@@ -299,6 +299,7 @@ impl Elaborator<'_> {
                     // its exact answer (it declines for a scalar param anyway:
                     // `lookup_scoped` finding the name makes it return None).
                     .or_else(|| self.const_param_select(e))
+                    .or_else(|| self.selfdet_bits_i64(e))
             }
             // A constant PART / INDEXED-PART select of a parameter (`W[7:0]`,
             // `W[7 -: 4]`). Without these arms the whole fold declined, and every
@@ -306,7 +307,12 @@ impl Elaborator<'_> {
             // to width 1 at exit 0 while both oracles sized it from the selected
             // byte. See `const_select.rs` for the two decline rules.
             ast::ExprKind::PartSelect { .. } | ast::ExprKind::IndexedPart { .. } => {
+                // …and, when that declines, the WIDE bit domain. A select of a >64-bit
+                // parameter has no answer in `params` at all (the value lives in
+                // `wide_param_bits`), which is how `M_ISSUE[n*32 +: 32]` — one port's
+                // slice of a per-port vector — stayed loud in a width bound.
                 self.const_param_select(e)
+                    .or_else(|| self.selfdet_bits_i64(e))
             }
             ast::ExprKind::Ternary {
                 cond,
@@ -337,6 +343,9 @@ impl Elaborator<'_> {
             ast::ExprKind::SysCall { name, args } if name.name == "$rtoi" && args.len() == 1 => {
                 self.const_rtoi_via_real(&args[0])
             }
+            // A built-in string method with an integral result (`S.len()`), over a
+            // constant string. See `const_string_method`.
+            ast::ExprKind::MethodCall { .. } => self.const_string_method(e),
             // v7 P2-D: `pkg::sym` in const contexts.
             ast::ExprKind::PkgScoped { pkg, name } => self
                 .pkg_consts
@@ -407,6 +416,11 @@ impl Elaborator<'_> {
             // (`localparam W = clog2(N)`). Evaluated by interpreting the function body
             // at compile time (integer domain only; anything it cannot fold → None →
             // LOUD at the binding site, never a silently-wrong param value).
+            // `S.len()` parses as a TWO-segment call, so it reaches the const domain
+            // here rather than through the `MethodCall` arm above.
+            ast::ExprKind::Call { name, .. } if name.segments.len() == 2 => {
+                self.const_string_method(e)
+            }
             ast::ExprKind::Call { name, args } if name.segments.len() == 1 => self.eval_const_call(
                 &name.segments[0].name,
                 args,
@@ -517,7 +531,11 @@ impl Elaborator<'_> {
             // gate costs nothing it could otherwise have answered.
             None if env.is_empty() && envw.is_empty() => match self.const_int_via_real(arg) {
                 Some(v) if v >= 0 => v as u64,
-                _ => return None,
+                // …and finally the WIDE bit domain, which is the only one that can read
+                // a slice of a >64-bit parameter: `$clog2(M_ISSUE[n*32 +: 32]+1)` is how
+                // `axi_crossbar` sizes one port's in-flight counter, and the value lives
+                // in `wide_param_bits` where the integer walk cannot see it.
+                _ => self.selfdet_bits_unsigned(arg)?,
             },
             None => return None,
         };
@@ -893,10 +911,26 @@ impl Elaborator<'_> {
         env: &std::collections::BTreeMap<String, i64>,
         envw: &ConstWidths,
     ) -> Option<(ir::BitPacked, u32, bool)> {
-        let resolve = |path: &ast::HierPath| -> Option<WideBits> {
+        let resolve = |n: &ast::Expr, is_count: bool| -> Option<WideBits> {
+            // This resolver answers BARE names only. A `pkg::name` reaching the hook
+            // (the shared arm now routes both spellings here) declines, which is what
+            // it did before the hook took an expression: the env/`param_meta` pair
+            // below is a MODULE-scope lookup and has nothing to say about a package.
+            let ast::ExprKind::Ident(path) = &n.kind else {
+                return None;
+            };
             let [seg] = path.segments.as_slice() else {
                 return None; // a hierarchical name is not a constant here
             };
+            // ⚠️⚠️ A COUNT / SIZE position may not read this interpreter's LOCALS. They
+            // are runtime storage — `int n = 2; {n{4'hA}}` is not a constant expression
+            // and iverilog rejects the function — and a local that merely SHADOWS must
+            // stop the walk here rather than fall through to the module parameter
+            // below, which would answer for a different object than the reference
+            // names. Both were measured as blocking defects in §4.5.371.
+            if is_count && (envw.contains_key(&seg.name) || env.contains_key(&seg.name)) {
+                return None;
+            }
             let (v, w, s) = match envw.get(&seg.name).copied() {
                 Some((w, s)) if (1..=64).contains(&w) => (*env.get(&seg.name)?, w, s),
                 Some(_) => return None, // declared here, shape unknown or too wide
@@ -1017,7 +1051,14 @@ impl Elaborator<'_> {
                 None => {
                     env.insert(n.name.name.clone(), 0);
                 }
-                Some(e) => match self.eval_const_assign(e, env, envw, depth, m) {
+                // ⚠️ `m.is_none()` means the DECLARED WIDTH did not fold (its range calls
+                // the function being folded, say). A value bound at an unknown width is
+                // a value nothing will truncate, so the local stays UNBOUND and every
+                // read of it is loud — the property this file pins as "the loud must not
+                // be conditional on the width being known". It used to hold only because
+                // the initializers that reach such a declaration did not fold either;
+                // widening the placement folder made the width the load-bearing half.
+                Some(e) if m.is_some() => match self.eval_const_assign(e, env, envw, depth, m) {
                     Some(v) => {
                         env.insert(n.name.name.clone(), v);
                     }
@@ -1025,6 +1066,9 @@ impl Elaborator<'_> {
                         env.remove(&n.name.name);
                     }
                 },
+                Some(_) => {
+                    env.remove(&n.name.name);
+                }
             }
         }
         Some(())

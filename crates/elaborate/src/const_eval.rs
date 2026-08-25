@@ -325,25 +325,28 @@ impl Elaborator<'_> {
         if width <= 64 {
             return None;
         }
-        let resolve = |path: &ast::HierPath| -> Option<WideBits> {
-            let [seg] = path.segments.as_slice() else {
-                // A hierarchical name is not a constant here. UNREACHABLE today and
-                // measured so (`panic!` probe, 0 hits across the whole suite): both
-                // this elaborator and iverilog already refuse `localparam [127:0] B =
-                // ~u1.K;` upstream, so a multi-segment path never arrives. Kept
-                // fail-closed rather than widened to `segments.last()`, which would
-                // resolve the LAST segment in the CURRENT scope — a same-named local
-                // would then be folded for a reference that named something else.
-                return None;
-            };
-            let key = self.walk_scopes_key(&seg.name, |k| {
-                self.wide_param_bits.contains_key(k)
-                    || self.params.contains_key(k)
-                    || self.symbols.contains_key(k)
-            })?;
-            let cv = self.wide_param_bits.get(&key)?;
-            Some((cv.bits.clone(), cv.width, cv.signed))
-        };
+        // The NAME resolver. It used to consult `wide_param_bits` alone, which made
+        // the fold's reach depend on how wide the OTHER operand's declaration was:
+        // `A ^ 128'h1` folded and `A ^ B` did not, for the same value, because a
+        // narrow name is in no wide table. `wide_name_bits` adds the declared-width
+        // narrow case — see its doc for why `param_range`, not `param_meta`, is the
+        // width source, and why a multi-segment path still declines there.
+        let resolve =
+            |n: &ast::Expr, _is_count: bool| -> Option<WideBits> { self.wide_name_bits(n) };
+        // The same extension rule `param_bits_at_declared` states: a fold at the
+        // expression's SELF width may only be widened to the declaration when the top
+        // node is self-determined. Without it `localparam logic [127:0] Q = B << 4;`
+        // over an 8-bit `B` shifted inside 8 bits and then extended, losing the bits
+        // both oracles keep. (Unreachable today for `<<` — the i64 walk answers that
+        // one first — but the rule belongs beside the resize, not in the caller's
+        // ordering.)
+        if !wide_top_is_self_determined(e) {
+            if let Some((_, w, _)) = fold_self_bits(e, &|n, _| self.wide_name_bits(n)) {
+                if w < width {
+                    return None;
+                }
+            }
+        }
         let (b, w, sg) = match &e.kind {
             // Keep the literal/fill arms exactly where they were — `fold_init` is the
             // only place that knows the CONTEXT width a fill literal needs.
@@ -358,252 +361,6 @@ impl Elaborator<'_> {
             repr: ir::ConstRepr::Numeric,
             bits: resize_bits(&b, w, width, sg),
         })
-    }
-}
-
-// ── wide (>64-bit) CARRY-FREE constant folding ───────────────────────────────
-//
-// `wide_param_bits` has always been able to REPRESENT a >64-bit parameter; what it
-// could not do is compute one. `fold_init` handled a literal and a parenthesised
-// literal, so `localparam logic [127:0] K = 128'h…` worked and
-// `localparam logic [127:0] K = {8'he1, 120'h0}` was `E3009 … not a foldable
-// constant expression` — the spelling every crypto IP actually uses.
-
-/// One folded value in the wide bit domain: `(bits, self width, signed)`.
-pub(crate) type WideBits = (ir::BitPacked, u32, bool);
-
-/// Resolves a NAME to an already-folded wide constant. See `fold_self_bits`.
-pub(crate) type WideNameFn<'a> = &'a dyn Fn(&ast::HierPath) -> Option<WideBits>;
-
-/// A zeroed bit vector wide enough for `width` bits.
-fn bp_zero(width: u32) -> ir::BitPacked {
-    let n = ((width as usize).div_ceil(64)).max(1);
-    ir::BitPacked {
-        val: vec![0; n],
-        unk: vec![0; n],
-    }
-}
-
-fn bp_get(bp: &ir::BitPacked, i: usize) -> (bool, bool) {
-    let g = |p: &[u64]| {
-        p.get(i / 64)
-            .map(|w| (w >> (i % 64)) & 1 == 1)
-            .unwrap_or(false)
-    };
-    (g(&bp.val), g(&bp.unk))
-}
-
-fn bp_set(bp: &mut ir::BitPacked, i: usize, v: bool, u: bool) {
-    if i / 64 >= bp.val.len() {
-        return;
-    }
-    if v {
-        bp.val[i / 64] |= 1u64 << (i % 64);
-    }
-    if u {
-        bp.unk[i / 64] |= 1u64 << (i % 64);
-    }
-}
-
-fn bp_any_unknown(bp: &ir::BitPacked, width: u32) -> bool {
-    (0..width as usize).any(|i| bp_get(bp, i).1)
-}
-
-/// Fold an expression at its OWN (self-determined) width in the WIDE bit domain.
-/// Returns `(bits, width, signed)`.
-///
-/// ⚠️⚠️ **CARRY-FREE ONLY, and that is the admission rule.** Concatenation,
-/// replication, a size cast, a constant logical shift, the bitwise operators and
-/// `~` all decide each result bit from operand bits at KNOWN positions. `+`, `-`,
-/// `*`, `/` and the comparisons need a carry chain across 128+ bits; implementing
-/// one here would be a second spelling of the engine's arithmetic, and a subtly
-/// wrong one produces a silent wrong PARAMETER, which is P0-5. They decline, and
-/// the caller stays loud — the same boundary this domain has always had. What
-/// widens is which expressions reach it, not what it can represent.
-///
-/// ⚠️ Unknown (x/z) bits ride through the PLACEMENT arms (concat/replicate/shift/
-/// cast MOVE bits without reading them) and DECLINE the value-reading ones, for the
-/// same reason: a 4-state `&`/`|`/`^`/`~` table belongs in one place and it is not
-/// here.
-pub(crate) fn fold_self_bits(
-    e: &ast::Expr,
-    // Resolve a NAME to an already-folded constant. `None` = names decline, which is
-    // what a caller without an elaborator (a class field default) must pass — it has
-    // no parameter table to consult and inventing one here would be a second scope
-    // walk beside `walk_scopes_key`, the exact shape §4.5.218 turned into a silent
-    // generate-body deletion.
-    name: WideNameFn,
-) -> Option<WideBits> {
-    // A width this domain will not build. `MAX_NET_WIDTH` is the declared-width cap
-    // a net already lives under, so an intermediate wider than that cannot land
-    // anywhere legal — and it keeps `{1000000{8'hAB}}` from allocating before the
-    // caller ever sees it.
-    let cap = |w: u64| -> Option<u32> {
-        if w == 0 || w > MAX_NET_WIDTH {
-            None
-        } else {
-            u32::try_from(w).ok()
-        }
-    };
-    match &e.kind {
-        ast::ExprKind::Paren { inner } => fold_self_bits(inner, name),
-        // A fill literal is context-determined (§5.7.1) and therefore has NO self
-        // width — only `fold_init`, which knows the target, can fold one.
-        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => None,
-        ast::ExprKind::IntLit { kind, raw } => {
-            let cv = parse_int_literal(raw, *kind)?;
-            Some((cv.bits, cv.width, cv.signed))
-        }
-        // §6.24.1 size cast: the result is `n` bits; signedness is INHERITED.
-        ast::ExprKind::Cast {
-            target: ast::CastTarget::Size(w),
-            expr,
-        } => {
-            let n = cap(u64::from(const_eval_u32(w)?))?;
-            let (b, bw, sg) = fold_self_bits(expr, name)?;
-            Some((resize_bits(&b, bw, n, sg), n, sg))
-        }
-        // §11.4.12 concatenation: unsigned, leftmost part most significant.
-        ast::ExprKind::Concat { parts } => {
-            let (b, w) = fold_concat_parts(parts, &cap, name)?;
-            Some((b, w, false))
-        }
-        // §11.4.12.1 replication: unsigned; the count is a constant.
-        ast::ExprKind::Replicate { count, value } => {
-            let n = const_eval_u32(count)?;
-            if n == 0 {
-                return None; // a zero replication has no width in this position
-            }
-            let (one, ow) = fold_concat_parts(value, &cap, name)?;
-            let total = cap(u64::from(ow) * u64::from(n))?;
-            let mut out = bp_zero(total);
-            for k in 0..n as usize {
-                for i in 0..ow as usize {
-                    let (v, u) = bp_get(&one, i);
-                    bp_set(&mut out, k * ow as usize + i, v, u);
-                }
-            }
-            Some((out, total, false))
-        }
-        // §11.4.10 LOGICAL shift by a constant: the result keeps the LEFT operand's
-        // self width and signedness, and the vacated bits are ZERO for both
-        // directions. `<<<`/`>>>` are deliberately NOT admitted — the arithmetic
-        // right shift reads the sign bit, which is the value-reading class above.
-        ast::ExprKind::Binary { op, lhs, rhs }
-            if matches!(op, ast::BinOp::Shl | ast::BinOp::Shr) =>
-        {
-            let k = const_eval_u32(rhs)? as usize;
-            let (b, w, sg) = fold_self_bits(lhs, name)?;
-            let mut out = bp_zero(w);
-            for i in 0..w as usize {
-                // source index for result bit i
-                let src = match op {
-                    ast::BinOp::Shl => i.checked_sub(k),
-                    _ => i.checked_add(k).filter(|s| *s < w as usize),
-                };
-                if let Some(si) = src {
-                    let (v, u) = bp_get(&b, si);
-                    bp_set(&mut out, i, v, u);
-                }
-            }
-            Some((out, w, sg))
-        }
-        // §11.4.8 bitwise: width is the max of the operands, each extended in its own
-        // signedness; the result is signed only if BOTH operands are.
-        ast::ExprKind::Binary { op, lhs, rhs }
-            if matches!(
-                op,
-                ast::BinOp::BitAnd | ast::BinOp::BitOr | ast::BinOp::BitXor
-            ) =>
-        {
-            let (lb, lw, ls) = fold_self_bits(lhs, name)?;
-            let (rb, rw, rs) = fold_self_bits(rhs, name)?;
-            if bp_any_unknown(&lb, lw) || bp_any_unknown(&rb, rw) {
-                return None;
-            }
-            let w = lw.max(rw);
-            let (la, ra) = (resize_bits(&lb, lw, w, ls), resize_bits(&rb, rw, w, rs));
-            let mut out = bp_zero(w);
-            for i in 0..w as usize {
-                let (a, _) = bp_get(&la, i);
-                let (c, _) = bp_get(&ra, i);
-                let v = match op {
-                    ast::BinOp::BitAnd => a && c,
-                    ast::BinOp::BitOr => a || c,
-                    _ => a ^ c,
-                };
-                bp_set(&mut out, i, v, false);
-            }
-            Some((out, w, ls && rs))
-        }
-        ast::ExprKind::Unary {
-            op: ast::UnOp::BitNot,
-            operand,
-        } => {
-            let (b, w, sg) = fold_self_bits(operand, name)?;
-            if bp_any_unknown(&b, w) {
-                return None;
-            }
-            let mut out = bp_zero(w);
-            for i in 0..w as usize {
-                bp_set(&mut out, i, !bp_get(&b, i).0, false);
-            }
-            Some((out, w, sg))
-        }
-        ast::ExprKind::Ident(path) => name(path),
-        _ => None,
-    }
-}
-
-/// Fold a concat PART LIST (also the body of a replication, which holds the parts
-/// directly rather than a `Concat` wrapper) into one unsigned bit vector.
-fn fold_concat_parts(
-    parts: &[ast::Expr],
-    cap: &dyn Fn(u64) -> Option<u32>,
-    name: WideNameFn,
-) -> Option<(ir::BitPacked, u32)> {
-    let mut folded = Vec::with_capacity(parts.len());
-    let mut total: u64 = 0;
-    for p in parts {
-        let (b, w, _) = fold_self_bits(p, name)?;
-        total += u64::from(w);
-        cap(total)?;
-        folded.push((b, w));
-    }
-    let total = cap(total)?;
-    let mut out = bp_zero(total);
-    let mut pos = total as usize;
-    for (b, w) in folded {
-        pos -= w as usize;
-        for i in 0..w as usize {
-            let (v, u) = bp_get(&b, i);
-            bp_set(&mut out, pos + i, v, u);
-        }
-    }
-    Some((out, total))
-}
-
-pub(crate) fn fold_init(e: &ast::Expr, width: u32) -> Option<ir::BitPacked> {
-    match &e.kind {
-        // A fill literal is context-determined: replicate the fill bit across the
-        // full target `width` (§5.7.1), not the self-determined 32-bit default.
-        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
-            let cv = literal::fill_literal_const(raw, *kind, width)?;
-            Some(cv.bits)
-        }
-        ast::ExprKind::IntLit { kind, raw } => {
-            let cv = parse_int_literal(raw, *kind)?;
-            Some(resize_bits(&cv.bits, cv.width, width, cv.signed))
-        }
-        ast::ExprKind::Paren { inner } => fold_init(inner, width),
-        // Everything the CARRY-FREE wide folder admits: fold at the expression's own
-        // width, then size it to the target the way an assignment would. Additive —
-        // every shape that folded before still takes an arm above, and one this
-        // declines still returns None, so the caller's loud reject is unchanged.
-        _ => {
-            let (b, w, sg) = fold_self_bits(e, &|_| None)?;
-            Some(resize_bits(&b, w, width, sg))
-        }
     }
 }
 
@@ -935,6 +692,13 @@ impl Elaborator<'_> {
         if folded.is_some() {
             return;
         }
+        // ⚠️ A declaration's range is folded MORE THAN ONCE — the net-creation walk and
+        // the width query each ask — so one bad bound printed the same line twice, and
+        // an author with two of them could not tell four messages from two. The span is
+        // the identity of the bound, so dedup on it.
+        if !self.reported_bad_bounds.insert((e.span.lo, e.span.hi)) {
+            return;
+        }
         // r19: a REAL parameter has no i64 value and is deliberately kept out of
         // `params`, so a bound reading one folds to None. `nonconst_bound_reason`
         // does not descend into system-call args (a false-loud guard for `$bits`),
@@ -944,8 +708,9 @@ impl Elaborator<'_> {
         // chose its context, so `if (R > 2)` with R=2.4 took the wrong generate
         // branch and `R == 2` folded TRUE. Loud here, converted nowhere.
         if self.count_reads_real_param(e) {
-            self.error(
+            self.error_at(
                 MsgCode::ElabUnsupported,
+                e.span,
                 "a real parameter is not an integral constant and cannot be used in a \
                  width / range bound (assign it to an integer localparam first)",
             );
@@ -956,8 +721,9 @@ impl Elaborator<'_> {
         // it "undefined" sends the user looking for a typo in a name that is right
         // there. Say what it actually is.
         if let Some(n) = self.wide_param_name_in(e) {
-            self.error(
+            self.error_at(
                 MsgCode::ElabUnsupported,
+                e.span,
                 &format!(
                     "`{n}` is wider than 64 bits, so it has no integral constant value \
                      for a width / range bound (select the bits you need, or declare a \
@@ -967,8 +733,9 @@ impl Elaborator<'_> {
             return;
         }
         if let Some(reason) = self.nonconst_bound_reason(e) {
-            self.error(
+            self.error_at(
                 MsgCode::ElabUnsupported,
+                e.span,
                 &format!("{reason} is not allowed in a constant range bound"),
             );
         }
@@ -986,6 +753,10 @@ impl Elaborator<'_> {
     /// `nonconst_bound_reason` and said *"undefined name `K`"* about a name declared
     /// two lines up — while the message four lines above tells the user to "select
     /// the bits you need", which is precisely what they did.
+    pub(crate) fn wide_param_name_in_pub(&self, e: &ast::Expr) -> Option<String> {
+        self.wide_param_name_in(e)
+    }
+
     fn wide_param_name_in(&self, e: &ast::Expr) -> Option<String> {
         if let ast::ExprKind::Ident(p) = &e.kind {
             if let [seg] = p.segments.as_slice() {

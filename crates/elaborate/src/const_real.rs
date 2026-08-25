@@ -41,6 +41,15 @@ impl Elaborator<'_> {
         if let Some(v) = self.const_int_selfdet(e) {
             return Some(v != 0);
         }
+        // …then the WIDE bit domain, which is the only one that can weigh a value the
+        // i64 walk cannot hold: `generate if ({1'b1, 63'd0} > 0)` is 64 bits with the
+        // top one set, and both oracles take the THEN branch. Reading it as a truth
+        // value is safe for the same reason the branch above is — §11.6.1 Table 11-21
+        // makes a condition SELF-DETERMINED, so there is no context width it should
+        // have been evaluated at instead.
+        if let Some(v) = self.selfdet_bits_unsigned(e) {
+            return Some(v != 0);
+        }
         if !self.expr_mentions_real(e) {
             return None;
         }
@@ -99,6 +108,22 @@ impl Elaborator<'_> {
                 self.walk_scopes(n, &self.real_param_val)
                     .or_else(|| self.lookup_scoped(n).map(|v| v as f64))
             }
+            // The package twin, in the same precedence order (real map first, then the
+            // integer one promoted). Its absence is what made a MODULE-LOCAL
+            // `localparam real` fold and a byte-identical `pkg::` one go loud — the
+            // value was in `pkg_real_val` the whole time and this walk had no arm to
+            // read it with.
+            K::PkgScoped { pkg, name } => self
+                .pkg_real_val
+                .get(&pkg.name)
+                .and_then(|m| m.get(&name.name))
+                .copied()
+                .or_else(|| {
+                    self.pkg_consts
+                        .get(&pkg.name)
+                        .and_then(|c| c.get(&name.name))
+                        .map(|&v| v as f64)
+                }),
             K::Binary { op, lhs, rhs } => {
                 let a = self.const_eval_real_in_scope(lhs)?;
                 let b = self.const_eval_real_in_scope(rhs)?;

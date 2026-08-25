@@ -477,3 +477,164 @@ impl Elaborator<'_> {
             .all(|c| self.expr_calls_width_safe(c, depth))
     }
 }
+
+impl Elaborator<'_> {
+    /// A short rendering of an expression NODE, for a diagnostic that has to say which
+    /// sub-expression it is talking about.
+    ///
+    /// Deliberately shallow: one level of structure and then `…`. The point is to let
+    /// the reader find the operand in a long initializer, not to reproduce it.
+    pub(crate) fn expr_brief(e: &ast::Expr) -> String {
+        use ast::ExprKind as K;
+        let seg = |p: &ast::HierPath| {
+            p.segments
+                .iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<_>>()
+                .join(".")
+        };
+        match &e.kind {
+            K::Paren { inner } => Self::expr_brief(inner),
+            K::IntLit { raw, .. } | K::RealLit { raw, .. } => raw.clone(),
+            K::StrLit { .. } => "a string literal".to_string(),
+            K::Ident(p) => format!("`{}`", seg(p)),
+            K::PkgScoped { pkg, name } => format!("`{}::{}`", pkg.name, name.name),
+            K::SysCall { name, .. } => format!("`{}(…)`", name.name),
+            K::Call { name, .. } => format!("`{}(…)`", seg(name)),
+            K::MethodCall { recv, method, .. } => {
+                format!("the method call `{}.{}(…)`", Self::plain(recv), method.name)
+            }
+            K::BitSelect { base, .. } => format!("the select `{}[…]`", Self::plain(base)),
+            K::PartSelect { base, .. } | K::IndexedPart { base, .. } => {
+                format!("the part-select `{}[…]`", Self::plain(base))
+            }
+            K::Concat { .. } => "the concatenation `{…}`".to_string(),
+            K::Replicate { .. } => "the replication `{n{…}}`".to_string(),
+            K::Binary { op, .. } => format!("the `{}` operation", bin_op_text(*op)),
+            K::Unary { op, .. } => format!("the `{}` operation", un_op_text(*op)),
+            K::Ternary { .. } => "the conditional `? :`".to_string(),
+            K::Cast { .. } => "the cast".to_string(),
+            _ => "this sub-expression".to_string(),
+        }
+    }
+
+    /// `expr_brief` without the surrounding words — for embedding inside a bigger
+    /// rendering (`A[…]` rather than "the select `A[…]`").
+    fn plain(e: &ast::Expr) -> String {
+        use ast::ExprKind as K;
+        match &e.kind {
+            K::Paren { inner } => Self::plain(inner),
+            K::Ident(p) => p
+                .segments
+                .iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<_>>()
+                .join("."),
+            K::PkgScoped { pkg, name } => format!("{}::{}", pkg.name, name.name),
+            _ => "…".to_string(),
+        }
+    }
+
+    /// WHY a constant expression did not fold — the first sub-expression the constant
+    /// domain has no answer for, deepest first.
+    ///
+    /// ⭐ The message this feeds used to say only that the parameter's value "is not a
+    /// foldable constant expression". Three declarations rejected for three unrelated
+    /// reasons — a package `real`, a string method, a replication count — printed the
+    /// same twelve words, and not one of `real`, `string` or `replication` appeared in
+    /// any of them. Worse, when the cause was an UNDEFINED NAME the name was in hand
+    /// and thrown away.
+    ///
+    /// Children first, so the answer is the innermost thing that failed rather than
+    /// the whole initializer. Returns `None` when every part folds — then the caller
+    /// keeps its unqualified wording, which is honest: nothing here can name a cause
+    /// it did not find.
+    pub(crate) fn unfoldable_reason(&self, e: &ast::Expr) -> Option<String> {
+        if let Some(r) = Self::const_fold_children(e)
+            .into_iter()
+            .find_map(|c| self.unfoldable_reason(c))
+        {
+            return Some(r);
+        }
+        if self.const_eval_in_scope(e).is_some() {
+            return None;
+        }
+        // The domains that HAVE a value but not an integral one get named for what
+        // they are; a caller reading "not foldable" about `pk::R` would look for a
+        // typo in a name that is right there.
+        if self.count_reads_real_param(e) {
+            return Some(format!(
+                "{} is a real, which has no integral constant value here",
+                Self::expr_brief(e)
+            ));
+        }
+        if let Some(n) = self.wide_param_name_in_pub(e) {
+            return Some(format!(
+                "`{n}` is wider than 64 bits, so it has no integral constant value here"
+            ));
+        }
+        use ast::ExprKind as K;
+        Some(match &e.kind {
+            K::Ident(_) | K::PkgScoped { .. } => match self.nonconst_bound_reason(e) {
+                Some(r) => format!("{r} is not a constant"),
+                None => format!("{} is not a constant here", Self::expr_brief(e)),
+            },
+            K::MethodCall { .. } => format!(
+                "{} has no constant-fold arm (its runtime spelling works)",
+                Self::expr_brief(e)
+            ),
+            K::StrLit { .. } => "a string literal has no integral constant value".to_string(),
+            K::RealLit { .. } => "a real literal has no integral constant value here".to_string(),
+            _ => format!("{} has no constant-fold arm", Self::expr_brief(e)),
+        })
+    }
+}
+
+/// Source text of a binary operator, for [`Elaborator::expr_brief`].
+fn bin_op_text(op: ast::BinOp) -> &'static str {
+    use ast::BinOp as B;
+    match op {
+        B::Add => "+",
+        B::Sub => "-",
+        B::Mul => "*",
+        B::Div => "/",
+        B::Mod => "%",
+        B::Pow => "**",
+        B::Eq => "==",
+        B::Ne => "!=",
+        B::CaseEq => "===",
+        B::CaseNe => "!==",
+        B::Lt => "<",
+        B::Le => "<=",
+        B::Gt => ">",
+        B::Ge => ">=",
+        B::LogAnd => "&&",
+        B::LogOr => "||",
+        B::BitAnd => "&",
+        B::BitOr => "|",
+        B::BitXor => "^",
+        B::BitXnor => "~^",
+        B::Shl => "<<",
+        B::Shr => ">>",
+        B::AShl => "<<<",
+        B::AShr => ">>>",
+        _ => "?",
+    }
+}
+
+/// Source text of a unary operator, for [`Elaborator::expr_brief`].
+fn un_op_text(op: ast::UnOp) -> &'static str {
+    use ast::UnOp as U;
+    match op {
+        U::Plus => "+",
+        U::Minus => "-",
+        U::LogNot => "!",
+        U::BitNot => "~",
+        U::RedAnd => "&",
+        U::RedOr => "|",
+        U::RedXor => "^",
+        U::RedNand => "~&",
+        U::RedNor => "~|",
+        U::RedXnor => "~^",
+    }
+}

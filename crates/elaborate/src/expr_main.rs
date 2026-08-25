@@ -85,7 +85,19 @@ impl Elaborator<'_> {
             // chaining on `.atoi()`, which returns an int) is loud (correct-or-loud).
             ast::ExprKind::MethodCall { recv, method, args } => {
                 let h = self.lower_expr(recv);
-                if self.ir_expr_is_string(h) {
+                // A string CONSTANT is a legal receiver too — that is what `pkg::S`
+                // lowers to, and `lower_string_method_expr_handle` already documents
+                // "or a literal string `Const`" as one of its handle shapes. The test
+                // is made HERE rather than inside `ir_expr_is_string` because that
+                // predicate also drives comparison and context-width decisions, where
+                // a literal is already handled by its own path.
+                let const_str = matches!(
+                    self.exprs.get(h as usize),
+                    Some(ir::Expr::Const { val })
+                        if self.consts.get(*val as usize)
+                            .is_some_and(|c| matches!(c.repr, ir::ConstRepr::StrUtf8))
+                );
+                if self.ir_expr_is_string(h) || const_str {
                     self.lower_string_method_expr_handle(h, &method.name, args)
                 } else {
                     self.error(
@@ -124,6 +136,18 @@ impl Elaborator<'_> {
                     .cloned()
                 {
                     let cid = self.intern_const(parse_str_literal(&raw));
+                    return self.push_expr(ir::Expr::Const { val: cid });
+                }
+                // …and the wide domain, on the same footing: a >64-bit package
+                // parameter has no i64 value either, so it is answered from its own
+                // side map before the numeric one is consulted.
+                if let Some(cv) = self
+                    .pkg_wide_bits
+                    .get(&pkg.name)
+                    .and_then(|m| m.get(&name.name))
+                    .cloned()
+                {
+                    let cid = self.intern_const(cv);
                     return self.push_expr(ir::Expr::Const { val: cid });
                 }
                 match self

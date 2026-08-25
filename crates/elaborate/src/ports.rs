@@ -628,7 +628,20 @@ impl Elaborator<'_> {
                         ir::PortDir::Inout => {
                             self.warn(&format!("inout port `{pname}` left unconnected"));
                         }
-                        _ => {} // input floats silently (z = time-0 default)
+                        // ⭐ The asymmetry ran OPPOSITE to the consequence. A dangling
+                        // OUTPUT discards a value; a dangling INPUT *manufactures* one
+                        // — `z` at time 0 — and propagates it through everything the
+                        // child computes. The first was warned about and the second was
+                        // silent, so the only unconnected port that can produce a wrong
+                        // answer was the one nothing said anything about, and the
+                        // author learned about it as a mismatching digest much later.
+                        _ => {
+                            self.warn(&format!(
+                                "input port `{pname}` left unconnected — it floats at \
+                                 `z`, and every value the instance derives from it is \
+                                 unknown (tie it off explicitly)"
+                            ));
+                        }
                     }
                 }
                 continue;

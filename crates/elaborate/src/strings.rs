@@ -295,6 +295,16 @@ impl Elaborator<'_> {
                     self.walk_scopes(n, &self.real_param_val).is_some()
                 }
             }
+            // ⭐ `pkg::R` was missing, and the gap was invisible from inside: a package
+            // real's VALUE crossed into module scope fine (a bare read prints 3.5, an
+            // `int'()` in a statement converts), and only the CONSTANT domain refused
+            // it — because this predicate is the gate that chooses the real domain, and
+            // it saw no real. There is no shadowing question for an explicitly
+            // qualified name, so both settings resolve it the same way.
+            K::PkgScoped { pkg, name } => self
+                .pkg_real_val
+                .get(&pkg.name)
+                .is_some_and(|m| m.contains_key(&name.name)),
             K::Paren { inner } => r(inner),
             K::Unary { operand, .. } => r(operand),
             K::Binary { lhs, rhs, .. } => r(lhs) || r(rhs),

@@ -123,8 +123,11 @@ pub(crate) use expr::*;
 pub(crate) use monomorph::*;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
-    pub span: Span,               // where to ANCHOR the report (u32)
-    pub expected: &'static str,   // "expression", "';'", "identifier", …
+    pub span: Span, // where to ANCHOR the report (u32)
+    /// "expression", "';'", "identifier", … — or, for the few diagnostics that must
+    /// name something from the source (an unknown package, a rejected spelling), an
+    /// OWNED message. The vast majority stay `Borrowed` and allocate nothing.
+    pub expected: std::borrow::Cow<'static, str>,
     pub found: Option<TokenKind>, // None ⇒ EOF
     /// Span of the token in [`Self::found`]. Usually equal to [`Self::span`],
     /// but `error_at` anchors the report at an EARLIER node while `found` stays
@@ -634,7 +637,24 @@ impl<'t, 's> Parser<'t, 's> {
             let at = self.cur_span();
             self.errors.push(ParseError {
                 span: at,
-                expected,
+                expected: expected.into(),
+                found: self.peek(),
+                found_span: at,
+            });
+        }
+    }
+
+    /// [`Self::error`] with a message built from the SOURCE — a package name, a
+    /// rejected spelling. Kept separate so the common path stays allocation-free.
+    pub(crate) fn error_owned(&mut self, expected: String) {
+        if self.at_lex_error() {
+            return;
+        }
+        if self.errors.len() < self.error_limit {
+            let at = self.cur_span();
+            self.errors.push(ParseError {
+                span: at,
+                expected: expected.into(),
                 found: self.peek(),
                 found_span: at,
             });
@@ -669,7 +689,7 @@ impl<'t, 's> Parser<'t, 's> {
         if self.errors.len() < self.error_limit {
             self.errors.push(ParseError {
                 span,
-                expected,
+                expected: expected.into(),
                 found: self.peek(),
                 found_span: self.cur_span(),
             });

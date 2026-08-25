@@ -59,6 +59,8 @@ mod const_fn_width;
 mod const_real;
 mod const_select;
 mod const_str;
+mod const_wide;
+mod const_wide_num;
 mod cover;
 mod cover_bins;
 mod cover_synth;
@@ -128,6 +130,8 @@ pub(crate) use classes::*;
 pub(crate) use const_eval::*;
 pub(crate) use const_fn::*;
 pub(crate) use const_fn_width::*;
+pub(crate) use const_wide::*;
+pub(crate) use const_wide_num::*;
 pub(crate) use cover::*;
 pub(crate) use cover_synth::*;
 pub(crate) use crv::*;
@@ -333,6 +337,16 @@ struct Elaborator<'s> {
     // convention) / f64. A `real` param whose initializer is wholly integral appears in
     // BOTH, so an integral context still folds it.
     pkg_str_raw: BTreeMap<String, BTreeMap<String, String>>,
+    /// The package twin of `wide_param_bits`: a package parameter WIDER than the i64
+    /// constant domain, per package.
+    ///
+    /// ⚠️ Its absence was not a width limit — `wide_param_bits` has always held 128-bit
+    /// values, and the same declaration in a MODULE, in a `#()` header, in an unpacked
+    /// array or inside a packed struct all worked. Only the package's scalar path had no
+    /// fourth domain to fall into, so `localparam logic [127:0] K = 128'he1…;` — the
+    /// declaration every crypto IP writes for a field polynomial — was `E3009` in the one
+    /// scope that exists to share it.
+    pkg_wide_bits: BTreeMap<String, BTreeMap<String, ir::ConstVal>>,
     pkg_real_val: BTreeMap<String, BTreeMap<String, f64>>,
     /// v7 P2-D: package name → its function/task definitions (clones — the
     /// same inline-expansion tables modules use).
@@ -927,6 +941,10 @@ struct Elaborator<'s> {
     /// procedural reference to a genvar-named import alias would silently
     /// resolve to the package variable outside the unroll.
     genvar_decls: std::collections::BTreeSet<String>,
+    /// Spans of range bounds already reported by `check_const_range_bound`. A
+    /// declaration's range is folded by more than one pass, so without this the same
+    /// bound is reported once per pass.
+    reported_bad_bounds: std::collections::BTreeSet<(u32, u32)>,
     /// Every clocking-block name in the whole design (never cleared) — diagnostic
     /// only: lets a cross-hierarchy `@(inst.cb)` event control emit an accurate
     /// "unsupported clocking-event" message instead of a generic hier-name error.

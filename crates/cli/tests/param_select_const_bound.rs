@@ -294,25 +294,22 @@ fn a_select_drives_the_other_constant_bound_consumers() {
 }
 
 #[test]
-fn a_wider_than_64_bit_base_stays_loud_and_now_says_why() {
-    // OUT OF SCOPE, PINNED: a >64-bit parameter is deliberately kept out of the i64
-    // `params` table, so a select on one still declines — correctly loud, not
-    // silent. What changed is the MESSAGE: `wide_param_name_in` used to walk the
-    // select-blind `collect_bare_idents`, so it never saw `K` and the diagnostic
-    // fell through to "undefined name `K`" about a name declared in the same module
-    // — while the neighbouring message tells the user to "select the bits you need",
-    // which is exactly what they did.
-    let err = run(
+fn a_wider_than_64_bit_base_selects_the_bits_it_names() {
+    // ⭐ This pin asserted a LOUD reject and explained it as "OUT OF SCOPE, PINNED: a
+    // >64-bit parameter is deliberately kept out of the i64 `params` table, so a select
+    // on one still declines". The premise was true and the conclusion did not follow —
+    // the VALUE lives in `wide_param_bits`, which carries bits and width and sign, and
+    // a select is PLACEMENT: each result bit is an operand bit at a known position, so
+    // nothing about the i64 table is needed to read one. iverilog: 16.
+    //
+    // The diagnostic this test was named for still exists for the shapes that DO
+    // decline (an ascending select, an out-of-range one) — see `every_decline_rule_has_a_pin`.
+    let out = run(
         "  logic [K[7:0]-1:0] v;\n",
         "    $display(\"r=%0d\", $bits(v));\n",
     )
-    .expect_err("a >64-bit base must stay loud");
-    assert!(err.contains("VITA-E3009"), "{err}");
-    assert!(err.contains("wider than 64 bits"), "{err}");
-    assert!(
-        !err.contains("undefined name"),
-        "the misleading message came back:\n{err}"
-    );
+    .expect("a select of a wide parameter folds");
+    assert_eq!(out, "16", "K[7:0] is 0x10 = 16 (iverilog agrees)");
 }
 
 #[test]

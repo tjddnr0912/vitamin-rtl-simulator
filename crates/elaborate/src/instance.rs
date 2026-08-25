@@ -187,6 +187,9 @@ impl Elaborator<'_> {
                         // uses. `v` above is the parent-side 32-bit fold and is the
                         // fallback for everything that is not a fill.
                         fill,
+                        // A defparam carries no wide value either: the value it
+                        // brings has already been folded to i64 by the collector.
+                        bits: None,
                         // A defparam carries no text at all, so the flag is never
                         // read here — `false` is the honest value for "not a literal".
                         str_is_literal: false,
@@ -346,14 +349,16 @@ impl Elaborator<'_> {
                         let meta = self.param_decl_width_unoverridden(p);
                         let folded = self
                             .eval_param_init(&p.value, meta.map(|(w, _)| w))
-                            .or_else(|| self.param_value_via_real(meta, &p.value));
+                            .or_else(|| self.param_value_via_real(meta, &p.value))
+                            .or_else(|| {
+                                let dm = self.param_decl_width_declared(p);
+                                self.param_i64_at_declared(&p.value, dm)
+                            });
                         // Wider than the i64 domain — see `wide_param_bits`. Reached
                         // only when the numeric fold DECLINED, so a wide declaration
                         // whose value fits keeps its integer identity.
-                        if folded.is_none() {
-                            if let Some(cv) = meta
-                                .and_then(|(w, sg)| self.wide_param_const_in_scope(&p.value, w, sg))
-                            {
+                        {
+                            if let Some(cv) = self.wide_disagreeing_value(&p.value, meta, folded) {
                                 let key = self.fq(&p.name.name);
                                 self.wide_param_bits.insert(key, cv);
                                 continue;
@@ -373,7 +378,9 @@ impl Elaborator<'_> {
                         if let Some(m) = meta {
                             self.param_meta.insert(key.clone(), m);
                         }
-                        if let Some(r) = self.param_decl_range(p) {
+                        // This scope has NO override channel, so the declared default is
+                        // always what binds — see `param_decl_range_opt`.
+                        if let Some(r) = self.param_decl_range_opt(p, true) {
                             self.param_range.insert(key.clone(), r);
                         }
                         saved_params.push((key.clone(), self.params.insert(key, v)));
@@ -798,6 +805,9 @@ impl Elaborator<'_> {
         // generate's own flush was ranked during VarInit. Only this slot is reset: the
         // instance slot is visited by ONE walk and must keep counting across it.
         self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
+        // IEEE §9.2.2.2 double-driver warning — a pure AST pass, run once here so it
+        // sees the whole body before any lowering reorders it.
+        self.warn_always_comb_initializers(&module.body);
         for item in &module.body {
             match item {
                 ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),
@@ -999,6 +1009,7 @@ impl Elaborator<'_> {
                         fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
                         str_is_literal: Self::param_str_literal(e).is_some(),
                         str: self.const_str_in_scope(e),
+                        bits: self.override_bits(e),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -1120,6 +1131,7 @@ impl Elaborator<'_> {
                         fill,
                         str_is_literal: text_is_literal,
                         str: text,
+                        bits: value.as_ref().and_then(|e| self.override_bits(e)),
                     });
                 }
             }

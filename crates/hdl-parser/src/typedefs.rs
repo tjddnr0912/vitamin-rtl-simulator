@@ -894,3 +894,57 @@ impl Parser<'_, '_> {
         self.build_for_typed_init(start, info.kind, info.signed, info.range, info.packed)
     }
 }
+
+impl Parser<'_, '_> {
+    /// `pkg::type_name <name>` in a TYPE position where `pkg::type_name` resolves to
+    /// nothing — almost always a source file that was not passed to the tool.
+    ///
+    /// ⭐ Without this the shape simply did not parse, and the cascade was the whole
+    /// cost: one missing `rtl/sha2_pkg.sv` produced ELEVEN `E2002`s, the first at the
+    /// `::` ("expected ')' closing tf-port list"), the rest at perfectly correct
+    /// declarations further down that only failed because the port list never closed.
+    /// The package's NAME — the single fact that identifies the missing file —
+    /// appeared in none of them.
+    ///
+    /// The position is not ambiguous: a tf-port item is `[direction] data_type
+    /// identifier`, so `IDENT :: IDENT IDENT` there can only be a scope-qualified
+    /// type. Recognising it costs one error that says which package, and consuming the
+    /// three tokens lets the rest of the declaration parse — which is what turns
+    /// eleven errors into one.
+    ///
+    /// Returns `true` when it fired (the caller then has a type-less port to name).
+    pub(crate) fn reject_unknown_scoped_type(&mut self) -> bool {
+        if self.scoped_type_key().is_some() || !self.is_ident() {
+            return false;
+        }
+        if self.peek_at(1) != Some(TokenKind::ColonColon) {
+            return false;
+        }
+        if !matches!(
+            self.peek_at(2),
+            Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
+        ) {
+            return false;
+        }
+        // The 4th token must be the declared NAME — that is what makes this a type
+        // position rather than a `pkg::CONST` value reference.
+        if !matches!(
+            self.peek_at(3),
+            Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
+        ) {
+            return false;
+        }
+        let (pkg, ty) = (self.cur_text().to_string(), self.text_at(2).to_string());
+        // One message for both causes, because from here they are indistinguishable
+        // and both point at the same fix: `{pkg}` was never declared, or it was and
+        // has no `{ty}`. Either way the file that would supply it is not in this run.
+        self.error_owned(format!(
+            "a type this compilation declares — `{pkg}::{ty}` names no typedef in any \
+             package called `{pkg}` (is a source file missing from the file list?)"
+        ));
+        self.bump(); // pkg
+        self.bump(); // ::
+        self.bump(); // type name
+        true
+    }
+}

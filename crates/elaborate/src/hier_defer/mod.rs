@@ -29,6 +29,10 @@ pub(crate) struct DeferredHierCall {
     pub(crate) prefix: String,
     pub(crate) path: Vec<String>,
     pub(crate) argc: usize,
+    /// The CALL's own span. This pass runs long after lowering, so `cur_span` no
+    /// longer points at anything the user wrote — the rejection printed with no
+    /// `file:line` at all.
+    pub(crate) span: ast::Span,
 }
 
 /// Family D (r18): a hierarchical TASK enable `u1.tk(args);` whose callee lives in a

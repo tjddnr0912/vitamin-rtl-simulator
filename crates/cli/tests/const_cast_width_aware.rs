@@ -66,7 +66,8 @@ fn loud(expr: &str) {
     let (_, code, err) = run_raw(&param(expr));
     assert_eq!(code, Some(1), "`{expr}` should be loud:\n{err}");
     assert!(
-        err.contains("is not a foldable constant expression"),
+        err.contains("is not a foldable constant expression")
+            || err.contains("value is not a constant:"),
         "`{expr}` unexpected diagnostic:\n{err}"
     );
 }
@@ -121,10 +122,19 @@ fn a_size_cast_inherits_the_operand_sign() {
 /// pre-existing 64-bit class ROADMAP §2 records for a bare literal.
 #[test]
 fn a_cast_outside_the_i64_domain_declines() {
+    // ⚠️ The FIRST cell is the one that still declines, and it declines for a reason
+    // the wide domain cannot fix: a size cast is a CONTEXT for its operand (§11.6.1 —
+    // the operand is evaluated at `max(its self width, N)`), and this walk folds at the
+    // operand's own width. Folding it there wrapped the 64-bit addition to 0 and
+    // shifted 0, where both oracles carry the sum into bit 64 and answer 1. Loud is the
+    // honest answer until the walk can carry a context width.
     loud("65'(64'd18446744073709551615 + 64'd1) >> 64");
-    loud("(64'(64'hFFFFFFFFFFFFFFFF) > 0)");
-    loud("65'(1)");
-    loud("128'(1)");
+    // ⭐ The other three FOLD now — the operand is self-determined, so folding at its
+    // own width and sizing to the cast is the same operation the LRM describes. All
+    // three measured 1 on iverilog 13.0 AND verilator 5.050.
+    folds("(64'(64'hFFFFFFFFFFFFFFFF) > 0)", 1);
+    folds("65'(1)", 1);
+    folds("128'(1)", 1);
     // The signed 64-bit neighbour is inside the domain and still folds.
     folds("64'(-1)", -1);
     folds("64'(64'h7FFFFFFFFFFFFFFF) >> 32", 2147483647);
@@ -186,7 +196,10 @@ fn a_shadowing_local_never_gets_the_module_scope_compare() {
          endmodule\n",
     );
     assert_eq!(code, Some(1), "must not answer the module param:\n{err}");
-    assert!(err.contains("is not a foldable constant expression"));
+    assert!(
+        err.contains("is not a foldable constant expression")
+            || err.contains("value is not a constant:")
+    );
 }
 
 /// Neighbours that must not move: a widening cast, a param/call/concat operand,

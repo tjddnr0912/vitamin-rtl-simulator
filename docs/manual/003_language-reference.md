@@ -36,7 +36,7 @@ Phase-2.
 | `localparam` | Yes | Not overridable. |
 | Parameter override — positional `#(8)` | Yes | |
 | Parameter override — named `#(.W(8))` | Yes | |
-| `generate` / `endgenerate`, `genvar` | Yes | `for`/`if`/`case` generate constructs. |
+| `generate` / `endgenerate`, `genvar` | Yes | `for`/`if`/`case` generate constructs. The `generate`/`endgenerate` keywords are **optional** (IEEE 1800-2017 §27.3), and the loop variable may be declared in the header — `for (genvar i = 0; i < 4; i++)` (§27.4). |
 | `function` / `endfunction` | Yes | See §6. |
 | `task` / `endtask` | Yes | See §6. |
 | Module instantiation & hierarchy | Yes | Named (`.p(x)`) and positional port maps; arbitrary nesting. |

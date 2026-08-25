@@ -402,8 +402,9 @@ fn pkg_var_in_const_context_is_loud() {
     );
     assert_ne!(c, 0);
     assert!(
-        e.contains("not a foldable constant"),
-        "package var in const context must be loud:\n{e}"
+        // The message now names the CAUSE rather than stopping at "not foldable".
+        e.contains("package variable `p::cnt` is not a constant"),
+        "package var in const context must be loud, and say why:\n{e}"
     );
 }
 

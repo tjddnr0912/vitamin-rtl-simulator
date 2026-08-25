@@ -104,15 +104,26 @@ fn a_bitwise_operator_on_unknown_bits_declines_instead_of_guessing() {
 }
 
 #[test]
-fn carrying_operators_stay_loud() {
-    // The admission boundary, stated as tests. iverilog folds all three; vita refuses
-    // rather than grow a 128-bit adder / sign-aware shifter inside the elaborator.
-    for expr in ["A + 1", "A * 2", "A >>> 4"] {
+fn carrying_operators_fold_in_the_wide_lane() {
+    // ⭐ The admission boundary this file used to state was "carry-free only": `+`, `*`
+    // and `>>>` refused, "rather than grow a 128-bit adder / sign-aware shifter inside
+    // the elaborator". That was a statement about RISK, and the risk is payable — the
+    // limbs are the same `BitPacked` the engine uses and the operand-extension rule is
+    // written once, at the single place both operands reach a common width. Values
+    // measured on iverilog 13.0 AND verilator 5.050.
+    for (expr, want) in [
+        ("A + 1", "0123456789abcdeffedcba9876543211"),
+        ("A * 2", "02468acf13579bdffdb97530eca86420"),
+        ("A >>> 4", "00123456789abcdeffedcba987654321"),
+    ] {
         let out = run(&design(expr));
-        assert!(
-            out.contains("E3009"),
-            "`{expr}` needs a carry or the sign bit — it must stay loud:\n{out}"
-        );
+        assert!(out.contains(want), "`{expr}` should fold to {want}:\n{out}");
+    }
+    // Division and modulus are still out: a wide divide is a different algorithm and
+    // `x/0` has no value in this domain.
+    for expr in ["A / 3", "A % 3"] {
+        let out = run(&design(expr));
+        assert!(out.contains("E3009"), "`{expr}` must stay loud:\n{out}");
     }
 }
 

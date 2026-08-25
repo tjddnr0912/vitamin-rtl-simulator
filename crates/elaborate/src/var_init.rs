@@ -537,3 +537,68 @@ impl Elaborator<'_> {
         self.push_process(proc);
     }
 }
+
+impl Elaborator<'_> {
+    /// IEEE §9.2.2.2: a variable written by `always_comb` may have NO other driver.
+    /// A declaration INITIALIZER is another driver.
+    ///
+    /// ⭐ vita ran `logic rdy = 1'b1; always_comb rdy = …;` at exit 0 with nothing to
+    /// say, while xrun stops elaboration (`*E,MULAXX`) and verilator errors
+    /// (MULTIDRIVEN). That combination is the expensive kind of quiet: the design is
+    /// green in the development loop and dies at sign-off, and the loop is where the
+    /// author still has the context to fix it. Nothing about the simulated VALUE
+    /// changes here — this is the warning that was missing, not a semantics change.
+    ///
+    /// A pure AST pass over the module body: the initializer set comes from the
+    /// declarations, the driver set from `stmt_never_writes_ident` — the same
+    /// conservative write walk the definite-assignment analysis uses, so a write
+    /// through a task call or a nested block counts exactly as it does there.
+    pub(crate) fn warn_always_comb_initializers(&mut self, body: &[ast::ModuleItem]) {
+        // (name, span) of every module-scope variable with a declaration initializer.
+        let mut inited: Vec<(String, ast::Span)> = Vec::new();
+        for item in body {
+            if let ast::ModuleItem::NetVar(d) = item {
+                if !netvar_kind_is_var(d.kind) {
+                    continue; // a `wire` initializer is a continuous assign, not this
+                }
+                for n in &d.names {
+                    if n.init.is_some() {
+                        inited.push((n.name.name.clone(), d.span));
+                    }
+                }
+            }
+        }
+        if inited.is_empty() {
+            return;
+        }
+        let combs: Vec<&ast::Stmt> = body
+            .iter()
+            .filter_map(|it| match it {
+                ast::ModuleItem::Proc(p) if matches!(p.kind, ast::ProcKind::AlwaysComb) => {
+                    Some(&*p.body)
+                }
+                _ => None,
+            })
+            .collect();
+        if combs.is_empty() {
+            return;
+        }
+        for (name, span) in inited {
+            let driven = combs
+                .iter()
+                .any(|s| !stmt_never_writes_ident(std::slice::from_ref(*s), &name, None));
+            if driven {
+                self.warn_code_at(
+                    MsgCode::ElabFeatureLimit,
+                    span,
+                    &format!(
+                        "variable `{name}` has a declaration initializer AND is written by \
+                         `always_comb`, which is two drivers on one variable (IEEE §9.2.2.2) \
+                         — other tools reject this at elaboration; drop the initializer or \
+                         the `always_comb` write"
+                    ),
+                );
+            }
+        }
+    }
+}

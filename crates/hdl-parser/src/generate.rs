@@ -104,6 +104,13 @@ impl Parser<'_, '_> {
         let start = self.cur_span();
         self.bump(); // `for`
         self.expect(TokenKind::LParen, "'(' after generate 'for'");
+        // IEEE 1800-2017 §27.4 `genvar_initialization`: the loop variable may be
+        // DECLARED in the header (`for (genvar i = 0; …)`). vita required it outside,
+        // which widens the name's scope to the whole module and hands collision
+        // management back to the author. The elaborator already binds `init.lvalue`
+        // as the loop's genvar whether or not a declaration preceded it, so the
+        // keyword is consumed and nothing else changes.
+        let _ = self.eat_kw(Kw::Genvar);
         let init = self.parse_gen_assign(false);
         self.expect(TokenKind::Semi, "';' after generate-for init");
         let cond = self.expr(0);

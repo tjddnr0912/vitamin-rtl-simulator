@@ -195,8 +195,8 @@ fn const_context_use_of_package_array_param_is_loud() {
     );
     assert_ne!(c, 0);
     assert!(
-        e.contains("not a foldable constant"),
-        "const-context use must be loud:\n{e}"
+        e.contains("net/variable `T` is not a constant"),
+        "const-context use must be loud, and say why:\n{e}"
     );
 }
 

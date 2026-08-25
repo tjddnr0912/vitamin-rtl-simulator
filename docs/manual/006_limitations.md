@@ -421,8 +421,10 @@ takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`
 
 > **Known limit — an enum whose label names a `parameter` has no working methods.**
 > `typedef enum { A = K, B = K+1 }` with a module `parameter K` parses and the VALUES
-> are correct, but `.name()`, `.first`, `.next` and `.num()` on that enum are rejected,
-> and the message unhelpfully mentions a "hierarchical function call". The cause is that
+> are correct, but `.name()`, `.first`, `.next` and `.num()` on that enum are rejected.
+> *(The message used to describe a "hierarchical function call" — a different feature —
+> and carried no `file:line`. It now names the enum method, the location, and the fix.)*
+> The cause is that
 > enum methods are resolved while parsing, before any instance override is known — and an
 > override really does move the labels (`#(.K(9))` shifts them), so folding the label
 > early would be silently wrong. Use a `localparam` instead, which cannot be overridden
@@ -442,6 +444,34 @@ takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`
 > WILDCARD import (`import pk::*;` then a bare `R`). It is loud, never silent — the
 > package fold succeeds and only the import binding is missing. Use `pk::R` explicitly,
 > or import the name directly. Tracked in `docs/ROADMAP.md` §3.
+>
+> **Fixed 2026-08-25 — a package `real` now reaches module-scope CONSTANTS too.**
+> `localparam real Q = pk::R * 2.0;`, `int'(pk::R * 2.0)`, a `parameter real` port
+> default and `generate if (pk::R > 2.0)` used to be `VITA-E3009` while a
+> byte-identical MODULE-LOCAL real folded — the predicate that chooses the real domain
+> had no `pkg::` arm to see it with.
+
+> **Fixed 2026-08-25 — a package parameter may be wider than 64 bits.**
+> `localparam logic [127:0] K = 128'he1…;` inside a `package` was `VITA-E3009` while
+> the identical declaration in a module, in a `#()` header, in a one-element array and
+> inside a packed struct all worked: the package's scalar path had no wide domain to
+> fall into. It travels through wildcard and explicit imports and through `pk::K`, and
+> `pk::K[127:64]` selects out of it.
+
+> **Fixed 2026-08-25 — the constant domain computes in the width you declared.**
+> A named parameter is an operand of the wide fold now, so `A ^ B` folds where only
+> `A ^ 128'h1` used to; `+`, `-`, `*` and the comparisons have wide arms; `A[127:64]`
+> and `A[127]` select; and the reductions (`^A`, `&A`, …) plus `$countones` /
+> `$onehot` / `$signed` / `$unsigned` fold at any width. A replication count may be a
+> name (`{N{32'd2}}`), and a `-G K=128'h…` override applies instead of being refused.
+>
+> ⚠️ **Two boundaries remain, and both are deliberate.** An UNTYPED parameter's width
+> is inferred from its value, and that inference disagrees with the language
+> (`localparam W = 4'hF | 4'h0;` is 4 bits in every other tool and 32 in the
+> inference) — so a reduction or a select over one stays loud rather than answer from
+> a width nothing declared. And a size cast is a CONTEXT for its operand, so
+> `65'(64'd18446744073709551615 + 64'd1)` — where the sum must carry into bit 64 —
+> also stays loud. Division and modulus have no wide arm.
 
 ---
 

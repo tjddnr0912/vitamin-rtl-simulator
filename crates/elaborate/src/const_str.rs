@@ -247,3 +247,95 @@ fn str_raw_content(raw: &str) -> Option<&str> {
     // caller should decline rather than build on it.
     raw.strip_prefix('"').and_then(|r| r.strip_suffix('"'))
 }
+
+impl Elaborator<'_> {
+    /// A built-in STRING METHOD in a constant context: `localparam int W = S.len();`.
+    ///
+    /// ⭐ The runtime spelling of every one of these already works. What was missing is
+    /// that a `localparam` cannot call one — so a width derived from a constant string
+    /// had to be written out by hand and kept in sync with the string, which is the
+    /// thing a `localparam` exists to prevent. There is no `::` and no package in the
+    /// failing case: it is the plainest spelling there is.
+    ///
+    /// Only the INTEGER-returning methods are folded (`len`, `getc`, `compare`, and the
+    /// `ato*` family) — a `substr`/`toupper` result is a STRING and belongs in
+    /// `const_str_in_scope`, not here. `atoreal` returns a real and is the real domain's.
+    ///
+    /// ⚠️ `S.len()` parses as a two-segment `Call`, not a `MethodCall` — both spellings
+    /// are accepted here so the fold cannot depend on which one the parser produced.
+    pub(crate) fn const_string_method(&self, e: &ast::Expr) -> Option<i64> {
+        let (recv, method, args): (&ast::Expr, &str, &[ast::Expr]) = match &e.kind {
+            ast::ExprKind::MethodCall { recv, method, args } => (recv, method.name.as_str(), args),
+            // `S.len()` — the receiver is the path's leading segments.
+            ast::ExprKind::Call { name, args } if name.segments.len() == 2 => {
+                let head = ast::Expr {
+                    span: name.segments[0].span,
+                    kind: ast::ExprKind::Ident(ast::HierPath {
+                        segments: vec![name.segments[0].clone()],
+                        span: name.segments[0].span,
+                    }),
+                };
+                // The receiver expression is synthesized, so it cannot be borrowed out
+                // of `e`; fold it here and dispatch on the raw text below.
+                let raw = self.const_str_in_scope(&head)?;
+                return const_str_method_value(&raw, name.segments[1].name.as_str(), args, self);
+            }
+            _ => return None,
+        };
+        let raw = self.const_str_in_scope(recv)?;
+        const_str_method_value(&raw, method, args, self)
+    }
+}
+
+/// The value half of [`Elaborator::const_string_method`], over the receiver's RAW
+/// literal text. Split out so both parse shapes share one table.
+fn const_str_method_value(
+    raw: &str,
+    method: &str,
+    args: &[ast::Expr],
+    el: &Elaborator<'_>,
+) -> Option<i64> {
+    let bytes = literal::unescape_str_literal_bytes(raw);
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    let radix = |r: u32| i64::from_str_radix(text.trim(), r).ok().or(Some(0));
+    match (method, args.len()) {
+        ("len", 0) => Some(bytes.len() as i64),
+        ("getc", 1) => {
+            let i = el.const_int_selfdet(&args[0])?;
+            // §6.16.2: an out-of-range index yields 0, which is a VALUE, not a decline.
+            Some(match usize::try_from(i).ok().and_then(|i| bytes.get(i)) {
+                Some(&b) => i64::from(b),
+                None => 0,
+            })
+        }
+        ("compare", 1) => {
+            let other = el.const_str_in_scope(&args[0])?;
+            let ob = literal::unescape_str_literal_bytes(&other);
+            Some(match bytes.cmp(&ob) {
+                std::cmp::Ordering::Less => -1,
+                std::cmp::Ordering::Equal => 0,
+                std::cmp::Ordering::Greater => 1,
+            })
+        }
+        // §6.16.9-12. A non-numeric prefix yields 0 in every tool, so a parse failure
+        // is `Some(0)` rather than a decline — declining would make `atoi` LOUD on the
+        // one input the LRM defines an answer for.
+        ("atoi", 0) => text
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .or_else(|| {
+                let d: String = text
+                    .trim()
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit() || *c == '-' || *c == '+')
+                    .collect();
+                d.parse::<i64>().ok()
+            })
+            .or(Some(0)),
+        ("atohex", 0) => radix(16),
+        ("atooct", 0) => radix(8),
+        ("atobin", 0) => radix(2),
+        _ => None,
+    }
+}

@@ -267,23 +267,59 @@ impl Elaborator<'_> {
         let deferred = std::mem::take(&mut self.deferred_hier_calls);
         for d in deferred {
             let Some(fid) = self.hier_resolve(&d.prefix, &d.path, &self.hier_funcs) else {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    &format!(
+                // ⭐ An ENUM METHOD lands here, and the generic wording described a
+                // DIFFERENT feature: `x.name()` is not a hierarchical call at all, and
+                // telling its author about "framed functions with input-only scalar
+                // formals reached through an instance path" sent them looking at the
+                // wrong construct entirely. It arrives here because `x`'s enum type was
+                // never registered, so the parser's method desugar did not fire and the
+                // two-segment name fell through to this resolver.
+                let is_enum_method = d.path.len() == 2
+                    && matches!(
+                        d.path[1].as_str(),
+                        "name" | "next" | "prev" | "first" | "last" | "num"
+                    )
+                    // The receiver must be a NET in the scope the CALL was lowered in —
+                    // `cur_prefix` has moved on by the time this pass runs, so the key
+                    // is rebuilt from the saved prefix rather than looked up ambiently.
+                    // Without that a genuine `u1.next(x)` could take this message.
+                    && {
+                        let key = if d.prefix.is_empty() {
+                            d.path[0].clone()
+                        } else {
+                            format!("{}.{}", d.prefix, d.path[0])
+                        };
+                        self.symbols.contains_key(&key)
+                    };
+                let msg = if is_enum_method {
+                    format!(
+                        "enum method `{}` is unavailable: the enum type of `{}` was not \
+                         registered, which happens when a label's value is not a \
+                         parse-time constant (an overridable `parameter`, or a sized \
+                         literal). Give the labels plain decimal `localparam` / literal \
+                         values — the VALUES themselves are correct either way, it is \
+                         only the methods that are lost",
+                        d.path.join("."),
+                        d.path[0]
+                    )
+                } else {
+                    format!(
                         "unsupported hierarchical function call `{}` (the callee must be a \
                          framed function with input-only scalar formals and a non-string \
                          return, reached through an instance path)",
                         d.path.join(".")
-                    ),
-                );
+                    )
+                };
+                self.error_at(MsgCode::ElabUnsupported, d.span, &msg);
                 continue;
             };
             // Arity guard: the engine coerces actuals to formal widths BY INDEX, so a
             // wrong count would read past / drop formals (silent-wrong) — loud instead.
             let n_params = self.func_metas[fid as usize].n_params as usize;
             if n_params != d.argc {
-                self.error(
+                self.error_at(
                     MsgCode::ElabUnsupported,
+                    d.span,
                     &format!(
                         "hierarchical call `{}` passes {} argument(s) but the function \
                          takes {}",

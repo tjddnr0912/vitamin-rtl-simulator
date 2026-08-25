@@ -175,6 +175,7 @@ impl Elaborator<'_> {
                     prefix: self.cur_prefix.clone(),
                     path: name.segments.iter().map(|s| s.name.clone()).collect(),
                     argc,
+                    span: name.span,
                 });
                 return eid;
             }
@@ -253,19 +254,34 @@ impl Elaborator<'_> {
         // A non-framed recursive function reaching here means the recursion cycle
         // was missed by `build_frame_set` (it should have been framed) — the inline
         // path's `inline_stack` guard still catches it loud (in `inline_resolved_func`).
-        self.inline_resolved_func(&func, args)
+        //
+        // ⭐ The package this function was DECLARED in travels with it. IEEE §26.3 says
+        // a routine's body resolves in its declaring scope, and `resolve_rtn_key` is
+        // how vita spells that — but only the FRAME path ever pushed `cur_rtn_pkg`, so
+        // a STATIC package function could not see its own sibling: `import p::gmul;`
+        // made `gmul`'s body's call to `xtime` an undeclared-function error, while
+        // spelling the same function `automatic` worked, and so did importing `xtime`
+        // as well (which is the caller's business, not the callee's).
+        let pk = self.rtn_key_pkg(fname.as_str());
+        self.inline_resolved_func_in_pkg(&func, args, pk)
     }
 
     /// Inline an ALREADY-RESOLVED function definition as a straight-line fold, formals
-    /// bound to actuals. Shared by the bare-name inline path (`inline_function`, after
-    /// the frame dispatch) and the package-scoped pure-inline path
-    /// (`inline_pkg_function`). Does NOT consult the frame set — the caller decides
-    /// frame vs inline. The `inline_stack` guard still catches any missed recursion
-    /// cycle loud.
-    pub(crate) fn inline_resolved_func(
+    /// bound to actuals. Does NOT consult the frame set — the caller decides frame vs
+    /// inline. The `inline_stack` guard still catches any missed recursion cycle loud.
+    ///
+    /// `pkg` is the callee's DECLARING PACKAGE, so its body resolves bare sibling calls
+    /// the way IEEE §26.3 requires.
+    ///
+    /// ⚠️ The package is pushed around the BODY reduction ONLY, never around the
+    /// ACTUAL-argument lowering above it. The actuals belong to the CALLER's scope: a
+    /// module that declares its own `xtime` and writes `gmul(xtime(3))` must get the
+    /// module's, and pushing earlier would silently hand it the package's.
+    pub(crate) fn inline_resolved_func_in_pkg(
         &mut self,
         func: &ast::FunctionDef,
         args: &[ast::Expr],
+        pkg: Option<String>,
     ) -> u32 {
         let fname = func.name.name.clone();
         if self.inline_stack.iter().any(|n| n == &fname) {
@@ -334,7 +350,14 @@ impl Elaborator<'_> {
         let n_dyn = dyn_binds.len();
         self.dyn_subst.extend(dyn_binds);
         self.inline_stack.push(fname);
+        let in_pkg = pkg.is_some();
+        if let Some(p) = pkg {
+            self.cur_rtn_pkg.push(p);
+        }
         let result = self.reduce_function_body(func, &inputs, &actual_ids, &eff_args);
+        if in_pkg {
+            self.cur_rtn_pkg.pop();
+        }
         self.inline_stack.pop();
         self.dyn_subst.truncate(self.dyn_subst.len() - n_dyn);
         // R2 / §6.11.3: a 2-state return (`int`/`byte`/`bit`/…) must coerce X/Z→0. The

@@ -19,6 +19,9 @@ pub(crate) struct ParamOverrides {
     pub(crate) fill: BTreeMap<String, (ast::IntLitKind, String)>,
     pub(crate) text: BTreeMap<String, String>,
     pub(crate) unfoldable: std::collections::BTreeSet<String>,
+    /// The wide channel — see `ResolvedOverride::bits`. It carries the override's
+    /// WIDTH as well as its value, which is what §6.20.2 gives an untyped parameter.
+    pub(crate) bits: BTreeMap<String, ir::ConstVal>,
 }
 
 impl ParamOverrides {
@@ -58,6 +61,7 @@ impl ParamOverrides {
         self.fill.remove(name);
         self.text.remove(name);
         self.unfoldable.remove(name);
+        self.bits.remove(name);
     }
 }
 
@@ -98,6 +102,30 @@ impl Elaborator<'_> {
 
     pub(crate) fn param_decl_width_unoverridden(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
         self.param_decl_width_opt(p, false, true)
+    }
+
+    /// [`Self::param_decl_width_unoverridden`] restricted to DECLARED provenance — the
+    /// `(width, signed)` twin of what `param_decl_range` records, and the only meta the
+    /// wide bit domain may resize against.
+    ///
+    /// ⚠️ The unrestricted wrapper is NOT interchangeable here even on the decline path
+    /// it is reached from. Three of its value-inferring arms are already fenced off by
+    /// needing a folded value, but the concatenation arm is not: it sizes a leaf NAME
+    /// through `param_meta`, where inferred widths live, so a concatenation could hand
+    /// back a width nothing declared. Truncating a folded value to such a width is the
+    /// §4.5.363 263-bit-net shape with the sign flipped.
+    pub(crate) fn param_decl_width_declared(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
+        self.param_decl_width_opt(p, true, true)
+    }
+
+    /// [`Self::param_decl_width_declared`] for a declaration an OVERRIDE reached — the
+    /// declared range / type / sized literal only, with nothing the initializer's own
+    /// value could have supplied.
+    pub(crate) fn param_decl_width_declared_overridden(
+        &self,
+        p: &ast::ParamDecl,
+    ) -> Option<(u32, bool)> {
+        self.param_decl_width_opt(p, true, false)
     }
 
     /// The string value of a parameter's declared default: its LITERAL first, and only
@@ -422,14 +450,28 @@ impl Elaborator<'_> {
     /// `hi − 26` = 5). Direction, not LSB, is what `norm_offset_for_range` needs.
     ///
     /// Reads the SAME `p.range` as [`Self::param_decl_width`].
-    pub(crate) fn param_decl_range(&self, p: &ast::ParamDecl) -> Option<(u32, u32, bool)> {
+    /// [`Self::param_decl_range`] told whether this declaration's DEFAULT is what binds.
+    ///
+    /// ⚠️ The distinction is §6.20.2's, and it is the same one `param_decl_width_opt`
+    /// draws: a width taken from a self-determined INITIALIZER (a concatenation of
+    /// sized literals) is a declared fact only while that initializer is the value. An
+    /// override replaces it, and then the width came from somewhere that no longer
+    /// exists. Passing `false` unconditionally — which is what this did — was safe but
+    /// blind: it also refused the un-overridden case, so `parameter M_ISSUE =
+    /// {M_COUNT{32'd4}}` recorded no range and `M_ISSUE[n*32 +: 32]`, the way every AXI
+    /// generator slices a per-port vector, had nothing to select out of.
+    pub(crate) fn param_decl_range_opt(
+        &self,
+        p: &ast::ParamDecl,
+        default_binds: bool,
+    ) -> Option<(u32, u32, bool)> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
         }
         let Some(r) = p.range.as_ref() else {
             // No declared range: the width is a fact only when a TYPE or a LITERAL
             // states it. `lo = 0`, descending — an offset no-op.
-            let (w, _) = self.param_decl_width_opt(p, true, false)?;
+            let (w, _) = self.param_decl_width_opt(p, true, default_binds)?;
             return Some((0, w, false));
         };
         let m = self.const_eval_in_scope(&r.msb)?;
@@ -599,6 +641,16 @@ impl Elaborator<'_> {
     /// REPRESENTATION. A declaration wider than 64 bits takes the `wide_param_bits`
     /// route instead and does carry the x's — which is why the narrow case is the only
     /// one that has to say this.
+    /// The loud line for a parameter whose value the constant domain cannot produce.
+    ///
+    /// ⭐ Two things about it were wrong at once, and they are the same defect seen
+    /// from two sides: it named the DECLARED thing and not the REJECTED one. The
+    /// caret came from `cur_span`, which during module elaboration is the module
+    /// header — so N rejections in one module printed the same `file:line:col`, at a
+    /// line with no parameter on it. And the text stopped at "not a foldable constant
+    /// expression", so three declarations rejected for three unrelated reasons were
+    /// indistinguishable. Both are fixed here: the caret goes on the INITIALIZER, and
+    /// [`Self::unfoldable_reason`] names the innermost sub-expression that failed.
     pub(crate) fn param_value_unfoldable(&mut self, what: &str, name: &str, value: &ast::Expr) {
         let unknown_fill = const_eval::fill_literal_ast(value)
             .map(|(raw, kind)| (raw.to_string(), kind))
@@ -608,9 +660,12 @@ impl Elaborator<'_> {
                 "{what} `{name}` is declared `{raw}`, which this parameter model cannot \
                  hold — a parameter value has no x/z plane"
             ),
-            None => format!("{what} `{name}` value is not a foldable constant expression"),
+            None => match self.unfoldable_reason(value) {
+                Some(why) => format!("{what} `{name}` value is not a constant: {why}"),
+                None => format!("{what} `{name}` value is not a foldable constant expression"),
+            },
         };
-        self.error(MsgCode::ElabUnsupported, &msg);
+        self.error_at(MsgCode::ElabUnsupported, value.span, &msg);
     }
 
     /// Turn `-G NAME=VALUE` into overrides for one top module.
@@ -673,23 +728,30 @@ impl Elaborator<'_> {
                     // never read — `false` is the honest value.
                     str_is_literal: false,
                     str: None,
+                    // A fill has no width of its own — it takes the target's, which is
+                    // exactly what the `fill` channel above exists to do.
+                    bits: None,
                 });
                 continue;
             }
+            // The SIZED-literal form is parsed once and kept whole: `wide` carries the
+            // value at its declared width, which is what a >64-bit `-G` needs and what
+            // §6.20.2 wants even when the value fits.
+            let sized = crate::literal::parse_int_literal(t, ast::IntLitKind::Sized);
+            let mut wide: Option<ir::ConstVal> = None;
             let (value, text) = if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') {
                 (None, Some(t[1..t.len() - 1].to_string()))
             } else if let Ok(v) = t.parse::<i64>() {
                 (Some(v), None)
-            } else if let Some(cv) = crate::literal::parse_int_literal(t, ast::IntLitKind::Sized)
-                .and_then(|c| {
-                    // Same i64 domain the override channel uses everywhere else: a
-                    // value with bits above word 0 does not fit and is loud, not
-                    // silently truncated.
-                    (!c.bits.val.iter().skip(1).any(|&w| w != 0))
-                        .then(|| c.bits.val.first().copied().unwrap_or(0) as i64)
-                })
-            {
-                (Some(cv), None)
+            } else if let Some(c) = sized {
+                wide = Some(c.clone());
+                // The i64 channel still takes it when it fits, so every override that
+                // applied before applies by the same route.
+                let fits = !c.bits.val.iter().skip(1).any(|&w| w != 0);
+                (
+                    fits.then(|| c.bits.val.first().copied().unwrap_or(0) as i64),
+                    None,
+                )
             } else {
                 self.error(
                     MsgCode::ElabPortMismatch,
@@ -710,6 +772,7 @@ impl Elaborator<'_> {
                 // quotes itself, there is no expression to fold.
                 str_is_literal: true,
                 str: text,
+                bits: wide,
             });
         }
         out
@@ -757,6 +820,9 @@ impl Elaborator<'_> {
                         if let Some(f) = &ov.fill {
                             o.fill.insert(p.name.name.clone(), f.clone());
                         }
+                        if let Some(b) = &ov.bits {
+                            o.bits.insert(p.name.name.clone(), b.clone());
+                        }
                         if let Some(t) = Self::override_text_for(p, ov) {
                             o.text.insert(p.name.name.clone(), t);
                         }
@@ -776,6 +842,9 @@ impl Elaborator<'_> {
                         o.by_name.insert(p.name.name.clone(), ov.value);
                         if let Some(f) = &ov.fill {
                             o.fill.insert(p.name.name.clone(), f.clone());
+                        }
+                        if let Some(b) = &ov.bits {
+                            o.bits.insert(p.name.name.clone(), b.clone());
                         }
                         if let Some(t) = Self::override_text_for(p, ov) {
                             o.text.insert(p.name.name.clone(), t);
@@ -1048,10 +1117,25 @@ impl Elaborator<'_> {
                 && !ovr_fill.contains_key(p.name.name.as_str())
                 && !ovr_str.contains_key(p.name.name.as_str())
                 && !ovr_unfoldable.contains(p.name.name.as_str());
+            let ovr_bits = ovr.bits.get(p.name.name.as_str());
             let meta = if default_binds {
                 self.param_decl_width_unoverridden(p)
             } else {
-                self.param_decl_width(p)
+                // §6.20.2: an UNTYPED parameter takes the range of its FINAL override
+                // value. Only the wide channel carries one — `by_name` is a bare i64 —
+                // so without this the child re-derived a width from the magnitude:
+                // `#(.M_ISSUE(M_ISSUE))` forwarding `{2{32'd4}}` arrived as 35 bits
+                // where every other tool has 64, and the per-port slice `M_ISSUE[32 +:
+                // 32]` then read past the end. A DECLARED type still wins — it survives
+                // an override, and `param_decl_width` answers for it first.
+                // Order matters and is §6.20.2's: a DECLARED type survives an override,
+                // the override's own width comes next, and only then the width inferred
+                // from the folded value. Asking `param_decl_width` first put the
+                // inference ahead of the override — it answers 35 for `{2{32'd4}}` (the
+                // value's minimal signed width) and never reached the override's 64.
+                self.param_decl_width_declared_overridden(p)
+                    .or_else(|| ovr_bits.map(|c| (c.width, c.signed)))
+                    .or_else(|| self.param_decl_width(p))
             };
             let pw = meta.map(|(w, _)| w);
             // A fill-literal override re-folds at THIS param's declared width.
@@ -1067,7 +1151,16 @@ impl Elaborator<'_> {
             // default; the escalation above has already made that loud.
             let chosen_val: Option<i64> = ovr_fill_v
                 .or_else(|| ovr_by_name.get(p.name.name.as_str()).copied().flatten())
-                .or_else(|| self.eval_param_init(&p.value, pw));
+                .or_else(|| self.eval_param_init(&p.value, pw))
+                // The WIDE bit domain, read back as an i64 because the declaration
+                // fits one. Last in the chain: it fires only where every integer arm
+                // declined, so a reduction (`^A`), a select (`A[7:4]`) or a wide
+                // comparison becomes a value instead of an error, and nothing that
+                // folded before changes route.
+                .or_else(|| {
+                    let dm = self.param_decl_width_declared(p);
+                    self.param_i64_at_declared(&p.value, dm)
+                });
             // Wider than the i64 constant domain — see `wide_param_bits`. Reached
             // ONLY when the numeric fold above already declined, so a wide DECLARATION
             // whose value happens to fit (`localparam logic [255:0] K = 256'h1`) keeps
@@ -1076,8 +1169,28 @@ impl Elaborator<'_> {
             // declaration scopes from correct to loud — the field doc claimed the
             // opposite ("the boundary is the VALUE, not the declared width") and the
             // code was the counterexample.
-            if chosen_val.is_none() {
-                let wide = meta.and_then(|(w, sg)| self.wide_param_const_in_scope(&p.value, w, sg));
+            // An override whose value is WIDER than the i64 channel: install it in the
+            // wide side map, which is where a >64-bit parameter lives. Before this,
+            // `-G K=128'hdead…` and `#(.K(128'h…))` could only be REFUSED — correctly,
+            // since installing the low 64 bits would be a different design — so a
+            // sweep over 128-bit keys had to go through a file instead.
+            if let Some(cv) = ovr_bits.filter(|c| c.width > 64) {
+                let key = self.fq(&p.name.name);
+                let mut cv = cv.clone();
+                // The DECLARED width still wins when there is one (§6.20.2 gives the
+                // override's range only to an untyped parameter).
+                if let Some((w, sg)) = self.param_decl_width(p) {
+                    cv.bits = resize_bits(&cv.bits, cv.width, w, cv.signed);
+                    cv.width = w;
+                    cv.signed = sg;
+                }
+                if cv.width > 64 {
+                    self.wide_param_bits.insert(key, cv);
+                    return;
+                }
+            }
+            {
+                let wide = self.wide_disagreeing_value(&p.value, meta, chosen_val);
                 if let Some(cv) = wide {
                     let key = self.fq(&p.name.name);
                     self.wide_param_bits.insert(key, cv);
@@ -1098,7 +1211,17 @@ impl Elaborator<'_> {
             if let Some(m) = meta {
                 self.param_meta.insert(key.clone(), m);
             }
-            if let Some(r) = self.param_decl_range(p) {
+            // `default_binds` is the same flag `meta` was computed with a few lines up:
+            // an overridden header parameter's initializer no longer supplies its width.
+            // An OVERRIDE supplies one instead — that is what §6.20.2 says the range of
+            // an untyped parameter is, and the wide channel is the only one carrying it.
+            let range = self.param_decl_range_opt(p, default_binds).or_else(|| {
+                (!default_binds)
+                    .then(|| ovr.bits.get(p.name.name.as_str()))
+                    .flatten()
+                    .map(|c| (0, c.width, false))
+            });
+            if let Some(r) = range {
                 self.param_range.insert(key.clone(), r);
             }
             saved.push((key.clone(), self.params.insert(key, v)));

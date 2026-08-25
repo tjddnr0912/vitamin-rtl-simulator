@@ -706,6 +706,25 @@ impl Parser<'_, '_> {
         if self.at_kw(Kw::Generate) {
             return Some(ModuleItem::Generate(self.parse_generate_construct()));
         }
+        // IEEE 1800-2017 §27.3: **the `generate` and `endgenerate` keywords are
+        // optional.** A conditional or loop generate written without them is the
+        // dominant spelling in modern SV and is what synthesis tools and other
+        // simulators are handed, so refusing it made the wrapper mandatory in vita
+        // and only in vita. The error it produced pointed at the `end`/`else` that
+        // followed, never at the missing keyword.
+        //
+        // Only these three keywords reach here: `parse_gen_item` tests them BEFORE
+        // falling through to `parse_module_item`, so a bare `if` inside an explicit
+        // `generate` block never takes this path and the two spellings cannot
+        // recurse into each other.
+        if self.at_kw(Kw::If) || self.at_kw(Kw::For) || self.at_kw(Kw::Case) {
+            let start = self.cur_span();
+            let items = self.parse_gen_item().into_iter().collect::<Vec<_>>();
+            return Some(ModuleItem::Generate(GenerateConstruct {
+                items,
+                span: start.to(self.prev_span()),
+            }));
+        }
         // module-level concurrent assertion: `assert property(@(clk) …);`
         // (slice S10). Only `assert property` is a module item — an immediate
         // `assert (expr)` is procedural-only and is a loud error here. The

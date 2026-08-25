@@ -348,6 +348,22 @@ impl Elaborator<'_> {
                 saved_m.push((key.clone(), self.param_meta.insert(key, m)));
             }
         }
+        // The wide side map gets the same scoped registration. `wide_param_bits` is
+        // FQ-keyed and a package function's prefix is its own, so no unwind list is
+        // needed — but the skip set still applies: a formal of the same name is a NET
+        // and must keep winning.
+        let wides: Vec<(String, ir::ConstVal)> = self
+            .pkg_wide_bits
+            .get(pkg)
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default();
+        for (cname, cv) in wides {
+            if skip.contains(&cname) {
+                continue;
+            }
+            let key = self.fq(&cname);
+            self.wide_param_bits.insert(key, cv);
+        }
         (saved_p, saved_m)
     }
 
@@ -461,9 +477,11 @@ impl Elaborator<'_> {
         // collected for the flush into the per-package maps the readers consult.
         let mut saved_real: Vec<(String, Option<f64>)> = Vec::new();
         let mut saved_str: Vec<(String, Option<String>)> = Vec::new();
+        let mut saved_wide: Vec<(String, Option<ir::ConstVal>)> = Vec::new();
         let mut consts: BTreeMap<String, i64> = BTreeMap::new();
         let mut real_vals: BTreeMap<String, f64> = BTreeMap::new();
         let mut str_vals: BTreeMap<String, String> = BTreeMap::new();
+        let mut wide_vals: BTreeMap<String, ir::ConstVal> = BTreeMap::new();
         // Every parameter name in this body, whatever domain it folded into — see
         // `elaborate_pkg_netvar`. Kept beside the three value maps rather than derived
         // from them, so a future fourth domain has one obvious place to register.
@@ -546,19 +564,42 @@ impl Elaborator<'_> {
                     // recomputed a few lines below for `const_meta`; asking twice is
                     // cheaper than reordering a block whose restore list is positional.
                     let pmeta = self.param_decl_width_unoverridden(p);
-                    let v = self
+                    let folded = self
                         .const_eval_in_scope(&p.value)
                         .or_else(|| self.param_value_via_real(pmeta, &p.value))
-                        .unwrap_or_else(|| {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                &format!(
-                                    "package parameter `{}` value is not a foldable constant",
-                                    p.name.name
-                                ),
-                            );
-                            0
+                        .or_else(|| {
+                            let dm = self.param_decl_width_declared(p);
+                            self.param_i64_at_declared(&p.value, dm)
                         });
+                    // The FOURTH domain, and the one the package fold never grew: a
+                    // value too wide for i64. Reached only after the numeric fold
+                    // declined, exactly like the module-body twin, so a wide
+                    // DECLARATION whose value happens to fit keeps its integer
+                    // identity and stays usable as a width and a bound.
+                    {
+                        if let Some(cv) = self.wide_disagreeing_value(&p.value, pmeta, folded) {
+                            saved_wide.push((
+                                key.clone(),
+                                self.wide_param_bits.insert(key.clone(), cv.clone()),
+                            ));
+                            wide_vals.insert(p.name.name.clone(), cv);
+                            if let Some(m) = pmeta {
+                                const_meta.insert(p.name.name.clone(), m);
+                                saved_meta.push((key.clone(), self.param_meta.insert(key, m)));
+                            }
+                            continue;
+                        }
+                    }
+                    let v = folded.unwrap_or_else(|| {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "package parameter `{}` value is not a foldable constant",
+                                p.name.name
+                            ),
+                        );
+                        0
+                    });
                     saved.push((key.clone(), self.params.insert(key.clone(), v)));
                     consts.insert(p.name.name.clone(), v);
                     // A package constant has no override channel.
@@ -752,6 +793,19 @@ impl Elaborator<'_> {
                 }
             }
         }
+        // The wide entries were made live for intra-package siblings (`localparam
+        // [127:0] M = ~K;`) exactly as the string and real ones are; module-scope
+        // reads go through `pkg_wide_bits`, so these must not linger either.
+        for (k, prev) in saved_wide.into_iter().rev() {
+            match prev {
+                Some(cv) => {
+                    self.wide_param_bits.insert(k, cv);
+                }
+                None => {
+                    self.wide_param_bits.remove(&k);
+                }
+            }
+        }
         self.cur_prefix = saved_prefix;
         self.pkg_consts.insert(pkg.clone(), consts);
         if !types.is_empty() {
@@ -765,6 +819,9 @@ impl Elaborator<'_> {
         }
         if !str_vals.is_empty() {
             self.pkg_str_raw.insert(pkg.clone(), str_vals);
+        }
+        if !wide_vals.is_empty() {
+            self.pkg_wide_bits.insert(pkg.clone(), wide_vals);
         }
         self.pkg_vars.insert(pkg.clone(), vars);
         if !array_vals.is_empty() {
@@ -930,6 +987,41 @@ impl Elaborator<'_> {
                         }
                     }
                 }
+                // The WIDE consts ride the same wildcard, from their own side map:
+                // they are not in `consts` (no i64 value), so without this pass a
+                // `import p::*;` bound every narrow parameter of the package and
+                // silently skipped the 128-bit ones.
+                let wides: Vec<(String, ir::ConstVal)> = self
+                    .pkg_wide_bits
+                    .get(pkg)
+                    .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                    .unwrap_or_default();
+                for (name, cv) in wides {
+                    let key = self.fq(&name);
+                    if explicit_imports.contains(&key) {
+                        continue;
+                    }
+                    match wc_origin.get(&key).map(String::as_str) {
+                        Some("") => continue,
+                        Some(prev) if prev != pkg => {
+                            self.wide_param_bits.remove(&key);
+                            wc_origin.insert(key, String::new());
+                        }
+                        Some(_) => {}
+                        None => {
+                            self.wide_param_bits.insert(key.clone(), cv);
+                            if let Some(m) = self
+                                .pkg_const_meta
+                                .get(pkg)
+                                .and_then(|mm| mm.get(&name))
+                                .copied()
+                            {
+                                self.param_meta.insert(key.clone(), m);
+                            }
+                            wc_origin.insert(key, pkg.to_string());
+                        }
+                    }
+                }
                 // A2b-prereq: wildcard-bind the package's VARIABLES as symbol
                 // aliases (interface-alias precedent — one insertion covers
                 // every read/write name→net funnel). Same origin/ambiguity
@@ -977,7 +1069,27 @@ impl Elaborator<'_> {
                 }
             }
             Some(sym) => {
-                if let Some(&v) = consts.get(&sym.name) {
+                if let Some(cv) = self
+                    .pkg_wide_bits
+                    .get(pkg)
+                    .and_then(|m| m.get(&sym.name))
+                    .cloned()
+                {
+                    let key = self.fq(&sym.name);
+                    explicit_imports.insert(key.clone());
+                    if self.pkg_var_aliases.remove(&key).is_some() {
+                        self.symbols.remove(&key);
+                    }
+                    if let Some(m) = self
+                        .pkg_const_meta
+                        .get(pkg)
+                        .and_then(|mm| mm.get(&sym.name))
+                        .copied()
+                    {
+                        self.param_meta.insert(key.clone(), m);
+                    }
+                    self.wide_param_bits.insert(key, cv);
+                } else if let Some(&v) = consts.get(&sym.name) {
                     let key = self.fq(&sym.name);
                     explicit_imports.insert(key.clone());
                     // A2b-prereq S4 (symmetric): an explicit CONST import wins

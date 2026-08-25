@@ -78,7 +78,8 @@ fn loud(body: &str, extra: &str) {
         "expected a loud reject, not {code:?}:\n{err}"
     );
     assert!(
-        err.contains("is not a foldable constant expression"),
+        err.contains("is not a foldable constant expression")
+            || err.contains("value is not a constant:"),
         "unexpected diagnostic:\n{err}"
     );
 }
@@ -135,14 +136,21 @@ fn a_placement_that_does_not_fit_the_i64_domain_declines() {
     // 64 bits, top bit SET — every consumer shape the review measured.
     loud("    int x = {32'hFFFFFFFF, 32'h0};\n    g = x;", "");
     loud("    int x = {2{32'hFFFFFFFF}};\n    g = x;", "");
-    let (_, code, err) = run_raw(
+    // ⭐ The two MODULE-SCOPE cells below used to assert a loud reject, and the
+    // docstring above called them "honest-loud, not correct — iverilog has a value for
+    // each". They are correct now, and the mechanism is the same one that closed the
+    // 64-bit comparison generally: the WIDE bit domain compares inside the width the
+    // operands declare, so a 64-bit value with the top bit set is a large positive
+    // number rather than a negative i64. Both oracles: 111 for each.
+    let (out, code, err) = run_raw(
         "module top;\n\
          localparam integer L = ({32'hFFFFFFFF, 32'h0} > 0) ? 111 : 222;\n\
          initial begin $display(\"R=%0d\", L); #1 $finish; end\n\
          endmodule\n",
     );
-    assert_eq!(code, Some(1), "module-scope 64-bit placement:\n{err}");
-    let (_, code, err) = run_raw(
+    assert_eq!(code, Some(0), "module-scope 64-bit placement:\n{err}");
+    assert!(out.contains("R=111"), "both oracles say 111:\n{out}");
+    let (out, code, err) = run_raw(
         "module top;\n\
          generate if ({1'b1, 63'd0} > 0) begin : y\n\
          initial begin $display(\"R=%0d\", 111); #1 $finish; end\n\
@@ -151,11 +159,8 @@ fn a_placement_that_does_not_fit_the_i64_domain_declines() {
          end endgenerate\n\
          endmodule\n",
     );
-    assert_ne!(
-        code,
-        Some(0),
-        "generate-if must not pick a branch here:\n{err}"
-    );
+    assert_eq!(code, Some(0), "generate-if over a 64-bit value:\n{err}");
+    assert!(out.contains("R=111"), "both oracles take THEN:\n{out}");
     // …and what still folds: 63 bits, and 64 bits with the top bit clear.
     folds("    int x = {63{1'b1}} > 0;\n    g = x;", "", 1);
     folds("    longint x = {32'h1, 32'h0};\n    g = x >> 32;", "", 1);
@@ -217,7 +222,10 @@ fn module_scope_and_body_agree_on_placement() {
 /// Every one of these was a silent 0 before the slice.
 #[test]
 fn unfoldable_decl_init_is_loud_not_a_silent_zero() {
-    loud("    int x = {4'd2, (4'd1+4'd1)};\n    g = x;", "");
+    // `{4'd2, (4'd1+4'd1)}` was the first cell here and it FOLDS now — 34, which is
+    // what both oracles say. What remains unfoldable is what the domain cannot
+    // represent (an x/z bit) or cannot model (a cast in a function-local initializer).
+    folds("    int x = {4'd2, (4'd1+4'd1)};\n    g = x;", "", 34);
     loud("    int x = {4'd2, 4'bxx01};\n    g = x;", "");
     loud("    int x = int'(7);\n    g = x;", "");
     // A concat operand that is an UNBOUND local declines rather than letting the
@@ -238,7 +246,11 @@ fn dead_unfoldable_decl_init_still_folds() {
     // A shape the CARRY-FREE placement folder declines, so it stands in for
     // "the interpreter cannot fold this initializer" now that a bare cast,
     // concatenation and replication all do fold.
-    const DEAD: &str = "{4'd2, (4'd1+4'd1)}";
+    // ⚠️ The stand-in used to be `{4'd2, (4'd1+4'd1)}`, chosen because the CARRY-FREE
+    // placement folder declined an addition. It folds now (34, both oracles), so the
+    // proxy had to become one that cannot stop being unfoldable: a parameter value has
+    // no x/z plane, so an initializer carrying UNKNOWN bits can never have one.
+    const DEAD: &str = "{4'd2, 4'bxx01}";
     folds(
         &format!("    int x = {DEAD};\n    x = 42;\n    g = x;"),
         "",
@@ -273,14 +285,10 @@ fn dead_unfoldable_decl_init_still_folds() {
 #[test]
 fn unbound_local_never_resolves_a_same_named_param() {
     let p = "  parameter integer X = 99;";
-    loud("    int X = {4'd2, (4'd1+4'd1)};\n    g = X;", p);
+    loud("    int X = {4'd2, 4'bxx01};\n    g = X;", p);
     folds("    int X = 7;\n    g = X;", p, 7);
     folds("    g = X;", p, 99);
-    folds(
-        "    int X = {4'd2, (4'd1+4'd1)};\n    X = 3;\n    g = X;",
-        p,
-        3,
-    );
+    folds("    int X = {4'd2, 4'bxx01};\n    X = 3;\n    g = X;", p, 3);
     // An initializer that mentions the name being DECLARED sees the local, not
     // yet bound — never the param. iverilog answers 0 here; answering 99 is what
     // happens if the width twin is recorded AFTER the fold instead of before it.
@@ -294,17 +302,25 @@ fn unbound_local_never_resolves_a_same_named_param() {
     );
     // A local whose declared WIDTH is unknown (its range calls the function being
     // folded, which the recursion guard declines) is still the interpreter's own
-    // name: the loud must not be conditional on the width being known, and the
-    // width twin must be recorded even when the shape is not.
-    loud(
-        "    bit [g()-1:0] X = {4'd2, (4'd1+4'd1)};\n    g = X;",
-        "  parameter integer X = 99;",
-    );
-    folds(
-        "    bit [g()-1:0] X = 7;\n    g = X;",
-        "  parameter integer X = 99;",
-        7,
-    );
+    // name: the loud must not be conditional on the width being known.
+    //
+    // ⚠️ That is the property this cell was written for, and it only STARTED being the
+    // thing under test here. The pair used to split — `= {4'd2, (4'd1+4'd1)}` was loud
+    // and `= 7` folded to 7 — but the split was an accident of which INITIALIZERS the
+    // placement folder could handle, not of the width; once it could handle both, one
+    // unknown-width local bound 34 and its neighbour bound 7, and nothing in either
+    // path would ever truncate them.
+    //
+    // ⚠️ NEITHER ORACLE HAS A VALUE HERE: iverilog aborts on this shape (`assert:
+    // elab_expr.cc:2927: failed assertion def`) and verilator fails to build it. So
+    // the choice is vita's, and it is the safe side of the ladder — a value bound at a
+    // width nothing can state is not a value this domain will claim. Both cells loud.
+    for init in ["{4'd2, (4'd1+4'd1)}", "7"] {
+        loud(
+            &format!("    bit [g()-1:0] X = {init};\n    g = X;"),
+            "  parameter integer X = 99;",
+        );
+    }
 }
 
 /// #3: a self-referential declaration initializer used to recurse at a constant
@@ -324,7 +340,10 @@ fn self_referential_decl_init_is_loud_not_a_stack_overflow() {
          endmodule\n",
     );
     assert_eq!(code, Some(1), "expected loud, not a crash:\n{err}");
-    assert!(err.contains("is not a foldable constant expression"));
+    assert!(
+        err.contains("is not a foldable constant expression")
+            || err.contains("value is not a constant:")
+    );
 }
 
 /// Charging the declaration a depth level must not cost a legitimate design:

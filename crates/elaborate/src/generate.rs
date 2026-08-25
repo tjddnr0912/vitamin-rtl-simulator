@@ -521,8 +521,20 @@ impl Elaborator<'_> {
                 match self
                     .const_eval_in_scope(&p.value)
                     .or_else(|| self.param_value_via_real(meta, &p.value))
-                {
+                    .or_else(|| {
+                        let dm = self.param_decl_width_declared(p);
+                        self.param_i64_at_declared(&p.value, dm)
+                    }) {
                     Some(v) => {
+                        // A >64-bit declaration whose i64 fold DISAGREES with the wide
+                        // one lost bits on the way (see `wide_disagreeing_value`); the
+                        // wide value is installed instead. Same check as the module-body
+                        // and header twins.
+                        if let Some(cv) = self.wide_disagreeing_value(&p.value, meta, Some(v)) {
+                            let key = self.fq(&p.name.name);
+                            self.wide_param_bits.insert(key, cv);
+                            return;
+                        }
                         // The width the caller just resolved, not a re-derivation:
                         // this scope has no override channel, so `meta` is authoritative.
                         let v = self.coerce_param_value_with(v, meta);
@@ -537,7 +549,9 @@ impl Elaborator<'_> {
                         if let Some(m) = meta {
                             self.param_meta.insert(key.clone(), m);
                         }
-                        if let Some(r) = self.param_decl_range(p) {
+                        // This scope has NO override channel, so the declared default is
+                        // always what binds — see `param_decl_range_opt`.
+                        if let Some(r) = self.param_decl_range_opt(p, true) {
                             self.param_range.insert(key.clone(), r);
                         }
                         self.params.insert(key, v);
@@ -546,8 +560,7 @@ impl Elaborator<'_> {
                         // Wider than the i64 domain — see `wide_param_bits`. Reached
                         // only after the fold declined, so a wide declaration whose
                         // value fits keeps its integer identity.
-                        let wide = meta
-                            .and_then(|(w, sg)| self.wide_param_const_in_scope(&p.value, w, sg));
+                        let wide = self.wide_disagreeing_value(&p.value, meta, None);
                         if let Some(cv) = wide {
                             let key = self.fq(&p.name.name);
                             self.wide_param_bits.insert(key, cv);

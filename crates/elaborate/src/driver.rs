@@ -38,6 +38,7 @@ impl<'s> Elaborator<'s> {
             pkg_types: BTreeMap::new(),
             pkg_const_meta: BTreeMap::new(),
             pkg_str_raw: BTreeMap::new(),
+            pkg_wide_bits: BTreeMap::new(),
             pkg_real_val: BTreeMap::new(),
             pkg_funcs: BTreeMap::new(),
             pkg_tasks: BTreeMap::new(),
@@ -58,6 +59,7 @@ impl<'s> Elaborator<'s> {
             pkg_vars: std::collections::BTreeMap::new(),
             pkg_var_aliases: std::collections::BTreeMap::new(),
             genvar_decls: std::collections::BTreeSet::new(),
+            reported_bad_bounds: std::collections::BTreeSet::new(),
             all_clocking_names: std::collections::BTreeSet::new(),
             anon_clocking_count: 0,
             func_metas: Vec::new(),
@@ -274,6 +276,20 @@ impl<'s> Elaborator<'s> {
             context,
             sim_time: None,
         }));
+    }
+
+    /// [`Self::error`] anchored at an EXPLICIT span rather than `cur_span` — the
+    /// error twin of [`Self::warn_code_at`] and [`Self::note_at`].
+    ///
+    /// ⚠️ `cur_span` during module elaboration is the MODULE HEADER, which makes every
+    /// constant-fold rejection in one module print the same `file:line:col` — a line
+    /// that holds no parameter at all. A module with three unrelated rejections
+    /// printed `module t;` three times, and the only way to find which declaration
+    /// was meant was to comment them out one at a time.
+    pub(crate) fn error_at(&mut self, code: MsgCode, span: ast::Span, msg: &str) {
+        let saved = self.cur_span.replace(span);
+        self.error(code, msg);
+        self.cur_span = saved;
     }
 
     /// R17 §3.3 / §4.2: emit a NOTE anchored at `span` — a follow-on line that

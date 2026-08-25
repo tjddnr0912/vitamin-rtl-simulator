@@ -223,7 +223,9 @@ fn an_untyped_localparam_with_a_real_value_stays_loud() {
            localparam M = R/2.0;\n\
            initial $display(\"%0d\", M);\n\
          endmodule\n",
-        "not a foldable constant expression",
+        // The rejection is unchanged; the message now names the real instead of
+        // stopping at "not a foldable constant expression".
+        "is a real, which has no integral constant value here",
     );
 }
 

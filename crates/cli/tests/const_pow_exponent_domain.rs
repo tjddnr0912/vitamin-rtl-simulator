@@ -76,7 +76,8 @@ fn loud_as(decl: &str, expr: &str) {
     let (_, code, err) = run_raw(&src);
     assert_eq!(code, Some(1), "`{expr}` should be loud:\n{err}");
     assert!(
-        err.contains("is not a foldable constant expression"),
+        err.contains("is not a foldable constant expression")
+            || err.contains("value is not a constant:"),
         "`{expr}` unexpected diagnostic:\n{err}"
     );
 }
@@ -156,7 +157,8 @@ fn the_const_function_body_agrees_with_module_scope() {
     );
     assert_eq!(code, Some(1), "must be loud, not a silent 0:\n{err}");
     assert!(
-        err.contains("is not a foldable constant expression"),
+        err.contains("is not a foldable constant expression")
+            || err.contains("value is not a constant:"),
         "{err}"
     );
     // The RUNTIME does carry it — that is where the oracle value lives.
@@ -200,17 +202,23 @@ fn consumers_of_a_power_are_unchanged() {
 /// const domain still declines is the separate domain-wide class in §2.)
 #[test]
 fn an_overflowing_literal_product_is_loud_not_a_panic() {
-    let (_, code, err) = run_raw(
+    let (out, code, err) = run_raw(
         "module top;\n\
          localparam integer L = 3037000500 * 3037000500;\n\
          initial begin $display(\"R=%0d\", L); #1 $finish; end\n\
          endmodule\n",
     );
-    assert_eq!(code, Some(1), "must be loud, not a panic:\n{err}");
+    // ⭐ The property this cell exists for is "not a PANIC"; it used to be spelled as
+    // "loud", because an i64 product of two 33-bit decimals overflows and the fold
+    // declined. The wide lane multiplies inside the context width, which is what the
+    // language says happens, so the answer is now a value — and it is the value both
+    // oracles print (145474192). The overflow is still not a panic; that is what the
+    // second assertion pins.
+    assert_eq!(code, Some(0), "must not be a panic:\n{err}");
     assert!(!err.contains("panicked"), "panicked:\n{err}");
     assert!(
-        err.contains("is not a foldable constant expression"),
-        "{err}"
+        out.contains("R=145474192"),
+        "both oracles say 145474192:\n{out}"
     );
     // The generate-array index this helper exists for still folds.
     let (out, code, err) = run_raw(

@@ -127,16 +127,24 @@ fn block_local_queue_decl_init() {
 }
 
 #[test]
-fn generate_scope_decl_init_is_loud() {
-    // A generate-body queue decl-init is NOT desugared (the generate init pass does
-    // not run the var-init flush), so it is loud-rejected rather than silently
-    // dropped (which would leave an empty queue — the converged review finding).
-    let (_o, ok) = run("module top;\n\
-         if (1) begin : g int q[$]='{10,20}; initial begin $display(\"%0d\", q.size()); #1 $finish; end end endmodule");
-    assert!(
-        !ok,
-        "a generate-scope queue decl-init must be loud, not silently dropped"
-    );
+fn generate_scope_decl_init_desugars() {
+    // ⚠️ This pin asserted a LOUD reject, on the reasoning that "a generate-body queue
+    // decl-init is NOT desugared (the generate init pass does not run the var-init
+    // flush)". Both halves are stale, and the second one is why the first went
+    // unnoticed: the desugar was opened by §4.5.228, and this cell kept passing only
+    // because the KEYWORD-LESS `if (1) begin … end` at module scope did not PARSE.
+    // Once IEEE §27.3's optional keywords were accepted, the design ran — and printed
+    // iverilog's answer. Measured on both spellings, both tools: 2.
+    for src in [
+        "module top;\n\
+         if (1) begin : g int q[$]='{10,20}; initial begin $display(\"%0d\", q.size()); #1 $finish; end end endmodule",
+        "module top;\n\
+         generate if (1) begin : g int q[$]='{10,20}; initial begin $display(\"%0d\", q.size()); #1 $finish; end end endgenerate endmodule",
+    ] {
+        let (o, ok) = run(src);
+        assert!(ok, "a generate-scope queue decl-init runs:\n{o}");
+        assert!(o.contains('2'), "iverilog says 2:\n{o}");
+    }
 }
 
 #[test]

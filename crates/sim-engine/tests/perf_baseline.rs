@@ -263,6 +263,63 @@ const CONT_ASSIGN_HEAVY: &str = "module top;\n\
   end\n\
 endmodule";
 
+/// ⚠️⚠️ **[round-33] `native` loses to `vm` by ~2.1× here, and the reported
+/// diagnosis is REFUTED by the controlled twin.**
+///
+/// An external report measured `native` losing 1.88× on continuous assigns whose
+/// LHS is an unpacked-array ELEMENT, winning on the same dataflow written to scalar
+/// nets, and drawing on the same array written procedurally — and concluded "the
+/// axis is the LHS shape". Held constant and varied one thing at a time, it is not:
+///
+/// | design (25 assigns, 20k cycles, one digest) | native / vm |
+/// |---|---|
+/// | element LHS, index `a[gy][gx]` | **0.92×** (native wins) |
+/// | element LHS, index `a[gy][(gx+2*gy)%5]` | **2.05×** (native loses) |
+/// | element LHS, indices written as literals | 1.03× (draw) |
+///
+/// ⭐ The LHS is incidental — it is what makes the index EXIST. The axis is a
+/// **computed array index in the RHS**: `(gx+2*gy)%5` over genvars is a CONSTANT,
+/// but it survives generate unrolling as a `Binary{Mod, Binary{Add, Const, …}}`
+/// tree that nothing folds, so the element read is `LoadIdx` (index re-evaluated
+/// per access) instead of a direct slot `Load`. And that is Keccak's π step
+/// exactly — `B[y][(2*x+3*y)%5] = rot(A[x][y], …)` — which is the design the report
+/// measured.
+///
+/// ⚠️ **Widening `wprog` to `*` / `/` / `%` was built and REVERTED**: it compiled,
+/// it was byte-identical, and it moved this row by nothing (2.09× → 2.09×). The
+/// declining operator was never the cost. The prerequisite is a CONSTANT-FOLD of
+/// the IR expression tree, so a genvar-derived index becomes a `Const` and the read
+/// becomes a slot load — the literal-index row above shows what that buys.
+///
+/// `CONT_ASSIGN_HEAVY` above cannot see any of this: its indices are scalar names.
+///
+/// Measures, does not gate.
+const CONT_ASSIGN_ELEM: &str = "module top;\n\
+  reg clk;\n\
+  reg  [63:0] a [0:4][0:4];\n\
+  wire [63:0] b [0:4][0:4];\n\
+  genvar gx, gy;\n\
+  generate\n\
+    for (gy = 0; gy < 5; gy = gy + 1) begin : gyl\n\
+      for (gx = 0; gx < 5; gx = gx + 1) begin : gxl\n\
+        assign b[gx][gy] = a[gy][(gx + 2*gy) % 5] ^ {a[gx][gy][62:0], a[gx][gy][63]};\n\
+      end\n\
+    end\n\
+  endgenerate\n\
+  integer i, j, k;\n\
+  always @(posedge clk) begin\n\
+    for (i = 0; i < 5; i = i + 1)\n\
+      for (j = 0; j < 5; j = j + 1) a[i][j] <= b[i][j];\n\
+  end\n\
+  initial begin\n\
+    clk = 0;\n\
+    for (i = 0; i < 5; i = i + 1)\n\
+      for (j = 0; j < 5; j = j + 1) a[i][j] = 64'h0123456789ABCDEF + i*5 + j;\n\
+    for (k = 0; k < 4000; k = k + 1) begin #1 clk = 1; #1 clk = 0; end\n\
+    $finish;\n\
+  end\n\
+endmodule";
+
 /// ⚠️ **[round-29] HEAP-bound: the second axis the other eight do not have.**
 ///
 /// String / queue / dynamic-array churn — the regime a real testbench spends its
@@ -399,6 +456,11 @@ fn perf_baseline_codegen_heavy() {
     report(
         "cont-assign-heavy (Keccak-style combinational nets; round-29 counterexample)",
         CONT_ASSIGN_HEAVY,
+        5,
+    );
+    report(
+        "cont-assign-elem (unpacked-array-element LHS; round-33 counterexample)",
+        CONT_ASSIGN_ELEM,
         5,
     );
     report(

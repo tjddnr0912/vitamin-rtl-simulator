@@ -2,7 +2,7 @@
 
 > **이 문서 = 전방(남은 것)-전용.** 완료 항목의 상세 로그(§4.5.x)는 [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)에, **Phase A~D 실행 기록(§5.1-x · 슬라이스 59건)은 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에, 옛 §번호(구 §0~§7) 원문은 [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md)에 있다(셋 다 §번호 보존). 이력 내러티브 = [DEVLOG.md](DEVLOG.md), 상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md), 실행 큐 = `LOOPROMPT.md` NEXT(로컬 dev-meta), SPEC 정본 = `docs/preview/`.
 >
-> **기준선(2026-08-24)**: format_version **29** · **5,943 tests green** · 3-OS CI green · MsgCode **68** · **MSRV 1.85** · 기본 백엔드 **native**. 완료 슬라이스의 한-줄 요약과 상세는 **전부** [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(상단 인덱스 · `#### 4.5.<N>` 검색)에 있다 — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다(옛 헤더의 34-슬라이스 요약 체인은 2026-08-19 에 트림 · 전부 ARCHIVE 인덱스와 중복이었다).
+> **기준선(2026-08-25)**: format_version **29** · **5,987 tests green** · **워크로드 코퍼스 8/10** · 3-OS CI green · MsgCode **68** · **MSRV 1.85** · 기본 백엔드 **native**. 완료 슬라이스의 한-줄 요약과 상세는 **전부** [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(상단 인덱스 · `#### 4.5.<N>` 검색)에 있다 — 이 문서는 전방 전용이므로 완료 서사를 두지 않는다(옛 헤더의 34-슬라이스 요약 체인은 2026-08-19 에 트림 · 전부 ARCHIVE 인덱스와 중복이었다).
 >
 > **운용 규칙**: 완료 항목은 **즉시 이 문서에서 제거**하고 ARCHIVE로 옮긴다 — 취소선 잔류가 이 파일을 106KB까지 불린 원인이다(잔여가 남은 항목만 "RESOLVED(§x·상세=ARCHIVE) — 잔여 …" 한 줄로 유지).  슬라이스 완료 시 → 상세 로그를 ARCHIVE "완료 슬라이스 로그"에 append(§4.5.x 양식·최신이 위), 이 문서의 해당 잔여 항목 삭제. 신규 발굴은 아래 해당 섹션에 1줄로 추가.
 
@@ -432,6 +432,27 @@
 
 ## 3. Loud→supported 후보 (현재 전부 loud=안전 · additive)
 
+> **⑫ 상수 함수의 누산기가 i64 보다 넓다** (2-오라클 · **verilog-axi 를 막는 마지막 것** ·
+> §4.5.379 가 *"비싼 절반"* 이라 부르며 § ② 뒤로 재배치했고, ② 가 §4.5.382 에서 섰으므로 **이제 이것이
+> 줄의 앞**이다). `axi_crossbar_addr.v:144` 의 `M_BASE_ADDR_INT = calcBaseAddrs(…)` — 본문이 루프로
+> 128비트를 쌓는 상수 함수. `eval_const_call` 의 env 는 **i64 맵**이라 폭에서 끊긴다. 선행조건 =
+> 상수함수 인터프리터의 env 를 `WideBits` 로 올리는 것(값 표현 하나가 아니라 `ConstWidths` 짝까지).
+> §4.5.382 가 지은 `fold_self_bits` 의 산술/비교 arm 이 그 계산 자체는 이미 할 수 있다.
+
+> **⑬ 런타임 진단에 `file:line` 이 없다** (round-33 V33-8 · 진단 · **인프라**). W4029(unknown array
+> index)·W4023(`$readmem` open 실패)를 포함해 **엔진이 내는 모든 진단이 `location: None`** 이다. 리포터
+> 실측: `rtl/` elaborate 시 경고 11 중 **9가 한 배열(`$pkg$sha3_pkg.RC_TABLE`) 위의 W4029** 인데 그
+> 배열은 **서로 다른 세 자리**에서 읽힌다 ⇒ 사람이 이분탐색한다. serv 도 같은 모양(`tb.dut.ram.mem`
+> 위 W4029 7건). elaborate 의 E2002/E3009 는 전부 위치를 단다. **선행조건 = 표현식/문장 id → `SourceLoc`
+> 사이드카**(골든 밖 · `SimOpts` 경유)와 엔진이 진단 시점에 그 id 를 아는 것. 메시지 수정이 아니라
+> 배관이므로 전용 슬라이스.
+
+> **⑭ 프로세스별 평가 횟수/시간 관측 수단** (aes_top R14 · OBS · §6 과 인접). 리포터의 top(엔진 5 +
+> 코어 1)이 **≈20 cycle/s** 라 전량 스윕을 vita 로 못 돌리고, *"행(hang)"* 과 *"느림"* 을 구별할 수단이
+> 없어 타임아웃 상수를 plusarg 로 빼야 했다. 요구는 성능 개선 **또는** `--obs-dir` 에 프로세스별
+> 평가 횟수/시간. 후자만으로도 TB 를 줄일 수 있다고 명시. §6 OBS 트랙의 항목으로 다룬다.
+
+
 > ### 🆕🆕 **워크로드 코퍼스가 연 줄** (§4.5.369 · **①은 §4.5.370 으로 RESOLVED** · 2026-08-23)
 >
 > 허가적 라이선스 서드파티 RTL **여덟**을 오라클로 고정해 훑은 결과다(`crates/corpus-runner`,
@@ -450,21 +471,24 @@
 > 값은 **따옴표를 포함한 raw** 라 `{"RE","D"}` 가 `RE""D`(정수로는 1092756034)가 됐다 ⇒ 내용만
 > 이어 붙이고 **다시 따옴표를 씌운다**. 잔여 = **package 스코프**(아래 ⑨).
 
-> **② 정수 상수 도메인의 replication COUNT 가 리터럴 전용이다** (오라클 有 · **verilog-axi 를 막는
-> 것** · ⚠️⚠️ **§4.5.371 이 지어서·재서·되돌렸다 — 메커니즘이 기록됐으니 다음 시도는 여기서 시작하라**).
-> `fold_self_bits` 의 `Replicate` arm 이 count 를 **자유함수** `const_eval_u32` 로 접는다. 넓히면
-> **verilog-axi 의 elaborate 에러가 54 → 4** 까지 내려간다(남은 넷은 §3 ⑪). 그런데 넓힘은 **셋을
-> 동시에** 만족해야 하고, 세 라운드 동안 하나씩 고칠 때마다 새 BLOCKING 이 나왔다:
-> ⓐ **폭 쌍둥이**(`const_fn_width::const_self_width`)를 같은 순간에 넓혀야 한다 — 안 그러면
-> `{N{4'd15}}` 이 값은 있고 self 폭은 없는 노드가 돼 폭-인식 walk 가 무제한 도메인으로 degrade
-> 한다(⭐ **오라클 없이 유죄**: 리터럴 쌍둥이 `{2{4'd15}}` 와 다른 답) ·
-> ⓑ **상수함수 스코프** — count 는 §11.4.12.1 상 상수식이라 함수 **지역변수**는 자격이 없는데
-> (iverilog: *"a reference to a net or variable is not allowed in a constant expression"*),
-> 이름 resolver 로 접으면 지역변수를 잡고(**170**), `const_eval_in_scope` 로 접으면 **같은 이름의
-> 지역변수를 지나쳐 모듈 파라미터**를 잡는다(**43690**) ⇒ **지역 이름 집합을 보고 declines** 해야 한다 ·
-> ⓒ **콜 깊이** — `const_eval_in_scope` 는 깊이를 **0으로 재시작**하므로(같은 파일이 400줄 위에서
-> 그 이유로 `ast_contains_call` 가드를 둔다) count 안의 호출이 **스택 오버플로**로 abort 한다(PRE 는 loud).
-> ⇒ **선행조건 = 깊이를 이어받는 상수 평가 진입점**. 폭 축(§4.5.371 이 실은 것)과는 **다른 머신러리**다.
+> ~~**② 정수 상수 도메인의 replication COUNT 가 리터럴 전용이다**~~ ✅ **RESOLVED — §4.5.382**
+> (2026-08-25 · 2-오라클 · format 29 불변 · 상세=ARCHIVE).
+>
+> ⭐⭐ **§4.5.371 이 지어서·재서·되돌리며 기록한 BLOCKING 셋이, 전부 같은 한 가지로 답해졌다** —
+> count 를 **별도 evaluator** 가 아니라 **주변 fold 가 이미 쓰는 그 name resolver** 로 접는 것.
+> ⓐ *"폭 쌍둥이를 같은 순간에 넓혀야 한다"* — 넓힐 쌍둥이가 없다. 폭 소비자(`const_placement_wide`)와
+> 값 소비자가 **같은 `fold_self_bits`** 를 부르므로 한 번의 수정이 둘 다 움직인다.
+> ⓑ *"상수함수 지역변수를 잡거나, 지나쳐 모듈 파라미터를 잡는다"* — resolver 에 `is_count` 플래그를
+> 하나 달아 **count 위치에서는 env 에 이름이 있으면 그 자리에서 declines** 한다(지나치지도, 잡지도
+> 않는다). 실측으로 확인: `int n = 2; {n{4'hA}}` 는 vita E3009 · iverilog *"a reference to a net or
+> variable (`n') is not allowed in a constant expression"*.
+> ⓒ *"`const_eval_in_scope` 가 깊이를 0으로 재시작해 스택 오버플로"* — 이 walk 는 evaluator 를 아예
+> 부르지 않는다. 받은 AST 위를 재귀할 뿐이다.
+>
+> ⚠️ **verilog-axi 는 아직 안 돈다** — 하지만 막는 자리가 **두 번 이동했다**: `S_THREADS`(count) →
+> `$clog2(M_ISSUE[n*32 +: 32]+1)`(per-port 벡터 슬라이스 · 같은 슬라이스에서 해소) →
+> 지금은 **`calcBaseAddrs(…)`**, i64 보다 넓은 누산기를 가진 **상수 함수**(= §4.5.379 가 *"비싼 절반"*
+> 이라고 재배치한 그 항목). 코퍼스 핀은 새 거절 문구로 갱신했다.
 
 > **③ 잔여 = 조건부·반복 평가 위치, 그리고 `$feof` 가 살아남는 문장** (§4.5.374 가 나머지를
 > 열었다). 직접-rhs 제한 자체는 사라졌다 — `hoist/special.rs` 가 호출을 temp 로 끌어내
@@ -597,36 +621,23 @@
 > **측정**: serv auto-top **경고 21 → 2**(남은 둘 = auto-top 모호성 + timescale, 둘 다 실행 가능한
 > 정보) · 오류는 6 그대로(루트 2 × 실제 오류 3 = iverilog 와 같은 중복) · `--top tb` 는 3/1 불변.
 
-> **⑦ 상수 도메인에 리덕션 연산자(`&`·`~&`·`|`·`~|`·`^`·`~^`)가 없다** (2-오라클 ·
-> **serv 를 막는 것** · ⚠️⚠️ **§4.5.373 이 지어서·재서·되돌렸다 — 선행조건이 두 단계로
-> 드러났으니 다음 시도는 여기서 시작하라**). 증상은 `serv_ctrl` 의 `generate if (|WITH_CSR)` 가
-> **E3010** 이지만 generate 만의 문제가 아니다 — `localparam Q = |P;` 도 loud 고, 12칸 census 가
-> **여섯 전부 · 두 철자 전부** loud 임을 보였다.
+> ~~**⑦ 상수 도메인에 리덕션 연산자(`&`·`~&`·`|`·`~|`·`^`·`~^`)가 없다**~~ ✅ **RESOLVED —
+> §4.5.382**(2026-08-25 · 2-오라클 · format 29 불변 · **serv PROMOTED · 코퍼스 7/10 → 8/10** ·
+> 상세=ARCHIVE).
 >
-> ⭐ **값 walk 하나만 비어 있다**: `const_self_width` 는 리덕션에 **1** 을, `const_signed_env` 는
-> **unsigned** 를 이미 답한다(폭-인식 walk 의 `!` arm 주석이 *"and the reductions"* 라고 적어 두고
-> 구현만 없다). 넣으면 **serv 가 돌고 다이제스트가 오라클과 일치한다**(측정: `f3f45af36093b2b1`,
-> 8.7 s vs iverilog 7.4 s) ⇒ 코퍼스 **8/10**.
+> ⭐⭐ **§4.5.373 이 기록한 두-단계 선행조건이 둘 다 `param_range` 하나로 답해졌다.**
+> ⓐ *"폭이 declared provenance 여야 한다"* — `param_decl_range` 는 **선언된 range / 타입 /
+> sized 리터럴에서만** 기록하고, 값-추론은 아예 들어오지 않는다(`param_meta` 와 다른 점이 이것뿐이고
+> 그 하나가 전부다). ⓑ *"그 폭에서 값이 canonical 이어야 한다"* — 선언 range 가 있으면 바인딩에서
+> `coerce_param_value_with` 가 이미 그 폭으로 자른다. **§4.5.373 의 반례 그대로 실측**:
+> `parameter A = 4'h1; localparam logic [3:0] W = A<<4;` 는 vita 0 · iverilog 0.
 >
-> ⚠️⚠️ **그런데 선행조건이 둘이고, 두 번째는 첫 시도의 좁힘을 무너뜨렸다.**
-> ⓐ **폭의 provenance** — `const_self_width` 는 이름을 `param_meta` 에서 읽는데 거긴 **선언 폭과
-> 값-추론 폭이 섞여** 있고(§4.5.363 이 이미 기록) 미스는 **32** 로 때운다 ⇒
-> `localparam W = 4'hF | 4'h0` (참값 4비트)이 32로 기록돼 `generate if (&W)` 가 **두 오라클과 반대
-> 가지**를 exit 0 으로 골랐다. 1차 좁힘은 *"창이 커져도 «어떤 비트든 set 인가»는 불변"* 이라는
-> **정리**로 `|`/`~|` 만 이름 위에서 허용했다.
-> ⓑ ⭐⭐ **그 정리가 거짓이다** — 전제(*"기록된 i64 는 참값의 zero/sign 확장"*)가 성립하지 않는다.
-> vita 는 파라미터를 **주장한 폭으로 감싸지 않고** 기록한다: `parameter A = 4'h1; localparam W =
-> A << 4;` 가 **W=16 · $bits=32**(두 오라클 **W=0 · 4비트**) ⇒ 참 피연산자 **바깥**이 아니라
-> **안쪽**에 여분 비트가 있어 `|W` 가 1(오라클 0)이고 `generate if (|W)` 가 가지를 뒤집는다.
-> ⇒ **이름 위의 리덕션은 여섯 전부 신뢰할 수 없다**, 폭에 둔감한 둘까지 포함해서.
+> ⚠️ 무타입 파라미터(`localparam W = A<<4;`)는 여전히 **loud** 다 — 폭이 값에서 추론되므로 위 두
+> 조건 중 어느 것도 성립하지 않는다. 그것이 §4.5.373 이 잰 바로 그 셀이고, 회귀 테스트로 **거절**
+> 을 핀했다(`wide_const_domain::an_inferred_width_never_supplies_a_reduction`).
 >
-> ⇒ **선행조건 = 파라미터 값이 기록된 폭에서 canonical 이어야 하고, 그 폭이 declared provenance
-> 여야 한다.** 후자만 지으려 해도 `param_meta` 를 쓰는 **여덟 자리**가 합의해야 하는데(§4.5.371 이
-> 두 번 물린 4-copy 가족), 전자는 그보다 더 깊다. 리터럴 피연산자만 허용하는 반쪽은 **수요가 0**
-> 이라(SERV 는 이름을 쓴다) 싣지 않았다.
->
-> ⚠️ **같은 벽을 세 문으로 쳤다**: §4.5.371 의 select 바운드 · 같은 슬라이스의 concat 폭 · 여기의
-> 리덕션. 셋 다 *"폭을 계산할 수는 있는데 그 폭을 보증할 수 없다"* 에서 멈췄다.
+> ⚠️ *"같은 벽을 세 문으로 쳤다"* 던 셋(§4.5.371 의 select 바운드 · concat 폭 · 리덕션)은 **셋 다**
+> 이 슬라이스에서 열렸다 — 벽이 하나였다는 §4.5.373 의 판단이 맞았고, 그 하나가 폭의 출처였다.
 
 > **⑧ 함수 본문의 `$finish`/`$stop`** (2-오라클 · **verilog-ethernet 을 막는 것** ·
 > ⚠️⚠️ **§4.5.372 가 지어서·재서·되돌렸다 — 선행조건이 기록됐으니 다음 시도는 여기서 시작하라**).
@@ -945,6 +956,31 @@
 
 ## 5. perf / 하드닝 — ⛔ **성능 축은 수확 체감 도달**(Phase D 종료 2026-08-17) · 열린 것 = 하드닝 1건 + §5.1 나머지
 
+**⚠️⚠️ 성능 잔여 1건 — 계산된 배열 인덱스에서 `native` 가 `vm` 에 2.1× 진다 (round-33 R30-2 ·
+§4.5.382 가 측정 · 벤치 행 = `perf_baseline.rs::CONT_ASSIGN_ELEM`).**
+
+리포트는 *"축은 LHS 모양(unpacked 배열 원소)"* 이라 진단했고 **컨트롤 쌍둥이가 그걸 반박한다**.
+25 assign · 20k cycle · 다이제스트 하나로 한 번에 하나씩만 바꿔 재면:
+
+| 설계 | native / vm |
+|---|---|
+| 원소 LHS · 인덱스 `a[gy][gx]` | **0.92×**(native 승) |
+| 원소 LHS · 인덱스 `a[gy][(gx+2*gy)%5]` | **2.05×**(native 패) |
+| 원소 LHS · 인덱스를 리터럴로 써 둠 | 1.03×(무승부) |
+
+⭐ LHS 는 **인덱스가 존재하게 만드는 것**일 뿐이다. 축은 **RHS 의 계산된 배열 인덱스**:
+genvar 로 쓴 `(gx+2*gy)%5` 는 상수인데 generate 언롤 뒤에도 **아무도 접지 않는
+`Binary{Mod, Binary{Add, Const, …}}` 트리**로 남아, 원소 읽기가 슬롯 `Load` 가 아니라
+**`LoadIdx`**(접근마다 인덱스 재평가)가 된다. 그리고 그게 Keccak π 스텝
+(`B[y][(2*x+3*y)%5] = rot(A[x][y], …)`) 그 자체 = 리포터가 잰 설계다.
+
+⚠️ **`wprog` 에 `*`/`/`/`%` 를 더하는 것은 지어서 되돌렸다** — 컴파일되고 바이트 동일했지만 이 행을
+**전혀 움직이지 않았다**(2.09× → 2.09×). 거절하던 연산자는 원인이 아니었다.
+⇒ **선행조건 = IR 표현식 트리의 상수 폴딩**(genvar 유래 인덱스가 `Const` 가 되면 읽기가 슬롯
+로드가 된다 — 위 표의 리터럴 행이 그 상한을 보여 준다). 골든 밖(빌드 시 in-memory)이면
+`format_version` 무영향.
+
+
 **⚠️ 하드닝 1건 — 프로세스 수준 메모리 가드가 없다 (슬라이스 #8 실측 · 오너 승인 2026-08-15).** 폭주한
 `vita` 하나가 **33 GB × 2** 를 잡아 32 GB 머신을 jetsam → WindowServer 크래시 → **userspace watchdog
 커널 패닉**까지 몰고 갔다(2026-08-14). 기존 가드(`max_deltas`·`max_body_steps`·`time_limit`)는 **델타도
@@ -1090,7 +1126,7 @@
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,943 tests green** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-25 · ARCHIVE §4.5.380) |
+| 게이트 | **5,987 tests green** · 워크로드 코퍼스 **8/10** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-25 · ARCHIVE §4.5.382) |
 
 ### 다음 후보 — 우선순위 순
 

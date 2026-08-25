@@ -429,13 +429,36 @@ impl Parser<'_, '_> {
                 span: start.to(self.prev_span()),
             };
         }
-        Expr {
+        let base = Expr {
             kind: ExprKind::PkgScoped {
                 pkg: path.segments.into_iter().next().unwrap(),
                 name,
             },
             span: start.to(self.prev_span()),
+        };
+        // A METHOD on the qualified value (`pkg::S.len()`, `pkg::E.name()`). The `.`
+        // used to end the expression here, so the caller reported `expected ')', found
+        // '.'` — three times, at the same column, with none of the words "method",
+        // "package" or "::" in any of them. Everything else about the spelling already
+        // worked: `s.len()` on a bare name, and `pkg::e_t x; x.name()` on a variable of
+        // a qualified TYPE. Only the `.` after a qualified EXPRESSION was missing.
+        if self.peek() == Some(TokenKind::Dot)
+            && matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident)))
+            && self.peek_at(2) == Some(TokenKind::LParen)
+        {
+            self.bump(); // '.'
+            let method = self.ident().expect("peeked an identifier");
+            let args = self.call_args();
+            return Expr {
+                kind: ExprKind::MethodCall {
+                    recv: Box::new(base),
+                    method,
+                    args,
+                },
+                span: start.to(self.prev_span()),
+            };
         }
+        base
     }
 
     /// Token length of a `pkg::` scope qualifier that precedes a registered scoped

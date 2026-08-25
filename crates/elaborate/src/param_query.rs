@@ -167,6 +167,15 @@ impl Elaborator<'_> {
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
                 self.real_param_is_non_integral(&p.segments[0].name)
             }
+            // The package spelling of the same fact. Without it a `pkg::R` in a width
+            // bound fell through to `nonconst_bound_reason` and was reported as an
+            // undefined name — about a parameter that exists, in a package that is
+            // imported. An explicitly qualified name has no shadowing question, so the
+            // membership test is the whole answer.
+            ast::ExprKind::PkgScoped { pkg, name } => self
+                .pkg_real_val
+                .get(&pkg.name)
+                .is_some_and(|m| m.contains_key(&name.name)),
             // A const-FUNCTION call is the hole the bound guard was meant to be the only
             // net for: neither this walk nor `nonconst_bound_reason` descended into call
             // args, so `logic [f(R)-1:0]` folded to None and `clamp_bound_u32` silently

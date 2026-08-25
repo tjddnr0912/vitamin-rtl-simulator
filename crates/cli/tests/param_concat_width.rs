@@ -163,35 +163,44 @@ fn a_concatenation_over_a_name_is_not_declared_provenance() {
 /// just the width. The slice fixes `$bits(W)` 32 → 16 and leaves the bound where it
 /// was. Pinned so that closing the range side turns this red and asks for promotion.
 #[test]
-fn a_select_over_a_concatenation_parameter_is_still_a_one_bit_bound() {
+fn a_select_over_a_concatenation_parameter_sizes_the_bound() {
+    // ⭐ This pin used to assert `VAL=1/16` — a SILENTLY one-bit net — with a docstring
+    // saying "iverilog says 9/16; if the bound is no longer 1, promote this row". The
+    // width was never the missing piece: `param_range` records a concatenation of SIZED
+    // literals as declared provenance, so the bits were there and the select had no arm
+    // to read them with. Both oracles: 9/16.
     let (out, code) = run(
         "module tb;\n  localparam W = {2{8'h09}};\n  logic [W[7:0]-1:0] v; assign v = 0;\n  \
          initial $display(\"VAL=%0d/%0d\", $bits(v), $bits(W));\nendmodule\n",
     );
     assert_eq!(code, Some(0), "{out}");
-    assert!(
-        out.contains("VAL=1/16"),
-        "iverilog says 9/16; if the bound is no longer 1, promote this row\n{out}"
-    );
+    assert!(out.contains("VAL=9/16"), "both oracles say 9/16\n{out}");
 }
 
-/// Recorded residue, NOT a target: the replication COUNT is still literal-only, so
-/// `{N{32'd2}}` — how every parameterised AXI/Ethernet core writes a per-port
-/// parameter vector — stays loud. Widening it was BUILT, MEASURED and REVERTED in the
-/// same slice: it needs the count folded in the right SCOPE (a constant-function local
-/// is not a constant expression, and the module-scope evaluator resolves past the
-/// shadow to a same-named parameter), with a DEPTH the module-scope evaluator restarts
-/// at 0 (a call in the count overflowed the stack), and it re-opens the select-bound
-/// gap above from the other side. See ROADMAP §3 ② for the measured mechanism.
+/// ⭐ The replication COUNT over a NAME — how every parameterised AXI / Ethernet core
+/// writes a per-port parameter vector.
+///
+/// This pin asserted a loud reject, and the docstring above it recorded WHY: widening
+/// the count had been built, measured and reverted, because it needs the count folded
+/// in the right SCOPE (a constant-function local is not a constant expression, and the
+/// module-scope evaluator resolves past the shadow to a same-named parameter) at a
+/// DEPTH that evaluator restarts at 0 (a call in the count overflowed the stack), and
+/// because it re-opened the select-bound gap from the other side.
+///
+/// All three are answered by folding the count through the SAME name resolver the
+/// surrounding wide fold uses instead of through a second evaluator: there is one
+/// width consumer (so the select-bound twin widens with it), the resolver is the
+/// innermost-binding one (so a shadow wins), and the walk calls no evaluator at all
+/// (so there is no depth to restart). Both oracles: 8589934594 at 64 bits.
 #[test]
-fn a_parameter_replication_count_is_still_loud() {
+fn a_parameter_replication_count_folds() {
     let (out, code) = run(
         "module tb;\n  parameter N=2;\n  localparam P = {N{32'd2}};\n  \
-         initial $display(\"VAL=%0d\", P);\nendmodule\n",
+         initial $display(\"VAL=%0d/%0d\", P, $bits(P));\nendmodule\n",
     );
-    assert_ne!(
-        code,
-        Some(0),
-        "if this now folds, the count widened — see ROADMAP §3 ②\n{out}"
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("VAL=8589934594/64"),
+        "both oracles say 8589934594 at 64 bits\n{out}"
     );
 }

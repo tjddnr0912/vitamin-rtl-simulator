@@ -50,6 +50,21 @@ pub(crate) struct ResolvedOverride {
     /// folded value the shape was LOUD before, so folding it would be loud →
     /// silent-wrong. `bind_params` gates on this.
     pub(crate) str_is_literal: bool,
+    /// The override folded in the WIDE bit domain, carrying its VALUE **and its
+    /// WIDTH**.
+    ///
+    /// ⭐ Two separate reports pointed here. `-G K=128'hdead…` and `#(.K(128'h…))`
+    /// could not be applied at all — the i64 `value` channel has nowhere to put a
+    /// 128-bit constant, and the diagnostic (correctly) refused rather than install a
+    /// truncated one. And an override that DOES fit i64 still lost its width: §6.20.2
+    /// gives an untyped parameter the range of its FINAL override value, but `value`
+    /// carries no range, so the child re-derived one from the magnitude —
+    /// `#(.M_ISSUE(M_ISSUE))` forwarding `{2{32'd4}}` arrived as 35 bits where both
+    /// the parent and every other tool have 64, and `M_ISSUE[32 +: 32]` then selected
+    /// past the end.
+    ///
+    /// Folded at the expression's OWN width, which is what §6.20.2 asks for.
+    pub(crate) bits: Option<ir::ConstVal>,
 }
 
 impl ResolvedOverride {

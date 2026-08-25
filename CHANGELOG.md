@@ -83,6 +83,105 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **The constant domain now computes in the width the declaration states, not in i64.**
+  Two external reports (round-33 and an AES IP audit) converged on one axis: every
+  crypto/AXI constant idiom that mixes a NAME with a wide value was rejected, and which
+  operator you wrote decided whether the parameter existed at all. `A ^ 128'h1` folded
+  and `A ^ B` — same value, named — did not; `+`, `-`, `*` and the comparisons had no
+  wide arm; a select of a >64-bit parameter (`A[127:64]`, `A[127]`) had none either; and
+  a reduction (`^A`) or `$countones` had none at ANY width. All of them fold now, and
+  every value was measured against **both** iverilog 13.0 and Verilator 5.050.
+
+  The pieces, because they were separate causes:
+  - **A NARROW named parameter is now an operand of the wide fold**, read at its
+    DECLARED width. The width comes from `param_range` — the map that records only
+    declared provenance — and not from `param_meta`, where widths inferred from a value
+    also live. That distinction is the whole soundness argument: §4.5.373 built the
+    reductions on `param_meta` and measured `localparam W = 4'hF | 4'h0;` reducing 32
+    bits where both oracles hold 4, then reverted. With the range declared, the stored
+    value IS canonical at that width — measured on the same counterexample.
+  - **Wide arithmetic and comparison arms** (`+ - *`, `< <= > >= == != === !==`, `&&`
+    `||` `!`), the **reductions** (`& | ^ ~& ~| ~^`), **bit / part / indexed-part
+    selects**, the **conditional**, `>>>`, and `$countones` / `$onehot` / `$onehot0` /
+    `$signed` / `$unsigned`. Division and modulus stay out.
+  - **A package parameter may be wider than 64 bits.** `localparam logic [127:0] K =
+    128'he1…;` inside a `package` was `E3009` while the identical declaration in a
+    module, in a `#()` header, in a one-element array or inside a packed struct all
+    worked — the package's scalar path simply had no fourth domain to fall into. It
+    travels through wildcard and explicit imports and through `pkg::K`.
+  - **An override carries its WIDTH.** IEEE §6.20.2 gives an untyped parameter the range
+    of its FINAL override value, and the i64 channel carried no range, so
+    `#(.M_ISSUE(M_ISSUE))` forwarding `{2{32'd4}}` arrived 35 bits wide where every
+    other tool has 64 — and the per-port slice `M_ISSUE[32 +: 32]` then read past the
+    end. A `-G K=128'h…` override, which could previously only be refused, now applies.
+  - **A replication COUNT may be a name.** `{N{32'd2}}` and `parameter [S*32-1:0] MASK =
+    {S{…}}` fold. §4.5.371 built this and reverted it over four blocking defects; all
+    four are answered by folding the count through the *same* name resolver the
+    surrounding fold uses rather than through a second evaluator.
+  - **Package `real` reaches module-scope constants.** `localparam real Q = pk::R*2.0;`,
+    `int'(pk::R*2.0)`, a `parameter real` port default and `generate if (pk::R > 2.0)`
+    were `E3009` while a byte-identical MODULE-LOCAL real folded and the package
+    string crossed the same boundary fine.
+  - **String methods fold in a constant context.** `localparam int W = S.len();` and the
+    `getc` / `compare` / `ato*` family.
+
+- **`generate` / `endgenerate` are optional (IEEE 1800-2017 §27.3), and a `genvar` may be
+  declared in the `for` header (§27.4).** `if (…) begin … end` and `for (…) begin … end`
+  at module scope are the dominant modern spelling and what synthesis tools are handed;
+  vitamin required the wrapper, and the error it produced pointed at the `end`/`else`
+  that followed rather than at the missing keyword.
+
+- **A package's STATIC `function` could not call its own sibling under a selective
+  import.** `import p::gmul;` made `gmul`'s body's call to `xtime` an
+  `E3010 call to undeclared function`, while spelling the same function `automatic`
+  worked and so did importing `xtime` as well — which is the caller's business, not the
+  callee's. IEEE §26.3 resolves a routine's body in its DECLARING scope; only the frame
+  path carried that scope, and the inline path now carries it too (around the BODY only,
+  never around the actual arguments, which belong to the caller).
+
+- **A `pkg::`-qualified value may take a method.** `pk::S.len()` was three parse errors
+  at one column, none of which contained the words "method", "package" or "::".
+
+### Diagnostics
+
+- **A constant-fold rejection now points at the declaration and names the cause.** The
+  caret came from the elaborator's ambient span, which during module elaboration is the
+  MODULE HEADER — so every rejection in one module printed the same `file:line:col`, at
+  a line holding no parameter, and finding the culprit meant commenting declarations out
+  one at a time. And the text stopped at *"value is not a foldable constant
+  expression"*, so three declarations rejected for three unrelated reasons (a package
+  `real`, a string method, a replication count) were indistinguishable — none of the
+  words `real`, `string` or `replication` appeared in any of them, and when the cause
+  was an UNDEFINED NAME the name was in hand and thrown away.
+
+- **A missing package file produces one error that names the package, not seven that do
+  not.** `function f(input q::mode_e m);` with `q` absent produced seven `E2002`s — the
+  first at the `::`, the rest at perfectly correct declarations further down that only
+  failed because the port list never closed — and the package's name appeared in none of
+  them.
+
+- **An enum method rejection describes enum methods.** `x.name()` on an enum whose label
+  names a `parameter` was reported as an *"unsupported hierarchical function call … the
+  callee must be a framed function with input-only scalar formals … reached through an
+  instance path"*, which describes a different feature entirely, and carried no
+  `file:line` at all.
+
+- **A non-constant bound in a declaration is reported once, at the bound.** The range is
+  folded by more than one pass, so the same `$clog2(n)` printed twice, both times with
+  the caret on the `logic` keyword rather than on the `$clog2`.
+
+- **An unconnected child INPUT warns.** vitamin warned about a dangling `output` and
+  `inout` and was silent about a dangling `input` — which is backwards with respect to
+  consequence: a dangling output discards a value, a dangling input MANUFACTURES one
+  (`z` at time 0) and propagates it. `W-ELAB-FEATURE-LIMIT`, and a ROOT module's own
+  ports stay silent as before.
+
+- **A variable with BOTH a declaration initializer and an `always_comb` driver warns.**
+  `logic rdy = 1'b1; always_comb rdy = …;` ran at exit 0 with nothing to say, while
+  xcelium stops elaboration (`*E,MULAXX`) and Verilator errors (MULTIDRIVEN). Nothing
+  about the simulated value changes; this is the warning that was missing.
+
+
 - **A `real` constant could not reach an integer context, even when you wrote the
   conversion.** `logic [int'(R)-1:0] v;`, `{int'(R){1'b1}}`, `$clog2(R)` in a width, and
   `localparam int M = R*2.0;` were all rejected with `VITA-E3009` — while this manual told

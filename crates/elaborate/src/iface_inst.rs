@@ -28,6 +28,7 @@ impl Elaborator<'_> {
                         fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
                         str_is_literal: Self::param_str_literal(e).is_some(),
                         str: self.const_str_in_scope(e),
+                        bits: self.override_bits(e),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -107,6 +108,7 @@ impl Elaborator<'_> {
                         fill,
                         str_is_literal: text_is_literal,
                         str: text,
+                        bits: value.as_ref().and_then(|e| self.override_bits(e)),
                     });
                 }
             }

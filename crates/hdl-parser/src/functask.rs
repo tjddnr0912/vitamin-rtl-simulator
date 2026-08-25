@@ -390,6 +390,12 @@ impl Parser<'_, '_> {
         // name must be captured BEFORE `try_tf_port_typedef` consumes the token; the
         // resolver returns only the underlying vector kind, not the enum-ness.
         let mut enum_name: Option<String> = None;
+        // A `pkg::type` in the type slot whose package/type this run never declared:
+        // report it ONCE, naming the package, and consume it so the rest of the header
+        // parses. See `reject_unknown_scoped_type` for the cascade this replaces.
+        if net_or_var.is_none() && range.is_none() && self.reject_unknown_scoped_type() {
+            net_or_var = Some(NetVarKind::Logic);
+        }
         if net_or_var.is_none() && range.is_none() {
             let tname = self.type_name_key();
             let is_enum = self.enum_defs.contains_key(&tname);

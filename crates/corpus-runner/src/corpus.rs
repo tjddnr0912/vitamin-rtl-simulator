@@ -354,17 +354,19 @@ pub static CORPUS: &[Workload] = &[
         data: &["src/sw/blinky.hex"],
         plusargs: &["+N=500000"],
         digest: "DIGEST=f3f45af36093b2b1",
-        // §4.5.370 folded the string constant domain, which removed all SEVEN E3009s
-        // this row used to pin. The three E3010s behind them were already there in
-        // PRE — the gap moved deeper, it did not appear.
-        expect: Expect::Refused {
-            diag: "generate-if condition is not a constant",
-        },
+        // ⭐ PROMOTED 2026-08-25 (§4.5.382). The row's history is the corpus doing its
+        // job: §4.5.370 folded the string constant domain and removed all SEVEN E3009s
+        // it originally pinned, leaving three E3010s that were already there in PRE;
+        // §4.5.373 built the reduction operators that close those, measured this exact
+        // digest — and REVERTED, because the reduction read its operand's width out of
+        // `param_meta`, where inferred widths live. It runs now because the width comes
+        // from `param_range` instead, which records only declared provenance.
+        expect: Expect::Runs { exit: 0 },
         // Not verilator: SERV reads an uninitialised register file and drives x
         // deliberately, so its 2-state result (e7e8b5e6c1276563) is a different
         // design's answer. iverilog and vita's probe build agree.
         oracle: "iverilog 13.0",
-        note: "bit-serial, ~35 clk/insn — a scheduler-throughput workload. ROADMAP §3 ⑦",
+        note: "bit-serial, ~35 clk/insn — a scheduler-throughput workload.",
     },
     Workload {
         name: "verilog-axi",
@@ -394,10 +396,13 @@ pub static CORPUS: &[Workload] = &[
         plusargs: &["+N=5000"],
         digest: "DIGEST=3b9321d5ea42f302",
         expect: Expect::Refused {
-            diag: "parameter `S_THREADS` value is not a foldable constant expression",
+            diag: "`calcBaseAddrs(…)` has no constant-fold arm",
         },
         oracle: "iverilog 13.0",
-        note: "2x2 crossbar — elaboration- and generate-heavy. ROADMAP §3 ②",
+        note: "2x2 crossbar — elaboration- and generate-heavy. The pinned refusal has \
+               moved TWICE as the constant domain widened: `S_THREADS` (a parameter \
+               replication count) → a `$clog2` over a per-port vector slice → this, a \
+               constant FUNCTION whose accumulator is wider than i64. ROADMAP §3 ②",
     },
     Workload {
         name: "verilog-ethernet",
