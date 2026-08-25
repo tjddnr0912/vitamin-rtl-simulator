@@ -458,6 +458,26 @@ takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`
 > fall into. It travels through wildcard and explicit imports and through `pk::K`, and
 > `pk::K[127:64]` selects out of it.
 
+> **Fixed 2026-08-25 — a bit/part select of an ENUM LABEL.**
+> `typedef enum logic [31:0] { EA = 32'hAB34 } e_t;` then `logic [EA[7:0]-1:0] v;`
+> declared a **one-bit** net at exit 0 where every other tool declares 52, at module
+> scope and in a package alike — while the RUNTIME read of the same `EA[7:0]` was
+> already right. Every constant consumer was affected (a net width, an unpacked
+> dimension, a replication count, a `generate` condition, an instance parameter
+> override, a port list, a genvar loop bound), and the width a select feeds into
+> `$dumpvars` now follows.
+>
+> ⚠️ **One boundary remains, and it is deliberate**: a non-zero-LSB enum base
+> (`enum logic [39:8] {…}`) is refused by this fold because the tools disagree about
+> it — iverilog reads such a label as a plain value of the base's width and answers
+> 171 for `EA[15:8]`, verilator honours the declared LSB and answers 52. An ascending
+> base (`[0:31]`) is rejected outright by iverilog. Declare the base with a zero LSB
+> and every tool agrees.
+>
+> ⚠️ Also unchanged: a module-scope label is not visible to a body `localparam` at all
+> (`localparam int Q = EA;`, with no select, is already an error) — the package
+> spelling of the same text works.
+
 > **Fixed 2026-08-25 — a bit/part select of a PACKAGE constant.**
 > `logic [pk::W[7:0]-1:0] v;` declared a **one-bit** net at exit 0 where every other
 > tool declares 52 — and the same text written as a bare name after `import pk::*` or

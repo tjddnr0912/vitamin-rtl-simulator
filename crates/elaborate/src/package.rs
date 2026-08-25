@@ -658,6 +658,7 @@ impl Elaborator<'_> {
                         let base_w = self
                             .enum_base_width(base)
                             .or_else(|| base.is_none().then_some(32u32));
+                        let base_range = self.enum_base_range(base);
                         let mut next: i64 = 0;
                         for l in labels {
                             let v = match &l.value {
@@ -690,10 +691,24 @@ impl Elaborator<'_> {
                                 );
                             }
                             let key = self.fq(&l.name.name);
-                            saved.push((key.clone(), self.bind_param_value(key, v)));
+                            // Capture the prior range BEFORE binding — `bind_param_value`
+                            // clears it, so this is the only moment it can be saved, and
+                            // the restore list must hold the prior state and not a blanket
+                            // "remove" (the same discipline as the parameter arm above).
+                            let prev_range = self.param_range.get(&key).copied();
+                            let prev = self.bind_param_value(key.clone(), v);
+                            // The declared range travels with the label the way it
+                            // travels with a package parameter, so `pk::EA[7:0]` and the
+                            // bare-imported `EA[7:0]` fold through the same table.
+                            self.bind_param_range(&key, base_range);
+                            saved_range.push((key.clone(), prev_range));
+                            saved.push((key, prev));
                             consts.insert(l.name.name.clone(), v);
                             if let Some(w) = base_w {
                                 const_meta.insert(l.name.name.clone(), (w, *signed || v < 0));
+                            }
+                            if let Some(r) = base_range {
+                                const_range.insert(l.name.name.clone(), r);
                             }
                         }
                     }

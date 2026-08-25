@@ -219,6 +219,39 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ A gate in an EARLIER phase cannot supply your phase's precondition (2026-08-25 · §4.5.384)
+
+§4.5.384 needed §4.5.373's second prerequisite — *the recorded width is only usable if the
+stored value is CANONICAL at it* — and argued it was already supplied: §6.19 makes an
+out-of-range enum label a loud `E2002`, with a test file to prove it. **Both adversarial
+lenses refuted that independently, from opposite ends**, and they were right: the check
+runs in the PARSER, over bare literals, while the fold runs at ELABORATE over
+`const_eval_in_scope`, which resolves parameters, package constants and constant
+functions. Everything in the gap is accepted silently — and both oracles REJECT those
+designs, so vita was alone.
+
+**Rule**: when you lean on an existing gate for a precondition, compare the two phases'
+**resolvers**, not their intents. A check that folds less than you do cannot cover you.
+Then ask what actually holds the invariant — here it was that every consumer NARROWS to
+the recorded width, which is a stronger and simpler argument than the gate ever was — and
+say so in the doc, because the next slice inherits whichever sentence you wrote.
+
+⚠️ Corollary: cap the recorded quantity at the SOURCE. The masking consumers were safe;
+the one operation that would AMPLIFY (a width above 64, which sign-extends rather than
+truncates) was unreachable only because a different component happened to refuse first.
+
+### ⚠️ A probe whose ANSWER equals its failure mode certifies itself (2026-08-25 · §4.5.384)
+
+`EA[5]` is 1, and a bound the fold declines clamps to 1 as well, so the bit-select and
+equal-endpoint cells of the census read "correct" in PRE. Scaling the result (`EA[5]*52`)
+separated them and both turned out broken. This is §4.5.365's *"a probe whose value fits
+the width cannot see a width defect"* one level up: there the VALUE collided, here the
+probe's ANSWER collided with what failure returns.
+
+**Rule**: for every cell, ask what the number would be if the feature did nothing. If that
+equals the expected answer, the cell is decoration — scale it, offset it, or pick another
+constant.
+
 ### ⭐⭐ A side map keyed like another map is owned by nobody until there is exactly ONE binder (2026-08-25 · §4.5.383)
 
 `param_range` is keyed exactly like `params` and is written by 5 of ~13 binders. That was safe for

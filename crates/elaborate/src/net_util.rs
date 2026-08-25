@@ -342,6 +342,94 @@ impl Elaborator<'_> {
         }
     }
 
+    /// The enum base's DECLARED `(lo, width, ascending)` — the enum-label twin of
+    /// [`Self::param_decl_range_opt`], and the reason a label can join the constant
+    /// domain's select fold at all.
+    ///
+    /// ⚠️ A label's width is a DECLARED fact, exactly like a parameter's: it comes from
+    /// the enum's base type, never from the label's value. That is the whole
+    /// provenance question `param_range` exists to answer, and without an entry there
+    /// `logic [EA[7:0]-1:0] v;` declared **one bit** at exit 0 where both oracles
+    /// declare 52 — while the RUNTIME read of the same `EA[7:0]` was already right in
+    /// all three tools.
+    ///
+    /// ⚠️⚠️ **THE SECOND PREREQUISITE IS THE CONSUMER'S, NOT §6.19's.** §4.5.373 showed
+    /// that a declared width is only usable if the stored value is CANONICAL at it, and
+    /// the first draft of this function claimed §6.19 supplied that: a label outside its
+    /// base range is a loud `E2002` (`enum_label_range.rs`). The adversarial review
+    /// measured the claim and it is FALSE. That check lives in the PARSER
+    /// (`hdl-parser/src/typedefs.rs`) and is fail-open twice over — it gives up on the
+    /// whole enum after the first label it cannot fold itself, and it skips entirely
+    /// when a bound is not a bare literal — while this fold runs on
+    /// `const_eval_in_scope`, which is strictly stronger (parameters, package
+    /// constants, constant functions). `module top #(parameter P = 4); typedef enum
+    /// logic [P-1:0] { A = 300 } e_t;` stores 300 against a recorded width of 4, at
+    /// exit 0. Both adversarial lenses reached this independently, from opposite ends:
+    /// the parser's check needs a BARE LITERAL bound, so a parameterised base — set in
+    /// the header, by an instance override, or by `-G` — never reaches it, and both
+    /// oracles REJECT those designs while vita exits 0.
+    ///
+    /// ⚠️ And even where the check does fire the value is canonical only MODULO SIGN:
+    /// `enum logic [7:0] { EA = -8'sd2 }` — an unsigned base, i.e. exactly a base this
+    /// function records — stores `-2` where both oracles read 254, while `param_meta`
+    /// marks the label signed through its `|| v < 0` clause. Pre-existing and tracked
+    /// separately (ROADMAP §2); it matters here as the second reason the premise cannot
+    /// carry the argument.
+    ///
+    /// What actually makes this sound is that **every consumer narrows to the recorded
+    /// width before using the value**: `select_base_at_declared` masks
+    /// (`const_select.rs`) and `narrow_param_bits` resizes 64 → w (`const_wide.rs`).
+    /// §6.19 is a second line of defence, not the argument. Do not add a consumer that
+    /// reads `params` at this width WITHOUT narrowing — and note that the one operation
+    /// which would AMPLIFY rather than mask is a width above 64, which is why the cap
+    /// below is not decoration.
+    ///
+    /// A base-less `enum {…}` is `int` (§6.19), so it reports a 32-bit zero-LSB range —
+    /// the same substitution [`Self::enum_base_width`]'s callers already make.
+    ///
+    /// ⚠️⚠️ A NON-ZERO declared LSB and an ASCENDING base DECLINE, and not for the
+    /// usual representational reason: **the oracles split on them.** With
+    /// `typedef enum logic [39:8] { EA = 32'hAB34 }`, `EA[15:8]` is **171** in iverilog
+    /// (which reads the label as a plain value of the base's WIDTH, indexed from 0) and
+    /// **52** in verilator (which honours the declared LSB, as both do for a NET of that
+    /// type). Recording the range would install verilator's reading as vita's answer on
+    /// an axis where there is no agreement to appeal to; declining leaves the cell
+    /// exactly where it was. A zero-LSB base — every spelling anyone writes, including
+    /// `int`, `byte` and the base-less form — is the case the two agree on, and the
+    /// offset normalization is the identity there, so what the entry actually buys is
+    /// the DECLARED WIDTH the select fold needs.
+    ///
+    /// A NEGATIVE declared bound declines as well — subsumed by the `lo != 0` test
+    /// below, since a negative low bound is not zero. (An earlier draft wrote the sign
+    /// test separately and credited it; the review showed it could never be the
+    /// deciding one.)
+    ///
+    /// ⚠️ The `1 ..= 64` cap is load-bearing and is the only guard against the
+    /// amplifying direction. `narrow_param_bits` EXTENDS the stored i64 to the recorded
+    /// width (sign-extending a label of a signed enum), so a width above 64 would turn
+    /// a value the const domain cannot represent into invented bits, and a width of
+    /// ZERO — reachable in a release build, where `m.abs_diff(l) + 1` wraps for a bound
+    /// near `u32::MAX` instead of panicking — would reach `fold_self_bits` with a
+    /// zero-width operand where it used to decline. Its narrow twin
+    /// `select_base_at_declared` already refuses both; this refuses them at the source,
+    /// for every consumer at once.
+    pub(crate) fn enum_base_range(&self, base: &Option<ast::Range>) -> Option<DeclRange> {
+        let Some(r) = base.as_ref() else {
+            return Some((0, 32, false));
+        };
+        let m = self.const_eval_in_scope(&r.msb)?;
+        let l = self.const_eval_in_scope(&r.lsb)?;
+        // Descending, zero-LSB, and no wider than the i64 constant domain can carry.
+        if m.min(l) != 0 || m < l {
+            return None;
+        }
+        let w = m.abs_diff(l) as u32 + 1;
+        if w == 0 || w > 64 {
+            return None;
+        }
+        Some((0, w, false))
+    }
+
     /// Gap B (round-5): register a function/task's body-local `typedef enum` labels
     /// as integer constants under the CURRENT scope (`self.cur_prefix`), returning a
     /// save-list for `restore_params` to unwind afterwards. Mirrors the module-scope
@@ -398,6 +486,7 @@ impl Elaborator<'_> {
                 let base_w = self
                     .enum_base_width(base)
                     .or_else(|| base.is_none().then_some(32u32));
+                let base_range = self.enum_base_range(base);
                 let mut next: i64 = 0;
                 for lab in labels {
                     if block_local_names.contains(lab.name.name.as_str()) {
@@ -433,7 +522,9 @@ impl Elaborator<'_> {
                             self.param_meta.insert(key.clone(), (w, *signed || v < 0)),
                         ));
                     }
-                    saved.push((key.clone(), self.bind_param_value(key, v)));
+                    let prev = self.bind_param_value(key.clone(), v);
+                    self.bind_param_range(&key, base_range);
+                    saved.push((key, prev));
                     next = v.wrapping_add(1);
                 }
             }

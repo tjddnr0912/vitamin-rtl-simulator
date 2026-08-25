@@ -433,6 +433,10 @@ impl Elaborator<'_> {
                     let base_w = self
                         .enum_base_width(base)
                         .or_else(|| base.is_none().then_some(32u32));
+                    // …and the declared RANGE beside it, so a select of a label folds
+                    // in the constant domain and normalizes at runtime. See
+                    // `enum_base_range`.
+                    let base_range = self.enum_base_range(base);
                     let mut next: i64 = 0;
                     for lab in labels {
                         let v = match &lab.value {
@@ -452,7 +456,9 @@ impl Elaborator<'_> {
                         if let Some(w) = base_w {
                             self.param_meta.insert(key.clone(), (w, *signed || v < 0));
                         }
-                        saved_params.push((key.clone(), self.bind_param_value(key, v)));
+                        let prev = self.bind_param_value(key.clone(), v);
+                        self.bind_param_range(&key, base_range);
+                        saved_params.push((key, prev));
                         next = v.wrapping_add(1);
                     }
                 }
