@@ -307,7 +307,14 @@ impl Parser<'_, '_> {
         // (`p.hi`) is desugared to a part-select by THIS loop, so by the time the AST
         // exists `p.hi[3:0]` (which every tool accepts) and `a[7:0][3:0]` are the same
         // shape. Only here is it still known that the chain began at a name.
-        let from_name = matches!(e.kind, ExprKind::Ident(_));
+        //
+        // ⚠️ A `pkg::x` primary IS a name — §26.3 makes a package-scoped reference a
+        // reference to the declaration in that package, and both oracles accept a
+        // select on one. Leaving it out reported the ONE spelling of a package
+        // constant's select that is spelled with the package: `pk::W[7:0]` drew
+        // "a bit/part select here applies to an expression, not to a net or
+        // variable" while the bare-imported spelling of the same select drew nothing.
+        let from_name = matches!(e.kind, ExprKind::Ident(_) | ExprKind::PkgScoped { .. });
         // ⚠️ `from_name` is decided ONCE, from the primary, and that leaves a hole this
         // loop has to close separately: `a[7:0][3:0]` starts at a name, so every select
         // in the chain inherited "legal" and the second one went unwarned while vita

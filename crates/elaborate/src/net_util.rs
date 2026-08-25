@@ -433,7 +433,7 @@ impl Elaborator<'_> {
                             self.param_meta.insert(key.clone(), (w, *signed || v < 0)),
                         ));
                     }
-                    saved.push((key.clone(), self.params.insert(key, v)));
+                    saved.push((key.clone(), self.bind_param_value(key, v)));
                     next = v.wrapping_add(1);
                 }
             }

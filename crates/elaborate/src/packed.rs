@@ -1592,6 +1592,21 @@ impl Elaborator<'_> {
         if let Some(net) = self.pkg_scoped_var_net(base) {
             return self.norm_offset_for_net(net, raw_off);
         }
+        // …and a direct `pkg::W[…]` naming a package CONSTANT, whose declaration
+        // lives in `pkg_const_range` rather than in a net. Without it the select read
+        // RAW internal bits of a non-zero-LSB package parameter: `parameter [39:8] B
+        // = 32'hAB34;` made `pk::B[15:8]` print 171 where both oracles print 52. The
+        // `Ident` arm above answers the bare-imported spelling of the same select,
+        // through the same `param_sel_range`. Asking only for a PkgScoped base keeps
+        // the single-segment miss to ONE scope walk, which is what it was.
+        if matches!(
+            Self::peel_parens(base).kind,
+            ast::ExprKind::PkgScoped { .. }
+        ) {
+            if let Some((lo, w, asc)) = self.param_sel_range(base) {
+                return self.norm_offset_for_range(raw_off, i64::from(lo), w, asc);
+            }
+        }
         // Array-element part/indexed-select `mem[i][m:l]` — peel the element
         // `BitSelect`(s) to the root net and normalize by the ELEMENT's declared
         // range, the descending twin of `norm_offset_ascending`'s `base_root_net`

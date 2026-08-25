@@ -343,7 +343,7 @@ impl Elaborator<'_> {
                 continue;
             }
             let key = self.fq(cname);
-            saved_p.push((key.clone(), self.params.insert(key.clone(), v)));
+            saved_p.push((key.clone(), self.bind_param_value(key.clone(), v)));
             if let Some(&m) = metas.get(cname) {
                 saved_m.push((key.clone(), self.param_meta.insert(key, m)));
             }
@@ -490,6 +490,15 @@ impl Elaborator<'_> {
         // `pkg_const_meta`) so a `pkg::x` / bare-imported read gets its true
         // self-width in a concat/replication (see the field doc).
         let mut const_meta: BTreeMap<String, (u32, bool)> = BTreeMap::new();
+        // The DECLARED range per PARAM const (flushed to `pkg_const_range`), so a
+        // select of this constant — in any scope, by any spelling — can normalize
+        // against the declaration instead of reading raw internal bits.
+        let mut const_range: BTreeMap<String, (u32, u32, bool)> = BTreeMap::new();
+        // …and made LIVE during this package's own fold, exactly as `param_meta` is
+        // above, so an intra-package sibling (`parameter Q = W[7:0];`) folds. Same
+        // save/restore discipline: a module-scope name of the same spelling must not
+        // inherit this package's declared range.
+        let mut saved_range: Vec<(String, Option<DeclRange>)> = Vec::new();
         let mut vars: BTreeMap<String, u32> = BTreeMap::new();
         // GAP-G: const array-parameter element values for this package (name →
         // elements), the package-scope twin of `array_const_vals`. Flushed into
@@ -545,7 +554,7 @@ impl Elaborator<'_> {
                         saved_real.push((key.clone(), self.real_param_val.insert(key.clone(), rv)));
                         real_vals.insert(p.name.name.clone(), rv);
                         if let Some(i) = exact {
-                            saved.push((key.clone(), self.params.insert(key.clone(), i)));
+                            saved.push((key.clone(), self.bind_param_value(key.clone(), i)));
                             consts.insert(p.name.name.clone(), i);
                         }
                         continue;
@@ -583,6 +592,9 @@ impl Elaborator<'_> {
                                 self.wide_param_bits.insert(key.clone(), cv.clone()),
                             ));
                             wide_vals.insert(p.name.name.clone(), cv);
+                            if let Some(r) = self.param_decl_range_opt(p, true) {
+                                const_range.insert(p.name.name.clone(), r);
+                            }
                             if let Some(m) = pmeta {
                                 const_meta.insert(p.name.name.clone(), m);
                                 saved_meta.push((key.clone(), self.param_meta.insert(key, m)));
@@ -600,9 +612,18 @@ impl Elaborator<'_> {
                         );
                         0
                     });
-                    saved.push((key.clone(), self.params.insert(key.clone(), v)));
+                    saved.push((key.clone(), self.bind_param_value(key.clone(), v)));
                     consts.insert(p.name.name.clone(), v);
                     // A package constant has no override channel.
+                    if let Some(r) = self.param_decl_range_opt(p, true) {
+                        const_range.insert(p.name.name.clone(), r);
+                        saved_range.push((key.clone(), self.param_range.insert(key.clone(), r)));
+                    } else {
+                        // Set-or-CLEAR, the same discipline `param_meta` follows two
+                        // lines down: a stale same-name entry from another scope must
+                        // not answer for this declaration.
+                        saved_range.push((key.clone(), self.param_range.remove(&key)));
+                    }
                     if let Some(m) = self.param_decl_width_unoverridden(p) {
                         const_meta.insert(p.name.name.clone(), m);
                         // Make this param's meta visible to a LATER intra-package
@@ -669,7 +690,7 @@ impl Elaborator<'_> {
                                 );
                             }
                             let key = self.fq(&l.name.name);
-                            saved.push((key.clone(), self.params.insert(key, v)));
+                            saved.push((key.clone(), self.bind_param_value(key, v)));
                             consts.insert(l.name.name.clone(), v);
                             if let Some(w) = base_w {
                                 const_meta.insert(l.name.name.clone(), (w, *signed || v < 0));
@@ -750,10 +771,10 @@ impl Elaborator<'_> {
         for (k, prev) in saved.into_iter().rev() {
             match prev {
                 Some(v) => {
-                    self.params.insert(k, v);
+                    self.bind_param_value(k, v);
                 }
                 None => {
-                    self.params.remove(&k);
+                    self.unbind_param(&k);
                 }
             }
         }
@@ -793,6 +814,16 @@ impl Elaborator<'_> {
                 }
             }
         }
+        for (k, prev) in saved_range.into_iter().rev() {
+            match prev {
+                Some(r) => {
+                    self.param_range.insert(k, r);
+                }
+                None => {
+                    self.param_range.remove(&k);
+                }
+            }
+        }
         // The wide entries were made live for intra-package siblings (`localparam
         // [127:0] M = ~K;`) exactly as the string and real ones are; module-scope
         // reads go through `pkg_wide_bits`, so these must not linger either.
@@ -813,6 +844,9 @@ impl Elaborator<'_> {
         }
         if !const_meta.is_empty() {
             self.pkg_const_meta.insert(pkg.clone(), const_meta);
+        }
+        if !const_range.is_empty() {
+            self.pkg_const_range.insert(pkg.clone(), const_range);
         }
         if !real_vals.is_empty() {
             self.pkg_real_val.insert(pkg.clone(), real_vals);
@@ -948,10 +982,15 @@ impl Elaborator<'_> {
                             .get(pkg)
                             .and_then(|mm| mm.get(k))
                             .copied();
-                        (k.clone(), v, m)
+                        let r = self
+                            .pkg_const_range
+                            .get(pkg)
+                            .and_then(|mm| mm.get(k))
+                            .copied();
+                        (k.clone(), v, m, r)
                     })
                     .collect::<Vec<_>>();
-                for (name, v, meta) in all {
+                for (name, v, meta, rng) in all {
                     let key = self.fq(&name);
                     // An explicit import of this name always wins — skip the wildcard.
                     if explicit_imports.contains(&key) {
@@ -969,7 +1008,7 @@ impl Elaborator<'_> {
                         // (the alias-guarded symbols removal never touches a real
                         // net: only keys this import machinery inserted).
                         Some(prev) if prev != pkg => {
-                            let prev_val = self.params.remove(&key);
+                            let prev_val = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev_val));
                             if self.pkg_var_aliases.remove(&key).is_some() {
                                 self.symbols.remove(&key);
@@ -979,10 +1018,17 @@ impl Elaborator<'_> {
                         // Same package re-import: idempotent, keep the binding.
                         Some(_) => {}
                         None => {
-                            saved_params.push((key.clone(), self.params.insert(key.clone(), v)));
+                            saved_params.push((key.clone(), self.bind_param_value(key.clone(), v)));
                             if let Some(m) = meta {
                                 self.param_meta.insert(key.clone(), m);
                             }
+                            // The DECLARED range travels with the value, so a select
+                            // of the bare-imported name normalizes against the
+                            // package's declaration exactly as `pkg::W[m:l]` does.
+                            // Set-or-CLEAR: a name with no declared-range entry must
+                            // not inherit a stale one from another binding of the
+                            // same key.
+                            self.bind_param_range(&key, rng);
                             wc_origin.insert(key, pkg.to_string());
                         }
                     }
@@ -1039,7 +1085,7 @@ impl Elaborator<'_> {
                     match wc_origin.get(&key).map(String::as_str) {
                         Some("") => continue,
                         Some(prev) if prev != pkg => {
-                            let prev_val = self.params.remove(&key);
+                            let prev_val = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev_val));
                             if self.pkg_var_aliases.remove(&key).is_some() {
                                 self.symbols.remove(&key);
@@ -1108,7 +1154,16 @@ impl Elaborator<'_> {
                     {
                         self.param_meta.insert(key.clone(), m);
                     }
-                    saved_params.push((key.clone(), self.params.insert(key, v)));
+                    // Same pairing as the wildcard arm: the declared range binds with
+                    // the value it describes, or the key is cleared.
+                    let rng = self
+                        .pkg_const_range
+                        .get(pkg)
+                        .and_then(|mm| mm.get(&sym.name))
+                        .copied();
+                    let prev = self.bind_param_value(key.clone(), v);
+                    self.bind_param_range(&key, rng);
+                    saved_params.push((key, prev));
                 } else if let Some(&net) = self.pkg_vars.get(pkg).and_then(|m| m.get(&sym.name)) {
                     // A2b-prereq: explicit VARIABLE import — bind the alias and
                     // mark it explicit (a later local declaration of this name
@@ -1135,7 +1190,7 @@ impl Elaborator<'_> {
                     } else {
                         if wildcard_bound {
                             // unbind the losing wildcard (either namespace).
-                            let prev = self.params.remove(&key);
+                            let prev = self.unbind_param(&key);
                             saved_params.push((key.clone(), prev));
                             self.pkg_var_aliases.remove(&key);
                         }

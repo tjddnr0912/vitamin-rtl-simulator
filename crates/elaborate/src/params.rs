@@ -490,13 +490,110 @@ impl Elaborator<'_> {
         Some((lo, m.abs_diff(l) as u32 + 1, m < l))
     }
 
+    /// Bind a constant VALUE at `key`, and CLEAR any declared range recorded for the
+    /// binding it replaces. **Every binder of `self.params` goes through here** — the
+    /// header, body, generate, enum-label, genvar, real-twin, package and import
+    /// binders alike — so the side map cannot be left describing a declaration that is
+    /// no longer bound. A binder that HAS a range calls [`Self::bind_param_range`]
+    /// immediately after; the debug assert there is what keeps that order.
+    ///
+    /// ⚠️ The class this closes was created by this slice and measured by the review.
+    /// `param_range` is keyed exactly like `params`, and before imports bound a range
+    /// no OTHER writer could rebind a ranged key — the FQ key made every scope
+    /// disjoint. A wildcard `import pk::*` breaks that: it binds a package
+    /// declaration at the module's OWN key, and then a local enum label, a genvar, a
+    /// real parameter's integer twin or a body parameter rebinds the same key one
+    /// phase later. Two of those were live correct→silent-wrong:
+    /// `import pk::*` over `parameter [39:8] W` plus a local
+    /// `enum { W = 32'hDEADBEEF }` answered `W[15:8]` = 239 where all three tools had
+    /// said 190, and the genvar spelling answered 8 where all three had said 0.
+    /// Clearing at 3 of ~13 binders was the wrong shape: the fix is that there is only
+    /// one binder.
+    pub(crate) fn bind_param_value(&mut self, key: String, v: i64) -> Option<i64> {
+        self.param_range.remove(&key);
+        self.params.insert(key, v)
+    }
+
+    /// Unbind `key` — the value and the range together, for the same reason.
+    pub(crate) fn unbind_param(&mut self, key: &str) -> Option<i64> {
+        self.param_range.remove(key);
+        self.params.remove(key)
+    }
+
+    /// Bind (or CLEAR) the declared range of the param now bound at `key`.
+    ///
+    /// ⚠️ The clear is the point. `param_range` answers *"is this param's width a
+    /// declared fact?"*, and that question is about the declaration currently bound
+    /// at the key — so every writer of `self.params` that could REBIND a key another
+    /// writer already ranged has to say which it is. Imports made that reachable: a
+    /// wildcard `import pk::*` binds `pk`'s `parameter [31:0] W` at `top.W`, and a
+    /// module-body `localparam W = ~8'hCB;` then rebinds the VALUE two phases later
+    /// (3a.5 imports, 3b body params). Leaving the package's range behind would let
+    /// `W[15:8]` extract bits of a 32-bit declaration out of an 8-bit value — the
+    /// §4.5.363 "263-bit net" regression, arriving through the import door.
+    pub(crate) fn bind_param_range(&mut self, key: &str, r: Option<(u32, u32, bool)>) {
+        // The range describes the binding that is THERE. Writing it before the value
+        // would be silently undone by `bind_param_value`'s clear, so the order is part
+        // of the contract and this is what enforces it across every call site.
+        debug_assert!(
+            self.params.contains_key(key),
+            "bind_param_range({key}) before the value was bound"
+        );
+        match r {
+            Some(r) => {
+                self.param_range.insert(key.to_string(), r);
+            }
+            None => {
+                self.param_range.remove(key);
+            }
+        }
+    }
+
     /// If `base` is a bare param/localparam Ident with a recorded non-zero-LSB
     /// declared range, return `(lo, width, ascending)` — resolved by the SAME
     /// `walk_scopes` as the param's value (`lookup_scoped`) and meta (`param_meta`),
     /// so the offset range can never drift from the value lookup. Drives the
     /// offset-normalization param arms in `norm_offset_if_net` / `base_net_ascending`
     /// / `norm_offset_ascending`, mirroring a net's `norm_offset_for_net`.
+    /// Strip parentheses from a select's base: `(pk::B)[15:8]` names the object
+    /// `pk::B[15:8]` names. See [`Self::param_sel_range`] for why that matters.
+    pub(crate) fn peel_parens(e: &ast::Expr) -> &ast::Expr {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => Self::peel_parens(inner),
+            _ => e,
+        }
+    }
+
     pub(crate) fn param_sel_range(&self, base: &ast::Expr) -> Option<(u32, u32, bool)> {
+        // A parenthesised base names the same object. Both oracles REJECT the spelling
+        // outright (vita keeps the value and says so — `W-PARSE-SELECT-BASE`), so there
+        // is no oracle to move toward here; what there is, is vita's own answer to the
+        // same select two characters away. Without the peel this slice made a
+        // parenthesis change the value: `pk::B[15:8]` normalized to `34` while
+        // `(pk::B)[15:8]` still read the raw `ab`, in one file.
+        let base = Self::peel_parens(base);
+        // `pkg::W` names a package CONSTANT, and its declaration is in the package's
+        // own table. Answering here is what makes the three spellings of one select
+        // — `pkg::W[m:l]`, the bare name after `import pkg::*`, and the bare name
+        // after `import pkg::W` — normalize identically for a NARROW constant: the two
+        // bare ones arrive as `Ident` and are answered by the walk below, because
+        // `apply_import_consts` binds the range alongside the value.
+        //
+        // ⚠️ NARROW is the whole claim, and the review measured the boundary. A >64-bit
+        // package parameter is bound by the import into `wide_param_bits`, which the
+        // walk below does not look in, so `pkg::M[15:8]` normalizes and the
+        // bare-imported `M[15:8]` still reads raw internal bits (silent→silent, no
+        // ladder move — recorded in ROADMAP §2). Widening the walk is not a two-line
+        // change: it would put a range on a key whose value lives in a SECOND map with
+        // its own set of binders, and that is exactly the staleness `bind_param_value`
+        // exists to make unrepresentable for `params`.
+        if let ast::ExprKind::PkgScoped { pkg, name } = &base.kind {
+            return self
+                .pkg_const_range
+                .get(&pkg.name)
+                .and_then(|m| m.get(&name.name))
+                .copied();
+        }
         let ast::ExprKind::Ident(path) = &base.kind else {
             return None;
         };
@@ -1075,7 +1172,7 @@ impl Elaborator<'_> {
                         // them — and no discriminator was found. It is kept because
                         // "no discriminator" is not "dead"; do not cite it as the
                         // mechanism that makes an exact-integer real usable as a width.
-                        saved.push((key.clone(), self.params.insert(key, ov)));
+                        saved.push((key.clone(), self.bind_param_value(key, ov)));
                         return;
                     }
                     Some(None) => self.error(
@@ -1108,7 +1205,7 @@ impl Elaborator<'_> {
                     // read — a module/ANSI real parameter is not readable across an
                     // instance boundary at all (the interface fold keeps its own i64
                     // twin; see `iface_inst.rs` for the measured reason).
-                    saved.push((key.clone(), self.params.insert(key, i)));
+                    saved.push((key.clone(), self.bind_param_value(key, i)));
                 }
                 return;
             }
@@ -1221,10 +1318,9 @@ impl Elaborator<'_> {
                     .flatten()
                     .map(|c| (0, c.width, false))
             });
-            if let Some(r) = range {
-                self.param_range.insert(key.clone(), r);
-            }
-            saved.push((key.clone(), self.params.insert(key, v)));
+            let prev = self.bind_param_value(key.clone(), v);
+            self.bind_param_range(&key, range);
+            saved.push((key, prev));
         }
     }
 
@@ -1232,12 +1328,15 @@ impl Elaborator<'_> {
     /// params (so sibling instances of the same module re-bind cleanly).
     pub(crate) fn restore_params(&mut self, saved: Vec<(String, Option<i64>)>) {
         for (k, prev) in saved.into_iter().rev() {
+            // Through the funnel in both directions: the scope being unwound is dead,
+            // and a range left behind for one of its keys would outlive the value it
+            // describes.
             match prev {
                 Some(v) => {
-                    self.params.insert(k, v);
+                    self.bind_param_value(k, v);
                 }
                 None => {
-                    self.params.remove(&k);
+                    self.unbind_param(&k);
                 }
             }
         }

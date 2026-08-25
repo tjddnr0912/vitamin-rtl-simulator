@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.383` **선언 폭이 사실인지 답하는 그 맵에 package twin 이 없었다** · §2 ⓓ · ⭐ 큐가 적어 둔 선행조건(*"패키지 const 테이블이 선언 폭 provenance 를 나른다"*)이 정확했고 답은 **새 맵 하나**(`pkg_const_range`, 모듈 twin 과 **같은 `param_decl_range_opt`** = 한 생산자 한 규칙) · ⭐⭐ census 가 한 줄 뒤에서 **다섯 레인**을 찾았다 — ⚠️ 큐의 *"런타임은 이미 세 툴 다 맞다"* 는 **zero-LSB 에서만** 참이라 `parameter [39:8] B` 는 `pk::B[15:8]` 을 **171** 로 찍고 있었다(두 오라클 52 · exit 0) · 세 철자(`pk::W` / wildcard / explicit)가 **한 갭** · 곁수확 = 파서가 `pk::W[7:0]` 을 *"이름이 아니다"* 라고 경고 · ⚠️⚠️ **적대 BLOCKING 둘이 내 것**(import 가 패키지 선언을 **모듈 자기 키**에 바인딩하면서 enum 라벨·genvar 의 재바인딩이 남은 range 를 물려받아 190→239 · 0→8) ⇒ **3/13 사이트 clear 는 틀린 모양** · ⭐⭐ 고침 = **바인더를 하나로**(`bind_param_value` 가 지우고 `bind_param_range` 가 쓴다 · raw writer grep 0) · ⭐ **두 렌즈가 같은 잔여**(>64비트 패키지 파라미터의 range 가 4분면 중 1개만 · **PRE 도 전부 틀렸다** = 사다리 이동 없음 ⇒ §2 10번) · 132칸 **FIXED 61 · REGRESSION 0 · MOVED 0** · 상세=아래
 - `4.5.382` **외부 리포트 둘, 축은 하나: 상수 도메인이 i64 로 계산하는데 선언은 폭을 말하고 있었다** · round-33(11건) + aes_top 감사(14건) · ⭐⭐ census 가 둘을 합쳤다 — **25건 중 11건이 한 축**이고 뿌리는 `fold_self_bits` 의 NAME 훅이 `wide_param_bits` **하나만** 물어 좁은 이름이 전부 declines 한 것 · ⚠️⚠️ 폭 출처가 소유권 논증 전부 = **`param_range`**(선언 provenance만) — §4.5.373 이 `param_meta` 위에 짓고 되돌린 그 자리 · 실은 것: 좁은 이름 피연산자 · wide 산술/비교/리덕션/select/삼항/`>>>`/`$countones` 계열 · **패키지 wide 파라미터** · **override 가 폭을 나른다**(§6.20.2 · `-G K=128'h…` 도) · ⭐ **replication count 이름**(§4.5.371 의 BLOCKING 넷이 *같은 resolver 로 접기* 하나로 전부 답해졌다) · 패키지 real · 상수 문맥 string 메서드 · **generate 키워드 선택(§27.3)·헤더 genvar(§27.4)** · 패키지 static function 의 형제 호출(§26.3) · **진단 6건 = 한 결함**(캐럿이 모듈 헤더 · 원인을 안 말한다) · ⚠️⚠️ 내가 만든 결함 셋(**cast 는 문맥이다** · count 가 상수함수 지역변수를 읽었다 · 폭 미상 지역변수를 바인딩했다) · **핀 21개 전량 2-오라클 재측정** · ⭐⭐ **serv PROMOTED · 코퍼스 7/10 → 8/10** · ⚠️⚠️ **R30-2 는 리포트 진단이 반박됐다**(축은 LHS 모양이 아니라 **RHS 의 계산된 인덱스** · 0.92× vs 2.05× · wprog 넓힘은 지어서 되돌렸다) · 상세=아래
 - `4.5.381` **매뉴얼이 쓰라고 안내하던 그 변환도 거절당하고 있었다** · §0 T2 의 마지막 열린 항목 = **real 상수가 정수 문맥에 닿는 것** · ⭐⭐ **철회가 이 슬라이스를 지목해 뒀다**: §4.5.232 가 i64 twin 으로 닫으려다 5건 silent-wrong 으로 철회하며 `strings.rs` 주석에 *"closing it means routing those sites through the real domain, which is its own slice"* 라고 적었고, 그 다섯 자리 중 셋은 §4.5.241/242 가 이미 닫았다 — 남은 것을 **leaf 가 아니라 소비자**에서 변환한다 · ⭐ **census 가 축을 명시/암시로 갈랐고 두 오라클이 같은 선을 긋는다**: 16형태×3툴에서 vita 는 16/16 loud, 두 오라클 합의 12 · 분열 넷은 **전부 암시 변환**이고 **서로 반대 방향**이다(`logic [R-1:0]` = iverilog 3/verilator 거부 · `{R{1'b1}}` = iverilog 거부/verilator 7 · `logic v [R]` · `R<<1`) ⇒ 규칙은 *"vita 가 숫자를 낼 수 있는가"* 가 아니라 **"언어가 이 노드를 변환이라 부르는가"** · ⭐ **근인 한 줄**: `count_reads_real_param`/`count_lowers_real_param` 이 *"real 파라미터를 언급하는가"* 를 묻는데 **`Cast` 와 `SysCall` 을 그대로 통과해 내려간다** — 그 둘이 바로 변환 그 자체 · ⭐ **반올림의 참조 구현도 트리 안에 있었다**(§6.24.1 = half away from zero · `$rtoi` 는 절단 · iverilog·verilator·**vita 자기 런타임**이 12칸 전부 일치 · 상수 도메인만 안 물었다) · ⚠️⚠️ **내가 만든 결함 둘, 둘 다 loud→silent-wrong 이고 둘 다 내 프로브가 잡았다**(스위트는 첫 번째를 통과했다): ⓐ *parity* 로 `$rtoi` arm 을 상수함수 walk 에 미러링했더니 정수 formal 이 모듈 `real` 을 가리는데 **모듈 스코프 resolver** 를 타 `f(9)`=3(iverilog 9 · §4.5.371 ⓷ 와 같은 모양) ⇒ ⭐ **고침은 arm 삭제** — 그 walk 의 catch-all 이 이미 *가릴 것이 없음을 증명하는 게이트* 아래서 모듈 스코프에 위임한다 ⇒ **shadow 규칙은 `env` 를 가진 walk 가 가진다** · ⓑ 도메인 순서 — real 도메인이 정수 부분트리를 `as f64` 로 올려 `$rtoi(2^53+1)` 이 **조용히 1 작게** ⇒ **정수 먼저**(real 은 답을 더할 수만 있지 고칠 수는 없다) · ⭐⭐ **스위트가 자기 핀 여섯을 지목했고 전부 제거된 제한을 인코딩**하고 있었다(다섯은 앞 슬라이스들이 갭을 **방어하려고** 쓴 것 · 하나는 docstring 에 §0 T2 를 **자기 선행조건으로 지목**) — ⚠️ 그중 **둘은 silent 를 핀하고 있었다**(`v[int'(3.5):0]` 이 **1비트** 를 읽는 것을 `Y=1` 로 · `$clog2(8.0)` 의 **0-count replication** 을 *"declines to 0, never a wrong non-zero"* 라 변호) — 0폭 replication 은 사다리의 안전한 쪽이 아니라 **조용한 쪽**이다 ⇒ 전부 오라클 재측정 후 **값-어서션** · ⚠️ **핀 하나는 제목이 틀렸다**(`a_non_integral_real_never_folds_into_the_integer_domain` 의 세 칸 중 둘은 **경계가 있어서** 변환이 불변식의 *처방*이다) ⇒ 불변식을 재는 칸만 남기고 **긍정 칸 추가** · ⭐ **곁수확 pre-existing silent-wrong 둘**(`nonconst_bound_reason` 에 `Cast` arm 부재 ⇒ `logic [int'(NOPE)-1:0]` 가 **1비트 exit 0** 인데 bare 쌍둥이는 loud = 도메인-쌍둥이 탐지기 · 그리고 위 select) · ⭐ **census 가 놓친 레인** = real **리터럴**(`int'(3.0)`·`$clog2(8.0)`) — 스위트 핀이 알려 줬다 · ⚠️ **수요 근거는 앞 네 슬라이스보다 약하다**(서드파티 8설계에 `parameter real` **0건** — 다만 코퍼스가 합성 RTL 이라 real 파라미터가 사는 테스트벤치가 없다) ⇒ 죽이는 근거로 쓰지 않고 기록 · ⚠️ **방법 메모**: 스윕 한 칸이 verilator 거부로 읽혔는데 **20초 워치독이 느린 기동을 죽인 것**이었다 — 워치독 킬은 오라클 판정이 아니다 · examples 4/4 바이트 동일 · 5,943 → **5,963 green** · format 29 불변 · **제품 코드 ~30줄**
 - `4.5.380` **외부 리포트 두 건 — 진단이 스스로 지운 규칙을 인용하고 있었다** · round-32(hash_top) + aes_top, 둘 다 `6c4be81` 기준이라 **HEAD(4 슬라이스 뒤)에서 전 항목 재현부터**([[external-report-fresh-probe-triage]]) · **해결 4 · 기록 6** · ⭐ **N32-1 = silent-wrong**: `wire [$bits(8'h00)-1:0] c;` 가 **1비트 net** 을 선언해 `8'hA5` 가 `1` 로 잘렸다(exit 0 · 3 백엔드 동일 · **포트 바운드면 모듈 경계를 넘어** 잘린다) — 같은 호출이 런타임 6 · unpacked 차원 8 · 파라미터 E3009 = **한 줄에 세 답** · 고침 = ⓐ 값 fold `bits_of_selfdet`(리터럴·concat·replication, **leaf 는 전부 `bits_of_view`** = 이미 도는 `$bits(<이름>)` 과 **같은 resolver**, `const_self_width` 는 **의도적으로 안 씀** — 그건 `param_meta` 로 이름을 풀고 §4.5.373 이 그 폭의 canonical 성을 반증했다) ⓑ **못 접는 형태는 loud**(`nonconst_bound_reason` 의 SysCall arm — §4.5.377 에서 내가 고친 **바로 그 catch-all** 의 다른 arm이고, `$bits(<미선언 이름>)` 조차 조용히 1비트를 만들고 있었다) · ⭐⭐ **N32-3 이 이 슬라이스의 교훈**: 진단이 *"direct rhs of a blocking assignment (v9)"* 라는 **§4.5.374 가 지운 규칙**을 인용해 곧이 들으면 **멀쩡한 코드를 되돌린다** — ⚠️ 그리고 **자리가 둘**이었다(`$fgetc` 계열 `(v9)` · `$value$plusargs` `(v7)`), **이유도 서로 다르다**(평가 **횟수** vs ref **쓰기 순서**) ⇒ 문장 둘 + 캐럿을 **호출**로 · ⚠️⚠️ **내 첫 교체 문구가 과대주장**이었다(*"a task argument … supported"*)인데 `$monitor` 인자는 **task 인자이면서 정당하게 거절**된다(재렌더) — **기존 핀이 잡았다** ⇒ 원리를 *"written 과 다른 **횟수**로 실행된다"* 로 다시 씀 · **aes §4** `a[7:0][3:0]` 무경고 ⇒ ⭐ iverilog 문구가 규칙을 정확히 준다(*"All but the final index … must be a single value, not a range"*)라 **파싱 시점 판정 가능** · ⚠️ *"두 번째 select 면 경고"* 는 **틀린다** — `mem[i][3:0]` 은 어디서나 합법이고 도처에 있다 ⇒ 판별자는 **직전 select 가 range 였는가**(측정 후 확정) · **aes §5** 진단 둘이 한 사건에 모순(*"is not a constant; default kept"* 인데 상수이고 companion 이 error) ⇒ **wide 리터럴만** 분리, ⚠️ 진짜로 default 가 유지되는 `#(.W(sig))` 는 **옛 문구가 참**이라 핀이 지켜 줬다(내 첫 시도는 그것도 갈아엎었다) · 📌 **기록 6**: aes §1(값 2⁶³ 두 레인 — reduction 은 §3 ⑦, 나머지는 §2 canonical 벽) · aes §2(**CHANGELOG 정정** — *"discriminator is one keyword"* 가 거짓, 자체 실측 plain 3/5 vs `automatic`·`for`·`if`·`case` **전부 1/5** · `p::f()` 2/5 ⇒ **8행 표**로 재작성) · aes §3(⚠️ **iverilog 도 통과** ⇒ 2-오라클 결함 아닌 **lint 기회**) · R30-1 · R30-2 · N32-2 · 코퍼스 7/10 zero drift · examples 4/4 · 5,935 → **5,943 green** · format 29 불변
@@ -414,6 +415,87 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.383 — The table that says "this width is a declared fact" had no package twin (2026-08-25 · 6,006 green · format 29 unchanged)
+
+**Input**: the §2 queue's next item, ⓓ *"package-scope parameter select"* — the residue §4.5.363 left behind, with its prerequisite already written down: *"the package const table has to carry declared width provenance."*
+
+⭐ **The prerequisite was right, and it was one map.** `param_range` is the map that answers *"is this parameter's width a DECLARED fact?"*; §4.5.382 had just used it to settle a whole axis. The package scope had no twin of it. `pkg_const_meta` records widths, but it mixes declared ones with widths INFERRED from a folded value, so no consumer could ask it the only question that matters before extracting bits — and §4.5.382 had written that refusal down explicitly, as a deliberate decline in `wide_name_bits`.
+
+⭐⭐ **The census found five lanes behind the one queue line.**
+
+| lane | module scope | `pk::W` · bare-imported |
+|---|---|---|
+| constant width / bound (net, unpacked dim, replication count, localparam, generate cond, submodule param, port list) | correct | **silent 1** — and `$size` gave `x` |
+| runtime read of a zero-LSB declaration | correct | correct |
+| runtime read of `[39:8]` | correct | **silent 171** — the raw internal bits |
+| runtime read of `[0:31]` | correct | **loud** |
+| intra-package sibling (`parameter Q = W[7:0];`) | — | **loud** |
+
+⚠️ **The queue line said the runtime lane was already right in all three tools.** It was measured on a ZERO-LSB declaration, where the normalization is a no-op. `parameter [39:8] B = 32'hAB34;` makes `pk::B[15:8]` print **171** where both oracles print 52, at exit 0 — a silent-wrong the queue did not know about, found by widening the census rather than by re-reading the line.
+
+⭐ **And all three SPELLINGS behaved identically** — `pk::W[m:l]`, the bare name after `import pk::*`, the bare name after `import pk::W`. One gap, not three: the two bare ones arrive as an `Ident` whose key IS in `params` (the import binds it) but never in `param_range`, because the import bound the value and the meta and not the range.
+
+**What shipped**: `pkg_const_range`, filled by the SAME `param_decl_range_opt` the module twin reads back — so the provenance rule stays one rule and a value-inferred package width still declines. It is bound alongside the value on `import` (wildcard and explicit), made live during the package's own fold so an intra-package sibling resolves and then restored, and read by `param_sel_range` (which drives BOTH the constant fold and the runtime offset normalization) and by `const_select_base`'s new package arm.
+
+⚠️ **`bind_param_range` is set-or-CLEAR, and the clear is the point.** Imports made a rebind reachable that never was: a wildcard `import pk::*` binds `pk`'s `parameter [31:0] W` at `top.W`, and a module-body `localparam W = ~8'hCB;` rebinds the VALUE two phases later (3a.5 imports, 3b body params). Leaving the package's range behind would extract bits of a 32-bit declaration out of an 8-bit value — the §4.5.363 "263-bit net" regression, arriving through the import door.
+
+⭐ **Side finding on the same axis, in the parser.** `W-PARSE-SELECT-BASE` fired on `pk::W[7:0]`, saying the select "applies to an expression, not to a net or variable". A package-scoped reference IS a name (§26.3) and both oracles accept the select; `from_name` simply did not list `PkgScoped`. So the same select drew a portability warning or nothing at all depending on which of its three spellings you wrote.
+
+**Measurement**: a 3-oracle census over spelling × consumer × declared range × select form × hazard — the transition matrix is at the bottom, after the review. Corpus **8/10, every pinned digest matched**; examples 4/4 stdout + VCD byte-identical.
+
+**Residue recorded, not fixed**: a select of an ENUM LABEL in a constant context is silent-1 at MODULE scope too (`typedef enum logic [31:0] { EA = 32'hAB34 }`; `EA[7:0]` in a width) — a different declaration site, not this axis. A package STRING parameter's select stays loud (the string constant domain's gap). A package const ARRAY element in a width stays loud, as at module scope.
+
+## What the adversarial round cost, and what it bought
+
+⚠️⚠️ **Two BLOCKING findings were regressions this slice created, and the soundness lens
+measured both.** `param_range` is keyed exactly like `params`, and until this slice **no
+binder could rebind a key another binder had ranged** — the FQ key made every scope
+disjoint, which is why maintaining the side map at 3 of ~13 binders had been safe. A
+wildcard import breaks that property: it binds a PACKAGE declaration at the MODULE's own
+key, and a local enum label (phase 3c), a genvar, a real parameter's integer twin or a
+body parameter rebinds that same key one phase later.
+
+| | PRE | this slice, round 1 | all three tools |
+|---|---|---|---|
+| `import pk::*` over `parameter [39:8] W` + local `enum { W = 32'hDEADBEEF }`, `W[15:8]` | 190 | **239** | 190 |
+| the same with `genvar W` bound to 8, `W[11:8]` | 0 | **8** | 0 |
+
+⭐⭐ **The fix is that there is only one binder.** `bind_param_value` clears the range and
+`bind_param_range` (with a `debug_assert` on the order) sets it, so `grep` for a raw
+`self.params.insert` / `.remove` outside those two functions returns nothing. The author
+had added the clear at three sites and believed it complete; the lens censused thirteen.
+Patching the writers you can think of is the wrong shape — *"a writer that forgot"* has to
+be unrepresentable.
+
+⭐ **Both lenses independently found the same remaining hole**, which makes it high
+confidence: a >64-bit package parameter's declared range reaches **one of four**
+consumer × spelling quadrants. `pk::K[31:24]` normalizes, the bare-imported `K[31:24]`
+does not, and neither spelling sizes a net correctly. ⚠️ **PRE was wrong on all eight
+cells too**, so no ladder move — and the two halves need different machinery (the bare
+spelling needs the range on a key whose value lives in `wide_param_bits`, a second map
+with its own ~10 binders; the width consumer needs the WIDE BIT DOMAIN to carry a declared
+direction at all, which is a capability). ⇒ **ROADMAP §2 row 10**, with both prerequisites
+written out — and the two docstrings that overclaimed the reach are corrected in place,
+because a false claim in a comment is how this repo's last two slices got their premises
+wrong.
+
+⭐ Round 2 also closed the last asymmetry the census had left: a NESTED select
+(`pk::W[15:0][7:0]`) folded through the bare-imported spelling and declared **one bit**
+through the `pkg::` one, because only the wide bit domain folds a select of a select and
+its name resolver declined every narrow PACKAGE constant. That decline was written one
+slice earlier with a reason — *"its declared width lives in `pkg_const_meta`, which is not
+provenance-filtered"* — that `pkg_const_range` had just made obsolete.
+
+⚠️ And a parenthesis had started to change the answer: `pk::B[15:8]` normalized to `34`
+while `(pk::B)[15:8]` still read the raw `ab`, in one file. Both oracles reject the
+parenthesised spelling, so there is no oracle here — the target is vita's own answer to
+the same select two characters away.
+
+**Final measurement**: 132 cells, PRE vs POST, three tools — **FIXED 61 · REGRESSION 0 ·
+MOVED 0**. Lens A adds a 64-cell non-package sweep at **PRE == POST, 0 diffs** (the direct
+probe of the new set-or-CLEAR) and four instances of one module with a ranged parameter,
+two of them overridden, unchanged.
 
 #### 4.5.382 — Two external reports, one axis: the constant domain was computing in i64 while the declaration stated a width (2026-08-25 · 5,987 green · format 29 unchanged · corpus **7/10 → 8/10**)
 

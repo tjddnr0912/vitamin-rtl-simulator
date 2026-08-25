@@ -219,6 +219,44 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ A side map keyed like another map is owned by nobody until there is exactly ONE binder (2026-08-25 · §4.5.383)
+
+`param_range` is keyed exactly like `params` and is written by 5 of ~13 binders. That was safe for
+months for a reason nobody had written down: the FQ key made every scope disjoint, so **no binder
+could ever rebind a key another binder had ranged**. §4.5.383 broke that property without noticing —
+a wildcard `import pk::*` binds a PACKAGE declaration at the MODULE's own key, and then a local enum
+label, a genvar, a real parameter's integer twin or a body parameter rebinds that same key one phase
+later. Two of those were live correct→silent-wrong, and the author had already added the clear at
+three sites and believed it complete.
+
+**Rule**: when you make a key space REBINDABLE, every writer of the primary map becomes a writer of
+the side map. Do not patch the writers you can think of — the adversarial census found 13 and the
+author had found 3. Route them through one funnel (`bind_param_value` clears the range; a ranging
+binder calls `bind_param_range` right after, and a `debug_assert` there enforces the order), so that
+`grep` for the raw writer returns only the funnel itself. *"A writer that forgot"* has to be
+unrepresentable, not merely absent.
+
+### ⚠️⚠️ A census that varies one field of a record certifies the lanes where the others are no-ops (2026-08-25 · §4.5.383)
+
+The queue line said *"the runtime lane already prints the right value in all three tools"*, and it had
+been measured — on a **zero-LSB** declaration, where the offset normalization is the identity. With
+`parameter [39:8] B`, the same runtime read printed **171** against both oracles' 52, at exit 0.
+
+**Rule**: when the thing you are testing is a RECORD (`lo`, `width`, `direction`), the census must vary
+every field, or the no-op combination will certify a lane that does not work. The same shape as
+*"프로브의 값이 폭에 들어맞으면 폭 결함이 안 보인다"* (§4.5.365), one level up: there the VALUE hid the
+defect, here the DECLARATION did.
+
+### ⭐ Build the new table with the same producer as its twin (2026-08-25 · §4.5.383)
+
+§4.5.382's rule — *the prerequisite a reverted slice wrote down may already be answered by a map you
+have* — has a second half for when it is NOT. §4.5.383 genuinely needed a new map (`pkg_const_range`),
+and what made it safe was that it is filled by the **same `param_decl_range_opt`** the module twin is
+read back through. One producer means one provenance rule, so *"a value-inferred width declines"* did
+not have to be re-argued in the second scope, and the review could check the claim by reading one
+function. A second, independently-written producer would have been a second rule wearing the first
+one's name.
+
 ### ⭐⭐ 되돌린 슬라이스가 적어 둔 **선행조건**은, 이미 있는 맵이 답하고 있을 수 있다 (2026-08-25 · §4.5.382)
 
 §4.5.373 은 리덕션을 짓고 되돌리며 선행조건을 **두 단계**로 적었다: *"폭이 declared provenance 여야

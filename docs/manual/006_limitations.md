@@ -458,6 +458,30 @@ takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`
 > fall into. It travels through wildcard and explicit imports and through `pk::K`, and
 > `pk::K[127:64]` selects out of it.
 
+> **Fixed 2026-08-25 — a bit/part select of a PACKAGE constant.**
+> `logic [pk::W[7:0]-1:0] v;` declared a **one-bit** net at exit 0 where every other
+> tool declares 52 — and the same text written as a bare name after `import pk::*` or
+> `import pk::W` did the same. Every constant consumer was affected (a net width, an
+> unpacked dimension, a replication count, a `localparam` value, a `generate`
+> condition, a submodule parameter, a port list), and a `parameter real`-style
+> declaration was not required to hit it.
+>
+> ⚠️ The RUNTIME read of such a select was wrong too, which is easy to miss because it
+> is right for the common declaration: with `parameter [39:8] B = 32'hAB34;` in a
+> package, `pk::B[15:8]` printed **171** instead of 52 — the raw internal bits, with
+> the declared LSB never subtracted — and an ascending `parameter [0:31]` was refused
+> outright. A package parameter may now also be written in terms of a select of an
+> earlier one (`parameter Q = W[7:0];`).
+>
+> ⚠️ **One boundary remains**: for a parameter WIDER than 64 bits, only the explicit
+> `pk::K[m:l]` spelling normalizes a non-zero declared LSB; the bare-imported spelling
+> and a net sized from either spelling still read raw bits. Declare such a parameter
+> with a zero LSB (`[127:0]`) and every spelling agrees.
+>
+> ⚠️ Also unchanged: a select of an ENUM LABEL in a constant context
+> (`logic [EA[7:0]-1:0] v;`) is still one bit — at module scope as well as in a
+> package. Assign the label to a `localparam` first and select from that.
+
 > **Fixed 2026-08-25 — the constant domain computes in the width you declared.**
 > A named parameter is an operand of the wide fold now, so `A ^ B` folds where only
 > `A ^ 128'h1` used to; `+`, `-`, `*` and the comparisons have wide arms; `A[127:64]`

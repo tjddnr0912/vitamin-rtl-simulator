@@ -175,6 +175,11 @@ pub(crate) type BlockLocalInit = (u32, Vec<u32>, ast::Lvalue, ast::Expr);
 /// width, which is the only place that width is known.
 pub(crate) type DefparamOverride = (String, i64, Option<(ast::IntLitKind, String)>);
 
+/// A parameter's DECLARED packed range: `(lo, width, ascending)` — the tuple the
+/// provenance maps (`param_range`, `pkg_const_range`) carry, named so the save/restore
+/// lists that shuttle it stay readable.
+pub(crate) type DeclRange = (u32, u32, bool);
+
 struct Elaborator<'s> {
     sink: &'s dyn LogSink,
     /// §4.5.249: resolves an AST byte span back to `file:line:col` for diagnostics.
@@ -330,6 +335,19 @@ struct Elaborator<'s> {
     /// 32 bits, so it carries the right self-width inside a concat/replication
     /// (`{4'h5, p::x}` — otherwise the 32-bit const shoves the high operand out).
     pkg_const_meta: BTreeMap<String, BTreeMap<String, (u32, bool)>>,
+    /// Declared `(lo, width, ascending)` of each package PARAM const — the package
+    /// twin of `param_range`, and **provenance-filtered exactly as that map is**
+    /// (`param_decl_range_opt`, so a value-INFERRED width has no entry).
+    ///
+    /// ⚠️ Its absence is why a select of a package constant was the one spelling of
+    /// that select that did not work. `pkg_const_meta` records widths, but it mixes
+    /// declared and inferred ones, so every consumer that has to ask *"is this width
+    /// a declared fact?"* — the constant-domain select fold, the wide domain's name
+    /// resolver, the runtime offset normalization — had nothing to ask and declined
+    /// or, worse, read the raw offset. Measured: `parameter [39:8] B = 32'hAB34;` in
+    /// a package, `pk::B[15:8]` printed **171** where both oracles print 52, and
+    /// `logic [pk::B[15:8]-1:0]` declared **one bit** where both declare 52.
+    pkg_const_range: BTreeMap<String, BTreeMap<String, DeclRange>>,
     // §3 ⑨: the string / real twins of `pkg_consts`. A package parameter has no i64
     // value in either domain, so it is kept OUT of `pkg_consts` (exactly as a
     // module-scope string/real param is kept out of `params`) and read from here —

@@ -170,7 +170,7 @@ impl Elaborator<'_> {
 
                 // Save any prior binding of this name (an outer param/genvar of the
                 // same identifier) and seed the genvar.
-                let saved = self.params.insert(gv_key.clone(), start);
+                let saved = self.bind_param_value(gv_key.clone(), start);
                 // A genvar IS a signed 32-bit integer (IEEE 1800 §27.4), and the
                 // const domain's sign model reads `param_meta` — with no entry it
                 // answered UNSIGNED, so `2 ** (g - 1)` at g = 0 masked −1 into
@@ -249,17 +249,17 @@ impl Elaborator<'_> {
                         }
                         break;
                     }
-                    self.params.insert(gv_key.clone(), next);
+                    self.bind_param_value(gv_key.clone(), next);
                     idx_count += 1;
                 }
 
                 // restore the prior binding (siblings/ancestors unaffected).
                 match saved {
                     Some(v) => {
-                        self.params.insert(gv_key.clone(), v);
+                        self.bind_param_value(gv_key.clone(), v);
                     }
                     None => {
-                        self.params.remove(&gv_key);
+                        self.unbind_param(&gv_key);
                     }
                 }
                 match saved_meta {
@@ -499,7 +499,7 @@ impl Elaborator<'_> {
                     self.real_param_val.insert(key.clone(), rv);
                     if let Some(i) = exact {
                         self.hier_params.insert(key.clone(), i);
-                        self.params.insert(key, i);
+                        self.bind_param_value(key, i);
                     }
                     return;
                 }
@@ -551,10 +551,9 @@ impl Elaborator<'_> {
                         }
                         // This scope has NO override channel, so the declared default is
                         // always what binds — see `param_decl_range_opt`.
-                        if let Some(r) = self.param_decl_range_opt(p, true) {
-                            self.param_range.insert(key.clone(), r);
-                        }
-                        self.params.insert(key, v);
+                        let r = self.param_decl_range_opt(p, true);
+                        self.bind_param_value(key.clone(), v);
+                        self.bind_param_range(&key, r);
                     }
                     None => {
                         // Wider than the i64 domain — see `wide_param_bits`. Reached

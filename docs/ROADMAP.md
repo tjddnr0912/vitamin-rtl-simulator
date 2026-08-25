@@ -146,6 +146,8 @@
 > | 6 | 🆕 **static function 이 모듈 net 에 쓴 값이 조용히 사라진다**(§4.5.362 곁수확 · **2-오라클** silent-wrong) | `function logic [3:0] f(); seq = seq + 7; f = 4'h3; endfunction` 에서 `a = f();` → 반환값 `a=3` 은 맞는데 **`seq` 가 0 그대로**(iverilog·verilator 둘 다 **7**) · ⭐ `automatic` 철자는 같은 본문을 **정직하게 거부한다**(E3009 = *"frame-call subset 밖"*) ⇒ 사다리상 **static 철자만 한 칸 아래**에 있다 — 같은 규칙의 두 철자가 갈린 §4.5.359 와 같은 모양 · ⚠️ 발견 경로가 기록할 만하다: 이 슬라이스의 **재배치가 관찰 가능한지** 묻는 soundness 프로브(부작용 있는 피연산자)를 짜다가 나왔다 — PRE·POST 동일이라 이 슬라이스 것이 아니다 |
 > | 7 | 🔄 **REWRITTEN (§4.5.376)** — **a parent `initial` READING a child net at t0 sees X** (**2-oracle** · reachable today · ⚠️ **zero corpus demand**) | ⚠️⚠️ **The original wording of this row was measured wrong and it caused a revert.** It said `u1.s = 8'hAA` in a parent vs `initial s = 8'hEE` in the child gives vita `ee` and **"iverilog and verilator both `aa`"**. Re-measured: iverilog `aa`, **verilator `ee`** — verilator sides with VITA. Confirmed not a dropped write (with the child's competitor removed, verilator honours the parent's write). IEEE 1800 §4.7 makes `initial` order explicitly nondeterministic, so **write-vs-write across an instance boundary is an ORACLE SPLIT**, not a defect, and §3 ④ was reverted for it needlessly. **What survives as a real two-oracle silent-wrong is the READ direction**: a parent `initial` that reads a child net the child's `initial` writes gets **X** in vita and the value in both oracles — 10 cells (depth 1/2/3, two siblings, generate scope, read-into-local), no disagreement. ⭐ Narrow: a decl initializer (`init_ranks` sorts `RANK_MOD_INSTANCE` 1 before `RANK_MOD_OWN` 2), an `always @*` read, a fork-arm read, and a delayed child `initial` are **all already correct** — only a direct `initial`→`initial` read at t0 is wrong. ⚠️ **Demand is unproven**: no design in the ten-workload corpus does it, and the four testbenches that motivated §3 ④ all WRITE downward rather than read. ⇒ **Do not rank this by the ladder alone.** Fix shape if taken: `push_process` is a single funnel and `rank_path` is live there, so the rank is `rank_path + [own_slot, pid]`; but `sim_ir::Process` is FROZEN, `tie` must stay a **dense int in [0, nproc)** because `compose_child_tie` packs `(parent_tie+1) << 16`, so the sidecar is a PERMUTATION not a key; it must be threaded through **both** backends (`sched/scan_arm.rs` seeding and `native/run.rs`), and adding a `StagedExtraSidecars` field **bumps format_version to 30** (v26 did exactly this for `init_procs` — the earlier briefing's guess that 29 would hold was wrong). |
 > | 8 | 🆕 **A clocking INPUT is writable through `$readmem*`** (§4.5.375 · hand-IEEE §14.3 · **no oracle** — iverilog 13 cannot parse clocking blocks) | `$readmemh("f.hex", c.cb.mem)` writes the clocking hold net at exit 0, while the direct `c.cb.s = 8'hAA` is correctly `E3009`. §14.3: a clocking input is read-only. ⚠️ First recorded as merely LATENT — a clocking input of an unpacked array gets a **scalar** hold net, so the §3 ④ exemption arm cannot reach it — but that is the wrong reason: the **reachable** half runs through the ORDINARY resolution, which has no `clocking_hold_nets` check (both hierarchical WRITE lanes do: `hier_defer/write.rs`). ⇒ the guard belongs on the shared read resolution, covering both halves. |
+> | 9 | 🆕 **A constant-context select of an ENUM LABEL is silently one bit** (§4.5.383 census · **2-oracle** · MODULE and package scope alike) | `typedef enum logic [31:0] { EA = 32'hAB34 } e_t;` then `logic [EA[7:0]-1:0] v;` gives `$bits` **1** in vita and **52** in iverilog and verilator, at exit 0. ⭐ The RUNTIME read of the same label select is correct in all three, and so is every parameter spelling since §4.5.383 — the label is the one constant that reaches `const_select_base` with no declared range, because `param_range` is written at parameter DECLARATION sites and a label is not one. Its width is nonetheless a declared fact (the enum's base type), so the fix shape is a range recorded where the label's value is recorded; ⚠️ the value must be proven canonical at that width first (§4.5.373's second prerequisite), which a parameter gets from `coerce_param_value_with` and a label does not. |
+> | 10 | 🆕 **A >64-bit package parameter's DECLARED range reaches one of four consumer × spelling quadrants** (§4.5.383 · both adversarial lenses, independently · **2-oracle** · ⚠️ **pre-existing — PRE was wrong on all eight cells too**, so no ladder move) | `parameter [143:16] K = 128'h…;` then `pk::K[31:24]` is **ee** (both oracles ee) but the bare-imported `K[31:24]` is **cc**, and `$bits` of a net sized by either spelling is **204** where both oracles give 238. ⭐ The runtime `pk::` quadrant works because `packed.rs` asks `param_sel_range` directly and the new `pkg_const_range` answers; the other three do not, for TWO separate reasons. (a) The bare spelling: a wide import binds `wide_param_bits`, which `param_sel_range`'s `walk_scopes_key` does not look in — and widening that walk is **not** the two-line change it looks like, because it would put a range on a key whose value lives in a second map with its own ~10 binders, reintroducing exactly the staleness `bind_param_value` was built to make unrepresentable. (b) The width consumer: the value is folded by the WIDE bit domain, which by construction *"indexes positionally from 0 and carries no direction"* (`narrow_param_bits`) — so the prerequisite is that domain learning declared ranges, which is a capability, not a binding. ⇒ **the two halves are different machinery; do not take them as one item.** |
 >
 > ✅ **u64 패턴 지수는 §4.5.348 로 RESOLVED · 폭-미상 wrapping 지수는 재센서스에서 소멸**
 > (2026-08-20 · 상세=ARCHIVE): 후자는 **§4.5.345 가 `const_decl_wsign` 의 multi-packed 폭을 채우면서
@@ -270,20 +272,17 @@
   BARE NAME 으로 모듈 net 에 flatten 하는 v1 모델이 import alias 와 같은 칸에 앉는다(memory:
   block-local-flatten-model). 사다리상 silent-wrong 이고 오라클이 둘 다 답한다.
 
-- **파라미터 셀렉트의 상수 폭 — RESOLVED §4.5.363**(2026-08-22 · 93칸 3-오라클 **FIXED 52 · 회귀 0** · 상세=ARCHIVE).
-  잔여는 **전부 사다리 이동 없음**(silent→silent 또는 loud→loud)이고, ⭐ **적대 리뷰가 넷을 하나로 접었다**:
-  - **🔴 package 스코프 base 는 넷이 아니라 하나다** — `c03`(`pk::W[7:0]`) · `c04`(`import pk::*` 뒤 bare) ·
-    `d12`(포트 리스트) · `d17`(서브모듈 스코프) 는 **전부 같은 텍스트**이고 소비자만 다르다. **네 철자 전부 vita 1 /
-    두 오라클 52** — ⚠️ 초안이 *"bare 는 52, `pk::` 는 1 로 갈린다"* 고 적었지만 **최종 판정 리뷰의 재측정이 반박**했다
-    (폭 provenance 게이트가 bare 쪽도 함께 닫는다) ⇒ 갈림이 아니라 **한 덩어리**다.
-    ⭐ 지어서 되돌렸다: `package.rs` 의 param 기록 자리에 `param_range` 삽입을 더해도 **키가 안 닿는다**(패키지
-    const 는 `pkg_consts`/`pkg_const_meta` 별도 테이블이고 `param_sel_range` 의 스코프 걷기는 `params`/`symbols`
-    만 본다) ⇒ 선행조건 = 패키지 const 테이블이 **선언 폭 provenance** 를 같이 나르는 것.
-  - **🔴 셀렉트들의 concat**(`{W[7:0], W[7:0]}` 을 bound 로) — 첫 칸만 맞고 둘째가 1. ⚠️ 근인이 *"concat 에 fold
-    arm 이 없다"* 가 **아니다**(리터럴 피연산자 concat bound 는 PRE 에서도 정확하다) — `fold_self_bits` 의 leaf
-    resolver 가 `&ast::HierPath` 만 받아 **셀렉트가 도달하지 못한다**. 셀렉트는 **비트 배치** 연산이라 그
-    carry-free folder 의 계약에 정확히 들어맞는다.
-  - **🔴 중첩 셀렉트**(`W[15:0][7:0]`) · **파라미터에서 파생된 파라미터의 셀렉트** — 둘 다 base 모양 게이트 밖.
+- **파라미터 셀렉트의 상수 폭 — RESOLVED §4.5.363**(2026-08-22 · 상세=ARCHIVE) · **package 스코프 = RESOLVED §4.5.383**
+  (2026-08-25 · 세 철자 `pk::W[m:l]` / `import pk::*` 뒤 bare / `import pk::W` 뒤 bare 가 **한 갭**이었고,
+  선행조건으로 적혀 있던 *"패키지 const 테이블이 선언 폭 provenance 를 나른다"* 가 `pkg_const_range` 로 답해졌다 ·
+  상세=ARCHIVE §4.5.383).
+  ⚠️⚠️ **이 목록의 나머지는 2026-08-25 재측정에서 전부 stale 이었다** — 뒤 슬라이스들이 조용히 닫았고, 목록만
+  남아 있었다. PRE(`a8dcc75`) 실측 · 전부 iverilog 일치: 셀렉트들의 concat **68** · 파라미터에서 파생된
+  파라미터의 셀렉트 **52** · 중첩 셀렉트 `W[15:0][7:0]` **52** · 헤더 파라미터가 다른 헤더 파라미터의 셀렉트로
+  기본값을 받는 형태 **52** · `#(.N(W[7:0]))` override **52** · `defparam` **52** · >64비트 파라미터 셀렉트 **52**.
+  이 축과 무관한 둘(struct 멤버 폭 = **파서** 갭 · 클래스 속성 = 셀렉트 없는 쌍둥이도 *"undefined name"*)도 그대로다.
+  ⭐ 규칙: **잔여 목록은 다음 슬라이스의 진단을 정하므로, 인용하기 전에 PRE 를 돌려라**(§4.5.375 의 그 교훈).
+  남은 것은 하나다:
   - **🔴 const 배열을 가리는 안쪽 스칼라 — GAP-G 의 shadow 검사가 첫 가지에만 없다**(pre-existing · §4.5.363
     최종 리뷰가 발굴 · **오라클 하나**: iverilog 는 unpacked array parameter 를 아예 거부하고 verilator 만 답한다).
     `localparam int ROT [0:3] = '{…}` 를 generate 안쪽 `localparam int ROT = 99;` 가 가리면 `logic [ROT[1]:0] v` 가
@@ -1126,13 +1125,13 @@ genvar 로 쓴 `(gx+2*gy)%5` 는 상수인데 generate 언롤 뒤에도 **아무
 | 제품 형태 | `--no-default-features` = **실행기 하나** · 게이트 거부는 **치명** |
 | 성능 | 벤치 **10/10 에서 native < vm** · picorv32 native/vm **0.60** (⚠️ round-29 가 지적한 **레짐 갭**을 메워 8→10 · 아래 §round-29 §5) |
 | 코드젠 | **기본 OFF · 기각됨**(§5.1-be) — 빌드·배선·측정·정확성은 전부 갖춰 둔 상태 |
-| 게이트 | **5,987 tests green** · 워크로드 코퍼스 **8/10** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-25 · ARCHIVE §4.5.382) |
+| 게이트 | **6,006 tests green** · 워크로드 코퍼스 **8/10** · no-oracle 축 green · clippy 0 · fmt 0 · format_version **29** · MsgCode **68** (2026-08-25 · ARCHIVE §4.5.383) |
 
 ### 다음 후보 — 우선순위 순
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
-| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. **다음 = ⓓ**(package 스코프 파라미터 셀렉트 · §4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) · ⚠️⚠️ **ⓔ 는 §4.5.376 census 가 강등**했다(*"두 오라클 다 자식 먼저"* 가 거짓 — verilator 가 **vita 편** · §3 ④ 를 막고 있지도 않았다 · 남은 결함은 읽기 방향뿐이고 **코퍼스 수요 0** ⇒ 브리핑은 아래) · 그 다음 ⓓ **package 스코프 파라미터 셀렉트**(§4.5.363 잔여 · 같은 파일에서 두 철자가 갈린다) · ~~ⓐ§4.5.364~~ ~~ⓑ§4.5.365~~ ~~ⓒ§4.5.366~~ RESOLVED(잔여는 §2) |
+| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고, 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라 — 그 절은 주제별 묶음이지 착수 순서가 아니다**(맨 위 뭉치는 *AST self-폭 패스*라는 큰 선행조건에 막혀 있다). **착수 순서는 §2 머리말의 「다음 착수 순서」** 를 따른다 · 착수 전 오라클로 재현. ~~**다음 = ⓓ**~~ **RESOLVED §4.5.383** · 다음 후보 = §2 표 **9**(enum 라벨 셀렉트) / **6** / **4** · ⚠️⚠️ **ⓔ 는 §4.5.376 census 가 강등**했다(*"두 오라클 다 자식 먼저"* 가 거짓 — verilator 가 **vita 편** · §3 ④ 를 막고 있지도 않았다 · 남은 결함은 읽기 방향뿐이고 **코퍼스 수요 0** ⇒ 브리핑은 아래) · ~~ⓐ§4.5.364~~ ~~ⓑ§4.5.365~~ ~~ⓒ§4.5.366~~ RESOLVED(잔여는 §2) |
 | **2** | **§3 loud → correct-support 승격** — ⭐⭐ 착수 순서를 **워크로드 코퍼스가 정한다**(§3 머리 블록) | 오늘 loud 인 것이 **실물 IP 를 막고 있다는 것이 측정됐다**. ~~①~~ **RESOLVED(§4.5.370)** — 문자열 상수 도메인이 열려 serv·verilog-ethernet 이 **더 깊은 갭으로 전진**했다 | **②** 는 §4.5.371 이 **되돌렸다**(메커니즘은 §3 ② 에 기록 · 선행조건 = 깊이를 이어받는 상수 평가 진입점). ~~⑧~~ 도 §4.5.372 가 **되돌렸다**(선행조건 = *멈춘 프레임 본문의 반환값* · 상세 §3 ⑧). ~~⑦~~ 도 §4.5.373 이 **되돌렸다**(②와 **같은 벽** — 상세 §3 ⑦). ~~③~~ **RESOLVED(§4.5.374)** — darkriscv 전체 SoC 가 처음 돌았다. ~~④~~ **RESOLVED(§4.5.376)** — §4.5.375 가 되돌렸던 것을 **census 가 그 revert 를 반박**하고 재랜딩했다(*"두 오라클 다 자식 먼저"* 가 거짓 · verilator 는 vita 와 같은 `01 02 03 04` · 네 테스트벤치 중 경쟁 로드를 가진 것이 **하나도 없다** · serv 는 ④ 유무와 무관하게 §3 ⑦ 로 거절). ~~⑨~~ **RESOLVED(§4.5.377)** — census 가 갭을 *"삼항"* 에서 **패키지 안 string/real 전부**로 넓혔고 **§2 의 package-real silent-wrong 과 같은 뿌리**여서 두 줄이 함께 닫혔다. ~~⑥~~ **RESOLVED(§4.5.378)** — census 가 원인을 바꿨다(루트 선택은 **iverilog 와 동일** = 결함 아님 · 진짜 결함은 *"top 의 포트가 unconnected"* 경고로 **auto-top 과 무관**). ⚠️⚠️ **⑪ 은 착수 불가로 판정**(§4.5.379 census) — verilog-axi 의 **54 에러가 전부 ② 한 뿌리의 연쇄**다(`parameter S_THREADS = {S_COUNT{32'd2}}` = 파라미터 count replication) ⇒ ⑪ 의 네 칸은 **② 가 서기 전엔 보이지도 재현되지도 않는다** · ⭐ 그리고 census 가 ⑪ 의 이름도 반박했다: **폭이 아니라 값**이다 — `[127:0]` 선언에 값이 `0x1122` 면 **이미 돈다**, 막히는 건 **값이 64비트를 넘을 때**(65비트 리터럴 · part-select 로 쌓는 128비트 누산기) · ⚠️ **싼 절반(넓은 리터럴 반환)은 수요 0**, verilog-axi 가 쓰는 건 **비싼 절반**(루프 누산기 = `calcBaseAddrs`) = §4.5.373 이 되돌린 그 형태 ⇒ **② 뒤로 재배치** · 참고로 넓은 도메인 자체는 이미 있다(`fold_self_bits`/`WideBits`/`BitPacked`, 단 **carry-free**) ⇒ ⭐ **다음 표적 = §0 T2 의 `real` const-fold** · ⚠️ **⑧⑪ 은 §2 급 잔여를 남겼다**(§3 ⑧ 의 `$fdisplay`/`$strobe` 한 문장 lag) · **⑩ 은 §2 급**(조용히 자른다) · ⚠️ *"오라클이 없다"* 는 미루는 이유가 **아니다**(⑤ ibex) |
 | **2b** | **§0 T2 잔여** — ~~sized-literal enum label~~ **RESOLVED(§4.5.379)**(⚠️ census 가 이름을 반박: 막힌 건 sized-literal 이 아니라 **상수 이름 라벨**이었다) | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**라 더 싸다 | 남은 하나 = `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · ⚠️ 그 잔여는 §0 항목 8 이 *"의도적 loud"* 로 적어 둔 것이고 **i64 twin 은 시도 후 철회**(5건 silent-wrong)이므로 착수 전 census 필수 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |
@@ -1150,7 +1149,9 @@ genvar 로 쓴 `(gx+2*gy)%5` 는 상수인데 generate 언롤 뒤에도 **아무
 
 ### ★★ §2 다음 하나 — 착수 브리핑 (**ⓐ = §4.5.364 · ⓑ = §4.5.365 · ⓒ = §4.5.366 으로 완료**)
 
-**다음 착수 = ⓓ**(package 스코프 파라미터 셀렉트). 이후는 §2 「다음 착수 순서」 표에서 다시 고른다.
+~~**ⓓ package 스코프 파라미터 셀렉트**~~ — ✅ **RESOLVED §4.5.383**(2026-08-25 · 세 철자가 한 갭 · grids A/B/C **FIXED 39 · REGRESSION 0** · format 29 불변). ⭐ 선행조건으로 적혀 있던 *"패키지 const 테이블이 선언 폭 provenance 를 나른다"* 는 정확했고, 답은 **새 맵 하나**(`pkg_const_range`, 모듈 twin 과 **같은 `param_decl_range_opt`**)였다 — §4.5.382 의 교훈이 여기서는 *찾으면 있다* 가 아니라 *없으면 짓되 같은 생산자로 지어라* 로 적용됐다. ⚠️⚠️ 큐 문구의 절반이 틀렸다: *"런타임 레인은 세 툴 다 이미 맞다"* 는 **zero-LSB 선언에서만** 참이고, `parameter [39:8] B` 는 `pk::B[15:8]` 을 **171** 로 찍었다(두 오라클 52 · exit 0) — 큐가 모르던 silent-wrong. 잔여 = §2 의 새 9번(enum 라벨 셀렉트 · **모듈 스코프도 같다**).
+
+**다음 착수**는 §2 「다음 착수 순서」 표에서 고른다 — 후보 = **9**(enum 라벨 · 2-오라클 · 모듈+패키지 동시) · **6**(static function 이 모듈 net 에 쓴 값이 사라진다 · 2-오라클) · **4**(`$itor` 가 real 인자의 비트를 읽는다). 또는 §3 ⑫(verilog-axi 상수함수 wide 누산기 · 코퍼스가 지목).
 
 **⚠️⚠️ ⓔ was DEMOTED by its own census (§4.5.376).** It was ranked first this morning on two
 claims, and the census refuted both.
@@ -1184,7 +1185,7 @@ see ENGINEERING_RULES, *"A revert's reason is a measurement, not a finding."*
 
 ~~**ⓒ 정확히 64비트 문맥의 비교**~~ — ✅ **RESOLVED §4.5.366**(2026-08-23 · 120칸 4-오라클 전이 **ok→wrong 0 · wrong→ok 14 · 오라클 분열 0** · 5,806 green · format 29 불변). ⭐ 규칙은 하나 — *"이 i64 는 마스킹이 정규화할 수 없는 unsigned 값을 나른다"* — 이고 폭 인식 walk 의 **소비자 넷**(순서비교 · `/`·`%` · 두 시프트 · leaf 재해석)이 그것을 묻는다. ⚠️ 착수 census 가 클래스를 *"비교"* 에서 넷으로 넓혔고, 적대 렌즈가 **`>>>` 도 부호 민감**(§11.4.10)임을 잡았다 — 비교 리다이렉트가 그 결함을 **드러내서** 14칸이 correct→silent-wrong 이 될 뻔했다. 잔여 셋 = §2 「🆕 §4.5.366 이 남긴 64비트 unsigned 잔여 셋」. 상세=ARCHIVE §4.5.366.
 
-**ⓓ package 스코프 파라미터 셀렉트**(§4.5.363 잔여) — 위 §2 불릿 참조. ⭐ **`package.rs` 에 `param_range` 삽입만 더하는 건 이미 지어서 되돌렸다 — 키가 안 닿는다. 반복하지 마라.**
+~~**ⓓ package 스코프 파라미터 셀렉트**~~ — ✅ **RESOLVED §4.5.383**. ⭐ 되돌렸던 시도(*"`package.rs` 의 param 기록 자리에 `param_range` 삽입을 더한다"*)가 왜 안 됐는지도 그 기록이 정확히 적어 뒀다 — **키가 안 닿는다**(패키지 const 는 `pkg_consts`/`pkg_const_meta` 별도 테이블이고 `param_sel_range` 의 스코프 걷기는 `params`/`symbols` 만 본다). 그래서 답은 module 쪽 맵에 밀어 넣는 것이 아니라 **패키지 쪽에 twin 을 두고 `param_sel_range` 가 그것을 묻게 하는 것**이었고, import 는 값 옆에 range 를 **함께** 바인딩한다.
 
 ### 스케줄러 축 프로파일 (2026-08-18 · 측정 트리거 실행 결과)
 

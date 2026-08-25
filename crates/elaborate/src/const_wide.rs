@@ -696,6 +696,36 @@ impl Elaborator<'_> {
         Some((resize_bits(&cv.bits, 64, w, signed), w, signed))
     }
 
+    /// A NARROW package constant's bits at its DECLARED width - the package twin of
+    /// [`Self::narrow_param_bits`], declining for the same three reasons: an
+    /// unrecorded (value-inferred) width, a non-zero declared LSB, and an ascending
+    /// declaration. This bit domain indexes positionally from 0 and carries no
+    /// direction, so reading `[7:4]`'s or `[0:31]`'s bits through it would read the
+    /// declared range backwards.
+    fn pkg_const_narrow_bits(&self, pkg: &str, name: &str) -> Option<WideBits> {
+        let (lo, w, ascending) = self.pkg_const_range.get(pkg)?.get(name).copied()?;
+        if lo != 0 || ascending {
+            return None;
+        }
+        let v = self.pkg_consts.get(pkg)?.get(name).copied()?;
+        // The SIGN must come from the SAME declaration as the width; a disagreement
+        // means one of the two was inferred. Same proof as the module twin.
+        let (mw, signed) = self.pkg_const_meta.get(pkg)?.get(name).copied()?;
+        if mw != w {
+            return None;
+        }
+        let cv = ir::ConstVal {
+            width: 64,
+            signed,
+            repr: ir::ConstRepr::Numeric,
+            bits: ir::BitPacked {
+                val: vec![v as u64],
+                unk: vec![0],
+            },
+        };
+        Some((resize_bits(&cv.bits, 64, w, signed), w, signed))
+    }
+
     /// The wide domain's NAME resolver: an already-wide parameter first, then a narrow
     /// one at its declared width.
     pub(crate) fn wide_name_bits(&self, e: &ast::Expr) -> Option<WideBits> {
@@ -704,8 +734,25 @@ impl Elaborator<'_> {
         // `pkg_const_meta`, which (unlike `param_range`) is not provenance-filtered, so
         // reading bits out of it would be the `param_meta` mistake in a second scope.
         if let ast::ExprKind::PkgScoped { pkg, name } = &e.kind {
-            let cv = self.pkg_wide_bits.get(&pkg.name)?.get(&name.name)?;
-            return Some((cv.bits.clone(), cv.width, cv.signed));
+            if let Some(cv) = self
+                .pkg_wide_bits
+                .get(&pkg.name)
+                .and_then(|m| m.get(&name.name))
+            {
+                return Some((cv.bits.clone(), cv.width, cv.signed));
+            }
+            // ...and a NARROW package constant, on the footing a narrow MODULE
+            // parameter got one slice ago. That case declined here with the note
+            // "its declared width lives in `pkg_const_meta`, which (unlike
+            // `param_range`) is not provenance-filtered" - true when it was written,
+            // and no longer: `pkg_const_range` is the provenance-filtered twin,
+            // filled by the same `param_decl_range_opt`.
+            //
+            // It is what closes the last asymmetry between the three spellings of one
+            // select: a NESTED select `pk::W[15:0][7:0]` declared ONE BIT while the
+            // bare-imported spelling of the same text declared 52, because only this
+            // domain folds a select of a select and only a bare name could reach it.
+            return self.pkg_const_narrow_bits(&pkg.name, &name.name);
         }
         let ast::ExprKind::Ident(path) = &e.kind else {
             return None;

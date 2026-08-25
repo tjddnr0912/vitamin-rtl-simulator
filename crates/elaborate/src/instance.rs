@@ -338,7 +338,7 @@ impl Elaborator<'_> {
                             // happened to be OVERRIDDEN (only an override or an exact
                             // default ever produced an i64). Hierarchical reads of a
                             // real parameter are loud — ROADMAP §2 owns the axis.
-                            saved_params.push((key.clone(), self.params.insert(key, i)));
+                            saved_params.push((key.clone(), self.bind_param_value(key, i)));
                         }
                     } else {
                         // Unfoldable value = LOUD error (never a silent 0): a parameter
@@ -380,10 +380,10 @@ impl Elaborator<'_> {
                         }
                         // This scope has NO override channel, so the declared default is
                         // always what binds — see `param_decl_range_opt`.
-                        if let Some(r) = self.param_decl_range_opt(p, true) {
-                            self.param_range.insert(key.clone(), r);
-                        }
-                        saved_params.push((key.clone(), self.params.insert(key, v)));
+                        let r = self.param_decl_range_opt(p, true);
+                        let prev = self.bind_param_value(key.clone(), v);
+                        self.bind_param_range(&key, r);
+                        saved_params.push((key, prev));
                     }
                 }
                 ast::ModuleItem::NetVar(d) => {
@@ -452,7 +452,7 @@ impl Elaborator<'_> {
                         if let Some(w) = base_w {
                             self.param_meta.insert(key.clone(), (w, *signed || v < 0));
                         }
-                        saved_params.push((key.clone(), self.params.insert(key, v)));
+                        saved_params.push((key.clone(), self.bind_param_value(key, v)));
                         next = v.wrapping_add(1);
                     }
                 }

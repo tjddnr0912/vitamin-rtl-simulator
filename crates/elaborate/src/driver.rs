@@ -37,6 +37,7 @@ impl<'s> Elaborator<'s> {
             pkg_consts: BTreeMap::new(),
             pkg_types: BTreeMap::new(),
             pkg_const_meta: BTreeMap::new(),
+            pkg_const_range: BTreeMap::new(),
             pkg_str_raw: BTreeMap::new(),
             pkg_wide_bits: BTreeMap::new(),
             pkg_real_val: BTreeMap::new(),

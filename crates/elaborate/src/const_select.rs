@@ -168,8 +168,26 @@ impl Elaborator<'_> {
     /// width is RECORDED — see the module doc for why each restriction is a
     /// decline and not a guess.
     fn const_select_base(&self, base: &ast::Expr) -> Option<(u64, u32, u32, bool)> {
+        // `pkg::W` — the same declaration, in the scope that exists to share it. The
+        // value comes from `pkg_consts` and the range from `pkg_const_range`, which
+        // is filled by the SAME `param_decl_range_opt` the module twin below reads
+        // back through `param_sel_range`, so the provenance rule is one rule.
+        //
+        // ⚠️ A package ARRAY parameter is refused for the reason the module arm
+        // refuses one: `pkg::ROT[2]` is an ELEMENT read, and `const_array_vals_of_base`
+        // is what answers it. A package STRING or REAL parameter is not in
+        // `pkg_consts` at all (they live in their own side maps), so it declines here
+        // and stays loud, as it does at module scope.
+        if let ast::ExprKind::PkgScoped { pkg, name } = &base.kind {
+            if self.const_array_vals_of_base(base).is_some() {
+                return None;
+            }
+            let v = *self.pkg_consts.get(&pkg.name)?.get(&name.name)?;
+            let (dlo, dwidth, asc) = self.param_sel_range(base)?;
+            return Self::select_base_at_declared(v, dlo, dwidth, asc);
+        }
         let ast::ExprKind::Ident(path) = &base.kind else {
-            return None; // a hierarchical / package / element base is not this arm
+            return None; // a hierarchical / element base is not this arm
         };
         let [seg] = path.segments.as_slice() else {
             return None;
@@ -223,13 +241,26 @@ impl Elaborator<'_> {
         // `param_decl_range` answers only for a DECLARED range or a TYPE/LITERAL
         // width, so a value-inferred one has no entry and this declines.
         let (dlo, dwidth, asc) = self.param_sel_range(base)?;
+        Self::select_base_at_declared(v, dlo, dwidth, asc)
+    }
+
+    /// A resolved base value narrowed to its DECLARED width. One spelling for the
+    /// module-scope and the package-scope arm, so the two cannot disagree about
+    /// which bits the declaration owns.
+    ///
+    /// A signed negative param carries its sign bits above the declared width in the
+    /// i64 container, and those are not part of the value: `localparam signed [31:0]
+    /// W = -32'sd52; W[15:8]` is 255 in both oracles, which is the masked byte, not
+    /// a sign extension.
+    fn select_base_at_declared(
+        v: i64,
+        dlo: u32,
+        dwidth: u32,
+        asc: bool,
+    ) -> Option<(u64, u32, u32, bool)> {
         if dwidth == 0 || dwidth > 64 {
             return None;
         }
-        // Read the base at its DECLARED width: a signed negative param carries its
-        // sign bits above the declared width in the i64 container, and those are
-        // not part of the value. `localparam signed [31:0] W = -32'sd52; W[15:8]`
-        // is 255 in both oracles, which is the masked byte, not a sign extension.
         let keep = if dwidth >= 64 {
             u64::MAX
         } else {
