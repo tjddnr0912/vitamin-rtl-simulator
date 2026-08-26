@@ -294,6 +294,19 @@ warning[VITA-W2003]: implicit net 'enabel' inferred (default_nettype wire)  --> 
 > | procedural lvalue (`initial TYPO = 1`) | **E3010** |
 > | `` `default_nettype none `` 하의 모든 위치 | **E3010** |
 > | `.name` **shorthand** (IEEE 1800 §23.3.2.2) | **E3010** — 선언된 객체를 요구한다 |
+> | **interface instance** as an actual (`simple_if bus(); child c(bus);`) | no diagnostic — it is a declaration |
+>
+> **An interface instance is not a §3.5 position (V34-6, 2026-08-26).** It only looked
+> like one: the flatten registers symbols for the interface MEMBERS (`t.bus.d`) and never
+> for the bare instance name, so the terminal-list walk saw an undeclared bare ident and
+> warned `implicit net t.bus …`. Everything about that warning was wrong — `bus` is
+> declared one line above, an interface instance cannot be "declared as a net" as the
+> advice asked, `` `default_nettype none `` made the warning VANISH instead of becoming
+> the promised error, and it fired once per module SHARING the bus. The pass now skips the
+> interface-instance names of the same module body, which also removes the phantom
+> `$var wire 1 … bus` (stuck at `z`) from the VCD and drops `net_count` by one per
+> interface instance. verilator 5.050 is the oracle here; iverilog 13 cannot parse an
+> interface PORT at all.
 >
 > **§3.5 net 은 스칼라다.** 더 넓은 드라이버는 bit 0 만 남기고 버린다 — 모든 시뮬레이터가 조용히
 > 하는 일이므로 vita 는 폭을 말하는 **W3056** 을 추가로 낸다(`… drives it with 12 bits and the top

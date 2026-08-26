@@ -240,3 +240,203 @@ fn the_dot_name_shorthand_is_not_a_section_3_5_position() {
         "`.a` shorthand with no declared `a` must stay a loud bind error:\n{o2}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// V34-6 (round-34) — an interface INSTANCE is a declaration, not a §3.5 position.
+//
+// The §3.5 pass above walks every module-instance terminal list looking for bare
+// undeclared idents. An interface instance passed as a port actual looks exactly like
+// one to that walk: `simple_if bus(); child c(bus);` has `bus` as a bare ident, and
+// `net_is_undeclared("bus")` is TRUE, because the interface flatten registers symbols
+// for the MEMBERS (`t.bus.d`) and never for the bare instance name.
+//
+// Oracles: iverilog 13 is NOT one here — it cannot parse an interface PORT at all
+// (`module child(simple_if s)` ⇒ "syntax error / Errors in port declarations"), and the
+// "implicit definition of wire 'bus'" it then prints is a consequence of that parse
+// failure, not a ruling. verilator 5.050 compiles the designs below with no warning at
+// default settings and prints the values pinned in each test.
+// ---------------------------------------------------------------------------
+
+/// Run a source that dumps a VCD and return (stdout+stderr, exit code, VCD text).
+/// Unlike `run` this reads the dump back before deleting the directory.
+fn run_dumping(src: &str) -> (String, Option<i32>, String) {
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_r34_{}_{n}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(d.join("t.sv"), src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg("t.sv")
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let vcd = std::fs::read_to_string(d.join("v346.vcd")).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&d);
+    (text, out.status.code(), vcd)
+}
+
+const IFACE_SRC: &str = "interface simple_if; logic [7:0] d; endinterface\n\
+     module child(simple_if s); initial #1 $display(\"d=%02h\", s.d); endmodule\n";
+
+/// V34-6 (a) — the instance is declared one line above, so nothing about it is implicit.
+/// PRE: `W-PARSE-IMPLICIT-NET: implicit net \`t.bus\` inferred as a 1-bit wire`, exit 0.
+/// verilator: silent, `d=5a`.
+#[test]
+fn an_interface_instance_actual_is_not_an_implicit_net() {
+    let (o, ok) = run(&format!(
+        "{IFACE_SRC}module t;\n\
+           simple_if bus();\n\
+           child c(bus);\n\
+           initial bus.d = 8'h5a;\n\
+         endmodule\n"
+    ));
+    assert_eq!(ok, Some(0), "must elaborate cleanly:\n{o}");
+    assert!(o.contains("d=5a"), "verilator gives d=5a:\n{o}");
+    assert!(
+        !o.contains("VITA-W2003"),
+        "an interface instance is a declaration, not a §3.5 terminal:\n{o}"
+    );
+    assert!(
+        !o.contains("t.bus"),
+        "and nothing may name `t.bus` as an implicit net:\n{o}"
+    );
+}
+
+/// V34-6 (b) — the PRE advice was unfollowable in BOTH directions: an interface instance
+/// cannot be redeclared as a net, and `` `default_nettype none `` (which the message
+/// promised would turn the warning into an error) made it VANISH instead, because
+/// `declare_implicit_net` returns early under `cur_nettype_none` without diagnosing.
+/// One design must not get two verdicts from a directive that changes nothing here.
+#[test]
+fn the_nettype_directive_does_not_change_the_interface_verdict() {
+    let body = "module t;\n\
+           simple_if bus();\n\
+           child c(bus);\n\
+           initial bus.d = 8'h5a;\n\
+         endmodule\n";
+    let (o1, ok1) = run(&format!("{IFACE_SRC}{body}"));
+    let (o2, ok2) = run(&format!("`default_nettype none\n{IFACE_SRC}{body}"));
+    assert_eq!(ok1, Some(0), "default nettype:\n{o1}");
+    assert_eq!(ok2, Some(0), "`default_nettype none`:\n{o2}");
+    assert!(
+        o1.contains("d=5a") && o2.contains("d=5a"),
+        "{o1}\n---\n{o2}"
+    );
+    assert!(
+        !o1.contains("VITA-W2003") && !o2.contains("VITA-W2003"),
+        "the directive must not decide whether this warns:\n{o1}\n---\n{o2}"
+    );
+}
+
+/// V34-6 (c) — the PRE warning fired once per module that shared the bus, so the
+/// canonical "N agents on one interface" design got N copies of a fake warning while a
+/// local-only use of the same interface was clean. verilator: silent, and all three
+/// children read `5a` (their relative print ORDER is IEEE §4.7 nondeterministic —
+/// verilator prints 2,1,0 and vita 0,1,2 — so only the values are pinned).
+#[test]
+fn sharing_one_interface_across_modules_warns_zero_times() {
+    let (o, ok) = run("interface simple_if; logic [7:0] d; endinterface\n\
+         module rd(simple_if s, input [7:0] tag);\n\
+           initial #1 $display(\"rd tag=%0d d=%02h\", tag, s.d);\n\
+         endmodule\n\
+         module t;\n\
+           simple_if bus();\n\
+           rd r0(bus, 8'd0);\n\
+           rd r1(bus, 8'd1);\n\
+           rd r2(bus, 8'd2);\n\
+           initial bus.d = 8'h5a;\n\
+         endmodule\n");
+    assert_eq!(ok, Some(0), "must elaborate cleanly:\n{o}");
+    for tag in 0..3 {
+        assert!(
+            o.contains(&format!("rd tag={tag} d=5a")),
+            "every sharer reads 5a:\n{o}"
+        );
+    }
+    assert_eq!(
+        o.matches("VITA-W2003").count(),
+        0,
+        "N sharers used to mean N fake warnings:\n{o}"
+    );
+}
+
+/// V34-6 side effect, pinned deliberately — the PRE run did not only warn, it CREATED a
+/// 1-bit wire that never had a driver or a reader. It appeared in the waveform as
+/// `$var wire 1 ! bus $end` sitting at `z` for the whole run, and because it took the
+/// first id-code it shifted every real signal's code by one. Measured PRE / POST on this
+/// exact source:
+///
+///   PRE : `$scope module t` → `$var wire 1 ! bus`, `$scope module bus` → `$var wire 8 " d`
+///   POST: `$scope module t` → `$scope module bus` → `$var wire 8 ! d`
+///
+/// The phantom net is GONE on purpose; `net_count` for `t` drops by one per interface
+/// instance. Nothing observable is lost — the interface port bind aliases SYMBOLS
+/// (`bind_iface_port`), it never reads a net under the bare instance name.
+#[test]
+fn no_phantom_wire_for_the_interface_instance_in_the_vcd() {
+    let (o, ok, vcd) = run_dumping(&format!(
+        "{IFACE_SRC}module t;\n\
+           simple_if bus();\n\
+           child c(bus);\n\
+           initial begin\n\
+             $dumpfile(\"v346.vcd\"); $dumpvars(0, t);\n\
+             bus.d = 8'h5a;\n\
+             #2 $finish;\n\
+           end\n\
+         endmodule\n"
+    ));
+    assert_eq!(ok, Some(0), "must elaborate cleanly:\n{o}");
+    assert!(o.contains("d=5a"), "value unchanged:\n{o}");
+    assert!(!vcd.is_empty(), "a VCD must have been written:\n{o}");
+    // The interface SCOPE and its member survive — only the phantom net is gone.
+    assert!(
+        vcd.contains("$scope module bus $end"),
+        "the interface scope must still be dumped:\n{vcd}"
+    );
+    assert!(
+        vcd.contains("$var wire 8 ! d [7:0] $end"),
+        "the member keeps its width and now takes the FIRST id-code:\n{vcd}"
+    );
+    // `$scope module bus $end` also ends in " bus $end", so match the $var line itself.
+    assert!(
+        !vcd.lines()
+            .any(|l| l.starts_with("$var ") && l.ends_with(" bus $end")),
+        "no 1-bit phantom wire named `bus` may be declared:\n{vcd}"
+    );
+    assert_eq!(
+        vcd.matches("$var ").count(),
+        1,
+        "exactly one variable in the whole design:\n{vcd}"
+    );
+}
+
+/// The boundary: the skip is keyed on the interface-instance NAMES from this same module
+/// body, so a genuinely undeclared terminal standing next to one still gets §3.5 — a
+/// blanket "this instance has an interface port, skip it" rule would have swallowed it.
+#[test]
+fn a_real_implicit_net_beside_an_interface_instance_still_warns() {
+    let (o, ok) = run("interface simple_if; logic [7:0] d; endinterface\n\
+         module child(simple_if s, input w2);\n\
+           initial #1 $display(\"d=%02h w2=%b\", s.d, w2);\n\
+         endmodule\n\
+         module t;\n\
+           simple_if bus();\n\
+           child c(bus, undeclared_w);\n\
+           assign undeclared_w = 1'b1;\n\
+           initial bus.d = 8'h5a;\n\
+         endmodule\n");
+    assert_eq!(ok, Some(0), "must elaborate cleanly:\n{o}");
+    assert!(o.contains("d=5a w2=1"), "both halves must be right:\n{o}");
+    assert!(
+        o.contains("implicit net `t.undeclared_w`"),
+        "the real §3.5 net must still be announced:\n{o}"
+    );
+    assert!(
+        !o.contains("t.bus"),
+        "and the interface instance must not be:\n{o}"
+    );
+}

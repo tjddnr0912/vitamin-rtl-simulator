@@ -799,6 +799,36 @@ impl Elaborator<'_> {
     /// Runs over the module body only. A name that appears solely inside a generate
     /// body stays loud — narrower than the standard, and on the safe side of the ladder.
     pub(crate) fn declare_implicit_nets(&mut self, body: &[ast::ModuleItem]) {
+        // V34-6: an INTERFACE INSTANCE name is a declaration, not a §3.5 position.
+        // `simple_if bus(); child c(bus);` used to warn `implicit net t.bus inferred as
+        // a 1-bit wire` and create a phantom 1-bit wire, because the port-actual arm
+        // below sees a bare ident and `net_is_undeclared("bus")` is TRUE — the iface
+        // flatten registers symbols for the MEMBERS (`t.bus.d`) and never for the bare
+        // instance name. Three things were wrong with that warning: `bus` is declared
+        // one line above; its advice is unfollowable (an interface instance cannot be
+        // declared as a net, and `default_nettype none` made the warning VANISH rather
+        // than become the promised error, since `declare_implicit_net` returns early);
+        // and it fired only when the instance was passed as an actual, so N sharing
+        // modules meant N fake warnings. verilator (the only oracle here — iverilog 13
+        // cannot parse an interface PORT at all, `syntax error` on `module child
+        // (simple_if s)`) accepts this design silently and prints d=5a.
+        //
+        // The set is built from the SAME body this pass already walks, so the pass stays
+        // order-free (see instance.rs:658-664 for why that matters). Fixing it by
+        // reordering the flatten instead would not work: the flatten never registers a
+        // symbol under the bare instance name.
+        let iface_insts: BTreeSet<&str> = body
+            .iter()
+            .filter_map(|it| match it {
+                ast::ModuleItem::Instance(mi)
+                    if self.ifaces.contains_key(mi.module_name.name.as_str()) =>
+                {
+                    Some(mi.instances.iter().map(|i| i.name.name.as_str()))
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect();
         let mut want: Vec<String> = Vec::new();
         for item in body {
             match item {
@@ -841,6 +871,9 @@ impl Elaborator<'_> {
             }
         }
         for n in want {
+            if iface_insts.contains(n.as_str()) {
+                continue;
+            }
             if self.net_is_undeclared(&n) {
                 self.declare_implicit_net(&n);
             }
