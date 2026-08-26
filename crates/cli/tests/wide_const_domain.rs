@@ -99,11 +99,24 @@ fn wide_arithmetic_and_comparison_fold() {
         "R",
         "fffffffffffffffffffffffffffffffe",
     );
-    // Division and modulus are deliberately out — a wide divide is a different
-    // algorithm and `x/0` has no value in this domain.
-    loud(
+    // ⚠️ Division and modulus WERE deliberately out — "a wide divide is a different
+    // algorithm and a subtly wrong one produces a silent wrong parameter". Round 34
+    // closed that by MOVING the engine's limb `mw_divmod` into `sim-ir` so both
+    // domains call the same function, leaving no second spelling to be wrong. The
+    // value is live iverilog 13.0's and an independent Python golden's.
+    folds(
         "  localparam logic [127:0] A = 128'he1000000000000000000000000000001;\n  \
          localparam logic [127:0] R = A / 3;",
+        "%h",
+        "R",
+        "4b000000000000000000000000000000",
+    );
+    // What genuinely has no value stays loud: §11.4.3 makes `x / 0` an `x`, and
+    // iverilog and vita's own runtime both give x there.
+    loud(
+        "  localparam logic [127:0] A = 128'he1000000000000000000000000000001;\n  \
+         localparam logic [127:0] Z = 128'h0;\n  \
+         localparam logic [127:0] R = A / Z;",
         "%h",
         "R",
     );

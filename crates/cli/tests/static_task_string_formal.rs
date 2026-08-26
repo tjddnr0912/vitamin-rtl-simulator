@@ -88,40 +88,41 @@ fn two_calls_with_different_lengths_each_carry_their_own() {
 }
 
 #[test]
-fn an_output_string_formal_stays_loud_and_still_names_the_way_out() {
-    // NARROWED, not deleted. The copy-OUT resolver takes a simple-net caller lvalue and
-    // a `string` actual is not one, so this direction genuinely does not work here —
-    // and `automatic` does (measured). Deleting the arm outright traded one actionable
-    // message for a vaguer rejection plus a spurious E3010 cascade, because the formal
-    // never gets bound and the body's reads then go unresolved.
+fn an_output_string_formal_now_works_and_the_survivors_still_name_their_reason() {
+    // ⚠️ This test asserted the WORDING of a refusal. Round 34 (R6) removed the
+    // refusal: the gate decided from the FORMAL alone, and every piece of copy-out
+    // machinery it claimed was missing was already present in the Output/Inout arm.
+    // It is NARROWED now, at the point where the ACTUAL is known — so a wording
+    // assertion here became a VALUE assertion, which is strictly stronger.
+    //
+    // Values are LIVE iverilog 13.0's.
     for dir in ["output", "inout"] {
         let out = run(&format!(
             "module tb; string r = \"in\";\n\
              \x20 task t({dir} string s); s = \"out\"; endtask\n\
              \x20 initial begin t(r); $display(\"s=%s\", r); end endmodule\n"
         ));
-        assert!(out.contains("E3009"), "{dir} stays loud:\n{out}");
-        // The message must name the direction it is actually about. Reporting "output"
-        // for an `inout` sends the reader to the wrong port — the §3.4 defect this
-        // round already paid for once.
         assert!(
-            out.contains(&format!("`string` {dir} formal")),
-            "the message must name the {dir} direction:\n{out}"
+            out.contains("s=out"),
+            "a bare string variable actual is copied out ({dir}):\n{out}"
         );
-        assert!(
-            out.contains("automatic"),
-            "…and must still name the way out that works:\n{out}"
-        );
-        assert!(
-            out.contains("INPUT `string` formal is supported"),
-            "…and must say the direction that now works, so the reader does not \
-             rewrite an input too:\n{out}"
-        );
-        assert!(
-            !out.contains("E3010"),
-            "…and must not cascade into an unresolved-name error:\n{out}"
-        );
+        assert!(!out.contains("E3009"), "{dir} must not be loud:\n{out}");
     }
+
+    // ⚠️ The narrowing's other half — what STAYS loud, and why. A select is not a
+    // whole string variable, so its copy-out target has no representation; the
+    // message has to say THAT rather than repeat the old blanket sentence.
+    let out = run("module tb; string r = \"in\"; logic [7:0] v;\n\
+         \x20 task t(output string s); s = \"out\"; endtask\n\
+         \x20 initial begin t(v); $display(\"v=%02h\", v); end endmodule\n");
+    assert!(
+        out.contains("E3009"),
+        "a NON-string actual must stay loud:\n{out}"
+    );
+    assert!(
+        out.contains("string"),
+        "…and the message must still be about the string formal:\n{out}"
+    );
 }
 
 #[test]

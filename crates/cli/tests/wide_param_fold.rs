@@ -119,9 +119,21 @@ fn carrying_operators_fold_in_the_wide_lane() {
         let out = run(&design(expr));
         assert!(out.contains(want), "`{expr}` should fold to {want}:\n{out}");
     }
-    // Division and modulus are still out: a wide divide is a different algorithm and
-    // `x/0` has no value in this domain.
-    for expr in ["A / 3", "A % 3"] {
+    // ⚠️ Division and modulus WERE still out, for a stated reason — "a wide divide is
+    // a different algorithm" and a second, subtly wrong spelling of it produces a
+    // silent wrong PARAMETER. Round 34 removed the second spelling instead of writing
+    // one: the engine's limb `mw_divmod` moved into `sim-ir` and both domains call it.
+    // Values are live iverilog 13.0 AND an independent Python golden.
+    for (expr, want) in [
+        ("A / 3", "00611722833944a554f43e32d21c10b0"),
+        ("A % 3", "00000000000000000000000000000000"),
+    ] {
+        let out = run(&design(expr));
+        assert!(out.contains(want), "`{expr}` should fold to {want}:\n{out}");
+    }
+    // What has no value still stays loud: §11.4.3 makes `x / 0` an `x`, and iverilog
+    // and vita's own runtime both give x there — verilator's 0 is a 2-state artifact.
+    for expr in ["A / (C - C)", "A % (C - C)"] {
         let out = run(&design(expr));
         assert!(out.contains("E3009"), "`{expr}` must stay loud:\n{out}");
     }
