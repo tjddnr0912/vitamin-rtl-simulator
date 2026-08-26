@@ -274,24 +274,59 @@ impl Elaborator<'_> {
                 // wrong construct entirely. It arrives here because `x`'s enum type was
                 // never registered, so the parser's method desugar did not fire and the
                 // two-segment name fell through to this resolver.
-                let is_enum_method = d.path.len() == 2
+                //
+                // V33-3: and the receiver test had to be widened, because it asked
+                // `symbols` — which holds NETS ONLY. An enum LABEL is a constant, never
+                // a net, so `LA.name()` (label declared in this module, or wildcard-
+                // imported from a package) missed this arm entirely and took the
+                // hierarchical-call wording. The label case also needs its OWN message:
+                // the "enum type was not registered" sentence is FALSE for a label —
+                // the enum IS registered, which is exactly why `mv.name()` works on a
+                // variable of that type. Measured: both oracles reject the label form
+                // (iverilog 13 aborts in `elab_expr.cc:3297`, verilator 5.050 says
+                // "Can't find definition of task/function: 'name'"), so this stays
+                // loud; the job is to describe the right construct.
+                let enum_method = d.path.len() == 2
                     && matches!(
                         d.path[1].as_str(),
                         "name" | "next" | "prev" | "first" | "last" | "num"
+                    );
+                // The receiver must resolve in the scope the CALL was lowered in —
+                // `cur_prefix` has moved on by the time this pass runs, so keys are
+                // rebuilt from the saved prefix rather than looked up ambiently.
+                // Without that a genuine `u1.next(x)` could take these messages.
+                let recv_key = if d.prefix.is_empty() {
+                    d.path[0].clone()
+                } else {
+                    format!("{}.{}", d.prefix, d.path[0])
+                };
+                let recv_is_net = enum_method && self.symbols.contains_key(&recv_key);
+                // A label binds under the scope that DECLARED it, which may enclose the
+                // one the call was lowered in (a label declared in the module body, a
+                // call inside a generate block). Walk outward over the saved prefix the
+                // way `walk_scopes_key` walks over `cur_prefix`.
+                let label_ty = if enum_method && !recv_is_net {
+                    self.scoped_key_at_or_above(&d.prefix, &d.path[0], |k| {
+                        self.enum_label_types.contains_key(k)
+                    })
+                    .and_then(|k| self.enum_label_types.get(&k).cloned())
+                } else {
+                    None
+                };
+                let msg = if let Some(ty) = label_ty {
+                    format!(
+                        "`{}()` calls an enum method on the enum LABEL `{}` (a named \
+                         constant of `{ty}`), which vita does not support — and neither \
+                         oracle accepts it either (iverilog aborts, verilator reports no \
+                         such function). vita's enum methods (`name`/`next`/`prev`/\
+                         `first`/`last`/`num`) work on a VARIABLE of the enum type: \
+                         declare one and assign the label first — `{ty} v = {}; v.{}()`",
+                        d.path.join("."),
+                        d.path[0],
+                        d.path[0],
+                        d.path[1]
                     )
-                    // The receiver must be a NET in the scope the CALL was lowered in —
-                    // `cur_prefix` has moved on by the time this pass runs, so the key
-                    // is rebuilt from the saved prefix rather than looked up ambiently.
-                    // Without that a genuine `u1.next(x)` could take this message.
-                    && {
-                        let key = if d.prefix.is_empty() {
-                            d.path[0].clone()
-                        } else {
-                            format!("{}.{}", d.prefix, d.path[0])
-                        };
-                        self.symbols.contains_key(&key)
-                    };
-                let msg = if is_enum_method {
+                } else if recv_is_net {
                     format!(
                         "enum method `{}` is unavailable: the enum type of `{}` was not \
                          registered, which happens when a label's value is not a \

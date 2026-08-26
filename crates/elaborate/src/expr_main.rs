@@ -100,11 +100,57 @@ impl Elaborator<'_> {
                 if self.ir_expr_is_string(h) || const_str {
                     self.lower_string_method_expr_handle(h, &method.name, args)
                 } else {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "a chained method call is supported only on a string-returning \
-                         method result (e.g. `s.substr(a,b).atoi()`)",
-                    );
+                    // V33-3: `pk::LA.name()` is NOT a chained method call — there is no
+                    // method before `.name()`. It lands in this arm because `pk::LA` is
+                    // a scope-resolved NAME (§26.3) that folds to an integer const, and
+                    // the arm's catch-all message then described a completely different
+                    // construct (`s.substr(a,b).atoi()`), pointing its author at string
+                    // chaining. The neighbouring spellings that DO work bound the
+                    // residue to this one cell: `pk::S.len()` on a package string
+                    // parameter, `s.len()` on a local string, and `mv.name()` on a
+                    // variable of the `::`-qualified enum TYPE all run today.
+                    //
+                    // Measured — it stays LOUD because neither oracle accepts it:
+                    // iverilog 13 aborts (`elab_expr.cc:3297: failed assertion
+                    // sub_expr`) and verilator 5.050 errors "Can't find definition of
+                    // task/function: 'name'". Only the message changes.
+                    let pkg_label = match &recv.kind {
+                        ast::ExprKind::PkgScoped { pkg, name }
+                            if matches!(
+                                method.name.as_str(),
+                                "name" | "next" | "prev" | "first" | "last" | "num"
+                            ) =>
+                        {
+                            self.pkg_enum_labels
+                                .get(&pkg.name)
+                                .and_then(|m| m.get(&name.name))
+                                .map(|ty| (pkg.name.clone(), name.name.clone(), ty.clone()))
+                        }
+                        _ => None,
+                    };
+                    if let Some((pkg, label, ty)) = pkg_label {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "`{pkg}::{label}.{m}()` calls an enum method on the enum \
+                                 LABEL `{label}` of package `{pkg}` (a named constant of \
+                                 `{pkg}::{ty}`), which vita does not support — and \
+                                 neither oracle accepts it either (iverilog aborts, \
+                                 verilator reports no such function). vita's enum \
+                                 methods (`name`/`next`/`prev`/`first`/`last`/`num`) \
+                                 work on a VARIABLE of the enum type: declare one and \
+                                 assign the label first — `{pkg}::{ty} v = \
+                                 {pkg}::{label}; v.{m}()`",
+                                m = method.name
+                            ),
+                        );
+                    } else {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            "a chained method call is supported only on a string-returning \
+                             method result (e.g. `s.substr(a,b).atoi()`)",
+                        );
+                    }
                     self.placeholder_expr()
                 }
             }

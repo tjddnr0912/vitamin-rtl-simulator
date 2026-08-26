@@ -329,6 +329,11 @@ struct Elaborator<'s> {
     /// exists only so `apply_import_consts` can tell a legal type import from an
     /// unknown-symbol error.
     pkg_types: BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// V33-3 (DIAGNOSTIC ONLY): package name → (enum LABEL in `pkg_consts` → the enum
+    /// TYPE that declared it). The package twin of [`Self::enum_label_types`] — a
+    /// `pk::LA` read never binds a scoped key at all (it folds straight out of
+    /// `pkg_consts`), so the `pk::LA.name()` message arm has to ask the package.
+    pkg_enum_labels: BTreeMap<String, BTreeMap<String, String>>,
     /// Declared `(width, signed)` of each package PARAM const (the package twin
     /// of `param_meta`). A `pkg::x` / bare-imported read materializes at this
     /// DECLARED width (`logic [3:0] x` → 4 bits) instead of the value-inferred
@@ -533,6 +538,27 @@ struct Elaborator<'s> {
     // FQ param-name → const value, visible while lowering an instance scope.
     // Re-points the v1 free `const_eval_u32` SLOT so `[W-1:0]` folds to a width.
     params: BTreeMap<String, i64>,
+    /// V33-3 (DIAGNOSTIC ONLY): scoped key of every name bound as an enum LABEL →
+    /// the NAME of the enum type that declared it. The subset of `params` that came
+    /// from a `typedef enum {…}` rather than a `parameter`/`localparam`, plus the one
+    /// fact the message needs beyond "it is a label": the type to tell the author to
+    /// declare a variable of.
+    ///
+    /// ⚠️ Nothing in `params` records WHY a name is a constant, and two error sites
+    /// need exactly that distinction: `LA.name()` and `pk::LA.name()` are enum-method
+    /// spellings on a LABEL, and both used to be described as a different construct
+    /// entirely (a hierarchical function call `u1.f(x)`, and a chained string method
+    /// `s.substr(a,b).atoi()`). The receiver test the message arms had was
+    /// `symbols.contains_key(…)` — NET-only — so a label, which is never a net,
+    /// could not reach the enum-method arm at all.
+    ///
+    /// Deliberately **not** save/restored with `params`: the deferred hierarchical
+    /// call resolver runs at the very END of elaboration, after every module's
+    /// `restore_params` has already unbound its labels, so a scoped-and-unwound map
+    /// would be empty exactly where the message is written. Keys are instance-scoped
+    /// (`fq`), so an accumulating set cannot answer for a different scope's name, and
+    /// it feeds a message only — never a value, a width, or a fold decision.
+    enum_label_types: BTreeMap<String, String>,
     // FQ param-name → (DECLARED width, signed), for params with a determinate
     // declared width (an explicit range or `integer`/`int`). A typed-param READ
     // materializes at THIS width — not the value-inferred 32 bits — so

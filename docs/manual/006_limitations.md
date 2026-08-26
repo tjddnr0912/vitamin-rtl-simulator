@@ -433,6 +433,24 @@ takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`
 > `localparam`: a *sized* literal value (`localparam L = 8'h5`) does not fold. Tracked in
 > `docs/ROADMAP.md` §0.
 
+> **Known limit — an enum method on a LABEL is rejected (so is it by both reference
+> tools).** `pk::LA.name()`, and the bare `LA.name()` after an `import pk::*`, are
+> `VITA-E3009`. A label is a named *constant*, and the methods are defined on a
+> *variable* of the enum type — declare one and assign the label first:
+>
+> ```systemverilog
+> pk::e_t v = pk::LA;
+> $display("%s", v.name());   // LA
+> ```
+>
+> This is not vita being narrow: iverilog 13 aborts on `pk::LA.name()` (an internal
+> assertion in `elab_expr.cc`) and Verilator 5.050 reports *"Can't find definition of
+> task/function: 'name'"*. With no agreed answer to match, vita stays loud.
+> *(Until 2026-08-26 the message described a different construct entirely — a chained
+> string method `s.substr(a,b).atoi()` for the `pk::LA.name()` spelling, and an
+> "unsupported hierarchical function call" for the bare one. It now names the label, the
+> enum type it belongs to, and the spelling that works.)*
+
 > **Fixed — a package-scope `parameter real` used to be silently wrong.** Until
 > 2026-08-24, `pk::PR / 2` with `parameter real PR = 3;` in a package yielded `1.0`
 > rather than `1.5`: the value crossed the package boundary but its DOMAIN did not, so

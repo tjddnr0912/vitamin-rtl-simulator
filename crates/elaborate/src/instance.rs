@@ -458,6 +458,12 @@ impl Elaborator<'_> {
                             None => next,
                         };
                         let key = self.fq(&lab.name.name);
+                        // V33-3: remember that this constant is a LABEL and which enum
+                        // declared it, so `LA.name()` can be told from `u1.f(x)` when
+                        // the deferred hierarchical-call resolver writes its message —
+                        // and so that message can name the type to declare.
+                        self.enum_label_types
+                            .insert(key.clone(), td.name.name.clone());
                         if let Some(w) = base_w {
                             self.param_meta.insert(key.clone(), (w, *signed || v < 0));
                         }

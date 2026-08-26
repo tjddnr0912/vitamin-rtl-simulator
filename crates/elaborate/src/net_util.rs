@@ -516,6 +516,11 @@ impl Elaborator<'_> {
                         None => next,
                     };
                     let key = self.fq(&lab.name.name);
+                    // V33-3: a body-local label is a label too (diagnostic-only map —
+                    // see `enum_label_types`; deliberately NOT in the save-list, since
+                    // the message that reads it is written long after the unwind).
+                    self.enum_label_types
+                        .insert(key.clone(), td.name.name.clone());
                     if let Some(w) = base_w {
                         saved_meta.push((
                             key.clone(),

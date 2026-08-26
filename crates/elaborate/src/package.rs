@@ -486,6 +486,11 @@ impl Elaborator<'_> {
         // `elaborate_pkg_netvar`. Kept beside the three value maps rather than derived
         // from them, so a future fourth domain has one obvious place to register.
         let mut param_names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        // V33-3 (DIAGNOSTIC ONLY): which of this package's consts are enum LABELS, and
+        // which enum declared each — flushed to `pkg_enum_labels` so the `pk::LA.name()`
+        // message can say what the author actually wrote (and name the type to declare)
+        // instead of describing a chained string method.
+        let mut enum_labels: BTreeMap<String, String> = BTreeMap::new();
         // Declared `(width, signed)` per PARAM const (flushed to
         // `pkg_const_meta`) so a `pkg::x` / bare-imported read gets its true
         // self-width in a concat/replication (see the field doc).
@@ -704,6 +709,7 @@ impl Elaborator<'_> {
                             saved_range.push((key.clone(), prev_range));
                             saved.push((key, prev));
                             consts.insert(l.name.name.clone(), v);
+                            enum_labels.insert(l.name.name.clone(), td.name.name.clone());
                             if let Some(w) = base_w {
                                 const_meta.insert(l.name.name.clone(), (w, *signed || v < 0));
                             }
@@ -857,6 +863,9 @@ impl Elaborator<'_> {
         if !types.is_empty() {
             self.pkg_types.insert(pkg.clone(), types);
         }
+        if !enum_labels.is_empty() {
+            self.pkg_enum_labels.insert(pkg.clone(), enum_labels);
+        }
         if !const_meta.is_empty() {
             self.pkg_const_meta.insert(pkg.clone(), const_meta);
         }
@@ -984,6 +993,11 @@ impl Elaborator<'_> {
             );
             return;
         };
+        // V33-3 (DIAGNOSTIC ONLY): which of the imported names are enum LABELS, and of
+        // which enum. Cloned up front because both binding arms below need it while
+        // `self` is borrowed mutably; empty for every package without a `typedef enum`.
+        let pkg_labels: BTreeMap<String, String> =
+            self.pkg_enum_labels.get(pkg).cloned().unwrap_or_default();
         match &imp.item {
             None => {
                 // Carry each const's declared `(width, signed)` alongside its
@@ -1044,6 +1058,9 @@ impl Elaborator<'_> {
                             // not inherit a stale one from another binding of the
                             // same key.
                             self.bind_param_range(&key, rng);
+                            if let Some(ty) = pkg_labels.get(&name) {
+                                self.enum_label_types.insert(key.clone(), ty.clone());
+                            }
                             wc_origin.insert(key, pkg.to_string());
                         }
                     }
@@ -1178,6 +1195,9 @@ impl Elaborator<'_> {
                         .copied();
                     let prev = self.bind_param_value(key.clone(), v);
                     self.bind_param_range(&key, rng);
+                    if let Some(ty) = pkg_labels.get(&sym.name) {
+                        self.enum_label_types.insert(key.clone(), ty.clone());
+                    }
                     saved_params.push((key, prev));
                 } else if let Some(&net) = self.pkg_vars.get(pkg).and_then(|m| m.get(&sym.name)) {
                     // A2b-prereq: explicit VARIABLE import — bind the alias and

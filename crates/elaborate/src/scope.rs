@@ -77,6 +77,37 @@ impl Elaborator<'_> {
         self.walk_scopes_key_inner(name, hit, false)
     }
 
+    /// [`Self::walk_scopes_key`]'s shape for a SAVED prefix: the innermost key
+    /// `<scope>.<name>` that satisfies `hit`, searching `prefix` and every scope
+    /// enclosing it.
+    ///
+    /// The deferred hierarchical resolvers run after `cur_prefix` has moved on, so they
+    /// carry the prefix that was live when the reference was LOWERED and cannot use the
+    /// ambient walk. Diagnostic-only today (V33-3's enum-label receiver test).
+    pub(crate) fn scoped_key_at_or_above(
+        &self,
+        prefix: &str,
+        name: &str,
+        hit: impl Fn(&str) -> bool,
+    ) -> Option<String> {
+        let mut scope = prefix;
+        loop {
+            let key = if scope.is_empty() {
+                name.to_string()
+            } else {
+                format!("{scope}.{name}")
+            };
+            if hit(&key) {
+                return Some(key);
+            }
+            match scope.rfind('.') {
+                Some(i) => scope = &scope[..i],
+                None if scope.is_empty() => return None,
+                None => scope = "",
+            }
+        }
+    }
+
     /// r19: [`Self::walk_scopes_key`], but the outward walk STOPS as soon as a scope
     /// level binds `name` as a NET without `hit` matching there.
     ///
