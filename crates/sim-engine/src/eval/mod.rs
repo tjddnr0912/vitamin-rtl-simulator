@@ -15,11 +15,18 @@ use crate::value::{and_w, low_mask, not1, not_w, nwords, or_w, xnor_w, xor_w, Va
 // ---- split parts (mechanical refactor) ----
 pub(crate) mod binops;
 mod eval_core;
-mod mw_tail;
 mod sysfunc;
 pub(crate) use eval_core::*;
-pub(crate) use mw_tail::*;
 pub(crate) use sysfunc::*;
+
+// The multi-word limb kernels used to live here (`mw_tail.rs` plus a block in
+// `sysfunc.rs`). They moved DOWN to `sim_ir::mw` when the elaborate-time wide
+// constant domain needed `/`, `%` and `**`: `elaborate` cannot see into
+// `sim-engine`, and a second spelling of a divider is exactly the hazard
+// `const_wide.rs` cited when it declined division ("a subtly wrong one produces
+// a silent wrong PARAMETER"). Re-exported under the old path so every call site
+// in this crate reads as it did.
+pub(crate) use sim_ir::mw::*;
 
 /// WIDE-ARITH-CAP: width above which the super-linear arithmetic kernels
 /// (`*` O(n²), restoring `/`·`%` O(bits·n), `**` square-multiply) poison to X

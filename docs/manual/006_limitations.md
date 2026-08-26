@@ -533,7 +533,25 @@ takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`
 > inference) — so a reduction or a select over one stays loud rather than answer from
 > a width nothing declared. And a size cast is a CONTEXT for its operand, so
 > `65'(64'd18446744073709551615 + 64'd1)` — where the sum must carry into bit 64 —
-> also stays loud. Division and modulus have no wide arm.
+> also stays loud.
+
+> **Fixed 2026-08-26 — `/`, `%`, `**`, `<<<`, `$clog2`, `$bits` and `$isunknown`
+> fold at any width.**
+> These were the operators the wide constant domain had no arm for, while the
+> RUNTIME lane computed every one of them correctly — so `localparam logic [127:0] Q
+> = A / B;` was `VITA-E3009` for a 128-bit `A`, and so was
+> `localparam int AW = $clog2(MAX);`, the standard width idiom over a crypto
+> constant. `$clog2` and `$bits` also answer in a declaration bound
+> (`logic [$clog2(MAX)-1:0] bus;`) and in a `generate` condition. The kernels are the
+> simulator's own (`mw_divmod` / `mw_pow`), not a second implementation, so the
+> constant and the runtime cannot disagree.
+>
+> ⚠️ **Two boundaries, both loud.** `x / 0` and `x % 0` are `x` in IEEE §11.4.3, and a
+> parameter cannot hold `x`, so they are refused rather than folded to 0 — the
+> message names the divisor. And the super-linear kernels are budgeted at elaborate
+> time: a `/` or `%` wider than about 65536 bits is refused instead of running for
+> minutes (the runtime lane answers the same shape with `X` above its own
+> `WIDE_ARITH_CAP`).
 
 > **Fixed 2026-08-26 — a shift or index bigger than 2³² no longer folds to a smaller
 > one.** The constant domain's count/index channel took the low 32 bits of a value and

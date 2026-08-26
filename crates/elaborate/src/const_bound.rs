@@ -544,8 +544,14 @@ impl Elaborator<'_> {
     /// no integral constant value here"* — true of `A[127]` as well, and that folds.
     /// A sub-expression the wide domain answers is not the reason the enclosing one
     /// failed, so the walk steps over it and keeps looking outward.
+    ///
+    /// ⚠️ An x/z-carrying fold is NOT an answer. `fold_self_bits` returns `Some` for
+    /// `128'hx` — it carries the unknown plane faithfully — but every VALUE-reading
+    /// consumer declines it, so treating it as "answered" promoted the operator above
+    /// it into the message and `128'hx / 128'd3` blamed the `/` instead of the operand.
     pub(crate) fn wide_self_folds(&self, e: &ast::Expr) -> bool {
-        fold_self_bits(e, &|n, _| self.wide_name_bits(n)).is_some()
+        fold_self_bits(e, &|n, _| self.wide_name_bits(n))
+            .is_some_and(|(b, w, _)| !bp_any_unknown(&b, w))
     }
 
     /// The 2-state value of a count/index sub-expression as a `u128`, or `None` when
@@ -646,9 +652,24 @@ impl Elaborator<'_> {
     /// the whole initializer. Returns `None` when every part folds — then the caller
     /// keeps its unqualified wording, which is honest: nothing here can name a cause
     /// it did not find.
+    /// Is `e` a constant ZERO in EITHER constant domain? Diagnostic-only, and
+    /// deliberately conservative: an expression that does not fold at all is not a
+    /// known zero, so the caller falls back to its generic wording.
+    fn divisor_is_zero(&self, e: &ast::Expr) -> bool {
+        self.const_eval_in_scope(e) == Some(0) || self.wide_domain_is_zero(e)
+    }
+
     pub(crate) fn unfoldable_reason(&self, e: &ast::Expr) -> Option<String> {
         if let Some(r) = Self::const_fold_children(e)
             .into_iter()
+            // ⚠️ A child the WIDE bit domain can fold is not the failure, even though
+            // the integral walk below declines it. Without this skip the ONE >64-bit
+            // operand in the expression answers for the whole thing: `A / 0` blamed
+            // `A`'s width, which is a fact about a name this elaborator reads without
+            // difficulty, and said nothing about the zero divisor that is the actual
+            // reason. Same shape as any stale proxy — the membership test kept
+            // standing in for a property that had moved.
+            .filter(|c| !self.wide_domain_folds(c))
             .find_map(|c| self.unfoldable_reason(c))
         {
             return Some(r);
@@ -674,12 +695,31 @@ impl Elaborator<'_> {
         if let Some(r) = self.select_or_count_reason(e) {
             return Some(r);
         }
-        if let Some(n) = self.wide_param_name_in_pub(e) {
-            return Some(format!(
-                "`{n}` is wider than 64 bits, so it has no integral constant value here"
-            ));
-        }
         use ast::ExprKind as K;
+        // ⚠️ Only when `e` IS that name. A COMPOUND expression holding a wide name
+        // fails for a reason of its own — the operator has no wide arm, the divisor
+        // is zero, the select runs backwards — and blaming the operand's width sent
+        // the author to look at a declaration that is fine. A bare name, on the other
+        // hand, really does fail for its width: the consumer wants an integral value
+        // and 128 bits is not one.
+        if matches!(e.kind, K::Ident(_) | K::PkgScoped { .. }) {
+            if let Some(n) = self.wide_param_name_in_pub(e) {
+                return Some(format!(
+                    "`{n}` is wider than 64 bits, so it has no integral constant value here"
+                ));
+            }
+        }
+        // §11.4.3 makes `x / 0` and `x % 0` X, so there is no constant to fold — and
+        // that is a different sentence from "no fold arm", which is what the operator
+        // catch-all below would have said about an operator that has one.
+        if let K::Binary { op, rhs, .. } = &e.kind {
+            if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) && self.divisor_is_zero(rhs) {
+                return Some(format!(
+                    "{} divides by zero, which is `x` and not a constant",
+                    Self::expr_brief(e)
+                ));
+            }
+        }
         Some(match &e.kind {
             K::Ident(_) | K::PkgScoped { .. } => match self.nonconst_bound_reason(e) {
                 Some(r) => format!("{r} is not a constant"),

@@ -383,8 +383,14 @@ impl Elaborator<'_> {
                 // declared a 1-bit net that truncated `8'hA5` to `1`, at exit 0, in
                 // every backend). The runtime spelling of the same call already
                 // answered 8, so one source line had two answers.
+                // …and LAST the wide bit domain, the only one that can size an
+                // operand built out of a >64-bit parameter: `$bits(A)` and
+                // `$bits(A[63:0])` were E3009 for a 128-bit `A` while vita's own
+                // RUNTIME `$bits` of the same text answered 128 and 64. Last in the
+                // chain, so nothing that folds today changes route.
                 self.bits_of_view(&args[0], true)
                     .or_else(|| self.bits_of_selfdet(&args[0]))
+                    .or_else(|| self.wide_selfdet_width(&args[0]))
                     .map(|n| n as i64)
             }
             // A static cast in a constant context (`int'(7)`, `8'(P+1)`). Without
@@ -555,7 +561,18 @@ impl Elaborator<'_> {
                 // a slice of a >64-bit parameter: `$clog2(M_ISSUE[n*32 +: 32]+1)` is how
                 // `axi_crossbar` sizes one port's in-flight counter, and the value lives
                 // in `wide_param_bits` where the integer walk cannot see it.
-                _ => self.selfdet_bits_unsigned(arg)?,
+                //
+                // ⚠️ `selfdet_bits_unsigned` reads the folded bits back as a u64, so it
+                // declines the moment the argument's MAGNITUDE passes 64 bits — and
+                // `localparam int AW = $clog2(MAX);` over a 128-bit `MAX` is exactly
+                // that shape, the standard width idiom over a crypto constant. The
+                // ceiling itself is a BIT INDEX, so the bit domain can answer it
+                // without ever forming the value: fall through to `selfdet_clog2_wide`,
+                // which returns the finished `$clog2` rather than its argument.
+                _ => match self.selfdet_bits_unsigned(arg) {
+                    Some(n) => n,
+                    None => return self.selfdet_clog2_wide(arg),
+                },
             },
             None => return None,
         };

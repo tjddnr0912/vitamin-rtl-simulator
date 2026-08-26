@@ -230,11 +230,16 @@ pub(crate) fn fold_self_bits(
         }
         // §11.4.10 LOGICAL shift by a constant: the result keeps the LEFT operand's
         // self width and signedness, and the vacated bits are ZERO for both
-        // directions. `<<<` is not admitted (it is `<<` with a signed result, and no
-        // caller folds it here); `>>>` has its OWN arm below — the sentence that used
-        // to say both were "deliberately NOT admitted" was written before it.
+        // directions. `>>>` is not here — the arithmetic RIGHT shift reads the sign
+        // bit, and has its own arm below.
+        //
+        // ⭐ `<<<` rides this arm because at a FIXED width it IS the logical shift:
+        // §11.4.10 gives an arithmetic LEFT shift the same zero fill `<<` has, and
+        // only the right shift differs. It used to fall to the catch-all, so
+        // `A <<< 4` was E3009 where `A << 4` folded — which of two spellings of one
+        // operation you wrote decided whether the parameter existed.
         ast::ExprKind::Binary { op, lhs, rhs }
-            if matches!(op, ast::BinOp::Shl | ast::BinOp::Shr) =>
+            if matches!(op, ast::BinOp::Shl | ast::BinOp::AShl | ast::BinOp::Shr) =>
         {
             let k = fold_shift_count(rhs, name)?;
             let (b, w, sg) = fold_self_bits(lhs, name)?;
@@ -242,7 +247,7 @@ pub(crate) fn fold_self_bits(
             for i in 0..w as usize {
                 // source index for result bit i
                 let src = match op {
-                    ast::BinOp::Shl => i.checked_sub(k),
+                    ast::BinOp::Shl | ast::BinOp::AShl => i.checked_sub(k),
                     _ => i.checked_add(k).filter(|s| *s < w as usize),
                 };
                 if let Some(si) = src {
@@ -380,6 +385,31 @@ pub(crate) fn fold_self_bits(
                 _ => limbs_mul(&a, &b, w),
             };
             Some((bp_from_limbs(v, w), w, sg))
+        }
+        // §11.4.3 division and modulus — the two the arm above deliberately left
+        // out ("a wide divide is a different algorithm, and `x/0` has no value
+        // here"). Both halves of that are still true, and neither is a reason to
+        // decline any more: the algorithm is `sim_ir::mw::mw_divmod`, the SAME
+        // function the runtime evaluator calls, and `x/0` still declines.
+        ast::ExprKind::Binary { op, lhs, rhs }
+            if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) =>
+        {
+            let l = fold_self_bits(lhs, name)?;
+            let r = fold_self_bits(rhs, name)?;
+            wide_divmod(matches!(op, ast::BinOp::Div), &l, &r)
+        }
+        // §11.4.10 power. ⚠️ NOT folded through `bp_operands` like its arithmetic
+        // siblings: Table 11-21 makes the exponent SELF-determined while the base
+        // takes the context, so each side folds at its own width and the RESULT is
+        // the base's. See `wide_pow`.
+        ast::ExprKind::Binary {
+            op: ast::BinOp::Pow,
+            lhs,
+            rhs,
+        } => {
+            let l = fold_self_bits(lhs, name)?;
+            let r = fold_self_bits(rhs, name)?;
+            wide_pow(&l, &r)
         }
         // §11.4.5 unary minus: the two's complement at the operand's own width.
         ast::ExprKind::Unary {
@@ -540,6 +570,42 @@ pub(crate) fn fold_self_bits(
             match f.name.as_str() {
                 "$signed" => arg().map(|(b, w, _)| (b, w, true)),
                 "$unsigned" => arg().map(|(b, w, _)| (b, w, false)),
+                // §20.8.1: the argument is self-determined and read UNSIGNED; the
+                // result is an `integer` — 32 bits, signed. The value is a bit
+                // INDEX, so it always fits, which is the point: the integral
+                // domain's `$clog2` route (`selfdet_bits_unsigned`) declines the
+                // moment the argument's magnitude passes 64 bits, and
+                // `localparam int AW = $clog2(MAX);` over a crypto-width `MAX` is
+                // the standard width idiom.
+                "$clog2" => {
+                    let (b, w, _) = arg()?;
+                    Some(int32(wide_clog2(&b, w)?))
+                }
+                // §20.6.2: the number of bits the expression needs — which is the
+                // SELF width this whole walk computes, so the arm is one line.
+                //
+                // ⚠️ The width is trustworthy here for the reason `narrow_param_bits`
+                // spends a paragraph on: a NAME only answers from `param_range` /
+                // `pkg_const_range`, the DECLARED-provenance maps. §4.5.373 measured
+                // what happens when a width-relative operator reads `param_meta`
+                // instead (an INFERRED width picked the opposite generate branch at
+                // exit 0), and that is why `bits_of_selfdet` deliberately excludes
+                // `const_self_width`. This domain is not that map. Verified against
+                // iverilog on twelve shapes — name, select, concat, `+`, `>`, `/`,
+                // `**`, reduction, `<<`, `?:`, a signed name, `$clog2` — all
+                // identical, and identical to vita's own RUNTIME `$bits` for the
+                // same text.
+                "$bits" => {
+                    let (_, w, _) = arg()?;
+                    Some(int32(u64::from(w)))
+                }
+                // §20.9: 1 if ANY bit is x/z. The placement arms carry unknown bits
+                // through, so this domain can answer it exactly — and it is the one
+                // question here that WANTS an unknown rather than declining on it.
+                "$isunknown" => {
+                    let (b, w, _) = arg()?;
+                    Some(bp_bit(bp_any_unknown(&b, w)))
+                }
                 "$countones" | "$onehot" | "$onehot0" => {
                     let (b, w, _) = arg()?;
                     if bp_any_unknown(&b, w) {
@@ -550,13 +616,7 @@ pub(crate) fn fold_self_bits(
                         "$onehot" => Some(bp_bit(n == 1)),
                         "$onehot0" => Some(bp_bit(n <= 1)),
                         // §20.9: `$countones` returns an `int` — 32 bits, signed.
-                        _ => {
-                            let mut b = bp_zero(32);
-                            for i in 0..32 {
-                                bp_set(&mut b, i, (n >> i) & 1 == 1, false);
-                            }
-                            Some((b, 32, true))
-                        }
+                        _ => Some(int32(n)),
                     }
                 }
                 _ => None,
@@ -937,6 +997,67 @@ impl Elaborator<'_> {
             }
         }
         Some(v)
+    }
+
+    /// Does the WIDE bit domain have bits for `e`? A diagnostic-only question.
+    ///
+    /// ⭐ It exists because "this name is wider than 64 bits" stopped being a REASON
+    /// the moment the wide domain learned to read narrow and wide names alike. The
+    /// unfoldable-reason walk used the name's width as a proxy for the failure and
+    /// so blamed `A` for `A / 0` — a name it can read perfectly, in an expression
+    /// that fails for an entirely different reason (§4.5.384's shape: a proxy goes
+    /// stale silently when the thing it stood for is routed elsewhere).
+    ///
+    /// ⚠️ An x/z bit does NOT count as folding. The placement arms carry unknowns
+    /// through (a concat moves bits without reading them) while every value-reading
+    /// arm declines on one, so a child that folds to `128'hx` is a perfectly good
+    /// culprit — and saying so ("`128'hx` has no constant-fold arm") is sharper than
+    /// naming the operator above it.
+    pub(crate) fn wide_domain_folds(&self, e: &ast::Expr) -> bool {
+        matches!(
+            fold_self_bits(e, &|n, _| self.wide_name_bits(n)),
+            Some((b, w, _)) if !bp_any_unknown(&b, w)
+        )
+    }
+
+    /// Is `e` a KNOWN zero in the wide bit domain? Diagnostic-only, and false
+    /// whenever the answer is not certain (it declines, or it carries an x bit).
+    pub(crate) fn wide_domain_is_zero(&self, e: &ast::Expr) -> bool {
+        match fold_self_bits(e, &|n, _| self.wide_name_bits(n)) {
+            Some((b, w, _)) => !bp_any_unknown(&b, w) && !(0..w as usize).any(|i| bp_get(&b, i).0),
+            None => false,
+        }
+    }
+
+    /// The SELF width of `e` as the wide bit domain computes it — `$bits`'s answer
+    /// for an operand the integral domain's two width sources both decline.
+    ///
+    /// ⚠️ `bits_of_selfdet` deliberately excludes `const_self_width` because that map
+    /// mixes DECLARED widths with ones INFERRED from a folded value (§4.5.373 measured
+    /// an inferred width picking the opposite generate branch at exit 0). This walk is
+    /// not that map: a NAME reaches it only through `param_range` / `pkg_const_range`,
+    /// which record a declared range or a declared type and nothing else — so the
+    /// width it returns has the provenance the exclusion was protecting.
+    pub(crate) fn wide_selfdet_width(&self, e: &ast::Expr) -> Option<u32> {
+        fold_self_bits(e, &|n, _| self.wide_name_bits(n)).map(|(_, w, _)| w)
+    }
+
+    /// `$clog2(e)` computed entirely in the wide bit domain — the finished ceiling,
+    /// not the argument.
+    ///
+    /// ⚠️ This exists because the ceiling is REPRESENTABLE where its argument is not.
+    /// [`Self::selfdet_bits_unsigned`] must decline a value whose magnitude passes
+    /// 64 bits (a u64 cannot carry it), and the integral `$clog2` route has nothing
+    /// after that — so `localparam int AW = $clog2(A);` over a 128-bit `A` was
+    /// E3009 while the runtime lane answered 128. The answer is a bit INDEX, and
+    /// the bit domain has those.
+    ///
+    /// No `wide_top_is_self_determined` gate, for the same reason the sibling
+    /// documents: §20.8.1 makes a `$clog2` argument self-determined outright.
+    pub(crate) fn selfdet_clog2_wide(&self, e: &ast::Expr) -> Option<i64> {
+        let (b, w, _) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;
+        // A ceiling is at most `MAX_NET_WIDTH` (2²⁰), so the i64 is never near an edge.
+        wide_clog2(&b, w).map(|n| n as i64)
     }
 
     pub(crate) fn selfdet_bits_i64(&self, e: &ast::Expr) -> Option<i64> {

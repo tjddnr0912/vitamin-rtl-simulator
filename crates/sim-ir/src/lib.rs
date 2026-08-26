@@ -9,6 +9,7 @@
 extern crate self as sim_ir;
 
 mod analysis;
+pub mod mw;
 pub mod realness;
 pub mod selfwidth;
 pub use analysis::{
