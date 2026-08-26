@@ -156,6 +156,9 @@
 > | 16 | 🆕 **A parameter override that is an EXPRESSION with a context-determined top cannot be wider than 64 bits** (round-34 R5 residue · **2-oracle** · loud) | `leaf #(.K(128'h1 << 100))` on a `parameter logic [127:0] K` is `E3009`; both oracles apply it (`00000010000000000000000000000000`). ⭐ Every other wide-override spelling now lands — literal, positional, `-G`, `65'h…`, a replication, a cast, a named wide `localparam`, and a forward through an intermediate module — because `override_bits` folds the override at its own width. It declines a context-determined top ON PURPOSE: a shift folded at the operand's self width loses the bits the context would have kept (the rule `wide_top_is_self_determined` states). ⇒ the prerequisite is folding an override **at the target's declared width**, which the parent does not know — the same "the child's width is not visible in the parent" shape the `fill` channel exists to solve, so the fix is probably a fourth deferred channel rather than a wider fold. |
 > | 17 | 🆕 **The oracles split on how wide an UNSIGNED narrow override is before it extends** (round-34 R5 census · **oracle split — do not chase**) | `leaf #(.K(32'd0 - 32'd1))` on `parameter logic [127:0] K`: iverilog `ffff…ffff` (sign-extends an unsigned 32-bit expression), verilator `0000…0000ffffffff` (zero-extends from 32), vita `0000000000000000ffffffff_ffffffff` (zero-extends from **64**, the i64 lane's width). ⚠️ vita matches NEITHER, and its width is the one thing all three could have agreed on — but with the two oracles split on the extension RULE there is no answer to adopt, and §6.20.2 does not settle it. Recorded so that a future slice does not "fix" it toward whichever tool it measured first. The neighbouring cells are not split: `64'hFFFF_FFFF_FFFF_FFFF + 64'd0` zero-extends in all three, and `-(64'sd1)` sign-extends in all three. |
 > | 18 | 🆕 **A `defparam` override carries no signedness, so it cannot extend past the i64 lane** (round-34 R5 residue · loud-by-omission, silent for a NEGATIVE value) | `defparam u.K = 32'h7;` on a `parameter logic [127:0] K` is correct, but a NEGATIVE one still stops its sign at bit 63. ⭐ The other channels record `ResolvedOverride::signed` from the override EXPRESSION; the `defparam` collector folds to an i64 before the record exists, so the field is `None` and the extension declines rather than guessing — which keeps that channel exactly where it was. ⚠️ Fail-closed, but a residue: the fix is to compute the flag in the collector, where the expression still exists. |
+> | 19 | 🆕 **A 2-D / 3-D / packed element as a continuous-assign LHS costs ~10× on BOTH backends** (round-34 R30-2 census · performance · mechanism NOT located) | Marginal cost per continuous-assign evaluation against 50.0 ns for a 1-D unpacked element: 2-D `arr[0:15][0:3]` **546.7 ns** native / 675.8 vm, 3-D 829.2 / 967.5, packed `logic [63:0][31:0]` 410.8 / 441.7. ⭐ The native/vm ratio stays 0.81–0.93 across all three, so this is SHARED PLUMBING, not a backend axis — which also means the R30-2 fix (a `Const` leaf's sign) cannot touch it. Needs its own census; the report's and §4.5.382's diagnoses were both refuted on the 1-D axis, so do not carry either forward here. |
+> | 20 | 🆕 **The inline function fold is exponential in a re-read local** (round-34 R4 census · performance · correctness-adjacent) | `elab_s` stays flat at 0.35 ms while `sim_s` spreads 0.16 s → 14.36 s ⇒ the arena SHARES a substituted subtree as a DAG and the evaluator re-walks it as a TREE. Inlining costs (references per statement)^(chained statements) where the frame path is linear: 6 chained statements reading the local ONCE is 0.19 s inlined / 0.24 s framed; reading it THREE times is **14.39 s / 0.35 s**, digest-identical, identical under all three backends. ⭐ So `able` is ANTI-correlated with speed on exactly the body shape a cryptographic combinational function has, and the CHANGELOG's filed improvement — *"widen the inliner to control-flow bodies"* — was the wrong direction (now corrected there). The real item is **per-activation memoisation of a shared sub-expression** (a refcount pass over the frozen arena, or a memo keyed on ExprId inside the expression compiler). |
+> | 21 | 🆕 **A `**` (and any context-determined top) cannot be folded at a width WIDER than its operands** (round-34 R3 residue · **2-oracle** · loud, and the message got LESS specific) | `localparam bit [127:0] C = 3 ** 41;` is loud where both oracles print the exact `…1fa2a1cf67b5fb863`; so are `localparam longint D = 3 ** 40;` and `localparam integer L = 4'sd3 ** (64'd0 - 64'd8);`. ⭐ §11.6.1 makes `**` take its width from the CONTEXT, so the BASE must be evaluated at 128/64/32 bits — and the wide fold folds at the operand's own width and extends afterwards, which is a different answer. Same rule that keeps a size cast (`65'(64'd… + 64'd1)`) loud. ⚠️ **The diagnostic REGRESSED on these cells**: PRE said *"the `**` operation has no constant-fold arm"* (misleading, but specific) and it now falls to the unqualified *"value is not a foldable constant expression"*, because `unfoldable_reason` steps over a sub-expression the wide domain answers and the wide domain DOES answer this one — just not at the declaration's width. The honest message needs the declared width, which that helper does not have; the caller (`param_value_unfoldable`) does. |
 >
 > ✅ **u64 패턴 지수는 §4.5.348 로 RESOLVED · 폭-미상 wrapping 지수는 재센서스에서 소멸**
 > (2026-08-20 · 상세=ARCHIVE): 후자는 **§4.5.345 가 `const_decl_wsign` 의 multi-packed 폭을 채우면서
@@ -742,7 +745,7 @@
 > | **aes §2** 인라이너 판별자가 `automatic` 만이 아니다 | 📌 **기록 + CHANGELOG 정정** — 자체 실측 확인: plain 3/5 · `automatic`·`for`·`if`·`case` **전부 1/5** · `p::f()` 2/5. CHANGELOG 표가 *"one keyword"* 라 했는데 **거짓**이었다(그 표 자체가 08-18 정정본이다) ⇒ **8행 표로 재작성**. 인라이너 확장은 §3 |
 > | **aes §3** `always_comb` 구동 변수의 선언 초기화자 무경고 | 📌 **기록** — ⚠️ **iverilog 도 통과시킨다**(실측) ⇒ 2-오라클 결함이 아니라 **lint 기회**(xrun·verilator 는 error). W2004 급 경고 한 줄이 요청 |
 > | **R30-1** 빠진 패키지 → E2002 7줄, 패키지 이름 0줄 | 📌 **기록** — tf-port 자리의 `IDENT::IDENT` 는 스코프 타입일 수밖에 없으므로 파서가 타입으로 받고 elaborate 가 *"unknown package"* 를 말하면 7줄이 1줄이 된다. 파서 작업 |
-> | **R30-2** unpacked-array 원소 LHS 인 cont-assign 에서 native 가 vm 에 **1.88×** | 📌 **기록** — 성능 축. §4 표의 `keccak_f_arr`(코퍼스 최악 0.53×)와 **같은 축**으로 보이고, 이쪽은 **자기 vm 과의 비교**라 오라클이 필요 없다. `perf_baseline.rs` 에 **그 형태의 row 가 없다** |
+> | ~~**R30-2** unpacked-array element LHS~~ | ✅ **RESOLVED 2026-08-26 — and the diagnosis was refuted twice.** The axis is a SIGNED CONSTANT operand in the RHS, not the LHS storage class: over 34 cells native was ahead on every 1-D array-element-LHS cell and 3.9× ahead on the report's own headline shape. See §5. |
 > | **N32-2** replication count 의 **typed 철자**는 width twin 선행조건이 없다 | 📌 **기록(§3 ②)** — 좁힘 관찰: 폭이 선언에 있으므로 ⓐ 는 불필요, ⓑⓒ 는 남는다 |
 
 > **✅ 외부 리포트 aes_top 2판 — 16항목 중 15 해결 (2026-08-07 · §4.5.313).** unpacked
@@ -963,30 +966,45 @@
 
 ## 5. perf / 하드닝 — ⛔ **성능 축은 수확 체감 도달**(Phase D 종료 2026-08-17) · 열린 것 = 하드닝 1건 + §5.1 나머지
 
-**⚠️⚠️ 성능 잔여 1건 — 계산된 배열 인덱스에서 `native` 가 `vm` 에 2.1× 진다 (round-33 R30-2 ·
-§4.5.382 가 측정 · 벤치 행 = `perf_baseline.rs::CONT_ASSIGN_ELEM`).**
+✅ **RESOLVED 2026-08-26 (round-34) — and the axis was neither the one §4.5.382 recorded
+nor the one the report proposed.** Details = ARCHIVE. One line: **the only family where
+`native` loses to `vm` is a SIGNED CONSTANT operand in the RHS.** `wprog`'s entry gate
+declined a `Const` leaf on sign alone, which took the whole continuous assign off the
+compiled op-stream (64 assigns × 200k cycles: signed native **118.1 ns/eval** vs vm 73.2
+= **1.61×**; unsigned native 41.1 vs vm 72.8 = 0.56×). Relaxed for a `Const` leaf only ⇒
+signed 1.706 s → **0.726 s (−57%)**, identical to its unsigned twin. A 96-cell battery
+(every admitted operator × a signed constant in each operand position) is
+native == vm == iverilog.
 
-리포트는 *"축은 LHS 모양(unpacked 배열 원소)"* 이라 진단했고 **컨트롤 쌍둥이가 그걸 반박한다**.
-25 assign · 20k cycle · 다이제스트 하나로 한 번에 하나씩만 바꿔 재면:
+⚠️⚠️ **Two earlier conclusions were refuted here.**
 
-| 설계 | native / vm |
-|---|---|
-| 원소 LHS · 인덱스 `a[gy][gx]` | **0.92×**(native 승) |
-| 원소 LHS · 인덱스 `a[gy][(gx+2*gy)%5]` | **2.05×**(native 패) |
-| 원소 LHS · 인덱스를 리터럴로 써 둠 | 1.03×(무승부) |
+- **§4.5.382's diagnosis** (*"the axis is the computed RHS array index"*, 0.92× / 2.05× /
+  1.03×) and **the report's** (*"the axis is the unpacked-array-element LHS"*, 1.66×) are
+  **both wrong**. Over a 34-cell sweep, EVERY 1-D array-element-LHS cell has native
+  ahead (0.246 … 0.837), and native is **3.9× faster** on the report's own headline
+  shape. A computed index adds only +11% on native (83.3 → 92.5 ns); the +91% is vm's.
+- ⭐⭐ **Dropping the sign half of the gate ENTIRELY was already built, measured and
+  reverted on 2026-08-20** — `wprog.rs`'s own module header records it as *"SOUND · slow
+  lane −19.0% · and **1.00×**"*. That measurement was right and its conclusion was scoped
+  to picorv32 and keccak. `localparam int` is what SV RTL writes and a generate genvar is
+  the same cell, so a hash or cipher round was falling off this path entirely.
+  ⇒ **the §4.5.369 lesson again**: our own benchmarks find what we already suspect.
 
-⭐ LHS 는 **인덱스가 존재하게 만드는 것**일 뿐이다. 축은 **RHS 의 계산된 배열 인덱스**:
-genvar 로 쓴 `(gx+2*gy)%5` 는 상수인데 generate 언롤 뒤에도 **아무도 접지 않는
-`Binary{Mod, Binary{Add, Const, …}}` 트리**로 남아, 원소 읽기가 슬롯 `Load` 가 아니라
-**`LoadIdx`**(접근마다 인덱스 재평가)가 된다. 그리고 그게 Keccak π 스텝
-(`B[y][(2*x+3*y)%5] = rot(A[x][y], …)`) 그 자체 = 리포터가 잰 설계다.
+**⚠️ Remaining performance residue — a 2-D / 3-D / packed element LHS is a ~10× cliff on
+BOTH backends** (round-34 census · mechanism **NOT located**). Against 50.0 ns for 1-D:
+2-D **546.7** (native) / 675.8 (vm), 3-D 829.2 / 967.5, packed `logic [63:0][31:0]`
+410.8 / 441.7 ns. The native/vm ratio stays 0.81–0.93, so this is shared plumbing rather
+than a backend axis. Needs its own census before a fix shape — do not guess.
 
-⚠️ **`wprog` 에 `*`/`/`/`%` 를 더하는 것은 지어서 되돌렸다** — 컴파일되고 바이트 동일했지만 이 행을
-**전혀 움직이지 않았다**(2.09× → 2.09×). 거절하던 연산자는 원인이 아니었다.
-⇒ **선행조건 = IR 표현식 트리의 상수 폴딩**(genvar 유래 인덱스가 `Const` 가 되면 읽기가 슬롯
-로드가 된다 — 위 표의 리터럴 행이 그 상한을 보여 준다). 골든 밖(빌드 시 in-memory)이면
-`format_version` 무영향.
-
+**⚠️ And the inline fold is exponential** (round-34 R4 census). `elab_s` stays flat at
+0.35 ms while `sim_s` spreads 0.16 s → 14.36 s ⇒ the arena SHARES the substituted subtree
+as a DAG and the evaluator re-walks it as a TREE. Inlining is (references per
+statement)^(chained statements) where the frame path is linear: 6 statements reading the
+local ONCE is 0.19 s inlined / 0.24 s framed, and reading it THREE times is
+**14.39 s / 0.35 s** — digest-identical, and the same under all three backends.
+⇒ ⭐ **`able` is a coverage number, not a speed proxy.** Widening the inliner to
+control-flow bodies is the WRONG DIRECTION; the real item is **per-activation
+memoisation of a shared sub-expression**.
 
 **⚠️ 하드닝 1건 — 프로세스 수준 메모리 가드가 없다 (슬라이스 #8 실측 · 오너 승인 2026-08-15).** 폭주한
 `vita` 하나가 **33 GB × 2** 를 잡아 32 GB 머신을 jetsam → WindowServer 크래시 → **userspace watchdog

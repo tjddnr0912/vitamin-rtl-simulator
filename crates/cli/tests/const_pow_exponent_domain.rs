@@ -91,9 +91,19 @@ fn loud(expr: &str) {
 /// huge positive exponent, and the answer is the modular one.
 #[test]
 fn an_unsigned_exponent_is_not_a_negative_one() {
-    // A huge unsigned exponent is outside the i64 domain, so it is LOUD — not the
-    // 0 the negative-exponent table used to hand back at exit 0.
-    loud("3 ** (64'd0 - 64'd8)");
+    // ⚠️ These three asserted LOUD until round 34 gave the WIDE constant domain a
+    // `**` arm. A huge unsigned exponent is no longer outside a domain vita has —
+    // `3 ** (64'd0 - 64'd8)` on a 32-bit `integer` is 926288481 in iverilog AND in
+    // verilator, and now in vita. The claim this test exists to make is unchanged and
+    // is now made POSITIVELY: the exponent's signedness comes from the EXPRESSION, so
+    // an unsigned subtraction that "goes negative" is a huge positive exponent and the
+    // answer is the modular one — never the 0 the negative-exponent table would give.
+    folds("3 ** (64'd0 - 64'd8)", 926288481);
+    // ⚠️ Two neighbours stay LOUD for the SAME reason, and it is not the exponent:
+    // §11.6.1 makes `**` take its width from the CONTEXT, so a 4-bit base in a 32-bit
+    // declaration has to be evaluated at 32 bits, and a `longint` declaration at 64.
+    // The wide fold cannot widen a context — it folds at the operand's own width and
+    // extends, which is a different answer. iverilog prints 926288481 for both.
     loud("4'sd3 ** (64'd0 - 64'd8)");
     loud_as("longint", "3 ** (64'd0 - 64'd8)");
     // A genuinely SIGNED negative exponent still takes the IEEE table.
@@ -123,9 +133,20 @@ fn an_unsigned_exponent_is_not_a_negative_one() {
 /// wrapping already discarded.
 #[test]
 fn a_result_outside_the_i64_domain_stays_loud() {
-    loud("3 ** 40");
-    loud("3 ** 64");
-    loud("7 ** 30");
+    // ⚠️ The first three asserted LOUD until round 34 gave the WIDE constant domain a
+    // `**` arm. At a 32-bit `integer` context the answer is the modular one and both
+    // oracles print it, so what was "outside the i64 domain" is now inside a domain
+    // vita has. The name of this test is kept because the CLAIM survives — a result
+    // vita cannot represent AT THE DECLARATION'S WIDTH is still loud, which is the
+    // rest of the list.
+    folds("3 ** 40", 689956897);
+    folds("3 ** 64", 2038349057);
+    folds("7 ** 30", 1878557649);
+    // ⚠️ Still loud. §11.6.1 makes `**` take its width from the CONTEXT, and the wide
+    // fold cannot widen a context — it would have to evaluate the BASE at 64/96/128
+    // bits, not fold at the operand's own width and extend afterwards. Both oracles
+    // print the exact value (`3 ** 41` is `…1fa2a1cf67b5fb863` at 128 bits), so this
+    // is a capability gap and not an oracle split.
     loud_as("longint", "3 ** 40");
     loud_as("bit [95:0]", "3 ** 45");
     loud_as("bit [127:0]", "3 ** 41");

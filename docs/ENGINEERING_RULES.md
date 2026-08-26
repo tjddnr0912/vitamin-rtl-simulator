@@ -2487,3 +2487,75 @@ what separated "still true" (N32-1, and both stale texts) from "already fixed" a
 "true but not a defect" — its `always_comb`-initializer item is accepted by iverilog too,
 so it is a lint request, not a two-oracle bug, and recording it as the latter would have
 put a false row in the queue.
+
+## Round 34 — two external reports (2026-08-26 · §4.5.385)
+
+### ★★★★★ **A report's SEVERITY is a claim to re-measure, not just its repro**
+
+`R5` arrived as a LOUD gap: *"`-G/--param` cannot carry a value wider than 64 bits"*. The
+repro was exact and the triage was still wrong, because the report varied the OVERRIDE and
+held the DECLARATION fixed. Varying the declaration instead found **19 silent-wrong cells**
+under the same line: on `parameter logic [127:0] K = <wide default>`, `#(.K(5))` was
+DISCARDED and the default used, at `errors=0`.
+
+The reporter cannot be blamed for this — they hit the loud wall first and stopped, which is
+what a loud wall is for. But it means a census must vary **every field of the shape**, not
+only the one the report names. The field that mattered here is the one the report held
+constant.
+
+Corollary: *"this item is loud, so it is not urgent"* is a conclusion about the cells the
+reporter tried.
+
+### ★★★★★ **A revert's conclusion is scoped to the workloads that measured it**
+
+`wprog.rs`'s module header records, in detail, that dropping the sign half of the admission
+gate was built, measured SOUND, measured *"slow lane −19.0%"* and **1.00×**, and reverted.
+Every one of those numbers is right. The conclusion — *"it buys nothing"* — was true of
+picorv32 and keccak, which is what was measured, and false of a `localparam int` operand,
+which is what SV RTL writes and what a `generate for` genvar is. There the same gate costs
+**1.61×**.
+
+This is [[§4.5.369]]'s lesson arriving from the other direction: our own benchmarks find
+what we already suspect, so a revert justified by *"no gain on our benchmarks"* is a
+statement about our benchmarks. Record the SHAPE the measurement covered, not only the
+verdict — and when a new workload shows the shape, re-run before trusting the verdict.
+
+### ★★★★★ **A wording assertion outlives the limitation it describes**
+
+Three pins broke this round, all of the same kind: they asserted the TEXT of a refusal, and
+the round removed the refusal. `a_wide_literal_override_is_named_for_what_it_is` asserted
+*"WIDER than the 64-bit integer channel"*; two streaming pins asserted *"§11.4.14"* appears.
+Each was correct when written and each had to be rewritten as a VALUE assertion, which is
+the strictly stronger form of the same complaint.
+
+⇒ When a construct has no value yet, pin the wording AND say in the docstring that it is a
+wording pin, so the next author knows to convert rather than delete it. When it has a
+value, pin the value.
+
+### ★★★★ **A probe whose input is a fixed point certifies itself**
+
+`{<<{8'hA5}}` reverses bits, and `8'hA5` is `1010_0101` — a palindrome. That cell passes
+whether the implementation reverses, copies, or returns its input. It is the same failure
+as a benchmark whose digest does not move under mutation ([[digest-must-move-under-mutation]]),
+one level down: choose inputs where every wrong implementation gives a different answer,
+and say in the comment why THAT input.
+
+### ★★★★ **An extension needs the EXPRESSION's signedness, not the container's sign**
+
+`64'hFFFF_FFFF_FFFF_FFFF + 64'd0`, `-(64'sd1)` and `32'd0 - 32'd1` all reach parameter
+binding as the same `i64`. Both oracles extend the first with zeros and the second with
+ones. Reading the sign of the container would be right for two of the three and silently
+wrong for the other, and nothing downstream could tell which.
+
+⇒ If a value has to cross a width boundary, the channel that carries it must carry the
+signedness the SOURCE had. And when a channel cannot know it (a `defparam`, whose collector
+folds before the record exists), `None` must DECLINE rather than pick a default — a guess
+here is a silent-wrong either way it guesses.
+
+### ★★★ **Predicting an oracle's answer and pinning it is not measuring it**
+
+A cell in the new sign battery asserted `-100 >>> -7 == -1`, reasoned from §11.4.10's
+sign fill. It is 0: a negative SIGNED right operand makes the whole expression unsigned
+(§11.8.1), so the fill is zero. All three tools said 0 and the test failed on the first
+run — which is the good outcome, but only because the value was asserted at all. A cell
+that had asserted "exit code 0" would have shipped the wrong understanding silently.

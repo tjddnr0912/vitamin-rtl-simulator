@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.385` **Round 34: two external reports, and the biggest finding was in neither of them** · ⭐⭐ R5 was filed as a LOUD gap and the census found **19 silent-wrong cells** under it — a NARROW override of a `parameter logic [127:0]` was DISCARDED and the default used, at exit 0, on every channel (root = `wide_disagreeing_value(&p.value…)` folding the DECLARED DEFAULT while an override is in flight) · ⚠️ extending needs the override EXPRESSION's signedness, which three expressions with the SAME i64 extend two different ways ⇒ new `signed` channel, `None` declines · **R1** the count/index channel took `val[0] as u32` **silently** — boundary is 2³² not the report's 2⁶⁴ — so a shift folded UNSHIFTED, `A[2**32]` folded to `A[0]`, and a 2³²+2 replication built TWO elements; shift → **correct** (saturating, both oracles agree), count/index → **loud** (no consensus to adopt) · **R2** the diagnostics blamed an operand for an out-of-range index; the VALUE half is blocked on the narrow parameter store having no unknown plane (§2 15) · **R3** `/ % ** $clog2` wide arms, with the limb math **MOVED** to `sim-ir` so there is no second spelling · **R30-2** ⭐⭐ **both the report's axis AND §4.5.382's were refuted** — the only family where native loses is a **SIGNED CONSTANT operand in the RHS** (−57% once `wprog` admits a `Const` leaf across sign), and dropping the sign half entirely had already been built, measured **1.00×** on picorv32/keccak, and reverted · **R4** `able` is ANTI-correlated with speed (14.39 s inlined vs 0.35 s framed, digest-identical) so *"widen the inliner"* was the wrong direction · plus R6 · V34-1/2/4/5/6 · V33-1/3 · 상세=아래
 - `4.5.384` **라벨의 폭은 선언된 사실인데 어떤 맵도 기록하지 않았다** · §2 9번 · ⭐ §4.5.383 과 같은 모양, 선언 자리만 하나 옆(enum base 타입) — `enum_base_range` 를 라벨 바인딩 **세 자리**가 기록 · ⭐⭐ **직전 슬라이스의 단일 바인더가 즉시 값을 했다**(안쪽 `localparam` 이 라벨을 가리는 칸이 새 규칙 없이 그대로 정답 — §4.5.383 에선 그게 BLOCKING 이었다) · ⚠️⚠️ **비-0 LSB base 는 오라클이 갈린다**(iverilog 171 / verilator 52)·ascending 은 iverilog 가 선언 거부 ⇒ **둘 다 declines** · ⚠️⚠️ **두 렌즈가 같은 전제를 반대편에서 반증했고 그건 내 것이었다** — *"§6.19 가 값의 canonical 을 보장한다"* 는 거짓(파서 검사가 **파라미터 bound 에서 fail-open**, `-G W=8` 로 두 오라클이 **거부**하는 설계를 vita 가 exit 0 · 한 라벨이 한 실행에서 **두 답**) ⇒ 실제 근거는 **소비자가 폭으로 좁힌다**는 것이고 그래서 `1..=64` 캡을 **source 에** 달았다 · 59칸 **FIXED 39 · REGRESSION 0 · MOVED 0** + 렌즈A 45칸 **REGRESSION 0 · 추가 19 수정** · 기록 = §2 12~14번 + 11번 · 상세=아래
 - `4.5.383` **선언 폭이 사실인지 답하는 그 맵에 package twin 이 없었다** · §2 ⓓ · ⭐ 큐가 적어 둔 선행조건(*"패키지 const 테이블이 선언 폭 provenance 를 나른다"*)이 정확했고 답은 **새 맵 하나**(`pkg_const_range`, 모듈 twin 과 **같은 `param_decl_range_opt`** = 한 생산자 한 규칙) · ⭐⭐ census 가 한 줄 뒤에서 **다섯 레인**을 찾았다 — ⚠️ 큐의 *"런타임은 이미 세 툴 다 맞다"* 는 **zero-LSB 에서만** 참이라 `parameter [39:8] B` 는 `pk::B[15:8]` 을 **171** 로 찍고 있었다(두 오라클 52 · exit 0) · 세 철자(`pk::W` / wildcard / explicit)가 **한 갭** · 곁수확 = 파서가 `pk::W[7:0]` 을 *"이름이 아니다"* 라고 경고 · ⚠️⚠️ **적대 BLOCKING 둘이 내 것**(import 가 패키지 선언을 **모듈 자기 키**에 바인딩하면서 enum 라벨·genvar 의 재바인딩이 남은 range 를 물려받아 190→239 · 0→8) ⇒ **3/13 사이트 clear 는 틀린 모양** · ⭐⭐ 고침 = **바인더를 하나로**(`bind_param_value` 가 지우고 `bind_param_range` 가 쓴다 · raw writer grep 0) · ⭐ **두 렌즈가 같은 잔여**(>64비트 패키지 파라미터의 range 가 4분면 중 1개만 · **PRE 도 전부 틀렸다** = 사다리 이동 없음 ⇒ §2 10번) · 132칸 **FIXED 61 · REGRESSION 0 · MOVED 0** · 상세=아래
 - `4.5.382` **외부 리포트 둘, 축은 하나: 상수 도메인이 i64 로 계산하는데 선언은 폭을 말하고 있었다** · round-33(11건) + aes_top 감사(14건) · ⭐⭐ census 가 둘을 합쳤다 — **25건 중 11건이 한 축**이고 뿌리는 `fold_self_bits` 의 NAME 훅이 `wide_param_bits` **하나만** 물어 좁은 이름이 전부 declines 한 것 · ⚠️⚠️ 폭 출처가 소유권 논증 전부 = **`param_range`**(선언 provenance만) — §4.5.373 이 `param_meta` 위에 짓고 되돌린 그 자리 · 실은 것: 좁은 이름 피연산자 · wide 산술/비교/리덕션/select/삼항/`>>>`/`$countones` 계열 · **패키지 wide 파라미터** · **override 가 폭을 나른다**(§6.20.2 · `-G K=128'h…` 도) · ⭐ **replication count 이름**(§4.5.371 의 BLOCKING 넷이 *같은 resolver 로 접기* 하나로 전부 답해졌다) · 패키지 real · 상수 문맥 string 메서드 · **generate 키워드 선택(§27.3)·헤더 genvar(§27.4)** · 패키지 static function 의 형제 호출(§26.3) · **진단 6건 = 한 결함**(캐럿이 모듈 헤더 · 원인을 안 말한다) · ⚠️⚠️ 내가 만든 결함 셋(**cast 는 문맥이다** · count 가 상수함수 지역변수를 읽었다 · 폭 미상 지역변수를 바인딩했다) · **핀 21개 전량 2-오라클 재측정** · ⭐⭐ **serv PROMOTED · 코퍼스 7/10 → 8/10** · ⚠️⚠️ **R30-2 는 리포트 진단이 반박됐다**(축은 LHS 모양이 아니라 **RHS 의 계산된 인덱스** · 0.92× vs 2.05× · wprog 넓힘은 지어서 되돌렸다) · 상세=아래
@@ -416,6 +417,130 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.385 — Round 34: two external reports, and the biggest finding was in neither of them (2026-08-26 · format 29 unchanged)
+
+**Input**: two forwarded reports on the same day — hash_top round-34 (10 items) and an
+aes_top audit (7 items) — filed against `9471a8a`. Every item was reproduced and
+re-triaged at HEAD before anything was built, in a 10-agent census.
+
+⭐⭐ **The census's largest finding is in neither report.** `R5` was filed as a LOUD gap
+(*"`-G/--param` cannot carry a value wider than 64 bits"*). Widening the census over the
+DECLARATION rather than the override found **19 silent-wrong cells** underneath it: on
+`parameter logic [127:0] K = 128'hAAAA…`, a NARROW override — `#(.K(5))`,
+`#(.K(32'hDEADBEEF))`, `#(.K(-1))` — was DISCARDED and the declared default used, at
+`errors=0`. Every channel (`#()` named and positional, `defparam`, `-G`, generate scope,
+forwarding through an intermediate module), every storage class. The flip is at declared
+width **65**, not at the override's width.
+
+The root is one call folding the wrong expression: `wide_disagreeing_value(&p.value, …)`
+asks *"do the two domains agree?"* about `p.value`, which is the DECLARED DEFAULT's
+expression. With an override in flight the two are different expressions, so they
+disagree by construction and the arm installed the default and returned.
+
+⚠️ **Extending an override past the i64 lane needs the EXPRESSION's signedness, and that
+is not derivable from the i64.** `64'hFFFF_FFFF_FFFF_FFFF + 64'd0`, `-(64'sd1)` and
+`32'd0 - 32'd1` all fold to the same i64; the oracles extend the first with zeros and the
+second with ones. `ResolvedOverride` gains a `signed` channel recorded at each producer;
+`None` (a `defparam`, whose collector folds before the record exists) declines rather than
+guesses. The value goes into `wide_param_bits` **only when it must** — when there are bits
+the i64 lane cannot carry — which also repairs a pre-existing correct→loud regression
+(`logic [K-1:0]` broke the moment any wide-literal override appeared).
+
+⚠️ And `bits` became a FOURTH applying channel in both `keeps_default_of` and
+`has_applied_override`. They are one rule and had drifted, which is why a wide literal
+warned *"not a constant; default kept"* and then errored, about an override that is a
+constant and is now applied.
+
+**R1 — the count/index channel truncated to 32 bits, silently.** `const_eval_u32` returned
+`BitPacked.val[0] as u32`, and every consumer of that helper is a COUNT or an INDEX, so
+the discarded bits were the ones that decide the answer:
+
+| expression | vita const lane | vita runtime | both oracles |
+|---|---|---|---|
+| `64'hDEADBEEF12345678 >> 64'h1_0000_0000` | the operand UNSHIFTED | 0 | 0 |
+| `A[2**32]` | `A[0]` | x | x / refuse |
+| `$bits({(2**32+2){8'hA5}})` | 16 (a TWO-element replication) | — | warn / refuse |
+
+⚠️ **The report put the boundary at 2⁶⁴** because it wrote 128-bit literals. It is **2³²**:
+`>> 64'h1_0000_0000` is a 64-bit literal the i64 domain carries fine.
+
+The two halves land on different rungs deliberately. A SHIFT is now CORRECT — §11.4.10
+vacates with zeros (with the sign bit for `>>>`), so every amount at or above the width
+gives the same answer and `fold_shift_count` saturates; both oracles agree and vita's own
+runtime lane already did. A COUNT or a SELECT INDEX goes LOUD, because there is no
+consensus to adopt: iverilog truncates a replication count with a warning and verilator
+refuses it; for an out-of-range select iverilog gives `x` and verilator, a 2-state tool,
+gives 0.
+
+⭐ Side effect: a NAMED wide shift amount (`A >> SH`) folds now where it was E3009,
+because the amount takes the same route its literal twin does.
+
+**R2 — the diagnostics named the wrong thing.** `A[128]` over a 128-bit `A` said *"`A` is
+wider than 64 bits"*, which is equally true of `A[127]`, and that folds. `B[9]` over an
+8-bit `B` said *"the select `B[…]` has no constant-fold arm"*, and the arm exists.
+`unfoldable_reason` asked only the i64 domain, so every operand of a wide expression
+looked like a cause. It now steps over a sub-expression the WIDE domain answers, and an
+out-of-range select or count is named for that before any operand is blamed.
+
+⚠️ The VALUE half (§11.5.1 makes an out-of-range select `x`) is blocked one level down and
+not on the select: the ≤64-bit parameter store is an `i64` with no unknown plane, which is
+why `localparam logic X = 'x;` is loud too, with no select anywhere ⇒ §2 row 15, the same
+prerequisite as the existing `'x`-valued-parameter row.
+
+**R3 — `/`, `%`, `**` and `$clog2` had no wide arm** while the runtime lane computed all
+four correctly. ⭐ The limb math is MOVED, not re-spelled: `mw_divmod`/`mw_pow` were pure
+`&[u64]` functions in sim-engine and now live in `sim-ir::mw`, called by both. That
+answers the decline comment already in `const_wide.rs` — *"implementing one here would be
+a second spelling of the engine's arithmetic, and a subtly wrong one produces a silent
+wrong PARAMETER"* — by removing the second spelling. `<<<` rides the logical-shift arm
+(at a fixed width an arithmetic LEFT shift has `<<`'s zero fill), so `A <<< 4` stops being
+E3009 where `A << 4` folds. `**` folds its base at the context width and its exponent at
+its own (§11.6.1), which `128'd2 ** 100` is the cell for. `x / 0` stays loud. Verified
+against live iverilog AND an independent Python golden.
+
+**R30-2 — the report's axis was refuted, and so was §4.5.382's.** See ROADMAP §5. One
+line: the only family where `native` loses to `vm` is a **SIGNED CONSTANT operand in the
+RHS** (118.1 ns/eval vs 73.2), because `wprog`'s entry gate declined a `Const` leaf on
+sign alone and took the whole assign off the compiled path. Relaxed for `Const` only ⇒
+**−57%**. ⚠️⚠️ Dropping the sign half ENTIRELY was already built, measured sound, measured
+**1.00×** on picorv32 and keccak, and reverted on 2026-08-20 — that measurement was right
+and its conclusion was scoped to two designs without this shape.
+
+**R4 — the CHANGELOG's discriminator table named 4 of the 12 shapes that frame a
+function**, got the qualified-call row wrong (the refusal is per CALL SITE, so 1/5 not
+2/5), and filed *"widen the inliner to control-flow bodies"* as the improvement.
+⭐⭐ Measured, that is the WRONG DIRECTION: the inline fold is kⁿ in (references per
+statement)^(chained statements) where the frame path is linear — the same design is
+0.19 s inlined / 0.24 s framed at one reference and **14.39 s / 0.35 s** at three,
+digest-identical. `able` is a coverage number, not a speed proxy. ⇒ §2 row 20.
+
+**Also shipped, one commit each**: `R6` (a `string` output/inout formal in a static task —
+narrowed at the ACTUAL rather than deleted, and `ref`/`const ref` stop being spelled
+"inout"); `V34-4` (the §7.12 array manipulation methods reach fixed-size unpacked arrays,
+with `item.index` as the DECLARED index — the hazard the census flagged); `V34-5` (`%p`
+on an aggregate, matching verilator byte for byte); `V34-1` (the streaming operator on the
+RHS, matching verilator on every cell; the LHS unpack stays loud with the working rewrite
+in the message); `V34-2` (a body-scope `bind`); `V34-6` (an interface instance passed as a
+port stops drawing a fake implicit-net warning); `V33-1` (all ten generate rejections
+carry a real span and name the offending sub-expression); `V33-3` (an enum method on a
+label stops being described as a chained method call — it stays LOUD, because iverilog
+aborts on it and verilator reports no such function).
+
+⚠️ **Three pins encoded limitations this round removed** and were rewritten as VALUE
+assertions: the wide-literal-override wording, and two streaming-refusal wordings. One of
+those also had to change its input — `8'hA5` is `1010_0101`, whose bit reversal is itself,
+so the cell would have certified itself whatever the code did.
+
+⚠️ **Two defects were introduced and caught inside the round**: reading the wide fold back
+into the i64 lane (`#(.K({64'h0, 64'h5}))` folds to a 128-bit constant of value 5, and the
+i64 walk declines a concatenation, so it fell through to the declared default — loud
+traded for silent); and `wide_self_folds` treating an x-carrying fold as an answer, which
+made `128'hx / 128'd3` blame the `/`.
+
+⚠️ **One pinned value in the new sign battery was a prediction, not a measurement**:
+`-100 >>> -7` is 0, not −1 — a negative SIGNED right operand makes the whole expression
+unsigned (§11.8.1) so the fill is zero. All three tools said 0.
 
 #### 4.5.384 — A label's width was a declared fact that no map recorded (2026-08-25 · 6,020 green · format 29 unchanged)
 
