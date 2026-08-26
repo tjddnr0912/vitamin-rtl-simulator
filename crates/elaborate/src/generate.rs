@@ -88,10 +88,20 @@ impl Elaborator<'_> {
         if depth > GENERATE_DEPTH_CAP {
             // depth guard reported ONCE (in the Nets phase) to avoid 3× dup.
             if phase == GenPhase::Nets {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    "generate nesting too deep (deferred)",
-                );
+                // Anchor on the too-deep LEVEL, not on `cur_span` (= the module
+                // header): the reader needs to know which nest overflowed, and a
+                // deep generate is exactly the shape where several of them exist.
+                match gen_items_anchor(items) {
+                    Some(sp) => self.error_at(
+                        MsgCode::ElabUnsupported,
+                        sp,
+                        "generate nesting too deep (deferred)",
+                    ),
+                    None => self.error(
+                        MsgCode::ElabUnsupported,
+                        "generate nesting too deep (deferred)",
+                    ),
+                }
             }
             return;
         }
@@ -153,17 +163,15 @@ impl Elaborator<'_> {
                 step,
                 label,
                 body,
-                ..
+                span: for_span,
             } => {
                 let gv_key = self.fq(&init.lvalue.name);
 
                 // INIT value, const-eval'd in the current scope.
                 let Some(start) = self.const_eval_in_scope(&init.value) else {
                     if phase == GenPhase::Nets {
-                        self.error(
-                            MsgCode::ElabUnresolvedName,
-                            "generate-for init is not a constant",
-                        );
+                        let msg = self.unfoldable_note("generate-for init", &init.value);
+                        self.error_at(MsgCode::ElabUnresolvedName, init.value.span, &msg);
                     }
                     return;
                 };
@@ -190,10 +198,8 @@ impl Elaborator<'_> {
                         Some(c) => c,
                         None => {
                             if phase == GenPhase::Nets {
-                                self.error(
-                                    MsgCode::ElabUnresolvedName,
-                                    "generate-for condition is not a constant",
-                                );
+                                let msg = self.unfoldable_note("generate-for condition", cond);
+                                self.error_at(MsgCode::ElabUnresolvedName, cond.span, &msg);
                             }
                             break;
                         }
@@ -203,8 +209,9 @@ impl Elaborator<'_> {
                     }
                     if idx_count >= GENERATE_UNROLL_CAP {
                         if phase == GenPhase::Nets {
-                            self.error(
+                            self.error_at(
                                 MsgCode::ElabUnsupported,
+                                *for_span,
                                 "generate-for exceeds the unroll cap (possible infinite loop)",
                             );
                         }
@@ -224,10 +231,8 @@ impl Elaborator<'_> {
                     // step: fold (with genvar bound) → rebind the genvar.
                     let Some(next) = self.const_eval_in_scope(&step.value) else {
                         if phase == GenPhase::Nets {
-                            self.error(
-                                MsgCode::ElabUnresolvedName,
-                                "generate-for step is not a constant",
-                            );
+                            let msg = self.unfoldable_note("generate-for step", &step.value);
+                            self.error_at(MsgCode::ElabUnresolvedName, step.value.span, &msg);
                         }
                         break;
                     };
@@ -242,8 +247,9 @@ impl Elaborator<'_> {
                     // correctness intact, diagnostics less clean. Residual risk R3.)
                     if next == iter_val {
                         if phase == GenPhase::Nets {
-                            self.error(
+                            self.error_at(
                                 MsgCode::ElabUnsupported,
+                                *for_span,
                                 "generate-for genvar does not advance (step leaves it unchanged)",
                             );
                         }
@@ -284,10 +290,8 @@ impl Elaborator<'_> {
                     Some(c) => c,
                     None => {
                         if phase == GenPhase::Nets {
-                            self.error(
-                                MsgCode::ElabUnresolvedName,
-                                "generate-if condition is not a constant",
-                            );
+                            let msg = self.unfoldable_note("generate-if condition", cond);
+                            self.error_at(MsgCode::ElabUnresolvedName, cond.span, &msg);
                         }
                         return;
                     }
@@ -304,10 +308,8 @@ impl Elaborator<'_> {
             } => {
                 let Some(scrut) = self.const_eval_in_scope(scrutinee) else {
                     if phase == GenPhase::Nets {
-                        self.error(
-                            MsgCode::ElabUnresolvedName,
-                            "generate-case scrutinee is not a constant",
-                        );
+                        let msg = self.unfoldable_note("generate-case scrutinee", scrutinee);
+                        self.error_at(MsgCode::ElabUnresolvedName, scrutinee.span, &msg);
                     }
                     return;
                 };
@@ -577,18 +579,34 @@ impl Elaborator<'_> {
             }
             // A PORT declaration inside generate stays forbidden (IEEE §27:
             // ports are module-boundary, not per-instance). Reported once.
-            (GenPhase::Nets, ast::ModuleItem::PortDecl(_)) => {
-                self.error(
+            (GenPhase::Nets, ast::ModuleItem::PortDecl(pd)) => {
+                self.error_at(
                     MsgCode::ElabUnsupported,
+                    pd.span,
                     "port declaration not allowed inside generate",
                 );
             }
-            (
-                GenPhase::Nets,
-                ast::ModuleItem::Func(_) | ast::ModuleItem::Task(_) | ast::ModuleItem::Defparam(_),
-            ) => {
-                self.error(
+            // Three variants, three spans, one message: each carries its own span,
+            // so the arm is split rather than anchored at `cur_span` (the module
+            // header, which is where all of these used to point).
+            (GenPhase::Nets, ast::ModuleItem::Func(f)) => {
+                self.error_at(
                     MsgCode::ElabUnsupported,
+                    f.span,
+                    "construct deferred inside generate (func/task/defparam)",
+                );
+            }
+            (GenPhase::Nets, ast::ModuleItem::Task(t)) => {
+                self.error_at(
+                    MsgCode::ElabUnsupported,
+                    t.span,
+                    "construct deferred inside generate (func/task/defparam)",
+                );
+            }
+            (GenPhase::Nets, ast::ModuleItem::Defparam(d)) => {
+                self.error_at(
+                    MsgCode::ElabUnsupported,
+                    d.span,
                     "construct deferred inside generate (func/task/defparam)",
                 );
             }
@@ -633,4 +651,22 @@ impl Elaborator<'_> {
             }
         }
     }
+}
+
+/// A source anchor for a whole gen-item LIST — the span of the first item that
+/// carries one.
+///
+/// `GenItem::Item` wraps a `ModuleItem`, which has no uniform span accessor, so
+/// this can answer `None` for a list made only of plain module items; the one
+/// caller (the nesting-depth guard) then falls back to `cur_span`. Every other
+/// variant records its own span, and the FIRST one is the right anchor because
+/// the guard fires on the level as a whole, not on any single item in it.
+fn gen_items_anchor(items: &[ast::GenItem]) -> Option<ast::Span> {
+    items.iter().find_map(|gi| match gi {
+        ast::GenItem::For { span, .. }
+        | ast::GenItem::If { span, .. }
+        | ast::GenItem::Case { span, .. }
+        | ast::GenItem::Block { span, .. } => Some(*span),
+        ast::GenItem::Item(_) => None,
+    })
 }

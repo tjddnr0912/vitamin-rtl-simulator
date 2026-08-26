@@ -694,6 +694,26 @@ impl Elaborator<'_> {
             _ => format!("{} has no constant-fold arm", Self::expr_brief(e)),
         })
     }
+
+    /// `"<what> is not a constant[: <why>]"` — the message a const-fold rejection
+    /// prints when the rejected thing is a POSITION rather than a named declaration
+    /// ([`Self::param_value_unfoldable`] is the named-declaration twin).
+    ///
+    /// The generate rejections used to stop at the unqualified half, so a module
+    /// whose `generate if`, `generate case` and `generate for` were all rejected
+    /// printed three sentences that named the construct and nothing else — while
+    /// both oracles name the offending sub-expression (iverilog: "A reference to a
+    /// net or variable (`q') is not allowed in a constant expression"; verilator:
+    /// "Expecting expression to be constant, but variable isn't const: 'q'").
+    /// [`Self::unfoldable_reason`] is the same naming, so this is reaching parity,
+    /// not inventing a format. `None` keeps the unqualified wording, which stays
+    /// honest: nothing here can name a cause it did not find.
+    pub(crate) fn unfoldable_note(&self, what: &str, e: &ast::Expr) -> String {
+        match self.unfoldable_reason(e) {
+            Some(why) => format!("{what} is not a constant: {why}"),
+            None => format!("{what} is not a constant"),
+        }
+    }
 }
 
 /// Source text of a binary operator, for [`Elaborator::expr_brief`].
