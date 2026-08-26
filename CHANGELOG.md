@@ -9,6 +9,23 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-26
+
+**The compiled backend is the product.** `native` is now the default and the only
+executor a default-features build needs; the tree-walking interpreter and the
+bytecode VM are demoted behind the `oracle` feature, where they exist to bisect a
+suspected defect against a second and a third implementation of the same
+semantics. Output is byte-identical across all three, enforced over the whole
+corpus, so `--backend` is a wall-clock knob rather than a semantic one.
+
+Since 0.1.0: **6,169 tests** (was 5,009), `format_version` 26 → 29, a ten-workload
+third-party corpus pinned by SHA, FST waveforms, and thirty-odd correctness slices
+driven by adversarial two-lens review against live Icarus Verilog and Verilator.
+
+The MAJOR stays 0 while [docs/ROADMAP.md](docs/ROADMAP.md) §2/§3 carry open
+correctness items. A MINOR bump does not invalidate artifacts — `verify_header`
+gates on the semver MAJOR only — so existing `.velab`/`.vu` files stay valid.
+
 ### Added
 
 - **Named and `default:` assignment patterns** (IEEE 1800 §10.9.1/§10.9.2):

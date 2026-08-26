@@ -14,13 +14,15 @@ a **clean, source-only `cargo` build** with no C/C++ dependencies.
 preprocess → lex → parse → elaborate → sim-ir → sim-engine → VCD
 ```
 
-> **Status — `0.1.0`, the initial release; actively developed.** The full pipeline
-> works end-to-end in both one-shot and staged modes, spanning Phase-1 RTL, a broad
-> SystemVerilog subset, and Phase-3 verification features (SVA, classes,
-> constrained-random). The major version stays at `0` while
+> **Status — `0.2.0`; actively developed.** The full pipeline works end-to-end in
+> both one-shot and staged modes, spanning Phase-1 RTL, a broad SystemVerilog
+> subset, and Phase-3 verification features (SVA, classes, constrained-random).
+> Process bodies run on the **compiled `native` backend by default**; the
+> interpreter and the bytecode VM remain behind the `oracle` feature as
+> bisection oracles. The major version stays at `0` while
 > [docs/ROADMAP.md](docs/ROADMAP.md) §2/§3 carry open correctness items — see
 > [CHANGELOG.md](CHANGELOG.md).
-> **5,000+ tests pass**; behaviour is checked against Icarus Verilog (`iverilog`)
+> **6,000+ tests pass**; behaviour is checked against Icarus Verilog (`iverilog`)
 > by live differential review under a strict **correct-or-loud** rule — the
 > simulator never produces a silently wrong result, and anything unsupported is
 > an explicit diagnostic. Platforms: **Linux and macOS** (Windows is not

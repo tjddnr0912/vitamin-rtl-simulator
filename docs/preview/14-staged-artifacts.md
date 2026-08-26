@@ -46,8 +46,8 @@ work/
 `work/lib.toml` (매니페스트):
 
 ```toml
-format_version = 22  # work/lib.toml 매니페스트 포맷(현재 22). 산출물 컨테이너 format_version도 22 (CURRENT_FORMAT_VERSION).
-tool           = { version = "0.1.0", git_sha = "…", dirty = false, profile = "release" }
+format_version = 29  # work/lib.toml 매니페스트 포맷(현재 29). 산출물 컨테이너 format_version도 29 (CURRENT_FORMAT_VERSION).
+tool           = { version = "0.2.0", git_sha = "…", dirty = false, profile = "release" }
 [library]
 name = "work"                # 논리 라이브러리 이름 (D3 — 기본 work)
 dialect_digest = "blake3:…"  # 전역 dialect(--std/-sv) 다이제스트 (§2 RULE A)

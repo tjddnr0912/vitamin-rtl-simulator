@@ -25,11 +25,13 @@ members = [
 exclude = ["third_party/libm"]
 
 [workspace.package]
-# v0.1.0 = the initial release. The MAJOR stays 0 deliberately: `tool_semver_major`
-# is a hard staleness gate (`vita-artifact/src/gate.rs`), so a 0→1 bump would
-# invalidate every existing `.velab`/`.vu`, and semver-0 is the honest signal
-# while docs/ROADMAP.md §2/§3 still carry open correctness items.
-version = "0.1.0"
+# The MAJOR stays 0 deliberately: `tool_semver_major` is a hard staleness gate
+# (`vita-artifact/src/gate.rs`), so a 0→1 bump would invalidate every existing
+# `.velab`/`.vu`, and semver-0 is the honest signal while docs/ROADMAP.md §2/§3
+# still carry open correctness items. A MINOR bump is not gated — `verify_header`
+# compares the major only — so 0.1 → 0.2 leaves every artifact valid and
+# `format_version` untouched at 29.
+version = "0.2.0"
 edition = "2021"
 # 1.85 (was 1.82): required by fst-writer 0.3.x, whose 0.2.x line writes a
 # malformed FST time-table that GTKWave/fst-reader tolerate but wellen (Surfer)
