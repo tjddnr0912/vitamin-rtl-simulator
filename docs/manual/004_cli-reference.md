@@ -112,6 +112,10 @@ name.
 | `--obs-dir <dir>` | Write the machine-readable run report (`run.json`, `results.jsonl`, and `coverage.json` when the design has covergroups) into DIR. One-shot `vita` only. See [The machine-readable run report](#the-machine-readable-run-report). |
 | `--obs-procs` | Add `run.json`'s `processes` object: per-body **evaluation counts**. Requires `--obs-dir`. |
 | `--obs-procs-time` | `--obs-procs` plus **cumulative wall clock** per body. Not deterministic and it perturbs what it measures — read the warning below. |
+| `--probe <net>` | Record every value change of one hierarchical net path into `trace.jsonl` (repeatable; requires `--obs-dir`). An unresolved path is a loud error, never a silent skip. |
+| `--probe-file <file>` | Read `--probe` paths from a file, one per line (`#` comments and blank lines skipped); merged with any `--probe`. |
+| `--hier-tree <file>` | Write the instance tree (module + instance name per line). |
+| `--inst-paths <file>` | Write one full dotted instance path per line. |
 | `-Wno-<CODE>` / `-Werror[=<CODE>]` | Suppress a warning / promote warnings to errors (doc-15 mnemonics). |
 | `-q` / `-v` / `--verbosity <0..3>` | Quiet / verbose. `-v` also prints the [effective-invocation block](#what-actually-ran--v). |
 | `-l, --log <file>` [`--log-append`] | Tee the full transcript (RTL + diags + progress) to a file. |

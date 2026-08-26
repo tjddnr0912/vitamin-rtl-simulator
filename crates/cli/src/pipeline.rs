@@ -286,6 +286,16 @@ pub(crate) fn print_help(applet: &str) {
     // sentence inside an unrelated ERROR message (`--backend bogus`), not
     // through the help. The feature was documented only in an internal design
     // note, which is the same as not documented.
+    //
+    // ⚠️ And this block did not keep up: `--obs-procs`/`--obs-procs-time`
+    // (R14) and `--probe-file` (OBS-2) shipped working and documented in
+    // docs/manual/004, and were never added here — so a round-35 report read
+    // `"processes": null` in run.json, concluded per-process observability was
+    // UNIMPLEMENTED, and found the flags only by reading the manual. Same bug
+    // class, second occurrence. `crates/cli/tests/help_covers_flags.rs` now
+    // enumerates the flag literals out of `stage_args.rs`'s match arms and
+    // fails if any of them is missing from this text, so the third occurrence
+    // is a red test rather than another report.
     println!(
         "\nObservability (machine-readable run facts -- doc-19):\n  \
          --obs-dir <DIR>       write run.json (backend actually used, codegen coverage and\n                        \
@@ -293,9 +303,23 @@ pub(crate) fn print_help(applet: &str) {
                        results.jsonl, and coverage.json when the design has\n                        \
                        covergroups. This is where 'why is it slow' and 'which\n                        \
                        executor really ran' are answered\n  \
+         --obs-procs           add run.json's 'processes': how many times each process and\n                        \
+                       each continuous assign was EVALUATED, with kind, instance\n                        \
+                       scope and file:line, most-evaluated first. Deterministic\n                        \
+                       and ~free; requires --obs-dir. Without it run.json says\n                        \
+                       \"processes\": null, which means NOT MEASURED -- not that\n                        \
+                       nothing ran\n  \
+         --obs-procs-time      --obs-procs plus cumulative wall clock per body. NOT\n                        \
+                       deterministic, and it PERTURBS what it measures: it reads\n                        \
+                       the clock on both sides of every activation, which can cost\n                        \
+                       more than a one-bit assign does, so the shares tilt toward\n                        \
+                       the cheap rows. Read 'evals' first; reach for time_s only\n                        \
+                       to break a tie between rows with similar counts\n  \
          --probe <NET>         record every value change of a hierarchical net path to\n                        \
                        trace.jsonl (repeatable; requires --obs-dir). Same data a\n                        \
                        $display probe would give, with no edit to the RTL or TB\n  \
+         --probe-file <FILE>   read --probe paths from FILE, one per line ('#' comments\n                        \
+                       and blank lines skipped); merged with any --probe\n  \
          --hier-tree <FILE>    write the instance tree (module + instance name per line)\n  \
          --inst-paths <FILE>   write one full dotted instance path per line"
     );
