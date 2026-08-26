@@ -10,6 +10,7 @@ extern crate self as sim_ir;
 
 mod analysis;
 pub mod mw;
+mod names;
 pub mod realness;
 pub mod selfwidth;
 pub use analysis::{
@@ -17,6 +18,7 @@ pub use analysis::{
     rhs_frame_executor_cannot_perform, rhs_is_stmt_effect, sysfunc_frame_executor_cannot_perform,
     sysfunc_is_stmt_effect, systask_net_write, NetWrite,
 };
+pub use names::{sysfunc_name, systask_name};
 
 use serde::{Deserialize, Serialize};
 use vita_artifact_derive::SchemaHash;

@@ -305,10 +305,13 @@ pub(crate) fn print_help(applet: &str) {
                        executor really ran' are answered\n  \
          --obs-procs           add run.json's 'processes': how many times each process and\n                        \
                        each continuous assign was EVALUATED, with kind, instance\n                        \
-                       scope and file:line, most-evaluated first. Deterministic\n                        \
-                       and ~free; requires --obs-dir. Without it run.json says\n                        \
-                       \"processes\": null, which means NOT MEASURED -- not that\n                        \
-                       nothing ran\n  \
+                       scope and file:line, most-evaluated first. Also adds\n                        \
+                       'builtins': how many times each $task/$function/method\n                        \
+                       ($fgets, $sscanf, .push_back(), ...) was CALLED, which is\n                        \
+                       how much of an expensive process row is the simulator\n                        \
+                       rather than your RTL. Deterministic and ~free; requires\n                        \
+                       --obs-dir. Without it both say null, which means NOT\n                        \
+                       MEASURED -- not that nothing ran\n  \
          --obs-procs-time      --obs-procs plus cumulative wall clock per body. NOT\n                        \
                        deterministic, and it PERTURBS what it measures: it reads\n                        \
                        the clock on both sides of every activation, which can cost\n                        \

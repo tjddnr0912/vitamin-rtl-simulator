@@ -61,6 +61,11 @@ pub struct ProcProfile {
     pub ca_evals: Vec<u64>,
     /// Cumulative nanoseconds per continuous assign. EMPTY unless `timed`.
     pub ca_nanos: Vec<u64>,
+    /// R2 (round-36): the per-BUILTIN table, folded in at the end of the run
+    /// from the interior-mutable [`BuiltinProfile`] the four seams bumped.
+    /// EMPTY `rows` means "measured, no builtin ran" — the "not measured" case
+    /// is the enclosing `Option<ProcProfile>` being `None`.
+    pub builtins: BuiltinCounts,
 }
 
 impl ProcProfile {
@@ -80,6 +85,10 @@ impl ProcProfile {
                 vec![0; n_cas]
             } else {
                 Vec::new()
+            },
+            builtins: BuiltinCounts {
+                timed: cfg.timed,
+                rows: std::collections::BTreeMap::new(),
             },
         }
     }
@@ -117,5 +126,224 @@ impl ProcProfile {
         if let Some(t) = self.ca_nanos.get_mut(ci) {
             *t += nanos;
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// R2 (round-36) — the PER-BUILTIN profile, the second half of `--obs-procs`.
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// WHAT THE EXTERNAL REPORT ASKED FOR, and what this is not. Their `initial` at
+// `tb_aes_top:729` is ONE row worth 60% of the run, because it calls a whole
+// vector-driver stack and every nested cost is summed into the caller. They
+// asked, in priority order, for (1) a call tree down to task granularity and
+// (2), failing that, per-builtin cumulative time for `$fgets`/`$sscanf`/string
+// ops/queue ops. THIS IS (2). It is not a call tree and does not pretend to be:
+// it splits a process row into "time this body spent inside the simulator's own
+// builtins" versus the rest, which is the half a profile can attribute with a
+// stable identity today. Why (1) is a separate slice, and what it needs first,
+// is written up in the OBS SPEC (doc-19 §4.9) with the measurement that decided
+// it.
+//
+// THE IDENTITY is the builtin's NAME (`sim_ir::systask_name`/`sysfunc_name`),
+// not an index — a `$sscanf` row means the same thing in every design, every run
+// and every version, which is exactly what an index would not. A builtin has no
+// declaration site to report: it is not declared in the user's source, so the
+// `file:line:col` that identifies a PROCESS row has no counterpart here. (The
+// CALL SITE does have one, and per-site rows are the natural follow-on; the SPEC
+// says why they are not in this slice.)
+//
+// ATTRIBUTION — stated here because "do not double-count" is a hard requirement:
+//
+//  * `calls` is invocations. No nesting question exists for it.
+//  * `nanos` is **SELF (exclusive) time**: the wall clock of one invocation
+//    MINUS the wall clock of any builtin invoked inside it. `$display("%s",
+//    $sformatf(…))` is a real nesting — the argument evaluation runs the inner
+//    builtin inside the outer one's dispatch — so an inclusive convention would
+//    count that span twice and the column would not add up. With SELF time the
+//    rows are disjoint and `Σ nanos` is a true simulator-builtin subtotal.
+//  * That sum is nonetheless CONTAINED IN the process rows above: a builtin runs
+//    inside whichever body called it, so `processes.items[].time_s` already
+//    includes it. `run.json` says so in `builtins.attribution` and
+//    `builtins.included_in_processes` rather than leaving a reader to guess.
+//
+// DETERMINISM is the same split as the process profile: `calls` is a function of
+// the design and the run options alone and rides the determinism golden; `nanos`
+// is wall clock, exists only under `--obs-procs-time`, and never participates in
+// the row ORDER (rows sort by `calls`, then by NAME — a total order, so two runs
+// are byte-identical).
+//
+// ⚠️ OBSERVER EFFECT, worse here than for processes. Two `Instant::now()` per
+// invocation is ~40 ns on this Mac, and a `.len()` on a short string costs less
+// than that. Read `calls` first; `time_s` is for separating two rows whose call
+// counts are comparable.
+
+/// Cumulative accumulator for ONE builtin name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct BuiltinAcc {
+    /// Invocations. Deterministic.
+    pub calls: u64,
+    /// SELF (exclusive) nanoseconds — see the attribution note above. Always 0
+    /// unless the run asked for `--obs-procs-time`.
+    pub nanos: u64,
+}
+
+/// The finished per-builtin table handed back on [`ProcProfile`].
+///
+/// `BTreeMap` and not a `Vec`: the key is a `&'static str` from the two name
+/// tables, so iteration order is a total order over NAMES and cannot depend on
+/// insertion order — i.e. on the design's execution order, which is exactly what
+/// a `HashMap` would have leaked into a file this rail promises is byte-stable.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BuiltinCounts {
+    pub timed: bool,
+    pub rows: std::collections::BTreeMap<&'static str, BuiltinAcc>,
+}
+
+/// One open invocation. Returned by [`BuiltinProfile::enter`] and consumed by
+/// [`BuiltinProfile::leave`]; carrying the enclosing invocation's inner-time
+/// total in the VALUE rather than in a side stack is what makes the pair
+/// reentrant without allocating.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BuiltinFrame {
+    t0: Option<std::time::Instant>,
+    saved_nested: u64,
+}
+
+/// The live accumulators.
+///
+/// ⚠️ INTERIOR MUTABILITY IS THE WHOLE DESIGN. The four seams that see a builtin
+/// run are not all `&mut`: `builtins::dispatch_with` holds `&mut Scheduler`,
+/// `exec::apply_effect` holds `&mut impl Kernel` whose net reader it can only
+/// borrow immutably, `EvalCtx::eval_sysfunc_ctx` is `&self`, and the `&self`
+/// frame executor in `state/frame_eval.rs` is `&self` by name. A `&mut`
+/// accumulator would have needed a different plumbing story at each one; with
+/// `Cell`/`RefCell` all four reach the SAME object through a shared reference —
+/// the pattern `SimState::rng` (`RngCells`) and `dyn_heap` already use.
+#[derive(Debug, Default)]
+pub struct BuiltinProfile {
+    timed: bool,
+    acc: std::cell::RefCell<std::collections::BTreeMap<&'static str, BuiltinAcc>>,
+    /// Nanoseconds accumulated by builtins invoked INSIDE the innermost open
+    /// invocation. See [`Self::leave`].
+    nested: std::cell::Cell<u64>,
+}
+
+impl BuiltinProfile {
+    /// Allocate for one run. Constructed only when `--obs-procs` was given, so
+    /// `SimState::builtin_prof == None` is the whole cost on a run without it.
+    pub fn new(cfg: ProcProfileCfg) -> Self {
+        Self {
+            timed: cfg.timed,
+            acc: std::cell::RefCell::new(std::collections::BTreeMap::new()),
+            nested: std::cell::Cell::new(0),
+        }
+    }
+
+    /// Open one invocation. Reads the clock only when timing was asked for, so
+    /// an `--obs-procs` (counts-only) run pays one `bool` test here.
+    #[inline]
+    pub(crate) fn enter(&self) -> BuiltinFrame {
+        BuiltinFrame {
+            t0: self.timed.then(std::time::Instant::now),
+            // Park the enclosing invocation's inner-time accumulator and start
+            // this one's at zero, so `leave` can subtract exactly the time spent
+            // in builtins nested inside THIS call.
+            saved_nested: self.nested.replace(0),
+        }
+    }
+
+    /// Close one invocation and charge it.
+    ///
+    /// The three lines that make the column add up: `elapsed` is this
+    /// invocation's INCLUSIVE time, `inner` is what builtins nested inside it
+    /// reported while it was open, and `elapsed - inner` is its SELF time. The
+    /// enclosing invocation then resumes with `saved + elapsed` as its own inner
+    /// total — `elapsed`, not `elapsed - inner`, because the WHOLE of this call
+    /// (its own work and its callees') is nested inside that one.
+    ///
+    /// `saturating_sub`, not `-`: the clock is monotonic but the two reads are
+    /// taken at different nesting depths, and a reporting side table must not be
+    /// able to panic a simulation over a rounding artefact.
+    #[inline]
+    pub(crate) fn leave(&self, name: &'static str, f: BuiltinFrame) {
+        let elapsed = f.t0.map_or(0, |t0| t0.elapsed().as_nanos() as u64);
+        let inner = self.nested.replace(f.saved_nested.saturating_add(elapsed));
+        let mut acc = self.acc.borrow_mut();
+        let slot = acc.entry(name).or_default();
+        slot.calls += 1;
+        slot.nanos = slot.nanos.saturating_add(elapsed.saturating_sub(inner));
+    }
+
+    /// Freeze into the reportable table.
+    pub fn finish(&self) -> BuiltinCounts {
+        BuiltinCounts {
+            timed: self.timed,
+            rows: self.acc.borrow().clone(),
+        }
+    }
+}
+
+/// R2: the profile label of a severity task.
+///
+/// ⚠️ `$info`/`$warning`/`$error`/`$fatal` all lower to `SysTaskId::Display`
+/// plus a `severities` sidecar entry, so the ID alone cannot name them and TWO
+/// seams have to un-fold the same table (`builtins::dispatch`'s label helper and
+/// the `&self` frame executor's severity arm). One spelling, here, so the two
+/// cannot drift into calling the same construct different things.
+pub(crate) fn severity_builtin_name(sev: crate::SeverityKind) -> &'static str {
+    match sev {
+        crate::SeverityKind::Info => "$info",
+        crate::SeverityKind::Warning => "$warning",
+        crate::SeverityKind::Error => "$error",
+        crate::SeverityKind::Fatal => "$fatal",
+        // A `unique`/`priority` violation is a PARSER desugar onto the
+        // `$warning` shape, not a task the user wrote — name the construct.
+        crate::SeverityKind::UniqueViolation => "unique/priority check",
+    }
+}
+
+#[cfg(test)]
+mod builtin_tests {
+    use super::*;
+
+    /// SELF time is exclusive: an inner invocation's span is charged to the
+    /// inner row and SUBTRACTED from the outer one. Without this the two rows
+    /// would double-count the nested span, which is the failure the
+    /// `attribution` field exists to rule out.
+    ///
+    /// The assertion is on the ORDERING and the SUM, not on absolute
+    /// nanoseconds — wall clock is not reproducible, and a test that pinned it
+    /// would be measuring this Mac.
+    #[test]
+    fn nested_time_is_charged_once() {
+        let p = BuiltinProfile::new(ProcProfileCfg { timed: true });
+        let outer = p.enter();
+        std::thread::sleep(std::time::Duration::from_millis(4));
+        let inner = p.enter();
+        std::thread::sleep(std::time::Duration::from_millis(8));
+        p.leave("$inner", inner);
+        p.leave("$outer", outer);
+        let c = p.finish();
+        let o = c.rows["$outer"].nanos;
+        let i = c.rows["$inner"].nanos;
+        assert!(i > o, "inner slept twice as long: inner={i} outer={o}");
+        // The outer row must NOT contain the inner span. Total ≈ 12 ms, so an
+        // outer that still carried the inner 8 ms would be ≳ 11 ms.
+        assert!(o < 7_000_000, "outer kept the nested span: {o} ns");
+    }
+
+    /// Counts are the deterministic half and do not need timing on.
+    #[test]
+    fn counts_without_timing_are_free_of_the_clock() {
+        let p = BuiltinProfile::new(ProcProfileCfg { timed: false });
+        for _ in 0..3 {
+            let f = p.enter();
+            p.leave("$display", f);
+        }
+        let c = p.finish();
+        assert_eq!(c.rows["$display"].calls, 3);
+        assert_eq!(c.rows["$display"].nanos, 0, "untimed run must report 0");
+        assert!(!c.timed);
     }
 }

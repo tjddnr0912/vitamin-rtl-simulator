@@ -581,6 +581,48 @@
 > observability one. That axis is Phase D (machine-code codegen) + the arena
 > prerequisite, tracked in §5.1. What ⑭ delivers is the reporter's own stated
 > fallback: enough per-body attribution to cut the cost on their side.
+>
+> ⭐ **Round-36 R2 added the half INSIDE a process row — §4.9 `builtins`.** The
+> reporter came back with the granularity limit: their single largest row is one
+> `initial` at `tb_aes_top:729` worth **60% of the run**, because it calls a
+> vector-driver stack and every nested cost is summed into the caller — so the
+> profile says THAT the testbench is expensive and not WHICH LINE. They asked for
+> (1) a call tree to task granularity, or failing that (2) per-builtin cumulative
+> time. **(2) shipped**: `run.json` gains a `builtins` object beside `processes`
+> under the same two flags — one row per system task / system function / method
+> form (`$fgets`, `$sscanf`, `.push_back()`, `.size()`, `$sformatf`, …), keyed by
+> the NAME the author typed (a builtin has no declaration site, so there is no
+> `file:line:col` twin to report). ⭐ Two fields answer *"may I add these up?"* in
+> the file rather than in a doc: `attribution:"self"` (a row EXCLUDES builtins
+> nested inside it — `$display("%0d", q.size())` is a real nesting, measured:
+> `$fdisplay` 0.0424 s + `$sformatf` 0.0292 s under a 0.0767 s process row, where
+> an inclusive convention would have summed to 0.100 s > the parent) and
+> `included_in_processes:true` (that time is ALREADY inside the process row —
+> the useful arithmetic is subtraction, not addition). ⚠️ **Four seams, one
+> object**: `builtins::dispatch_with` (every system task, all four backends),
+> `exec::apply_effect` (statement-effect system functions), `EvalCtx::
+> eval_sysfunc_ctx` (the pure half — string/queue/array/math), and the `&self`
+> frame executor's own three arms, which do NOT go through `dispatch` — a hook
+> only in the shared funnel would have under-reported every print inside a subset
+> function body. Accumulators are interior-mutable (`RefCell`/`Cell`, the
+> `RngCells` pattern) precisely because three of the four seams hold only
+> `&self`. Cost when NOT asked for: **+0.6…0.9%** on a constructed worst case
+> (3M pure `$clog2`/`$countones` evaluations, two independent interleaved rounds)
+> against a builtin-free control that moved **−1.9%** — i.e. under this method's
+> own noise here. format_version stays **29** (no frozen type touched; the name
+> tables are free functions in `sim-ir`), examples 4/4 stdout byte-identical.
+>
+> ⚠️ **(1) is NOT shipped, and the reason is structural.** vita lowers a
+> subroutine call two ways: a frame body with a runtime call seam, and an INLINE
+> splice into the caller at elaborate time (`inline_task.rs`/`inline_fn.rs`;
+> round-35 R4 measured 14.39 s inline vs 0.35 s frame, so both are live). A
+> profile built on the call seams would report **0 calls** for every inlined
+> subroutine, and a task showing 0 reads as *"free"* — the one answer a profile
+> must never give about the thing the user is hunting. Prerequisite, recorded:
+> an elaborate-time record of which call sites were inlined and into which
+> caller, so a seam-less task can be reported as *inlined into its caller* rather
+> than as absent. The identity half already exists (`Sidecars::func_names` is
+> parallel to `SimIr.funcs`; only a declaration `file:line:col` twin is missing).
 
 
 > ### 🆕🆕 **워크로드 코퍼스가 연 줄** (§4.5.369 · **①은 §4.5.370 으로 RESOLVED** · 2026-08-23)

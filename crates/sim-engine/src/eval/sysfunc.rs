@@ -719,6 +719,34 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
         w: u32,
         eff_signed: bool,
     ) -> Value {
+        // R2 (round-36): THE pure-system-function seam. Every `Expr::SysFunc`
+        // reaches the evaluator through here (`eval_core`'s `SysFunc` arm is its
+        // only caller), so one wrapper covers `.len()`, `.substr()`, `.size()`,
+        // `.sum()`, `$clog2`, the real-math family and the rest of the pure half
+        // — the string and queue reads the report names, which never touch the
+        // statement-effect funnel below.
+        //
+        // ⚠️ The counter is INSIDE the profiled span on purpose: the argument
+        // expressions are evaluated by the arms, so a nested `$sformatf` in an
+        // argument is charged to its own row and subtracted from this one.
+        match self.nets.builtin_prof() {
+            None => self.eval_sysfunc_ctx_inner(which, args, w, eff_signed),
+            Some(p) => {
+                let frame = p.enter();
+                let v = self.eval_sysfunc_ctx_inner(which, args, w, eff_signed);
+                p.leave(sim_ir::sysfunc_name(which), frame);
+                v
+            }
+        }
+    }
+
+    fn eval_sysfunc_ctx_inner(
+        &self,
+        which: SysFuncId,
+        args: &[u32],
+        w: u32,
+        eff_signed: bool,
+    ) -> Value {
         match which {
             SysFuncId::Signed => {
                 // operand at its OWN self width. `$signed` re-stamps it signed, but

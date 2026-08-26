@@ -360,6 +360,54 @@ impl ObsRun<'_> {
                 s.push_str("\n  ]}");
             }
         }
+        // R2 (round-36): the PER-BUILTIN table. A sibling of `processes` and not
+        // a member of it, because it is a different DOMAIN — a `processes` row is
+        // a body the user wrote and can edit, a `builtins` row is a simulator
+        // primitive that body called. Same opt-in (`--obs-procs`), same
+        // `null` = "not measured" convention.
+        s.push_str(",\n  \"builtins\": ");
+        match &self.procs {
+            None => s.push_str("null"),
+            Some(pp) => {
+                let b = &pp.profile.builtins;
+                let mut rows: Vec<(&&str, &sim_engine::BuiltinAcc)> = b.rows.iter().collect();
+                // Descending by CALLS — deterministic — then ascending by name,
+                // which is a TOTAL order over `&'static str` keys, so two runs of
+                // the same design produce byte-identical rows even with timing on.
+                rows.sort_by(|a, b| b.1.calls.cmp(&a.1.calls).then_with(|| a.0.cmp(b.0)));
+                s.push_str("{\"timed\": ");
+                s.push_str(if b.timed { "true" } else { "false" });
+                // The two fields that answer "may I add these up?", stated rather
+                // than left to a reader (doc-19 §4.9). `attribution:"self"` =
+                // each row EXCLUDES builtins nested inside it, so the rows are
+                // disjoint; `included_in_processes:true` = that time is ALSO
+                // inside the `processes` row of whichever body called it, so the
+                // two arrays must never be summed together.
+                s.push_str(", \"attribution\": \"self\", \"included_in_processes\": true");
+                s.push_str(", \"distinct\": ");
+                s.push_str(&rows.len().to_string());
+                s.push_str(", \"total_calls\": ");
+                let total: u64 = rows.iter().map(|r| r.1.calls).sum();
+                s.push_str(&total.to_string());
+                s.push_str(",\n  \"items\": [");
+                for (i, (name, acc)) in rows.iter().enumerate() {
+                    s.push_str(if i > 0 { ",\n    {" } else { "\n    {" });
+                    s.push_str("\"name\": ");
+                    json_str(&mut s, name);
+                    s.push_str(", \"calls\": ");
+                    s.push_str(&acc.calls.to_string());
+                    // Emitted only when measured — the same reason the process
+                    // rows omit it: a `0.0` reads as "this costs nothing", which
+                    // is a different claim from "nobody asked".
+                    if b.timed {
+                        s.push_str(", \"time_s\": ");
+                        s.push_str(&fmt_wall(acc.nanos as f64 / 1e9));
+                    }
+                    s.push('}');
+                }
+                s.push_str("\n  ]}");
+            }
+        }
         // ── isolated wall-clock (excluded from the determinism golden) ──
         s.push_str(",\n  \"utc_unix_s\": ");
         s.push_str(&self.utc_unix_s.to_string());

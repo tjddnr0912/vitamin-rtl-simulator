@@ -1519,7 +1519,18 @@ impl<'a> SimState<'a> {
                         args,
                     } if self.severities.contains_key(&sid) => {
                         if let Some(&sev) = self.severities.get(&sid) {
+                            // R2 (round-36): this executor does NOT go through
+                            // `builtins::dispatch`, so its three system-task arms
+                            // are profiled where they live. Without these two
+                            // sites a testbench whose `$error`s and `$display`s
+                            // sit inside subset FUNCTION bodies would report an
+                            // empty builtin table — the "profile silently omits
+                            // the thing you are hunting" failure.
+                            let f = self.builtin_prof.as_ref().map(|p| p.enter());
                             self.frame_emit_severity(sev, *fmt, args, sid);
+                            if let (Some(p), Some(f)) = (self.builtin_prof.as_ref(), f) {
+                                p.leave(crate::profile::severity_builtin_name(sev), f);
+                            }
                         }
                     }
                     // Family D (r17): a genuine `$display`/`$write` in this subset function
@@ -1535,6 +1546,9 @@ impl<'a> SimState<'a> {
                             sim_ir::SysTaskId::Display | sim_ir::SysTaskId::Write
                         ) =>
                     {
+                        // R2: profiled for the reason the severity arm above
+                        // gives — this executor bypasses `builtins::dispatch`.
+                        let f = self.builtin_prof.as_ref().map(|p| p.enter());
                         let radix = self.radixes.get(&sid).copied();
                         let mut s = match nets {
                             Some(n) => {
@@ -1549,6 +1563,9 @@ impl<'a> SimState<'a> {
                             text: s,
                             sim_time: None,
                         }));
+                        if let (Some(p), Some(f)) = (self.builtin_prof.as_ref(), f) {
+                            p.leave(sim_ir::systask_name(*which), f);
+                        }
                     }
                     // Other SysTask / NBA / delay / event in a func body are rejected at
                     // ELABORATE (B1 cut) → never reach here.

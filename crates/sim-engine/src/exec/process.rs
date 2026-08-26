@@ -757,6 +757,43 @@ pub(crate) fn compute_effect<'s, K: Kernel>(k: &K, stmt: &'s Stmt, sid: u32) -> 
     }
 }
 
+/// R2 (round-36): run one statement-effect BUILTIN worker as a profiled
+/// invocation.
+///
+/// ⚠️ Two-step rather than a closure over a borrowed profile, and that is forced
+/// rather than stylistic: the accumulators are reached through
+/// `k.k_nets().builtin_prof()`, an immutable borrow of `k`, while every worker
+/// below needs `&mut k`. So the handle is consumed to open the frame, dropped,
+/// and re-acquired to close it — the same object either way, since both
+/// `Scheduler` and `NativeKernel` forward `k_nets` to the one `SimState`.
+///
+/// R2: the profile label of the system function at `rhs`, read from the IR.
+///
+/// The fallback is the honest one rather than a guess: every caller has already
+/// been routed here by a `kpred` probe that matched an `Expr::SysFunc`, so a
+/// non-`SysFunc` node means a hand-built IR, and an `"(unnamed builtin)"` row is
+/// a visible "here is cost I cannot name" — the same convention the process
+/// profile's missing-ident fallback uses.
+fn rhs_builtin_name<K: Kernel + ?Sized>(k: &K, rhs: u32) -> &'static str {
+    match k.k_ir().exprs.get(rhs as usize) {
+        Some(sim_ir::Expr::SysFunc { which, .. }) => sim_ir::sysfunc_name(*which),
+        _ => "(unnamed builtin)",
+    }
+}
+
+/// A run without `--obs-procs` pays one `Option` test per statement effect.
+#[inline]
+fn builtin<K: Kernel + ?Sized, R>(k: &mut K, name: &'static str, f: impl FnOnce(&mut K) -> R) -> R {
+    let Some(frame) = k.k_builtin_prof().map(|p| p.enter()) else {
+        return f(k);
+    };
+    let r = f(k);
+    if let Some(p) = k.k_builtin_prof() {
+        p.leave(name, frame);
+    }
+    r
+}
+
 /// WRITE phase: apply a [`StmtEffect`] through the mutating half of the [`Kernel`]
 /// seam. Returns `Some(Step)` only when a `$finish`/`$stop`/fatal system task ends the
 /// activation. Generic over `K: Kernel` (same executor for interpreter + compiled VM).
@@ -770,68 +807,102 @@ pub(crate) fn apply_effect<K: Kernel>(k: &mut K, effect: StmtEffect<'_>) -> Opti
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
+        // ── R2: the statement-effect BUILTIN family ───────────────────────
+        //
+        // Every arm below runs one system function as a statement-level effect,
+        // and every one of them names it the SAME way: from the `Expr::SysFunc`
+        // at `rhs`, through `rhs_builtin_name`. Deriving the label from the IR
+        // rather than writing it per arm is what keeps `$fscanf` and `$sscanf`
+        // (one arm, two builtins) and `.pop_back()`/`.pop_front()` (one arm,
+        // two methods) from having to be told apart twice.
         StmtEffect::QPop { lhs, rhs, offsets } => {
-            let value = k.k_queue_pop(lhs, rhs); // pop + context-size (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // pop + context-size (WRITE phase)
+            let value = builtin(k, name, |k| k.k_queue_pop(lhs, rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::AssocIter { lhs, rhs, offsets } => {
-            let value = k.k_assoc_iter(lhs, rhs); // key write + status (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // key write + status (WRITE phase)
+            let value = builtin(k, name, |k| k.k_assoc_iter(lhs, rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::SeededRandom { lhs, rhs, offsets } => {
-            let value = k.k_random_seeded(rhs); // seed write + draw (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // seed write + draw (WRITE phase)
+            let value = builtin(k, name, |k| k.k_random_seeded(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::SeededDist { lhs, rhs, offsets } => {
-            let value = k.k_dist_seeded(rhs); // seed write + dist draw (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // seed write + dist draw (WRITE phase)
+            let value = builtin(k, name, |k| k.k_dist_seeded(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::Cast { lhs, rhs, offsets } => {
-            let value = k.k_cast(rhs); // dst ref write + status (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // dst ref write + status (WRITE phase)
+            let value = builtin(k, name, |k| k.k_cast(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::ValuePlusargs { lhs, rhs, offsets } => {
-            let value = k.k_value_plusargs(rhs); // var write + status (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // var write + status (WRITE phase)
+            let value = builtin(k, name, |k| k.k_value_plusargs(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::Fopen { lhs, rhs, offsets } => {
-            let value = k.k_fopen(rhs); // file-table mutation (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // file-table mutation (WRITE phase)
+            let value = builtin(k, name, |k| k.k_fopen(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::Sformatf { lhs, rhs, offsets } => {
-            let value = k.k_sformatf(rhs); // kernel-side render (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // kernel-side render (WRITE phase)
+            let value = builtin(k, name, |k| k.k_sformatf(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::Fgetc { lhs, rhs, offsets } => {
-            let value = k.k_fgetc(rhs); // byte read + fd advance (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // byte read + fd advance (WRITE phase)
+            let value = builtin(k, name, |k| k.k_fgetc(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::Feof { lhs, rhs, offsets } => {
-            let value = k.k_feof(rhs); // lazy-EOF flag read (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // lazy-EOF flag read (WRITE phase)
+            let value = builtin(k, name, |k| k.k_feof(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::Ungetc { lhs, rhs, offsets } => {
-            let value = k.k_ungetc(rhs); // pushback mutation (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // pushback mutation (WRITE phase)
+            let value = builtin(k, name, |k| k.k_ungetc(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::Fgets { lhs, rhs, offsets } => {
-            let value = k.k_fgets(rhs); // line read + str dest write (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // line read + str dest write (WRITE phase)
+            let value = builtin(k, name, |k| k.k_fgets(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
         StmtEffect::Fread { lhs, rhs, offsets } => {
-            let value = k.k_fread(rhs); // binary read + target write (WRITE phase)
+            let name = rhs_builtin_name(k, rhs);
+            // binary read + target write (WRITE phase)
+            let value = builtin(k, name, |k| k.k_fread(rhs));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
@@ -843,11 +914,14 @@ pub(crate) fn apply_effect<K: Kernel>(k: &mut K, effect: StmtEffect<'_>) -> Opti
         } => {
             // the parser writes every matched ref arg internally (WRITE phase);
             // the conversion count is written to lhs.
-            let value = if is_file {
-                k.k_fscanf(rhs)
-            } else {
-                k.k_sscanf(rhs)
-            };
+            let name = rhs_builtin_name(k, rhs);
+            let value = builtin(k, name, |k| {
+                if is_file {
+                    k.k_fscanf(rhs)
+                } else {
+                    k.k_sscanf(rhs)
+                }
+            });
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }
@@ -899,7 +973,10 @@ pub(crate) fn apply_effect<K: Kernel>(k: &mut K, effect: StmtEffect<'_>) -> Opti
             class_id,
             offsets,
         } => {
-            let value = k.k_class_alloc(class_id); // allocate heap object (WRITE phase)
+            // The one builtin here whose name does NOT come from an
+            // `Expr::SysFunc`: a class `new()` is lowered as its own effect, so
+            // the label is a literal. It is still the spelling the user typed.
+            let value = builtin(k, ".new()", |k| k.k_class_alloc(class_id));
             k.k_write_lvalue(lhs, value, &offsets);
             None
         }

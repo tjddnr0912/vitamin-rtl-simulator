@@ -138,6 +138,7 @@ impl<'a> SimState<'a> {
             queue_bounds: crate::QueueBoundTable::new(),
             proc_scopes: Vec::new(),
             proc_prof: None,
+            builtin_prof: None,
             cur_scope: "top".to_string(),
             frame_scope: std::cell::RefCell::new(Vec::new()),
             func_names: Vec::new(),

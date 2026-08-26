@@ -15,7 +15,7 @@
 
 | REQ | 내용 | 원문 | 분류 |
 |---|---|---|---|
-| R-L0 | run manifest(run.json — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·**backend**·**backend_requested**·**codegen{able,total,frame_bodies,reject_reasons{…}}**·**native{eligible,reject_reasons{…}}**·**processes**(R14 · § 4.6 — `--obs-procs` 없이는 `null`)·utc_unix_s·wall_s. `backend`/`codegen`/`native`=T0/S0 계기(doc-21 §7.3, 2026-08-03 additive — 기존 kind 위 필드 추가라 schema_ver 1 유지): `backend`=**실제 실행기** + `backend_requested`=**요청된 것**(둘 다 `--backend` 어휘 · `backend` 는 결과에서 읽는다). ⚠️ **Corrected 2026-08-25 — this entry described the pre-Phase-B world and was actively misleading.** It said *"`--backend native` still falls back to the VM, so writing the request verbatim would report an executor that did not run"* and *"`native` currently appears only in `backend_requested`"*. Neither is true: **`native` is the DEFAULT executor, it runs 100.00% of the corpus, and `backend` reports `"native"` on an ordinary run** (verified: a plain `vita --obs-dir …` writes `backend: native`, `backend_requested: native`, `native.refused: null`). An agent reading this field must NOT infer that vita interprets. The two fields still exist for the same reason and **their comparison is still the only fallback signal**: `native.refused` 는 설계의 성질이라 아무것도 거부하지 않을 때 `null` 이고, 그때가 바로 폴백이 일어나는 경우다 · `codegen` 이 정적 census 라 이 필드 없이는 interp 강제 런의 `able` 이 "VM 이 돌렸다"로 오독됨), `codegen`=②층 VM 이 이 설계에서 무엇을 거부했는가(엔진 compile gate 와 같은 walk = 단일 소스 · `sformatf` 키는 desugar 된 string concat 도 포함 — "소스가 $sformatf 를 썼다"가 아니라 "IR 이 $sformatf 노드에 닿는다"), `native`=③층 판정 **두 층**: `eligible`=v1 **범위**가 받는가(설계 수준 상한) · `buildable`=오늘의 **저장소**가 실제로 담을 수 있는가(`NetArena::buildable`) · `refused`=런타임 게이트(둘의 AND)가 거부한 이유 또는 `null` — **어휘가 둘**이다: 설계 게이트가 거부하면 `reject_reasons` 의 **키**(여럿이면 그 맵의 사전순 첫 항 = 결정적이지만 "하나의" 이유), 저장소가 거부하면 **맵에 없는 자체 문구**(소비자는 조인 실패를 오류가 아니라 저장소 경우로 읽어야 한다). 둘을 한 플래그로 접으면 **상한이 능력으로 읽힌다**(서브루틴 설계는 eligible 이지만 buildable 아님). (설계, 런 옵션) 별 정적 — `--probe`/stage 계측 런은 설계상 부적격(doc-21 §4.3). 리뷰어 원문의 `run_id`는 **미구현-연기**, wall-clock 키는 `utc`가 아니라 `utc_unix_s`/`wall_s`) | §2 L0 | 로그 rail |
+| R-L0 | run manifest(run.json — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·**backend**·**backend_requested**·**codegen{able,total,frame_bodies,reject_reasons{…}}**·**native{eligible,reject_reasons{…}}**·**processes**(R14 · § 4.6 — `--obs-procs` 없이는 `null`)·**builtins**(R2 · §4.9 — 같은 플래그 · 없으면 `null`)·utc_unix_s·wall_s. `backend`/`codegen`/`native`=T0/S0 계기(doc-21 §7.3, 2026-08-03 additive — 기존 kind 위 필드 추가라 schema_ver 1 유지): `backend`=**실제 실행기** + `backend_requested`=**요청된 것**(둘 다 `--backend` 어휘 · `backend` 는 결과에서 읽는다). ⚠️ **Corrected 2026-08-25 — this entry described the pre-Phase-B world and was actively misleading.** It said *"`--backend native` still falls back to the VM, so writing the request verbatim would report an executor that did not run"* and *"`native` currently appears only in `backend_requested`"*. Neither is true: **`native` is the DEFAULT executor, it runs 100.00% of the corpus, and `backend` reports `"native"` on an ordinary run** (verified: a plain `vita --obs-dir …` writes `backend: native`, `backend_requested: native`, `native.refused: null`). An agent reading this field must NOT infer that vita interprets. The two fields still exist for the same reason and **their comparison is still the only fallback signal**: `native.refused` 는 설계의 성질이라 아무것도 거부하지 않을 때 `null` 이고, 그때가 바로 폴백이 일어나는 경우다 · `codegen` 이 정적 census 라 이 필드 없이는 interp 강제 런의 `able` 이 "VM 이 돌렸다"로 오독됨), `codegen`=②층 VM 이 이 설계에서 무엇을 거부했는가(엔진 compile gate 와 같은 walk = 단일 소스 · `sformatf` 키는 desugar 된 string concat 도 포함 — "소스가 $sformatf 를 썼다"가 아니라 "IR 이 $sformatf 노드에 닿는다"), `native`=③층 판정 **두 층**: `eligible`=v1 **범위**가 받는가(설계 수준 상한) · `buildable`=오늘의 **저장소**가 실제로 담을 수 있는가(`NetArena::buildable`) · `refused`=런타임 게이트(둘의 AND)가 거부한 이유 또는 `null` — **어휘가 둘**이다: 설계 게이트가 거부하면 `reject_reasons` 의 **키**(여럿이면 그 맵의 사전순 첫 항 = 결정적이지만 "하나의" 이유), 저장소가 거부하면 **맵에 없는 자체 문구**(소비자는 조인 실패를 오류가 아니라 저장소 경우로 읽어야 한다). 둘을 한 플래그로 접으면 **상한이 능력으로 읽힌다**(서브루틴 설계는 eligible 이지만 buildable 아님). (설계, 런 옵션) 별 정적 — `--probe`/stage 계측 런은 설계상 부적격(doc-21 §4.3). 리뷰어 원문의 `run_id`는 **미구현-연기**, wall-clock 키는 `utc`가 아니라 `utc_unix_s`/`wall_s`) | §2 L0 | 로그 rail |
 | R-L1 | test-case ledger(results.jsonl, PASS=1줄 terse·FAIL=detail_ref) | §2 L1 | 로그 rail |
 | R-L2 | failure detail(fail/*.json, 발산점 값 우선) | §2 L2 | 로그 rail |
 | R-L3 | FSM/state trace(**transition만**, hang용 stuck_in) | §2 L3 | 로그 rail |
@@ -74,7 +74,7 @@
 | 단계 | 산출물 | 구현 스케치 | 검증(teeth) | 공수 |
 |---|---|---|---|---|
 | **OBS-0 ✅** | 본 스펙(계약·스키마·우선순위) | — | — | — |
-| **OBS-1 (MVP)** | `--obs-dir D` → `run.json`(R-L0 — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·backend·backend_requested·codegen{…}·native{eligible,buildable,refused,…}·processes(§4.6 · `--obs-procs` 없이는 null)·utc_unix_s·wall_s; `run_id`는 미구현-연기) + `results.jsonl`(R-L1: v1=run당 1줄, status=PASS/FAIL(exit·`$fatal`·assertion fail)·finish time) + `coverage.json`(R-L5: **functional covergroup 커버리지만** 직렬화 — `groups[]{instance, coverage_pct, coverpoints[]{name,is_cross,num_bins,covered_bins,coverage_pct}}`; assertion pass/fail·cover property 카운트는 **미포함** — OBS-2 `sva.jsonl` 슬라이스로 라우팅) | CLI 플래그+직렬화기(vita-log 인접 신규 모듈). 엔진의 기존 카운터를 종료 시 flush | 골든 byte-diff(같은 입력 2-run 동일)·수치는 기존 `$display`/exit와 3-way 대조 | S-M |
+| **OBS-1 (MVP)** | `--obs-dir D` → `run.json`(R-L0 — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·backend·backend_requested·codegen{…}·native{eligible,buildable,refused,…}·processes(§4.6 · `--obs-procs` 없이는 null)·builtins(§4.9 · 같은 플래그)·utc_unix_s·wall_s; `run_id`는 미구현-연기) + `results.jsonl`(R-L1: v1=run당 1줄, status=PASS/FAIL(exit·`$fatal`·assertion fail)·finish time) + `coverage.json`(R-L5: **functional covergroup 커버리지만** 직렬화 — `groups[]{instance, coverage_pct, coverpoints[]{name,is_cross,num_bins,covered_bins,coverage_pct}}`; assertion pass/fail·cover property 카운트는 **미포함** — OBS-2 `sva.jsonl` 슬라이스로 라우팅) | CLI 플래그+직렬화기(vita-log 인접 신규 모듈). 엔진의 기존 카운터를 종료 시 flush | 골든 byte-diff(같은 입력 2-run 동일)·수치는 기존 `$display`/exit와 3-way 대조 | S-M |
 | **OBS-2** | `--probe <path>`(반복)/`--probe-file F` → `trace.jsonl`(R-L3/R-I1: **변경 시만** `{v,t,kind:"chg",path,old,new}`) + `sva.jsonl`(R-L6: property명·시각·verdict·leaf 신호값=support-cone v0) | VCD 변경 스트림의 2번째 소비자로 probe sink 연결·경로 해소는 elaborate 심볼 테이블(미해석=loud E-code) | 3-way 차분(trace.jsonl ≡ VCD 동일 net 타임라인 ≡ `$monitor`)·probe 오타=loud 테스트 | M |
 | **OBS-3** | `$vita_stage("label", v0, v1, …)` → `stage.jsonl`(R-S3: `{v,t,kind:"stage",label,idx,vals[]}`) — 사용자 TB가 emulator와 동일 스키마로 정렬 diff 가능 | 벤더 시스템 태스크(no-op Display+StmtId 사이드테이블 선례=§4.5.x `$timeformat` 패턴, IR-0·bump 회피)·`+STAGE_TRACE` plusarg 게이트 | 라벨 순서·값을 `$display` 병행 emit과 바이트 대조·iverilog 호환은 `` `ifdef VITA `` 가드 문서화 | M |
 | **OBS-4** | `vrun --control stdio` JSON-RPC(R-C1): `peek(path)`·`poke(path,val)`·`step(n)`·`run_until(time)`·`finish` + 에러 계약(unknown path/bad val=구조화 에러) | time-step 경계에 REPL(단일 스레드 유지)·poke=스케줄 주입 이벤트·**전 명령을 run.json에 저널**(→동일 세션 재생=replay v0) | 제어 세션 기록→비대화식 재실행이 byte-identical·poke≡`force/release`-등가 케이스 내부 차분 | L |
@@ -186,6 +186,154 @@ which inlines, so the split doubled the loop body — moved nothing either. Only
 compiling the counters out located the cost, which is where the +0.11% number
 above comes from. The shipped shape (one call site, charge after) is kept for
 being smaller, not for being faster.
+
+### 4.9 `builtins` — the per-builtin execution profile (R2, round-36)
+
+**Shipped 2026-08-27.** Same flags and same requirements as §4.6: `--obs-procs`
+(counts) / `--obs-procs-time` (counts + wall clock), `--obs-dir` mandatory,
+one-shot `vita` only.
+
+**Why it exists — and what it is NOT.** §4.6 gives one row per body the user
+wrote. The external report that asked for this ran into that granularity's
+limit: their single largest row is
+
+```json
+{"domain":"process","kind":"initial","scope":"tb_aes_top","line":729,"evals":1434,"time_s":43.66}
+```
+
+= 60% of the whole run, one `initial` that calls a vector-driver stack
+(`run_all` → `run_vec_file` → per-record drive/check tasks, with `$fgets` /
+`$sscanf` / string work and queue operations inside). Every nested cost is summed
+into the calling process, so the profile says THAT the testbench is expensive and
+not WHICH LINE to fix. They asked, in priority order, for **(1)** a call tree
+decomposed to task granularity and **(2)**, failing that, per-builtin cumulative
+time. **This section is (2).** For why (1) is a separate slice and what it needs
+first, see *"The call tree, and its prerequisite"* below.
+
+**Shape.** A SIBLING of `processes`, not a member of it — a `processes` row is a
+body the author can edit, a `builtins` row is a simulator primitive that body
+called; two domains, two objects. `null` without the flag, on the same
+"not measured" ≠ "measured, nothing ran" convention.
+
+```json
+"builtins": {"timed": true, "attribution": "self", "included_in_processes": true,
+  "distinct": 8, "total_calls": 3006,
+  "items": [
+    {"name": "$fgets", "calls": 1001, "time_s": 0.004241},
+    {"name": "$sscanf", "calls": 1000, "time_s": 0.000642},
+    {"name": ".push_back()", "calls": 1000, "time_s": 0.000100},
+    {"name": ".size()", "calls": 1, "time_s": 0.000012}
+  ]}
+```
+
+| field | meaning |
+|---|---|
+| `timed` | whether `--obs-procs-time` was given. When false the rows carry no `time_s` at all, for §4.6's reason. |
+| `attribution` | always `"self"` in schema_ver 1 — see the arithmetic contract below. A field rather than a documented assumption, so a consumer can refuse a value it does not understand. |
+| `included_in_processes` | always `true` — this time is ALSO inside the `processes` row of whichever body called it. It is stated in the file because the one mistake a reader can make here is adding the two arrays together. |
+| `distinct` | number of rows = builtins this run touched at least once. |
+| `total_calls` | Σ `calls`. |
+| `name` | the IDENTITY, and it is the builtin's name because a builtin has no declaration site: it is not declared in the user's source, so the `file:line:col` that identifies a `processes` row has no counterpart. `$…` = the IEEE system task/function spelling the user typed; `.name()` = a METHOD-form builtin (`q.push_back(v)`, `s.len()`, `a.sum()`) — printing `$qpushback` for one of those would send the reader looking for a system task that does not exist. |
+| `calls` | invocations. DETERMINISTIC — a function of (design, run options) alone. |
+| `time_s` | present only under `--obs-procs-time`: cumulative SELF seconds, 6 decimals. |
+
+**The arithmetic contract (`attribution: "self"`).** `time_s` is the wall clock
+of one invocation MINUS the wall clock of any builtin invoked inside it. That
+nesting is real, not hypothetical: `$display("%0d", q.size())` evaluates
+`.size()` during `$display`'s argument rendering, i.e. inside the outer builtin's
+own dispatch. Under an inclusive convention that span would appear in both rows
+and the column would not add up. With self time the rows are **disjoint**, so
+`Σ time_s` is a true "simulator-builtin subtotal" and each row's share of it is
+meaningful. What you may NOT do is add `builtins` to `processes`:
+`included_in_processes: true` says the builtin seconds are already inside the
+process seconds. The useful subtraction is the other direction — *this `initial`
+costs 43.7 s, of which 18.2 s is `$fgets` + `$sscanf`, so 25.5 s is my RTL.*
+
+**Row order** is `calls` descending, then `name` ascending. The tiebreak is a
+total order over `&'static str` keys, so the object is byte-identical across two
+runs of one design — including a timed run, since `time_s` never participates in
+the order. Same reasoning as §4.6.
+
+**Backend-invariance.** Four seams see a builtin run, and all four charge ONE
+object (`SimState::builtin_prof`, interior-mutable so a `&self` seam can reach
+it):
+
+| seam | covers | reached by |
+|---|---|---|
+| `builtins::dispatch_with` | every system TASK | interpreter, VM, JIT, tier-3 — all four converge here |
+| `exec::apply_effect` | the statement-effect system FUNCTIONS (`$fgets`, `$fscanf`/`$sscanf`, `$fread`, `$fgetc`, `$feof`, `$ungetc`, `$fopen`, `$sformatf`, `$value$plusargs`, seeded `$random`/`$dist_*`, `$cast`, queue pop, assoc iteration, class `new()`) | interpreter + tier-3 |
+| `EvalCtx::eval_sysfunc_ctx` | the PURE system functions in expression position — `.len()`, `.substr()`, `.size()`, `.sum()`, `$clog2`, `$countones`, the real-math family | every executor (the shared evaluator) |
+| `state/frame_eval.rs`'s system-task arms | `$display`/`$write`/`$info`/`$warning`/`$error`/`$fatal` inside a subroutine body run by the synchronous `&self` frame executor | that executor only — it does NOT go through `builtins::dispatch` |
+
+The fourth row is the one worth knowing about: a hook only in the shared dispatch
+would silently under-report every print inside a subset function body. A pinned
+test asserts a `$display` inside a `function automatic` counts, and another
+asserts the whole table is identical under `--backend native|vm|interp`.
+
+**⚠️ Six constructs share `SysTaskId::Display`** and are separated only by a
+StmtId-keyed sidecar: `$info`/`$warning`/`$error`/`$fatal`, `$timeformat`,
+`$vita_stage`, `$assertoff`-family, a whole-handle copy, and a queue slice. The
+label un-folds all of them, so an `$error`-heavy testbench's cost appears on an
+`$error` row rather than being hidden inside `$display`. `$cast` is the one
+deliberate merge: the task form and the function form are one construct to the
+author, so both render `"$cast"`.
+
+**⚠️ A row counts IR NODES, not source text** — the same caveat `codegen`'s
+`sformatf` key carries (§1 R-L0). elaborate desugars some constructs onto a
+builtin the author never typed: a string concatenation becomes a `$sformatf`
+node, a `foreach` over a queue becomes assoc-iteration steps, a `unique case`
+violation becomes the `$warning` shape. A row whose count exceeds the number of
+call sites you can find in the source is that, not a bug — and it is still the
+honest answer to *"what is this run spending itself on"*, which is the question
+the object exists for.
+
+**⚠️ Observer effect, worse than §4.6's.** Two `Instant::now()` per invocation
+(~40 ns here) against a `.len()` on a short string is not noise — it is most of
+the measurement. Read `calls` first; `time_s` is for separating rows with
+comparable call counts, and the expensive builtins (file I/O, formatting,
+`$readmem*`, sorting) are exactly the ones where the overhead is negligible.
+
+**Cost when NOT asked for.** Measured PRE (`git archive HEAD`) vs POST, both
+`--release`, interleaved A/B, first round discarded, macOS arm64, 6 samples each:
+
+| workload | PRE mean | POST mean | delta | min/min |
+|---|---|---|---|---|
+| 3M `$clog2`+`$countones`+`$onehot` in a loop (worst case) | 1.2418 s | 1.2525 s | **+0.86%** | +0.47% |
+| same, repeated | 1.2429 s | 1.2500 s | **+0.57%** | +0.39% |
+| 200 × (20 × 200-iteration task calls) + `$sformatf` | 0.3413 s | 0.3419 s | **+0.15%** | +0.31% |
+| clocked RTL, no builtin in the loop (control) | 1.6172 s | 1.5872 s | **−1.86%** | −1.94% |
+
+The control moving −1.9% is the honest bound on this method's noise here: it
+touches none of the four seams, so its delta is pure code-layout luck. The worst
+case — a design that does nothing but evaluate pure system functions, where the
+added work is exactly one `Option` test per evaluation — is +0.6…0.9% across two
+independent rounds, i.e. under the noise band the control establishes. Nothing
+was measurably slowed.
+
+**The call tree, and its prerequisite.** The reporter's item (1) is not shipped,
+and the reason is structural rather than budgetary. vita lowers a subroutine call
+TWO ways: a frame body entered through `Terminator::Call` / `Expr::Call`, and an
+INLINE splice where the callee's statements are copied into the caller's block at
+elaborate time (`elaborate/src/inline_task.rs`, `inline_fn.rs`; round-35 R4
+measured the two at 14.39 s vs 0.35 s on one design, so both are live). A
+profile built on the runtime call seams would report **zero** for every inlined
+subroutine — and a task showing 0 calls reads as "this is free", which is the one
+answer a profile must never give about the thing the user is hunting. Closing
+item (1) therefore needs, first, an elaborate-time record of which call sites
+were inlined and into which caller, so a task with no runtime seam can be
+reported as *inlined into its caller* rather than as absent. That record does not
+exist today. Recorded as the prerequisite; the identity half is already there
+(`Sidecars::func_names` is parallel to `SimIr.funcs`, and only a declaration
+`file:line:col` twin is missing).
+
+**Not shipped, deliberately: per-CALL-SITE rows.** `{"name":"$sscanf","file":…,
+"line":312}` would be strictly more actionable than a per-name total, and the
+system-task half could have it today (`sid` + the `stmt_locs` sidecar). The
+sysfunc half could not: `apply_effect` receives an effect that carries no StmtId,
+and the pure evaluator has no statement context at all. Half the table locating
+and half not is worse than neither, so the slice ships name-level aggregation —
+which is what the reporter asked for in item (2) — and leaves the site axis whole
+for a follow-on.
 
 ## 5. 트래킹
 

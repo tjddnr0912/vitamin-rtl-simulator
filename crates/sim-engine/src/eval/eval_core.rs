@@ -419,6 +419,19 @@ pub trait NetReader {
     fn fd_eof(&self, _fd: u32) -> Value {
         Value::xs(32, true)
     }
+    /// R2 (round-36): the run's per-builtin accumulators, so a PURE system
+    /// function evaluated in expression position can charge itself.
+    ///
+    /// It rides `NetReader` for the same reason `fd_eof` does, and that
+    /// precedent is the argument: the alternative was a new field on `EvalCtx`,
+    /// which is constructed at twenty sites — nine of them tests — and is the
+    /// hottest struct in the simulator. Every reader that can reach `SimState`
+    /// (`SimState` itself, `NativeKernel`, the `HeapRouted` composite) overrides;
+    /// the arena and the native-eval test fakes keep the default `None` and are
+    /// unchanged by construction.
+    fn builtin_prof(&self) -> Option<&crate::profile::BuiltinProfile> {
+        None
+    }
 }
 
 impl<N: NetReader + ?Sized> EvalCtx<'_, N> {

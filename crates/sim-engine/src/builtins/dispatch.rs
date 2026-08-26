@@ -126,6 +126,81 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
     args: &[u32],
     sid: u32,
 ) -> Ctl {
+    // R2 (round-36): THE system-task seam. Every backend converges here — the
+    // interpreter through `k_dispatch_systask`, the VM through `backend.rs`, the
+    // JIT through `jit.rs`, tier-3 through `NativeKernel::k_dispatch_systask` —
+    // so one wrapper profiles all four. The only system-task execution that does
+    // NOT pass through is the `&self` frame executor's own three arms, which are
+    // profiled where they live (`state/frame_eval.rs`).
+    let Some(prof) = sched.st.builtin_prof.take() else {
+        return dispatch_body(sched, nets, out, which, fmt, args, sid);
+    };
+    // TAKEN, not borrowed: the body needs `&mut Scheduler` and `builtin_prof`
+    // hangs off it, so a live `&` would deny the `&mut`. The take is undone two
+    // lines down, before anything runs.
+    let name = builtin_label(sched, which, sid);
+    let frame = prof.enter();
+    // Re-install BEFORE running the body, so a builtin nested inside this one
+    // (an argument expression's `$sformatf`, a `$readmemh` element write) still
+    // finds the accumulators and is charged to its own row. Only the `enter`
+    // needed the exclusive handle.
+    sched.st.builtin_prof = Some(prof);
+    let ctl = dispatch_body(sched, nets, out, which, fmt, args, sid);
+    if let Some(p) = sched.st.builtin_prof.as_ref() {
+        p.leave(name, frame);
+    }
+    ctl
+}
+
+/// The `$display`-shaped constructs that are NOT `$display`.
+///
+/// ⚠️ Six source constructs lower onto `SysTaskId::Display` and are separated
+/// only by a StmtId-keyed side table: `$info`/`$warning`/`$error`/`$fatal`
+/// (`severities`), `$timeformat`, `$vita_stage`, `$assertoff`/`$asserton`/
+/// `$assertkill`, a whole-handle copy and a queue slice. Labelling all of them
+/// `"$display"` would put an `$error`-heavy testbench's cost on a row whose name
+/// sends the reader looking for prints — the same misdirection `proc_ident`'s
+/// `lower_synth_proc` exists to prevent, arriving through a different door.
+///
+/// Only asked for `Display`, so every other id pays nothing; and only asked at
+/// all when the run is profiled.
+fn builtin_label(sched: &Scheduler, which: SysTaskId, sid: u32) -> &'static str {
+    if which != SysTaskId::Display {
+        return sim_ir::systask_name(which);
+    }
+    // Same ORDER the body's interceptors run in, so the label names the arm that
+    // will actually execute.
+    if sched.st.assert_ctl.contains_key(&sid) {
+        return "$assertcontrol";
+    }
+    if let Some(&sev) = sched.st.severities.get(&sid) {
+        return crate::profile::severity_builtin_name(sev);
+    }
+    if sched.st.timeformat_stmts.contains(&sid) {
+        return "$timeformat";
+    }
+    if sched.st.stage_stmts.contains(&sid) {
+        return "$vita_stage";
+    }
+    if sched.st.handle_copy_stmts.contains_key(&sid) {
+        return "handle copy";
+    }
+    if sched.st.queue_slice_stmts.contains(&sid) {
+        return "queue slice";
+    }
+    "$display"
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    out: &mut TaskWrites<'_>,
+    which: SysTaskId,
+    fmt: Option<u32>,
+    args: &[u32],
+    sid: u32,
+) -> Ctl {
     // SVA-REST assertion control. A `$assertoff`/`$asserton`/`$assertkill` site is a
     // no-op `Display` whose StmtId is in `assert_ctl`: flip the global enable instead
     // of printing. A gated assertion FIRE (`assert_fire`) is SUPPRESSED while disabled

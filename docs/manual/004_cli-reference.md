@@ -110,8 +110,8 @@ name.
 | `--backend <interp\|vm\|native>` | Which executor runs process bodies. **A debug knob you do not need**: `native` is the default and runs every design. **Output is byte-identical across all three** — see [Choosing a backend](#choosing-a-backend). |
 | `--timeout <ticks>` | Stop cleanly after TICKS of simulation time (CI killswitch). |
 | `--obs-dir <dir>` | Write the machine-readable run report (`run.json`, `results.jsonl`, and `coverage.json` when the design has covergroups) into DIR. One-shot `vita` only. See [The machine-readable run report](#the-machine-readable-run-report). |
-| `--obs-procs` | Add `run.json`'s `processes` object: per-body **evaluation counts**. Requires `--obs-dir`. |
-| `--obs-procs-time` | `--obs-procs` plus **cumulative wall clock** per body. Not deterministic and it perturbs what it measures — read the warning below. |
+| `--obs-procs` | Add `run.json`'s `processes` object (per-body **evaluation counts**) and its `builtins` object (per-builtin **call counts**). Requires `--obs-dir`. |
+| `--obs-procs-time` | `--obs-procs` plus **cumulative wall clock** per body and per builtin. Not deterministic and it perturbs what it measures — read the warning below. |
 | `--probe <net>` | Record every value change of one hierarchical net path into `trace.jsonl` (repeatable; requires `--obs-dir`). An unresolved path is a loud error, never a silent skip. |
 | `--probe-file <file>` | Read `--probe` paths from a file, one per line (`#` comments and blank lines skipped); merged with any `--probe`. |
 | `--hier-tree <file>` | Write the instance tree (module + instance name per line). |
@@ -218,6 +218,61 @@ between two rows with similar counts.
 
 Because timing is opt-in, a `run.json` produced with `--obs-procs` alone stays
 byte-reproducible.
+
+### `builtins` — how much of that body was `$fgets`, not your RTL
+
+The same two flags also add a `builtins` object next to `processes`. A
+`processes` row is a block **you** wrote; a `builtins` row is a simulator
+primitive that block called.
+
+```json
+"builtins": {"timed": true, "attribution": "self", "included_in_processes": true,
+  "distinct": 8, "total_calls": 3006,
+  "items": [
+    {"name": "$fgets", "calls": 1001, "time_s": 0.004241},
+    {"name": "$sscanf", "calls": 1000, "time_s": 0.000642},
+    {"name": ".push_back()", "calls": 1000, "time_s": 0.000100},
+    {"name": ".size()", "calls": 1, "time_s": 0.000012}
+  ]}
+```
+
+This is the answer to the question `processes` cannot reach. A testbench
+`initial` that drives a vector file shows up as ONE expensive row, because every
+nested cost is summed into the calling process; `builtins` splits that row into
+"time the simulator spent in its own primitives" versus "time in your RTL".
+
+`name` is the spelling you typed: `$…` for a system task or function, `.name()`
+for a method form (`q.push_back(v)`, `s.len()`, `a.sum()`). Constructs that
+share one internal id are still told apart — `$error`, `$warning`, `$info`,
+`$fatal`, `$timeformat` all get their own row rather than hiding inside
+`$display`.
+
+**How to add the numbers up.** Two fields in the object say it, so you never
+have to guess:
+
+* `"attribution": "self"` — a row's `time_s` **excludes** builtins invoked
+  inside it. `$display("%0d", q.size())` charges `.size()` to `.size()` and
+  subtracts it from `$display`. So the rows are disjoint and `Σ time_s` is a
+  real subtotal.
+* `"included_in_processes": true` — that subtotal is **already inside** the
+  `processes` rows. Never add the two arrays together. The useful arithmetic is
+  the subtraction: *this `initial` costs 43.7 s, of which 18.2 s is `$fgets` +
+  `$sscanf`, so 25.5 s is mine.*
+
+`calls` is deterministic, `time_s` is not — same rule as `processes`, and the
+observer effect is worse here: a clock reading costs more than a `.len()` on a
+short string. Read `calls` first. Rows are sorted most-called-first, ties broken
+by name, so two runs of one design produce byte-identical output.
+
+Without `--obs-procs`, `run.json` carries `"builtins": null`.
+
+**What it does not do (yet).** It does not decompose your own tasks and
+functions — a `run_vec_file` that calls `drive_one` still reports as one process
+row. Per-subroutine rows are a known follow-on; the blocker is that vita lowers
+some subroutine calls by splicing the body into the caller at elaborate time, so
+a profile keyed on runtime call sites would report `0` for exactly those, and a
+task showing `0` reads as "free". See `docs/preview/19-ai-agent-observability.md`
+§4.9.
 
 ---
 

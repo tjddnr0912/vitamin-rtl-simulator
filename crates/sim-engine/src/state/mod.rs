@@ -714,6 +714,13 @@ pub(crate) struct SimState<'a> {
     /// simulator's innermost loop. Boxed so the `None` case adds one pointer to
     /// `SimState` rather than four vectors.
     pub proc_prof: Option<Box<crate::profile::ProcProfile>>,
+    /// R2 (round-36): the per-BUILTIN accumulators, or `None` on a run that did
+    /// not ask. Separate from `proc_prof` and not a field of it because the two
+    /// are reached through DIFFERENT borrows — `proc_prof` is bumped from the
+    /// `&mut` dispatch seams, this one from four seams that hold only `&self`
+    /// (see [`crate::profile::BuiltinProfile`]'s note). Boxed for the same
+    /// reason: `None` costs one pointer.
+    pub builtin_prof: Option<Box<crate::profile::BuiltinProfile>>,
 }
 
 /// A heap-allocated class object (N7). `class_id` is the DYNAMIC type (set at
@@ -1030,5 +1037,9 @@ impl<N: crate::eval::NetReader + ?Sized> crate::eval::NetReader for HeapRouted<'
     }
     fn fd_eof(&self, fd: u32) -> Value {
         self.st.fd_eof(fd)
+    }
+    /// R2: same forward as every other `st`-owned fact on this wrapper.
+    fn builtin_prof(&self) -> Option<&crate::profile::BuiltinProfile> {
+        crate::eval::NetReader::builtin_prof(self.st)
     }
 }

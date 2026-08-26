@@ -13,6 +13,9 @@ impl Kernel for Scheduler<'_, '_> {
     fn k_nets(&self) -> &dyn crate::eval::NetReader {
         self.st
     }
+    fn k_builtin_prof(&self) -> Option<&crate::profile::BuiltinProfile> {
+        self.st.builtin_prof.as_deref()
+    }
     fn k_eval_for_lvalue(&self, lhs: &Lvalue, rhs: u32) -> Value {
         self.eval_for_lvalue(lhs, rhs)
     }

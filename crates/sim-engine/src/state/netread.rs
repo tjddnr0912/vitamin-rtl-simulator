@@ -317,6 +317,11 @@ impl NetReader for SimState<'_> {
         let eof = self.read_state.get(&fd).map(|s| s.eof).unwrap_or(false);
         Value::from_i128(if eof { 1 } else { 0 }, 32, true)
     }
+    /// R2: the run's per-builtin accumulators live here; every other reader that
+    /// can see a `SimState` forwards to this one.
+    fn builtin_prof(&self) -> Option<&crate::profile::BuiltinProfile> {
+        self.builtin_prof.as_deref()
+    }
     fn eval_call(&self, func: u32, args: &[Value]) -> Option<Value> {
         self.run_frame_call(func, args)
     }

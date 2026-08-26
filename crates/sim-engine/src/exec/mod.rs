@@ -52,6 +52,15 @@ pub(crate) trait Kernel {
     /// reader every other path uses.
     #[cfg(feature = "jit")]
     fn k_nets(&self) -> &dyn crate::eval::NetReader;
+    /// READ (R2, round-36): the run's per-builtin accumulators, or `None` when
+    /// `--obs-procs` was not given.
+    ///
+    /// ⚠️ NOT reached through `k_nets`, which would have been the obvious route:
+    /// that method is `#[cfg(feature = "jit")]`, so `apply_effect` — which is in
+    /// the default build — cannot see it. A second, unconditional accessor is
+    /// the honest answer; both implementors return the same `SimState` field, so
+    /// the two backends charge one object.
+    fn k_builtin_prof(&self) -> Option<&crate::profile::BuiltinProfile>;
     /// READ: evaluate `rhs` context-sized to `lhs`'s width (IEEE assignment rule).
     fn k_eval_for_lvalue(&self, lhs: &Lvalue, rhs: u32) -> Value;
     /// READ: SELF-DETERMINED evaluation of `eid` through THIS kernel's store.

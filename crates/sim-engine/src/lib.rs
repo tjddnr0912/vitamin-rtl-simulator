@@ -75,7 +75,7 @@ pub use levelize::{
     comb_depth, comb_ranks, fusion_candidates, fusion_candidates_across_copies,
     self_read_write_processes, FusionPair,
 };
-pub use profile::{ProcProfile, ProcProfileCfg};
+pub use profile::{BuiltinAcc, BuiltinCounts, BuiltinProfile, ProcProfile, ProcProfileCfg};
 pub use sched::FinishReason;
 
 use sched::Scheduler;
@@ -809,6 +809,11 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
             ir.cont_assigns.len(),
         ))
     });
+    // R2 (round-36): the per-builtin half of the same opt-in. One flag, two
+    // accumulators — see `SimState::builtin_prof` for why they are two objects.
+    st.builtin_prof = opts
+        .proc_profile
+        .map(|cfg| Box::new(profile::BuiltinProfile::new(cfg)));
     st.net_dims = opts.net_dims.clone();
     st.net_decl_ranges = opts.net_decl_ranges.clone();
     st.file_directed_stmts = opts.file_directed_stmts.clone();
@@ -1217,7 +1222,15 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         backend: effective_backend,
         // R14: taken from the state the executors actually bumped, never
         // re-derived — the same single-source rule `codegen` follows above.
-        proc_profile: st.proc_prof.take().map(|b| *b),
+        proc_profile: st.proc_prof.take().map(|mut b| {
+            // R2: fold the interior-mutable builtin accumulators into the same
+            // record the process rows ride, so `run.json` reads ONE object and
+            // the two halves cannot disagree about whether the run was timed.
+            if let Some(bp) = st.builtin_prof.take() {
+                b.builtins = bp.finish();
+            }
+            *b
+        }),
     }
 }
 

@@ -1750,6 +1750,13 @@ impl crate::eval::NetReader for NativeKernel<'_, '_, '_> {
     fn fd_eof(&self, fd: u32) -> Value {
         self.sched.st.fd_eof(fd)
     }
+    /// R2: tier-3 charges builtins to the SAME accumulators the engine does —
+    /// the profile is a property of the run, not of the executor, and a
+    /// `--backend native` run that reported an empty builtin table would look
+    /// exactly like a design that calls none.
+    fn builtin_prof(&self) -> Option<&crate::profile::BuiltinProfile> {
+        crate::eval::NetReader::builtin_prof(&*self.sched.st)
+    }
 
     fn take_deferred_range_kinds(&self) -> Vec<(u32, bool)> {
         // The ARENA's counter, not the engine's: `SimState` reports at the
@@ -1828,6 +1835,12 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // reader" must get the composite, or a call it evaluates hits the
         // arena's loud `eval_call` — the arena alone is half a store.
         self
+    }
+
+    /// R2: the SAME accumulators the engine bumps — the profile is a property of
+    /// the run, not of the executor.
+    fn k_builtin_prof(&self) -> Option<&crate::profile::BuiltinProfile> {
+        self.sched.st.builtin_prof.as_deref()
     }
 
     // ── READ: store-backed, shared rules ──
