@@ -105,6 +105,7 @@ mod params;
 mod ports;
 mod proc_builder;
 mod scope;
+mod static_array_method;
 mod stmt_flow;
 mod stmt_main;
 mod string_array_route;
@@ -152,6 +153,7 @@ pub(crate) use package::*;
 pub(crate) use packed::*;
 pub(crate) use ports::*;
 pub(crate) use proc_builder::*;
+pub(crate) use static_array_method::*;
 pub(crate) use string_array_route::*;
 pub(crate) use sva_ast::*;
 pub(crate) use sva_prop::*;
@@ -509,6 +511,12 @@ struct Elaborator<'s> {
     // The (width, signed) of the iterated array's ELEMENT type, so a bare `item`
     // is sized correctly in the with-expr. `None` ⇒ default int (32, signed).
     array_iter_elem: Option<(u32, bool)>,
+    // V34-4: the DECLARED low index of the array currently being iterated. The
+    // engine's `ArrayItem{index:true}` is the FLAT slot number, which equals the
+    // §7.12.3 index only for a 0-based array; a non-zero base emits one `Add` so
+    // `int a[-1:1]` iterates -1, 0, 1. Always 0 for a dynamic-storage handle
+    // (no declared bounds) ⇒ every pre-V34-4 design lowers byte-for-byte.
+    array_iter_index_base: i64,
     // v5 ⑥ (D): interface declarations (OWNED clones — avoids threading the
     // unit lifetime) + the registry of elaborated interface INSTANCES
     // (FQ path → interface name) consulted by interface-port binding.

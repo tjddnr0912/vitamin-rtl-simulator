@@ -104,6 +104,31 @@ impl Elaborator<'_> {
             if let Some((net, kind)) = self.dyn_handle_read(&name.segments[0].name) {
                 return self.lower_dyn_method_expr(net, kind, &name.segments[1].name, args);
             }
+            // V34-4: the BARE (`with`-less) §7.12.3 reductions on a fixed-size
+            // unpacked array. Checked ONLY for those five method names, so every
+            // other `a.f()` keeps whatever diagnostic it had — the pre-slice one
+            // for `a.sum()` was "unsupported hierarchical function call `a.sum`",
+            // which names the wrong thing entirely (`a` is an array, not an
+            // instance path). A non-array receiver falls through untouched.
+            if matches!(
+                name.segments[1].name.as_str(),
+                "sum" | "product" | "and" | "or" | "xor"
+            ) {
+                match self.static_array_recv(&name.segments[0].name) {
+                    StaticArrayRecv::Integral(net, _) => {
+                        return self.lower_static_array_reduction(
+                            net,
+                            &name.segments[1].name,
+                            args,
+                        );
+                    }
+                    StaticArrayRecv::Unsupported(msg) => {
+                        self.error(MsgCode::ElabUnsupported, msg);
+                        return self.placeholder_expr();
+                    }
+                    StaticArrayRecv::No => {}
+                }
+            }
             // v7 P2-C: string methods. A frame-local string slot is also a
             // `NetKind::String` net now (round-14 V1); its receiver handle reads via
             // the engine's frame-aware `str_bytes` (mirrors `read_net`), so this

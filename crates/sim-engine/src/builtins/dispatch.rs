@@ -265,6 +265,15 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
                 .get(net as usize)
                 .map(|nv| nv.signed)
                 .unwrap_or(true);
+            // V34-4: a FIXED-SIZE unpacked array is the second legal receiver
+            // (IEEE §7.12.2). It has no heap object at all, so the block below
+            // would find nothing and silently no-op — ask the static-storage
+            // arm first. It lives beside `apply_order` in `radix_arr` rather
+            // than here because this file is at the 1000-line policy ceiling
+            // and the ordering rule already lives there.
+            if order_static_array(sched, nets, out, net, which, signed) {
+                return Ctl::Continue;
+            }
             let mut bad_kind = false;
             {
                 let mut heap = sched.st.dyn_heap.borrow_mut();

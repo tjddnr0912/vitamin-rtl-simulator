@@ -30,6 +30,23 @@ impl Elaborator<'_> {
                 self.lower_dyn_method_stmt(b, net, kind, &name.segments[1].name, args);
                 return;
             }
+            // V34-4: the §7.12.2 ORDERING methods on a fixed-size unpacked array.
+            // Checked only for those three names, so nothing else changes shape;
+            // the pre-slice diagnostic was "unsupported hierarchical task call
+            // `a.sort`", which names an instance path that does not exist.
+            if matches!(name.segments[1].name.as_str(), "sort" | "rsort" | "reverse") {
+                match self.static_array_recv(&name.segments[0].name) {
+                    StaticArrayRecv::Integral(net, _) => {
+                        self.lower_static_array_order(b, net, &name.segments[1].name, args);
+                        return;
+                    }
+                    StaticArrayRecv::Unsupported(msg) => {
+                        self.error(MsgCode::ElabUnsupported, msg);
+                        return;
+                    }
+                    StaticArrayRecv::No => {}
+                }
+            }
             // v7 P2-C: `s.putc(i, c);`.
             if let Some(net) = self.string_handle(&name.segments[0].name) {
                 self.lower_string_method_stmt(b, net, &name.segments[1].name, args);

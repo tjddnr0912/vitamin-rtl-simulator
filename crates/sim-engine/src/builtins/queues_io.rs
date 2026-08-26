@@ -871,7 +871,8 @@ pub(crate) fn eval_task_arg<N: crate::eval::NetReader + ?Sized>(
 }
 
 /// [`eval_task_arg`]'s twin for a WHOLE-NET read rather than an expression —
-/// `$writemem*`'s per-element memory read is the only caller (slice #8).
+/// `$writemem*`'s per-element memory read (slice #8) and, since V34-4, the
+/// fixed-array `.sort()`/`.rsort()`/`.reverse()` arm's per-element read.
 ///
 /// It lives here, beside the other two seams, for a reason the raw-read pin
 /// makes concrete: that pin counts `sched.st.read_net(` per file and expects the
@@ -882,15 +883,23 @@ pub(crate) fn eval_task_arg<N: crate::eval::NetReader + ?Sized>(
 ///
 /// ⚠️ The `Some` arm reads the BARE store, where [`eval_task_arg`] routes through
 /// `eval_expr_with` (i.e. `HeapRouted`). That asymmetry is deliberate and it is
-/// MEASURED, not assumed: this takes a net id straight from the IR, and the only
-/// caller's net is a `$writemem*` target, which elaborate refuses to be anything
-/// but a flat memory — a dynamic array is `E3009` ("no whole-value surface") and
-/// a whole unpacked-array frame local is `E3009` ("no value here"). Both
+/// MEASURED, not assumed: this takes a net id straight from the IR, and every
+/// caller's net is a flat memory. For `$writemem*` elaborate refuses the target
+/// to be anything else — a dynamic array is `E3009` ("no whole-value surface")
+/// and a whole unpacked-array frame local is `E3009` ("no value here"). Both
 /// refusals are pinned by `cli::sysread_writemem::
 /// writemem_targets_the_seam_cannot_own_are_refused_before_the_backend`, because
 /// `NetArena::read_net`'s ownership guard is a `debug_assert!` — if either gate
 /// were opened, a release build would silently read a slot that is not the
 /// value, and the pin is what makes that fail loudly here first.
+///
+/// V34-4's ordering-method caller inherits the SAME property from a different
+/// gate: `static_array_recv` resolves the receiver with `lookup_net_scoped` +
+/// `net_is_static_array`, which a frame-local array does not satisfy (pinned by
+/// `cli::fixed_array_methods::a_subroutine_local_array_is_still_loud`), and
+/// `static_array_len` declines every heap kind. Both spellings therefore reach
+/// this with a module-scope flat memory, which is what the `debug_assert!`
+/// above is checking for.
 pub(crate) fn read_task_net<N: crate::eval::NetReader + ?Sized>(
     sched: &Scheduler,
     nets: Option<&N>,

@@ -90,6 +90,7 @@ impl<'s> Elaborator<'s> {
             dollar_subst: None,
             array_iter: None,
             array_iter_elem: None,
+            array_iter_index_base: 0,
             ifaces: BTreeMap::new(),
             iface_insts: BTreeMap::new(),
             vif_handles: std::collections::BTreeSet::new(),

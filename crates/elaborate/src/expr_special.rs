@@ -114,6 +114,20 @@ impl Elaborator<'_> {
         amw: &ast::ArrayMethodWithExpr,
         elem: Option<(u32, bool)>,
     ) -> u32 {
+        self.lower_with_expr_based(amw, elem, 0)
+    }
+
+    /// [`Self::lower_with_expr`] plus the DECLARED low index of the iterated
+    /// array (V34-4). The engine hands `item.index` the flat slot number, which
+    /// is the §7.12.3 index only for a 0-based array; `idx_base` shifts it so
+    /// `int a[-1:1]` iterates -1, 0, 1. Every dynamic-storage receiver passes 0
+    /// (a handle has no declared bounds), so those lower byte-for-byte as before.
+    pub(crate) fn lower_with_expr_based(
+        &mut self,
+        amw: &ast::ArrayMethodWithExpr,
+        elem: Option<(u32, bool)>,
+        idx_base: i64,
+    ) -> u32 {
         let name = amw
             .iter_var
             .as_ref()
@@ -121,10 +135,13 @@ impl Elaborator<'_> {
             .unwrap_or_else(|| "item".to_string());
         let saved = self.array_iter.replace(name);
         let saved_elem = self.array_iter_elem.take();
+        let saved_base = self.array_iter_index_base;
         self.array_iter_elem = elem;
+        self.array_iter_index_base = idx_base;
         let eid = self.lower_expr(&amw.with_expr);
         self.array_iter = saved;
         self.array_iter_elem = saved_elem;
+        self.array_iter_index_base = saved_base;
         eid
     }
 
@@ -155,26 +172,50 @@ impl Elaborator<'_> {
             );
             return self.placeholder_expr();
         }
-        let Some((net, kind)) = self.dyn_handle(&amw.recv.segments[0].name) else {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "array reduction `with` applies to a dynamic array / queue / assoc handle",
-            );
-            return self.placeholder_expr();
+        // V34-4: the receiver is EITHER a dynamic-storage handle (as always) or a
+        // 1-D fixed-size unpacked array — IEEE §7.12 applies the §7.12.3 reduction
+        // methods to both, and the emitted IR is identical (`Signal{net,word:None}`
+        // + `SysFunc`), so nothing about the frozen sim-ir shape changes.
+        //
+        // `idx_base` is the array's DECLARED low index. The engine iterates FLAT
+        // slots, so `item.index` over `int a[-1:1]` would read 0,1,2 where §7.12.3
+        // says -1,0,1; `lower_with_expr` rebases it. A handle is always 0-based.
+        let (net, idx_base) = match self.dyn_handle(&amw.recv.segments[0].name) {
+            Some((net, kind)) => {
+                if !matches!(
+                    kind,
+                    ir::NetKind::DynArray
+                        | ir::NetKind::Queue
+                        | ir::NetKind::Assoc
+                        | ir::NetKind::AssocStr
+                ) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "array reduction on a non-array handle",
+                    );
+                    return self.placeholder_expr();
+                }
+                (net, 0i64)
+            }
+            None => match self.static_array_recv(&amw.recv.segments[0].name) {
+                StaticArrayRecv::Integral(net, lo) => (net, lo),
+                StaticArrayRecv::Unsupported(msg) => {
+                    self.error(MsgCode::ElabUnsupported, msg);
+                    return self.placeholder_expr();
+                }
+                StaticArrayRecv::No => {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "array reduction `with` applies to a dynamic array / queue / assoc \
+                         handle or a 1-D fixed-size unpacked array",
+                    );
+                    return self.placeholder_expr();
+                }
+            },
         };
-        if !matches!(
-            kind,
-            ir::NetKind::DynArray | ir::NetKind::Queue | ir::NetKind::Assoc | ir::NetKind::AssocStr
-        ) {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "array reduction on a non-array handle",
-            );
-            return self.placeholder_expr();
-        }
         let elem = self.handle_elem_type(net);
         let handle = self.push_expr(ir::Expr::Signal { net, word: None });
-        let with_eid = self.lower_with_expr(amw, elem);
+        let with_eid = self.lower_with_expr_based(amw, elem, idx_base);
         self.push_expr(ir::Expr::SysFunc {
             which,
             args: vec![handle, with_eid],

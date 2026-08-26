@@ -168,6 +168,7 @@ end
 | Dynamic arrays `int d[]` | Yes (`new[n]`, `new[n](src)`, `.size()`, `.delete()`, element r/w, whole-copy `b = a`) |
 | Associative arrays `int a[integer]` | Yes (signed-64 key domain; `.num()`/`.exists()`/`.delete()`/`.first()`/`.next()`, whole-copy) — key-type spellings other than `[integer]`/`[time]` are not parsed yet |
 | Queues `int q[$]`, bounded `[$:N]` | Yes (push/pop both ends, `.insert()`/`.delete()`, `q[$]`, bounded truncation, whole-copy `r = q`; the slice read `q[a:b]` is a loud reject) |
+| Array manipulation methods (IEEE 1800 §7.12) | Yes on dynamic arrays, queues, associative arrays **and — since the 2026-08-26 release — 1-D fixed-size unpacked arrays** (`int a[4]`, `int a[3:0]`, `int a[-1:1]`): the reductions `.sum()`/`.product()`/`.and()`/`.or()`/`.xor()` with or without a `with (expr)` clause, and the ordering methods `.sort()`/`.rsort()`/`.reverse()`. `item.index` inside a `with` clause is the **declared** index, so `int a[-1:1]` yields -1, 0, 1. Still loud on a fixed array: multi-dimensional receivers (no simulator oracle agrees on whether the fold is over rows or leaves), `real`/`string`/class-handle elements, packed vectors (`logic [3:0] v; v.sum()` is not an array method), a subroutine-local array, and `.sort()` on a `wire` array (that is a procedural net write, `E3018`). |
 
 ---
 
@@ -319,6 +320,7 @@ Still deferred or intentionally loud:
 | Queue slice read (`q[a:b]`) | Loud reject (Icarus itself mis-executes this form; a hand-LRM implementation is tracked). |
 | Assoc keys other than `[integer]`/`[time]` | Declaration spelling not parsed (`[int]`/`[longint]`/`[string]`/`[*]`). |
 | Array `parameter`s (`parameter int P[0:3]`) | Loud reject (single-value parameter model). |
+| §7.12 array methods on a 2-D fixed array, or on a subroutine-local one | Loud reject. The 2-D form has no oracle at all (Icarus has no fixed-array method; Verilator 5.050 fails to compile it), and a subroutine-local array lives in the call frame, which the method receiver does not resolve through yet. |
 | Hierarchical function calls (`u1.f(x)`) | Loud reject. |
 | `force`/`release` on a bit/part-select | Loud reject (whole nets/variables only). |
 | Modport direction enforcement | Interface signals bind, but modport read/write direction is not checked. |

@@ -262,10 +262,34 @@ impl Elaborator<'_> {
                             });
                         }
                         [s, ix] if s.name == iter && ix.name == "index" => {
-                            return self.push_expr(ir::Expr::ArrayItem {
+                            let slot = self.push_expr(ir::Expr::ArrayItem {
                                 index: true,
                                 width: 32,
                                 signed: true,
+                            });
+                            // V34-4: `ArrayItem{index:true}` is the FLAT slot
+                            // number. For a fixed-size array declared with a
+                            // non-zero low bound (`int a[-1:1]`, `int a[2:5]`)
+                            // §7.12.3's index is the DECLARED one, so rebase.
+                            // `array_iter_index_base` is 0 for every dynamic
+                            // handle and for every 0-based array, and a 0 base
+                            // emits NO node — the pre-slice IR is preserved
+                            // byte-for-byte.
+                            if self.array_iter_index_base == 0 {
+                                return slot;
+                            }
+                            // `const_s32_expr`, NOT `intern_const`: the latter
+                            // returns a CONST-POOL id and using it as an ExprId
+                            // reads whatever expression happens to sit at that
+                            // index. Measured before it shipped — `int c[-1:1]`
+                            // summed `item.index` to 93 (indices 30/31/32)
+                            // instead of 0.
+                            let base = self.array_iter_index_base as i32;
+                            let c = self.const_s32_expr(base);
+                            return self.push_expr(ir::Expr::Binary {
+                                op: ir::BinOp::Add,
+                                lhs: slot,
+                                rhs: c,
                             });
                         }
                         _ => {}

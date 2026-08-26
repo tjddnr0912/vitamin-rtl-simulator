@@ -109,6 +109,89 @@ pub(crate) fn dyn_handle_net(sched: &Scheduler, arg: Option<&u32>) -> Option<u32
     }
 }
 
+/// V34-4: the element COUNT of a fixed-size unpacked array net, or `None` when
+/// the net is one of the heap kinds (which own their own storage) or is not an
+/// array at all (`array_len == 0` is exactly how a handle net is spelled).
+///
+/// The elaborate gate is what decides a fixed array may reach the §7.12 methods
+/// at all — 1-D, integral elements, an oracle-backed shape. This is the engine's
+/// own answer to "does this net have positional words", and it must not widen
+/// that gate: it is only ever asked about a net an `ArrSort`/`ArrRsort`/
+/// `ArrReverse`/`Arr*` argument already named.
+pub(crate) fn static_array_len(sched: &Scheduler, net: u32) -> Option<u32> {
+    let nv = sched.st.ir.nets.get(net as usize)?;
+    if matches!(
+        nv.kind,
+        sim_ir::NetKind::DynArray
+            | sim_ir::NetKind::Queue
+            | sim_ir::NetKind::Assoc
+            | sim_ir::NetKind::AssocStr
+            | sim_ir::NetKind::String
+    ) || nv.array_len == 0
+    {
+        return None;
+    }
+    Some(nv.array_len)
+}
+
+/// V34-4: the §7.12.2 ordering methods applied to a FIXED-SIZE unpacked array.
+///
+/// Returns `true` once it has handled the receiver, `false` when `net` is not a
+/// static array (the heap kinds, which the caller's own arm owns). It lives here
+/// rather than inline in `dispatch.rs` because that file sits at the 1000-line
+/// module ceiling and the ordering rule (`apply_order`) already lives here.
+///
+/// It reads and writes through exactly the two seams `$readmem*`/`$writemem*`
+/// use, and for the same reason both of those were threaded:
+///
+///  * the `nets` READER, so a tier-3 run reads the arena rather than the
+///    engine's untouched `SimState` slot, and
+///  * the `out` WRITE funnel, so the element writes are scheduled the way every
+///    other funnel-outside task write is — which is also what puts the sort into
+///    the VCD at the right tick (measured: `#1 a.sort()` on an `int a[3]` of
+///    3,1,2 dumps `1 2 3` at `#1`).
+///
+/// The receiver is proven writable BEFORE the design reaches here:
+/// `lower_static_array_order` asks `check_lvalue_kind`, so a `wire` array is
+/// `E3018` at elaborate. Without that gate the sort landed under the continuous
+/// drivers and vanished at exit 0.
+pub(crate) fn order_static_array<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    out: &mut super::TaskWrites<'_>,
+    net: u32,
+    which: SysTaskId,
+    signed: bool,
+) -> bool {
+    let Some(len) = static_array_len(sched, net) else {
+        return false;
+    };
+    let mut elems: Vec<Value> = (0..len)
+        .map(|i| super::queues_io::read_task_net(sched, nets, net, Some(i)))
+        .collect();
+    apply_order(elems.as_mut_slice(), which, signed);
+    for (i, v) in elems.into_iter().enumerate() {
+        let lv = sim_ir::Lvalue {
+            chunks: vec![sim_ir::LvalChunk {
+                net,
+                // The dummy `word: Some(0)` ExprId is never evaluated —
+                // `write_chunk` takes the resolved word from the offsets pair.
+                // The same shape `$readmem`'s funnel builds.
+                word: Some(0),
+                offset: None,
+                width: None,
+                kind: sim_ir::SelKind::Bit,
+            }],
+        };
+        let off = crate::exec::Offsets::Inline {
+            buf: [(0, i as u32), (0, 0)],
+            len: 1,
+        };
+        out.put(sched, lv, v, off);
+    }
+    true
+}
+
 /// ⓑ-breadth (v16): total order over array elements for `sort`/`rsort`. CLEAN
 /// (no x/z) values compare by signed/unsigned numeric value; x/z values sort
 /// AFTER all clean values, among themselves by a deterministic raw-bit order so

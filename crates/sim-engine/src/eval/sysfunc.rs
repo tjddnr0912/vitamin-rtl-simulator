@@ -3,6 +3,37 @@
 use super::*;
 
 impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
+    /// V34-4: element snapshot of a FIXED-SIZE unpacked array, in flat slot
+    /// order — the static-storage twin of `NetReader::dyn_values`.
+    ///
+    /// It is a separate function rather than a new arm inside `dyn_values` on
+    /// purpose: `dyn_values` has other callers (`arr_locator`, the ordering
+    /// methods) whose own gates assume a heap object, and `HeapRouted` forwards
+    /// it to `SimState` unconditionally. Reading through `self.nets` instead
+    /// keeps every element coming out of whichever store this evaluation is
+    /// actually against.
+    ///
+    /// Returns `None` for the heap kinds (`dyn_values` owns those) and for
+    /// `array_len == 0`, which is exactly how a handle net is spelled.
+    fn static_array_values(&self, net: u32) -> Option<Vec<Value>> {
+        let nv = self.ir.nets.get(net as usize)?;
+        if matches!(
+            nv.kind,
+            sim_ir::NetKind::DynArray
+                | sim_ir::NetKind::Queue
+                | sim_ir::NetKind::Assoc
+                | sim_ir::NetKind::AssocStr
+                | sim_ir::NetKind::String
+        ) {
+            return None;
+        }
+        let n = nv.array_len;
+        if n == 0 {
+            return None;
+        }
+        Some((0..n).map(|i| self.nets.read_net(net, Some(i))).collect())
+    }
+
     // ── SysFunc ────────────────────────────────────────────────────────────
 
     pub(crate) fn eval_sysfunc(&self, which: SysFuncId, args: &[u32]) -> Value {
@@ -161,7 +192,17 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                         _ => this.bitwise(acc, e, xor_w),
                     }
                 };
-                match net.and_then(|n| self.nets.dyn_values(n)) {
+                // V34-4: a fixed-size unpacked array is the second legal receiver
+                // (IEEE §7.12). `dyn_values` answers ONLY for the four heap kinds,
+                // so the static array falls through to `static_array_values`, which
+                // reads the same `self.nets` reader the rest of this arm uses — NOT
+                // `SimState` directly. That matters: `HeapRouted` forwards
+                // `dyn_values` to `st`, so a fixed array living in tier-3's arena
+                // would have been read out of a dead slot.
+                match net
+                    .and_then(|n| self.nets.dyn_values(n))
+                    .or_else(|| net.and_then(|n| self.static_array_values(n)))
+                {
                     Some(elems) if !elems.is_empty() => {
                         let saved = self.nets.swap_array_item(None);
                         let mut acc: Option<Value> = None;
