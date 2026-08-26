@@ -611,6 +611,42 @@ takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`
 
 ---
 
+## A 2-state cast evaluates its operand more than once
+
+A cast to a **2-state** type — `int'(e)`, `byte'(e)`, `shortint'(e)`, `longint'(e)`,
+`bit'(e)` — has to force any `x`/`z` in `e` to `0`, and vita builds that check one bit at
+a time. If `e` cannot be shown to be free of `x`/`z` at elaboration, it is evaluated
+**once per bit of the cast's target type**.
+
+For a pure expression this costs time and nothing else — the value is identical. It
+matters when the operand has a **side effect**:
+
+```systemverilog
+int r;
+initial r = int'($random);   // vita draws 32 times and keeps the last;
+                             // Icarus Verilog draws once
+```
+
+Affected operands are the ones vita cannot prove known: a call to a user function, a
+seeded `$random`/`$dist_*`, a file read that advances a descriptor. A 4-state cast of the
+same width is unaffected (`integer'(e)` evaluates `e` once), as are size casts
+(`24'(e)`), signing casts (`signed'(e)`), and any operand vita can prove is already
+2-state.
+
+**Workaround** — assign to a temporary first, which is also what makes the intent
+explicit:
+
+```systemverilog
+int unsigned t;
+initial begin
+  t = $random;      // drawn exactly once
+  r = int'(t);
+end
+```
+
+Nesting no longer multiplies (`int'(int'(e))` costs the same as `int'(e)`), but a
+widening cast over a call still fans out to the wider width.
+
 ## File reads inside a subroutine body
 
 `$fgets`, `$fscanf`, `$sscanf`, `$fread`, `$fgetc` and `$ungetc` write their

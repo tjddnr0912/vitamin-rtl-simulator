@@ -1142,6 +1142,13 @@ impl Elaborator<'_> {
                         .is_some_and(crate::net_util::net_kind_is_two_state)
             }
             ir::Expr::Concat { parts } => parts.iter().any(|&p| self.expr_may_be_unknown(p)),
+            // A replication is its value, repeated — it introduces no bit the value
+            // does not already have. ⚠️ This arm is LOAD-BEARING for the sibling
+            // `lower_prim_cast` guard, not a completeness nicety: a WIDENING cast
+            // goes through `extend_to`, which builds `Concat[Replicate(sign bit), e]`,
+            // so without it every widening 2-state cast fell into the `_ => true`
+            // arm below and rebuilt the per-bit coercion it was meant to skip.
+            ir::Expr::Replicate { value, .. } => self.expr_may_be_unknown(*value),
             ir::Expr::Unary { op, operand } => match op {
                 ir::UnOp::Plus
                 | ir::UnOp::Minus

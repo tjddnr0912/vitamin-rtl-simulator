@@ -2559,3 +2559,81 @@ sign fill. It is 0: a negative SIGNED right operand makes the whole expression u
 (§11.8.1), so the fill is zero. All three tools said 0 and the test failed on the first
 run — which is the good outcome, but only because the value was asserted at all. A cell
 that had asserted "exit code 0" would have shipped the wrong understanding silently.
+
+## Round 35 — one external report (2026-08-26 · §4.5.386)
+
+### An A/B on hand-written source text is not an A/B on the compiler's transform
+
+The report measured its own design two ways — calling a small `function`, and pasting
+that function's body into the call site — got −30% for the pasted version, and asked for
+vita's inliner to be widened so it would do that automatically.
+
+Both halves of the measurement were real. The inference between them was not. **Pasted
+source text has no formals.** Vita's inliner binds the actual to the declared formal, and
+for a 2-state formal (`int`, `int unsigned` — what SystemVerilog RTL actually writes) that
+binding builds a per-bit coercion. Routing the report's own `idx()` through the real
+inliner measured **98× slower** than the frame call it was asking to replace, against
+0.83 s for the text they pasted. The design that motivated the request is the
+counter-example to it.
+
+The rule: when a report proposes "make the tool do automatically what I did by hand",
+build the cell where the tool does it. That cell is usually missing from the report,
+because the reporter could not run it — that is why they are asking.
+
+### A fan-out multiplier hides as a "slow operator"
+
+The same round chased a ternary that appeared to cost 10–50× what plain arithmetic cost
+in the same loop, on all three backends. The ternary was innocent. `int'(e)` lowers to a
+`Concat` of one `CaseEq(Select(e, i), 1'b1)` **per target bit**, the evaluator walks that
+DAG as a tree, and so the cast names its operand exactly `target_width` times. The
+ternary was expensive only because a cast was replicating it.
+
+Two things made it findable, and both are cheap:
+
+* **Count, do not time.** A `$display` inside the operand turns a timing mystery into an
+  integer: 8 for `byte'`, 32 for `int'`, 64 for `longint'`, 1024 for `int'(int'(x))`, 1
+  for iverilog. Timing said "expensive"; counting said what the multiplier *was*, and the
+  multiplier was exactly the declared width.
+* **Vary one attribute against a twin that shares the others.** `integer'` and `int'` are
+  both 32-bit and signed and differ only in 2-state-ness — 27× apart. That single pair
+  named the mechanism; the whole width ladder only confirmed it.
+
+### The guard you need may already exist one call site away
+
+`coerce_two_state` has two callers. The inline path's formal binding gates it on
+`expr_may_be_unknown` and carries a comment recording this exact measurement ("42.7x on a
+`longint` one, 23x `.velab` growth, and nesting multiplies it"). The cast path called the
+same routine with no gate at all. The fix was to give the second caller the first one's
+predicate.
+
+So before designing a gate, grep for the other callers of the thing you are gating. A
+sibling that already solved it also tells you the predicate is sound, gives you the
+measurement, and — as here — its comment may be the bug report you are about to write.
+
+⚠️ And when you add the guard, check what the *other* paths into it build. A widening cast
+goes through `extend_to`, which produces `Concat[Replicate(sign), e]`; `expr_may_be_unknown`
+had no `Replicate` arm, so every widening cast fell into the catch-all `_ => true` and
+rebuilt the coercion the new guard was meant to skip. The guard measured as a no-op until
+that arm existed — a gate can be correct and still be dead.
+
+### Fixing part of a wrong count is a rung, not a resolution
+
+The guard takes `int'(int'(f()))` from 1024 evaluations of `f` to 32. Icarus evaluates it
+once. The values are byte-identical either way, so nothing on the accuracy ladder moved
+for a pure expression — but for an operand with a side effect (`int'($random)` is the
+canonical one) the count *is* the semantics, and 32 is still wrong.
+
+Record that in the queue in the same slice, with the number. A partially-fixed silent
+defect looks exactly like a fixed one from the outside, and the next reader has no way to
+tell which it was unless the slice says so.
+
+### "It collapses" is a claim about a curve; measure the curve
+
+A report observed a five-engine top running about five times slower per cycle than a
+single-core testbench and read it as throughput collapsing with instance count. Over a
+128× sweep the cost is a straight line to within 3.6%, with the marginal cost per
+instance-cycle flat from N=2 to N=128. Five engines costing 5× is what linear predicts.
+
+Two points cannot distinguish linear from super-linear, and the reporter had two. Before
+accepting or rejecting a scaling claim, get enough points to fit — and report the
+residuals, because "it fits a line" is only meaningful with them.

@@ -390,7 +390,23 @@ impl Elaborator<'_> {
             }
             std::cmp::Ordering::Less => self.select_low(e, tw),
         };
-        let coerced = if t2state {
+        // ⚠️ `coerce_two_state` names its operand ONCE PER TARGET BIT (it builds a
+        // `Concat` of `CaseEq(Select(e, i), 1'b1)`), and the engine walks that DAG as
+        // a TREE. So an unguarded 2-state cast multiplies the operand's evaluation
+        // cost by the DECLARED WIDTH, and nesting multiplies again. Measured by
+        // counting `$display`s inside the operand: `byte'` 8x, `int'` 32x, `longint'`
+        // 64x, `int'(int'(x))` 1024x — against iverilog's 1. The timing ladder tracks
+        // it exactly (`int'` 1.08 s vs the 4-state same-width `integer'` 0.04 s = 27x
+        // on one triple-nested `always_comb`), and at ~5 nesting levels `velab` ALONE
+        // ran past 60 s on a 20-character expression.
+        //
+        // The guard is the one the sibling coercion site already had
+        // (`inline_fn.rs`'s formal binding, whose comment records the same 42.7x);
+        // this arm simply never got it. Build the per-bit coercion only where the
+        // operand can actually CARRY an x or z. `expr_may_be_unknown` is conservative
+        // in the safe direction — an unproven shape is still coerced — so no value
+        // moves; its `CaseEq` arm is what stops a nested coercion being coerced again.
+        let coerced = if t2state && self.expr_may_be_unknown(resized) {
             self.coerce_two_state(resized, tw)
         } else {
             resized

@@ -240,6 +240,23 @@
 >
 > **🆕 §4.5.365 곁가지 — `int'($random*1.0)` 의 draw 횟수**(둘 다 틀렸고 값이 **바뀌었다**): `lower_real_to_int_cast` 의 ≤32비트 가지가 정확 반올림으로 바뀌며 피연산자 명명 횟수가 2→4 로 늘었고, 그 함수의 **다른 호출자**(`lower_prim_cast` = `keyword'(e)`)에는 **`expr_is_repeatable` 게이트가 없다** ⇒ `int'($random*1.0)` 이 캐스트당 2회 → 4회 draw(iverilog 는 1회). 어느 쪽도 맞은 적이 없지만 **silent↔silent 를 조용히 맞바꾸지 마라** 규칙상 기록한다. 봉쇄책은 이미 이름이 있다 — 바인드가 쓰는 그 게이트를 `lower_prim_cast` 에도 주는 것(단, 거기선 decline 이 real 을 정수 문맥에 그대로 두므로 **다른 처리**가 필요하다).
 >
+> **🆕 §4.5.386 (round-35 R1) — the same row, now with the fan-out MEASURED and the
+>   nesting half closed.** `coerce_two_state` names its operand once per TARGET BIT (it
+>   builds a `Concat` of `CaseEq(Select(e, i), 1'b1)`) and the engine walks that DAG as a
+>   tree, so the multiplier is exactly the cast's declared width: `byte'` 8, `int'` 32,
+>   `longint'` 64, and `int'(int'(x))` **1024** — against iverilog's 1. ⭐ The
+>   discriminator is 2-state-ness, not width: `integer'` and `int'` are both 32-bit
+>   signed and differ by 27× in wall clock. `lower_prim_cast` now carries the SAME
+>   `expr_may_be_unknown` guard its sibling `inline_fn.rs` formal-binding site always
+>   had, which collapses the nesting (1024 → 32) and buys 8.6×–542× on the reporting
+>   design with byte-identical output (64 x/z cells PRE == POST == live iverilog).
+>   ⚠️ **The count is still wrong and this row stays open**: a single `int'(f())` names
+>   `f` 32 times because a `Call` is conservatively unknown, and a WIDENING cast over a
+>   call fans out to the wider width (`longint'(int'(g(1)))` = 64). Closing it needs the
+>   `expr_is_repeatable` gate this row already names — a different predicate from the one
+>   that shipped, which asks whether the coercion is NEEDED, not whether the operand may
+>   be evaluated twice. Both are required for the count; only the second one is.
+>
 > **🆕 §4.5.368 곁발굴**(§3 성격 · pre-existing): **`$realtobits`/`$bitstoreal` 이 64비트 아닌 인자를 조용히 받는다**(iverilog 는 *"requires a 64-bit argument"* 로 거부). vita 는 저64비트를 답한다 — 그 경로가 살아 있는 것이 §4.5.368 의 BLOCKING 이 도달 가능했던 이유다.
 >
 > **🆕 §4.5.367 곁발굴 둘**(전부 PRE==POST · pre-existing):

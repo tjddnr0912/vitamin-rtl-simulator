@@ -9,6 +9,95 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A 2-state cast named its operand once per declared bit.** `int'(e)` is lowered into
+  a `Concat` of one `CaseEq(Select(e, i), 1'b1)` per target bit, and the engine walks
+  that DAG as a tree — so an unguarded `keyword'(e)` cast multiplied the cost of
+  evaluating `e` by the cast's declared width, and nesting multiplied again. Counted
+  exactly, by putting a `$display` inside the operand:
+
+  | cast | operand evaluations, before | after | Icarus Verilog 13 |
+  |---|---|---|---|
+  | none | 1 | 1 | 1 |
+  | `byte'` | 8 | 8 | 1 |
+  | `int'` | 32 | 32 | 1 |
+  | `longint'` | 64 | 64 | 1 |
+  | `int'(int'(x))` | **1024** | **32** | 1 |
+
+  ⭐ The discriminator is 2-state-ness, not width: `integer'` and `int'` are both 32-bit
+  and signed, and differed by **27×** in wall clock on one triple-nested `always_comb` —
+  `integer` is 4-state, so no coercion is built for it at all. At around five levels of
+  nesting, `velab` **alone** ran past 60 s on a twenty-character expression.
+
+  The fix is the guard the sibling coercion site already had: the inline path's
+  formal binding calls the same routine and gates it on "can this operand actually carry
+  an x or z", with a comment recording the same measurement. The cast path simply never
+  got it. Measured end to end on the reporting design, release, interleaved:
+  **8.6×–542× faster** with byte-identical output, and 64 cast cells over x/z-carrying
+  operands print identically before, after, and under live Icarus Verilog.
+
+  ⚠️ **This does not make the evaluation count correct**, and the gap is recorded rather
+  than glossed. A single `int'(f())` still calls `f` 32 times where Icarus calls it once,
+  because a call is conservatively treated as possibly-unknown; a widening cast over a
+  call still fans out to the wider width. What was removed is the *multiplication* under
+  nesting. If your design casts an expression with a side effect — `int'($random)` is the
+  canonical one — the count is still wrong; see ROADMAP §2.
+
+- **`--obs-procs` profile rows of `kind: "port"` had no `file:line:col`.** On a reporting
+  design that was 1,267 rows and 51% of all evaluations — the largest category in the
+  profile, and the one a reader could not act on, since `scope` only narrows to an
+  instance and one instance can carry dozens of ports. Each row now reports the location
+  of its port connection in the parent's instantiation, **including the column**, so
+  several connections written on one line are told apart. A `.*` wildcard connection
+  still reports `("", 0, 0)`: it synthesizes one connection per port from no source text
+  of its own, and pointing it at the nearest real token would be a location that does not
+  survive being followed.
+
+- **`--obs-procs` and `--obs-procs-time` were missing from `vita --help`.** They worked
+  and were documented in the manual, but a reporter reading `run.json`'s `"processes":
+  null` concluded the feature was unimplemented. A third flag, `--probe-file`, was
+  missing too, and four rows were absent from the manual's flag table. A new test now
+  extracts the flag literals from the argument parser's own match arms and asserts every
+  one appears in `--help`, so the next undocumented flag is a red test rather than
+  another external report.
+
+### Documentation
+
+- **The codegen-discriminator note is corrected a fourth time, and this time the framing
+  changes rather than a row.** The 2026-08-25 revision already recorded that `able` is
+  anti-correlated with speed. A round-35 report asked, on the strength of a −30% A/B on
+  its own design, for the inliner to be *widened* to control-flow bodies. Measured, the
+  request is the wrong direction on the design that motivated it:
+
+  | routing of the report's own `idx()` | wall |
+  |---|---|
+  | frame call (today) | 0.27 s |
+  | hand-written source text (what they measured) | 0.83 s |
+  | **vita's own inline fold** | **26.9 s** |
+
+  Their hand-inlined file is *source text*, which has no formals — so it never pays the
+  formal-binding coercion that vita's inliner would. `idx`'s formals are `int` and
+  `int unsigned`; binding a possibly-unknown actual to a 32-bit 2-state formal is the
+  same per-bit fan-out described above, and it lands **98×**. The inline path's upside is
+  capped at 1.4–1.6× (one saved frame call) and does not grow with body size; its
+  downside is unbounded — measured 335× on a six-statement body and 31,000× on a
+  twenty-statement one, from the fold's expansion factor alone.
+
+  Also measured and rejected: opening the bytecode VM's `Terminator::Call` refusal. The
+  VM and the interpreter are within 1% on these bodies (their cost is expression
+  evaluation, which the VM delegates back to the kernel), and the **default** backend
+  already runs call-bearing bodies — so `codegen.able` under-reports what actually
+  executes, and "able 3/5 → 1/5" does not describe the default path.
+
+- **Throughput does not collapse with instance count.** A report observed a 5-engine top
+  running ~5× slower per cycle than a single-core testbench and read it as super-linear.
+  Measured over a 128× sweep, cost is a straight line — `t = 0.186 + 0.1597·N` per 200k
+  cycles, every point within 3.6% of the fit, with the marginal cost per instance-cycle
+  flat from N=2 to N=128. Five engines costing 5× *is* the linear prediction. Per-delta
+  work is O(active), not O(design): 1,024 dead instances add 4.6% total, and that as a
+  one-time step at elaboration rather than per delta.
+
 ## [0.2.0] — 2026-08-26
 
 **The compiled backend is the product.** `native` is now the default and the only
