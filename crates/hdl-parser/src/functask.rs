@@ -295,11 +295,16 @@ impl Parser<'_, '_> {
             return ports;
         }
         let mut inherited = PortDir::Input;
+        // R6: a bare `, b` continues the previous formal's DIRECTION, so it continues
+        // its spelling too — `task t(ref int a, b);` gives `b` the `ref` word as well.
+        let mut inherited_spelling = TfDirSpelling::Declared;
         let mut inherited_type: TfPortType = (None, false, None, None, None);
         loop {
             let before = self.pos;
-            let (port, dir, ty, unpacked_struct) = self.parse_tf_port(inherited, &inherited_type);
+            let (port, dir, ty, unpacked_struct) =
+                self.parse_tf_port(inherited, inherited_spelling, &inherited_type);
             inherited = dir;
+            inherited_spelling = port.dir_spelling;
             inherited_type = ty;
             // R5: an unpacked-struct port expands to its N member formals; every
             // other port pushes one (byte-identical to the pre-R5 path).
@@ -324,6 +329,7 @@ impl Parser<'_, '_> {
     pub(crate) fn parse_tf_port(
         &mut self,
         inherited: PortDir,
+        inherited_spelling: TfDirSpelling,
         inherited_type: &TfPortType,
     ) -> (TfPort, PortDir, TfPortType, Option<String>) {
         let start = self.cur_span();
@@ -336,32 +342,44 @@ impl Parser<'_, '_> {
         // A `const ref` is input-only; copy-out of its unmodified value is harmless, so
         // it maps to inout as well. iverilog has no `ref` support (sorry) — hand-IEEE.
         // Only consume a leading `const` when it actually precedes `ref`.
+        // R6: remember whether a `const` was actually consumed, so a diagnostic can
+        // echo the two spellings apart (`ref` vs `const ref`) instead of printing the
+        // `Inout` they both desugar to.
+        let mut saw_const_ref = false;
         if self.at_ident_kw("const") && self.peek_at(1) == Some(TokenKind::Word(WordKind::Ident)) {
             // Peek the token after `const`: consume the pair only if it is `ref`.
             let save = self.pos;
             self.bump(); // tentatively consume `const`
-            if !self.at_ident_kw("ref") {
+            if self.at_ident_kw("ref") {
+                saw_const_ref = true;
+            } else {
                 self.pos = save; // not `const ref` — restore
             }
         }
-        let (dir, dir_present) = if self.at_ident_kw("ref") {
+        let (dir, dir_spelling, dir_present) = if self.at_ident_kw("ref") {
             self.bump();
-            (PortDir::Inout, true)
+            let sp = if saw_const_ref {
+                TfDirSpelling::ConstRef
+            } else {
+                TfDirSpelling::Ref
+            };
+            (PortDir::Inout, sp, true)
         } else {
             match self.peek() {
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Input))) => {
                     self.bump();
-                    (PortDir::Input, true)
+                    (PortDir::Input, TfDirSpelling::Declared, true)
                 }
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Output))) => {
                     self.bump();
-                    (PortDir::Output, true)
+                    (PortDir::Output, TfDirSpelling::Declared, true)
                 }
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Inout))) => {
                     self.bump();
-                    (PortDir::Inout, true)
+                    (PortDir::Inout, TfDirSpelling::Declared, true)
                 }
-                _ => (inherited, false), // bare `, b` continues the previous direction
+                // bare `, b` continues the previous direction AND its spelling
+                _ => (inherited, inherited_spelling, false),
             }
         };
         let mut net_or_var = self.net_var_kind();
@@ -468,6 +486,7 @@ impl Parser<'_, '_> {
         };
         let port = TfPort {
             dir,
+            dir_spelling,
             net_or_var,
             signed,
             range,
@@ -766,6 +785,9 @@ impl Parser<'_, '_> {
             }
             let port = TfPort {
                 dir,
+                // R6: the non-ANSI formal-decl form has no `ref` spelling to record
+                // (the direction slot here only reads `input`/`output`/`inout`).
+                dir_spelling: TfDirSpelling::Declared,
                 net_or_var,
                 signed,
                 range: range.clone(),

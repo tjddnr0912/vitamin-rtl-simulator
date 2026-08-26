@@ -225,6 +225,7 @@ impl Parser<'_, '_> {
             name: mk_ident(fname),
             ports: vec![TfPort {
                 dir: PortDir::Input,
+                dir_spelling: TfDirSpelling::Declared,
                 net_or_var: None,
                 signed: port_signed,
                 range: Some(Range {

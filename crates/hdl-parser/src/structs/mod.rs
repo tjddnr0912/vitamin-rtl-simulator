@@ -251,6 +251,9 @@ impl Parser<'_, '_> {
             .iter()
             .map(|m| TfPort {
                 dir: port.dir,
+                // R6: each expanded member inherits the whole port's spelling, so a
+                // `ref cfg_t c` member still reports itself as `ref`.
+                dir_spelling: port.dir_spelling,
                 net_or_var: Some(m.kind),
                 signed: m.signed,
                 range: m.range.clone(),

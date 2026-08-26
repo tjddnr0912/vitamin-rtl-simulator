@@ -12,6 +12,13 @@
 use vita_schema::schema_hash;
 
 /// Pinned root hash of `hdl_ast::SourceUnit`'s full type closure.
+/// Re-pinned 2026-08-26 R6 `TfPort.dir_spelling: TfDirSpelling` — the parser maps
+/// `ref` and `const ref` onto `PortDir::Inout`, which left every diagnostic about
+/// such a formal printing "inout formal" for source that contains no such keyword.
+/// The field carries the user's own word for message fidelity ONLY; nothing
+/// branches on it semantically and `Declared` (every non-`ref` formal) reproduces
+/// the prior behaviour exactly. All `.vu` artifacts are stale; no sim-ir change,
+/// format_version unchanged.
 /// Re-pinned 2026-08-19 §16.15 `default disable iff (expr);`
 /// (`ModuleItem::DefaultDisableIff(Expr)` — the scope-level reset every concurrent
 /// assertion inherits unless it writes its own; all `.vu` artifacts are stale, no
@@ -225,8 +232,8 @@ use vita_schema::schema_hash;
 /// would silently connect word 0 only). Front-end + elaborate; no sim-ir change,
 /// format_version stays 26. All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    147, 157, 14, 169, 48, 236, 88, 160, 21, 6, 47, 140, 4, 249, 214, 14, 209, 238, 205, 144, 37,
-    15, 237, 35, 215, 42, 211, 116, 90, 0, 22, 219,
+    32, 183, 24, 112, 250, 161, 177, 31, 225, 142, 196, 212, 229, 83, 139, 100, 109, 202, 59, 194,
+    138, 212, 70, 86, 161, 28, 95, 192, 188, 37, 96, 50,
 ];
 
 #[test]

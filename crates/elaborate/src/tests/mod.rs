@@ -663,6 +663,7 @@ fn build_gen_if(cond: u32) -> ast::SourceUnit {
 fn tf_port(dir: ast::PortDir, range: Option<(u32, u32)>, name: &str) -> ast::TfPort {
     ast::TfPort {
         dir,
+        dir_spelling: ast::TfDirSpelling::Declared,
         net_or_var: None,
         signed: false,
         range: range.map(|(m, l)| ast::Range {

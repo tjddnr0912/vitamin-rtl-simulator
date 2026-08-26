@@ -290,6 +290,26 @@ pub enum PortDir {
     Inout,
 }
 
+/// R6: how a subroutine formal's direction was SPELLED in the source, when that
+/// spelling desugars to a different `PortDir`. The parser maps `ref` and
+/// `const ref` onto `PortDir::Inout` (copy-in/copy-out — observationally the same
+/// for straight-line code with no aliasing), which leaves `dir` unable to echo the
+/// user's own keyword back: a diagnostic about `ref string s` said "inout formal"
+/// for code that contains no such word, sending the reader hunting for a direction
+/// they never wrote. Recorded for message fidelity ONLY — nothing branches on it
+/// semantically, so `Declared` (every non-`ref` formal) keeps the prior behaviour
+/// exactly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub enum TfDirSpelling {
+    /// Written as `input` / `output` / `inout`, or inherited from the previous
+    /// formal in a comma list.
+    Declared,
+    /// Written `ref`.
+    Ref,
+    /// Written `const ref`.
+    ConstRef,
+}
+
 // ──────────────────────────── ModuleItem ────────────────────────────
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum ModuleItem {
@@ -1847,6 +1867,9 @@ pub struct TaskDef {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct TfPort {
     pub dir: PortDir,
+    /// R6: the source spelling of `dir` when it desugars (`ref`/`const ref` →
+    /// `Inout`). Diagnostics only — see `TfDirSpelling`.
+    pub dir_spelling: TfDirSpelling,
     pub net_or_var: Option<NetVarKind>,
     pub signed: bool,
     pub range: Option<Range>,

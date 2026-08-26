@@ -48,7 +48,22 @@ impl Elaborator<'_> {
                 }
             }
             // v7 P2-C: `s.putc(i, c);`.
-            if let Some(net) = self.string_handle(&name.segments[0].name) {
+            // R6: `string_handle` resolves by SOURCE name, and an inline task's
+            // output/inout formal is bound through `out_subst` to a MANGLED
+            // formal-local (`__taskarg_<task>_<formal>_<n>`) rather than to a net
+            // named `s` — so `s.itoa(42);` inside the body missed here and fell all
+            // the way to the hierarchical-enable arm below, reporting the misleading
+            // "unsupported hierarchical task call `s.itoa`". It was loud, never
+            // silent, but the reason was wrong. The READ half already had this
+            // routing (`expr_is_string_ast` consults `out_subst` and `inline_fn`
+            // dispatches on the resulting handle), which is why `s.len()` and
+            // `s.substr()` worked in the same body that `s.itoa()` refused;
+            // this is the WRITE twin of that lookup. Filtered on `is_string_net`, so
+            // a non-string out formal still falls through unchanged.
+            if let Some(net) = self.string_handle(&name.segments[0].name).or_else(|| {
+                self.out_subst_lookup(&name.segments[0].name)
+                    .filter(|&n| self.is_string_net(n))
+            }) {
                 self.lower_string_method_stmt(b, net, &name.segments[1].name, args);
                 return;
             }
@@ -270,33 +285,25 @@ impl Elaborator<'_> {
         // task `automatic` diverts to the working frame path.
         // v7 (NARROWED 2026-08-18): an INPUT `string` formal now works — the
         // formal-local below is allocated as a real `NetKind::String` slot, so the
-        // copy-in stores a heap string instead of truncating it to one bit. An
-        // OUTPUT/INOUT one still cannot: the copy-OUT resolver takes a "simple net"
-        // caller lvalue and a `string` actual is not one, so removing this arm entirely
-        // traded ONE actionable message for a less specific rejection plus a spurious
-        // E3010 cascade (the formal never gets bound, so the body's reads go
-        // unresolved). Declaring the task `automatic` diverts to the frame path, which
-        // handles every direction — measured, which is why that advice is kept.
-        if let Some(p) = task.ports.iter().find(|p| {
-            matches!(p.net_or_var, Some(ast::NetVarKind::String))
-                && !matches!(p.dir, ast::PortDir::Input)
-        }) {
-            self.error(
-                MsgCode::ElabUnsupported,
-                &format!(
-                    "a `string` {} formal (`{}`) in the static task `{tname}` is \
-                     unsupported — its copy-out target must be a simple net. An INPUT \
-                     `string` formal is supported; declaring the task `automatic` \
-                     supports every direction",
-                    match p.dir {
-                        ast::PortDir::Output => "output",
-                        _ => "inout",
-                    },
-                    p.name.name
-                ),
-            );
-            return;
-        }
+        // copy-in stores a heap string instead of truncating it to one bit.
+        // R6 (NARROWED 2026-08-26): OUTPUT/INOUT works too, and the whole-port gate
+        // that used to sit here is GONE. Its stated reason — "the copy-out resolver
+        // takes a simple net and a `string` actual is not one" — was refuted by
+        // measurement: every piece the copy-out needs is already in the Output|Inout
+        // arm below (`out_lval` from the bare-Ident case, the inout copy-IN, the
+        // `out_subst` binding, and the exit `BlockingAssign`), and the formal-local
+        // has been a real `NetKind::String` slot since the INPUT narrowing above, so
+        // both ends of that assign are string handles. What actually blocked it was
+        // the `array_len != 1` rejection in that arm: a scalar `string` net is
+        // recorded with `array_len: 0` (netdecl.rs — a string has no packed extent to
+        // record), so a perfectly ordinary `string a;` actual read as "an unpacked
+        // array" and was rejected by a check aimed at whole-array actuals.
+        //
+        // The decision therefore moved to where the ACTUAL is known, because the
+        // formal alone cannot decide it: `t_out(a)` with `string a` is expressible,
+        // `t_out(a[3:0])` and `t_out(w)` with `logic [31:0] w` are not, and the old
+        // gate refused all three with the same sentence. See the three narrowed
+        // rejections in the Output|Inout arm below for each surviving reason.
         let Some(eff_args) = self.fill_default_args(tname.as_str(), &task.ports, args) else {
             return;
         };
@@ -434,18 +441,65 @@ impl Elaborator<'_> {
                     // outer formal routed via out_subst), or a part/bit/indexed select
                     // or array element (§13.5.3 — any variable lvalue).
                     let is_inout = matches!(p.dir, ast::PortDir::Inout);
+                    // R6: is the FORMAL declared `string`? The copy-in/copy-out pair
+                    // moves a heap HANDLE for such a formal and a packed VALUE for
+                    // every other one, so the two domains must agree end to end —
+                    // which only this arm can check, because the actual lives here.
+                    let formal_is_string = matches!(p.net_or_var, Some(ast::NetVarKind::String));
                     let out_lval: ir::Lvalue = match &a.kind {
                         ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                             let caller_net = self
                                 .out_subst_lookup(&path.segments[0].name)
                                 .unwrap_or_else(|| self.resolve_net(path));
+                            // R6: the two domains must match. A `string` formal bound to
+                            // a packed net (or the reverse) would copy a heap handle into
+                            // a bit vector — iverilog renders `"made"` as its 32-bit code
+                            // 1835099237 and verilator drops the write entirely (measured
+                            // 2026-08-26 on `task t(output string s); s="made";` called
+                            // with a `logic [31:0]` actual), so the two oracles SPLIT and
+                            // this stays loud on both sides of the mismatch.
+                            let caller_is_string = self.is_string_net(caller_net);
+                            if formal_is_string != caller_is_string {
+                                let (fk, ak) = if formal_is_string {
+                                    ("`string`", "a packed net")
+                                } else {
+                                    ("packed", "a `string` net")
+                                };
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "task `{tname}`: {fk} {} formal `{}` is bound to \
+                                         {ak} (`{}`) — a string and a packed vector are \
+                                         different domains here, and the two oracles \
+                                         disagree about what such a copy-out should write",
+                                        tf_dir_word(p),
+                                        p.name.name,
+                                        path.segments[0].name
+                                    ),
+                                );
+                                // Bind the formal anyway so the body's own reads/writes
+                                // resolve to the local: without it every mention of the
+                                // formal raises a second, misleading E3010 "undeclared
+                                // net" (measured — the packed-formal/string-actual cell
+                                // printed exactly that cascade before this slice).
+                                self.out_subst.push((p.name.name.clone(), local));
+                                continue;
+                            }
                             // A whole unpacked array can't bind to a scalar formal —
                             // reject rather than silently copy out word 0.
-                            if self
-                                .nets
-                                .get(caller_net as usize)
-                                .map(|n| n.array_len != 1)
-                                .unwrap_or(false)
+                            // R6: a scalar `string` net carries `array_len: 0` (netdecl
+                            // records no packed extent for one), so it read as an array
+                            // to this check — that, not any missing copy-out machinery,
+                            // is what forced the old whole-port `string` gate. The
+                            // domains are already proven equal above, so exempt the
+                            // matched-string pair and leave every other actual's test
+                            // byte-identical.
+                            if !caller_is_string
+                                && self
+                                    .nets
+                                    .get(caller_net as usize)
+                                    .map(|n| n.array_len != 1)
+                                    .unwrap_or(false)
                             {
                                 self.error(
                                     MsgCode::ElabUnsupported,
@@ -453,6 +507,7 @@ impl Elaborator<'_> {
                                         "task `{tname}` output/inout arg must be a simple net (v1)"
                                     ),
                                 );
+                                self.out_subst.push((p.name.name.clone(), local));
                                 continue;
                             }
                             // A2a: the copy-out WRITES the actual.
@@ -473,6 +528,43 @@ impl Elaborator<'_> {
                         ast::ExprKind::PartSelect { .. }
                         | ast::ExprKind::BitSelect { .. }
                         | ast::ExprKind::IndexedPart { .. } => {
+                            // R6: a `string` formal's copy-in/copy-out moves a whole heap
+                            // handle, which no select can name. On a scalar `string` net
+                            // that is `is_non_bit_addressable_target` by construction (a
+                            // string has no bit-addressable storage — iverilog agrees, it
+                            // rejects `t_out(a[3:0])` with "Cannot part select assign to a
+                            // string" and traps at run time on `t_out(a[1])`). On a fixed
+                            // string ARRAY a const-index element `t_out(names[0])` IS a
+                            // whole string net and both oracles run it — but the copy-IN
+                            // on this arm reads the actual as a packed value of the
+                            // formal's width (0 for a string), so accepting it would need
+                            // its own handle-read path. Measured and left loud rather than
+                            // half-built; the message names which of the two it is.
+                            if formal_is_string {
+                                let scalar_str = self
+                                    .actual_root_net(a)
+                                    .is_some_and(|n| self.is_non_bit_addressable_target(n));
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "task `{tname}`: `string` {} formal `{}` cannot be \
+                                         bound to a select — {}",
+                                        tf_dir_word(p),
+                                        p.name.name,
+                                        if scalar_str {
+                                            "a `string` variable is a byte sequence with no \
+                                             bit-addressable storage, so a partial copy-out \
+                                             into one has no representation (iverilog \
+                                             rejects the same code)"
+                                        } else {
+                                            "only a bare `string` variable can receive the \
+                                             whole handle a `string` formal copies out"
+                                        }
+                                    ),
+                                );
+                                self.out_subst.push((p.name.name.clone(), local));
+                                continue;
+                            }
                             // A select of a FRAME-LOCAL (automatic local) cannot be a
                             // copy-out target the engine can route — loud-reject.
                             if self
@@ -517,6 +609,9 @@ impl Elaborator<'_> {
                                     "task `{tname}` output/inout arg must be a simple net or select (v1)"
                                 ),
                             );
+                            // R6: bind the formal so the body's own mentions of it do not
+                            // raise a second, misleading E3010 on top of this one.
+                            self.out_subst.push((p.name.name.clone(), local));
                             continue;
                         }
                     };
@@ -718,5 +813,22 @@ impl Elaborator<'_> {
         if first_call {
             self.emit_frame_local_inits(b, decls);
         }
+    }
+}
+
+/// R6: the direction word to print for a tf-port, as the USER spelled it.
+///
+/// `ref` and `const ref` both desugar to `PortDir::Inout` in the parser (a
+/// copy-in/copy-out approximation of pass-by-reference), so `p.dir` alone made a
+/// diagnostic about `task t(ref string s)` say "inout formal" — a word that
+/// appears nowhere in the source, sending the reader looking for a direction they
+/// never wrote. `TfDirSpelling` carries the original keyword for exactly this.
+pub(crate) fn tf_dir_word(p: &ast::TfPort) -> &'static str {
+    match (p.dir_spelling, p.dir) {
+        (ast::TfDirSpelling::Ref, _) => "ref",
+        (ast::TfDirSpelling::ConstRef, _) => "const ref",
+        (_, ast::PortDir::Output) => "output",
+        (_, ast::PortDir::Inout) => "inout",
+        (_, ast::PortDir::Input) => "input",
     }
 }
