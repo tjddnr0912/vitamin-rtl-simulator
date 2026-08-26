@@ -89,6 +89,7 @@ enum GateKind {
 // ---- split modules (mechanical refactor; see the module-size policy note in the crate docs) ----
 mod api;
 mod assertions;
+mod assign_pattern;
 mod blocks_timing;
 mod casts;
 mod classes;

@@ -226,6 +226,16 @@ pub(crate) fn rebuild(e: &ast::Expr, children: Vec<ast::Expr>) -> ast::Expr {
             },
         },
         K::AssignPattern(_) => K::AssignPattern(k.rest()),
+        // The keys are not children (`shape` yields only the VALUE side), so rebuild
+        // pairs the original keys back onto the hoisted values in the same order.
+        // Falling through to the `_` arm would return the ORIGINAL node, silently
+        // un-doing the hoist while its temp assignment stayed — a double evaluation.
+        K::AssignPatternKeyed(kv) => K::AssignPatternKeyed(
+            kv.iter()
+                .map(|(key, _)| key.clone())
+                .zip(k.rest())
+                .collect(),
+        ),
         K::NamedArg { formal, value } => K::NamedArg {
             formal: formal.clone(),
             value: value.as_ref().map(|_| k.one()),

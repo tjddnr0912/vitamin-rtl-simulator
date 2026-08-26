@@ -1557,8 +1557,37 @@ pub enum ExprKind {
     /// slot in order. A named / `default:` / replicated pattern, a packed-array or
     /// struct target, or any non-array context is loud-rejected at elaborate.
     AssignPattern(Vec<Expr>),
+    /// SV §10.9.1/§10.9.2 KEYED assignment pattern `'{ key: value, … }` — the
+    /// SIBLING of the positional `AssignPattern` above, NOT a widening of it. The
+    /// positional payload is read as "one expression per position" at ~46 match
+    /// sites across 19 files; a keyed pattern is position-INDEPENDENT, so folding
+    /// the two together would have made every one of those sites re-derive an
+    /// order it has no type information to derive.
+    ///
+    /// A key only means something against the TARGET's declared shape, so key
+    /// resolution lives with whoever owns that shape: a packed-struct MEMBER key
+    /// is resolved in the PARSER (which owns `StructLayout` and its field names)
+    /// and never reaches elaborate; an unpacked-array `default:` is resolved in
+    /// ELABORATE (which owns the dimensions). Every other position is loud.
+    AssignPatternKeyed(Vec<(AssignPatternKey, Expr)>),
     /// Recovery placeholder so the Pratt loop can keep folding past an error.
     Error,
+}
+
+/// One key of an `AssignPatternKeyed` element (IEEE 1800 §10.9.1/§10.9.2).
+///
+/// Only the two spellings vita resolves are representable. An INTEGER key
+/// (`'{0: a, 1: b}`) and a TYPE key (`'{int: 0}`) are rejected in the parser
+/// rather than carried here: iverilog 13 rejects both (it rejects EVERY keyed
+/// pattern — measured, see `parse_assign_pattern`), so verilator is the only
+/// tool that would have to be trusted alone for their ordering/priority rules.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub enum AssignPatternKey {
+    /// `default: v` — fills every member/element not given by another key
+    /// (§10.9.1). Its value expression is used once PER filled slot.
+    Default,
+    /// `name: v` — a packed-struct member name (§10.9.2).
+    Member(String),
 }
 
 /// The casting type in `casting_type'(expr)` (IEEE 1800 §6.24).

@@ -170,6 +170,40 @@ end
 | Queues `int q[$]`, bounded `[$:N]` | Yes (push/pop both ends, `.insert()`/`.delete()`, `q[$]`, bounded truncation, whole-copy `r = q`; the slice read `q[a:b]` is a loud reject) |
 | Array manipulation methods (IEEE 1800 §7.12) | Yes on dynamic arrays, queues, associative arrays **and — since the 2026-08-26 release — 1-D fixed-size unpacked arrays** (`int a[4]`, `int a[3:0]`, `int a[-1:1]`): the reductions `.sum()`/`.product()`/`.and()`/`.or()`/`.xor()` with or without a `with (expr)` clause, and the ordering methods `.sort()`/`.rsort()`/`.reverse()`. `item.index` inside a `with` clause is the **declared** index, so `int a[-1:1]` yields -1, 0, 1. Still loud on a fixed array: multi-dimensional receivers (no simulator oracle agrees on whether the fold is over rows or leaves), `real`/`string`/class-handle elements, packed vectors (`logic [3:0] v; v.sum()` is not an array method), a subroutine-local array, and `.sort()` on a `wire` array (that is a procedural net write, `E3018`). |
 
+**Assignment patterns `'{…}`** (IEEE 1800 §10.9) come in three spellings. Prefer
+the NAMED one for a struct: a positional pattern is coupled to the declaration
+order, so inserting a member silently shifts every later value — a wrong result,
+not an error.
+
+```systemverilog
+typedef struct packed { logic [3:0] mode; logic en; logic [7:0] len; } cfg_t;
+
+cfg_t c;
+int   a [0:3];
+initial begin
+  c = '{4'h3, 1'b1, 8'd7};                  // positional  (§10.9)
+  c = '{len: 8'd7, mode: 4'h3, en: 1'b1};   // named       (§10.9.2) — order-free
+  c = '{mode: 4'h5, default: 1'b0};         // named + default (§10.9.1)
+  a = '{default: 5};                        // default on a whole array
+end
+```
+
+| Spelling | Status |
+|---|---|
+| Positional `'{e0, …}` | Yes — packed struct/union, fixed-size unpacked array (1-D and multi-dim, nested), dynamic array, queue |
+| Named `'{name: v, …}` | Yes for a packed struct (and a packable unpacked record), in a procedural assignment, a declaration initializer, and a `push_back`/`push_front`/`insert` actual. Field order comes from the DECLARATION. Every member must be covered exactly once, or it is a loud reject |
+| `'{default: v}` | Yes for a packed struct and for a fixed-size unpacked array (any bounds, 1-D or multi-dim). `v` is applied to each member/element separately, so it takes each one's own width — `'{default: 1'b1}` on the `cfg_t` above is `13'h0301`, not all-ones |
+| Mixed `'{name: v, default: v}` | Yes (`default` covers whatever no name gave) |
+| Integer key `'{0: a, 1: b}` | Loud reject |
+| Type key `'{int: 0}` | Loud reject |
+| Replication `'{N{e}}` | Loud reject |
+
+A keyed pattern is also loud on a target vita cannot resolve the keys against —
+a dynamic array, a queue, a packed array, a subroutine argument, a continuous
+assign, or a keyed pattern nested inside a positional multi-dimensional one. It
+is refused, never guessed. A call in the `default:` value is refused too, because
+that value is applied once per member and a call would run once per member.
+
 ---
 
 ## 3. Procedural blocks

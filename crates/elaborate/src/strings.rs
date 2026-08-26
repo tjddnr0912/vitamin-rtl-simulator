@@ -79,6 +79,9 @@ impl Elaborator<'_> {
                     || self.expr_mentions_hier_path(width)
             }
             K::Concat { parts } | K::AssignPattern(parts) => any(parts),
+            K::AssignPatternKeyed(parts) => {
+                parts.iter().any(|(_, v)| self.expr_mentions_hier_path(v))
+            }
             K::Replicate { count, value } => self.expr_mentions_hier_path(count) || any(value),
             K::MinTypMax { min, typ, max } => {
                 self.expr_mentions_hier_path(min)

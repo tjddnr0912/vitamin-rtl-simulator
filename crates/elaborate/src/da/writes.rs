@@ -154,6 +154,9 @@ fn expr_call_may_write_ident(e: &ast::Expr, name: &str, out: Option<OutActualWri
         K::AssignPattern(parts) => parts
             .iter()
             .any(|x| expr_call_may_write_ident(x, name, out)),
+        K::AssignPatternKeyed(parts) => parts
+            .iter()
+            .any(|(_, v)| expr_call_may_write_ident(v, name, out)),
     }
 }
 

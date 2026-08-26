@@ -415,7 +415,7 @@ impl Parser<'_, '_> {
     /// EXHAUSTIVE (no `_` arm) — matching the discipline of `da.rs`'s
     /// `expr_call_may_write_ident`: a future call-bearing `ExprKind` addition must be a
     /// COMPILE ERROR here, not a silently-widened torn-read window (whole-branch review).
-    fn expr_has_call(e: &Expr) -> bool {
+    pub(crate) fn expr_has_call(e: &Expr) -> bool {
         use ExprKind as K;
         match &e.kind {
             // Call-like / side-effecting / non-deterministic ⇒ a non-idempotent index.
@@ -476,6 +476,7 @@ impl Parser<'_, '_> {
             K::NamedArg { value, .. } => value.as_ref().is_some_and(|v| Self::expr_has_call(v)),
             K::Cast { expr, .. } => Self::expr_has_call(expr),
             K::AssignPattern(parts) => parts.iter().any(Self::expr_has_call),
+            K::AssignPatternKeyed(parts) => parts.iter().any(|(_, v)| Self::expr_has_call(v)),
         }
     }
 

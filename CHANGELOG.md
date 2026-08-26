@@ -11,6 +11,32 @@ changed for a user of the simulator.
 
 ### Added
 
+- **Named and `default:` assignment patterns** (IEEE 1800 §10.9.1/§10.9.2):
+  `c = '{mode: 4'h3, en: 1'b1, len: 8'd7}` for a packed struct, and
+  `a = '{default: 5}` for a packed struct or a fixed-size unpacked array (any
+  bounds, 1-D or multi-dimensional). They mix — `'{mode: 4'h5, default: 1'b0}`
+  gives the named member its value and every other member the default. All three
+  work in a procedural assignment, in a declaration initializer, and inside a
+  task or function body.
+
+  This is worth reaching for even where the positional form already worked. A
+  positional pattern is coupled to the declaration order, so **inserting a member
+  silently shifts every later value** — and that failure surfaces as a wrong
+  result at exit 0, not as an error. The named form makes it impossible.
+
+  `default:` is applied to each member SEPARATELY, in that member's own width, so
+  on a `{logic [3:0] mode; logic en; logic [7:0] len;}` struct `'{default: 1'b1}`
+  is `13'h0301` and not all-ones.
+
+  Still loud, on purpose: an integer key (`'{0: a, 1: b}`), a type key
+  (`'{int: 0}`), a replication (`'{N{e}}`), a keyed pattern whose target is a
+  dynamic array / queue / packed array / subroutine argument / continuous assign,
+  a member left uncovered, an unknown or duplicated member name, mixing
+  positional and keyed elements in one pattern, and a call in the `default:`
+  value (which would run once per member instead of once). Note that Icarus
+  Verilog 13 rejects every keyed pattern outright, so a design using this form
+  will not build there.
+
 - **`--backend <interp|vm|native>`** on `vita` and `vrun` — selects which executor runs
   process bodies. **`native` is the default** and runs every design; `interp` is the
   readable reference semantics and `vm` the bytecode compiler, and both exist to bisect a

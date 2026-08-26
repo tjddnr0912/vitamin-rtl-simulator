@@ -571,6 +571,20 @@ impl Elaborator<'_> {
         if let ast::ExprKind::AssignPattern(elems) = &rhs.kind {
             return self.lower_array_assign_pattern(b, t_net, &t_lead, elems, delay, nonblocking);
         }
+        // §10.9.1 `a = '{default: v}` — `default` fills every element not otherwise
+        // given. vita resolves the ALL-default form only: with no other key there is
+        // nothing to order, so the target's own dimensions are the whole answer and
+        // `expand_array_default_pattern` hands the positional path one clone of `v`
+        // per residual slot. Integer keys (`'{0: a, default: b}`) stay loud — see
+        // that function.
+        if let ast::ExprKind::AssignPatternKeyed(keyed) = &rhs.kind {
+            let t_dims = self.net_dim_extents(t_net);
+            let t_res: Vec<(i64, u32)> = t_dims[t_lead.len()..].to_vec();
+            let Some(elems) = self.expand_array_default_pattern(keyed, &t_res) else {
+                return true; // error already emitted
+            };
+            return self.lower_array_assign_pattern(b, t_net, &t_lead, &elems, delay, nonblocking);
+        }
         let Some((s_net, s_lead)) = self.expr_array_view(rhs) else {
             self.error(
                 MsgCode::ElabUnsupported,
@@ -751,6 +765,149 @@ impl Elaborator<'_> {
             out.extend(self.flatten_assign_pattern(sub, &dims[1..])?);
         }
         Some(out)
+    }
+
+    /// §10.9.1 `'{default: v}` bound to a fixed-size unpacked array: expand it into
+    /// the `n`-element POSITIONAL list `lower_array_assign_pattern` already lowers,
+    /// so the two spellings share one lowering and one element-width rule rather
+    /// than growing a second copy that could drift.
+    ///
+    /// ONLY the sole-`default` form is expanded. A member name is meaningless on an
+    /// array, and an INTEGER key (`'{0: a, default: b}`) is left loud on purpose:
+    /// iverilog 13 rejects every keyed pattern outright (measured — see the parser's
+    /// `parse_assign_pattern`), so verilator would be the only tool available to
+    /// settle index-vs-`default` priority and non-zero-based bounds, and one tool is
+    /// not an oracle. `n` is the residual element COUNT, so a multi-dimensional
+    /// target is filled correctly too (every leaf gets `v`, regardless of shape).
+    ///
+    /// `v` is CLONED into every slot, so a side-effecting `v` would run once per
+    /// element instead of once; §10.9.1 does not pin that count and iverilog cannot
+    /// be asked, so `assign_pattern_expr_has_call` keeps a call-bearing default loud.
+    pub(crate) fn expand_array_default_pattern(
+        &mut self,
+        keyed: &[(ast::AssignPatternKey, ast::Expr)],
+        dims: &[(i64, u32)],
+    ) -> Option<Vec<ast::Expr>> {
+        let [(ast::AssignPatternKey::Default, v)] = keyed else {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "an unpacked-array assignment pattern that is positional `'{e0,…}` or \
+                 exactly `'{default: v}` (IEEE 1800 §10.9.1); a member or index key on \
+                 an array target is not supported",
+            );
+            return None;
+        };
+        if Self::assign_pattern_expr_has_call(v) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a call-free `'{default: v}` value (it is evaluated once per element, \
+                 so a call there would run once per element instead of once)",
+            );
+            return None;
+        }
+        if dims.is_empty() {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "`'{default: v}` on an unpacked-array target (this target has no \
+                 unpacked dimension left to fill)",
+            );
+            return None;
+        }
+        // Bound the expansion before building it — `lower_array_assign_pattern`'s own
+        // unroll cap fires only AFTER flattening, which would mean materialising the
+        // clones first. Same number, checked earlier.
+        let total: u64 = dims
+            .iter()
+            .fold(1u64, |a, &(_, w)| a.saturating_mul(w as u64));
+        if total > 4096 {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a `'{default: v}` pattern expanding past the v1 4096-element cap",
+            );
+            return None;
+        }
+        // A multi-dimensional target needs the same NESTED shape the positional path
+        // validates (`flatten_assign_pattern` requires one `'{…}` per element of each
+        // outer dimension), so build the nest rather than a flat list.
+        fn nest(v: &ast::Expr, dims: &[(i64, u32)]) -> Vec<ast::Expr> {
+            (0..dims[0].1)
+                .map(|_| {
+                    if dims.len() == 1 {
+                        v.clone()
+                    } else {
+                        ast::Expr {
+                            kind: ast::ExprKind::AssignPattern(nest(v, &dims[1..])),
+                            span: v.span,
+                        }
+                    }
+                })
+                .collect()
+        }
+        Some(nest(v, dims))
+    }
+
+    /// Does `e` contain a call-like node? The array `'{default: v}` expansion clones
+    /// `v` once per element, so a side-effecting `v` would run `n` times; §10.9.1
+    /// does not pin that count and iverilog cannot be asked (it rejects the form),
+    /// so a call-bearing default stays loud. Deliberately CONSERVATIVE — anything
+    /// this walker does not recognise as a pure leaf/compound counts as a call.
+    fn assign_pattern_expr_has_call(e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        match &e.kind {
+            K::IntLit { .. }
+            | K::RealLit { .. }
+            | K::StrLit { .. }
+            | K::Ident(_)
+            | K::PkgScoped { .. }
+            | K::Null
+            | K::Dollar
+            | K::Error => false,
+            K::Unary { operand, .. } => Self::assign_pattern_expr_has_call(operand),
+            K::Binary { lhs, rhs, .. } => {
+                Self::assign_pattern_expr_has_call(lhs) || Self::assign_pattern_expr_has_call(rhs)
+            }
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                Self::assign_pattern_expr_has_call(cond)
+                    || Self::assign_pattern_expr_has_call(then_e)
+                    || Self::assign_pattern_expr_has_call(else_e)
+            }
+            K::BitSelect { base, index } => {
+                Self::assign_pattern_expr_has_call(base)
+                    || Self::assign_pattern_expr_has_call(index)
+            }
+            K::PartSelect { base, msb, lsb } => {
+                Self::assign_pattern_expr_has_call(base)
+                    || Self::assign_pattern_expr_has_call(msb)
+                    || Self::assign_pattern_expr_has_call(lsb)
+            }
+            K::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => {
+                Self::assign_pattern_expr_has_call(base)
+                    || Self::assign_pattern_expr_has_call(offset)
+                    || Self::assign_pattern_expr_has_call(width)
+            }
+            K::Concat { parts } | K::AssignPattern(parts) => {
+                parts.iter().any(Self::assign_pattern_expr_has_call)
+            }
+            K::Replicate { count, value } => {
+                Self::assign_pattern_expr_has_call(count)
+                    || value.iter().any(Self::assign_pattern_expr_has_call)
+            }
+            K::Paren { inner } => Self::assign_pattern_expr_has_call(inner),
+            K::Cast { expr, .. } => Self::assign_pattern_expr_has_call(expr),
+            K::TimeLit { num, .. } => Self::assign_pattern_expr_has_call(num),
+            // Everything else (calls, method calls, `new`, randomize, dist, min:typ:max,
+            // named args, nested keyed patterns) is treated as impure — fail-closed.
+            _ => true,
+        }
     }
 
     pub(crate) fn lower_array_assign_pattern(

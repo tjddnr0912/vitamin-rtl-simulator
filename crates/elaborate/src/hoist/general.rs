@@ -126,6 +126,7 @@ pub(crate) fn shape(e: &ast::Expr) -> Shape<'_> {
             _ => Shape::Uncond(vec![expr]),
         },
         K::AssignPattern(parts) => Shape::Uncond(parts.iter().collect()),
+        K::AssignPatternKeyed(parts) => Shape::Uncond(parts.iter().map(|(_, v)| v).collect()),
         K::NamedArg { value, .. } => Shape::Uncond(value.iter().map(|v| v.as_ref()).collect()),
         K::New { size, src } => {
             let mut cs = vec![size.as_ref()];

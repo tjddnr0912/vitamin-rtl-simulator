@@ -3,8 +3,11 @@
 //! element is assigned to the corresponding array slot in DECLARATION order
 //! (correct for ascending, descending, and offset bounds). A packed-array or
 //! struct target, a multi-dimensional array, an element-count mismatch, and any
-//! non-array context stay loud (correct-or-loud; the named / `default:` /
-//! replicated patterns are loud at parse). Pinned to iverilog 13.0.
+//! non-array context stay loud (correct-or-loud; a replicated `'{N{e}}` and an
+//! INTEGER-key pattern are still loud). Pinned to iverilog 13.0 — except the
+//! `'{default: v}` cells added by V34-3, which iverilog cannot judge (it rejects
+//! every keyed pattern) and are pinned to verilator 5.050 + IEEE 1800 §10.9.1;
+//! the keyed shapes live in `assign_pattern_keyed.rs`.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -124,8 +127,23 @@ fn pattern_in_non_array_context_is_loud() {
 }
 
 #[test]
-fn named_pattern_is_loud() {
-    // `'{default:0}` / `'{key:val}` are not positional — loud at parse.
-    let (_o, code) = run("module top; int a[3]='{default:7}; initial $finish; endmodule\n");
-    assert_ne!(code, Some(0), "named/default pattern must be loud");
+fn default_pattern_fills_every_element() {
+    // WAS `named_pattern_is_loud` (V34-3). The old test pinned the LIMITATION —
+    // `'{default:7}` was a parse error — so it stayed green on a refusal without
+    // ever saying what the right answer is. Re-measured 2026-08-26: verilator 5.050
+    // prints `7 7 7`; iverilog 13 rejects the form outright (it rejects EVERY keyed
+    // pattern, so it is not an oracle here). Now a VALUE assertion.
+    let (o, code) = run("module top; int a[3]='{default:7};\n\
+         initial begin $display(\"%0d %0d %0d\", a[0],a[1],a[2]); $finish; end endmodule\n");
+    assert_eq!(code, Some(0), "got:\n{o}");
+    assert!(o.contains("7 7 7"), "got:\n{o}");
+}
+
+#[test]
+fn index_key_pattern_is_loud() {
+    // The half of the old `named_pattern_is_loud` that is STILL loud: an integer
+    // key. iverilog rejects it and verilator alone cannot settle index-vs-`default`
+    // priority or a non-zero-based target, so vita refuses rather than guesses.
+    let (_o, code) = run("module top; int a[3]='{0:1,1:2,2:3}; initial $finish; endmodule\n");
+    assert_ne!(code, Some(0), "an integer-key pattern must be loud");
 }

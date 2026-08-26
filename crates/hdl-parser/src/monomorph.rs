@@ -71,6 +71,13 @@ pub(crate) fn subst_expr(e: &mut Expr, map: &std::collections::BTreeMap<String, 
                 subst_expr(el, map);
             }
         }
+        // Keys are member NAMES / `default`, never parameter references — only the
+        // value side can mention a parameter.
+        ExprKind::AssignPatternKeyed(elems) => {
+            for (_, v) in elems {
+                subst_expr(v, map);
+            }
+        }
         ExprKind::Replicate { count, value } => {
             subst_expr(count, map);
             for v in value {
@@ -514,6 +521,12 @@ pub(crate) fn rename_ident_in_stmt(s: &mut Stmt, from: &str, to: &str) {
             ExprKind::AssignPattern(elems) => {
                 for el in elems {
                     fix_expr(el, from, to);
+                }
+            }
+            // Keys are member NAMES / `default`; only the value side holds an expr.
+            ExprKind::AssignPatternKeyed(elems) => {
+                for (_, v) in elems {
+                    fix_expr(v, from, to);
                 }
             }
             ExprKind::Call { args, .. } | ExprKind::SysCall { args, .. } => {

@@ -231,9 +231,22 @@ use vita_schema::schema_hash;
 /// ELEMENT (there is no whole-array value in this IR — one whole-net cont-assign
 /// would silently connect word 0 only). Front-end + elaborate; no sim-ir change,
 /// format_version stays 26. All `.vu` artifacts are stale.
+/// Re-pinned 2026-08-26 (V34-3) KEYED assignment patterns (IEEE 1800 §10.9.1/
+/// §10.9.2) — `ExprKind::AssignPatternKeyed(Vec<(AssignPatternKey, Expr)>)` plus
+/// the `AssignPatternKey` enum (`Default` / `Member(String)`). A SIBLING of the
+/// positional `AssignPattern`, not a widening of it: the positional payload is read
+/// as "one expression per position" at ~46 sites, and a keyed pattern has no
+/// position. `'{mode: 4'h3, en: 1'b1, len: 8'd7}` and `'{default: v}` used to be
+/// parse errors, so a config struct had to be written positionally — where
+/// inserting a member silently shifts every later value. Front-end + elaborate
+/// only: a packed-struct target is resolved to the existing field-width concat in
+/// the PARSER and an unpacked-array `'{default: v}` expands to the existing
+/// positional lowering in elaborate, so no sim-ir change — `format_version` STAYS
+/// 29 and the SimIr schema hash / canonical / RON goldens are untouched (verified:
+/// the only test this slice moves is this one). All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    32, 183, 24, 112, 250, 161, 177, 31, 225, 142, 196, 212, 229, 83, 139, 100, 109, 202, 59, 194,
-    138, 212, 70, 86, 161, 28, 95, 192, 188, 37, 96, 50,
+    13, 232, 81, 64, 26, 92, 92, 2, 89, 14, 127, 239, 98, 187, 188, 150, 168, 75, 123, 113, 149,
+    77, 77, 121, 167, 183, 141, 71, 17, 218, 155, 209,
 ];
 
 #[test]

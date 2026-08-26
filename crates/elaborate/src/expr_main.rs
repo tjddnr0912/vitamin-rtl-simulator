@@ -1492,6 +1492,22 @@ impl Elaborator<'_> {
                 );
                 self.placeholder_expr()
             }
+            ast::ExprKind::AssignPatternKeyed(_) => {
+                // A keyed pattern reaching a general expression position means no
+                // owner of a declared shape claimed it: a packed-struct target is
+                // resolved in the PARSER (`build_struct_pattern_concat`) and an
+                // unpacked-array `'{default: v}` in `array_assign_special`. Anything
+                // else — an integer/type key, a keyed pattern in a sub-expression, a
+                // named pattern whose target is not a struct — is loud, never a
+                // guessed order.
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    "a keyed assignment pattern `'{k: v, …}` is supported for a \
+                     packed-struct target (member names, IEEE 1800 §10.9.2) and as \
+                     `'{default: v}` on an unpacked array (§10.9.1)",
+                );
+                self.placeholder_expr()
+            }
             ast::ExprKind::Error => {
                 self.error(
                     MsgCode::ElabUnsupported,
