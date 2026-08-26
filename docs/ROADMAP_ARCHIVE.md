@@ -542,6 +542,44 @@ made `128'hx / 128'd3` blame the `/`.
 `-100 >>> -7` is 0, not −1 — a negative SIGNED right operand makes the whole expression
 unsigned (§11.8.1) so the fill is zero. All three tools said 0.
 
+**The last three items, each its own commit.**
+
+`V33-8` — the runtime warnings named the array and the file but never the line. ⭐ The
+first job was to find out whether a span is even AVAILABLE there, and the honest answer is
+NO at the emitting primitive: `warn_run_index` is called from `NetReader::read_net`, a
+`&self` hot primitive whose whole signature is `(net, word)`. But a span IS available one
+level up, and the mechanism already existed — the `severity_locs` sidecar (StmtId →
+SourceLoc, resolved at elaborate, riding the `.velab` trailer) is exactly the *"statement-id
+→ SourceLoc sidecar outside the golden IR"* the queue line asked someone to build. It is
+renamed `stmt_locs`, its key set widened to the statements a runtime diagnostic can point
+at, and the engine publishes `cur_stmt` from all THREE process-body executors. postcard
+encodes struct fields positionally, so the rename and the widened key set are wire-neutral:
+**no `format_version` bump**, and old and new artifacts still interoperate.
+⚠️ **A side effect had to be fixed to ship it**: `SourceMap::resolve` scanned from byte 0,
+which was fine for a handful of spans and made `velab` 0.01 s → 0.10 s once every
+array-indexing statement resolved one. Memoised per-file line starts, fuzzed against the
+linear walk. ⚠️ **And one residue was BUILT and then removed**: publishing the callee's
+StmtId from the frame executor made `--backend interp` anchor at the subscript and
+`--backend native` anchor nowhere — one design, one flag apart, two answers. Backend
+agreement won and the weaker anchor is pinned.
+
+`V34-3` — keyed assignment patterns (§10.9.1/§10.9.2). The parser hook is the shared
+`lvalue = rhs` funnel, so `'{name: value}` arrived at every assignment form at once, and
+`'{default: v}` covers ascending, descending, offset and multi-dimensional bounds. ⚠️ The
+oracle is verilator: iverilog 13 does not parse a keyed pattern at all. New AST variant
+(a SIBLING of `AssignPattern`, not a widening of it — 46 match sites across 19 files), so
+the hdl-ast schema hash re-pins and every `.vu` is stale; `format_version` stays 29.
+
+`R7` (the tractable half) — `--obs-procs` / `--obs-procs-time` put a `processes` object in
+`run.json`: one row per process AND per continuous assign, with a scope the reader can act
+on. ⭐ The identity is a new elaborate sidecar rather than a field on the frozen
+`sim_ir::Process`, so a module instantiated 40 times gives 40 distinguishable rows with no
+`format_version` bump. Synthesized bodies are labelled apart (`var_init`/`sva`/`covergroup`
+/`clocking`/`port`/`net_init`) because reporting `always` at a line whose first keyword is
+`covergroup` is the exact misdirection the feature exists to prevent. ⚠️ **The headline ask
+is NOT covered and the queue line now says so**: the reporter needs ~440 cycle/s and
+measures 20.4, which is a 21× scheduler question tracked in §5.1.
+
 #### 4.5.384 — A label's width was a declared fact that no map recorded (2026-08-25 · 6,020 green · format 29 unchanged)
 
 **Input**: §2 row 9, which the previous slice's census had produced: `typedef enum logic [31:0] { EA = 32'hAB34 } e_t;` then `logic [EA[7:0]-1:0] v;` declared a **one-bit** net at exit 0 where both oracles declare 52 — at MODULE scope as much as in a package.
