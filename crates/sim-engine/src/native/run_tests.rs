@@ -5116,7 +5116,7 @@ endmodule
 #[test]
 fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
     // (file, expected raw-read sites, why each is unreachable)
-    let files: [(&str, usize, &str); 4] = [
+    let files: [(&str, usize, &str); 5] = [
         (
             "dispatch.rs",
             0,
@@ -5148,6 +5148,17 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
              where one is easiest to add unnoticed",
         ),
         (
+            "pattern.rs",
+            0,
+            "ZERO, and the file is new (`%p`, IEEE §21.2.1.7). Its aggregate \
+             render reads array words through `NetReader::read_net` on the \
+             THREADED reader — which is what a threaded read looks like — and \
+             its dyn/queue/assoc arm reads `SimState::dyn_heap`, one object both \
+             backends borrow, so there is no store to route past. Listed rather \
+             than omitted: a file this pin does not scan is exactly where a raw \
+             read would be easiest to add unnoticed",
+        ),
+        (
             "queues_io.rs",
             3,
             "the `None` arms of `eval_task_arg`, `eval_task_arg_ctx` and \
@@ -5173,6 +5184,7 @@ fn every_untreaded_store_read_in_builtins_sits_behind_a_reject_row() {
         ("dispatch.rs", include_str!("../builtins/dispatch.rs")),
         ("crv_draw.rs", include_str!("../builtins/crv_draw.rs")),
         ("render.rs", include_str!("../builtins/render.rs")),
+        ("pattern.rs", include_str!("../builtins/pattern.rs")),
         ("queues_io.rs", include_str!("../builtins/queues_io.rs")),
     ];
     for (name, want, why) in files {

@@ -1244,6 +1244,13 @@ struct Elaborator<'s> {
     // `true` = the task WRITES the memory (`$readmem*`), the only family that must
     // also deny a const array-parameter target; `$writemem*` only reads it.
     hier_mem_args: BTreeMap<u32, bool>,
+    // V34-5: the `deferred_hier` eids that sit in a `%p` (§21.2.1.7) ARGUMENT
+    // position. Exactly `hier_mem_args`' shape and exactly its reason — the read
+    // guard's question ("does this have a plain readable value?") is right for
+    // `x = dut.mem;` and wrong for a conversion that renders the aggregate. A
+    // named EVENT is still rejected in every position: `%p` has nothing to render
+    // from one either.
+    hier_pattern_args: std::collections::BTreeSet<u32>,
     // Family D (r17): deferred hierarchical FUNCTION calls (`u1.f(x)`), resolved to a
     // per-instance FuncId after all instances exist (mirrors `deferred_hier`).
     deferred_hier_calls: Vec<DeferredHierCall>,

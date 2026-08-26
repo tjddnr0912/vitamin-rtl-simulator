@@ -6,12 +6,19 @@
 //! shortest spelling that reads back as the same number), which is what an
 //! assignment pattern of a real looks like.
 //!
-//! RESIDUAL, recorded in ROADMAP §3 and pinned below so the current behavior is
-//! visible rather than assumed: a STRING renders as its packed byte value and an
-//! UNPACKED STRUCT as its fields concatenated, where IEEE wants `"hi"` and
-//! `'{x:7, y:-2}`. Neither is distinguishable from an ordinary packed value where
-//! the renderer runs — `Value` carries `is_real` but no string/struct marker — so
-//! those need type information this layer never receives.
+//! The RESIDUAL this file used to record — "a STRING renders as its packed byte
+//! value and an UNPACKED STRUCT as its fields concatenated" — is half closed and
+//! half re-diagnosed, both by V34-5 (`fmt_p_aggregate.rs`, which owns the
+//! aggregate half of `%p` and the oracle measurement behind it):
+//!
+//! * a `string` VARIABLE now renders as `"hi"`, because the renderer can see
+//!   `Value::is_str` after all — what it could not see was the AGGREGATE, and
+//!   fixing that put a real domain test in front of the packed fallback. A string
+//!   LITERAL is still a packed value under `%p` (`"abc"` -> 6382179), which is
+//!   what verilator prints too, measured;
+//! * the UNPACKED STRUCT was never a `%p` gap. vita cannot DECLARE one at all
+//!   (`u_t u;` is E3010, "undeclared net/variable"), so there is no net for `%p`
+//!   to render from. A declaration gap, filed as such.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -71,28 +78,25 @@ fn p_spec_leaves_integrals_alone() {
     assert!(out.contains("I=-5 165 10"), "integral %p; got:\n{out}");
 }
 
-/// A packed struct is a bit vector, so its pattern form is its value — and the
-/// aggregate shapes that have no whole-value surface stay LOUD rather than
-/// inventing one.
+/// A packed struct is a bit vector, so its pattern form is its value.
+///
+/// The second half of this test used to assert that `%p` of an unpacked array
+/// stays LOUD "rather than inventing" a format. That was the right call while the
+/// only oracle had not been measured; V34-5 measured it (iverilog does not
+/// implement `%p` at all, verilator does), so the array case moved to
+/// `fmt_p_aggregate.rs` with verilator's format and lives there as a VALUE
+/// assertion. What is pinned here is the half that did not move.
 #[test]
-fn p_spec_on_packed_and_aggregate_shapes() {
+fn p_spec_on_packed_shapes() {
     let (out, c) = run(
         "module m;\n  typedef struct packed { logic [3:0] a; logic [3:0] b; } sp_t;\n\
            sp_t sp;\n  initial begin sp.a = 4'h3; sp.b = 4'hC;\n\
-             $display(\"S=%p\", sp); #1 $finish; end\nendmodule\n",
+             $display(\"S=%p 0S=%0p\", sp, sp); #1 $finish; end\nendmodule\n",
     );
     assert_eq!(c, Some(0), "packed struct; got:\n{out}");
     assert!(
-        out.contains("S=60"),
-        "packed struct is its value; got:\n{out}"
-    );
-
-    // An unpacked array has no whole value here; `%p` must not fabricate one.
-    let (out, c) = run("module m;\n  int arr [3];\n  initial begin arr[0]=1;\n\
-           $display(\"%p\", arr); #1 $finish; end\nendmodule\n");
-    assert_ne!(
-        c,
-        Some(0),
-        "%p of an unpacked array must stay loud; got:\n{out}"
+        out.contains("S=60 0S='h3c"),
+        "packed struct is its value under `%p`, its hex under `%0p` \
+         (verilator-matched); got:\n{out}"
     );
 }

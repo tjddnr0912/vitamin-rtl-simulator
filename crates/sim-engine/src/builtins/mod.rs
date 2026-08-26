@@ -15,11 +15,13 @@ use crate::value::Value;
 // ---- split parts (mechanical refactor) ----
 mod crv_draw;
 mod dispatch;
+mod pattern;
 mod queues_io;
 mod radix_arr;
 mod render;
 pub(crate) use crv_draw::*;
 pub(crate) use dispatch::*;
+pub(crate) use pattern::*;
 pub(crate) use queues_io::*;
 pub(crate) use radix_arr::*;
 pub(crate) use render::*;

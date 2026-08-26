@@ -349,45 +349,187 @@ impl Elaborator<'_> {
         }
     }
 
+    /// The net a WHOLE-NAME expression denotes, with the same resolution
+    /// priority [`Self::expr_array_view`] uses — inline-subst formals, params,
+    /// genvars and shadowed package aliases all decline, because a name they own
+    /// is not a net at all.
+    ///
+    /// Extracted so that "which net does this bare/dotted name mean" has ONE
+    /// spelling: `expr_array_view` filters its answer to static arrays, the `%p`
+    /// argument gate ([`Self::lower_pattern_arg`]) filters the same answer to
+    /// dynamic-storage handles, and a second copy of these four shadow rules is
+    /// exactly the drift that would let one of them read a package's storage.
+    pub(crate) fn whole_name_net(&self, e: &ast::Expr) -> Option<u32> {
+        let ast::ExprKind::Ident(p) = &e.kind else {
+            return None;
+        };
+        let name = match p.segments.as_slice() {
+            [seg] => {
+                // Inline-subst formals / params shadow nets (mirrors
+                // the lower_expr Ident arm's resolution priority).
+                // A2b-prereq S1/S2: a const/genvar-shadowed import
+                // alias also falls through — the scalar funnel's
+                // guard keeps the reference loud, never a silent
+                // read of the package storage.
+                if self.subst_lookup(&seg.name).is_some()
+                    || self.out_subst_lookup(&seg.name).is_some()
+                    || self.lookup_scoped(&seg.name).is_some()
+                    || self.bare_hit_is_shadowed_pkg_alias(&seg.name)
+                {
+                    return None;
+                }
+                seg.name.clone()
+            }
+            segs => {
+                let joined = segs
+                    .iter()
+                    .map(|s| s.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(".");
+                // A2b-prereq F2: dotted paths never resolve through an
+                // import alias (IEEE §26.3).
+                if self.dotted_hit_is_pkg_alias(&joined) {
+                    return None;
+                }
+                joined
+            }
+        };
+        self.lookup_net_scoped(&name)
+    }
+
+    /// The `%p` (IEEE 1800 §21.2.1.7) ARGUMENT surface.
+    ///
+    /// `%p` is defined for exactly the aggregates whose whole-value reads are
+    /// E3009 — an unpacked array ("a whole unpacked array has no value in this
+    /// context") and a dynamic-storage handle ("a dynamic-storage handle has no
+    /// whole-value surface"). Both messages answer a question about a VALUE, and
+    /// they are right about it; `%p` asks a different question, so in this ONE
+    /// argument position the aggregate is the operand rather than a value and the
+    /// engine's `builtins::pattern` renders it.
+    ///
+    /// Shaped after the `$readmem*` memory argument (§4.5.376): the eid pushed
+    /// here is `Signal { net, word: None }`, the same node `lower_expr` would
+    /// have produced had the guard not fired, so the whole behavioural delta is
+    /// "which eids skip the read guard".
+    ///
+    /// `None` ⇒ the caller lowers normally, which keeps every non-aggregate `%p`
+    /// argument (an int, a packed struct, a real, a string, a select) byte-identical.
+    ///
+    /// ⚠️ A ONE-ELEMENT unpacked array (`int a[0:0]`, `array_len == 1`) declines
+    /// DELIBERATELY, and the caller then reports it: elaborate knows it is an
+    /// array (`unpacked_array_nets`), but `sim_ir::NetVar` records only
+    /// `array_len`, which is `1` for a scalar too, and that table never reaches
+    /// the engine. Admitting it would render `'{'h2a}` as the bare scalar `42` at
+    /// exit 0 — the exact silent-wrong this feature exists to remove — so it stays
+    /// LOUD until something carries array-ness into the IR.
+    pub(crate) fn lower_pattern_arg(&mut self, e: &ast::Expr) -> Option<u32> {
+        if let ast::ExprKind::Paren { inner } = &e.kind {
+            return self.lower_pattern_arg(inner);
+        }
+        // A whole fixed-size unpacked array. A PARTIAL index (`a[i]` on a 2-D
+        // array) also has an assignment-pattern form, but its flat window is not
+        // a net — it is the `lead`-selected sub-array — so it stays loud.
+        if let Some((net, lead)) = self.expr_array_view(e) {
+            if lead.is_empty() && self.nets[net as usize].array_len > 1 {
+                return Some(self.push_expr(ir::Expr::Signal { net, word: None }));
+            }
+            return None;
+        }
+        // A whole dynamic-storage handle (dyn array / queue / assoc / assoc-str).
+        // A `string` is NOT here on purpose: it already has a whole-value surface,
+        // and the renderer's string arm is the one that quotes it.
+        if let Some(net) = self.whole_name_net(e) {
+            if self.is_dyn_handle_net(net) {
+                return Some(self.push_expr(ir::Expr::Signal { net, word: None }));
+            }
+            return None;
+        }
+        // A CROSS-INSTANCE name (`dut.mem`, `dut.q`). Its net does not exist yet —
+        // the child's nets are created in pass 8, after this pass-7 lowering — so
+        // `whole_name_net` declines and `lower_expr` emits the deferred placeholder,
+        // which is ALREADY `Signal { net: POISON_NET, word: None }`: the exact node
+        // the two arms above build by hand. Nothing needs building; only the read
+        // guard in `resolve_deferred_hier` has to know that in THIS position an
+        // aggregate is the operand (§4.5.376's shape, verbatim).
+        if matches!(&e.kind, ast::ExprKind::Ident(p) if p.segments.len() > 1) {
+            let eid = self.lower_expr(e);
+            self.hier_pattern_args.insert(eid);
+            return Some(eid);
+        }
+        None
+    }
+
+    /// Lower ONE value argument of a `$display`-family call, given whether its
+    /// conversion is `%p`.
+    ///
+    /// The single entry point both print lowerings use (the general system-task
+    /// path and the severity family), so "what does `%p` accept" has one answer
+    /// and one diagnostic. `is_pattern == false` is literally `lower_expr`, which
+    /// is what keeps every other argument byte-identical.
+    pub(crate) fn lower_fmt_value_arg(&mut self, a: &ast::Expr, is_pattern: bool) -> u32 {
+        if !is_pattern {
+            return self.lower_expr(a);
+        }
+        if let Some(eid) = self.lower_pattern_arg(a) {
+            return eid;
+        }
+        if self.pattern_arg_is_unrenderable_array(a) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "`%p` of a ONE-ELEMENT unpacked array is unsupported: `sim_ir::NetVar` \
+                 records only `array_len`, which is 1 for a scalar too, so the renderer \
+                 cannot tell the two apart and would print the element without its \
+                 assignment-pattern braces (index the element instead)",
+            );
+            return self.placeholder_expr();
+        }
+        self.lower_expr(a)
+    }
+
+    /// `$sformatf(fmt, args…)` argument lowering, with the `%p` aggregate surface.
+    ///
+    /// THREE sites build a `SysFunc::Sformatf` out of a user call — the
+    /// blocking-assign special, the `sformatf_expr_ok` expression arm and a string
+    /// `return` — and all three carried the identical
+    /// `args.iter().map(lower_expr)` line. They share this one instead, because
+    /// `$sformatf("%p", q)` being loud while `$display("%p", q)` renders would be a
+    /// difference in the SPELLING of the call rather than in the question asked.
+    /// `args[0]` is the format literal itself, so value-argument `k` is `args[k+1]`.
+    pub(crate) fn lower_sformatf_args(&mut self, args: &[ast::Expr]) -> Vec<u32> {
+        let conv: Vec<char> = match args.first().map(|a| &a.kind) {
+            Some(ast::ExprKind::StrLit { raw }) => arg_conv_specs(&parse_str_literal_text(raw)),
+            _ => Vec::new(),
+        };
+        args.iter()
+            .enumerate()
+            .map(|(i, a)| {
+                let is_pattern =
+                    matches!(i.checked_sub(1).and_then(|k| conv.get(k)), Some('p' | 'P'));
+                self.lower_fmt_value_arg(a, is_pattern)
+            })
+            .collect()
+    }
+
+    /// True when `e` names an aggregate that `%p` OUGHT to render but the engine
+    /// cannot recognise — today exactly the one-element unpacked array described
+    /// on [`Self::lower_pattern_arg`]. The caller turns this into an honest
+    /// refusal rather than letting the scalar path answer.
+    pub(crate) fn pattern_arg_is_unrenderable_array(&self, e: &ast::Expr) -> bool {
+        if let ast::ExprKind::Paren { inner } = &e.kind {
+            return self.pattern_arg_is_unrenderable_array(inner);
+        }
+        matches!(self.expr_array_view(e), Some((net, ref lead))
+            if lead.is_empty() && self.nets[net as usize].array_len <= 1)
+    }
+
     /// Read-side twin of [`Self::lval_array_view`] over expressions.
     pub(crate) fn expr_array_view<'a>(
         &self,
         e: &'a ast::Expr,
     ) -> Option<(u32, Vec<&'a ast::Expr>)> {
         match &e.kind {
-            ast::ExprKind::Ident(p) => {
-                let name = match p.segments.as_slice() {
-                    [seg] => {
-                        // Inline-subst formals / params shadow nets (mirrors
-                        // the lower_expr Ident arm's resolution priority).
-                        // A2b-prereq S1/S2: a const/genvar-shadowed import
-                        // alias also falls through — the scalar funnel's
-                        // guard keeps the reference loud, never a silent
-                        // read of the package storage.
-                        if self.subst_lookup(&seg.name).is_some()
-                            || self.out_subst_lookup(&seg.name).is_some()
-                            || self.lookup_scoped(&seg.name).is_some()
-                            || self.bare_hit_is_shadowed_pkg_alias(&seg.name)
-                        {
-                            return None;
-                        }
-                        seg.name.clone()
-                    }
-                    segs => {
-                        let joined = segs
-                            .iter()
-                            .map(|s| s.name.as_str())
-                            .collect::<Vec<_>>()
-                            .join(".");
-                        // A2b-prereq F2: dotted paths never resolve through an
-                        // import alias (IEEE §26.3).
-                        if self.dotted_hit_is_pkg_alias(&joined) {
-                            return None;
-                        }
-                        joined
-                    }
-                };
-                let net = self.lookup_net_scoped(&name)?;
+            ast::ExprKind::Ident(_) => {
+                let net = self.whole_name_net(e)?;
                 self.net_is_static_array(net).then(|| (net, Vec::new()))
             }
             ast::ExprKind::BitSelect { base, index } => {

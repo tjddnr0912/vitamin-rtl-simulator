@@ -305,27 +305,47 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
             'u' | 'U' | 'z' | 'Z' => {
                 let _ = next_arg_with(st, nets, args, argi);
             }
-            // `%p` (SV assignment pattern, §21.2.1.7): minimal-width value form.
-            // A REAL must render as a real — `fmt_dec` rounds it to an integer, so
-            // `$display("%p", 2.5)` printed `3` and the value was silently gone.
-            // `%g` is the assignment-pattern spelling of a real (shortest form that
-            // still reads back as the same number). Integrals keep `fmt_dec`, which
-            // is already the right pattern form for them.
+            // `%p` (SV assignment pattern, §21.2.1.7) — the one conversion that
+            // asks for a RENDERING rather than for a value, and therefore the one
+            // whose argument may denote a whole aggregate. The two rules and the
+            // measured verilator format live in `builtins::pattern`.
             //
-            // RESIDUAL (ROADMAP §3, no oracle — iverilog has no `%p` at all): a
-            // STRING renders as its packed byte value (`"hi"` → 26729) and an
-            // UNPACKED STRUCT as its fields concatenated, where IEEE wants `"hi"`
-            // and `'{x:7, y:-2}`. Neither is distinguishable from an ordinary packed
-            // value at this point — `Value` carries `is_real` but no string/struct
-            // marker — so fixing them needs type information this renderer does not
-            // receive, not a spelling change here.
+            // The argument eid is PEEKED before it is consumed: an aggregate has no
+            // scalar value, so `next_arg_with` must not be the thing that decides.
+            // `Signal { word: None }` is the shape elaborate emits for a whole
+            // aggregate in this position — and only in this position, because a
+            // whole aggregate anywhere else is still E3009.
+            //
+            // RESIDUAL (no oracle to match, and no net to render): an UNPACKED
+            // struct and a fixed-size array of `string` are not declarable in vita
+            // at all (E3010 at the declaration), so `'{x:7, y:-2}` has nothing to
+            // render from. That is a declaration gap, not a `%p` gap.
             'p' | 'P' => {
-                let v = next_arg_with(st, nets, args, argi);
-                if v.is_real {
-                    let s = fmt_real(&v, 'g', field_width, precision, left_just, min_zero, plus);
-                    out.push_str(&s);
-                } else {
-                    out.push_str(&fmt_dec(&v));
+                let aggregate =
+                    args.get(*argi)
+                        .copied()
+                        .and_then(|eid| match st.ir.exprs.get(eid as usize) {
+                            Some(sim_ir::Expr::Signal { net, word: None }) => {
+                                crate::builtins::pattern_of_net(st, nets, *net)
+                            }
+                            _ => None,
+                        });
+                match aggregate {
+                    Some(s) => {
+                        *argi += 1;
+                        out.push_str(&justify(&s, field_width, left_just));
+                    }
+                    None => {
+                        let v = next_arg_with(st, nets, args, argi);
+                        out.push_str(&crate::builtins::pattern_scalar(
+                            &v,
+                            min_zero,
+                            field_width,
+                            precision,
+                            left_just,
+                            plus,
+                        ));
+                    }
                 }
             }
             other => {

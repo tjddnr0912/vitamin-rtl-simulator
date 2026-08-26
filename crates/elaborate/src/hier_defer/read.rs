@@ -225,9 +225,16 @@ impl Elaborator<'_> {
             // wants the array, not a value. Events and dynamic handles stay rejected in
             // every position: those have no array to hand over either.
             let mem_arg = self.hier_mem_args.get(&d.eid).copied();
+            // V34-5: in a `%p` ARGUMENT position the aggregate is the operand, the
+            // same exemption `$readmem*`'s memory position gets one line above and
+            // for the same reason. The dyn-handle arm is exempt too here (unlike
+            // the readmem one) because `builtins::pattern` renders a queue / dyn
+            // array / assoc from `dyn_heap`, which is keyed by NET id and therefore
+            // already per-instance — a hierarchical handle needs nothing extra.
+            let pattern_arg = self.hier_pattern_args.contains(&d.eid);
             let bad = self.event_nets.contains(&net)
-                || self.is_dyn_handle_net(net)
-                || (self.net_is_static_array(net) && mem_arg.is_none());
+                || (self.is_dyn_handle_net(net) && !pattern_arg)
+                || (self.net_is_static_array(net) && mem_arg.is_none() && !pattern_arg);
             if bad {
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -247,6 +254,28 @@ impl Elaborator<'_> {
             // legitimate `$writememh(f, dut.some_param_array)`.
             if mem_arg == Some(true) {
                 self.deny_const_param_write(net, "$readmem into");
+            }
+            // The one-element-array refusal `lower_pattern_arg` makes locally, made
+            // here instead — the local site cannot make it, because a cross-instance
+            // net does not exist until this pass. Same reason, same message: the
+            // engine sees only `array_len`, which is 1 for a scalar too, so rendering
+            // it would drop the assignment-pattern braces at exit 0.
+            if pattern_arg
+                && self.net_is_static_array(net)
+                && self.nets[net as usize].array_len <= 1
+            {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "`%p` of the ONE-ELEMENT unpacked array `{}` is unsupported: \
+                         `sim_ir::NetVar` records only `array_len`, which is 1 for a \
+                         scalar too, so the renderer cannot tell the two apart and would \
+                         print the element without its assignment-pattern braces (index \
+                         the element instead)",
+                        d.path.join(".")
+                    ),
+                );
+                continue;
             }
             if let Some(ir::Expr::Signal { net: slot, .. }) = self.exprs.get_mut(d.eid as usize) {
                 *slot = net;

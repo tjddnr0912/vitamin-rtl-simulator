@@ -492,7 +492,7 @@ impl Elaborator<'_> {
             );
             return true;
         }
-        let arg_ids: Vec<u32> = args.iter().map(|a| self.lower_expr(a)).collect();
+        let arg_ids: Vec<u32> = self.lower_sformatf_args(args);
         let rhs_id = self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::Sformatf,
             args: arg_ids,

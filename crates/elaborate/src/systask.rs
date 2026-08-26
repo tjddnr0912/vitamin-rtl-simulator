@@ -92,6 +92,67 @@ pub(crate) fn count_arg_specs(raw: &str) -> usize {
     n
 }
 
+/// The conversion character each ARG-CONSUMING specifier in a DECODED format
+/// template uses, in consumption order — i.e. `spec[k]` is the conversion that
+/// will render value-argument `k`.
+///
+/// ⚠️ This is NOT [`count_arg_specs`] with a different return type, and merging
+/// them would break one of the two. `count_arg_specs` answers "could there be a
+/// SURPLUS argument", and is deliberately over-eager about flags so that a
+/// malformed format over-counts and the `$sformatf` hoist stays strict. This one
+/// answers "which conversion lands on argument k", and a wrong answer here is a
+/// wrong ARGUMENT rather than a refused optimisation — so its flag/width/
+/// precision scan is a transcription of `render_template`'s (sim-engine
+/// `builtins/render.rs`), character for character: `-`/`+`/`0` only while the
+/// width run is still empty, then digits, then an optional `.` and its digits.
+/// Two copies of one algorithm, because that is what makes elaborate's decision
+/// ("argument k is the `%p` one, let the aggregate through") and the renderer's
+/// walk land on the same argument.
+///
+/// It takes the DECODED template (`parse_str_literal_text`), which is what the
+/// engine renders, so an escaped `\%` is already a literal `%`… and therefore a
+/// conversion here exactly as it is there. `%m`/`%M` and every unknown
+/// conversion consume no argument and contribute no entry, matching
+/// `render_template`'s arms.
+pub(crate) fn arg_conv_specs(template: &str) -> Vec<char> {
+    let mut out = Vec::new();
+    let mut chars = template.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            continue;
+        }
+        // flags / width / precision — `render_template`'s loop verbatim
+        let mut width_digits = String::new();
+        while let Some(&d) = chars.peek() {
+            if (d == '-' || d == '+' || d == '0') && width_digits.is_empty() {
+                if d == '0' {
+                    width_digits.push('0');
+                }
+                chars.next();
+            } else if d.is_ascii_digit() {
+                width_digits.push(d);
+                chars.next();
+            } else {
+                break;
+            }
+        }
+        if chars.peek() == Some(&'.') {
+            chars.next();
+            while chars.peek().is_some_and(|d| d.is_ascii_digit()) {
+                chars.next();
+            }
+        }
+        let spec = chars.next().unwrap_or('%');
+        if matches!(
+            spec.to_ascii_lowercase(),
+            'd' | 'h' | 'x' | 'o' | 'b' | 'c' | 's' | 't' | 'e' | 'f' | 'g' | 'v' | 'p' | 'u' | 'z'
+        ) {
+            out.push(spec);
+        }
+    }
+    out
+}
+
 /// `$display`→Display … `$dumpall`→DumpAll. `name` retains the leading `$`
 /// (parser keeps it, parallel to `map_sysfunc`). Unknown → None.
 /// `$monitoron`/`$monitoroff`/`$timeformat` etc. are DEFERRED.
@@ -632,12 +693,27 @@ impl Elaborator<'_> {
                 | ir::SysTaskId::WritememB
                 | ir::SysTaskId::WritememH
         );
+        // `%p` (IEEE §21.2.1.7) argument positions. `arg_conv_specs` walks the
+        // DECODED template the way `render_template` will, so `conv[k]` is the
+        // conversion that will render value-argument `k` — the mapping has to be
+        // exact, because it is what says "this aggregate is an operand here, not a
+        // value". `spec_shift` accounts for the file family, whose `value_args[0]`
+        // is the descriptor / `$sformat` destination and is never rendered.
+        let conv: Vec<char> = fmt_raw.as_deref().map(arg_conv_specs).unwrap_or_default();
+        let spec_shift = usize::from(fmt.is_some() && file_fmt);
         let arg_ids: Vec<u32> = value_args
             .iter()
             .enumerate()
             .filter_map(|(argi, a)| {
                 if addr_positions && argi >= 2 {
                     return Some(self.lower_index_expr(a));
+                }
+                let is_pattern = matches!(
+                    argi.checked_sub(spec_shift).and_then(|k| conv.get(k)),
+                    Some('p' | 'P')
+                );
+                if is_pattern {
+                    return Some(self.lower_fmt_value_arg(a, true));
                 }
                 // `$dumpvars(level, scope)` — the level const and a scope/module
                 // ident. v1 dumps ALL signals (a valid superset of any requested
@@ -785,7 +861,15 @@ impl Elaborator<'_> {
             }
             _ => (None, args),
         };
-        let arg_ids: Vec<u32> = value_args.iter().map(|a| self.lower_expr(a)).collect();
+        // Same `%p` aggregate surface as the print family — `$error("%p", q)` is
+        // the same question as `$display("%p", q)`, and the severity tasks reach
+        // the identical `render_template`.
+        let conv: Vec<char> = fmt_raw.as_deref().map(arg_conv_specs).unwrap_or_default();
+        let arg_ids: Vec<u32> = value_args
+            .iter()
+            .enumerate()
+            .map(|(k, a)| self.lower_fmt_value_arg(a, matches!(conv.get(k), Some('p' | 'P'))))
+            .collect();
         if let Some(fmt_str) = &fmt_raw {
             self.check_format_real_radix(fmt_str, &arg_ids);
         }
