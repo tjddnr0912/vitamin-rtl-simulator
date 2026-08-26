@@ -121,6 +121,42 @@ fn fold_count(e: &ast::Expr, name: WideNameFn) -> Option<u32> {
     u32::try_from(v).ok()
 }
 
+/// A SHIFT AMOUNT in the wide domain — the one count position where an amount past
+/// `u32::MAX` has a CORRECT answer instead of a loud one.
+///
+/// ⚠️ [`fold_count`] is fail-closed above `u32::MAX` because a replication count, a
+/// size cast's width and a select index all become nonsense there. A shift does not:
+/// §11.4.10 vacates with zeros (with the sign bit for `>>>`), so any amount at or
+/// above the left operand's width gives the same answer whatever its exact value is,
+/// and `MAX_NET_WIDTH` (2**20) is far below the 2**32 this saturates at. Both oracles
+/// agree — `64'hDEAD_BEEF_1234_5678 >> 64'h1_0000_0000` is `0` in iverilog and in
+/// verilator, with no diagnostic from either, and vita answered the operand UNSHIFTED
+/// until the `const_eval_u32` truncation this saturation replaces.
+///
+/// `usize::MAX` is safe to hand both shift loops: it drives `i.checked_add(k)` /
+/// `i.checked_sub(k)` to `None` for every bit, which is the all-vacated result.
+fn fold_shift_count(e: &ast::Expr, name: WideNameFn) -> Option<usize> {
+    if let Some(n) = const_eval_u32(e) {
+        return Some(n as usize);
+    }
+    let (b, w, _) = fold_self_bits(e, &|n, _| name(n, true))?;
+    if bp_any_unknown(&b, w) {
+        return None;
+    }
+    // §11.4.10: the amount is UNSIGNED. A set bit at or above 32 puts it past
+    // `u32::MAX`, hence past every buildable width — saturate.
+    if (32..w as usize).any(|i| bp_get(&b, i).0) {
+        return Some(usize::MAX);
+    }
+    let mut v: usize = 0;
+    for i in 0..(w as usize).min(32) {
+        if bp_get(&b, i).0 {
+            v |= 1usize << i;
+        }
+    }
+    Some(v)
+}
+
 pub(crate) fn fold_self_bits(
     e: &ast::Expr,
     // Resolve a NAME to an already-folded constant. `None` = names decline, which is
@@ -194,12 +230,13 @@ pub(crate) fn fold_self_bits(
         }
         // §11.4.10 LOGICAL shift by a constant: the result keeps the LEFT operand's
         // self width and signedness, and the vacated bits are ZERO for both
-        // directions. `<<<`/`>>>` are deliberately NOT admitted — the arithmetic
-        // right shift reads the sign bit, which is the value-reading class above.
+        // directions. `<<<` is not admitted (it is `<<` with a signed result, and no
+        // caller folds it here); `>>>` has its OWN arm below — the sentence that used
+        // to say both were "deliberately NOT admitted" was written before it.
         ast::ExprKind::Binary { op, lhs, rhs }
             if matches!(op, ast::BinOp::Shl | ast::BinOp::Shr) =>
         {
-            let k = fold_count(rhs, name)? as usize;
+            let k = fold_shift_count(rhs, name)?;
             let (b, w, sg) = fold_self_bits(lhs, name)?;
             let mut out = bp_zero(w);
             for i in 0..w as usize {
@@ -267,7 +304,7 @@ pub(crate) fn fold_self_bits(
             lhs,
             rhs,
         } => {
-            let k = fold_count(rhs, name)? as usize;
+            let k = fold_shift_count(rhs, name)?;
             let (b, w, sg) = fold_self_bits(lhs, name)?;
             let hi = w as usize - 1;
             let (fill_v, fill_u) = if sg { bp_get(&b, hi) } else { (false, false) };

@@ -190,6 +190,11 @@ impl Elaborator<'_> {
                         // A defparam carries no wide value either: the value it
                         // brings has already been folded to i64 by the collector.
                         bits: None,
+                        // A defparam's expression is gone by the time this record
+                        // exists (the collector folded it to i64), so its signedness is
+                        // unknown and an extension past the i64 lane keeps its old
+                        // route. Recorded as a residue rather than guessed.
+                        signed: None,
                         // A defparam carries no text at all, so the flag is never
                         // read here — `false` is the honest value for "not a literal".
                         str_is_literal: false,
@@ -1016,6 +1021,7 @@ impl Elaborator<'_> {
                         str_is_literal: Self::param_str_literal(e).is_some(),
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
+                        signed: Some(self.const_signed_env(e, &ConstWidths::new())),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -1094,6 +1100,7 @@ impl Elaborator<'_> {
                                 None,
                                 fill.as_ref(),
                                 text.as_ref(),
+                                self.override_bits(e).as_ref(),
                             ) {
                                 // ⚠️ Two different events reach here and they need
                                 // different sentences (external report, aes_top §5).
@@ -1138,6 +1145,9 @@ impl Elaborator<'_> {
                         str_is_literal: text_is_literal,
                         str: text,
                         bits: value.as_ref().and_then(|e| self.override_bits(e)),
+                        signed: value
+                            .as_ref()
+                            .map(|e| self.const_signed_env(e, &ConstWidths::new())),
                     });
                 }
             }

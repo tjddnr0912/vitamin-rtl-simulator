@@ -191,9 +191,17 @@ fn an_array_index_before_a_select_does_not_warn() {
 
 /// A wide-literal override said "is not a constant; default kept" while the companion
 /// check errored — so it was a constant, and no default was kept. Both halves wrong.
+///
+/// ⚠️ **This test used to assert the WORDING of a refusal.** Round 34 removed the
+/// refusal: `bits` became one of the channels both `keeps_default_of` and
+/// `has_applied_override` ask about, so the override is APPLIED. A wording assertion
+/// over a limitation outlives the limitation, so it is now a VALUE assertion — which
+/// is a strictly stronger statement of the same complaint (the two diagnostics
+/// contradicted each other about one override, and now there are none because the
+/// override lands). Pinned to live iverilog 13.0, which prints the same line.
 #[test]
 fn a_wide_literal_override_is_named_for_what_it_is() {
-    let (o, e, _) = run(
+    let (o, e, code) = run(
         "module leaf #(parameter logic [127:0] K = 128'h0) (output logic [127:0] o);\n\
            assign o = K;\n\
          endmodule\n\
@@ -203,12 +211,13 @@ fn a_wide_literal_override_is_named_for_what_it_is() {
          endmodule\n",
     );
     let all = format!("{o}{e}");
+    assert_eq!(code, Some(0), "the override applies now:\n{all}");
     assert!(
-        all.contains("WIDER than the 64-bit integer channel"),
-        "name the real reason:\n{all}"
+        o.contains("K=deadbeef000000000000000000000001"),
+        "iverilog prints exactly this:\n{all}"
     );
     assert!(
-        !all.contains("default kept"),
-        "nothing is kept — the companion check errors:\n{all}"
+        !all.contains("default kept") && !all.contains("WIDER than the 64-bit integer channel"),
+        "neither half of the contradiction may survive:\n{all}"
     );
 }

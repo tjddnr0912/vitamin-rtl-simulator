@@ -29,6 +29,7 @@ impl Elaborator<'_> {
                         str_is_literal: Self::param_str_literal(e).is_some(),
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
+                        signed: Some(self.const_signed_env(e, &ConstWidths::new())),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -91,6 +92,7 @@ impl Elaborator<'_> {
                                 None,
                                 fill.as_ref(),
                                 text.as_ref(),
+                                self.override_bits(e).as_ref(),
                             ) {
                                 self.warn(&format!(
                                     "override of parameter `{}` is not a constant; default kept",
@@ -109,6 +111,9 @@ impl Elaborator<'_> {
                         str_is_literal: text_is_literal,
                         str: text,
                         bits: value.as_ref().and_then(|e| self.override_bits(e)),
+                        signed: value
+                            .as_ref()
+                            .map(|e| self.const_signed_env(e, &ConstWidths::new())),
                     });
                 }
             }

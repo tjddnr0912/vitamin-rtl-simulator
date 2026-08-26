@@ -535,6 +535,103 @@ impl Elaborator<'_> {
         }
     }
 
+    /// Does the WIDE bit domain have an answer for this sub-expression?
+    ///
+    /// ⚠️⚠️ [`Self::unfoldable_reason`] used to ask only the i64 domain, so every
+    /// operand of a >64-bit expression looked like a cause. `wide_param_name_in_pub`
+    /// then blamed the first wide NAME anywhere in the tree, which is how
+    /// `localparam logic C2 = A[128];` reported *"`A` is wider than 64 bits, so it has
+    /// no integral constant value here"* — true of `A[127]` as well, and that folds.
+    /// A sub-expression the wide domain answers is not the reason the enclosing one
+    /// failed, so the walk steps over it and keeps looking outward.
+    pub(crate) fn wide_self_folds(&self, e: &ast::Expr) -> bool {
+        fold_self_bits(e, &|n, _| self.wide_name_bits(n)).is_some()
+    }
+
+    /// The 2-state value of a count/index sub-expression as a `u128`, or `None` when
+    /// it is not a foldable 2-state constant or needs more than 128 bits. Used only
+    /// to WORD a diagnostic — never to fold.
+    fn count_value_for_msg(&self, e: &ast::Expr) -> Option<u128> {
+        if let Some(v) = self.const_eval_in_scope(e) {
+            return u128::try_from(v).ok();
+        }
+        let (b, w, _) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;
+        if bp_any_unknown(&b, w) || (128..w as usize).any(|i| bp_get(&b, i).0) {
+            return None;
+        }
+        let mut v: u128 = 0;
+        for i in 0..(w as usize).min(128) {
+            if bp_get(&b, i).0 {
+                v |= 1u128 << i;
+            }
+        }
+        Some(v)
+    }
+
+    /// Name the real cause when a SELECT or a REPLICATION did not fold because its
+    /// index / count is out of range rather than because an arm is missing.
+    ///
+    /// Both halves are reachable only after [`Self::wide_self_folds`] has cleared the
+    /// operands, so anything this reports is genuinely about the index or the count.
+    fn select_or_count_reason(&self, e: &ast::Expr) -> Option<String> {
+        use ast::ExprKind as K;
+        // The base's width, from whichever domain can state it.
+        let base_width = |b: &ast::Expr| -> Option<u32> {
+            fold_self_bits(b, &|n, _| self.wide_name_bits(n)).map(|(_, w, _)| w)
+        };
+        let over_u32 = |i: &ast::Expr| -> Option<u128> {
+            self.count_value_for_msg(i)
+                .filter(|v| *v > u128::from(u32::MAX))
+        };
+        match &e.kind {
+            K::BitSelect { base, index } => {
+                let idx = self.count_value_for_msg(index)?;
+                let w = base_width(base)?;
+                if idx >= u128::from(w) {
+                    return Some(format!(
+                        "the select index {idx} is outside {}'s range [{}:0] — IEEE 1800 \
+                         §11.5.1 makes an out-of-range select `x`, which is not a value \
+                         a parameter can hold",
+                        Self::expr_brief(base),
+                        w - 1
+                    ));
+                }
+                None
+            }
+            K::PartSelect { base, msb, lsb } => {
+                let (m, l) = (
+                    self.count_value_for_msg(msb)?,
+                    self.count_value_for_msg(lsb)?,
+                );
+                let w = base_width(base)?;
+                if m >= u128::from(w) || l > m {
+                    return Some(format!(
+                        "the part-select [{m}:{l}] is outside {}'s range [{}:0]",
+                        Self::expr_brief(base),
+                        w - 1
+                    ));
+                }
+                None
+            }
+            K::IndexedPart { base, offset, .. } => {
+                let v = over_u32(offset)?;
+                Some(format!(
+                    "the indexed part-select base {v} does not fit the 32-bit index \
+                     channel a select travels in ({} is selected from)",
+                    Self::expr_brief(base)
+                ))
+            }
+            K::Replicate { count, .. } => {
+                let v = over_u32(count)?;
+                Some(format!(
+                    "the replication count {v} does not fit 32 bits, so the repetition \
+                     cannot be built (verilator refuses the same count)"
+                ))
+            }
+            _ => None,
+        }
+    }
+
     /// WHY a constant expression did not fold — the first sub-expression the constant
     /// domain has no answer for, deepest first.
     ///
@@ -556,7 +653,7 @@ impl Elaborator<'_> {
         {
             return Some(r);
         }
-        if self.const_eval_in_scope(e).is_some() {
+        if self.const_eval_in_scope(e).is_some() || self.wide_self_folds(e) {
             return None;
         }
         // The domains that HAVE a value but not an integral one get named for what
@@ -567,6 +664,15 @@ impl Elaborator<'_> {
                 "{} is a real, which has no integral constant value here",
                 Self::expr_brief(e)
             ));
+        }
+        // A COUNT or an INDEX that no domain can carry — asked BEFORE the two
+        // "this operand has no integral value" blames below, because both of those
+        // name an OPERAND and the cause here is the index. Measured: `A[128]` over a
+        // 128-bit `A` said *"`A` is wider than 64 bits"* (true of `A[127]` as well,
+        // and that folds), and `B[9]` over an 8-bit `B` said *"the select `B[…]` has
+        // no constant-fold arm"* (the arm exists — `B[3]` folds).
+        if let Some(r) = self.select_or_count_reason(e) {
+            return Some(r);
         }
         if let Some(n) = self.wide_param_name_in_pub(e) {
             return Some(format!(

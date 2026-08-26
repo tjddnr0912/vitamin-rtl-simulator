@@ -194,8 +194,28 @@ pub(crate) fn const_eval_u32(e: &ast::Expr) -> Option<u32> {
             if cv.bits.unk.iter().any(|&w| w != 0) {
                 return None;
             }
-            // take the low 32 bits of the value plane (2-state by the check above).
-            Some(cv.bits.val.first().copied().unwrap_or(0) as u32)
+            // ⚠️⚠️ FAIL-CLOSED above `u32::MAX`. This used to be `val[0] as u32` — the
+            // low 32 bits of the value plane, taken SILENTLY — and every consumer of
+            // this helper is a COUNT or an INDEX, so the discarded bits were the ones
+            // that decide the answer. Measured at HEAD: `64'hDEAD_BEEF_1234_5678 >>
+            // 64'h1_0000_0000` folded to the operand UNSHIFTED (both oracles: 0),
+            // `A[2**64]` folded to `A[0]` and answered 1 where the bit is out of range,
+            // and `$bits({(2**64+2){8'hA5}})` built a TWO-element replication (16 bits).
+            // All three at `errors=0 warnings=0`.
+            //
+            // ⚠️ The boundary is 2**32, not the 2**64 an external report found by
+            // writing 128-bit literals: `>> 64'h1_0000_0000` is a 64-bit literal the
+            // i64 domain carries fine, and it was wrong for the same reason.
+            //
+            // Declining is the fail-closed answer and it is what verilator does
+            // (*"Value too wide for 32-bits expected in this context"* for the
+            // replication count, an error for the bit-select). A shift wants the
+            // CORRECT answer rather than a loud one, so the wide domain asks
+            // `fold_shift_count` instead — see `const_wide.rs`.
+            if cv.bits.val.iter().skip(1).any(|&w| w != 0) {
+                return None;
+            }
+            u32::try_from(cv.bits.val.first().copied().unwrap_or(0)).ok()
         }
         ast::ExprKind::Paren { inner } => const_eval_u32(inner),
         ast::ExprKind::Unary { op, operand } => {

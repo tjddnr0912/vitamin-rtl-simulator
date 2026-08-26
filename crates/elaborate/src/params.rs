@@ -22,6 +22,11 @@ pub(crate) struct ParamOverrides {
     /// The wide channel — see `ResolvedOverride::bits`. It carries the override's
     /// WIDTH as well as its value, which is what §6.20.2 gives an untyped parameter.
     pub(crate) bits: BTreeMap<String, ir::ConstVal>,
+    /// Is the override EXPRESSION signed — see `ResolvedOverride::signed`. Read only
+    /// when the value has to be EXTENDED past the 64-bit integer lane, where the sign
+    /// of the i64 is not enough to decide (three expressions with the same i64 extend
+    /// two different ways).
+    pub(crate) signed: BTreeMap<String, bool>,
 }
 
 impl ParamOverrides {
@@ -62,6 +67,7 @@ impl ParamOverrides {
         self.text.remove(name);
         self.unfoldable.remove(name);
         self.bits.remove(name);
+        self.signed.remove(name);
     }
 }
 
@@ -828,6 +834,9 @@ impl Elaborator<'_> {
                     // A fill has no width of its own — it takes the target's, which is
                     // exactly what the `fill` channel above exists to do.
                     bits: None,
+                    // A fill is unsigned and is re-folded at the target width, so the
+                    // extension channel never reads this.
+                    signed: Some(false),
                 });
                 continue;
             }
@@ -835,6 +844,8 @@ impl Elaborator<'_> {
             // value at its declared width, which is what a >64-bit `-G` needs and what
             // §6.20.2 wants even when the value fits.
             let sized = crate::literal::parse_int_literal(t, ast::IntLitKind::Sized);
+            // A bare decimal is signed; a sized literal states its own signedness.
+            let sized_signed = sized.as_ref().map(|c| c.signed).unwrap_or(true);
             let mut wide: Option<ir::ConstVal> = None;
             let (value, text) = if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') {
                 (None, Some(t[1..t.len() - 1].to_string()))
@@ -870,9 +881,54 @@ impl Elaborator<'_> {
                 str_is_literal: true,
                 str: text,
                 bits: wide,
+                // A bare decimal on the command line is a SIGNED integer; a sized
+                // literal carries its own `s`, which `wide` above already holds.
+                signed: Some(sized_signed),
             });
         }
         out
+    }
+
+    /// An override's value RESIZED to the parameter's declared width, in the wide bit
+    /// domain — the one place that can carry a value the 64-bit integer lane cannot.
+    ///
+    /// Channels in precedence order, which is `chosen_val`'s own order minus the
+    /// declared default (this runs only when an override is in flight):
+    ///  1. `bits` — the override folded at its own width WITH its signedness.
+    ///  2. `fill` — `'1`/`'0` re-folded at the target width (`fill_to_i64` cannot
+    ///     represent 128 ones, so the i64 lane answered `…ffffffffffffffff`).
+    ///  3. the i64, extended with the EXPRESSION's signedness. `None` signedness (a
+    ///     `defparam`) declines, keeping that channel on the route it took before.
+    ///
+    /// A parameter with no declared width keeps the override's own range (§6.20.2).
+    fn override_at_declared_width(
+        &self,
+        decl: Option<(u32, bool)>,
+        ovr_bits: Option<&ir::ConstVal>,
+        ovr_fill: Option<&(ast::IntLitKind, String)>,
+        chosen_val: Option<i64>,
+        ovr_signed: Option<bool>,
+    ) -> Option<ir::ConstVal> {
+        let (bits, from_w, from_sg) = if let Some(c) = ovr_bits {
+            (c.bits.clone(), c.width, c.signed)
+        } else if let Some((k, raw)) = ovr_fill {
+            let w = decl.map(|(w, _)| w)?;
+            if literal::fill_is_unknown(raw, *k) {
+                return None;
+            }
+            let cv = literal::fill_literal_const(raw, *k, w)?;
+            (cv.bits, w, false)
+        } else {
+            let v = chosen_val?;
+            (bp_from_limbs(vec![v as u64], 64), 64, ovr_signed?)
+        };
+        let (w, sg) = decl.unwrap_or((from_w, from_sg));
+        Some(ir::ConstVal {
+            width: w,
+            signed: sg,
+            repr: ir::ConstRepr::Numeric,
+            bits: resize_bits(&bits, from_w, w, from_sg),
+        })
     }
 
     /// Resolve `#()` / `defparam` / `-G` overrides against a module's parameter port
@@ -920,6 +976,9 @@ impl Elaborator<'_> {
                         if let Some(b) = &ov.bits {
                             o.bits.insert(p.name.name.clone(), b.clone());
                         }
+                        if let Some(sg) = ov.signed {
+                            o.signed.insert(p.name.name.clone(), sg);
+                        }
                         if let Some(t) = Self::override_text_for(p, ov) {
                             o.text.insert(p.name.name.clone(), t);
                         }
@@ -942,6 +1001,9 @@ impl Elaborator<'_> {
                         }
                         if let Some(b) = &ov.bits {
                             o.bits.insert(p.name.name.clone(), b.clone());
+                        }
+                        if let Some(sg) = ov.signed {
+                            o.signed.insert(p.name.name.clone(), sg);
                         }
                         if let Some(t) = Self::override_text_for(p, ov) {
                             o.text.insert(p.name.name.clone(), t);
@@ -1065,13 +1127,19 @@ impl Elaborator<'_> {
                     );
                 }
             }
+            // ⚠️ The FOURTH channel is `bits`, and it must be here for the same reason
+            // it must be in `keeps_default_of`: a wide-literal override IS applied now,
+            // so escalating it to *"not a constant, so the declared default would be
+            // used instead"* describes the opposite of what happens. The two
+            // conjunctions are one rule and drifted apart once already.
             let has_applied_override = ovr_by_name
                 .get(p.name.name.as_str())
                 .copied()
                 .flatten()
                 .is_some()
                 || ovr_fill.contains_key(p.name.name.as_str())
-                || ovr_str.contains_key(p.name.name.as_str());
+                || ovr_str.contains_key(p.name.name.as_str())
+                || ovr.bits.contains_key(p.name.name.as_str());
             if ovr_unfoldable.contains(&p.name.name) && !has_applied_override {
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -1246,7 +1314,7 @@ impl Elaborator<'_> {
             // and installed the declared default silently. `by_name` holding
             // `Some(None)` (written, did not fold) also falls through to the declared
             // default; the escalation above has already made that loud.
-            let chosen_val: Option<i64> = ovr_fill_v
+            let mut chosen_val: Option<i64> = ovr_fill_v
                 .or_else(|| ovr_by_name.get(p.name.name.as_str()).copied().flatten())
                 .or_else(|| self.eval_param_init(&p.value, pw))
                 // The WIDE bit domain, read back as an i64 because the declaration
@@ -1271,23 +1339,76 @@ impl Elaborator<'_> {
             // `-G K=128'hdead…` and `#(.K(128'h…))` could only be REFUSED — correctly,
             // since installing the low 64 bits would be a different design — so a
             // sweep over 128-bit keys had to go through a file instead.
-            if let Some(cv) = ovr_bits.filter(|c| c.width > 64) {
-                let key = self.fq(&p.name.name);
-                let mut cv = cv.clone();
-                // The DECLARED width still wins when there is one (§6.20.2 gives the
-                // override's range only to an untyped parameter).
-                if let Some((w, sg)) = self.param_decl_width(p) {
-                    cv.bits = resize_bits(&cv.bits, cv.width, w, cv.signed);
-                    cv.width = w;
-                    cv.signed = sg;
-                }
-                if cv.width > 64 {
-                    self.wide_param_bits.insert(key, cv);
-                    return;
+            // ⚠️⚠️ The override AT THE DECLARED WIDTH — the whole silent lane the
+            // aes_top round-34 census found, and the report named only its LOUD half.
+            //
+            // On `parameter logic [127:0] K = 128'hAAAA…`, `#(.K(-1))`, `#(.K(8'shFF))`
+            // and `#(.K('1))` printed `0000000000000000ffffffffffffffff` where both
+            // oracles print all ones: the i64 lane holds the value and ZERO-extends it
+            // on a read past bit 63, so a sign that has to reach bit 127 is lost. The
+            // old gate here only admitted an override whose LITERAL was already wider
+            // than 64 bits, so every narrow one fell through to that lane.
+            //
+            // ⚠️ Extending needs the OVERRIDE's signedness, not the parameter's and not
+            // the sign of the i64: `64'hFFFF_FFFF_FFFF_FFFF + 64'd0`, `-(64'sd1)` and
+            // `32'd0 - 32'd1` fold to the same i64 and the oracles extend the first
+            // with zeros and the other two with ones. That is what `ovr.signed` is for.
+            //
+            // ⚠️ And the result goes wide ONLY when it must. `#(.K(32'h5))` on the same
+            // declaration resizes to 128 bits of which the top 64 are zero — the i64
+            // lane reproduces that exactly, and a parameter parked in `wide_param_bits`
+            // stops being usable as a width or a bound (measured: `logic [K-1:0]` went
+            // correct → E3009 the moment a wide-literal override appeared). So the
+            // install is keyed on "are there bits the i64 lane cannot carry", which
+            // also repairs that pre-existing regression.
+            if !default_binds {
+                let cv = self.override_at_declared_width(
+                    self.param_decl_width(p),
+                    ovr_bits,
+                    ovr_fill.get(p.name.name.as_str()),
+                    chosen_val,
+                    ovr.signed.get(p.name.name.as_str()).copied(),
+                );
+                if let Some(cv) = cv {
+                    if (64..cv.width as usize).any(|i| bp_get(&cv.bits, i).0) {
+                        let key = self.fq(&p.name.name);
+                        self.wide_param_bits.insert(key, cv);
+                        return;
+                    }
+                    // ⚠️⚠️ It fits the i64 lane — but `chosen_val` may not HOLD it.
+                    // `#(.K({64'h0, 64'h5}))` folds to a 128-bit constant whose value
+                    // is 5; the i64 walk declines the concatenation, so `by_name` is
+                    // `Some(None)` and the chain fell through to `eval_param_init` on
+                    // the DECLARED DEFAULT. Before the four-channel conjunction above
+                    // that shape was loud; letting it fall through here would have
+                    // traded that loud for a silent default — which is exactly the
+                    // event this whole block exists to remove. The wide fold IS the
+                    // override, so read it back.
+                    chosen_val = Some(cv.bits.val.first().copied().unwrap_or(0) as i64);
                 }
             }
             {
-                let wide = self.wide_disagreeing_value(&p.value, meta, chosen_val);
+                // ⚠️⚠️ `p.value` is the DECLARED DEFAULT's expression, and this helper
+                // asks *"do the two domains AGREE about it?"* — a question that only
+                // means anything when the default is what binds. With an override in
+                // flight the two are DIFFERENT expressions, so they disagree by
+                // construction and this arm installed the DEFAULT and returned,
+                // throwing the override away at `errors=0`.
+                //
+                // Measured on `parameter logic [127:0] K = 128'hAAAA…1111`:
+                // `#(.K(5))`, `#(.K(32'hDEADBEEF))` and `#(.K(-1))` all printed the
+                // default where both oracles print the override. NINETEEN cells,
+                // every channel (`#()`, positional, `defparam`, `-G`, generate scope),
+                // every storage class — the whole silent lane was this one call
+                // folding the wrong expression.
+                //
+                // ⚠️ The flip is at declared width 65, not at the override's width: a
+                // declaration of 64 or less never reaches here.
+                let wide = if default_binds {
+                    self.wide_disagreeing_value(&p.value, meta, chosen_val)
+                } else {
+                    None
+                };
                 if let Some(cv) = wide {
                     let key = self.fq(&p.name.name);
                     self.wide_param_bits.insert(key, cv);

@@ -517,6 +517,48 @@ takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`
 > `65'(64'd18446744073709551615 + 64'd1)` — where the sum must carry into bit 64 —
 > also stays loud. Division and modulus have no wide arm.
 
+> **Fixed 2026-08-26 — a shift or index bigger than 2³² no longer folds to a smaller
+> one.** The constant domain's count/index channel took the low 32 bits of a value and
+> used them, silently. `64'hDEAD_BEEF_1234_5678 >> 64'h1_0000_0000` folded to the
+> operand UNSHIFTED where both iverilog and verilator give 0, `A[2**32]` folded to
+> `A[0]`, and `$bits({(2**32+2){8'hA5}})` built a **two**-element replication — all at
+> `errors=0 warnings=0`, and with vita's own runtime lane giving the right answer in
+> the same run.
+>
+> A SHIFT is now correct: §11.4.10 vacates with zeros (with the sign bit for `>>>`), so
+> any amount at or above the operand's width gives the same answer and the fold
+> saturates instead of truncating. A named amount folds the same way its literal twin
+> does.
+>
+> A COUNT or a SELECT INDEX above 2³² is now **loud**, not correct — there is no
+> answer to adopt. iverilog truncates a replication count (with a warning) and
+> verilator refuses it; for an out-of-range select iverilog gives `x` and verilator, a
+> 2-state tool, gives 0. The diagnostic names the index and its range.
+>
+> ⚠️ **Still loud, for a reason one level down**: an out-of-range CONSTANT select
+> (`localparam logic C = B[9];` over an 8-bit `B`) is `x` per §11.5.1, and a parameter
+> below 64 bits is stored as an integer with no unknown plane — which is why
+> `localparam logic X = 'x;` is loud too, with no select anywhere.
+
+> **Fixed 2026-08-26 — an override of a parameter wider than 64 bits is applied.**
+> On `parameter logic [127:0] K = <128-bit default>`, a NARROW override was silently
+> DISCARDED and the declared default used instead: `#(.K(5))`, `#(.K(32'hDEADBEEF))`
+> and `#(.K(-1))` all ran the child with the default at exit 0. A WIDE override was
+> refused with two diagnostics that contradicted each other (*"not a constant; default
+> kept"* about a constant that was not kept).
+>
+> Both are gone. Every channel applies — `#(.K(v))` named and positional, `defparam`,
+> `-G K=…`, a generate-scope instance, and a forward through an intermediate module —
+> and the value reaches the declared width with the OVERRIDE's signedness, so `#(.K(-1))`
+> and `#(.K('1))` are all ones while `#(.K(64'hFFFF_FFFF_FFFF_FFFF))` is zero-extended,
+> matching both oracles. An override that fits an integer keeps the parameter usable as
+> a width or a bound (`logic [K-1:0]`), which a wide-literal override used to destroy.
+>
+> ⚠️ **Two remain.** An override EXPRESSION whose top operator takes its width from the
+> context (`#(.K(128'h1 << 100))`) is still loud — folding it at the operand's own width
+> would drop the bits the context keeps. And a `defparam` records no signedness, so a
+> NEGATIVE `defparam` value still stops its sign at bit 63.
+
 ---
 
 ## File reads inside a subroutine body

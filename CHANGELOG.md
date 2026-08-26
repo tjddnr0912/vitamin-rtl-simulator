@@ -41,19 +41,61 @@ changed for a user of the simulator.
   |---|---|---|
   | `function f(…)`, straight-line body | **yes** — no `Expr::Call` survives | 3/5 |
   | …with a local variable, or calling another function | **yes** | 3/5 |
-  | …containing `for` | **no** | 1/5 |
+  | …with a ternary `?:`, a concat, a part-select | **yes** | 3/5 |
+  | …reading a module-level signal | **yes** (deliberate — framing would drop it from the `always_comb` sensitivity list) | 3/5 |
+  | …containing `for` / `while` / `repeat` | **no** | 1/5 |
   | …containing `if` / `else` | **no** | 1/5 |
   | …containing `case` | **no** | 1/5 |
+  | …containing a `$display` or any system task | **no** | 1/5 |
+  | …written `return x + 1;` instead of `f = x + 1;` | **no** | 1/5 |
+  | **`function int` / `function bit [7:0]` / `function byte`** | **no** — any 2-state return type | 1/5 |
+  | …with an unpacked-array formal | **no** | 1/5 |
+  | …whose return type is WIDER than its top-level operator | **no** — the context-width route | 1/5 |
   | `function automatic f(…)`, straight-line body | **no** — lowered to a frame body | 1/5 |
+  | …with an OUTPUT formal + a control-flow body | **no** — reason `frame_call`, not `user_call_in_expr` | 1/5 |
   | `import p::*;` then `pf(a)` | **yes** | 3/5 |
-  | `p::pf(a)` (qualified) | **no** — that process only | 2/5 |
+  | `p::pf(a)` (qualified) | **no** — per CALL SITE | 1/5 (2/5 if only one of the two sites is qualified) |
+
+  ⚠️ **Corrected a third time, 2026-08-26.** Two of the rows above were wrong and one
+  sentence pointed the wrong way.
+
+  * The qualified-call row said **2/5**. The refusal is per CALL SITE, not per function,
+    so on this table's own two-call shape it is **1/5**; 2/5 appears only when exactly one
+    of the two sites is qualified. And the route is not a resolver miss to be opened
+    cheaply — `inline_pkg_function` frames it deliberately, with the reason written out
+    (the inline fold evaluates the return expression at its self-determined operand width
+    and resizes afterwards, so an 8-bit `a+b` bound to a 16-bit return keeps 8 bits and
+    `255+255` is 254, not 510). All three spellings measure 510 today.
+  * The table named 4 of the **12** shapes that frame. The biggest omission for SV RTL is
+    a **2-state return type**: `function int f` frames where `function logic [31:0] f`
+    with the identical body inlines.
+
+  * ⚠️⚠️ **And `able` is ANTI-correlated with speed on exactly the body shape the report
+    cites.** The closing sentence used to file *"widen the inliner to control-flow bodies"*
+    as the improvement. Measured, interleaved, same design, only the body wrapped in
+    `if (1'b1) … else …`:
+
+    | body | inlined | framed | winner |
+    |---|---|---|---|
+    | 6 chained statements, local read **once** each | 0.19 s | 0.24 s | inline 1.27× |
+    | …read **twice** each | 1.77 s | 0.31 s | **framed 5.6×** |
+    | …read **three times** each | 14.39 s | ~0.35 s | **framed ~40×** |
+
+    Digests are byte-identical in every pair, and `elab_s` stays flat at 0.35 ms across a
+    0.16 s → 14.36 s spread of `sim_s` — so the arena SHARES the substituted subtree as a
+    DAG and the evaluator re-walks it as a TREE. The inline fold is therefore
+    kᶰ in (references per statement)^(chained statements) where the frame path is linear,
+    and the shape that blows up — an accumulator re-read inside a chain — is what a
+    cryptographic combinational function is made of. Widening the inliner would convert
+    the reporting design's 0.31 s into 1.8 s or 14 s at unchanged output.
+
+    ⇒ **`able` is a coverage number, not a speed proxy.** The item filed in ROADMAP §3 is
+    now the DAG re-walk (memoise a shared sub-expression per activation), not the inliner.
 
   So on real RTL `automatic` is rarely the binding constraint: the reporting design has 24
   `function automatic` in its RTL, and removing the keyword from all 24 moved
   `user_call_in_expr` from 262 to 261 — **0.4%** — because 16 of those 24 contain `for` or
-  `case`, which is what a cryptographic combinational function looks like. Widening the
-  inliner to control-flow bodies (or opening `Terminator::Call` in `is_codegen_able`) is
-  filed in ROADMAP §3; the qualified-call gap is its own row.
+  `case`. That observation stands; what changed is what to do about it.
 
 ### Documentation
 

@@ -65,6 +65,19 @@ pub(crate) struct ResolvedOverride {
     ///
     /// Folded at the expression's OWN width, which is what §6.20.2 asks for.
     pub(crate) bits: Option<ir::ConstVal>,
+    /// Is the override EXPRESSION signed (§11.8.1)? `None` = the channel does not
+    /// know (a `defparam`, whose collector folds to i64 before the record exists).
+    ///
+    /// ⚠️⚠️ This is not derivable from the i64 in `value`, and the difference is a
+    /// silent-wrong. Overriding a `parameter logic [127:0]`, all three of
+    /// `64'hFFFF_FFFF_FFFF_FFFF + 64'd0`, `-(64'sd1)` and `32'd0 - 32'd1` fold to the
+    /// SAME i64, and both oracles extend the first with zeros and the other two with
+    /// ones. Only the expression's signedness separates them, and `bits` cannot carry
+    /// it because `override_bits` declines every context-determined top.
+    ///
+    /// Consumed by `bind_one_param` and ONLY for an extension past the i64 lane —
+    /// `None` there means "stay on the route you took before".
+    pub(crate) signed: Option<bool>,
 }
 
 impl ResolvedOverride {
@@ -82,19 +95,30 @@ impl ResolvedOverride {
     /// `params.rs` asks exactly this conjunction before recording `unfoldable`;
     /// one spelling means the warning and the escalation cannot disagree.
     pub(crate) fn keeps_default(&self) -> bool {
-        Self::keeps_default_of(self.value, self.fill.as_ref(), self.str.as_ref())
+        Self::keeps_default_of(
+            self.value,
+            self.fill.as_ref(),
+            self.str.as_ref(),
+            self.bits.as_ref(),
+        )
     }
 
     /// [`Self::keeps_default`] on the three channels before the record exists —
     /// the named-connection arm decides inside a closure that PRODUCES `value`,
     /// so it cannot ask the record. Sharing the conjunction is the point: split
     /// across two `if`s in two files it is four places to forget a channel.
+    /// ⚠️ FOUR channels, not three. `bits` became an applying channel when the wide
+    /// override landed, and leaving it out of this conjunction is what made
+    /// `#(.K(128'hdead…))` warn *"not a constant; default kept"* and then error, about
+    /// an override that is a constant and is now applied. One spelling is the point —
+    /// `params.rs`'s `has_applied_override` asks the same four.
     pub(crate) fn keeps_default_of(
         value: Option<i64>,
         fill: Option<&(ast::IntLitKind, String)>,
         text: Option<&String>,
+        bits: Option<&ir::ConstVal>,
     ) -> bool {
-        value.is_none() && fill.is_none() && text.is_none()
+        value.is_none() && fill.is_none() && text.is_none() && bits.is_none()
     }
 }
 
