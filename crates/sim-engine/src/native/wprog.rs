@@ -388,7 +388,33 @@ fn compile_node(
     // right shift declines when signed, and a comparison passes the operand
     // sign to the shared comparison functions.
     let sw = wt.get(eid);
-    if sw.width != w || sw.signed != signed {
+    if sw.width != w {
+        return None;
+    }
+    // ⚠️⚠️ The SIGN half of this gate applies to every node EXCEPT a `Const` leaf.
+    //
+    // The module header above records that dropping the sign half entirely was built,
+    // measured SOUND, measured **1.00x** on picorv32 and keccak, and reverted. That
+    // measurement was right and its conclusion was scoped to those two designs. An
+    // external round-34 report brought a shape neither of them has, and there the same
+    // gate costs 2.9x:
+    //
+    //   64 continuous assigns `assign n_i = s ^ II;`, 200k cycles, release, interleaved
+    //     localparam logic [31:0] II   (unsigned)   native 41.1 ns/eval   vm 72.8   0.56x
+    //     localparam int          II   (SIGNED)     native 118.1 ns/eval  vm 73.2   1.61x
+    //
+    // A `localparam int` is what SV RTL writes, and a genvar in an expression is the
+    // same cell — so a `generate for` whose body indexes with its genvar, which is what
+    // a hash or cipher round looks like, falls off this path entirely.
+    //
+    // Restricting the relaxation to `Const` keeps the soundness argument the header
+    // already makes, and makes it trivial rather than set-wide: at EQUAL WIDTH a
+    // constant's two's-complement BITS do not depend on how its signedness was
+    // recorded, and the `Const` arm below masks to `w` and pushes exactly those bits.
+    // The two ops that read a sign are unaffected — `>>>` declines on the NODE's sign,
+    // and a comparison requires both operands to share a signedness and passes it down
+    // explicitly, so a mixed-sign comparison still declines at its own guard.
+    if sw.signed != signed && !matches!(ir.exprs.get(eid as usize)?, sim_ir::Expr::Const { .. }) {
         return None;
     }
     let mask = mask_of(w);
