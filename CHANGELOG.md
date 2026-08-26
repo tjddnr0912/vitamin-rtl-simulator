@@ -11,6 +11,29 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A 2-state cast paid for bits its operand did not have.** Round 35 stopped nested casts
+  from multiplying; a single cast still expanded to one `CaseEq` per bit of the **target**
+  type, so `int'(nb)` on a 4-bit `nb` built 32 terms of which 28 selected bits of a known
+  zero-extension. A widening cast now coerces at the **operand's** width and extends
+  afterwards — provably the same bits (an unsigned extension is literal zeros, a signed one
+  replicates a sign bit that coercion has already forced to 0 or 1).
+
+  Measured on the reporting design's own repro, release, interleaved: **69.6 s → 6.7 s
+  (10.4×)**, stdout byte-identical. Fan-out for a 4-bit operand: `int'` 32→4, `longint'`
+  64→4, `shortint'` 16→4. The two no-cast controls did not move, which is what shows the
+  win is the cast and not a global effect.
+
+  ⚠️ **The reorder introduced a silent-wrong and it was caught by measuring its own
+  premise.** The equivalence argument says "the operand's width", but the code asked
+  `ir_bits_of(e).unwrap_or(32)` — and a deferred hierarchical reference has no width yet, so
+  `longint'(u1.w40)` on a `logic [39:0]` silently dropped its top 8 bits at exit 0. **A green
+  6,185-test suite and a green 90-cell three-way sweep both passed over it**, because every
+  operand in both had a declared width. Now gated on the width being *known* and pinned.
+
+  ⚠️ Still open, with the numbers, in ROADMAP §2: a same-width `int'(f())` names `f` 32 times
+  against Icarus's 1. This removes paying for bits the operand does not have; it does not
+  remove paying per bit.
+
 - **A 2-state cast named its operand once per declared bit.** `int'(e)` is lowered into
   a `Concat` of one `CaseEq(Select(e, i), 1'b1)` per target bit, and the engine walks
   that DAG as a tree — so an unguarded `keyword'(e)` cast multiplied the cost of
@@ -61,6 +84,26 @@ changed for a user of the simulator.
   extracts the flag literals from the argument parser's own match arms and asserts every
   one appears in `--help`, so the next undocumented flag is a red test rather than
   another external report.
+
+### Added
+
+- **`run.json` now carries per-builtin evaluation counts and time** under `--obs-procs` /
+  `--obs-procs-time`, as a `builtins` sibling of `processes`. A single expensive process row
+  splits into "simulator primitives" vs "your RTL": `$fgets`, `$sscanf`, `$fdisplay`,
+  `.push_back()`, `.size()` and the rest each get `calls` and (when timed) `time_s`.
+
+  The convention is stated **in the file**, not just in a doc: `attribution: "self"` means a
+  row excludes builtins nested inside it, and `included_in_processes: true` means that time
+  is already inside the process row — so the two arrays must never be summed. Verified on a
+  nested `$fdisplay(fd, "%s", $sformatf(…))`, where an inclusive convention would have summed
+  past its own parent.
+
+  Instrumentation covers all four seams a builtin can reach the engine through, including the
+  synchronous `&self` frame executor, which does not go through the task dispatcher — without
+  that arm a `$display` inside a subroutine body would have been silently absent. Cost when
+  not requested, measured on a constructed worst case (3M pure system-function evaluations in
+  a loop): **+0.86%**, inside the measurement noise of a control that touches none of the
+  seams.
 
 ### Documentation
 

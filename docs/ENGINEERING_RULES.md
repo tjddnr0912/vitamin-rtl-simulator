@@ -2669,3 +2669,63 @@ instance-cycle flat from N=2 to N=128. Five engines costing 5× is what linear p
 Two points cannot distinguish linear from super-linear, and the reporter had two. Before
 accepting or rejecting a scaling claim, get enough points to fit — and report the
 residuals, because "it fits a line" is only meaningful with them.
+
+## Round 36 — one external report (2026-08-27 · §4.5.387)
+
+### A green suite over a fabricated default
+
+The round-36 cast fix rests on a stated equivalence: coercing at *the operand's width* and
+extending gives the same bits as extending and coercing at the target's. The code that
+implemented it asked `ir_bits_of(e).unwrap_or(32)`.
+
+For a deferred hierarchical reference the width is not known yet, so `unwrap_or(32)` did not
+read a width — it **invented** one, and `longint'(u1.w40)` on a `logic [39:0]` silently
+dropped its top 8 bits at exit 0. The full **6,185-test suite passed**, and so did a
+purpose-built **90-cell three-way sweep against live Icarus**, because every operand in both
+had a declared width.
+
+The rule that caught it: when a change rests on a property (*"this is the operand's width"*),
+find the code that establishes the property and check it cannot answer with a default. An
+`unwrap_or` under a correctness argument is a fabricated fact wearing the argument's clothes,
+and no amount of green tells you otherwise — the tests can only exercise the shapes someone
+thought to write.
+
+### The profile is not allowed to say zero for something that runs
+
+The reporter asked for a call tree to task granularity. vita lowers a subroutine two ways: a
+frame body entered through a runtime call seam, and an **inline splice** that copies the
+callee's statements into the caller at elaborate time. A profile keyed on the runtime seam
+would report `0 calls` for every inlined subroutine — and a task showing 0 reads as *"this one
+is free"*, which is a reporting silent-wrong about precisely the thing the user is hunting.
+
+So the call tree was refused and the per-builtin half — which the reporter had named as an
+acceptable fallback — shipped instead, with the prerequisite written into the queue: an
+elaborate-time record of which call sites were inlined and into which caller, so a seam-less
+task can be reported as *"inlined into its caller"* rather than as absent.
+
+The accuracy ladder applies to the OBSERVABILITY rail too. A profile that under-reports is not
+a partial feature, it is a wrong answer with a number attached.
+
+### State the attribution convention in the artifact, not in a doc
+
+A nested-cost table is ambiguous until someone says whether a row's time includes its
+children. The `builtins` object answers it in the file — `attribution: "self"` and
+`included_in_processes: true` — so a consumer never has to infer it, and a reader who sums the
+two arrays is contradicted by the data rather than by a paragraph they did not read.
+
+Verify the convention by construction, not by assertion: on a nested
+`$fdisplay(fd, "%s", $sformatf(…))` the inclusive convention sums *past its own parent*, so the
+double-count is visible in the numbers if it is ever reintroduced.
+
+### Measure the settle, not just the expression
+
+Three rounds of this report chased the cost of *evaluating* an expression. The largest single
+term turned out to be **how many times the expression is evaluated**: a continuous assign whose
+RHS contains any call or any system function is visited 6.00× per input change instead of 1.00×,
+because the purity predicate that feeds the dirty worklist rejects both node kinds outright.
+
+Two lessons. First, a per-evaluation cost and an evaluation count multiply, and profiling tools
+that report time-per-row show you their product — divide it out early. Second, the blast radius
+of a conservative predicate is invisible until someone counts: this one also fires on vita's own
+inliner output, making an inlined function measurably *slower* than the same expression written
+by hand, which is the opposite of what the inliner exists to do.

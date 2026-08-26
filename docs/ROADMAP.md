@@ -240,6 +240,53 @@
 >
 > **🆕 §4.5.365 곁가지 — `int'($random*1.0)` 의 draw 횟수**(둘 다 틀렸고 값이 **바뀌었다**): `lower_real_to_int_cast` 의 ≤32비트 가지가 정확 반올림으로 바뀌며 피연산자 명명 횟수가 2→4 로 늘었고, 그 함수의 **다른 호출자**(`lower_prim_cast` = `keyword'(e)`)에는 **`expr_is_repeatable` 게이트가 없다** ⇒ `int'($random*1.0)` 이 캐스트당 2회 → 4회 draw(iverilog 는 1회). 어느 쪽도 맞은 적이 없지만 **silent↔silent 를 조용히 맞바꾸지 마라** 규칙상 기록한다. 봉쇄책은 이미 이름이 있다 — 바인드가 쓰는 그 게이트를 `lower_prim_cast` 에도 주는 것(단, 거기선 decline 이 real 을 정수 문맥에 그대로 두므로 **다른 처리**가 필요하다).
 >
+> **🆕🆕 §4.5.387 (round-36 C) — ⭐ THE BIGGEST MEASURED LEVER IN THE SIMULATOR, and nobody
+>   had measured it.** A continuous assign whose RHS contains ANY `Expr::Call` or ANY
+>   `Expr::SysFunc` is re-evaluated **6.00× per input change** instead of 1.00×, measured
+>   exactly (300,001 evals for 50,000 clocked iterations vs 50,001 for the same design with a
+>   plain expression RHS; the same call in an `always @*` is 1.00×). Root =
+>   `levelize::expr_is_pure_of_nets` (crates/sim-engine/src/levelize.rs:329), whose
+>   `E::SysFunc{..} | E::Call{..} | E::ArrayItem{..} => false` arm sets `dirty_ok=false`, drops
+>   the assign into `ca_always`, and makes `settle_cont_assigns` visit it on every fixpoint
+>   pass of every settle, ignoring the `ca_dirty` worklist.
+>
+>   Measured cost of the SysFunc half alone, same design, only the RHS spelling varying:
+>   `$unsigned(src) ^ …` **1.89×**, `… ^ 128'($bits(src))` — a compile-time constant —
+>   **4.90×**. The doc comment justifies the blanket reject with *"`$random`/`$time` do not
+>   depend on their inputs alone"*, which is true of those and false of the large pure
+>   majority of the 79 `SysFuncId` variants (~22 are clearly impure).
+>
+>   ⭐⭐ **And vita's own inliner trips this.** `resize_inline_assign` seals its result with a
+>   `$signed`/`$unsigned` (inline_fn.rs:631,655), which IS an `Expr::SysFunc` — so an inlined
+>   function measured **1.98× SLOWER** (0.158 s vs 0.080 s, 253,126 vs 50,001 evals) than the
+>   identical expression written by hand. A *perfect* control-flow inliner would still leave
+>   the assign at ~5 evals/iter. That is an independent reason the round-35 ruling against
+>   widening the inliner holds.
+>
+>   FIX ORDER, with measured prizes:
+>   1. Refine the SysFunc arm to a per-`SysFuncId` ALLOW-list, `_`-free exhaustive so a new
+>      variant cannot default to the pure side. Prize 1.89×–4.90×, plus 1.98× on every function
+>      the inliner touches. ~79 variants to audit — a real bounded job, not obviously safe for
+>      all of them.
+>   2. Complete the dep set for `Expr::Call`: `expr_nets`' Call arm (levelize.rs:161) walks only
+>      the ARGS, never the callee body, so the reject is SOUND today. Walking the body makes
+>      certification possible. Prize on the reporter's exact repro: **5.95×**, byte-identical.
+>   3. Only then the body cost (2.33× ceiling), where frame setup is just 7% of the per-call
+>      cost — so neither half should be sold as "frame-call overhead".
+>
+>   ⚠️⚠️ **Certification changes the DIAGNOSTIC stream, and that must be adjudicated first.**
+>   Measured on one out-of-range-read design with identical output: a pure RHS gives
+>   `errors=5`, the same RHS wrapped in a no-op `$unsigned` gives `errors=9`. The error COUNT
+>   today tracks an internal scheduling classification rather than the design. Fixing the arm
+>   moves 9→5 (toward consistency) but WILL move golden error counts on any design with a
+>   call/SysFunc-bearing cont-assign that reads out of range; run.rs:621 records picorv32
+>   moving 6→9 for the opposite change.
+>
+>   ⚠️ Do NOT add a `pure` flag to `FuncDef`/`SimIr` — both are SchemaHash-frozen and it would
+>   force format_version 29→30. Everything above is computable out-of-band (`levelize.rs` is
+>   not serialized; a static-lifetime bit rides a `SimOpts`-style sidecar), so no bump is
+>   needed.
+>
 > **🆕 §4.5.386 (round-35 R1) — the same row, now with the fan-out MEASURED and the
 >   nesting half closed.** `coerce_two_state` names its operand once per TARGET BIT (it
 >   builds a `Concat` of `CaseEq(Select(e, i), 1'b1)`) and the engine walks that DAG as a
