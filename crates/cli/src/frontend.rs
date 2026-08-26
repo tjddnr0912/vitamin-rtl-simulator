@@ -658,6 +658,23 @@ pub(crate) fn run_vita_str_gated(
         Ok(v) => v,
         Err(c) => return c,
     };
+    // R14: the profile is published through `run.json` and nowhere else, so
+    // `--obs-procs` without `--obs-dir` would instrument the whole run and then
+    // discard every number at exit 0. Loud, for the same reason `--probe` is.
+    if opts.proc_profile.is_some() && opts.obs_dir.is_none() {
+        eprintln!(
+            "error[{}]: '--obs-procs' requires '--obs-dir <D>' (the profile is \
+             published as run.json's `processes` object)",
+            MsgCode::CliBadFlag.code_num()
+        );
+        return EXIT_CLI_ERROR;
+    }
+    // R14 (ROADMAP §3 ⑭): the profile IDENTITY tables. Held HERE and not
+    // threaded through `SimOpts`, because the engine never reads them — only
+    // the `run.json` writer does — and every table on `SimOpts` is one more row
+    // `native::design_eligibility` has to classify.
+    let proc_idents = sc.proc_idents;
+    let ca_idents = sc.ca_idents;
     let sim_opts = SimOpts {
         fork_modes: sc.fork_modes,
         net_names: sc.net_names,
@@ -772,6 +789,15 @@ pub(crate) fn run_vita_str_gated(
         };
         let backend = name(result.backend);
         let backend_requested = name(opts.backend.unwrap_or_default());
+        // R14: `Some` iff the run asked for a profile AND the engine produced
+        // one. Both halves are read from the RESULT, so a `--obs-procs` that
+        // somehow reached an engine that did not honour it emits `null`
+        // ("not measured") instead of a fabricated empty table.
+        let procs = result.proc_profile.as_ref().map(|profile| obs::ObsProcs {
+            profile,
+            proc_idents: &proc_idents,
+            ca_idents: &ca_idents,
+        });
         emit_obs(
             dir,
             file,
@@ -785,6 +811,7 @@ pub(crate) fn run_vita_str_gated(
             obs_start,
             elab_s,
             sim_s,
+            procs,
         );
     }
     final_code
@@ -808,6 +835,7 @@ pub(crate) fn emit_obs(
     start: std::time::Instant,
     elab_s: f64,
     sim_s: f64,
+    procs: Option<obs::ObsProcs<'_>>,
 ) {
     let utc_unix_s = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -855,6 +883,7 @@ pub(crate) fn emit_obs(
         backend_requested,
         codegen: &result.codegen,
         native: &result.native,
+        procs,
         utc_unix_s,
         wall_s: start.elapsed().as_secs_f64(),
         elab_s,

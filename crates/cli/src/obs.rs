@@ -73,6 +73,11 @@ pub struct ObsRun<'a> {
     /// as the `native` object. Deterministic; static per (design, run options)
     /// — a `--probe`/stage-instrumented run is ineligible by design (§4.3).
     pub native: &'a sim_engine::native::NativeEligibility,
+    /// R14 (ROADMAP §3 ⑭): the per-body execution profile, or `None` without
+    /// `--obs-procs`. The `evals` half is DETERMINISTIC and belongs in the
+    /// golden; the `nanos` half only exists under `--obs-procs-time` and is
+    /// isolated exactly like the four wall-clock fields below.
+    pub procs: Option<ObsProcs<'a>>,
     /// Isolated non-deterministic field (excluded from the determinism golden).
     pub utc_unix_s: u64,
     /// Isolated non-deterministic field (excluded from the determinism golden).
@@ -118,6 +123,81 @@ fn json_str_array(out: &mut String, items: &[String]) {
         json_str(out, it);
     }
     out.push(']');
+}
+
+/// R14 (ROADMAP §3 ⑭) — everything `run.json`'s `processes` object needs, in one
+/// borrow: the engine's accumulators plus the elaborate-time identity tables
+/// that turn an index into a line of RTL.
+///
+/// Two SEPARATE tables and not one, because the two domains are indexed
+/// independently in the IR (`SimIr.processes` / `SimIr.cont_assigns`). The
+/// serialized row carries its `domain` explicitly rather than letting the reader
+/// infer it from `kind` — `kind` is a source-construct vocabulary that may grow,
+/// and a consumer keying off it would break the day it does.
+pub struct ObsProcs<'a> {
+    pub profile: &'a sim_engine::ProcProfile,
+    /// Per-ProcId identity, parallel to `profile.evals`.
+    pub proc_idents: &'a [sim_engine::ProcIdent],
+    /// Per-cont-assign identity, parallel to `profile.ca_evals`.
+    pub ca_idents: &'a [sim_engine::ProcIdent],
+}
+
+/// One serialized profile row, already resolved from the two parallel tables.
+///
+/// `evals` is the SORT KEY and it is deterministic, so the row ORDER is
+/// deterministic too — including on a `--obs-procs-time` run, where `nanos` is
+/// wall clock. That is the whole reason timing is not the sort key: a profile
+/// whose row order changed between two runs of the same design could not be
+/// byte-diffed, which is what the rest of this rail exists to allow.
+struct ProcRow<'a> {
+    domain: &'static str,
+    index: usize,
+    ident: &'a sim_engine::ProcIdent,
+    evals: u64,
+    nanos: u64,
+}
+
+impl ObsProcs<'_> {
+    /// Flatten both domains into one list, sorted most-expensive-first.
+    ///
+    /// ⚠️ An identity table SHORTER than its accumulator does not drop the row —
+    /// it falls back to a default ident (empty kind/scope). A dropped row would
+    /// be a profile that silently omits the process the user is hunting, which
+    /// is the one failure this feature cannot afford; an unlabelled row is at
+    /// least a visible "here is cost I cannot name".
+    fn rows(&self) -> Vec<ProcRow<'_>> {
+        static UNKNOWN: std::sync::OnceLock<sim_engine::ProcIdent> = std::sync::OnceLock::new();
+        let unknown = UNKNOWN.get_or_init(sim_engine::ProcIdent::default);
+        let p = self.profile;
+        let mut out: Vec<ProcRow<'_>> = Vec::with_capacity(p.evals.len() + p.ca_evals.len());
+        for (i, &n) in p.evals.iter().enumerate() {
+            out.push(ProcRow {
+                domain: "process",
+                index: i,
+                ident: self.proc_idents.get(i).unwrap_or(unknown),
+                evals: n,
+                nanos: p.nanos.get(i).copied().unwrap_or(0),
+            });
+        }
+        for (i, &n) in p.ca_evals.iter().enumerate() {
+            out.push(ProcRow {
+                domain: "assign",
+                index: i,
+                ident: self.ca_idents.get(i).unwrap_or(unknown),
+                evals: n,
+                nanos: p.ca_nanos.get(i).copied().unwrap_or(0),
+            });
+        }
+        // Descending by cost, then a TOTAL tiebreak on (domain, index) so two
+        // rows with equal counts cannot swap between runs.
+        out.sort_by(|a, b| {
+            b.evals
+                .cmp(&a.evals)
+                .then_with(|| a.domain.cmp(b.domain))
+                .then_with(|| a.index.cmp(&b.index))
+        });
+        out
+    }
 }
 
 /// Shape the isolated `wall_s` value cleanly (its VALUE is never compared).
@@ -227,6 +307,59 @@ impl ObsRun<'_> {
             s.push_str(&n.to_string());
         }
         s.push_str("}}");
+        // R14: the DYNAMIC counterpart of `codegen`. That object says which
+        // bodies the VM *could* compile; this one says which bodies actually
+        // ran and how often — the question "which `always_comb` eats the cost"
+        // asks, and the one a static census cannot answer. `null` (not an empty
+        // object) without `--obs-procs`, so a consumer can tell "not measured"
+        // from "measured, nothing ran".
+        s.push_str(",\n  \"processes\": ");
+        match &self.procs {
+            None => s.push_str("null"),
+            Some(pp) => {
+                let rows = pp.rows();
+                let timed = pp.profile.timed;
+                s.push_str("{\"timed\": ");
+                s.push_str(if timed { "true" } else { "false" });
+                s.push_str(", \"counts\": {\"processes\": ");
+                s.push_str(&pp.profile.evals.len().to_string());
+                s.push_str(", \"assigns\": ");
+                s.push_str(&pp.profile.ca_evals.len().to_string());
+                s.push_str(", \"total_evals\": ");
+                let total: u64 = rows.iter().map(|r| r.evals).sum();
+                s.push_str(&total.to_string());
+                s.push_str("},\n  \"items\": [");
+                for (i, r) in rows.iter().enumerate() {
+                    s.push_str(if i > 0 { ",\n    {" } else { "\n    {" });
+                    s.push_str("\"domain\": ");
+                    json_str(&mut s, r.domain);
+                    s.push_str(", \"index\": ");
+                    s.push_str(&r.index.to_string());
+                    s.push_str(", \"kind\": ");
+                    json_str(&mut s, r.ident.kind);
+                    s.push_str(", \"scope\": ");
+                    json_str(&mut s, &r.ident.scope);
+                    s.push_str(", \"file\": ");
+                    json_str(&mut s, &r.ident.file);
+                    s.push_str(", \"line\": ");
+                    s.push_str(&r.ident.line.to_string());
+                    s.push_str(", \"col\": ");
+                    s.push_str(&r.ident.col.to_string());
+                    s.push_str(", \"evals\": ");
+                    s.push_str(&r.evals.to_string());
+                    // The wall-clock half is EMITTED ONLY when it was measured.
+                    // A `"time_s": 0.0` on an untimed run reads as "this body
+                    // costs nothing", which is a different claim from "nobody
+                    // asked" — and this rail is read by agents.
+                    if timed {
+                        s.push_str(", \"time_s\": ");
+                        s.push_str(&fmt_wall(r.nanos as f64 / 1e9));
+                    }
+                    s.push('}');
+                }
+                s.push_str("\n  ]}");
+            }
+        }
         // ── isolated wall-clock (excluded from the determinism golden) ──
         s.push_str(",\n  \"utc_unix_s\": ");
         s.push_str(&self.utc_unix_s.to_string());

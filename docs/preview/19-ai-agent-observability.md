@@ -15,7 +15,7 @@
 
 | REQ | 내용 | 원문 | 분류 |
 |---|---|---|---|
-| R-L0 | run manifest(run.json — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·**backend**·**backend_requested**·**codegen{able,total,frame_bodies,reject_reasons{…}}**·**native{eligible,reject_reasons{…}}**·utc_unix_s·wall_s. `backend`/`codegen`/`native`=T0/S0 계기(doc-21 §7.3, 2026-08-03 additive — 기존 kind 위 필드 추가라 schema_ver 1 유지): `backend`=**실제 실행기** + `backend_requested`=**요청된 것**(둘 다 `--backend` 어휘 · `backend` 는 결과에서 읽는다). ⚠️ **Corrected 2026-08-25 — this entry described the pre-Phase-B world and was actively misleading.** It said *"`--backend native` still falls back to the VM, so writing the request verbatim would report an executor that did not run"* and *"`native` currently appears only in `backend_requested`"*. Neither is true: **`native` is the DEFAULT executor, it runs 100.00% of the corpus, and `backend` reports `"native"` on an ordinary run** (verified: a plain `vita --obs-dir …` writes `backend: native`, `backend_requested: native`, `native.refused: null`). An agent reading this field must NOT infer that vita interprets. The two fields still exist for the same reason and **their comparison is still the only fallback signal**: `native.refused` 는 설계의 성질이라 아무것도 거부하지 않을 때 `null` 이고, 그때가 바로 폴백이 일어나는 경우다 · `codegen` 이 정적 census 라 이 필드 없이는 interp 강제 런의 `able` 이 "VM 이 돌렸다"로 오독됨), `codegen`=②층 VM 이 이 설계에서 무엇을 거부했는가(엔진 compile gate 와 같은 walk = 단일 소스 · `sformatf` 키는 desugar 된 string concat 도 포함 — "소스가 $sformatf 를 썼다"가 아니라 "IR 이 $sformatf 노드에 닿는다"), `native`=③층 판정 **두 층**: `eligible`=v1 **범위**가 받는가(설계 수준 상한) · `buildable`=오늘의 **저장소**가 실제로 담을 수 있는가(`NetArena::buildable`) · `refused`=런타임 게이트(둘의 AND)가 거부한 이유 또는 `null` — **어휘가 둘**이다: 설계 게이트가 거부하면 `reject_reasons` 의 **키**(여럿이면 그 맵의 사전순 첫 항 = 결정적이지만 "하나의" 이유), 저장소가 거부하면 **맵에 없는 자체 문구**(소비자는 조인 실패를 오류가 아니라 저장소 경우로 읽어야 한다). 둘을 한 플래그로 접으면 **상한이 능력으로 읽힌다**(서브루틴 설계는 eligible 이지만 buildable 아님). (설계, 런 옵션) 별 정적 — `--probe`/stage 계측 런은 설계상 부적격(doc-21 §4.3). 리뷰어 원문의 `run_id`는 **미구현-연기**, wall-clock 키는 `utc`가 아니라 `utc_unix_s`/`wall_s`) | §2 L0 | 로그 rail |
+| R-L0 | run manifest(run.json — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·**backend**·**backend_requested**·**codegen{able,total,frame_bodies,reject_reasons{…}}**·**native{eligible,reject_reasons{…}}**·**processes**(R14 · § 4.6 — `--obs-procs` 없이는 `null`)·utc_unix_s·wall_s. `backend`/`codegen`/`native`=T0/S0 계기(doc-21 §7.3, 2026-08-03 additive — 기존 kind 위 필드 추가라 schema_ver 1 유지): `backend`=**실제 실행기** + `backend_requested`=**요청된 것**(둘 다 `--backend` 어휘 · `backend` 는 결과에서 읽는다). ⚠️ **Corrected 2026-08-25 — this entry described the pre-Phase-B world and was actively misleading.** It said *"`--backend native` still falls back to the VM, so writing the request verbatim would report an executor that did not run"* and *"`native` currently appears only in `backend_requested`"*. Neither is true: **`native` is the DEFAULT executor, it runs 100.00% of the corpus, and `backend` reports `"native"` on an ordinary run** (verified: a plain `vita --obs-dir …` writes `backend: native`, `backend_requested: native`, `native.refused: null`). An agent reading this field must NOT infer that vita interprets. The two fields still exist for the same reason and **their comparison is still the only fallback signal**: `native.refused` 는 설계의 성질이라 아무것도 거부하지 않을 때 `null` 이고, 그때가 바로 폴백이 일어나는 경우다 · `codegen` 이 정적 census 라 이 필드 없이는 interp 강제 런의 `able` 이 "VM 이 돌렸다"로 오독됨), `codegen`=②층 VM 이 이 설계에서 무엇을 거부했는가(엔진 compile gate 와 같은 walk = 단일 소스 · `sformatf` 키는 desugar 된 string concat 도 포함 — "소스가 $sformatf 를 썼다"가 아니라 "IR 이 $sformatf 노드에 닿는다"), `native`=③층 판정 **두 층**: `eligible`=v1 **범위**가 받는가(설계 수준 상한) · `buildable`=오늘의 **저장소**가 실제로 담을 수 있는가(`NetArena::buildable`) · `refused`=런타임 게이트(둘의 AND)가 거부한 이유 또는 `null` — **어휘가 둘**이다: 설계 게이트가 거부하면 `reject_reasons` 의 **키**(여럿이면 그 맵의 사전순 첫 항 = 결정적이지만 "하나의" 이유), 저장소가 거부하면 **맵에 없는 자체 문구**(소비자는 조인 실패를 오류가 아니라 저장소 경우로 읽어야 한다). 둘을 한 플래그로 접으면 **상한이 능력으로 읽힌다**(서브루틴 설계는 eligible 이지만 buildable 아님). (설계, 런 옵션) 별 정적 — `--probe`/stage 계측 런은 설계상 부적격(doc-21 §4.3). 리뷰어 원문의 `run_id`는 **미구현-연기**, wall-clock 키는 `utc`가 아니라 `utc_unix_s`/`wall_s`) | §2 L0 | 로그 rail |
 | R-L1 | test-case ledger(results.jsonl, PASS=1줄 terse·FAIL=detail_ref) | §2 L1 | 로그 rail |
 | R-L2 | failure detail(fail/*.json, 발산점 값 우선) | §2 L2 | 로그 rail |
 | R-L3 | FSM/state trace(**transition만**, hang용 stuck_in) | §2 L3 | 로그 rail |
@@ -74,7 +74,7 @@
 | 단계 | 산출물 | 구현 스케치 | 검증(teeth) | 공수 |
 |---|---|---|---|---|
 | **OBS-0 ✅** | 본 스펙(계약·스키마·우선순위) | — | — | — |
-| **OBS-1 (MVP)** | `--obs-dir D` → `run.json`(R-L0 — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·backend·backend_requested·codegen{…}·native{eligible,buildable,refused,…}·utc_unix_s·wall_s; `run_id`는 미구현-연기) + `results.jsonl`(R-L1: v1=run당 1줄, status=PASS/FAIL(exit·`$fatal`·assertion fail)·finish time) + `coverage.json`(R-L5: **functional covergroup 커버리지만** 직렬화 — `groups[]{instance, coverage_pct, coverpoints[]{name,is_cross,num_bins,covered_bins,coverage_pct}}`; assertion pass/fail·cover property 카운트는 **미포함** — OBS-2 `sva.jsonl` 슬라이스로 라우팅) | CLI 플래그+직렬화기(vita-log 인접 신규 모듈). 엔진의 기존 카운터를 종료 시 flush | 골든 byte-diff(같은 입력 2-run 동일)·수치는 기존 `$display`/exit와 3-way 대조 | S-M |
+| **OBS-1 (MVP)** | `--obs-dir D` → `run.json`(R-L0 — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·backend·backend_requested·codegen{…}·native{eligible,buildable,refused,…}·processes(§4.6 · `--obs-procs` 없이는 null)·utc_unix_s·wall_s; `run_id`는 미구현-연기) + `results.jsonl`(R-L1: v1=run당 1줄, status=PASS/FAIL(exit·`$fatal`·assertion fail)·finish time) + `coverage.json`(R-L5: **functional covergroup 커버리지만** 직렬화 — `groups[]{instance, coverage_pct, coverpoints[]{name,is_cross,num_bins,covered_bins,coverage_pct}}`; assertion pass/fail·cover property 카운트는 **미포함** — OBS-2 `sva.jsonl` 슬라이스로 라우팅) | CLI 플래그+직렬화기(vita-log 인접 신규 모듈). 엔진의 기존 카운터를 종료 시 flush | 골든 byte-diff(같은 입력 2-run 동일)·수치는 기존 `$display`/exit와 3-way 대조 | S-M |
 | **OBS-2** | `--probe <path>`(반복)/`--probe-file F` → `trace.jsonl`(R-L3/R-I1: **변경 시만** `{v,t,kind:"chg",path,old,new}`) + `sva.jsonl`(R-L6: property명·시각·verdict·leaf 신호값=support-cone v0) | VCD 변경 스트림의 2번째 소비자로 probe sink 연결·경로 해소는 elaborate 심볼 테이블(미해석=loud E-code) | 3-way 차분(trace.jsonl ≡ VCD 동일 net 타임라인 ≡ `$monitor`)·probe 오타=loud 테스트 | M |
 | **OBS-3** | `$vita_stage("label", v0, v1, …)` → `stage.jsonl`(R-S3: `{v,t,kind:"stage",label,idx,vals[]}`) — 사용자 TB가 emulator와 동일 스키마로 정렬 diff 가능 | 벤더 시스템 태스크(no-op Display+StmtId 사이드테이블 선례=§4.5.x `$timeformat` 패턴, IR-0·bump 회피)·`+STAGE_TRACE` plusarg 게이트 | 라벨 순서·값을 `$display` 병행 emit과 바이트 대조·iverilog 호환은 `` `ifdef VITA `` 가드 문서화 | M |
 | **OBS-4** | `vrun --control stdio` JSON-RPC(R-C1): `peek(path)`·`poke(path,val)`·`step(n)`·`run_until(time)`·`finish` + 에러 계약(unknown path/bad val=구조화 에러) | time-step 경계에 REPL(단일 스레드 유지)·poke=스케줄 주입 이벤트·**전 명령을 run.json에 저널**(→동일 세션 재생=replay v0) | 제어 세션 기록→비대화식 재실행이 byte-identical·poke≡`force/release`-등가 케이스 내부 차분 | L |
@@ -86,6 +86,105 @@
 > **OBS-2 probe 의미론(출하)**: `probe_prev`는 **t0 이전 construction 값**으로 arm된다 — 따라서 t0에 처음 구동된 값도 **첫 `chg`로 기록**된다(`old`=construction 기본값, 보통 x). transition-only dedup은 그 이후부터 적용.
 
 **비목표(rail 밖)**: FSDB/UCDB·SQLite 내장(외부 로더 스크립트 1개로 충분 — 리뷰어도 optional)·waveform GUI·UVM 연동·L4 채널 자동 추론(R-I2는 config 기술 기반만). VCD는 사람용으로 유지.
+
+### 4.6 `processes` — the per-body execution profile (R14 / ROADMAP §3 ⑭)
+
+**Shipped 2026-08-26.** Flags: `--obs-procs` (counts) and `--obs-procs-time`
+(counts + cumulative wall clock; implies `--obs-procs`). Both require
+`--obs-dir` and are one-shot `vita` only, like the rest of the rail.
+
+**Why it exists.** An external report measured 20.4 cycle/s against a 440
+cycle/s budget and asked, as their explicit fallback to a faster scheduler, for
+"per-process evaluation counts and cumulative time … if we knew which
+`always_comb` eats the cost we could reduce it on our side". Everything
+`run.json` carried before this was STATIC: `codegen` says which bodies the VM
+*could* compile, `native` says whether tier-3 accepts the design. Neither says
+which body actually ran, or how often. `processes` is the dynamic half, and it
+is the half a user can act on without changing the simulator.
+
+**Shape.** `null` when the flags were not given — deliberately distinct from an
+empty object, so a consumer can tell *"not measured"* from *"measured, nothing
+ran"*.
+
+```json
+"processes": {"timed": false, "counts": {"processes": 5, "assigns": 1, "total_evals": 57},
+  "items": [
+    {"domain": "process", "index": 1, "kind": "always", "scope": "tb",
+     "file": "t1.sv", "line": 9, "col": 3, "evals": 21},
+    {"domain": "assign", "index": 0, "kind": "assign", "scope": "tb",
+     "file": "t1.sv", "line": 7, "col": 3, "evals": 12}
+  ]}
+```
+
+| field | meaning |
+|---|---|
+| `timed` | whether `--obs-procs-time` was given. When false, rows carry no `time_s` AT ALL — a `0.0` would read as "this body is free", a different claim from "nobody asked". |
+| `counts.processes` / `.assigns` | the size of each domain = `SimIr.processes.len()` / `.cont_assigns.len()`. Rows are emitted for ALL of them, zero-eval ones included: "this `always_comb` never fired" is a finding too. |
+| `counts.total_evals` | the sum over every row, for normalising a share. |
+| `domain` | `"process"` or `"assign"`. Explicit rather than inferred from `kind`, because `kind`'s vocabulary can grow. |
+| `index` | the index into that domain's IR vector. Stable for a given design + run options. |
+| `kind` | the SOURCE construct: `initial` · `always` · `always_ff` · `always_comb` · `always_latch` · `final` · `assign` · `net_init` (a `wire a = expr;` declaration initializer) · `port` (a synthesized port hookup) · `var_init` (the §6.8 declaration-initializer flush) · `sva` · `covergroup` · `clocking` · `synth` (a body vita synthesized with no more specific label). The last seven have NO keyword at the cited line — they are labelled apart precisely so a reader is not sent hunting for an `always` that is not there. |
+| `scope` | the INSTANCE path this body was elaborated under (`tb.u1`), the same string `%m` renders. A module instantiated N times contributes N rows with the same `file:line:col` and different `scope`, which is exactly the question "which of them eats the cost" asks. |
+| `file`/`line`/`col` | the construct's own source position. ⚠️ `file` is the path AS GIVEN on the command line (the same string diagnostics print), NOT the basename `source.name` carries — a 19-file design needs the directory to be actionable. |
+| `evals` | ACTIVATIONS. A process that suspends on `#5` and resumes counts twice; the two halves are two dispatches. A continuous assign counts one settle-fixpoint visit that evaluated its RHS (the dirty worklist skips the rest, and a skipped visit costs nothing). |
+| `time_s` | present only under `--obs-procs-time`: cumulative seconds inside that body, 6 decimals. |
+
+**Row order** is `evals` descending, then `(domain, index)` ascending. The
+tiebreak is total, so the order is DETERMINISTIC — including on a timed run,
+which is why `evals` and not `time_s` is the sort key: a file whose row order
+moved between two runs of the same design could not be byte-diffed, and R-F1
+(§3-2) is the contract the whole rail rests on.
+
+**Determinism (R-F1).** `evals` is a function of (design, run options) alone and
+belongs INSIDE the determinism golden. `time_s` is wall clock and is isolated
+exactly like `wall_s`/`elab_s`/`sim_s` — which is the whole reason timing is a
+SECOND flag rather than implied: a transcript showing `--obs-procs` alone is a
+transcript whose `run.json` is byte-reproducible.
+
+**Backend-invariance.** Both `--backend` executors bump the same counters at
+their own dispatch seam (`Scheduler::run_body` / `native::run::dispatch_body`)
+and their own settle fixpoint, and both count the same event — so the same
+design profiles identically on `interp`, `vm` and `native`. `--obs-procs` is NOT
+a tier-3 disqualifier (unlike `--probe`, doc-21 §4.3): it adds a `u64` after the
+body, it does not change what the body must do.
+
+**⚠️ Observer effect, and it is asymmetric.** `--obs-procs-time` takes two
+`Instant::now()` per activation (~40 ns here). For a fat `always_ff` that is
+noise; for a one-bit continuous assign it can exceed the work it measures, so a
+timed run's `sim_s` is longer than the same run's untimed `sim_s` and the
+per-row shares are biased TOWARD the cheap rows. Read `evals` first; reach for
+`time_s` only to break a tie between rows with similar counts.
+
+**Cost when NOT asked for.** Measured PRE (`git archive HEAD`) vs POST, both
+`--release`, interleaved A/B, first round discarded, on macOS arm64:
+
+| workload | PRE | POST | delta | spreads |
+|---|---|---|---|---|
+| `bench/keccak` `keccak_f.sv +N=400` | 1.657 s | 1.651 s | **−0.34%** | 0.8% / 0.5% |
+| same, earlier round | 1.679 s | 1.681 s | **+0.12%** | 1.5% / 1.7% |
+| seam-dominated synthetic | 3.814 s | 3.847 s | **+0.87%** | 1.8% / 0.7% |
+| same, repeated | 3.801 s | 3.861 s | **+1.58%** | 2.3% / 1.5% |
+
+The real workload is INSIDE the noise (the two rounds straddle zero). The
+synthetic is deliberately the worst case this instrumentation can have: 64
+one-line `always @(posedge clk)` blocks plus a 64-deep continuous-assign chain
+over 200k cycles ≈ 26M seam crossings, so the dispatch seam and the settle visit
+ARE the run. It costs ~1.3%, and that is the floor for a runtime-flag design —
+an experiment that constant-folded the settle counters away measured **+0.11%**,
+so the residue is the per-visit test itself, not the code around it. Removing
+even that would need the settle pass monomorphised over a `const PROF: bool`,
+i.e. a second copy of the simulator's hottest loop; not worth 1.3% on a shape no
+real design has.
+
+⚠️ **Two plausible explanations for that 1.3% were both wrong**, and saying so
+is the point — a performance comment that names the wrong cause is worse than
+none. Hoisting the `proc_prof` read out of the settle fixpoint (it was two
+pointer hops per visit) moved nothing: +1.45% before, +1.45% after. Collapsing a
+profiled/unprofiled ARM SPLIT — each arm carrying its own call to the evaluator,
+which inlines, so the split doubled the loop body — moved nothing either. Only
+compiling the counters out located the cost, which is where the +0.11% number
+above comes from. The shipped shape (one call site, charge after) is kept for
+being smaller, not for being faster.
 
 ## 5. 트래킹
 

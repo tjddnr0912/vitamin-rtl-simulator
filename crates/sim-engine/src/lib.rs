@@ -39,6 +39,9 @@ mod levelize;
 /// S0 measurement calls it directly.
 pub mod native;
 mod native_eval;
+/// R14 (ROADMAP §3 ⑭): the per-body execution profile behind run.json's
+/// `processes` object.
+pub mod profile;
 mod rng;
 mod sched;
 mod state;
@@ -65,13 +68,14 @@ pub use backend::{
 pub use elaborate::{
     AssignRankTable, CovItem, CovgInstMeta, DeferActTable, DeferMarkTable, DeferRegion,
     ForkModeTable, FuncMeta, FuncTable, JoinMode, NetDeclRangeTable, NetDimsTable, NetNameTable,
-    QueueBoundTable, RadixTable, SeverityKind, SeverityLoc, SeverityLocTable, SeverityTable,
-    Sidecars, TaskCallFunc, TaskCallInfo, TaskCallProc,
+    ProcIdent, QueueBoundTable, RadixTable, SeverityKind, SeverityLoc, SeverityLocTable,
+    SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo, TaskCallProc,
 };
 pub use levelize::{
     comb_depth, comb_ranks, fusion_candidates, fusion_candidates_across_copies,
     self_read_write_processes, FusionPair,
 };
+pub use profile::{ProcProfile, ProcProfileCfg};
 pub use sched::FinishReason;
 
 use sched::Scheduler;
@@ -309,6 +313,11 @@ pub struct SimOpts {
     /// Per-ProcId instance path (`"tb.u1"`) for `%m` (P2-11). EMPTY ⇒ `%m`
     /// renders the legacy flat `top`. Never enters the IR.
     pub proc_scopes: Vec<String>,
+    /// R14 (ROADMAP §3 ⑭): turn on the per-body execution profile. `None` (the
+    /// default) ⇒ `SimState.proc_prof` is `None` and the two dispatch seams and
+    /// the two settle loops each cost ONE null test — measured below noise; see
+    /// `docs/preview/19-ai-agent-observability.md` §4.6. Never enters the IR.
+    pub proc_profile: Option<ProcProfileCfg>,
     /// OBS-1b coverage manifest (per covergroup instance → hit-bitmap net ids). The
     /// engine reads each bitmap's FINAL value at end-of-run to build the
     /// `SimResult.coverage` summary for `coverage.json`. EMPTY ⇒ no covergroups.
@@ -466,6 +475,7 @@ impl Default for SimOpts {
             assign_ranks: AssignRankTable::new(),
             queue_bounds: QueueBoundTable::new(),
             proc_scopes: Vec::new(),
+            proc_profile: None,
             coverage_manifest: Vec::new(),
             probed_nets: Vec::new(),
             net_dims: NetDimsTable::new(),
@@ -540,6 +550,11 @@ pub struct SimResult {
     /// `SimOpts.backend` when `Backend::Native` fell back (see the resolution in
     /// `simulate`), which is why run.json reports this one.
     pub backend: Backend,
+    /// R14 (ROADMAP §3 ⑭): per-body activation counts (+ optional cumulative
+    /// nanoseconds), or `None` when `SimOpts.proc_profile` was `None`. The
+    /// COUNTS are deterministic; the nanoseconds are not — see `profile`'s
+    /// module docs for why they are a separate opt-in.
+    pub proc_profile: Option<profile::ProcProfile>,
 }
 
 /// OBS-2: format a net's 4-state value as an MSB..LSB binary string (`bit_char`
@@ -780,6 +795,17 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.assign_ranks = opts.assign_ranks.clone();
     st.queue_bounds = opts.queue_bounds.clone();
     st.proc_scopes = opts.proc_scopes.clone();
+    // R14 (ROADMAP §3 ⑭): allocate the per-body accumulators ONCE, sized from
+    // the IR itself, and only when the run asked for them. `None` otherwise —
+    // that `None` is what the two dispatch seams and the two settle fixpoints
+    // test, and it is the whole cost of the feature on a run without the flag.
+    st.proc_prof = opts.proc_profile.map(|cfg| {
+        Box::new(profile::ProcProfile::new(
+            cfg,
+            ir.processes.len(),
+            ir.cont_assigns.len(),
+        ))
+    });
     st.net_dims = opts.net_dims.clone();
     st.net_decl_ranges = opts.net_decl_ranges.clone();
     st.file_directed_stmts = opts.file_directed_stmts.clone();
@@ -1186,6 +1212,9 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         codegen: backend::codegen_report(ir, &st.class_new_sites),
         native: native_eligibility,
         backend: effective_backend,
+        // R14: taken from the state the executors actually bumped, never
+        // re-derived — the same single-source rule `codegen` follows above.
+        proc_profile: st.proc_prof.take().map(|b| *b),
     }
 }
 

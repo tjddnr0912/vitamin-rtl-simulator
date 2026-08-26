@@ -456,7 +456,7 @@ impl Elaborator<'_> {
                 self.elaborate_net_init_drivers(d);
             }
             (GenPhase::Logic, ast::ModuleItem::Proc(p)) => {
-                let proc = self.lower_proc_block(p);
+                let proc = self.lower_user_proc(p);
                 debug_assert_eq!(
                     self.processes.len() as u32,
                     self.cur_proc,

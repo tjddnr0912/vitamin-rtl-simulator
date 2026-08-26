@@ -496,7 +496,9 @@ impl Elaborator<'_> {
                 net: src,
                 word: Some(widx_r),
             });
-            self.cont_assigns.push(ir::ContAssign {
+            // R14: a per-element port hookup vita synthesized — `port` is the
+            // honest kind (there is no `assign` keyword in the source).
+            self.push_cont_assign_port(ir::ContAssign {
                 lhs: ir::Lvalue {
                     chunks: vec![ir::LvalChunk {
                         net: dst,
@@ -688,7 +690,7 @@ impl Elaborator<'_> {
                     let rhs = self.lower_ctx_or_plain(conn_expr, pw);
                     self.cur_prefix = child_prefix;
                     let lhs = whole_net_lvalue(child_id);
-                    self.cont_assigns.push(ir::ContAssign {
+                    self.push_cont_assign_port(ir::ContAssign {
                         lhs,
                         rhs,
                         delay: None,
@@ -716,7 +718,7 @@ impl Elaborator<'_> {
                         net: child_id,
                         word: None,
                     });
-                    self.cont_assigns.push(ir::ContAssign {
+                    self.push_cont_assign_port(ir::ContAssign {
                         lhs,
                         rhs,
                         delay: None,

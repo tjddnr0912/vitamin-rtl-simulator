@@ -129,6 +129,7 @@ pub fn run(argv: &[String]) -> i32 {
                 top_params: io.top_params.clone(),
                 plusargs: io.plusargs,
                 obs_dir: io.obs_dir,
+                proc_profile: io.proc_profile,
                 hier_tree: io.hier_tree,
                 inst_paths: io.inst_paths,
                 probes: io.probes,

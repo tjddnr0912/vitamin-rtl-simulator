@@ -104,6 +104,7 @@ mod param_query;
 mod params;
 mod ports;
 mod proc_builder;
+mod proc_ident;
 mod scope;
 mod static_array_method;
 mod stmt_flow;
@@ -1152,6 +1153,16 @@ struct Elaborator<'s> {
     event_nets: std::collections::BTreeSet<u32>,
     // Per-ProcId instance path for `%m` (P2-11); lockstep with `processes`.
     proc_scopes: Vec<String>,
+    // R14 (ROADMAP §3 ⑭): per-ProcId construct kind + source location, lockstep
+    // with `processes`; and the same for `cont_assigns`. Reporting only — the
+    // engine never reads them, they exist so an obs profile row can name a line
+    // of RTL. `pending_proc_ident` is how the ONE user-block lowering path
+    // (`lower_proc_block`) hands its identity to the ONE append point
+    // (`push_process`): every other producer synthesizes a body and leaves it
+    // `None`, which is what makes the `synth` default honest rather than a guess.
+    proc_idents: Vec<ProcIdent>,
+    ca_idents: Vec<ProcIdent>,
+    pending_proc_ident: Option<ProcIdent>,
     // §6.8: a VARIABLE declaration initializer whose value is NON-constant
     // (`logic [7:0] b = a;`) is a one-time assignment at time 0, equivalent to
     // `initial b = a;`. A constant init folds into the net's `init` field; a

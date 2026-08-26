@@ -457,10 +457,35 @@
 > 사이드카**(골든 밖 · `SimOpts` 경유)와 엔진이 진단 시점에 그 id 를 아는 것. 메시지 수정이 아니라
 > 배관이므로 전용 슬라이스.
 
-> **⑭ 프로세스별 평가 횟수/시간 관측 수단** (aes_top R14 · OBS · §6 과 인접). 리포터의 top(엔진 5 +
-> 코어 1)이 **≈20 cycle/s** 라 전량 스윕을 vita 로 못 돌리고, *"행(hang)"* 과 *"느림"* 을 구별할 수단이
-> 없어 타임아웃 상수를 plusarg 로 빼야 했다. 요구는 성능 개선 **또는** `--obs-dir` 에 프로세스별
-> 평가 횟수/시간. 후자만으로도 TB 를 줄일 수 있다고 명시. §6 OBS 트랙의 항목으로 다룬다.
+> ~~**⑭ 프로세스별 평가 횟수/시간 관측 수단**~~ ✅ **RESOLVED (the observability half) — R7/§4.6**
+> (2026-08-26). (aes_top R14 · OBS · §6 과 인접). 리포터의 top(엔진 5 + 코어 1)이 **≈20 cycle/s** 라
+> 전량 스윕을 vita 로 못 돌리고, *"행(hang)"* 과 *"느림"* 을 구별할 수단이 없어 타임아웃 상수를
+> plusarg 로 빼야 했다. 요구는 성능 개선 **또는** `--obs-dir` 에 프로세스별 평가 횟수/시간.
+>
+> **Shipped**: `--obs-procs` (deterministic per-body evaluation COUNTS) and
+> `--obs-procs-time` (adds cumulative wall clock), both surfacing as `run.json`'s
+> `processes` object — one row per process AND per continuous assign, sorted
+> most-evaluated first, each naming its construct `kind`, its instance `scope`
+> and its `file:line:col`. SPEC = [19-ai-agent-observability §4.6](preview/19-ai-agent-observability.md),
+> user docs = `docs/manual/004_cli-reference.md`. ⭐ The IDENTITY is the part that
+> made it useful: an index answers nothing, and a module instantiated 40 times
+> needs `scope` to tell its copies apart (measured on a 4-way generate loop —
+> `tb.gb[0]`…`tb.gb[3]`, same line, separate rows). ⚠️ Synthesized bodies are
+> labelled apart (`var_init`/`sva`/`covergroup`/`clocking`/`port`/`net_init`)
+> because saying `always` at a line with no `always` keyword is the same
+> misdirection the feature exists to prevent — including the parser's synthetic
+> `initial` wrapper around a module-level `assert property`. ⚠️ Timing is a
+> SECOND flag on purpose: counts are deterministic (byte-diffable `run.json`),
+> wall clock is not, and for a one-bit continuous assign the two `Instant::now()`
+> can exceed the work they measure. Cost when NOT asked for: **inside the noise**
+> on `bench/keccak` (−0.34% / +0.12% over two rounds), **+1.3%** on a
+> deliberately seam-dominated synthetic — see §4.6's table.
+>
+> **NOT shipped — the headline ask stays open**: the reporter wants ~440 cycle/s
+> and measures 20.4, which is a **21x scheduler/executor question**, not an
+> observability one. That axis is Phase D (machine-code codegen) + the arena
+> prerequisite, tracked in §5.1. What ⑭ delivers is the reporter's own stated
+> fallback: enough per-body attribution to cut the cost on their side.
 
 
 > ### 🆕🆕 **워크로드 코퍼스가 연 줄** (§4.5.369 · **①은 §4.5.370 으로 RESOLVED** · 2026-08-23)

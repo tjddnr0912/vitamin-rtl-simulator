@@ -109,6 +109,9 @@ name.
 | `--threads, -j <N>` | **Waveform-writer** thread budget; `N ≥ 2` moves VCD writing off the sim thread. Simulation itself is single-threaded, so this does **not** speed up a run with no waveform dump. Output stays byte-identical for any N. |
 | `--backend <interp\|vm\|native>` | Which executor runs process bodies. **A debug knob you do not need**: `native` is the default and runs every design. **Output is byte-identical across all three** — see [Choosing a backend](#choosing-a-backend). |
 | `--timeout <ticks>` | Stop cleanly after TICKS of simulation time (CI killswitch). |
+| `--obs-dir <dir>` | Write the machine-readable run report (`run.json`, `results.jsonl`, and `coverage.json` when the design has covergroups) into DIR. One-shot `vita` only. See [The machine-readable run report](#the-machine-readable-run-report). |
+| `--obs-procs` | Add `run.json`'s `processes` object: per-body **evaluation counts**. Requires `--obs-dir`. |
+| `--obs-procs-time` | `--obs-procs` plus **cumulative wall clock** per body. Not deterministic and it perturbs what it measures — read the warning below. |
 | `-Wno-<CODE>` / `-Werror[=<CODE>]` | Suppress a warning / promote warnings to errors (doc-15 mnemonics). |
 | `-q` / `-v` / `--verbosity <0..3>` | Quiet / verbose. `-v` also prints the [effective-invocation block](#what-actually-ran--v). |
 | `-l, --log <file>` [`--log-append`] | Tee the full transcript (RTL + diags + progress) to a file. |
@@ -126,6 +129,81 @@ vita pkg.sv dut.sv tb.sv         # concatenate three files, then run
 vita -f files.f +VERBOSE +N=42   # filelist + runtime plusargs
 vita -D WIDTH=16 -I rtl/inc tb.sv
 ```
+
+---
+
+## The machine-readable run report
+
+`--obs-dir <DIR>` writes an out-of-band, machine-readable companion to the
+human-facing stdout/VCD. It never changes the simulation, the exit code, or a
+single byte of the transcript. One-shot `vita` only — `vcmp`/`velab`/`vrun`
+reject it loud rather than silently producing nothing.
+
+```
+vita tb.sv --obs-dir obs/
+```
+
+| file | contents |
+|---|---|
+| `run.json` | The run manifest: tool + `format_version`, source name + blake3, plusargs, `finish_reason`, `exit_code`, `status`, error/warning/fatal counts, which executor ran, and the `codegen`/`native` capability verdicts. |
+| `results.jsonl` | One `{"v","t","kind":"result",…}` line per run (fully deterministic — no wall-clock field). |
+| `coverage.json` | Functional covergroup coverage, when the design has any. |
+
+Everything in `run.json` is byte-reproducible across two runs of the same input
+EXCEPT four isolated wall-clock fields: `utc_unix_s`, `wall_s` (total),
+`elab_s` (everything before `simulate`) and `sim_s` (inside it). That split
+matters when you are chasing speed: if `elab_s` dominates, no `--backend`
+choice can help you.
+
+### `--obs-procs` — which body eats the cost
+
+`--obs-procs` adds a `processes` object to `run.json`: one row per process AND
+per continuous assign, with how many times it was **evaluated**.
+
+```
+vita tb.sv --obs-dir obs/ --obs-procs
+```
+
+```json
+"processes": {"timed": false, "counts": {"processes": 5, "assigns": 1, "total_evals": 57},
+  "items": [
+    {"domain": "process", "index": 1, "kind": "always", "scope": "tb",
+     "file": "tb.sv", "line": 9, "col": 3, "evals": 21},
+    {"domain": "assign", "index": 0, "kind": "assign", "scope": "tb",
+     "file": "tb.sv", "line": 7, "col": 3, "evals": 12}
+  ]}
+```
+
+Rows are sorted most-evaluated first, so the top of `items` is the answer to
+"which `always_comb` is my run spending itself on". Each row names the body by
+`kind` (`always_comb`, `always_ff`, `initial`, `assign`, …), by `scope` (the
+instance path — a module instantiated 40 times gives 40 rows you can tell
+apart), and by `file:line:col`.
+
+An **evaluation** is one activation: a process that suspends on `#5` and
+resumes counts twice, and a continuous assign counts one settle visit that
+actually re-evaluated its RHS. Bodies that never ran are listed with `evals: 0`
+— "this block never fired" is a finding too.
+
+`evals` is **deterministic**: the same design and the same flags produce the
+same numbers, so two `run.json` files can be diffed directly.
+
+Without `--obs-procs`, `run.json` carries `"processes": null` — which means
+*not measured*, not *nothing ran*.
+
+### `--obs-procs-time` — and why it is a separate flag
+
+`--obs-procs-time` adds `"time_s"` to every row (and sets `"timed": true`).
+
+⚠️ **It is not deterministic and it perturbs what it measures.** Timing takes a
+clock reading on both sides of every activation. For a fat `always_ff` that is
+noise; for a one-bit continuous assign the reading can cost more than the work,
+so a timed run is slower overall and the per-row shares tilt toward the cheap
+rows. **Read `evals` first**, and reach for `time_s` only to break a tie
+between two rows with similar counts.
+
+Because timing is opt-in, a `run.json` produced with `--obs-procs` alone stays
+byte-reproducible.
 
 ---
 

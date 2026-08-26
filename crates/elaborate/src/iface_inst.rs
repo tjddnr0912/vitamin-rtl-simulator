@@ -269,7 +269,7 @@ impl Elaborator<'_> {
                     match it {
                         ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),
                         ast::ModuleItem::Proc(pb) => {
-                            let proc = self.lower_proc_block(pb);
+                            let proc = self.lower_user_proc(pb);
                             self.push_process(proc);
                         }
                         ast::ModuleItem::NetVar(d) => self.elaborate_net_init_drivers(d),

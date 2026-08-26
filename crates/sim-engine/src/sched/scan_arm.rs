@@ -713,6 +713,30 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     #[must_use]
     pub fn settle_cont_assigns(&mut self) -> Option<bool> {
         let mut any = false;
+        // ── R14 (ROADMAP §3 ⑭): the settle-loop counter, and WHERE ITS COST IS,
+        // measured rather than argued ──
+        //
+        // This loop runs once per continuous assign per delta — 12.8M times on
+        // a 64-stage synthetic — so it is where a profile flag could plausibly
+        // tax a run that did not ask for one. It does: PRE vs POST on that
+        // synthetic is ~+1.3%.
+        //
+        // ⚠️ TWO PLAUSIBLE CAUSES WERE WRONG. Hoisting the `proc_prof` read out
+        // of the fixpoint (it was two pointer hops per visit) moved nothing:
+        // +1.45% before, +1.45% after. Collapsing a profiled/unprofiled ARM
+        // SPLIT — each arm carried its own call to the evaluator, which inlines,
+        // so the split doubled the loop body — moved nothing either. What DID
+        // move it was compiling the counters out entirely (`profiling` forced to
+        // a literal `false`): **+0.11%**. So the residue is the per-visit test
+        // itself, and the only way to remove it is a settle pass monomorphised
+        // over `const PROF: bool` = a second copy of this loop. Not taken.
+        //
+        // The shape below is kept because it is the SMALLER one (one call site,
+        // charge after), not because it was faster. Both flags are hoisted
+        // because the profile cannot be switched on mid-run, so one read for the
+        // whole fixpoint is exactly equivalent — that part is free either way.
+        let profiling = self.st.proc_prof.is_some();
+        let prof_timed = self.st.proc_prof.as_ref().is_some_and(|p| p.timed);
         loop {
             let mut changed = false;
             // DIRTY-SETTLE: visit the assigns that must be re-evaluated, not all of
@@ -763,7 +787,11 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 }
                 let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
                 let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
+                let ca_t0 = prof_timed.then(std::time::Instant::now);
                 let v = self.eval_cont_assign(ci, &lhs, ca_rhs); // CONTEXT-SIZED to lhs width
+                if profiling {
+                    self.charge_ca(ci, ca_t0);
+                }
                 let offs = self.resolve_lvalue_offsets(&lhs); // dynamic index NOW (settle time)
                 changed |= self.st.write_lvalue(&lhs, v, &offs);
             }
@@ -782,7 +810,11 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 for ci in cis {
                     let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
                     let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
+                    let ca_t0 = prof_timed.then(std::time::Instant::now);
                     vals.push(self.eval_cont_assign(ci, &lhs, ca_rhs));
+                    if profiling {
+                        self.charge_ca(ci, ca_t0);
+                    }
                 }
                 let acc = resolve_md_group(kind, net_w, vals);
                 let lhs = self.st.ir.cont_assigns[self.md_nets[mi].1[0]].lhs.clone();
@@ -834,6 +866,16 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             };
             let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
             let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
+            // R14: charged around the WHOLE match and not inside the `None`
+            // arm, because tier-3 takes the `Some(arena)` arm — a counter on one
+            // arm would make `ca_evals` for a DELAYED assign depend on
+            // `--backend`, and the point of the profile is comparable runs.
+            // (This loop visits only DELAYED assigns, which are rare, so it
+            // reads `proc_prof` directly rather than hoisting.)
+            let ca_t0 = match &self.st.proc_prof {
+                Some(p) if p.timed => Some(std::time::Instant::now()),
+                _ => None,
+            };
             let v = match nets {
                 // Same assignment rule as `eval_for_lvalue`: width is
                 // max(lhs, self(rhs)), sign is the rhs's own. `lvalue_width`
@@ -847,6 +889,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 }
                 None => self.eval_cont_assign(ci, &lhs, ca_rhs),
             };
+            self.charge_ca(ci, ca_t0);
             if self.last_ca[ci].as_ref() == Some(&v) {
                 continue; // RHS unchanged → no new scheduled write
             }
@@ -1241,6 +1284,26 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // `propagate_changes` (before the Active batch), never run here — so no
         // hot-path check is needed in `run_body`.
         self.set_cur_activity(proc);
+        // ── R14 (ROADMAP §3 ⑭): per-process activation profile ──
+        // ONE read of `proc_prof`, ONE test: the template lookup and the clock
+        // read live inside the `Some` arm, so a run without the flag pays for
+        // neither. This is the simulator's per-activation seam, and on a design
+        // whose bodies are one statement each the seam IS the run — but the
+        // measured tax lives in the SETTLE loop, not here (see
+        // `settle_cont_assigns`: forcing that loop's flag to a literal `false`
+        // took a 64-stage synthetic from +1.3% to +0.11% with this counter still
+        // in place).
+        //
+        // Two `map`s and not one closure: the second one needs `&self` for
+        // `activity_template`, which cannot be borrowed inside a closure already
+        // holding `&self.st.proc_prof`. The first `map` copies the `bool` out to
+        // end that borrow.
+        let prof = self.st.proc_prof.as_ref().map(|p| p.timed).map(|timed| {
+            (
+                self.activity_template(proc) as usize,
+                timed.then(std::time::Instant::now),
+            )
+        });
         // SELF-RETRIG: tag blocking writes made by THIS body to their author, so
         // it is not re-triggered by its own write. Cleared on return — NBA apply,
         // cont-assign settle and clocking commit (all outside `run_body`) then
@@ -1277,6 +1340,15 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             }
         };
         self.st.blocking_writer = None;
+        // R14: charge the activation AFTER the body ran, so `nanos` covers the
+        // executor that actually ran it (interpreter, VM or JIT — `run_body` is
+        // the seam all three arms leave through).
+        if let Some((tmpl, t0)) = prof {
+            let ns = t0.map_or(0, |t0| t0.elapsed().as_nanos() as u64);
+            if let Some(p) = self.st.proc_prof.as_mut() {
+                p.bump_proc(tmpl, ns);
+            }
+        }
         step
     }
 

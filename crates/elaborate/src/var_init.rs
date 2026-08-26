@@ -139,11 +139,20 @@ impl Elaborator<'_> {
             if let Some(rft) = rft {
                 self.ca_delays.insert(idx, rft);
             }
-            self.cont_assigns.push(ir::ContAssign {
-                lhs,
-                rhs: rhs_id,
-                delay,
-            });
+            // R14: a NET declaration initializer is an implicit continuous
+            // assign (see the width note above) — labelled apart from a spelled
+            // `assign` because that is what the reader will be looking for in
+            // the source. Anchored on the declared NAME's span, not the decl's,
+            // so `wire a = x, b = y;` gives two distinguishable rows.
+            self.push_cont_assign(
+                ir::ContAssign {
+                    lhs,
+                    rhs: rhs_id,
+                    delay,
+                },
+                "net_init",
+                Some(name.name.span),
+            );
         }
     }
 
@@ -532,7 +541,7 @@ impl Elaborator<'_> {
         // not fire on it.
         let saved = self.lowering_decl_init;
         self.lowering_decl_init = true;
-        let proc = self.lower_proc_block(&pb);
+        let proc = self.lower_synth_proc(&pb, "var_init");
         self.lowering_decl_init = saved;
         self.push_process(proc);
     }

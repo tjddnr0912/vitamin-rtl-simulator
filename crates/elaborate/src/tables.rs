@@ -117,6 +117,56 @@ pub struct SeverityLoc {
 /// trailer; NEVER the golden `SimIr` root.
 pub type SeverityLocTable = std::collections::BTreeMap<u32, SeverityLoc>;
 
+/// R14 / ROADMAP §3 ⑭ — the ACTIONABLE IDENTITY of one schedulable body, so an
+/// obs consumer reading a per-process evaluation count can point at a line of
+/// RTL instead of an index.
+///
+/// WHY IT IS A SIDECAR AND NOT A FIELD ON `sim_ir::Process`. `Process` is a
+/// SchemaHash-frozen type; a field on it would flip the golden root hash and
+/// invalidate every `.velab`. Nothing here is read by the simulation — it is
+/// pure reporting — so it rides `SimOpts` the way `proc_scopes` (`%m`) does.
+///
+/// `file`/`line`/`col` are EMPTY/0 when no [`diag::SpanResolver`] was installed
+/// (the AST-only unit-test paths); the `kind` and `scope` halves are always
+/// present, so a profile row is still identifiable by construct + instance.
+/// NOT `Serialize`/`Deserialize` on purpose: `--obs-dir` is one-shot `vita` only
+/// (`reject_obs_dir`), so this never rides the `.velab` trailer and adding it
+/// there would cost a `format_version` bump for a field the staged path cannot
+/// use. `kind` is `&'static str` precisely so the vocabulary is closed.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ProcIdent {
+    /// Stable snake_case construct name an obs consumer may pin. Two groups.
+    ///
+    /// WRITTEN BY THE USER — `initial` | `always` | `always_ff` |
+    /// `always_comb` | `always_latch` | `final` | `assign`: the keyword really
+    /// is at `file:line:col`.
+    ///
+    /// SYNTHESIZED BY VITA — `net_init` (a `wire a = expr;` declaration
+    /// initializer) | `port` (an instance port hookup) | `var_init` (the §6.8
+    /// non-constant declaration-initializer flush) | `sva` | `covergroup` |
+    /// `clocking`: the span points at the construct that CAUSED the body, and
+    /// there is no `always`/`initial` keyword there. Labelling these `always`
+    /// would send a reader hunting for a block that does not exist, which is the
+    /// exact misdirection the profile exists to prevent.
+    ///
+    /// `synth` is the fail-safe for a future producer that appends a process
+    /// without going through `lower_proc_block`/`lower_synth_proc`. **No
+    /// producer reaches it today** (every one of the append sites is
+    /// `lower…(); push_process(…)`), so seeing it in a `run.json` means a new
+    /// one appeared and needs a label — not that the design has an odd block.
+    pub kind: &'static str,
+    /// Display file name (`SourceLoc::file`), or empty with no resolver.
+    pub file: String,
+    /// 1-based line / column of the construct keyword, or 0 with no resolver.
+    pub line: u32,
+    pub col: u32,
+    /// The INSTANCE path this body was elaborated under (`cur_prefix`). A module
+    /// instantiated N times lowers N copies of the same `always_comb`, and
+    /// `file:line:col` alone cannot tell those copies apart — which is exactly
+    /// the question "which of them eats the cost" asks.
+    pub scope: String,
+}
+
 /// Default-radix side table (P1-5): StmtId → radix (2/8/16) for the
 /// `$displayb/o/h`, `$writeb/o/h`, `$strobeb/o/h`, `$monitorb/o/h` variants —
 /// the b/o/h changes only how UNFORMATTED arguments render (IEEE §17.1.1.1).
@@ -390,6 +440,13 @@ pub struct Sidecars {
     /// Per-ProcId hierarchical instance path (`"tb.u1"`) — drives `%m` (P2-11).
     /// Parallel to `processes`, like `proc_multipliers`.
     pub proc_scopes: Vec<String>,
+    /// R14: per-ProcId construct kind + source location (see [`ProcIdent`]).
+    /// Parallel to `processes`; reporting only, never read by the simulation.
+    pub proc_idents: Vec<ProcIdent>,
+    /// R14: the same identity for each `sim_ir::ContAssign`, parallel to
+    /// `cont_assigns`. A continuous assign is a schedulable body too — the
+    /// settle fixpoint re-evaluates it per delta — so the profile counts it.
+    pub ca_idents: Vec<ProcIdent>,
     /// StmtIds of Force/Release stmts that are procedural assign/deassign.
     pub assign_ranks: AssignRankTable,
     /// Bounded-queue bounds (v6 ③): handle NetId → N.

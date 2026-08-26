@@ -94,6 +94,39 @@ fn dispatch_body(k: &mut NativeKernel, ir: &SimIr, act: u32, tmpl: u32, block: u
     if (act as usize) < k.sched.activities.len() {
         k.sched.set_cur_activity(act);
     }
+    // ── R14 (ROADMAP §3 ⑭): per-process activation profile, tier-3's copy ──
+    // `dispatch_body` is this backend's `Scheduler::run_body` — the same choke,
+    // so the counter belongs in the same position, ABOVE the executor choice,
+    // and it counts the same event (one activation). `tmpl` is already a
+    // parameter here, so the untimed cost is one null test.
+    let prof = k
+        .sched
+        .st
+        .proc_prof
+        .as_ref()
+        .map(|p| p.timed.then(std::time::Instant::now));
+    let step = dispatch_body_inner(k, ir, act, tmpl, block);
+    if let Some(t0) = prof {
+        let ns = t0.map_or(0, |t| t.elapsed().as_nanos() as u64);
+        if let Some(p) = k.sched.st.proc_prof.as_mut() {
+            p.bump_proc(tmpl as usize, ns);
+        }
+    }
+    step
+}
+
+/// The executor choice itself — split out of [`dispatch_body`] so the R14
+/// counter can wrap it without a second `return` site to keep in sync (this
+/// function has three).
+///
+/// `inline(always)` so the split cannot cost a call: `dispatch_body` used to be
+/// one body the optimiser could fold into its callers, and a hot-path split is
+/// exactly the kind of change that quietly stops being folded. ⚠️ It was NOT the
+/// source of this slice's measured +1.3% — adding the attribute changed nothing
+/// (`settle_cont_assigns` records where the cost actually is). It stays because
+/// the reason to keep the fold is structural, not because it bought anything.
+#[inline(always)]
+fn dispatch_body_inner(k: &mut NativeKernel, ir: &SimIr, act: u32, tmpl: u32, block: u32) -> Step {
     // ⚠️ A4: a CHILD activity always takes the walk. `vm_exec` carries one `proc`
     // and uses it for both roles the walk now keeps apart — the body it indexes
     // and the identity it schedules under — so a child running its parent's
@@ -605,6 +638,12 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
     }
     let max_deltas = k.k_delta_budget();
     let mut any = false;
+    // R14 (ROADMAP §3 ⑭): the settle counter's two hoisted flags. The engine's
+    // `settle_cont_assigns` carries the measurement — including the two
+    // plausible explanations for its ~1.3% that turned out to be wrong, and the
+    // experiment that located the cost in the per-visit test itself.
+    let profiling = k.sched.st.proc_prof.is_some();
+    let prof_timed = k.sched.st.proc_prof.as_ref().is_some_and(|p| p.timed);
     // Hoisted out of the fixpoint: both are scratch, and a fixpoint runs this
     // body once per delta.
     let mut md_members: Vec<usize> = Vec::new();
@@ -658,7 +697,16 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
             if k.sched.ca_is_md(ci) {
                 continue; // MULTI-DRIVER member: written once by resolution below
             }
+            // R14 (ROADMAP §3 ⑭): the tier-3 spelling of the settle counter.
+            // Same event as the engine's `eval_cont_assign_prof` — one RHS
+            // evaluation of assign `ci` — so the two backends produce the SAME
+            // `ca_evals`, which is what makes the profile comparable across
+            // `--backend`.
+            let ca_t0 = prof_timed.then(std::time::Instant::now);
             let v = k.k_eval_for_lvalue(lhs, rhs);
+            if profiling {
+                k.sched.charge_ca(ci, ca_t0);
+            }
             // The offsets are resolved INSIDE, only on the arm that needs them:
             // a proven plain whole-net scalar has nothing to resolve, and this
             // line is reached ~3.3M times on picorv32/200k.
@@ -691,7 +739,11 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
                 // Borrowed, for the same reason as the ordinary arm above.
                 let lhs = &ir.cont_assigns[ci].lhs;
                 let rhs = ir.cont_assigns[ci].rhs;
+                let ca_t0 = prof_timed.then(std::time::Instant::now);
                 vals.push(k.k_eval_for_lvalue(lhs, rhs));
+                if profiling {
+                    k.sched.charge_ca(ci, ca_t0);
+                }
             }
             let acc = crate::sched::resolve_md_group(kind, net_w, vals);
             let lhs = &ir.cont_assigns[first].lhs;

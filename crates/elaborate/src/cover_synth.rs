@@ -307,7 +307,7 @@ impl Elaborator<'_> {
                 body: Box::new(body),
                 span: sp,
             };
-            let proc = self.lower_proc_block(&pb);
+            let proc = self.lower_synth_proc(&pb, "covergroup");
             self.push_process(proc);
             // End-of-sim coverage report: `final $display("Cover ...: %0d hits", cnt);`.
             let report = ast::Stmt::SysTaskCall {
@@ -332,7 +332,7 @@ impl Elaborator<'_> {
                 body: Box::new(report),
                 span: sp,
             };
-            let fproc = self.lower_proc_block(&fpb);
+            let fproc = self.lower_synth_proc(&fpb, "covergroup");
             self.push_process(fproc);
         }
     }

@@ -279,7 +279,7 @@ impl Elaborator<'_> {
                 body: Box::new(sample_call),
                 span: sp,
             };
-            let proc = self.lower_proc_block(&pb);
+            let proc = self.lower_synth_proc(&pb, "covergroup");
             self.push_process(proc);
         }
     }

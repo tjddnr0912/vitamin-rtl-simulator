@@ -832,11 +832,17 @@ impl Elaborator<'_> {
             if let Some(rft) = rft {
                 self.ca_delays.insert(idx, rft);
             }
-            self.cont_assigns.push(ir::ContAssign {
-                lhs,
-                rhs: rhs_id,
-                delay,
-            });
+            // R14: `assign` — the user wrote it, so the identity is the
+            // statement's own span.
+            self.push_cont_assign(
+                ir::ContAssign {
+                    lhs,
+                    rhs: rhs_id,
+                    delay,
+                },
+                "assign",
+                Some(ca.span),
+            );
         }
     }
 }

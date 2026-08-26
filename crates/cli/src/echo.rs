@@ -183,6 +183,20 @@ pub(crate) fn echo_effective_invocation(
     if let Some(d) = &opts.obs_dir {
         lines.extend(row("obs-dir", std::slice::from_ref(d)));
     }
+    // R14: the profile is a knob that changes what `run.json` contains AND, in
+    // its timed form, what the wall-clock fields beside it mean — so it belongs
+    // in the block whose job is "which knobs decided this run". `timed` is
+    // spelled out rather than implied by a second row, because a reader
+    // comparing two transcripts needs to see WHICH of the two flags was used:
+    // only the count-only one leaves `run.json` byte-reproducible.
+    if let Some(cfg) = &opts.proc_profile {
+        let mode = if cfg.timed {
+            "counts+time (--obs-procs-time)"
+        } else {
+            "counts (--obs-procs)"
+        };
+        lines.extend(row("obs-procs", &[mode.to_string()]));
+    }
     lines.extend(row("probes", &opts.probes));
     if let Some(t) = opts.time_limit {
         lines.extend(row("timeout", &[format!("{t} ticks")]));

@@ -682,6 +682,14 @@ pub(crate) struct SimState<'a> {
     /// once instead of every call. `RefCell` because the format path runs on the
     /// read side (`&self`); byte-identical (`const_string` is a pure fn of cid).
     pub fmt_cache: std::cell::RefCell<Vec<Option<Box<str>>>>,
+    /// R14: the per-body execution profile accumulators, or `None` on a run
+    /// that did not ask for one. `Option` and not an always-present empty `Vec`
+    /// because that is what makes the hot-path cost ONE null test: the two
+    /// dispatch seams (`Scheduler::run_body`, `native::run::dispatch_body`) and
+    /// the two settle fixpoints read it, and every one of them is on the
+    /// simulator's innermost loop. Boxed so the `None` case adds one pointer to
+    /// `SimState` rather than four vectors.
+    pub proc_prof: Option<Box<crate::profile::ProcProfile>>,
 }
 
 /// A heap-allocated class object (N7). `class_id` is the DYNAMIC type (set at

@@ -34,7 +34,24 @@ impl Elaborator<'_> {
         // an empty prefix (single top) renders as the top module's own name —
         // but cur_prefix is ALWAYS the instance path incl. the top ("m" / "m.u1").
         self.proc_scopes.push(self.cur_prefix.clone());
+        // R14: the profile identity, in the SAME lockstep. Every producer today
+        // parks one — `lower_proc_block` for a user block, `lower_synth_proc`
+        // for a body vita synthesized — so the `synth` default is a FAIL-SAFE,
+        // not a case: it exists so a future append site that forgets to label
+        // itself produces a visibly-unlabelled row instead of inheriting some
+        // other body's `file:line`.
+        let ident = self.pending_proc_ident.take().unwrap_or_else(|| ProcIdent {
+            kind: "synth",
+            scope: self.cur_prefix.clone(),
+            ..ProcIdent::default()
+        });
+        self.proc_idents.push(ident);
         self.processes.push(p);
+        debug_assert_eq!(
+            self.proc_idents.len(),
+            self.processes.len(),
+            "R14 proc_idents must stay lockstep with processes"
+        );
     }
 
     /// THE deterministic stmt append point (mirror of [`Self::push_expr`]).
@@ -215,6 +232,37 @@ impl Elaborator<'_> {
         // builds one Process and returns BEFORE processes.push). Any fork mode
         // recorded below is keyed by this id; the caller debug_asserts the match.
         self.cur_proc = self.processes.len() as u32;
+        // R14: park THIS block's identity for `push_process` (the caller pushes
+        // immediately after we return). Anchored on the block's OWN span, not
+        // `cur_span` — during module elaboration that is the module header.
+        //
+        // ⚠️ THE PARK IS ONLY SOUND BECAUSE EVERY CALLER PUSHES IMMEDIATELY.
+        // A caller that lowered two bodies before pushing either would give the
+        // FIRST push the SECOND body's identity — a wrong `file:line` at exit 0,
+        // which is precisely the misdirection this feature exists to prevent.
+        // The assert is what keeps that a checked fact rather than a convention:
+        // every append site is `lower…(); push_process(…)` today, and the whole
+        // suite runs in debug.
+        debug_assert!(
+            self.pending_proc_ident.is_none(),
+            "R14: a lowered body was never pushed — its identity would be \
+             mis-attached to the next process"
+        );
+        let (file, line, col) = self.span_file_line_col(p.span);
+        self.pending_proc_ident = Some(ProcIdent {
+            kind: match p.kind {
+                ast::ProcKind::Initial => "initial",
+                ast::ProcKind::Always => "always",
+                ast::ProcKind::AlwaysFf => "always_ff",
+                ast::ProcKind::AlwaysComb => "always_comb",
+                ast::ProcKind::AlwaysLatch => "always_latch",
+                ast::ProcKind::Final => "final",
+            },
+            file,
+            line,
+            col,
+            scope: self.cur_prefix.clone(),
+        });
         // Reset the nesting guard at every top-level body entry (a process body is
         // never lowered while already inside a fork child of another process).
         self.in_fork = false;

@@ -314,6 +314,28 @@ impl Scheduler<'_, '_> {
         }
     }
 
+    /// R14 (ROADMAP §3 ⑭): [`Self::eval_cont_assign`] plus the profile charge.
+    ///
+    /// A separate spelling rather than a counter inside the one above, because
+    /// that one is `&self` — it is reached from read-only contexts — and a
+    /// counter needs `&mut`. This is the settle fixpoint's spelling, and the
+    /// fixpoint is the only place a continuous assign's RHS is evaluated as
+    /// WORK (a `$display` of the same net re-reads the settled value instead).
+    /// R14 (ROADMAP §3 ⑭): charge one continuous-assign RHS evaluation to the
+    /// profile. `t0` is `Some` only under `--obs-procs-time`.
+    ///
+    /// Deliberately does NOT wrap the evaluation: a wrapper needs a call in each
+    /// of its two arms, and the evaluator inlines, so the settle loop would
+    /// carry two copies of it. That shape measured the SAME as this one — the
+    /// cost is the per-visit test, not the duplication (`settle_cont_assigns`
+    /// has the numbers) — so this is the smaller code, not the faster one.
+    #[inline]
+    pub(crate) fn charge_ca(&mut self, ci: usize, t0: Option<std::time::Instant>) {
+        if let Some(p) = self.st.proc_prof.as_mut() {
+            p.bump_ca(ci, t0.map_or(0, |t| t.elapsed().as_nanos() as u64));
+        }
+    }
+
     pub(crate) fn eval_for_lvalue(&self, lhs: &Lvalue, rhs: u32) -> Value {
         // §6.12: a real destination lends no width — see `width::lvalue_targets_real`.
         let lw = if crate::width::lvalue_targets_real(self.st.ir, lhs) {

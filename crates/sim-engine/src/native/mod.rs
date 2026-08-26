@@ -212,6 +212,12 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         net_dims: _,
         net_decl_ranges: _,
         proc_scopes: _,
+        // R14: pure REPORTING instrumentation — the counters live on
+        // `SimState` and both backends bump them at their own dispatch seam, so
+        // a profiled run is not a different design. ⚠️ NOT the same call as
+        // `--probe`/`$vita_stage`, which DO disqualify (§4.3): those change what
+        // the executor must do mid-body; this only adds a `u64` after it.
+        proc_profile: _,
         ca_delays: _,
         assign_ranks: _,
         two_state_nets: _,

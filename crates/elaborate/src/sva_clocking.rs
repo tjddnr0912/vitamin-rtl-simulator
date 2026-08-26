@@ -134,12 +134,15 @@ impl Elaborator<'_> {
         };
         let mut body_a = vec![set_handoff];
         body_a.extend(regs_a.nbas);
-        let proc_a = self.lower_proc_block(&ast::ProceduralBlock {
-            kind: ast::ProcKind::Always,
-            sensitivity: Some(sva.clock.clone()),
-            body: Box::new(sva_block_or_single(body_a, sp)),
-            span: sp,
-        });
+        let proc_a = self.lower_synth_proc_inline(
+            "sva",
+            &ast::ProceduralBlock {
+                kind: ast::ProcKind::Always,
+                sensitivity: Some(sva.clock.clone()),
+                body: Box::new(sva_block_or_single(body_a, sp)),
+                span: sp,
+            },
+        );
         self.push_process(proc_a);
 
         // PROCESS B @ c2: CHECK + DISCHARGE — `if (handoff) begin if (!cons)
@@ -188,12 +191,15 @@ impl Elaborator<'_> {
         };
         let mut body_b = vec![consume];
         body_b.extend(regs_b.nbas);
-        let proc_b = self.lower_proc_block(&ast::ProceduralBlock {
-            kind: ast::ProcKind::Always,
-            sensitivity: Some(cons_clock),
-            body: Box::new(sva_block_or_single(body_b, sp)),
-            span: sp,
-        });
+        let proc_b = self.lower_synth_proc_inline(
+            "sva",
+            &ast::ProceduralBlock {
+                kind: ast::ProcKind::Always,
+                sensitivity: Some(cons_clock),
+                body: Box::new(sva_block_or_single(body_b, sp)),
+                span: sp,
+            },
+        );
         self.push_process(proc_b);
     }
 
@@ -312,12 +318,15 @@ impl Elaborator<'_> {
             let mut body = vec![arm];
             body.extend(regs.nbas);
             body.extend(pipeline_nbas);
-            let proc = self.lower_proc_block(&ast::ProceduralBlock {
-                kind: ast::ProcKind::Always,
-                sensitivity: Some(segs[0].0.clone()),
-                body: Box::new(sva_block_or_single(body, sp)),
-                span: sp,
-            });
+            let proc = self.lower_synth_proc_inline(
+                "sva",
+                &ast::ProceduralBlock {
+                    kind: ast::ProcKind::Always,
+                    sensitivity: Some(segs[0].0.clone()),
+                    body: Box::new(sva_block_or_single(body, sp)),
+                    span: sp,
+                },
+            );
             self.push_process(proc);
         }
 
@@ -411,12 +420,15 @@ impl Elaborator<'_> {
             });
             body.extend(regs.nbas);
             body.extend(pipeline_nbas);
-            let proc = self.lower_proc_block(&ast::ProceduralBlock {
-                kind: ast::ProcKind::Always,
-                sensitivity: Some(segs[i].0.clone()),
-                body: Box::new(sva_block_or_single(body, sp)),
-                span: sp,
-            });
+            let proc = self.lower_synth_proc_inline(
+                "sva",
+                &ast::ProceduralBlock {
+                    kind: ast::ProcKind::Always,
+                    sensitivity: Some(segs[i].0.clone()),
+                    body: Box::new(sva_block_or_single(body, sp)),
+                    span: sp,
+                },
+            );
             self.push_process(proc);
         }
     }
@@ -745,7 +757,7 @@ impl Elaborator<'_> {
                 body: Box::new(ast::Stmt::Null(cb.span)),
                 span: cb.span,
             };
-            let proc = self.lower_proc_block(&pb);
+            let proc = self.lower_synth_proc(&pb, "clocking");
             let pid = self.processes.len() as u32;
             self.push_process(proc);
             if !pairs.is_empty() {

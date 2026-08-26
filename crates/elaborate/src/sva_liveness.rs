@@ -170,7 +170,7 @@ impl Elaborator<'_> {
             body: Box::new(body),
             span: sp,
         };
-        let proc = self.lower_proc_block(&pb);
+        let proc = self.lower_synth_proc(&pb, "sva");
         self.push_process(proc);
         // End-of-sim obligation: `final if (pend) $error`. A separate `final` process
         // (registered in `final_procs`) reads the module-level `pend` reg.
@@ -199,7 +199,7 @@ impl Elaborator<'_> {
             body: Box::new(final_body),
             span: sp,
         };
-        let fproc = self.lower_proc_block(&fpb);
+        let fproc = self.lower_synth_proc(&fpb, "sva");
         self.push_process(fproc);
     }
 

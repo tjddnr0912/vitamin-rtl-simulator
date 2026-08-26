@@ -22,6 +22,12 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
     let mut top_params: Vec<(String, String)> = Vec::new();
     let mut plusargs: Vec<String> = Vec::new();
     let mut obs_dir: Option<String> = None;
+    // R14: two BOOLEANS, folded into one `Option<ProcProfileCfg>` below, so the
+    // "timing implies counting" rule has exactly one spelling. Order-independent
+    // (either flag first means the same thing) — a flag pair whose meaning
+    // depended on argv order would be a trap under a wrapper script.
+    let mut obs_procs = false;
+    let mut obs_procs_time = false;
     let mut hier_tree: Option<String> = None;
     let mut inst_paths: Option<String> = None;
     let mut probes: Vec<String> = Vec::new();
@@ -326,6 +332,20 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
                 obs_dir = Some(v.clone());
                 i += 2;
             }
+            // R14 (ROADMAP section 3 item 14). TWO flags and not one
+            // `--obs-procs=time` because the two answer different questions and
+            // only one of them is free: counts are DETERMINISTIC and ~free,
+            // wall-clock is neither (see `sim_engine::profile`'s observer-effect
+            // note). A reader who sees `--obs-procs` alone in a transcript can
+            // trust the numbers were not perturbed by the measurement.
+            "--obs-procs" => {
+                obs_procs = true;
+                i += 1;
+            }
+            "--obs-procs-time" => {
+                obs_procs_time = true;
+                i += 1;
+            }
             "--hier-tree" => {
                 let Some(v) = args.get(i + 1).filter(|v| !v.is_empty()) else {
                     eprintln!(
@@ -457,6 +477,11 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
             }
         }
     }
+    // R14: timing IMPLIES counting — `nanos` beside no `evals` would be a row
+    // with a cost and no way to normalise it.
+    let proc_profile = (obs_procs || obs_procs_time).then_some(sim_engine::ProcProfileCfg {
+        timed: obs_procs_time,
+    });
     Ok(IoArgs {
         pos,
         out,
@@ -477,6 +502,7 @@ pub(crate) fn parse_io_args(args: &[String]) -> Result<IoArgs, i32> {
         top_params,
         plusargs,
         obs_dir,
+        proc_profile,
         hier_tree,
         inst_paths,
         probes,
@@ -629,6 +655,17 @@ pub(crate) fn reject_obs_dir(stage: &str, io: &IoArgs) -> Result<(), i32> {
         eprintln!(
             "error[{}]: '--probe'/'--probe-file' is a one-shot `vita` argument — \
              '{stage}' does not emit the trace rail (staged probing is a follow-on)",
+            MsgCode::CliBadFlag.code_num()
+        );
+        return Err(EXIT_CLI_ERROR);
+    }
+    // R14: the profile lands in `run.json`, and `run.json` is written by the
+    // one-shot flow only (the rejection above) — so accepting the flag here
+    // would silently profile a run and then throw the numbers away.
+    if io.proc_profile.is_some() {
+        eprintln!(
+            "error[{}]: '--obs-procs'/'--obs-procs-time' is a one-shot `vita` argument \
+             — '{stage}' does not emit run.json (a staged-run manifest is a follow-on)",
             MsgCode::CliBadFlag.code_num()
         );
         return Err(EXIT_CLI_ERROR);

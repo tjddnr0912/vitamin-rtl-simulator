@@ -699,7 +699,7 @@ impl Elaborator<'_> {
             body: Box::new(body),
             span: sp,
         };
-        let proc = self.lower_proc_block(&pb);
+        let proc = self.lower_synth_proc(&pb, "sva");
         self.push_process(proc);
     }
 

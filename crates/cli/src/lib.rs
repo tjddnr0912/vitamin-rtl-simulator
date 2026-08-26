@@ -135,6 +135,12 @@ pub struct VitaOpts {
     /// rail (byte-identical to before). Out-of-band sink — never hashed into
     /// artifacts, never enters the golden IR. One-shot `vita` only for v1.
     pub obs_dir: Option<String>,
+    /// `--obs-procs` / `--obs-procs-time` (R14, ROADMAP §3 ⑭): add the
+    /// `processes` object — per-body evaluation counts, and with
+    /// `--obs-procs-time` cumulative wall-clock — to `run.json`. `None` ⇒ no
+    /// profile at all (nothing is allocated and both dispatch seams cost one
+    /// null test). Requires `--obs-dir`.
+    pub proc_profile: Option<sim_engine::ProcProfileCfg>,
     /// `--hier-tree <path>` (design-structure export): after elaborate, write the module
     /// hierarchy as an indented tree (`instance : module`, top at the root) to `<path>`.
     /// `None` ⇒ not requested. Out-of-band (never hashed / never in the golden IR).
@@ -179,6 +185,7 @@ impl VitaOpts {
             time_limit: self.time_limit,
             plusargs: self.plusargs.clone(),
             backend: self.backend.unwrap_or_default(),
+            proc_profile: self.proc_profile,
             ..SimOpts::default()
         }
     }
@@ -657,6 +664,12 @@ struct IoArgs {
     /// `--obs-dir <D>` (G2 OBS-1a): directory for the run manifest + result
     /// ledger. `None` ⇒ no obs rail. Out-of-band; one-shot `vita` only for v1.
     obs_dir: Option<String>,
+    /// `--obs-procs` / `--obs-procs-time` (R14, ROADMAP §3 ⑭): per-body
+    /// evaluation counts in `run.json`'s `processes` object, optionally with
+    /// cumulative wall-clock. `None` ⇒ no profile (the counters are not even
+    /// allocated). Requires `--obs-dir`; one-shot `vita` only, like the rest of
+    /// the rail.
+    proc_profile: Option<sim_engine::ProcProfileCfg>,
     /// `--hier-tree <path>` / `--inst-paths <path>`: design-structure exports (module
     /// hierarchy tree / full instance-path list). `None` ⇒ not requested.
     hier_tree: Option<String>,
