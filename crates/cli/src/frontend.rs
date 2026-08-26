@@ -143,8 +143,8 @@ pub(crate) fn smap_to_wire(map: &hdl_preprocess::SourceMap) -> SmapWire {
 /// map (preprocessing is over; the map's only staged job is span resolution).
 pub(crate) fn smap_from_wire(w: SmapWire) -> hdl_preprocess::SourceMap {
     let (files, segments) = w;
-    hdl_preprocess::SourceMap {
-        files: files
+    hdl_preprocess::SourceMap::from_parts(
+        files
             .into_iter()
             .map(|(name, text)| hdl_preprocess::SourceFileEntry {
                 name,
@@ -153,7 +153,7 @@ pub(crate) fn smap_from_wire(w: SmapWire) -> hdl_preprocess::SourceMap {
                 dir: std::path::PathBuf::new(),
             })
             .collect(),
-        segments: segments
+        segments
             .into_iter()
             .map(
                 |(exp_start, exp_end, file, orig_start, collapsed)| hdl_preprocess::Segment {
@@ -165,7 +165,7 @@ pub(crate) fn smap_from_wire(w: SmapWire) -> hdl_preprocess::SourceMap {
                 },
             )
             .collect(),
-    }
+    )
 }
 
 /// Build a `SourceLoc` for the half-open expanded-byte range `[lo, hi)` by
@@ -684,7 +684,7 @@ pub(crate) fn run_vita_str_gated(
         severities: sc.severities,
         // #10: elaborate-resolved file:line:col + instance for severity
         // statements (one-shot path; empty without a resolver ⇒ byte-identical).
-        severity_locs: sc.severity_locs,
+        stmt_locs: sc.stmt_locs,
         // §21.3.2 %t/$timeformat: the call-site table + the precision exponent
         // %t scales against (one-shot path; empty/−9 ⇒ byte-identical).
         timeformat_stmts: sc.timeformat_stmts,

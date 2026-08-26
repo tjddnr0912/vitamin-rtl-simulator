@@ -26,6 +26,12 @@ mod tests;
 #[cfg(test)]
 mod write_parity_tests;
 
+/// [`SimState::cur_stmt`] sentinel: "no statement is executing". `u32::MAX` and
+/// not `Option<u32>` so the per-statement store stays a plain word write, and so
+/// a stale value can never MASQUERADE as a real StmtId — `stmt_locs` is a
+/// BTreeMap keyed by real ids, and this one is never in it.
+pub const NO_STMT: u32 = u32::MAX;
+
 /// A boxed `Write` sink for the VCD. v1 production uses a `File`; tests use an
 /// in-memory buffer captured via an `Rc<RefCell<Vec<u8>>>` adapter.
 pub(crate) type VcdSink = Box<dyn Write>;
@@ -365,9 +371,9 @@ pub(crate) struct SimState<'a> {
     /// (from `SimOpts.severities`); empty ⇒ no severity tasks in the design.
     pub severities: crate::SeverityTable,
     /// StmtId → resolved source location + instance path for severity
-    /// statements (from `SimOpts.severity_locs`); empty ⇒ location-less
+    /// statements (from `SimOpts.stmt_locs`); empty ⇒ location-less
     /// severity diagnostics (no resolver at elaborate, or a pre-#10 harness).
-    pub severity_locs: crate::SeverityLocTable,
+    pub stmt_locs: crate::StmtLocTable,
     /// StmtIds of `$timeformat` calls, lowered as no-op `Display` statements
     /// (the `assert_ctl`/severity side-table pattern, from
     /// `SimOpts.timeformat_stmts`); empty ⇒ no `$timeformat` in the design.
@@ -531,6 +537,24 @@ pub(crate) struct SimState<'a> {
     /// Companion budget for W4029 — see `warn_run_index`. Separate so a reset
     /// window's unknown indexes cannot starve the out-of-range budget.
     pub run_range_unk_count: Cell<u32>,
+    /// V33-8: the StmtId currently executing, or [`NO_STMT`] outside one.
+    ///
+    /// Runtime diagnostics raised from a `&self` primitive have no other way to
+    /// say WHERE. `warn_run_index` is called from `read_net` — a `&self` hot
+    /// primitive whose whole signature is `(net, word)` — and from the `&self`
+    /// write funnel; threading a StmtId (or an ExprId) through either means
+    /// changing the `NetReader` trait and every implementor, on the hottest path
+    /// in the engine, to carry a value only a capped-at-eight diagnostic reads.
+    /// One `Cell` store per statement buys the same answer: the two statement
+    /// loops (`exec::process::run_process` and `native::body`) already have `sid`
+    /// in hand and already pay a `Cell` LOAD per statement for `call_fatal`.
+    ///
+    /// ⚠️ FAIL TO NONE, never to stale. It is cleared before every terminator and
+    /// on every early return, because a block's terminator condition
+    /// (`if (mem[i])`) reads nets AFTER the last statement of the block ran — and
+    /// pointing a diagnostic at the wrong line is worse than pointing at none.
+    /// That is the residue: a terminator-condition W4029 stays location-less.
+    pub cur_stmt: Cell<u32>,
 
     // ── postponed region ($strobe FIFO + global $monitor singleton) ──
     pub postponed: Postponed,

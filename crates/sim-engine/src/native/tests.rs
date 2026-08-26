@@ -391,11 +391,11 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         two_state_nets: sc.two_state_nets,
         func_table: sc.func_table,
         severities: sc.severities,
-        // #10 severity_locs: threaded for production parity. Always EMPTY here
+        // #10 stmt_locs: threaded for production parity. Always EMPTY here
         // (engine tests elaborate with no SpanResolver), so it changes nothing
         // today — the field exists so a future resolver-installing harness
         // cannot silently diverge from the production construction.
-        severity_locs: sc.severity_locs,
+        stmt_locs: sc.stmt_locs,
         // …and `timeformat_stmts`, for the same reason: `$timeformat` lowers to a
         // `Display` plus a sid, so WITHOUT the table it prints its own arguments
         // instead of applying them, and the `%t` path is never entered.

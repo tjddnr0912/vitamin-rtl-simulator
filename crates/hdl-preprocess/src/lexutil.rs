@@ -115,6 +115,44 @@ pub fn byte_to_line_col(src: &str, byte: usize) -> (u32, u32) {
     (line, col)
 }
 
+/// Byte offsets of every LINE START in `src`: `0`, then one past each `\n`.
+///
+/// Built once per file so [`byte_to_line_col_indexed`] can binary-search instead
+/// of walking. [`byte_to_line_col`] is O(byte) and that was fine while a run
+/// resolved a handful of spans; V33-8 resolves one per array-indexing statement
+/// at elaborate time, which turned the same walk into O(statements × file) —
+/// measured 0.01 s → 0.10 s of `velab` on a 2000-statement, 365 KB source.
+pub fn line_starts_of(src: &str) -> Vec<u32> {
+    let mut v = vec![0u32];
+    v.extend(
+        src.bytes()
+            .enumerate()
+            .filter(|&(_, b)| b == b'\n')
+            .map(|(i, _)| i as u32 + 1),
+    );
+    v
+}
+
+/// [`byte_to_line_col`] against a prebuilt [`line_starts_of`] index.
+///
+/// MUST agree with `byte_to_line_col` on every input — they are two spellings of
+/// one answer and a diagnostic's line number must not depend on which the caller
+/// reached for. `line_col_index_matches_the_linear_walk` fuzzes them together.
+/// Only the LINE lookup becomes a binary search; the column still counts chars,
+/// but over one line rather than the whole file.
+pub fn byte_to_line_col_indexed(src: &str, starts: &[u32], byte: usize) -> (u32, u32) {
+    let mut byte = byte.min(src.len());
+    while byte > 0 && !src.is_char_boundary(byte) {
+        byte -= 1;
+    }
+    // Number of line starts at or before `byte` == the 1-based line number.
+    // `starts` always begins with 0, so this is >= 1 for any input.
+    let line = starts.partition_point(|&s| s as usize <= byte).max(1);
+    let last_nl = starts[line - 1] as usize;
+    let col = src[last_nl..byte].chars().count() as u32 + 1;
+    (line as u32, col)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Include resolution (injected; keeps std::fs out of the core for tests)
 // ─────────────────────────────────────────────────────────────────────────────

@@ -170,7 +170,8 @@ impl<'s> Elaborator<'s> {
             inline_stack: Vec::new(),
             fork_modes: ForkModeTable::new(),
             severities: SeverityTable::new(),
-            severity_locs: SeverityLocTable::new(),
+            stmt_locs: StmtLocTable::new(),
+            stmt_wants_loc: false,
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),
             handle_copy_stmts: std::collections::BTreeMap::new(),
@@ -354,6 +355,41 @@ impl<'s> Elaborator<'s> {
     pub(crate) fn cur_location(&self) -> Option<diag::SourceLoc> {
         let sp = self.cur_span?;
         Some(self.span_resolver?.resolve(sp.lo, sp.hi))
+    }
+
+    /// Record `sid`'s source position + instance path in [`StmtLocTable`] — THE
+    /// one write point, shared by the severity path and by the V33-8 runtime
+    /// diagnostics (`W4029` out-of-range/unknown index, `W4023` `$readmem*` file
+    /// trouble). A second spelling would let two callers report different places
+    /// for one statement.
+    ///
+    /// `cur_span` is the enclosing STATEMENT's span (`lower_stmt` sets it), which
+    /// is the resolution the reporter asked for: they were bisecting three reads
+    /// of one array by commenting lines out. It is NOT the indexing expression's
+    /// own span — the IR keeps no per-expression spans, and the engine's read
+    /// primitive is a `&self` hot path that never learns which ExprId it is
+    /// serving (see `SimState::cur_stmt`).
+    ///
+    /// No resolver ⇒ no entry ⇒ the pre-slice, location-less diagnostic, byte
+    /// for byte. First writer wins: a statement lowered once keeps one record,
+    /// and re-recording would only re-resolve the same span.
+    pub(crate) fn record_stmt_loc(&mut self, sid: u32) {
+        if self.stmt_locs.contains_key(&sid) {
+            return;
+        }
+        if let Some(loc) = self.cur_location() {
+            self.stmt_locs.insert(
+                sid,
+                StmtLoc {
+                    file: loc.file,
+                    line: loc.line,
+                    col: loc.col,
+                    byte_start: loc.byte_start,
+                    byte_end: loc.byte_end,
+                    instance: self.cur_prefix.clone(),
+                },
+            );
+        }
     }
 
     /// Emit a WARNING-severity diagnostic and KEEP GOING — does NOT set

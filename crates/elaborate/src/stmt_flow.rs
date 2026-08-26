@@ -2,6 +2,20 @@
 
 use super::*;
 
+/// The lvalue a statement writes, when it has one. Exhaustive on purpose (no
+/// `_` arm): V33-8 uses it to decide whether an out-of-range WRITE report can
+/// name a source line, and a new `Stmt` variant that carries an lvalue must not
+/// fall silently into "no location".
+pub(crate) fn stmt_lvalue(s: &ir::Stmt) -> Option<&ir::Lvalue> {
+    match s {
+        ir::Stmt::BlockingAssign { lhs, .. }
+        | ir::Stmt::NonblockingAssign { lhs, .. }
+        | ir::Stmt::Force { lhs, .. }
+        | ir::Stmt::Release { lhs } => Some(lhs),
+        ir::Stmt::SysTask { .. } | ir::Stmt::Disable { .. } => None,
+    }
+}
+
 // ════════════════════════════════════════════════════════════════════
 //  v2 — procedural-block lowering (ProceduralBlock → ir::Process)
 // ════════════════════════════════════════════════════════════════════
@@ -69,7 +83,39 @@ impl Elaborator<'_> {
             }
         }
         let id = self.stmts.len() as u32;
+        // V33-8: does a runtime diagnostic want to point AT this statement?
+        // Three producers, one recorder (`record_stmt_loc`):
+        //  - an array-word READ lowered since the last push  (`push_expr` latch)
+        //  - an array-word WRITE in this statement's lvalue   (below)
+        //  - `$readmem*` / `$writemem*`                       (below)
+        // `$fread`'s W4023 twin rides the READ latch: its memory argument is a
+        // whole-array `Signal { word: None }`, but the destination lvalue it
+        // writes through is built with `word: Some(_)`, so the write arm catches
+        // it. (Measured: `$fread` into a memory records a row.)
+        let wants = std::mem::take(&mut self.stmt_wants_loc)
+            || matches!(
+                &s,
+                ir::Stmt::SysTask {
+                    which: ir::SysTaskId::ReadmemB
+                        | ir::SysTaskId::ReadmemH
+                        | ir::SysTaskId::WritememB
+                        | ir::SysTaskId::WritememH,
+                    ..
+                }
+            )
+            || stmt_lvalue(&s).is_some_and(|lv| {
+                lv.chunks.iter().any(|c| {
+                    c.word.is_some()
+                        && self
+                            .nets
+                            .get(c.net as usize)
+                            .is_some_and(|nv| nv.array_len > 1)
+                })
+            });
         self.stmts.push(s);
+        if wants {
+            self.record_stmt_loc(id);
+        }
         id
     }
 

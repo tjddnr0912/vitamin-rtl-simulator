@@ -229,7 +229,12 @@ support):
   `reg [1023:0] firmware_file; … $readmemh(firmware_file, mem);` works, as does
   a `string` variable. The memory may be named HIERARCHICALLY
   (`$readmemh(f, dut.ram.mem)`), which is the firmware-loading idiom used by
-  serv, picorv32 and ibex.
+  serv, picorv32 and ibex. A file that cannot be opened (and every other
+  `$readmem*`/`$writemem*` complaint) is a `W-RUN-READMEM` / `VITA-W4023`
+  warning naming BOTH the file and the calling line —
+  `d.sv:4:5: warning[VITA-W4023] … unable to open 'fw.hex' for reading [in t]` —
+  so a testbench that loads several memories does not print interchangeable
+  lines. `$fread`'s complaints share the code and the anchoring.
 - **File I/O** — `$fopen` (fd and MCD modes), `$fclose`, `$fwrite`/`$fdisplay`
   (+ b/o/h variants), `$fgetc`/`$ungetc`/`$feof`/`$fgets`/`$fread`/`$fscanf`/
   `$sscanf`, `$sformat`/`$sformatf`, and the pre-opened STDOUT/STDERR

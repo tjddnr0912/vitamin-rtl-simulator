@@ -547,6 +547,32 @@ impl Elaborator<'_> {
     /// THE deterministic expr append point.
     #[inline]
     pub(crate) fn push_expr(&mut self, e: ir::Expr) -> u32 {
+        // V33-8: latch "the statement being built can emit a LOCATED runtime
+        // diagnostic". Here because this is the one funnel — `Expr::Signal { word }`
+        // is constructed at a dozen sites (expr_main, packed, ports, events…) and
+        // hooking them individually is how a gate ends up covering four of five.
+        //
+        // `array_len > 1` is the predicate because `W4029` is an ARRAY WORD index
+        // report: a `word: Some(_)` on a non-array net is a class field-select,
+        // which routes to the heap and cannot reach `warn_run_index`. Without it
+        // every class-field read in the design would buy a table row.
+        match e {
+            ir::Expr::Signal { net, word: Some(_) }
+                if self
+                    .nets
+                    .get(net as usize)
+                    .is_some_and(|nv| nv.array_len > 1) =>
+            {
+                self.stmt_wants_loc = true;
+            }
+            // A CALL, because an out-of-range access inside the callee's body is
+            // reported against the CALLING statement — see the note in
+            // `SimState::run_frame_call_with` for why the callee's own line is
+            // deliberately not used. Without this arm `c = pick(i)` would be the
+            // one shape in the family with no location at all.
+            ir::Expr::Call { .. } => self.stmt_wants_loc = true,
+            _ => {}
+        }
         let id = self.exprs.len() as u32;
         self.exprs.push(e);
         id

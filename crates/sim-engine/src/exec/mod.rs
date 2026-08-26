@@ -581,6 +581,17 @@ pub(crate) trait Kernel {
     /// Called at the statement boundary — the finest granularity the seam has —
     /// so an access and the `$display` in the NEXT statement stay in order.
     fn k_drain_diags(&mut self);
+    /// CONTROL (V33-8): publish the StmtId now executing, or `state::NO_STMT`
+    /// when none is. It is what lets a `&self` runtime diagnostic
+    /// (`warn_run_index`, `warn_readmem`) resolve a `file:line:col` out of the
+    /// elaborate-time `stmt_locs` record.
+    ///
+    /// On the seam rather than poked at `sched.st` directly, for the reason
+    /// `k_enter_body` is: BOTH statement loops must publish it, and the tier-3
+    /// loop reaches its state through the kernel. A backend that forgot this
+    /// call would lose locations SILENTLY (the diagnostic still prints, just
+    /// unanchored), which is exactly the shape a seam exists to prevent.
+    fn k_set_cur_stmt(&self, sid: u32);
     /// CONTROL: the IN-BODY step budget — how many blocks one activation may run
     /// without suspending.
     ///

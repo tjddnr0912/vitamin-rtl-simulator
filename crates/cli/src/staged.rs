@@ -737,7 +737,7 @@ pub(crate) fn run_vrun_gated(
         // #10 (STAGED-DROP parity): severity file:line:col + instance — without
         // this the staged run silently prints location-less severity reports
         // while one-shot locates them.
-        severity_locs: extra.severity_locs,
+        stmt_locs: extra.stmt_locs,
         stage_stmts: std::collections::BTreeSet::new(),
         handle_copy_stmts: extra.handle_copy_stmts,
         queue_slice_stmts: extra.queue_slice_stmts,

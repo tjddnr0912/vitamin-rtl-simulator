@@ -882,19 +882,7 @@ impl Elaborator<'_> {
         // #10: resolve THIS statement's span NOW (the engine never can — the IR
         // is span-free) so the runtime report says file:line:col + instance.
         // Entry ⟺ resolver installed: the no-resolver paths stay byte-identical.
-        if let Some(loc) = self.cur_location() {
-            self.severity_locs.insert(
-                sid,
-                SeverityLoc {
-                    file: loc.file,
-                    line: loc.line,
-                    col: loc.col,
-                    byte_start: loc.byte_start,
-                    byte_end: loc.byte_end,
-                    instance: self.cur_prefix.clone(),
-                },
-            );
-        }
+        self.record_stmt_loc(sid);
         // SVA-REST: a fire `$error` lowered while a checker body is being synthesized
         // is an ASSERTION fire — record its StmtId so `$assertoff`/`$assertkill` can
         // suppress it at runtime.

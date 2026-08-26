@@ -376,6 +376,16 @@ pub(crate) struct CompiledBody {
 pub(crate) struct CompiledBlock {
     ops: Vec<Op>,
     term: CompiledTerm,
+    /// V33-8: the StmtIds this block's ops came from, in order — one entry per
+    /// statement, NOT per op. `vm_exec` walks it with a counter bumped at each
+    /// `Op::ends_statement()`, which is the only place the VM knows a statement
+    /// boundary at all (the op stream has erased statement structure everywhere
+    /// else). It exists so a runtime diagnostic raised from a `&self` primitive
+    /// under a COMPILED body can still say `file:line:col`; without it the VM
+    /// backend would print unanchored warnings while the interpreter printed
+    /// located ones for the same design — the STAGED-DROP hazard shape, one
+    /// backend silently poorer than the other.
+    stmt_sids: Vec<u32>,
 }
 
 /// The P9 allow-list terminators ONLY — `is_codegen_able` guaranteed nothing else
@@ -754,7 +764,9 @@ pub(crate) fn compile_body(
     let mut blocks = Vec::with_capacity(body.len());
     for block in body {
         let mut ops = Vec::new();
+        let mut stmt_sids: Vec<u32> = Vec::with_capacity(block.stmts.len());
         for &sid in &block.stmts {
+            stmt_sids.push(sid);
             match &stmts[sid as usize] {
                 Stmt::BlockingAssign { lhs, rhs } => {
                     let li = lvalues.len() as u32;
@@ -896,7 +908,24 @@ pub(crate) fn compile_body(
             // `is_codegen_able` guarantees only the P9 allow-list reaches here.
             other => unreachable!("non-codegen-able terminator in compile_body: {other:?}"),
         };
-        blocks.push(CompiledBlock { ops, term });
+        // INVARIANT the runtime walk rests on: one `ends_statement()` op per
+        // entry here, in the same order. Every arm above emits exactly one
+        // statement-ending op per `block.stmts` entry (`Op::ends_statement`
+        // enumerates which ops those are), so the counter and this Vec stay in
+        // step. Asserted rather than commented, because a future arm that emits
+        // two write ops for one statement would shift every later location by
+        // one — a WRONG line, which is the failure mode this slice exists to
+        // avoid.
+        debug_assert_eq!(
+            ops.iter().filter(|o| o.ends_statement()).count(),
+            stmt_sids.len(),
+            "compiled block: one statement-ending op per source statement"
+        );
+        blocks.push(CompiledBlock {
+            ops,
+            term,
+            stmt_sids,
+        });
     }
     CompiledBody {
         blocks,
@@ -957,6 +986,21 @@ pub(crate) fn vm_exec(
     let mut guard: u64 = 0;
     loop {
         let block = &body.blocks[bb as usize];
+        // V33-8: publish the statement the VM is inside, so `warn_run_index` /
+        // `warn_readmem` can resolve a source line out of `stmt_locs`. The op
+        // stream has no statement boundaries except `ends_statement()`, so the
+        // cursor is advanced THERE (below) and seeded here. `unwrap_or(NO_STMT)`
+        // for an empty block, and the same call past the last statement clears
+        // it before the terminator — a branch condition must not inherit the
+        // last statement's line.
+        let mut stmt_i = 0usize;
+        k.k_set_cur_stmt(
+            block
+                .stmt_sids
+                .first()
+                .copied()
+                .unwrap_or(crate::state::NO_STMT),
+        );
         for op in &block.ops {
             match *op {
                 Op::EvalForLval { dst, lhs, rhs } => {
@@ -1013,9 +1057,18 @@ pub(crate) fn vm_exec(
                     args,
                     sid,
                 } => match k.k_dispatch_systask(which, fmt, &body.arglists[args as usize], sid) {
-                    Ctl::Finish => return Step::Finish,
-                    Ctl::Stop => return Step::Stop,
-                    Ctl::Fatal => return Step::Fatal,
+                    Ctl::Finish => {
+                        k.k_set_cur_stmt(crate::state::NO_STMT);
+                        return Step::Finish;
+                    }
+                    Ctl::Stop => {
+                        k.k_set_cur_stmt(crate::state::NO_STMT);
+                        return Step::Stop;
+                    }
+                    Ctl::Fatal => {
+                        k.k_set_cur_stmt(crate::state::NO_STMT);
+                        return Step::Fatal;
+                    }
                     Ctl::Continue => {}
                 },
             }
@@ -1049,9 +1102,22 @@ pub(crate) fn vm_exec(
             //    no-op outright.)
             if op.ends_statement() {
                 if k.k_call_fatal() {
+                    k.k_set_cur_stmt(crate::state::NO_STMT);
                     return Step::Fatal;
                 }
+                // Drain FIRST, then advance: `k_drain_diags` reports what the
+                // tier-3 arena recorded while THIS statement ran, so moving the
+                // cursor before it would file those reports under the next
+                // statement's line.
                 k.k_drain_diags();
+                stmt_i += 1;
+                k.k_set_cur_stmt(
+                    block
+                        .stmt_sids
+                        .get(stmt_i)
+                        .copied()
+                        .unwrap_or(crate::state::NO_STMT),
+                );
             }
         }
         match block.term {

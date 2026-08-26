@@ -449,13 +449,33 @@
 > 상수함수 인터프리터의 env 를 `WideBits` 로 올리는 것(값 표현 하나가 아니라 `ConstWidths` 짝까지).
 > §4.5.382 가 지은 `fold_self_bits` 의 산술/비교 arm 이 그 계산 자체는 이미 할 수 있다.
 
-> **⑬ 런타임 진단에 `file:line` 이 없다** (round-33 V33-8 · 진단 · **인프라**). W4029(unknown array
-> index)·W4023(`$readmem` open 실패)를 포함해 **엔진이 내는 모든 진단이 `location: None`** 이다. 리포터
-> 실측: `rtl/` elaborate 시 경고 11 중 **9가 한 배열(`$pkg$sha3_pkg.RC_TABLE`) 위의 W4029** 인데 그
-> 배열은 **서로 다른 세 자리**에서 읽힌다 ⇒ 사람이 이분탐색한다. serv 도 같은 모양(`tb.dut.ram.mem`
-> 위 W4029 7건). elaborate 의 E2002/E3009 는 전부 위치를 단다. **선행조건 = 표현식/문장 id → `SourceLoc`
-> 사이드카**(골든 밖 · `SimOpts` 경유)와 엔진이 진단 시점에 그 id 를 아는 것. 메시지 수정이 아니라
-> 배관이므로 전용 슬라이스.
+> **⑬ 런타임 진단에 `file:line` 이 없다** — **RESOLVED (V33-8, 2026-08-26)** for the two codes the
+> report named. W4029/E4002 (array word index) and W4023 (`$readmem*`/`$writemem*`/`$fread`) now
+> anchor at `file:line:col [in instance]`, one-shot and staged alike, and the reporter's shape
+> (one table read from three places) yields three distinct lines. The prerequisite this line asked
+> for turned out to be ALREADY BUILT: `stmt_locs` (the #10 severity sidecar, `.velab` v29) is a
+> StmtId → `SourceLoc` map outside the golden IR, so the slice only widened WHICH statements earn
+> an entry (array-indexing / `$readmem*` / call-bearing) and taught the engine which StmtId is
+> executing (`SimState::cur_stmt`, published by all three process-body executors through the
+> `Kernel::k_set_cur_stmt` seam).
+>
+> Residues, each with its reason:
+> - **호출된 서브루틴 본문 안의 접근은 CALL 문에 귀속된다**(subscript 줄이 아니라). tier-3 arena 는
+>   접근을 RECORD 만 하고 caller 의 문장 경계에서 drain 하므로 callee 의 StmtId 를 알 방법이 없다
+>   (두 번째 `cur_stmt` 원본 또는 `Rc<Cell>` 공유가 필요). 측정: publish 를 넣으면 `--backend interp`
+>   가 `d.sv:6`, `--backend native` 가 무위치 ⇒ **한 설계가 플래그 하나 차이로 두 줄**. 백엔드 일치를
+>   택했고 테스트로 핀했다(`a_read_inside_a_subroutine_is_named_by_its_call_statement`).
+> - **terminator 조건**(`if (mem[i])`)의 접근은 위치가 없다. 블록의 마지막 문장 뒤에 평가되므로
+>   `cur_stmt` 를 NO_STMT 로 지운다 — 확신에 찬 틀린 줄보다 무위치가 낫다.
+> - **cont-assign settle · t0 arm · delayed-CA apply** 의 drain 도 같은 이유로 무위치.
+> - 그 밖의 엔진 진단(W4022 closed-fd, W4028 plusargs, delta-limit 등)은 아직 `location: None`.
+>   같은 `cur_stmt` + `stmt_diag_meta` 로 한 줄씩 열 수 있다(배관은 이미 있다).
+>
+> 비용(실측): `.velab` +5.3%(keccak_f_arr) — 모든 문장이 배열 인덱스이자 호출인 합성 최악에서 +50%.
+> 런타임 회귀 없음(keccak_f_arr N=1000 인터리브 A/B: PRE 8.362 s · POST 8.330 s · 분산 ~0.6%).
+> ⚠️ 곁수확: `SourceMap::resolve` 의 line/col 이 **파일 처음부터의 선형 스캔**이라 문장당 해석이
+> `velab` 를 0.01 s → 0.10 s 로 만들었다 ⇒ 파일별 line-start 인덱스를 메모이즈해 원상 복구
+> (모든 기존 진단 경로도 같이 빨라진다 · `line_col_index_matches_the_linear_walk` 로 두 철자 동치 핀).
 
 > ~~**⑭ 프로세스별 평가 횟수/시간 관측 수단**~~ ✅ **RESOLVED (the observability half) — R7/§4.6**
 > (2026-08-26). (aes_top R14 · OBS · §6 과 인접). 리포터의 top(엔진 5 + 코어 1)이 **≈20 cycle/s** 라

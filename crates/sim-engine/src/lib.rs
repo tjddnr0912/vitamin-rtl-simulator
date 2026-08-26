@@ -68,8 +68,8 @@ pub use backend::{
 pub use elaborate::{
     AssignRankTable, CovItem, CovgInstMeta, DeferActTable, DeferMarkTable, DeferRegion,
     ForkModeTable, FuncMeta, FuncTable, JoinMode, NetDeclRangeTable, NetDimsTable, NetNameTable,
-    ProcIdent, QueueBoundTable, RadixTable, SeverityKind, SeverityLoc, SeverityLocTable,
-    SeverityTable, Sidecars, TaskCallFunc, TaskCallInfo, TaskCallProc,
+    ProcIdent, QueueBoundTable, RadixTable, SeverityKind, SeverityTable, Sidecars, StmtLoc,
+    StmtLocTable, TaskCallFunc, TaskCallInfo, TaskCallProc,
 };
 pub use levelize::{
     comb_depth, comb_ranks, fusion_candidates, fusion_candidates_across_copies,
@@ -278,11 +278,14 @@ pub struct SimOpts {
     /// `SysTaskId::Display`). EMPTY for severity-free designs (the default), so
     /// every existing caller is unaffected. Never enters the golden IR.
     pub severities: SeverityTable,
-    /// StmtId → source location + instance path for the SAME statements
-    /// (resolved at elaborate time — the engine's IR is span-free). EMPTY when
-    /// no `SpanResolver` was installed ⇒ severity diagnostics stay
-    /// location-less, byte-identical to the pre-#10 output. Never golden IR.
-    pub severity_locs: SeverityLocTable,
+    /// StmtId → source location + instance path (resolved at elaborate time —
+    /// the engine's IR is span-free). Keyed by, but no longer restricted to, the
+    /// severity statements above: V33-8 added the statements that index an array
+    /// and the `$readmem*` family, so `warn_run_index` / `warn_readmem` can
+    /// anchor too. EMPTY when no `SpanResolver` was installed ⇒ every runtime
+    /// diagnostic stays location-less, byte-identical to the pre-#10 output.
+    /// Never golden IR. Read through `SimState::stmt_diag_meta`.
+    pub stmt_locs: StmtLocTable,
     /// `$timeformat` side table: StmtIds of `$timeformat` calls (lowered as no-op
     /// `SysTaskId::Display`, the severity/assert_ctl pattern). EMPTY for designs
     /// without `$timeformat` (the default). Never enters the golden IR.
@@ -465,7 +468,7 @@ impl Default for SimOpts {
             // of the suite. Keep them together, and flip both when flipping.
             backend: Backend::Native,
             severities: SeverityTable::new(),
-            severity_locs: SeverityLocTable::new(),
+            stmt_locs: StmtLocTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),
             handle_copy_stmts: std::collections::BTreeMap::new(),
@@ -785,7 +788,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     }
     st.backend = effective_backend;
     st.severities = opts.severities.clone();
-    st.severity_locs = opts.severity_locs.clone();
+    st.stmt_locs = opts.stmt_locs.clone();
     st.timeformat_stmts = opts.timeformat_stmts.clone();
     st.stage_stmts = opts.stage_stmts.clone();
     st.handle_copy_stmts = opts.handle_copy_stmts.clone();

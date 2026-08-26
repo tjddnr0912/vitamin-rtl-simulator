@@ -4,7 +4,7 @@
 //! The engine runs on span-free IR, so it can never resolve a span itself.
 //! Elaborate — which holds both the spans and the `SpanResolver` (§4.5.249;
 //! staged since v28) — resolves each severity statement's span ONCE into the
-//! `severity_locs` sidecar, and every runtime emitter (statement path, frame
+//! `stmt_locs` sidecar, and every runtime emitter (statement path, frame
 //! path, deferred maturation) attaches that record. iverilog reports the same
 //! facts for these designs (`ERROR: sev.sv:5: … Time: 5 Scope: top.u1`), which
 //! is the content oracle; the exact rendering is vita's own and pinned

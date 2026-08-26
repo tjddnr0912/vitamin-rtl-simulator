@@ -1266,7 +1266,7 @@ impl<'a> SimState<'a> {
         }
         // #10: same sid-keyed lookup as `emit_severity_message` — the two
         // paths must report the same place for the same statement.
-        let (location, context) = self.severity_diag_meta(sid);
+        let (location, context) = self.stmt_diag_meta(sid);
         self.sink.emit(LogEvent::Diagnostic(Diagnostic {
             severity,
             code,
@@ -1430,6 +1430,25 @@ impl<'a> SimState<'a> {
 
         // ── BB LOOP over the GLOBAL func arena from `fd.entry`. Process bodies
         //    live in a SEPARATE `Process.body` space and are never touched. ──
+        //
+        // ⚠️ V33-8 DELIBERATELY DOES NOT publish `cur_stmt` here, and this is the
+        // one place in the slice where the finer answer was rejected on purpose.
+        //
+        // Publishing the callee's own StmtId works on this executor: a `mem[i]`
+        // inside `pick` then reports `pick`'s line. The tier-3 walk CANNOT match
+        // it. There the array lives in the `NetArena`, which can only RECORD an
+        // out-of-range access (`note_bad_index`) and is drained by the kernel at
+        // the CALLER's statement boundary — the arena has no handle on
+        // `SimState`, so the only ways to give it the callee's id are a second
+        // `cur_stmt` origin or an `Rc<Cell>` shared into the store.
+        //
+        // MEASURED, not assumed: with the publish in place, `--backend interp`
+        // anchored the report at `pkg.sv:10` (inside the function) while
+        // `--backend native` anchored it nowhere. One design, one flag apart, two
+        // different lines — the shape this repo pins byte-identity against.
+        // Attributing a callee's out-of-range access to the CALL STATEMENT is
+        // true on every backend, so that is what all of them say. The residue is
+        // real and recorded: the line names the call, not the subscript.
         let mut cur = fd.entry;
         loop {
             debug_assert!(

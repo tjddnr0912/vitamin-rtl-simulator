@@ -73,9 +73,9 @@ fn staged_extra_sidecars_wire_shape_is_pinned() {
     s.net_decl_ranges = std::collections::BTreeMap::from([(31u32, (3i64, -2i64))]);
     s.file_directed_stmts = std::collections::BTreeSet::from([37u32]);
     s.init_procs = vec![2u32, 0, 1];
-    s.severity_locs = std::collections::BTreeMap::from([(
+    s.stmt_locs = std::collections::BTreeMap::from([(
         41u32,
-        sim_engine::SeverityLoc {
+        sim_engine::StmtLoc {
             file: "a.sv".to_string(),
             line: 12,
             col: 5,

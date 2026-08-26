@@ -90,14 +90,20 @@ impl SeverityKind {
 /// `SimOpts` / the `.velab` trailer and NEVER enters the golden `SimIr` root.
 pub type SeverityTable = std::collections::BTreeMap<u32, SeverityKind>;
 
-/// Where a severity statement WAS in the source, resolved at ELABORATE time.
-/// The engine runs on span-free IR, so this is the only way a runtime
-/// `$fatal`/`$error`/`$warning`/`$info` (or a `unique`/`priority` violation /
-/// deferred assert, which lower through the same table) can say `file:line:col`
-/// — and resolving ONCE here also makes one-shot and staged output identical by
-/// construction (both read this record; neither re-resolves at runtime).
+/// Where a statement WAS in the source, resolved at ELABORATE time.
+/// The engine runs on span-free IR, so this is the only way ANY runtime
+/// diagnostic can say `file:line:col` — and resolving ONCE here also makes
+/// one-shot and staged output identical by construction (both read this record;
+/// neither re-resolves at runtime).
+///
+/// ⚠️ Originally `SeverityLoc`, written only by `lower_severity_task`. V33-8
+/// widened it: a runtime warning that names only WHAT went wrong (`W4029` names
+/// the array, `W4023` names the file) leaves the reader bisecting by commenting
+/// reads out — an external report had 9 `W4029` lines on ONE package table read
+/// from three places. The record is unchanged; what changed is WHICH statements
+/// get one (see [`StmtLocTable`]).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SeverityLoc {
+pub struct StmtLoc {
     pub file: String,
     pub line: u32,
     pub col: u32,
@@ -110,12 +116,23 @@ pub struct SeverityLoc {
     pub instance: String,
 }
 
-/// StmtId → [`SeverityLoc`], keyed identically to [`SeverityTable`] (both are
-/// written at the single `lower_severity_task` site). An entry exists only when
-/// a `SpanResolver` was installed — the no-resolver (AST-only / unit-test)
-/// paths stay byte-identical. Rides `SimOpts` / the `.velab` extra-sidecars
-/// trailer; NEVER the golden `SimIr` root.
-pub type SeverityLocTable = std::collections::BTreeMap<u32, SeverityLoc>;
+/// StmtId → [`StmtLoc`]. An entry exists only when a `SpanResolver` was
+/// installed — the no-resolver (AST-only / unit-test) paths stay
+/// byte-identical. Rides `SimOpts` / the `.velab` extra-sidecars trailer;
+/// NEVER the golden `SimIr` root.
+///
+/// SPARSE BY CONSTRUCTION, and that is the whole design constraint: a `StmtLoc`
+/// carries two owned `String`s, so recording every statement would put a file
+/// name and an instance path in the `.velab` per statement. Entries are written
+/// for exactly the statements a runtime diagnostic can point AT:
+///
+///  - severity statements (`$fatal`/`$error`/`$warning`/`$info`, `unique`/
+///    `priority` violations, deferred asserts) — `lower_severity_task`;
+///  - statements that index an ARRAY net, read or written (`W4029`);
+///  - `$readmem*`/`$writemem*`/`$fread` statements (`W4023`).
+///
+/// All three funnel through `Elaborator::record_stmt_loc`.
+pub type StmtLocTable = std::collections::BTreeMap<u32, StmtLoc>;
 
 /// R14 / ROADMAP §3 ⑭ — the ACTIONABLE IDENTITY of one schedulable body, so an
 /// obs consumer reading a per-process evaluation count can point at a line of
@@ -422,10 +439,10 @@ pub struct Sidecars {
     /// rounding); rides `SimOpts.proc_prec_mults`. EMPTY ⇒ S = 1 everywhere.
     pub proc_prec_mults: Vec<u64>,
     pub severities: SeverityTable,
-    /// Source location + instance path per severity StmtId (see [`SeverityLoc`]).
-    /// EMPTY when no resolver was installed ⇒ runtime severity diagnostics stay
-    /// location-less (the pre-slice behavior).
-    pub severity_locs: SeverityLocTable,
+    /// Source location + instance path per LOCATABLE StmtId (see [`StmtLocTable`]
+    /// for which statements earn an entry). EMPTY when no resolver was installed
+    /// ⇒ runtime diagnostics stay location-less (the pre-slice behavior).
+    pub stmt_locs: StmtLocTable,
     /// StmtIds of `$timeformat` calls (no-op `Display` stmts, §21.3.2).
     pub timeformat_stmts: std::collections::BTreeSet<u32>,
     /// OBS-3: StmtIds of `$vita_stage(...)` calls (no-op `Display` stmts the engine

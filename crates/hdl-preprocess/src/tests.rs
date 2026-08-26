@@ -613,3 +613,36 @@ fn resolve_mid_char_no_panic() {
         let _ = r.map.resolve(b);
     }
 }
+
+/// V33-8: the memoized line index and the linear walk are two spellings of ONE
+/// answer, so a diagnostic's `line:col` must not depend on which one a emitter
+/// reached for. Fuzzed over the shapes that break naive versions of this: CRLF,
+/// a file that does not end in a newline, consecutive newlines, a leading
+/// newline, multibyte scalars (so the offset can land mid-scalar and both must
+/// floor it the same way), and every byte offset including past the end.
+#[test]
+fn line_col_index_matches_the_linear_walk() {
+    let corpus = [
+        "",
+        "\n",
+        "a",
+        "a\n",
+        "\na",
+        "one\ntwo\nthree",
+        "one\r\ntwo\r\n",
+        "a\n\n\nb",
+        "héllo\nwörld\n日本語",
+        "x\n😀y\nz",
+    ];
+    for src in corpus {
+        let starts = crate::line_starts_of(src);
+        // `len() + 2` so the clamp path (an offset past EOF) is covered too.
+        for b in 0..src.len() + 2 {
+            assert_eq!(
+                crate::byte_to_line_col(src, b),
+                crate::byte_to_line_col_indexed(src, &starts, b),
+                "src={src:?} byte={b}"
+            );
+        }
+    }
+}

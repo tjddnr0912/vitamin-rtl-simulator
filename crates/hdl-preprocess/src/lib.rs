@@ -207,6 +207,14 @@ pub struct Segment {
 pub struct SourceMap {
     pub files: Vec<SourceFileEntry>,
     pub segments: Vec<Segment>,
+    /// Per-file [`line_starts_of`] index, built on first `resolve` and reused.
+    ///
+    /// A CACHE, not data: it is derived from `files[i].text` and is deliberately
+    /// not part of the `.vu` wire form. It exists because V33-8 made `resolve`
+    /// a per-statement cost at elaborate time — see `byte_to_line_col_indexed`
+    /// for the measurement. Private so nothing can construct a map whose index
+    /// disagrees with its text; `from_parts` is the outside-the-crate builder.
+    line_starts: std::cell::OnceCell<Vec<Vec<u32>>>,
 }
 
 /// What `resolve` returns: enough to build a `diag::SourceLoc`.
@@ -230,6 +238,32 @@ impl SourceMap {
     /// FIRST (before any indexing) and `delta` is clamped to the segment's own
     /// original width with `checked_add`, so an EOF-clamped offset resolves to the
     /// last real byte of the segment — never one past it, never an overflow.
+    /// Build a map from its wire parts (the `.vu` v28 tail). The line index is
+    /// derived, so it is never carried and never passed in.
+    pub fn from_parts(files: Vec<SourceFileEntry>, segments: Vec<Segment>) -> Self {
+        SourceMap {
+            files,
+            segments,
+            line_starts: std::cell::OnceCell::new(),
+        }
+    }
+
+    /// `(line, col)` of `orig_byte` in file `fi`, through the memoized index.
+    fn line_col_in(&self, fi: usize, orig_byte: u32) -> (u32, u32) {
+        let idx = self
+            .line_starts
+            .get_or_init(|| self.files.iter().map(|f| line_starts_of(&f.text)).collect());
+        match (self.files.get(fi), idx.get(fi)) {
+            (Some(f), Some(starts)) => {
+                byte_to_line_col_indexed(&f.text, starts, orig_byte as usize)
+            }
+            // Unreachable given `idx` is built from `files`, but a resolver that
+            // panics turns a diagnostic into a crash; degrade to the walk.
+            (Some(f), None) => byte_to_line_col(&f.text, orig_byte as usize),
+            _ => (1, 1),
+        }
+    }
+
     pub fn resolve(&self, exp_byte: usize) -> ResolvedLoc {
         // Defensive: handle the empty map before any binary_search / indexing.
         if self.segments.is_empty() {
@@ -260,8 +294,8 @@ impl SourceMap {
             let delta = exp.saturating_sub(seg.exp_start).min(seg_width);
             seg.orig_start.checked_add(delta).unwrap_or(seg.orig_start)
         };
+        let (line, col) = self.line_col_in(seg.file.0 as usize, orig_byte);
         let file = &self.files[seg.file.0 as usize];
-        let (line, col) = byte_to_line_col(&file.text, orig_byte as usize);
         ResolvedLoc {
             file_name: file.name.clone(),
             line,
@@ -619,10 +653,7 @@ impl<'a> Preprocessor<'a> {
     }
 
     fn finish(self) -> PpResult {
-        let map = SourceMap {
-            files: self.files,
-            segments: self.segments,
-        };
+        let map = SourceMap::from_parts(self.files, self.segments);
         PpResult {
             text: self.out,
             map,

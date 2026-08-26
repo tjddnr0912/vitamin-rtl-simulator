@@ -499,21 +499,12 @@ pub(crate) fn readmem<N: crate::eval::NetReader + ?Sized>(
     args: &[u32],
     hex: bool,
 ) {
-    let warn = |sched: &mut Scheduler, msg: String| {
-        sched
-            .st
-            .sink
-            .emit(diag::LogEvent::Diagnostic(diag::Diagnostic {
-                severity: diag::Severity::Warning,
-                code: diag::MsgCode::RunReadmem,
-                message: msg,
-                location: None,
-                context: Vec::new(),
-                sim_time: Some(diag::TimeStamp {
-                    ticks: sched.st.now,
-                }),
-            }));
-    };
+    // V33-8: located at the calling statement, and ONE spelling with the
+    // `$writemem` twin below and with `$fread`'s `k_warn_readmem` — see
+    // `SimState::warn_readmem`. PRE named the FILE and never the `$readmemh`
+    // line, so a design that loads several memories reported N interchangeable
+    // lines.
+    let warn = |sched: &mut Scheduler, msg: String| sched.st.warn_readmem(msg);
     let Some(&a0) = args.first() else { return };
     let Some(name) = memfile_name(sched, nets, a0) else {
         warn(
@@ -682,21 +673,8 @@ pub(crate) fn writemem<N: crate::eval::NetReader + ?Sized>(
     args: &[u32],
     hex: bool,
 ) {
-    let warn = |sched: &mut Scheduler, msg: String| {
-        sched
-            .st
-            .sink
-            .emit(diag::LogEvent::Diagnostic(diag::Diagnostic {
-                severity: diag::Severity::Warning,
-                code: diag::MsgCode::RunReadmem,
-                message: msg,
-                location: None,
-                context: Vec::new(),
-                sim_time: Some(diag::TimeStamp {
-                    ticks: sched.st.now,
-                }),
-            }));
-    };
+    // The `$readmem` twin, verbatim — see the note there.
+    let warn = |sched: &mut Scheduler, msg: String| sched.st.warn_readmem(msg);
     let Some(&a0) = args.first() else { return };
     let Some(name) = memfile_name(sched, nets, a0) else {
         warn(

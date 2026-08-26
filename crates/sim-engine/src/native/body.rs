@@ -399,8 +399,15 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, act: u32, tmpl: u32, en
             None => &ir.processes[tmpl as usize].body[bb as usize],
         };
         for &sid in &block.stmts {
+            // V33-8 twin of `run_process`'s store — the tier-3 walk owns its own
+            // statement loop, so the location would be MISSING on this backend
+            // (not wrong) if only the engine loop published it. It matters more
+            // here, not less: `k_drain_diags` below reports the arena's deferred
+            // out-of-range reads, and it runs while this `sid` is still current.
+            k.k_set_cur_stmt(sid);
             let effect = compute_effect(&*k, &ir.stmts[sid as usize], sid);
             if let Some(step) = apply_effect(k, effect) {
+                k.k_set_cur_stmt(crate::state::NO_STMT);
                 return step; // a SysTask returned Finish/Stop/Fatal
             }
             // A fatal raised from a `&self` eval context can only latch a Cell;
@@ -424,6 +431,7 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, act: u32, tmpl: u32, en
             // latched it; what this does is stop the body, exactly as it does for
             // `K = Scheduler`.
             if k.k_call_fatal() {
+                k.k_set_cur_stmt(crate::state::NO_STMT);
                 return Step::Fatal;
             }
             // A store that can only RECORD a diagnostic reports it here, at the
@@ -439,6 +447,10 @@ pub(crate) fn run_body<K: Kernel>(k: &mut K, ir: &SimIr, act: u32, tmpl: u32, en
             // backstop, not as a covered behaviour; treat it as unproven.
             k.k_drain_diags();
         }
+        // Cleared before the terminator for the reason `run_process` spells out:
+        // a branch condition is evaluated after the last statement of the block,
+        // and a confidently wrong line is worse than none.
+        k.k_set_cur_stmt(crate::state::NO_STMT);
         // `run_process`'s `set_pos!`, and it exists for the same reason: every
         // non-suspending terminator has to write the TOP FRAME's PC when one is
         // open and the process's otherwise.

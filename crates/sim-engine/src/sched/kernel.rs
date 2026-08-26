@@ -174,16 +174,9 @@ impl Kernel for Scheduler<'_, '_> {
         crate::builtins::declared_array_base(&self.st.net_dims, net)
     }
     fn k_warn_readmem(&mut self, msg: String) {
-        self.st
-            .sink
-            .emit(diag::LogEvent::Diagnostic(diag::Diagnostic {
-                severity: diag::Severity::Warning,
-                code: diag::MsgCode::RunReadmem,
-                message: msg,
-                location: None,
-                context: Vec::new(),
-                sim_time: Some(diag::TimeStamp { ticks: self.st.now }),
-            }));
+        // V33-8: one spelling, shared with `$readmem*`/`$writemem*` — see
+        // `SimState::warn_readmem` for why the three copies became one.
+        self.st.warn_readmem(msg);
     }
     fn k_file_open(&mut self, name: &str, mode: Option<&str>) -> u32 {
         let open = |mode: &str| -> std::io::Result<std::fs::File> {
@@ -503,6 +496,9 @@ impl Kernel for Scheduler<'_, '_> {
     }
     fn k_call_fatal(&self) -> bool {
         self.st.call_fatal.get()
+    }
+    fn k_set_cur_stmt(&self, sid: u32) {
+        self.st.cur_stmt.set(sid);
     }
     fn k_drain_diags(&mut self) {
         // Nothing to drain: this store emits at the access (`warn_run_range` is

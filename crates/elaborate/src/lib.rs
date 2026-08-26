@@ -1117,9 +1117,18 @@ struct Elaborator<'s> {
     // StmtId → SeverityKind for every `$fatal`/`$error`/`$warning`/`$info` lowered
     // (each as a `SysTaskId::Display` stmt). Threaded via `SimOpts.severities`.
     severities: SeverityTable,
-    // StmtId → resolved source location + instance path for the same statements
-    // (entry ⟺ a SpanResolver was installed). Threaded via `SimOpts.severity_locs`.
-    severity_locs: SeverityLocTable,
+    // StmtId → resolved source location + instance path, for severity statements
+    // AND for the statements a runtime diagnostic points at (see `StmtLocTable`).
+    // Entry ⟺ a SpanResolver was installed. Threaded via `SimOpts.stmt_locs`.
+    stmt_locs: StmtLocTable,
+    // V33-8 latch: "an expression lowered since the last `push_stmt` can make the
+    // engine emit a located runtime diagnostic" — an array-word index (`W4029`) or
+    // a `$fread` (`W4023`). `push_stmt` CONSUMES it and records the statement's
+    // span, which is why nothing has to bracket the many non-`lower_stmt` callers
+    // that synthesize statements (ports, events, packed lowering): each pushed
+    // statement sees exactly the expressions lowered since the previous push.
+    // Over-approximating costs one extra table row, never a wrong location.
+    stmt_wants_loc: bool,
     // StmtIds of `$timeformat` calls (each a no-op `SysTaskId::Display` stmt —
     // the assert_ctl/severity pattern). Threaded via `SimOpts.timeformat_stmts`.
     timeformat_stmts: std::collections::BTreeSet<u32>,

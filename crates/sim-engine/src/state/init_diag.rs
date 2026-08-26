@@ -123,7 +123,7 @@ impl<'a> SimState<'a> {
             init_procs: Vec::new(),
             proc_prec_mults: Vec::new(),
             severities: crate::SeverityTable::new(),
-            severity_locs: crate::SeverityLocTable::new(),
+            stmt_locs: crate::StmtLocTable::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),
             stage_lines: Vec::new(),
@@ -164,6 +164,7 @@ impl<'a> SimState<'a> {
             sink,
             run_range_count: Cell::new(0),
             run_range_unk_count: Cell::new(0),
+            cur_stmt: Cell::new(crate::state::NO_STMT),
             postponed: Postponed::default(),
             func_table: crate::FuncTable::new(),
             frame_local: vec![false; nnets],
@@ -416,6 +417,14 @@ impl<'a> SimState<'a> {
             std::cmp::Ordering::Greater => None,
         };
         if let Some(message) = msg {
+            // V33-8: NAME THE INDEXING SITE, not only the array. An external
+            // report elaborated an RTL and got 11 warnings, NINE of them this
+            // code on ONE package table read from three different places — the
+            // only way to tell them apart was to comment reads out and re-run.
+            // `cur_stmt` is the executing StmtId (NO_STMT outside a statement),
+            // and `stmt_locs` is the elaborate-time span record every other
+            // located runtime diagnostic already reads.
+            let (location, context) = self.stmt_diag_meta(self.cur_stmt.get());
             self.sink.emit(LogEvent::Diagnostic(Diagnostic {
                 severity: if unknown {
                     Severity::Warning
@@ -428,27 +437,25 @@ impl<'a> SimState<'a> {
                     MsgCode::RunRange
                 },
                 message,
-                location: None,
-                context: Vec::new(),
+                location,
+                context,
                 sim_time: Some(diag::TimeStamp { ticks: self.now }),
             }));
         }
         cell.set(n.saturating_add(1));
     }
 
-    /// #10: the `(location, context)` a severity diagnostic keyed by `sid`
-    /// carries — resolved at ELABORATE time into `severity_locs` (the IR is
-    /// span-free; this lookup is the only source of a runtime `file:line:col`).
+    /// #10: the `(location, context)` a diagnostic keyed by `sid` carries —
+    /// resolved at ELABORATE time into `stmt_locs` (the IR is span-free; this
+    /// lookup is the only source of a runtime `file:line:col`).
     /// ONE spelling shared by the statement-path, frame-path and
-    /// deferred-maturation emitters — a second copy would let the three report
+    /// deferred-maturation severity emitters and, since V33-8, by
+    /// `warn_run_index` and `warn_readmem` — a second copy would let them report
     /// different places for one statement. A missing entry (no resolver at
     /// elaborate — AST-only callers, engine unit harnesses) yields
     /// `(None, [])`, the pre-#10 diagnostic shape, byte-identical.
-    pub(crate) fn severity_diag_meta(
-        &self,
-        sid: u32,
-    ) -> (Option<diag::SourceLoc>, Vec<diag::Frame>) {
-        match self.severity_locs.get(&sid) {
+    pub(crate) fn stmt_diag_meta(&self, sid: u32) -> (Option<diag::SourceLoc>, Vec<diag::Frame>) {
+        match self.stmt_locs.get(&sid) {
             Some(l) => (
                 Some(diag::SourceLoc {
                     file: l.file.clone(),
@@ -468,6 +475,31 @@ impl<'a> SimState<'a> {
             ),
             None => (None, Vec::new()),
         }
+    }
+
+    /// Emit `VITA-W4023` (`W-RUN-READMEM`), the `$readmem*`/`$writemem*`/`$fread`
+    /// file-trouble channel, LOCATED at the calling statement.
+    ///
+    /// ⚠️ ONE spelling for what used to be three copies of the same six lines
+    /// (`crv_draw`'s `warn` closure, its `$writemem` twin, and the `k_warn_readmem`
+    /// kernel method `$fread` uses). They all set `location: None`, so a report
+    /// that names the FILE but not the `$readmemh` line was the same defect three
+    /// times — and a fix applied to one of them would have left the other two.
+    ///
+    /// The location comes from `cur_stmt`, not from a threaded StmtId, for the
+    /// reason spelled out on that field: it is the mechanism every located
+    /// runtime diagnostic in this engine already uses, and `$readmem*` is
+    /// dispatched from inside the statement loop that sets it.
+    pub fn warn_readmem(&self, msg: String) {
+        let (location, context) = self.stmt_diag_meta(self.cur_stmt.get());
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Warning,
+            code: MsgCode::RunReadmem,
+            message: msg,
+            location,
+            context,
+            sim_time: Some(diag::TimeStamp { ticks: self.now }),
+        }));
     }
 
     /// Emit `VITA-W4028`: a matched plusarg's value cannot be converted by the

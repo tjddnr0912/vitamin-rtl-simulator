@@ -143,8 +143,16 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
         // byte-identical to the prior inline form — same evals, same writes, same order.
         for &sid in &block.stmts {
             let stmt = &ir.stmts[sid as usize];
+            // V33-8: publish WHICH statement is running so a `&self` runtime
+            // diagnostic (`warn_run_index`, `warn_readmem`) can name a source
+            // line. One predictable `Cell` store, next to the `Cell` LOAD this
+            // loop already pays per statement for `call_fatal`.
+            sched.st.cur_stmt.set(sid);
             let effect = compute_effect(&*sched, stmt, sid); // READ phase via Kernel seam
             if let Some(step) = apply_effect(sched, effect) {
+                // Cleared on the way out too: the process is leaving, and the
+                // next thing to run must not inherit this statement's line.
+                sched.st.cur_stmt.set(crate::state::NO_STMT);
                 return step; // a SysTask returned Finish/Stop/Fatal
             }
             // R22 §4: a fatal raised from a `&self` eval context (a frame body, a
@@ -155,9 +163,16 @@ pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {
             // tail is what let a testbench print its own PASS verdict after a read had
             // already failed. One predictable `Cell` load per statement.
             if sched.k_call_fatal() {
+                sched.st.cur_stmt.set(crate::state::NO_STMT);
                 return Step::Fatal;
             }
         }
+        // ⚠️ CLEARED BEFORE THE TERMINATOR, and that is the point: a branch
+        // condition (`if (mem[i])`) or a delay amount is evaluated HERE, after
+        // the block's last statement, and attributing its out-of-range read to
+        // that statement would print a confidently wrong line. Fail to "no
+        // location" — the pre-slice shape — instead.
+        sched.st.cur_stmt.set(crate::state::NO_STMT);
 
         // ── terminator ── (`set_pos!` writes the base-process `bb` or, in a task
         // frame, the top frame's `bb`; the base-only suspend/fork/delay arms guard on

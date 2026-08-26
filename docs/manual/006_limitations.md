@@ -76,6 +76,20 @@ on correct designs. Both are **rate-limited** with independent budgets, so a hot
 that indexes out of range will not flood your transcript — you will see it, but
 not thousands of times.
 
+Both name the array AND the source line that touched it:
+
+```
+d.sv:11:5: warning[VITA-W4029] W-RUN-RANGE-UNKNOWN: array word index of `t.tab` \
+is unknown (x/z); read X / write ignored [in t] [at time 0]
+```
+
+so one table read from several places gives you several distinct reports rather than
+N identical lines. One case is coarser on purpose: an out-of-range access inside a
+`function`/`task` body is anchored at the **calling statement**, not at the subscript
+inside the body. (The compiled backends record such an access and report it at the
+caller's statement boundary; anchoring it deeper would make the same design print
+different lines under different `--backend` settings.)
+
 > Caveat — *sub-dimension* over-indexing of a multi-dimensional unpacked array
 > (e.g. `g[0][5]` where the inner dimension is only `[0:3]`) is **not** bounds-
 > checked per dimension; it aliases within the flattened address space. The

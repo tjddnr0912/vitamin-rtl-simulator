@@ -2072,6 +2072,11 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         self.sched.st.call_fatal.get()
     }
 
+    fn k_set_cur_stmt(&self, sid: u32) {
+        // `sched.st` is the ONE origin, exactly like `k_now` — the arena holds
+        // net values and nothing else.
+        self.sched.st.cur_stmt.set(sid);
+    }
     fn k_drain_diags(&mut self) {
         self.drain_range_diags();
     }

@@ -348,6 +348,17 @@ Release state: **5009 tests** green on Ubuntu, macOS and RHEL 9 · `format_versi
 
 ### Changed
 
+- **Runtime array-index and `$readmem*` diagnostics now say WHERE.** `VITA-E4002` /
+  `VITA-W4029` (out-of-range / unknown array word index) named the array but not the
+  indexing site, and `VITA-W4023` (`$readmem*`, `$writemem*`, `$fread` file trouble) named
+  the file but not the call. Both now print `file:line:col … [in instance]` like the
+  severity diagnostics, in one-shot and staged runs alike, so one table read from three
+  places produces three distinguishable reports instead of N identical lines. Two limits,
+  both deliberate: an access inside a `function`/`task` body is anchored at the **calling
+  statement** (the compiled backends record it and report it at that statement's boundary,
+  and anchoring deeper would make the same design print different lines under different
+  `--backend` settings), and an access in a branch condition — evaluated after the last
+  statement of its block — stays unanchored rather than borrowing that statement's line.
 - `E3009`'s message no longer claims that a bare call statement in that position works —
   that is precisely the form that used to panic. It now names the real boundary, and a
   rejected call terminator is no longer reported as "a timing/suspend/fork control".

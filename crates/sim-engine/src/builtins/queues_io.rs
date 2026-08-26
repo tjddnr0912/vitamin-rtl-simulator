@@ -182,7 +182,7 @@ pub(crate) fn emit_severity_message(
     // #10: file:line:col + instance path, resolved at elaborate time and keyed
     // by this statement's sid (a deferred assert passes its ACTION sid — the
     // report points at the `$error`, not the maturation site).
-    let (location, context) = sched.st.severity_diag_meta(sid);
+    let (location, context) = sched.st.stmt_diag_meta(sid);
     sched.st.sink.emit(LogEvent::Diagnostic(Diagnostic {
         severity,
         code,
