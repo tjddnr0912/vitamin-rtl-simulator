@@ -117,10 +117,33 @@ impl Elaborator<'_> {
         self.lower_synth_proc(pb, kind)
     }
 
-    /// R14: the port-binding spelling of [`Self::push_cont_assign`]. A port
-    /// hookup has no source span of its own that would help a reader — the
-    /// useful half is the INSTANCE (`scope`), which the funnel already records.
-    pub(crate) fn push_cont_assign_port(&mut self, ca: ir::ContAssign) {
-        self.push_cont_assign(ca, "port", None);
+    /// R14: the port-binding spelling of [`Self::push_cont_assign`].
+    ///
+    /// ⚠️ This passed `None` until round-35 R3, on the claim that "a port hookup
+    /// has no source span of its own that would help a reader — the useful half
+    /// is the INSTANCE (`scope`)". MEASURED AND REFUTED by the reporter: on
+    /// their design `kind:"port"` is 1,267 rows and 51% of all evals, and
+    /// `scope` cannot resolve them because ONE instance carries dozens of ports
+    /// (their top has a 39-connection instance). The largest category in the
+    /// profile was the one category a reader could not act on.
+    ///
+    /// WHICH SPAN, when they differ. `span` is the PORT CONNECTION in the
+    /// PARENT's instantiation — for a named connection the whole `.p(expr)` (or
+    /// the `.p` shorthand), starting at the `.` so the COLUMN names the port;
+    /// for a positional one the connection expression. That is the text an
+    /// author would edit to change this hookup, and it is the only candidate
+    /// that separates the rows of one instantiation from each other: several
+    /// connections written on one line differ by column, not by line. Both
+    /// alternatives collapse exactly that distinction — the child port's
+    /// DECLARATION is one span for every instance of the module, and the
+    /// instantiation header is one span for every port of one instance.
+    ///
+    /// `None` is reserved for a connection with NO source text of its own (the
+    /// `.*` wildcard synthesizes one connection per port from thin air) and
+    /// reports `("", 0, 0)` — the same honest "unlocated" a run with no span
+    /// resolver gives. Aiming such a row at the nearest real token instead would
+    /// be a location that does not survive being followed.
+    pub(crate) fn push_cont_assign_port(&mut self, ca: ir::ContAssign, span: Option<ast::Span>) {
+        self.push_cont_assign(ca, "port", span);
     }
 }

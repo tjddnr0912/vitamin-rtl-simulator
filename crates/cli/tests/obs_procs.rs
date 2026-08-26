@@ -446,3 +446,218 @@ fn staged_applets_reject_obs_procs() {
         );
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// R3 (external round-35) — a `kind:"port"` row locates its PORT CONNECTION.
+//
+// These rows reported `("", 0, 0)` until this test existed, on the claim (in the
+// elaborate-side producer's doc comment) that a port hookup has no source span
+// worth showing and that the instance `scope` is the useful half. Measured and
+// refuted by the reporter: on their design `port` is 1,267 rows and 51% of all
+// evals, and one instance there carries 39 connections — `scope` names the
+// instance and stops, so the largest category in the profile was the only one a
+// reader could not act on.
+//
+// COLUMNS are asserted, not just lines, and that is the point of the design
+// below: connections written on one line are told apart by column and by
+// nothing else, which is the case the reporter hit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `(scope, line, col)` for every `kind:"port"` row, sorted by location.
+///
+/// Sorted rather than left in emitted order because the emitted order is by
+/// eval count and port rows of one design tie there; the tie-break is not what
+/// these tests are about.
+fn port_locs(json: &str) -> Vec<(String, u32, u32)> {
+    let mut v: Vec<(String, u32, u32)> = json
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("{\"domain\"") && str_field(l, "kind") == "port")
+        .map(|l| {
+            (
+                str_field(l, "scope"),
+                num_field(l, "line") as u32,
+                num_field(l, "col") as u32,
+            )
+        })
+        .collect();
+    v.sort();
+    v
+}
+
+/// THE design the locations below are derived from. Indent is two spaces, and
+/// columns are 1-based, so on line 8 `(` is column 11 and the three connections
+/// that share the line start at 12, 19 and 26.
+///
+/// ```text
+///  1 module leaf(input a, input b, input c, output d, output e);
+///  2   assign d = a & b;
+///  3   assign e = b | c;
+///  4 endmodule
+///  5 module tb;
+///  6   logic a, b, c;
+///  7   wire d1, e1, d2, e2, d3, e3;
+///  8   leaf u1 (.a(a), .b(b), .c(c),
+///  9            .d(d1),
+/// 10            .e(e1));
+/// 11   leaf u2 (a, b,
+/// 12            c,
+/// 13            d2, e2);
+/// 14   leaf u3 (.a, .b, .c, .d(d3), .e(e3));
+/// 15   initial begin
+/// 16     a = 0; b = 0; c = 0;
+/// 17     #1 a = 1; #1 b = 1; #1 c = 1; #1 $finish;
+/// 18   end
+/// 19 endmodule
+/// ```
+const PORTS: &str = "module leaf(input a, input b, input c, output d, output e);\n\
+     \x20 assign d = a & b;\n\
+     \x20 assign e = b | c;\n\
+     endmodule\n\
+     module tb;\n\
+     \x20 logic a, b, c;\n\
+     \x20 wire d1, e1, d2, e2, d3, e3;\n\
+     \x20 leaf u1 (.a(a), .b(b), .c(c),\n\
+     \x20          .d(d1),\n\
+     \x20          .e(e1));\n\
+     \x20 leaf u2 (a, b,\n\
+     \x20          c,\n\
+     \x20          d2, e2);\n\
+     \x20 leaf u3 (.a, .b, .c, .d(d3), .e(e3));\n\
+     \x20 initial begin\n\
+     \x20   a = 0; b = 0; c = 0;\n\
+     \x20   #1 a = 1; #1 b = 1; #1 c = 1; #1 $finish;\n\
+     \x20 end\n\
+     endmodule\n";
+
+/// Named `.p(expr)`, positional, and the `.p` shorthand all locate, and rows
+/// that share a LINE are separated by COLUMN.
+#[test]
+fn port_rows_locate_their_connection() {
+    let (_, code, obs) = run(PORTS, &["--obs-procs"]);
+    assert_eq!(code, 0);
+    let m = read(&obs.join("run.json"));
+
+    // NAMED `.p(expr)`: the column is the `.` of `.p`, not the actual. That is
+    // what names the PORT — `.d(d1)` and any other connection to `d1` would
+    // otherwise be one location — and it is why `u1`'s line-8 trio is 12/19/26
+    // rather than three columns inside the parentheses.
+    //
+    // POSITIONAL: there is no `.p` wrapper, so the connection expression is the
+    // whole of what was written and its own span is the answer (`a`, `b` on
+    // line 11 at 12 and 15).
+    //
+    // `.p` SHORTHAND (line 14): the parser desugars it to `.p(p)`, but what is
+    // recorded is still the connection's span, so the five connections on that
+    // one line stay five distinct columns (12/16/20/24/32) instead of collapsing
+    // onto the synthesized identifier.
+    assert_eq!(
+        port_locs(&m),
+        vec![
+            ("tb.u1".to_string(), 8, 12),
+            ("tb.u1".to_string(), 8, 19),
+            ("tb.u1".to_string(), 8, 26),
+            ("tb.u1".to_string(), 9, 12),
+            ("tb.u1".to_string(), 10, 12),
+            ("tb.u2".to_string(), 11, 12),
+            ("tb.u2".to_string(), 11, 15),
+            ("tb.u2".to_string(), 12, 12),
+            ("tb.u2".to_string(), 13, 12),
+            ("tb.u2".to_string(), 13, 16),
+            ("tb.u3".to_string(), 14, 12),
+            ("tb.u3".to_string(), 14, 16),
+            ("tb.u3".to_string(), 14, 20),
+            ("tb.u3".to_string(), 14, 24),
+            ("tb.u3".to_string(), 14, 32),
+        ],
+        "port rows:\n{m}"
+    );
+
+    // The FILE half too — the vector above would be identical on a build that
+    // recorded a line and column with no file to open them in.
+    for l in m
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("{\"domain\"") && str_field(l, "kind") == "port")
+    {
+        assert!(
+            str_field(l, "file").ends_with("t.sv"),
+            "port row has no file: {l}"
+        );
+    }
+}
+
+/// A `.*` wildcard connection has NO source text of its own — the elaborator
+/// synthesizes one connection per unnamed port — so those rows stay `("", 0, 0)`
+/// instead of borrowing the nearest real token. Fail honest: an unlocated row
+/// says "I cannot name this one", while a location that does not survive being
+/// followed sends the reader somewhere unrelated to the cost. The explicitly
+/// named `.d(d1)` in the SAME instantiation still locates, which is what makes
+/// the empty pair a property of `.*` rather than of the run.
+#[test]
+fn wildcard_port_rows_stay_unlocated() {
+    let src = "module leaf(input a, input b, output d);\n\
+         \x20 assign d = a & b;\n\
+         endmodule\n\
+         module tb;\n\
+         \x20 logic a, b; wire d1;\n\
+         \x20 leaf u1 (.*, .d(d1));\n\
+         \x20 initial begin a = 0; b = 0; #1 a = 1; #1 $finish; end\n\
+         endmodule\n";
+    let (_, code, obs) = run(src, &["--obs-procs"]);
+    assert_eq!(code, 0);
+    let m = read(&obs.join("run.json"));
+    assert_eq!(
+        port_locs(&m),
+        vec![
+            // `.a` and `.b`, synthesized by the `.*`.
+            ("tb.u1".to_string(), 0, 0),
+            ("tb.u1".to_string(), 0, 0),
+            // `.d(d1)`, written out: line 6, column 16.
+            ("tb.u1".to_string(), 6, 16),
+        ],
+        "wildcard rows:\n{m}"
+    );
+}
+
+/// An UNPACKED ARRAY port lowers to one cont-assign PER ELEMENT (this IR has no
+/// whole-array value, so "connect the array" IS N assigns), and all N rows carry
+/// the SAME span. That is honest rather than a shortcut: the source contains one
+/// connection, the split into N is vita's, and the element is the row's `index`
+/// rather than its location. Pinned so that a later change which starts
+/// inventing per-element locations has to argue for them here.
+#[test]
+fn array_port_elements_share_one_connection_span() {
+    let src = "module arrp(input logic [7:0] m [0:2], output logic [7:0] n [0:2]);\n\
+         \x20 assign n[0] = m[0];\n\
+         \x20 assign n[1] = m[1];\n\
+         \x20 assign n[2] = m[2];\n\
+         endmodule\n\
+         module tb;\n\
+         \x20 logic [7:0] arr [0:2];\n\
+         \x20 logic [7:0] out [0:2];\n\
+         \x20 arrp u4 (.m(arr),\n\
+         \x20          .n(out));\n\
+         \x20 initial begin\n\
+         \x20   arr[0] = 1; arr[1] = 2; arr[2] = 3;\n\
+         \x20   #1 arr[0] = 4; #1 $finish;\n\
+         \x20 end\n\
+         endmodule\n";
+    let (_, code, obs) = run(src, &["--obs-procs"]);
+    assert_eq!(code, 0);
+    let m = read(&obs.join("run.json"));
+    assert_eq!(
+        port_locs(&m),
+        vec![
+            // `.m(arr)` — line 9, column 12, three elements.
+            ("tb.u4".to_string(), 9, 12),
+            ("tb.u4".to_string(), 9, 12),
+            ("tb.u4".to_string(), 9, 12),
+            // `.n(out)` — line 10, column 12, three elements.
+            ("tb.u4".to_string(), 10, 12),
+            ("tb.u4".to_string(), 10, 12),
+            ("tb.u4".to_string(), 10, 12),
+        ],
+        "array port rows:\n{m}"
+    );
+}

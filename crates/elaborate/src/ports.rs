@@ -2,6 +2,25 @@
 
 use super::*;
 
+/// ONE port connection as it was written in the parent: the actual expression
+/// and the span of the connection that carries it.
+///
+/// A struct rather than two locals because the pair must not drift. Both halves
+/// answer "which connection is this port's", the span half feeds a `kind:"port"`
+/// profile row's `file:line:col` (R3), and a row pointing at a DIFFERENT port's
+/// text reads as correct while sending the reader to the wrong line — a failure
+/// with no symptom. Resolved once, carried together.
+///
+/// `span` is `None` for a connection with no source text of its own: a `.*`
+/// wildcard synthesizes one actual per unnamed port, and the synthesized
+/// `ast::Expr` is stamped with a span that belongs to something else entirely.
+/// See `push_cont_assign_port` for why that reports `("", 0, 0)` instead.
+#[derive(Clone, Copy)]
+pub(crate) struct ConnSite<'a> {
+    pub(crate) expr: &'a ast::Expr,
+    pub(crate) span: Option<ast::Span>,
+}
+
 /// A module's ports as `(local_name, dir)` in HEADER declaration order. ANSI
 /// ports read dir inline; non-ANSI merges the body `PortDecl` directions over the
 /// header name list (an undeclared header name defaults to Input + is rare).
@@ -384,11 +403,11 @@ impl Elaborator<'_> {
         child_len: u32,
         dir: ir::PortDir,
         pname: &str,
-        conn_expr: &ast::Expr,
+        conn: ConnSite<'_>,
         parent_prefix: &str,
     ) {
         let saved = std::mem::replace(&mut self.cur_prefix, parent_prefix.to_string());
-        let actual = match &conn_expr.kind {
+        let actual = match &conn.expr.kind {
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
                 self.lookup_net_scoped(&p.segments[0].name)
             }
@@ -498,19 +517,30 @@ impl Elaborator<'_> {
             });
             // R14: a per-element port hookup vita synthesized — `port` is the
             // honest kind (there is no `assign` keyword in the source).
-            self.push_cont_assign_port(ir::ContAssign {
-                lhs: ir::Lvalue {
-                    chunks: vec![ir::LvalChunk {
-                        net: dst,
-                        word: Some(widx_l),
-                        offset: None,
-                        width: None,
-                        kind: ir::SelKind::Bit,
-                    }],
+            //
+            // R3: every element row carries the SAME `conn.span`, and that is
+            // honest rather than a shortcut: the source really does contain one
+            // connection here (`.p(arr)`), and the split into `child_len` rows
+            // is vita's — this IR has no whole-array value, so "connect the
+            // array" IS N cont-assigns (see this function's doc). A reader
+            // seeing N rows at one `file:line:col` is reading the truth; the
+            // element index is the row's `index`, not its location.
+            self.push_cont_assign_port(
+                ir::ContAssign {
+                    lhs: ir::Lvalue {
+                        chunks: vec![ir::LvalChunk {
+                            net: dst,
+                            word: Some(widx_l),
+                            offset: None,
+                            width: None,
+                            kind: ir::SelKind::Bit,
+                        }],
+                    },
+                    rhs,
+                    delay: None,
                 },
-                rhs,
-                delay: None,
-            });
+                conn.span,
+            );
         }
     }
 
@@ -584,27 +614,55 @@ impl Elaborator<'_> {
             _ => Vec::new(),
         };
         for (i, (pname, dir)) in ports.iter().enumerate() {
-            // find the connection expr for this port (None ⇒ unconnected).
-            let conn: Option<&ast::Expr> = match &binding {
+            // find the connection expr for this port (None ⇒ unconnected), and
+            // WITH IT the span of that connection in the PARENT's instantiation
+            // (R3: what a `kind:"port"` profile row reports as `file:line:col`).
+            //
+            // The two are resolved by ONE match on purpose. A separate lookup
+            // for the span would be a second copy of the "which connection is
+            // this port's" rule — including the `.*` fallback — and the failure
+            // mode of drifting is a row pointing at a DIFFERENT port's text,
+            // which reads as correct and sends the reader to the wrong line.
+            let conn: Option<ConnSite<'_>> = match &binding {
                 PortBinding::None => None,
-                PortBinding::Positional(v) => v.get(i).and_then(|o| o.as_ref()),
-                PortBinding::Named(v, _) => v
-                    .iter()
-                    .find(|c| &c.name.name == pname)
-                    .and_then(|c| c.value.as_ref())
-                    // not explicitly named → a `.*` wildcard same-name reference,
-                    // if one was synthesized for this port.
-                    .or_else(|| {
-                        wildcard_conns
-                            .iter()
-                            .find(|(n, _)| n == pname)
-                            .map(|(_, e)| e)
+                // A positional connection has no `.name` wrapper, so the
+                // connection expression IS the whole of what was written and
+                // its own span is the location.
+                PortBinding::Positional(v) => v.get(i).and_then(|o| o.as_ref()).map(|e| ConnSite {
+                    expr: e,
+                    span: Some(e.span),
+                }),
+                PortBinding::Named(v, _) => match v.iter().find(|c| &c.name.name == pname) {
+                    // `PortConn::span` covers `.p(expr)` (and the `.p`
+                    // shorthand) from the `.` onward, so the COLUMN names the
+                    // PORT. That is what tells apart several connections
+                    // written on one line — the actual's span cannot, because
+                    // `.a(x)` and `.b(x)` would both point at the same `x`.
+                    Some(c) => c.value.as_ref().map(|e| ConnSite {
+                        expr: e,
+                        span: Some(c.span),
                     }),
+                    // Not explicitly named → a `.*` wildcard same-name
+                    // reference, if one was synthesized for this port. Those
+                    // carry NO span of their own: the `ast::Expr` above is
+                    // built HERE and stamped with `module.name.span`, which is
+                    // the CHILD MODULE's declared name — one location shared by
+                    // every instance of the module and by every port of each.
+                    // Reporting it would be a location that does not survive
+                    // being followed, so a `.*` row stays honestly unlocated.
+                    None => wildcard_conns
+                        .iter()
+                        .find(|(n, _)| n == pname)
+                        .map(|(_, e)| ConnSite {
+                            expr: e,
+                            span: None,
+                        }),
+                },
             };
             // v5 ⑥ (D): interface-typed port → symbol aliasing, not wiring.
             if let Some(iref) = ansi_iface_ref(module, pname) {
                 match conn {
-                    Some(c) => self.bind_iface_port(iref, pname, c, parent_prefix),
+                    Some(c) => self.bind_iface_port(iref, pname, c.expr, parent_prefix),
                     None => self.error(
                         MsgCode::ElabPortMismatch,
                         &format!("interface port `{pname}` left unconnected"),
@@ -612,7 +670,7 @@ impl Elaborator<'_> {
                 }
                 continue;
             }
-            let Some(conn_expr) = conn else {
+            let Some(conn) = conn else {
                 // unconnected port.
                 // §3 ⑥: silent for a ROOT. Measured on serv: auto-top elaborates the
                 // library modules `serv_rf_top` and `servile_rf_mem_if` as independent
@@ -667,7 +725,7 @@ impl Elaborator<'_> {
                 .map(|n| n.array_len)
                 .unwrap_or(1);
             if child_len > 1 {
-                self.wire_array_port(child_id, child_len, *dir, pname, conn_expr, parent_prefix);
+                self.wire_array_port(child_id, child_len, *dir, pname, conn, parent_prefix);
                 self.cur_prefix = child_prefix;
                 continue;
             }
@@ -687,19 +745,22 @@ impl Elaborator<'_> {
                         .get(child_id as usize)
                         .map(|n| n.width)
                         .unwrap_or(32);
-                    let rhs = self.lower_ctx_or_plain(conn_expr, pw);
+                    let rhs = self.lower_ctx_or_plain(conn.expr, pw);
                     self.cur_prefix = child_prefix;
                     let lhs = whole_net_lvalue(child_id);
-                    self.push_cont_assign_port(ir::ContAssign {
-                        lhs,
-                        rhs,
-                        delay: None,
-                    });
+                    self.push_cont_assign_port(
+                        ir::ContAssign {
+                            lhs,
+                            rhs,
+                            delay: None,
+                        },
+                        conn.span,
+                    );
                 }
                 // OUTPUT: parent_lval = child_port  (lval lowered in PARENT scope).
                 ir::PortDir::Output => {
                     self.cur_prefix = parent_prefix.to_string();
-                    let lhs = match expr_to_lvalue(conn_expr) {
+                    let lhs = match expr_to_lvalue(conn.expr) {
                         Some(lv) => self.lower_lvalue(&lv),
                         None => {
                             self.error(
@@ -718,11 +779,14 @@ impl Elaborator<'_> {
                         net: child_id,
                         word: None,
                     });
-                    self.push_cont_assign_port(ir::ContAssign {
-                        lhs,
-                        rhs,
-                        delay: None,
-                    });
+                    self.push_cont_assign_port(
+                        ir::ContAssign {
+                            lhs,
+                            rhs,
+                            delay: None,
+                        },
+                        conn.span,
+                    );
                 }
                 ir::PortDir::Internal => {
                     // a non-port net in the header list — module-decl bug.

@@ -184,6 +184,16 @@ Rows are sorted most-evaluated first, so the top of `items` is the answer to
 instance path — a module instantiated 40 times gives 40 rows you can tell
 apart), and by `file:line:col`.
 
+Port hookups show up as `kind: "port"` — vita synthesizes one continuous assign
+per port connection, and on a structural design they can be most of the rows.
+Their `file:line:col` is the **port connection in the parent's instantiation**:
+the `.p(expr)` (or the `.p` shorthand) starting at its `.`, or the connection
+expression for a positional list. So connections written on one line are told
+apart by `col`. Two exceptions, both honest rather than approximate: a `.*`
+wildcard connection has no source text of its own and reports `"", 0, 0`, and an
+**unpacked array** port becomes one row per element, all at that single
+connection's position.
+
 An **evaluation** is one activation: a process that suspends on `#5` and
 resumes counts twice, and a continuous assign counts one settle visit that
 actually re-evaluated its RHS. Bodies that never ran are listed with `evals: 0`

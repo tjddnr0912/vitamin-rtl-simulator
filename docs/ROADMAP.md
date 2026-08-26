@@ -501,6 +501,21 @@
 > on `bench/keccak` (−0.34% / +0.12% over two rounds), **+1.3%** on a
 > deliberately seam-dominated synthetic — see §4.6's table.
 >
+> ⭐ **Round-35 R3 corrected one of these labels' locations.** `port` rows shipped
+> with `("", 0, 0)`, on a doc comment claiming a port hookup "has no source span
+> of its own that would help a reader — the useful half is the INSTANCE". The
+> reporter measured **1,267 `port` rows = 51% of all evals** on their design, and
+> `scope` cannot resolve them because one instance there carries **39**
+> connections: the biggest category in the profile was the only one nobody could
+> act on. A `port` row now reports the PORT CONNECTION in the parent's
+> instantiation (`.p(expr)` from its `.`, so `col` separates connections written
+> on one line; the expression itself for a positional list). `("", 0, 0)` is now
+> reserved for what genuinely has no source text — a `.*` wildcard synthesizes
+> one connection per unnamed port — and an unpacked-array port's per-element rows
+> honestly share their one connection's position. Reporting only (`ProcIdent` is
+> an elaborate-side sidecar, not a `sim-ir` type): examples 4/4 stdout + VCD +
+> `.vu` + `.velab` **byte-identical PRE vs POST**, format_version stays 29.
+>
 > **NOT shipped — the headline ask stays open**: the reporter wants ~440 cycle/s
 > and measures 20.4, which is a **21x scheduler/executor question**, not an
 > observability one. That axis is Phase D (machine-code codegen) + the arena
