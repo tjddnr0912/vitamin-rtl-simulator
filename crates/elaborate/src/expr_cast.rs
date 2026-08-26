@@ -373,9 +373,70 @@ impl Elaborator<'_> {
         }
         // integral operand: resize to the target width (sign-extend per the
         // OPERAND's sign), coerce X/Z for 2-state, then stamp the target sign.
-        let w = self.ir_bits_of(e).unwrap_or(32);
-        let resized = match tw.cmp(&w) {
-            std::cmp::Ordering::Equal => e,
+        let w_known = self.ir_bits_of(e);
+        let w = w_known.unwrap_or(32);
+        // ⚠️ `coerce_two_state` names its operand ONCE PER BIT IT COVERS (it builds a
+        // `Concat` of `CaseEq(Select(e, i), 1'b1)`), and the engine walks that DAG as
+        // a TREE. So an unguarded 2-state cast multiplies the operand's evaluation
+        // cost by the width it is applied at, and nesting multiplies again. Measured
+        // by counting `$display`s inside the operand: `byte'` 8x, `int'` 32x,
+        // `longint'` 64x, `int'(int'(x))` 1024x — against iverilog's 1. The timing
+        // ladder tracks it exactly (`int'` 1.08 s vs the 4-state same-width
+        // `integer'` 0.04 s = 27x on one triple-nested `always_comb`), and at ~5
+        // nesting levels `velab` ALONE ran past 60 s on a 20-character expression.
+        //
+        // Two things hold that cost down, and they are independent:
+        //
+        // (1) The GUARD (round 35) — build the coercion only where the operand can
+        //     actually CARRY an x or z. `expr_may_be_unknown` is conservative in the
+        //     safe direction (an unproven shape is still coerced), so no value moves;
+        //     its `CaseEq` arm is what stops a nested coercion being coerced again.
+        //     ⚠️ It is asked about `e`, the operand, NOT about the resized value, and
+        //     that is not a shortcut: the resize adds a `Select` (narrowing, always
+        //     statically in range here), or a `Concat` of a `Replicate` of either a
+        //     literal 0 or a `Select` of `e`'s MSB (widening). Every one of those
+        //     arms of `expr_may_be_unknown` forwards to `e`, so the two questions
+        //     have the SAME answer — and asking `e` lets the widening arm below
+        //     coerce before it extends.
+        //
+        // (2) The WIDTH it is applied at (round 36). Coercing the RESIZED value costs
+        //     `tw` terms; coercing the OPERAND costs `w`. For a WIDENING cast those
+        //     are provably the same value, so pay the smaller one — the report's
+        //     `int'(nb)` over a 4-bit `nb` was paying 32 terms for 4 bits of operand,
+        //     and that single cast was 25x of a 633x gap (2.76 s vs 69.62 s when the
+        //     cast is replaced by a hand-written `{28'd0, nb}`).
+        //
+        //     The equivalence, both signednesses (each RUN against live iverilog 13,
+        //     see `cli/tests/two_state_cast_fanout.rs`):
+        //       - UNSIGNED: the extension bits are literal `1'b0`. `0 === 1'b1` is 0,
+        //         so coercing them is the identity — coerce-first and coerce-after
+        //         both leave `tw-w` zeros above `coerce(e)`.
+        //       - SIGNED: the extension replicates `e[w-1]`. Coerce-after replicates
+        //         the RAW sign bit and then maps each copy through `=== 1'b1`;
+        //         coerce-first maps the sign bit through `=== 1'b1` and replicates
+        //         the result. `CaseEq` is a per-bit function, so mapping-then-
+        //         replicating and replicating-then-mapping agree on every copy. An x
+        //         or z sign bit becomes `tw-w` zeros either way, which is exactly the
+        //         `X=-3 Y=3` / `A=ffffffffffffff8a` line the pinned tests assert.
+        //
+        //     ⚠️ The sign fill is coerced SEPARATELY from the value rather than taken
+        //     as `coerce(e)[w-1]`: `extend_to` derives its fill from the value it is
+        //     extending, and against a tree-walking engine that would name the whole
+        //     `w`-term coercion a second time (2w, not w+1). `coerce(e)[w-1]` and
+        //     `coerce(e[w-1])` are the same bit for the reason above.
+        //
+        //     NARROWING is already at the smaller width (`tw < w`) and stays as it
+        //     was — coercing the operand first would cost `w` to throw `w - tw` of
+        //     the terms away.
+        let needs_coerce = t2state && self.expr_may_be_unknown(e);
+        let coerced = match tw.cmp(&w) {
+            std::cmp::Ordering::Equal => {
+                if needs_coerce {
+                    self.coerce_two_state(e, tw)
+                } else {
+                    e
+                }
+            }
             // Sign-extend iff the operand is signed (§6.24/§11.6.1); 4-state-
             // preserving Concat (a `| 0` would zero-extend a signed operand AND
             // corrupt Z→X — the two extend-path silent-wrongs the hunt found).
@@ -384,32 +445,52 @@ impl Elaborator<'_> {
             // the operand-repeat guard) — the mirror called a signed function
             // return unsigned and `int'(f())` then zero-extended −3 to
             // `0000000d`. This arm always widens, hence the literal `true`.
+            // ⚠️ It is asked about `e` and not about the coerced value: a coercion
+            // is a `Concat`, which is unsigned, so asking it would silently make
+            // every widening 2-state cast zero-extend.
             std::cmp::Ordering::Greater => {
                 let signed_op = self.cast_extend_signed(e, true);
-                self.extend_to(e, w, tw, signed_op)
+                // ⚠️ Two shapes fall back to the resize-then-coerce order, and
+                // the second is a VALUE guard, not a tidiness one:
+                //   - `w == 0` would make `coerce_two_state` build an EMPTY concat.
+                //   - `ir_bits_of` answered `None` and `w` is a FABRICATED 32
+                //     (a deferred hierarchical placeholder, a `string` net, the
+                //     string-producing system functions, the element-typed
+                //     `pop`/array-reduction family — the list `lower_size_cast`'s doc
+                //     enumerates). Both orders are built on that same guess, but they
+                //     do not degrade the same way: coerce-after takes the low `tw`
+                //     bits of a concat whose real width is unknown, coerce-first
+                //     freezes the guess into the low half. Same guess, different
+                //     wrong answer, so keep the PRE shape where the width is not a
+                //     declared fact. The equivalence argument above rests on
+                //     `w` being the operand's ACTUAL width; where it is not, the
+                //     argument does not apply and neither does the reorder.
+                if needs_coerce && w > 0 && w_known.is_some() {
+                    let low = self.coerce_two_state(e, w);
+                    let fill_bit = if signed_op {
+                        let sign = self.sign_bit_of(e, w);
+                        self.coerce_two_state(sign, 1)
+                    } else {
+                        self.const_u32_expr(0, 1)
+                    };
+                    self.extend_with_fill(low, fill_bit, tw - w)
+                } else {
+                    let resized = self.extend_to(e, w, tw, signed_op);
+                    if needs_coerce {
+                        self.coerce_two_state(resized, tw)
+                    } else {
+                        resized
+                    }
+                }
             }
-            std::cmp::Ordering::Less => self.select_low(e, tw),
-        };
-        // ⚠️ `coerce_two_state` names its operand ONCE PER TARGET BIT (it builds a
-        // `Concat` of `CaseEq(Select(e, i), 1'b1)`), and the engine walks that DAG as
-        // a TREE. So an unguarded 2-state cast multiplies the operand's evaluation
-        // cost by the DECLARED WIDTH, and nesting multiplies again. Measured by
-        // counting `$display`s inside the operand: `byte'` 8x, `int'` 32x, `longint'`
-        // 64x, `int'(int'(x))` 1024x — against iverilog's 1. The timing ladder tracks
-        // it exactly (`int'` 1.08 s vs the 4-state same-width `integer'` 0.04 s = 27x
-        // on one triple-nested `always_comb`), and at ~5 nesting levels `velab` ALONE
-        // ran past 60 s on a 20-character expression.
-        //
-        // The guard is the one the sibling coercion site already had
-        // (`inline_fn.rs`'s formal binding, whose comment records the same 42.7x);
-        // this arm simply never got it. Build the per-bit coercion only where the
-        // operand can actually CARRY an x or z. `expr_may_be_unknown` is conservative
-        // in the safe direction — an unproven shape is still coerced — so no value
-        // moves; its `CaseEq` arm is what stops a nested coercion being coerced again.
-        let coerced = if t2state && self.expr_may_be_unknown(resized) {
-            self.coerce_two_state(resized, tw)
-        } else {
-            resized
+            std::cmp::Ordering::Less => {
+                let resized = self.select_low(e, tw);
+                if needs_coerce {
+                    self.coerce_two_state(resized, tw)
+                } else {
+                    resized
+                }
+            }
         };
         let which = if tsigned {
             ir::SysFuncId::Signed

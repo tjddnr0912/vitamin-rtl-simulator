@@ -257,6 +257,49 @@
 >   that shipped, which asks whether the coercion is NEEDED, not whether the operand may
 >   be evaluated twice. Both are required for the count; only the second one is.
 >
+> **🆕 §4.5.387 (round-36 ITEM A) — the same row again: the coercion was applied at the
+>   TARGET's width, not the operand's.** The external report called a frame call inside a
+>   continuous `assign` its biggest single cost (13.98 s of 72.94 s). Its own control
+>   ladder refuted that: replacing `int'(nb)` by the hand-written `{28'd0, nb}` in the
+>   otherwise identical file took the repro from 69.62 s to 2.76 s, so **25× of a 633×
+>   gap was one cast over a 4-bit operand**, and dropping the 128-bit part-select moved
+>   nothing (68.33 s). ⭐ Root: `lower_prim_cast` RESIZED first and coerced the resized
+>   value, so a widening cast paid `tw` `CaseEq` terms for `w` bits of operand — 32 terms
+>   for a 4-bit `nb`. The extension bits are provably no-ops (unsigned: a literal 0, and
+>   `0 === 1'b1` is 0; signed: `CaseEq` is a per-bit function, so mapping the sign bit
+>   then replicating it equals replicating it then mapping each copy), so the coercion
+>   now runs at the OPERAND's width and the extension is applied afterwards, with the
+>   sign fill coerced SEPARATELY (deriving it from the coerced value would name the whole
+>   `w`-term coercion a second time). Measured, release, interleaved, warm-up discarded:
+>   the reporter's repro **69.6 s → 6.7 s (10.4×)**, stdout byte-identical; the 4-bit
+>   ping count 32 → 4, `longint'(g(1))` 64 → 32; examples 000..003 stdout+VCD
+>   byte-identical. The same reorder landed at the sibling `inline_fn.rs` formal bind
+>   (21 binds reach the coercion across the whole `cli` suite, 5 of them widening).
+>   ⚠️ **The count is still wrong and this row stays open.** After the fix the repro sits
+>   at 6.7 s against the no-cast control's 2.76 s — the residue is the 4 surviving terms
+>   plus the frame call itself, and the frame call is now the LARGER half, so the
+>   reporter's original axis becomes the next one to measure. ⚠️ Two things measured and
+>   NOT shipped: a **per-bit skip** inside `coerce_two_state` (emit the bit directly where
+>   `expr_may_be_unknown` proves that bit known) fires **0 times** on 41 cast cells and on
+>   the repro, because the predicate's `Select` arm forwards to the BASE without
+>   projecting a `Concat`/`Replicate` by bit offset — inside a coercion we only build
+>   because the base may be unknown, so every bit-select answers "unknown"; and the third
+>   caller (`inline_fn.rs:396`, the R2 return coercion) is **genuinely different** — it has
+>   no resize in front of it, so its target width is doing the ZERO-EXTENSION as well as
+>   the coercion and narrowing it would change the value, not just the cost.
+>   ⚠️⚠️ **The reorder's own silent-wrong, caught by measuring its premise while the whole
+>   suite was green over it**: the equivalence rests on `w` being the operand's ACTUAL
+>   width, and `ir_bits_of` answers `None` for a deferred hierarchical reference (also a
+>   `string` net, the string-producing system functions, the element-typed
+>   `pop`/array-reduction family), whereupon the caller FABRICATES 32. Both orders are
+>   built on that guess but degrade differently — coerce-after takes the low `tw` bits of
+>   a concat of unknown real width, coerce-first FREEZES the guess into the low half:
+>   `longint'(u1.w40)` with `logic [39:0] w40` is `0000001234567800` in iverilog 13 and
+>   in PRE, and the unguarded reorder printed `0000000034567800` at exit 0. ⇒ the reorder
+>   is taken only where the width is a DECLARED fact
+>   (`a_width_unknown_operand_keeps_the_resize_then_coerce_order`). Same shape as the
+>   §4.5.371 lesson: computing a width is not vouching for its provenance.
+>
 > **🆕 §4.5.368 곁발굴**(§3 성격 · pre-existing): **`$realtobits`/`$bitstoreal` 이 64비트 아닌 인자를 조용히 받는다**(iverilog 는 *"requires a 64-bit argument"* 로 거부). vita 는 저64비트를 답한다 — 그 경로가 살아 있는 것이 §4.5.368 의 BLOCKING 이 도달 가능했던 이유다.
 >
 > **🆕 §4.5.367 곁발굴 둘**(전부 PRE==POST · pre-existing):

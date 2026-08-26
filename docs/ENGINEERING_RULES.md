@@ -219,6 +219,38 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ A rewrite justified by an equivalence inherits its PREMISE as a live obligation (2026-08-27 · §4.5.387)
+
+The round-36 cast reorder is provably value-neutral: coercing a widening 2-state cast at
+the OPERAND's width and extending afterwards equals coercing the extended value, because
+the extension bits are a literal 0 or copies of the sign bit and `CaseEq` is a per-bit
+function. Both signednesses were derived, written into the comment, and RUN against live
+iverilog over 90 cells — PRE == POST on all 90.
+
+**And it was still a silent-wrong**, because the argument says *the operand's width*, and
+the code says `ir_bits_of(e).unwrap_or(32)`. Where `ir_bits_of` answers `None` (a deferred
+hierarchical reference, a `string` net, the string-producing system functions, the
+element-typed `pop`/array-reduction family) that 32 is a FABRICATION. The two orders are
+built on the same guess and degrade differently: the old one takes the low `tw` bits of a
+concat of unknown real width (and the engine's post-resolve width table still widens it
+correctly), the new one FREEZES the guess into the low half. Measured:
+`longint'(u1.w40)` with `logic [39:0] w40` is `0000001234567800` in iverilog 13 and in
+PRE, and `0000000034567800` under the unguarded reorder, at exit 0. **The whole 6,181-test
+suite was green over it**, and so was the 90-cell three-way sweep — every operand in both
+had a declared width, which is precisely the field the argument depends on.
+
+**Rule**: after deriving an equivalence, read the code back and name every input the
+derivation assumed. For each one, ask *what does this expression do when that input is a
+DEFAULT rather than a fact* — a `unwrap_or`, a fabricated width, an `is_none_or`. Then
+build the design where it is a default and run it. The premise is not discharged by the
+derivation; it becomes a gate you owe. (Same family as §4.5.371's *computing a width is
+not vouching for its provenance* and §4.5.373's *narrowing by theorem: measure the
+premise* — this is the third time the fabricated-width default has been the leak.)
+
+⚠️ Corollary for benchmarks-as-tests: a differential sweep certifies only the field values
+it varies. Ours varied width, sign and x/z placement across 90 cells and never varied
+*width KNOWN vs width FABRICATED*, which was the only axis that mattered.
+
 ### ⭐⭐ A gate in an EARLIER phase cannot supply your phase's precondition (2026-08-25 · §4.5.384)
 
 §4.5.384 needed §4.5.373's second prerequisite — *the recorded width is only usable if the

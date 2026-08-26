@@ -219,25 +219,48 @@ impl Elaborator<'_> {
     /// operand AND collapse Z→X (`z | 0 = x`), the two extend-path silent-wrongs.
     pub(crate) fn extend_to(&mut self, e: u32, w: u32, n: u32, signed_op: bool) -> u32 {
         let fill_bit = if signed_op {
-            let off = self.const_u32_expr(w.saturating_sub(1), 32);
-            let wid = self.const_u32_expr(1, 32);
-            self.push_expr(ir::Expr::Select {
-                base: e,
-                offset: off,
-                width: wid,
-                kind: ir::SelKind::Bit,
-            })
+            self.sign_bit_of(e, w)
         } else {
             self.const_u32_expr(0, 1)
         };
-        let count = self.const_u32_expr(n - w, 32);
+        self.extend_with_fill(e, fill_bit, n - w)
+    }
+
+    /// The MSB of `e` (self-width `w`) as a 1-bit `Select` — the fill an extension
+    /// replicates. Split out of [`Self::extend_to`] so a caller that has to coerce
+    /// the fill bit SEPARATELY from the value can build the same node
+    /// (`expr_cast::lower_prim_cast`'s 2-state widening path).
+    pub(crate) fn sign_bit_of(&mut self, e: u32, w: u32) -> u32 {
+        let off = self.const_u32_expr(w.saturating_sub(1), 32);
+        let wid = self.const_u32_expr(1, 32);
+        self.push_expr(ir::Expr::Select {
+            base: e,
+            offset: off,
+            width: wid,
+            kind: ir::SelKind::Bit,
+        })
+    }
+
+    /// `Concat[Replicate(n_fill, fill_bit), low]` — the assembly half of
+    /// [`Self::extend_to`], with the fill bit supplied rather than derived from
+    /// `low`. ⚠️ The split is a COST decision, not a style one: the engine walks the
+    /// expression DAG as a TREE, so deriving the fill from `low` names `low` a
+    /// SECOND time and doubles its evaluation cost. Where `low` is expensive (a
+    /// per-bit 2-state coercion) the caller derives the fill from the cheap operand
+    /// underneath it instead. `n_fill == 0` is not expected (callers widen), but a
+    /// zero-count `Replicate` would be an empty value, so it returns `low` unchanged.
+    pub(crate) fn extend_with_fill(&mut self, low: u32, fill_bit: u32, n_fill: u32) -> u32 {
+        if n_fill == 0 {
+            return low;
+        }
+        let count = self.const_u32_expr(n_fill, 32);
         let fill = self.push_expr(ir::Expr::Replicate {
             count,
             value: fill_bit,
         });
         // Concat is MSB-first: the high fill, then the operand's low bits.
         self.push_expr(ir::Expr::Concat {
-            parts: vec![fill, e],
+            parts: vec![fill, low],
         })
     }
 

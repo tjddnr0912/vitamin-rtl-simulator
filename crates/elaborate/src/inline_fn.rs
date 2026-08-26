@@ -391,6 +391,13 @@ impl Elaborator<'_> {
         // (`return b[i]` on `logic b[]`) or an OOB read would leak X/Z. Coerce the folded
         // return value here. GATED on an R2 call (`n_dyn > 0`), so every non-R2 inline
         // function stays byte-identical (they were the only `ret_two_state` inline path).
+        // ⚠️ This coercion is NOT the target-vs-operand-width asymmetry the formal
+        // bind and `lower_prim_cast` carry, and must not be "fixed" the same way:
+        // there is no resize in front of it, so `rw` is doing the WIDENING as well as
+        // the coercion. `coerce_two_state` reads bit `i` of a narrower `result` out of
+        // range, which is X, which `=== 1'b1` turns into 0 — i.e. the declared return
+        // width here zero-extends, and narrowing it to the folded body's own width
+        // would change the VALUE, not just the cost.
         if n_dyn > 0 && func.ret_two_state {
             let rw = ast_func_return_width(func).unwrap_or(32).max(1);
             self.coerce_two_state(result, rw)
@@ -621,6 +628,43 @@ impl Elaborator<'_> {
             }
             let actual_signed = self.expr_self_signed(eid);
             return self.resize_inline_assign(eid, w, actual_signed);
+        }
+        // (2.5) COST — the same target-vs-operand-width asymmetry `lower_prim_cast`
+        // carries, and the same answer. The 2-state coercion in (3) below names its
+        // operand once per bit it covers and the engine walks that DAG as a TREE, so
+        // binding a NARROW actual to a WIDER 2-state formal pays `w` evaluations for
+        // `rw` bits of actual. For a widening bind the extra terms are provably
+        // no-ops — the extension bits are a literal 0 (unsigned actual) or copies of
+        // the actual's sign bit, and `CaseEq` is a per-bit function, so mapping the
+        // sign bit and then replicating it equals replicating it and then mapping
+        // each copy. Coerce at `rw`, extend the coerced value, and let
+        // `resize_inline_assign` below apply the SEAL at the now-equal width.
+        //
+        // ⚠️ Two things are taken from `eid` and not from the coerced value, both
+        // load-bearing: the extension SIGN (a coercion is a `Concat`, which is
+        // unsigned — asking it would zero-extend every signed narrow actual), and the
+        // sign FILL BIT (deriving the fill from the coerced value would name the whole
+        // `rw`-term coercion a second time, 2·rw instead of rw+1). `expr_self_signed`
+        // is the very spelling `resize_inline_assign` uses internally, so the
+        // extension direction is unchanged, mirror caveat (ROADMAP §2) included.
+        //
+        // ⚠️ `trusted_self_width` is `Some` here — the guard immediately above
+        // returns when it is not — so `rw` is a DECLARED width and not a fabricated
+        // 32. Measured demand across the whole `cli` suite (5,220 tests, logged at
+        // this line): 21 binds reach the coercion, 5 of them widening (16←4 ×3,
+        // 64←32, 8←1). Small, but it is the same defect and it is one call away.
+        let rw = self.trusted_self_width(eid).unwrap_or(w);
+        if net_kind_is_two_state(kind) && rw > 0 && w > rw && self.expr_may_be_unknown(eid) {
+            let actual_signed = self.expr_self_signed(eid);
+            let low = self.coerce_two_state(eid, rw);
+            let fill_bit = if actual_signed {
+                let sign = self.sign_bit_of(eid, rw);
+                self.coerce_two_state(sign, 1)
+            } else {
+                self.const_u32_expr(0, 1)
+            };
+            let ext = self.extend_with_fill(low, fill_bit, w - rw);
+            return self.resize_inline_assign(ext, w, formal_signed);
         }
         // (1) WIDTH and (2) SIGN, in ONE primitive. Using a separate primitive per
         // direction is what let §4.5.323 round 2 truncate a `real` actual's f64 bits:

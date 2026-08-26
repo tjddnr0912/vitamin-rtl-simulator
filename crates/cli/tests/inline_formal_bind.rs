@@ -330,6 +330,14 @@ endmodule
 /// the actual's signedness — the coerced `Concat` is unsigned, so the widening
 /// that follows zero-fills. Every other 2-state row here uses an equal-width
 /// actual, which makes the order structurally invisible; this one does not.
+///
+/// ⚠️ ROUND 36 REFINEMENT, recorded here rather than left to quietly contradict the
+/// name: a widening bind now DOES coerce first, for cost (see
+/// `a_narrow_widening_bind_coerces_at_the_actuals_width` below). What makes that safe
+/// is exactly the hazard this row names — the extension sign is read off the
+/// PRE-coercion actual (`expr_self_signed(eid)`), never off the `Concat`. This row's
+/// actual is a CONSTANT with no x/z, so no coercion is built for it at all and it
+/// still pins the plain resize-then-seal order; the new row pins the reordered one.
 #[test]
 fn the_width_resize_precedes_the_2_state_coercion() {
     let o = run(r#"module t;
@@ -550,4 +558,53 @@ endmodule
     assert_eq!(a, b);
     assert_eq!(a, c);
     assert!(a.starts_with("-3 05"), "got {a}");
+}
+
+/// ROUND 36 — a narrow actual bound to a WIDER 2-state formal coerces at the
+/// ACTUAL's width, not the formal's.
+///
+/// `coerce_two_state` names its operand once per bit it covers and the engine walks
+/// that DAG as a TREE, so binding a 4-bit actual to an `int` formal paid 32
+/// evaluations for 4 bits of actual. The extension bits are a literal 0 (unsigned
+/// actual) or copies of the actual's sign bit, and `CaseEq` is a per-bit function, so
+/// coerce-then-extend and extend-then-coerce are the same value. Measured demand
+/// across the whole `cli` suite (logged at the coercion): 21 binds reach it, 5 of
+/// them widening — small, but it is the same defect the prim cast had, one call away.
+///
+/// ⚠️ EVERY actual here carries an x or a z, because an actual that provably cannot
+/// is not coerced at all and the row would be vacuous. Verified non-vacuous by
+/// instrumenting the new branch: this design fires it SEVEN times (formal/actual
+/// widths 16/4 in both signednesses, 32/4 in both, 32/8, 64/8, 8/4), including the
+/// signed path where the fill bit is itself coerced. `fb1(s4[0])` is the control —
+/// equal width, so it does not fire. Every cell measured three ways (a pre-36
+/// binary, POST, live iverilog 13.0) and identical in all three.
+#[test]
+fn a_narrow_widening_bind_coerces_at_the_actuals_width() {
+    let o = run(r#"module t;
+  logic signed [3:0] s4;
+  logic        [3:0] u4;
+  logic signed [7:0] s8;
+  function [31:0] fb16(input bit  [15:0] x); fb16 = x; endfunction
+  function [31:0] fbs (input byte        x); fbs  = x; endfunction
+  function [31:0] fi  (input int         x); fi   = x; endfunction
+  function [63:0] fl  (input longint     x); fl   = x; endfunction
+  function [31:0] fb1 (input bit         x); fb1  = x; endfunction
+  initial begin
+    s4 = 4'b1x01; u4 = 4'b1x01; s8 = 8'b1x01_z011;
+    $display("%h %h", fb16(s4), fb16(u4));
+    $display("%h %h", fi(s4),   fi(u4));
+    $display("%h %h", fl(s8),   fbs(s4));
+    $display("%h %h", fb1(s4[0]), fi(s8));
+    #1 $finish;
+  end
+endmodule
+"#);
+    // iverilog 13.0. The x/z digits coerce to 0 (`4'b1x01` -> `4'h9`,
+    // `8'b1x01_z011` -> `8'h93`) and the result then SIGN-extends for a signed
+    // actual — a coerce-first that read its sign off the coerced `Concat` would
+    // print `00000009` / `00000093` in the signed columns instead.
+    assert_eq!(
+        o,
+        "0000fff9 00000009\nfffffff9 00000009\nffffffffffffff93 fffffff9\n00000001 ffffff93"
+    );
 }
