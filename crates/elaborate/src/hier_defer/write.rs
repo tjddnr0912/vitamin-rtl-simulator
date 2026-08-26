@@ -351,7 +351,7 @@ impl Elaborator<'_> {
     /// §4.5.355: give every fill literal the assignment width its deferred
     /// hierarchical target could not supply at lowering time.
     ///
-    /// ⭐ THIS ASKS THE SAME QUESTION `resize_fill_rhs` ASKED, JUST LATER. Both
+    /// ⭐ THIS ASKS THE SAME QUESTION `resize_rhs_for_lvalue` ASKED, JUST LATER. Both
     /// deferral lanes have published the chunk they decided on, so `ir_lvalue_width`
     /// finally has a real net to read; there is no second width rule here, which is
     /// what keeps the sub-cases honest by construction:

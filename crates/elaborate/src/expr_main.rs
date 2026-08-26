@@ -1129,6 +1129,15 @@ impl Elaborator<'_> {
                 if name.name == "$bits" && args.len() == 1 {
                     return self.lower_bits_fold(&args[0]);
                 }
+                // §11.4.14 `{<<N{…}}`: the parser's marker (see `stream_concat`),
+                // expanded here because the block count is `$bits(operand)/N` and the
+                // operand's width is not known until now.
+                if name.name == crate::stream_concat::STREAM_REV {
+                    return self.lower_stream_rev(args);
+                }
+                if name.name == crate::stream_concat::STREAM_FWD {
+                    return self.lower_stream_fwd(args);
+                }
                 // SYS-INTRO: array-query / dimension introspection const-folds
                 // (IR-0, like $bits). A TYPE/net reference, not evaluated.
                 if let Some(folded) = self.try_introspect_fold(&name.name, args) {
@@ -1337,10 +1346,20 @@ impl Elaborator<'_> {
                         })
                     }
                     None => {
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            "unsupported system function in expression",
-                        );
+                        // A `$__vita_stream_*` marker reaching here means a path
+                        // lowered it without going through the arms above; say what
+                        // the SOURCE wrote, never the synthesized name.
+                        if name.name.starts_with("$__vita_stream_") {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                crate::stream_concat::STREAM_LIMIT_HINT,
+                            );
+                        } else {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "unsupported system function in expression",
+                            );
+                        }
                         self.placeholder_expr()
                     }
                 }

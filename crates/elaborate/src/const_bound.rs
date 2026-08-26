@@ -720,6 +720,19 @@ impl Elaborator<'_> {
                 ));
             }
         }
+        // A streaming concatenation reaches here as vita's own marker call, whose
+        // name is not a thing the source wrote — `expr_brief` would print
+        // `$__vita_stream_rev(…)` at a line reading `{<<8{…}}`. Name the construct.
+        if matches!(&e.kind, K::SysCall { name, .. }
+            if name.name == ast::STREAM_REV_FUNC || name.name == ast::STREAM_FWD_FUNC)
+        {
+            return Some(
+                "a streaming concatenation (`{<<N{…}}`, IEEE 1800-2017 §11.4.14) has no \
+                 constant-fold arm — vita expands it at elaborate, so it works in a \
+                 runtime expression but not in a constant one"
+                    .to_string(),
+            );
+        }
         Some(match &e.kind {
             K::Ident(_) | K::PkgScoped { .. } => match self.nonconst_bound_reason(e) {
                 Some(r) => format!("{r} is not a constant"),

@@ -108,6 +108,7 @@ mod scope;
 mod static_array_method;
 mod stmt_flow;
 mod stmt_main;
+mod stream_concat;
 mod string_array_route;
 mod strings;
 mod sva_ast;

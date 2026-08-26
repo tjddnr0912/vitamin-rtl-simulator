@@ -494,13 +494,13 @@ impl Elaborator<'_> {
     /// §4.5.216: lower one ternary arm `e` (hoisting an eval-order-safe inout/output-formal
     /// call in it to a copy-out `Terminator::Call` at the CURRENT block, so the copy-out
     /// fires on this path only) and assign it to `lhs` as a normal blocking assign — reusing
-    /// `resize_fill_rhs` so a context-fill literal (`'0`/`'1`) arm grows to the lvalue width
+    /// `resize_rhs_for_lvalue` so a context-fill literal (`'0`/`'1`) arm grows to the lvalue width
     /// exactly like the generic Blocking path.
     pub(crate) fn assign_arm(&mut self, b: &mut ProcessBuilder, lhs: &ast::Lvalue, e: &ast::Expr) {
         let rhs_id = self.lower_loop_cond_operand(b, e);
         let lv = self.lower_lvalue(lhs);
         self.check_lvalue_kind(&lv, true);
-        let rhs_id = self.resize_fill_rhs(e, rhs_id, &lv);
+        let rhs_id = self.resize_rhs_for_lvalue(e, rhs_id, &lv);
         let sid = self.push_stmt(ir::Stmt::BlockingAssign {
             lhs: lv,
             rhs: rhs_id,

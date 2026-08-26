@@ -570,7 +570,20 @@ impl Elaborator<'_> {
     /// own node). What IS true: for a NON-fill rhs the lvalue width is never read and
     /// `rhs_id` is returned untouched, which is what makes every fill-free design
     /// byte-identical — an error-recovery lvalue (`x = 1` for undeclared `x`) included.
-    pub(crate) fn resize_fill_rhs(&mut self, rhs: &ast::Expr, rhs_id: u32, lv: &ir::Lvalue) -> u32 {
+    pub(crate) fn resize_rhs_for_lvalue(
+        &mut self,
+        rhs: &ast::Expr,
+        rhs_id: u32,
+        lv: &ir::Lvalue,
+    ) -> u32 {
+        // §11.4.14.3: a STREAMING rhs assigned to a wider target is left-justified,
+        // not zero-extended. It rides this funnel rather than a second one because
+        // the two rules answer the same question — what width does the LVALUE impose
+        // on this rhs — and a future assignment site that remembered one and forgot
+        // the other would be silently wrong in exactly one of them.
+        if let Some(id) = self.pad_stream_rhs(rhs, rhs_id, lv) {
+            return id;
+        }
         // The rhs has no fill in a context-propagating position ⇒ untouched
         // (byte-identical; `lower_expr` already produced the right IR).
         if !expr_contains_fill(rhs) {
@@ -630,7 +643,7 @@ impl Elaborator<'_> {
     /// element/bit-select lane and then the whole-net lane), and `POISON_NET` is
     /// deliberately EXCLUDED: a poisoned lvalue already produced a loud error, and
     /// there is nothing to come back and patch.
-    fn deferred_lvalue_sentinel(&self, lv: &ir::Lvalue) -> Option<u32> {
+    pub(crate) fn deferred_lvalue_sentinel(&self, lv: &ir::Lvalue) -> Option<u32> {
         lv.chunks
             .iter()
             .map(|c| c.net)
@@ -678,7 +691,7 @@ impl Elaborator<'_> {
                 }
                 // ⚠️ NEITHER A STRING COMPARE NOR A HANDLE COMPARE HAS A BIT-WIDTH
                 // CONTEXT TO TAKE (IEEE §6.16 / §8.4) — the same shape as the `real`
-                // guard in `resize_fill_rhs` (§6.12). `lower_expr`'s `Binary` arm
+                // guard in `resize_rhs_for_lvalue` (§6.12). `lower_expr`'s `Binary` arm
                 // routes both, in this position; this twin routed neither, so a fill
                 // literal ANYWHERE in the node was a bypass of both:
                 //   • `s < {"a",'1}` compared PACKED (zero-extends MSB-side, so not

@@ -132,7 +132,7 @@ impl Elaborator<'_> {
             // 1-bit self-determined width and was then zero-extended, so
             // `wire [7:0] a = '1;` read 00000001 against both oracles' 11111111 while
             // the spelled-out `assign a = '1;` beside it was correct.
-            let rhs_id = self.resize_fill_rhs(init, rhs_id, &lhs);
+            let rhs_id = self.resize_rhs_for_lvalue(init, rhs_id, &lhs);
             // The index of THIS cont-assign is the len BEFORE the push (matches
             // `elaborate_cont_assign`'s sidecar keying).
             let idx = self.cont_assigns.len() as u32;

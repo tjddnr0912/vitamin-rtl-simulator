@@ -826,7 +826,7 @@ impl Elaborator<'_> {
             // legacy `reg r = init` forms stay accepted).
             self.check_lvalue_kind(&lhs, false);
             let rhs_id = self.lower_expr(rhs);
-            let rhs_id = self.resize_fill_rhs(rhs, rhs_id, &lhs);
+            let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lhs);
             // The index of THIS cont-assign is the len BEFORE the push.
             let idx = self.cont_assigns.len() as u32;
             if let Some(rft) = rft {

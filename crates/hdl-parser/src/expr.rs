@@ -458,11 +458,10 @@ impl Parser<'_, '_> {
     /// concat-of-concats: `first={a}` then next is `,`, so concat path is taken.
     pub(crate) fn brace_expr(&mut self, start: Span) -> Expr {
         self.bump(); // outer '{'
-        if self.reject_streaming_concat() {
-            return Expr {
-                kind: ExprKind::Error,
-                span: start.to(self.prev_span()),
-            };
+                     // §11.4.14 streaming concatenation. `<<`/`>>` cannot begin an expression, so
+                     // seeing one here decides the production with no lookahead and no ambiguity.
+        if matches!(self.peek(), Some(TokenKind::Shl) | Some(TokenKind::Shr)) {
+            return self.stream_expr(start);
         }
         let first = self.expr(0);
         if self.peek() == Some(TokenKind::LBrace) {
@@ -493,39 +492,116 @@ impl Parser<'_, '_> {
         }
     }
 
-    /// The outer `{` of a concatenation has just been consumed: if what follows is
-    /// `<<` or `>>`, the source wrote a STREAMING concatenation (IEEE 1800-2017
-    /// §11.4.14 — `{<<N{expr}}` / `{>>{expr}}`, the pack/unpack operator), which vita
-    /// does not implement. Returns `true` after reporting it and skipping the whole
-    /// `{ … }` group, so the caller yields an error node and the rest of the
-    /// statement still parses.
+    /// The outer `{` of a concatenation has just been consumed and the cursor is on
+    /// `<<`/`>>`: parse the rest of a STREAMING concatenation (IEEE 1800-2017
+    /// §11.4.14).
     ///
-    /// The predicate is EXACT, not a heuristic: after `{` the grammar admits only an
-    /// expression, and `<<`/`>>` are infix-only in SV — no legal concatenation,
-    /// replication or assignment-pattern can begin with one — so this cannot
-    /// false-positive on supported source. `<<<`/`>>>` (`ShlA`/`ShrA`) are separate
-    /// tokens and are NOT streaming operators, so they are deliberately excluded and
-    /// keep falling through to the ordinary "expected expression" error.
+    ///   `streaming_concatenation ::= { stream_operator [slice_size] { expr {, expr} } }`
     ///
-    /// Without this, `r = {<<8{a}};` reported only `expected expression, found '<<'`
-    /// and the LHS spelling `{>>{b0,b1}} = a;` reported THREE cascading errors at one
-    /// column — in neither case did the output contain the words "streaming", "pack"
-    /// or the clause number, so an unsupported feature was indistinguishable from a
-    /// typo.
-    pub(crate) fn reject_streaming_concat(&mut self) -> bool {
-        if !matches!(self.peek(), Some(TokenKind::Shl) | Some(TokenKind::Shr)) {
-            return false;
+    /// Both directions leave here as a MARKER system call that
+    /// `elaborate::stream_concat` expands, because both need something the parser does
+    /// not have:
+    ///
+    /// * `<<` — right-to-left — cuts the operand into `N`-bit blocks and reverses
+    ///   them, so the result SHAPE depends on `$bits(operand)`, which is not known
+    ///   until elaborate. It becomes [`STREAM_REV_FUNC`]`(N, {parts})`.
+    /// * `>>` — left-to-right — is the identity for a packed operand and ignores the
+    ///   slice size, so its VALUE is just the concatenation. It still becomes
+    ///   [`STREAM_FWD_FUNC`]`({parts})` rather than a bare `Concat`, because
+    ///   §11.4.14.3 pads a streaming rhs on the RIGHT when the assignment target is
+    ///   wider (measured, verilator 5.050: `{>>{32'hAABBCCDD}}` into a 64-bit variable
+    ///   is `aabbccdd00000000`, where the plain concatenation is `00000000aabbccdd`) —
+    ///   and a bare `Concat` would erase the one fact that separates them.
+    ///
+    /// The dispatch that got us here is EXACT, not a heuristic: after `{` the grammar
+    /// admits only an expression, and `<<`/`>>` are infix-only in SV — no legal
+    /// concatenation, replication or assignment pattern can begin with one. `<<<`/
+    /// `>>>` (`ShlA`/`ShrA`) are different tokens and are NOT stream operators, so
+    /// they never reach here and keep the ordinary "expected expression" error.
+    fn stream_expr(&mut self, start: Span) -> Expr {
+        let right_to_left = self.peek() == Some(TokenKind::Shl);
+        self.bump(); // `<<` / `>>`
+                     // `slice_size ::= simple_type | constant_expression`. A TYPE (`{<<byte{…}}`)
+                     // is refused BY NAME here rather than parsed as an expression, which would
+                     // otherwise reach elaborate as an undefined identifier and be reported as a
+                     // typo. Absent slice size ⇒ 1 (§11.4.14: "if not specified, the default is 1").
+        let slice = if self.peek() == Some(TokenKind::LBrace) {
+            Self::dec_lit(1, start)
+        } else if self.net_var_kind().is_some() || self.peek_typedef_name().is_some() {
+            self.error(
+                "a constant slice size — vita does not support a TYPE as the slice \
+                 size of a streaming concatenation (`{<<byte{…}}`, IEEE 1800-2017 \
+                 §11.4.14); write the bit count (`{<<8{…}}`)",
+            );
+            self.skip_balanced_brace_group();
+            return Expr {
+                kind: ExprKind::Error,
+                span: start.to(self.prev_span()),
+            };
+        } else {
+            self.expr(0)
+        };
+        if !self.expect(TokenKind::LBrace, "'{' opening the stream expression list") {
+            self.skip_balanced_brace_group();
+            return Expr {
+                kind: ExprKind::Error,
+                span: start.to(self.prev_span()),
+            };
         }
-        self.error(
-            "an expression after `{` — vita does not support the streaming operator \
-             `{<<N{…}}` / `{>>N{…}}` (pack/unpack, IEEE 1800-2017 §11.4.14). Write the \
-             reordering explicitly, e.g. `{a[7:0], a[15:8], a[23:16], a[31:24]}` for \
-             `{<<8{a}}`",
-        );
-        // Balanced skip to the `}` that closes the outer `{` (depth starts at 1: the
-        // caller already consumed it), leaving the cursor exactly where a well-formed
-        // concatenation would have left it — so an enclosing `= expr;` / `lhs = …;`
-        // finishes normally and this diagnostic is the ONLY line printed.
+        let mut parts = vec![self.expr(0)];
+        while !self.node_budget_blown && self.eat(TokenKind::Comma) {
+            parts.push(self.expr(0));
+        }
+        // `stream_expression ::= expression [ with [ array_range_expression ] ]` — the
+        // `with` form slices an UNPACKED array, which is the part of §11.4.14 vita does
+        // not have at all. Named, not "expected '}'".
+        if self.at_ident_kw("with") {
+            self.error(
+                "'}' closing the stream expression list — vita does not support the \
+                 `with` range form of a streaming concatenation (`{<<8{a with [3:0]}}`, \
+                 IEEE 1800-2017 §11.4.14)",
+            );
+            self.skip_balanced_brace_group(); // the inner group
+            self.skip_balanced_brace_group(); // the outer group
+            return Expr {
+                kind: ExprKind::Error,
+                span: start.to(self.prev_span()),
+            };
+        }
+        self.expect(TokenKind::RBrace, "'}' closing the stream expression list");
+        self.expect(TokenKind::RBrace, "'}' closing the streaming concatenation");
+        let span = start.to(self.prev_span());
+        let operand = Expr {
+            kind: ExprKind::Concat { parts },
+            span,
+        };
+        let (name, args) = if right_to_left {
+            (STREAM_REV_FUNC, vec![slice, operand])
+        } else {
+            // `>>` carries no slice size into elaborate (§11.4.14 ignores it) — only
+            // the fact that this WAS a stream, which §11.4.14.3's right-padding rule
+            // needs at the assignment funnel.
+            (STREAM_FWD_FUNC, vec![operand])
+        };
+        Expr {
+            kind: ExprKind::SysCall {
+                name: Ident {
+                    name: name.to_string(),
+                    span,
+                },
+                args,
+            },
+            span,
+        }
+    }
+
+    /// Skip to the `}` that closes a brace group whose OPENING `{` the caller already
+    /// consumed, and consume it. Used by the streaming rejections so the cursor ends
+    /// exactly where a well-formed concatenation would have left it — an enclosing
+    /// `= expr;` / `lhs = …;` then finishes normally and the named diagnostic is the
+    /// ONLY line printed, instead of the cascade of follow-on "expected X" errors the
+    /// old fall-through produced (three, at one `line:col`, for the lvalue form).
+    pub(crate) fn skip_balanced_brace_group(&mut self) {
         let mut depth = 1i32;
         while let Some(k) = self.peek() {
             match k {
@@ -544,6 +620,28 @@ impl Parser<'_, '_> {
             }
             self.bump();
         }
+    }
+
+    /// The outer `{` of an assignment TARGET has just been consumed: if what follows
+    /// is `<<`/`>>`, the source wrote the streaming UNPACK form (`{>>{b0,b1}} = a;`,
+    /// §11.4.14), which vita does not have — the rhs direction ships, this one does
+    /// not. Reports it by name and skips the group, so the enclosing `= rhs;` still
+    /// parses and this is the only line. Returns whether it fired.
+    ///
+    /// Same exact `<<`/`>>` predicate as the rhs dispatch in `brace_expr`, for the
+    /// same reason: neither token can begin an expression, so no legal concatenation
+    /// lvalue can trip it.
+    pub(crate) fn reject_streaming_lvalue(&mut self) -> bool {
+        if !matches!(self.peek(), Some(TokenKind::Shl) | Some(TokenKind::Shr)) {
+            return false;
+        }
+        self.error(
+            "a net or variable — vita supports the streaming operator (pack/unpack, \
+             IEEE 1800-2017 §11.4.14) only as a right-hand-side EXPRESSION, not as an \
+             assignment target: write `{b0,b1,b2,b3} = {<<8{a}}` rather than \
+             `{>>{b0,b1,b2,b3}} = a`",
+        );
+        self.skip_balanced_brace_group();
         true
     }
 

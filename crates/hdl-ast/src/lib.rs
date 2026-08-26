@@ -36,6 +36,35 @@ use vita_artifact_derive::SchemaHash;
 /// touch the `.vu` root.
 pub const UNIQUE_VIOLATION_TASK: &str = "$__vita_unique_violation";
 
+/// System-FUNCTION name the parser synthesizes for a right-to-left streaming
+/// concatenation `{<<N{…}}` (IEEE 1800-2017 §11.4.14), same reserved `$__vita_`
+/// channel and same reason as [`UNIQUE_VIOLATION_TASK`]: the producer
+/// (`hdl-parser::stream_expr`) and the consumer (`elaborate::stream_concat`) must
+/// agree on exactly one spelling, and a name is all a `SysCall` can carry without
+/// adding an `ExprKind` variant — which would flip the frozen `.vu` root.
+///
+/// The parser CANNOT expand this itself: the result is `$bits(operand)/N` blocks and
+/// the operand's width is not known until elaborate. Args are `[slice_size,
+/// operand]`. The left-to-right form `{>>N{…}}` needs no marker — for a packed
+/// operand it is the identity, so the parser emits a plain `Concat`.
+pub const STREAM_REV_FUNC: &str = "$__vita_stream_rev";
+
+/// The left-to-right twin, `{>>N{…}}`. Its VALUE is just the concatenation of the
+/// stream expressions (§11.4.14: `>>` ignores the slice size, and for a packed
+/// operand the order is unchanged — measured, verilator 5.050), so the marker looks
+/// redundant. It is not: **§11.4.14.3 pads a streaming rhs on the RIGHT** when the
+/// assignment target is wider, where an ordinary concatenation zero-extends on the
+/// left. Measured, verilator 5.050:
+///
+/// ```text
+///   logic [63:0] w;  w = {>>{32'hAABBCCDD}};  // aabbccdd00000000
+///                    w = {  32'hAABBCCDD  };  // 00000000aabbccdd
+/// ```
+///
+/// Desugaring `>>` to a bare `Concat` would erase exactly the fact that separates
+/// those two, so the marker survives to the assignment funnel. Args are `[operand]`.
+pub const STREAM_FWD_FUNC: &str = "$__vita_stream_fwd";
+
 // ───────────────────────────── Span ─────────────────────────────
 /// Half-open byte range `[lo, hi)` into the preprocessed source. `u32` (not the
 /// lexer's `Range<usize>`) so the serialized shape is deterministic across OSes.

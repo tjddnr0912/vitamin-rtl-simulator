@@ -258,7 +258,7 @@ impl Elaborator<'_> {
                 let lv = self.lower_lvalue(lhs);
                 self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
                                                    // §5.7.1: context-determined fill literal → lvalue width.
-                let rhs_id = self.resize_fill_rhs(rhs, rhs_id, &lv);
+                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
                 if let Some(d) = delay {
                     // IEEE §9.2.2 intra-assignment delay: the RHS evaluates NOW,
                     // the process suspends `d`, THEN the write happens. Lower as
@@ -353,7 +353,7 @@ impl Elaborator<'_> {
                 let lv = self.lower_lvalue(lhs);
                 self.check_lvalue_kind(&lv, true); // P1-9 (E3018)
                                                    // §5.7.1: context-determined fill literal → lvalue width.
-                let rhs_id = self.resize_fill_rhs(rhs, rhs_id, &lv);
+                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
                 let delay_id = delay.as_ref().map(|d| self.lower_delay(d).0);
                 let sid = self.push_stmt(ir::Stmt::NonblockingAssign {
                     lhs: lv,
@@ -1243,7 +1243,7 @@ impl Elaborator<'_> {
                 // procedural continuous assign is an assignment, whatever IR node
                 // carries it. Lowering to `Stmt::Force` is an implementation choice
                 // and must not change how wide `'1` is.
-                let rhs_id = self.resize_fill_rhs(rhs, rhs_id, &lv);
+                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
                 let sid = self.push_stmt(ir::Stmt::Force {
                     lhs: lv,
                     rhs: rhs_id,
@@ -1285,8 +1285,8 @@ impl Elaborator<'_> {
                 // call every other assignment form makes. `force a = '1;` sampled a
                 // 1-bit fill and zero-extended it (00000001 against both oracles'
                 // 11111111). The target is already proved a whole single net above,
-                // so the width `resize_fill_rhs` asks for is the net's.
-                let rhs_id = self.resize_fill_rhs(rhs, rhs_id, &lv);
+                // so the width `resize_rhs_for_lvalue` asks for is the net's.
+                let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
                 let sid = self.push_stmt(ir::Stmt::Force {
                     lhs: lv,
                     rhs: rhs_id,

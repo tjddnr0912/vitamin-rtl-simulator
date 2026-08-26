@@ -54,18 +54,20 @@ fn errors(out: &str) -> usize {
 /// The rhs form is refused by NAME: the operator, what it does, and the clause.
 #[test]
 fn a_streaming_rhs_names_the_operator_and_the_clause() {
+    // ⚠️ This test asserted the WORDING of a refusal until the operator itself
+    // shipped in the same slice. A wording assertion outlives the limitation it
+    // describes, so it is now a VALUE assertion — the strictly stronger statement.
+    // Values are LIVE verilator 5.050's; iverilog 13 does not parse the construct.
     let (out, code) = run(
         "`timescale 1ns/1ns\nmodule tb;\n  logic [31:0] a = 32'hAABBCCDD;\n  \
-         logic [31:0] r;\n  initial begin r = {<<8{a}}; $display(\"r=%h\", r); end\n\
-         endmodule\n",
+         logic [31:0] r1, r2, r3, r4;\n  initial begin\n    \
+         r1 = {<<8{a}}; r2 = {<<{a}}; r3 = {>>{a}}; r4 = {<<16{a}};\n    \
+         $display(\"R=%08h %08h %08h %08h\", r1, r2, r3, r4); end\nendmodule\n",
     );
-    assert_ne!(code, Some(0), "must stay loud:\n{out}");
-    assert_eq!(errors(&out), 1, "exactly one error:\n{out}");
-    assert!(out.contains("streaming operator"), "{out}");
-    assert!(out.contains("pack/unpack"), "{out}");
+    assert_eq!(code, Some(0), "{out}");
     assert!(
-        out.contains("§11.4.14"),
-        "the clause must be citable:\n{out}"
+        out.contains("R=ddccbbaa bb33dd55 aabbccdd ccddaabb"),
+        "byte reversal / bit reversal / identity / 16-bit slices:\n{out}"
     );
 }
 
@@ -73,13 +75,18 @@ fn a_streaming_rhs_names_the_operator_and_the_clause() {
 /// census found the old text identical for every spelling, which was the problem.
 #[test]
 fn a_streaming_rhs_without_a_slice_size_is_named_too() {
+    // Same conversion as above: a no-slice-size `{<<{a}}` reverses BITS. `8'hA5` is
+    // `1010_0101`, whose bit reversal is `1010_0101` — a palindrome, which would make
+    // this cell certify itself, so it uses `8'h1A` (`0001_1010` → `0101_1000` = 58).
+    // verilator 5.050 prints both.
     let (out, code) = run(
-        "`timescale 1ns/1ns\nmodule tb;\n  logic [7:0] a = 8'hA5, r;\n  \
-         initial begin r = {<<{a}}; $display(\"r=%h\", r); end\nendmodule\n",
+        "`timescale 1ns/1ns\nmodule tb;\n  logic [7:0] a = 8'h1A, r;\n  \
+         logic [15:0] b = 16'h1234, s;\n  \
+         initial begin r = {<<{a}}; s = {<<4{b}}; \
+         $display(\"r=%02h s=%04h\", r, s); end\nendmodule\n",
     );
-    assert_ne!(code, Some(0));
-    assert_eq!(errors(&out), 1, "{out}");
-    assert!(out.contains("§11.4.14"), "{out}");
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("r=58 s=4321"), "{out}");
 }
 
 /// ⭐ The lvalue (unpack) spelling used to print THREE errors at one column
