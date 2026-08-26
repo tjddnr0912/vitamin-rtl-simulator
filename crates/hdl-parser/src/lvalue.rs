@@ -358,6 +358,15 @@ impl Parser<'_, '_> {
         if self.peek() == Some(TokenKind::LBrace) {
             let start = self.cur_span();
             self.bump();
+            // `{>>{a,b}} = e;` — the streaming UNPACK target (§11.4.14). Same exact
+            // predicate as the rhs twin (`reject_streaming_concat`), and the same
+            // balanced skip, so the enclosing `= rhs ;` still parses and the three
+            // cascading errors this used to print ("expected identifier" / "expected
+            // '}'" / "expected '=' or '<=' after lvalue", all at one column) collapse
+            // to the one named line.
+            if self.reject_streaming_concat() {
+                return Lvalue::Error(start.to(self.prev_span()));
+            }
             let mut parts = Vec::new();
             loop {
                 parts.push(self.parse_lvalue());

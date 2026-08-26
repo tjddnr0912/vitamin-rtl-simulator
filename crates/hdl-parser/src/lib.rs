@@ -432,6 +432,15 @@ pub struct Parser<'t, 's> {
     /// ⓑ-breadth (§8.25): override specializations of parameterized classes,
     /// produced by `monomorphize_param_classes` and appended at top level.
     pending_mono_specs: Vec<ClassDecl>,
+    /// §23.11 binds written INSIDE a module/interface body. A bind whose target is a
+    /// module NAME means the same thing wherever it is written — elaborate keys the
+    /// bind table by target module name alone and wires the checker in each target
+    /// INSTANCE's scope (`elaborate/driver.rs`), never consulting the directive's
+    /// enclosing scope — so a body bind is hoisted here and appended to the source
+    /// unit as an ordinary `TopItem::Bind`. There is no `ModuleItem::Bind`: the AST
+    /// is frozen and needs no new variant for a construct whose meaning is
+    /// scope-independent. Drained (and asserted empty) in `parse_source_unit`.
+    pending_binds: Vec<BindDecl>,
     /// A body parameter/localparam COMMA-LIST (`localparam A=1, B=2;`) yields one
     /// `ModuleItem` per name from a single `parse_module_item` call. The FIRST is
     /// returned inline; the REST queue here (FIFO) and drain at the top of
@@ -502,6 +511,7 @@ impl<'t, 's> Parser<'t, 's> {
             union_type_names: std::collections::HashSet::new(),
             const_locals: std::collections::HashMap::new(),
             pending_mono_specs: Vec::new(),
+            pending_binds: Vec::new(),
             pending_module_items: Vec::new(),
             loop_labels: Vec::new(),
             enum_defs: std::collections::HashMap::new(),

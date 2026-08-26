@@ -253,6 +253,15 @@ impl Parser<'_, '_> {
                 .into_iter()
                 .map(TopItem::Class),
         );
+        // §23.11 body binds hoisted out of module/interface bodies. Order among binds
+        // is preserved; position relative to the modules is irrelevant because
+        // elaborate prescans the whole unit for `TopItem::Bind` before any module
+        // lowers (`elaborate/driver.rs`), exactly as it does for a unit-scope bind.
+        items.extend(
+            std::mem::take(&mut self.pending_binds)
+                .into_iter()
+                .map(TopItem::Bind),
+        );
         SourceUnit {
             items,
             span: start.to(self.prev_span()),
@@ -362,6 +371,25 @@ impl Parser<'_, '_> {
             // never holds unpacked structs — so without this they fall to module-
             // instantiation parsing and choke. Cold helper keeps the loop frame small.
             if self.try_module_unpacked_struct_decl(&mut body) {
+                if self.pos == before {
+                    self.bump();
+                }
+                continue;
+            }
+            // §23.11 `bind <target-module> <checker> u (…);` written INSIDE this body.
+            // Handled HERE rather than in `parse_module_item` because a bind produces
+            // no module item at all: it is hoisted whole to the source unit (see
+            // `pending_binds`), and this loop — unlike `parse_module_item`, which must
+            // return one item — can simply continue. A bind is the last item before
+            // `endmodule` often enough that the difference matters.
+            if self.at_bind_directive() {
+                match self.parse_bind_decl() {
+                    Some(b) => self.pending_binds.push(b),
+                    None => {
+                        body.push(ModuleItem::Error(self.cur_span()));
+                        self.synchronize();
+                    }
+                }
                 if self.pos == before {
                     self.bump();
                 }

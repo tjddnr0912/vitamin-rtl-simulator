@@ -458,6 +458,12 @@ impl Parser<'_, '_> {
     /// concat-of-concats: `first={a}` then next is `,`, so concat path is taken.
     pub(crate) fn brace_expr(&mut self, start: Span) -> Expr {
         self.bump(); // outer '{'
+        if self.reject_streaming_concat() {
+            return Expr {
+                kind: ExprKind::Error,
+                span: start.to(self.prev_span()),
+            };
+        }
         let first = self.expr(0);
         if self.peek() == Some(TokenKind::LBrace) {
             // replication: first = count, inner {…} = the repeated element list.
@@ -486,6 +492,61 @@ impl Parser<'_, '_> {
             span: start.to(self.prev_span()),
         }
     }
+
+    /// The outer `{` of a concatenation has just been consumed: if what follows is
+    /// `<<` or `>>`, the source wrote a STREAMING concatenation (IEEE 1800-2017
+    /// §11.4.14 — `{<<N{expr}}` / `{>>{expr}}`, the pack/unpack operator), which vita
+    /// does not implement. Returns `true` after reporting it and skipping the whole
+    /// `{ … }` group, so the caller yields an error node and the rest of the
+    /// statement still parses.
+    ///
+    /// The predicate is EXACT, not a heuristic: after `{` the grammar admits only an
+    /// expression, and `<<`/`>>` are infix-only in SV — no legal concatenation,
+    /// replication or assignment-pattern can begin with one — so this cannot
+    /// false-positive on supported source. `<<<`/`>>>` (`ShlA`/`ShrA`) are separate
+    /// tokens and are NOT streaming operators, so they are deliberately excluded and
+    /// keep falling through to the ordinary "expected expression" error.
+    ///
+    /// Without this, `r = {<<8{a}};` reported only `expected expression, found '<<'`
+    /// and the LHS spelling `{>>{b0,b1}} = a;` reported THREE cascading errors at one
+    /// column — in neither case did the output contain the words "streaming", "pack"
+    /// or the clause number, so an unsupported feature was indistinguishable from a
+    /// typo.
+    pub(crate) fn reject_streaming_concat(&mut self) -> bool {
+        if !matches!(self.peek(), Some(TokenKind::Shl) | Some(TokenKind::Shr)) {
+            return false;
+        }
+        self.error(
+            "an expression after `{` — vita does not support the streaming operator \
+             `{<<N{…}}` / `{>>N{…}}` (pack/unpack, IEEE 1800-2017 §11.4.14). Write the \
+             reordering explicitly, e.g. `{a[7:0], a[15:8], a[23:16], a[31:24]}` for \
+             `{<<8{a}}`",
+        );
+        // Balanced skip to the `}` that closes the outer `{` (depth starts at 1: the
+        // caller already consumed it), leaving the cursor exactly where a well-formed
+        // concatenation would have left it — so an enclosing `= expr;` / `lhs = …;`
+        // finishes normally and this diagnostic is the ONLY line printed.
+        let mut depth = 1i32;
+        while let Some(k) = self.peek() {
+            match k {
+                TokenKind::LBrace => depth += 1,
+                TokenKind::RBrace => {
+                    depth -= 1;
+                    if depth == 0 {
+                        self.bump(); // the closing '}'
+                        break;
+                    }
+                }
+                // A `;`/`endmodule` inside the group means the braces never close
+                // (truncated source): stop rather than eat the rest of the file.
+                TokenKind::Semi | TokenKind::Word(WordKind::Keyword(Kw::Endmodule)) => break,
+                _ => {}
+            }
+            self.bump();
+        }
+        true
+    }
+
     pub(crate) fn parse_systask_call(&mut self) -> Stmt {
         let start = self.cur_span();
         // `$__vita_*` is vita's own namespace: a desugar that needs to say

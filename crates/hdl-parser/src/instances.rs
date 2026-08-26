@@ -35,10 +35,50 @@ impl Parser<'_, '_> {
     /// an ORDINARY module instantiation, so `parse_module_instance` (which also
     /// consumes the trailing `;`) is reused wholesale — no bind-specific port
     /// parsing. `None` on a malformed target/checker ident (caller recovers).
+    /// Is the cursor on a §23.11 `bind` directive (as opposed to an instantiation of a
+    /// module literally NAMED `bind`)? `bind` is a contextual keyword — the lexer has
+    /// no `Kw::Bind` — so at MODULE-ITEM position, where a bare ident legitimately
+    /// starts an instantiation, the spelling alone does not decide. The two shapes
+    /// separate at the THIRD token: a directive is `bind TARGET CHECKER …`, so token 2
+    /// is a name (or the `.` of an instance-target path), while an instantiation is
+    /// `bind u (…)` / `bind #(…) u (…)` / `bind cg = new;`, where token 1 is `#` or
+    /// token 2 is `(`/`=`/`,`/`;`. At SOURCE-UNIT position no such ambiguity exists
+    /// (a bare ident there is always an error), which is why the top-level arm still
+    /// matches on the keyword alone.
+    pub(crate) fn at_bind_directive(&self) -> bool {
+        self.at_ident_kw("bind")
+            && matches!(
+                self.peek_at(1),
+                Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
+            )
+            && matches!(
+                self.peek_at(2),
+                Some(TokenKind::Word(WordKind::Ident))
+                    | Some(TokenKind::EscapedIdent)
+                    | Some(TokenKind::Dot)
+            )
+    }
+
     pub(crate) fn parse_bind_decl(&mut self) -> Option<BindDecl> {
         let start = self.cur_span();
         self.bump(); // contextual 'bind'
         let target = self.ident()?;
+        // §23.11 `bind_target_instance_list`: `bind top.u1 chk c (…)` names an
+        // INSTANCE, not a module type. vita's bind table is keyed by target MODULE
+        // name (elaborate wires the checker into every instance of it), so a
+        // per-instance target would need a different key and is unimplemented. It used
+        // to reach `self.ident()` below and report "expected identifier, found '.'"
+        // plus two follow-on lines — a spelling error, for a construct vita simply
+        // does not have. Report the real reason once and skip the directive.
+        if matches!(self.peek(), Some(TokenKind::Dot) | Some(TokenKind::Colon)) {
+            self.error(
+                "a target MODULE name — vita does not support a `bind` instance target \
+                 (`bind top.u1 chk c(…)` / `bind m : u1 chk c(…)`, IEEE 1800-2017 \
+                 §23.11 bind_target_instance_list); a bind on the target MODULE name \
+                 attaches the checker to every instance of it",
+            );
+            return None;
+        }
         let checker = self.ident()?;
         let inst = self.parse_module_instance(checker);
         Some(BindDecl {
