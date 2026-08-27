@@ -11,6 +11,43 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A `case` evaluated its expression once per ARM TESTED — and, with no arm to test, not
+  at all.** IEEE §12.5 evaluates the case expression exactly once. `lower_case` built its
+  cascade from one shared scrutinee node, which is right in the arena and wrong in the
+  evaluator: a shared node is walked as a TREE, so the expression ran again for every
+  comparison. Measured against BOTH oracles, vita was wrong in two directions at once:
+
+  ```text
+    case (f(n)) 0: 1: 2: 3: default:   n=3    vita E×4   iverilog E×1   verilator E×1
+    casez / casex, one arm before the hit     vita E×2   iverilog E×1   verilator E×1
+    0,1,2: / 3,4,5:  (multi-label arms)       vita E×6   iverilog E×1   verilator E×1
+    case (f(n)) default:  (no Match arm)      vita E×0   iverilog E×1   verilator E×1
+  ```
+
+  ⭐ The last row is why this was not a repetition count: with no Match arm there is no
+  comparison, so the scrutinee was never evaluated at all — a `$display` inside it did not
+  print, and the `E4002` an out-of-range read owes did not fire. The scrutinee is now
+  captured into a temp before the cascade, which makes the count exactly one in every row.
+
+  A runtime range report from the scrutinee now anchors on the READ rather than on the
+  `case` keyword, which is also more precise than before the change. The capture carries
+  the scrutinee's signedness (an unsigned capture would silently take a different arm,
+  since each `CaseEq` pair is sized from it), is 4-state (`casez`/`casex` match on its own
+  x/z bits), and is taken after §12.5's common-maximum width pass. It reuses the
+  `$ia_tmp$` sigil so the existing VCD/FST filter covers it — no synthetic net reaches a
+  waveform.
+
+  ⚠️ **Module-scope bodies only.** A frame body cannot write a module net, so the capture
+  there has to be a frame local, which needs the reservation pass `repeat` already has.
+  Every cell that measured a difference is module-scope; inside a function the scrutinee
+  is still re-evaluated per arm, which is unobservable for a side-effect-free one and is
+  where the performance half of this lives. Real and string scrutinees are skipped for the
+  same reason (the capture net would need `NetKind::Real`/`String`) and neither shows a
+  measured difference today.
+
+  Corpus 8/10 with every pinned digest matching, `examples/` 4/4 byte-identical, 6,237
+  tests green.
+
 - **⚠️ BREAKING: two drivers on one variable is now an ERROR (`VITA-E3001`).** IEEE
   §9.2.2.2 says a variable written by `always_comb` may have no other driver, and a
   declaration initializer is one — so `logic rdy = 1'b1; always_comb rdy = …;` is a

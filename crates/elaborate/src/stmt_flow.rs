@@ -137,6 +137,41 @@ impl Elaborator<'_> {
         (self.nets.len() - 1) as u32
     }
 
+    /// [§12.5] The case-scrutinee capture temp: `fresh_ia_tmp` with a SIGNEDNESS.
+    ///
+    /// It shares the `$ia_tmp$` sigil deliberately rather than minting a second
+    /// one. That prefix is what the VCD/FST writer filters on
+    /// (`queues_io.rs`'s `starts_with("$ia_tmp$")`), and §4.5.374 already paid
+    /// once for a new sigil slipping past that filter and changing the waveform
+    /// of a feature that was otherwise working. One sigil, one filter.
+    ///
+    /// ⚠️ The signedness is the part `fresh_ia_tmp` cannot supply and the part
+    /// that would be silent if it were wrong. `CaseEq` sizes each (scrutinee,
+    /// label) pair by `signed(l) && signed(r)`, so capturing a SIGNED scrutinee
+    /// into an unsigned temp makes every pair unsigned — which is the collective
+    /// rule this function's caller spent a whole paragraph getting right, applied
+    /// in the one place it does not belong. `case (s) -1: ; ` with signed
+    /// `s = 4'hF` would take the other arm.
+    ///
+    /// `NetKind::Reg` (4-state) is likewise load-bearing: casez/casex match on
+    /// the scrutinee's OWN x/z bits, and a 2-state capture would coerce them to 0
+    /// before the first test ran.
+    pub(crate) fn fresh_case_tmp(&mut self, width: u32, signed: bool) -> u32 {
+        let name = format!("$ia_tmp${}", self.nets.len());
+        let nv = ir::NetVar {
+            kind: ir::NetKind::Reg,
+            width,
+            msb: width.saturating_sub(1),
+            lsb: 0,
+            signed,
+            array_len: 1,
+            dir: ir::PortDir::Internal,
+            init: default_init(ast::NetVarKind::Reg, width),
+        };
+        self.add_net(&name, nv);
+        (self.nets.len() - 1) as u32
+    }
+
     /// A2: synthesize ONE step of a fixed-size-array `foreach` walk. The parser
     /// desugar emits `__st = arr.first/next(__foreach_i)` uniformly; a static array
     /// has no `.first/.next`, so walk a plain index over the FIRST dim `[lo, lo+size)`:
@@ -384,6 +419,59 @@ impl Elaborator<'_> {
     }
 
     // ── case → Branch chain ────────────────────────────────────────
+    /// §12.5 capture: evaluate the case expression ONCE into a temp and return a
+    /// `Signal` naming it, or return `scrut_id` unchanged when the capture is not
+    /// available (see the call site for each reason).
+    ///
+    /// The returned expression must carry the SAME self width and signedness as
+    /// the one it replaces, because the cascade sizes each `CaseEq` pair from it.
+    /// A `Const` is returned unchanged: re-reading a constant has no effect to
+    /// duplicate and no cost to remove, and hoisting it would churn the arena of
+    /// every `case` in every design for nothing.
+    fn hoist_case_scrutinee(
+        &mut self,
+        b: &mut ProcessBuilder,
+        scrut_id: u32,
+        scrut_span: ast::Span,
+    ) -> u32 {
+        if self.in_frame_body
+            || self.expr_is_real(scrut_id)
+            || self.ir_expr_is_string(scrut_id)
+            || matches!(
+                self.exprs.get(scrut_id as usize),
+                Some(ir::Expr::Const { .. })
+            )
+        {
+            return scrut_id;
+        }
+        let Some(w) = self.ir_bits_of(scrut_id) else {
+            return scrut_id; // no width to give the capture net
+        };
+        if w == 0 {
+            return scrut_id;
+        }
+        let signed = self.expr_self_signed(scrut_id);
+        let tmp = self.fresh_case_tmp(w, signed);
+        // ⚠️ Anchor the capture at the SCRUTINEE, not at the `case` keyword.
+        // `push_stmt` records a runtime location from `cur_span`, which here is
+        // the whole statement — and this capture is the statement that now owns
+        // the scrutinee's array reads, so an E4002 from `case (mem[9])` would
+        // have moved its caret off `mem[9]` and onto `case (`. Measured: 4:45
+        // before, 4:3 after, same message. A diagnostic that names a location is
+        // only as good as the location.
+        let saved = self.cur_span.replace(scrut_span);
+        let st = self.push_stmt(ir::Stmt::BlockingAssign {
+            lhs: whole_net_lvalue(tmp),
+            rhs: scrut_id,
+        });
+        self.cur_span = saved;
+        b.push_stmt_id(st);
+        self.push_expr(ir::Expr::Signal {
+            net: tmp,
+            word: None,
+        })
+    }
+
     pub(crate) fn lower_case(
         &mut self,
         b: &mut ProcessBuilder,
@@ -502,6 +590,41 @@ impl Elaborator<'_> {
         } else {
             scrut_id0
         };
+
+        // §12.5: THE CASE EXPRESSION IS EVALUATED ONCE. The cascade below reuses
+        // one `scrut_id` for every arm, which shares the node in the arena — and
+        // the evaluator walks a shared node as a TREE, so the scrutinee ran again
+        // for every test. Measured against both oracles, vita was wrong in BOTH
+        // directions:
+        //
+        // ```text
+        //   case (f(n)) 0: 1: 2: 3: default:      n=3   vita E×4   ivl E×1   vlt E×1
+        //   casez / casex, one arm before a hit         vita E×2   ivl E×1   vlt E×1
+        //   0,1,2: / 3,4,5:  (multi-label)              vita E×6   ivl E×1   vlt E×1
+        //   case (f(n)) default: only                   vita E×0   ivl E×1   vlt E×1
+        // ```
+        //
+        // The last row is the one that shows this is not merely a repetition
+        // count: with no Match arm there is no comparison, so the scrutinee was
+        // never evaluated AT ALL and its effects — a `$display`, a `$fgetc`, the
+        // E4002 an out-of-range read owes — simply did not happen.
+        //
+        // Capturing into a temp makes the count exactly one in every row, and it
+        // is also the fix for the largest single cost this profile has: a 25-way
+        // `case (x + 5*y)` re-evaluated that sum 25 times per call.
+        //
+        // ⚠️ MODULE-SCOPE BODIES ONLY, and the exclusion is not conservatism.
+        // A frame body cannot write a module net — `frame_write_lvalue` is `&self`
+        // and reaches only the activation window — so the capture would have to be
+        // a frame LOCAL, which needs the reservation pass `repeat` already has
+        // (`frame_repeat_cnt`, above). Every measured defect cell is module-scope;
+        // the frame half is the follow-on, and it carries the perf win with it.
+        //
+        // ⚠️ Real and string scrutinees are skipped for the same why-not-yet
+        // reason: the capture net would need `NetKind::Real` / `String`, and
+        // neither shows a measured difference today (both oracles match vita on
+        // `case (r)` and iverilog rejects `case (s)` outright).
+        let scrut_id = self.hoist_case_scrutinee(b, scrut_id, scrutinee.span);
 
         // Test cascade: for each label, a wildcard-aware match → arm else next.
         for (labels, arm) in &tests {

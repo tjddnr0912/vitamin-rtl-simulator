@@ -2411,10 +2411,15 @@ fn s2_admission_census_on_the_hot_design() {
     // 129/3 → 131/1 in S2 slice 4: the two DYNAMIC-INDEX array reads this line
     // used to call "the next slice's target" are now admitted, which is that
     // slice. What is left is one `select` (a part-select), still generic.
+    //
+    // 131/1 → 132/1 when the §12.5 case-scrutinee capture landed: this design
+    // has exactly ONE `case` (`case (rnd)`, line 116), and the capture assign it
+    // now emits is an admitted RHS. The rise is the whole delta — `declined` is
+    // unmoved, still the one part-select.
     let declined_total: usize = declined.values().sum();
     assert_eq!(
         (admitted, declined_total),
-        (131, 1),
+        (132, 1),
         "admission census moved: {declined:?}"
     );
     assert_eq!(
