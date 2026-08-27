@@ -11,167 +11,46 @@ changed for a user of the simulator.
 
 ### Fixed
 
-- **A hierarchical reference could not name a generate block, unless you spelled the index.**
-  A singleton generate scope (`if` / `if…else` / `case` / bare `begin : g`) is stored as
-  `g[0]`, and the bare-label mapping onto it ran for the LEADING path segment only. That is
-  fine for a same-module reference, where the block IS the leading segment (`gblk.x`), and
-  exactly wrong one dot further out: `u.gblk.x` commits `u` as the scope and then looked up
-  the literal `u.gblk.x` while the net lives at `u.gblk[0].x`. 19 census cells — all four
-  spellings × net / localparam / instance-inside × read / write, plus depth 2 — E3010 in
-  vita, correct in Icarus.
+- **⚠️ BREAKING: two drivers on one variable is now an ERROR (`VITA-E3001`).** IEEE
+  §9.2.2.2 says a variable written by `always_comb` may have no other driver, and a
+  declaration initializer is one — so `logic rdy = 1'b1; always_comb rdy = …;` is a
+  multiple-driver design. vita reported it as a warning and ran anyway, which meant the
+  design was green in the development loop and stopped xrun's elaboration (`*E,MULAXX`)
+  at sign-off. It now stops the run. Measured on the workload corpus: **8/10 unchanged,
+  every pinned digest matching, zero designs newly rejected**; `examples/` 4/4 unaffected.
 
-  ⭐ The report said "generate blocks"; the measurement said one axis. `for`-generate
-  references (`u.g[0].x`) already worked, so did the indexed spelling of a conditional
-  block, and so did the bare spelling from inside the same module — the last of these has
-  been pinned and green since the initial commit, which is why the cross-instance family
-  stayed invisible.
+  ⚠️ **`always_comb` only — `always_ff` and `always_latch` are NOT included, and an
+  external report asking for them was measured and declined.** The report's ground was
+  that the clause "does not vary by block kind". It does. One kind per file, verilator
+  5.050 `--lint-only -Wall`: `always_comb` gives **MULTIDRIVEN** (citing IEEE 1800-2023
+  §9.2.2.2), while `always_ff` and `always_latch` give **PROCASSINIT only** — a style
+  note, not a driver ruling. iverilog says nothing about any of the three. The split is
+  what the rule is for: `always_comb` models combinational logic, whose output must be a
+  function of its inputs at all times, so any other write destroys the property the
+  procedure asserts; `always_ff` models a REGISTER, and a declaration initializer is that
+  register's power-on value. `logic [7:0] c = 0; always_ff @(posedge clk) c <= c + 1;` is
+  the ordinary FPGA initialization idiom.
 
-- **A named generate-`case` block minted no scope at all.** The parser's case-item arms
-  called `parse_gen_branch().1`, keeping the items and discarding the label, where the `if`
-  and `for` arms bind it. Its members therefore landed in the ENCLOSING scope: `u.g.x` and
-  `u.g[0].x` were both E3010 (the one generate kind no spelling could reach), and when the
-  name collided with a parent declaration the design was rejected outright with E3009
-  `redeclared` though Icarus and Verilator both run it. The labelled body is now re-wrapped
-  as the `GenItem::Block` the elaborator already knows how to scope, so `label[0]` has one
-  spelling and no AST field was added.
+  ⭐ The widened version was built and reverted, and the thing that refuted it was this
+  repository's own `obs_procs` fixture — written in exactly that idiom, and it stopped
+  elaborating. **A working test design breaking is evidence AGAINST a new rejection, not
+  for it.**
 
-  ⚠️ A bare label on a `for`-generate stays loud at EVERY trip count (§27.4 makes those
-  blocks an array). The one-trip case is the trap: it leaves exactly the `g[0]` a
-  conditional block leaves, so a fallback keyed on storage alone accepted it and would have
-  begun failing the day a parameter moved from 1 to 2.
+  ⚠️ Plain `always` is out too, for a different reason: `logic clk = 1'b0; always #5 clk =
+  ~clk;` is the clock generator every testbench has, and the clause reaches only the
+  inference procedures. So are `initial` and `final`.
 
-  `format_version` unchanged at 29 — the loop-label record is elaborate-side and never
-  serialized.
+  ⚠️ **Promoting a diagnostic is the one ladder move that can DESCEND**, so the false
+  positive it had was closed first. The detector is the definite-assignment write walk,
+  which over-approximates on purpose (name-based; an unresolved call writes everything)
+  because it was built for accept gates — and it flagged a module variable that nothing
+  writes when an `always_comb` declared a block-local SHADOW of the same name. A procedure
+  declaring its own `name` is now skipped for that name; a write reaching the variable
+  through a task's `inout` actual is still a driver.
 
-- **A 2-state cast paid for bits its operand did not have.** Round 35 stopped nested casts
-  from multiplying; a single cast still expanded to one `CaseEq` per bit of the **target**
-  type, so `int'(nb)` on a 4-bit `nb` built 32 terms of which 28 selected bits of a known
-  zero-extension. A widening cast now coerces at the **operand's** width and extends
-  afterwards — provably the same bits (an unsigned extension is literal zeros, a signed one
-  replicates a sign bit that coercion has already forced to 0 or 1).
-
-  Measured on the reporting design's own repro, release, interleaved: **69.6 s → 6.7 s
-  (10.4×)**, stdout byte-identical. Fan-out for a 4-bit operand: `int'` 32→4, `longint'`
-  64→4, `shortint'` 16→4. The two no-cast controls did not move, which is what shows the
-  win is the cast and not a global effect.
-
-  ⚠️ **The reorder introduced a silent-wrong and it was caught by measuring its own
-  premise.** The equivalence argument says "the operand's width", but the code asked
-  `ir_bits_of(e).unwrap_or(32)` — and a deferred hierarchical reference has no width yet, so
-  `longint'(u1.w40)` on a `logic [39:0]` silently dropped its top 8 bits at exit 0. **A green
-  6,185-test suite and a green 90-cell three-way sweep both passed over it**, because every
-  operand in both had a declared width. Now gated on the width being *known* and pinned.
-
-  ⚠️ Still open, with the numbers, in ROADMAP §2: a same-width `int'(f())` names `f` 32 times
-  against Icarus's 1. This removes paying for bits the operand does not have; it does not
-  remove paying per bit.
-
-- **A 2-state cast named its operand once per declared bit.** `int'(e)` is lowered into
-  a `Concat` of one `CaseEq(Select(e, i), 1'b1)` per target bit, and the engine walks
-  that DAG as a tree — so an unguarded `keyword'(e)` cast multiplied the cost of
-  evaluating `e` by the cast's declared width, and nesting multiplied again. Counted
-  exactly, by putting a `$display` inside the operand:
-
-  | cast | operand evaluations, before | after | Icarus Verilog 13 |
-  |---|---|---|---|
-  | none | 1 | 1 | 1 |
-  | `byte'` | 8 | 8 | 1 |
-  | `int'` | 32 | 32 | 1 |
-  | `longint'` | 64 | 64 | 1 |
-  | `int'(int'(x))` | **1024** | **32** | 1 |
-
-  ⭐ The discriminator is 2-state-ness, not width: `integer'` and `int'` are both 32-bit
-  and signed, and differed by **27×** in wall clock on one triple-nested `always_comb` —
-  `integer` is 4-state, so no coercion is built for it at all. At around five levels of
-  nesting, `velab` **alone** ran past 60 s on a twenty-character expression.
-
-  The fix is the guard the sibling coercion site already had: the inline path's
-  formal binding calls the same routine and gates it on "can this operand actually carry
-  an x or z", with a comment recording the same measurement. The cast path simply never
-  got it. Measured end to end on the reporting design, release, interleaved:
-  **8.6×–542× faster** with byte-identical output, and 64 cast cells over x/z-carrying
-  operands print identically before, after, and under live Icarus Verilog.
-
-  ⚠️ **This does not make the evaluation count correct**, and the gap is recorded rather
-  than glossed. A single `int'(f())` still calls `f` 32 times where Icarus calls it once,
-  because a call is conservatively treated as possibly-unknown; a widening cast over a
-  call still fans out to the wider width. What was removed is the *multiplication* under
-  nesting. If your design casts an expression with a side effect — `int'($random)` is the
-  canonical one — the count is still wrong; see ROADMAP §2.
-
-- **`--obs-procs` profile rows of `kind: "port"` had no `file:line:col`.** On a reporting
-  design that was 1,267 rows and 51% of all evaluations — the largest category in the
-  profile, and the one a reader could not act on, since `scope` only narrows to an
-  instance and one instance can carry dozens of ports. Each row now reports the location
-  of its port connection in the parent's instantiation, **including the column**, so
-  several connections written on one line are told apart. A `.*` wildcard connection
-  still reports `("", 0, 0)`: it synthesizes one connection per port from no source text
-  of its own, and pointing it at the nearest real token would be a location that does not
-  survive being followed.
-
-- **`--obs-procs` and `--obs-procs-time` were missing from `vita --help`.** They worked
-  and were documented in the manual, but a reporter reading `run.json`'s `"processes":
-  null` concluded the feature was unimplemented. A third flag, `--probe-file`, was
-  missing too, and four rows were absent from the manual's flag table. A new test now
-  extracts the flag literals from the argument parser's own match arms and asserts every
-  one appears in `--help`, so the next undocumented flag is a red test rather than
-  another external report.
-
-### Added
-
-- **`run.json` now carries per-builtin evaluation counts and time** under `--obs-procs` /
-  `--obs-procs-time`, as a `builtins` sibling of `processes`. A single expensive process row
-  splits into "simulator primitives" vs "your RTL": `$fgets`, `$sscanf`, `$fdisplay`,
-  `.push_back()`, `.size()` and the rest each get `calls` and (when timed) `time_s`.
-
-  The convention is stated **in the file**, not just in a doc: `attribution: "self"` means a
-  row excludes builtins nested inside it, and `included_in_processes: true` means that time
-  is already inside the process row — so the two arrays must never be summed. Verified on a
-  nested `$fdisplay(fd, "%s", $sformatf(…))`, where an inclusive convention would have summed
-  past its own parent.
-
-  Instrumentation covers all four seams a builtin can reach the engine through, including the
-  synchronous `&self` frame executor, which does not go through the task dispatcher — without
-  that arm a `$display` inside a subroutine body would have been silently absent. Cost when
-  not requested, measured on a constructed worst case (3M pure system-function evaluations in
-  a loop): **+0.86%**, inside the measurement noise of a control that touches none of the
-  seams.
-
-### Documentation
-
-- **The codegen-discriminator note is corrected a fourth time, and this time the framing
-  changes rather than a row.** The 2026-08-25 revision already recorded that `able` is
-  anti-correlated with speed. A round-35 report asked, on the strength of a −30% A/B on
-  its own design, for the inliner to be *widened* to control-flow bodies. Measured, the
-  request is the wrong direction on the design that motivated it:
-
-  | routing of the report's own `idx()` | wall |
-  |---|---|
-  | frame call (today) | 0.27 s |
-  | hand-written source text (what they measured) | 0.83 s |
-  | **vita's own inline fold** | **26.9 s** |
-
-  Their hand-inlined file is *source text*, which has no formals — so it never pays the
-  formal-binding coercion that vita's inliner would. `idx`'s formals are `int` and
-  `int unsigned`; binding a possibly-unknown actual to a 32-bit 2-state formal is the
-  same per-bit fan-out described above, and it lands **98×**. The inline path's upside is
-  capped at 1.4–1.6× (one saved frame call) and does not grow with body size; its
-  downside is unbounded — measured 335× on a six-statement body and 31,000× on a
-  twenty-statement one, from the fold's expansion factor alone.
-
-  Also measured and rejected: opening the bytecode VM's `Terminator::Call` refusal. The
-  VM and the interpreter are within 1% on these bodies (their cost is expression
-  evaluation, which the VM delegates back to the kernel), and the **default** backend
-  already runs call-bearing bodies — so `codegen.able` under-reports what actually
-  executes, and "able 3/5 → 1/5" does not describe the default path.
-
-- **Throughput does not collapse with instance count.** A report observed a 5-engine top
-  running ~5× slower per cycle than a single-core testbench and read it as super-linear.
-  Measured over a 128× sweep, cost is a straight line — `t = 0.186 + 0.1597·N` per 200k
-  cycles, every point within 3.6% of the fit, with the marginal cost per instance-cycle
-  flat from N=2 to N=128. Five engines costing 5× *is* the linear prediction. Per-delta
-  work is O(active), not O(design): 1,024 dead instances add 4.6% total, and that as a
-  one-time step at elaboration rather than per delta.
+  ⚠️ **There is no opt-out.** `-Wno-<CODE>` suppresses Warning/Info diagnostics only
+  (measured: `-Wno-E3001` leaves the error standing), so a design with two drivers on a
+  variable stops elaborating. That is the same answer xrun gives.
 
 ## [0.2.0] — 2026-08-26
 

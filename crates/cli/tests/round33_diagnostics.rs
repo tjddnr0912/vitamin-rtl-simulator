@@ -149,19 +149,28 @@ fn an_unconnected_child_input_warns() {
     );
 }
 
-/// ⭐ A variable driven by BOTH a declaration initializer and `always_comb` warns.
+/// ⭐ A variable driven by BOTH a declaration initializer and an inference
+/// procedure is REJECTED.
+///
 /// vita ran it at exit 0 with nothing to say while xcelium stops elaboration
-/// (`*E,MULAXX`) and verilator errors (MULTIDRIVEN) — green in the development loop,
-/// dead at sign-off. The simulated VALUE is unchanged.
+/// (`*E,MULAXX`) and verilator errors (MULTIDRIVEN) — green in the development
+/// loop, dead at sign-off.
+///
+/// ⚠️ This test used to assert a WARNING and exit 0, and the pin was on the
+/// wording. Round 37 promoted the diagnostic to `E3001` on an owner decision to
+/// follow xrun here rather than the two available oracles (verilator implements
+/// the clause for `always_comb` only; iverilog checks none of it), and widened it
+/// to `always_ff` / `always_latch`. The full rule and its exclusions live in
+/// `multidriver_inference_procs.rs`; what stays here is the round-33 shape, now
+/// asserting the answer rather than the old severity.
 #[test]
-fn an_always_comb_variable_with_an_initializer_warns() {
+fn an_always_comb_variable_with_an_initializer_is_rejected() {
     let (out, code) = run(
         "`timescale 1ns/1ns\nmodule tb;\n  logic [7:0] cnt = 0;\n  logic rdy = 1'b1;\n  \
          logic ok;\n  always_comb rdy = (cnt < 8'd128);\n  always_comb ok = 1'b1;\n  \
          initial begin #1 $display(\"R=%0b%0b\", rdy, ok); $finish; end\nendmodule\n",
     );
-    assert_eq!(code, Some(0), "warn, never change the value:\n{out}");
-    assert!(out.contains("R=11"), "{out}");
+    assert_ne!(code, Some(0), "two drivers stop elaboration:\n{out}");
     assert_eq!(
         out.matches("declaration initializer AND").count(),
         1,
@@ -169,4 +178,5 @@ fn an_always_comb_variable_with_an_initializer_warns() {
          the always_comb:\n{out}"
     );
     assert!(out.contains("`rdy`"), "{out}");
+    assert!(out.contains("VITA-E3001"), "the multidriver code:\n{out}");
 }

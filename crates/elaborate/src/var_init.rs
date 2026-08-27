@@ -7,6 +7,69 @@ use super::*;
 /// [`Elaborator::with_rank_scope_keyed`].
 pub(crate) type RankKey = (u32, u32, u32);
 
+/// Does this statement tree DECLARE a block-local (or `fork` block) variable named
+/// `name`, shadowing a module-scope one?
+///
+/// ⚠️ This is the guard that lets the diagnostic below be an ERROR rather than a
+/// warning, and it was written because the check had a measured false positive.
+/// `stmt_never_writes_ident` is the definite-assignment walk, built for ACCEPT
+/// GATES where over-approximating a write is the safe direction — it is name-based
+/// and treats an unresolved call as writing everything. Ask it about
+///
+/// ```text
+///   int n = 7;                       // module scope, written by nobody
+///   always_ff @(posedge clk) begin
+///     int n;                         // a block-local SHADOW
+///     n = 3;
+///   end
+/// ```
+///
+/// and it answers "written", because the two `n`s are one name to it. As a warning
+/// that is a nuisance; as an error it rejects RTL that iverilog, verilator and
+/// xrun all accept.
+///
+/// ⚠️⚠️ Suppressing the DIAGNOSTIC does not make that design correct here: vita
+/// prints `n=3` where both oracles print `n=7`, because v1 flattens a procedural
+/// block-local onto a module net BY BARE NAME and the two coalesce. That is a
+/// pre-existing silent-wrong of its own, entirely separate from the driver
+/// question — and it is the reason this guard is written as "the source declares a
+/// shadow", which is a fact about the SOURCE, rather than as anything about which
+/// net vita happens to use.
+fn declares_local_named(stmts: &[ast::Stmt], name: &str) -> bool {
+    fn decl_hit(decls: &[ast::NetVarDecl], name: &str) -> bool {
+        decls
+            .iter()
+            .any(|d| d.names.iter().any(|n| n.name.name == name))
+    }
+    stmts.iter().any(|st| match st {
+        ast::Stmt::Block { decls, stmts, .. } | ast::Stmt::Fork { decls, stmts, .. } => {
+            decl_hit(decls, name) || declares_local_named(stmts, name)
+        }
+        ast::Stmt::If { then_s, else_s, .. } => {
+            declares_local_named(std::slice::from_ref(then_s), name)
+                || else_s
+                    .as_deref()
+                    .is_some_and(|e| declares_local_named(std::slice::from_ref(e), name))
+        }
+        ast::Stmt::For { body, .. }
+        | ast::Stmt::While { body, .. }
+        | ast::Stmt::Repeat { body, .. }
+        | ast::Stmt::Forever { body, .. } => declares_local_named(std::slice::from_ref(body), name),
+        // The timing statements carry an OPTIONAL body (`@(posedge clk) begin … end`
+        // is one of them, and it is the shape an `always_ff` almost always has).
+        ast::Stmt::DelayCtrl { body, .. }
+        | ast::Stmt::EventCtrl { body, .. }
+        | ast::Stmt::Wait { body, .. } => body
+            .as_deref()
+            .is_some_and(|b| declares_local_named(std::slice::from_ref(b), name)),
+        ast::Stmt::Case { items, .. } => items.iter().any(|it| {
+            let (ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. }) = it;
+            declares_local_named(std::slice::from_ref(body), name)
+        }),
+        _ => false,
+    })
+}
+
 impl Elaborator<'_> {
     /// §6.8: collect a VARIABLE declaration's NON-constant initializer
     /// (`logic [7:0] b = a;`) into `pending_var_inits` so a pre-sweep can emit it
@@ -548,15 +611,38 @@ impl Elaborator<'_> {
 }
 
 impl Elaborator<'_> {
-    /// IEEE §9.2.2.2: a variable written by `always_comb` may have NO other driver.
-    /// A declaration INITIALIZER is another driver.
+    /// IEEE §9.2.2.2: a variable written by `always_comb` may have NO other driver,
+    /// and a declaration INITIALIZER is another driver.
     ///
     /// ⭐ vita ran `logic rdy = 1'b1; always_comb rdy = …;` at exit 0 with nothing to
     /// say, while xrun stops elaboration (`*E,MULAXX`) and verilator errors
     /// (MULTIDRIVEN). That combination is the expensive kind of quiet: the design is
     /// green in the development loop and dies at sign-off, and the loop is where the
     /// author still has the context to fix it. Nothing about the simulated VALUE
-    /// changes here — this is the warning that was missing, not a semantics change.
+    /// changes here — this is the diagnostic that was missing, not a semantics change.
+    ///
+    /// ⚠️⚠️ **`always_comb` ONLY, and the two neighbours are deliberately out.**
+    /// An external report asked for `always_ff` and `always_latch` as well, on the
+    /// ground that the clause "does not vary by block kind". It does. Measured, one
+    /// kind per file, verilator 5.050 `--lint-only -Wall`:
+    ///
+    /// ```text
+    ///   always_comb  + initializer -> MULTIDRIVEN (cites IEEE 1800-2023 9.2.2.2)
+    ///   always_ff    + initializer -> PROCASSINIT only  (a style note)
+    ///   always_latch + initializer -> PROCASSINIT only
+    /// ```
+    ///
+    /// iverilog says nothing about any of the three. The distinction is not an
+    /// oversight in verilator either — it is what the rule is FOR. `always_comb`
+    /// models combinational logic, whose output must be a function of its inputs at
+    /// all times, so any other write destroys the property the procedure asserts.
+    /// `always_ff` models a REGISTER, and a declaration initializer is that
+    /// register's power-on value — `logic [7:0] c = 0; always_ff @(posedge clk) c <=
+    /// c + 1;` is the ordinary FPGA initialization idiom, which synthesis tools
+    /// implement and which this repository's own `obs_procs` fixture is written in.
+    ///
+    /// The widened version was built and reverted: it rejected that fixture, and a
+    /// test design breaking is evidence AGAINST a new rejection, not for it.
     ///
     /// A pure AST pass over the module body: the initializer set comes from the
     /// declarations, the driver set from `stmt_never_writes_ident` — the same
@@ -580,34 +666,56 @@ impl Elaborator<'_> {
         if inited.is_empty() {
             return;
         }
-        let combs: Vec<&ast::Stmt> = body
+        // `always_comb` alone — the match is `_`-free over `ProcKind` so that adding
+        // a procedure kind is a forced decision here rather than a silent default,
+        // and so that the three deliberate exclusions are visible as code.
+        let inferred: Vec<&ast::Stmt> = body
             .iter()
             .filter_map(|it| match it {
-                ast::ModuleItem::Proc(p) if matches!(p.kind, ast::ProcKind::AlwaysComb) => {
-                    Some(&*p.body)
-                }
+                ast::ModuleItem::Proc(p) => match p.kind {
+                    ast::ProcKind::AlwaysComb => Some(&*p.body),
+                    // Registers and latches take a power-on value from a
+                    // declaration initializer; measured, verilator calls neither
+                    // of these a multiple driver. See the doc above.
+                    ast::ProcKind::AlwaysFf | ast::ProcKind::AlwaysLatch => None,
+                    // `always #5 clk = ~clk;` beside `logic clk = 0;` is the clock
+                    // generator every testbench has.
+                    ast::ProcKind::Always | ast::ProcKind::Initial | ast::ProcKind::Final => None,
+                },
                 _ => None,
             })
             .collect();
-        if combs.is_empty() {
+        if inferred.is_empty() {
             return;
         }
         for (name, span) in inited {
-            let driven = combs
-                .iter()
-                .any(|s| !stmt_never_writes_ident(std::slice::from_ref(*s), &name, None));
-            if driven {
-                self.warn_code_at(
-                    MsgCode::ElabFeatureLimit,
-                    span,
-                    &format!(
-                        "variable `{name}` has a declaration initializer AND is written by \
-                         `always_comb`, which is two drivers on one variable (IEEE §9.2.2.2) \
-                         — other tools reject this at elaboration; drop the initializer or \
-                         the `always_comb` write"
-                    ),
-                );
+            // FIRST writer only: two `always_ff` blocks both writing an initialized
+            // variable is one diagnostic about the initializer, not one per block —
+            // the span reported is the DECLARATION's either way, so a second copy
+            // would repeat itself at the same caret.
+            //
+            // ⚠️ The SHADOW guard runs first, and it is what makes an error
+            // defensible: a procedure that declares its own `name` is writing THAT
+            // one, and the write walk cannot tell them apart (see
+            // `declares_local_named`). Skipping the whole procedure — rather than
+            // just its declaring block — is the conservative direction for a
+            // diagnostic that now stops the run.
+            let driven = inferred.iter().any(|s| {
+                let one = std::slice::from_ref(*s);
+                !declares_local_named(one, &name) && !stmt_never_writes_ident(one, &name, None)
+            });
+            if !driven {
+                continue;
             }
+            self.error_at(
+                MsgCode::ElabMultidriver,
+                span,
+                &format!(
+                    "variable `{name}` has a declaration initializer AND is written by \
+                     `always_comb`, which is two drivers on one variable (IEEE §9.2.2.2) \
+                     — drop the initializer or the `always_comb` write"
+                ),
+            );
         }
     }
 }

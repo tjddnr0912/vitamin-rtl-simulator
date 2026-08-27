@@ -330,6 +330,46 @@ $ velab -s top   ->  VITA-E3001 at top.w
 `velab --multi-driver warn|error` 정책 플래그(warn 강등 선택)는 **미구현 future work**다 —
 현재는 정책 선택 없이 항상 Error.
 
+**두 번째 트리거 — 변수의 두 드라이버 (round 37 신설).** IEEE 1800 §9.2.2.2 는
+`always_comb` 가 구동하는 변수를 **다른 어떤 프로세스도 구동할 수 없다**고 규정하고,
+선언 초기화자는 그 다른 드라이버다. 따라서 아래는 E3001 이다:
+```systemverilog
+logic rdy = 1'b1;                           // 드라이버 ①
+always_comb rdy = (cnt < 8'd128);           // 드라이버 ②  -> VITA-E3001
+```
+승격 전에는 경고였고, 그래서 개발 루프는 통과하고 xrun elaboration 이 `*E,MULAXX` 로
+죽는 왕복이 났다.
+
+⚠️⚠️ **`always_comb` 만이다 — `always_ff`·`always_latch` 는 넣지 않는다.** 외부 리포트가
+*"조항은 블록 종류에 따라 달라지지 않는다"* 를 근거로 셋 다 요청했는데, **달라진다.**
+kind 별로 파일을 나눠 verilator 5.050 `--lint-only -Wall` 로 실측:
+
+| 선언 초기화자 + | verilator |
+|---|---|
+| `always_comb` | **MULTIDRIVEN** (IEEE 1800-2023 9.2.2.2 인용) |
+| `always_ff` | **PROCASSINIT 만** (스타일 노트) |
+| `always_latch` | **PROCASSINIT 만** |
+
+iverilog 는 셋 다 침묵한다. 그리고 이 분리는 verilator 의 누락이 아니라 **규칙의 목적**
+이다 — `always_comb` 는 조합논리를 모델링하므로 출력이 항상 입력의 함수여야 하고, 다른
+어떤 쓰기도 그 프로시저가 주장하는 성질을 깨뜨린다. `always_ff` 는 **레지스터**를
+모델링하고 **선언 초기화자는 그 레지스터의 power-on 값**이다 —
+`logic [7:0] c = 0; always_ff @(posedge clk) c <= c + 1;` 은 합성툴이 구현하는 표준
+FPGA 초기화 관용구다.
+
+⭐ 넓힌 버전은 **지어서 되돌렸다**. 반증한 것은 이 저장소 자신의 `obs_procs` 픽스처였다 —
+정확히 그 관용구로 쓰여 있고 elaboration 이 멈췄다. **도는 테스트 설계가 깨지는 것은 새
+거절에 대한 반증이지 근거가 아니다.**
+
+⚠️ 평범한 `always` 는 또 다른 이유로 제외다 — `logic clk = 0; always #5 clk = ~clk;` 는
+모든 툴이 받는 TB 관용구이고 조항이 추론 프로시저에만 닿는다. `initial`·`final` 도 같다.
+
+⚠️ **판정기는 과대근사이므로 가드가 하나 붙어 있다.** `stmt_never_writes_ident`(definite-
+assignment walk)는 accept-gate 용이라 이름 기반이고 미해결 호출을 "쓴다"로 본다. 블록 로컬
+**섀도**(`always_comb` 안에서 같은 이름을 다시 선언)에서 오탐이 실측됐고,
+`declares_local_named` 가 그 프로시저를 통째로 건너뛴다. 경고였다면 성가심이지만 에러이므로
+합법 RTL 거절이 된다. task `inout` 실인자를 통한 쓰기는 여전히 드라이버다.
+
 ### VITA-E3002 · `E-ELAB-PORT-MISMATCH` (Error)
 **인스턴스 포트 연결이 모듈 포트 선언과 비호환.** 모듈에 없는 named 포트 `.foo()`, 포트 수를
 넘는 positional 연결, 방향/종류 비호환 등 바인딩 자체가 무의미할 때(IEEE 1800 §23.3.2). 폭
