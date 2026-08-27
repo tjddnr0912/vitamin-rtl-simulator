@@ -712,6 +712,42 @@ endtask
 Pass the argument explicitly (`tw(a, g)`), or make the default a literal or a
 `pkg::` constant.
 
+## Naming a generate block from outside
+
+A named generate block is referenced by its bare label, and a conditional block
+(`if` / `if…else` / `case`) or a bare `begin : name` is a singleton, so no index
+appears:
+
+```systemverilog
+module dut;
+  generate if (WIDE) begin : g
+    logic [7:0] x;
+  end endgenerate
+endmodule
+
+module tb;
+  dut u();
+  initial $display("%h", u.g.x);   // reads, and `u.g.x = 8'hA5;` writes
+endmodule
+```
+
+A `for`-generate is different: §27.4 makes its blocks an **array**, so the index
+is required and a bare label is rejected — at every trip count, including a loop
+that happens to run exactly once.
+
+```systemverilog
+generate for (genvar i = 0; i < N; i++) begin : gl
+  logic [7:0] x;
+end endgenerate
+…
+u.gl[0].x       // correct
+u.gl.x          // VITA-E3010, as in Icarus
+```
+
+vitamin also accepts the redundant `u.g[0].x` on a *singleton* block. That
+spelling is a vitamin extension — Icarus and Verilator both reject it — so write
+the bare label if the design has to build elsewhere.
+
 ---
 
 ## Where to go next

@@ -240,6 +240,56 @@
 >
 > **🆕 §4.5.365 곁가지 — `int'($random*1.0)` 의 draw 횟수**(둘 다 틀렸고 값이 **바뀌었다**): `lower_real_to_int_cast` 의 ≤32비트 가지가 정확 반올림으로 바뀌며 피연산자 명명 횟수가 2→4 로 늘었고, 그 함수의 **다른 호출자**(`lower_prim_cast` = `keyword'(e)`)에는 **`expr_is_repeatable` 게이트가 없다** ⇒ `int'($random*1.0)` 이 캐스트당 2회 → 4회 draw(iverilog 는 1회). 어느 쪽도 맞은 적이 없지만 **silent↔silent 를 조용히 맞바꾸지 마라** 규칙상 기록한다. 봉쇄책은 이미 이름이 있다 — 바인드가 쓰는 그 게이트를 `lower_prim_cast` 에도 주는 것(단, 거기선 decline 이 real 을 정수 문맥에 그대로 두므로 **다른 처리**가 필요하다).
 >
+> **🆕🆕 §4.5.388 — a hierarchical reference into a generate block, and the green test that
+>   hid it.** External report: *"vita can't do hierarchical references into generate blocks
+>   (VITA-E3010)"*. ⭐ **The census refuted its scope twice before confirming a defect under
+>   it.** `for`-generate references already worked in every form measured (`u.g[0].x` — net,
+>   localparam, instance-inside, read and write); so did the INDEXED spelling of a conditional
+>   block; so did the bare spelling from inside the SAME module (`gblk.x`). Exactly one axis
+>   was broken — **the bare label one dot further out** — and the existing green test is why
+>   it stayed invisible: `hier_ref.rs::named_generate_block_read` pins `gblk.x` and has been
+>   green since the initial commit. 63-cell census, **FIXED 19 · REGRESSION 0 · STILL-GAP 0**.
+>
+>   **ROOT 1** (`hier.rs::hier_resolve`) — vita stores a singleton generate scope as
+>   `label[0]`, so the bare spelling must be mapped onto it. Arm (b) did that and said, in as
+>   many words, *"Map only the leading segment."* For `gblk.x` the block IS the leading
+>   segment; for `u.gblk.x` the leading segment is the INSTANCE, arm (a) commits to it, and the
+>   remainder was then looked up verbatim (`u.gblk.x`) against a net stored at `u.gblk[0].x`.
+>   Fix = `hier_key_within`, walking the remainder segment by segment.
+>
+>   ⭐⭐ **ROOT 2, which the report never mentioned and no spelling could reach**
+>   (`hdl-parser::generate::parse_gen_case_item`) — both arms called `parse_gen_branch().1`,
+>   taking the items and **discarding `.0`, the label**, where the `if` and `for` arms bind it.
+>   A named generate-case block minted **no scope at all** and its members landed in the
+>   enclosing one. Measured in the VCD: the `case` spelling emits scopes `tb u` where the `if`
+>   spelling of the same design emits `tb u g[0]` — so `u.g.x` AND `u.g[0].x` were both E3010,
+>   the only generate kind unreachable by either spelling. Worse than unreachable on a name
+>   collision: a parent with its own `x` got **E3009 "redeclared"** on a design iverilog and
+>   verilator both run. Fixed by RE-WRAPPING the labelled body as a `GenItem::Block` — the
+>   existing arm already knows how to scope it, so there is one spelling of `label[0]`, and
+>   `GenCaseItem` needs no new field (which would have flipped the `hdl-ast` SchemaHash).
+>
+>   ⚠️⚠️ **MY OWN FIRST DRAFT TRADED LOUD FOR SILENT-WRONG, and the census caught it.** §27.4
+>   makes a generate-FOR's blocks an ARRAY whose name is illegal unindexed at ANY trip count.
+>   Storage cannot recover that — a one-trip loop and a conditional block both leave exactly
+>   `g[0]` — so a fallback keyed on "does `[1]` exist" answered `u.g.x` on a two-iteration loop
+>   with element 0's net at exit 0 (iverilog REJECTS it). Adding the `[1]` test fixed that cell
+>   and left a subtler one: the ONE-trip loop still resolved, so `u.g.x` worked at one
+>   iteration and went loud at two — the "which spelling you wrote decides whether it resolves"
+>   footgun, which would start failing the day a parameter moved from 1 to 2. ⇒ `gen_loop_labels`
+>   records the SYNTACTIC fact at the single site that mints a loop scope. Elaborate-side only,
+>   never serialized ⇒ **format_version 29 unchanged**.
+>
+>   ⚠️ **Recorded, not changed**: vita accepts `u.g[0].x` on a CONDITIONAL scope, which both
+>   oracles reject (§27.6 — a conditional block is not an array). That leniency is
+>   **pre-existing** (PRE accepted it for `if`/bare), the value is correct, and this slice only
+>   made `case` consistent with its siblings. Loud-ifying it would descend the ladder for a
+>   spelling that has worked for years.
+>
+>   Gates: examples 4/4 byte-identical PRE vs POST · corpus **8/10, exit 0, every pinned digest
+>   matched** · 12 new pinned tests (`gen_scope_hier_ref.rs`), including the for-generate guard
+>   at 1/2/3 trips and three negatives.
+
 > **🆕🆕 §4.5.387 (round-36 C) — ⭐ THE BIGGEST MEASURED LEVER IN THE SIMULATOR, and nobody
 >   had measured it.** A continuous assign whose RHS contains ANY `Expr::Call` or ANY
 >   `Expr::SysFunc` is re-evaluated **6.00× per input change** instead of 1.00×, measured
@@ -1096,7 +1146,7 @@
 - **array reduction method가 var-init initializer에서 loud**(§4.5.219 재감사 발굴·pre-existing): `string s = $sformatf("%0d", arr.sum());` 및 배열 원소 형태 모두 E3009 "unsupported hierarchical function call arr.sum" — t0 pre-sweep 경로의 갭이며 scalar/array 동일(=게이트 문제 아님). `q.size()`·`.len()`·`.substr()`·`.name()`은 동작.
 - **string-array 잔여 → §0 승격 큐 T1로 이관(2026-07-25)**: FIXED string array decl-init(`string s[2]='{"a","b"}`·module/block 양쪽 loud·iverilog ✓·§4.5.183 기록 항목) · fixed array **runtime index**/`foreach`(dyn 배열은 이미 동작→fixed만 element-net 표현 때문에 const-index 전용) · `string q[$]`(queue of string·iverilog ✓) · multi-dim `string s[2][2]`(iverilog ✓) · hierarchical `u.s[0]` · **frame-local**(task/function body) string array(static task=E3018·function/automatic=E3009). dyn element의 byte select `d[0][0]`(no-oracle)도 잔여.
 
-- ~~gen/iface string decl-init~~ **RESOLVED**(§4.5.228). 잔여 = generate-case 스코프 이름 `gcase[0].x` · 인터페이스 queue 원소의 **계층 read**(`u.q[0]`).
+- ~~gen/iface string decl-init~~ **RESOLVED**(§4.5.228). ~~generate-case 스코프 이름 `gcase[0].x`~~ **RESOLVED**(§4.5.388 — 뿌리는 파서가 `parse_gen_branch().1` 로 **라벨을 버린 것**이라 스코프가 아예 안 생겼다). 잔여 = 인터페이스 queue 원소의 **계층 read**(`u.q[0]`).
 - SYS-READ hier-element dest · hier-write sentinel panic→loud · generate-내 `import` · package 자기-func init(㉽). explicit `import p::t`(TYPE)=**§4.5.148 지원**.
 - `$fmonitor`/`$fstrobe`(파일 strobe/monitor) — 현재 W3056 skip=**파일출력 silent drop**(non-silent·warned). 지원=**format bump 필요**(`SysTaskId` 변종 ① or 직렬화 사이드카 ②·staged 파리티): `FmtCapture`에 `fd:Option<u32>` 추가(engine-local)+strobe drain을 `file_write` 라우팅·전용 슬라이스. STDIN read(결정성 설계 필요).
 - compound-const `==?` fold=**§4.5.146 지원**(sized 패턴)·잔여 fail-closed loud=unsized x/z 패턴(`'hx` self-width truncation)·negative-signed LHS·non-literal RHS. param override 비상수(W3056→error) · longint MIN fold(package) · loud-message 품질 2건(`[bit]` 캐스케이드·typedef-키 메시지).

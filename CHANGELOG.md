@@ -11,6 +11,38 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A hierarchical reference could not name a generate block, unless you spelled the index.**
+  A singleton generate scope (`if` / `if…else` / `case` / bare `begin : g`) is stored as
+  `g[0]`, and the bare-label mapping onto it ran for the LEADING path segment only. That is
+  fine for a same-module reference, where the block IS the leading segment (`gblk.x`), and
+  exactly wrong one dot further out: `u.gblk.x` commits `u` as the scope and then looked up
+  the literal `u.gblk.x` while the net lives at `u.gblk[0].x`. 19 census cells — all four
+  spellings × net / localparam / instance-inside × read / write, plus depth 2 — E3010 in
+  vita, correct in Icarus.
+
+  ⭐ The report said "generate blocks"; the measurement said one axis. `for`-generate
+  references (`u.g[0].x`) already worked, so did the indexed spelling of a conditional
+  block, and so did the bare spelling from inside the same module — the last of these has
+  been pinned and green since the initial commit, which is why the cross-instance family
+  stayed invisible.
+
+- **A named generate-`case` block minted no scope at all.** The parser's case-item arms
+  called `parse_gen_branch().1`, keeping the items and discarding the label, where the `if`
+  and `for` arms bind it. Its members therefore landed in the ENCLOSING scope: `u.g.x` and
+  `u.g[0].x` were both E3010 (the one generate kind no spelling could reach), and when the
+  name collided with a parent declaration the design was rejected outright with E3009
+  `redeclared` though Icarus and Verilator both run it. The labelled body is now re-wrapped
+  as the `GenItem::Block` the elaborator already knows how to scope, so `label[0]` has one
+  spelling and no AST field was added.
+
+  ⚠️ A bare label on a `for`-generate stays loud at EVERY trip count (§27.4 makes those
+  blocks an array). The one-trip case is the trap: it leaves exactly the `g[0]` a
+  conditional block leaves, so a fallback keyed on storage alone accepted it and would have
+  begun failing the day a parameter moved from 1 to 2.
+
+  `format_version` unchanged at 29 — the loop-label record is elaborate-side and never
+  serialized.
+
 - **A 2-state cast paid for bits its operand did not have.** Round 35 stopped nested casts
   from multiplying; a single cast still expanded to one `CaseEq` per bit of the **target**
   type, so `int'(nb)` on a 4-bit `nb` built 32 terms of which 28 selected bits of a known

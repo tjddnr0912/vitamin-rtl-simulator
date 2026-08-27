@@ -2729,3 +2729,54 @@ that report time-per-row show you their product — divide it out early. Second,
 of a conservative predicate is invisible until someone counts: this one also fires on vita's own
 inliner output, making an inlined function measurably *slower* than the same expression written
 by hand, which is the opposite of what the inliner exists to do.
+
+## Round 37 — one external report (2026-08-27 · §4.5.388)
+
+### A green test on one spelling is why the sibling spelling stayed invisible
+
+The report was "vita can't do hierarchical references into generate blocks". Three of the
+four things that phrase covers already worked, and the fourth had been broken since the
+beginning. `hier_ref.rs::named_generate_block_read` pins `gblk.x` and has been green since
+the initial commit — so every casual check of "can we reference a generate block?" came back
+yes, while `u.gblk.x` (the same name, one dot further out) was E3010 in 19 measured cells.
+
+This is the same shape as *widen a read, sweep the write twin* and *branch parity before new
+traffic*, arriving through the test suite rather than the code: **a passing test is evidence
+about the spelling it uses and nothing else.** When a report names a FEATURE, enumerate the
+spellings of that feature and measure each; do not let one green cell stand for the family.
+The census here cost an hour and moved the diagnosis from "generate blocks" to one axis —
+and then found a second root the report never mentioned.
+
+### The comment that describes the limitation is the bug report
+
+`hier_resolve`'s arm (b) said, in as many words, *"Map only the leading segment."* That
+sentence is the entire defect, written down, sitting in the function that has it. It read as
+a scope note rather than a gap because for the same-module spelling the leading segment IS
+the block — the restriction was true of the case its author was looking at.
+
+Companion to *a comment saying "cannot" is a claim to measure*: a comment saying "only"
+deserves the same treatment. Ask what the other cases are and run one.
+
+### Storage cannot recover a syntactic fact — and the one-instance case is where you find out
+
+§27.4 makes a generate-`for`'s blocks an array whose name is illegal unindexed; a
+conditional block is a singleton whose name is legal bare. Both leave the same key in the
+symbol table when the loop runs once. The first draft of the fallback keyed on storage
+alone ("does `[1]` exist"), which answered a bare label on a two-trip loop with element 0 —
+a correct loud refusal traded for a silent pick, exactly what the ladder forbids. Adding the
+`[1]` test fixed that cell and left the subtler one: a ONE-trip loop still resolved, so the
+reference worked at one iteration and went loud at two, and would have started failing the
+day a parameter moved from 1 to 2.
+
+**When a predicate needs a fact the source has and the data structure does not, record the
+fact at the site that knows it** — here, the single place that mints a loop scope. And test
+the degenerate count: a container with one element is where "is this a container?" and "how
+many are in it?" stop being the same question.
+
+### Re-wrapping beats extending the AST
+
+Fixing the dropped generate-`case` label looked like it needed a `label` field on
+`GenCaseItem`, which would have flipped the `hdl-ast` SchemaHash. It did not: wrapping the
+labelled body in the `GenItem::Block` the elaborator already scopes reuses the existing
+`label[0]` naming instead of writing a second copy of it. Before adding a field to a frozen
+or hashed type, check whether an existing node already carries the meaning you want.

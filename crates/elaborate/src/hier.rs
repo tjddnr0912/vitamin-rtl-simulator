@@ -563,7 +563,6 @@ impl Elaborator<'_> {
             return None;
         }
         let first = &path[0];
-        let tail = path.join(".");
         let rest = path[1..].join(".");
         let mut segs: Vec<&str> = if prefix.is_empty() {
             Vec::new()
@@ -579,10 +578,8 @@ impl Elaborator<'_> {
             };
             // (a) leading segment names a child SCOPE (module/genblock instance) here.
             if self.is_hier_scope(&base) {
-                let full = if level.is_empty() {
-                    tail.clone()
-                } else {
-                    format!("{level}.{tail}")
+                let Some(full) = self.hier_key_within(&base, &path[1..]) else {
+                    return None; // committed, remainder unresolvable
                 };
                 // A2b-prereq (adversarial diff F2): a package-variable IMPORT
                 // alias is a LEXICAL binding only (IEEE §26.3 — an import is
@@ -596,13 +593,13 @@ impl Elaborator<'_> {
             }
             // (b) SINGLETON generate block: vita names a named `if`/`begin` block `g[0]`,
             // but the hierarchical name is the bare `g` (IEEE: the implicit [0] is not
-            // part of the name). Map only the leading segment.
+            // part of the name).
             let base0 = format!("{base}[0]");
             if self.is_hier_scope(&base0) {
                 let full = if rest.is_empty() {
                     base0
                 } else {
-                    format!("{base0}.{rest}")
+                    self.hier_key_within(&base0, &path[1..])?
                 };
                 if self.pkg_var_aliases.contains_key(&full) {
                     return None; // same §26.3 rule as (a)
@@ -620,6 +617,78 @@ impl Elaborator<'_> {
             }
             segs.pop();
         }
+    }
+
+    /// Build the STORAGE key for `rest` inside the already-committed scope `base`,
+    /// mapping each intermediate segment that names a SINGLETON generate block to
+    /// the `seg[0]` spelling vita stores it under.
+    ///
+    /// ⚠️ This exists because the `g` ⇒ `g[0]` mapping used to be applied to the
+    /// LEADING segment only — the comment on arm (b) said so in as many words
+    /// ("Map only the leading segment"). That is fine for a same-module reference,
+    /// where the block IS the leading segment (`gblk.x`), and it is exactly wrong
+    /// one dot further out: `u.gblk.x` commits `u` in arm (a) and then looked up
+    /// the literal `u.gblk.x`, while the net is stored as `u.gblk[0].x`. MEASURED:
+    /// 19 cells across `if` / `if…else` / `case` / bare `begin : g`, read and
+    /// write, net / localparam / instance-inside, depth 1 and 2 — all E3010 in
+    /// vita and all correct in iverilog. The indexed spelling (`u.gblk[0].x`)
+    /// already worked, which is why a suite that pinned the local spelling
+    /// (`hier_ref.rs::named_generate_block_read`, green since the initial commit)
+    /// left the whole cross-instance family invisible.
+    ///
+    /// PLAIN FIRST, `[0]` ONLY AS A FALLBACK, and only when the `[0]` spelling is a
+    /// REAL scope: a module may legitimately hold an instance named `g` (measured:
+    /// `ub.g.r` on `module b; sub g(); endmodule` resolves and must keep
+    /// resolving), and an instance and a generate block cannot share a name in one
+    /// scope, so the fallback can never steal a name that exists. A segment that is
+    /// neither keeps the committed-unresolved contract — `None`, never a walk
+    /// further outward (review N3 HIGH).
+    ///
+    /// ⚠️⚠️ SINGLETON ONLY, and this guard is not decoration — the first draft
+    /// omitted it and the census caught the regression it caused. `g` on a
+    /// generate-FOR with two iterations is an ambiguous name that iverilog REFUSES
+    /// to compile; without the singleton test the fallback answered it with
+    /// iteration 0's net (`u.g.x` → `a5`, exit 0), turning a correct loud refusal
+    /// into a silent pick — the one trade the accuracy ladder forbids outright.
+    /// `seg[1]` existing is the whole discriminator: a conditional/`case`/bare
+    /// block is a singleton by construction, an unrolled loop is not.
+    fn hier_key_within(&self, base: &str, rest: &[String]) -> Option<String> {
+        // The `g` ⇒ `g[0]` spelling, but ONLY for a genuine singleton scope.
+        //
+        // TWO tests, because neither alone is the property: `gen_loop_labels` says
+        // the LRM made this name an array (a `for` block, at ANY trip count — the
+        // syntactic fact storage cannot recover), and the absent `[1]` says nothing
+        // else unrolled into it. The loop test has to come first: a one-trip loop
+        // passes the `[1]` test and must still be refused.
+        let singleton0 = |cur: &str, seg: &str| -> Option<String> {
+            let label = format!("{cur}.{seg}");
+            if self.gen_loop_labels.contains(&label) {
+                return None;
+            }
+            let g0 = format!("{label}[0]");
+            let is_singleton =
+                self.is_hier_scope(&g0) && !self.is_hier_scope(&format!("{label}[1]"));
+            is_singleton.then_some(g0)
+        };
+        let mut cur = base.to_string();
+        for (i, seg) in rest.iter().enumerate() {
+            let plain = format!("{cur}.{seg}");
+            if i + 1 == rest.len() {
+                // LEAF: the caller's `table` decides whether this is a hit, so hand
+                // back the plain spelling unless only the `[0]` scope spelling
+                // exists (a whole-scope reference, e.g. a genblock-typed leaf).
+                if self.symbols.contains_key(&plain) || self.hier_params.contains_key(&plain) {
+                    return Some(plain);
+                }
+                return Some(singleton0(&cur, seg).unwrap_or(plain));
+            }
+            if self.is_hier_scope(&plain) {
+                cur = plain;
+                continue;
+            }
+            cur = singleton0(&cur, seg)?;
+        }
+        Some(cur)
     }
 
     /// True iff `base` is a hierarchical SCOPE — some net OR parameter is named

@@ -223,6 +223,11 @@ impl Elaborator<'_> {
                     let iter_val = *self.params.get(&gv_key).unwrap_or(&0);
                     let lbl = label.as_ref().map(|l| l.name.as_str()).unwrap_or("genblk");
                     let block_prefix = format!("{lbl}[{iter_val}]");
+                    // §27.4: these blocks are an ARRAY — record the label so a bare
+                    // (unindexed) hierarchical reference to it stays loud even when
+                    // the loop happens to run exactly once. See `gen_loop_labels`.
+                    let loop_label_key = self.fq(lbl);
+                    self.gen_loop_labels.insert(loop_label_key);
 
                     self.with_scope(&block_prefix, |me| {
                         me.elaborate_generate_scoped(body, phase, depth + 1, map, true);

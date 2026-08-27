@@ -60,6 +60,7 @@ impl<'s> Elaborator<'s> {
             lowering_decl_init: false,
             pkg_vars: std::collections::BTreeMap::new(),
             pkg_var_aliases: std::collections::BTreeMap::new(),
+            gen_loop_labels: std::collections::BTreeSet::new(),
             genvar_decls: std::collections::BTreeSet::new(),
             reported_bad_bounds: std::collections::BTreeSet::new(),
             all_clocking_names: std::collections::BTreeSet::new(),

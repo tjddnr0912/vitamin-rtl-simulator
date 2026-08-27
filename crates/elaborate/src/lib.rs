@@ -989,6 +989,20 @@ struct Elaborator<'s> {
     /// WILDCARD import (iverilog-pinned), colliding with an EXPLICIT import
     /// is an error (iverilog-pinned).
     pkg_var_aliases: std::collections::BTreeMap<String, (String, bool)>,
+    /// Fully-qualified label prefixes of scopes minted by a generate-FOR
+    /// (`top.u.g` for `for (…) begin : g`), WITHOUT the `[idx]` suffix.
+    ///
+    /// ⚠️ The bare-label hierarchical spelling (`u.g.x`) is legal only for a
+    /// SINGLETON generate scope; §27.4 makes a loop's blocks an ARRAY whose name
+    /// must be indexed at any trip count. Storage alone cannot tell the two apart —
+    /// a one-trip loop and a conditional block both leave exactly `g[0]` — so
+    /// without this set the fallback answered `u.g.x` on `for (i=0;i<1;i++)`
+    /// (iverilog REJECTS it) while still refusing the same spelling at two trips.
+    /// That is the "which spelling you wrote decides whether it resolves"
+    /// inconsistency, and it would silently start failing when a parameter moved
+    /// from 1 to 2. Elaborate-side only — never serialized, so `format_version` is
+    /// untouched.
+    gen_loop_labels: std::collections::BTreeSet<String>,
     /// A2b-prereq (adversarial sound S2): fq keys of DECLARED genvar names.
     /// A genvar binds into `params` only transiently (during loop unroll), so
     /// the constant-shadow guard needs this persistent record — otherwise a

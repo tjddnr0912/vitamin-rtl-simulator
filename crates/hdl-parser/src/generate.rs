@@ -267,7 +267,7 @@ impl Parser<'_, '_> {
         let start = self.cur_span();
         if self.eat_kw(Kw::Default) {
             self.eat(TokenKind::Colon); // ':' OPTIONAL after default
-            let body = self.parse_gen_branch().1;
+            let body = self.gen_case_body(start);
             return GenCaseItem::Default {
                 body,
                 span: start.to(self.prev_span()),
@@ -278,11 +278,43 @@ impl Parser<'_, '_> {
             labels.push(self.expr(0));
         }
         self.expect(TokenKind::Colon, "':' in generate-case item");
-        let body = self.parse_gen_branch().1;
+        let body = self.gen_case_body(start);
         GenCaseItem::Match {
             labels,
             body,
             span: start.to(self.prev_span()),
+        }
+    }
+
+    /// A generate-case item's body, KEEPING the `begin : label` name.
+    ///
+    /// ⚠️ Both arms above used to call `parse_gen_branch().1`, which takes the items
+    /// and throws away `.0` — the label — while the `if` and `for` arms bind it
+    /// (`let (label, body) = self.parse_gen_branch()`). A named generate-case block
+    /// therefore minted NO scope at all: its members landed in the ENCLOSING scope.
+    /// MEASURED on `case (1) 1: begin : g logic [7:0] x; end`: vita's VCD shows
+    /// scopes `tb u` where the `if`/`begin` spellings of the same design show
+    /// `tb u g[0]`, so `u.g.x` and `u.g[0].x` were BOTH E3010 — the one generate
+    /// kind unreachable by either spelling. Worse than unreachable when the name
+    /// collides: a parent with its own `x` gets E3009 "redeclared" on a design both
+    /// iverilog and verilator accept (they print the parent's `x`).
+    ///
+    /// The fix re-wraps rather than extending the AST: `GenCaseItem` has no `label`
+    /// slot, and adding one would flip the `hdl-ast` SchemaHash for a name the
+    /// EXISTING `GenItem::Block` arm already knows how to scope. Wrapping hands the
+    /// labelled body to `elaborate_gen_scoped` through that arm, so the `label[0]`
+    /// naming is the one the other kinds use — one spelling, not a second copy.
+    /// An UNLABELLED body is passed through untouched, preserving the transparent
+    /// (`unlabeled_is_scope`) behaviour the case arm already had.
+    fn gen_case_body(&mut self, start: Span) -> Vec<GenItem> {
+        let (label, items) = self.parse_gen_branch();
+        match label {
+            Some(l) => vec![GenItem::Block {
+                label: Some(l),
+                items,
+                span: start.to(self.prev_span()),
+            }],
+            None => items,
         }
     }
 
