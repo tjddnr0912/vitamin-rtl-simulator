@@ -37,16 +37,31 @@ changed for a user of the simulator.
   `$ia_tmp$` sigil so the existing VCD/FST filter covers it — no synthetic net reaches a
   waveform.
 
-  ⚠️ **Module-scope bodies only.** A frame body cannot write a module net, so the capture
-  there has to be a frame local, which needs the reservation pass `repeat` already has.
-  Every cell that measured a difference is module-scope; inside a function the scrutinee
-  is still re-evaluated per arm, which is unobservable for a side-effect-free one and is
-  where the performance half of this lives. Real and string scrutinees are skipped for the
-  same reason (the capture net would need `NetKind::Real`/`String`) and neither shows a
-  measured difference today.
+  Frame bodies are covered too, by a different capture net. A frame body cannot write a
+  module net — `frame_write_lvalue` is `&self` and reaches only the activation window — so
+  its capture is one of the frame's own slots, reserved by a new `reserve_frame_case_tmps`
+  pass before the window closes. That is the same span-keyed handoff `repeat` already uses
+  for its per-activation counter, and for the same two reasons: a frame's locals are a
+  contiguous net-id range that closes before lowering begins, and "the Nth case in each
+  walk" is exactly the agreement that drifts silently. The reservation runs over the AST,
+  where nothing has an IR width yet, so it reserves at a placeholder width and the lowering
+  patches width and signedness — which cannot move the window, since that window is a range
+  of net IDs. A lookup miss degrades to the pre-existing per-arm re-evaluation rather than
+  to a shared module net.
 
-  Corpus 8/10 with every pinned digest matching, `examples/` 4/4 byte-identical, 6,237
-  tests green.
+  ⭐ **The frame half is where the cost was.** `bench/keccak`'s `keccak_f.sv` spends 63.8%
+  of its run inside `run_frame_call`, and 79.7% of that was branch conditions — two `case`
+  statements of 24 and 25 arms re-evaluating their scrutinee up to 25 times per call.
+  **7.06 s → 5.24 s (−25.7%), digest unchanged.** Together with the compiled-body change
+  above, `keccak_f.sv` is **8.11 s → 5.24 s (−35.4%)**.
+
+  ⚠️ Real and string scrutinees are still skipped (the capture net would need
+  `NetKind::Real`/`String`) and neither shows a measured difference today.
+
+  Corpus 8/10 with every pinned digest matching, `examples/` 4/4 byte-identical, 6,240
+  tests green. Adversarial cells over the frame path all match Icarus: recursion, two
+  concurrent task activations that each suspend inside the arm they chose, a nested frame
+  case, `casez` over an x/z scrutinee, and collective signedness.
 
 - **⚠️ BREAKING: two drivers on one variable is now an ERROR (`VITA-E3001`).** IEEE
   §9.2.2.2 says a variable written by `always_comb` may have no other driver, and a

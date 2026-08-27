@@ -622,6 +622,15 @@ struct Elaborator<'s> {
     /// inside a suspendable task gets a per-activation counter instead of a shared
     /// module net.
     frame_repeat_cnt: BTreeMap<(u32, u32), u32>,
+    /// `case` SOURCE SPAN → the frame-local capture net reserved for its
+    /// scrutinee. §12.5 evaluates a case expression once; the module-scope
+    /// lowering captures it into a `$ia_tmp$` net, and a FRAME body cannot write
+    /// a module net (`frame_write_lvalue` reaches only the activation window), so
+    /// the capture has to live in the frame's own slot range. Reserved by
+    /// `reserve_frame_case_tmps` and consumed by `hoist_case_scrutinee`, keyed by
+    /// span for the same reason the counter above is: the two walks are two walks
+    /// of one tree, and "the Nth case in each" drifts silently.
+    frame_case_tmp: BTreeMap<(u32, u32), u32>,
     /// §4.5.248: the per-entry (`automatic`) block-local NAMES currently in scope
     /// during the Nets-phase hoist walk, so a NESTED block's STATIC initializer can be
     /// checked against an OUTER block's automatic (see

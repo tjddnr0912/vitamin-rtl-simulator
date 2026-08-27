@@ -34,14 +34,19 @@
 //!
 //! ## Scope
 //!
-//! ⚠️ MODULE-SCOPE bodies only. A frame body cannot write a module net —
-//! `frame_write_lvalue` is `&self` and reaches only the activation window — so
-//! the capture there has to be a frame LOCAL, which needs the reservation pass
-//! `repeat` already has (`frame_repeat_cnt`). Every cell that measured a
-//! difference is module-scope. The frame half is the follow-on, and it carries a
-//! large perf win with it: `run_frame_call` on `bench/keccak`'s `keccak_f.sv` is
-//! 63.8% of the run and 79.7% of THAT is branch conditions, which is two `case`
-//! statements of 24 and 25 arms re-evaluating `x + 5*y` up to 25 times a call.
+//! Module scope and FRAME bodies are both covered, by two different capture
+//! nets. A frame body cannot write a module net — `frame_write_lvalue` is `&self`
+//! and reaches only the activation window — so its capture is one of the frame's
+//! own slots, reserved by `reserve_frame_case_tmps` before the window closes.
+//! That is the same span-keyed handoff `repeat` already uses for its
+//! per-activation counter, and for the same two reasons: a frame's locals are a
+//! contiguous net-id range that closes before lowering, and "the Nth case in each
+//! walk" is precisely the agreement that drifts silently.
+//!
+//! ⭐ The frame half is where the cost was. `run_frame_call` on `bench/keccak`'s
+//! `keccak_f.sv` is 63.8% of the run and 79.7% of THAT was branch conditions —
+//! two `case` statements of 24 and 25 arms re-evaluating their scrutinee up to 25
+//! times per call. **7.06 s → 5.24 s, digest unchanged.**
 //!
 //! ⚠️ Real and string scrutinees are skipped too: the capture net would need
 //! `NetKind::Real` / `String`, and neither shows a measured difference (both
@@ -343,25 +348,106 @@ fn two_instances_do_not_share_a_capture() {
     assert!(out.contains("a=10 b=11"), "each instance its own:\n{out}");
 }
 
-/// ⚠️ A frame body is NOT hoisted, and this cell says so rather than leaving it
-/// to the implementation to remember. `frame_write_lvalue` reaches only the
-/// activation window, so a module-net capture would not be writable there; the
-/// scrutinee is still re-evaluated per arm inside a function. Nothing observable
-/// changes for a side-effect-free scrutinee, which is why this asserts the
-/// ANSWER and not a count — when the follow-on lands, this test keeps passing.
+/// ⭐ A frame body is hoisted too, through its OWN slot.
+///
+/// It could not use the module-scope capture: `frame_write_lvalue` is `&self` and
+/// reaches only the activation window, so a module net is not writable from
+/// inside a function at all. The capture is instead reserved as a frame LOCAL by
+/// `reserve_frame_case_tmps` — the same span-keyed handoff `repeat` already uses
+/// for its per-activation counter — because a frame's locals are a contiguous
+/// net-id range that closes before lowering begins, and a net minted later would
+/// land outside the window.
+///
+/// This is where the cost was: `bench/keccak`'s `keccak_f.sv` spends 63.8% of its
+/// run inside `run_frame_call` and 79.7% of THAT was branch conditions, which is
+/// two `case` statements of 24 and 25 arms re-evaluating their scrutinee up to 25
+/// times per call. **7.06 s → 5.24 s, digest unchanged.**
 #[test]
-fn a_case_inside_a_frame_body_still_answers_correctly() {
+fn a_case_inside_a_frame_body_evaluates_its_scrutinee_once() {
     let (out, code) = run("`timescale 1ns/1ns\nmodule tb;\n  integer i, r;\n  \
-         function automatic integer sel(input integer x);\n    integer j;\n    \
-         begin sel = 0; for (j = 0; j < 1; j = j + 1) \
-         case (x) 0: sel = 10; 1: sel = 11; 2: sel = 12; 3: sel = 13; default: sel = 99; \
-         endcase end\n  endfunction\n  \
-         initial begin for (i = 0; i < 4; i = i + 1) begin r = sel(i); $display(\"%0d\", r); \
-         end $finish; end\nendmodule\n");
+         function integer probe(input integer x); \
+         begin $display(\"EVAL%0d\", x); probe = x; end endfunction\n  \
+         function automatic integer pick(input integer x);\n    integer j;\n    \
+         begin pick = 0; for (j = 0; j < 1; j = j + 1)\n      \
+         case (probe(x)) 0: pick = 10; 1: pick = 11; 2: pick = 12; 3: pick = 13; \
+         default: pick = 99; endcase end\n  endfunction\n  \
+         initial begin for (i = 0; i < 4; i = i + 1) begin r = pick(i); \
+         $display(\"r=%0d\", r); end $finish; end\nendmodule\n");
+    assert_eq!(code, Some(0), "{out}");
+    assert_eq!(
+        evals(&out),
+        4,
+        "one per call, not one per arm tested:\n{out}"
+    );
+    let vals: Vec<&str> = out
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("r="))
+        .collect();
+    assert_eq!(vals, vec!["10", "11", "12", "13"], "{out}");
+}
+
+/// ⚠️⚠️ **The reason the capture had to be per-activation, and the cell that
+/// proves it.** Two concurrent activations of one task, each capturing its own
+/// scrutinee and then SUSPENDING inside the arm it chose. A shared net would let
+/// the second capture overwrite the first before the first finished.
+#[test]
+fn concurrent_task_activations_do_not_share_a_capture() {
+    let (out, code) = run("`timescale 1ns/1ns\nmodule tb;\n  integer a, b;\n  \
+         task automatic t(input integer x, output integer o);\n    \
+         begin case (x) 0: begin #3; o = 10; end 1: begin #1; o = 11; end \
+         default: o = 99; endcase end\n  endtask\n  \
+         initial begin fork t(0, a); t(1, b); join \
+         $display(\"a=%0d b=%0d\", a, b); $finish; end\nendmodule\n");
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("a=10 b=11"), "iverilog agrees:\n{out}");
+}
+
+/// Recursion is the same hazard one level down: each activation captures into its
+/// own slot, so an inner call cannot clobber the frame it returned into.
+#[test]
+fn a_recursive_frame_case_captures_per_activation() {
+    let (out, code) = run("`timescale 1ns/1ns\nmodule tb;\n  integer i;\n  \
+         function automatic integer fact(input integer n);\n    \
+         begin case (n) 0, 1: fact = 1; default: fact = n * fact(n - 1); endcase end\n  \
+         endfunction\n  \
+         initial begin for (i = 1; i < 8; i = i + 1) \
+         $display(\"%0d\", fact(i)); $finish; end\nendmodule\n");
     assert_eq!(code, Some(0), "{out}");
     let vals: Vec<&str> = out
         .lines()
         .filter(|l| l.trim().parse::<u32>().is_ok())
+        .map(|l| l.trim())
         .collect();
-    assert_eq!(vals, vec!["10", "11", "12", "13"], "{out}");
+    assert_eq!(
+        vals,
+        vec!["1", "2", "6", "24", "120", "720", "5040"],
+        "{out}"
+    );
+}
+
+/// The frame capture carries width, signedness and 4-state-ness exactly as the
+/// module-scope one does — it is the same code path past the slot lookup.
+#[test]
+fn a_frame_capture_keeps_signedness_and_x_bits() {
+    let (out, code) = run("`timescale 1ns/1ns\nmodule tb;\n  \
+         function automatic integer sgn(input signed [3:0] s);\n    integer j;\n    \
+         begin sgn = 0; for (j = 0; j < 1; j = j + 1) \
+         case (s) -1: sgn = 1; 4'hF: sgn = 2; default: sgn = 9; endcase end\n  endfunction\n  \
+         function automatic [3:0] wild(input [3:0] v);\n    integer j;\n    \
+         begin wild = 0; for (j = 0; j < 1; j = j + 1) \
+         casez (v) 4'b1??0: wild = 4'd1; 4'b1x0z: wild = 4'd2; default: wild = 4'd9; \
+         endcase end\n  endfunction\n  \
+         initial begin $display(\"%0d\", sgn(4'hF)); $display(\"%0d\", wild(4'b1x0z)); \
+         $finish; end\nendmodule\n");
+    assert_eq!(code, Some(0), "{out}");
+    let vals: Vec<&str> = out
+        .lines()
+        .filter(|l| l.trim().parse::<u32>().is_ok())
+        .map(|l| l.trim())
+        .collect();
+    assert_eq!(
+        vals,
+        vec!["2", "1"],
+        "collectively unsigned, then casez:\n{out}"
+    );
 }

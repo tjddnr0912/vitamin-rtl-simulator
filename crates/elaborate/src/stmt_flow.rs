@@ -433,9 +433,9 @@ impl Elaborator<'_> {
         b: &mut ProcessBuilder,
         scrut_id: u32,
         scrut_span: ast::Span,
+        case_span: ast::Span,
     ) -> u32 {
-        if self.in_frame_body
-            || self.expr_is_real(scrut_id)
+        if self.expr_is_real(scrut_id)
             || self.ir_expr_is_string(scrut_id)
             || matches!(
                 self.exprs.get(scrut_id as usize),
@@ -451,7 +451,34 @@ impl Elaborator<'_> {
             return scrut_id;
         }
         let signed = self.expr_self_signed(scrut_id);
-        let tmp = self.fresh_case_tmp(w, signed);
+        // A frame body cannot write a MODULE net — `frame_write_lvalue` is `&self`
+        // and reaches only the activation window — so its capture is one of the
+        // frame's own slots, reserved by `reserve_frame_case_tmps` before the
+        // window closed and patched to the real width and signedness here. The
+        // AST pass that reserved it had neither; computing them there would be a
+        // second spelling of the width rules.
+        //
+        // ⚠️ Patching cannot move the window: a frame's locals are a RANGE OF NET
+        // IDS, and this changes a net's contents rather than the count.
+        //
+        // ⚠️ A miss degrades to the pre-existing per-arm re-evaluation, NOT to a
+        // module net. The two walks agree today; the day they stop, "the
+        // reservation did not see this `case`" must not silently become "capture
+        // into a net every activation shares".
+        let tmp = if self.in_frame_body {
+            let Some(&net) = self.frame_case_tmp.get(&(case_span.lo, case_span.hi)) else {
+                return scrut_id;
+            };
+            if let Some(nv) = self.nets.get_mut(net as usize) {
+                nv.width = w;
+                nv.msb = w.saturating_sub(1);
+                nv.signed = signed;
+                nv.init = default_init(ast::NetVarKind::Reg, w);
+            }
+            net
+        } else {
+            self.fresh_case_tmp(w, signed)
+        };
         // ⚠️ Anchor the capture at the SCRUTINEE, not at the `case` keyword.
         // `push_stmt` records a runtime location from `cur_span`, which here is
         // the whole statement — and this capture is the statement that now owns
@@ -478,6 +505,7 @@ impl Elaborator<'_> {
         kind: ast::CaseKind,
         scrutinee: &ast::Expr,
         items: &[ast::CaseItem],
+        case_span: ast::Span,
     ) {
         // casez/casex wildcard semantics are realized per-label by masking the
         // label's unknown (`?`/`z`/`x`) bits out of the compare (see
@@ -624,7 +652,7 @@ impl Elaborator<'_> {
         // reason: the capture net would need `NetKind::Real` / `String`, and
         // neither shows a measured difference today (both oracles match vita on
         // `case (r)` and iverilog rejects `case (s)` outright).
-        let scrut_id = self.hoist_case_scrutinee(b, scrut_id, scrutinee.span);
+        let scrut_id = self.hoist_case_scrutinee(b, scrut_id, scrutinee.span, case_span);
 
         // Test cascade: for each label, a wildcard-aware match → arm else next.
         for (labels, arm) in &tests {

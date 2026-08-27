@@ -728,8 +728,8 @@ impl Elaborator<'_> {
                 kind,
                 scrutinee,
                 items,
-                ..
-            } => self.lower_case(b, *kind, scrutinee, items),
+                span,
+            } => self.lower_case(b, *kind, scrutinee, items, *span),
 
             // ── #delay ──────────────────────────────────────────────
             ast::Stmt::DelayCtrl { delay, body, .. } => {

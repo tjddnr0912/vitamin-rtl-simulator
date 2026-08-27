@@ -376,6 +376,97 @@ impl Elaborator<'_> {
         }
     }
 
+    /// Reserve one FRAME-LOCAL capture net per `case` in this body, for the §12.5
+    /// scrutinee hoist.
+    ///
+    /// The module-scope hoist writes a `$ia_tmp$` MODULE net; a frame body cannot
+    /// — `frame_write_lvalue` is `&self` and reaches only the activation window —
+    /// so the capture must be one of the frame's own slots. Same handoff shape as
+    /// `reserve_frame_repeat_counters` above, and the same two reasons for it:
+    ///
+    /// ⚠️ It has to be reserved HERE. A frame's locals are the contiguous net-id
+    /// range `[base_net, base_net + locals_len)`, closed at the end of this pass,
+    /// so a net minted during lowering would land outside the window and the
+    /// engine would read a module slot instead.
+    ///
+    /// ⚠️ Keyed by SOURCE SPAN, not visitation order — this walk and `lower_case`
+    /// are two walks of the same tree.
+    ///
+    /// ⚠️⚠️ The net is reserved at a PLACEHOLDER width and the lowering patches it.
+    /// This pass runs over the AST, before any expression has an IR width or a
+    /// signedness, and both matter to the capture: the cascade sizes every
+    /// `CaseEq(scrutinee, label)` pair from it. Computing the width here would be
+    /// a second spelling of the width rules; patching keeps one. Only the SLOT
+    /// COUNT is fixed by this pass — widening a reserved net later cannot move the
+    /// window, because the window is a range of net IDs.
+    ///
+    /// ⚠️ Every `case` gets a slot, including the ones the lowering then declines
+    /// (a real or string scrutinee, a bare constant). The alternative is asking
+    /// IR-level questions from an AST walk, which is exactly the drift this
+    /// span-keyed handoff exists to avoid; the cost is one unused slot per
+    /// declined case.
+    pub(crate) fn reserve_frame_case_tmps(&mut self, body: &ast::Stmt) {
+        let mut spans = Vec::new();
+        Self::collect_case_spans(body, &mut spans);
+        for sp in spans {
+            let name = format!("$ia_tmp${}", self.nets.len());
+            let nv = ir::NetVar {
+                kind: ir::NetKind::Reg,
+                width: 1,
+                msb: 0,
+                lsb: 0,
+                signed: false,
+                array_len: 1,
+                dir: ir::PortDir::Internal,
+                init: default_init(ast::NetVarKind::Reg, 1),
+            };
+            self.add_net(&name, nv);
+            let net = (self.nets.len() - 1) as u32;
+            self.frame_case_tmp.insert(sp, net);
+        }
+    }
+
+    /// Spans of every `case` in `s`, at any depth.
+    ///
+    /// `_`-free over the statement variants that can CONTAIN one: a variant added
+    /// later must be classified here rather than defaulting to "holds no case",
+    /// which would silently leave its scrutinee re-evaluated per arm inside a
+    /// frame while the module-scope twin was fixed.
+    fn collect_case_spans(s: &ast::Stmt, out: &mut Vec<(u32, u32)>) {
+        use ast::Stmt as S;
+        match s {
+            S::Case { items, span, .. } => {
+                out.push((span.lo, span.hi));
+                for it in items {
+                    let (ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. }) =
+                        it;
+                    Self::collect_case_spans(body, out);
+                }
+            }
+            S::Block { stmts, .. } | S::Fork { stmts, .. } => {
+                for st in stmts {
+                    Self::collect_case_spans(st, out);
+                }
+            }
+            S::If { then_s, else_s, .. } => {
+                Self::collect_case_spans(then_s, out);
+                if let Some(e) = else_s {
+                    Self::collect_case_spans(e, out);
+                }
+            }
+            S::For { body, .. }
+            | S::While { body, .. }
+            | S::Repeat { body, .. }
+            | S::Forever { body, .. } => Self::collect_case_spans(body, out),
+            S::DelayCtrl { body, .. } | S::EventCtrl { body, .. } | S::Wait { body, .. } => {
+                if let Some(b) = body {
+                    Self::collect_case_spans(b, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Spans of every `repeat` in `s` that will need a runtime counter, innermost-first
     /// order irrelevant (the map is span-keyed).
     fn collect_runtime_repeat_spans(&self, s: &ast::Stmt, out: &mut Vec<(u32, u32)>) {
@@ -697,6 +788,7 @@ impl Elaborator<'_> {
             // top-level body_decls in the flat slot order).
             auto_override |= s.reserve_frame_block_locals(&func.body, base_net);
             s.reserve_frame_repeat_counters(&func.body);
+            s.reserve_frame_case_tmps(&func.body);
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;
@@ -915,6 +1007,7 @@ impl Elaborator<'_> {
             // Block-locals declared inside a `begin … end` in the body.
             auto_override |= s.reserve_frame_block_locals(&task.body, base_net);
             s.reserve_frame_repeat_counters(&task.body);
+            s.reserve_frame_case_tmps(&task.body);
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;
