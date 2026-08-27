@@ -312,25 +312,54 @@ mod builtin_tests {
     /// would double-count the nested span, which is the failure the
     /// `attribution` field exists to rule out.
     ///
-    /// The assertion is on the ORDERING and the SUM, not on absolute
-    /// nanoseconds — wall clock is not reproducible, and a test that pinned it
-    /// would be measuring this Mac.
+    /// ⚠️ The first draft of this test asserted `i > o` and `o < 7_000_000`
+    /// directly beneath a docstring promising it did NOT pin absolute
+    /// nanoseconds — and the second of those IS an absolute bound. It went red
+    /// on macos-latest only (run 33024096624, `outer kept the nested span:
+    /// 34377541 ns`) while ubuntu and RHEL9 stayed green: a contended runner
+    /// overshot BOTH sleeps by ~6×, so a 12 ms nominal block took ~70 ms and
+    /// the outer's own 4 ms sleep alone reported 34 ms. Nothing was
+    /// double-counted; the assertion was measuring the runner, which is exactly
+    /// what the docstring said it must not do.
+    ///
+    /// So both timing assumptions are gone. What remains is ALGEBRA, bracketed
+    /// by the test's own clock reads: `enter`/`leave` guarantee
+    /// `o == outer_inclusive - inner_inclusive` and `i == inner_inclusive`,
+    /// therefore `o + i == outer_inclusive`, which the outer bracket contains
+    /// by construction. Double-counting makes `o + i` overshoot by the whole
+    /// nested span — ≥ 8 ms of daylight — no matter how the scheduler behaves,
+    /// so the separation survives any load. Dropped with the bound: `i > o`,
+    /// which only ever encoded "the runner will honour these sleep durations".
     #[test]
     fn nested_time_is_charged_once() {
         let p = BuiltinProfile::new(ProcProfileCfg { timed: true });
+
+        let outer_bracket = std::time::Instant::now();
         let outer = p.enter();
         std::thread::sleep(std::time::Duration::from_millis(4));
+        let inner_bracket = std::time::Instant::now();
         let inner = p.enter();
         std::thread::sleep(std::time::Duration::from_millis(8));
         p.leave("$inner", inner);
+        let nested = inner_bracket.elapsed().as_nanos() as u64;
         p.leave("$outer", outer);
+        let total = outer_bracket.elapsed().as_nanos() as u64;
+
         let c = p.finish();
         let o = c.rows["$outer"].nanos;
         let i = c.rows["$inner"].nanos;
-        assert!(i > o, "inner slept twice as long: inner={i} outer={o}");
-        // The outer row must NOT contain the inner span. Total ≈ 12 ms, so an
-        // outer that still carried the inner 8 ms would be ≳ 11 ms.
-        assert!(o < 7_000_000, "outer kept the nested span: {o} ns");
+
+        // THE invariant: the nested span is charged once, so the two SELF times
+        // sum to the outer's INCLUSIVE span and cannot exceed a bracket that
+        // opened before it and closed after it.
+        assert!(
+            o + i <= total,
+            "nested span charged twice: outer={o} + inner={i} > bracket={total}"
+        );
+        // The inner row cannot exceed its own bracket either — that would be
+        // over-charging in the other direction, which the sum above permits.
+        assert!(i <= nested, "inner overcharged: inner={i} bracket={nested}");
+        assert!(i > 0, "timed run charged the inner call nothing");
     }
 
     /// Counts are the deterministic half and do not need timing on.
