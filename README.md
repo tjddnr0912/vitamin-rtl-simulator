@@ -72,6 +72,48 @@ module counter #(parameter WIDTH = 4) (input clk, rst, output reg [WIDTH-1:0] cn
 endmodule
 ```
 
+## Performance — what to expect
+
+vitamin is an **event-driven, 4-state** simulator, the same class of tool as
+Icarus Verilog. Against a **compiled, 2-state** simulator such as Verilator — or
+a commercial simulator — it is **one to two orders of magnitude slower**. That
+gap is structural rather than a tuning bug: Verilator buys its speed by giving
+up 4-state semantics and event ordering, and vitamin deliberately does not (see
+[docs/study/01](docs/study/01-interpreted-vs-compiled.md)).
+
+Measured on Keccak-f[1600], 2 000 permutations, macOS arm64, release builds,
+interleaved samples with the first round discarded:
+
+| Simulator | Per permutation | Relative |
+|---|---|---|
+| Verilator 5.050 (compiled, 2-state) | **6.7 µs** | 1× |
+| vitamin — design with no subroutine calls | 290 µs | 43× slower |
+| vitamin — design with function/task calls | 4 055 µs | 605× slower |
+| Icarus Verilog 13 | 4 460 µs | 665× slower |
+
+Against Icarus Verilog specifically, vitamin is competitive — a geometric mean
+of **1.6× faster** across five third-party designs in the workload corpus, with
+one design still slower ([docs/study/03](docs/study/03-workload-corpus.md)).
+Function and task calls are the biggest remaining cost, and closing that is an
+active work item.
+
+### Use it for fast verification, not for regression farms
+
+Running a full regression suite under vitamin is generally impractical today.
+Get value out of it the other way around — as the **quick-check** tool in the
+loop, where its determinism and its correct-or-loud rule matter most:
+
+- Pick **representative cases** rather than the whole suite — one directed test
+  per feature, a short randomized burst, a smoke test of a few hundred cycles.
+- Keep the cycle count to what the check actually needs; simulated time is the
+  dominant cost, so a 10× shorter run really is 10× cheaper.
+- Use the staged flow (`vcmp` → `velab` → `vrun`) when you re-run one design
+  repeatedly: compile and elaborate once, then only pay for `vrun`.
+- Dump waveforms only when you intend to look at them, and prefer FST
+  (`-o waves.fst`) for large runs.
+- Reach for Verilator or a commercial simulator for long soak runs, large
+  randomized regressions, and full-chip workloads.
+
 ## Documentation
 
 The **user manual** lives in [`docs/manual/`](docs/manual/), in reading order:
