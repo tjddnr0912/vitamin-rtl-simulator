@@ -141,26 +141,57 @@ TX 가 틀린 FCS 를 붙이고 RX 가 그것을 **정확하다고 검증**한�
 
 | 워크로드 | 모양 | 라이선스 | iverilog | vita | 비 |
 |---|---|---|---|---|---|
-| **sha256** (secworks) | crypto | BSD-2 | 4.171 s | **1.441 s** | **2.89×** |
-| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 9.315 s | **4.967 s** | **1.88×** |
-| **aes** (secworks) | crypto | BSD-2 | 6.154 s | **3.541 s** | **1.74×** |
-| **picorv32** (YosysHQ) | cpu | ISC | 7.046 s | **4.888 s** | **1.44×** |
-| *keccak* (1st-party) | crypto | ours | 9.295 s | 8.426 s | 1.10× |
-| **darkriscv** (코어만) | cpu | BSD-3 | 7.194 s | 9.187 s | **0.78×** |
-| *keccak-arr* (1st-party) | crypto | ours | 9.169 s | 17.237 s | **0.53×** |
-| serv · verilog-axi · verilog-ethernet | — | — | 6.8–7.8 s | **거절** | — |
+| **sha256** (secworks) | crypto | BSD-2 | 4.166 s | **1.477 s** | **2.82×** |
+| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 9.393 s | **4.993 s** | **1.88×** |
+| **aes** (secworks) | crypto | BSD-2 | 6.164 s | **3.539 s** | **1.74×** |
+| *keccak* (1st-party) | crypto | ours | 9.288 s | **5.406 s** | **1.72×** |
+| **picorv32** (YosysHQ) | cpu | ISC | 7.110 s | **4.942 s** | **1.44×** |
+| **darkriscv** (코어만) | cpu | BSD-3 | 7.231 s | 9.089 s | **0.80×** |
+| **serv** (bit-serial) | cpu | ISC | 7.383 s | 9.438 s | **0.78×** |
+| *keccak-arr* (1st-party) | crypto | ours | 9.129 s | 15.973 s | **0.57×** |
+| verilog-axi · verilog-ethernet | — | — | 6.8–7.8 s | **거절** | — |
 
-> 기하평균 **1.30×** (도는 일곱) · **1.60×** (서드파티 다섯만). 측정 = 릴리즈 바이너리,
+> 기하평균 **1.30×** (도는 여덟) · **1.42×** (서드파티 여섯) · **1.60×** (serv 를 뺀
+> 서드파티 다섯 = 2026-08-23 과 같은 집합). 측정 = 릴리즈 바이너리,
 > **인터리브 · 타임드 샘플 3개**(라운드 4회, 첫 회 폐기), 다른 부하 없는 상태.
 > 재현 = `corpus-runner run --compare`. ⚠️ 이 표가 **수치의 유일한 자리**다 — 매니페스트의
 > `note` 는 일부러 시간을 안 들고 있다(두 벌을 적었더니 실제로 여섯 행이 셋째 자리에서 갈렸다).
 
-⭐ **first-party 둘을 빼면 1.30 → 1.60 로 올라간다.** 우리가 쓴 두 설계가 평균을 *끌어내리고*
-있었다 — 즉 그 둘은 우리에게 유리한 벤치가 아니라 **가장 어려운 벤치**였다. `keccak_f_arr` 는
-지금도 코퍼스 최악(0.53×)이고, 아레나 추정 2.33× 는 전부 **그 하나**에서 나온 수다.
+⭐ **`keccak` 가 1.10× → 1.72× 로 올라갔다** (2026-08-28). 아래 재측정 절을 보라.
+`keccak_f_arr` 는 지금도 코퍼스 최악(0.57×)이고, 아레나 추정 2.33× 는 전부 **그 하나**에서
+나온 수다.
 
-⚠️ **지는 둘의 공통점은 아직 모른다.** `keccak_f_arr` 는 호출마다 25원소 배열을 짓고(프레임 로컬
-배열), `darkriscv` 는 그런 게 없다. 성능 축의 다음 계측 대상이다.
+⚠️ **지는 셋의 공통점은 아직 모른다.** `keccak_f_arr` 는 호출마다 25원소 배열을 짓고(프레임 로컬
+배열), `darkriscv` 와 `serv` 는 그런 게 없다. 성능 축의 다음 계측 대상이다.
+
+#### Re-measurement, 2026-08-28
+
+The whole corpus was re-timed after two changes to how a process body reaches the
+compiled backend. Nothing else in the table moved by more than run-to-run noise,
+which is itself the finding: the two changes are worth a lot on exactly one shape.
+
+- **A user call no longer excludes the body that holds it.** The compile gate used
+  to refuse an entire process body if any expression in it called a function or a
+  task, so a single call dropped the whole body onto the generic evaluator.
+- **A `case` evaluates its scrutinee once.** It used to be re-evaluated per arm —
+  and, with a default-only `case`, not at all. That was a correctness defect in two
+  directions before it was a performance one.
+
+Together they moved `keccak_f.sv` from 8.11 s to 5.41 s (**-33%**) at an unchanged
+digest, which is what carried the `keccak` row from 1.10× to 1.72×. `keccak-arr`
+did not move at all: the per-call frame-local array it exists to measure is a
+different cost, and it stays the corpus worst case.
+
+The standing call-regime measurement is `keccak_f.sv` against `keccak_f_flat.sv`
+(same algorithm, subroutines expanded by `gen_flat.py`): **5.40 s vs 0.61 s = 8.9×**.
+That is the headroom still on the table, and it is why compiling the *callee* body
+is the next item rather than a finished one. Full numbers, including verilator, in
+`bench/keccak/RUN.md`.
+
+⚠️ **serv is new to this table.** It began running only in §4.5.382, so its 0.78×
+is a first measurement rather than a regression, and the 1.60× figure quoted before
+2026-08-28 was over a corpus that did not include it. The five-design geometric mean
+is reprinted above so the two dates can be compared over the same set.
 
 ⚠️ **verilator 는 절반의 오라클이다.** sha256·aes·verilog-ethernet·darkriscv 에선 일치하지만
 **picorv32 와 serv 에선 갈린다** — 둘 다 레지스터 파일이 초기화되지 않은 채 x 를 읽는 설계라

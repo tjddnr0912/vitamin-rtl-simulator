@@ -261,6 +261,24 @@ changed for a user of the simulator.
 
 ### Documentation
 
+- **Every published performance number was re-measured (2026-08-28).** The two changes
+  above move exactly one shape, and the corpus is the only place that could say so. On the
+  same machine, release builds, interleaved samples with the first round discarded:
+  `keccak_f.sv` **8.11 s -> 5.41 s (-33%)** at an unchanged digest, carrying that corpus row
+  from 1.10x to **1.72x faster than iverilog**; `keccak_f_arr.sv` did not move, because the
+  per-call frame-local array it exists to measure is a different cost, and it remains the
+  corpus worst case (0.57x). Nothing else moved beyond run-to-run noise. Corpus 8/10, every
+  pinned digest matching.
+
+  The README table is rewritten from the new measurement — Verilator 6.8 us per Keccak
+  permutation, vitamin 305 us without subroutine calls, 2 700 us with them, iverilog
+  4 655 us — and now states the call cost as what it is: **8.9x on the same algorithm**,
+  measured against the flat spelling of the identical design. `docs/study/03` gains the
+  re-measured cross-corpus table, and `serv` appears in it for the first time (0.78x); it
+  began running only in §4.5.382, so the five-design geometric mean is reprinted beside the
+  six-design one to keep the two dates comparable. `bench/keccak/RUN.md` carries the raw
+  four-tool numbers, all four agreeing on the published Keccak digest.
+
 - **The codegen-discriminator note is corrected a fourth time, and this time the framing
   changes rather than a row.** The 2026-08-25 revision already recorded that `able` is
   anti-correlated with speed. A round-35 report asked, on the strength of a −30% A/B on

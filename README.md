@@ -86,16 +86,17 @@ interleaved samples with the first round discarded:
 
 | Simulator | Per permutation | Relative |
 |---|---|---|
-| Verilator 5.050 (compiled, 2-state) | **6.7 µs** | 1× |
-| vitamin — design with no subroutine calls | 290 µs | 43× slower |
-| vitamin — design with function/task calls | 4 055 µs | 605× slower |
-| Icarus Verilog 13 | 4 460 µs | 665× slower |
+| Verilator 5.050 (compiled, 2-state) | **6.8 µs** | 1× |
+| vitamin — design with no subroutine calls | 305 µs | 45× slower |
+| vitamin — design with function/task calls | 2 700 µs | 397× slower |
+| Icarus Verilog 13 | 4 655 µs | 685× slower |
 
 Against Icarus Verilog specifically, vitamin is competitive — a geometric mean
 of **1.6× faster** across five third-party designs in the workload corpus, with
-one design still slower ([docs/study/03](docs/study/03-workload-corpus.md)).
-Function and task calls are the biggest remaining cost, and closing that is an
-active work item.
+two designs still slower ([docs/study/03](docs/study/03-workload-corpus.md)).
+Function and task calls remain the biggest cost a design can pay: the same
+algorithm written without subroutines runs **8.9× faster** than the version that
+calls them, and closing that gap is an active work item.
 
 ### Use it for fast verification, not for regression farms
 
