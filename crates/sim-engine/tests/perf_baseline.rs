@@ -841,6 +841,16 @@ fn perf_pdes_bsp_mock() {
 //
 // The two designs below are the same SHA-256 compression round written the two
 // ways real RTL is written: transforms inline, and transforms behind `function`.
+//
+// ⚠️ They measure the INLINER, not the call regime, and they read as though they
+// measure the call regime. `body_needs_frame` (elaborate) sends only a body with
+// CONTROL FLOW to a frame, and all four transforms here are straight-line — so
+// the elaborator folds every call and the two designs produce a byte-identical
+// `CodegenReport`: `frame_bodies: 0` on both sides, `user_call_in_expr` on
+// neither. Writing `function` is not the same as reaching the frame path. For a
+// pair that does reach it, see `cli/tests/perf_call_regime.rs`, whose transforms
+// carry a loop. Being folded is exactly right for the P9-coverage question this
+// pair is used for; it is only wrong as a call benchmark.
 
 /// SHA-256 round, transforms written INLINE. No calls, no delays in the body.
 const SHA256_INLINE: &str = "module top;\n\

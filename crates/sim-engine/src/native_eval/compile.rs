@@ -765,18 +765,19 @@ pub(crate) fn lower(
             }
             Some(())
         }
-        // B1 frame-call: the VM never compiles a Call-bearing body
-        // (`is_codegen_able`'s `expr_has_call` exclusion), so the native path
-        // must NEVER reach a user `Expr::Call`. Assert the contract in debug;
-        // bail to the oracle (kernel `eval_ctx`, which runs the real frame
-        // evaluator) in release — safe either way.
-        Expr::Call { .. } => {
-            debug_assert!(
-                false,
-                "is_codegen_able must keep Expr::Call off the native/VM path"
-            );
-            None
-        }
+        // A user-function call. This compiler has no representation for one —
+        // running a frame body means re-entering the engine, which a flat op
+        // stream over `NativeScratch` cannot do — so it DECLINES, and the caller
+        // falls back to the kernel's generic `eval_ctx`, which reaches the real
+        // frame evaluator through `eval_call`.
+        //
+        // ⚠️ This used to be `debug_assert!(false, ..)`, on the ground that
+        // `is_codegen_able`'s `expr_has_call` exclusion kept a Call-bearing body
+        // off this path entirely. That exclusion is gone (see
+        // `backend::reject_reasons_into`), so a Call reaching here is now an
+        // ordinary decline rather than a broken contract — and the assertion
+        // would have turned every debug-build run of such a design into a panic.
+        Expr::Call { .. } => None,
         // sysfunc / array-indexed signal: deferred increment.
         _ => None,
     }

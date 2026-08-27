@@ -44,14 +44,30 @@ use crate::width::WidthTable;
 /// instead of popping and silently diverge. (Queue PUSHES stay codegen-able:
 /// they are SysTasks riding the shared kernel dispatch.)
 ///
-/// B1 frame-call: a body that REACHES an `Expr::Call` (a user-function call) is
-/// also excluded. The frame evaluator runs ONLY on the `&self` interpreter read
-/// path (re-entrant frame arena + the left-to-right operand order that static
-/// recursion depends on); the VM's native/`EvalForLval` funnels must never
-/// reorder or short-circuit it. `expr_has_call` walks the RHS / cond / arg
-/// subtrees (the arena is post-order, so the recursion is bounded by ExprId
-/// depth). The interpreter is then the SOLE executor of any Call, and the P5
-/// differential gate passes vacuously for frame designs.
+/// ⭐ A body reaching an `Expr::Call` (a user-function call) is NOT excluded, and
+/// the paragraph that used to stand here was a B1-era description of a world with
+/// two backends in it. It said the frame evaluator "runs ONLY on the `&self`
+/// interpreter read path" and that "the interpreter is then the SOLE executor of
+/// any Call" — both false since S3a wired `NativeKernel::eval_call`, which routes
+/// a call to `run_frame_call_with(Some(&self.arena), ..)` with the report drain
+/// that seam needs. On the native backend the excluded body was not running on
+/// the interpreter at all; it was running on `native::body::run_body`, the
+/// uncompiled walk.
+///
+/// Nothing in the op stream evaluates an expression: every `vm_exec` op hands an
+/// ExprId to a `Kernel` method, and each of those declines a call down to the
+/// generic evaluator that has always handled it —
+/// `k_eval_for_lvalue` → `wprog_for` (no `Call` arm) → `ctx().eval_ctx`,
+/// `k_truthy` → `ctx().truthy`, and `native_eval::compile`'s explicit
+/// `Expr::Call => None`. So the order the old note worried about is the generic
+/// walk's own order, unchanged, and admitting the body buys the OTHER statements
+/// in it — which for a design like `bench/keccak`'s `keccak_f.sv` is most of the
+/// body. The old exclusion also made the P5 differential pass vacuously for every
+/// frame design; it now has something to compare.
+///
+/// ⚠️ `Terminator::Call` (a TASK call, which ends a basic block because it can
+/// suspend) is still excluded, above, and for the reason this paragraph used to
+/// give: resuming it needs machinery the op stream does not have.
 ///
 /// Anything not on the allow-list falls back to the interpreter, so an unknown or
 /// future terminator/statement variant is safe by default.
@@ -92,12 +108,10 @@ fn reject_reasons_into(
     for block in body {
         match block.term {
             Terminator::Goto { .. } | Terminator::Return => {}
-            // A Branch condition can itself be a Call (`if (fact(n) > 5)`).
-            Terminator::Branch { cond, .. } => {
-                if expr_has_call(exprs, cond) {
-                    out.insert("user_call_in_expr");
-                }
-            }
+            // A Branch condition can itself be a Call (`if (fact(n) > 5)`);
+            // `k_truthy` declines it down to `ctx().truthy`, which is the same
+            // evaluator and the same order the walk would have used.
+            Terminator::Branch { .. } => {}
             Terminator::Delay { .. } => {
                 out.insert("delay");
             }
@@ -163,23 +177,6 @@ fn reject_reasons_into(
             // exited 0.
             if class_new_sites.contains_key(&sid) {
                 out.insert("class_new");
-            }
-            // B1: any expr position that can REACH a frame Call excludes the body.
-            let has_call = match &stmts[sid as usize] {
-                Stmt::BlockingAssign { rhs, .. } | Stmt::Force { rhs, .. } => {
-                    expr_has_call(exprs, *rhs)
-                }
-                Stmt::NonblockingAssign { rhs, delay, .. } => {
-                    expr_has_call(exprs, *rhs) || delay.is_some_and(|d| expr_has_call(exprs, d))
-                }
-                Stmt::SysTask { fmt, args, .. } => {
-                    fmt.is_some_and(|f| expr_has_call(exprs, f))
-                        || args.iter().any(|&a| expr_has_call(exprs, a))
-                }
-                Stmt::Disable { .. } | Stmt::Release { .. } => false,
-            };
-            if has_call {
-                out.insert("user_call_in_expr");
             }
             // Disable: Phase-2 control flow we will not bake into compiled
             // code. Force/Release: format_version-4 shape reserve — keep
@@ -1362,12 +1359,29 @@ mod tests {
         ));
     }
 
-    /// B1 frame-call: a process body that REACHES an `Expr::Call` (a user
-    /// function call) in a RHS, a Branch cond, or a $systask arg is
-    /// interpreter-only — the VM must never run the re-entrant frame evaluator
-    /// (it would reorder the operand eval that static recursion depends on).
+    /// ⭐ A process body reaching an `Expr::Call` IS codegen-able, in every one of
+    /// the three positions the old exclusion walked.
+    ///
+    /// This test asserted the opposite, and its docstring gave the reason: "the VM
+    /// must never run the re-entrant frame evaluator (it would reorder the operand
+    /// eval that static recursion depends on)". The VM never runs it and never
+    /// reorders anything — `vm_exec` evaluates no expression itself, it hands an
+    /// ExprId to a `Kernel` method, and each of those declines a call one level
+    /// down to the SAME generic evaluator the uncompiled walk would have used
+    /// (`k_eval_for_lvalue` → `wprog_for`, which has no `Call` arm, → `ctx().eval_ctx`;
+    /// `k_truthy` → `ctx().truthy`; `native_eval::compile` returns `None` for a
+    /// `Call` explicitly). The order is that evaluator's order, unchanged.
+    ///
+    /// The exclusion cost the body's OTHER statements, which is most of a real one:
+    /// `bench/keccak`'s `keccak_f.sv` went 8.11 s → 6.91 s on removing it, digest
+    /// unchanged.
+    ///
+    /// ⚠️ `Terminator::Call` — a TASK call, which ends a block because it can
+    /// suspend — is still refused, and `fork_and_call_are_not_codegen_able`
+    /// is where that is pinned. Resuming one needs machinery the op stream does not
+    /// have; the two are different questions that shared a paragraph.
     #[test]
-    fn frame_call_in_body_is_not_codegen_able() {
+    fn a_frame_call_in_an_expression_no_longer_excludes_the_body() {
         // RHS: `r = 1 + fact(n)` (the Call is NESTED under a Binary).
         let exprs = vec![
             Expr::Signal { net: 0, word: None }, // 0: n
@@ -1388,13 +1402,13 @@ mod tests {
         }];
         let body = vec![block(vec![0], Terminator::Return)];
         assert!(
-            !is_codegen_able(
+            is_codegen_able(
                 &rhs_assign,
                 &exprs,
                 &body,
                 &std::collections::BTreeMap::new()
             ),
-            "a frame Call nested in an RHS must exclude the body"
+            "a frame Call nested in an RHS declines at the RHS, not at the body"
         );
 
         // Branch cond: `if (fact(n)) ...` — the Call rides the terminator.
@@ -1407,13 +1421,13 @@ mod tests {
             },
         )];
         assert!(
-            !is_codegen_able(
+            is_codegen_able(
                 &arena(),
                 &exprs,
                 &cond_body,
                 &std::collections::BTreeMap::new()
             ),
-            "a frame Call in a Branch cond must exclude the body"
+            "`k_truthy` declines it to `ctx().truthy`"
         );
 
         // $display arg: `$display(fact(n))`.
@@ -1423,18 +1437,24 @@ mod tests {
             args: vec![1], // fact(n)
         }];
         assert!(
-            !is_codegen_able(&task, &exprs, &body, &std::collections::BTreeMap::new()),
-            "a frame Call in a $systask arg must exclude the body"
+            is_codegen_able(&task, &exprs, &body, &std::collections::BTreeMap::new()),
+            "a systask argument is evaluated by the kernel too"
         );
 
-        // Negative control: the same arena WITHOUT a Call stays codegen-able.
-        let no_call = vec![Stmt::BlockingAssign {
-            lhs: Lvalue { chunks: vec![] },
-            rhs: 2, // the Const
-        }];
+        // And no rejection reason mentions a user call any more — the histogram
+        // key is a published run.json contract, so its ABSENCE is worth an
+        // assertion rather than being left to the `able` count.
+        let mut out = std::collections::BTreeSet::new();
+        reject_reasons_into(
+            &rhs_assign,
+            &exprs,
+            &body,
+            &std::collections::BTreeMap::new(),
+            &mut out,
+        );
         assert!(
-            is_codegen_able(&no_call, &exprs, &body, &std::collections::BTreeMap::new()),
-            "a Call-free body must stay codegen-able"
+            out.is_empty(),
+            "no reason at all, and specifically not `user_call_in_expr`: {out:?}"
         );
     }
 

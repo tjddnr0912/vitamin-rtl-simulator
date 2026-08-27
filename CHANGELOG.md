@@ -52,6 +52,196 @@ changed for a user of the simulator.
   (measured: `-Wno-E3001` leaves the error standing), so a design with two drivers on a
   variable stops elaborating. That is the same answer xrun gives.
 
+- **A hierarchical reference could not name a generate block, unless you spelled the index.**
+  A singleton generate scope (`if` / `if…else` / `case` / bare `begin : g`) is stored as
+  `g[0]`, and the bare-label mapping onto it ran for the LEADING path segment only. That is
+  fine for a same-module reference, where the block IS the leading segment (`gblk.x`), and
+  exactly wrong one dot further out: `u.gblk.x` commits `u` as the scope and then looked up
+  the literal `u.gblk.x` while the net lives at `u.gblk[0].x`. 19 census cells — all four
+  spellings × net / localparam / instance-inside × read / write, plus depth 2 — E3010 in
+  vita, correct in Icarus.
+
+  ⭐ The report said "generate blocks"; the measurement said one axis. `for`-generate
+  references (`u.g[0].x`) already worked, so did the indexed spelling of a conditional
+  block, and so did the bare spelling from inside the same module — the last of these has
+  been pinned and green since the initial commit, which is why the cross-instance family
+  stayed invisible.
+
+- **A named generate-`case` block minted no scope at all.** The parser's case-item arms
+  called `parse_gen_branch().1`, keeping the items and discarding the label, where the `if`
+  and `for` arms bind it. Its members therefore landed in the ENCLOSING scope: `u.g.x` and
+  `u.g[0].x` were both E3010 (the one generate kind no spelling could reach), and when the
+  name collided with a parent declaration the design was rejected outright with E3009
+  `redeclared` though Icarus and Verilator both run it. The labelled body is now re-wrapped
+  as the `GenItem::Block` the elaborator already knows how to scope, so `label[0]` has one
+  spelling and no AST field was added.
+
+  ⚠️ A bare label on a `for`-generate stays loud at EVERY trip count (§27.4 makes those
+  blocks an array). The one-trip case is the trap: it leaves exactly the `g[0]` a
+  conditional block leaves, so a fallback keyed on storage alone accepted it and would have
+  begun failing the day a parameter moved from 1 to 2.
+
+  `format_version` unchanged at 29 — the loop-label record is elaborate-side and never
+  serialized.
+
+- **A 2-state cast paid for bits its operand did not have.** Round 35 stopped nested casts
+  from multiplying; a single cast still expanded to one `CaseEq` per bit of the **target**
+  type, so `int'(nb)` on a 4-bit `nb` built 32 terms of which 28 selected bits of a known
+  zero-extension. A widening cast now coerces at the **operand's** width and extends
+  afterwards — provably the same bits (an unsigned extension is literal zeros, a signed one
+  replicates a sign bit that coercion has already forced to 0 or 1).
+
+  Measured on the reporting design's own repro, release, interleaved: **69.6 s → 6.7 s
+  (10.4×)**, stdout byte-identical. Fan-out for a 4-bit operand: `int'` 32→4, `longint'`
+  64→4, `shortint'` 16→4. The two no-cast controls did not move, which is what shows the
+  win is the cast and not a global effect.
+
+  ⚠️ **The reorder introduced a silent-wrong and it was caught by measuring its own
+  premise.** The equivalence argument says "the operand's width", but the code asked
+  `ir_bits_of(e).unwrap_or(32)` — and a deferred hierarchical reference has no width yet, so
+  `longint'(u1.w40)` on a `logic [39:0]` silently dropped its top 8 bits at exit 0. **A green
+  6,185-test suite and a green 90-cell three-way sweep both passed over it**, because every
+  operand in both had a declared width. Now gated on the width being *known* and pinned.
+
+  ⚠️ Still open, with the numbers, in ROADMAP §2: a same-width `int'(f())` names `f` 32 times
+  against Icarus's 1. This removes paying for bits the operand does not have; it does not
+  remove paying per bit.
+
+- **A 2-state cast named its operand once per declared bit.** `int'(e)` is lowered into
+  a `Concat` of one `CaseEq(Select(e, i), 1'b1)` per target bit, and the engine walks
+  that DAG as a tree — so an unguarded `keyword'(e)` cast multiplied the cost of
+  evaluating `e` by the cast's declared width, and nesting multiplied again. Counted
+  exactly, by putting a `$display` inside the operand:
+
+  | cast | operand evaluations, before | after | Icarus Verilog 13 |
+  |---|---|---|---|
+  | none | 1 | 1 | 1 |
+  | `byte'` | 8 | 8 | 1 |
+  | `int'` | 32 | 32 | 1 |
+  | `longint'` | 64 | 64 | 1 |
+  | `int'(int'(x))` | **1024** | **32** | 1 |
+
+  ⭐ The discriminator is 2-state-ness, not width: `integer'` and `int'` are both 32-bit
+  and signed, and differed by **27×** in wall clock on one triple-nested `always_comb` —
+  `integer` is 4-state, so no coercion is built for it at all. At around five levels of
+  nesting, `velab` **alone** ran past 60 s on a twenty-character expression.
+
+  The fix is the guard the sibling coercion site already had: the inline path's
+  formal binding calls the same routine and gates it on "can this operand actually carry
+  an x or z", with a comment recording the same measurement. The cast path simply never
+  got it. Measured end to end on the reporting design, release, interleaved:
+  **8.6×–542× faster** with byte-identical output, and 64 cast cells over x/z-carrying
+  operands print identically before, after, and under live Icarus Verilog.
+
+  ⚠️ **This does not make the evaluation count correct**, and the gap is recorded rather
+  than glossed. A single `int'(f())` still calls `f` 32 times where Icarus calls it once,
+  because a call is conservatively treated as possibly-unknown; a widening cast over a
+  call still fans out to the wider width. What was removed is the *multiplication* under
+  nesting. If your design casts an expression with a side effect — `int'($random)` is the
+  canonical one — the count is still wrong; see ROADMAP §2.
+
+- **`--obs-procs` profile rows of `kind: "port"` had no `file:line:col`.** On a reporting
+  design that was 1,267 rows and 51% of all evaluations — the largest category in the
+  profile, and the one a reader could not act on, since `scope` only narrows to an
+  instance and one instance can carry dozens of ports. Each row now reports the location
+  of its port connection in the parent's instantiation, **including the column**, so
+  several connections written on one line are told apart. A `.*` wildcard connection
+  still reports `("", 0, 0)`: it synthesizes one connection per port from no source text
+  of its own, and pointing it at the nearest real token would be a location that does not
+  survive being followed.
+
+- **`--obs-procs` and `--obs-procs-time` were missing from `vita --help`.** They worked
+  and were documented in the manual, but a reporter reading `run.json`'s `"processes":
+  null` concluded the feature was unimplemented. A third flag, `--probe-file`, was
+  missing too, and four rows were absent from the manual's flag table. A new test now
+  extracts the flag literals from the argument parser's own match arms and asserts every
+  one appears in `--help`, so the next undocumented flag is a red test rather than
+  another external report.
+
+### Changed
+
+- **A user-function call no longer refuses the process body that holds it.** `is_codegen_able`
+  recorded `user_call_in_expr` for any body reaching an `Expr::Call`, and the whole body —
+  every statement in it, call-bearing or not — fell to the uncompiled walk. The reason
+  recorded for that exclusion described a two-backend world: it said the frame evaluator
+  "runs ONLY on the `&self` interpreter read path" and that "the interpreter is then the
+  SOLE executor of any Call", neither of which has been true since `NativeKernel::eval_call`
+  wired the tier-3 route. Nothing in the op stream evaluates an expression — every op hands
+  an ExprId to a `Kernel` method, and each of those declines a call one level down to the
+  generic evaluator that has always run it.
+
+  Measured on `bench/keccak`: `keccak_f.sv` **8.11 s → 6.91 s (−14.8%)** and `keccak_f_arr.sv`
+  **17.24 s → 15.37 s (−10.9%)**, both digests unchanged. Corpus 8/10 with every pinned
+  digest matching, `examples/` 4/4 byte-identical, and a 24-cell call-shape battery
+  (blocking / NBA / branch condition / system-task argument / ternary / `&&` / recursion /
+  `$fatal` inside / nested / lvalue index / NBA transport delay / `force`) identical
+  PRE-vs-POST, 16 of whose cells actually changed `able` — a cell that does not move
+  measures nothing.
+
+  ⚠️ This does NOT reach a frame call in a CONTINUOUS ASSIGN, which is a different path
+  (`settle_cont_assigns`, never `is_codegen_able`). Measured on the shape an external
+  report identified as its single largest cost — `assign w = {128'd0, zpad(src, nb)};` with
+  a looping `zpad` — the time is unchanged. That axis is open.
+
+  ⚠️ Also unchanged: the callee body itself. `frame_bodies` still counts every subroutine,
+  and each one still runs on `SimState::run_frame_call`, the generic `Value` tree-walk.
+  `crates/cli/tests/perf_call_regime.rs` carries the paired benchmark and pins both facts.
+
+### Added
+
+- **`run.json` now carries per-builtin evaluation counts and time** under `--obs-procs` /
+  `--obs-procs-time`, as a `builtins` sibling of `processes`. A single expensive process row
+  splits into "simulator primitives" vs "your RTL": `$fgets`, `$sscanf`, `$fdisplay`,
+  `.push_back()`, `.size()` and the rest each get `calls` and (when timed) `time_s`.
+
+  The convention is stated **in the file**, not just in a doc: `attribution: "self"` means a
+  row excludes builtins nested inside it, and `included_in_processes: true` means that time
+  is already inside the process row — so the two arrays must never be summed. Verified on a
+  nested `$fdisplay(fd, "%s", $sformatf(…))`, where an inclusive convention would have summed
+  past its own parent.
+
+  Instrumentation covers all four seams a builtin can reach the engine through, including the
+  synchronous `&self` frame executor, which does not go through the task dispatcher — without
+  that arm a `$display` inside a subroutine body would have been silently absent. Cost when
+  not requested, measured on a constructed worst case (3M pure system-function evaluations in
+  a loop): **+0.86%**, inside the measurement noise of a control that touches none of the
+  seams.
+
+### Documentation
+
+- **The codegen-discriminator note is corrected a fourth time, and this time the framing
+  changes rather than a row.** The 2026-08-25 revision already recorded that `able` is
+  anti-correlated with speed. A round-35 report asked, on the strength of a −30% A/B on
+  its own design, for the inliner to be *widened* to control-flow bodies. Measured, the
+  request is the wrong direction on the design that motivated it:
+
+  | routing of the report's own `idx()` | wall |
+  |---|---|
+  | frame call (today) | 0.27 s |
+  | hand-written source text (what they measured) | 0.83 s |
+  | **vita's own inline fold** | **26.9 s** |
+
+  Their hand-inlined file is *source text*, which has no formals — so it never pays the
+  formal-binding coercion that vita's inliner would. `idx`'s formals are `int` and
+  `int unsigned`; binding a possibly-unknown actual to a 32-bit 2-state formal is the
+  same per-bit fan-out described above, and it lands **98×**. The inline path's upside is
+  capped at 1.4–1.6× (one saved frame call) and does not grow with body size; its
+  downside is unbounded — measured 335× on a six-statement body and 31,000× on a
+  twenty-statement one, from the fold's expansion factor alone.
+
+  Also measured and rejected: opening the bytecode VM's `Terminator::Call` refusal. The
+  VM and the interpreter are within 1% on these bodies (their cost is expression
+  evaluation, which the VM delegates back to the kernel), and the **default** backend
+  already runs call-bearing bodies — so `codegen.able` under-reports what actually
+  executes, and "able 3/5 → 1/5" does not describe the default path.
+
+- **Throughput does not collapse with instance count.** A report observed a 5-engine top
+  running ~5× slower per cycle than a single-core testbench and read it as super-linear.
+  Measured over a 128× sweep, cost is a straight line — `t = 0.186 + 0.1597·N` per 200k
+  cycles, every point within 3.6% of the fit, with the marginal cost per instance-cycle
+  flat from N=2 to N=128. Five engines costing 5× *is* the linear prediction. Per-delta
+  work is O(active), not O(design): 1,024 dead instances add 4.6% total, and that as a
+  one-time step at elaboration rather than per delta.
 ## [0.2.0] — 2026-08-26
 
 **The compiled backend is the product.** `native` is now the default and the only

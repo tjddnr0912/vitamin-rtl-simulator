@@ -760,9 +760,16 @@ fn stage_plusarg_value_form_enables() {
 /// rest was refused — before this the only observation was a `--backend interp`
 /// vs `bytecode` A/B timing run, which is how a design with exactly 0% VM
 /// contribution (`bench/keccak` 호출형, round-26) went unnoticed. This design
-/// reproduces that shape in miniature: full of work, `frame_bodies > 0`, and
-/// the caller process refused for `user_call_in_expr` — so the report must say
-/// so, with exact counts (a wrong log is a silent-wrong, doc-19 §3).
+/// reproduces that shape in miniature: full of work and `frame_bodies > 0`, with
+/// exact counts, because a wrong log is a silent-wrong (doc-19 §3).
+///
+/// ⚠️ The caller process used to be refused here for `user_call_in_expr`, and
+/// this test was where that fact was pinned. Round 37 removed the exclusion: the
+/// op stream never evaluates an expression itself — every op hands an ExprId to a
+/// `Kernel` method, and each of those declines a call one level down to the
+/// generic evaluator that has always run it — so the body compiles and only the
+/// two `#delay` processes are refused. `frame_bodies` is still 1: the CALLEE is
+/// unchanged, and it is the number that says so.
 #[test]
 fn run_json_codegen_pins_the_vm_claim_and_reasons() {
     let (_, code, obs) = run(
@@ -779,8 +786,8 @@ fn run_json_codegen_pins_the_vm_claim_and_reasons() {
     let manifest = read(&obs.join("run.json"));
     assert_eq!(
         field(&manifest, "codegen"),
-        "{\"able\": 1, \"total\": 4, \"frame_bodies\": 1, \
-         \"reject_reasons\": {\"delay\": 2, \"user_call_in_expr\": 1}}",
+        "{\"able\": 2, \"total\": 4, \"frame_bodies\": 1, \
+         \"reject_reasons\": {\"delay\": 2}}",
         "full manifest:\n{manifest}"
     );
     // S0: framed user calls are CORE (rev-4: S3 absorbs T1/T2), and #delay is
