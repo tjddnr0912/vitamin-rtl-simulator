@@ -254,6 +254,60 @@ word buffer that lets `wprog` compile frame bodies) is where that estimate actua
 and it should be re-priced against a fresh profile rather than against the number written
 before these two.
 
+#### The re-pricing, and why it moved the next slice off the arena
+
+That re-pricing was done the same day, and it came back reversed in two directions.
+
+**The ceiling went UP, and it is not where the estimate said.** Leaf-attributed profiles
+(`/usr/bin/sample`, idle thread excluded) put the share of the run spent inside a frame
+call, and within that the share spent in the generic evaluator and `Value` — the part a
+compiled frame body would replace:
+
+| design | inside a frame call | generic-evaluator share | ceiling if removed |
+|---|---|---|---|
+| **aes** | 88.8% | **68.0%** | **3.13×** |
+| keccak-arr | 82.5% | 60.4% | 2.52× |
+| keccak_f | 44.8% | 39.3% | 1.65× |
+
+⭐ The standing "ceiling 2.33×" was computed from `keccak-arr` alone. The real maximum is
+**aes** — a third-party design, and one already winning at 2.22×. `keccak-arr`, the design
+the estimate was built on, is only second.
+
+**And the next slice is still not the arena.** `darkriscv` sits at parity and has
+`frame_bodies` = **0**, so nothing above applies to it — yet 45% of its run is in the
+generic evaluator (`eval_ctx` 16.8%, `eval_binary_ctx` 6.7%, `read_net` 5.6%, `log_eq`
+5.2%, `Value::clone` 3.6%, `from_packed` 2.8%, `mask_top` 2.7%, `resize` 2.4%) while the
+compiled `WProg::run` is 6.8%. Its process bodies are **13 of 16 admitted**, so the gap is
+not body admission — it is expression-level `wprog` declines *inside* admitted bodies.
+
+A temporary execution-weighted census (instrumentation measured and reverted, not
+committed) found **325k of 568k compile requests declined — 57% — and one node kind is
+78% of them**:
+
+```text
+  declined 252975  ok 17487   Ternary        w=32
+  declined  20000  ok     0   BitXor         w=92   (over the 64-bit lane)
+  declined  19999  ok     0   Eq             w=1
+  declined  16645  ok  2504   LogOr          w=1
+  declined   8746  ok     0   LogAnd         w=1
+  declined   2500  ok     0   Ne             w=1
+```
+
+⭐⭐ And the work-list is **small**. The compile cache runs `compile` once per
+`(eid, w, signed)`, so those request counts are execution weight, not distinct
+expressions: the Ternary bucket is **29 distinct expressions** requested 253k times, and
+they decline because a BRANCH declines (17 else, 6 cond, 4 then) — only 2 for the
+`LoadIdx`-in-an-untaken-branch rule the arm is written around. The width-1 comparisons
+never compile on this design at all (31k requests, 0 successes), which is the
+`lw.signed != rw.signed` gate — the same family `wprog`'s own header records a round-34
+report finding worth **2.9×**.
+
+⚠️ That header's census was over **picorv32 and keccak**. This corpus exists because that
+pair is not the corpus, and `darkriscv` and `serv` were not in it. So the next performance
+slice is `wprog` expression admission, not 5c: a 29-item list, covering exactly the three
+designs (`sha256`, `picorv32`, `darkriscv`) an arena would do nothing for, and not a
+six-to-ten-week item.
+
 ⚠️ **serv is new to this table.** It began running only in §4.5.382, so its 0.78×
 is a first measurement rather than a regression, and the 1.60× figure quoted before
 2026-08-28 was over a corpus that did not include it. The five-design geometric mean
