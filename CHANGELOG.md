@@ -11,6 +11,69 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A block-local with the same name as a module-scope net was the module net.** vita
+  flattens procedural block-locals into the module namespace, and the guard that makes
+  that safe — a width/signedness check, a definite-assignment check, and
+  `elaborate_netvar_decl` itself — sat behind one early `return` taken whenever the
+  name also existed at module scope. Its comment said the case was "handled by the
+  struct/enum/typedef shadow-scoping". It was not. So a shadow created no declaration
+  at all and every reference resolved to the shadowed net, at exit 0.
+
+  ⭐ One token separates the two behaviours: rename the MODULE net and the identical
+  design is loud. A 46-shape census found **22 silent-wrong cells**, unanimous against
+  both oracles:
+
+  ```text
+    logic[15:0] over logic[7:0]    val=ef  bits=8    both oracles: beef / 16
+    real over int                  3.000000          both: 2.500000
+    int signed over int unsigned   4294967293        both: -3
+    enum over logic[1:0]           x=1 name=RED      both: x=5 name=GRN
+    int x[0:3] over logic[7:0]     arr 1 1           both: arr 5 9
+    read before write              55 (leftover)     both: 0
+    write inside the block         module x=99       both: module x untouched
+  ```
+
+  The last row escapes the module: the shadowed net is readable by a hierarchical
+  reference from another module and visible in `$dumpvars`, so a block that only ever
+  named its own local was rewriting its parent's state, and the waveform showed the
+  parent's net changing with no var for the local at all.
+
+  The fix reuses machinery already in the tree. The function/task path (`$func$`) and
+  the generate path both give a local a distinct key and were already correct; a shadow
+  now earns a `$blk$<span>` scope the same way `automatic` and dynamic-storage locals
+  have since §4.5.249. The condition that disqualified it — `module_names.contains(name)`
+  — is now what QUALIFIES it, on ONE declaring block, because a shadow has nothing to
+  coalesce with. `walk_scopes_key` already treats `$blk$` as transparent, so every other
+  name in the block still falls through to the enclosing module net.
+
+  ⭐ The same move closes the reference from OUTSIDE the block. That gate exists because
+  "vita keeps a body's block-locals in a FLAT per-body table, so a reference outside the
+  declaring block would silently resolve to the block-local" — false for a name that is
+  not in the flat table. It is keyed on `scoped_block_locals`, which covers module
+  process bodies only, so a FRAME body keeps both its flat table and its diagnostic.
+
+  Census after: **40 of 46 match an oracle, 0 silent-wrong, 5 loud** (all
+  non-shadowing sibling coalesces plus a parser gap). Eight shapes moved loud → support
+  as well: a shadowing `string`, a shadowed `wire` (which reported E3018 and blamed the
+  user for a net assignment they had not written), a larger local array over a smaller
+  module array (E4002 twice at runtime), an `automatic` colliding with a module net, and
+  a dynamic array shadowing a dynamic net.
+
+  ⚠️ **Ten existing tests asserted the refusal this removes**, six of them named
+  `*_is_loud` / `*_stays_loud`. Every one was re-measured against both oracles before
+  being rewritten: all ten designs now produce the oracles' answer, so each is a value
+  assertion now, and the two that are still loud say which guard actually fires — one
+  of them passes for an entirely different reason than it was written for. ⚠️ One of the
+  ten was a cell written in this same change, one edit before the gate it pinned was
+  removed; its docstring claimed the scoping "does not teach the OUTER reference to
+  resolve", which was a guess about machinery that had needed no teaching.
+
+  ⚠️ The dynamic-pair diagnostic also listed "AND the name does not also name a net in
+  the enclosing scope" among the conditions for distinct storage. That clause is now
+  false and has been dropped. Recorded, not fixed: vita spells the waveform scope
+  `$blk$<span.lo>` where iverilog uses the block's label — a pre-existing convention,
+  but this change makes it visible on far more designs.
+
 - **`&&` and `||` evaluated their RIGHT operand even when the LEFT one had already
   decided the result.** IEEE 1800 §11.4.7 evaluates the right operand only when the left
   does not determine the answer. vita's generic evaluator was an ordinary eager tree

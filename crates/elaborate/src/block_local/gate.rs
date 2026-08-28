@@ -578,6 +578,27 @@ impl Elaborator<'_> {
         gather_nested_block_locals(body, true, &mut nested);
         for (bspan, names) in &nested {
             for (n, dspan) in names {
+                // A `$blk$`-SCOPED name is not in the flat table this gate is about.
+                // The paragraph above states the hazard exactly — "vita keeps a body's
+                // block-locals in a FLAT per-body table, so a reference OUTSIDE the
+                // declaring block would silently resolve to the block-local" — and that
+                // is false once the declaration owns a `$blk$<lo>` net: the outside
+                // reference walks past a scope that does not hold the name and lands on
+                // the outer binding, which is the answer both oracles give.
+                //
+                // ⚠️ Keyed on `scoped_block_locals` rather than on "does it shadow a
+                // module name", because that map is what actually decides whether the
+                // scope EXISTS. It is populated for MODULE PROCESS bodies only
+                // (`compute_scoped_block_locals` walks `for_each_proc`), so a
+                // function/task body — where the flat table is still the whole story —
+                // matches nothing here and keeps the diagnostic unchanged.
+                if self
+                    .scoped_block_locals
+                    .get(&bspan.lo)
+                    .is_some_and(|set| set.contains(n))
+                {
+                    continue;
+                }
                 let Some(hit) = stmt_refs_ident_outside(body, *bspan, n) else {
                     continue;
                 };

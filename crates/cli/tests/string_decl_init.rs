@@ -149,11 +149,17 @@ fn same_named_block_local_strings_get_their_own_storage() {
         assert!(out.contains(want), "expected `{want}`; got:\n{out}");
     }
 
-    // A block-local string shadowing a MODULE string is still loud — one declaring
-    // block, and the name is a module name, so it cannot be scoped.
-    let (_o, code) = run("module top; string s=\"M\"; initial begin \
-         begin string s=\"L\"; $display(\"%s\",s); end $display(\"%s\",s); $finish; end endmodule\n");
-    assert_ne!(code, Some(0), "a module-net shadow must stay loud");
+    // ⚠️ A block-local string shadowing a MODULE string is SUPPORTED now — being a
+    // module name is what EARNS the `$blk$` scope rather than what disqualifies it, so
+    // one declaring block is enough. Both oracles: `IN=L`, then `OUT=M`.
+    let (out, code) = run("module top; string s=\"M\"; initial begin \
+         begin string s=\"L\"; $display(\"IN=%s\",s); end $display(\"OUT=%s\",s); $finish; end endmodule\n");
+    assert_eq!(code, Some(0), "expected a clean run:\n{out}");
+    assert!(out.contains("IN=L"), "{out}");
+    assert!(
+        out.contains("OUT=M"),
+        "the module string must survive:\n{out}"
+    );
 }
 
 #[test]

@@ -378,19 +378,35 @@ fn gap_d_fork_read_after_preassign_is_accepted() {
 #[test]
 fn gap_d_automatic_colliding_with_module_net_is_loud() {
     // Adversarial find: an `automatic` block-local whose name collides with a
-    // module-scope net is aliased onto that net by the v1 flatten, which both
-    // corrupts the shared net AND bypasses the definite-assignment gate (the
-    // coalesce `continue` skips it). Must be LOUD — never silently aliased. Here
-    // the block is even read-before-write, the exact case the gate must catch.
+    // module-scope net used to be ALIASED onto that net by the v1 flatten, which both
+    // corrupted the shared net AND bypassed the definite-assignment gate.
+    //
+    // ⚠️ The aliasing is gone — a shadow earns its own `$blk$` net — so the COLLISION
+    // is no longer a reason to refuse and this no longer says "collides". What still
+    // refuses is the second half of the original hazard, which this design was built
+    // to carry: `y = x + 1` READS `x` before its first write, and a `$blk$` net is one
+    // static net per block rather than one per entry, so the `automatic` lifetime is
+    // still unimplementable here. verilator runs it (`y=1`, module `x=50`).
+    //
+    // The property worth pinning is unchanged and is the one the report was about:
+    // this must never be accepted silently. The reason is asserted separately from
+    // the refusal so a future change to either is visible.
     let (_o, e, ok) = run("module top;\n\
          logic [7:0] a; integer y; integer x;\n\
          always @(*) begin automatic int x; y = x + 1; x = a; end\n\
          initial begin x = 8'd50; a = 8'd10; #1 $display(\"y=%0d\", y); end endmodule\n");
     assert!(
         !ok,
-        "an automatic colliding with a module net must be loud, not aliased"
+        "a read-before-write `automatic` block-local must be loud, not aliased"
     );
-    assert!(e.contains("collides"), "expected the collision loud: {e}");
+    assert!(
+        e.contains("per-entry lifetime"),
+        "expected the lifetime gate, not the retired collision gate: {e}"
+    );
+    assert!(
+        !e.contains("collides"),
+        "the collision is no longer a reason — the shadow has its own net: {e}"
+    );
 }
 
 #[test]

@@ -553,14 +553,25 @@ fn same_named_string_locals_keep_their_own_initializers() {
 /// on both counts.
 #[test]
 fn a_block_local_shadowing_a_module_dynamic_net_stays_loud() {
-    assert!(loud3009(
-        "module top;\n\
+    // ⚠️ It does not stay loud any more. A block-local shadowing a module-scope name
+    // — dynamic storage included — earns its own `$blk$` net, so the two dynamic
+    // arrays are two variables with two heaps, which is what IEEE says they are and
+    // what both oracles print (`A=1`, then the module's own 5).
+    //
+    // The name is kept so the history is findable; the assertion is the value.
+    let (out, ok) = run("module top;\n\
          byte m [];\n\
          initial begin\n\
            m = new[5];\n\
            begin byte m[]; m = new[1]; $display(\"A=%0d\", m.size()); end\n\
+           $display(\"M=%0d\", m.size());\n\
            $finish;\n\
          end\n\
-         endmodule\n"
-    ));
+         endmodule\n");
+    assert!(ok, "expected a clean run:\n{out}");
+    assert!(out.contains("A=1"), "the local's own heap:\n{out}");
+    assert!(
+        out.contains("M=5"),
+        "the module's heap must survive:\n{out}"
+    );
 }

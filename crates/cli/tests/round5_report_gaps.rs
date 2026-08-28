@@ -52,10 +52,6 @@ fn run(src: &str) -> (String, String, bool) {
     )
 }
 
-fn err_count(e: &str) -> usize {
-    e.matches("error[").count()
-}
-
 /// stdout with the trailing engine status lines removed (`simulation ended …` /
 /// `$finish called …`), leaving just the `$display` output.
 fn disp(o: &str) -> String {
@@ -238,15 +234,21 @@ fn dup_collision_with_real_net_stays_loud() {
     // A block-local automatic whose name collides with a REAL module net (not
     // another block-local) must STAY loud — aliasing a real net is the round-4 GAP-D
     // hazard the fix must not weaken.
-    let (_o, e, ok) = run(
+    // ⚠️ It does not stay loud. GAP-D's hazard was that the flatten ALIASED the local
+    // onto the module net; a shadow now gets a `$blk$` net per block, so the two
+    // `always_comb` locals are two variables and `idx` at module scope is untouched.
+    // verilator (iverilog refuses `automatic` block-locals outright): `R 4 5`.
+    let (o, e, ok) = run(
         "module m (input logic [3:0] s, output logic [7:0] y0, output logic [7:0] y1);\n\
          int idx;\n\
          always_comb begin automatic int idx; idx = s + 1; y0 = idx[7:0]; end\n\
          always_comb begin automatic int idx; idx = s + 2; y1 = idx[7:0]; end\n\
-         endmodule",
+         endmodule\n\
+         module t; logic [3:0] s = 4'h3; logic [7:0] y0, y1; m u(.s(s), .y0(y0), .y1(y1));\n\
+         initial begin #1 $display(\"R %0d %0d\", y0, y1); end endmodule",
     );
-    assert!(!ok, "collision with a real module net must stay loud");
-    assert!(err_count(&e) >= 1, "expected an E3009 collision:\n{e}");
+    assert!(ok, "expected a clean run:\n{e}");
+    assert!(o.contains("R 4 5"), "each block needs its own idx:\n{o}");
 }
 
 #[test]

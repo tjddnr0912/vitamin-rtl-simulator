@@ -455,7 +455,14 @@ fn alias_a_string_block_local_of_the_same_name_is_still_loud() {
     // reached the block-local scalar, the read the routed array), so iverilog's
     // `R=zz,yy` became a silent `R=,` at exit 0. The guard is now keyed on the storage,
     // not on one of the two representations.
-    let (_, ok, err) = compile(
+    // ⚠️ The alias is gone for a BETTER reason than the guard: the block-local
+    // `string sa` shadows a module-scope name, so it earns its own `$blk$` net and the
+    // module's array is untouched. The write and the read-back now reach the same
+    // storage because there is only one candidate left. iverilog: `R=zz,yy`.
+    //
+    // The regression this cell guards is unchanged in substance — a SILENT `R=,` must
+    // never come back — and is now asserted as the value rather than as a refusal.
+    let (out, ok, err) = compile(
         "module t;\n\
            string sa[2];\n\
            initial begin : blk\n\
@@ -465,10 +472,10 @@ fn alias_a_string_block_local_of_the_same_name_is_still_loud() {
            initial begin sa[0]=\"zz\"; sa[1]=\"yy\"; #1 $display(\"R=%s,%s\", sa[0], sa[1]); end\n\
          endmodule\n",
     );
-    assert!(!ok, "expected a loud reject");
+    assert!(ok, "expected a clean run:\n{err}");
     assert!(
-        err.contains("collides with a string ARRAY"),
-        "unexpected diagnostic:\n{err}"
+        out.contains("R=zz,yy"),
+        "the array must keep its own storage:\n{out}"
     );
 }
 

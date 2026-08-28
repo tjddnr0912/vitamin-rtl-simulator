@@ -119,7 +119,7 @@ impl Elaborator<'_> {
         for_each_proc(&module.body, &mut |p, path| {
             let before: BTreeMap<String, usize> =
                 per_name.iter().map(|(k, v)| (k.clone(), v.len())).collect();
-            Self::gather_auto_block_locals(&p.body, &mut per_name);
+            Self::gather_auto_block_locals(&p.body, module_names, &mut per_name);
             for (name, spans) in per_name.iter() {
                 for &(lo, hi, _) in &spans[before.get(name).copied().unwrap_or(0)..] {
                     branch_of.entry((lo, hi)).or_insert_with(|| path.clone());
@@ -147,7 +147,17 @@ impl Elaborator<'_> {
                 })
                 .map(|&(lo, hi, _)| (lo, hi))
                 .collect();
-            if spans.len() < 2 || module_names.contains(name) {
+            // A name that SHADOWS a module-scope port/param/net qualifies on ONE
+            // declaring block: there is nothing for it to coalesce WITH, and the net
+            // it would flatten onto is the shadowed one — which is the bug, not the
+            // baseline. Every other name still needs two declaring blocks, because
+            // a lone non-shadowing block-local has a net of its own already.
+            //
+            // ⚠️ This condition used to read `|| module_names.contains(name)`, i.e.
+            // the exact opposite: a shadow was DISQUALIFIED from scoping. That is
+            // what routed all 22 shapes onto the module net.
+            let shadows_module = module_names.contains(name);
+            if spans.len() < 2 && !shadows_module {
                 continue;
             }
             // §4.5.259: a span in a NESTING relation with another declaring span of this
@@ -169,7 +179,7 @@ impl Elaborator<'_> {
                         .any(|&b| a != b && (contains(a, b) || contains(b, a)) && coexist(a, b))
                 })
                 .collect();
-            if spans.len() < 2 {
+            if spans.len() < 2 && !shadows_module {
                 continue;
             }
             for &(lo, hi) in &spans {

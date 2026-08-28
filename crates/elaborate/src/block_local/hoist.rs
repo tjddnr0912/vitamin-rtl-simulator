@@ -210,7 +210,15 @@ impl Elaborator<'_> {
                     matches!(dim, ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_))
                 })
             });
-        if d.lifetime == Some(true) || dyn_storage {
+        // A block-local SHADOWING a module-scope name earns a scope too, for the
+        // reason `gather_auto_block_locals` records: the net it would flatten onto is
+        // the shadowed one. The three terms are the three kinds `gather` marks, and
+        // `block_local_scope_seg` re-checks the marks, so this stays the weaker test.
+        let shadows_module = d
+            .names
+            .iter()
+            .any(|n| self.local_decl_names.contains(&n.name.name));
+        if d.lifetime == Some(true) || dyn_storage || shadows_module {
             if let Some(seg) = self.block_local_scope_seg(span, d) {
                 for n in &d.names {
                     let nm = &n.name.name;
@@ -395,8 +403,7 @@ impl Elaborator<'_> {
                          another block, and this pair cannot be given distinct storage \
                          ({lifetime}). A pair earns distinct storage when both are \
                          `automatic`, or both are dynamic (or scalar-`string`), AND \
-                         neither declaring block encloses the other, AND the name does \
-                         not also name a net in the enclosing scope. As written both \
+                         neither declaring block encloses the other. As written both \
                          would share one flattened handle and one heap; make both \
                          `automatic`, or rename one"
                     ),

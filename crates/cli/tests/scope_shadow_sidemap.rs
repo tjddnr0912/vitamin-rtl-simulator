@@ -241,7 +241,12 @@ fn block_local_string_colliding_with_string_array_is_loud() {
     // collides with the array's name instead of nesting under it. It used to alias:
     // the module's own `sa[0]="zz"` became a putc byte-write into the block-local
     // scalar and read back "".
-    let (_, ok, err) = run_raw(
+    // ⚠️ Not loud any more, and not aliased either: the block-local shadows a
+    // module-scope name, so it gets its own `$blk$` net and the array keeps its
+    // element storage. The property under test — the module's `sa[0]="zz"` and its
+    // read-back must reach the SAME storage — is now asserted as the value iverilog
+    // prints (`R=zz,yy`) rather than as a refusal.
+    let (out, ok, err) = run_raw(
         "module t;\n\
            string sa[2];\n\
            initial begin : blk\n\
@@ -251,10 +256,10 @@ fn block_local_string_colliding_with_string_array_is_loud() {
            initial begin sa[0]=\"zz\"; sa[1]=\"yy\"; #1 $display(\"R=%s,%s\", sa[0], sa[1]); end\n\
          endmodule\n",
     );
-    assert!(!ok, "expected a loud reject");
+    assert!(ok, "expected a clean run:\n{err}");
     assert!(
-        err.contains("collides with a string ARRAY"),
-        "unexpected diagnostic:\n{err}"
+        out.contains("R=zz,yy"),
+        "write and read must reach one storage:\n{out}"
     );
 }
 

@@ -162,16 +162,20 @@ fn two_fork_arms_can_declare_the_same_string_array() {
 /// both; vita says so instead of aliasing them.
 #[test]
 fn the_two_unsupported_same_name_shapes_stay_loud() {
-    assert!(loud(
-        "module t;\n\
+    // ⚠️ The FIRST shape is supported now — the two blocks shadow a module-scope name,
+    // so each earns its own `$blk$` net and both oracles' answer (`A=|aa| B=|bb|`) is
+    // reproduced. Only the second shape, where the outer declaration is itself a
+    // BLOCK-local, is still beyond the scoping.
+    let (out, ok) = run("module t;\n\
            string s[2];\n\
            initial begin\n\
              begin string s[2]; s[0]=\"aa\"; $display(\"A=|%s|\", s[0]); end\n\
              begin string s[2]; s[0]=\"bb\"; $display(\"B=|%s|\", s[0]); end\n\
              $finish;\n\
            end\n\
-         endmodule\n"
-    ));
+         endmodule\n");
+    assert!(ok, "expected a clean run:\n{out}");
+    assert!(out.contains("A=|aa|") && out.contains("B=|bb|"), "{out}");
     assert!(loud(
         "module t;\n\
            initial begin\n\

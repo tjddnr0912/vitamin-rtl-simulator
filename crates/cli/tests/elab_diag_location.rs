@@ -135,14 +135,16 @@ fn elaborate_warnings_are_located_too() {
 /// decides whether two same-named locals can have distinct storage.
 #[test]
 fn the_same_name_dynamic_local_message_names_the_local_and_the_rule() {
-    // A block-local dynamic array shadowing a MODULE net of the same name — the shape
-    // §4.5.251's widening still cannot scope (one declaring block, and the name is a
-    // module name), so this is where the message is still read.
+    // ⚠️ The shape this cell used to use — a dynamic local shadowing a MODULE net —
+    // is now SCOPED and runs, so it no longer reads this message. What still cannot be
+    // scoped is a pair where one declaring block ENCLOSES the other (the nesting
+    // filter in `compute_scoped_block_locals`), which is the condition the message
+    // itself names, so that is the shape now used.
     let out = run("module t;\n\
-         byte m [];\n\
          initial begin\n\
-           m = new[5];\n\
-           begin byte m[]; m = new[1]; $display(\"A=%0d\", m.size()); end\n\
+           begin byte m[]; m = new[5];\n\
+             begin byte m[]; m = new[1]; $display(\"A=%0d\", m.size()); end\n\
+           end\n\
            $finish;\n\
          end\n\
          endmodule\n");

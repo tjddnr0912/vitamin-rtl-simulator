@@ -11,8 +11,16 @@ impl Elaborator<'_> {
     /// (non-`automatic`) block-locals are intentionally OMITTED — they safely
     /// coalesce onto one net when two sequential blocks reuse a temp name (see
     /// `hoist_block_local_nets`), so they need no separate scope.
+    /// `module_names` is [`Self::gather_local_decl_names`]'s set — the module's own
+    /// ports, params and nets. A block-local of one of those names SHADOWS it, and a
+    /// shadow cannot be answered by the flatten at all: the flattened net IS the
+    /// shadowed one, so the local's width, signedness and lifetime are the module
+    /// net's and its writes land on the module net. That was silent-wrong in 22
+    /// measured shapes, so a shadow earns a `$blk$` scope for the same reason
+    /// `automatic` and dynamic storage do — it owns storage the flatten cannot share.
     pub(crate) fn gather_auto_block_locals(
         s: &ast::Stmt,
+        module_names: &std::collections::BTreeSet<String>,
         out: &mut BTreeMap<String, Vec<(u32, u32, bool)>>,
     ) {
         match s {
@@ -71,7 +79,8 @@ impl Elaborator<'_> {
                         // span of the same name must not withdraw the scoping the
                         // automatic-only set already granted (review S3 — it turned a
                         // working inner/sibling pair loud).
-                        if d.lifetime == Some(true) || dyn_storage {
+                        let shadows_module = module_names.contains(&n.name.name);
+                        if d.lifetime == Some(true) || dyn_storage || shadows_module {
                             out.entry(n.name.name.clone()).or_default().push((
                                 span.lo,
                                 span.hi,
@@ -81,18 +90,18 @@ impl Elaborator<'_> {
                     }
                 }
                 for st in stmts {
-                    Self::gather_auto_block_locals(st, out);
+                    Self::gather_auto_block_locals(st, module_names, out);
                 }
             }
             ast::Stmt::Fork { stmts, .. } => {
                 for st in stmts {
-                    Self::gather_auto_block_locals(st, out);
+                    Self::gather_auto_block_locals(st, module_names, out);
                 }
             }
             ast::Stmt::If { then_s, else_s, .. } => {
-                Self::gather_auto_block_locals(then_s, out);
+                Self::gather_auto_block_locals(then_s, module_names, out);
                 if let Some(e) = else_s {
-                    Self::gather_auto_block_locals(e, out);
+                    Self::gather_auto_block_locals(e, module_names, out);
                 }
             }
             ast::Stmt::Case { items, .. } => {
@@ -101,14 +110,14 @@ impl Elaborator<'_> {
                         ast::CaseItem::Match { body: b, .. } => b,
                         ast::CaseItem::Default { body: b, .. } => b,
                     };
-                    Self::gather_auto_block_locals(inner, out);
+                    Self::gather_auto_block_locals(inner, module_names, out);
                 }
             }
             ast::Stmt::For { body: b, .. }
             | ast::Stmt::While { body: b, .. }
             | ast::Stmt::Repeat { body: b, .. }
             | ast::Stmt::Forever { body: b, .. } => {
-                Self::gather_auto_block_locals(b, out);
+                Self::gather_auto_block_locals(b, module_names, out);
             }
             _ => {}
         }

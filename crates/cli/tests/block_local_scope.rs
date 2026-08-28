@@ -72,10 +72,20 @@ fn leak_nested_block_read_in_outer_is_loud() {
 
 #[test]
 fn leak_procedural_block_is_loud() {
-    // The same leak in an initial/always procedural block.
-    let (_o, code) = run("module top; int x=10; \
+    // ⚠️ NO LONGER LOUD, and the rename would be a lie the other way: in a MODULE
+    // PROCESS the shadowing local now owns a `$blk$` net, so there is no leak left to
+    // be loud about and the outer read resolves to the module net. Pinned to the
+    // VALUE, which is iverilog's and verilator's (`r=10`).
+    //
+    // The frame-body twin below is where the flat table — and the diagnostic — still
+    // live, so the case this cell was written for is still covered.
+    let (o, code) = run("module top; int x=10; \
          initial begin begin int x; x=5; end #1 $display(\"r=%0d\",x); $finish; end endmodule\n");
-    assert_ne!(code, Some(0), "procedural block-local leak must be loud");
+    assert_eq!(code, Some(0), "a module process scopes the shadow:\n{o}");
+    assert!(
+        o.contains("r=10"),
+        "the outer read must see the module net:\n{o}"
+    );
 }
 
 #[test]

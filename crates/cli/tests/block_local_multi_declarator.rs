@@ -20,6 +20,22 @@
 //!
 //! The fix splits a declaration only when its declarators DISAGREE about colliding.
 //! A declaration where all collide, or none do, takes the original path unchanged.
+//!
+//! ## ⚠️ The collision REFUSAL these cells were written against is gone
+//!
+//! R16 §3.5 was about how far one collision's diagnostic spread. The collision
+//! itself is no longer a refusal: a block-local shadowing a module-scope name now
+//! earns its own `$blk$` net instead of aliasing onto the shadowed one, which was
+//! silent-wrong in 22 measured shapes. So three of these cells changed from
+//! "exactly one diagnostic" to "runs, and matches verilator" — loud → support.
+//!
+//! They were kept rather than deleted because what they actually test survives the
+//! change and is stronger stated as a value: the CLEAN declarators must still work
+//! (no E3010 cascade, which is the original bug) AND the shadowed module net must
+//! come out untouched (which is the bug the scoping fixed). iverilog is not an
+//! oracle here — it refuses `automatic` block-locals outright ("sorry: Overriding
+//! the default variable lifetime is not yet supported") — so verilator is, and
+//! every expected value below was measured against it.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -51,66 +67,67 @@ fn errors(o: &str) -> Vec<String> {
         .collect()
 }
 
-/// Exactly one diagnostic, and it names `who` — no leak onto the clean declarators,
-/// no E3010 cascade.
-fn one_error_naming(src: &str, who: &str) {
+const MODULE_NET: &str = "module t;\n  int n;\n";
+
+/// The design runs, the clean declarators computed their answer, and the SHADOWED
+/// module net is untouched. All three are verilator's answer, measured.
+fn runs_with_module_net_untouched(src: &str) {
     let (o, ok) = run(src);
-    assert!(!ok, "expected a diagnostic, got acceptance:\n{o}");
-    let e = errors(&o);
-    assert_eq!(e.len(), 1, "expected exactly one diagnostic, got:\n{o}");
-    assert!(e[0].contains(&format!("`{who}`")), "wrong subject:\n{o}");
+    assert!(ok, "expected acceptance, got:\n{o}");
+    assert!(
+        o.contains("R PASS"),
+        "clean declarators must still work:\n{o}"
+    );
     assert!(
         !o.contains("E3010"),
         "a dropped declarator produced an undeclared-name cascade:\n{o}"
     );
+    assert!(
+        o.contains("module n=0"),
+        "the shadowed module net must not receive the local's writes:\n{o}"
+    );
 }
 
-const MODULE_NET: &str = "module t;\n  int n;\n";
-
-/// The report's reproducer. 8 diagnostics at 6b6b8ef.
+/// The report's reproducer. 8 diagnostics at 6b6b8ef, one after R16 §3.5, and now
+/// none at all — the shadowing `n` has its own net, so there is nothing to report.
 #[test]
 fn collision_in_the_first_declarator_does_not_leak() {
-    one_error_naming(
-        &format!(
-            "{MODULE_NET}\
-             initial begin begin automatic int n = 0, n_skip = 0;\n\
-               n_skip++; n_skip++; if (n_skip == 2) $display(\"R PASS\");\n\
-             end end\n\
-           endmodule"
-        ),
-        "n",
-    );
+    runs_with_module_net_untouched(&format!(
+        "{MODULE_NET}\
+         initial begin begin automatic int n = 0, n_skip = 0;\n\
+           n_skip++; n_skip++; if (n_skip == 2) $display(\"R PASS\");\n\
+         end end\n\
+         initial begin #1; $display(\"module n=%0d\", n); end\n\
+       endmodule"
+    ));
 }
 
 /// The report's order dependence: a collision in the SECOND declarator did not leak,
-/// which is why the same code moved one word over behaved differently.
+/// which is why the same code moved one word over behaved differently. It still must
+/// not matter, and now neither spelling reports anything.
 #[test]
 fn collision_in_a_later_declarator_behaves_the_same() {
-    one_error_naming(
-        &format!(
-            "{MODULE_NET}\
-             initial begin begin automatic int n_skip = 0, n = 0;\n\
-               n_skip++; n_skip++; if (n_skip == 2) $display(\"R PASS\");\n\
-             end end\n\
-           endmodule"
-        ),
-        "n",
-    );
+    runs_with_module_net_untouched(&format!(
+        "{MODULE_NET}\
+         initial begin begin automatic int n_skip = 0, n = 0;\n\
+           n_skip++; n_skip++; if (n_skip == 2) $display(\"R PASS\");\n\
+         end end\n\
+         initial begin #1; $display(\"module n=%0d\", n); end\n\
+       endmodule"
+    ));
 }
 
 /// Three declarators, one colliding — 11 diagnostics at 6b6b8ef.
 #[test]
 fn two_clean_declarators_survive_one_collision() {
-    one_error_naming(
-        &format!(
-            "{MODULE_NET}\
-             initial begin begin automatic int n = 0, a2 = 0, a3 = 0;\n\
-               a2++; a3++; if (a2 == 1 && a3 == 1) $display(\"R PASS\");\n\
-             end end\n\
-           endmodule"
-        ),
-        "n",
-    );
+    runs_with_module_net_untouched(&format!(
+        "{MODULE_NET}\
+         initial begin begin automatic int n = 0, a2 = 0, a3 = 0;\n\
+           a2++; a3++; if (a2 == 1 && a3 == 1) $display(\"R PASS\");\n\
+         end end\n\
+         initial begin #1; $display(\"module n=%0d\", n); end\n\
+       endmodule"
+    ));
 }
 
 /// The report's PASS boundary: renaming only the first declarator made it work, and
@@ -128,8 +145,15 @@ fn no_collision_still_runs() {
     assert!(o.contains("R PASS"), "expected R PASS, got:\n{o}");
 }
 
-/// SOUNDNESS PIN. When EVERY declarator collides, every one is still reported — the
-/// split must not silence a real collision, only stop it spreading.
+/// SOUNDNESS PIN — one diagnostic per NAME, never one verdict applied to all.
+///
+/// ⚠️ This cell still passes but no longer for the reason it was written for. The
+/// collision guard it targeted is gone; what fires here is the per-entry-lifetime
+/// guard, because `n++` READS before its first write and a `$blk$` net is still one
+/// static net per block rather than per entry. The property under test is unchanged
+/// and is the one worth keeping: whatever the guard is, it must name each offending
+/// declarator separately. verilator runs this design (`R 1 1`, `mod 0 0`), so the
+/// refusal is a real remaining limit, not a disagreement about semantics.
 #[test]
 fn all_declarators_colliding_are_all_reported() {
     let (o, ok) = run("module t;\n  int n; int m;\n\
