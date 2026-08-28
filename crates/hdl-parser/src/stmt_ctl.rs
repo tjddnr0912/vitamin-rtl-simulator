@@ -18,6 +18,13 @@ impl Parser<'_, '_> {
                 self.expect(TokenKind::Colon, "':' in an `inside` range");
                 let hi = self.expr(0);
                 self.expect(TokenKind::RBracket, "']' to close an `inside` range");
+                // ⚠️ `lhs` is DUPLICATED, so a side-effecting operand is named twice
+                // where §11.4.13 evaluates it once. Since `&&` short-circuits
+                // (IEEE 1800 §11.4.7), the duplicate now runs a CONDITION-DEPENDENT
+                // number of times — once when the lower bound fails, twice otherwise —
+                // where it used to run twice always. Closer to the LRM in both cases and
+                // the VALUE is unaffected, but the remaining defect is the duplication
+                // itself: it wants a hoist to a temporary, like the `case` scrutinee got.
                 let ge = mk_bin(BinOp::Ge, lhs.clone(), lo);
                 let le = mk_bin(BinOp::Le, lhs.clone(), hi);
                 mk_bin(BinOp::LogAnd, ge, le)

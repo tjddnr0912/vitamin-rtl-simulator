@@ -66,7 +66,7 @@
 //! corpus mirror sweep (`s2_wprog_*` tests) — measured equal, not argued equal.
 //! Nothing here is restated: the comparisons call the shared
 //! `eval::binops::{relational, log_eq, case_eq}`, `&&`/`||` call
-//! `eval::binops::{log_and, log_or}`, and `!` plus the six reductions call
+//! `eval::binops::log_bin_tri`, and `!` plus the six reductions call
 //! `eval::unary_self_of` — the same function the generic `eval_unary_self`
 //! reaches. Those are free functions extracted for this; the pre-existing
 //! `EvalCtx` methods delegate, so the generic path is unchanged.
@@ -658,24 +658,33 @@ fn compile_node(
                     Some(())
                 }
                 // `&&` / `||` — SELF-determined operands, each reduced to a
-                // truth value independently, one unsigned result bit. Two facts
-                // make this admissible without restating anything:
-                //
-                // (1) the generic evaluator does NOT short-circuit — it writes
-                //     `let l = self.eval(lhs); let r = self.eval(rhs);` and only
-                //     then folds. So evaluating both eagerly here is not a
-                //     behavioural choice; it is the same order, which matters
-                //     because an admitted subtree can still COUNT an
-                //     out-of-range element read (`LoadIdx`).
-                // (2) each operand is compiled at ITS OWN width and sign, so the
-                //     stack value is already masked to that width and the
-                //     truthiness scan sees exactly the bits the generic one sees.
+                // truth value independently, one unsigned result bit. Each operand
+                // is compiled at ITS OWN width and sign, so the stack value is
+                // already masked to that width and the truthiness scan sees exactly
+                // the bits the generic one sees.
                 //
                 // The operands may differ in width from each other and from this
                 // node — that is why the op carries both, and why this does not
                 // violate the module's uniform-width admission: like a comparison,
                 // it introduces a further width rather than a conversion, and the
                 // result discards the operands entirely.
+                //
+                // ⚠️⚠️ This arm used to carry a SECOND justification — *"the generic
+                // evaluator does NOT short-circuit … so evaluating both eagerly here
+                // is not a behavioural choice; it is the same order"* — and that
+                // sentence was load-bearing precisely because an admitted subtree can
+                // still COUNT an out-of-range element read (`LoadIdx`). The generic
+                // evaluator short-circuits now (IEEE 1800 §11.4.7), so the sentence
+                // is false and the hazard it named is live: this lane always runs the
+                // right operand, so a `LoadIdx` there would report an access the
+                // generic path never performs.
+                //
+                // The answer is the one the `Ternary` arm below already gives, asked
+                // the same way — of the compiled OPS rather than the expression shape,
+                // which makes it exact rather than conservative. Only the RIGHT
+                // operand is guarded: the left one is evaluated on every path, so a
+                // report from it is not a divergence. A diagnostic APPEARING is a
+                // divergence exactly as much as one going missing.
                 B::LogAnd | B::LogOr => {
                     // Insurance, not a live check — see the identical note on the
                     // unary arm above.
@@ -690,9 +699,16 @@ fn compile_node(
                     compile_node(
                         ir, wt, arena, *lhs, lw.width, lw.signed, ops, depth, max_depth,
                     )?;
+                    let rhs_at = ops.len();
                     compile_node(
                         ir, wt, arena, *rhs, rw.width, rw.signed, ops, depth, max_depth,
                     )?;
+                    if ops[rhs_at..]
+                        .iter()
+                        .any(|o| matches!(o, WOp::LoadIdx { .. }))
+                    {
+                        return None;
+                    }
                     *depth -= 1;
                     ops.push(WOp::LogBin {
                         op: *op,

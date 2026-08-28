@@ -452,6 +452,14 @@ pub(crate) fn lower(
                 }
                 // LOGICAL: each operand self-determined, tri-valued combine
                 // (wide operands stay oracle-bound — `c = a128 && b` is rare).
+                // ⚠️ LAZINESS — the same guard, and for the same reason, as the
+                // `Ternary` arm below: `eval_ctx`'s `&&`/`||` runs the right operand
+                // ONLY when the left did not decide the result (IEEE 1800 §11.4.7).
+                // This VM has no control flow and evaluates both always, which is the
+                // same VALUE (the truth table is total) but not the same DIAGNOSTICS,
+                // because `LoadIndexed` reads through `read_net` and that is where an
+                // out-of-range index is REPORTED. Only the RIGHT operand is guarded;
+                // the left runs on every path.
                 B::LogAnd | B::LogOr => {
                     let lw = wt.get(*lhs).width;
                     let rw = wt.get(*rhs).width;
@@ -459,7 +467,14 @@ pub(crate) fn lower(
                         return None;
                     }
                     lower(ir, wt, nonint, *lhs, 0, true, ops)?;
+                    let rhs_at = ops.len();
                     lower(ir, wt, nonint, *rhs, 0, true, ops)?;
+                    if ops[rhs_at..]
+                        .iter()
+                        .any(|o| matches!(o, NOp::LoadIndexed { .. } | NOp::WLoadIndexed { .. }))
+                    {
+                        return None;
+                    }
                     ops.push(NOp::LogBin {
                         and: matches!(op, B::LogAnd),
                         lw,

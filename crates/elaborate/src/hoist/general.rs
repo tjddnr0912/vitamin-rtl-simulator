@@ -903,11 +903,11 @@ impl Elaborator<'_> {
     /// `cc` is NOT `sc_val` — the value that makes the source skip `arm` (`0` for a `&&`
     /// right operand and a `?:` then-arm, `1` for a `||` right operand and an else-arm).
     /// Case-inequality, so an x truth enters the block: that is exactly when IEEE
-    /// evaluates the operand anyway (`log_and(x, B)` needs `B`; a `?:` with an x
+    /// evaluates the operand anyway (`log_bin_tri(LogAnd, x, B)` needs `B`; a `?:` with an x
     /// condition evaluates both arms).
     ///
     /// On the skipped path the arm's temp keeps its default value and is read but not
-    /// selected: `log_and(0, anything)` is `0`, `log_or(1, anything)` is `1`, and a `?:`
+    /// selected: `(LogAnd, False, _)` is `0`, `(LogOr, True, _)` is `1`, and a `?:`
     /// with a definite condition returns the other arm.
     fn guarded_hoist(
         &mut self,

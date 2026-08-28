@@ -11,6 +11,63 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **`&&` and `||` evaluated their RIGHT operand even when the LEFT one had already
+  decided the result.** IEEE 1800 §11.4.7 evaluates the right operand only when the left
+  does not determine the answer. vita's generic evaluator was an ordinary eager tree
+  walk — `let l = self.eval(lhs); let r = self.eval(rhs);` — so a guard idiom did not
+  guard. The operator's own RESULT was right in all 47 census cells; the damage was
+  entirely in state the skipped operand should never have touched:
+
+  ```text
+    0 && (c.bump()==1);   then c.cnt      vita 1              ivl 0  verilator 0
+    1 || (c.bump()==1);   then c.cnt      vita 1              ivl 0  verilator 0
+    0 && ($random != 0);  then $random    vita -1064739199    ivl 303379748
+    0 && (mem4[9] != 0);                  vita E4002, exit 1  both exit 0
+    0 && f(1)   where f $displays         vita prints         neither oracle does
+  ```
+
+  ⭐ The `$random` row is the sharpest: vita's CONTROL draw is byte-identical to
+  iverilog's, since the two share an LCG stream — so vita's test draw was provably the
+  SECOND draw of that same stream while iverilog's was still the first. A skipped
+  operand had consumed a random number. And the fourth row means the canonical
+  `if (i < 4 && mem[i])` bounds guard reported an out-of-range read and exited 1.
+
+  The reference implementation was four lines above the defect: the `Ternary` arm
+  reaches a branch through a closure, so a branch runs only where the closure is
+  called. `&&`/`||` now do the same. ⚠️ The deciding question is the operand's TRUTH
+  VALUE, not a bit — `4'b01x0 || f()` skips (a set bit determines it) while
+  `4'b00x0 || f()` must not (`Tri::Unknown`), and both oracles agree on both — so the
+  predicate is written over `Tri`. Skipping is sound because the table row is constant
+  across the right argument there, and rather than restate that answer the deciding
+  truth value is fed back in as the right argument, so the one `log_bin_tri` table
+  still produces it.
+
+  The two compiled lanes (`native/wprog.rs`, `native_eval/`) have no control flow and
+  keep evaluating both operands. That is the same VALUE — the table is total — but not
+  the same DIAGNOSTICS, so both now DECLINE an `&&`/`||` whose right operand compiled to
+  an indexed element load, which is character-for-character the guard their `Ternary`
+  arms already carried, asked of the compiled OPS rather than of the expression shape.
+  Only the right operand is guarded; the left runs on every path.
+
+  ⚠️ The 6,240-test suite passed unchanged both before and after. Nothing in it
+  evaluated a side-effecting `&&` operand, which is why 16 new cells exist. Adversarial
+  review found 0 BLOCKING across ~93,000 differential cells and a nine-item code-path
+  census; three NITs were documentation the change had made false, including
+  `log_bin_tri`'s own doc comment still asserting *"neither operator short-circuits
+  here and neither does the generic evaluator"* — on the function this change had just
+  pointed `wprog.rs`'s header at.
+
+  ⚠️ Two measured limits, recorded rather than closed. A statement whose `&&` right
+  operand is an unpacked-array read at a RUNTIME index now falls out of both compiled
+  lanes and costs up to 4.8× — its neighbours are unaffected, values are correct, and
+  corpus demand is zero, but `if (valid && ram[addr])` is not an exotic shape. The
+  decline is also invisible in `run.json`: `codegen.able` counts PROCESS BODIES and this
+  is EXPRESSION admission, so observability reports full coverage on a design that lost
+  it. Separately, the elaborate-time constant folders still evaluate both operands, so
+  `localparam OK = (DIV != 0) && (100/DIV > 3)` is still E3009 where both oracles fold
+  it to 0 — pre-existing and always loud, but it means the file that cites §11.4.7 is
+  now the one that does not implement it.
+
 - **A `case` evaluated its expression once per ARM TESTED — and, with no arm to test, not
   at all.** IEEE §12.5 evaluates the case expression exactly once. `lower_case` built its
   cascade from one shared scrutinee node, which is right in the arena and wrong in the

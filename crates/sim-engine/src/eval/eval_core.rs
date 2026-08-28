@@ -915,16 +915,38 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 self.casez_eq(op, &l, &r).resize_keep_sign(w, false)
             }
 
-            // LOGICAL — self-determined operands, each reduced independently.
+            // LOGICAL — self-determined operands, each reduced independently,
+            // and the RIGHT one evaluated only if the LEFT did not already decide
+            // (IEEE 1800 §11.4.7). The shape is the `Ternary` arm above: reach the
+            // operand through something that is only entered on the path that needs
+            // it, rather than evaluating both and folding.
+            //
+            // ⚠️ The deciding value is the operand's TRUTH VALUE, not a bit: a
+            // vector decides `&&` when EVERY bit is 0 and decides `||` when ANY bit
+            // is 1 — so `4'b01x0 || f()` skips `f()` (a set bit determines it) while
+            // `4'b00x0 || f()` must not (`Tri::Unknown`). Both oracles agree, and
+            // this is exactly `truthiness`, which is why the predicate is written
+            // over `Tri` and not over the planes.
+            //
+            // ⚠️⚠️ Skipping is only sound because the row is INDEPENDENT of the
+            // right operand there: `log_bin_tri(&&, False, _)` is False for all
+            // three `_`, and `(||, True, _)` is True. Rather than restate that
+            // answer, feed the deciding truth value back in as the right argument
+            // and let the ONE table produce it — a future edit to the table cannot
+            // then leave a second, divergent copy behind here.
             LogAnd | LogOr => {
-                let l = self.eval(lhs); // OWN self-width
-                let r = self.eval(rhs);
-                let bit = if matches!(op, LogAnd) {
-                    self.log_and(&l, &r)
+                let lt = self.truthiness(&self.eval(lhs)); // OWN self-width
+                let decides = if matches!(op, LogAnd) {
+                    Tri::False
                 } else {
-                    self.log_or(&l, &r)
+                    Tri::True
                 };
-                bit.resize_keep_sign(w, false) // = max(1, ctx)
+                let rt = if lt == decides {
+                    lt
+                } else {
+                    self.truthiness(&self.eval(rhs))
+                };
+                crate::eval::binops::log_bin_of(op, lt, rt).resize_keep_sign(w, false)
             }
 
             // SHIFTS — LEFT operand is context-determined (result width = w);

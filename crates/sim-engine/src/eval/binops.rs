@@ -594,14 +594,6 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
         Value::logic(true)
     }
 
-    pub(crate) fn log_and(&self, l: &Value, r: &Value) -> Value {
-        log_and(l, r)
-    }
-
-    pub(crate) fn log_or(&self, l: &Value, r: &Value) -> Value {
-        log_or(l, r)
-    }
-
     pub(crate) fn shift_left(&self, l: &Value, r: &Value) -> Value {
         if r.has_xz() {
             return Value::xs(l.width, l.signed);
@@ -784,20 +776,14 @@ pub(crate) fn case_eq(op: BinOp, l: &Value, r: &Value) -> Value {
     Value::logic(if op == BinOp::CaseEq { eq } else { !eq })
 }
 
-pub(crate) fn log_and(l: &Value, r: &Value) -> Value {
-    tri_bit(log_bin_tri(
-        BinOp::LogAnd,
-        crate::eval::sysfunc::truthiness(l),
-        crate::eval::sysfunc::truthiness(r),
-    ))
-}
-
-pub(crate) fn log_or(l: &Value, r: &Value) -> Value {
-    tri_bit(log_bin_tri(
-        BinOp::LogOr,
-        crate::eval::sysfunc::truthiness(l),
-        crate::eval::sysfunc::truthiness(r),
-    ))
+/// `&&` / `||` from the two operands' TRUTH VALUES.
+///
+/// It takes `Tri` rather than two `Value`s because its only caller SHORT-CIRCUITS:
+/// having decided on the left operand alone, there is no right `Value` to hand over.
+/// The `Value`-taking pair this replaced (`log_and`/`log_or`) reduced both operands
+/// first, which is the one thing a lazy caller must not do.
+pub(crate) fn log_bin_of(op: BinOp, l: Tri, r: Tri) -> Value {
+    tri_bit(log_bin_tri(op, l, r))
 }
 
 /// `&&` / `||` over the two operands' TRUTH VALUES — the one spelling of the
@@ -805,9 +791,19 @@ pub(crate) fn log_or(l: &Value, r: &Value) -> Value {
 /// has planes (the tier-3 W evaluator, via `truthiness_word`) reaches it without
 /// building two 72-byte values first.
 ///
-/// Neither operator short-circuits here and neither does the generic evaluator:
-/// both operands are evaluated before the table is consulted, which is what
-/// makes an eager W program the same order rather than a different one.
+/// ⚠️ This paragraph used to read *"neither operator short-circuits here and neither
+/// does the generic evaluator … which is what makes an eager W program the same order
+/// rather than a different one"*. The second half is false as of the §11.4.7 fix, and
+/// `wprog.rs`'s module header now points readers HERE for the `&&`/`||` rule, so the
+/// retired justification would have been the first thing they landed on.
+///
+/// What is true: the table is TOTAL, so both an eager caller and a lazy one reach a row
+/// for every input. The generic evaluator (`eval_core.rs`) short-circuits — it feeds the
+/// deciding `Tri` back in as the right argument, which is sound because
+/// `(LogAnd, False, _)` and `(LogOr, True, _)` are constant across `_`. The two eager
+/// lanes (`native/wprog.rs`, `native_eval/`) keep evaluating both operands and pay for
+/// the difference by DECLINING any program whose right operand compiled to an
+/// observable op, so no diagnostic can appear from an operand the generic path skips.
 #[inline]
 pub(crate) fn log_bin_tri(op: BinOp, l: Tri, r: Tri) -> (u64, u64) {
     match op {

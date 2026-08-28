@@ -371,7 +371,7 @@ fn output_formal_if_cond_or_shortcircuit() {
 // `lhs` on every path (`shortcircuit_rhs_special` → `lower_ternary_rhs` /
 // `lower_shortcircuit_rhs`), so the copy-out fires ONLY on the path that reaches it. The
 // result value is byte-identical to a bare `c?T:E` / `A&&B` / `A||B` (assembled with the
-// engine's own tri-valued `merge_x`/`log_and`/`log_or`, incl. the 4-state corners). Same
+// engine's own tri-valued `merge_x` / `log_bin_tri`, incl. the 4-state corners). Same
 // NO ORACLE as §4.5.215 (iverilog/verilator reject an output-formal function) → hand-IEEE
 // (§11.4.7/§11.4.11) cross-checked by a within-vita differential vs the call-free form.
 

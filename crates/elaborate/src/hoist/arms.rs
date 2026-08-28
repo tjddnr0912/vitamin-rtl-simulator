@@ -271,7 +271,7 @@ impl Elaborator<'_> {
     /// hoisted there) and its tri-valued truth is CAPTURED in a fresh 1-bit net so `B`'s
     /// copy-out (in `eval_b`) can never perturb the value combined with it. The whole-
     /// expression result is byte-identical to a bare `A && B` / `A || B` because it is
-    /// assembled with the SAME logical op the engine uses (`log_and`/`log_or`, tri-valued),
+    /// assembled with the SAME logical op the engine uses (`log_bin_tri`, tri-valued),
     /// including the 4-state corners:
     ///
     /// ```text
@@ -282,10 +282,10 @@ impl Elaborator<'_> {
     /// ```
     ///
     /// For `&&` the branch is `ta !== 0` (case-inequality) so an x-valued `A` still evaluates
-    /// `B` — matching `log_and(x, B)`, which needs `B`; `sc` is reached only for a DEFINITELY
+    /// `B` — matching `log_bin_tri(LogAnd, x, B)`, which needs `B`; `sc` is reached only for a DEFINITELY
     /// false `A`, where `A && B == 0` regardless of `B`. For `||` a plain truth-branch on `ta`
     /// sends a definitely-true `A` to `sc` (`== 1`) and {false, x} to `eval_b`, matching
-    /// `log_or`. The short-circuit path's literal is exact because a definitely-false `&&`
+    /// `||`. The short-circuit path's literal is exact because a definitely-false `&&`
     /// operand / definitely-true `||` operand fully determines the 4-state result.
     pub(crate) fn lower_shortcircuit_rhs(
         &mut self,
