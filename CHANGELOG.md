@@ -332,6 +332,55 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **A whole-net read at its own width made three `Value` moves to perform two stores.**
+  `Value::resize_keep_sign` — the function every whole-net read goes through — combined the
+  signedness, called `resize`, and then re-stamped the signedness. At EQUAL width, which is
+  the common case, `resize`'s own arm does nothing but drop `is_str` and return, so the call
+  was a 72-byte copy in and a 72-byte copy out to accomplish two field writes. It now
+  answers equal width itself.
+
+  ```text
+    bench/keccak, N=2000, interleaved, first round discarded
+    keccak_f.sv       5.36 s -> 4.44 s   -17.2%
+    keccak_f_arr.sv  15.87 s -> 13.70 s  -13.7%
+    corpus            aes -16% · biriscv -15% · darkriscv -11% · keccak -18%
+  ```
+
+  Digests unchanged everywhere; `picorv32`, `serv` and `sha256` are flat, as expected —
+  they spend their time elsewhere.
+
+  ⭐ The collapse is EXACT rather than usually-exact, and that is the whole correctness
+  argument. Reaching the arm guarantees `!is_real` and `!is_str` (both return above it), so
+  over all six fields: `val`/`unk`/`width` are untouched on both paths; `signed` was
+  `(signed && ctx)` and then **unconditionally** `= ctx`, so the first write was dead and
+  nothing reads it in between (`resize` consults `signed` only to sign-fill, which needs an
+  extension); `is_real` is false and neither path writes it; `is_str` is already false, so
+  `resize`'s `is_str = false` was a no-op. The arm keeps that store anyway, to mirror
+  `resize` and to make the `is_str` early return above it load-bearing rather than
+  incidental — a reorder would start it doing work, and a test pins that.
+
+  ⚠️ It inherits `resize`'s proof obligation along with its shape: a `Value` is canonical by
+  construction, so the arm re-establishes nothing, and the `debug_assert!(is_canonical())`
+  is what makes a producer that forgets fail loudly in debug rather than reach here
+  unnoticed.
+
+  ⚠️ **Three experiments on the same axis are recorded so they are not retried.**
+  `#[inline]` on `resize` alone: 0% — LLVM declines a function that size. Shrinking
+  `Words::Inline`'s `len` from `usize` to `u8`: **0 bytes** — no niche optimisation survives
+  the enum tag against `Vec`, so `Value` stayed 72 bytes. And one that measured −1.5% and
+  then reversed sign: splitting `resize`'s >64-bit tail into an `#[inline(never)]` helper was
+  worth −1.5% against the OLD baseline and **+3.2% against this one**, because the
+  equal-width arm removed the calls it was helping.
+
+  Adversarial review: 0 BLOCKING across ~4,000 PRE/POST cells, 2,248 cross-backend
+  equivalence checks, corpus 10/10 with every pinned digest, and byte-identical stdout,
+  VCD, FST, `.vu`, `.velab` and staged output. `run.json` matched on every semantic field
+  including `codegen` and `native`, so no compile decision moved. Its findings were a
+  mangled assert string, an overstated comment, and — the one that mattered — that the arm
+  had **no test at all**; there is now a parity cell that writes the old path out longhand
+  and compares, killed by a mutation of the sign collapse.
+
+
 - **A user-function call no longer refuses the process body that holds it.** `is_codegen_able`
   recorded `user_call_in_expr` for any body reaching an `Expr::Call`, and the whole body —
   every statement in it, call-bearing or not — fell to the uncompiled walk. The reason

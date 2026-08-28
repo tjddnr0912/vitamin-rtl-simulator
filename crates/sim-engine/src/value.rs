@@ -480,6 +480,7 @@ impl Value {
         }
     }
 
+    #[inline]
     /// Resize to `new_width`: signed → sign-extend the MSB *bit value* (X MSB →
     /// X fill); unsigned → zero-extend; shrink → truncate. WORD-PARALLEL: copy the
     /// overlapping low words wholesale (the source is canonical — bits ≥ width are 0 —
@@ -708,6 +709,7 @@ impl Value {
 
     /// `resize` but extension policy follows the *combined* signedness (only
     /// sign-extend when context-signed, per IEEE 1364-2001 §4.5).
+    #[inline]
     pub fn resize_keep_sign(mut self, w: u32, ctx_signed: bool) -> Value {
         if self.is_real {
             return self; // FIRST: before any `.signed` mutation — a real is width/sign-free.
@@ -715,6 +717,48 @@ impl Value {
         if self.is_str {
             // v7: a string's width is its DYNAMIC length — context sizing
             // never truncates it; the write funnel owns §6.16 conversion.
+            return self;
+        }
+        // EQUAL WIDTH — what every whole-net read at its own width takes, and what this
+        // function was paying three `Value` moves for: one INTO `resize`, one back out of
+        // it, and one out of here. A `Value` is 72 bytes, so at this width the moves ARE
+        // the cost: the arm they reach does no plane arithmetic at all.
+        //
+        // ⚠️ Not a second spelling of the rule — it is the old path with the call taken
+        // away, and the collapse is EXACT rather than usually-exact. Reaching here
+        // guarantees `!is_real` and `!is_str` (both returned above), so over all six
+        // fields:
+        //
+        //   val / unk / width   `resize`'s equal-width arm returns `self` untouched.
+        //   signed              was `(signed && ctx)` and then, UNCONDITIONALLY,
+        //                       `out.signed = ctx` — so the first write is dead, and
+        //                       nothing reads `signed` between them (`resize` consults it
+        //                       only to sign-fill, which needs an extension).
+        //   is_real             false on both paths; neither writes it.
+        //   is_str              false already, so `resize`'s `is_str = false` was a no-op.
+        //
+        // ⚠️ The `is_str = false` below is therefore DEAD — kept because it mirrors
+        // `resize`'s own arm, so the two read alike, and because it is what makes the
+        // `is_str` early return above load-bearing rather than incidental: reorder those
+        // returns and this line starts doing work. `a_same_width_keep_sign_matches_the_old_path`
+        // pins that.
+        //
+        // It also inherits `resize`'s proof obligation: a `Value` is canonical BY
+        // CONSTRUCTION, so this re-establishes nothing — and the assert is what makes a
+        // producer that forgets fail loudly in debug instead of reaching here unnoticed
+        // (§4.5.368 removed a `mask_top` on that same argument and an adversarial review
+        // then found a producer that violated it).
+        if w == self.width {
+            debug_assert!(
+                self.is_canonical(),
+                "resize_keep_sign at equal width received a non-canonical Value \
+                 (width {}, val {} words, unk {} words)",
+                self.width,
+                self.val.len(),
+                self.unk.len(),
+            );
+            self.signed = ctx_signed;
+            self.is_str = false;
             return self;
         }
         self.signed = self.signed && ctx_signed;
@@ -1366,12 +1410,107 @@ mod resize_parity_tests {
         out
     }
 
+    /// `resize_keep_sign`'s EQUAL-WIDTH arm against the path it replaced, written out
+    /// here rather than called, so the two spellings are compared instead of one being
+    /// asked to check itself.
+    ///
+    /// The arm is an optimisation with no new semantics — it exists because at equal
+    /// width the old path made three 72-byte `Value` moves to perform two stores — so
+    /// the only thing worth pinning is that it is EXACTLY the old path. It shipped
+    /// unpinned; an adversarial review pointed that out, and §4.5.368's own
+    /// same-width cell is the precedent for pinning this kind of removal.
+    #[test]
+    fn a_same_width_keep_sign_matches_the_old_path() {
+        // The old spelling, verbatim: combine, resize (which at equal width drops
+        // `is_str` and returns), then stamp the context sign unconditionally.
+        fn old_path(mut v: Value, w: u32, ctx_signed: bool) -> Value {
+            if v.is_real || v.is_str {
+                return v;
+            }
+            v.signed = v.signed && ctx_signed;
+            let mut out = v.resize(w);
+            out.signed = ctx_signed;
+            out
+        }
+        let pats: [(u64, u64); 6] = [
+            (0, 0),
+            (u64::MAX, 0),
+            (0, u64::MAX),
+            (0x8000_0000, 0),
+            (0, 0x8000_0000),
+            (0xFFFF_FFFF, 0xFF00_FF00),
+        ];
+        let mut checked = 0usize;
+        for &(pv, pu) in &pats {
+            for &w in &[0u32, 1, 3, 8, 31, 32, 33, 63, 64] {
+                for &signed in &[false, true] {
+                    for &ctx in &[false, true] {
+                        let mk = || {
+                            let mut val = Words::zeros(1);
+                            let mut unk = Words::zeros(1);
+                            val[0] = pv;
+                            unk[0] = pu;
+                            let mut v = Value {
+                                val,
+                                unk,
+                                width: w,
+                                signed,
+                                is_real: false,
+                                is_str: false,
+                            };
+                            v.mask_top();
+                            v
+                        };
+                        let new = mk().resize_keep_sign(w, ctx);
+                        let old = old_path(mk(), w, ctx);
+                        assert_eq!(new, old, "planes/width: w={w} signed={signed} ctx={ctx}");
+                        assert_eq!(
+                            new.signed, old.signed,
+                            "SIGN is the half the collapse rewrites: w={w} signed={signed} ctx={ctx}"
+                        );
+                        assert_eq!(new.signed, ctx, "the context sign wins unconditionally");
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(checked, 6 * 9 * 2 * 2);
+    }
+
+    /// ⚠️ What makes the arm's `is_str = false` DEAD, and therefore what a reorder
+    /// would break. Both flags short-circuit ABOVE the equal-width arm, so a string and
+    /// a real must come back untouched — including keeping the signedness they had,
+    /// which the arm would otherwise overwrite with the context's.
+    #[test]
+    fn a_string_or_real_never_reaches_the_same_width_arm() {
+        let mut s = Value::zeros(32, true);
+        s.is_str = true;
+        let out = s.clone().resize_keep_sign(32, false);
+        assert!(
+            out.is_str,
+            "a string must not be stripped by the equal-width arm"
+        );
+        assert_eq!(out.signed, s.signed, "nor re-signed by it");
+
+        let r = Value::from_f64(2.5);
+        let out = r.clone().resize_keep_sign(64, false);
+        assert!(out.is_real, "a real is width- and sign-free");
+        assert_eq!(out.to_f64(), r.to_f64());
+    }
+
     /// Every one-word (width, new_width, signed, bit pattern) combination must give
     /// bit-identical planes through the fast path and the general path.
     ///
     /// A resize fast path that is subtly wrong is invisible: it produces a plausible
     /// number, not a crash, and the difference only shows on sign extension or on an
     /// x in the sign bit. This sweeps both.
+    ///
+    /// ⚠️ Every width here is ≤ 64, so `resize`'s own `self.width <= 64 && new_width <= 64`
+    /// fast path always fires and the PRODUCTION >64-bit arm is never executed by this
+    /// test — what it compares is the production fast path against the test-local
+    /// `resize_general` oracle. Pre-existing; recorded so the name is not read as
+    /// broader coverage than it has. The wide arm is covered end-to-end instead, by the
+    /// >64-bit designs in the cli suite.
     #[test]
     fn resize_fast_path_matches_general() {
         let pats: [(u64, u64); 7] = [
