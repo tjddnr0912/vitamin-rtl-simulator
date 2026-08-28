@@ -2291,6 +2291,7 @@ fn s2_wprog_matches_generic_eval_exhaustively_at_width_4() {
 fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
     let sink = NullSink;
     let mut admitted_total = 0usize;
+    let mut widened_total = 0usize;
     let mut designs: Vec<(String, String)> = corpus(0x5EED_F00D, 72)
         .into_iter()
         .map(|d| (d.name.to_string(), d.src))
@@ -2343,13 +2344,62 @@ fn s2_wprog_matches_generic_eval_on_admitted_corpus_trees() {
                 );
                 admitted_total += 1;
             }
+            // ⭐ THE WIDENING SWEEP. The loop above compiles every tree at its OWN
+            // width, so it reaches the widening admission only through inner nodes.
+            // This asks the same trees in a WIDER context — which is the whole of
+            // what that admission added, and the only place its two halves can
+            // disagree with the generic path:
+            //
+            //   * a SELF-determined tree must be computed at its own width and then
+            //     extended (sign-filled iff it and the context are both signed);
+            //   * a CONTEXT-determined one must be computed at the WIDER width —
+            //     `v[8:11] + 4'd1` is 16 at eight bits and 0 at four, and the first
+            //     version of the admission got exactly that backwards.
+            //
+            // `eval_with` at the same `(w, signed)` is the oracle, so a wrong choice
+            // of half shows up as a value mismatch rather than as a coverage number.
+            for &eid in &pure {
+                let sw = wt.get(eid);
+                for extra in [1u32, 7, 24] {
+                    let w = sw.width + extra;
+                    if w > 64 {
+                        continue;
+                    }
+                    for signed in [false, true] {
+                        let Some(prog) =
+                            crate::native::wprog::compile(&ir, &wt, &arena, eid, w, signed)
+                        else {
+                            continue;
+                        };
+                        let got = prog.run(&arena, &mut scratch);
+                        let generic = eval_with(&ir, &wt, &rng_cells, &arena, eid, w, signed);
+                        assert_eq!(
+                            (got.val, got.unk),
+                            (generic.val[0], generic.unk[0]),
+                            "{name}: eid {eid} state {state_i} widened {} -> {w} signed {signed}",
+                            sw.width
+                        );
+                        widened_total += 1;
+                    }
+                }
+            }
         }
     }
     assert_eq!(
-        admitted_total, 7960,
+        admitted_total, 8225,
         "the admitted-tree coverage moved — re-pin deliberately (a DROP means \
          the admission or the corpus silently shrank). 7715 → 7890 at S2 slice 5 \
-         (`Concat`/`Replicate`) → 7960 at S2 slice 6 (`Select`)"
+         (`Concat`/`Replicate`) → 7960 at S2 slice 6 (`Select`) → 8225 when a \
+         narrower node stopped declining in a wider context (the widening admission)"
+    );
+    // ⚠️ A sweep that never fires passes every assertion in it. This is the teeth:
+    // the widening admission MUST produce compiled programs, and the number is
+    // pinned for the same reason the one above is.
+    assert_eq!(
+        widened_total, 45180,
+        "the WIDENING sweep's coverage moved — re-pin deliberately; a drop to 0 \
+         would mean the admission stopped firing and every value assertion above \
+         it became vacuous"
     );
 }
 

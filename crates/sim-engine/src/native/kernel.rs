@@ -1889,11 +1889,12 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         };
         let sw = self.sched.st.wt.get(rhs);
         let w = lw.max(sw.width);
-        // S2: the width-specialized fast path. Admission (uniform width AND
-        // sign, ≤64 bits, constant shift amounts, and array indices that are
-        // themselves admitted — see `wprog`) is what
-        // makes it byte-identical; a decline is cached and falls through to
-        // the generic evaluator, which IS the previous path.
+        // S2: the width-specialized fast path. Admission (≤64 bits, uniform SIGN,
+        // constant shift amounts, array indices that are themselves admitted, and
+        // — since the widening admission — a narrower node only where the LRM's
+        // sizing rules allow it to be converted rather than computed wider; see
+        // `wprog`) is what makes it byte-identical; a decline is cached and falls
+        // through to the generic evaluator, which IS the previous path.
         if let Some(prog) = self.wprog_for(rhs, w, sw.signed) {
             return self.run_wprog(&prog);
         }

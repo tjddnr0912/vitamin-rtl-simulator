@@ -386,6 +386,55 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **The compiled expression backend refused any value whose width differed from its
+  context, and that was 84% of its declines.** An execution-weighted census of `wprog`
+  declines on the three corpus designs that have no frame bodies — the ones a frame arena
+  would do nothing for — put 273k of darkriscv's 325k declined requests on comparison
+  operands of unequal width, and most of the rest on a narrower `Signal`, `!` or select
+  meeting a wider context. serv and picorv32 have the same two families at the top.
+
+  ⭐ The work-list was far smaller than the request counts suggest: the compile cache runs
+  the compiler once per `(expression, width, signedness)`, so 241k requests is **7 distinct
+  expressions**.
+
+  A narrower node is now admitted, and *how* is decided by the LRM's sizing rule rather
+  than by the width: a **self-determined** node (a leaf, a select, a concat/replication,
+  and every one-bit result — comparisons, `&&`/`||`, `!`, the reductions) is compiled at
+  its own width and converted on the way out; a **context-determined** operator (`~`,
+  unary `-`, the bitwise binaries, `+`/`-`, the shifts, `?:`) is computed at the context
+  width. A comparison's operands are sized to `max(self-width)` with their pair signedness,
+  which is §11.8.1 and is what the generic evaluator already did.
+
+  Sign extension calls the same `resize_word` the generic path reaches through
+  `Value::resize`, so the one conversion this backend emits is not a second spelling of the
+  semantics. Zero-extension emits no instruction at all. Truncation still declines.
+
+  ⚠️⚠️ **`self-width < context` does NOT mean "fold narrow, then extend."** That holds only
+  for a self-determined node. The first version applied it everywhere and
+  `logic [7:0] s = v[8:11] + 4'd1` became **0** instead of **16** — 15 + 1 folded at four
+  bits. A pinned test caught it, and it is why the classification is an exhaustive match
+  over the operator enums rather than a catch-all: a new operator must not inherit a
+  sizing rule.
+
+  ```text
+    darkriscv  -6.2%      serv  -2.7%      picorv32  -1.8%
+    aes / keccak / keccak-arr: flat (their cost is inside frame bodies)
+  ```
+
+  every pinned corpus digest unchanged, and darkriscv moved from parity to **1.08× ahead**
+  of Icarus Verilog. The backend's own differential battery grew from 7,960 to **8,225**
+  admitted trees and gained a widening sweep of **45,180** programs, every one
+  value-identical to the generic evaluator.
+
+  Adversarial 2-lens review: no BLOCKING. The differential lens was CLEAN over ~100,000
+  generated cases — including exhaustive 64×64 value sweeps for comparisons, every 4-state
+  value pair at small widths, and 1,130 fuzzed deep-tree designs — with the corpus
+  byte-identical. Its three NITs were all stale documentation this slice left behind, now
+  corrected. ⭐ Its fuzz also turned up a **pre-existing** wrong answer unrelated to the
+  change: a comparison does not push its unsignedness down into its operands, so
+  `(b >>> 4) > 8'd100` with `b = 8'shB3` is 1 in vitamin and 0 in both oracles. Reduced to
+  a two-operator repro, pinned as it stands, and filed.
+
 - **Every frame call rebuilt its local window from the IR, and one whole class of call
   built one it then threw away.** All three frame-entry sites — `run_frame_call_with`,
   `run_task`, `enter_task_frame` — opened with the same six lines: a `Vec` allocation,

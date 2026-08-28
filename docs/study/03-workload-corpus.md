@@ -141,17 +141,17 @@ TX 가 틀린 FCS 를 붙이고 RX 가 그것을 **정확하다고 검증**한�
 
 | 워크로드 | 모양 | 라이선스 | iverilog | vita | 비 |
 |---|---|---|---|---|---|
-| **sha256** (secworks) | crypto | BSD-2 | 4.005 s | **1.288 s** | **3.11×** |
-| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 8.994 s | **3.958 s** | **2.27×** |
-| **aes** (secworks) | crypto | BSD-2 | 5.884 s | **2.649 s** | **2.22×** |
-| *keccak* (1st-party) | crypto | ours | 8.938 s | **4.095 s** | **2.18×** |
-| **picorv32** (YosysHQ) | cpu | ISC | 6.774 s | **4.409 s** | **1.54×** |
-| **darkriscv** (코어만) | cpu | BSD-3 | 6.962 s | **6.871 s** | **1.01×** |
-| **serv** (bit-serial) | cpu | ISC | 7.055 s | 7.685 s | **0.92×** |
-| *keccak-arr* (1st-party) | crypto | ours | 8.756 s | 12.934 s | **0.68×** |
+| **sha256** (secworks) | crypto | BSD-2 | 4.188 s | **1.313 s** | **3.19×** |
+| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 9.394 s | **4.065 s** | **2.31×** |
+| **aes** (secworks) | crypto | BSD-2 | 6.150 s | **2.759 s** | **2.23×** |
+| *keccak* (1st-party) | crypto | ours | 9.300 s | **4.240 s** | **2.19×** |
+| **picorv32** (YosysHQ) | cpu | ISC | 7.155 s | **4.610 s** | **1.55×** |
+| **darkriscv** (코어만) | cpu | BSD-3 | 7.276 s | **6.757 s** | **1.08×** |
+| **serv** (bit-serial) | cpu | ISC | 7.417 s | 7.805 s | **0.95×** |
+| *keccak-arr* (1st-party) | crypto | ours | 9.106 s | 13.243 s | **0.69×** |
 | verilog-axi · verilog-ethernet | — | — | 6.8–7.8 s | **거절** | — |
 
-> 기하평균 **1.55×** (도는 여덟) · **1.68×** (서드파티 여섯) · **1.89×** (serv 를 뺀
+> 기하평균 **1.58×** (도는 여덟) · **1.72×** (서드파티 여섯) · **1.94×** (serv 를 뺀
 > 서드파티 다섯 = 2026-08-23 과 같은 집합). 측정 = 릴리즈 바이너리,
 > **인터리브 · 타임드 샘플 3개**(라운드 4회, 첫 회 폐기), 다른 부하 없는 상태.
 > 재현 = `corpus-runner run --compare`. ⚠️ 이 표가 **수치의 유일한 자리**다 — 매니페스트의
@@ -161,7 +161,7 @@ TX 가 틀린 FCS 를 붙이고 RX 가 그것을 **정확하다고 검증**한�
 `keccak_f_arr` 는 지금도 코퍼스 최악(0.68×)이고, 아레나 추정 2.33× 는 전부 **그 하나**에서
 나온 수다.
 
-⚠️ **지는 셋 중 둘이 사라졌다.** `darkriscv` 는 **1.01× — 동률**이고 `serv` 는 0.80 → **0.92×**
+⚠️ **지는 셋 중 둘이 사라졌다.** `darkriscv` 는 **1.08× — 앞선다**이고 `serv` 는 0.80 → **0.95×**
 다. 둘 다 아레나 가설과 **무관한 이유**로 지고 있었다는 것이 2026-08-28 에 드러났다: 기본
 백엔드가 델타마다 `Vec` 두 개를 새로 할당하고 있었고(interp 쪽은 수년째 재사용한다), 그건
 프레임 레짐과 아무 상관이 없다. 트래커가 *"다음 계측은 darkriscv 부터"* 라고 적어 둔 이유가
@@ -307,6 +307,50 @@ pair is not the corpus, and `darkriscv` and `serv` were not in it. So the next p
 slice is `wprog` expression admission, not 5c: a 29-item list, covering exactly the three
 designs (`sha256`, `picorv32`, `darkriscv`) an arena would do nothing for, and not a
 six-to-ten-week item.
+
+#### That slice landed, and the axis was one thing
+
+Sharpening the census to the FIRST failing node (not the root) collapsed it further:
+
+```text
+darkriscv, 325k declined requests, by first failing node
+   241266   7 distinct   CMP: operand WIDTH 3 vs 32
+    24162   2            CMP: operand WIDTH 4 vs 32
+    15442  11            Signal        w=32 sw.w=1    sw.width != w
+     7924   2            Unary(LogNot) w=32 sw.w=1    sw.width != w
+     7498   4            CMP: operand WIDTH 2 vs 32
+     2501   1            Select        w=32 sw.w=7    sw.width != w
+```
+
+⭐⭐ **84% of it is one missing capability: `wprog` could not EXTEND a narrower value into a
+wider context**, and the comparison arm's demand that both operands share a width is the
+same gap one level up. serv and picorv32 have the same two families at the top.
+
+The fix admits a narrower node, and *how* is decided by the LRM's sizing rule rather than
+by the width: a SELF-determined node (a leaf, a select, a concat, and every one-bit result)
+is compiled at its own width and converted; a CONTEXT-determined operator is computed at
+the context width. Sign extension calls `value::resize_word` — the same function
+`Value::resize` uses — so the conversion is the generic path's own rather than a second
+spelling. Truncation still declines.
+
+⚠️⚠️ **`sw.width < w` does NOT mean "fold narrow, then extend".** The first version applied
+it to everything and `logic [7:0] s = v[8:11] + 4'd1` became **0** instead of **16** — 15+1
+folded at four bits. A pinned test caught it, which is why the classification is an
+`_`-free match over the operator enums.
+
+```text
+  darkriscv -6.2%     serv -2.7%     picorv32 -1.8%
+  aes / keccak / keccak-arr: flat (their cost is inside frame bodies)
+```
+
+every pinned digest unchanged, and `darkriscv` moved from parity to **1.08× ahead**.
+
+⭐ The adversarial review was CLEAN on the differential lens over ~100k generated cases
+(including exhaustive 64×64 comparison sweeps and every 4-state value pair at small
+widths), and its fuzz turned up a **pre-existing** silent-wrong unrelated to the slice: a
+comparison does not push its unsignedness DOWN into its operands, so
+`(b >>> 4) > 8'd100` with `b = 8'shB3` is 1 in vita and 0 in both oracles. Recorded as
+ROADMAP §2 row 🆕 A with a two-operator repro.
 
 ⚠️ **serv is new to this table.** It began running only in §4.5.382, so its 0.78×
 is a first measurement rather than a regression, and the 1.60× figure quoted before

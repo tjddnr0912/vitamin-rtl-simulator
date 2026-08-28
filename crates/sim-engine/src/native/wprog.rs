@@ -19,9 +19,10 @@
 //! - `BitNot` / `BitAnd` / `BitOr` / `BitXor` / `Add` / `Sub`,
 //! - `Shl` / `Shr` / `AShr` by a 2-state constant amount — except a SIGNED
 //!   `AShr`, whose sign fill is the one shift whose bits depend on the sign,
-//! - `Lt` / `Le` / `Gt` / `Ge` / `Eq` / `Ne` / `CaseEq` / `CaseNe`, when both
-//!   operands already share a width and a signedness (the comparison node's
-//!   own context is one unsigned bit),
+//! - `Lt` / `Le` / `Gt` / `Ge` / `Eq` / `Ne` / `CaseEq` / `CaseNe`, whose two
+//!   operands are MUTUALLY context-determined at `max(self-width)` with their
+//!   pair signedness (§11.8.1 — the comparison node's own context is one
+//!   unsigned bit, and it does NOT inherit the enclosing one),
 //! - `LogAnd` / `LogOr`, whose operands are SELF-determined and need not share
 //!   a width with each other or with the result,
 //! - `LogNot` and the six reductions, over a self-determined operand.
@@ -32,11 +33,12 @@
 //! - `Ternary` whose branches CANNOT REPORT (S2 slice 7) — the one admission in
 //!   this module that is about evaluation order rather than width.
 //!
-//! Every node carries the SAME width and the SAME signedness as its context,
-//! with SIX deliberate exceptions that introduce a FURTHER width rather than a
-//! conversion — a comparison's operands, a runtime array index, the operands
-//! of `&&`/`||` and of the one-bit unaries, a concat/replicate part, and a
-//! select's base.
+//! A node carries its context's width and signedness unless it is
+//! SELF-determined, in which case it carries its own and is converted on the way
+//! out. Six positions introduce a FURTHER width without any conversion — a
+//! comparison's operands, a runtime array index, the operands of `&&`/`||` and of
+//! the one-bit unaries, a concat/replicate part, and a select's base — and one,
+//! the widening admission in `compile_node`, is a genuine CONVERSION.
 //! Four widths in ONE program is an
 //! ordinary shape, not a corner: `(sa < sb) && m[idx]` gives 1 / 8 / 8 / 4.
 //! The first four DISCARD their operand — every one of those nodes yields a
@@ -44,9 +46,22 @@
 //! dies where it is introduced. The fifth does not: a concat part's bits SURVIVE
 //! into a wider result, and the sentence that used to stand here ("no value is
 //! ever moved between widths") stopped being true when slice 5 admitted it.
-//! What is still true, and is the whole correctness argument, is the narrower
-//! claim: **no widening, no sign extension and no truncation exists
-//! anywhere in an admitted tree.** A part contributes EXACTLY its own bits at a
+//! What used to stand here in its place — *"no widening, no sign extension and
+//! no truncation exists anywhere in an admitted tree"* — has ALSO expired, and
+//! deliberately: the widening admission in `compile_node` is exactly a widening
+//! and, for a signed value in a signed context, exactly a sign extension.
+//!
+//! ⚠️ So the correctness argument is no longer "there is no conversion". It is
+//! **every conversion is the generic path's own**: the only one this module emits
+//! is `WOp::Sext`, which calls `value::resize_word` — the single spelling
+//! `Value::resize`'s ≤64-bit arm uses — and it is emitted under exactly
+//! `resize_keep_sign`'s condition (`value.signed && ctx_signed`). TRUNCATION still
+//! exists nowhere: it declines. And WHICH nodes may be converted is decided by
+//! `node_ctx_class` against the LRM's sizing rules, because converting a
+//! CONTEXT-determined operator instead of computing it at the context width is a
+//! wrong answer (`v[8:11] + 4'd1` is 16 at eight bits and 0 at four).
+//!
+//! The rest of that paragraph still stands as written. A part contributes EXACTLY its own bits at a
 //! compile-time offset, the offsets tile the result (`Σ pw == w`, checked), and
 //! the accumulator they merge into is definite zero — so there is no room for a
 //! fill and no bit is written twice. A select is the mirror image and the same
@@ -242,6 +257,23 @@ enum WOp {
         cs: bool,
         m: u64,
     },
+    /// SIGN-EXTEND the top of stack from `from` bits to `to`.
+    ///
+    /// Only ever emitted for a SIGNED value in a SIGNED context. Zero-extension
+    /// needs no op at all: the module's standing invariant is that every stack
+    /// value is masked to its own width ("loads are pre-masked, `Const` masks at
+    /// compile time, and each op that can move bits out of range carries that
+    /// operand's mask" — the `LogBin` arm already rests on it), so widening a
+    /// value whose high bits are zero is the identity on the word pair.
+    ///
+    /// ⚠️ The extension itself is NOT restated here — it calls `value::resize_word`,
+    /// which is the one spelling the generic path uses through
+    /// `Value::resize`'s ≤64-bit arm. An x or z in the sign bit fills the new bits
+    /// with x/z, which is exactly the rule that would be easy to get wrong twice.
+    Sext {
+        from: u32,
+        to: u32,
+    },
     /// S2 slice 6: the top of stack's bits `[k +: w]`, i.e. one shift and one
     /// mask on both planes. `copy_bits(out, 0, src, k, w)` into a zeroed `w`-bit
     /// destination is exactly this, and the compiler only emits it after proving
@@ -379,17 +411,75 @@ fn compile_node(
     depth: &mut usize,
     max_depth: &mut usize,
 ) -> Option<()> {
-    // UNIFORM WIDTH AND SIGN inside one node's subtree — the admission that
-    // makes the sizing rules moot. Signedness was excluded outright until S2
-    // slice 2; at uniform width it is inert for every op admitted below
-    // (two's complement makes the BITS identical, and there is no widening to
-    // sign-extend), which the exhaustive battery measures rather than assumes.
+    // UNIFORM SIGN inside one node's subtree, and uniform WIDTH except where the
+    // branch below converts. Signedness was excluded outright until S2 slice 2; at
+    // uniform width it is inert for every op admitted below (two's complement makes
+    // the BITS identical), which the exhaustive battery measures rather than
+    // assumes — and the one place a width is now crossed emits the generic path's
+    // OWN conversion rather than relying on that inertness.
     // The two places sign is NOT inert are handled explicitly: an arithmetic
     // right shift declines when signed, and a comparison passes the operand
     // sign to the shared comparison functions.
     let sw = wt.get(eid);
+    // ── A NARROWER node in a WIDER context ────────────────────────────────
+    //
+    // ⚠️⚠️ `sw.width < w` does NOT mean "compute at `sw.width` and extend". That is
+    // true only for a SELF-DETERMINED node. A CONTEXT-DETERMINED operator is
+    // performed at the CONTEXT width (§11.6.1), and folding it at its own width
+    // first is a wrong answer, not a slower one: `logic [7:0] s = v[8:11] + 4'd1`
+    // with the select all-ones is 15 + 1 = **16** at the assignment's 8 bits and
+    // **0** at the addition's own 4. That is a pinned test, and it is what the
+    // first version of this branch broke.
+    //
+    // So the two halves are handled differently, and which half a node is in is
+    // decided by [`node_ctx_class`] rather than by its width:
+    //
+    // * SELF-determined (a leaf, a select, a concat/replication, and every
+    //   one-bit result — comparisons, `&&`/`||`, `!` and the reductions): the
+    //   value is fixed at its own width, so compile it there and EXTEND.
+    // * CONTEXT-determined (`~`, the bitwise binaries, `+`/`-`, a shift's left
+    //   operand, a ternary's branches): the operator is performed at `w`, so
+    //   simply proceed — the arms already hand `w` to their own
+    //   context-determined children, and a narrower LEAF underneath lands in the
+    //   self-determined half above.
+    //
+    // The sign rule is `resize_keep_sign`'s, not a new one: it sets
+    // `signed = self.signed && ctx_signed` BEFORE resizing, so the fill is a sign
+    // fill only when the value AND its context are both signed, and zero otherwise.
+    // Zero-extension needs no op at all — see [`WOp::Sext`].
+    //
+    // ⚠️ TRUNCATION (`sw.width > w`) still declines everywhere. The generic path
+    // truncates there, and nothing measured asks for it: every decline the corpus
+    // census attributed to this gate was a widening.
+    //
+    // ⚠️ The census that motivates this is in `docs/study/03-workload-corpus.md`:
+    // on darkriscv it is 84% of all declined requests (comparison operands of
+    // unequal width, which reach this through the arm below), and the same shape
+    // is the top bucket on serv and picorv32.
     if sw.width != w {
-        return None;
+        match node_ctx_class(ir, eid) {
+            CtxClass::SelfDetermined => {
+                if sw.width == 0 || sw.width > w || !width_admits(sw.width) {
+                    return None;
+                }
+                compile_node(
+                    ir, wt, arena, eid, sw.width, sw.signed, ops, depth, max_depth,
+                )?;
+                if sw.signed && signed {
+                    ops.push(WOp::Sext {
+                        from: sw.width,
+                        to: w,
+                    });
+                }
+                return Some(());
+            }
+            // Performed at `w`; fall through to the arms, which mask to `w`.
+            CtxClass::ContextDetermined => {}
+            // Anything this module has no arm for declines here exactly as the
+            // blanket width gate used to — the catch-all is the status quo, so a
+            // new `Expr` variant cannot be silently mis-sized by this branch.
+            CtxClass::Unknown => return None,
+        }
     }
     // ⚠️⚠️ The SIGN half of this gate applies to every node EXCEPT a `Const` leaf.
     //
@@ -627,33 +717,43 @@ fn compile_node(
                 // ORDERED / EQUALITY comparisons (S2 slice 2). The result is
                 // ONE bit while the operands are `ow` bits — one of the two nodes
                 // whose subtree width differs from its own (the other is a runtime
-                // array index, S2 slice 4) — admitted only
-                // when both operands already share a width AND a signedness, so
-                // no §11.8.1 mixed-sign or widening question arises here
-                // either. The comparison itself is the shared free function.
+                // array index, S2 slice 4). The comparison itself is the shared
+                // free function.
+                //
+                // ⚠️ This arm USED to demand that both operands already share a
+                // width and a signedness, "so no §11.8.1 mixed-sign or widening
+                // question arises here either". That is no longer the rule: the
+                // question is asked and answered below, the same way
+                // `eval_binary_ctx` answers it.
                 B::Lt | B::Le | B::Gt | B::Ge | B::Eq | B::Ne | B::CaseEq | B::CaseNe => {
                     if w != 1 || signed {
                         return None; // a comparison's own self-width IS 1, unsigned
                     }
+                    // §11.8.1: the two operands are MUTUALLY context-determined —
+                    // each is sized to max(self-width) with their PAIR signedness.
+                    // This is `eval_binary_ctx`'s comparison arm verbatim
+                    // (`cmp_w = width(l).max(width(r))`, `pair = signed(l) &&
+                    // signed(r)`), and the widening admission above is what lets the
+                    // narrower side reach it — that is the whole reason this arm used
+                    // to demand equal widths.
+                    //
+                    // ⚠️ Byte-identical for everything that compiled before: when the
+                    // widths already matched, `ow` IS that width, and when the
+                    // signednesses already matched, `os` IS that signedness.
                     let lw = wt.get(*lhs);
                     let rw = wt.get(*rhs);
-                    if lw.width != rw.width || lw.signed != rw.signed {
+                    let ow = lw.width.max(rw.width);
+                    let os = lw.signed && rw.signed;
+                    if ow == 0 || ow > 64 {
                         return None;
                     }
-                    if lw.width == 0 || lw.width > 64 {
-                        return None;
-                    }
-                    compile_node(
-                        ir, wt, arena, *lhs, lw.width, lw.signed, ops, depth, max_depth,
-                    )?;
-                    compile_node(
-                        ir, wt, arena, *rhs, lw.width, lw.signed, ops, depth, max_depth,
-                    )?;
+                    compile_node(ir, wt, arena, *lhs, ow, os, ops, depth, max_depth)?;
+                    compile_node(ir, wt, arena, *rhs, ow, os, ops, depth, max_depth)?;
                     *depth -= 1;
                     ops.push(WOp::Cmp {
                         op: *op,
-                        ow: lw.width,
-                        osigned: lw.signed,
+                        ow,
+                        osigned: os,
                     });
                     Some(())
                 }
@@ -1202,6 +1302,13 @@ impl WProg {
                         crate::eval::Tri::Unknown => return None,
                     };
                 }
+                WOp::Sext { from, to } => {
+                    // 2-state lane: `unk` is definite 0 here by construction (the
+                    // lane bails on any unknown), so the sign fill has no x arm to
+                    // reach — the SAME function still decides it.
+                    let a = scratch.last_mut()?;
+                    *a = crate::value::resize_word(*a, 0, from, to, true).0;
+                }
                 WOp::Slice { k, m } => {
                     let a = scratch.last_mut()?;
                     *a = (*a >> k) & m;
@@ -1401,6 +1508,12 @@ impl WProg {
                         }
                     };
                 }
+                WOp::Sext { from, to } => {
+                    let a = scratch.last_mut().expect("wprog stack");
+                    let (v, u) = crate::value::resize_word(a.val, a.unk, from, to, true);
+                    a.val = v;
+                    a.unk = u;
+                }
                 WOp::Slice { k, m } => {
                     let a = scratch.last_mut().expect("wprog stack");
                     a.val = (a.val >> k) & m;
@@ -1468,4 +1581,81 @@ fn one_word_value(val: u64, unk: u64, w: u32, signed: bool) -> Value {
     v.val[0] = val;
     v.unk[0] = unk;
     v
+}
+
+/// Which sizing rule an expression follows — the ONE question the width
+/// admission above needs and the one it must not guess.
+///
+/// ⚠️ There is deliberately no catch-all arm mapping to a sizing rule: an
+/// `Expr` this module has no compile arm for maps to `Unknown`, which declines,
+/// which is exactly what the blanket width gate did before. Getting this wrong
+/// in the `SelfDetermined` direction folds an operator at the wrong width and
+/// produces a wrong ANSWER (see the `+` example above), so the safe default is
+/// to refuse rather than to pick.
+enum CtxClass {
+    SelfDetermined,
+    ContextDetermined,
+    Unknown,
+}
+
+fn node_ctx_class(ir: &SimIr, eid: u32) -> CtxClass {
+    use sim_ir::BinOp as B;
+    use sim_ir::UnOp as U;
+    match ir.exprs.get(eid as usize) {
+        // Leaves and the width-fixing constructors: their value IS their width.
+        Some(sim_ir::Expr::Signal { .. })
+        | Some(sim_ir::Expr::Const { .. })
+        | Some(sim_ir::Expr::Select { .. })
+        | Some(sim_ir::Expr::Concat { .. })
+        | Some(sim_ir::Expr::Replicate { .. }) => CtxClass::SelfDetermined,
+        // One-bit results (§11.4.7 / §11.8.1) — self-determined by definition,
+        // and the arms below already compile their operands at their OWN widths.
+        // ⚠️ `_`-FREE on purpose (the project's accept-gate rule): a new operator
+        // must not inherit a sizing rule by falling into a catch-all. Adding one
+        // breaks this build, which is the intended cost.
+        Some(sim_ir::Expr::Binary { op, .. }) => match op {
+            // One-bit results (§11.8.1 / §11.4.7): self-determined by definition,
+            // and the arms below already compile their operands at their OWN widths.
+            B::Lt
+            | B::Le
+            | B::Gt
+            | B::Ge
+            | B::Eq
+            | B::Ne
+            | B::CaseEq
+            | B::CaseNe
+            | B::CasezEq
+            | B::CasexEq
+            | B::LogAnd
+            | B::LogOr => CtxClass::SelfDetermined,
+            // §11.6.1: the arithmetic and bitwise operators take the context's
+            // width. The shifts are here for their LEFT operand (the count is
+            // self-determined, and is a compile-time constant on this path).
+            // `Mul`/`Div`/`Mod`/`Pow` have no compile arm — the classification is
+            // still the LRM's, and their arm declines as it did before.
+            B::Add
+            | B::Sub
+            | B::Mul
+            | B::Div
+            | B::Mod
+            | B::Pow
+            | B::BitAnd
+            | B::BitOr
+            | B::BitXor
+            | B::BitXnor
+            | B::Shl
+            | B::Shr
+            | B::AShl
+            | B::AShr => CtxClass::ContextDetermined,
+        },
+        Some(sim_ir::Expr::Unary { op, .. }) => match op {
+            U::LogNot | U::RedAnd | U::RedNand | U::RedOr | U::RedNor | U::RedXor | U::RedXnor => {
+                CtxClass::SelfDetermined
+            }
+            U::BitNot | U::Minus | U::Plus => CtxClass::ContextDetermined,
+        },
+        // `?:` takes the context on both branches (§11.4.11).
+        Some(sim_ir::Expr::Ternary { .. }) => CtxClass::ContextDetermined,
+        _ => CtxClass::Unknown,
+    }
 }
