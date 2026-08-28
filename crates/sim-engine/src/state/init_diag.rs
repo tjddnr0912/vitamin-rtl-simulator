@@ -174,7 +174,9 @@ impl<'a> SimState<'a> {
             frame_windows: std::cell::RefCell::new(Vec::new()),
             frame_window_free: std::cell::RefCell::new(Vec::new()),
             frame_window_rc: std::cell::RefCell::new(Vec::new()),
-            static_store: std::cell::RefCell::new(std::collections::BTreeMap::new()),
+            static_store: std::cell::RefCell::new(Vec::new()),
+            frame_template: Vec::new(),
+            frame_window_pool: std::cell::RefCell::new(Vec::new()),
             call_depth: Cell::new(0),
             call_fatal: Cell::new(false),
             task_calls_proc: crate::TaskCallProc::new(),
@@ -280,6 +282,28 @@ impl<'a> SimState<'a> {
                 }
             }
         }
+        // 5b: the STATIC slab table is indexed by FuncId, so it is sized here (all
+        // `None` — each function's slab is seeded on its first call).
+        *self.static_store.borrow_mut() = vec![None; self.func_table.len()];
+        // 5a: the fresh-window TEMPLATE, one per function — the per-call window is a pure
+        // function of the (immutable) IR, so it is built ONCE here rather than by
+        // `locals_len` `Value::from_packed` calls on every frame entry. `fresh_window`
+        // clones this. Built after the bounds check above so `base_net + locals_len` is
+        // known in range.
+        //
+        // ⚠️ This and the `static_store` sizing above are on the SUCCESSFUL tail: the two
+        // malformed-sidecar returns leave both empty, where the old `BTreeMap::entry` would
+        // have worked. That is not reachable — `fatal_run` sets `finished`, so the run loop
+        // never executes a frame call — and both PRE and POST are loud there either way.
+        self.frame_template = self
+            .func_table
+            .iter()
+            .map(|m| {
+                (0..m.locals_len)
+                    .map(|s| frame_slot_default(&self.ir.nets[(m.base_net + s) as usize]))
+                    .collect()
+            })
+            .collect();
     }
 
     /// NATIVE-TYPE GUARD: the per-net "the native expression path must not read this"

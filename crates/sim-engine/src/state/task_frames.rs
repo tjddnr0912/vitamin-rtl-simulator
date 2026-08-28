@@ -79,52 +79,25 @@ impl SimState<'_> {
         // slot via its `return`) and copies out every requested slot uniformly.
         let _ = &fd;
         let base = m.base_net;
-        let nloc = m.locals_len;
         // B4: per-func storage needs (window for automatic slots, slab for static).
         let has_auto = self.func_has_auto[callee as usize];
         let has_static = self.func_has_static[callee as usize];
 
         // ── FRAME SETUP (window for automatic slots; persistent slab for static). ──
-        // Each fresh frame slot defaults to its NET's declared init — X for 4-state
-        // (reg/logic/integer), 0 for 2-state (bit/byte/int/shortint/longint) per IEEE
-        // §6.4. (Using `Value::xs` unconditionally mis-defaulted 2-state locals to X,
-        // silently corrupting reads/branches of an unassigned 2-state local.)
-        let fresh: Vec<Value> = (0..nloc)
-            .map(|s| {
-                let nv = &self.ir.nets[(base + s) as usize];
-                // N1: a frame-local `string` slot (an output/inout string formal or a
-                // string return var) defaults to the EMPTY string, not a width-1
-                // non-is_str value — the latter renders as a stray space and makes
-                // `s==""` / `s.len()==0` FALSE on an unwritten path (a silent-wrong
-                // caught by adversarial review; string-return t03 already matched
-                // iverilog because it happened to write, output formals did not).
-                if nv.kind == NetKind::String {
-                    Value::from_str_bytes(&[])
-                } else {
-                    Value::from_packed(&nv.init, nv.width.max(1), nv.signed)
-                }
-            })
-            .collect();
         // `run_task` is the SYNCHRONOUS (`&self`) subset-task executor — a task with a
         // `fork` is suspendable and never routed here (it goes through `enter_task_frame`),
         // so its window is always `Owned` (byte-identical to the pre-arena path).
         match (has_auto, has_static) {
             (true, true) => {
-                self.frame_stack
-                    .borrow_mut()
-                    .push(WindowSlot::Owned(fresh.clone()));
-                self.static_store
-                    .borrow_mut()
-                    .entry(callee)
-                    .or_insert(fresh);
+                let w = self.fresh_window(callee);
+                self.frame_stack.borrow_mut().push(WindowSlot::Owned(w));
+                self.seed_static_slab(callee);
             }
-            (true, false) => self.frame_stack.borrow_mut().push(WindowSlot::Owned(fresh)),
-            (false, _) => {
-                self.static_store
-                    .borrow_mut()
-                    .entry(callee)
-                    .or_insert(fresh);
+            (true, false) => {
+                let w = self.fresh_window(callee);
+                self.frame_stack.borrow_mut().push(WindowSlot::Owned(w));
             }
+            (false, _) => self.seed_static_slab(callee),
         }
 
         // ── COPY-IN the input args (sized to each formal's TYPE — §13.4.3). ──
@@ -335,7 +308,13 @@ impl SimState<'_> {
             })
             .collect();
         if has_auto {
-            self.frame_stack.borrow_mut().pop();
+            // TERMINAL pop: `run_task` drives a NON-suspendable task to completion on the
+            // `&self` path (a task with a `fork`/`Delay` goes through `enter_task_frame`),
+            // so no `FrameRec` holds this window ⇒ it is safe to recycle.
+            let popped = self.frame_stack.borrow_mut().pop();
+            if let Some(WindowSlot::Owned(w)) = popped {
+                self.retire_window(w);
+            }
         }
         Some(outs)
     }
@@ -556,21 +535,10 @@ impl SimState<'_> {
     pub(crate) fn enter_task_frame(&self, callee: u32, in_vals: &[(u32, Value)]) {
         let m = self.func_table[callee as usize];
         let base = m.base_net;
-        let nloc = m.locals_len;
         self.call_depth.set(self.call_depth.get() + 1);
         self.frame_scope.borrow_mut().push(callee);
         let has_auto = self.func_has_auto[callee as usize];
         let has_static = self.func_has_static[callee as usize];
-        let fresh: Vec<Value> = (0..nloc)
-            .map(|s| {
-                let nv = &self.ir.nets[(base + s) as usize];
-                if nv.kind == NetKind::String {
-                    Value::from_str_bytes(&[])
-                } else {
-                    Value::from_packed(&nv.init, nv.width.max(1), nv.signed)
-                }
-            })
-            .collect();
         // Stage-2 fork-in-frame: a Case-B `join` task (`contains_shared_fork`) with
         // automatic locals gets an interior-mutable ARENA window (a `WindowSlot::Shared`)
         // so its fork arms share the parent's locals by handle; every other task keeps the
@@ -583,25 +551,22 @@ impl SimState<'_> {
             .unwrap_or(false);
         match (has_auto, has_static, shared) {
             (true, _, true) => {
-                let h = self.alloc_frame_window(fresh);
+                // ⚠️ NOT pooled: this window is MOVED into the arena and outlives the
+                // call (the fork arms reference it by handle), so it never reaches a
+                // terminal pop `retire_window` could serve.
+                let h = self.alloc_frame_window(self.fresh_window(callee));
                 self.frame_stack.borrow_mut().push(WindowSlot::Shared(h));
             }
             (true, true, false) => {
-                self.frame_stack
-                    .borrow_mut()
-                    .push(WindowSlot::Owned(fresh.clone()));
-                self.static_store
-                    .borrow_mut()
-                    .entry(callee)
-                    .or_insert(fresh);
+                let w = self.fresh_window(callee);
+                self.frame_stack.borrow_mut().push(WindowSlot::Owned(w));
+                self.seed_static_slab(callee);
             }
-            (true, false, false) => self.frame_stack.borrow_mut().push(WindowSlot::Owned(fresh)),
-            (false, _, _) => {
-                self.static_store
-                    .borrow_mut()
-                    .entry(callee)
-                    .or_insert(fresh);
+            (true, false, false) => {
+                let w = self.fresh_window(callee);
+                self.frame_stack.borrow_mut().push(WindowSlot::Owned(w));
             }
+            (false, _, _) => self.seed_static_slab(callee),
         }
         for (slot, v) in in_vals {
             let bound = self.bind_formal(callee, *slot, base, v.clone());

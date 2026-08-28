@@ -386,6 +386,59 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **Every frame call rebuilt its local window from the IR, and one whole class of call
+  built one it then threw away.** All three frame-entry sites — `run_frame_call_with`,
+  `run_task`, `enter_task_frame` — opened with the same six lines: a `Vec` allocation,
+  `locals_len` `Value` constructions from `ir.nets[..].init`, and a `free` at the pop,
+  **per call**, for a list that is a pure function of the IMMUTABLE IR. `keccak`'s
+  `rotl64` is called millions of times; `aes` has 18 frame bodies.
+
+  It is now a per-function template built once at elaboration-time routing setup, plus a
+  capacity-capped free-list of retired windows: `clear()` + `extend_from_slice(template)`
+  reuses the allocation and restores every slot to its declared default.
+
+  ⭐ And the arm for a function whose locals are all STATIC — which is what a plain
+  non-`automatic` Verilog function is — built the window on every call and handed it to
+  `static_store.entry(func).or_insert(fresh)`, which **drops it on every call but the
+  first**. The entire per-call window cost, paid for a value nobody reads.
+
+  Separately, the static slab was a `BTreeMap<u32, Vec<Value>>` whose stated reason was
+  determinism — but the key is a dense `FuncId`, so a `Vec` indexed by it is deterministic
+  BY CONSTRUCTION and costs an index instead of a tree descent. Nothing iterated it and it
+  is never serialized, so the map bought nothing the index does not.
+
+  ```text
+    keccak     4.437 s -> 4.097 s   -7.7%      biriscv     4.080 -> 4.021   -1.4%
+    aes        2.865 s -> 2.670 s   -6.8%      serv        7.883 -> 7.847   -0.5%
+    keccak-arr 13.420  -> 12.952    -3.5%      darkriscv   7.094 -> 7.135   +0.6%
+    sha256     1.335 s -> 1.291 s   -3.3%      picorv32    4.721 -> 4.617   -2.2%
+  ```
+
+  every pinned corpus digest unchanged.
+
+  ⚠️ The load-bearing rule is that a window is recycled ONLY from a pop that provably
+  DROPS it. `stash_windows_in` also pops `frame_stack` — but it MOVES the window into a
+  `FrameRec` and pushes it back when the activity resumes, so recycling one of those would
+  hand a LIVE window to the next call, with no loud symptom. Only the two synchronous
+  `&self` executors' terminal pops retire; the Case-B fork-in-frame window, which is moved
+  into the `frame_windows` arena and outlives the call, is never pooled either.
+
+  ⚠️ `clear()` before the refill is what makes an unwritten local read as its DEFAULT
+  rather than as the previous activation's value — an `integer` reads X, an `int` reads 0,
+  a `string` reads `""`. That is the property `crates/cli/tests/frame_window_reuse.rs`
+  pins, since a reuse bug is invisible to a wall clock and to a final-value assertion that
+  never calls the function twice.
+
+  Adversarial 2-lens review found **no BLOCKING**: the differential lens ran ~624 designs
+  across all three backends (~1,870 PRE/POST pairs) with zero output and zero exit-code
+  differences, all ten corpus workloads byte-identical, VCD bytes identical, and staged
+  `vcmp→velab→vrun` identical; the soundness lens censused all five sites that remove an
+  entry from `frame_stack` and confirmed the two that retire are terminal — checking, rather
+  than taking, `run_task`'s docstring claim that a suspendable task never routes there.
+  Its one NIT proposing a third retire site was refuted by measurement: the stated harm
+  mechanism did not reproduce and the ceiling on a design engineered to maximise the path
+  was 1.2%, below noise.
+
 - **The default backend allocated two `Vec`s per DELTA, and threw a third buffer's
   capacity away on every continuous-assign fixpoint pass.** `native::run::propagate` runs
   once per delta — 5.5 M times on picorv32, 7.0 M on serv, ~15 M on sha256 — and opened

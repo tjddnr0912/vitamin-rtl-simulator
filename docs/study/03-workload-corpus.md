@@ -141,27 +141,27 @@ TX 가 틀린 FCS 를 붙이고 RX 가 그것을 **정확하다고 검증**한�
 
 | 워크로드 | 모양 | 라이선스 | iverilog | vita | 비 |
 |---|---|---|---|---|---|
-| **sha256** (secworks) | crypto | BSD-2 | 4.126 s | **1.345 s** | **3.07×** |
-| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 9.450 s | **4.175 s** | **2.26×** |
-| **aes** (secworks) | crypto | BSD-2 | 6.169 s | **2.948 s** | **2.09×** |
-| *keccak* (1st-party) | crypto | ours | 9.320 s | **4.667 s** | **2.00×** |
-| **picorv32** (YosysHQ) | cpu | ISC | 7.068 s | **4.564 s** | **1.55×** |
-| **darkriscv** (코어만) | cpu | BSD-3 | 7.216 s | 7.184 s | **1.00×** |
-| **serv** (bit-serial) | cpu | ISC | 7.237 s | 7.861 s | **0.92×** |
-| *keccak-arr* (1st-party) | crypto | ours | 9.183 s | 13.737 s | **0.67×** |
+| **sha256** (secworks) | crypto | BSD-2 | 4.005 s | **1.288 s** | **3.11×** |
+| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 8.994 s | **3.958 s** | **2.27×** |
+| **aes** (secworks) | crypto | BSD-2 | 5.884 s | **2.649 s** | **2.22×** |
+| *keccak* (1st-party) | crypto | ours | 8.938 s | **4.095 s** | **2.18×** |
+| **picorv32** (YosysHQ) | cpu | ISC | 6.774 s | **4.409 s** | **1.54×** |
+| **darkriscv** (코어만) | cpu | BSD-3 | 6.962 s | **6.871 s** | **1.01×** |
+| **serv** (bit-serial) | cpu | ISC | 7.055 s | 7.685 s | **0.92×** |
+| *keccak-arr* (1st-party) | crypto | ours | 8.756 s | 12.934 s | **0.68×** |
 | verilog-axi · verilog-ethernet | — | — | 6.8–7.8 s | **거절** | — |
 
-> 기하평균 **1.51×** (도는 여덟) · **1.66×** (서드파티 여섯) · **1.86×** (serv 를 뺀
+> 기하평균 **1.55×** (도는 여덟) · **1.68×** (서드파티 여섯) · **1.89×** (serv 를 뺀
 > 서드파티 다섯 = 2026-08-23 과 같은 집합). 측정 = 릴리즈 바이너리,
 > **인터리브 · 타임드 샘플 3개**(라운드 4회, 첫 회 폐기), 다른 부하 없는 상태.
 > 재현 = `corpus-runner run --compare`. ⚠️ 이 표가 **수치의 유일한 자리**다 — 매니페스트의
 > `note` 는 일부러 시간을 안 들고 있다(두 벌을 적었더니 실제로 여섯 행이 셋째 자리에서 갈렸다).
 
-⭐ **`keccak` 가 1.10× → 2.09× 로 올라갔다** (2026-08-28, 세 변경). 아래 재측정 절을 보라.
-`keccak_f_arr` 는 지금도 코퍼스 최악(0.67×)이고, 아레나 추정 2.33× 는 전부 **그 하나**에서
+⭐ **`keccak` 가 1.10× → 2.18× 로 올라갔다** (2026-08-28, 다섯 변경). 아래 재측정 절을 보라.
+`keccak_f_arr` 는 지금도 코퍼스 최악(0.68×)이고, 아레나 추정 2.33× 는 전부 **그 하나**에서
 나온 수다.
 
-⚠️ **지는 셋 중 둘이 사라졌다.** `darkriscv` 는 **1.00× — 동률**이고 `serv` 는 0.80 → **0.92×**
+⚠️ **지는 셋 중 둘이 사라졌다.** `darkriscv` 는 **1.01× — 동률**이고 `serv` 는 0.80 → **0.92×**
 다. 둘 다 아레나 가설과 **무관한 이유**로 지고 있었다는 것이 2026-08-28 에 드러났다: 기본
 백엔드가 델타마다 `Vec` 두 개를 새로 할당하고 있었고(interp 쪽은 수년째 재사용한다), 그건
 프레임 레짐과 아무 상관이 없다. 트래커가 *"다음 계측은 darkriscv 부터"* 라고 적어 둔 이유가
@@ -200,7 +200,7 @@ That took the `keccak` row from 1.10× to **2.09×**, and `keccak-arr` from 0.53
 took it the rest of the way to parity (see below).
 
 The standing call-regime measurement is `keccak_f.sv` against `keccak_f_flat.sv`
-(same algorithm, subroutines expanded by `gen_flat.py`): **4.45 s vs 0.61 s = 7.3×**,
+(same algorithm, subroutines expanded by `gen_flat.py`): **4.07 s vs 0.59 s = 6.9×**,
 down from 8.9×. That is the headroom still on the table, and it is why compiling the
 *callee* body is the next item rather than a finished one. Full numbers, including
 verilator, in `bench/keccak/RUN.md`.
@@ -222,6 +222,37 @@ interpreter had had the fix for years; the default backend never got it.
 on sha256, picorv32 and darkriscv — their 38, 33 and 9 functions are all INLINED — so a
 frame arena would do nothing for them. Its demand is aes (18), biriscv (7) and keccak (3),
 and that is the whole of it.
+
+#### A fifth change: the frame window itself, before the arena
+
+The arena item's own first two slices landed the same day and are worth separating from
+it, because they need none of its machinery.
+
+All three frame-entry sites rebuilt the callee's local window from the IR on **every
+call** — a `Vec` allocation, `locals_len` `Value` constructions, and a `free` at the pop —
+for a list that is a pure function of the immutable IR. It is now a per-function template
+built once, plus a capacity-capped free-list of retired windows. ⭐ And the arm for a
+function whose locals are all STATIC — which is what a plain non-`automatic` Verilog
+function is — built that window on every call and handed it to `entry().or_insert()`,
+which **drops it on every call but the first**. Separately, the static slab moved off a
+`BTreeMap` keyed by a dense `FuncId` onto a `Vec` indexed by it: deterministic by
+construction, an index instead of a tree descent.
+
+```text
+  keccak     -7.7%     aes  -6.8%     keccak-arr -3.5%     sha256 -3.3%
+  picorv32   -2.2%     biriscv -1.4%  serv -0.5%           darkriscv +0.6% (noise)
+```
+
+⚠️ Two of those rows have **`frame_bodies` = 0**, so the win there is the *other* half of
+the change: `sha256` and `picorv32` never take a frame call, and what moved for them is
+the throwaway-window arm plus the slab index.
+
+⭐ Note what this says about the arena estimate. Two of the three slices scoped under it
+(5a, 5b) delivered a corpus-wide win **without touching the window's representation at
+all** — the thing the 6-to-10-week estimate is about. The remaining slice (5c, the flat
+word buffer that lets `wprog` compile frame bodies) is where that estimate actually lives,
+and it should be re-priced against a fresh profile rather than against the number written
+before these two.
 
 ⚠️ **serv is new to this table.** It began running only in §4.5.382, so its 0.78×
 is a first measurement rather than a regression, and the 1.60× figure quoted before

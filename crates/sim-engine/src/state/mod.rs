@@ -208,6 +208,27 @@ pub(crate) enum WindowSlot {
     Shared(u32),
 }
 
+/// The default a FRESH frame slot starts at — X for 4-state (reg/logic/integer), 0 for
+/// 2-state (bit/byte/int/shortint/longint) per IEEE §6.4, and the EMPTY string for a
+/// `string` slot.
+///
+/// ⚠️ Both halves are load-bearing and both were bugs once. `Value::xs` unconditionally
+/// mis-defaulted 2-state locals to X, silently corrupting reads/branches of an unassigned
+/// 2-state local; and a frame-local `string` slot (an output/inout string formal or a
+/// string return var) defaulting to a width-1 non-`is_str` value rendered as a stray space
+/// and made `s == ""` / `s.len() == 0` FALSE on an unwritten path.
+///
+/// ⭐ This used to be spelled out THREE times — once per frame-entry site — which is
+/// exactly the shape that lets two of them drift. It is now the single producer, and it
+/// runs once per function at init rather than once per call ([`SimState::fresh_window`]).
+pub(crate) fn frame_slot_default(nv: &sim_ir::NetVar) -> crate::value::Value {
+    if nv.kind == sim_ir::NetKind::String {
+        crate::value::Value::from_str_bytes(&[])
+    } else {
+        crate::value::Value::from_packed(&nv.init, nv.width.max(1), nv.signed)
+    }
+}
+
 pub(crate) struct SimState<'a> {
     pub ir: &'a SimIr,
     pub now: u64,
@@ -596,10 +617,34 @@ pub(crate) struct SimState<'a> {
     /// exactly at the parent's `Return` — the same free moment). `rc[h] == 0` for a freed
     /// slot; `debug_assert`ed `> 0` on every arena access. Empty unless a Case-B fork ran.
     pub frame_window_rc: std::cell::RefCell<Vec<u32>>,
-    /// STATIC per-function persistent slabs (FuncId → `Vec<Value>`), X-init once,
-    /// never restored (shared-slot lifetime). `BTreeMap` = deterministic; never
-    /// serialized.
-    pub static_store: std::cell::RefCell<std::collections::BTreeMap<u32, Vec<Value>>>,
+    /// STATIC per-function persistent slabs, X-init once, never restored (shared-slot
+    /// lifetime). Indexed by FuncId, parallel to `func_table`; `None` = this function has
+    /// no static slots yet (it is seeded on its first call).
+    ///
+    /// ⭐ This was a `BTreeMap<u32, Vec<Value>>`, whose stated reason was determinism —
+    /// but the key is a dense FuncId, so a `Vec` is deterministic BY CONSTRUCTION and
+    /// costs an index instead of a tree descent. Nothing iterates it and it is never
+    /// serialized, so the map bought nothing the index does not. Every read and write of
+    /// a static frame slot goes through here.
+    pub static_store: std::cell::RefCell<Vec<Option<Vec<Value>>>>,
+
+    /// Per-function FRESH-WINDOW TEMPLATE (FuncId → the `locals_len` slot defaults),
+    /// computed ONCE from the IR at init. Every frame entry used to rebuild this list
+    /// from `ir.nets[..].init` on EVERY call — `locals_len` `Value::from_packed` calls
+    /// plus a `Vec` allocation, per call, for a value that is a pure function of the
+    /// (immutable) IR. `keccak`'s `rotl64` alone is called millions of times.
+    ///
+    /// Indexed by FuncId, parallel to `func_table`; empty when a design has no frames.
+    pub frame_template: Vec<Vec<Value>>,
+
+    /// Free-list of retired AUTOMATIC windows, reused by [`SimState::fresh_window`].
+    ///
+    /// ⚠️ A window is returned here ONLY from a pop that provably DROPS it — the two
+    /// synchronous `&self` executors' terminal pops. `stash_windows_in` also pops, but it
+    /// MOVES the window into a `FrameRec` to push back later; recycling one of those would
+    /// hand a live window to the next call. Capacity-capped so a deep recursion that
+    /// unwinds once does not pin its whole stack of windows for the rest of the run.
+    pub frame_window_pool: std::cell::RefCell<Vec<Vec<Value>>>,
     /// Live frame-call nesting depth (runaway-recursion guard). `Cell` (no borrow).
     pub call_depth: Cell<u32>,
     /// Latched by `eval_call` when `call_depth` hits the cap (a `&self` path

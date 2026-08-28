@@ -264,6 +264,69 @@ impl<'a> SimState<'a> {
         self.eval_ctx_with_opt(nets, rhs, lw.max(sw.width), sw.signed)
     }
 
+    /// A fresh AUTOMATIC window for `func`, from the free-list when one is parked there.
+    ///
+    /// Every frame entry used to `collect()` this from `ir.nets[..].init` per call: a
+    /// `malloc` for the `Vec`, `locals_len` `Value::from_packed` calls, and a `free` at
+    /// pop — for a list that is a pure function of the immutable IR. `keccak`'s `rotl64`
+    /// is called millions of times; `aes` has 18 frame bodies.
+    ///
+    /// The template does the value half; the pool does the allocation half. Reuse is
+    /// `clear` + `extend_from_slice`, which keeps the recycled `Vec`'s capacity and drops
+    /// the previous activation's contents (so a wide/`string` slot's heap buffer is
+    /// released here rather than pinned in the pool).
+    #[inline]
+    pub(crate) fn fresh_window(&self, func: u32) -> Vec<Value> {
+        let tpl = &self.frame_template[func as usize];
+        match self.frame_window_pool.borrow_mut().pop() {
+            Some(mut w) => {
+                w.clear();
+                w.extend_from_slice(tpl);
+                w
+            }
+            None => tpl.clone(),
+        }
+    }
+
+    /// Install this function's persistent STATIC slab if it has none yet (X-init ONCE,
+    /// never reset — the shared-slot lifetime).
+    ///
+    /// ⚠️ The slab used to be seeded with `entry(func).or_insert(fresh)`, which builds a
+    /// fresh window on EVERY call and then DROPS it on every call but the first. A plain
+    /// (non-`automatic`) Verilog function is ALL-static, so that was the entire per-call
+    /// window cost — allocation and `locals_len` `Value` constructions — paid for a value
+    /// nobody reads.
+    #[inline]
+    pub(crate) fn seed_static_slab(&self, func: u32) {
+        let mut g = self.static_store.borrow_mut();
+        let slot = g
+            .get_mut(func as usize)
+            .expect("static seed: FuncId out of range");
+        if slot.is_none() {
+            *slot = Some(self.frame_template[func as usize].clone());
+        }
+    }
+
+    /// Park a retired window on the free-list.
+    ///
+    /// ⚠️ Call this ONLY where the pop provably DROPS the window. `stash_windows_in` also
+    /// pops, but it MOVES the window into a `FrameRec` and pushes it back when the activity
+    /// resumes; recycling one of those would hand a live window to the next call — a
+    /// wrong-answer bug with no loud symptom. The two call sites are the synchronous `&self`
+    /// executors' terminal pops, where the callee has run to completion and nothing can
+    /// reach the window again.
+    ///
+    /// Capped so a deep recursion that unwinds once does not pin its whole stack of windows
+    /// for the rest of the run. Overflow just drops, which is the pre-5a behaviour.
+    #[inline]
+    pub(crate) fn retire_window(&self, w: Vec<Value>) {
+        const POOL_CAP: usize = 64;
+        let mut pool = self.frame_window_pool.borrow_mut();
+        if pool.len() < POOL_CAP {
+            pool.push(w);
+        }
+    }
+
     /// Read frame slot `slot` of function `func`: the top AUTOMATIC window, or
     /// the shared STATIC slab. Borrow → clone → drop-at-return (never held
     /// across a nested eval — §borrowDiscipline rule 1).
@@ -293,9 +356,8 @@ impl<'a> SimState<'a> {
                 }
             }
         } else {
-            self.static_store
-                .borrow()
-                .get(&func)
+            self.static_store.borrow()[func as usize]
+                .as_ref()
                 .expect("static read: no storage slab")[slot as usize]
                 .clone()
         }
@@ -340,10 +402,8 @@ impl<'a> SimState<'a> {
             }
         } else {
             pick(
-                &self
-                    .static_store
-                    .borrow()
-                    .get(&func)
+                &self.static_store.borrow()[func as usize]
+                    .as_ref()
                     .expect("static read: no storage slab")[slot as usize],
             )
         }
@@ -381,7 +441,9 @@ impl<'a> SimState<'a> {
             }
         } else {
             let mut g = self.static_store.borrow_mut();
-            g.get_mut(&func).expect("arg bind: no storage slab")[slot as usize] = v;
+            g[func as usize]
+                .as_mut()
+                .expect("arg bind: no storage slab")[slot as usize] = v;
         }
     }
 
@@ -1360,7 +1422,6 @@ impl<'a> SimState<'a> {
             "return-var net width/sign must equal the declared ret_width/ret_signed"
         );
         let base = m.base_net;
-        let nloc = m.locals_len;
         let np = fd.n_params;
         // B4: per-func storage needs (window for automatic slots, slab for static).
         let has_auto = self.func_has_auto[func as usize];
@@ -1370,39 +1431,22 @@ impl<'a> SimState<'a> {
         //    The per-call WINDOW holds automatic slots (push/pop); the persistent
         //    STATIC slab (X-init ONCE, never reset) holds static slots. A func with
         //    no lifetime overrides uses exactly one of them (byte-identical to B1). ──
-        // Each fresh frame slot defaults to its NET's declared init — X for 4-state
-        // (reg/logic/integer), 0 for 2-state (bit/byte/int/shortint/longint) per IEEE
-        // §6.4. (Using `Value::xs` unconditionally mis-defaulted 2-state locals to X,
-        // silently corrupting reads/branches of an unassigned 2-state local.)
-        let fresh: Vec<Value> = (0..nloc)
-            .map(|s| {
-                let nv = &self.ir.nets[(base + s) as usize];
-                // N1: a frame-local `string` slot (an output/inout string formal or a
-                // string return var) defaults to the EMPTY string, not a width-1
-                // non-is_str value — the latter renders as a stray space and makes
-                // `s==""` / `s.len()==0` FALSE on an unwritten path (a silent-wrong
-                // caught by adversarial review; string-return t03 already matched
-                // iverilog because it happened to write, output formals did not).
-                if nv.kind == NetKind::String {
-                    Value::from_str_bytes(&[])
-                } else {
-                    Value::from_packed(&nv.init, nv.width.max(1), nv.signed)
-                }
-            })
-            .collect();
         // A pure FUNCTION never contains a Case-B fork (a fork in a function body is
         // loud), so its window is always `Owned` (byte-identical to the pre-arena path).
         match (has_auto, has_static) {
             (true, true) => {
-                self.frame_stack
-                    .borrow_mut()
-                    .push(WindowSlot::Owned(fresh.clone()));
-                self.static_store.borrow_mut().entry(func).or_insert(fresh);
+                let w = self.fresh_window(func);
+                self.frame_stack.borrow_mut().push(WindowSlot::Owned(w));
+                self.seed_static_slab(func);
             }
-            (true, false) => self.frame_stack.borrow_mut().push(WindowSlot::Owned(fresh)),
-            (false, _) => {
-                self.static_store.borrow_mut().entry(func).or_insert(fresh);
+            (true, false) => {
+                let w = self.fresh_window(func);
+                self.frame_stack.borrow_mut().push(WindowSlot::Owned(w));
             }
+            // ⚠️ Reached with NO slots at all (`locals_len == 0`), where both flags are
+            // false — the arm still seeds, so an (unreachable) slot read finds a slab
+            // rather than a different panic than before.
+            (false, _) => self.seed_static_slab(func),
         }
 
         // ── BIND ARGS into the formal slots (resize to the formal's width). ──
@@ -1602,7 +1646,13 @@ impl<'a> SimState<'a> {
             .frame_slot_read(func, ret_auto, m.return_slot)
             .resize_keep_sign(rw, rsig);
         if has_auto {
-            self.frame_stack.borrow_mut().pop(); // static: leave the slab (persistence)
+            // TERMINAL pop: a pure function body cannot suspend, so nothing has stashed
+            // this window and nothing can reach it again ⇒ it is safe to recycle.
+            // (static slots: leave the slab in place — persistence is their lifetime.)
+            let popped = self.frame_stack.borrow_mut().pop();
+            if let Some(WindowSlot::Owned(w)) = popped {
+                self.retire_window(w);
+            }
         }
         Some(rv) // _g drops here → call_depth decremented
     }
