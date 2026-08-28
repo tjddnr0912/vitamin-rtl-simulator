@@ -141,17 +141,17 @@ TX 가 틀린 FCS 를 붙이고 RX 가 그것을 **정확하다고 검증**한�
 
 | 워크로드 | 모양 | 라이선스 | iverilog | vita | 비 |
 |---|---|---|---|---|---|
-| **sha256** (secworks) | crypto | BSD-2 | 4.157 s | **1.460 s** | **2.85×** |
-| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 9.363 s | **4.187 s** | **2.24×** |
-| *keccak* (1st-party) | crypto | ours | 9.320 s | **4.452 s** | **2.09×** |
-| **aes** (secworks) | crypto | BSD-2 | 6.140 s | **2.948 s** | **2.08×** |
-| **picorv32** (YosysHQ) | cpu | ISC | 7.267 s | **4.847 s** | **1.50×** |
-| **darkriscv** (코어만) | cpu | BSD-3 | 7.241 s | 7.573 s | **0.96×** |
-| **serv** (bit-serial) | cpu | ISC | 7.369 s | 9.234 s | **0.80×** |
-| *keccak-arr* (1st-party) | crypto | ours | 9.135 s | 13.643 s | **0.67×** |
+| **sha256** (secworks) | crypto | BSD-2 | 4.126 s | **1.345 s** | **3.07×** |
+| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 9.450 s | **4.175 s** | **2.26×** |
+| **aes** (secworks) | crypto | BSD-2 | 6.169 s | **2.948 s** | **2.09×** |
+| *keccak* (1st-party) | crypto | ours | 9.320 s | **4.667 s** | **2.00×** |
+| **picorv32** (YosysHQ) | cpu | ISC | 7.068 s | **4.564 s** | **1.55×** |
+| **darkriscv** (코어만) | cpu | BSD-3 | 7.216 s | 7.184 s | **1.00×** |
+| **serv** (bit-serial) | cpu | ISC | 7.237 s | 7.861 s | **0.92×** |
+| *keccak-arr* (1st-party) | crypto | ours | 9.183 s | 13.737 s | **0.67×** |
 | verilog-axi · verilog-ethernet | — | — | 6.8–7.8 s | **거절** | — |
 
-> 기하평균 **1.47×** (도는 여덟) · **1.58×** (서드파티 여섯) · **1.80×** (serv 를 뺀
+> 기하평균 **1.51×** (도는 여덟) · **1.66×** (서드파티 여섯) · **1.86×** (serv 를 뺀
 > 서드파티 다섯 = 2026-08-23 과 같은 집합). 측정 = 릴리즈 바이너리,
 > **인터리브 · 타임드 샘플 3개**(라운드 4회, 첫 회 폐기), 다른 부하 없는 상태.
 > 재현 = `corpus-runner run --compare`. ⚠️ 이 표가 **수치의 유일한 자리**다 — 매니페스트의
@@ -161,9 +161,14 @@ TX 가 틀린 FCS 를 붙이고 RX 가 그것을 **정확하다고 검증**한�
 `keccak_f_arr` 는 지금도 코퍼스 최악(0.67×)이고, 아레나 추정 2.33× 는 전부 **그 하나**에서
 나온 수다.
 
-⚠️ **지는 셋의 공통점은 아직 모른다.** `keccak_f_arr` 는 호출마다 25원소 배열을 짓고(프레임 로컬
-배열), `darkriscv`(**이제 0.96× — 거의 동률**)와 `serv` 는 그런 게 없다. 성능 축의 다음 계측
-대상이다.
+⚠️ **지는 셋 중 둘이 사라졌다.** `darkriscv` 는 **1.00× — 동률**이고 `serv` 는 0.80 → **0.92×**
+다. 둘 다 아레나 가설과 **무관한 이유**로 지고 있었다는 것이 2026-08-28 에 드러났다: 기본
+백엔드가 델타마다 `Vec` 두 개를 새로 할당하고 있었고(interp 쪽은 수년째 재사용한다), 그건
+프레임 레짐과 아무 상관이 없다. 트래커가 *"다음 계측은 darkriscv 부터"* 라고 적어 둔 이유가
+정확히 이것이었고 — 아무도 그 설계를 들여다보지 않은 채 해결됐다.
+
+남은 하나는 `keccak_f_arr`(0.67×)이고, 그건 여전히 호출마다 25원소 배열을 짓는 프레임 로컬
+배열이다.
 
 #### Re-measurement, 2026-08-28
 
@@ -191,14 +196,32 @@ nothing else. Answering equal width in place is **keccak_f −17.2%, keccak_f_ar
 helped a design with no subroutine calls in its hot path.
 
 That took the `keccak` row from 1.10× to **2.09×**, and `keccak-arr` from 0.53× to
-**0.67×**. `darkriscv` went 0.78× → **0.96×**, so the corpus now has no design losing
-by more than a third.
+**0.67×**. `darkriscv` went 0.78× → **0.96×** — and a fourth change later the same day
+took it the rest of the way to parity (see below).
 
 The standing call-regime measurement is `keccak_f.sv` against `keccak_f_flat.sv`
 (same algorithm, subroutines expanded by `gen_flat.py`): **4.45 s vs 0.61 s = 7.3×**,
 down from 8.9×. That is the headroom still on the table, and it is why compiling the
 *callee* body is the next item rather than a finished one. Full numbers, including
 verilator, in `bench/keccak/RUN.md`.
+
+#### A fourth change, and the reason it is filed separately
+
+Later on 2026-08-28 the default backend stopped allocating two `Vec`s per DELTA, and
+stopped throwing away `ca_dirty`'s capacity on every continuous-assign fixpoint pass.
+Neither is in the eval/frame regime at all, and that is the point: **serv −14.6%,
+sha256 −9.8%, picorv32 −5.0%, darkriscv −4.9%**, while `keccak` and `aes` — the two
+most call-heavy rows — did not move.
+
+⭐ So the corpus's two losing CPU rows were losing for a reason the arena hypothesis
+never explained, and the tracker had said so: it named `darkriscv` as the next thing to
+measure precisely because *"지는 이유가 아레나 가설과 다를 수 있다"*. It was. The
+interpreter had had the fix for years; the default backend never got it.
+
+⚠️ A census of the corpus also re-prices the arena item itself. `frame_bodies` is **0**
+on sha256, picorv32 and darkriscv — their 38, 33 and 9 functions are all INLINED — so a
+frame arena would do nothing for them. Its demand is aes (18), biriscv (7) and keccak (3),
+and that is the whole of it.
 
 ⚠️ **serv is new to this table.** It began running only in §4.5.382, so its 0.78×
 is a first measurement rather than a regression, and the 1.60× figure quoted before

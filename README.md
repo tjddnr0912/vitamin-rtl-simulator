@@ -92,8 +92,8 @@ interleaved samples with the first round discarded:
 | Icarus Verilog 13 | 4 670 µs | 672× slower |
 
 Against Icarus Verilog specifically, vitamin is ahead — a geometric mean of
-**1.8× faster** across five third-party designs in the workload corpus, and
-**1.5×** across all eight that run, with two designs still slower
+**1.9× faster** across five third-party designs in the workload corpus, and
+**1.5×** across all eight that run, with one design still meaningfully slower
 ([docs/study/03](docs/study/03-workload-corpus.md)). Function and task calls
 remain the biggest cost a design can pay: the same algorithm written without
 subroutines runs **7.3× faster** than the version that calls them, and closing
