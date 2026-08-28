@@ -11,6 +11,60 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **The inline function fold re-ran a body-local's defining expression once per
+  REFERENCE.** vita has two lowerings for a user function; the inline one substitutes a
+  local's defining RHS at every place the local is named, and the arena keeps ONE node
+  that the evaluator then walks once per reference. Same defect as a shared `case`
+  scrutinee and an eager `&&` right operand: a DAG walked as a tree.
+
+  ```text
+    reg u; u = $random;  g = u ^ u;    vita 3533466533   iverilog 0   exit 0
+           u = $urandom; g = u ^ u;    vita 2354591315   iverilog 0   exit 0
+  ```
+
+  ⭐ A function reaches the inline path when it is not `automatic`, its return type is
+  4-state (`function [31:0]` — `function int` is framed by `ret_two_state`, whether or not
+  `automatic` is written), its body is straight-line, and it has no unpacked formal. That
+  is not obvious and cost three failed reproduction attempts.
+
+  A body that assigns a local from a NON-REPEATABLE RHS and then names it twice or more
+  is now routed to the FRAME path, which binds the RHS to a slot once. Frame ⊇ inline in
+  capability since §4.5.198/199, so this is routing rather than new machinery, and the
+  review measured **6 shapes moving loud → correct** as well — `assign y = f(xin)` with
+  `$random` in the body was an `F4016` delta-limit **fatal** before. The strongest single
+  measurement is that six consecutive `$random` draws interleaved with a testbench's own
+  now reproduce iverilog's entire stream, which shows one draw per call in the right
+  order rather than an XOR that happens to cancel.
+
+  ⚠️ Adversarial review found **three BLOCKING defects in the first version**, all mine.
+  ⓐ `if let Blocking { lhs, rhs, .. }` swallowed `delay`: `body_needs_frame` ignores an
+  intra-assignment delay and `fold_straight_line` deliberately ACCEPTS one with a warning,
+  but the frame path refuses it — so `u = #3 $signed(a); fn = u+u;` went from `r=42` (the
+  oracle's answer) to E3009 exit 1. **correct → loud.** The guard has to be body-wide, not
+  per-statement, because the delayed assignment need not be the non-repeatable one.
+  ⓑ Repeatability was judged on surface syntax where it has to be judged AFTER
+  substitution — `u = $random; v = u; g = v ^ v;` gives `v` the same impure node, and
+  seven of a 26-cell census survived through `+`, `{}`, `&`, `[m:l]` and a bare copy.
+  ⓒ `walk_expr_refs` had no `Cast` arm, so `int'(u) ^ int'(u)` counted zero references;
+  both siblings in the same file already had it.
+
+  ⚠️ Two shapes of the same defect are NOT closed: a side-effecting callee firing once
+  per reference, and an out-of-range element read reporting once per reference. Both
+  bodies read something non-local, and the routing is gated on `body_reads_only_locals`
+  because a framed call contributes only its ARGUMENTS to an implicit `always_comb`
+  sensitivity list — routing them would drop a read from that list, which is a different
+  silent-wrong. The gate is shared with two other routing clauses, so widening it is not
+  a local change. Recorded, with a test pinning today's behaviour so whoever lifts the
+  gate sees it go red.
+
+  ⚠️ **Performance is not the reason.** Inline is Θ(refs^depth) and frame is Θ(refs·depth)
+  — measured, fitted base 1.99 / 2.98 / 3.95 for 2 / 3 / 4 references, 27–29 ns per node
+  visit, with the arena growing strictly LINEARLY (+20 bytes per level) while the visit
+  count explodes: 774 bytes of arena and 305,831 visits per call at 4 references and depth
+  8. But a census of all 203 `function` blocks in the corpus found 27 on the inline path
+  and **25 of them have no body local at all**, so the corpus win is zero.
+
+
 - **A block-local with the same name as a module-scope net was the module net.** vita
   flattens procedural block-locals into the module namespace, and the guard that makes
   that safe — a width/signedness check, a definite-assignment check, and

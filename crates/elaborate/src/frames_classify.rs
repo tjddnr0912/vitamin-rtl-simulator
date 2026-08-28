@@ -249,6 +249,263 @@ pub(crate) fn body_has_return(s: &ast::Stmt) -> bool {
     }
 }
 
+/// Is `e` REPEATABLE — does evaluating it twice give the same answer and the same
+/// observable effects as evaluating it once?
+///
+/// The inline fold substitutes a body-local's defining RHS at every REFERENCE to that
+/// local, and the arena keeps one node that the evaluator then walks once per reference.
+/// For a pure RHS that is only wasted work. For an impure one it is a defect, measured
+/// against iverilog on the path that exists at HEAD:
+///
+/// ```text
+///   reg [31:0] u; u = $random;  g = u ^ u;        vita 3533466533   ivl 0
+///   u = $urandom; g = u ^ u;                      vita 2354591315   ivl 0
+///   u = sf(a);    g = u ^ u ^ u;   (sf $displays) vita prints 3x    ivl 1x
+///   u = mem[99];  g = u ^ u ^ u;   (mem[0:3])     vita E4002 x3     ivl silent
+/// ```
+///
+/// ⚠️ FAIL CLOSED. Every construct not listed as repeatable answers `false`, because the
+/// cost of a wrong `true` is a silent-wrong and the cost of a wrong `false` is one
+/// function taking the frame path — which is strictly more capable since §4.5.198/199.
+/// In particular an ARRAY ELEMENT read is NOT repeatable: it is the one shape above whose
+/// impurity is a diagnostic rather than a value, and vita reports it once per reference.
+///
+/// ⚠️⚠️ Only the FIRST TWO rows above are actually reached. The routing is gated on
+/// `body_reads_only_locals`, which answers `false` for a user `Call` and for a module-net
+/// read — so rows 3 and 4 stay exactly as they were. They are listed because they are the
+/// same defect and the same evidence, not because this closes them; closing them needs
+/// the sensitivity-list prerequisite that gate exists for.
+fn expr_is_repeatable(e: &ast::Expr) -> bool {
+    use ast::ExprKind as K;
+    match &e.kind {
+        // Literals and a plain name: no effect, and nothing can change between two
+        // reads inside ONE expression evaluation (a frame body cannot write a module
+        // net, and no net write interleaves inside a single `eval_ctx`).
+        K::IntLit { .. } | K::RealLit { .. } | K::StrLit { .. } | K::TimeLit { .. } => true,
+        K::PkgScoped { .. } | K::Null => true,
+        K::Ident(_) => true,
+        K::Paren { inner } => expr_is_repeatable(inner),
+        K::Unary { operand, .. } => expr_is_repeatable(operand),
+        K::Binary { lhs, rhs, .. } => expr_is_repeatable(lhs) && expr_is_repeatable(rhs),
+        K::Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => expr_is_repeatable(cond) && expr_is_repeatable(then_e) && expr_is_repeatable(else_e),
+        // A part-select of a NAME is repeatable; a part-select whose base is an array
+        // element is not, and that is decided by recursing into `base`.
+        K::PartSelect { base, msb, lsb } => {
+            expr_is_repeatable(base) && expr_is_repeatable(msb) && expr_is_repeatable(lsb)
+        }
+        K::IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => expr_is_repeatable(base) && expr_is_repeatable(offset) && expr_is_repeatable(width),
+        K::Concat { parts } => parts.iter().all(expr_is_repeatable),
+        K::Replicate { count, value } => {
+            expr_is_repeatable(count) && value.iter().all(expr_is_repeatable)
+        }
+        // ⚠️ `a[i]` is deliberately NOT repeatable. An out-of-range read REPORTS, and
+        // vita files that report once per evaluation — so a duplicated element read
+        // turns one `E4002` into N and an exit 0 into an exit 1. Measured.
+        K::BitSelect { .. } => false,
+        // Everything else fails closed: `$random` and `$urandom` draw, a user call runs
+        // a body that can print, `new`/`randomize`/`with`-clause carry state.
+        _ => false,
+    }
+}
+
+/// Does this body DUPLICATE a non-repeatable value — assign a local from an RHS that
+/// cannot be evaluated twice, and then name that local more than once?
+///
+/// That is exactly the shape the inline fold turns into repeated evaluation, so such a
+/// function is routed to the frame path, which binds the RHS to a slot ONCE and reads the
+/// slot thereafter. The frame path is already linear in the reference count where the
+/// inline path is exponential — `(refs)^(chained statements)`, measured — so the routing
+/// closes a performance cliff as a side effect, but the reason it exists is the four
+/// measured silent-wrongs above.
+///
+/// Straight-line only, because a body with control flow is already framed by
+/// `body_needs_frame` before this is ever asked.
+fn body_duplicates_a_non_repeatable_local(f: &ast::FunctionDef) -> bool {
+    // ⚠️⚠️ BAIL on an INTRA-ASSIGNMENT DELAY, body-wide.
+    //
+    // `body_needs_frame` answers `false` for a `Blocking` regardless of its `delay`, and
+    // `fold_straight_line` deliberately ACCEPTS one with a warning ("intra-assignment
+    // delay in inlined function dropped"). `classify_frame_body` does NOT — it refuses
+    // the body outright. So routing a delayed body hands a design the inline path RAN to
+    // a path that rejects it: `u = #3 $signed(a); fn = u + u;` was `r=42` (iverilog's
+    // answer) plus a warning, and became E3009 exit 1. That is correct → loud, which the
+    // accuracy ladder forbids however non-conforming the design is (IEEE 1364 §10.4.4
+    // bans time control in a function; vita's accept was deliberate and warned).
+    //
+    // ⚠️ BODY-WIDE, not per-statement. The delayed statement need not be the
+    // non-repeatable one: `u = #3 a;` (repeatable) followed by `v = $signed(a[7:0]);
+    // fn = u+v+v;` routes on `v` and is refused for `u`'s delay.
+    let mut has_delay = false;
+    walk_straight_line(&f.body, &mut |st| {
+        if let ast::Stmt::Blocking { delay, event, .. } = st {
+            if delay.is_some() || event.is_some() {
+                has_delay = true;
+            }
+        }
+    });
+    if has_delay {
+        return false;
+    }
+
+    // (name → the count of REFERENCES seen since its non-repeatable definition).
+    let mut pending: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut hit = false;
+    walk_straight_line(&f.body, &mut |st| {
+        if let ast::Stmt::Blocking { lhs, rhs, .. } = st {
+            // Count references in the RHS *before* re-defining, so `u = u + f()` counts
+            // the read of `u` that happens on the way in.
+            let mut names_a_pending = false;
+            for (nm, n) in pending.iter_mut() {
+                let c = expr_ref_count(rhs, nm);
+                if c > 0 {
+                    names_a_pending = true;
+                    *n += c;
+                    if *n >= 2 {
+                        hit = true;
+                    }
+                }
+            }
+            if let Some(target) = lvalue_bare_name(lhs) {
+                // ⚠️⚠️ TRANSITIVITY. Repeatability has to be judged AFTER substitution,
+                // not on the surface syntax: `fold_straight_line` binds each local to the
+                // arena node its RHS lowered to UNDER the current substitution, so
+                // `u = $random; v = u; fn = v ^ v;` gives `v` the SAME impure node and
+                // duplicates it exactly as `fn = u ^ u` would. Judging `v = u` on its own
+                // text calls it repeatable and loses the whole chain — measured: seven of
+                // twenty-six defective cells survived the first version of this, through
+                // `+`, `{}`, `&`, `[m:l]` and a bare copy.
+                //
+                // So a definition inherits pending status from any pending name it reads.
+                if expr_is_repeatable(rhs) && !names_a_pending {
+                    pending.remove(&target);
+                } else {
+                    pending.insert(target, 0);
+                }
+            }
+        }
+    });
+    hit
+}
+
+/// The bare NAME an lvalue writes, when it is a whole scalar. A select/concat lvalue
+/// returns `None` — this predicate only needs the simple `u = <rhs>;` shape the inline
+/// fold substitutes through.
+fn lvalue_bare_name(l: &ast::Lvalue) -> Option<String> {
+    match l {
+        ast::Lvalue::Ident(p) if p.segments.len() == 1 => Some(p.segments[0].name.clone()),
+        _ => None,
+    }
+}
+
+/// How many times `name` is NAMED in `e`. Counts occurrences rather than answering a
+/// yes/no, because one reference is exactly the case the inline fold handles correctly.
+fn expr_ref_count(e: &ast::Expr, name: &str) -> u32 {
+    let mut n = 0;
+    walk_expr_refs(e, &mut |id| {
+        if id == name {
+            n += 1;
+        }
+    });
+    n
+}
+
+fn walk_expr_refs(e: &ast::Expr, f: &mut impl FnMut(&str)) {
+    use ast::ExprKind as K;
+    match &e.kind {
+        K::Ident(p) => {
+            if p.segments.len() == 1 {
+                f(&p.segments[0].name);
+            }
+        }
+        K::Paren { inner } => walk_expr_refs(inner, f),
+        K::Unary { operand, .. } => walk_expr_refs(operand, f),
+        K::Binary { lhs, rhs, .. } => {
+            walk_expr_refs(lhs, f);
+            walk_expr_refs(rhs, f);
+        }
+        K::Ternary {
+            cond,
+            then_e,
+            else_e,
+        } => {
+            walk_expr_refs(cond, f);
+            walk_expr_refs(then_e, f);
+            walk_expr_refs(else_e, f);
+        }
+        K::BitSelect { base, index } => {
+            walk_expr_refs(base, f);
+            walk_expr_refs(index, f);
+        }
+        K::PartSelect { base, msb, lsb } => {
+            walk_expr_refs(base, f);
+            walk_expr_refs(msb, f);
+            walk_expr_refs(lsb, f);
+        }
+        K::IndexedPart {
+            base,
+            offset,
+            width,
+            ..
+        } => {
+            walk_expr_refs(base, f);
+            walk_expr_refs(offset, f);
+            walk_expr_refs(width, f);
+        }
+        K::Concat { parts } => parts.iter().for_each(|p| walk_expr_refs(p, f)),
+        K::Replicate { count, value } => {
+            walk_expr_refs(count, f);
+            value.iter().for_each(|p| walk_expr_refs(p, f));
+        }
+        K::Call { args, .. } | K::SysCall { args, .. } => {
+            args.iter().for_each(|a| walk_expr_refs(a, f))
+        }
+        // ⚠️ `Cast` is the ONE variant that `expr_reads_only_locals` admits and this walk
+        // could miss, so a reference hiding in `int'(u)` counted as ZERO and the body was
+        // not routed. Both siblings in this file already have the arm
+        // (`expr_reads_only_locals`, `expr_selects_name`); this is the same spelling.
+        // Every other unwalked variant — `MinTypMax`, `MethodCall`, `New`, `ClassNew`,
+        // `Dist`, the assignment patterns, `RandomizeWith`, `ArrayMethodWith`,
+        // `NamedArg` — is refused by that gate before this walk is reached.
+        K::Cast { target, expr } => {
+            walk_expr_refs(expr, f);
+            if let ast::CastTarget::Size(sz) = target {
+                walk_expr_refs(sz, f);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Visit every statement of a STRAIGHT-LINE body in source order.
+///
+/// ⚠️ The body IS straight-line here — `body_needs_frame` sits earlier in the same
+/// short-circuiting `||` chain — but that is an invariant carried by DISJUNCT ORDER, not
+/// by this function, and reordering the chain would silently make this walk under-visit.
+/// The callback sees every statement including ones this walk cannot descend into, so a
+/// caller that must fail closed can check the kind itself; `debug_assert` states the
+/// invariant so a reorder fails loudly in CI rather than quietly routing less.
+fn walk_straight_line(s: &ast::Stmt, f: &mut impl FnMut(&ast::Stmt)) {
+    match s {
+        ast::Stmt::Block { stmts, .. } => stmts.iter().for_each(|st| walk_straight_line(st, f)),
+        other => {
+            debug_assert!(
+                matches!(other, ast::Stmt::Null(_) | ast::Stmt::Blocking { .. }),
+                "walk_straight_line reached a control-flow statement;                  `body_needs_frame` is supposed to have routed this body already"
+            );
+            f(other)
+        }
+    }
+}
+
 impl Elaborator<'_> {
     /// AST-side companion to `expr_is_real`: does `e` evaluate to real *because* it
     /// reaches a real-returning user function call through a real-propagating
@@ -782,7 +1039,23 @@ impl Elaborator<'_> {
                 // path has no array binding. Force it to a frame regardless of
                 // lifetime so `arr[i]` reads / control flow both work.
                 || f.ports.iter().any(|p| !p.unpacked.is_empty())
-                || ((body_needs_context_width(f, &func_widths) || body_selects_mdpacked_local(f))
+                || ((body_needs_context_width(f, &func_widths)
+                    || body_selects_mdpacked_local(f)
+                    // §11.4.7-adjacent, and the same defect class as the shared `case`
+                    // scrutinee: the inline fold substitutes a body-local's defining RHS
+                    // at every REFERENCE, and one arena node walked N times re-runs its
+                    // effects N times: `$random` and `$urandom` drew TWICE where iverilog
+                    // draws once, measured, at exit 0. The frame path binds the RHS to a
+                    // slot once, so routing is the fix.
+                    //
+                    // ⚠️ `body_reads_only_locals` below is what makes this safe AND what
+                    // limits it: a framed call contributes only its ARGUMENTS to an
+                    // implicit `always_comb` sensitivity list, so a body reading a module
+                    // net cannot be routed without dropping that read. The two remaining
+                    // shapes of this defect — a side-effecting callee firing once per
+                    // reference, and an out-of-range element read reporting once per
+                    // reference — both sit behind that gate and are unchanged.
+                    || body_duplicates_a_non_repeatable_local(f))
                     && body_reads_only_locals(f))
             {
                 set.insert(name.clone());
