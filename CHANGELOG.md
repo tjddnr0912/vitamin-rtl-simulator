@@ -386,6 +386,59 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **The default backend allocated two `Vec`s per DELTA, and threw a third buffer's
+  capacity away on every continuous-assign fixpoint pass.** `native::run::propagate` runs
+  once per delta — 5.5 M times on picorv32, 7.0 M on serv, ~15 M on sha256 — and opened
+  with `let mut changed = Vec::new(); … let mut woken = Vec::new(); let mut clocked =
+  Vec::new();`. The vectors are TINY, median 2 to 8 entries, which is not a reason to
+  leave them alone but the reason they cost so much: each is a `malloc(48)`, one to two
+  `realloc`s through capacity 4/8/16, and a `free`. Caller attribution of
+  `alloc::raw_vec::finish_grow` put `simulate←propagate` at **74.9% of all `Vec` growth
+  in the process** on sha256, 65.5% on picorv32, 44.2% on serv.
+
+  Separately, `settle_cont_assigns` built its visit list with `mem::take(&mut ca_dirty)`
+  and then dropped the taken buffer, leaving `ca_dirty` at capacity **zero** so every
+  later `note_change` push regrew it from scratch — `note_change`'s push line alone
+  measured 6.2% of serv.
+
+  ⭐ The interpreter has done the take/restore since its own measurement, with the reason
+  written down (`sched/propagate.rs`: *"a fresh Vec pair per call was measurable allocator
+  traffic"*) and four named scratch fields behind it. The DEFAULT backend never got it, so
+  the reference implementation was in the sibling all along.
+
+  ```text
+    serv       9.234 s -> 7.861 s   corpus ratio vs iverilog 0.80x -> 0.92x
+    sha256     1.460 s -> 1.345 s                            2.85x -> 3.07x
+    picorv32   4.847 s -> 4.564 s                            1.50x -> 1.55x
+    darkriscv  7.573 s -> 7.184 s                            0.96x -> 1.00x  (parity)
+    biriscv    4.187 s -> 4.175 s      aes / keccak / keccak-arr    flat
+  ```
+
+  every pinned corpus digest unchanged. Geometric mean against iverilog is now **1.51×**
+  over the eight workloads that run and **1.86×** over the five third-party designs that
+  made up the 1.60× quoted in August. ⭐ `darkriscv` reaching parity matters more than the
+  percentage: it is the workload the tracker named as the next thing to measure *because
+  it loses for a reason the arena hypothesis does not explain*, and it got there without
+  anyone looking into it.
+
+  ⚠️ Three traps, each of which silently undoes the fix with no wrong-answer symptom:
+  `for p in woken` iterates BY VALUE and consumes the buffer (now `drain(..)`);
+  `propagate`'s early return on an empty changed set is the arm it takes MOST often, an
+  idle delta, so failing to restore there re-allocates on the next one; and
+  `settle_cont_assigns` has two `return`s inside its fixpoint loop.
+
+  ⚠️ The row this came from named the wrong file and the wrong mechanism. It pointed at
+  `sched/propagate.rs`, which is the interpreter and is already correct, and it blamed a
+  `chunks[0].clone()` in `k_schedule_nba_scalar` — measured: `LvalChunk` is 32 bytes of
+  `Copy` fields, its clone allocates nothing, and it is 0.36% of any design. That
+  candidate is priced out and struck.
+
+  Adversarial review: 0 BLOCKING across 1,482 differential cells — 10 corpus workloads at
+  full N, 130 generated designs, 100 designs whose observable is the WAKE ORDER of up to
+  nine processes on one net, plus clocking blocks, `force`/`release`, `wait` predicates
+  and an F4016 oscillation — all three backends, with stdout, exit code, VCD, FST, `.vu`,
+  `.velab` and the staged path byte-identical.
+
 - **A whole-net read at its own width made three `Value` moves to perform two stores.**
   `Value::resize_keep_sign` — the function every whole-net read goes through — combined the
   signedness, called `resize`, and then re-stamped the signedness. At EQUAL width, which is

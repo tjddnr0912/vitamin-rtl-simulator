@@ -290,6 +290,35 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// the delta loop are 4c-2.
     pub(crate) nba: Vec<NbaUpdate>,
     pub(crate) nba_seq: u64,
+    /// Per-delta scratch for [`crate::native::run::propagate`], and for the
+    /// `settle_cont_assigns` fixpoint's visit list.
+    ///
+    /// ⚠️ These are here for ONE reason and it is measured: `propagate` runs once per
+    /// delta — 5.5 M times on picorv32, 7.0 M on serv, ~15 M on sha256 — and built two
+    /// fresh `Vec`s each time. The vectors are TINY (median 2–8 entries), which is not a
+    /// reason to leave them alone but the reason they cost so much: each is a
+    /// `malloc(48)`, one to two `realloc`s as it grows through capacity 4/8/16, and a
+    /// `free`. Caller attribution of `alloc::raw_vec::finish_grow` puts
+    /// `simulate←propagate` at **74.9% of all `Vec` growth in the process** on sha256,
+    /// 65.5% on picorv32, 44.2% on serv.
+    ///
+    /// The interpreter has had exactly this since its own measurement
+    /// (`sched/mod.rs`'s `scratch_changed`/`scratch_edges`, taken and restored in
+    /// `sched/propagate.rs`); the default backend never got it. Both consumers already
+    /// open with `clear()`, so this is a caller-only change with no semantic delta.
+    ///
+    /// `scratch_clocked` is provably free on a design with no clocking blocks (nothing
+    /// is ever pushed, so it never allocates) — it is here so the two callees keep their
+    /// signatures rather than because it was costing anything.
+    pub(crate) scratch_changed: Vec<crate::native::dirty::ChangedNet>,
+    pub(crate) scratch_woken: Vec<u32>,
+    pub(crate) scratch_clocked: Vec<u32>,
+    /// The `settle_cont_assigns` visit list. Its old spelling `mem::take`d
+    /// `arena.ch.ca_dirty` and dropped the taken buffer at the end of the pass, so
+    /// `ca_dirty` was left at capacity ZERO and every `note_change` push regrew it from
+    /// scratch — several times per delta. Measured: `note_change`'s push line alone is
+    /// **6.2% of serv**, and `settle_cont_assigns` is 5.3% (0.49 s).
+    pub(crate) scratch_ca_pass: Vec<u32>,
     /// TRANSPORT-delay updates, filed under the tick they are due — the engine's
     /// `delayed_nba`, same type and same key, so the two drains compare directly.
     ///
@@ -606,6 +635,10 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             has_frames,
             nba: Vec::new(),
             nba_seq: 0,
+            scratch_changed: Vec::new(),
+            scratch_woken: Vec::new(),
+            scratch_clocked: Vec::new(),
+            scratch_ca_pass: Vec::new(),
             delayed_nba: BTreeMap::new(),
             nba_scratch_lhs: Lvalue { chunks: Vec::new() },
             wake,

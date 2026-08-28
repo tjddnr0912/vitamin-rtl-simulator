@@ -654,17 +654,29 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
         // `ca_of_net`) UNION the ones `levelize::ca_deps` refused to certify
         // (`ca_always`). Ascending index = declaration order, which several
         // goldens depend on.
-        let pass: Vec<u32> = {
+        // ⚠️ The old spelling was `let pass: Vec<u32> = { let mut v = take(ca_dirty); … v };`
+        // and then DROPPED `pass` at the end of the iteration. That left `ca_dirty` at
+        // capacity ZERO, so every later `note_change` push regrew it from scratch —
+        // several times per delta, on the hottest loop this backend has. Measured:
+        // `note_change`'s push line alone is 6.2% of serv.
+        //
+        // Now the pass is built in a kernel-owned buffer and `ca_dirty`'s own allocation
+        // is handed straight back, emptied. Same visit set, same order.
+        let mut pass = std::mem::take(&mut k.scratch_ca_pass);
+        pass.clear();
+        {
             let mut v = std::mem::take(&mut k.arena.ch.ca_dirty);
             for &ci in &v {
                 k.arena.ch.ca_dirty_flag[ci as usize] = false;
             }
-            v.extend_from_slice(k.sched.ca_always());
-            v.sort_unstable();
-            v.dedup();
-            v
-        };
-        for ci in pass.into_iter().map(|c| c as usize) {
+            pass.extend_from_slice(&v);
+            v.clear();
+            k.arena.ch.ca_dirty = v;
+        }
+        pass.extend_from_slice(k.sched.ca_always());
+        pass.sort_unstable();
+        pass.dedup();
+        for ci in pass.iter().map(|&c| c as usize) {
             // BORROWED from `ir`, not cloned out of it. This used to be
             // `.lhs.clone()` — an `Lvalue` owns a `Vec<LvalChunk>`, so that was
             // a heap allocation per continuous assign per fixpoint pass, on the
@@ -755,6 +767,12 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
         // predicate had. Drained here rather than left to the next body,
         // because the t0 settle runs before any body exists.
         k.drain_range_diags();
+        // Hand the visit buffer back BEFORE every exit from this iteration, including
+        // the two that leave the function. A `return` that skipped this would drop the
+        // capacity and reinstate exactly the regrowth this replaced — silently, since
+        // the only symptom is a slower run.
+        pass.clear();
+        k.scratch_ca_pass = std::mem::take(&mut pass);
         if !changed {
             break;
         }
@@ -916,13 +934,22 @@ fn propagate(k: &mut NativeKernel) {
     if !k.sched.st.active_forces.is_empty() && !k.arena.ch.dirty.is_empty() {
         k.reeval_active_forces();
     }
-    let mut changed = Vec::new();
+    // TAKE/RESTORE the per-delta scratch instead of allocating a fresh pair. The
+    // interpreter's `sched::propagate` has done this since its own measurement; see
+    // `NativeKernel::scratch_changed` for the numbers on this side. Both callees open
+    // with `clear()`, so the taken buffer's contents are never read.
+    let mut changed = std::mem::take(&mut k.scratch_changed);
     k.arena.take_changed(&mut changed);
     if changed.is_empty() {
+        // ⚠️ The early return has to give the buffer back too, and this is the arm it
+        // is taken on most often — an idle delta. Dropping it here would leave the
+        // field empty and re-allocate on the NEXT delta, i.e. the whole fix undone by
+        // its own fast path.
+        k.scratch_changed = changed;
         return;
     }
-    let mut woken = Vec::new();
-    let mut clocked = Vec::new();
+    let mut woken = std::mem::take(&mut k.scratch_woken);
+    let mut clocked = std::mem::take(&mut k.scratch_clocked);
     k.wake.wake(&changed, &mut woken, &mut clocked);
     // N4 clocking: apply each fired handler's commit HERE — at edge detection,
     // before the Active batch drains — so every same-slot reader of `cb.sig` sees
@@ -934,7 +961,11 @@ fn propagate(k: &mut NativeKernel) {
     // The plan is decided against the ARENA and applied to the arena. Both
     // halves are the slice: an unthreaded plan reads the engine's holding nets
     // (which a native run never writes) and an unthreaded apply writes them.
-    for p in clocked {
+    // ⚠️ `drain(..)` rather than `for p in clocked` / `for p in woken`. Iterating by
+    // VALUE consumes the vector, which would leave the scratch field empty and undo the
+    // whole point — the buffer has to survive to be handed back below. `drain` yields
+    // the same items in the same order and leaves the capacity in place.
+    for p in clocked.drain(..) {
         let Some(writes) = k.sched.st.clocking_commit_plan(Some(&k.arena), p) else {
             continue;
         };
@@ -942,7 +973,7 @@ fn propagate(k: &mut NativeKernel) {
             k.arena.commit_clocking_sample(net, &v);
         }
     }
-    for p in woken {
+    for p in woken.drain(..) {
         push_sorted_native(
             &mut k.active,
             NativeReady {
@@ -953,6 +984,12 @@ fn propagate(k: &mut NativeKernel) {
         );
     }
     fire_waiters(k, &changed);
+    // Hand all three back BEFORE the drain below, which can re-enter nothing but is the
+    // last statement — a `?`/early return added here later would leak them, so they go
+    // back at the first point where every use is finished.
+    k.scratch_changed = changed;
+    k.scratch_woken = woken;
+    k.scratch_clocked = clocked;
     // THE THIRD PRODUCER. `fire_waiters` evaluates every `wait(expr)` predicate
     // through the arena, so it can leave a deferred out-of-range report behind —
     // and `propagate` is called from two places that both `continue` straight
