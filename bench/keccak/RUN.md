@@ -23,29 +23,32 @@ iverilog -g2012 -o keccak-arr.vvp tb.sv keccak_f_arr.sv && vvp keccak-arr.vvp +N
 
 | row | design | iverilog | vita | ratio |
 |---|---|---|---|---|
-| `keccak` | `keccak_f.sv` | 9.288 s | 5.406 s | 1.72x faster |
-| `keccak-arr` | `keccak_f_arr.sv` | 9.129 s | 15.973 s | **0.57x — the corpus worst case** |
+| `keccak` | `keccak_f.sv` | 9.320 s | 4.452 s | 2.09x faster |
+| `keccak-arr` | `keccak_f_arr.sv` | 9.135 s | 13.643 s | **0.67x — the corpus worst case** |
 
 Three timed samples, interleaved, first round discarded. The cross-corpus table is
 `docs/study/03-workload-corpus.md`.
 
-The `keccak` row moved 8.426 s -> 5.406 s on 2026-08-28: a process body holding a
-user call is no longer excluded from the compiled backend, and a `case` no longer
-re-evaluates its scrutinee once per arm. `keccak-arr` did not move, because what
-that row measures is the per-call frame-local array, not the call gate.
+The `keccak` row moved 8.426 s -> 4.452 s on 2026-08-28, over three changes:
+a process body holding a user call is no longer excluded from the compiled backend;
+a `case` no longer re-evaluates its scrutinee once per arm; and a whole-net read at
+its own width no longer makes three 72-byte `Value` moves to perform two field
+writes. The first two are call-shaped and left `keccak-arr` untouched, which is why
+it was flat at 15.97 s after them; the third is on every read, and moved it too.
 
 Same day, same machine, N=2000 unless noted, all four tools agreeing on
 `lane0=54aa20c46ef0e0f6 lane1=b19e9f995e1f41d3 acc=767c5ab6776c4bde`:
 
 | tool | design | wall | per permutation |
 |---|---|---|---|
-| verilator 5.050 (`--binary --timing`, N=200000) | `keccak_f.sv` | 1.36 s | **6.8 us** |
+| verilator 5.050 (`--binary --timing`, N=200000) | `keccak_f.sv` | 1.39 s | **7.0 us** |
 | vita | `keccak_f_flat.sv` (no calls) | 0.61 s | 305 us |
-| vita | `keccak_f.sv` (calls) | 5.40 s | 2700 us |
-| iverilog 13 | `keccak_f.sv` | 9.31 s | 4655 us |
+| vita | `keccak_f.sv` (calls) | 4.45 s | 2225 us |
+| iverilog 13 | `keccak_f.sv` | 9.34 s | 4670 us |
 
 The flat/calls pair is the standing measurement of what the call regime costs:
-**8.9x** on the same algorithm. It is not a corpus row (see below).
+**7.3x** on the same algorithm (was 8.9x before the three changes above). It is not
+a corpus row (see below).
 
 `keccak_f_arr.sv` differs from `keccak_f.sv` ONLY in how `rho` looks up a constant: it
 builds a 25-element `integer` array on every call. That one difference is worth 2.0x,
