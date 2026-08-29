@@ -308,6 +308,64 @@ slice is `wprog` expression admission, not 5c: a 29-item list, covering exactly 
 designs (`sha256`, `picorv32`, `darkriscv`) an arena would do nothing for, and not a
 six-to-ten-week item.
 
+#### Is 4-state the cost? A corpus census says no — the METADATA is
+
+VCS is a 4-state simulator and it is fast, which by itself refutes "4-state is why we are
+slower". 4-state doubles the DATA; it cannot explain a 44x gap. So what does the extra cost
+actually buy?
+
+vitamin's `Value` is 72 bytes: two 32-byte `Words` (each an inline `[u64; 2]` or a heap
+`Vec`, with a discriminant) plus width, signedness, and the `is_real`/`is_str` flags. Of that,
+**16 bytes are the 4-state data**. The other 56 are metadata — what an INTERPRETER needs, and
+what a compiled simulator bakes into its generated code as literals.
+
+The census (instrumentation measured and reverted, not committed) counts every value returned
+by `eval_ctx` on all eight running workloads:
+
+```text
+                    definite   <=64 bits   BOTH     heap
+  picorv32           100.00%    100.00%    100.00%   0.00%
+  keccak             100.00%     99.95%     99.95%   0.05%
+  keccak-arr         100.00%     99.72%     99.72%   0.28%
+  biriscv             99.91%     99.94%     99.86%   0.00%
+  aes                 99.99%     97.49%     97.49%   0.00%
+  darkriscv           98.49%     97.89%     96.38%   0.00%
+  serv                89.66%    100.00%     89.66%   0.00%
+  sha256             100.00%     83.93%     83.93%  16.07%
+```
+
+⭐⭐ **83.9% to 100% of all evaluated values are simultaneously definite and at most 64 bits**
+— geometric mean **95.7%**, median 99.7%. That is exactly the shape `wprog`'s compiled lane
+already carries: `W = (val, unk)` is **16 bytes**, and its 2-state lane is a bare `u64` at
+**8**. The representation vitamin needs is already in the tree; what is missing is how much of
+the design reaches it.
+
+⭐ Two secondary readings sharpen it further:
+
+* **The heap is not the cost.** `Value`'s `Vec` spill fires on 0.00% of evaluations in six of
+  eight designs (sha256 is the exception at 16%, its 512-bit blocks). So the 72 bytes are
+  moved BY VALUE, inline — which is precisely the defect measured twice this month:
+  `resize_keep_sign` answering equal width in place was **-17.2%** on keccak, and it did no
+  arithmetic at all.
+* **Making the unknown plane lazy is NOT the prize.** At <=64 bits both planes are inline, so
+  the unk plane costs no allocation — only 16 of the 72 bytes and some ALU. The 56 bytes of
+  metadata dominate, and they are metadata a compiled program does not carry.
+
+⚠️ One column is a BIASED SUBSAMPLE and must not be read as a design-wide x/z rate: the
+`genpath_reads` figures (aes 11.65% definite, sha256 39.54%) count only `read_net`, the general
+`Value`-returning path, which is reached exactly when the fast `read_scalar_words` path
+DECLINES. Those are the nets that already fell off the fast lane, so they over-represent x/z by
+construction. The `eval_ctx` column has no such bias — it sees every value.
+
+⚠️ `serv` is the floor at 89.66% definite, and it is one of the two designs vitamin loses on.
+Its x/z is real (a bit-serial core reading an uninitialized register file), which is also why a
+GLOBAL 2-state mode with an x trip-wire is the wrong shape: on this corpus it would trip
+immediately after reset and stay tripped. The per-operation lane is the right granularity, and
+it already exists.
+
+⚠️⚠️ And VCS itself has never been measured by this project. The architectural reading above
+stands on its own, but any numeric target needs a licensed single-core run of this corpus.
+
 #### That slice landed, and the axis was one thing
 
 Sharpening the census to the FIRST failing node (not the root) collapsed it further:
