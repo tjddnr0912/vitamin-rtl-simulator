@@ -356,9 +356,14 @@ pub trait NetReader {
     fn resolve_virtual_call(&self, _call_eid: u32, static_fid: u32, _args: &[Value]) -> u32 {
         static_fid
     }
-    /// B1 frame-call: the i-th formal's (width, signed) so the eval arm can size
-    /// each actual to the FORMAL type (IEEE 1800 §13.4.3) BEFORE the call. `None`
-    /// (default / no sidecar) ⇒ fall back to the actual's self-width.
+    /// B1 frame-call: the i-th formal's (width, signed) so the eval arm can size each
+    /// actual to the formal's WIDTH before the call. `None` (default / no sidecar) ⇒
+    /// fall back to the actual's self-width.
+    ///
+    /// ⚠️ The `signed` half is no longer read by the value path: §11.8.1 keeps an
+    /// expression's signedness with its own operands, so the actual is evaluated with
+    /// `wt.signed(actual)` and the formal's sign applies only at the store into the
+    /// formal net. The tuple keeps both because the fallback arm supplies the pair.
     fn formal_width(&self, _func: u32, _i: usize) -> Option<(u32, bool)> {
         None
     }
@@ -682,9 +687,16 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             Expr::SysFunc { which, args } => self.eval_sysfunc_ctx(*which, args, w, eff_signed),
 
             // ── user function call (B1) ──────────────────────────────────────
-            // Evaluate each actual at the FORMAL's width/sign (§13.4.3 — the
-            // formal type is the assignment context), call the engine frame
-            // evaluator, then resize the result to THIS call site's context.
+            // Evaluate each actual at the FORMAL's WIDTH but with the ACTUAL's own
+            // SIGN, call the engine frame evaluator, then resize the result to THIS
+            // call site's context.
+            //
+            // ⚠️ This used to read "at the FORMAL's width/sign (§13.4.3 — the formal
+            // type is the assignment context)". §13.5.1 does make the bind an
+            // assignment, but §11.8.1 then says the signedness does not depend on the
+            // left-hand side, so only the WIDTH half of §11.8.3 survives. Measured:
+            // under iverilog the formal's declared sign has zero effect —
+            // `fu16(8'shf7)` and `fs16(8'shf7)` are both `fff7`.
             // `eval_call` returning `None` (empty sidecar / test fake) X-poisons
             // exactly like the pre-B1 stub, so func-free designs are unchanged.
             Expr::Call { func, args } => {
@@ -704,11 +716,24 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                             let v = self.eval_ctx(a, s.width.max(1), s.signed);
                             Value::from_str_bytes(&v.to_str_bytes())
                         } else {
-                            let (fw, fs) = self.nets.formal_width(*func, i).unwrap_or_else(|| {
+                            // §11.8.3: an assignment-like context lends the actual its
+                            // WIDTH, not its SIGN — the right-hand expression's type is
+                            // determined by that expression alone.
+                            //
+                            // ⚠️⚠️ This used to pass the FORMAL's signedness as the
+                            // context sign. It was wrong from the start
+                            // (`function automatic [31:0] au(input [31:0] x)` read a
+                            // `reg signed [7:0] b = 8'shB3` as 179 where both oracles
+                            // say 4294967219), but `>>>` was accidentally immune because
+                            // its arm ignored `ctx_signed` entirely. Making that arm
+                            // honour the result type removed the cancellation and turned
+                            // the wrong context sign into a wrong VALUE:
+                            // `au(b >>> 2)` went 4294967276 → 44 at exit 0.
+                            let (fw, _fs) = self.nets.formal_width(*func, i).unwrap_or_else(|| {
                                 let s = self.wt.get(a);
                                 (s.width, s.signed)
                             });
-                            self.eval_ctx(a, fw, fs)
+                            self.eval_ctx(a, fw, self.wt.signed(a))
                         }
                     })
                     .collect();
@@ -962,18 +987,39 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 let r = self.eval(rhs);
                 self.shift_right(&l, &r, false) // logical, fill 0
             }
-            // ARITHMETIC RIGHT SHIFT — the sign-fill is governed by the LEFT
-            // operand's OWN self-signedness, NOT the enclosing context. An unsigned
-            // enclosing context MUST NOT demote a genuinely-signed `s >>> n` to a
-            // logical shift. Evaluate the LEFT operand with its OWN self-sign so its
-            // MSB carries the true sign bit, and pass that same own-sign as the fill
-            // flag; only AFTER shifting resize to the surrounding (w, eff_signed).
+            // ARITHMETIC RIGHT SHIFT — §11.4.10 fills the vacated positions with the
+            // left operand's sign bit "if the RESULT TYPE is signed", and zero
+            // otherwise. The result type is `eff_signed`, i.e. the left operand's own
+            // signedness AND the context's — the same global-unsigned rule this
+            // function states at the top and every other arm obeys.
+            //
+            // ⚠️⚠️ This arm used to read `self.wt.signed(lhs)` instead, under a comment
+            // asserting that "an unsigned enclosing context MUST NOT demote a
+            // genuinely-signed `s >>> n` to a logical shift". Demoting it is exactly
+            // what §11.4.10 requires, and a 303-cell census against BOTH oracles put
+            // **70 cells** on the wrong side of it with ZERO oracle split — the two
+            // tools never disagreed, so there was nothing to arbitrate:
+            //
+            //   reg signed [7:0] b = 8'shB3;   (b >>> 4) > 8'd100
+            //     vita 1        iverilog 0        verilator 0        (exit 0)
+            //
+            // ⭐ The unsignedness reaches here from an operand the shift does not
+            // contain — the comparison's other side, or a sibling of the `+` — which
+            // is why the shift's own operands all look signed when you inspect them.
+            //
+            // ⚠️ TWO COPIES OF THE OLD RULE REMAIN and are filed, not fixed here:
+            // `elaborate`'s constant folder (`const_fn.rs`'s plain-i64 `AShr` and its
+            // wide twin `const_wide.rs`), which makes a `localparam` disagree with its
+            // own runtime twin; and a `case` region, whose collective unsignedness is
+            // applied as an outer `$unsigned` on the already-lowered scrutinee instead
+            // of being propagated into it, so unsigned case ITEMS do not demote the
+            // shift. This comment says "every other arm", and it means every other arm
+            // OF THIS FUNCTION.
             AShr => {
-                let lhs_signed = self.wt.signed(lhs); // OWN self-sign
-                let l = self.eval_ctx(lhs, w, lhs_signed); // keep its OWN sign for fill MSB
+                let l = self.eval_ctx(lhs, w, eff_signed);
                 let r = self.eval(rhs);
-                let shifted = self.shift_right(&l, &r, lhs_signed); // arith iff LEFT signed
-                shifted.resize_keep_sign(w, eff_signed) // re-stamp to ctx sign
+                let shifted = self.shift_right(&l, &r, eff_signed); // arith iff the RESULT is signed
+                shifted.resize_keep_sign(w, eff_signed)
             }
         }
     }

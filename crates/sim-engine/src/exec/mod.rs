@@ -89,8 +89,11 @@ pub(crate) trait Kernel {
     /// READ: CONTEXT-sized evaluation of `eid` through THIS kernel's store.
     ///
     /// A3-i. The self-determined `k_eval` above is not enough for a subroutine
-    /// copy-in: IEEE §13.4.3 makes a formal a variable of its DECLARED type, so
-    /// the actual is evaluated in the formal's width and signedness. The engine
+    /// copy-in: the actual is evaluated at the FORMAL's width. ⚠️ It is NOT evaluated
+    /// with the formal's signedness — this doc used to say so, citing §13.4.3, and that
+    /// was measured wrong (§11.8.1 keeps an expression's sign with its own operands).
+    /// The sign argument is the CALLER's to choose; every caller passes the actual's
+    /// own. The engine
     /// spells this `Scheduler::eval_ctx_top`, which reads its own nets — the one
     /// store a native run never writes.
     fn k_eval_ctx(&self, eid: u32, ctx_width: u32, ctx_signed: bool) -> Value;

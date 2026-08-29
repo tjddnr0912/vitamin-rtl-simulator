@@ -212,29 +212,33 @@ fn comparison_operands_size_to_the_wider_with_pair_signedness() {
     assert!(out.contains("A=1 B=0 C=1 D=0"), "{out}");
 }
 
-// ── the pre-existing gap this slice's fuzz found, pinned as it stands ─────
+// ── the gap this slice's fuzz found, and the next slice closed ───────────
 
-/// ⚠️ NOT FIXED, and NOT this slice's: pinned so a later change to the comparison's
-/// operand sizing cannot move it silently in either direction.
+/// ⭐ FOUND AND FIXED ONE SLICE APART. This slice's differential lens hit this family five
+/// times in 1,130 fuzzed designs; it was pinned here as vitamin's WRONG answer, filed as a
+/// ROADMAP row, and closed the next day. The pin is now the ORACLES' answer.
 ///
-/// §11.8.1 makes a comparison unsigned when EITHER operand is, and that unsignedness
-/// propagates DOWN into both operands — which demotes a `>>>` inside one of them to a
-/// logical shift. vita does not propagate it:
+/// §11.4.10 fills `>>>`'s vacated positions with the left operand's sign bit "if the
+/// RESULT TYPE is signed" and with zero otherwise, and §11.8.1 makes the result type
+/// unsigned as soon as ANY operand of the surrounding context-determined region is. So an
+/// unsigned comparand demotes a signed `>>>` to a logical shift:
 ///
 /// ```text
 ///   reg signed [7:0] b = 8'shB3;   (b >>> 4) > 8'd100
-///     vita 1     iverilog 0     verilator 0        (exit 0, no diagnostic)
+///     was: vita 1, iverilog 0, verilator 0        now: all three 0
 /// ```
 ///
-/// ⭐ It ISOLATES: the same expression against a SIGNED `8'sd100` is 0 in all three, and
-/// `$signed(b >>> 4)` is −5 in all three. So it is neither the shift nor the sign of `b` —
-/// it is the direction the comparison propagates signedness.
+/// ⚠️ The old `eval_ctx` arm read the LEFT OPERAND's own recorded signedness instead of the
+/// propagated one, under a comment asserting that an unsigned context "MUST NOT demote a
+/// genuinely-signed `s >>> n`". A 303-cell census against both oracles put **70 cells** on
+/// the wrong side with ZERO oracle split.
 ///
-/// ⚠️ All three vita backends agree, so it lives in the shared sizing path and has
-/// nothing to do with `wprog`. Recorded as ROADMAP §2 row 🆕 A. It was found by this
-/// slice's differential lens, which hit the family five times in 1,130 fuzzed designs.
+/// `B` and `C` are the controls that make this cell diagnose rather than merely detect:
+/// against a SIGNED comparand the shift stays arithmetic, and asked with no comparand at
+/// all it is −5. Both already matched before the fix, so a regression that re-broke the
+/// propagation moves `A` alone.
 #[test]
-fn a_comparison_does_not_yet_push_its_unsignedness_into_its_operands() {
+fn a_comparison_pushes_its_unsignedness_into_its_operands() {
     let out = agrees_across_backends(
         "`timescale 1ns/1ns\nmodule t;\n  reg signed [7:0] b;\n  \
          initial begin b = 8'shB3;\n    \
@@ -243,8 +247,8 @@ fn a_comparison_does_not_yet_push_its_unsignedness_into_its_operands() {
          $finish;\n  end\nendmodule\n",
     );
     assert!(
-        out.contains("A=1 B=0 C=-5"),
-        "A is vita's WRONG answer (both oracles say 0) and is pinned as such; \
-         B and C already match both oracles:\n{out}"
+        out.contains("A=0 B=0 C=-5"),
+        "an unsigned comparand demotes the shift (A); a signed one does not (B); \
+         with no comparand it is arithmetic (C):\n{out}"
     );
 }

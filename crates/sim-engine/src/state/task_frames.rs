@@ -247,11 +247,23 @@ impl SimState<'_> {
                         } else {
                             let nv = &self.ir.nets[fnet];
                             let sw = self.wt.get(e);
+                            // §11.8.3: the formal lends its WIDTH, not its SIGN — the
+                            // actual's type is the actual's own. THE THIRD of three
+                            // funnels; the other two are `eval_core`'s `Expr::Call` arm
+                            // and `exec/frame_call.rs`'s `split_in_binds`.
+                            //
+                            // ⚠️⚠️ This one was missed when the other two were fixed, and
+                            // the soundness lens's twelve-site census concluded "two
+                            // needed the change and both got it" — the differential lens
+                            // found it by measurement. It is reached only when a NESTED
+                            // callee is non-suspendable, so one `$display` in the callee
+                            // routes the call to the already-fixed path instead; that is
+                            // why every earlier nested-call probe missed it.
                             let v = self.eval_ctx_with_opt(
                                 nets,
                                 e,
                                 nv.width.max(1).max(sw.width),
-                                nv.signed,
+                                sw.signed,
                             );
                             in_v.push((slot, v));
                         }

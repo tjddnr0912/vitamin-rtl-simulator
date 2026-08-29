@@ -210,10 +210,12 @@ fn bb_after<K: Kernel>(k: &K, proc: u32, bb: u32, in_frame: Option<u32>) -> u32 
 ///
 /// This IS `Scheduler::split_frame_in_binds` — that method delegates here now,
 /// so there is one spelling of the sizing rule rather than one per backend. The
-/// only substitution the lift needed was `eval_ctx_top` → `k_eval_ctx`. The sizing rule — the formal's declared width
-/// widened to the actual's own self-width, and the formal's signedness (IEEE
-/// §13.4.3) — is NOT restated; it is the same three terms in the same order,
-/// because getting it wrong is a silently narrow argument rather than a loud one.
+/// only substitution the lift needed was `eval_ctx_top` → `k_eval_ctx`.
+///
+/// The sizing rule is the formal's declared width widened to the actual's own
+/// self-width, and the ACTUAL's own signedness. ⚠️ It used to say "the formal's
+/// signedness (IEEE §13.4.3)"; that half was wrong (§11.8.1 keeps the sign with the
+/// operands) and the body below now records what it cost.
 ///
 /// A dyn-array formal is bound by elaborate to a bare `Signal` reading the
 /// caller's dyn net; a shape that is anything else contributes no snapshot, which
@@ -234,8 +236,25 @@ pub(crate) fn split_in_binds<K: Kernel + ?Sized>(
             }
         } else {
             let nv = &ir.nets[fnet];
-            let (sw, _) = k.k_self_width(e);
-            let v = k.k_eval_ctx(e, nv.width.max(1).max(sw), nv.signed);
+            // §11.8.3: an assignment-like context lends the right-hand expression its
+            // WIDTH, not its SIGN — the expression's type is determined by the
+            // expression alone. So the actual is evaluated at the formal's width but
+            // with its OWN signedness, which `k_self_width` already returns.
+            //
+            // ⚠️⚠️ This used to pass `nv.signed`, the FORMAL's declared sign. It was
+            // wrong from the start (`function automatic [31:0] au(input [31:0] x)` read
+            // a `reg signed [7:0] b = 8'shB3` as 179 where both oracles say
+            // 4294967219), but `>>>` was accidentally immune because its arm ignored
+            // `ctx_signed` entirely. Making that arm honour the result type removed the
+            // cancellation and turned the wrong context sign into a wrong VALUE —
+            // `au(b >>> 2)` went 4294967276 → 44 at exit 0. Found by the adversarial
+            // soundness lens, which is exactly the shape it exists to catch: a fix that
+            // is right on its own axis, landing on a latent defect one call away.
+            //
+            // ⭐ The INLINE (non-frame) call path was already correct, so this is the
+            // one-branch-of-a-pair shape rather than a new rule.
+            let (sw, s_signed) = k.k_self_width(e);
+            let v = k.k_eval_ctx(e, nv.width.max(1).max(sw), s_signed);
             in_v.push((slot, v));
         }
     }

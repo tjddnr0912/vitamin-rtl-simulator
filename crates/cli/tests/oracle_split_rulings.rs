@@ -187,3 +187,43 @@ fn modulo_on_a_real_operand_stays_loud() {
          initial begin a = r << 1; #1 $display(\"r=%0d\", a); $finish; end endmodule\n");
     assert!(!ok, "shift on a real must stay loud too:\n{all}");
 }
+
+// ── 5. a signed DEFAULT argument: iverilog contradicts itself, so it is not the
+//        oracle here ────────────────────────────────────────────────────────────
+
+/// ⭐ iverilog answers the SAME default, through the SAME formal declaration, two
+/// different ways depending only on whether the subroutine is a function or a task:
+///
+/// ```text
+///   localparam signed [7:0] K = 8'shb3;
+///   function automatic [31:0] fd(input [31:0] x = K); fd = x; endfunction  -> 000000b3
+///   task     automatic td(input [31:0] x = K); $display(x);  endtask       -> ffffffb3
+/// ```
+///
+/// §13.5.3 makes a defaulted binding an assignment and says nothing that distinguishes a
+/// task from a function, so the two answers cannot both be the rule — and iverilog's own
+/// plain-assignment twin (`reg signed [31:0] w; w = K;`) is `ffffffb3`, agreeing with its
+/// task half. The function half is therefore the outlier, and iverilog is disqualified
+/// HERE by its own neighbouring answers rather than by preference.
+///
+/// verilator answers `ffffffb3` for both. vitamin now does too — uniformly, which it did
+/// not before: the argument-binding fix (`formal_bind_signedness.rs`) removed a split in
+/// which vitamin's own automatic and static spellings disagreed.
+///
+/// ⚠️ Pinned as a RULING, not as a capability: the point is that a future sweep chasing
+/// iverilog agreement must not "fix" this back into the self-inconsistent state. There is
+/// nothing to implement.
+#[test]
+fn a_signed_default_argument_follows_the_assignment_not_the_subroutine_kind() {
+    let (ok, all) = run("module t;\n  localparam signed [7:0] K = 8'shb3;\n  \
+         function automatic [31:0] fd(input [31:0] x = K); fd = x; endfunction\n  \
+         task automatic td(input [31:0] x = K); $display(\"T=%h\", x); endtask\n  \
+         reg signed [31:0] w;\n  \
+         initial begin w = K; $display(\"F=%h\", fd()); td(); $display(\"W=%h\", w); \
+         #1 $finish; end\nendmodule\n");
+    assert!(ok, "must run:\n{all}");
+    assert!(
+        all.contains("F=ffffffb3") && all.contains("T=ffffffb3") && all.contains("W=ffffffb3"),
+        "all three spellings of the same assignment must agree:\n{all}"
+    );
+}

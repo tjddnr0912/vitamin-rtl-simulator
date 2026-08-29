@@ -511,14 +511,22 @@ pub(crate) fn lower(
                     });
                     Some(())
                 }
-                // `>>>`: fill governed by the LEFT operand's OWN sign (oracle
-                // evaluates lhs at (w, own-sign); the final ctx re-stamp only
-                // changes the sign FLAG, never the bits — registers carry bits).
+                // `>>>`: §11.4.10 fills with the left operand's sign bit when the
+                // RESULT TYPE is signed and with zero otherwise, and the result type
+                // is `eff_signed` — the same rule every other arm here obeys.
+                //
+                // ⚠️⚠️ This used to read the LEFT operand's OWN sign, mirroring the
+                // generic evaluator's arm, which had the same defect: an unsigned
+                // operand ANYWHERE in the surrounding context-determined region makes
+                // the shift logical, and a 303-cell two-oracle census found 70 cells
+                // where vitamin filled with the sign bit instead. Fixing only the
+                // generic arm left THIS copy answering 61440 where it answered 4096 —
+                // the tier-2 battery caught it, which is what that battery is for.
                 B::AShr => {
                     if wt.get(*rhs).width > 64 {
                         return None;
                     }
-                    let lhs_signed = wt.get(*lhs).signed;
+                    let lhs_signed = eff_signed;
                     lower(ir, wt, nonint, *lhs, w, lhs_signed, ops)?;
                     lower(ir, wt, nonint, *rhs, 0, true, ops)?;
                     ops.push(if wide {

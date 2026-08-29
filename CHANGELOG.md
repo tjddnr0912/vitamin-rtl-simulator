@@ -11,6 +11,57 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **`>>>` filled with the sign bit whenever its LEFT OPERAND was signed; IEEE 1800
+  §11.4.10 says the fill follows the RESULT TYPE.** §11.8.1 makes that type unsigned as
+  soon as ANY operand of the surrounding context-determined region is, so an unsigned
+  comparand or addend next to the shift demotes it to a logical shift. A 303-cell census
+  against both oracles put **70 cells** on the wrong side of it, with **zero oracle
+  split** — the two tools never disagreed, so there was nothing to arbitrate:
+
+  ```text
+    reg signed [7:0] b = 8'shB3;   (b >>> 2) + 8'd0
+      was 236          iverilog 44          verilator 44          exit 0
+  ```
+
+  ⭐ The unsignedness arrives from an operand the shift does not contain, which is why
+  every part of the shift looks signed when you inspect it alone, and why the neighbouring
+  spellings (the shift by itself, against a signed comparand, under `$signed`) are all
+  correct. The arm read the left operand's own signedness under a comment asserting that an
+  unsigned context *"MUST NOT demote a genuinely-signed `s >>> n`"*. Demoting it is exactly
+  what the LRM requires.
+
+  ⚠️⚠️ **And fixing it uncovered a second, larger rule.** Both frame call funnels evaluated
+  an argument with the FORMAL's declared signedness as the context sign. §13.5.1 makes an
+  argument bind an assignment, §11.8.3 lends it the formal's WIDTH — but §11.8.1 then says
+  an expression's signedness does not depend on the left-hand side. Measured under
+  iverilog, the formal's declared sign has **zero** effect: `fu16(8'shf7)` and
+  `fs16(8'shf7)` are both `fff7`. That had been wrong from the start, but the old `>>>` arm
+  ignored the context sign entirely, so shifts were accidentally immune; making the arm
+  correct removed the cancellation and turned it into a wrong VALUE
+  (`au(b >>> 2)`: 4294967276 → 44). The adversarial review graded that BLOCKING and it is
+  fixed, which also closed a documented gap (`ff(8'shf7)` now reads `0000fff7` like
+  iverilog rather than `000000f7`) and three pre-existing cells beside it.
+
+  ⚠️⚠️ **THREE funnels, found one per review round.** After two were fixed, the soundness
+  lens ran a twelve-site census and concluded "two needed the change and both got it" —
+  and the DIFFERENTIAL lens found a third by measurement: a task called from inside another
+  frame body, and only when the callee is non-suspendable, so one `$display` in the callee
+  routes it to an already-fixed path. A census that enumerates sites can miss one selected
+  by a property of the CALLEE; a sweep that varies the design finds it. That is the whole
+  argument for requiring both lenses.
+
+  Round 3 re-measured everything: **~9,200 cells, zero regressions, zero backend splits,
+  the corpus byte-identical**, with the routing varied over automatic/static, task/function,
+  `#delay`/`wait`/`fork`/`$display` bodies, nesting depth 1–4 mixing suspendable and
+  non-suspendable callees, class and virtual methods, package and hierarchical calls, and
+  every caller context.
+
+  ⭐ A side ruling came out of it: for a signed DEFAULT argument, iverilog answers the same
+  default two different ways depending only on whether the subroutine is a function or a
+  task, while its own plain-assignment twin agrees with the task half. It is disqualified
+  there by its own neighbouring answers; vitamin now matches verilator and is internally
+  uniform where it was not. Pinned as a ruling in `oracle_split_rulings.rs`.
+
 - **The inline function fold re-ran a body-local's defining expression once per
   REFERENCE.** vita has two lowerings for a user function; the inline one substitutes a
   local's defining RHS at every place the local is named, and the arena keeps ONE node

@@ -516,13 +516,26 @@ endmodule
     assert_eq!(o, "xxc3 xxab");
 }
 
-/// The other path. A FRAME-bound formal has the same §11.6.1 extension defect
-/// and this slice does not touch it — three call funnels share it (frame
-/// function, frame task, class method), which makes it a class and its own
-/// slice. The row exists so that a later fix has a starting measurement, and so
-/// that nobody reads this file as "argument binding is now correct everywhere".
+/// ⭐ THE OTHER PATH, AND IT IS NOW CLOSED. This cell was written as a known gap — "a
+/// FRAME-bound formal has the same §11.6.1 extension defect and this slice does not touch
+/// it" — pinning vitamin's wrong `000000f7` / `00f7` against iverilog's `0000fff7` /
+/// `fff7` so a later fix would have a starting measurement. It got one.
+///
+/// The cause was that both frame funnels evaluated the actual with the FORMAL's
+/// signedness as the context sign. §11.8.3 gives an assignment-like context its WIDTH but
+/// not its SIGN — the right-hand expression's type is the expression's own — so
+/// `8'shf7` (−9) sign-extends to `fff7` before the 16-bit unsigned formal receives it.
+///
+/// ⚠️ It was found by the adversarial review of an unrelated slice (`>>>`'s fill following
+/// the result type). That fix made the `AShr` arm honour `ctx_signed` for the first time,
+/// which removed the accidental immunity this defect had been hiding behind and turned it
+/// from a wrong extension into a wrong `>>>` VALUE. Fixing the context sign closed both.
+///
+/// Two sites, because the funnels are separate: `eval_core`'s `Expr::Call` arm (frame
+/// FUNCTION) and `exec/frame_call.rs`'s `split_in_binds` (frame TASK). Row 3 is the
+/// inline path, which was already correct.
 #[test]
-fn a_frame_bound_formal_is_a_separate_funnel() {
+fn a_frame_bound_formal_takes_the_actuals_own_signedness() {
     let o = run(r#"module t;
   function automatic [31:0] ff(input [15:0] x); ff = x; endfunction
   task     automatic tk(input [15:0] x); $display("%h", x); endtask
@@ -535,9 +548,8 @@ fn a_frame_bound_formal_is_a_separate_funnel() {
   end
 endmodule
 "#);
-    // iverilog: `0000fff7` / `fff7` / `1`. Rows 1-2 are the frame funnel's gap
-    // (unchanged by this slice); row 3 is the inline path, fixed here.
-    assert_eq!(o, "000000f7\n00f7\n1");
+    // All three now match iverilog exactly.
+    assert_eq!(o, "0000fff7\nfff7\n1");
 }
 
 /// Every backend folds the same IR, so the bind must be invisible to the choice.
