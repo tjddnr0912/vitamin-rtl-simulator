@@ -11,6 +11,34 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **Nothing shipped for the `case` collective-signedness gap, and the reason is the
+  finding.** §12.5 makes a `case` comparison unsigned as soon as one participant is, and
+  that unsignedness must reach the scrutinee's own operators. vitamin applied the rule by
+  wrapping the scrutinee in `$unsigned`, which stops at the wrapper — `$unsigned`'s
+  argument is self-determined, and all four tools agree on that — so a `>>>`, `/` or `%`
+  inside the scrutinee kept its signed reading and `case (b >>> 2)` took the wrong arm.
+
+  ⭐ The fix was found and it needed no new machinery: re-lower the scrutinee through the
+  sign-carrying context lowering §11.8.1 size casts already use, passing the scrutinee's
+  own width so it borrows only the sign half. Six `case`/`casez`/`casex` cells matched both
+  oracles, and `/` and `%` came along.
+
+  ⚠️⚠️ **Reverted after four BLOCKING defects on one axis, every one created by the fix
+  itself.** Replacing the wrapper instead of keeping it as the fallback dropped the rule
+  entirely for scrutinees the new lowering cannot take. A signed function-call LABEL voted
+  "unsigned". The predicate written to stop that voting drifted from the whitelist it was
+  supposed to mirror — ⭐ the exact drift its own docstring warned about, and both review
+  lenses found it independently. Fixing that surfaced a `$bits` label going from right to
+  wrong, because `$bits` returns a signed `int` in SystemVerilog and vitamin folds it to an
+  unsigned constant.
+
+  ⭐⭐ The root is one sentence: the collective vote rests on `expr_self_signed`, whose
+  "unsigned" is a DEFAULT rather than a fact for calls, non-whitelisted system functions,
+  and constants folded from them. Making that vote load-bearing is the prerequisite, and it
+  is not met. The prerequisite is now written into the queue with the measured cells, the
+  fix shape, and the four defects, so the next attempt starts where this one stopped rather
+  than rediscovering it.
+
 - **`>>>` filled with the sign bit whenever its LEFT OPERAND was signed; IEEE 1800
   §11.4.10 says the fill follows the RESULT TYPE.** §11.8.1 makes that type unsigned as
   soon as ANY operand of the surrounding context-determined region is, so an unsigned
