@@ -141,14 +141,14 @@ TX 가 틀린 FCS 를 붙이고 RX 가 그것을 **정확하다고 검증**한�
 
 | 워크로드 | 모양 | 라이선스 | iverilog | vita | 비 |
 |---|---|---|---|---|---|
-| **sha256** (secworks) | crypto | BSD-2 | 4.188 s | **1.313 s** | **3.19×** |
-| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 9.394 s | **4.065 s** | **2.31×** |
-| **aes** (secworks) | crypto | BSD-2 | 6.150 s | **2.759 s** | **2.23×** |
-| *keccak* (1st-party) | crypto | ours | 9.300 s | **4.240 s** | **2.19×** |
-| **picorv32** (YosysHQ) | cpu | ISC | 7.155 s | **4.610 s** | **1.55×** |
-| **darkriscv** (코어만) | cpu | BSD-3 | 7.276 s | **6.757 s** | **1.08×** |
-| **serv** (bit-serial) | cpu | ISC | 7.417 s | 7.805 s | **0.95×** |
-| *keccak-arr* (1st-party) | crypto | ours | 9.106 s | 13.243 s | **0.69×** |
+| **sha256** (secworks) | crypto | BSD-2 | 3.988 s | **1.287 s** | **3.10×** |
+| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 8.934 s | **3.932 s** | **2.27×** |
+| **aes** (secworks) | crypto | BSD-2 | 5.878 s | **2.628 s** | **2.24×** |
+| *keccak* (1st-party) | crypto | ours | 8.917 s | **4.074 s** | **2.19×** |
+| **picorv32** (YosysHQ) | cpu | ISC | 6.801 s | **4.336 s** | **1.57×** |
+| **darkriscv** (코어만) | cpu | BSD-3 | 6.890 s | **6.429 s** | **1.07×** |
+| **serv** (bit-serial) | cpu | ISC | 7.040 s | 7.456 s | **0.94×** |
+| *keccak-arr* (1st-party) | crypto | ours | 8.766 s | 12.959 s | **0.68×** |
 | verilog-axi · verilog-ethernet | — | — | 6.8–7.8 s | **거절** | — |
 
 > 기하평균 **1.58×** (도는 여덟) · **1.72×** (서드파티 여섯) · **1.94×** (serv 를 뺀
@@ -365,6 +365,47 @@ it already exists.
 
 ⚠️⚠️ And VCS itself has never been measured by this project. The architectural reading above
 stands on its own, but any numeric target needs a licensed single-core run of this corpus.
+
+#### Widening the lane, step one: the sign gate at a leaf
+
+Acting on that census. A fresh execution-weighted decline census put **6,600,872 requests from
+exactly TWO expressions** on one gate in `darkriscv` — 92% of its declines — namely
+`compile_node`'s entry gate `sw.signed != signed` firing on a `Signal` LEAF at EQUAL width.
+
+⚠️ `wprog`'s own header records that dropping that gate's sign half for EVERY node was built,
+measured sound, measured **1.00x**, and reverted — over **picorv32 and keccak**, which the
+header says. `darkriscv` was not in that pair. This is the same two-design trap this corpus
+exists to break.
+
+Only the LEAF exemption was taken, and its argument is that the arm never ASKS: no exit of the
+`Signal` arm reads `signed`, directly or through a mask. It requires `slot.width == w`, and the
+arena's slot invariant — established at the write producers, which all mask — is what lets the
+load skip a mask of its own.
+
+```text
+  picorv32 -3.4%   darkriscv -1.6%   biriscv -1.6%   serv -1.2%
+  sha256 -0.9%     keccak -0.4%      aes / keccak-arr flat
+```
+
+every pinned digest unchanged. ⭐ The corpus deltas understate what the lane does where it
+applies: on hot single-shape designs the review measured **4.8x** for a mixed-sign expression
+tree, **2.0x** for `signed ^ unsigned`, and **2.3x** for a signed memory read through a runtime
+index. The corpus numbers are small because those shapes are a minority THERE, not because the
+lane is.
+
+⚠️ Re-censusing after the change shows the gate did not disappear — it MOVED UP. darkriscv's
+6.6M leaf declines became **6,425,888 requests from four `Ternary` nodes** failing the same
+test, because the gate is per-node and a parent inherits nothing from an admitted child. The
+next question is which non-leaf kinds are also sign-inert at equal width; that is the reverted
+set-wide relaxation, and re-measuring it on THIS corpus is the follow-on. It needs `AShr`'s
+guard rewritten from `signed` to `sw.signed && signed` first — dropping the entry gate is
+exactly what stops those two being the same question.
+
+Remaining top buckets, for whoever takes the next one: `aes` is 387k requests on
+`root ctx-width>64 (w=128)` (a wide lane, not an admission); `keccak` and `biriscv` are
+`Call w=64` (the frame axis, 5c); `picorv32` is 533k on `Ternary` inner-gate and 178k on the
+same sign gate at `Unary(BitNot)`; `serv` is 500k each on `Select(PartConst) w=6` and
+`Ternary w=2`.
 
 #### That slice landed, and the axis was one thing
 

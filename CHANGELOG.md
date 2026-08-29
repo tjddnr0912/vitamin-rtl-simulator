@@ -465,6 +465,49 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **The compiled expression lane refused a signal read whenever the context's signedness
+  differed from the net's, at equal width — where the bits are the same either way.**
+
+  ⭐ A corpus-wide representation census came first, because the premise needed testing:
+  VCS is a 4-state simulator and it is fast, so "4-state is why we are slower" cannot be
+  right — 4-state doubles the DATA. Of vitamin's 72-byte value, **16 bytes are the 4-state
+  data**; the other 56 are width, signedness and flags, which a compiled simulator bakes
+  into generated code as literals. Counting every value the evaluator returns across all
+  eight running workloads, **83.9% to 100% are simultaneously definite and at most 64
+  bits** — geometric mean 95.7%. That is exactly the shape the compiled lane already
+  carries (16 bytes; 8 in its two-state lane). The representation is in the tree; the gap
+  is coverage.
+
+  So: a fresh execution-weighted decline census, which put **6,600,872 requests from
+  exactly two expressions** on one gate in `darkriscv` — 92% of that design's declines.
+
+  ⚠️ Dropping that gate's sign half for EVERY node was built, measured sound, measured
+  1.00× and reverted once before — over picorv32 and keccak, which the record says.
+  `darkriscv` was not in that pair, and this corpus exists to break exactly that trap.
+  Only the LEAF exemption is taken here, on the ground that the arm never ASKS: no exit of
+  it reads the signedness, directly or through a mask.
+
+  ```text
+    picorv32 -3.4%   darkriscv -1.6%   biriscv -1.6%   serv -1.2%   sha256 -0.9%
+  ```
+
+  every pinned corpus digest unchanged. ⭐ The corpus deltas understate the lane: on hot
+  single-shape designs the review measured **4.8×** for a mixed-sign expression tree,
+  **2.0×** for `signed ^ unsigned` and **2.3×** for a signed memory read through a runtime
+  index. Those shapes are a minority in the corpus, not in the lane.
+
+  Adversarial 2-lens review: no BLOCKING. The differential lens was CLEAN over **~46,000
+  cells** — every operator at thirteen widths in all four sign combinations, the widening
+  composition, every net kind, 9,360 x/z cells against iverilog, 24,000 fuzzed mixed-sign
+  trees — with all ten corpus workloads byte-identical. Its one NIT was mine: the comment
+  named only the constant-index half of the arm, while the runtime-index half is admitted
+  too and is the only op here that can move a DIAGNOSTIC. Corrected, and pinned.
+
+  ⚠️ Re-censusing after the change shows the gate did not disappear, it MOVED UP: the same
+  test now fails at four `Ternary` nodes for 6,425,888 requests, because the gate is
+  per-node and a parent inherits nothing from an admitted child. That is the reverted
+  set-wide relaxation's territory and is filed rather than taken.
+
 - **The compiled expression backend refused any value whose width differed from its
   context, and that was 84% of its declines.** An execution-weighted census of `wprog`
   declines on the three corpus designs that have no frame bodies — the ones a frame arena

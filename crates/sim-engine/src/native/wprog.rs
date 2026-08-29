@@ -504,7 +504,39 @@ fn compile_node(
     // The two ops that read a sign are unaffected — `>>>` declines on the NODE's sign,
     // and a comparison requires both operands to share a signedness and passes it down
     // explicitly, so a mixed-sign comparison still declines at its own guard.
-    if sw.signed != signed && !matches!(ir.exprs.get(eid as usize)?, sim_ir::Expr::Const { .. }) {
+    //
+    // ⭐⭐ THE EXEMPTION COVERS `Signal` TOO. The argument is not "the same BITS either
+    // way" — it is that the arm never asks: NO exit of the `Signal` arm reads `signed` or
+    // `sw.signed`, directly or through a mask. It requires `slot.width == w`, and the
+    // arena's slot invariant (established at the WRITE producers, `arena.rs` and
+    // `write.rs`, which all mask) is what lets the load skip a mask of its own.
+    //
+    // ⚠️ BOTH sub-paths of that arm are admitted, not just the scalar one. A constant
+    // index gives `Load { vi }`, two word reads at a compile-time offset; a RUNTIME index
+    // compiles the index at its OWN `(iw.width, iw.signed)` and emits `LoadIdx`. The
+    // second is the one that also moves a DIAGNOSTIC — `LoadIdx` is this module's only
+    // caller of `note_bad_index` — and it is genuinely newly reached: a signed-element
+    // memory read through a runtime index in an unsigned context measured **2.3x**.
+    // (Naming only the scalar half is how a coverage claim turns into a smaller one than
+    // the code makes; the review caught exactly that here.)
+    //
+    // The other half of the obligation is that the generic path this must equal changes
+    // no plane bit at equal width — `resize_keep_sign`'s `w == self.width` arm writes
+    // only `signed`. That is the same rule the widening admission above cites.
+    //
+    // ⚠️ This is the narrow half of the relaxation §5.1 measured and reverted. That
+    // measurement — dropping the sign half for EVERY node, 1.00x — was over picorv32 and
+    // keccak, and its own note says the conclusion was scoped to those two designs. A
+    // fresh execution-weighted census puts **6,600,872 requests from exactly TWO
+    // expressions** on this gate in `darkriscv` (92% of that design's declines), which
+    // was not in the original pair. Leaves only, so nothing about the reverted set-wide
+    // relaxation is reinstated.
+    if sw.signed != signed
+        && !matches!(
+            ir.exprs.get(eid as usize)?,
+            sim_ir::Expr::Const { .. } | sim_ir::Expr::Signal { .. }
+        )
+    {
         return None;
     }
     let mask = mask_of(w);
