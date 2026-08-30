@@ -407,6 +407,44 @@ Remaining top buckets, for whoever takes the next one: `aes` is 387k requests on
 same sign gate at `Unary(BitNot)`; `serv` is 500k each on `Select(PartConst) w=6` and
 `Ternary w=2`.
 
+#### Step two: removing the sign admission entirely — built, re-measured, reverted AGAIN
+
+The obvious next step was the rest of that gate: the leaf exemption had only moved it up, to
+**6,425,888 requests from four `Ternary` nodes** on darkriscv. Removing the sign half outright
+is the change §5.1 built, measured sound, measured **1.00×** and reverted in 2026-08 — over
+picorv32 and keccak. This corpus has eight designs, so the value question looked re-askable.
+
+It was built (with `>>>`'s guard rewritten from `signed` to `sw.signed && signed` first, since
+the gate was the only thing making those the same question), and it is **sound**: the module's
+own battery grew 8,225 → 8,260 admitted trees and 45,180 → 48,660 widening programs, all
+value-identical to the generic evaluator, and the adversarial review measured **~330,000 cells**
+with PRE and POST byte-identical everywhere plus all ten corpus workloads byte-identical.
+
+⭐ It also fires hard where it applies: the review timed **13 of 14 hot shape families at
+2.1×–4.7×** (a 24-assign mixed-sign expression design went 1.26 s → 0.27 s).
+
+⚠️⚠️ **And it is still 1.00× on the corpus.** It was reverted again.
+
+⭐⭐ The reason this is worth writing down is that **the first measurement said −4.5% and was
+wrong**, and two independent verifiers caught it. The method was the defect: alternating the two
+binaries by copying each into `target/release/vita` and always running PRE first, POST second.
+Reversing the order reverses the sign of the answer —
+
+```text
+  PRE first:   PRE 4.582 mean   POST 4.591   -> POST looks 0.2% SLOWER
+  POST first:  POST 4.564 mean  PRE 4.616    -> POST looks 1.1% FASTER
+```
+
+— so the true delta is inside a ±1% order bias. ⚠️ This is the SECOND time in one session that a
+copy-then-time A/B misled this project (the other invented a −1.5% for a change that had been
+accidentally reverted, and re-adding it measured +3.2%). **Interleave in both orders, or the
+first-vs-second position is what you are measuring.**
+
+What the corpus now says, on eight designs rather than two: the §5.1 verdict **stands**. The
+admission is worth 2–4× on mixed-sign expression trees and those are not in these designs' hot
+loops. A design that is mixed-sign-heavy would want it; ours are not, and the queue line should
+say that rather than "worthless".
+
 #### That slice landed, and the axis was one thing
 
 Sharpening the census to the FIRST failing node (not the root) collapsed it further:

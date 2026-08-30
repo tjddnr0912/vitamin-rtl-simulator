@@ -465,6 +465,33 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **Nothing shipped for the compiled lane's sign admission, and the reason is a
+  measurement I got wrong.** After the leaf exemption, the gate had only moved up — to
+  6,425,888 requests from four ternary nodes on one design. Removing the sign half
+  outright is a change this project built, measured sound, measured 1.00× and reverted in
+  August; that measurement was over two designs and the corpus now has eight, so the value
+  question looked re-askable.
+
+  It was built and it is sound: the backend's own battery grew 8,225 → 8,260 admitted trees
+  and 45,180 → 48,660 widening programs, all value-identical to the generic evaluator, and
+  the adversarial review measured ~330,000 cells with the two binaries byte-identical
+  everywhere and all ten corpus workloads byte-identical. ⭐ It fires hard where it applies:
+  13 of 14 hot shape families timed at 2.1×–4.7×.
+
+  ⚠️⚠️ It is still 1.00× on the corpus, and was reverted again.
+
+  ⭐⭐ What is worth recording is that **the first measurement said −4.5% and was wrong**,
+  and two independent verifiers caught it. The method was the defect: alternating the two
+  binaries by copying each into the same path and always running one first. Reversing the
+  order reverses the sign of the answer — first-order gives "0.2% slower", reversed gives
+  "1.1% faster" — so the true delta sits inside a ±1% position bias. This is the second
+  time in one session that a copy-then-time A/B misled this project. **Interleave in both
+  orders, or what you are measuring is first-versus-second.**
+
+  The August verdict now stands on eight designs instead of two, with the qualification the
+  queue line should carry: the admission is worth 2–4× on mixed-sign expression trees, and
+  those are not in these designs' hot loops.
+
 - **The compiled expression lane refused a signal read whenever the context's signedness
   differed from the net's, at equal width — where the bits are the same either way.**
 
