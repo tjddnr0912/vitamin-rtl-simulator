@@ -313,11 +313,14 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     pub(crate) scratch_changed: Vec<crate::native::dirty::ChangedNet>,
     pub(crate) scratch_woken: Vec<u32>,
     pub(crate) scratch_clocked: Vec<u32>,
-    /// The `settle_cont_assigns` visit list. Its old spelling `mem::take`d
-    /// `arena.ch.ca_dirty` and dropped the taken buffer at the end of the pass, so
-    /// `ca_dirty` was left at capacity ZERO and every `note_change` push regrew it from
-    /// scratch — several times per delta. Measured: `note_change`'s push line alone is
-    /// **6.2% of serv**, and `settle_cont_assigns` is 5.3% (0.49 s).
+    /// The `settle_cont_assigns` visit list — a kernel-owned buffer the pass is
+    /// drained into, because the loop over it takes `&mut k`.
+    ///
+    /// ⚠️ This doc used to explain a capacity hazard (taking `ca_dirty`'s `Vec`
+    /// and dropping it left it at capacity zero, so `note_change` regrew it
+    /// several times per delta — measured at 6.2% of serv). `ca_dirty` is a
+    /// fixed-size bitmap now, so that hazard is not merely fixed, it is
+    /// unrepresentable: there is no allocation to lose and no push to regrow.
     pub(crate) scratch_ca_pass: Vec<u32>,
     /// TRANSPORT-delay updates, filed under the tick they are due — the engine's
     /// `delayed_nba`, same type and same key, so the two drains compare directly.
@@ -1572,9 +1575,8 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     pub(crate) fn redirty_drivers_of(&mut self, net: u32) {
         for ci in self.sched.st.drivers_of_net(net) {
             let i = ci as usize;
-            if i < self.arena.ch.ca_dirty_flag.len() && !self.arena.ch.ca_dirty_flag[i] {
-                self.arena.ch.ca_dirty_flag[i] = true;
-                self.arena.ch.ca_dirty.push(ci);
+            if self.arena.ch.ca_dirty.holds(i) {
+                self.arena.ch.ca_dirty.insert(i);
             }
         }
     }
@@ -1589,9 +1591,13 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
     /// (`force_keys_for`/`force_entry`). What differs is the two store
     /// operations and the SEED: the engine reads `st.dirty`, tier-3 the arena's.
     pub(crate) fn reeval_active_forces(&mut self) {
-        let dirty = std::mem::take(&mut self.arena.ch.dirty);
-        let mut keys = self.sched.st.force_keys_for(&dirty, true);
-        self.arena.ch.dirty = dirty;
+        // ASCENDING now rather than write order, which `force_keys_for` cannot
+        // observe: it ends in `sort_unstable(); dedup()`, so its output is a
+        // function of the SET, not of the order it was handed.
+        let mut keys = self
+            .sched
+            .st
+            .force_keys_for(&self.arena.ch.dirty.collect(), true);
 
         let saved = self.sched.st.cur_time_mult;
         let mut budget = self.sched.st.active_forces.len().saturating_add(2);

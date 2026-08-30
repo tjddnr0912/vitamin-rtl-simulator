@@ -654,28 +654,26 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
         // `ca_of_net`) UNION the ones `levelize::ca_deps` refused to certify
         // (`ca_always`). Ascending index = declaration order, which several
         // goldens depend on.
-        // ⚠️ The old spelling was `let pass: Vec<u32> = { let mut v = take(ca_dirty); … v };`
-        // and then DROPPED `pass` at the end of the iteration. That left `ca_dirty` at
-        // capacity ZERO, so every later `note_change` push regrew it from scratch —
-        // several times per delta, on the hottest loop this backend has. Measured:
-        // `note_change`'s push line alone is 6.2% of serv.
-        //
-        // Now the pass is built in a kernel-owned buffer and `ca_dirty`'s own allocation
-        // is handed straight back, emptied. Same visit set, same order.
+        // ⚠️ The hazard this used to warn about — taking `ca_dirty`'s `Vec` and
+        // dropping it, which left it at capacity ZERO for the next delta's
+        // pushes — CANNOT OCCUR any more and the warning was deleted rather
+        // than left standing: `ca_dirty` is a fixed-size bitmap, so it has no
+        // capacity to lose and `note_change` has no push to regrow. The
+        // kernel-owned `pass` buffer stays, for the different reason that the
+        // loop below takes `&mut k` while iterating.
         let mut pass = std::mem::take(&mut k.scratch_ca_pass);
         pass.clear();
-        {
-            let mut v = std::mem::take(&mut k.arena.ch.ca_dirty);
-            for &ci in &v {
-                k.arena.ch.ca_dirty_flag[ci as usize] = false;
-            }
-            pass.extend_from_slice(&v);
-            v.clear();
-            k.arena.ch.ca_dirty = v;
+        // ⭐ `ca_always` is unioned INTO the worklist before the drain rather
+        // than appended after it. That is what removes the `sort_unstable();
+        // dedup()` this loop used to run every fixpoint pass: membership is a
+        // bit, so the union is idempotent and the drain is ascending by
+        // construction — the "ascending index = declaration order" the goldens
+        // depend on is now a property of the traversal instead of a cost paid
+        // to recover it.
+        for &ci in k.sched.ca_always() {
+            k.arena.ch.ca_dirty.insert(ci as usize);
         }
-        pass.extend_from_slice(k.sched.ca_always());
-        pass.sort_unstable();
-        pass.dedup();
+        k.arena.ch.ca_dirty.drain_with(|ci| pass.push(ci));
         for ci in pass.iter().map(|&c| c as usize) {
             // BORROWED from `ir`, not cloned out of it. This used to be
             // `.lhs.clone()` — an `Lvalue` owns a `Vec<LvalChunk>`, so that was
@@ -814,7 +812,7 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
     // cont-assign settle and must SURVIVE; only what the initializer bodies add
     // below is dropped. `NetArena::build` dirties nothing (its `set_elem` is
     // test-only and bypasses the channel), so this is exactly the settle's set.
-    let settled = k.arena.ch.dirty.len();
+    let settled = k.arena.ch.dirty.snapshot();
     for &pid in &inits {
         // RANGE GUARD, mirroring `arm_processes`'s `fatal_init_proc_missing`:
         // `init_procs` rides the `.velab` trailer, OUTSIDE the schema gate, so a
@@ -855,9 +853,11 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
     // Measured: 49 of 270 generated cont-assign designs diverged, silently, at
     // exit 0. The mark is what makes the split possible, so it is taken BEFORE
     // the initializer loop above rather than derived afterwards.
-    for n in k.arena.ch.dirty.split_off(settled) {
-        k.arena.ch.dirty_flag[n as usize] = false;
-    }
+    // ⚠️ The mark is a BITMAP snapshot, not a length: membership is a bit now,
+    // so "everything added after this point" is `set & ~snapshot` and the undo
+    // is `set &= snapshot`. Same result as the old `split_off`, and it no longer
+    // depends on the list being append-only to be correct.
+    k.arena.ch.dirty.retain_snapshot(&settled);
     let init_set: std::collections::BTreeSet<u32> = inits.iter().copied().collect();
     for pi in 0..ir.processes.len() as u32 {
         if init_set.contains(&pi) {

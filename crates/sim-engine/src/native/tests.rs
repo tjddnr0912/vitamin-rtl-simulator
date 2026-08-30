@@ -2754,10 +2754,9 @@ fn s2_truthiness_word_and_loop_agree_exhaustively() {
 #[cfg(test)]
 fn arena_snapshot(a: &NetArena) -> String {
     format!(
-        "buf={:?} dirty={:?} flag={:?} edge={:?} lbw={:?} vcd={:?} range={:?}",
+        "buf={:?} dirty={:?} edge={:?} lbw={:?} vcd={:?} range={:?}",
         a.buf,
         a.ch.dirty,
-        a.ch.dirty_flag,
         a.ch.slot_edge,
         a.ch.last_blocking_writer,
         a.ch.vcd_pending,

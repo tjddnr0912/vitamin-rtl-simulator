@@ -465,6 +465,42 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **The scheduler's dirty-net set is a two-level bitmap, so the per-delta sort is gone.**
+  The set was a `Vec<u32>` push-list beside a parallel `Vec<bool>` flag array, and every
+  delta paid `sort_unstable()` to put it back in ascending order. ⭐ The reason was written
+  in the code's own docstring — *"ascending, not write order: the engine sorts to reproduce
+  the order its old full-table scan produced"* — so the sort existed to BUY BACK an order
+  an earlier implementation got for free. A bitmap is that full-table scan, compressed:
+  membership is a bit, so ascending is a property of the traversal and there is nothing
+  left to recover. The same change removes the flag array (membership had two
+  representations that had to agree), makes the write funnel's `note_change` a single
+  `|=` instead of a branch plus a `Vec` push, and turns `arm_t0`'s rollback from
+  `split_off(mark)` into `bits &= snapshot`.
+
+  The second level — one bit per WORD — is what keeps it honest on a large design: a drain
+  visits only words that actually hold a dirty net, never `nets/64`, and an empty delta
+  costs `nets/4096` loads. Sizes were measured before building: the dirty set averages
+  1.5–10.8 nets over designs of 36–1611 nets, and 18–32% of deltas are empty.
+
+  The continuous-assign worklist got the same treatment, and there the `ca_always` set is
+  unioned INTO the worklist before the drain rather than appended after it — which is what
+  lets `sort_unstable(); dedup()` go from the settle fixpoint too, since a bitwise union is
+  idempotent.
+
+  ⚠️ **The trade is real and it is not free everywhere.** A bitmap pays a fixed cost per
+  drain to delete an `O(d log d)` sort, so it wins where `d` is large and loses marginally
+  where `d` is tiny. Measured, interleaved in both orders (min of three, sign consistent in
+  both directions on every design): **serv −2.9%/−4.6%**, picorv32 −1.1%/−0.6%, biriscv
+  −0.3%/−0.8%, and against that **aes +0.3%/+0.3%** and **keccak +0.6%/+0.5%** — keccak
+  being 36 nets with an average of 1.5 dirty, where the old sort was already a no-op. Both
+  regressions come from the cont-assign half, which is also where most of serv's win is.
+
+  Output is unchanged: all ten corpus workloads are byte-identical to the previous build,
+  and the untouched VM and interpreter backends still agree with the compiled one. A design
+  past 4096 nets — the second summary word, which no corpus workload reaches — is pinned to
+  iverilog.
+
+
 - **Nothing shipped for the compiled lane's sign admission, and the reason is a
   measurement I got wrong.** After the leaf exemption, the gate had only moved up — to
   6,425,888 requests from four ternary nodes on one design. Removing the sign half
