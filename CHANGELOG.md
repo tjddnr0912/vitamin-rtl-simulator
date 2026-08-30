@@ -465,6 +465,32 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **The hottest reader stopped handing out a reference count.** `k_eval_for_lvalue` — the
+  continuous-assign settle's evaluator, reached 61 million times on serv, where the settle
+  is **45% of the whole run** — looked the compiled program up with `wprog_for`, whose
+  signature forces an `Rc::clone` on every hit so the caller can run outside the cache
+  borrow. ⭐ The version that runs INSIDE the borrow (`run_cached_wprog`) already existed,
+  built for a different caller and citing its own measurement; this reader had never been
+  routed through it.
+
+  The `Value` is now stamped from the requested `(width, signed)` instead of the program's
+  own, and those are the same values **by construction**, not by coincidence: `compile`
+  stores its arguments verbatim and a cache hit requires the slot to match the same key, so
+  no path can return a program compiled for a different one.
+
+  ⚠️ The precondition — that running inside the borrow cannot deadlock on a program that
+  reaches back into the cache — is structural rather than argued: `WProg::run` takes only
+  the arena and a scratch buffer, so re-entry is unrepresentable.
+
+  Measured, interleaved in both orders (min of three): **serv −0.7%/−0.6%, keccak
+  −1.3%/−0.6%, biriscv −0.3%/−0.6%**, aes noise (sign flips), picorv32 inside the ±1%
+  position band. ⚠️ Worth saying plainly: the lookup profiles at 2.4% and this recovered
+  about a quarter of it — the refcount pair was the cheap half, and the `RefCell` borrow,
+  the bounds-checked index and the key comparison are all still paid per evaluation.
+
+  Corpus 10/10 byte-identical.
+
+
 - **The scheduler's dirty-net set is a two-level bitmap, so the per-delta sort is gone.**
   The set was a `Vec<u32>` push-list beside a parallel `Vec<bool>` flag array, and every
   delta paid `sort_unstable()` to put it back in ascending order. ⭐ The reason was written

@@ -1901,8 +1901,26 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // sizing rules allow it to be converted rather than computed wider; see
         // `wprog`) is what makes it byte-identical; a decline is cached and falls
         // through to the generic evaluator, which IS the previous path.
-        if let Some(prog) = self.wprog_for(rhs, w, sw.signed) {
-            return self.run_wprog(&prog);
+        // ⭐ Run INSIDE the cache borrow. `wprog_for` hands the caller an `Rc`,
+        // and that refcount pair is paid on EVERY evaluation — this is the
+        // hottest reader in the backend (serv spends 45% of its run in the
+        // continuous-assign settle, which reaches this line 61 million times,
+        // and the lookup alone profiles at 2.4% self). `run_cached_wprog` is the
+        // same lookup with the same miss path — one compiler, one cache-fill —
+        // and it does not clone.
+        //
+        // ⚠️ The `Value` is stamped from the REQUESTED `(w, sw.signed)` rather
+        // than from `prog.width()`/`prog.signed()`, which is what `run_wprog`
+        // reads. Those are the same values BY CONSTRUCTION, on both arms:
+        // `compile` stores its arguments verbatim (`WProg { width: w, signed }`)
+        // and a cache hit requires `slot.hits(w, signed)`. Not "they happen to
+        // agree" — there is no path that returns a program compiled for a
+        // different key.
+        if let Some(r) = self.run_cached_wprog(rhs, w, sw.signed) {
+            let mut v = Value::zeros(w, sw.signed);
+            v.val[0] = r.val;
+            v.unk[0] = r.unk;
+            return v;
         }
         self.ctx().eval_ctx(rhs, w, sw.signed)
     }
