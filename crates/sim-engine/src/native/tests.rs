@@ -3010,3 +3010,74 @@ fn b4b_a_refused_design_is_fatal_when_there_is_no_fallback() {
         hit.1
     );
 }
+
+/// ⭐ THE SINGLE-LEAF SHORT CIRCUIT, and why it needs its own test.
+///
+/// `WProg::run` answers a one-`Load`/one-`Const` program directly instead of
+/// entering an executor. That is a pure performance change, which means the
+/// whole differential apparatus in this file is BLIND to it: the fast arm
+/// returns the same value the ops return, so a lane that never fires and a lane
+/// that always fires are indistinguishable by output. The same anti-vacuity
+/// problem `two_state_flag` exists for.
+///
+/// So this asserts both halves separately — which programs take the short
+/// circuit (classification), and that the value is the one the executor would
+/// have produced (equivalence), over both planes.
+#[test]
+fn a_single_leaf_program_short_circuits_and_agrees_with_the_executor() {
+    let src = "module m;\n\
+       reg [7:0] a, b;\n\
+       wire [7:0] leaf   = a;          // one Load  -> fast kind 1\n\
+       wire [7:0] lit    = 8'hA5;      // one Const -> fast kind 2\n\
+       wire [7:0] xlit   = 8'bxx01xx01; // an x-carrying Const, still one op\n\
+       wire [7:0] two    = a ^ b;      // more than one op -> kind 0\n\
+       initial begin a = 8'd0; b = 8'd0; end\n\
+       endmodule\n";
+    let ir = build(src);
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let mut arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
+    for i in 0..arena.slots.len() {
+        let sl = arena.slots[i];
+        arena.buf[sl.off as usize + 1] = 0;
+    }
+    let progs: Vec<_> = ir
+        .cont_assigns
+        .iter()
+        .map(|ca| {
+            let sw = wt.get(ca.rhs);
+            crate::native::wprog::compile(&ir, &wt, &arena, ca.rhs, sw.width, sw.signed)
+                .expect("every row of this design compiles")
+        })
+        .collect();
+    assert_eq!(progs.len(), 4, "design shape moved");
+
+    // CLASSIFICATION — the anti-vacuity half. If these all became 0 the short
+    // circuit would be dead code and every other test would still pass.
+    let kinds: Vec<u8> = progs.iter().map(|p| p.fast_kind()).collect();
+    assert_eq!(kinds, vec![1, 2, 2, 0], "got {kinds:?}");
+
+    // EQUIVALENCE — over a sweep, on both planes, against the executor the fast
+    // arm skips. `run_ops_for_test` is `run` with the short circuit bypassed.
+    let mut sc = crate::native::wprog::WScratch::default();
+    let a_net = match ir.exprs.get(ir.cont_assigns[0].rhs as usize) {
+        Some(sim_ir::Expr::Signal { net, .. }) => *net,
+        other => panic!("shape moved: {other:?}"),
+    };
+    let slot = arena.slots[a_net as usize];
+    for val in [0u64, 1, 0x5a, 0xff] {
+        for unk in [0u64, 0x0f, 0xff] {
+            arena.buf[slot.off as usize] = val & !unk;
+            arena.buf[slot.off as usize + 1] = unk;
+            for p in &progs {
+                let fast = p.run(&arena, &mut sc);
+                let slow = p.run_ops_for_test(&arena, &mut sc);
+                assert_eq!(
+                    (fast.val, fast.unk),
+                    (slow.val, slow.unk),
+                    "kind {} diverged at val={val:#x} unk={unk:#x}",
+                    p.fast_kind()
+                );
+            }
+        }
+    }
+}

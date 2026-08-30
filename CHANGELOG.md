@@ -465,6 +465,37 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **Most compiled programs are one instruction, and now they skip the interpreter.** Asking
+  whether machine-code generation should be reopened turned into a distribution question:
+  how many operations does a compiled program actually execute? ⭐ **Of the programs that
+  run, 56–86% are a single `Load` or a single `Const`** (serv 56.4%, picorv32 60.0%, biriscv
+  72.5%, aes 85.9%). Each paid a scratch clear and reserve, a loop set-up, one match
+  dispatch, a push and a pop — to read two adjacent words.
+
+  `WProg` now recognises that shape once, at compile time, and `run` answers it directly.
+  The collapse is exact on both lanes rather than a heuristic: a single `Load` yields
+  `(buf[vi], buf[vi+1])` from the 4-state executor, and the 2-state lane only takes its arm
+  when the unknown word is zero, so both give the same pair; a single `Const` is the same
+  argument with `two_state` already false whenever the constant carries an x.
+
+  Measured, both interleave orders, min of three: **serv −2.5%/−2.1%, picorv32 −1.6%/−2.1%,
+  biriscv −1.3%/−1.2%**, keccak −0.6%/−0.1%, and aes +0.2%/+0.5%.
+
+  ⚠️ The obvious explanation for that aes number is wrong, and the measurement says so: aes
+  has the **highest** single-instruction rate in the corpus (85.9%) and keccak the lowest
+  (26.6%), yet aes is the one that regresses. The predictor is not the rate but the number
+  of executions — the saving is per-run, and aes runs about 2 million programs where serv
+  runs 88 million, because aes spends its time inside frame calls instead. At that surface
+  the residual reads as code layout, not as the added branch.
+
+  Because this is a pure performance change, the differential suite is blind to it by
+  construction — the fast arm returns the same value the operations return. It therefore
+  ships with a test that asserts the classification separately from the equivalence, so a
+  lane that silently stopped firing cannot pass.
+
+  Corpus 10/10 byte-identical.
+
+
 - **The hottest reader stopped handing out a reference count.** `k_eval_for_lvalue` — the
   continuous-assign settle's evaluator, reached 61 million times on serv, where the settle
   is **45% of the whole run** — looked the compiled program up with `wprog_for`, whose

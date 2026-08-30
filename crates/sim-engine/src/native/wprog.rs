@@ -312,6 +312,42 @@ pub(crate) struct WScratch {
     pub(crate) u: Vec<u64>,
 }
 
+/// A program that is a SINGLE leaf, recognised once at compile time so `run`
+/// can answer it without entering an executor.
+///
+/// ⭐ Measured before building: of the programs actually executed, **56.4% on
+/// serv and 60.0% on picorv32 are one `Load` or one `Const`**. Those paid a
+/// scratch `clear` + `reserve`, a loop set-up, one match dispatch, a push and a
+/// pop — to read two adjacent words. Nothing about that is compilation; there
+/// is no code to generate, only an interpreter not to enter.
+///
+/// The collapse is exact on BOTH lanes, which is why it is a `match` on the
+/// program rather than a heuristic:
+///
+/// * `Load { vi }` — `run_4s` pushes `W { buf[vi], buf[vi+1] }`. `run_2s`
+///   declines when `buf[vi+1] != 0` and otherwise yields `W { buf[vi], 0 }`,
+///   which is the same value BECAUSE it only takes that arm when the unk word
+///   is zero.
+/// * `Const { val, unk }` — `run_4s` pushes `W { val, unk }`; `two_state` is
+///   false whenever any `Const` carries `unk != 0`, so the 2-state lane is only
+///   reached when `unk == 0` and yields `W { val, 0 }`.
+///
+/// Neither arm masks, and neither did the ops: an arena slot is already
+/// canonical at its own width (the admission gate requires `slot.width == w`),
+/// which is the invariant the `Load` arm has always relied on.
+#[derive(Clone, Copy)]
+enum WFast {
+    /// Run the ops.
+    Prog,
+    Leaf {
+        vi: u32,
+    },
+    Lit {
+        val: u64,
+        unk: u64,
+    },
+}
+
 pub(crate) struct WProg {
     ops: Vec<WOp>,
     /// The RESULT's width and signedness — what the caller stamps on the
@@ -320,6 +356,8 @@ pub(crate) struct WProg {
     signed: bool,
     /// Maximum stack depth, so the executor can reserve once.
     depth: usize,
+    /// Single-leaf short circuit — see [`WFast`].
+    fast: WFast,
     /// D2: may this program ever attempt the 2-state lane?
     ///
     /// FALSE when a `Const` carries x/z, because that leaf is unknown on every
@@ -381,12 +419,21 @@ pub(crate) fn compile(
     let two_state = !ops
         .iter()
         .any(|o| matches!(*o, WOp::Const { unk, .. } if unk != 0));
+    let fast = match ops.as_slice() {
+        [WOp::Load { vi }] => WFast::Leaf { vi: *vi },
+        [WOp::Const { val, unk }] => WFast::Lit {
+            val: *val,
+            unk: *unk,
+        },
+        _ => WFast::Prog,
+    };
     Some(WProg {
         ops,
         width: w,
         signed,
         depth: max_depth,
         two_state,
+        fast,
     })
 }
 
@@ -1190,6 +1237,19 @@ impl WProg {
     /// Here the approximation is "no unknown so far", and being wrong about it
     /// costs a re-run, not an answer.
     pub(crate) fn run(&self, arena: &NetArena, sc: &mut WScratch) -> W {
+        // ⭐ The majority of executions never reach an executor — see [`WFast`]
+        // for the measurement and for why the collapse is exact on both lanes.
+        match self.fast {
+            WFast::Leaf { vi } => {
+                let vi = vi as usize;
+                return W {
+                    val: arena.buf[vi],
+                    unk: arena.buf[vi + 1],
+                };
+            }
+            WFast::Lit { val, unk } => return W { val, unk },
+            WFast::Prog => {}
+        }
         if self.two_state {
             if let Some(val) = self.run_2s(arena, &mut sc.u) {
                 return W { val, unk: 0 };
@@ -1584,6 +1644,34 @@ impl WProg {
     /// D2 teeth: the three questions the lane's correctness rests on, asked
     /// directly rather than through `run`'s dispatch — because a lane that
     /// silently never fires passes every differential in the repository.
+    /// `run` with the single-leaf short circuit BYPASSED — the executor the
+    /// fast arm skips, so a test can compare the two answers directly.
+    #[cfg(test)]
+    pub(crate) fn run_ops_for_test(&self, arena: &NetArena, sc: &mut WScratch) -> W {
+        if self.two_state {
+            if let Some(val) = self.run_2s(arena, &mut sc.u) {
+                return W { val, unk: 0 };
+            }
+        }
+        self.run_4s(arena, &mut sc.w)
+    }
+
+    /// D2 teeth, extended: WHICH short circuit (if any) this program takes.
+    /// `0` = runs the ops, `1` = single `Load`, `2` = single `Const`.
+    ///
+    /// ⚠️ Anti-vacuity, for the reason the sibling accessor gives: a lane that
+    /// silently never fires passes every differential in the repository, and
+    /// the differential CANNOT see this one — it returns the same value either
+    /// way, by construction.
+    #[cfg(test)]
+    pub(crate) fn fast_kind(&self) -> u8 {
+        match self.fast {
+            WFast::Prog => 0,
+            WFast::Leaf { .. } => 1,
+            WFast::Lit { .. } => 2,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn two_state_flag(&self) -> bool {
         self.two_state
