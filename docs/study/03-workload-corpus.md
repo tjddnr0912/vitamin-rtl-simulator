@@ -445,6 +445,51 @@ admission is worth 2–4× on mixed-sign expression trees and those are not in t
 loops. A design that is mixed-sign-heavy would want it; ours are not, and the queue line should
 say that rather than "worthless".
 
+#### The decline census has to be NORMALISED, and I ranked the next candidates without doing it
+
+The remaining buckets were ranked by absolute request count, which put `serv` first: two
+declining expressions, 500,015 requests each, one distinct expression apiece — the cheapest
+possible diagnosis for the largest apparent prize.
+
+Both were diagnosed in one run, by labelling every early return in the two arms:
+
+```text
+  serv:  req 20015  distinct 3   SEL: offset is NOT a Const
+         req 20015  distinct 1   TERN: a branch can report (LoadIdx)
+```
+
+Both are documented, deliberate non-admissions. The first is the runtime-offset select
+(`x[i +: 4]`) the module's own comment says it does not take, and a bit-serial core does it
+constantly. The second is the diagnostic-ordering rule: the compiled lane has no control flow,
+so it evaluates BOTH ternary branches, and an untaken branch holding an out-of-range array read
+would report an access the generic path never performs.
+
+⚠️⚠️ **And then the number that should have come first.** Those buckets are 1,043,305 declined
+requests against **72,500,547 admitted** ones — `serv` is already **98.6% compiled**, the
+highest rate in the corpus:
+
+| design | ok | declined | decline rate |
+|---|---:|---:|---:|
+| keccak | 1,712,105 | 1,546,018 | **47.5%** |
+| darkriscv | 10,527,654 | 7,025,920 | **40.0%** |
+| aes | 592,296 | 387,885 | **39.6%** |
+| picorv32 | 7,889,493 | 1,022,255 | 11.5% |
+| biriscv | 5,015,105 | 196,393 | 3.8% |
+| sha256 | 3,312,068 | 50,003 | 1.5% |
+| **serv** | 72,500,547 | 1,043,305 | **1.4%** |
+
+⭐⭐ `serv` is the LEAST promising target for lane coverage, not the most — and it is one of the
+two designs vitamin loses on, so **whatever makes serv slow is not the compiled lane's
+coverage**. That is a separate investigation and the profile has to name it.
+
+The corrected ranking is `keccak` / `darkriscv` / `aes`, and the first two of those are the two
+axes already filed: `Call` (the frame arena) and the non-leaf sign gate (measured 1.00× and
+reverted, above). `aes` is the wide lane.
+
+⚠️ The methodological point, because it cost a ranking: **a decline count is meaningless without
+the admitted count beside it.** 500,015 requests is enormous next to `aes`'s 387,885 and
+negligible next to `serv`'s own 72.5 million.
+
 #### That slice landed, and the axis was one thing
 
 Sharpening the census to the FIRST failing node (not the root) collapsed it further:

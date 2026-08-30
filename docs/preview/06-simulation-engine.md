@@ -57,7 +57,7 @@ end
 
 ### IEEE 1800 (SystemVerilog) — 17개 region
 
-SV는 assertion, program block, PLI 콜백을 지원하기 위해 4개 region을 17개로 확장했다. Phase 1은 IEEE 1364의 4개 region을 코어로 구현하고, 그 위에 **Observed/Reactive 두 리전을 추가 도입**해 deferred immediate assert(`assert #0`=Observed·`assert final`=Reactive, 22탄 ✅)를 충실 구현한다. SVA concurrent assertion·시퀀스는 합성 clocked-always 체커로 desugar해 4-region 코어 위에서 동작하므로 17-region 전면 구현은 불요(✅ Phase-3 진입분 구현). Preponed 리전(clocking block 입력 샘플링)은 아직 부재 — clocking block은 그래서 NO-GO(N4).
+SV는 assertion, program block, PLI 콜백을 지원하기 위해 4개 region을 17개로 확장했다. Phase 1은 IEEE 1364의 4개 region을 코어로 구현하고, 그 위에 **Observed/Reactive 두 리전을 추가 도입**해 deferred immediate assert(`assert #0`=Observed·`assert final`=Reactive, 22탄 ✅)를 충실 구현한다. SVA concurrent assertion·시퀀스는 합성 clocked-always 체커로 desugar해 4-region 코어 위에서 동작하므로 17-region 전면 구현은 불요(✅ Phase-3 진입분 구현). **Preponed 상당의 입력 샘플링은 구현돼 있다**(2026-08-30 실측 정정 — 이 문장은 오래 "아직 부재 · clocking block NO-GO(N4)"로 남아 있었으나 코드보다 낡은 서술이었다). `clocking … @(posedge clk); default input #1step; input d, q; endclocking` 은 파싱·엘라보레이트·실행이 모두 되고, clocking 이벤트에서 읽은 값이 **엣지 직전 값**으로 샘플된다(수동 확인: `q <= d` 와 나란히 두면 `cb.q` 가 NBA 갱신 이전 값을 준다). **잔여는 skew 형태**다 — `#0`/`#N`/`##N` 과 output skew 는 `E3009` 로 정직하게 거부하며, 진단이 스스로 *"`#1step` is the only accepted skew … follow-on slice"* 라고 남은 작업을 지목한다. ⚠️ **오라클 없음**: iverilog 13 은 clocking block 을 파싱조차 못 한다(syntax error) — 이 영역의 검증은 hand-IEEE 로만 가능하다.
 
 ```
 Preponed          ← concurrent assertion 신호 샘플링 (time slot 시작 직전)
