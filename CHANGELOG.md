@@ -554,6 +554,37 @@ changed for a user of the simulator.
 
 ### Changed
 
+- **A size cast's sign seal no longer evicts its expression from the compiled lane (R8).**
+  `expr_cast` wraps every `n'(e)` result in `$signed`/`$unsigned` — a stamp, not a
+  computation — and the compiled lane had no arm for it, so a cast anywhere in an
+  expression sent the whole expression to the generic evaluator. An external reviewer took
+  **14,616,553** of those in a workload whose source never writes `$signed`.
+
+  Measured here: a 1.6M-iteration cast loop was **0.678 s sealed against 0.480 s unsealed —
+  the seal was 29.2% of the run**. With the arm the two are equal (0.332 s each).
+
+  ⭐ It needed no relaxation of the lane's uniform-sign gate, which is where this looked
+  like it was heading. The seal's operand is evaluated **at its own width and its own
+  sign** — that is what the seal is for — so the child compiles at the sign it already has
+  and `$signed(<unsigned expression>)` admits both halves.
+
+  ⚠️ The arm is written out rather than routed through the existing self-determined
+  widening path, because the fill rules differ: `$signed` sign-fills iff the CONTEXT is
+  signed and `$unsigned` always zero-fills, neither reading the operand's own sign, where
+  the generic rule is `operand.signed && context.signed`. Reusing it would have filled
+  `$signed(<unsigned>)` wrongly in a signed context.
+
+  ⚠️ **Our corpus barely moves** — every workload is inside ±1% in both interleave orders,
+  which is the same thing §4.5.396 measured when it reverted a related relaxation: this
+  shape is not in our designs' hot loops. It is in the reviewer's, 14.6 million times.
+
+  Corpus 10/10 byte-identical; a 768-cell sweep over source sign × cast width × destination
+  sign/width agrees with iverilog cell for cell; the untouched VM and interpreter agree.
+  Because the seal compiles to **no ops at all**, a value differential cannot see whether
+  the arm fired, so it ships with a test that compares the sealed and unsealed programs'
+  op counts.
+
+
 - **Most compiled programs are one instruction, and now they skip the interpreter.** Asking
   whether machine-code generation should be reopened turned into a distribution question:
   how many operations does a compiled program actually execute? ⭐ **Of the programs that

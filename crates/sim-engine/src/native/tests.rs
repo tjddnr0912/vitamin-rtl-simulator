@@ -3081,3 +3081,44 @@ fn a_single_leaf_program_short_circuits_and_agrees_with_the_executor() {
         }
     }
 }
+
+/// ⭐ THE SIGN SEAL, and why it needs a test the differential cannot give.
+///
+/// `expr_cast` wraps every size cast's result in `$signed`/`$unsigned`, and this
+/// module used to decline the node — so `8'(e)` fell to the generic evaluator.
+/// An external reviewer's workload took 14.6 million of those from a source that
+/// never writes `$signed`; a cast loop measured 0.678 s sealed against 0.480 s
+/// unsealed, and after the arm the two are equal.
+///
+/// The seal emits NO OPS, which is exactly why a value differential is blind to
+/// it: sealed and unsealed compute the same thing whether or not the arm fired.
+/// So this asserts the two halves separately — that the sealed form COMPILES
+/// (before, it did not) and that it compiles to the SAME PROGRAM as the
+/// unsealed one.
+#[test]
+fn a_size_casts_sign_seal_compiles_to_the_same_program_as_its_operand() {
+    let src = "module m;\n\
+       logic [7:0] a, b;\n\
+       wire [7:0] sealed   = 8'((a << 4) | b);   // cast → `$signed`/`$unsigned` seal\n\
+       wire [7:0] unsealed = (a << 4) | b;       // same expression, no seal\n\
+       initial begin a = 8'h3c; b = 8'h5a; end\n\
+     endmodule\n";
+    let ir = build(src);
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
+
+    let prog = |i: usize| {
+        let ca = &ir.cont_assigns[i];
+        let sw = wt.get(ca.rhs);
+        crate::native::wprog::compile(&ir, &wt, &arena, ca.rhs, sw.width, sw.signed)
+    };
+    // ANTI-VACUITY: the sealed row must compile at all. This is the assertion
+    // that fails if the arm is deleted — every value test stays green.
+    let sealed = prog(0).expect("the sealed cast must reach the compiled lane");
+    let unsealed = prog(1).expect("control row");
+    assert_eq!(
+        sealed.ops_len(),
+        unsealed.ops_len(),
+        "the seal is a stamp, not a computation — it must add no ops"
+    );
+}

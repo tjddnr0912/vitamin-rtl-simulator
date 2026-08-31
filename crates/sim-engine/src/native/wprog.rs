@@ -1109,6 +1109,56 @@ fn compile_node(
             });
             Some(())
         }
+        // ⭐ THE SIGN SEAL (`$signed`/`$unsigned`). Not a computation — a stamp.
+        //
+        // `expr_cast` wraps EVERY size cast's result in one of these, so `8'(e)`
+        // carries a `SysFunc` node, and this module's catch-all declined it: an
+        // external reviewer's workload took **14,616,553** of them from a source
+        // that never writes `$signed`, and a 1.6M-iteration cast loop measured
+        // **0.678 s sealed vs 0.480 s unsealed = 29.2% of the run**. The body was
+        // never the problem (`codegen able` is the same either way); the seal
+        // evicted the EXPRESSION.
+        //
+        // The generic arm is `a = eval(x); a.signed = <stamp>; a.resize_keep_sign(w,
+        // <stamp>)`, and the two halves matter separately:
+        //
+        // * The OPERAND is evaluated at **its own self width and its own sign**
+        //   (`selfwidth.rs`: the seal preserves the operand's width and only flips
+        //   the sign attribute). That is why this needs no relaxation of the
+        //   uniform-sign gate above — the child is compiled at the sign it already
+        //   has, so `$signed(<unsigned expression>)` admits both halves.
+        // * The FILL is the STAMP, not the child's sign. `$signed` sign-fills iff
+        //   the CONTEXT is signed (`a.signed = eff_signed` before the resize);
+        //   `$unsigned` always zero-fills. ⚠️ This is why the arm is written out
+        //   instead of routed through `CtxClass::SelfDetermined`, whose rule is
+        //   `sw.signed && signed` — that reads the CHILD's sign and would fill
+        //   wrongly for `$signed(<unsigned>)` in a signed context.
+        //
+        // Zero-extension needs no op (every stack value is masked to its width);
+        // truncation declines, as it does everywhere in this module.
+        sim_ir::Expr::SysFunc {
+            which: which @ (sim_ir::SysFuncId::Signed | sim_ir::SysFuncId::Unsigned),
+            args,
+        } if args.len() == 1 => {
+            let xw = wt.get(args[0]);
+            if !width_admits(xw.width) || xw.width > w {
+                return None;
+            }
+            compile_node(
+                ir, wt, arena, args[0], xw.width, xw.signed, ops, depth, max_depth,
+            )?;
+            let fill_signed = match which {
+                sim_ir::SysFuncId::Signed => signed,
+                _ => false,
+            };
+            if xw.width < w && fill_signed {
+                ops.push(WOp::Sext {
+                    from: xw.width,
+                    to: w,
+                });
+            }
+            Some(())
+        }
         sim_ir::Expr::Concat { parts } => {
             // `Σ pw == w` is the tiling proof AND the agreement check between
             // this module's two sources of width (the table, and `eval_concat`'s
@@ -1670,6 +1720,17 @@ impl WProg {
             WFast::Leaf { .. } => 1,
             WFast::Lit { .. } => 2,
         }
+    }
+
+    /// Op count — the teeth for the sign-seal arm.
+    ///
+    /// ⚠️ The seal compiles to NOTHING, so a differential cannot see whether the
+    /// arm fired: sealed and unsealed produce the same value either way, and the
+    /// only difference is whether the sealed form reached this module at all.
+    /// Comparing the two op counts is the question that has an answer.
+    #[cfg(test)]
+    pub(crate) fn ops_len(&self) -> usize {
+        self.ops.len()
     }
 
     #[cfg(test)]
