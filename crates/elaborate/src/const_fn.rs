@@ -907,6 +907,35 @@ impl Elaborator<'_> {
             // `envw` and NOT in `env` (that is what makes reading it loud), and,
             // pre-existing, the Blocking lvalue writes `env` with no `envw` twin.
             // Neither breaks this guard, which needs only "envw is non-empty".
+            // A select of a PARAMETER, folded with this environment so an index
+            // that mentions a const-function local resolves. Without this arm the
+            // walk fell through to the module-scope delegate below, which fires
+            // only on an EMPTY environment — i.e. never inside a function body —
+            // so `M_ADDR_WIDTH[i*32 +: 32]` had no arm at all.
+            //
+            // The span rule is `select_span`, the same one the part-select WRITE
+            // above folds with. A select of a const-function LOCAL still declines
+            // (the base resolver answers only for parameters), which keeps that
+            // shape honestly loud rather than guessed.
+            ast::ExprKind::BitSelect { .. }
+            | ast::ExprKind::PartSelect { .. }
+            | ast::ExprKind::IndexedPart { .. } => {
+                // ⚠️ FALLS BACK — it must not `return`. A new FIRST domain that
+                // swallows its arm silently removes whatever the catch-all below
+                // used to answer: this one declines for a NESTED select
+                // (`EA[15:0][7:0]`, whose base is not a bare parameter) and the
+                // module-scope delegate answered exactly those, so returning here
+                // collapsed a 52-bit width bound to 1. A pinned test caught it;
+                // reasoning did not.
+                self.const_param_select_env(e, env, envw, depth)
+                    .or_else(|| {
+                        (env.is_empty()
+                            && envw.is_empty()
+                            && (depth == 0 || !Self::ast_contains_call(e)))
+                        .then(|| self.const_eval_in_scope(e))
+                        .flatten()
+                    })
+            }
             _ if env.is_empty()
                 && envw.is_empty()
                 && (depth == 0 || !Self::ast_contains_call(e)) =>
@@ -1216,6 +1245,61 @@ impl Elaborator<'_> {
     /// for/while/repeat, return. A NonBlocking/timing/fork/system-task/case or any
     /// unmodeled form returns None → LOUD. `steps` bounds total iterations so a
     /// non-terminating loop is loud, never a hang.
+    /// `name[sel] = rhs` inside a const function: read-modify-write on the
+    /// integer environment.
+    ///
+    /// The span comes from [`Elaborator::select_span`], the SAME rule the
+    /// constant READ path folds with — a read and a write that disagreed about
+    /// which bits `x[b -: w]` names would be a silent-wrong by construction, so
+    /// the two share one function rather than two matching ones.
+    ///
+    /// Every decline below is a fact this domain cannot represent, not a shape
+    /// it dislikes:
+    ///
+    /// * **No `[msb:lsb]`.** §11.5.1 reads that pair in the BASE's declared
+    ///   direction, and `ConstWidths` records a local's width and signedness but
+    ///   not its direction — so "which endpoint is the msb" has no answer here.
+    ///   `+:`/`-:` and a bit-select name a numeric span outright and need none.
+    /// * **No unrecorded target.** Without the declared width there is nothing to
+    ///   bound the span against.
+    /// * **Nothing wider than 64 bits, and no span reaching outside the target.**
+    ///   This environment is `i64`; a write past the declared range is dropped by
+    ///   §11.5.1 rather than wrapping, and modelling that from a value that
+    ///   cannot hold the bits would be a guess.
+    fn exec_const_select_write(
+        &self,
+        lhs: &ast::Lvalue,
+        rhs: &ast::Expr,
+        env: &mut std::collections::BTreeMap<String, i64>,
+        envw: &crate::const_fn_width::ConstWidths,
+        depth: u32,
+    ) -> Option<ConstFlow> {
+        let (path, parts) = Self::lvalue_sel_parts(lhs)?;
+        if matches!(parts, crate::const_select::SelParts::Range(..)) {
+            return None;
+        }
+        let name = &path.segments[0].name;
+        let &(vw, _vsigned) = envw.get(name)?;
+        if vw == 0 || vw > 64 {
+            return None;
+        }
+        let (a, b, _directed) = self.select_span(parts, env, envw, depth)?;
+        let (lo, hi) = (a.min(b), a.max(b));
+        if lo < 0 || hi >= i64::from(vw) {
+            return None;
+        }
+        let w = (hi - lo + 1) as u32;
+        // §11.6.1: the RHS is assigned to the SELECT, so the select's width is
+        // its context — not the target variable's.
+        let v = self.eval_const_assign(rhs, env, envw, depth, Some((w, false)))?;
+        let field = if w >= 64 { u64::MAX } else { (1u64 << w) - 1 };
+        let mask = field << lo;
+        let cur = env.get(name).copied().unwrap_or(0) as u64;
+        let out = (cur & !mask) | (((v as u64) & field) << lo);
+        env.insert(name.clone(), out as i64);
+        Some(ConstFlow::Normal)
+    }
+
     pub(crate) fn exec_const_stmt(
         &self,
         s: &ast::Stmt,
@@ -1262,7 +1346,12 @@ impl Elaborator<'_> {
                     return None; // intra-assignment timing → loud
                 }
                 let ast::Lvalue::Ident(path) = lhs else {
-                    return None; // only a simple local-var target
+                    // A PART-SELECT target (`f[i*32 +: 32] = base`). The const
+                    // function that motivated this — verilog-axi's
+                    // `calcBaseAddrs` — builds its whole return value that way,
+                    // and this arm's absence is what made the crossbar's four
+                    // `M_BASE_ADDR_INT` parameters loud.
+                    return self.exec_const_select_write(lhs, rhs, env, envw, depth);
                 };
                 if path.segments.len() != 1 {
                     return None;

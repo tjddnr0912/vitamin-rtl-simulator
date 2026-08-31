@@ -41,6 +41,91 @@
 
 use super::*;
 
+/// The three shapes a select can take, destructured out of EITHER enum.
+///
+/// ⚠️ `ast::Expr` and `ast::Lvalue` spell the same three selects in two separate
+/// enums, and the §11.5.1 span rule must not be written twice — a read and a
+/// write that disagree about which bits `x[b -: w]` names is a silent-wrong by
+/// construction. Both matchers produce this and call [`Elaborator::select_span`].
+pub(crate) enum SelParts<'a> {
+    Bit(&'a ast::Expr),
+    /// `[msb : lsb]`
+    Range(&'a ast::Expr, &'a ast::Expr),
+    /// `[offset +: width]` / `[offset -: width]`
+    Indexed(&'a ast::Expr, &'a ast::Expr, ast::PartDir),
+}
+
+impl Elaborator<'_> {
+    /// `(hi, lo, directed)` — the bit span a select names. `directed` is true
+    /// only for an explicit `[msb:lsb]`, whose endpoints may be given in either
+    /// order and are resolved against the base's declared direction.
+    ///
+    /// ⚠️ Folded with `eval_const_env_self`, NOT the width-unlimited walk:
+    /// §11.5.1 makes a select's index a constant expression and Table 11-21
+    /// makes it SELF-DETERMINED. `W[4'd15+4'd1]` names bit 0 — the 4-bit sum
+    /// wraps — and the unlimited walk read bit 16 instead.
+    ///
+    /// The `env`/`envw` pair is what lets a CONST-FUNCTION body fold an index
+    /// that mentions a loop variable (`f[i*32 +: 32]`). Module-scope callers
+    /// pass empty ones, which is exactly `const_int_selfdet` — that function is
+    /// literally this evaluator with an empty environment, so threading the
+    /// environment through is a no-op for every pre-existing caller.
+    pub(crate) fn select_span(
+        &self,
+        p: SelParts<'_>,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &crate::const_fn_width::ConstWidths,
+        depth: u32,
+    ) -> Option<(i64, i64, bool)> {
+        match p {
+            SelParts::Bit(index) => {
+                let i = self.eval_const_env_self(index, env, envw, depth)?;
+                Some((i, i, false))
+            }
+            SelParts::Range(msb, lsb) => Some((
+                self.eval_const_env_self(msb, env, envw, depth)?,
+                self.eval_const_env_self(lsb, env, envw, depth)?,
+                true,
+            )),
+            // `b +: w` / `b -: w` (§11.5.1): the WIDTH is a positive constant and
+            // the span runs numerically up or down from the offset.
+            SelParts::Indexed(offset, width, dir) => {
+                let o = self.eval_const_env_self(offset, env, envw, depth)?;
+                let w = self.eval_const_env_self(width, env, envw, depth)?;
+                if w <= 0 {
+                    return None;
+                }
+                Some(match dir {
+                    ast::PartDir::PlusColon => (o, o.checked_add(w - 1)?, false),
+                    ast::PartDir::MinusColon => (o.checked_sub(w - 1)?, o, false),
+                })
+            }
+        }
+    }
+
+    /// [`SelParts`] for an LVALUE select over a bare single-segment name, with
+    /// that name. `None` for anything else (a hierarchical or nested base, an
+    /// array element) — those are not const-function locals.
+    pub(crate) fn lvalue_sel_parts(lv: &ast::Lvalue) -> Option<(&ast::HierPath, SelParts<'_>)> {
+        let (base, parts) = match lv {
+            ast::Lvalue::BitSelect { base, index, .. } => (base, SelParts::Bit(index)),
+            ast::Lvalue::PartSelect { base, msb, lsb, .. } => (base, SelParts::Range(msb, lsb)),
+            ast::Lvalue::IndexedPart {
+                base,
+                offset,
+                width,
+                dir,
+                ..
+            } => (base, SelParts::Indexed(offset, width, *dir)),
+            _ => return None,
+        };
+        match &**base {
+            ast::Lvalue::Ident(path) if path.segments.len() == 1 => Some((path, parts)),
+            _ => None,
+        }
+    }
+}
+
 impl Elaborator<'_> {
     /// A constant BIT / PART / INDEXED-PART select of a parameter, in the i64
     /// const domain. `None` = decline → the caller keeps the behavior it had.
@@ -52,7 +137,29 @@ impl Elaborator<'_> {
     /// (§11.5.1) whatever the base's signedness, and its width is the number of
     /// bits selected.
     pub(crate) fn const_param_select(&self, e: &ast::Expr) -> Option<i64> {
-        let (val, lo_n, hi_n, dlo, dwidth, asc) = self.const_select_resolved(e)?;
+        self.const_param_select_env(
+            e,
+            &std::collections::BTreeMap::new(),
+            &crate::const_fn_width::ConstWidths::new(),
+            0,
+        )
+    }
+
+    /// [`Self::const_param_select`] with a const-function ENVIRONMENT, so an index
+    /// that mentions a loop variable folds (`M_ADDR_WIDTH[i*32 +: 32]`).
+    ///
+    /// ⚠️ The empty-environment call above is provably the previous behaviour:
+    /// `const_int_selfdet` — what this chain folded indices with before — IS
+    /// `eval_const_env_self` with an empty environment, by its own definition.
+    pub(crate) fn const_param_select_env(
+        &self,
+        e: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &crate::const_fn_width::ConstWidths,
+        depth: u32,
+    ) -> Option<i64> {
+        let (val, lo_n, hi_n, dlo, dwidth, asc) =
+            self.const_select_resolved(e, env, envw, depth)?;
         let n = (hi_n - lo_n + 1) as u32;
         if n > 63 {
             // 64 unsigned magnitude bits do not fit the i64 const domain — the same
@@ -85,8 +192,14 @@ impl Elaborator<'_> {
     /// width, ascending)`. The one place the direction rule is written, so the fold
     /// and the self-width answer cannot disagree about which bits are named.
     #[allow(clippy::type_complexity)] // one tuple, one caller pair — a struct would not earn its name
-    fn const_select_resolved(&self, e: &ast::Expr) -> Option<(u64, i64, i64, u32, u32, bool)> {
-        let (base, a, b, directed) = self.const_select_bounds(e)?;
+    fn const_select_resolved(
+        &self,
+        e: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &crate::const_fn_width::ConstWidths,
+        depth: u32,
+    ) -> Option<(u64, i64, i64, u32, u32, bool)> {
+        let (base, a, b, directed) = self.const_select_bounds(e, env, envw, depth)?;
         let (val, dlo, dwidth, asc) = self.const_select_base(base)?;
         // ⚠️ `[m:l]` is written LEFT:RIGHT in the base's own declared direction, so
         // "which endpoint is numerically larger" is decided by the BASE, not by the
@@ -129,38 +242,26 @@ impl Elaborator<'_> {
     /// bit 0 — the 4-bit sum wraps — and the unlimited walk read bit 16 instead, so
     /// a bound built on it declared 10 bits where both oracles declare 9. vita's own
     /// RUNTIME lane already answered 0 for the same text.
-    fn const_select_bounds<'a>(&self, e: &'a ast::Expr) -> Option<(&'a ast::Expr, i64, i64, bool)> {
-        match &e.kind {
-            ast::ExprKind::BitSelect { base, index } => {
-                let i = self.const_int_selfdet(index)?;
-                Some((base, i, i, false))
-            }
-            ast::ExprKind::PartSelect { base, msb, lsb } => Some((
-                base,
-                self.const_int_selfdet(msb)?,
-                self.const_int_selfdet(lsb)?,
-                true,
-            )),
-            // `b +: w` / `b -: w` (§11.5.1): the WIDTH is a positive constant and
-            // the span runs numerically up or down from the offset.
+    fn const_select_bounds<'a>(
+        &self,
+        e: &'a ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &crate::const_fn_width::ConstWidths,
+        depth: u32,
+    ) -> Option<(&'a ast::Expr, i64, i64, bool)> {
+        let (base, parts) = match &e.kind {
+            ast::ExprKind::BitSelect { base, index } => (base, SelParts::Bit(index)),
+            ast::ExprKind::PartSelect { base, msb, lsb } => (base, SelParts::Range(msb, lsb)),
             ast::ExprKind::IndexedPart {
                 base,
                 offset,
                 width,
                 dir,
-            } => {
-                let o = self.const_int_selfdet(offset)?;
-                let w = self.const_int_selfdet(width)?;
-                if w <= 0 {
-                    return None;
-                }
-                Some(match dir {
-                    ast::PartDir::PlusColon => (base, o, o.checked_add(w - 1)?, false),
-                    ast::PartDir::MinusColon => (base, o.checked_sub(w - 1)?, o, false),
-                })
-            }
-            _ => None,
-        }
+            } => (base, SelParts::Indexed(offset, width, *dir)),
+            _ => return None,
+        };
+        let (a, b, directed) = self.select_span(parts, env, envw, depth)?;
+        Some((base, a, b, directed))
     }
 
     /// The base of a constant select: `(value, declared lo, declared width,
@@ -333,7 +434,12 @@ impl Elaborator<'_> {
     /// has no recorded width here — it stays the §4.5.344 width-unknown leaf, which
     /// degrades to the unlimited domain exactly as before.
     pub(crate) fn const_select_self_width(&self, e: &ast::Expr) -> Option<u32> {
-        let (_, lo_n, hi_n, ..) = self.const_select_resolved(e)?;
+        let (_, lo_n, hi_n, ..) = self.const_select_resolved(
+            e,
+            &std::collections::BTreeMap::new(),
+            &crate::const_fn_width::ConstWidths::new(),
+            0,
+        )?;
         u32::try_from(hi_n - lo_n + 1).ok()
     }
 }

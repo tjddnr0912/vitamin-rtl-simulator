@@ -367,6 +367,38 @@ impl Elaborator<'_> {
                         }
                     }
                 }
+                // §11.4.11: a CONDITIONAL is not value-determined either — its
+                // result is as wide as its WIDER ARM, and both arms then widen to
+                // that. Like the concatenation above, that width is not recoverable
+                // from the value: `Z ? Z : 64'h0100000000000000` is 64 bits wide and
+                // 57 bits of magnitude, so the value-inferred tail recorded 58 where
+                // both oracles say 64 — the parameter's top bits then read `x` and
+                // `axi_crossbar`'s address decode died on them.
+                //
+                // ⭐ The RULE is not new here: `const_self_width` has carried the
+                // §11.4.11 arm (`max(then, else)`) since the `**` exponent work. What
+                // was missing is that this inference never ASKED it — the same shape
+                // as the concatenation arm above, one operator over.
+                //
+                // ⚠️ Declines under `declared_only`, for exactly the reason the
+                // value-inferred tail does: `const_self_width` sizes a NAME from
+                // `param_meta`, which is where value-INFERRED widths are recorded, so
+                // answering there would launder the provenance that flag fences off —
+                // the §4.5.363 regression the concatenation arm documents, through a
+                // different door.
+                if default_binds && !declared_only {
+                    let mut tern = &p.value;
+                    while let ast::ExprKind::Paren { inner } = &tern.kind {
+                        tern = inner;
+                    }
+                    if matches!(tern.kind, ast::ExprKind::Ternary { .. }) {
+                        if let Some(w) = self.const_self_width(tern, &ConstWidths::new()) {
+                            if w > 0 {
+                                return Some((w, self.const_expr_signed(tern)));
+                            }
+                        }
+                    }
+                }
                 // A constant-function CALL is type-determined too: the parameter
                 // takes the function's declared RETURN type (§13.4.1), so
                 // `localparam X = fb()` with `function byte fb()` is 8 bits signed,

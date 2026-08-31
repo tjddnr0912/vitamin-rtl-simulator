@@ -11,6 +11,46 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A constant function could not write a part-select of its own return value, and an
+  untyped parameter took the wrong width from a conditional.** Two gaps, one design:
+  `verilog-axi`'s crossbar computes its base-address vector with
+  `calcBaseAddrs[i*ADDR_WIDTH +: ADDR_WIDTH] = base` and then selects out of the result.
+
+  ⭐ The census refuted the queue on both counts. It recorded "54 errors" and "a wide
+  accumulator"; at HEAD there were **4 errors, all one expression**, and the return value
+  is **exactly 64 bits** — no wide domain needed. Walking a ladder from a trivial constant
+  function up to `calcBaseAddrs` put the first failure at a single line: the assignment arm
+  accepted `Lvalue::Ident` and declined everything else, so even a CONSTANT-offset
+  part-select had no fold.
+
+  Shipped: a part-select write arm (read-modify-write on the integer environment) and an
+  environment-aware select READ, so an index may mention a loop variable. The §11.5.1 span
+  rule is now written **once** — `select_span`, called by both the expression form and the
+  lvalue form, because `ast::Expr` and `ast::Lvalue` spell the same three selects in two
+  enums and a read that disagreed with a write would be silent-wrong by construction.
+  Threading the environment through is provably a no-op for every existing caller:
+  `const_int_selfdet` is that evaluator with an empty environment, by its own definition.
+  A `[msb:lsb]` lvalue stays loud — that pair is read in the base's declared DIRECTION and
+  the constant-function width table records width and signedness but not direction.
+
+  ⭐ The second gap is a **pre-existing silent-wrong** and reproduces with no function call
+  anywhere: `localparam T = Z ? Z : 64'h0100000000000000` was **58 bits** (the value's
+  magnitude) where §11.4.11 and both oracles say **64** (the wider arm). The rule was
+  already in the tree — `const_self_width` has carried `max(then, else)` since the `**`
+  exponent work — the untyped-parameter width inference simply never asked it, exactly as
+  the concatenation arm beside it once did not.
+
+  `verilog-axi` now elaborates and runs, completing on the **same cycle as iverilog**
+  (123,166). ⚠️ Its digest still differs on a **third, independent axis**: the crossbar's
+  registered valid outputs read `x` in iverilog and `0` in vita for the first cycles after
+  reset (29 of 123,166 cycles). That is not this change's doing and is recorded rather than
+  guessed at, so the workload stays un-promoted in the corpus.
+
+  ⚠️ One regression, caught by a pinned test and not by reasoning: the new select arm
+  initially RETURNED instead of falling back, which removed the module-scope answer for a
+  nested select (`EA[15:0][7:0]`) and collapsed a 52-bit width bound to 1.
+
+
 - **A package function containing a `case` stopped the whole design from elaborating (P0
   regression).** As soon as another function in the same package called it, every module
   that merely wrote `import p::*;` failed with E3009 — once per instance, 201 times on the

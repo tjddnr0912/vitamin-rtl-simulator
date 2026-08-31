@@ -121,6 +121,17 @@
 §5 perf/하드닝(**실행 기록은 [ARCHIVE_PHASE_A-D](ROADMAP_ARCHIVE_PHASE_A-D.md)**) · §6 OBS ·
 §7 조건부 · §8 비목표. ⚠️ **§2·§3 은 주제별 묶음이지 착수 순서가 아니다** — 각 절 머리말의 착수표를 따른다.
 
+## 2-N. 신규 silent-wrong (2026-08-31 · verilog-axi census 부산물)
+
+- 🔴 **크로스바의 등록 valid 출력이 리셋 직후 x 여야 하는데 0 이다.** verilog-axi 가 처음 끝까지 돌면서
+  드러났다(§3 ⑫ 해결 후). `m_axi_awvalid`/`m_axi_wvalid`/`m_axi_arvalid` 가 iverilog 는 **x**, vita 는
+  **0** — 123,166 사이클 중 **29 사이클**. tb 가 *"the crossbar legitimately drives X on `m_axi_wvalid`
+  before its first transaction"* 라고 주석에 적어 둔 바로 그 구간이다. ⚠️ **기능은 일치한다** — 트랜잭션이
+  **같은 사이클(123,166)에 완료**하고 핸드셰이크 신호도 초기 사이클에서 일치한다. 갈리는 것은 x 축뿐이고
+  vita 가 **낙관적**(x 여야 할 자리에 definite)이라 실제 x 전파 버그를 가릴 수 있다 ⇒ silent-wrong.
+  **오라클 = iverilog**(verilator 는 x/z 오라클이 아니다). 이것 때문에 verilog-axi 는 코퍼스에서
+  **승격 보류**(다이제스트 불일치) · 축은 §3 ⑫ 와 **무관**하고 별도 머신러리다(리셋 없는 등록 출력의 초기값).
+
 ## 2-R. 외부 리포트 P0 (해결 기록 — 상세는 ARCHIVE)
 
 - **round-35 / aes_top R6 (2026-08-31) ✅ 해결** — 패키지 함수 안의 `case` 하나가 **설계 전체의
