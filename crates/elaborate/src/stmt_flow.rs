@@ -466,7 +466,16 @@ impl Elaborator<'_> {
         // reservation did not see this `case`" must not silently become "capture
         // into a net every activation shares".
         let tmp = if self.in_frame_body {
-            let Some(&net) = self.frame_case_tmp.get(&(case_span.lo, case_span.hi)) else {
+            // ⚠️ Owner-checked. One span can own a net in TWO windows (a package
+            // routine is reserved under both its bare name and `pkg::name`), and
+            // taking the wrong one lowers a write outside this frame — which the
+            // body validator correctly reports as E3009. A foreign entry MISSES,
+            // which is the degradation this function already documents as safe.
+            let Some(&net) = self.cur_frame_owner.and_then(|o| {
+                self.frame_case_tmp
+                    .get(&(case_span.lo, case_span.hi))?
+                    .get(&o)
+            }) else {
                 return scrut_id;
             };
             if let Some(nv) = self.nets.get_mut(net as usize) {
@@ -977,14 +986,22 @@ impl Elaborator<'_> {
                 // they stop agreeing is the day a shared counter starts corrupting
                 // concurrent activations SILENTLY, and this is the only place that can
                 // see it happen.
-                if self.in_frame_body && !self.frame_repeat_cnt.contains_key(&(span.lo, span.hi)) {
+                if self.in_frame_body
+                    && self
+                        .cur_frame_owner
+                        .and_then(|o| self.frame_repeat_cnt.get(&(span.lo, span.hi))?.get(&o))
+                        .is_none()
+                {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "a `repeat` with a runtime count in this position was not seen by                          the frame reservation pass, so it has no per-activation counter                          — concurrent activations would share one. Hoist the count into a                          local first, or make the count a constant",
                     );
                     return;
                 }
-                let cnt_net = if let Some(&n) = self.frame_repeat_cnt.get(&(span.lo, span.hi)) {
+                let cnt_net = if let Some(&n) = self
+                    .cur_frame_owner
+                    .and_then(|o| self.frame_repeat_cnt.get(&(span.lo, span.hi))?.get(&o))
+                {
                     n
                 } else {
                     let name = format!("$repeat_cnt${}", self.nets.len());

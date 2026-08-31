@@ -1115,6 +1115,22 @@ impl Elaborator<'_> {
         }
     }
 
+    /// Is `net` one vita minted for itself (a `$…` scratch: `$ia_tmp$`,
+    /// `$repeat_cnt$`, `$sfmt_tmp$`) rather than one the source declared?
+    ///
+    /// ⚠️ Asked only on an ERROR path, so the scan over `symbols` costs nothing
+    /// that matters. It exists so a recurrence of the round-35 P0 names vita
+    /// instead of the user's code.
+    fn net_is_compiler_internal(&self, net: u32) -> bool {
+        self.symbols.iter().any(|(fq, &id)| {
+            id == net
+                && fq
+                    .rsplit('.')
+                    .next()
+                    .is_some_and(|seg| seg.starts_with('$'))
+        })
+    }
+
     /// Round-14 V3/V4: classify a frame body — `None` = SUBSET (blocking-assigns to
     /// its own locals + control flow + nested subset calls, executable synchronously
     /// by `run_task_call`); `Some(reason)` = NON-SUBSET (a timing/suspend/fork
@@ -1222,7 +1238,21 @@ impl Elaborator<'_> {
                             // The gate is right; the hoist is what must not run there.
                             if whole {
                                 if !in_frame {
-                                    why = Some(("an assignment to a net outside the function", ""));
+                                    // ⚠️ Which HALF of this sentence is true matters. The
+                                    // P0 this guard was added for (aes_top round-35) was a
+                                    // COMPILER-generated capture net handed to the wrong
+                                    // frame, and the message blamed the user's `case` — a
+                                    // construct the same sentence lists as supported. The
+                                    // reporter spent thirty minutes on the wrong half.
+                                    // The source cannot avoid an internal net, so say so.
+                                    why = Some(if self.net_is_compiler_internal(c.net) {
+                                        (
+                                            "an assignment to a COMPILER-GENERATED net                                              outside the function",
+                                            ". That net is vita's, not the source's — this                                              is a vita bug; please report it",
+                                        )
+                                    } else {
+                                        ("an assignment to a net outside the function", "")
+                                    });
                                 }
                             } else if c.word.is_some()
                                 || !in_frame

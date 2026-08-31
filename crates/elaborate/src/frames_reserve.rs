@@ -364,7 +364,7 @@ impl Elaborator<'_> {
     /// in each" is precisely the kind of agreement that drifts silently — the defect
     /// slice 1 of this round fixed between the unroll classifier and the lowering. The
     /// unroll question itself is asked with that same single spelling.
-    pub(crate) fn reserve_frame_repeat_counters(&mut self, body: &ast::Stmt) {
+    pub(crate) fn reserve_frame_repeat_counters(&mut self, body: &ast::Stmt, owner: u32) {
         let mut spans = Vec::new();
         Self::collect_runtime_repeat_spans(self, body, &mut spans);
         for sp in spans {
@@ -381,7 +381,10 @@ impl Elaborator<'_> {
             };
             self.add_net(&name, nv);
             let net = (self.nets.len() - 1) as u32;
-            self.frame_repeat_cnt.insert(sp, net);
+            self.frame_repeat_cnt
+                .entry(sp)
+                .or_default()
+                .insert(owner, net);
         }
     }
 
@@ -414,7 +417,7 @@ impl Elaborator<'_> {
     /// IR-level questions from an AST walk, which is exactly the drift this
     /// span-keyed handoff exists to avoid; the cost is one unused slot per
     /// declined case.
-    pub(crate) fn reserve_frame_case_tmps(&mut self, body: &ast::Stmt) {
+    pub(crate) fn reserve_frame_case_tmps(&mut self, body: &ast::Stmt, owner: u32) {
         let mut spans = Vec::new();
         Self::collect_case_spans(body, &mut spans);
         for sp in spans {
@@ -431,7 +434,10 @@ impl Elaborator<'_> {
             };
             self.add_net(&name, nv);
             let net = (self.nets.len() - 1) as u32;
-            self.frame_case_tmp.insert(sp, net);
+            self.frame_case_tmp
+                .entry(sp)
+                .or_default()
+                .insert(owner, net);
         }
     }
 
@@ -796,8 +802,8 @@ impl Elaborator<'_> {
             // Block-locals declared inside a `begin … end` in the body (after the
             // top-level body_decls in the flat slot order).
             auto_override |= s.reserve_frame_block_locals(&func.body, base_net);
-            s.reserve_frame_repeat_counters(&func.body);
-            s.reserve_frame_case_tmps(&func.body);
+            s.reserve_frame_repeat_counters(&func.body, base_net);
+            s.reserve_frame_case_tmps(&func.body, base_net);
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;
@@ -1015,8 +1021,8 @@ impl Elaborator<'_> {
             }
             // Block-locals declared inside a `begin … end` in the body.
             auto_override |= s.reserve_frame_block_locals(&task.body, base_net);
-            s.reserve_frame_repeat_counters(&task.body);
-            s.reserve_frame_case_tmps(&task.body);
+            s.reserve_frame_repeat_counters(&task.body, base_net);
+            s.reserve_frame_case_tmps(&task.body, base_net);
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;

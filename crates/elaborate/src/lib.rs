@@ -621,7 +621,7 @@ struct Elaborator<'s> {
     /// `reserve_frame_repeat_counters`; `lower_repeat` consumes it so a runtime count
     /// inside a suspendable task gets a per-activation counter instead of a shared
     /// module net.
-    frame_repeat_cnt: BTreeMap<(u32, u32), u32>,
+    frame_repeat_cnt: BTreeMap<(u32, u32), BTreeMap<u32, u32>>,
     /// `case` SOURCE SPAN → the frame-local capture net reserved for its
     /// scrutinee. §12.5 evaluates a case expression once; the module-scope
     /// lowering captures it into a `$ia_tmp$` net, and a FRAME body cannot write
@@ -630,7 +630,20 @@ struct Elaborator<'s> {
     /// `reserve_frame_case_tmps` and consumed by `hoist_case_scrutinee`, keyed by
     /// span for the same reason the counter above is: the two walks are two walks
     /// of one tree, and "the Nth case in each" drifts silently.
-    frame_case_tmp: BTreeMap<(u32, u32), u32>,
+    frame_case_tmp: BTreeMap<(u32, u32), BTreeMap<u32, u32>>,
+    /// WHICH frame's window the lowering is currently inside, as that frame's
+    /// `base_net` — the second half of the key for the two span maps above.
+    ///
+    /// ⚠️⚠️ A span alone is NOT a key. One package routine's body is reserved
+    /// under TWO frame keys (its bare name and `pkg::name`), so one `case` span
+    /// owns two capture nets in two different windows. With a span-only map the
+    /// second reservation overwrote the first and the first frame then lowered a
+    /// write to a net outside its own window — E3009 on a design that merely
+    /// IMPORTED the package, reported once per instance (P0, aes_top round-35).
+    ///
+    /// `None` outside a frame body — a class method sets `in_frame_body` but
+    /// reserves nothing, so it must MISS rather than borrow a frame's net.
+    cur_frame_owner: Option<u32>,
     /// §4.5.248: the per-entry (`automatic`) block-local NAMES currently in scope
     /// during the Nets-phase hoist walk, so a NESTED block's STATIC initializer can be
     /// checked against an OUTER block's automatic (see

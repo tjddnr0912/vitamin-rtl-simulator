@@ -109,6 +109,7 @@ impl<'s> Elaborator<'s> {
             hoisted_block_local: BTreeMap::new(),
             frame_repeat_cnt: BTreeMap::new(),
             frame_case_tmp: BTreeMap::new(),
+            cur_frame_owner: None,
             per_entry_in_scope: BTreeSet::new(),
             frame_fn_lowering: false,
             sformatf_expr_ok: false,

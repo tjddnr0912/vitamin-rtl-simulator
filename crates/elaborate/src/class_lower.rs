@@ -269,6 +269,9 @@ impl Elaborator<'_> {
         self.cur_this = Some((this_net, cname.to_string()));
         self.cur_discard = method.discard_net;
         let saved_frame = std::mem::replace(&mut self.in_frame_body, true);
+        // A class method body reserves no span nets, so it must not inherit an
+        // enclosing frame's owner and answer from that frame's window.
+        let saved_cfo = self.cur_frame_owner.take();
         // Return var (functions) = base_net + return_slot; None for a void task.
         let m = self.func_metas[fid as usize];
         let retvar = method.func.as_ref().map(|_| m.base_net + m.return_slot);
@@ -311,6 +314,9 @@ impl Elaborator<'_> {
         self.cur_return = saved_ret;
         self.cur_discard = saved_discard;
         self.in_frame_body = saved_frame;
+        // A class method body sets `in_frame_body` but reserves no span nets, so
+        // it must not inherit an enclosing frame's owner and hit that frame's net.
+        self.cur_frame_owner = saved_cfo;
         self.formal_str.truncate(fs_base);
         // Capture the block base AFTER the body closure (round-7): lowering the body may
         // append blocks (a `pkg::f()` inside a method reserves+lowers its frame on

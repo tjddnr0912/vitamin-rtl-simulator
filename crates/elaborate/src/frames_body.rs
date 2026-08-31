@@ -165,6 +165,9 @@ impl Elaborator<'_> {
         // take a different executor path and are unaffected.
         let saved_ffl = self.frame_fn_lowering;
         self.frame_fn_lowering = true;
+        // The span maps are keyed by (span, OWNER); see `cur_frame_owner`.
+        let saved_owner = self.cur_frame_owner;
+        self.cur_frame_owner = self.func_metas.get(fid as usize).map(|m| m.base_net);
         // A package routine's body resolves its own package first — see
         // `resolve_rtn_key`. Pushed for the whole body, so a nested call inside it
         // inherits the right scope too.
@@ -256,6 +259,7 @@ impl Elaborator<'_> {
         });
         self.cur_return = saved_ret;
         self.in_frame_body = saved_frame;
+        self.cur_frame_owner = saved_owner;
         self.formal_str.truncate(fs_base);
         // Capture the block base AFTER the body closure: lowering the body may itself
         // have appended blocks to `func_blocks` (round-7: a package-scoped call inside
@@ -292,6 +296,8 @@ impl Elaborator<'_> {
             self.cur_rtn_pkg.push(pk);
         }
         let scope_seg = format!("$func${name}");
+        let saved_owner = self.cur_frame_owner;
+        self.cur_frame_owner = self.func_metas.get(fid as usize).map(|m| m.base_net);
         let saved_ftl = self.frame_task_lowering;
         let saved_pending = std::mem::take(&mut self.pending_task_calls);
         let saved_fork_modes = std::mem::take(&mut self.pending_fork_modes);
@@ -359,6 +365,7 @@ impl Elaborator<'_> {
         });
         self.cur_return = saved_ret;
         self.in_frame_body = saved_frame;
+        self.cur_frame_owner = saved_owner;
         self.formal_str.truncate(fs_base);
         let pending = std::mem::replace(&mut self.pending_task_calls, saved_pending);
         let fork_modes_pending = std::mem::replace(&mut self.pending_fork_modes, saved_fork_modes);

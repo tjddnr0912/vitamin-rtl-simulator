@@ -11,6 +11,35 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A package function containing a `case` stopped the whole design from elaborating (P0
+  regression).** As soon as another function in the same package called it, every module
+  that merely wrote `import p::*;` failed with E3009 — once per instance, 201 times on the
+  reporting design — even though nothing instantiated or called either function. Introduced
+  by the §12.5 scrutinee hoist for frame bodies; the module-scope twin of the same two
+  functions always worked.
+
+  ⭐ **The `case` was not the cause.** A package routine's body is reserved under TWO frame
+  keys — its bare name and `pkg::name` — and the hoist recorded its capture net in a map
+  keyed by SOURCE SPAN alone. The second reservation overwrote the first, so the first frame
+  then lowered a write to a net living in the *other* frame's window, which the body
+  validator correctly reported as "an assignment to a net outside the function". Both
+  span-keyed maps (the `case` capture and its `repeat`-counter sibling — `repeat` reproduced
+  the same failure) are now keyed on `(span, owning frame)`.
+
+  ⚠️ A lookup from the wrong frame is now a MISS, which is the degradation the hoist already
+  documented as safe (per-arm re-evaluation), rather than a foreign net. Class method bodies,
+  which set the frame flag but reserve nothing, are explicitly given no owner so they miss
+  too.
+
+  The reported diagnostic complaint is answered a step further back than it was raised: the
+  wording was accurate — vita really had generated a write to an outside net — so it is not
+  reworded. What it could not say is *whose* net it was. A write to a **compiler-generated**
+  (`$…`) net now says so and asks for a bug report, because no source change can avoid one.
+
+  Values verified against iverilog through both maps and a nested package call.
+  Corpus 10/10 byte-identical.
+
+
 - **Nothing shipped for the `case` collective-signedness gap, and the reason is the
   finding.** §12.5 makes a `case` comparison unsigned as soon as one participant is, and
   that unsignedness must reach the scrutinee's own operators. vitamin applied the rule by
