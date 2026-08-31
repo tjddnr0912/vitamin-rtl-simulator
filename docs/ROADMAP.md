@@ -141,8 +141,31 @@
   - **직접 프로브로 배제된 것 넷**(전부 iverilog 와 일치): 미리셋 `reg` → x · generate 루프가 **비트별로**
     구동하는 벡터 · 파라미터 슬라이스 `[n*2 +: 2]` 로 고르는 **generate 분기**(`REG_TYPE`) ·
     **구동자 없는 wire → z** 이고 `^z` → x.
-  - **다음 프로브** = `xbar.axi_crossbar_wr_inst` 의 `int_s_axi_awvalid`/arbiter grant 출력을 c=0~2 에서
-    양 툴로 찍어 비교(계층 읽기는 vita 가 지원한다).
+  - ✅ **절반 해결 (2026-08-31)** — `always @*` 가 시각 0에 실행되던 것(§9.2.2.2 는 그 암묵 실행을
+    `always_comb`/`always_latch` 에만 준다)을 `SensKind::Level` 매핑으로 고쳤다. 상세 = CHANGELOG.
+  - 🔴 **남은 절반 = 포트 바인드가 가짜 전이를 만든다.** 완전히 격리된 재현:
+
+    ```verilog
+    module sub (input wire p, output wire o);
+      reg r; always @* r = p; assign o = r;
+    endmodule
+    // 부모:
+    reg  pr = 1'b0;              sub u1 (.p(pr), .o(o1));   // ivl x  / vita 0  ← 결함
+    wire pw; assign pw = 1'b0;   sub u2 (.p(pw), .o(o2));   // ivl 0  / vita 0  ✓
+    ```
+
+    ⭐⭐ **축은 «전이가 있었는가»다.** `assign` 소스는 넷이 x 에서 시작해 t0 에 0으로 가므로 **진짜
+    전이**이고 두 툴 다 `@*` 를 깨운다. `reg pr = 1'b0` 은 **선언 시점부터 0** 이라 전이가 없고
+    iverilog 는 안 깨운다. vita 는 자식 포트 넷을 **x 로 만들고 t0 structural settle 이 구동**해
+    **없는 x→0 전이**를 만든다(`run.rs`: settle → `arm_t0` 순서이고, `arm_t0` 의 mark 가 그 dirt 를
+    **의도적으로 보존**한다 — `assign w=1'b1` 위의 `always @(w)` 를 위해 필요하고, 실측 근거가 그
+    주석에 있다).
+  - ⚠️ **따라서 «포트 바인드 dirt 를 통째로 억제»는 틀린 고침**이다 — 그러면 `assign` 소스 쪽이
+    같이 죽는다(위 표의 두 번째 행이 오라클과 갈린다).
+  - ⭐ **고침 형태 = 넷 초기값 시딩**: 자식 포트 넷을 소스의 **선언 초기값으로 생성 시점에** 채우면,
+    쓰기 퍼널이 same-value 쓰기를 이미 버리므로 settle 이 **dirt 를 아예 안 만든다**. `assign` 소스는
+    선언 초기값이 없으니 x 로 남고 전이가 그대로 산다 ⇒ 두 행이 동시에 맞는다.
+    ⚠️ 선행 = 초기값 전파 순서(부모 reg 초기화 → 포트 바인드 → 자식 넷)와 다중 드라이버/inout 처리.
   - ⚠️ **오라클은 iverilog 뿐**(verilator 는 x/z 오라클이 아니다). vita 가 **낙관적**(x 자리에 definite)이라
     진짜 x 전파 버그를 가릴 수 있다 ⇒ silent-wrong 으로 분류.
 
