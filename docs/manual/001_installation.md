@@ -68,6 +68,24 @@ cargo test --workspace --locked
 the intended flow is to **install** the binary (next section) and invoke it as a
 terminal command.
 
+> **If you build repeatedly, sweep `target/`.** Cargo writes a new hashed binary
+> per test target per build and never reclaims the superseded ones, and this
+> workspace has **513 integration-test targets** — so every `cargo test
+> --workspace` leaves another full set on disk. Measured on one development
+> machine: **59 GiB across 357,247 files in two months** (~25 GiB/month).
+>
+> ```sh
+> cargo install cargo-sweep
+> cargo sweep --time 2      # add -d for a dry run
+> ```
+>
+> A 2-day retention took that tree to **3.5 GiB** while keeping every current
+> artifact — the next `cargo build --workspace --locked` finished in 0.08 s with
+> nothing to recompile. Use this rather than `cargo clean`, which also throws away
+> artifacts that are still current and forces a full rebuild. Do not sweep while a
+> build or test run is in flight. This only affects the build tree; installed
+> binaries and simulation results are untouched.
+
 ---
 
 ## 1.3 Install

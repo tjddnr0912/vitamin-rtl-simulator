@@ -147,6 +147,34 @@ cargo fmt --all -- --check
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain pins (MSRV 1.85, edition
 2021, `--locked`) and the determinism rules that keep builds reproducible.
 
+### Keep `target/` from growing without bound
+
+If you build vitamin from source repeatedly, **install [`cargo-sweep`][sweep] and run it
+periodically**:
+
+```sh
+cargo install cargo-sweep
+cargo sweep --time 2        # delete build artifacts untouched for 2+ days
+cargo sweep --time 2 -d     # dry run: report what would be reclaimed
+```
+
+This is not a vitamin quirk — cargo writes a **new hashed binary per test target per
+build** and never reclaims superseded ones. Vitamin just makes it visible, because the
+workspace carries **513 integration-test targets**: every `cargo test --workspace` leaves
+another full set behind. On one development machine `target/` reached **59 GiB across
+357,247 files** in two months, roughly **25 GiB per month**.
+
+A 2-day retention is safe and cheap: sweeping that tree brought `target/` to **3.5 GiB**,
+after which `cargo build --workspace --locked` finished in **0.08 s** with nothing to
+recompile — current artifacts are kept, only superseded ones go. Prefer this to
+`cargo clean`, which also discards artifacts that are still current and forces a full
+rebuild. Do not sweep while a build or test run is in flight.
+
+Contributors only: this affects the build tree, never a released binary or your
+simulation results.
+
+[sweep]: https://github.com/holmgr/cargo-sweep
+
 ## License
 
 Licensed under either of
