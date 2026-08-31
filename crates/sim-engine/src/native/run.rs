@@ -840,6 +840,29 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
         // absence would be a silent loss the day the walk's drain moves.
         k.drain_range_diags();
     }
+    // COPY-NET REPAIR, before the rollback so its own writes are dropped with
+    // the initializers'. A net whose every continuous driver MOVES bits rather
+    // than computing them has no state of its own (`crate::alias`), but the
+    // settle above evaluated those drivers while their sources still held their
+    // declared defaults — so the copies are redone here, now that the
+    // initializers have landed, and an event on one is then suppressed below
+    // unless a source really moved. Without the redo the run loop's first delta
+    // does the copy, and THAT move is the transition the source never made
+    // (ROADMAP §2-N).
+    //
+    // Order matters twice: sources come first (`copy_nets` returns dependency
+    // order) so a chain repairs in one pass, and the suppression runs AFTER
+    // `retain_snapshot` so each source's dirt is the settle's answer alone.
+    let copies = crate::alias::copy_nets(ir);
+    for cn in &copies {
+        for &ci in &cn.cas {
+            let lhs = &ir.cont_assigns[ci].lhs;
+            let rhs = ir.cont_assigns[ci].rhs;
+            let v = k.k_eval_for_lvalue(lhs, rhs);
+            k.write_settled(lhs, v);
+        }
+    }
+
     // Drop what the INITIALIZERS made dirty — and only that. The engine splits
     // its dirty list at a mark taken before it runs them, and the reason is
     // written in `arm_processes`: the t0 cont-assign settle's writes are on the
@@ -858,6 +881,23 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
     // is `set &= snapshot`. Same result as the old `split_off`, and it no longer
     // depends on the list being append-only to be correct.
     k.arena.ch.dirty.retain_snapshot(&settled);
+    // SUPPRESSION ONLY, and TRANSITIVE. A copy net cannot carry an event nothing in
+    // its source CHAIN had, so if nothing moved its dirt is dropped; if something
+    // did, the settle's own record of whether the DESTINATION moved stands.
+    // `moved` is what makes it a chain: a copy net that stayed put only because
+    // its own storage default already equalled the copied value still forwards
+    // its sources' movement, and `copy_nets` hands them over source-first so one
+    // pass suffices. Both halves are measured — see `crate::alias`.
+    let mut moved: std::collections::BTreeMap<u32, bool> = std::collections::BTreeMap::new();
+    for cn in &copies {
+        let m = cn.srcs.iter().any(|&s| {
+            k.arena.ch.dirty.contains(s as usize) || moved.get(&s).copied().unwrap_or(false)
+        });
+        moved.insert(cn.dst, m);
+        if !m {
+            k.arena.ch.dirty.remove(cn.dst as usize);
+        }
+    }
     let init_set: std::collections::BTreeSet<u32> = inits.iter().copied().collect();
     for pi in 0..ir.processes.len() as u32 {
         if init_set.contains(&pi) {

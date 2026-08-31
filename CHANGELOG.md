@@ -11,6 +11,77 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A port connection invented a transition, and everything level-sensitive behind one woke
+  on it.** `assign n = m;` between two whole nets of the same width — which is what a port
+  connection lowers to, and `assign n[1] = a; assign n[0] = b;` is what a bus does — gives `n`
+  no state of its own: it cannot hold a value its source never held. vita drove those nets from
+  the time-zero structural settle, which runs BEFORE declaration initializers, so the settle read
+  the source at its declared default and the run loop's first delta moved the net AGAIN once
+  `reg m = 1'b0;` had landed. That second move is a real change, so it woke every `always @*`,
+  `always @(n)` and `@(negedge n)` reading it.
+
+  ⭐ Six lines, and the two rows have to disagree:
+
+  ```verilog
+  module sub (input wire p, output wire o);
+    reg r; always @* r = p; assign o = r;
+  endmodule
+  reg  pr = 1'b0;              sub u1 (.p(pr), .o(o1));   // iverilog x, vita 0  ← the defect
+  wire pw; assign pw = 1'b0;   sub u2 (.p(pw), .o(o2));   // iverilog 0, vita 0  ← must keep firing
+  ```
+
+  The second row is why "suppress the port bind's dirt" is the wrong fix: a constant driver really
+  does move its net off `z` at time zero and both tools wake the waiter for it — the engine already
+  carries the measurement that dropping that dirt broke 49 of 270 generated designs. The separating
+  property is not *is it a port bind* but **did the source move**. It is also why the recorded
+  proposal — seed the child port net from the source's declaration initializer — was too narrow
+  twice over: the same defect appears with no port at all (`assign w = r;` inside one module), and
+  an UNINITIALISED source must equally not manufacture an edge, which seeding cannot express.
+
+  So vita now identifies the nets whose every continuous driver MOVES bits rather than computing
+  them (whole net or a constant, in-range slice on both sides; equal widths; no delay; not a
+  multi-driver resolution), redoes those copies after static initialization, and then suppresses
+  the net's time-zero event unless one of its sources really moved. A driver that computes — an
+  operator, a concatenation, a width change, a runtime index — is not a move: its output has an
+  initial state and the settle's first evaluation is a real transition out of it.
+
+  ⭐ **30 cells went from disagreeing with iverilog to agreeing, and none regressed** (117 cells,
+  three ways): port binds of initialised and uninitialised variables, `assign w = reg`, alias
+  chains, grandchild hierarchy, multi-bit ports, buses assembled one bit at a time,
+  `assign w = v[0]`, single-driver `wand`/`wor`, and the `@*` / `@(p)` / `@(negedge p)` waiters
+  behind all of them. Corpus digests, `.velab` bytes and the four examples' stdout and VCD are
+  unchanged; `format_version` stays 29.
+
+  ⚠️⚠️ **Two adversarial review rounds, one correction each, and they pull in opposite
+  directions.** The first version handed a copy net its sources' event status verbatim
+  (`dirty[n] := OR over its sources`), which reads as the same rule and is not: in vita `n` and its
+  source are two nets with their OWN storage defaults — a driven `wire` starts `z`, a `logic`/`reg`
+  starts `x` — where iverilog collapses them into one net with one default. So a source can
+  legitimately move while the destination provably never does, and the OR arm woke a child module on
+  a port that holds `x` for the whole run (16 of 56 generated cells). Round 2 then broke the
+  correction: asking only the IMMEDIATE sources is wrong too, because a copy can stay put for a
+  reason unrelated to its source — its own default already equals the copied value. With
+  `assign vv = 2'b1z;` the vector moves, the `wire` copy of bit 0 does not (its `z` default already
+  matches), and the `logic` copy of THAT does (its `x` default does not); iverilog fires on the last
+  one and plain suppression did not. So the movement is carried along the chain, and the `x` twin of
+  the same design — where iverilog is silent — is the control that keeps it from collapsing back
+  into the OR arm. Both spellings are pinned.
+
+  ⚠️ Three existing tests encoded the old behaviour and were re-measured rather than adjusted: two
+  `bind` cells asserting verilator's extra time-zero line (iverilog, asked through the equivalent
+  plain instantiation, prints only the later one), and a two-instance `case` cell whose scrutinees
+  came from port-bound `reg`s with declaration initializers — both instances answer `x` in iverilog
+  too, which also means that cell could no longer see the shared-capture bug it existed to pin, so
+  its scrutinees are now written from an `initial` block, which IS an event.
+
+  ⚠️ `verilog-axi` is still not promoted. Its register-slice shape is fixed — driving the unmodified
+  `axi_register_wr` through a port-bound `reg` now matches iverilog cycle for cycle — but the
+  crossbar reaches that slice through computed wires, and there iverilog is not self-consistent:
+  with identical operands and identical values it reports a time-zero event for `assign w = a | b;`
+  and none for `assign w = a & b;`. Matching that would mean reproducing an elaborator's folding
+  table, not implementing a rule; ROADMAP §2-N records the measurement and the residuals.
+
+
 - **`always @*` no longer runs at time zero.** IEEE 1800 §9.2.2.2 gives that implicit
   time-zero execution to `always_comb` and `always_latch`; a plain `always @*` waits for
   its inferred read set to change, exactly as `always @(a or b)` does. vita ran it, which

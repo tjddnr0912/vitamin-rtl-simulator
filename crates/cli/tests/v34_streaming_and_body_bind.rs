@@ -143,9 +143,19 @@ fn an_arithmetic_shift_token_after_a_brace_is_not_called_streaming() {
 // ───────────────────────── (B) `bind` in a module body ─────────────────────────
 
 /// The reporter's own spelling: a bind inside the body of the module it targets.
-/// verilator 5.050 prints `chk 0` / `chk 1` and finishes at 2; so does vita now.
+///
+/// ⚠️ RE-MEASURED 2026-08-31. This asserted verilator's `chk 0` at time zero as
+/// well, and verilator is not an oracle for event ordering. `bind` is an
+/// instantiation, so the same design written as a plain `chk c_i_inst(.c(c_i));`
+/// answers the question in iverilog — and iverilog prints **only `chk 1`**:
+/// `logic c_i = 0;` is 0 from its declaration, so the port net it drives never
+/// transitions and `always @(c)` never fires at time zero (ROADMAP §2-N,
+/// `copy_net_no_t0_transition.rs`). verilator prints the extra line in both
+/// spellings, so the difference is verilator's, not `bind`'s.
+///
+/// What this cell still pins is that the bind RUNS and finishes at 2.
 #[test]
-fn a_body_bind_on_the_enclosing_module_runs_like_verilator() {
+fn a_body_bind_on_the_enclosing_module_runs() {
     let (out, code) = run_top(
         "`timescale 1ns/1ns\nmodule chk(input logic c);\n  \
          always @(c) $display(\"chk %b\", c);\nendmodule\n\
@@ -154,14 +164,25 @@ fn a_body_bind_on_the_enclosing_module_runs_like_verilator() {
         Some("t"),
     );
     assert_eq!(code, Some(0), "{out}");
-    assert!(out.contains("chk 0"), "{out}");
     assert!(out.contains("chk 1"), "{out}");
+    assert!(
+        !out.contains("chk 0"),
+        "a declaration initializer makes no edge (iverilog):\n{out}"
+    );
     assert!(out.contains("at time 2"), "{out}");
 }
 
 /// ⭐ The load-bearing case: the target module has TWO instances, so the bind must
 /// fire once per instance — which is what makes "keyed by target module name" the
-/// right claim. verilator: `chk v=3` ×2 then `chk v=9` ×2.
+/// right claim.
+///
+/// ⚠️ RE-MEASURED 2026-08-31 against iverilog, through the plain-instantiation
+/// spelling of the same design (`bind` is an instantiation, and iverilog cannot
+/// parse `bind`): iverilog prints `chk v=9` **twice and nothing at time zero** —
+/// `logic [3:0] v = 4'd3;` never transitions, so the port net is a rename that
+/// makes no edge (ROADMAP §2-N). verilator prints `chk v=3` ×2 first; it is not
+/// an oracle for event ordering. The per-instance claim is carried entirely by
+/// the `v=9` pair, which is the assertion below.
 #[test]
 fn a_body_bind_attaches_to_every_instance_of_its_target() {
     let (out, code) = run_top(
@@ -175,8 +196,8 @@ fn a_body_bind_attaches_to_every_instance_of_its_target() {
     assert_eq!(code, Some(0), "{out}");
     assert_eq!(
         out.matches("chk v=3").count(),
-        2,
-        "once per instance:\n{out}"
+        0,
+        "a declaration initializer makes no edge (iverilog):\n{out}"
     );
     assert_eq!(out.matches("chk v=9").count(), 2, "{out}");
 }

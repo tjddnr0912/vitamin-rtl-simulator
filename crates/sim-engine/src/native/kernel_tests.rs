@@ -2168,9 +2168,20 @@ fn s1d4c2b_body_walk(src: &str, name: &str, seed: u64) -> usize {
     let mut nba_applied = 0usize;
 
     for pass in 0..4 {
+        // ⚠️ ARM FIRST, MIRROR SECOND — and only this side is armed.
+        // `arm_processes` WRITES: it runs the declaration initializers, and since
+        // the copy-net repair (`crate::alias`) it also re-copies every rename net.
+        // The native kernel below is handed a bare arena with no `arm_t0`, so
+        // mirroring after the arm is what keeps this comparison about the two BODY
+        // WALKS rather than about one store having been initialised. Mirroring
+        // first was fine only while `arm_processes` happened to write nothing for
+        // these designs; `two_instances` (whose ports are renames of `a`/`b`) is
+        // the cell that stopped being true.
+        let mut sched_e = Scheduler::new(&mut st_e, 33_000, 10_000, None, opts.fork_modes.clone());
+        sched_e.arm_processes();
         // Same start state on both sides, then each runs its own executor.
         mirror_state(
-            &mut st_e,
+            sched_e.st,
             &mut arena,
             &mut rng,
             n_nets,
@@ -2191,10 +2202,13 @@ fn s1d4c2b_body_walk(src: &str, name: &str, seed: u64) -> usize {
                 );
             }
         }
-        assert_stores_equal(&st_e, &arena, n_nets, &format!("{name}/pass{pass}/start"));
+        assert_stores_equal(
+            sched_e.st,
+            &arena,
+            n_nets,
+            &format!("{name}/pass{pass}/start"),
+        );
 
-        let mut sched_e = Scheduler::new(&mut st_e, 33_000, 10_000, None, opts.fork_modes.clone());
-        sched_e.arm_processes();
         let mut sched_n = Scheduler::new(&mut st_n, 33_000, 10_000, None, Default::default());
         let mut nk = NativeKernel::new(&ir, arena, &mut sched_n, &empty, 10_000);
 

@@ -143,29 +143,70 @@
     **구동자 없는 wire → z** 이고 `^z` → x.
   - ✅ **절반 해결 (2026-08-31)** — `always @*` 가 시각 0에 실행되던 것(§9.2.2.2 는 그 암묵 실행을
     `always_comb`/`always_latch` 에만 준다)을 `SensKind::Level` 매핑으로 고쳤다. 상세 = CHANGELOG.
-  - 🔴 **남은 절반 = 포트 바인드가 가짜 전이를 만든다.** 완전히 격리된 재현:
+  - ✅ **RESOLVED (2026-09-01) — the other half: a continuous driver that MOVES bits invents no
+    time-zero transition.** The isolated repro above now answers `o1=x o2=0`, which is iverilog's
+    answer, and 46 further cells came with it (**47 FIXED · 0 REGRESSION** over 162 three-way cells).
+    `assign n = m;` between two whole nets of equal width — and `assign n[1] = a; assign n[0] = b;`,
+    which is what a port connection and a bus bit lower to — gives `n` no state of its own, so vita
+    re-copies such nets after static initialization and then SUPPRESSES their time-zero event unless
+    something in their source CHAIN really moved. Implementation = `sim_engine::alias::copy_nets` + one repair pass in each
+    backend's t0 arming; the argument, the measurements and the two traps are in CHANGELOG and in
+    `crates/sim-engine/src/alias.rs`.
+    ⚠️ The queue line above proposed *"seed the child port net from the source's declaration
+    initializer"*. That is too narrow twice over: **the same defect appears with no port at all**
+    (`assign w = r;` inside one module) and **the fix must not read the initializer** — an
+    UNINITIALISED source must equally not manufacture an edge, which seeding cannot express.
+
+  - 🔴 **verilog-axi is still not promoted, and the residual is an ORACLE ARTIFACT rather than a vita
+    defect.** `XC=29` (iverilog) vs `XC=0` (vita) is unchanged at N=200 and the digest has not moved.
+    The register-slice shape the 2026-08-31 census named IS fixed — driving the unmodified
+    `axi_register_wr` through a port-bound `reg` or an `assign w = reg` now matches iverilog cycle for
+    cycle — but the crossbar reaches that slice through **computed** wires
+    (`int_s_axi_wready[m] = int_axi_wready[w_select_reg*S_COUNT+m] || w_drop_reg`), and vita fires a t0
+    event on those while iverilog does not.
+    ⚠️⚠️ **iverilog gives two answers to the same question here.** Two designs differing only in an
+    operator, with identical operands and identical values:
 
     ```verilog
-    module sub (input wire p, output wire o);
-      reg r; always @* r = p; assign o = r;
-    endmodule
-    // 부모:
-    reg  pr = 1'b0;              sub u1 (.p(pr), .o(o1));   // ivl x  / vita 0  ← 결함
-    wire pw; assign pw = 1'b0;   sub u2 (.p(pw), .o(o2));   // ivl 0  / vita 0  ✓
+    reg a = 1'b0; reg b = 1'b0; wire w; assign w = a | b;  always @(w) c=c+1;  // ivl c=1
+    reg a = 1'b0; reg b = 1'b0; wire w; assign w = a & b;  always @(w) c=c+1;  // ivl c=0
     ```
 
-    ⭐⭐ **축은 «전이가 있었는가»다.** `assign` 소스는 넷이 x 에서 시작해 t0 에 0으로 가므로 **진짜
-    전이**이고 두 툴 다 `@*` 를 깨운다. `reg pr = 1'b0` 은 **선언 시점부터 0** 이라 전이가 없고
-    iverilog 는 안 깨운다. vita 는 자식 포트 넷을 **x 로 만들고 t0 structural settle 이 구동**해
-    **없는 x→0 전이**를 만든다(`run.rs`: settle → `arm_t0` 순서이고, `arm_t0` 의 mark 가 그 dirt 를
-    **의도적으로 보존**한다 — `assign w=1'b1` 위의 `always @(w)` 를 위해 필요하고, 실측 근거가 그
-    주석에 있다).
-  - ⚠️ **따라서 «포트 바인드 dirt 를 통째로 억제»는 틀린 고침**이다 — 그러면 `assign` 소스 쪽이
-    같이 죽는다(위 표의 두 번째 행이 오라클과 갈린다).
-  - ⭐ **고침 형태 = 넷 초기값 시딩**: 자식 포트 넷을 소스의 **선언 초기값으로 생성 시점에** 채우면,
-    쓰기 퍼널이 same-value 쓰기를 이미 버리므로 settle 이 **dirt 를 아예 안 만든다**. `assign` 소스는
-    선언 초기값이 없으니 x 로 남고 전이가 그대로 산다 ⇒ 두 행이 동시에 맞는다.
-    ⚠️ 선행 = 초기값 전파 순서(부모 reg 초기화 → 포트 바인드 → 자식 넷)와 다중 드라이버/inout 처리.
+    Same family: it collapses `pr & 1'b1`, `~(~pr)`, `{pr}` and `1'b1 ? pr : 1'b0` (its elaborator
+    folds the identity away first) but not `pr | 1'b0` or `pr ^ 1'b0`. The boundary is where
+    iverilog's elaborator happens to stop, not a rule any LRM sentence supplies. vita's rule is
+    uniform — **a driver that computes has an initial state of its own; a driver that moves bits does
+    not** — and matching the rest would mean reproducing iverilog's functor table.
+    ⇒ **Do not chase this without a second oracle.** verilator is not one here: it answers
+    `a=10 b=11` where iverilog and vita both now answer `a=x b=x`. Promotion needs either the digest
+    to stop counting x-cycles or a ruling that this axis is oracle-split.
+
+  - 📌 **Measured 2026-09-01 and deliberately left (all pre-existing, all PRE == POST):**
+    - `assign w = 1'bx;` fires a t0 event in vita and not in iverilog — vita's driven-net default is
+      `z`, iverilog's is effectively `x`. Same for a computed driver whose value is `x`.
+    - A TRUNCATING copy (`wire [3:0] w; assign w = r8;`) — iverilog collapses it, vita treats the
+      truncation as computed. A widening one fires in both.
+    - `assign #1 w = r;` — iverilog 0 events, vita **2**.
+    - A multi-driver net, and a two-driver `wand`/`wor` — iverilog 0, vita 1. A SINGLE-driver
+      `wand`/`wor` is fixed by the copy rule.
+    - A concatenation lvalue (`assign {x,y} = …`) is excluded by the single-chunk gate.
+    - vita's dirty channel is per NET and iverilog's collapse is per BIT, so a constant driver on
+      `bus[1]` wakes a reader of `bus[0]` in vita and not in iverilog.
+    - **Declaration-initializer read order is oracle-SPLIT**: `wire w; assign w = 1'b1; reg r = w;`
+      is `z` in iverilog and `1` in verilator and in vita. IEEE 1800 §6.8 puts a static initializer
+      before any `initial`/`always` *procedure*; a continuous assignment is neither, so the order is
+      arbitrary and vita is on verilator's side ⇒ untouchable axis, pinned not moved.
+  - 🆕 **A gate primitive is a bit move that `copy_nets` cannot see.** `buf b(o, i);` lowers to
+    `assign o = ~(~i);`, whose rhs is an `Expr::Unary`, so the predicate refuses it and vita keeps a
+    t0 event iverilog does not have. Closing it means recognising the double-negation the desugar
+    emits, or emitting a bare `Signal` rhs for `buf` in the first place.
+  - 🆕 **FST loses every value in a dump with exactly ONE time-table entry.** Two designs with
+    different values produce byte-identical 530-byte `.fst` files in which every signal reads `x`, at
+    exit 0 — confirmed by reading them back with `fst-reader`, against iverilog's own FST as the
+    oracle, on all three backends, and present identically on PRE (so NOT caused by §2-N). A dump with
+    ≥2 distinct times is byte-correct. Likely one missing `time_change` in `crates/vcd-writer/src/fst.rs`.
+    ⚠️ It also makes FST useless as a waveform differential oracle: 24 designs whose VCDs differ
+    produced identical FSTs.
   - ⚠️ **오라클은 iverilog 뿐**(verilator 는 x/z 오라클이 아니다). vita 가 **낙관적**(x 자리에 definite)이라
     진짜 x 전파 버그를 가릴 수 있다 ⇒ silent-wrong 으로 분류.
 

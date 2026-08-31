@@ -219,6 +219,41 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ A rule copied from a tool that COLLAPSES two objects inherits an aliasing you do not have (2026-09-01 · §4.5.397)
+
+§2-N's copy-net rule was derived from iverilog, which turns `assign n = m;` into ONE net: `n` and `m`
+share a value, a default and an event. vita keeps two nets, each with its own storage default — a
+driven `wire` starts `z`, a `logic`/`reg` starts `x` — so the sentence the rule is built on, *"`n` has
+no state of its own"*, is true of the VALUE and false of the DEFAULT. Both naive translations were
+shipped and both were caught by adversarial review, one per round, failing in opposite directions:
+
+- **Mirroring the source's event** (`dirty[n] := OR over sources`) INVENTS events. The source
+  legitimately moves while the destination provably never does — `assign vv = {1'b1,1'bx};` moves,
+  and a `logic` copy of bit 0 is `x` before and after — so the mirror woke a child module on a port
+  that holds `x` for the whole run. 16 of 56 generated cells, correct→silent-wrong.
+- **Suppressing on the IMMEDIATE source** LOSES events. A copy can stay put for a reason unrelated
+  to its source: its own default already equals the copied value. `assign vv = 2'b1z;` moves, the
+  `wire` copy of bit 0 does not (its `z` default already matches), and the `logic` copy of THAT one
+  does — and iverilog fires on it.
+
+The property that survives the split is **transitive**: suppress only when nothing in the source
+CHAIN moved, and let a copy forward its sources' movement whether or not it moved itself.
+
+**Rule**: when you import a rule from a simulator, ask what that simulator MERGES that you keep
+separate — storage, defaults, identity, event channels — and write the failing design for each merged
+field before shipping. And build the twin that differs only in the merged field (here `2'b1z` vs
+`2'b1x`, where the oracle answers differently), because that pair is the only thing that separates
+"forward the movement" from "mirror the event".
+
+⚠️ Corollary for review rounds: **the fix for round N is the finding of round N+1**. Two rounds here,
+each correcting the previous correction, neither found by the author. A delta round is not optional
+after a design change, and its brief must name the delta so the lenses attack the new claim rather
+than re-measure the old one.
+
+⚠️ Corollary for verifiers: when a verify phase dies wholesale (here: a session limit killed all ten),
+its lens findings are UNVERIFIED, not cleared. The blocking repro as written did not reproduce for me;
+rebuilding it from the stated mechanism did, and the mechanism was exactly right.
+
 ### ⭐⭐ A rewrite justified by an equivalence inherits its PREMISE as a live obligation (2026-08-27 · §4.5.387)
 
 The round-36 cast reorder is provably value-neutral: coercing a widening 2-state cast at

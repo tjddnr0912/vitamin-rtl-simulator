@@ -220,6 +220,31 @@ impl DirtyBits {
         out
     }
 
+    /// Is `i` a member?
+    #[inline]
+    pub fn contains(&self, i: usize) -> bool {
+        self.words[i >> 6] & (1u64 << (i & 63)) != 0
+    }
+
+    /// Drop `i`. Returns whether it WAS a member.
+    ///
+    /// The summary bit is cleared only when the whole word empties, which keeps
+    /// `drain_with`'s invariant ("a set summary bit means that word may hold
+    /// members") exact rather than merely conservative.
+    #[inline]
+    pub fn remove(&mut self, i: usize) -> bool {
+        let (wi, b) = (i >> 6, 1u64 << (i & 63));
+        let w = &mut self.words[wi];
+        if *w & b == 0 {
+            return false;
+        }
+        *w &= !b;
+        if *w == 0 {
+            self.summary[wi >> 6] &= !(1u64 << (wi & 63));
+        }
+        true
+    }
+
     /// A copy of the raw words, for `arm_t0`'s MARK.
     pub fn snapshot(&self) -> Vec<u64> {
         self.words.clone()

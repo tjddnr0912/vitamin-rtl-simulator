@@ -27,6 +27,7 @@
 // SAME file (single corpus source) instead of duplicating it. sim-ir precedent.
 extern crate self as sim_engine;
 
+mod alias;
 mod backend;
 mod builtins;
 mod eval;

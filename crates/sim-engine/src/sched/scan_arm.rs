@@ -1066,6 +1066,31 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             let entry = self.st.ir.processes[*pid as usize].entry;
             let _ = self.run_body(*pid, entry);
         }
+        // COPY-NET REPAIR — the tier-3 twin is `native::run::arm_t0`, and the
+        // whole argument lives in `crate::alias`. A net whose every continuous
+        // driver MOVES bits rather than computing them has no state of its own,
+        // but the settle above evaluated those drivers while their sources still
+        // held their declared defaults, so the copies are redone here
+        // (initializers have landed) and then handed their sources' event status.
+        // Without it the run loop's first delta does the copy, and THAT move is
+        // the transition the source never made (ROADMAP §2-N).
+        //
+        // The writes go in before the rollback so they are dropped with the
+        // initializers'; the suppression goes after it, so each source's dirt is
+        // the settle's answer alone. `copy_nets` is in dependency order, so one
+        // pass repairs a chain and every source's flag is final when its reader
+        // asks.
+        let copies = crate::alias::copy_nets(self.st.ir);
+        for cn in &copies {
+            for &ci in &cn.cas {
+                let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
+                let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
+                let v = self.eval_cont_assign(ci, &lhs, ca_rhs);
+                let offs = self.resolve_lvalue_offsets(&lhs);
+                self.st.write_lvalue(&lhs, v, &offs);
+            }
+        }
+
         // …and drop what those writes made dirty. "Before any process is armed" means the
         // initialization is not a transition anyone can observe: `reg clk = 0;` must not
         // hand `always @clk` an X→0 edge, and `int nc = src + 1;` must not hand one to
@@ -1074,6 +1099,32 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // from this list, so clearing it costs nothing there.
         for n in self.st.dirty.split_off(settled) {
             self.st.dirty_flag[n as usize] = false;
+        }
+        // SUPPRESSION ONLY, and TRANSITIVE — the tier-3 twin says why: a copy net
+        // cannot carry an event nothing in its source CHAIN had, but it CAN
+        // legitimately stay put while a source moves, because the two nets have
+        // their own storage defaults. `moved` forwards a source's movement past a
+        // copy whose own default masked it.
+        let mut moved: std::collections::BTreeMap<u32, bool> = std::collections::BTreeMap::new();
+        let mut dropped_any = false;
+        for cn in &copies {
+            let d = cn.dst as usize;
+            let m = cn.srcs.iter().any(|&s| {
+                self.st.dirty_flag[s as usize] || moved.get(&s).copied().unwrap_or(false)
+            });
+            moved.insert(cn.dst, m);
+            if !m && self.st.dirty_flag[d] {
+                self.st.dirty_flag[d] = false;
+                dropped_any = true;
+            }
+        }
+        if dropped_any {
+            // `dirty` is a list with a membership flag beside it, so a cleared
+            // flag has to be paid for by compacting the list — `propagate_changes`
+            // reads the LIST, not the flags.
+            let mut v = std::mem::take(&mut self.st.dirty);
+            v.retain(|n| self.st.dirty_flag[*n as usize]);
+            self.st.dirty = v;
         }
         let init_set: std::collections::BTreeSet<u32> = inits.iter().copied().collect();
 

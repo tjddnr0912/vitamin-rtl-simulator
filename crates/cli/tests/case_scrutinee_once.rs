@@ -335,15 +335,25 @@ fn an_always_comb_case_keeps_its_sensitivity() {
 /// elaboration is per-instance, so this is a property of how nets are minted
 /// rather than something the lowering arranges. Pinned because a shared capture
 /// would make the second instance read the first one's scrutinee.
+///
+/// ⚠️ The scrutinees are driven from an `initial` block, NOT from declaration
+/// initializers, and the difference is the whole point of `copy_net_no_t0_
+/// transition.rs`: a `reg s = 2'd0;` port-bound to a child never transitions, so
+/// the child's `always @*` never runs and BOTH instances answer `x` — which is
+/// iverilog's answer too, re-measured here. This cell used to be written that way
+/// and passed on the old behaviour, but with `a=x b=x` it cannot see a shared
+/// capture at all, so it was asking nothing. An `initial` write IS an event, so
+/// the blocks run and the two answers separate again.
 #[test]
 fn two_instances_do_not_share_a_capture() {
     let (out, code) = run("`timescale 1ns/1ns\n\
          module m(input [1:0] s, output reg [7:0] o);\n  \
          always @* case (s) 2'd0: o = 8'd10; 2'd1: o = 8'd11; default: o = 8'd99; endcase\n\
          endmodule\n\
-         module tb;\n  reg [1:0] x = 2'd0, y = 2'd1;\n  wire [7:0] a, b;\n  \
+         module tb;\n  reg [1:0] x, y;\n  wire [7:0] a, b;\n  \
          m u0(.s(x), .o(a));\n  m u1(.s(y), .o(b));\n  \
-         initial begin #1 $display(\"a=%0d b=%0d\", a, b); $finish; end\nendmodule\n");
+         initial begin x = 2'd0; y = 2'd1; #1 $display(\"a=%0d b=%0d\", a, b); $finish; end\n\
+         endmodule\n");
     assert_eq!(code, Some(0), "{out}");
     assert!(out.contains("a=10 b=11"), "each instance its own:\n{out}");
 }
