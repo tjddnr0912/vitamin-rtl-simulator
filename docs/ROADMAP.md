@@ -130,7 +130,21 @@
   **같은 사이클(123,166)에 완료**하고 핸드셰이크 신호도 초기 사이클에서 일치한다. 갈리는 것은 x 축뿐이고
   vita 가 **낙관적**(x 여야 할 자리에 definite)이라 실제 x 전파 버그를 가릴 수 있다 ⇒ silent-wrong.
   **오라클 = iverilog**(verilator 는 x/z 오라클이 아니다). 이것 때문에 verilog-axi 는 코퍼스에서
-  **승격 보류**(다이제스트 불일치) · 축은 §3 ⑫ 와 **무관**하고 별도 머신러리다(리셋 없는 등록 출력의 초기값).
+  **승격 보류**(다이제스트 불일치) · 축은 §3 ⑫ 와 **무관**하다.
+
+  **2026-08-31 국소화 (착수 시 여기서 시작하라 — 아래는 전부 실측)**
+  - **첫 발산 = c=1**, 리셋 해제 직후 첫 사이클. c=0 은 양쪽 `00`.
+  - ⚠️ **내가 처음 적은 이유 *"리셋 없는 등록 출력"* 은 반증됐다** — `axi_register_wr.v:148` 의
+    `m_axi_awvalid_reg = 1'b0` 처럼 **선언 초기화가 있다** ⇒ x 는 조합 경로로 **상류에서 전파돼 들어온다**.
+  - **addr 디코드 경로는 일치**한다: `…s_ifaces[0].addr_inst` 의 `m_select`·`m_axi_avalid`·`s_axi_aready`
+    가 c=0~2 에서 양쪽 다 0 ⇒ 발원지는 **register slice 상류**(`int_s_axi_*` = arbiter/grant 경로).
+  - **직접 프로브로 배제된 것 넷**(전부 iverilog 와 일치): 미리셋 `reg` → x · generate 루프가 **비트별로**
+    구동하는 벡터 · 파라미터 슬라이스 `[n*2 +: 2]` 로 고르는 **generate 분기**(`REG_TYPE`) ·
+    **구동자 없는 wire → z** 이고 `^z` → x.
+  - **다음 프로브** = `xbar.axi_crossbar_wr_inst` 의 `int_s_axi_awvalid`/arbiter grant 출력을 c=0~2 에서
+    양 툴로 찍어 비교(계층 읽기는 vita 가 지원한다).
+  - ⚠️ **오라클은 iverilog 뿐**(verilator 는 x/z 오라클이 아니다). vita 가 **낙관적**(x 자리에 definite)이라
+    진짜 x 전파 버그를 가릴 수 있다 ⇒ silent-wrong 으로 분류.
 
 ## 2-R. 외부 리포트 P0 (해결 기록 — 상세는 ARCHIVE)
 
