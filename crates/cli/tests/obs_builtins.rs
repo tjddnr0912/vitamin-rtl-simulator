@@ -151,14 +151,34 @@ fn builtin_counts_are_hand_checkable() {
     assert_eq!(calls(&j, "$display"), Some(1));
 
     let b = builtins_obj(&j);
-    // The two fields that answer "may I add these up?". They are the contract a
-    // reader needs and are asserted so they cannot quietly change meaning.
-    assert!(b.contains("\"attribution\": \"self\""), "{b}");
+    // The fields that answer "may I add these up?" and "may I read a row as a
+    // saving?". They are the contract a reader needs and are asserted so they
+    // cannot quietly change meaning.
+    //
+    // ⚠️ `self-plus-arguments`, not `self`: the arms evaluate a call's own
+    // arguments inside its timed span, so a row bounds the prize from above
+    // rather than predicting it. The old `"self"` cost a reviewer a nearly
+    // published 64% where the real gain was 9.7%.
+    assert!(
+        b.contains("\"attribution\": \"self-plus-arguments\""),
+        "{b}"
+    );
+    assert!(
+        b.contains("\"time_semantics\""),
+        "the caveat must ship: {b}"
+    );
     assert!(b.contains("\"included_in_processes\": true"), "{b}");
     assert!(b.contains("\"timed\": false"), "counts-only run: {b}");
+    // ⚠️ The FIELD, not the substring. `time_semantics`'s prose names `time_s`,
+    // and an untimed run still ships that sentence — what must be absent is a
+    // `"time_s":` key, whose `0.0` would read as "costs nothing".
     assert!(
-        !b.contains("time_s"),
+        !b.contains("\"time_s\":"),
         "an untimed run must not emit a 0.0 that reads as `costs nothing`: {b}"
+    );
+    assert!(
+        !b.contains("obs_overhead_est_s"),
+        "an untimed run measures no overhead, so it must claim none: {b}"
     );
     // distinct = the 8 names above; total_calls = 1+5+4+4+1+1+1+1 = 18.
     assert!(b.contains("\"distinct\": 8"), "{b}");

@@ -377,18 +377,44 @@ impl ObsRun<'_> {
                 rows.sort_by(|a, b| b.1.calls.cmp(&a.1.calls).then_with(|| a.0.cmp(b.0)));
                 s.push_str("{\"timed\": ");
                 s.push_str(if b.timed { "true" } else { "false" });
-                // The two fields that answer "may I add these up?", stated rather
-                // than left to a reader (doc-19 §4.9). `attribution:"self"` =
-                // each row EXCLUDES builtins nested inside it, so the rows are
-                // disjoint; `included_in_processes:true` = that time is ALSO
-                // inside the `processes` row of whichever body called it, so the
-                // two arrays must never be summed together.
-                s.push_str(", \"attribution\": \"self\", \"included_in_processes\": true");
+                // The fields that answer "may I add these up?" and "may I read
+                // a row as a saving?", stated rather than left to a reader
+                // (doc-19 §4.9).
+                //
+                // ⚠️⚠️ `attribution` used to say `"self"`, and that was
+                // MISLEADING in the one direction that matters. What `leave`
+                // subtracts is builtins nested inside this one — NOT the
+                // ordinary expression work in this call's own ARGUMENTS, which
+                // the arms evaluate inside the timed span. So `$signed(<big
+                // expression>)` charges the big expression to `$signed`. A
+                // reviewer measured a row at 64% of a run whose real removal
+                // gain was 9.7% (6.6x over) and nearly published the 64%.
+                // The label now says what the number is.
+                s.push_str(
+                    ", \"attribution\": \"self-plus-arguments\", \"included_in_processes\": true",
+                );
+                s.push_str(
+                    ", \"time_semantics\": \"ranking and UPPER BOUND on removal gain: a row's \
+                     time_s includes evaluating that call's own arguments (nested builtins are \
+                     subtracted, ordinary expression work is not), so removing the call recovers \
+                     at most this, usually much less\"",
+                );
                 s.push_str(", \"distinct\": ");
                 s.push_str(&rows.len().to_string());
                 s.push_str(", \"total_calls\": ");
                 let total: u64 = rows.iter().map(|r| r.1.calls).sum();
                 s.push_str(&total.to_string());
+                // What the INSTRUMENT cost, measured on this machine now rather
+                // than assumed: `overhead_estimate_s` times a batch of the same
+                // clock reads an invocation pays and scales by the invocations
+                // taken. Emitted only when timing was on (it is 0.0 otherwise,
+                // and a 0.0 would read as "timing is free"). Asked for by a
+                // reviewer who could not tell how much of a `time_s` was the
+                // measurement — see `time_semantics`.
+                if b.timed {
+                    s.push_str(", \"obs_overhead_est_s\": ");
+                    s.push_str(&fmt_wall(b.overhead_estimate_s(total)));
+                }
                 s.push_str(",\n  \"items\": [");
                 for (i, (name, acc)) in rows.iter().enumerate() {
                     s.push_str(if i > 0 { ",\n    {" } else { "\n    {" });

@@ -162,7 +162,13 @@ fn obs_procs_counts_are_hand_checkable() {
     );
     // COUNT-ONLY runs carry NO `time_s`: a 0.0 would read as "this body is
     // free", which is a different claim from "nobody measured".
-    assert!(!m.contains("time_s"), "untimed run emitted time_s:\n{m}");
+    //
+    // ⚠️ The FIELD, not the substring — this is the whole `run.json`, and
+    // `builtins.time_semantics` names `time_s` inside its prose on every run.
+    assert!(
+        !m.contains("\"time_s\":"),
+        "untimed run emitted time_s:\n{m}"
+    );
 
     let rows = rows(&m);
     assert_eq!(rows.len(), 6, "one row per process + per assign: {rows:?}");

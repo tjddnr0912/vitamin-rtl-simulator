@@ -11,6 +11,26 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A profile field said `attribution: "self"` and it was not self time (R7).** A reviewer
+  measured a `builtins` row at **64% of a run whose real removal gain was 9.7%** — 6.6× over
+  — and nearly published the 64%. Instrumentation overhead (~11%) does not explain it.
+
+  ⭐ The cause is in the code's own comment, which was half of the story: what the timer
+  subtracts is builtins nested inside a call, **not the ordinary expression work in that
+  call's arguments**, which the arms evaluate inside the timed span. So
+  `$signed(<big expression>)` charges the big expression to `$signed`. The label was
+  accurate about nesting and misleading about everything else.
+
+  `run.json` now says what the number is: `attribution` reads `"self-plus-arguments"`, a new
+  `time_semantics` field states in one sentence that a row **ranks** and is an **upper bound
+  on removal gain**, and — also asked for — `obs_overhead_est_s` reports what the timing
+  itself cost, measured on the machine at emit time rather than assumed.
+
+  ⚠️ Two pinned tests asserted `!contains("time_s")` on an untimed run and broke, because
+  the new caveat names `time_s` in its prose. Both now ask for the `"time_s":` FIELD, which
+  is what they meant.
+
+
 - **A constant function could not write a part-select of its own return value, and an
   untyped parameter took the wrong width from a conditional.** Two gaps, one design:
   `verilog-axi`'s crossbar computes its base-address vector with

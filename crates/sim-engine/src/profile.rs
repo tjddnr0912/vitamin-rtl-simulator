@@ -200,6 +200,37 @@ pub struct BuiltinCounts {
     pub rows: std::collections::BTreeMap<&'static str, BuiltinAcc>,
 }
 
+impl BuiltinCounts {
+    /// A measured estimate of what the TIMING ITSELF cost this run, in seconds.
+    ///
+    /// ⚠️ This exists because a reviewer nearly published "`$signed` is 33% of
+    /// our run" off a `time_s` column, and needed to know how much of the number
+    /// was the instrument. Calibrated here rather than assumed: time a batch of
+    /// `enter`/`leave` clock reads NOW, on this machine, and multiply by the
+    /// invocations actually taken. It is an ESTIMATE and the field name says so.
+    ///
+    /// Zero when timing was off — then `enter` reads no clock at all.
+    pub fn overhead_estimate_s(&self, total_calls: u64) -> f64 {
+        if !self.timed || total_calls == 0 {
+            return 0.0;
+        }
+        const N: u32 = 2000;
+        let t0 = std::time::Instant::now();
+        let mut sink = 0u64;
+        for _ in 0..N {
+            // The pair a real invocation pays: one read to open, one to close.
+            let a = std::time::Instant::now();
+            sink = sink.wrapping_add(a.elapsed().as_nanos() as u64);
+        }
+        let per_call = t0.elapsed().as_secs_f64() / f64::from(N);
+        // Keep the loop from being optimised away without perturbing the timing.
+        if sink == u64::MAX {
+            return 0.0;
+        }
+        per_call * total_calls as f64
+    }
+}
+
 /// One open invocation. Returned by [`BuiltinProfile::enter`] and consumed by
 /// [`BuiltinProfile::leave`]; carrying the enclosing invocation's inner-time
 /// total in the VALUE rather than in a side stack is what makes the pair

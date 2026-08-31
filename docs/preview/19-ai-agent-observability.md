@@ -216,8 +216,10 @@ called; two domains, two objects. `null` without the flag, on the same
 "not measured" ≠ "measured, nothing ran" convention.
 
 ```json
-"builtins": {"timed": true, "attribution": "self", "included_in_processes": true,
-  "distinct": 8, "total_calls": 3006,
+"builtins": {"timed": true, "attribution": "self-plus-arguments",
+  "included_in_processes": true,
+  "time_semantics": "ranking and UPPER BOUND on removal gain: …",
+  "distinct": 8, "total_calls": 3006, "obs_overhead_est_s": 0.001204,
   "items": [
     {"name": "$fgets", "calls": 1001, "time_s": 0.004241},
     {"name": "$sscanf", "calls": 1000, "time_s": 0.000642},
@@ -229,15 +231,24 @@ called; two domains, two objects. `null` without the flag, on the same
 | field | meaning |
 |---|---|
 | `timed` | whether `--obs-procs-time` was given. When false the rows carry no `time_s` at all, for §4.6's reason. |
-| `attribution` | always `"self"` in schema_ver 1 — see the arithmetic contract below. A field rather than a documented assumption, so a consumer can refuse a value it does not understand. |
+| `attribution` | `"self-plus-arguments"` — see the arithmetic contract below. A field rather than a documented assumption, so a consumer can refuse a value it does not understand. ⚠️ It said `"self"` through round-36 and that was **misleading in the direction that matters**; corrected 2026-08-31 after a reviewer measured a row at 64% of a run whose real removal gain was 9.7%. |
+| `time_semantics` | one sentence naming what the number is good for: **ranking**, and an **upper bound** on what removing the call would save. Emitted so a consumer cannot read a row as a saving without meeting the caveat. |
+| `obs_overhead_est_s` | present only when `timed` — a MEASURED estimate of what the timing itself cost this run (a batch of the same clock reads an invocation pays, calibrated on this machine at emit time, scaled by `total_calls`). Asked for by a reviewer who could not tell how much of a `time_s` was the instrument. It is an estimate and the name says so. |
 | `included_in_processes` | always `true` — this time is ALSO inside the `processes` row of whichever body called it. It is stated in the file because the one mistake a reader can make here is adding the two arrays together. |
 | `distinct` | number of rows = builtins this run touched at least once. |
 | `total_calls` | Σ `calls`. |
 | `name` | the IDENTITY, and it is the builtin's name because a builtin has no declaration site: it is not declared in the user's source, so the `file:line:col` that identifies a `processes` row has no counterpart. `$…` = the IEEE system task/function spelling the user typed; `.name()` = a METHOD-form builtin (`q.push_back(v)`, `s.len()`, `a.sum()`) — printing `$qpushback` for one of those would send the reader looking for a system task that does not exist. |
 | `calls` | invocations. DETERMINISTIC — a function of (design, run options) alone. |
-| `time_s` | present only under `--obs-procs-time`: cumulative SELF seconds, 6 decimals. |
+| `time_s` | present only under `--obs-procs-time`: cumulative seconds, 6 decimals. ⚠️ **Not self time in the strict sense** — the arms evaluate this call's ARGUMENTS inside the timed span, so `$signed(<big expression>)` charges the big expression here. Nested BUILTINS are subtracted; ordinary expression work is not. |
 
-**The arithmetic contract (`attribution: "self"`).** `time_s` is the wall clock
+**⚠️ What a row is NOT (2026-08-31).** A reviewer took a `time_s` of 64% of a run
+and measured the actual gain from deleting that call: **9.7%** — 6.6× over. The
+instrumentation overhead (~11%) does not explain it. The cause is above: the
+timed span covers the call's own argument evaluation. So a row RANKS, and bounds
+the prize from above; it does not predict a saving. That is what `time_semantics`
+says in the file, and why `attribution` no longer claims `"self"`.
+
+**The arithmetic contract (`attribution: "self-plus-arguments"`).** `time_s` is the wall clock
 of one invocation MINUS the wall clock of any builtin invoked inside it. That
 nesting is real, not hypothetical: `$display("%0d", q.size())` evaluates
 `.size()` during `$display`'s argument rendering, i.e. inside the outer builtin's
