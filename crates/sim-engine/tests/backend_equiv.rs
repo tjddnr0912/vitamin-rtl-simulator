@@ -857,7 +857,7 @@ fn a_natively_compiled_branch_condition_keeps_the_tri_valued_rule() {
                reg [3:0] v;\n\
                reg [7:0] r;\n\
                integer k;\n\
-               always @* begin\n\
+               always_comb begin\n\
                  if (v) r = 8'd1; else r = 8'd2;\n\
                end\n\
                initial begin\n\
@@ -872,6 +872,12 @@ fn a_natively_compiled_branch_condition_keeps_the_tri_valued_rule() {
                end\n\
              endmodule"
         );
+        // ⚠️ `always_comb`, not `always @*`, and the difference is the point of
+        // a DIFFERENT test: `@*` has no implicit time-zero run (IEEE §9.2.2.2),
+        // and the `"xz"` row assigns `4'bxxxx` to a `v` that is ALREADY x — no
+        // event, so a `@*` block correctly never runs and `r` keeps its own x.
+        // This test is about the tri-valued BRANCH rule, so it uses the spelling
+        // that self-starts and keeps asking its own question.
         let ir = build(&src);
         let want_val = if want == "then" { "r=1" } else { "r=2" };
         for backend in [Backend::Interpreter, Backend::Bytecode] {

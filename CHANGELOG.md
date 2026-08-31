@@ -11,6 +11,36 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **`always @*` no longer runs at time zero.** IEEE 1800 §9.2.2.2 gives that implicit
+  time-zero execution to `always_comb` and `always_latch`; a plain `always @*` waits for
+  its inferred read set to change, exactly as `always @(a or b)` does. vita ran it, which
+  turned an `x` into a definite value whenever nothing the block reads ever changes.
+
+  ⭐ Three lines: `reg a = 1'b0; always @* star = a; always_comb comb = a;` gave
+  `star=0 comb=0` where iverilog gives **`star=x comb=0`**.
+
+  Found by censusing why `verilog-axi`'s digest differed from the oracle's — the crossbar's
+  register slices compute their next-valid in an `always @*`, and vita's time-zero run made
+  the whole write path definite where the oracle has `x` after reset. The fix is a one-word
+  reclassification (`SensKind::Comb` → `Level` for `@*`): the scheduler already registers
+  Level, Comb and Latch with the same level waiter over the same inferred read set, so the
+  only thing that changes is the time-zero arm. No IR shape moves; `format_version` stays 29.
+
+  ⚠️ Three things it uncovered, each fixed rather than papered over:
+  - **A combinational UDP desugared to `always @*`** and so lost its output until an input
+    first changed. A UDP is a primitive — it drives from time zero like a gate — so the
+    desugar now emits `always_comb`.
+  - **The native wake table armed a `Level` process with an EMPTY read set** where the
+    engine arms none. Latent until now, because every previous `Level` came from an
+    explicit `@(a or b)`, which always names nets.
+  - Two test fixtures encoded the old behaviour. One is re-pinned; the other was asserting
+    the tri-valued branch rule through a block that (correctly) no longer runs, and now
+    asks its own question through `always_comb`.
+
+  ⭐ picorv32 loses three spurious `W4029` warnings — reads of an unknown array index that
+  only happened because a `@*` block ran at time zero. Its digest is unchanged.
+
+
 - **A profile field said `attribution: "self"` and it was not self time (R7).** A reviewer
   measured a `builtins` row at **64% of a run whose real removal gain was 9.7%** — 6.6× over
   — and nearly published the 64%. Instrumentation overhead (~11%) does not explain it.

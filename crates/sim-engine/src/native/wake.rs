@@ -147,10 +147,17 @@ impl WakeTable {
             // ARMS a `Level` block (it waits for the first event) while it QUEUES
             // a `Comb`/`Latch` block into Active to run at t0. So a Comb waiter
             // does not exist until that first run completes and re-arms.
+            //
+            // ⚠️ `&& !edges.is_empty()` — the engine's `arm_sensitivity` pushes a
+            // waiter only `if !nets.is_empty()`, so a `Level` process with an
+            // EMPTY read set has no waiter there and must have none here. The
+            // condition was latent until `always @*` became `Level`: every prior
+            // `Level` came from an explicit `@(a or b)`, which always names nets.
+            // Caught by `s1d4c2a_rearm_matches_the_engine_on_both_halves_of_the_asymmetry`.
             level_armed: ir
                 .processes
                 .iter()
-                .map(|p| p.sensitivity.kind == SensKind::Level)
+                .map(|p| p.sensitivity.kind == SensKind::Level && !p.sensitivity.edges.is_empty())
                 .collect(),
             has_level_nets,
             busy: vec![false; ir.processes.len()],

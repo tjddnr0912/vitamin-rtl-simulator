@@ -130,9 +130,16 @@ impl Parser<'_, '_> {
                 span,
             };
         }
+        // ⚠️ `always_comb`, NOT `always @*`, and the difference is time zero.
+        // A UDP is a PRIMITIVE (IEEE 1364 §29): like a gate, it has an output
+        // from the start, so its desugar needs the implicit time-zero execution
+        // §9.2.2.2 gives `always_comb` and explicitly does NOT give `always @*`.
+        // With `Star` this table produced `x` until an input first changed —
+        // caught by `udp_comb::udp_qmark_matches_z` the moment `always @*` was
+        // corrected to stop self-starting.
         let always = ProceduralBlock {
-            kind: ProcKind::Always,
-            sensitivity: Some(Sensitivity::Star),
+            kind: ProcKind::AlwaysComb,
+            sensitivity: None,
             body: Box::new(Stmt::Block {
                 label: None,
                 decls: Vec::new(),

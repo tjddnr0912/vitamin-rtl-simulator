@@ -386,8 +386,31 @@ impl Elaborator<'_> {
                         }
                     }
                 }
+                // ⭐⭐ `always @*` is LEVEL, not Comb — and the whole difference
+                // is the time-zero arm. IEEE 1800 §9.2.2.2 gives `always_comb`
+                // (and `always_latch`) an implicit execution at time zero;
+                // `always @*` has none — it waits for its inferred read set to
+                // change, exactly like `always @(a or b)` does.
+                //
+                // Every other consumer already treats the three alike: the
+                // scheduler registers Level, Comb and Latch with the SAME level
+                // waiter over `sensitivity.edges`, and the read set is filled
+                // from `comb_inferred_procs`, a list of process ids that does not
+                // consult this kind. So this is a one-word change with no IR
+                // shape change and no `format_version` move.
+                //
+                // ⚠️ MEASURED, not reasoned: `reg a = 0; always @* out = a;`
+                // left `out` at **x** in iverilog and **0** in vita, because
+                // nothing ever changes `a` so the block must never run. That
+                // 0-for-x is what made `axi_register_wr`'s `m_axi_awvalid_next`
+                // definite, and it is every one of the 29 x-cycles by which
+                // verilog-axi's digest differed from the oracle's (ROADMAP §2-N).
+                //
+                // ⚠️ The `None` arm above stays `Comb` on purpose: a self-timed
+                // `always` with in-body `#`/`@` is a clock generator and MUST
+                // start at time zero, or nothing in the design ever moves.
                 Some(ast::Sensitivity::Star) => ir::Sensitivity {
-                    kind: ir::SensKind::Comb,
+                    kind: ir::SensKind::Level,
                     edges: Vec::new(),
                 },
                 Some(s @ ast::Sensitivity::List(_)) => {

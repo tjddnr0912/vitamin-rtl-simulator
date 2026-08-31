@@ -1940,7 +1940,7 @@ fn s1d4c2a_rearm_matches_the_engine_on_both_halves_of_the_asymmetry() {
     // said exactly that while carrying no `Latch` at all, so moving `Latch` into
     // the do-nothing arm survived the whole package. The corpus cannot cover it
     // either: measured, it carries `Comb` and `Edge` only.
-    let designs: [(&str, &str); 6] = [
+    let designs: [(&str, &str); 7] = [
         (
             "edge",
             "module t;\n\
@@ -1974,8 +1974,23 @@ fn s1d4c2a_rearm_matches_the_engine_on_both_halves_of_the_asymmetry() {
              endmodule\n",
         ),
         (
+            // ⚠️ `always_comb`, which is now the ONLY spelling that produces
+            // `SensKind::Comb`: `always @*` became `Level` when it stopped
+            // self-starting at t0 (IEEE §9.2.2.2 gives the implicit time-zero
+            // execution to `always_comb`, not to `always @*`). Without this
+            // fixture the named-kind floor below loses its `Comb` witness.
+            "always_comb_readset",
+            "module t;\n\
+               reg [7:0] a; reg [7:0] o;\n\
+               always_comb o = a ^ 8'h5a;\n\
+               initial begin a = 8'd3; end\n\
+             endmodule\n",
+        ),
+        (
             // EMPTY read set: `arm_sensitivity` registers nothing, so re-arming
-            // must register nothing. This is the shape the two diverged on.
+            // must register nothing. This is the shape the two diverged on —
+            // and, since `always @*` became `Level`, also the shape that proved
+            // `level_armed` was arming a process the engine leaves unwaited.
             "comb_empty_readset",
             "module t;\n\
                reg [7:0] o;\n\
@@ -2069,7 +2084,11 @@ fn s1d4c2a_rearm_matches_the_engine_on_both_halves_of_the_asymmetry() {
              match. Seen: {kinds_seen:?}"
         );
     }
-    assert_eq!(compared, 13, "re-arm coverage moved — re-pin deliberately");
+    // 13 → 15: the `always_comb_readset` fixture added two processes, which is
+    // the deliberate re-pin this assertion asks for. It was added because
+    // `always @*` became `Level` (no time-zero self-start, IEEE §9.2.2.2) and
+    // took the suite's only `Comb` witness with it.
+    assert_eq!(compared, 15, "re-arm coverage moved — re-pin deliberately");
 }
 
 /// Is `Initial` ever a process with a NON-EMPTY sensitivity read set? If it were,
