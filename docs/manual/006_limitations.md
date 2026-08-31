@@ -150,6 +150,40 @@ diagnostic — nothing is lost, so nothing needs flagging.
 
 ---
 
+## Scheduling regions, `clocking` blocks and SVA
+
+IEEE 1800 defines **seventeen** scheduling regions. vitamin models **seven** of
+them, and the ones it leaves out are the ones no supported construct can observe:
+
+| Region | State |
+|---|---|
+| Preponed | **implemented** — clocking inputs are snapshotted at time advance and committed at the clocking edge, which is what makes `cb.sig` sample the slot-entry value (§14.13) |
+| Active, Inactive, NBA, Postponed | **implemented** — the IEEE 1364 core, carried in the IR as `RegionTag` |
+| Observed, Reactive | **implemented** — where `assert #0` and `assert final` mature (§16.4) |
+| the Pre-/Post-/Re- variants | **not implemented** — only `program` blocks and non-`#1step` clocking skews can tell the difference, and both are refused loudly |
+
+Concurrent **SVA is implemented**, not deferred: `assert property`, `cover
+property`, sequences with `##N`, `|->` and `|=>` all run and report. What stays
+loud is spelled out when you hit it — a ranged/`goto`/unbounded/multi-clock
+consequent, and an action block on `cover property`.
+
+`clocking` blocks work for input sampling, `@(cb)`, `#1step` skew, anonymous
+blocks and output direction. These are refused loudly rather than approximated:
+
+- a skew other than `#1step` (`#0`, `#N`, `##N`) — these need a sampling region
+  vitamin does not model
+- `inout` clocking variables
+- a multi-event clocking event (`@(posedge a or b)`)
+- a clocking item bound to something other than a net
+- driving a clocking input from a parent through a hierarchical reference
+
+> ⚠️ Historical note, because searching the repository will find the opposite:
+> `docs/DEVLOG.md` and `docs/ROADMAP_ARCHIVE_2026-07-16.md` contain a
+> **2026-06-18 gate evaluation that ruled clocking blocks "NO-GO" for lack of a
+> Preponed region.** That verdict was overturned a week later by the slice that
+> built the region. Those two files are a chronological log and a frozen
+> snapshot; this manual and `ROADMAP.md` are the current statement.
+
 ## Other intentional simplifications
 
 A few smaller, fully-documented choices round out the list:

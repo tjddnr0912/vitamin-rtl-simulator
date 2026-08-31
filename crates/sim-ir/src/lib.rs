@@ -44,7 +44,22 @@ pub enum EdgeKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct ProcFlags(pub u8);
 
-/// [SD4] IEEE 1364 4 regions; 17-region split is an intentional Phase-2 flip.
+/// [SD4] The four IEEE 1364 regions a PROCESS can be queued in.
+///
+/// ⚠️ This is not "the regions vitamin has" — it is the part of the region model
+/// that rides the FROZEN IR, which is why it is four. Three more are implemented
+/// out-of-band, where they do not touch the golden shape:
+///
+/// * **Preponed** — `SimState::preponed_buf`, snapshotted at time advance and
+///   committed at the clocking edge. This is what makes `clocking` input
+///   sampling correct (IEEE §14.13); an early gate evaluation called it a
+///   blocker and the region was then built.
+/// * **Observed / Reactive** — `elaborate::DeferRegion`, where `assert #0` and
+///   `assert final` mature (§16.4).
+///
+/// So seven of IEEE 1800's seventeen are modelled. The rest are the Pre-/Post-
+/// and Re- variants that only `program` blocks and non-`#1step` clocking skews
+/// can observe, and every construct that needs one is honestly loud.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum RegionTag {
     Active,

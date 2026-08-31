@@ -5,6 +5,19 @@
 > 구 ROADMAP 원문, 이후 갱신 없음)을 나눴다. **§번호는 원문 그대로 보존** — 다른 문서의
 > "구 §0~§7" 참조는 전부 이 파일을 가리킨다. 내용은 한 글자도 바뀌지 않았다.
 
+> ⚠️⚠️ **이 파일의 판정 중 뒤집힌 것 (2026-08-31 추가 · 본문은 그대로 둔다).**
+> 아래 본문은 **2026-07-16 시점의 동결 스냅샷**이라 그 뒤 뒤집힌 판정이 그대로 남아 있고,
+> 검색으로 여기에 착지한 독자가 **현재 상태로 오독한다**(실제로 발생했다). 현재 상태의 정본은
+> [ROADMAP.md](ROADMAP.md) · [REMAINING_WORK.md](REMAINING_WORK.md) · `CLAUDE.md` 다.
+>
+> | 이 파일이 말하는 것 | 실제 (2026-08-31) |
+> |---|---|
+> | **N4 clocking = ⛔ 조건부 NO-GO**(§295 · *"Preponed 리전이 필수인데 vita 스케줄러엔 부재"*) | ✅ **틀렸다 — 일주일 뒤 지었다.** 2026-06-25 에 **Preponed 리전 sampler** 를 도입했고(`snapshot_preponed`·`preponed_buf`) 06-26 v2 로 확장했다. 같은 파일 §337/§370 이 이미 **"🟢 v2 확장 완성 · ~~Preponed 리전~~ ✅"** 로 적고 있다. 잔여 honest-loud = non-`#1step` skew(`#0`/`#N`/`##N`)·INOUT·multi-event clock·non-net bind·hier input drive |
+> | **T4 엔진 내 PDES = NO-GO**(§102) | 그대로 유효(연구 종결 · 재진입 조건 = 지속 W≥64 + grain≥200ns) |
+>
+> ⭐ 규칙: **이 파일에서 «NO-GO»/«미구현»을 읽었으면 같은 파일 안의 더 뒤 §를 먼저 확인하라** —
+> 관문 평가와 그 평가를 뒤집은 구현이 **한 파일에 나란히** 들어 있다.
+
 ## 이관 스냅샷 (2026-07-16 — 구 ROADMAP 원문 · §번호 보존)
 
 > **갱신:** 2026-07-02 — **재계획(사용자 지시)**: ① 최종목표에 **G2 "AI-Agent 친화 simulator"** 추가 → **§7 OBS 트랙 신설**(SPEC 정본=[`preview/19-ai-agent-observability.md`](preview/19-ai-agent-observability.md)·요구 원문=[`reviews/2026-07-02-ai-sim-observability.md`](reviews/2026-07-02-ai-sim-observability.md)) ② **A2 체인(§6 잔여 1건) 최우선 승격**(§2 🆕 착수 순서: A2a→A2b-prereq→A2b — prereq는 iverilog 라이브 오라클 확보 확인) ③ [`REMAINING_WORK.md`](REMAINING_WORK.md) 라이브 스냅샷으로 리뉴얼·LOOPROMPT 콤팩트화(82KB→룰만).

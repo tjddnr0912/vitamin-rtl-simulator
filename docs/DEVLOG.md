@@ -2,6 +2,11 @@
 
 > `CLAUDE.md` 상태 블록에서 분리한 **슬라이스별(탄) 누적 개발 로그**(Stage C 바이트코드 VM → Phase-1 감사 → Phase-2 → Phase-3 SVA/검증 → Medium 묶음). 단일 진실 공급원은 `docs/preview/` SPEC이며, 향후 과제는 [ROADMAP.md](ROADMAP.md), 잔여 작업은 [REMAINING_WORK.md](REMAINING_WORK.md)에 있다. 각 항목은 커밋 해시·테스트 그린 수·적대 리뷰 결과를 핀(pin)한다.
 
+> ⚠️ **이것은 시간순 로그다 — 각 탄은 «그때의» 판정이고 뒤 탄이 뒤집을 수 있다.**
+> 현재 상태를 알고 싶으면 [ROADMAP.md](ROADMAP.md)/`CLAUDE.md` 를 봐라. 실제 오독 사례:
+> 27탄(2026-06-18)의 **clocking ⛔ NO-GO(Preponed 리전 부재)** 는 **④탄(2026-06-25)이 그 리전을
+> 지어서 뒤집었다** — 두 항목이 같은 파일에 있고 앞의 것이 검색에 먼저 걸린다.
+
 ## Phase-1 마일스톤 (요약)
 
 **상태:** **전 파이프라인 동작** — one-shot `vita design.sv` + staged `vcmp→velab→vrun` 모두 시뮬레이션해 VCD+stdout 산출. timescale(doc-08 전체 모델)·다차원 unpacked·packed 배열·VCD 계층 naming·casex/casez·fork-join·func/task·**SV 자료형(enum/typedef/packed struct)** 등 Phase-1 합성 RTL 대부분 구현·검증(**1125 테스트 green, iverilog 차분 일치**). 6축 감사 52항목+후속 큐 5항목 전부 클리어. 혼합-timescale postponed `$strobe`/`$monitor` multiplier 버그 수정(`fbb869c`) + 멀티-top 다중 root elaborate 수정(미인스턴스 모듈 전부를 root로, 골든 무영향).
