@@ -631,12 +631,20 @@
 
 ## 3. Loud→supported 후보 (현재 전부 loud=안전 · additive)
 
-> **⑫ 상수 함수의 누산기가 i64 보다 넓다** (2-오라클 · **verilog-axi 를 막는 마지막 것** ·
-> §4.5.379 가 *"비싼 절반"* 이라 부르며 § ② 뒤로 재배치했고, ② 가 §4.5.382 에서 섰으므로 **이제 이것이
-> 줄의 앞**이다). `axi_crossbar_addr.v:144` 의 `M_BASE_ADDR_INT = calcBaseAddrs(…)` — 본문이 루프로
-> 128비트를 쌓는 상수 함수. `eval_const_call` 의 env 는 **i64 맵**이라 폭에서 끊긴다. 선행조건 =
-> 상수함수 인터프리터의 env 를 `WideBits` 로 올리는 것(값 표현 하나가 아니라 `ConstWidths` 짝까지).
-> §4.5.382 가 지은 `fold_self_bits` 의 산술/비교 arm 이 그 계산 자체는 이미 할 수 있다.
+> ~~**⑫ 상수 함수의 누산기가 i64 보다 넓다**~~ — **RESOLVED (2026-08-31)**, 그리고 ⭐⭐ **이 줄의
+> 진단은 세 군데가 다 틀렸다**: 에러는 54가 아니라 **4**(뿌리 ②를 §4.5.382 가 이미 닫았다), 누산기는
+> 128비트가 아니라 **정확히 64비트**(M_COUNT·M_REGIONS·ADDR_WIDTH = 2·1·32)라 **wide 도메인이 필요
+> 없었고**, 막던 것은 폭도 런타임 인덱스도 아니라 `exec_const_stmt` 의 대입 arm 이 **`Lvalue::Ident`
+> 만 받는 한 줄**이었다(상수 오프셋 part-select 도 실패). 사다리(자명한 상수함수 → `calcBaseAddrs`)가
+> 첫 실패 rung 을 그렇게 짚었다 ⇒ 실은 것 = part-select **쓰기** arm + env 인지 select **읽기**,
+> §11.5.1 span 규칙은 `select_span` **하나**로 Expr·Lvalue 공유 · `[msb:lsb]` lvalue 는 방향 정보가
+> `ConstWidths` 에 없어 **loud 유지** · 곁수확 = **삼항 초기화 무타입 파라미터의 폭**(선재 silent-wrong ·
+> `Z ? Z : 64'h01…` 이 58비트 · §11.4.11 과 두 오라클은 64 · 규칙은 `const_self_width` 에 **이미 있었고**
+> 파라미터 폭 추론이 안 물었을 뿐).
+>
+> ⚠️ **verilog-axi 는 돌지만 승격은 보류** — iverilog 와 **같은 사이클(123,166)에 완료**하는데
+> 다이제스트가 갈린다. 남은 것은 **§2-N**(리셋 직후 등록 valid 출력이 x 여야 하는데 0 · 29/123,166 사이클)
+> 이고 **별도 축**이다.
 
 > **⑬ 런타임 진단에 `file:line` 이 없다** — **RESOLVED (V33-8, 2026-08-26)** for the two codes the
 > report named. W4029/E4002 (array word index) and W4023 (`$readmem*`/`$writemem*`/`$fread`) now
@@ -1468,7 +1476,7 @@ memoisation of a shared sub-expression**.
 
 ~~**ⓓ package 스코프 파라미터 셀렉트**~~ — ✅ **RESOLVED §4.5.383**(2026-08-25 · 세 철자가 한 갭 · grids A/B/C **FIXED 39 · REGRESSION 0** · format 29 불변). ⭐ 선행조건으로 적혀 있던 *"패키지 const 테이블이 선언 폭 provenance 를 나른다"* 는 정확했고, 답은 **새 맵 하나**(`pkg_const_range`, 모듈 twin 과 **같은 `param_decl_range_opt`**)였다 — §4.5.382 의 교훈이 여기서는 *찾으면 있다* 가 아니라 *없으면 짓되 같은 생산자로 지어라* 로 적용됐다. ⚠️⚠️ 큐 문구의 절반이 틀렸다: *"런타임 레인은 세 툴 다 이미 맞다"* 는 **zero-LSB 선언에서만** 참이고, `parameter [39:8] B` 는 `pk::B[15:8]` 을 **171** 로 찍었다(두 오라클 52 · exit 0) — 큐가 모르던 silent-wrong. 잔여 = §2 의 새 9번(enum 라벨 셀렉트 · **모듈 스코프도 같다**).
 
-**다음 착수**는 §2 「다음 착수 순서」 표에서 고른다 — 후보 = **9**(enum 라벨 · 2-오라클 · 모듈+패키지 동시) · **6**(static function 이 모듈 net 에 쓴 값이 사라진다 · 2-오라클) · **4**(`$itor` 가 real 인자의 비트를 읽는다). 또는 §3 ⑫(verilog-axi 상수함수 wide 누산기 · 코퍼스가 지목).
+**다음 착수**는 §2 「다음 착수 순서」 표에서 고른다 — 후보 = **12**(§6.19 게이트가 파라미터 bound 에서 fail-open) · **13**(unsigned base 의 음수 라벨) · **14**(혼합 부호 zero-extension) · **6**(static function 이 모듈 net 에 쓴 값이 사라진다 · 2-오라클) · **4**(`$itor` 가 real 인자의 비트를 읽는다). ⚠️ ~~9~~ 는 §4.5.384 로 RESOLVED — 이 줄에 stale 로 남아 있었다. 또는 **§2-N**(verilog-axi 의 x 초기화 · 닫으면 코퍼스 9/10 · 2-오라클은 iverilog 뿐).
 
 **⚠️⚠️ ⓔ was DEMOTED by its own census (§4.5.376).** It was ranked first this morning on two
 claims, and the census refuted both.
