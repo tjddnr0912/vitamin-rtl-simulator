@@ -11,6 +11,57 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **The rest of the §2 queue, re-measured first — and the census closed three rows without
+  writing any code.** Every remaining candidate was reproduced at HEAD against both oracles before
+  anything was touched; that is what decided which four were worth taking and which were not.
+
+  - **A `defparam` override now carries its expression's signedness.** Overriding a
+    `parameter logic [127:0]`, the value has to be extended past the 64-bit lane and the integer
+    alone cannot say how — `64'hFFFF_FFFF_FFFF_FFFF + 64'd0`, `-(64'sd1)` and `32'd0 - 32'd1` fold
+    to the same number and do not all extend the same way. The `#()` channels record the
+    expression's sign for exactly that reason; the `defparam` collector folded to an integer before
+    the record existed, so `defparam u.K = -32'sd7;` came out
+    `0000000000000000fffffffffffffff9` where both oracles give all ones.
+    ⚠️ It records the sign only when the EXPRESSION carries it — a literal, or an operator tree
+    over literals. Review measured why: the recorded signedness of a NAME is the sign of its
+    declared initializer, and §6.20.2 lets a later override replace the type, so forwarding an
+    untyped parameter (`defparam u.K = PW;`) would have sign-extended a value both oracles
+    zero-extend. The `#()` spelling is wrong there too; unifying onto the wrong answer is not a fix,
+    and that residue is recorded rather than shipped.
+
+  - **A clocking INPUT is no longer writable through `$readmem*`.** §14.3 makes it read-only and
+    vita enforced that from the LVALUE path, but a `$readmem*` memory argument is resolved through
+    the ordinary READ path — so it wrote the clocking holding net at exit 0 while the real variable
+    kept its contents. ⚠️ Two corrections from review, both measured: the guard has to ask from the
+    PATH rather than the resolved net (a clocking input of an unpacked array has only a scalar
+    holding net, which the array arm never produces), and it has to be scoped to argument 1 — the
+    first version ran on every argument and refused `$readmemh(cb.fn, mem)`, where the clocking
+    input is the FILE NAME and is only read. ⚠️ This closes the spelling the row was filed against,
+    not the class: six more argument-writing tasks and the hierarchical spelling of `$readmem*`
+    itself still reach the holding net, and that list is now written down.
+
+  ⭐ **Three rows were closed or re-scoped by measurement alone.**
+  - A queue line read *"`buf b(o, i)` is a pure bit move that the copy-net rule cannot see, because
+    it lowers to `assign o = ~(~i)`"*. It is not a bit move: **that spelling IS the IEEE 1364 §7.3
+    z→x coercion** a gate input performs. Measured on an undriven wire, `buf` gives `x` in vita and
+    `z` in iverilog while the neighbouring `assign o = zin;` gives `z` in both — and iverilog's own
+    `and` gate maps the same `z` to `x` one line away, so its buf answer is not a consistent reading
+    of its own tables. Closed, with the ruling pinned.
+  - The FST row said a dump with one time-table entry loses its values. The transcoder does emit the
+    `$dumpvars` snapshot before any time step — but opening time 0 for it, built and measured,
+    changes nothing: the values are absorbed into the writer's per-variable INITIAL value instead.
+    The speculative change was reverted and the diagnosis rewritten.
+  - Row 10 lost half its cells to an earlier slice: `pk::K[31:24]` and a `$bits`-sized net are both
+    correct now, and only the bare-imported spelling is left.
+
+  ⚠️ Four more rows were reproduced and left alone with the reason written down: two of them
+  (`**` at a width wider than its operands, and an override whose top is context-determined) share
+  ONE prerequisite with the row already marked do-not-start, so they are one infrastructure item and
+  not three; the enum-label phase-order row has a concrete trap on both sides of the fix; and the
+  t0 child-read row is a 2-oracle silent-wrong with zero corpus demand that would move
+  `format_version` to 30.
+
+
 - **Four §2 queue rows, and two of them were not what the queue said.** Each was re-measured
   against both oracles before any code moved, and the census changed the shape of two.
 

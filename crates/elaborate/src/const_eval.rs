@@ -1128,6 +1128,60 @@ impl Elaborator<'_> {
         true
     }
 
+    /// §14.3: a clocking INPUT is read-only, so a task that WRITES its argument may
+    /// not take one. The twin of the check in `collect_lval_chunks`, which asks the
+    /// same question from the lvalue PATH.
+    ///
+    /// ⚠️⚠️ There are MORE than two funnels, and this covers one more of them — not all.
+    /// `cb.sig = 8'hAA;` is an LVALUE and was correctly loud; `$readmemh("f.hex",
+    /// cb.mem)` is an ARGUMENT, resolved through the ordinary READ path, so it never
+    /// reached that check and wrote the clocking holding net at exit 0 while the real
+    /// `mem` kept its contents. Review then censused the rest and measured SIX more
+    /// argument-write tasks that still do it — `$fgets`, `$fread`, `$fscanf`,
+    /// `$sscanf`, `$value$plusargs`, `$swrite`/`$sformat` — plus the HIERARCHICAL
+    /// spelling of `$readmem*` itself (`dut.cb.mem`), which `lookup_net_scoped` does
+    /// not resolve here although the lvalue twin catches it. All of those are
+    /// pre-existing and unchanged; ROADMAP §2 carries the list. The honest statement
+    /// is that this closes the spelling the row was filed against, not the class.
+    ///
+    /// Asks from the PATH, exactly as the lvalue twin does. A NetId is not enough
+    /// here: a clocking input of an UNPACKED ARRAY gets a scalar holding net, so the
+    /// array-view arm never produces the id to test — which is why the first version
+    /// of this guard, keyed on the resolved net, fired for the scalar spelling and
+    /// missed the array one that motivated the row.
+    pub(crate) fn deny_clocking_input_arg(&mut self, e: &ast::Expr, how: &str) -> bool {
+        if self.clocking_hold_nets.is_empty() {
+            return false;
+        }
+        let mut inner = e;
+        while let ast::ExprKind::Paren { inner: i } = &inner.kind {
+            inner = i;
+        }
+        let ast::ExprKind::Ident(path) = &inner.kind else {
+            return false;
+        };
+        let joined = path
+            .segments
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect::<Vec<_>>()
+            .join(".");
+        let Some(id) = self.lookup_net_scoped(&joined) else {
+            return false;
+        };
+        if !self.clocking_hold_nets.contains(&id) {
+            return false;
+        }
+        // Name the signal the SOURCE wrote. The first version said "`cb.sig`" whatever
+        // the design called it, which on a real design points at a name that is not
+        // there — review measured that on `cb.fn`.
+        self.error(
+            MsgCode::ElabUnsupported,
+            &format!("cannot {how} a clocking INPUT (`{joined}` is read-only, §14.3)"),
+        );
+        true
+    }
+
     /// Dedup-or-append a const; returns its ConstId. The dedup map is lookup-only
     /// and never reorders the arena (first-seen wins, driven by traversal order).
     pub(crate) fn intern_const(&mut self, cv: ir::ConstVal) -> u32 {

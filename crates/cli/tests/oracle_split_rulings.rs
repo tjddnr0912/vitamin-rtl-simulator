@@ -227,3 +227,37 @@ fn a_signed_default_argument_follows_the_assignment_not_the_subroutine_kind() {
         "all three spellings of the same assignment must agree:\n{all}"
     );
 }
+
+/// ⭐ A `buf` gate's output for a `z` INPUT is `x`, and iverilog says `z`.
+///
+/// IEEE 1364 §7.3's buf/not truth table maps a `z` input to an `x` output — a gate
+/// input's high-impedance is unknown at the output, which is why the desugar coerces
+/// it (`gates.rs` builds `~~in` for exactly this, and cites the clause). Measured on
+/// an undriven wire feeding a `buf`:
+///
+/// ```text
+/// wire zin;                  // undriven -> z
+/// wire o1; buf b1(o1, zin);  // iverilog z · vitamin x   <- the LRM's answer is x
+/// wire o2; assign o2 = zin;  // iverilog z · vitamin z   <- a continuous assign is a
+/// ```                        //                             wire, not a gate: z stays
+///
+/// The neighbouring `assign` in the same design agrees in both tools, which is what
+/// makes this a claim about the GATE and not about vitamin's z handling. verilator
+/// answers `0` for both and gets no vote (it has no z).
+///
+/// ⚠️ Pinned as a RULING, and it also CLOSES a queue line. §2 recorded `buf` as "a
+/// pure bit move that `copy_nets` cannot see", on the theory that `buf b(o,i)` is a
+/// rename whose `~(~i)` spelling merely hides it. It is not a rename: the double
+/// negation IS the §7.3 coercion, so the gate computes and its output has an initial
+/// state like any other computed driver. There is nothing to admit into the copy set.
+#[test]
+fn a_buf_gate_maps_a_z_input_to_x_where_a_continuous_assign_passes_it() {
+    let (ok, all) = run("module t;\n  wire zin;\n  \
+         wire o1; buf b1(o1, zin);\n  wire o2; assign o2 = zin;\n  \
+         initial begin #1 $display(\"G=%b A=%b\", o1, o2); $finish; end\nendmodule\n");
+    assert!(ok, "must run:\n{all}");
+    assert!(
+        all.contains("G=x A=z"),
+        "the gate coerces z->x (§7.3); the continuous assign does not:\n{all}"
+    );
+}

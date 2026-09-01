@@ -177,7 +177,7 @@ pub(crate) type BlockLocalInit = (u32, Vec<u32>, ast::Lvalue, ast::Expr);
 /// so the fold in the second is only the 32-bit self-determined default and is wrong
 /// for any parameter wider than that. `bind_one_param` re-folds it at the declared
 /// width, which is the only place that width is known.
-pub(crate) type DefparamOverride = (String, i64, Option<(ast::IntLitKind, String)>);
+pub(crate) type DefparamOverride = (String, i64, Option<(ast::IntLitKind, String)>, Option<bool>);
 
 /// A parameter's DECLARED packed range: `(lo, width, ascending)` — the tuple the
 /// provenance maps (`param_range`, `pkg_const_range`) carry, named so the save/restore

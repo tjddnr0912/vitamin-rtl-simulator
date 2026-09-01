@@ -756,6 +756,24 @@ impl Elaborator<'_> {
                             | ir::SysTaskId::WritememH
                     );
                     if dump_family || readmem_family {
+                        // …and the OTHER read-only target this position can reach.
+                        // Asked from the PATH and BEFORE the array view, because a
+                        // clocking input of an unpacked array has only a scalar holding
+                        // net and never reaches the arm below — see
+                        // `deny_clocking_input_arg`.
+                        //
+                        // ⚠️ `argi == 1` is load-bearing and was missing: §21.4's shape is
+                        // `(file, mem, start, end)`, this closure runs for EVERY argument,
+                        // and `addr_positions` only short-circuits argi ≥ 2 — so without
+                        // the position test the guard also fired on argument 0, the FILE
+                        // NAME, which is a pure READ. `$readmemh(cb.fn, mem)` is a legal
+                        // design that vita ran correctly and this refused. Two review
+                        // lenses found it independently.
+                        if argi == 1
+                            && matches!(which, ir::SysTaskId::ReadmemB | ir::SysTaskId::ReadmemH)
+                        {
+                            self.deny_clocking_input_arg(a, "$readmem into");
+                        }
                         if let Some((net, lead)) = self.expr_array_view(a) {
                             if lead.is_empty() {
                                 // A2a: $readmemb/h WRITE the memory — a desugared

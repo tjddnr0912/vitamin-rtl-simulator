@@ -3,6 +3,28 @@
 use super::*;
 
 impl Elaborator<'_> {
+    /// Is this expression's SIGNEDNESS readable from the syntax alone?
+    ///
+    /// True for a literal and for any operator tree over literals — the set whose sign
+    /// no side table can contradict. False as soon as a NAME, a call or a system
+    /// function is involved, because the recorded signedness of a name is the sign of
+    /// its DECLARED INITIALIZER, and §6.20.2 lets a later override replace the type.
+    /// Used by the `defparam` collector: a sign it cannot read is left unrecorded
+    /// rather than guessed.
+    fn sign_is_syntactically_evident(e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::IntLit { .. } => true,
+            ast::ExprKind::Paren { inner } => Self::sign_is_syntactically_evident(inner),
+            ast::ExprKind::Unary { operand, .. } => Self::sign_is_syntactically_evident(operand),
+            ast::ExprKind::Binary { lhs, rhs, .. } => {
+                Self::sign_is_syntactically_evident(lhs) && Self::sign_is_syntactically_evident(rhs)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Elaborator<'_> {
     /// Delay multiplier `M = 10^(unit_exp − global_prec_exp)` for module `name`
     /// (≥ 1, since every module's `unit_exp ≥ global_prec_exp`). A module absent from
     /// the map (the no-timescale base) defaults to `unit_exp = global_prec_exp` ⇒ M=1.
@@ -177,7 +199,7 @@ impl Elaborator<'_> {
             .remove(inst_path)
             .map(|dps| {
                 dps.into_iter()
-                    .map(|(param, v, fill)| ResolvedOverride {
+                    .map(|(param, v, fill, sg)| ResolvedOverride {
                         name: Some(param),
                         value: Some(v),
                         is_named: true,
@@ -190,11 +212,11 @@ impl Elaborator<'_> {
                         // A defparam carries no wide value either: the value it
                         // brings has already been folded to i64 by the collector.
                         bits: None,
-                        // A defparam's expression is gone by the time this record
-                        // exists (the collector folded it to i64), so its signedness is
-                        // unknown and an extension past the i64 lane keeps its old
-                        // route. Recorded as a residue rather than guessed.
-                        signed: None,
+                        // The collector computed this from the expression when its sign
+                        // is evident there — see the comment at the collector. It used to
+                        // be unconditionally `None` ("stay on the old route"), which
+                        // stopped a negative override's sign at bit 63.
+                        signed: sg,
                         // A defparam carries no text at all, so the flag is never
                         // read here — `false` is the honest value for "not a literal".
                         str_is_literal: false,
@@ -913,10 +935,36 @@ impl Elaborator<'_> {
                         // here, so `v` is only the 32-bit self-determined fold and is
                         // wrong for any target wider than that.
                         let fill = expr_as_fill(value).map(|(k, r)| (k, r.to_string()));
+                        // ⭐ …and the EXPRESSION's signedness, computed here because here
+                        // is the only place the expression still exists. Without it the
+                        // record below carried `signed: None`, which `bind_one_param`
+                        // reads as "stay on the route you took before" — so a NEGATIVE
+                        // defparam onto a `parameter logic [127:0]` stopped its sign at
+                        // bit 63: `defparam u.K = -32'sd7;` was
+                        // `0000000000000000fffffffffffffff9` where both oracles give all
+                        // ones. The three other override channels compute the same thing
+                        // from the same helper, so this is one spelling, not a new rule.
+                        // ⚠️⚠️ …but ONLY when the sign is evident from the expression
+                        // itself. `const_signed_env`'s name arm reads `param_meta`, whose
+                        // `signed` is the DECLARED INITIALIZER's sign — a DEFAULT, not a
+                        // fact — and §6.20.2 gives an untyped parameter the type of its
+                        // FINAL override. So an untyped parent parameter overridden with
+                        // an unsigned value ≥ 2^63 still reports "signed", and forwarding
+                        // it (`defparam u.K = PW;`) would sign-extend where both oracles
+                        // zero-extend: correct → silent-wrong, at exit 0. Review measured
+                        // it on all three channels; the `#()` twin is wrong there too, and
+                        // unifying onto the wrong answer is not a fix.
+                        //
+                        // A literal and an operator tree over literals carry their sign in
+                        // the syntax, which is the whole set this row is about
+                        // (`-32'sd7`, `-(64'sd1)`). Anything resting on a NAME keeps
+                        // `None` = "stay on the route you took before".
+                        let sg = Self::sign_is_syntactically_evident(value)
+                            .then(|| self.const_signed_env(value, &ConstWidths::new()));
                         // Last write wins (IEEE §23.10.1) — drop a prior same-param entry.
                         let entry = self.defparams.entry(fq).or_default();
-                        entry.retain(|(p, _, _)| p != &param);
-                        entry.push((param, v, fill));
+                        entry.retain(|(p, _, _, _)| p != &param);
+                        entry.push((param, v, fill, sg));
                     }
                 }
                 // A NET declaration initializer (`wire x = expr;`) is an implicit
