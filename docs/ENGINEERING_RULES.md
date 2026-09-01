@@ -3219,3 +3219,17 @@ from the same intent.
 Review found all three. Run the design and read the OUTPUT before writing what the output
 means — and when the same claim appears in a diagnostic, a docstring and a comment, fixing
 one is fixing a third of it.
+
+### ★★ A wait loop must be checked against the string the producer actually writes
+
+Waiting for the review to finish, I armed a background loop on
+`grep -c finished <journal> -ge 2`. The journal writes `{"type":"result",…}`; the word
+`finished` never appears in it, so the loop could not terminate and ran for four hours
+until the user noticed it in the task list. The review itself had completed long before —
+I read the journal directly, so nothing depended on the loop and nothing signalled that it
+was still alive.
+
+Two habits, both cheap: run the predicate ONCE by hand before arming it, and prefer a
+condition read from the artifact you have already inspected over one you assume. And when
+you stop needing a background wait, kill it — a wait whose result you obtained another way
+is a leak, not a spare.
