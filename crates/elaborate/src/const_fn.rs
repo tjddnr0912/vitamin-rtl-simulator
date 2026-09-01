@@ -431,9 +431,18 @@ impl Elaborator<'_> {
                     return const_pow(a, b, sg);
                 }
                 let b = match op {
-                    ast::BinOp::Shl | ast::BinOp::Shr | ast::BinOp::AShl | ast::BinOp::AShr => {
-                        self.const_int_selfdet(rhs)?
-                    }
+                    // §11.4.10 — self-determined AND unsigned. `const_int_selfdet` is
+                    // the plain self-determined evaluator and is shared with positions
+                    // (a ternary condition, a select index) where the operand's own
+                    // signedness IS the rule, so the count gets its own entry point.
+                    // The width-aware twin at `const_fn_width.rs` calls the same one.
+                    ast::BinOp::Shl | ast::BinOp::Shr | ast::BinOp::AShl | ast::BinOp::AShr => self
+                        .eval_const_shift_count(
+                            rhs,
+                            &std::collections::BTreeMap::new(),
+                            &ConstWidths::new(),
+                            0,
+                        )?,
                     _ => self.const_eval_in_scope(rhs)?,
                 };
                 const_binop(*op, a, b)
@@ -810,7 +819,20 @@ impl Elaborator<'_> {
                     let (b, sg) = self.const_pow_exponent_selfdet(rhs, env, envw, depth)?;
                     return const_pow(a, b, sg);
                 }
-                let b = self.eval_const_env(rhs, env, envw, depth)?;
+                // §11.4.10 — the shift COUNT is self-determined and unsigned, through the
+                // same helper the other two folds use. ⚠️ This arm is the third copy of
+                // the shift fold and it was the one left untaught: the `Pow` arm two
+                // lines up already routes its exponent through a shared helper for
+                // exactly this reason, and a rule that exists in N places and is fixed
+                // in N−1 is this project's recurring defect. Review could not reach it
+                // (its own docstring says the path is `eval_const_assign`'s
+                // unknown-target arm), so this is defence in depth, not a measured fix.
+                let b = match op {
+                    ast::BinOp::Shl | ast::BinOp::Shr | ast::BinOp::AShl | ast::BinOp::AShr => {
+                        self.eval_const_shift_count(rhs, env, envw, depth)?
+                    }
+                    _ => self.eval_const_env(rhs, env, envw, depth)?,
+                };
                 const_binop(*op, a, b)
             }
             ast::ExprKind::Ternary {

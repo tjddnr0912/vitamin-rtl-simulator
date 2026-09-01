@@ -401,7 +401,7 @@ impl Elaborator<'_> {
                             let (b, sg) = self.const_pow_exponent_selfdet(rhs, env, envw, depth)?;
                             return Some(mask(const_pow(a, b, sg)?));
                         }
-                        let b = self.eval_const_env_self(rhs, env, envw, depth)?;
+                        let b = self.eval_const_shift_count(rhs, env, envw, depth)?;
                         // With a KNOWN context width a shift is exact on the bit
                         // pattern, so it no longer has to decline. `const_binop`
                         // refuses a logical `>>` of a negative value because the
@@ -584,6 +584,123 @@ impl Elaborator<'_> {
         let w = self.const_self_width(e, envw).unwrap_or(0);
         let sg = self.const_signed_env(e, envw);
         self.eval_const_env_at(e, env, envw, depth, w, sg)
+    }
+
+    /// A shift's COUNT — self-determined, and §11.4.10 adds that it "shall be treated
+    /// as an unsigned number". [`Self::eval_const_env_self`] gives an operand its OWN
+    /// signedness, which is right for a ternary condition and a select index and wrong
+    /// here, so the count arrived NEGATIVE and every shift by it collapsed to 0.
+    ///
+    /// ⭐⭐ It needs no function and no name to reach: `logic [(16'h0100 >> 3'sb101)-1:0]
+    /// bus;` declared `$bits` **2** where both oracles say 8 — a silently wrong bus
+    /// width — and `generate if (16'hFF01 << 3'sb101)` took the WRONG BRANCH and deleted
+    /// its body at exit 0. A 158-cell census found 66 silent-wrong (and 32 more latent:
+    /// the defect only shows when the count's unsigned value is below the target width).
+    /// All four shift operators; `**` is unaffected (`const_pow_exponent_selfdet` is its
+    /// own helper), and no OTHER self-determined position is — an index, a replication
+    /// count, a ternary condition, a `$clog2` argument and a generate-for bound all fold
+    /// correctly, which is what makes this the shift arm's rule rather than a sizing bug.
+    ///
+    /// ⭐ The reference implementation was already in the tree and right: the >64-bit
+    /// lane's `const_wide::fold_shift_count` reads the count's bits at its own width and
+    /// treats them as unsigned, citing this clause. Three lanes disagreed inside one
+    /// binary — runtime correct, wide constant lane correct, this one wrong — so every
+    /// cell was a vita self-contradiction before any oracle was consulted.
+    ///
+    /// ⚠️ This is a POST-STEP on the value, not a different evaluator, and it belongs
+    /// HERE rather than inside `eval_const_env_self`: that function has 17 callers and
+    /// exactly one of them is a shift count. `C + 0` is 32 bits wide, so its unsigned
+    /// reading is 4294967293 and the shift yields 0 — which is what both oracles answer
+    /// too, and why widening the rule past the count itself would be wrong.
+    pub(crate) fn eval_const_shift_count(
+        &self,
+        e: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &ConstWidths,
+        depth: u32,
+    ) -> Option<i64> {
+        let v = self.eval_const_env_self(e, env, envw, depth)?;
+        // ⚠️⚠️ THE WIDTH HAS TO BE A FACT. `const_self_width`'s name arm reads
+        // `param_meta`, and for an untyped `parameter C = 3'sd1;` that records the
+        // DEFAULT literal's 3 bits — which §6.20.2 replaces with the final override's
+        // type the moment `#(.C(-3))` arrives (both oracles report `$bits(C)` = 32,
+        // vita reports 3, and that is pre-existing). Reading the count SIGNED was
+        // ACCIDENTALLY IMMUNE to it: −3 is out of `0..64` at any width, so the shift
+        // collapsed to 0, which is the right answer for a 32-bit count. Reading it
+        // unsigned at a stale 3 bits makes it **5**, and the shift really happens —
+        // review measured 21 cells going correct → silent-wrong across all four
+        // override channels, one of them a declared net width.
+        //
+        // So the mask is applied only where the width is EVIDENT: a literal and any
+        // operator tree over literals, plus a name whose width came from `envw` (a
+        // subprogram local's declared range, which no override can retype). A name that
+        // has to be looked up in `param_meta` keeps the pre-slice behaviour. That costs
+        // the module-scope NAMED count spelling and keeps every literal one, which is
+        // where the row's reachability lives (a net width, a `generate` condition).
+        //
+        // ⚠️ This is [[a-default-is-not-a-fact]] again, and it is the third slice on
+        // this axis to meet it. Widening past `envw` needs the declared-vs-inferred
+        // provenance §2 row 14 stopped at — not a guess about which map is fresher.
+        if !Self::shift_count_width_is_evident(e, envw) {
+            return Some(v);
+        }
+        // An unknown or >=64-bit self width leaves the value alone: `const_mask` is the
+        // identity there, and inventing a width is what this domain must never do.
+        match self.const_self_width(e, envw) {
+            Some(w) if w > 0 => Some(Self::const_mask(v, w, false)),
+            _ => Some(v),
+        }
+    }
+
+    /// Is every NAME in a shift count's expression one whose width `envw` records?
+    ///
+    /// Conservative by construction — a kind this does not enumerate answers `false`, so
+    /// a new expression form cannot inherit the mask by falling through a catch-all.
+    /// See [`Self::eval_const_shift_count`] for the measurement that made it necessary.
+    fn shift_count_width_is_evident(e: &ast::Expr, envw: &ConstWidths) -> bool {
+        use ast::ExprKind as K;
+        match &e.kind {
+            K::IntLit { .. } => true,
+            K::Paren { inner } => Self::shift_count_width_is_evident(inner, envw),
+            // A subprogram local's declared range, and nothing else.
+            //
+            // ⚠️ `param_range` was tried as a second admission — the reasoning was that
+            // `param_decl_range_opt` takes `default_binds`, so an OVERRIDDEN untyped
+            // parameter would have no entry. It has one, measured: the blocking design
+            // went straight back to wrong while the census went back to 30 fixed. The
+            // maps that could answer this are the ones §2 row 14 is stuck on, so the
+            // gate stays at the one map whose widths are declared locals.
+            //
+            // ⚠️ The cost is the module-scope NAMED count spelling: 16 of 168 census
+            // cells keep the pre-slice answer. Every position the row is actually about
+            // — a net's declared width, a `generate` condition, an unpacked dimension, a
+            // `repeat`, a `-:` width — uses a LITERAL count and is fixed.
+            K::Ident(p) if p.segments.len() == 1 => {
+                matches!(envw.get(&p.segments[0].name), Some((w, _)) if *w > 0)
+            }
+            K::Unary { operand, .. } => Self::shift_count_width_is_evident(operand, envw),
+            K::Binary { lhs, rhs, .. } => {
+                Self::shift_count_width_is_evident(lhs, envw)
+                    && Self::shift_count_width_is_evident(rhs, envw)
+            }
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                Self::shift_count_width_is_evident(cond, envw)
+                    && Self::shift_count_width_is_evident(then_e, envw)
+                    && Self::shift_count_width_is_evident(else_e, envw)
+            }
+            K::Cast {
+                target: ast::CastTarget::Size(_),
+                expr,
+            } => Self::shift_count_width_is_evident(expr, envw),
+            K::Concat { parts } => parts
+                .iter()
+                .all(|q| Self::shift_count_width_is_evident(q, envw)),
+            _ => false,
+        }
     }
 
     /// Evaluate `rhs` for an assignment whose target is `(w, signed)`: the RHS runs

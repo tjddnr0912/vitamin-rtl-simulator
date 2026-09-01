@@ -30,12 +30,10 @@
 //!
 //! ⚠️⚠️ **Round 3 found two more, both in the shared walk and both there since round 1:**
 //!
-//! 1. **§11.4.10 — a shift's RIGHT operand is self-determined and unsigned**, and the
-//!    width-aware walk pushes the assignment context onto every leaf including that one,
-//!    so a narrow SIGNED count sign-extends and the shift yields 0. 30 correct→wrong plus
-//!    36 loud→wrong. ⭐ It is PRE-EXISTING and independent — the const-FUNCTION spelling
-//!    is wrong today, with no routing involved — so it is its own row, and it has to be
-//!    closed before this one.
+//! 1. ~~**§11.4.10 — a shift's RIGHT operand is self-determined and unsigned.**~~ ✅
+//!    **CLOSED** as ROADMAP §2 row 27 — it was pre-existing and independent (the
+//!    const-FUNCTION spelling was wrong with no routing involved), which is why it became
+//!    its own row and its own slice. See `shift_count_selfdet.rs`. One prerequisite left.
 //! 2. **The i64-lane bound was on the TARGET only.** A `logic signed [64:0]` LEAF whose
 //!    value fits an i64 passes the provenance test and is then evaluated as a 64-bit
 //!    operand, which changes what `/` and `%` answer. 83 cells.
@@ -88,32 +86,6 @@ fn a_module_scope_name_does_not_convert_at_its_declared_width_but_a_local_does()
     assert!(
         o.contains("OUT func=00000000000000fe mod=fffffffffffffffe"),
         "the split is the row; closing it makes both columns 00…fe:\n{o}"
-    );
-}
-
-/// ⭐ THE PREREQUISITE, and the reason this row is not just "route the initializer":
-/// §11.4.10 makes a shift's RIGHT operand self-determined and unsigned, and the
-/// width-aware walk does not — so a narrow SIGNED count is sign-extended into the
-/// enclosing context and `16'hFF01 << 3'b101` becomes 0.
-///
-/// ⚠️⚠️ This is PRE-EXISTING and reachable TODAY through a constant FUNCTION, with no
-/// routing involved, which is what makes it a row of its own rather than a property of
-/// the reverted change. Both oracles: `e020`.
-#[test]
-fn a_signed_shift_count_is_sign_extended_by_the_width_aware_walk() {
-    let (o, ok) = run("module top;\n  \
-           function automatic logic [15:0] f();\n    \
-             logic signed [2:0] C;\n    logic [15:0] B;\n    \
-             C = -3'sd3; B = 16'hFF01;\n    f = B << C;\n  \
-           endfunction\n  \
-           localparam logic [15:0] FN = f();\n  \
-           initial begin $display(\"OUT=%h\", FN); $finish; end\n\
-         endmodule\n");
-    assert!(ok, "vita failed:\n{o}");
-    // KNOWN-WRONG: `3'b101` is the count 5, so both oracles give e020.
-    assert!(
-        o.contains("OUT=0000"),
-        "closing §11.4.10 in the width-aware walk makes this e020:\n{o}"
     );
 }
 

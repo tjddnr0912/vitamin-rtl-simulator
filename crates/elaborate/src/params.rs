@@ -1402,6 +1402,34 @@ impl Elaborator<'_> {
                     ovr.signed.get(p.name.name.as_str()).copied(),
                 );
                 if let Some(cv) = cv {
+                    // ⚠️⚠️ AN UNKNOWN-PLANE GUARD BELONGS HERE AND CANNOT BE WRITTEN YET
+                    // — built, measured, reverted (ROADMAP §2 row 15).
+                    //
+                    // The test below reads only the VALUE bits, so an override carrying
+                    // x or z fits the i64 lane and its plane is dropped:
+                    // `#(.K(8'b1010_010x))` binds `10100100` at exit 0 where both
+                    // oracles keep the x, and `8'bzzzzz1z0` binds `11111110` because z's
+                    // value bit is 1. Refusing with `bp_any_unknown` moves those five
+                    // cells silent-wrong → loud, and the sibling `fill` arm twelve lines
+                    // up already refuses the same way.
+                    //
+                    // ⚠️ It also refuses **76 cells that were CORRECT**. A 2-STATE
+                    // declaration (`bit`/`byte`/`shortint`/`int`/`longint`) converts x
+                    // and z to 0 on assignment, so dropping the plane IS that conversion
+                    // and the i64 lane was exactly right — `parameter bit [7:0] K` with
+                    // `#(.K(8'b1010_010x))` is `10100100` in vita and in iverilog.
+                    // Review measured every channel, including `-G`.
+                    //
+                    // ⭐ So the guard needs "is this declaration 4-state", and THAT IS NOT
+                    // IN THE AST: `hdl-parser/src/params.rs` computes `var_kind` for
+                    // exactly these keywords and drops it, because `ParamDecl` has no
+                    // such field — the same gap its own comment documents for the
+                    // 1-bit-`logic` range. Recording it is an `hdl-ast` field and a
+                    // SchemaHash re-pin, not a conditional here.
+                    //
+                    // ⚠️ The same field closes a sibling silent-wrong this arm cannot see
+                    // either: on a 2-state declaration z must also become 0, and today it
+                    // becomes 1.
                     if (64..cv.width as usize).any(|i| bp_get(&cv.bits, i).0) {
                         let key = self.fq(&p.name.name);
                         self.wide_param_bits.insert(key, cv);

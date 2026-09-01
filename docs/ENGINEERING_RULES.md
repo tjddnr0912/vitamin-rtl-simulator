@@ -3029,3 +3029,42 @@ run — 18,000× iverilog, with `--obs-procs-time` putting 100.0% of it in eight
 assigns that re-evaluate a constant-argument function call on every scheduler pass. This
 project has now had a corpus refusal *move* rather than close three times; measure the
 next gap before promising the promotion.
+
+## Row 27 — the shift count, and two ways a fix meets an old wall (2026-09-01)
+
+### ★★★★★ An accidental immunity is load-bearing until you remove it
+
+Reading a shift count as SIGNED was wrong, and it was also the only thing keeping a
+second defect invisible. A count of −3 is out of `0..64` at any width, so the shift
+collapsed to 0 — which is the correct answer for the 32-bit count the language says that
+parameter has. Making the count unsigned made the stored width matter for the first time,
+and the stored width is an untyped parameter's DEFAULT, not the type §6.20.2 gives it once
+an override arrives. Twenty-one cells went correct → silent-wrong.
+
+**Before removing a conversion, ask what it was hiding.** The signal here was that the
+values were right for the wrong reason: 0 from "out of range" rather than 0 from a
+computed count.
+
+### ★★★★ Try the discriminator, then MEASURE it
+
+The obvious fix was to admit any name whose width has declared provenance, and
+`param_range` is documented as exactly that map. It has an entry for the offending
+overridden parameter — measured, in the design that mattered, in under a minute. The
+census went back to 30 fixed and the blocking design went straight back to wrong.
+
+Two maps looked like they answered "is this width a fact" and neither did. The gate ended
+at the one map whose widths are declared subprogram locals, and the cost — the
+module-scope named spelling — is recorded rather than guessed at. **A map's docstring
+describes its intent; only a run describes its contents.**
+
+### ★★★★ The parser computes the fact and throws it away
+
+The x/z override guard needs to know whether a parameter's declared type is 2-state, since
+`bit`/`byte`/`int` convert x and z to 0 and dropping the plane IS that conversion. The
+parser computes `var_kind` for exactly those keywords and drops it, because `ParamDecl` has
+no such field — and the file's own comment documents the same gap for the 1-bit `logic`
+range it had to work around earlier.
+
+So a five-cell fix turned 76 correct cells loud, and the prerequisite is an AST field, not
+a conditional. [[implicit-means-unrecorded-not-untyped]] again — and the tell was that the
+guard had no way to name the thing it was deciding about.

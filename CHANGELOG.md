@@ -9,6 +9,30 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A shift's count is now read as unsigned, which is what the language says and what every
+  other lane in vita already did.** IEEE 1800 §11.4.10 makes a shift's right operand
+  self-determined *and* "always treated as an unsigned number". The constant domain gave it the
+  operand's own signedness — correct for a ternary condition and a select index, wrong here — so a
+  narrow signed count arrived negative and every shift by it collapsed to 0.
+  ⭐⭐ It needed no function and no name to reach, which is not how the gap was filed:
+  `logic [(16'h0100 >> 3'sb101)-1:0] bus;` declared a 2-bit bus where both oracles say 8, and
+  `generate if (16'hFF01 << 3'sb101)` took the **wrong branch and deleted its body**, both at exit
+  0. Also an unpacked dimension, a `repeat` count, a `-:` width and a parameter bound.
+  ⭐ Every affected cell was vita contradicting itself before any oracle was asked: the runtime
+  lane and the >64-bit constant lane were already right, and the >64-bit lane is where the correct
+  implementation had been sitting all along, citing this clause. Over the review's sweep, vita's
+  const-vs-runtime contradictions went from 346 to 36.
+  All three constant folds call one helper — review found the third would otherwise have been left
+  out, which is this project's recurring defect in miniature.
+  ⚠️ The count's width has to be a *fact*, and that limits the fix: it is applied to a literal, an
+  operator tree over literals, and a name whose width is a declared local. A module-scope name
+  keeps the old answer, because its width comes from a map that records an untyped parameter's
+  *default* rather than the type its override gives it — reading the count signed had been
+  accidentally immune to that, and reading it unsigned turned it into 21 wrong values. Widening it
+  needs provenance work that is already blocked elsewhere.
+
 ### Investigated — built, measured, reverted
 
 - **A module-scope parameter's declared width is still not a fact the constant fold uses — built,
