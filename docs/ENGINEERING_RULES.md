@@ -219,6 +219,38 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ A predicate borrowed from another PHASE is a mirror, and mirrors drift on contact (2026-09-01 · §4.5.398)
+
+Four queue rows, five blocking defects in the fixes, and four of the five are one shape: **a rule
+written twice, or a predicate copied from a phase that does not share its inputs.**
+
+- The new elaborate §6.19 check tried to skip "what the parser already policed" with a local
+  `is_literal`. The parser's actual fold takes a DECIMAL literal, unary minus and `+ - *`; the
+  mirror took any `IntLit`, parens and any unary. The two accept-sets are neither equal nor nested,
+  so `[(3):0]` and `[8'd7:0]` fell between them and stayed fail-open — the exact hole the row
+  existed to close. **The fix was to delete the mirror**: a parser error halts the pipeline, so
+  there was never anything to skip.
+- The three enum-label binders each say "see `instance.rs`" and one of them took its auto-increment
+  from the raw value while the others took it from the masked one. Same enum, loud at module scope,
+  silent in a package.
+- The `$itor` gate asked "is this expression real?" at the AST, where the crate's own comment four
+  hundred lines away says that predicate is blind to a real-returning frame call. **Asking the
+  VALUE in the one evaluator answered it for every spelling at once** — and removed a sign flip past
+  2^63 and an `--obs-procs` census inflation with it.
+
+**Rules.**
+1. Before mirroring a predicate across a phase boundary, print BOTH accept-sets and name the
+   difference. If you cannot share the code, ask whether you need the skip at all — the pipeline
+   may already order the two checks for you.
+2. When a comment says "twin of X", diff the two bodies as part of writing the comment. A review
+   lens read three such comments and found one of them false.
+3. Prefer the funnel that sees the VALUE over the one that sees the SYNTAX. A gate on the AST
+   inherits every hole in the AST-level predicate; a gate on the value has none of them, and it is
+   usually one arm instead of three.
+4. Arithmetic that builds a range from a WIDTH must be capped at the width the value can actually
+   occupy. `1i128 << w` for a `w` that comes from a user-parameterised declaration wraps in release
+   and panics in debug, and the caller's "this cannot be that wide" was never checked.
+
 ### ⭐⭐ A rule copied from a tool that COLLAPSES two objects inherits an aliasing you do not have (2026-09-01 · §4.5.397)
 
 §2-N's copy-net rule was derived from iverilog, which turns `assign n = m;` into ONE net: `n` and `m`

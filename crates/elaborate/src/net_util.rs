@@ -342,6 +342,81 @@ impl Elaborator<'_> {
         }
     }
 
+    /// §6.19: an enum label whose value does not fit its base type is an ERROR, and
+    /// this is the ELABORATE twin of the check in `hdl-parser/src/typedefs.rs`.
+    ///
+    /// ⚠️⚠️ The parser's copy can only run when BOTH base bounds are bare literals —
+    /// it folds with `const_lit`, which knows nothing about parameters. So
+    /// `typedef enum logic [W-1:0] { EA = 32'hAB34 } e_t;` with `-GW=8` was accepted at
+    /// exit 0 where iverilog (*"value that is too large"*) and verilator
+    /// (`ENUMITEMWIDTH`) both REJECT the design. By elaborate the bound is folded, so
+    /// the same question can finally be asked.
+    ///
+    /// ⚠️ It does NOT try to skip the shapes the parser already policed, and that is a
+    /// correction: the first version mirrored the parser's fold with a local
+    /// `is_literal`, and the mirror drifted immediately — `const_lit` folds `2+1` but
+    /// not `(3)`, and it requires a DECIMAL literal, so `[(3):0]` and `[8'd7:0]` fell
+    /// between the two checks and stayed fail-open, which is the exact hole this
+    /// function exists to close. There is nothing to skip: a parser error HALTS the
+    /// pipeline, so a base the parser rejects never reaches elaborate, and one mistake
+    /// still prints once. (`hdl-parser` is not a dependency of `elaborate`, so sharing
+    /// the predicate rather than mirroring it was not available.)
+    ///
+    /// The bounds test itself is the parser's, verbatim in intent: at width 64 the
+    /// distinction is PROVENANCE rather than magnitude — an explicitly written negative
+    /// in an unsigned 64-bit base is an error, while an AUTO-INCREMENTED label that
+    /// wraps past `64'sh7FFF…` is a legal `logic [63:0]` pattern iverilog accepts.
+    pub(crate) fn check_enum_label_fits(
+        &mut self,
+        base: &Option<ast::Range>,
+        enum_signed: bool,
+        label: &str,
+        v: i64,
+        explicit: bool,
+    ) {
+        if base.is_none() {
+            return; // a base-less enum is `int`, which the parser sizes itself
+        }
+        // ⚠️ `*w < 64`, and 64 is not an off-by-one. The label VALUE is an `i64`, so at
+        // 64 bits the union range below is `[-2^63, 2^64-1]` — every i64 is inside it and
+        // the check cannot fire. Above 64 it is worse than inert: `1i128 << w` WRAPS at
+        // 128 and overflows past that, which made a legal `enum logic [W-1:0]` with
+        // W=128 report `the widest range is [-170…728, 0]` and reject a label of 5 that
+        // iverilog, verilator and vita's own previous build all accept — and panic in a
+        // debug build from w=127 up. Two review lenses found it independently.
+        let Some(w) = self.enum_base_width(base).filter(|w| *w < 64) else {
+            return;
+        };
+        let _ = explicit;
+        // ⚠️⚠️ The bound is the UNION of the signed and unsigned readings, which is
+        // WEAKER than the parser's, and deliberately so: the two folds disagree about
+        // what a based literal MEANS. `const_lit` reads `8'shFF` as the pattern 255;
+        // `const_eval_in_scope` reads it as −1. The parser can afford the narrow range
+        // because it sees the literal it folded; by elaborate the provenance is gone,
+        // and a `logic [W-1:0]` base with `A = 8'shFF` is a legal design that must not
+        // be rejected (`enum_sized_label.rs` pins it at 255). So this only reports a
+        // value that fits under NEITHER reading — which is still every cell row 12 was
+        // about, because those overflow the width outright.
+        //
+        // ⚠️ The consequence is an asymmetry worth knowing: a negative label on an
+        // UNSIGNED base is loud when the base bounds are literals (the parser) and
+        // accepted when they are not (here). Closing it needs the sign PROVENANCE the
+        // constant domain does not carry — the same wall ROADMAP §2 row 14 stops at.
+        let vi = v as i128;
+        let (lo, hi): (i128, i128) = (-(1i128 << (w - 1)), (1i128 << w) - 1);
+        let _ = enum_signed;
+        if vi < lo || vi > hi {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "enum label `{label}` = {v} does not fit its {w}-bit base type (§6.19); \
+                     no reading of a {w}-bit value reaches it (the widest range is \
+                     [{lo}, {hi}])"
+                ),
+            );
+        }
+    }
+
     /// The enum base's DECLARED `(lo, width, ascending)` — the enum-label twin of
     /// [`Self::param_decl_range_opt`], and the reason a label can join the constant
     /// domain's select fold at all.
@@ -483,6 +558,8 @@ impl Elaborator<'_> {
                 // §4.5.158: give body-local labels the enum's declared width+sign in
                 // `param_meta` (twin of the module/package paths) so a positive label of
                 // a signed enum compares signed inside a function/task; base-less = int(32).
+                // ⚠️ DECLARED sign only — see the module-scope twin in `instance.rs` for why
+                // the old `|| v < 0` is gone.
                 let base_w = self
                     .enum_base_width(base)
                     .or_else(|| base.is_none().then_some(32u32));
@@ -515,6 +592,19 @@ impl Elaborator<'_> {
                         }),
                         None => next,
                     };
+                    // §6.19 on the value as WRITTEN — see `instance.rs`.
+                    self.check_enum_label_fits(
+                        base,
+                        *signed,
+                        &lab.name.name,
+                        v,
+                        lab.value.is_some(),
+                    );
+                    // ⭐ Canonical at the declared width — see `instance.rs`.
+                    let v = match base_w {
+                        Some(w) => Self::const_mask(v, w, *signed),
+                        None => v,
+                    };
                     let key = self.fq(&lab.name.name);
                     // V33-3: a body-local label is a label too (diagnostic-only map —
                     // see `enum_label_types`; deliberately NOT in the save-list, since
@@ -524,7 +614,7 @@ impl Elaborator<'_> {
                     if let Some(w) = base_w {
                         saved_meta.push((
                             key.clone(),
-                            self.param_meta.insert(key.clone(), (w, *signed || v < 0)),
+                            self.param_meta.insert(key.clone(), (w, *signed)),
                         ));
                     }
                     let prev = self.bind_param_value(key.clone(), v);

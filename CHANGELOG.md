@@ -11,6 +11,79 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **Four §2 queue rows, and two of them were not what the queue said.** Each was re-measured
+  against both oracles before any code moved, and the census changed the shape of two.
+
+  - **A negative enum label on an UNSIGNED base kept its sign.** `typedef enum logic [7:0]
+    { A = -8'sd2 }` printed `A` as **-2** where both oracles print **254**, made `A < 0` true,
+    `A * 8'sd1` negative, and folded `localparam logic [15:0] LP = A` to `fffe` instead of `00fe`.
+    The base is unsigned and the width is declared, so the sign is simply gone. §4.5.154 had OR-ed
+    `v < 0` into the label's recorded signedness, on the grounds that such a base is illegal anyway
+    and signed was the graceful reading; it is not the reading either oracle takes, and it made vita
+    disagree with ITSELF — `%h`, a select, `$bits`, `-`, `+`, a concat, a `case` and the enum
+    VARIABLE were all already unsigned. The label's value is now also stored canonical at its
+    declared width, so the constant domain stops re-deriving a sign the label does not have.
+    ⭐ A 64-cell census (8 declaration forms × 9 consumers, module and package scope) moved exactly
+    the wrong cells; the `localparam` twin with the same base and value was correct throughout, and
+    a signed base and a base-less `enum` keep their negative labels. Review measured three more
+    fixes it did not claim: a net width `logic [A-1:0]` 4 → 254, `$size(arr[A:0])` 3 → 255, and a
+    `generate if` that had been taking the wrong arm.
+
+  - **A static function that assigned a module net dropped the write, silently.** The inline fold
+    decided from the left-hand side's spelling alone whether a statement was the return value or a
+    local, so `function f(); seq = seq + 7; f = 4'h3; endfunction` returned the right 3 with `seq`
+    still 0 at exit 0 — where both oracles give 7. The `automatic` spelling of the same body was
+    already honest (the frame path names it), so one rule had two answers depending on a keyword.
+    The fold now carries the set of names the body OWNS — its formals, its locals, its own name —
+    and refuses anything else with a message that says which name and why. ⚠️ That is a ladder move,
+    not the destination: performing the write means emitting a statement from an expression-position
+    fold. The cost is measured and accepted — a design whose foreign write is never observed was
+    accidentally correct and is now loud.
+
+  - **`$itor` of a REAL argument converted the IEEE-754 bit pattern.** `$itor(3.9)` was
+    `4.615964438073390e18` where iverilog gives `4.0`: §20.5 defines `$itor` as integral→real, so
+    the argument is rounded first (§6.24.1, half away from zero). ⚠️ Fixed on the VALUE in the one
+    evaluator, not by inserting a cast at elaborate — review measured all three reasons the elaborate
+    version was worse: an AST-level "is this real?" gate is blind to a real-returning FRAME function
+    and to a hierarchical real net, a fixed-width integer intermediate FLIPS THE SIGN past 2^63
+    (iverilog keeps `$itor(1e30)` as 1e30, so its model is not a round-trip through any integer
+    width), and the inserted cast desugars into `$floor`/`$rtoi`/`$signed` nodes that `--obs-procs`
+    then reported as builtin calls the source never wrote. `real'()` lowers to the same id and must
+    not round; it never reaches the arm with a real argument, and all eight of its spellings are
+    unmoved.
+
+  - **§6.19's enum-label range check was fail-open on a parameterised base.** The parser folds base
+    bounds with a literal-only fold, so `enum logic [W-1:0] { EA = 32'hAB34 }` with `-GW=8` ran at
+    exit 0 where iverilog and verilator both reject the design. The check now has an elaborate twin,
+    where the bound is folded. ⚠️ It reports only a value that fits under NEITHER the signed nor the
+    unsigned reading, because the two folds disagree about what a based literal means (`8'shFF` is
+    the pattern 255 to one and −1 to the other) — a legal `[W-1:0]` base with `A = 8'shFF` must not
+    be rejected. An existing test asserted the old fail-open as a principle ("never over-reject on
+    unknown width"); re-measured, both oracles reject that exact source, so the pin was holding a
+    gap open and is re-aimed.
+
+  ⚠️⚠️ **Adversarial review found five BLOCKING defects, all in the fixes, and every one is now
+  closed.** They are worth listing because four of the five are the same kind of mistake — a rule
+  written twice, or a predicate borrowed from a phase that does not share its inputs.
+  (1) The new range check computed its bounds with `1i128 << w`, which WRAPS at 128 and overflows
+  above it, so a legal 128-bit parameterised base was rejected and a debug build panicked from
+  w=127 up; the check is now capped at the widths where it can fire at all, since a label value is
+  an `i64` and cannot overflow a 64-bit-or-wider base.
+  (2) Its "skip what the parser already policed" predicate was a hand-mirror of the parser's fold
+  and drifted immediately, leaving `[(3):0]` and `[8'd7:0]` unchecked by BOTH — the exact hole the
+  row exists to close. There is nothing to skip: a parser error halts the pipeline, so the mirror
+  was deleted.
+  (3) The three enum-label binders are documented as twins and were not — the package one took its
+  auto-increment from the raw value instead of the masked one, so the same enum was correctly
+  rejected at module scope and silently accepted in a package.
+  (4) The mask turned a loud package-internal concat into a silent-wrong. The root was that a
+  package makes its PARAMETERS' declared widths live for the rest of its own body and never did the
+  same for its enum LABELS, so `localparam logic [15:0] WIDE = {A, B};` inside the package folded at
+  the wrong width — `0003`, losing the high label. That is now fixed, which also repairs the
+  positive-label spelling that was silently wrong before this slice.
+  (5) The `$itor` gate, as described above.
+
+
 - **A port connection invented a transition, and everything level-sensitive behind one woke
   on it.** `assign n = m;` between two whole nets of the same width — which is what a port
   connection lowers to, and `assign n[1] = a; assign n[0] = b;` is what a bus does — gives `n`

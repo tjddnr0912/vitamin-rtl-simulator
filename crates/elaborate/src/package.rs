@@ -654,8 +654,10 @@ impl Elaborator<'_> {
                     {
                         // Base width so an imported / `pkg::`-read label carries its
                         // self-width in a concat (twin of the module path); the enum's
-                        // DECLARED sign (`|| v < 0` graceful) so a positive label of a
-                        // signed enum stays signed in a comparison — §4.5.158.
+                        // DECLARED sign so a positive label of a signed enum stays signed
+                        // in a comparison — §4.5.158. ⚠️ DECLARED sign only; the old
+                        // `|| v < 0` is gone, and `instance.rs` records what both oracles
+                        // say instead.
                         // §4.5.158: a base-less `enum {…}` is `int` (32-bit) — give its labels
                         // an explicit 32-bit `param_meta` so the sign fix below reaches them too
                         // (`enum_base_width` returns None for a rangeless base). An unfoldable
@@ -679,10 +681,7 @@ impl Elaborator<'_> {
                                 }),
                                 None => next,
                             };
-                            // wrapping: an explicit label at i64::MAX must not
-                            // panic the auto-increment (twin of the module-scope
-                            // and body-local enum loops).
-                            next = v.wrapping_add(1);
+
                             // A2b-prereq: same single-name-space rule as params.
                             if vars.contains_key(&l.name.name) {
                                 self.error(
@@ -695,6 +694,33 @@ impl Elaborator<'_> {
                                     ),
                                 );
                             }
+                            // §6.19 on the value as WRITTEN — see `instance.rs`.
+                            self.check_enum_label_fits(
+                                base,
+                                *signed,
+                                &l.name.name,
+                                v,
+                                l.value.is_some(),
+                            );
+                            // ⭐ Canonical at the declared width — see `instance.rs`.
+                            let v = match base_w {
+                                Some(w) => Self::const_mask(v, w, *signed),
+                                None => v,
+                            };
+                            // ⚠️ AFTER the mask, exactly as the module-scope and
+                            // body-local twins do it. It used to be taken from the RAW
+                            // fold, immediately after `const_eval_in_scope`, and that one
+                            // line made the twins disagree: with
+                            // `enum logic [7:0] { PA = -8'sd1, PB }` the module scope
+                            // auto-increments 255 → 256 and is correctly rejected, while
+                            // the package auto-incremented −1 → 0 and accepted a design
+                            // both oracles reject. Found by a review lens reading the
+                            // three "see `instance.rs`" comments and checking they were
+                            // true.
+                            // wrapping: an explicit label at i64::MAX must not panic the
+                            // auto-increment (twin of the module-scope and body-local
+                            // enum loops).
+                            next = v.wrapping_add(1);
                             let key = self.fq(&l.name.name);
                             // Capture the prior range BEFORE binding — `bind_param_value`
                             // clears it, so this is the only moment it can be saved, and
@@ -707,12 +733,26 @@ impl Elaborator<'_> {
                             // bare-imported `EA[7:0]` fold through the same table.
                             self.bind_param_range(&key, base_range);
                             saved_range.push((key.clone(), prev_range));
-                            saved.push((key, prev));
                             consts.insert(l.name.name.clone(), v);
                             enum_labels.insert(l.name.name.clone(), td.name.name.clone());
                             if let Some(w) = base_w {
-                                const_meta.insert(l.name.name.clone(), (w, *signed || v < 0));
+                                const_meta.insert(l.name.name.clone(), (w, *signed));
+                                // …and make it LIVE for the rest of this package body,
+                                // exactly as the parameter arm above does ("Make this
+                                // param's meta visible to a LATER intra-package alias /
+                                // expression"). Without it a label had a declared width
+                                // for every consumer OUTSIDE the package and none inside
+                                // it, so `localparam logic [15:0] WIDE = {A, B};` in the
+                                // same package folded the concat at the wrong width —
+                                // `0003`, losing the high label, where both oracles give
+                                // `fe03`. Save/restore like every other entry here, so
+                                // nothing leaks past the package.
+                                saved_meta.push((
+                                    key.clone(),
+                                    self.param_meta.insert(key.clone(), (w, *signed)),
+                                ));
                             }
+                            saved.push((key, prev));
                             if let Some(r) = base_range {
                                 const_range.insert(l.name.name.clone(), r);
                             }

@@ -4,8 +4,12 @@
 //! iverilog rejects it; vita previously TRUNCATED it silently (`{X=16}` in
 //! `[3:0]` read 0, a genuine silent-wrong on invalid input). The parser now
 //! emits a loud E2002 for const-foldable labels against a const-foldable base
-//! width, and stays fail-open (never over-rejects) when either is unknown.
-//! iverilog 13.0-pinned oracle.
+//! width, and ELABORATE checks the rest (2026-09-01, ROADMAP §2 row 12): the parser
+//! folds base bounds with `const_lit`, which cannot see a parameter, so
+//! `enum logic [W-1:0]` was fail-open — and both oracles reject the designs it let
+//! through. The two checks partition the shapes rather than overlapping, so one
+//! mistake still prints once. Fail-open remains only where NOTHING can fold the
+//! value or the width. iverilog 13.0-pinned oracle.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -13,6 +17,12 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 
 /// Run vita on `src`; return (stdout, exit-code).
 fn run(src: &str) -> (String, Option<i32>) {
+    run_with(src, &[])
+}
+
+/// `run` plus elaborate flags — `-G` is what makes a parameterised enum base illegal,
+/// and it is an ELABORATE input, so it cannot be expressed in the source.
+fn run_with(src: &str, extra: &[&str]) -> (String, Option<i32>) {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let d = std::env::temp_dir().join(format!("vita_elr_{}_{n}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
@@ -20,11 +30,16 @@ fn run(src: &str) -> (String, Option<i32>) {
     std::fs::write(&f, src).unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_vita"))
         .arg(f.to_str().unwrap())
+        .args(extra)
         .current_dir(&d)
         .output()
         .expect("run vita");
     (
-        String::from_utf8_lossy(&out.stdout).into_owned(),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
         out.status.code(),
     )
 }
@@ -104,16 +119,22 @@ fn atom_and_default_bases_pass() {
     assert!(out.contains("-128 200 255"), "atom/default bases:\n{out}");
 }
 
+/// ⚠️⚠️ RE-AIMED 2026-09-01. This cell used to assert `code == Some(0)` and called the
+/// behaviour "honest: never over-reject on unknown width". Re-measured, the width is
+/// not unknown to anyone but the PARSER, and both oracles reject this exact source:
+/// iverilog *"Enumeration name B has a value that is too large 32'sd99"*, verilator
+/// `%Error-ENUMITEMWIDTH`. So the pin was holding a gap open, not a principle — the
+/// parser folds base bounds with `const_lit`, which cannot see `W`, while ELABORATE
+/// can. ROADMAP §2 row 12.
 #[test]
-fn param_width_base_is_failopen() {
-    // The base width `[W-1:0]` is not const-foldable at parse time, so the range
-    // check is skipped (fail-open) — even a label that would overflow a concrete
-    // width must NOT be rejected here (honest: never over-reject on unknown width).
+fn param_width_base_is_checked_at_elaborate() {
     let (out, code) = run(
         "module t #(parameter W=4);\n  typedef enum logic [W-1:0] {A=15, B=99} e_t;\n  e_t e;\n\
          initial begin e=A; $display(\"%0d\", e); $finish; end\nendmodule\n",
     );
-    assert_eq!(code, Some(0), "param-width base must be fail-open:\n{out}");
+    assert_ne!(code, Some(0), "both oracles reject this:\n{out}");
+    assert!(out.contains("`B` = 99"), "names the label:\n{out}");
+    assert!(out.contains("4-bit base type"), "names the width:\n{out}");
 }
 
 #[test]
@@ -174,4 +195,65 @@ fn signed_longint_admits_any_i64() {
          initial begin x=B; $display(\"%0d\", x); $finish; end\nendmodule\n");
     assert_eq!(code, Some(0), "longint extremes must pass:\n{out}");
     assert!(out.contains("9223372036854775807"), "longint max:\n{out}");
+}
+
+/// ⚠️⚠️ The parser's §6.19 check is FAIL-OPEN once a base bound is not a bare literal:
+/// it folds with `const_lit`, which knows nothing about parameters. So an enum whose
+/// base is `[W-1:0]` was accepted at exit 0 with `-GW=8`, where iverilog (*"value that
+/// is too large"*) and verilator (`ENUMITEMWIDTH`) both REJECT the design. The check
+/// now has an ELABORATE twin, where the bound is folded. ROADMAP §2 row 12.
+#[test]
+fn a_parameterised_base_is_checked_too() {
+    let (o, code) = run_with(
+        "module top #(parameter W = 32);\n\
+           typedef enum logic [W-1:0] { EA = 32'hAB34 } e_t;\n\
+           initial begin $display(\"bare=%0d\", EA); $finish; end\n\
+         endmodule\n",
+        &["-GW=8"],
+    );
+    assert_ne!(code, Some(0), "both oracles reject this:\n{o}");
+    assert!(
+        o.contains("does not fit its 8-bit"),
+        "names the width:\n{o}"
+    );
+    assert!(
+        o.contains("`EA` = 43828"),
+        "names the label and value:\n{o}"
+    );
+}
+
+/// …and it is not a false alarm: the SAME design without the override has a 32-bit
+/// base, which holds the value, and both oracles run it.
+#[test]
+fn a_parameterised_base_that_does_fit_still_runs() {
+    let (o, code) = run_with(
+        "module top #(parameter W = 32);\n\
+           typedef enum logic [W-1:0] { EA = 32'hAB34 } e_t;\n\
+           initial begin $display(\"bare=%0d bits=%0d\", EA, $bits(EA)); $finish; end\n\
+         endmodule\n",
+        &[],
+    );
+    assert_eq!(code, Some(0), "{o}");
+    assert!(o.contains("bare=43828 bits=32"), "got:\n{o}");
+}
+
+/// CONTROL: a LITERAL base is still the parser's, and the mistake is reported ONCE.
+/// The elaborate twin skips exactly the shape the parser can fold, so the two cannot
+/// both fire on one label.
+#[test]
+fn a_literal_base_is_reported_once() {
+    let (o, code) = run_with(
+        "module top;\n\
+           typedef enum logic [3:0] { X = 16 } e_t;\n\
+           initial begin $display(\"%0d\", X); $finish; end\n\
+         endmodule\n",
+        &[],
+    );
+    assert_ne!(code, Some(0), "{o}");
+    assert_eq!(
+        o.matches("error[").count(),
+        1,
+        "one mistake, one diagnostic:\n{o}"
+    );
+    assert!(o.contains("fits the enum base type"), "the PARSER's:\n{o}");
 }

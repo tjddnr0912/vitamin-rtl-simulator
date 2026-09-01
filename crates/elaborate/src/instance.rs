@@ -429,8 +429,19 @@ impl Elaborator<'_> {
                     // `param_meta` twin of the localparam path above. §4.5.158: the label
                     // also carries the enum's DECLARED sign (`signed`) so a POSITIVE label
                     // of a SIGNED enum stays signed in a relational/collective context
-                    // (`enum byte {B=2}; v > B` = signed) — `|| v < 0` keeps a negative
-                    // label signed even on an (illegal) unsigned base (graceful, §4.5.154).
+                    // (`enum byte {B=2}; v > B` = signed).
+                    //
+                    // ⚠️ It carries the DECLARED sign and nothing else. §4.5.154 also OR-ed
+                    // in `v < 0` to keep a negative label signed on an unsigned base, on the
+                    // grounds that such a base is illegal anyway and signed was the graceful
+                    // reading. It is not the reading either oracle takes: for
+                    // `enum logic [7:0] { A = -8'sd2 }` both print `A` as **254**, `A < 0`
+                    // as **0** and `A * 8'sd1` as **254**, and both fold `logic [15:0] LP = A`
+                    // to `00fe` — the value is stored at the declared width and the declared
+                    // width is unsigned, so the sign is simply gone. vita said -2, 1, -2 and
+                    // `fffe`. The clause also made vita disagree with ITSELF: `%h`, a select,
+                    // `$bits`, `-`, `+`, a concat, a `case` and the enum VARIABLE were all
+                    // already unsigned, so one label read two ways in one design.
                     // §4.5.158: a base-less `enum {…}` is `int` (32-bit) — give its labels
                     // an explicit 32-bit `param_meta` so the sign fix below reaches them too
                     // (`enum_base_width` returns None for a rangeless base). An unfoldable
@@ -457,6 +468,30 @@ impl Elaborator<'_> {
                             }),
                             None => next,
                         };
+                        // §6.19 first, on the value as WRITTEN — the mask below would
+                        // hide the very thing this reports.
+                        self.check_enum_label_fits(
+                            base,
+                            *signed,
+                            &lab.name.name,
+                            v,
+                            lab.value.is_some(),
+                        );
+                        // ⭐ …and the VALUE is stored CANONICAL at that width. A label is
+                        // declared at a width and a sign, and both oracles read it that way:
+                        // `enum logic [7:0] { A = -8'sd2 }` folds
+                        // `localparam logic [15:0] LP = A;` to `00fe`, because the -2 never
+                        // survives the 8 unsigned bits it was declared in. Storing the raw
+                        // i64 left the constant domain to re-derive a sign the label no
+                        // longer has — `fffe` — while the RUNTIME read of the same label was
+                        // already 254, so one label had two values in one design.
+                        // `const_mask` is the identity for a signed base and for any
+                        // in-range non-negative label, so this moves exactly the cells that
+                        // were wrong.
+                        let v = match base_w {
+                            Some(w) => Self::const_mask(v, w, *signed),
+                            None => v,
+                        };
                         let key = self.fq(&lab.name.name);
                         // V33-3: remember that this constant is a LABEL and which enum
                         // declared it, so `LA.name()` can be told from `u1.f(x)` when
@@ -465,7 +500,7 @@ impl Elaborator<'_> {
                         self.enum_label_types
                             .insert(key.clone(), td.name.name.clone());
                         if let Some(w) = base_w {
-                            self.param_meta.insert(key.clone(), (w, *signed || v < 0));
+                            self.param_meta.insert(key.clone(), (w, *signed));
                         }
                         let prev = self.bind_param_value(key.clone(), v);
                         self.bind_param_range(&key, base_range);

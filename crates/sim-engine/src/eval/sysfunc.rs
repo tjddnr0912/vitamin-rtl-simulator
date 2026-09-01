@@ -257,7 +257,33 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
             }
             SysFuncId::Itor => {
                 // int → real, exact convert.
-                let i = self.eval(args[0]).to_i128_signed().unwrap_or(0);
+                //
+                // ⭐ …unless the argument is already REAL, which `$itor` accepts even
+                // though §20.5 defines it as integral→real. `to_i128_signed` on a real
+                // `Value` hands back the IEEE-754 BIT PATTERN, so `$itor(3.9)` was
+                // 4.615964438073390e18 at exit 0 where iverilog gives 4.0: it coerces
+                // the argument to an integer first (§6.24.1, round half away from zero
+                // — which is exactly `f64::round`) and converts that.
+                //
+                // ⚠️ Done on the VALUE, here, and not by inserting a cast at elaborate.
+                // Three reasons, each measured: an elaborate gate has to ask "is this
+                // expression real?" from the AST, and the IR-level predicate is blind to
+                // a real-returning FRAME function and to a hierarchical real net (this
+                // crate's own comment in `inline_fn.rs` says so); a fixed-width integer
+                // intermediate FLIPS THE SIGN past 2^63, where iverilog keeps the
+                // magnitude (`$itor(1e30)` is 1e30, so its model is not a round-trip
+                // through any integer width); and the cast desugars into `$floor`/
+                // `$rtoi`/`$signed` nodes that the `--obs-procs` builtin census then
+                // reports as calls the source never wrote.
+                //
+                // ⚠️ `real'(e)` lowers to this SAME id and must not round: it never
+                // reaches here with a real argument, because `lower_prim_cast` returns a
+                // real operand unchanged and only emits `Itor` for an integral one.
+                let v = self.eval(args[0]);
+                if v.is_real {
+                    return Value::from_f64(v.to_f64().unwrap_or(0.0).round());
+                }
+                let i = v.to_i128_signed().unwrap_or(0);
                 Value::from_f64(i as f64)
             }
             SysFuncId::RealToBits => {

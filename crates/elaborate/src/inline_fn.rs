@@ -2,6 +2,26 @@
 
 use super::*;
 
+/// What an inlined function body may write, and at what shape: `dims` is the declared
+/// width/sign of each local (absent for `string`/`class`/`event`, which must NOT be
+/// bit-resized), `writable` is every name the body OWNS — its formals, its locals and
+/// its own name. The two answer different questions and only `writable` is an
+/// ownership claim, which is why absence from `dims` cannot stand in for it.
+pub(crate) struct InlineScope<'a> {
+    pub dims: &'a BTreeMap<String, (u32, bool)>,
+    pub writable: &'a std::collections::BTreeSet<String>,
+    /// Set by the `writable` refusal so the caller's generic "control flow" message
+    /// does not overwrite a reason that was already given.
+    ///
+    /// ⚠️ It is a FLAG and not `self.error_count`, which is what this was first. A
+    /// global counter answers "did anything error since the fold began", and review
+    /// measured that swallowing: a nested callee's own refusal, a package-scoped
+    /// callee's, and an `E3010 undeclared name` that has nothing to do with functions
+    /// all suppressed the caller's reason. The question here is only ever "did THIS
+    /// fold refuse for a reason it stated".
+    pub named_a_reason: std::cell::Cell<bool>,
+}
+
 /// A function's declared RETURN bit-vector width. `None` = a `real`/`realtime`
 /// return (handled by the caller: NOT a bit-width context) OR an unfoldable
 /// (param-width) integral return (the caller treats that as unknown-width ⇒ route).
@@ -846,14 +866,43 @@ impl Elaborator<'_> {
                 ));
             }
         }
+        // ⭐ EVERY name this body may assign: its own formals, its own locals (block
+        // locals included) and the function name. `local_dims` cannot serve — it
+        // deliberately OMITS `string`/`class`/`event` locals so they skip the resize,
+        // so "absent from local_dims" does not mean "not a local".
+        //
+        // ⚠️⚠️ Without this the fold treated an assignment to a MODULE NET as an
+        // assignment to a local: `function f(); seq = seq + 7; f = 4'h3; endfunction`
+        // pushed `seq` onto the substitution stack, nothing ever wrote the net, and the
+        // call returned the right 3 with `seq` still 0 at exit 0 — where both oracles
+        // give 7. The `automatic` spelling of the SAME body is honestly loud (it takes
+        // the frame path, whose subset check names exactly this), so one rule had two
+        // answers depending on a keyword. Refusing here routes the static spelling to
+        // that same diagnostic. ⚠️ Refusing is the LADDER move, not the destination:
+        // supporting the write means emitting a statement from an expression-position
+        // fold, which is `hoist/`'s machinery — ROADMAP §2.
+        let mut writable: std::collections::BTreeSet<String> = decls
+            .iter()
+            .flat_map(|d| d.names.iter())
+            .map(|n| n.name.name.clone())
+            .collect();
+        writable.extend(func.ports.iter().map(|p| p.name.name.clone()));
+        writable.insert(func.name.name.clone());
         // (b) walk the straight-line body, recording the return-var assignment.
         let fname = func.name.name.clone();
         let mut ret: Option<u32> = None;
         // Gap B: body-local enum labels → constants under the caller prefix, bounded
         // to this reduction (restored below) so a body `= A` folds without leaking.
         let (saved_labels, saved_meta) = self.push_body_enum_labels(&func.body_enums, &func.body);
-        let ok =
-            self.fold_straight_line(&func.body, &fname, ret_w, ret_signed, &local_dims, &mut ret);
+        // The fold's refusals are not all the same refusal: the `writable` arm names its
+        // own cause, so the generic message below must not overwrite it with "control
+        // flow" — which was the wrong reason for a body that has none.
+        let scope = InlineScope {
+            dims: &local_dims,
+            writable: &writable,
+            named_a_reason: std::cell::Cell::new(false),
+        };
+        let ok = self.fold_straight_line(&func.body, &fname, ret_w, ret_signed, &scope, &mut ret);
         self.restore_params(saved_labels);
         self.restore_param_meta(saved_meta);
         // restore the substitution stack to its pre-call depth.
@@ -861,12 +910,14 @@ impl Elaborator<'_> {
         self.formal_str.truncate(fs_base);
 
         if !ok {
-            self.error(
-                MsgCode::ElabUnsupported,
-                &format!(
-                    "function `{fname}` body is not reducible to an expression (control flow)"
-                ),
-            );
+            if !scope.named_a_reason.get() {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "function `{fname}` body is not reducible to an expression (control flow)"
+                    ),
+                );
+            }
             return self.placeholder_expr();
         }
         match ret {
@@ -891,7 +942,7 @@ impl Elaborator<'_> {
         fname: &str,
         ret_w: u32,
         ret_signed: bool,
-        local_dims: &BTreeMap<String, (u32, bool)>,
+        scope: &InlineScope<'_>,
         ret: &mut Option<u32>,
     ) -> bool {
         match s {
@@ -899,9 +950,9 @@ impl Elaborator<'_> {
             ast::Stmt::Block { stmts, .. } => {
                 // begin-end local decls need NO nets: each local lives only as a
                 // substitution binding (combinational). Fold each stmt in order.
-                stmts.iter().all(|st| {
-                    self.fold_straight_line(st, fname, ret_w, ret_signed, local_dims, ret)
-                })
+                stmts
+                    .iter()
+                    .all(|st| self.fold_straight_line(st, fname, ret_w, ret_signed, scope, ret))
             }
             ast::Stmt::Blocking {
                 lhs, delay, rhs, ..
@@ -917,13 +968,28 @@ impl Elaborator<'_> {
                     return false;
                 }
                 let target = p.segments[0].name.clone();
+                // …and it must be a name this body OWNS. Anything else is a write the
+                // inline fold cannot perform — see `writable`.
+                if !scope.writable.contains(&target) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "function `{fname}` assigns `{target}`, which is not one of \
+                             its own formals or locals — an inlined function body can \
+                             only write its own names (declare `{fname}` `automatic` for \
+                             the same diagnostic from the frame path)"
+                        ),
+                    );
+                    scope.named_a_reason.set(true);
+                    return false;
+                }
                 // §11.6: a fill rhs is sized to the LHS width — the return-type width
                 // for `fname = …`, the declared width for a body/block local (non-
                 // fill ⇒ byte-identical via lower_expr).
                 let (ctx_w, ctx_signed) = if target == fname {
                     (ret_w, ret_signed)
                 } else {
-                    local_dims.get(&target).copied().unwrap_or((0, false))
+                    scope.dims.get(&target).copied().unwrap_or((0, false))
                 };
                 let rhs_id0 = if ctx_w == 0 {
                     self.lower_expr(rhs)

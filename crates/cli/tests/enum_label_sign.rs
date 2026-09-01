@@ -131,3 +131,77 @@ fn signed_enum_label_equiv_plain_signed_const() {
     assert!(oka && okb, "run failed:\nenum:\n{a}\nplain:\n{b}");
     assert_eq!(a, b, "signed enum label diverged from plain signed const");
 }
+
+/// ⚠️⚠️ A NEGATIVE label on an UNSIGNED base is UNSIGNED — the declared width is the
+/// whole story, and the sign is simply gone. §4.5.154 had OR-ed `v < 0` into the
+/// label's `param_meta` sign, on the grounds that such a base is illegal anyway and
+/// signed was the graceful reading; it is not the reading either oracle takes, and it
+/// made vita disagree with ITSELF, because `%h`, a select, `$bits`, `-`, `+`, a concat,
+/// a `case` and the enum VARIABLE were all already unsigned. One label, two readings.
+///
+/// A 64-cell census (8 declaration forms x 9 consumers, module AND package scope) moved
+/// exactly the cells below; the `localparam logic [7:0] NM = -8'sd2;` twin was correct
+/// throughout. ROADMAP §2 row 13. Values are iverilog's, and verilator agrees on all
+/// of them.
+#[test]
+fn a_negative_label_on_an_unsigned_base_is_unsigned() {
+    let (o, ok) = run("module t;\n\
+         typedef enum logic [7:0] { A = -8'sd2, B = 8'd5, C = -8'sd1 } ue_t;\n\
+         ue_t v = A;\n\
+         initial begin\n\
+           $display(\"d=%0d h=%h sel=%0d bits=%0d\", A, A, A[3:0], $bits(A));\n\
+           $display(\"lt0=%0d mul=%0d sub=%0d add=%0d\", A < 0, A * 8'sd1, A - B, A + B);\n\
+           $display(\"sgn=%0d wide=%h var=%0d\", $signed(A), A ^ 64'h0, v);\n\
+           #1 $finish;\n\
+         end endmodule");
+    assert!(ok, "{o}");
+    assert!(o.contains("d=254 h=fe sel=14 bits=8"), "got:\n{o}");
+    assert!(o.contains("lt0=0 mul=254 sub=249 add=3"), "got:\n{o}");
+    assert!(
+        o.contains("sgn=-2 wide=00000000000000fe var=254"),
+        "got:\n{o}"
+    );
+}
+
+/// …and the CONSTANT domain agrees with the runtime, which it did not before. The
+/// label's value is now stored canonical at its declared width, so a fold no longer
+/// re-derives a sign the label does not have. (Reached through a package because a
+/// module-scope label is not yet visible to a body `localparam` — ROADMAP §2 row 11.)
+#[test]
+fn the_constant_domain_reads_the_same_unsigned_label() {
+    let (o, ok) = run("package pk;\n\
+         typedef enum logic [7:0] { A = -8'sd2, B = 8'd5 } ue_t;\n\
+         endpackage\n\
+         module t;\n\
+         localparam logic [15:0] LP = pk::A;\n\
+         localparam int          SG = pk::A;\n\
+         wire [pk::A[3:0]-1:0] wbus;\n\
+         initial begin\n\
+           $display(\"lp=%h sg=%0d nb=%0d d=%0d gt=%0d\", LP, SG, $bits(wbus), pk::A, pk::A > pk::B);\n\
+           #1 $finish;\n\
+         end endmodule");
+    assert!(ok, "{o}");
+    assert!(o.contains("lp=00fe sg=254 nb=14 d=254 gt=1"), "got:\n{o}");
+}
+
+/// CONTROL: the two declaration forms the removal must NOT touch. A base-less enum is
+/// `int` (signed) and a `byte` base is signed, so their negative labels stay negative —
+/// which is also what makes this a sign-PROVENANCE fix rather than "negatives are
+/// unsigned now".
+#[test]
+fn signed_and_baseless_bases_keep_their_negative_labels() {
+    let (o, ok) = run("module t;\n\
+         typedef enum { N1 = -1 } bl_t;\n\
+         typedef enum byte { S1 = -8'sd2 } sb_t;\n\
+         typedef enum logic [7:0] { U1 = -8'sd2 } ub_t;\n\
+         initial begin\n\
+           $display(\"bl=%0d bl_lt=%0d sb=%0d sb_lt=%0d ub=%0d ub_lt=%0d\",\n\
+                    N1, N1 < 0, S1, S1 < 0, U1, U1 < 0);\n\
+           #1 $finish;\n\
+         end endmodule");
+    assert!(ok, "{o}");
+    assert!(
+        o.contains("bl=-1 bl_lt=1 sb=-2 sb_lt=1 ub=254 ub_lt=0"),
+        "got:\n{o}"
+    );
+}
