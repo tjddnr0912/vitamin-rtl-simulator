@@ -2995,3 +2995,37 @@ that row RESOLVED before the review finished. It came back with the revert. Do n
 propagate a closure out of a slice until the slice is committed — and when re-opening one,
 re-measure it rather than restoring the old text: the row said four operators lost the sign
 and only three do.
+
+## Re-grounding the queue — six rows, six changed shapes (2026-09-01)
+
+Before picking the next slice, every open candidate was reproduced at HEAD against
+iverilog and verilator. **All six changed shape**, and in four different directions. That
+ratio is the lesson, not any one row:
+
+| row | what the queue said | what it measures |
+|---|---|---|
+| shift count | a constant-function corner | reachable at module scope with **no function and no name** — a silently wrong bus width, and a `generate if` taking the wrong branch |
+| const OOR select | a loud gap, one prerequisite | a **10-cell silent-wrong** sits under it with a one-conditional fix; the recorded headline is the part to *not* start |
+| `**` at a wide target | loud | **48/108 silent-wrong**; the `**` examples are the rare loud corner |
+| duplicate name | 3 spellings, §2 | **126 cells**, and it belongs in §3 (nothing correct is got wrong) |
+| clocking output | "a write lands as x" | declaring the output **destroys the signal with no write at all**, across a module boundary |
+| verilog-ethernet | one ~10-line gate | the gate passes elaborate in 1.03 s and then **simulates in 38 hours vs 7.6 s** |
+
+Three rules fall out.
+
+**A queue line ages against the binary that wrote it.** These rows were accurate when
+filed. What changed underneath them was other slices — and a row's *class* (loud vs
+silent-wrong) ages fastest, because the surrounding code stops declining before the row is
+re-read. Re-measure class first: it is what decides ranking.
+
+**A row that names a symptom will be scoped to that symptom.** Every one of the six was
+filed from the cell that produced it. The shift-count row said "constant function" because
+that is where it was found; the real reachability was a net's declared width. Ask what the
+*mechanism* can reach, not what the reporter ran.
+
+**"Closing this unblocks the corpus" is a claim with two halves.** The verilog-ethernet
+gate really is ten lines and really does make the design elaborate. It would still not
+run — 18,000× iverilog, with `--obs-procs-time` putting 100.0% of it in eighty continuous
+assigns that re-evaluate a constant-argument function call on every scheduler pass. This
+project has now had a corpus refusal *move* rather than close three times; measure the
+next gap before promising the promotion.
