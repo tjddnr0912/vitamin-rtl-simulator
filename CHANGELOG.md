@@ -9,6 +9,27 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Investigated — built, measured, reverted
+
+- **A module-scope parameter's declared width is still not a fact the constant fold uses — built,
+  measured and reverted.** `localparam logic signed [7:0] NM = -8'sd2; localparam logic [63:0] X = NM
+  ^ 64'h0;` is `fffffffffffffffe` in vita where iverilog and verilator both give
+  `00000000000000fe`, and vita contradicts itself: the same expression over a function LOCAL folds
+  `00…fe`, because a local's declared width lives in the interpreter's environment and the
+  module-scope initializer folds through a width-unlimited walk that has no context to convert a leaf
+  into.
+  Routing that initializer through the width-aware entry the constant-function interpreter already
+  uses does fix it — a 44-cell census went from 27 divergent cells to 3, a four-operator residue
+  closed, and a pinned `>>>` self-contradiction went away. It was reverted anyway, after three review
+  rounds and seven blocking defects. Five were in the gate and were fixed; the last two are in the
+  shared width-aware walk itself and were there from the start. The sharper one is that a shift's
+  right operand is self-determined and unsigned, and the walk pushes the assignment context onto it,
+  so a narrow signed count sign-extends and `16'hFF01 << 3'b101` becomes 0 — which is **reachable
+  today through a constant function**, with no routing involved. That has to be fixed first, in a walk
+  shared with the constant-function interpreter, and it is a different blast radius.
+  What ships is the record: the diagnosis, both prerequisites, and a pinned test naming what a fix
+  must move and what it must not.
+
 ### Fixed
 
 - **A module-scope enum label is now visible to everything declared under it, and the read-only

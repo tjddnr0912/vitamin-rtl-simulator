@@ -2900,3 +2900,98 @@ question). The runner graded that *"was loud, now silently wrong"* — true of t
 false of this row, and permanently red. Pinning vita's own answer instead would have been
 self-certifying. The honest representation pins BOTH answers and names the ruling: vita
 moving is still a regression, and the two agreeing again is the promotion the row waits for.
+
+## Row 14 — declared width provenance: built, measured, reverted (2026-09-01)
+
+### ★★★★★ When the tool contradicts itself, the correct half is the implementation
+
+Three earlier slices stopped at *"a parameter's declared width is not available in the
+constant domain"* and each proposed building it. It was already built, one scope over: a
+constant FUNCTION's body folds through a width-aware walk that carries each local's
+declared width and sign and converts a leaf into its context (§11.8.2) — and gets the
+answer right. The module-scope initializer folded through a width-*unlimited* walk that has
+no context to convert into.
+
+So the same expression had two answers depending on where it was written, and the fix was
+to route one entry point at the other's walk. **Before building the mechanism a wall is
+attributed to, write the same expression in the neighbouring scope and see whether that
+scope already has it.**
+
+### ★★★★ A width is only a fact if a declaration says so
+
+The routing is gated on `param_decl_width_declared` and not on `param_meta`, whose width
+can be inferred from the initializer's own value. That distinction is the whole reason this
+was safe to ship: §6.20.2 gives an untyped parameter the type of its FINAL override, so a
+width read off the declared default is not a fact about the parameter once an override
+arrives — and review found a live case where it is not
+([[self-determined-width-does-not-survive-an-override]], now §2 row 25).
+
+### ★★★ "One prerequisite, three rows" is a claim with a domain in it
+
+Rows 14, 16 and 21 were filed as one infrastructure item because all three want a declared
+width. Closing 14 closed only 14: the other two need the >64-bit fold to compute at the
+CONTEXT width, and the ≤64-bit walk that fixed 14 does not reach them. They share the
+provenance and not the domain. **When collapsing N rows into one item, name the mechanism,
+not the missing input — and re-measure the others the day the item lands.**
+
+### ★★★★★ A producer cannot go canonical while its consumers still guess
+
+Review round 1 pointed out that a package folded `NS ^ 64'h0` to `ff…fe` where a module
+folded the identical text to `00…fe`, and routing the package binder through the same
+width-aware fold looks like the one-line answer. It is a **net loss**: it makes the
+package's stored VALUE canonical while every consumer of `pk::X` still folds through the
+width-unlimited walk, which has no context to convert the leaf into and sign-extends it.
+Measured over 8,748 package-consumer designs: **1,233 correct→silent-wrong against 714
+fixed**, plus one correct→loud.
+
+The two halves are one change. When a fix makes a stored value more precise, enumerate who
+READS it before shipping — and if the readers cannot use the precision, the asymmetry you
+were trying to remove is the safer state.
+
+### ★★★★ Set-or-clear is two-valued; scope resolution needs three
+
+A provenance set written `insert`-or-`remove` and probed by an outward scope walk cannot
+distinguish "this scope bound the name and it is not declared" from "this scope never bound
+the name" — so the walk sails outward and vouches for an ANCESTOR's declaration while the
+consumer resolves the leaf to that ancestor's width. A module-scope `logic [7:0] NM` beside
+a generate-block `localparam time NM = 300;` made `NM | 64'h0` answer 44, at exit 0, through
+five scope kinds.
+
+The fix is to stop at the first level that BINDS the name and answer from there. Pick the
+level marker carefully: `param_meta` was the obvious choice and is wrong, because the very
+declaration that has to stop the walk (`time`) is deliberately absent from it. The VALUE map
+is the one every binding writes.
+
+This is [[a-default-is-not-a-fact]] one level down — an absence read as a value — and it
+appeared in the slice written to fix exactly that.
+
+### ★★★★★ Count the rounds, and read WHERE the blockers are — that is the stop signal
+
+Three review rounds, seven BLOCKING, and the attribution decided the outcome:
+
+- **Round 1 (three)** — all one root in my design: the gate demanded provenance of the
+  TARGET and let the walk size every LEAF out of a map whose width is a default. Fixed.
+- **Round 2 (two)** — one from the fix I made for a round-1 NIT (the package routing), one
+  in the gate mechanism (the two-valued set). Reverted the first, repaired the second.
+  Different responses to superficially similar findings.
+- **Round 3 (two)** — both in the SHARED width-aware walk, and both there since round 1.
+
+That third row is the stop signal. When the remaining blockers are no longer in the thing
+you built but in the thing you routed TO, you are not finishing a slice — you are
+discovering a prerequisite. The clincher was one measurement: the shift-count defect
+reproduces **today**, through a constant function, with none of the new routing involved.
+A defect the change merely EXPOSES belongs to the code it exposes, and fixing it there is a
+different slice with a different blast radius.
+
+So the change was reverted with its diagnosis, both prerequisites, and a pinned test that
+records what a future fix must move and what it must not — the §4.5.361/371/373 pattern.
+**A fix that works and cannot be defended is worth less than the measurement that says
+why.**
+
+### ★★★ A "resolved" residue is only resolved if the thing that resolved it ships
+
+Routing the initializer also closed a separately-filed four-operator residue, and I marked
+that row RESOLVED before the review finished. It came back with the revert. Do not
+propagate a closure out of a slice until the slice is committed — and when re-opening one,
+re-measure it rather than restoring the old text: the row said four operators lost the sign
+and only three do.
