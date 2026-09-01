@@ -3068,3 +3068,49 @@ range it had to work around earlier.
 So a five-cell fix turned 76 correct cells loud, and the prerequisite is an AST field, not
 a conditional. [[implicit-means-unrecorded-not-untyped]] again — and the tell was that the
 guard had no way to name the thing it was deciding about.
+
+## Row 21 — a context width, and three ways a narrowing gate was load-bearing (2026-09-01)
+
+### ★★★★★ Removing a decline transfers responsibility to whatever answers instead
+
+The wide fold declined a context-determined top it could not widen, and the caller then
+fell back to the width-unlimited integer walk — which happens to be right for `+`, `*`,
+`<<` and `?:`. Threading a context width made the decline stop firing, and a stale
+`Paren` arm two lines away began answering instead, at the operand's width. One pair of
+parentheses, two lines from its own twin, turned a correct value into a wrong one; the
+slice's own headline cell got *worse* through a paren.
+
+The guard and the value were produced by two different walks, and only the guard was
+updated. **When you make a refusal unreachable, find out who answers now** — the fallback
+was doing real work and nobody had written that down.
+
+### ★★★★ The runtime is an oracle you already own
+
+`widen_to` extended each operand in its own signedness. §11.8.2 decides the *expression's*
+sign first and coerces operands to it, so a signed operand in an unsigned expression is
+zero-extended — and vita's runtime evaluator already did exactly that. The constant domain
+was contradicting the runtime, in the same binary, on the same text.
+
+Both review lenses found it, and neither needed iverilog to do so. **Before reaching for
+an external oracle, ask whether another lane of your own tool already answers the
+question** — a self-contradiction is a proof of a defect and needs no third party.
+
+### ★★★★ "The classification is not written here" is a claim to check against the code
+
+The docstring said the arms consult the canonical context-determined list. They
+hand-match, so the file is a sixth reading of it — and the drift was already real:
+`BitXnor` was in the list and missing from the arm, so `~^` was wrong before and after.
+Review caught the sentence, not the operator.
+
+A comment asserting that duplication *was avoided* is worth exactly as much as a comment
+asserting a limitation: check it, or write what the code actually does.
+
+### ★★★ A pin that names its prerequisite pays for itself
+
+Four unrelated tests refused a value and each said, in its docstring, precisely which
+missing capability made the refusal honest. When that capability landed they failed
+loudly, and re-aiming them was mechanical — the expected values were already in the
+comments, measured on both oracles.
+
+The opposite habit costs a slice: a pin that says only "this is loud" tells a future
+reader nothing about whether loud is still right.

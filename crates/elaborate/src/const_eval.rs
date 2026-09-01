@@ -340,20 +340,31 @@ impl Elaborator<'_> {
         // both oracles keep. (Unreachable today for `<<` — the i64 walk answers that
         // one first — but the rule belongs beside the resize, not in the caller's
         // ordering.)
+        // ⚠️ Backstop only since the declared width became a fold CONTEXT (§2 row 21):
+        // a context-determined top now computes at `width`, so this fires for the node
+        // kinds the threading does not reach, where refusing is still right.
         if !wide_top_is_self_determined(e) {
-            if let Some((_, w, _)) = fold_self_bits(e, &|n, _| self.wide_name_bits(n)) {
+            if let Some((_, w, _)) = fold_bits_at(e, width, &|n, _| self.wide_name_bits(n)) {
                 if w < width {
                     return None;
                 }
             }
         }
-        let (b, w, sg) = match &e.kind {
-            // Keep the literal/fill arms exactly where they were — `fold_init` is the
-            // only place that knows the CONTEXT width a fill literal needs.
-            ast::ExprKind::IntLit { .. } | ast::ExprKind::Paren { .. } => {
-                return wide_param_const(e, width, signed)
-            }
-            _ => fold_self_bits(e, &resolve)?,
+        // ⚠️⚠️ PEEL PARENS BEFORE DECIDING THE ROUTE. This arm exists so a fill literal
+        // reaches `fold_init`, the only place that knows the context width one needs —
+        // but it matched `Paren` at the TOP, so `(8'hFF + 8'hFF)` went there too and was
+        // folded at ctx 0 and resized, which is precisely the operation §2 row 21
+        // removed everywhere else. Pre-slice the backstop above declined that cell and
+        // the i64 walk answered it correctly; threading `ctx` into the backstop made it
+        // return `w == width`, so the decline stopped firing and the stale narrow route
+        // won. Both review lenses measured it independently: one pair of parentheses,
+        // two lines apart from its own twin, turned `…01fe` into `…00fe` at exit 0, and
+        // turned the slice's own headline cell `~32'd0` into a WORSE wrong value.
+        // 154 cells.
+        let peeled = Self::peel_parens(e);
+        let (b, w, sg) = match &peeled.kind {
+            ast::ExprKind::IntLit { .. } => return wide_param_const(peeled, width, signed),
+            _ => fold_bits_at(peeled, width, &resolve)?,
         };
         Some(ir::ConstVal {
             width,

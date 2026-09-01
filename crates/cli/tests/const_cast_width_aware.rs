@@ -117,18 +117,19 @@ fn a_size_cast_inherits_the_operand_sign() {
 /// The i64 constant domain is the boundary, and both halves of it are load
 /// bearing: at `N > 64` the operand still evaluates at 64 bits, so a carry past
 /// bit 63 would be lost; at exactly 64 an UNSIGNED result with its top bit set
-/// escapes as a negative i64 (`coerce_int_width` is the identity there). Both
-/// decline — the same fit rule the placement folder uses, and the same
+/// escapes as a negative i64 (`coerce_int_width` is the identity there). The i64 walk
+/// declines both — the same fit rule the placement folder uses, and the same
 /// pre-existing 64-bit class ROADMAP §2 records for a bare literal.
 #[test]
-fn a_cast_outside_the_i64_domain_declines() {
-    // ⚠️ The FIRST cell is the one that still declines, and it declines for a reason
-    // the wide domain cannot fix: a size cast is a CONTEXT for its operand (§11.6.1 —
-    // the operand is evaluated at `max(its self width, N)`), and this walk folds at the
-    // operand's own width. Folding it there wrapped the 64-bit addition to 0 and
-    // shifted 0, where both oracles carry the sum into bit 64 and answer 1. Loud is the
-    // honest answer until the walk can carry a context width.
-    loud("65'(64'd18446744073709551615 + 64'd1) >> 64");
+fn a_cast_outside_the_i64_domain_is_answered_by_the_wide_walk() {
+    // ⭐ RE-AIMED 2026-09-01, and this pin named its own prerequisite: it used to read
+    // *"loud is the honest answer UNTIL the walk can carry a context width"*. §2 row 21
+    // gave the wide fold a context width, so a size cast is now a context for its
+    // operand (§11.6.1 — evaluated at `max(its self width, N)`) instead of being folded
+    // at the operand's own width and resized. Folding it there wrapped the 64-bit
+    // addition to 0 and shifted 0; both oracles carry the sum into bit 64 and answer 1,
+    // and so does vita now. loud → correct.
+    folds("65'(64'd18446744073709551615 + 64'd1) >> 64", 1);
     // ⭐ The other three FOLD now — the operand is self-determined, so folding at its
     // own width and sizing to the cast is the same operation the LRM describes. All
     // three measured 1 on iverilog 13.0 AND verilator 5.050.

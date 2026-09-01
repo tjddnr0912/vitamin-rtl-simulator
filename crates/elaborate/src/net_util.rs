@@ -236,6 +236,14 @@ pub(crate) fn resize_bits(
     to_w: u32,
     signed: bool,
 ) -> ir::BitPacked {
+    // ⚠️ The identity case is free. Every context-determined arm now calls this on
+    // operands that are usually ALREADY at the common width, and the loop below is
+    // bit-at-a-time: a 300-deep `+` chain at MAX_NET_WIDTH took 3.0 s of elaborate
+    // before this early return, measured by review.
+    if from_w == to_w {
+        return src.clone();
+    }
+
     let nwords = (((to_w as usize) + 63) / 64).max(1);
     let mut val = vec![0u64; nwords];
     let mut unk = vec![0u64; nwords];

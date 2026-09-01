@@ -11,6 +11,26 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A constant wider than 64 bits is computed in the width the declaration states.** The wide
+  constant fold evaluated every node at the expression's own width and resized afterwards, which
+  §11.6.1 says is not the same operation: a context-determined operator takes its width from the
+  surrounding assignment, and resizing later cannot put back what was never computed.
+  `localparam logic [127:0] C = ~32'd0;` was `0000000000000000ffffffffffffffff` at exit 0 where both
+  oracles give 128 ones, and `3 ** 41` at 128 bits was refused outright. Over two censuses of 312
+  cells: 159 fixed, none regressed.
+  ⭐⭐ Four separate pinned tests turned from a refusal into a correct answer, and each had named this
+  exact prerequisite in its own docstring — *"until the walk can carry a context width"*, *"the wide
+  fold cannot widen a context"*, *"this walk cannot carry a context width, so it declines"*. One test
+  file no longer has a way to assert a refusal at all.
+  ⚠️ Three defects in the first version, all found by adversarial review and two of them by both
+  lenses independently: a leading parenthesis routed past the whole change and installed a *narrower*
+  answer than before; operands were extended in their own signedness where §11.8.2 decides the
+  expression's sign first (vita's own runtime already did this correctly, so the constant domain was
+  contradicting it); and widening a value containing x or z replicated the unknown bit, turning a
+  refusal into a silently unknown result.
+  ⚠️ The parameter-override channel is deliberately unchanged: most of its cells are a recorded
+  oracle split where verilator agrees with vita, and "fixing" them would pick a side.
+
 - **A shift's count is now read as unsigned, which is what the language says and what every
   other lane in vita already did.** IEEE 1800 §11.4.10 makes a shift's right operand
   self-determined *and* "always treated as an unsigned number". The constant domain gave it the

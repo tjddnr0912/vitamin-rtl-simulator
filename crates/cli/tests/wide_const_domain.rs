@@ -225,18 +225,24 @@ fn an_inferred_width_never_supplies_a_reduction() {
     );
 }
 
-/// ⚠️ A CONTEXT-determined top may not be folded at its own width and then widened.
+/// ⭐ A CONTEXT-determined top is folded AT THE CONTEXT WIDTH — §2 row 21, and this pin
+/// named its own prerequisite before it landed.
 ///
 /// `65'(64'd18446744073709551615 + 64'd1) >> 64` is 1 in both oracles: the cast
-/// establishes a 65-bit context and the sum carries into bit 64. Folding the operand
-/// at its own 64 bits wraps it to 0. This walk cannot carry a context width, so it
-/// declines — and a SELF-determined top beside it folds.
+/// establishes a 65-bit context and the sum carries into bit 64. This walk used to fold
+/// the operand at its own 64 bits, wrap it to 0 and then widen, so it declined rather
+/// than answer wrongly. It carries a context width now, and answers 1.
+///
+/// ⚠️ The SELF-determined neighbour must keep folding, and a cast must remain its OWN
+/// context rather than passing the outer one through — `128'(1)` is 1, not 1 widened
+/// from something else.
 #[test]
-fn a_context_determined_top_declines_rather_than_widen() {
-    loud(
+fn a_context_determined_top_folds_at_the_context_width() {
+    folds(
         "  localparam integer R = 65'(64'd18446744073709551615 + 64'd1) >> 64;",
         "%0d",
         "R",
+        "1",
     );
     folds("  localparam integer R = 128'(1);", "%0d", "R", "1");
 }

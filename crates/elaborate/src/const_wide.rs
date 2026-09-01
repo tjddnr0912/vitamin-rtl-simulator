@@ -166,6 +166,85 @@ pub(crate) fn fold_self_bits(
     // generate-body deletion.
     name: WideNameFn,
 ) -> Option<WideBits> {
+    fold_bits_at(e, 0, name)
+}
+
+/// [`fold_self_bits`] with a CONTEXT width (`0` = none), which is the whole of §11.6.1
+/// this domain used to be missing.
+///
+/// A context-determined operator takes its width from the surrounding assignment, not
+/// from its operands, and folding it at the operands' width and extending afterwards is
+/// a different answer whenever the operation carries information past their top bit.
+/// `localparam logic [127:0] C = ~32'd0;` was `0000000000000000ffffffffffffffff` at exit
+/// 0 where both oracles give 128 ones — the complement ran at 32 bits and the extension
+/// could not put back what was never computed. A 108-cell census found **48 such cells**;
+/// the `**` shapes the row was filed from are the rare LOUD corner of the same gate.
+///
+/// ⭐ Nothing new installs the answer: `wide_disagreeing_value` already prefers the wide
+/// domain whenever it disagrees with the i64 one, so the cells become correct the moment
+/// this stops folding narrow.
+///
+/// ⚠️⚠️ THE CLASSIFICATION IS THE FIFTH COPY OF ITSELF, and saying otherwise was the
+/// first thing review corrected. [`crate::binop_result_is_context_determined`] is the
+/// canonical list and its own docstring already records four hand-written copies living
+/// outside it; the arms below are a sixth reading, because each one needs the operand
+/// STRUCTURE and not just a yes/no. The drift is not hypothetical — the bitwise arm was
+/// missing `BitXnor`, which the list has, and `96'hF0 ~^ 96'h0F` at 128 bits was
+/// consequently wrong in both PRE and POST. Adding a context-determined operator means
+/// editing here too, and a `_`-free match is what makes that a compile error rather than
+/// a silent default.
+///
+/// The two positions the LRM carves OUT of that list — a shift's RIGHT operand
+/// (§11.4.10) and `**`'s exponent (Table 11-21) — are self-determined and recurse with
+/// no context, which is the same rule §2 row 27 established for the ≤64-bit walk.
+///
+/// ⚠️ A size cast is its own context (§11.6.1), so `ctx` stops there rather than passing
+/// through: in `localparam logic [255:0] C = 128'(~32'd0);` the complement runs at the
+/// CAST's 128 bits and the result is then widened to 256 — not complemented at 256.
+fn fold_bits_at0(e: &ast::Expr, name: WideNameFn) -> Option<WideBits> {
+    fold_bits_at(e, 0, name)
+}
+
+/// Extend an already-folded value to at least `ctx` bits, filling per `sg`.
+///
+/// ⚠️⚠️ `sg` is the EXPRESSION's signedness, not the value's own. §11.8.2 decides an
+/// expression's sign FIRST — unsigned if any context-determined operand is unsigned —
+/// and then each operand is reinterpreted at that sign, at its own width, before being
+/// extended. Filling with the operand's own sign made
+/// `localparam signed [95:0] S = 96'sh8000…; localparam logic [127:0] C = S + 96'd16;`
+/// come out `ffffffff8000…0010` where both oracles give `000000008000…0010` — and where
+/// **vita's own runtime already gave the oracles' answer**, so the constant domain was
+/// contradicting the runtime. Both review lenses found it independently; 72 cells.
+///
+/// ⚠️ An UNKNOWN value is not widened at all. `resize_bits` replicates the top bit, so
+/// an x in the MSB became an x in every added bit — `8'bxxxx_0000 << 2` at 128 bits
+/// printed 120 x's where both oracles print zeros above bit 7. That `resize_bits`
+/// behaviour is pre-existing and visible without this slice (a concat shows it), so the
+/// fix here is to decline rather than to widen, which restores the pre-slice loud.
+fn widen_to(v: WideBits, ctx: u32, sg: bool) -> Option<WideBits> {
+    let (b, w, own) = v;
+    if w >= ctx {
+        return Some((b, w, own));
+    }
+    if bp_any_unknown(&b, w) {
+        return None;
+    }
+    Some((resize_bits(&b, w, ctx, sg), ctx, own))
+}
+
+/// [`bp_operands`] with a floor on the common width — §11.6.1's context.
+///
+/// The common SIGN is computed first (`ls && rs`, §11.8.2) and both operands are
+/// extended with it.
+fn bp_operands_at(l: &WideBits, r: &WideBits, ctx: u32) -> Option<(Vec<u64>, Vec<u64>, u32, bool)> {
+    let sg = l.2 && r.2;
+    bp_operands(
+        &widen_to(l.clone(), ctx, sg)?,
+        &widen_to(r.clone(), ctx, sg)?,
+    )
+}
+
+pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<WideBits> {
     // A width this domain will not build. `MAX_NET_WIDTH` is the declared-width cap
     // a net already lives under, so an intermediate wider than that cannot land
     // anywhere legal — and it keeps `{1000000{8'hAB}}` from allocating before the
@@ -178,7 +257,7 @@ pub(crate) fn fold_self_bits(
         }
     };
     match &e.kind {
-        ast::ExprKind::Paren { inner } => fold_self_bits(inner, name),
+        ast::ExprKind::Paren { inner } => fold_bits_at(inner, ctx, name),
         // A fill literal is context-determined (§5.7.1) and therefore has NO self
         // width — only `fold_init`, which knows the target, can fold one.
         ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => None,
@@ -192,7 +271,8 @@ pub(crate) fn fold_self_bits(
             expr,
         } => {
             let n = cap(u64::from(fold_count(w, name)?))?;
-            let (b, bw, sg) = fold_self_bits(expr, name)?;
+            // A cast IS a context (§11.6.1) — `ctx` stops here and `n` takes over.
+            let (b, bw, sg) = fold_bits_at(expr, n, name)?;
             // ⚠️⚠️ A size cast is a CONTEXT for its operand (§11.6.1: the operand is
             // evaluated at `max(its self width, N)`), not a truncation applied
             // afterwards. Folding at the operand's own width and resizing is the same
@@ -242,7 +322,10 @@ pub(crate) fn fold_self_bits(
             if matches!(op, ast::BinOp::Shl | ast::BinOp::AShl | ast::BinOp::Shr) =>
         {
             let k = fold_shift_count(rhs, name)?;
-            let (b, w, sg) = fold_self_bits(lhs, name)?;
+            // §11.4.10: the LEFT operand takes the context, the count does not.
+            let (b0, w0, sg) = fold_bits_at(lhs, ctx, name)?;
+            let w = w0.max(ctx);
+            let (b, _, _) = widen_to((b0, w0, sg), w, sg)?;
             let mut out = bp_zero(w);
             for i in 0..w as usize {
                 // source index for result bit i
@@ -262,16 +345,18 @@ pub(crate) fn fold_self_bits(
         ast::ExprKind::Binary { op, lhs, rhs }
             if matches!(
                 op,
-                ast::BinOp::BitAnd | ast::BinOp::BitOr | ast::BinOp::BitXor
+                ast::BinOp::BitAnd | ast::BinOp::BitOr | ast::BinOp::BitXor | ast::BinOp::BitXnor
             ) =>
         {
-            let (lb, lw, ls) = fold_self_bits(lhs, name)?;
-            let (rb, rw, rs) = fold_self_bits(rhs, name)?;
+            let (lb, lw, ls) = fold_bits_at(lhs, ctx, name)?;
+            let (rb, rw, rs) = fold_bits_at(rhs, ctx, name)?;
             if bp_any_unknown(&lb, lw) || bp_any_unknown(&rb, rw) {
                 return None;
             }
-            let w = lw.max(rw);
-            let (la, ra) = (resize_bits(&lb, lw, w, ls), resize_bits(&rb, rw, w, rs));
+            let w = lw.max(rw).max(ctx);
+            // §11.8.2: the expression's sign decides the fill for BOTH operands.
+            let cs = ls && rs;
+            let (la, ra) = (resize_bits(&lb, lw, w, cs), resize_bits(&rb, rw, w, cs));
             let mut out = bp_zero(w);
             for i in 0..w as usize {
                 let (a, _) = bp_get(&la, i);
@@ -279,6 +364,7 @@ pub(crate) fn fold_self_bits(
                 let v = match op {
                     ast::BinOp::BitAnd => a && c,
                     ast::BinOp::BitOr => a || c,
+                    ast::BinOp::BitXnor => !(a ^ c),
                     _ => a ^ c,
                 };
                 bp_set(&mut out, i, v, false);
@@ -289,10 +375,15 @@ pub(crate) fn fold_self_bits(
             op: ast::UnOp::BitNot,
             operand,
         } => {
-            let (b, w, sg) = fold_self_bits(operand, name)?;
-            if bp_any_unknown(&b, w) {
+            let (b0, w0, sg) = fold_bits_at(operand, ctx, name)?;
+            if bp_any_unknown(&b0, w0) {
                 return None;
             }
+            // ⭐ THE CENSUS'S BIGGEST CELL. `~32'd0` at a 128-bit target complements at
+            // 128, not at 32 and then extends — the extension cannot put back bits the
+            // complement never computed.
+            let w = w0.max(ctx);
+            let (b, _, _) = widen_to((b0, w0, sg), w, sg)?;
             let mut out = bp_zero(w);
             for i in 0..w as usize {
                 bp_set(&mut out, i, !bp_get(&b, i).0, false);
@@ -310,7 +401,9 @@ pub(crate) fn fold_self_bits(
             rhs,
         } => {
             let k = fold_shift_count(rhs, name)?;
-            let (b, w, sg) = fold_self_bits(lhs, name)?;
+            let (b0, w0, sg) = fold_bits_at(lhs, ctx, name)?;
+            let w = w0.max(ctx);
+            let (b, _, _) = widen_to((b0, w0, sg), w, sg)?;
             let hi = w as usize - 1;
             let (fill_v, fill_u) = if sg { bp_get(&b, hi) } else { (false, false) };
             let mut out = bp_zero(w);
@@ -341,7 +434,7 @@ pub(crate) fn fold_self_bits(
                     | ast::UnOp::RedXnor
             ) =>
         {
-            let (b, w, _) = fold_self_bits(operand, name)?;
+            let (b, w, _) = fold_bits_at0(operand, name)?;
             if bp_any_unknown(&b, w) {
                 return None;
             }
@@ -364,7 +457,7 @@ pub(crate) fn fold_self_bits(
             op: ast::UnOp::LogNot,
             operand,
         } => {
-            let (b, w, _) = fold_self_bits(operand, name)?;
+            let (b, w, _) = fold_bits_at0(operand, name)?;
             if bp_any_unknown(&b, w) {
                 return None;
             }
@@ -376,9 +469,9 @@ pub(crate) fn fold_self_bits(
         ast::ExprKind::Binary { op, lhs, rhs }
             if matches!(op, ast::BinOp::Add | ast::BinOp::Sub | ast::BinOp::Mul) =>
         {
-            let l = fold_self_bits(lhs, name)?;
-            let r = fold_self_bits(rhs, name)?;
-            let (a, b, w, sg) = bp_operands(&l, &r)?;
+            let l = fold_bits_at(lhs, ctx, name)?;
+            let r = fold_bits_at(rhs, ctx, name)?;
+            let (a, b, w, sg) = bp_operands_at(&l, &r, ctx)?;
             let v = match op {
                 ast::BinOp::Add => limbs_add(&a, &b, w),
                 ast::BinOp::Sub => limbs_add(&a, &limbs_neg(&b, w), w),
@@ -394,8 +487,11 @@ pub(crate) fn fold_self_bits(
         ast::ExprKind::Binary { op, lhs, rhs }
             if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) =>
         {
-            let l = fold_self_bits(lhs, name)?;
-            let r = fold_self_bits(rhs, name)?;
+            let l0 = fold_bits_at(lhs, ctx, name)?;
+            let r0 = fold_bits_at(rhs, ctx, name)?;
+            let sg = l0.2 && r0.2;
+            let l = widen_to(l0, ctx, sg)?;
+            let r = widen_to(r0, ctx, sg)?;
             wide_divmod(matches!(op, ast::BinOp::Div), &l, &r)
         }
         // §11.4.10 power. ⚠️ NOT folded through `bp_operands` like its arithmetic
@@ -407,8 +503,13 @@ pub(crate) fn fold_self_bits(
             lhs,
             rhs,
         } => {
-            let l = fold_self_bits(lhs, name)?;
-            let r = fold_self_bits(rhs, name)?;
+            // Table 11-21: the BASE takes the context, the exponent is
+            // self-determined — the same carve-out §2 row 27 made for a shift count.
+            // The result's sign is the BASE's, so the base extends in its own.
+            let l0 = fold_bits_at(lhs, ctx, name)?;
+            let ls = l0.2;
+            let l = widen_to(l0, ctx, ls)?;
+            let r = fold_bits_at(rhs, 0, name)?;
             wide_pow(&l, &r)
         }
         // §11.4.5 unary minus: the two's complement at the operand's own width.
@@ -416,16 +517,18 @@ pub(crate) fn fold_self_bits(
             op: ast::UnOp::Minus,
             operand,
         } => {
-            let (b, w, sg) = fold_self_bits(operand, name)?;
-            if bp_any_unknown(&b, w) {
+            let (b0, w0, sg) = fold_bits_at(operand, ctx, name)?;
+            if bp_any_unknown(&b0, w0) {
                 return None;
             }
+            let w = w0.max(ctx);
+            let (b, _, _) = widen_to((b0, w0, sg), w, sg)?;
             Some((bp_from_limbs(limbs_neg(&b.val, w), w), w, sg))
         }
         ast::ExprKind::Unary {
             op: ast::UnOp::Plus,
             operand,
-        } => fold_self_bits(operand, name),
+        } => fold_bits_at(operand, ctx, name),
         // §11.4.4 / §11.4.5: relational and equality operators deliver ONE UNSIGNED
         // BIT and size their operands against EACH OTHER. That makes the whole node
         // self-determined, which is what lets a caller extend the result to a wider
@@ -443,8 +546,8 @@ pub(crate) fn fold_self_bits(
                     | ast::BinOp::CaseNe
             ) =>
         {
-            let l = fold_self_bits(lhs, name)?;
-            let r = fold_self_bits(rhs, name)?;
+            let l = fold_bits_at0(lhs, name)?;
+            let r = fold_bits_at0(rhs, name)?;
             let (a, b, w, sg) = bp_operands(&l, &r)?;
             let ord = limbs_cmp(&a, &b, w, sg);
             use std::cmp::Ordering::*;
@@ -463,7 +566,7 @@ pub(crate) fn fold_self_bits(
             if matches!(op, ast::BinOp::LogAnd | ast::BinOp::LogOr) =>
         {
             let truth = |e: &ast::Expr| -> Option<bool> {
-                let (b, w, _) = fold_self_bits(e, name)?;
+                let (b, w, _) = fold_bits_at0(e, name)?;
                 if bp_any_unknown(&b, w) {
                     return None;
                 }
@@ -484,17 +587,20 @@ pub(crate) fn fold_self_bits(
             then_e,
             else_e,
         } => {
-            let (cb, cw, _) = fold_self_bits(cond, name)?;
+            // §11.4.11: the CONDITION is self-determined; both arms take the context.
+            let (cb, cw, _) = fold_bits_at(cond, 0, name)?;
             if bp_any_unknown(&cb, cw) {
                 return None;
             }
             let c = (0..cw as usize).any(|i| bp_get(&cb, i).0);
-            let (tb, tw, ts) = fold_self_bits(then_e, name)?;
-            let (eb, ew, es) = fold_self_bits(else_e, name)?;
-            let w = tw.max(ew);
+            let (tb, tw, ts) = fold_bits_at(then_e, ctx, name)?;
+            let (eb, ew, es) = fold_bits_at(else_e, ctx, name)?;
+            let w = tw.max(ew).max(ctx);
             let sg = ts && es;
-            let (b, from, fs) = if c { (tb, tw, ts) } else { (eb, ew, es) };
-            Some((resize_bits(&b, from, w, fs), w, sg))
+            let (b, from, _) = if c { (tb, tw, ts) } else { (eb, ew, es) };
+            // §11.8.2 again: the chosen arm extends with the EXPRESSION's sign.
+            let (b, _, _) = widen_to((b, from, sg), w, sg)?;
+            Some((b, w, sg))
         }
         // §11.5.1 / §11.5.2 BIT and PART select: PLACEMENT, like the concat above —
         // each result bit is an operand bit at a known position. The selected range
@@ -506,7 +612,7 @@ pub(crate) fn fold_self_bits(
             // fail-closed answer (an out-of-range select is `x`, and this 2-state
             // domain will not claim one).
             let i = fold_count(index, name)?;
-            let (b, w, _) = fold_self_bits(base, name)?;
+            let (b, w, _) = fold_bits_at0(base, name)?;
             if i >= w {
                 return None;
             }
@@ -518,7 +624,7 @@ pub(crate) fn fold_self_bits(
         }
         ast::ExprKind::PartSelect { base, msb, lsb } => {
             let (m, l) = (fold_count(msb, name)?, fold_count(lsb, name)?);
-            let (b, w, _) = fold_self_bits(base, name)?;
+            let (b, w, _) = fold_bits_at0(base, name)?;
             // A DESCENDING select only. An ascending one (`A[0:7]`) is legal against
             // an ascending declaration, and the declared DIRECTION is exactly what
             // this domain does not carry — so it declines rather than read the range
@@ -547,7 +653,7 @@ pub(crate) fn fold_self_bits(
         } => {
             let n = fold_count(width, name)?;
             let off = fold_count(offset, name)?;
-            let (b, w, _) = fold_self_bits(base, name)?;
+            let (b, w, _) = fold_bits_at0(base, name)?;
             // `-:` counts DOWN from the offset, so its low bit is `off - n + 1`.
             let lo = match dir {
                 ast::PartDir::PlusColon => off,
@@ -566,7 +672,7 @@ pub(crate) fn fold_self_bits(
         // §20.9 bit-vector system functions, in the domain that actually holds the
         // bits. All are self-determined; `$signed`/`$unsigned` only RELABEL.
         ast::ExprKind::SysCall { name: f, args } if args.len() == 1 => {
-            let arg = || fold_self_bits(&args[0], name);
+            let arg = || fold_bits_at0(&args[0], name);
             match f.name.as_str() {
                 "$signed" => arg().map(|(b, w, _)| (b, w, true)),
                 "$unsigned" => arg().map(|(b, w, _)| (b, w, false)),
@@ -878,13 +984,24 @@ impl Elaborator<'_> {
     ///
     /// Reached only AFTER the integer domain declines, so nothing that folds today
     /// changes route.
+    ///
+    /// ⭐ The declared width is now handed to the fold as a CONTEXT rather than applied
+    /// after it, which is what §11.6.1 asks for and is why the decline below is only a
+    /// backstop: a context-determined top computes at `width` in the first place.
+    /// `localparam logic [127:0] C = ~32'd0;` was `00…00ffffffffffffffff` at exit 0
+    /// against both oracles' 128 ones — 48 of 108 census cells were that shape, and the
+    /// `**` examples the row was filed from are its rare LOUD corner.
     pub(crate) fn param_bits_at_declared(
         &self,
         e: &ast::Expr,
         width: u32,
         signed: bool,
     ) -> Option<ir::ConstVal> {
-        let (b, w, sg) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;
+        let (b, w, sg) = fold_bits_at(e, width, &|n, _| self.wide_name_bits(n))?;
+        // ⚠️ Kept as a backstop, not as the mechanism. With the context threaded, a
+        // context-determined top already returns `w >= width`; what can still land here
+        // is a node kind the threading does not reach, and for those the pre-slice
+        // refusal is still the right answer.
         if w < width && !wide_top_is_self_determined(e) {
             return None;
         }

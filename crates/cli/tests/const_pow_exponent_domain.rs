@@ -24,6 +24,13 @@
 //! at all: it HANGS, computing 3^(2^64−8) in arbitrary precision.
 //!
 //! Oracle: iverilog 13.0 and verilator 5.050 agree on every value here.
+//! ⭐ 2026-09-01: this file no longer has a `loud` helper, and that is the finding.
+//! Every cell here asserted a DECLINE at some point — first because the i64 domain could
+//! not hold the result, then because the wide domain could not fold `**` at all, then
+//! because it could not evaluate a base at a context width. §2 row 21 removed the last
+//! of those, and each pin had named it as its own prerequisite. What the file asserts now
+//! is values, four-way.
+//!
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -65,7 +72,9 @@ fn folds(expr: &str, want: i64) {
     folds_as("integer", expr, want);
 }
 
-fn loud_as(decl: &str, expr: &str) {
+/// [`folds_as`] for a value past the `i64` the other helper takes — compared as the
+/// decimal string both oracles print.
+fn folds_wide(decl: &str, expr: &str, want: &str) {
     let src = format!(
         "module top;\n\
          parameter integer W = 8;\n\
@@ -73,17 +82,12 @@ fn loud_as(decl: &str, expr: &str) {
          initial begin $display(\"R=%0d\", L); #1 $finish; end\n\
          endmodule\n"
     );
-    let (_, code, err) = run_raw(&src);
-    assert_eq!(code, Some(1), "`{expr}` should be loud:\n{err}");
+    let (out, code, err) = run_raw(&src);
+    assert_eq!(code, Some(0), "`{expr}` should fold, stderr:\n{err}");
     assert!(
-        err.contains("is not a foldable constant expression")
-            || err.contains("value is not a constant:"),
-        "`{expr}` unexpected diagnostic:\n{err}"
+        out.contains(&format!("R={want}")),
+        "`{expr}` want R={want}; got:\n{out}"
     );
-}
-
-fn loud(expr: &str) {
-    loud_as("integer", expr);
 }
 
 /// The exponent's SIGNEDNESS comes from the expression, not from the sign bit of
@@ -99,13 +103,13 @@ fn an_unsigned_exponent_is_not_a_negative_one() {
     // an unsigned subtraction that "goes negative" is a huge positive exponent and the
     // answer is the modular one — never the 0 the negative-exponent table would give.
     folds("3 ** (64'd0 - 64'd8)", 926288481);
-    // ⚠️ Two neighbours stay LOUD for the SAME reason, and it is not the exponent:
-    // §11.6.1 makes `**` take its width from the CONTEXT, so a 4-bit base in a 32-bit
-    // declaration has to be evaluated at 32 bits, and a `longint` declaration at 64.
-    // The wide fold cannot widen a context — it folds at the operand's own width and
-    // extends, which is a different answer. iverilog prints 926288481 for both.
-    loud("4'sd3 ** (64'd0 - 64'd8)");
-    loud_as("longint", "3 ** (64'd0 - 64'd8)");
+    // ⭐ RE-AIMED 2026-09-01 — these two named their own prerequisite and it landed.
+    // They read *"the wide fold cannot widen a context — it folds at the operand's own
+    // width and extends, which is a different answer"*. §2 row 21 gave that fold a
+    // context width, so a 4-bit base in a 32-bit declaration is evaluated at 32 bits
+    // and a `longint` one at 64. loud → correct, both values four-way.
+    folds("4'sd3 ** (64'd0 - 64'd8)", 926288481);
+    folds_as("longint", "3 ** (64'd0 - 64'd8)", -3148964085132555679);
     // A genuinely SIGNED negative exponent still takes the IEEE table.
     folds("3 ** (-8)", 0);
     folds("3 ** (-8'sd8)", 0);
@@ -123,34 +127,34 @@ fn an_unsigned_exponent_is_not_a_negative_one() {
     folds("(-1) ** (-7)", -1);
 }
 
-/// A result the i64 domain cannot hold stays LOUD — the discipline `+` and `*`
-/// keep in this domain, and the reason `**` may not wrap here. The cells below
-/// are all values both oracles print; the decline is honest, not correct.
+/// A `**` result is folded AT THE DECLARATION'S WIDTH, in whichever domain can hold it.
 ///
-/// ⚠️ Do not "fix" these by folding modularly without a context width. That was
-/// measured: mod 2^64 is right for a ≤64-bit context and silently wrong the
-/// moment the target is wider, because the coercion zero-extends what the
-/// wrapping already discarded.
+/// ⚠️ Do not "fix" anything here by folding modularly without a context width. That was
+/// measured: mod 2^64 is right for a ≤64-bit context and silently wrong the moment the
+/// target is wider, because the coercion zero-extends what the wrapping already
+/// discarded. What makes the cells below correct is that the width is now an INPUT to
+/// the fold, not a resize applied after it.
 #[test]
-fn a_result_outside_the_i64_domain_stays_loud() {
+fn a_pow_result_folds_at_the_declarations_width() {
     // ⚠️ The first three asserted LOUD until round 34 gave the WIDE constant domain a
     // `**` arm. At a 32-bit `integer` context the answer is the modular one and both
-    // oracles print it, so what was "outside the i64 domain" is now inside a domain
-    // vita has. The name of this test is kept because the CLAIM survives — a result
-    // vita cannot represent AT THE DECLARATION'S WIDTH is still loud, which is the
-    // rest of the list.
+    // oracles print it.
     folds("3 ** 40", 689956897);
     folds("3 ** 64", 2038349057);
     folds("7 ** 30", 1878557649);
-    // ⚠️ Still loud. §11.6.1 makes `**` take its width from the CONTEXT, and the wide
-    // fold cannot widen a context — it would have to evaluate the BASE at 64/96/128
-    // bits, not fold at the operand's own width and extend afterwards. Both oracles
-    // print the exact value (`3 ** 41` is `…1fa2a1cf67b5fb863` at 128 bits), so this
-    // is a capability gap and not an oracle split.
-    loud_as("longint", "3 ** 40");
-    loud_as("bit [95:0]", "3 ** 45");
-    loud_as("bit [127:0]", "3 ** 41");
-    loud_as("bit [95:0]", "3 ** (96'd0 - 96'd8)");
+    // ⭐ RE-AIMED 2026-09-01 — these four also named their prerequisite: *"the wide fold
+    // cannot widen a context — it would have to evaluate the BASE at 64/96/128 bits"*.
+    // §2 row 21 made the declared width a fold context, and `3 ** 41` at 128 bits is
+    // now the `…1fa2a1cf67b5fb863` both oracles print. loud → correct, all four
+    // four-way.
+    folds_as("longint", "3 ** 40", -6289078614652622815);
+    folds_wide("bit [95:0]", "3 ** 45", "2954312706550833698643");
+    folds_wide("bit [127:0]", "3 ** 41", "36472996377170786403");
+    folds_wide(
+        "bit [95:0]",
+        "3 ** (96'd0 - 96'd8)",
+        "43460167183178989635598944865",
+    );
     // Where the exact value fits, nothing changed.
     folds("2 ** 40", 0);
     folds("3 ** 20", -808182895);
