@@ -313,6 +313,8 @@
 > | 28 | 🆕 **A >64-bit parameter cannot be read hierarchically** (§2 row 21 review · **2-oracle** · silent-wrong→**loud**, an ascent, but a name-resolution error on a valid design) | `module m #(parameter logic [127:0] C = ~32'd0)(); endmodule` + `$display(u.C)` is `ffffffffffffffffffffffffffffffff` in both oracles; vita said `ffffffff` (silently truncated) and now says `error[VITA-E3010] undeclared hierarchical name 'u.C'`. ⭐ The hole is PRE-EXISTING — a 128-bit *literal* default was already loud — but row 21 moves more parameters into `wide_param_bits`, which the hierarchical reader cannot see, so its reach grew. Site = `hier.rs::hier_lookup_param`, which returns `Option<i64>` and resolves against `hier_params`; a >64-bit value has no i64, so this needs a wide hierarchical read path through the resolver AND the expression lowering — real machinery, not a conditional. Same for an `interface` parameter. |
 > | 29 | 🆕 **The RUNTIME evaluator lets a context pass THROUGH a size cast** (§2 row 21 review · **2-oracle** · silent-wrong · ⭐ found because the constant domain got it right first) | `localparam logic [31:0] W32 = 32'hDEADBEEF; R = ~64'(~(W32 + 32'd1));` into a `logic [127:0]`: both oracles and vita's own CONSTANT fold now give `ffffffffffffffff00000000deadbef0`, and vita's runtime gives `ffffffffffffffffffffffffdeadbef0`. §11.6.1 makes a size cast its own context, so the outer 128 must stop at the `64'(…)`. ⭐ This is the same rule row 21 installed in the wide constant fold, one lane over, and the const-vs-runtime disagreement is the detector — before row 21 both were wrong and agreed. |
 > | 30 | 🆕 **An unsized FILL declines the wide fold** (§2 row 21 review · **2-oracle** · silent-wrong · pre-existing, PRE == POST) | `localparam logic [127:0] C = '1 ^ 1'b0;` is `000000000000000000000000ffffffff` in vita and 128 ones in iverilog, verilator AND vita's own runtime; `~'1` at 128 is `0000000000000000ffffffff00000000` against everyone's `0`. `fold_bits_at`'s `IntLit` arm returns `None` for a fill because a fill is context-determined and had no context — ⭐ **row 21 gave it one**, so this is now a small arm (fold the fill at `ctx`) rather than a missing capability. ⚠️ `fold_init` already knows how to size a fill to a target; the question is only which of the two knows the width at that point. |
+> | 31 | 🆕 **A system FUNCTION in a continuous assign's callee keeps re-drawing** (§4.5.404 · **2-oracle** · silent-wrong · **pre-existing, PRE == POST**) | `function [7:0] f(input [7:0] x); begin f = x + $random; end endfunction  wire [7:0] m = f(8'd5);` re-draws on every settle pass (`206 119 60 103 225` over five cycles) where iverilog freezes `41` and verilator freezes `85` — they disagree on the VALUE but agree it is CONSTANT, which is the axis vita is wrong on. Same for `$time` (vita `6 8 10 12 14`, both oracles `5`), and the same shape as the bare `wire [7:0] m = $random;`. ⭐ §4.5.404 fixed the `Expr::Call` half of exactly this — the `$display` twin went 30 prints → 1 = both oracles — by collecting the nets a callee reads and letting the dirty settle re-evaluate only when one moves. ⚠️ `SysFunc` was excluded ON PURPOSE and the reason is the prerequisite: `$random` advances a seed other readers draw from and `$fgetc` advances a file position, so a dependency set made of NETS cannot name what changed between two evaluations. ⇒ prerequisite = a non-net resource identity the settle can key on ([[moving-an-effect-name-the-resource]]), or a narrower rule for the sysfuncs that are provably state-free (`$bits`, `$clog2`, `$signed`). |
+> | 32 | 🆕 **The statement after a REACHED `$finish` in a subroutine body still runs** (§4.5.404 · iverilog · silent-wrong · **parity with `$fatal`, which is pre-existing**) | `function [7:0] f(...); begin $display("before"); $finish; $display("after"); f = x; end` prints BOTH lines in vita and only `before` in iverilog. ⭐ It is not this slice's doing and it is not `$finish`-specific: the `$fatal` twin behaves identically (measured side by side, and pinned that way in `finish_in_subroutine_body.rs`), because the `call_fatal` latch is consumed at the enclosing STATEMENT boundary rather than inside the body's basic-block loop. ⚠️ Closing it means bailing out of that loop mid-body, which is §4.5.372's ⓐ — *what does the caller's lvalue receive* — and the answer is still undecided (iverilog does not assign, verilator runs to the end, vita commits the partial value). ⇒ same prerequisite as ⓐ; fixing only the `$finish` half would make the two spellings disagree for no stated reason. |
 >
 > ✅ **u64 패턴 지수는 §4.5.348 로 RESOLVED · 폭-미상 wrapping 지수는 재센서스에서 소멸**
 > (2026-08-20 · 상세=ARCHIVE): 후자는 **§4.5.345 가 `const_decl_wsign` 의 multi-packed 폭을 채우면서
@@ -1070,56 +1072,55 @@
 > ⚠️ *"같은 벽을 세 문으로 쳤다"* 던 셋(§4.5.371 의 select 바운드 · concat 폭 · 리덕션)은 **셋 다**
 > 이 슬라이스에서 열렸다 — 벽이 하나였다는 §4.5.373 의 판단이 맞았고, 그 하나가 폭의 출처였다.
 
-> 🔄 **RE-GROUNDED 2026-09-01 — ⑧ 을 닫아도 워크로드는 안 돈다. 진짜 선행조건은 성능이고 그건 다른 파일이다.**
-> ⭐ 실측: `lfsr_mask` 의 `$finish` 를 복사본에서 지우면 **elaborate 가 통째로 통과한다**(errors=0 ·
-> 1.03 s · 남는 진단은 전부 pre-existing `W3056 unconnected`) ⇒ **두 번째 elaborate 갭은 없다**.
-> ⚠️⚠️ **그런데 시뮬이 안 끝난다** — `--timeout` 스윕이 **9.4e-5 s/ps** 를 주고 핀된 `+N=1000` 런은
-> 1.473e9 ps 이므로 **~38.5시간**, iverilog 는 같은 런을 **7.62 s**(≈ **18,000×**). `+N=2` 도 ~56분 대 0.08 s.
-> ⭐⭐ `--obs-procs` 가 자리를 정확히 짚는다: 6 클럭에 6,726 eval 중 **6,080(90.4%)** 이
-> `wire [39:0] mask = lfsr_mask(n);` **80줄**(`lfsr.v:371`/`375`)이고, genvar 인자가 상수인데도 각각 **76회**
-> 재평가된다. `--obs-procs-time` 으로 그 80줄이 **런타임의 100.0%**.
-> ⭐ 3칸으로 줄이면 **lfsr 이 아니라 vita 의 일반 동작**이다: `wire [7:0] cc = 8'd3+8'd4;` **1회** ·
-> `assign c = 8'd9;` **1회** · 그런데 `assign a = sm(8'd3);`(자명한 함수·상수 인자) **90회** — `assign b = sm(q)`
-> 와 같다. **RHS 가 `Expr::Call` 에 닿는 연속대입은 영원히 매 패스 재평가된다.**
-> ⭐ 자리 = `sim-engine/src/levelize.rs::expr_is_pure_of_nets:329`
-> (`E::SysFunc | E::Call | E::ArrayItem => false`) → `ca_deps` → `sched/scan_arm.rs:625` 가 `!ok` 를
-> **`ca_always`** 에 넣는다. 게이트는 의도적 allow-list 라, 넓히려면 콜리의 purity 가 필요한데
-> `classify_frame_body` 가 이미 그 대부분을 계산한다. ⚠️ 다른 아홉 설계엔 비교 대상 없음(수요 = 이 한 줄).
-> ⚠️ 값 자체는 옳다 — eth CRC 파라미터로 8 벡터 격리 tb 를 돌리면 16개 출력이 iverilog 와 전부 일치.
-> ⚠️ **거절 자체도 기록보다 넓다**: 14 철자 census 에서 거절되는 것은 `$finish`·`$stop` 둘이 아니라
-> **`$finish $stop $dumpvars $monitor $sformat $readmemh $strobe` 일곱**(전부 같은 이유 문구).
-> verilog-ethernet 에 필요한 범위로는 옛 문구가 맞다.
-> ⭐⭐ **그리고 싼 대안이 기록돼 있지 않다**: 게이트는 **정적 전수 walk** 이고 아래 ⓐ 의 의미론은 그 문장이
-> **실행될 때만** 존재한다. 모양을 받아들이되 **도달한** `$finish`/`$stop` 을 **런타임 loud** 로 거절하면
-> ⓐ 에 답할 필요가 없고(멈추니 커밋할 것이 없다) `lfsr_mask` 의 `$finish` 는 **증명가능하게 도달 불가**다.
-> 그러면 남는 것은 좁은 arm + 런타임 bail + ⓒ(세 라우팅)이고 `frame_eval.rs:1616` 의 주석이 거짓이 된다.
-> ⇒ **판정: `ca_always` 성능 고침 뒤에 착수.** ⑧ 만 닫으면 이 프로젝트에서 **세 번째로** 거절이 닫히는 게
-> 아니라 옮겨간다. 둘을 같이 하면 코퍼스가 **10/10**.
+> **⑧ 함수/태스크 본문의 `$finish`/`$stop`** — ✅ **RESOLVED (§4.5.404)** (format 29 불변 ·
+> **코퍼스 9/10 → 10/10** · verilog-ethernet PROMOTED).
 >
-> **⑧ 함수 본문의 `$finish`/`$stop`** (2-오라클 · **verilog-ethernet 을 막는 것** ·
-> ⚠️⚠️ **§4.5.372 가 지어서·재서·되돌렸다 — 선행조건이 기록됐으니 다음 시도는 여기서 시작하라**).
-> 진단은 *"함수 본문이 **system task call** 을 쓴다"* 고 말하는데 10칸 census 는 훨씬 좁다 —
-> `$display`·`$write`·`$error`·`$warning`·`$fatal`·`$fflush` 와 시스템 **함수** 전부가 이미 돌고
-> **`$finish`·`$stop` 딱 둘**만 거절된다. `lfsr_mask` 의 `$finish` 는 **실행되지 않는 방어 가지**다.
+> ⭐⭐ **두 번 되돌려진 줄이고, 이번에 실린 건 그 둘 중 어느 것도 아니다.** §4.5.372 는 진짜 승격
+> (본문이 중간에 멈추게 하기)을 지어서 4라운드·BLOCKING 6 에 되돌렸고, §4.5.399/402 의 재그라운딩은
+> ⑧ 만 닫으면 **거절이 닫히는 게 아니라 옮겨간다**고 판정했다(elaborate 1.03 s 통과 · 시뮬 **~38.5시간**
+> 대 iverilog 7.62 s). 실린 것 = 그 재그라운딩이 기록해 둔 **싼 대안 + 성능 절반**:
 >
-> ⭐ 넣으면 verilog-ethernet 이 **elaborate 를 통과한다**(실행은 프레임 레짐 탓에 매우 느리다).
-> 그런데 넣으려면 **본문이 중간에 멈춰야** 하고, 거기서 막힌다:
-> ⓐ 프레임 본문이 중간에 멈추면 **반환값이 정의되지 않는다** — 그리고 vita·iverilog·verilator 가
-> **셋 다 다른 답**을 낸다(iverilog 는 대입 자체를 안 하고, verilator 는 본문을 끝까지 돌리고,
-> vita 는 중단하면서 부분값/x 를 **커밋한다**). `r = f(7)` 의 lvalue 에 무엇을 쓸지가 미정이므로
-> 어느 것을 골라도 loud 를 silent 와 맞바꾼다 ·
-> ⓑ 쓰기-다음-검사 순서가 `Op::ends_statement` 에 박혀 있고, 그 순서는 `mem[f(i)] = 1` 의 E4002 를
-> 지키려고 **의도적으로** 그렇게 돼 있다(`backend.rs:505-524`) ⇒ `$finish` 레인을 그 레인과
-> **분리**해야 한다(`call_end.is_some()` 이 판별자가 된다) ·
-> ⓒ 라우팅이 셋이다 — `elaborate/frames_classify.rs` · `sim-engine/native/frames.rs` ·
-> `state/frame_eval.rs` — 하나만 가르치면 native 가 vm 으로 폴백하며 *"실행기가 드롭한다"* 는
-> **거짓 진단**을 낸다 · ⓓ `Step::Fatal` 소비부 넷이 전부 `Error` 를 가정하므로 이유를 따로 실어야
-> 한다(`call_end` + `latched_end()`, 지어서 측정했고 되돌린 패치에 있다).
+> ⓐ **모양은 받고 의미는 런타임에 거절한다.** `classify_frame_body` 가 `Finish`/`Stop` 을 통과시키고,
+> **도달한** 것만 `SimState::frame_end_is_loud` 가 **위치를 단 fatal**(F4004 · file:line + 인스턴스
+> 경로)로 끝낸다. §4.5.372 의 ⓐ(*멈춘 본문의 반환값*)에 답할 필요가 없다 — **넘겨줄 호출자가 안 남는다**.
+> 라우팅 셋 전부 가르쳤다(elaborate classify · `state/frame_eval.rs` + `state/task_frames.rs` 실행기 ·
+> `native/frames.rs` 승인 walk). ⚠️ 태스크는 **재라우팅되지 않았다** — 전 스위트 계측으로 확인했고,
+> `$finish` 는 여전히 문장 실행기에서 **깨끗이 종료**한다(correct→loud 였을 자리).
 >
-> ✅ **분리해서 실은 절반(§4.5.372)**: `$fatal` 이 `$display`/`$write` 의 **인자에서** 걸리면 그
-> 출력이 나가면 안 된다(§20.10) — 경계가 출력 뒤라 vita 가 iverilog 보다 한 줄 더 찍던
-> **pre-existing silent-wrong**. 잔여 = `$fdisplay`/`$fwrite`·`$strobe`/`$monitor` 는 같은 검사가
-> 없어 여전히 한 문장 늦다(⚠️ 그 값이 곧 ⓐ 의 질문이라 지금 고치면 silent↔silent 맞바꿈이 된다).
+> ⓑ **성능 절반이 진짜 선행조건이었고 자리는 §3 이 아니라 스케줄러였다** — `expr_is_pure_of_nets` 가
+> 모든 `Expr::Call` 을 `false` 로 답해 `assign y = f(…)` 가 **영원히 매 패스** 재평가된다. 새
+> `levelize::func_read_deps` 가 콜리가 읽는 모듈 넷을 (중첩 호출까지) 모아 dirty settle 이 **의존 넷이
+> 움직일 때만** 재평가하게 한다 = **두 오라클의 규칙 그대로**. ⭐ 안전성 주장은 *"순수 함수"* 가 아니라
+> **의존 집합의 완전성**이다: 인자 없이 모듈 넷을 읽는 함수는 계속 추적하고(⚠️ 여기서 iverilog 는
+> 얼리고 verilator 는 추적하는 **오라클 분열**이라 vita 는 verilator 편을 지켜야 했다), 정적 지역을
+> 이월하는 함수도 계속 동작한다(iverilog 도 같은 상태를 같은 트리거 규칙으로 나른다).
+>
+> ⭐ 곁수확 **pre-existing silent-wrong 둘**: cont-assign 함수 안의 `$display` 가 5사이클에 **30번**
+> 찍히던 것이 **1번**(두 오라클 일치) · `$error` 도 30 → 1.
+> ⚠️⚠️ **적대 리뷰 BLOCKING 하나, 그리고 그게 내 docstring 의 *"측정으로 처분했다"* 를 반증했다** —
+> 정적 지역에 **카운터**를 이월하는 함수는 값이 *"몇 번 돌았나"* 의 함수이고, **몇 번 도는지가 바로
+> 이 인증이 바꾸는 것**이다. 의존이 살아 있는 채로 재면 PRE `3 3 3`(= **verilator 정확히**) /
+> 무게이트 POST `2 3 3`(**아무와도 불일치**) / iverilog `1 2 3`, 그리고 비포화 쌍둥이는 PRE
+> **F4016 exit 1** / POST **조용히 `2 3 4`** ⇒ correct→silent-wrong · loud→silent-wrong 둘 다.
+> ⭐ 고침은 **definite-assignment 게이트**(own-window 슬롯의 모든 읽기가 모든 경로에서 쓰기 뒤인가)
+> 인데 ⚠️ **그것만으로는 슬라이스 헤드라인이 죽는다** — `lfsr_mask` 는 마스크 배열을 `for` 루프로
+> 지우고, **0회 돌 수도 있는 루프는 definite assignment 가 아니다**(트립 카운트를 IR 이 안 나른다).
+> ⭐⭐ 그래서 조건은 **선언지(disjunct)** 다: *definite-assignment 가 성립* **또는** *의존 집합이
+> 비었다* — 비면 그 대입은 settle 시드에서 **딱 한 번** 평가되므로 *"몇 번"* 이 1로 고정된다(=
+> 두 오라클이 빈 감도 목록에 하는 그것). 같은 카운터 함수에서 의존만 없애면 PRE **F4016** →
+> POST **`1 1` = iverilog 정확히**. ⭐ 잔여 불일치는 규칙이 아니라 **평가 한 번**(vita 의 t0 추가
+> settle 패스)이고, 그걸 닫는 것이 이 가족을 정직하게 인증하는 선행조건이다.
+>
+> ⚠️ 그 밖에 리뷰가 **거짓으로 판정한 내 문구 셋**(전부 수정): 진단문의 *"vita ends the run here"*
+> 는 본문이 **계속 실행된다**는 사실과 어긋났다(`$fatal` 과 같은 동작 · 표 32) · `func_read_deps`
+> docstring 의 *"verilator 편을 지킨다"* 는 **재귀 콜리에서 무너진다**(거기선 verilator 도 얼린다) ·
+> `systask_effect_is_eval_local` 의 `Fdisplay|Fwrite => true` 는 소비자에서 **도달 불가**인데 이웃
+> `Fclose => false` 의 근거와 모순 ⇒ **거절로 바꿨다**.
+>
+> ⚠️ **잔여**(§2 로 기록): 본문의 **시스템 함수**는 여전히 거절이라 `assign m = f()` 안의
+> `$random`/`$time` 은 매 패스 다시 뽑힌다(두 오라클은 얼린다 — 씨앗은 넷이 아니라서 완전한 의존
+> 집합이 그것을 이름 부를 수 없다) · 도달한 `$finish` **다음 문장이 여전히 실행된다**(경계가 문장이라
+> `$fatal` 과 **같은 동작** · iverilog 는 거기서 멈춘다) · **output formal 을 가진 함수**는 `Terminator::Call` 로 라우팅돼 `$finish` 를 **수행한다**(exit 0) — 같은 구문이 형식인자 방향에 따라 두 답이지만 **둘 다 PRE 보다 위**이고 iverilog 는 그 구문 자체를 거부한다 ⇒ §3.
 
 > **⑨ 파라미터 선언 fold 의 네 번째 복사본(`package.rs`)이 string/real 을 라우팅 안 한다** —
 > ✅ **RESOLVED (§4.5.377)** (2-오라클 · format 29 불변).

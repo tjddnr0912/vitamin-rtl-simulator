@@ -87,7 +87,7 @@ impl Elaborator<'_> {
         // Three producers, one recorder (`record_stmt_loc`):
         //  - an array-word READ lowered since the last push  (`push_expr` latch)
         //  - an array-word WRITE in this statement's lvalue   (below)
-        //  - `$readmem*` / `$writemem*`                       (below)
+        //  - `$readmem*` / `$writemem*`, and `$finish`/`$stop`  (below)
         // `$fread`'s W4023 twin rides the READ latch: its memory argument is a
         // whole-array `Signal { word: None }`, but the destination lvalue it
         // writes through is built with `word: Some(_)`, so the write arm catches
@@ -99,7 +99,15 @@ impl Elaborator<'_> {
                     which: ir::SysTaskId::ReadmemB
                         | ir::SysTaskId::ReadmemH
                         | ir::SysTaskId::WritememB
-                        | ir::SysTaskId::WritememH,
+                        | ir::SysTaskId::WritememH
+                        // §3 ⑧: a fourth producer. `$finish`/`$stop` inside a
+                        // subroutine body is admitted for its shape and refused
+                        // by `SimState::frame_end_is_loud` only if REACHED, and
+                        // a fatal that cannot say WHICH `$finish` it hit is the
+                        // hardest kind to act on — the motivating one sits in a
+                        // library function instantiated eighty times.
+                        | ir::SysTaskId::Finish
+                        | ir::SysTaskId::Stop,
                     ..
                 }
             )

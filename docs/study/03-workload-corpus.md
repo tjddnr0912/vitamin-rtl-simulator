@@ -729,3 +729,97 @@ which is the event it is waiting for.
 
 ⚠️ The state exists for a divergence the ORACLE cannot arbitrate, and for nothing else. A
 digest that merely fails to match is a finding, not a split.
+
+## 10/10 — and the last row cost two changes, one of which was not in its queue line (2026-09-02)
+
+`verilog-ethernet` runs. `DIGEST=ca4945d0044f74d8`, the digest both oracles produce, in
+**2.24 s** against iverilog's **7.72 s**.
+
+The queue had one line for it, ROADMAP §3 ⑧: a `$finish` in a function body is refused, and
+`lfsr_mask`'s sits in a defensive branch its parameters never take. That line was right and
+it was half the work. Deleting the statement by hand — the first thing anyone would try —
+makes the design **elaborate in 1.03 s and simulate for about 38 hours**.
+
+⭐⭐ **The other half was not in this workload's row, or in any row.** `lfsr.v` generates one
+`wire [39:0] mask = lfsr_mask(n);` per LFSR bit, `n` a genvar, eighty of them across the two
+CRC instances. `--obs-procs-time` puts **99.99% of the run** on those two source lines, at
+240 evaluations each over twenty cycles. The cause is not in `lfsr.v` and not in the corpus:
+`levelize::expr_is_pure_of_nets`, the predicate that decides which continuous assigns the
+dirty settle may skip, answered `false` for **every** `Expr::Call`. Reduced to three lines,
+`wire [7:0] cc = 8'd3 + 8'd4;` is evaluated once, `assign c = 8'd9;` once, and
+`assign a = sm(8'd3);` — a trivial function of a constant — ninety times, the same as
+`assign b = sm(q)`. Any continuous assign that reaches a call was re-evaluated forever.
+
+⭐ **The rule that unblocks it is not the one the predicate's comment implies.** Its comment
+said a call is impure because "a user function can read state no net records", which is true
+and is the wrong criterion. iverilog and verilator both re-evaluate a continuous assign
+exactly when a net in its sensitivity list moves; matching that rule needs only a COMPLETE
+dependency set, not a pure function. `levelize::func_read_deps` now collects the module nets
+a callee reads, through nested calls, and declines anything it cannot attribute.
+
+Two measurements decided the shape, in opposite directions:
+
+* `assign m = f();` where `f` reads a module net through no argument is an **oracle split** —
+  iverilog freezes `m` at its time-zero value, verilator tracks the net, and vita was already
+  on verilator's side. Certifying without collecting that read would have silently moved vita
+  to iverilog's answer. So the reads are collected, and the split is preserved.
+* A function that carries a static local between calls looked like the dangerous case and is
+  not one. iverilog carries the same state under the same trigger rule, and all three tools
+  agree on that design today. `ca_always`'s once-per-pass evaluation was the anomaly.
+
+That second point generalises, and it is what let the two halves meet. A `$display` inside
+such a function, with nothing for it to depend on, printed **30 times** over a five-cycle run
+and now prints **once**, which is what both oracles print; `$error` went 30 → 1. With a
+dependency the count is one per change of it (26 → 3, measured by review) — the same rule, and
+a number neither oracle can arbitrate, since iverilog's sensitivity list is empty and verilator
+aborts on the first `$error`. An effect's right occurrence count is the
+oracle's evaluation count, and this change is what makes vita's evaluation count the oracle's.
+It is also why `$finish` had to be admitted into that certification rather than excluded from
+it: `lfsr_mask` contains an `$error`, and excluding the whole system-task family kept the
+design correct and eighty-times slow.
+
+⚠️ What is still excluded, and why: a system FUNCTION. `$random` advances a seed other
+readers draw from and `$fgetc` advances a file position, and neither is a net, so a
+dependency set built out of nets cannot name what changed between two evaluations. `wire m =
+f()` with `$random` in `f` keeps re-drawing where both oracles freeze it — ROADMAP §2 row 31.
+
+**The corpus after this slice** (median of three, `run --compare`):
+
+| workload | vita | iverilog | ratio |
+|---|---|---|---|
+| sha256 | 1.25 s | 4.06 s | **3.25×** |
+| verilog-ethernet | 2.24 s | 7.72 s | **3.45×** |
+| aes | 2.70 s | 6.03 s | 2.23× |
+| biriscv | 4.05 s | 9.20 s | 2.27× |
+| keccak | 4.24 s | 9.26 s | 2.19× |
+| picorv32 | 4.32 s | 7.06 s | 1.64× |
+| darkriscv | 6.63 s | 7.10 s | 1.07× |
+| serv | 7.42 s | 7.32 s | 0.99× |
+| keccak-arr | 13.58 s | 9.14 s | 0.67× |
+| verilog-axi | — | — | ruled split (§2-N) |
+
+Geometric mean **1.74×** over the nine timed rows, **1.93×** over the seven third-party ones,
+**2.15×** with `serv` excluded. The two losses are unchanged and their causes are recorded:
+`keccak-arr` is the frame-arena row (§4.5.390), `serv` the x-heavy one (§4.5.394).
+
+⚠️⚠️ **The certification needed a second condition, and adversarial review is what supplied
+it.** The static-local argument above is true of an IDEMPOTENT local and false of a counter:
+a function that increments a static local returns a value that depends on how many times it
+has run, and how many times it runs is the one thing this change alters. Measured on that
+design, with the assign depending on a moving net, the first version answered `2 3 3` where
+the previous release answered `3 3 3` — verilator's answer exactly — and iverilog says
+`1 2 3`; the non-saturating twin went from a loud `did not converge` to a silent `2 3 4`.
+
+The fix is definite assignment (no own-window slot may be read before it is written), and by
+itself it reverts this whole section: `lfsr_mask` clears its mask arrays in a `for` loop, and
+a loop that might run zero times is not definite assignment. What ships is a **disjunct** —
+definite assignment OR an empty dependency set — because an assign with no dependencies is
+evaluated once, which is what both simulators do with an empty sensitivity list. On the same
+counter function with its dependency removed, that turns a `did not converge` failure into
+iverilog's answer exactly.
+
+⚠️ Reaching 10/10 does not retire the corpus, and the two rows it did not move say why:
+`verilog-axi` is still a ruled split, and `serv` is still the only workload vita does not
+beat. The corpus exists to find what our own probes do not suspect, and the largest finding
+in this slice — that every call-bearing continuous assign in every design was re-evaluated
+forever — was found by a third-party workload rather than by a §2 row.

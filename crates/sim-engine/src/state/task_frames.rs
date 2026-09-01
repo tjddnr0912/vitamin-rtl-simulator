@@ -184,6 +184,25 @@ impl SimState<'_> {
                             self.frame_emit_severity(sev, *fmt, args, sid);
                         }
                     }
+                    // §3 ⑧: a REACHED `$finish`/`$stop` — parity with run_frame_call,
+                    // because elaborate admits both through the SAME `classify_frame_body`
+                    // arm and the alternative here is the `_ => {}` below, which would
+                    // silently DROP the statement.
+                    //
+                    // ⚠️ Measured DEAD today: instrumented across the whole suite (6,418
+                    // tests) and every `$finish`-in-a-task probe — a plain task, an
+                    // `automatic` one, one with a body local, and a hierarchical
+                    // `u.t(...)` — and this arm never fires; all four keep running on the
+                    // statement executor and finish cleanly (exit 0), PRE and POST alike.
+                    // It is here so that a routing change cannot turn the drop into a
+                    // hang, not because a design reaches it. A task also has no return
+                    // value to lose, so if one ever does route here, the honest fix is to
+                    // FINISH rather than to refuse — the reason `run_frame_call` refuses
+                    // does not apply to a task.
+                    Stmt::SysTask {
+                        which: which @ (sim_ir::SysTaskId::Finish | sim_ir::SysTaskId::Stop),
+                        ..
+                    } => self.frame_end_is_loud(*which, sid),
                     // Family D (r17): a genuine `$display`/`$write` in this subset TASK
                     // body — parity with run_frame_call (render + emit as RtlOutput).
                     Stmt::SysTask { which, fmt, args }

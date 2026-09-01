@@ -237,6 +237,82 @@ pub fn systask_net_write(which: sim_ir::SysTaskId) -> NetWrite {
     }
 }
 
+/// Is this `SysTask`'s whole effect OVER when the statement that ran it is over — a
+/// line of output, or the end of the run — leaving nothing behind that a LATER
+/// evaluation of the same expression could read back?
+///
+/// A DIFFERENT question from [`systask_net_write`], deliberately spelled out here
+/// rather than derived from it, because the two disagree in both directions:
+/// `$monitor` writes no net and is refused here (it registers something that speaks
+/// again later), while `$finish` writes no net and is admitted here (it ends the run,
+/// so there is no later evaluation at all). It is also NARROWER than `systask_net_write`
+/// in a way that matters: `$fdisplay` writes no net and is refused, because a file is an
+/// artifact that outlives the run.
+///
+/// The consumer is `levelize::func_read_deps`. A function reached from a continuous
+/// assign may be evaluated once per dependency change rather than once per settle
+/// pass — which is the rule BOTH reference simulators use — so an effect in its body
+/// then happens exactly as many times as they make it happen. Measured, with
+/// `$display` inside a function called from `assign m = noisy(5);` — no dependency, so
+/// one evaluation is the whole answer — iverilog and verilator print once and vita
+/// printed 30 times over a five-cycle run. Give the callee a dependency and the count
+/// becomes one per change of it, which is the same rule and not the same number.
+///
+/// That is why "its effect is over" is the criterion and "it writes no net" is not.
+/// An effect that OUTLIVES the statement ties a later evaluation's value to how many
+/// earlier ones happened, and how many happened is the one thing this certification
+/// changes. A task that writes STORAGE is refused for a second, independent reason:
+/// its destination rides the argument list rather than a `Stmt` lvalue, so the walk
+/// that checks "every write lands in this function's own frame window" cannot see it.
+///
+/// `_`-free for the same reason as its neighbour: `SysTaskId` has grown at v5/v6/v7/
+/// v9/v10/v16/v17/v18, and a new one must not default to the permissive side.
+pub fn systask_effect_is_eval_local(which: sim_ir::SysTaskId) -> bool {
+    use sim_ir::SysTaskId as T;
+    match which {
+        // Renders its arguments and is done. `$error`/`$warning`/`$info` lower to
+        // `Display` — which is how `verilog-ethernet`'s `lfsr_mask` reaches this at
+        // all, from an `$error` in a branch its parameters never take.
+        T::Display | T::Write => true,
+        // ⚠️ `$fdisplay`/`$fwrite` are the near miss, and they are refused. They look
+        // like `$display` with a destination, and their destination is a FILE: its line
+        // count would become a function of how many times the settle chose to evaluate,
+        // which is the one artifact a reader keeps after the run. Review measured that
+        // the two reference simulators already disagree wildly about that count on the
+        // same design (iverilog writes one line, verilator five), so there is no answer
+        // to match — and measured that `classify_frame_body` rejects them from a
+        // subroutine body anyway, so this arm costs nothing today. It is written as a
+        // refusal rather than left to that second gate, because a permissive arm one
+        // gate away from firing is a latent inconsistency, not a safe one.
+        T::Fdisplay | T::Fwrite => false,
+        // Ends the run, so "a later evaluation" does not exist. In a subroutine body
+        // reached from a continuous assign this is a loud fatal
+        // (`SimState::frame_end_is_loud`) rather than a clean finish, but either way
+        // nothing survives it to be read.
+        T::Finish | T::Stop => true,
+        // Registers something that speaks again later, or is time-slot scheduled.
+        T::Monitor | T::Strobe | T::MonitorOn | T::MonitorOff => false,
+        // Waveform state, descriptor state, whole files.
+        T::DumpFile
+        | T::DumpVars
+        | T::DumpOn
+        | T::DumpOff
+        | T::DumpAll
+        | T::DumpFlush
+        | T::DumpLimit => false,
+        T::Fclose | T::WritememB | T::WritememH => false,
+        // Everything that writes storage — the `systask_net_write` non-`None` set,
+        // refused here for the destination-is-an-argument reason above.
+        T::Sformat | T::ReadmemB | T::ReadmemH | T::Cast => false,
+        T::StrPutC | T::StrItoa | T::StrHextoa | T::StrOcttoa | T::StrBintoa => false,
+        T::DynNew | T::DynDelete => false,
+        T::QPushBack | T::QPushFront | T::QInsert | T::QDeleteIdx => false,
+        T::AssocDeleteKey => false,
+        T::ArrSort | T::ArrRsort | T::ArrReverse | T::ArrLocator => false,
+        T::ClassRandomize => false,
+    }
+}
+
 /// What kind of storage a `SysTask` writes from inside its own dispatch — the
 /// answer [`systask_net_write`] gives. The FLAT/HEAP split is not cosmetic: a
 /// consumer that already refuses heap storage kinds must not count the heap

@@ -450,15 +450,14 @@ pub static CORPUS: &[Workload] = &[
         data: &[],
         plusargs: &["+N=1000"],
         digest: "DIGEST=ca4945d0044f74d8",
-        // §4.5.370 folded `STYLE_INT`. What is left is narrower than the message
-        // says: of `$display`/`$error`/`$warning`/`$fatal`/`$finish` in a function
-        // body, ONLY `$finish` is refused — and `lfsr_mask`'s sits in a defensive
-        // branch that never executes.
-        expect: Expect::Refused {
-            diag: "outside the frame-call subset",
-        },
+        expect: Expect::Runs { exit: 0 },
         oracle: "iverilog 13.0 (verilator 5.050 agrees)",
-        note: "GMII loopback — the only streaming shape. ROADMAP §3 ⑧",
+        note: "GMII loopback — the only streaming shape. Admitted by §4.5.404, which \
+               needed BOTH halves of ROADMAP §3 8: the `$finish` in `lfsr_mask`'s \
+               never-taken defensive branch (loud only if REACHED), and the dirty \
+               settle learning that a call can be certified — without the second, \
+               elaborate passed in 1.03 s and the run took ~38 hours against \
+               iverilog's 7.62 s",
     },
     Workload {
         name: "keccak",

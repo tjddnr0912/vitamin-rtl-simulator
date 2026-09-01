@@ -1318,6 +1318,30 @@ impl Elaborator<'_> {
                         which: ir::SysTaskId::Display,
                         ..
                     } if self.severities.contains_key(&sid) => {}
+                    // §3 ⑧: `$finish` / `$stop`. Admitted for the SHAPE, not for the
+                    // semantics — the executors turn a REACHED one into a loud fatal
+                    // (`frame_end_is_loud`), which is what lets this arm exist at all.
+                    //
+                    // ⭐ §4.5.372 built the real promotion and reverted it after four
+                    // review rounds: a frame body that stops half-way has no defined
+                    // return value, and vita, iverilog and verilator each answer
+                    // differently (iverilog does not assign at all, verilator runs the
+                    // body to the end, vita commits the partial value) — so picking one
+                    // trades a loud for a silent-wrong. Refusing at RUNTIME never has to
+                    // answer that question, because the answer stops being observable:
+                    // the run ends with an error. ⚠️ It does NOT stop the body — the
+                    // latch is read at the enclosing statement, so the rest of the body
+                    // still executes, exactly as it does after a `$fatal`.
+                    //
+                    // What it buys is the design where the branch is never taken, which
+                    // is the demand: `verilog-ethernet`'s `lfsr_mask` guards its
+                    // `$finish` with `if (LFSR_CONFIG == "FIBONACCI") … else`, a
+                    // parameter its own instantiations always satisfy, and that one
+                    // statement refused all 2,155 lines of the design.
+                    ir::Stmt::SysTask {
+                        which: ir::SysTaskId::Finish | ir::SysTaskId::Stop,
+                        ..
+                    } => {}
                     // R25 §3.2: name the statement that ACTUALLY failed. This arm
                     // answered with a four-way list for every rejected statement, and
                     // for the commonest one — `s[i] = v` on a `string`, which lowers to

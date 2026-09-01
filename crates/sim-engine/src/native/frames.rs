@@ -722,6 +722,14 @@ impl<'i> Walk<'i> {
                         which: sim_ir::SysTaskId::Display | sim_ir::SysTaskId::Write,
                         ..
                     } => {}
+                    // §3 ⑧: `run_frame_call`/`run_task` execute these as a loud fatal
+                    // (`frame_end_is_loud`), so this walk must admit them — refusing
+                    // here would send the whole design to the VM with a message saying
+                    // the executor DROPS the statement, which it no longer does.
+                    sim_ir::Stmt::SysTask {
+                        which: sim_ir::SysTaskId::Finish | sim_ir::SysTaskId::Stop,
+                        ..
+                    } => {}
                     // Slice #3, and the census is why these three are here and
                     // nothing else is. Instrumented over every design this row
                     // was blocking: **13 are `new[]`** and **2 are `disable`**;

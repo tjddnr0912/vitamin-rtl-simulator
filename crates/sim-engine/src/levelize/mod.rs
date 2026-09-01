@@ -73,6 +73,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+mod call_deps;
+use call_deps::expr_call_reads;
+pub(crate) use call_deps::func_read_deps;
+
 use sim_ir::{SensKind, SimIr, Stmt};
 
 /// Nets a process writes with a BLOCKING assignment (the only writes that propagate
@@ -299,10 +303,17 @@ fn lvalue_index_nets(ir: &SimIr, lv: &sim_ir::Lvalue, out: &mut BTreeSet<u32>) {
 /// "not pure" so a future `Expr` variant cannot quietly opt itself into being skipped.
 ///
 /// `SysFunc` is excluded because `$random`/`$time` do not depend on their inputs alone,
-/// `Call` because a user function can read state no net records, and `ArrayItem`
-/// because it is an array-method iterator value with no net of its own.
-fn expr_is_pure_of_nets(ir: &SimIr, eid: u32) -> bool {
+/// and `ArrayItem` because it is an array-method iterator value with no net of its own.
+///
+/// `Call` is answered by `fdeps` — [`func_read_deps`]'s verdict for the callee, which
+/// is `Some` exactly when the callee's reads have all been collected into the caller's
+/// dependency set. Before that analysis existed this arm was an unconditional `false`,
+/// which is why `assign w = f(CONST);` — eighty of them in `verilog-ethernet`'s
+/// `lfsr.v`, one per generated mask bit — was re-evaluated on every settle pass for the
+/// whole run instead of once.
+fn expr_is_pure_of_nets(ir: &SimIr, eid: u32, fdeps: &[Option<BTreeSet<u32>>]) -> bool {
     use sim_ir::Expr as E;
+    let expr_is_pure_of_nets = |ir: &SimIr, e: u32| expr_is_pure_of_nets(ir, e, fdeps);
     match &ir.exprs[eid as usize] {
         E::Const { .. } => true,
         E::Signal { word, .. } => word.is_none_or(|w| expr_is_pure_of_nets(ir, w)),
@@ -326,7 +337,11 @@ fn expr_is_pure_of_nets(ir: &SimIr, eid: u32) -> bool {
                 && expr_is_pure_of_nets(ir, *then_e)
                 && expr_is_pure_of_nets(ir, *else_e)
         }
-        E::SysFunc { .. } | E::Call { .. } | E::ArrayItem { .. } => false,
+        E::Call { func, args } => {
+            fdeps.get(*func as usize).is_some_and(Option::is_some)
+                && args.iter().all(|&a| expr_is_pure_of_nets(ir, a))
+        }
+        E::SysFunc { .. } | E::ArrayItem { .. } => false,
     }
 }
 
@@ -342,22 +357,52 @@ fn expr_is_pure_of_nets(ir: &SimIr, eid: u32) -> bool {
 /// `dirty_ok` is false for an impure RHS, and for any dependency that is a heap handle
 /// (dynamic array / queue / associative array / class), whose CONTENTS can change while
 /// the handle net itself does not — a change no `note_change` would report.
-pub(crate) fn ca_deps(ir: &SimIr, is_heap: &dyn Fn(u32) -> bool) -> Vec<(BTreeSet<u32>, bool)> {
+///
+/// `windows` is the per-`FuncId` frame layout (`FuncMeta`'s `base_net`/`locals_len`),
+/// which [`func_read_deps`] needs to tell a callee's own locals from the module nets it
+/// reads. A caller with no sidecar passes an empty slice, and every call declines.
+pub(crate) fn ca_deps(
+    ir: &SimIr,
+    windows: &[(u32, u32)],
+    is_heap: &dyn Fn(u32) -> bool,
+) -> Vec<(BTreeSet<u32>, bool)> {
+    let (fdeps, fsafe) = func_read_deps(ir, windows, is_heap);
     ir.cont_assigns
         .iter()
         .map(|c| {
             let mut deps = BTreeSet::new();
             expr_nets(ir, c.rhs, &mut deps);
+            // …and, for a certified call, the nets its BODY reads: `expr_nets` sees the
+            // arguments only, so without this an `assign y = f();` reading a module net
+            // inside `f` would be certified with an empty set and freeze.
+            let mut count_safe = true;
+            expr_call_reads(ir, c.rhs, &fdeps, &fsafe, &mut deps, &mut count_safe);
             lvalue_index_nets(ir, &c.lhs, &mut deps);
+            for e in c
+                .lhs
+                .chunks
+                .iter()
+                .flat_map(|k| [k.word, k.offset, k.width])
+                .flatten()
+            {
+                expr_call_reads(ir, e, &fdeps, &fsafe, &mut deps, &mut count_safe);
+            }
             let dirty_ok = c.delay.is_none()
-                && expr_is_pure_of_nets(ir, c.rhs)
+                && expr_is_pure_of_nets(ir, c.rhs, &fdeps)
                 && c.lhs.chunks.iter().all(|k| {
                     [k.word, k.offset, k.width]
                         .into_iter()
                         .flatten()
-                        .all(|e| expr_is_pure_of_nets(ir, e))
+                        .all(|e| expr_is_pure_of_nets(ir, e, &fdeps))
                 })
-                && !deps.iter().copied().any(is_heap);
+                && !deps.iter().copied().any(is_heap)
+                // ⭐ THE DISJUNCT. A callee whose value can depend on how many times it
+                // has run is safe in exactly two situations, and one evaluation is one
+                // of them: with an EMPTY dependency set the assign is evaluated once (at
+                // the settle seed) and never again, which is what both oracles do with an
+                // empty sensitivity list. See `own_reads_are_definitely_assigned` for the
+                // other, and for the measurement that made this necessary.
+                && (deps.is_empty() || count_safe);
             (deps, dirty_ok)
         })
         .collect()

@@ -1344,6 +1344,67 @@ impl<'a> SimState<'a> {
         }
     }
 
+    /// §3 ⑧: a `$finish` / `$stop` that a subroutine body ACTUALLY REACHED.
+    ///
+    /// Elaborate admits the statement so a design whose guard never takes that branch
+    /// can run at all — `verilog-ethernet`'s `lfsr_mask` is the motivating one, and its
+    /// `$finish` is provably unreachable for every instantiation in the tree. Reaching
+    /// one is the case elaborate could not decide statically, and it is refused HERE,
+    /// loudly, rather than performed.
+    ///
+    /// ⚠️ It is refused rather than performed because of what stopping a frame body
+    /// mid-way would leave behind: the caller is an EXPRESSION, so it is owed a return
+    /// value, and §4.5.372 measured all three tools answering differently (iverilog does
+    /// not assign at all, verilator runs the body to completion, vita commits whatever
+    /// the return slot holds). Choosing one would swap this loud for a silent wrong
+    /// answer. Ending the run with an ERROR does not choose — which is the point.
+    ///
+    /// The mechanism is `$fatal`'s, deliberately: the same `call_fatal` latch, the same
+    /// diag stream, the same statement boundary.
+    ///
+    /// ⚠️⚠️ And that means the body KEEPS EXECUTING after the latch — the boundary is the
+    /// enclosing statement, not this one — so a `$display` after the `$finish` still
+    /// prints. Review found the first version of this docstring and of the diagnostic
+    /// claiming otherwise ("nothing is committed because the run ends"), which was a
+    /// claim about a bail this executor does not have. Both now say what happens. The
+    /// `$fatal` twin behaves identically, which is the argument for leaving it: closing
+    /// it means bailing out of the basic-block loop mid-body, and that is §4.5.372's
+    /// undecided question about the caller's lvalue all over again. ROADMAP §2 row 32.
+    ///
+    /// ⚠️ NOT UNIFORM, also measured by review: a function with an OUTPUT formal is
+    /// emitted as a `Terminator::Call` and classified suspendable (`stmt_signal` answers
+    /// `true` for every `Stmt::SysTask`), so it reaches the `&mut` statement executor,
+    /// which PERFORMS the `$finish` — same source construct, exit 0 instead of exit 1,
+    /// decided by a formal's direction. Both spellings are above PRE, which refused
+    /// both, so nothing moved down the ladder; and iverilog rejects an output formal on
+    /// a function outright, so there is no oracle to be uniform WITH. Unifying them means
+    /// changing what `compute_suspendable_tasks` routes, which is the task-routing
+    /// question and a different blast radius. ROADMAP §3.
+    pub(crate) fn frame_end_is_loud(&self, which: sim_ir::SysTaskId, sid: u32) {
+        if self.call_fatal.get() {
+            return;
+        }
+        self.call_fatal.set(true);
+        self.had_error.set(true);
+        let (location, context) = self.stmt_diag_meta(sid);
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Fatal,
+            code: MsgCode::RunFatal,
+            message: format!(
+                "`{}` was reached inside a subroutine body. vita ends the run with an \
+                 error instead of performing it, because a body that stops half-way \
+                 still owes its calling expression a value and the reference simulators \
+                 disagree about which one. The rest of this body still executes, as it \
+                 does after a `$fatal`. Move the `{}` to the caller.",
+                sim_ir::systask_name(which),
+                sim_ir::systask_name(which),
+            ),
+            location,
+            context,
+            sim_time: Some(TimeStamp { ticks: self.now }),
+        }));
+    }
+
     /// B1 frame-call evaluator. Runs user function `func`'s lowered body (in the
     /// GLOBAL `ir.blocks` arena from `FuncDef.entry`) against a per-invocation
     /// frame, returning its return-var Value resized to the declared return
@@ -1611,6 +1672,15 @@ impl<'a> SimState<'a> {
                             p.leave(sim_ir::systask_name(*which), f);
                         }
                     }
+                    // §3 ⑧: admitted by `classify_frame_body` for its SHAPE, refused
+                    // here for its semantics. Without this arm it would fall into the
+                    // `_ => {}` below and be silently DROPPED — the shape of defect
+                    // §4.5.372's round-2 review found when only one of the three
+                    // routings was taught.
+                    Stmt::SysTask {
+                        which: which @ (sim_ir::SysTaskId::Finish | sim_ir::SysTaskId::Stop),
+                        ..
+                    } => self.frame_end_is_loud(*which, sid),
                     // Other SysTask / NBA / delay / event in a func body are rejected at
                     // ELABORATE (B1 cut) → never reach here.
                     _ => {}

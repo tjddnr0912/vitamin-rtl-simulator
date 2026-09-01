@@ -3114,3 +3114,108 @@ comments, measured on both oracles.
 
 The opposite habit costs a slice: a pin that says only "this is loud" tells a future
 reader nothing about whether loud is still right.
+
+### ★★★★ A skip is licensed by a COMPLETE dependency set, not by purity
+
+The scheduler's "may this continuous assign be skipped?" predicate refused every call,
+with a comment giving the reason: "a user function can read state no net records." True,
+and the wrong criterion — so `assign y = f(...)` was re-evaluated on every settle pass of
+every delta for the life of the run, and one third-party design spent 99.99% of its
+runtime there.
+
+The correct criterion came from asking what the answer is being compared against.
+iverilog and verilator both re-evaluate a continuous assign **exactly when a net in its
+sensitivity list moves**. Reproducing that rule reproduces their answer, so the obligation
+is not "this is a mathematical function" but "the dependency set names everything that can
+change the value". Collect the callee's reads and the call is skippable; fail to attribute
+one read and decline.
+
+Two consequences that look like hazards and are not, both measured before the change:
+
+- A function carrying a STATIC local between calls still works, because the oracles carry
+  the same state under the same trigger rule. The every-pass evaluation was the anomaly.
+- A `$display` in the body prints once instead of thirty times, because an effect's right
+  occurrence count *is* the oracle's evaluation count. That is not a side benefit; it is
+  the same theorem, and it is what makes admitting a side effect into the certification
+  defensible rather than reckless.
+
+The one thing that genuinely breaks it is a read the set cannot name: `$random`'s seed,
+`$fgetc`'s file position, `$time`. Those decline — see
+[[moving-an-effect-name-the-resource]], which is the same distinction from the other side.
+
+### ★★★ When two halves of a gap block each other, measure the pair, not each half
+
+ROADMAP §3 ⑧ had one queue line — a `$finish` in a function body refuses the design — and
+closing it made the design elaborate in 1.03 s and simulate for **38 hours**. The
+performance defect underneath was in a different file, had no queue row of its own, and
+was reached only because the refusal was lifted first on a scratch copy.
+
+Then the two collided: the performance certification had to admit a system task for the
+motivating function to qualify (it contains an `$error`), and the `$finish` promotion had
+to be admitted into that same certification or the design stayed eighty-times slow. Fixing
+either alone produces a *worse* report than fixing neither — the refusal moves instead of
+closing, which this project has now done three times.
+
+⇒ When a re-grounding says "closing this moves the refusal", the unit of work is the pair.
+Measure the end-to-end outcome (does the real design RUN, at what time, with which digest)
+before deciding either half is done.
+
+### ★★★ A defensive arm you cannot reach is worth keeping, and worth measuring
+
+The `$finish` promotion needed an arm in the task executor for symmetry with the function
+one. Instrumenting it across the whole suite and every spelling of a task `$finish` showed
+it never fires: those tasks stay on the statement executor and finish cleanly. The arm was
+kept anyway, because the alternative at that point in the match is a `_ => {}` that DROPS
+the statement — but the docstring says it was measured dead, says how, and says what the
+honest behaviour would be if a routing change ever reaches it (a task has no return value
+to lose, so it should finish rather than refuse).
+
+"Unreachable" and "unreached in every test I ran" are different claims. Write the second
+one, with the method.
+
+### ★★★★ "Both oracles agree today" is a property of the design you built, not of the class
+
+The certification above rests on a measurement: a function carrying a static local across
+calls agrees in all three tools, so evaluating on dependency changes reproduces it. The
+probe that produced it carried a local whose value was IDEMPOTENT — re-evaluating with the
+same inputs wrote the same thing. Review built the non-idempotent twin, a counter, and the
+three tools did not agree at all; the ungated change answered `2 3 3` where the previous
+release answered `3 3 3` (verilator's answer exactly) and iverilog said `1 2 3`.
+
+The docstring said the measurement "disposes of the hazard". It disposed of one instance of
+it. When a hazard is *"the value depends on hidden state"*, the probe has to make the hidden
+state actually change the answer — an accumulator, not a flag that settles.
+
+⇒ Before writing "measured, this is fine" about a class, ask what the DEFECT would look
+like and build that, rather than building the shape and observing it is fine.
+
+### ★★★★ When a sound gate kills the feature, look for a disjunct, not a weaker gate
+
+The fix for the above is definite assignment: no own-window slot may be read before it is
+written. It is correct and it reverted the slice's entire headline — the motivating library
+function clears its arrays in a `for` loop, and a loop that *might* run zero times is not
+definite assignment. Every attempt to weaken the analysis (may-assign instead of
+must-assign, same-block writes, automatic-only) either admitted the counter again or still
+refused the loop.
+
+The answer was a second, independent reason to be safe: **an assign with an EMPTY dependency
+set is evaluated once**, so "how many times" is one and cannot vary. That arm is not a
+loophole — it is what both simulators do with an empty sensitivity list, and it was measured
+to give iverilog's answer exactly on the very counter function the gate exists to refuse,
+with its dependency removed.
+
+⇒ A hazard stated as a property ("the value must not depend on the evaluation count") often
+has more than one sufficient condition. Enumerate them before weakening the one you have —
+weakening trades soundness for coverage, a disjunct does not.
+
+### ★★★ A diagnostic's text is a claim, and it is the one users act on
+
+The new fatal said "vita ends the run here rather than choose what the calling expression
+receives". Measured, the body keeps executing: the latch is read at the enclosing statement,
+so a `$display` after the `$finish` still prints. The sentence described a bail the executor
+does not have, and it was repeated in two docstrings and a comment because they were written
+from the same intent.
+
+Review found all three. Run the design and read the OUTPUT before writing what the output
+means — and when the same claim appears in a diagnostic, a docstring and a comment, fixing
+one is fixing a third of it.

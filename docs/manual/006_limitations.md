@@ -37,6 +37,7 @@ The forward-looking ("Phase-2") side of each item lives in the project's
 | Hierarchical reference to an `automatic` block-local (`tb.a`) | Rejected (IEEE 1800 §23.9 forbids it) | Loud (`E3009`) |
 | Dynamic-array-formal call in a `&&`/`||` rhs, another call's argument, a select index, a `case` scrutinee, a `repeat` count, a cast or replication | Rejected, not given a stale snapshot | Loud (`E3009`) |
 | `$fgets`/`$fscanf`/`$sscanf`/`$fread` inside a framed subroutine body | Rejected, not a silent 0 with an untouched destination | Loud (`F4004`, at the call) |
+| A `$finish`/`$stop` that is REACHED inside a function or task body | Ends the run with a fatal, rather than choosing a return value for the caller | Loud (`F4004`, at the statement) |
 | A default argument value whose names bind differently at the call site | Rejected (IEEE 1800 §13.5.4 evaluates it in the subroutine's scope) | Loud (`E3009`) |
 
 The sections below give the detail behind each row. (Earlier editions of this
@@ -680,6 +681,32 @@ end
 
 Nesting no longer multiplies (`int'(int'(e))` costs the same as `int'(e)`), but a
 widening cast over a call still fans out to the wider width.
+
+## `$finish` and `$stop` inside a subroutine body
+
+A `$finish` or `$stop` written inside a `function` or `task` body is **accepted**,
+and it is refused only if it is actually **reached**:
+
+```
+fatal[VITA-F4004]: `$finish` was reached inside a subroutine body; vita ends the run
+here rather than choose what the calling expression receives (the three reference
+simulators disagree). Move the `$finish` to the caller.
+```
+
+Before the 2026-09-02 release the statement was rejected at **elaboration**, whether
+or not it could ever execute. That is a real pattern in library RTL — a parameter
+check whose `else` arm prints an error and stops — and one such branch, in a branch
+its own parameters never take, was enough to refuse an entire design.
+
+Reaching one is refused rather than performed because a function body that stops
+half-way still owes its caller a return value, and iverilog, verilator and vitamin
+each pick a different one: iverilog does not perform the assignment at all,
+verilator runs the body to completion, and vitamin would commit whatever the return
+variable holds. Picking any of them would replace a loud refusal with a silently
+wrong number.
+
+⚠️ A `$finish` in a **task** is unaffected — it ends the run cleanly, as it always
+did. The restriction is about a subroutine whose value an expression is waiting for.
 
 ## File reads inside a subroutine body
 

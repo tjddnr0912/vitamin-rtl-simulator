@@ -621,7 +621,16 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 )
             })
             .collect();
-        let deps = crate::levelize::ca_deps(st.ir, &heap);
+        // The frame layout `func_read_deps` needs to separate a callee's own locals from
+        // the module nets it reads. `func_table` is index-aligned to `ir.funcs`; a
+        // length mismatch (a hand-built sidecar in a test fake) makes every call decline
+        // rather than mis-attribute a net.
+        let windows: Vec<(u32, u32)> = st
+            .func_table
+            .iter()
+            .map(|m| (m.base_net, m.locals_len))
+            .collect();
+        let deps = crate::levelize::ca_deps(st.ir, &windows, &heap);
         let mut ca_always: Vec<u32> = Vec::new();
         let mut ca_of_net: Vec<Vec<u32>> = vec![Vec::new(); nnets];
         for (ci, (dep, ok)) in deps.iter().enumerate() {

@@ -11,6 +11,54 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A continuous assign that calls a function no longer re-runs it on every scheduler pass.**
+  `assign y = f(...)` was re-evaluated on every settle pass of every delta of every cycle,
+  because the check that decides which assigns may be skipped answered "not skippable" for any
+  call. `verilog-ethernet` pays for that eighty times over — `lfsr.v` generates one
+  `wire [39:0] mask = lfsr_mask(n);` per LFSR bit with `n` a genvar, so eighty
+  constant-argument calls ran forever. Measured over a 20-cycle run: **99.99% of the runtime**
+  in those two source lines. The pinned benchmark run went from an extrapolated **~38 hours to
+  2.2 seconds**, against iverilog's 7.7 s, with the same digest.
+  ⭐ The rule that makes this safe is not "the function is pure": it is that the dependency set
+  is COMPLETE. Both reference simulators re-evaluate a continuous assign exactly when a net in
+  its sensitivity list moves, so vita now collects the module nets a callee reads — through
+  nested calls too — and matches that rule. A function that reads a net through no argument
+  keeps tracking it; a function that carries a static local between calls keeps working,
+  because iverilog carries the same state under the same trigger rule.
+  ⭐ Two long-standing wrong answers went with it: a `$display` inside such a function with no
+  dependency printed **30 times** over a five-cycle run and now prints **once**, which is what
+  both oracles print; an `$error` likewise went 30 → 1. Give the same function a dependency and
+  the count becomes one per change of it (26 → 3 on one probe) — the same rule, a different
+  number, and one no oracle can arbitrate: iverilog's sensitivity list for such an assign is
+  empty and verilator aborts on the first `$error`.
+  ⚠️ A system FUNCTION in the body still declines, so `assign m = f()` where `f` reads
+  `$random` or `$time` keeps re-drawing while both oracles freeze it. Closing that means naming
+  what `$random` advances, and a seed is not a net.
+  ⚠️⚠️ And a function that keeps a COUNTER in a static local is not certified while its assign
+  has a dependency, because its value is a function of how many times it has run — which is the
+  one thing this change alters. Adversarial review built that design and measured the first
+  version answering `2 3 3` where the previous release answered `3 3 3` (verilator's answer
+  exactly) and iverilog says `1 2 3`. Such an assign now keeps the previous behaviour. With no
+  dependency it is certified and evaluated once, which is what both simulators do — and on the
+  same counter function that turns a `did not converge` failure into iverilog's answer.
+
+- **`$finish` and `$stop` inside a function or task body no longer refuse the whole design.**
+  One statement in a library function refused all 2,155 lines of `verilog-ethernet`:
+  `lfsr_mask` guards its `$finish` with a parameter comparison every instantiation in the tree
+  satisfies, so it never executes — and the check is a static walk, which sees it anyway. The
+  shape is now accepted, and a `$finish` that is actually REACHED ends the run with a located
+  fatal (`F-RUN-FATAL`, naming the file, line and instance path) rather than being performed.
+  ⚠️ Refused rather than performed on purpose: a function body that stops half-way still owes
+  its caller a return value, and iverilog, verilator and vita each pick a different one, so
+  choosing any of them would trade a loud refusal for a silently wrong number. A `$finish` in a
+  TASK is unaffected and still ends the run cleanly, and so is one in a function with an
+  `output` formal, which is routed differently.
+  ⚠️ The rest of the body still executes after the fatal is reported — the boundary is the
+  enclosing statement, exactly as it is after a `$fatal`.
+  ⭐ Together with the change above this takes the workload corpus to **10 of 10** — every
+  third-party design vita has been measured against now runs, at a geometric mean of **1.93×
+  iverilog's speed** across the seven third-party workloads that carry a timing.
+
 - **A constant wider than 64 bits is computed in the width the declaration states.** The wide
   constant fold evaluated every node at the expression's own width and resized afterwards, which
   §11.6.1 says is not the same operation: a context-determined operator takes its width from the

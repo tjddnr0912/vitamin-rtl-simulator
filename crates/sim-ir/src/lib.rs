@@ -16,7 +16,7 @@ pub mod selfwidth;
 pub use analysis::{
     call_out_nets, compute_suspendable_tasks, func_body_needs_stmt_executor,
     rhs_frame_executor_cannot_perform, rhs_is_stmt_effect, sysfunc_frame_executor_cannot_perform,
-    sysfunc_is_stmt_effect, systask_net_write, NetWrite,
+    sysfunc_is_stmt_effect, systask_effect_is_eval_local, systask_net_write, NetWrite,
 };
 pub use names::{sysfunc_name, systask_name};
 

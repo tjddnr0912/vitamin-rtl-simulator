@@ -194,7 +194,7 @@ assertion work:
 |------|----------|-----|---------|
 | `VITA-E4001` | `E-RUN-ASSERT-FAIL` | error | An `assert` with no action block failed (implicit `$error`). |
 | `VITA-E4003` | `E-RUN-USER-ERROR` | error | A runtime `$error` fired (prints and continues). |
-| `VITA-F4004` | `F-RUN-FATAL` | fatal | A runtime `$fatal` fired — implicit `$finish`, exit `1`. Also an engine capability limit reached while running (e.g. a `$fgets`/`$fscanf` inside a framed subroutine body): vitamin stops rather than return a quiet 0. |
+| `VITA-F4004` | `F-RUN-FATAL` | fatal | A runtime `$fatal` fired — implicit `$finish`, exit `1`. Also an engine capability limit reached while running: a `$fgets`/`$fscanf` inside a framed subroutine body (vitamin stops rather than return a quiet 0), or a `$finish`/`$stop` that was actually **reached** inside a function or task body (vitamin ends the run rather than choose what the calling expression receives — see [Limitations](006_limitations.md)). |
 | `VITA-W4007` | `W-RUN-USER-WARNING` | warning | A runtime `$warning` fired. |
 | `VITA-I4005` | `I-RUN-USER-INFO` | info | A runtime `$info` reported information. |
 | `VITA-W4006` | `W-RUN-NO-LOCATIONS` | warning | The loaded snapshot has no location side-table, so runtime diagnostics omit `file:line`. Re-elaborate with locations to restore them. |
