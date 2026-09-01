@@ -579,14 +579,20 @@ impl Elaborator<'_> {
                 return None;
             }
             let dst_id = self.lower_expr(&args[0]);
-            if !matches!(
-                self.exprs.get(dst_id as usize),
-                Some(ir::Expr::Signal { word: None, .. })
-            ) {
+            let Some(ir::Expr::Signal { net, word: None }) = self.exprs.get(dst_id as usize) else {
                 self.error(
                     MsgCode::ElabUnsupported,
                     "$cast destination must be a plain integral variable (v9 subset)",
                 );
+                return None;
+            };
+            // ⭐ …and it is a WRITE. This guard is the one the `$sformat` block below
+            // says it MIRRORS, and it was the only one of the pair that never asked the
+            // read-only question — review measured `$cast(cb.s, 8'hAA)` moving a
+            // clocking holding net at exit 0, where verilator says *"Cannot write to
+            // input clockvar"*.
+            let net = *net;
+            if self.deny_readonly_write_at(net, dst_id, "$cast into") {
                 return None;
             }
         }
@@ -598,13 +604,37 @@ impl Elaborator<'_> {
         // silent no-op. (Mirrors the $cast dest guard above; the check is exactly the
         // engine's accepted shape, so no destination it CAN write is rejected.)
         if matches!(which, ir::SysTaskId::Sformat) {
+            let mut dest_net = None;
             let ok = args.first().is_some_and(|a| {
                 let d = self.lower_expr(a);
-                matches!(
-                    self.exprs.get(d as usize),
-                    Some(ir::Expr::Signal { word: None, .. })
-                )
+                match self.exprs.get(d as usize) {
+                    Some(ir::Expr::Signal { net, word: None }) => {
+                        dest_net = Some((*net, d));
+                        true
+                    }
+                    _ => false,
+                }
             });
+            // ⭐ …and it is a WRITE, so it owes the read-only funnel every other write
+            // position goes through. It did not go through it at all: neither a
+            // `parameter` destination nor a clocking INPUT was refused here, though the
+            // sibling `$fgets`/`$fread`/`$fscanf` destinations have called it for
+            // exactly this since they were written. Measured: `$swrite(cb.s, "%d", 9)`
+            // moved the clocking holding net at exit 0 where verilator says *"Cannot
+            // write to input clockvar"*.
+            if let Some((net, eid)) = dest_net {
+                // ⚠️ `&'static str` here, because the deferred half stores it until
+                // the resolve pass — the two `$sformat` spellings are the whole
+                // variation, so a match beats keeping the formatted `String` alive.
+                let how = if name.name == "$sformat" {
+                    "$sformat into"
+                } else {
+                    "$swrite into"
+                };
+                if self.deny_readonly_write_at(net, eid, how) {
+                    return None;
+                }
+            }
             if !ok {
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -783,7 +813,7 @@ impl Elaborator<'_> {
                                     which,
                                     ir::SysTaskId::ReadmemB | ir::SysTaskId::ReadmemH
                                 ) {
-                                    self.deny_const_param_write(net, "$readmem into");
+                                    self.deny_readonly_write(net, "$readmem into");
                                 }
                                 return Some(self.push_expr(ir::Expr::Signal { net, word: None }));
                             }

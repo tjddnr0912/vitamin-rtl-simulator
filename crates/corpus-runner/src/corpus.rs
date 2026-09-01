@@ -70,6 +70,25 @@ pub enum Expect {
     /// matched as a substring so rewording a diagnostic does not break the gate,
     /// which is the same reason the compliance corpus asserts on message codes.
     Refused { diag: &'static str },
+    /// Runs to completion, and its digest DISAGREES with the oracle's on an axis
+    /// that has been measured and RULED — the oracle cannot arbitrate it.
+    ///
+    /// ⚠️⚠️ This is not a licence to pin a wrong answer, and it must never be
+    /// reached for by a row whose digest merely fails to match. It exists for one
+    /// shape: a divergence where the oracle answers **two ways to the same
+    /// question**, so "matches iverilog" stops being a statement about vita.
+    /// `verilog-axi` is that shape — the disagreement is 29 x-cycles of a 123,166
+    /// cycle run, on time-zero continuous-assign event ordering, where iverilog
+    /// fires for `a | b` and not for `a & b` with identical operands and identical
+    /// values (ROADMAP §2-N). `why` must name the ruling, and both digests are
+    /// pinned, so a change on EITHER side still fails the gate: vita moving is a
+    /// `Regression`, and the two agreeing again is a `Promoted`.
+    Split {
+        /// vita's own answer, pinned so its answer is still frozen.
+        vita: &'static str,
+        /// Where the ruling is written down.
+        why: &'static str,
+    },
 }
 
 /// One measurable design.
@@ -395,8 +414,13 @@ pub static CORPUS: &[Workload] = &[
         data: &[],
         plusargs: &["+N=5000"],
         digest: "DIGEST=3b9321d5ea42f302",
-        expect: Expect::Refused {
-            diag: "`calcBaseAddrs(…)` has no constant-fold arm",
+        // PROMOTED 2026-09-01: it elaborates and runs. Its digest is not the
+        // oracle's, and the residue is the time-zero event-ordering axis §2-N ruled
+        // un-arbitrable — same cycle count (123,166), same handshake, 29 x-cycles.
+        expect: Expect::Split {
+            vita: "DIGEST=fd90a1407928ebc8",
+            why: "ROADMAP §2-N: t0 continuous-assign event order; iverilog answers \
+                  two ways to the same question (fires for `a|b`, not for `a&b`)",
         },
         oracle: "iverilog 13.0",
         note: "2x2 crossbar — elaboration- and generate-heavy. The pinned refusal has \

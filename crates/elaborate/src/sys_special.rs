@@ -80,7 +80,7 @@ impl Elaborator<'_> {
             );
             return None;
         }
-        self.deny_const_param_write(net, "$value$plusargs into");
+        self.deny_readonly_write_at(net, var_id, "$value$plusargs into");
         Some(self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::ValuePlusargs,
             args: vec![fmt_id, var_id],
@@ -286,7 +286,7 @@ impl Elaborator<'_> {
             );
             return true;
         }
-        self.deny_const_param_write(net, "$fgets into");
+        self.deny_readonly_write_at(net, str_id, "$fgets into");
         let fd_id = self.lower_expr(&args[1]);
         let rhs_id = self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::Fgets,
@@ -342,7 +342,7 @@ impl Elaborator<'_> {
             }
             // A2a: $fread WRITES the whole memory — a desugared array
             // parameter target is loud.
-            self.deny_const_param_write(net, "$fread into");
+            self.deny_readonly_write(net, "$fread into");
             self.push_expr(ir::Expr::Signal { net, word: None })
         } else {
             let id = self.lower_expr(&args[0]);
@@ -362,7 +362,7 @@ impl Elaborator<'_> {
                 );
                 return true;
             }
-            self.deny_const_param_write(net, "$fread into");
+            self.deny_readonly_write_at(net, id, "$fread into");
             id
         };
         let mut sf_args = vec![target_id, self.lower_expr(&args[1])];
@@ -450,7 +450,7 @@ impl Elaborator<'_> {
                 );
                 return true;
             }
-            self.deny_const_param_write(net, "$fscanf/$sscanf into");
+            self.deny_readonly_write_at(net, id, "$fscanf/$sscanf into");
             sf_args.push(id);
         }
         let rhs_id = self.push_expr(ir::Expr::SysFunc {

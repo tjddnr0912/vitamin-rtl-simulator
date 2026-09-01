@@ -11,6 +11,66 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A module-scope enum label is now visible to everything declared under it, and the read-only
+  rule for a clocking input is asked in one place.** Two queue rows, and in both of them what the
+  adversarial review measured mattered more than what the row said.
+
+  - **An enum label binds in DECLARATION ORDER.** Labels used to bind after the whole body-parameter
+    walk, so a `localparam` written below a `typedef enum` could not name one:
+    `typedef enum logic [31:0] {EA = 32'hAB34} e_t; localparam logic [31:0] Q = EA;` was
+    *"undefined name `EA`"* where both oracles print 43828 — while the identical text inside a
+    PACKAGE folded, because a package binds its labels before any module body binds. One rule, two
+    answers, decided by which file the enum lives in.
+    ⭐ The row recorded only that spelling; it is broader. A param→label→param chain
+    (`localparam A = 3; typedef enum {L = A + 1} e_t; localparam B = L + 1;`) is `A=3 L=4 B=5` in
+    both oracles and was loud on `B`, and a label was equally invisible to a later declaration
+    width, a later `generate if`, and a later typedef's label.
+    The binding is now a quiet pre-pass inside the same declaration-order walk the body parameters
+    already use. The pass after the walk STAYS, because a label whose value names a LATER parameter
+    (`typedef enum {X = LP} e_t; localparam LP = 5;`) folds today and that shape is an oracle split —
+    iverilog refuses to bind it, verilator folds it — so nothing on that axis moves.
+    ⚠️⚠️ Binding twice is sound only if the two passes bind the SAME thing, and the first version
+    shipped without checking. Two review lenses each measured the same two mechanisms independently,
+    and a third only one of them saw; all three have one shape, a consumer that folds BETWEEN the
+    passes keeping pass 1's answer while everything after keeps pass 2's — one label reading two
+    values in one run at exit 0. Skipping an unfoldable label skipped the auto-increment counter
+    with it, so `{A = LP, B}` bound `B` to 0 while `B` itself printed 6; an enum base whose width was
+    not yet a fact skipped the mask, so `enum logic [W-1:0] {A = -8'sd2}` folded `fffe` where the
+    second pass makes it 254; and a name in a label's value could resolve to a wildcard import in
+    one pass and to a body `localparam` in the other. The first two are gated — the pre-pass declines
+    the WHOLE typedef rather than one label — and the third cannot be seen by a gate, because the
+    fold succeeds with a different answer, so the second pass now VERIFIES the first instead of
+    silently overwriting it, and says so loudly when they differ.
+
+  - **The clocking-input read-only rule is one funnel, and it covers nine tasks in two lowering
+    positions.** §14.3 makes a clocking input read-only; vita enforced it from the LVALUE path only,
+    so every other write position resolved the holding net through the ordinary READ path and wrote
+    it at exit 0 while the real variable kept its contents. `deny_const_param_write` is now
+    `deny_readonly_write`, asks the clocking question first, and is what all 21 write positions call;
+    `$sformat`/`$swrite` did not go through it at all and now do.
+    ⚠️ Review measured the census short by three: `$cast`'s destination — the guard the `$sformat`
+    check cites as the model it *mirrors* — and the SEED of `$random` and `$dist_*`, which the engine
+    advances, reached no funnel at all.
+    ⚠️⚠️ And the first closure was defeated by one keyword. A destination inside an `automatic` task,
+    or written hierarchically, is lowered before the name it points at exists, so the funnel was
+    handed a poison net and answered nothing — `$readmem*` was loud there only because it happens to
+    carry a side map for an unrelated reason. Those destinations are recorded at lowering time and
+    the question is asked again once the net exists, so adding `automatic` to a design no longer
+    turns the rule off.
+    ⚠️ Both halves are hand-IEEE: iverilog 13 cannot parse a clocking block at all. verilator carries
+    accept/reject, and rejects all fifteen spellings with *"Cannot write to input clockvar"*.
+
+### Changed
+
+- **`corpus-runner` can record a divergence the ORACLE cannot arbitrate.** `verilog-axi` elaborates
+  and runs now, and its digest is not iverilog's — the whole difference is 29 x-cycles of a 123,166
+  cycle run, on the time-zero continuous-assign event ordering that ROADMAP §2-N measured and ruled
+  un-arbitrable (iverilog fires for `a | b` and not for `a & b`, with identical operands and
+  identical values). Grading that as *"was loud, now silently wrong"* was true of the shape and false
+  of this row, so the manifest gained an `Expect::Split` that pins BOTH answers: vita's own answer
+  moving is still a regression, and the two agreeing again is reported as the promotion it would be.
+  Corpus coverage reads 9/10.
+
 - **The rest of the §2 queue, re-measured first — and the census closed three rows without
   writing any code.** Every remaining candidate was reproduced at HEAD against both oracles before
   anything was touched; that is what decided which four were worth taking and which were not.

@@ -701,3 +701,31 @@ differential 이 겨눌 과녁이 얇았고, 결함은 전부 **도구가 자기
   **매니페스트 위생 테스트 8개**(라이선스·SHA 형식·이름 충돌·다이제스트 마커·모양 다양성)뿐이다.
   실제 실행은 개발 기계의 수동 게이트다 — iverilog 차분 스위트와 같은 취급이다.
 
+
+
+## 9/10 — and the tenth row needed a third state (2026-09-01)
+
+`verilog-axi` elaborates and runs. Its digest is not iverilog's, and the whole of the
+difference is `XC=29` against `XC=0` — 29 cycles out of 123,166 in which the crossbar's
+registered `valid` outputs are `x` in iverilog and definite in vita. Everything else
+matches: the same cycle count, the same handshake, the same per-master data digests.
+
+The contract had two states and neither was true here. `Expect::Refused` graded it *"was
+loud, now silently wrong"* — right about the shape of a refused row that starts producing a
+wrong answer, wrong about this one and permanently red. `Expect::Runs` with vita's own
+digest would have been self-certifying: pinning our answer as the expected one is exactly
+what the corpus exists to prevent.
+
+The axis was already measured. ROADMAP §2-N found that the residual is time-zero
+continuous-assign event ordering, and that **iverilog answers two ways to the same
+question**: with identical operands and identical values, a `wire w = a | b;` fires the
+`always @*` that reads it at time zero and a `wire w = a & b;` does not. verilator settles
+everything and has no vote. So there is no oracle to match here, only a ruling.
+
+`Expect::Split { vita, why }` pins BOTH digests and names the ruling. It is not a pass:
+the row reads `ruled-split` on every run, with the reason on the line. vita's own answer
+moving is still a `REGRESSION`, and the day the two agree again the row grades `PROMOTED`,
+which is the event it is waiting for.
+
+⚠️ The state exists for a divergence the ORACLE cannot arbitrate, and for nothing else. A
+digest that merely fails to match is a finding, not a split.

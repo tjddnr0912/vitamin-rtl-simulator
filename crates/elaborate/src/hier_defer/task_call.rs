@@ -144,7 +144,7 @@ impl Elaborator<'_> {
                                 bind_err = true;
                                 continue;
                             }
-                            self.deny_const_param_write(
+                            self.deny_readonly_write(
                                 caller_net,
                                 "connect an output/inout array to",
                             );

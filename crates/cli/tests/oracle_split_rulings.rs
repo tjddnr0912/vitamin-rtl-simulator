@@ -261,3 +261,40 @@ fn a_buf_gate_maps_a_z_input_to_x_where_a_continuous_assign_passes_it() {
         "the gate coerces z->x (§7.3); the continuous assign does not:\n{all}"
     );
 }
+
+/// A `defparam` that reaches an ENUM LABEL's value: iverilog folds the label from the
+/// parameter's DECLARED default and verilator from the OVERRIDE.
+///
+/// ```verilog
+/// module m #(parameter P = 4);
+///   typedef enum logic [7:0] {A = P, B} e_t;   // A = P, B = A + 1
+///   localparam Q = B;
+/// endmodule
+/// module top; m u(); defparam u.P = 9; endmodule
+/// ```
+///
+/// iverilog: `A=4 B=5 Q=5` · verilator and vitamin: `A=9 B=10 Q=10`.
+///
+/// ⭐ RULING: verilator's. §6.20.2 makes the override the parameter's value for the
+/// whole instance, and every OTHER consumer of `P` in either tool reads 9 — iverilog
+/// itself prints `P=9` in the same run, so its 4 is the label fold reading a value the
+/// design no longer has, not a different reading of the rule. `defparam` is the only
+/// channel where the two disagree: `#(.P(9))` is `A=9 B=10 Q=10` in all three.
+///
+/// ⚠️ Pinned as a RULING, not a fix. Before 2026-09-01 vitamin was LOUD here (module
+/// enum labels bound after the body-parameter walk, so `Q` could not fold), so this is
+/// an ascent — but an ascent onto one oracle, which is worth a pin rather than being
+/// left implicit.
+#[test]
+fn a_defparam_reaching_an_enum_label_takes_the_override() {
+    let (ok, all) = run("module m #(parameter P = 4);\n  \
+         typedef enum logic [7:0] {A = P, B} e_t;\n  localparam Q = B;\n  \
+         initial begin $display(\"A=%0d B=%0d Q=%0d P=%0d\", A, B, Q, P); #1 $finish; end\n\
+       endmodule\n\
+       module top;\n  m u();\n  defparam u.P = 9;\n  initial #100 $finish;\nendmodule\n");
+    assert!(ok, "must run:\n{all}");
+    assert!(
+        all.contains("A=9 B=10 Q=10 P=9"),
+        "the label folds the OVERRIDE, like every other reader of `P`:\n{all}"
+    );
+}

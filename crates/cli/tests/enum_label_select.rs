@@ -174,24 +174,26 @@ fn every_constant_consumer_of_a_label_select() {
     }
 }
 
-/// ⚠️ The `localparam` consumer splits on SCOPE, and not because of this axis. A
-/// module-scope body parameter binds at phase (3b) and the module's enum labels at
-/// (3c), so `localparam int Q = EA;` — with no select at all — is already
-/// *"undefined name `EA`"*, and adding a select changes nothing. The PACKAGE and
-/// wildcard-imported spellings of the identical text fold, because a package's labels
-/// are folded before any module body binds. Both oracles answer 52 for all three.
-/// Pinned as-is so the ordering gap is visible rather than hidden inside this axis;
-/// closing it is ROADMAP §3.
+/// ⭐ RE-AIMED (row 11, 2026-09-01). This cell used to pin the ordering gap: a
+/// module-scope body parameter bound at phase (3b) and the module's enum labels at
+/// (3c), so `localparam int Q = EA;` — with no select at all — was *"undefined name
+/// `EA`"* while the PACKAGE spelling of the identical text folded. Both oracles
+/// answer 52 for both spellings, so the loud half was a **limitation pin**, and it is
+/// now an assertion of the value. Labels bind in the (3b) walk in DECLARATION ORDER,
+/// beside the parameters they are declared among.
+///
+/// ⚠️ The select is not incidental to this cell: it is the consumer that made the
+/// binding's `param_range` observable, so keep both spellings asserting 52.
 #[test]
-fn a_module_scope_label_is_not_visible_to_a_body_localparam() {
+fn a_module_scope_label_is_visible_to_a_body_localparam() {
     let e = enum_decl("logic [31:0]");
     let (out, c) = run(&format!(
-        "module top;\n{e}  localparam int Q = EA;\n\
+        "module top;\n{e}  localparam int Q = EA[7:0];\n\
            initial begin $display(\"BITS=%0d\", Q); $finish; end\n\
          endmodule\n"
     ));
-    assert_ne!(c, Some(0), "the ordering gap is loud, not silent:\n{out}");
-    assert!(out.contains("undefined name `EA`"), "{out}");
+    assert_eq!(c, Some(0), "{out}");
+    assert!(out.contains("BITS=52"), "{out}");
 
     // …and the same text through a package folds, select and all.
     let (out, c) = run(&format!(

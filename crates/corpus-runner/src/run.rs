@@ -475,6 +475,10 @@ pub enum Grade {
     /// Refused for a reason other than the pinned one. The gap moved; somebody has
     /// to look, because the pinned diagnostic no longer describes the design.
     Drifted { got: String },
+    /// Ran, and disagreed with the oracle exactly as the manifest's `Expect::Split`
+    /// says it does. Visible on every run, and NOT a failure: the row records a
+    /// ruling, not a passing grade.
+    RuledSplit,
     /// Not on this machine.
     Absent,
     /// The oracle itself no longer reproduces the pinned digest. Nothing about vita
@@ -491,6 +495,7 @@ impl Grade {
             Grade::KnownGap => "known-gap",
             Grade::Regression(_) => "REGRESSION",
             Grade::Promoted => "PROMOTED",
+            Grade::RuledSplit => "ruled-split",
             Grade::Drifted { .. } => "DRIFTED",
             Grade::Absent => "absent",
             Grade::OracleDrifted { .. } => "ORACLE-DRIFT",
@@ -558,6 +563,25 @@ pub fn grade(w: &Workload, tool: Tool, outcome: &Outcome) -> Grade {
         (Expect::Refused { .. }, Outcome::Crashed { code, tail }) => {
             Grade::Regression(format!("was loud, now crashes: exit {code}: {tail}"))
         }
+
+        // A ruled split. `Outcome::Match` compares against the ORACLE's digest, so a
+        // match here means the two agreed again — the split closed, which is the
+        // event this row is waiting for and is reported as a promotion.
+        (Expect::Split { .. }, Outcome::Match) => Grade::Promoted,
+        (Expect::Split { vita, .. }, Outcome::Mismatch { got }) => {
+            if got == vita {
+                Grade::RuledSplit
+            } else {
+                Grade::Regression(format!("digest changed: {got}"))
+            }
+        }
+        (Expect::Split { .. }, Outcome::Refused { diag }) => {
+            Grade::Regression(format!("newly refused: {diag}"))
+        }
+        (Expect::Split { .. }, Outcome::Crashed { code, tail }) => {
+            Grade::Regression(format!("exit {code}: {tail}"))
+        }
+        (Expect::Split { .. }, Outcome::Timeout) => Grade::Regression("timed out".into()),
         (Expect::Refused { .. }, Outcome::Timeout) => {
             Grade::Regression("was loud, now hangs".into())
         }
@@ -712,6 +736,45 @@ mod tests {
             expected_exit(Tool::Iverilog, &wl(Expect::Runs { exit: 1 })),
             0
         );
+    }
+
+    /// A RULED split pins BOTH answers, so it stays visible without being red and
+    /// without becoming a licence to pin a wrong digest.
+    ///
+    /// ⚠️ Three cells, and the middle one is the point: only vita's own pinned
+    /// answer is tolerated. A third digest is a `Regression` exactly as it would be
+    /// on a `Runs` row, and agreeing with the ORACLE again is the event the row is
+    /// waiting for — a `Promoted`, not an `Ok`, because the manifest row is then
+    /// wrong and someone has to move it.
+    #[test]
+    fn a_ruled_split_tolerates_one_answer_and_only_that_one() {
+        let w = wl(Expect::Split {
+            vita: "DIGEST=beef",
+            why: "ROADMAP §2-N",
+        });
+        let g = grade(
+            &w,
+            Tool::Vita,
+            &Outcome::Mismatch {
+                got: "DIGEST=beef".into(),
+            },
+        );
+        assert_eq!(g, Grade::RuledSplit);
+        assert!(!g.is_failure(), "a recorded ruling is not a red gate");
+
+        let moved = grade(
+            &w,
+            Tool::Vita,
+            &Outcome::Mismatch {
+                got: "DIGEST=cafe".into(),
+            },
+        );
+        assert!(moved.is_failure(), "vita's own answer moved: {moved:?}");
+
+        // The split closing is the promotion this row exists to catch.
+        assert_eq!(grade(&w, Tool::Vita, &Outcome::Match), Grade::Promoted);
+        // …and a split row counts as one vita RUNS.
+        assert!(!w.is_refused());
     }
 
     #[test]

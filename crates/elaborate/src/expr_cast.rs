@@ -874,6 +874,16 @@ impl Elaborator<'_> {
             return true;
         }
         let dst_id = self.lower_expr(&args[0]);
+        // ⭐ The destination is WRITTEN, so it owes the read-only funnel like every
+        // other write position — review measured `$cast(cb.s, 8'hAA)` moving a
+        // clocking holding net at exit 0 where verilator refuses it, and this is the
+        // guard `systask.rs` cites as the model its own `$sformat` check mirrors.
+        if let Some(ir::Expr::Signal { net, word: None }) = self.exprs.get(dst_id as usize) {
+            let net = *net;
+            if self.deny_readonly_write_at(net, dst_id, "$cast into") {
+                return true;
+            }
+        }
         if !matches!(
             self.exprs.get(dst_id as usize),
             Some(ir::Expr::Signal { word: None, .. })

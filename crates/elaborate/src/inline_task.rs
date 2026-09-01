@@ -511,7 +511,7 @@ impl Elaborator<'_> {
                                 continue;
                             }
                             // A2a: the copy-out WRITES the actual.
-                            self.deny_const_param_write(caller_net, "connect an output/inout to");
+                            self.deny_readonly_write(caller_net, "connect an output/inout to");
                             if is_inout {
                                 let rd = self.push_expr(ir::Expr::Signal {
                                     net: caller_net,

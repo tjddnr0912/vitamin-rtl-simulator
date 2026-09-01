@@ -73,7 +73,7 @@ pub(crate) fn is_hoistable_rhs_only_sysfunc(name: &str) -> bool {
 /// surviving expression ever holds, so the gate passed everything: measured
 /// `n = mem[0] + $fread(mem, fd);` at 73 against iverilog's 15, at exit 0. vita's own
 /// recognizers say which it is — `sys_special.rs` lowers `args[0]` and calls
-/// `deny_const_param_write(net, "$fgets into" / "$fread into")` on it.
+/// `deny_readonly_write(net, "$fgets into" / "$fread into")` on it.
 fn write_arg_range(name: &str, argc: usize) -> std::ops::Range<usize> {
     match name {
         "$fgets" | "$fread" => 0..1.min(argc),

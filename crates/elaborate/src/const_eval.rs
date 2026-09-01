@@ -1113,7 +1113,43 @@ impl Elaborator<'_> {
     /// parameter is an elaboration constant — silently mutating one would be
     /// a silent-wrong). `how` is the verb phrase for the message ("assign
     /// to" / "$readmem into" / …). Returns whether it fired.
-    pub(crate) fn deny_const_param_write(&mut self, net: u32, how: &str) -> bool {
+    pub(crate) fn deny_readonly_write(&mut self, net: u32, how: &str) -> bool {
+        // ⭐⭐ TWO read-only kinds, ONE funnel — and that is why this is named for the
+        // position rather than for the parameter. Every site that calls it has already
+        // decided "this net is WRITTEN here": lvalues, task output/inout binds,
+        // hierarchical writes, `foreach` keys, `$readmem*`, and the destination of
+        // `$fgets`/`$fread`/`$fscanf`/`$sscanf`/`$value$plusargs`. A clocking INPUT is
+        // read-only for exactly the same reason a parameter is (§14.3), and asking the
+        // two questions in two places is what let SIX of those tasks write a clocking
+        // holding net at exit 0 while the lvalue spelling of the same rule was loud.
+        // Measured: `$fgets(cb.s, fd)` left `s` at 55 and moved the holding net, with
+        // no diagnostic, where verilator says *"Cannot write to input clockvar"*.
+        //
+        // ⚠️ This covers every destination that HAS a net here. `$readmem*`'s memory
+        // argument keeps its own PATH-based check as well, because a clocking input of
+        // an unpacked ARRAY has only a scalar holding net and never reaches this call.
+        if self.clocking_hold_nets.contains(&net) {
+            // ⚠️ The fallback says what it knows rather than inventing a name. Its
+            // first comment claimed the HIERARCHICAL spelling (`u.cb.s`) reaches this
+            // with no recorded name; two review lenses measured that false — the map is
+            // keyed by the holding NET, so `u.cb.s` finds it and prints `cb.s`, and the
+            // single insertion site records both maps on consecutive lines, which makes
+            // `clocking_hold_nets ⊆ dom(clocking_hold_names)` true by construction.
+            // The arm is kept as defence in depth against a future second producer, not
+            // because a caller reaches it today. ⚠️ What the hierarchical spelling DOES
+            // lose is the instance prefix: with two instances of the same module the
+            // message names `cb.s` for either one.
+            let what = self.clocking_hold_names.get(&net).cloned();
+            let names = match what {
+                Some(n) => format!("`{n}` is"),
+                None => "it is".to_string(),
+            };
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!("cannot {how} a clocking INPUT ({names} read-only, §14.3)"),
+            );
+            return true;
+        }
         if self.lowering_decl_init {
             return false;
         }
@@ -1128,21 +1164,43 @@ impl Elaborator<'_> {
         true
     }
 
-    /// §14.3: a clocking INPUT is read-only, so a task that WRITES its argument may
-    /// not take one. The twin of the check in `collect_lval_chunks`, which asks the
-    /// same question from the lvalue PATH.
+    /// [`Self::deny_readonly_write`] for a destination that may not have a net YET.
     ///
-    /// ⚠️⚠️ There are MORE than two funnels, and this covers one more of them — not all.
-    /// `cb.sig = 8'hAA;` is an LVALUE and was correctly loud; `$readmemh("f.hex",
-    /// cb.mem)` is an ARGUMENT, resolved through the ordinary READ path, so it never
-    /// reached that check and wrote the clocking holding net at exit 0 while the real
-    /// `mem` kept its contents. Review then censused the rest and measured SIX more
-    /// argument-write tasks that still do it — `$fgets`, `$fread`, `$fscanf`,
-    /// `$sscanf`, `$value$plusargs`, `$swrite`/`$sformat` — plus the HIERARCHICAL
-    /// spelling of `$readmem*` itself (`dut.cb.mem`), which `lookup_net_scoped` does
-    /// not resolve here although the lvalue twin catches it. All of those are
-    /// pre-existing and unchanged; ROADMAP §2 carries the list. The honest statement
-    /// is that this closes the spelling the row was filed against, not the class.
+    /// ⚠️ A destination inside an `automatic` task, or spelled hierarchically, is
+    /// lowered before the name it points at exists, so `lower_expr` yields the deferred
+    /// placeholder and this funnel is handed `POISON_NET`. Asking there answers
+    /// nothing; the question has to be re-asked in `resolve_deferred_hier`, and this
+    /// records the eid so it can be. `$readmem*` was the only spelling already loud in
+    /// that position, purely because `hier_mem_args` happens to carry the same fact for
+    /// a different reason.
+    pub(crate) fn deny_readonly_write_at(&mut self, net: u32, eid: u32, how: &'static str) -> bool {
+        if net == POISON_NET {
+            self.hier_write_args.insert(eid, how);
+            return false;
+        }
+        self.deny_readonly_write(net, how)
+    }
+
+    /// §14.3: a clocking INPUT is read-only, so a task that WRITES its argument may
+    /// not take one — asked from the PATH, for the one destination that has no net
+    /// here. The net-keyed half lives in [`Self::deny_readonly_write`], the funnel
+    /// every other write position already goes through.
+    ///
+    /// ⚠️⚠️ There are MORE than two funnels. `cb.sig = 8'hAA;` is an LVALUE and was
+    /// correctly loud; `$readmemh("f.hex", cb.mem)` is an ARGUMENT, resolved through
+    /// the ordinary READ path, so it never reached that check and wrote the clocking
+    /// holding net at exit 0 while the real `mem` kept its contents. A first census
+    /// counted six more argument-write tasks in the same position; two review lenses
+    /// then measured **nine**, because `$cast`'s destination and the SEED of `$random`
+    /// and `$dist_*` — which the engine advances — reached no funnel at all. All nine
+    /// now call [`Self::deny_readonly_write`] or its deferred twin.
+    ///
+    /// ⚠️ And the FIRST version of that closure was defeated by one keyword: a
+    /// destination inside an `automatic` task, or written hierarchically, is lowered
+    /// before its name exists, so the funnel saw `POISON_NET` and answered nothing —
+    /// `$readmem*` was loud there only because `hier_mem_args` happens to carry the
+    /// same fact for a different reason. [`Self::deny_readonly_write_at`] records
+    /// those, and `resolve_deferred_hier` asks once the net exists.
     ///
     /// Asks from the PATH, exactly as the lvalue twin does. A NetId is not enough
     /// here: a clocking input of an UNPACKED ARRAY gets a scalar holding net, so the
@@ -1172,9 +1230,8 @@ impl Elaborator<'_> {
         if !self.clocking_hold_nets.contains(&id) {
             return false;
         }
-        // Name the signal the SOURCE wrote. The first version said "`cb.sig`" whatever
-        // the design called it, which on a real design points at a name that is not
-        // there — review measured that on `cb.fn`.
+        // Name the signal the SOURCE wrote (review measured the placeholder pointing at
+        // a name that is not in the design).
         self.error(
             MsgCode::ElabUnsupported,
             &format!("cannot {how} a clocking INPUT (`{joined}` is read-only, §14.3)"),

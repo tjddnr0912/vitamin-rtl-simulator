@@ -99,6 +99,7 @@ fn list() {
         let state = match w.expect {
             Expect::Runs { .. } => "runs",
             Expect::Refused { .. } => "refused",
+            Expect::Split { .. } => "split",
         };
         println!(
             "{:<18} {:<7} {:<9} {lic:<12} {state:<9} {}",
@@ -115,8 +116,10 @@ fn list() {
     let (runs, total) = coverage();
     println!("\ncoverage: {runs}/{total} run under vita");
     for w in CORPUS {
-        if let Expect::Refused { diag } = w.expect {
-            println!("  {:<18} refused: {diag}", w.name);
+        match w.expect {
+            Expect::Refused { diag } => println!("  {:<18} refused: {diag}", w.name),
+            Expect::Split { why, .. } => println!("  {:<18} ruled split: {why}", w.name),
+            Expect::Runs { .. } => {}
         }
     }
 }
@@ -271,6 +274,10 @@ fn run_corpus(
                 (Grade::Regression(why), _) => why.clone(),
                 (Grade::Drifted { got }, _) => format!("expected a different refusal; got {got}"),
                 (Grade::Promoted, _) => "now runs — move its manifest row to Expect::Runs".into(),
+                (Grade::RuledSplit, _) => match w.expect {
+                    Expect::Split { why, .. } => format!("ruled split — {why}"),
+                    _ => String::new(),
+                },
                 (Grade::KnownGap, Outcome::Refused { diag }) => diag.clone(),
                 (Grade::OracleDrifted { got }, _) => {
                     format!("the ORACLE no longer reproduces the pin: {got}")

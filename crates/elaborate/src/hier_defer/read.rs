@@ -253,7 +253,15 @@ impl Elaborator<'_> {
             // the same way, and running it for the whole family would false-loud a
             // legitimate `$writememh(f, dut.some_param_array)`.
             if mem_arg == Some(true) {
-                self.deny_const_param_write(net, "$readmem into");
+                self.deny_readonly_write(net, "$readmem into");
+            }
+            // ⭐ …and the same question for every OTHER write destination that could
+            // not be asked at lowering time, because its net did not exist yet. See
+            // `hier_write_args`: this is why `$readmem` was loud inside an `automatic`
+            // task and its seven siblings were silent — `$readmem` had a side map here
+            // for an unrelated reason and they had none.
+            if let Some(how) = self.hier_write_args.get(&d.eid).copied() {
+                self.deny_readonly_write(net, how);
             }
             // The one-element-array refusal `lower_pattern_arg` makes locally, made
             // here instead — the local site cannot make it, because a cross-instance

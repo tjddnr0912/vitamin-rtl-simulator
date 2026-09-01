@@ -565,7 +565,7 @@ impl Elaborator<'_> {
         }
         // A2a: same bypass — a whole-array write (`R = '{…}` / `R = other`)
         // targeting a desugared array parameter must stay loud.
-        self.deny_const_param_write(t_net, "assign to");
+        self.deny_readonly_write(t_net, "assign to");
         // SV §10.9: a positional assignment pattern RHS (`a = '{e0,…}`) assigns each
         // element to the corresponding 1-D unpacked array slot (declaration order).
         if let ast::ExprKind::AssignPattern(elems) = &rhs.kind {

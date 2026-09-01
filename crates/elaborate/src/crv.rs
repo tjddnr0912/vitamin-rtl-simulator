@@ -847,14 +847,18 @@ impl Elaborator<'_> {
             return true;
         }
         let seed_id = self.lower_expr(&args[0]);
-        if !matches!(
-            self.exprs.get(seed_id as usize),
-            Some(ir::Expr::Signal { word: None, .. })
-        ) {
+        let Some(ir::Expr::Signal { net, word: None }) = self.exprs.get(seed_id as usize) else {
             self.error(
                 MsgCode::ElabUnsupported,
                 "$random seed must be a plain integral variable (v7)",
             );
+            return true;
+        };
+        // §18.13.1: the engine ADVANCES the seed, so the seed argument is a write
+        // position and owes the read-only funnel — `$random(cb.s)` was moving a
+        // clocking holding net at exit 0 (verilator: *"Cannot write to input
+        // clockvar"*), and a `parameter` seed was equally silent.
+        if self.deny_readonly_write_at(*net, seed_id, "advance $random's seed in") {
             return true;
         }
         let rhs_id = self.push_expr(ir::Expr::SysFunc {
@@ -919,6 +923,12 @@ impl Elaborator<'_> {
             );
             return true;
         };
+        // The seed is ADVANCED, so it is a write position — same funnel, same reason
+        // as `$random`'s. Review measured `$dist_uniform(cb.s, 0, 10)` moving a
+        // clocking holding net at exit 0.
+        if self.deny_readonly_write_at(seed_net, seed_id, "advance a $dist_* seed in") {
+            return true;
+        }
         // iverilog rejects a seed narrower than 32 bits: the 32-bit Annex LCG
         // state would be truncated on write-back, silently corrupting the
         // sequence. Match it with a loud E3009 (review M1).

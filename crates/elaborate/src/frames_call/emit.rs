@@ -529,7 +529,7 @@ impl Elaborator<'_> {
                     if self.is_output_or_inout_dyn_array_formal(p) {
                         match self.dyn_array_actual_net(a, p) {
                             Some(caller_net) => {
-                                self.deny_const_param_write(
+                                self.deny_readonly_write(
                                     caller_net,
                                     "connect an output/inout dynamic array to",
                                 );
@@ -574,7 +574,7 @@ impl Elaborator<'_> {
                                     if let ast::ExprKind::Ident(path) = &a.kind {
                                         if path.segments.len() == 1 {
                                             let arr_net = self.resolve_net(path);
-                                            self.deny_const_param_write(
+                                            self.deny_readonly_write(
                                                 arr_net,
                                                 "connect an output array to",
                                             );
@@ -640,7 +640,7 @@ impl Elaborator<'_> {
                             let net = self.resolve_net(path);
                             // A2a: the copy-out WRITES the actual (selects route
                             // through lower_lvalue below and are covered there).
-                            self.deny_const_param_write(net, "connect an output/inout to");
+                            self.deny_readonly_write(net, "connect an output/inout to");
                             out_binds.push((slot, whole_net_lvalue(net)));
                         }
                         // §13.5.3: a part/bit/indexed select or array element actual —
@@ -881,7 +881,7 @@ impl Elaborator<'_> {
                     if self.is_output_or_inout_dyn_array_formal(p) {
                         match self.dyn_array_actual_net(a, p) {
                             Some(caller_net) => {
-                                self.deny_const_param_write(
+                                self.deny_readonly_write(
                                     caller_net,
                                     "connect an output/inout dynamic array to",
                                 );
@@ -912,7 +912,7 @@ impl Elaborator<'_> {
                     match &a.kind {
                         ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                             let net = self.resolve_net(path);
-                            self.deny_const_param_write(net, "connect an output/inout to");
+                            self.deny_readonly_write(net, "connect an output/inout to");
                             out_binds.push((slot, whole_net_lvalue(net)));
                         }
                         ast::ExprKind::PartSelect { .. }

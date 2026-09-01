@@ -569,6 +569,20 @@ struct Elaborator<'s> {
     /// (`fq`), so an accumulating set cannot answer for a different scope's name, and
     /// it feeds a message only — never a value, a width, or a fold decision.
     enum_label_types: BTreeMap<String, String>,
+    /// What the DECL-ORDER pre-pass bound for an enum label, so the pass that runs
+    /// after the walk can check it bound the same thing.
+    ///
+    /// ⭐⭐ This map is the slice's soundness argument, and it exists because the
+    /// argument I first shipped was wrong. Binding labels twice is only safe if the
+    /// second binding is identical to the first — otherwise a consumer that folded
+    /// BETWEEN the two passes keeps the first answer while everything after keeps
+    /// the second, and one label has two values in one elaboration at exit 0. Two
+    /// review lenses each measured that independently. The gate in
+    /// `bind_enum_labels_of` removes the two mechanisms we know of (an unfoldable
+    /// label value, an enum base whose width is not yet a fact); this map is what
+    /// catches the ones we do not know of, by making the second pass VERIFY rather
+    /// than silently overwrite. Keyed by the label's fully-qualified name.
+    enum_label_prepass: BTreeMap<String, (i64, Option<u32>, Option<DeclRange>)>,
     // FQ param-name → (DECLARED width, signed), for params with a determinate
     // declared width (an explicit range or `integer`/`int`). A typed-param READ
     // materializes at THIS width — not the value-inferred 32 bits — so
@@ -960,6 +974,10 @@ struct Elaborator<'s> {
     /// Holding NetIds of clocking INPUTs (`cb.sig`) — read-only; an lvalue write
     /// to one is loud (you cannot drive a clocking input, §14.3).
     clocking_hold_nets: std::collections::BTreeSet<u32>,
+    /// `clocking_hold_nets` → the source spelling (`cb.sig`), for the diagnostic. The
+    /// message used to hardcode "`cb.sig`" whatever the design called it, which points
+    /// at a name that is not in the source.
+    clocking_hold_names: std::collections::BTreeMap<u32, String>,
     /// R17: NetIds created by FLATTENING an `automatic` procedural block-local into
     /// the module namespace. IEEE 1800 §23.9 forbids a hierarchical reference to an
     /// automatic variable — it has no static address to name — but v1's flatten gives
@@ -1301,6 +1319,16 @@ struct Elaborator<'s> {
     // `true` = the task WRITES the memory (`$readmem*`), the only family that must
     // also deny a const array-parameter target; `$writemem*` only reads it.
     hier_mem_args: BTreeMap<u32, bool>,
+    // ⭐ The same shape once more, for the rest of the write positions. A destination
+    // written inside an `automatic` task — or spelled hierarchically — is lowered
+    // BEFORE the clocking desugar installs its alias, so `lower_expr` yields the
+    // deferred placeholder and the read-only funnel is handed `POISON_NET` and cannot
+    // fire. That is why `$readmem` was loud there (it has `hier_mem_args`) while the
+    // seven sibling tasks were silent, and why adding the word `automatic` to a design
+    // flipped the same statement from loud to silent-wrong — a review lens measured
+    // exactly that. This records "eid E is a WRITE destination, described as `how`",
+    // so `resolve_deferred_hier` can ask the question once the net finally exists.
+    hier_write_args: BTreeMap<u32, &'static str>,
     // V34-5: the `deferred_hier` eids that sit in a `%p` (§21.2.1.7) ARGUMENT
     // position. Exactly `hier_mem_args`' shape and exactly its reason — the read
     // guard's question ("does this have a plain readable value?") is right for

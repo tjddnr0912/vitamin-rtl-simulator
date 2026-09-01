@@ -2847,3 +2847,56 @@ Fixing the dropped generate-`case` label looked like it needed a `label` field o
 labelled body in the `GenItem::Block` the elaborator already scopes reuses the existing
 `label[0]` naming instead of writing a second copy of it. Before adding a field to a frozen
 or hashed type, check whether an existing node already carries the meaning you want.
+
+## Rows 8b and 11 — a two-pass binding, and a funnel with a poison net (2026-09-01)
+
+### ★★★★★ Doing something twice is only safe if the second time is provably identical
+
+Binding enum labels once in declaration order and once afterwards looked monotone: the
+first pass only ADDS bindings the second would make anyway, and the unwind is a stack. It
+is not monotone, and two review lenses each measured that independently, with a third
+mechanism only one of them saw. All three had one shape — **a consumer that runs BETWEEN
+the two passes keeps the first answer while everything after it keeps the second**, so one
+name has two values in one elaboration at exit 0.
+
+Two of the three were gateable (an unfoldable label value, a base width that is not yet a
+fact — and note that the gate has to decline the WHOLE group, because the labels share an
+auto-increment counter and a width). The third was not: the fold SUCCEEDED in both passes,
+with a different answer, because a name in it resolved to a wildcard import in one and to a
+body declaration in the other. No gate can see that.
+
+**So the second pass has to VERIFY, not overwrite.** Record what the first pass bound and
+compare; a mismatch is a loud diagnostic, not a silent replacement. That also covers the
+mechanism you have not thought of, which — on the evidence of three findings from two
+lenses — there is one of.
+
+### ★★★★ A funnel that resolves a name answers nothing before the name exists
+
+The read-only check is called at every write position, so "every write position calls it"
+read as "every write position is checked". It is not: a destination inside an `automatic`
+task, or written hierarchically, is lowered before its name is resolvable, so the funnel is
+handed a poison net and returns false. **Adding one keyword to a design flipped the same
+statement from loud to silent-wrong** — that loud↔silent neighbour is the detector.
+
+One spelling was already correct there, and for the wrong reason: `$readmem*` happened to
+carry a side map into the deferred-resolution pass for an unrelated purpose, and the pass
+asked the read-only question off the back of it. When one member of a family behaves and
+its siblings do not, find out what the working one has that the others lack before
+concluding the rule is enforced.
+
+### ★★★ A guard that cites another guard as its model is a census of two
+
+The `$sformat` check says in its own comment that it *mirrors the `$cast` dest guard above*.
+`$cast` never called the funnel at all — and neither did the seed argument of `$random` and
+`$dist_*`, which the engine advances and which therefore is a write position that looks like
+a read. A census that enumerates the sites you edited will not find those. Enumerate what
+the RESOURCE is (here: every argument the engine writes back), not what the code does.
+
+### ★★★ A corpus row can need a third state
+
+`verilog-axi` started running and disagreed with the oracle by 29 x-cycles out of 123,166,
+on an axis already measured and ruled un-arbitrable (iverilog answers two ways to the same
+question). The runner graded that *"was loud, now silently wrong"* — true of the shape and
+false of this row, and permanently red. Pinning vita's own answer instead would have been
+self-certifying. The honest representation pins BOTH answers and names the ruling: vita
+moving is still a regression, and the two agreeing again is the promotion the row waits for.

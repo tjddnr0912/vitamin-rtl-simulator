@@ -3,6 +3,192 @@
 use super::*;
 
 impl Elaborator<'_> {
+    /// Bind one `typedef enum`'s labels as module-scope constants.
+    ///
+    /// ⭐⭐ Called TWICE, and that is the design. Labels are const declarations, so
+    /// they belong in the same DECL-ORDER walk the body parameters already use — a
+    /// `localparam` written after a typedef must see its labels, and both oracles
+    /// agree: `typedef enum logic [31:0] {EA = 32'hAB34} e_t; localparam logic
+    /// [31:0] Q = EA;` is 43828 in iverilog and verilator and was `E3009 undefined
+    /// name` here. So this runs from the (3b) walk, in order, with `quiet`.
+    ///
+    /// ⚠️ …and AGAIN afterwards, not instead. Moving the binding wholesale into the
+    /// decl-order walk would break the other direction: a label whose value names a
+    /// LATER parameter (`typedef enum {X = LP} e_t; localparam LP = 5;`) folds today,
+    /// and that shape is an ORACLE SPLIT — iverilog rejects it (*"Unable to bind"*),
+    /// verilator accepts it. So the pass after the walk stays, and binds what the
+    /// pre-pass declined. `restore_params` unwinds in reverse, so a label bound by
+    /// both leaves the pre-module value behind either way.
+    ///
+    /// ⚠️⚠️ **Running it twice is sound only if the two passes bind the SAME thing**,
+    /// and the first version of this shipped without checking. Two review lenses each
+    /// measured the same two mechanisms independently, and a third only one of them
+    /// saw. All three have one shape: a consumer that folds BETWEEN the two passes
+    /// keeps pass 1's answer while everything after it keeps pass 2's, so ONE LABEL
+    /// HAS TWO VALUES IN ONE ELABORATION at exit 0 — the defect the `const_mask`
+    /// comment below says it fixed, re-opened one pass over.
+    ///
+    /// 1. `{A = LP, B}` — skipping an unfoldable `A` skipped the `next` counter with
+    ///    it, so `B` bound 0; `localparam Q = B;` folded 0 while `B` itself read 6.
+    /// 2. `enum logic [W-1:0] {A = -8'sd2}` with `W` declared BELOW — `enum_base_width`
+    ///    was `None` in pass 1, so the mask never ran and the raw `-2` was bound, and
+    ///    `localparam [15:0] Q = A;` folded `fffe` where pass 2 makes `A` 254.
+    /// 3. `import pk::*` beside a body `localparam` of the same name — the label's
+    ///    value resolved to the IMPORT in pass 1 and to the local declaration in
+    ///    pass 2.
+    ///
+    /// The gate below removes 1 and 2 by declining the WHOLE typedef rather than one
+    /// label: pass 1 binds an enum only when every label's value folds and the base's
+    /// width and range are already facts. 3 is not a shape a gate can see — the fold
+    /// SUCCEEDS, with a different answer — so `enum_label_prepass` records what pass 1
+    /// bound and pass 2 VERIFIES it, which also catches whatever mechanism 4 is.
+    ///
+    /// ⚠️ And pass 2 is no longer literally unchanged: it now runs with pass 1's
+    /// bindings visible, so `typedef enum {A = B} e1_t; typedef enum {B = 5} e2_t;`
+    /// folds where it used to be loud (verilator agrees; iverilog rejects it).
+    ///
+    /// `quiet` also suppresses `check_enum_label_fits`, so one illegal label still
+    /// reports once.
+    fn bind_enum_labels_of(
+        &mut self,
+        td: &ast::TypedefDecl,
+        saved_params: &mut Vec<(String, Option<i64>)>,
+        quiet: bool,
+    ) {
+        #[allow(irrefutable_let_patterns)]
+        if let ast::TypedefKind::Enum {
+            base,
+            signed,
+            labels,
+        } = &td.kind
+        {
+            // A label carries the enum base's DECLARED width so it reads at its
+            // real self-width in a concat (`{4'h5, STATE}`), not 32 bits — the
+            // `param_meta` twin of the localparam path above. §4.5.158: the label
+            // also carries the enum's DECLARED sign (`signed`) so a POSITIVE label
+            // of a SIGNED enum stays signed in a relational/collective context
+            // (`enum byte {B=2}; v > B` = signed).
+            //
+            // ⚠️ It carries the DECLARED sign and nothing else. §4.5.154 also OR-ed
+            // in `v < 0` to keep a negative label signed on an unsigned base, on the
+            // grounds that such a base is illegal anyway and signed was the graceful
+            // reading. It is not the reading either oracle takes: for
+            // `enum logic [7:0] { A = -8'sd2 }` both print `A` as **254**, `A < 0`
+            // as **0** and `A * 8'sd1` as **254**, and both fold `logic [15:0] LP = A`
+            // to `00fe` — the value is stored at the declared width and the declared
+            // width is unsigned, so the sign is simply gone. vita said -2, 1, -2 and
+            // `fffe`. The clause also made vita disagree with ITSELF: `%h`, a select,
+            // `$bits`, `-`, `+`, a concat, a `case` and the enum VARIABLE were all
+            // already unsigned, so one label read two ways in one design.
+            // §4.5.158: a base-less `enum {…}` is `int` (32-bit) — give its labels
+            // an explicit 32-bit `param_meta` so the sign fix below reaches them too
+            // (`enum_base_width` returns None for a rangeless base). An unfoldable
+            // range stays None (unknown width, value-inferred as before).
+            let base_w = self
+                .enum_base_width(base)
+                .or_else(|| base.is_none().then_some(32u32));
+            // …and the declared RANGE beside it, so a select of a label folds
+            // in the constant domain and normalizes at runtime. See
+            // `enum_base_range`.
+            let base_range = self.enum_base_range(base);
+            // ⚠️ THE GATE. In the decl-order pre-pass, bind this enum only when every
+            // input the binding reads is ALREADY a fact — otherwise decline the whole
+            // typedef and leave it to the pass after the walk, which is exactly what
+            // happened before this pass existed. A per-LABEL skip is not enough: the
+            // labels share the `next` counter and the base's width, so one label that
+            // cannot fold makes every later label's binding differ between the passes.
+            if quiet
+                && (base_range.is_none()
+                    || (base.is_some() && base_w.is_none())
+                    || labels.iter().any(|lab| {
+                        lab.value
+                            .as_ref()
+                            .is_some_and(|e| self.const_eval_in_scope(e).is_none())
+                    }))
+            {
+                return;
+            }
+            let mut next: i64 = 0;
+            for lab in labels {
+                // The gate above guarantees every value folds when `quiet`, so this
+                // diagnostic belongs to the after-the-walk pass alone.
+                let v = match &lab.value {
+                    Some(e) => self.const_eval_in_scope(e).unwrap_or_else(|| {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "enum label `{}` value is not a foldable constant",
+                                lab.name.name
+                            ),
+                        );
+                        0
+                    }),
+                    None => next,
+                };
+                // §6.19 first, on the value as WRITTEN — the mask below would
+                // hide the very thing this reports.
+                if !quiet {
+                    self.check_enum_label_fits(
+                        base,
+                        *signed,
+                        &lab.name.name,
+                        v,
+                        lab.value.is_some(),
+                    );
+                }
+                // ⭐ …and the VALUE is stored CANONICAL at that width. A label is
+                // declared at a width and a sign, and both oracles read it that way:
+                // `enum logic [7:0] { A = -8'sd2 }` folds
+                // `localparam logic [15:0] LP = A;` to `00fe`, because the -2 never
+                // survives the 8 unsigned bits it was declared in. Storing the raw
+                // i64 left the constant domain to re-derive a sign the label no
+                // longer has — `fffe` — while the RUNTIME read of the same label was
+                // already 254, so one label had two values in one design.
+                // `const_mask` is the identity for a signed base and for any
+                // in-range non-negative label, so this moves exactly the cells that
+                // were wrong.
+                let v = match base_w {
+                    Some(w) => Self::const_mask(v, w, *signed),
+                    None => v,
+                };
+                let key = self.fq(&lab.name.name);
+                // V33-3: remember that this constant is a LABEL and which enum
+                // declared it, so `LA.name()` can be told from `u1.f(x)` when
+                // the deferred hierarchical-call resolver writes its message —
+                // and so that message can name the type to declare.
+                self.enum_label_types
+                    .insert(key.clone(), td.name.name.clone());
+                if let Some(w) = base_w {
+                    self.param_meta.insert(key.clone(), (w, *signed));
+                }
+                // ⭐ RECORD (pass 1) / VERIFY (pass 2). See the header: two bindings
+                // are sound only if they agree, and the gate above removes only the
+                // mechanisms two lenses actually measured.
+                if quiet {
+                    self.enum_label_prepass
+                        .insert(key.clone(), (v, base_w, base_range));
+                } else if let Some(pre) = self.enum_label_prepass.remove(&key) {
+                    if pre != (v, base_w, base_range) {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "enum label `{}` folds to two different constants in one \
+                                 module: a name its value depends on is re-declared after \
+                                 the `typedef`, so anything written between the two reads a \
+                                 different value",
+                                lab.name.name
+                            ),
+                        );
+                    }
+                }
+                let prev = self.bind_param_value(key.clone(), v);
+                self.bind_param_range(&key, base_range);
+                saved_params.push((key, prev));
+                next = v.wrapping_add(1);
+            }
+        }
+    }
+
     /// Is this expression's SIGNEDNESS readable from the syntax alone?
     ///
     /// True for a literal and for any operator tree over literals — the set whose sign
@@ -413,6 +599,13 @@ impl Elaborator<'_> {
                         saved_params.push((key, prev));
                     }
                 }
+                // ⭐ A `typedef enum`'s LABELS are const declarations, so they bind HERE,
+                // in declaration order, beside the parameters — see
+                // `bind_enum_labels_of` for why this pass is additive and runs again
+                // after the walk rather than replacing it.
+                ast::ModuleItem::Typedef(td) => {
+                    self.bind_enum_labels_of(td, &mut saved_params, true);
+                }
                 ast::ModuleItem::NetVar(d) => {
                     self.prescan_net_bits(d);
                     // GAP-G: capture a const array param's element values in
@@ -439,97 +632,7 @@ impl Elaborator<'_> {
         //      explicit `LABEL = expr` resets the running counter (next = expr+1).
         for item in &module.body {
             if let ast::ModuleItem::Typedef(td) = item {
-                #[allow(irrefutable_let_patterns)]
-                if let ast::TypedefKind::Enum {
-                    base,
-                    signed,
-                    labels,
-                } = &td.kind
-                {
-                    // A label carries the enum base's DECLARED width so it reads at its
-                    // real self-width in a concat (`{4'h5, STATE}`), not 32 bits — the
-                    // `param_meta` twin of the localparam path above. §4.5.158: the label
-                    // also carries the enum's DECLARED sign (`signed`) so a POSITIVE label
-                    // of a SIGNED enum stays signed in a relational/collective context
-                    // (`enum byte {B=2}; v > B` = signed).
-                    //
-                    // ⚠️ It carries the DECLARED sign and nothing else. §4.5.154 also OR-ed
-                    // in `v < 0` to keep a negative label signed on an unsigned base, on the
-                    // grounds that such a base is illegal anyway and signed was the graceful
-                    // reading. It is not the reading either oracle takes: for
-                    // `enum logic [7:0] { A = -8'sd2 }` both print `A` as **254**, `A < 0`
-                    // as **0** and `A * 8'sd1` as **254**, and both fold `logic [15:0] LP = A`
-                    // to `00fe` — the value is stored at the declared width and the declared
-                    // width is unsigned, so the sign is simply gone. vita said -2, 1, -2 and
-                    // `fffe`. The clause also made vita disagree with ITSELF: `%h`, a select,
-                    // `$bits`, `-`, `+`, a concat, a `case` and the enum VARIABLE were all
-                    // already unsigned, so one label read two ways in one design.
-                    // §4.5.158: a base-less `enum {…}` is `int` (32-bit) — give its labels
-                    // an explicit 32-bit `param_meta` so the sign fix below reaches them too
-                    // (`enum_base_width` returns None for a rangeless base). An unfoldable
-                    // range stays None (unknown width, value-inferred as before).
-                    let base_w = self
-                        .enum_base_width(base)
-                        .or_else(|| base.is_none().then_some(32u32));
-                    // …and the declared RANGE beside it, so a select of a label folds
-                    // in the constant domain and normalizes at runtime. See
-                    // `enum_base_range`.
-                    let base_range = self.enum_base_range(base);
-                    let mut next: i64 = 0;
-                    for lab in labels {
-                        let v = match &lab.value {
-                            Some(e) => self.const_eval_in_scope(e).unwrap_or_else(|| {
-                                self.error(
-                                    MsgCode::ElabUnsupported,
-                                    &format!(
-                                        "enum label `{}` value is not a foldable constant",
-                                        lab.name.name
-                                    ),
-                                );
-                                0
-                            }),
-                            None => next,
-                        };
-                        // §6.19 first, on the value as WRITTEN — the mask below would
-                        // hide the very thing this reports.
-                        self.check_enum_label_fits(
-                            base,
-                            *signed,
-                            &lab.name.name,
-                            v,
-                            lab.value.is_some(),
-                        );
-                        // ⭐ …and the VALUE is stored CANONICAL at that width. A label is
-                        // declared at a width and a sign, and both oracles read it that way:
-                        // `enum logic [7:0] { A = -8'sd2 }` folds
-                        // `localparam logic [15:0] LP = A;` to `00fe`, because the -2 never
-                        // survives the 8 unsigned bits it was declared in. Storing the raw
-                        // i64 left the constant domain to re-derive a sign the label no
-                        // longer has — `fffe` — while the RUNTIME read of the same label was
-                        // already 254, so one label had two values in one design.
-                        // `const_mask` is the identity for a signed base and for any
-                        // in-range non-negative label, so this moves exactly the cells that
-                        // were wrong.
-                        let v = match base_w {
-                            Some(w) => Self::const_mask(v, w, *signed),
-                            None => v,
-                        };
-                        let key = self.fq(&lab.name.name);
-                        // V33-3: remember that this constant is a LABEL and which enum
-                        // declared it, so `LA.name()` can be told from `u1.f(x)` when
-                        // the deferred hierarchical-call resolver writes its message —
-                        // and so that message can name the type to declare.
-                        self.enum_label_types
-                            .insert(key.clone(), td.name.name.clone());
-                        if let Some(w) = base_w {
-                            self.param_meta.insert(key.clone(), (w, *signed));
-                        }
-                        let prev = self.bind_param_value(key.clone(), v);
-                        self.bind_param_range(&key, base_range);
-                        saved_params.push((key, prev));
-                        next = v.wrapping_add(1);
-                    }
-                }
+                self.bind_enum_labels_of(td, &mut saved_params, false);
             }
         }
 

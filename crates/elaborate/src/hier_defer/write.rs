@@ -65,17 +65,17 @@ impl Elaborator<'_> {
                     // cannot see a cross-instance name, so it is caught HERE on the
                     // resolved net).
                     if self.clocking_hold_nets.contains(&net) {
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            "cannot drive a clocking INPUT (`cb.sig` is read-only, §14.3)",
-                        );
+                        // Through the read-only funnel, which names the signal the source
+                        // wrote — the message used to hardcode `cb.sig` whatever the
+                        // design called it.
+                        self.deny_readonly_write(net, "drive");
                         POISON_NET
                     } else if self.const_param_nets.contains_key(&net) {
                         // A2a: a hierarchical write resolves AFTER lower_lvalue
                         // (sentinel chunk), so the funnel deny never saw the real
                         // net — enforce it here (`u1.RHO = …` incl. the [0:0]
                         // single-element shape that passes the static-array guard).
-                        self.deny_const_param_write(net, "assign to");
+                        self.deny_readonly_write(net, "assign to");
                         POISON_NET
                     } else if self.event_nets.contains(&net)
                         || self.is_dyn_handle_net(net)
@@ -210,16 +210,16 @@ impl Elaborator<'_> {
                     if self.clocking_hold_nets.contains(&net) {
                         // N4 §14.3: a clocking INPUT is read-only — a hierarchical
                         // SELECT drive (`dut.cb.sig[i] = v`) is loud too.
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            "cannot drive a clocking INPUT (`cb.sig` is read-only, §14.3)",
-                        );
+                        // Through the read-only funnel, which names the signal the source
+                        // wrote — the message used to hardcode `cb.sig` whatever the
+                        // design called it.
+                        self.deny_readonly_write(net, "drive");
                         poison_chunk()
                     } else if self.const_param_nets.contains_key(&net) {
                         // A2a: the deferred element/bit/part-select write lane —
                         // the funnel deny saw only the sentinel, so enforce it on
                         // the resolved net (`u1.RHO[0] = …` was a silent mutation).
-                        self.deny_const_param_write(net, "assign to");
+                        self.deny_readonly_write(net, "assign to");
                         poison_chunk()
                     } else if let Some(word) = (d.part.is_none() && !self.event_nets.contains(&net))
                         .then(|| self.hier_dyn_container_word(net, &d.idx_eids))

@@ -110,7 +110,7 @@ impl Elaborator<'_> {
         // these chunks, so one check covers them all. First hit is enough.
         if !self.const_param_nets.is_empty() {
             for c in &chunks {
-                if self.deny_const_param_write(c.net, "assign to") {
+                if self.deny_readonly_write(c.net, "assign to") {
                     break;
                 }
             }
@@ -164,8 +164,10 @@ impl Elaborator<'_> {
             let path = path.clone();
             self.check_modport_write(&path);
             // N4 §14.3: a clocking INPUT (`cb.sig`) is read-only — driving it is
-            // illegal. Resolve quietly (the joined alias) and reject if it targets
-            // a clocking-input holding net (never a silent write to the holding reg).
+            // illegal. Resolve quietly (the joined alias) and hand the net to the
+            // read-only funnel, which is where the rule lives now: it answers the same
+            // question for a parameter, and routing this spelling through it is what
+            // makes ONE message name the signal the source actually wrote.
             if !self.clocking_hold_nets.is_empty() {
                 let joined = path
                     .segments
@@ -175,10 +177,7 @@ impl Elaborator<'_> {
                     .join(".");
                 if let Some(id) = self.lookup_net_scoped(&joined) {
                     if self.clocking_hold_nets.contains(&id) {
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            "cannot drive a clocking INPUT (`cb.sig` is read-only, §14.3)",
-                        );
+                        self.deny_readonly_write(id, "drive");
                     }
                 }
             }

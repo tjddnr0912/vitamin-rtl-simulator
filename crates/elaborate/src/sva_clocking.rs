@@ -662,7 +662,7 @@ impl Elaborator<'_> {
                         // engine-side (a sidecar, never an lvalue) — a desugared
                         // array parameter source must stay loud (adversarial
                         // find: `cb.R <= v` silently overwrote the parameter).
-                        self.deny_const_param_write(src_id, "drive (clocking output)");
+                        self.deny_readonly_write(src_id, "drive (clocking output)");
                         let sv = &self.nets[src_id as usize];
                         let (w, msb, lsb, signed) = (sv.width, sv.msb, sv.lsb, sv.signed);
                         let clean = format!("__clkout_{}_{}", cb_name, it.name.name);
@@ -745,6 +745,10 @@ impl Elaborator<'_> {
                 pairs.push((hid, src_id));
                 self.clocking_inputs.insert(src_id);
                 self.clocking_hold_nets.insert(hid); // read-only: a write is loud
+                                                     // …and the SOURCE spelling beside it, so the diagnostic names what the
+                                                     // design wrote rather than a placeholder.
+                self.clocking_hold_names
+                    .insert(hid, format!("{}.{}", cb_name, it.name.name));
             }
             if pairs.is_empty() && out_pairs.is_empty() {
                 continue; // no valid items in this clocking block

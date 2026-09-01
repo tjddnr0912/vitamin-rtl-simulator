@@ -375,7 +375,7 @@ impl Elaborator<'_> {
         // A2a: the engine WRITES the found key into `knet` — a bare Signal that
         // never passes lower_lvalue (adversarial find: `aa.first(R)` silently
         // mutated a desugared array parameter).
-        self.deny_const_param_write(knet, "write the iteration key into");
+        self.deny_readonly_write(knet, "write the iteration key into");
         if !matches!(kind, ir::NetKind::Assoc | ir::NetKind::AssocStr) {
             // The dense dyn/queue walk exists only for the foreach desugar.
             let synthetic = matches!(
