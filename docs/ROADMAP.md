@@ -1111,6 +1111,21 @@
 > POST **`1 1` = iverilog 정확히**. ⭐ 잔여 불일치는 규칙이 아니라 **평가 한 번**(vita 의 t0 추가
 > settle 패스)이고, 그걸 닫는 것이 이 가족을 정직하게 인증하는 선행조건이다.
 >
+> ⚠️⚠️ **설계가 바뀌었으므로 재리뷰했고, 라운드 2 가 BLOCKING 을 셋 더 냈다 — 셋 다 라운드 1 의
+> 고침이 만든 것이고 셋 다 같은 카운터를 다른 문으로 들여보낸다**: ⓐ **`release` 가 전제를 깬다**
+> — *"의존이 없으면 딱 한 번 평가"* 가 거짓(`k_release` 가 `redirty_drivers_of` 를 **무조건** 부른다
+> — 릴리즈된 wire 가 같은 settle 안에서 되돌아오게 하려는 **의도된** 동작 · 대응 `force` 없는
+> `release` 도 두 오라클엔 no-op)이라 `1 + release 수` 번 평가 ⇒ PRE `3 3 3`(verilator 정확히) →
+> `1 2 3`(아무도 아님), 비포화 쌍둥이는 **F4016 → 조용한 답** · ⭐ **census 가 고침을 정밀하게
+> 만들었다**: `ca_dirty_flag[..] = true` 생산자는 **정확히 셋**(시드 · `note_change` ·
+> `redirty_drivers_of`)이라 **force/release 타깃을 이름 부르면 의존 변화가 아닌 평가를 전부** 이름
+> 부른다 ⓑ **인자 0개 함수의 반환 슬롯이 formal 로 세어졌다** — 경계 검사가 `insert` **뒤**라
+> `n_params==0` 에 하나가 들어갔고, 라운드 1 BLOCKING 이 **자기 repro 에 토큰 하나 바꿔** 부활했다
+> ⓒ **부분 쓰기가 넷 전체의 definite assignment 를 세웠다** — 내 docstring 이 이걸 *"array-word
+> 부정확 · 코퍼스도 프로브도 낸 적 없는 모양"* 이라 적었는데 **양쪽 다 반박**됐다(배열 없는 packed
+> part-select 로 카운터 세탁 · 프로브 둘 · 둘 다 loud→silent-wrong) ⇒ 셋 다 **PRE 와 정확히 일치**로
+> 복귀했고 헤드라인(veth 2.2 s · 코퍼스 10/10)은 불변.
+>
 > ⚠️ 그 밖에 리뷰가 **거짓으로 판정한 내 문구 셋**(전부 수정): 진단문의 *"vita ends the run here"*
 > 는 본문이 **계속 실행된다**는 사실과 어긋났다(`$fatal` 과 같은 동작 · 표 32) · `func_read_deps`
 > docstring 의 *"verilator 편을 지킨다"* 는 **재귀 콜리에서 무너진다**(거기선 verilator 도 얼린다) ·

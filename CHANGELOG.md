@@ -34,9 +34,12 @@ changed for a user of the simulator.
   ⚠️ A system FUNCTION in the body still declines, so `assign m = f()` where `f` reads
   `$random` or `$time` keeps re-drawing while both oracles freeze it. Closing that means naming
   what `$random` advances, and a seed is not a net.
-  ⚠️⚠️ And a function that keeps a COUNTER in a static local is not certified while its assign
-  has a dependency, because its value is a function of how many times it has run — which is the
-  one thing this change alters. Adversarial review built that design and measured the first
+  ⚠️⚠️ And a function that keeps a COUNTER in a static local is not certified — its value is a
+  function of how many times it has run, which is the one thing this change alters. Two rounds
+  of adversarial review found four ways in: a live dependency; a `release` on the driven net
+  (which re-evaluates the driver deliberately, so a released wire snaps back in the same
+  settle); a zero-parameter function keeping the counter in its return variable; and a counter
+  laundered through a packed part-select, which was wrongly read as writing the whole net. Adversarial review built that design and measured the first
   version answering `2 3 3` where the previous release answered `3 3 3` (verilator's answer
   exactly) and iverilog says `1 2 3`. Such an assign now keeps the previous behaviour. With no
   dependency it is certified and evaluated once, which is what both simulators do — and on the

@@ -367,6 +367,34 @@ pub(crate) fn ca_deps(
     is_heap: &dyn Fn(u32) -> bool,
 ) -> Vec<(BTreeSet<u32>, bool)> {
     let (fdeps, fsafe) = func_read_deps(ir, windows, is_heap);
+    // ⚠️⚠️ THE NETS A `force`/`release` CAN RE-DIRTY, and the reason the empty-dependency
+    // arm below is not enough on its own.
+    //
+    // That arm rests on "no dependencies ⇒ evaluated once, at the settle seed". Round-2
+    // adversarial review measured it FALSE: `k_release` calls `redirty_drivers_of` on its
+    // target UNCONDITIONALLY — deliberately, so a released wire snaps back in the same
+    // settle instead of at the next input change — so a certified assign is evaluated
+    // `1 + (number of releases)` times. Both oracles evaluate it once whatever the release
+    // count, and a `release` with no matching `force` is a no-op in both. Measured on a
+    // counter callee: PRE `3 3 3` (verilator's answer exactly) → certified POST `1 2 3`
+    // (nobody's), and the non-saturating twin went from a loud `F4016 did not converge` to
+    // a silent answer — the exact ladder drop the count-safety gate exists to prevent,
+    // arriving through the OTHER arm of the disjunct.
+    //
+    // ⭐ The census that settles it: `ca_dirty_flag[..] = true` has exactly three
+    // producers — the seed in `Scheduler::new`, `note_change` (a dependency really moved,
+    // which is the rule this certification implements), and `redirty_drivers_of`, whose
+    // only callers are the two `k_release` twins. So naming the force/release targets
+    // names every evaluation that is not caused by a dependency change.
+    let redirty_targets: BTreeSet<u32> = ir
+        .stmts
+        .iter()
+        .filter_map(|st| match st {
+            Stmt::Release { lhs } | Stmt::Force { lhs, .. } => Some(lhs),
+            _ => None,
+        })
+        .flat_map(|lv| lv.chunks.iter().map(|c| c.net))
+        .collect();
     ir.cont_assigns
         .iter()
         .map(|c| {
@@ -398,11 +426,14 @@ pub(crate) fn ca_deps(
                 && !deps.iter().copied().any(is_heap)
                 // ⭐ THE DISJUNCT. A callee whose value can depend on how many times it
                 // has run is safe in exactly two situations, and one evaluation is one
-                // of them: with an EMPTY dependency set the assign is evaluated once (at
-                // the settle seed) and never again, which is what both oracles do with an
-                // empty sensitivity list. See `own_reads_are_definitely_assigned` for the
-                // other, and for the measurement that made this necessary.
-                && (deps.is_empty() || count_safe);
+                // of them: with an EMPTY dependency set and no way to be re-dirtied, the
+                // assign is evaluated once (at the settle seed) and never again, which is
+                // what both oracles do with an empty sensitivity list. See
+                // `own_reads_are_definitely_assigned` for the other, and `redirty_targets`
+                // above for why "empty" alone was not the right question.
+                && (count_safe
+                    || (deps.is_empty()
+                        && !c.lhs.chunks.iter().any(|k| redirty_targets.contains(&k.net))));
             (deps, dirty_ok)
         })
         .collect()

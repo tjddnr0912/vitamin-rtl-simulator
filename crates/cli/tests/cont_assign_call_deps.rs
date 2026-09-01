@@ -359,3 +359,93 @@ fn the_same_counter_with_no_dependency_is_evaluated_once_and_matches_iverilog() 
         "iverilog prints 1 and 1:\n{o}"
     );
 }
+
+/// ⚠️⚠️ **Round-2 review, BLOCKING 1 of 3: the empty-dependency arm's premise was false.**
+/// "No dependencies ⇒ evaluated once at the settle seed" is not true on every path —
+/// `k_release` calls `redirty_drivers_of` on its target UNCONDITIONALLY (deliberately, so
+/// a released wire snaps back in the same settle), so a certified assign was evaluated
+/// `1 + releases` times. Both oracles evaluate it once whatever the release count, and a
+/// `release` with no matching `force` is a no-op in both.
+///
+/// ⭐ The census that made the fix precise rather than defensive: `ca_dirty_flag[..] = true`
+/// has exactly THREE producers — the seed, `note_change` (a dependency really moved), and
+/// `redirty_drivers_of`, whose only callers are the two `k_release` twins. So naming the
+/// force/release targets names every evaluation not caused by a dependency change.
+#[test]
+fn a_release_on_the_driven_net_blocks_the_empty_dependency_arm() {
+    let src = |sat: &str| {
+        format!(
+            "module t;\n  \
+               function [15:0] cnt(input [7:0] x);\n    reg [15:0] c; reg init;\n    \
+                 begin if (init !== 1'b1) begin c = 0; init = 1'b1; end\n      \
+                   {sat}\n      cnt = c; end\n  endfunction\n  \
+               wire [15:0] m; assign m = cnt(8'd1);\n  \
+               initial begin\n    #5 $display(\"OUT t5 m=%0d\", m);\n    \
+                 #5 release m;\n    #5 $display(\"OUT t15 m=%0d\", m);\n    \
+                 #5 release m;\n    #5 $display(\"OUT t25 m=%0d\", m);\n    $finish; end\n  \
+               initial #200 $finish;\n\
+             endmodule\n"
+        )
+    };
+    // Saturating: the previous release answered `3 3 3`, which is verilator's answer
+    // exactly. Certifying this gave `1 2 3`, which is nobody's.
+    let (o, ok) = run(&src("if (c < 3) c = c + 1;"));
+    assert!(ok, "vita failed:\n{o}");
+    for t in ["OUT t5 m=3", "OUT t15 m=3", "OUT t25 m=3"] {
+        assert!(o.contains(t), "expected `{t}` (verilator's answer):\n{o}");
+    }
+    // Non-saturating: re-evaluating forever never settles, so this is a LOUD refusal and
+    // must stay one. Certifying it turned the fatal into a silent `1 2 3`.
+    let (o2, ok2) = run(&src("c = c + 1;"));
+    assert!(
+        !ok2 && o2.contains("F-RUN-NO-CONVERGE"),
+        "a counter re-evaluated by every release cannot settle; that must stay loud:\n{o2}"
+    );
+}
+
+/// ⚠️⚠️ **Round-2 BLOCKING 2: a zero-parameter function's RETURN slot was read as a
+/// formal.** The entry set counted with `insert` before the bound check, so a function
+/// with `n_params == 0` got one net anyway — the func-named return variable — and a
+/// counter kept in it read as definitely assigned. That resurrected round 1's BLOCKING
+/// through a one-token change to its own repro.
+#[test]
+fn a_counter_in_the_return_variable_of_a_zero_parameter_function_is_not_certified() {
+    let (o, ok) = run("module tb;\n  reg [7:0] z; wire [7:0] m, d;\n  \
+           function [7:0] bump();\n    \
+             begin if (bump === 8'hxx) bump = 8'd0;\n      \
+               if (bump < 8'd3) bump = bump + 8'd1; end\n  endfunction\n  \
+           assign m = bump() + (z & 8'd0);\n  assign d = z;\n  \
+           initial begin z = 8'd1;\n    #1 $display(\"OUT A m=%0d\", m);\n    \
+             z = 8'd7; #1 $display(\"OUT B m=%0d\", m);\n    \
+             z = 8'd9; #1 $display(\"OUT C m=%0d\", m);\n    $finish; end\n  \
+           initial #100 $finish;\n\
+         endmodule\n");
+    assert!(ok, "vita failed:\n{o}");
+    assert!(
+        o.contains("OUT A m=3") && o.contains("OUT B m=3") && o.contains("OUT C m=3"),
+        "the previous release's answer; certifying this gave 2 3 3, which is nobody's:\n{o}"
+    );
+}
+
+/// ⚠️⚠️ **Round-2 BLOCKING 3: a PARTIAL write established definite assignment for the
+/// whole net.** The docstring called this "array-word imprecision … a shape no corpus
+/// design or probe has produced". Neither half was true: this launders a per-call counter
+/// through a packed part-select on a plain `reg [15:0]`, with no array anywhere, and the
+/// previous release refused the design loudly.
+#[test]
+fn a_partial_write_does_not_establish_definite_assignment() {
+    let (o, ok) = run("module tb;\n  reg [7:0] z; wire [7:0] m, d;\n  \
+           function [7:0] bump(input [7:0] a);\n    reg [15:0] t;\n    \
+             begin t[15:8] = a;\n      if (t[7:0] === 8'hxx) t[7:0] = 8'd0;\n      \
+               t[7:0] = t[7:0] + 8'd1;\n      bump = t[7:0]; end\n  endfunction\n  \
+           assign m = bump(z);\n  assign d = z;\n  \
+           initial begin z = 8'd1;\n    #1 $display(\"OUT A m=%0d\", m);\n    \
+             z = 8'd7; #1 $display(\"OUT B m=%0d\", m);\n    $finish; end\n  \
+           initial #100 $finish;\n\
+         endmodule\n");
+    assert!(
+        !ok && o.contains("F-RUN-NO-CONVERGE"),
+        "a counter that advances on every evaluation cannot settle; certifying it \
+         answered a silent `2 3 4`:\n{o}"
+    );
+}

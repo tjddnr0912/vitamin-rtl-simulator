@@ -198,10 +198,12 @@ pub(crate) fn func_read_deps(
 /// `FuncMeta.is_automatic`/`auto_override` would put a mirror of the storage policy in
 /// this file for it to drift against.
 ///
-/// ⚠️ ARRAY-WORD IMPRECISION, stated because it is the seam: a slot is a NET, so writing
-/// `t[0]` marks all of `t` assigned. What that can produce is a value depending on an
-/// unwritten WORD of an array the body does write — narrower than the counter above, and
-/// a shape no corpus design or probe has produced.
+/// ⚠️⚠️ A PARTIAL write establishes NOTHING. An earlier version let any chunk naming the
+/// net count, with a docstring calling that "array-word imprecision … a shape no corpus
+/// design or probe has produced"; review refuted both halves in one design, laundering a
+/// per-call counter through a packed part-select on a plain `reg [15:0]` — no array
+/// involved — and producing it twice. Only a write with no word, offset or width index
+/// covers the whole net.
 fn own_reads_are_definitely_assigned(ir: &SimIr, fi: usize, mine: &dyn Fn(u32) -> bool) -> bool {
     use sim_ir::{Stmt, Terminator};
     let Some(fd) = ir.funcs.get(fi) else {
@@ -221,12 +223,22 @@ fn own_reads_are_definitely_assigned(ir: &SimIr, fi: usize, mine: &dyn Fn(u32) -
         blocks.push(b);
         succs(&blk.term, &mut stack);
     }
+    // ⚠️⚠️ A PARTIAL write does NOT establish definite assignment. The first version
+    // accepted any chunk naming the net, and review laundered a per-call counter through a
+    // packed part-select on a plain `reg [15:0]` — `t[7:0] = t[7:0] + 1;` marks `t`
+    // assigned while the read that feeds it is the carried value. The docstring called
+    // this "ARRAY-WORD IMPRECISION … a shape no corpus design or probe has produced"; it
+    // is not array-specific and two probes produced it, both loud → silent-wrong. Only a
+    // whole-net write (no word, no offset, no width) covers the whole net.
+    let whole_net_write = |k: &sim_ir::LvalChunk| {
+        mine(k.net) && k.word.is_none() && k.offset.is_none() && k.width.is_none()
+    };
     let writes_of = |b: u32, out: &mut BTreeSet<u32>| {
         if let Some(blk) = ir.blocks.get(b as usize) {
             for &sid in &blk.stmts {
                 if let Some(Stmt::BlockingAssign { lhs, .. }) = ir.stmts.get(sid as usize) {
                     for k in &lhs.chunks {
-                        if mine(k.net) {
+                        if whole_net_write(k) {
                             out.insert(k.net);
                         }
                     }
@@ -236,28 +248,22 @@ fn own_reads_are_definitely_assigned(ir: &SimIr, fi: usize, mine: &dyn Fn(u32) -
     };
     // `None` = TOP (this block has no reachable predecessor state yet), which is the
     // identity for the meet. Entry starts at the formals.
-    let base_formals: BTreeSet<u32> = {
-        let mut f = BTreeSet::new();
-        for b in &blocks {
-            if let Some(blk) = ir.blocks.get(*b as usize) {
-                let _ = blk;
-            }
-        }
-        // The formals occupy the first `n_params` slots of the window by the layout
-        // convention `FuncMeta` documents; `mine` is the only thing that knows where the
-        // window starts, so recover the base by scanning for the lowest owned net id the
-        // body mentions. Cheaper and exact: ask `mine` at the ids the IR uses.
-        for (net, _) in ir.nets.iter().enumerate() {
-            let net = net as u32;
-            if mine(net) {
-                f.insert(net);
-                if f.len() as u32 >= ir.funcs[fi].n_params {
-                    break;
-                }
-            }
-        }
-        f
-    };
+    // The window is `[base_net, base_net + locals_len)` and `FuncMeta`'s layout convention
+    // puts the `n_params` INPUT FORMALS first, then the func-named return slot, then the
+    // body declarations. Only the formals are written by the call binding, so only they
+    // are live on entry.
+    //
+    // ⚠️⚠️ The first version of this counted with `insert` BEFORE the bound check, so a
+    // ZERO-parameter function got one net anyway — its RETURN SLOT — and a counter kept in
+    // the func-named variable read as definitely assigned. Review resurrected round 1's
+    // BLOCKING through that one token: `function [15:0] cnt; begin cnt = cnt + 1; end`
+    // certified while its dependency set was non-empty, and the value became a function of
+    // how many times the settle chose to evaluate it. `take` states the bound once instead
+    // of testing it after the fact.
+    let base_formals: BTreeSet<u32> = (0..ir.nets.len() as u32)
+        .filter(|&net| mine(net))
+        .take(ir.funcs[fi].n_params as usize)
+        .collect();
     let mut state: BTreeMap<u32, Option<BTreeSet<u32>>> =
         blocks.iter().map(|&b| (b, None)).collect();
     state.insert(fd.entry, Some(base_formals));
@@ -317,7 +323,7 @@ fn own_reads_are_definitely_assigned(ir: &SimIr, fi: usize, mine: &dyn Fn(u32) -
                                 return false;
                             }
                             for k in &lhs.chunks {
-                                if mine(k.net) {
+                                if whole_net_write(k) {
                                     have.insert(k.net);
                                 }
                             }

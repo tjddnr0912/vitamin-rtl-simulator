@@ -3233,3 +3233,48 @@ Two habits, both cheap: run the predicate ONCE by hand before arming it, and pre
 condition read from the artifact you have already inspected over one you assume. And when
 you stop needing a background wait, kill it — a wait whose result you obtained another way
 is a leak, not a spare.
+
+### ★★★★★ A premise about YOUR OWN engine needs a producer census, not an argument
+
+The fix for round 1's BLOCKING rested on one sentence: *an assign with no dependencies is
+evaluated once, at the settle seed, and never again.* I reasoned it from the seeding code
+and shipped it. Round 2 measured it false in one design: `k_release` calls
+`redirty_drivers_of` on its target unconditionally — on purpose, so a released wire snaps
+back in the same settle — so the assign is evaluated `1 + releases` times, and round 1's
+whole BLOCKING table came back through the other arm of the disjunct.
+
+The census that should have preceded the sentence takes one grep: `ca_dirty_flag[..] = true`
+has exactly three producers — the seed, `note_change`, and `redirty_drivers_of`. Running it
+afterwards is also what made the fix precise instead of defensive: naming the force/release
+target nets names *every* evaluation not caused by a dependency change, so the gate is
+provably complete rather than plausibly adequate.
+
+⇒ When a change's soundness rests on "this can only happen once/here/never", enumerate the
+WRITERS of the thing you are claiming about. It is the same rule as
+[[removing-a-defensive-check-needs-a-producer-census]], applied to a premise instead of a
+check — and the same failure, one slice later.
+
+### ★★★★ Fixing a BLOCKING is a design change, and the new design has not been reviewed
+
+Round 1 returned one BLOCKING. Fixing it added a definite-assignment analysis and a
+disjunct — new code with its own reasoning, none of which any lens had seen. Round 2 found
+**three** more BLOCKINGs, all of them in that fix, and all three let the same counter design
+back in through a different door: `release`, a zero-parameter function's return slot counted
+as a formal (the bound was tested *after* the insert), and a partial write establishing
+definite assignment for the whole net.
+
+Two of the three were reachable by a one-token edit to round 1's own repro. That is the
+signal: when a fix is a new mechanism rather than a corrected constant, the reviewers'
+existing repro is the first thing to mutate, and the re-review is not optional.
+
+### ★★★ A comment that pre-emptively excuses an imprecision is a claim, and it will be wrong
+
+I wrote: *"ARRAY-WORD IMPRECISION … what that can produce is a value depending on an
+unwritten WORD of an array the body does write — narrower than the counter above, and a
+shape no corpus design or probe has produced."* Review refuted both halves in one design:
+the laundering needs no array at all (a packed part-select on a plain `reg [15:0]` does it),
+and two probes produced it.
+
+Naming a known imprecision is good; bounding its consequences in the same breath is a
+measurement, and I did not run it. If the bound is worth writing, it is worth building the
+design that tests it — see [[a-comment-saying-cannot-is-a-claim-to-measure]].
