@@ -645,6 +645,10 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             }
         }
         st.ca_of_net = ca_of_net;
+        // §2 row 33: procedural read-through of whole-net copies (`crate::alias`).
+        let alias = crate::alias::copy_alias(st.ir, &st.two_state);
+        st.wt
+            .install_read_alias(crate::levelize::proc_read_alias(st.ir, &alias));
         st.ca_dirty_flag = vec![false; nca];
         // Seed EVERY certified assign: nothing has been evaluated yet, so the first
         // settle must behave exactly like the old full pass.

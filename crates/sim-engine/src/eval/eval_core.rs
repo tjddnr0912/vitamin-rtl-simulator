@@ -559,6 +559,12 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 base.resize_keep_sign(w, eff_signed)
             }
             Expr::Signal { net, word } => {
+                // §2 row 33: a procedural read of a whole-net copy, after the
+                // reader's own write of the source, reads the SOURCE (`WidthTable::
+                // read_alias`, built by `levelize::proc_read_alias`). A copy is a
+                // flat scalar, so the assoc/array branches below never see an
+                // aliased net.
+                let net = &self.wt.read_alias(eid).unwrap_or(*net);
                 // v5 ⑤: assoc element — the key domain is SIGNED i64 (negative
                 // and beyond-u32 keys are legal), so it must branch BEFORE the
                 // u32 word funnel below. Scalar reads short-circuit on

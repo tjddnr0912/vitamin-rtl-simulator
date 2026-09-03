@@ -436,6 +436,72 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.408 — A procedural read of a whole-net copy sees the writer's own write (§2 row 33) (2026-09-03 · format 29 unchanged · adversarial review: 2 lenses (differential 14 designs CLEAN · soundness 12 designs + read-site census, one FAIL fixed by narrowing the alias set) + delta re-verification · corpus 10/10)
+
+**The cell.** `wire [7:0] c; assign c = v;` then, in one process, `v = 8'hA5; cap = c;`
+latched `cap = 00` in vita on all three backends where iverilog and verilator both latch
+`a5`. The copy is written by the continuous-assign settle, which runs between process
+batches, so a read one statement after the writer's own write saw the value from before
+it — and it persisted, since nothing re-ran the copy until the next delta. iverilog
+COLLAPSES a whole-net copy into its source (its VCD gives both one identifier), which is
+why `assign c = v[3:0]` is stale there too: the collapse, not eager evaluation, is the
+oracle-side property. 91-cell census (4 widths × 3 source kinds × 5 destination kinds +
+27 shapes: declaration-initializer form, parens, 2/3-deep chains, signed either side,
+slice write, condition / index / `$display` reads, task write, function read, port
+copies read from the parent, cross-process order, force, `$monitor`): **59 silent→correct
+· 6 ok→ok · 20 oracle-split · 5 wrong→wrong · 0 regressed**.
+
+**Built first and REFUSED — the store-side forward the row proposed.** Forwarding `v`'s
+new words into every whole-net copy inside the write funnel (`store_words`, both stores)
+fixed the cell and moved three things the oracle pins: picorv32's digest (`REGRESSION`,
+the digest is cycle-resolution bus activity), a UDP shift-register chain
+(`udp_seq_instance_shift_register_output_first`: the second DFF sampled its FRESH input
+on the same clock edge, iverilog samples the old one) and native-vs-VM parity on keccak.
+Three of the four example VCDs also changed (t0 values toward iverilog, plus in-slot
+record order). The settle's consumers — UDPs, gates, downstream assigns — are
+evaluated in an order that a same-slot store forward changes; iverilog's collapse is
+coupled to its own functor order and cannot be emulated by pushing values earlier.
+
+**Shipped — READ-THROUGH, static and procedural.** ① `alias::copy_alias`: net → root
+source for the strict members of `copy_nets` (one driver, one source, both sides the
+whole net, rhs a bare `Signal`), excluding 2-state destinations and any net that is a
+`force`/`release` target. ② `levelize::proc_read_alias`: per-ExprId, for every process
+whose `blocking_writes` include the root, every `Signal` node in that process's
+statements and terminators reading a copy of it → the root. ③ `WidthTable::read_alias`:
+the one sidecar every evaluator already carries, so `eval_core` (interp and every
+`k_eval` fallback), `native_eval::lower` (VM bytecode) and `wprog::compile_node` (native
+compiled) resolve the same read to the same net at compile/eval time. Nothing in the
+settle, the store, the dirty/wake channel or the VCD changes: the examples' stdout AND
+VCD are byte-identical, 6,465 tests green before the pins were added, corpus 10/10.
+
+⚠️ **Scope, and why it is the whole defined case.** A read that follows the writer's
+OWN blocking write in program order has one answer in every tool. A read in ANOTHER
+process in the same delta is a §5.4.1 race whose outcome is process order — both
+oracles print `a5` when the writer is declared first and `00` when the reader is —
+and vita keeps the settle's value there (`xp_writer_first` is the one 2-oracle cell
+left wrong by design). Residue → §2 🆕 I: that race cell, multi-driver with a z driver
+(`copy_nets` excludes the group), a constant-index array-word source (`flat` refuses
+the base), a blocking write inside a `fork` arm / non-inlined frame body (the writer
+predicate walks the process's own blocks), the 2-state destination (a dead guard today —
+vita refuses `bit` copy destinations at elaborate), a SIGN-MISMATCHED copy and an
+`automatic` task's actual.
+
+**Review.** Differential lens: 14 designs outside the census (128-bit arithmetic, a
+function formal, hierarchical / interface / generate-scoped copies, runtime part-select,
+`always_comb`, fork arm, NBA source, gates + `$dumpvars`) — every change lands on the
+defined cell, three backends byte-identical, gates unchanged: CLEAN. Soundness lens:
+read-site census (three consulting arms, every other `Signal` match a string/queue
+handle or a write destination), table lifetime (installed after the settle programs
+compile; no expression interning), and one **FAIL**: `wire signed [7:0] c; assign c =
+v;` with an unsigned `v` then `r = c;` — the substituted net lent its sign to the
+extension, so the interpreter and VM printed 255 (slot sign) while the native compiled
+path printed the oracles' 4294967295 (node sign). Fixed by requiring the copy's declared
+sign to equal its root's, beside the width equality `copied_source` already demands;
+the cell reverts to PRE's stale value with backend parity, pinned as parity only.
+
+Tests: `copy_net_read_through.rs` (5, every cell on all three backends, values
+2-oracle). 6,465 → 6,470.
+
 #### 4.5.407 — A reduction operator inside a declaration bound sizes the declaration; an untyped parameter takes a reduction's type (§3 ⑦) (2026-09-03 · format 29 unchanged · adversarial review: 2 lenses (differential 12 designs · soundness 10 designs + a 13-site census), PASS/PASS, one wording finding fixed, delta re-census after each re-freeze · corpus 10/10)
 
 **The queue row said 12 silent cells; the census said 171.** The six §11.4.14 reduction

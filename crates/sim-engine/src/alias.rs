@@ -318,6 +318,62 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
     ordered
 }
 
+/// `net → the net it is a WHOLE-NET copy of` (its root source), identity elsewhere —
+/// the runtime half of the rename set (ROADMAP §2 row 33).
+///
+/// Only the strictest members of [`copy_nets`] qualify: ONE driver, ONE source, both
+/// sides the whole net, and an rhs that is a bare read. A chain resolves to its root
+/// (`copy_nets` is in dependency order, so `alias[src]` is final when `dst` asks).
+/// Excluded, deliberately: a 2-state destination (the settle's write coerces x/z
+/// to 0 and a read-through would not), any net that is ever a `force` / `release`
+/// target (a forced destination holds a value its source never held), and a
+/// destination whose declared SIGN differs from its source's. The read substitutes
+/// the NET, and a read carries the net's declared sign into its extension: `wire
+/// signed [7:0] c; assign c = v;` with an unsigned `v` then `r = c;` (32-bit) is
+/// 4294967295 in both oracles, and the source's unsigned flag gave 255 on the
+/// interpreter and the VM while the native compiled path (which keeps the node's
+/// own sign) gave the oracle's answer — a backend split, found by review. Width is
+/// already required equal by `copied_source`; sign is the other property a read
+/// takes from the net rather than from the bits.
+pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> Vec<u32> {
+    let mut alias: Vec<u32> = (0..ir.nets.len() as u32).collect();
+    let forced: std::collections::BTreeSet<u32> = ir
+        .stmts
+        .iter()
+        .filter_map(|st| match st {
+            sim_ir::Stmt::Force { lhs, .. } | sim_ir::Stmt::Release { lhs } => Some(lhs),
+            _ => None,
+        })
+        .flat_map(|lv| lv.chunks.iter().map(|c| c.net))
+        .collect();
+    for cn in copy_nets(ir) {
+        let [ci] = cn.cas.as_slice() else { continue };
+        let [src] = cn.srcs.as_slice() else { continue };
+        let ca = &ir.cont_assigns[*ci];
+        let [c] = ca.lhs.chunks.as_slice() else {
+            continue;
+        };
+        if c.word.is_some() || c.offset.is_some() || c.width.is_some() {
+            continue;
+        }
+        if !matches!(
+            ir.exprs.get(ca.rhs as usize),
+            Some(sim_ir::Expr::Signal { word: None, .. })
+        ) {
+            continue;
+        }
+        if two_state.get(cn.dst as usize).copied().unwrap_or(false) || forced.contains(&cn.dst) {
+            continue;
+        }
+        let root = alias[*src as usize];
+        if ir.nets[cn.dst as usize].signed != ir.nets[root as usize].signed {
+            continue;
+        }
+        alias[cn.dst as usize] = root;
+    }
+    alias
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

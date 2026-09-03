@@ -11,6 +11,19 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A read of a whole-net copy after the same process wrote its source sees the
+  new value.** `wire [7:0] c; assign c = v;` and then `v = 8'hA5; cap = c;` in one
+  `initial`/`always` body latched `cap = 00` — the copy is driven by the continuous-
+  assign settle, which runs between process batches — where iverilog and verilator
+  both latch `a5` (iverilog collapses such a copy into its source). Every width and
+  net kind, chains, the `wire c = v;` form, a port copy read from the parent, a read
+  through a function, a write through a task: 59 of a 91-cell census move, none
+  regress, and the examples' VCDs are byte-identical. Reads in ANOTHER process in the
+  same delta are a race the LRM leaves open and keep the settle's value; a forced copy,
+  a copy whose declared sign differs from its source's, and a 2-state copy are excluded. A store-side forward that would
+  also cover the race was built, measured against picorv32 and a UDP chain, and
+  rejected (ROADMAP §2 row 33).
+
 - **A reduction operator inside a declaration bound sizes the declaration.** The six
   IEEE §11.4.14 operators (`& ~& | ~| ^ ~^`) folded only where a declared width reached
   them; every other constant position — a packed range, an unpacked dimension, a port

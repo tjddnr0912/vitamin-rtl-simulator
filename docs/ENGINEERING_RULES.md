@@ -219,6 +219,20 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ Fix a stale-read defect at the READ, not at the STORE — the settle's consumers are order-sensitive (2026-09-03 · §4.5.408)
+
+Two fixes make `v = 8'hA5; cap = c;` read the fresh copy: forward `v`'s words into `c`
+inside the write funnel, or let the read of `c` resolve to `v`. Only the second is
+observationally confined to the defect. The store-side forward also makes every SETTLE
+consumer of `c` — a UDP, a gate, a downstream assign — see the new value in the same
+pass, which changed picorv32's oracle-pinned digest, made a DFF chain sample its fresh
+input on the same edge, split native from the VM on keccak, and reordered VCD records in
+three of four examples. **Rule**: when a value is stale "for a delta", ask which READER
+the oracle proves wrong, and change what that reader resolves to — statically, in the one
+sidecar every backend already consults — rather than when the value moves. Then prove
+the rest is untouched by the three cheapest byte-identity oracles the repo has: the
+examples' VCDs, the corpus digests and the full suite, each before any review round.
+
 ### ⭐⭐ A newly foldable leaf lands on EVERY consumer — count the ones whose rule is wrong (2026-09-03 · §4.5.407)
 
 Adding a fold arm for a leaf (here the six reductions) does not choose its consumers: the

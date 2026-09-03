@@ -273,6 +273,9 @@ pub(crate) fn lower(
             Some(())
         }
         Expr::Signal { net, word } => {
+            // §2 row 33: the same read-through the interpreter applies, resolved
+            // at compile time from the same table.
+            let net = &wt.read_alias(eid).unwrap_or(*net);
             // NATIVE-TYPE GUARD. A native register is a bare `(val, unk)` word pair
             // and the consumer rebuilds a plain integer `Value` — the program
             // structurally CANNOT carry `is_real`/`is_str`, nor a heap handle. So a

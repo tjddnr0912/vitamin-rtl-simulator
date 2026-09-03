@@ -27,12 +27,31 @@ pub(crate) struct WidthTable {
     /// self-determined, so a real sibling's 64-bit self width must not become the
     /// integral side's evaluation context.
     real: Vec<bool>,
+    /// `levelize::proc_read_alias` — the net a procedural `Signal` read takes
+    /// instead of its own (ROADMAP §2 row 33). Empty until `Scheduler::new`
+    /// installs it; `u32::MAX` = read the node's own net. Lives here because this
+    /// is the one sidecar every evaluator already carries — the interpreter's
+    /// `EvalCtx`, `native_eval::lower` and `wprog::compile` — so one table answers
+    /// all three and a backend cannot disagree with another about which net a
+    /// read names.
+    read_alias: Vec<u32>,
 }
 
 impl WidthTable {
     #[inline]
     pub(crate) fn get(&self, eid: u32) -> SelfWidth {
         self.sw[eid as usize]
+    }
+    /// The net a procedural read of `eid` resolves to, when it is a read-through.
+    #[inline]
+    pub(crate) fn read_alias(&self, eid: u32) -> Option<u32> {
+        match self.read_alias.get(eid as usize) {
+            Some(&n) if n != u32::MAX => Some(n),
+            _ => None,
+        }
+    }
+    pub(crate) fn install_read_alias(&mut self, table: Vec<u32>) {
+        self.read_alias = table;
     }
     #[inline]
     pub(crate) fn is_real(&self, eid: u32) -> bool {
@@ -168,7 +187,11 @@ impl WidthTable {
         // sidecar; `build_full` recomputes with it. Every caller that stops here
         // builds its own IR and has no dynamic array of reals in it.
         let real = Self::build_real(ir, ft, &std::collections::BTreeSet::new());
-        WidthTable { sw, real }
+        WidthTable {
+            sw,
+            real,
+            read_alias: Vec::new(),
+        }
     }
 }
 
