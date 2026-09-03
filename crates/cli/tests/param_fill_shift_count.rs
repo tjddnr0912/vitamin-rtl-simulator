@@ -114,16 +114,16 @@ fn a_zero_fill_amount_was_already_right_and_stays_right() {
     }
 }
 
-/// ⚠️ KNOWN DIVERGENCE, pinned so closing it is visible. A RIGHT shift by the
-/// mis-sized 32-bit amount is a legal i64 fold that answers 0, so the width-unlimited
-/// i64 walk succeeds first and this domain is never asked. Both oracles give
-/// `000000007f` and `0000000001`. 104 of the census's 880 cells are this shape; the
-/// cause is the same hard-coded 32 in the other constant lane.
+/// The divergence §4.5.406 pinned, closed by §4.5.409 (ROADMAP §2 🆕 C ⓔ). A RIGHT
+/// shift by a fill amount is answered by the width-unlimited i64 walk first, whose
+/// shift count is folded by the width-aware twin — and that twin's fill leaf is now
+/// sized to its context (one bit in a self-determined count), so the amount is 1.
+/// Both oracles: `000000007f`, `000000007f`, `7`.
 #[test]
-fn a_right_shift_by_a_fill_is_still_answered_by_the_i64_walk() {
-    assert_eq!(value("logic [39:0]", "40'hFF >> '1"), "0000000000");
-    assert_eq!(value("logic [39:0]", "40'hFF >>> '1"), "0000000000");
-    assert_eq!(value("logic [3:0]", "4'hF >> '1"), "0");
+fn a_right_shift_by_a_fill_is_one() {
+    assert_eq!(value("logic [39:0]", "40'hFF >> '1"), "000000007f");
+    assert_eq!(value("logic [39:0]", "40'hFF >>> '1"), "000000007f");
+    assert_eq!(value("logic [3:0]", "4'hF >> '1"), "7");
 }
 
 /// An x/z amount has no shift to name and stays loud, exactly as before.

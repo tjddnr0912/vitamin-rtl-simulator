@@ -219,6 +219,19 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐ A leaf with no width of its own needs a tri-state width: `None` (unknown), `Some(0)` (context-sized), `Some(w)` (2026-09-03 · §4.5.409)
+
+An unsized fill has no self width; the width table answered 32 (the parser's container)
+and every self-determined consumer sized it wrong. Answering `Some(0)` is right for the
+consumers that `max` it with a sibling or gate masking on `w > 0` — but one predicate
+(`ast_selfwidths_all_known`) read `w >= 1` as "known", so a fill now read as UNKNOWN, the
+tier-3 count fold declined, and `{('1)+1{8'hA5}}` fell to the engine's lowering, which
+replicated twice where both oracles reject a zero count: a loud became a value. **Rule**:
+when a table gains a third answer, grep every consumer for the predicate it uses to tell
+the other two apart (`unwrap_or(0)`, `>= 1`, `is_some_and`) and decide per site which of
+"unknown" and "context-sized" it meant; and the region made only of such leaves has a
+width of its own (one bit) that the evaluator, not the table, must supply.
+
 ### ⭐⭐ Fix a stale-read defect at the READ, not at the STORE — the settle's consumers are order-sensitive (2026-09-03 · §4.5.408)
 
 Two fixes make `v = 8'hA5; cap = c;` read the fresh copy: forward `v`'s words into `c`

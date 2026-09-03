@@ -11,6 +11,19 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **An unsized fill (`'0`/`'1`) in a constant expression is sized by its context.**
+  The integer constant lane read every fill at a hard 32 bits: `localparam U = '1 ^
+  1'b0;` was 4294967295 with `$bits(U)` 33 (both oracles 1 and 1), `$clog2('1)` was
+  32 (0), `$bits('1)` was 32 (1), `-G U='1` on an untyped parameter bound −1 at 32
+  bits (verilator: 1 at 1 bit), a right shift by `'1` shifted everything out, and
+  `generate if ('1 == 1'b1)` took the else branch. A fill now has no width of its own
+  in the width-aware walk and folds at the region's width — one bit when nothing is
+  beside it, the sibling's width otherwise (`4'd8 - '1` is 9) — an untyped parameter
+  whose initializer holds a fill takes that value and width, and a fill override of an
+  untyped parameter is one unsigned bit. 21 of a 93-cell census move, none regress,
+  the examples' output is byte-identical. A fill as the left operand under a TYPED
+  declaration (`logic [7:0] A = '1 >> 2`) is the separate, recorded ROADMAP §2 row 30.
+
 - **A read of a whole-net copy after the same process wrote its source sees the
   new value.** `wire [7:0] c; assign c = v;` and then `v = 8'hA5; cap = c;` in one
   `initial`/`always` body latched `cap = 00` — the copy is driven by the continuous-

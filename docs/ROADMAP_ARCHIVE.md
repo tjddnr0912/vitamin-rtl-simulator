@@ -436,6 +436,72 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.409 — An unsized fill in the i64 constant lane is sized by its context (§2 🆕 C) (2026-09-03 · format 29 unchanged · adversarial review: 2 lenses (differential 22 designs CLEAN · soundness 18 designs + a 12-site consumer census, one FAIL fixed and delta re-verified) · corpus 10/10)
+
+**One root, five instances.** `literal::parse_int_literal` sizes a fill (`'0 '1 'x 'z`) at
+`explicit_width.unwrap_or(32)`, and every constant-domain consumer that read a fill through
+it — the width table (`const_self_width`), the width-aware walk's leaf (via the plain
+twin's `const_eval_i64_lit`), `bits_of_selfdet`, the untyped parameter's literal arm and
+the override channel's width fallback — got a 32-bit all-ones. §5.7.1 replicates a fill to
+its CONTEXT; with nothing around it (a self-determined position, an implicit parameter's
+initializer) that is one bit, and beside a sibling it is the region width
+`max(ctx, siblings)`. Both oracles agree on every cell that has no oracle split. 93-cell
+census (16 initializer forms × {untyped, `logic [7:0]`, `logic [39:0]`, runtime} + `$clog2`
+/ `$bits` × {constant, runtime} + `-G` + shifts by a fill + bound / count / index / generate
+/ call / case / compare): **21 silent→correct · 49 ok→ok · 8 loud→loud · 4 oracle-split (vita
+= verilator) · 11 wrong→wrong · 0 regressed**. `-G U='1` on an untyped parameter: 1 with
+`$bits` 1 (verilator; iverilog cannot spell the override). Examples' stdout and VCD
+byte-identical.
+
+**Mechanism — six small pieces, none at the root.** ① `const_self_width`: a fill → `Some(0)`
+("takes the context"; every consumer already reads 0 as no-mask / `max`-neutral). ②
+`eval_const_env_at`: a fill leaf arm → `fill_to_i64(kind, raw, ctx_w.max(1))`, where `ctx_w`
+is the region width the parent pushed down (`4'd8 - '1` sees a 4-bit all-ones: 9); an x/z
+fill declines, the loud it already had. `eval_const_env_self`: a `Some(0)` region — fills
+only, `'1 + '1` — evaluates at ONE bit (both oracles fold `{('1 + '1){8'hA5}}` to a zero
+count and reject it). ③ `bits_of_selfdet`: `$bits('1)` = 1. ④ `untyped_fill_init`: an
+implicit, rangeless parameter whose initializer CONTAINS a fill takes its value from
+`const_int_selfdet` and its `(width, signed)` from `const_self_width(..).max(1)` — the first
+link at the four value sites and in the width tail, `default_binds` only; initializers
+without a fill keep the tail they had (row 14). ⑤ the header binder: a fill OVERRIDE of an
+implicit rangeless parameter has meta `(1, false)` — §6.20.2 gives an untyped parameter
+the override's type, and verilator binds `1 1` whatever the default literal was (`0`,
+`8'h00`, `4'sd1`, `'hFF`). ⑥ `ast_selfwidths_all_known`: a known width of 0 counts as known
+— the first build read it as unknown and sent `{('1)+1{8'hA5}}` to the engine's lowering,
+which replicated twice where both oracles reject a zero count (loud → value, caught by
+the census before review).
+
+⚠️ **What is deliberately not touched.** The root's 32 stays: it is the container the
+module-scope UNLIMITED walk (`const_eval_in_scope` → `const_eval_i64_lit`) and the
+declared-context binders read, and those are right today through `expr_as_fill` and the
+wide fold's `fold_init`. The WIDE fold's fill arm is row 30 (built, reviewed three rounds,
+reverted onto the §11.8.1 region-sign prerequisite): a fill as the LEFT operand under a
+TYPED declaration — `logic [7:0] A = '1 >> 2` is `ff` against `3f`, every `logic [39:0] U =
+'1 <op> 1'b0` — is 11 census cells, PRE == POST, and stays there. §4.5.406's residue pin
+(`a_right_shift_by_a_fill_is_still_answered_by_the_i64_walk`) now asserts the oracle
+values; the ⓔ instance it recorded is closed by ②.
+
+**Residue → §2 🆕 J**: row 30's cells · a fill in a declaration BOUND (`wire [('1)+2:0]`, both
+oracles 2, vita loud) · `$bits` of a fill under an operator (loud) · `{'1, 1'b0}` (illegal,
+oracles lenient, vita loud) · `v['1]` (oracle split) · the widths of `'1 * 2'd2` / `'1 +
+1'b1` / `4'd8 - '1` (verilator sibling-sized, iverilog one wider; vita = verilator).
+
+**Review.** Differential lens, 22 designs outside the census (no-fill controls across every
+width-aware consumer byte-identical; `2 ** '1` loud→2; `('1 & 4'hF) + 8'd1` sizes the fill at
+8; `'1 & 65'h1` folds at 65; `-G U='1` over `8'hA5` = verilator; x/z fills loud on both;
+interp/vm identical): CLEAN. Soundness lens: consumer census of `const_self_width`'s new
+`Some(0)` (12 sites, 11 context-sized-neutral) and one **FAIL** — `param_init_kept_loud`'s
+`w < 32` read a fill-bearing `'1 & (|4'hF)` as a 1-bit context-determined top over a
+reduction and refused a value PRE printed correctly (1, with `$bits` 32); a fill-bearing
+initializer now bypasses that guard, because the route it feeds is the width-aware walk
+the guard exists to demand. Delta re-verified on the re-frozen binary. Both lenses record
+one pre-existing, fill-INDEPENDENT gap the loud removal exposes: `$bits` of a DERIVED
+untyped localparam (`localparam Y = U + 4'd1` with a 1-bit `U`) is 32 where both oracles
+size it from the operands — the row-14 value-inferred tail, §2 🆕 J ⓖ.
+
+Tests: `fill_const_lane.rs` (7, every value 2-oracle unless the docstring says
+otherwise) + `param_fill_shift_count::a_right_shift_by_a_fill_is_one`. 6,470 → 6,477.
+
 #### 4.5.408 — A procedural read of a whole-net copy sees the writer's own write (§2 row 33) (2026-09-03 · format 29 unchanged · adversarial review: 2 lenses (differential 14 designs CLEAN · soundness 12 designs + read-site census, one FAIL fixed by narrowing the alias set) + delta re-verification · corpus 10/10)
 
 **The cell.** `wire [7:0] c; assign c = v;` then, in one process, `v = 8'hA5; cap = c;`

@@ -93,13 +93,17 @@ impl Elaborator<'_> {
         self.const_int_selfdet(e)
     }
 
-    /// Does EVERY sub-expression the const domain descends into have a known,
-    /// non-zero self width? This is what makes the self-determined walk mask at
+    /// Does EVERY sub-expression the const domain descends into have a known
+    /// self width (zero = context-sized fill)? This is what makes the self-determined walk mask at
     /// every step instead of degrading to the unlimited domain somewhere inside
     /// (its documented contract) — the tier-3 bound fold requires it.
     fn ast_selfwidths_all_known(&self, e: &ast::Expr) -> bool {
-        self.const_self_width(e, &ConstWidths::new())
-            .is_some_and(|w| w >= 1)
+        // `Some(0)` is a fill, or a region of fills — context-sized, and the walk
+        // sizes it (one bit with nothing around it). Refusing it here sent
+        // `{('1)+1{8'hA5}}` to the engine's lowering, which sized the fill to one bit
+        // INSIDE a 32-bit sum and replicated twice where both oracles reject a zero
+        // count — a loud that became a value (🆕 C review).
+        self.const_self_width(e, &ConstWidths::new()).is_some()
             && Self::const_fold_children(e)
                 .iter()
                 .all(|c| self.ast_selfwidths_all_known(c))

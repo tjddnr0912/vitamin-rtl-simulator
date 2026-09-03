@@ -361,6 +361,37 @@ fn ast_contains_reduction(e: &ast::Expr) -> bool {
 }
 
 impl Elaborator<'_> {
+    /// An UNTYPED parameter whose initializer CONTAINS an unsized fill: its value at
+    /// the initializer's own self-determined width, with the `(width, signed)` an
+    /// implicit declaration takes from it (§6.20.2) — ROADMAP §2 🆕 C ⓐ.
+    ///
+    /// `localparam U = '1 ^ 1'b0;` was 4294967295 with `$bits` 33 where both oracles
+    /// give 1 with `$bits` 1: the unlimited i64 walk read the fill through
+    /// `parse_int_literal`, whose fill is the lane's hard 32. §5.7.1 sizes a fill to
+    /// its context, and an implicit parameter's context is the initializer itself —
+    /// so the width-aware walk (`const_int_selfdet`, which now knows a fill has no
+    /// width of its own) is the evaluator, and its self width is the recorded one.
+    /// Only initializers that contain a fill take this route: every other implicit
+    /// initializer keeps the tail it has (the declared-vs-inferred wall, row 14).
+    /// `None` when there is no fill, or the walk declines (x/z fill, >64 bits) — the
+    /// caller's chain then answers as before.
+    pub(crate) fn untyped_fill_init(&self, p: &ast::ParamDecl) -> Option<(i64, (u32, bool))> {
+        if !matches!(p.ty, ast::ParamType::Implicit) || p.range.is_some() {
+            return None;
+        }
+        if !ast_any(&p.value, &|x| {
+            crate::const_eval::fill_literal_ast(x).is_some()
+        }) {
+            return None;
+        }
+        let v = self.const_int_selfdet(&p.value)?;
+        let w = self
+            .const_self_width(&p.value, &ConstWidths::new())
+            .unwrap_or(0)
+            .max(1);
+        Some((v, (w, self.const_expr_signed(&p.value))))
+    }
+
     /// An UNTYPED parameter whose initializer this slice would newly fold, but only
     /// into a consumer that is known to size it wrong — kept LOUD instead.
     ///
@@ -389,6 +420,17 @@ impl Elaborator<'_> {
     /// predicate goes with it.
     pub(crate) fn param_init_kept_loud(&self, p: &ast::ParamDecl) -> bool {
         if !matches!(p.ty, ast::ParamType::Implicit) || p.range.is_some() {
+            return false;
+        }
+        // An initializer holding a FILL takes `untyped_fill_init` — the width-aware
+        // walk at the initializer's own region width, which is exactly the evaluator
+        // this guard exists to keep the unlimited walk from standing in for. With a
+        // fill's self width at 0, `'1 & (|4'hF)` read as a 1-bit context-determined
+        // top and this guard refused a value PRE printed correctly (both oracles
+        // `1`/`1`) — review finding, §4.5.409.
+        if ast_any(&p.value, &|x| {
+            crate::const_eval::fill_literal_ast(x).is_some()
+        }) {
             return false;
         }
         let mut top = &p.value;

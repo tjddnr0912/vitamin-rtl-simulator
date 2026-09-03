@@ -561,7 +561,11 @@ impl Elaborator<'_> {
                         // instantiation override channel — the default binds.
                         let meta = self.param_decl_width_unoverridden(p);
                         let folded = (!self.param_init_kept_loud(p))
-                            .then(|| self.eval_param_init(&p.value, meta.map(|(w, _)| w)))
+                            .then(|| {
+                                self.untyped_fill_init(p).map(|(v, _)| v).or_else(|| {
+                                    self.eval_param_init(&p.value, meta.map(|(w, _)| w))
+                                })
+                            })
                             .flatten()
                             .or_else(|| self.param_value_via_real(meta, &p.value))
                             .or_else(|| {

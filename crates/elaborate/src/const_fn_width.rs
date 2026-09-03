@@ -115,6 +115,14 @@ impl Elaborator<'_> {
     pub(crate) fn const_self_width(&self, e: &ast::Expr, envw: &ConstWidths) -> Option<u32> {
         use ast::ExprKind as K;
         match &e.kind {
+            // §5.7.1: an unsized fill (`'0`/`'1`/`'x`/`'z`) has NO width of its own —
+            // it is replicated to the context's. Zero is what every consumer of this
+            // table reads as "takes the context" (`max` with a sibling, `w > 0` guards,
+            // `ctx_w == 0` ⇒ no masking); `parse_int_literal`'s 32 is the i64 lane's
+            // container size and reported `$clog2('1)` as 32 where both oracles say 0
+            // (ROADMAP §2 🆕 C). A lone fill evaluates at one bit — see the leaf arm
+            // in `eval_const_env_at`.
+            K::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => Some(0),
             K::IntLit { kind, raw } => parse_int_literal(raw, *kind).map(|c| c.width),
             K::Paren { inner } => self.const_self_width(inner, envw),
             // A local/formal's declared width, else a module param's, else the
@@ -348,6 +356,17 @@ impl Elaborator<'_> {
         match &e.kind {
             K::Paren { inner } => {
                 self.eval_const_env_at(inner, env, envw, depth, ctx_w, ctx_signed)
+            }
+            // §5.7.1: a fill is the fill bit replicated to the CONTEXT width — `ctx_w`
+            // here is the region width the parent computed as `max(ctx, every
+            // self-determined sibling)`, so `4'd8 - '1` sees a 4-bit all-ones (both
+            // oracles 9) and a lone fill in a self-determined position (`$clog2('1)`,
+            // `'1 >> 1`, `localparam U = '1;`) is ONE bit. Before this arm the leaf
+            // fell to the plain twin's `const_eval_i64_lit`, whose fill is the i64
+            // lane's hard 32 (ROADMAP §2 🆕 C). An x/z fill declines (no unknown
+            // plane here), which is the loud the callers already had.
+            K::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
+                crate::const_eval::fill_to_i64(*kind, raw, ctx_w.max(1))
             }
             K::Unary {
                 op: op @ (ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot),
@@ -629,7 +648,15 @@ impl Elaborator<'_> {
         envw: &ConstWidths,
         depth: u32,
     ) -> Option<i64> {
-        let w = self.const_self_width(e, envw).unwrap_or(0);
+        // `Some(0)` is a region made ONLY of unsized fills (`'1 + '1`): §5.7.1 gives
+        // each fill its context, and with no sibling and no context that is one bit —
+        // both oracles fold `{('1 + '1){8'hA5}}` to a zero count and reject it. `None`
+        // is an UNKNOWN width and keeps the unlimited walk (ctx 0), as before.
+        let w = match self.const_self_width(e, envw) {
+            Some(0) => 1,
+            Some(w) => w,
+            None => 0,
+        };
         let sg = self.const_signed_env(e, envw);
         self.eval_const_env_at(e, env, envw, depth, w, sg)
     }

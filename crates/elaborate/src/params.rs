@@ -249,6 +249,15 @@ impl Elaborator<'_> {
             // initializer keeps the value-inferred width — None.
             // Peel `(...)` and a leading unary `-`/`+` to reach the inner literal —
             // that tells us the SIGNEDNESS (a `-`/`+` preserves the operand's sign).
+            // 🆕 C ⓐ: an initializer holding an unsized fill is sized by the fill's
+            // context — the initializer itself — before any literal arm reads the
+            // parser's 32-bit container for it. `default_binds` only: an override
+            // replaces the initializer, type and all (§6.20.2).
+            if default_binds {
+                if let Some((_, meta)) = self.untyped_fill_init(p) {
+                    return Some(meta);
+                }
+            }
             let mut e = &p.value;
             loop {
                 match &e.kind {
@@ -1364,9 +1373,22 @@ impl Elaborator<'_> {
                 // from the folded value. Asking `param_decl_width` first put the
                 // inference ahead of the override — it answers 35 for `{2{32'd4}}` (the
                 // value's minimal signed width) and never reached the override's 64.
-                self.param_decl_width_declared_overridden(p)
-                    .or_else(|| ovr_bits.map(|c| (c.width, c.signed)))
-                    .or_else(|| self.param_decl_width(p))
+                // 🆕 C ⓓ: a FILL override of an implicit, rangeless parameter has the
+                // fill's own type — one unsigned bit (§5.7.1 in a self-determined
+                // position, §6.20.2 for the parameter): `-G U='1` binds 1 with `$bits`
+                // 1 in verilator (iverilog cannot spell the override) whatever the
+                // default literal was, where the chain below sized it from the DEFAULT
+                // and bound −1 at 32 bits. A declared type or range still wins.
+                if matches!(p.ty, ast::ParamType::Implicit)
+                    && p.range.is_none()
+                    && ovr_fill.contains_key(p.name.name.as_str())
+                {
+                    Some((1, false))
+                } else {
+                    self.param_decl_width_declared_overridden(p)
+                        .or_else(|| ovr_bits.map(|c| (c.width, c.signed)))
+                        .or_else(|| self.param_decl_width(p))
+                }
             };
             let pw = meta.map(|(w, _)| w);
             // A fill-literal override re-folds at THIS param's declared width.
@@ -1385,6 +1407,11 @@ impl Elaborator<'_> {
                 .or_else(|| {
                     if self.param_init_kept_loud(p) {
                         return None;
+                    }
+                    if default_binds {
+                        if let Some((v, _)) = self.untyped_fill_init(p) {
+                            return Some(v);
+                        }
                     }
                     self.eval_param_init(&p.value, pw)
                 })
