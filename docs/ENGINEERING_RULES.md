@@ -3336,3 +3336,83 @@ and two probes produced it.
 Naming a known imprecision is good; bounding its consequences in the same breath is a
 measurement, and I did not run it. If the bound is worth writing, it is worth building the
 design that tests it — see [[a-comment-saying-cannot-is-a-claim-to-measure]].
+
+## Row 30 — a fill's width, and three rounds of fixing my own fix (2026-09-03 · §4.5.406)
+
+An unsized fill (`'0`/`'1`) is context-determined, and vita's constant folder gave it a
+hard 32. The fix is four small pieces and it works — 165 of a 264-cell census, 778 of the
+review lenses' 1,622, zero regressions on its own axis. It was reverted anyway. Every
+lesson below came out of that gap between "works" and "shippable".
+
+### A context width is not the leaf's width
+
+§11.6.1 evaluates a context-determined operand at `max(the context, EVERY self-determined
+operand's width)`. Handing the LEAF the context and letting it freeze there is wrong the
+moment a sibling is wider: the operator above computes the real width and extends the
+frozen value — with ZEROS, because a fill is unsigned — and the bits it should have had
+are gone. `localparam logic [7:0] M = ('1 & 32'hff00) >> 8;` is `ff` in both oracles and
+became `00`; `~('1 & 32'hff00) >> 8` was an honest `E3009` and became a silent `ff`.
+150 cells. Both lenses found it independently, and neither the 264-cell census nor the
+"byte-identity" argument saw it, because **every form in that census paired the fill with
+a one-bit sibling**. A census's band is a property of its operands, not of the defect —
+widen the OTHER operand on every axis before believing a boundary. Same blindness made
+"width 32 and below is already correct" false: `logic [7:0] A = '1 >> 2` is `ff` and both
+oracles say `3f`, 82 more cells at widths 1..31.
+
+### A routing gate and a soundness guard need different predicates
+
+They fail in opposite directions. A routing gate that over-reports costs nothing — the
+fold declines and the chain continues. A guard whose decline is a LOUD cannot over-report
+at all. Reusing one predicate for both put a fill in a SELF-determined position (a shift
+count) into the guard's hazard set, where it never belonged, and declined folds the
+pre-slice build performed correctly: 104 NEW-LOUD, in all four binder copies. The guard's
+predicate has to be read off the walk's own arms — which operand does this arm fold at a
+non-zero `ctx`? — and nothing else. Related: [[predicate-must-be-guaranteed-by-the-walk]].
+
+### "Declining is always safe" is a claim about the CHAIN, and it must be censused
+
+The argument was "every caller reaches this fold as one link of an `or_else` chain whose
+next link is the pre-slice route". Measured false: `param_bits_at_declared` is reached
+through `param_i64_at_declared`, which is the **LAST** link of every binder chain — its
+`None` goes to `param_value_unfoldable`, i.e. `E3009`. Before writing "a decline is free",
+walk each caller to the END of its chain and say what is there. A decline is only free
+where the pre-slice fold would have declined too.
+
+### Count the loud → value cells separately; a pre-existing silent beneath them is yours
+
+The accuracy ladder forbids trading a loud for a silent-wrong, and OPENING a fold's accept
+set is exactly that trade whenever the newly-reachable computation is already wrong for
+another reason. Of the 504 cells this slice converted from loud to a value, **215 were
+silently wrong on the SIGN axis**: `localparam logic [7:0] B = ($signed(4'hF) + 1) | 8'h00;`
+is `00` against both oracles' `10` **with no fill anywhere, before and after alike**,
+because `fold_bits_at` decides an expression's sign node-locally (`sg = ls && rs`) where
+§11.8.1 makes the whole region unsigned if ANY operand is. The slice did not create it; it
+removed the loud standing over it. So: a fill-free CONTROL for every axis the new cells
+touch, and the loud→value column counted on its own.
+See [[removing-a-loud-gate-exposes-what-it-masked]].
+
+### Three rounds of blockers, all in my own fixes, means the axis — stop and separate
+
+Round 1's defect was in the slice; round 2's was in round 1's fix; round 3's was in round
+2's fix and landed on a different axis, in shared code the slice only ROUTES into, that
+predates it. That is the stop signal, and the answer is not a fourth fix: revert, ship the
+part that separates, and write the prerequisite into the queue line. Here the separable
+part was the shift COUNT (a fill there is one bit, §5.7.1 + §11.4.10) — it needs no width
+and no sign context, every cell it moves already had a wrong number, and it fixed 288 of an
+880-cell census with nothing turning from loud into a value.
+See [[three-blockers-on-one-axis-means-stop]].
+
+### A predicate that promises to cost nothing has to be measured saying so
+
+"A literal `false` for every design without a fill" was true of the ANSWER and false of the
+cost: the predicate opened by delegating to a whole-subtree walk and then recursed, so it
+re-walked the subtree at every node. A **fill-free** 8,000-term initializer went 0.31 s to
+1.26 s, superlinear (3.2x per doubling against a linear 2x). Grep any predicate that calls
+a whole-tree helper and then recurses.
+
+### Freeze the binary, and if you unfreeze it, say so
+
+Two review rounds in a row were handed a stale artifact because the tree moved after the
+snapshot, and both times a lens opened its report with that instead of with a finding.
+Snapshot, record the hash, and if a blocking fix lands mid-round, re-freeze and tell the
+lenses which binary their numbers describe. See [[freeze-the-binary-for-a-review]].
