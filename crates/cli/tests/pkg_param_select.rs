@@ -347,19 +347,31 @@ fn shapes_that_stay_loud() {
                initial begin $display(\"BITS=%0d\", $bits(v)); $finish; end\n\
              endmodule\n",
         ),
-        (
-            // A package const ARRAY element in a width — `const_array_vals_of_base`
-            // owns this shape and the new arm refuses it, as the module-scope arm
-            // does. iverilog rejects unpacked array parameters outright.
-            "package const array element",
-            "package pk; parameter int ROT [0:3] = '{10,20,52,40}; endpackage\n\
-             module top; logic [pk::ROT[2]-1:0] v;\n\
-               initial begin $display(\"BITS=%0d\", $bits(v)); $finish; end\n\
-             endmodule\n",
-        ),
     ] {
         let (out, c) = run(src);
         assert_ne!(c, Some(0), "{what} should stay loud:\n{out}");
+    }
+}
+
+/// A package const ARRAY element in a width — `const_array_vals_of_base` owns
+/// this shape (GAP-G), and the select arm refuses it so the two cannot disagree.
+/// Until §4.5.411 this case sat in `shapes_that_stay_loud`, but what was loud was
+/// the PARSER's reject of a package `parameter` array (an overridable-parameter
+/// gate), not the const arm: with `localparam` the same design already answered
+/// 52 on the previous binary. IEEE §6.20.1 makes a package `parameter` a
+/// `localparam`, so both spellings now answer 52 (verilator 5.050: BITS=52;
+/// iverilog rejects unpacked array parameters outright).
+#[test]
+fn a_package_const_array_element_folds_in_a_width() {
+    for kw in ["parameter", "localparam"] {
+        let (out, c) = run(&format!(
+            "package pk; {kw} int ROT [0:3] = '{{10,20,52,40}}; endpackage\n\
+             module top; logic [pk::ROT[2]-1:0] v;\n\
+               initial begin $display(\"BITS=%0d\", $bits(v)); $finish; end\n\
+             endmodule\n"
+        ));
+        assert_eq!(c, Some(0), "{kw}:\n{out}");
+        assert!(out.contains("BITS=52"), "{kw}:\n{out}");
     }
 }
 

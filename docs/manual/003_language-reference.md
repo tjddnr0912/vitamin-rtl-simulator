@@ -166,6 +166,7 @@ end
 | `struct packed` | Yes |
 | `struct` (unpacked) | Rejected loud (packed structs only) |
 | `union packed` | Yes (overlay semantics; member reads/writes share storage) |
+| Array parameter of a struct/enum typedef `localparam st_t P[N] = '{ '{…}, … }` | Yes — 1-D, body `localparam` / package `parameter` or `localparam` / generate; element patterns positional, named or `default:`; read whole, by member, `$size`/`$bits`, `foreach`, `case`. Loud: ANSI-header array parameter, module-body `parameter` array, multi-dimensional, a member of an element inside a constant expression |
 | Dynamic arrays `int d[]` | Yes (`new[n]`, `new[n](src)`, `.size()`, `.delete()`, element r/w, whole-copy `b = a`) |
 | Associative arrays `int a[integer]` | Yes (signed-64 key domain; `.num()`/`.exists()`/`.delete()`/`.first()`/`.next()`, whole-copy) — key-type spellings other than `[integer]`/`[time]` are not parsed yet |
 | Queues `int q[$]`, bounded `[$:N]` | Yes (push/pop both ends, `.insert()`/`.delete()`, `q[$]`, bounded truncation, whole-copy `r = q`; the slice read `q[a:b]` is a loud reject) |

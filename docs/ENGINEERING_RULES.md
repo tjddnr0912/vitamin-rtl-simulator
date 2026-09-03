@@ -219,6 +219,29 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐ A queue row that names a KEYWORD as the blocker may be two blockers — read the LRM's context rule first (2026-09-04 · §4.5.411)
+
+- §3 ⑤ ⓒ was written as "an overridable array `parameter` (A2a is body `localparam` only), ibex_pkg.sv:791,
+  ibex_top overrides it" and priced as "the override channel for aggregates". Measured: the line the row
+  cites is INSIDE A PACKAGE, and IEEE §6.20.1 says a `parameter` declared in a package, a generate block,
+  a class body or at compilation-unit scope "shall be treated as a localparam" — nothing can override it.
+  That half was one context flag (`Parser::in_package`) and closed for free inside ⓑ; the real remainder
+  is the ANSI-header array parameter with a whole-array default (`#(parameter pkg::cfg_t C[N] = pkg::Rst)`),
+  which the row never named. **Before building the machinery a row prices, run the row's own line and ask
+  which LRM context it is in** — a keyword's meaning is context-dependent, and a reject gate keyed on the
+  keyword alone is over-rejecting in every context the LRM neutralises it.
+- The same slice re-learned two pins: a `shapes_that_stay_loud` case was loud because of the PARSER's
+  keyword reject, not the const arm it claimed to pin (with `localparam` the previous binary already
+  answered 52), and a "kept loud in v1" pin for the very shape the next slice builds. **A loud pin must
+  name the gate it measures, and the test for that gate is: change the spelling the gate does not key on
+  and see whether the pin still fails.** (§4.5.382's "a pin can pass for a different reason" — the
+  loud-side twin.)
+- A census cell's own HARNESS can be the loud: the generate-position cells put a `function` inside the
+  generate block, which vita defers loudly — 14 cells read "still-loud" for a reason unrelated to the
+  parameter, and the keyword control twin (also loud) could not tell, because it shared the harness.
+  **When a whole position column is loud, diff the cell's diagnostic text against the control's before
+  classifying** — the text named the function, not the parameter.
+
 ### ⭐⭐ "One rule opens the workload" is a measurement, and the control twin is what attributes a defect (2026-09-03 · §4.5.410)
 
 The queue said the ibex blocker was one parse rule (`localparam <typedef> X = …`) and that it

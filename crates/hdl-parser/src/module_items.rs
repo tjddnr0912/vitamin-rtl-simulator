@@ -144,30 +144,40 @@ impl Parser<'_, '_> {
         if let Some(pb) = self.pkg_bindings.get(&pkg.name).cloned() {
             let explicit = item.is_some();
             let wanted = |n: &str| item.as_ref().is_none_or(|i| i.name == n);
+            // The names whose `var_struct` binding THIS replay installed. The
+            // shape sets below follow it, never the type NAME alone: a local
+            // scalar `st_t P;` declared before `import p::*` (p exports `st_t
+            // P[2]`) has the same type key, and a name-keyed gate put that scalar
+            // into `struct_1d_array_vars` (review B3 — latent until a member can
+            // itself be a struct; it would have diverted the scalar `'{…}` to the
+            // per-element desugar).
+            let mut landed: std::collections::HashSet<String> = std::collections::HashSet::new();
             for (n, ty) in pb.var_struct.clone() {
                 if wanted(&n) {
                     if explicit {
                         self.var_struct.insert(n.clone(), ty);
                         self.wildcard_bound.remove(&n);
+                        landed.insert(n);
                     } else if !self.var_struct.contains_key(&n)
                         && !self.local_decl_names.contains(&n)
                     {
                         self.var_struct.insert(n.clone(), ty);
-                        self.wildcard_bound.insert(n);
+                        self.wildcard_bound.insert(n.clone());
+                        landed.insert(n);
                     }
                 }
             }
-            // The `'{…}` desugar set follows the binding that actually landed: a
+            // The `'{…}` desugar sets follow the binding that actually landed: a
             // name whose `var_struct` entry stayed someone else's (a local struct
-            // array, a union, an earlier import) is not made scalar-desugarable.
+            // array or scalar, a union, an earlier import) keeps its own shape.
             for n in pb.struct_scalar.clone() {
-                if wanted(&n)
-                    && self
-                        .var_struct
-                        .get(&n)
-                        .is_some_and(|t| pb.var_struct_ty(&n) == Some(t.as_str()))
-                {
+                if landed.contains(&n) {
                     self.struct_scalar_vars.insert(n);
+                }
+            }
+            for n in pb.struct_1d_array.clone() {
+                if landed.contains(&n) {
+                    self.struct_1d_array_vars.insert(n);
                 }
             }
             for (n, ty) in pb.var_enum {
@@ -363,8 +373,11 @@ impl Parser<'_, '_> {
 
     /// One body shared by `module…endmodule` and `interface…endinterface`
     /// (v5 ⑥): the header/body grammar is identical for the MVP subset.
-    pub(crate) fn parse_module_like(&mut self, _start_kw: Kw, end_kw: Kw) -> Option<ModuleDecl> {
+    pub(crate) fn parse_module_like(&mut self, start_kw: Kw, end_kw: Kw) -> Option<ModuleDecl> {
         let start = self.cur_span();
+        // Packages never nest, and every module-like resets this, so a body that
+        // fails to parse cannot leak `true` into the next module.
+        self.in_package = start_kw == Kw::Package;
         // Variable→struct bindings are module-scoped (type *names* are not).
         self.var_struct.clear();
         self.var_unpacked_struct.clear();
@@ -639,6 +652,9 @@ impl Parser<'_, '_> {
             let mut ss: Vec<&String> = self.struct_scalar_vars.iter().collect();
             ss.sort();
             pb.struct_scalar = ss.into_iter().cloned().collect();
+            let mut sa: Vec<&String> = self.struct_1d_array_vars.iter().collect();
+            sa.sort();
+            pb.struct_1d_array = sa.into_iter().cloned().collect();
             let mut ve: Vec<(String, String)> = self
                 .var_enum
                 .iter()

@@ -521,9 +521,14 @@ impl Parser<'_, '_> {
                     }
                 } else if n.unpacked.len() == 1 && !is_union {
                     // A 1-D array of struct (`st_t arr[N]`): `arr[i] = '{…}` is a
-                    // packed-struct pattern on the element. Multi-dim arrays stay
-                    // loud (the indexed lvalue would be a nested BitSelect).
+                    // packed-struct pattern on the element, and a decl-init
+                    // `= '{ '{…}, … }` is one per element (§3 ⑤ ⓑ). Multi-dim
+                    // arrays stay loud (the indexed lvalue would be a nested
+                    // BitSelect).
                     self.struct_1d_array_vars.insert(n.name.name.clone());
+                    if let Some(init) = n.init.take() {
+                        n.init = Some(self.desugar_struct_array_init(&tyname, init));
+                    }
                 }
             }
         }

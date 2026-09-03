@@ -143,6 +143,56 @@ impl Parser<'_, '_> {
         }
     }
 
+    /// §3 ⑤ ⓑ: desugar the init/rhs of a 1-D array of a PACKED STRUCT
+    /// (`st_t A[N] = '{ '{…}, … }`, a `localparam st_t P[N] = …`, or a whole-array
+    /// `A = '{…}`): every OUTER element that is itself a `'{…}` becomes the same
+    /// field-width concat `A[i] = '{…}` desugars to (`build_struct_pattern_concat`,
+    /// keyed or positional), leaving an outer pattern of packed element VALUES the
+    /// unpacked-array init/assign path already lowers. A non-pattern element (a
+    /// struct-typed constant, a packed literal) is left untouched, exactly as
+    /// `A[i] = expr` is. The keyed outer form is walked the same way so
+    /// `'{default: '{…}}` (§10.9.1) reaches elaborate's `'{default: v}` arm with a
+    /// packed `v`; an outer member key on an ARRAY is not touched (loud downstream).
+    /// Anything that is not a pattern returns unchanged (byte-identical).
+    pub(crate) fn desugar_struct_array_init(&mut self, tyname: &str, e: Expr) -> Expr {
+        let span = e.span;
+        match e.kind {
+            ExprKind::AssignPattern(elems) => {
+                let parts = elems
+                    .into_iter()
+                    .map(|el| {
+                        if Self::is_assign_pattern(&el) {
+                            self.build_struct_pattern_concat(tyname, el)
+                        } else {
+                            el
+                        }
+                    })
+                    .collect();
+                Expr {
+                    kind: ExprKind::AssignPattern(parts),
+                    span,
+                }
+            }
+            ExprKind::AssignPatternKeyed(keyed) => {
+                let keyed = keyed
+                    .into_iter()
+                    .map(|(k, v)| {
+                        if Self::is_assign_pattern(&v) {
+                            (k, self.build_struct_pattern_concat(tyname, v))
+                        } else {
+                            (k, v)
+                        }
+                    })
+                    .collect();
+                Expr {
+                    kind: ExprKind::AssignPatternKeyed(keyed),
+                    span,
+                }
+            }
+            kind => Expr { kind, span },
+        }
+    }
+
     /// IEEE §10.9.1/§10.9.2 packed-struct assignment pattern. When `rhs` is
     /// `'{e0,…,eN}` (or the keyed `'{name: v, …, default: v}`, first normalized to
     /// declaration order by `keyed_struct_pattern_to_positional`)
@@ -408,9 +458,16 @@ impl Parser<'_, '_> {
             return rhs;
         }
         match lhs {
-            // Whole scalar struct variable `s = '{…}`.
+            // Whole scalar struct variable `s = '{…}`, or a whole 1-D struct
+            // array `arr = '{ '{…}, … }` (§3 ⑤ ⓑ — per-element, same helper as
+            // the decl-init).
             Lvalue::Ident(p) if p.segments.len() == 1 => {
                 let nm = p.segments[0].name.clone();
+                if self.struct_1d_array_vars.contains(&nm) {
+                    if let Some(tyname) = self.var_struct.get(&nm).cloned() {
+                        return self.desugar_struct_array_init(&tyname, rhs);
+                    }
+                }
                 self.desugar_struct_assign_pattern(&nm, rhs)
             }
             // 1-D struct-array element `arr[i] = '{…}`: the base must be a plain

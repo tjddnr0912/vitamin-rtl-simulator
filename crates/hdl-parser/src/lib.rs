@@ -272,18 +272,13 @@ struct PkgBindings {
     var_struct: Vec<(String, String)>,
     /// Names eligible for the scalar `'{…}` pattern desugar (non-union, no dims).
     struct_scalar: Vec<String>,
+    /// Names that are a 1-D array of a struct (`arr[i].member` / `arr[i] = '{…}`
+    /// desugar) — the array twin of `struct_scalar`, replayed under the same
+    /// landed-binding gate.
+    struct_1d_array: Vec<String>,
     /// `(name, "pkg::e")` for every enum-typed variable/parameter.
     var_enum: Vec<(String, String)>,
 }
-impl PkgBindings {
-    fn var_struct_ty(&self, n: &str) -> Option<&str> {
-        self.var_struct
-            .iter()
-            .find(|(k, _)| k == n)
-            .map(|(_, t)| t.as_str())
-    }
-}
-
 /// A snapshot of the parser's lexically-scoped registries, used to give a
 /// procedural block its own scope: snapshotted at the block's first body-local
 /// typedef DEFINITION or struct/enum-typed VAR declaration and restored when the
@@ -522,6 +517,11 @@ pub struct Parser<'t, 's> {
     /// BTreeMap (not HashMap) so the module-end injection order is DETERMINISTic
     /// (3-OS byte-identical golden — never iterate a HashMap into the AST).
     pending_enum_name_fns: std::collections::BTreeMap<String, FunctionDef>,
+    /// True while parsing a `package … endpackage` body. IEEE §6.20.1: a
+    /// `parameter` declared in a package is treated as a `localparam` (a package
+    /// is never instantiated, so nothing can override it) — the A2a array-parameter
+    /// path reads this to accept `parameter T X[N] = '{…}` there.
+    in_package: bool,
 }
 
 /// One enclosing-loop entry for `break`/`continue` desugar. The labels name the
@@ -568,6 +568,7 @@ impl<'t, 's> Parser<'t, 's> {
             pkg_bindings: std::collections::HashMap::new(),
             wildcard_bound: std::collections::HashSet::new(),
             local_decl_names: std::collections::HashSet::new(),
+            in_package: false,
             pending_enum_name_fns: std::collections::BTreeMap::new(),
         }
     }

@@ -436,6 +436,76 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.411 — An array parameter of a struct/enum typedef; a package `parameter` array is a localparam (§3 ⑤ ⓑ + ⓒ package half) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round (differential 61 designs + a 659-file PRE/POST sweep · soundness 4 findings, 1 fixed on the delta and re-scored with the lens's own designs) · corpus 10/10)
+
+**The rung.** ibex_pkg.sv:769 `parameter pmp_cfg_t PmpCfgRst[PMP_MAX_REGIONS] = '{ '{lock: 1'b0,
+mode: PMP_MODE_OFF, …}, … }` — the A2a array-parameter path rejected a struct/enum typedef prefix
+("needs the per-element pattern desugar the A2a path does not do"). Measured at HEAD with three
+tools: every struct/enum-typed array parameter loud; verilator 5.050 the sole oracle (iverilog 13.0:
+"sorry: unpacked array parameters are not supported yet", and no keyed pattern at all). The
+keyword-spelled control twins exposed the shape of the work: the VARIABLE twin `cfg_t V[2] = '{'{…},…}`
+was loud too (E3009, keyed or positional), and so was a whole-array `V = '{'{…},…}` — the variable
+side had the element assign `V[i] = '{…}` and nothing else.
+
+**What was built (parser only, 5 files).** `parse_array_param` accepts a struct/enum typedef prefix:
+a 1-D struct array binds the name exactly as `parse_typed_decl` binds the variable (`var_struct` +
+`struct_1d_array_vars`, so `P[i].member` and `P[i] = '{…}` desugar) and its init goes through the new
+`desugar_struct_array_init` — every outer element that is itself a `'{…}` (keyed or positional)
+becomes the field-width concat `build_struct_pattern_concat` already produces for `V[i] = '{…}`;
+non-pattern elements (a packed literal, a struct-typed constant) pass untouched; a keyed OUTER
+pattern has its values desugared and its keys left to elaborate's `'{default: v}` array arm. A union
+array binds the type only (as the variable does); a multi-dimensional struct array is a loud parse
+error; an enum typedef array binds `var_enum`. The typedef's folded signedness is passed as the
+explicit one. The same helper closes the variable decl-init (`parse_typed_decl`) and the whole-array
+procedural rhs (`maybe_struct_pattern_rhs`, `Lvalue::Ident` arm). `PkgBindings` carries
+`struct_1d_array` across `import p::*` / `import p::X`, gated on the names THIS replay bound
+(`landed`), not on the type name. `Parser::in_package` (set in `parse_module_like`) lets a
+package `parameter` array through — IEEE §6.20.1: a parameter in a package, generate block, class or
+CU scope is a localparam — which closed ibex_pkg.sv:791 (§3 ⑤ ⓒ's package half) for free; a
+module-body `parameter` array stays loud.
+
+**Census 230 cells** (12 typedef shapes — 4-state/2-state/enum-member/signed-member/signed-struct
+struct, enum, union, keyed/positional/mixed/default/fill/unsized elements — × {body localparam,
+body parameter, package parameter/localparam × wildcard/explicit/scoped import, generate, variable
+decl-init, whole-array assign, package variable, constant contexts} + dims `[N]`/`[N-1:0]`/`[0:N-1]`,
+outer default, comma list, multi-dim, wildcard shadow both orders, element as override, bad
+patterns; a keyword-spelled control twin per position): **114 loud→correct · 34 unchanged-correct
+· 0 silent · 0 regression · 80 still-loud · 2 no-oracle** (bad patterns, loud everywhere). The
+still-loud cells are §3 ⑤ ⓒ's header half (module-body `parameter`), constant-context consumers of
+an ELEMENT (a member/select of an element, `$size(P)` in a constant, generate-if on `P[j].a`,
+`p::P[1]` in a constant — the keyword twin `A[1][4:0]` is loud too, a pre-existing A2a class → §3 ⑤
+ⓔ), and elements whose desugared concat has no const-fold arm (fill, 2-state — §2 🆕 L ⓓ ⓔ);
+runtime reads of all of those are right. Examples 12 files byte-identical PRE/POST; corpus 10/10 no
+grade change.
+
+**Review.** Differential (61 designs; N=1/2/16, 76- and 136-bit structs, expression and
+cross-reference elements, five dimension spellings, `$size/$high/$low/$left/$right/$dimensions`,
+write side on const and variable, import carry across two packages and package-imports-package,
+enum arrays, signedness, 2-state and packed-array members, the 16-element ibex shape end-to-end
+with a submodule port): CLEAN, POST == verilator on every parseable cell; a 659-file PRE/POST sweep
+of every `.sv` in the repo differs only on the intended `ibex_pkg.sv` (5 errors → 1). Soundness:
+**B1** the briefing's byte-identity premise was false — passing the typedef's signedness as explicit
+changed every NON-struct typedef array parameter whose typedef spelled `signed`/`unsigned`:
+`typedef bit signed [3:0] tb2; localparam tb2 B[1] = '{4'hF}` read 15 (verilator −1), `typedef
+shortint unsigned … '{16'hFFFF}` read −1 (65535), `reg signed [7:0] … 8'hF0` 240 (−16), `longint
+unsigned` −1 (18446744073709551615), `byte unsigned` −1 (255) — PRE took the KEYWORD's default sign
+and ignored the typedef's; POST == verilator on all nine columns, the variable twin was already
+right. A pre-existing silent-wrong closed by the same change, pinned. **B3** the import replay gated
+the shape sets on the type NAME, so a local scalar `st_t P;` before `import p::*` (p exports `st_t
+P[2]`) landed in `struct_1d_array_vars` — latent (only observable once a member can be a struct),
+fixed on the delta with the `landed` set and re-scored with the lens's designs. **B9** a package with
+no `endpackage` leaks `in_package` (harmless by §6.20.1, recorded). **B10** function/task-local struct
+arrays still loud (pre-existing). Two pins moved from "loud" to a value: `pkg_param_select`'s
+package-array cell was loud because of the PARSER's keyword reject, not the const arm it claimed
+(with `localparam` PRE already answered 52), and `typed_param_user_type`'s "array parameter of a
+struct typedef stays loud" was this rung.
+
+**The ibex ladder after this rung** (`bench/ibex/vitarun.sh`): `ibex_pkg.sv` is down to one line —
+742, the multi-dimensional packed typedef parameter (§3 ⑤ ⓐ) — then `ibex_cheriot_pkg.sv`'s nested
+packed structs (ⓓ). ⓒ's real remainder is the ANSI-header array parameter with a whole-array default
+(`#(parameter ibex_pkg::pmp_cfg_t PMPRstCfg[PMP_MAX_REGIONS] = ibex_pkg::PmpCfgRst)`, ibex_top:22).
+Tests 6,498 → 6,514 (`crates/cli/tests/struct_array_param.rs`).
+
 #### 4.5.410 — A parameter typed by a user typedef; the ibex ladder re-measured (§3 ⑤) (2026-09-03 · format 29 unchanged · adversarial review: 2 lenses × 3 rounds (differential 55 designs · soundness 45 designs + a TypeInfo producer census · 9 findings fixed, each re-verified on the delta — the last two with the lenses' own harnesses, 152 designs re-scored) · corpus 10/10)
 
 **The row was one rule; the workload is five.** `parse_param_prefix` accepted only keyword

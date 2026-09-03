@@ -11,6 +11,19 @@ changed for a user of the simulator.
 
 ### Added
 
+- **An array parameter of a struct or enum typedef.** `localparam pmp_cfg_t PmpCfgRst[16] =
+  '{ '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, … };` (the ibex PMP
+  reset table) — positional or named element patterns, `'{default: v}` inside an element, an
+  outer `'{default: '{…}}`, a packed literal or a struct-typed constant as an element, `[N]` /
+  `[N-1:0]` / `[0:N-1]` dimensions, a comma list, a generate block, and a package (`parameter` or
+  `localparam`, read through `import p::*`, `import p::X` or `p::X[i]`). Elements read whole,
+  by member (`P[i].mode`, constant or runtime index), in `$size`/`$bits`, `foreach`, `case`
+  items, as a function actual and as an instance override value. The same per-element desugar
+  now applies to a struct-array VARIABLE's `= '{ '{…}, … }` declaration initializer and to a
+  whole-array `V = '{ '{…}, … }` assignment, both previously rejected. A `parameter` array
+  inside a PACKAGE is accepted (IEEE §6.20.1: it is a `localparam` there); a module-body
+  `parameter` array, an ANSI-header array parameter, a multi-dimensional struct array parameter
+  and a member/select of an element inside a CONSTANT expression stay loud.
 - **A parameter or localparam may be typed by a user `typedef`.** `localparam exc_cause_t
   E = '{irq_ext: 1'b1, irq_int: 1'b0, lower_cause: 5'd3};`, `parameter lfsr_seed_t S =
   32'hac53_3bf4;`, `localparam p::u Q = 6'd9;` — in a module body, a package, a generate

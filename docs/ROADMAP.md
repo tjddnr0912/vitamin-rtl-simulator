@@ -1040,25 +1040,53 @@
 > agrees on every cell it parses. Two pre-existing silent-wrongs the census exposed on the KEYWORD
 > spelling were fixed in the same slice (§2 rows 🆕 K ⓐ ⓑ, RESOLVED).
 >
-> **The ibex ladder after this rule (HEAD 3-tool, `bench/ibex/vitarun.sh`)** — `ibex_pkg.sv` is down to
-> three lines, then `ibex_cheriot_pkg.sv` (45 diagnostics, the cap):
+> **The ibex ladder after this rule (HEAD 3-tool, `bench/ibex/vitarun.sh`)** — after §4.5.411
+> `ibex_pkg.sv` is down to ONE line (742), then `ibex_cheriot_pkg.sv` (45 diagnostics, the cap):
 > ⓐ `ibex_pkg.sv:742` **a multi-dimensional packed typedef on a parameter** (`typedef logic
 > [LfsrWidth-1:0][$clog2(LfsrWidth)-1:0] lfsr_perm_t; parameter lfsr_perm_t X = {160'h…};`, 7 uses) —
 > loud by design: a scalar `ParamDecl` has one range, flattening would turn `X[i]` into one bit. Needs
 > a packed-dims carrier for parameters (elaborate side; no AST field without a format bump — the A2a
 > `ConstArrayVar` desugar is the precedent, but a header `parameter` must stay overridable).
-> ⓑ `ibex_pkg.sv:769` **an array parameter of a struct typedef with nested patterns** (`parameter
-> pmp_cfg_t PmpCfgRst[PMP_MAX_REGIONS] = '{ '{lock: 1'b0, mode: PMP_MODE_OFF, …}, … }`) — loud: the
-> A2a array path has no per-element struct desugar (`build_struct_pattern_concat` per outer element,
-> as `desugar_record_array_init` already does for records).
-> ⓒ `ibex_pkg.sv:791` **an overridable array `parameter`** (`parameter logic [PMP_ADDR_MSB:0]
-> PmpAddrRst[PMP_MAX_REGIONS] = '{…}`) — loud (A2a v1: body `localparam` only; the override channel
-> for aggregates is the missing piece, and ibex_top overrides it).
+> ⓑ ~~`ibex_pkg.sv:769` an array parameter of a struct typedef with nested patterns~~ ✅ **RESOLVED
+> (§4.5.411)** — `parse_array_param` binds a 1-D struct-typed array parameter like the variable
+> (`var_struct` + `struct_1d_array_vars`) and `desugar_struct_array_init` desugars each outer `'{…}`
+> element; enum typedef arrays bind `var_enum`; the same helper closed the VARIABLE twin's decl-init
+> and whole-array `V = '{'{…},…}` (both pre-existing loud) and the 1-D struct-array binding crosses
+> `import p::*`/`import p::X`. Census 230 cells (12 typedef shapes × {body localparam/parameter,
+> package parameter/localparam × wildcard/explicit/scoped, generate, variable decl-init, whole-array
+> assign, package variable, const contexts} + dims/default/comma/shadow/override cells, a
+> keyword-spelled control twin per position): 114 loud→correct · 34 unchanged · 0 silent · 0
+> regression; verilator sole oracle (iverilog: "unpacked array parameters are not supported yet").
+> ⓒ **split in two by §4.5.411.** The PACKAGE half — `ibex_pkg.sv:791 parameter logic
+> [PMP_ADDR_MSB:0] PmpAddrRst[PMP_MAX_REGIONS] = '{…}` — is ✅ **RESOLVED**: IEEE §6.20.1 makes a
+> package `parameter` a `localparam` (nothing can override it), so `parse_array_param` accepts it
+> under the new `Parser::in_package` flag (a module-body `parameter` array stays loud). The real
+> remainder is the HEADER half: `module ibex_top #(parameter ibex_pkg::pmp_cfg_t
+> PMPRstCfg[PMP_MAX_REGIONS] = ibex_pkg::PmpCfgRst, parameter logic [PMP_ADDR_MSB:0]
+> PMPRstAddr[PMP_MAX_REGIONS] = ibex_pkg::PmpAddrRst, …)` (ibex_top.sv:22-23, ibex_core:22,
+> ibex_cs_registers:26, ibex_lockstep:17) — an ARRAY parameter in the ANSI `#(…)` header, with
+> a whole-array default (`= pkg::Rst`) and an instance override channel for aggregates. Loud
+> today ("an array parameter is supported only as a body `localparam`").
+> ⓔ **constant-context consumers of an array-parameter ELEMENT** (pre-existing A2a class, loud on
+> the keyword spelling too — `logic [5:0] A[2]`): a member/select of an element in a constant
+> (`localparam int X = P[1].b;` / `A[1][4:0]`), `$size(P)` in a constant (module or package), a
+> generate-if on `P[j].a`, a scoped element `p::P[1]` in a constant, and a whole element whose
+> desugared concat has no const-fold arm (a fill member `'{a: '1, …}` = §2 🆕 L ⓔ, a 2-state struct =
+> 🆕 L ⓓ) — all "is not a constant"; the runtime reads are right. Also loud, variable twin
+> identical: an enum method on an element (`E[1].name()`), a union element's member (`U[1].w`), a
+> multi-dimensional struct array, a scoped member `p::P[1].mode` (🆕 L ⓗ), a continuous `assign
+> V = '{'{…},…}` to a whole struct array, a function/task-local struct array decl-init, and a
+> compilation-unit-scope `typedef`/array parameter. Review residue (§4.5.411): a `package` whose body
+> never reaches `endpackage` leaves the parser's `in_package` flag set for what follows at CU scope
+> (harmless — a CU-scope `parameter` is a localparam by the same §6.20.1 — but an error-recovery
+> leak); `import p1::*; import p2::P;` reads p2's `P` (vita = iverilog on the scalar twin; verilator
+> takes p1's, disqualified by its own scalar answer).
 > ⓓ `ibex_cheriot_pkg.sv:84-96` **nested packed structs** — a struct member whose type is another
 > struct/enum typedef (`cap_cor_t cap_cor; cperms_t cperms; otype_t otype;` inside `typedef struct
 > packed`), the layout flattening the parser does not do. This is the largest of the four.
 > Behind those: `ibex_if_stage.sv:218 ExcCauseIrqNm.lower_cause` now parses (import carry). verilator
 > lints all of ibex (`vlint.sh`, 8/8 probes); iverilog is not an oracle for any of ⓐ–ⓓ.
+> Order after §4.5.411: ⓐ (one line, 7 uses) → ⓒ header half → ⓓ.
 >
 > **⑥ (사용성) auto-top 이 미인스턴스화 루트를 전부 잡는다** — ✅ **RESOLVED (§4.5.378)**,
 > 다만 **큐가 지목한 그 원인 때문이 아니다**.
@@ -1635,7 +1663,7 @@ memoisation of a shared sub-expression**.
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
-| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라** — 그 절은 주제별 묶음이지 착수 순서가 아니다. **2026-09-02 재그라운딩(8 에이전트 · 전 항목 HEAD 3-툴)이 정한 순서**: ~~row 29~~ **RESOLVED §4.5.405** → ~~row 30~~ **BUILT · 3라운드 리뷰 · REVERTED 2026-09-03**(§4.5.406 이 분리 가능한 절반만 실었다 · 4-piece 패치와 세 edge 는 row 30 에 · **선행조건 = §11.8.1 region sign**, 🆕 F 와 같은 뿌리) → ~~§3 ⑦~~ **RESOLVED §4.5.407** → ~~row 33~~ **RESOLVED §4.5.408** → ~~🆕 C~~ **RESOLVED §4.5.409**(fill 문맥 사이징 21/93 · 잔여 = §2 🆕 J). → ~~§3 ⑤ 파스 규칙~~ **RESOLVED §4.5.410**(typed-parameter prefix 182/227 · 키워드 철자 대조군이 드러낸 pre-existing 둘 = 🆕 K 도 함께 · 잔여 🆕 L). ⚠️ **큐가 적은 «한 파스 규칙이 워크로드를 연다» 는 거짓이었다** — 규칙 뒤에 블로커 넷(§3 ⑤ ⓐ~ⓓ · ⓓ = 중첩 packed struct 가 가장 크다). **다음 = §3 ⑤ ⓑ→ⓒ→ⓐ→ⓓ**(작은 것부터 · 각각 verilator 단일 오라클). ⚠️ row 30 이 남긴 새 행 다섯(🆕 C~G)은 **전부 pre-existing** 이고 🆕 C 는 CLASS 다 — 트랙을 선점하지 않는다. ⚠️⚠️ **여덟 줄을 재측정했더니 여덟 줄 다 모양이 바뀌었고 셋은 severity 등급이 바뀌었다** — 착수 첫 행동은 구현이 아니라 census 다 |
+| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라** — 그 절은 주제별 묶음이지 착수 순서가 아니다. **2026-09-02 재그라운딩(8 에이전트 · 전 항목 HEAD 3-툴)이 정한 순서**: ~~row 29~~ **RESOLVED §4.5.405** → ~~row 30~~ **BUILT · 3라운드 리뷰 · REVERTED 2026-09-03**(§4.5.406 이 분리 가능한 절반만 실었다 · 4-piece 패치와 세 edge 는 row 30 에 · **선행조건 = §11.8.1 region sign**, 🆕 F 와 같은 뿌리) → ~~§3 ⑦~~ **RESOLVED §4.5.407** → ~~row 33~~ **RESOLVED §4.5.408** → ~~🆕 C~~ **RESOLVED §4.5.409**(fill 문맥 사이징 21/93 · 잔여 = §2 🆕 J). → ~~§3 ⑤ 파스 규칙~~ **RESOLVED §4.5.410**(typed-parameter prefix 182/227 · 키워드 철자 대조군이 드러낸 pre-existing 둘 = 🆕 K 도 함께 · 잔여 🆕 L). ⚠️ **큐가 적은 «한 파스 규칙이 워크로드를 연다» 는 거짓이었다** — 규칙 뒤에 블로커 넷(§3 ⑤ ⓐ~ⓓ · ⓓ = 중첩 packed struct 가 가장 크다). ~~§3 ⑤ ⓑ~~ **RESOLVED §4.5.411**(struct/enum typedef 배열 파라미터 114/230 · ⓒ 의 패키지 절반은 §6.20.1 로 같이 닫힘 · pre-existing silent 하나 = typedef 배열 파라미터의 명시 부호 무시 · 잔여 = ⓔ 상수 문맥 클래스). **다음 = §3 ⑤ ⓐ(ibex_pkg.sv 마지막 한 줄)→ⓒ 헤더 절반→ⓓ**(각각 verilator 단일 오라클). ⚠️ row 30 이 남긴 새 행 다섯(🆕 C~G)은 **전부 pre-existing** 이고 🆕 C 는 CLASS 다 — 트랙을 선점하지 않는다. ⚠️⚠️ **여덟 줄을 재측정했더니 여덟 줄 다 모양이 바뀌었고 셋은 severity 등급이 바뀌었다** — 착수 첫 행동은 구현이 아니라 census 다 |
 | **2** | **§3 loud → correct-support 승격** — ⚠️⚠️ **2026-09-02: 이 트랙의 외부 동인이 사라졌다.** 착수 순서를 정하던 워크로드 코퍼스가 **10/10 · 거절 0** 이 되었고(§4.5.404 가 마지막 거절 ⑧ 을 닫았다), 그것이 §3 을 §2 보다 먼저 세울 근거였다 ⇒ **이제 §3 은 §2 뒤**다 | 남은 줄 = §3 본문. ⚠️ ② 와 ⑦ 은 **지어서 되돌린** 항목이고 각자 선행조건이 기록돼 있다 — ⚠️ 착수 전 그 선행조건이 **아직 사실인지 재라**(§4.5.376 은 revert 사유가 stale 이고 항목이 애초에 막힌 적 없었음을 실측했다). ⑤ 는 **오라클 없음**이지만 그건 미루는 이유가 **아니다**(hand-IEEE) |
 | **2b** | **§0 T2 잔여** — ~~sized-literal enum label~~ **RESOLVED(§4.5.379)**(⚠️ census 가 이름을 반박: 막힌 건 sized-literal 이 아니라 **상수 이름 라벨**이었다) | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**라 더 싸다 | 남은 하나 = `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · ⚠️ 그 잔여는 §0 항목 8 이 *"의도적 loud"* 로 적어 둔 것이고 **i64 twin 은 시도 후 철회**(5건 silent-wrong)이므로 착수 전 census 필수 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |

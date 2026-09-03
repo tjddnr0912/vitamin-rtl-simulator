@@ -424,15 +424,16 @@ fn the_v1_limits_are_loud_not_silent() {
   initial begin $display(\"DIGEST=%h %h\", P, P[1]); #1 $finish; end endmodule",
         "multi-dimensional packed typedef parameter",
     );
-    // An array parameter of a struct typedef (ibex_pkg.sv:769 `PmpCfgRst`): the
-    // nested `'{'{…}}` needs a per-element desugar.
-    loud(
-        &format!(
+    // An array parameter of a struct typedef (ibex_pkg.sv:769 `PmpCfgRst`) was the
+    // next rung — §4.5.411 (`struct_array_param.rs`) desugars the nested `'{'{…}}`
+    // per element; verilator 5.050: 3.
+    assert_eq!(
+        digest(&format!(
             "module tb; {ST}
   localparam st_t A[2] = '{{'{{a: 1'b1, b: 5'd3}}, '{{1'b0, 5'd7}}}};
   initial begin $display(\"DIGEST=%0d\", A[0].b); #1 $finish; end endmodule"
-        ),
-        "array parameter of a struct/enum typedef",
+        )),
+        "3"
     );
     // An unpacked struct typedef is not a scalar parameter type.
     loud(

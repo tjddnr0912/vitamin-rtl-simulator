@@ -477,23 +477,23 @@ impl Parser<'_, '_> {
                 (None, None) => None,
                 (a, b) => Some(a.unwrap_or(false) || b.unwrap_or(false)),
             };
-            // §3 ⑤: an array parameter of a struct/enum typedef needs the per-element
-            // pattern desugar / label binding the A2a path does not do — loud, never
-            // a positional `'{…}` silently read as an element vector.
-            if let Some(tn) = &pfx.tyname {
-                if self.struct_layouts.contains_key(tn) || self.enum_defs.contains_key(tn) {
-                    self.error(
-                        "a vector or atom typedef on an array parameter (an array parameter of a struct/enum typedef is unsupported in v1)",
-                    );
-                    return None;
-                }
-            }
+            // A typedef prefix already folded an explicit `signed`/`unsigned` over
+            // the typedef's own signedness (`signed = expl0.unwrap_or(info.signed)`),
+            // so the typedef's answer is passed as if explicit — a `typedef logic
+            // signed [3:0] t; localparam t X[2]` must not fall back to `logic`'s
+            // unsigned default the way a keyword prefix would.
+            let expl_signed = if pfx.tyname.is_some() {
+                Some(signed)
+            } else {
+                expl_signed
+            };
             return self.parse_array_param(
                 body,
                 kind,
                 var_kind,
                 expl_signed,
                 explicit_range,
+                pfx.tyname.as_deref(),
                 name,
                 start,
             );
@@ -567,6 +567,19 @@ impl Parser<'_, '_> {
     /// write is a loud error). Kept loud (v1): the ANSI `#(…)` header form
     /// and an overridable body `parameter` (no override machinery for
     /// aggregates), an implicit-typed element, and non-fixed dims (`[$]`/`[]`).
+    ///
+    /// §3 ⑤ ⓑ: `tyname` is the user typedef the prefix named (`None` for a
+    /// keyword prefix). A 1-D array of a STRUCT typedef binds the name exactly as
+    /// the equivalent variable decl does (`var_struct` + `struct_1d_array_vars`, so
+    /// `P[i].member` and `P[i] = '{…}` desugar) and its `'{ '{…}, … }` init is
+    /// desugared per element by `desugar_struct_array_init`; an ENUM typedef binds
+    /// `var_enum`. A union array binds the type only (no member/pattern desugar,
+    /// as for the variable twin); a multi-dimensional struct array stays loud —
+    /// the variable twin has no member/pattern desugar for it either.
+    ///
+    /// IEEE §6.20.1: a `parameter` in a PACKAGE is a `localparam` (nothing can
+    /// override it), so `in_package` lifts the overridable-`parameter` reject
+    /// there; a module-body `parameter` array stays loud (§3 ⑤ ⓒ).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn parse_array_param(
         &mut self,
@@ -575,6 +588,7 @@ impl Parser<'_, '_> {
         var_kind: Option<NetVarKind>,
         expl_signed: Option<bool>,
         explicit_range: Option<Range>,
+        tyname: Option<&str>,
         name: Ident,
         start: Span,
     ) -> Option<ParamItem> {
@@ -584,12 +598,27 @@ impl Parser<'_, '_> {
             );
             return None;
         }
-        if kind == ParamKind::Parameter {
+        if kind == ParamKind::Parameter && !self.in_package {
             self.error(
                 "`localparam` for an array parameter (an overridable array `parameter` is unsupported in v1)",
             );
             return None;
         }
+        let tyname = tyname.map(str::to_owned);
+        let is_struct = tyname
+            .as_deref()
+            .is_some_and(|t| self.struct_layouts.contains_key(t));
+        let is_enum = tyname
+            .as_deref()
+            .is_some_and(|t| self.enum_defs.contains_key(t));
+        // A union array binds `var_struct` only, like its variable twin: no member
+        // desugar and no `'{…}` element desugar (a union overlay is kept loud
+        // there), so its elements are the packed literals the array path already
+        // lowers.
+        let is_union = is_struct
+            && self
+                .union_type_names
+                .contains(tyname.as_deref().unwrap_or(""));
         let Some(vk) = var_kind else {
             self.error(
                 "an explicit data type on an array parameter (`localparam int …` — an implicit-typed array parameter is unsupported in v1)",
@@ -611,8 +640,29 @@ impl Parser<'_, '_> {
             self.error("a fixed array-parameter dimension (`[msb:lsb]`/`[size]`)");
             return None;
         }
+        if is_struct && !is_union && unpacked.len() != 1 {
+            self.error_at(
+                n_start,
+                "a one-dimensional array parameter of a struct typedef (a multi-dimensional struct array parameter is unsupported in v1)",
+            );
+            return None;
+        }
         self.expect(TokenKind::Eq, "'=' in parameter");
-        let value = self.expr(0);
+        let mut value = self.expr(0);
+        // Same walk as `parse_typed_decl`: a local declaration ends any wildcard
+        // struct/enum binding of this name, then the declared type binds it anew.
+        self.unbind_struct_enum_name(&name.name);
+        if let Some(tn) = tyname.as_deref() {
+            if is_struct {
+                self.var_struct.insert(name.name.clone(), tn.to_owned());
+                if !is_union {
+                    self.struct_1d_array_vars.insert(name.name.clone());
+                    value = self.desugar_struct_array_init(tn, value);
+                }
+            } else if is_enum {
+                self.var_enum.insert(name.name.clone(), tn.to_owned());
+            }
+        }
         // Mirror `signed_eff`: an explicit `signed`/`unsigned` wins; otherwise
         // the atom default (byte/shortint/int/longint/integer are signed),
         // exactly like the equivalent var decl.
