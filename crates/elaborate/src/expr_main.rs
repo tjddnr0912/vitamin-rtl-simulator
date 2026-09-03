@@ -295,108 +295,65 @@ impl Elaborator<'_> {
                         _ => {}
                     }
                 }
-                // INLINE substitution (function/task formals). A single-segment name
-                // bound to an actual-arg ExprId lowers to that ExprId directly — no
-                // new IR node, exactly like `Paren` unwrapping. Innermost wins.
+                // A bare single-segment name: the binding ORDER lives in
+                // `bare_ident_route` (shared with the size-cast classifier — see
+                // `ident_route.rs`); this arm only materializes what it decided.
                 if path.segments.len() == 1 {
                     let seg = &path.segments[0].name;
-                    if let Some(eid) = self.subst_lookup(seg) {
-                        return eid;
-                    }
-                    // output/inout task formal: resolves to the caller's net.
-                    if let Some(net) = self.out_subst_lookup(seg) {
-                        if self.net_is_static_array(net) {
-                            // Phase-1.x ②: an out-actual bound to a whole
-                            // array would otherwise read word 0 SILENTLY
-                            // through the formal (adversarial find #2).
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                "a task output formal bound to a whole unpacked \
-                                 array has no value (v1: arrays cannot pass \
-                                 through task ports)",
-                            );
+                    match self.bare_ident_route(seg, e.span) {
+                        BareIdentRoute::ArrayItem { width, signed } => {
+                            return self.push_expr(ir::Expr::ArrayItem {
+                                index: false,
+                                width,
+                                signed,
+                            });
                         }
-                        return self.push_expr(ir::Expr::Signal { net, word: None });
-                    }
-                    // N5: a `string`-valued parameter/localparam folds to the SAME
-                    // StrUtf8 const its raw literal would (so `S == "abc"` is byte-
-                    // identical). It has no i64 value (kept out of `self.params`), so it
-                    // is resolved before the numeric param path — but ONLY when the
-                    // string param is the INNERMOST binding of the name (IEEE §6.21
-                    // innermost-wins). An independent `walk_scopes(&str_param_raw)` would
-                    // match an OUTER module-scope string param even when an inner net /
-                    // numeric param / frame-local (`$func$f.S`) shadows it, resolving the
-                    // name two different ways (const-eval finds the inner via
-                    // `lookup_scoped`, this pass found the outer string) — a silent-wrong.
-                    // Re-derive the innermost key over the COMBINED binding set and only
-                    // fold the string when that exact key is the string param.
-                    let mut local_shadows_param = false;
-                    if let Some(key) = self.walk_scopes_key(seg, |k| {
-                        self.str_param_raw.contains_key(k)
-                            || self.wide_param_bits.contains_key(k)
-                            || self.real_param_val.contains_key(k)
-                            || self.params.contains_key(k)
-                            || self.symbols.contains_key(k)
-                    }) {
-                        if self.str_param_raw.contains_key(&key) {
-                            let raw = self.str_param_raw[&key].clone();
+                        // INLINE substitution: the actual's ExprId directly — no
+                        // new IR node, exactly like `Paren` unwrapping.
+                        BareIdentRoute::Subst(eid) => return eid,
+                        // output/inout task formal: resolves to the caller's net.
+                        BareIdentRoute::OutSubst(net) => {
+                            if self.net_is_static_array(net) {
+                                // Phase-1.x ②: an out-actual bound to a whole
+                                // array would otherwise read word 0 SILENTLY
+                                // through the formal (adversarial find #2).
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    "a task output formal bound to a whole unpacked \
+                                     array has no value (v1: arrays cannot pass \
+                                     through task ports)",
+                                );
+                            }
+                            return self.push_expr(ir::Expr::Signal { net, word: None });
+                        }
+                        // N5: a `string`-valued parameter folds to the SAME StrUtf8
+                        // const its raw literal would (so `S == "abc"` is byte-
+                        // identical).
+                        BareIdentRoute::Str(raw) => {
                             let cid = self.intern_const(parse_str_literal(&raw));
                             return self.push_expr(ir::Expr::Const { val: cid });
                         }
                         // A parameter wider than the i64 constant domain — same
-                        // side-map shape as the string and real cases, and it rides
-                        // the same innermost-wins key derivation.
-                        if let Some(cv) = self.wide_param_bits.get(&key).cloned() {
+                        // side-map shape as the string and real cases.
+                        BareIdentRoute::Wide(cv) => {
                             let cid = self.intern_const(cv);
                             return self.push_expr(ir::Expr::Const { val: cid });
                         }
                         // r19: a REAL param folds to the SAME const its raw literal
-                        // would, and rides the SAME innermost-wins re-derivation as the
-                        // string case — an independent walk over `real_param_raw` alone
-                        // would match an OUTER real param even when an inner net /
-                        // numeric param / frame-local shadows it (the silent-wrong the
-                        // string comment above describes).
-                        if let Some(&v) = self.real_param_val.get(&key) {
+                        // would.
+                        BareIdentRoute::Real(v) => {
                             let cid = self.intern_const(make_const_real(v));
                             return self.push_expr(ir::Expr::Const { val: cid });
                         }
-                        // An inner NET wins over an outer parameter (§23.9 name
-                        // resolution). The fall-through below calls `lookup_scoped`,
-                        // which runs its OWN params-only walk and therefore ignores
-                        // the innermost key just derived — so an outer `localparam W`
-                        // beat a function/task/block-local `int W` and the local's
-                        // value silently vanished (`W = 9; return W;` returned the
-                        // param's 4). Skip the parameter branch when the innermost
-                        // binding is a net that is NOT itself a parameter; resolution
-                        // then falls to `resolve_net`, which is what the comment above
-                        // always intended.
-                        // ⚠️ The `!params` clause alone is not the question, because the
-                        // v1 flatten publishes a module-level block-local under the BARE
-                        // name — landing on the very key the constant already occupies,
-                        // so `symbols` AND `params` both hold it and the net (which the
-                        // VCD shows, and which the block's own `N = 3` writes to) could
-                        // never win. A reader INSIDE the declaring block must resolve to
-                        // that net even then; one outside must still see the constant.
-                        if self.symbols.contains_key(&key)
-                            && (self.block_local_declared_at(&key, e.span)
-                                || (!self.params.contains_key(&key)
-                                    && self.block_local_covers(&key, e.span)))
-                        {
-                            local_shadows_param = true;
-                        }
-                        // else: an inner numeric param wins — fall through to the
-                        // normal resolution below (which resolves that innermost binding).
-                    }
-                    // parameter / localparam / genvar: a constant in THIS scope (or
-                    // an enclosing generate scope) folds to a Const, NOT a net read.
-                    // Resolved before `resolve_net` so a param never errors as an
-                    // undeclared net (mirrors `const_eval_in_scope`'s lookup_scoped).
-                    if let Some(v) = self.lookup_scoped(seg).filter(|_| !local_shadows_param) {
-                        // A TYPED param (`logic [63:0] P`, `int W`) materializes at
-                        // its DECLARED width, not the value-inferred 32 bits — so
+                        // parameter / localparam / genvar: a constant in THIS scope
+                        // (or an enclosing generate scope) folds to a Const, NOT a net
+                        // read. A TYPED param (`logic [63:0] P`, `int W`) materializes
+                        // at its DECLARED width, not the value-inferred 32 bits — so
                         // `$display("%h", P)` of a 64-bit param shows all 16 nibbles.
-                        let meta = self.walk_scopes(seg, &self.param_meta);
-                        return self.const_param_expr_w(v, meta);
+                        BareIdentRoute::Param { v, meta, .. } => {
+                            return self.const_param_expr_w(v, meta);
+                        }
+                        BareIdentRoute::Other => {}
                     }
                     // SVA-REST `let NAME = expr;` (0 formals): substitute the declared
                     // body. Resolved AFTER nets/params/formals (a real net/param of the

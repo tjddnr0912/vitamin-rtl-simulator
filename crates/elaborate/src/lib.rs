@@ -84,6 +84,8 @@ mod generate;
 mod hier;
 mod hier_defer;
 mod hoist;
+mod ident_route;
+pub(crate) use ident_route::BareIdentRoute;
 mod iface_inst;
 mod inline_fn;
 mod inline_task;
@@ -1068,6 +1070,23 @@ struct Elaborator<'s> {
     // reverse linear scan. Empty in steady state (one `is_empty`/scan on the hot
     // path costs nothing).
     subst: Vec<(String, u32)>,
+    // ExprIds `bind_formal_actual` (and the body-local binder) handed to `subst`
+    // VERBATIM — an actual whose width was not trustworthy or which may be named
+    // only once, or a real/string RHS. Such a node's sign/width MIRROR
+    // (`expr_self_signed` / `ir_bits_of`) is not the value the engine gives it (a
+    // frame call's return sign lives in a sidecar, a class field reads through a
+    // 32-bit handle, a hierarchical actual is a placeholder), so the size-cast
+    // classifier must answer `None` for it — the pre-slice route. Everything else
+    // `subst` carries went through `resize_inline_assign`, whose result's mirror
+    // sign is the formal's declared sign by construction.
+    verbatim_actuals: BTreeSet<u32>,
+    // FQ keys of constants whose recorded TYPE is a guess rather than a fact: an
+    // UNTYPED parameter an override reached (its `param_meta` is the DEFAULT
+    // literal's — §6.20.2 says the override's, ROADMAP §2 row 25), and every body
+    // parameter / localparam whose initializer reads one. The size-cast classifier
+    // answers `None` for these (the pre-slice route); everything else that reads
+    // `param_meta` is unchanged. Cleared by `bind_param_value` like `param_range`.
+    param_type_guessed: BTreeSet<String>,
     // Output/inout task formal NAME → caller NetId. Consulted in BOTH `lower_expr`
     // (read) and `collect_lval_chunks` (write) so a formal resolves to the caller's
     // net in either position. Symmetric Vec stack with `subst`.

@@ -11,6 +11,20 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A size cast now evaluates its operand at the LRM width, and sees constant leaves.**
+  `N'(expr)` over a context-determined operation (`+ - * / % ** << >> >>> & | ^ ~ ?:`)
+  only took the context path when every leaf was a net; a parameter, localparam,
+  genvar, enum label, package constant or >64-bit parameter anywhere in the operand
+  dropped the whole cast to a self-width evaluation, so `64'(~(W32 + 32'd1))` with a
+  32-bit parameter zero-filled the top half and `8'(-EA)` on a 4-bit enum label
+  computed at 4 bits. The operand is also evaluated at `max(N, its own self width)`
+  rather than at N, which fixed `8'(13 + (s8 >> 2))` (the 32-bit literal makes the
+  shift run at 32 bits) for net leaves too. Inline function/task formals that shadow a
+  module constant, and generate-scope localparams that shadow a module net, are
+  resolved in the lowering's own order. Operands the elaborator cannot yet give a
+  width to — a hierarchical or class-member read, a hierarchical call, an inline
+  formal bound to one, an override-typed parameter (see the known limitation on
+  untyped parameter overrides) — keep the behaviour they had.
 - **A continuous assign that calls a function no longer re-runs it on every scheduler pass.**
   `assign y = f(...)` was re-evaluated on every settle pass of every delta of every cycle,
   because the check that decides which assigns may be skipped answered "not skippable" for any

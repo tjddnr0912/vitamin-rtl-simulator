@@ -549,6 +549,7 @@ impl Elaborator<'_> {
     /// one binder.
     pub(crate) fn bind_param_value(&mut self, key: String, v: i64) -> Option<i64> {
         self.param_range.remove(&key);
+        self.param_type_guessed.remove(&key);
         self.params.insert(key, v)
     }
 
@@ -1501,6 +1502,18 @@ impl Elaborator<'_> {
             });
             let prev = self.bind_param_value(key.clone(), v);
             self.bind_param_range(&key, range);
+            // An override reached an UNTYPED declaration: the meta recorded above is
+            // the default literal's, not the override's (§2 row 25) — mark the type a
+            // guess so a consumer that must not extend by a guessed sign declines.
+            // …and a header-list SIBLING that is untyped and derives from one
+            // (`#(parameter P = 5, parameter Q = P + 1)`) inherits the guess: its
+            // value was folded from the guessed binding and its meta inferred from
+            // that value. Typed declarations carry a declared type and are facts.
+            if matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time)
+                && (!default_binds || self.ast_reads_guessed_param(&p.value))
+            {
+                self.param_type_guessed.insert(key.clone());
+            }
             saved.push((key, prev));
         }
     }

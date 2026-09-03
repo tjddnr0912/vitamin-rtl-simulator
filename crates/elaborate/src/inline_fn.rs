@@ -644,10 +644,13 @@ impl Elaborator<'_> {
             // its own un-sealed branch when it is untrustworthy.
             let rw = self.ir_bits_of(eid).unwrap_or(w);
             if rw >= w {
+                self.verbatim_actuals.insert(eid);
                 return eid;
             }
             let actual_signed = self.expr_self_signed(eid);
-            return self.resize_inline_assign(eid, w, actual_signed);
+            let out = self.resize_inline_assign(eid, w, actual_signed);
+            self.verbatim_actuals.insert(out);
+            return out;
         }
         // (2.5) COST — the same target-vs-operand-width asymmetry `lower_prim_cast`
         // carries, and the same answer. The 2-state coercion in (3) below names its
@@ -1004,9 +1007,18 @@ impl Elaborator<'_> {
                 // `expr_is_real` cannot see it — must NOT be bit-resized/sign-
                 // stamped; guard with the AST-aware check `lower_prim_cast` uses.
                 let rhs_id = if ctx_w == 0 || self.cast_operand_is_real(rhs, rhs_id0) {
+                    self.verbatim_actuals.insert(rhs_id0);
                     rhs_id0
                 } else {
-                    self.resize_inline_assign(rhs_id0, ctx_w, ctx_signed)
+                    let out = self.resize_inline_assign(rhs_id0, ctx_w, ctx_signed);
+                    // A resize over an UNTRUSTED width (a hierarchical placeholder, a
+                    // class-field handle) is a new node whose width the mirror still
+                    // cannot read — record it like a verbatim actual, or the cast
+                    // classifier fabricates 32 for it (`16'(y + 0)` printed `xxxx`).
+                    if self.trusted_self_width(rhs_id0).is_none() {
+                        self.verbatim_actuals.insert(out);
+                    }
+                    out
                 };
                 if target == fname {
                     *ret = Some(rhs_id); // return assignment

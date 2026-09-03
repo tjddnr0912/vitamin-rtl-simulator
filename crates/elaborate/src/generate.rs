@@ -561,6 +561,14 @@ impl Elaborator<'_> {
                         let r = self.param_decl_range_opt(p, true);
                         self.bind_param_value(key.clone(), v);
                         self.bind_param_range(&key, r);
+                        // untyped only: a TYPED derived constant carries a declared
+                        // type, which both oracles honour whatever its value was
+                        // folded from.
+                        if matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time)
+                            && self.ast_reads_guessed_param(&p.value)
+                        {
+                            self.param_type_guessed.insert(key.clone());
+                        }
                     }
                     None => {
                         // Wider than the i64 domain — see `wide_param_bits`. Reached

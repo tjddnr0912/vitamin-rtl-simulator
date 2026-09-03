@@ -219,6 +219,64 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ An arm that answers WITHOUT descending is where an opaque leaf hides (2026-09-03 · §4.5.405)
+
+A guard that walks the operand for a hazard is only as good as the arms that DESCEND. `Concat` and
+`Replicate` answer `Some(false)` from §5.4.1 without looking at their parts, so every syntactic
+guard the slice added was walked past by wrapping the hazard in braces — a hierarchical call NAME
+(the args were walked, the callee's path was not), an inline formal bound to a hierarchical actual
+(no hierarchical spelling in the operand at all), a select whose own `[msb+:w]` gives a width while
+its base is a placeholder. **Rule**: when you add a hazard walk, enumerate the arms that answer
+from a rule rather than from their children — those are the ones that must still descend for the
+GUARD even though they need not for the ANSWER. And gate every consumer of the walk (sign AND
+width) on one predicate, not each on its own.
+
+### ⚠️ A stricter rule can regress by declining what the baseline accepted (2026-09-03 · §4.5.405)
+
+"Route only what the walk can measure" is simpler and stricter than the guard it would replace, and
+it regressed 458 cells: the pre-slice classifier ROUTED operands whose width the new walk cannot
+measure, so declining them is a change away from the baseline, not toward it. **Rule**: before
+replacing a guard with a stricter invariant, measure what the BASELINE did for the shapes the
+invariant would newly refuse — a restriction is only safe where the baseline was already refusing.
+
+### ⭐⭐ Call the lowering's DECISION, not a mirror of its maps (2026-09-02 · §4.5.405)
+
+The size-cast classifier re-derived "where does this bare name bind" from the same side
+maps the lowering reads — and got the ORDER wrong twice: an inline formal binds before any
+constant (`subst_lookup`), and the innermost combined key binds a generate-scope
+`localparam` before an outer module net. Both were review BLOCKINGs on designs the suite
+never sees. **Rule**: when a predicate must agree with a lowering, extract the lowering's
+decision into a side-effect-free function (`bare_ident_route`) and make the lowering match
+on it too. A docstring saying "mirrors X" is a drift waiting to be measured.
+
+Round 2 of the same slice added the second half: the shared decision hands back an ExprId
+for an inline formal, and the IR MIRROR (`expr_self_signed` / `ir_bits_of`) of that node is
+only exact when the node was BUILT for the formal (`resize_inline_assign` at its declared
+type). An actual handed over VERBATIM — a frame call (`Call ⇒ false`), a class field (a
+32-bit handle), a hierarchical placeholder — carries its real sign in a sidecar the mirror
+cannot see. So the decision function must also say WHICH of its answers are facts
+(`verbatim_actuals`), and the classifier answers `None` for the rest.
+
+### ⚠️⚠️ The queue row is not the only line about its defect (2026-09-02 · §4.5.405)
+
+Row 29 said "no prerequisite". Two bullets below it, the same defect's older entry held
+the reason §4.5.318 built the fix and reverted it. **Rule**: before trusting a row's
+"prerequisite" field, grep §2 for the SITE (`ast_ctx_signed`, `lower_size_ctx`) and read
+every line that names it; the older line is usually the one that was measured.
+
+### ⚠️ A path that is right by accident is a latent producer defect (2026-09-02 · §4.5.405)
+
+`64'(P >> 1)` was right on the fill-only path with a wrongly-SIGNED parameter because the
+shift's result was positive; the moment the classifier read the parameter's sign, the
+cell went wrong. `P < 0` and `64'(P)` had been wrong the whole time. **Rule**: when a
+review's "regression" only reads an input that was already wrong, fix the producer
+(here `param_decl_width_opt` typing an overridden parameter by its DEFAULT) — and then
+run the corpus, because the producer feeds more than the consumer you were looking at
+(`param_range`, and serv). **And if the producer axis then yields a new blocker in each of
+three review rounds, revert it and make the consumer DECLINE on what it cannot vouch for**
+(`param_type_guessed`) — the consumer's fix ships, the producer's patch and its edges go
+into its own row (§2 row 25). The 7,982 cells it fixed are not lost; they are measured.
+
 ### ⭐⭐ A predicate borrowed from another PHASE is a mirror, and mirrors drift on contact (2026-09-01 · §4.5.398)
 
 Four queue rows, five blocking defects in the fixes, and four of the five are one shape: **a rule

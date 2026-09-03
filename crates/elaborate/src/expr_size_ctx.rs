@@ -10,6 +10,22 @@ use super::*;
 pub(crate) const REAL_SIZE_CAST_MSG: &str =
     "size cast is not defined on a real operand (use int'/longint')";
 
+/// See [`Elaborator::select_chain`].
+enum SelChain {
+    /// a bit of `net` (or of a constant: `None`) — 1-bit unsigned
+    Bit { net: Option<u32> },
+    /// an unpacked-array element; `None` where the element's sign / width is
+    /// not visible here (a dynamic handle)
+    Elem {
+        signed: Option<bool>,
+        width: Option<u32>,
+    },
+    /// fewer selects than unpacked dimensions: not a value
+    NotAValue,
+    /// not a select chain down to a name this walk resolves
+    Unknown,
+}
+
 impl Elaborator<'_> {
     /// §4.5.212: is `e` a CONTEXT-DETERMINED operation whose result width the size
     /// cast `N'(e)` must drive down into (arith/bitwise/shift/`**`, unary `+`/`-`/`~`,
@@ -50,11 +66,32 @@ impl Elaborator<'_> {
     /// whole expression unsigned, and ALL leaves are then zero-extended — verified
     /// against iverilog: `8'((signed*signed)+unsigned)` zero-extends the signed pair).
     /// A single sign therefore governs every leaf's extension. `None` ⇒ a leaf whose
-    /// sign can't be resolved here (a param / call / package ref) → the caller keeps the
-    /// current fill-only behavior (no regression). Mirrors `expr_self_signed`'s rules.
-    pub(crate) fn ast_ctx_signed(&self, e: &ast::Expr) -> Option<bool> {
+    /// sign can't be resolved here (a call / hierarchical ref / string or real
+    /// constant) → the caller keeps the fill-only behavior. ⚠️ `None` is load-bearing
+    /// in BOTH directions: answering it where `Some` was possible drops the context
+    /// width (the fill-only path computes at self width — 170 element cells and 114
+    /// constant cells regressed/were wrong that way), and a WRONG `Some` extends a
+    /// leaf against the lowering (§4.5.393's blocking shape). Every `Some` here must
+    /// come from the resolver the lowering itself uses. Mirrors `expr_self_signed`'s
+    /// operator rules.
+    /// §4.5.212: the OVERALL self-signedness of a size-cast operand's tree.
+    ///
+    /// An OPAQUE leaf — a hierarchical or class-member read, a hierarchical call,
+    /// an inline formal bound to one — is a PLACEHOLDER at this point (resolved
+    /// only after the instance tree exists) with no width for `lower_size_leaf`
+    /// to resize by, so a cast over one is right on neither path; when the
+    /// operand holds one ANYWHERE, every leaf rule falls back to the pre-slice
+    /// classifier verbatim and the cast keeps exactly the answer it had.
+    /// Measured in both directions: resolving a constant sibling routed
+    /// `16'(PS16 * u.a1[2])` over the widthless leaf (`xxxx` for the oracles'
+    /// `4d20`), and declining the leaf sent `8'(-u.v[3])` to the fill-only path
+    /// (`01` for `ff`).
+    /// `consts` = the operand holds NO opaque leaf, so the constant-resolving
+    /// rules apply; `false` selects the pre-slice classifier verbatim.
+    /// [`Self::size_ctx_route`] computes it once for both walks.
+    fn ctx_signed_impl(&self, e: &ast::Expr, consts: bool) -> Option<bool> {
         match &e.kind {
-            ast::ExprKind::Paren { inner } => self.ast_ctx_signed(inner),
+            ast::ExprKind::Paren { inner } => self.ctx_signed_impl(inner, consts),
             ast::ExprKind::Binary { op, lhs, rhs } => match op {
                 ast::BinOp::Add
                 | ast::BinOp::Sub
@@ -65,26 +102,26 @@ impl Elaborator<'_> {
                 | ast::BinOp::BitOr
                 | ast::BinOp::BitXor
                 | ast::BinOp::BitXnor => {
-                    Some(self.ast_ctx_signed(lhs)? && self.ast_ctx_signed(rhs)?)
+                    Some(self.ctx_signed_impl(lhs, consts)? && self.ctx_signed_impl(rhs, consts)?)
                 }
                 // power / shifts: sign follows the LEFT (base) operand only.
                 ast::BinOp::Pow
                 | ast::BinOp::Shl
                 | ast::BinOp::Shr
                 | ast::BinOp::AShl
-                | ast::BinOp::AShr => self.ast_ctx_signed(lhs),
+                | ast::BinOp::AShr => self.ctx_signed_impl(lhs, consts),
                 // comparison / logical / wildcard: a 1-bit UNSIGNED result.
                 _ => Some(false),
             },
             ast::ExprKind::Unary { op, operand } => match op {
                 ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot => {
-                    self.ast_ctx_signed(operand)
+                    self.ctx_signed_impl(operand, consts)
                 }
                 _ => Some(false), // reductions / logical-not: 1-bit unsigned
             },
-            ast::ExprKind::Ternary { then_e, else_e, .. } => {
-                Some(self.ast_ctx_signed(then_e)? && self.ast_ctx_signed(else_e)?)
-            }
+            ast::ExprKind::Ternary { then_e, else_e, .. } => Some(
+                self.ctx_signed_impl(then_e, consts)? && self.ctx_signed_impl(else_e, consts)?,
+            ),
             // concat / replicate are ALWAYS unsigned (§5.4.1).
             ast::ExprKind::Concat { .. } | ast::ExprKind::Replicate { .. } => Some(false),
             // A select of a PACKED vector is unsigned too (§5.4.1) — but the very
@@ -107,66 +144,449 @@ impl Elaborator<'_> {
             // §11.8.1 makes the whole expression unsigned anyway and the old
             // blanket `false` was accidentally right; only an all-signed
             // expression discriminates.
-            ast::ExprKind::BitSelect { .. }
-            | ast::ExprKind::PartSelect { .. }
-            | ast::ExprKind::IndexedPart { .. } => {
-                Some(self.unpacked_elem_signed(e).unwrap_or(false))
-            }
+            // A packed part-select is unsigned whatever it selects from (§5.4.1)…
+            ast::ExprKind::PartSelect { .. } | ast::ExprKind::IndexedPart { .. } => Some(false),
+            // …a chain of `[i]` selects is unsigned when it ends at a BIT (of a
+            // vector, of a constant, of an element — a bit-select is 1-bit
+            // unsigned whatever its base, §11.8.1, and the fill-only path would
+            // evaluate that 1-bit leaf at 1 bit: `8'(-a1[0][3])` `ff` → `01`), and
+            // carries the ELEMENT's sign when it ends at one (a 1-D or N-D static
+            // array's element, a frame array's element); an element whose sign
+            // this walk cannot see (a dynamic / queue / assoc handle) is `None`,
+            // not `false` — `64'(PS16 / g2[0][1])` extended a signed element as
+            // unsigned once its constant sibling became resolvable. A base the
+            // walk cannot resolve keeps the pre-slice `false`.
+            // …and a chain the walk cannot resolve at all (a hierarchical or
+            // class-member base — a placeholder here, sized only after the
+            // instance tree exists) declines: answering `false` routed the cast
+            // over a widthless leaf whenever its constant sibling resolved
+            // (`16'(PS16 * u.a1[2])` printed `xxxx` for the oracles' `4d20`).
+            ast::ExprKind::BitSelect { .. } if !consts => Some(self.pre_slice_elem_signed(e)),
+            ast::ExprKind::BitSelect { .. } => match self.select_chain(e) {
+                SelChain::Bit { .. } => Some(false),
+                SelChain::Elem { signed, .. } => signed,
+                SelChain::NotAValue | SelChain::Unknown => None,
+            },
             ast::ExprKind::IntLit { kind, raw } => {
                 if literal::is_fill_literal(raw, *kind) {
                     return Some(false);
                 }
                 literal::parse_int_literal(raw, *kind).map(|c| c.signed)
             }
+            // A bare name binds where `lower_expr` binds it — `bare_ident_route`
+            // is the lowering's own decision, in its order (iterator → inline
+            // formal → task out-formal → string/wide/real → numeric constant →
+            // everything else). The sign of each route is the sign of the node
+            // that route builds: a substituted actual's own (`expr_self_signed`,
+            // the rule `lower_size_leaf` stamps by — but only for an actual
+            // `resize_inline_assign` built; one handed over VERBATIM has a mirror
+            // the engine does not honour, see `verbatim_actuals`), the wide const's, the
+            // constant's `param_const_signed` — the rule `const_param_expr_w`
+            // builds with. A string or real read is not a bit-vector ⇒ `None`
+            // (the real refusal keeps firing). `Other` is the tail the lowering
+            // resolves through `resolve_net`: answered as before, by the net.
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                let net = self.lookup_net_scoped(&p.segments[0].name)?;
-                Some(self.nets.get(net as usize)?.signed)
+                let name = &p.segments[0].name;
+                if !consts {
+                    let net = self.lookup_net_scoped(name)?;
+                    return Some(self.nets.get(net as usize)?.signed);
+                }
+                match self.bare_ident_route(name, e.span) {
+                    BareIdentRoute::ArrayItem { signed, .. } => Some(signed),
+                    BareIdentRoute::Subst(eid) => {
+                        (!self.verbatim_actuals.contains(&eid)).then(|| self.expr_self_signed(eid))
+                    }
+                    BareIdentRoute::OutSubst(net) => {
+                        if self.net_is_static_array(net) {
+                            return None;
+                        }
+                        Some(self.nets.get(net as usize)?.signed)
+                    }
+                    BareIdentRoute::Str(_) | BareIdentRoute::Real(_) => None,
+                    BareIdentRoute::Wide(cv) => Some(cv.signed),
+                    // a guessed type (an overridden untyped parameter, §2 row 25, and
+                    // what derives from it) is not a sign to extend by — pre-slice route
+                    BareIdentRoute::Param { guessed: true, .. } => None,
+                    BareIdentRoute::Param { v, meta, .. } => {
+                        Some(Self::param_const_signed(v, meta))
+                    }
+                    BareIdentRoute::Other => {
+                        let net = self.lookup_net_scoped(name)?;
+                        Some(self.nets.get(net as usize)?.signed)
+                    }
+                }
             }
-            // params / calls / sysfuncs / package refs / patterns → indeterminate here.
+            ast::ExprKind::PkgScoped { pkg, name } if consts => {
+                self.pkg_const_read_signed(&pkg.name, &name.name)
+            }
+            // calls / sysfuncs / hierarchical refs / patterns → indeterminate here.
+            // A call is its own slice: `expr_self_signed`'s `_ => false` has 21
+            // callers, so answering it here would widen a 2-site blast radius to 21.
             _ => None,
         }
     }
 
-    /// `Some(signed)` when `e` is an UNPACKED ARRAY ELEMENT read — a `[i]` whose
-    /// base is DIRECTLY a single-segment ident naming a declared unpacked array.
-    /// `None` for every ordinary packed select, including a select taken OF an
-    /// element (`am[0][3:1]`, whose base is the element read, not the ident) —
-    /// that one really is §5.4.1-unsigned.
-    ///
-    /// Element-ness is `net_is_static_array` — the same PREDICATE `arrays.rs`
-    /// uses to route `m[i]` (`array_len > 1` misses a one-element `reg x[0:0]`,
-    /// and `array_dims` is the wrong map: it is sparse, plain 0-based 1-D arrays
-    /// are absent from it). ⚠️ It is NOT the same RESOLVER: `expr_array_chain`
-    /// joins every segment with `"."` and has package-alias and `PkgScoped` arms,
-    /// so `pk::pm[0]`, `u1.sarr[0]`, a frame-local array and a dyn/queue element
-    /// are all UNDER-claimed here and keep the pre-slice unsigned answer
-    /// (measured: no over-claim is reachable, and a formal shadowing a module
-    /// array still answers correctly). That under-claim splits one array's value
-    /// across two spellings in one design — ROADMAP §2, and the reason to widen
-    /// this to the real resolver rather than add cases.
-    ///
-    /// A MULTI-dimensional element (`g[i][j]`) is likewise not claimed: it is
-    /// AST-identical to `am[0][3]`, a bit-select OF an element, which really is
-    /// §5.4.1-unsigned — separating them needs unpacked-DIM COUNTING, not shape.
-    fn unpacked_elem_signed(&self, e: &ast::Expr) -> Option<bool> {
-        let ast::ExprKind::BitSelect { base, .. } = &e.kind else {
+    /// `pkg::NAME` twin of the `Ident` arm of [`Self::ast_ctx_signed`], mirroring the
+    /// `PkgScoped` arm of `lower_expr` in ITS order (real → string → wide →
+    /// numeric → package variable). A whole unpacked package array is an error
+    /// there, so it is `None` here.
+    fn pkg_const_read_signed(&self, pkg: &str, name: &str) -> Option<bool> {
+        if self
+            .pkg_real_val
+            .get(pkg)
+            .is_some_and(|m| m.contains_key(name))
+            || self
+                .pkg_str_raw
+                .get(pkg)
+                .is_some_and(|m| m.contains_key(name))
+        {
             return None;
-        };
-        let mut b = base.as_ref();
-        while let ast::ExprKind::Paren { inner } = &b.kind {
-            b = inner;
         }
-        let ast::ExprKind::Ident(p) = &b.kind else {
-            return None;
-        };
-        let [seg] = p.segments.as_slice() else {
-            return None;
-        };
-        let net = self.lookup_net_scoped(&seg.name)?;
-        if !self.net_is_static_array(net) {
+        if let Some(cv) = self.pkg_wide_bits.get(pkg).and_then(|m| m.get(name)) {
+            return Some(cv.signed);
+        }
+        if let Some(&v) = self.pkg_consts.get(pkg).and_then(|m| m.get(name)) {
+            let meta = self
+                .pkg_const_meta
+                .get(pkg)
+                .and_then(|m| m.get(name))
+                .copied();
+            return Some(Self::param_const_signed(v, meta));
+        }
+        let net = *self.pkg_vars.get(pkg)?.get(name)?;
+        if self.net_is_static_array(net) {
             return None;
         }
         Some(self.nets.get(net as usize)?.signed)
+    }
+
+    /// What a chain of `[i]` selects down to a bare name denotes — see the
+    /// `BitSelect` arms of [`Self::ast_ctx_signed`] and
+    /// [`Self::size_ctx_self_width`]. `k` selects on a name with `d` unpacked
+    /// dimensions: `k > d` is a BIT (of the element, or of a plain vector / a
+    /// constant: `d == 0`), `k == d` an ELEMENT, `k < d` a sub-array (not a
+    /// value). `d` is `array_dims`' count for a static array (absent = 1), 1 for
+    /// a dynamic / queue / assoc handle and for a frame-local / formal array (an
+    /// md-packed slot, `frame_arr_formal_meta`), 0 for anything else. The base
+    /// is a bare single-segment name or `pkg::name`; any other base (a
+    /// hierarchical element, a call) is `Unknown`.
+    fn select_chain(&self, e: &ast::Expr) -> SelChain {
+        let mut k = 0u32;
+        let mut b = e;
+        loop {
+            match &b.kind {
+                ast::ExprKind::Paren { inner } => b = inner,
+                ast::ExprKind::BitSelect { base, .. } => {
+                    k += 1;
+                    b = base;
+                }
+                _ => break,
+            }
+        }
+        if k == 0 {
+            return SelChain::Unknown;
+        }
+        let net = match &b.kind {
+            // …resolved by the SAME route the rest of this file and the lowering
+            // take. Reading `lookup_net_scoped` + `lookup_scoped` directly (the
+            // net table and the i64 constant domain) missed every name those two
+            // maps do not carry — a parameter wider than i64 (`wide_param_bits`)
+            // and an inline-substituted formal — so a BIT of one declined and the
+            // fill-only path evaluated a 1-bit leaf at 1 bit (round-6 review: 108
+            // cells where PRE routed and was right).
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                match self.bare_ident_route(&p.segments[0].name, b.span) {
+                    BareIdentRoute::OutSubst(net) => net,
+                    BareIdentRoute::Other => match self.lookup_net_scoped(&p.segments[0].name) {
+                        Some(net) => net,
+                        None => return SelChain::Unknown,
+                    },
+                    // a constant, a substituted actual, a `with`-clause item: a
+                    // packed VALUE, so a `[i]` of it is a 1-bit unsigned bit
+                    _ => return SelChain::Bit { net: None },
+                }
+            }
+            // …and the package twin, in the SAME order the `PkgScoped` arms of
+            // `ast_ctx_signed` / `size_ctx_self_width` use: a wide package
+            // parameter lives in its own side map, and reading `pkg_consts`
+            // alone made a bit of one decline (round-6: `2'(pk::WP[95] + …)`).
+            ast::ExprKind::PkgScoped { pkg, name } => {
+                let has_const = self
+                    .pkg_consts
+                    .get(&pkg.name)
+                    .is_some_and(|m| m.contains_key(&name.name))
+                    || self
+                        .pkg_wide_bits
+                        .get(&pkg.name)
+                        .is_some_and(|m| m.contains_key(&name.name));
+                match self.pkg_vars.get(&pkg.name).and_then(|m| m.get(&name.name)) {
+                    Some(&net) => net,
+                    None if has_const => return SelChain::Bit { net: None },
+                    None => return SelChain::Unknown,
+                }
+            }
+            // a packed VALUE (a part-select, a concat, a call, an operator, a
+            // cast, a literal): its bit is a bit — 1-bit unsigned, as before
+            ast::ExprKind::PartSelect { .. }
+            | ast::ExprKind::IndexedPart { .. }
+            | ast::ExprKind::Concat { .. }
+            | ast::ExprKind::Replicate { .. }
+            | ast::ExprKind::Cast { .. }
+            | ast::ExprKind::SysCall { .. }
+            | ast::ExprKind::Call { .. }
+            | ast::ExprKind::Binary { .. }
+            | ast::ExprKind::Unary { .. }
+            | ast::ExprKind::Ternary { .. }
+            | ast::ExprKind::IntLit { .. } => return SelChain::Bit { net: None },
+            // a hierarchical or class-member base is a PLACEHOLDER at this point
+            // (resolved after the instance tree exists): neither its element-ness
+            // nor its width is knowable here
+            _ => return SelChain::Unknown,
+        };
+        if let Some(af) = self.frame_arr_formal_meta.get(&net) {
+            // N-D: `lower_packed_read` builds the element at exactly `dims.len()`
+            // selects (and re-stamps its sign from `elem_signed` there).
+            let d = af.dims.len().max(1) as u32;
+            return match k.cmp(&d) {
+                std::cmp::Ordering::Less => SelChain::NotAValue,
+                std::cmp::Ordering::Equal => SelChain::Elem {
+                    signed: Some(af.elem_signed),
+                    width: Some(af.elem_w),
+                },
+                std::cmp::Ordering::Greater => SelChain::Bit { net: None },
+            };
+        }
+        if self.is_dyn_handle_net(net) {
+            return if k == 1 {
+                SelChain::Elem {
+                    signed: None,
+                    width: None,
+                }
+            } else {
+                SelChain::Bit { net: None }
+            };
+        }
+        if self.net_is_static_array(net) {
+            let d = self.array_dims.get(&net).map_or(1, |v| v.len() as u32);
+            return match k.cmp(&d) {
+                std::cmp::Ordering::Less => SelChain::NotAValue,
+                std::cmp::Ordering::Equal => {
+                    let nv = self.nets.get(net as usize);
+                    SelChain::Elem {
+                        signed: nv.map(|nv| nv.signed),
+                        width: nv.map(|nv| nv.width),
+                    }
+                }
+                std::cmp::Ordering::Greater => SelChain::Bit { net: Some(net) },
+            };
+        }
+        SelChain::Bit { net: Some(net) }
+    }
+
+    /// The SELF-DETERMINED width (IEEE §11.6.1, Table 11-21) of a size-cast
+    /// operand, answered at the AST — over exactly the leaf kinds
+    /// [`Self::ast_ctx_signed`] resolves, and with each leaf's width taken from
+    /// the same table the lowering materializes it from (`NetVar.width`,
+    /// `const_param_expr_w`'s meta/value rule, a wide const's own width). `None`
+    /// wherever a width would be a guess (a select with non-constant bounds, a
+    /// multi-dimensional element, a call, a system function, a cast) — the caller
+    /// then measures it by lowering, which is exact by construction.
+    ///
+    /// The number has to be EXACT, not merely safe: the evaluation width decides
+    /// what a logical shift brings in and what a division sees, so an
+    /// over-estimate is as wrong as an under-estimate (`8'(s8 >> 2)` on `-16` is
+    /// `3c` at 8 bits and `fc` at 32).
+    fn size_ctx_self_width(&self, e: &ast::Expr) -> Option<u32> {
+        use ast::ExprKind as K;
+        let rec = |x: &ast::Expr| self.size_ctx_self_width(x);
+        match &e.kind {
+            K::Paren { inner } => rec(inner),
+            K::Binary { op, lhs, rhs } => match op {
+                ast::BinOp::Lt
+                | ast::BinOp::Le
+                | ast::BinOp::Gt
+                | ast::BinOp::Ge
+                | ast::BinOp::Eq
+                | ast::BinOp::Ne
+                | ast::BinOp::CaseEq
+                | ast::BinOp::CaseNe
+                | ast::BinOp::WildEq
+                | ast::BinOp::WildNe
+                | ast::BinOp::LogAnd
+                | ast::BinOp::LogOr => Some(1),
+                // a shift / power is as wide as its LEFT operand alone.
+                ast::BinOp::Shl
+                | ast::BinOp::Shr
+                | ast::BinOp::AShl
+                | ast::BinOp::AShr
+                | ast::BinOp::Pow => rec(lhs),
+                _ => Some(rec(lhs)?.max(rec(rhs)?)),
+            },
+            K::Unary { op, operand } => match op {
+                ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot => rec(operand),
+                _ => Some(1), // reductions / logical-not
+            },
+            K::Ternary { then_e, else_e, .. } => Some(rec(then_e)?.max(rec(else_e)?)),
+            K::Concat { parts } => {
+                let mut sum: u32 = 0;
+                for p in parts {
+                    sum = sum.checked_add(rec(p)?)?;
+                }
+                Some(sum)
+            }
+            K::Replicate { count, value } => {
+                let c = u32::try_from(self.const_eval_in_scope(count)?).ok()?;
+                let mut sum: u32 = 0;
+                for v in value {
+                    sum = sum.checked_add(rec(v)?)?;
+                }
+                c.checked_mul(sum)
+            }
+            // The same chain rule as the classifier: a BIT is 1 wide (a slice of a
+            // multi-packed-dim vector is not claimed), an ELEMENT is its element's
+            // width, an element of a dynamic handle and a sub-array are not claimed.
+            K::BitSelect { .. } => match self.select_chain(e) {
+                SelChain::Bit { net } => net
+                    .is_none_or(|n| self.packed_dims.get(&n).is_none_or(|d| d.len() <= 1))
+                    .then_some(1),
+                SelChain::Elem { width, .. } => width,
+                SelChain::Unknown | SelChain::NotAValue => None,
+            },
+            K::PartSelect { base, msb, lsb, .. } => {
+                let K::Ident(p) = &base.kind else {
+                    return None;
+                };
+                let [seg] = p.segments.as_slice() else {
+                    return None;
+                };
+                let net = self.lookup_net_scoped(&seg.name)?;
+                if self.net_is_static_array(net)
+                    || self.packed_dims.get(&net).is_some_and(|d| d.len() > 1)
+                {
+                    return None;
+                }
+                let m = self.const_eval_in_scope(msb)?;
+                let l = self.const_eval_in_scope(lsb)?;
+                u32::try_from(m.abs_diff(l) + 1).ok()
+            }
+            K::IndexedPart { width, .. } => u32::try_from(self.const_eval_in_scope(width)?).ok(),
+            K::IntLit { kind, raw } => {
+                if literal::is_fill_literal(raw, *kind) {
+                    // no self width: it takes the context's (§11.6). Zero so it
+                    // never widens the maximum.
+                    return Some(0);
+                }
+                literal::parse_int_literal(raw, *kind).map(|c| c.width)
+            }
+            // A net reads as `Signal{net}` and `ir_bits_of` gives that node the
+            // table width (a string's is a dynamic length ⇒ none); a REAL net is
+            // 64 there too — the context path refuses it before the width can
+            // matter, and answering it here keeps the operand out of the probe,
+            // which would lower a nested cast a second time and report its
+            // refusal twice. A whole unpacked array has no value here.
+            K::Ident(p) if p.segments.len() == 1 => {
+                let name = &p.segments[0].name;
+                match self.bare_ident_route(name, e.span) {
+                    BareIdentRoute::ArrayItem { width, .. } => Some(width),
+                    BareIdentRoute::Subst(eid) => (!self.verbatim_actuals.contains(&eid))
+                        .then(|| self.ir_bits_of(eid))
+                        .flatten(),
+                    BareIdentRoute::OutSubst(net) => {
+                        if self.net_is_static_array(net) {
+                            return None;
+                        }
+                        self.signal_read_width(net)
+                    }
+                    BareIdentRoute::Str(_) | BareIdentRoute::Real(_) => None,
+                    BareIdentRoute::Wide(cv) => Some(cv.width),
+                    BareIdentRoute::Param { guessed: true, .. } => None,
+                    BareIdentRoute::Param { v, meta, .. } => Some(Self::param_const_width(v, meta)),
+                    BareIdentRoute::Other => {
+                        let net = self.lookup_net_scoped(name)?;
+                        if self.net_is_static_array(net) {
+                            return None;
+                        }
+                        self.signal_read_width(net)
+                    }
+                }
+            }
+            K::PkgScoped { pkg, name } => self.pkg_const_read_width(&pkg.name, &name.name),
+            // A nested cast is a self-determined leaf as wide as its target — the
+            // classifier does not look through a concat, so `8'({4'(r2*2)} + r)`
+            // routes and the inner cast's width has to be answered here, or the
+            // probe would lower it a second time and report its refusal twice.
+            K::Cast { target, expr } => match target {
+                ast::CastTarget::Size(_) | ast::CastTarget::Named(_) => {
+                    u32::try_from(self.cast_size_bits(target)?)
+                        .ok()
+                        .filter(|n| *n >= 1)
+                }
+                ast::CastTarget::Prim(p) => cast_prim_wsign(*p).map(|(w, _, _)| w),
+                ast::CastTarget::Signing { .. } => rec(expr),
+            },
+            K::SysCall { name, args }
+                if matches!(name.name.as_str(), "$signed" | "$unsigned") && args.len() == 1 =>
+            {
+                rec(&args[0])
+            }
+            _ => None,
+        }
+    }
+
+    /// `pkg::NAME` twin of the `Ident` arm of [`Self::size_ctx_self_width`].
+    fn pkg_const_read_width(&self, pkg: &str, name: &str) -> Option<u32> {
+        if self
+            .pkg_real_val
+            .get(pkg)
+            .is_some_and(|m| m.contains_key(name))
+            || self
+                .pkg_str_raw
+                .get(pkg)
+                .is_some_and(|m| m.contains_key(name))
+        {
+            return None;
+        }
+        if let Some(cv) = self.pkg_wide_bits.get(pkg).and_then(|m| m.get(name)) {
+            return Some(cv.width);
+        }
+        if let Some(&v) = self.pkg_consts.get(pkg).and_then(|m| m.get(name)) {
+            let meta = self
+                .pkg_const_meta
+                .get(pkg)
+                .and_then(|m| m.get(name))
+                .copied();
+            return Some(Self::param_const_width(v, meta));
+        }
+        let net = *self.pkg_vars.get(pkg)?.get(name)?;
+        if self.net_is_static_array(net) {
+            return None;
+        }
+        self.signal_read_width(net)
+    }
+
+    /// The width `ir_bits_of` reports for a `Signal{net}` read — mirrored, not
+    /// re-derived: `String` is a dynamic length (none), everything else the
+    /// table width floored at 1.
+    fn signal_read_width(&self, net: u32) -> Option<u32> {
+        let nv = self.nets.get(net as usize)?;
+        (nv.kind != ir::NetKind::String).then_some(nv.width.max(1))
+    }
+
+    /// The WIDTH a parameter read materializes with — the width half of
+    /// [`Self::param_const_signed`], spelled once: `const_param_expr_w` uses the
+    /// declared meta width whenever it is ≥ 1, else `const_param_expr` binds the
+    /// value at 32 bits when it fits `u32` or `i32`, else at 64.
+    pub(crate) fn param_const_width(v: i64, meta: Option<(u32, bool)>) -> u32 {
+        match meta {
+            Some((w, _)) if w >= 1 => w,
+            _ => {
+                if u32::try_from(v).is_ok() || i32::try_from(v).is_ok() {
+                    32
+                } else {
+                    64
+                }
+            }
+        }
     }
 
     /// §4.5.212: lower a size-cast operand in CONTEXT WIDTH `n`, recursing the
@@ -402,13 +822,156 @@ impl Elaborator<'_> {
         self.placeholder_expr()
     }
 
+    /// May a size cast take the CONTEXT path over `e`, and with what
+    /// `(sign, self width)`? BOTH have to be known: routing an operand whose
+    /// width the walk cannot measure hands `lower_size_leaf` a node it resizes
+    /// from a fabricated 32 — a hierarchical read, a class field, a verbatim
+    /// inline actual and a hierarchical CALL NAME are all placeholders here, and
+    /// each one produced `x` where the fill-only path was right (round-6 review:
+    /// `16'(PS16 * {u.hf(-8'sd16), 1'b0})` printed `xxxx` for both oracles'
+    /// `f640`, because the `Concat` sign arm answers without descending while
+    /// the width arm declines). "Route only what the walk can measure" is the
+    /// one predicate that covers every such leaf, in every position, without a
+    /// syntactic guard to keep in step with the AST.
+    pub(crate) fn size_ctx_route(&self, e: &ast::Expr) -> Option<(bool, Option<u32>)> {
+        // ONE gate for both walks. An operand holding an opaque leaf keeps the
+        // pre-slice SIGN (see `ast_ctx_signed`) and the pre-slice EVALUATION
+        // WIDTH (`None` ⇒ `n`): the width walk sizes a select from its own
+        // `[msb:lsb]` without looking at the base, so `4'(s8 - u.v[0+:4])`
+        // measured 8 and evaluated wider than the pre-slice `n` over a
+        // placeholder — `x` where PRE and both oracles agree.
+        let opaque = self.has_opaque_leaf(e);
+        let ext = self.ctx_signed_impl(e, !opaque)?;
+        let w = (!opaque).then(|| self.size_ctx_self_width(e)).flatten();
+        Some((ext, w))
+    }
+
+    /// The PRE-SLICE answer for a `[i]` select — verbatim: a `[i]` whose base is
+    /// DIRECTLY a single-segment ident naming a declared unpacked array carries
+    /// that net's sign, everything else is §5.4.1-unsigned. Its own function so
+    /// the fallback is provably the old decision, not a re-derivation of it.
+    fn pre_slice_elem_signed(&self, e: &ast::Expr) -> bool {
+        let ast::ExprKind::BitSelect { base, .. } = &e.kind else {
+            return false;
+        };
+        let mut b = base.as_ref();
+        while let ast::ExprKind::Paren { inner } = &b.kind {
+            b = inner;
+        }
+        let ast::ExprKind::Ident(p) = &b.kind else {
+            return false;
+        };
+        let [seg] = p.segments.as_slice() else {
+            return false;
+        };
+        self.lookup_net_scoped(&seg.name)
+            .filter(|net| self.net_is_static_array(*net))
+            .and_then(|net| self.nets.get(net as usize))
+            .is_some_and(|nv| nv.signed)
+    }
+
+    /// Does `e` read anything this walk cannot give a width to — a hierarchical
+    /// or class-member name, a hierarchical CALL (the callee's own name is a
+    /// path, and the args walk alone missed it), or a bare name bound to an
+    /// inline actual handed over VERBATIM (`verbatim_actuals`: a frame call, a
+    /// class field, a hierarchical net — the actual is a placeholder and the
+    /// operand carries no hierarchical spelling at all)? The `Concat` and
+    /// `Replicate` sign arms answer `Some(false)` WITHOUT descending, so an
+    /// opaque leaf wrapped in braces otherwise walks straight past every guard
+    /// (round-6 review: `16'(PS16 * {u.hf(-8'sd16), 1'b0})` and a formal bound
+    /// to `u.v` both printed `xxxx` where PRE and both oracles say `f640`).
+    fn has_opaque_leaf(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        let rec = |x: &ast::Expr| self.has_opaque_leaf(x);
+        match &e.kind {
+            K::Ident(p) => {
+                if p.segments.len() > 1 {
+                    return true;
+                }
+                matches!(
+                    self.bare_ident_route(&p.segments[0].name, e.span),
+                    BareIdentRoute::Subst(eid) if self.verbatim_actuals.contains(&eid)
+                )
+            }
+            K::Call { name, args } => name.segments.len() > 1 || args.iter().any(rec),
+            K::Paren { inner } => rec(inner),
+            K::Unary { operand, .. } => rec(operand),
+            K::Binary { lhs, rhs, .. } => rec(lhs) || rec(rhs),
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => rec(cond) || rec(then_e) || rec(else_e),
+            K::BitSelect { base, index } => rec(base) || rec(index),
+            K::PartSelect { base, msb, lsb } => rec(base) || rec(msb) || rec(lsb),
+            K::IndexedPart { base, offset, .. } => rec(base) || rec(offset),
+            K::Concat { parts } => parts.iter().any(rec),
+            K::Replicate { count, value } => rec(count) || value.iter().any(rec),
+            K::Cast { expr, .. } => rec(expr),
+            K::SysCall { args, .. } => args.iter().any(rec),
+            // a package constant or variable is resolved here and has a width
+            K::PkgScoped { .. } => false,
+            K::IntLit { .. } | K::RealLit { .. } | K::StrLit { .. } | K::TimeLit { .. } => false,
+            // a method call, an assignment pattern, a `let` use, a streaming
+            // operator — anything this walk does not model: opaque, not a guess.
+            _ => true,
+        }
+    }
+
     /// The two cast arms' entry into [`Self::lower_size_ctx`]. Scopes the
     /// "already reported" flag to ONE cast (iverilog reports the cast, not each
     /// leaf) while leaving a NESTED cast free to report its own. No early return
     /// inside, so the restore cannot be skipped.
-    pub(crate) fn lower_size_ctx_entry(&mut self, e: &ast::Expr, n: u32, ext: bool) -> u32 {
+    ///
+    /// §11.8.1 / §6.24.1: the operand is evaluated as if assigned to an N-bit
+    /// variable, and an assignment's context can only WIDEN — the evaluation
+    /// width is `max(N, the operand's own self-determined width)`, never N alone.
+    /// Recursing at N computed `8'(13 + (s8 >> 2))` at 8 bits (`s8 = -16`:
+    /// `f0 >> 2` = `3c`, `+ 13` = `49`) where the 32-bit literal makes both
+    /// oracles shift at 32 bits (`3ffffffc + 13` = `…09`, low byte `09`). The
+    /// self width comes from [`Self::size_ctx_self_width`]; where that declines
+    /// the recursion stays at N (see below). The cast's own `lower_size_cast(_, N)`
+    /// then resizes the result to N.
+    pub(crate) fn lower_size_ctx_entry(
+        &mut self,
+        e: &ast::Expr,
+        n: u32,
+        ext: bool,
+        w: Option<u32>,
+    ) -> u32 {
         let outer = std::mem::replace(&mut self.size_cast_real_reported, false);
-        let out = self.lower_size_ctx(e, n, ext);
+        // Dev self-check (`VITA_SCW_CHECK=<file>`): ALSO lower the operand plain
+        // and log whether the walk agrees with the lowering on the EVALUATION
+        // width. ⚠️ The probe is a second lowering, so while the hook is on every
+        // diagnostic inside a routed cast is reported twice and a `$random` draw
+        // is duplicated — run the suite without it for a diagnostics count.
+        if let Some(log) = std::env::var_os("VITA_SCW_CHECK") {
+            use std::io::Write;
+            let plain = self.lower_ctx_or_plain(e, n);
+            let pw = (!self.expr_is_real(plain))
+                .then(|| self.ir_bits_of(plain))
+                .flatten();
+            let cwd = std::env::current_dir()
+                .map(|d| d.display().to_string())
+                .unwrap_or_default();
+            let line = match (w, pw) {
+                (Some(a), Some(p)) if n.max(p) != n.max(a) => format!(
+                    "SCW-MISMATCH ast={a} probe={p} n={n} span={:?} cwd={cwd}\n",
+                    e.span
+                ),
+                (Some(_), _) => "SCW-OK\n".to_string(),
+                (None, _) => format!("SCW-NONE probe={pw:?} n={n} span={:?} cwd={cwd}\n", e.span),
+            };
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(log)
+            {
+                let _ = f.write_all(line.as_bytes());
+            }
+        }
+        let m = n.max(w.unwrap_or(0));
+        let out = self.lower_size_ctx(e, m, ext);
         self.size_cast_real_reported = outer;
         out
     }

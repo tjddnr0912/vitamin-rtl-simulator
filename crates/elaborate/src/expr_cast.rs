@@ -76,9 +76,9 @@ impl Elaborator<'_> {
                 // that can't be resolved here the fill-only path is kept (no regression).
                 let e = match (
                     Self::is_size_ctx_operation(operand),
-                    self.ast_ctx_signed(operand),
+                    self.size_ctx_route(operand),
                 ) {
-                    (true, Some(ext)) => self.lower_size_ctx_entry(operand, n, ext),
+                    (true, Some((ext, w))) => self.lower_size_ctx_entry(operand, n, ext, w),
                     _ => self.lower_ctx_or_plain(operand, n),
                 };
                 if self.cast_operand_is_real(operand, e) {
@@ -106,10 +106,10 @@ impl Elaborator<'_> {
                             // §4.5.212: a context-determined operation runs at N bits.
                             let e = match (
                                 Self::is_size_ctx_operation(operand),
-                                self.ast_ctx_signed(operand),
+                                self.size_ctx_route(operand),
                             ) {
-                                (true, Some(ext)) => {
-                                    self.lower_size_ctx_entry(operand, n as u32, ext)
+                                (true, Some((ext, w))) => {
+                                    self.lower_size_ctx_entry(operand, n as u32, ext, w)
                                 }
                                 _ => self.lower_ctx_or_plain(operand, n as u32),
                             };

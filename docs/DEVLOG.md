@@ -503,3 +503,20 @@ replication count 는 `-56` 을 4294967240 으로 읽었고, range bound 는 음
 differential 이 남긴 *"다음에 이걸 재라"* 중 가장 위험한 것(비선택 generate 가지에서 `logic q[N]`
 N=0 이 false-LOUD 가 되는가)을 직접 쟀다 — 재현되지 않았고, `sub #(0)` 로 **인스턴스화된** 쪽은
 iverilog 도 거부하므로 그건 FIXED 다. 79칸 4-way 회귀 0 · FIXED 30 · 오라클 분열 7(불가침).
+
+## 2026-09-02 — §2: a size cast's constant leaves, the width it evaluates at, and what an override types (§4.5.405)
+
+Queue row 29 said "no prerequisite, ~30–50 lines". The classifier fix was that size — and
+the first measurement after it found 6 correct→silent cells on the very shapes §4.5.318
+had reverted on: the prerequisite existed, written one bullet below the row in the same
+§2. The width model (`max(N, self width)`) was the real defect and had been wrong for net
+leaves all along. Two review rounds: round 1 found the classifier resolving names in a
+different ORDER than the lowering (inline formals, generate-scope localparams) — fixed by
+extracting the lowering's decision into `bare_ident_route` and making both use it — and a
+parameter override typed by the DEFAULT's literal (§2 row 25). That one was fixed at the
+producer, fixed 7,982 override cells — and produced a new correct→silent edge in each of
+three review rounds (defparam names, `time` decimal defaults, `$signed(64'h…)`), so it was
+REVERTED under the three-blockers rule: the patch is kept in the row, and the classifier
+declines every guessed type instead. Round 3 also caught a round-1 class nobody reported
+(2-D / dynamic / queue elements classified unsigned). 6,452 green, corpus 10/10, digests
+unchanged. Details: ROADMAP_ARCHIVE §4.5.405.

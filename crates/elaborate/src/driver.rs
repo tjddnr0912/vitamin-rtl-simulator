@@ -169,6 +169,8 @@ impl<'s> Elaborator<'s> {
             assert_ctl: std::collections::BTreeMap::new(),
             in_assert_synth: false,
             subst: Vec::new(),
+            verbatim_actuals: BTreeSet::new(),
+            param_type_guessed: BTreeSet::new(),
             out_subst: Vec::new(),
             dyn_subst: Vec::new(),
             formal_str: Vec::new(),
