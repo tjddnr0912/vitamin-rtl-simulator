@@ -823,6 +823,34 @@ impl Elaborator<'_> {
                 }
                 None
             }
+            // A reduction the fold declined. Its operand is walked first (a net or an
+            // undefined name inside is the better message). Otherwise, the one way a
+            // reduction of constants fails to fold is an operand whose WIDTH the wide
+            // domain cannot vouch for — a parameter sized from its value rather than
+            // from a range, type or sized literal — and `&W` / `^W` / `~&W` genuinely
+            // depend on that width. Left in the const-but-unfoldable catch-all this
+            // was a silent 1-bit bound. An operand with x/z bits has a known width and
+            // is deliberately not named: iverilog sizes such a bound from the value
+            // bits and verilator rejects it, and vita follows the former for every
+            // other x-bearing bound (`wire [1'bx+2:0]`), so this stays in step.
+            K::Unary {
+                op:
+                    ast::UnOp::RedAnd
+                    | ast::UnOp::RedOr
+                    | ast::UnOp::RedXor
+                    | ast::UnOp::RedNand
+                    | ast::UnOp::RedNor
+                    | ast::UnOp::RedXnor,
+                operand,
+            } => {
+                if let Some(reason) = r(self, operand) {
+                    return Some(reason);
+                }
+                if self.wide_selfdet_width(operand).is_none() {
+                    return Some(REDUCTION_WIDTH_UNDECLARED.to_string());
+                }
+                None
+            }
             K::Unary { operand, .. } => r(self, operand),
             K::Binary { lhs, rhs, .. } => r(self, lhs).or_else(|| r(self, rhs)),
             K::Ternary {

@@ -436,6 +436,83 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.407 — A reduction operator inside a declaration bound sizes the declaration; an untyped parameter takes a reduction's type (§3 ⑦) (2026-09-03 · format 29 unchanged · adversarial review: 2 lenses (differential 12 designs · soundness 10 designs + a 13-site census), PASS/PASS, one wording finding fixed, delta re-census after each re-freeze · corpus 10/10)
+
+**The queue row said 12 silent cells; the census said 171.** The six §11.4.14 reduction
+operators folded in the value domain since §4.5.382, but only through
+`param_i64_at_declared`, which a declaration WITH a width reaches. Every position that
+asks the module-scope i64 walk (`const_eval_in_scope`) — a packed range, an unpacked
+dimension, a port range, a replication count, an untyped parameter's initializer — got
+`None`, and the bound consumers read `None` as ONE BIT at exit 0. `wire
+[((|4'b1010)+1):0] x;` was 1 bit where both oracles declare 3; `input [((|P)+7):0] p`
+sized 1 bit and truncated a 12-bit actual to `0` across the module boundary; `logic x
+[(|P)+2:0]` lost its dimension; `localparam R = |4'b1010;` was E3009. **Census 1**: 4
+provenances (literal · sized-literal param · typed localparam · package constant) × 9
+positions × 6 operators + 60 edge shapes = 320 cells → with the first arm alone **117
+silent→correct · 43 loud→correct · 35 wrong→wrong**; with all four pieces **148
+silent→correct · 46 loud→correct · 4 loud→(oracle-split, vita = verilator) · 0
+loud→wrong · 4 wrong→wrong** (all x-plane). **Census 2** (102 cells: constant-function
+formals and shadowing, `#()` and `-G` overrides, decimal and value-inferred provenance,
+`!`/`?:`/`**`/select under the reduction, untyped-parameter type): **48 silent→correct ·
+18 loud→correct · 6 loud→(split, vita = verilator) · 6 silent→loud · 0 loud→wrong · 4
+wrong→wrong** (x-plane).
+
+**Mechanism — four pieces.** ① `const_eval_in_scope` gets an arm for the six operators →
+`selfdet_bits_i64(e)`: the wide bit domain, whose names resolve through `wide_name_bits`
+= DECLARED provenance only (`param_range`, sized literal, type, package meta). That is
+the whole soundness argument §4.5.373 missed and §4.5.382 established: the operand's
+width never comes from `param_meta`. ② The width-aware twin `eval_const_env_at` had no
+reduction arm either, and it is what a bound holding a parameter SELECT reaches
+(`const_range_bound_fold`) and what `!`, a ternary condition and a `**` exponent reach
+for their operand — so `wire [(|P[3:1])+2:0]` and `wire [(!(|4'b1010))+2:0]` stayed 1
+bit after ①. The arm takes the wide domain when the operand names no constant-function
+local (one text, one answer at module scope) and the local's `envw` width otherwise
+(`fnshadow`: a 4-bit formal `P` shadowing an 8-bit module `P` reduces the formal). ⭐ It
+is also what closed the 24 replication-count cells the first census left at a silent
+`0000` — `const_bound_u32`'s third tier is this walk. ③ `param_decl_width_opt`: an
+untyped parameter whose initializer TOP is a reduction or a `!` records `(1, unsigned)`
+— a type fact (§11.8.1 / §11.4.7), so it answers under `declared_only`; without it
+`$bits(R)` was 32 for a value both oracles hold at 1 bit, and the delta re-census caught
+`localparam R = !(|4'b1010);` going loud → `0 32` before `!` was added. ④
+`nonconst_bound_reason` / `unfoldable_reason`: a reduction that declined because
+`wide_selfdet_width(operand)` is None says *"a reduction of an operand whose width is
+not declared"* — `localparam E = 4'hF | 4'h0; wire [(&E)+2:0]` was a silent 1 bit (both
+oracles 4) and is loud now.
+
+⚠️⚠️ **The loud→silent trade this slice refused.** In an UNTYPED parameter, the
+value-inferred tail sizes the initializer at ≥32 bits and the unlimited fold computes a
+context-determined operator at i64, so once the reduction folds, `localparam R =
+~(|4'b1010);` would print 4294967294 where both oracles print 0 at one bit — and
+`(|4'b1010) << 2` → 4 (oracles 0), `-(|4'b1010)` → 4294967295 (oracles 1). Three cells
+from loud to silent-wrong. The class is pre-existing (`localparam R = ~4'b1010;` is
+4294967285/32 at HEAD — §2 row 14's declared-vs-inferred wall) and this slice does not
+touch it; instead `param_init_kept_loud(p)` — implicit type, no range, a
+context-determined top over a reduction, self-determined width < 32 or unknown —
+declines at the four untyped value sites (instance · header · generate · package) and
+in the width tail, so those cells stay exactly as loud as they were. ⚠️ The "contains a
+reduction" conjunct is a delta-limiter, not a semantic claim; `~(!4'b0)` sits in the
+same class unguarded because it already folds today. The typed twins fold (`localparam
+logic [1:0] R = ~(|4'b1010)` is 2 on both oracles) and a top whose self width is already
+32 folds untyped (`(|x) * 3` is `3 32`, verilator; iverilog says 33 for its own reasons).
+
+**Review**: differential lens (12 designs outside the tables: generate-for/case,
+`repeat`, indexed part-select width, `$clog2`, size cast, typedef / function-return /
+interface ranges, 64- and 65-bit and signed operands, nested and concatenated operands,
+`~`/`<<`/`-` over a reduction in a BOUND — all correct) PASS; soundness lens (13-site
+census of every untyped-parameter fold, every one guarded; `defparam`, `-G`, `#()`,
+interface and class scopes measured) PASS with **F1**: the new loud sentence told the
+author of `parameter [0:3] P` to *declare a range* — `narrow_param_bits` refuses an
+ascending or non-zero-LSB declaration because the bit domain indexes positionally, so
+the text now names that case. **Residue → §2 🆕 H**: x-plane partial-known reductions
+(`&4'b110x` is a known 0) still decline (8 cells, 2-oracle) · an ascending / non-zero-LSB
+operand is loud where PRE was a silent 1 (oracles 4) · a value-inferred operand is loud,
+not correct · the kept-loud untyped shapes above · a constant-function BODY local
+assigned then reduced is loud in PRE and POST.
+
+Tests: `reduction_in_declaration_bound.rs` (8, all values 2-oracle unless the docstring
+says otherwise) + `wide_const_domain::an_inferred_width_never_supplies_a_reduction` now
+covers the untyped and the bound spelling its name claims. 6,457 → 6,465.
+
 #### 4.5.406 — A fill in a shift COUNT is one bit, and the row-30 fill lane is built, measured and reverted onto a prerequisite (§2 row 30) (2026-09-03 · format 29 unchanged · adversarial review: 2 lenses × 3 rounds · corpus 10/10)
 
 **SHIPPED — the part that separates.** §11.4.10 makes a shift amount self-determined and

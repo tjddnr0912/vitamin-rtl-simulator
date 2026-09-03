@@ -525,8 +525,9 @@ impl Elaborator<'_> {
                 // parameter whose initializer mentions a real converts at the
                 // declaration (§6.24.1). Without this the same text answered 6 at
                 // module scope and went loud one `generate` deeper.
-                match self
-                    .const_eval_in_scope(&p.value)
+                match (!self.param_init_kept_loud(p))
+                    .then(|| self.const_eval_in_scope(&p.value))
+                    .flatten()
                     .or_else(|| self.param_value_via_real(meta, &p.value))
                     .or_else(|| {
                         let dm = self.param_decl_width_declared(p);

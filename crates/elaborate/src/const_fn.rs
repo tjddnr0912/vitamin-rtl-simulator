@@ -283,13 +283,37 @@ impl Elaborator<'_> {
                 op: ast::UnOp::LogNot,
                 operand,
             } => Some((self.const_int_selfdet(operand)? == 0) as i64),
-            ast::ExprKind::Unary { op, operand } => {
+            // §11.4.14 REDUCTION: one bit out of a SELF-DETERMINED operand. The value
+            // domain folded these (§4.5.382) through `param_i64_at_declared`, which only
+            // a declaration with a width reaches — so in every position that asks THIS
+            // walk the six operators answered None, and the consumers of a declaration
+            // bound read None as ONE BIT: `wire [((|4'b1010)+1):0] x;` declared 1 bit
+            // where both oracles declare 3, an `input [((|4'b1010)+7):0] p` sized 1 bit
+            // and truncated its actual across the module boundary, an unpacked
+            // `[(|P)+2:0]` dimension vanished, all at exit 0. Same route the select arms
+            // below take: the wide bit domain reads the operand at its DECLARED width
+            // (`wide_name_bits`, provenance-filtered), so nothing here guesses a width.
+            // An operand with x/z bits declines there, as does a name whose width was
+            // inferred from a value — `nonconst_bound_reason` names the latter.
+            ast::ExprKind::Unary {
+                op:
+                    ast::UnOp::RedAnd
+                    | ast::UnOp::RedOr
+                    | ast::UnOp::RedXor
+                    | ast::UnOp::RedNand
+                    | ast::UnOp::RedNor
+                    | ast::UnOp::RedXnor,
+                ..
+            } => self.selfdet_bits_i64(e),
+            ast::ExprKind::Unary {
+                op: op @ (ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot),
+                operand,
+            } => {
                 let v = self.const_eval_in_scope(operand)?;
                 match op {
                     ast::UnOp::Plus => Some(v),
                     ast::UnOp::Minus => v.checked_neg(),
-                    ast::UnOp::BitNot => Some(!v),
-                    _ => None,
+                    _ => Some(!v),
                 }
             }
             // param/genvar reference: single-segment name bound in this scope OR
@@ -789,13 +813,27 @@ impl Elaborator<'_> {
                 op: ast::UnOp::LogNot,
                 operand,
             } => Some((self.eval_const_env_self(operand, env, envw, depth)? == 0) as i64),
-            ast::ExprKind::Unary { op, operand } => {
+            // A reduction is a self-determined NODE — the width-aware twin owns the
+            // arm (see `eval_const_env_at`), like the non-context Binary arm below.
+            ast::ExprKind::Unary {
+                op:
+                    ast::UnOp::RedAnd
+                    | ast::UnOp::RedOr
+                    | ast::UnOp::RedXor
+                    | ast::UnOp::RedNand
+                    | ast::UnOp::RedNor
+                    | ast::UnOp::RedXnor,
+                ..
+            } => self.eval_const_env_self(e, env, envw, depth),
+            ast::ExprKind::Unary {
+                op: op @ (ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot),
+                operand,
+            } => {
                 let v = self.eval_const_env(operand, env, envw, depth)?;
                 match op {
                     ast::UnOp::Plus => Some(v),
                     ast::UnOp::Minus => v.checked_neg(),
-                    ast::UnOp::BitNot => Some(!v),
-                    _ => None,
+                    _ => Some(!v),
                 }
             }
             // A non-context-determined operator is a self-determined NODE (the same

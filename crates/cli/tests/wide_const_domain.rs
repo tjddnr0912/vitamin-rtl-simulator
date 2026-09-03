@@ -206,6 +206,26 @@ fn an_inferred_width_never_supplies_a_reduction() {
         "%b",
         "R",
     );
+    // ⚠️ The UNTYPED spelling and the DECLARATION-BOUND spelling of the same reduction
+    // — the two positions this pin's name claims and, until §3 ⑦ landed, never
+    // covered: both took the module-scope walk, which had no reduction arm at all, so
+    // the untyped one was loud for the wrong reason and the bound was a SILENT 1 bit.
+    // The walk folds reductions now (through the same provenance-filtered resolver),
+    // and both stay loud for the RIGHT reason.
+    loud(
+        "  parameter A = 4'h1;\n  localparam W = A | 4'h0;\n  localparam R = ^W;",
+        "%b",
+        "R",
+    );
+    let (out, code) = run(
+        "module top;\n  parameter A = 4'h1;\n  localparam W = A | 4'h0;\n  \
+         wire [(^W)+2:0] X;\n  initial $display(\"%0d\", $bits(X));\nendmodule\n",
+    );
+    assert_ne!(code, Some(0), "{out}");
+    assert!(
+        out.contains("a reduction of an operand whose width the constant domain cannot read"),
+        "{out}"
+    );
     // The same value with the range DECLARED: canonical, and it folds.
     folds(
         "  parameter A = 4'h1;\n  localparam logic [3:0] W = A | 4'h0;\n  \

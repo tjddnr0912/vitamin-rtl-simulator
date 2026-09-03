@@ -314,6 +314,33 @@ impl Elaborator<'_> {
                         .and_then(|m| m.get(&name.name))
                         .copied();
                 }
+                // §11.4.14 / §11.4.7 / §11.8.1: a REDUCTION and a logical NOT are one bit
+                // and unsigned whatever their operand is — a type fact of the operator,
+                // not a width read off the value, which is why it answers under
+                // `declared_only` like a sized literal does. Without this arm the
+                // value-inferred tail sized `localparam R = |4'b1010;` at 32 bits where
+                // both oracles say 1 (`$bits(R)`), the moment `const_eval_in_scope`
+                // learned to fold it — and `!(|4'b1010)`, loud until then, would have
+                // gone the same way. Parens only, like the concatenation arm: a peeled
+                // `-(|x)` is a context-determined top and stays with
+                // `param_init_kept_loud`.
+                if default_binds {
+                    let mut red = &p.value;
+                    while let ast::ExprKind::Paren { inner } = &red.kind {
+                        red = inner;
+                    }
+                    if is_reduction_top(red)
+                        || matches!(
+                            red.kind,
+                            ast::ExprKind::Unary {
+                                op: ast::UnOp::LogNot,
+                                ..
+                            }
+                        )
+                    {
+                        return Some((1, false));
+                    }
+                }
                 // §11.4.12 / §11.4.12.1: a concatenation and a replication are
                 // SELF-DETERMINED — their width is the sum of their operands' own
                 // widths, and they are unsigned. That width is not recoverable from
@@ -453,6 +480,12 @@ impl Elaborator<'_> {
                 // with the same value written as a bare literal.
                 if declared_only {
                     return None; // VALUE-inferred — see the doc on this parameter
+                }
+                // Same decision as the four value sites — see `param_init_kept_loud`.
+                // Left to the tail, this would have recorded a 32-bit width for a value
+                // the sites then refuse, and a `$bits` of a parameter with no value.
+                if self.param_init_kept_loud(p) {
+                    return None;
                 }
                 if let Some(v) = self.const_eval_in_scope(&p.value) {
                     return Some((min_signed_bits(v).max(32), self.const_expr_signed(&p.value)));
@@ -1349,7 +1382,12 @@ impl Elaborator<'_> {
             // default; the escalation above has already made that loud.
             let mut chosen_val: Option<i64> = ovr_fill_v
                 .or_else(|| ovr_by_name.get(p.name.name.as_str()).copied().flatten())
-                .or_else(|| self.eval_param_init(&p.value, pw))
+                .or_else(|| {
+                    if self.param_init_kept_loud(p) {
+                        return None;
+                    }
+                    self.eval_param_init(&p.value, pw)
+                })
                 // The WIDE bit domain, read back as an i64 because the declaration
                 // fits one. Last in the chain: it fires only where every integer arm
                 // declined, so a reduction (`^A`), a select (`A[7:4]`) or a wide

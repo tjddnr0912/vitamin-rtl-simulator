@@ -733,6 +733,14 @@ impl Elaborator<'_> {
                     .to_string(),
             );
         }
+        // A reduction has a fold arm; what it lacks here is its operand's WIDTH — the
+        // same sentence `nonconst_bound_reason` gives a declaration bound, so one text
+        // fails the same way in a parameter and in a range.
+        if let K::Unary { operand, .. } = &e.kind {
+            if is_reduction_top(e) && self.wide_selfdet_width(operand).is_none() {
+                return Some(REDUCTION_WIDTH_UNDECLARED.to_string());
+            }
+        }
         Some(match &e.kind {
             K::Ident(_) | K::PkgScoped { .. } => match self.nonconst_bound_reason(e) {
                 Some(r) => format!("{r} is not a constant"),

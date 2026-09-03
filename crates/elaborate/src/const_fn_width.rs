@@ -522,6 +522,54 @@ impl Elaborator<'_> {
                 let _ = op;
                 Some((v == 0) as i64)
             }
+            // §11.4.14 REDUCTION — the arm this walk never had. It is what a declared
+            // range bound holding a parameter SELECT reaches (`const_range_bound_fold`
+            // redirects such a bound here), and what `!`, a ternary condition and a
+            // `**` exponent reach for their self-determined operand — so
+            // `wire [(|P[3:1])+2:0]` was ONE bit against both oracles' three, and
+            // `wire [(!(|4'b1010))+2:0]` the same, at exit 0.
+            //
+            // ⚠️ The operand's WIDTH decides `&`, `~&`, `^` and `~^`, and this walk sizes
+            // a module parameter from `param_meta`, where value-INFERRED widths live —
+            // the exact reading §4.5.373 built and reverted (`localparam W = 4'hF |
+            // 4'h0;` is 32 bits there and 4 in both oracles). So a reduction with no
+            // constant-function local in it takes the wide bit domain, whose names
+            // carry DECLARED provenance only, and gives the same answer
+            // `const_eval_in_scope` gives for the same text. Only an operand that
+            // names a local (`env` / `envw` — a formal or a body local, whose width IS
+            // its declaration) folds here, at that width.
+            K::Unary {
+                op:
+                    op @ (ast::UnOp::RedAnd
+                    | ast::UnOp::RedOr
+                    | ast::UnOp::RedXor
+                    | ast::UnOp::RedNand
+                    | ast::UnOp::RedNor
+                    | ast::UnOp::RedXnor),
+                operand,
+            } => {
+                let local = |n: &str| env.contains_key(n) || envw.contains_key(n);
+                if !ast_names_any(operand, &local) {
+                    return self.selfdet_bits_i64(e);
+                }
+                let w = self.const_self_width(operand, envw)?;
+                if w == 0 || w > 64 {
+                    return None;
+                }
+                let v = self.eval_const_env_self(operand, env, envw, depth)?;
+                let all = if w == 64 { u64::MAX } else { (1u64 << w) - 1 };
+                let bits = (v as u64) & all;
+                let r = match op {
+                    ast::UnOp::RedAnd | ast::UnOp::RedNand => bits == all,
+                    ast::UnOp::RedOr | ast::UnOp::RedNor => bits != 0,
+                    _ => bits.count_ones() % 2 == 1,
+                };
+                let inv = matches!(
+                    op,
+                    ast::UnOp::RedNand | ast::UnOp::RedNor | ast::UnOp::RedXnor
+                );
+                Some((r != inv) as i64)
+            }
             // A system function's ARGUMENT is self-determined — it does not take the
             // surrounding context — so it evaluates at its OWN width:
             // `$clog2(4'd15 + 4'd15)` is `$clog2(14)` = 4, not `$clog2(30)` = 5,

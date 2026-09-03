@@ -298,6 +298,7 @@
 > | **🆕 E** | **A fill in a SELF-determined position declines the WHOLE initializer, not just its own operand** (2026-09-03 · pre-existing · PRE == POST · 2-oracle) | `localparam logic [39:0] V = ('1 ^ 1'b0) + (('1 > 1'b0) ? 1'b1 : 1'b0);` keeps the 32-bit answer for its context-determined half as well — `0100000000` against both oracles' `0000000000`, 12 cells. §5.7.1 correctly gives a self-determined fill no context, but `fold_bits_at` returns `None` and the decline propagates out of the whole fold. Fix = fold such an operand at **1 bit** instead of declining the tree — which is exactly what `fold_shift_count` now does for a shift amount (§4.5.406), so the pattern is established. |
 > | **🆕 F** | **A narrow SIGNED operand is ZERO-extended in an unsigned context** (2026-09-03 · pre-existing · PRE == POST · 2-oracle · **NOT a fill defect** — the control has no fill) | `localparam logic [7:0] A = 8'hFF - (-1'sb1);` is `fe` and `8'hF0 \| (-1'sb1)` is `f1`; both oracles give `00` and `ff`. §11.8.2 reinterprets each operand at the EXPRESSION's sign; `const_wide.rs`'s bitwise/arith arms compute `cs = ls && rs` and then `resize_bits(.., cs)` for BOTH operands. 24 cells at widths 2..32, both sign declarations. ⭐ **Same root as row 30's prerequisite** (§11.8.1 region sign, node-local in the wide fold) — file the fix once. |
 > | **🆕 G** | **A hierarchical read of a wide parameter is `E3010 undeclared hierarchical name`, a factually FALSE message** (2026-09-03 · pre-existing · 2-oracle) | `module sub; localparam logic [127:0] K = 128'h1 - 128'h3; endmodule` + `s.K` → `E3010 … no such cross-instance net or parameter`, where both oracles print the value. A parameter that lands in `wide_param_bits` never reaches `hier_params`, so the read reports the name as undeclared. Controls confirm the class is about the WIDE side map, not this shape. Fix = populate `hier_params` for wide parameters, or re-word `E3010` for that case; the current text sends a reader hunting a typo. |
+> | **🆕 H** | **§3 ⑦ 잔여 넷 (2026-09-03 · §4.5.407 census + 리뷰 · 전부 pre-existing 또는 의도적 loud)** | ⓐ **x-plane 부분-기지 리덕션**: `(&4'b110x)`(=0 확정) · `(\|4'b101x)`(=1 확정) 이 바운드에서 1비트 clamp — 두 오라클 3/4 · 8칸(`^`/`~^` 는 오라클 분열). `fold_self_bits` 리덕션 arm 이 unknown 하나에도 decline. ⓑ **폭은 선언됐는데 wide 도메인이 못 읽는 피연산자** — ascending `parameter [0:3] P` · lo≠0 `parameter [7:4] P` 의 `\|P` 바운드: PRE 조용한 1 → 이제 **loud**(두 오라클 4 · 리뷰 F1). `narrow_param_bits` 가 `lo != 0 \|\| ascending` 을 거절(select 의 positional 인덱싱 보호). 리덕션은 방향·LSB 와 무관하므로 리덕션 피연산자 전용 레이아웃-무관 resolver 가 정답. ⓒ **값-추론 폭의 피연산자** `localparam E = 4'hF \| 4'h0; wire [(&E)+2:0]` 는 **loud**(두 오라클 4) — 정답은 row 14 선언폭 provenance 벽 뒤. ⓓ **무타입 파라미터의 좁은 문맥-결정 top 아래 리덕션** `localparam R = ~(\|4'b1010);` 는 **의도적 loud**(두 오라클 `0`·`$bits` 1) — 같은 소비자가 `~4'b1010` 을 4294967285/32 로 내는 pre-existing 클래스(row 14)와 같은 자리이고, 그 클래스가 닫히면 `param_init_kept_loud` 를 지운다. ⓔ const-function **본문 지역**을 대입 후 리덕션(`logic [5:0] t; t = a[5:0]; return (\|t)+2;`) 은 PRE·POST 모두 loud(오라클 3) — 인터프리터가 본문 지역의 폭을 envw 에 안 싣는 별 축. |
 > | 31 | 🔄 **RE-GROUNDED 2026-09-02 — the row's own proposed fix closes ZERO silent-wrong cells** (⛔ do not start as a §2 item) | The row offered *"a narrower rule for the sysfuncs that are provably state-free (`$bits`, `$clog2`, `$signed`)"*. Measured: **all 126 pure-family cells are already three-way correct in all nine positions.** That half is a **priority ⑤ PERFORMANCE** item and a real one — `assign p1 = $signed(a)*$signed(b)` measured **603 evaluations against 201** for the identical-dependency `a*b` (3.0×), same for `a >> $clog2(8)`; corpus demand 22 continuous assigns / 29 occurrences in ibex and verilog-ethernet ⇒ **re-filed to §5.2 rank 4**. The STATE half is **do-not-chase**: of 32 wrong cells only 6 are arbitrable — 26 have both oracles constant but disagreeing on WHICH constant (ivl `z` vs vlt `0`) and 4 split on constancy itself. ⚠️ Its recorded cause is also refuted: `$fgetc`/seeded `$random` in that position are E3009, i.e. unreachable, and for the one reachable case the decline makes the hazard WORSE (an uncertified `$random` assign spun the settle 2,406,546 times). |
 > | 32 | 🔄 **RE-GROUNDED 2026-09-02 — LOUD, not silent-wrong: the queue overstates it by two rungs** (→ §3, tail item) | Real, 6 cells, but the run ends with `F4004` and exit 1; the residue is one extra `$display` line. ⭐ Its recorded prerequisite is **removed by measurement**: vita's own TASK path already bails without committing the caller's lvalue and matches iverilog exactly, so the *"what does the calling expression receive"* question has a worked answer in the tree — and verilator is disqualified here because it prints after a TOP-LEVEL `$finish` too. ~10–20 product lines, one funnel (`frame_eval.rs::run_frame_call_with`). |
 > | 33 | 🆕🆕 **A whole-net copy is STALE for a whole delta when read in the same time slot as a blocking write of its source** (fresh-area engine probe 2026-09-02 · **2-oracle** · **41/63 cells** · silent-wrong · ⭐ a NEW class, not a constant-domain row) | `wire [7:0] c; assign c = v;` then `#1 v = 8'hA5; cap = c;` latches `cap = 00` in vita and `a5` in BOTH oracles, exit 0, no diagnostic, and it **persists** — nothing recomputes it. Identical under `--backend interp|vm|native`. Widths 1…128, `reg`/`logic`/`bit` sources, `wire`/`logic`/`tri`/`wand`/`wor` destinations, the `wire [7:0] c = v;` declaration form, parens, 2- and 3-deep copy chains, a pass-through module port, signed either side — all wrong. ⭐⭐ **`alias.rs`'s own module docstring is the thing refuted**: *"`n` has no state of its own, so there is no instant at which it holds a value `m` never held."* §4.5.397 built `copy_nets` on that sentence and wired it ONLY into t0 event suppression; the runtime half was never built, and the file says so out loud. ⭐ The separating property was established FROM THE ORACLE SIDE, not assumed: in one design, one slot, `assign c=v[3:0]`, `assign c={4'b0,v[3:0]}` and `assign c=v[0]` are **stale in iverilog too** ⇒ iverilog is not evaluating continuous assigns eagerly, it is COLLAPSING the whole-net copy into one net ⇒ the *"this is just the §5.4.1 CA-vs-procedural race, no oracle"* reading is dead. ⚠️ **`copy_nets` is NOT reusable verbatim — it is wrong at both edges, measured**: TOO WIDE (a bus assembled from in-range slices is an ORACLE SPLIT — iverilog stale, verilator fresh — and vita currently sits on iverilog's side, so reusing the set as-is moves a cell that has no answer) and TOO NARROW (it excludes multi-driver, but `assign c=v; assign c=8'hzz;` is fresh in BOTH oracles, as is a constant-index array-word source). Both edits must be an **opt-in parameter** on the existing walk — the t0 consumer's answers are pinned in `cli/tests/copy_net_no_t0_transition.rs`. ⚠️ **First action is a corpus measurement, not code**: pull copy-net updates earlier in the slot and check the 10 digests, the 4 examples and the `.velab` files for byte-identity. If they move, this is a SCHEDULING slice and must be re-scoped. ~60–120 product lines. |
@@ -1045,49 +1046,14 @@
 > **측정**: serv auto-top **경고 21 → 2**(남은 둘 = auto-top 모호성 + timescale, 둘 다 실행 가능한
 > 정보) · 오류는 6 그대로(루트 2 × 실제 오류 3 = iverilog 와 같은 중복) · `--top tb` 는 3/1 불변.
 
-> **⑦ 리덕션 연산자 — ⚠️⚠️ RESOLVED 로 적혀 있었고 그 밑에 silent-wrong 12칸이 있다**
-> (재그라운딩 2026-09-02 · **2-오라클** · 4 provenance × 7 위치 × 6 연산자 매트릭스에서
-> **silent 12 · loud 6 · correct 10 · 오라클 분열 0**).
->
-> ⭐⭐ **큐를 읽어서는 영영 안 나오는 줄이다.** `&`·`~&`·`|`·`~|`·`^`·`~^` 는 값 도메인에선
-> §4.5.382 로 열렸지만 **선언 바운드 안에서는 폭이 조용히 1 로 clamp** 된다:
-> `wire [((|4'b1010)+1):0] x;` — **이름 없는 순수 리터럴** — 이 vita `$bits` **1**, 두 오라클 **3**,
-> exit 0(timescale 경고뿐). 모듈 포트면 `input [((|4'b1010)+7):0] p` 가 **1비트로 사이즈되어
-> actual 을 모듈 경계 너머로 조용히 절단**하고, unpacked 차원이면 **차원이 통째로 사라진다**.
-> 선언-바운드 위치는 4 provenance × 6 연산자 전부 silent 다.
->
-> ⚠️ **기록된 잔여가 두 번 틀렸다**: 잔여는 loud 가 아니라 **silent** 이고, loud 쪽의 축은
-> 피연산자가 아니라 **타깃**이다 — `localparam R = &4'b1111;`(전부 리터럴, 추론할 것이 없다)은
-> loud 인데 `localparam logic R = &4'b1111;` 은 24/24 정확히 접힌다. 그리고 핀 테스트
-> `an_inferred_width_never_supplies_a_reduction` 은 **typed 타깃만** 써서 제 이름이 주장하는
-> 칸을 한 번도 덮은 적이 없다.
->
-> ⭐ 자리 = `const_fn.rs::const_eval_in_scope` 의 Unary catch-all 에
-> `.or_else(|| self.selfdet_bits_i64(e))` — **3~4 product lines**. 참조 구현은 트리 안에 있는
-> 정도가 아니라 **30줄 위에 이미 배선**돼 있다(`BitSelect`/`PartSelect` arm 이 정확히 그 호출로
-> 끝나고, `fold_self_bits` 는 여섯 리덕션 arm 을 이미 갖고 있다).
-> ⚠️ **최소 단위는 모듈 스코프 walk 하나**: env 쌍둥이 둘(`eval_const_env`,
-> `eval_const_env_self`)은 `wide_name_bits` 가 못 보는 **const-function 지역**을 들고 있어
-> 별도 정당화가 필요하다 — 세 `or_else` 가 똑같이 생겼지만 같지 않다. 그리고
-> `nonconst_bound_reason` 의 *"const 지만 못 접음, 그대로 둠"* catch-all 이 잔여에 대해
-> **loud 로 승격**되지 않으면 조용한 1비트 clamp 가 그만큼 살아남는다.
->
-> ✅ **값 도메인 절반은 §4.5.382 로 RESOLVED** (2026-08-25 · serv PROMOTED · 상세=ARCHIVE).
->
-> ⭐⭐ **§4.5.373 이 기록한 두-단계 선행조건이 둘 다 `param_range` 하나로 답해졌다.**
-> ⓐ *"폭이 declared provenance 여야 한다"* — `param_decl_range` 는 **선언된 range / 타입 /
-> sized 리터럴에서만** 기록하고, 값-추론은 아예 들어오지 않는다(`param_meta` 와 다른 점이 이것뿐이고
-> 그 하나가 전부다). ⓑ *"그 폭에서 값이 canonical 이어야 한다"* — 선언 range 가 있으면 바인딩에서
-> `coerce_param_value_with` 가 이미 그 폭으로 자른다. **§4.5.373 의 반례 그대로 실측**:
-> `parameter A = 4'h1; localparam logic [3:0] W = A<<4;` 는 vita 0 · iverilog 0.
->
-> ⚠️ 무타입 파라미터(`localparam W = A<<4;`)는 여전히 **loud** 다 — 폭이 값에서 추론되므로 위 두
-> 조건 중 어느 것도 성립하지 않는다. 그것이 §4.5.373 이 잰 바로 그 셀이고, 회귀 테스트로 **거절**
-> 을 핀했다(`wide_const_domain::an_inferred_width_never_supplies_a_reduction`).
->
-> ⚠️ *"같은 벽을 세 문으로 쳤다"* 던 셋(§4.5.371 의 select 바운드 · concat 폭 · 리덕션)은 **셋 다**
-> 이 슬라이스에서 열렸다 — 벽이 하나였다는 §4.5.373 의 판단이 맞았고, 그 하나가 폭의 출처였다.
-
+> **⑦ 리덕션 연산자 — 선언 바운드 · 무타입 파라미터** — ✅ **RESOLVED (§4.5.407)** (format 29 불변 ·
+> 2-오라클 · 코퍼스 10/10). 큐가 12 silent 라 적은 자리를 census 하니 **422칸 중 silent→정답 196 ·
+> loud→정답 64**(+10 은 오라클 분열에서 verilator 와 일치) 이었다(4 provenance × 9 위치 × 6 연산자 +
+> 엣지 60 + 함수 지역·override·env-쌍둥이 102). 모듈 스코프 i64 walk 와 폭-인지 쌍둥이 둘 다에 리덕션
+> arm(`selfdet_bits_i64` = 선언 provenance 만 · 쌍둥이 arm 이 select-아래·`!`·`?:`·`**`·replication count
+> 까지 열었다) · 무타입 파라미터의 리덕션/`!` top 폭 = (1, unsigned) · 좁은 문맥 아래 리덕션은 무타입
+> 파라미터에서 **loud 유지**(`param_init_kept_loud`) · 값-추론 피연산자는 조용한 1비트가 아니라 loud.
+> **loud→wrong 0** (렌즈 2 × 22 설계). 잔여 = §2 🆕 H.
 > **⑧ 함수/태스크 본문의 `$finish`/`$stop`** — ✅ **RESOLVED (§4.5.404)** (format 29 불변 ·
 > **코퍼스 9/10 → 10/10** · verilog-ethernet PROMOTED).
 >
@@ -1635,7 +1601,7 @@ memoisation of a shared sub-expression**.
 
 | 순위 | 트랙 | 왜 여기 | 착수 조건 / 첫 걸음 |
 |---|---|---|---|
-| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라** — 그 절은 주제별 묶음이지 착수 순서가 아니다. **2026-09-02 재그라운딩(8 에이전트 · 전 항목 HEAD 3-툴)이 정한 순서**: ~~row 29~~ **RESOLVED §4.5.405** → ~~row 30~~ **BUILT · 3라운드 리뷰 · REVERTED 2026-09-03**(§4.5.406 이 분리 가능한 절반만 실었다 · 4-piece 패치와 세 edge 는 row 30 에 · **선행조건 = §11.8.1 region sign**, 🆕 F 와 같은 뿌리) → **§3 ⑦**(선언 바운드 리덕션 · **12 silent** · 3~4줄 · ⚠️ RESOLVED 로 적혀 있었다) → **row 33**(whole-net copy 가 한 델타 stale · **41/63** · 신규 클래스). ⚠️ row 30 이 남긴 새 행 다섯(🆕 C~G)은 **전부 pre-existing** 이고 🆕 C 는 CLASS 다 — 트랙을 선점하지 않는다. ⚠️⚠️ **여덟 줄을 재측정했더니 여덟 줄 다 모양이 바뀌었고 셋은 severity 등급이 바뀌었다** — 착수 첫 행동은 구현이 아니라 census 다 |
+| **1** | **정확성 큐 — §2 silent-wrong 잔여** | 이 저장소의 **최상위 원칙**이 정확성이고 성능 축은 수확 체감에 도달했다 | ⚠️ **§2 를 위에서부터 읽지 마라** — 그 절은 주제별 묶음이지 착수 순서가 아니다. **2026-09-02 재그라운딩(8 에이전트 · 전 항목 HEAD 3-툴)이 정한 순서**: ~~row 29~~ **RESOLVED §4.5.405** → ~~row 30~~ **BUILT · 3라운드 리뷰 · REVERTED 2026-09-03**(§4.5.406 이 분리 가능한 절반만 실었다 · 4-piece 패치와 세 edge 는 row 30 에 · **선행조건 = §11.8.1 region sign**, 🆕 F 와 같은 뿌리) → ~~§3 ⑦~~ **RESOLVED §4.5.407**(큐의 «12 silent» 는 census 에서 **196 silent + 64 loud** 였다 · loud→wrong 0 · 잔여 = §2 🆕 H) → **row 33**(whole-net copy 가 한 델타 stale · **41/63** · 신규 클래스). ⚠️ row 30 이 남긴 새 행 다섯(🆕 C~G)은 **전부 pre-existing** 이고 🆕 C 는 CLASS 다 — 트랙을 선점하지 않는다. ⚠️⚠️ **여덟 줄을 재측정했더니 여덟 줄 다 모양이 바뀌었고 셋은 severity 등급이 바뀌었다** — 착수 첫 행동은 구현이 아니라 census 다 |
 | **2** | **§3 loud → correct-support 승격** — ⚠️⚠️ **2026-09-02: 이 트랙의 외부 동인이 사라졌다.** 착수 순서를 정하던 워크로드 코퍼스가 **10/10 · 거절 0** 이 되었고(§4.5.404 가 마지막 거절 ⑧ 을 닫았다), 그것이 §3 을 §2 보다 먼저 세울 근거였다 ⇒ **이제 §3 은 §2 뒤**다 | 남은 줄 = §3 본문. ⚠️ ② 와 ⑦ 은 **지어서 되돌린** 항목이고 각자 선행조건이 기록돼 있다 — ⚠️ 착수 전 그 선행조건이 **아직 사실인지 재라**(§4.5.376 은 revert 사유가 stale 이고 항목이 애초에 막힌 적 없었음을 실측했다). ⑤ 는 **오라클 없음**이지만 그건 미루는 이유가 **아니다**(hand-IEEE) |
 | **2b** | **§0 T2 잔여** — ~~sized-literal enum label~~ **RESOLVED(§4.5.379)**(⚠️ census 가 이름을 반박: 막힌 건 sized-literal 이 아니라 **상수 이름 라벨**이었다) | §3 과 같은 사다리 방향인데 **오라클이 이미 답한다**라 더 싸다 | 남은 하나 = `real` const-fold(= §4.5.229 가 남긴 `int'(<real param>)` 바운드의 **선행**) · ⚠️ 그 잔여는 §0 항목 8 이 *"의도적 loud"* 로 적어 둔 것이고 **i64 twin 은 시도 후 철회**(5건 silent-wrong)이므로 착수 전 census 필수 |
 | **3** | **§6 G2 OBS 잔여** | 최종목표 G2 축이고 정확성과 **직교**라 병렬 가능 | SPEC = [preview/19](preview/19-ai-agent-observability.md) · 남은 항목은 §6 표 |

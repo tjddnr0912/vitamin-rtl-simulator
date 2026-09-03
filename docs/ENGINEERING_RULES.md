@@ -219,6 +219,21 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ A newly foldable leaf lands on EVERY consumer — count the ones whose rule is wrong (2026-09-03 · §4.5.407)
+
+Adding a fold arm for a leaf (here the six reductions) does not choose its consumers: the
+same `Some(v)` reaches a range bound (a 32-bit self-determined position, where the i64 walk
+is exact), a port, a replication count, and an UNTYPED parameter — whose value-inferred
+tail sizes at ≥32 and computes a context-determined top at unlimited width. Three cells
+that were LOUD (`~(|4'b1010)`, `(|x) << 2`, `-(|x)`) would have become silent-wrong on that
+one consumer while 165 became correct on the others. **Rule**: before widening a shared
+fold, list its consumers and, for each, whether its context rule is exact for the new
+leaf; where it is not, decline at THAT consumer for the delta only (`param_init_kept_loud`
+— keyed on the shape the slice opens, documented as a delta-limiter) rather than shrinking
+the fold or loud-ing the consumer's pre-existing class. And a text folded by TWO
+evaluators (`const_eval_in_scope` and the width-aware twin) needs the arm in both: the
+first arm fixed 117 cells and left every bound holding a parameter SELECT at 1 bit.
+
 ### ⭐⭐ An arm that answers WITHOUT descending is where an opaque leaf hides (2026-09-03 · §4.5.405)
 
 A guard that walks the operand for a hazard is only as good as the arms that DESCEND. `Concat` and

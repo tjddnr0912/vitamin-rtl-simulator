@@ -301,3 +301,113 @@ impl Elaborator<'_> {
         }
     }
 }
+
+/// Why a reduction of constants declines: the one input it needs beyond the value.
+///
+/// ⚠️ Names every case the wide domain's name resolver refuses (`narrow_param_bits`),
+/// not only the value-inferred one: a declared `[0:N]` (ascending) or `[H:L]` with a
+/// non-zero low bound is a width the DECLARATION states and the bit domain still
+/// declines, because it indexes positionally from 0 and carries no direction. Review
+/// measured `parameter [0:3] P = 4'b1010; wire [(|P)+2:0] x;` — both oracles 4 — reading
+/// a sentence that told the author to declare a range they had declared.
+pub(crate) const REDUCTION_WIDTH_UNDECLARED: &str =
+    "a reduction of an operand whose width the constant domain cannot read: a parameter \
+     sized from its value (no range, type or sized literal), or one declared ascending \
+     `[0:N]` / with a non-zero low bound `[H:L]`";
+
+/// Is `e` (parens already peeled) one of the six §11.4.14 reduction operators?
+pub(crate) fn is_reduction_top(e: &ast::Expr) -> bool {
+    matches!(
+        &e.kind,
+        ast::ExprKind::Unary {
+            op: ast::UnOp::RedAnd
+                | ast::UnOp::RedOr
+                | ast::UnOp::RedXor
+                | ast::UnOp::RedNand
+                | ast::UnOp::RedNor
+                | ast::UnOp::RedXnor,
+            ..
+        }
+    )
+}
+
+/// Does any node of `e` satisfy `pred`, over the arms the constant domain descends
+/// into — `const_fold_children` plus the parts of a concatenation / replication
+/// (which the placement fold walks on its own)?
+pub(crate) fn ast_any(e: &ast::Expr, pred: &dyn Fn(&ast::Expr) -> bool) -> bool {
+    if pred(e) {
+        return true;
+    }
+    let parts: Vec<&ast::Expr> = match &e.kind {
+        ast::ExprKind::Concat { parts } => parts.iter().collect(),
+        ast::ExprKind::Replicate { count, value } => {
+            std::iter::once(&**count).chain(value.iter()).collect()
+        }
+        _ => Elaborator::const_fold_children(e),
+    };
+    parts.into_iter().any(|p| ast_any(p, pred))
+}
+
+/// Does `e` mention a single-segment name for which `is_local` holds?
+pub(crate) fn ast_names_any(e: &ast::Expr, is_local: &dyn Fn(&str) -> bool) -> bool {
+    ast_any(e, &|x| match &x.kind {
+        ast::ExprKind::Ident(p) if p.segments.len() == 1 => is_local(&p.segments[0].name),
+        _ => false,
+    })
+}
+
+fn ast_contains_reduction(e: &ast::Expr) -> bool {
+    ast_any(e, &is_reduction_top)
+}
+
+impl Elaborator<'_> {
+    /// An UNTYPED parameter whose initializer this slice would newly fold, but only
+    /// into a consumer that is known to size it wrong — kept LOUD instead.
+    ///
+    /// An implicit parameter takes its type from its initializer (§6.20.2), and the
+    /// value-inferred tail of `param_decl_width_opt` records that width as the folded
+    /// value's minimal width, never narrower than 32. For an initializer whose
+    /// self-determined width is NARROWER than that and whose top operator is
+    /// context-determined, the width-unlimited fold and the recorded width disagree
+    /// with both oracles: `localparam R = ~4'b1010;` prints 4294967285 at 32 bits
+    /// where both say 5 at 4. That class is pre-existing (ROADMAP §2 row 14, the
+    /// declared-vs-inferred provenance wall) and it is not touched here.
+    ///
+    /// What IS touched: `const_eval_in_scope` now folds a reduction, so `~(|4'b1010)`,
+    /// `(|4'b1010) << 2` and `-(|4'b1010)` — loud until now — would land on that
+    /// same tail and print `4294967294`, `4` and `4294967295` where both oracles
+    /// print `0`, `0` and `1`. Three cells from loud to silent-wrong is a trade the
+    /// accuracy ladder forbids, so a narrow context-determined top OVER a reduction
+    /// declines in the four untyped-parameter value sites and in the tail, and stays
+    /// exactly as loud as it was. A reduction as the TOP is not this shape: its
+    /// width is a type fact and `param_decl_width_opt` records it as one bit.
+    ///
+    /// ⚠️ The "contains a reduction" conjunct limits the guard to this slice's delta
+    /// and makes no semantic claim — `~(!4'b0)` and `~(1 < 2)` sit in the same
+    /// pre-existing class and are not guarded, because they already fold today.
+    /// When the tail learns to size an initializer at its self-determined width, this
+    /// predicate goes with it.
+    pub(crate) fn param_init_kept_loud(&self, p: &ast::ParamDecl) -> bool {
+        if !matches!(p.ty, ast::ParamType::Implicit) || p.range.is_some() {
+            return false;
+        }
+        let mut top = &p.value;
+        while let ast::ExprKind::Paren { inner } = &top.kind {
+            top = inner;
+        }
+        let ctx_top = match &top.kind {
+            ast::ExprKind::Unary { op, .. } => {
+                matches!(op, ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot)
+            }
+            ast::ExprKind::Binary { op, .. } => binop_result_is_context_determined(*op),
+            _ => false,
+        };
+        if !ctx_top || !ast_contains_reduction(top) {
+            return false;
+        }
+        // A self width of 32 or more is what the tail records anyway, so the two
+        // agree there; anything narrower — or unknown — is the disagreeing shape.
+        self.const_self_width(top, &ConstWidths::new())
+            .is_none_or(|w| w < 32)
+    }
+}

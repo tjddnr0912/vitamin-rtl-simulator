@@ -560,8 +560,9 @@ impl Elaborator<'_> {
                         // A module-BODY parameter/localparam is not on the
                         // instantiation override channel — the default binds.
                         let meta = self.param_decl_width_unoverridden(p);
-                        let folded = self
-                            .eval_param_init(&p.value, meta.map(|(w, _)| w))
+                        let folded = (!self.param_init_kept_loud(p))
+                            .then(|| self.eval_param_init(&p.value, meta.map(|(w, _)| w)))
+                            .flatten()
                             .or_else(|| self.param_value_via_real(meta, &p.value))
                             .or_else(|| {
                                 let dm = self.param_decl_width_declared(p);

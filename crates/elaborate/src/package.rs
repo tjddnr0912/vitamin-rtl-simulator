@@ -578,8 +578,9 @@ impl Elaborator<'_> {
                     // recomputed a few lines below for `const_meta`; asking twice is
                     // cheaper than reordering a block whose restore list is positional.
                     let pmeta = self.param_decl_width_unoverridden(p);
-                    let folded = self
-                        .const_eval_in_scope(&p.value)
+                    let folded = (!self.param_init_kept_loud(p))
+                        .then(|| self.const_eval_in_scope(&p.value))
+                        .flatten()
                         .or_else(|| self.param_value_via_real(pmeta, &p.value))
                         .or_else(|| {
                             let dm = self.param_decl_width_declared(p);

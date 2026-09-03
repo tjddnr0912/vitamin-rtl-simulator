@@ -11,6 +11,22 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A reduction operator inside a declaration bound sizes the declaration.** The six
+  IEEE §11.4.14 operators (`& ~& | ~| ^ ~^`) folded only where a declared width reached
+  them; every other constant position — a packed range, an unpacked dimension, a port
+  range, an untyped parameter's initializer — got no value, and the bound consumers
+  read "no value" as one bit at exit 0. `wire [((|4'b1010)+1):0] x;` was 1 bit where
+  iverilog and verilator declare 3, `input [((|P)+7):0] p` truncated its actual across
+  the module boundary, and `localparam R = |4'b1010;` was refused. All of these fold
+  now — in a range, a dimension, a port, a replication count, an indexed part-select
+  width, a generate condition, a constant function's formal (196 silent and 64 loud
+  cells of a 422-cell census, none regressed) — an untyped parameter initialised by a
+  reduction or a `!` has that operator's type (`$bits(R)` is 1), and a reduction whose
+  operand width the constant domain cannot read refuses with a message naming why.
+  Residue, tracked in ROADMAP §2: a reduction over an operand with x/z bits still
+  declines, and one over a parameter declared ascending (`[0:3]`) or with a non-zero
+  low bound (`[7:4]`) refuses where it used to be a silent one bit.
+
 - **A shift amount written as an unsized fill is one bit, not 32.** IEEE §11.4.10 makes
   a shift amount self-determined and §5.7.1 gives an unsized fill in a self-determined
   position a width of one, so `'1` shifts by 1. The wide constant folder sized it at a

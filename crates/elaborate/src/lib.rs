@@ -155,6 +155,7 @@ pub(crate) use lvalue::*;
 pub(crate) use net_util::*;
 pub(crate) use package::*;
 pub(crate) use packed::*;
+pub(crate) use param_query::{ast_names_any, is_reduction_top, REDUCTION_WIDTH_UNDECLARED};
 pub(crate) use ports::*;
 pub(crate) use proc_builder::*;
 pub(crate) use static_array_method::*;
