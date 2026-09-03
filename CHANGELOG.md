@@ -11,6 +11,16 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A shift amount written as an unsized fill is one bit, not 32.** IEEE §11.4.10 makes
+  a shift amount self-determined and §5.7.1 gives an unsized fill in a self-determined
+  position a width of one, so `'1` shifts by 1. The wide constant folder sized it at a
+  hard 32 instead, got `0xFFFFFFFF`, and saturated every such shift to zero:
+  `localparam logic [39:0] R = 40'hFF << '1;` was `0000000000` where iverilog and
+  verilator both give `00000001fe`. 288 of an 880-cell census move, none regress, and
+  `'0` — a shift by zero at any width — is unchanged. An `'x`/`'z` amount still refuses.
+  A right shift by a fill is still answered by the other constant lane and stays wrong;
+  that lane's own hard-coded 32 is tracked as one class in ROADMAP §2.
+
 - **A size cast now evaluates its operand at the LRM width, and sees constant leaves.**
   `N'(expr)` over a context-determined operation (`+ - * / % ** << >> >>> & | ^ ~ ?:`)
   only took the context path when every leaf was a net; a parameter, localparam,

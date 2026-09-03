@@ -136,6 +136,23 @@ fn fold_count(e: &ast::Expr, name: WideNameFn) -> Option<u32> {
 /// `usize::MAX` is safe to hand both shift loops: it drives `i.checked_add(k)` /
 /// `i.checked_sub(k)` to `None` for every bit, which is the all-vacated result.
 fn fold_shift_count(e: &ast::Expr, name: WideNameFn) -> Option<usize> {
+    // ⚠️⚠️ A shift amount is SELF-determined (§11.4.10), and an unsized fill in a
+    // self-determined position is ONE BIT (§5.7.1) — so `'1` is a shift by 1 and `'0` a
+    // shift by 0, which is what both oracles do. `const_eval_u32` below has no fill arm
+    // and sizes one at a hard 32, so `'1` came back `0xFFFFFFFF` and the saturation two
+    // lines down turned every such shift into zero: `localparam logic [39:0] R =
+    // 40'hFF << '1;` was `0000000000` at exit 0 where iverilog and verilator both give
+    // `00000001fe`. Its `>>` twin was `0000000000` for their `000000007f`.
+    //
+    // ⭐ This is a value→value correction on its own: every cell it moves already had a
+    // (wrong) number, because the fill sits in the COUNT and the walk folds the left
+    // operand as it always did. Nothing that was loud becomes a value.
+    //
+    // ⚠️ An x/z fill still declines — there is no shift amount it could name — and
+    // `fill_to_i64` is the helper that says so.
+    if let Some((raw, kind)) = const_eval::fill_literal_ast(e) {
+        return const_eval::fill_to_i64(kind, raw, 1).map(|v| v as usize);
+    }
     if let Some(n) = const_eval_u32(e) {
         return Some(n as usize);
     }
