@@ -34,6 +34,7 @@ Phase-2.
 | Non-ANSI port headers | Yes | `module m (a, q); input a; output [7:0] q;` |
 | `parameter` | Yes | Overridable at instantiation. |
 | `localparam` | Yes | Not overridable. |
+| Parameter typed by a `typedef` | Yes | `localparam my_struct_t C = '{a: 1'b1, b: 5'd3};` — vector, signed, atom (`int`/`byte`/…), packed struct (members read as constants, positional or named `'{…}`), enum (labels and `.name()`/`.next()`), scoped `pkg::t`; bindings follow `import pkg::*`. Loud in v1: a multi-dimensional packed typedef, an array parameter of a struct/enum typedef, an unpacked struct, a `'{…}` given as an instance override. |
 | Parameter override — positional `#(8)` | Yes | |
 | Parameter override — named `#(.W(8))` | Yes | |
 | `generate` / `endgenerate`, `genvar` | Yes | `for`/`if`/`case` generate constructs. The `generate`/`endgenerate` keywords are **optional** (IEEE 1800-2017 §27.3), and the loop variable may be declared in the header — `for (genvar i = 0; i < 4; i++)` (§27.4). |

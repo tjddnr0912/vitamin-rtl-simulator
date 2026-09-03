@@ -397,6 +397,23 @@ impl Parser<'_, '_> {
         }
     }
 
+    /// A LOCAL declaration of `n` shadows whatever struct/enum NAME binding `n`
+    /// carried (a wildcard-imported package variable/parameter — §4.5.410's
+    /// `pkg_bindings` replay — or an earlier same-scope binding). Every declaration
+    /// site that produces a name calls this before binding its own type, so a
+    /// module-local `logic [7:0] V [0:1]` after `import p::*` (where `p` has a
+    /// struct `V`) is an array again and its `'{…}` is an array pattern, not the
+    /// package struct's field concat (measured: PRE ran, the replay made it E3009).
+    /// The parser-side twin of elaborate's `gather_local_decl_names` skip.
+    pub(crate) fn unbind_struct_enum_name(&mut self, n: &str) {
+        self.local_decl_names.insert(n.to_string());
+        self.var_struct.remove(n);
+        self.struct_scalar_vars.remove(n);
+        self.struct_1d_array_vars.remove(n);
+        self.var_enum.remove(n);
+        self.wildcard_bound.remove(n);
+    }
+
     pub(crate) fn parse_net_var(&mut self, allow_net_delay: bool) -> Option<NetVarDecl> {
         let start = self.cur_span();
         let kind = self.net_var_kind().unwrap();
@@ -417,6 +434,9 @@ impl Parser<'_, '_> {
         };
         let names = self.parse_decl_name_list()?;
         self.expect(TokenKind::Semi, "';'");
+        for n in &names {
+            self.unbind_struct_enum_name(&n.name.name);
+        }
         Some(NetVarDecl {
             kind,
             signed,
@@ -480,6 +500,9 @@ impl Parser<'_, '_> {
         };
         let mut names = self.parse_decl_name_list()?;
         self.expect(TokenKind::Semi, "';'");
+        for n in &names {
+            self.unbind_struct_enum_name(&n.name.name);
+        }
         // If this is a struct type, bind each declared name → type so `var.field`
         // member accesses can be desugared to part-selects. A scalar (no unpacked
         // dims) struct var is additionally eligible for the `'{…}` pattern

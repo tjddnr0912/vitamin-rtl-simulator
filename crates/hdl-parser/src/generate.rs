@@ -323,7 +323,13 @@ impl Parser<'_, '_> {
         let start = self.cur_span();
         self.bump(); // `begin`
         let label = self.opt_block_label(); // reuse PR2 helper (`: name` or None)
+                                            // A generate block is a scope (IEEE §27.2): its typedefs, struct/enum name
+                                            // bindings and IMPORTS end with it. Without the snapshot an `import r::P;`
+                                            // inside the block dropped the module-scope binding of `P` (§4.5.410
+                                            // review: q's value read through r's layout at module scope).
+        let snap = self.snapshot_scope();
         let items = self.parse_gen_items_until(&|p| p.at_kw(Kw::End) || p.at_eof());
+        self.restore_scope(snap);
         self.expect(TokenKind::Word(WordKind::Keyword(Kw::End)), "'end'");
         self.opt_block_label(); // optional `: end_label` (no AST slot → discard)
         GenItem::Block {

@@ -123,6 +123,66 @@ impl Parser<'_, '_> {
                 }
             }
         }
+        // §3 ⑤: replay the package's struct/enum NAME bindings so a member access /
+        // `'{…}` / enum method on an imported package variable or parameter desugars
+        // here as it did in the package. A WILDCARD replays with `or_insert` (a
+        // same-named local or earlier binding wins, like the type copies above). An
+        // EXPLICIT `import r::X` WINS over a prior wildcard binding of `X` (IEEE
+        // §26.8 — elaborate already gives it the VALUE), so it first DROPS whatever
+        // `X` was bound to and then installs r's binding if r has one: without the
+        // drop, `import q::*; import r::P;` read r's value through q's layout
+        // (`P=122 lo=2 hi=12`, no simulator's answer), and a non-struct `r::P`
+        // would keep desugaring `P.lo` against q's struct.
+        // Only a binding a WILDCARD made is dropped (`wildcard_bound`): a local
+        // declaration that shares the name — a struct variable named like a
+        // package TYPE being imported explicitly, say — keeps its binding.
+        if let Some(i) = &item {
+            if self.wildcard_bound.remove(&i.name) {
+                self.unbind_struct_enum_name(&i.name);
+            }
+        }
+        if let Some(pb) = self.pkg_bindings.get(&pkg.name).cloned() {
+            let explicit = item.is_some();
+            let wanted = |n: &str| item.as_ref().is_none_or(|i| i.name == n);
+            for (n, ty) in pb.var_struct.clone() {
+                if wanted(&n) {
+                    if explicit {
+                        self.var_struct.insert(n.clone(), ty);
+                        self.wildcard_bound.remove(&n);
+                    } else if !self.var_struct.contains_key(&n)
+                        && !self.local_decl_names.contains(&n)
+                    {
+                        self.var_struct.insert(n.clone(), ty);
+                        self.wildcard_bound.insert(n);
+                    }
+                }
+            }
+            // The `'{…}` desugar set follows the binding that actually landed: a
+            // name whose `var_struct` entry stayed someone else's (a local struct
+            // array, a union, an earlier import) is not made scalar-desugarable.
+            for n in pb.struct_scalar.clone() {
+                if wanted(&n)
+                    && self
+                        .var_struct
+                        .get(&n)
+                        .is_some_and(|t| pb.var_struct_ty(&n) == Some(t.as_str()))
+                {
+                    self.struct_scalar_vars.insert(n);
+                }
+            }
+            for (n, ty) in pb.var_enum {
+                if wanted(&n) {
+                    if explicit {
+                        self.var_enum.insert(n.clone(), ty);
+                        self.wildcard_bound.remove(&n);
+                    } else if !self.var_enum.contains_key(&n) && !self.local_decl_names.contains(&n)
+                    {
+                        self.var_enum.insert(n.clone(), ty);
+                        self.wildcard_bound.insert(n);
+                    }
+                }
+            }
+        }
         Some(ImportDecl {
             pkg,
             item,
@@ -268,6 +328,35 @@ impl Parser<'_, '_> {
         }
     }
 
+    /// The stable key a package's struct/enum NAME binding records for type `ty`
+    /// (see the `pkg_bindings` capture in `parse_module_like`): the `pkg::ty` twin,
+    /// registered from the bare layout/labels in scope when this package did not
+    /// define `ty` itself (it imported it). An already-scoped `ty` is returned as is.
+    fn pkg_binding_type_key(&mut self, pkg: &str, ty: &str) -> String {
+        if ty.contains("::") {
+            return ty.to_string();
+        }
+        let scoped = format!("{pkg}::{ty}");
+        if !self.struct_layouts.contains_key(&scoped) {
+            if let Some(l) = self.struct_layouts.get(ty).cloned() {
+                self.struct_layouts.insert(scoped.clone(), l);
+                if self.union_type_names.contains(ty) {
+                    self.union_type_names.insert(scoped.clone());
+                }
+            }
+        }
+        if !self.enum_defs.contains_key(&scoped) {
+            if let Some(e) = self.enum_defs.get(ty).cloned() {
+                self.enum_defs.insert(scoped.clone(), e);
+            }
+        }
+        if self.struct_layouts.contains_key(&scoped) || self.enum_defs.contains_key(&scoped) {
+            scoped
+        } else {
+            ty.to_string()
+        }
+    }
+
     pub(crate) fn parse_module(&mut self) -> Option<ModuleDecl> {
         self.parse_module_like(Kw::Module, Kw::Endmodule)
     }
@@ -284,6 +373,8 @@ impl Parser<'_, '_> {
         self.struct_scalar_vars.clear();
         self.struct_1d_array_vars.clear();
         self.var_enum.clear();
+        self.wildcard_bound.clear();
+        self.local_decl_names.clear();
         self.const_locals.clear();
         let is_macromodule = self.at_kw(Kw::Macromodule);
         self.bump(); // module / macromodule / interface
@@ -337,6 +428,21 @@ impl Parser<'_, '_> {
 
         // port list: ANSI ( dir type name, … ) | non-ANSI ( name, … ) | none
         let ports = self.parse_port_list();
+        // Port names are local declarations too (a body `import p::*` must not
+        // bind a package struct over a port of the same name).
+        match &ports {
+            PortList::Ansi(ps) => {
+                for pt in ps {
+                    self.local_decl_names.insert(pt.name.name.clone());
+                }
+            }
+            PortList::NonAnsi(ids) => {
+                for id in ids {
+                    self.local_decl_names.insert(id.name.clone());
+                }
+            }
+            PortList::None => {}
+        }
         self.expect(TokenKind::Semi, "';' after module header");
 
         // For the post-package scoped-twin pass below: snapshot the aggregate type
@@ -509,6 +615,41 @@ impl Parser<'_, '_> {
                     }
                 }
             }
+            // §3 ⑤: capture this package's struct/enum NAME bindings for `import`.
+            // The type is re-spelled as the `pkg::t` twin registered just above when
+            // one exists (collision-safe against a same-named type elsewhere). A type
+            // this package itself IMPORTED has no twin yet: the bare `t` in scope
+            // right now is the one the package used, so a `pkg::t` twin of THAT
+            // layout is registered for the binding's sake (layout/label maps only —
+            // not `typedefs`, so `pkg::t` is still not a usable type name: a package
+            // does not re-export what it imports). A bare key would re-resolve in
+            // the importer's scope against whatever same-named type it has
+            // (measured: `V.a` cut as `V[15:4]` out of an 8-bit net, exit 0).
+            let mut pb = PkgBindings::default();
+            let mut vs: Vec<(String, String)> = self
+                .var_struct
+                .iter()
+                .map(|(n, t)| (n.clone(), t.clone()))
+                .collect();
+            vs.sort();
+            for (n, ty) in vs {
+                let key = self.pkg_binding_type_key(&pkg, &ty);
+                pb.var_struct.push((n, key));
+            }
+            let mut ss: Vec<&String> = self.struct_scalar_vars.iter().collect();
+            ss.sort();
+            pb.struct_scalar = ss.into_iter().cloned().collect();
+            let mut ve: Vec<(String, String)> = self
+                .var_enum
+                .iter()
+                .map(|(n, t)| (n.clone(), t.clone()))
+                .collect();
+            ve.sort();
+            for (n, ty) in ve {
+                let key = self.pkg_binding_type_key(&pkg, &ty);
+                pb.var_enum.push((n, key));
+            }
+            self.pkg_bindings.insert(pkg, pb);
         }
         // Inject the synthetic `$enum_name$<T>` functions generated by any
         // `x.name()` desugar in this container's body, appended in deterministic

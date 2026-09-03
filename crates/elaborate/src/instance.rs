@@ -427,9 +427,26 @@ impl Elaborator<'_> {
             .cu_imports
             .clone()
             .into_iter()
-            .chain(module.body.iter().filter_map(|it| match it {
-                ast::ModuleItem::Import(i) => Some(i.clone()),
-                _ => None,
+            .chain(module.body.iter().flat_map(|it| {
+                match it {
+                    ast::ModuleItem::Import(i) => vec![i.clone()],
+                    // IEEE §27.3: a bare `generate … endgenerate` REGION is not a scope,
+                    // so an `import` written directly in it is a module-scope import
+                    // (both oracles apply it). Only the region's direct items — an
+                    // import inside a generate block/if/for stays the loud v1 case.
+                    ast::ModuleItem::Generate(g) => g
+                        .items
+                        .iter()
+                        .filter_map(|gi| match gi {
+                            ast::GenItem::Item(b) => match &**b {
+                                ast::ModuleItem::Import(i) => Some(i.clone()),
+                                _ => None,
+                            },
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                }
             }))
             .collect();
         // SVPART: wildcard-import ambiguity (IEEE §26.8). Track each wildcard-bound
@@ -438,15 +455,21 @@ impl Elaborator<'_> {
         // ambiguous → unbound, so referencing it is a loud "undefined" at the use
         // site (never a silent last-wins value), while an UNUSED ambiguous name is
         // no error — exactly IEEE's "ambiguous only when referenced".
+        let saved_scope_imports = std::mem::replace(&mut self.scope_imports, import_list.clone());
         let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
         let mut explicit_imports: std::collections::BTreeSet<String> =
             std::collections::BTreeSet::new();
+        // The module's own declared names shadow a wildcard import (§26.3) — the
+        // same set the GAP-G array guard below reads, gathered once, here, because
+        // the imports bind BEFORE the nets are declared.
+        let names = self.gather_local_decl_names(module);
         for imp in &import_list {
             self.apply_import_consts(
                 imp,
                 &mut saved_params,
                 &mut wc_origin,
                 &mut explicit_imports,
+                &names,
             );
         }
 
@@ -460,7 +483,6 @@ impl Elaborator<'_> {
         // locally (header params, ports, top-level body nets/params) BEFORE any
         // body const-eval, so a local name that shadows a wildcard-imported array
         // is known regardless of decl order (catches forward refs and ports).
-        let names = self.gather_local_decl_names(module);
         // IEEE §6.10 ordering — see the `decl_pos` field doc. Same walk as `names`.
         let dpos = self.gather_decl_positions(module);
         let mut saved_decl_pos = std::mem::replace(&mut self.decl_pos, dpos);
@@ -1144,6 +1166,7 @@ impl Elaborator<'_> {
 
         // restore scope/params so siblings + ancestors resolve correctly.
         self.restore_params(saved_params);
+        self.scope_imports = saved_scope_imports;
         self.bits_prescan = saved_prescan;
         self.local_decl_names = saved_local_names;
         self.scoped_block_locals = saved_scoped_blocks;

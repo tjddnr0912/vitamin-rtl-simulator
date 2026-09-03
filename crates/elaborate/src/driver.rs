@@ -45,6 +45,7 @@ impl<'s> Elaborator<'s> {
             pkg_funcs: BTreeMap::new(),
             pkg_tasks: BTreeMap::new(),
             cu_imports: Vec::new(),
+            scope_imports: Vec::new(),
             final_procs: std::collections::BTreeSet::new(),
             comb_inferred_procs: Vec::new(),
             clocking_inputs: std::collections::BTreeSet::new(),

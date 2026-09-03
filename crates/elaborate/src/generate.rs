@@ -628,6 +628,31 @@ impl Elaborator<'_> {
                     "construct deferred inside generate (func/task/defparam)",
                 );
             }
+            // An `import` inside a generate block: imports are applied at MODULE
+            // scope only (`apply_import_consts`), so this one was silently ignored —
+            // `import q::*; if (1) begin : g import r::P; … P … end` read q's P where
+            // both oracles read r's (§4.5.410 review). Loud until generate-scoped
+            // imports are bound per scope; the parser already scopes the struct/enum
+            // name bindings to the block, so a silent answer here would mix r's
+            // layout with q's value.
+            (GenPhase::Nets, ast::ModuleItem::Import(imp)) => {
+                // Redundant with a module-scope import of the same package (a
+                // wildcard, or the same explicit symbol): ignoring it resolves every
+                // name identically, and PRE ran such designs — keep them running.
+                let redundant = self.scope_imports.iter().any(|m| {
+                    m.pkg.name == imp.pkg.name
+                        && (m.item.is_none()
+                            || m.item.as_ref().map(|i| &i.name)
+                                == imp.item.as_ref().map(|i| &i.name))
+                });
+                if !redundant {
+                    self.error_at(
+                        MsgCode::ElabUnsupported,
+                        imp.span,
+                        "an `import` at module scope (an import inside a generate block is not applied in v1 — move it to the module body)",
+                    );
+                }
+            }
             // Genvar decl inside generate: elaboration-only, no net → no-op.
             // Any item not matching the active phase: no-op (handled elsewhere).
             _ => {}

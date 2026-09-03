@@ -265,6 +265,25 @@ impl StructLayout {
     }
 }
 
+/// The struct/enum NAME bindings one package body made (see `Parser::pkg_bindings`).
+#[derive(Clone, Default)]
+struct PkgBindings {
+    /// `(name, "pkg::t")` for every struct-typed variable/parameter.
+    var_struct: Vec<(String, String)>,
+    /// Names eligible for the scalar `'{…}` pattern desugar (non-union, no dims).
+    struct_scalar: Vec<String>,
+    /// `(name, "pkg::e")` for every enum-typed variable/parameter.
+    var_enum: Vec<(String, String)>,
+}
+impl PkgBindings {
+    fn var_struct_ty(&self, n: &str) -> Option<&str> {
+        self.var_struct
+            .iter()
+            .find(|(k, _)| k == n)
+            .map(|(_, t)| t.as_str())
+    }
+}
+
 /// A snapshot of the parser's lexically-scoped registries, used to give a
 /// procedural block its own scope: snapshotted at the block's first body-local
 /// typedef DEFINITION or struct/enum-typed VAR declaration and restored when the
@@ -297,6 +316,8 @@ struct ScopeSnapshot {
     var_enum: std::collections::HashMap<String, String>,
     struct_scalar_vars: std::collections::HashSet<String>,
     struct_1d_array_vars: std::collections::HashSet<String>,
+    wildcard_bound: std::collections::HashSet<String>,
+    local_decl_names: std::collections::HashSet<String>,
 }
 
 /// A trailing READ sub-select on a packed-struct member, normalized to an
@@ -343,6 +364,12 @@ struct ParamPrefix {
     explicit_range: Option<Range>,
     expl0: Option<bool>,
     expl1: Option<bool>,
+    /// §3 ⑤: the typedef NAME (`type_name_key` — `"pkg::t"` or bare `t`) when the
+    /// prefix was a user type (`localparam exc_cause_t E = …`). `finish_param_assignment`
+    /// binds the parameter name to it exactly like `parse_typed_decl` binds a variable
+    /// (struct member desugar, `'{…}` pattern, enum methods). `None` for every keyword
+    /// or implicit prefix ⇒ byte-identical.
+    tyname: Option<String>,
 }
 
 /// The components of a parsed `property_spec` (the body shared by an inline
@@ -465,6 +492,27 @@ pub struct Parser<'t, 's> {
     /// `var_struct`). Lets `x.first/last/next/prev/name/num` desugar to literals /
     /// ternary chains over the enum's labels.
     var_enum: std::collections::HashMap<String, String>,
+    /// §3 ⑤: per-PACKAGE struct/enum NAME bindings — `(var_struct, struct_scalar_vars,
+    /// var_enum)` entries a package body made for its own variables and parameters,
+    /// captured at `endpackage` (the module-scoped maps are cleared at the next
+    /// container) with the type spelled as the package's `pkg::t` twin. `import
+    /// pkg::X;` / `import pkg::*;` replay them into the importing scope so
+    /// `ExcCauseIrqNm.lower_cause` / `ev.name()` desugar in a module exactly as they
+    /// do inside the package. Unit-scoped (never cleared), like `typedefs`.
+    pkg_bindings: std::collections::HashMap<String, PkgBindings>,
+    /// Names whose CURRENT struct/enum binding came from a WILDCARD import replay
+    /// (never a local declaration). An explicit `import r::X` may drop only such a
+    /// binding of `X` (IEEE §26.8: explicit beats wildcard); a local `X` — a struct
+    /// variable that happens to share a package TYPE's name, say — stays bound.
+    /// Scoped with the binding maps (snapshot / restore / per-module clear).
+    wildcard_bound: std::collections::HashSet<String>,
+    /// Every name the current module has DECLARED so far (ports, parameters, nets,
+    /// variables) — the parser twin of elaborate's `gather_local_decl_names`, built
+    /// incrementally. A wildcard import replay never binds one of these (IEEE §26.3):
+    /// a `logic [7:0] V [0:1]` declared BEFORE `import p::*` writes no struct map, so
+    /// the replay's `!var_struct.contains_key` test alone could not see it and bound
+    /// p's struct `V` over a plain local array (review R1: PRE ran, POST refused).
+    local_decl_names: std::collections::HashSet<String>,
     /// SV §6.19.5 `x.name()`: a synthetic `function string $enum_name$<T>(x)` —
     /// a `case(x)` returning each label's string literal — generated on first use
     /// per enum type in the CURRENT container, then injected into its body at the
@@ -517,6 +565,9 @@ impl<'t, 's> Parser<'t, 's> {
             loop_labels: Vec::new(),
             enum_defs: std::collections::HashMap::new(),
             var_enum: std::collections::HashMap::new(),
+            pkg_bindings: std::collections::HashMap::new(),
+            wildcard_bound: std::collections::HashSet::new(),
+            local_decl_names: std::collections::HashSet::new(),
             pending_enum_name_fns: std::collections::BTreeMap::new(),
         }
     }

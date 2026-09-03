@@ -436,6 +436,102 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.410 — A parameter typed by a user typedef; the ibex ladder re-measured (§3 ⑤) (2026-09-03 · format 29 unchanged · adversarial review: 2 lenses × 3 rounds (differential 55 designs · soundness 45 designs + a TypeInfo producer census · 9 findings fixed, each re-verified on the delta — the last two with the lenses' own harnesses, 152 designs re-scored) · corpus 10/10)
+
+**The row was one rule; the workload is five.** `parse_param_prefix` accepted only keyword
+prefixes (`int`, `logic [r]`, `byte`, `real`, `string`, …). A user typedef in that position —
+`localparam exc_cause_t ExcCauseIrqSoftwareM = '{irq_ext: 1'b1, …};` — failed at the parameter
+NAME ("expected '=' in parameter, found identifier"), three diagnostics per line, which is the
+whole first error page of ibex (50 = the cap). The queue line blamed the assignment pattern;
+measured, a `'{…}` on a struct VARIABLE already desugared, and the pattern on a parameter was
+never reached. It also promised that this one rule "opens the next workload": measured after
+the rule, `ibex_pkg.sv` has three more blockers and `ibex_cheriot_pkg.sv` a fourth, larger
+one (nested packed structs) — ROADMAP §3 ⑤ ⓐ–ⓓ.
+
+**Mechanism — parser only, no AST change.** ① `parse_param_prefix`: when the cursor is a
+`<typedef> <ident>` opener (`peek_block_typedef_decl`, scoped `pkg::t` included), the typedef's
+`TypeInfo` is mapped by `typedef_param_shape` to the SAME `(ParamType, var_kind, forced_range,
+explicit_range)` the keyword arms build — an atom's fixed width stays in `forced_range`, a
+vector's dimension goes to `explicit_range` (so an A2a array parameter of that type keeps its
+element width, and `reject_packed_dims_on_nonvector` reads only the vector slot; the first cut
+moved both into one slot and `typedef byte b_t` went loud — the census caught it). Loud: a
+multi-dim packed typedef (a scalar `ParamDecl` has one range; flattening would make `P[i]` one
+bit), a class/net/event/container typedef, an array parameter of a struct/enum typedef. ②
+`ParamPrefix.tyname` carries the type key to `finish_param_assignment`, which binds a
+struct-typed name into `var_struct`/`struct_scalar_vars` (and desugars a `'{…}` value through
+`desugar_struct_assign_pattern`, positional or §10.9.2 named) and an enum-typed one into
+`var_enum` — exactly what `parse_typed_decl` does for a variable, so `E.lower_cause`,
+`E == F`, `E[4:0]`, `$bits(E)`, `E.name()` all ride existing desugars. `starts_param_prefix`
+accepts the shape so a `#(…)` header group can start with a typedef and `, B = 2` still
+continues it (a continuation named like a typedef is followed by `=`, not an identifier). ③
+`pkg_bindings`: at `endpackage` the package's three name-binding maps are captured (type
+respelled as the `pkg::t` twin when one exists) and `import pkg::*` / `import pkg::X` replay
+them with `or_insert` — a local binding wins. This is what ibex_if_stage's
+`ExcCauseIrqNm.lower_cause` needs, and it also opened the pre-existing E2002 on `v.b` for an
+imported package struct VARIABLE (same binder, same gap).
+
+**Two pre-existing silent-wrongs, found by the keyword control twin.** Every census cell had
+a keyword-spelled twin; two of them were wrong on PRE. ⓐ `elaborate_package` bound the
+unlimited i64 walk's value for a typed package parameter without the
+`coerce_param_value_with(v, pmeta)` the module-body and generate twins apply — a module read
+`P` right (the import channel carries the declared width) but a sibling `localparam W = P + 1`
+INSIDE the package folded from 31, not 15. ⓑ `apply_import_consts` bound every wildcard-
+imported constant/variable under the module key before the module's own nets were declared,
+and nothing unbound it: a local VARIABLE, header parameter, package variable or >64-bit
+constant of the same name read the package's value (IEEE §26.3: the local declaration
+shadows). The set already existed (`gather_local_decl_names`, used by the GAP-G array guard);
+the wildcard arms now skip it. Both are in this slice's diff, pinned in
+`typed_param_user_type.rs`.
+
+**Census 227 cells** (16 typedef kinds × 7 positions × value/`$bits`/member/slice/derived/enum
+method, PRE/POST/verilator/iverilog): **182 loud→correct · 1 unchanged · 0 regressed · 0 silent
+· 22 still-loud (multi-dim, unpacked struct, 2-state struct pattern and fill-in-pattern under a
+constant — both pre-existing const-fold gaps on the keyword spelling — struct array) · 15
+oracle-split (`$bits` of a real / string parameter, pre-existing)** → §2 🆕 L. Examples'
+stdout and VCD byte-identical; corpus 10/10 with no grade change. ibex after the slice:
+`ibex_pkg.sv` 349–378 (the exc_cause block) and 741 parse; remaining 742 / 769 / 791 and the
+cheriot package. iverilog is not an oracle on this axis (it cannot parse a struct/enum-typed
+parameter and aborts on its member access — `net_scope.cc:449`); verilator 5.050 agrees with
+iverilog on every cell iverilog parses. Opus was unavailable for the review (five HTTP 500s in a
+row); both lenses ran on Fable.
+
+**Review — six findings, all in the import carry, all fixed.** ① (differential) `import q::*;
+import r::P;` took r's VALUE through q's LAYOUT — the explicit replay was `or_insert`; an
+explicit import now drops the name's WILDCARD binding (`wildcard_bound`) and installs its own
+(the plain-int twin proves §26.8 with two oracles: iverilog 9, verilator 5 — verilator is
+order-sensitive on this axis and is not the oracle). ② (differential) a module-local array
+`V` declared AFTER `import p::*` (p has a struct variable `V`) was desugared as p's struct and
+refused — PRE ran; every declaration site now unbinds its names first
+(`unbind_struct_enum_name`, the parser twin of the elaborate skip). ③ (soundness) a package
+that IMPORTED its struct type captured the binding under the bare name, which re-resolved in
+the importer against a same-named local type (`V.a` cut as `V[15:4]` from an 8-bit net) —
+the capture now registers a `pkg::t` layout twin from the bare layout in scope. ④
+(differential, from fix ①) an explicit import inside a generate block dropped the
+MODULE-scope binding — a generate `begin/end` is now a scope (snapshot/restore), which also
+closes the pre-existing clobber by a generate-block struct localparam (soundness F3). ⑤
+(soundness, from fix ①) the unconditional drop removed a LOCAL struct variable named like an
+imported TYPE — hence `wildcard_bound`. ⑥ the scalar-pattern set is replayed only for names
+whose binding actually landed. And one pre-existing silent-wrong the review's controls
+exposed on the keyword spelling — an `import` INSIDE a generate block was silently ignored
+(`P` read the module-scope 5 where both oracles read 9) — is now loud. Round 3 then caught
+the loud gate itself twice: ⑦ a REDUNDANT block import (the module already imports the
+package) had run on PRE — the gate now fires only when no module-scope import of that
+package/symbol exists (`scope_imports`); ⑧ an import written directly in a bare
+`generate … endgenerate` REGION is not scoped (§27.3) — it is hoisted into the module's
+import list (both oracles 9; with a prior `import q::*` the explicit region import wins:
+iverilog 9, verilator 7 = its order-sensitivity). ⑨ (soundness R1) the parser-side unbind
+only saw declarations parsed AFTER the import — a `logic [7:0] V [0:1]` declared before
+`import p::*` writes no struct map, so the replay bound p's struct `V` over it (PRE ran):
+the module's declared names are now tracked incrementally (`local_decl_names`, ports
+included) and the wildcard replay skips them. Also fixed by ⓐ, unmentioned above:
+`bit signed [3:0] B = 4'hF` read 15 in a package, −1 everywhere else.
+
+**Lesson** (ENGINEERING_RULES): a queue line that says "one rule opens the workload" is a
+measurement to make, not a fact — run the real design after the rule and write the ladder; a
+census cell's keyword-spelled CONTROL twin is what tells a pre-existing defect from one the new
+spelling made; and a field that moves between two slots (`forced_range` → `explicit_range`)
+has readers on both — census them before moving.
+
 #### 4.5.409 — An unsized fill in the i64 constant lane is sized by its context (§2 🆕 C) (2026-09-03 · format 29 unchanged · adversarial review: 2 lenses (differential 22 designs CLEAN · soundness 18 designs + a 12-site consumer census, one FAIL fixed and delta re-verified) · corpus 10/10)
 
 **One root, five instances.** `literal::parse_int_literal` sizes a fill (`'0 '1 'x 'z`) at

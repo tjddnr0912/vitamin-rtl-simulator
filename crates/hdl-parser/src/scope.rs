@@ -27,6 +27,8 @@ impl Parser<'_, '_> {
             var_enum: self.var_enum.clone(),
             struct_scalar_vars: self.struct_scalar_vars.clone(),
             struct_1d_array_vars: self.struct_1d_array_vars.clone(),
+            wildcard_bound: self.wildcard_bound.clone(),
+            local_decl_names: self.local_decl_names.clone(),
         }
     }
 
@@ -46,6 +48,8 @@ impl Parser<'_, '_> {
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
+        self.wildcard_bound = s.wildcard_bound;
+        self.local_decl_names = s.local_decl_names;
     }
 
     /// Restore the type registries around a top-level UNIT (module / interface /
@@ -109,6 +113,8 @@ impl Parser<'_, '_> {
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
+        self.wildcard_bound = s.wildcard_bound;
+        self.local_decl_names = s.local_decl_names;
     }
 
     /// Map a member SOURCE bit index `e` onto the field part-select `pv[w-1:0]`.

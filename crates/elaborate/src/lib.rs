@@ -385,6 +385,11 @@ struct Elaborator<'s> {
     /// v7 P2-D: compilation-unit-scope `import` items — applied to every
     /// module elaboration (IEEE visibility is decl-order; TBs put them first).
     cu_imports: Vec<ast::ImportDecl>,
+    /// The imports applied to the module being elaborated (`cu_imports` + its body
+    /// `import`s), so a generate-block `import` can be told REDUNDANT (the same
+    /// package, or the same symbol, already imported at module scope — ignoring it
+    /// changes nothing) from one that would change resolution (loud, v1).
+    scope_imports: Vec<ast::ImportDecl>,
     /// P2-E: ProcIds of `final` blocks — engine side table (never the IR):
     /// skipped at arming, run once at end of simulation.
     pub final_procs: std::collections::BTreeSet<u32>,

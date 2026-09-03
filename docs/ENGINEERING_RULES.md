@@ -219,6 +219,37 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ "One rule opens the workload" is a measurement, and the control twin is what attributes a defect (2026-09-03 · §4.5.410)
+
+The queue said the ibex blocker was one parse rule (`localparam <typedef> X = …`) and that it
+was the assignment pattern. Measured before starting: the pattern already desugared on a
+variable and was never reached on a parameter; measured after the rule: four more blockers
+stand behind it, the largest (nested packed structs) not in any queue line. **Rule**: when a
+queue line claims a rule "opens" a design, run the real design after the rule and write the
+ladder that follows — the claim is a hypothesis about the SECOND error page, which nobody has
+seen. Two more from the same slice: ① every census cell needs a **keyword-spelled control
+twin** — two "new" silent-wrongs (a package's derived constant folding from the untruncated
+initializer; a wildcard import shadowing a module-local variable) were pre-existing on
+`localparam logic [3:0] P`, and only the twin could say so; ② a value that moves between two
+slots of one record (`forced_range` → `explicit_range`) has readers on BOTH slots — the
+array-element consumer wanted the vector slot, the non-vector-dimension reject reads the same
+slot, and `typedef byte` went loud until the split honoured both. Census the readers of a
+slot before moving anything into it.
+
+Review of the same slice, three rounds, nine findings — all in the import carry, and
+five of them made by the previous round's fix. Two rules from that: ④ **a "twin" of a
+predicate in another phase must be the same WALK, not the same intent** — the parser's
+"local declaration shadows the wildcard" was applied at the moment a declaration was
+parsed, while elaborate's walks the whole module before any import binds; a declaration
+standing BEFORE the import was invisible to the parser twin and a design PRE ran went
+loud. Ask "over which set of names does the twin quantify, and when is that set complete
+at the point of use". ⑤ **a new loud gate is measured on the designs it will refuse, not on
+the one that motivated it** — "an import inside a generate block is ignored, make it loud"
+was right for the motivating cell and a regression for the redundant import the corpus
+style writes (module imports `p::*`, block re-imports `p::K`), and for a bare `generate`
+region, which is not a scope at all. Before adding a loud arm, enumerate the syntactic
+shapes that reach it and run PRE on each.
+
 ### ⭐ A leaf with no width of its own needs a tri-state width: `None` (unknown), `Some(0)` (context-sized), `Some(w)` (2026-09-03 · §4.5.409)
 
 An unsized fill has no self width; the width table answered 32 (the parser's container)

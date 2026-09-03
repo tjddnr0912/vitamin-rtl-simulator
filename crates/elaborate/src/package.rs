@@ -622,6 +622,13 @@ impl Elaborator<'_> {
                         );
                         0
                     });
+                    // Canonical at the DECLARED width, like the module-body and
+                    // generate twins (`coerce_param_value_with`) and this package's own
+                    // enum labels below. Without it the i64 fold's unlimited value
+                    // bound here — `localparam logic [3:0] P = 5'h1F;` read 15 from a
+                    // module but a sibling `localparam W = P + 1;` in the same package
+                    // folded 32 where both oracles say 16 (silent, at exit 0).
+                    let v = self.coerce_param_value_with(v, pmeta);
                     saved.push((key.clone(), self.bind_param_value(key.clone(), v)));
                     consts.insert(p.name.name.clone(), v);
                     // A package constant has no override channel.
@@ -787,7 +794,13 @@ impl Elaborator<'_> {
                     let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
                     let mut explicit: std::collections::BTreeSet<String> =
                         std::collections::BTreeSet::new();
-                    self.apply_import_consts(imp, &mut saved, &mut wc_origin, &mut explicit);
+                    self.apply_import_consts(
+                        imp,
+                        &mut saved,
+                        &mut wc_origin,
+                        &mut explicit,
+                        &Default::default(),
+                    );
                 }
                 // A2b-prereq/A2b: package-level VARIABLE declaration — one
                 // storage instance per elaboration (IEEE §26), lowered as an
@@ -1023,12 +1036,24 @@ impl Elaborator<'_> {
     }
 
     /// Bind one import's CONST symbols into the current module scope.
+    ///
+    /// `local_names` = the bare names the importing scope DECLARES itself
+    /// (`gather_local_decl_names`: header params, ports, body nets/vars, body
+    /// params). A WILDCARD import never binds one of those (IEEE §26.3: a local
+    /// declaration shadows `import p::*`); before this the wildcard bound the
+    /// package constant under the module key, the later net declaration did not
+    /// unbind it, and every read of a local VARIABLE `P` answered the package's
+    /// `P` at exit 0 (measured: 35 where both oracles print 42 — a local
+    /// localparam was already right only because its own later bind overwrote
+    /// the import's). An EXPLICIT import of a locally declared name stays the
+    /// conflict it is (loud in `add_net`).
     pub(crate) fn apply_import_consts(
         &mut self,
         imp: &ast::ImportDecl,
         saved_params: &mut Vec<(String, Option<i64>)>,
         wc_origin: &mut BTreeMap<String, String>,
         explicit_imports: &mut std::collections::BTreeSet<String>,
+        local_names: &std::collections::BTreeSet<String>,
     ) {
         let pkg = imp.pkg.name.as_str();
         let Some(consts) = self.pkg_consts.get(pkg) else {
@@ -1065,6 +1090,10 @@ impl Elaborator<'_> {
                     })
                     .collect::<Vec<_>>();
                 for (name, v, meta, rng) in all {
+                    // A local declaration shadows the wildcard (see the doc above).
+                    if local_names.contains(&name) {
+                        continue;
+                    }
                     let key = self.fq(&name);
                     // An explicit import of this name always wins — skip the wildcard.
                     if explicit_imports.contains(&key) {
@@ -1120,6 +1149,9 @@ impl Elaborator<'_> {
                     .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
                     .unwrap_or_default();
                 for (name, cv) in wides {
+                    if local_names.contains(&name) {
+                        continue;
+                    }
                     let key = self.fq(&name);
                     if explicit_imports.contains(&key) {
                         continue;
@@ -1155,6 +1187,9 @@ impl Elaborator<'_> {
                     .map(|m| m.iter().map(|(k, &n)| (k.clone(), n)).collect())
                     .unwrap_or_default();
                 for (name, net) in vars {
+                    if local_names.contains(&name) {
+                        continue;
+                    }
                     let key = self.fq(&name);
                     if explicit_imports.contains(&key) {
                         continue;

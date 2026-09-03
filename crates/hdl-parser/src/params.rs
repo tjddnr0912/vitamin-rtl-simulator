@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// `(ParamType, var_kind, forced_range, explicit_range)` — see `typedef_param_shape`.
+type TypedefParamShape = (ParamType, Option<NetVarKind>, Option<Range>, Option<Range>);
+
 impl Parser<'_, '_> {
     /// ⓑ-breadth (§8.25): MONOMORPHIZE parameterized classes. For each distinct
     /// `C #(args)` used at a handle declaration (plus the all-defaults instance),
@@ -207,6 +210,12 @@ impl Parser<'_, '_> {
         // must construct the SAME `NetVarDecl` the equivalent var decl would).
         let mut var_kind: Option<NetVarKind> = None;
         let mut expl1: Option<bool> = None;
+        let mut tyname: Option<String> = None;
+        // A vector typedef's own packed dimension (`typedef logic [5:0] u`) — carried
+        // as the EXPLICIT range so an A2a array parameter of that type keeps its
+        // element width, exactly as a spelled-out `[5:0]` would. Atom widths
+        // (`typedef byte b`) stay in `forced_range` like the keyword path.
+        let mut typedef_range: Option<Range> = None;
         let kw_kind = match self.peek() {
             Some(TokenKind::Word(WordKind::Keyword(
                 k @ (Kw::Logic
@@ -265,6 +274,29 @@ impl Parser<'_, '_> {
             };
             expl1 = self.opt_signed();
             signed = expl0.or(expl1).unwrap_or(atom_signed);
+        } else if let Some(info) = self.peek_block_typedef_decl() {
+            // §3 ⑤ (IEEE §6.20.2 / §A.2.1.1 `data_type` param_assignment): a USER type
+            // leads — `localparam exc_cause_t E = '{…}`, `parameter lfsr_seed_t S = …`,
+            // `localparam p::u Q = …`. Resolved here to the same (kind, sign, range)
+            // `parse_typed_decl` gives the equivalent variable, so the scalar
+            // `ParamDecl` below is exactly what `parameter logic [W-1:0]`/`int`/…
+            // would have produced (declared-width provenance, no AST change). The
+            // `<type> <name>` shape is what `peek_block_typedef_decl` asserts, so a
+            // header continuation `, T = 2` (a value named like a type) is untouched.
+            let key = self.type_name_key();
+            self.eat_scope_qualifier();
+            self.bump(); // the type-name identifier
+            match self.typedef_param_shape(&info) {
+                Ok((t, k, forced, explicit)) => {
+                    ty = t;
+                    var_kind = k;
+                    forced_range = forced;
+                    typedef_range = explicit;
+                    signed = expl0.unwrap_or(info.signed);
+                    tyname = Some(key);
+                }
+                Err(msg) => self.error(msg),
+            }
         } else {
             ty = match self.peek() {
                 Some(TokenKind::Word(WordKind::Keyword(Kw::Integer))) => {
@@ -306,7 +338,12 @@ impl Parser<'_, '_> {
                 _ => ParamType::Implicit,
             };
         }
-        let explicit_range = if forced_range.is_some() {
+        // A typedef prefix carries its OWN range (a typedef's packed dimension) as
+        // `explicit_range`, so an A2a array parameter of that type (`localparam u A[2]`)
+        // keeps the element width; a keyword prefix reads a user `[msb:lsb]` here.
+        let explicit_range = if tyname.is_some() {
+            typedef_range
+        } else if forced_range.is_some() {
             None
         } else {
             self.opt_range()
@@ -321,7 +358,63 @@ impl Parser<'_, '_> {
             explicit_range,
             expl0,
             expl1,
+            tyname,
         }
+    }
+
+    /// The scalar-parameter shape of a resolved typedef: `(ParamType, var_kind,
+    /// forced_range, explicit_range)` — the SAME fields the keyword arms of
+    /// `parse_param_prefix` build for `int`/`byte`/…/`logic [r]` (an atom's fixed
+    /// width is `forced`, a vector's dimension is `explicit`, and the non-vector
+    /// dimension reject reads only `explicit`), so a typedef'd parameter and its
+    /// spelled-out twin are one AST. `Err` = a type a scalar `ParamDecl` cannot carry without
+    /// losing something (a multi-dim packed typedef would flatten `P[i]` to one bit;
+    /// a class handle / net / event / container is not a parameter type) — loud.
+    fn typedef_param_shape(&self, info: &TypeInfo) -> Result<TypedefParamShape, &'static str> {
+        if info.class_name.is_some() {
+            return Err(
+                "a non-class typedef on a parameter (a class-handle parameter is unsupported)",
+            );
+        }
+        if !info.packed.is_empty() {
+            return Err(
+                "a typedef with one packed dimension on a parameter (a multi-dimensional packed typedef parameter — `logic [N-1:0][M-1:0]` — is unsupported in v1)",
+            );
+        }
+        Ok(match info.kind {
+            NetVarKind::Int => (ParamType::Integer, Some(NetVarKind::Int), None, None),
+            NetVarKind::Integer => (ParamType::Integer, Some(NetVarKind::Integer), None, None),
+            NetVarKind::Byte => (
+                ParamType::Implicit,
+                Some(NetVarKind::Byte),
+                Some(Self::dec_range(7)),
+                None,
+            ),
+            NetVarKind::Shortint => (
+                ParamType::Implicit,
+                Some(NetVarKind::Shortint),
+                Some(Self::dec_range(15)),
+                None,
+            ),
+            NetVarKind::Longint => (
+                ParamType::Implicit,
+                Some(NetVarKind::Longint),
+                Some(Self::dec_range(63)),
+                None,
+            ),
+            NetVarKind::Real => (ParamType::Real, Some(NetVarKind::Real), None, None),
+            NetVarKind::Realtime => (ParamType::Realtime, Some(NetVarKind::Realtime), None, None),
+            NetVarKind::Time => (ParamType::Time, Some(NetVarKind::Time), None, None),
+            NetVarKind::String => (ParamType::Implicit, None, None, None),
+            k @ (NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit) => {
+                (ParamType::Implicit, Some(k), None, info.range.clone())
+            }
+            _ => {
+                return Err(
+                    "an integral, real or string typedef on a parameter (a net / event / container typedef is not a parameter type)",
+                )
+            }
+        })
     }
 
     /// Finish ONE parameter assignment — `name [array_dims] = value` — using a
@@ -344,6 +437,7 @@ impl Parser<'_, '_> {
             explicit_range,
             expl0,
             expl1,
+            tyname: _,
         } = pfx.clone();
         // `logic`/`reg`/`bit` with NO explicit range are ONE bit (§6.11.2). The atom
         // recorded that in `var_kind` and then dropped it: `ParamDecl` has no such
@@ -383,6 +477,17 @@ impl Parser<'_, '_> {
                 (None, None) => None,
                 (a, b) => Some(a.unwrap_or(false) || b.unwrap_or(false)),
             };
+            // §3 ⑤: an array parameter of a struct/enum typedef needs the per-element
+            // pattern desugar / label binding the A2a path does not do — loud, never
+            // a positional `'{…}` silently read as an element vector.
+            if let Some(tn) = &pfx.tyname {
+                if self.struct_layouts.contains_key(tn) || self.enum_defs.contains_key(tn) {
+                    self.error(
+                        "a vector or atom typedef on an array parameter (an array parameter of a struct/enum typedef is unsupported in v1)",
+                    );
+                    return None;
+                }
+            }
             return self.parse_array_param(
                 body,
                 kind,
@@ -394,7 +499,25 @@ impl Parser<'_, '_> {
             );
         }
         self.expect(TokenKind::Eq, "'=' in parameter");
-        let value = self.expr(0);
+        let mut value = self.expr(0);
+        // §3 ⑤: a struct/enum-typed parameter binds its NAME the way `parse_typed_decl`
+        // binds a variable, so `E.lower_cause` desugars to the member part-select,
+        // a `'{…}` value (positional or §10.9.2 named) becomes the field-width
+        // concat, and `E.name()` resolves the enum's labels. A union stays bound
+        // for member reads but never pattern-desugared (same as the variable path).
+        self.unbind_struct_enum_name(&name.name);
+        if let Some(tn) = &pfx.tyname {
+            if self.struct_layouts.contains_key(tn) {
+                self.var_struct.insert(name.name.clone(), tn.clone());
+                if !self.union_type_names.contains(tn) {
+                    self.struct_scalar_vars.insert(name.name.clone());
+                    value = self.desugar_struct_assign_pattern(&name.name, value);
+                }
+            }
+            if self.enum_defs.contains_key(tn) {
+                self.var_enum.insert(name.name.clone(), tn.clone());
+            }
+        }
         Some(ParamItem::Scalar(ParamDecl {
             kind,
             signed,
@@ -411,27 +534,28 @@ impl Parser<'_, '_> {
     /// loop uses this to tell a NEW type group from an unadorned continuation
     /// (`, B = 2`) that must inherit the preceding group's type.
     pub(crate) fn starts_param_prefix(&self) -> bool {
-        matches!(
-            self.peek(),
-            Some(TokenKind::Word(WordKind::Keyword(
-                Kw::Parameter
-                    | Kw::Localparam
-                    | Kw::Signed
-                    | Kw::Unsigned
-                    | Kw::Logic
-                    | Kw::Reg
-                    | Kw::Bit
-                    | Kw::Int
-                    | Kw::Byte
-                    | Kw::Shortint
-                    | Kw::Longint
-                    | Kw::Integer
-                    | Kw::Real
-                    | Kw::Realtime
-                    | Kw::Time
-                    | Kw::String
-            )))
-        )
+        self.peek_block_typedef_decl().is_some()
+            || matches!(
+                self.peek(),
+                Some(TokenKind::Word(WordKind::Keyword(
+                    Kw::Parameter
+                        | Kw::Localparam
+                        | Kw::Signed
+                        | Kw::Unsigned
+                        | Kw::Logic
+                        | Kw::Reg
+                        | Kw::Bit
+                        | Kw::Int
+                        | Kw::Byte
+                        | Kw::Shortint
+                        | Kw::Longint
+                        | Kw::Integer
+                        | Kw::Real
+                        | Kw::Realtime
+                        | Kw::Time
+                        | Kw::String
+                )))
+            )
     }
 
     /// A2a (IEEE §6.20.2): a body `localparam <type> NAME [dims] = '{…};` —

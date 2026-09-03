@@ -9,7 +9,34 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added
+
+- **A parameter or localparam may be typed by a user `typedef`.** `localparam exc_cause_t
+  E = '{irq_ext: 1'b1, irq_int: 1'b0, lower_cause: 5'd3};`, `parameter lfsr_seed_t S =
+  32'hac53_3bf4;`, `localparam p::u Q = 6'd9;` — in a module body, a package, a generate
+  block, an ANSI `#(…)` header and a comma list — where before every one was an E2002 at
+  the parameter name (the first 50 diagnostics of ibex). A struct-typed parameter takes a
+  positional or named `'{…}` pattern and its members read as constants
+  (`E.lower_cause`); an enum-typed one carries the label and its methods (`E.name()`);
+  the bindings follow `import pkg::*` / `import pkg::X` into the importing module, for
+  package variables too. Kept loud in v1: a multi-dimensional packed typedef
+  (`logic [N-1:0][M-1:0]`), an array parameter of a struct/enum typedef, an unpacked
+  struct, and a `'{…}` as an instance override value.
+
 ### Fixed
+
+- **A package's derived constant reads its sibling at the declared width.** `package p;
+  localparam logic [3:0] P = 5'h1F; localparam W = P + 1;` folded `W` to 32 (both oracles
+  16) — the package fold bound the untruncated value; a module reading `P` already saw 15.
+- **A module-local declaration shadows a wildcard import (IEEE §26.3).** `import p::*;
+  logic [5:0] P = 42;` read the package's `P` (both oracles 42) for a variable, a header
+  parameter, a package variable and a wide constant alike; an explicit `import r::P` after
+  `import q::*` is r's in layout as well as value; a generate block scopes its own
+  struct/enum bindings.
+- **An `import` inside a generate block is a loud error** instead of being silently
+  ignored (it read the module-scope binding where both oracles apply the block's import),
+  unless the module already imports the same package or symbol; an `import` written
+  directly in a bare `generate … endgenerate` region is applied at module scope (§27.3).
 
 - **An unsized fill (`'0`/`'1`) in a constant expression is sized by its context.**
   The integer constant lane read every fill at a hard 32 bits: `localparam U = '1 ^

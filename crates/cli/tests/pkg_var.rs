@@ -338,13 +338,18 @@ fn param_shadow_write_is_loud() {
     // A local constant shadows the imported variable for READS; a write to
     // the bare name must therefore be loud, never a silent write into the
     // package storage (iverilog also rejects: "Could not find variable").
+    // Wording pin: since §4.5.410 the wildcard never binds a locally declared
+    // name (IEEE §26.3), so the write lands on the constant itself and gets the
+    // import-free twin's diagnostic (`undeclared net/variable`); the alias
+    // guard's `not … assignable` is what an EXPLICIT import still produces.
     let (_, e, c) = run(
         "package p; int cnt = 5; endpackage\n\
          module top; import p::*;\n  localparam int cnt = 3;\n  initial begin cnt = 9; $finish; end\nendmodule\n",
     );
     assert_ne!(c, 0);
     assert!(
-        e.contains("not") && e.contains("assignable"),
+        (e.contains("not") && e.contains("assignable"))
+            || e.contains("undeclared net/variable `top.cnt`"),
         "write to a param-shadowed import must be loud:\n{e}"
     );
 }
@@ -508,6 +513,11 @@ fn const_shadowed_array_funnels_are_loud_s1() {
     // Sound S1: the whole-array / pattern / element lvalue funnels bypass
     // `resolve_net` — each must still refuse to write a package array whose
     // name a local constant shadows (iverilog: "Could not find variable").
+    // Wording pin: since §4.5.410 a wildcard import never binds a name the
+    // module declares (IEEE §26.3), so the write lands on the local CONSTANT
+    // itself and gets the same diagnostic the import-free twin gets
+    // (`undeclared net/variable` — a constant is not a net); the alias-guard
+    // wording (`not … assignable`) is what an EXPLICIT import still produces.
     for stmt in ["mem = loc;", "mem = '{1,2,3,4};", "mem[0] = 5;"] {
         let (_, e, c) = run(&format!(
             "package p; int mem[4]; endpackage\n\
@@ -515,9 +525,11 @@ fn const_shadowed_array_funnels_are_loud_s1() {
         ));
         assert_ne!(c, 0, "`{stmt}` must be loud");
         assert!(
-            e.contains("not") && e.contains("assignable"),
+            (e.contains("not") && e.contains("assignable"))
+                || e.contains("undeclared net/variable `top.mem`"),
             "`{stmt}` wrong diagnostic:\n{e}"
         );
+        assert!(!e.contains("done"), "`{stmt}` must not run:\n{e}");
     }
 }
 
