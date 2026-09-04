@@ -436,6 +436,84 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.415 — A header `import` is visible to the header's own parameter defaults; a declared parameter range that does not fold is loud; an explicit-import collision is loud; scoped typedef dims re-spelled (§3 ⑤ ⓕ + §2 🆕 L ⓘⓟ) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round + delta re-score — differential 72 new designs + 243 re-runs (every grounding probe and census cell on both binaries; 120 PRE≠POST, all inside the claimed shapes) FAIL → 1 NEW regression fixed (a compilation-unit explicit import shadowed by a local declaration was refused — §26.3 is a same-scope rule; both oracles shadow) + 1 new-instance false-loud fixed (a package typedef dim naming a constant the package imported); soundness 32 designs FAIL → 3 MAJOR fixed (the non-overridden body-parameter binder skipped the new range gate; a package's own declarations did not shadow a wildcard import inside the package — a pre-existing silent-wrong against both oracles; the typedef-twin respell left an imported name bare — a pre-existing silent-wrong against both oracles); the delta re-scored directly with both lenses' harnesses, the census, the probes and the examples: 11 cells moved, every one to the oracle line or to loud on an oracle split · corpus 10/10)
+
+**The rung.** Every ibex module header is `module ibex_top import ibex_pkg::*; #(parameter
+lfsr_perm_t RndCnstLfsrPerm = RndCnstLfsrPermDefault, …)` and was E3009 "undefined name" on its
+first default — the parser already led the body with the header imports (`ModuleItem::Import`),
+but elaborate's pass (3a) `bind_params` ran BEFORE pass (3a.5) applied the imports, so the header
+saw none of them (a port width `[W-1:0]` did, because ports come after). Measured at HEAD with three
+tools (47 probes): both oracles fold a header default / range / `$clog2` / `$bits(t)` / enum label /
+sibling / header localparam / override target naming an imported constant, for a wildcard, an
+explicit, a comma-list, a two-package and a compilation-unit import, in a module and an interface;
+a BODY import's constant in a header default is an oracle split (iverilog rejects, verilator
+folds); a name two wildcards export is loud when referenced (iverilog; verilator takes the first);
+an explicit import of a name the scope declares is an error (iverilog; verilator answers the local).
+
+**Mechanism.** `instance.rs` and `iface_inst.rs` apply the scope's import list in two passes
+around `bind_params`: pass 1 = every compilation-unit import and every HEADER import
+(`Elaborator::import_precedes_header`, package.rs — index below the CU count, or a span before the
+first header parameter's), pass 2 = the body imports, as before. `saved_params` collects pass 1,
+then the header's, then pass 2's; `restore_params` unwinds in reverse. The interface, which had
+applied no imports and refused a body `import` as "outside the MVP", now binds constants
+(routines have no caller there — a call stays loud). Three loud gates and one respell rode along,
+each found by the census or its control twins: (1) `check_param_decl_range` (params.rs) folds a
+parameter's DECLARED range and hands each bound to `check_const_range_bound` (the net/port helper:
+loud on an undefined name, a real, a >64-bit bound; silent on a const-but-unfoldable bound), called
+from `bind_one_param`, the generate-scope and the package-scope binders — before this
+`parameter logic [Nope-1:0] X = 4'h9` was `$bits(X)` 32 at exit 0 (value-inferred) in every scope
+where a port's `[Nope-1:0]` was loud; 4 census cells (`range` × 4 positions) had PRE `00000009 32`
+against the oracles' `9 4`. (2) The explicit-import arm of `apply_import_consts` refuses a name in
+`local_names` for every namespace (§26.3; was 🆕 L ⓘ — a constant silently answered the package's
+value, which the reorder would have extended to a header default naming an explicitly imported
+`W` that a body `localparam W` redeclares: census `ex_shadowbody`, the one NEW-SILENT cell of the
+first round, fixed before review). (3) The `typed_param_user_type` "local variable named like an
+explicitly imported type keeps its binding" pin (no oracle) became a loud pin. (4) At `endpackage`
+the scoped typedef twin's `range` and packed dims are re-spelled `p::W` by `respell_pkg_dims` (was
+🆕 L ⓟ: `p::t v;` E3009 on `W`) — the full-suite gate exposed this: `packed_md_param`'s
+`parameter p::perm_t Perm` copied the typedef's `[W-1:0][$clog2(W)-1:0]` verbatim, so its declared
+range never folded and PRE was right only by value-inference; gate (1) refused it until the twin
+carried `p::W`.
+
+**Census** (`c415/census`, 196 cells = 26 header shapes × {`import p::*`, `import p::X`, two
+packages, a comma list} × {import, `p::`-spelled control twin without an import}): 80
+loud→correct · 89 unchanged · 4 FIXED-SILENT (the declared range) · 4 still-loud (a header default
+naming a body `localparam` declared later — LRM side of the split) · 1 value→loud (the §26.3
+collision) · 8 SPLIT (iverilog's `z` on a genvar bit-select, control twins identical) · 0 NEW-SILENT.
+Probes 47 (interface header/body import, CU import, ambiguity, enum label, package function, real /
+string / wide / struct / enum / array-parameter defaults, nested instances, generate, non-ANSI
+ports, `parameter type`). ibex: every module header binds; the packages + tb run has 0 package
+errors; the whole design is unchanged (24 preprocessor E1013 — the next rung); with a stub
+`prim_assert` ibex_alu's next blocker is a generate-block unpacked-array write / keyed pattern.
+
+**Review-round fixes (all on the delta, pinned in `review_pins`).** B F1: the module-body
+`Param` arm's non-overridden branch is the reduced copy `iface_inst.rs` warns about — it never
+reached `bind_one_param`, so `localparam logic [Nope-1:0] X` in a body was loud only when an
+override happened to target it; the gate is called there now. B F2: `package.rs` passed an EMPTY
+`local_names` to `apply_import_consts`, so a package's own earlier `parameter int K = 9` was
+clobbered by a later `import q::*` (both oracles 9, vita 5 — pre-existing) and a package's explicit
+import of a name it declares was silent; the package's own declarations are gathered up front now.
+B F3 / A F2: `respell_pkg_dims` re-spelled only the package's OWN names, so a typedef dim naming a
+constant the package IMPORTED stayed bare and bound in the importer's scope (a local `QW` of 12
+where both oracles read q's 6 — pre-existing silent-wrong; with the new range gate a header
+`parameter p::t X` of that shape had become a false-loud): a name with a parser-known literal
+value is substituted by its VALUE in the twin (a package constant is never overridden, §6.20.1).
+A F1: the §26.3 collision gate refused a compilation-unit explicit import shadowed by a module-local
+declaration — an OUTER scope, both oracles shadow it in silence — so the gate takes a `same_scope`
+flag (CU imports skip, same-scope imports are loud).
+
+**Residue.** Loud, pre-existing, both oracles agree: `parameter type T = …` is not parsed (🆕 L ⓥ);
+a package FUNCTION in a constant has no fold arm — and in a RANGE it is silently 32 bits (a
+const-but-unfoldable bound stays silent by design; a module-local function folds) (🆕 L ⓦ); a
+`real` package parameter is not on the import channel (🆕 L ⓕ); `$bits(p::t)`; a typedef declared
+inside a package function is not re-spelled. Oracle-split, vita now loud: a `real` or a
+forward-referenced localparam or `$bits(<net declared later>)` as a parameter's range bound (was
+silently 32). Pre-existing leniencies the review measured (verilator side, iverilog rejects): a
+compilation-unit import written AFTER the module applies to it; a package constant used before its
+declaration folds through the re-spelled twin; the range-gate's span dedup reports a generate
+loop's bound once. Tests: `header_import_param{,_wc,_ex,_two,_comma}.rs` (232 census cells +
+9 review pins, oracle lines verbatim).
+
 #### 4.5.414 — Nested packed structs and constant-width struct members; a fill inside a struct pattern and a struct-typed cast fold in a constant (§3 ⑤ ⓓ) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round — differential 211 designs (26 grounding + 102 census re-run on both binaries, 14 real designs incl. every corpus workload, 69 new) PASS, 0 value divergences, byte-identity measured on stdout+stderr+rc; soundness 20 designs, 3 BLOCKING fixed on the delta and one delta regression the differential lens's own design caught (a header genvar's scope) fixed too; delta re-scored with both lenses' harnesses (0 changed after the last fix), the census, the grounding set, examples · corpus 10/10)
 
 **The rung.** `ibex_cheriot_pkg.sv:84-131` was TWO rungs under one queue line: a `typedef struct

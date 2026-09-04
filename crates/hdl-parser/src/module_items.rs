@@ -649,7 +649,20 @@ impl Parser<'_, '_> {
                         continue; // already-scoped (defensive; package typedefs are bare)
                     }
                     let scoped = format!("{pkg}::{n}");
-                    if let Some(ti) = self.typedefs.get(&n).cloned() {
+                    if let Some(mut ti) = self.typedefs.get(&n).cloned() {
+                        // §4.5.415 (§2 🆕 L ⓟ): the twin's dims name the package's
+                        // OWN constants as `pkg::W` — the bare `W` is undefined
+                        // wherever the twin is used without importing it (`p::t v;`
+                        // was E3009 on its range, and a header `parameter p::t X`
+                        // silently went value-inferred). Same respell as the
+                        // packed-md parameter dims below; a name the package
+                        // imported is left as written.
+                        if let Some(r) = ti.range.take() {
+                            ti.range = self.respell_pkg_dims(&pkg, &[r]).pop();
+                        }
+                        if !ti.packed.is_empty() {
+                            ti.packed = self.respell_pkg_dims(&pkg, &ti.packed);
+                        }
                         self.typedefs.insert(scoped.clone(), ti);
                     }
                     // Was `n`'s struct/enum layout (re)written by THIS package body?

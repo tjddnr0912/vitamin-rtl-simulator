@@ -1200,6 +1200,21 @@ impl Elaborator<'_> {
     /// wide side maps). Three callers: `bind_params` for each ANSI header parameter,
     /// the module-body loop in `instance.rs` for an OVERRIDDEN body parameter, and the
     /// interface body loop in `iface_inst.rs` for EVERY interface body parameter.
+    /// §4.5.415: a parameter's DECLARED range must fold, loudly — see the note at
+    /// `bind_one_param`. Called by all three binders (module/interface header and
+    /// body, generate scope, package scope) so the answer does not depend on where
+    /// the declaration sits.
+    pub(crate) fn check_param_decl_range(&mut self, p: &ast::ParamDecl) {
+        if let Some(r) = &p.range {
+            if !matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
+                let m = self.const_eval_in_scope(&r.msb);
+                let l = self.const_eval_in_scope(&r.lsb);
+                self.check_const_range_bound(&r.msb, m);
+                self.check_const_range_bound(&r.lsb, l);
+            }
+        }
+    }
+
     pub(crate) fn bind_one_param(
         &mut self,
         p: &ast::ParamDecl,
@@ -1232,6 +1247,16 @@ impl Elaborator<'_> {
         let ovr_fill = &ovr.fill;
         let ovr_unfoldable = &ovr.unfoldable;
         let ovr_str = &ovr.text;
+        // §4.5.415: a DECLARED range that does not fold is loud, through the same
+        // helper a net's range uses (an undefined name, a real or a >64-bit bound
+        // are named; a bound vita merely cannot fold yet stays silent there too).
+        // Before this, `parameter logic [Nope-1:0] X = 4'h9` — and every header
+        // range naming a constant a header import had not yet made visible — went
+        // value-inferred: `$bits(X)` 32 where both oracles refuse the design, at exit
+        // 0 (a port's or a net's `[Nope-1:0]` was loud all along). Measured on the
+        // suite, the corpus and the examples before landing: no design folded its
+        // declared range in one place and refused it here.
+        self.check_param_decl_range(p);
         {
             // ★ ORDERING RULE — this block runs for EVERY parameter, before any
             // side-map early `return` below.

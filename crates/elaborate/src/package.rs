@@ -513,9 +513,28 @@ impl Elaborator<'_> {
         let mut funcs: BTreeMap<String, ast::FunctionDef> = BTreeMap::new();
         let mut tasks: BTreeMap<String, ast::TaskDef> = BTreeMap::new();
         let mut types: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        // §4.5.415 (review B F2): the package's OWN declarations, for the two §26.3
+        // gates in `apply_import_consts` — a wildcard import never binds a name the
+        // package declares (`parameter int K = 9; import q::*;` read q's `K`, both
+        // oracles 9) and an explicit import of one is loud. Gathered up front, like
+        // the module scope's `gather_local_decl_names`, so declaration order does not
+        // decide.
+        let pkg_local_names: std::collections::BTreeSet<String> = pm
+            .body
+            .iter()
+            .flat_map(|it| match it {
+                ast::ModuleItem::Param(p) => vec![p.name.name.clone()],
+                ast::ModuleItem::NetVar(d) => d.names.iter().map(|n| n.name.name.clone()).collect(),
+                ast::ModuleItem::Typedef(td) => vec![td.name.name.clone()],
+                ast::ModuleItem::Func(f) => vec![f.name.name.clone()],
+                ast::ModuleItem::Task(t) => vec![t.name.name.clone()],
+                _ => Vec::new(),
+            })
+            .collect();
         for item in &pm.body {
             match item {
                 ast::ModuleItem::Param(p) => {
+                    self.check_param_decl_range(p);
                     // A2b-prereq: params and variables share the package's single
                     // name space (IEEE §26.3) — a duplicate is loud, never a
                     // silent double-binding (`add_net` only guards net-vs-net).
@@ -799,7 +818,8 @@ impl Elaborator<'_> {
                         &mut saved,
                         &mut wc_origin,
                         &mut explicit,
-                        &Default::default(),
+                        &pkg_local_names,
+                        true,
                     );
                 }
                 // A2b-prereq/A2b: package-level VARIABLE declaration — one
@@ -1035,6 +1055,23 @@ impl Elaborator<'_> {
         }
     }
 
+    /// §3 ⑤ ⓕ: is the `i`-th entry of a scope's import list (compilation-unit
+    /// imports first, then the body's in order) visible to the ANSI header's own
+    /// parameter defaults and ranges? A compilation-unit import precedes the whole
+    /// declaration; a HEADER import (`module m import p::*; #(…)`, IEEE §A.1.2) is
+    /// one the parser led the body with, recognised by a span that precedes the
+    /// first header parameter's. A body import is not (oracle split — iverilog
+    /// rejects a header default naming what a body import brings in, verilator
+    /// folds it), so the caller applies it only after the header is bound.
+    pub(crate) fn import_precedes_header(
+        decl: &ast::ModuleDecl,
+        n_cu: usize,
+        i: usize,
+        imp: &ast::ImportDecl,
+    ) -> bool {
+        i < n_cu || decl.params.first().is_some_and(|p| imp.span.lo < p.span.lo)
+    }
+
     /// Bind one import's CONST symbols into the current module scope.
     ///
     /// `local_names` = the bare names the importing scope DECLARES itself
@@ -1047,6 +1084,11 @@ impl Elaborator<'_> {
     /// localparam was already right only because its own later bind overwrote
     /// the import's). An EXPLICIT import of a locally declared name stays the
     /// conflict it is (loud in `add_net`).
+    ///
+    /// `same_scope` = the import is written IN the importing scope (a module/interface
+    /// body or header, a package body). A compilation-unit import is an OUTER scope:
+    /// a local declaration shadows it — explicit or wildcard — with no error (both
+    /// oracles; §26.3's collision rule is for one scope).
     pub(crate) fn apply_import_consts(
         &mut self,
         imp: &ast::ImportDecl,
@@ -1054,6 +1096,7 @@ impl Elaborator<'_> {
         wc_origin: &mut BTreeMap<String, String>,
         explicit_imports: &mut std::collections::BTreeSet<String>,
         local_names: &std::collections::BTreeSet<String>,
+        same_scope: bool,
     ) {
         let pkg = imp.pkg.name.as_str();
         let Some(consts) = self.pkg_consts.get(pkg) else {
@@ -1209,9 +1252,10 @@ impl Elaborator<'_> {
                             // Never clobber a symbols entry this machinery did
                             // not create (e.g. an interface-port alias): the
                             // existing binding wins, like a local declaration.
-                            // Same for a HEADER parameter already bound (3a
-                            // runs before this 3a.5): local constant wins the
-                            // wildcard (iverilog local-wins pin).
+                            // A HEADER parameter is in `local_names` (the header
+                            // is bound between the two import passes since
+                            // §4.5.415, so it may not be in `params` yet): local
+                            // constant wins the wildcard (iverilog local-wins pin).
                             if self.params.contains_key(&key)
                                 || (self.symbols.contains_key(&key)
                                     && !self.pkg_var_aliases.contains_key(&key))
@@ -1227,6 +1271,32 @@ impl Elaborator<'_> {
                 }
             }
             Some(sym) => {
+                // IEEE §26.3: an explicit import of a name the importing scope
+                // declares itself is an error (iverilog refuses it; verilator answers
+                // the local). Before this a CONSTANT collision silently answered the
+                // package's value wherever the local declaration had not been bound
+                // yet — a header parameter default naming an explicitly imported
+                // `W` that a body `localparam W` redeclares read the package's `W`
+                // at exit 0 once header imports became visible to the header
+                // (§4.5.415 census `ex_shadowbody`; the header-parameter twin was
+                // §2 🆕 L ⓘ). A package importing a package passes an empty set.
+                // A VARIABLE collision was already loud below; one funnel now.
+                // (review A F1: a compilation-unit explicit import is shadowed by the
+                // local declaration in silence, like a wildcard — both oracles.)
+                if local_names.contains(&sym.name) {
+                    if same_scope {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "`{}` has already been imported into this scope (explicit \
+                                 import from package `{pkg}`) and is also declared locally \
+                                 — IEEE 1800 §26.3 forbids both",
+                                sym.name
+                            ),
+                        );
+                    }
+                    return;
+                }
                 if let Some(cv) = self
                     .pkg_wide_bits
                     .get(pkg)

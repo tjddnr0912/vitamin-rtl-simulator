@@ -183,6 +183,27 @@ impl Parser<'_, '_> {
                     name: p.segments[0].clone(),
                 }
             }
+            // §4.5.415 (review B F3): a name the package IMPORTED (not its own
+            // declaration) with a parser-known literal value is fixed at the package
+            // — a package constant is never overridden (§6.20.1) — so the twin carries
+            // the VALUE; left bare it bound in the importer's scope (`QW` read the
+            // importer's own local, both oracles the package's). A name with no
+            // parser-time value stays as written.
+            ExprKind::Ident(p)
+                if p.segments.len() == 1 && self.const_locals.contains_key(&p.segments[0].name) =>
+            {
+                let v = self.const_locals[&p.segments[0].name];
+                if v < 0 && v.unsigned_abs() <= u32::MAX as u64 {
+                    ExprKind::Unary {
+                        op: UnOp::Minus,
+                        operand: Box::new(Self::dec_lit(v.unsigned_abs() as u32, span)),
+                    }
+                } else if v <= u32::MAX as i64 {
+                    return Self::dec_lit(v as u32, span);
+                } else {
+                    ExprKind::Ident(p)
+                }
+            }
             ExprKind::Binary { op, lhs, rhs } => ExprKind::Binary {
                 op,
                 lhs: Box::new(self.respell_pkg_expr(pkg, *lhs)),

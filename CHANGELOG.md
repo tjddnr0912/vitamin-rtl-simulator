@@ -11,6 +11,36 @@ changed for a user of the simulator.
 
 ### Added
 
+- **A header `import` is visible to the header's own parameter defaults and ranges.** `module m
+  import p::*; #(parameter perm_t X = Dflt, parameter logic [W-1:0] Y = Mask)` — and `import p::X`,
+  a comma list, two packages, a compilation-unit import — binds `Dflt`/`W`/`Mask` (a constant, an
+  enum label, `$clog2(N)`, `$bits(t)`, an expression of them) for every header shape: a typed /
+  untyped / ranged parameter, a header `localparam`, a sibling, a port width, an instance override
+  of such a parameter, a child override naming it; the interface twin (`interface i import p::*;
+  #(parameter int N = W)`) likewise, and an interface body `import` binds its constants. Every ibex
+  module header (`ibex_top`, `ibex_core`, `ibex_lockstep`, `ibex_if_stage`) is this shape. A header
+  default naming a constant that a BODY import brings in stays loud (IEEE §26.3; the oracles split).
+- **A scoped typedef whose dims name the package's own constants** works without importing them:
+  `package p; parameter int W = 4; typedef logic [W-1:0] t; endpackage … p::t v;` (`$bits`, packed
+  multi-dim dims, a header `parameter p::t X` — the dims are re-spelled `p::W` at `endpackage`).
+
+### Fixed
+
+- **A parameter's declared range that does not fold is loud** — `parameter logic [Nope-1:0] X =
+  4'h9` (header, body, generate scope, package scope) reported `$bits(X)` = 32 at exit 0 where
+  both oracles refuse the design; it is now the same E3009 a net's range gives. A bound vita merely
+  cannot fold yet (a constant function call) is unchanged.
+- **An explicit import colliding with a local declaration is loud** (`import p::W; … localparam W
+  = 9;`, or a header parameter / port / variable / type of that name — IEEE §26.3, iverilog
+  rejects it): a constant of that name silently answered the package's value.
+- **Inside a package, the package's own declarations shadow a wildcard import** (`parameter int K
+  = 9; import q::*;` read q's `K`), and an explicit import of a name the package declares is loud.
+- **A package typedef whose dim names a constant the package itself imported** (`package p; import
+  q::*; typedef logic [QW-1:0] t;`) is laid out with q's value everywhere `p::t` is used; it used
+  to bind whatever `QW` meant in the USING scope.
+- A compilation-unit `import p::X;` is shadowed by a module-local declaration of `X` in silence
+  (an outer scope); only a same-scope collision is the §26.3 error.
+
 - **Nested packed structs and constant-width struct members.** A `typedef struct packed` member may
   be another packed struct/union typedef (`perms_t perms;`, ibex_cheriot_pkg's `cap_t` /
   `decoded_cap_t` / `bound_result_t`): any chain `s.a.b.c` / `arr[i].a.b` reads, writes,

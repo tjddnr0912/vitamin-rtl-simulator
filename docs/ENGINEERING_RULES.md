@@ -3594,3 +3594,25 @@ its BARE key dies at `endpackage`: the wildcard-import cell passed, the explicit
 cross-package cells failed — key by the `pkg::t` twin. **Rule**: for a parse-time table list the
 four gates and census each with a control twin; for a stored key name its lifetime.
 See [[layout-keys-must-outlive-the-unit]], [[gate-on-constness-not-resolvability]].
+
+### An import has a position, and a new loud gate is measured against the suite before it is believed (§4.5.415)
+
+The header-import defect was an ORDERING defect in a pass that already existed: the parser put the
+header imports where they belonged, elaborate applied every import after the header was bound. The
+fix is not "apply imports earlier" — a body import must NOT reach the header (the oracles split
+there) — but "apply each import before the first thing it must be visible to", which is a span
+comparison against the first header parameter, in two passes around the binder. Two rules fell
+out. (1) A new loud gate on a shape the engine used to accept silently ("a declared range that does
+not fold") is a claim that no PRE-correct design depended on the silence; the full suite refuted it
+in one test (a typedef's dims copied verbatim across a package made a header parameter's range
+unfoldable while its VALUE was right by value-inference) and the right repair was upstream (re-spell
+the twin), not a narrower gate. Run the suite, the corpus and the examples before the review, and
+when the gate refuses a working design, ask what made it work. (2) A gate that exists for one
+consumer (`check_const_range_bound` for nets) is the gate for every consumer of the same shape —
+parameters had three binders and none called it — and the review found a FOURTH copy (the
+non-overridden body branch) the docstring had already claimed. (3) A scope rule names its scope:
+§26.3's collision is for an import written IN the scope; a compilation-unit import is an outer
+scope and a local declaration shadows it in silence (both oracles) — the review's first finding
+was that gate applied to the CU spelling. Census every rule at every spelling of the scope it names
+(module, interface, package, compilation unit). See [[a-default-is-not-a-fact]],
+[[removing-a-loud-gate-exposes-what-it-masked]], [[import-has-a-position]].

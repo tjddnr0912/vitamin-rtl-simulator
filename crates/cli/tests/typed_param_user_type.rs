@@ -175,13 +175,23 @@ module tb; logic [7:0] V [0:1]; import p::*;
   initial begin V = '{8'h12, 8'h34}; #1 $display(\"DIGEST=%h %h\", V[0], V[1]); #1 $finish; end
 endmodule";
     assert_eq!(digest(src), "12 34");
-    // A local struct VARIABLE named like a package TYPE being imported explicitly
-    // keeps its own binding (review: the unconditional drop made this E3010).
+    // A local struct VARIABLE named like a package TYPE being imported explicitly:
+    // IEEE 1800 §26.3 forbids an explicit import of a name the scope declares
+    // (iverilog: "'rs_t' has already been declared in this scope"; verilator is
+    // lenient and answers the local, `3 4`). Loud since §4.5.415 — the parser keeps
+    // the local's binding (review: the unconditional drop made it E3010), elaborate
+    // refuses the import.
     let src = "package r; typedef struct packed { logic [11:0] a; logic [3:0] b; } rs_t; endpackage
 module tb; typedef struct packed { logic [3:0] a; logic [3:0] b; } ls_t; ls_t rs_t; import r::rs_t;
   initial begin rs_t = 8'h34; $display(\"DIGEST=%h %h\", rs_t.a, rs_t.b); #1 $finish; end
 endmodule";
-    assert_eq!(digest(src), "3 4");
+    let (e, c) = run(src);
+    assert_ne!(
+        c,
+        Some(0),
+        "an explicit import colliding with a local declaration must be loud:\n{e}"
+    );
+    assert!(e.contains("already been imported"), "{e}");
 }
 
 #[test]

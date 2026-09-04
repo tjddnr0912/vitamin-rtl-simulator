@@ -520,6 +520,7 @@ impl Elaborator<'_> {
                 }
                 // A generate-scope parameter has no override channel, so its
                 // declared default is always what binds.
+                self.check_param_decl_range(p);
                 let meta = self.param_decl_width_unoverridden(p);
                 // Branch parity with the module-body twin: a declared-integral
                 // parameter whose initializer mentions a real converts at the

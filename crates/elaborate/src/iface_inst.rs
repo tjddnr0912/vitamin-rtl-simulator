@@ -145,7 +145,56 @@ impl Elaborator<'_> {
                 let saved_prefix = std::mem::replace(&mut self.cur_prefix, path.clone());
                 // params (header `#(...)` then body localparams) BEFORE nets
                 // so `[W-1:0]` folds — mirroring module passes (3)/(3b).
-                let (mut saved_params, param_ovr) = self.bind_params(&decl, &overrides);
+                // §3 ⑤ ⓕ: the interface's imports, CONST symbols only (an interface
+                // body has no functions/tasks, so a routine brought in by an import
+                // has no caller to resolve — a call stays loud). Two passes around
+                // `bind_params`, exactly as the module scope does: a compilation-unit
+                // or HEADER import (`interface i import p::*; #(parameter N = W)`) is
+                // visible to the header's own defaults, a body import only after.
+                let iface_imports: Vec<ast::ImportDecl> = self
+                    .cu_imports
+                    .clone()
+                    .into_iter()
+                    .chain(decl.body.iter().filter_map(|it| match it {
+                        ast::ModuleItem::Import(i) => Some(i.clone()),
+                        _ => None,
+                    }))
+                    .collect();
+                let n_cu = self.cu_imports.len();
+                let local_names = self.gather_local_decl_names(&decl);
+                let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
+                let mut explicit_imports: std::collections::BTreeSet<String> =
+                    std::collections::BTreeSet::new();
+                let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
+                for (i, imp) in iface_imports.iter().enumerate() {
+                    if Self::import_precedes_header(&decl, n_cu, i, imp) {
+                        self.apply_import_consts(
+                            imp,
+                            &mut saved_params,
+                            &mut wc_origin,
+                            &mut explicit_imports,
+                            &local_names,
+                            i >= n_cu,
+                        );
+                    }
+                }
+                let param_ovr = {
+                    let (sp, ovr) = self.bind_params(&decl, &overrides);
+                    saved_params.extend(sp);
+                    ovr
+                };
+                for (i, imp) in iface_imports.iter().enumerate() {
+                    if !Self::import_precedes_header(&decl, n_cu, i, imp) {
+                        self.apply_import_consts(
+                            imp,
+                            &mut saved_params,
+                            &mut wc_origin,
+                            &mut explicit_imports,
+                            &local_names,
+                            i >= n_cu,
+                        );
+                    }
+                }
                 for it in &decl.body {
                     if let ast::ModuleItem::Param(pp) = it {
                         // Same binder as the module body loop and the generate fold.
@@ -280,6 +329,8 @@ impl Elaborator<'_> {
                         | ast::ModuleItem::Param(_)
                         | ast::ModuleItem::PortDecl(_)
                         | ast::ModuleItem::Genvar { .. } => {}
+                        // Applied above, around the parameter bind.
+                        ast::ModuleItem::Import(_) => {}
                         other => {
                             let what = match other {
                                 ast::ModuleItem::Instance(_) => "nested instances",

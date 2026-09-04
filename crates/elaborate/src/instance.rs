@@ -412,18 +412,21 @@ impl Elaborator<'_> {
                     .collect()
             })
             .unwrap_or_default();
-        let (mut saved_params, param_ovr) = if dp_overrides.is_empty() {
-            self.bind_params(module, param_overrides)
-        } else {
-            let mut merged = param_overrides.to_vec();
-            merged.extend(dp_overrides);
-            self.bind_params(module, &merged)
-        };
-
-        // (3a.5) v7 P2-D imports — CONST symbols bind first so body params
-        //        and ranges can use them; a later LOCAL declaration of the
+        // (3a.5, first half) v7 P2-D imports — CONST symbols bind first so body
+        //        params and ranges can use them; a later LOCAL declaration of the
         //        same name simply rebinds (local wins, iverilog-pinned).
         //        Function/task imports apply after (3.5) below.
+        //
+        // §3 ⑤ ⓕ: the imports are applied in TWO passes around `bind_params`. A
+        // compilation-unit import and an ANSI HEADER import (`module m import p::*;
+        // #(parameter T X = Dflt)`, IEEE §A.1.2 — the parser leads the body with it)
+        // exist precisely so the header's own parameter defaults and ranges can name
+        // the package's constants (both oracles fold `Dflt`); before this every ibex
+        // module header was E3009 on its first default. A BODY import stays in the
+        // second pass: a header default naming a constant that a body import brings
+        // in is an oracle split (iverilog rejects it, verilator folds it — §26.3 makes
+        // an import visible from its own position on), so it stays loud. A header
+        // import is one whose span precedes the first header parameter's.
         let import_list: Vec<ast::ImportDecl> = self
             .cu_imports
             .clone()
@@ -464,14 +467,45 @@ impl Elaborator<'_> {
         // same set the GAP-G array guard below reads, gathered once, here, because
         // the imports bind BEFORE the nets are declared.
         let names = self.gather_local_decl_names(module);
-        for imp in &import_list {
-            self.apply_import_consts(
-                imp,
-                &mut saved_params,
-                &mut wc_origin,
-                &mut explicit_imports,
-                &names,
-            );
+        let n_cu = self.cu_imports.len();
+        let is_header_import =
+            |i: usize, imp: &ast::ImportDecl| Self::import_precedes_header(module, n_cu, i, imp);
+        let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
+        for (i, imp) in import_list.iter().enumerate() {
+            if is_header_import(i, imp) {
+                self.apply_import_consts(
+                    imp,
+                    &mut saved_params,
+                    &mut wc_origin,
+                    &mut explicit_imports,
+                    &names,
+                    i >= n_cu,
+                );
+            }
+        }
+        let param_ovr = {
+            let (sp, ovr) = if dp_overrides.is_empty() {
+                self.bind_params(module, param_overrides)
+            } else {
+                let mut merged = param_overrides.to_vec();
+                merged.extend(dp_overrides);
+                self.bind_params(module, &merged)
+            };
+            saved_params.extend(sp);
+            ovr
+        };
+        // (3a.5, second half) the body imports.
+        for (i, imp) in import_list.iter().enumerate() {
+            if !is_header_import(i, imp) {
+                self.apply_import_consts(
+                    imp,
+                    &mut saved_params,
+                    &mut wc_origin,
+                    &mut explicit_imports,
+                    &names,
+                    i >= n_cu,
+                );
+            }
         }
 
         // (3b) BODY-level `parameter`/`localparam` (a `ModuleItem::Param`, NOT in
@@ -549,6 +583,12 @@ impl Elaborator<'_> {
                         self.bind_one_param(p, &param_ovr, &mut saved_params);
                         continue;
                     }
+                    // §4.5.415 (review B F1): this branch is the reduced copy the
+                    // `iface_inst.rs` binder comment describes, so the declared-range
+                    // gate `bind_one_param` runs must be called here too — the same
+                    // `localparam logic [Nope-1:0] X` was loud only when an override
+                    // happened to target it.
+                    self.check_param_decl_range(p);
                     // N5: a string-valued parameter/localparam (`localparam string S =
                     // "abc"`, or the untyped `localparam S = "abc"`). It has no i64
                     // value, so record its raw literal (FQ-keyed, persistent — walk_scopes
