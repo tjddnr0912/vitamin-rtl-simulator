@@ -2,6 +2,14 @@
 
 use super::*;
 
+/// The decl-init flush verdict for a const array parameter declarator — see
+/// `array_param_init_pattern`.
+pub(crate) enum ArrayParamInit {
+    Keep,
+    Skip,
+    Use(ast::Expr),
+}
+
 /// Canonical dedup key for the const pool. Cloning the `Vec<u64>` planes keeps
 /// the compare total and order-independent (used only for lookup, never to drive
 /// arena order — see determinism note).
@@ -595,17 +603,22 @@ impl Elaborator<'_> {
         d: &ast::NetVarDecl,
         decl: &ast::DeclName,
     ) -> Option<Vec<i64>> {
-        let (base_w, _, _, elem_signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
-        let elem_w = if d.packed.is_empty() {
-            base_w
-        } else {
-            self.packed_extents(d.range.as_ref(), &d.packed)
-                .iter()
-                .fold(1u32, |a, &(_, w, _)| a.saturating_mul(w.max(1)))
-        };
+        let (elem_w, elem_signed) = self.const_array_elem_geom(d);
         let init = decl.init.as_ref()?;
-        let ast::ExprKind::AssignPattern(parts) = &init.kind else {
-            return None;
+        // §3 ⑤ ⓒ: an instance override / a whole-array default replaces the
+        // pattern's elements (already folded, in the scope that owns them).
+        let src = self.array_param_vals_src(d, decl);
+        let raw: Vec<i64> = match src {
+            Some(v) => v,
+            None => {
+                let ast::ExprKind::AssignPattern(parts) = &init.kind else {
+                    return None;
+                };
+                parts
+                    .iter()
+                    .map(|p| self.const_eval_in_scope(p))
+                    .collect::<Option<Vec<i64>>>()?
+            }
         };
         let zero_based_asc = decl.unpacked.len() == 1
             && match &decl.unpacked[0] {
@@ -619,18 +632,176 @@ impl Elaborator<'_> {
         if !zero_based_asc {
             return None;
         }
-        let vals = parts
-            .iter()
-            .map(|p| {
-                self.const_eval_in_scope(p)
-                    .map(|v| coerce_i64_to_width(v, elem_w, elem_signed))
-            })
-            .collect::<Option<Vec<i64>>>()?;
-        let expected = self
-            .array_dim_extents(&decl.unpacked)
-            .iter()
-            .fold(1u32, |a, &(_, n)| a.saturating_mul(n.max(1)));
+        let vals: Vec<i64> = raw
+            .into_iter()
+            .map(|v| coerce_i64_to_width(v, elem_w, elem_signed))
+            .collect();
+        let expected = self.const_array_elem_count(decl);
         (vals.len() as u32 == expected).then_some(vals)
+    }
+
+    /// The ELEMENT width/signedness of an array parameter decl `d` — the flat packed
+    /// width when the element is multi-dimensional packed.
+    pub(crate) fn const_array_elem_geom(&mut self, d: &ast::NetVarDecl) -> (u32, bool) {
+        let (base_w, _, _, elem_signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+        let elem_w = if d.packed.is_empty() {
+            base_w
+        } else {
+            self.packed_extents(d.range.as_ref(), &d.packed)
+                .iter()
+                .fold(1u32, |a, &(_, w, _)| a.saturating_mul(w.max(1)))
+        };
+        (elem_w, elem_signed)
+    }
+
+    /// The declared element COUNT of one array declarator (product of its unpacked
+    /// extents).
+    pub(crate) fn const_array_elem_count(&mut self, decl: &ast::DeclName) -> u32 {
+        self.array_dim_extents(&decl.unpacked)
+            .iter()
+            .fold(1u32, |a, &(_, n)| a.saturating_mul(n.max(1)))
+    }
+
+    /// §3 ⑤ ⓒ: an instance OVERRIDE expression folded as a whole ARRAY, in the
+    /// scope of the instantiation (the parent): a positional assignment pattern
+    /// whose every element folds, or a constant array parameter named bare (the
+    /// parent's own header/body array, an imported package array) or `pkg::`
+    /// scoped. Anything else — a scalar, a non-constant element, a pattern with a
+    /// struct-typed element pattern inside (the parser cannot desugar it without
+    /// the target type) — is `None`; `bind_array_param` then refuses the override
+    /// loudly when its target IS an array parameter.
+    pub(crate) fn const_array_override_vals(&mut self, e: &ast::Expr) -> Option<Vec<i64>> {
+        match &e.kind {
+            ast::ExprKind::AssignPattern(parts) => parts
+                .iter()
+                .map(|p| self.const_eval_in_scope(p))
+                .collect::<Option<Vec<i64>>>(),
+            ast::ExprKind::Ident(_) | ast::ExprKind::PkgScoped { .. } => {
+                self.const_array_vals_of_base(e).cloned()
+            }
+            _ => None,
+        }
+    }
+
+    /// §3 ⑤ ⓒ: the element values that REPLACE the declared `'{…}` of a const array
+    /// parameter declarator, if any: the instance override recorded for its fq name
+    /// by `bind_array_param`, else — when the declared default is not a pattern but
+    /// a whole-array constant (`= ibex_pkg::PmpCfgRst`, `= Rst` under `import p::*`,
+    /// another header array) — that array's captured elements, resolved in THIS
+    /// scope. `None` = keep the declared pattern (or stay loud on a non-pattern init
+    /// that names no captured array, as before). Not coerced to the element type —
+    /// the two consumers do that on their own terms.
+    pub(crate) fn array_param_vals_src(
+        &mut self,
+        d: &ast::NetVarDecl,
+        decl: &ast::DeclName,
+    ) -> Option<Vec<i64>> {
+        if !d.const_param {
+            return None;
+        }
+        let key = self.fq(&decl.name.name);
+        if let Some(v) = self.array_param_overrides.get(&key) {
+            return Some(v.clone());
+        }
+        let init = decl.init.as_ref()?;
+        if matches!(init.kind, ast::ExprKind::AssignPattern(_)) {
+            return None;
+        }
+        self.const_array_vals_of_base(init).cloned()
+    }
+
+    /// §3 ⑤ ⓒ: the initializer the decl-init flush must use for a const array
+    /// parameter declarator — `Keep` the declared pattern; `Use` a synthesized
+    /// pattern of sized literals (one per element, masked to the element width) when
+    /// an override / whole-array default supplies the values; `Skip` after a loud
+    /// error (an element count that does not match the declaration, or an element
+    /// wider than the 64-bit lane the values travelled in — never a truncated or
+    /// zero-extended reset table at exit 0).
+    pub(crate) fn array_param_init_pattern(
+        &mut self,
+        d: &ast::NetVarDecl,
+        decl: &ast::DeclName,
+    ) -> ArrayParamInit {
+        let name = decl.name.name.as_str();
+        let Some(vals) = self.array_param_vals_src(d, decl) else {
+            // A whole-array default that names a LOCAL net which is not a constant
+            // array (`parameter logic [3:0] A[2] = R` with `logic [3:0] R[2]` a
+            // variable) — illegal (verilator: "variable isn't const"), and the
+            // runtime copy the flush would emit reads `R` before its own init
+            // (`x x` at exit 0, review A F1a). A constant source that the capture
+            // does not cover (a non-0-based sibling, a forward reference) keeps the
+            // copy: its net is in `const_param_nets` by the time the flush runs.
+            if d.const_param {
+                if let Some(init) = &decl.init {
+                    if let ast::ExprKind::Ident(path) = &init.kind {
+                        if path.segments.len() == 1 {
+                            let n = path.segments[0].name.as_str();
+                            let local = self
+                                .walk_scopes_key(n, |k| self.symbols.contains_key(k))
+                                .and_then(|k| self.symbols.get(&k).copied());
+                            if let Some(id) = local {
+                                if !self.const_param_nets.contains_key(&id) {
+                                    self.error(
+                                        MsgCode::ElabUnsupported,
+                                        &format!(
+                                            "array parameter `{name}`: the whole-array default \
+                                             `{n}` is not a constant array (a variable cannot \
+                                             initialise a parameter)"
+                                        ),
+                                    );
+                                    return ArrayParamInit::Skip;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return ArrayParamInit::Keep;
+        };
+        let expected = self.const_array_elem_count(decl);
+        if vals.len() as u32 != expected {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "array parameter `{name}`: {} element value(s) for an array of {expected} \
+                     element(s)",
+                    vals.len()
+                ),
+            );
+            return ArrayParamInit::Skip;
+        }
+        let (elem_w, _) = self.const_array_elem_geom(d);
+        if elem_w > 64 {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "array parameter `{name}`: an override / whole-array default of an \
+                     element type wider than 64 bits is unsupported (write the `'{{…}}` \
+                     pattern in the declaration)"
+                ),
+            );
+            return ArrayParamInit::Skip;
+        }
+        let span = decl.init.as_ref().map(|i| i.span).unwrap_or(decl.span);
+        let mask = if elem_w == 64 {
+            u64::MAX
+        } else {
+            (1u64 << elem_w) - 1
+        };
+        let parts = vals
+            .iter()
+            .map(|&v| ast::Expr {
+                kind: ast::ExprKind::IntLit {
+                    kind: ast::IntLitKind::Sized,
+                    raw: format!("{elem_w}'h{:x}", (v as u64) & mask),
+                },
+                span,
+            })
+            .collect();
+        ArrayParamInit::Use(ast::Expr {
+            kind: ast::ExprKind::AssignPattern(parts),
+            span,
+        })
     }
 
     pub(crate) fn capture_const_array_vals(&mut self, d: &ast::NetVarDecl) {

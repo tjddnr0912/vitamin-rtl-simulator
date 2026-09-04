@@ -444,10 +444,35 @@ impl Parser<'_, '_> {
                 } else {
                     last_pfx.clone().unwrap()
                 };
-                // body=false: an array parameter in the header is a loud error
-                // inside `finish_param_assignment` (never a `ConstArrayVar` here).
-                if let Some(ParamItem::Scalar(p)) = self.finish_param_assignment(&pfx, false) {
-                    params.push(p);
+                match self.finish_param_assignment(&pfx, false) {
+                    Some(ParamItem::Scalar(p)) => params.push(p),
+                    // §3 ⑤ ⓒ: a header ARRAY parameter. The desugared const
+                    // array decl leads the body (after the header imports, whose
+                    // symbols its dims/default may name) and a scalar TWIN with the
+                    // same name and span holds its override slot in `params`.
+                    Some(ParamItem::ConstArrayVar(d)) => {
+                        if start_kw != Kw::Module {
+                            self.error_at(
+                                d.span,
+                                "a scalar parameter in this header (an array parameter is supported only in a module header in v1)",
+                            );
+                        } else if let Some(dn) = d.names.first() {
+                            params.push(ParamDecl {
+                                kind: pfx.kind,
+                                signed: d.signed,
+                                ty: ParamType::Implicit,
+                                range: d.range.clone(),
+                                name: dn.name.clone(),
+                                value: dn.init.clone().unwrap_or_else(|| Expr {
+                                    kind: ExprKind::AssignPattern(Vec::new()),
+                                    span: d.span,
+                                }),
+                                span: d.span,
+                            });
+                            header_imports.push(ModuleItem::NetVar(d));
+                        }
+                    }
+                    None => {}
                 }
                 if !self.eat(TokenKind::Comma) {
                     break;

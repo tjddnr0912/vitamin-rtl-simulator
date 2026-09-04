@@ -147,12 +147,19 @@ impl Elaborator<'_> {
                 // into `net.init` and skipped here, which removed it from the
                 // initialization order entirely.
             }
+            // §3 ⑤ ⓒ: a header array parameter's override / whole-array default
+            // replaces the declared pattern (same lvalue, same flush slot).
+            let init = match self.array_param_init_pattern(d, name) {
+                crate::const_eval::ArrayParamInit::Keep => init.clone(),
+                crate::const_eval::ArrayParamInit::Skip => continue,
+                crate::const_eval::ArrayParamInit::Use(e) => e,
+            };
             let path = ast::HierPath {
                 segments: vec![name.name.clone()],
                 span: name.name.span,
             };
             self.pending_var_inits
-                .push((ast::Lvalue::Ident(path), init.clone()));
+                .push((ast::Lvalue::Ident(path), init));
         }
     }
 

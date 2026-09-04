@@ -11,6 +11,19 @@ changed for a user of the simulator.
 
 ### Added
 
+- **An array parameter in the ANSI `#(…)` header.** `module ibex_top #(parameter ibex_pkg::pmp_cfg_t
+  PMPRstCfg[PMP_MAX_REGIONS] = ibex_pkg::PmpCfgRst, parameter logic [PMP_ADDR_MSB:0]
+  PMPRstAddr[PMP_MAX_REGIONS] = ibex_pkg::PmpAddrRst, …)`: a whole-array default (`= pkg::Rst`, an
+  imported bare name, a sibling header array — and a body `localparam L[2] = p::R`, loud before)
+  and the instance override channel for aggregates — a `'{…}` of constants, `pkg::Arr`, the
+  parent's own array parameter forwarded (`.PMPRstCfg(PMPRstCfg)`), a pattern of the parent's
+  elements, named or positional, instance arrays. Element types: vectors, `int`/signed atoms,
+  struct/enum typedefs (scoped or imported). Verified against verilator 5.050 (183-cell census,
+  109 loud→correct, 0 silent). Still loud: a nested (2-D) override pattern, an override or
+  whole-array default of elements wider than 64 bits, `defparam` onto an array parameter, an
+  interface-header array parameter, `$size(A)` in a constant, a select of an element as a child
+  override (`A[i][MSB-:W]`). Newly loud (was a silent leniency): an array parameter whose
+  whole-array default names a VARIABLE array.
 - **A parameter with more than one packed dimension.** `parameter lfsr_perm_t RndCnstLfsrPerm =
   {160'h…}` over `typedef logic [W-1:0][$clog2(W)-1:0] lfsr_perm_t` (ibex), and the keyword spelling
   `parameter logic [Dw-1:0][Iw-1:0] StatePerm` (prim_lfsr's header, dims naming the instance's own

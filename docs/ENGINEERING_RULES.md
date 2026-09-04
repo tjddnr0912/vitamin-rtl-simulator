@@ -219,6 +219,37 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐ A named source replacing a literal: gate on CONSTNESS at the consumer, not on resolvability (2026-09-04 · §4.5.413)
+
+§4.5.413 let an array parameter's `'{…}` be replaced by a NAMED array (an override, a whole-array
+default `= pkg::Rst` / `= R`). The first cut resolved the name through the constant-array capture
+and, when that failed, fell back to the pre-existing runtime whole-array copy. Two facts made that
+fallback wrong in opposite directions, and only a design pair told them apart:
+
+- A name that resolves LATE is still a constant. A sibling header array declared after its
+  reader, or a non-0-based source the capture does not cover, is not in the capture map when the
+  reader is captured — but its net is registered as a constant by the time the decl-init flush
+  runs. Refusing "unresolved" there would have turned two correct designs loud (`fwd.sv`,
+  `nz.sv`: PRE `6 7 3 4`, verilator the same).
+- A name that resolves to a VARIABLE is illegal (verilator: "variable isn't const"), and the
+  runtime copy the fallback emits reads it BEFORE its own decl-init: `x x` at exit 0. The
+  body-localparam control had been answering `6 7` for that illegal shape all along (pre-existing
+  leniency); the new header placement — the array leads the body — moved the copy ahead of the
+  source's init and turned the leniency into a wrong value (review A F1a).
+
+The rule that survived both: at the consumer that has the nets, resolve the name to its net and
+ask `const_param_nets` — constant ⇒ keep the copy (it is right whenever it runs), variable ⇒ loud.
+"Does it resolve now?" is a property of pass order; "is it a constant?" is a property of the
+design. Gate on the second.
+
+Two smaller ones from the same review. (a) An AST-field-free TWIN (`ParamDecl` + `NetVarDecl`,
+same name, same `span`) is a legitimate way to occupy a slot the frozen AST has no field for —
+but write the pairing predicate so a user-written collision cannot satisfy it (two declarations
+never share a span) and measure the collision on PRE (`edge_collide`: the silent redeclaration
+was pre-existing, §2 🆕 L ⓢ). (b) Verilator prints later instances' `initial` output first; a
+census cell with two instances reads as NEW-SILENT until the line SETS are compared — put one
+instance per cell, or compare sorted lines, before filing a divergence.
+
 ### ⭐ A name-keyed parser rewrite has three lifetimes to census: declaration, SHADOW, and export (2026-09-04 · §4.5.412)
 
 - §3 ⑤ ⓐ rewrote every select on a multi-dim packed PARAMETER to a flat part-select, keyed on the

@@ -436,6 +436,107 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.413 — An array parameter in the ANSI `#(…)` header: whole-array default and aggregate override (§3 ⑤ ⓒ header half) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round — differential 152 designs + a 643-file PRE/POST repo sweep (0 differing), 1 value finding fixed on the delta + 2 recorded; soundness 66 designs + an 88-design byte-identity sweep, 0 blocking, 1 precondition documented; delta re-scored with the census, the grounding set and both lenses' own designs (only the fixed shape and its body control changed, both to loud) · corpus 10/10)
+
+**The rung.** `module ibex_top #(parameter ibex_pkg::pmp_cfg_t PMPRstCfg[PMP_MAX_REGIONS] =
+ibex_pkg::PmpCfgRst, parameter logic [PMP_ADDR_MSB:0] PMPRstAddr[PMP_MAX_REGIONS] =
+ibex_pkg::PmpAddrRst, …)` (ibex_top.sv:22-23, ibex_core:22, ibex_cs_registers:26, ibex_lockstep:17)
+and its forward `.PMPRstCfg(PMPRstCfg)` down three levels. Measured at HEAD with three tools: every
+header shape loud ("an array parameter is supported only as a body `localparam`"), and the
+whole-array default `localparam L[2] = p::R` loud in the body too ("assigning a non-array value to
+an unpacked array"); verilator 5.050 the sole oracle for every array cell (iverilog 13.0: "sorry:
+unpacked array parameters are not supported yet"; it pins the scalar/keyword controls).
+
+**Mechanism (no AST field, format 29).** Parser: `parse_array_param` accepts `body == false`; the
+header loop puts the desugared A2a const array decl at the FRONT of the body (after the header
+imports, whose symbols its dims/default may name) and pushes a scalar `ParamDecl` TWIN — same
+name, SAME `span`, the whole-array default as `value`, the element range, the keyword as written
+— into `module.params`, so the parameter occupies its override slot: positional counting, the
+§6.20.1 "a header exists ⇒ body `parameter` is a localparam" rule (`param_ports`), `-G`/`defparam`
+name resolution. A body `parameter` array and an interface-header array stay loud. Elaborate:
+`ResolvedOverride.array` is folded in the PARENT (`const_array_override_vals`: a positional `'{…}`
+whose elements `const_eval_in_scope`, or an `Ident`/`PkgScoped` naming a captured array via
+`const_array_vals_of_base`); `ParamOverrides.arrays` carries it; `bind_params` recognises the pair
+(`array_param_twin`: `const_param` + one declarator + same name + `d.span == p.span` — a
+user-written collision has two spans) and `bind_array_param` records the values under the child's
+fq name, or refuses loudly any other channel aimed at the array ("is not a constant array" — never
+default-kept; `-G`/`defparam` land there by construction; a `localparam` twin answers "cannot
+override localparam"). Both consumers of the declarator's `'{…}` — the GAP-G capture
+`const_array_elem_vals` and the decl-init flush `collect_var_init_drivers` — read ONE source,
+`array_param_vals_src`: the override, else a NON-pattern default resolved in the child scope
+(`= p::R`, `= R` under `import p::*`, a sibling header array, a body localparam array from a
+package), else the declared pattern. The flush gets a synthesized pattern of sized literals masked
+to the element width (`array_param_init_pattern`); an element-count mismatch or an element wider
+than the 64-bit lane is an error that pushes no init. The parent-side "not a constant; default
+kept" WARN is skipped for an `AssignPattern` override (an aggregate never folds as a scalar and
+whichever parameter kind it targets decides it loudly in the child). Byte-identity: no twin ⇒
+`bind_params` unchanged; `array_param_vals_src` returns None for every non-`const_param` decl and
+for a pattern init without an override.
+
+**Census (183 cells, `c413/census`, a body-`localparam` keyword control and a variable twin per
+element type; verilator sole oracle).** 9 element types (`logic [3:0]`, `int`, `int unsigned`,
+`logic signed [3:0]`, scoped struct typedef, imported struct typedef, enum typedef, `logic [95:0]`,
+multi-dim packed) × {literal default, `= p::X`, `= X` imported, sibling `B[2] = A`, named / positional
+/ `pkg::` / forwarded header / forwarded body-localparam / parent-element-pattern override} + 4 dim
+spellings × {default, override, const element} + 2-D + 15 override edge shapes + slot rules (group
+continuation, positional mixes, array-only header + body `parameter`, `localparam` header, defparam,
+instance array, `-G`, interface) + 12 consumers (runtime index, `$size`/`$bits`, const element,
+generate-if, generate-for child override `.RV(A[i])` = the ibex_cs_registers shape, foreach, port
+connection, continuous assign, hierarchical read, block-local shadow, write) + the rung-ⓕ pair:
+**109 loud→correct · 25 unchanged-correct · 32 still-loud (all expected) · 0 silent · 0
+regression.** The 34-probe grounding set and the ibex shape (`ibexhdr/mini.sv`: ibex_top→ibex_core
+with the real `pmp_cfg_t`/`pmp_cfg_mode_e`, two instances, one overriding the address table from a
+tb-local array) match verilator line for line. Deliberately still loud: a NESTED (2-D) override
+pattern; `w96` override / whole-array default (the literal default works); `defparam` onto an
+array; an interface header; a multi-dim packed ELEMENT type; a `'{4'bx,…}` element (2-state
+oracle); `$size(A)` in a constant and `A[i][3-:2]` as a child override (§3 ⑤ ⓔ, identical on the
+control); a const element of a non-0-based dim (GAP-G). Pre-existing, keyword control identical,
+recorded: §2 🆕 L ⓢ (a header parameter redeclared in the body is accepted) · ⓣ (a duplicate named
+override, last wins) · a `pkg::`-scoped operand inside a constant concatenation has no fold arm
+(`{1'b1, p::X}` loud, bare imported `{1'b1, X}` folds — so a body struct-array whose patterns name
+`pkg::LABEL` members cannot be forwarded as an override; filed under ⓔ). Verilator quirk
+(single-oracle, not adopted): `.N(3), .A('{…3 elems})` on `A[N]` errors "too many elements" (it sizes
+`A` with the default `N`); vita applies the overridden `N`.
+
+**Review.** A (differential): every scalar-parameter design PRE/POST byte-identical except a
+suppressed DUPLICATE warning (the error and rc unchanged); positional counting arity 0–4, name
+lifetimes, 3-deep chains, per-instance and per-generate-instance overrides, decl-init order, port
+widths, case labels, 64/65-bit mask edges, every runtime read shape = verilator. F1a (fixed on the
+delta): a header array whose whole-array default names a module-scope VARIABLE array ran `x x`
+at exit 0 — the copy fallback read the variable before its init; now loud at the flush when the
+named source's net is not in `const_param_nets` (a constant that resolves late — a forward
+sibling, a non-0-based source — keeps the copy; `fwd.sv`/`nz.sv` controls unchanged). F1b
+(recorded): an `int` package array into a `logic [3:0]` header array truncates 300→12 silently —
+verilator errors on the `=` spelling and produces the same 12 for the override spelling
+(self-contradicting; the override truncation is the rule everywhere). F2 (recorded, §2 🆕 L ⓢ new
+instance): header array `A` + body `localparam int A = 9` accepted. F3 (fixed): the keyed
+`'{a: …}` pattern still warned "default kept". B (soundness): scope keying for plain / instance-array
+/ generate-for / generate-if / nested-in-generate instances, every `.init` consumer, element
+folding edges, count mismatch under a const read, all four `keeps_default` callers gate only a
+warn, `-G`/defparam, twin pairing under comma-list continuations and a two-expansion macro, the
+wildcard-shadow set — all PASS. Notes: the element width of a header array naming a BODY
+`localparam` declared later is loud (verilator runs it; scalar header params bind before the body
+the same way — residue); `array_param_overrides` relies on the readers running in passes 3/6
+before the pass-8 recursion (the instance-array port-width pre-pass calls `bind_params` under
+the parent prefix) — stated on the field now; the `const_param` gate also opened the body
+`localparam L[2] = p::R` default (8 census control cells loud→correct, all = verilator).
+
+**ibex.** Whole-design run still stops at the `prim_assert` macros (E1013, PRE == POST error
+lines); the module pages behind it need ⓓ (cheriot_pkg nested structs) and ⓕ (header import in
+header defaults) first, then ⓔ for the cs_registers element consumers.
+
+**Tests.** `cli/tests/header_array_param.rs` (10 tests, every value the verilator census line):
+default / named / positional / `pkg::` / `.A()` / instance array; three forward chains + element
+pattern + parent scalar pattern; whole-array defaults (scoped, imported, sibling, body localparam);
+element types (int, unsigned wrap, signed 4-bit, struct scoped + `pkg::CR`, enum, 96-bit literal);
+dims (asc/desc/base-1/`p::N2`/from an earlier header parameter, 2-D default, nested override loud);
+consumers (runtime index, `$size`+`$bits`, const element, generate-if, foreach, assign, generate-for
+child override, port, hierarchical read, block-local shadow); slot rules (group continuation,
+positional counting, §6.20.1 body `parameter` after an array-only header, `localparam` header);
+value shapes (`-1`→15, `8'd200`→8, fills, a size cast); loud shapes (scalar, non-constant, x,
+nested, string, ident, count 1/3, `-G`, `defparam`, 96-bit override, interface, multi-dim packed
+element, a write); the ibex chain. 6,537 green.
+
 #### 4.5.412 — A multi-dimensional packed parameter, typedef or keyword spelling, body / header / package (§3 ⑤ ⓐ) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round — differential 48 designs + a 1,466-file PRE/POST repo sweep, 1 finding; soundness 2 findings; all three fixed on the delta and re-scored with the lenses' own designs · corpus 10/10)
 
 **The rung.** ibex_pkg.sv:742 `parameter lfsr_perm_t RndCnstLfsrPermDefault = {160'h…}` over

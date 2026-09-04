@@ -1019,6 +1019,16 @@ struct Elaborator<'s> {
     /// anything else is absent → loud. Elaborate-local only.
     pkg_array_const_vals:
         std::collections::BTreeMap<String, std::collections::BTreeMap<String, Vec<i64>>>,
+    /// §3 ⑤ ⓒ: fq name of a header ARRAY parameter → the element values an
+    /// instance override installs in place of the declared default (recorded by
+    /// `bind_array_param`, read by `array_param_vals_src`). One entry per instance
+    /// path, so nothing to restore — PRECONDITION: both readers run in the child's
+    /// own passes (the decl-order capture, pass 3; the decl-init flush, pass 6),
+    /// BEFORE the child recursion of pass 8, so an entry the instance-array
+    /// port-width pre-pass writes under the PARENT's prefix (`instance_array.rs`
+    /// calls `bind_params` in the parent scope) is never read by the parent, whose
+    /// own passes 3/6 are already over (review B note 4). Elaborate-local only.
+    array_param_overrides: std::collections::BTreeMap<String, Vec<i64>>,
     /// A2a: true while lowering the synthesized §6.8 decl-init `initial` —
     /// a const param's own initializer is legitimate, so the deny is off.
     lowering_decl_init: bool,

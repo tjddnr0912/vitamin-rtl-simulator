@@ -645,7 +645,15 @@ impl Parser<'_, '_> {
     ///
     /// IEEE §6.20.1: a `parameter` in a PACKAGE is a `localparam` (nothing can
     /// override it), so `in_package` lifts the overridable-`parameter` reject
-    /// there; a module-body `parameter` array stays loud (§3 ⑤ ⓒ).
+    /// there; a module-body `parameter` array stays loud.
+    ///
+    /// §3 ⑤ ⓒ: in the ANSI `#(…)` HEADER (`body == false`) an array parameter is
+    /// accepted with either keyword. `parse_module_like` puts the returned decl at
+    /// the front of the body (after the header imports) AND pushes a scalar
+    /// `ParamDecl` TWIN of it into `module.params` — same name, same `span`, the
+    /// whole-array default as its `value` — so the parameter occupies its
+    /// positional/named override slot and elaborate's `bind_params` recognises the
+    /// pair (`array_param_twin`) and routes an override to the array net.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn parse_array_param(
         &mut self,
@@ -658,13 +666,10 @@ impl Parser<'_, '_> {
         name: Ident,
         start: Span,
     ) -> Option<ParamItem> {
-        if !body {
-            self.error(
-                "a scalar parameter in the ANSI `#(…)` header (an array parameter is supported only as a body `localparam` in v1)",
-            );
-            return None;
-        }
-        if kind == ParamKind::Parameter && !self.in_package {
+        // §3 ⑤ ⓒ: the ANSI `#(…)` header IS the override channel, so a header
+        // `parameter` array is accepted (`body == false`); the module-body
+        // `parameter` array stays loud — it has no override channel at all.
+        if body && kind == ParamKind::Parameter && !self.in_package {
             self.error(
                 "`localparam` for an array parameter (an overridable array `parameter` is unsupported in v1)",
             );

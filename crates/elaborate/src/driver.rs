@@ -105,6 +105,7 @@ impl<'s> Elaborator<'s> {
             enum_label_prepass: BTreeMap::new(),
             array_const_vals: BTreeMap::new(),
             pkg_array_const_vals: BTreeMap::new(),
+            array_param_overrides: BTreeMap::new(),
             param_meta: BTreeMap::new(),
             param_range: BTreeMap::new(),
             str_param_raw: BTreeMap::new(),

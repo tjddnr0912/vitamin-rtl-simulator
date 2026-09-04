@@ -398,6 +398,7 @@ impl Elaborator<'_> {
                         // A defparam carries no wide value either: the value it
                         // brings has already been folded to i64 by the collector.
                         bits: None,
+                        array: None,
                         // The collector computed this from the expression when its sign
                         // is evident there — see the comment at the collector. It used to
                         // be unconditionally `None` ("stay on the old route"), which
@@ -1250,6 +1251,7 @@ impl Elaborator<'_> {
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
                         signed: Some(self.const_signed_env(e, &ConstWidths::new())),
+                        array: self.const_array_override_vals(e),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -1274,7 +1276,13 @@ impl Elaborator<'_> {
                                 "a parameter override that reads a real parameter is unsupported \
                          (a real has no integral constant value)",
                             );
-                        } else if ovr.keeps_default() {
+                        } else if ovr.keeps_default()
+                            && !matches!(
+                                e.kind,
+                                ast::ExprKind::AssignPattern(_)
+                                    | ast::ExprKind::AssignPatternKeyed(_)
+                            )
+                        {
                             self.warn(
                                 "parameter override expression is not a constant; child default kept",
                             );
@@ -1293,6 +1301,11 @@ impl Elaborator<'_> {
                     let text_is_literal =
                         value.as_ref().and_then(Self::param_str_literal).is_some();
                     let text = value.as_ref().and_then(|e| self.const_str_in_scope(e));
+                    // §3 ⑤ ⓒ: the whole-array channel, folded here in the PARENT
+                    // scope like every other one.
+                    let array = value
+                        .as_ref()
+                        .and_then(|e| self.const_array_override_vals(e));
                     let v = value.as_ref().and_then(|e| {
                         let r = self.const_eval_in_scope(e);
                         if r.is_none() {
@@ -1324,12 +1337,24 @@ impl Elaborator<'_> {
                                     "a parameter override that reads a real parameter is unsupported \
                              (a real has no integral constant value)",
                                 );
-                            } else if ResolvedOverride::keeps_default_of(
-                                None,
-                                fill.as_ref(),
-                                text.as_ref(),
-                                self.override_bits(e).as_ref(),
-                            ) {
+                            } else if array.is_none()
+                                // §3 ⑤ ⓒ: an assignment pattern is an AGGREGATE — it
+                                // never folds as a scalar, and whichever kind of
+                                // parameter it targets decides it loudly in the child
+                                // (`bind_array_param` / `bind_one_param`), so "default
+                                // kept" would state the opposite of what happens.
+                                && !matches!(
+                                    e.kind,
+                                    ast::ExprKind::AssignPattern(_)
+                                        | ast::ExprKind::AssignPatternKeyed(_)
+                                )
+                                && ResolvedOverride::keeps_default_of(
+                                    None,
+                                    fill.as_ref(),
+                                    text.as_ref(),
+                                    self.override_bits(e).as_ref(),
+                                )
+                            {
                                 // ⚠️ Two different events reach here and they need
                                 // different sentences (external report, aes_top §5).
                                 //
@@ -1376,6 +1401,7 @@ impl Elaborator<'_> {
                         signed: value
                             .as_ref()
                             .map(|e| self.const_signed_env(e, &ConstWidths::new())),
+                        array,
                     });
                 }
             }

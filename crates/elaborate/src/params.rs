@@ -27,6 +27,10 @@ pub(crate) struct ParamOverrides {
     /// of the i64 is not enough to decide (three expressions with the same i64 extend
     /// two different ways).
     pub(crate) signed: BTreeMap<String, bool>,
+    /// §3 ⑤ ⓒ: the whole-array channel — see `ResolvedOverride::array`. Consumed
+    /// by `bind_array_param` for a header array parameter; a scalar target never
+    /// reads it (a scalar override never fills it either).
+    pub(crate) arrays: BTreeMap<String, Vec<i64>>,
 }
 
 impl ParamOverrides {
@@ -45,6 +49,7 @@ impl ParamOverrides {
             || self.fill.contains_key(name)
             || self.text.contains_key(name)
             || self.unfoldable.contains(name)
+            || self.arrays.contains_key(name)
     }
 
     /// Drop every channel's entry for `name` before a later override writes its own.
@@ -912,6 +917,7 @@ impl Elaborator<'_> {
                     // A fill is unsigned and is re-folded at the target width, so the
                     // extension channel never reads this.
                     signed: Some(false),
+                    array: None,
                 });
                 continue;
             }
@@ -959,6 +965,7 @@ impl Elaborator<'_> {
                 // A bare decimal on the command line is a SIGNED integer; a sized
                 // literal carries its own `s`, which `wide` above already holds.
                 signed: Some(sized_signed),
+                array: None,
             });
         }
         out
@@ -1057,6 +1064,9 @@ impl Elaborator<'_> {
                         if let Some(t) = Self::override_text_for(p, ov) {
                             o.text.insert(p.name.name.clone(), t);
                         }
+                        if let Some(a) = &ov.array {
+                            o.arrays.insert(p.name.name.clone(), a.clone());
+                        }
                         // `.W()` with no value ⇒ keep default (no insert).
                     }
                     None => {
@@ -1082,6 +1092,9 @@ impl Elaborator<'_> {
                         }
                         if let Some(t) = Self::override_text_for(p, ov) {
                             o.text.insert(p.name.name.clone(), t);
+                        }
+                        if let Some(a) = &ov.array {
+                            o.arrays.insert(p.name.name.clone(), a.clone());
                         }
                         if ov.value.is_none()
                             && ov.fill.is_none()
@@ -1112,13 +1125,73 @@ impl Elaborator<'_> {
         let ovr = self.resolve_param_overrides(module, overrides);
         let mut saved = Vec::new();
         for p in &module.params {
-            self.bind_one_param(p, &ovr, &mut saved);
+            if Self::array_param_twin(module, p).is_some() {
+                self.bind_array_param(p, &ovr);
+            } else {
+                self.bind_one_param(p, &ovr, &mut saved);
+            }
         }
         // A module with no ANSI header binds its body parameters in `instance.rs`
         // (decl order, after imports and net prescan) and an interface binds its own
         // in `iface_inst.rs`, so an override that targets one is applied THERE —
         // through `bind_one_param`, with this same set.
         (saved, ovr)
+    }
+
+    /// §3 ⑤ ⓒ: is header parameter `p` the scalar TWIN of a header ARRAY parameter?
+    /// The parser emits the pair together (`parse_module_like`): the desugared const
+    /// array decl at the front of the body and a `ParamDecl` of the same name AND the
+    /// same `span` in `params`. A user-written collision (`#(parameter X = 1)` + body
+    /// `localparam int X[2]`) has two spans, so it is never taken for a twin.
+    pub(crate) fn array_param_twin<'m>(
+        module: &'m ast::ModuleDecl,
+        p: &ast::ParamDecl,
+    ) -> Option<&'m ast::NetVarDecl> {
+        module.body.iter().find_map(|it| match it {
+            ast::ModuleItem::NetVar(d)
+                if d.const_param
+                    && d.span == p.span
+                    && d.names.len() == 1
+                    && d.names[0].name.name == p.name.name =>
+            {
+                Some(d)
+            }
+            _ => None,
+        })
+    }
+
+    /// §3 ⑤ ⓒ: bind a header ARRAY parameter (through its twin `p`). The array net
+    /// itself is declared and initialised by the body decl (A2a path); this only
+    /// decides which VALUES it gets: an override that folded as a whole array
+    /// (`ParamOverrides::arrays`) is recorded under the fq name for the decl's two
+    /// init consumers (`const_array_elem_vals` and `collect_var_init_drivers`), and
+    /// any other override aimed at it is loud — never "default kept" (the child
+    /// would run with the wrong reset table at exit 0). A `-G` / `defparam` value is
+    /// scalar by construction and lands on that error.
+    pub(crate) fn bind_array_param(&mut self, p: &ast::ParamDecl, ovr: &ParamOverrides) {
+        let name = p.name.name.as_str();
+        if !matches!(p.kind, ast::ParamKind::Parameter) {
+            if ovr.targets(name) {
+                self.error(
+                    MsgCode::ElabPortMismatch,
+                    &format!("cannot override localparam `{name}`"),
+                );
+            }
+            return;
+        }
+        if let Some(vals) = ovr.arrays.get(name) {
+            let key = self.fq(name);
+            self.array_param_overrides.insert(key, vals.clone());
+        } else if ovr.targets(name) {
+            self.error(
+                MsgCode::ElabPortMismatch,
+                &format!(
+                    "the override of array parameter `{name}` is not a constant array \
+                     (an assignment pattern of constants, or a constant array parameter \
+                     of the parent / a package, is required)"
+                ),
+            );
+        }
     }
 
     /// Bind ONE parameter declaration: apply an override if one targets it, else fold

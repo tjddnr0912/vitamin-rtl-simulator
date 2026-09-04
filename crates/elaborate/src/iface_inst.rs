@@ -30,6 +30,7 @@ impl Elaborator<'_> {
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
                         signed: Some(self.const_signed_env(e, &ConstWidths::new())),
+                        array: None,
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -114,6 +115,7 @@ impl Elaborator<'_> {
                         signed: value
                             .as_ref()
                             .map(|e| self.const_signed_env(e, &ConstWidths::new())),
+                        array: None,
                     });
                 }
             }

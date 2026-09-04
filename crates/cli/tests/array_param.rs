@@ -227,12 +227,19 @@ fn writes_are_loud() {
 
 #[test]
 fn v1_boundaries_are_loud() {
-    // ANSI header form — no override machinery for aggregates
-    assert_loud(
-        "module t #(parameter int P [0:1] = '{1,2}); endmodule\n",
-        "header",
-        "ANSI header array parameter",
-    );
+    // ANSI header form — supported since §4.5.413 (a value pin, verilator 1 2 / 8 9;
+    // the full matrix is `header_array_param.rs`)
+    {
+        let (out, err, code) = run(
+            "module t #(parameter int P [0:1] = '{1,2}) (); initial $display(\"P=%0d %0d\", P[0], P[1]); endmodule\n\
+             module tb; t u(); t #(.P('{8,9})) v(); initial #1 $finish; endmodule\n",
+        );
+        assert_eq!(
+            code, 0,
+            "ANSI header array parameter: must elaborate\n{err}"
+        );
+        assert!(out.contains("P=1 2") && out.contains("P=8 9"), "{out}");
+    }
     // overridable body `parameter`
     assert_loud(
         "module t; parameter int P [0:1] = '{1,2}; endmodule\n",

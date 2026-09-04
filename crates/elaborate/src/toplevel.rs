@@ -24,6 +24,12 @@ pub(crate) enum PortBinding<'a> {
 pub(crate) struct ResolvedOverride {
     pub(crate) name: Option<String>,
     pub(crate) value: Option<i64>,
+    /// §3 ⑤ ⓒ: the override folded as a whole ARRAY in the parent scope — an
+    /// assignment pattern of constants, or a constant array parameter named
+    /// bare / `pkg::`-scoped (see `const_array_override_vals`). Applied only to a
+    /// header ARRAY parameter (`bind_array_param`); every scalar channel of such an
+    /// override is `None`, and a scalar target ignores this one.
+    pub(crate) array: Option<Vec<i64>>,
     pub(crate) is_named: bool,
     /// Set when the override expression IS an unsized fill literal (`'1`/`'0`/…).
     /// Its width is the CHILD param's declared width — unknown here in the parent
@@ -100,7 +106,7 @@ impl ResolvedOverride {
             self.fill.as_ref(),
             self.str.as_ref(),
             self.bits.as_ref(),
-        )
+        ) && self.array.is_none()
     }
 
     /// [`Self::keeps_default`] on the three channels before the record exists —
