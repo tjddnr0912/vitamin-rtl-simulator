@@ -71,6 +71,15 @@ name is a loud error, never a silent float).
 
 ---
 
+## 1a. Preprocessor
+
+| Directive | Supported |
+|---|---|
+| `` `define `` object-like and function-like, `` `undef ``, `` `include `` (`-I` search path) | Yes — arguments, **default argument values** (`` `define M(a, b = 5) ``: an omitted trailing or empty actual takes the default; a default may be a literal, an expression, a parenthesised text, a string, a replication or another macro, bound at use time), `` `" `` stringification and `` `` `` token pasting. A multi-line body keeps one directive per continued line; a `// comment \` line continues the body and the comment is dropped. Loud: an omitted actual whose formal has no default, too many actuals, a formal without a name, a duplicate formal |
+| `` `ifdef `` / `` `ifndef `` / `` `elsif `` / `` `else `` / `` `endif `` | Yes — at file level and inside a macro body (evaluated when the body is expanded) |
+| `` `__FILE__ ``, `` `__LINE__ `` | Yes — the use's file (as given on the command line) as a string literal, and its line; inside a macro body the line where the use's argument list closes |
+| `` `timescale ``, `` `default_nettype ``, `` `line ``, `` `pragma ``, `` `begin_keywords `` / `` `end_keywords ``, `` `unconnected_drive `` / `` `nounconnected_drive `` | Yes (`` `line `` / `` `pragma `` accepted and ignored) |
+
 ## 2. Data types
 
 ### Scalar / net types

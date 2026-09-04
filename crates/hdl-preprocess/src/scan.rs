@@ -10,7 +10,16 @@ impl Preprocessor<'_> {
     /// Walk one file's original text, mapping output verbatim 1:1.
     pub(crate) fn scan_file(&mut self, file: FileId) {
         let src = self.files[file.0 as usize].text.clone();
+        // A file is scanned VERBATIM even when the `include that brought it in sits
+        // inside a macro body: its directives map to its own bytes and its `__LINE__
+        // is its own line (review B B2: an `ifdef diagnostic inside such an include
+        // pointed at the macro use). The expansion context is cleared for its
+        // duration and restored after.
+        let saved_site = self.cur_site.take();
+        let saved_anchor = self.line_anchor.take();
         self.scan_impl(&src, file, None, 0);
+        self.cur_site = saved_site;
+        self.line_anchor = saved_anchor;
     }
 
     /// Walk synthetic macro-expansion text; every emit collapses to `site`.
@@ -30,7 +39,9 @@ impl Preprocessor<'_> {
         }
         // The `file` argument identifies the include-search context. Macro bodies
         // resolve includes relative to the use-site file (site.0).
+        let saved_site = self.cur_site.replace(site);
         self.scan_impl(text, site.0, Some(site), depth);
+        self.cur_site = saved_site;
     }
 
     /// Shared scanner core. `site_for_collapse = None` => verbatim emits mapped
@@ -149,6 +160,39 @@ impl Preprocessor<'_> {
             return self.handle_directive(src, file, &name, backtick, name_end);
         }
 
+        // IEEE 1800-2017 §22.13 `__FILE__ / `__LINE__: the file name (as a string
+        // literal) and line number of the USE — inside a macro body that is the line
+        // of the macro's use, in an included file the including use's own file and
+        // line (both oracles). Nothing is consumed but the name.
+        if name == "__FILE__" || name == "__LINE__" {
+            if !self.emitting() {
+                return name_end;
+            }
+            let (f, byte) = match (self.line_anchor, site_for_collapse) {
+                (Some((af, ab)), Some(_)) => (af, ab as usize),
+                (_, Some((sf, sb))) => (sf, sb as usize),
+                (_, None) => (file, backtick),
+            };
+            let text = if name == "__FILE__" {
+                let nm = self.files[f.0 as usize]
+                    .name
+                    .replace('\\', "\\\\")
+                    .replace('"', "\\\"");
+                format!("\"{nm}\"")
+            } else {
+                let src_f = &self.files[f.0 as usize].text;
+                let upto = byte.min(src_f.len());
+                (src_f.as_bytes()[..upto]
+                    .iter()
+                    .filter(|&&c| c == b'\n')
+                    .count()
+                    + 1)
+                .to_string()
+            };
+            self.emit_run(&text, file, backtick as u32, site_for_collapse);
+            return name_end;
+        }
+
         // Macro use.
         if !self.emitting() {
             // Dead region: skip the macro use, do not parse arguments.
@@ -209,7 +253,12 @@ impl Preprocessor<'_> {
                 let body = substitute(&mac.body, &[], &[]);
                 self.active.insert(name.to_string());
                 self.macro_depth += 1;
+                let saved_anchor = self.line_anchor;
+                if site_for_collapse.is_none() {
+                    self.line_anchor = Some((file, name_end as u32));
+                }
                 self.scan_text(&body, site, depth + 1);
+                self.line_anchor = saved_anchor;
                 self.macro_depth = self.macro_depth.saturating_sub(1);
                 self.active.remove(name);
                 name_end
@@ -247,7 +296,7 @@ impl Preprocessor<'_> {
                 if params.is_empty() && actuals.len() == 1 && actuals[0].is_empty() {
                     actuals.clear();
                 }
-                if actuals.len() != params.len() {
+                if actuals.len() > params.len() {
                     self.err(
                         MsgCode::PpMacroArity,
                         format!(
@@ -260,6 +309,57 @@ impl Preprocessor<'_> {
                     self.emit_run(&literal, file, backtick as u32, site_for_collapse);
                     return split.close + 1;
                 }
+                // §22.5.1 defaults: an OMITTED trailing actual and an EMPTY one both
+                // take the formal's default; an omitted actual whose formal has none is
+                // the arity error (both oracles reject `\`M(1)` for `M(a, b)`); an empty
+                // actual whose formal has none substitutes empty text, as before.
+                // §22.13 `__LINE__ inside the ACTUALS of a multi-line use is the line
+                // where the use closes too (review B B1: both oracles), so the anchor
+                // is set BEFORE the actuals are pre-expanded.
+                let saved_anchor = self.line_anchor;
+                if site_for_collapse.is_none() {
+                    self.line_anchor = Some((file, split.close as u32));
+                }
+                for (i, p) in params.iter().enumerate() {
+                    // BLANK = nothing but whitespace and COMMENTS — `M(1, /*clk*/, /*rst*/)`
+                    // is how ibex leaves a defaulted actual empty (review A F1; both
+                    // oracles take the default).
+                    let blank = actuals
+                        .get(i)
+                        .is_none_or(|a| skip_ws_comments(a, 0) == a.len());
+                    if !blank {
+                        continue;
+                    }
+                    match (&mac.defaults.get(i).cloned().flatten(), actuals.get(i)) {
+                        (Some(d), _) => {
+                            // A default is macro TEXT: its `"…`" stringification and ``
+                            // paste are resolved as an object-like body's would be
+                            // (review A F2, both oracles) before it travels as an actual.
+                            let d = substitute(d, &[], &[]);
+                            if i < actuals.len() {
+                                actuals[i] = d;
+                            } else {
+                                actuals.push(d);
+                            }
+                        }
+                        (None, Some(_)) => {}
+                        (None, None) => {
+                            self.err(
+                                MsgCode::PpMacroArity,
+                                format!(
+                                    "macro `{name} expects {} argument(s), got {} — formal `{p}` \
+                                     has no default",
+                                    params.len(),
+                                    actuals.len()
+                                ),
+                                self.out.len(),
+                            );
+                            self.emit_run(&literal, file, backtick as u32, site_for_collapse);
+                            self.line_anchor = saved_anchor;
+                            return split.close + 1;
+                        }
+                    }
+                }
                 // Pre-expand each actual to completion WITHOUT `name` in active.
                 let expanded_actuals: Vec<String> = actuals
                     .iter()
@@ -271,6 +371,7 @@ impl Preprocessor<'_> {
                 self.active.insert(name.to_string());
                 self.macro_depth += 1;
                 self.scan_text(&substituted, site, depth + 1);
+                self.line_anchor = saved_anchor;
                 self.macro_depth = self.macro_depth.saturating_sub(1);
                 self.active.remove(name);
                 split.close + 1

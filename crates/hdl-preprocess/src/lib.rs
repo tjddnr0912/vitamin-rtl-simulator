@@ -363,7 +363,13 @@ struct Macro {
     /// `None` => object-like. `Some(params)` => function-like with these params
     /// (empty vec is a zero-arg function-like macro, callable only as `NAME()`).
     params: Option<Vec<String>>,
-    /// Replacement text, continuation-joined, body-trimmed (leading ws after NAME
+    /// §22.5.1 default text per formal (`None` = no default), same length as
+    /// `params`; empty for an object-like macro. Bound at USE time exactly like an
+    /// actual — pre-expanded without the macro active — so a default naming a macro
+    /// defined after this one still resolves (both oracles).
+    defaults: Vec<Option<String>>,
+    /// Replacement text, continuation-joined (the newline of every `\`+NL is kept
+    /// so a body's directives stay one per line), body-trimmed (leading ws after NAME
     /// removed; trailing ws kept; final newline excluded).
     body: String,
     /// (file_id, byte) of the body's start, for definition-site provenance.
@@ -414,6 +420,16 @@ struct Preprocessor<'a> {
     /// before the next non-directive output (or at the next conditional / EOF).
     pending_nl: Option<(FileId, u32)>,
     pending_cont: u32,
+    /// While scanning EXPANSION text (`scan_text`): the use site every emit collapses
+    /// to. A directive met inside an expansion (`\`ifdef` in a macro body) must map
+    /// its newline to this site too — `consume_logical_line`'s byte offsets index the
+    /// expansion STRING, not the site file, and a verbatim emit with one of them would
+    /// point provenance at an arbitrary byte of that file.
+    cur_site: Option<(FileId, u32)>,
+    /// The byte just past the outermost macro USE being expanded — `\`__LINE__` inside
+    /// a body is the line where the use's argument list CLOSES (both oracles: a use
+    /// spanning lines 4–5 reports 5), not where its backtick sits.
+    line_anchor: Option<(FileId, u32)>,
 
     /// Whether any directive or macro was seen at all. If false at finish, the
     /// identity fast path is taken (single 1:1 segment).
@@ -432,7 +448,7 @@ struct Preprocessor<'a> {
 
 /// A captured logical directive line (continuation-joined).
 struct CapturedLine {
-    /// The joined line text (continuation `\`+NL removed; terminating NL excluded).
+    /// The joined line text (each continuation's `\` removed, its NL kept; terminating NL excluded).
     text: String,
     /// Cursor just past the terminating newline (or EOF).
     cursor: usize,
@@ -586,6 +602,7 @@ impl<'a> Preprocessor<'a> {
                 nm.clone(),
                 Macro {
                     params: None,
+                    defaults: Vec::new(),
                     body: body.clone(),
                     def_file: FileId(0),
                     def_byte: 0,
@@ -607,6 +624,8 @@ impl<'a> Preprocessor<'a> {
             macro_depth: 0,
             pending_nl: None,
             pending_cont: 0,
+            cur_site: None,
+            line_anchor: None,
             saw_directive: false,
             budget_blown: false,
             timescales: Vec::new(),

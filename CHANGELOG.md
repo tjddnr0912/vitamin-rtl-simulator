@@ -11,6 +11,20 @@ changed for a user of the simulator.
 
 ### Added
 
+- **`define default argument values** (IEEE 1800-2017 §22.5.1): `` `define M(a, b = 5) `` — an
+  omitted trailing actual (`` `M(1) ``) and an empty one (`` `M(1,) ``) take the default, which may
+  be a literal, an expression, a parenthesised text, a string, a replication, an empty text or
+  another macro (bound at use time, so a macro defined after the `define but before the use
+  resolves). An omitted actual whose formal has no default is the arity error it was.
+- **Directives and comments inside a macro body**: a body written one directive per continued
+  line (`` `ifdef X \ `` … `` `else \ `` … `` `endif ``) expands with each directive on its own
+  line and is evaluated at expansion time; a `// comment \` line continues the definition and the
+  comment is dropped (ibex's `prim_assert` macros). A blank actual whose only content is a comment
+  (`` `ASSERT(x, y, /*clk*/, /*rst*/) ``) takes the default.
+- **`` `__FILE__ `` / `` `__LINE__ ``** (§22.13): the use's file name as a string literal and its
+  line — inside a macro body the line where the use's argument list closes, through an `include the
+  including use's own file and line.
+
 - **A select, struct member or bit of an array-parameter ELEMENT folds in every constant
   position.** `localparam int X = P[1].b;`, `logic [A[1][3:0]-1:0] v;`, `if (S[1].b == 2)` in a
   generate, `c #(.R(A[i][7-:4]))` as a child override (ibex_cs_registers' PMP reset table),

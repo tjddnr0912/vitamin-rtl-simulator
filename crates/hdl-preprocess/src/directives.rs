@@ -99,6 +99,10 @@ impl Preprocessor<'_> {
             // break on a continuation `\`+NL or a bare top-level newline.
             let mut j = i;
             let mut continued = false;
+            // Where the captured text is CUT (a line comment is dropped from it) and
+            // where the next physical line resumes.
+            let mut cut = None;
+            let mut resume = None;
             while j < bytes.len() {
                 match bytes[j] {
                     b'"' => {
@@ -106,7 +110,26 @@ impl Preprocessor<'_> {
                         j = end;
                     }
                     b'/' if j + 1 < bytes.len() && bytes[j + 1] == b'/' => {
-                        j = scan_line_comment(src, j);
+                        // IEEE 1800-2017 §22.5.1: a one-line comment in the macro text
+                        // is not part of the substituted text — and a comment line
+                        // that ENDS in `\` continues the definition (both oracles;
+                        // ibex's prim_assert_standard_macros writes its bodies that
+                        // way). The comment is cut out of the captured text either
+                        // way; without the continuation the logical line ends here.
+                        let end = scan_line_comment(src, j);
+                        let body_end = if end > j && bytes[end - 1] == b'\r' {
+                            end - 1
+                        } else {
+                            end
+                        };
+                        let cont = body_end > j && bytes[body_end - 1] == b'\\';
+                        cut = Some(j);
+                        if cont && end < bytes.len() && bytes[end] == b'\n' {
+                            continued = true;
+                            resume = Some(end + 1);
+                        }
+                        j = end;
+                        break;
                     }
                     b'/' if j + 1 < bytes.len() && bytes[j + 1] == b'*' => {
                         j = scan_block_comment(src, j);
@@ -125,15 +148,20 @@ impl Preprocessor<'_> {
                     _ => j += utf8_len(bytes[j]),
                 }
             }
-            raw.push_str(&src[i..j]);
+            raw.push_str(&src[i..cut.unwrap_or(j)]);
             if continued {
                 conts += 1;
-                // Skip `\` + (CR)LF, continue capturing the next physical line.
-                if j + 1 < bytes.len() && bytes[j + 1] == b'\n' {
-                    i = j + 2;
-                } else {
-                    i = j + 3; // `\` CR LF
-                }
+                // The backslash goes, the NEWLINE stays (see `join_continuations`): a
+                // `define body keeps one directive per line, so an `ifdef inside it
+                // takes only its own line when the body is expanded.
+                raw.push('\n');
+                // Skip `\` + (CR)LF (or the whole continued comment line), continue
+                // capturing the next physical line.
+                i = match resume {
+                    Some(r) => r,
+                    None if j + 1 < bytes.len() && bytes[j + 1] == b'\n' => j + 2,
+                    None => j + 3, // `\` CR LF
+                };
                 continue;
             }
             // Reached a bare newline or EOF. `j` is the terminating newline byte.
@@ -157,7 +185,7 @@ impl Preprocessor<'_> {
             return;
         }
         if self.pending_nl.is_none() {
-            self.pending_nl = Some((file, line.nl_byte));
+            self.pending_nl = Some(self.cur_site.unwrap_or((file, line.nl_byte)));
         }
         self.pending_cont += line.conts;
     }
@@ -217,18 +245,19 @@ impl Preprocessor<'_> {
         }
         let tail = &trimmed[after_name..];
         // Significant-space: function-like iff `(` IMMEDIATELY follows NAME.
-        let (params, body_src): (Option<Vec<String>>, &str) = if tail.starts_with('(') {
-            // Parse parameter list up to matching ')'.
-            match parse_param_list(tail) {
-                Ok((ps, rest)) => (Some(ps), rest),
-                Err(msg) => {
-                    self.err(MsgCode::PpBadDirective, msg, self.out.len());
-                    return cursor;
+        let (params, defaults, body_src): (Option<Vec<String>>, Vec<Option<String>>, &str) =
+            if tail.starts_with('(') {
+                // Parse parameter list up to matching ')'.
+                match parse_param_list(tail) {
+                    Ok((ps, ds, rest)) => (Some(ps), ds, rest),
+                    Err(msg) => {
+                        self.err(MsgCode::PpBadDirective, msg, self.out.len());
+                        return cursor;
+                    }
                 }
-            }
-        } else {
-            (None, tail)
-        };
+            } else {
+                (None, Vec::new(), tail)
+            };
         // Body: trim leading ws after NAME/param-list, drop trailing line comment.
         let body_no_comment = strip_trailing_line_comment(body_src);
         let body = body_no_comment.trim_start().to_string();
@@ -238,13 +267,16 @@ impl Preprocessor<'_> {
         let _ = lead_ws;
         let new_mac = Macro {
             params,
+            defaults,
             body,
             def_file: file,
             def_byte,
         };
         if let Some(existing) = self.macros.get(&nm) {
             if *existing == new_mac
-                || (existing.params == new_mac.params && existing.body == new_mac.body)
+                || (existing.params == new_mac.params
+                    && existing.defaults == new_mac.defaults
+                    && existing.body == new_mac.body)
             {
                 // Identical redefinition: silent.
             } else {
@@ -388,7 +420,10 @@ impl Preprocessor<'_> {
         // in a dead region) so `open_at` resolves to THIS directive's line, giving
         // distinct unterminated-conditional diagnostics per frame.
         self.flush_pending_nl();
-        self.emit_verbatim("\n", file, captured.nl_byte);
+        match self.cur_site {
+            Some((sf, sb)) => self.emit_collapsed("\n", sf, sb),
+            None => self.emit_verbatim("\n", file, captured.nl_byte),
+        }
         self.cond.push(CondFrame {
             active,
             taken: active,

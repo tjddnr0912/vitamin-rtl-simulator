@@ -436,6 +436,61 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.417 — The preprocessor rung behind ibex's whole design: `define default arguments, directives and comments inside a macro body, `__FILE__ / `__LINE__ (2026-09-05 · format 29 unchanged · adversarial review: 2 lenses × 1 round + delta re-score — differential 96 new designs + 81 re-runs FAIL → 2 real gaps fixed (a blank actual whose only content is a COMMENT did not take the default — ibex's `ASSERT(x, y, /*clk*/, /*rst*/) shape, both oracles; a default holding `"…`" was a stray backtick — resolved as macro text) + 2 pre-existing recorded; soundness 32 designs FAIL → 2 BLOCKING fixed (`__LINE__ inside the ACTUALS of a multi-line use took the backtick's line — the anchor is now set before the actuals are pre-expanded; an `include performed from a macro body inherited the expansion site, so an `ifdef diagnostic inside it named the macro use — `scan_file` clears the expansion context) + 3 pre-existing recorded; delta re-scored with both lenses' harnesses, the probes, the census, the examples, the 1,454-file sweep and ibex: 21 cells moved, every one to the oracle line, 0 other moves · corpus 10/10)
+
+**Rung.** The whole ibex design stopped at 24 preprocessor E1013 errors: `` `define default argument
+values are not supported `` (dv_fcov_macros, prim_assert), three `` unterminated `ifdef `` and the
+`` `ASSERT `` family undefined behind them. Both oracles (iverilog 13.0, verilator 5.050) process every
+shape; the preprocessor is text semantics, so both are full oracles here.
+
+**Mechanism** (crates/hdl-preprocess only). ⓐ `parse_param_list` returns `(params, defaults, rest)`:
+the formal list is split on depth-0 commas (parens / brackets / braces / strings / comments
+respected) and each formal is `name` or `name = default-text` (§22.5.1). `Macro.defaults` rides beside
+`params`. `handle_macro_use`: more actuals than formals is the arity error it was; a MISSING trailing
+actual or a BLANK one takes the formal's default, a missing one without a default is the arity error
+(both oracles), a blank one without a default substitutes empty text (unchanged); a default is
+pre-expanded exactly like an actual, so `` b = `LATE `` with `LATE` defined after the `define but
+before the use resolves (both oracles). ⓑ The three "unterminated" errors had one root: the body of
+a multi-line `define was captured with its continuations turned into SPACES, so `` `ifdef FLAG ``
+inside the body, at expansion, took the rest of the body as its logical line and swallowed the
+`` `else `` / `` `endif ``. `consume_logical_line` and `join_continuations` now drop the backslash and
+KEEP the newline (one directive per line in the expansion), a `// comment` is cut out of the captured
+text and a comment line ending in `\` continues the definition (§22.5.1 — prim_assert_standard_macros
+writes `// … \` lines inside bodies; both oracles). A body's conditional is thereby evaluated at
+EXPANSION time, which is what both oracles do (`` `define FLAG `` after the `define, before the use,
+takes the arm; `` `undef `` between flips it). ⓒ A directive met inside an expansion emits its newline
+COLLAPSED to the use site (`Preprocessor.cur_site`, set for the duration of `scan_text`): the
+logical-line offsets index the expansion STRING, and a verbatim emit with one of them pointed
+provenance at an arbitrary byte of the site file. ⓓ `` `__FILE__ `` / `` `__LINE__ `` (§22.13): the
+use's file name as an escaped string literal and its line — inside an expansion the OUTERMOST use's
+`line_anchor`, the byte just past its argument list (both oracles report the line where a
+multi-line use CLOSES); through an `include the including use's own file and line (both oracles).
+
+**Measured.** 21 grounding probes: 21/21 POST == oracle (defaults: basic / macro / two defaults /
+empty-without-default / fewer-without-default / a default naming a formal / parens+string / whitespace
+and comments in the list / a macro defined later / nested default call / used twice; `ifdef` in a body
+taken / untaken / defined later / the prim_assert `ASSERT_ERROR` shape; comment continuation; comment
+ending the body; `__LINE__` at top level, in a body, in a multi-line use; `__FILE__` at top level and
+through an include). Census 60 cells (default position × use shape, default kinds, continuation and
+comment shapes, conditionals in a body, `__FILE__`/`__LINE__` positions, the arity errors): **44
+loud→correct · 14 unchanged · 0 new-silent · 2 still-loud** (a formal without a name — verilator
+lenient, iverilog rejects; a duplicate formal — oracle split). Repo sweep: 1,454 `.sv`/`.v` files under
+crates/ examples/ bench/ with PRE and POST — 94 differ, every one exit 1 → exit 1 with identical
+non-diagnostic output (ibex vendor files whose error page advanced), 0 other differences. ibex whole
+design: 24 E1013 → 0 preprocessor errors; the page is now the PARSER (`prim_cipher_pkg.sv` tf-port
+formals of a multi-packed type `logic [15:0][3:0] shifts`, `prim_ram_1p_pkg.sv`). Examples
+byte-identical PRE vs POST. Tests: `macro_default_args.rs` (17 probes) + `macro_default_args_census.rs`
+(51 cells); the unit test `line_continuation_joins_body` now expects the kept newline.
+
+**Residue (loud):** a formal without a name and a duplicate formal (illegal; verilator lenient on the
+first, split on the second); a default naming another formal and a default calling a macro with a
+formal as its argument (both oracles reject). **Pre-existing (PRE == POST, recorded in §3 ⑤):** a `//`
+comment inside a formal list WITHOUT a continuation ends the list where both oracles run it past the
+raw newline; the redefinition warning's span names the FIRST definition and a redefinition differing
+only in a default's whitespace is not warned (verilator warns); a continued `timescale / `include /
+`default_nettype line is accepted where both oracles reject (leniency); a `__FILE__`-bearing `-D` is
+fine, a function-like `-D 'Y(a,b=2)=…'` is stored object-like (loud at use, as verilator).
+
 #### 4.5.416 — Constant-context consumers of an array-parameter ELEMENT: a select / member / bit of `A[i]` in every constant position, the `$size` family, an untyped parameter's width from a select, and the typedef-cast rung behind them (§3 ⑤ ⓔ) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round + delta re-score — differential 117 new designs + 548 re-runs FAIL → 1 NEW loud→silent fixed (an UNTYPED child parameter overridden by a SELECT of an element bound at the default literal's width, §2 row 25's channel — the element spelling is kept loud, the scalar spelling is the recorded pre-existing); soundness 30 designs + a 1,454-file byte-identity sweep (0 diffs) FAIL → 1 BLOCKING fixed (the element resolver's local branch skipped the innermost-binding shadow check — a generate-scope scalar named like an outer array read the outer array in the wide domain and in `$size`; the value arm carried the same hole as GAP-G's recorded root, closed for every consumer through the one shared `const_array_ref_of_base`); delta re-scored directly with both lenses' harnesses, the census, the probes, the examples and ibex: 5 cells silent→loud, 3 cells → the oracle line, 0 other moves · corpus 10/10)
 
 **Rung.** `localparam int X = P[1].b;`, `logic [A[1][3:0]-1:0] v;`, `if (S[1].b == 2)` in a generate,

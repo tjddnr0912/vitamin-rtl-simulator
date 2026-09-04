@@ -597,10 +597,19 @@ pub(crate) fn join_continuations(s: &str) -> String {
                 i = end;
             }
             b'\\' => {
-                // `\`+LF or `\`+CRLF => drop both/all, joining the lines.
+                // `\`+LF or `\`+CRLF: the backslash is dropped and the NEWLINE KEPT, so
+                // a macro body keeps its line structure. A body written one directive
+                // per continued line (`\`ifdef UVM \` … `\`else \` … `\`endif`, ibex's
+                // prim_assert) must expand with each directive on its own line: joined
+                // with a space, `\`ifdef FLAG` took the rest of the body as its logical
+                // line and swallowed the `\`else` / `\`endif` (three "unterminated
+                // `\`ifdef" errors on the whole ibex design). Both oracles evaluate a
+                // body's `\`ifdef` at EXPANSION time, which the newline form gives for free.
                 if i + 1 < bytes.len() && bytes[i + 1] == b'\n' {
+                    out.push('\n');
                     i += 2;
                 } else if i + 2 < bytes.len() && bytes[i + 1] == b'\r' && bytes[i + 2] == b'\n' {
+                    out.push('\n');
                     i += 3;
                 } else {
                     out.push('\\');
@@ -642,26 +651,49 @@ pub(crate) fn strip_trailing_line_comment(s: &str) -> &str {
     s
 }
 
-/// Parse a parameter list starting at the `(` of `s`. Returns `(params, rest)`
-/// where `rest` is the body text after the `)`. Rejects `=` defaults and duplicate
-/// names (returns `Err(message)`).
-pub(crate) fn parse_param_list(s: &str) -> Result<(Vec<String>, &str), &'static str> {
+/// Parse a parameter list starting at the `(` of `s`. Returns `(params, defaults,
+/// rest)` where `rest` is the body text after the `)` and `defaults[i]` is formal
+/// `i`'s `= text` default (IEEE 1800-2017 §22.5.1), `None` when it has none. The
+/// list is split on the commas at nesting depth 0 only — a default may hold
+/// parentheses, brackets, braces or a string (`b = (1+2)`, `c = "x,y"`). Rejects a
+/// non-identifier name and duplicate names (returns `Err(message)`).
+pub(crate) type ParamList<'a> = (Vec<String>, Vec<Option<String>>, &'a str);
+
+pub(crate) fn parse_param_list(s: &str) -> Result<ParamList<'_>, &'static str> {
     debug_assert!(s.starts_with('('));
     let bytes = s.as_bytes();
-    // Find the matching ')'.
+    // Find the matching ')' and the depth-0 commas, respecting strings / comments.
     let mut depth = 0u32;
     let mut close = None;
+    let mut commas: Vec<usize> = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         match bytes[i] {
-            b'(' => depth += 1,
-            b')' => {
-                depth -= 1;
+            b'"' => {
+                let (end, _ok) = scan_string(s, i);
+                i = end;
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i = scan_line_comment(s, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i = scan_block_comment(s, i);
+                continue;
+            }
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => {
+                depth = depth.saturating_sub(1);
                 if depth == 0 {
+                    if bytes[i] != b')' {
+                        return Err("`define parameter list is unterminated");
+                    }
                     close = Some(i);
                     break;
                 }
             }
+            b',' if depth == 1 => commas.push(i),
             _ => {}
         }
         i += 1;
@@ -672,26 +704,38 @@ pub(crate) fn parse_param_list(s: &str) -> Result<(Vec<String>, &str), &'static 
     let inner = &s[1..close];
     let rest = &s[close + 1..];
     let mut params: Vec<String> = Vec::new();
-    let inner_trim = inner.trim();
-    if !inner_trim.is_empty() {
-        for part in inner.split(',') {
-            let p = part.trim();
-            if p.contains('=') {
-                return Err("`define default argument values are not supported");
-            }
-            let Some((nm, end)) = parse_ident(p, 0) else {
+    let mut defaults: Vec<Option<String>> = Vec::new();
+    if !inner.trim().is_empty() {
+        let mut start = 1usize;
+        let mut parts: Vec<&str> = Vec::new();
+        for &c in &commas {
+            parts.push(&s[start..c]);
+            start = c + 1;
+        }
+        parts.push(&s[start..close]);
+        for part in parts {
+            // `name` or `name = default`; comments around the name are dropped.
+            let (name_part, default) = match part.find('=') {
+                Some(eq) => (&part[..eq], Some(part[eq + 1..].trim().to_string())),
+                None => (part, None),
+            };
+            let p = name_part.trim();
+            let p = strip_trailing_line_comment(p).trim();
+            let j = skip_ws_comments(p, 0);
+            let Some((nm, end)) = parse_ident(p, j) else {
                 return Err("`define parameter name is invalid");
             };
-            if !p[end..].trim().is_empty() {
+            if skip_ws_comments(p, end) != p.len() {
                 return Err("`define parameter name is invalid");
             }
             if params.iter().any(|x| x == nm) {
                 return Err("`define has a duplicate parameter name");
             }
             params.push(nm.to_string());
+            defaults.push(default);
         }
     }
-    Ok((params, rest))
+    Ok((params, defaults, rest))
 }
 
 /// Parse `s` requiring exactly one double-quoted token surrounded only by

@@ -3595,6 +3595,25 @@ cross-package cells failed — key by the `pkg::t` twin. **Rule**: for a parse-t
 four gates and census each with a control twin; for a stored key name its lifetime.
 See [[layout-keys-must-outlive-the-unit]], [[gate-on-constness-not-resolvability]].
 
+### Three errors with one root: a text form the oracles keep, a joiner that flattened it (§4.5.417)
+
+- **A diagnostic count is not a defect count.** The whole-ibex page read as three items (`define
+  defaults, unterminated `ifdef, undefined `ASSERT); two of them and the third's 12 uses were ONE
+  root — the `define body joiner replaced every backslash-newline with a space, so a body's `ifdef
+  took the rest of the body as its argument. Bisect the page by including each header alone before
+  pricing the items.
+- **Keep the text form the oracles keep.** Both oracles expand a multi-line body with its newlines
+  and evaluate a body's conditional at EXPANSION time; a joiner that "normalises" the text away
+  from that form changes which bytes a later directive consumes. When a preprocessor stage rewrites
+  text, ask what the next consumer of that text keys on (here: the line) before rewriting it.
+- **An offset is only meaningful in the buffer it indexes.** A directive met inside an expansion
+  reported its newline with an offset into the expansion STRING, mapped as if it were a byte of the
+  use-site FILE. Any provenance emit inside `scan_text` must go through the collapse site; grep the
+  verbatim emitters for callers that can run with `site_for_collapse` set.
+- **`__LINE__` is a position of the USE's end, not its start** — a multi-line macro use reports the
+  line where the argument list closes in both oracles; a probe with a single-line use cannot tell
+  the two apart, so the census needs the multi-line cell.
+
 ### A loud→value column over a pre-existing silent is closed at the consumer's own type rule, and a parser-flattened shape is queried where the shape still exists (§4.5.416)
 
 - **The scalar control twin is what turns "loud→value" into a verdict.** Every census consumer had a

@@ -346,7 +346,7 @@ fn unconnected_drive_accepted() {
 fn line_continuation_joins_body() {
     let r = pp("`define LONG aaa \\\nbbb\nx = `LONG;\n");
     assert!(r.diags.is_empty());
-    assert_eq!(r.text, "x = aaa bbb;\n");
+    assert_eq!(r.text, "x = aaa \nbbb;\n");
 }
 
 // 4. nested ifdef/ifndef/elsif/else/endif
