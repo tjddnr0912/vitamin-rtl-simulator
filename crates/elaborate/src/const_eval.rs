@@ -498,47 +498,11 @@ impl Elaborator<'_> {
     /// multi-segment, a non-captured array) → None → the read stays loud at the binding
     /// site (correct-or-loud).
     pub(crate) fn const_array_vals_of_base(&self, base: &ast::Expr) -> Option<&Vec<i64>> {
-        match &base.kind {
-            ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
-                let n = path.segments[0].name.as_str();
-                if let Some(key) =
-                    self.walk_scopes_key(n, |k| self.array_const_vals.contains_key(k))
-                {
-                    return self.array_const_vals.get(&key);
-                }
-                // A module-local declaration of `n` SHADOWS a wildcard-imported
-                // package array of the same name (IEEE §26.3, iverilog-pinned
-                // local-wins). A GAP-G-capturable local array would have hit
-                // `array_const_vals` above; reaching here with a local net means
-                // the local is a shape GAP-G does NOT capture (descending /
-                // non-zero-base / multi-dim / plain variable / scalar), so the
-                // correct result is LOUD — never silently fold the IMPORTED array
-                // in its place. `add_net` drops the stale import alias when the
-                // local net is created, but that is a pass LATER than this const
-                // read, so consult the decl-order `bits_prescan` (populated for
-                // every body net before the params/generates that follow it).
-                // A local declaration of `n` (array net, scalar param, port, or a
-                // forward-declared one) SHADOWS the wildcard-imported array —
-                // `local_decl_names` was gathered upfront from the AST, so it
-                // catches every declaration form regardless of order. A local
-                // genvar / header param bound only in `self.params` is caught by
-                // `lookup_scoped`. A pure import is NOT a local declaration →
-                // absent from both → the fold below proceeds (the GAP-G support).
-                if self.local_decl_names.contains(n) || self.lookup_scoped(n).is_some() {
-                    return None;
-                }
-                // Imported (wildcard/explicit) package array parameter read by its
-                // bare name: the import bound a var-alias `key → (pkg, _)`; fold
-                // from that package's captured element values.
-                let akey = self.walk_scopes_key(n, |k| self.pkg_var_aliases.contains_key(k))?;
-                let (pkg, _) = self.pkg_var_aliases.get(&akey)?;
-                self.pkg_array_const_vals.get(pkg)?.get(n)
-            }
-            ast::ExprKind::PkgScoped { pkg, name } => {
-                self.pkg_array_const_vals.get(&pkg.name)?.get(&name.name)
-            }
-            _ => None,
-        }
+        // §3 ⑤ ⓔ: ONE resolution for the value table and its geometry twin
+        // (`const_array_ref_of_base`, const_array.rs) — the three routes above, with
+        // the innermost-binding shadow check on the local one (GAP-G's recorded root).
+        let r = self.const_array_ref_of_base(base)?;
+        self.const_array_vals_of_ref(&r)
     }
 
     /// `Expr::Const` → its u64 value (None for non-const / X-bearing) — used to
@@ -811,6 +775,11 @@ impl Elaborator<'_> {
         for decl in &d.names {
             if let Some(vals) = self.const_array_elem_vals(d, decl) {
                 let key = self.fq(&decl.name.name);
+                // §3 ⑤ ⓔ: the geometry rides with the values — same key, same
+                // shape rule, recorded by the same `if`, so neither map has an
+                // entry the other lacks.
+                let meta = self.const_array_elem_meta(d, decl);
+                self.array_const_meta.insert(key.clone(), meta);
                 self.array_const_vals.insert(key, vals);
             }
         }

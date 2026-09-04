@@ -28,8 +28,13 @@ impl Parser<'_, '_> {
             return Some((i64::from(w), info.signed));
         }
         let range = info.range.as_ref()?;
-        let msb = Self::const_lit(&range.msb)?;
-        let lsb = Self::const_lit(&range.lsb)?;
+        // §3 ⑤ ⓔ ladder: the bounds fold through the same parse-time constant table a
+        // struct member's width does (`try_const_index`, §4.5.414), so a vector
+        // typedef whose range names a package constant — `typedef logic [CBOUND_W-1:0]
+        // cbound_t;` and its `cbound_t'(addr >> exp)` in ibex_cheriot_pkg — casts
+        // instead of declining (a literal range takes the same route it did).
+        let msb = self.try_const_index(&range.msb)?;
+        let lsb = self.try_const_index(&range.lsb)?;
         // Direction-agnostic width (overflow-safe `abs_diff`, matching
         // `member_width`); the range direction does not affect the cast VALUE.
         Some((msb.abs_diff(lsb) as i64 + 1, info.signed))

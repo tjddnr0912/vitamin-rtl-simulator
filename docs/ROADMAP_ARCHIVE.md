@@ -436,6 +436,73 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.416 — Constant-context consumers of an array-parameter ELEMENT: a select / member / bit of `A[i]` in every constant position, the `$size` family, an untyped parameter's width from a select, and the typedef-cast rung behind them (§3 ⑤ ⓔ) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round + delta re-score — differential 117 new designs + 548 re-runs FAIL → 1 NEW loud→silent fixed (an UNTYPED child parameter overridden by a SELECT of an element bound at the default literal's width, §2 row 25's channel — the element spelling is kept loud, the scalar spelling is the recorded pre-existing); soundness 30 designs + a 1,454-file byte-identity sweep (0 diffs) FAIL → 1 BLOCKING fixed (the element resolver's local branch skipped the innermost-binding shadow check — a generate-scope scalar named like an outer array read the outer array in the wide domain and in `$size`; the value arm carried the same hole as GAP-G's recorded root, closed for every consumer through the one shared `const_array_ref_of_base`); delta re-scored directly with both lenses' harnesses, the census, the probes, the examples and ibex: 5 cells silent→loud, 3 cells → the oracle line, 0 other moves · corpus 10/10)
+
+**Rung.** `localparam int X = P[1].b;`, `logic [A[1][3:0]-1:0] v;`, `if (S[1].b == 2)` in a generate,
+`c #(.R(A[i][7-:4]))` (ibex_cs_registers:1486, `PMPRstAddr[i][PMP_ADDR_MSB-:PMPAddrWidth]`),
+`{A[1][3:0]{4'hA}}`, `{A[0], A[1]}`, `$bits(A[1][4:0])`, `$size(A)` — all "is not a constant" while
+the runtime reads were right. iverilog rejects every unpacked array parameter ("sorry: unpacked array
+parameters are not supported yet"), so verilator is the sole oracle for the array shapes and iverilog a
+second one for the scalar control twins.
+
+**Mechanism.** The element VALUES were captured (`array_const_vals`, GAP-G) and the whole-element read
+`A[i]` folded; everything that asks for MORE than the value needs the element's DECLARED range and the
+array's extent. New `elaborate/const_array.rs`: `ArrayConstMeta {count, elem_lo, elem_w, elem_asc,
+elem_signed, packed_dims}` captured beside the values at the two capture sites (module, package —
+same `if`, same key); `const_array_ref_of_base` = the value table's base resolution made reusable
+(local-wins shadow check, import alias, `pkg::`); `const_array_elem_read(A[i]) → (value, meta)`. Then
+one arm per domain: `const_select_base` (i64) accepts a `BitSelect` base that is an element and hands
+`(value, lo, width, asc)` to the SAME `select_base_at_declared` a scalar parameter's select takes (so
+direction / non-zero LSB / sign are the scalar rules — `A[0][0:3]` on `[0:7]`, `A[0][11:8]` on `[11:4]`,
+a signed element's select unsigned); `wide_name_bits` (bit domain) answers an element at its declared
+width under the three `narrow_param_bits` declines (lo≠0, ascending, plus multi-packed), and
+`fold_bits_at`'s `BitSelect` arm asks the resolver FIRST; `const_placement_wide`'s resolver hands every
+non-Ident node (`pkg::X`, `A[i]`) to `wide_name_bits` (both declined before — `localparam L = {1'b1,
+p::X}` was loud in the untyped spelling while the typed twin folded); `const_eval_in_scope` gains the
+`$size` family (`const_dim_query`: an array's `[0:count-1]` then its single packed range; a parameter's
+`param_sel_range`, provenance-filtered, so an untyped parameter declines); both replication-count
+walks descend through a select's base. ⭐ The parser answers the `$size` family on a MULTI-PACKED
+parameter (`rewrite_packed_md_dim_query` at the generic `$name(args)` build): the declaration was
+flattened to one range and only the parser still knows the dims — elaborate would have read
+`$size(P)` = 8 for `logic [1:0][3:0] P` where both oracles say 2 (the census's one NEW-SILENT before
+the rewrite; the scalar control twin found it). ⭐ `param_decl_width_opt` gains `select_init_meta` in
+the type-determined family (after the reduction arm, under `default_binds`): an element read inherits
+the element's declared type, any other bit-select is one unsigned bit, a part / indexed select its
+bounds' width — the `unt` consumer column was loud→value over a PRE-EXISTING silent 32 on the scalar
+spelling (`localparam L = W[3:0]; $bits(L)` 32, both oracles 4; `localparam L = A[1]` 32, oracles 8),
+the exact loud→silent trade the ladder forbids (§4.5.409's 215-cell lesson), closed for both
+spellings instead of declined. Ladder: with ⓔ folded, ibex_cs_registers' next page was six
+`typedef/class cast … outside the v1 cast scope` in ibex_cheriot_pkg — `simple_typedef_cast` folded
+a vector typedef's bounds with `const_lit` only; through `try_const_index` (the §4.5.414 parse-time
+table) `typedef logic [CBOUND_W-1:0] cbound_t; cbound_t'(addr >> exp)` casts (19e in vita and
+verilator, three spellings).
+
+**Census** (504 cells: sources scalar-control / body / generate / header-overridden / `p::A` /
+`import p::*` × element types `[7:0]` / `[0:7]` / `[11:4]` / `signed [7:0]` / `int` / packed struct /
+`[1:0][3:0]` × consumers part / bit / indexed / concat / `$size`+`$high`+`$right` / bound / generate-if
+/ child override / untyped localparam / replication / runtime twin / whole-element untyped): **258
+loud→correct · 104 unchanged · 31 FIXED-SILENT (the untyped-width cells) · 0 NEW-SILENT · 104
+still-loud** (multi-packed elements — the capture declines them, PRE too; ascending / non-zero-LSB
+elements in a concat / replication, declined as the scalar twin is; the header struct-typed override
+pattern = §4.5.413 residue; `p::S[1].b` = 🆕 L ⓗ; runtime `$size(param)`) · 1 PRE-EXISTING-SILENT on
+the scalar control (`{A1[7:4], A1[7:4]}` with `A1 [11:4]` → 33 for cc = 🆕 L ⓩ) · 6 harness cells
+(a nested `generate` keyword, illegal; the legal spelling agrees). 40 grounding probes: 33 loud→correct.
+ibex_cs_registers with `PMPEnable=1` (wrapper, address-table override, default-arg-free
+`prim_assert` stub): PRE 10 errors → POST exit 0, the four landed `ResetValue`s
+`48d159e2 80000001 fffffffc 00000032` equal verilator's. Whole-design ibex is unchanged (the
+preprocessor rung). Tests: `array_elem_const*.rs` (13 files, 476 cells + 4 review pins) + four wording pins turned
+into value pins (`pkg_array_param`, `struct_array_param`, `packed_md_param`, `param_select_const_bound`'s
+shadow pin now reads 2 as its own comment foresaw). Examples byte-identical
+PRE vs POST.
+
+**Residue (all loud, verilator-value):** a multi-packed ELEMENT array (`A[1][0]`, a whole read,
+`$size(A, 2)`); ascending / non-zero-LSB elements inside a concat or replication; a select reaching
+outside the element (`x`); a header struct-typed array under an override pattern; `p::S[1].b`; the
+runtime `$size` of a scalar parameter; an UNTYPED child parameter overridden by a select of an
+element (review A F1 — kept loud; the scalar `.P(W[3:0])` and the whole-element `.P(A[0])` spellings
+are the row-25 pre-existing 32). Pre-existing silent = §2 🆕 L ⓩ (plus the runtime read of a bare name
+that a generate-scope parameter shadows resolving the outer array NET — review B B1's runtime twin).
+
 #### 4.5.415 — A header `import` is visible to the header's own parameter defaults; a declared parameter range that does not fold is loud; an explicit-import collision is loud; scoped typedef dims re-spelled (§3 ⑤ ⓕ + §2 🆕 L ⓘⓟ) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round + delta re-score — differential 72 new designs + 243 re-runs (every grounding probe and census cell on both binaries; 120 PRE≠POST, all inside the claimed shapes) FAIL → 1 NEW regression fixed (a compilation-unit explicit import shadowed by a local declaration was refused — §26.3 is a same-scope rule; both oracles shadow) + 1 new-instance false-loud fixed (a package typedef dim naming a constant the package imported); soundness 32 designs FAIL → 3 MAJOR fixed (the non-overridden body-parameter binder skipped the new range gate; a package's own declarations did not shadow a wildcard import inside the package — a pre-existing silent-wrong against both oracles; the typedef-twin respell left an imported name bare — a pre-existing silent-wrong against both oracles); the delta re-scored directly with both lenses' harnesses, the census, the probes and the examples: 11 cells moved, every one to the oracle line or to loud on an oracle split · corpus 10/10)
 
 **The rung.** Every ibex module header is `module ibex_top import ibex_pkg::*; #(parameter

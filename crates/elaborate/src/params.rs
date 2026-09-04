@@ -31,6 +31,9 @@ pub(crate) struct ParamOverrides {
     /// by `bind_array_param` for a header array parameter; a scalar target never
     /// reads it (a scalar override never fills it either).
     pub(crate) arrays: BTreeMap<String, Vec<i64>>,
+    /// §3 ⑤ ⓔ: names whose override is a select of an array-parameter element — see
+    /// `ResolvedOverride::elem_select`.
+    pub(crate) elem_select: std::collections::BTreeSet<String>,
 }
 
 impl ParamOverrides {
@@ -73,6 +76,7 @@ impl ParamOverrides {
         self.unfoldable.remove(name);
         self.bits.remove(name);
         self.signed.remove(name);
+        self.elem_select.remove(name);
     }
 }
 
@@ -353,6 +357,20 @@ impl Elaborator<'_> {
                         )
                     {
                         return Some((1, false));
+                    }
+                    // §11.5.1 / Table 11-21 (§3 ⑤ ⓔ): a SELECT is self-determined and
+                    // unsigned — one bit, `|msb-lsb|+1`, or the indexed width — a type
+                    // fact of the operator read from its constant bounds alone, so it
+                    // answers under `declared_only` like the reduction above; and an
+                    // ELEMENT read of a constant array parameter (`A[1]`, spelled as a
+                    // bit-select by the parser) inherits the element's DECLARED type,
+                    // as a bare alias inherits its source's. Without this arm the
+                    // value-inferred tail recorded 32 for `localparam L = W[3:0];` and
+                    // for `localparam L = A[1];` over 8-bit elements, where both
+                    // oracles answer 4 and 8 — the scalar spelling was silently wrong
+                    // before the element spelling could fold at all.
+                    if let Some(m) = self.select_init_meta(red) {
+                        return Some(m);
                     }
                 }
                 // §11.4.12 / §11.4.12.1: a concatenation and a replication are
@@ -918,6 +936,7 @@ impl Elaborator<'_> {
                     // extension channel never reads this.
                     signed: Some(false),
                     array: None,
+                    elem_select: false,
                 });
                 continue;
             }
@@ -966,6 +985,7 @@ impl Elaborator<'_> {
                 // literal carries its own `s`, which `wide` above already holds.
                 signed: Some(sized_signed),
                 array: None,
+                elem_select: false,
             });
         }
         out
@@ -1067,6 +1087,9 @@ impl Elaborator<'_> {
                         if let Some(a) = &ov.array {
                             o.arrays.insert(p.name.name.clone(), a.clone());
                         }
+                        if ov.elem_select {
+                            o.elem_select.insert(p.name.name.clone());
+                        }
                         // `.W()` with no value ⇒ keep default (no insert).
                     }
                     None => {
@@ -1095,6 +1118,9 @@ impl Elaborator<'_> {
                         }
                         if let Some(a) = &ov.array {
                             o.arrays.insert(p.name.name.clone(), a.clone());
+                        }
+                        if ov.elem_select {
+                            o.elem_select.insert(p.name.name.clone());
                         }
                         if ov.value.is_none()
                             && ov.fill.is_none()
@@ -1456,6 +1482,28 @@ impl Elaborator<'_> {
                 && !ovr_str.contains_key(p.name.name.as_str())
                 && !ovr_unfoldable.contains(p.name.name.as_str());
             let ovr_bits = ovr.bits.get(p.name.name.as_str());
+            // §3 ⑤ ⓔ (review A F1): an UNTYPED, unranged target overridden by a SELECT of
+            // an array-parameter element. Its meta below comes from the DEFAULT literal
+            // (§2 row 25), not from the select's own width, so the value would bind at
+            // the wrong width — 32 where both oracles have 4. The scalar spelling is that
+            // pre-existing silent-wrong; this spelling was loud before the element fold
+            // existed and stays loud until row 25 lands.
+            if !default_binds
+                && matches!(p.ty, ast::ParamType::Implicit)
+                && p.range.is_none()
+                && ovr.elem_select.contains(p.name.name.as_str())
+            {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "the override of untyped parameter `{}` is a select of an array-parameter \
+                         element, whose width (IEEE 1800 §6.20.2) this binder cannot record — \
+                         declare the parameter's type (e.g. `parameter logic [3:0] {}`)",
+                        p.name.name, p.name.name
+                    ),
+                );
+                return;
+            }
             let meta = if default_binds {
                 self.param_decl_width_unoverridden(p)
             } else {

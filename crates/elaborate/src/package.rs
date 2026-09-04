@@ -510,6 +510,7 @@ impl Elaborator<'_> {
         // `pkg_array_const_vals` below so an element read `p::ROT[i]` (or a bare
         // `ROT[i]` from `import p::*`) folds in a constant context.
         let mut array_vals: BTreeMap<String, Vec<i64>> = BTreeMap::new();
+        let mut array_meta: BTreeMap<String, ArrayConstMeta> = BTreeMap::new();
         let mut funcs: BTreeMap<String, ast::FunctionDef> = BTreeMap::new();
         let mut tasks: BTreeMap<String, ast::TaskDef> = BTreeMap::new();
         let mut types: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
@@ -839,6 +840,8 @@ impl Elaborator<'_> {
                     if d.const_param {
                         for decl in &d.names {
                             if let Some(vals) = self.const_array_elem_vals(d, decl) {
+                                let meta = self.const_array_elem_meta(d, decl);
+                                array_meta.insert(decl.name.name.clone(), meta);
                                 array_vals.insert(decl.name.name.clone(), vals);
                             }
                         }
@@ -962,6 +965,7 @@ impl Elaborator<'_> {
         self.pkg_vars.insert(pkg.clone(), vars);
         if !array_vals.is_empty() {
             self.pkg_array_const_vals.insert(pkg.clone(), array_vals);
+            self.pkg_array_const_meta.insert(pkg.clone(), array_meta);
         }
         self.pkg_funcs.insert(pkg.clone(), funcs);
         self.pkg_tasks.insert(pkg, tasks);

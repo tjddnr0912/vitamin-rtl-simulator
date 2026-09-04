@@ -638,6 +638,14 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
         // is read against the operand's OWN width, which is exactly what the wide
         // domain carries, so this needs no declared-range side table.
         ast::ExprKind::BitSelect { base, index } => {
+            // §3 ⑤ ⓔ: a bit-select that NAMES an element of a constant array parameter
+            // is a leaf to the resolver (`wide_name_bits` answers `A[i]` from the
+            // element table and declines every other bit-select), asked FIRST so the
+            // structural read below — which would look for `A`'s own bits and find
+            // none — never sees it. A caller without a resolver gets the old walk.
+            if let Some(r) = name(e, false) {
+                return Some(r);
+            }
             // `const_eval_u32` is the same folder the size cast and the replication
             // count use here; a NEGATIVE index declines through it, which is the
             // fail-closed answer (an out-of-range select is `x`, and this 2-state
@@ -963,6 +971,14 @@ impl Elaborator<'_> {
     /// The wide domain's NAME resolver: an already-wide parameter first, then a narrow
     /// one at its declared width.
     pub(crate) fn wide_name_bits(&self, e: &ast::Expr) -> Option<WideBits> {
+        // §3 ⑤ ⓔ: an ELEMENT of a constant array parameter, `A[i]`, is a name in this
+        // domain — its bits at the element's declared width (`const_array_elem_bits`,
+        // which declines a non-zero LSB, an ascending or a multi-packed element on
+        // the footing `narrow_param_bits` declines the first two). Any other
+        // bit-select is not a name and keeps the structural arm.
+        if let ast::ExprKind::BitSelect { .. } = &e.kind {
+            return self.const_array_elem_bits(e);
+        }
         // `pkg::K` — answered from the package's own wide side map and NOWHERE else.
         // A NARROW package constant deliberately declines: its declared width lives in
         // `pkg_const_meta`, which (unlike `param_range`) is not provenance-filtered, so

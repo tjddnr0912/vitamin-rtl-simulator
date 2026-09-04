@@ -387,6 +387,12 @@ impl Elaborator<'_> {
             ast::ExprKind::SysCall { name, args } if name.name == "$rtoi" && args.len() == 1 => {
                 self.const_rtoi_via_real(&args[0])
             }
+            // §20.7 array query functions (`$size(A)`, `$high(W)`, …) over a constant
+            // array parameter or a parameter with a DECLARED range — §3 ⑤ ⓔ. Declines
+            // (loud) for a variable, an element, or a value-inferred width.
+            ast::ExprKind::SysCall { name, args } if is_dim_query_name(&name.name) => {
+                self.const_dim_query(&name.name, args)
+            }
             // A built-in string method with an integral result (`S.len()`), over a
             // constant string. See `const_string_method`.
             ast::ExprKind::MethodCall { .. } => self.const_string_method(e),
@@ -1068,12 +1074,15 @@ impl Elaborator<'_> {
         envw: &ConstWidths,
     ) -> Option<(ir::BitPacked, u32, bool)> {
         let resolve = |n: &ast::Expr, is_count: bool| -> Option<WideBits> {
-            // This resolver answers BARE names only. A `pkg::name` reaching the hook
-            // (the shared arm now routes both spellings here) declines, which is what
-            // it did before the hook took an expression: the env/`param_meta` pair
-            // below is a MODULE-scope lookup and has nothing to say about a package.
+            // This resolver answers BARE names itself. A `pkg::name` — and, §3 ⑤ ⓔ, an
+            // element `A[i]` of a constant array parameter — is handed to the wide
+            // domain's own resolver: the env/`param_meta` pair below is a MODULE-scope
+            // lookup and has nothing to say about a package or an element table, and
+            // both spellings DECLINED here before, so nothing that folded changes route
+            // (`{1'b1, p::X}` was loud in an untyped localparam while the typed twin,
+            // which reaches `wide_name_bits` directly, already folded).
             let ast::ExprKind::Ident(path) = &n.kind else {
-                return None;
+                return self.wide_name_bits(n);
             };
             let [seg] = path.segments.as_slice() else {
                 return None; // a hierarchical name is not a constant here

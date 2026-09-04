@@ -424,16 +424,16 @@ endmodule
         &format!("module tb; {ST}\n  localparam T P[2] = '{{ '{{a: 1'b1, b: 5'd3}} }};\n  initial begin $display(\"DIGEST=%b\", P[0]); #1 $finish; end\nendmodule\n"),
         "error",
     );
-    // Residue (pre-existing on the keyword spelling too, see ROADMAP §3): a MEMBER
-    // of an element in a constant context — `localparam int X = P[1].b;` — and
-    // `$size(P)` there. Wording pin on the shared decline, not on a value.
-    loud(
-        &format!("module tb; {ST}\n  localparam T P[2] = {KEYED};\n  localparam int X = P[1].b;\n  initial begin $display(\"DIGEST=%0d\", X); #1 $finish; end\nendmodule\n"),
-        "is not a constant",
+    // §3 ⑤ ⓔ closed the former residue: a MEMBER of an element and a part-select
+    // of an element in a constant context now fold (verilator 7 for both; iverilog
+    // rejects unpacked array parameters), and `$size(P)` folds (2, pinned above).
+    assert_eq!(
+        digest(&format!("module tb; {ST}\n  localparam T P[2] = {KEYED};\n  localparam int X = P[1].b;\n  initial begin $display(\"DIGEST=%0d\", X); #1 $finish; end\nendmodule\n")),
+        "7"
     );
-    loud(
-        &format!("module tb; {ST}\n  localparam logic [5:0] P[2] = '{{6'b100011, 6'b000111}};\n  localparam int X = P[1][4:0];\n  initial begin $display(\"DIGEST=%0d\", X); #1 $finish; end\nendmodule\n"),
-        "is not a constant",
+    assert_eq!(
+        digest(&format!("module tb; {ST}\n  localparam logic [5:0] P[2] = '{{6'b100011, 6'b000111}};\n  localparam int X = P[1][4:0];\n  initial begin $display(\"DIGEST=%0d\", X); #1 $finish; end\nendmodule\n")),
+        "7"
     );
 }
 

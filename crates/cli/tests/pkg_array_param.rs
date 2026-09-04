@@ -186,18 +186,16 @@ fn forward_ref_init_is_documented_leniency() {
 }
 
 #[test]
-fn const_context_use_of_package_array_param_is_loud() {
-    // `$size(T)` in a localparam init does not fold (same loud line as A2a's
-    // module-body const-context uses; iverilog has no array params = no oracle).
-    let (_, e, c) = run(
+fn const_context_use_of_package_array_param_folds() {
+    // `$size(T)` in a localparam init folds over the imported constant array's
+    // captured geometry (§3 ⑤ ⓔ; was a loud "not a constant" wording pin —
+    // iverilog rejects unpacked array parameters, verilator answers 5).
+    let (o, e, c) = run(
         "package p; localparam int T[0:4] = '{1,2,3,4,5}; endpackage\n\
          module top; import p::*;\n  localparam int N = $size(T);\n  initial begin $display(\"%0d\", N); $finish; end\nendmodule\n",
     );
-    assert_ne!(c, 0);
-    assert!(
-        e.contains("net/variable `T` is not a constant"),
-        "const-context use must be loud, and say why:\n{e}"
-    );
+    assert_eq!(c, 0, "must elaborate clean:\n{e}");
+    assert!(o.starts_with("5\n"), "verilator answers 5:\n{o}");
 }
 
 #[test]

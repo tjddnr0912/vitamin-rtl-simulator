@@ -269,6 +269,19 @@ impl Elaborator<'_> {
     /// width is RECORDED — see the module doc for why each restriction is a
     /// decline and not a guess.
     fn const_select_base(&self, base: &ast::Expr) -> Option<(u64, u32, u32, bool)> {
+        // §3 ⑤ ⓔ: an ELEMENT of a constant array parameter — `A[1][4:0]`, and the
+        // struct member `S[1].b` the parser spelled as a part-select of `S[1]`. The
+        // value is what the element read folds to and the range is the element's
+        // DECLARED one (`ArrayConstMeta`), so direction and LSB take the same
+        // `select_base_at_declared` route a scalar parameter's do. A multi-packed
+        // element declines: its `[i]` is a packed slice, not a bit of a flat value.
+        if let ast::ExprKind::BitSelect { .. } = &base.kind {
+            let (v, m) = self.const_array_elem_read(base)?;
+            if m.packed_dims != 1 {
+                return None;
+            }
+            return Self::select_base_at_declared(v, m.elem_lo, m.elem_w, m.elem_asc);
+        }
         // `pkg::W` — the same declaration, in the scope that exists to share it. The
         // value comes from `pkg_consts` and the range from `pkg_const_range`, which
         // is filled by the SAME `param_decl_range_opt` the module twin below reads
@@ -321,13 +334,11 @@ impl Elaborator<'_> {
         // parameters outright — says 2), but trading one silent wrong for a different
         // one is the move the ladder forbids, so this restores PRE exactly.
         //
-        // ⚠️ The ROOT is older and stays recorded, not fixed here: the first branch of
-        // `const_array_vals_of_base` returns on a `walk_scopes_key` hit WITHOUT the
-        // inner-wins shadow check its own second branch performs, so it reaches past
-        // the shadow. Closing that lands the oracle's 2 — and the MODULE-scope
-        // spelling of the same shadow is already correct (and improved by this slice,
-        // see `round4_report_gaps`), which is exactly the "one rule, one spelling
-        // short" shape. Fixing it is a GAP-G slice, not this one.
+        // §4.5.416 closed that root: `const_array_vals_of_base` now resolves through
+        // `const_array_ref_of_base`, whose local branch takes the INNERMOST binding of the
+        // name and answers only when it IS the array, so the inner scalar wins in the
+        // value arm too and the bound above is 2 (verilator). The guard below is still the
+        // arm-order mirror — it declines exactly the bases the value arm claims.
         if self.const_array_vals_of_base(base).is_some() {
             return None;
         }

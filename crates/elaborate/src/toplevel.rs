@@ -30,6 +30,14 @@ pub(crate) struct ResolvedOverride {
     /// header ARRAY parameter (`bind_array_param`); every scalar channel of such an
     /// override is `None`, and a scalar target ignores this one.
     pub(crate) array: Option<Vec<i64>>,
+    /// §3 ⑤ ⓔ: the override expression is a SELECT of an array-parameter element
+    /// (`A[0][3:0]`, `A[0][7]`, `p::A[1][7-:4]`). An UNTYPED, unranged target takes
+    /// its meta from the DEFAULT literal (§2 row 25 — the override's own width channel
+    /// is not consulted), so such an override would bind the right value at the wrong
+    /// width (`$bits` 32 for 4, `{P,P}` wrong); the scalar spelling `.P(W[3:0])` is
+    /// that pre-existing silent-wrong, and the element spelling was LOUD before this
+    /// slice — `bind_one_param` keeps it loud (review A F1).
+    pub(crate) elem_select: bool,
     pub(crate) is_named: bool,
     /// Set when the override expression IS an unsized fill literal (`'1`/`'0`/…).
     /// Its width is the CHILD param's declared width — unknown here in the parent

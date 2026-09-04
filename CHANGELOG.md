@@ -11,6 +11,34 @@ changed for a user of the simulator.
 
 ### Added
 
+- **A select, struct member or bit of an array-parameter ELEMENT folds in every constant
+  position.** `localparam int X = P[1].b;`, `logic [A[1][3:0]-1:0] v;`, `if (S[1].b == 2)` in a
+  generate, `c #(.R(A[i][7-:4]))` as a child override (ibex_cs_registers' PMP reset table),
+  `{A[1][3:0]{4'hA}}`, `{A[0], A[1]}`, `$bits(A[1][4:0])`, `A[1][7] ? … : …` — for a body,
+  generate, header (overridden) or package array (`p::A[1]`, `import p::*`), with the element's
+  declared direction, LSB and sign. iverilog rejects every unpacked array parameter; verilator is
+  the oracle.
+- **The `$size` family in a constant context** — `$size` / `$left` / `$right` / `$low` / `$high` /
+  `$increment` / `$dimensions` / `$unpacked_dimensions` — over an array parameter (module,
+  package, `p::A`, header, a generate loop bound) and over a parameter with a declared range; on a
+  multi-packed parameter (`logic [3:0][4:0] P`) the parser answers from the dimensions it
+  flattened, at runtime too.
+- **`pkg::X` and an array element inside an untyped constant concatenation** (`localparam L =
+  {1'b1, p::X}` was loud where the typed twin folded).
+- **A vector typedef whose range names a package constant casts** (`typedef logic [CBOUND_W-1:0]
+  cbound_t; cbound_t'(addr >> exp)`, ibex_cheriot_pkg).
+
+### Fixed
+
+- **An untyped parameter initialised by a select was 32 bits wide at exit 0** — `localparam L =
+  W[3:0]; $bits(L)` printed 32 (both oracles 4), `localparam L = A[1]` over 8-bit elements 32
+  (oracles 8); a select is self-determined (§11.5.1) and an element read has the element's type.
+- **`$size(P)` on a multi-packed parameter would have read the flattened range** (8 for
+  `logic [1:0][3:0] P`, both oracles 2) — answered by the parser from the recorded dimensions.
+- **A generate-scope scalar named like an outer constant array now shadows it in every constant
+  consumer** (`localparam int ROT[0:3] = …; generate if (1) begin : g localparam int ROT = 99;
+  logic [ROT[1]:0] v;` declared 21 bits reading the outer element; verilator 2).
+
 - **A header `import` is visible to the header's own parameter defaults and ranges.** `module m
   import p::*; #(parameter perm_t X = Dflt, parameter logic [W-1:0] Y = Mask)` — and `import p::X`,
   a comma list, two packages, a compilation-unit import — binds `Dflt`/`W`/`Mask` (a constant, an

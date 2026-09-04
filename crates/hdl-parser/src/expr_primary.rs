@@ -182,10 +182,14 @@ impl Parser<'_, '_> {
                 } else {
                     Vec::new()
                 };
-                Expr {
+                let call = Expr {
                     kind: ExprKind::SysCall { name, args },
                     span: start.to(self.prev_span()),
-                }
+                };
+                // A §20.7 array query on a multi-dimensional packed PARAMETER is
+                // answered here, from the dimensions this parser flattened away
+                // (`packed_md.rs`); every other call is returned untouched.
+                self.rewrite_packed_md_dim_query(call)
             }
             // v5 ⑥: bare `$` — queue last-index (`q[$]`, `q[$-1]`). A primary
             // so Pratt arithmetic folds over it; elaborate substitutes

@@ -745,6 +745,19 @@ impl Elaborator<'_> {
                 return Some(REDUCTION_WIDTH_UNDECLARED.to_string());
             }
         }
+        // §3 ⑤ ⓔ: an array query has a fold arm; what it lacks is a DECLARED geometry
+        // for its argument (a variable, an element, an untyped parameter, an array the
+        // element capture does not cover). Say that, not "no arm".
+        if let K::SysCall { name, .. } = &e.kind {
+            if is_dim_query_name(&name.name) {
+                return Some(format!(
+                    "{} folds only over a constant array parameter (0-based, single \
+                     unpacked dimension, elements ≤ 64 bits) or a parameter with a \
+                     declared range, for a dimension it declares",
+                    Self::expr_brief(e)
+                ));
+            }
+        }
         Some(match &e.kind {
             K::Ident(_) | K::PkgScoped { .. } => match self.nonconst_bound_reason(e) {
                 Some(r) => format!("{r} is not a constant"),

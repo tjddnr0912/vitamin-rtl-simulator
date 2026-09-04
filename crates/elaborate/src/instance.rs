@@ -399,6 +399,7 @@ impl Elaborator<'_> {
                         // brings has already been folded to i64 by the collector.
                         bits: None,
                         array: None,
+                        elem_select: false,
                         // The collector computed this from the expression when its sign
                         // is evident there — see the comment at the collector. It used to
                         // be unconditionally `None` ("stay on the old route"), which
@@ -1292,6 +1293,7 @@ impl Elaborator<'_> {
                         bits: self.override_bits(e),
                         signed: Some(self.const_signed_env(e, &ConstWidths::new())),
                         array: self.const_array_override_vals(e),
+                        elem_select: self.override_is_elem_select(e),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -1442,6 +1444,9 @@ impl Elaborator<'_> {
                             .as_ref()
                             .map(|e| self.const_signed_env(e, &ConstWidths::new())),
                         array,
+                        elem_select: value
+                            .as_ref()
+                            .is_some_and(|e| self.override_is_elem_select(e)),
                     });
                 }
             }

@@ -3595,6 +3595,30 @@ cross-package cells failed — key by the `pkg::t` twin. **Rule**: for a parse-t
 four gates and census each with a control twin; for a stored key name its lifetime.
 See [[layout-keys-must-outlive-the-unit]], [[gate-on-constness-not-resolvability]].
 
+### A loud→value column over a pre-existing silent is closed at the consumer's own type rule, and a parser-flattened shape is queried where the shape still exists (§4.5.416)
+
+- **The scalar control twin is what turns "loud→value" into a verdict.** Every census consumer had a
+  scalar-parameter spelling beside the element spelling. The untyped-localparam column went loud→value
+  on the elements and the control twin showed the SAME value with `$bits` 32 (both oracles 4) —
+  a pre-existing silent the element spelling was about to inherit (the §4.5.409 trade the ladder
+  forbids). Without the twin the column reads as 31 wins.
+- **Do not decline what a type rule answers.** The tempting move was "decline the untyped consumer
+  for elements" (keep the loud, leave the scalar silent). A select is self-determined (§11.5.1) and an
+  element read has the element's declared type — a width fact of the OPERATOR, the same family as the
+  reduction / concatenation arms in `param_decl_width_opt`, not the value-inferred tail. Adding the
+  arm closed the scalar spelling's pre-existing silent too (31 FIXED-SILENT) instead of freezing it
+  behind a decline. Ask "which rule sizes this initializer" before asking "which consumer to keep loud".
+- **A shape the parser flattens has no elaborate-side truth.** The multi-packed parameter is declared
+  flat (`[7:0]`) and its selects are rewritten at parse; an elaborate `$size(P)` read the flat range
+  (8 for `[1:0][3:0]`, oracles 2) and the AST could not tell. The query is answered where the dims
+  still exist — the parser, next to the select rewrite — with a parse error for a dimension index it
+  cannot fold rather than a fall-through to the flat answer. Whoever flattens a shape owns every
+  query on it.
+- **Run the real design behind the row and take the next page in the same slice when it is the same
+  table.** With ⓔ folded, ibex_cs_registers' next errors were six typedef casts whose bounds fold
+  through the §4.5.414 parse-time table already used for member widths — two lines. The ladder was
+  written from the design, not predicted.
+
 ### An import has a position, and a new loud gate is measured against the suite before it is believed (§4.5.415)
 
 The header-import defect was an ORDERING defect in a pass that already existed: the parser put the

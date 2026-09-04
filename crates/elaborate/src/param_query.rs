@@ -17,7 +17,16 @@ impl Elaborator<'_> {
     /// runtime array read is NOT one → left to the ordinary lowering).
     pub(crate) fn count_reads_const_array_elem(&self, e: &ast::Expr) -> bool {
         match &e.kind {
-            ast::ExprKind::BitSelect { base, .. } => self.const_array_vals_of_base(base).is_some(),
+            ast::ExprKind::BitSelect { base, .. } => {
+                self.const_array_vals_of_base(base).is_some()
+                    || self.count_reads_const_array_elem(base)
+            }
+            // §3 ⑤ ⓔ: a SELECT of an element (`{A[1][3:0]{4'hA}}`) reads the element
+            // through its base — the same fold now answers it, so the same routing
+            // rule applies.
+            ast::ExprKind::PartSelect { base, .. } | ast::ExprKind::IndexedPart { base, .. } => {
+                self.count_reads_const_array_elem(base)
+            }
             ast::ExprKind::Paren { inner } => self.count_reads_const_array_elem(inner),
             ast::ExprKind::Unary { operand, .. } => self.count_reads_const_array_elem(operand),
             ast::ExprKind::Binary { lhs, rhs, .. } => {
@@ -243,6 +252,10 @@ impl Elaborator<'_> {
         match &e.kind {
             ast::ExprKind::BitSelect { base, .. } => {
                 self.base_is_array_net(base) || self.count_reads_array_param_elem(base)
+            }
+            // §3 ⑤ ⓔ: the loud-gate twin sees through a select of an element too.
+            ast::ExprKind::PartSelect { base, .. } | ast::ExprKind::IndexedPart { base, .. } => {
+                self.count_reads_array_param_elem(base)
             }
             ast::ExprKind::Paren { inner } => self.count_reads_array_param_elem(inner),
             ast::ExprKind::Unary { operand, .. } => self.count_reads_array_param_elem(operand),

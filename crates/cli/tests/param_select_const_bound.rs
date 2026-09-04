@@ -406,10 +406,14 @@ fn an_inner_scalar_shadowing_a_const_array_keeps_both_lanes_on_one_object() {
     // unpacked array parameters outright, says 2) — but trading one silent wrong for
     // a DIFFERENT silent wrong is the move the ladder forbids, so this pins PRE.
     //
-    // The root is older and is recorded in ROADMAP §2, not fixed here:
-    // `const_array_vals_of_base`'s first branch skips the inner-wins shadow check its
-    // own second branch performs. Whoever closes that will change this to "2" and
-    // should read this comment before doing so.
+    // §4.5.416 closed the root: `const_array_ref_of_base` (the one resolution the
+    // value table and its geometry twin share) takes the INNERMOST binding of the name
+    // over the combined set the value lookups walk and answers only when that binding
+    // IS the array, so the bound is the inner scalar's bit 1 → 2 (verilator). The
+    // RUNTIME read `ROTA[1]` still prints the outer element (20): the runtime lowering
+    // resolves the bare name to the outer array NET before the inner generate-scope
+    // parameter — a pre-existing routing leniency recorded in ROADMAP §2 (🆕 L ⓩ), not
+    // this slice's consumer.
     assert_eq!(
         run(
             "  localparam int ROTA [0:3] = '{10, 20, 30, 40};\n\
@@ -421,6 +425,6 @@ fn an_inner_scalar_shadowing_a_const_array_keeps_both_lanes_on_one_object() {
             "    #2;\n"
         )
         .unwrap(),
-        "21|20"
+        "2|20"
     );
 }

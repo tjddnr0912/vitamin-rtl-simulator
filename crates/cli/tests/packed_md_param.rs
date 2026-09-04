@@ -473,15 +473,26 @@ fn the_v1_limits_are_loud_not_silent() {
         ),
         "an array parameter of a multi-dimensional packed type",
     );
-    // A write, `$size`, an assignment pattern and `foreach` stay as loud as on a
-    // scalar parameter.
+    // A write, an assignment pattern and `foreach` stay as loud as on a scalar
+    // parameter.
     loud(
         &format!(
             "module tb;\n{d}\n  initial begin P[1] = 5'd1; #1 $display(\"DIGEST=%0d\", P[1]); #1 $finish; end\nendmodule"
         ),
         "E3010",
     );
-    loud(&body(&d, "%0d", "$size(P)"), "E3009");
+    // `$size(P)` is answered by the parser from the recorded dimensions (§3 ⑤ ⓔ):
+    // the OUTERMOST packed dimension `[3:0]` — 4, as verilator (was a loud E3009 pin;
+    // an elaborate-side answer would have read the flattened `[19:0]` as 20).
+    assert_eq!(digest(&body(&d, "%0d", "$size(P)")), "4");
+    assert_eq!(
+        digest(&body(
+            &d,
+            "%0d %0d %0d",
+            "$size(P, 2), $high(P, 2), $dimensions(P)"
+        )),
+        "5 4 2"
+    );
     // A REVERSED range select (review B1): the flat/variable twins are loud
     // ("part-select bounds … out of order"); the parameter must not answer 0 bits.
     loud(&body(&d, "%b", "P[1][2:4]"), "out of order");

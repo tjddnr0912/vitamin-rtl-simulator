@@ -414,3 +414,104 @@ impl Parser<'_, '_> {
         }
     }
 }
+
+/// The §20.7 array query functions [`Parser::rewrite_packed_md_dim_query`] answers.
+/// Twin of `elaborate::const_array::is_dim_query_name` — the two crates cannot share
+/// a list, so a name added to one must be added to the other.
+fn is_dim_query_name(name: &str) -> bool {
+    matches!(
+        name,
+        "$size"
+            | "$left"
+            | "$right"
+            | "$low"
+            | "$high"
+            | "$increment"
+            | "$dimensions"
+            | "$unpacked_dimensions"
+    )
+}
+
+impl Parser<'_, '_> {
+    /// `$size(P)` / `$left(P, d)` / … on a multi-dimensional packed PARAMETER.
+    ///
+    /// The declaration was flattened to one range (`packed_md_flat_range`) and only
+    /// this parser still knows the dimensions, so an elaborate-side query would read
+    /// the FLAT range — `$size(P)` 8 for `logic [1:0][3:0] P`, where both oracles say 2
+    /// (§3 ⑤ ⓔ census, the scalar control twin). The answer is built from the recorded
+    /// dimension the way a select's offset is: `packed_dim_width` for `$size`, the
+    /// bound expressions for `$left` / `$right`, `by_dir` for `$high` / `$low` /
+    /// `$increment`, literals for the dimension counts. A dimension index that is not
+    /// a literal, or names a dimension the parameter does not declare, is a parse
+    /// error rather than a guess (the runtime prints `x` for the latter; a constant
+    /// cannot). Every call on any other operand is returned untouched.
+    pub(crate) fn rewrite_packed_md_dim_query(&mut self, e: Expr) -> Expr {
+        let ExprKind::SysCall { name, args } = &e.kind else {
+            return e;
+        };
+        if !is_dim_query_name(&name.name) || args.is_empty() || args.len() > 2 {
+            return e;
+        }
+        let dims = match &args[0].kind {
+            ExprKind::Ident(p) if p.segments.len() == 1 => {
+                self.packed_md_params.get(&p.segments[0].name).cloned()
+            }
+            ExprKind::PkgScoped { pkg, name } => self
+                .packed_md_scoped
+                .get(&format!("{}::{}", pkg.name, name.name))
+                .cloned(),
+            _ => None,
+        };
+        let Some(dims) = dims else {
+            return e;
+        };
+        let span = e.span;
+        match name.name.as_str() {
+            "$dimensions" | "$unpacked_dimensions" if args.len() == 2 => {
+                self.error("`$dimensions` / `$unpacked_dimensions` take one argument");
+                return e;
+            }
+            "$dimensions" => return Self::lit(dims.len() as u32, span),
+            "$unpacked_dimensions" => return Self::lit(0, span),
+            _ => {}
+        }
+        let d = if args.len() == 2 {
+            match Self::lit_u32(&args[1]) {
+                Some(d) => d,
+                None => {
+                    self.error(
+                        "the dimension index of an array query on a multi-dimensional packed parameter must be a literal",
+                    );
+                    return e;
+                }
+            }
+        } else {
+            1
+        };
+        if d < 1 || d as usize > dims.len() {
+            self.error(
+                "an array query names a dimension a multi-dimensional packed parameter does not declare",
+            );
+            return e;
+        }
+        let r = &dims[d as usize - 1];
+        match name.name.as_str() {
+            "$size" => Self::packed_dim_width(r, span),
+            "$left" => r.msb.clone(),
+            "$right" => r.lsb.clone(),
+            "$high" => Self::by_dir(r, r.msb.clone(), r.lsb.clone(), span),
+            "$low" => Self::by_dir(r, r.lsb.clone(), r.msb.clone(), span),
+            "$increment" => {
+                let neg = Expr {
+                    kind: ExprKind::Unary {
+                        op: UnOp::Minus,
+                        operand: Box::new(Self::lit(1, span)),
+                    },
+                    span,
+                };
+                Self::by_dir(r, Self::lit(1, span), neg, span)
+            }
+            _ => e,
+        }
+    }
+}

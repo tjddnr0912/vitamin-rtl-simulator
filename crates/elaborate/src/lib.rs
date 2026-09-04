@@ -52,6 +52,7 @@ mod block_local;
 mod block_local_class;
 mod class_lower;
 mod classes;
+mod const_array;
 mod const_bound;
 mod const_eval;
 mod const_fn;
@@ -132,6 +133,7 @@ pub(crate) use array_formal::*;
 pub(crate) use ast_query::*;
 pub(crate) use block_local::*;
 pub(crate) use classes::*;
+pub(crate) use const_array::*;
 pub(crate) use const_eval::*;
 pub(crate) use const_fn::*;
 pub(crate) use const_fn_width::*;
@@ -1008,6 +1010,11 @@ struct Elaborator<'s> {
     /// `localparam R = ROT[g]`. A multi-dim / non-foldable array is simply absent
     /// (its element reads stay loud — correct-or-loud). Elaborate-local only.
     array_const_vals: std::collections::BTreeMap<String, Vec<i64>>,
+    /// §3 ⑤ ⓔ: the geometry twin of `array_const_vals` (element declared range,
+    /// count, packed-dimension count), recorded at the SAME capture site for the
+    /// SAME keys — what a select of an element, its bits in a concatenation and
+    /// `$size(A)` need beyond the values. Elaborate-local only.
+    array_const_meta: std::collections::BTreeMap<String, ArrayConstMeta>,
     /// GAP-G (round-4): package name → (const array parameter name → element
     /// values), the package-scope twin of `array_const_vals`. A package array
     /// param (`package p; localparam int ROT[0:3]='{…}`) lowers to a `$pkg$p`
@@ -1019,6 +1026,9 @@ struct Elaborator<'s> {
     /// anything else is absent → loud. Elaborate-local only.
     pkg_array_const_vals:
         std::collections::BTreeMap<String, std::collections::BTreeMap<String, Vec<i64>>>,
+    /// §3 ⑤ ⓔ: package twin of `array_const_meta`, filled beside `pkg_array_const_vals`.
+    pkg_array_const_meta:
+        std::collections::BTreeMap<String, std::collections::BTreeMap<String, ArrayConstMeta>>,
     /// §3 ⑤ ⓒ: fq name of a header ARRAY parameter → the element values an
     /// instance override installs in place of the declared default (recorded by
     /// `bind_array_param`, read by `array_param_vals_src`). One entry per instance
