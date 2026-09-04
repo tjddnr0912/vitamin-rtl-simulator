@@ -62,16 +62,6 @@ fn folds(expr: &str, want: i64) {
     );
 }
 
-fn loud(expr: &str) {
-    let (_, code, err) = run_raw(&param(expr));
-    assert_eq!(code, Some(1), "`{expr}` should be loud:\n{err}");
-    assert!(
-        err.contains("is not a foldable constant expression")
-            || err.contains("value is not a constant:"),
-        "`{expr}` unexpected diagnostic:\n{err}"
-    );
-}
-
 /// The headline silent-wrong: truncating an operand folded wide is not the same
 /// as folding it narrow. The 4-bit sum is 0, so the quotient is 0 — the old arm
 /// divided the un-narrowed 16.
@@ -222,9 +212,13 @@ fn widening_and_neighbouring_casts_unchanged() {
     ] {
         folds(e, want);
     }
-    // A `signed'`/`unsigned'` cast preserves a width this domain does not track,
-    // so it stays loud — the arm is untouched.
-    loud("signed'(4'hF)");
+    // A `signed'`/`unsigned'` cast preserves a width the i64 domain does not track,
+    // so it stays loud there — but §4.5.414's wide-domain arm (bits and width kept,
+    // sign replaced, operand self-determined) folds it: −1 / 15 / 0 / ff on both
+    // oracles (was a wording pin of the limitation).
+    folds("signed'(4'hF)", -1);
+    folds("unsigned'(4'shF)", 15);
+    folds("signed'(4'hF) + 1", 0);
     // Consumer positions.
     for (src, want) in [
         (

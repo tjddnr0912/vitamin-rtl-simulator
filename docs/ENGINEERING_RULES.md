@@ -3574,3 +3574,23 @@ Two review rounds in a row were handed a stale artifact because the tree moved a
 snapshot, and both times a lens opened its report with that instead of with a finding.
 Snapshot, record the hash, and if a blocking fix lands mid-round, re-freeze and tell the
 lenses which binary their numbers describe. See [[freeze-the-binary-for-a-review]].
+
+### A parser-side constant table has four gates, and a key stored in one map must outlive the other (§4.5.414)
+
+Widening a parse-time constant table (`const_locals`) so a struct member width can fold looked like
+"record more parameters". It was four separate decisions, and the review found a defect behind
+each one the slice had skipped: (1) **overridability** — IEEE §6.20.1 makes a package `parameter`
+and a body `parameter` behind an ANSI header localparams, everything else must stay out (both
+oracles lay a header-parameter width out per instance); (2) **the declared type** — decline only
+a PROVABLE mismatch (`byte B = 200` is −56 downstream); declining what you merely cannot prove
+made three PRE-correct designs loud (review B-2); (3) **every declaration of the name drops the
+entry** — ports, variables, params, genvars, tf formals; the one path that did not (`genvar`)
+turned a wildcard-imported constant into a silently-folded generate index (B-3), and a header
+genvar's drop must be restored after the loop (§27.4 — the differential lens's own design caught
+it on the delta); (4) **the readers you did not write** — the table already fed the generate-index
+and enum-label folds, so the "five new shapes" byte-identity claim was short by one shape (A F1;
+one of them a PRE silent-wrong fixed by the scope snapshot). And a layout that names another type by
+its BARE key dies at `endpackage`: the wildcard-import cell passed, the explicit-import / scoped /
+cross-package cells failed — key by the `pkg::t` twin. **Rule**: for a parse-time table list the
+four gates and census each with a control twin; for a stored key name its lifetime.
+See [[layout-keys-must-outlive-the-unit]], [[gate-on-constness-not-resolvability]].

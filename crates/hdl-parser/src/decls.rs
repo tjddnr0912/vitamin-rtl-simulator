@@ -413,6 +413,10 @@ impl Parser<'_, '_> {
         self.var_enum.remove(n);
         self.packed_md_params.remove(n);
         self.wildcard_bound.remove(n);
+        // §3 ⑤ ⓓ: any declaration of the name shadows a same-named constant
+        // (an imported one, or a localparam of an outer scope) — the parse-time
+        // fold must not answer the outer value for this scope's name.
+        self.const_locals.remove(n);
     }
 
     pub(crate) fn parse_net_var(&mut self, allow_net_delay: bool) -> Option<NetVarDecl> {

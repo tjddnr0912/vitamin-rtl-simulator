@@ -126,14 +126,17 @@ fn module_local_typedef_cast() {
 }
 
 #[test]
-fn struct_typedef_cast_is_loud() {
-    // A struct typedef cast needs per-field semantics — honest-loud (v1).
-    let (_o, ok) = run(
+fn struct_typedef_cast_sizes_to_the_struct() {
+    // §4.5.414 (IEEE §6.24.1): a 4-state packed struct typedef cast is the size
+    // cast to its width with the struct's signedness — both oracles `R:ab`, and a
+    // wider operand truncates (`R2:cd`). Was a wording pin of the v1 deferral.
+    let (o, ok) = run(
         "package p; typedef struct packed {logic[3:0] a,b;} s_t; endpackage\n\
-         module tb; import p::*; logic [7:0] q;\n\
-         initial begin q=s_t'(8'hAB); $display(\"R:%h\", q); $finish; end endmodule",
+         module tb; import p::*; logic [7:0] q; logic [11:0] w;\n\
+         initial begin q=s_t'(8'hAB); w=s_t'(12'h1CD); $display(\"R:%h R2:%h\", q, w); $finish; end endmodule",
     );
-    assert!(!ok, "a struct typedef cast must be loud (v1)");
+    assert!(ok, "{o}");
+    assert!(o.contains("ab R2:0cd"), "{o}");
 }
 
 #[test]

@@ -163,7 +163,7 @@ end
 |---|---|
 | `enum` (via `typedef enum`) | Yes |
 | `typedef` | Yes |
-| `struct packed` | Yes |
+| `struct packed` | Yes — a member may be another packed struct/union typedef (`perms_t perms;`, any depth: `s.a.b.c`, `arr[i].a.b`, sub-selects, `$bits`, ports, a `'{…}` recursed per member or a plain value for the nested slot, `s.perms = '{…}`, a `default:` fill, a struct-typed cast `cap_t'(e)` also in a constant) and its width may name a constant (`logic [W-1:0]`, `[0:W-1]`, a typedef of one, `$clog2(N)`, `W/2`, `p::W`: a `localparam`, a package `parameter`, a body `parameter` behind an ANSI header — IEEE §6.20.1 — directly or through `import`). Loud: a member width naming an overridable `parameter` (header, or body without a header), `1 << 3` / a sized literal / a narrow-typed or forward-referenced localparam as that width, a `default:` for a nested member that is not a fill or 0, an enum method through a chain, a packed array of a struct typedef as a member (`in_t [1:0] i`), `$bits(pkg::T)`, an indexed member write |
 | `struct` (unpacked) | Rejected loud (packed structs only) |
 | `union packed` | Yes (overlay semantics; member reads/writes share storage) |
 | Multi-dimensional packed parameter `parameter logic [N-1:0][M-1:0] P = {…}` / `localparam perm_t P = …` | Yes — body, ANSI header (default + instance override, dims may name the instance's own parameters), package (wildcard / explicit / `p::P[i]`); reads `P[i]`, `P[i][j]`, `P[i][a:b]`, `P[i][o+:w]`, `P[a:b]`, runtime or constant index, `$bits(P)` / `$bits(P[i])`. Loud: `$size`/`$left`/`$dimensions` on it, a `'{…}` value, an array parameter of such a type, a select chain deeper than the dims or with a non-final range |

@@ -30,6 +30,7 @@ impl Parser<'_, '_> {
             packed_md_params: self.packed_md_params.clone(),
             wildcard_bound: self.wildcard_bound.clone(),
             local_decl_names: self.local_decl_names.clone(),
+            const_locals: self.const_locals.clone(),
         }
     }
 
@@ -90,6 +91,7 @@ impl Parser<'_, '_> {
         self.packed_md_params = s.packed_md_params;
         self.wildcard_bound = s.wildcard_bound;
         self.local_decl_names = s.local_decl_names;
+        self.const_locals = s.const_locals;
     }
 
     /// Restore the type registries around a top-level UNIT (module / interface /
@@ -156,6 +158,7 @@ impl Parser<'_, '_> {
         self.packed_md_params = s.packed_md_params;
         self.wildcard_bound = s.wildcard_bound;
         self.local_decl_names = s.local_decl_names;
+        self.const_locals = s.const_locals;
     }
 
     /// Map a member SOURCE bit index `e` onto the field part-select `pv[w-1:0]`.

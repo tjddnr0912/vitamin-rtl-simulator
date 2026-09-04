@@ -294,12 +294,16 @@ impl Parser<'_, '_> {
     /// not pin that count, verilator and iverilog cannot be compared (iverilog
     /// rejects the whole form), so a call-bearing `default:` stays loud rather than
     /// silently multiplying a side effect.
+    ///
+    /// §3 ⑤ ⓓ: the second vector marks the slots the `default:` filled — a NESTED
+    /// struct member takes a default only when the value is a fill or zero
+    /// (`build_struct_pattern_concat`).
     fn keyed_struct_pattern_to_positional(
         &mut self,
         fields: &[(String, u32, bool)],
         keyed: Vec<(AssignPatternKey, Expr)>,
         span: Span,
-    ) -> Option<Vec<Expr>> {
+    ) -> Option<(Vec<Expr>, Vec<bool>)> {
         let mut slots: Vec<Option<Expr>> = vec![None; fields.len()];
         let mut default: Option<Expr> = None;
         for (k, v) in keyed {
@@ -336,9 +340,14 @@ impl Parser<'_, '_> {
             }
         }
         let mut out = Vec::with_capacity(slots.len());
+        let mut from_default = Vec::with_capacity(slots.len());
         for slot in slots {
+            let defaulted = slot.is_none();
             match slot.or_else(|| default.clone()) {
-                Some(e) => out.push(e),
+                Some(e) => {
+                    out.push(e);
+                    from_default.push(defaulted);
+                }
                 None => {
                     self.error_at(
                         span,
@@ -349,7 +358,49 @@ impl Parser<'_, '_> {
                 }
             }
         }
-        Some(out)
+        Some((out, from_default))
+    }
+
+    /// §3 ⑤ ⓓ: the sized literal a fill `e` denotes at width `w` (`'1` → `w'b11…1`,
+    /// `'0` → `w'b0`, `'x`/`'z` → all-x/all-z, or all-zero on a 2-state field);
+    /// `None` when `e` is not a fill literal.
+    fn fill_at_width(e: &Expr, w: u32, two_state: bool) -> Option<Expr> {
+        let ExprKind::IntLit { raw, .. } = &e.kind else {
+            return None;
+        };
+        let digit = match raw.trim() {
+            "'0" => '0',
+            "'1" => '1',
+            "'x" | "'X" if !two_state => 'x',
+            "'z" | "'Z" if !two_state => 'z',
+            "'x" | "'X" | "'z" | "'Z" => '0',
+            _ => return None,
+        };
+        let body: String = std::iter::repeat_n(digit, w as usize).collect();
+        Some(Expr {
+            kind: ExprKind::IntLit {
+                kind: IntLitKind::Sized,
+                raw: format!("{w}'b{body}"),
+            },
+            span: e.span,
+        })
+    }
+
+    /// §3 ⑤ ⓓ: is `e` a value whose meaning is the same whether a `default:`
+    /// applies it to a nested struct member AS A WHOLE or to each of its leaves —
+    /// a fill (`'0`/`'1`/`'x`/`'z`) or the literal zero? Anything else (`default:
+    /// 1`, `default: 2'b10`) reads differently under the two rules (verilator
+    /// applies it whole: `'{default: 1}` on `{cor[1:0], perms{U0,SE,q[1:0]}, valid}`
+    /// is `01_0001_1`; a per-leaf reading gives `01_1101_1`; iverilog rejects the
+    /// form; §10.9.2 does not settle it) — loud.
+    fn default_value_shape_free(&self, e: &Expr) -> bool {
+        if let ExprKind::IntLit { raw, .. } = &e.kind {
+            let r = raw.trim();
+            if matches!(r, "'0" | "'1" | "'x" | "'X" | "'z" | "'Z") {
+                return true;
+            }
+        }
+        self.try_const_index(e) == Some(0)
     }
 
     pub(crate) fn build_struct_pattern_concat(&mut self, tyname: &str, rhs: Expr) -> Expr {
@@ -364,17 +415,24 @@ impl Parser<'_, '_> {
             .get(tyname)
             .cloned()
             .or_else(|| self.packable_record_layout(tyname));
+        let nested: Vec<Option<String>> = match &layout {
+            Some(l) => l.fields.iter().map(|f| f.8.clone()).collect(),
+            None => return rhs,
+        };
         let fields: Vec<(String, u32, bool)> = match layout {
             Some(l) => l
                 .fields
                 .iter()
-                .map(|(n, _, w, _, _, ts, _, _)| (n.clone(), *w, *ts))
+                .map(|(n, _, w, _, _, ts, _, _, _)| (n.clone(), *w, *ts))
                 .collect(),
             None => return rhs,
         };
         let span = rhs.span;
-        let elems = match rhs.kind {
-            ExprKind::AssignPattern(elems) => elems,
+        let (elems, from_default) = match rhs.kind {
+            ExprKind::AssignPattern(elems) => {
+                let n = elems.len();
+                (elems, vec![false; n])
+            }
             // A keyed pattern is put into declaration order FIRST, then rides the
             // identical field-width-cast path below — one layout rule, not two.
             ExprKind::AssignPatternKeyed(keyed) => {
@@ -398,20 +456,74 @@ impl Parser<'_, '_> {
                 span,
             };
         }
+        // §3 ⑤ ⓓ: an element for a NESTED struct member. A `'{…}` value recurses
+        // into the nested layout (its own field-width concat — exact width, each
+        // leaf already 2-state-coerced, so the outer squash/size below is skipped);
+        // a `default:`-supplied value must be shape-free (see
+        // `default_value_shape_free`); a plain value is sized to the member like
+        // any other (`perms: 12'h1eb`).
+        let mut parts_in: Vec<(Expr, bool)> = Vec::with_capacity(elems.len());
+        for ((e, defaulted), nested) in elems.into_iter().zip(from_default).zip(&nested) {
+            match nested {
+                Some(nty) if Self::is_assign_pattern(&e) => {
+                    let inner = self.build_struct_pattern_concat(nty, e);
+                    if Self::is_assign_pattern(&inner) {
+                        // the nested pattern was loud (error emitted) — keep the
+                        // outer pattern unresolved, exactly like the count-mismatch arm
+                        return Expr {
+                            kind: ExprKind::AssignPattern(
+                                parts_in.into_iter().map(|(e, _)| e).collect(),
+                            ),
+                            span,
+                        };
+                    }
+                    parts_in.push((inner, true));
+                }
+                Some(_) if defaulted && !self.default_value_shape_free(&e) => {
+                    self.error_at(
+                        e.span,
+                        "a fill (`'0`/`'1`) or 0 as the `default:` of a pattern whose unnamed member is itself a packed struct (whether the value applies to the nested struct as a whole or to each of its members is not pinned in v1)",
+                    );
+                    return Expr {
+                        kind: ExprKind::AssignPattern(
+                            parts_in.into_iter().map(|(e, _)| e).collect(),
+                        ),
+                        span,
+                    };
+                }
+                _ => parts_in.push((e, false)),
+            }
+        }
         // A 2-state field is X/Z-coerced by squashing the element through
         // `longint'(e)` (the widest 2-state prim) before sizing; one wider than 64
         // bits cannot be squashed this way, so honest-loud rather than silent-wrong.
-        if fields.iter().any(|&(w, ts)| ts && w > 64) {
+        if parts_in
+            .iter()
+            .zip(&fields)
+            .any(|((_, exact), &(w, ts))| !exact && ts && w > 64)
+        {
             self.error("a 2-state packed-struct field no wider than 64 bits in `'{…}`");
             return Expr {
-                kind: ExprKind::AssignPattern(elems),
+                kind: ExprKind::AssignPattern(parts_in.into_iter().map(|(e, _)| e).collect()),
                 span,
             };
         }
-        let parts = elems
+        let parts = parts_in
             .into_iter()
             .zip(fields)
-            .map(|(e, (w, two_state))| {
+            .map(|((e, exact), (w, two_state))| {
+                if exact {
+                    return e;
+                }
+                // §3 ⑤ ⓓ: a FILL element (`'0`/`'1`/`'x`/`'z`) is emitted as the sized
+                // literal it means at the field's width (§11.6 — a fill in a size cast
+                // is the fill at that width), not as `w'('0)`: the size cast of a fill
+                // has no constant-fold arm, so `parameter cap_t NULL_CAP = '{default:
+                // '0}` was loud (§2 🆕 L ⓔ). A 2-state field coerces `'x`/`'z` to 0
+                // (§6.11.3), exactly what the `longint'` squash below does for a value.
+                if let Some(lit) = Self::fill_at_width(&e, w, two_state) {
+                    return lit;
+                }
                 // 4-state field: keep the value (plain size cast). 2-state field:
                 // coerce X/Z→0 (§6.11.3) via `w'(longint'(e))` — `longint'` squashes
                 // unknowns to 0; the size cast then takes the field's low `w` bits.
@@ -452,10 +564,17 @@ impl Parser<'_, '_> {
     /// decl-init `st_t s = '{…}` is desugared by a direct `desugar_struct_assign_pattern`
     /// call in `parse_typed_decl`, not through this hook.)
     pub(crate) fn maybe_struct_pattern_rhs(&mut self, lhs: &Lvalue, rhs: Expr) -> Expr {
+        // §3 ⑤ ⓓ: the nested struct type of a whole-member write target
+        // (`s.perms = '{…}` / `arr[i].perms = '{…}`), recorded by the lvalue parse
+        // that produced `lhs`. Taken unconditionally so it never outlives its lvalue.
+        let member_ty = self.member_pattern_ty.take();
         // Fast path: only `'{…}` to an eligible target can desugar; every other
         // assignment returns `rhs` untouched (byte-identical) with no work.
         if !Self::is_assign_pattern(&rhs) {
             return rhs;
+        }
+        if let (Some(ty), Lvalue::PartSelect { .. }) = (member_ty, lhs) {
+            return self.build_struct_pattern_concat(&ty, rhs);
         }
         match lhs {
             // Whole scalar struct variable `s = '{…}`, or a whole 1-D struct

@@ -452,6 +452,9 @@ impl Parser<'_, '_> {
             name: String::new(),
             span: self.cur_span(),
         });
+        // §3 ⑤ ⓓ: a formal shadows a same-named constant inside the body (the
+        // tf scope snapshot restores it after `endfunction`/`endtask`).
+        self.const_locals.remove(&name.name);
         // IEEE §13.3: unpacked-array formal dims follow the NAME
         // (`input logic [63:0] words [0:7]`). Parsed here so the port list no
         // longer stops at the trailing `[` (was E2002 → a 6-error cascade); the
@@ -771,6 +774,7 @@ impl Parser<'_, '_> {
         loop {
             let n_start = self.cur_span();
             let Some(name) = self.ident() else { break };
+            self.const_locals.remove(&name.name);
             // IEEE §13.3: a non-ANSI formal may be an unpacked array too
             // (`input logic [63:0] words [0:7];`). Per-name dims (a comma list can
             // mix `a, mem [0:3]`), mirroring the ANSI path.

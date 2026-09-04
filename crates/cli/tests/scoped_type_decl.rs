@@ -319,14 +319,29 @@ fn collision_nonfoldable_enum_methods_are_loud() {
     // same-name enum's STALE labels from `pa`. The value-compare twin skips the stale
     // entry, so the methods are honest-loud instead (the plain VALUE still resolves
     // through the unconditional TypeInfo twin — see the test below).
+    // §4.5.414: a PACKAGE `parameter` is a localparam (IEEE §6.20.1 — nothing can
+    // override it), so `BASE` now folds at parse time and pb's enum registers: `num`
+    // is pb's 2 (pa's stale labels would answer 3). Both oracles: 2.
     let (out, code) = run("package pa; typedef enum logic [1:0] { A, B, C } n; endpackage\n\
          package pb; parameter int BASE = 5; typedef enum logic [3:0] { X = BASE, Y } n; endpackage\n\
          module top; pb::n e;\n\
          initial begin e = pb::X; #1 $display(\"m=%0d\", e.num); $finish; end endmodule\n");
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("m=2"),
+        "pb's own label count, not pa's stale 3:\n{out}"
+    );
+    // The half that is STILL non-foldable: a module HEADER parameter label — an
+    // instance override changes the label values (`#(.K(9))` moves them), so the
+    // enum stays out of `enum_defs` and the methods are honest-loud.
+    let (out, code) = run("module c #(parameter int BASE = 5) ();\n\
+         typedef enum logic [3:0] { X = BASE, Y } n; n e;\n\
+         initial begin e = X; #1 $display(\"m=%0d\", e.num); end endmodule\n\
+         module top; c u(); initial #2 $finish; endmodule\n");
     assert_ne!(
         code,
         Some(0),
-        "non-foldable scoped enum methods must be loud, not stale labels:\n{out}"
+        "an overridable parameter label must keep the methods loud:\n{out}"
     );
 }
 

@@ -19,6 +19,12 @@ impl Parser<'_, '_> {
             }
         }
         self.expect(TokenKind::Semi, "';' after genvar declaration");
+        // §3 ⑤ ⓓ (review B-3): a genvar is a declaration — it shadows a same-named
+        // imported / outer constant, which must not fold a generate index in its
+        // place (`import p::*` exporting `gi`, `genvar gi; … gg[gi]` folded p's 2).
+        for id in &names {
+            self.unbind_struct_enum_name(&id.name);
+        }
         ModuleItem::Genvar {
             names,
             span: start.to(self.prev_span()),
@@ -112,12 +118,19 @@ impl Parser<'_, '_> {
         // keyword is consumed and nothing else changes.
         let _ = self.eat_kw(Kw::Genvar);
         let init = self.parse_gen_assign(false);
+        // The loop variable shadows a same-named constant for the LOOP only (§27.4
+        // — a header genvar's scope is the loop; review A k03: `localparam int i`
+        // read as `g[i].x` after the loop must still fold to the localparam).
+        let shadowed = self.const_locals.remove(&init.lvalue.name);
         self.expect(TokenKind::Semi, "';' after generate-for init");
         let cond = self.expr(0);
         self.expect(TokenKind::Semi, "';' after generate-for cond");
         let step = self.parse_gen_assign(true);
         self.expect(TokenKind::RParen, "')' after generate-for header");
         let (label, body) = self.parse_gen_branch();
+        if let Some(v) = shadowed {
+            self.const_locals.insert(init.lvalue.name.clone(), v);
+        }
         GenItem::For {
             init,
             cond,

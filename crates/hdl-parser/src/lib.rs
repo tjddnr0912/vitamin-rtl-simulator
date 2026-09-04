@@ -251,18 +251,39 @@ type TfPortType = (
 /// first-level element width of a multi-dim packed member (`logic [1:0][3:0] m` →
 /// 4), or 1 for an ordinary single-dim member (so a `s.m[i]` bit-select stays
 /// byte-identical). `> 1` marks a multi-dim member whose `m[i]` selects an
-/// `elem_stride`-bit element, not a bit.
-type StructFieldLayout = (String, u32, u32, bool, bool, bool, i64, u32);
+/// `elem_stride`-bit element, not a bit. The ninth element (§3 ⑤ ⓓ) is the
+/// struct/union TYPE KEY of a NESTED packed-struct member (`perms_t perms;` →
+/// `Some("perms_t")`, a `pkg::t` key when the member type was scoped), `None` for
+/// every vector/atom/enum member. The member itself is laid out FLAT at the
+/// nested type's total width; a chain `s.perms.EX` adds the nested layout's
+/// offsets (`struct_field_chain`), and a nested `'{…}` value recurses.
+type StructFieldLayout = (String, u32, u32, bool, bool, bool, i64, u32, Option<String>);
+/// A resolved member's geometry `(lsb_offset, width, ascending, signed, dbase,
+/// elem_stride)` — `StructLayout::field`'s answer.
+type FieldGeom = (u32, u32, bool, bool, i64, u32);
+/// A parsed struct/union member TYPE `(kind, signed, range, packed_dims, nested)`
+/// (`parse_struct_member_type`).
+type MemberType = (NetVarKind, bool, Option<Range>, Vec<Range>, Option<String>);
 #[derive(Clone, PartialEq)]
 struct StructLayout {
     fields: Vec<StructFieldLayout>,
 }
 impl StructLayout {
     fn field(&self, name: &str) -> Option<(u32, u32, bool, bool, i64, u32)> {
+        self.fields.iter().find(|(n, ..)| n == name).map(
+            |(_, o, w, asc, sgn, _ts, dbase, stride, _nested)| {
+                (*o, *w, *asc, *sgn, *dbase, *stride)
+            },
+        )
+    }
+
+    /// The nested struct/union type key of member `name` (`None` for a
+    /// non-struct member or an unknown name).
+    fn nested_of(&self, name: &str) -> Option<&str> {
         self.fields
             .iter()
             .find(|(n, ..)| n == name)
-            .map(|(_, o, w, asc, sgn, _ts, dbase, stride)| (*o, *w, *asc, *sgn, *dbase, *stride))
+            .and_then(|f| f.8.as_deref())
     }
 }
 
@@ -282,6 +303,10 @@ struct PkgBindings {
     /// §3 ⑤ ⓐ: `(name, dims)` for every multi-dimensional packed parameter
     /// (`packed_md_params`), replayed on import like `var_enum`.
     packed_md: Vec<(String, Vec<Range>)>,
+    /// §3 ⑤ ⓓ: `(name, value)` for every literal-valued constant the package
+    /// DECLARED (`const_locals` ∩ its own declarations — an imported constant is
+    /// not re-exported), replayed on import into `const_locals`.
+    consts: Vec<(String, i64)>,
 }
 /// A snapshot of the parser's lexically-scoped registries, used to give a
 /// procedural block its own scope: snapshotted at the block's first body-local
@@ -318,6 +343,7 @@ struct ScopeSnapshot {
     packed_md_params: std::collections::HashMap<String, Vec<Range>>,
     wildcard_bound: std::collections::HashSet<String>,
     local_decl_names: std::collections::HashSet<String>,
+    const_locals: std::collections::HashMap<String, i64>,
 }
 
 /// A trailing READ sub-select on a packed-struct member, normalized to an
@@ -471,7 +497,37 @@ pub struct Parser<'t, 's> {
     /// `parameter` (overridable) is never recorded → its index stays loud, never
     /// silently folding to a value an instance override could disagree with.
     /// Module-scoped; cleared per module.
+    ///
+    /// §3 ⑤ ⓓ widened the WRITERS and the READERS. Written also by a package
+    /// `parameter` and by a body `parameter` of a module that HAS an ANSI
+    /// parameter header (both are localparams by IEEE §6.20.1 — nothing can
+    /// override them), only when the value fits the parameter's declared type
+    /// (`const_param_fits`); replayed on `import` from `PkgBindings::consts` (a
+    /// wildcard never over a local declaration) and read scoped through
+    /// `pkg_const_scoped`. Every declaration of the name drops the entry
+    /// (`unbind_struct_enum_name`, the header lists), so an overridable header /
+    /// body `parameter`, a port or a variable named like an imported constant
+    /// shadows it — the read then declines, and the consumer stays loud. Scoped
+    /// with `ScopeSnapshot` (a generate block's `localparam` ends with the
+    /// block). Read by the packed-struct member layout (`member_width` /
+    /// `member_ascending` / `member_dbase`), the constant generate-array index
+    /// and the enum-label fold — one evaluator (`try_const_index`) for all.
     const_locals: std::collections::HashMap<String, i64>,
+    /// §3 ⑤ ⓓ: `"pkg::W"` → value for every constant a package exported
+    /// (`const_locals` at its `endpackage`, own declarations only). Unit-scoped,
+    /// like `packed_md_scoped`; read by `try_const_index` for a `pkg::W` operand.
+    pkg_const_scoped: std::collections::HashMap<String, i64>,
+    /// §3 ⑤ ⓓ: the current module-like has an ANSI `#(…)` parameter header, so a
+    /// body `parameter` is a localparam (IEEE §6.20.1) and may be recorded in
+    /// `const_locals`. Set after the header is parsed; false in a package (whose
+    /// `parameter`s are localparams by the same clause, via `in_package`).
+    has_param_header: bool,
+    /// §3 ⑤ ⓓ: the nested struct type of the member an lvalue just resolved to
+    /// (`s.perms = …`, `arr[i].perms = …` — a whole-member write of a NESTED
+    /// struct member), so `maybe_struct_pattern_rhs` can desugar a `'{…}` on the
+    /// right-hand side against that member's layout. Reset at every lvalue
+    /// parse; consumed (taken) by the assignment hook.
+    member_pattern_ty: Option<String>,
     /// ⓑ-breadth (§8.25): override specializations of parameterized classes,
     /// produced by `monomorphize_param_classes` and appended at top level.
     pending_mono_specs: Vec<ClassDecl>,
@@ -581,6 +637,9 @@ impl<'t, 's> Parser<'t, 's> {
             packed_md_scoped: std::collections::HashMap::new(),
             union_type_names: std::collections::HashSet::new(),
             const_locals: std::collections::HashMap::new(),
+            pkg_const_scoped: std::collections::HashMap::new(),
+            has_param_header: false,
+            member_pattern_ty: None,
             pending_mono_specs: Vec::new(),
             pending_binds: Vec::new(),
             pending_module_items: Vec::new(),

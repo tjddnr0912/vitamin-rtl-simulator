@@ -392,12 +392,15 @@ impl Parser<'_, '_> {
         // leaks past the member region. An indexed `[i±:w]` / runtime / reverse
         // sub-select stays loud (iverilog 13.0 itself refuses those struct-member
         // writes — "sorry: not yet supported" — so there is no oracle to match).
+        // §3 ⑤ ⓓ: reset per lvalue; set below by a whole-member write of a nested
+        // struct member (consumed by `maybe_struct_pattern_rhs`).
+        self.member_pattern_ty = None;
         let mut lv = if let Some(mangled) = self.unpacked_field_ident(&path) {
             // Round-9: UNPACKED-struct member write `k.field = …` → the member net
             // `k$field` (a plain Ident). A trailing sub-select (`k.field[i] = …`)
             // flows through the `loop` below on the member net, like any net.
             Lvalue::Ident(mangled)
-        } else if let Some((base, off, w, asc, _sgn, dbase, stride)) =
+        } else if let Some((base, (off, w, asc, _sgn, dbase, stride), nested)) =
             self.struct_field_select(&path)
         {
             let span = path.span;
@@ -408,6 +411,7 @@ impl Parser<'_, '_> {
                     span,
                 )
             } else {
+                self.member_pattern_ty = nested;
                 Lvalue::PartSelect {
                     base: Box::new(Lvalue::Ident(base)),
                     msb: Box::new(Self::dec_lit(off + w - 1, span)),

@@ -22,6 +22,21 @@ impl Parser<'_, '_> {
             ExprKind::Ident(p) if p.segments.len() == 1 => {
                 self.const_locals.get(&p.segments[0].name).copied()
             }
+            // §3 ⑤ ⓓ: a scoped constant `pkg::W` (exported at `endpackage`).
+            ExprKind::PkgScoped { pkg, name } => self
+                .pkg_const_scoped
+                .get(&format!("{}::{}", pkg.name, name.name))
+                .copied(),
+            // §3 ⑤ ⓓ: `$clog2(n)` of a folded non-negative operand (IEEE §20.8.1:
+            // the number of bits to address `n` items; 0 for 0 and 1). The same
+            // function elaborate folds, over the same integer domain.
+            ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
+                let n = self.try_const_index(&args[0])?;
+                if n < 0 {
+                    return None;
+                }
+                Some(i64::from(64 - (n as u64).saturating_sub(1).leading_zeros()))
+            }
             ExprKind::Paren { inner } => self.try_const_index(inner),
             ExprKind::Unary {
                 op: UnOp::Minus,
@@ -46,6 +61,9 @@ impl Parser<'_, '_> {
                     BinOp::Add => a.checked_add(b),
                     BinOp::Sub => a.checked_sub(b),
                     BinOp::Mul => a.checked_mul(b),
+                    // §3 ⑤ ⓓ: integer division truncates toward zero in both SV
+                    // (§11.4.3) and Rust; a zero divisor declines (elaborate gives x).
+                    BinOp::Div if b != 0 => a.checked_div(b),
                     _ => None,
                 }
             }
@@ -256,14 +274,8 @@ impl Parser<'_, '_> {
                 // Extracted to a non-inlined helper so the (rare) struct-field
                 // locals never inflate `expr_primary`'s frame on the hot paren-
                 // recursion path (the MAX_EXPR_DEPTH stack budget is frame-sized).
-                if let Some((base, off, w, asc, sgn, dbase, stride)) =
-                    self.struct_field_select(&path)
-                {
-                    return self.struct_member_expr(
-                        base,
-                        (off, w, asc, sgn, dbase, stride),
-                        path.span,
-                    );
+                if let Some((base, geom, _nested)) = self.struct_field_select(&path) {
+                    return self.struct_member_expr(base, geom, path.span);
                 }
                 // SV §6.19.5 enum method `x.first/last/num/next/prev/name [()]` —
                 // the arg-less form. Desugars to literals / ternary chains over the

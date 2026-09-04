@@ -98,12 +98,15 @@ fn builtin_member_struct_and_union_unchanged() {
 }
 
 #[test]
-fn nested_struct_member_is_loud() {
-    // A member whose type is itself a struct typedef needs nested-field layout —
-    // honest-loud (deferred), not silently mis-laid-out.
-    let (_o, ok) = run(
+fn nested_struct_member_lays_out() {
+    // §4.5.414: a member whose type is itself a struct typedef is laid out FLAT at
+    // the nested type's width with a chain to its leaves (was a wording pin of the
+    // deferral). Both oracles: 16 a5 5 3c.
+    let (o, ok) = run(
         "module top; typedef struct packed {logic [3:0] lo, hi;} bt; typedef struct packed {bt a, b;} w_t;\n\
-         w_t w; initial begin #1 $finish; end endmodule",
+         w_t w; initial begin w = '0; w.a.lo = 4'ha; w.a.hi = 4'h5; w.b = 8'h3c;\n\
+         $display(\"%0d %h %h %h\", $bits(w), w.a, w.a.lo, w.b); #1 $finish; end endmodule",
     );
-    assert!(!ok, "a nested struct member must be loud");
+    assert!(ok, "{o}");
+    assert!(o.contains("16 a5 a 3c"), "{o}");
 }

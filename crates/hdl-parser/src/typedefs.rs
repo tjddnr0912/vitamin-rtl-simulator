@@ -12,13 +12,20 @@ impl Parser<'_, '_> {
     /// size+sign desugar cannot reproduce.
     pub(crate) fn simple_typedef_cast(&self, name: &str) -> Option<(i64, bool)> {
         let info = self.typedefs.get(name)?;
-        if self.struct_layouts.contains_key(name)
-            || self.union_type_names.contains(name)
-            || info.class_name.is_some()
+        if info.class_name.is_some()
             || !info.packed.is_empty()
             || !matches!(info.kind, NetVarKind::Logic | NetVarKind::Reg)
         {
             return None;
+        }
+        // §3 ⑤ ⓓ (IEEE §6.24.1): a cast to a 4-state packed STRUCT/UNION type is
+        // the cast to its packed width with the struct's whole-value signedness —
+        // `cap_t'(decoded_cap)` truncates the wider record to the struct's bits
+        // (both oracles). A 2-state struct stays loud with the 2-state vector
+        // typedef (the size cast would not coerce X/Z).
+        if self.struct_layouts.contains_key(name) {
+            let w = self.bits_of_type_name(name)?;
+            return Some((i64::from(w), info.signed));
         }
         let range = info.range.as_ref()?;
         let msb = Self::const_lit(&range.msb)?;
@@ -540,10 +547,20 @@ impl Parser<'_, '_> {
         } else {
             false
         };
-        let members = self.parse_struct_member_list()?;
+        let (members, nested_keys) = self.parse_struct_member_list()?;
         let tname = self.ident()?;
         self.expect(TokenKind::Semi, "';'");
         if !packed {
+            // §3 ⑤ ⓓ: a packed-struct member inside an UNPACKED record would need
+            // the record's per-member net to carry a layout — not in v1, loud.
+            if let Some(i) = nested_keys.iter().position(Option::is_some) {
+                if let Some(m) = members.get(i) {
+                    self.error_at(
+                        m.span,
+                        "a non-struct member type in an unpacked struct (a packed-struct member of an unpacked struct is unsupported in v1)",
+                    );
+                }
+            }
             // Round-9: an UNPACKED struct (record). Members keep their OWN types (a
             // `string`/`int` member can't share a flat packed vector), so a scalar
             // variable desugars to N independent member nets `k$field` (there is no
@@ -582,17 +599,18 @@ impl Parser<'_, '_> {
         // Lay out MSB-first: first member occupies the high bits.
         let mut off = total;
         let mut fields = Vec::with_capacity(members.len());
-        for (m, (w, stride)) in members.iter().zip(&widths) {
+        for ((m, (w, stride)), nested) in members.iter().zip(&widths).zip(&nested_keys) {
             off -= *w;
             fields.push((
                 m.name.name.clone(),
                 off,
                 *w,
-                Self::member_ascending(&m.range),
+                self.member_ascending(&m.range),
                 m.signed,
                 Self::member_kind_two_state(m.kind),
-                Self::member_dbase(&m.range),
+                self.member_dbase(&m.range),
                 *stride,
+                nested.clone(),
             ));
         }
         self.struct_layouts
@@ -648,10 +666,12 @@ impl Parser<'_, '_> {
         let union_signed = self.opt_signed().unwrap_or(false);
         self.expect(TokenKind::LBrace, "'{' for union body");
         let mut members = Vec::new();
+        let mut nested_keys = Vec::new();
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
             let before = self.pos;
             let m_start = self.cur_span();
-            let Some((kind, signed, range, packed_dims)) = self.parse_struct_member_type() else {
+            let Some((kind, signed, range, packed_dims, nested)) = self.parse_struct_member_type()
+            else {
                 break;
             };
             loop {
@@ -664,6 +684,7 @@ impl Parser<'_, '_> {
                     packed_dims: packed_dims.clone(),
                     span: m_start.to(self.prev_span()),
                 });
+                nested_keys.push(nested.clone());
                 if !self.eat(TokenKind::Comma) {
                     break;
                 }
@@ -695,16 +716,18 @@ impl Parser<'_, '_> {
         let fields = members
             .iter()
             .zip(&widths)
-            .map(|(m, (w, stride))| {
+            .zip(&nested_keys)
+            .map(|((m, (w, stride)), nested)| {
                 (
                     m.name.name.clone(),
                     0u32,
                     *w,
-                    Self::member_ascending(&m.range),
+                    self.member_ascending(&m.range),
                     m.signed,
                     Self::member_kind_two_state(m.kind),
-                    Self::member_dbase(&m.range),
+                    self.member_dbase(&m.range),
                     *stride,
+                    nested.clone(),
                 )
             })
             .collect();

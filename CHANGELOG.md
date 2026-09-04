@@ -11,6 +11,27 @@ changed for a user of the simulator.
 
 ### Added
 
+- **Nested packed structs and constant-width struct members.** A `typedef struct packed` member may
+  be another packed struct/union typedef (`perms_t perms;`, ibex_cheriot_pkg's `cap_t` /
+  `decoded_cap_t` / `bound_result_t`): any chain `s.a.b.c` / `arr[i].a.b` reads, writes,
+  sub-selects (`s.perms[3:0]`, `s.perms.q[1]`), `$bits`, ports, function locals, `always_comb`,
+  compare/concat, a `'{…}` whose element for a nested member is itself a `'{…}` (positional or keyed,
+  recursed per member) or a plain value, `s.perms = '{…}`, a `default:` fill, a decl-init, a
+  `localparam` / package `parameter` of the type, and a struct-typed cast `cap_t'(e)` (also in a
+  constant — `parameter cap_t ROOT_CAP_TX = cap_t'(ROOT_DECODED_CAP_TX)`). A member's width may
+  name a constant — `logic [W-1:0]`, `[0:W-1]`, `[W+3:4]`, a typedef of one, `$clog2(N)`, `W/2`,
+  `p::W` — where `W` is a `localparam`, a package `parameter`, or a body `parameter` of a module
+  with an ANSI parameter header (IEEE §6.20.1), reached directly or through `import p::*` /
+  `import p::W`; an overridable `parameter` (a header parameter, a body parameter without a header)
+  stays loud, and a port / variable / generate-local `localparam` of the same name shadows the
+  constant. A fill (`'0`/`'1`/`'x`/`'z`) inside a struct `'{…}` now folds in a constant
+  (`parameter cap_t NULL_CAP = '{default: '0}` was loud). Verified against iverilog 13.0 and
+  verilator 5.050 (102-cell census, 65 loud→correct, 0 silent); `ibex_cheriot_pkg.sv` elaborates
+  with 0 errors (was 50). Still loud: a `default:` value for a nested member that is neither a fill
+  nor 0, an enum method through a chain (`o.i.e.name()`), a packed array of a struct typedef as a
+  member (`in_t [1:0] i`), a packed struct inside an unpacked record, `$bits(pkg::T)`, a
+  hierarchical read through a member, an indexed member write, and a member width from `1 << 3`,
+  a sized literal, a narrow-typed localparam or a forward reference.
 - **An array parameter in the ANSI `#(…)` header.** `module ibex_top #(parameter ibex_pkg::pmp_cfg_t
   PMPRstCfg[PMP_MAX_REGIONS] = ibex_pkg::PmpCfgRst, parameter logic [PMP_ADDR_MSB:0]
   PMPRstAddr[PMP_MAX_REGIONS] = ibex_pkg::PmpAddrRst, …)`: a whole-array default (`= pkg::Rst`, an

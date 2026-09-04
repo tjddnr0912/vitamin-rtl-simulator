@@ -760,13 +760,24 @@ impl Parser<'_, '_> {
 
     /// Convert a parsed `ParamItem` into its `ModuleItem`, recording a module-scope
     /// `localparam` whose value is a pure literal so a constant generate-hier index
-    /// (`g[P].x`) can fold it. A `parameter` is overridable → never recorded.
+    /// (`g[P].x`) can fold it. An OVERRIDABLE `parameter` is never recorded; a
+    /// `parameter` of a package, or of a module-like with an ANSI parameter header,
+    /// is a localparam (IEEE §6.20.1) and is recorded like one (§3 ⑤ ⓓ — the
+    /// packed-struct member layout reads the table).
+    ///
+    /// Only a value the parameter's declared TYPE holds unchanged is recorded
+    /// (`const_param_fits`): `localparam byte B = 200` is −56 in elaborate, so
+    /// folding 200 here would be a second evaluator disagreeing with the first.
     pub(crate) fn param_item_to_module_item(&mut self, p: ParamItem) -> ModuleItem {
         match p {
             ParamItem::Scalar(p) => {
-                if p.kind == ParamKind::Localparam {
+                let non_overridable =
+                    p.kind == ParamKind::Localparam || self.in_package || self.has_param_header;
+                if non_overridable {
                     if let Some(v) = self.try_const_index(&p.value) {
-                        self.const_locals.insert(p.name.name.clone(), v);
+                        if self.const_param_fits(&p, v) {
+                            self.const_locals.insert(p.name.name.clone(), v);
+                        }
                     }
                 }
                 ModuleItem::Param(p)
@@ -774,6 +785,53 @@ impl Parser<'_, '_> {
             // A2a: an array parameter arrives as the desugared const variable-array
             // decl — flows through every NetVar pass verbatim.
             ParamItem::ConstArrayVar(d) => ModuleItem::NetVar(d),
+        }
+    }
+
+    /// §3 ⑤ ⓓ: could the parameter's declared type hold `v` unchanged? Declines
+    /// only on a PROVABLE mismatch — a width this parser can fold that does not
+    /// hold `v` under the declared signedness (`localparam byte B = 200` is −56 in
+    /// elaborate, so folding 200 here would be a second evaluator disagreeing with
+    /// the first). An untyped parameter takes the value's own type (§6.20.2) — a
+    /// 32-bit signed integer for the decimal arithmetic `try_const_index` folds, so
+    /// `v` must fit `i32`; `int`/`integer` are 32-bit (signed, or `unsigned`
+    /// 0..2³²−1); `time` is 64-bit unsigned. A range whose bounds do not fold, and
+    /// every other type (`real`, `string`, …), keep the pre-§4.5.414 behaviour —
+    /// recorded as any `localparam` was (review B-2: declining those made two
+    /// PRE-correct designs loud).
+    pub(crate) fn const_param_fits(&self, p: &ParamDecl, v: i64) -> bool {
+        let fits_width = |w: u32, signed: bool| -> bool {
+            match (w, signed) {
+                (0, _) | (65.., _) => false,
+                (64, true) => true,
+                (64, false) => v >= 0,
+                (_, true) => {
+                    let half = 1i64 << (w - 1);
+                    v >= -half && v < half
+                }
+                (_, false) => v >= 0 && v < (1i64 << w),
+            }
+        };
+        match (&p.ty, &p.range) {
+            (ParamType::Implicit, None) => i32::try_from(v).is_ok(),
+            (ParamType::Integer, None) => {
+                if p.signed {
+                    i32::try_from(v).is_ok()
+                } else {
+                    u32::try_from(v).is_ok()
+                }
+            }
+            (ParamType::Time, None) => v >= 0,
+            (ParamType::Implicit | ParamType::Integer, Some(r)) => {
+                match (self.try_const_index(&r.msb), self.try_const_index(&r.lsb)) {
+                    (Some(a), Some(b)) => {
+                        let w = u32::try_from(a.abs_diff(b)).map(|d| d + 1).unwrap_or(64);
+                        fits_width(w, p.signed)
+                    }
+                    _ => true,
+                }
+            }
+            _ => true,
         }
     }
 

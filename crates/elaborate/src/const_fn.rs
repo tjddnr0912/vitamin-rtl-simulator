@@ -743,8 +743,38 @@ impl Elaborator<'_> {
             }
             // `signed'`/`unsigned'` PRESERVE the operand's width, which this domain
             // does not track (`signed'(4'hF)` is −1 at 4 bits and 15 at 32), so it
-            // stays loud.
-            ast::CastTarget::Signing { .. } => None,
+            // stays loud — EXCEPT over a size cast, whose width the cast itself
+            // names (§3 ⑤ ⓓ: the parser spells a typedef cast `t'(e)` / `cap_t'(e)`
+            // as `signed'|unsigned'(W'(e))`, so `parameter cap_t ROOT_CAP_TX =
+            // cap_t'(ROOT_DECODED_CAP_TX)` is this shape). The inner cast delivers
+            // W bits with the operand's sign; the outer re-reads those W bits with
+            // the named sign. `const_expr_signed` already answers `signed` for it.
+            ast::CastTarget::Signing { signed } => match &operand.kind {
+                ast::ExprKind::Cast {
+                    target: inner @ (ast::CastTarget::Size(_) | ast::CastTarget::Named(_)),
+                    expr: inner_e,
+                } => {
+                    let w = u32::try_from(self.cast_size_bits(inner)?).ok()?;
+                    if !(1..=63).contains(&w) {
+                        return None;
+                    }
+                    let v = self.const_size_cast(
+                        inner,
+                        inner_e,
+                        &BTreeMap::new(),
+                        &ConstWidths::new(),
+                        0,
+                    )?;
+                    let mask = (1i64 << w) - 1;
+                    let u = v & mask;
+                    Some(if *signed && (u >> (w - 1)) & 1 == 1 {
+                        u | !mask
+                    } else {
+                        u
+                    })
+                }
+                _ => None,
+            },
         }
     }
 

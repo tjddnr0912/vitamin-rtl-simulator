@@ -208,6 +208,27 @@ impl Parser<'_, '_> {
                     }
                 }
             }
+            // §3 ⑤ ⓓ: the package's literal-valued constants, same rules. Two
+            // wildcards exporting the same name with DIFFERENT values make the name
+            // ambiguous (IEEE §26.3) — the entry is dropped so the read declines
+            // (loud), never the first package's value.
+            for (n, v) in pb.consts {
+                if wanted(&n) {
+                    if explicit {
+                        self.const_locals.insert(n.clone(), v);
+                        self.wildcard_bound.remove(&n);
+                    } else if self.local_decl_names.contains(&n) {
+                        // a local declaration wins over a wildcard
+                    } else if let Some(prev) = self.const_locals.get(&n).copied() {
+                        if prev != v && self.wildcard_bound.contains(&n) {
+                            self.const_locals.remove(&n);
+                        }
+                    } else {
+                        self.const_locals.insert(n.clone(), v);
+                        self.wildcard_bound.insert(n);
+                    }
+                }
+            }
         }
         Some(ImportDecl {
             pkg,
@@ -406,6 +427,7 @@ impl Parser<'_, '_> {
         self.wildcard_bound.clear();
         self.local_decl_names.clear();
         self.const_locals.clear();
+        self.has_param_header = false;
         let is_macromodule = self.at_kw(Kw::Macromodule);
         self.bump(); // module / macromodule / interface
         let name = self.ident()?;
@@ -480,6 +502,10 @@ impl Parser<'_, '_> {
             }
             self.expect(TokenKind::RParen, "')'");
         }
+        // §3 ⑤ ⓓ / IEEE §6.20.1: with an ANSI parameter header, a body
+        // `parameter` is a localparam. The twin of a header ARRAY parameter counts
+        // (it is in `params`), exactly as elaborate's `param_ports` counts it.
+        self.has_param_header = !params.is_empty();
 
         // port list: ANSI ( dir type name, … ) | non-ANSI ( name, … ) | none
         let ports = self.parse_port_list();
@@ -492,12 +518,14 @@ impl Parser<'_, '_> {
                     // §3 ⑤ ⓐ: a port named like a header packed-md parameter of an
                     // OUTER scope / an imported one shadows it (review A-1).
                     self.packed_md_params.remove(&pt.name.name);
+                    self.const_locals.remove(&pt.name.name);
                 }
             }
             PortList::NonAnsi(ids) => {
                 for id in ids {
                     self.local_decl_names.insert(id.name.clone());
                     self.packed_md_params.remove(&id.name);
+                    self.const_locals.remove(&id.name);
                 }
             }
             PortList::None => {}
@@ -652,7 +680,21 @@ impl Parser<'_, '_> {
                         TypedefKind::Struct { .. } => false,
                     };
                     if struct_fresh {
-                        if let Some(sl) = self.struct_layouts.get(&n).cloned() {
+                        if let Some(mut sl) = self.struct_layouts.get(&n).cloned() {
+                            // §3 ⑤ ⓓ: a nested member's bare key is this package's
+                            // own type (declared earlier in the body, so its twin is
+                            // already registered) — re-spell it `pkg::t` so the twin
+                            // an importer copies still chains (`stable_type_key`).
+                            for f in &mut sl.fields {
+                                if let Some(k) = &f.8 {
+                                    if !k.contains("::") {
+                                        let sk = format!("{pkg}::{k}");
+                                        if self.struct_layouts.contains_key(&sk) {
+                                            f.8 = Some(sk);
+                                        }
+                                    }
+                                }
+                            }
                             self.struct_layouts.insert(scoped.clone(), sl);
                         }
                         // A union is a struct-layout overlay; its flag rides with the
@@ -726,6 +768,22 @@ impl Parser<'_, '_> {
                     .insert(format!("{pkg}::{n}"), d.clone());
             }
             pb.packed_md = pm;
+            // §3 ⑤ ⓓ: the package's literal-valued constants (`parameter` and
+            // `localparam` alike — §6.20.1), for `import` and for a scoped `pkg::W`
+            // read. Only the package's OWN declarations (`local_decl_names`): a
+            // constant it imported is not re-exported (IEEE §26.3). Sorted for a
+            // deterministic replay order.
+            let mut cs: Vec<(String, i64)> = self
+                .const_locals
+                .iter()
+                .filter(|(n, _)| self.local_decl_names.contains(*n))
+                .map(|(n, v)| (n.clone(), *v))
+                .collect();
+            cs.sort();
+            for (n, v) in &cs {
+                self.pkg_const_scoped.insert(format!("{pkg}::{n}"), *v);
+            }
+            pb.consts = cs;
             self.pkg_bindings.insert(pkg, pb);
         }
         // Inject the synthetic `$enum_name$<T>` functions generated by any

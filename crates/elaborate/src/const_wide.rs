@@ -303,6 +303,20 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             }
             Some((resize_bits(&b, bw, n, sg), n, sg))
         }
+        // §6.24.1 signing cast: the operand's bits and width, re-read with the named
+        // sign (§3 ⑤ ⓓ — the typedef cast `cap_t'(e)` desugars to `unsigned'(W'(e))`;
+        // the 112-bit `decoded_cap_t` → 35-bit `cap_t` cast of ibex_cheriot_pkg
+        // folds here). A cast operand is SELF-determined (§11.8.1 — the cast is a
+        // context boundary): the outer `ctx` must NOT reach it, or `unsigned'(A +
+        // 8'h01)` under an 18-bit target carries the 8-bit sum into bit 8 (review B-1:
+        // vita 256 where both oracles wrap to 0).
+        ast::ExprKind::Cast {
+            target: ast::CastTarget::Signing { signed },
+            expr,
+        } => {
+            let (b, w, _) = fold_bits_at0(expr, name)?;
+            Some((b, w, *signed))
+        }
         // §11.4.12 concatenation: unsigned, leftmost part most significant.
         ast::ExprKind::Concat { parts } => {
             let (b, w) = fold_concat_parts(parts, &cap, name)?;

@@ -9,30 +9,96 @@ impl Parser<'_, '_> {
     /// If `path` is `var.field` where `var` is a packed-struct variable and `field`
     /// is one of its members, return `(base_path_to_var, lsb_offset, width,
     /// ascending, signed)`.
+    ///
+    /// §3 ⑤ ⓓ: a CHAIN `var.f.g[.h…]` through NESTED packed-struct members
+    /// resolves to the leaf's geometry at the summed offset (`struct_field_chain`).
+    /// Any segment that is not a member of the layout reached so far — including
+    /// a member past a non-struct member — returns `None`, exactly as before.
     pub(crate) fn struct_field_select(
         &self,
         path: &HierPath,
-    ) -> Option<(HierPath, u32, u32, bool, bool, i64, u32)> {
-        if path.segments.len() != 2 {
+    ) -> Option<(HierPath, FieldGeom, Option<String>)> {
+        if path.segments.len() < 2 {
             return None;
         }
         let tyname = self.var_struct.get(&path.segments[0].name)?;
         // A PACKED struct (`struct_layouts`) first; then a packable UNPACKED record
         // (§4.5.192 packed-vector body-local, mirrors `struct_array_field_geom`) via
         // `packable_record_layout` — both yield the same `StructLayout::field()` shape.
-        let (off, w, asc, sgn, dbase, stride) = self
+        let layout = self
             .struct_layouts
             .get(tyname)
-            .and_then(|l| l.field(&path.segments[1].name))
-            .or_else(|| {
-                self.packable_record_layout(tyname)
-                    .and_then(|l| l.field(&path.segments[1].name))
-            })?;
+            .cloned()
+            .or_else(|| self.packable_record_layout(tyname))?;
+        let names: Vec<&str> = path.segments[1..].iter().map(|s| s.name.as_str()).collect();
+        let (geom, nested) = self.struct_field_chain(&layout, &names)?;
         let base = HierPath {
             segments: vec![path.segments[0].clone()],
             span: path.segments[0].span,
         };
-        Some((base, off, w, asc, sgn, dbase, stride))
+        Some((base, geom, nested))
+    }
+
+    /// §3 ⑤ ⓓ: resolve member NAMES `f.g.h…` against `layout`, descending into a
+    /// nested struct member's own layout at each step. Returns the LEAF geometry
+    /// `(off, w, ascending, signed, dbase, stride)` — `off` summed along the chain,
+    /// everything else the leaf's — plus the leaf's nested type key (`Some` when the
+    /// leaf is itself a struct, so a caller can keep chaining). `None` when a name
+    /// is not a member of the layout reached, or a further name follows a
+    /// non-struct member.
+    pub(crate) fn struct_field_chain(
+        &self,
+        layout: &StructLayout,
+        names: &[&str],
+    ) -> Option<(FieldGeom, Option<String>)> {
+        let (first, rest) = names.split_first()?;
+        let (mut off, mut w, mut asc, mut sgn, mut dbase, mut stride) = layout.field(first)?;
+        let mut nested = layout.nested_of(first).map(str::to_string);
+        for name in rest {
+            let nl = self.struct_layouts.get(nested.as_deref()?)?;
+            let (o2, w2, asc2, sgn2, db2, st2) = nl.field(name)?;
+            off += o2;
+            (w, asc, sgn, dbase, stride) = (w2, asc2, sgn2, db2, st2);
+            nested = nl.nested_of(name).map(str::to_string);
+        }
+        Some(((off, w, asc, sgn, dbase, stride), nested))
+    }
+
+    /// §3 ⑤ ⓓ: after `arr[i].field` resolved to `geom` whose member is a nested
+    /// struct (`nested`), consume any further `.name` tokens down the nesting
+    /// (`arr[i].perms.EX`). Stops at the first `.` that is not followed by an
+    /// identifier (an enum method's `.name()` on a leaf, say — left to the caller /
+    /// loud downstream) or at an unknown member (loud here). Returns the leaf
+    /// geometry.
+    pub(crate) fn extend_member_chain(
+        &mut self,
+        mut geom: FieldGeom,
+        mut nested: Option<String>,
+    ) -> (FieldGeom, Option<String>) {
+        while let Some(nty) = nested.clone() {
+            if self.peek() != Some(TokenKind::Dot)
+                || !matches!(self.peek_at(1), Some(TokenKind::Word(WordKind::Ident)))
+            {
+                break;
+            }
+            self.bump(); // '.'
+            let Some(name) = self.ident() else { break };
+            match self.struct_layouts.get(&nty).and_then(|l| {
+                l.field(&name.name)
+                    .map(|g| (g, l.nested_of(&name.name).map(str::to_string)))
+            }) {
+                Some(((o2, w2, asc2, sgn2, db2, st2), n2)) => {
+                    geom = (geom.0 + o2, w2, asc2, sgn2, db2, st2);
+                    nested = n2;
+                }
+                None => {
+                    self.error_at(name.span, "a member of the nested struct in a member chain");
+                    nested = None;
+                    break;
+                }
+            }
+        }
+        (geom, nested)
     }
 
     /// N3: is `e` an `arr[i]` bit-select whose base is a record-ARRAY var (either the
@@ -177,19 +243,23 @@ impl Parser<'_, '_> {
     /// The packed-struct field geometry `(off, w, ascending, signed, dbase, stride)`
     /// for element member `arr[i].field` — `arr`'s struct type (`var_struct`) laid out
     /// in `struct_layouts`. `None` for an unknown field.
+    /// §3 ⑤ ⓓ: also the member's nested struct type key, for a chain
+    /// (`extend_member_chain`).
     pub(crate) fn struct_array_field_geom(
         &self,
         arr: &str,
         field: &str,
-    ) -> Option<(u32, u32, bool, bool, i64, u32)> {
+    ) -> Option<(FieldGeom, Option<String>)> {
         let tyname = self.var_struct.get(arr)?;
         // A PACKED struct (`struct_layouts`) first; then a packable UNPACKED record
         // (§4.5.191 fixed record array) via `packable_record_layout` — both yield the
         // same `StructLayout::field()` `(off, w, asc, sgn, dbase, stride)` shape.
-        if let Some(g) = self.struct_layouts.get(tyname).and_then(|l| l.field(field)) {
-            return Some(g);
+        if let Some(l) = self.struct_layouts.get(tyname) {
+            let g = l.field(field)?;
+            return Some((g, l.nested_of(field).map(str::to_string)));
         }
-        self.packable_record_layout(tyname)?.field(field)
+        let l = self.packable_record_layout(tyname)?;
+        Some((l.field(field)?, None))
     }
 
     /// §4.5.190 (read): parse `arr[i].field` (cursor at `.`) → a part-select on the
@@ -210,7 +280,11 @@ impl Parser<'_, '_> {
             _ => None,
         };
         match arr.and_then(|nm| self.struct_array_field_geom(&nm, &field.name)) {
-            Some(geom) => self.struct_member_expr_of(base, geom, span),
+            Some((geom, nested)) => {
+                let (geom, _) = self.extend_member_chain(geom, nested);
+                let span = span.to(self.prev_span());
+                self.struct_member_expr_of(base, geom, span)
+            }
             None => {
                 self.error("unknown field in a struct-array element member access");
                 base
@@ -270,7 +344,13 @@ impl Parser<'_, '_> {
             _ => None,
         };
         match arr.and_then(|nm| self.struct_array_field_geom(&nm, &field.name)) {
-            Some((off, w, asc, _sgn, dbase, stride)) => {
+            Some((geom, nested)) => {
+                let ((off, w, asc, _sgn, dbase, stride), leaf_nested) =
+                    self.extend_member_chain(geom, nested);
+                let span = span.to(self.prev_span());
+                if self.peek() != Some(TokenKind::LBracket) {
+                    self.member_pattern_ty = leaf_nested;
+                }
                 if self.peek() == Some(TokenKind::LBracket) {
                     self.parse_struct_field_lval(base, (off, w, asc, dbase, stride), span)
                 } else {

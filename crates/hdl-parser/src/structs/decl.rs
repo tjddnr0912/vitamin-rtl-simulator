@@ -127,11 +127,12 @@ impl Parser<'_, '_> {
                 m.name.name.clone(),
                 off,
                 *w,
-                Self::member_ascending(&m.range),
+                self.member_ascending(&m.range),
                 m.signed,
                 Self::member_kind_two_state(m.kind),
-                Self::member_dbase(&m.range),
+                self.member_dbase(&m.range),
                 1u32, // elem_stride: multi-dim members were rejected above
+                None, // a nested struct member never reaches a record layout
             ));
         }
         Some(StructLayout { fields })
@@ -508,9 +509,9 @@ impl Parser<'_, '_> {
 
     /// Is a packed-struct member declared with an ascending range (`logic [0:N]`,
     /// so field index 0 is the MSB)? Scalar members (no range) are not ascending.
-    pub(crate) fn member_ascending(range: &Option<Range>) -> bool {
+    pub(crate) fn member_ascending(&self, range: &Option<Range>) -> bool {
         match range {
-            Some(r) => match (Self::const_lit(&r.msb), Self::const_lit(&r.lsb)) {
+            Some(r) => match (self.try_const_index(&r.msb), self.try_const_index(&r.lsb)) {
                 (Some(m), Some(l)) => m < l,
                 _ => false,
             },
@@ -531,9 +532,12 @@ impl Parser<'_, '_> {
     /// write, `+:`/`-:`, runtime), which v1 does not do; the whole-field read/write
     /// is unaffected and stays correct. A non-negative base casts to the `u32` the
     /// select machinery uses, so every currently-valid member is byte-identical.
-    pub(crate) fn member_dbase(range: &Option<Range>) -> i64 {
+    /// §3 ⑤ ⓓ: both fold through `try_const_index`, the SAME evaluator
+    /// `member_width` uses — a `[0:W-1]` member whose width folds must also be
+    /// seen as ascending here, or its sub-selects would be mirrored silently.
+    pub(crate) fn member_dbase(&self, range: &Option<Range>) -> i64 {
         match range {
-            Some(r) => match (Self::const_lit(&r.msb), Self::const_lit(&r.lsb)) {
+            Some(r) => match (self.try_const_index(&r.msb), self.try_const_index(&r.lsb)) {
                 (Some(m), Some(l)) => m.min(l),
                 _ => 0,
             },

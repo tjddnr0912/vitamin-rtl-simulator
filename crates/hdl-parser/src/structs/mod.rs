@@ -5,16 +5,18 @@ mod decl;
 use super::*;
 
 impl Parser<'_, '_> {
-    /// Parse a packed struct/union MEMBER's type into `(kind, signed, range)`. A
-    /// built-in keyword resolves directly (§7.2.1); a SIMPLE user-defined type name
-    /// (a vector / enum / atom typedef) resolves to its `TypeInfo`. A nested
-    /// struct/union, a class handle, or a multi-dim packed typedef member needs
-    /// nested-layout machinery not in v1 — honest-loud. Returns `None` (with the
-    /// error already emitted) on a non-type token or an unsupported member type; the
-    /// caller breaks out of the member loop.
-    pub(crate) fn parse_struct_member_type(
-        &mut self,
-    ) -> Option<(NetVarKind, bool, Option<Range>, Vec<Range>)> {
+    /// Parse a packed struct/union MEMBER's type into `(kind, signed, range,
+    /// packed_dims, nested)`. A built-in keyword resolves directly (§7.2.1); a
+    /// SIMPLE user-defined type name (a vector / enum / atom typedef) resolves to
+    /// its `TypeInfo`. §3 ⑤ ⓓ: a NESTED packed struct/union typedef (`perms_t
+    /// perms;`) resolves to the flat vector its `TypeInfo` already is (`[total-1:0]`,
+    /// the struct's 2-/4-state kind and whole-value signedness) and returns its
+    /// type key as `nested`, so the layout can chain member accesses and recurse
+    /// a `'{…}` value into it. A class handle or a multi-dim packed typedef member
+    /// is honest-loud. Returns `None` (with the error already emitted) on a
+    /// non-type token or an unsupported member type; the caller breaks out of
+    /// the member loop.
+    pub(crate) fn parse_struct_member_type(&mut self) -> Option<MemberType> {
         if let Some(kind) = self.net_var_kind() {
             self.bump(); // kind keyword
             let signed = self.signed_eff(Some(kind));
@@ -32,25 +34,57 @@ impl Parser<'_, '_> {
                     None => break,
                 }
             }
-            return Some((kind, signed, range, packed_dims));
+            return Some((kind, signed, range, packed_dims, None));
         }
         if let Some(info) = self.peek_typedef_name() {
             let nm = self.type_name_key();
-            if self.struct_layouts.contains_key(&nm)
-                || info.class_name.is_some()
-                || !info.packed.is_empty()
-            {
+            if info.class_name.is_some() || !info.packed.is_empty() {
                 self.error(
-                    "a simple (non-struct) type for a struct/union member (a nested struct / class / multi-dim packed member is unsupported in v1)",
+                    "a simple type for a struct/union member (a class / multi-dim packed member is unsupported in v1)",
                 );
                 return None;
             }
+            let nested = self
+                .struct_layouts
+                .contains_key(&nm)
+                .then(|| self.stable_type_key(&nm));
             self.eat_scope_qualifier();
             self.bump(); // the typedef-name token
-            return Some((info.kind, info.signed, info.range, Vec::new()));
+            return Some((info.kind, info.signed, info.range, Vec::new(), nested));
         }
         self.error("a net/var type in a struct/union member");
         None
+    }
+
+    /// §3 ⑤ ⓓ: the key a NESTED member's layout stays reachable under. A bare
+    /// name is unit-scoped only until its declaring unit ends (`restore_scope_unit`
+    /// drops it; an importer sees the `pkg::t` twin), so a layout that names a
+    /// nested member by a bare key would fail to chain — or, worse, chain into a
+    /// same-named LOCAL type of the importer. A bare name that is the wildcard /
+    /// explicit-import copy of a package twin (same layout under some `pkg::nm`)
+    /// is keyed by that twin; a fresh local definition keeps the bare key (a
+    /// package's own is re-spelled `pkg::nm` at `endpackage`, a module's stays
+    /// module-local like the variable that uses it). Candidates are sorted so
+    /// two packages exporting one identical layout pick deterministically.
+    pub(crate) fn stable_type_key(&self, nm: &str) -> String {
+        if nm.contains("::") {
+            return nm.to_string();
+        }
+        let Some(bare) = self.struct_layouts.get(nm) else {
+            return nm.to_string();
+        };
+        let suffix = format!("::{nm}");
+        let mut cands: Vec<&String> = self
+            .struct_layouts
+            .iter()
+            .filter(|(k, v)| k.ends_with(&suffix) && *v == bare)
+            .map(|(k, _)| k)
+            .collect();
+        cands.sort();
+        cands
+            .first()
+            .map(|k| (*k).clone())
+            .unwrap_or_else(|| nm.to_string())
     }
 
     /// `typedef struct packed { <type> f1, f2; … } name;` (Phase-2). Members are
@@ -59,13 +93,20 @@ impl Parser<'_, '_> {
     /// `start` is the span of the leading `typedef` keyword (already consumed).
     /// Parse `{ <type> f1, f2; … }` — the shared member list of a packed OR
     /// unpacked `typedef struct`. Cursor at `{`; consumes through the closing `}`.
-    pub(crate) fn parse_struct_member_list(&mut self) -> Option<Vec<StructMember>> {
+    /// Also returns, parallel to the members, each member's NESTED struct/union
+    /// type key (§3 ⑤ ⓓ; `None` for a non-struct member) — `StructMember` is a
+    /// frozen AST type and cannot carry it.
+    pub(crate) fn parse_struct_member_list(
+        &mut self,
+    ) -> Option<(Vec<StructMember>, Vec<Option<String>>)> {
         self.expect(TokenKind::LBrace, "'{' for struct body");
         let mut members = Vec::new();
+        let mut nested_keys = Vec::new();
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
             let before = self.pos;
             let m_start = self.cur_span();
-            let Some((kind, signed, range, packed_dims)) = self.parse_struct_member_type() else {
+            let Some((kind, signed, range, packed_dims, nested)) = self.parse_struct_member_type()
+            else {
                 break;
             };
             loop {
@@ -78,6 +119,7 @@ impl Parser<'_, '_> {
                     packed_dims: packed_dims.clone(),
                     span: m_start.to(self.prev_span()),
                 });
+                nested_keys.push(nested.clone());
                 if !self.eat(TokenKind::Comma) {
                     break;
                 }
@@ -88,17 +130,19 @@ impl Parser<'_, '_> {
             }
         }
         self.expect(TokenKind::RBrace, "'}' to close struct body");
-        Some(members)
+        Some((members, nested_keys))
     }
 
-    /// Width of a struct member from its range. `None` ⇒ scalar (1). Only
-    /// constant-literal bounds fold (`[7:0]`, `[8-1:0]`); param widths return `None`.
+    /// Width of a struct member from its range. `None` ⇒ scalar (1). Constant
+    /// bounds fold (`[7:0]`, `[8-1:0]`, and — §3 ⑤ ⓓ — `[W-1:0]` / `[p::W:0]` /
+    /// `[$clog2(N)-1:0]` over a NON-overridable constant, see `const_locals`);
+    /// anything else returns `None` (→ loud).
     pub(crate) fn member_width(&self, range: &Option<Range>) -> Option<u32> {
         match range {
             None => Some(1),
             Some(r) => {
-                let msb = Self::const_lit(&r.msb)?;
-                let lsb = Self::const_lit(&r.lsb)?;
+                let msb = self.try_const_index(&r.msb)?;
+                let lsb = self.try_const_index(&r.lsb)?;
                 Some(msb.abs_diff(lsb) as u32 + 1)
             }
         }

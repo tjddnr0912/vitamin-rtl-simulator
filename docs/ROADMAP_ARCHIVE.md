@@ -436,6 +436,108 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.414 — Nested packed structs and constant-width struct members; a fill inside a struct pattern and a struct-typed cast fold in a constant (§3 ⑤ ⓓ) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round — differential 211 designs (26 grounding + 102 census re-run on both binaries, 14 real designs incl. every corpus workload, 69 new) PASS, 0 value divergences, byte-identity measured on stdout+stderr+rc; soundness 20 designs, 3 BLOCKING fixed on the delta and one delta regression the differential lens's own design caught (a header genvar's scope) fixed too; delta re-scored with both lenses' harnesses (0 changed after the last fix), the census, the grounding set, examples · corpus 10/10)
+
+**The rung.** `ibex_cheriot_pkg.sv:84-131` was TWO rungs under one queue line: a `typedef struct
+packed` member whose type is another packed struct/union typedef (`perms_t perms; cap_t cap;
+decoded_cap_t cap;` — 3 of the 6 page-1 typedefs nest, `bound_result_t` nests a 112-bit one) and a
+member whose width names a CONSTANT (`logic [ADDR_W:0] top33`, `cperms_t` = `logic
+[CPERMS_W-1:0]`, `logic [EXP_W:0] explen`, 11 members). Measured at HEAD with three tools: both
+loud in vita (E2002 "a simple (non-struct) type for a struct/union member" / "struct member width
+must be a named integer type or a constant-literal range"); both oracles run every nested shape
+without a pattern (iverilog rejects a `'{…}` containing a nested pattern, a method through a chain,
+and a keyed pattern in a package parameter — verilator sole oracle there); a header parameter as a
+member width is laid out PER INSTANCE by both oracles (`c #(.W(3))` → 4 bits, the default → 7), so a
+parse-time layout cannot fold it (loud, correct); a forward-referenced localparam width splits the
+oracles (iverilog rejects) — loud.
+
+**Mechanism (parser layout + two const-fold arms; no AST field, format 29).**
+- `parse_struct_member_type` accepts a packed struct/union typedef member as the FLAT vector its
+  `TypeInfo` already is (`[total-1:0]`, the struct's 2-/4-state kind and whole-value signedness) and
+  returns its type key as `nested`; `StructFieldLayout` gains a 9th element (`Option<String>`).
+  `struct_field_chain` / `extend_member_chain` resolve `s.a.b.c…` and `arr[i].a.b` to the leaf's
+  geometry at the summed offset; read, write, sub-select, `$bits`, ports, record arrays reuse the
+  single-member machinery unchanged. The key must outlive the unit: a bare name dies at
+  `endpackage` (`restore_scope_unit`), so a package's own nested keys are re-spelled `pkg::t` when
+  the twin is registered, and an import copy is keyed by the twin whose layout it equals
+  (`stable_type_key`) — the explicit-import, scoped-type and cross-package census cells were the
+  ones that failed before this (the wildcard cell passed).
+- `build_struct_pattern_concat` recurses a `'{…}` element into a nested slot (exact width, no outer
+  squash); a `default:`-supplied value for a nested slot must be a fill or 0
+  (`default_value_shape_free` — verilator applies a non-fill default to the nested member AS A
+  WHOLE (`'{default: 1}` → `01_0001_1`), iverilog rejects the form, §10.9.2 does not settle
+  whole-vs-per-leaf: loud); a FILL element is emitted as the sized literal `w'b…`
+  (`fill_at_width`) instead of `w'('0)`, whose size cast had no const-fold arm (§2 🆕 L ⓔ) —
+  `parameter cap_t NULL_CAP = '{default: '0}` was loud. `member_pattern_ty` (reset per lvalue, taken
+  by `maybe_struct_pattern_rhs`) desugars `s.perms = '{…}` / `arr[i].perms = '{…}`.
+- Member widths: `member_width` / `member_ascending` / `member_dbase` fold bounds through
+  `try_const_index` (was `const_lit`), i.e. the `const_locals` table the constant generate index
+  and enum labels already read. The table now also records a package `parameter` and a body
+  `parameter` behind an ANSI header (`has_param_header`; IEEE §6.20.1 — both are localparams),
+  declines only a PROVABLE type mismatch (`const_param_fits`: `localparam byte B = 200` is −56 in
+  elaborate), is exported at `endpackage` (`PkgBindings::consts`, own declarations only;
+  `pkg_const_scoped` for `pkg::W`), replayed on import (explicit wins; a wildcard never over a local
+  declaration; two wildcards with different values drop the entry), dropped by every declaration of
+  the name (`unbind_struct_enum_name`, ports, genvars, tf formals; a header genvar for the loop
+  only), snapshotted per generate block. `try_const_index` gains `pkg::W`, `/` (nonzero), `$clog2`.
+- `simple_typedef_cast`: a 4-state packed struct/union typedef cast `cap_t'(e)` = size cast to its
+  width + signing cast with the struct's signedness (was E3009 "outside the v1 cast scope");
+  `const_fn.rs` folds `signed'|unsigned'(W'(e))` (narrow arm over a size cast of known width,
+  1..=63 bits); `const_wide.rs` folds a signing cast (bits and width preserved, sign replaced,
+  operand SELF-determined) — `parameter cap_t ROOT_CAP_TX = cap_t'(ROOT_DECODED_CAP_TX)` (112 →
+  35 bits) folds.
+
+**Census (102 cells · verilator sole oracle where iverilog rejects, both otherwise · a flat /
+literal control twin per shape).** Leaf types vector/byte/enum/ascending/non-zero-LSB × read /
+sub-select / write; 3-level chains; union-in-struct, struct-in-union; 2-state nesting; patterns
+positional / keyed / `default:` fills / x-z fills / decl-init / localparam / package parameter /
+scoped; array element; port; function; generate; `always_comb`; compare/concat; casts (signed too);
+scoped / explicit / cross-package types; a same-name collision between two packages; block-local
+typedef; the real cheriot page 1 (types, 12 constants, chains through `bound_result_t.cap.perms`);
+and for the width table every source kind (`localparam` untyped/int/integer/longint/uint/vector/
+byte/derived/`/`/`$clog2`/paren/`<<`/sized/negative/after), body parameter with and without a
+header, header parameter, package parameter wildcard/explicit/scoped/localparam/typedef, shadows
+(variable, generate-local, port), two wildcards same/different, explicit over wildcard, local over
+wildcard, header import, ascending / non-zero-LSB / sub-select / pattern / union / record / md
+member / zero width / enum label / generate index. Result: **65 loud→correct · 12 unchanged · 19
+still-loud (all expected) · 0 regression · 0 silent**. Two oracle splits resolved on the LRM side:
+iverilog reads a nested member part-select (`o.i[2:1]`) as the whole member and clears the whole
+member on a part-select write (disqualified by its own neighbouring answers; verilator = vita);
+verilator lets a wildcard win over an explicit import (§26.8 says explicit; iverilog = vita). Three
+x/z cells are no-oracle (verilator is 2-state, iverilog rejects) and equal the flat PRE control.
+
+**ibex.** `vitarun.sh` (both packages + tb): 50 errors → **0**. The whole-design run is unchanged
+(24 preprocessor E1013 — `define default argument values in dv_fcov_macros, prim_assert's `ifdef
+structure; PRE == POST), which with ⓕ and the header-parameter member widths of
+`ibex_lockstep.sv:243` is the next ladder.
+
+**Review.** Differential (211 designs): PASS, 0 value divergences; F1 = the widened constant table
+reaches the two PRE-EXISTING readers — a `$clog2`/`/`-valued localparam as a constant generate
+index and as an enum label go loud→correct, and a generate-local `localparam` shadowing a module
+one was a PRE silent-wrong (the outer value folded — `DIGEST=1 1 2` vs both oracles `1 3 2`) now
+right through the scope snapshot; the five-shape byte-identity claim was short by that shape
+(recorded). Byte-identity measured on the four examples, three keccak variants and full multi-file
+runs of aes, sha256, serv, verilog-ethernet, verilog-axi, picorv32, darkriscv. Soundness (20
+designs): B-1 the wide signing-cast arm passed the OUTER context width to a self-determined operand
+(`unsigned'(A + 8'h01)` under an 18-bit target: 256 where both oracles wrap to 0 — loud→silent, fixed:
+`fold_bits_at0`); B-2 the type-fit gate declined localparams PRE recorded (an unfoldable range
+bound, `time`) — three PRE-correct designs went loud (fixed: decline only a provable mismatch, bounds
+through `try_const_index`); B-3 `genvar` never dropped the table, so a wildcard-imported package
+constant of the genvar's name folded a generate index inside the loop (loud→silent, fixed: genvars,
+tf formals drop it). The delta re-score with lens A's 69 designs then caught k03: a HEADER genvar
+(`for (genvar i …)`) shadowing a module `localparam i` must shadow it for the loop only (§27.4) —
+fixed by restoring the entry after the loop; second re-score 0 changed. All four pinned in
+`struct_member_param_width_scope.rs::review_b_pins`.
+
+**Tests.** `nested_packed_struct.rs` (33 cells), `nested_packed_struct_pattern.rs` (17, incl. the
+cheriot page), `struct_member_param_width.rs` (15), `struct_member_param_width_scope.rs` (37 + the
+4 review pins) — every expected string is the census oracle line, generated from the census
+(`mktests.py`), a comment naming which oracle ran. Three wording pins of removed limitations
+became value pins (both oracles): `signed'(4'hF)` in a constant (−1), a package-`parameter` enum
+label's methods (`num` = 2, with a header-parameter twin still loud), a nested struct member
+(`16 a5 a 3c`), a struct typedef cast (`ab` / truncating `0cd`). 6,555 green. Residue and the pre-existing findings = ROADMAP
+§3 ⑤ ⓓ and §2 🆕 L ⓤ.
+
 #### 4.5.413 — An array parameter in the ANSI `#(…)` header: whole-array default and aggregate override (§3 ⑤ ⓒ header half) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round — differential 152 designs + a 643-file PRE/POST repo sweep (0 differing), 1 value finding fixed on the delta + 2 recorded; soundness 66 designs + an 88-design byte-identity sweep, 0 blocking, 1 precondition documented; delta re-scored with the census, the grounding set and both lenses' own designs (only the fixed shape and its body control changed, both to loud) · corpus 10/10)
 
 **The rung.** `module ibex_top #(parameter ibex_pkg::pmp_cfg_t PMPRstCfg[PMP_MAX_REGIONS] =
