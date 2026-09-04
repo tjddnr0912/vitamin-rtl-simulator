@@ -34,7 +34,7 @@ Phase-2.
 | Non-ANSI port headers | Yes | `module m (a, q); input a; output [7:0] q;` |
 | `parameter` | Yes | Overridable at instantiation. |
 | `localparam` | Yes | Not overridable. |
-| Parameter typed by a `typedef` | Yes | `localparam my_struct_t C = '{a: 1'b1, b: 5'd3};` — vector, signed, atom (`int`/`byte`/…), packed struct (members read as constants, positional or named `'{…}`), enum (labels and `.name()`/`.next()`), scoped `pkg::t`; bindings follow `import pkg::*`. Loud in v1: a multi-dimensional packed typedef, an array parameter of a struct/enum typedef, an unpacked struct, a `'{…}` given as an instance override. |
+| Parameter typed by a `typedef` | Yes | `localparam my_struct_t C = '{a: 1'b1, b: 5'd3};` — vector, signed, atom (`int`/`byte`/…), packed struct (members read as constants, positional or named `'{…}`), enum (labels and `.name()`/`.next()`), scoped `pkg::t`; bindings follow `import pkg::*`. Loud in v1: an unpacked struct, a `'{…}` given as an instance override. |
 | Parameter override — positional `#(8)` | Yes | |
 | Parameter override — named `#(.W(8))` | Yes | |
 | `generate` / `endgenerate`, `genvar` | Yes | `for`/`if`/`case` generate constructs. The `generate`/`endgenerate` keywords are **optional** (IEEE 1800-2017 §27.3), and the loop variable may be declared in the header — `for (genvar i = 0; i < 4; i++)` (§27.4). |
@@ -166,6 +166,7 @@ end
 | `struct packed` | Yes |
 | `struct` (unpacked) | Rejected loud (packed structs only) |
 | `union packed` | Yes (overlay semantics; member reads/writes share storage) |
+| Multi-dimensional packed parameter `parameter logic [N-1:0][M-1:0] P = {…}` / `localparam perm_t P = …` | Yes — body, ANSI header (default + instance override, dims may name the instance's own parameters), package (wildcard / explicit / `p::P[i]`); reads `P[i]`, `P[i][j]`, `P[i][a:b]`, `P[i][o+:w]`, `P[a:b]`, runtime or constant index, `$bits(P)` / `$bits(P[i])`. Loud: `$size`/`$left`/`$dimensions` on it, a `'{…}` value, an array parameter of such a type, a select chain deeper than the dims or with a non-final range |
 | Array parameter of a struct/enum typedef `localparam st_t P[N] = '{ '{…}, … }` | Yes — 1-D, body `localparam` / package `parameter` or `localparam` / generate; element patterns positional, named or `default:`; read whole, by member, `$size`/`$bits`, `foreach`, `case`. Loud: ANSI-header array parameter, module-body `parameter` array, multi-dimensional, a member of an element inside a constant expression |
 | Dynamic arrays `int d[]` | Yes (`new[n]`, `new[n](src)`, `.size()`, `.delete()`, element r/w, whole-copy `b = a`) |
 | Associative arrays `int a[integer]` | Yes (signed-64 key domain; `.num()`/`.exists()`/`.delete()`/`.first()`/`.next()`, whole-copy) — key-type spellings other than `[integer]`/`[time]` are not parsed yet |

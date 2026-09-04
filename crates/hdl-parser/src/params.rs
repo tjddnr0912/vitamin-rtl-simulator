@@ -3,7 +3,13 @@
 use super::*;
 
 /// `(ParamType, var_kind, forced_range, explicit_range)` — see `typedef_param_shape`.
-type TypedefParamShape = (ParamType, Option<NetVarKind>, Option<Range>, Option<Range>);
+type TypedefParamShape = (
+    ParamType,
+    Option<NetVarKind>,
+    Option<Range>,
+    Option<Range>,
+    Vec<Range>,
+);
 
 impl Parser<'_, '_> {
     /// ⓑ-breadth (§8.25): MONOMORPHIZE parameterized classes. For each distinct
@@ -216,6 +222,9 @@ impl Parser<'_, '_> {
         // element width, exactly as a spelled-out `[5:0]` would. Atom widths
         // (`typedef byte b`) stay in `forced_range` like the keyword path.
         let mut typedef_range: Option<Range> = None;
+        // §3 ⑤ ⓐ: packed dims after the first range (`logic [3:0][7:0]`, or a
+        // typedef's own). See `packed_md.rs`.
+        let mut packed_dims: Vec<Range> = Vec::new();
         let kw_kind = match self.peek() {
             Some(TokenKind::Word(WordKind::Keyword(
                 k @ (Kw::Logic
@@ -287,11 +296,12 @@ impl Parser<'_, '_> {
             self.eat_scope_qualifier();
             self.bump(); // the type-name identifier
             match self.typedef_param_shape(&info) {
-                Ok((t, k, forced, explicit)) => {
+                Ok((t, k, forced, explicit, packed)) => {
                     ty = t;
                     var_kind = k;
                     forced_range = forced;
                     typedef_range = explicit;
+                    packed_dims = packed;
                     signed = expl0.unwrap_or(info.signed);
                     tyname = Some(key);
                 }
@@ -346,7 +356,14 @@ impl Parser<'_, '_> {
         } else if forced_range.is_some() {
             None
         } else {
-            self.opt_range()
+            let r = self.opt_range();
+            // §3 ⑤ ⓐ: further packed dims (`[N-1:0][M-1:0]`) on a vector kind or an
+            // implicit (`parameter [3:0][1:0] P`) prefix. A non-vector kind with a
+            // range is rejected below (`reject_packed_dims_on_nonvector`) as before.
+            if r.is_some() {
+                packed_dims = self.opt_packed_dims();
+            }
+            r
         };
         ParamPrefix {
             start,
@@ -359,6 +376,7 @@ impl Parser<'_, '_> {
             expl0,
             expl1,
             tyname,
+            packed_dims,
         }
     }
 
@@ -368,47 +386,64 @@ impl Parser<'_, '_> {
     /// width is `forced`, a vector's dimension is `explicit`, and the non-vector
     /// dimension reject reads only `explicit`), so a typedef'd parameter and its
     /// spelled-out twin are one AST. `Err` = a type a scalar `ParamDecl` cannot carry without
-    /// losing something (a multi-dim packed typedef would flatten `P[i]` to one bit;
-    /// a class handle / net / event / container is not a parameter type) — loud.
+    /// losing something (a class handle / net / event / container is not a
+    /// parameter type) — loud. A multi-dimensional packed vector typedef (§3 ⑤ ⓐ)
+    /// returns its extra dims as the fifth field; the parameter is declared flat
+    /// and its selects rewritten (`packed_md.rs`).
     fn typedef_param_shape(&self, info: &TypeInfo) -> Result<TypedefParamShape, &'static str> {
         if info.class_name.is_some() {
             return Err(
                 "a non-class typedef on a parameter (a class-handle parameter is unsupported)",
             );
         }
-        if !info.packed.is_empty() {
-            return Err(
-                "a typedef with one packed dimension on a parameter (a multi-dimensional packed typedef parameter — `logic [N-1:0][M-1:0]` — is unsupported in v1)",
-            );
-        }
+        let none = Vec::new();
         Ok(match info.kind {
-            NetVarKind::Int => (ParamType::Integer, Some(NetVarKind::Int), None, None),
-            NetVarKind::Integer => (ParamType::Integer, Some(NetVarKind::Integer), None, None),
+            NetVarKind::Int => (ParamType::Integer, Some(NetVarKind::Int), None, None, none),
+            NetVarKind::Integer => (
+                ParamType::Integer,
+                Some(NetVarKind::Integer),
+                None,
+                None,
+                none,
+            ),
             NetVarKind::Byte => (
                 ParamType::Implicit,
                 Some(NetVarKind::Byte),
                 Some(Self::dec_range(7)),
                 None,
+                none,
             ),
             NetVarKind::Shortint => (
                 ParamType::Implicit,
                 Some(NetVarKind::Shortint),
                 Some(Self::dec_range(15)),
                 None,
+                none,
             ),
             NetVarKind::Longint => (
                 ParamType::Implicit,
                 Some(NetVarKind::Longint),
                 Some(Self::dec_range(63)),
                 None,
+                none,
             ),
-            NetVarKind::Real => (ParamType::Real, Some(NetVarKind::Real), None, None),
-            NetVarKind::Realtime => (ParamType::Realtime, Some(NetVarKind::Realtime), None, None),
-            NetVarKind::Time => (ParamType::Time, Some(NetVarKind::Time), None, None),
-            NetVarKind::String => (ParamType::Implicit, None, None, None),
-            k @ (NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit) => {
-                (ParamType::Implicit, Some(k), None, info.range.clone())
-            }
+            NetVarKind::Real => (ParamType::Real, Some(NetVarKind::Real), None, None, none),
+            NetVarKind::Realtime => (
+                ParamType::Realtime,
+                Some(NetVarKind::Realtime),
+                None,
+                None,
+                none,
+            ),
+            NetVarKind::Time => (ParamType::Time, Some(NetVarKind::Time), None, None, none),
+            NetVarKind::String => (ParamType::Implicit, None, None, None, none),
+            k @ (NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit) => (
+                ParamType::Implicit,
+                Some(k),
+                None,
+                info.range.clone(),
+                info.packed.clone(),
+            ),
             _ => {
                 return Err(
                     "an integral, real or string typedef on a parameter (a net / event / container typedef is not a parameter type)",
@@ -438,6 +473,7 @@ impl Parser<'_, '_> {
             expl0,
             expl1,
             tyname: _,
+            packed_dims,
         } = pfx.clone();
         // `logic`/`reg`/`bit` with NO explicit range are ONE bit (§6.11.2). The atom
         // recorded that in `var_kind` and then dropped it: `ParamDecl` has no such
@@ -460,6 +496,24 @@ impl Parser<'_, '_> {
             )
             .then(|| Self::dec_range(0))
         });
+        // §3 ⑤ ⓐ: a multi-dimensional packed parameter is declared FLAT —
+        // `[total-1:0]` over all its dims (the outer `explicit_range` first) — and
+        // the name is bound below so a select on it is rewritten to the flat
+        // part-select (`packed_md.rs`). The override channel / a whole-value read
+        // / `$bits` see exactly the packed bits.
+        let md_dims: Vec<Range> = if packed_dims.is_empty() {
+            Vec::new()
+        } else {
+            let mut d = Vec::with_capacity(packed_dims.len() + 1);
+            d.push(explicit_range.clone().unwrap_or_else(|| Self::dec_range(0)));
+            d.extend(packed_dims);
+            d
+        };
+        let range = if md_dims.is_empty() {
+            range
+        } else {
+            Some(Self::packed_md_flat_range(&md_dims, start))
+        };
         // §4.5.156 (§3 全 site): a typed param's kind may not carry a user packed range
         // unless it is a vector (`logic`/`reg`/`bit`). `forced_range` is the atom's OWN
         // fixed width (byte→[7:0]) not a user dim, so gate on `explicit_range` only.
@@ -469,6 +523,15 @@ impl Parser<'_, '_> {
         let name = self.ident()?;
         // A2a: `[` after the parameter name ⇒ an ARRAY parameter (IEEE §6.20.2).
         if self.peek() == Some(TokenKind::LBracket) {
+            // §3 ⑤ ⓐ: an ARRAY of a multi-dimensional packed element would need the
+            // A2a `NetVarDecl` to carry the packed dims AND the element const-fold
+            // to see them; loud until measured (the flat element would silently
+            // turn `A[i][j]` into one bit).
+            if !md_dims.is_empty() {
+                self.error(
+                    "a one-dimensional packed element type on an array parameter (an array parameter of a multi-dimensional packed type — `logic [N-1:0][M-1:0] A[K]` — is unsupported in v1)",
+                );
+            }
             // Explicit-signing presence (either position): the desugar mirrors
             // `signed_eff` — an explicit `signed`/`unsigned` wins over the
             // atom default (`int unsigned` must come out unsigned, like the
@@ -506,6 +569,9 @@ impl Parser<'_, '_> {
         // concat, and `E.name()` resolves the enum's labels. A union stays bound
         // for member reads but never pattern-desugared (same as the variable path).
         self.unbind_struct_enum_name(&name.name);
+        if !md_dims.is_empty() {
+            self.packed_md_params.insert(name.name.clone(), md_dims);
+        }
         if let Some(tn) = &pfx.tyname {
             if self.struct_layouts.contains_key(tn) {
                 self.var_struct.insert(name.name.clone(), tn.clone());

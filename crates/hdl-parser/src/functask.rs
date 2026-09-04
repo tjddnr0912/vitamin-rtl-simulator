@@ -303,6 +303,9 @@ impl Parser<'_, '_> {
             let before = self.pos;
             let (port, dir, ty, unpacked_struct) =
                 self.parse_tf_port(inherited, inherited_spelling, &inherited_type);
+            // §3 ⑤ ⓐ: a formal named like a multi-dim packed parameter shadows it
+            // for the body (the tf scope snapshot restores it — review A-1).
+            self.packed_md_params.remove(&port.name.name);
             inherited = dir;
             inherited_spelling = port.dir_spelling;
             inherited_type = ty;
@@ -796,6 +799,7 @@ impl Parser<'_, '_> {
                 default: None, // non-ANSI formals have no default (ANSI-only, §13.5.3)
                 span: n_start.to(self.prev_span()),
             };
+            self.packed_md_params.remove(&port.name.name);
             // R5: an unpacked-struct formal expands to its N member ports (per name in
             // a comma list); every other formal appends one (byte-identical pre-R5).
             match &unpacked_struct {
@@ -826,7 +830,7 @@ impl Parser<'_, '_> {
     ) -> Option<NetVarDecl> {
         self.bump(); // 'automatic' — `static` is not reserved, so only this reaches here
         if self.net_var_kind().is_some() {
-            let mut d = self.parse_net_var(false)?;
+            let mut d = self.parse_block_plain_decl(scope)?;
             d.lifetime = Some(true);
             Some(d)
         } else if let Some(info) = self.peek_block_typedef_decl() {

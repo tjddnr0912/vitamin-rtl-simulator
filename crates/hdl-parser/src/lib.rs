@@ -105,6 +105,7 @@ mod instances;
 mod lvalue;
 mod module_items;
 mod monomorph;
+mod packed_md;
 mod params;
 mod scope;
 mod soa;
@@ -278,6 +279,9 @@ struct PkgBindings {
     struct_1d_array: Vec<String>,
     /// `(name, "pkg::e")` for every enum-typed variable/parameter.
     var_enum: Vec<(String, String)>,
+    /// §3 ⑤ ⓐ: `(name, dims)` for every multi-dimensional packed parameter
+    /// (`packed_md_params`), replayed on import like `var_enum`.
+    packed_md: Vec<(String, Vec<Range>)>,
 }
 /// A snapshot of the parser's lexically-scoped registries, used to give a
 /// procedural block its own scope: snapshotted at the block's first body-local
@@ -311,6 +315,7 @@ struct ScopeSnapshot {
     var_enum: std::collections::HashMap<String, String>,
     struct_scalar_vars: std::collections::HashSet<String>,
     struct_1d_array_vars: std::collections::HashSet<String>,
+    packed_md_params: std::collections::HashMap<String, Vec<Range>>,
     wildcard_bound: std::collections::HashSet<String>,
     local_decl_names: std::collections::HashSet<String>,
 }
@@ -365,6 +370,11 @@ struct ParamPrefix {
     /// (struct member desugar, `'{…}` pattern, enum methods). `None` for every keyword
     /// or implicit prefix ⇒ byte-identical.
     tyname: Option<String>,
+    /// §3 ⑤ ⓐ: the packed dimensions AFTER `explicit_range` (`logic [3:0][7:0]` ⇒
+    /// `[[7:0]]`, a typedef's `TypeInfo::packed`). Non-empty ⇒ the parameter is
+    /// declared flat and its selects are rewritten (`packed_md.rs`); empty for
+    /// every parameter that parsed before ⇒ byte-identical.
+    packed_dims: Vec<Range>,
 }
 
 /// The components of a parsed `property_spec` (the body shared by an inline
@@ -426,6 +436,16 @@ pub struct Parser<'t, 's> {
     /// scalar struct (0 dims, in `struct_scalar_vars`), a multi-dim array (≥2
     /// dims), and a union array are all excluded. Module-scoped.
     struct_1d_array_vars: std::collections::HashSet<String>,
+    /// §3 ⑤ ⓐ: a multi-dimensional packed PARAMETER name → its packed dims, outer
+    /// first (`parameter logic [3:0][4:0] P` ⇒ `[[3:0],[4:0]]`). The parameter is
+    /// declared FLAT and a select on the name is rewritten to the flat part-select
+    /// (`packed_md.rs`). Module-scoped like `var_struct`; block-scoped through
+    /// `ScopeSnapshot`; a same-named declaration unbinds it.
+    packed_md_params: std::collections::HashMap<String, Vec<Range>>,
+    /// The `pkg::P` twins of `packed_md_params`, captured at `endpackage` for a
+    /// scoped read `p::P[i]`. Unit-scoped (never cleared), like `struct_layouts`'s
+    /// scoped keys.
+    packed_md_scoped: std::collections::HashMap<String, Vec<Range>>,
     /// Round-9: UNPACKED struct (record) type name → its members (each keeps its
     /// OWN type — a `string`/`int` member can't share a flat vector). A scalar
     /// variable of this type desugars to N independent member nets `k$field`
@@ -557,6 +577,8 @@ impl<'t, 's> Parser<'t, 's> {
             var_struct: std::collections::HashMap::new(),
             struct_scalar_vars: std::collections::HashSet::new(),
             struct_1d_array_vars: std::collections::HashSet::new(),
+            packed_md_params: std::collections::HashMap::new(),
+            packed_md_scoped: std::collections::HashMap::new(),
             union_type_names: std::collections::HashSet::new(),
             const_locals: std::collections::HashMap::new(),
             pending_mono_specs: Vec::new(),

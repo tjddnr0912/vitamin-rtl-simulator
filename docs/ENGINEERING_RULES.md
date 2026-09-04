@@ -219,6 +219,37 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐ A name-keyed parser rewrite has three lifetimes to census: declaration, SHADOW, and export (2026-09-04 · §4.5.412)
+
+- §3 ⑤ ⓐ rewrote every select on a multi-dim packed PARAMETER to a flat part-select, keyed on the
+  name like the packed-struct member desugar. The declaration lifetime was right on the first build
+  (141/195 cells); the two others were not. **Shadow:** a block-local PLAIN `logic [7:0] P;`
+  unbound the name (`unbind_struct_enum_name`) and `block_body` snapshotted the scope only for a
+  typedef or struct/enum-typed local, so after `end` the module's `P[1]` was silently flat bit 1
+  (the same hole was merely LOUD for a struct variable — E2002 after the block — which is why nobody
+  had seen it). **Export:** the dims captured at `endpackage` still spelled the package's own `W`
+  bare, so `p::P[i]` in an importer without `W` was E3010 (loud, but every scoped/explicit-import
+  cell). Rule: when a binding keyed on a NAME is added, write three cells before the census — a
+  same-named block-local plain decl with a read AFTER the block, a same-named decl in a sibling
+  scope, a same-named PORT (ANSI and non-ANSI) and function/task FORMAL (review A-1 found the
+  port list and both tf-port sites unbound `var_struct` but not the new map), and a package export
+  read through `pkg::` with none of the package's constants imported.
+- A hand-computed expected value is not a pin. Three of the first twelve tests were wrong by hand
+  (`P[i+1]` with a 2-bit `i` is 32-bit arithmetic, a bit table, an LFSR permutation) and the
+  tests were green against the census's oracle only after the values were REPLACED by verilator's.
+  Write the census first and copy the oracle's raw line into the test.
+- A rewrite that routes a NEW shape into an old evaluator inherits that evaluator's leniencies
+  as silent-wrongs: the flat `+:` answers a 0-width select in silence, and a flat `[hi:lo]` with a
+  runtime bound answers 0 in silence (both pre-existing on any parameter, both unreachable from
+  legal source before). Before choosing the target shape, run the target evaluator on the
+  DEGENERATE inputs your rewrite can produce (width 0, negative, runtime bound) and pick the one
+  whose failure is loud — or refuse at the rewrite when it is decidable there.
+- Two verilator quirks to keep a control for: `$signed(elem) < 0` on a `signed` multi-dim
+  PARAMETER (0; the identical variable is 1 on verilator and iverilog) and `import p::*; import
+  q::P;` (verilator answers p's even for a scalar keyword control where iverilog and PRE answer
+  q's). A harness can be the loud: a CU-scope `typedef` before `module` is a vita parse error,
+  `$bits(u.X)` is loud, and two parallel verilator builds sharing one `-Mdir` race on `verilated.d`.
+
 ### ⭐ A queue row that names a KEYWORD as the blocker may be two blockers — read the LRM's context rule first (2026-09-04 · §4.5.411)
 
 - §3 ⑤ ⓒ was written as "an overridable array `parameter` (A2a is body `localparam` only), ibex_pkg.sv:791,

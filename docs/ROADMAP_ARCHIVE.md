@@ -436,6 +436,102 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.412 — A multi-dimensional packed parameter, typedef or keyword spelling, body / header / package (§3 ⑤ ⓐ) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round — differential 48 designs + a 1,466-file PRE/POST repo sweep, 1 finding; soundness 2 findings; all three fixed on the delta and re-scored with the lenses' own designs · corpus 10/10)
+
+**The rung.** ibex_pkg.sv:742 `parameter lfsr_perm_t RndCnstLfsrPermDefault = {160'h…}` over
+`typedef logic [LfsrWidth-1:0][$clog2(LfsrWidth)-1:0] lfsr_perm_t` — the LAST diagnostic in
+ibex_pkg.sv, loud by design ("a scalar `ParamDecl` has one range"). Measured at HEAD with three
+tools: the typedef spelling AND the keyword spelling `parameter logic [Dw-1:0][Iw-1:0] StatePerm`
+(prim_lfsr.sv:53 — the consumer of every ibex use, an ANSI header whose dims are the instance's own
+overridable parameters) were both loud; verilator 5.050 the sole oracle (iverilog 13.0: "sorry:
+packed array parameters are not supported yet", and it ABORTS on a multi-dim packed typedef
+VARIABLE); the keyword VARIABLE twin `logic [3:0][4:0] v` is the only shape both oracles parse.
+
+**Mechanism (parser only, no AST field, format 29).** `ParamDecl` carries one range and the
+override channel (`#(.P(v))`, a header default `= pkg::Dflt`) moves one flat value, so the
+parameter is declared FLAT — `[total-1:0]`, the product of `|msb-lsb|+1` over its dims, built as
+expressions and literal-folded when literal — and every select chain on its NAME is rewritten in
+`expr_postfix` to the flat bit/part-select those bits occupy (`hdl-parser/src/packed_md.rs`, the
+packed-struct member precedent keyed on the name the same way): flat offset = Σ off_k(i_k)·stride_k,
+off_k = `(msb>=lsb) ? i-lsb : lsb-i` (IEEE §7.4.1: the element at the RIGHT bound is the lowest
+bits either way; the first draft used `msb-i` for ascending and the g4 probe caught it), stride_k =
+the bit width of the inner dims; the last select may be a bit, `[a:b]`, `[o+:w]` or `[o-:w]`. Writes
+are not rewritten (E3010 like any parameter write); more selects than dims or a non-final range
+select is a loud parse error (the flat twin would have answered a bit or `x`). Name bindings:
+`Parser::packed_md_params` (module-scoped, in `ScopeSnapshot`, `unbind_struct_enum_name`),
+`PkgBindings.packed_md` (replayed on `import p::*`/`import p::P` under the `var_enum` rules) and the
+unit-scoped `packed_md_scoped` (`p::P[i]`), the package dims re-spelled `p::W` at `endpackage`
+(`respell_pkg_dims`) so `[W-1:0][$clog2(W)-1:0]` resolves in an importer that never imported `W`.
+An array parameter of such a type stays loud. The typedef path also lifts `typedef_param_shape`'s
+packed reject; the keyword path parses `opt_packed_dims()` after the first range (also the implicit
+`parameter [3:0][4:0] P`). Byte-identity: a design without a packed-md parameter never populates
+the map and the rewrite returns early; the keyword path parses extra dims only after a range, a
+position where PRE already errored.
+
+**Census (195 cells, `mdc/`, a keyword control twin and a variable twin per position).** 8
+declaration positions (body localparam/parameter, typedef/keyword/implicit/`bit`, generate,
+variable) × 10 read shapes (element, bit, `[a:b]`, `[o+:w]`, outer slices, whole/`$bits`,
+`$bits(P[i])`, arithmetic, compare) + runtime-index/always_ff/assign/function/index-another-vector
+cells + constant contexts (localparam, generate-if, per-block widths, case items) + 9 dims shapes
+(ascending outer, ascending inner, non-zero lsb, 3-dim, single element, 128-bit, signed, symbolic
+`[N-1:0][M-1:0]`, `$clog2`) + header default/override/narrow override/pass-through/element
+pass/chained header default + the prim_lfsr shape with two instances of DIFFERENT dims + package
+wildcard/scoped/explicit/const/header-default/shadow×4/two-packages/explicit-over-wildcard +
+loud-expected cells: **141 loud→correct · 24 unchanged · 17 still-loud (all expected) · 0 silent ·
+0 regression.** One NEW silent the first census run found and this slice fixed: a block-local PLAIN
+declaration (`initial begin : b logic [7:0] P; … end`) shadowing the parameter unbound it for the
+rest of the module (`o2 = P[1]` after the block read flat bit 1, verilator 9) — `block_body`
+snapshotted the scope only for a typedef or struct/enum-typed local; `parse_block_plain_decl` now
+takes a tentative snapshot when a bound name exists and keeps it only when the decl shadowed one
+(review B2 narrowed it to packed-md PARAMETERS: restoring a struct VARIABLE's binding made a
+post-block `SS.g` read the block-local's flattened module net through the package layout — loud
+E3010 → silent `1`, both oracles `5` — because the v1 block-local model flattens the local to a
+module net of the same name, which a parameter never collides with; that flatten collision is
+pre-existing, §2 🆕 L ⓡ). Review B1: a REVERSED range select (`P[1:2]` on `[2:0]`, `B[3:2]` on
+`[1:3]`) became a `+:` of computed width 0 and answered `0` in silence where the flat and variable
+twins are loud "out of order"; refused at parse time when the direction is decidable (literal
+bounds, or `[N-1:0]`/`[0:N-1]` shapes), because a flat `[hi:lo]` with a runtime bound is itself a
+pre-existing silent 0 on any parameter (🆕 L ⓠ) — a fully symbolic dimension with a reversed
+literal select is the documented residue. Review A-1 (differential): a module PORT (ANSI or
+non-ANSI) or a function/task FORMAL named like a bound packed-md parameter did not unbind it, so
+`P[1]` on an 8-bit formal was rewritten to the parameter's element (`fn=03 tk=0011`, verilator
+`00 0`; the keyword-scalar control identical on all four tools, and a package STRUCT parameter
+already unbound by a port) — the port list and both tf-port sites now remove the binding (the tf
+scope snapshot restores it after the body). The lens's sweep: `examples/` stdout + VCD
+byte-identical; of 1,466 `bench` files three differ, all loudly (ibex_pkg.sv now parses and
+stops at "no top module"; prim_cipher_pkg's first error moved from a packed-md localparam to a
+multi-dim packed FUNCTION port `input logic [3:0][3:0] shifts`, untouched; prim_double_lfsr from
+30 parse errors to 6 unresolved-instance errors standalone); whole-design ibex is PRE==POST,
+blocked upstream at E1013 "define default argument values" — so the slice cannot yet be exercised
+on the real ibex. Attributed by control twins, not silent: `$signed(P[2]) < 0` on a `signed`
+multi-dim parameter (verilator 0 for the parameter, 1 for the identical VARIABLE on verilator AND
+iverilog; vita 1 = the variable twin), and `import p::*; import q::P;` (verilator answers p's even
+for a scalar keyword control where iverilog and PRE-vita answer q's, the §4.5.410 pin). Three
+pre-existing findings went to §2 🆕 L ⓝ ⓞ ⓟ (`$bits` of a block-local shadowing a wildcard
+constant · a middle-dim part-select on a 3-dim packed VARIABLE is 2 bits not 4 · a scoped typedef
+whose dims name package constants is loud without importing them). Harness lessons: a CU-scope
+`typedef` before `module` is a parse error (cells re-spelled through a package), `$bits(u.X)` is
+loud (hier), and two parallel verilator builds in one -Mdir race on `verilated.d` (a false LOUD).
+
+**The ibex ladder.** `ibex_pkg.sv` parses clean; the first error page is `ibex_cheriot_pkg.sv`
+(50 = cap: 11 struct members with a PARAMETER range `logic [ADDR_W:0]`, plus ⓓ's nested struct
+members). The census also exposed the rung behind ⓓ: a header `import p::*;` is not visible to
+the header's own parameter defaults (`module m import p::*; #(parameter T X = Dflt)` → E3009
+"undefined name `Dflt`", keyword scalar identical, PRE==POST) — every ibex module header is that
+shape → §3 ⑤ ⓕ.
+
+**Tests.** `crates/cli/tests/packed_md_param.rs` (12): element/bit reads on both spellings,
+part/indexed/outer selects, runtime indexes in every position, the index-another-vector shape,
+constant contexts (localparam, generate-if, per-block widths, case items), 3-dim + ascending +
+non-zero lsb, symbolic dims under override + two instances with different dims, package wildcard +
+scoped + variable twin, local/block/scalar shadows (block shadow restored after the block),
+explicit-over-wildcard + scoped dims re-spelling, the signed element (variable twin pin), and the
+loud limits (too many selects, range-first, array-of-md, write, `$size`, `'{…}`). The
+`typed_param_user_type` "kept loud" pin for this shape became a value pin (`12345 1a`). Three of the
+first draft's hand-computed expectations were wrong (`P[i+1]` with a 2-bit `i` is 32-bit
+arithmetic; a bit table; an LFSR permutation) — the census's verilator output is the pin, never a
+hand value.
+
 #### 4.5.411 — An array parameter of a struct/enum typedef; a package `parameter` array is a localparam (§3 ⑤ ⓑ + ⓒ package half) (2026-09-04 · format 29 unchanged · adversarial review: 2 lenses × 1 round (differential 61 designs + a 659-file PRE/POST sweep · soundness 4 findings, 1 fixed on the delta and re-scored with the lens's own designs) · corpus 10/10)
 
 **The rung.** ibex_pkg.sv:769 `parameter pmp_cfg_t PmpCfgRst[PMP_MAX_REGIONS] = '{ '{lock: 1'b0,

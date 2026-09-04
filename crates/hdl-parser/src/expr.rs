@@ -405,7 +405,9 @@ impl Parser<'_, '_> {
                 _ => break,
             }
         }
-        e
+        // §3 ⑤ ⓐ: a select chain on a multi-dimensional packed PARAMETER (declared
+        // flat) becomes the flat bit/part-select. A no-op for every other chain.
+        self.rewrite_packed_md_select(e)
     }
 
     pub(crate) fn call_args(&mut self) -> Vec<Expr> {

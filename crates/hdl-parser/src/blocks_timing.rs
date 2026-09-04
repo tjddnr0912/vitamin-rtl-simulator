@@ -364,8 +364,9 @@ impl Parser<'_, '_> {
                 // body-local enum here stays honest-loud (allow_enum = false).
                 let _ = self.parse_body_typedef_def(false);
             } else if self.net_var_kind().is_some() {
-                if let Some(d) = self.parse_net_var(false) {
-                    // procedural block-local decl: no net delay
+                // procedural block-local decl: no net delay. Snapshots the scope when
+                // the decl shadows a bound outer name (see the helper).
+                if let Some(d) = self.parse_block_plain_decl(&mut scope) {
                     decls.push(d);
                 }
             } else if self.at_kw(Kw::Automatic) && self.lifetime_prefixes_decl() {

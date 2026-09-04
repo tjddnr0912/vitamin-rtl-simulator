@@ -411,6 +411,7 @@ impl Parser<'_, '_> {
         self.struct_scalar_vars.remove(n);
         self.struct_1d_array_vars.remove(n);
         self.var_enum.remove(n);
+        self.packed_md_params.remove(n);
         self.wildcard_bound.remove(n);
     }
 

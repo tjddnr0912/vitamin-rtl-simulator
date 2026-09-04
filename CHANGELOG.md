@@ -11,6 +11,18 @@ changed for a user of the simulator.
 
 ### Added
 
+- **A parameter with more than one packed dimension.** `parameter lfsr_perm_t RndCnstLfsrPerm =
+  {160'h…}` over `typedef logic [W-1:0][$clog2(W)-1:0] lfsr_perm_t` (ibex), and the keyword spelling
+  `parameter logic [Dw-1:0][Iw-1:0] StatePerm` (prim_lfsr's header, dims naming the instance's own
+  overridable parameters) — body `localparam`/`parameter`, ANSI header with default and instance
+  override, package (wildcard / explicit / scoped `p::P[i]` reads). The parameter is declared flat
+  and `P[i]`, `P[i][j]`, `P[i][a:b]`, `P[i][o+:w]`, `P[a:b]` are rewritten to the flat part-select;
+  `$bits`, whole-value reads and constant contexts see the packed bits. Verified against verilator
+  5.050 (195-cell census, 141 loud→correct, 0 silent). Still loud: `$size`/`$left`/`$dimensions` on
+  it, a `'{…}` value, an array parameter of such a type.
+- **A block-local plain declaration that shadows a struct/enum/packed-md-bound name shadows it
+  for the block only** (the outer binding returns after `end`; before, the outer read was silently
+  wrong for a packed-md parameter and loud for a struct variable).
 - **An array parameter of a struct or enum typedef.** `localparam pmp_cfg_t PmpCfgRst[16] =
   '{ '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, … };` (the ibex PMP
   reset table) — positional or named element patterns, `'{default: v}` inside an element, an

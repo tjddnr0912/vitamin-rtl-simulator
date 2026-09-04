@@ -417,12 +417,15 @@ endmodule";
 
 #[test]
 fn the_v1_limits_are_loud_not_silent() {
-    // A multi-dimensional packed typedef (ibex_pkg.sv:742 `lfsr_perm_t`): a scalar
-    // `ParamDecl` would flatten `P[1]` to one bit.
-    loud(
-        "module tb; typedef logic [3:0][4:0] pt; localparam pt P = 20'h12345;
-  initial begin $display(\"DIGEST=%h %h\", P, P[1]); #1 $finish; end endmodule",
-        "multi-dimensional packed typedef parameter",
+    // A multi-dimensional packed typedef (ibex_pkg.sv:742 `lfsr_perm_t`) was the
+    // next rung — §4.5.412 (`packed_md_param.rs`) declares the parameter flat and
+    // rewrites `P[1]` to the element's part-select; verilator 5.050: `12345 1a`.
+    assert_eq!(
+        digest(
+            "module tb; typedef logic [3:0][4:0] pt; localparam pt P = 20'h12345;
+  initial begin $display(\"DIGEST=%h %h\", P, P[1]); #1 $finish; end endmodule"
+        ),
+        "12345 1a"
     );
     // An array parameter of a struct typedef (ibex_pkg.sv:769 `PmpCfgRst`) was the
     // next rung — §4.5.411 (`struct_array_param.rs`) desugars the nested `'{'{…}}`

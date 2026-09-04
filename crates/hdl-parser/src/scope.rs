@@ -27,6 +27,7 @@ impl Parser<'_, '_> {
             var_enum: self.var_enum.clone(),
             struct_scalar_vars: self.struct_scalar_vars.clone(),
             struct_1d_array_vars: self.struct_1d_array_vars.clone(),
+            packed_md_params: self.packed_md_params.clone(),
             wildcard_bound: self.wildcard_bound.clone(),
             local_decl_names: self.local_decl_names.clone(),
         }
@@ -35,6 +36,44 @@ impl Parser<'_, '_> {
     /// Restore the registries to a prior snapshot, dropping any block-local
     /// typedefs / struct-var bindings added since (so they do not leak out of or
     /// clobber an outer scope).
+    /// A block-local PLAIN declaration (`logic [7:0] P;`) that shadows an outer
+    /// multi-dim-packed PARAMETER name must shadow it for the BLOCK only:
+    /// `parse_net_var` unbinds the name, and without a snapshot the outer binding
+    /// never came back (measured: a module `localparam logic [3:0][4:0] P` read as
+    /// its flat bit 1 after an `initial begin : b logic [7:0] P; … end` — silent).
+    /// The snapshot is taken tentatively (only when some binding exists) and kept
+    /// only when a declared name was actually bound — a design with no such
+    /// bindings, or no shadowing decl, is byte-identical. Cold and boxed: the
+    /// caller sits on the frame-budgeted `block_body` recursion.
+    /// Deliberately NOT extended to `var_struct`/`var_enum`: a block-local decl
+    /// flattens to a MODULE net of the same name (the v1 block-local model), so
+    /// restoring a struct VARIABLE binding made a post-block `SS.g` read the local
+    /// net through the package struct's layout (review B2: loud E3010 → silent `1`
+    /// where both oracles read the package's `5`); a parameter is not a net, so it
+    /// does not collide. That flatten collision is pre-existing (ROADMAP §2).
+    #[inline(never)]
+    pub(crate) fn parse_block_plain_decl(
+        &mut self,
+        scope: &mut Option<Box<ScopeSnapshot>>,
+    ) -> Option<NetVarDecl> {
+        let tentative = if scope.is_none() && !self.packed_md_params.is_empty() {
+            Some(Box::new(self.snapshot_scope()))
+        } else {
+            None
+        };
+        let d = self.parse_net_var(false);
+        if let (Some(t), Some(d)) = (tentative, &d) {
+            let shadows = d
+                .names
+                .iter()
+                .any(|n| t.packed_md_params.contains_key(&n.name.name));
+            if shadows {
+                *scope = Some(t);
+            }
+        }
+        d
+    }
+
     pub(crate) fn restore_scope(&mut self, s: ScopeSnapshot) {
         self.typedefs = s.typedefs;
         self.struct_layouts = s.struct_layouts;
@@ -48,6 +87,7 @@ impl Parser<'_, '_> {
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
+        self.packed_md_params = s.packed_md_params;
         self.wildcard_bound = s.wildcard_bound;
         self.local_decl_names = s.local_decl_names;
     }
@@ -113,6 +153,7 @@ impl Parser<'_, '_> {
         self.var_enum = s.var_enum;
         self.struct_scalar_vars = s.struct_scalar_vars;
         self.struct_1d_array_vars = s.struct_1d_array_vars;
+        self.packed_md_params = s.packed_md_params;
         self.wildcard_bound = s.wildcard_bound;
         self.local_decl_names = s.local_decl_names;
     }
