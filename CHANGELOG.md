@@ -11,6 +11,23 @@ changed for a user of the simulator.
 
 ### Added
 
+- **Multi-dimensional packed tf-port formals**: `function f(logic [15:0][3:0] shifts)` (and a
+  typedef with packed dims, non-ANSI `input logic [1:0][3:0] a;`, task / function, `input` /
+  `output` / `inout` / `ref`, a default value, a comma continuation) — element and part reads,
+  element writes (`o[i] = …`, `a[1][3:2] = …`) and `$size` / `$left` / `$right` / `$low` / `$high`
+  / `$increment` / `$dimensions` on the formal. Loud: a multi-dim packed formal that is also an
+  unpacked array (`logic [1:0][3:0] a [2]`).
+- **A based literal as a parameter value in a constant width**: `parameter int unsigned W = 32'd12;`
+  (package / localparam / body `parameter` behind an ANSI header) then `logic [W-1:0]` as a
+  packed-struct member width. The parameter must be 32 bits or wider; a truncated, x/z or
+  over-64-bit literal, an expression and a narrower parameter stay loud.
+
+### Fixed
+
+- **A packed-struct member width now folds at the expression's own width** (IEEE §11.6): a 32-bit
+  `int unsigned W = 4294967295` under `logic [$clog2(W+2):0]` and two 4-bit constants under
+  `logic [C+D:0]` wrap as they do in iverilog and verilator (were 35 and 17 bits, silently).
+
 - **`define default argument values** (IEEE 1800-2017 §22.5.1): `` `define M(a, b = 5) `` — an
   omitted trailing actual (`` `M(1) ``) and an empty one (`` `M(1,) ``) take the default, which may
   be a literal, an expression, a parenthesised text, a string, a replication, an empty text or

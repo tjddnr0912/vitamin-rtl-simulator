@@ -20,13 +20,13 @@ impl Parser<'_, '_> {
                 .parse::<i64>()
                 .ok(),
             ExprKind::Ident(p) if p.segments.len() == 1 => {
-                self.const_locals.get(&p.segments[0].name).copied()
+                self.const_locals.get(&p.segments[0].name).map(|c| c.v)
             }
             // §3 ⑤ ⓓ: a scoped constant `pkg::W` (exported at `endpackage`).
             ExprKind::PkgScoped { pkg, name } => self
                 .pkg_const_scoped
                 .get(&format!("{}::{}", pkg.name, name.name))
-                .copied(),
+                .map(|c| c.v),
             // §3 ⑤ ⓓ: `$clog2(n)` of a folded non-negative operand (IEEE §20.8.1:
             // the number of bits to address `n` items; 0 for 0 and 1). The same
             // function elaborate folds, over the same integer domain.
@@ -500,6 +500,135 @@ impl Parser<'_, '_> {
 
     /// Fold a constant-literal expression to `i64` at parse time (decimal literals
     /// and +/-/* of them). Returns `None` for anything non-constant.
+    /// §4.5.418: the WIDTH-AWARE twin of `try_const_index`, for a constant bound
+    /// that a layout is built from (a packed-struct member width). IEEE §11.6: a
+    /// decimal literal is 32-bit signed, a based literal its own size (unsized ⇒ 32,
+    /// unsigned unless `s`), a named constant its declaration's width and sign
+    /// (`ConstVal`), and `+ - * / %` are computed at the LARGER operand width, signed
+    /// only when both operands are; the result wraps to that width. `$clog2` yields
+    /// a 32-bit signed value of a self-determined operand; unary minus and parens
+    /// keep the operand's width. Every other shape, a constant of unknown width
+    /// (`w == 0`), a literal that does not fit its width, or a division by zero
+    /// declines — the caller then falls back to the i64 fold, byte-identical to
+    /// before. Measured need: `int unsigned W = 32'hffff_ffff; [$clog2(W+2):0]` and
+    /// `logic [3:0] C = 15, D = 1; [C+D:0]` wrap to 1 in both oracles, where the
+    /// i64 fold answered 4294967297 and 17 (review B F1 and the census control twin).
+    pub(crate) fn try_const_index_w(&self, e: &Expr) -> Option<ConstVal> {
+        fn wrap(v: i128, w: u32, signed: bool) -> Option<i64> {
+            if w == 0 || w > 64 {
+                return None;
+            }
+            let mask: u128 = if w == 64 {
+                u64::MAX as u128
+            } else {
+                (1u128 << w) - 1
+            };
+            let bits = (v as u128) & mask;
+            if signed && w < 64 && (bits >> (w - 1)) & 1 == 1 {
+                Some((bits | (!0u128 << w)) as i64)
+            } else if !signed && w == 64 && bits > i64::MAX as u128 {
+                None
+            } else {
+                Some(bits as i64)
+            }
+        }
+        match &e.kind {
+            ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                raw,
+            } => {
+                let v = raw
+                    .chars()
+                    .filter(|c| *c != '_')
+                    .collect::<String>()
+                    .parse::<i64>()
+                    .ok()?;
+                i32::try_from(v).ok()?;
+                Some(ConstVal {
+                    v,
+                    w: 32,
+                    signed: true,
+                })
+            }
+            ExprKind::IntLit {
+                kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
+                raw,
+            } => {
+                let sized = matches!(kind, IntLitKind::Sized);
+                let (pat, w) = Self::based_lit_pattern(raw, sized)?;
+                let tick = raw.find('\'')?;
+                let signed = matches!(raw[tick + 1..].chars().next(), Some('s') | Some('S'));
+                let v = wrap(pat as i128, w, signed)?;
+                Some(ConstVal { v, w, signed })
+            }
+            ExprKind::Ident(p) if p.segments.len() == 1 => self
+                .const_locals
+                .get(&p.segments[0].name)
+                .copied()
+                .filter(|c| c.w > 0),
+            ExprKind::PkgScoped { pkg, name } => self
+                .pkg_const_scoped
+                .get(&format!("{}::{}", pkg.name, name.name))
+                .copied()
+                .filter(|c| c.w > 0),
+            ExprKind::Paren { inner } => self.try_const_index_w(inner),
+            ExprKind::Unary {
+                op: UnOp::Minus,
+                operand,
+            } => {
+                let c = self.try_const_index_w(operand)?;
+                let v = wrap(-(c.v as i128), c.w, c.signed)?;
+                Some(ConstVal { v, ..c })
+            }
+            ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
+                let n = self.try_const_index_w(&args[0])?;
+                if n.v < 0 {
+                    return None;
+                }
+                Some(ConstVal {
+                    v: i64::from(64 - (n.v as u64).saturating_sub(1).leading_zeros()),
+                    w: 32,
+                    signed: true,
+                })
+            }
+            ExprKind::Binary { op, lhs, rhs } => {
+                let a = self.try_const_index_w(lhs)?;
+                let b = self.try_const_index_w(rhs)?;
+                let w = a.w.max(b.w);
+                let signed = a.signed && b.signed;
+                // Operands extend to the result width first (§11.6.1: sign-extended
+                // only when the result is signed).
+                let ext = |c: ConstVal| -> i128 {
+                    if signed {
+                        c.v as i128
+                    } else {
+                        (wrap(c.v as i128, c.w, false).unwrap_or(0) as u64) as i128
+                    }
+                };
+                let (x, y) = (ext(a), ext(b));
+                let v = match op {
+                    BinOp::Add => x + y,
+                    BinOp::Sub => x - y,
+                    BinOp::Mul => x * y,
+                    BinOp::Div if y != 0 => x / y,
+                    BinOp::Mod if y != 0 => x % y,
+                    _ => return None,
+                };
+                let v = wrap(v, w, signed)?;
+                Some(ConstVal { v, w, signed })
+            }
+            _ => None,
+        }
+    }
+
+    /// A constant BOUND a parse-time layout is built from: the width-aware fold
+    /// where it applies, else the plain i64 fold (`try_const_index`).
+    pub(crate) fn const_bound(&self, e: &Expr) -> Option<i64> {
+        self.try_const_index_w(e)
+            .map(|c| c.v)
+            .or_else(|| self.try_const_index(e))
+    }
+
     pub(crate) fn const_lit(e: &Expr) -> Option<i64> {
         match &e.kind {
             ExprKind::IntLit {
@@ -615,7 +744,7 @@ impl Parser<'_, '_> {
     ///     sign bit — `'sd2147483648` would be −2147483648 here and +2147483648
     ///     there. Unsized WITHOUT `s` is safe: no sign bit is consulted, and the
     ///     fits-the-width rule above already forces the value below 2^32.
-    fn based_lit_pattern(raw: &str, sized: bool) -> Option<(u64, u32)> {
+    pub(crate) fn based_lit_pattern(raw: &str, sized: bool) -> Option<(u64, u32)> {
         let tick = raw.find('\'')?;
         let width: u32 = if sized {
             let w: String = raw[..tick].chars().filter(|c| *c != '_').collect();

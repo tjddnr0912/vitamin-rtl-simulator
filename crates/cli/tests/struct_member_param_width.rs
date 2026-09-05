@@ -267,8 +267,9 @@ endmodule
 "#,
         "expected struct member width must be a named integer type or a constan",
     );
-    // pw_localparam_sized: both oracles
-    loud(
+    // pw_localparam_sized: both oracles (§4.5.418: a lone based literal is the
+    // parameter's value in the parse-time table; was a wording pin of the loud)
+    digest(
         "pw_localparam_sized",
         r#"module tb;
   localparam int W = 8'd6;
@@ -282,7 +283,7 @@ endmodule
   initial #5 $finish;
 endmodule
 "#,
-        "expected struct member width must be a named integer type or a constan",
+        "14 6 3f01 1",
     );
     // pw_localparam_uint: both oracles
     digest(

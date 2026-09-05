@@ -774,9 +774,12 @@ impl Parser<'_, '_> {
                 let non_overridable =
                     p.kind == ParamKind::Localparam || self.in_package || self.has_param_header;
                 if non_overridable {
-                    if let Some(v) = self.try_const_index(&p.value) {
+                    let based = self.based_lit_param_value(&p);
+                    if let Some(v) = self.try_const_index(&p.value).or(based.map(|b| b.0)) {
                         if self.const_param_fits(&p, v) {
-                            self.const_locals.insert(p.name.name.clone(), v);
+                            let (w, signed) = self.param_const_shape(&p, based);
+                            self.const_locals
+                                .insert(p.name.name.clone(), ConstVal { v, w, signed });
                         }
                     }
                 }
@@ -832,6 +835,84 @@ impl Parser<'_, '_> {
                 }
             }
             _ => true,
+        }
+    }
+
+    /// §4.5.418: the value of a parameter whose initializer is ONE based literal
+    /// (`parameter int unsigned W = 32'd12`, `'hFF`, `16'sh8000`). `try_const_index`
+    /// deliberately does not fold based literals: inside an expression a literal
+    /// narrower than 32 bits sets the expression's width, and the parse-time fold
+    /// carries no width (ROADMAP §2: `[C+D:0]` over two 4-bit constants folds 17 where
+    /// both oracles say 1). Standing alone, the literal's exact value is the value the
+    /// declared type receives (`const_param_fits` then decides, as for a decimal).
+    /// The parameter's WIDTH must be 32 bits or more — the literal's own width for
+    /// an untyped parameter, the declared range or atom width otherwise — because
+    /// the table folds a consumer's `[C+D:0]` at i64 and a narrower parameter wraps
+    /// there (measured: `logic [3:0] C = 4'hf, D = 4'h1` → 17 where the oracles say
+    /// 1; the decimal spelling is the same pre-existing silent, ROADMAP §2, and this
+    /// spelling must not inherit it). A truncated (`4'd20`), x/z, or over-64-bit
+    /// literal declines in `based_lit_pattern`; an unsigned 64-bit pattern above
+    /// `i64::MAX` declines here (no i64 holds it).
+    fn based_lit_param_value(&self, p: &ParamDecl) -> Option<(i64, u32, bool)> {
+        let ExprKind::IntLit {
+            kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
+            raw,
+        } = &p.value.kind
+        else {
+            return None;
+        };
+        let sized = matches!(kind, IntLitKind::Sized);
+        let (pat, w) = Self::based_lit_pattern(raw, sized)?;
+        let tick = raw.find('\'')?;
+        let signed = matches!(raw[tick + 1..].chars().next(), Some('s') | Some('S'));
+        let declared_w: u64 = match (&p.ty, &p.range) {
+            (ParamType::Implicit, None) => u64::from(w),
+            (ParamType::Integer, None) => 32,
+            (ParamType::Time, None) => 64,
+            (ParamType::Implicit | ParamType::Integer, Some(r)) => {
+                let a = self.try_const_index(&r.msb)?;
+                let b = self.try_const_index(&r.lsb)?;
+                a.abs_diff(b) + 1
+            }
+            _ => return None,
+        };
+        if declared_w < 32 {
+            return None;
+        }
+        let v = if w == 64 {
+            if signed || pat <= i64::MAX as u64 {
+                pat as i64
+            } else {
+                return None;
+            }
+        } else if signed && (pat >> (w - 1)) & 1 == 1 {
+            (pat | (!0u64 << w)) as i64
+        } else {
+            i64::try_from(pat).ok()?
+        };
+        Some((v, w, signed))
+    }
+
+    /// The WIDTH and sign the recorded constant's declaration gives it (IEEE §6.20 /
+    /// §11.6): an untyped parameter takes its initializer's — 32-bit signed for a
+    /// decimal, the literal's own for a lone based literal (`based`); `int` /
+    /// `integer` are 32, `time` 64 unsigned, a declared range its folded width.
+    /// `0` = unknown (the range did not fold): the width-aware twin declines there.
+    fn param_const_shape(&self, p: &ParamDecl, based: Option<(i64, u32, bool)>) -> (u32, bool) {
+        match (&p.ty, &p.range) {
+            (ParamType::Implicit, None) => match based {
+                Some((_, w, s)) => (w, s),
+                None => (32, true),
+            },
+            (ParamType::Integer, None) => (32, p.signed),
+            (ParamType::Time, None) => (64, false),
+            (ParamType::Implicit | ParamType::Integer, Some(r)) => {
+                match (self.try_const_index(&r.msb), self.try_const_index(&r.lsb)) {
+                    (Some(a), Some(b)) => (u32::try_from(a.abs_diff(b) + 1).unwrap_or(0), p.signed),
+                    _ => (0, p.signed),
+                }
+            }
+            _ => (0, p.signed),
         }
     }
 

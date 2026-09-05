@@ -833,6 +833,7 @@ impl Parser<'_, '_> {
         Option<Range>,
         Option<String>,
         Option<String>,
+        Vec<Range>,
     )> {
         // R5: an UNPACKED struct typedef IS supported as a tf-port — it expands to one
         // member formal per field (`$unp$<port>$<field>`), because a heterogeneous
@@ -870,27 +871,37 @@ impl Parser<'_, '_> {
                     Some(self.synth_bit_range(w, span)),
                     Some(nm),
                     None,
+                    Vec::new(),
                 ));
             }
-            return Some((NetVarKind::Reg, false, None, None, Some(nm)));
+            return Some((NetVarKind::Reg, false, None, None, Some(nm), Vec::new()));
         }
         let info = self.peek_typedef_name()?;
         let nm = self.type_name_key();
         // EXT2-C: a packed struct/union typedef IS supported as a tf-port. The frame
         // var is the struct's flat vector (`info.range` = total width) and the caller
         // binds the port NAME to the layout (`var_struct`) so `c.field` desugars to a
-        // part-select in the body. A class handle or a multi-dim-packed vector typedef
-        // stays honest-loud (the TfPort shape carries no class binding / packed dims).
+        // part-select in the body. A class handle stays honest-loud (the TfPort shape
+        // carries no class binding). A multi-dim packed vector typedef (§4.5.418)
+        // returns its inner dims in the sixth slot; the caller flattens the formal and
+        // binds the dims for the body rewrite, as for the inline spelling.
         let is_struct = self.struct_layouts.contains_key(&nm);
-        if info.class_name.is_some() || !info.packed.is_empty() {
+        if info.class_name.is_some() {
             self.error(
-                "a class or multi-dim-packed typedef type for a tf-port (a simple vector / enum / packed-struct typedef port is supported)",
+                "a class typedef type for a tf-port (a vector / enum / packed-struct / multi-dim packed typedef port is supported)",
             );
         }
         self.eat_scope_qualifier();
         self.bump(); // the typedef-name token
         let struct_name = if is_struct { Some(nm) } else { None };
-        Some((info.kind, info.signed, info.range, struct_name, None))
+        Some((
+            info.kind,
+            info.signed,
+            info.range,
+            struct_name,
+            None,
+            info.packed,
+        ))
     }
 
     /// SV §12.7.1 typed for-init with a USER-DEFINED type name (`for (my_t i=0; …)`

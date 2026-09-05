@@ -298,14 +298,17 @@ impl Parser<'_, '_> {
         // R6: a bare `, b` continues the previous formal's DIRECTION, so it continues
         // its spelling too — `task t(ref int a, b);` gives `b` the `ref` word as well.
         let mut inherited_spelling = TfDirSpelling::Declared;
-        let mut inherited_type: TfPortType = (None, false, None, None, None);
+        let mut inherited_type: TfPortType = (None, false, None, None, None, Vec::new());
         loop {
             let before = self.pos;
             let (port, dir, ty, unpacked_struct) =
                 self.parse_tf_port(inherited, inherited_spelling, &inherited_type);
             // §3 ⑤ ⓐ: a formal named like a multi-dim packed parameter shadows it
-            // for the body (the tf scope snapshot restores it — review A-1).
-            self.packed_md_params.remove(&port.name.name);
+            // for the body (the tf scope snapshot restores it — review A-1). A
+            // multi-dim packed FORMAL binds its own dims under the same key so the
+            // body's `shifts[k]` / `$size(shifts)` are rewritten against the flat
+            // declaration (§4.5.418; same snapshot scopes it to this tf).
+            self.bind_packed_md_formal(&port.name.name, &ty.5);
             inherited = dir;
             inherited_spelling = port.dir_spelling;
             inherited_type = ty;
@@ -391,6 +394,13 @@ impl Parser<'_, '_> {
         }
         let explicit_signed = self.opt_signed();
         let mut range = self.opt_range();
+        // §4.5.418: further packed dims (`logic [15:0][3:0] shifts`) — the formal is
+        // declared FLAT and the dims are kept for the body's select rewrite.
+        let mut md_dims: Vec<Range> = if range.is_some() {
+            self.opt_packed_dims()
+        } else {
+            Vec::new()
+        };
         // §4.5.156 (§3 全 site): reject an inline packed range on a non-vector tf-port
         // kind (`task t(byte [7:0] a)`); a typedef-name port is resolved below and was
         // validated at its own decl.
@@ -420,34 +430,38 @@ impl Parser<'_, '_> {
         if net_or_var.is_none() && range.is_none() {
             let tname = self.type_name_key();
             let is_enum = self.enum_defs.contains_key(&tname);
-            if let Some((k, s, r, sn, usn)) = self.try_tf_port_typedef() {
+            if let Some((k, s, r, sn, usn, pd)) = self.try_tf_port_typedef() {
                 net_or_var = Some(k);
                 range = r;
                 typedef_signed = Some(s);
                 struct_name = sn;
                 unpacked_struct = usn;
+                md_dims = pd;
                 if is_enum {
                     enum_name = Some(tname);
                 }
             }
         }
+        let dims = self.flatten_packed_md_formal(&mut range, md_dims);
         // A port carries its own type when a direction keyword OR any explicit type
         // token is present; otherwise (a bare `, name`) it inherits the previous
         // type (INCLUDING its struct-ness). The resolved type then propagates on.
         let type_present = net_or_var.is_some() || range.is_some() || explicit_signed.is_some();
-        let (net_or_var, signed, range, struct_name, enum_name) = if dir_present || type_present {
-            (
-                net_or_var,
-                explicit_signed
-                    .or(typedef_signed)
-                    .unwrap_or_else(|| atom_default_signed(net_or_var)),
-                range,
-                struct_name,
-                enum_name,
-            )
-        } else {
-            inherited_type.clone()
-        };
+        let (net_or_var, signed, range, struct_name, enum_name, dims) =
+            if dir_present || type_present {
+                (
+                    net_or_var,
+                    explicit_signed
+                        .or(typedef_signed)
+                        .unwrap_or_else(|| atom_default_signed(net_or_var)),
+                    range,
+                    struct_name,
+                    enum_name,
+                    dims,
+                )
+            } else {
+                inherited_type.clone()
+            };
         let name = self.ident().unwrap_or_else(|| Ident {
             name: String::new(),
             span: self.cur_span(),
@@ -466,6 +480,7 @@ impl Parser<'_, '_> {
                 None => break,
             }
         }
+        self.reject_packed_md_formal_array(&dims, &unpacked, name.span);
         // EXT2-C: bind a struct/union port NAME to its layout so `name.field`
         // desugars in the body (scoped to this tf by `parse_function_def`/
         // `parse_task_def`). A bare continuation `, b` inherits the struct name too.
@@ -507,6 +522,7 @@ impl Parser<'_, '_> {
             port.range.clone(),
             struct_name,
             enum_name,
+            dims,
         );
         (port, dir, next_type, unpacked_struct)
     }
@@ -730,6 +746,67 @@ impl Parser<'_, '_> {
         }
     }
 
+    /// §4.5.418: a multi-dimensional packed formal (`logic [15:0][3:0] shifts`, or a
+    /// typedef with packed dims). Returns the full dimension list (outer first) and
+    /// replaces `range` with the FLAT product range (`packed_md_flat_range`), so the
+    /// `TfPort` carries one vector exactly like a multi-dim packed parameter; the
+    /// body's selects and `$size`-family queries are rewritten from the dims
+    /// (`bind_packed_md_formal`). Empty `inner` ⇒ `range` untouched, empty list.
+    pub(crate) fn flatten_packed_md_formal(
+        &mut self,
+        range: &mut Option<Range>,
+        inner: Vec<Range>,
+    ) -> Vec<Range> {
+        if inner.is_empty() {
+            return Vec::new();
+        }
+        let Some(outer) = range.take() else {
+            // Unreachable by construction (`opt_packed_dims` runs only after a first
+            // range, and a typedef's `packed` is empty without a `range`); a defect
+            // here must be loud, not a scalar formal.
+            self.error("a multi-dimensional packed formal without its first dimension");
+            return Vec::new();
+        };
+        let span = outer.span;
+        let mut dims = Vec::with_capacity(inner.len() + 1);
+        dims.push(outer);
+        dims.extend(inner);
+        *range = Some(Self::packed_md_flat_range(&dims, span));
+        dims
+    }
+
+    /// A multi-dim packed formal that is ALSO an unpacked array (`logic [1:0][3:0]
+    /// a [2]`) stays loud: the body rewrite keys on the name and would read the
+    /// first UNPACKED index as the outer packed dimension (measured: `a[0][1] ^
+    /// a[1][0]` answered `x` where both oracles say 5). The array-parameter twin is
+    /// not captured either (ROADMAP §3 ⑤); one axis, one queue line.
+    fn reject_packed_md_formal_array(&mut self, dims: &[Range], unpacked: &[Dim], at: Span) {
+        if !dims.is_empty() && !unpacked.is_empty() {
+            self.error_at(
+                at,
+                "a multi-dimensional packed formal with unpacked dimensions (`logic [1:0][3:0] a [2]`) is unsupported in v1; a packed-only or unpacked-only formal is supported",
+            );
+        }
+    }
+
+    /// Bind (or unbind) a formal's name in the multi-dim packed rewrite table. A
+    /// formal ALWAYS drops a same-named parameter's dims (§3 ⑤ ⓐ, review A-1: the
+    /// formal shadows the parameter for the body); a multi-dim packed formal then
+    /// binds its own. The enclosing tf's scope snapshot restores the table after the
+    /// body, so neither the drop nor the binding leaks (a package function's formal
+    /// is not exported at `endpackage`).
+    pub(crate) fn bind_packed_md_formal(&mut self, name: &str, dims: &[Range]) {
+        if name.is_empty() {
+            return;
+        }
+        if dims.is_empty() {
+            self.packed_md_params.remove(name);
+        } else {
+            self.packed_md_params
+                .insert(name.to_string(), dims.to_vec());
+        }
+    }
+
     /// Non-ANSI formal decl `input [r] a, b;` → one TfPort per name, appended.
     pub(crate) fn parse_tf_port_decl_into(&mut self, ports: &mut Vec<TfPort>) {
         let dir = match self.peek() {
@@ -752,6 +829,12 @@ impl Parser<'_, '_> {
         }
         let mut signed = self.signed_eff(net_or_var);
         let mut range = self.opt_range();
+        // §4.5.418: further packed dims — flat declaration + body rewrite (ANSI twin).
+        let mut md_dims: Vec<Range> = if range.is_some() {
+            self.opt_packed_dims()
+        } else {
+            Vec::new()
+        };
         // §4.5.156 (§3 全 site): reject an inline packed range on a non-vector non-ANSI
         // tf-port kind; a typedef-name port is resolved below (validated at its decl).
         if let Some(k) = net_or_var {
@@ -763,14 +846,16 @@ impl Parser<'_, '_> {
         let mut struct_name: Option<String> = None;
         let mut unpacked_struct: Option<String> = None;
         if net_or_var.is_none() && range.is_none() {
-            if let Some((k, s, r, sn, usn)) = self.try_tf_port_typedef() {
+            if let Some((k, s, r, sn, usn, pd)) = self.try_tf_port_typedef() {
                 net_or_var = Some(k);
                 signed = s;
                 range = r;
                 struct_name = sn;
                 unpacked_struct = usn;
+                md_dims = pd;
             }
         }
+        let dims = self.flatten_packed_md_formal(&mut range, md_dims);
         loop {
             let n_start = self.cur_span();
             let Some(name) = self.ident() else { break };
@@ -785,6 +870,7 @@ impl Parser<'_, '_> {
                     None => break,
                 }
             }
+            self.reject_packed_md_formal_array(&dims, &unpacked, name.span);
             // Bind a struct/union port name to its layout (scoped by the enclosing
             // tf's snapshot/restore); `input cfg_t a, b;` binds every name.
             if let Some(sn) = &struct_name {
@@ -803,7 +889,7 @@ impl Parser<'_, '_> {
                 default: None, // non-ANSI formals have no default (ANSI-only, §13.5.3)
                 span: n_start.to(self.prev_span()),
             };
-            self.packed_md_params.remove(&port.name.name);
+            self.bind_packed_md_formal(&port.name.name, &dims);
             // R5: an unpacked-struct formal expands to its N member ports (per name in
             // a comma list); every other formal appends one (byte-identical pre-R5).
             match &unpacked_struct {

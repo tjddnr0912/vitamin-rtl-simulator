@@ -436,6 +436,56 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.418 — The parser rung behind ibex's whole design: multi-dimensional packed tf-port formals, a based literal as a parse-time constant, and a member width folded at its IEEE §11.6 width (2026-09-05 · format 29 unchanged · adversarial review: 2 lenses × 1 round + delta re-score — differential 87 designs PASS (0 blocking; 1 pre-existing tripped = the i64 fold class on a typedef spelling; 2 wording nits fixed); soundness 86 designs FAIL → 1 blocking-class fixed (a 32-bit parameter near 2³² — `W+2` wraps in both oracles, the i64 fold did not — a NEW instance of the pre-existing decimal-spelling class the based spelling was about to inherit; closed for both spellings at the member-width consumer by a width-aware fold twin) + 2 pre-existing recorded; delta re-scored with both lenses' designs, the census, the examples, ibex: 5 cells moved, every one to the oracle line, 6 diagnostic-wording moves, 0 other moves · corpus 10/10)
+
+**Rung.** After §4.5.417 the whole ibex design stopped at 50 parser E2002 errors in two package
+files: `prim_cipher_pkg.sv` — eight functions whose formal is a multi-dimensional packed type
+(`logic [15:0][3:0] shifts`, `logic [7:0][2:0] perm`) — and `prim_ram_1p_pkg.sv` — two packed-struct
+members whose width names a package `parameter int unsigned … = 32'd12` (a based literal, which the
+parse-time table did not fold). Both oracles run every shape; iverilog refuses packed-array
+PARAMETERS, so the parameter control twins are verilator-only.
+
+**Formal.** No AST change (`TfPort` keeps `range`): the formal is declared FLAT — `range` becomes the
+product range `packed_md_flat_range` builds — and the dimension list is bound under the formal's name
+in the existing `packed_md_params` table (`bind_packed_md_formal`), which the tf's scope snapshot
+already restores after the body (a formal always drops a same-named parameter's dims, §3 ⑤ ⓐ review
+A-1). Reads were already rewritten (`expr.rs` → `rewrite_packed_md_select`); WRITES now are too
+(`lvalue.rs` → `rewrite_packed_md_lvalue`, a select chain rooted at a bound name round-trips through
+the expression rewrite), and the `$size` family answers from the dims. The typedef spelling
+(`typedef logic [1:0][3:0] t; function f(t a)`) returns its packed dims through
+`try_tf_port_typedef`'s new sixth slot instead of the old "honest-loud"; `TfPortType` carries the
+dims so a comma continuation inherits them; the non-ANSI body declaration is the same code path. A
+multi-dim packed formal that is ALSO an unpacked array is refused (measured: the name-keyed rewrite
+read the unpacked index as the outer packed dim and printed `x` where both oracles print 5).
+
+**Constant.** `based_lit_param_value`: a parameter whose value is exactly one based literal folds
+when the pattern is exact (no truncation, no x/z, ≤ 64 bits — `based_lit_pattern`), the declared type
+holds it (`const_param_fits`) and the declared width is ≥ 32. The width guard exists because the
+table's readers fold at i64; the census control twin showed the decimal spelling of a 4-bit constant
+pair silently 17 where the oracles say 1 (§4.5.414's table was width-unaware) and the based spelling
+must not inherit it.
+
+**Review B F1 and the width-aware twin.** The guard's threshold was not enough: a 32-bit parameter
+holding `32'hffff_ffff` under `[$clog2(W+2):0]` folded 4294967297 where both oracles wrap to 1 —
+the decimal spelling was already silent (PRE == POST 35 vs 2). The fix is at the consumer, for both
+spellings: `ConstVal` now records each constant's declared width and sign beside its value, and
+`try_const_index_w` folds a member bound per IEEE §11.6 (a decimal literal 32-bit signed, a based
+literal its own size, a named constant its declaration's width, `+ - * / %` at the larger operand
+width and signed only when both are, wrapped to that width; unary minus, `$clog2`, parens; anything
+else, an unknown width, or a division by zero declines to the i64 fold). `member_width`,
+`member_ascending` and `member_dbase` read the twin first. The other readers of the table stay i64
+(§2 🆕 L (aa)).
+
+**Measurement.** Probes 18/18 = oracles. Census 646 cells (4 dim shapes × 10–12 read shapes × 9 sites
+incl. two control twins; writes × output/inout/ref/local/variable; 9 declared types × 15 literal
+forms for the constant; misc shadow/continuation/default/recursion/package cells): 418 loud → correct
+· 93 same-correct · 107 loud → loud (declines, illegal shapes, elaborate's frame-call subset) · 17
+loud → value where the oracles split on 4-state (vita = iverilog) · 1 FIXED-SILENT (the control twin,
+after F1's fix) · 3 pre-existing (§3 ⑤ ⓞ, the 3-dim packed VARIABLE middle-dim part-select — the
+formal spelling, rewritten by the parser, is right) · 0 new silent. Examples byte-identical, corpus
+10/10, nextest 7,062 (+164), clippy 0, fmt 0. ibex: `prim_cipher_pkg` / `prim_ram_1p_pkg` 50 → 0;
+next page = the SVA parser (a parenthesised implication property inside `assert property`).
+
 #### 4.5.417 — The preprocessor rung behind ibex's whole design: `define default arguments, directives and comments inside a macro body, `__FILE__ / `__LINE__ (2026-09-05 · format 29 unchanged · adversarial review: 2 lenses × 1 round + delta re-score — differential 96 new designs + 81 re-runs FAIL → 2 real gaps fixed (a blank actual whose only content is a COMMENT did not take the default — ibex's `ASSERT(x, y, /*clk*/, /*rst*/) shape, both oracles; a default holding `"…`" was a stray backtick — resolved as macro text) + 2 pre-existing recorded; soundness 32 designs FAIL → 2 BLOCKING fixed (`__LINE__ inside the ACTUALS of a multi-line use took the backtick's line — the anchor is now set before the actuals are pre-expanded; an `include performed from a macro body inherited the expansion site, so an `ifdef diagnostic inside it named the macro use — `scan_file` clears the expansion context) + 3 pre-existing recorded; delta re-scored with both lenses' harnesses, the probes, the census, the examples, the 1,454-file sweep and ibex: 21 cells moved, every one to the oracle line, 0 other moves · corpus 10/10)
 
 **Rung.** The whole ibex design stopped at 24 preprocessor E1013 errors: `` `define default argument

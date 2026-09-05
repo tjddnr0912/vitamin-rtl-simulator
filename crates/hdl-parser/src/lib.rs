@@ -216,18 +216,34 @@ struct TypeInfo {
     class_name: Option<String>,
 }
 
+/// A parse-time constant (§3 ⑤ ⓓ table): its value, and the WIDTH and sign of the
+/// declaration that holds it (`w == 0` ⇒ the width is not known at parse time — a
+/// declared range that did not fold; the width-aware twin then declines and the
+/// plain i64 fold answers as before).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ConstVal {
+    pub(crate) v: i64,
+    pub(crate) w: u32,
+    pub(crate) signed: bool,
+}
+
 /// A resolved tf-port type carried through the comma-sticky inheritance:
 /// `(net_or_var kind, signed, range, struct-type-name, enum-type-name)`. The struct
 /// name is `Some` only for a packed struct/union typedef port (EXT2-C); the enum name
 /// (r18/E1) is `Some` for an `enum`-typedef port so `m.name()`/`m.next()` desugar in the
 /// body (`var_enum`). Both thread onward so a bare continuation `input e_t a, b` binds
-/// every name.
+/// every name. The sixth slot is the packed DIMENSION list of a multi-dimensional
+/// packed formal (`logic [15:0][3:0] shifts` ⇒ `[[15:0],[3:0]]`, outer first): the
+/// formal is declared FLAT (`range` = the product range) and its selects / dimension
+/// queries in the body are rewritten by `packed_md.rs`, exactly like a multi-dim
+/// packed parameter (§3 ⑤ ⓐ). Empty for every other formal.
 type TfPortType = (
     Option<NetVarKind>,
     bool,
     Option<Range>,
     Option<String>,
     Option<String>,
+    Vec<Range>,
 );
 
 /// Flat bit layout of a packed struct: members are placed MSB-first into one
@@ -306,7 +322,7 @@ struct PkgBindings {
     /// §3 ⑤ ⓓ: `(name, value)` for every literal-valued constant the package
     /// DECLARED (`const_locals` ∩ its own declarations — an imported constant is
     /// not re-exported), replayed on import into `const_locals`.
-    consts: Vec<(String, i64)>,
+    consts: Vec<(String, ConstVal)>,
 }
 /// A snapshot of the parser's lexically-scoped registries, used to give a
 /// procedural block its own scope: snapshotted at the block's first body-local
@@ -343,7 +359,7 @@ struct ScopeSnapshot {
     packed_md_params: std::collections::HashMap<String, Vec<Range>>,
     wildcard_bound: std::collections::HashSet<String>,
     local_decl_names: std::collections::HashSet<String>,
-    const_locals: std::collections::HashMap<String, i64>,
+    const_locals: std::collections::HashMap<String, ConstVal>,
 }
 
 /// A trailing READ sub-select on a packed-struct member, normalized to an
@@ -511,12 +527,15 @@ pub struct Parser<'t, 's> {
     /// with `ScopeSnapshot` (a generate block's `localparam` ends with the
     /// block). Read by the packed-struct member layout (`member_width` /
     /// `member_ascending` / `member_dbase`), the constant generate-array index
-    /// and the enum-label fold — one evaluator (`try_const_index`) for all.
-    const_locals: std::collections::HashMap<String, i64>,
+    /// and the enum-label fold — one evaluator (`try_const_index`) for all. The
+    /// entry also carries the constant's declared WIDTH and sign (§4.5.418) so the
+    /// width-aware twin `try_const_index_w` can fold a member-width expression at
+    /// the width IEEE §11.6 gives it (a 32-bit `W + 2` wraps; the i64 fold did not).
+    const_locals: std::collections::HashMap<String, ConstVal>,
     /// §3 ⑤ ⓓ: `"pkg::W"` → value for every constant a package exported
     /// (`const_locals` at its `endpackage`, own declarations only). Unit-scoped,
     /// like `packed_md_scoped`; read by `try_const_index` for a `pkg::W` operand.
-    pkg_const_scoped: std::collections::HashMap<String, i64>,
+    pkg_const_scoped: std::collections::HashMap<String, ConstVal>,
     /// §3 ⑤ ⓓ: the current module-like has an ANSI `#(…)` parameter header, so a
     /// body `parameter` is a localparam (IEEE §6.20.1) and may be recorded in
     /// `const_locals`. Set after the header is parsed; false in a package (whose

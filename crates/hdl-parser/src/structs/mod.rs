@@ -141,9 +141,9 @@ impl Parser<'_, '_> {
         match range {
             None => Some(1),
             Some(r) => {
-                let msb = self.try_const_index(&r.msb)?;
-                let lsb = self.try_const_index(&r.lsb)?;
-                Some(msb.abs_diff(lsb) as u32 + 1)
+                let msb = self.const_bound(&r.msb)?;
+                let lsb = self.const_bound(&r.lsb)?;
+                Some(u32::try_from(msb.abs_diff(lsb)).ok()? + 1)
             }
         }
     }

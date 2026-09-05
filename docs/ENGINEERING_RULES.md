@@ -3595,6 +3595,29 @@ cross-package cells failed — key by the `pkg::t` twin. **Rule**: for a parse-t
 four gates and census each with a control twin; for a stored key name its lifetime.
 See [[layout-keys-must-outlive-the-unit]], [[gate-on-constness-not-resolvability]].
 
+### A width guard on the PRODUCER is a threshold; the defect lives in the CONSUMER's fold (§4.5.418)
+
+- **"Only admit values ≥ 32 bits" answered the census cell and not the class.** The parse-time
+  constant table folds at i64; the census control twin showed a 4-bit pair silently 17 (oracles 1),
+  so the new based-literal spelling was declined below 32 bits. The soundness lens moved the value to
+  2³²−1 and a 32-bit `W+2` still folded 4294967297 (oracles wrap to 1) — the same class, one width up.
+  A guard on what enters the table cannot make the fold width-correct; the fold has to know the
+  width. Fix at the consumer: record each constant's declared width and sign beside its value and
+  fold a layout bound per §11.6 (`try_const_index_w`), falling back to the old fold only where the
+  twin declines. That closed BOTH spellings (the decimal one was pre-existing silent) instead of
+  keeping one loud.
+- **A name-keyed rewrite that was read-only gains a write side when the key gains a writable
+  binder.** The multi-dim packed rewrite was built for PARAMETERS, so only the expression side had
+  it; binding a FORMAL under the same key made `o[i] = …` a bit write on the flat vector (measured
+  `xxxxxxxa` vs `13121110`). When a table's key set widens, enumerate the AST forms the new keys can
+  appear in that the old keys could not (lvalues, `foreach`, port connections) before the census.
+- **A "same key, different unpacked shape" reuse is a silent miss, not a loud one.** The rewrite
+  cannot see unpacked dims, so a formal `logic [1:0][3:0] a [2]` read its unpacked index as the
+  outer packed dim (`x` vs 5). A shape the machinery cannot represent must be refused at the binder,
+  not left to the rewrite's arithmetic.
+- **Hand-computed expected values are not pins.** Three pins written from the mechanism were wrong
+  on the digest's second field; the oracle lines replaced them. Copy the census's oracle output.
+
 ### Three errors with one root: a text form the oracles keep, a joiner that flattened it (§4.5.417)
 
 - **A diagnostic count is not a defect count.** The whole-ibex page read as three items (`define

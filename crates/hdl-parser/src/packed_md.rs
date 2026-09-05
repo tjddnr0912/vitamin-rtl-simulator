@@ -192,7 +192,7 @@ impl Parser<'_, '_> {
             ExprKind::Ident(p)
                 if p.segments.len() == 1 && self.const_locals.contains_key(&p.segments[0].name) =>
             {
-                let v = self.const_locals[&p.segments[0].name];
+                let v = self.const_locals[&p.segments[0].name].v;
                 if v < 0 && v.unsigned_abs() <= u32::MAX as u64 {
                     ExprKind::Unary {
                         op: UnOp::Minus,
@@ -310,7 +310,7 @@ impl Parser<'_, '_> {
         let m = sels.len();
         if m > n {
             self.error(
-                "at most one select per packed dimension of a multi-dimensional packed parameter (this chain selects deeper than the parameter's dimensions)",
+                "at most one select per packed dimension of a multi-dimensional packed parameter or formal (this chain selects deeper than the declared dimensions)",
             );
             return base;
         }
@@ -369,7 +369,7 @@ impl Parser<'_, '_> {
                     if let Some(desc) = desc {
                         if (desc && av < bv) || (!desc && av > bv) {
                             self.error(
-                                "a range select in the dimension's own direction on a multi-dimensional packed parameter (this select is out of order: `[a:b]` must descend on a `[hi:lo]` dimension and ascend on a `[lo:hi]` one)",
+                                "a range select in the dimension's own direction on a multi-dimensional packed parameter or formal (this select is out of order: `[a:b]` must descend on a `[hi:lo]` dimension and ascend on a `[lo:hi]` one)",
                             );
                             return base;
                         }

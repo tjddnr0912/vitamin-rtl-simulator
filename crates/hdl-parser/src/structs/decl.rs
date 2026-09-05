@@ -511,7 +511,7 @@ impl Parser<'_, '_> {
     /// so field index 0 is the MSB)? Scalar members (no range) are not ascending.
     pub(crate) fn member_ascending(&self, range: &Option<Range>) -> bool {
         match range {
-            Some(r) => match (self.try_const_index(&r.msb), self.try_const_index(&r.lsb)) {
+            Some(r) => match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
                 (Some(m), Some(l)) => m < l,
                 _ => false,
             },
@@ -537,7 +537,7 @@ impl Parser<'_, '_> {
     /// seen as ascending here, or its sub-selects would be mirrored silently.
     pub(crate) fn member_dbase(&self, range: &Option<Range>) -> i64 {
         match range {
-            Some(r) => match (self.try_const_index(&r.msb), self.try_const_index(&r.lsb)) {
+            Some(r) => match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
                 (Some(m), Some(l)) => m.min(l),
                 _ => 0,
             },

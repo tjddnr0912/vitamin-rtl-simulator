@@ -786,13 +786,13 @@ impl Parser<'_, '_> {
             // read. Only the package's OWN declarations (`local_decl_names`): a
             // constant it imported is not re-exported (IEEE §26.3). Sorted for a
             // deterministic replay order.
-            let mut cs: Vec<(String, i64)> = self
+            let mut cs: Vec<(String, ConstVal)> = self
                 .const_locals
                 .iter()
                 .filter(|(n, _)| self.local_decl_names.contains(*n))
                 .map(|(n, v)| (n.clone(), *v))
                 .collect();
-            cs.sort();
+            cs.sort_by(|a, b| a.0.cmp(&b.0));
             for (n, v) in &cs {
                 self.pkg_const_scoped.insert(format!("{pkg}::{n}"), *v);
             }

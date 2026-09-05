@@ -178,14 +178,19 @@ fn struct_port_name_does_not_leak_to_module() {
 // ---- deferred facets stay honest-loud (separate follow-ons) ----
 
 #[test]
-fn md_packed_tf_port_is_loud() {
-    // A multi-dim-packed vector typedef as a tf-port stays loud (blocked by a
-    // pre-existing md-packed frame-local element-select gap).
+fn md_packed_tf_port_typedef() {
+    // §4.5.418: a multi-dim-packed vector typedef as a tf-port is declared flat and
+    // its element selects are rewritten in the body (both oracles `cd 12cd`). Was a
+    // wording pin of the loud.
     let (out, code) = run("module top;\n\
          typedef logic [1:0][7:0] pair_t;\n\
          function automatic logic [7:0] lo(input pair_t p); lo = p[0]; endfunction\n\
          pair_t q;\n\
-         initial begin q[0]=8'hCD; #1 $display(\"%h\", lo(q)); $finish; end\n\
+         initial begin q[0]=8'hCD; q[1]=8'h12; #1 $display(\"%h %h\", lo(q), q); $finish; end\n\
          endmodule\n");
-    assert_ne!(code, Some(0), "md-packed tf-port must stay loud:\n{out}");
+    assert_eq!(code, Some(0), "md-packed typedef tf-port:\n{out}");
+    assert!(
+        out.contains("cd 12cd\n"),
+        "md-packed typedef tf-port value:\n{out}"
+    );
 }

@@ -492,7 +492,38 @@ impl Parser<'_, '_> {
                 break;
             }
         }
-        lv
+        // §4.5.418: a select chain WRITE on a multi-dim packed formal (`o[i] = …`)
+        // takes the same flat rewrite as the read side (`expr.rs`); a no-op for
+        // every other lvalue (the rewrite keys on the chain's root name).
+        self.rewrite_packed_md_lvalue(lv)
+    }
+
+    /// The lvalue twin of `rewrite_packed_md_select`: a pure select chain rooted at a
+    /// bare name the packed-md table binds is round-tripped through the expression
+    /// rewrite. Any other lvalue (hier path, concat, struct-folded part-select whose
+    /// root is not bound, error) is returned untouched.
+    fn rewrite_packed_md_lvalue(&mut self, lv: Lvalue) -> Lvalue {
+        if self.packed_md_params.is_empty() {
+            return lv;
+        }
+        let mut cur = &lv;
+        let mut depth = 0usize;
+        while let Lvalue::BitSelect { base, .. }
+        | Lvalue::PartSelect { base, .. }
+        | Lvalue::IndexedPart { base, .. } = cur
+        {
+            depth += 1;
+            cur = base;
+        }
+        let bound = depth > 0
+            && matches!(cur, Lvalue::Ident(p)
+                if p.segments.len() == 1 && self.packed_md_params.contains_key(&p.segments[0].name));
+        if !bound {
+            return lv;
+        }
+        let e = Self::lvalue_to_expr(&lv);
+        let e = self.rewrite_packed_md_select(e);
+        self.expr_to_lvalue(e)
     }
 
     /// True when `lv` is `name[idx]` — a bit-select lvalue rooted at a plain Ident.
