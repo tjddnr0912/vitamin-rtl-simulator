@@ -181,8 +181,8 @@ impl Elaborator<'_> {
     ) -> Vec<(i64, u32, bool)> {
         let mut out = Vec::new();
         for r in range.into_iter().chain(packed.iter()) {
-            let msb_v = self.const_eval_in_scope(&r.msb);
-            let lsb_v = self.const_eval_in_scope(&r.lsb);
+            let msb_v = self.const_range_bound_fold(&r.msb);
+            let lsb_v = self.const_range_bound_fold(&r.lsb);
             // P0-NCW: net/hierarchical-referenced (non-constant) packed bound is loud.
             self.check_const_range_bound(&r.msb, msb_v);
             self.check_const_range_bound(&r.lsb, lsb_v);

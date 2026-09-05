@@ -37,8 +37,8 @@ impl Elaborator<'_> {
             }
         };
         let (Some(left), Some(right)) = (
-            self.const_eval_in_scope(&range.msb),
-            self.const_eval_in_scope(&range.lsb),
+            self.const_range_bound_fold(&range.msb),
+            self.const_range_bound_fold(&range.lsb),
         ) else {
             self.error(
                 MsgCode::ElabUnsupported,
@@ -86,8 +86,8 @@ impl Elaborator<'_> {
             let mut w: u64 = match &p.range {
                 Some(r) => {
                     match (
-                        self.const_eval_in_scope(&r.msb),
-                        self.const_eval_in_scope(&r.lsb),
+                        self.const_range_bound_fold(&r.msb),
+                        self.const_range_bound_fold(&r.lsb),
                     ) {
                         (Some(m), Some(l)) => m.abs_diff(l) + 1,
                         _ => {
@@ -100,8 +100,8 @@ impl Elaborator<'_> {
             };
             for r in &p.packed {
                 match (
-                    self.const_eval_in_scope(&r.msb),
-                    self.const_eval_in_scope(&r.lsb),
+                    self.const_range_bound_fold(&r.msb),
+                    self.const_range_bound_fold(&r.lsb),
                 ) {
                     (Some(m), Some(l)) => w = w.saturating_mul(m.abs_diff(l) + 1),
                     _ => widths_ok = false,

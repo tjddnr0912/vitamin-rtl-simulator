@@ -588,8 +588,8 @@ impl Elaborator<'_> {
             && match &decl.unpacked[0] {
                 ast::Dim::Size(_) => true,
                 ast::Dim::Range(r) => {
-                    self.const_eval_in_scope(&r.msb) == Some(0)
-                        && self.const_eval_in_scope(&r.lsb).is_some_and(|l| l >= 0)
+                    self.const_range_bound_fold(&r.msb) == Some(0)
+                        && self.const_range_bound_fold(&r.lsb).is_some_and(|l| l >= 0)
                 }
                 _ => false,
             };

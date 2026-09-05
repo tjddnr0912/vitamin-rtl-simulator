@@ -256,17 +256,11 @@ fn a_negative_declared_bound_declines_rather_than_recording_a_clamped_lie() {
 }
 
 #[test]
-fn the_select_free_twin_of_the_wrapping_bound_is_deliberately_untouched() {
-    // ⚠️ ANTI-SWEEP PIN. `P` is `[1:0]` = 1, so `P-4'd3` has the SAME 4-bit wrap and
-    // the same correct answer 15 — but it reaches the declared-range bound through
-    // the width-UNLIMITED fold with no select to route it elsewhere, and this slice
-    // does not change that path. It answers 3.
-    //
-    // This is a pre-existing width-model gap (ROADMAP §2, the declared-range half of
-    // the AST self-width class), NOT this slice's regression. The assertion is here
-    // so that whoever finally closes that class trips over this line and updates the
-    // two together instead of leaving one behind.
-    assert_eq!(bits_of("[P-4'd3:0]"), "3");
+fn the_select_free_twin_of_the_wrapping_bound_folds_at_its_own_width() {
+    // Was the anti-sweep pin `3`: the select-free bound reached the width-UNLIMITED
+    // fold. §4.5.423 routes every declared-range bound through the self-determined
+    // walk, so `P-4'd3` wraps at 4 bits like its select twin — 15 bits in both oracles.
+    assert_eq!(bits_of("[P-4'd3:0]"), "15");
 }
 
 #[test]

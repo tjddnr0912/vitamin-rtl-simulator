@@ -33,8 +33,10 @@ impl Parser<'_, '_> {
         // typedef whose range names a package constant — `typedef logic [CBOUND_W-1:0]
         // cbound_t;` and its `cbound_t'(addr >> exp)` in ibex_cheriot_pkg — casts
         // instead of declining (a literal range takes the same route it did).
-        let msb = self.try_const_index(&range.msb)?;
-        let lsb = self.try_const_index(&range.lsb)?;
+        // §2 🆕 L (aa): a range bound is self-determined (§11.6.1) — `[C+D:0]` over
+        // two 4-bit constants is ONE bit in both oracles; the i64 fold cast at 17.
+        let msb = self.const_bound(&range.msb)?;
+        let lsb = self.const_bound(&range.lsb)?;
         // Direction-agnostic width (overflow-safe `abs_diff`, matching
         // `member_width`); the range direction does not affect the cast VALUE.
         Some((msb.abs_diff(lsb) as i64 + 1, info.signed))

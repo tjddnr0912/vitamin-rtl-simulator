@@ -55,8 +55,8 @@ fn loud(name: &str, src: &str, needle: &str) {
 
 #[test]
 fn c_l8_neg8d3() {
-    // c_l8_neg8d3: stays loud (declined shape)
-    loud(
+    // c_l8_neg8d3: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_neg8d3",
         r#"module tb;
   localparam logic [7:0] X = -8'd3;
@@ -65,7 +65,7 @@ fn c_l8_neg8d3() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "253 254 3fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     );
     // c_l8_s16sh8000: stays loud (both oracles refuse it too)
     loud(
@@ -79,8 +79,8 @@ endmodule
 "#,
         "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
     );
-    // c_l8_s32d12: stays loud (declined shape)
-    loud(
+    // c_l8_s32d12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_s32d12",
         r#"module tb;
   localparam logic [7:0] X = 32'd12;
@@ -89,10 +89,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "12 13 1fff",
     );
-    // c_l8_s32sd5: stays loud (declined shape)
-    loud(
+    // c_l8_s32sd5: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_s32sd5",
         r#"module tb;
   localparam logic [7:0] X = 32'sd5;
@@ -101,14 +101,14 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 6 3f",
     );
 }
 
 #[test]
 fn c_l8_s33d9() {
-    // c_l8_s33d9: stays loud (declined shape)
-    loud(
+    // c_l8_s33d9: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_s33d9",
         r#"module tb;
   localparam logic [7:0] X = 33'd9;
@@ -117,10 +117,10 @@ fn c_l8_s33d9() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "9 10 3ff",
     );
-    // c_l8_s40d5: stays loud (declined shape)
-    loud(
+    // c_l8_s40d5: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_s40d5",
         r#"module tb;
   localparam logic [7:0] X = 40'd5;
@@ -129,7 +129,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 6 3f",
     );
     // c_l8_s4d20: stays loud (declined shape)
     loud(
@@ -143,8 +143,8 @@ endmodule
 "#,
         "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
     );
-    // c_l8_s4sd12: stays loud (declined shape)
-    loud(
+    // c_l8_s4sd12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_s4sd12",
         r#"module tb;
   localparam logic [7:0] X = 4'sd12;
@@ -153,7 +153,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "252 253 1fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     );
 }
 
@@ -183,8 +183,8 @@ endmodule
 "#,
         "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
     );
-    // c_l8_s64d5: stays loud (declined shape)
-    loud(
+    // c_l8_s64d5: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_s64d5",
         r#"module tb;
   localparam logic [7:0] X = 64'd5;
@@ -193,10 +193,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 6 3f",
     );
-    // c_l8_s8d12: stays loud (declined shape)
-    loud(
+    // c_l8_s8d12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_s8d12",
         r#"module tb;
   localparam logic [7:0] X = 8'd12;
@@ -205,14 +205,14 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "12 13 1fff",
     );
 }
 
 #[test]
 fn c_l8_s8hff() {
-    // c_l8_s8hff: stays loud (declined shape)
-    loud(
+    // c_l8_s8hff: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_s8hff",
         r#"module tb;
   localparam logic [7:0] X = 8'hff;
@@ -221,10 +221,10 @@ fn c_l8_s8hff() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "255 256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     );
-    // c_l8_sum: stays loud (declined shape)
-    loud(
+    // c_l8_sum: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_sum",
         r#"module tb;
   localparam logic [7:0] X = 32'd12 + 1;
@@ -233,10 +233,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "13 14 3fff",
     );
-    // c_l8_u_d12: stays loud (declined shape)
-    loud(
+    // c_l8_u_d12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l8_u_d12",
         r#"module tb;
   localparam logic [7:0] X = 'd12;
@@ -245,7 +245,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "12 13 1fff",
     );
     // c_longint_neg8d3: stays loud (declined shape)
     loud(
@@ -419,8 +419,8 @@ endmodule
 
 #[test]
 fn c_longint_sum() {
-    // c_longint_sum: stays loud (declined shape)
-    loud(
+    // c_longint_sum: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_longint_sum",
         r#"module tb;
   localparam longint X = 32'd12 + 1;
@@ -429,7 +429,7 @@ fn c_longint_sum() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "13 14 3fff",
     );
     // c_longint_u_d12: both oracles
     digest(
@@ -443,8 +443,8 @@ endmodule
 "#,
         "12 13 1fff",
     );
-    // c_narrow_sum_new: stays loud (declined shape)
-    loud(
+    // c_narrow_sum_new: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_narrow_sum_new",
         r#"module tb;
   localparam logic [3:0] C = 4'hf;
@@ -454,7 +454,7 @@ endmodule
   initial begin $display("DIGEST=%0d", $bits(v)); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "1",
     );
     // c_pkg_uint: both oracles
     digest(
@@ -492,8 +492,8 @@ endmodule
 "#,
         "2 6",
     );
-    // c_shortint_neg8d3: stays loud (declined shape)
-    loud(
+    // c_shortint_neg8d3: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_neg8d3",
         r#"module tb;
   localparam shortint X = -8'd3;
@@ -502,10 +502,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "-3 6 3f",
     );
-    // c_shortint_s16sh8000: stays loud (declined shape)
-    loud(
+    // c_shortint_s16sh8000: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_s16sh8000",
         r#"module tb;
   localparam shortint X = 16'sh8000;
@@ -514,10 +514,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "-32768 32771 7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     );
-    // c_shortint_s32d12: stays loud (declined shape)
-    loud(
+    // c_shortint_s32d12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_s32d12",
         r#"module tb;
   localparam shortint X = 32'd12;
@@ -526,14 +526,14 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "12 13 1fff",
     );
 }
 
 #[test]
 fn c_shortint_s32sd5() {
-    // c_shortint_s32sd5: stays loud (declined shape)
-    loud(
+    // c_shortint_s32sd5: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_s32sd5",
         r#"module tb;
   localparam shortint X = 32'sd5;
@@ -542,10 +542,10 @@ fn c_shortint_s32sd5() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 6 3f",
     );
-    // c_shortint_s33d9: stays loud (declined shape)
-    loud(
+    // c_shortint_s33d9: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_s33d9",
         r#"module tb;
   localparam shortint X = 33'd9;
@@ -554,10 +554,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "9 10 3ff",
     );
-    // c_shortint_s40d5: stays loud (declined shape)
-    loud(
+    // c_shortint_s40d5: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_s40d5",
         r#"module tb;
   localparam shortint X = 40'd5;
@@ -566,7 +566,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 6 3f",
     );
     // c_shortint_s4d20: stays loud (declined shape)
     loud(
@@ -584,8 +584,8 @@ endmodule
 
 #[test]
 fn c_shortint_s4sd12() {
-    // c_shortint_s4sd12: stays loud (declined shape)
-    loud(
+    // c_shortint_s4sd12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_s4sd12",
         r#"module tb;
   localparam shortint X = 4'sd12;
@@ -594,7 +594,7 @@ fn c_shortint_s4sd12() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "-4 7 7f",
     );
     // c_shortint_s4x: stays loud (declined shape)
     loud(
@@ -620,8 +620,8 @@ endmodule
 "#,
         "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
     );
-    // c_shortint_s64d5: stays loud (declined shape)
-    loud(
+    // c_shortint_s64d5: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_s64d5",
         r#"module tb;
   localparam shortint X = 64'd5;
@@ -630,14 +630,14 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 6 3f",
     );
 }
 
 #[test]
 fn c_shortint_s8d12() {
-    // c_shortint_s8d12: stays loud (declined shape)
-    loud(
+    // c_shortint_s8d12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_s8d12",
         r#"module tb;
   localparam shortint X = 8'd12;
@@ -646,10 +646,10 @@ fn c_shortint_s8d12() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "12 13 1fff",
     );
-    // c_shortint_s8hff: stays loud (declined shape)
-    loud(
+    // c_shortint_s8hff: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_s8hff",
         r#"module tb;
   localparam shortint X = 8'hff;
@@ -658,10 +658,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "255 256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     );
-    // c_shortint_sum: stays loud (declined shape)
-    loud(
+    // c_shortint_sum: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_sum",
         r#"module tb;
   localparam shortint X = 32'd12 + 1;
@@ -670,10 +670,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "13 14 3fff",
     );
-    // c_shortint_u_d12: stays loud (declined shape)
-    loud(
+    // c_shortint_u_d12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_shortint_u_d12",
         r#"module tb;
   localparam shortint X = 'd12;
@@ -682,7 +682,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "12 13 1fff",
     );
 }
 
@@ -711,7 +711,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "E-ELAB-UNSUPPORTED: declared net width",
     );
     // c_uint_s16sh8000: stays loud (both oracles refuse it too)
     loud(
@@ -723,7 +723,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "E-ELAB-UNSUPPORTED: declared net width",
     );
     // c_uint_s32d12: both oracles
     digest(
@@ -803,7 +803,7 @@ fn c_uint_s4sd12() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "E-ELAB-UNSUPPORTED: declared net width",
     );
     // c_uint_s4x: stays loud (declined shape)
     loud(
@@ -869,8 +869,8 @@ endmodule
 "#,
         "255 256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     );
-    // c_uint_sum: stays loud (declined shape)
-    loud(
+    // c_uint_sum: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_uint_sum",
         r#"module tb;
   localparam int unsigned X = 32'd12 + 1;
@@ -879,7 +879,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "13 14 3fff",
     );
     // c_uint_u_d12: both oracles
     digest(

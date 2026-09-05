@@ -841,8 +841,8 @@ impl Elaborator<'_> {
                     && !Self::ast_contains_call(&r.msb)
                     && !Self::ast_contains_call(&r.lsb) =>
             {
-                let hi = self.const_eval_in_scope(&r.msb)?;
-                let lo = self.const_eval_in_scope(&r.lsb)?;
+                let hi = self.const_range_bound_fold(&r.msb)?;
+                let lo = self.const_range_bound_fold(&r.lsb)?;
                 u32::try_from(hi.abs_diff(lo).checked_add(1)?).ok()?
             }
             _ => ast_kind_range_width(kind, range)?,
@@ -861,8 +861,8 @@ impl Elaborator<'_> {
             if Self::ast_contains_call(&r.msb) || Self::ast_contains_call(&r.lsb) {
                 return None; // same recursion guard the first dimension takes
             }
-            let hi = self.const_eval_in_scope(&r.msb)?;
-            let lo = self.const_eval_in_scope(&r.lsb)?;
+            let hi = self.const_range_bound_fold(&r.msb)?;
+            let lo = self.const_range_bound_fold(&r.lsb)?;
             let d = u32::try_from(hi.abs_diff(lo).checked_add(1)?).ok()?;
             w = w.checked_mul(d)?;
         }

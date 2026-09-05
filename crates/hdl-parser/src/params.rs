@@ -775,12 +775,35 @@ impl Parser<'_, '_> {
                     p.kind == ParamKind::Localparam || self.in_package || self.has_param_header;
                 if non_overridable {
                     let based = self.based_lit_param_value(&p);
-                    if let Some(v) = self.try_const_index(&p.value).or(based.map(|b| b.0)) {
-                        if self.const_param_fits(&p, v) {
-                            let (w, signed) = self.param_const_shape(&p, based);
-                            self.const_locals
-                                .insert(p.name.name.clone(), ConstVal { v, w, signed });
-                        }
+                    let (w, signed) = self.param_const_shape(&p, based);
+                    // §2 🆕 L (aa): a TYPED declaration is an assignment context — the
+                    // initializer folds at the declared width (§11.6.1) and lands in the
+                    // declared type. `localparam int E = C + D` over two 4-bit constants
+                    // is 16, `logic [3:0] F = C + D` is 0 (both oracles); the i64 fold
+                    // recorded 16 for both, or declined. An UNTYPED declaration keeps the
+                    // i64 fold: its type is the initializer's own (§6.20.2) and the two
+                    // oracles disagree about that case (16 / 0 — ROADMAP §2 🆕 L).
+                    let typed = !matches!((&p.ty, &p.range), (ParamType::Implicit, None));
+                    let ctx_v = (typed && w > 0)
+                        .then(|| self.try_const_index_wc(&p.value, w))
+                        .flatten()
+                        .and_then(|c| {
+                            let x = if c.signed {
+                                c.v as i128
+                            } else {
+                                (super::expr_primary::wrap_i128(c.v as i128, c.w, false)? as u64)
+                                    as i128
+                            };
+                            super::expr_primary::wrap_i128(x, w, signed)
+                        });
+                    let fitted = ctx_v.or_else(|| {
+                        self.try_const_index(&p.value)
+                            .or(based.map(|b| b.0))
+                            .filter(|v| self.const_param_fits(&p, *v))
+                    });
+                    if let Some(v) = fitted {
+                        self.const_locals
+                            .insert(p.name.name.clone(), ConstVal { v, w, signed });
                     }
                 }
                 ModuleItem::Param(p)
@@ -826,9 +849,12 @@ impl Parser<'_, '_> {
             }
             (ParamType::Time, None) => v >= 0,
             (ParamType::Implicit | ParamType::Integer, Some(r)) => {
-                match (self.try_const_index(&r.msb), self.try_const_index(&r.lsb)) {
+                match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
                     (Some(a), Some(b)) => {
-                        let w = u32::try_from(a.abs_diff(b)).map(|d| d + 1).unwrap_or(64);
+                        let w = u32::try_from(a.abs_diff(b))
+                            .ok()
+                            .and_then(|d| d.checked_add(1))
+                            .unwrap_or(64);
                         fits_width(w, p.signed)
                     }
                     _ => true,
@@ -870,15 +896,17 @@ impl Parser<'_, '_> {
             (ParamType::Integer, None) => 32,
             (ParamType::Time, None) => 64,
             (ParamType::Implicit | ParamType::Integer, Some(r)) => {
-                let a = self.try_const_index(&r.msb)?;
-                let b = self.try_const_index(&r.lsb)?;
+                let a = self.const_bound(&r.msb)?;
+                let b = self.const_bound(&r.lsb)?;
                 a.abs_diff(b) + 1
             }
             _ => return None,
         };
-        if declared_w < 32 {
-            return None;
-        }
+        // (§4.5.418 declined a declaration narrower than 32 bits here because the
+        // table's readers folded at i64; §2 🆕 L (aa) made them width-aware, so the
+        // spelling is recorded like its decimal twin — `const_param_fits` still
+        // refuses a literal the declared type does not hold.)
+        let _ = declared_w;
         let v = if w == 64 {
             if signed || pat <= i64::MAX as u64 {
                 pat as i64
@@ -907,7 +935,7 @@ impl Parser<'_, '_> {
             (ParamType::Integer, None) => (32, p.signed),
             (ParamType::Time, None) => (64, false),
             (ParamType::Implicit | ParamType::Integer, Some(r)) => {
-                match (self.try_const_index(&r.msb), self.try_const_index(&r.lsb)) {
+                match (self.const_bound(&r.msb), self.const_bound(&r.lsb)) {
                     (Some(a), Some(b)) => (u32::try_from(a.abs_diff(b) + 1).unwrap_or(0), p.signed),
                     _ => (0, p.signed),
                 }

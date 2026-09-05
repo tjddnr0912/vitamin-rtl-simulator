@@ -105,8 +105,8 @@ impl Elaborator<'_> {
                 Some((0, u32::try_from(n).ok()?, false))
             }
             ast::Dim::Range(r) => {
-                let m = self.const_eval_in_scope(&r.msb)?;
-                let l = self.const_eval_in_scope(&r.lsb)?;
+                let m = self.const_range_bound_fold(&r.msb)?;
+                let l = self.const_range_bound_fold(&r.lsb)?;
                 let (lo, hi) = if m <= l { (m, l) } else { (l, m) };
                 // CHECKED: `hi - lo` overflows i64 on a pathological declaration such as
                 // `[4611686018427387904:-4611686018427387905]`. The old negative-bound
@@ -354,8 +354,8 @@ impl Elaborator<'_> {
                     (n >= 1).then_some((0, n - 1))?
                 }
                 ast::Dim::Range(r) => (
-                    self.const_eval_in_scope(&r.msb)?,
-                    self.const_eval_in_scope(&r.lsb)?,
+                    self.const_range_bound_fold(&r.msb)?,
+                    self.const_range_bound_fold(&r.lsb)?,
                 ),
                 _ => return None,
             };

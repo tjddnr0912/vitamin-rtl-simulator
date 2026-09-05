@@ -98,8 +98,8 @@ impl Elaborator<'_> {
             return None;
         }
         if let Some(r) = &f.range {
-            let hi = self.const_eval_in_scope(&r.msb)?;
-            let lo = self.const_eval_in_scope(&r.lsb)?;
+            let hi = self.const_range_bound_fold(&r.msb)?;
+            let lo = self.const_range_bound_fold(&r.lsb)?;
             return Some((u32::try_from((hi - lo).unsigned_abs() + 1).ok()?, f.signed));
         }
         match f.ret_type {

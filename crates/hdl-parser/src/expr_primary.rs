@@ -2,6 +2,28 @@
 
 use super::*;
 
+/// Wrap a two's-complement value to `w` bits and read it back under `signed`.
+/// Declines an unknown or over-64-bit width, and an unsigned 64-bit pattern no i64
+/// holds.
+pub(crate) fn wrap_i128(v: i128, w: u32, signed: bool) -> Option<i64> {
+    if w == 0 || w > 64 {
+        return None;
+    }
+    let mask: u128 = if w == 64 {
+        u64::MAX as u128
+    } else {
+        (1u128 << w) - 1
+    };
+    let bits = (v as u128) & mask;
+    if signed && w < 64 && (bits >> (w - 1)) & 1 == 1 {
+        Some((bits | (!0u128 << w)) as i64)
+    } else if !signed && w == 64 && bits > i64::MAX as u128 {
+        None
+    } else {
+        Some(bits as i64)
+    }
+}
+
 impl Parser<'_, '_> {
     /// Const-fold a generate-array hier index to its non-negative value: a decimal
     /// literal, literal arithmetic (`P-1`, `1+2`), or a module-scope literal-valued
@@ -76,7 +98,9 @@ impl Parser<'_, '_> {
     /// `localparam` (`g[P]`) folds; anything else (a `parameter`, a runtime value)
     /// is a loud parse error.
     pub(crate) fn const_index_string(&mut self, idx: &Expr) -> String {
-        if let Some(v) = self.try_const_index(idx) {
+        // §2 🆕 L (aa): a generate index is self-determined — `g[C+D]` over two
+        // 4-bit constants wraps to `g[0]` in both oracles (the i64 fold said 16).
+        if let Some(v) = self.const_bound(idx) {
             if v >= 0 {
                 // Normalize the value (strip leading zeros: `g[00]` ⇒ scope `g[0]`).
                 return v.to_string();
@@ -514,24 +538,39 @@ impl Parser<'_, '_> {
     /// `logic [3:0] C = 15, D = 1; [C+D:0]` wrap to 1 in both oracles, where the
     /// i64 fold answered 4294967297 and 17 (review B F1 and the census control twin).
     pub(crate) fn try_const_index_w(&self, e: &Expr) -> Option<ConstVal> {
-        fn wrap(v: i128, w: u32, signed: bool) -> Option<i64> {
-            if w == 0 || w > 64 {
-                return None;
-            }
-            let mask: u128 = if w == 64 {
-                u64::MAX as u128
-            } else {
-                (1u128 << w) - 1
-            };
-            let bits = (v as u128) & mask;
-            if signed && w < 64 && (bits >> (w - 1)) & 1 == 1 {
-                Some((bits | (!0u128 << w)) as i64)
-            } else if !signed && w == 64 && bits > i64::MAX as u128 {
-                None
-            } else {
-                Some(bits as i64)
-            }
+        self.try_const_index_wc(e, 0)
+    }
+
+    /// [`Self::try_const_index_w`] under a CONTEXT width `ctx` (`0` = none) — the
+    /// §11.6.1 / §11.8.2 rule, in the LRM's two steps. First the expression's width
+    /// and sign are determined from ALL of its context-determined operands and the
+    /// context (`cw_shape`): the larger of the operands' widths and `ctx`; signed only
+    /// when every operand is. Then every context-determined node is evaluated AT that
+    /// width (`cw_eval`), the operands extended first. A leaf keeps its own width for
+    /// the first step and is extended in the second; a `$clog2` operand is
+    /// self-determined (no context, its own two steps).
+    ///
+    /// Measured against both oracles: `localparam int E = C + D` over two 4-bit
+    /// constants is 16 (the context carries the carry), `logic [3:0] F = C + D` is 0,
+    /// `int S = (D - C) / 2` is 2147483641 (unsigned, §11.8.1); in a self-determined
+    /// position `g[-C+16]` is `g[1]` and `[(C+D)%3:0]` is `[1:0]` — the first draft
+    /// folded bottom-up, wrapping `-C` and `C+D` at 4 bits before the 32-bit literal
+    /// beside them widened the expression, and got both wrong (census, 2 cells).
+    pub(crate) fn try_const_index_wc(&self, e: &Expr, ctx: u32) -> Option<ConstVal> {
+        let (w0, signed) = self.cw_shape(e)?;
+        let w = w0.max(ctx);
+        if w == 0 || w > 64 {
+            return None;
         }
+        let pat = self.cw_eval(e, w, signed)?;
+        let v = wrap_i128(pat, w, signed)?;
+        Some(ConstVal { v, w, signed })
+    }
+
+    /// Step one of [`Self::try_const_index_wc`]: the expression's own `(width, signed)`
+    /// (§11.6.1 Table 11-21 for the width, §11.8.1 for the sign). `None` = a shape this
+    /// fold does not know, or a name whose width is unknown.
+    fn cw_shape(&self, e: &Expr) -> Option<(u32, bool)> {
         match &e.kind {
             ExprKind::IntLit {
                 kind: IntLitKind::Decimal,
@@ -544,78 +583,142 @@ impl Parser<'_, '_> {
                     .parse::<i64>()
                     .ok()?;
                 i32::try_from(v).ok()?;
-                Some(ConstVal {
-                    v,
-                    w: 32,
-                    signed: true,
-                })
+                Some((32, true))
             }
             ExprKind::IntLit {
                 kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
                 raw,
             } => {
                 let sized = matches!(kind, IntLitKind::Sized);
-                let (pat, w) = Self::based_lit_pattern(raw, sized)?;
+                let (_, w) = Self::based_lit_pattern(raw, sized)?;
                 let tick = raw.find('\'')?;
                 let signed = matches!(raw[tick + 1..].chars().next(), Some('s') | Some('S'));
-                let v = wrap(pat as i128, w, signed)?;
-                Some(ConstVal { v, w, signed })
+                Some((w, signed))
             }
             ExprKind::Ident(p) if p.segments.len() == 1 => self
                 .const_locals
                 .get(&p.segments[0].name)
-                .copied()
-                .filter(|c| c.w > 0),
+                .filter(|c| c.w > 0)
+                .map(|c| (c.w, c.signed)),
             ExprKind::PkgScoped { pkg, name } => self
                 .pkg_const_scoped
                 .get(&format!("{}::{}", pkg.name, name.name))
-                .copied()
-                .filter(|c| c.w > 0),
-            ExprKind::Paren { inner } => self.try_const_index_w(inner),
+                .filter(|c| c.w > 0)
+                .map(|c| (c.w, c.signed)),
+            ExprKind::Paren { inner } => self.cw_shape(inner),
+            ExprKind::Unary {
+                op: UnOp::Minus,
+                operand,
+            } => self.cw_shape(operand),
+            ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
+                Some((32, true))
+            }
+            ExprKind::Binary { op, lhs, rhs } => {
+                if !matches!(
+                    op,
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
+                ) {
+                    return None;
+                }
+                let (lw, ls) = self.cw_shape(lhs)?;
+                let (rw, rs) = self.cw_shape(rhs)?;
+                Some((lw.max(rw), ls && rs))
+            }
+            _ => None,
+        }
+    }
+
+    /// Step two of [`Self::try_const_index_wc`]: the value of `e` as a `w`-bit pattern
+    /// (a non-negative `i128` below 2^w), every context-determined node computed at
+    /// `w`, leaves extended per `signed` (the EXPRESSION's sign, §11.8.2 — an unsigned
+    /// expression zero-extends a signed leaf). Division and modulus read the operands
+    /// under `signed` and truncate toward zero (§11.4.3); a zero divisor declines.
+    fn cw_eval(&self, e: &Expr, w: u32, signed: bool) -> Option<i128> {
+        let mask: i128 = (1i128 << w) - 1;
+        // A leaf's `(value, own width, own sign)` → its pattern at `w`.
+        let leaf = |v: i64, lw: u32, ls: bool| -> Option<i128> {
+            let x: i128 = if signed && ls {
+                v as i128
+            } else {
+                // Zero-extend the leaf's own `lw`-bit pattern.
+                (wrap_i128(v as i128, lw, false)? as u64) as i128
+            };
+            Some(x & mask)
+        };
+        // Read a `w`-bit pattern back as the value `signed` says it is.
+        let read = |p: i128| -> i128 {
+            if signed && (p >> (w - 1)) & 1 == 1 {
+                p - (1i128 << w)
+            } else {
+                p
+            }
+        };
+        match &e.kind {
+            ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                raw,
+            } => {
+                let v = raw
+                    .chars()
+                    .filter(|c| *c != '_')
+                    .collect::<String>()
+                    .parse::<i64>()
+                    .ok()?;
+                leaf(v, 32, true)
+            }
+            ExprKind::IntLit {
+                kind: kind @ (IntLitKind::Sized | IntLitKind::UnsizedBased),
+                raw,
+            } => {
+                let sized = matches!(kind, IntLitKind::Sized);
+                let (pat, lw) = Self::based_lit_pattern(raw, sized)?;
+                let tick = raw.find('\'')?;
+                let ls = matches!(raw[tick + 1..].chars().next(), Some('s') | Some('S'));
+                let v = wrap_i128(pat as i128, lw, ls)?;
+                leaf(v, lw, ls)
+            }
+            ExprKind::Ident(p) if p.segments.len() == 1 => {
+                let c = self
+                    .const_locals
+                    .get(&p.segments[0].name)
+                    .filter(|c| c.w > 0)?;
+                leaf(c.v, c.w, c.signed)
+            }
+            ExprKind::PkgScoped { pkg, name } => {
+                let c = self
+                    .pkg_const_scoped
+                    .get(&format!("{}::{}", pkg.name, name.name))
+                    .filter(|c| c.w > 0)?;
+                leaf(c.v, c.w, c.signed)
+            }
+            ExprKind::Paren { inner } => self.cw_eval(inner, w, signed),
             ExprKind::Unary {
                 op: UnOp::Minus,
                 operand,
             } => {
-                let c = self.try_const_index_w(operand)?;
-                let v = wrap(-(c.v as i128), c.w, c.signed)?;
-                Some(ConstVal { v, ..c })
+                let x = self.cw_eval(operand, w, signed)?;
+                Some((-x) & mask)
             }
             ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
-                let n = self.try_const_index_w(&args[0])?;
+                let n = self.try_const_index_wc(&args[0], 0)?;
                 if n.v < 0 {
                     return None;
                 }
-                Some(ConstVal {
-                    v: i64::from(64 - (n.v as u64).saturating_sub(1).leading_zeros()),
-                    w: 32,
-                    signed: true,
-                })
+                let v = i64::from(64 - (n.v as u64).saturating_sub(1).leading_zeros());
+                leaf(v, 32, true)
             }
             ExprKind::Binary { op, lhs, rhs } => {
-                let a = self.try_const_index_w(lhs)?;
-                let b = self.try_const_index_w(rhs)?;
-                let w = a.w.max(b.w);
-                let signed = a.signed && b.signed;
-                // Operands extend to the result width first (§11.6.1: sign-extended
-                // only when the result is signed).
-                let ext = |c: ConstVal| -> i128 {
-                    if signed {
-                        c.v as i128
-                    } else {
-                        (wrap(c.v as i128, c.w, false).unwrap_or(0) as u64) as i128
-                    }
-                };
-                let (x, y) = (ext(a), ext(b));
+                let x = self.cw_eval(lhs, w, signed)?;
+                let y = self.cw_eval(rhs, w, signed)?;
                 let v = match op {
                     BinOp::Add => x + y,
                     BinOp::Sub => x - y,
-                    BinOp::Mul => x * y,
-                    BinOp::Div if y != 0 => x / y,
-                    BinOp::Mod if y != 0 => x % y,
+                    BinOp::Mul => (read(x) * read(y)) & mask,
+                    BinOp::Div if y != 0 => read(x) / read(y),
+                    BinOp::Mod if y != 0 => read(x) % read(y),
                     _ => return None,
                 };
-                let v = wrap(v, w, signed)?;
-                Some(ConstVal { v, w, signed })
+                Some(v & mask)
             }
             _ => None,
         }

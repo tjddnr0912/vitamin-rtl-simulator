@@ -55,8 +55,8 @@ fn loud(name: &str, src: &str, needle: &str) {
 
 #[test]
 fn c_byte_neg8d3() {
-    // c_byte_neg8d3: stays loud (declined shape)
-    loud(
+    // c_byte_neg8d3: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_neg8d3",
         r#"module tb;
   localparam byte X = -8'd3;
@@ -65,10 +65,10 @@ fn c_byte_neg8d3() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "-3 6 3f",
     );
-    // c_byte_s16sh8000: stays loud (declined shape)
-    loud(
+    // c_byte_s16sh8000: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_s16sh8000",
         r#"module tb;
   localparam byte X = 16'sh8000;
@@ -77,10 +77,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "0 3 7",
     );
-    // c_byte_s32d12: stays loud (declined shape)
-    loud(
+    // c_byte_s32d12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_s32d12",
         r#"module tb;
   localparam byte X = 32'd12;
@@ -89,10 +89,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "12 13 1fff",
     );
-    // c_byte_s32sd5: stays loud (declined shape)
-    loud(
+    // c_byte_s32sd5: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_s32sd5",
         r#"module tb;
   localparam byte X = 32'sd5;
@@ -101,14 +101,14 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 6 3f",
     );
 }
 
 #[test]
 fn c_byte_s33d9() {
-    // c_byte_s33d9: stays loud (declined shape)
-    loud(
+    // c_byte_s33d9: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_s33d9",
         r#"module tb;
   localparam byte X = 33'd9;
@@ -117,10 +117,10 @@ fn c_byte_s33d9() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "9 10 3ff",
     );
-    // c_byte_s40d5: stays loud (declined shape)
-    loud(
+    // c_byte_s40d5: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_s40d5",
         r#"module tb;
   localparam byte X = 40'd5;
@@ -129,7 +129,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 6 3f",
     );
     // c_byte_s4d20: stays loud (declined shape)
     loud(
@@ -143,8 +143,8 @@ endmodule
 "#,
         "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
     );
-    // c_byte_s4sd12: stays loud (declined shape)
-    loud(
+    // c_byte_s4sd12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_s4sd12",
         r#"module tb;
   localparam byte X = 4'sd12;
@@ -153,7 +153,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "-4 7 7f",
     );
 }
 
@@ -183,8 +183,8 @@ endmodule
 "#,
         "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
     );
-    // c_byte_s64d5: stays loud (declined shape)
-    loud(
+    // c_byte_s64d5: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_s64d5",
         r#"module tb;
   localparam byte X = 64'd5;
@@ -193,10 +193,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 6 3f",
     );
-    // c_byte_s8d12: stays loud (declined shape)
-    loud(
+    // c_byte_s8d12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_s8d12",
         r#"module tb;
   localparam byte X = 8'd12;
@@ -205,14 +205,14 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "12 13 1fff",
     );
 }
 
 #[test]
 fn c_byte_s8hff() {
-    // c_byte_s8hff: stays loud (declined shape)
-    loud(
+    // c_byte_s8hff: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_s8hff",
         r#"module tb;
   localparam byte X = 8'hff;
@@ -221,10 +221,10 @@ fn c_byte_s8hff() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "-1 4 f",
     );
-    // c_byte_sum: stays loud (declined shape)
-    loud(
+    // c_byte_sum: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_sum",
         r#"module tb;
   localparam byte X = 32'd12 + 1;
@@ -233,10 +233,10 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "13 14 3fff",
     );
-    // c_byte_u_d12: stays loud (declined shape)
-    loud(
+    // c_byte_u_d12: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_byte_u_d12",
         r#"module tb;
   localparam byte X = 'd12;
@@ -245,7 +245,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "12 13 1fff",
     );
     // c_cast_bound: both oracles
     digest(
@@ -308,8 +308,8 @@ endmodule
 "#,
         "12 fff",
     );
-    // c_int_neg8d3: stays loud (declined shape)
-    loud(
+    // c_int_neg8d3: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_int_neg8d3",
         r#"module tb;
   localparam int X = -8'd3;
@@ -318,7 +318,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "-3 6 3f",
     );
 }
 
@@ -480,8 +480,8 @@ endmodule
 
 #[test]
 fn c_int_sum() {
-    // c_int_sum: stays loud (declined shape)
-    loud(
+    // c_int_sum: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_int_sum",
         r#"module tb;
   localparam int X = 32'd12 + 1;
@@ -490,7 +490,7 @@ fn c_int_sum() {
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "13 14 3fff",
     );
     // c_int_u_d12: both oracles
     digest(
@@ -504,8 +504,8 @@ endmodule
 "#,
         "12 13 1fff",
     );
-    // c_integer_neg8d3: stays loud (declined shape)
-    loud(
+    // c_integer_neg8d3: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_integer_neg8d3",
         r#"module tb;
   localparam integer X = -8'd3;
@@ -514,7 +514,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "-3 6 3f",
     );
     // c_integer_s16sh8000: both oracles
     digest(
@@ -672,8 +672,8 @@ endmodule
 "#,
         "255 256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     );
-    // c_integer_sum: stays loud (declined shape)
-    loud(
+    // c_integer_sum: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_integer_sum",
         r#"module tb;
   localparam integer X = 32'd12 + 1;
@@ -682,7 +682,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "13 14 3fff",
     );
 }
 
@@ -868,8 +868,8 @@ endmodule
 "#,
         "255 256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     );
-    // c_l40_sum: stays loud (declined shape)
-    loud(
+    // c_l40_sum: both oracles (§4.5.423: the based-literal spelling folds like its decimal twin)
+    digest(
         "c_l40_sum",
         r#"module tb;
   localparam logic [39:0] X = 32'd12 + 1;
@@ -878,7 +878,7 @@ endmodule
   initial begin s = '1; $display("DIGEST=%0d %0d %h", X, $bits(s), s); #1 $finish; end
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "13 14 3fff",
     );
     // c_l40_u_d12: both oracles
     digest(

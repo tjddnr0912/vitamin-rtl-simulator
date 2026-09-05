@@ -229,8 +229,8 @@ impl Elaborator<'_> {
         }
         if let Some(r) = &p.range {
             match (
-                self.const_eval_in_scope(&r.msb),
-                self.const_eval_in_scope(&r.lsb),
+                self.const_range_bound_fold(&r.msb),
+                self.const_range_bound_fold(&r.lsb),
             ) {
                 (Some(m), Some(l)) => Some((m.abs_diff(l) as u32 + 1, p.signed)),
                 _ => None, // unfoldable bound: leave it value-inferred (loud elsewhere)
@@ -577,8 +577,8 @@ impl Elaborator<'_> {
             let (w, _) = self.param_decl_width_opt(p, true, default_binds)?;
             return Some((0, w, false));
         };
-        let m = self.const_eval_in_scope(&r.msb)?;
-        let l = self.const_eval_in_scope(&r.lsb)?;
+        let m = self.const_range_bound_fold(&r.msb)?;
+        let l = self.const_range_bound_fold(&r.lsb)?;
         // ⚠️⚠️ A NEGATIVE declared bound (`[3:-2]`, `[-2:3]`) DECLINES. `param_range`'s
         // value type cannot hold a negative `lo`, so the `min(l).max(0)` this used to
         // write recorded a LIE — and while `lo == 0` filtered every such range out the
@@ -757,6 +757,15 @@ impl Elaborator<'_> {
         // function's assignment already uses — and the lane below keeps every
         // fill-free initializer byte-identical. A declined walk (x/z fill, a shape it
         // has no arm for) falls through to the answer the lane always gave.
+        // ⚠️ NOT for every sized initializer. §4.5.423's review (A B-1) measured that
+        // routing EVERY sized initializer through this walk fixes `/ % >> >>>` under a
+        // wrapped intermediate (`localparam logic [7:0] M = (P + 8'd100) % 8'd7` with
+        // `P = 200` is 2 in both oracles, 6 here) — and it is ROADMAP §2 row 14's
+        // reverted slice: the walk vouches a module-scope `logic [7:0] NM` for a
+        // generate-scope `localparam time NM` (`NM | 64'h0` = 2c, both oracles 12c, PRE
+        // 12c — a correct→wrong), and a `logic signed [64:0]` leaf whose value fits an
+        // i64 is evaluated as a 64-bit operand (`W65 / 64'd2`, `W65 % 64'd3` — a
+        // different silent-wrong). Row 14's prerequisites stand; the fill gate stays.
         if let Some((w, s)) = meta {
             if w <= 64 && crate::param_query::ast_contains_fill(e) {
                 if let Some(v) = self.eval_const_assign(
@@ -1255,8 +1264,8 @@ impl Elaborator<'_> {
     pub(crate) fn check_param_decl_range(&mut self, p: &ast::ParamDecl) {
         if let Some(r) = &p.range {
             if !matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
-                let m = self.const_eval_in_scope(&r.msb);
-                let l = self.const_eval_in_scope(&r.lsb);
+                let m = self.const_range_bound_fold(&r.msb);
+                let l = self.const_range_bound_fold(&r.lsb);
                 self.check_const_range_bound(&r.msb, m);
                 self.check_const_range_bound(&r.lsb, l);
             }

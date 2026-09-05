@@ -251,8 +251,8 @@ impl Elaborator<'_> {
                 (n >= 1).then_some((0, n - 1))
             }
             ast::Dim::Range(r) => {
-                let m = self.const_eval_in_scope(&r.msb)?;
-                let l = self.const_eval_in_scope(&r.lsb)?;
+                let m = self.const_range_bound_fold(&r.msb)?;
+                let l = self.const_range_bound_fold(&r.lsb)?;
                 Some((m.min(l), m.max(l)))
             }
             _ => None,
@@ -293,8 +293,8 @@ impl Elaborator<'_> {
         for d in dims {
             out.push(match d {
                 ast::Dim::Range(r) => {
-                    let msb_v = self.const_eval_in_scope(&r.msb);
-                    let lsb_v = self.const_eval_in_scope(&r.lsb);
+                    let msb_v = self.const_range_bound_fold(&r.msb);
+                    let lsb_v = self.const_range_bound_fold(&r.lsb);
                     // P0-NCW: net/hierarchical-referenced (non-constant) unpacked
                     // bound is loud, NOT a silent length-1 dim.
                     self.check_const_range_bound(&r.msb, msb_v);
@@ -344,8 +344,8 @@ impl Elaborator<'_> {
     /// [`Self::range_to_dims_opt`]. The ascending twin is [`Self::declared_asc_lsb`].
     pub(crate) fn declared_neg_lsb(&mut self, range: Option<&ast::Range>) -> Option<i64> {
         let r = range?;
-        let m = self.const_eval_in_scope(&r.msb)?;
-        let l = self.const_eval_in_scope(&r.lsb)?;
+        let m = self.const_range_bound_fold(&r.msb)?;
+        let l = self.const_range_bound_fold(&r.lsb)?;
         (l < 0 && m >= l).then_some(l)
     }
 
@@ -361,8 +361,8 @@ impl Elaborator<'_> {
     /// right about one.
     pub(crate) fn declared_asc_lsb(&mut self, range: Option<&ast::Range>) -> Option<i64> {
         let r = range?;
-        let m = self.const_eval_in_scope(&r.msb)?;
-        let l = self.const_eval_in_scope(&r.lsb)?;
+        let m = self.const_range_bound_fold(&r.msb)?;
+        let l = self.const_range_bound_fold(&r.lsb)?;
         (m < l && m < 0).then_some(l)
     }
 
@@ -418,7 +418,7 @@ impl Elaborator<'_> {
         // …and the full declared pair, for the VCD `$var` label (the stored range is
         // normalized, so without this a waveform viewer numbers the bits `[5:0]` where
         // iverilog numbers them `[3:-2]`).
-        if let Some(m) = range.and_then(|r| self.const_eval_in_scope(&r.msb)) {
+        if let Some(m) = range.and_then(|r| self.const_range_bound_fold(&r.msb)) {
             self.net_decl_range.insert(id, (m, l));
         }
     }
@@ -760,8 +760,8 @@ impl Elaborator<'_> {
             match u {
                 ast::Dim::Range(r) => {
                     if let (Some(m), Some(l)) = (
-                        self.const_eval_in_scope(&r.msb),
-                        self.const_eval_in_scope(&r.lsb),
+                        self.const_range_bound_fold(&r.msb),
+                        self.const_range_bound_fold(&r.lsb),
                     ) {
                         dims.push((m, l));
                     }
@@ -778,8 +778,8 @@ impl Elaborator<'_> {
         let unpacked_n = dims.len();
         for r in range.into_iter().chain(packed.iter()) {
             if let (Some(m), Some(l)) = (
-                self.const_eval_in_scope(&r.msb),
-                self.const_eval_in_scope(&r.lsb),
+                self.const_range_bound_fold(&r.msb),
+                self.const_range_bound_fold(&r.lsb),
             ) {
                 dims.push((m, l));
             }

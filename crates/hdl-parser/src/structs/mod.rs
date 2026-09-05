@@ -143,7 +143,10 @@ impl Parser<'_, '_> {
             Some(r) => {
                 let msb = self.const_bound(&r.msb)?;
                 let lsb = self.const_bound(&r.lsb)?;
-                Some(u32::try_from(msb.abs_diff(lsb)).ok()? + 1)
+                // `[X-1:0]` with an 8-bit `X = 0` is `[4294967295:0]` at the 32-bit
+                // self width: `abs_diff` fits a u32 and `+ 1` does not — a panic in
+                // debug and a 0-width member in release. Decline (→ loud) instead.
+                u32::try_from(msb.abs_diff(lsb)).ok()?.checked_add(1)
             }
         }
     }

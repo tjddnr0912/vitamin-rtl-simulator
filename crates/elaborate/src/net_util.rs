@@ -342,8 +342,8 @@ impl Elaborator<'_> {
     pub(crate) fn enum_base_width(&self, base: &Option<ast::Range>) -> Option<u32> {
         let r = base.as_ref()?;
         match (
-            self.const_eval_in_scope(&r.msb),
-            self.const_eval_in_scope(&r.lsb),
+            self.const_range_bound_fold(&r.msb),
+            self.const_range_bound_fold(&r.lsb),
         ) {
             (Some(m), Some(l)) => Some(m.abs_diff(l) as u32 + 1),
             _ => None,
@@ -500,8 +500,8 @@ impl Elaborator<'_> {
         let Some(r) = base.as_ref() else {
             return Some((0, 32, false));
         };
-        let m = self.const_eval_in_scope(&r.msb)?;
-        let l = self.const_eval_in_scope(&r.lsb)?;
+        let m = self.const_range_bound_fold(&r.msb)?;
+        let l = self.const_range_bound_fold(&r.lsb)?;
         // Descending, zero-LSB, and no wider than the i64 constant domain can carry.
         if m.min(l) != 0 || m < l {
             return None;
@@ -772,8 +772,8 @@ impl Elaborator<'_> {
     pub(crate) fn prescan_net_bits(&mut self, d: &ast::NetVarDecl) {
         let fold_range = |me: &Self, r: &ast::Range| -> Option<u64> {
             match (
-                me.const_eval_in_scope(&r.msb),
-                me.const_eval_in_scope(&r.lsb),
+                me.const_range_bound_fold(&r.msb),
+                me.const_range_bound_fold(&r.lsb),
             ) {
                 (Some(m), Some(l)) if m >= 0 && l >= 0 => Some(m.abs_diff(l) + 1),
                 _ => None,

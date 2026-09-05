@@ -400,7 +400,7 @@ impl Parser<'_, '_> {
                 return true;
             }
         }
-        self.try_const_index(e) == Some(0)
+        self.const_bound(e) == Some(0)
     }
 
     pub(crate) fn build_struct_pattern_concat(&mut self, tyname: &str, rhs: Expr) -> Expr {

@@ -909,8 +909,8 @@ impl Elaborator<'_> {
                     .iter()
                     .map(|d| match d {
                         ast::Dim::Range(r) => {
-                            let msb = self.const_eval_in_scope(&r.msb);
-                            let lsb = self.const_eval_in_scope(&r.lsb);
+                            let msb = self.const_range_bound_fold(&r.msb);
+                            let lsb = self.const_range_bound_fold(&r.lsb);
                             matches!((msb, lsb), (Some(m), Some(l)) if m > l)
                         }
                         _ => false,

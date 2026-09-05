@@ -316,8 +316,8 @@ impl Elaborator<'_> {
                 },
                 ast::Dim::Range(r) => {
                     let (m, l) = match (
-                        self.const_eval_in_scope(&r.msb),
-                        self.const_eval_in_scope(&r.lsb),
+                        self.const_range_bound_fold(&r.msb),
+                        self.const_range_bound_fold(&r.lsb),
                     ) {
                         (Some(m), Some(l)) => (m, l),
                         _ => return Some(Err("a non-constant unpacked-array bound")),
@@ -378,8 +378,8 @@ impl Elaborator<'_> {
             }
             Some(r) => {
                 let (m, l) = match (
-                    self.const_eval_in_scope(&r.msb),
-                    self.const_eval_in_scope(&r.lsb),
+                    self.const_range_bound_fold(&r.msb),
+                    self.const_range_bound_fold(&r.lsb),
                 ) {
                     (Some(m), Some(l)) => (m, l),
                     _ => return Some(Err("a non-constant element width")),
