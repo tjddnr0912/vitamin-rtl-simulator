@@ -422,6 +422,7 @@ impl Parser<'_, '_> {
         self.record_soa_vars.clear();
         self.struct_scalar_vars.clear();
         self.struct_1d_array_vars.clear();
+        self.struct_packed_array_vars.clear();
         self.var_enum.clear();
         self.packed_md_params.clear();
         self.wildcard_bound.clear();

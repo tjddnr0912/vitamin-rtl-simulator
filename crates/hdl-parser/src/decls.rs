@@ -75,6 +75,7 @@ impl Parser<'_, '_> {
     /// e.g. illegal `module m(reg x)` — is routed to non-ANSI and errors in the body.
     /// Strict V2005 non-ANSI headers are bare-name-only, so this is correct for scope.)
     pub(crate) fn parse_port_list(&mut self) -> PortList {
+        self.ansi_prev_struct = None;
         if self.peek() != Some(TokenKind::LParen) {
             return PortList::None;
         }
@@ -218,10 +219,16 @@ impl Parser<'_, '_> {
         // EXT2-E1: a packed-struct typedef port carries a layout name to bind
         // once the port NAME is known (below), so `c.field` desugars.
         let mut port_struct_name: Option<String> = None;
-        let (mut signed, mut range, mut packed) = if let Some((k, s, r, sn)) = typedef_ty {
+        // §4.5.425 (review B F1): the member desugar on a packed ELEMENT applies to
+        // exactly ONE packed dim after the typedef (`cfg_t [1:0] r` — `r[i]` is the
+        // struct); with two (`cfg_t [1:0][2:0] r`) `r[i]` is a sub-array and both
+        // oracles refuse `r[i].field`, so the name joins no member set (loud).
+        let mut typedef_one_dim = false;
+        let (mut signed, mut range, mut packed) = if let Some((k, s, r, sn, extra)) = typedef_ty {
             net_or_var = Some(k);
             port_struct_name = sn;
-            (s, r, Vec::new())
+            typedef_one_dim = extra.len() == 1;
+            self.typedef_dims_layout(s, r, extra)
         } else {
             (
                 self.signed_eff(net_or_var),
@@ -250,7 +257,15 @@ impl Parser<'_, '_> {
                 signed = p.signed;
                 range = p.range.clone();
                 packed = p.packed.clone();
+                // §4.5.425 (review B F3): `input cfg_t [1:0] a, b` — `b` is the same
+                // struct (array) as `a`; without this only `a[i].field` desugared.
+                if let Some((sn, one)) = self.ansi_prev_struct.clone() {
+                    port_struct_name = Some(sn);
+                    typedef_one_dim = one;
+                }
             }
+        } else {
+            self.ansi_prev_struct = port_struct_name.clone().map(|sn| (sn, typedef_one_dim));
         }
         let name = self.ident().unwrap_or(Ident {
             name: String::new(),
@@ -271,6 +286,14 @@ impl Parser<'_, '_> {
                 Some(d) => unpacked.push(d),
                 None => break,
             }
+        }
+        if port_struct_name.is_some() {
+            self.bind_port_struct_shape(
+                &name.name,
+                unpacked.len(),
+                typedef_one_dim,
+                !packed.is_empty(),
+            );
         }
         let default = if self.eat(TokenKind::Eq) {
             Some(self.expr(0))
@@ -319,9 +342,15 @@ impl Parser<'_, '_> {
             None
         };
         let mut port_struct_name: Option<String> = None;
-        let (signed, range) = if let Some((k, s, r, sn)) = typedef_ty {
+        let (signed, range) = if let Some((k, s, r, sn, extra)) = typedef_ty {
             net_or_var = Some(k);
             port_struct_name = sn;
+            if !extra.is_empty() {
+                self.error(
+                    "packed dimensions after a typedef name on a non-ANSI port are unsupported \
+                     in v1 (write the port ANSI-style)",
+                );
+            }
             (s, r)
         } else {
             (self.signed_eff(net_or_var), self.opt_range())
@@ -350,6 +379,10 @@ impl Parser<'_, '_> {
                         Some(d) => dims.push(d),
                         None => break,
                     }
+                }
+                if port_struct_name.is_some() {
+                    let nm = names.last().map(|i| i.name.clone()).unwrap_or_default();
+                    self.bind_port_struct_shape(&nm, dims.len(), false, false);
                 }
                 unpacked.push(dims);
             }
@@ -495,9 +528,18 @@ impl Parser<'_, '_> {
         let tyname = self.type_name_key(); // "pkg::t" (scoped twin key) or bare "t"
         self.eat_scope_qualifier(); // skip an optional `pkg::` before the type name
         self.bump(); // the type-name identifier
-                     // ⓑ-breadth (§8.25): a parameterized class handle override `C #(16) h;`.
-                     // Only a class-typed name takes specialization args; for any other type a
-                     // `#` here is not ours (left for the caller / a loud error downstream).
+                     // §4.5.425: `cfg_t [1:0] r;` — packed dims after the type name.
+        let extra = self.opt_packed_dims();
+        // Review B F1: ONE extra dim makes `v[i]` the struct; two make it a sub-array
+        // (both oracles refuse `v[i].field`) — no member set for it.
+        let packed_array = extra.len() == 1;
+        let any_packed = !extra.is_empty();
+        let (info_signed, info_range, mut info_packed) =
+            self.typedef_dims_layout(info.signed, info.range.clone(), extra);
+        info_packed.extend(info.packed.iter().cloned());
+        // ⓑ-breadth (§8.25): a parameterized class handle override `C #(16) h;`.
+        // Only a class-typed name takes specialization args; for any other type a
+        // `#` here is not ours (left for the caller / a loud error downstream).
         let class_args = if info.class_name.is_some() && self.peek() == Some(TokenKind::Hash) {
             self.parse_param_override_args()
         } else {
@@ -518,7 +560,11 @@ impl Parser<'_, '_> {
                 self.var_struct.insert(n.name.name.clone(), tyname.clone());
                 // A scalar STRUCT (not union, no unpacked dims) is eligible for the
                 // `'{…}` pattern desugar; a union overlay is not (kept loud).
-                if n.unpacked.is_empty() && !is_union {
+                if any_packed {
+                    if packed_array && n.unpacked.is_empty() {
+                        self.struct_packed_array_vars.insert(n.name.name.clone());
+                    }
+                } else if n.unpacked.is_empty() && !is_union {
                     self.struct_scalar_vars.insert(n.name.name.clone());
                     if let Some(init) = n.init.take() {
                         let nm = n.name.name.clone();
@@ -551,9 +597,9 @@ impl Parser<'_, '_> {
         });
         Some(NetVarDecl {
             kind: info.kind,
-            signed: info.signed,
-            range: info.range,
-            packed: info.packed,
+            signed: info_signed,
+            range: info_range,
+            packed: info_packed,
             delay: None,
             names,
             lifetime: None,
@@ -592,5 +638,73 @@ impl Parser<'_, '_> {
             span: start.to(self.prev_span()),
             from_gate: false,
         })
+    }
+
+    /// §4.5.425: fold packed dims written AFTER a typedef name into the decl's
+    /// `(signed, range, packed)`: `cfg_t [1:0] r` is `range = [1:0]`, `packed =
+    /// [the typedef's own range]` — a packed array whose element is the typedef (an
+    /// element-typed multi-dim packed net for elaborate, `v[i]` = one element). An
+    /// atom typedef (no range of its own) keeps its dims loud downstream.
+    pub(crate) fn typedef_dims_layout(
+        &mut self,
+        signed: bool,
+        range: Option<Range>,
+        extra: Vec<Range>,
+    ) -> (bool, Option<Range>, Vec<Range>) {
+        if extra.is_empty() {
+            return (signed, range, Vec::new());
+        }
+        let Some(own) = range else {
+            self.error(
+                "packed dimensions on a typedef with no range of its own (an atom / class \
+                 typedef) are unsupported in v1",
+            );
+            return (signed, None, Vec::new());
+        };
+        // Review A F1 (§4.5.425): a SIGNED element type. The flattened net is unsigned
+        // (both oracles: `v` is an unsigned array) and each element `v[i]` keeps the
+        // typedef's sign — a per-element sign the flat multi-dim representation cannot
+        // carry (folding `signed` onto the whole net inverted BOTH: `s_t [1:0] v;
+        // v[1]` read 14 where both oracles read −2 and a signed accumulator summed 512
+        // for 0). Loud, as it was before this slice.
+        if signed {
+            self.error(
+                "a SIGNED typedef as the element of a packed array (`typedef logic signed \
+                 [3:0] s_t; s_t [1:0] v`) is unsupported in v1 (the element's sign cannot \
+                 be carried per element) — declare the array with an unsigned element type \
+                 or an unpacked array",
+            );
+            return (false, None, Vec::new());
+        }
+        let mut it = extra.into_iter();
+        let outer = it.next();
+        let mut packed: Vec<Range> = it.collect();
+        packed.push(own);
+        (false, outer, packed)
+    }
+
+    /// §4.5.425: a struct-typed PORT's element-access shape, decided once its
+    /// unpacked dims (and its typedef-side packed dims) are known: one unpacked dim
+    /// ⇒ `arr[i].field` desugars per element (`struct_1d_array_vars`, the variable
+    /// declaration's rule — a scoped-type port `pk::cfg_t c [N]` with a genvar index
+    /// parsed as a generate-array hierarchical reference before this); a packed
+    /// array of the struct ⇒ `struct_packed_array_vars`; either way the name is no
+    /// longer a scalar for the `'{…}` desugar.
+    pub(crate) fn bind_port_struct_shape(
+        &mut self,
+        name: &str,
+        unpacked: usize,
+        one_packed_dim: bool,
+        any_packed_dim: bool,
+    ) {
+        if unpacked == 1 && !any_packed_dim {
+            self.struct_scalar_vars.remove(name);
+            self.struct_1d_array_vars.insert(name.to_string());
+        } else if one_packed_dim && unpacked == 0 {
+            self.struct_scalar_vars.remove(name);
+            self.struct_packed_array_vars.insert(name.to_string());
+        } else if unpacked > 0 || any_packed_dim {
+            self.struct_scalar_vars.remove(name);
+        }
     }
 }

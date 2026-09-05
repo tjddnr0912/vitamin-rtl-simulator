@@ -234,7 +234,8 @@ impl Parser<'_, '_> {
         if let ExprKind::BitSelect { base, .. } = &e.kind {
             if let ExprKind::Ident(p) = &base.kind {
                 return p.segments.len() == 1
-                    && self.struct_1d_array_vars.contains(&p.segments[0].name);
+                    && (self.struct_1d_array_vars.contains(&p.segments[0].name)
+                        || self.struct_packed_array_vars.contains(&p.segments[0].name));
             }
         }
         false
@@ -319,7 +320,8 @@ impl Parser<'_, '_> {
         if let Lvalue::BitSelect { base, .. } = lv {
             if let Lvalue::Ident(p) = base.as_ref() {
                 return p.segments.len() == 1
-                    && self.struct_1d_array_vars.contains(&p.segments[0].name);
+                    && (self.struct_1d_array_vars.contains(&p.segments[0].name)
+                        || self.struct_packed_array_vars.contains(&p.segments[0].name));
             }
         }
         false

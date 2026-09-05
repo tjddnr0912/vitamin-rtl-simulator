@@ -356,6 +356,11 @@ struct ScopeSnapshot {
     var_enum: std::collections::HashMap<String, String>,
     struct_scalar_vars: std::collections::HashSet<String>,
     struct_1d_array_vars: std::collections::HashSet<String>,
+    /// §4.5.425: names declared `struct_t [N:0] v` (a PACKED array of a packed struct,
+    /// `NetVarDecl { range: [N:0], packed: [struct flat range] }`): `v[i].field` desugars
+    /// to a part-select on the packed element exactly as `struct_1d_array_vars` does
+    /// on an unpacked element (the geometry is the element's either way).
+    struct_packed_array_vars: std::collections::HashSet<String>,
     packed_md_params: std::collections::HashMap<String, Vec<Range>>,
     wildcard_bound: std::collections::HashSet<String>,
     local_decl_names: std::collections::HashSet<String>,
@@ -478,6 +483,11 @@ pub struct Parser<'t, 's> {
     /// scalar struct (0 dims, in `struct_scalar_vars`), a multi-dim array (≥2
     /// dims), and a union array are all excluded. Module-scoped.
     struct_1d_array_vars: std::collections::HashSet<String>,
+    struct_packed_array_vars: std::collections::HashSet<String>,
+    /// §4.5.425 (review B F3): the struct layout name and "one packed dim after the
+    /// typedef" flag of the previous ANSI port, so a pure continuation
+    /// (`input cfg_t [1:0] a, b`) binds `b`'s member desugar like `a`'s.
+    ansi_prev_struct: Option<(String, bool)>,
     /// §3 ⑤ ⓐ: a multi-dimensional packed PARAMETER name → its packed dims, outer
     /// first (`parameter logic [3:0][4:0] P` ⇒ `[[3:0],[4:0]]`). The parameter is
     /// declared FLAT and a select on the name is rewritten to the flat part-select
@@ -652,6 +662,8 @@ impl<'t, 's> Parser<'t, 's> {
             var_struct: std::collections::HashMap::new(),
             struct_scalar_vars: std::collections::HashSet::new(),
             struct_1d_array_vars: std::collections::HashSet::new(),
+            struct_packed_array_vars: std::collections::HashSet::new(),
+            ansi_prev_struct: None,
             packed_md_params: std::collections::HashMap::new(),
             packed_md_scoped: std::collections::HashMap::new(),
             union_type_names: std::collections::HashSet::new(),

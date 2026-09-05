@@ -784,16 +784,21 @@ impl Parser<'_, '_> {
     /// vector typedef port stays honest-loud (the AnsiPort/PortDecl shape carries
     /// no class binding / extra packed dims). Used by both the ANSI
     /// (`parse_ansi_port`) and non-ANSI (`parse_port_decl`) port parsers.
+    #[allow(clippy::type_complexity)]
     pub(crate) fn try_port_typedef(
         &mut self,
-    ) -> Option<(NetVarKind, bool, Option<Range>, Option<String>)> {
+    ) -> Option<(NetVarKind, bool, Option<Range>, Option<String>, Vec<Range>)> {
         let info = self.peek_typedef_name()?;
         let q = self.scope_qualifier_len(); // 0 (bare) or 2 (`pkg::`)
+                                            // `<type> <name>`, or (§4.5.425) `<type> [dims] <name>` — a packed array of
+                                            // the typedef; anything else is left for the continuation/name path.
         if !matches!(
             self.peek_at(q + 1),
-            Some(TokenKind::Word(WordKind::Ident)) | Some(TokenKind::EscapedIdent)
+            Some(TokenKind::Word(WordKind::Ident))
+                | Some(TokenKind::EscapedIdent)
+                | Some(TokenKind::LBracket)
         ) {
-            return None; // not `<type> <name>` — leave for the continuation/name path
+            return None;
         }
         let nm = self.type_name_key();
         let is_struct = self.struct_layouts.contains_key(&nm);
@@ -804,8 +809,13 @@ impl Parser<'_, '_> {
         }
         self.eat_scope_qualifier();
         self.bump(); // the typedef-name token
+                     // §4.5.425: packed dims AFTER the type name (`cfg_t [N-1:0] p`, `pkg::t
+                     // [pkg::C-1:0] p` — the ibex_top_tracing port shape): the outer dims of a
+                     // packed array whose element is the typedef; the caller folds them ahead of
+                     // the typedef's own range.
+        let extra = self.opt_packed_dims();
         let struct_name = if is_struct { Some(nm) } else { None };
-        Some((info.kind, info.signed, info.range, struct_name))
+        Some((info.kind, info.signed, info.range, struct_name, extra))
     }
 
     /// One ANSI tf-port: `[input|output|inout] [net_or_var] [signed] [range] name`.
