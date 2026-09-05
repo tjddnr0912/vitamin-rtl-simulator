@@ -85,6 +85,50 @@ impl Parser<'_, '_> {
                 }
             }
         }
+        // A property wrapped whole in parentheses (`assert property (@(posedge c)
+        // disable iff (r) (a |-> b))`, lowRISC's `ASSERT` macro shape) is the same
+        // property: strip every such pair and parse the flat body between them, so
+        // `(a |-> b)` lowers byte-identically to `a |-> b`. Only a group that runs
+        // to the property's own end is stripped — `(a |-> b) or (c |-> d)` keeps its
+        // groups for the tree path below, and `(a |-> b) ##1 c` is left to fail as
+        // it did (a parenthesized property is not a sequence).
+        let mut stripped = 0usize;
+        while self.peek() == Some(TokenKind::LParen) && self.paren_group_is_whole_property() {
+            self.bump(); // `(`
+            stripped += 1;
+        }
+        let (antecedent, implication_kind, consequent, consequent_clock, prop_expr) =
+            self.parse_property_expr_parts(start);
+        for _ in 0..stripped {
+            self.expect(TokenKind::RParen, "')' to close a parenthesized property");
+        }
+        (
+            clock,
+            disable_iff,
+            antecedent,
+            implication_kind,
+            consequent,
+            consequent_clock,
+            prop_expr,
+            local_vars,
+        )
+    }
+
+    /// The property expression of a spec, after the clock, `disable iff` and any
+    /// local-variable declarations: `(antecedent, kind, consequent, consequent clock,
+    /// property tree)`. The flat fields are the byte-identical legacy path; the tree
+    /// is `Some` only when a property-level operator is present.
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn parse_property_expr_parts(
+        &mut self,
+        start: Span,
+    ) -> (
+        Sequence,
+        ImplicationKind,
+        Sequence,
+        Option<Sensitivity>,
+        Option<PropExpr>,
+    ) {
         // Property-level operators (slice N2d + SVA-REST): when the body uses a
         // top-level (paren-depth-0) property operator — `and`/`or` (N2d), or
         // `not`/`always`/`until`/`s_until`/`implies`/`iff`/`s_eventually`/`nexttime`
@@ -100,14 +144,11 @@ impl Parser<'_, '_> {
             let pe = self.parse_prop_expr();
             let true_lit = Self::sva_true_lit(start);
             return (
-                clock,
-                disable_iff,
                 Sequence::Boolean(true_lit.clone()),
                 ImplicationKind::Overlap,
                 Sequence::Boolean(true_lit),
                 None,
                 Some(pe),
-                local_vars,
             );
         }
         // `seq [ |-> | |=> ] expr` — a bare `property(@(clk) expr)` (no
@@ -118,52 +159,40 @@ impl Parser<'_, '_> {
         if self.eat(TokenKind::PipeArrow) {
             let cons_clock = self.parse_optional_consequent_clock(true);
             (
-                clock,
-                disable_iff,
                 ante_seq,
                 ImplicationKind::Overlap,
                 self.parse_sequence(),
                 cons_clock,
                 None,
-                local_vars,
             )
         } else if self.eat(TokenKind::PipeEqArrow) {
             let cons_clock = self.parse_optional_consequent_clock(false);
             (
-                clock,
-                disable_iff,
                 ante_seq,
                 ImplicationKind::NonOverlap,
                 self.parse_sequence(),
                 cons_clock,
                 None,
-                local_vars,
             )
         } else {
             let true_lit = Self::sva_true_lit(start);
             match ante_seq {
                 // bare `property(@(clk) expr)` desugars to `1'b1 |-> expr`.
                 Sequence::Boolean(e) => (
-                    clock,
-                    disable_iff,
                     Sequence::Boolean(true_lit),
                     ImplicationKind::Overlap,
                     Sequence::Boolean(e),
                     None,
                     None,
-                    local_vars,
                 ),
                 other => {
                     self.error("an implication `|->`/`|=>` (a bare sequence property is unsupported in this subset)");
                     (
-                        clock,
-                        disable_iff,
                         other,
                         ImplicationKind::Overlap,
                         Sequence::Boolean(true_lit),
                         None,
                         None,
-                        local_vars,
                     )
                 }
             }
@@ -461,6 +490,66 @@ impl Parser<'_, '_> {
                 Some(TokenKind::Word(WordKind::Ident)) if depth == 1 => {
                     if Self::is_prop_op_text(self.text_at(i)) {
                         return true;
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+            if i > BUDGET {
+                return false;
+            }
+        }
+    }
+
+    /// Cursor on `(`: true iff the balanced group contains a property operator
+    /// (`|->`/`|=>`/`and`/`or`/`not`/…) at ANY depth inside it AND the group runs to
+    /// the end of the property — the token after its closing `)` is the `)` of an
+    /// inline `assert property( … )` or the `;` of a `property NAME; …; endproperty`
+    /// body. Such a group is the whole property in parentheses, which is the same
+    /// property; `((a |-> b))` is two of them, and the caller strips them one by one.
+    /// A boolean expression never contains a property operator, so the any-depth
+    /// test cannot mistake `(a & b)` (an antecedent) for a property.
+    pub(crate) fn paren_group_is_whole_property(&self) -> bool {
+        const BUDGET: usize = 65536;
+        let mut i = 0usize;
+        let mut depth: i32 = 0;
+        let mut seen_op = false;
+        loop {
+            match self.peek_at(i) {
+                None => return false,
+                Some(
+                    TokenKind::LParen
+                    | TokenKind::LBracket
+                    | TokenKind::LBracketStar
+                    | TokenKind::LBracketArrow
+                    | TokenKind::LBracketEq,
+                ) => depth += 1,
+                Some(TokenKind::RParen | TokenKind::RBracket) => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return seen_op
+                            && matches!(
+                                self.peek_at(i + 1),
+                                Some(TokenKind::RParen | TokenKind::Semi)
+                            );
+                    }
+                }
+                Some(TokenKind::PipeArrow | TokenKind::PipeEqArrow) => seen_op = true,
+                Some(TokenKind::Word(WordKind::Keyword(
+                    Kw::And | Kw::Or | Kw::Not | Kw::Always,
+                ))) => seen_op = true,
+                // The same fences `prop_has_toplevel_op` carries: a malformed
+                // (unbalanced) property must not let the scan settle past its
+                // construct.
+                Some(TokenKind::Word(WordKind::Keyword(Kw::Module | Kw::Endmodule))) => {
+                    return false
+                }
+                Some(TokenKind::Word(WordKind::Ident)) => {
+                    if self.text_at(i) == "endproperty" {
+                        return false;
+                    }
+                    if Self::is_prop_op_text(self.text_at(i)) {
+                        seen_op = true;
                     }
                 }
                 _ => {}

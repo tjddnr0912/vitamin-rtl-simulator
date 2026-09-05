@@ -164,9 +164,13 @@ them, and the ones it leaves out are the ones no supported construct can observe
 | the Pre-/Post-/Re- variants | **not implemented** — only `program` blocks and non-`#1step` clocking skews can tell the difference, and both are refused loudly |
 
 Concurrent **SVA is implemented**, not deferred: `assert property`, `cover
-property`, sequences with `##N`, `|->` and `|=>` all run and report. What stays
-loud is spelled out when you hit it — a ranged/`goto`/unbounded/multi-clock
-consequent, and an action block on `cover property`.
+property`, sequences with `##N`, `|->` and `|=>` all run and report, and a
+property wrapped whole in parentheses (`assert property (@(posedge clk)
+disable iff (rst) (a |-> b))`, the lowRISC `ASSERT` macro shape) is the same
+property as the unwrapped one. What stays loud is spelled out when you hit it —
+a ranged/`goto`/unbounded/multi-clock consequent, `disable iff` combined with a
+property-level `and`/`or`, an action block on `cover property`, and a
+parenthesised property inside `cover property`.
 
 `clocking` blocks work for input sampling, `@(cb)`, `#1step` skew, anonymous
 blocks and output direction. These are refused loudly rather than approximated:
