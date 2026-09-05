@@ -608,6 +608,12 @@ struct Elaborator<'s> {
     // Parallel-keyed to `param_meta` and resolved by the SAME `walk_scopes`, so the
     // offset range can never drift from the value/meta lookups. elaborate-LOCAL.
     param_range: BTreeMap<String, (u32, u32, bool)>,
+    // §2 🆕 M ⓒ: the PERSISTENT twin of `param_range` for a HIERARCHICAL select
+    // (`u.N[7:4]` on `parameter [11:4] N`), written and cleared exactly where
+    // `param_range` is (`bind_param_range` / `bind_param_value`) but never restored
+    // out at an instance boundary — the same reason `param_meta` persists. Keyed
+    // like `hier_params`; resolved by `hier_resolve`. elaborate-LOCAL.
+    hier_param_range: BTreeMap<String, (u32, u32, bool)>,
     // N5: FQ param-name → RAW string literal for a `string`-typed / string-valued
     // parameter (`localparam string S = "abc"` and the untyped `localparam S = "abc"`).
     // A string param has NO i64 value, so it is kept out of `self.params` and stored
@@ -1390,6 +1396,9 @@ struct Elaborator<'s> {
     // N3.1: hierarchical INDEXED reads `dut.mem[i]` — resolved (with the lowering
     // scope restored) into an array element / bit select after all instances.
     deferred_hier_sel: Vec<DeferredHierSelect>,
+    /// `$bits(u.X)` placeholders patched after every instance exists; see
+    /// [`DeferredHierBits`]. Out-of-band (golden-free).
+    deferred_hier_bits: Vec<DeferredHierBits>,
     /// Deferred hierarchical WRITE targets (`tb.dut.x = …`); see [`DeferredHierWrite`].
     /// Out-of-band (golden-free) — patched into the statement arena post-elaboration.
     deferred_hier_write: Vec<DeferredHierWrite>,

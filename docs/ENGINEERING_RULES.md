@@ -219,6 +219,51 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ A review finding's fix is a slice — grep §2 for the code site BEFORE building it (2026-09-05 · §4.5.423)
+
+Lens A reported "a typed initializer folds `/ % >>` unbounded and wraps after" with 17 designs; the
+one-line routing that fixed all 17 (and three KNOWN-WRONG pins) was ROADMAP §2 row 14's slice,
+reverted four days earlier after seven BLOCKINGs — and its recorded regression reproduced on the
+first row-14 design run (`localparam time NM` in a generate scope over a module-scope `logic [7:0]
+NM`: 2c for 12c). The queue-row rule ("grep §2 by the defect's code site before starting") applies to
+a finding raised mid-review exactly as it applies to a queue row: the finding names a symptom, §2
+may already name the fix and why it cannot be shipped. **How to apply:** before implementing any
+review finding, grep §2 for the function you are about to change (`eval_param_init`,
+`const_eval_in_scope`); if a row says BUILT/REVERTED, run its designs first and file the finding as
+that row's upside instead of shipping the fix.
+
+### ⭐⭐ A width rule is two steps; a bottom-up fold does one and looks right on every leaf (2026-09-05 · §4.5.423)
+
+IEEE §11.6.1/§11.8.2 size an expression FIRST (the largest of every context-determined operand and the
+context; signed only when all are) and evaluate every node AT that width SECOND. A fold that computes
+each node at its own width and extends the result afterwards passes every cell whose operands already
+share the final width, and fails exactly where a narrow sub-expression sits beside a wider sibling:
+`g[-C+16]` (4-bit `C`) wrapped `-C` at 4 bits before the 32-bit literal widened the sum — `g[17]` where
+both oracles read `g[1]`; `[(C+D)%3:0]` was `[0:0]` for `[1:0]`. Two REGRESSION cells in a 324-cell
+census that was otherwise green. **How to apply:** write the shape pass (`cw_shape`) and the
+evaluation pass (`cw_eval`) as two functions and let the second take the width the first computed;
+in the census, put a NARROW constant beside a WIDE literal under a unary minus, a `%` and a `/` —
+those are the operators where the wrapped intermediate is not recoverable by extension.
+
+### ⭐ One funnel for a range bound — a swap at the site the probe hit closes one reader of dozens (2026-09-05 · §4.5.423)
+
+`[C+D:0]` folded at i64 in the parser table's readers (the queue row) AND at 56 elaborate sites in 13
+files that each called `const_eval_in_scope(&r.msb)` on their own declaration kind (net, param, typedef,
+unpacked dim, formal, function local, inline task, instance array, string array). The first probe fixed
+the net range and the param range still said 17. **How to apply:** when a defect is "the same text
+folded by the same evaluator at N sites", grep the evaluator call on the field (`(&r.msb)`), route
+every site through one named funnel with the old call as its FALLBACK (accept set identical by
+construction), and measure the funnel's new lane for the shapes it must not change (the unsigned
+`[W-1:0]` underflow that row 11 keeps graceful needed a `<= i32::MAX` guard).
+
+### ⭐ A parse-time page hides the pages behind it — read the ladder after every rung, not the count (2026-09-05 · §4.5.422)
+
+The parser stops at 50 diagnostics. Clearing the `ASSERT_INIT` page (30) did not reduce ibex's count
+(50 → 50): three pages that were behind the cap became visible (a scoped-constant dim on a port, a
+genvar-indexed member access, DPI export). **How to apply:** after a ladder rung, diff the per-file
+distribution and the first line of each file's page, never the total; write the next page's shape
+into the queue with its file:line so the next iteration starts at the source, not at the count.
+
 ### ⭐ A named source replacing a literal: gate on CONSTNESS at the consumer, not on resolvability (2026-09-04 · §4.5.413)
 
 §4.5.413 let an array parameter's `'{…}` be replaced by a NAMED array (an override, a whole-array

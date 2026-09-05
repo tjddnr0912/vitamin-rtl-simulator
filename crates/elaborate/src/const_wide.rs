@@ -1299,7 +1299,12 @@ impl Elaborator<'_> {
     /// yet, and for an untyped child there is none), so a context-determined top has
     /// no width to be given and the i64 channel remains the answer for it.
     pub(crate) fn override_bits(&self, e: &ast::Expr) -> Option<ir::ConstVal> {
-        if !wide_top_is_self_determined(e) {
+        // §2 🆕 M ⓓ: a bitwise `& | ^` tree over self-determined leaves folds here too
+        // (`#(.K(128'h… ^ 128'd3))` was `W3056 … not a constant` + E3009, where both
+        // oracles bind it) — see `wide_ext_invariant_bitwise` for why only those.
+        let bitwise_tree = crate::const_wide_num::wide_ext_invariant_bitwise(e)
+            && !crate::param_query::ast_contains_fill(e);
+        if !wide_top_is_self_determined(e) && !bitwise_tree {
             return None;
         }
         let (b, w, sg) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;

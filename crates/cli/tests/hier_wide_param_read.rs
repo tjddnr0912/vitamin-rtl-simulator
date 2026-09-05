@@ -75,10 +75,8 @@ fn declared_wide_value_narrow_reads_at_declared_width() {
 }
 
 #[test]
-fn select_of_a_hierarchical_parameter_is_loud_with_an_honest_message() {
-    let src = "module sub; localparam logic [127:0] K = 128'h1; endmodule\nmodule top;\n  sub u();\n  initial begin $display(\"%h\", u.K[7:0]); #1 $finish; end\nendmodule\n";
-    let (out, rc) = run(src);
-    assert_ne!(rc, Some(0), "{out}");
-    assert!(out.contains("hierarchical parameter `u.K`"), "{out}");
-    assert!(!out.contains("undeclared"), "{out}");
+fn select_of_a_hierarchical_parameter_folds() {
+    // §4.5.424: was a wording pin on the loud message; both oracles print `01`.
+    let src = "module sub; localparam logic [127:0] K = 128'h1; endmodule\nmodule top;\n  sub u();\n  initial begin $display(\"D=%h\", u.K[7:0]); #1 $finish; end\nendmodule\n";
+    assert_eq!(lines(src, "D="), vec!["D=01"]);
 }

@@ -110,6 +110,7 @@ impl<'s> Elaborator<'s> {
             array_param_overrides: BTreeMap::new(),
             param_meta: BTreeMap::new(),
             param_range: BTreeMap::new(),
+            hier_param_range: BTreeMap::new(),
             str_param_raw: BTreeMap::new(),
             real_param_val: BTreeMap::new(),
             hoisted_block_local: BTreeMap::new(),
@@ -214,6 +215,7 @@ impl<'s> Elaborator<'s> {
             deferred_hier_calls: Vec::new(),
             deferred_hier_task_calls: Vec::new(),
             deferred_hier_sel: Vec::new(),
+            deferred_hier_bits: Vec::new(),
             deferred_hier_write: Vec::new(),
             deferred_hier_sel_write: Vec::new(),
             pending_fill_width: Vec::new(),
@@ -780,6 +782,9 @@ impl<'s> Elaborator<'s> {
         // N3.1: resolve hierarchical INDEXED reads FIRST (their index lowering may
         // itself defer a whole-net hierarchical read into `deferred_hier`)…
         self.resolve_deferred_hier_sel();
+        // §2 🆕 M ⓒ: `$bits(u.X)` placeholders — a width, never a net, so the comb
+        // read-set recompute below does not need them.
+        self.resolve_deferred_hier_bits();
         // N3: …then resolve the whole-net hierarchical READ references, now that EVERY
         // instance's nets are in `symbols` (deferred during pass-7 lowering because
         // child nets are created in pass 8). Patches each placeholder to the real NetId.

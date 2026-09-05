@@ -327,3 +327,22 @@ pub(crate) fn wide_clog2(b: &ir::BitPacked, w: u32) -> Option<u64> {
     let exact = !(0..top).any(|i| bp_get(b, i).0);
     Some(if exact { top as u64 } else { top as u64 + 1 })
 }
+
+/// §2 🆕 M ⓓ: is `e` a tree of the bitwise `& | ^` over self-determined leaves?
+/// Such an expression's value at ANY context width is its value at the operands'
+/// width, extended — extension commutes with the three operators — so it can be
+/// folded in the PARENT scope (where its names resolve) before the child's declared
+/// width is known, and resized there. `~`, `+`, `-`, `*`, `<<` and the rest carry
+/// information past the operands' top bit and stay declined (loud), as does any
+/// fill (`'1 ^ 1'b0` sizes differently in the two oracles — ROADMAP §2 🆕 M ⓐ).
+pub(crate) fn wide_ext_invariant_bitwise(e: &ast::Expr) -> bool {
+    match &e.kind {
+        ast::ExprKind::Paren { inner } => wide_ext_invariant_bitwise(inner),
+        ast::ExprKind::Binary {
+            op: ast::BinOp::BitAnd | ast::BinOp::BitOr | ast::BinOp::BitXor,
+            lhs,
+            rhs,
+        } => wide_ext_invariant_bitwise(lhs) && wide_ext_invariant_bitwise(rhs),
+        _ => crate::const_wide::wide_top_is_self_determined(e),
+    }
+}

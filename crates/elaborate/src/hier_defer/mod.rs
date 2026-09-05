@@ -152,6 +152,18 @@ pub(crate) struct DeferredHierSelect {
     pub(crate) part: Option<HierPart>,
 }
 
+/// `$bits(u.X)` of a hierarchical NET or PARAMETER (§2 🆕 M ⓒ): the argument is a
+/// type reference, never evaluated, but its width is not known until the sibling
+/// instance has bound its nets and parameters — the same reason a whole read
+/// `u.K` defers. The placeholder `Const` at `eid` is patched to the width.
+pub(crate) struct DeferredHierBits {
+    pub(crate) eid: u32,
+    pub(crate) prefix: String,
+    pub(crate) path: Vec<String>,
+    pub(crate) span: Option<ast::Span>,
+}
+
+mod bits;
 mod read;
 mod task_call;
 mod write;

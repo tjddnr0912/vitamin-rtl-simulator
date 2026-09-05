@@ -71,17 +71,17 @@ impl Elaborator<'_> {
                 // built here (this pass resolves nets); say so rather than calling a
                 // name the read path resolves "undeclared" (§4.5.421 review, both
                 // lenses).
+                // §2 🆕 M ⓒ: a select of a hierarchical PARAMETER (`u.C[7:0]`, `u.C[0]`,
+                // `u.C[b+:w]`) is a `Select` over the parameter's constant, offset
+                // normalized against its declared LSB — both oracles answer it at every
+                // width; this pass used to say "unsupported" here.
                 if self.hier_lookup_param(&d.prefix, &d.path).is_some()
                     || self.hier_lookup_wide_param(&d.prefix, &d.path).is_some()
                 {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!(
-                            "a bit / part-select of the hierarchical parameter `{}` is \
-                             unsupported (a whole read of it folds; select a copy)",
-                            d.path.join(".")
-                        ),
-                    );
+                    if let Some(built) = self.build_hier_param_select(&d) {
+                        let e = self.exprs[built as usize].clone();
+                        self.exprs[d.eid as usize] = e;
+                    }
                     continue;
                 }
                 self.error(

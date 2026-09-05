@@ -614,6 +614,7 @@ impl Elaborator<'_> {
     /// one binder.
     pub(crate) fn bind_param_value(&mut self, key: String, v: i64) -> Option<i64> {
         self.param_range.remove(&key);
+        self.hier_param_range.remove(&key);
         self.param_type_guessed.remove(&key);
         self.params.insert(key, v)
     }
@@ -646,9 +647,11 @@ impl Elaborator<'_> {
         match r {
             Some(r) => {
                 self.param_range.insert(key.to_string(), r);
+                self.hier_param_range.insert(key.to_string(), r);
             }
             None => {
                 self.param_range.remove(key);
+                self.hier_param_range.remove(key);
             }
         }
     }
@@ -1561,6 +1564,18 @@ impl Elaborator<'_> {
                     && ovr_fill.contains_key(p.name.name.as_str())
                 {
                     Some((1, false))
+                } else if matches!(p.ty, ast::ParamType::Implicit)
+                    && p.range.is_none()
+                    && ovr_bits.is_some()
+                {
+                    // §6.20.2 (§2 row 25, the wide channel): an UNTYPED, unranged
+                    // parameter takes the range of its FINAL override value. A sized
+                    // DEFAULT literal is not a declared type — `parameter UK = 128'h2`
+                    // overridden with `64'hdead_beef_0000_1111` is 64 bits in both
+                    // oracles, and `param_decl_width_declared_overridden` answered the
+                    // default's 128 ahead of the override's own width (census: four
+                    // bitwise-expression cells and the literal twin alike).
+                    ovr_bits.map(|c| (c.width, c.signed))
                 } else {
                     self.param_decl_width_declared_overridden(p)
                         .or_else(|| ovr_bits.map(|c| (c.width, c.signed)))

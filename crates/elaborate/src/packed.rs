@@ -1393,7 +1393,7 @@ impl Elaborator<'_> {
     /// is provably unsigned; otherwise EXACTLY the previous emission — an
     /// unsigned 32-bit `Sub`, or an `Add` by `|k|` for a negative `k`, which is
     /// what the old code wrote to dodge a wrapped unsigned constant.
-    fn norm_sub_k(&mut self, raw_off: u32, k: i32) -> u32 {
+    pub(crate) fn norm_sub_k(&mut self, raw_off: u32, k: i32) -> u32 {
         if let Some(v) = self.const_index_value(raw_off) {
             let n = v.saturating_sub(i64::from(k));
             return self.const_s32_expr(n.clamp(i32::MIN as i64, i32::MAX as i64) as i32);

@@ -20,8 +20,19 @@ changed for a user of the simulator.
   (also through a generate block, a nested instance, an interface, an instance override) in a
   display, arithmetic, a comparison, `$countones` or a continuous assign; a parameter declared
   wider than 64 bits whose value fits 64 (`logic [127:0] SMALL = 128'h7`) now reads at its declared
-  width hierarchically (it printed 32 bits). Still loud, and now saying so: a part / bit-select of a
-  hierarchical parameter (any width); `$bits` of one and an expression override of a wide parameter.
+  width hierarchically (it printed 32 bits).
+- **A statement label** `L: stmt` (IEEE §9.3.5): `L: assert (p) else …`, `L: begin … end`,
+  `L: for (…)` with `disable L`, a label on any statement, inside a named block, a task, a function,
+  an `always` — the shape every lowRISC `ASSERT_INIT` macro expands to. A block carrying both a
+  statement label and a block label (`L: begin : M`) is a parse error. Known: `%m` inside a named
+  block or a labelled statement prints the instance scope only.
+- **A bit / part / indexed-part select and `$bits` of a hierarchical parameter** (`u.K[7:0]`,
+  `u.K[0]`, `u.K[3+:2]`, `$bits(u.K)`, any width, a non-zero-LSB declaration), **`$bits` of a
+  hierarchical net** (`$bits(u.n)`, `$bits(u.arr)`), and **a bitwise `& | ^` expression override of a
+  parameter wider than 64 bits** (`#(.K(128'h… ^ 128'd3))`, `#(.K(PK & PJ))`). An untyped
+  parameter overridden with a wide literal or such an expression takes the override's own width
+  (§6.20.2). Still loud: a select of an ascending or value-sized hierarchical parameter, `$bits` of a
+  hierarchical string, an override that carries past its operands' top bit (`~`, `+`, `<<`).
 - **Multi-dimensional packed tf-port formals**: `function f(logic [15:0][3:0] shifts)` (and a
   typedef with packed dims, non-ANSI `input logic [1:0][3:0] a;`, task / function, `input` /
   `output` / `inout` / `ref`, a default value, a comma continuation) — element and part reads,
@@ -34,6 +45,17 @@ changed for a user of the simulator.
   over-64-bit literal, an expression and a narrower parameter stay loud.
 
 ### Fixed
+
+- **Constant expressions in a self-determined position fold at their own width** (IEEE §11.6.1):
+  with `localparam logic [3:0] C = 15, D = 1;` a typedef cast bound `logic [C+D:0]`, a generate index
+  `g[C+D]`, a declared range (`logic [C+D:0] v`, a `localparam` range, an unpacked dimension, a
+  function local), an `int` / `logic [N:0]` constant's own value (`int E = C + D` is 16, `logic [3:0]
+  F = C + D` is 0) and `-C+16`, `(C+D)%3` inside them now match both oracles (the cast was 17 bits,
+  `$bits` of the range 17, the index out of range). An untyped `localparam G = C + D` and an enum
+  label keep the earlier reading (the two oracles disagree there).
+- `break` inside a labelled loop (`L: for (…) … break;`) parses. Known, unchanged: a typed
+  parameter's initializer still folds `/ % >> >>>` unbounded and wraps after (`localparam logic [7:0]
+  M = (P + 8'd100) % 8'd7` with `P = 200` is 6, other simulators 2) — ROADMAP §2 row 14.
 
 - **An unsized fill inside a sized parameter initializer** (`localparam logic [39:0] X = '1 ^
   1'b0;`, `'0 - 1'b1`, `('1 > 8'd200)`, `'1 * 1'b1`, `~('1 ^ 1'b0)`, …) is sized by the declared

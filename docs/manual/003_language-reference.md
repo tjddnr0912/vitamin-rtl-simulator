@@ -40,7 +40,7 @@ Phase-2.
 | `generate` / `endgenerate`, `genvar` | Yes | `for`/`if`/`case` generate constructs. The `generate`/`endgenerate` keywords are **optional** (IEEE 1800-2017 §27.3), and the loop variable may be declared in the header — `for (genvar i = 0; i < 4; i++)` (§27.4). |
 | `function` / `endfunction` | Yes | See §6. |
 | `task` / `endtask` | Yes | See §6. |
-| Module instantiation & hierarchy | Yes | Named (`.p(x)`) and positional port maps; arbitrary nesting. A hierarchical read of a parameter (`u.P`, `u.g.P`, `u.v.P`, an interface's) folds to its constant, including one wider than 64 bits; a part/bit-select or `$bits` of a hierarchical parameter is loud. |
+| Module instantiation & hierarchy | Yes | Named (`.p(x)`) and positional port maps; arbitrary nesting. A hierarchical read of a parameter (`u.P`, `u.g.P`, `u.v.P`, an interface's) folds to its constant, including one wider than 64 bits; a bit / part / indexed-part select of one (`u.P[7:0]`, `u.P[0]`, `u.P[b+:w]`, a non-zero-LSB declaration) and `$bits(u.P)` / `$bits(u.net)` fold too. Loud: a select of an ascending (`[0:7]`) or value-sized (untyped, unranged) hierarchical parameter; `$bits` of a hierarchical string. |
 | `interface` / `modport`, `package`, `program`, `class` | Yes | Interfaces bind as signal aliases (modport direction enforcement pending); packages with `import`; `program` blocks; classes with inheritance + virtual dispatch, parameterized classes, and constrained-random (`rand`/`constraint`/`randomize()`). |
 
 ### Ports
@@ -260,6 +260,7 @@ that value is applied once per member and a call would run once per member.
 | `fork` / `join` | Yes | |
 | `fork` / `join_any` | Yes | |
 | `fork` / `join_none` | Yes | |
+| Statement label `name: stmt` | Yes | IEEE §9.3.5 — the label names a block around the statement (`L: begin … end` ≡ `begin : L … end`; `L: for (…)` ends on `disable L`; `L: assert (p) else …`). A block with both a statement label and a block label is a parse error. `%m` inside it prints the instance scope only (see §6). |
 | `disable name;` | Yes | Aborts the named enclosing block (loop `break`/`continue` desugar onto this machinery). |
 | `disable fork;` | Yes | Cancels the calling process's forked children. |
 | `#delay` (statement) | Yes | Scaled by timescale, see §8. |

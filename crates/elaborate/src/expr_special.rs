@@ -515,6 +515,29 @@ impl Elaborator<'_> {
                     return self.const_u32_expr(f.width, 32);
                 }
             }
+            // §2 🆕 M ⓒ: `$bits(u.X)` of a HIERARCHICAL net or parameter — its width
+            // is known only once the sibling instance exists, so defer (as a whole
+            // read `u.X` does) and patch the placeholder in
+            // `resolve_deferred_hier_bits`. An interface-member alias (`ifc.sig`, a
+            // local net named with a dot) keeps the local path.
+            if p.segments.len() >= 2 {
+                let joined = p
+                    .segments
+                    .iter()
+                    .map(|s| s.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(".");
+                if self.lookup_net_scoped(&joined).is_none() {
+                    let eid = self.const_u32_expr(32, 32);
+                    self.deferred_hier_bits.push(DeferredHierBits {
+                        eid,
+                        prefix: self.cur_prefix.clone(),
+                        path: p.segments.iter().map(|s| s.name.clone()).collect(),
+                        span: Some(arg.span),
+                    });
+                    return eid;
+                }
+            }
         }
         let n = self
             .bits_of_view(arg, false)
