@@ -63,6 +63,7 @@ impl<'s> Elaborator<'s> {
             pkg_vars: std::collections::BTreeMap::new(),
             pkg_var_aliases: std::collections::BTreeMap::new(),
             gen_loop_labels: std::collections::BTreeSet::new(),
+            gen_singleton_labels: std::collections::BTreeSet::new(),
             genvar_decls: std::collections::BTreeSet::new(),
             reported_bad_bounds: std::collections::BTreeSet::new(),
             all_clocking_names: std::collections::BTreeSet::new(),
@@ -362,8 +363,10 @@ impl<'s> Elaborator<'s> {
         if self.cur_prefix.is_empty() {
             return Vec::new();
         }
+        // §4.5.429: the spelling `%m` prints — a singleton generate scope without
+        // its storage `[0]`.
         vec![diag::Frame {
-            label: self.cur_prefix.clone(),
+            label: self.display_prefix(),
             location: None,
         }]
     }

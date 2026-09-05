@@ -935,7 +935,7 @@ impl Elaborator<'_> {
                 join,
                 decls,
                 span,
-                label: _,
+                label,
             } => {
                 // ── HARD MVP BOUNDARY: no nested fork (§6.2). A fork inside a fork
                 //    child is a fatal elaborate error — NOT "warn and proceed". This
@@ -955,6 +955,15 @@ impl Elaborator<'_> {
                     b.start_block(cont);
                     return;
                 }
+
+                // §4.5.429: a fork's own label is a scope for `%m` (`F: fork … join` →
+                // `top.F`, verilator), like a named block's. Pushed AFTER the nested-fork
+                // guard above (review B N1: an early return would skip the pop).
+                let pushed_fork_scope = label
+                    .as_ref()
+                    .filter(|l| !l.name.starts_with('$'))
+                    .map(|l| self.block_scope.push(l.name.clone()))
+                    .is_some();
 
                 // fork-local decls share the enclosing scope in v1 (like begin-block
                 // decls); WARN-ignore them, matching Stmt::Block decl handling.
@@ -1015,6 +1024,9 @@ impl Elaborator<'_> {
                 // Open resume_bb as the single continuation. Post-condition for the
                 // caller: exactly one open block, at the parent's continuation point.
                 b.start_block(resume_bb);
+                if pushed_fork_scope {
+                    self.block_scope.pop();
+                }
             }
             ast::Stmt::RandomizeWith {
                 name,

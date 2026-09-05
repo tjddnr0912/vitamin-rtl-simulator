@@ -1079,6 +1079,11 @@ struct Elaborator<'s> {
     /// from 1 to 2. Elaborate-side only — never serialized, so `format_version` is
     /// untouched.
     gen_loop_labels: std::collections::BTreeSet<String>,
+    // §4.5.429 (review B B1): the FQ keys of SINGLETON generate scopes (`generate if` /
+    // `case` / a bare labelled block), stored as `label[0]` but rendered `label` by
+    // `display_prefix`. Keyed positively — an INSTANCE-array element `w[0]` is also a
+    // `[0]` segment and must keep its index (both oracles `top.w[0]`).
+    gen_singleton_labels: std::collections::BTreeSet<String>,
     /// A2b-prereq (adversarial sound S2): fq keys of DECLARED genvar names.
     /// A genvar binds into `params` only transiently (during loop unroll), so
     /// the constant-shadow guard needs this persistent record — otherwise a

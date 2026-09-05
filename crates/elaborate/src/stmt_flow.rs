@@ -47,7 +47,7 @@ impl Elaborator<'_> {
         // `%m` scope: the instance path of the module being lowered ("tb.u1");
         // an empty prefix (single top) renders as the top module's own name —
         // but cur_prefix is ALWAYS the instance path incl. the top ("m" / "m.u1").
-        self.proc_scopes.push(self.cur_prefix.clone());
+        self.proc_scopes.push(self.display_prefix());
         // R14: the profile identity, in the SAME lockstep. Every producer today
         // parks one — `lower_proc_block` for a user block, `lower_synth_proc`
         // for a body vita synthesized — so the `synth` default is a FAIL-SAFE,

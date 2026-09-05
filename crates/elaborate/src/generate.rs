@@ -48,6 +48,42 @@ impl Elaborator<'_> {
         seg.contains('[')
     }
 
+    /// The instance path as `%m` prints it (§4.5.429, ROADMAP §2 🆕 N): a SINGLETON
+    /// generate scope (`generate if` / `case` / a bare labelled block) is stored as
+    /// `label[0]` so the scope walk treats it like a loop iteration, but it is not an
+    /// array — both oracles print `top.g.blk`, not `top.g[0].blk` (§27.5/§27.6). Keyed
+    /// POSITIVELY on `gen_singleton_labels` (review B B1: a first draft stripped every
+    /// `[0]` not in `gen_loop_labels`, which took an instance-array element `w[0]` to
+    /// `w` — two elements of one array printed different spellings). A loop block and
+    /// an instance-array element keep their index. Storage keys are untouched.
+    pub(crate) fn display_prefix(&self) -> String {
+        let mut acc = String::new();
+        let mut out: Vec<String> = Vec::new();
+        for seg in self.cur_prefix.split('.') {
+            let shown = match seg.strip_suffix("[0]") {
+                Some(label) if !label.contains('[') => {
+                    let key = if acc.is_empty() {
+                        label.to_string()
+                    } else {
+                        format!("{acc}.{label}")
+                    };
+                    if self.gen_singleton_labels.contains(&key) {
+                        label.to_string()
+                    } else {
+                        seg.to_string()
+                    }
+                }
+                _ => seg.to_string(),
+            };
+            if !acc.is_empty() {
+                acc.push('.');
+            }
+            acc.push_str(seg);
+            out.push(shown);
+        }
+        out.join(".")
+    }
+
     /// Run `f` with `cur_prefix` temporarily extended by `seg` (a gen-block
     /// `label[idx]` segment). Restores the prefix on return. Genvar bindings in
     /// `self.params` are NOT touched here (the caller manages those).
@@ -382,6 +418,8 @@ impl Elaborator<'_> {
                 // nets THROUGH it (a plain `label` would be read as an instance
                 // boundary, stopping the outward walk → `t.g.y` undeclared).
                 let seg = format!("{}[0]", l.name);
+                let key = self.fq(&l.name);
+                self.gen_singleton_labels.insert(key);
                 self.with_scope(&seg, |me| {
                     me.elaborate_generate_scoped(items, phase, depth + 1, map, true);
                 });
