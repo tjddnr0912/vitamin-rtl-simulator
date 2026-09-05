@@ -21,6 +21,13 @@ changed for a user of the simulator.
   display, arithmetic, a comparison, `$countones` or a continuous assign; a parameter declared
   wider than 64 bits whose value fits 64 (`logic [127:0] SMALL = 128'h7`) now reads at its declared
   width hierarchically (it printed 32 bits).
+- **Elaboration system tasks** (IEEE §20.11): `$info` / `$warning` / `$error` / `$fatal` as a module
+  item, also inside a generate branch (`if (W > 8) $fatal(1, "W too big");`), run at elaboration with
+  constant arguments (`%d %h %b %o %s %c` at the parameter's declared width, `%m`); `$error`/`$fatal`
+  fail elaboration (exit 1, no simulation). Codes I3006 / W3007 / E3004 / F3005.
+- **`%m` in a `generate if` / `case` block** prints `top.g.blk` (was `top.g[0].blk`), a fork's own label
+  (`F: fork`) is a scope segment, and elaboration diagnostics say `[in top.g]`. Known: the VCD scope
+  is still named `g[0]`; an unnamed generate block adds no segment.
 - **Packed dimensions after a typedef name**: `cfg_t [N-1:0] p`, `pkg::t [pkg::C-1:0] p` in an ANSI
   port or a declaration (a packed array whose element is the typedef; `p[i].field` reads the
   element's member), and a struct-typed port array's element member with a genvar or runtime index
@@ -56,6 +63,9 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **`$bits` of a block-local or function-local variable that shadows an imported package constant**
+  answers the local's width (it answered the constant's); `$bits` of an unpacked local array is its
+  element width × count.
 - **A part-select on a non-innermost packed dimension** (`logic [1:0][2:0][1:0] v; v[1][2:1]`,
   `v[1][1+:2]`, `$bits(v[1][2:1])`, the write `v[1][2:1] = …`, an array of packed `m[1][1][2:1]`)
   selects whole sub-elements (4 bits, `1011`) as other simulators do; vita read two flat bits. An

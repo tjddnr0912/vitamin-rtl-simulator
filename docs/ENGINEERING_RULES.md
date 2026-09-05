@@ -219,6 +219,32 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ Strip by a POSITIVE record of the shape, never by "not the other shape" (2026-09-06 · §4.5.429)
+
+`%m` had to drop the `[0]` vita stores on a singleton generate scope. The first draft dropped every
+`label[0]` whose label was not in `gen_loop_labels` — and an instance-array element `w[0]` is also a
+`[0]` segment and also not a loop label, so `ch w[1:0]()` printed `top.w` for element 0 and
+`top.w[1]` for element 1 (correct → silent-wrong, review B B1). **How to apply:** when a rendering
+or a resolution must treat one producer's spelling specially, record that producer's keys at the
+one site that mints them (`gen_singleton_labels`, the twin of `gen_loop_labels`) and key on
+membership; a complement ("everything that is not X") silently includes every shape you did not
+enumerate — instance arrays, interface arrays, whatever the next slice mints.
+
+### ⭐ A second renderer of the same format string calls the first one's rules, or it disagrees (2026-09-06 · §4.5.428)
+
+The elaboration-task message renderer folded arguments to an i64 and printed `%h` of `v as u64`:
+`$info("A=%h", N)` with `logic signed [7:0] N = -1` printed sixteen `f`s where vita's own runtime
+`render_template` (and verilator) print `ff`. The first fix READ the width and sign and masked —
+and the differential lens then found the rest of the rule set missing (bare `%d` has a default
+field width, `%5d`/`%04h`/`%8s` carry theirs, `%s` of a packed value is its bytes, `%-` justifies):
+re-deriving a rule set one finding at a time converges on the runtime only asymptotically.
+**How to apply:** a constant-domain twin of a runtime renderer does not re-derive; the value-free
+rules move to a crate BOTH can reach (`diag::fmt`: `parse_flags`, `dec_field_width`, `pad_dec`,
+`pad_radix`, `justify`, `packed_chars`) and both call them. The twin's test is the runtime spelling
+of the SAME `$display` in the same design: elaboration line == runtime line, byte for byte, before
+the oracle is consulted. When the dependency runs the wrong way (sim-engine depends on elaborate),
+that is the signal the rules belong lower, not that the twin may approximate.
+
 ### ⭐ A sidecar reaches the engine through THREE copies, and a runtime map of 0 is the symptom (2026-09-06 · §4.5.426)
 
 An out-of-band table (`stmt_scopes`) was added to elaborate's `SimOpts`, the engine's `SimOpts`, its

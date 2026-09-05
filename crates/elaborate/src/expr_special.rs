@@ -734,7 +734,22 @@ impl Elaborator<'_> {
                     if me.subst_lookup(name).is_some() || me.out_subst_lookup(name).is_some() {
                         return None; // formal — resolve via the lowering path
                     }
-                    if me.lookup_scoped(name).is_some() {
+                    // §2 🆕 L ⓝ (§4.5.430): a BLOCK-local (or function-local) variable
+                    // that shadows a constant of the same name — a wildcard-imported
+                    // package parameter binds at the module key the flattened local
+                    // also uses — is the object `$bits` names; the value read already
+                    // prefers it (`bare_ident_route`'s shadow test, mirrored here).
+                    let local_shadows = me
+                        .walk_scopes_key(name, |k| {
+                            me.params.contains_key(k) || me.symbols.contains_key(k)
+                        })
+                        .is_some_and(|key| {
+                            me.symbols.contains_key(&key)
+                                && (me.block_local_declared_at(&key, e.span)
+                                    || (!me.params.contains_key(&key)
+                                        && me.block_local_covers(&key, e.span)))
+                        });
+                    if !local_shadows && me.lookup_scoped(name).is_some() {
                         // A TYPED param/localparam has a declared width (`logic
                         // [11:0] P` ⇒ 12); `$bits` must report THAT, not the
                         // value-inferred 32. An untyped param / genvar (no recorded
@@ -749,7 +764,14 @@ impl Elaborator<'_> {
                         if nv.kind == ir::NetKind::String {
                             return None; // dynamic length — loud at the site
                         }
-                        return Some(nv.width.max(1));
+                        // An unpacked array is its element width × its element count
+                        // (`$bits(Q)` for `logic [11:0] Q [2]` is 24, both oracles) —
+                        // the same product the array-view arm above computes; a
+                        // block-local that shadows a constant reaches this arm instead.
+                        return u32::try_from(
+                            u64::from(nv.width.max(1)) * u64::from(nv.array_len.max(1)),
+                        )
+                        .ok();
                     }
                 }
             }
