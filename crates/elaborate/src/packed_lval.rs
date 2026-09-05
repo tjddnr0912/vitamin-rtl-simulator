@@ -20,7 +20,22 @@ impl Elaborator<'_> {
         msb: &ast::Expr,
         lsb: &ast::Expr,
     ) -> Option<u32> {
-        let (net, word) = self.packed_ps_base(base)?;
+        let Some((net, word)) = self.packed_ps_base(base) else {
+            // §2 🆕 L ⓞ: a NON-innermost dim under one or more indices (`v[1][2:1]`).
+            let (net, word, k, prefix) = self.packed_inner_ps_base(base)?;
+            return match self.packed_inner_part_select(net, k, prefix, msb, lsb)? {
+                Ok((offset, width)) => {
+                    let base_id = self.push_expr(ir::Expr::Signal { net, word });
+                    Some(self.push_expr(ir::Expr::Select {
+                        base: base_id,
+                        offset,
+                        width,
+                        kind: ir::SelKind::PartIdxUp,
+                    }))
+                }
+                Err(()) => Some(self.placeholder_expr()),
+            };
+        };
         match self.packed_outer_part_select(net, msb, lsb)? {
             Ok((offset, width)) => {
                 let base_id = self.push_expr(ir::Expr::Signal { net, word });
@@ -52,7 +67,21 @@ impl Elaborator<'_> {
         width: &ast::Expr,
         dir: &ast::PartDir,
     ) -> Option<u32> {
-        let (net, word) = self.packed_ps_base(base)?;
+        let Some((net, word)) = self.packed_ps_base(base) else {
+            let (net, word, k, prefix) = self.packed_inner_ps_base(base)?;
+            return match self.packed_inner_indexed(net, k, prefix, offset, width, dir) {
+                Ok((off, w)) => {
+                    let base_id = self.push_expr(ir::Expr::Signal { net, word });
+                    Some(self.push_expr(ir::Expr::Select {
+                        base: base_id,
+                        offset: off,
+                        width: w,
+                        kind: ir::SelKind::PartIdxUp,
+                    }))
+                }
+                Err(()) => Some(self.placeholder_expr()),
+            };
+        };
         match self.packed_indexed_range(net, offset, width, dir) {
             Ok((off, w)) => {
                 let base_id = self.push_expr(ir::Expr::Signal { net, word });
@@ -98,7 +127,19 @@ impl Elaborator<'_> {
         msb: &ast::Expr,
         lsb: &ast::Expr,
     ) -> Option<ir::LvalChunk> {
-        let (net, word) = self.packed_ps_base_lval(base)?;
+        let Some((net, word)) = self.packed_ps_base_lval(base) else {
+            let (net, word, k, prefix) = self.packed_inner_ps_base_lval(base)?;
+            return match self.packed_inner_part_select(net, k, prefix, msb, lsb)? {
+                Ok((offset, width)) => Some(ir::LvalChunk {
+                    net,
+                    word,
+                    offset: Some(offset),
+                    width: Some(width),
+                    kind: ir::SelKind::PartIdxUp,
+                }),
+                Err(()) => Some(Self::poison_chunk()),
+            };
+        };
         match self.packed_outer_part_select(net, msb, lsb)? {
             Ok((offset, width)) => Some(ir::LvalChunk {
                 net,
@@ -123,7 +164,19 @@ impl Elaborator<'_> {
         width: &ast::Expr,
         dir: &ast::PartDir,
     ) -> Option<ir::LvalChunk> {
-        let (net, word) = self.packed_ps_base_lval(base)?;
+        let Some((net, word)) = self.packed_ps_base_lval(base) else {
+            let (net, word, k, prefix) = self.packed_inner_ps_base_lval(base)?;
+            return match self.packed_inner_indexed(net, k, prefix, offset, width, dir) {
+                Ok((off, w)) => Some(ir::LvalChunk {
+                    net,
+                    word,
+                    offset: Some(off),
+                    width: Some(w),
+                    kind: ir::SelKind::PartIdxUp,
+                }),
+                Err(()) => Some(Self::poison_chunk()),
+            };
+        };
         match self.packed_indexed_range(net, offset, width, dir) {
             Ok((off, w)) => Some(ir::LvalChunk {
                 net,

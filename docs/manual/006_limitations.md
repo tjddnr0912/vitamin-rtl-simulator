@@ -823,9 +823,3 @@ the bare label if the design has to build elsewhere.
   Windows, 3-OS CI).
 - `docs/REMAINING_WORK.md` (in the repository) — the live tracker of Phase-2
   refinements for each item above.
-
-## `%m` inside a named block
-
-`%m` is rendered from the process's instance path, so inside `begin : blk … end` (or a labelled
-statement `L: …`) it prints `top` where other simulators print `top.blk`. The instance part is
-right; the block labels are missing. Tracked as ROADMAP §2 🆕 N.

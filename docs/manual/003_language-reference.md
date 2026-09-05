@@ -34,6 +34,7 @@ Phase-2.
 | Non-ANSI port headers | Yes | `module m (a, q); input a; output [7:0] q;` |
 | `parameter` | Yes | Overridable at instantiation. An unsized fill inside a sized initializer (`localparam logic [39:0] X = '1 ^ 1'b0;`) is sized by the declared width (IEEE §5.7.1 / §11.6.1); an instance-override expression containing a fill is folded before the target's width is known (an axis the oracles split on). |
 | `localparam` | Yes | Not overridable. |
+| Typedef with packed dims (`cfg_t [N-1:0] v`, `pkg::t [pkg::C-1:0] p`) | Yes | A packed array whose element is the typedef (vector or packed struct), as a variable or an ANSI port; `v[i]` is one element and `v[i].field` its member; a struct-typed port array's element member takes a constant, genvar or runtime index (`c[r].mode`). Loud: a non-ANSI `<type> [dims]` port, an atom typedef (`int_t [1:0]`) with dims. |
 | Parameter typed by a `typedef` | Yes | `localparam my_struct_t C = '{a: 1'b1, b: 5'd3};` — vector, signed, atom (`int`/`byte`/…), packed struct (members read as constants, positional or named `'{…}`), enum (labels and `.name()`/`.next()`), scoped `pkg::t`; bindings follow `import pkg::*`. Loud in v1: an unpacked struct, a `'{…}` given as an instance override. |
 | Parameter override — positional `#(8)` | Yes | |
 | Parameter override — named `#(.W(8))` | Yes | |
@@ -260,7 +261,7 @@ that value is applied once per member and a call would run once per member.
 | `fork` / `join` | Yes | |
 | `fork` / `join_any` | Yes | |
 | `fork` / `join_none` | Yes | |
-| Statement label `name: stmt` | Yes | IEEE §9.3.5 — the label names a block around the statement (`L: begin … end` ≡ `begin : L … end`; `L: for (…)` ends on `disable L`; `L: assert (p) else …`). A block with both a statement label and a block label is a parse error. `%m` inside it prints the instance scope only (see §6). |
+| Statement label `name: stmt` | Yes | IEEE §9.3.5 — the label names a block around the statement (`L: begin … end` ≡ `begin : L … end`; `L: for (…)` ends on `disable L`; `L: assert (p) else …`). A block with both a statement label and a block label is a parse error. `%m` inside a named block or a labelled statement prints the block-label chain (`top.blk.L`). |
 | `disable name;` | Yes | Aborts the named enclosing block (loop `break`/`continue` desugar onto this machinery). |
 | `disable fork;` | Yes | Cancels the calling process's forked children. |
 | `#delay` (statement) | Yes | Scaled by timescale, see §8. |

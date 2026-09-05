@@ -219,6 +219,35 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐ A sidecar reaches the engine through THREE copies, and a runtime map of 0 is the symptom (2026-09-06 · §4.5.426)
+
+An out-of-band table (`stmt_scopes`) was added to elaborate's `SimOpts`, the engine's `SimOpts`, its
+`SimState` copy and the render arm — and rendered nothing: the CLI builds the engine's `SimOpts` from
+elaborate's `Sidecars` FIELD BY FIELD (`frontend.rs`), the staged path again from the `.velab`
+trailer (`staged.rs`), and a native test fixture a third time (`native/tests.rs`); a field the copies
+do not name is silently empty at runtime. **How to apply:** after adding a sidecar, grep an existing
+sibling (`stmt_locs`) across `crates/` and mirror EVERY site, then assert the map is non-empty at the
+consumer on the grounding design before reading the output.
+
+### ⭐ `%m` has four render sites; one seam is not the funnel (2026-09-06 · §4.5.426)
+
+The dispatch seam (`dispatch_with`) is where "every backend converges" — for statements executed by a
+process. A `$sformatf` renders in two kernels (`sched`, `native`) and a frame body's display /
+severity / `$sformatf` render in the `&self` frame executor with no seam at all. **How to apply:** a
+per-statement rendering fact needs the `&self` executor to be able to write it (`RefCell`), and a
+census cell per site (a task-body block, a function-body block, a `$sformatf` in an argument, a
+`$strobe`/`$monitor` rendered later under another statement).
+
+### ⚠️ A struct-typed name's SHAPE is decided after its dims, not at its type (2026-09-06 · §4.5.425)
+
+The ANSI port path bound a struct-typed port as a SCALAR struct at the type token, before the
+unpacked dims after the NAME were parsed; a constant index happened to work through another path,
+and a genvar / runtime index fell to the generate-array hierarchical reference parser ("expected a
+constant generate-array index" for `csr_pmp_cfg_i[r].mode`). **How to apply:** bind the shape sets
+(`struct_scalar_vars` / `struct_1d_array_vars` / `struct_packed_array_vars`) once the whole
+declarator is parsed, at every binder (variable, ANSI port, non-ANSI port, tf-port, package replay),
+and census the index kinds — a constant index is the control that hides the defect.
+
 ### ⭐⭐ A review finding's fix is a slice — grep §2 for the code site BEFORE building it (2026-09-05 · §4.5.423)
 
 Lens A reported "a typed initializer folds `/ % >>` unbounded and wraps after" with 17 designs; the

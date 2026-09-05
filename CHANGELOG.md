@@ -21,6 +21,16 @@ changed for a user of the simulator.
   display, arithmetic, a comparison, `$countones` or a continuous assign; a parameter declared
   wider than 64 bits whose value fits 64 (`logic [127:0] SMALL = 128'h7`) now reads at its declared
   width hierarchically (it printed 32 bits).
+- **Packed dimensions after a typedef name**: `cfg_t [N-1:0] p`, `pkg::t [pkg::C-1:0] p` in an ANSI
+  port or a declaration (a packed array whose element is the typedef; `p[i].field` reads the
+  element's member), and a struct-typed port array's element member with a genvar or runtime index
+  (`c[r].mode` in a generate loop) — the ibex_top_tracing and ibex_pmp shapes. Still loud: a non-ANSI
+  `<type> [dims]` port, an atom typedef with dims.
+- **`%m` inside a named block** now prints the block-label chain (`top.blk.inner`, a statement label
+  `top.blk.L`, a fork child, a block inside a task or function, `$sformatf("%m")`, `$strobe`/`$monitor`
+  registered in a block) — IEEE §21.2.1, as other simulators print. **Artifact format 29 → 30**: the
+  staged `.velab` trailer carries the chains; old `.velab`/`.vu` files are refused at the header gate
+  (rebuild them). Known: a `generate if` block still prints `g[0]`; an unnamed block adds no segment.
 - **A statement label** `L: stmt` (IEEE §9.3.5): `L: assert (p) else …`, `L: begin … end`,
   `L: for (…)` with `disable L`, a label on any statement, inside a named block, a task, a function,
   an `always` — the shape every lowRISC `ASSERT_INIT` macro expands to. A block carrying both a
@@ -46,6 +56,10 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **A part-select on a non-innermost packed dimension** (`logic [1:0][2:0][1:0] v; v[1][2:1]`,
+  `v[1][1+:2]`, `$bits(v[1][2:1])`, the write `v[1][2:1] = …`, an array of packed `m[1][1][2:1]`)
+  selects whole sub-elements (4 bits, `1011`) as other simulators do; vita read two flat bits. An
+  out-of-range, reversed or variable-offset inner select is a loud error.
 - **Constant expressions in a self-determined position fold at their own width** (IEEE §11.6.1):
   with `localparam logic [3:0] C = 15, D = 1;` a typedef cast bound `logic [C+D:0]`, a generate index
   `g[C+D]`, a declared range (`logic [C+D:0] v`, a `localparam` range, an unpacked dimension, a

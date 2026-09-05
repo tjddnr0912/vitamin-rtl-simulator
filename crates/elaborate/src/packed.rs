@@ -666,7 +666,7 @@ impl Elaborator<'_> {
         true
     }
 
-    fn const_index_value(&self, eid: u32) -> Option<i64> {
+    pub(crate) fn const_index_value(&self, eid: u32) -> Option<i64> {
         let ir::Expr::Const { val } = self.exprs.get(eid as usize)? else {
             return None;
         };
