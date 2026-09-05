@@ -321,6 +321,8 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         class_field_widths: _,
         // Slice #4: see the deleted `file_directed` row below — one fd read.
         file_directed_stmts: _,
+        stmt_scopes: _,
+        expr_scopes: _,
     } = opts;
 
     // ⭐⭐ **A8-a: `handle_copy` was PURELY CONSERVATIVE — zero kernel code.**

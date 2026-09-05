@@ -527,6 +527,11 @@ struct StagedExtraSidecars {
     /// EMPTY when nothing qualifies (or no resolver) ⇒ byte-identical.
     #[serde(default)]
     stmt_locs: sim_engine::StmtLocTable,
+    /// v30: `%m` named-block label chains (see `SimOpts::stmt_scopes`).
+    #[serde(default)]
+    stmt_scopes: std::collections::BTreeMap<u32, String>,
+    #[serde(default)]
+    expr_scopes: std::collections::BTreeMap<u32, String>,
 }
 
 impl StagedExtraSidecars {
@@ -568,6 +573,8 @@ impl StagedExtraSidecars {
             file_directed_stmts: sc.file_directed_stmts.clone(),
             init_procs: sc.init_procs.clone(),
             stmt_locs: sc.stmt_locs.clone(),
+            stmt_scopes: sc.stmt_scopes.clone(),
+            expr_scopes: sc.expr_scopes.clone(),
         }
     }
 }

@@ -168,6 +168,8 @@ pub fn elaborate_located_params(
         proc_prec_mults: std::mem::take(&mut el.proc_prec_mults),
         severities: std::mem::take(&mut el.severities),
         stmt_locs: std::mem::take(&mut el.stmt_locs),
+        stmt_scopes: std::mem::take(&mut el.stmt_scopes),
+        expr_scopes: std::mem::take(&mut el.expr_scopes),
         timeformat_stmts: std::mem::take(&mut el.timeformat_stmts),
         stage_stmts: std::mem::take(&mut el.stage_stmts),
         handle_copy_stmts: std::mem::take(&mut el.handle_copy_stmts),

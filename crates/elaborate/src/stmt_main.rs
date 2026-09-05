@@ -585,6 +585,13 @@ impl Elaborator<'_> {
                 // body_decls still init once at frame entry (`emit_frame_local_inits`).
                 // MODULE-process block-locals keep their static (once-at-t0) init.
                 let emit_block_inits = self.in_frame_body;
+                // §4.5.426: a USER label (a synthetic `$break$…` is not a scope) joins
+                // the `%m` chain for every system task lowered inside.
+                let pushed_scope = label
+                    .as_ref()
+                    .filter(|l| !l.name.starts_with('$'))
+                    .map(|l| self.block_scope.push(l.name.clone()))
+                    .is_some();
                 // DUP (round-5): if this block has `$blk$`-scoped locals, lower its
                 // body under the SAME segment the Nets-phase hoist used so a scoped
                 // local resolves to its own net; `walk_scopes_key` treats `$blk$` as
@@ -615,6 +622,9 @@ impl Elaborator<'_> {
                     for st in stmts {
                         self.lower_stmt(b, st);
                     }
+                }
+                if pushed_scope {
+                    self.block_scope.pop();
                 }
                 if let Some(exit) = exit {
                     self.disable_stack.pop();

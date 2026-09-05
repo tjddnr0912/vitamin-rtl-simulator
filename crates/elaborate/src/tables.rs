@@ -443,6 +443,15 @@ pub struct Sidecars {
     /// for which statements earn an entry). EMPTY when no resolver was installed
     /// ⇒ runtime diagnostics stay location-less (the pre-slice behavior).
     pub stmt_locs: StmtLocTable,
+    /// §4.5.426 (ROADMAP §2 🆕 N): StmtId of a system task lowered INSIDE named
+    /// blocks → the block-label chain (`"blk.inner"`) that `%m` appends to the
+    /// process's instance path (IEEE §21.2.1: `%m` is the hierarchical name of the
+    /// scope, and a named block / statement label is a scope — both oracles print
+    /// `top.blk.inner`). EMPTY for designs with no `%m`-carrying task inside a named
+    /// block ⇒ byte-identical output. Out-of-band; never golden IR.
+    pub stmt_scopes: std::collections::BTreeMap<u32, String>,
+    /// The `$sformatf` twin of `stmt_scopes`, keyed by the `SysFunc` ExprId.
+    pub expr_scopes: std::collections::BTreeMap<u32, String>,
     /// StmtIds of `$timeformat` calls (no-op `Display` stmts, §21.3.2).
     pub timeformat_stmts: std::collections::BTreeSet<u32>,
     /// OBS-3: StmtIds of `$vita_stage(...)` calls (no-op `Display` stmts the engine

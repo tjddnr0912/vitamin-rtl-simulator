@@ -2879,7 +2879,17 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // SHARED reborrows of `*self`, so this compiles where the sibling
         // `k_dispatch_systask` (which needs `&mut Scheduler` for the sink and
         // the file table) cannot — which is why that one keeps a gate row.
+        // §4.5.426: `%m` inside a named block (see `expr_scopes`).
+        let saved_scope = self.sched.st.cur_block_scope.replace(
+            self.sched
+                .st
+                .expr_scopes
+                .get(&rhs)
+                .cloned()
+                .unwrap_or_default(),
+        );
         let text = crate::builtins::format_args_str_with(self.sched.st, self, f, &rest, None);
+        self.sched.st.cur_block_scope.replace(saved_scope);
         Value::from_str_bytes(text.as_bytes())
     }
 }

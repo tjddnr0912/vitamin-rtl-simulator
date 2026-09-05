@@ -102,6 +102,7 @@ pub(crate) use hoist::is_deferred_print_task;
 mod netdecl;
 mod package;
 pub mod packed;
+mod packed_inner;
 mod packed_lval;
 mod param_query;
 mod params;
@@ -1226,6 +1227,13 @@ struct Elaborator<'s> {
     // AND for the statements a runtime diagnostic points at (see `StmtLocTable`).
     // Entry ⟺ a SpanResolver was installed. Threaded via `SimOpts.stmt_locs`.
     stmt_locs: StmtLocTable,
+    // §4.5.426: the named-block label chain in effect while lowering statements
+    // (pushed by the `Stmt::Block`/`Stmt::Fork` arms for a user label; replaced by
+    // `[task]` while an inline task body lowers; empty in a frame body), and the two
+    // sidecars it records into (`push_stmt` for a SysTask, the `$sformatf` lowering).
+    block_scope: Vec<String>,
+    stmt_scopes: std::collections::BTreeMap<u32, String>,
+    expr_scopes: std::collections::BTreeMap<u32, String>,
     // V33-8 latch: "an expression lowered since the last `push_stmt` can make the
     // engine emit a located runtime diagnostic" — an array-word index (`W4029`) or
     // a `$fread` (`W4023`). `push_stmt` CONSUMES it and records the statement's

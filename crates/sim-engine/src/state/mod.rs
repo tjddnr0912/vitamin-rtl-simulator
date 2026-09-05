@@ -504,6 +504,12 @@ pub(crate) struct SimState<'a> {
     /// Instance path of the process CURRENTLY executing — set per `run_process`
     /// (like `cur_time_mult`), read by the `%m` format spec.
     pub cur_scope: String,
+    /// §4.5.426: the named-block label chain of the system task / `$sformatf` being
+    /// rendered (`stmt_scopes` / `expr_scopes` lookup, set by the dispatch seam and
+    /// `k_sformatf`, cleared after) — `%m` appends it after the frame names.
+    pub cur_block_scope: std::cell::RefCell<String>,
+    pub stmt_scopes: std::collections::BTreeMap<u32, String>,
+    pub expr_scopes: std::collections::BTreeMap<u32, String>,
     /// N1: stack of active frame-subroutine FuncIds (innermost last), pushed by
     /// `run_frame_call`/`run_task` while a body executes (a `u32` push is alloc-free on
     /// the hot call path). `%m` inside a subroutine body appends each id's name (from

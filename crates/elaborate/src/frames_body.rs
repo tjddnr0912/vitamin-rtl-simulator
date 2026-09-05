@@ -157,6 +157,19 @@ impl Elaborator<'_> {
     /// process-local CFG (reusing `lower_stmt`), append it with every `Goto`/
     /// `Branch` target rebased by `+base`, set `FuncDef.entry`, then validate.
     pub(crate) fn lower_frame_func_body(&mut self, name: &str, func: &ast::FunctionDef, fid: u32) {
+        // §4.5.426: a frame body is its own `%m` scope (`module.func`, appended by the
+        // engine from `func_names`) — no caller block chain leaks into it.
+        let saved_block_scope = std::mem::take(&mut self.block_scope);
+        self.lower_frame_body_inner_lower_frame_func_body(name, func, fid);
+        self.block_scope = saved_block_scope;
+    }
+
+    fn lower_frame_body_inner_lower_frame_func_body(
+        &mut self,
+        name: &str,
+        func: &ast::FunctionDef,
+        fid: u32,
+    ) {
         // §4.5.250: a FRAME FUNCTION body is validated by `classify_frame_body`, which
         // rejects a whole write to any net outside the frame — and the engine backs that
         // up (exempting a scratch net there panics `frame lvalue net is routed`). So the
@@ -287,6 +300,19 @@ impl Elaborator<'_> {
     /// registers into `pending_task_calls` (keyed by the process-LOCAL block),
     /// which is rebased by `+base` into `task_calls_func` on append.
     pub(crate) fn lower_frame_task_body(&mut self, name: &str, task: &ast::TaskDef, fid: u32) {
+        // §4.5.426: a frame body is its own `%m` scope (`module.func`, appended by the
+        // engine from `func_names`) — no caller block chain leaks into it.
+        let saved_block_scope = std::mem::take(&mut self.block_scope);
+        self.lower_frame_body_inner_lower_frame_task_body(name, task, fid);
+        self.block_scope = saved_block_scope;
+    }
+
+    fn lower_frame_body_inner_lower_frame_task_body(
+        &mut self,
+        name: &str,
+        task: &ast::TaskDef,
+        fid: u32,
+    ) {
         // A package task's body resolves in its own package, exactly as a package
         // function's does (`resolve_rtn_key`). This half was missing, so a package
         // task could neither call its own siblings nor read its own package's

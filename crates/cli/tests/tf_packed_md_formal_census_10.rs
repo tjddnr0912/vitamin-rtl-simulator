@@ -902,8 +902,8 @@ endmodule
 "#,
         "b5c",
     );
-    // w_d3_mid_ctl_var: stays loud (declined shape)
-    loud(
+    // w_d3_mid_ctl_var: both oracles (§4.5.427: a mid-dim write on a partially indexed packed net)
+    digest(
         "w_d3_mid_ctl_var",
         r#"module tb;
   logic [1:0][2:0][1:0] a;
@@ -913,6 +913,6 @@ endmodule
   initial begin a = 12'ha5c; t(); $display("DIGEST=%h", a); #1 $finish; end
 endmodule
 "#,
-        "E-ELAB-UNSUPPORTED: nested lvalue select (v1: single-level) [in tb.$func$t]",
+        "a64",
     );
 }

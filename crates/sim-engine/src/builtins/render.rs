@@ -106,6 +106,14 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                     }
                     s
                 };
+                // §4.5.426: the named-block label chain of the rendering statement.
+                let blk = st.cur_block_scope.borrow();
+                let scope = if blk.is_empty() {
+                    scope
+                } else {
+                    format!("{scope}.{blk}")
+                };
+                drop(blk);
                 out.push_str(&justify(&scope, field_width, left_just));
             }
             't' | 'T' => {

@@ -126,6 +126,30 @@ pub(crate) fn dispatch_with<N: crate::eval::NetReader + ?Sized>(
     args: &[u32],
     sid: u32,
 ) -> Ctl {
+    // §4.5.426: the named-block label chain of THIS statement, for `%m`. Cleared on
+    // every exit below via the guard (a strobe/monitor capture folds it into its
+    // registering scope instead — see `FmtCapture.scope`).
+    // Saved and RESTORED, not cleared: a system task inside a call argument of another
+    // (`$display("%m %0d %m", f())` with a `$display` in `f`) must hand the outer
+    // statement its chain back (review B F2).
+    let saved = sched
+        .st
+        .cur_block_scope
+        .replace(sched.st.stmt_scopes.get(&sid).cloned().unwrap_or_default());
+    let r = dispatch_with_scoped(sched, nets, out, which, fmt, args, sid);
+    sched.st.cur_block_scope.replace(saved);
+    r
+}
+
+fn dispatch_with_scoped<N: crate::eval::NetReader + ?Sized>(
+    sched: &mut Scheduler,
+    nets: Option<&N>,
+    out: &mut TaskWrites<'_>,
+    which: SysTaskId,
+    fmt: Option<u32>,
+    args: &[u32],
+    sid: u32,
+) -> Ctl {
     // R2 (round-36): THE system-task seam. Every backend converges here — the
     // interpreter through `k_dispatch_systask`, the VM through `backend.rs`, the
     // JIT through `jit.rs`, tier-3 through `NativeKernel::k_dispatch_systask` —
@@ -682,7 +706,7 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                 args: args.to_vec(),
                 time_mult,
                 radix,
-                scope: sched.st.cur_scope.clone(),
+                scope: scope_with_block(sched.st),
                 fd,
             });
             Ctl::Continue
@@ -700,7 +724,7 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                     args: args.to_vec(),
                     time_mult,
                     radix,
-                    scope: sched.st.cur_scope.clone(),
+                    scope: scope_with_block(sched.st),
                     fd,
                 },
                 last_vals: None,
@@ -1066,4 +1090,16 @@ pub(crate) fn inline_with_call(sched: &Scheduler, args: &[u32]) -> Option<crate:
         }
     }
     None
+}
+
+/// §4.5.426: the registering scope a strobe / monitor capture keeps — the instance
+/// path plus the named-block chain of the registering statement (rendered later,
+/// when `cur_block_scope` belongs to some other statement).
+fn scope_with_block(st: &crate::SimState) -> String {
+    let b = st.cur_block_scope.borrow();
+    if b.is_empty() {
+        st.cur_scope.clone()
+    } else {
+        format!("{}.{}", st.cur_scope, b)
+    }
 }

@@ -396,6 +396,8 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // today — the field exists so a future resolver-installing harness
         // cannot silently diverge from the production construction.
         stmt_locs: sc.stmt_locs,
+        stmt_scopes: sc.stmt_scopes,
+        expr_scopes: sc.expr_scopes,
         // …and `timeformat_stmts`, for the same reason: `$timeformat` lowers to a
         // `Display` plus a sid, so WITHOUT the table it prints its own arguments
         // instead of applying them, and the `%t` path is never entered.

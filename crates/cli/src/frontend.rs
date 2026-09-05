@@ -685,6 +685,8 @@ pub(crate) fn run_vita_str_gated(
         // #10: elaborate-resolved file:line:col + instance for severity
         // statements (one-shot path; empty without a resolver ⇒ byte-identical).
         stmt_locs: sc.stmt_locs,
+        stmt_scopes: sc.stmt_scopes,
+        expr_scopes: sc.expr_scopes,
         // §21.3.2 %t/$timeformat: the call-site table + the precision exponent
         // %t scales against (one-shot path; empty/−9 ⇒ byte-identical).
         timeformat_stmts: sc.timeformat_stmts,

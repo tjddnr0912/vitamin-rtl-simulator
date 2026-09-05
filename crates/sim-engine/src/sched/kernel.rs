@@ -351,7 +351,13 @@ impl Kernel for Scheduler<'_, '_> {
             return Value::from_str_bytes(&[]);
         };
         let (fmt, rest) = (args.first().copied(), args.get(1..).unwrap_or(&[]).to_vec());
+        // §4.5.426: `%m` inside a named block (see `expr_scopes`).
+        let saved = self
+            .st
+            .cur_block_scope
+            .replace(self.st.expr_scopes.get(&rhs).cloned().unwrap_or_default());
         let text = crate::builtins::format_args_str(&*self.st, fmt, &rest, None);
+        self.st.cur_block_scope.replace(saved);
         Value::from_str_bytes(text.as_bytes())
     }
     fn k_disable_fork(&mut self) {

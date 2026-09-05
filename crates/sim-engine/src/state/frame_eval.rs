@@ -253,10 +253,15 @@ impl<'a> SimState<'a> {
         }) = self.ir.exprs.get(rhs as usize)
         {
             let (f0, rest) = (args.first().copied(), args.get(1..).unwrap_or(&[]));
+            // §4.5.426: `%m` inside a named block of this frame body (`expr_scopes`).
+            let saved_scope = self
+                .cur_block_scope
+                .replace(self.expr_scopes.get(&rhs).cloned().unwrap_or_default());
             let text = match nets {
                 Some(n) => crate::builtins::format_args_str_with(self, n, f0, rest, None),
                 None => crate::builtins::format_args_str(self, f0, rest, None),
             };
+            self.cur_block_scope.replace(saved_scope);
             return Value::from_str_bytes(text.as_bytes());
         }
         let lw = self.lvalue_width(lhs);
@@ -1322,7 +1327,12 @@ impl<'a> SimState<'a> {
         use crate::SeverityKind as K;
         // One spelling, shared with the statement-path emitter — see `SeverityKind`.
         let (severity, code) = sev.diag_class();
+        // §4.5.426: `%m` inside a named block of this frame body (`stmt_scopes`).
+        let saved_scope = self
+            .cur_block_scope
+            .replace(self.stmt_scopes.get(&sid).cloned().unwrap_or_default());
         let mut message = crate::builtins::format_args_str(self, fmt, args, None);
+        self.cur_block_scope.replace(saved_scope);
         if message.is_empty() {
             message = code.title().to_string();
         }
@@ -1655,12 +1665,17 @@ impl<'a> SimState<'a> {
                         // gives — this executor bypasses `builtins::dispatch`.
                         let f = self.builtin_prof.as_ref().map(|p| p.enter());
                         let radix = self.radixes.get(&sid).copied();
+                        // §4.5.426: `%m` inside a named block of this frame body.
+                        let saved_scope = self
+                            .cur_block_scope
+                            .replace(self.stmt_scopes.get(&sid).cloned().unwrap_or_default());
                         let mut s = match nets {
                             Some(n) => {
                                 crate::builtins::format_args_str_with(self, n, *fmt, args, radix)
                             }
                             None => crate::builtins::format_args_str(self, *fmt, args, radix),
                         };
+                        self.cur_block_scope.replace(saved_scope);
                         if matches!(which, sim_ir::SysTaskId::Display) {
                             s.push('\n');
                         }

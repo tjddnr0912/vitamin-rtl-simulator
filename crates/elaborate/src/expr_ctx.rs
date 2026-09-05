@@ -547,6 +547,20 @@ impl Elaborator<'_> {
     /// THE deterministic expr append point.
     #[inline]
     pub(crate) fn push_expr(&mut self, e: ir::Expr) -> u32 {
+        // §4.5.426: a `$sformatf` inside named blocks renders `%m` with the label chain
+        // (every lowering site — direct rhs, hoist, return — funnels through here).
+        if !self.block_scope.is_empty()
+            && matches!(
+                e,
+                ir::Expr::SysFunc {
+                    which: ir::SysFuncId::Sformatf,
+                    ..
+                }
+            )
+        {
+            let id = self.exprs.len() as u32;
+            self.expr_scopes.insert(id, self.block_scope.join("."));
+        }
         // V33-8: latch "the statement being built can emit a LOCATED runtime
         // diagnostic". Here because this is the one funnel — `Expr::Signal { word }`
         // is constructed at a dozen sites (expr_main, packed, ports, events…) and

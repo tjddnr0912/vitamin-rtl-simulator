@@ -132,17 +132,17 @@ fn struct_typedef_port_supported() {
 }
 
 #[test]
-fn typedef_port_with_extra_dims_is_loud() {
-    // `input byte_t [3:0] a` (an array of the typedef) is honest-loud — the guard
-    // declines (`[` after the type, not the name), so it does not silently parse.
-    let (_o, ok) = run(
+fn typedef_port_with_extra_dims_is_a_packed_array_of_the_typedef() {
+    // §4.5.425: `input byte_t [3:0] a` is a packed array whose element is the typedef
+    // (was honest-loud). Both oracles: `81 01 32`.
+    let (o, ok) = run(
         "package p; typedef logic [7:0] byte_t; endpackage\n\
-         module m import p::*; (input byte_t [3:0] a, output logic q); assign q=a[0][0]; endmodule",
+         module m import p::*; (input byte_t [3:0] a, output logic [7:0] q, output logic [1:0] r); assign q = a[1]; assign r = {a[0][0], a[3][7]}; endmodule\n\
+         module top; p::byte_t [3:0] a; logic [7:0] q; logic [1:0] r; m u(.a(a), .q(q), .r(r));\n\
+         initial begin a = 32'hA5_3C_81_F0; #1 $display(\"R:%h %b %0d\", q, r, $bits(a)); #1 $finish; end endmodule\n",
     );
-    assert!(
-        !ok,
-        "a typedef port with extra packed dims must be loud (v1)"
-    );
+    assert!(ok, "{o}");
+    assert_eq!(o, "81 01 32");
 }
 
 #[test]

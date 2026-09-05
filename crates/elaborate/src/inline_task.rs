@@ -649,6 +649,9 @@ impl Elaborator<'_> {
         // transparent in `walk_scopes_key`, so a label at `caller.LABEL` is still
         // found from inside it; restored after so it does not leak past the call.
         let (saved_labels, saved_meta) = self.push_body_enum_labels(&task.body_enums, &task.body);
+        // §4.5.426: `%m` inside a task body is `module.task` (IEEE §21.2.1), not the
+        // caller's block chain — the inlined body lowers under `[task]`.
+        let saved_scope = std::mem::replace(&mut self.block_scope, vec![tname.to_string()]);
         if tlocals.is_empty() {
             self.inline_task_body(b, &task.body);
         } else {
@@ -658,6 +661,7 @@ impl Elaborator<'_> {
                 s.inline_task_body(b, &task.body);
             });
         }
+        self.block_scope = saved_scope;
         self.restore_params(saved_labels);
         self.restore_param_meta(saved_meta);
         self.inline_stack.pop();

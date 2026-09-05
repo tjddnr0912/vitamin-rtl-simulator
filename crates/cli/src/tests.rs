@@ -91,7 +91,7 @@ fn staged_extra_sidecars_wire_shape_is_pinned() {
         println!("REGEN StagedExtraSidecars wire = {got}");
         return;
     }
-    const EXPECTED: &str = "616c15b60a2377b576ac0129442c5f0095d984f0fe03d052899848f825df7126";
+    const EXPECTED: &str = "8ea71cc6289427f4afb13e14837dacf40b42b960bc9587347d78fb88c049f550";
     assert_eq!(
         got, EXPECTED,
         "StagedExtraSidecars wire shape changed — a field was added / removed / \

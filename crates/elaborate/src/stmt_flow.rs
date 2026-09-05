@@ -83,6 +83,10 @@ impl Elaborator<'_> {
             }
         }
         let id = self.stmts.len() as u32;
+        // §4.5.426: a system task inside named blocks renders `%m` with the label chain.
+        if !self.block_scope.is_empty() && matches!(s, ir::Stmt::SysTask { .. }) {
+            self.stmt_scopes.insert(id, self.block_scope.join("."));
+        }
         // V33-8: does a runtime diagnostic want to point AT this statement?
         // Three producers, one recorder (`record_stmt_loc`):
         //  - an array-word READ lowered since the last push  (`push_expr` latch)

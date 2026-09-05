@@ -287,6 +287,10 @@ pub struct SimOpts {
     /// diagnostic stays location-less, byte-identical to the pre-#10 output.
     /// Never golden IR. Read through `SimState::stmt_diag_meta`.
     pub stmt_locs: StmtLocTable,
+    /// §4.5.426: StmtId → named-block label chain for `%m` (see elaborate's
+    /// `SimOpts::stmt_scopes`); `expr_scopes` is the `$sformatf` twin.
+    pub stmt_scopes: std::collections::BTreeMap<u32, String>,
+    pub expr_scopes: std::collections::BTreeMap<u32, String>,
     /// `$timeformat` side table: StmtIds of `$timeformat` calls (lowered as no-op
     /// `SysTaskId::Display`, the severity/assert_ctl pattern). EMPTY for designs
     /// without `$timeformat` (the default). Never enters the golden IR.
@@ -470,6 +474,8 @@ impl Default for SimOpts {
             backend: Backend::Native,
             severities: SeverityTable::new(),
             stmt_locs: StmtLocTable::new(),
+            stmt_scopes: std::collections::BTreeMap::new(),
+            expr_scopes: std::collections::BTreeMap::new(),
             timeformat_stmts: std::collections::BTreeSet::new(),
             stage_stmts: std::collections::BTreeSet::new(),
             handle_copy_stmts: std::collections::BTreeMap::new(),
@@ -790,6 +796,8 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.backend = effective_backend;
     st.severities = opts.severities.clone();
     st.stmt_locs = opts.stmt_locs.clone();
+    st.stmt_scopes = opts.stmt_scopes.clone();
+    st.expr_scopes = opts.expr_scopes.clone();
     st.timeformat_stmts = opts.timeformat_stmts.clone();
     st.stage_stmts = opts.stage_stmts.clone();
     st.handle_copy_stmts = opts.handle_copy_stmts.clone();

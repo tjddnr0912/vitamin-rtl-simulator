@@ -68,8 +68,8 @@ endmodule
 "#,
         "a64",
     );
-    // w_d3_mid_local: stays loud (declined shape)
-    loud(
+    // w_d3_mid_local: both oracles (§4.5.427: a mid-dim write on a partially indexed packed net)
+    digest(
         "w_d3_mid_local",
         r#"module tb;
   function automatic logic [11:0] f(input logic [1:0][2:0][1:0] a0);
@@ -81,7 +81,7 @@ endmodule
   initial begin $display("DIGEST=%h", f(12'ha5c)); #1 $finish; end
 endmodule
 "#,
-        "E-ELAB-UNSUPPORTED: nested lvalue select (v1: single-level) [in tb.$func$f]",
+        "a64",
     );
     // w_d3_mid_output: iverilog (4-state; verilator is 2-state and prints '024')
     digest(

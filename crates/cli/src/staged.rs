@@ -738,6 +738,9 @@ pub(crate) fn run_vrun_gated(
         // this the staged run silently prints location-less severity reports
         // while one-shot locates them.
         stmt_locs: extra.stmt_locs,
+        // v30 (STAGED-DROP parity): the `%m` named-block chains.
+        stmt_scopes: extra.stmt_scopes,
+        expr_scopes: extra.expr_scopes,
         stage_stmts: std::collections::BTreeSet::new(),
         handle_copy_stmts: extra.handle_copy_stmts,
         queue_slice_stmts: extra.queue_slice_stmts,
