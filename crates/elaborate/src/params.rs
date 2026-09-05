@@ -744,9 +744,31 @@ impl Elaborator<'_> {
     /// §5.7.1 / §11.6 — the fill is context-determined, here by the param type).
     /// Without a fill, this is exactly `const_eval_in_scope`. `'1` into a 64-bit
     /// param therefore yields all-64-ones, not the 32-bit `0xFFFFFFFF`.
-    pub(crate) fn eval_param_init(&self, e: &ast::Expr, width: Option<u32>) -> Option<i64> {
-        if let (Some(w), Some((kind, raw))) = (width, expr_as_fill(e)) {
+    pub(crate) fn eval_param_init(&self, e: &ast::Expr, meta: Option<(u32, bool)>) -> Option<i64> {
+        if let (Some((w, _)), Some((kind, raw))) = (meta, expr_as_fill(e)) {
             return fill_to_i64(kind, raw, w);
+        }
+        // A fill INSIDE the initializer (`'1 ^ 1'b0`, `'0 - 1'b1`, `('1 > 8'd200)`) is
+        // sized by the region it sits in (§5.7.1, §11.6.1), and the region of a sized
+        // parameter is its declared width. The unlimited lane below reads a fill at a
+        // hard 32 bits, so `localparam logic [39:0] X = '1 ^ 1'b0;` was `00ffffffff`
+        // where both oracles give `ffffffffff` (ROADMAP §2 🆕 E). The width-aware
+        // assignment walk is the evaluator for that shape — the one a constant
+        // function's assignment already uses — and the lane below keeps every
+        // fill-free initializer byte-identical. A declined walk (x/z fill, a shape it
+        // has no arm for) falls through to the answer the lane always gave.
+        if let Some((w, s)) = meta {
+            if w <= 64 && crate::param_query::ast_contains_fill(e) {
+                if let Some(v) = self.eval_const_assign(
+                    e,
+                    &BTreeMap::new(),
+                    &ConstWidths::new(),
+                    0,
+                    Some((w, s)),
+                ) {
+                    return Some(v);
+                }
+            }
         }
         self.const_eval_in_scope(e)
     }
@@ -1559,7 +1581,7 @@ impl Elaborator<'_> {
                             return Some(v);
                         }
                     }
-                    self.eval_param_init(&p.value, pw)
+                    self.eval_param_init(&p.value, meta)
                 })
                 // The WIDE bit domain, read back as an i64 because the declaration
                 // fits one. Last in the chain: it fires only where every integer arm

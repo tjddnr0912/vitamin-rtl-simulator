@@ -1,6 +1,7 @@
 //! The WIDE (bit-vector) constant domain — see the section banner below.
 
 use super::*;
+use crate::const_eval::fill_literal_ast;
 
 // ── wide (>64-bit) CARRY-FREE constant folding ───────────────────────────────
 //
@@ -261,6 +262,20 @@ fn bp_operands_at(l: &WideBits, r: &WideBits, ctx: u32) -> Option<(Vec<u64>, Vec
     )
 }
 
+/// A SELF-determined operand (§11.6.1 Table 11-21: a comparison's operand beside
+/// another fill, a logical operand, a ternary's condition, `**`'s exponent): folded
+/// with no context, except that an unsized fill there is ONE bit (§5.7.1 — the rule
+/// `fold_shift_count` already applies to a shift amount, and the i64 lane's
+/// `const_self_width` gives the same answer). Both oracles: `('1 && 1'b1)` is 1,
+/// `(2 ** '1)` is 2, `('1 ? 1'b1 : 1'b0)` is 1.
+fn fold_selfdet_operand(e: &ast::Expr, name: WideNameFn) -> Option<WideBits> {
+    if fill_literal_ast(e).is_some() {
+        fold_bits_at(e, 1, name)
+    } else {
+        fold_bits_at0(e, name)
+    }
+}
+
 pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<WideBits> {
     // A width this domain will not build. `MAX_NET_WIDTH` is the declared-width cap
     // a net already lives under, so an intermediate wider than that cannot land
@@ -276,8 +291,19 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
     match &e.kind {
         ast::ExprKind::Paren { inner } => fold_bits_at(inner, ctx, name),
         // A fill literal is context-determined (§5.7.1) and therefore has NO self
-        // width — only `fold_init`, which knows the target, can fold one.
-        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => None,
+        // width: with no context (`ctx == 0`) it declines — only `fold_init`, which
+        // knows the target, folds a lone one — and inside a context it is the fill
+        // bit replicated to that width, which is what makes `'1 ^ 1'b0` at 128 bits
+        // 128 ones (ROADMAP §2 🆕 E). A self-determined operand position (a
+        // comparison's operand, a logical operand, a ternary's condition, `**`'s
+        // exponent) sizes its fill through `fold_selfdet_operand` instead.
+        ast::ExprKind::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => {
+            if ctx == 0 {
+                return None;
+            }
+            let cv = literal::fill_literal_const(raw, *kind, ctx)?;
+            Some((cv.bits, ctx, false))
+        }
         ast::ExprKind::IntLit { kind, raw } => {
             let cv = parse_int_literal(raw, *kind)?;
             Some((cv.bits, cv.width, cv.signed))
@@ -540,7 +566,7 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             let l0 = fold_bits_at(lhs, ctx, name)?;
             let ls = l0.2;
             let l = widen_to(l0, ctx, ls)?;
-            let r = fold_bits_at(rhs, 0, name)?;
+            let r = fold_selfdet_operand(rhs, name)?;
             wide_pow(&l, &r)
         }
         // §11.4.5 unary minus: the two's complement at the operand's own width.
@@ -577,8 +603,24 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
                     | ast::BinOp::CaseNe
             ) =>
         {
-            let l = fold_bits_at0(lhs, name)?;
-            let r = fold_bits_at0(rhs, name)?;
+            // §11.6.1: a comparison's operands size each other, so a fill on one side
+            // takes the OTHER side's width (`'1 == 8'hff` is true, `'1 != 40'hff_ffff_ffff`
+            // is false in both oracles); two fills are one bit each.
+            let (l, r) = match (fill_literal_ast(lhs), fill_literal_ast(rhs)) {
+                (Some(_), None) => {
+                    let r = fold_bits_at0(rhs, name)?;
+                    (fold_bits_at(lhs, r.1, name)?, r)
+                }
+                (None, Some(_)) => {
+                    let l = fold_bits_at0(lhs, name)?;
+                    let r = fold_bits_at(rhs, l.1, name)?;
+                    (l, r)
+                }
+                _ => (
+                    fold_selfdet_operand(lhs, name)?,
+                    fold_selfdet_operand(rhs, name)?,
+                ),
+            };
             let (a, b, w, sg) = bp_operands(&l, &r)?;
             let ord = limbs_cmp(&a, &b, w, sg);
             use std::cmp::Ordering::*;
@@ -597,7 +639,7 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             if matches!(op, ast::BinOp::LogAnd | ast::BinOp::LogOr) =>
         {
             let truth = |e: &ast::Expr| -> Option<bool> {
-                let (b, w, _) = fold_bits_at0(e, name)?;
+                let (b, w, _) = fold_selfdet_operand(e, name)?;
                 if bp_any_unknown(&b, w) {
                     return None;
                 }
@@ -619,7 +661,7 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             else_e,
         } => {
             // §11.4.11: the CONDITION is self-determined; both arms take the context.
-            let (cb, cw, _) = fold_bits_at(cond, 0, name)?;
+            let (cb, cw, _) = fold_selfdet_operand(cond, name)?;
             if bp_any_unknown(&cb, cw) {
                 return None;
             }

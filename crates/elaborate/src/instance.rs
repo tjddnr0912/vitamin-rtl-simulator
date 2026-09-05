@@ -626,9 +626,9 @@ impl Elaborator<'_> {
                         let meta = self.param_decl_width_unoverridden(p);
                         let folded = (!self.param_init_kept_loud(p))
                             .then(|| {
-                                self.untyped_fill_init(p).map(|(v, _)| v).or_else(|| {
-                                    self.eval_param_init(&p.value, meta.map(|(w, _)| w))
-                                })
+                                self.untyped_fill_init(p)
+                                    .map(|(v, _)| v)
+                                    .or_else(|| self.eval_param_init(&p.value, meta))
                             })
                             .flatten()
                             .or_else(|| self.param_value_via_real(meta, &p.value))

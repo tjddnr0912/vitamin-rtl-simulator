@@ -303,6 +303,18 @@ impl Elaborator<'_> {
     pub(crate) fn patch_expr_param_const_w(&mut self, eid: u32, v: i64, meta: Option<(u32, bool)>) {
         let cv = match meta {
             Some((w, signed)) if (1..=64).contains(&w) => make_const_i64(v, w, signed),
+            // Declared WIDER than 64 bits with a value that fits i64 (`logic [127:0]
+            // SMALL = 128'h7`): such a parameter lives in `hier_params`, not the wide
+            // side map, and used to fall to value-inference — `u.SMALL` printed 32 bits
+            // where the bare read and both oracles print 128 (§4.5.421 review, both
+            // lenses). The i64 value is the parameter's value at 64 bits; extend it to
+            // the declared width with the declared sign.
+            Some((w, signed)) if w > 64 => ir::ConstVal {
+                width: w,
+                signed,
+                repr: ir::ConstRepr::Numeric,
+                bits: resize_bits(&bp_from_limbs(vec![v as u64], 64), 64, w, signed),
+            },
             _ => {
                 self.patch_expr_param_const(eid, v);
                 return;
@@ -371,6 +383,13 @@ pub(crate) fn ast_names_any(e: &ast::Expr, is_local: &dyn Fn(&str) -> bool) -> b
 
 fn ast_contains_reduction(e: &ast::Expr) -> bool {
     ast_any(e, &is_reduction_top)
+}
+
+/// True iff the expression contains an unsized fill (`'0 '1 'x 'z`) anywhere — the
+/// shape whose value depends on the CONTEXT width (§5.7.1), so a sized initializer
+/// holding one must be folded at its declared width rather than in the unlimited lane.
+pub(crate) fn ast_contains_fill(e: &ast::Expr) -> bool {
+    ast_any(e, &|x| crate::const_eval::fill_literal_ast(x).is_some())
 }
 
 impl Elaborator<'_> {

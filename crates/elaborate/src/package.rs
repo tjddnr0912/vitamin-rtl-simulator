@@ -602,7 +602,10 @@ impl Elaborator<'_> {
                         .then(|| {
                             self.untyped_fill_init(p)
                                 .map(|(v, _)| v)
-                                .or_else(|| self.const_eval_in_scope(&p.value))
+                                // The same evaluator a module parameter takes: a fill
+                                // inside a sized initializer folds at the declared width
+                                // (§4.5.420), and a fill-free one is `const_eval_in_scope`.
+                                .or_else(|| self.eval_param_init(&p.value, pmeta))
                         })
                         .flatten()
                         .or_else(|| self.param_value_via_real(pmeta, &p.value))
