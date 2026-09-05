@@ -11,6 +11,17 @@ changed for a user of the simulator.
 
 ### Added
 
+- **A property wrapped whole in parentheses**: `assert property (@(posedge clk) disable iff (rst)
+  (a |-> b))` — the shape every lowRISC `ASSERT` macro expands to — parses and runs exactly as the
+  unwrapped body (also `((…))`, `|=>`, `##1`, `inside`, an `else begin … end` action block, a
+  named property, `assume property`). A group that is not the whole property (`(a |-> b) ##1 c`)
+  stays a parse error; `cover property` with an implication stays loud.
+- **A parameter wider than 64 bits read hierarchically**: `u.C` on `parameter logic [127:0] C`
+  (also through a generate block, a nested instance, an interface, an instance override) in a
+  display, arithmetic, a comparison, `$countones` or a continuous assign; a parameter declared
+  wider than 64 bits whose value fits 64 (`logic [127:0] SMALL = 128'h7`) now reads at its declared
+  width hierarchically (it printed 32 bits). Still loud, and now saying so: a part / bit-select of a
+  hierarchical parameter (any width); `$bits` of one and an expression override of a wide parameter.
 - **Multi-dimensional packed tf-port formals**: `function f(logic [15:0][3:0] shifts)` (and a
   typedef with packed dims, non-ANSI `input logic [1:0][3:0] a;`, task / function, `input` /
   `output` / `inout` / `ref`, a default value, a comma continuation) — element and part reads,
@@ -23,6 +34,13 @@ changed for a user of the simulator.
   over-64-bit literal, an expression and a narrower parameter stay loud.
 
 ### Fixed
+
+- **An unsized fill inside a sized parameter initializer** (`localparam logic [39:0] X = '1 ^
+  1'b0;`, `'0 - 1'b1`, `('1 > 8'd200)`, `'1 * 1'b1`, `~('1 ^ 1'b0)`, …) is sized by the declared
+  width in both constant lanes (33–64 bits and wider), as in both oracles; a fill beside a
+  comparison operand takes that operand's width, a fill as a logical operand / ternary condition
+  / `**` exponent is one bit. Package parameters included. Unchanged: an instance-override
+  expression containing a fill (`#(.P('1 ^ 1'b0))`, an axis the oracles split on).
 
 - **A packed-struct member width now folds at the expression's own width** (IEEE §11.6): a 32-bit
   `int unsigned W = 4294967295` under `logic [$clog2(W+2):0]` and two 4-bit constants under

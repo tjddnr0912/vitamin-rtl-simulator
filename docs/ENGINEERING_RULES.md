@@ -3597,6 +3597,9 @@ See [[layout-keys-must-outlive-the-unit]], [[gate-on-constness-not-resolvability
 
 ### A width guard on the PRODUCER is a threshold; the defect lives in the CONSUMER's fold (§4.5.418)
 
+- **A queue row names one shape; the root is usually a lane (§4.5.420).** 🆕 E said "a fill in a self-determined position declines the whole initializer"; the plain twin `localparam logic [39:0] X = '1 ^ 1'b0;` was already wrong, because the i64 lane reads any fill at 32 and the wide lane declined a fill leaf — the position was incidental. Before building for the row's shape, probe its plain twin (no parens, no comparison) at three widths (≤32, 33–64, >64): the answer tells you which lane, and a lane fix is one consumer (`eval_param_init`) plus one leaf arm, not a per-position patch. A binder census for a parameter rule has FOUR channels — module body, instance-elaborated, package, instance override — and the override channel is a different binder (the value is folded in the parent before the target's width exists), so it gets a §2 line, not a fifth call site.
+- **Three slices, one review (§4.5.419–421).** A batch amortises the review (the ~75 % cost) only if attribution stays per slice: disjoint files per slice, one PRE and one POST binary, a census per slice with its own cell prefix, and the lenses' questions grouped per slice. A finding then reverts one slice without touching the other two.
+
 - **"Only admit values ≥ 32 bits" answered the census cell and not the class.** The parse-time
   constant table folds at i64; the census control twin showed a 4-bit pair silently 17 (oracles 1),
   so the new based-literal spelling was declined below 32 bits. The soundness lens moved the value to

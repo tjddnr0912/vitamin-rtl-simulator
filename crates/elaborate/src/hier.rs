@@ -524,6 +524,19 @@ impl Elaborator<'_> {
         self.hier_resolve(prefix, path, &self.hier_params)
     }
 
+    /// The >64-bit twin of [`Self::hier_lookup_param`]: a parameter that landed in
+    /// `wide_param_bits` (keyed by the same fully-qualified name) read through a
+    /// hierarchical path. Before this, `u.C` on a 128-bit parameter was `E3010
+    /// undeclared hierarchical name` — a false message on a valid design (ROADMAP §2
+    /// 🆕 G / row 28) — because the resolver consulted the i64 table only.
+    pub(crate) fn hier_lookup_wide_param(
+        &self,
+        prefix: &str,
+        path: &[String],
+    ) -> Option<ir::ConstVal> {
+        self.hier_resolve(prefix, path, &self.wide_param_bits)
+    }
+
     /// The `(declared width, signed)` of a hierarchical param read (`dut.W`), when
     /// the param has a determinate declared width — so the cross-instance const is
     /// materialized at THAT width, not the value-inferred 32 bits (mirrors the
@@ -547,7 +560,7 @@ impl Elaborator<'_> {
     /// walking outward (review N3 HIGH: the old whole-tail outward strip silently
     /// grabbed an unrelated outer net when the leading segment matched an inner
     /// scope whose remainder was invalid, e.g. `b.v` / a local-shadowed `cfg.mode`).
-    pub(crate) fn hier_resolve<V: Copy>(
+    pub(crate) fn hier_resolve<V: Clone>(
         &self,
         prefix: &str,
         path: &[String],
@@ -589,7 +602,7 @@ impl Elaborator<'_> {
                 if self.pkg_var_aliases.contains_key(&full) {
                     return None;
                 }
-                return table.get(&full).copied(); // committed: Some=hit, None=unresolved
+                return table.get(&full).cloned(); // committed: Some=hit, None=unresolved
             }
             // (b) SINGLETON generate block: vita names a named `if`/`begin` block `g[0]`,
             // but the hierarchical name is the bare `g` (IEEE: the implicit [0] is not
@@ -604,7 +617,7 @@ impl Elaborator<'_> {
                 if self.pkg_var_aliases.contains_key(&full) {
                     return None; // same §26.3 rule as (a)
                 }
-                return table.get(&full).copied();
+                return table.get(&full).cloned();
             }
             // (c) leading segment names a NET (not a scope) here: `.member` on a plain
             // net is unsupported (committed → unresolved, loud).
@@ -677,7 +690,10 @@ impl Elaborator<'_> {
                 // LEAF: the caller's `table` decides whether this is a hit, so hand
                 // back the plain spelling unless only the `[0]` scope spelling
                 // exists (a whole-scope reference, e.g. a genblock-typed leaf).
-                if self.symbols.contains_key(&plain) || self.hier_params.contains_key(&plain) {
+                if self.symbols.contains_key(&plain)
+                    || self.hier_params.contains_key(&plain)
+                    || self.wide_param_bits.contains_key(&plain)
+                {
                     return Some(plain);
                 }
                 return Some(singleton0(&cur, seg).unwrap_or(plain));
@@ -712,6 +728,13 @@ impl Elaborator<'_> {
             .is_some_and(|(k, _)| hit(k))
             || self
                 .hier_params
+                .range(probe.clone()..)
+                .next()
+                .is_some_and(|(k, _)| hit(k))
+            // A child whose only parameter is wider than i64 lives in the wide side
+            // map alone; without this arm it was not a scope at all.
+            || self
+                .wide_param_bits
                 .range(probe.clone()..)
                 .next()
                 .is_some_and(|(k, _)| hit(k))

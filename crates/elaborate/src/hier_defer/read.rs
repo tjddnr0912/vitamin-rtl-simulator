@@ -67,6 +67,23 @@ impl Elaborator<'_> {
                 .hier_lookup(&d.prefix, &d.path)
                 .or_else(|| self.hier_resolve(&d.prefix, &d.path, &self.fixed_string_dyn_key))
             else {
+                // A select of a hierarchical PARAMETER (`u.C[7:0]`, `u.C[0]`) is not
+                // built here (this pass resolves nets); say so rather than calling a
+                // name the read path resolves "undeclared" (§4.5.421 review, both
+                // lenses).
+                if self.hier_lookup_param(&d.prefix, &d.path).is_some()
+                    || self.hier_lookup_wide_param(&d.prefix, &d.path).is_some()
+                {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "a bit / part-select of the hierarchical parameter `{}` is \
+                             unsupported (a whole read of it folds; select a copy)",
+                            d.path.join(".")
+                        ),
+                    );
+                    continue;
+                }
                 self.error(
                     MsgCode::ElabUnresolvedName,
                     &format!(
@@ -188,6 +205,13 @@ impl Elaborator<'_> {
                 if let Some(v) = self.hier_lookup_param(&d.prefix, &d.path) {
                     let meta = self.hier_lookup_param_meta(&d.prefix, &d.path);
                     self.patch_expr_param_const_w(d.eid, v, meta);
+                } else if let Some(cv) = self.hier_lookup_wide_param(&d.prefix, &d.path) {
+                    // A >64-bit parameter: the same `Const` a bare read of it lowers to
+                    // (`BareIdentRoute::Wide`), so `u.C` and `C` are byte-identical.
+                    let cid = self.intern_const(cv);
+                    if let Some(slot) = self.exprs.get_mut(d.eid as usize) {
+                        *slot = ir::Expr::Const { val: cid };
+                    }
                 } else {
                     self.error(
                         MsgCode::ElabUnresolvedName,

@@ -32,7 +32,7 @@ Phase-2.
 | `module` / `endmodule` | Yes | The top-level design unit. |
 | ANSI port headers | Yes | `module m (input logic a, output reg [7:0] q);` |
 | Non-ANSI port headers | Yes | `module m (a, q); input a; output [7:0] q;` |
-| `parameter` | Yes | Overridable at instantiation. |
+| `parameter` | Yes | Overridable at instantiation. An unsized fill inside a sized initializer (`localparam logic [39:0] X = '1 ^ 1'b0;`) is sized by the declared width (IEEE §5.7.1 / §11.6.1); an instance-override expression containing a fill is folded before the target's width is known (an axis the oracles split on). |
 | `localparam` | Yes | Not overridable. |
 | Parameter typed by a `typedef` | Yes | `localparam my_struct_t C = '{a: 1'b1, b: 5'd3};` — vector, signed, atom (`int`/`byte`/…), packed struct (members read as constants, positional or named `'{…}`), enum (labels and `.name()`/`.next()`), scoped `pkg::t`; bindings follow `import pkg::*`. Loud in v1: an unpacked struct, a `'{…}` given as an instance override. |
 | Parameter override — positional `#(8)` | Yes | |
@@ -40,7 +40,7 @@ Phase-2.
 | `generate` / `endgenerate`, `genvar` | Yes | `for`/`if`/`case` generate constructs. The `generate`/`endgenerate` keywords are **optional** (IEEE 1800-2017 §27.3), and the loop variable may be declared in the header — `for (genvar i = 0; i < 4; i++)` (§27.4). |
 | `function` / `endfunction` | Yes | See §6. |
 | `task` / `endtask` | Yes | See §6. |
-| Module instantiation & hierarchy | Yes | Named (`.p(x)`) and positional port maps; arbitrary nesting. |
+| Module instantiation & hierarchy | Yes | Named (`.p(x)`) and positional port maps; arbitrary nesting. A hierarchical read of a parameter (`u.P`, `u.g.P`, `u.v.P`, an interface's) folds to its constant, including one wider than 64 bits; a part/bit-select or `$bits` of a hierarchical parameter is loud. |
 | `interface` / `modport`, `package`, `program`, `class` | Yes | Interfaces bind as signal aliases (modport direction enforcement pending); packages with `import`; `program` blocks; classes with inheritance + virtual dispatch, parameterized classes, and constrained-random (`rand`/`constraint`/`randomize()`). |
 
 ### Ports
