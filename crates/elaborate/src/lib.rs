@@ -99,6 +99,7 @@ pub(crate) use limits::*;
 // The deferred-print task list lives with the hoister that must skip those arguments;
 // `lower_stmt`'s own `$sformatf` child hoist needs the same answer.
 pub(crate) use hoist::is_deferred_print_task;
+mod elab_task;
 mod netdecl;
 mod package;
 pub mod packed;

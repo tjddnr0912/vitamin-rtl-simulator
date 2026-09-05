@@ -1122,20 +1122,5 @@ pub(crate) fn strength_form(v: &Value) -> String {
 /// under the `-` flag. Used by the plain-content specs `%c`/`%v`/`%m`/`%s`, which
 /// iverilog justifies in an explicit field width. `None` width → content verbatim.
 pub(crate) fn justify(content: &str, field_width: Option<usize>, left_just: bool) -> String {
-    match field_width {
-        Some(n) => {
-            let clen = content.chars().count();
-            if clen < n {
-                let pad = " ".repeat(n - clen);
-                if left_just {
-                    format!("{content}{pad}")
-                } else {
-                    format!("{pad}{content}")
-                }
-            } else {
-                content.to_string()
-            }
-        }
-        None => content.to_string(),
-    }
+    diag::fmt::justify(content, field_width, left_just)
 }

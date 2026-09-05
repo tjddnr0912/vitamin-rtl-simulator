@@ -1,6 +1,7 @@
 //! diag — diagnostic data model + renderer boundary (leaf, IO-free).
 mod code;
 mod event;
+pub mod fmt;
 mod severity;
 
 pub use code::MsgCode;

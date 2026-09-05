@@ -1195,6 +1195,40 @@ impl Parser<'_, '_> {
                 self.parse_module_instance(module_name),
             ));
         }
+        // §4.5.428: an ELABORATION system task (IEEE §20.11) — `$fatal("…")` /
+        // `$error` / `$warning` / `$info` as a module item (also inside a generate
+        // branch: `if (W > 8) $fatal(1, "…");`). Carried as a synthetic `initial` whose
+        // call is renamed under `ELAB_TASK_PREFIX`; elaborate runs it at elaboration.
+        if self.peek() == Some(TokenKind::SystemTask) {
+            let start = self.cur_span();
+            let stmt = self.parse_systask_call();
+            let Stmt::SysTaskCall { name, args, span } = stmt else {
+                return Some(ModuleItem::Error(start));
+            };
+            let base = name.name.trim_start_matches('$');
+            if !matches!(base, "info" | "warning" | "error" | "fatal") {
+                self.error_at(
+                    name.span,
+                    "an elaboration system task as a module item (`$info` / `$warning` / \
+                     `$error` / `$fatal`, IEEE 1800 §20.11)",
+                );
+                return Some(ModuleItem::Error(start));
+            }
+            let renamed = Ident {
+                name: format!("{ELAB_TASK_PREFIX}{base}"),
+                span: name.span,
+            };
+            return Some(ModuleItem::Proc(ProceduralBlock {
+                kind: ProcKind::Initial,
+                sensitivity: None,
+                body: Box::new(Stmt::SysTaskCall {
+                    name: renamed,
+                    args,
+                    span,
+                }),
+                span: start.to(self.prev_span()),
+            }));
+        }
         self.error("module item");
         None
     }

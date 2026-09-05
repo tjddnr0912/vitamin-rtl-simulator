@@ -322,6 +322,9 @@ impl Elaborator<'_> {
                     match it {
                         ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),
                         ast::ModuleItem::Proc(pb) => {
+                            if self.try_elab_task(pb) {
+                                continue;
+                            }
                             let proc = self.lower_user_proc(pb);
                             self.push_process(proc);
                         }

@@ -36,6 +36,15 @@ use vita_artifact_derive::SchemaHash;
 /// touch the `.vu` root.
 pub const UNIQUE_VIOLATION_TASK: &str = "$__vita_unique_violation";
 
+/// §4.5.428: an ELABORATION system task (IEEE 1800-2017 §20.11 — `$info` / `$warning`
+/// / `$error` / `$fatal` written as a MODULE ITEM, incl. inside a generate) is parsed as
+/// a synthetic `initial` whose single statement is the call under this prefix
+/// (`$__vita_elab_fatal` …). Same channel and reason as [`UNIQUE_VIOLATION_TASK`]: the
+/// name is the only marker a `SysTaskCall` can carry without a new AST variant, and
+/// elaborate runs the call at ELABORATION (no process is created) — the message is
+/// rendered from constant arguments and `$fatal`/`$error` fail elaboration.
+pub const ELAB_TASK_PREFIX: &str = "$__vita_elab_";
+
 /// System-FUNCTION name the parser synthesizes for a right-to-left streaming
 /// concatenation `{<<N{…}}` (IEEE 1800-2017 §11.4.14), same reserved `$__vita_`
 /// channel and same reason as [`UNIQUE_VIOLATION_TASK`]: the producer

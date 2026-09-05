@@ -141,40 +141,21 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                 // `%0d` (bare leading zero, no width) = minimal; `%0Nd` = zero-pad
                 // to N (sign-aware: "-42"→"-00042"); `%Nd` = space-pad to N; bare
                 // `%d` = the operand's default decimal field width (iverilog-pinned).
-                let fw = match (min_zero, field_width) {
-                    (true, Some(0)) => 0,
-                    (_, Some(n)) => n,
-                    // bare `%d` of a REAL has NO default field width — iverilog
-                    // prints the rounded value unpadded (`%d` of 4.0 → "4", not the
-                    // 20-wide u64 field `dec_field_width(64)` would give). An
-                    // explicit `%Nd`/`%0Nd` still pads (handled above).
-                    (_, None) if v.is_real => 0,
-                    (_, None) => dec_field_width(v.width, v.signed),
-                };
-                if s.len() < fw {
-                    let pad = fw - s.len();
-                    if left_just {
-                        // `-` right-pads with spaces (and overrides `0`).
-                        out.push_str(&s);
-                        out.push_str(&" ".repeat(pad));
-                    } else if min_zero {
-                        // zero-pad AFTER any leading sign (`-` or `+`): "-42" →
-                        // "-00042", "+42" → "+00042".
-                        if let Some(rest) = s.strip_prefix(['-', '+']) {
-                            out.push_str(&s[..1]);
-                            out.push_str(&"0".repeat(pad));
-                            out.push_str(rest);
-                        } else {
-                            out.push_str(&"0".repeat(pad));
-                            out.push_str(&s);
-                        }
-                    } else {
-                        out.push_str(&" ".repeat(pad));
-                        out.push_str(&s);
-                    }
+                // bare `%d` of a REAL has NO default field width — iverilog prints
+                // the rounded value unpadded (`%d` of 4.0 → "4", not the 20-wide u64
+                // field `dec_field_width(64)` would give). Rules = `diag::fmt::pad_dec`.
+                let default_w = if v.is_real {
+                    0
                 } else {
-                    out.push_str(&s);
-                }
+                    dec_field_width(v.width, v.signed)
+                };
+                out.push_str(&diag::fmt::pad_dec(
+                    &s,
+                    min_zero,
+                    field_width,
+                    left_just,
+                    default_w,
+                ));
             }
             'h' | 'H' | 'x' | 'X' => {
                 let v = next_arg_with(st, nets, args, argi);
@@ -367,13 +348,13 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
 /// `%s` on a packed value: width/8 chars MSB-first, NUL bytes render as
 /// spaces (iverilog live pin, probe t7).
 pub(crate) fn fmt_packed_chars(v: &Value) -> String {
+    diag::fmt::packed_chars(&packed_bytes_msb(v), false)
+}
+
+/// The bytes of a packed value MSB-first (ceil(width/8), ≥1), x/z masked to 0.
+pub(crate) fn packed_bytes_msb(v: &Value) -> Vec<u8> {
     let nbytes = (v.width as usize).div_ceil(8).max(1);
-    let mut s = String::with_capacity(nbytes);
-    for bi in (0..nbytes).rev() {
-        let byte = packed_byte(v, bi);
-        s.push(if byte == 0 { ' ' } else { byte as char });
-    }
-    s
+    (0..nbytes).rev().map(|bi| packed_byte(v, bi)).collect()
 }
 
 /// Byte `bi` of a packed value (LSB byte = 0). Unknown (x/z) bits are masked OFF
@@ -394,20 +375,7 @@ pub(crate) fn packed_byte(v: &Value, bi: usize) -> u8 {
 /// yields the empty string. iverilog-pinned: 64-bit "hello" → "hello"; "hi\0\0" →
 /// "hi  "; "\0h\0i" → "h i"; all-NUL → "".
 pub(crate) fn fmt_packed_chars_min(v: &Value) -> String {
-    let nbytes = (v.width as usize).div_ceil(8).max(1);
-    let mut s = String::with_capacity(nbytes);
-    let mut started = false;
-    for bi in (0..nbytes).rev() {
-        let byte = packed_byte(v, bi); // x/z masked → 0, so leading x/z also strips
-        if !started {
-            if byte == 0 {
-                continue; // skip leading NUL (and x/z) padding
-            }
-            started = true;
-        }
-        s.push(if byte == 0 { ' ' } else { byte as char });
-    }
-    s
+    diag::fmt::packed_chars(&packed_bytes_msb(v), true)
 }
 
 /// `next_arg` against an alternate net store — see `format_args_str_with`.
@@ -427,35 +395,7 @@ pub(crate) fn next_arg_with<N: crate::eval::NetReader + ?Sized>(
 /// value (`2^n − 1`): 1-bit→1, 8-bit→3, 32-bit→10. Computed exactly up to 128 bits,
 /// then via `n·log10(2)` (a column-alignment hint; exactness beyond 128 is moot).
 pub(crate) fn dec_field_width(n: u32, signed: bool) -> usize {
-    if n == 0 {
-        return 1;
-    }
-    if signed && n > 1 {
-        // A signed `%d` field holds a sign char plus the digits of the most-negative
-        // magnitude 2^(n-1) (iverilog-pinned: 8-bit → "-128" = 4, 32-bit →
-        // "-2147483648" = 11). This is NOT simply unsigned_width + 1 — for some
-        // widths the two coincide (10-bit: signed "-512" and unsigned 1023 are both
-        // 4 wide), so the magnitude must be computed directly. A 1-bit signed value
-        // is the exception: iverilog gives it field width 1 (NOT 2), so n==1 falls
-        // through to the unsigned branch below (the lone `-1` overflows the 1-col
-        // field, as in iverilog).
-        if n <= 128 {
-            let mag: u128 = 1u128 << (n - 1);
-            1 + mag.to_string().len()
-        } else {
-            // wide: digits(2^(n-1)) ≈ (n-1)*log10(2)+1, plus the sign.
-            2 + ((n - 1) as f64 * std::f64::consts::LOG10_2) as usize
-        }
-    } else if n <= 128 {
-        let maxv: u128 = if n == 128 {
-            u128::MAX
-        } else {
-            (1u128 << n) - 1
-        };
-        maxv.to_string().len()
-    } else {
-        (n as f64 * std::f64::consts::LOG10_2) as usize + 1
-    }
+    diag::fmt::dec_field_width(n, signed)
 }
 
 /// IEEE 1800 §21.2.1.2 letter for a bit range `[lo,hi)` that contains ≥1 unknown

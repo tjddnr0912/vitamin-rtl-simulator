@@ -508,6 +508,20 @@ impl<'s> Elaborator<'s> {
 
     /// Emit a Warning with a SPECIFIC code (the generic [`Self::warn`] uses
     /// `W-ELAB-FEATURE-LIMIT`).
+    /// An INFO-severity diagnostic with an explicit code (an elaboration `$info`).
+    pub(crate) fn info_code(&mut self, code: MsgCode, msg: &str) {
+        let location = self.cur_location();
+        let context = self.cur_context();
+        self.sink.emit(LogEvent::Diagnostic(Diagnostic {
+            severity: Severity::Info,
+            code,
+            message: msg.to_string(),
+            location,
+            context,
+            sim_time: None,
+        }));
+    }
+
     pub(crate) fn warn_code(&mut self, code: MsgCode, msg: &str) {
         let location = self.cur_location();
         let context = self.cur_context();

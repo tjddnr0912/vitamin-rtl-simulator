@@ -1066,6 +1066,9 @@ impl Elaborator<'_> {
             match item {
                 ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),
                 ast::ModuleItem::Proc(p) => {
+                    if self.try_elab_task(p) {
+                        continue;
+                    }
                     let proc = self.lower_user_proc(p);
                     debug_assert_eq!(
                         self.processes.len() as u32,

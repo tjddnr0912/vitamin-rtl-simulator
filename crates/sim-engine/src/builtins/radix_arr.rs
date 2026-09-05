@@ -55,37 +55,8 @@ pub(crate) fn fmt_radix(
             std::char::from_digit(val, 16).unwrap()
         });
     }
-    // Width/flag handling (iverilog-pinned):
-    //   `%h`   → full vector width (leading zeros retained)
-    //   `%0h`  → minimum width: strip leading zeros (keep ≥1 digit)
-    //   `%0Nh` → zero-pad to N digits
-    //   `%Nh`  → space-pad to N digits (over the full-width form)
-    let base = if min_zero && field_width == Some(0) {
-        let trimmed = s.trim_start_matches('0');
-        if trimmed.is_empty() {
-            "0".to_string()
-        } else {
-            trimmed.to_string()
-        }
-    } else {
-        s
-    };
-    match field_width {
-        Some(w) if base.len() < w => {
-            let n = w - base.len();
-            if left_just {
-                // `-` right-pads with spaces (overrides `0`); the natural
-                // zero-padded digit string is the content (e.g. 8'hA → "0a").
-                format!("{base}{}", " ".repeat(n))
-            } else {
-                let pad = if min_zero { '0' } else { ' ' };
-                let mut p: String = std::iter::repeat(pad).take(n).collect();
-                p.push_str(&base);
-                p
-            }
-        }
-        _ => base,
-    }
+    // Width/flag handling (iverilog-pinned) = `diag::fmt::pad_radix`.
+    diag::fmt::pad_radix(s, min_zero, field_width, left_just)
 }
 
 pub(crate) fn char_of(v: &Value) -> char {
