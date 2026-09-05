@@ -210,8 +210,85 @@ impl Parser<'_, '_> {
             _ if self.at_ident_kw("continue") && self.peek_at(1) == Some(TokenKind::Semi) => {
                 self.parse_break_continue(false)
             }
+            // IEEE 1800-2017 §9.3.5: a statement label `L: stmt`. See
+            // `parse_labeled_stmt` for the desugar (a named block around the statement).
+            _ if self.is_ident() && self.peek_at(1) == Some(T::Colon) => self.parse_labeled_stmt(),
             _ if self.is_ident() => self.parse_assign_or_call(),
             _ => self.stmt_error(),
+        }
+    }
+
+    /// `label : statement` (IEEE 1800-2017 §9.3.5). The label names a scope around
+    /// the statement — `L: begin … end` is `begin : L … end` by the LRM's own
+    /// equivalence, and the same reading is applied to every other statement: the
+    /// statement is wrapped in a named block, so `%m` inside it reports `top.L`, a
+    /// `disable L` ends it, and a `$error` from a labelled `assert` names the label's
+    /// scope (verilator prints `top.L` for both; iverilog 13 accepts a label on an
+    /// immediate assertion only and prints the enclosing scope — recorded as its
+    /// leniency, not an oracle). lowRISC's `ASSERT_INIT(name, prop)` is
+    /// `initial begin name: assert (prop) else begin … end end` — thirty of them in
+    /// ibex were `E2002` before this. A block that already carries its own label
+    /// (`L: begin : M`) is illegal (§9.3.5) and both oracles refuse it.
+    pub(crate) fn parse_labeled_stmt(&mut self) -> Stmt {
+        let start = self.cur_span();
+        let Some(label) = self.ident() else {
+            return self.stmt_error_at(start);
+        };
+        self.bump(); // ':'
+        let inner = self.parse_statement();
+        let span = start.to(self.prev_span());
+        // A loop that used `break` arrives wrapped in a SYNTHETIC named block
+        // (`begin : $break$<lo> loop end`, `wrap_break`); that label is not one the
+        // user wrote, so the user's label goes on a block AROUND it (`disable L`
+        // still ends the loop) — review A-1: nine `L: for (…) … break;` cells were
+        // E2002 "one label on a block" for a label nobody wrote.
+        let synthetic =
+            matches!(&inner, Stmt::Block { label: Some(l), .. } if l.name.starts_with('$'));
+        match inner {
+            other if synthetic => Stmt::Block {
+                label: Some(label),
+                decls: Vec::new(),
+                stmts: vec![other],
+                span,
+            },
+            Stmt::Block {
+                label: None,
+                decls,
+                stmts,
+                span,
+            } => Stmt::Block {
+                label: Some(label),
+                decls,
+                stmts,
+                span,
+            },
+            Stmt::Fork {
+                label: None,
+                decls,
+                stmts,
+                join,
+                span,
+            } => Stmt::Fork {
+                label: Some(label),
+                decls,
+                stmts,
+                join,
+                span,
+            },
+            Stmt::Block { label: Some(_), .. } | Stmt::Fork { label: Some(_), .. } => {
+                self.error_at(
+                    label.span,
+                    "one label on a block (a statement label and a block label on the \
+                     same block is illegal, IEEE 1800 §9.3.5)",
+                );
+                inner
+            }
+            other => Stmt::Block {
+                label: Some(label),
+                decls: Vec::new(),
+                stmts: vec![other],
+                span,
+            },
         }
     }
 
