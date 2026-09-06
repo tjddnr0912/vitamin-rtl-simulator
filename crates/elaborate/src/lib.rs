@@ -551,6 +551,11 @@ struct Elaborator<'s> {
     // `cur_prefix + "." + local`, so `tb.q` and `tb.dut.q` never collide. Empty
     // only transiently (the top is always given its module name as the root path).
     cur_prefix: String,
+    /// §4.5.435: the path of the module INSTANCE being elaborated — `cur_prefix`
+    /// without the generate-scope segments `with_scope` appends inside it. A
+    /// subroutine is declared by the module, so `%m` in its body names this
+    /// (IEEE §21.2.1), whatever generate scope or frame chain called it.
+    inst_prefix: String,
     // §11.4.12.1: a ZERO replication count is legal only as a direct operand of a
     // concatenation. The Concat arm sets this for a part whose AST kind IS
     // `Replicate` (nothing else), and the Replicate arm `mem::take`s it on entry —
@@ -1246,6 +1251,11 @@ struct Elaborator<'s> {
     // `[task]` while an inline task body lowers; empty in a frame body), and the two
     // sidecars it records into (`push_stmt` for a SysTask, the `$sformatf` lowering).
     block_scope: Vec<String>,
+    /// §4.5.435: the DECLARING scope the chain is rooted at while a subroutine body
+    /// lowers — the module instance (display spelling) for an inlined task, the
+    /// frame's own `<inst>.<name>` for a frame body; `None` = the process's own
+    /// scope (`display_prefix`). A recorded chain is absolute (`scope_chain_abs`).
+    block_scope_root: Option<String>,
     stmt_scopes: std::collections::BTreeMap<u32, String>,
     expr_scopes: std::collections::BTreeMap<u32, String>,
     // V33-8 latch: "an expression lowered since the last `push_stmt` can make the

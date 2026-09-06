@@ -91,29 +91,7 @@ pub(crate) fn render_template<N: crate::eval::NetReader + ?Sized>(
                 // (IEEE §21.2.1) — append the active frame-subroutine name(s), resolved
                 // from FuncId via `func_names`. Empty stack (module-level) ⇒ just
                 // `cur_scope`, byte-identical to before.
-                let fs = st.frame_scope.borrow();
-                let scope = if fs.is_empty() {
-                    st.cur_scope.clone()
-                } else {
-                    let mut s = st.cur_scope.clone();
-                    for &fid in fs.iter() {
-                        if let Some(n) = st.func_names.get(fid as usize) {
-                            if !n.is_empty() {
-                                s.push('.');
-                                s.push_str(n);
-                            }
-                        }
-                    }
-                    s
-                };
-                // §4.5.426: the named-block label chain of the rendering statement.
-                let blk = st.cur_block_scope.borrow();
-                let scope = if blk.is_empty() {
-                    scope
-                } else {
-                    format!("{scope}.{blk}")
-                };
-                drop(blk);
+                let scope = m_scope(st);
                 out.push_str(&justify(&scope, field_width, left_just));
             }
             't' | 'T' => {
@@ -835,4 +813,42 @@ pub(crate) fn fmt_real_e(x: f64, prec: Option<usize>) -> String {
 /// can never drift apart.
 pub(crate) fn format_g(x: f64, prec: Option<usize>) -> String {
     vcd_writer::fmt_g(x, prec.unwrap_or(6).max(1) as i32)
+}
+
+/// The `%m` scope (IEEE §21.2.1). §4.5.435: a recorded named-block chain
+/// (`stmt_scopes` / `expr_scopes`) is ABSOLUTE when it starts with `.` — elaborate
+/// rooted it at the declaring scope of the enclosing subroutine body, or at the
+/// process's own scope — and renders verbatim. Otherwise the innermost frame's
+/// `func_names` entry: absolute (leading `.`, a module subroutine) renders verbatim;
+/// a relative one (a class method) keeps the executing process's scope plus every
+/// frame name, as before. No frame and no chain ⇒ the executing process's scope.
+pub(crate) fn m_scope(st: &crate::SimState) -> String {
+    let blk = st.cur_block_scope.borrow();
+    if let Some(abs) = blk.strip_prefix('.') {
+        return abs.to_string();
+    }
+    let fs = st.frame_scope.borrow();
+    let scope = match fs.last().and_then(|&fid| st.func_names.get(fid as usize)) {
+        Some(n) if n.starts_with('.') => n[1..].to_string(),
+        _ => {
+            let mut s = st.cur_scope.clone();
+            for &fid in fs.iter() {
+                if let Some(n) = st.func_names.get(fid as usize) {
+                    let n = n
+                        .strip_prefix('.')
+                        .map_or(n.as_str(), |a| a.rsplit('.').next().unwrap_or(a));
+                    if !n.is_empty() {
+                        s.push('.');
+                        s.push_str(n);
+                    }
+                }
+            }
+            s
+        }
+    };
+    if blk.is_empty() {
+        scope
+    } else {
+        format!("{scope}.{blk}")
+    }
 }

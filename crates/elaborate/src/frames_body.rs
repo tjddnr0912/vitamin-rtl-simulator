@@ -153,6 +153,14 @@ impl Elaborator<'_> {
         self.resolve_frame_task_rejects();
     }
 
+    /// §4.5.435: a frame body's `%m` chain is rooted at the frame's own declaring
+    /// path `<inst>.<name>` (`frame_path`) — the same string `func_names` carries.
+    fn enter_frame_scope_root(&mut self, name: &str) -> Option<String> {
+        let fp = self.frame_path(name);
+        let root = fp.strip_prefix('.').unwrap_or(&fp).to_string();
+        std::mem::replace(&mut self.block_scope_root, Some(root))
+    }
+
     /// Lower a frame function's body into the GLOBAL `func_blocks` arena: build a
     /// process-local CFG (reusing `lower_stmt`), append it with every `Goto`/
     /// `Branch` target rebased by `+base`, set `FuncDef.entry`, then validate.
@@ -160,8 +168,10 @@ impl Elaborator<'_> {
         // §4.5.426: a frame body is its own `%m` scope (`module.func`, appended by the
         // engine from `func_names`) — no caller block chain leaks into it.
         let saved_block_scope = std::mem::take(&mut self.block_scope);
+        let saved_root = self.enter_frame_scope_root(name);
         self.lower_frame_body_inner_lower_frame_func_body(name, func, fid);
         self.block_scope = saved_block_scope;
+        self.block_scope_root = saved_root;
     }
 
     fn lower_frame_body_inner_lower_frame_func_body(
@@ -303,8 +313,10 @@ impl Elaborator<'_> {
         // §4.5.426: a frame body is its own `%m` scope (`module.func`, appended by the
         // engine from `func_names`) — no caller block chain leaks into it.
         let saved_block_scope = std::mem::take(&mut self.block_scope);
+        let saved_root = self.enter_frame_scope_root(name);
         self.lower_frame_body_inner_lower_frame_task_body(name, task, fid);
         self.block_scope = saved_block_scope;
+        self.block_scope_root = saved_root;
     }
 
     fn lower_frame_body_inner_lower_frame_task_body(

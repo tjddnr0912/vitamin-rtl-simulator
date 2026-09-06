@@ -559,7 +559,7 @@ impl Elaborator<'_> {
             )
         {
             let id = self.exprs.len() as u32;
-            self.expr_scopes.insert(id, self.block_scope.join("."));
+            self.expr_scopes.insert(id, self.scope_chain_abs());
         }
         // V33-8: latch "the statement being built can emit a LOCATED runtime
         // diagnostic". Here because this is the one funnel — `Expr::Signal { word }`

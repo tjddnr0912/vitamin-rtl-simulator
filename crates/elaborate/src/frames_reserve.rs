@@ -827,7 +827,24 @@ impl Elaborator<'_> {
             has_hier_call: false,
             contains_shared_fork: false,
         });
-        self.frame_func_names.push(func.name.name.clone()); // %m
+        let fp = self.frame_path(&func.name.name);
+        self.frame_func_names.push(fp); // %m
+    }
+
+    /// §4.5.435: the `%m` of a frame subroutine — its DECLARING instance (display
+    /// spelling) and its name, spelled absolute (leading `.`) for the engine's
+    /// render. IEEE §21.2.1: `%m` names the scope the subroutine was declared in,
+    /// not the process that called it (`top.t` from a generate-block process, not
+    /// `top.gi.t`; `top.f` for every level of a recursion, not `top.f.f.f`; `top.a`
+    /// for a task called from another task). A class method keeps its bare name
+    /// (relative): its declaring instance is not known to a global class table.
+    pub(crate) fn frame_path(&self, name: &str) -> String {
+        let inst = self.display_of(&self.inst_prefix);
+        if inst.is_empty() {
+            name.to_string()
+        } else {
+            format!(".{inst}.{name}")
+        }
     }
 
     /// B2: reserve a frame TASK — allocate its formal nets (input + output, in
@@ -1046,6 +1063,7 @@ impl Elaborator<'_> {
             has_hier_call: false,
             contains_shared_fork: false,
         });
-        self.frame_func_names.push(task.name.name.clone()); // %m
+        let fp = self.frame_path(&task.name.name);
+        self.frame_func_names.push(fp); // %m
     }
 }

@@ -652,6 +652,9 @@ impl Elaborator<'_> {
         // §4.5.426: `%m` inside a task body is `module.task` (IEEE §21.2.1), not the
         // caller's block chain — the inlined body lowers under `[task]`.
         let saved_scope = std::mem::replace(&mut self.block_scope, vec![tname.to_string()]);
+        // §4.5.435: rooted at the DECLARING instance, not the caller's generate scope.
+        let decl_root = self.display_of(&self.inst_prefix);
+        let saved_root = std::mem::replace(&mut self.block_scope_root, Some(decl_root));
         if tlocals.is_empty() {
             self.inline_task_body(b, &task.body);
         } else {
@@ -662,6 +665,7 @@ impl Elaborator<'_> {
             });
         }
         self.block_scope = saved_scope;
+        self.block_scope_root = saved_root;
         self.restore_params(saved_labels);
         self.restore_param_meta(saved_meta);
         self.inline_stack.pop();

@@ -1096,10 +1096,7 @@ pub(crate) fn inline_with_call(sched: &Scheduler, args: &[u32]) -> Option<crate:
 /// path plus the named-block chain of the registering statement (rendered later,
 /// when `cur_block_scope` belongs to some other statement).
 fn scope_with_block(st: &crate::SimState) -> String {
-    let b = st.cur_block_scope.borrow();
-    if b.is_empty() {
-        st.cur_scope.clone()
-    } else {
-        format!("{}.{}", st.cur_scope, b)
-    }
+    // §4.5.435 (review B B-1): the same rule as a `$display`'s `%m` — an absolute chain,
+    // else the declaring scope of the innermost frame, else the executing process.
+    crate::builtins::render::m_scope(st)
 }

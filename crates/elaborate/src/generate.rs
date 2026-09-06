@@ -57,9 +57,15 @@ impl Elaborator<'_> {
     /// `w` — two elements of one array printed different spellings). A loop block and
     /// an instance-array element keep their index. Storage keys are untouched.
     pub(crate) fn display_prefix(&self) -> String {
+        self.display_of(&self.cur_prefix)
+    }
+
+    /// `display_prefix` of an arbitrary storage path (§4.5.435: the declaring
+    /// instance of a subroutine, `inst_prefix`).
+    pub(crate) fn display_of(&self, prefix: &str) -> String {
         let mut acc = String::new();
         let mut out: Vec<String> = Vec::new();
-        for seg in self.cur_prefix.split('.') {
+        for seg in prefix.split('.') {
             let shown = match seg.strip_suffix("[0]") {
                 Some(label) if !label.contains('[') => {
                     let key = if acc.is_empty() {
@@ -82,6 +88,27 @@ impl Elaborator<'_> {
             out.push(shown);
         }
         out.join(".")
+    }
+
+    /// §4.5.435: the `%m` scope of the statement being lowered, ABSOLUTE — the
+    /// declaring scope of the enclosing subroutine body (`block_scope_root`) or the
+    /// process's own scope, then the named-block chain. Spelled with a leading `.`
+    /// so the engine renders it verbatim instead of appending it to the EXECUTING
+    /// process's scope (which is the caller's scope inside a task called from a
+    /// generate block: `top.gi.t` for both oracles' `top.t`). A chain lowered with
+    /// no scope at all (class-method bodies lower before any instance) stays
+    /// relative, exactly as before.
+    pub(crate) fn scope_chain_abs(&self) -> String {
+        let chain = self.block_scope.join(".");
+        let root = match &self.block_scope_root {
+            Some(r) => r.clone(),
+            None => self.display_prefix(),
+        };
+        if root.is_empty() {
+            chain
+        } else {
+            format!(".{root}.{chain}")
+        }
     }
 
     /// Run `f` with `cur_prefix` temporarily extended by `seg` (a gen-block
