@@ -705,7 +705,11 @@ impl Elaborator<'_> {
             has_hier_call: false,
             contains_shared_fork: false,
         });
-        self.frame_func_names.push(method.name.clone()); // %m
+        // §4.5.437: `%m` inside a class method names the CLASS and the method
+        // (`top.C.show`, both oracles) — the engine prefixes the calling process's
+        // scope (the class table is global; its declaring instance is not known).
+        self.frame_func_names
+            .push(format!("{cname}.{}", method.name)); // %m
         if let Some(ci) = self.class_table.get_mut(cname) {
             ci.methods[mi].fid = Some(fid);
             ci.methods[mi].this_net = Some(this_net);

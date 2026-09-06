@@ -106,6 +106,8 @@ impl Elaborator<'_> {
         };
         if root.is_empty() {
             chain
+        } else if chain.is_empty() {
+            format!(".{root}")
         } else {
             format!(".{root}.{chain}")
         }

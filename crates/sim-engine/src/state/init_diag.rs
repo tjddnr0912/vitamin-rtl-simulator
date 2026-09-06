@@ -496,7 +496,12 @@ impl<'a> SimState<'a> {
                     Vec::new()
                 } else {
                     vec![diag::Frame {
-                        label: l.instance.clone(),
+                        // §4.5.437: a class method's `.<class>.<method>` marker is
+                        // completed with the calling process's scope (`%m`'s rule).
+                        label: match l.instance.strip_prefix('.') {
+                            Some(rel) => format!("{}.{rel}", self.cur_scope),
+                            None => l.instance.clone(),
+                        },
                         location: None,
                     }]
                 },

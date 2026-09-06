@@ -164,7 +164,7 @@ fn a_frame_path_severity_locates_like_the_statement_path() {
     let (out, _) = one_shot(FOUR_AXES);
     assert!(
         out.contains("d.sv:6:16: warning[VITA-W4007]")
-            && out.contains("frame-path warn v=7 [in top.$func$fcheck] [at time 0]"),
+            && out.contains("frame-path warn v=7 [in top.fcheck] [at time 0]"),
         "frame-path severity must locate:\n{out}"
     );
 }

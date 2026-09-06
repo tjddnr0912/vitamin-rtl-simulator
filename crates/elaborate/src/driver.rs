@@ -188,6 +188,7 @@ impl<'s> Elaborator<'s> {
             stmt_locs: StmtLocTable::new(),
             block_scope: Vec::new(),
             block_scope_root: None,
+            cur_class_method: None,
             stmt_scopes: std::collections::BTreeMap::new(),
             expr_scopes: std::collections::BTreeMap::new(),
             stmt_wants_loc: false,
@@ -409,7 +410,18 @@ impl<'s> Elaborator<'s> {
                     col: loc.col,
                     byte_start: loc.byte_start,
                     byte_end: loc.byte_end,
-                    instance: self.cur_prefix.clone(),
+                    // §4.5.437: inside a subroutine body the context names the
+                    // DECLARING scope, the same string `%m` prints (`top.t`, not the
+                    // `top.$func$t` storage prefix); a class method records the
+                    // `.<class>.<method>` marker the engine completes.
+                    instance: match (&self.cur_class_method, &self.block_scope_root) {
+                        (Some(m), _) => format!(".{m}"),
+                        (None, Some(_)) => {
+                            let s = self.scope_chain_abs();
+                            s.strip_prefix('.').unwrap_or(&s).to_string()
+                        }
+                        (None, None) => self.cur_prefix.clone(),
+                    },
                 },
             );
         }

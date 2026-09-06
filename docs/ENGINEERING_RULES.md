@@ -3834,3 +3834,24 @@ block's nets were flattened there (`pending_sva` / `pending_cover`) breaks the m
 scope. Census the consumers that resolve names LATER than they are collected, and carry the
 collection scope with the item. See [[an-accidental-immunity-hides-a-latent-defect]],
 [[count-the-loud-to-value-column]], [[reject-gate-measure-hazard-set]].
+
+### A call terminator's target is a snapshot; dispatch data lives in the sidecar (§4.5.437–439)
+
+The frame read-through walk followed `Terminator::Call.target` to find the callee's blocks. That
+field is the callee's entry AS KNOWN WHEN THE CALLER LOWERED — a callee declared later still had
+its reservation placeholder (`entry: 0`) — so the walk missed every nested task whose name sorted
+after its caller's, and the same design gave `xx` or `a5` depending on which task was called `aaa`.
+The engine never had this problem because it dispatches on the sidecar's `callee` FuncId. When a
+new analysis reads an IR field to follow control flow, ask what the RUNTIME reads for the same
+decision and read that; a field that is only ever patched after the fact is a snapshot, not a
+fact. Two more from the batch. (1) A feature the AST cannot carry can still be delivered by a
+DESUGAR that keeps every axis the consumers need: a type parameter is a width, a signedness and a
+2-state kind; the width can be a value parameter, the two shape bits cannot follow a declaration
+— so make them a value parameter TOO and guard them (`initial if (T$s != …) $fatal`), which turns
+the one axis the desugar cannot honour into a loud refusal instead of a silently unsigned type.
+Pick the guard's construct by what it perturbs: a generate `if` would renumber the user's
+`genblk<N>`; a process does not. (2) A diagnostic's context string is shared by EVERY emitter
+that goes through the same resolver (`stmt_diag_meta`: `$error`, W4029, `$readmem`, unique-case,
+…); changing it for one is changing it for all — census the emitters, and measure at least one
+of the others against the oracles. See [[a-default-is-not-a-fact]],
+[[routing-lives-in-several-places]].

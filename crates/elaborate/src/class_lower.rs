@@ -269,6 +269,18 @@ impl Elaborator<'_> {
         self.cur_this = Some((this_net, cname.to_string()));
         self.cur_discard = method.discard_net;
         let saved_frame = std::mem::replace(&mut self.in_frame_body, true);
+        // §4.5.437: a class method body is its own `%m` scope — the engine renders
+        // `<process scope>.<class>.<method>` from `func_names` and appends the body's
+        // own block labels, so the recorded chain is RELATIVE (an empty root; the
+        // `$class$C$m` storage segment must not leak into it) and the diagnostic
+        // context of a `$error` inside the body is the `.<class>.<method>` marker
+        // the engine completes with the process scope (`stmt_diag_meta`).
+        let saved_block_scope = std::mem::take(&mut self.block_scope);
+        let saved_root = std::mem::replace(&mut self.block_scope_root, Some(String::new()));
+        let saved_cm = std::mem::replace(
+            &mut self.cur_class_method,
+            Some(format!("{cname}.{}", method.name)),
+        );
         // A class method body reserves no span nets, so it must not inherit an
         // enclosing frame's owner and answer from that frame's window.
         let saved_cfo = self.cur_frame_owner.take();
@@ -314,6 +326,9 @@ impl Elaborator<'_> {
         self.cur_return = saved_ret;
         self.cur_discard = saved_discard;
         self.in_frame_body = saved_frame;
+        self.block_scope = saved_block_scope;
+        self.block_scope_root = saved_root;
+        self.cur_class_method = saved_cm;
         // A class method body sets `in_frame_body` but reserves no span nets, so
         // it must not inherit an enclosing frame's owner and hit that frame's net.
         self.cur_frame_owner = saved_cfo;

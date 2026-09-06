@@ -11,6 +11,16 @@ changed for a user of the simulator.
 
 ### Added
 
+- **Type parameters** (`parameter type T = logic [7:0]` / `type T = int` / `localparam type`,
+  IEEE §6.20.3) on a module or interface header, in a body and at the compilation-unit scope,
+  for the integral vector subset (`logic`/`reg`/`bit` with one packed range, the 2-state atoms,
+  `time`, an integral vector typedef, another type parameter): `T` declares variables, ports,
+  struct members, function formals and returns, `typedef T u_t;`, `T'(e)`, `$bits(T)`; an
+  instance overrides it by a type (`.T(logic [15:0])`, positional, a typedef, `pkg::t`, a
+  pass-through `.T(T)`). An override may change the width; one that changes the type's
+  signedness or 2-state kind is refused loudly. A struct / enum / union / real / string / class
+  or multi-dimensional type parameter is a parse error. Also: `$bits(t)` and `t'(e)` on a module
+  typedef whose range names a header parameter now fold per instance.
 - **Compilation-unit-scope declarations** (IEEE §3.12.1): a `typedef` (vector, atom, chained, packed
   struct / union, enum), a `localparam` / `parameter` (a unit `parameter` is a localparam), a
   `function` or a `task` written before the first `module` is visible to every module, interface,
@@ -31,6 +41,14 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- A procedural read of a whole-net copy (`assign c = v;`) after the reader's own blocking write
+  of `v` now reads the fresh value when the read or the write is inside an `automatic` task or
+  function the process calls, or when the copy is the call's actual (`tk(c, r2)`); it read the
+  settle's stale value before.
+- `%m` inside a class method names the class (`top.C.show`, `top.C.new`, with the body's own
+  block labels), and the `[in …]` context of a runtime diagnostic raised inside a task, function
+  or class method names the subroutine's declaring scope (`top.t`, `top.C.show`) instead of an
+  internal storage prefix.
 - **`%m` inside a function or task names the scope the subroutine is declared in** (IEEE §21.2.1):
   `top.t` for a module task called from a generate block, a generate loop, a fork arm, another task
   or at any depth of a recursion (was the caller's scope plus every frame on the call path —

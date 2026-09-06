@@ -1256,6 +1256,10 @@ struct Elaborator<'s> {
     /// frame's own `<inst>.<name>` for a frame body; `None` = the process's own
     /// scope (`display_prefix`). A recorded chain is absolute (`scope_chain_abs`).
     block_scope_root: Option<String>,
+    /// §4.5.437: `<class>.<method>` while a class method body lowers — the
+    /// diagnostic context (`record_stmt_loc`) of a statement inside it, stored with
+    /// a leading `.` so the engine prefixes the calling process's scope.
+    cur_class_method: Option<String>,
     stmt_scopes: std::collections::BTreeMap<u32, String>,
     expr_scopes: std::collections::BTreeMap<u32, String>,
     // V33-8 latch: "an expression lowered since the last `push_stmt` can make the

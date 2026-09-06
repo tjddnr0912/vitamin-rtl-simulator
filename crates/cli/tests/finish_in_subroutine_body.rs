@@ -86,7 +86,7 @@ fn a_reached_finish_is_a_located_fatal_not_a_finish() {
         "the fatal must name the construct and the reason:\n{o}"
     );
     assert!(
-        o.contains("t.v:4:") && o.contains("[in top.$func$f]"),
+        o.contains("t.v:4:") && o.contains("[in top.f]"),
         "…and WHERE: the motivating one sits in a library function instantiated eighty \
          times, so a location-less fatal would be unactionable:\n{o}"
     );
