@@ -48,6 +48,10 @@ impl Elaborator<'_> {
         // an empty prefix (single top) renders as the top module's own name —
         // but cur_prefix is ALWAYS the instance path incl. the top ("m" / "m.u1").
         self.proc_scopes.push(self.display_prefix());
+        // §4.5.440: the instance alone (a generate scope is not an instance) — what a
+        // class method's `%m` is prefixed with, in the same lockstep.
+        self.proc_inst_scopes
+            .push(self.display_of(&self.inst_prefix));
         // R14: the profile identity, in the SAME lockstep. Every producer today
         // parks one — `lower_proc_block` for a user block, `lower_synth_proc`
         // for a body vita synthesized — so the `synth` default is a FAIL-SAFE,

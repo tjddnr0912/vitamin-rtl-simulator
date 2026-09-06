@@ -321,6 +321,10 @@ pub struct SimOpts {
     /// Per-ProcId instance path (`"tb.u1"`) for `%m` (P2-11). EMPTY ⇒ `%m`
     /// renders the legacy flat `top`. Never enters the IR.
     pub proc_scopes: Vec<String>,
+    /// §4.5.440 (§2 🆕 N): per-ProcId INSTANCE path (`proc_scopes` without generate
+    /// scopes) — the prefix of a class method's `%m` and diagnostic context. EMPTY ⇒
+    /// the process scope is used. Never enters the IR.
+    pub proc_inst_scopes: Vec<String>,
     /// R14 (ROADMAP §3 ⑭): turn on the per-body execution profile. `None` (the
     /// default) ⇒ `SimState.proc_prof` is `None` and the two dispatch seams and
     /// the two settle loops each cost ONE null test — measured below noise; see
@@ -485,6 +489,7 @@ impl Default for SimOpts {
             assign_ranks: AssignRankTable::new(),
             queue_bounds: QueueBoundTable::new(),
             proc_scopes: Vec::new(),
+            proc_inst_scopes: Vec::new(),
             proc_profile: None,
             coverage_manifest: Vec::new(),
             probed_nets: Vec::new(),
@@ -807,6 +812,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.assign_ranks = opts.assign_ranks.clone();
     st.queue_bounds = opts.queue_bounds.clone();
     st.proc_scopes = opts.proc_scopes.clone();
+    st.proc_inst_scopes = opts.proc_inst_scopes.clone();
     // R14 (ROADMAP §3 ⑭): allocate the per-body accumulators ONCE, sized from
     // the IR itself, and only when the run asked for them. `None` otherwise —
     // that `None` is what the two dispatch seams and the two settle fixpoints

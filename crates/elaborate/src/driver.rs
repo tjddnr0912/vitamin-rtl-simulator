@@ -205,6 +205,7 @@ impl<'s> Elaborator<'s> {
             queue_bounds: QueueBoundTable::new(),
             event_nets: std::collections::BTreeSet::new(),
             proc_scopes: Vec::new(),
+            proc_inst_scopes: Vec::new(),
             proc_idents: Vec::new(),
             ca_idents: Vec::new(),
             pending_proc_ident: None,

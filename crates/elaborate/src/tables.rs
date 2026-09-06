@@ -466,6 +466,12 @@ pub struct Sidecars {
     /// Per-ProcId hierarchical instance path (`"tb.u1"`) — drives `%m` (P2-11).
     /// Parallel to `processes`, like `proc_multipliers`.
     pub proc_scopes: Vec<String>,
+    /// §4.5.440 (ROADMAP §2 🆕 N): per-ProcId INSTANCE path — `proc_scopes` without
+    /// its generate-scope segments. A class method's `%m` / diagnostic context names
+    /// the class's declaring instance (`top.u2.C.show`, iverilog), never the calling
+    /// generate block or frame; the class table is global, so the executing process's
+    /// instance stands in for the declaring one. Parallel to `processes`.
+    pub proc_inst_scopes: Vec<String>,
     /// R14: per-ProcId construct kind + source location (see [`ProcIdent`]).
     /// Parallel to `processes`; reporting only, never read by the simulation.
     pub proc_idents: Vec<ProcIdent>,

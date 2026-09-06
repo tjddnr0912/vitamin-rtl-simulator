@@ -524,6 +524,7 @@ impl Scheduler<'_, '_> {
             for cap in &batch {
                 self.st.cur_time_mult = cap.time_mult; // registering module's M
                 self.st.cur_scope = cap.scope.clone(); // registering module's %m
+                self.st.cur_inst_scope = cap.inst_scope.clone();
                 let mut line = match nets {
                     Some(n) => crate::builtins::format_args_str_with(
                         &*self.st, n, cap.fmt, &cap.args, cap.radix,
@@ -581,16 +582,17 @@ impl Scheduler<'_, '_> {
                 let tmult = m.cap.time_mult; // monitoring module's M (see (a) above)
                 let radix = m.cap.radix;
                 let scope = m.cap.scope.clone();
+                let inst_scope = m.cap.inst_scope.clone();
                 let prev = m.last_vals.take(); // moves baseline out; slot now None
                 let fd = m.cap.fd;
-                Some((fmt, args, tmult, radix, scope, prev, fd))
+                Some((fmt, args, tmult, radix, scope, inst_scope, prev, fd))
             }
             // no monitor established → nothing to do. (DISABLED is no longer
             // gated here: the establishment print must fire even when disabled,
             // so the enable check moved INTO the change-detection below.)
             _ => None,
         };
-        if let Some((fmt, args, tmult, radix, scope, prev, fd)) = mon {
+        if let Some((fmt, args, tmult, radix, scope, inst_scope, prev, fd)) = mon {
             if fmt.is_none() && args.is_empty() {
                 // No-arg monitor (`$monitor;` → fmt=None, args=[]) prints nothing —
                 // not even a bare newline. Guarded so a future bare-`$monitor`
@@ -615,6 +617,7 @@ impl Scheduler<'_, '_> {
                 // compares the static signed/is_real metadata).
                 self.st.cur_time_mult = tmult;
                 self.st.cur_scope = scope;
+                self.st.cur_inst_scope = inst_scope;
                 let is_direct_time = |eid: u32| {
                     matches!(
                         self.st.ir.exprs[eid as usize],

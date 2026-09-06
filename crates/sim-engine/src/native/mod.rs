@@ -212,6 +212,7 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         net_dims: _,
         net_decl_ranges: _,
         proc_scopes: _,
+        proc_inst_scopes: _,
         // R14: pure REPORTING instrumentation — the counters live on
         // `SimState` and both backends bump them at their own dispatch seam, so
         // a profiled run is not a different design. ⚠️ NOT the same call as

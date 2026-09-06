@@ -33,6 +33,20 @@ pub(crate) fn enter_body(st: &mut crate::state::SimState<'_>, tmpl: usize) {
             }
         }
     }
+    // §4.5.440: the instance path beside the scope (a class method's `%m` prefix);
+    // an absent sidecar falls back to the scope itself, as before.
+    match st.proc_inst_scopes.get(tmpl) {
+        Some(s) => {
+            if &st.cur_inst_scope != s {
+                st.cur_inst_scope.clone_from(s);
+            }
+        }
+        None => {
+            if st.cur_inst_scope != st.cur_scope {
+                st.cur_inst_scope.clone_from(&st.cur_scope);
+            }
+        }
+    }
 }
 
 pub(crate) fn run_process(sched: &mut Scheduler, pi: u32, mut bb: u32) -> Step {

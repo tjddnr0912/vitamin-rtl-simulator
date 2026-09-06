@@ -820,8 +820,15 @@ pub(crate) fn format_g(x: f64, prec: Option<usize>) -> String {
 /// rooted it at the declaring scope of the enclosing subroutine body, or at the
 /// process's own scope — and renders verbatim. Otherwise the innermost frame's
 /// `func_names` entry: absolute (leading `.`, a module subroutine) renders verbatim;
-/// a relative one (a class method) keeps the executing process's scope plus every
-/// frame name, as before. No frame and no chain ⇒ the executing process's scope.
+/// a relative one (a class method, `<class>.<method>`) is prefixed with the
+/// executing process's INSTANCE path (`cur_inst_scope`, §4.5.440 / ROADMAP §2 🆕 N):
+/// a method's scope is its class's, which lives in the declaring instance — not
+/// in the calling generate block and not under the frames of the call chain
+/// (iverilog `top.u2.C.show` from a process in `top.u2.gi` and from a task
+/// frame; verilator prints the FIRST instance for every one and contradicts
+/// itself on the second). The declaring instance is not known (the class table
+/// is global), so the executing process's instance stands in, as before. No
+/// frame and no chain ⇒ the executing process's scope.
 pub(crate) fn m_scope(st: &crate::SimState) -> String {
     let blk = st.cur_block_scope.borrow();
     if let Some(abs) = blk.strip_prefix('.') {
@@ -830,21 +837,8 @@ pub(crate) fn m_scope(st: &crate::SimState) -> String {
     let fs = st.frame_scope.borrow();
     let scope = match fs.last().and_then(|&fid| st.func_names.get(fid as usize)) {
         Some(n) if n.starts_with('.') => n[1..].to_string(),
-        _ => {
-            let mut s = st.cur_scope.clone();
-            for &fid in fs.iter() {
-                if let Some(n) = st.func_names.get(fid as usize) {
-                    let n = n
-                        .strip_prefix('.')
-                        .map_or(n.as_str(), |a| a.rsplit('.').next().unwrap_or(a));
-                    if !n.is_empty() {
-                        s.push('.');
-                        s.push_str(n);
-                    }
-                }
-            }
-            s
-        }
+        Some(n) if !n.is_empty() => format!("{}.{n}", st.cur_inst_scope),
+        _ => st.cur_scope.clone(),
     };
     if blk.is_empty() {
         scope

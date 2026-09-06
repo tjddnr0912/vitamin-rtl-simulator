@@ -698,6 +698,7 @@ pub(crate) fn run_vita_str_gated(
         assign_ranks: sc.assign_ranks,
         queue_bounds: sc.queue_bounds,
         proc_scopes: sc.proc_scopes,
+        proc_inst_scopes: sc.proc_inst_scopes,
         // OBS-1b: the coverage manifest → end-of-run `coverage.json` (empty for
         // covergroup-free designs → no coverage payload). One-shot path only.
         coverage_manifest: sc.coverage_manifest,

@@ -741,6 +741,8 @@ pub(crate) fn run_vrun_gated(
         // v30 (STAGED-DROP parity): the `%m` named-block chains.
         stmt_scopes: extra.stmt_scopes,
         expr_scopes: extra.expr_scopes,
+        // v31 (STAGED-DROP parity): the class-method `%m` instance prefix.
+        proc_inst_scopes: extra.proc_inst_scopes,
         stage_stmts: std::collections::BTreeSet::new(),
         handle_copy_stmts: extra.handle_copy_stmts,
         queue_slice_stmts: extra.queue_slice_stmts,

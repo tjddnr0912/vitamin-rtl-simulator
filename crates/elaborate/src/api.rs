@@ -176,6 +176,7 @@ pub fn elaborate_located_params(
         queue_slice_stmts: std::mem::take(&mut el.queue_slice_stmts),
         radixes: std::mem::take(&mut el.radixes),
         proc_scopes: std::mem::take(&mut el.proc_scopes),
+        proc_inst_scopes: std::mem::take(&mut el.proc_inst_scopes),
         proc_idents: std::mem::take(&mut el.proc_idents),
         ca_idents: std::mem::take(&mut el.ca_idents),
         assign_ranks: std::mem::take(&mut el.assign_ranks),

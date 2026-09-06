@@ -137,9 +137,11 @@ impl<'a> SimState<'a> {
             assign_ranks: crate::AssignRankTable::new(),
             queue_bounds: crate::QueueBoundTable::new(),
             proc_scopes: Vec::new(),
+            proc_inst_scopes: Vec::new(),
             proc_prof: None,
             builtin_prof: None,
             cur_scope: "top".to_string(),
+            cur_inst_scope: "top".to_string(),
             cur_block_scope: std::cell::RefCell::new(String::new()),
             stmt_scopes: std::collections::BTreeMap::new(),
             expr_scopes: std::collections::BTreeMap::new(),
@@ -497,9 +499,10 @@ impl<'a> SimState<'a> {
                 } else {
                     vec![diag::Frame {
                         // §4.5.437: a class method's `.<class>.<method>` marker is
-                        // completed with the calling process's scope (`%m`'s rule).
+                        // completed with the calling process's INSTANCE (`%m`'s rule,
+                        // §4.5.440: no generate scope, no frame).
                         label: match l.instance.strip_prefix('.') {
-                            Some(rel) => format!("{}.{rel}", self.cur_scope),
+                            Some(rel) => format!("{}.{rel}", self.cur_inst_scope),
                             None => l.instance.clone(),
                         },
                         location: None,

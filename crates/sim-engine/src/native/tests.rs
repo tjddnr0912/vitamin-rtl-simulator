@@ -50,6 +50,7 @@ pub(super) fn fresh_state_with<'a>(
 ) -> SimState<'a> {
     let mut st = fresh_state(ir, sink);
     st.proc_scopes = opts.proc_scopes.clone();
+    st.proc_inst_scopes = opts.proc_inst_scopes.clone();
     st.proc_multipliers = opts.proc_multipliers.clone();
     st.proc_prec_mults = opts.proc_prec_mults.clone();
     for &n in &opts.two_state_nets {
@@ -407,6 +408,7 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // "top"/1 and a body walk that skipped `enter_body` entirely was
         // indistinguishable (measured).
         proc_scopes: sc.proc_scopes,
+        proc_inst_scopes: sc.proc_inst_scopes,
         proc_multipliers: sc.proc_multipliers,
         proc_prec_mults: sc.proc_prec_mults,
         // …and the declaration-initializer list (S1d-4c-2c). `reg clk = 0;`

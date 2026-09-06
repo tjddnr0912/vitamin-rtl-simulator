@@ -70,6 +70,12 @@
 - A verilator census is the bottleneck (about 1,500 cells per 30 minutes). Run it on a width subset only, keep one `--prefix` per executable, and hand-IEEE the cells whose oracle is untrusted (property `and`), saying so in the briefing.
 - The shadow set of a name is every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations. A census over declarations alone misses four of the five.
 
+### A queue's selection criterion is not the row's fix (2026-09-06, §4.5.441)
+- "No format bump" was a criterion for CHOOSING a §2 row, and the row chosen carried a fix ("a per-process inst_prefix sidecar") that needs one: every per-process sidecar rides the `.velab` trailer, so the bump is the fix's cost, not a reason to build the engine-side alternative ("strip generate segments" cannot tell a generate label from an instance name by its string). Read the trailer chain (`cli/src/pipeline.rs` writes, `staged.rs` reads) before choosing between a sidecar and a derivation; the bump procedure is ten commits deep in `header.rs` and costs one hash re-pin.
+- verilator prints the FIRST instance's path for a class method's `%m` in every instance (`top.u1.C.show` from `top.u2`): self-contradicting on the second instance, so multi-instance class-scope cells pin iverilog; single-instance cells stay two-oracle. Record which cells are which.
+- A copy alias that substitutes the SOURCE net hands the source's declared sign to every consumer that reads sign from storage (the interpreter's `Value.signed`, the arena slot); the node's own sign survives only where the compiler keeps it. Re-stamp at the one interpreter read and make the compiled paths decline on the mismatch — two backends spelling one sign rule is how they diverge.
+- A package function's body folds in the PACKAGE's scope: seed the callee env with the package constants and refuse the module-scope fallback for a bare name inside it (a same-named module `localparam` is a different object than the text says). The same-named shadow cell is the control that separates the two scopes.
+
 ### 리뷰 오리엔테이션 — 비용을 줄이는 것은 검증이 아니다 (LOOPROMPT §4 에서 이관 · 2026-08-22)
 
 - **측정 결과를 파일로 넘겨라** — 스윕 표(셀 × iverilog/PRE/POST × 분류)를 주고 *"이 표 밖을 쳐라"* 로 시작시킨다. 안 주면 리뷰어가 그 표를 처음부터 다시 만든다.

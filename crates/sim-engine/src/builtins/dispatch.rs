@@ -707,6 +707,7 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                 time_mult,
                 radix,
                 scope: scope_with_block(sched.st),
+                inst_scope: sched.st.cur_inst_scope.clone(),
                 fd,
             });
             Ctl::Continue
@@ -725,6 +726,7 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                     time_mult,
                     radix,
                     scope: scope_with_block(sched.st),
+                    inst_scope: sched.st.cur_inst_scope.clone(),
                     fd,
                 },
                 last_vals: None,

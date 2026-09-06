@@ -532,6 +532,10 @@ struct StagedExtraSidecars {
     stmt_scopes: std::collections::BTreeMap<u32, String>,
     #[serde(default)]
     expr_scopes: std::collections::BTreeMap<u32, String>,
+    /// v31: per-ProcId instance path for a class method's `%m` (see
+    /// `SimOpts::proc_inst_scopes`).
+    #[serde(default)]
+    proc_inst_scopes: Vec<String>,
 }
 
 impl StagedExtraSidecars {
@@ -575,6 +579,7 @@ impl StagedExtraSidecars {
             stmt_locs: sc.stmt_locs.clone(),
             stmt_scopes: sc.stmt_scopes.clone(),
             expr_scopes: sc.expr_scopes.clone(),
+            proc_inst_scopes: sc.proc_inst_scopes.clone(),
         }
     }
 }

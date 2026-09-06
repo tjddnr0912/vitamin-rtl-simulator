@@ -159,3 +159,149 @@ fn a_diagnostic_inside_a_subroutine_body_names_the_declaring_scope() {
     // control: a process's own context is unchanged (the instance path)
     error_contexts(&top("  initial $error(\"boom\");"), &["top"]);
 }
+
+/// §4.5.440 (§2 🆕 N residue): a class method's scope is its class's, which lives
+/// in the declaring INSTANCE — not in the calling generate block, not under the
+/// frames of the call chain. iverilog prints `top.u1.C.show` / `top.gg.u3.C.show`
+/// from a process in `top.u1.gi`, from a `generate for` element, from a named
+/// block, a `fork`, an automatic task frame and a static task; verilator prints
+/// the FIRST instance (`top.u1`) for every one and contradicts itself on the
+/// second instance, so the multi-instance cells pin iverilog. vita printed the
+/// calling scope (`top.u1.gi.C.show`, `top.u1.ta.C.show`).
+#[test]
+fn a_class_method_called_from_a_generate_scope_or_a_frame_names_its_instance() {
+    const SUB: &str = "module sub;
+  class C;
+    task show(); $display(\"M=%m\"); endtask
+    task lab(); begin : lb $display(\"M=%m\"); end endtask
+    task err(); $error(\"E\"); endtask
+  endclass
+  C c; initial c = new;
+  task automatic ta; c.show(); endtask
+  task st; c.show(); endtask
+  initial #1 ta();
+  generate if (1) begin : gi
+    initial #2 c.show();
+    initial #3 begin : nb c.show(); end
+    initial #4 fork c.show(); join
+    initial #5 c.lab();
+    initial #6 st();
+    initial #7 ta();
+  end endgenerate
+  generate for (genvar g = 0; g < 2; g++) begin : gl
+    initial #(8+g) c.show();
+  end endgenerate
+endmodule
+";
+    let src = format!(
+        "`timescale 1ns/1ns\n{SUB}module top;\n  sub u1();\n  generate if (1) begin : gg sub u3(); end endgenerate\n  initial #20 $finish;\nendmodule\n"
+    );
+    // the same cell per time step, once per instance (declaration order)
+    let mut want: Vec<String> = Vec::new();
+    for _ in 0..4 {
+        want.push("M=top.u1.C.show".into());
+        want.push("M=top.gg.u3.C.show".into());
+    }
+    // `lab`: the method body's own label follows (verilator; iverilog drops it)
+    want.push("M=top.u1.C.lab.lb".into());
+    want.push("M=top.gg.u3.C.lab.lb".into());
+    for _ in 0..4 {
+        want.push("M=top.u1.C.show".into());
+        want.push("M=top.gg.u3.C.show".into());
+    }
+    let want: Vec<&str> = want.iter().map(String::as_str).collect();
+    prints_all(&src, &want);
+    // single instance: `top.C.show` from `top.gi` (both oracles)
+    prints_all(
+        &top("  class C; task show(); $display(\"M=%m\"); endtask endclass\n  C c; initial c = new;\n  generate if (1) begin : gi initial #1 c.show(); end endgenerate\n  task automatic ta; c.show(); endtask\n  initial #2 ta();"),
+        &["M=top.C.show", "M=top.C.show"],
+    );
+    // a `$error` inside the method called from the generate block: `[in top.u1.C.err]`
+    // (iverilog `Scope: top.u1.C.err`)
+    error_contexts(
+        "`timescale 1ns/1ns\nmodule sub;\n  class C; task err(); $error(\"E\"); endtask endclass\n  C c; initial c = new;\n  generate if (1) begin : gi initial #1 c.err(); end endgenerate\nendmodule\nmodule top;\n  sub u1(); sub u2();\n  initial #5 $finish;\nendmodule\n",
+        &["top.u1.C.err", "top.u2.C.err"],
+    );
+    // control: a process's own `%m` in the generate block is unchanged
+    prints_all(
+        &top("  generate if (1) begin : gi initial $display(\"M=%m\"); end endgenerate"),
+        &["M=top.gi"],
+    );
+}
+
+/// The instance prefix rides the `.velab` trailer (format 31): vcmp → velab → vrun
+/// prints the same `M=` lines as the one-shot run (the STAGED-DROP hazard).
+#[test]
+fn staged_vrun_prints_the_same_class_method_scope() {
+    let src = "`timescale 1ns/1ns\nmodule sub;\n  class C; task show(); $display(\"M=%m\"); endtask endclass\n  C c; initial c = new;\n  task automatic ta; c.show(); endtask\n  generate if (1) begin : gi initial #1 c.show(); initial #2 ta(); end endgenerate\nendmodule\nmodule top;\n  sub u1(); sub u2();\n  initial #5 $finish;\nendmodule\n";
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!("vita_cmms_staged_{}_{n}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(d.join("d.sv"), src).unwrap();
+    let run = |args: &[&str]| -> (String, i32) {
+        let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+            .args(args)
+            .current_dir(&d)
+            .output()
+            .expect("spawn vita");
+        (
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            ),
+            out.status.code().unwrap_or(-1),
+        )
+    };
+    let m_lines = |s: &str| -> Vec<String> {
+        s.lines()
+            .filter(|l| l.starts_with("M="))
+            .map(str::to_string)
+            .collect()
+    };
+    let (one, code) = run(&["d.sv"]);
+    assert_eq!(code, 0, "one-shot:\n{one}");
+    let (c, code) = run(&["vcmp", "d.sv", "-o", "d.vu"]);
+    assert_eq!(code, 0, "vcmp:\n{c}");
+    let (e, code) = run(&["velab", "d.vu", "-o", "d.velab"]);
+    assert_eq!(code, 0, "velab:\n{e}");
+    let (staged, code) = run(&["vrun", "d.velab"]);
+    assert_eq!(code, 0, "vrun:\n{staged}");
+    let _ = std::fs::remove_dir_all(&d);
+    assert_eq!(
+        m_lines(&one),
+        vec![
+            "M=top.u1.C.show",
+            "M=top.u2.C.show",
+            "M=top.u1.C.show",
+            "M=top.u2.C.show"
+        ]
+    );
+    assert_eq!(
+        m_lines(&one),
+        m_lines(&staged),
+        "one-shot vs staged diverged"
+    );
+}
+
+/// Review (§4.5.441 B1): a class method evaluated at a `$strobe` / `$monitor` flush
+/// — outside any process body — takes the REGISTERING process's instance, carried
+/// on the capture beside its scope. A second module with no class C runs its
+/// processes after the registration; the stale instance was `top.o2` (verilator
+/// `top.u1.C.val`; iverilog cannot take a function call in `$strobe`).
+#[test]
+fn a_class_method_in_a_strobe_or_monitor_argument_names_the_registering_instance() {
+    let src = "`timescale 1ns/1ns\nmodule sub;\n  logic [3:0] x = 0;\n  class C; function int val(); $display(\"M=%m\"); return 1; endfunction endclass\n  C c; initial c = new;\n  initial begin #1 x = 1; $strobe(\"S=%m v=%0d\", c.val()); end\n  initial begin #2 $monitor(\"N=%0d\", c.val() + x); #1 x = 2; #1 x = 3; end\nendmodule\nmodule other; initial #1 $display(\"other\"); initial #3 $display(\"other\"); endmodule\nmodule top;\n  sub u1(); other o1(); other o2();\n  initial #6 $finish;\nendmodule\n";
+    for b in ["native", "interp", "vm"] {
+        let (out, code) = run_backend(src, b);
+        assert_eq!(code, Some(0), "[{b}] exit\n{out}");
+        let m: Vec<&str> = out.lines().filter(|l| l.starts_with("M=")).collect();
+        assert!(m.len() >= 4, "[{b}]\n{out}");
+        assert!(
+            m.iter().all(|l| *l == "M=top.u1.C.val"),
+            "[{b}] every evaluation names u1:\n{out}"
+        );
+        assert!(out.contains("S=top.u1 v=1"), "[{b}]\n{out}");
+    }
+}

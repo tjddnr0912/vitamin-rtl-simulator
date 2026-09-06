@@ -98,6 +98,11 @@ pub(crate) struct FmtCapture {
     pub radix: Option<u8>,
     /// `%m` scope of the registering process (P2-11) — snapshot, like `time_mult`.
     pub scope: String,
+    /// §4.5.441: the registering process's INSTANCE path (`cur_inst_scope`), the
+    /// same snapshot — a class method evaluated at the postponed flush renders
+    /// `%m` from it (review B1: the flush runs outside any process body, so the
+    /// last `enter_body`'s instance was stale there).
+    pub inst_scope: String,
 }
 
 /// The single global `$monitor` record (IEEE 1364-2005: at most one active
@@ -430,6 +435,8 @@ pub(crate) struct SimState<'a> {
     pub queue_bounds: crate::QueueBoundTable,
     /// Per-ProcId instance path for `%m` (P2-11); empty ⇒ flat `top` fallback.
     pub proc_scopes: Vec<String>,
+    /// §4.5.440: per-ProcId instance path (no generate scope); empty ⇒ `proc_scopes`.
+    pub proc_inst_scopes: Vec<String>,
     /// Unpacked-array dims for per-element VCD naming (Phase-1.x ⑤, from
     /// `SimOpts.net_dims`); an absent array falls back to 1-D 0-based names.
     pub net_dims: crate::NetDimsTable,
@@ -504,6 +511,13 @@ pub(crate) struct SimState<'a> {
     /// Instance path of the process CURRENTLY executing — set per `run_process`
     /// (like `cur_time_mult`), read by the `%m` format spec.
     pub cur_scope: String,
+    /// §4.5.440: the INSTANCE path of the process currently executing — `cur_scope`
+    /// without its generate-scope segments (`proc_inst_scopes`), set beside it. A
+    /// class method's `%m` / diagnostic context is `<this>.<class>.<method>`: the
+    /// class's declaring instance is not known (the class table is global), so the
+    /// executing process's instance stands in, and neither the generate block nor
+    /// the frame chain of the call appears (iverilog `top.u2.C.show`).
+    pub cur_inst_scope: String,
     /// §4.5.426: the named-block label chain of the system task / `$sformatf` being
     /// rendered (`stmt_scopes` / `expr_scopes` lookup, set by the dispatch seam and
     /// `k_sformatf`, cleared after) — `%m` appends it after the frame names.

@@ -11,6 +11,25 @@ changed for a user of the simulator.
 
 ### Added
 
+- **Package and module functions in constant contexts** (IEEE §13.4.3): a function
+  declared in a package — imported with `import p::*`, `import p::f`, or called as `p::f(…)` —
+  or in the module itself now folds in a header parameter default (`#(parameter int X = dbl(W))`),
+  a `localparam`, and a declared range bound (`logic [dbl(W)-1:0]`). The body is evaluated in the
+  package's own scope (its constants and sibling functions; a module-local function of the same
+  name shadows a wildcard import per §26.3). A call in a range bound that does not fold to a
+  constant is now rejected loudly (it used to declare a silent 1-bit net).
+- **`%m` inside a class method names the class's instance** (IEEE §21.2.1) when the method is
+  called from a process in a generate block, through a task frame, or from a named block / fork:
+  `top.u1.C.show`, never the calling scope `top.u1.gi.C.show`. The `[in …]` context of a
+  `$error` inside the method follows the same rule. Carried by a new per-process entry in the
+  staged `.velab` trailer — artifact **format_version 31** (older `.velab`/`.vu` are refused
+  loudly at the header gate; regenerate with `vcmp`/`velab`).
+- **Copy nets that differ in declared sign, and full-range part-select copies, read through**
+  (ROADMAP §2 🆕 I): after a process's own write of `v`, a read of `wire signed [7:0] c;
+  assign c = v;` sees the fresh value with the copy's own sign (`r = c` → 4294967295, matching
+  iverilog and verilator), an unsigned copy of a signed net reads 255, and `assign f = v[7:0]`
+  is treated as the whole-net copy it is. Partial slices, widening and truncating copies stay
+  computed (the oracles disagree there).
 - **Type parameters** (`parameter type T = logic [7:0]` / `type T = int` / `localparam type`,
   IEEE §6.20.3) on a module or interface header, in a body and at the compilation-unit scope,
   for the integral vector subset (`logic`/`reg`/`bit` with one packed range, the 2-state atoms,

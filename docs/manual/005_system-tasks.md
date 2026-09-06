@@ -68,7 +68,7 @@ field renders as `x`/`z` rather than a fabricated number.
 | `%f` | Real, fixed-point. Default 6 fractional digits. |
 | `%e` | Real, scientific. Default 6 mantissa digits; exponent is signed and at least 2 digits (`1.500000e+03`). |
 | `%g` | Real, shortest of `%f`/`%e` with trailing zeros stripped (default 6 significant digits). |
-| `%m` | Current scope name: the instance path plus the named-block chain of the statement; inside a function or task, the scope the subroutine is declared in (`top.t`, whatever process called it), plus the body's own named blocks; inside a class method, the calling process's scope, the class and the method (`top.C.show`). A class declared in a module but called from a generate-block process prints that block's scope; a `$unit` / package class prints no `$unit::` / `pkg::` prefix. |
+| `%m` | Current scope name: the instance path plus the named-block chain of the statement; inside a function or task, the scope the subroutine is declared in (`top.t`, whatever process called it), plus the body's own named blocks; inside a class method, the INSTANCE the calling process belongs to, the class and the method (`top.u1.C.show`) — never the calling generate block or the frames of the call chain (a class declared in a module instantiated twice prints one path per instance, as iverilog does); a `$unit` / package class prints no `$unit::` / `pkg::` prefix. |
 | `%%` | A literal `%`. |
 
 `%f`, `%e`, and `%g` are for **real** values. Pairing a radix specifier

@@ -15,10 +15,10 @@ Top-level snapshot of what stands between HEAD and the two goals. Rewritten whol
 
 | # | track | item |
 |---|---|---|
-| 1 | §3 loud → correct-support | ⑤ residues (class-body CU items, `typedef T a_t[N]`, class `#(type T)` header), 🆕 L ⓦ package-function constant, ibex DPI export |
-| 2 | §2 silent-wrong | 🆕 N residue: class-method `%m` / diagnostic context prefixed with the calling scope |
-| 3 | §2 silent-wrong | 🆕 I ⓖ residue: array-word and sign-extending copy aliases; `always_comb` reading only inside a called task |
-| next | — | mixed-caller callee, `m #(8)` / `defparam u.T$w`, 🆕 L ⓩ, VCD `$scope` spelling, `genblk<N>` collision, genvar index copies |
+| 1 | §3 loud → correct-support | `typedef T a_t[N]` (unpacked-array typedef; both oracles) · ⑤ ⓓ/ⓔ residues · CU-scope items in a class body · class `#(type T)` header · ibex DPI export |
+| 2 | §2 silent-wrong | 🆕 L ⓩ: `{A1[7:4], A1[7:4]}` of a `[11:4]`-declared localparam folds without the declared LSB (vita `33`, oracles `cc`) |
+| 3 | §2 silent-wrong | 🆕 N residue: a `$error` inside a named block reports `[in top]` (iverilog `top.blk`); `%m` in an assertion action block omits the label |
+| next | — | mixed-caller callee, `m #(8)` / `defparam u.T$w`, VCD `$scope` spelling, `genblk<N>` collision (split), 🆕 L ⓦ residue (package constants outside the i64 interpreter) |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.
 

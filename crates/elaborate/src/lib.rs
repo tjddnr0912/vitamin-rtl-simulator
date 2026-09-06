@@ -1312,6 +1312,9 @@ struct Elaborator<'s> {
     event_nets: std::collections::BTreeSet<u32>,
     // Per-ProcId instance path for `%m` (P2-11); lockstep with `processes`.
     proc_scopes: Vec<String>,
+    /// §4.5.440 (§2 🆕 N): per-ProcId INSTANCE path (`display_of(inst_prefix)`, no
+    /// generate scope) — the `%m` prefix of a class method. Parallel to `proc_scopes`.
+    proc_inst_scopes: Vec<String>,
     // R14 (ROADMAP §3 ⑭): per-ProcId construct kind + source location, lockstep
     // with `processes`; and the same for `cont_assigns`. Reporting only — the
     // engine never reads them, they exist so an obs profile row can name a line
