@@ -74,8 +74,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 mod call_deps;
+mod read_through;
 use call_deps::expr_call_reads;
 pub(crate) use call_deps::func_read_deps;
+pub(crate) use read_through::proc_read_alias;
 
 use sim_ir::{SensKind, SimIr, Stmt};
 
@@ -85,13 +87,7 @@ use sim_ir::{SensKind, SimIr, Stmt};
 fn blocking_writes(ir: &SimIr, tmpl: usize) -> BTreeSet<u32> {
     let mut out = BTreeSet::new();
     for block in &ir.processes[tmpl].body {
-        for &sid in &block.stmts {
-            if let Stmt::BlockingAssign { lhs, .. } = &ir.stmts[sid as usize] {
-                for c in &lhs.chunks {
-                    out.insert(c.net);
-                }
-            }
-        }
+        read_through::block_blocking_writes(ir, block, &mut out);
     }
     out
 }
@@ -109,114 +105,9 @@ fn level_reads(ir: &SimIr, tmpl: usize) -> BTreeSet<u32> {
     }
 }
 
-/// Per-expression READ-THROUGH table (ROADMAP §2 row 33): for a `Signal` read of a
-/// whole-net copy `c = v` inside a process that BLOCKING-writes `v`, the net to read
-/// instead (`v`); `u32::MAX` everywhere else. Indexed by ExprId.
-///
-/// `wire [7:0] c; assign c = v;` then `v = 8'hA5; cap = c;` in one process latched
-/// `cap = 00` where both oracles latch `a5`: the copy is driven by the settle, which
-/// runs between process batches, so the process's own read one statement later saw
-/// the value from before its own write. iverilog COLLAPSES such a copy into its
-/// source (its VCD gives both one identifier); this table gives the same answer at
-/// the one place it is defined — a read that follows the writer's own write in
-/// program order. A read in ANOTHER process in the same delta is a §5.4.1 race
-/// whose outcome depends on process order in every tool, and it keeps the value it
-/// had (the settle's), so nothing order-dependent moves.
-///
-/// ⚠️ A store-side forward (update `c` inside the write of `v`) was built and
-/// measured first: it moved picorv32's oracle-pinned digest, made a UDP chain sample
-/// its fresh input in the same delta (iverilog: the old one) and split native from
-/// the VM on keccak. The settle's consumers are order-sensitive; procedural reads
-/// after one's own write are not.
-pub(crate) fn proc_read_alias(
-    ir: &SimIr,
-    alias: &[u32],
-    alias_word: &[u32],
-) -> (Vec<u32>, Vec<u32>) {
-    // (net table, word table), both by ExprId.
-    let mut table = (
-        vec![u32::MAX; ir.exprs.len()],
-        vec![u32::MAX; ir.exprs.len()],
-    );
-    if alias.iter().enumerate().all(|(i, &a)| a == i as u32) {
-        return table;
-    }
-    for tmpl in 0..ir.processes.len() {
-        let writes = blocking_writes(ir, tmpl);
-        if writes.is_empty() {
-            continue;
-        }
-        let mark = |eid: u32, table: &mut (Vec<u32>, Vec<u32>)| {
-            expr_signals(ir, eid, &mut |sig, net| {
-                let root = alias[net as usize];
-                if root != net && writes.contains(&root) {
-                    table.0[sig as usize] = root;
-                    table.1[sig as usize] = alias_word[net as usize];
-                }
-            });
-        };
-        let lv_exprs = |lv: &sim_ir::Lvalue, f: &mut dyn FnMut(u32)| {
-            for c in &lv.chunks {
-                for e in [c.word, c.offset, c.width].into_iter().flatten() {
-                    f(e);
-                }
-            }
-        };
-        for block in &ir.processes[tmpl].body {
-            for &sid in &block.stmts {
-                match &ir.stmts[sid as usize] {
-                    Stmt::BlockingAssign { lhs, rhs } => {
-                        mark(*rhs, &mut table);
-                        lv_exprs(lhs, &mut |e| mark(e, &mut table));
-                    }
-                    Stmt::NonblockingAssign { lhs, rhs, delay } => {
-                        mark(*rhs, &mut table);
-                        if let Some(d) = delay {
-                            mark(*d, &mut table);
-                        }
-                        lv_exprs(lhs, &mut |e| mark(e, &mut table));
-                    }
-                    Stmt::SysTask {
-                        which: _,
-                        fmt,
-                        args,
-                    } => {
-                        if let Some(f) = fmt {
-                            mark(*f, &mut table);
-                        }
-                        for &a in args {
-                            mark(a, &mut table);
-                        }
-                    }
-                    Stmt::Force { lhs, rhs } => {
-                        mark(*rhs, &mut table);
-                        lv_exprs(lhs, &mut |e| mark(e, &mut table));
-                    }
-                    Stmt::Release { lhs } => lv_exprs(lhs, &mut |e| mark(e, &mut table)),
-                    Stmt::Disable { .. } => {}
-                }
-            }
-            match &block.term {
-                sim_ir::Terminator::Branch { cond, .. } => mark(*cond, &mut table),
-                sim_ir::Terminator::Delay { amount, .. } => mark(*amount, &mut table),
-                sim_ir::Terminator::Wait { cond, .. } => {
-                    if let sim_ir::WaitCause::Expr { expr } = cond {
-                        mark(*expr, &mut table);
-                    }
-                }
-                sim_ir::Terminator::Goto { .. }
-                | sim_ir::Terminator::Fork { .. }
-                | sim_ir::Terminator::Call { .. }
-                | sim_ir::Terminator::Return => {}
-            }
-        }
-    }
-    table
-}
-
 /// Every `Signal` node under `eid`, as `(that node's ExprId, its net)`. Same
 /// exhaustive walk as [`expr_nets`], one level richer.
-fn expr_signals(ir: &SimIr, eid: u32, f: &mut dyn FnMut(u32, u32)) {
+pub(super) fn expr_signals(ir: &SimIr, eid: u32, f: &mut dyn FnMut(u32, u32)) {
     use sim_ir::Expr as E;
     match &ir.exprs[eid as usize] {
         E::Signal { net, word } => {
