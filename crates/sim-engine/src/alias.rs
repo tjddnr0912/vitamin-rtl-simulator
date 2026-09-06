@@ -99,6 +99,184 @@ fn const_of(ir: &SimIr, eid: u32) -> Option<u32> {
     crate::width::const_u32_of_expr(ir, eid)
 }
 
+/// The value of a constant array-WORD index, or `None` when the index is not a
+/// constant expression of the shapes the lowering builds for one.
+///
+/// A word index is not a bare `Const`: `m[-2]` on `m[-2:1]` lowers to
+/// `(-2) + 2` (the `lo`-normalised coordinate, `dim_coord`), a narrow unsigned
+/// index is sealed as `{1'b0, i}` and a narrow signed one as `{{n{i[msb]}}, i}`
+/// (`seal_index_unsigned`), and the index itself may be arithmetic (`2-4`,
+/// `4'd14 + 4'd4 - 18`). The width-tree folder (`const_u32_of_expr`) saturates
+/// instead of wrapping, so `0xFFFF_FFFE + 2` came out as WIDTH_MAX and the copy
+/// was declined — the read stayed stale where both oracles read the word through
+/// (§2 🆕 I residue, 13 cells).
+///
+/// This folds the tree the way the engine evaluates it (IEEE §11.6 / §11.8.1):
+/// the arithmetic operators are context-determined — every operand is extended
+/// to the widest operand of the whole tree, sign-extended only when EVERY operand
+/// is signed — and computed modulo that width; `Concat` / `Replicate` / a bit
+/// `Select` / `Const` are self-determined leaves. Anything else (`Ternary`, a
+/// signal, a wider-than-64-bit or x/z constant) declines. The fold gates
+/// ADMISSION only: the alias carries the index expression itself and the engine
+/// evaluates it at the read, so a fold that disagreed with the engine could at
+/// most admit an out-of-range copy (whose read is `x` either way, plus a repeated
+/// E4002) — never a different word.
+fn word_const(ir: &SimIr, eid: u32) -> Option<u32> {
+    let (w, signed) = word_ctx(ir, eid)?;
+    if w == 0 || w > 66 {
+        return None;
+    }
+    let v = word_eval(ir, eid, w, signed)?;
+    u32::try_from(v).ok()
+}
+
+/// A self-determined leaf of a word-index tree: its bit pattern, width and sign.
+fn word_leaf(ir: &SimIr, eid: u32) -> Option<(u128, u32, bool)> {
+    match ir.exprs.get(eid as usize)? {
+        sim_ir::Expr::Const { val } => {
+            let c = ir.consts.get(*val as usize)?;
+            if !matches!(c.repr, sim_ir::ConstRepr::Numeric)
+                || c.width == 0
+                || c.width > 64
+                || c.bits.unk.iter().any(|&u| u != 0)
+                || c.bits.val.iter().skip(1).any(|&v| v != 0)
+            {
+                return None;
+            }
+            let word0 = c.bits.val.first().copied().unwrap_or(0) as u128;
+            Some((word0 & mask(c.width), c.width, c.signed))
+        }
+        sim_ir::Expr::Concat { parts } => {
+            let mut pat: u128 = 0;
+            let mut w: u32 = 0;
+            for &p in parts {
+                let (pp, pw, _) = word_self(ir, p)?;
+                w = w.checked_add(pw)?;
+                if w > 66 {
+                    return None;
+                }
+                pat = (pat << pw) | pp;
+            }
+            Some((pat, w, false))
+        }
+        sim_ir::Expr::Replicate { count, value } => {
+            let n = const_of(ir, *count)?;
+            let (vp, vw, _) = word_self(ir, *value)?;
+            let w = vw.checked_mul(n)?;
+            if w > 66 {
+                return None;
+            }
+            let mut pat: u128 = 0;
+            for _ in 0..n {
+                pat = (pat << vw) | vp;
+            }
+            Some((pat, w, false))
+        }
+        sim_ir::Expr::Select {
+            base,
+            offset,
+            width,
+            kind: sim_ir::SelKind::Bit,
+        } => {
+            let (bp, bw, _) = word_self(ir, *base)?;
+            let off = const_of(ir, *offset)?;
+            if const_of(ir, *width)? != 1 || off >= bw {
+                return None;
+            }
+            Some(((bp >> off) & 1, 1, false))
+        }
+        _ => None,
+    }
+}
+
+/// A SELF-DETERMINED subtree: an arithmetic tree evaluated in its own context
+/// (a concatenation operand, a replicated bit, a select base — §11.6), or a leaf.
+fn word_self(ir: &SimIr, eid: u32) -> Option<(u128, u32, bool)> {
+    match ir.exprs.get(eid as usize)? {
+        sim_ir::Expr::Binary {
+            op: sim_ir::BinOp::Add | sim_ir::BinOp::Sub | sim_ir::BinOp::Mul,
+            ..
+        }
+        | sim_ir::Expr::Unary {
+            op: sim_ir::UnOp::Minus,
+            ..
+        } => {
+            let (w, signed) = word_ctx(ir, eid)?;
+            if w == 0 || w > 66 {
+                return None;
+            }
+            Some((word_eval(ir, eid, w, signed)?, w, signed))
+        }
+        _ => word_leaf(ir, eid),
+    }
+}
+
+/// The context of a word-index tree: the widest operand and whether every
+/// operand is signed, through the context-determined operators only.
+fn word_ctx(ir: &SimIr, eid: u32) -> Option<(u32, bool)> {
+    match ir.exprs.get(eid as usize)? {
+        sim_ir::Expr::Binary {
+            op: sim_ir::BinOp::Add | sim_ir::BinOp::Sub | sim_ir::BinOp::Mul,
+            lhs,
+            rhs,
+        } => {
+            let (lw, ls) = word_ctx(ir, *lhs)?;
+            let (rw, rs) = word_ctx(ir, *rhs)?;
+            Some((lw.max(rw), ls && rs))
+        }
+        sim_ir::Expr::Unary {
+            op: sim_ir::UnOp::Minus,
+            operand,
+        } => word_ctx(ir, *operand),
+        _ => {
+            let (_, w, s) = word_leaf(ir, eid)?;
+            Some((w, s))
+        }
+    }
+}
+
+/// Evaluate a word-index tree at context width `w` (modulo `2^w`).
+fn word_eval(ir: &SimIr, eid: u32, w: u32, signed: bool) -> Option<u128> {
+    let m = mask(w);
+    match ir.exprs.get(eid as usize)? {
+        sim_ir::Expr::Binary { op, lhs, rhs } => {
+            let l = word_eval(ir, *lhs, w, signed)?;
+            let r = word_eval(ir, *rhs, w, signed)?;
+            match op {
+                sim_ir::BinOp::Add => Some(l.wrapping_add(r) & m),
+                sim_ir::BinOp::Sub => Some(l.wrapping_sub(r) & m),
+                sim_ir::BinOp::Mul => Some(l.wrapping_mul(r) & m),
+                _ => None,
+            }
+        }
+        sim_ir::Expr::Unary {
+            op: sim_ir::UnOp::Minus,
+            operand,
+        } => Some(word_eval(ir, *operand, w, signed)?.wrapping_neg() & m),
+        _ => {
+            let (pat, lw, ls) = word_leaf(ir, eid)?;
+            if lw > w {
+                return None;
+            }
+            let neg = signed && ls && lw > 0 && (pat >> (lw - 1)) & 1 == 1;
+            Some(if neg {
+                (pat | (m & !mask(lw))) & m
+            } else {
+                pat
+            })
+        }
+    }
+}
+
+#[inline]
+fn mask(w: u32) -> u128 {
+    if w >= 128 {
+        u128::MAX
+    } else {
+        (1u128 << w) - 1
+    }
+}
+
 /// Flat packed storage of one element — asked of the DESTINATION, and of a source
 /// that is reached through a `Select` (a slice of a heap handle is not a slice).
 /// Heap kinds are string / queue / dynamic and associative arrays / class handles
@@ -180,7 +358,7 @@ fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<(u32, Option<u32>)> 
             if !flat_kind || nv.array_len <= 1 || want != nv.width {
                 return None;
             }
-            let idx = const_of(ir, *weid)?;
+            let idx = word_const(ir, *weid)?;
             (idx < nv.array_len).then_some((*net, Some(*weid)))
         }
         sim_ir::Expr::Select {

@@ -11,6 +11,12 @@ changed for a user of the simulator.
 
 ### Added
 
+- **Compilation-unit-scope declarations** (IEEE §3.12.1): a `typedef` (vector, atom, chained, packed
+  struct / union, enum), a `localparam` / `parameter` (a unit `parameter` is a localparam), a
+  `function` or a `task` written before the first `module` is visible to every module, interface,
+  package and class that follows it in the file; a module's own declaration of the same name (a
+  port, net, constant, enum label, instance, …) and a name it imports from a package shadow it. Still loud: `$unit::t`, a declaration after its first use, an unpacked-array typedef, a
+  unit-scope variable or net.
 - **A packed-struct member sized by an overridable parameter**: `typedef struct packed { logic
   [W-1:0] d; … }` with `W` a header `parameter` (a header-less module's body `parameter`, or a
   localparam derived from one) is laid out per instance — declarations, ports, packed and unpacked
@@ -25,6 +31,16 @@ changed for a user of the simulator.
 
 ### Fixed
 
+- **`%m` inside a function or task names the scope the subroutine is declared in** (IEEE §21.2.1):
+  `top.t` for a module task called from a generate block, a generate loop, a fork arm, another task
+  or at any depth of a recursion (was the caller's scope plus every frame on the call path —
+  `top.gi.t`, `top.b.a`, `top.f.f.f`); the body's own named blocks are appended (`top.t.ib`);
+  `$sformatf`, `$strobe` and `$error` inside the body agree. A class method still prints without its
+  class name.
+- **A copy of an array word with a negative-base, parameter, arithmetic or narrow-signed constant
+  index reads through** after the writer's own write (`wire [7:0] c; assign c = m[-2];` on
+  `m[-2:1]`, `m[P]`, `m[2-4]`, `m[4'sd14]`, `m[4'd14 + 4'd4 - 18]` — both reference simulators print
+  the written value; vita printed `xx`).
 - A `generate if … else` whose branches carry different labels named the taken else scope with the
   if label (`%m` printed `top.n` for `top.y`; `n.v` resolved, `y.v` did not).
 - A procedural read, after the writer's own write, of a copy of a constant array word (`assign c =

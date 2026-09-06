@@ -219,6 +219,31 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐ A folder is written for ONE consumer's rule — an index is a value, a width is a bound (2026-09-06 · §4.5.436)
+
+The copy alias folded an array-word INDEX with the width-tree folder, which saturates (a `[msb:lsb]`
+width cannot wrap). An index VALUE wraps at its context width: `m[-2]` on `m[-2:1]` is the
+coordinate `(-2) + 2`, and `0xFFFF_FFFE + 2` saturated to WIDTH_MAX, so every negative-base,
+parameter, arithmetic and narrow-signed index was declined — silently stale, never wrong-valued,
+which is why three censuses did not see it. **How to apply:** before reusing a constant folder, name
+the consumer it was written for and the rule that consumer needs (bound vs value, saturate vs wrap,
+self-determined vs context width); an index folder implements §11.6/§11.8.1 itself. And keep such a
+fold ADMISSION-only where you can — the alias carries the eid and the engine evaluates it, so a fold
+that disagrees with the engine can admit an out-of-range copy (loud, `x`) but never a different word.
+
+### ⭐ A scope recorded RELATIVE to a runtime prefix encodes the caller; record it absolute and mark it (2026-09-06 · §4.5.435)
+
+`%m` inside a task body was rendered as `<executing process's scope>.<task>.<labels>` — right only
+while the caller lived in the declaring scope; a generate-block caller, a recursion, a task called
+through another task each printed the call chain. The declaring scope is known at LOWERING time and
+the executing scope only at RUN time, so a chain stored relative to the latter cannot be repaired by
+the renderer. **How to apply:** when a recorded string will be prefixed by a runtime value, decide
+at the producer whether it is relative or absolute, spell absoluteness in the string itself (a
+leading `.`, no sidecar shape change) and make every renderer honour the marker — census the
+renderers (`m_scope`, the strobe/monitor capture, the frame executor's three arms) as you would any
+funnel. A relative fallback must reproduce the old output byte-for-byte for the producers you did
+not convert (class methods).
+
 ### ⭐⭐ Strip by a POSITIVE record of the shape, never by "not the other shape" (2026-09-06 · §4.5.429)
 
 `%m` had to drop the `[0]` vita stores on a singleton generate scope. The first draft dropped every

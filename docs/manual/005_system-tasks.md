@@ -68,7 +68,7 @@ field renders as `x`/`z` rather than a fabricated number.
 | `%f` | Real, fixed-point. Default 6 fractional digits. |
 | `%e` | Real, scientific. Default 6 mantissa digits; exponent is signed and at least 2 digits (`1.500000e+03`). |
 | `%g` | Real, shortest of `%f`/`%e` with trailing zeros stripped (default 6 significant digits). |
-| `%m` | Current scope name. |
+| `%m` | Current scope name: the instance path plus the named-block chain of the statement; inside a function or task, the scope the subroutine is declared in (`top.t`, whatever process called it), plus the body's own named blocks. A class method prints without its class name. |
 | `%%` | A literal `%`. |
 
 `%f`, `%e`, and `%g` are for **real** values. Pairing a radix specifier
