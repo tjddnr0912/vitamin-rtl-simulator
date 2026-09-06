@@ -229,6 +229,42 @@ fn g4_gen_if_else() {
     assert!(else_b.is_empty());
 }
 
+// g4b. §2 🆕 N: the else branch keeps its own `begin : label … end` as a Block
+// (the then label is hoisted into the If node); an un-blocked else stays bare.
+#[test]
+fn g4b_gen_else_block_keeps_its_label() {
+    let items = gen_of(
+        "generate if (W) begin : n assign y = a; end else begin : e assign y = b; end\nendgenerate",
+    );
+    let GenItem::If {
+        then_b,
+        else_b,
+        label,
+        ..
+    } = &items[0]
+    else {
+        panic!("not an If: {:?}", items[0]);
+    };
+    assert_eq!(label.as_ref().map(|l| l.name.as_str()), Some("n"));
+    assert_eq!(then_b.len(), 1);
+    let [GenItem::Block {
+        label: el,
+        items: ei,
+        ..
+    }] = else_b.as_slice()
+    else {
+        panic!("else is not one Block: {else_b:?}");
+    };
+    assert_eq!(el.as_ref().map(|l| l.name.as_str()), Some("e"));
+    assert_eq!(ei.len(), 1);
+
+    let items = gen_of("generate if (W) assign y = a; else if (V) assign y = b;\nendgenerate");
+    let GenItem::If { else_b, .. } = &items[0] else {
+        panic!("not an If: {:?}", items[0]);
+    };
+    assert!(matches!(else_b.as_slice(), [GenItem::If { .. }]));
+}
+
 // g5. generate-case: 0:…  1,2:…  default:… → Match{1}, Match{2}, Default.
 #[test]
 fn g5_gen_case() {

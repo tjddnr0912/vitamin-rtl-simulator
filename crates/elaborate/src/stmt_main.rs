@@ -1384,6 +1384,7 @@ impl Elaborator<'_> {
                             // as `prop_self_name` so `synth_prop_expr` recognises the
                             // legal tail-`|=>` recursion (`… |=> NAME`).
                             self.pending_sva.push(PendingSva {
+                                scope: self.cur_prefix.clone(),
                                 clock: pd.clock,
                                 disable_iff: pd.disable_iff,
                                 ante: pd.antecedent,
@@ -1425,6 +1426,7 @@ impl Elaborator<'_> {
                             // disable, antecedent, consequent) before scheduling.
                             let map = sva_formal_map(&pd.formals, args);
                             self.pending_sva.push(PendingSva {
+                                scope: self.cur_prefix.clone(),
                                 clock: subst_sensitivity(&pd.clock, &map),
                                 disable_iff: pd.disable_iff.as_ref().map(|e| subst_expr(e, &map)),
                                 ante: subst_sequence(&pd.antecedent, &map),
@@ -1469,6 +1471,7 @@ impl Elaborator<'_> {
                                 span: name.span,
                             };
                             self.pending_sva.push(PendingSva {
+                                scope: self.cur_prefix.clone(),
                                 clock: ast::Sensitivity::List(Vec::new()),
                                 disable_iff: None,
                                 ante: ast::Sequence::Boolean(true_lit),
@@ -1515,6 +1518,7 @@ impl Elaborator<'_> {
                     // Inline `assert property(...)`: a `prop_expr` (N2d and/or tree)
                     // has NO self-name (anonymous ⇒ no recursion site).
                     self.pending_sva.push(PendingSva {
+                        scope: self.cur_prefix.clone(),
                         clock: clock.clone(),
                         disable_iff: disable_iff.clone(),
                         ante: antecedent.clone(),
@@ -1539,6 +1543,7 @@ impl Elaborator<'_> {
                 span,
             } => {
                 self.pending_cover.push(PendingCover {
+                    scope: self.cur_prefix.clone(),
                     clock: clock.clone(),
                     disable_iff: disable_iff.clone(),
                     seq: seq.clone(),

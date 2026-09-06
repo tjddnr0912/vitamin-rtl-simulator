@@ -235,8 +235,18 @@ impl Parser<'_, '_> {
         let cond = self.expr(0);
         self.expect(TokenKind::RParen, "')' after generate-if condition");
         let (label, then_b) = self.parse_gen_branch();
+        // The ELSE branch keeps its own `begin : label … end` as a `GenItem::Block`
+        // (§2 🆕 N, review A F1): `label` above is the THEN block's, and hoisting the
+        // else's label into the same slot lost it — `if (0) begin : n … end else begin
+        // : y … end` named the taken scope `top.n` where both oracles print `top.y`
+        // (and resolved `n.v`, which both refuse). An un-blocked `else <item>` and
+        // an `else if` chain arrive as the bare item, as before.
         let else_b = if self.eat_kw(Kw::Else) {
-            self.parse_gen_branch().1
+            if self.at_kw(Kw::Begin) {
+                vec![self.parse_gen_block()]
+            } else {
+                self.parse_gen_branch().1
+            }
         } else {
             Vec::new()
         };

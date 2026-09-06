@@ -64,313 +64,319 @@ impl Elaborator<'_> {
         // crossclock, which all emit fires. Cover (a separate pass) keeps it false.
         let saved_synth = self.in_assert_synth;
         self.in_assert_synth = true;
-        for mut sva in pending {
-            // A concurrent assertion with NO clocking event of its own inherits the
-            // scope's `default clocking` (IEEE 1800 §14.12). The empty sensitivity list
-            // is the sentinel the parser leaves; this is the ONLY place that resolves it,
-            // so the multi-clock gate below never sees it. `self.default_clocking` is the
-            // CURRENT module's — `lower_clocking_blocks` set it at step (6.5) and this
-            // drain runs later in the same `elaborate_instance`.
-            // §16.15: an assertion with no `disable iff` of its own inherits the
-            // scope's. Applied beside the clock default because it is the same shape of
-            // rule and the same drain — and BEFORE the multi-clock gate, so a default
-            // reset can never be silently dropped by an early `continue`.
-            if sva.disable_iff.is_none() {
-                sva.disable_iff = self.default_disable_iff.clone();
-            }
-            if matches!(&sva.clock, ast::Sensitivity::List(evs) if evs.is_empty()) {
-                match self.default_clocking.clone() {
-                    Some(c) => sva.clock = c,
-                    None => {
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            "a concurrent assertion needs a clocking event: write one \
-                             (`assert property (@(posedge clk) …)`) or declare a \
-                             `default clocking cb @(posedge clk); endclocking` in this scope",
-                        );
-                        continue;
-                    }
-                }
-            }
-            let sp = sva.span;
-            // A concurrent assertion must have a SINGLE clocking event (slice
-            // S15). An OR-of-clocks event `@(posedge c1 or posedge c2)` (a
-            // `Sensitivity::List` with >1 term) or `@(*)` is a multi-clock
-            // property — the single-`always` checker model does not implement it.
-            // Reject it loudly instead of building one (semantically wrong)
-            // `always @(c1 or c2)` checker (this closes a silent-accept hole).
-            // Mid-property second-`@` events are caught earlier by the parser.
-            let single_clock = matches!(&sva.clock, ast::Sensitivity::List(evs) if evs.len() == 1);
-            if !single_clock {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    "a concurrent assertion must have a single clocking event \
-                     (multi-clock / OR-of-clocks property clocks are unsupported \
-                     in this subset)",
-                );
-                continue;
-            }
-            // Sequence/property LOCAL VARIABLES (slice N2c, IEEE §16.10): a property
-            // that declares a local var OR carries a `(b, x = e)` capture routes to the
-            // data-tracking synthesis (a parallel DATA shift register, shifted in
-            // lockstep with the liveness pipeline). Dispatched BEFORE the prop_expr /
-            // cross-clock / flat paths so a capture never reaches them. Guarded so an
-            // assertion with NO local vars and NO capture is byte-identical (the common
-            // case allocates ZERO data-tracking nets).
-            if !sva.local_vars.is_empty()
-                || seq_has_match_item(&sva.ante)
-                || seq_has_match_item(&sva.cons)
-            {
-                self.synth_local_var_assert(sva, sp);
-                continue;
-            }
-            // Property-level operators (slice N2d + SVA-REST): a `prop_expr` tree
-            // (the flat `ante/kind/cons` fields hold placeholders). Dispatched FIRST
-            // so the placeholder fields never reach the cross-clock / flat paths. A
-            // tree containing a LIVENESS operator (`s_eventually` / `s_until`) routes
-            // to `synth_liveness` (which emits an end-of-sim `final` obligation check);
-            // a SAFETY-only tree (`and`/`or`/`not`/`always`/weak-`until`/recursion)
-            // reduces to a per-clock boolean violation by `synth_prop_expr`.
-            if sva.prop_expr.is_some() {
-                if Self::prop_expr_has_liveness(sva.prop_expr.as_ref().unwrap()) {
-                    self.synth_liveness(sva, sp);
-                } else {
-                    self.synth_prop_expr(sva, sp);
-                }
-                continue;
-            }
-            // Cross-clock SEQUENCE antecedent (slice N2a-1): `@(c1) a ##1 @(c2) b |-> c`
-            // — a `##1 @(c2)` boundary re-clocks MID-ANTECEDENT (distinct from A3,
-            // where the IMPLICATION crosses clocks). Routed to a dedicated dual-clock
-            // handoff synthesis. (A `Clocked` node in the consequent is also routed
-            // here and loud-rejected — `synth_crossclock` requires a boolean cons.)
-            // FIRST fold any redundant same-clock re-clock `@(c1) … @(c1) …` to plain
-            // sequence (§16.13 no-op) so it shares the byte-correct single-clock
-            // pipeline rather than the lossy handoff (review N2a-1). Guarded so the
-            // common no-Clocked antecedent is untouched (byte-identical).
-            if seq_has_clocked(&sva.ante) {
-                sva.ante = strip_redundant_clocks(&sva.ante, &sva.clock);
-            }
-            if seq_has_clocked(&sva.ante) || seq_has_clocked(&sva.cons) {
-                self.synth_crossclock(sva, sp);
-                continue;
-            }
-            // Multi-clock canonical pattern (slice A3): `@(c1) ante |=> @(c2) cons`
-            // synthesizes TWO processes (a c1-clocked sampler + a c2-clocked consumer)
-            // joined by a 1-bit handoff reg, instead of the single-clock checker below.
-            // Single-clock asserts (the common case) keep the byte-identical path.
-            if sva.cons_clock.is_some() {
-                self.synth_multiclock(sva, sp);
-                continue;
-            }
-            // Property-references-property (slice A4): a bare named-PROPERTY consequent
-            // `… |-> q` (q an OVERLAP property, same clock) flattens to the boolean
-            // `!q.ante || q.cons`. A no-op for a literal / sequence / net consequent
-            // (byte-identical), so it runs before the prev-reg allocation below to keep
-            // the single-property path's numbering unchanged.
-            self.flatten_prop_consequent(&mut sva);
-            // Rewrite sampled-value functions ($past/$rose/$fell/$stable) into
-            // reads of synthesized prev-registers, collecting the per-clock NBA
-            // updates (`prev <= signal`) that maintain them.
-            let mut regs = SvaRegs::default();
-            // Expand the antecedent Sequence into a disjunction of (boolean-term,
-            // hop-delay) alternatives, synthesize each one's match-this-clock
-            // signal (a shift-register pipeline for ≥2 terms), and OR them. A
-            // single 1-term alternative reproduces the flat-property path
-            // byte-for-byte; bounded ranges produce >1 alternative.
-            let mut pipeline_nbas: Vec<ast::Stmt> = Vec::new();
-            let ante = self.synth_seq_match(&sva.ante, &mut regs, &mut pipeline_nbas, sp);
-            // Consequent (slice S14). A boolean consequent is rewritten here (so
-            // its prev-reg allocation order — and the byte-identical lowering —
-            // is preserved); a sequence consequent is built as an obligation
-            // chain AFTER `cond_lhs` is known (it seeds the chain).
-            let cons_boolean = match &sva.cons {
-                ast::Sequence::Boolean(e) => Some(self.rewrite_sampled(e, &mut regs)),
-                _ => None,
-            };
+        for sva in pending {
+            // Resolve the assertion's names in the scope it was written in.
+            let saved_prefix = std::mem::replace(&mut self.cur_prefix, sva.scope.clone());
+            self.materialize_one_sva(sva);
+            self.cur_prefix = saved_prefix;
+        }
+        self.in_assert_synth = saved_synth;
+    }
 
-            // Action block (slice S11). The fail action — the `else` statement, or
-            // the default `$error("Assertion property violation")` when absent —
-            // runs on a violation; the optional pass action runs on a non-vacuous
-            // success. When both are absent the body is byte-identical to the
-            // pre-S11 checker (default $error, no pass branch).
-            let fail_stmt_raw = match sva.fail {
-                Some(s) => *s,
-                None => ast::Stmt::SysTaskCall {
-                    name: ast::Ident {
-                        name: "$error".to_string(),
-                        span: sp,
+    /// One pending concurrent assertion → its synthesized clocked checker (the
+    /// body of `materialize_sva_checkers`'s loop; an early `return` is a skipped
+    /// assertion whose diagnostic was already emitted).
+    fn materialize_one_sva(&mut self, mut sva: PendingSva) {
+        // A concurrent assertion with NO clocking event of its own inherits the
+        // scope's `default clocking` (IEEE 1800 §14.12). The empty sensitivity list
+        // is the sentinel the parser leaves; this is the ONLY place that resolves it,
+        // so the multi-clock gate below never sees it. `self.default_clocking` is the
+        // CURRENT module's — `lower_clocking_blocks` set it at step (6.5) and this
+        // drain runs later in the same `elaborate_instance`.
+        // §16.15: an assertion with no `disable iff` of its own inherits the
+        // scope's. Applied beside the clock default because it is the same shape of
+        // rule and the same drain — and BEFORE the multi-clock gate, so a default
+        // reset can never be silently dropped by an early `continue`.
+        if sva.disable_iff.is_none() {
+            sva.disable_iff = self.default_disable_iff.clone();
+        }
+        if matches!(&sva.clock, ast::Sensitivity::List(evs) if evs.is_empty()) {
+            match self.default_clocking.clone() {
+                Some(c) => sva.clock = c,
+                None => {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a concurrent assertion needs a clocking event: write one \
+                         (`assert property (@(posedge clk) …)`) or declare a \
+                         `default clocking cb @(posedge clk); endclocking` in this scope",
+                    );
+                    return;
+                }
+            }
+        }
+        let sp = sva.span;
+        // A concurrent assertion must have a SINGLE clocking event (slice
+        // S15). An OR-of-clocks event `@(posedge c1 or posedge c2)` (a
+        // `Sensitivity::List` with >1 term) or `@(*)` is a multi-clock
+        // property — the single-`always` checker model does not implement it.
+        // Reject it loudly instead of building one (semantically wrong)
+        // `always @(c1 or c2)` checker (this closes a silent-accept hole).
+        // Mid-property second-`@` events are caught earlier by the parser.
+        let single_clock = matches!(&sva.clock, ast::Sensitivity::List(evs) if evs.len() == 1);
+        if !single_clock {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a concurrent assertion must have a single clocking event \
+                 (multi-clock / OR-of-clocks property clocks are unsupported \
+                 in this subset)",
+            );
+            return;
+        }
+        // Sequence/property LOCAL VARIABLES (slice N2c, IEEE §16.10): a property
+        // that declares a local var OR carries a `(b, x = e)` capture routes to the
+        // data-tracking synthesis (a parallel DATA shift register, shifted in
+        // lockstep with the liveness pipeline). Dispatched BEFORE the prop_expr /
+        // cross-clock / flat paths so a capture never reaches them. Guarded so an
+        // assertion with NO local vars and NO capture is byte-identical (the common
+        // case allocates ZERO data-tracking nets).
+        if !sva.local_vars.is_empty()
+            || seq_has_match_item(&sva.ante)
+            || seq_has_match_item(&sva.cons)
+        {
+            self.synth_local_var_assert(sva, sp);
+            return;
+        }
+        // Property-level operators (slice N2d + SVA-REST): a `prop_expr` tree
+        // (the flat `ante/kind/cons` fields hold placeholders). Dispatched FIRST
+        // so the placeholder fields never reach the cross-clock / flat paths. A
+        // tree containing a LIVENESS operator (`s_eventually` / `s_until`) routes
+        // to `synth_liveness` (which emits an end-of-sim `final` obligation check);
+        // a SAFETY-only tree (`and`/`or`/`not`/`always`/weak-`until`/recursion)
+        // reduces to a per-clock boolean violation by `synth_prop_expr`.
+        if sva.prop_expr.is_some() {
+            if Self::prop_expr_has_liveness(sva.prop_expr.as_ref().unwrap()) {
+                self.synth_liveness(sva, sp);
+            } else {
+                self.synth_prop_expr(sva, sp);
+            }
+            return;
+        }
+        // Cross-clock SEQUENCE antecedent (slice N2a-1): `@(c1) a ##1 @(c2) b |-> c`
+        // — a `##1 @(c2)` boundary re-clocks MID-ANTECEDENT (distinct from A3,
+        // where the IMPLICATION crosses clocks). Routed to a dedicated dual-clock
+        // handoff synthesis. (A `Clocked` node in the consequent is also routed
+        // here and loud-rejected — `synth_crossclock` requires a boolean cons.)
+        // FIRST fold any redundant same-clock re-clock `@(c1) … @(c1) …` to plain
+        // sequence (§16.13 no-op) so it shares the byte-correct single-clock
+        // pipeline rather than the lossy handoff (review N2a-1). Guarded so the
+        // common no-Clocked antecedent is untouched (byte-identical).
+        if seq_has_clocked(&sva.ante) {
+            sva.ante = strip_redundant_clocks(&sva.ante, &sva.clock);
+        }
+        if seq_has_clocked(&sva.ante) || seq_has_clocked(&sva.cons) {
+            self.synth_crossclock(sva, sp);
+            return;
+        }
+        // Multi-clock canonical pattern (slice A3): `@(c1) ante |=> @(c2) cons`
+        // synthesizes TWO processes (a c1-clocked sampler + a c2-clocked consumer)
+        // joined by a 1-bit handoff reg, instead of the single-clock checker below.
+        // Single-clock asserts (the common case) keep the byte-identical path.
+        if sva.cons_clock.is_some() {
+            self.synth_multiclock(sva, sp);
+            return;
+        }
+        // Property-references-property (slice A4): a bare named-PROPERTY consequent
+        // `… |-> q` (q an OVERLAP property, same clock) flattens to the boolean
+        // `!q.ante || q.cons`. A no-op for a literal / sequence / net consequent
+        // (byte-identical), so it runs before the prev-reg allocation below to keep
+        // the single-property path's numbering unchanged.
+        self.flatten_prop_consequent(&mut sva);
+        // Rewrite sampled-value functions ($past/$rose/$fell/$stable) into
+        // reads of synthesized prev-registers, collecting the per-clock NBA
+        // updates (`prev <= signal`) that maintain them.
+        let mut regs = SvaRegs::default();
+        // Expand the antecedent Sequence into a disjunction of (boolean-term,
+        // hop-delay) alternatives, synthesize each one's match-this-clock
+        // signal (a shift-register pipeline for ≥2 terms), and OR them. A
+        // single 1-term alternative reproduces the flat-property path
+        // byte-for-byte; bounded ranges produce >1 alternative.
+        let mut pipeline_nbas: Vec<ast::Stmt> = Vec::new();
+        let ante = self.synth_seq_match(&sva.ante, &mut regs, &mut pipeline_nbas, sp);
+        // Consequent (slice S14). A boolean consequent is rewritten here (so
+        // its prev-reg allocation order — and the byte-identical lowering —
+        // is preserved); a sequence consequent is built as an obligation
+        // chain AFTER `cond_lhs` is known (it seeds the chain).
+        let cons_boolean = match &sva.cons {
+            ast::Sequence::Boolean(e) => Some(self.rewrite_sampled(e, &mut regs)),
+            _ => None,
+        };
+
+        // Action block (slice S11). The fail action — the `else` statement, or
+        // the default `$error("Assertion property violation")` when absent —
+        // runs on a violation; the optional pass action runs on a non-vacuous
+        // success. When both are absent the body is byte-identical to the
+        // pre-S11 checker (default $error, no pass branch).
+        let fail_stmt_raw = match sva.fail {
+            Some(s) => *s,
+            None => ast::Stmt::SysTaskCall {
+                name: ast::Ident {
+                    name: "$error".to_string(),
+                    span: sp,
+                },
+                args: vec![ast::Expr {
+                    kind: ast::ExprKind::StrLit {
+                        raw: "\"Assertion property violation\"".to_string(),
                     },
-                    args: vec![ast::Expr {
-                        kind: ast::ExprKind::StrLit {
-                            raw: "\"Assertion property violation\"".to_string(),
-                        },
+                    span: sp,
+                }],
+                span: sp,
+            },
+        };
+        let pass_action_raw = sva.pass;
+        // `disable iff (expr)` reset (slice S12): a 1-bit reduction of the
+        // (sampled) condition. When present, fire conditions are gated with
+        // `!dis` and every obligation NBA is reset to 0 on the dis clock, so
+        // in-flight attempts are aborted. Absent → the body is byte-identical
+        // to the pre-S12 checker.
+        let dis = sva
+            .disable_iff
+            .as_ref()
+            // §16.13.5: an X/Z disable condition is NOT definitely-true → it does
+            // NOT disable (X-strict), so a real violation is not silently masked.
+            .map(|e| sva_match(self.rewrite_sampled(e, &mut regs), sp));
+        // Action-block sampled values (slice A2): rewrite $past/$rose/$fell/$stable
+        // inside the fail/pass action statements to the SAME shared prev-regs the
+        // property body uses. Done AFTER the antecedent/consequent/disable rewrites
+        // so those keep the lower net IDs and an action `$past(sig)` of an
+        // already-sampled signal dedups onto the existing prev-reg (regs.by_signal).
+        // A no-sampled action allocates ZERO nets → byte-identical to pre-A2.
+        let fail_stmt = self.rewrite_sampled_stmt(&fail_stmt_raw, &mut regs);
+        let pass_action =
+            pass_action_raw.map(|ps| Box::new(self.rewrite_sampled_stmt(&ps, &mut regs)));
+        let (cond_lhs, pending_nba) = match sva.kind {
+            ast::ImplicationKind::Overlap => (ante, None),
+            ast::ImplicationKind::NonOverlap => {
+                // 1-bit pending reg: NBA-sampled with the antecedent's BOOLEAN
+                // truthiness each clock (reduction-OR, so a multi-bit antecedent
+                // is not truncated to its LSB), checked against the consequent
+                // on the FOLLOWING clock.
+                let pend = self.fresh_sva_reg(1, "pend");
+                let pend_path = ast::HierPath {
+                    segments: vec![ast::Ident {
+                        name: pend.clone(),
                         span: sp,
                     }],
                     span: sp,
-                },
-            };
-            let pass_action_raw = sva.pass;
-            // `disable iff (expr)` reset (slice S12): a 1-bit reduction of the
-            // (sampled) condition. When present, fire conditions are gated with
-            // `!dis` and every obligation NBA is reset to 0 on the dis clock, so
-            // in-flight attempts are aborted. Absent → the body is byte-identical
-            // to the pre-S12 checker.
-            let dis = sva
-                .disable_iff
-                .as_ref()
-                // §16.13.5: an X/Z disable condition is NOT definitely-true → it does
-                // NOT disable (X-strict), so a real violation is not silently masked.
-                .map(|e| sva_match(self.rewrite_sampled(e, &mut regs), sp));
-            // Action-block sampled values (slice A2): rewrite $past/$rose/$fell/$stable
-            // inside the fail/pass action statements to the SAME shared prev-regs the
-            // property body uses. Done AFTER the antecedent/consequent/disable rewrites
-            // so those keep the lower net IDs and an action `$past(sig)` of an
-            // already-sampled signal dedups onto the existing prev-reg (regs.by_signal).
-            // A no-sampled action allocates ZERO nets → byte-identical to pre-A2.
-            let fail_stmt = self.rewrite_sampled_stmt(&fail_stmt_raw, &mut regs);
-            let pass_action =
-                pass_action_raw.map(|ps| Box::new(self.rewrite_sampled_stmt(&ps, &mut regs)));
-            let (cond_lhs, pending_nba) = match sva.kind {
-                ast::ImplicationKind::Overlap => (ante, None),
-                ast::ImplicationKind::NonOverlap => {
-                    // 1-bit pending reg: NBA-sampled with the antecedent's BOOLEAN
-                    // truthiness each clock (reduction-OR, so a multi-bit antecedent
-                    // is not truncated to its LSB), checked against the consequent
-                    // on the FOLLOWING clock.
-                    let pend = self.fresh_sva_reg(1, "pend");
-                    let pend_path = ast::HierPath {
-                        segments: vec![ast::Ident {
-                            name: pend.clone(),
-                            span: sp,
-                        }],
-                        span: sp,
-                    };
-                    let nba = ast::Stmt::NonBlocking {
-                        lhs: ast::Lvalue::Ident(pend_path),
-                        delay: None,
-                        event: None,
-                        rhs: sva_unary(ast::UnOp::RedOr, ante, sp),
-                        span: sp,
-                    };
-                    (sva_ident_expr(&pend, sp), Some(nba))
-                }
-            };
-            // Consequent core (slice S14): the violation and (non-vacuous)
-            // success signals. A boolean consequent is `cond_lhs && !cons` /
-            // `cond_lhs && cons` (byte-identical to before S14); a sequence
-            // consequent is an obligation chain whose due-delay regs are
-            // obligation state (reset by `disable iff` like the antecedent).
-            let mut cons_chain_nbas: Vec<ast::Stmt> = Vec::new();
-            let (violation_core, success_core) = match cons_boolean {
-                Some(cons) => {
-                    // §16.13.5: the consequent matches only when it is definitely
-                    // true (X/Z = non-match → violation). `sva_match` makes the X
-                    // case a hard 0 so `!match` fires; a definitely-nonzero value
-                    // (e.g. multi-bit `4'b0100`) still matches.
-                    let cons_match = sva_match(cons, sp);
-                    (
-                        sva_binary(
-                            ast::BinOp::LogAnd,
-                            cond_lhs.clone(),
-                            sva_unary(ast::UnOp::LogNot, cons_match.clone(), sp),
-                            sp,
-                        ),
-                        sva_binary(ast::BinOp::LogAnd, cond_lhs.clone(), cons_match, sp),
-                    )
-                }
-                None => self.build_seq_consequent(
-                    &sva.cons,
-                    &cond_lhs,
-                    &mut regs,
-                    &mut cons_chain_nbas,
-                    sp,
-                ),
-            };
-            // violation gated by `!dis`.
-            let mut violation = violation_core;
+                };
+                let nba = ast::Stmt::NonBlocking {
+                    lhs: ast::Lvalue::Ident(pend_path),
+                    delay: None,
+                    event: None,
+                    rhs: sva_unary(ast::UnOp::RedOr, ante, sp),
+                    span: sp,
+                };
+                (sva_ident_expr(&pend, sp), Some(nba))
+            }
+        };
+        // Consequent core (slice S14): the violation and (non-vacuous)
+        // success signals. A boolean consequent is `cond_lhs && !cons` /
+        // `cond_lhs && cons` (byte-identical to before S14); a sequence
+        // consequent is an obligation chain whose due-delay regs are
+        // obligation state (reset by `disable iff` like the antecedent).
+        let mut cons_chain_nbas: Vec<ast::Stmt> = Vec::new();
+        let (violation_core, success_core) = match cons_boolean {
+            Some(cons) => {
+                // §16.13.5: the consequent matches only when it is definitely
+                // true (X/Z = non-match → violation). `sva_match` makes the X
+                // case a hard 0 so `!match` fires; a definitely-nonzero value
+                // (e.g. multi-bit `4'b0100`) still matches.
+                let cons_match = sva_match(cons, sp);
+                (
+                    sva_binary(
+                        ast::BinOp::LogAnd,
+                        cond_lhs.clone(),
+                        sva_unary(ast::UnOp::LogNot, cons_match.clone(), sp),
+                        sp,
+                    ),
+                    sva_binary(ast::BinOp::LogAnd, cond_lhs.clone(), cons_match, sp),
+                )
+            }
+            None => {
+                self.build_seq_consequent(&sva.cons, &cond_lhs, &mut regs, &mut cons_chain_nbas, sp)
+            }
+        };
+        // violation gated by `!dis`.
+        let mut violation = violation_core;
+        if let Some(d) = &dis {
+            violation = sva_binary(
+                ast::BinOp::LogAnd,
+                sva_unary(ast::UnOp::LogNot, d.clone(), sp),
+                violation,
+                sp,
+            );
+        }
+        let if_fail = ast::Stmt::If {
+            cond: violation,
+            then_s: Box::new(fail_stmt),
+            else_s: None,
+            span: sp,
+        };
+        // Clocked body: check FIRST (reads the prior clock's prev/pend), then
+        // the NBA updates apply in the NBA region for the next clock.
+        let mut stmts = vec![if_fail];
+        // Pass action (if any) runs on a NON-VACUOUS success: antecedent
+        // matched AND consequent held (vacuous success — antecedent false —
+        // does not fire it; a hand-IEEE choice, documented). Also gated `!dis`.
+        if let Some(ps) = pass_action {
+            let mut success = success_core;
             if let Some(d) = &dis {
-                violation = sva_binary(
+                success = sva_binary(
                     ast::BinOp::LogAnd,
                     sva_unary(ast::UnOp::LogNot, d.clone(), sp),
-                    violation,
+                    success,
                     sp,
                 );
             }
-            let if_fail = ast::Stmt::If {
-                cond: violation,
-                then_s: Box::new(fail_stmt),
+            stmts.push(ast::Stmt::If {
+                cond: success,
+                then_s: ps,
                 else_s: None,
                 span: sp,
-            };
-            // Clocked body: check FIRST (reads the prior clock's prev/pend), then
-            // the NBA updates apply in the NBA region for the next clock.
-            let mut stmts = vec![if_fail];
-            // Pass action (if any) runs on a NON-VACUOUS success: antecedent
-            // matched AND consequent held (vacuous success — antecedent false —
-            // does not fire it; a hand-IEEE choice, documented). Also gated `!dis`.
-            if let Some(ps) = pass_action {
-                let mut success = success_core;
-                if let Some(d) = &dis {
-                    success = sva_binary(
-                        ast::BinOp::LogAnd,
-                        sva_unary(ast::UnOp::LogNot, d.clone(), sp),
-                        success,
-                        sp,
-                    );
-                }
-                stmts.push(ast::Stmt::If {
-                    cond: success,
-                    then_s: ps,
-                    else_s: None,
-                    span: sp,
-                });
-            }
-            // `disable iff` reset: clear in-flight obligation state (antecedent
-            // pipeline + consequent chain + |=> pend NBAs) when dis is true. The
-            // prev-sampling NBAs (regs.nbas) keep sampling — only the attempt
-            // obligations are aborted.
-            let (pipeline_nbas, cons_chain_nbas, pending_nba) = if let Some(d) = &dis {
-                (
-                    pipeline_nbas
-                        .into_iter()
-                        .map(|s| gate_nba_with_disable(s, d, sp))
-                        .collect::<Vec<_>>(),
-                    cons_chain_nbas
-                        .into_iter()
-                        .map(|s| gate_nba_with_disable(s, d, sp))
-                        .collect::<Vec<_>>(),
-                    pending_nba.map(|s| gate_nba_with_disable(s, d, sp)),
-                )
-            } else {
-                (pipeline_nbas, cons_chain_nbas, pending_nba)
-            };
-            stmts.extend(regs.nbas);
-            stmts.extend(pipeline_nbas);
-            stmts.extend(cons_chain_nbas);
-            if let Some(nba) = pending_nba {
-                stmts.push(nba);
-            }
-            let body = if stmts.len() == 1 {
-                stmts.pop().unwrap()
-            } else {
-                ast::Stmt::Block {
-                    label: None,
-                    decls: Vec::new(),
-                    stmts,
-                    span: sp,
-                }
-            };
-            let pb = ast::ProceduralBlock {
-                kind: ast::ProcKind::Always,
-                sensitivity: Some(sva.clock),
-                body: Box::new(body),
-                span: sp,
-            };
-            let proc = self.lower_synth_proc(&pb, "sva");
-            self.push_process(proc);
+            });
         }
-        self.in_assert_synth = saved_synth;
+        // `disable iff` reset: clear in-flight obligation state (antecedent
+        // pipeline + consequent chain + |=> pend NBAs) when dis is true. The
+        // prev-sampling NBAs (regs.nbas) keep sampling — only the attempt
+        // obligations are aborted.
+        let (pipeline_nbas, cons_chain_nbas, pending_nba) = if let Some(d) = &dis {
+            (
+                pipeline_nbas
+                    .into_iter()
+                    .map(|s| gate_nba_with_disable(s, d, sp))
+                    .collect::<Vec<_>>(),
+                cons_chain_nbas
+                    .into_iter()
+                    .map(|s| gate_nba_with_disable(s, d, sp))
+                    .collect::<Vec<_>>(),
+                pending_nba.map(|s| gate_nba_with_disable(s, d, sp)),
+            )
+        } else {
+            (pipeline_nbas, cons_chain_nbas, pending_nba)
+        };
+        stmts.extend(regs.nbas);
+        stmts.extend(pipeline_nbas);
+        stmts.extend(cons_chain_nbas);
+        if let Some(nba) = pending_nba {
+            stmts.push(nba);
+        }
+        let body = if stmts.len() == 1 {
+            stmts.pop().unwrap()
+        } else {
+            ast::Stmt::Block {
+                label: None,
+                decls: Vec::new(),
+                stmts,
+                span: sp,
+            }
+        };
+        let pb = ast::ProceduralBlock {
+            kind: ast::ProcKind::Always,
+            sensitivity: Some(sva.clock),
+            body: Box::new(body),
+            span: sp,
+        };
+        let proc = self.lower_synth_proc(&pb, "sva");
+        self.push_process(proc);
     }
 
     /// A fresh DATA-tracking register (slice N2c) of the given width/sign, X-init

@@ -228,112 +228,120 @@ impl Elaborator<'_> {
     pub(crate) fn materialize_cover(&mut self) {
         let pending = std::mem::take(&mut self.pending_cover);
         for cov in pending {
-            let sp = cov.span;
-            let single_clock = matches!(&cov.clock, ast::Sensitivity::List(evs) if evs.len() == 1);
-            if !single_clock {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    "a cover property must have a single clocking event \
-                     (multi-clock cover is unsupported in this subset)",
-                );
-                continue;
+            let saved_prefix = std::mem::replace(&mut self.cur_prefix, cov.scope.clone());
+            self.materialize_one_cover(cov);
+            self.cur_prefix = saved_prefix;
+        }
+    }
+
+    /// One pending cover → its counter process (the body of `materialize_cover`'s
+    /// loop; an early `return` is a skipped cover whose diagnostic was emitted).
+    fn materialize_one_cover(&mut self, cov: PendingCover) {
+        let sp = cov.span;
+        let single_clock = matches!(&cov.clock, ast::Sensitivity::List(evs) if evs.len() == 1);
+        if !single_clock {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a cover property must have a single clocking event \
+                 (multi-clock cover is unsupported in this subset)",
+            );
+            return;
+        }
+        // Reject a re-clocked / multi-clock sequence (handoff machinery is for
+        // assertions only) — keep cover to a single-clock match.
+        if seq_has_clocked(&cov.seq) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a re-clocked (`@(c2)`) sequence inside `cover property` is \
+                 unsupported in this subset",
+            );
+            return;
+        }
+        let mut regs = SvaRegs::default();
+        let mut pipeline_nbas: Vec<ast::Stmt> = Vec::new();
+        let matched = self.synth_seq_match(&cov.seq, &mut regs, &mut pipeline_nbas, sp);
+        let dis = cov
+            .disable_iff
+            .as_ref()
+            // §16.13.5: an X/Z disable condition is NOT definitely-true → it does
+            // NOT disable (X-strict), so a real violation is not silently masked.
+            .map(|e| sva_match(self.rewrite_sampled(e, &mut regs), sp));
+        // hit condition (1-bit), gated by `!dis`.
+        let mut hit = sva_unary(ast::UnOp::RedOr, matched, sp);
+        if let Some(d) = &dis {
+            hit = sva_binary(
+                ast::BinOp::LogAnd,
+                sva_unary(ast::UnOp::LogNot, d.clone(), sp),
+                hit,
+                sp,
+            );
+        }
+        // 32-bit 0-init hit counter (`fresh_cover_counter`).
+        let cnt = self.fresh_cover_counter(32);
+        let cnt_e = sva_ident_expr(&cnt, sp);
+        // `if (hit) cnt <= cnt + 1;`
+        let incr = ast::Stmt::If {
+            cond: hit,
+            then_s: Box::new(sva_nba_1bit(
+                &cnt,
+                sva_binary(ast::BinOp::Add, cnt_e.clone(), sva_one(sp), sp),
+                sp,
+            )),
+            else_s: None,
+            span: sp,
+        };
+        let mut stmts = vec![incr];
+        stmts.extend(regs.nbas);
+        // `disable iff`: clear the antecedent pipeline obligations on the dis clock.
+        if let Some(d) = &dis {
+            for s in pipeline_nbas {
+                stmts.push(gate_nba_with_disable(s, d, sp));
             }
-            // Reject a re-clocked / multi-clock sequence (handoff machinery is for
-            // assertions only) — keep cover to a single-clock match.
-            if seq_has_clocked(&cov.seq) {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    "a re-clocked (`@(c2)`) sequence inside `cover property` is \
-                     unsupported in this subset",
-                );
-                continue;
-            }
-            let mut regs = SvaRegs::default();
-            let mut pipeline_nbas: Vec<ast::Stmt> = Vec::new();
-            let matched = self.synth_seq_match(&cov.seq, &mut regs, &mut pipeline_nbas, sp);
-            let dis = cov
-                .disable_iff
-                .as_ref()
-                // §16.13.5: an X/Z disable condition is NOT definitely-true → it does
-                // NOT disable (X-strict), so a real violation is not silently masked.
-                .map(|e| sva_match(self.rewrite_sampled(e, &mut regs), sp));
-            // hit condition (1-bit), gated by `!dis`.
-            let mut hit = sva_unary(ast::UnOp::RedOr, matched, sp);
-            if let Some(d) = &dis {
-                hit = sva_binary(
-                    ast::BinOp::LogAnd,
-                    sva_unary(ast::UnOp::LogNot, d.clone(), sp),
-                    hit,
-                    sp,
-                );
-            }
-            // 32-bit 0-init hit counter (`fresh_cover_counter`).
-            let cnt = self.fresh_cover_counter(32);
-            let cnt_e = sva_ident_expr(&cnt, sp);
-            // `if (hit) cnt <= cnt + 1;`
-            let incr = ast::Stmt::If {
-                cond: hit,
-                then_s: Box::new(sva_nba_1bit(
-                    &cnt,
-                    sva_binary(ast::BinOp::Add, cnt_e.clone(), sva_one(sp), sp),
-                    sp,
-                )),
-                else_s: None,
+        } else {
+            stmts.extend(pipeline_nbas);
+        }
+        let body = if stmts.len() == 1 {
+            stmts.pop().unwrap()
+        } else {
+            ast::Stmt::Block {
+                label: None,
+                decls: Vec::new(),
+                stmts,
                 span: sp,
-            };
-            let mut stmts = vec![incr];
-            stmts.extend(regs.nbas);
-            // `disable iff`: clear the antecedent pipeline obligations on the dis clock.
-            if let Some(d) = &dis {
-                for s in pipeline_nbas {
-                    stmts.push(gate_nba_with_disable(s, d, sp));
-                }
-            } else {
-                stmts.extend(pipeline_nbas);
             }
-            let body = if stmts.len() == 1 {
-                stmts.pop().unwrap()
-            } else {
-                ast::Stmt::Block {
-                    label: None,
-                    decls: Vec::new(),
-                    stmts,
-                    span: sp,
-                }
-            };
-            let pb = ast::ProceduralBlock {
-                kind: ast::ProcKind::Always,
-                sensitivity: Some(cov.clock.clone()),
-                body: Box::new(body),
+        };
+        let pb = ast::ProceduralBlock {
+            kind: ast::ProcKind::Always,
+            sensitivity: Some(cov.clock.clone()),
+            body: Box::new(body),
+            span: sp,
+        };
+        let proc = self.lower_synth_proc(&pb, "covergroup");
+        self.push_process(proc);
+        // End-of-sim coverage report: `final $display("Cover ...: %0d hits", cnt);`.
+        let report = ast::Stmt::SysTaskCall {
+            name: ast::Ident {
+                name: "$display".to_string(),
                 span: sp,
-            };
-            let proc = self.lower_synth_proc(&pb, "covergroup");
-            self.push_process(proc);
-            // End-of-sim coverage report: `final $display("Cover ...: %0d hits", cnt);`.
-            let report = ast::Stmt::SysTaskCall {
-                name: ast::Ident {
-                    name: "$display".to_string(),
+            },
+            args: vec![
+                ast::Expr {
+                    kind: ast::ExprKind::StrLit {
+                        raw: "\"Cover property hits: %0d\"".to_string(),
+                    },
                     span: sp,
                 },
-                args: vec![
-                    ast::Expr {
-                        kind: ast::ExprKind::StrLit {
-                            raw: "\"Cover property hits: %0d\"".to_string(),
-                        },
-                        span: sp,
-                    },
-                    cnt_e,
-                ],
-                span: sp,
-            };
-            let fpb = ast::ProceduralBlock {
-                kind: ast::ProcKind::Final,
-                sensitivity: None,
-                body: Box::new(report),
-                span: sp,
-            };
-            let fproc = self.lower_synth_proc(&fpb, "covergroup");
-            self.push_process(fproc);
-        }
+                cnt_e,
+            ],
+            span: sp,
+        };
+        let fpb = ast::ProceduralBlock {
+            kind: ast::ProcKind::Final,
+            sensitivity: None,
+            body: Box::new(report),
+            span: sp,
+        };
+        let fproc = self.lower_synth_proc(&fpb, "covergroup");
+        self.push_process(fproc);
     }
 }

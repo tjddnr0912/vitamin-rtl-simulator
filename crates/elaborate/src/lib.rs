@@ -1084,6 +1084,14 @@ struct Elaborator<'s> {
     // `display_prefix`. Keyed positively — an INSTANCE-array element `w[0]` is also a
     // `[0]` segment and must keep its index (both oracles `top.w[0]`).
     gen_singleton_labels: std::collections::BTreeSet<String>,
+    /// IEEE 1800 §27.6: the number of the NEXT generate construct (`if` / `case` /
+    /// `for`) in the scope being walked — every construct in a scope is numbered
+    /// from 1 in source order, named or not, and an UNNAMED block is `genblk<N>`.
+    /// Reset to 0 at each module-scope phase walk and saved around a nested scope
+    /// (a generate block body restarts at 1) and around a child instance's
+    /// lowering. Each phase re-walks the same items in the same order, so every
+    /// phase mints the same names.
+    gen_ctr: u32,
     /// A2b-prereq (adversarial sound S2): fq keys of DECLARED genvar names.
     /// A genvar binds into `params` only transiently (during loop unroll), so
     /// the constant-shadow guard needs this persistent record — otherwise a

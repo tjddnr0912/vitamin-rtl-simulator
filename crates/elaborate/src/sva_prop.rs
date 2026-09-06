@@ -37,6 +37,12 @@ pub(crate) struct PendingSva {
     /// the assertion to `synth_local_var_assert` (the data-tracking shift register).
     pub(crate) local_vars: Vec<ast::SvaLocalDecl>,
     pub(crate) span: ast::Span,
+    /// The generate/instance scope prefix (`cur_prefix`) the assertion was
+    /// collected under — a concurrent assertion inside a generate block resolves
+    /// its names in THAT scope (§4.5.432 review B: an unnamed block's own net was
+    /// resolved at module scope, which the old flattening had made work by
+    /// accident; a named block's was loud already).
+    pub(crate) scope: String,
 }
 
 /// Collected sampled-value state for one concurrent assertion: each distinct

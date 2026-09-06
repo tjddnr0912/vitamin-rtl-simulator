@@ -202,6 +202,7 @@ impl Elaborator<'_> {
                 span: for_span,
             } => {
                 let gv_key = self.fq(&init.lvalue.name);
+                let gen_no = self.next_gen_construct();
 
                 // INIT value, const-eval'd in the current scope.
                 let Some(start) = self.const_eval_in_scope(&init.value) else {
@@ -257,7 +258,10 @@ impl Elaborator<'_> {
                     // The genvar VALUE (not a 0-based counter) indexes the block
                     // name, so `for(i=2;i<5;…)` yields `[2],[3],[4]` per Verilog.
                     let iter_val = *self.params.get(&gv_key).unwrap_or(&0);
-                    let lbl = label.as_ref().map(|l| l.name.as_str()).unwrap_or("genblk");
+                    // §27.6: an unnamed loop is `genblk<N>[i]` (both oracles), N the
+                    // construct's number in this scope.
+                    let unnamed = format!("genblk{gen_no}");
+                    let lbl = label.as_ref().map(|l| l.name.as_str()).unwrap_or(&unnamed);
                     let block_prefix = format!("{lbl}[{iter_val}]");
                     // §27.4: these blocks are an ARRAY — record the label so a bare
                     // (unindexed) hierarchical reference to it stays loud even when
@@ -265,9 +269,13 @@ impl Elaborator<'_> {
                     let loop_label_key = self.fq(lbl);
                     self.gen_loop_labels.insert(loop_label_key);
 
+                    // Each iteration's block is a scope of its own: §27.6 numbering
+                    // inside it restarts at 1 (`top.L[1].genblk1`, both oracles).
+                    let saved_gen_ctr = std::mem::replace(&mut self.gen_ctr, 0);
                     self.with_scope(&block_prefix, |me| {
                         me.elaborate_generate_scoped(body, phase, depth + 1, map, true);
                     });
+                    self.gen_ctr = saved_gen_ctr;
 
                     // step: fold (with genvar bound) → rebind the genvar.
                     let Some(next) = self.const_eval_in_scope(&step.value) else {
@@ -325,28 +333,21 @@ impl Elaborator<'_> {
                 then_b,
                 else_b,
                 label,
-                ..
+                span,
             } => {
-                let taken = match self.const_truth_in_scope(cond) {
-                    Some(c) => c,
-                    None => {
-                        if phase == GenPhase::Nets {
-                            let msg = self.unfoldable_note("generate-if condition", cond);
-                            self.error_at(MsgCode::ElabUnresolvedName, cond.span, &msg);
-                        }
-                        return;
-                    }
-                };
-                let body = if taken { then_b } else { else_b };
-                // An `if` BODY is a scope even unlabeled — measured: its content
-                // initializes before the enclosing module's own variables.
-                self.elaborate_gen_scoped(label, body, phase, depth, map, true);
+                let gen_no = self.next_gen_construct();
+                self.elaborate_gen_if(
+                    cond, then_b, else_b, label, *span, gen_no, phase, depth, map,
+                );
             }
 
             // ── generate-case: const-eval scrutinee, match ONE item ──
             ast::GenItem::Case {
-                scrutinee, items, ..
+                scrutinee,
+                items,
+                span,
             } => {
+                let gen_no = self.next_gen_construct();
                 let Some(scrut) = self.const_eval_in_scope(scrutinee) else {
                     if phase == GenPhase::Nets {
                         let msg = self.unfoldable_note("generate-case scrutinee", scrutinee);
@@ -373,7 +374,11 @@ impl Elaborator<'_> {
                     }
                 }
                 if let Some(body) = chosen.or(default) {
-                    self.elaborate_generate_scoped(body, phase, depth + 1, map, true);
+                    // The arm's block: its own label (kept as a `Block` by
+                    // `gen_case_body`) or `genblk<N>` (§27.6) — an un-blocked arm is an
+                    // implicit block too (both oracles `top.genblk3`).
+                    let (lbl, body) = Self::branch_label(body, *span, gen_no);
+                    self.elaborate_gen_scoped(&lbl, body, phase, depth, map, true);
                 }
             }
 
@@ -420,14 +425,113 @@ impl Elaborator<'_> {
                 let seg = format!("{}[0]", l.name);
                 let key = self.fq(&l.name);
                 self.gen_singleton_labels.insert(key);
+                // A generate block is a scope of its own for §27.6 numbering too:
+                // its constructs count from 1.
+                let saved_gen_ctr = std::mem::replace(&mut self.gen_ctr, 0);
                 self.with_scope(&seg, |me| {
                     me.elaborate_generate_scoped(items, phase, depth + 1, map, true);
                 });
+                self.gen_ctr = saved_gen_ctr;
             }
             None => {
                 self.elaborate_generate_scoped(items, phase, depth + 1, map, unlabeled_is_scope)
             }
         }
+    }
+
+    /// IEEE 1800 §27.6: the number of the generate construct about to be walked in
+    /// the current scope (1 for the first, +1 per construct, named or unnamed).
+    fn next_gen_construct(&mut self) -> u32 {
+        self.gen_ctr += 1;
+        self.gen_ctr
+    }
+
+    /// The scope label of a generate branch / case-arm BODY: the body's own
+    /// `begin : label … end` when the parser kept it as a single `Block`, else
+    /// the implicit `genblk<N>` name (§27.6) for an unlabeled block or an
+    /// un-blocked item. Returns the label and the items the scope holds.
+    fn branch_label(
+        body: &[ast::GenItem],
+        span: ast::Span,
+        gen_no: u32,
+    ) -> (Option<ast::Ident>, &[ast::GenItem]) {
+        let implicit = |sp: ast::Span| ast::Ident {
+            name: format!("genblk{gen_no}"),
+            span: sp,
+        };
+        match body {
+            [ast::GenItem::Block {
+                label,
+                items,
+                span: bsp,
+            }] => (
+                Some(label.clone().unwrap_or_else(|| implicit(*bsp))),
+                items.as_slice(),
+            ),
+            _ => (Some(implicit(span)), body),
+        }
+    }
+
+    /// One `generate if`, numbered `gen_no` in its scope: const-eval the condition
+    /// and elaborate ONE branch under that branch's OWN scope name — the then
+    /// block's hoisted label, the else block's kept label, or `genblk<N>`. An
+    /// `else if` is the SAME construct (both oracles number the taken block of a
+    /// chain with the first `if`'s number: `if (0) … else if (1) begin … end` is
+    /// `top.genblk2` when it is the second construct), so the chain recurses with
+    /// `gen_no` and no scope of its own.
+    #[allow(clippy::too_many_arguments)]
+    fn elaborate_gen_if(
+        &mut self,
+        cond: &ast::Expr,
+        then_b: &[ast::GenItem],
+        else_b: &[ast::GenItem],
+        label: &Option<ast::Ident>,
+        span: ast::Span,
+        gen_no: u32,
+        phase: GenPhase,
+        depth: u32,
+        map: &ModuleMap<'_>,
+    ) {
+        let taken = match self.const_truth_in_scope(cond) {
+            Some(c) => c,
+            None => {
+                if phase == GenPhase::Nets {
+                    let msg = self.unfoldable_note("generate-if condition", cond);
+                    self.error_at(MsgCode::ElabUnresolvedName, cond.span, &msg);
+                }
+                return;
+            }
+        };
+        if taken {
+            let lbl = label.clone().or_else(|| {
+                Some(ast::Ident {
+                    name: format!("genblk{gen_no}"),
+                    span,
+                })
+            });
+            // An `if` BODY is a scope even unlabeled — measured: its content
+            // initializes before the enclosing module's own variables.
+            self.elaborate_gen_scoped(&lbl, then_b, phase, depth, map, true);
+            return;
+        }
+        if else_b.is_empty() {
+            return;
+        }
+        if let [ast::GenItem::If {
+            cond,
+            then_b,
+            else_b,
+            label,
+            span,
+        }] = else_b
+        {
+            self.elaborate_gen_if(
+                cond, then_b, else_b, label, *span, gen_no, phase, depth, map,
+            );
+            return;
+        }
+        let (lbl, body) = Self::branch_label(else_b, span, gen_no);
+        self.elaborate_gen_scoped(&lbl, body, phase, depth, map, true);
     }
 
     /// Lower ONE plain `ModuleItem` found inside a generate, honoring the current

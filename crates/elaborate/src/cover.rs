@@ -83,6 +83,8 @@ pub(crate) struct PendingCover {
     pub(crate) disable_iff: Option<ast::Expr>,
     pub(crate) seq: ast::Sequence,
     pub(crate) span: ast::Span,
+    /// The scope prefix the cover was collected under (see `PendingSva::scope`).
+    pub(crate) scope: String,
 }
 
 impl Elaborator<'_> {

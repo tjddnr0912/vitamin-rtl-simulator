@@ -912,6 +912,7 @@ impl Elaborator<'_> {
         // decided by the phase order. ONE funnel, one pass, order-free.
         self.declare_implicit_nets(&module.body);
         self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
+        self.gen_ctr = 0;
         for item in &module.body {
             if let ast::ModuleItem::Generate(g) = item {
                 self.elaborate_generate_scoped(&g.items, GenPhase::Nets, 0, map, false);
@@ -1031,6 +1032,7 @@ impl Elaborator<'_> {
         // so generate scopes still precede the module's own variables whatever their
         // source position.
         self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
+        self.gen_ctr = 0;
         for item in &module.body {
             match item {
                 ast::ModuleItem::Generate(g) => {
@@ -1062,6 +1064,7 @@ impl Elaborator<'_> {
         // IEEE §9.2.2.2 double-driver warning — a pure AST pass, run once here so it
         // sees the whole body before any lowering reorders it.
         self.warn_always_comb_initializers(&module.body);
+        self.gen_ctr = 0;
         for item in &module.body {
             match item {
                 ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),
@@ -1176,6 +1179,7 @@ impl Elaborator<'_> {
         // generate's own flush was ranked during VarInit. Only this slot is reset: the
         // instance slot is visited by ONE walk and must keep counting across it.
         self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
+        self.gen_ctr = 0;
         for item in &module.body {
             match item {
                 ast::ModuleItem::Instance(mi) => {
@@ -1250,6 +1254,19 @@ impl Elaborator<'_> {
     /// and recurse into each child. Connection exprs are resolved later, in the
     /// PARENT scope (still active here), inside the child's `wire_ports`.
     pub(crate) fn elaborate_child_instances(
+        &mut self,
+        mi: &ast::ModuleInstance,
+        parent_inst: u32,
+        map: &ModuleMap<'_>,
+    ) {
+        // The child's own phase walks reset the generate-construct counter; the
+        // parent's Instances walk continues numbering after the call.
+        let saved_gen_ctr = self.gen_ctr;
+        self.elaborate_child_instances_inner(mi, parent_inst, map);
+        self.gen_ctr = saved_gen_ctr;
+    }
+
+    fn elaborate_child_instances_inner(
         &mut self,
         mi: &ast::ModuleInstance,
         parent_inst: u32,
