@@ -62,6 +62,14 @@
 - **같은 hazard 의 두 철자가 갈리면 그것이 신호다** — 직접은 거부, 간접은 통과 = 워커가 한 겹 아래를 못 본다.
 - **부분 지원이 silent-wrong 을 맞바꾸기만 하면 기능을 빼라** — 정답은 더 나은 절반이 아니라 honest-loud + defer. 단 **빼기 전에 소비자×값 매트릭스를 세라**(빼는 것도 편집이고 회귀를 만든다).
 
+### Census mechanics moved out of LOOPROMPT §4 (2026-09-06)
+
+- A typedef census must include the `signed` spelling of every cell; an unsigned-only table certifies the sign axis by omission.
+- One instance per census cell. A two-instance cell prints in display order and reads as NEW-SILENT when it is the second instance's pre-existing value.
+- An ordering defect is fixed by "before its first consumer" (compare spans; split the pass), never by "earlier": moving a binder ahead of everything re-orders every other consumer.
+- A verilator census is the bottleneck (about 1,500 cells per 30 minutes). Run it on a width subset only, keep one `--prefix` per executable, and hand-IEEE the cells whose oracle is untrusted (property `and`), saying so in the briefing.
+- The shadow set of a name is every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations. A census over declarations alone misses four of the five.
+
 ### 리뷰 오리엔테이션 — 비용을 줄이는 것은 검증이 아니다 (LOOPROMPT §4 에서 이관 · 2026-08-22)
 
 - **측정 결과를 파일로 넘겨라** — 스윕 표(셀 × iverilog/PRE/POST × 분류)를 주고 *"이 표 밖을 쳐라"* 로 시작시킨다. 안 주면 리뷰어가 그 표를 처음부터 다시 만든다.
