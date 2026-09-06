@@ -773,6 +773,10 @@ impl Parser<'_, '_> {
             ParamItem::Scalar(p) => {
                 let non_overridable =
                     p.kind == ParamKind::Localparam || self.in_package || self.has_param_header;
+                if !non_overridable {
+                    // §3 ⑤ ⓒ: a body `parameter` of a header-less module.
+                    self.overridable_params.insert(p.name.name.clone());
+                }
                 if non_overridable {
                     let based = self.based_lit_param_value(&p);
                     let (w, signed) = self.param_const_shape(&p, based);
@@ -804,6 +808,12 @@ impl Parser<'_, '_> {
                     if let Some(v) = fitted {
                         self.const_locals
                             .insert(p.name.name.clone(), ConstVal { v, w, signed });
+                    } else if self.names_an_overridable(&p.value) == Some(true) {
+                        // §3 ⑤ ⓒ: a localparam DERIVED from an overridable parameter
+                        // (`localparam int X = W * 2;`) has a per-instance value too —
+                        // it joins the set the symbolic struct layout is keyed on. A
+                        // localparam the table declined for any other reason does not.
+                        self.overridable_params.insert(p.name.name.clone());
                     }
                 }
                 ModuleItem::Param(p)

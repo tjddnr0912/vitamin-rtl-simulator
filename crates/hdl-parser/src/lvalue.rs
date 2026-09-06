@@ -419,6 +419,10 @@ impl Parser<'_, '_> {
                     span,
                 }
             }
+        } else if let Some(lv) = self.sym_struct_member_lval(&path) {
+            // §3 ⑤ ⓒ: a member write on a symbolic-layout struct (a cold helper —
+            // see `sym_struct_member_expr`).
+            lv
         } else {
             Lvalue::Ident(path)
         };

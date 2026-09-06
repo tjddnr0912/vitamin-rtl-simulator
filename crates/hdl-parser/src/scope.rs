@@ -17,6 +17,7 @@ impl Parser<'_, '_> {
         ScopeSnapshot {
             typedefs: self.typedefs.clone(),
             struct_layouts: self.struct_layouts.clone(),
+            sym_struct_layouts: self.sym_struct_layouts.clone(),
             unpacked_struct_layouts: self.unpacked_struct_layouts.clone(),
             enum_defs: self.enum_defs.clone(),
             union_type_names: self.union_type_names.clone(),
@@ -76,9 +77,23 @@ impl Parser<'_, '_> {
         d
     }
 
+    /// `snapshot_scope` boxed in THIS frame, and `restore_scope` fed from the box
+    /// in THIS frame — so the by-value `ScopeSnapshot` temporaries never land in a
+    /// caller that recurses per nesting level. `block_body` sits on the
+    /// `begin … begin` chain; every map added to the snapshot widened its frame
+    /// (the parser's `depth_guard` test measures that edge — §4.5.431 tripped it).
+    pub(crate) fn snapshot_scope_boxed(&self) -> Box<ScopeSnapshot> {
+        Box::new(self.snapshot_scope())
+    }
+
+    pub(crate) fn restore_scope_boxed(&mut self, s: Box<ScopeSnapshot>) {
+        self.restore_scope(*s);
+    }
+
     pub(crate) fn restore_scope(&mut self, s: ScopeSnapshot) {
         self.typedefs = s.typedefs;
         self.struct_layouts = s.struct_layouts;
+        self.sym_struct_layouts = s.sym_struct_layouts;
         self.unpacked_struct_layouts = s.unpacked_struct_layouts;
         self.enum_defs = s.enum_defs;
         self.union_type_names = s.union_type_names;
@@ -123,6 +138,8 @@ impl Parser<'_, '_> {
             .collect();
         self.struct_layouts = s.struct_layouts;
         self.struct_layouts.extend(new_sl);
+        // A symbolic layout is module-local and has no `pkg::` twin.
+        self.sym_struct_layouts = s.sym_struct_layouts;
         // Round-9: unpacked-struct layouts scope exactly like `struct_layouts` —
         // keep the `pkg::T` twins this unit added, drop its bare names.
         let new_usl: Vec<(String, Vec<StructMember>)> = self

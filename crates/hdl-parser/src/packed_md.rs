@@ -36,7 +36,7 @@ enum Sel {
 
 impl Parser<'_, '_> {
     /// A non-negative literal or `None`.
-    fn lit_u32(e: &Expr) -> Option<u32> {
+    pub(crate) fn lit_u32(e: &Expr) -> Option<u32> {
         Self::const_lit(e).and_then(|v| u32::try_from(v).ok())
     }
 
@@ -57,7 +57,7 @@ impl Parser<'_, '_> {
 
     /// `a - b`, folded when both are literals (and the result is non-negative);
     /// `a - 0` is `a`.
-    fn sub(a: Expr, b: Expr, span: Span) -> Expr {
+    pub(crate) fn sub(a: Expr, b: Expr, span: Span) -> Expr {
         match (Self::lit_u32(&a), Self::lit_u32(&b)) {
             (Some(x), Some(y)) if x >= y => Self::lit(x - y, span),
             (_, Some(0)) => a,
@@ -66,7 +66,7 @@ impl Parser<'_, '_> {
     }
 
     /// `a + b`, folded when both are literals; `0 + b` is `b`, `a + 0` is `a`.
-    fn add(a: Expr, b: Expr, span: Span) -> Expr {
+    pub(crate) fn add(a: Expr, b: Expr, span: Span) -> Expr {
         match (Self::lit_u32(&a), Self::lit_u32(&b)) {
             (Some(x), Some(y)) => match x.checked_add(y) {
                 Some(s) => Self::lit(s, span),

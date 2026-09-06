@@ -314,8 +314,10 @@ module tb; c #(.X(2)) u(); initial #5 $finish; endmodule
 "#,
         "14 6 3f01 1",
     );
-    // pw_bodyparam_nohdr: both oracles
-    loud(
+    // pw_bodyparam_nohdr: both oracles (§4.5.431: a body `parameter` of a header-less
+    // module is overridable, so the member is laid out per instance — was a loud
+    // decline)
+    digest(
         "pw_bodyparam_nohdr",
         r#"module tb;
   parameter int W = 6;
@@ -329,7 +331,7 @@ module tb; c #(.X(2)) u(); initial #5 $finish; endmodule
   initial #5 $finish;
 endmodule
 "#,
-        "expected struct member width must be a named integer type or a constan",
+        "14 6 3f01 1",
     );
     // pw_enum_label: both oracles
     digest(
@@ -400,8 +402,8 @@ module tb; c u(); initial #5 $finish; endmodule
 "#,
         "14 6 3f01 1",
     );
-    // pw_hdrparam: both oracles
-    loud(
+    // pw_hdrparam: both oracles (§4.5.431: laid out per instance — was a loud decline)
+    digest(
         "pw_hdrparam",
         r#"module c #(parameter int W = 6) ();
   typedef struct packed { logic [W-1:0] a; logic [W:0] b; logic c; } s_t;
@@ -413,7 +415,7 @@ module tb; c u(); initial #5 $finish; endmodule
 endmodule
 module tb; c #(.W(3)) u(); initial #5 $finish; endmodule
 "#,
-        "expected struct member width must be a named integer type or a constan",
+        "8 3 e1 1",
     );
     // pw_local_over_wild: both oracles
     digest(

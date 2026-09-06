@@ -277,6 +277,36 @@ type StructFieldLayout = (String, u32, u32, bool, bool, bool, i64, u32, Option<S
 /// A resolved member's geometry `(lsb_offset, width, ascending, signed, dbase,
 /// elem_stride)` — `StructLayout::field`'s answer.
 type FieldGeom = (u32, u32, bool, bool, i64, u32);
+/// §3 ⑤ ⓒ: a packed-struct member's geometry when the layout is SYMBOLIC —
+/// `(lsb_offset, width, signed)` as constant EXPRESSIONS (`SymStructLayout`),
+/// folded by elaborate per instance.
+type SymGeom = (Expr, Expr, bool);
+/// §3 ⑤ ⓒ (§4.5.431): a packed struct with at least one member whose width names
+/// an OVERRIDABLE parameter — `logic [MemDataWidth-1:0] instr_rdata;` in
+/// ibex_lockstep, `MemDataWidth` a header parameter. Both oracles lay the struct
+/// out PER INSTANCE, so the parse-time table cannot fold it; the layout is kept
+/// as expressions instead — each member's width `msb + 1` (the range must be
+/// `[E:0]`), each offset the sum of the widths above it (MSB-first), the total
+/// the sum of all — and every emitted part-select / declared range carries them
+/// for elaborate to fold with the instance's parameter values. Such a struct is
+/// NOT in `struct_layouts`: every consumer keyed there (the `'{…}` pattern, a
+/// union, `$bits(T)`, a nested-member chain, a member sub-select) stays loud
+/// exactly as before, and only the consumers that take a `SymGeom` see it.
+#[derive(Clone, PartialEq)]
+struct SymStructLayout {
+    /// `(name, lsb_offset, width, signed)`, declaration order.
+    fields: Vec<(String, Expr, Expr, bool)>,
+    /// The struct's packed width.
+    total: Expr,
+}
+impl SymStructLayout {
+    fn field(&self, name: &str) -> Option<SymGeom> {
+        self.fields
+            .iter()
+            .find(|(n, ..)| n == name)
+            .map(|(_, o, w, s)| (o.clone(), w.clone(), *s))
+    }
+}
 /// A parsed struct/union member TYPE `(kind, signed, range, packed_dims, nested)`
 /// (`parse_struct_member_type`).
 type MemberType = (NetVarKind, bool, Option<Range>, Vec<Range>, Option<String>);
@@ -337,6 +367,7 @@ struct ScopeSnapshot {
     // TYPE-name-keyed (a body-local typedef definition).
     typedefs: std::collections::HashMap<String, TypeInfo>,
     struct_layouts: std::collections::HashMap<String, StructLayout>,
+    sym_struct_layouts: std::collections::HashMap<String, SymStructLayout>,
     unpacked_struct_layouts: std::collections::HashMap<String, Vec<StructMember>>,
     enum_defs: std::collections::HashMap<String, Vec<(String, i64)>>,
     union_type_names: std::collections::HashSet<String>,
@@ -470,6 +501,20 @@ pub struct Parser<'t, 's> {
     typedefs: std::collections::HashMap<String, TypeInfo>,
     /// Packed-struct type name → flat bit layout (for `s.field` desugaring).
     struct_layouts: std::collections::HashMap<String, StructLayout>,
+    /// §3 ⑤ ⓒ: packed structs whose layout is symbolic (a member width names an
+    /// overridable parameter) — disjoint from `struct_layouts`, module-local (a
+    /// package parameter is a localparam and folds).
+    sym_struct_layouts: std::collections::HashMap<String, SymStructLayout>,
+    /// §3 ⑤ ⓒ: the OVERRIDABLE parameters of the current module-like — the ANSI
+    /// header's `parameter`s and, in a module with no header, its body
+    /// `parameter`s (IEEE §6.20.1; everything else the table can hold is a
+    /// localparam). The symbolic struct layout is keyed POSITIVELY on this set: a
+    /// member width the table could not fold is laid out per instance only when
+    /// it names one of these — a `localparam` the table DECLINED (an `x` bit, a
+    /// truncating initializer, a based literal narrower than its type) keeps its
+    /// loud refusal, because the decline is what stops a wrong elaborate-side
+    /// value (25 census pins). Module-scoped; cleared per module.
+    overridable_params: std::collections::HashSet<String>,
     /// Variable name → its struct type name (module-scoped; cleared per module).
     var_struct: std::collections::HashMap<String, String>,
     /// Scalar (no unpacked dims) packed-struct variable names — the subset of
@@ -655,6 +700,8 @@ impl<'t, 's> Parser<'t, 's> {
             node_budget_blown: false,
             typedefs: std::collections::HashMap::new(),
             struct_layouts: std::collections::HashMap::new(),
+            sym_struct_layouts: std::collections::HashMap::new(),
+            overridable_params: std::collections::HashSet::new(),
             unpacked_struct_layouts: std::collections::HashMap::new(),
             var_unpacked_struct: std::collections::HashMap::new(),
             record_array_vars: std::collections::HashMap::new(),

@@ -358,7 +358,7 @@ impl Parser<'_, '_> {
             let before = self.pos;
             if self.at_kw(Kw::Typedef) {
                 if scope.is_none() {
-                    scope = Some(Box::new(self.snapshot_scope()));
+                    scope = Some(self.snapshot_scope_boxed());
                 }
                 // A bare `begin/end` block has no `body_enums` carrier, so a
                 // body-local enum here stays honest-loud (allow_enum = false).
@@ -418,7 +418,7 @@ impl Parser<'_, '_> {
                 // block-local `s_t x` that shadows an outer `s_t x` must not leak
                 // its layout binding out of the block.
                 if scope.is_none() {
-                    scope = Some(Box::new(self.snapshot_scope()));
+                    scope = Some(self.snapshot_scope_boxed());
                 }
                 if let Some(d) = self.parse_typed_decl(info) {
                     decls.push(d);
@@ -442,7 +442,7 @@ impl Parser<'_, '_> {
         // AFTER statements are parsed — a statement may reference a local typedef
         // (e.g. a cast `t'(x)`) or a local struct var's `x.field`.
         if let Some(scope) = scope {
-            self.restore_scope(*scope);
+            self.restore_scope_boxed(scope);
         }
         (decls, stmts)
     }

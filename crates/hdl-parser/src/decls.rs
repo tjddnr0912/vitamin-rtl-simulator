@@ -583,6 +583,21 @@ impl Parser<'_, '_> {
                 }
             }
         }
+        // §3 ⑤ ⓒ: a symbolic-layout struct binds the name for the member desugar
+        // (scalar, packed array, 1-D unpacked array) and nothing else — no `'{…}`
+        // pattern, no decl-init desugar (both stay loud downstream).
+        if self.sym_struct_layouts.contains_key(&tyname) {
+            for n in &names {
+                self.var_struct.insert(n.name.name.clone(), tyname.clone());
+                if any_packed {
+                    if packed_array && n.unpacked.is_empty() {
+                        self.struct_packed_array_vars.insert(n.name.name.clone());
+                    }
+                } else if n.unpacked.len() == 1 {
+                    self.struct_1d_array_vars.insert(n.name.name.clone());
+                }
+            }
+        }
         // If this is a (literal-foldable) enum type, bind each name → enum type so
         // `var.first/last/next/prev/name/num` can desugar to its labels (§6.19.5).
         if self.enum_defs.contains_key(&tyname) {

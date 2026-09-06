@@ -277,8 +277,9 @@ endmodule
 "#,
         "6",
     );
-    // c_hdr_param: stays loud (declined shape)
-    loud(
+    // c_hdr_param: both oracles (§4.5.431: a member width naming a HEADER parameter
+    // is laid out per instance — was a loud decline)
+    digest(
         "c_hdr_param",
         r#"module c #(parameter int W = 32'd12) ();
   typedef struct packed { logic [W-1:0] req; } t;
@@ -290,7 +291,7 @@ module tb;
   initial #1 $finish;
 endmodule
 "#,
-        "E-PARSE-UNEXPECTED-TOKEN: expected struct member width must be a named integer type or",
+        "5 1f",
     );
     // c_hdr_param_body: both oracles
     digest(

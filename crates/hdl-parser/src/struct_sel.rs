@@ -39,6 +39,117 @@ impl Parser<'_, '_> {
         Some((base, geom, nested))
     }
 
+    /// §3 ⑤ ⓒ: `var.field` on a SYMBOLIC-layout struct variable — one level only
+    /// (a chain into a nested member is not laid out symbolically; `None` keeps it
+    /// loud downstream).
+    pub(crate) fn sym_struct_field_select(&self, path: &HierPath) -> Option<(HierPath, SymGeom)> {
+        if path.segments.len() != 2 {
+            return None;
+        }
+        let tyname = self.var_struct.get(&path.segments[0].name)?;
+        let geom = self
+            .sym_struct_layouts
+            .get(tyname)?
+            .field(&path.segments[1].name)?;
+        let base = HierPath {
+            segments: vec![path.segments[0].clone()],
+            span: path.segments[0].span,
+        };
+        Some((base, geom))
+    }
+
+    /// §3 ⑤ ⓒ: the symbolic geometry of `arr[i].field` for a packed / 1-D array
+    /// of a symbolic-layout struct.
+    pub(crate) fn sym_struct_array_field_geom(&self, arr: &str, field: &str) -> Option<SymGeom> {
+        let tyname = self.var_struct.get(arr)?;
+        self.sym_struct_layouts.get(tyname)?.field(field)
+    }
+
+    /// §3 ⑤ ⓒ: the `[msb:lsb]` of a symbolic member — `off + w - 1` and `off`,
+    /// literals folded.
+    fn sym_bounds(geom: &SymGeom, span: Span) -> (Expr, Expr) {
+        let (off, w, _) = geom;
+        let hi = Self::sym_sub_one(Self::sum_of(&[off.clone(), w.clone()], span), span);
+        (hi, off.clone())
+    }
+
+    /// §3 ⑤ ⓒ: the READ of a symbolic member: the field part-select, sign-wrapped
+    /// for a signed member like the numeric twin. A trailing sub-select (`s.f[i]`,
+    /// `s.f[a:b]`) is loud — the field-relative remap needs the width.
+    pub(crate) fn sym_member_expr_of(
+        &mut self,
+        base_expr: Expr,
+        geom: SymGeom,
+        span: Span,
+    ) -> Expr {
+        let (hi, lo) = Self::sym_bounds(&geom, span);
+        let pv = Expr {
+            kind: ExprKind::PartSelect {
+                base: Box::new(base_expr),
+                msb: Box::new(hi),
+                lsb: Box::new(lo),
+            },
+            span,
+        };
+        if self.peek() == Some(TokenKind::LBracket) {
+            self.error(
+                "a whole-member read — a sub-select of a packed-struct member whose width \
+                 names a header parameter is unsupported in v1",
+            );
+        }
+        if geom.2 {
+            return Expr {
+                kind: ExprKind::Cast {
+                    target: CastTarget::Signing { signed: true },
+                    expr: Box::new(pv),
+                },
+                span,
+            };
+        }
+        pv
+    }
+
+    /// §3 ⑤ ⓒ: `var.field` READ on a symbolic-layout struct variable, resolved and
+    /// built here so `expr_primary`'s recursive frame holds only the `Option`
+    /// (`#[inline(never)]`, like [`Self::struct_member_expr`] — the parser's
+    /// `depth_guard` test overflowed with the select inline).
+    #[inline(never)]
+    pub(crate) fn sym_struct_member_expr(&mut self, path: &HierPath) -> Option<Expr> {
+        let (base, geom) = self.sym_struct_field_select(path)?;
+        let span = path.span;
+        let base_expr = Expr {
+            kind: ExprKind::Ident(base),
+            span,
+        };
+        Some(self.sym_member_expr_of(base_expr, geom, span))
+    }
+
+    /// §3 ⑤ ⓒ: `var.field = …` on a symbolic-layout struct variable — the WRITE
+    /// twin of [`Self::sym_struct_member_expr`], cold for the same reason.
+    #[inline(never)]
+    pub(crate) fn sym_struct_member_lval(&mut self, path: &HierPath) -> Option<Lvalue> {
+        let (base, geom) = self.sym_struct_field_select(path)?;
+        let span = path.span;
+        Some(self.sym_member_lval_of(Lvalue::Ident(base), geom, span))
+    }
+
+    /// §3 ⑤ ⓒ: the WRITE twin of [`Self::sym_member_expr_of`].
+    pub(crate) fn sym_member_lval_of(&mut self, base: Lvalue, geom: SymGeom, span: Span) -> Lvalue {
+        let (hi, lo) = Self::sym_bounds(&geom, span);
+        if self.peek() == Some(TokenKind::LBracket) {
+            self.error(
+                "a whole-member write — a sub-select write of a packed-struct member whose \
+                 width names a header parameter is unsupported in v1",
+            );
+        }
+        Lvalue::PartSelect {
+            base: Box::new(base),
+            msb: Box::new(hi),
+            lsb: Box::new(lo),
+            span,
+        }
+    }
+
     /// §3 ⑤ ⓓ: resolve member NAMES `f.g.h…` against `layout`, descending into a
     /// nested struct member's own layout at each step. Returns the LEAF geometry
     /// `(off, w, ascending, signed, dbase, stride)` — `off` summed along the chain,
@@ -280,16 +391,25 @@ impl Parser<'_, '_> {
             },
             _ => None,
         };
-        match arr.and_then(|nm| self.struct_array_field_geom(&nm, &field.name)) {
+        match arr
+            .as_deref()
+            .and_then(|nm| self.struct_array_field_geom(nm, &field.name))
+        {
             Some((geom, nested)) => {
                 let (geom, _) = self.extend_member_chain(geom, nested);
                 let span = span.to(self.prev_span());
                 self.struct_member_expr_of(base, geom, span)
             }
-            None => {
-                self.error("unknown field in a struct-array element member access");
-                base
-            }
+            None => match arr
+                .as_deref()
+                .and_then(|nm| self.sym_struct_array_field_geom(nm, &field.name))
+            {
+                Some(geom) => self.sym_member_expr_of(base, geom, span),
+                None => {
+                    self.error("unknown field in a struct-array element member access");
+                    base
+                }
+            },
         }
     }
 
@@ -345,7 +465,10 @@ impl Parser<'_, '_> {
             },
             _ => None,
         };
-        match arr.and_then(|nm| self.struct_array_field_geom(&nm, &field.name)) {
+        match arr
+            .as_deref()
+            .and_then(|nm| self.struct_array_field_geom(nm, &field.name))
+        {
             Some((geom, nested)) => {
                 let ((off, w, asc, _sgn, dbase, stride), leaf_nested) =
                     self.extend_member_chain(geom, nested);
@@ -364,10 +487,16 @@ impl Parser<'_, '_> {
                     }
                 }
             }
-            None => {
-                self.error("unknown field in a struct-array element member write");
-                base
-            }
+            None => match arr
+                .as_deref()
+                .and_then(|nm| self.sym_struct_array_field_geom(nm, &field.name))
+            {
+                Some(geom) => self.sym_member_lval_of(base, geom, span),
+                None => {
+                    self.error("unknown field in a struct-array element member write");
+                    base
+                }
+            },
         }
     }
 

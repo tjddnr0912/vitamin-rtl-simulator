@@ -553,7 +553,10 @@ impl Parser<'_, '_> {
     pub(crate) fn bind_tf_port_struct(&mut self, name: &str, struct_name: &str) {
         self.var_struct
             .insert(name.to_string(), struct_name.to_string());
-        if !self.union_type_names.contains(struct_name) {
+        // A union, and a symbolic-layout struct (§3 ⑤ ⓒ), take no `'{…}` desugar.
+        if !self.union_type_names.contains(struct_name)
+            && !self.sym_struct_layouts.contains_key(struct_name)
+        {
             self.struct_scalar_vars.insert(name.to_string());
         }
     }

@@ -305,6 +305,12 @@ impl Parser<'_, '_> {
                 if let Some((base, geom, _nested)) = self.struct_field_select(&path) {
                     return self.struct_member_expr(base, geom, path.span);
                 }
+                // §3 ⑤ ⓒ: a member of a symbolic-layout struct. A cold helper for
+                // the same reason as `struct_member_expr` — its locals must not sit
+                // in this recursive frame (`depth_guard` measured the overflow).
+                if let Some(e) = self.sym_struct_member_expr(&path) {
+                    return e;
+                }
                 // SV §6.19.5 enum method `x.first/last/num/next/prev/name [()]` —
                 // the arg-less form. Desugars to literals / ternary chains over the
                 // enum's labels; non-enum `x.foo` returns None → normal path.

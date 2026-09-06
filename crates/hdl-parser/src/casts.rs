@@ -36,17 +36,24 @@ impl Parser<'_, '_> {
             _ => None,
         };
         if let Some(key) = &td_key {
-            if let Some((w, signed)) = self.simple_typedef_cast(key) {
-                let width_lit = Expr {
-                    kind: ExprKind::IntLit {
-                        kind: IntLitKind::Decimal,
-                        raw: w.to_string(),
+            // §3 ⑤ ⓒ: a symbolic-layout struct casts to its width EXPRESSION.
+            let sized = match self.simple_typedef_cast(key) {
+                Some((w, signed)) => Some((
+                    Expr {
+                        kind: ExprKind::IntLit {
+                            kind: IntLitKind::Decimal,
+                            raw: w.to_string(),
+                        },
+                        span: start,
                     },
-                    span: start,
-                };
+                    signed,
+                )),
+                None => self.sym_typedef_cast(key),
+            };
+            if let Some((width_expr, signed)) = sized {
                 let inner = Expr {
                     kind: ExprKind::Cast {
-                        target: CastTarget::Size(Box::new(width_lit)),
+                        target: CastTarget::Size(Box::new(width_expr)),
                         expr: Box::new(operand),
                     },
                     span: start,

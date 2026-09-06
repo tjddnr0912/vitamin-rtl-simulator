@@ -428,6 +428,7 @@ impl Parser<'_, '_> {
         self.wildcard_bound.clear();
         self.local_decl_names.clear();
         self.const_locals.clear();
+        self.overridable_params.clear();
         self.has_param_header = false;
         let is_macromodule = self.at_kw(Kw::Macromodule);
         self.bump(); // module / macromodule / interface
@@ -507,6 +508,12 @@ impl Parser<'_, '_> {
         // `parameter` is a localparam. The twin of a header ARRAY parameter counts
         // (it is in `params`), exactly as elaborate's `param_ports` counts it.
         self.has_param_header = !params.is_empty();
+        // §3 ⑤ ⓒ: the header's `parameter`s are the overridable ones.
+        for p in &params {
+            if p.kind == ParamKind::Parameter {
+                self.overridable_params.insert(p.name.name.clone());
+            }
+        }
 
         // port list: ANSI ( dir type name, … ) | non-ANSI ( name, … ) | none
         let ports = self.parse_port_list();
