@@ -463,11 +463,10 @@ impl Elaborator<'_> {
                 // `localparam X = fb()` with `function byte fb()` is 8 bits signed,
                 // not the value-inferred 32 unsigned. Same trio as the cast below.
                 if let ast::ExprKind::Call { name, .. } = &p.value.kind {
-                    if name.segments.len() == 1 && self.const_eval_in_scope(&p.value).is_some() {
+                    if self.const_eval_in_scope(&p.value).is_some() {
                         if let Some(m) = self
-                            .const_func_table
-                            .get(&name.segments[0].name)
-                            .and_then(|f| self.const_fn_ret_wsign(f))
+                            .const_fn_def(name)
+                            .and_then(|(f, _)| self.const_fn_ret_wsign(f))
                         {
                             return Some(m);
                         }

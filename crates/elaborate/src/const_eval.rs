@@ -468,10 +468,9 @@ impl Elaborator<'_> {
             // folded −56 as UNSIGNED and materialized 4294967240 — the same
             // three-predicates-must-agree trap the `Cast` arm below closed, reached
             // once width-aware evaluation made a negative return value possible.
-            ast::ExprKind::Call { name, .. } if name.segments.len() == 1 => self
-                .const_func_table
-                .get(&name.segments[0].name)
-                .and_then(|f| self.const_fn_ret_wsign(f))
+            ast::ExprKind::Call { name, .. } => self
+                .const_fn_def(name)
+                .and_then(|(f, _)| self.const_fn_ret_wsign(f))
                 .is_some_and(|(_, s)| s),
             ast::ExprKind::Cast { target, expr } => match target {
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).is_some_and(|(_, s, _)| s),
@@ -836,9 +835,9 @@ impl Elaborator<'_> {
     /// rejects it ("not allowed in a constant expression"). Emit a loud E3009
     /// instead of the OLD silent width-1 (the bound clamped to 0). The caller then
     /// proceeds with a degenerate extent, but the run is already loud (exit 1).
-    /// A const-but-unfoldable bound vita simply cannot fold yet (e.g. a constant
-    /// function call `f(3)`, which iverilog DOES accept) carries no net/hier ref,
-    /// so it is left silent — unchanged behavior, NOT a new false-loud.
+    /// §2 🆕 L ⓦ: a function CALL that did not fold is loud too — `logic
+    /// [nosuch(2)-1:0]` and `[dbl(W)-1:0]` with `dbl` outside the interpreter's
+    /// subset were a silent 1-bit net where both oracles reject the declaration.
     pub(crate) fn check_const_range_bound(&mut self, e: &ast::Expr, folded: Option<i64>) {
         if folded.is_some() {
             return;
@@ -888,6 +887,16 @@ impl Elaborator<'_> {
                 MsgCode::ElabUnsupported,
                 e.span,
                 &format!("{reason} is not allowed in a constant range bound"),
+            );
+            return;
+        }
+        if Self::ast_contains_call(e) {
+            self.error_at(
+                MsgCode::ElabUnsupported,
+                e.span,
+                "a function call that does not fold to a constant is not allowed in a \
+                 constant range bound (the function is undefined, or its body is outside \
+                 the constant-function subset)",
             );
         }
     }

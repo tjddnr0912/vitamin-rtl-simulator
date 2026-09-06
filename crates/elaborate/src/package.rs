@@ -825,6 +825,26 @@ impl Elaborator<'_> {
                         &pkg_local_names,
                         true,
                     );
+                    // §4.5.440 (review B G1 e5): the imported package's FUNCTIONS join this
+                    // package's own set, so a package function calling an imported one
+                    // folds (`const_fn_def` resolves a bare name inside a package body in
+                    // that package only). `or_insert`: a same-named local definition wins
+                    // wherever it is declared (an earlier one is kept; a later `Func` arm
+                    // overwrites).
+                    if let Some(q) = self.pkg_funcs.get(imp.pkg.name.as_str()).cloned() {
+                        match &imp.item {
+                            None => {
+                                for (n, f) in q {
+                                    funcs.entry(n).or_insert(f);
+                                }
+                            }
+                            Some(it) => {
+                                if let Some(f) = q.get(&it.name) {
+                                    funcs.entry(it.name.clone()).or_insert(f.clone());
+                                }
+                            }
+                        }
+                    }
                 }
                 // A2b-prereq/A2b: package-level VARIABLE declaration — one
                 // storage instance per elaboration (IEEE §26), lowered as an
@@ -1542,6 +1562,72 @@ impl Elaborator<'_> {
         let read_names: std::collections::BTreeSet<String> =
             names.union(pkg_const_names).cloned().collect();
         pkg_stmt_pure_with(&task.body, &names, &read_names, pkg_rtn_names)
+    }
+
+    /// §2 🆕 L ⓦ: the constant-interpreter half of [`Self::apply_import_routines`] —
+    /// the imported package's FUNCTIONS join `const_func_table`, so a constant
+    /// context (a header default, a `localparam`, a range bound) folds `dbl(W)`
+    /// through the package's body, under the same §26.3 rules as the runtime table:
+    /// an explicit import wins, a local definition wins a wildcard, two wildcards of
+    /// one name are ambiguous (unbound — the use site stays loud). `const_fn_pkg`
+    /// records the package so the body folds in ITS constant scope.
+    pub(crate) fn apply_import_const_funcs(
+        &mut self,
+        imp: &ast::ImportDecl,
+        local_funcs: &std::collections::BTreeSet<String>,
+        wc_fn: &mut BTreeMap<String, String>,
+        explicit_fn: &mut std::collections::BTreeSet<String>,
+    ) {
+        let pkg = imp.pkg.name.to_string();
+        let Some(funcs) = self.pkg_funcs.get(&pkg).cloned() else {
+            return; // unknown package already diagnosed in the const pass
+        };
+        match &imp.item {
+            None => {
+                for (n, f) in funcs {
+                    if explicit_fn.contains(&n) || local_funcs.contains(&n) {
+                        continue;
+                    }
+                    match wc_fn.get(&n).map(String::as_str) {
+                        Some("") => {} // already ambiguous: stay unbound
+                        Some(prev) if prev != pkg => {
+                            self.const_func_table.remove(&n);
+                            self.const_fn_pkg.remove(&n);
+                            wc_fn.insert(n, String::new());
+                        }
+                        Some(_) => {} // same package, idempotent
+                        None => {
+                            self.const_func_table.insert(n.clone(), f);
+                            self.const_fn_pkg.insert(n.clone(), pkg.clone());
+                            wc_fn.insert(n, pkg.clone());
+                        }
+                    }
+                }
+            }
+            Some(item) => {
+                let n = item.name.to_string();
+                let Some(f) = funcs.get(&n) else { return };
+                // IEEE §26.3: an explicit import of a name the importing scope declares
+                // itself is an error (iverilog refuses it; verilator answers the local).
+                // The constant table used to answer the package's function here where
+                // the runtime table answered the local's (review A S1-D1: `X=8` beside
+                // `r=40`, a value no oracle prints) — one loud funnel, like the
+                // constant collision in `apply_import_consts`.
+                if local_funcs.contains(&n) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        &format!(
+                            "explicit import of `{n}` from package `{pkg}` conflicts with a \
+                             local declaration of the same name"
+                        ),
+                    );
+                    return;
+                }
+                self.const_func_table.insert(n.clone(), f.clone());
+                self.const_fn_pkg.insert(n.clone(), pkg);
+                explicit_fn.insert(n);
+            }
+        }
     }
 
     pub(crate) fn apply_import_routines(

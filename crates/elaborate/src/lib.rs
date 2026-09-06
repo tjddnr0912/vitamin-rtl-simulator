@@ -792,6 +792,15 @@ struct Elaborator<'s> {
     // populated in pass 3.5, AFTER the param fold in pass 3). Saved/restored per
     // instance scope alongside `func_table`.
     const_func_table: BTreeMap<String, ast::FunctionDef>,
+    /// §2 🆕 L ⓦ: the package a `const_func_table` entry was IMPORTED from (absent =
+    /// the module's own function), so its body folds in that package's constant
+    /// scope rather than the importer's. Saved/restored with `const_func_table`.
+    const_fn_pkg: BTreeMap<String, String>,
+    /// The package whose function body the constant interpreter is running, if any
+    /// (`eval_const_call`): a bare name inside it resolves to the PACKAGE's sibling
+    /// function or constant, never to the calling module's same-named one, and a
+    /// name the package does not declare stays unbound (loud).
+    const_call_pkg: std::cell::RefCell<Option<String>>,
     task_table: BTreeMap<String, ast::TaskDef>,
     // The package a routine in `func_table`/`task_table` was DECLARED in, when it got
     // there through an import. A routine's body must resolve in its own declaring

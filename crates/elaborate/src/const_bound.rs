@@ -364,9 +364,9 @@ impl Elaborator<'_> {
             }
             // A constant function is only as exact as its BODY — see
             // [`Self::const_fn_call_width_safe`].
-            K::Call { name, args } if name.segments.len() == 1 => {
+            K::Call { name, args } => {
                 args.iter().all(|a| self.ast_const_leaves_min32(a))
-                    && self.const_fn_call_width_safe(&name.segments[0].name, 0)
+                    && self.const_fn_call_width_safe(name, 0)
             }
             _ => false,
         }
@@ -388,22 +388,27 @@ impl Elaborator<'_> {
     /// launder a narrow callee — both were live wrong-non-zero folds. So the walk
     /// recurses through the body's statements and through every callee, with a
     /// depth cap that declines rather than recursing forever on a cycle.
-    fn const_fn_call_width_safe(&self, name: &str, depth: u32) -> bool {
+    fn const_fn_call_width_safe(&self, name: &ast::HierPath, depth: u32) -> bool {
         const MAX_DEPTH: u32 = 8;
         if depth >= MAX_DEPTH {
             return false;
         }
-        let Some(f) = self.const_func_table.get(name) else {
+        let Some((f, pkg)) = self.const_fn_def(name) else {
             return false;
         };
-        self.const_fn_ret_wsign(f).is_some_and(|(w, _)| w >= 32)
+        // A package function's body is walked in ITS scope (a sibling call inside it
+        // names the package's function, not the importer's) — `const_fn_def`.
+        let saved_pkg = self.const_call_pkg.replace(pkg);
+        let safe = self.const_fn_ret_wsign(f).is_some_and(|(w, _)| w >= 32)
             && f.ports
                 .iter()
                 .all(|p| Self::decl_is_wide(p.net_or_var, p.range.as_ref()))
             && f.body_decls
                 .iter()
                 .all(|d| Self::decl_is_wide(Some(d.kind), d.range.as_ref()))
-            && self.const_stmt_width_safe(&f.body, depth)
+            && self.const_stmt_width_safe(&f.body, depth);
+        self.const_call_pkg.replace(saved_pkg);
+        safe
     }
 
     /// A declared item is at least 32 bits wide. An unmodeled kind (real, string,
@@ -471,9 +476,7 @@ impl Elaborator<'_> {
     /// matter here: narrow operands are handled by the assignment's own width.
     fn expr_calls_width_safe(&self, e: &ast::Expr, depth: u32) -> bool {
         let here = match &e.kind {
-            ast::ExprKind::Call { name, .. } if name.segments.len() == 1 => {
-                self.const_fn_call_width_safe(&name.segments[0].name, depth + 1)
-            }
+            ast::ExprKind::Call { name, .. } => self.const_fn_call_width_safe(name, depth + 1),
             _ => true,
         };
         here && Self::const_fold_children(e)

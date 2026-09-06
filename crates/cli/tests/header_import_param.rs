@@ -388,14 +388,16 @@ module tb; m u(); initial begin #1 $finish; end endmodule
 
 #[test]
 fn edge_f26() {
-    // f26_pkg_func: both oracles — PRE-EXISTING: a package FUNCTION in a header default has no constant-fold arm (loud)
-    loud(
+    // f26_pkg_func: both oracles 10 — §4.5.440 (§2 🆕 L ⓦ): a package FUNCTION in a
+    // header default folds through the constant-function interpreter (was a loud
+    // wording pin, "no constant-fold arm").
+    digest(
         "f26_pkg_func",
         r#"package p; function automatic int dbl(int a); return a*2; endfunction parameter int W = 5; endpackage
 module m import p::*; #(parameter int X = dbl(W)) (); initial $display("DIGEST=%0d", X); endmodule
 module tb; m u(); initial begin #1 $finish; end endmodule
 "#,
-        "parameter `X` value is not a constant: `dbl(…)` has no constant-fold a",
+        "10",
     );
 }
 

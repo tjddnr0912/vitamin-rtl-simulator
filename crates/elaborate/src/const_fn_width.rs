@@ -228,10 +228,9 @@ impl Elaborator<'_> {
                 ast::CastTarget::Signing { .. } => self.const_self_width(expr, envw),
             },
             // A call is as wide as its declared return type.
-            K::Call { name, .. } if name.segments.len() == 1 => self
-                .const_func_table
-                .get(&name.segments[0].name)
-                .and_then(|f| self.const_fn_ret_wsign(f))
+            K::Call { name, .. } => self
+                .const_fn_def(name)
+                .and_then(|(f, _)| self.const_fn_ret_wsign(f))
                 .map(|(w, _)| w),
             _ => None,
         }
@@ -307,10 +306,9 @@ impl Elaborator<'_> {
                     self.cast_size_bits(target).is_some() && self.const_signed_env(expr, envw)
                 }
             },
-            K::Call { name, .. } if name.segments.len() == 1 => self
-                .const_func_table
-                .get(&name.segments[0].name)
-                .and_then(|f| self.const_fn_ret_wsign(f))
+            K::Call { name, .. } => self
+                .const_fn_def(name)
+                .and_then(|(f, _)| self.const_fn_ret_wsign(f))
                 .is_some_and(|(_, s)| s),
             // `$clog2`/`$bits` yield a signed 32-bit int.
             K::SysCall { .. } => true,

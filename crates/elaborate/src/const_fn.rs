@@ -483,16 +483,21 @@ impl Elaborator<'_> {
             // LOUD at the binding site, never a silently-wrong param value).
             // `S.len()` parses as a TWO-segment call, so it reaches the const domain
             // here rather than through the `MethodCall` arm above.
+            // §2 🆕 L ⓦ: `p::dbl(W)` — a package-scoped constant-function call (the
+            // parser spells the scope as the first segment). Before the string-method
+            // arm, which owns every other two-segment call.
+            ast::ExprKind::Call { name, args }
+                if name.segments.len() == 2
+                    && self.pkg_funcs.contains_key(&name.segments[0].name) =>
+            {
+                self.eval_const_call(name, args, &BTreeMap::new(), &ConstWidths::new(), 0)
+            }
             ast::ExprKind::Call { name, .. } if name.segments.len() == 2 => {
                 self.const_string_method(e)
             }
-            ast::ExprKind::Call { name, args } if name.segments.len() == 1 => self.eval_const_call(
-                &name.segments[0].name,
-                args,
-                &BTreeMap::new(),
-                &ConstWidths::new(),
-                0,
-            ),
+            ast::ExprKind::Call { name, args } if name.segments.len() == 1 => {
+                self.eval_const_call(name, args, &BTreeMap::new(), &ConstWidths::new(), 0)
+            }
             _ => None,
         }
     }
@@ -841,6 +846,11 @@ impl Elaborator<'_> {
                 match env.get(n) {
                     Some(v) => Some(*v),
                     None if envw.contains_key(n) => None,
+                    // §2 🆕 L ⓦ: inside a PACKAGE function's body the package's own
+                    // constants are already in `env`; a name it does not declare must
+                    // not fall to the calling module's scope (a same-named module
+                    // `localparam` is a different object than the text says).
+                    None if self.const_call_pkg.borrow().is_some() => None,
                     None => self.lookup_scoped(n),
                 }
             }
@@ -940,8 +950,12 @@ impl Elaborator<'_> {
             // be sized with THIS body's widths — handing over an empty map made
             // `g((b + b) / 8'sd3)` size `b` as 32 bits and compute 66 instead of
             // −18, while the same expression written inline was correct.
-            ast::ExprKind::Call { name, args } if name.segments.len() == 1 => {
-                self.eval_const_call(&name.segments[0].name, args, env, envw, depth)
+            ast::ExprKind::Call { name, args }
+                if name.segments.len() == 1
+                    || (name.segments.len() == 2
+                        && self.pkg_funcs.contains_key(&name.segments[0].name)) =>
+            {
+                self.eval_const_call(name, args, env, envw, depth)
             }
             // §11.4.12 concatenation / §11.4.12.1 replication: SELF-determined bit
             // PLACEMENTS whose value depends on every operand's WIDTH, which an i64
@@ -1250,9 +1264,38 @@ impl Elaborator<'_> {
     /// an unsupported statement, recursion past the depth cap, or a loop past the step
     /// cap (a guaranteed-terminate guard). The i64 domain matches `const_eval_in_scope`
     /// (its intermediate-width imprecision is the same tracked §2 residual).
+    /// The constant-function definition `name` denotes, with the package it belongs
+    /// to (`None` = the module's own). A two-segment `p::f` (the parser spells the
+    /// scope as a segment) resolves in `p` directly. A bare name inside a PACKAGE
+    /// function's body (`const_call_pkg`) resolves in that package only — the
+    /// importer's same-named function must not capture a sibling call, and a name the
+    /// package does not declare is not answered by the module. Elsewhere a bare name
+    /// is the module table, whose imported entries carry their package
+    /// (`const_fn_pkg`).
+    pub(crate) fn const_fn_def(
+        &self,
+        name: &ast::HierPath,
+    ) -> Option<(&ast::FunctionDef, Option<String>)> {
+        match name.segments.as_slice() {
+            [p, f] => {
+                let def = self.pkg_funcs.get(&p.name)?.get(&f.name)?;
+                Some((def, Some(p.name.clone())))
+            }
+            [f] => {
+                if let Some(pkg) = self.const_call_pkg.borrow().as_ref() {
+                    let def = self.pkg_funcs.get(pkg)?.get(&f.name)?;
+                    return Some((def, Some(pkg.clone())));
+                }
+                let def = self.const_func_table.get(&f.name)?;
+                Some((def, self.const_fn_pkg.get(&f.name).cloned()))
+            }
+            _ => None,
+        }
+    }
+
     pub(crate) fn eval_const_call(
         &self,
-        name: &str,
+        name: &ast::HierPath,
         args: &[ast::Expr],
         caller_env: &std::collections::BTreeMap<String, i64>,
         caller_w: &ConstWidths,
@@ -1262,7 +1305,8 @@ impl Elaborator<'_> {
         if depth >= MAX_DEPTH {
             return None;
         }
-        let f = self.const_func_table.get(name)?;
+        let (f, pkg) = self.const_fn_def(name)?;
+        let name = name.segments.last()?.name.as_str();
         let (rw, rs) = self.const_fn_ret_wsign(f)?;
         if args.len() > f.ports.len() {
             return None; // too many args
@@ -1315,28 +1359,47 @@ impl Elaborator<'_> {
             envw.insert(p.name.name.clone(), tw.unwrap_or((0, false)));
             env.insert(p.name.name.clone(), av);
         }
-        // The body's declarations run at the BODY's depth — the same `depth + 1`
-        // the body itself gets below, and the reason a self-referential
-        // initializer terminates. See `bind_const_decl`.
-        for d in &f.body_decls {
-            self.bind_const_decl(d, &mut env, &mut envw, depth + 1)?;
+        // §2 🆕 L ⓦ: a PACKAGE function's body folds in the package's constant scope
+        // — its constants seed the environment (a formal of the same name is bound
+        // above and wins; a body local rebinds below), and `const_call_pkg` makes a
+        // bare name in the body resolve to the package's sibling function and keeps
+        // an undeclared name out of the caller's scope. The ARGUMENTS were folded in
+        // the caller's scope above, before the switch.
+        if let Some(p) = &pkg {
+            if let Some(consts) = self.pkg_consts.get(p) {
+                for (k, v) in consts {
+                    env.entry(k.clone()).or_insert(*v);
+                }
+            }
         }
-        // The function-name return variable is itself a declared target.
-        envw.insert(name.to_string(), (rw, rs));
-        env.entry(name.to_string()).or_insert(0);
-        let mut steps: u64 = 0;
-        let ret = match self.exec_const_stmt(
-            &f.body,
-            &mut env,
-            &mut envw,
-            Some((rw, rs)),
-            depth + 1,
-            &mut steps,
-        )? {
-            ConstFlow::Return(Some(v)) => v,
-            ConstFlow::Return(None) | ConstFlow::Normal => *env.get(name)?,
+        let saved_pkg = self.const_call_pkg.replace(pkg);
+        let mut body = || -> Option<i64> {
+            // The body's declarations run at the BODY's depth — the same `depth + 1`
+            // the body itself gets below, and the reason a self-referential
+            // initializer terminates. See `bind_const_decl`.
+            for d in &f.body_decls {
+                self.bind_const_decl(d, &mut env, &mut envw, depth + 1)?;
+            }
+            // The function-name return variable is itself a declared target.
+            envw.insert(name.to_string(), (rw, rs));
+            env.entry(name.to_string()).or_insert(0);
+            let mut steps: u64 = 0;
+            let ret = match self.exec_const_stmt(
+                &f.body,
+                &mut env,
+                &mut envw,
+                Some((rw, rs)),
+                depth + 1,
+                &mut steps,
+            )? {
+                ConstFlow::Return(Some(v)) => v,
+                ConstFlow::Return(None) | ConstFlow::Normal => *env.get(name)?,
+            };
+            Some(coerce_int_width(ret, rw, rs))
         };
-        Some(coerce_int_width(ret, rw, rs))
+        let r = body();
+        self.const_call_pkg.replace(saved_pkg);
+        r
     }
 
     /// §4.5.186: execute one statement of a const-function body over the local `env`.

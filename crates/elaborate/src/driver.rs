@@ -136,6 +136,8 @@ impl<'s> Elaborator<'s> {
             cur_inst: 0,
             func_table: BTreeMap::new(),
             const_func_table: BTreeMap::new(),
+            const_fn_pkg: BTreeMap::new(),
+            const_call_pkg: std::cell::RefCell::new(None),
             task_table: BTreeMap::new(),
             rtn_pkg: BTreeMap::new(),
             cur_rtn_pkg: Vec::new(),

@@ -472,6 +472,29 @@ impl Elaborator<'_> {
         let n_cu = self.cu_imports.len();
         let is_header_import =
             |i: usize, imp: &ast::ImportDecl| Self::import_precedes_header(module, n_cu, i, imp);
+        // §4.5.186: collect this module's functions into `const_func_table` BEFORE the
+        // header parameter fold (`bind_params`) and the body fold, so a header default
+        // `#(parameter int X = f(4))` and a `localparam W = f(N)` interpret `f` at
+        // compile time (both oracles fold both; the table used to be filled after
+        // `bind_params`, so the header spelling was E3009). (`func_table` is populated
+        // later, in pass 3.5.) Saved/restored with `func_table` at the module-scope
+        // exit. §2 🆕 L ⓦ: an imported package's functions join the table at each
+        // import (`apply_import_const_funcs`, §26.3: a local definition wins a
+        // wildcard, an explicit import wins, two wildcards of one name are
+        // ambiguous), with the package recorded in `const_fn_pkg`.
+        let mut saved_const_funcs = std::mem::take(&mut self.const_func_table);
+        let mut saved_const_fn_pkg = std::mem::take(&mut self.const_fn_pkg);
+        let mut local_const_funcs: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        for item in &module.body {
+            if let ast::ModuleItem::Func(f) = item {
+                self.const_func_table.insert(f.name.name.clone(), f.clone());
+                local_const_funcs.insert(f.name.name.clone());
+            }
+        }
+        let mut wc_const_fn: BTreeMap<String, String> = BTreeMap::new();
+        let mut explicit_const_fn: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
         let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
         for (i, imp) in import_list.iter().enumerate() {
             if is_header_import(i, imp) {
@@ -482,6 +505,12 @@ impl Elaborator<'_> {
                     &mut explicit_imports,
                     &names,
                     i >= n_cu,
+                );
+                self.apply_import_const_funcs(
+                    imp,
+                    &local_const_funcs,
+                    &mut wc_const_fn,
+                    &mut explicit_const_fn,
                 );
             }
         }
@@ -506,6 +535,12 @@ impl Elaborator<'_> {
                     &mut explicit_imports,
                     &names,
                     i >= n_cu,
+                );
+                self.apply_import_const_funcs(
+                    imp,
+                    &local_const_funcs,
+                    &mut wc_const_fn,
+                    &mut explicit_const_fn,
                 );
             }
         }
@@ -550,16 +585,6 @@ impl Elaborator<'_> {
         let saved_coalesced = std::mem::replace(&mut self.coalesced_block_locals, coalesced);
         let saved_local_names = std::mem::replace(&mut self.local_decl_names, names);
         let saved_prescan = std::mem::take(&mut self.bits_prescan);
-        // §4.5.186: collect this module's functions into `const_func_table` BEFORE the
-        // parameter fold below, so a `localparam W = f(N)` can interpret `f` at compile
-        // time. (`func_table` is populated later, in pass 3.5.) Saved/restored with
-        // `func_table` at the module-scope exit.
-        let mut saved_const_funcs = std::mem::take(&mut self.const_func_table);
-        for item in &module.body {
-            if let ast::ModuleItem::Func(f) = item {
-                self.const_func_table.insert(f.name.name.clone(), f.clone());
-            }
-        }
         for item in &module.body {
             match item {
                 ast::ModuleItem::Param(p) => {
@@ -961,6 +986,7 @@ impl Elaborator<'_> {
         // is child scope and is untouched by the swap.
         std::mem::swap(&mut self.func_table, &mut saved_funcs);
         std::mem::swap(&mut self.const_func_table, &mut saved_const_funcs);
+        std::mem::swap(&mut self.const_fn_pkg, &mut saved_const_fn_pkg);
         std::mem::swap(&mut self.task_table, &mut saved_tasks);
         std::mem::swap(&mut self.frame_idx, &mut saved_frame_idx);
         std::mem::swap(&mut self.rtn_pkg, &mut saved_rtn_pkg);
@@ -971,6 +997,7 @@ impl Elaborator<'_> {
         self.wire_ports(module, binding, &saved_prefix, parent_inst.is_none());
         std::mem::swap(&mut self.func_table, &mut saved_funcs);
         std::mem::swap(&mut self.const_func_table, &mut saved_const_funcs);
+        std::mem::swap(&mut self.const_fn_pkg, &mut saved_const_fn_pkg);
         std::mem::swap(&mut self.task_table, &mut saved_tasks);
         std::mem::swap(&mut self.frame_idx, &mut saved_frame_idx);
         std::mem::swap(&mut self.rtn_pkg, &mut saved_rtn_pkg);
@@ -1225,6 +1252,7 @@ impl Elaborator<'_> {
         self.func_table = saved_funcs;
         self.tf_decl_scope = saved_decl_scope;
         self.const_func_table = saved_const_funcs;
+        self.const_fn_pkg = saved_const_fn_pkg;
         self.task_table = saved_tasks;
         self.rtn_pkg = saved_rtn_pkg;
         self.decl_pos = saved_decl_pos;
