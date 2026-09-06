@@ -190,14 +190,14 @@ module tb; m u(); initial begin #1 $finish; end endmodule
 
 #[test]
 fn edge_f11() {
-    // f11_typedef_param: both oracles — PRE-EXISTING: `parameter type` is not parsed (loud, unrelated to the import)
-    loud(
+    // f11_typedef_param: both oracles — §4.5.437: `parameter type` is parsed; the typed parameter folds through it (oracle output copied)
+    digest(
         "f11_typedef_param",
         r#"package p; typedef logic [7:0] perm_t; parameter perm_t Dflt = 8'h3C; endpackage
 module m import p::*; #(parameter type T = perm_t, parameter T X = Dflt) (); initial $display("DIGEST=%h %0d", X, $bits(T)); endmodule
 module tb; m u(); initial begin #1 $finish; end endmodule
 "#,
-        "expected '=' in parameter, found identifier 'T'",
+        "3c 8",
     );
 }
 
@@ -466,14 +466,14 @@ module tb; m u(); initial begin #1 $finish; end endmodule
 
 #[test]
 fn edge_f32() {
-    // f32_type_cast: both oracles — PRE-EXISTING: `parameter type` is not parsed (loud, unrelated to the import)
-    loud(
+    // f32_type_cast: both oracles — §4.5.437: `parameter type` is parsed; the typed parameter folds through it (oracle output copied)
+    digest(
         "f32_type_cast",
         r#"package p; typedef logic [7:0] perm_t; parameter int Dflt = 300; endpackage
 module m import p::*; #(parameter type T = perm_t, parameter T X = T'(Dflt)) (); initial $display("DIGEST=%h", X); endmodule
 module tb; m u(); initial begin #1 $finish; end endmodule
 "#,
-        "expected '=' in parameter, found identifier 'T'",
+        "2c",
     );
 }
 
@@ -571,13 +571,13 @@ module tb; i u(); initial begin #1 $display("DIGEST=%h", u.d); $finish; end endm
 
 #[test]
 fn edge_f40() {
-    // f40_type_param_ctrl: both oracles — PRE-EXISTING control: `parameter type` is not parsed even without an import
-    loud(
+    // f40_type_param_ctrl: both oracles — §4.5.437: `parameter type` is parsed; the typed parameter folds through it (oracle output copied)
+    digest(
         "f40_type_param_ctrl",
         r#"module m #(parameter type T = logic [7:0], parameter T X = 8'h2c) (); initial $display("DIGEST=%h", X); endmodule
 module tb; m u(); initial begin #1 $finish; end endmodule
 "#,
-        "expected '=' in parameter, found identifier 'T'",
+        "2c",
     );
 }
 

@@ -263,6 +263,17 @@ impl Parser<'_, '_> {
     /// is returned, the rest queue in `pending_module_items` (IEEE §6.20.1: one type
     /// prefix shared by every name).
     pub(crate) fn parse_param_list_item(&mut self) -> Option<ModuleItem> {
+        // §4.5.437: a body / unit-scope TYPE parameter group.
+        if self.starts_type_param() {
+            let (decls, guards) = self.parse_type_param_group(false);
+            self.expect(TokenKind::Semi, "';'");
+            let mut items: Vec<ModuleItem> = decls.into_iter().map(ModuleItem::Param).collect();
+            items.extend(guards);
+            let mut it = items.into_iter();
+            let first = it.next();
+            self.pending_module_items.extend(it);
+            return first;
+        }
         let pfx = self.parse_param_prefix();
         let mut first: Option<ModuleItem> = None;
         loop {
@@ -537,6 +548,7 @@ impl Parser<'_, '_> {
             } else if self.at_kw(Kw::Parameter) || self.at_kw(Kw::Localparam) {
                 // §4.5.434: a unit-scope constant. `parameter` here is a localparam
                 // (§6.20.1: not overridable outside a module header).
+                self.type_params = self.cu_type_params.clone();
                 if let Some(first) = self.parse_param_list_item() {
                     let mut list = vec![first];
                     list.append(&mut self.pending_module_items);
@@ -544,9 +556,16 @@ impl Parser<'_, '_> {
                         if let ModuleItem::Param(p) = &mut it {
                             p.kind = ParamKind::Localparam;
                         }
+                        // §4.5.437: a unit-scope TYPE parameter is a localparam in
+                        // every module, so its override shape guard has nothing to
+                        // guard — it is not replicated.
+                        if matches!(it, ModuleItem::Proc(_)) {
+                            continue;
+                        }
                         self.cu_items.push(it);
                     }
                 }
+                self.cu_type_params = self.type_params.clone();
             } else if self.at_kw(Kw::Function) {
                 // §4.5.434: a unit-scope function (`function void` = task-equivalent,
                 // the same desugar as the module-body arm).
@@ -643,6 +662,8 @@ impl Parser<'_, '_> {
         self.local_decl_names.clear();
         self.const_locals.clear();
         self.overridable_params.clear();
+        // §4.5.437: the unit scope's type parameters are visible to every module.
+        self.type_params = self.cu_type_params.clone();
         self.has_param_header = false;
         let is_macromodule = self.at_kw(Kw::Macromodule);
         self.bump(); // module / macromodule / interface
@@ -670,6 +691,19 @@ impl Parser<'_, '_> {
             self.expect(TokenKind::LParen, "'(' after '#'");
             let mut last_pfx: Option<ParamPrefix> = None;
             loop {
+                // §4.5.437: a TYPE parameter group — `[parameter] type T = <type>`
+                // desugars to two value parameters (`T$w`, `T$s`) and a parser
+                // typedef; the shape guard leads the body.
+                if self.starts_type_param() {
+                    let (decls, guards) = self.parse_type_param_group(true);
+                    params.extend(decls);
+                    header_imports.extend(guards);
+                    last_pfx = None;
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                    continue;
+                }
                 // A type prefix (`parameter [T]`) is parsed once per GROUP; an
                 // unadorned continuation (`, B = 2`) inherits the PRECEDING group's
                 // type/width/signedness (IEEE §6.20.1) rather than silently
@@ -683,7 +717,15 @@ impl Parser<'_, '_> {
                     last_pfx.clone().unwrap()
                 };
                 match self.finish_param_assignment(&pfx, false) {
-                    Some(ParamItem::Scalar(p)) => params.push(p),
+                    Some(ParamItem::Scalar(p)) => {
+                        // Overridable as soon as it is declared, so a LATER header
+                        // parameter's default may name it symbolically (§4.5.437:
+                        // `parameter W = 8, parameter type T = logic [W-1:0]`).
+                        if p.kind == ParamKind::Parameter {
+                            self.overridable_params.insert(p.name.name.clone());
+                        }
+                        params.push(p)
+                    }
                     // §3 ⑤ ⓒ: a header ARRAY parameter. The desugared const
                     // array decl leads the body (after the header imports, whose
                     // symbols its dims/default may name) and a scalar TWIN with the

@@ -199,6 +199,10 @@ impl Parser<'_, '_> {
                     if let Some(w) = self.parse_bits_type_arg() {
                         return Self::dec_lit(w, start.to(self.prev_span()));
                     }
+                    // §4.5.437: a type parameter (`T$w`) or a symbolic-width typedef
+                    if let Some(e) = self.parse_bits_sym_type_arg() {
+                        return e;
+                    }
                     self.pos = save; // not a bare type → restore for normal expr-arg parse
                 }
                 let args = if self.peek() == Some(T::LParen) {

@@ -115,6 +115,7 @@ mod struct_sel;
 mod structs;
 mod sva_prop;
 mod sva_seq;
+mod type_params;
 mod typedefs;
 mod udp;
 mod udp_table;
@@ -505,6 +506,12 @@ pub struct Parser<'t, 's> {
     /// overridable parameter) — disjoint from `struct_layouts`, module-local (a
     /// package parameter is a localparam and folds).
     sym_struct_layouts: std::collections::HashMap<String, SymStructLayout>,
+    /// §4.5.437: the TYPE parameters of the current module-like (`parameter type T`),
+    /// by name — the width parameter each desugars to and the default's signedness.
+    type_params: std::collections::HashMap<String, type_params::TypeParam>,
+    /// §4.5.437: the compilation-unit scope's type parameters (`type_params` is
+    /// reset to these at every module-like).
+    cu_type_params: std::collections::HashMap<String, type_params::TypeParam>,
     /// §3 ⑤ ⓒ: the OVERRIDABLE parameters of the current module-like — the ANSI
     /// header's `parameter`s and, in a module with no header, its body
     /// `parameter`s (IEEE §6.20.1; everything else the table can hold is a
@@ -719,6 +726,8 @@ impl<'t, 's> Parser<'t, 's> {
             typedefs: std::collections::HashMap::new(),
             struct_layouts: std::collections::HashMap::new(),
             sym_struct_layouts: std::collections::HashMap::new(),
+            type_params: std::collections::HashMap::new(),
+            cu_type_params: std::collections::HashMap::new(),
             overridable_params: std::collections::HashSet::new(),
             unpacked_struct_layouts: std::collections::HashMap::new(),
             var_unpacked_struct: std::collections::HashMap::new(),

@@ -48,7 +48,9 @@ impl Parser<'_, '_> {
                     },
                     signed,
                 )),
-                None => self.sym_typedef_cast(key),
+                None => self
+                    .sym_typedef_cast(key)
+                    .or_else(|| self.type_param_cast(key)),
             };
             if let Some((width_expr, signed)) = sized {
                 let inner = Expr {

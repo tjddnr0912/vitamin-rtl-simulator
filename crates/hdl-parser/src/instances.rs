@@ -151,8 +151,8 @@ impl Parser<'_, '_> {
         loop {
             let before = self.pos;
             if named {
-                out.push(self.parse_named_param_conn());
-            } else {
+                self.parse_named_param_conn_into(&mut out);
+            } else if !self.push_type_param_override(&mut out, None, self.cur_span()) {
                 // positional override: a single const-expr (never empty)
                 out.push(ParamConn::Positional(self.expr(0)));
             }
@@ -167,8 +167,10 @@ impl Parser<'_, '_> {
         out
     }
 
-    /// `.NAME(expr)` | `.NAME()`  → ParamConn::Named { name, value, span }.
-    pub(crate) fn parse_named_param_conn(&mut self) -> ParamConn {
+    /// `.NAME(expr)` | `.NAME()`  → ParamConn::Named { name, value, span } into
+    /// `out` — a TYPE value (§4.5.437, `.T(logic [15:0])`) pushes the two value
+    /// overrides a type parameter desugars to.
+    pub(crate) fn parse_named_param_conn_into(&mut self, out: &mut Vec<ParamConn>) {
         let start = self.cur_span();
         self.expect(TokenKind::Dot, "'.' in named parameter override");
         let name = self.ident().unwrap_or(Ident {
@@ -176,17 +178,21 @@ impl Parser<'_, '_> {
             span: self.cur_span(),
         });
         self.expect(TokenKind::LParen, "'(' after parameter name");
+        if self.push_type_param_override(out, Some(&name), start) {
+            self.expect(TokenKind::RParen, "')' after parameter value");
+            return;
+        }
         let value = if self.peek() == Some(TokenKind::RParen) {
             None // `.W()` — explicitly-empty override
         } else {
             Some(self.expr(0))
         };
         self.expect(TokenKind::RParen, "')' after parameter value");
-        ParamConn::Named {
+        out.push(ParamConn::Named {
             name,
             value,
             span: start.to(self.prev_span()),
-        }
+        });
     }
 
     /// One instance: inst_name [unpacked_dims] ( port_connections )
