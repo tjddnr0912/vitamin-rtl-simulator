@@ -149,14 +149,39 @@ fn const_slice(
     (lsb >= 0 && (lsb as u64) + (w as u64) <= net_w as u64).then_some((lsb as u32, w))
 }
 
-/// The source net this driver's rhs copies, if it copies one: a whole-net read or
-/// a constant, in-range slice of one. `want` is the bit count the lvalue takes, so
-/// a widening or truncating driver is refused — padding and truncation are
-/// computed, not moved.
-fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<u32> {
+/// The source this driver's rhs copies, if it copies one: a whole-net read, a
+/// constant, in-range slice of one, or a constant, in-range WORD of a flat
+/// unpacked array (`assign c = m[1];`, §2 🆕 I ⓒ — both oracles read the word
+/// through). `want` is the bit count the lvalue takes, so a widening or
+/// truncating driver is refused — padding and truncation are computed, not moved.
+/// The second half is the word's index expression when the source is an array
+/// word (`None` for a whole net or a slice).
+fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<(u32, Option<u32>)> {
     match ir.exprs.get(rhs as usize)? {
         sim_ir::Expr::Signal { net, word: None } => {
-            (want == ir.nets[*net as usize].width).then_some(*net)
+            (want == ir.nets[*net as usize].width).then_some((*net, None))
+        }
+        sim_ir::Expr::Signal {
+            net,
+            word: Some(weid),
+        } => {
+            // An array WORD: the element is flat packed storage like any scalar,
+            // but the array net itself is not (`flat` refuses it as a destination
+            // and as a slice base). A runtime index computes; an out-of-range
+            // constant fabricates `x` (and re-emits its E4002 on every repair).
+            let nv = &ir.nets[*net as usize];
+            let flat_kind = matches!(
+                nv.kind,
+                sim_ir::NetKind::Wire
+                    | sim_ir::NetKind::Reg
+                    | sim_ir::NetKind::Logic
+                    | sim_ir::NetKind::Integer
+            );
+            if !flat_kind || nv.array_len <= 1 || want != nv.width {
+                return None;
+            }
+            let idx = const_of(ir, *weid)?;
+            (idx < nv.array_len).then_some((*net, Some(*weid)))
         }
         sim_ir::Expr::Select {
             base,
@@ -178,10 +203,44 @@ fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<u32> {
                 Some(*width),
                 ir.nets[net as usize].width,
             )?;
-            (w == want).then_some(net)
+            (w == want).then_some((net, None))
         }
         _ => None,
     }
+}
+
+/// A driver that contributes NOTHING to its net's resolution: no delay, the whole
+/// net, and a constant that is `z` in every bit at the net's own width (`assign c
+/// = 8'hzz;` beside `assign c = v;`, §2 🆕 I ⓑ). `z` is the identity of every
+/// resolution kind (wire / wand / wor), so the net is a copy of its other driver
+/// exactly as if this one were not written — both oracles read `v` through it.
+/// A narrower constant is NOT one: `4'hz` on an 8-bit net zero-extends and the
+/// high half drives 0 (iverilog `X5` against an `a5` source). A partial
+/// `8'hzx` computes a conflict. Both stay computed, as they were.
+fn null_driver(ir: &SimIr, ca: &sim_ir::ContAssign) -> bool {
+    if ca.delay.is_some() || ca.lhs.chunks.len() != 1 {
+        return false;
+    }
+    let c = &ca.lhs.chunks[0];
+    if c.word.is_some() || c.offset.is_some() || c.width.is_some() {
+        return false;
+    }
+    let Some(sim_ir::Expr::Const { val }) = ir.exprs.get(ca.rhs as usize) else {
+        return false;
+    };
+    let Some(k) = ir.consts.get(*val as usize) else {
+        return false;
+    };
+    let w = ir.nets[c.net as usize].width;
+    if k.width != w || w == 0 || !matches!(k.repr, sim_ir::ConstRepr::Numeric) {
+        return false;
+    }
+    (0..w as usize).all(|b| {
+        let (wi, bi) = (b / 64, b % 64);
+        let v = (k.bits.val.get(wi).copied().unwrap_or(0) >> bi) & 1;
+        let u = (k.bits.unk.get(wi).copied().unwrap_or(0) >> bi) & 1;
+        v == 1 && u == 1
+    })
 }
 
 /// Every copy net in `ir`, in DEPENDENCY ORDER — a copy net whose source is
@@ -201,7 +260,9 @@ fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<u32> {
 /// The net must have at least one driver, ALL of them must be admitted, and it
 /// must not be a multi-driver group (≥2 whole-net drivers is a resolution, and
 /// vita's `E3001` already refuses overlapping partial ones, so the surviving
-/// multi-driver copy nets are disjoint slices of one bus).
+/// multi-driver copy nets are disjoint slices of one bus). A whole-net all-`z`
+/// constant driver ([`null_driver`]) is not counted on either side: it is neither
+/// a move nor a computation, and a net with one move beside it is still a copy.
 ///
 /// A cycle has no source to order from, so its own members are dropped. A copy
 /// net READING a cycle member is kept — whatever value the settle's fixpoint left
@@ -218,12 +279,27 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
     if ir.cont_assigns.is_empty() {
         return Vec::new();
     }
-    let md = crate::sched::multi_driver_groups(ir);
+    let nulls: std::collections::BTreeSet<usize> = ir
+        .cont_assigns
+        .iter()
+        .enumerate()
+        .filter(|(_, ca)| null_driver(ir, ca))
+        .map(|(ci, _)| ci)
+        .collect();
+    // A multi-driver group whose members are one real driver plus null ones is
+    // not a resolution of anything.
+    let md: BTreeMap<u32, Vec<usize>> = crate::sched::multi_driver_groups(ir)
+        .into_iter()
+        .filter(|(_, cis)| cis.iter().filter(|ci| !nulls.contains(ci)).count() >= 2)
+        .collect();
     // net → (its move drivers, the distinct nets they read, "every driver that
     // touches this net is a move"). A net touched by one driver that computes is
     // out whatever its other drivers look like.
     let mut by_dst: BTreeMap<u32, (Vec<usize>, Vec<u32>, bool)> = BTreeMap::new();
     for (ci, ca) in ir.cont_assigns.iter().enumerate() {
+        if nulls.contains(&ci) {
+            continue;
+        }
         // `Some(src)` ⇒ this whole driver is one bit move from `src`. Only a
         // single-chunk lvalue can be, so the multi-chunk case falls to the loop
         // below and disqualifies every net it touches.
@@ -235,7 +311,9 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
                 }
                 let (_, took) =
                     const_slice(ir, c.kind, c.offset, c.width, ir.nets[c.net as usize].width)?;
-                copied_source(ir, ca.rhs, took).filter(|&s| s != c.net)
+                copied_source(ir, ca.rhs, took)
+                    .map(|(s, _)| s)
+                    .filter(|&s| s != c.net)
             })
             .flatten();
         match moved {
@@ -319,11 +397,15 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
 }
 
 /// `net → the net it is a WHOLE-NET copy of` (its root source), identity elsewhere —
-/// the runtime half of the rename set (ROADMAP §2 row 33).
+/// the runtime half of the rename set (ROADMAP §2 row 33) — and, beside it, `net →
+/// the index expression of the array WORD it copies` (`u32::MAX` = a whole net),
+/// for a copy of a constant word (`assign c = m[1];`, §2 🆕 I ⓒ). A chain through
+/// such a copy carries the word down (`d = c` reads `m[1]` too).
 ///
 /// Only the strictest members of [`copy_nets`] qualify: ONE driver, ONE source, both
-/// sides the whole net, and an rhs that is a bare read. A chain resolves to its root
-/// (`copy_nets` is in dependency order, so `alias[src]` is final when `dst` asks).
+/// sides the whole net, and an rhs that is a bare read (of a net or of a constant
+/// word of an array). A chain resolves to its root (`copy_nets` is in dependency
+/// order, so `alias[src]` is final when `dst` asks).
 /// Excluded, deliberately: a 2-state destination (the settle's write coerces x/z
 /// to 0 and a read-through would not), any net that is ever a `force` / `release`
 /// target (a forced destination holds a value its source never held), and a
@@ -335,8 +417,9 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
 /// own sign) gave the oracle's answer — a backend split, found by review. Width is
 /// already required equal by `copied_source`; sign is the other property a read
 /// takes from the net rather than from the bits.
-pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> Vec<u32> {
+pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> (Vec<u32>, Vec<u32>) {
     let mut alias: Vec<u32> = (0..ir.nets.len() as u32).collect();
+    let mut alias_word: Vec<u32> = vec![u32::MAX; ir.nets.len()];
     let forced: std::collections::BTreeSet<u32> = ir
         .stmts
         .iter()
@@ -356,12 +439,9 @@ pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> Vec<u32> {
         if c.word.is_some() || c.offset.is_some() || c.width.is_some() {
             continue;
         }
-        if !matches!(
-            ir.exprs.get(ca.rhs as usize),
-            Some(sim_ir::Expr::Signal { word: None, .. })
-        ) {
+        let Some(sim_ir::Expr::Signal { word, .. }) = ir.exprs.get(ca.rhs as usize) else {
             continue;
-        }
+        };
         if two_state.get(cn.dst as usize).copied().unwrap_or(false) || forced.contains(&cn.dst) {
             continue;
         }
@@ -370,8 +450,15 @@ pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> Vec<u32> {
             continue;
         }
         alias[cn.dst as usize] = root;
+        // An array word's index is validated by `copied_source` (constant, in
+        // range); an array net is never itself a copy, so the chain's word is
+        // either this driver's or the source's.
+        alias_word[cn.dst as usize] = match word {
+            Some(weid) => *weid,
+            None => alias_word[*src as usize],
+        };
     }
-    alias
+    (alias, alias_word)
 }
 
 #[cfg(test)]
@@ -491,6 +578,87 @@ mod tests {
         // settle left on net 0, and copies its event status with it.
         let ir = ir_with(3, vec![(0, 1, None), (1, 0, None), (2, 0, None)]);
         assert_eq!(shape(&copy_nets(&ir)), vec![(2, vec![0])]);
+    }
+
+    /// `assign c = m[IDX];` — a constant, in-range word of a flat array is a
+    /// copy (§2 🆕 I ⓒ); the alias carries the word's index expression.
+    fn ir_word_copy(idx: u64, array_len: u32, c_width: u32) -> (SimIr, u32) {
+        let mut ir = empty_ir();
+        let mut m = net(sim_ir::NetKind::Reg, 8);
+        m.array_len = array_len;
+        ir.nets.push(m);
+        ir.nets.push(net(sim_ir::NetKind::Wire, c_width));
+        let k = konst(&mut ir, idx);
+        let rhs = ir.exprs.len() as u32;
+        ir.exprs.push(sim_ir::Expr::Signal {
+            net: 0,
+            word: Some(k),
+        });
+        ir.cont_assigns.push(sim_ir::ContAssign {
+            lhs: whole(1),
+            rhs,
+            delay: None,
+        });
+        (ir, k)
+    }
+
+    #[test]
+    fn a_constant_in_range_array_word_is_a_copy_and_the_alias_names_the_word() {
+        let (ir, k) = ir_word_copy(1, 4, 8);
+        assert_eq!(shape(&copy_nets(&ir)), vec![(1, vec![0])]);
+        let (alias, words) = copy_alias(&ir, &[false, false]);
+        assert_eq!(alias, vec![0, 0]);
+        assert_eq!(words, vec![u32::MAX, k]);
+    }
+
+    #[test]
+    fn an_out_of_range_word_a_widened_word_and_a_scalar_word_are_not_copies() {
+        assert!(copy_nets(&ir_word_copy(4, 4, 8).0).is_empty());
+        assert!(copy_nets(&ir_word_copy(1, 4, 9).0).is_empty());
+        // `word: Some(_)` on a non-array net is a class field / assoc read.
+        assert!(copy_nets(&ir_word_copy(0, 1, 8).0).is_empty());
+    }
+
+    /// `assign c = v; assign c = <z>;` — an all-`z` whole-net constant driver at
+    /// the net's width contributes nothing (§2 🆕 I ⓑ) and the net stays a copy;
+    /// a narrower or partial `z` constant computes, as before.
+    fn ir_with_z(width: u32, val: u64, unk: u64) -> SimIr {
+        let mut ir = ir_with(2, vec![(1, 0, None)]);
+        for n in &mut ir.nets {
+            n.width = 8;
+            n.msb = 7;
+        }
+        let cv = ir.consts.len() as u32;
+        ir.consts.push(sim_ir::ConstVal {
+            width,
+            signed: false,
+            repr: sim_ir::ConstRepr::Numeric,
+            bits: sim_ir::BitPacked {
+                val: vec![val],
+                unk: vec![unk],
+            },
+        });
+        let e = ir.exprs.len() as u32;
+        ir.exprs.push(sim_ir::Expr::Const { val: cv });
+        ir.cont_assigns.push(sim_ir::ContAssign {
+            lhs: whole(1),
+            rhs: e,
+            delay: None,
+        });
+        ir
+    }
+
+    #[test]
+    fn an_all_z_whole_net_constant_driver_is_ignored() {
+        let ir = ir_with_z(8, 0xff, 0xff);
+        assert_eq!(shape(&copy_nets(&ir)), vec![(1, vec![0])]);
+        let (alias, words) = copy_alias(&ir, &[false, false]);
+        assert_eq!(alias, vec![0, 0]);
+        assert_eq!(words, vec![u32::MAX, u32::MAX]);
+        // narrower (`4'hz` zero-extends), partial (`8'hzx`) and `x` all compute
+        assert!(copy_nets(&ir_with_z(4, 0xf, 0xf)).is_empty());
+        assert!(copy_nets(&ir_with_z(8, 0xf0, 0xff)).is_empty());
+        assert!(copy_nets(&ir_with_z(8, 0x00, 0xff)).is_empty());
     }
 
     #[test]

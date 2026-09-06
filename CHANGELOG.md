@@ -11,6 +11,26 @@ changed for a user of the simulator.
 
 ### Added
 
+- **A packed-struct member sized by an overridable parameter**: `typedef struct packed { logic
+  [W-1:0] d; … }` with `W` a header `parameter` (a header-less module's body `parameter`, or a
+  localparam derived from one) is laid out per instance — declarations, ports, packed and unpacked
+  arrays of the type, member reads and writes, `arr[i].f`, `t'(e)` casts. A member sub-select,
+  `$bits(T)`, a `'{…}` pattern, a union and a nested-member chain on such a struct stay loud.
+  ibex_lockstep parses (ibex page 19 → 13).
+- **Unnamed generate blocks are `genblk<N>`** (IEEE §27.6): `%m`, hierarchical references
+  (`genblk1.v`, `top.genblk2[1].v`), instance paths and the VCD scope name the block; the number
+  counts every generate construct in the scope, named or not, and an `else if` chain is one
+  construct. A net declared in an unnamed block is no longer visible at module scope (both
+  reference tools refuse that).
+
+### Fixed
+
+- A `generate if … else` whose branches carry different labels named the taken else scope with the
+  if label (`%m` printed `top.n` for `top.y`; `n.v` resolved, `y.v` did not).
+- A procedural read, after the writer's own write, of a copy of a constant array word (`assign c =
+  m[1];`) or of a copy beside an all-`z` constant driver (`assign c = v; assign c = 8'hzz;`)
+  printed the stale value (`xx` / `00`) where both reference tools print the written one.
+
 - **A property wrapped whole in parentheses**: `assert property (@(posedge clk) disable iff (rst)
   (a |-> b))` — the shape every lowRISC `ASSERT` macro expands to — parses and runs exactly as the
   unwrapped body (also `((…))`, `|=>`, `##1`, `inside`, an `else begin … end` action block, a

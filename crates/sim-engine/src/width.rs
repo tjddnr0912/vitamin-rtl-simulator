@@ -35,6 +35,10 @@ pub(crate) struct WidthTable {
     /// all three and a backend cannot disagree with another about which net a
     /// read names.
     read_alias: Vec<u32>,
+    /// Beside `read_alias`: the index expression of the array WORD the read
+    /// takes (`u32::MAX` = the whole net) — a copy of a constant word
+    /// (`assign c = m[1];`) reads that word (§2 🆕 I ⓒ).
+    read_alias_word: Vec<u32>,
 }
 
 impl WidthTable {
@@ -42,16 +46,21 @@ impl WidthTable {
     pub(crate) fn get(&self, eid: u32) -> SelfWidth {
         self.sw[eid as usize]
     }
-    /// The net a procedural read of `eid` resolves to, when it is a read-through.
+    /// The net — and the array word of it, if any — a procedural read of `eid`
+    /// resolves to, when it is a read-through.
     #[inline]
-    pub(crate) fn read_alias(&self, eid: u32) -> Option<u32> {
+    pub(crate) fn read_alias(&self, eid: u32) -> Option<(u32, Option<u32>)> {
         match self.read_alias.get(eid as usize) {
-            Some(&n) if n != u32::MAX => Some(n),
+            Some(&n) if n != u32::MAX => {
+                let w = self.read_alias_word.get(eid as usize).copied();
+                Some((n, w.filter(|&w| w != u32::MAX)))
+            }
             _ => None,
         }
     }
-    pub(crate) fn install_read_alias(&mut self, table: Vec<u32>) {
+    pub(crate) fn install_read_alias(&mut self, (table, words): (Vec<u32>, Vec<u32>)) {
         self.read_alias = table;
+        self.read_alias_word = words;
     }
     #[inline]
     pub(crate) fn is_real(&self, eid: u32) -> bool {
@@ -191,6 +200,7 @@ impl WidthTable {
             sw,
             real,
             read_alias: Vec::new(),
+            read_alias_word: Vec::new(),
         }
     }
 }

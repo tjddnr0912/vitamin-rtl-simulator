@@ -608,8 +608,13 @@ fn compile_node(
         }
         sim_ir::Expr::Signal { net, word } => {
             // §2 row 33: the same read-through the interpreter applies, resolved
-            // at compile time from the same table.
-            let net = &wt.read_alias(eid).unwrap_or(*net);
+            // at compile time from the same table (net and, for a copy of a
+            // constant array word, the word's index expression).
+            let (net, word) = match wt.read_alias(eid) {
+                Some((n, w)) => (n, w),
+                None => (*net, *word),
+            };
+            let (net, word) = (&net, &word);
             // KIND first, and locally rather than by inheritance. Today the
             // arena refuses `NetKind::Real` at build ("real: S2 width class"),
             // so a real net cannot reach here — but this arm's checks are all

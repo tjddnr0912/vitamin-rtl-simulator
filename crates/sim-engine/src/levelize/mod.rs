@@ -128,8 +128,16 @@ fn level_reads(ir: &SimIr, tmpl: usize) -> BTreeSet<u32> {
 /// its fresh input in the same delta (iverilog: the old one) and split native from
 /// the VM on keccak. The settle's consumers are order-sensitive; procedural reads
 /// after one's own write are not.
-pub(crate) fn proc_read_alias(ir: &SimIr, alias: &[u32]) -> Vec<u32> {
-    let mut table = vec![u32::MAX; ir.exprs.len()];
+pub(crate) fn proc_read_alias(
+    ir: &SimIr,
+    alias: &[u32],
+    alias_word: &[u32],
+) -> (Vec<u32>, Vec<u32>) {
+    // (net table, word table), both by ExprId.
+    let mut table = (
+        vec![u32::MAX; ir.exprs.len()],
+        vec![u32::MAX; ir.exprs.len()],
+    );
     if alias.iter().enumerate().all(|(i, &a)| a == i as u32) {
         return table;
     }
@@ -138,11 +146,12 @@ pub(crate) fn proc_read_alias(ir: &SimIr, alias: &[u32]) -> Vec<u32> {
         if writes.is_empty() {
             continue;
         }
-        let mark = |eid: u32, table: &mut Vec<u32>| {
+        let mark = |eid: u32, table: &mut (Vec<u32>, Vec<u32>)| {
             expr_signals(ir, eid, &mut |sig, net| {
                 let root = alias[net as usize];
                 if root != net && writes.contains(&root) {
-                    table[sig as usize] = root;
+                    table.0[sig as usize] = root;
+                    table.1[sig as usize] = alias_word[net as usize];
                 }
             });
         };

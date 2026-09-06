@@ -3785,3 +3785,27 @@ scope and a local declaration shadows it in silence (both oracles) — the revie
 was that gate applied to the CU spelling. Census every rule at every spelling of the scope it names
 (module, interface, package, compilation unit). See [[a-default-is-not-a-fact]],
 [[removing-a-loud-gate-exposes-what-it-masked]], [[import-has-a-position]].
+
+### A parse-time refusal keyed on "did not fold" is two populations, and a symbolic width is a formula with a domain (§4.5.431–433)
+
+The lockstep struct needed a member width the parser cannot fold — a header parameter — laid out per
+instance. The first draft opened the symbolic path to EVERY member whose width failed the fold, and
+25 suite pins measured what that column holds: a `localparam` the table declines ON PURPOSE (an `x`
+bit, a truncating initializer, a based literal narrower than its type) — the decline is the thing
+that keeps elaborate's wrong value out of the layout. "Did not fold" is two populations, "the table
+has no value" and "the table refused a value", and only the first is per-instance. Key the new path
+POSITIVELY on the names that are per-instance (`overridable_params`: the header's `parameter`s, a
+header-less body `parameter`, a localparam DERIVED from one) — the same shape as
+`gen_singleton_labels` one batch earlier. Three rules fell out. (1) A width formula has a domain:
+`msb + 1` is right for `msb ≥ 0` and `[W-1:0]` at `W = 0` is `[-1:0]`, two bits (§7.4.1); the
+review's B1 was the one value of `W` the census did not run. Write the LRM form, and when the
+emitted shape feeds back into the walker (a nested symbolic member's range is that ternary),
+extend the walker to its own output. (2) A per-level frame is a budget: one map added to
+`ScopeSnapshot` cost `block_body` 144 B per nesting level through two by-value temporaries and the
+depth guard overflowed; the parser's `depth_guard` test is the canary — box the value in the callee
+(`snapshot_scope_boxed`), never in the recursive frame. (3) Giving a block a scope of its own removes
+an accidental immunity: everything that was resolved at MODULE scope and worked only because the
+block's nets were flattened there (`pending_sva` / `pending_cover`) breaks the moment the block is a
+scope. Census the consumers that resolve names LATER than they are collected, and carry the
+collection scope with the item. See [[an-accidental-immunity-hides-a-latent-defect]],
+[[count-the-loud-to-value-column]], [[reject-gate-measure-hazard-set]].
