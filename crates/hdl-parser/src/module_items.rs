@@ -28,6 +28,12 @@ impl Parser<'_, '_> {
         Some(out)
     }
 
+    /// §4.5.434: a bare type name the compilation unit declared, not redeclared by
+    /// this module — a wildcard import's twin of that name REPLACES it (§26.3).
+    fn cu_type_overridable(&self, bare: &str) -> bool {
+        self.cu_type_names.contains(bare) && !self.local_decl_names.contains(bare)
+    }
+
     /// One `pkg::sym` / `pkg::*` term, no `import` keyword and no `;`.
     fn parse_import_term(&mut self) -> Option<ImportDecl> {
         let start = self.cur_span();
@@ -82,7 +88,11 @@ impl Parser<'_, '_> {
                     })
                     .collect();
                 for (b, v) in td {
-                    self.typedefs.entry(b).or_insert(v);
+                    if self.cu_type_overridable(&b) {
+                        self.typedefs.insert(b, v);
+                    } else {
+                        self.typedefs.entry(b).or_insert(v);
+                    }
                 }
                 let sl: Vec<(String, StructLayout)> = self
                     .struct_layouts
@@ -92,7 +102,11 @@ impl Parser<'_, '_> {
                     })
                     .collect();
                 for (b, v) in sl {
-                    self.struct_layouts.entry(b).or_insert(v);
+                    if self.cu_type_overridable(&b) {
+                        self.struct_layouts.insert(b, v);
+                    } else {
+                        self.struct_layouts.entry(b).or_insert(v);
+                    }
                 }
                 let ed: Vec<(String, Vec<(String, i64)>)> = self
                     .enum_defs
@@ -102,7 +116,11 @@ impl Parser<'_, '_> {
                     })
                     .collect();
                 for (b, v) in ed {
-                    self.enum_defs.entry(b).or_insert(v);
+                    if self.cu_type_overridable(&b) {
+                        self.enum_defs.insert(b, v);
+                    } else {
+                        self.enum_defs.entry(b).or_insert(v);
+                    }
                 }
                 let un: Vec<String> = self
                     .union_type_names
@@ -119,7 +137,11 @@ impl Parser<'_, '_> {
                     })
                     .collect();
                 for (b, v) in usl {
-                    self.unpacked_struct_layouts.entry(b).or_insert(v);
+                    if self.cu_type_overridable(&b) {
+                        self.unpacked_struct_layouts.insert(b, v);
+                    } else {
+                        self.unpacked_struct_layouts.entry(b).or_insert(v);
+                    }
                 }
             }
         }
@@ -237,6 +259,158 @@ impl Parser<'_, '_> {
         })
     }
 
+    /// A body `parameter`/`localparam`/`specparam` COMMA-LIST: the FIRST name's item
+    /// is returned, the rest queue in `pending_module_items` (IEEE §6.20.1: one type
+    /// prefix shared by every name).
+    pub(crate) fn parse_param_list_item(&mut self) -> Option<ModuleItem> {
+        let pfx = self.parse_param_prefix();
+        let mut first: Option<ModuleItem> = None;
+        loop {
+            let Some(pi) = self.finish_param_assignment(&pfx, true) else {
+                break; // parse error already recorded by finish_param_assignment
+            };
+            let mi = self.param_item_to_module_item(pi);
+            match first {
+                None => first = Some(mi),
+                Some(_) => self.pending_module_items.push(mi),
+            }
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(TokenKind::Semi, "';'");
+        first
+    }
+
+    /// `function … endfunction` as a module item. `function void` in module/package
+    /// scope ⇒ task-equivalent: reuse the full task machinery (statement call, output
+    /// formals, control flow).
+    pub(crate) fn parse_function_item(&mut self) -> ModuleItem {
+        let (fd, is_void) = self.parse_function_def();
+        if is_void {
+            return ModuleItem::Task(TaskDef {
+                automatic: fd.automatic,
+                name: fd.name,
+                ports: fd.ports,
+                body_decls: fd.body_decls,
+                body_enums: fd.body_enums,
+                body: fd.body,
+                span: fd.span,
+            });
+        }
+        ModuleItem::Func(fd)
+    }
+
+    /// §4.5.434: replicate the compilation-unit-scope declarations parsed so far
+    /// (`cu_items`) into the front of this module's body — every one whose name the
+    /// module does not declare itself (a header parameter, a body typedef/parameter/
+    /// function/task/net/genvar of the same name shadows the unit's, §3.12.1). The
+    /// unit-scope names were registered in the parser's scope as they were parsed, so
+    /// the body already resolved them; this hands elaborate the declarations to bind.
+    fn inject_cu_items(&self, m: &mut ModuleDecl) {
+        self.inject_cu_items_filtered(m, false);
+    }
+
+    /// `inject_cu_items`, restricted to `Param` items when `consts_only`.
+    fn inject_cu_items_filtered(&self, m: &mut ModuleDecl, consts_only: bool) {
+        if self.cu_items.is_empty() {
+            return;
+        }
+        let mut local: std::collections::BTreeSet<&str> =
+            m.params.iter().map(|p| p.name.name.as_str()).collect();
+        // Review B A-1: a PORT is a declaration of the module too (ANSI or non-ANSI).
+        match &m.ports {
+            PortList::Ansi(ps) => local.extend(ps.iter().map(|p| p.name.name.as_str())),
+            PortList::NonAnsi(ns) => local.extend(ns.iter().map(|n| n.name.as_str())),
+            PortList::None => {}
+        }
+        for it in &m.body {
+            match it {
+                ModuleItem::PortDecl(pd) => {
+                    for n in &pd.names {
+                        local.insert(n.name.as_str());
+                    }
+                }
+                // Review B A-2: an imported name is nearer than the unit scope (§26.3) —
+                // an explicit import names it, a wildcard brings the package's exports.
+                ModuleItem::Import(imp) => match &imp.item {
+                    Some(n) => {
+                        local.insert(n.name.as_str());
+                    }
+                    None => {
+                        if let Some(ex) = self.pkg_exports.get(&imp.pkg.name) {
+                            local.extend(ex.iter().map(|s| s.as_str()));
+                        }
+                    }
+                },
+                ModuleItem::Typedef(td) => {
+                    local.insert(td.name.name.as_str());
+                }
+                ModuleItem::Param(p) => {
+                    local.insert(p.name.name.as_str());
+                }
+                ModuleItem::Func(f) => {
+                    local.insert(f.name.name.as_str());
+                }
+                ModuleItem::Task(t) => {
+                    local.insert(t.name.name.as_str());
+                }
+                ModuleItem::NetVar(d) => {
+                    for n in &d.names {
+                        local.insert(n.name.name.as_str());
+                    }
+                }
+                ModuleItem::Genvar { names, .. } => {
+                    for n in names {
+                        local.insert(n.name.as_str());
+                    }
+                }
+                // Review A A-3: an instance name is a declaration too (both oracles
+                // refuse a read of it; a unit constant must not answer instead).
+                ModuleItem::Instance(mi) => {
+                    for it in &mi.instances {
+                        local.insert(it.name.name.as_str());
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Review A A-1: a unit `typedef enum`'s LABELS are declarations the module's
+        // own net / variable / constant / port of that name shadows (§3.12.1); the
+        // whole enum item stays out of that module (its other labels are loud there,
+        // never wrong).
+        let enum_shadowed = |td: &TypedefDecl| match &td.kind {
+            TypedefKind::Enum { labels, .. } => {
+                labels.iter().any(|l| local.contains(l.name.name.as_str()))
+            }
+            _ => false,
+        };
+        let mut pre: Vec<ModuleItem> = self
+            .cu_items
+            .iter()
+            .filter(|it| {
+                if consts_only && !matches!(it, ModuleItem::Param(_)) {
+                    return false;
+                }
+                let n = match it {
+                    ModuleItem::Typedef(td) if enum_shadowed(td) => return false,
+                    ModuleItem::Typedef(td) => td.name.name.as_str(),
+                    ModuleItem::Param(p) => p.name.name.as_str(),
+                    ModuleItem::Func(f) => f.name.name.as_str(),
+                    ModuleItem::Task(t) => t.name.name.as_str(),
+                    _ => return false,
+                };
+                !local.contains(n)
+            })
+            .cloned()
+            .collect();
+        if pre.is_empty() {
+            return;
+        }
+        pre.append(&mut m.body);
+        m.body = pre;
+    }
+
     pub fn parse_source_unit(&mut self) -> SourceUnit {
         // N7: pre-scan the token stream for every `class NAME` (any nesting) so a
         // class-typed declaration `Packet p;` parses through the ordinary
@@ -253,7 +427,10 @@ impl Parser<'_, '_> {
                 // module-local / package typedef does not leak into the next unit.
                 let snap = self.snapshot_scope();
                 match self.parse_module() {
-                    Some(m) => items.push(TopItem::Module(m)),
+                    Some(mut m) => {
+                        self.inject_cu_items(&mut m);
+                        items.push(TopItem::Module(m));
+                    }
                     None => {
                         items.push(TopItem::Error(self.prev_span()));
                         self.synchronize();
@@ -264,7 +441,13 @@ impl Parser<'_, '_> {
                 // v5 ⑥: `interface … endinterface` — same shape as a module.
                 let snap = self.snapshot_scope();
                 match self.parse_module_like(Kw::Interface, Kw::Endinterface) {
-                    Some(m) => items.push(TopItem::Interface(m)),
+                    Some(mut m) => {
+                        // An interface body binds unit-scope CONSTANTS only: its
+                        // elaboration refuses typedef/function/task items, and a
+                        // unit-scope type is already resolved by the parser scope.
+                        self.inject_cu_items_filtered(&mut m, true);
+                        items.push(TopItem::Interface(m));
+                    }
                     None => {
                         items.push(TopItem::Error(self.prev_span()));
                         self.synchronize();
@@ -341,6 +524,37 @@ impl Parser<'_, '_> {
                         self.synchronize();
                     }
                 }
+            } else if self.at_kw(Kw::Typedef) {
+                // §4.5.434: a compilation-unit-scope typedef (IEEE §3.12.1). The type
+                // registers under the unit scope here; the item rides into every later
+                // module/interface body (`inject_cu_items`).
+                if let Some(it) = self.parse_typedef() {
+                    if let ModuleItem::Typedef(td) = &it {
+                        self.cu_type_names.insert(td.name.name.clone());
+                    }
+                    self.cu_items.push(it);
+                }
+            } else if self.at_kw(Kw::Parameter) || self.at_kw(Kw::Localparam) {
+                // §4.5.434: a unit-scope constant. `parameter` here is a localparam
+                // (§6.20.1: not overridable outside a module header).
+                if let Some(first) = self.parse_param_list_item() {
+                    let mut list = vec![first];
+                    list.append(&mut self.pending_module_items);
+                    for mut it in list {
+                        if let ModuleItem::Param(p) = &mut it {
+                            p.kind = ParamKind::Localparam;
+                        }
+                        self.cu_items.push(it);
+                    }
+                }
+            } else if self.at_kw(Kw::Function) {
+                // §4.5.434: a unit-scope function (`function void` = task-equivalent,
+                // the same desugar as the module-body arm).
+                let it = self.parse_function_item();
+                self.cu_items.push(it);
+            } else if self.at_kw(Kw::Task) {
+                let t = self.parse_task_def();
+                self.cu_items.push(ModuleItem::Task(t));
             } else {
                 self.error("'module'");
                 let s = self.cur_span();
@@ -650,6 +864,25 @@ impl Parser<'_, '_> {
         // typedef is also visible bare in vita's flat model — pre-existing over-leniency).
         if end_kw == Kw::Endpackage {
             let pkg = name.name.clone();
+            // §4.5.434: what this package exports by name (`inject_cu_items` shadow set).
+            let exported: std::collections::BTreeSet<String> = body
+                .iter()
+                .flat_map(|it| match it {
+                    ModuleItem::Typedef(td) => {
+                        let mut v = vec![td.name.name.clone()];
+                        if let TypedefKind::Enum { labels, .. } = &td.kind {
+                            v.extend(labels.iter().map(|l| l.name.name.clone()));
+                        }
+                        v
+                    }
+                    ModuleItem::Param(p) => vec![p.name.name.clone()],
+                    ModuleItem::Func(f) => vec![f.name.name.clone()],
+                    ModuleItem::Task(t) => vec![t.name.name.clone()],
+                    ModuleItem::NetVar(d) => d.names.iter().map(|n| n.name.name.clone()).collect(),
+                    _ => Vec::new(),
+                })
+                .collect();
+            self.pkg_exports.insert(pkg.clone(), exported);
             for it in &body {
                 if let ModuleItem::Typedef(td) = it {
                     let n = td.name.name.clone();
@@ -907,23 +1140,7 @@ impl Parser<'_, '_> {
         // inline; the rest queue in `pending_module_items` and drain (in order, same
         // scope) at the next `parse_module_item`/`parse_gen_item`.
         if self.at_kw(Kw::Parameter) || self.at_kw(Kw::Localparam) || self.at_kw(Kw::Specparam) {
-            let pfx = self.parse_param_prefix();
-            let mut first: Option<ModuleItem> = None;
-            loop {
-                let Some(pi) = self.finish_param_assignment(&pfx, true) else {
-                    break; // parse error already recorded by finish_param_assignment
-                };
-                let mi = self.param_item_to_module_item(pi);
-                match first {
-                    None => first = Some(mi),
-                    Some(_) => self.pending_module_items.push(mi),
-                }
-                if !self.eat(TokenKind::Comma) {
-                    break;
-                }
-            }
-            self.expect(TokenKind::Semi, "';'");
-            return first;
+            return self.parse_param_list_item();
         }
         // defparam path = expr [, path = expr]* ;  (IEEE §23.10.1)
         if self.at_kw(Kw::Defparam) {
@@ -1004,21 +1221,7 @@ impl Parser<'_, '_> {
         }
         // function/endfunction and task/endtask definitions.
         if self.at_kw(Kw::Function) {
-            let (fd, is_void) = self.parse_function_def();
-            if is_void {
-                // `function void` in module/package scope ⇒ task-equivalent: reuse the
-                // full task machinery (statement call, output formals, control flow).
-                return Some(ModuleItem::Task(TaskDef {
-                    automatic: fd.automatic,
-                    name: fd.name,
-                    ports: fd.ports,
-                    body_decls: fd.body_decls,
-                    body_enums: fd.body_enums,
-                    body: fd.body,
-                    span: fd.span,
-                }));
-            }
-            return Some(ModuleItem::Func(fd));
+            return Some(self.parse_function_item());
         }
         if self.at_kw(Kw::Task) {
             return Some(ModuleItem::Task(self.parse_task_def()));

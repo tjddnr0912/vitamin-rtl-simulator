@@ -620,6 +620,24 @@ pub struct Parser<'t, 's> {
     /// `parse_module_item` and `parse_gen_item` (which wraps them), plus the
     /// single-item `parse_gen_branch` arm, so every name lands in the SAME scope.
     pending_module_items: Vec<ModuleItem>,
+    /// §4.5.434: compilation-unit-scope declarations (IEEE §3.12.1) — a `typedef`,
+    /// `localparam`/`parameter` (a unit-scope `parameter` is a localparam, §6.20.1),
+    /// `function` or `task` written OUTSIDE any module. The parser registers the
+    /// type / constant under the unit scope as it goes (a later module sees the
+    /// bare name), and the item itself is replicated into the body of every LATER
+    /// module and interface (`inject_cu_items`) so elaborate binds it exactly as a
+    /// module-local declaration — minus any name the module declares itself
+    /// (the local declaration shadows, §3.12.1).
+    cu_items: Vec<ModuleItem>,
+    /// §4.5.434: the names each package declares (typedef / parameter / function /
+    /// task / variable), recorded at `endpackage`, so a module's `import p::*` can
+    /// shadow a unit-scope item of the same name (review B A-2: the import is the
+    /// nearer scope, IEEE §26.3 — both oracles read the package's).
+    pkg_exports: std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// §4.5.434: the unit-scope TYPE names, so a module's `import p::*` can rebind a
+    /// bare type name the unit declared (review A A-2: the import is the nearer scope,
+    /// §26.3 — the wildcard copy otherwise yields to an existing bare entry).
+    cu_type_names: std::collections::BTreeSet<String>,
     /// SV §11.5 loop-control context stack (one entry per enclosing for/while/
     /// repeat/forever/foreach being parsed). `break`/`continue` desugar to
     /// `disable <synthetic-label>` of the innermost loop; the loop is wrapped in
@@ -721,6 +739,9 @@ impl<'t, 's> Parser<'t, 's> {
             pending_mono_specs: Vec::new(),
             pending_binds: Vec::new(),
             pending_module_items: Vec::new(),
+            cu_items: Vec::new(),
+            pkg_exports: std::collections::BTreeMap::new(),
+            cu_type_names: std::collections::BTreeSet::new(),
             loop_labels: Vec::new(),
             enum_defs: std::collections::HashMap::new(),
             var_enum: std::collections::HashMap::new(),
