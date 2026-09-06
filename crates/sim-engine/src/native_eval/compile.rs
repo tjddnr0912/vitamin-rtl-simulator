@@ -277,7 +277,17 @@ pub(crate) fn lower(
             // at compile time from the same table (net and, for a copy of a
             // constant array word, the word's index expression).
             let (net, word) = match wt.read_alias(eid) {
-                Some((n, w)) => (n, w),
+                // §4.5.441 (§2 🆕 I ⓖ): a copy whose declared sign differs from its
+                // source's reads through on the interpreter, which re-stamps the
+                // COPY's sign; a compiled load takes the sign from the SLOT (the
+                // source's), so it declines — "evaluate on the interpreter", never
+                // a different value.
+                Some((n, w)) => {
+                    if ir.nets[n as usize].signed != ir.nets[*net as usize].signed {
+                        return None;
+                    }
+                    (n, w)
+                }
                 None => (*net, *word),
             };
             let (net, word) = (&net, &word);

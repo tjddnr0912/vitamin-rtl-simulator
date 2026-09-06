@@ -585,16 +585,22 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
 /// word of an array). A chain resolves to its root (`copy_nets` is in dependency
 /// order, so `alias[src]` is final when `dst` asks).
 /// Excluded, deliberately: a 2-state destination (the settle's write coerces x/z
-/// to 0 and a read-through would not), any net that is ever a `force` / `release`
-/// target (a forced destination holds a value its source never held), and a
-/// destination whose declared SIGN differs from its source's. The read substitutes
-/// the NET, and a read carries the net's declared sign into its extension: `wire
-/// signed [7:0] c; assign c = v;` with an unsigned `v` then `r = c;` (32-bit) is
-/// 4294967295 in both oracles, and the source's unsigned flag gave 255 on the
-/// interpreter and the VM while the native compiled path (which keeps the node's
-/// own sign) gave the oracle's answer — a backend split, found by review. Width is
-/// already required equal by `copied_source`; sign is the other property a read
-/// takes from the net rather than from the bits.
+/// to 0 and a read-through would not) and any net that is ever a `force` /
+/// `release` target (a forced destination holds a value its source never held).
+///
+/// §4.5.441 (§2 🆕 I ⓖ): a destination whose declared SIGN differs from its
+/// source's IS a member. The read substitutes the NET, and a read carries the
+/// net's declared sign into its extension — `wire signed [7:0] c; assign c = v;`
+/// with an unsigned `v` then `r = c;` (32-bit) is 4294967295 in both oracles —
+/// so the interpreter re-stamps the COPY's declared sign on the aliased read
+/// (`eval_core`), and the compiled paths (the VM and tier-3 `wprog`), which take
+/// the sign from the SLOT, decline such a read and fall back to it. Until this
+/// slice the mismatch was excluded (a backend split found by review, the value
+/// stale on all three); both oracles read it through with the copy's sign.
+/// Width is required equal by `copied_source`; a FULL-range part-select of the
+/// source (`assign c = v[7:0]`) is that whole net under another spelling and is
+/// admitted too (both oracles `a5`); a partial slice stays computed (oracle
+/// split: iverilog `x`, verilator the slice).
 pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> (Vec<u32>, Vec<u32>) {
     let mut alias: Vec<u32> = (0..ir.nets.len() as u32).collect();
     let mut alias_word: Vec<u32> = vec![u32::MAX; ir.nets.len()];
@@ -617,22 +623,43 @@ pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> (Vec<u32>, Vec<u32>)
         if c.word.is_some() || c.offset.is_some() || c.width.is_some() {
             continue;
         }
-        let Some(sim_ir::Expr::Signal { word, .. }) = ir.exprs.get(ca.rhs as usize) else {
-            continue;
+        let word: Option<u32> = match ir.exprs.get(ca.rhs as usize) {
+            Some(sim_ir::Expr::Signal { word, .. }) => *word,
+            // A full-range part-select of the (flat, non-array) source is the whole
+            // net: `copied_source` already admitted it to the rename set on width;
+            // the alias asks that the slice start at bit 0 and cover every bit.
+            Some(sim_ir::Expr::Select {
+                base,
+                offset,
+                width,
+                kind,
+            }) => {
+                let Some(sim_ir::Expr::Signal { net: b, word: None }) =
+                    ir.exprs.get(*base as usize)
+                else {
+                    continue;
+                };
+                if *b != *src || !flat(ir, *b) {
+                    continue;
+                }
+                let nw = ir.nets[*b as usize].width;
+                match const_slice(ir, *kind, Some(*offset), Some(*width), nw) {
+                    Some((0, w)) if w == nw => None,
+                    _ => continue,
+                }
+            }
+            _ => continue,
         };
         if two_state.get(cn.dst as usize).copied().unwrap_or(false) || forced.contains(&cn.dst) {
             continue;
         }
         let root = alias[*src as usize];
-        if ir.nets[cn.dst as usize].signed != ir.nets[root as usize].signed {
-            continue;
-        }
         alias[cn.dst as usize] = root;
         // An array word's index is validated by `copied_source` (constant, in
         // range); an array net is never itself a copy, so the chain's word is
         // either this driver's or the source's.
         alias_word[cn.dst as usize] = match word {
-            Some(weid) => *weid,
+            Some(weid) => weid,
             None => alias_word[*src as usize],
         };
     }

@@ -565,9 +565,12 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 // flat scalar, so the assoc/array branches below never see an
                 // aliased net — except a copy of a constant array WORD, whose
                 // read-through names the word as well (§2 🆕 I ⓒ).
-                let (net, word) = match self.wt.read_alias(eid) {
-                    Some((n, w)) => (n, w),
-                    None => (*net, *word),
+                // §4.5.441 (§2 🆕 I ⓖ): the copy may differ from its source in
+                // declared SIGN; the read is of the COPY, so its extension takes
+                // the copy's sign (both oracles 4294967295 / 255), re-stamped below.
+                let (net, word, copy_sign) = match self.wt.read_alias(eid) {
+                    Some((n, w)) => (n, w, Some(self.ir.nets[*net as usize].signed)),
+                    None => (*net, *word, None),
                 };
                 let (net, word) = (&net, &word);
                 // v5 ⑤: assoc element — the key domain is SIGNED i64 (negative
@@ -592,7 +595,12 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 // all-X — NOT a silent read of a wrapped element. Symmetric with
                 // the write side (`resolve_lvalue_offsets`).
                 let widx = word.map(|weid| crate::eval::word_index_of(self.eval(weid).to_u64()));
-                let base = self.nets.read_net(*net, widx);
+                let mut base = self.nets.read_net(*net, widx);
+                if let Some(s) = copy_sign {
+                    if !base.is_real && !base.is_str {
+                        base.signed = s;
+                    }
+                }
                 base.resize_keep_sign(w, eff_signed)
             }
 

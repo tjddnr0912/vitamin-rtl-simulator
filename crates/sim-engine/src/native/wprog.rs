@@ -611,7 +611,14 @@ fn compile_node(
             // at compile time from the same table (net and, for a copy of a
             // constant array word, the word's index expression).
             let (net, word) = match wt.read_alias(eid) {
-                Some((n, w)) => (n, w),
+                // §4.5.441 (§2 🆕 I ⓖ): a sign-mismatched copy declines here — the
+                // slot carries the SOURCE's sign, the interpreter re-stamps the copy's.
+                Some((n, w)) => {
+                    if ir.nets[n as usize].signed != ir.nets[*net as usize].signed {
+                        return None;
+                    }
+                    (n, w)
+                }
                 None => (*net, *word),
             };
             let (net, word) = (&net, &word);

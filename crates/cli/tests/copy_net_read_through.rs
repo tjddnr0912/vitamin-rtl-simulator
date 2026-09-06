@@ -195,27 +195,52 @@ fn a_port_copy_reads_through_across_the_module_boundary() {
 /// ⚠️ Review finding: a copy whose declared SIGN differs from its source's does not
 /// read through — the substituted net would lend its sign to the extension, and the
 /// interpreter/VM (slot sign) and the native compiled path (node sign) disagreed
-/// (255 vs 4294967295; both oracles 4294967295). Excluded in `copy_alias`, so the
-/// three backends agree again; the value is the pre-slice one (stale), pinned here
-/// as PARITY only — ROADMAP §2 🆕 I records the cell.
+/// (255 vs 4294967295; both oracles 4294967295). §4.5.441 (§2 🆕 I ⓖ): the copy
+/// reads through WITH ITS OWN declared sign on every backend — the interpreter
+/// re-stamps it on the aliased read, the compiled paths decline the read and fall
+/// back — so `r = c` is the oracles' 4294967295 and `c >>> 1` is `ff`; the unsigned
+/// copy of a signed source is 255 / `7f`; a chain that flips the sign twice reads
+/// with the LAST copy's sign; a FULL-range part-select copy (`v[7:0]`) is the
+/// whole net and reads through too (all cells: both oracles).
 #[test]
-fn a_sign_mismatched_copy_keeps_backend_parity() {
-    let src = top(
+fn a_sign_mismatched_copy_reads_through_with_the_copys_sign() {
+    prints(
         "  reg [7:0] v = 0; reg [31:0] r;\n  wire signed [7:0] c; assign c = v;",
         "v = 8'hFF; r = c; $display(\"r=%0d sra=%h\", r, c >>> 1);",
+        "r=4294967295 sra=ff",
     );
-    let mut seen = std::collections::BTreeSet::new();
-    for b in ["native", "interp", "vm"] {
-        let (out, code) = run_backend(&src, b);
-        assert_eq!(code, Some(0), "[{b}]\n{out}");
-        let line = out
-            .lines()
-            .find(|l| l.starts_with("r="))
-            .map(str::to_string);
-        assert!(line.is_some(), "[{b}]\n{out}");
-        seen.insert(line.unwrap());
-    }
-    assert_eq!(seen.len(), 1, "the three backends disagree: {seen:?}");
+    prints(
+        "  reg signed [7:0] v = 0; reg [31:0] r;\n  wire [7:0] c; assign c = v;",
+        "v = 8'hFF; r = c; $display(\"r=%0d sra=%h\", r, c >>> 1);",
+        "r=255 sra=7f",
+    );
+    prints(
+        "  reg [7:0] v = 0; reg [31:0] r;\n  wire signed [7:0] c; assign c = v; wire [7:0] d; assign d = c;",
+        "v = 8'hFF; r = d; $display(\"r=%0d\", r);",
+        "r=255",
+    );
+    prints(
+        "  reg signed [7:0] v = 0; reg [31:0] r;\n  wire [7:0] c; assign c = v; wire signed [7:0] e; assign e = c;",
+        "v = 8'hFF; r = e; $display(\"r=%0d\", r);",
+        "r=4294967295",
+    );
+    prints(
+        "  reg [7:0] v = 0; reg [31:0] r;\n  wire signed [7:0] h; assign h = v[7:0];",
+        "v = 8'hFF; r = h; $display(\"r=%0d\", r);",
+        "r=4294967295",
+    );
+    prints(
+        "  reg [7:0] v = 0; integer iv = 0;\n  wire [7:0] f; assign f = v[7:0]; wire [7:0] k; assign k = f; wire [31:0] j; assign j = iv[31:0];",
+        "v = 8'hA5; iv = -2; $display(\"f=%h k=%h j=%h\", f, k, j);",
+        "f=a5 k=a5 j=fffffffe",
+    );
+    // A PARTIAL slice stays computed and keeps the settle's value (oracle split:
+    // iverilog `x`, verilator `5`; ROADMAP §2 🆕 I records the cell).
+    prints(
+        "  reg [7:0] v = 0;\n  wire [3:0] c4; assign c4 = v[3:0];",
+        "v = 8'hA5; $display(\"c4=%h\", c4);",
+        "c4=0",
+    );
     // The same-sign twins DO read through, on every backend.
     prints(
         "  reg [7:0] v = 0; reg [31:0] r;\n  wire [7:0] c; assign c = v;",
