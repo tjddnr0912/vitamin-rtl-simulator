@@ -233,16 +233,9 @@ fn the_consumers_that_cannot_carry_the_dims_are_loud() {
          endmodule\n",
         "outside the v1 cast scope",
     );
-    // vita-only declines: a subroutine formal and a parameter, both of which
-    // would otherwise bind the ELEMENT type.
-    loud(
-        "typedef logic [7:0] a_t [0:3];\n\
-         module top;\n\
-           function automatic logic [7:0] pick(input a_t v); pick = v[1]; endfunction\n\
-           initial begin $display(\"f\"); $finish; end\n\
-         endmodule\n",
-        "unpacked-array typedef formal is unsupported",
-    );
+    // vita-only decline: a parameter, which would otherwise bind the ELEMENT type.
+    // (The subroutine FORMAL that used to sit here is now supported — see
+    // `a_tf_port_formal_carries_the_typedefs_dims` below.)
     loud(
         "typedef logic [7:0] a_t [0:3];\n\
          module top;\n\
@@ -333,4 +326,184 @@ fn bits_of_an_unsized_dimension_stays_loud() {
             "E-ELAB",
         );
     }
+}
+
+/// §3 ⑤ⓕ (§4.5.456): a tf-port FORMAL spelled with an unpacked-array typedef.
+///
+/// The typedef's own dims now ride onto `TfPort.unpacked` — the same field the
+/// explicit spelling `input logic [7:0] v [0:3]` fills — so the two spellings build
+/// the SAME port and elaborate's existing unpacked-formal lowering carries it. Each
+/// cell is paired with that explicit twin, which is the regression oracle: the two
+/// must print the same thing.
+///
+/// ORACLE STRENGTH, measured at HEAD and NOT what the queue line claimed:
+///   * the DYNAMIC formal (`typedef logic [7:0] d_t [];`) is the only TWO-oracle
+///     cell — iverilog `R=12`, verilator `R=12`;
+///   * every FIXED cell is ONE-oracle (verilator). iverilog 13.0 refuses the
+///     CONTROL spelling itself — "sorry: Subroutine ports with unpacked dimensions
+///     are not yet supported" — so it cannot judge the typedef spelling either, and
+///     `ref` is refused a second way ("Reference ports not supported yet").
+///     Verilator's value is copied verbatim into each assertion below.
+#[test]
+fn a_tf_port_formal_carries_the_typedefs_dims() {
+    // The 2-oracle anchor: a DYNAMIC unpacked typedef. iverilog R=12, verilator R=12.
+    assert!(run("module top;\n\
+           typedef logic [7:0] d_t [];\n\
+           function int f(input d_t v); f = int'(v[0]) + int'(v[1]); endfunction\n\
+           d_t q;\n\
+           initial begin q = new[2]; q[0] = 8'd5; q[1] = 8'd7;\n\
+             $display(\"R=%0d\", f(q)); $finish; end\n\
+         endmodule\n")
+    .contains("R=12"));
+
+    // Every FIXED cell beside the explicit twin it must equal. `want` is verilator's.
+    // (dir, formal body, actual set-up + display, want)
+    let dirs: [(&str, &str, &str, &str); 4] = [
+        (
+            "input",
+            "x = v[0] + v[3];",
+            "$display(\"R=%0d\", x);",
+            "R=5",
+        ),
+        (
+            "output",
+            "v[0] = 8'd9; v[1] = 8'd6;",
+            "$display(\"R=%0d %0d\", q[0], q[1]);",
+            "R=9 6",
+        ),
+        (
+            "inout",
+            "v[0] = v[0] + 8'd1; v[1] = v[1] + 8'd1;",
+            "$display(\"R=%0d %0d\", q[0], q[1]);",
+            "R=2 6",
+        ),
+        (
+            "ref",
+            "v[0] = v[0] + 8'd7;",
+            "$display(\"R=%0d\", q[0]);",
+            "R=8",
+        ),
+    ];
+    for (dir, body, disp, want) in dirs {
+        for (tydecl, ty) in [
+            ("typedef logic [7:0] a_t [0:3];\n", "a_t v"),
+            ("", "logic [7:0] v [0:3]"),
+        ] {
+            let src = format!(
+                "module top;\n{tydecl}  logic [7:0] x;\n\
+                   task automatic t({dir} {ty}); {body} endtask\n\
+                   logic [7:0] q [0:3];\n\
+                   initial begin q[0]=8'd1; q[1]=8'd5; q[2]=8'd0; q[3]=8'd4;\n\
+                     t(q); {disp} $finish; end\n\
+                 endmodule\n"
+            );
+            let got = run(&src);
+            assert!(
+                got.contains(want),
+                "{dir} / `{ty}`: wanted `{want}`:\n{got}"
+            );
+        }
+    }
+}
+
+/// The spellings the formal carry has to reach beyond the plain ANSI `input a_t v`,
+/// each one a binder the declaration carry (§4.5.445) already had to visit.
+/// Verilator's value is in each assertion; iverilog refuses every one of these
+/// (unpacked subroutine ports), so they are ONE-oracle.
+#[test]
+fn the_formal_carry_reaches_every_binder() {
+    // The NON-ANSI formal-declaration form — the second tf-port binder.
+    assert!(run("typedef logic [7:0] a_t [0:3];\n\
+         module top;\n\
+           function int f;\n\
+             input a_t v;\n\
+             f = int'(v[0]) + int'(v[3]);\n\
+           endfunction\n\
+           a_t q = '{8'd1, 8'd2, 8'd3, 8'd4};\n\
+           initial begin $display(\"R=%0d\", f(q)); $finish; end\n\
+         endmodule\n")
+    .contains("R=5"));
+
+    // A bare comma CONTINUATION inherits the array type, not the element — in both
+    // binders. `input a_t v, w` must give `w` the dims too (verilator R=13).
+    for f in [
+        "function int f(input a_t v, w); f = int'(v[3]) + int'(w[0]); endfunction\n",
+        "function int f;\n input a_t v, w;\n f = int'(v[3]) + int'(w[0]);\n endfunction\n",
+    ] {
+        let got = run(&format!(
+            "typedef logic [7:0] a_t [0:3];\n\
+             module top;\n  {f}\
+               a_t q = '{{8'd1, 8'd2, 8'd3, 8'd4}};\n\
+               a_t r = '{{8'd9, 8'd0, 8'd0, 8'd0}};\n\
+               initial begin $display(\"R=%0d\", f(q, r)); $finish; end\n\
+             endmodule\n"
+        ));
+        assert!(got.contains("R=13"), "continuation:\n{got}");
+    }
+
+    // The `[N]` size form, a 2-D typedef, and the package-SCOPED spelling — the
+    // three shapes the declaration carry also had to respell (verilator 5 / 7 / 5).
+    for (src, want) in [
+        (
+            "module top;\n\
+               typedef logic [7:0] s_t [4];\n\
+               function int f(input s_t v); f = int'(v[0]) + int'(v[3]); endfunction\n\
+               s_t q = '{8'd1, 8'd2, 8'd3, 8'd4};\n\
+               initial begin $display(\"R=%0d\", f(q)); $finish; end\n\
+             endmodule\n",
+            "R=5",
+        ),
+        (
+            "module top;\n\
+               typedef logic [7:0] m_t [0:1][0:2];\n\
+               function int f(input m_t v); f = int'(v[0][0]) + int'(v[1][2]); endfunction\n\
+               m_t q;\n\
+               initial begin q[0][0] = 8'd3; q[1][2] = 8'd4;\n\
+                 $display(\"R=%0d\", f(q)); $finish; end\n\
+             endmodule\n",
+            "R=7",
+        ),
+        (
+            "package pk; localparam N = 4; typedef logic [7:0] a_t [0:N-1]; endpackage\n\
+             module top;\n\
+               function int f(input pk::a_t v); f = int'(v[0]) + int'(v[3]); endfunction\n\
+               pk::a_t q = '{8'd1, 8'd2, 8'd3, 8'd4};\n\
+               initial begin $display(\"R=%0d\", f(q)); $finish; end\n\
+             endmodule\n",
+            "R=5",
+        ),
+    ] {
+        let got = run(src);
+        assert!(got.contains(want), "wanted `{want}`:\n{got}");
+    }
+}
+
+/// What the formal carry must KEEP refusing.
+///
+/// Dims on BOTH the typedef and the declarator is the same live oracle SPLIT the
+/// DECLARATION binder refuses (`declarator_dims_on_top_of_typedef_dims_stay_loud`
+/// above): iverilog reads the declarator dim as the inner index, verilator as the
+/// outer, and iverilog contradicts its own answer for the identical explicit type.
+/// The two refusals are deliberately worded alike and must stay in lockstep.
+#[test]
+fn the_formal_carry_keeps_the_split_and_the_class_refusal() {
+    loud(
+        "typedef logic [7:0] a_t [0:3];\n\
+         module top;\n\
+           function int f(input a_t v [0:1]); f = 1; endfunction\n\
+           initial begin $display(\"f\"); $finish; end\n\
+         endmodule\n",
+        "unpacked-array typedef combined with declarator dimensions",
+    );
+    // A class-handle typedef formal is unrelated to the dims and stays loud; the
+    // message no longer mentions unpacked arrays, because that half now works.
+    loud(
+        "module top;\n\
+           class C; int x; endclass\n\
+           typedef C c_t;\n\
+           function int f(input c_t v); f = 1; endfunction\n\
+           initial begin $display(\"f\"); $finish; end\n\
+         endmodule\n",
+        "a class typedef type for a tf-port",
+    );
 }

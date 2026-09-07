@@ -1123,6 +1123,16 @@ impl Parser<'_, '_> {
     /// not on a typedef name, so the caller keeps its built-in / inherited-type
     /// handling. Shared by the ANSI (`parse_tf_port`) and non-ANSI
     /// (`parse_tf_port_decl_into`) port parsers.
+    ///
+    /// §3 ⑤ⓕ: the SEVENTH slot carries the typedef's own UNPACKED dims
+    /// (`typedef logic [7:0] a_t [0:3]` → `[0:3]`). `TfPort.unpacked` is the
+    /// declarator's slot for exactly the same dims, so the caller seeds it with
+    /// these and the resulting port is byte-identical to the explicit spelling
+    /// `input logic [7:0] v [0:3]` — which elaborate already lowers
+    /// (`array_formal::is_fixed_unpacked_array_formal`, `inline_task`'s
+    /// force-frame). Dims on BOTH the typedef and the declarator stay loud: that
+    /// is a live oracle SPLIT on dimension order, refused by the same rule the
+    /// declaration binder uses (`decls.rs`).
     #[allow(clippy::type_complexity)]
     pub(crate) fn try_tf_port_typedef(
         &mut self,
@@ -1133,6 +1143,7 @@ impl Parser<'_, '_> {
         Option<String>,
         Option<String>,
         Vec<Range>,
+        Vec<Dim>,
     )> {
         // R5: an UNPACKED struct typedef IS supported as a tf-port — it expands to one
         // member formal per field (`$unp$<port>$<field>`), because a heterogeneous
@@ -1171,9 +1182,18 @@ impl Parser<'_, '_> {
                     Some(nm),
                     None,
                     Vec::new(),
+                    Vec::new(),
                 ));
             }
-            return Some((NetVarKind::Reg, false, None, None, Some(nm), Vec::new()));
+            return Some((
+                NetVarKind::Reg,
+                false,
+                None,
+                None,
+                Some(nm),
+                Vec::new(),
+                Vec::new(),
+            ));
         }
         let info = self.peek_typedef_name()?;
         let nm = self.type_name_key();
@@ -1185,18 +1205,36 @@ impl Parser<'_, '_> {
         // returns its inner dims in the sixth slot; the caller flattens the formal and
         // binds the dims for the body rewrite, as for the inline spelling.
         let is_struct = self.struct_layouts.contains_key(&nm);
-        // §3 ⑤: an UNPACKED-array typedef. The tuple carries a range and packed
-        // dims and has no slot for unpacked ones, so the formal would silently be
-        // ONE element — honest-loud instead, with the reason named. (The explicit
-        // spelling `input logic [7:0] v [0:3]` is a separate, supported channel.)
-        if info.class_name.is_some() || !info.unpacked.is_empty() {
+        // A class handle stays honest-loud (the TfPort shape carries no class
+        // binding).
+        if info.class_name.is_some() {
             self.error(
-                "a class typedef type for a tf-port (a vector / enum / packed-struct / multi-dim packed typedef port is supported; an unpacked-array typedef formal is unsupported in v1 — write the dimensions on the formal)",
+                "a class typedef type for a tf-port (a vector / enum / packed-struct / multi-dim packed typedef port is supported)",
+            );
+        }
+        // §3 ⑤ⓕ: an UNPACKED-array typedef no longer declines here — its dims ride
+        // the seventh slot onto `TfPort.unpacked`, the same field the explicit
+        // spelling `input logic [7:0] v [0:3]` fills, so the two spellings build the
+        // SAME port and elaborate's existing lowering carries it.
+        //
+        // A STRUCT typedef is the one shape held back: a packed struct rides `range`
+        // as a flat vector and the 4th slot binds its layout, so an array OF one has
+        // no element type to spell here and the dims would land on the flat vector.
+        // Measured unreachable today — a struct typedef cannot CARRY unpacked dims,
+        // because both spellings are refused at the declaration (the inline
+        // `typedef struct packed {…} sa_t [0:1];` is a parse error, and the chained
+        // `typedef s_t sa_t [0:1];` is "an unpacked-array typedef of an aliased
+        // type"). It is kept fail-closed so that opening either declaration does not
+        // silently bind the element here.
+        if is_struct && !info.unpacked.is_empty() {
+            self.error(
+                "a non-array struct typedef for a tf-port (an unpacked ARRAY of a struct typedef as a formal is unsupported in v1 — write the dimensions on the formal)",
             );
         }
         self.eat_scope_qualifier();
         self.bump(); // the typedef-name token
         let struct_name = if is_struct { Some(nm) } else { None };
+        let td_unpacked = info.unpacked.clone();
         Some((
             info.kind,
             info.signed,
@@ -1204,6 +1242,7 @@ impl Parser<'_, '_> {
             struct_name,
             None,
             info.packed,
+            td_unpacked,
         ))
     }
 

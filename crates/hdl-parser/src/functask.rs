@@ -321,7 +321,8 @@ impl Parser<'_, '_> {
         // R6: a bare `, b` continues the previous formal's DIRECTION, so it continues
         // its spelling too — `task t(ref int a, b);` gives `b` the `ref` word as well.
         let mut inherited_spelling = TfDirSpelling::Declared;
-        let mut inherited_type: TfPortType = (None, false, None, None, None, Vec::new());
+        let mut inherited_type: TfPortType =
+            (None, false, None, None, None, Vec::new(), Vec::new());
         loop {
             let before = self.pos;
             let (port, dir, ty, unpacked_struct) =
@@ -444,6 +445,9 @@ impl Parser<'_, '_> {
         // name must be captured BEFORE `try_tf_port_typedef` consumes the token; the
         // resolver returns only the underlying vector kind, not the enum-ness.
         let mut enum_name: Option<String> = None;
+        // §3 ⑤ⓕ: an unpacked-array typedef's OWN dims, to be carried onto
+        // `TfPort.unpacked` below — the same field the declarator spelling fills.
+        let mut typedef_unpacked: Vec<Dim> = Vec::new();
         // A `pkg::type` in the type slot whose package/type this run never declared:
         // report it ONCE, naming the package, and consume it so the rest of the header
         // parses. See `reject_unknown_scoped_type` for the cascade this replaces.
@@ -453,13 +457,14 @@ impl Parser<'_, '_> {
         if net_or_var.is_none() && range.is_none() {
             let tname = self.type_name_key();
             let is_enum = self.enum_defs.contains_key(&tname);
-            if let Some((k, s, r, sn, usn, pd)) = self.try_tf_port_typedef() {
+            if let Some((k, s, r, sn, usn, pd, tu)) = self.try_tf_port_typedef() {
                 net_or_var = Some(k);
                 range = r;
                 typedef_signed = Some(s);
                 struct_name = sn;
                 unpacked_struct = usn;
                 md_dims = pd;
+                typedef_unpacked = tu;
                 if is_enum {
                     enum_name = Some(tname);
                 }
@@ -470,7 +475,7 @@ impl Parser<'_, '_> {
         // token is present; otherwise (a bare `, name`) it inherits the previous
         // type (INCLUDING its struct-ness). The resolved type then propagates on.
         let type_present = net_or_var.is_some() || range.is_some() || explicit_signed.is_some();
-        let (net_or_var, signed, range, struct_name, enum_name, dims) =
+        let (net_or_var, signed, range, struct_name, enum_name, dims, typedef_unpacked) =
             if dir_present || type_present {
                 (
                     net_or_var,
@@ -481,6 +486,7 @@ impl Parser<'_, '_> {
                     struct_name,
                     enum_name,
                     dims,
+                    typedef_unpacked,
                 )
             } else {
                 inherited_type.clone()
@@ -503,6 +509,7 @@ impl Parser<'_, '_> {
                 None => break,
             }
         }
+        self.carry_typedef_formal_dims(&typedef_unpacked, &mut unpacked, name.span);
         self.reject_packed_md_formal_array(&dims, &unpacked, name.span);
         // EXT2-C: bind a struct/union port NAME to its layout so `name.field`
         // desugars in the body (scoped to this tf by `parse_function_def`/
@@ -546,8 +553,41 @@ impl Parser<'_, '_> {
             struct_name,
             enum_name,
             dims,
+            typedef_unpacked,
         );
         (port, dir, next_type, unpacked_struct)
+    }
+
+    /// §3 ⑤ⓕ: carry an unpacked-array TYPEDEF's own dims onto the formal, which is
+    /// what the explicit spelling `input logic [7:0] v [0:3]` writes into the same
+    /// `TfPort.unpacked` field. Both tf-port binders — the ANSI port list and the
+    /// non-ANSI formal declaration — call this at the one point where the
+    /// declarator's own dims have just been parsed.
+    ///
+    /// ⚠️ REFUSED when the declarator brings dims of its own (`a_t v [0:1]`): the
+    /// oracles disagree about the resulting dimension ORDER (iverilog reads the
+    /// declarator dim as the INNER index, verilator as the OUTER, and iverilog
+    /// contradicts its own answer for the identical explicit type), so there is no
+    /// oracle to build on. Same rule, same reason, as the declaration binder
+    /// (`decls.rs`) — kept in lockstep with it deliberately.
+    pub(crate) fn carry_typedef_formal_dims(
+        &mut self,
+        typedef_unpacked: &[Dim],
+        unpacked: &mut Vec<Dim>,
+        at: Span,
+    ) {
+        if typedef_unpacked.is_empty() {
+            return;
+        }
+        if !unpacked.is_empty() {
+            self.error_at(
+                at,
+                "a formal without its own unpacked dimensions (an unpacked-array \
+                 typedef combined with declarator dimensions is unsupported in v1)",
+            );
+            return;
+        }
+        unpacked.extend_from_slice(typedef_unpacked);
     }
 
     /// Body of a function/task: a decl prefix (net/var decls AND — for the non-ANSI
@@ -868,14 +908,19 @@ impl Parser<'_, '_> {
         // packed struct/union (EXT2-C), exactly as the ANSI path.
         let mut struct_name: Option<String> = None;
         let mut unpacked_struct: Option<String> = None;
+        // §3 ⑤ⓕ: the typedef's own unpacked dims, carried onto EVERY declarator in
+        // the comma list below — `input a_t a, b;` gives both names the array type,
+        // exactly as the declaration binder does for `a_t a, b;`.
+        let mut typedef_unpacked: Vec<Dim> = Vec::new();
         if net_or_var.is_none() && range.is_none() {
-            if let Some((k, s, r, sn, usn, pd)) = self.try_tf_port_typedef() {
+            if let Some((k, s, r, sn, usn, pd, tu)) = self.try_tf_port_typedef() {
                 net_or_var = Some(k);
                 signed = s;
                 range = r;
                 struct_name = sn;
                 unpacked_struct = usn;
                 md_dims = pd;
+                typedef_unpacked = tu;
             }
         }
         let dims = self.flatten_packed_md_formal(&mut range, md_dims);
@@ -893,6 +938,7 @@ impl Parser<'_, '_> {
                     None => break,
                 }
             }
+            self.carry_typedef_formal_dims(&typedef_unpacked, &mut unpacked, name.span);
             self.reject_packed_md_formal_array(&dims, &unpacked, name.span);
             // Bind a struct/union port name to its layout (scoped by the enclosing
             // tf's snapshot/restore); `input cfg_t a, b;` binds every name.

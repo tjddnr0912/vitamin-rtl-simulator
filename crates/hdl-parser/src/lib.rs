@@ -249,6 +249,10 @@ pub(crate) struct ConstVal {
 /// formal is declared FLAT (`range` = the product range) and its selects / dimension
 /// queries in the body are rewritten by `packed_md.rs`, exactly like a multi-dim
 /// packed parameter (§3 ⑤ ⓐ). Empty for every other formal.
+///
+/// The seventh slot is the UNPACKED dimension list an unpacked-array TYPEDEF brought
+/// (§3 ⑤ⓕ). It threads onward for the same reason the struct/enum names do — a bare
+/// continuation `input a_t v, w` must give `w` the array type too, not the element.
 type TfPortType = (
     Option<NetVarKind>,
     bool,
@@ -256,6 +260,7 @@ type TfPortType = (
     Option<String>,
     Option<String>,
     Vec<Range>,
+    Vec<Dim>,
 );
 
 /// Flat bit layout of a packed struct: members are placed MSB-first into one
