@@ -216,3 +216,210 @@ fn what_is_still_computed_stays_computed() {
         &["D=xx", "D=a5"],
     );
 }
+
+/// §2 🆕 I ⓒ residue (§4.5.456): a FULL-RANGE part-select of a constant array WORD
+/// is that word under another spelling, and now renames like it.
+///
+/// `assign c = m[1][7:0]` reached `copied_source`'s `Select` arm, which required a
+/// FLAT base and so refused an array twice over — while the plain `assign c = m[1]`
+/// beside it renamed. The measured cost was not an `x`: after a later write of the
+/// source in the same delta the reader saw the PREVIOUS DEFINITE value
+/// (`the_defect_is_a_stale_value_not_an_x` below).
+///
+/// Every value is PRE `xx a5` → POST `a5 a5`, with BOTH oracles reading `a5 a5`
+/// (iverilog 13.0 `-g2012`, verilator 5.052 `--binary --timing`).
+#[test]
+fn a_full_range_select_of_a_word_renames_like_the_word() {
+    // The headline, and its `+:` spelling.
+    for sel in ["[7:0]", "[0+:8]"] {
+        prints_all(
+            &top(
+                &format!("  reg [7:0] m [0:3]; wire [7:0] c; assign c = m[1]{sel};"),
+                "m[1] = 8'hA5;",
+                "c",
+            ),
+            &["D=a5", "D=a5"],
+        );
+    }
+    // `-:` at full range. ⚠️ ONE-oracle by disqualification, not by absence:
+    // iverilog answers `xx` here and `a5` for `[7:0]` — the identical slice of the
+    // identical word — so it contradicts itself and cannot judge the cell. verilator
+    // reads `a5`, and vita follows the value it already gives the other two
+    // spellings rather than reproducing a self-contradiction.
+    prints_all(
+        &top(
+            "  reg [7:0] m [0:3]; wire [7:0] c; assign c = m[1][7-:8];",
+            "m[1] = 8'hA5;",
+            "c",
+        ),
+        &["D=a5", "D=a5"],
+    );
+    // The element geometry the fold has to read from the DECLARATION, not from the
+    // slice text: a non-zero packed LSB, a non-zero word base, and a 32-bit element.
+    prints_all(
+        &top(
+            "  reg [8:1] m [0:3]; wire [7:0] c; assign c = m[1][8:1];",
+            "m[1] = 8'hA5;",
+            "c",
+        ),
+        &["D=a5", "D=a5"],
+    );
+    prints_all(
+        &top(
+            "  reg [7:0] m [2:5]; wire [7:0] c; assign c = m[3][7:0];",
+            "m[3] = 8'hA5;",
+            "c",
+        ),
+        &["D=a5", "D=a5"],
+    );
+    prints_all(
+        &top(
+            "  reg [31:0] m [0:3]; wire [31:0] c; assign c = m[1][31:0];",
+            "m[1] = 32'hA5;",
+            "c",
+        ),
+        &["D=000000a5", "D=000000a5"],
+    );
+    // The element's KIND and SIGN are read from storage: an `integer` array, a
+    // SIGNED element into an unsigned copy, a 2-state `bit` array (whose PRE was a
+    // definite wrong `00`, not an `x`), and a `logic` destination.
+    prints_all(
+        &top(
+            "  integer m [0:3]; wire [31:0] c; assign c = m[1][31:0];",
+            "m[1] = 32'hA5;",
+            "c",
+        ),
+        &["D=000000a5", "D=000000a5"],
+    );
+    for decl in [
+        "  reg signed [7:0] m [0:3]; wire [7:0] c; assign c = m[1][7:0];",
+        "  bit [7:0] m [0:3]; wire [7:0] c; assign c = m[1][7:0];",
+        "  reg [7:0] m [0:3]; logic [7:0] c; assign c = m[1][7:0];",
+        // Beside an all-`z` null driver (§2 🆕 I ⓑ), which drops out of both counts.
+        "  reg [7:0] m [0:3]; wire [7:0] c; assign c = m[1][7:0]; assign c = 8'hzz;",
+    ] {
+        prints_all(&top(decl, "m[1] = 8'hA5;", "c"), &["D=a5", "D=a5"]);
+    }
+    // A CHAIN through the select spelling: `t = m[1][7:0]`, `c = t`.
+    prints_all(
+        &top(
+            "  reg [7:0] m [0:3]; wire [7:0] t; wire [7:0] c;\n  \
+             assign t = m[1][7:0]; assign c = t;",
+            "m[1] = 8'hA5;",
+            "c",
+        ),
+        &["D=a5", "D=a5"],
+    );
+}
+
+/// What the defect actually cost, which is why the row is not a t0-`x` row: the
+/// reader saw the PREVIOUS DEFINITE value of the word, not `x`. PRE `11 a5`, POST
+/// and both oracles `a5 a5`.
+#[test]
+fn the_defect_is_a_stale_value_not_an_x() {
+    prints_all(
+        &top(
+            "  reg [7:0] m [0:3]; wire [7:0] c; assign c = m[1][7:0];",
+            "m[1] = 8'h11; #1 m[1] = 8'hA5;",
+            "c",
+        ),
+        &["D=a5", "D=a5"],
+    );
+}
+
+/// The boundary. Every cell here is PRE == POST, and every one is an oracle SPLIT
+/// or loud — which is exactly why the new admission had to be keyed on
+/// "constant, in-range word AND a slice covering the whole element", not on
+/// "the base is an array".
+#[test]
+fn the_neighbours_of_the_word_select_stay_where_they_were() {
+    // A RUNTIME index, plain and under the select. iverilog `xx a5` — the SAME
+    // answer vita gives — and only verilator reads `a5 a5`. vita stays on
+    // iverilog's side; `word_const` still refuses a non-constant index. (iverilog
+    // is not usable to move here either: on a later write of the source it answers
+    // `5a` where it answered the stale `11` for a later write of the INDEX.)
+    for rhs in ["m[k]", "m[k][7:0]"] {
+        prints_all(
+            &top(
+                &format!("  reg [7:0] m [0:3]; wire [7:0] c; reg [1:0] k; assign c = {rhs};"),
+                "k = 1; m[1] = 8'hA5;",
+                "c",
+            ),
+            &["D=xx", "D=a5"],
+        );
+    }
+    // A PARTIAL slice of the word and a BIT of it: vita `x 5` / `x 1` is iverilog's
+    // answer exactly; verilator reads `0 5` / `0 1`. Split, still computed.
+    prints_all(
+        &top(
+            "  reg [7:0] m [0:3]; wire [3:0] c; assign c = m[1][3:0];",
+            "m[1] = 8'hA5;",
+            "c",
+        ),
+        &["D=x", "D=5"],
+    );
+    prints_all(
+        &top(
+            "  reg [7:0] m [0:3]; wire c; assign c = m[1][2];",
+            "m[1] = 8'hA5;",
+            "c",
+        ),
+        &["D=x", "D=1"],
+    );
+    // A WIDER destination (iverilog `zzxx`, verilator `00a5` — a 3-way split) and an
+    // array-WORD lvalue (iverilog `a5 a5`, verilator `00 a5`). Both unmoved.
+    prints_all(
+        &top(
+            "  reg [7:0] m [0:3]; wire [15:0] c; assign c = m[1][7:0];",
+            "m[1] = 8'hA5;",
+            "c",
+        ),
+        &["D=00xx", "D=00a5"],
+    );
+    prints_all(
+        &top(
+            "  reg [7:0] m [0:3]; wire [7:0] n [0:1]; assign n[0] = m[1];",
+            "m[1] = 8'hA5;",
+            "n[0]",
+        ),
+        &["D=xx", "D=a5"],
+    );
+    // A 2-D array word: the 1-D twin above renames, this does not. iverilog `a5 a5`,
+    // verilator `00 a5` — a split, and its mechanism (how a multi-dim index lowers)
+    // is unmeasured. Recorded, not chased.
+    prints_all(
+        &top(
+            "  reg [7:0] m [0:1][0:1]; wire [7:0] c; assign c = m[0][1];",
+            "m[0][1] = 8'hA5;",
+            "c",
+        ),
+        &["D=xx", "D=a5"],
+    );
+    // A `force`d copy, released — the forced set is excluded from the rename and
+    // stays so. Both oracles `33 a5`.
+    prints_all(
+        "`timescale 1ns/1ns\nmodule top;\n  reg [7:0] m [0:3]; wire [7:0] c; \
+         assign c = m[1][7:0];\n  initial begin\n    m[1] = 8'hA5;\n    \
+         force c = 8'h33;\n    $display(\"D=%h\", c);\n    #1 release c;\n    \
+         #1 $display(\"D=%h\", c);\n  end\n  initial #5 $finish;\nendmodule\n",
+        &["D=33", "D=a5"],
+    );
+}
+
+/// An OUT-OF-RANGE constant word under the select stays loud (E4002), the way the
+/// plain word spelling already did — `copied_source` validates the index BEFORE
+/// admitting the slice, so the repair never fabricates an `x` and never re-emits
+/// the diagnostic on every visit.
+#[test]
+fn an_out_of_range_word_under_the_select_stays_loud() {
+    let (out, code) = run_backend(
+        &top(
+            "  reg [7:0] m [0:3]; wire [7:0] c; assign c = m[9][7:0];",
+            "m[1] = 8'hA5;",
+            "c",
+        ),
+        "native",
+    );
+    assert_eq!(code, Some(1), "expected a loud exit 1:\n{out}");
+    assert!(out.contains("VITA-E4002"), "{out}");
+}

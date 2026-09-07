@@ -367,13 +367,44 @@ fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<(u32, Option<u32>)> 
             width,
             kind,
         } => {
-            let net = match ir.exprs.get(*base as usize)? {
-                sim_ir::Expr::Signal { net, word: None } => *net,
+            // The base is either a flat net (`assign c = v[7:0]`) or an array WORD
+            // (`assign c = m[1][7:0]`, §2 🆕 I ⓒ). The word carries the SAME
+            // admission the whole-word arm above applies — flat element kind, a
+            // constant in-range index — because the slice is taken of the element,
+            // whose storage is flat packed like any scalar's. Without this the
+            // select spelling of a word read stays computed while `assign c = m[1]`
+            // renames, and a same-delta procedural read of `c` sees the settle's
+            // stale value (both oracles read the word).
+            let (net, word) = match ir.exprs.get(*base as usize)? {
+                sim_ir::Expr::Signal { net, word: None } => {
+                    if !flat(ir, *net) {
+                        return None;
+                    }
+                    (*net, None)
+                }
+                sim_ir::Expr::Signal {
+                    net,
+                    word: Some(weid),
+                } => {
+                    let nv = &ir.nets[*net as usize];
+                    let flat_kind = matches!(
+                        nv.kind,
+                        sim_ir::NetKind::Wire
+                            | sim_ir::NetKind::Reg
+                            | sim_ir::NetKind::Logic
+                            | sim_ir::NetKind::Integer
+                    );
+                    if !flat_kind || nv.array_len <= 1 {
+                        return None;
+                    }
+                    let idx = word_const(ir, *weid)?;
+                    if idx >= nv.array_len {
+                        return None;
+                    }
+                    (*net, Some(*weid))
+                }
                 _ => return None,
             };
-            if !flat(ir, net) {
-                return None;
-            }
             let (_, w) = const_slice(
                 ir,
                 *kind,
@@ -381,7 +412,7 @@ fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<(u32, Option<u32>)> 
                 Some(*width),
                 ir.nets[net as usize].width,
             )?;
-            (w == want).then_some((net, None))
+            (w == want).then_some((net, word))
         }
         _ => None,
     }
@@ -601,6 +632,12 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
 /// source (`assign c = v[7:0]`) is that whole net under another spelling and is
 /// admitted too (both oracles `a5`); a partial slice stays computed (oracle
 /// split: iverilog `x`, verilator the slice).
+///
+/// §2 🆕 I ⓒ residue: the same is true of an array WORD — `assign c = m[1][7:0]`
+/// is `assign c = m[1]` under another spelling, and its alias carries the same
+/// word index. The two arms of the select (here and in `copied_source`) must be
+/// opened together: this one supplies `alias_word`, that one supplies membership
+/// in `copy_nets`, and a net in one without the other is a value/event split.
 pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> (Vec<u32>, Vec<u32>) {
     let mut alias: Vec<u32> = (0..ir.nets.len() as u32).collect();
     let mut alias_word: Vec<u32> = vec![u32::MAX; ir.nets.len()];
@@ -634,17 +671,42 @@ pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> (Vec<u32>, Vec<u32>)
                 width,
                 kind,
             }) => {
-                let Some(sim_ir::Expr::Signal { net: b, word: None }) =
-                    ir.exprs.get(*base as usize)
-                else {
-                    continue;
+                // The two base shapes `copied_source` admits: a flat net (the
+                // alias is the whole net, word `None`) and an array WORD
+                // (`assign c = m[1][7:0]`), whose alias carries the SAME word
+                // expression the plain `assign c = m[1]` spelling would.
+                //
+                // ⚠️ The lockstep that matters is FLAT vs WORD, not this function
+                // against `copied_source`. Those two ask different questions and are
+                // deliberately not equal: `copied_source` decides membership in
+                // `copy_nets` (is this driver a pure bit MOVE — a same-width slice
+                // at any offset is one), this decides RENAMING (is the destination a
+                // second NAME for the source — only the whole element is). A
+                // narrower `assign c = v[15:8]` into an 8-bit `c` has sat on that
+                // boundary since the flat arm existed, and the word arm inherits it
+                // for the same reason (measured: `m[1][15:8]` into 8 bits is
+                // PRE == POST == iverilog). What must not diverge is the two BASE
+                // shapes: whatever the flat spelling does with a given
+                // (offset, width), the word spelling must do too, or one read has
+                // two answers depending on how it is written.
+                let (b, word) = match ir.exprs.get(*base as usize) {
+                    Some(sim_ir::Expr::Signal { net: b, word: None }) if flat(ir, *b) => (*b, None),
+                    Some(sim_ir::Expr::Signal {
+                        net: b,
+                        word: Some(weid),
+                    }) if ir.nets[*b as usize].array_len > 1 => (*b, Some(*weid)),
+                    _ => continue,
                 };
-                if *b != *src || !flat(ir, *b) {
+                if b != *src {
                     continue;
                 }
-                let nw = ir.nets[*b as usize].width;
+                // The slice must start at bit 0 and cover every bit OF THE ELEMENT
+                // (`nets[b].width` is the element width for an array net), which is
+                // what makes it the word under another spelling. A partial slice
+                // stays computed — an oracle split.
+                let nw = ir.nets[b as usize].width;
                 match const_slice(ir, *kind, Some(*offset), Some(*width), nw) {
-                    Some((0, w)) if w == nw => None,
+                    Some((0, w)) if w == nw => word,
                     _ => continue,
                 }
             }
