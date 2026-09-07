@@ -223,6 +223,7 @@ impl Parser<'_, '_> {
         // `parse_task_def`) — snapshot before the ports, restore after the body.
         let tf_scope = self.snapshot_scope();
         let mut ports = self.opt_tf_port_paren_list();
+        self.note_tf_formal_names(&ports);
         self.expect(TokenKind::Semi, "';' after function header");
         let (body_decls, body_enums, body) = self.tf_body(BlockEnd2::Endfunction, &mut ports);
         self.restore_scope(tf_scope);
@@ -268,6 +269,7 @@ impl Parser<'_, '_> {
         // mis-desugar `name.field` elsewhere).
         let tf_scope = self.snapshot_scope();
         let mut ports = self.opt_tf_port_paren_list();
+        self.note_tf_formal_names(&ports);
         self.expect(TokenKind::Semi, "';' after task header");
         let (body_decls, body_enums, body) = self.tf_body(BlockEnd2::Endtask, &mut ports);
         self.restore_scope(tf_scope);
@@ -288,6 +290,23 @@ impl Parser<'_, '_> {
     /// is no `(` (non-ANSI form — ports come from body input/output decls instead).
     /// Empty `()` ⇒ `[]`. Direction AND type are sticky across comma-grouped
     /// names (a bare `, name` inherits both — see `parse_tf_port`).
+    /// Record every FORMAL's name as a local declaration for the enclosing tf body.
+    ///
+    /// A formal shadows a same-named TYPE inside the body, and the parser's
+    /// `$bits(<type>)` folds resolve a bare name with no scope of their own — so
+    /// without this a `function f(input logic [11:0] a_t)` beside a module
+    /// `typedef … a_t` folded the TYPE's width where verilator reads the formal's
+    /// 12 (iverilog rejects the shape, so verilator is the oracle and vita's own
+    /// pre-fold answer agreed with it).
+    ///
+    /// The caller snapshots the scope BEFORE the port list, so these names are
+    /// dropped at `restore_scope` and never leak into the module or a sibling tf.
+    fn note_tf_formal_names(&mut self, ports: &[TfPort]) {
+        for p in ports {
+            self.local_decl_names.insert(p.name.name.clone());
+        }
+    }
+
     pub(crate) fn opt_tf_port_paren_list(&mut self) -> Vec<TfPort> {
         let mut ports = Vec::new();
         if self.peek() != Some(TokenKind::LParen) {
@@ -894,6 +913,9 @@ impl Parser<'_, '_> {
                 span: n_start.to(self.prev_span()),
             };
             self.bind_packed_md_formal(&port.name.name, &dims);
+            // …and the NON-ANSI formal spelling records its name too (see
+            // `note_tf_formal_names`); this list is appended during the body parse.
+            self.local_decl_names.insert(port.name.name.clone());
             // R5: an unpacked-struct formal expands to its N member ports (per name in
             // a comma list); every other formal appends one (byte-identical pre-R5).
             match &unpacked_struct {

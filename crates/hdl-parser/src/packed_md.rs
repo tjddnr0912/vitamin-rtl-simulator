@@ -81,7 +81,7 @@ impl Parser<'_, '_> {
     /// `a * b`, folded when both are literals; `a * 1` / `1 * b` collapse. A
     /// literal ZERO factor is NOT folded away (`0 * x` is `x` in 4-state — the
     /// flat twin must keep that arithmetic).
-    fn mul(a: Expr, b: Expr, span: Span) -> Expr {
+    pub(crate) fn mul(a: Expr, b: Expr, span: Span) -> Expr {
         match (Self::lit_u32(&a), Self::lit_u32(&b)) {
             (Some(x), Some(y)) => match x.checked_mul(y) {
                 Some(p) => Self::lit(p, span),

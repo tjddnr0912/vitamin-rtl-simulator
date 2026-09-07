@@ -419,10 +419,18 @@ impl Parser<'_, '_> {
     }
 
     /// `$bits(<type>)` where the type is a type parameter (`T$w`) or an integral
-    /// vector typedef whose range names an overridable parameter (the symbolic
-    /// width): the width EXPRESSION. `None` for every other argument — the caller's
-    /// literal fold (`parse_bits_type_arg`) and the expression path answer those.
-    /// The cursor is just after `(`; consumes through `)` on success.
+    /// vector typedef with at least one SYMBOLIC extent â a range bound or an
+    /// unpacked dimension that names an overridable parameter: the width
+    /// EXPRESSION. `None` for every other argument â the caller's literal fold
+    /// (`parse_bits_type_arg`) and the expression path answer those. The cursor is
+    /// just after `(`; consumes through `)` on success.
+    ///
+    /// ⚠️ It must be an EXPRESSION and not a number even though the parser could
+    /// fold the declaration's own default: a header `parameter` is overridable per
+    /// instance, so a parse-time value would bake the PRE-override width. Measured:
+    /// `module m #(parameter N=4); typedef logic [7:0] a_t [0:N-1];` under
+    /// `m #(.N(8))` is 64 in both oracles, and the packed twin `logic [N-1:0]`
+    /// already answered 8 through this same desugar.
     pub(crate) fn parse_bits_sym_type_arg(&mut self) -> Option<Expr> {
         if !self.is_ident() || self.peek_at(1) != Some(TokenKind::RParen) {
             return None;
@@ -432,26 +440,92 @@ impl Parser<'_, '_> {
         let e = if let Some(tp) = self.type_params.get(&key) {
             Self::ident_expr(&tp.width_name, span)
         } else {
-            let info = self.typedefs.get(&key)?;
-            if !matches!(
-                info.kind,
-                NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit
-            ) || !info.packed.is_empty()
-                || !info.unpacked.is_empty() // §3 ⑤: no dim slot in the desugar
-                || self.struct_layouts.contains_key(&key)
-                || self.sym_struct_layouts.contains_key(&key)
-            {
-                return None;
-            }
-            let r = info.range.as_ref()?;
-            if self.member_width(&Some(r.clone())).is_some() {
-                return None; // a literal width: the numeric fold answers
-            }
-            self.sym_range_width(r)?
+            self.sym_typedef_bits(&key, span)?
         };
         self.bump(); // type name
         self.bump(); // )
         Some(e)
+    }
+
+    /// The width EXPRESSION of an integral vector typedef, as `element × every
+    /// packed dim × every unpacked dim`. Each factor is the literal count where the
+    /// parse-time table folds it and the symbolic form where it does not, so a
+    /// LITERAL element width beside a symbolic dimension (`logic [7:0] a_t [0:N-1]`)
+    /// composes â the earlier shape declined it because the element range folded and
+    /// the dimension had no slot in the desugar.
+    ///
+    /// `None` unless at least one factor is symbolic: with every factor literal the
+    /// caller's numeric fold (`bits_of_type_name`) is the answer, and returning an
+    /// expression here would move cells it already owns.
+    ///
+    /// ⚠️ `Dyn` / `Queue` / `Assoc` still decline and there is no oracle to move
+    /// toward â iverilog rejects `$bits` of a `[]` / `[$]` typedef and verilator
+    /// reports an internal fault on both.
+    fn sym_typedef_bits(&self, key: &str, span: Span) -> Option<Expr> {
+        // A VARIABLE of the same name shadows the type, and the parser has no scope
+        // to see that with — so it must not claim the name at all when the module
+        // body also DECLARES it. Measured: `typedef logic [7:0] a_t [0:N-1];` beside
+        // a block-local `logic [11:0] a_t` (or a formal of that name) is 12 in
+        // verilator and was 12 here through the expression path; answering the
+        // type's width would be a correct → silent-wrong trade. iverilog rejects the
+        // shape outright, so verilator is the oracle and vita's own PRE answer
+        // agreed with it.
+        if self.local_decl_names.contains(key) {
+            return None;
+        }
+        let info = self.typedefs.get(key)?;
+        if !matches!(
+            info.kind,
+            NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit
+        ) || self.struct_layouts.contains_key(key)
+            || self.sym_struct_layouts.contains_key(key)
+        {
+            return None;
+        }
+        let mut any_sym = false;
+        // The ELEMENT: the declared range, or the kind's own width when it folds
+        // (a range-free `typedef logic a_t [0:N-1]` is a 1-bit element).
+        let mut acc = match self.member_width_kind(info.kind, &info.range) {
+            Some(w) => Self::dec_lit(w, span),
+            None => {
+                any_sym = true;
+                self.sym_range_width(info.range.as_ref()?)?
+            }
+        };
+        // One factor per dimension. `Range` counts its extent; an unpacked `[N]` is
+        // `[0:N-1]`, so the size expression IS the count.
+        let factor = |me: &Self, r: &Range, any_sym: &mut bool| -> Option<Expr> {
+            match me.member_width(&Some(r.clone())) {
+                Some(w) => Some(Self::dec_lit(w, span)),
+                None => {
+                    *any_sym = true;
+                    me.sym_range_width(r)
+                }
+            }
+        };
+        for d in &info.packed {
+            let f = factor(self, d, &mut any_sym)?;
+            acc = Self::mul(acc, f, span);
+        }
+        for d in &info.unpacked {
+            let f = match d {
+                Dim::Range(r) => factor(self, r, &mut any_sym)?,
+                Dim::Size(e) => match Self::lit_u32(e) {
+                    Some(n) => Self::dec_lit(n, span),
+                    None => {
+                        // Only an OVERRIDABLE-parameter expression composes; any
+                        // other unfoldable leaf (a variable, a declined constant)
+                        // must stay loud rather than reach elaborate as a width.
+                        self.names_an_overridable(e)?;
+                        any_sym = true;
+                        e.clone()
+                    }
+                },
+                Dim::Dyn | Dim::Queue(_) | Dim::Assoc(_) => return None,
+            };
+            acc = Self::mul(acc, f, span);
+        }
+        any_sym.then_some(acc)
     }
 
     /// `T'(e)` for a type parameter or a symbolic-width vector typedef: the size
