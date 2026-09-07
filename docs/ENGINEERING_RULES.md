@@ -233,6 +233,45 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ Fixing the READ moved the write from a wrong object to a wrong bit — the write needs its own funnel (2026-09-07 · §4.5.446)
+
+Five readers shared a `symbols`-only name walk, so a generate-scope `localparam` shadowing an outer
+array did not stop it: the SELECT `ROTA[1]` read the outer array while the whole-name read in the same
+`$display` was right. Declining the index chains fixed every READ — and moved the WRITE from "stores
+into the outer array's word 1" to "stores into a different bit of the same net", because the lvalue
+path fell through to the plain bit-select lane. Both oracles reject the program; both vita answers are
+silent at exit 0, and swapping one silent-wrong for another is the move the ladder forbids.
+**How to apply:** when a read fix routes a name away from an object, walk the WRITE path to its end
+and name what it lands on; give the write its own refusal (`a constant is not assignable`) at the
+LVALUE funnels rather than inside the shared resolver, which also serves reads (`@(e)`, `->e`, an
+interface-member fall-through) where over-reporting is a loud regression instead of a refusal. The
+write guard then closes shapes the read fix never touched — here the same shadow on a SCALAR net,
+silently accepted since before the slice.
+
+### ⭐ A queue row's ORACLE COUNT is a claim, and the control twin is what tests it (2026-09-07 · §4.5.447)
+
+The row said a subroutine formal of an unpacked-array typedef was two-oracle. Measured: iverilog 13.0
+refuses `input logic [7:0] v [0:3]` — the EXPLICIT spelling vita already supports — with `sorry:
+Subroutine ports with unpacked dimensions are not yet supported`, so it is not an oracle for any fixed
+unpacked formal and nine of the row's ten cells are verilator-only. The cost-per-two-oracle-cell of
+that item was 4 edit sites for 1 cell, against 1 site for 7 on each of its neighbours.
+**How to apply:** run the CONTROL TWIN through both oracles, not just the defect — an oracle that
+refuses the working spelling cannot arbitrate the broken one; and price a loud→correct item in
+two-oracle cells per edit site before picking it out of a row that lists several.
+
+### ⭐ A decline that was right for a CLAMP is not right for a truthful record (2026-09-07 · §4.5.448)
+
+`param_decl_range_opt` refused a negative declared bound, and its comment recorded exactly why: a
+previous attempt wrote `min(l).max(0)` and an ascending `[-2:3]` recorded `(0, 6, true)`, turning two
+correct cells into silent-wrongs. The comment made the refusal look load-bearing. It was load-bearing
+for the CLAMP — the value type's `u32` was the actual constraint, and widening it to `i64` made the
+record truthful, closed 13 cells and left every non-negative declaration byte-identical because the
+keys that gain an entry are exactly the ones with a negative bound.
+**How to apply:** when a guard's comment names the LIE it prevents rather than a property of the
+domain, ask whether the lie is the TYPE's fault; and check what the consumers already do — here
+`norm_offset_for_range` and `const_norm_bit` were already `i64` and already exercised by a
+neighbouring path, which is why the runtime lane was right and only the fold lane was wrong.
+
 ### ⭐⭐ A resolver-first hook inherits the CALLER's scope problem, not the resolver's (2026-09-07 · §4.5.443)
 
 Giving a shared folder's select arms the "ask the name resolver first" probe its sibling arm already

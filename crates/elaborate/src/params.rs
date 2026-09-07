@@ -566,7 +566,7 @@ impl Elaborator<'_> {
         &self,
         p: &ast::ParamDecl,
         default_binds: bool,
-    ) -> Option<(u32, u32, bool)> {
+    ) -> Option<DeclRange> {
         if matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime) {
             return None;
         }
@@ -578,17 +578,15 @@ impl Elaborator<'_> {
         };
         let m = self.const_range_bound_fold(&r.msb)?;
         let l = self.const_range_bound_fold(&r.lsb)?;
-        // ⚠️⚠️ A NEGATIVE declared bound (`[3:-2]`, `[-2:3]`) DECLINES. `param_range`'s
-        // value type cannot hold a negative `lo`, so the `min(l).max(0)` this used to
-        // write recorded a LIE — and while `lo == 0` filtered every such range out the
-        // lie never reached a consumer. It does now, and it is not inert: an ascending
-        // `[-2:3]` recorded `(0, 6, true)` turned `A[0]`/`A[3]` from the correct 0/0
-        // into 1/1 against both oracles = correct→silent-wrong. Declining leaves the
-        // pre-existing (separately tracked) negative-bound behaviour exactly as it was.
-        if m < 0 || l < 0 {
-            return None;
-        }
-        let lo = m.min(l) as u32;
+        // ⚠️⚠️ A NEGATIVE declared bound (`[3:-2]`, `[-2:3]`) used to DECLINE, because
+        // `DeclRange`'s `lo` was a `u32` and the `min(l).max(0)` written before that
+        // recorded a LIE: an ascending `[-2:3]` recorded `(0, 6, true)` and turned
+        // `A[0]` / `A[3]` from the correct 0/0 into 1/1 against both oracles. The
+        // decline was the right answer for a CLAMP; it is not the right answer for a
+        // truthful record. §4.5.448 widened `lo` to `i64`, so the range below is the
+        // declaration — and the keys that gain an entry are EXACTLY the ones with a
+        // negative bound, every other key being unchanged.
+        let lo = m.min(l);
         Some((lo, m.abs_diff(l) as u32 + 1, m < l))
     }
 
@@ -635,7 +633,7 @@ impl Elaborator<'_> {
     /// (3a.5 imports, 3b body params). Leaving the package's range behind would let
     /// `W[15:8]` extract bits of a 32-bit declaration out of an 8-bit value — the
     /// §4.5.363 "263-bit net" regression, arriving through the import door.
-    pub(crate) fn bind_param_range(&mut self, key: &str, r: Option<(u32, u32, bool)>) {
+    pub(crate) fn bind_param_range(&mut self, key: &str, r: Option<DeclRange>) {
         // The range describes the binding that is THERE. Writing it before the value
         // would be silently undone by `bind_param_value`'s clear, so the order is part
         // of the contract and this is what enforces it across every call site.
@@ -670,7 +668,7 @@ impl Elaborator<'_> {
         }
     }
 
-    pub(crate) fn param_sel_range(&self, base: &ast::Expr) -> Option<(u32, u32, bool)> {
+    pub(crate) fn param_sel_range(&self, base: &ast::Expr) -> Option<DeclRange> {
         // A parenthesised base names the same object. Both oracles REJECT the spelling
         // outright (vita keeps the value and says so — `W-PARSE-SELECT-BASE`), so there
         // is no oracle to move toward here; what there is, is vita's own answer to the

@@ -11,15 +11,26 @@ changed for a user of the simulator.
 
 ### Added
 
+- **`$bits` of an unpacked-array typedef name and a non-ANSI port of that type**:
+  `typedef logic [7:0] a_t [0:3];` now answers `$bits(a_t)` = 32 (64 for a 2-D one, and through a
+  chained alias), and `module sub(i, o); input a_t i;` binds the array. `$bits` of a `[]`, `[$]` or
+  `[string]` typedef stays refused — the two reference tools disagree or crash on it.
+- **A parameter declared with a negative low bound reads its declared range**: `localparam logic
+  [3:-4] A = 8'h3C;` makes `A[3:0]` the top nibble (`3`), `A[-1]` bit −1, and `{A[3:0], A[3:0]}`
+  `33` — the answers both reference tools give. Selects in a concatenation used to read the stored
+  bits positionally (`cc`), and a bare select or a bit-select was refused outright. Range bounds
+  (`wire [A[3:0]:0]`) and replication counts follow, as do the package, scoped, overridden,
+  generate-scope and hierarchical spellings of the declaration.
+
 - **Unpacked-array typedefs** (IEEE §6.18): `typedef logic [7:0] a_t [0:3];` is accepted and its
   dimensions reach the declaration — as a module variable, an ANSI module port (input or output), a
   package or `$unit`-scope type, a block-local or generate-scope declaration, a declaration
   initializer `= '{…}`, a chained alias `typedef a_t b_t;`, and with dynamic (`[]`), queue (`[$]`) or
   associative (`[string]`) dimensions. Previously the `[` after the typedef name was a parse error.
   Still rejected, each with its reason named: the type as a function return type, a subroutine formal,
-  a non-ANSI port, a `parameter`, a `parameter type`, an enum base, a packed-struct member, a numeric
-  cast `a_t'(e)`, `$bits(a_t)` of the bare type name, and dimensions written on BOTH the typedef and
-  the declarator (the two reference tools disagree about the resulting dimension order).
+  a `parameter`, a `parameter type`, an enum base, a packed-struct member, a numeric cast `a_t'(e)`,
+  and dimensions written on BOTH the typedef and the declarator (the two reference tools disagree
+  about the resulting dimension order).
 - **A select of a parameter whose declared range does not start at zero folds in a concatenation**:
   `localparam logic [11:4] A = 8'h3C; localparam L = {A[7:4], A[7:4]};` is `cc`, not `33` — the
   select is read against the DECLARED range, as it already was outside a concatenation. Ascending
@@ -76,6 +87,15 @@ changed for a user of the simulator.
   reference tools refuse that).
 
 ### Fixed
+
+- **A name whose innermost binding is a constant is no longer read or written as the outer object of
+  the same name.** Inside `generate if (1) begin : g localparam int ROTA = 99;`, with a module-scope
+  `logic [31:0] ROTA[0:3]`, the select `ROTA[1]` read the outer array's element while the whole-name
+  read `ROTA` in the same `$display` correctly read 99; a packed outer array did the same, `$size`
+  answered the array's size, and — worse — `ROTA[1] = …` silently stored into the outer array where
+  both reference tools reject the program. A write through a name that binds to a constant
+  (parameter, localparam, genvar, enum label) is now refused with that reason, which also covers the
+  same shape on a scalar (`SC = 5;`, `SC[1] = 1'b1;`).
 
 - **A runtime diagnostic's `[in …]` names the block it is in.** `initial begin : blk $error("boom");
   end` said `[in top]` and now says `[in top.blk]` — the same string the statement's `%m` prints, and

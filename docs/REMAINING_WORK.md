@@ -15,9 +15,9 @@ Top-level snapshot of what stands between HEAD and the two goals. Rewritten whol
 
 | # | track | item |
 |---|---|---|
-| 1 | §3 loud → correct-support | ⑤ⓕ unpacked-array typedef residue (a subroutine formal, a non-ANSI port, `$bits(a_t)`) · ⑤ ⓓ/ⓔ residues · CU-scope items in a class body · class `#(type T)` header · ibex DPI export |
-| 2 | §2 silent-wrong | 🆕 O: a runtime read of an outer array shadowed by a generate-scope scalar `localparam` reads the outer array's element (`ROTA[1]` = 20, both oracles 1) |
-| 3 | §2 silent-wrong | 🆕 L ⓩ residue: a NEGATIVE declared LSB (`logic [3:-4] A; {A[3:0], A[3:0]}` = `cc`, both oracles `33`) — `param_range` stores an unsigned lo |
+| 1 | §3 loud → correct-support | ⑤ⓕ residue: `$bits(pkg::T)` (one gate, its scalar twin too) · `$bits(a_t)` with a parameter-named dim · the tf-port formal (1-oracle for the fixed shape) · ⑤ ⓓ/ⓔ residues · CU-scope items in a class body · ibex DPI export |
+| 2 | §2 silent-wrong | 🆕 P: a continuous assign in a generate block indexing a module-scope array PANICS (exit 101) where both oracles print the element; no shadowing needed |
+| 3 | §2 loud | 🆕 Q: a `localparam` in a plain named `begin : g` block is a parse error; both oracles accept it |
 | next | — | mixed-caller callee, `m #(8)` / `defparam u.T$w`, VCD `$scope` spelling, `genblk<N>` collision (split), 🆕 L ⓦ residue (package constants outside the i64 interpreter), a labelled concurrent `assert property` action block's `%m` |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.
@@ -27,7 +27,7 @@ Priority principle: ① silent-wrong with an oracle > ② loud→supported with 
 | section | open | breakdown |
 |---|---:|---|
 | §0 promotion queue (T2/T3 residues) | 15 rows | real const-fold residues ⓐ–ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), `-G` aliases and `.velab` header field, `case inside` |
-| §2 start-order table | 26 rows | OPEN 6 · BLOCKED 3 · WALL 5 (declared-width provenance / §11.8.1 region sign) · ORACLE-SPLIT 2 · PERF 2 · LOUD 6 · DO-NOT-START 2 |
+| §2 start-order table | 28 rows | OPEN 8 · BLOCKED 3 · WALL 5 (declared-width provenance / §11.8.1 region sign) · ORACLE-SPLIT 2 · PERF 2 · LOUD 6 · DO-NOT-START 2 |
 | §2 recorded defects by mechanism | 86 bullets | size cast / signedness 15 · constant domain (i64) 14 · inline / frame binds 16 · index sealing 4 · real 5 · ranges 4 · class fields 3 · scoping 4 · delays / events 6 · diagnostics 4 · performance 6 · oracle splits 5 |
 | §3 numbered items | 24 rows | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, incl. ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies / `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
 | §3 small residues | 65 rows | parser accept 8 · constants / parameters 11 · subroutine / frame 17 · system tasks & file I/O 9 · nets / timing 6 · diagnostics quality 5 · strings / heap 6 · VCD / real conversion 3 |

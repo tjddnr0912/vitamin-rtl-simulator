@@ -1602,7 +1602,7 @@ impl Elaborator<'_> {
                 // `walk_scopes` as the value). A zero-LSB param has no entry → raw
                 // (byte-identical).
                 if let Some((lo, w, asc)) = self.param_sel_range(base) {
-                    return self.norm_offset_for_range(raw_off, i64::from(lo), w, asc);
+                    return self.norm_offset_for_range(raw_off, lo, w, asc);
                 }
             } else if let Some(net) = self.iface_member_net(path) {
                 // Interface-member alias (`bi.data`, ≥2-seg) — a KNOWN dotted symbol
@@ -1634,7 +1634,7 @@ impl Elaborator<'_> {
             ast::ExprKind::PkgScoped { .. }
         ) {
             if let Some((lo, w, asc)) = self.param_sel_range(base) {
-                return self.norm_offset_for_range(raw_off, i64::from(lo), w, asc);
+                return self.norm_offset_for_range(raw_off, lo, w, asc);
             }
         }
         // Array-element part/indexed-select `mem[i][m:l]` — peel the element
@@ -1702,7 +1702,7 @@ impl Elaborator<'_> {
         }
         // Ascending non-zero-LSB param — normalize against its declared range.
         if let Some((lo, w, asc)) = self.param_sel_range(base) {
-            return self.norm_offset_for_range(raw_off, i64::from(lo), w, asc);
+            return self.norm_offset_for_range(raw_off, lo, w, asc);
         }
         match self.base_root_net(base) {
             Some(net) => self.norm_offset_for_net(net, raw_off),

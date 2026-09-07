@@ -189,7 +189,7 @@ pub(crate) type DefparamOverride = (String, i64, Option<(ast::IntLitKind, String
 /// A parameter's DECLARED packed range: `(lo, width, ascending)` — the tuple the
 /// provenance maps (`param_range`, `pkg_const_range`) carry, named so the save/restore
 /// lists that shuttle it stay readable.
-pub(crate) type DeclRange = (u32, u32, bool);
+pub(crate) type DeclRange = (i64, u32, bool);
 
 struct Elaborator<'s> {
     sink: &'s dyn LogSink,
@@ -614,13 +614,13 @@ struct Elaborator<'s> {
     // absent entry means the classic `[N:0]`/zero-LSB raw offset (byte-identical).
     // Parallel-keyed to `param_meta` and resolved by the SAME `walk_scopes`, so the
     // offset range can never drift from the value/meta lookups. elaborate-LOCAL.
-    param_range: BTreeMap<String, (u32, u32, bool)>,
+    param_range: BTreeMap<String, DeclRange>,
     // §2 🆕 M ⓒ: the PERSISTENT twin of `param_range` for a HIERARCHICAL select
     // (`u.N[7:4]` on `parameter [11:4] N`), written and cleared exactly where
     // `param_range` is (`bind_param_range` / `bind_param_value`) but never restored
     // out at an instance boundary — the same reason `param_meta` persists. Keyed
     // like `hier_params`; resolved by `hier_resolve`. elaborate-LOCAL.
-    hier_param_range: BTreeMap<String, (u32, u32, bool)>,
+    hier_param_range: BTreeMap<String, DeclRange>,
     // N5: FQ param-name → RAW string literal for a `string`-typed / string-valued
     // parameter (`localparam string S = "abc"` and the untyped `localparam S = "abc"`).
     // A string param has NO i64 value, so it is kept out of `self.params` and stored

@@ -13,6 +13,9 @@
 
 
 **§4.5.220–280**
+- `4.5.448` **A parameter declared with a NEGATIVE low bound reads its declared range** (2026-09-07 · §2 🆕 L ⓩ residue · 33 cells · batch with 446/447)
+- `4.5.447` **An unpacked-array typedef on a non-ANSI port, and `$bits` of the type name** (2026-09-07 · §3 ⑤ⓕ · 58 cells · batch with 446/448)
+- `4.5.446` **A bare name whose innermost binding is a CONSTANT stops the index chains and the write funnel** (2026-09-07 · §2 🆕 O · 57 cells · batch with 447/448)
 - `4.5.445` **An unpacked-array typedef `typedef logic [7:0] a_t [0:3];`** (2026-09-07 · §3 ⑤ · 39 cells · batch with 443/444)
 - `4.5.444` **The `[in …]` context of a runtime diagnostic is the statement's `%m` string** (2026-09-07 · §2 🆕 N residue · 18 cells · batch with 443/445)
 - `4.5.443` **A select of a parameter whose declared range does not start at 0 folds in the wide domain** (2026-09-07 · §2 🆕 L ⓩ · 89 cells · batch with 444/445)
@@ -462,6 +465,134 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.448 — A parameter declared with a NEGATIVE low bound reads its declared range (§2 🆕 L ⓩ residue) (2026-09-07 · format 31 · batch-reviewed with §4.5.446/447) ✅
+
+**Bug (silent-wrong, both oracles).** `localparam logic [3:-4] A = 8'h3C; localparam L = {A[3:0],
+A[3:0]};` printed `cc` where both oracles print `33`, and beside it the bare select `A[3:0]` and the
+bit-select `A[-1]` were honest-loud ("the part-select `A[…]` has no constant-fold arm"). ONE root:
+`DeclRange`'s `lo` was a `u32`, so `param_decl_range_opt` DECLINED a negative bound outright and every
+consumer fell back to reading the normalised `[w-1:0]` storage positionally.
+
+**Mechanism.** `lo` widened to `i64` across the carriers that spell the alias — `DeclRange` itself
+(and with it `pkg_const_range` and `enum_label_prepass`), the two spelled-out maps `param_range` /
+`hier_param_range`, `param_decl_range_opt` / `bind_param_range` / `param_sel_range`, and the const
+lane's `const_select_base` / `select_base_at_declared` / `select_idx_in_declared_range`.
+`norm_offset_for_range` and `const_norm_bit` were ALREADY `i64` — the offset arithmetic for a negative
+lo existed and was exercised by the packed-element path, which is exactly why the runtime lane was
+right and the fold lane was not; their call sites only shed an `i64::from`.
+
+⚠️ **The decline this replaced was right for what it guarded.** The comment at its site records a
+measured regression: writing a CLAMPED lo made an ascending `[-2:3]` record `(0, 6, true)` and turned
+`A[0]` / `A[3]` from the correct 0/0 into 1/1 against both oracles. A truthful `i64` is not that; and
+the keys that GAIN an entry are exactly the ones with a negative bound, so every non-negative
+declaration is untouched (measured: the `[11:4]`, `[7:0]` and `[0:7]` controls are byte-identical in
+all three tools, and the whole suite is green).
+
+**Census: 33 cells, 12 WRONG → CORRECT, 1 LOUD → CORRECT, 0 regressions.** Every declarer spelling
+moves together (localparam, `parameter`, a package constant read bare and scoped, a header parameter
+that is OVERRIDDEN, a generate-scope one, and a HIERARCHICAL `u.A[3:0]` through the persistent twin
+map), and so does every consumer the review attacked: a concatenation, a bare select, a bit-select at
+a negative index, both bounds negative (`[-1:-4]`), the ascending spelling (iverilog-only — verilator
+refuses `logic [-4:3]`), a const-function body, a RANGE BOUND and a REPLICATION COUNT (`wire
+[A[3:0]:0] w` went from a silent 1-bit net to both oracles' 4, and `{A[3:0]{1'b1}}` from `fff` to `7`).
+
+**Recorded, three separate roots left on the axis:** a negative select BOUND (`A[0:-2]`) false-louds
+because `const_bound_u32` folds it unsigned; a >64-bit negative-LSB base stays positional (a different
+lane reads `param_range` directly and `select_base_at_declared` refuses `dwidth > 64`); an explicit
+`[m:l]` PART select of a NET declared with a negative low bound is loud by its own gate. Corpus demand
+is ZERO — no negative packed declaration in the 1,462 RTL files under `bench/`.
+
+**Tests:** `cli/tests/param_negative_declared_lsb.rs` (+3).
+
+#### 4.5.447 — An unpacked-array typedef on a non-ANSI port, and `$bits` of the type name (§3 ⑤ⓕ) (2026-09-07 · format 31 · batch-reviewed with §4.5.446/448) ✅
+
+**Gap (loud, both oracles accept).** §4.5.445 gave the parser's `TypeInfo` an `unpacked` field and
+carried it to the declaration and the ANSI port, and gave every other consumer an explicit decline so
+none could silently bind the ELEMENT type. Two of those declines are now carries:
+
+* **the NON-ANSI port** (`module sub(i, o); input a_t i;`) — the merge rule and the both-dims refusal
+  already existed verbatim for the ANSI twin ninety lines above, so this is that code applied at the
+  second binder. The dims are CLONED inside the per-NAME loop: a comma list (`input a_t i, j;`) gives
+  each name its own list, and a moved vector would have left every name after the first scalar —
+  which is the silent-wrong the decline existed to prevent.
+* **`$bits(a_t)` of the bare TYPE NAME** — the element width times every unpacked dim, folded with the
+  same `member_width` / `const_bound` pair the PACKED loop above it already used, so a dimension that
+  does not fold declines the whole answer and the site stays loud exactly as it did.
+
+⚠️ **`Dyn` / `Queue` / `Assoc` decline on purpose, and there is no oracle to move toward:** iverilog
+rejects `$bits` of a `[]` / `[$]` typedef ("Invalid data type for $bits()") and verilator CRASHES on
+both ("Verilator internal fault"); `[string]` is iverilog-reject against verilator's 0.
+
+**Census: 58 cells, 14 LOUD → CORRECT, 0 regressions.** Non-ANSI `input` and `output`, a package and a
+`$unit` typedef, a `p::`-qualified one, 2-D, the size form, a comma list; `$bits` of a 1-D, a 2-D, a
+descending 2-D, the size form and a chained alias. A `$bits(a_t)` whose dim names a PARAMETER stays
+loud — the parse-time table declines a name it cannot fold before the override, which is the guard
+rail that stops it baking a pre-override width.
+
+⚠️ **The roadmap's oracle count for the tf-port FORMAL was measured false** and is corrected in the
+row: iverilog 13.0 refuses the CONTROL TWIN too (`input logic [7:0] v [0:3]`, the spelling vita already
+supports, gets `sorry: Subroutine ports with unpacked dimensions are not yet supported`), so nine of
+its ten cells are verilator-only and only the dynamic `[]` formal is two-oracle. It stays deferred.
+
+**Tests:** `cli/tests/unpacked_array_typedef.rs` (+3).
+
+#### 4.5.446 — A bare name whose innermost binding is a CONSTANT stops the index chains and the write funnel (§2 🆕 O) (2026-09-07 · format 31 · batch-reviewed with §4.5.447/448) ✅
+
+**Bug (silent-wrong, both oracles).** `generate if (1) begin : g localparam int ROTA = 99;` over an
+outer `logic [31:0] ROTA[0:3]` printed `whole=99 sel=20` where both oracles print `whole=99 sel=1`.
+One `$display`, two reads of one name, two different objects: the WHOLE-name read is right because
+the lowering routes it through `bare_ident_route`, and the SELECT read the outer array because the
+index chains resolve their base with `lookup_net_scoped` — `walk_scopes(name, &self.symbols)` — which
+a `params` binding does not stop.
+
+**The class is four times the filed row.** Five readers shared that walk and four more were wrong:
+`expr_packed_chain` (a packed outer array), and — worse than a wrong value — BOTH WRITE chains, where
+`ROTA[1] = 32'd20;` under the shadow silently STORED INTO THE OUTER ARRAY at exit 0 while both oracles
+reject the program outright ("Could not find variable ``ROTA['sd1]'' in ``top.g''" / "Storing to
+parameter variable 'ROTA'"); and the `$size` introspection lane, which answered the outer array's 4
+for both oracles' 32.
+
+**Mechanism.** The guarded readers ask the question the lowering asks, with the lowering's own
+function: `bare_name_binds_constant` = `bare_ident_route` matching `Param` / `Str` / `Wide` / `Real`.
+`Subst` / `OutSubst` / `ArrayItem` deliberately do NOT decline — those are the inline-formal lanes the
+chains legitimately serve (an array passed to an inlined function is read through the chain by
+design, measured unchanged).
+
+⚠️ **Not hand-rolled as `params.contains_key(key)`:** the v1 flatten publishes a hoisted block-local
+NET under the module's bare name, so a module `localparam` and that net collide on ONE key, and only
+`bare_ident_route`'s `block_local_declared_at` / `block_local_covers` tie-break gets the
+reader-position rule right.
+
+**The write side needed its own funnel, and it closed a wider class.** Declining the chain alone moved
+the write from "stores into the outer array" to "stores into a different bit of it" — a silent-for-
+silent swap the ladder forbids. `lval_write_net` sits on the two lvalue funnels (`lval_base_net` and
+the whole-name write) and refuses a write whose bare name binds to a constant, which also closes the
+pre-existing scalar shapes measured beside it: `SC = 5;` and `SC[1] = 1'b1;` under a shadowing
+`localparam` both ran to exit 0 where both oracles reject. It sits on the lvalue paths rather than
+inside `resolve_net` because that function also serves reads (`@(e)`, `->e`, an interface-member
+fall-through), where over-reporting would be a loud regression instead of a refusal.
+
+**Census: 57 cells, 9 WRONG → CORRECT, 2 WRONG → LOUD (`$size`, which lands on the pre-existing
+"unsupported system function" the UNSHADOWED spelling already gives), 1 LOUD → CORRECT, 0
+regressions.** The review added a genvar shadow (a tenth silent-wrong, `sel=20` → both oracles' `0`)
+and confirmed the controls: an unshadowed read, a block-local NET shadow (already correct — which is
+what makes the predicate "binds to a constant" and not "a name that also exists outside"), a
+wildcard-imported constant beside a LOCAL array of the same name (the local wins, unchanged), a
+hierarchical write, an array passed to a function formal, and two live splits (an enum label and
+`foreach` over a shadowed name) that did not move.
+
+**Two pins updated, both measured:** `param_select_const_bound.rs` pinned the runtime `ROTA[1]` = 20
+and named it "a pre-existing routing leniency recorded in ROADMAP §2, not this slice's consumer" —
+this is that consumer, and the cell is now verilator's 1; `packed_md_param.rs` pinned `E3010` for a
+write to a packed parameter, where the funnel now says WHY (verilator: "Storing to parameter variable
+'P'") instead of the false "undeclared net/variable `tb.P`".
+
+**Found beside it, filed not fixed:** a continuous assign inside a generate block whose RHS indexes a
+module-scope array PANICS (`init_diag.rs:869`, exit 101) with NO shadowing involved (§2 🆕 P); a
+`localparam` in a plain named `begin : g` block is a parse error both oracles accept (§2 🆕 Q).
+
+**Tests:** `cli/tests/shadowed_constant_resolution.rs` (+5).
 
 #### 4.5.445 — An unpacked-array typedef `typedef logic [7:0] a_t [0:3];` (§3 ⑤) (2026-09-07 · format 31 · batch-reviewed with §4.5.443/444) ✅
 

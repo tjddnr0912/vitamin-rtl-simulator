@@ -498,7 +498,7 @@ impl Elaborator<'_> {
         // The DECLARED range per PARAM const (flushed to `pkg_const_range`), so a
         // select of this constant — in any scope, by any spelling — can normalize
         // against the declaration instead of reading raw internal bits.
-        let mut const_range: BTreeMap<String, (u32, u32, bool)> = BTreeMap::new();
+        let mut const_range: BTreeMap<String, DeclRange> = BTreeMap::new();
         // …and made LIVE during this package's own fold, exactly as `param_meta` is
         // above, so an intra-package sibling (`parameter Q = W[7:0];`) folds. Same
         // save/restore discipline: a module-scope name of the same spelling must not

@@ -233,7 +233,7 @@ impl Elaborator<'_> {
                 ast::ExprKind::Ident(_) | ast::ExprKind::PkgScoped { .. }
             ) {
                 let (lo, w, asc) = self.param_sel_range(arg)?;
-                let (lo, hi) = (i64::from(lo), i64::from(lo) + i64::from(w) - 1);
+                let (lo, hi) = (lo, lo + i64::from(w) - 1);
                 (vec![if asc { (lo, hi) } else { (hi, lo) }], 1, 0)
             } else {
                 return None;

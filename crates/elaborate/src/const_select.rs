@@ -169,8 +169,8 @@ impl Elaborator<'_> {
         // Normalize BOTH endpoints into internal bit positions and take the lower:
         // ascending flips the order, so the numerically-low DECLARED index is the
         // numerically-HIGH internal one.
-        let shift = Self::const_norm_bit(lo_n, i64::from(dlo), dwidth, asc)
-            .min(Self::const_norm_bit(hi_n, i64::from(dlo), dwidth, asc));
+        let shift = Self::const_norm_bit(lo_n, dlo, dwidth, asc)
+            .min(Self::const_norm_bit(hi_n, dlo, dwidth, asc));
         let mask = if n == 63 { i64::MAX } else { (1i64 << n) - 1 };
         Some(((val >> shift) as i64) & mask)
     }
@@ -229,9 +229,9 @@ impl Elaborator<'_> {
         // reports as `x`.
         let norm = |idx: i64| -> i64 {
             if asc {
-                i64::from(dlo) + i64::from(dwidth) - 1 - idx
+                dlo + i64::from(dwidth) - 1 - idx
             } else {
-                idx - i64::from(dlo)
+                idx - dlo
             }
         };
         let base = norm(lo_n).min(norm(hi_n));
@@ -323,7 +323,7 @@ impl Elaborator<'_> {
         env: &std::collections::BTreeMap<String, i64>,
         envw: &crate::const_fn_width::ConstWidths,
         depth: u32,
-    ) -> Option<(u64, i64, i64, u32, u32, bool)> {
+    ) -> Option<(u64, i64, i64, i64, u32, bool)> {
         let r = self.const_select_resolved_raw(e, env, envw, depth)?;
         let (_, lo_n, hi_n, dlo, dwidth, _) = r;
         if !Self::select_idx_in_declared_range(lo_n, dlo, dwidth)
@@ -345,7 +345,7 @@ impl Elaborator<'_> {
         env: &std::collections::BTreeMap<String, i64>,
         envw: &crate::const_fn_width::ConstWidths,
         depth: u32,
-    ) -> Option<(u64, i64, i64, u32, u32, bool)> {
+    ) -> Option<(u64, i64, i64, i64, u32, bool)> {
         let (base, a, b, directed) = self.const_select_bounds(e, env, envw, depth)?;
         let (val, dlo, dwidth, asc) = self.const_select_base(base)?;
         // ⚠️ `[m:l]` is written LEFT:RIGHT in the base's own declared direction, so
@@ -375,8 +375,8 @@ impl Elaborator<'_> {
     /// Is DECLARED index `idx` inside a base declared `dlo` .. `dlo + dwidth - 1`?
     /// The one spelling of §11.5.1's range test, so the integer lane's decline and
     /// the bit lane's per-bit `x` cannot disagree about which bits exist.
-    fn select_idx_in_declared_range(idx: i64, dlo: u32, dwidth: u32) -> bool {
-        idx >= i64::from(dlo) && idx < i64::from(dlo) + i64::from(dwidth)
+    fn select_idx_in_declared_range(idx: i64, dlo: i64, dwidth: u32) -> bool {
+        idx >= dlo && idx < dlo + i64::from(dwidth)
     }
 
     /// The two endpoints of a select. The `bool` is `true` when the pair is written
@@ -415,7 +415,7 @@ impl Elaborator<'_> {
     /// ascending)`. Restricted to a BARE single-segment parameter whose declared
     /// width is RECORDED — see the module doc for why each restriction is a
     /// decline and not a guess.
-    fn const_select_base(&self, base: &ast::Expr) -> Option<(u64, u32, u32, bool)> {
+    fn const_select_base(&self, base: &ast::Expr) -> Option<(u64, i64, u32, bool)> {
         // §3 ⑤ ⓔ: an ELEMENT of a constant array parameter — `A[1][4:0]`, and the
         // struct member `S[1].b` the parser spelled as a part-select of `S[1]`. The
         // value is what the element read folds to and the range is the element's
@@ -427,7 +427,7 @@ impl Elaborator<'_> {
             if m.packed_dims != 1 {
                 return None;
             }
-            return Self::select_base_at_declared(v, m.elem_lo, m.elem_w, m.elem_asc);
+            return Self::select_base_at_declared(v, i64::from(m.elem_lo), m.elem_w, m.elem_asc);
         }
         // `pkg::W` — the same declaration, in the scope that exists to share it. The
         // value comes from `pkg_consts` and the range from `pkg_const_range`, which
@@ -513,10 +513,10 @@ impl Elaborator<'_> {
     /// a sign extension.
     fn select_base_at_declared(
         v: i64,
-        dlo: u32,
+        dlo: i64,
         dwidth: u32,
         asc: bool,
-    ) -> Option<(u64, u32, u32, bool)> {
+    ) -> Option<(u64, i64, u32, bool)> {
         if dwidth == 0 || dwidth > 64 {
             return None;
         }
