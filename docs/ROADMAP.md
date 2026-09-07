@@ -550,7 +550,9 @@ Canonical start order. LOOPROMPT.md NEXT mirrors this table; when they differ th
 | 1 | 1 | §3 ⑤ⓕ residue, cheapest first: `$bits(pkg::T)` (a separate gate at `casts.rs`'s bare-type-name path — its SCALAR twin is loud too, so one fix buys both) · `$bits(a_t)` when a dim names a PARAMETER · then the tf-port FORMAL (1-oracle for the fixed shape, 2-oracle only for the dynamic `[]` one) | §3 ⑤ⓕ | ② |
 | 2 | 2 | §2 🆕 P: a continuous assign inside a generate block whose RHS indexes a module-scope array PANICS at exit 101 (`init_diag.rs:869`, index out of bounds) where both oracles print the element; reproduces with NO shadowing. A panic is below loud | §2 🆕 P | ① |
 | 3 | 3 | §2 🆕 Q: a `localparam` in a plain named `begin : g` block inside an `initial` is a parse error; both oracles accept it, and the generate-scope spelling of the same declaration parses | §2 🆕 Q | ② |
-| 4 | next | mixed-caller callee (intersection rule, design decision) · `m #(8)` / `defparam u.T$w` (illegal input accepted) · VCD `$scope` `[0]` spelling · `genblk<N>` label collision (split) · 🆕 L ⓦ residue (package constants outside the i64 interpreter) · §2 🆕 N residue: a labelled CONCURRENT `assert property` action block drops the label (1-oracle; the label dies in the parser, `Stmt::ConcurrentAssert` has no field for it ⇒ frozen-type change or a parser rewrap) | §4.5.432/436/437/440/444 residues | ② |
+| 4 | OBS | §6 R2 residue, now unblocked by ⓐ: ⓑ a `SubProfile` at the three RUNTIME frame seams (`state/frame_eval.rs::run_frame_call_with`, `exec/process.rs`'s `Terminator::Call`, `exec/frame_call.rs::call_here`) · ⓒ a decl `file:line:col` twin for `Sidecars::func_names`. ⓐ (the static route census) is what makes ⓑ's 0-call rows readable | ROADMAP §6 | ④ |
+| 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has). Nothing today says why an EXPRESSION left the compiled lane, so both an external report and this repo's refutation of it inferred the boundary from builtin call counts and each named a wrong cause — two rounds | ROADMAP §5.b | ④ |
+| 6 | next | mixed-caller callee (intersection rule, design decision) · `m #(8)` / `defparam u.T$w` (illegal input accepted) · VCD `$scope` `[0]` spelling · `genblk<N>` label collision (split) · 🆕 L ⓦ residue (package constants outside the i64 interpreter) · §2 🆕 N residue: a labelled CONCURRENT `assert property` action block drops the label (1-oracle; the label dies in the parser, `Stmt::ConcurrentAssert` has no field for it ⇒ frozen-type change or a parser rewrap) | §4.5.432/436/437/440/444 residues | ② |
 
 Do not start: rows 14/16/25/26/30 and 🆕 F (declared-width provenance / §11.8.1 region sign wall), row 34 (one oracle, zero demand), row 31 (pure half correct ⇒ performance), any widening of the wide fold's accept set before §11.8.1 region sign stands.
 
@@ -582,9 +584,14 @@ teeth = 3-way 내부 차분(JSONL ≡ VCD ≡ `$display`) + 결정성 골든. �
   the very thing the user is hunting. What it needs first, in order:
   ⓐ ✅ **shipped 2026-09-07 (round-39, §4.5.450)** — `run.json`'s `subroutines` object records,
   per `(module, routine)`, the route the elaborator actually took (`frame` / `inlined`) and the
-  number of call sites lowered under it, written at the three seams that PICK the route
-  (`inline_fn.rs` ×2, `inline_task.rs`) and seeded so a declared-but-never-called subroutine still
-  reports one. Static, unconditional, deterministic. SPEC = doc-19 §4.10. The reporter asked for
+  number of call sites lowered under it, seeded from the same two sets the lowering reserves from
+  so a declared-but-never-called subroutine still reports a row. The frame half is counted inside
+  the three frame EMITTERS (`frames_call/emit.rs` — `emit_frame_call`, `emit_frame_task_call`,
+  `emit_frame_func_out_call`), NOT at the seams that pick the route: recording at the pickers
+  measured `sites: 0` for two real call sites, because an `output`-formal call is rewritten by the
+  hoist into a temp + statement call and never reaches `inline_function` (found by this slice's own
+  soundness lens; the inline half stays at its two fall-throughs in `inline_fn.rs` / `inline_task.rs`).
+  Static, unconditional, deterministic. SPEC = doc-19 §4.10. The reporter asked for
   exactly this as the intermediate form and it answers their own case: their `hexdig` is a frame in
   every variant they tried, and the frame call — not the size-cast seal they had been chasing — is
   5× of that expression;

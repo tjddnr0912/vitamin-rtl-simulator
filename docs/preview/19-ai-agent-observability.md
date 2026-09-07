@@ -412,5 +412,5 @@ obs_subroutines.rs` pins it.
 
 ## 5. 트래킹
 
-- 단계별 상태·착수 순서 = **ROADMAP §6**(이 표의 요약본). 실행 큐 = LOOPROMPT NEXT(correctness A2 체인 후 OBS-1부터).
+- 단계별 상태·착수 순서 = **ROADMAP §6**(이 표의 요약본). 실행 큐 정본 = **ROADMAP §5.2**(LOOPROMPT NEXT 가 미러). 출하분 = OBS-0/1a/1b·OBS-2 v1·OBS-3·OBS-S0 + R2 의 ⓐ(`subroutines`, §4.10). 다음 = OBS-2 잔여이고, R2 ⓑ/ⓒ 와 WPROG-WHY 는 §5.2 큐 4·5번.
 - 스키마 변경은 이 문서 + `schema_ver` bump로만(record envelope는 §3-4핀이 동결 기준).

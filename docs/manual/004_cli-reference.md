@@ -102,6 +102,7 @@ name.
 |------|---------|
 | `-o, --out <path>` | Override the VCD output path, ignoring the design's `$dumpfile` argument (per-applet meaning below). |
 | `-f <file>` / `-F <file>` | Expand a filelist (`-f` = paths relative to the CWD, `-F` = relative to the filelist's own directory). |
+| `-G, --param <NAME=VALUE>` | Override a `parameter` of a top module from the command line, before elaboration. Repeatable. `VALUE` is an expression in the design's own syntax, so quote what the shell would eat (`-G W=9`, `-G 'NAME="fast"'`). A NAME that matches no parameter of any top is a loud `VITA-E3002`, never a silent no-op — and a `localparam` is not overridable, which is the usual cause. `vita` and `velab` only: `vcmp` and `vrun` reject it (`VITA-E0001`) and name the applet to pass it to, because the override is applied at elaboration. |
 | `-D, --define <N[=V]>` | Predefine a text macro (`+define+N=V+M` also accepted). |
 | `-I, --incdir <dir>` | Add an `` `include `` search directory (`+incdir+a+b` also accepted). |
 | `--dump-filelist` | Print the effective post-expansion input list and exit. |
@@ -117,7 +118,7 @@ name.
 | `--hier-tree <file>` | Write the instance tree (module + instance name per line). |
 | `--inst-paths <file>` | Write one full dotted instance path per line. |
 | `-Wno-<CODE>` / `-Werror[=<CODE>]` | Suppress a warning / promote warnings to errors (doc-15 mnemonics). |
-| `-q` / `-v` / `--verbosity <0..3>` | Quiet / verbose. `-v` also prints the [effective-invocation block](#what-actually-ran--v). |
+| `-q, --quiet` / `-v` / `-vv` / `--verbosity <0..3>` | Quiet (`0`) / verbose (`-v` = `2`, `-vv` = `3`). `-v` also prints the [effective-invocation block](#what-actually-ran--v). |
 | `-l, --log <file>` [`--log-append`] | Tee the full transcript (RTL + diags + progress) to a file. |
 | `-h, --help` / `-V, --version` | Help / version. |
 
@@ -526,6 +527,7 @@ logging, plusargs) plus:
 |------|---------|
 | `-o <path>` | Override the VCD output path (same semantics as `vita -o`). Rejected if it names the input `.velab`. |
 | `--backend <interp\|vm\|native>` | (`vrun` only) Same meaning as `vita --backend`. `vcmp`/`velab` **reject** it: nothing in the artifact they write depends on the backend, so accepting it would misleadingly suggest otherwise. |
+| `-G, --param <NAME=VALUE>` | (`velab` only) Same meaning as `vita -G`. `vcmp` and `vrun` reject it with `VITA-E0001`: the override is applied at elaboration, so `vcmp` is too early and `vrun` too late. |
 | `--upstream <file>` | Verify the `.velab`'s recorded upstream digest against a specific `.vu`. |
 
 ```

@@ -46,7 +46,7 @@ work/
 `work/lib.toml` (매니페스트):
 
 ```toml
-format_version = 29  # work/lib.toml 매니페스트 포맷(현재 29). 산출물 컨테이너 format_version도 29 (CURRENT_FORMAT_VERSION).
+format_version = 31  # work/lib.toml 매니페스트 포맷(현재 31). 산출물 컨테이너 format_version도 31 (CURRENT_FORMAT_VERSION).
 tool           = { version = "0.2.0", git_sha = "…", dirty = false, profile = "release" }
 [library]
 name = "work"                # 논리 라이브러리 이름 (D3 — 기본 work)
@@ -112,7 +112,7 @@ SimIr 루트 1개:
   - arena/interner 평탄 벡터 (u32 인덱스 엣지 — 재로드 시 포인터 fixup 0)
 ```
 
-> **엔진-facing 사이드테이블 트레일러(골든 SimIr 프레임 밖, append-only).** 골든 `SimIr` postcard 프레임 뒤에 out-of-band 트레일러 세그먼트를 `write_velab_file`이 다음 순서로 append한다: ① fork_modes ② net_names ③ timescale — v22부터 트리플 `(proc_multipliers, global_prec_exp, proc_prec_mults)` ④ severities ⑤ radixes ⑥ proc_scopes ⑦ assign_ranks ⑧ queue_bounds ⑨ WorkConsumed(worklib v1; legacy explicit-path 빌드도 항상 기록) ⑩ net_dims(per-element VCD) ⑪ final_procs(P2-E `final`) ⑫ defer_marks ⑬ defer_acts(§16.4 deferred immediate assert) ⑭ StagedExtraSidecars(append-only 필드 — v29 의 `severity_locs` 가 여기 산다: elaborate 가 해석한 severity 문장별 file:line:col+인스턴스, 런타임 진단 위치의 유일한 소스) ⑮ WorkStamps(RULEV-MTIME). `.vu` 쪽도 tail 을 갖는다: SourceUnit 프레임 ++ timescale tail(v22) ++ **source-map tail(v28 — 파일별 (name, 원문) + 세그먼트, `velab` 이 `MapResolver` 를 재구성해 staged elaborate 진단이 one-shot 과 같은 위치를 갖는다)**. 이들은 `SimOpts`/elaborate IR-0 합성으로 **골든 해시(SimIr 루트)에 무영향** — SVA 체커·named-event·wait fork·frame-call 등 IR-0 기능이 여기 또는 elaborate-합성으로 얹힌다. format_version은 현재 29 — v9~v29 이력은 `crates/vita-artifact/src/header.rs`의 버전별 주석이 정본(SimIr 골든 해시는 v19 re-freeze에 핀·v20 이후는 전부 trailer/tail-only).
+> **엔진-facing 사이드테이블 트레일러(골든 SimIr 프레임 밖, append-only).** 골든 `SimIr` postcard 프레임 뒤에 out-of-band 트레일러 세그먼트를 `write_velab_file`이 다음 순서로 append한다: ① fork_modes ② net_names ③ timescale — v22부터 트리플 `(proc_multipliers, global_prec_exp, proc_prec_mults)` ④ severities ⑤ radixes ⑥ proc_scopes ⑦ assign_ranks ⑧ queue_bounds ⑨ WorkConsumed(worklib v1; legacy explicit-path 빌드도 항상 기록) ⑩ net_dims(per-element VCD) ⑪ final_procs(P2-E `final`) ⑫ defer_marks ⑬ defer_acts(§16.4 deferred immediate assert) ⑭ StagedExtraSidecars(append-only 필드 — 현재 37개. 위치·스코프 계열이 여기 산다: `stmt_locs`(v29. 필드명은 `severity_locs` 에서 바뀌었고 postcard 는 필드를 위치로 인코딩하므로 개명은 wire-중립 — elaborate 가 해석한 문장별 file:line:col+인스턴스, 런타임 진단 위치의 유일한 소스) · `stmt_scopes`/`expr_scopes`(v30 — named block · statement label 의 `%m` 접미 체인) · `proc_inst_scopes`(v31 — ProcId 별 인스턴스 경로, generate 스코프 제거. generate 블록 프로세스나 프레임에서 부른 class 메서드의 `%m` 접두)) ⑮ WorkStamps(RULEV-MTIME). `.vu` 쪽도 tail 을 갖는다: SourceUnit 프레임 ++ timescale tail(v22) ++ **source-map tail(v28 — 파일별 (name, 원문) + 세그먼트, `velab` 이 `MapResolver` 를 재구성해 staged elaborate 진단이 one-shot 과 같은 위치를 갖는다)**. 이들은 `SimOpts`/elaborate IR-0 합성으로 **골든 해시(SimIr 루트)에 무영향** — SVA 체커·named-event·wait fork·frame-call 등 IR-0 기능이 여기 또는 elaborate-합성으로 얹힌다. format_version은 현재 31 — v9~v31 이력은 `crates/vita-artifact/src/header.rs`의 버전별 주석이 정본(SimIr 골든 해시는 v19 re-freeze에 핀·v20 이후는 전부 trailer/tail-only).
 
 > **SCHEMA_HASH 루트 = `sim_ir::SimIr` (M3 동결, doc 17).** §5의 구조적 해시는 위 `SimIr` 루트(arena 전체를 `Vec`로 by-value 보유 → `Expr`/`Stmt`/`NetVar`/`ConstVal`까지 도달)에서 산출한다. `Process`만으로는 cross-arena u32 엣지라 arena에 미도달 → `Process`는 런타임 클러스터 sub-pin 골든. `Expr`/`Stmt`/`Lvalue`/`Terminator`/`Sensitivity`/`NetVar`/arena 형상은 doc 17이 동결.
 
@@ -464,7 +464,7 @@ canonical 경로가 두 번 나오는 경우만 dedup하되, 두 occurrence가 *
 
 ```
 vrun <top>.velab:
-  1. 헤더만 디코드 (본문 역직렬화 전): magic, format_version(현재 22), schema_hash 확인
+  1. 헤더만 디코드 (본문 역직렬화 전): magic, format_version(현재 31), schema_hash 확인
      → format/schema 불일치면 hard error + 재빌드 힌트 (본문 안 읽고 거부)
   2. 스냅샷의 consumed[(lib:unit, src_sha256)] 각 항목에 대해:
        라이브 소스를 재전처리(상속 반영) → 다이제스트 재계산 → 박힌 값과 대조

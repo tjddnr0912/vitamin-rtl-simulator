@@ -137,7 +137,7 @@
 - **최저위험 순서**: 순수 파서 desugar(기존 AST 재사용) > 기존 메커니즘 라우팅(grep 등가 기구) > 단일-속성 primitive COMPOSE(신규 결합 primitive=골든 영향) > 신규 인프라.
 - **loud→supported 후보를 그라운딩할 때 형제 경로와 capability-parity 매트릭스를 비교하라** — 같은 문맥 집합(concat·compare·method·arg·display)을 두 경로에 모두 돌리면 **양쪽 공통 silent-wrong**이 드러난다(이번 반복의 ① 발굴 경로).
 - **거부/미지원 판단 전 기존 부분지원 grep · STORAGE 갭 의심 → ENGINEERING_RULES**.
-- **아티팩트 불변식**: **format_version 29**. bump 사유 3종=①frozen sim-ir 형상 변경(골든 재생성·드묾) ②staged trailer 사이드카 **추가**(v20/21/22/28/29 선례 — v28 은 `.vu` 쪽 tail·SimIr 골든 불변·wire-pin+`obs.rs` pin 재생성·구 `.velab` loud-reject) ③**기존 사이드카의 enum 이 variant 를 얻을 때**(v27 선례). ⚠️ ③ 은 **하위호환인데도 bump 한다** — postcard 는 discriminant 를 쓰므로 **마지막에 추가하면** 구 아티팩트는 그대로 디코드되고 **새 아티팩트 × 구 바이너리**만 깨진다. bump 하지 않아도 loud 이긴 하지만(`undecodable … trailer`) 그 메시지는 **고치는 법을 말하지 않는다** ⇒ 헤더 게이트의 `E-ART-FORMAT-MISMATCH` 로 받게 하려고 bump 한다. **더 정확한 loud 를 사는 것이 bump 의 이유**이고, variant 를 중간에 끼우면 ③ 이 아니라 ①(구 아티팩트 mis-decode)이다. 그 외 전부 **IR-0**(엔진/elaborate-local·SimOpts 사이드카). **3-OS byte-identical**이 perf보다 우선. AST 필드 추가=`.vu` 해시만 re-pin(`hdl-ast/tests/schema_hash.rs`)·format 불변·VALUE만 변경=둘 다 불변. **`block_body` 재귀 경로(파서) 수정=2 MiB 스택 depth_guard 확인 필수**(`RUST_MIN_STACK=2097152`·프레임 비대→`#[inline(never)]` cold-helper 추출/Box화).
+- **아티팩트 불변식**: **format_version 은 `header.rs::CURRENT_FORMAT_VERSION` 이 정본**(이 문장에 숫자를 복사하지 마라 — 29 로 굳어 두 bump 를 놓쳤다). bump 사유 3종=①frozen sim-ir 형상 변경(골든 재생성·드묾) ②staged trailer 사이드카 **추가**(v20/21/22/28/29/30/31 선례 — v28 은 `.vu` 쪽 tail·SimIr 골든 불변·wire-pin+`obs.rs` pin 재생성·구 `.velab` loud-reject) ③**기존 사이드카의 enum 이 variant 를 얻을 때**(v27 선례). ⚠️ ③ 은 **하위호환인데도 bump 한다** — postcard 는 discriminant 를 쓰므로 **마지막에 추가하면** 구 아티팩트는 그대로 디코드되고 **새 아티팩트 × 구 바이너리**만 깨진다. bump 하지 않아도 loud 이긴 하지만(`undecodable … trailer`) 그 메시지는 **고치는 법을 말하지 않는다** ⇒ 헤더 게이트의 `E-ART-FORMAT-MISMATCH` 로 받게 하려고 bump 한다. **더 정확한 loud 를 사는 것이 bump 의 이유**이고, variant 를 중간에 끼우면 ③ 이 아니라 ①(구 아티팩트 mis-decode)이다. 그 외 전부 **IR-0**(엔진/elaborate-local·SimOpts 사이드카). **3-OS byte-identical**이 perf보다 우선. AST 필드 추가=`.vu` 해시만 re-pin(`hdl-ast/tests/schema_hash.rs`)·format 불변·VALUE만 변경=둘 다 불변. **`block_body` 재귀 경로(파서) 수정=2 MiB 스택 depth_guard 확인 필수**(`RUST_MIN_STACK=2097152`·프레임 비대→`#[inline(never)]` cold-helper 추출/Box화).
 - **READ 경로를 넓히면 WRITE twin을 같은 반복에 전수하라** — read 하나를 고치면 대개 write 쪽에 같은-클래스 silent가 여러 형태로 잠복해 있다(select 3형·concat). twin 판정 기준=**scalar/fixed 쌍둥이가 loud인데 이 경로만 조용하면 그 경로가 이상한 것**.
 - **guard는 문서화된 단일 퍼널에 두고 全 site가 술어 하나를 공유하라** — 별도 site에 두면 형제 축(concat 등)이 열린 채 남고, 술어를 둘로 나누면 (string/real처럼) 축마다 커버리지가 갈린다. 술어 이름은 **금지 사유**(bit-addressable 아님)로 짓고 타입 열거로 짓지 마라.
 - **공유 기구(walk·분류기·퍼널)에 semantics를 추가할 땐 default가 아니라 OPT-IN 파라미터로** — consumer마다 순서 의존성·안전 전제가 다르다(한 곳을 위해 14개 전부에 리스크를 지우지 마라). opt-in 함수 doc에 **양성 전제조건**(언제 켜도 되는지)을 반드시 적어라(금지 조건만 적으면 다음 사람이 같은 함정에 빠진다).
@@ -4028,3 +4028,34 @@ call-tree feature was blocked on a static record of the routing, and why shippin
 ALONE is a real deliverable rather than a placeholder: a reader can now tell an absent row from a
 free one. When a measurement has a blind region, publishing the region's MAP is worth more than
 publishing the measurement.
+
+## The docs written before the review are the ones the review invalidates (2026-09-07, round-39 doc sweep)
+
+**A document that names WHERE a mechanism lives is a claim about code, and a review that moves the
+mechanism silently falsifies it.** The slice above wrote ROADMAP §6's R2-ⓐ paragraph while the census
+still lived at the three route-PICKING seams, then the soundness lens moved the recording into the
+three frame EMITTERS — and the paragraph shipped saying *"written at the three seams that PICK the
+route (`inline_fn.rs` ×2, `inline_task.rs`)"*, which is now false in both the place and the count.
+Every gate was green, because no test reads prose. The rule: when a review changes the DESIGN, re-read
+the docs written before it, not just the code. The high-risk sentences are the ones naming a file, a
+function, or a count — a doc that only states the CONTRACT (what `subroutines` reports) survives the
+move; one that states the IMPLEMENTATION does not. Prefer the contract, and where the implementation
+must be named, name it with the reason it is there (here: "the emitters, because an `output`-formal
+call never reaches `inline_function`"), so a later move reads as a contradiction instead of a detail.
+
+**The queue that declares itself canonical must be the one that GAINS the row.** Two queues describe
+the same start order: ROADMAP §5.2 ("LOOPROMPT.md NEXT mirrors this table; when they differ this
+table wins") and REMAINING_WORK §B ("canonical = ROADMAP §5.2"). The slice filed its two deferrals —
+R2-ⓑ/ⓒ and `WPROG-WHY` — into REMAINING_WORK and LOOPROMPT's prose but not into §5.2, so both
+mirrors carried rows their own declared source did not have, and a reader following the pointer to
+the canonical table would have concluded the items were dropped. A deferral is a queue edit: write it
+where the queue is canonical FIRST, then mirror. Detection is one grep per queued item across the
+three files, and it is cheap enough to run at every slice close.
+
+**A version constant repeated in prose decays silently.** `format_version` is pinned in one place in
+code (`header.rs::CURRENT_FORMAT_VERSION`) and restated in three SPEC documents; at HEAD 31 they read
+29, 29, 22 and 22 — drifting nine, nine and two bumps behind while every gate stayed green. Restating
+a constant is a copy, and copies are only as fresh as the last person who remembered them. Where the
+prose needs the number, say what it is FOR and point at the canonical site, and when a bump ships,
+grep the number itself (`grep -rn 'format_version'`) rather than trusting that the bump's own slice
+touched every restatement.

@@ -329,9 +329,9 @@ node-kind당 append-only `Vec` 1개 = 재로드 시 포인터 fixup 0.
 - **format_version 5–8 (2026-06-10~14) — 후속 re-freeze:** v5=`NonblockingAssign.delay`(NBA transport delay)
   +`NetKind` Dyn 3종(동적 배열/queue/assoc)+`SysFunc`/`SysTask` 메서드 — v6=queue `insert/delete`·assoc iter·string 키
   — v7=`BinOp::CasezEq/CasexEq`+`SysFuncId`/`SysTaskId` 다수($random·파일 I/O·readmem·bit-vector)+`NetKind::String`
-  — **v8=`WaitCause::Fork`(wait fork IR)**. **현재 골든 `format_version` = 22**(SimIr 골든 해시는
-  **v19 re-freeze에 핀** — v20/21/22는 trailer-only bump·골든 불변; v9~v22 버전별 이력 정본 =
-  `crates/vita-artifact/src/header.rs` 주석). SVA(concurrent assert·시퀀스·
+  — **v8=`WaitCause::Fork`(wait fork IR)**. **현재 골든 `format_version` = 31**(SimIr 골든 해시는
+  **v19 re-freeze에 핀** — v20 이후는 전부 trailer/tail-only bump·골든 불변; 버전별 이력 정본 =
+  `crates/vita-artifact/src/header.rs::CURRENT_FORMAT_VERSION` 주석. 이 숫자는 복사본이므로 정본을 먼저 봐라). SVA(concurrent assert·시퀀스·
   sampled fn·named property/sequence·multi-clock)와 wait fork **기능**은 v8 위에 **순수 IR-0 desugar + AST-flip**으로
   얹혀 `.vu` AST-해시만 재핀(SimIr 골든 무변경).
 - **`format_version` bump:** M3가 전 백본 동결 → 루트 해시 by construction 변경 → 이전 모든 `.velab` 무효(decode 시 incompatible-tool 하드 에러, silent misparse 없음). M3 동결로 1회 bump; 새 `schema_hash_is_pinned` EXPECTED + canonical 골든(SimIr 루트) 커밋.

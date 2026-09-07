@@ -387,11 +387,11 @@ fn schema_hash_is_pinned() {
     assert_eq!(hex::encode(got), EXPECTED,
         "SCHEMA_HASH 변경 — frozen sim-ir 타입의 형상/serde 속성이 이동.\n\
          의도적이면: 모든 .velab 무효 → format_version bump + 골든 갱신.");
-    // (현재 골든 컨테이너 format_version = 22. v2→8 사이 의도적 re-freeze: real(v3)·#delay ExprId(v4)·
+    // (현재 골든 컨테이너 format_version = 31. v2→8 사이 의도적 re-freeze: real(v3)·#delay ExprId(v4)·
     //  NBA transport delay+dyn array/queue/assoc(v5)·queue insert/assoc iter/string key(v6)·
     //  casez/casex·$random·file I/O·readmem·package·string(v7)·WaitCause::Fork wait-fork(v8).
-    //  SimIr 골든 해시 자체는 v19 re-freeze에 핀 — v20/21/22는 trailer-only bump(골든 불변).
-    //  v9~v22 버전별 이력 정본 = crates/vita-artifact/src/header.rs 주석.)
+    //  SimIr 골든 해시 자체는 v19 re-freeze에 핀 — v20 이후는 전부 trailer/tail-only bump(골든 불변).
+    //  v9~v31 버전별 이력 정본 = crates/vita-artifact/src/header.rs 주석.)
 }
 ```
 모든 CI OS/arch(x86_64/aarch64 × linux-gnu/apple-darwin)에서 실행. 정규 문자열이 byte-identical(위)이므로 해시 동일 → *같은* `EXPECTED` literal이 전 플랫폼 통과 — 그것이 2-플랫폼 계약(§5 line 491). platform-의존 해시면 최소 한 runner 실패.
