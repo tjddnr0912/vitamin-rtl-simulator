@@ -757,6 +757,25 @@ impl Elaborator<'_> {
                         if let Some((w, _)) = me.walk_scopes(name, &me.param_meta) {
                             return Some(w);
                         }
+                        // §2 🆕 L ⓐ: a `real` / `realtime` parameter is 64 bits
+                        // (§6.12.1 makes both the IEEE-754 double) and has no
+                        // `param_meta` width, so it used to reach the untyped tail and
+                        // answer the i64 domain's 32. THREE of vita's own answers
+                        // already said 64 for the same object — a real VARIABLE, the
+                        // package-SCOPED spelling `p::P`, and `$realtobits` — so this
+                        // was vita contradicting itself; verilator reads 64 for every
+                        // one of them. (iverilog 13.0 answers 1 for a real VARIABLE
+                        // too, which is what disqualifies it on this axis rather than
+                        // a preference between tools.)
+                        //
+                        // It sits INSIDE the `!local_shadows` arm, so a block-local
+                        // that shadows the parameter still answers for the object it
+                        // names, exactly as the value read does. `shortreal` never
+                        // arrives — the parser refuses that keyword — so no 32-bit
+                        // real is folded to 64 here.
+                        if me.walk_scopes(name, &me.real_param_val).is_some() {
+                            return Some(64);
+                        }
                         return Some(32);
                     }
                     if let Some(net) = me.lookup_net_scoped(name) {
