@@ -27,9 +27,9 @@ Priority principle: ① silent-wrong with an oracle > ② loud→supported with 
 | section | open | breakdown |
 |---|---:|---|
 | §0 promotion queue (T2/T3 residues) | 15 rows | real const-fold residues ⓐ–ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), `-G` aliases and `.velab` header field, `case inside` |
-| §2 start-order table | 25 rows | OPEN 5 · BLOCKED 3 · WALL 5 (declared-width provenance / §11.8.1 region sign) · ORACLE-SPLIT 2 · PERF 2 · LOUD 6 · DO-NOT-START 2 |
+| §2 start-order table | 26 rows | OPEN 6 · BLOCKED 3 · WALL 5 (declared-width provenance / §11.8.1 region sign) · ORACLE-SPLIT 2 · PERF 2 · LOUD 6 · DO-NOT-START 2 |
 | §2 recorded defects by mechanism | 86 bullets | size cast / signedness 15 · constant domain (i64) 14 · inline / frame binds 16 · index sealing 4 · real 5 · ranges 4 · class fields 3 · scoping 4 · delays / events 6 · diagnostics 4 · performance 6 · oracle splits 5 |
-| §3 numbered items | 23 rows | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (8), ⑧ system functions in function bodies / `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
+| §3 numbered items | 24 rows | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, incl. ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies / `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
 | §3 small residues | 65 rows | parser accept 8 · constants / parameters 11 · subroutine / frame 17 · system tasks & file I/O 9 · nets / timing 6 · diagnostics quality 5 · strings / heap 6 · VCD / real conversion 3 |
 | §3 intentionally loud | 12 rows | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | mostly no oracle; hand-IEEE when started |
