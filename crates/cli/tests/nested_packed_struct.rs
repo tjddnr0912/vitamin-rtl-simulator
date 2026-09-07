@@ -58,8 +58,11 @@ fn loud(name: &str, src: &str, needle: &str) {
 
 #[test]
 fn ctl_misc() {
-    // ctl_bits_scoped_type: both oracles
-    loud(
+    // ctl_bits_scoped_type: §4.5.452 turned this loud pin into a VALUE pin. `$bits`
+    // of a package-scoped struct type name folds through the same `"p::cap_t"` twin
+    // the bare spelling uses; the digest is the oracles' own line (iverilog 13.0 and
+    // verilator 5.052 both print `14 7`), not a re-derivation.
+    digest(
         "ctl_bits_scoped_type",
         r#"package p;
   typedef struct packed { logic [1:0] cor; logic [3:0] perms; logic valid; } cap_t;
@@ -74,7 +77,7 @@ module tb;
   initial #5 $finish;
 endmodule
 "#,
-        "`p::cap_t` does not name a package constant or variable (v7 supports p",
+        "14 7",
     );
     // ctl_hier_read: both oracles
     loud(

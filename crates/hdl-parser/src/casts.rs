@@ -211,6 +211,33 @@ impl Parser<'_, '_> {
             self.bump(); // )
             return Some(w);
         }
+        // §3 ⑤ⓕ: …and its package-SCOPED spelling (`$bits(pkg::T)`). It resolves
+        // through the SAME table with no new width rule: the parser registers a
+        // `"pkg::T"` twin of every package typedef in `typedefs` / `struct_layouts` /
+        // `union_type_names` (the twin `parse_size_or_named_cast` already reads for
+        // `pkg::T'(e)`), so `bits_of_type_name` answers a scoped key exactly as it
+        // answers a bare one — including the declines (`real` / `string` / class
+        // handle / `[]` / `[$]`), which is what keeps the loud cases loud.
+        //
+        // Both oracles: 32 for `typedef logic [7:0] a_t [0:3]` and 8 for the SCALAR
+        // twin `typedef logic [7:0] e_t` — the scalar was loud too, so one gate buys
+        // both. Without this the argument falls through to the expression path and
+        // elaborate reports `pkg::T` "does not name a package constant or variable".
+        if self.is_ident()
+            && self.peek_at(1) == Some(TokenKind::ColonColon)
+            && matches!(self.peek_at(2), Some(TokenKind::Word(WordKind::Ident)))
+            && self.peek_at(3) == Some(TokenKind::RParen)
+        {
+            let key = format!("{}::{}", self.cur_text(), self.text_at(2));
+            // `?` BEFORE any bump — an unknown scoped name must leave the cursor
+            // untouched so the expression path sees the whole `pkg::T`.
+            let w = self.bits_of_type_name(&key)?;
+            self.bump(); // pkg
+            self.bump(); // ::
+            self.bump(); // T
+            self.bump(); // )
+            return Some(w);
+        }
         None
     }
 }

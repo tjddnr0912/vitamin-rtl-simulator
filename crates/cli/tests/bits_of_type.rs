@@ -140,12 +140,16 @@ fn bits_string_type_stays_loud() {
 }
 
 #[test]
-fn bits_scoped_type_stays_loud() {
-    // A scoped `pkg::T` type name is a follow-on — loud, not silent-wrong.
-    assert!(loud(
-        "package p; typedef logic [9:0] w_t; endpackage\n\
-         module top; initial begin $display(\"K=%0d\", $bits(p::w_t)); $finish; end endmodule"
-    ));
+fn bits_scoped_type_folds() {
+    // §4.5.452: was a loud follow-on, now the oracles' width. `bits_of_type_name`
+    // resolves the `"p::w_t"` twin the parser registers for every package typedef,
+    // so the scoped spelling answers exactly as the bare one does — 10, live-pinned
+    // to iverilog 13.0 and verilator 5.052. The DECLINE set (`real` / `string` /
+    // `[]` / `[$]` / unknown) is pinned in `bits_of_scoped_type.rs`, which is why
+    // this pin is a value and not a refusal.
+    let (k, ok) = run("package p; typedef logic [9:0] w_t; endpackage\n\
+         module top; initial begin $display(\"K=%0d\", $bits(p::w_t)); $finish; end endmodule");
+    assert!(ok && k == "K=10", "got ({k}, {ok})");
 }
 
 #[test]
