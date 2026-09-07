@@ -282,6 +282,44 @@ pub fn fill_literal_const(raw: &str, kind: IntLitKind, width: u32) -> Option<Con
     })
 }
 
+/// The WIDTH and SIGNEDNESS of a raw IntLit lexeme, without building its bits.
+///
+/// A dozen callers ask a literal only for its shape — `const_self_width`,
+/// `const_signed_env`, the two context walks, the `>= 32` / `> 64` predicates —
+/// and each one was calling [`parse_int_literal`], which allocates five times (a
+/// despaced `String`, a digit `Vec`, a `Vec<Bit>`, and the two `BitPacked`
+/// planes) to build a value the caller drops. That is what made §4.5.423's
+/// switch to `const_range_bound_fold` cost 3× the elaboration of a design with
+/// nothing but `wire [31:0]` declarations in it: the new walk asks for the shape
+/// twice more per bound, and each ask was a full literal parse.
+///
+/// ⚠️ THE FAST PATH IS DECIMAL-ONLY ON PURPOSE, and it is not an approximation:
+/// a `_`-free run of 1..=9 ASCII digits is exactly the input `decimal_bits`
+/// accepts and its value is below 2^30, so `parse_int_literal` computes
+/// `max(32, bits.len() + 1)` = 32, signed. Nothing else is decided here —
+/// every other lexeme falls through to the full parse, so the two cannot
+/// disagree about a shape this function did not compute itself.
+pub fn int_literal_shape(raw: &str, kind: IntLitKind) -> Option<(u32, bool)> {
+    if matches!(kind, IntLitKind::Decimal) {
+        let mut digits = 0usize;
+        let mut ok = true;
+        for b in raw.bytes() {
+            if b == b'_' {
+                continue;
+            }
+            if !b.is_ascii_digit() {
+                ok = false;
+                break;
+            }
+            digits += 1;
+        }
+        if ok && (1..=9).contains(&digits) {
+            return Some((32, true));
+        }
+    }
+    parse_int_literal(raw, kind).map(|c| (c.width, c.signed))
+}
+
 /// Parse a raw IntLit lexeme into a `ConstVal`. `None` ⇒ malformed (caller emits
 /// a diagnostic and substitutes a zero const).
 pub fn parse_int_literal(raw: &str, kind: IntLitKind) -> Option<ConstVal> {
@@ -667,5 +705,60 @@ pub fn make_const_u32(n: u32, width: u32) -> ConstVal {
         signed: false,
         repr: ConstRepr::Numeric,
         bits: BitPacked { val, unk },
+    }
+}
+
+#[cfg(test)]
+mod shape_tests {
+    use super::*;
+
+    /// The fast path is an OPTIMISATION, so the only thing worth testing is that
+    /// it never answers differently from the parse it skips. Every lexeme the
+    /// decimal arm can see, including the ones that must fall through.
+    #[test]
+    fn shape_agrees_with_the_full_parse() {
+        let decimals = [
+            "0",
+            "1",
+            "7",
+            "9",
+            "31",
+            "32",
+            "63",
+            "255",
+            "1_000",
+            "999999999",
+            "0000000031",
+            "1000000000",
+            "4294967295",
+            "18446744073709551616",
+            "",
+            "_",
+            "1a",
+            "0x1f",
+        ];
+        for raw in decimals {
+            let want = parse_int_literal(raw, IntLitKind::Decimal).map(|c| (c.width, c.signed));
+            assert_eq!(
+                int_literal_shape(raw, IntLitKind::Decimal),
+                want,
+                "decimal {raw:?}"
+            );
+        }
+        for (raw, kind) in [
+            ("8'hAB", IntLitKind::Sized),
+            ("4'sd5", IntLitKind::Sized),
+            ("1'b0", IntLitKind::Sized),
+            ("65'h1", IntLitKind::Sized),
+            ("8 'hFF", IntLitKind::Sized),
+            ("'b1101", IntLitKind::UnsizedBased),
+            ("'sd9", IntLitKind::UnsizedBased),
+            ("'1", IntLitKind::UnsizedBased),
+            ("'x", IntLitKind::UnsizedBased),
+            ("8'hZQ", IntLitKind::Sized),
+        ] {
+            let want = parse_int_literal(raw, kind).map(|c| (c.width, c.signed));
+            assert_eq!(int_literal_shape(raw, kind), want, "based {raw:?}");
+        }
     }
 }

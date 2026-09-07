@@ -171,7 +171,7 @@ impl Elaborator<'_> {
                 if literal::is_fill_literal(raw, *kind) {
                     return Some(false);
                 }
-                literal::parse_int_literal(raw, *kind).map(|c| c.signed)
+                literal::int_literal_shape(raw, *kind).map(|(_, s)| s)
             }
             // A bare name binds where `lower_expr` binds it — `bare_ident_route`
             // is the lowering's own decision, in its order (iterator → inline
@@ -476,7 +476,7 @@ impl Elaborator<'_> {
                     // never widens the maximum.
                     return Some(0);
                 }
-                literal::parse_int_literal(raw, *kind).map(|c| c.width)
+                literal::int_literal_shape(raw, *kind).map(|(w, _)| w)
             }
             // A net reads as `Signal{net}` and `ir_bits_of` gives that node the
             // table width (a string's is a dynamic length ⇒ none); a REAL net is

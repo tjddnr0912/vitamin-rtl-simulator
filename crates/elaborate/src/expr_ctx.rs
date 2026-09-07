@@ -270,7 +270,7 @@ pub(crate) fn ast_expr_self_width(
             [seg] => func_widths.get(&seg.name).copied(),
             _ => None,
         },
-        IntLit { kind, raw } => literal::parse_int_literal(raw, *kind).map(|cv| cv.width),
+        IntLit { kind, raw } => literal::int_literal_shape(raw, *kind).map(|(w, _)| w),
         BitSelect { .. } => Some(1),
         PartSelect { msb, lsb, .. } => {
             let m = ast_decimal_lit_i64(msb)?;

@@ -321,7 +321,7 @@ impl Elaborator<'_> {
         use ast::ExprKind as K;
         let all = |es: &[&ast::Expr]| es.iter().all(|x| self.ast_const_leaves_min32(x));
         match &e.kind {
-            K::IntLit { kind, raw } => parse_int_literal(raw, *kind).is_some_and(|c| c.width >= 32),
+            K::IntLit { kind, raw } => int_literal_shape(raw, *kind).is_some_and(|(w, _)| w >= 32),
             K::TimeLit { num, .. } => all(&[num]),
             K::Paren { inner } => all(&[inner]),
             K::Unary { operand, .. } => all(&[operand]),

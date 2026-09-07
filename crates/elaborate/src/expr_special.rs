@@ -669,7 +669,7 @@ impl Elaborator<'_> {
                 Some(1)
             }
             ast::ExprKind::IntLit { kind, raw } => {
-                crate::literal::parse_int_literal(raw, *kind).map(|c| c.width)
+                crate::literal::int_literal_shape(raw, *kind).map(|(w, _)| w)
             }
             ast::ExprKind::Concat { parts } => parts
                 .iter()

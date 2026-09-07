@@ -420,7 +420,7 @@ impl Elaborator<'_> {
         match &e.kind {
             ast::ExprKind::Paren { inner } => self.const_expr_signed(inner),
             ast::ExprKind::IntLit { kind, raw } => {
-                literal::parse_int_literal(raw, *kind).is_some_and(|cv| cv.signed)
+                literal::int_literal_shape(raw, *kind).is_some_and(|(_, s)| s)
             }
             ast::ExprKind::Ident(pth) if pth.segments.len() == 1 => self
                 .param_meta

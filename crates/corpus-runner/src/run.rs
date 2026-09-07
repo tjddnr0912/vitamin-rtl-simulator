@@ -76,6 +76,30 @@ pub struct Measurement {
     /// Distinct digest lines observed. More than one means the tool is not
     /// deterministic on this design, which outranks any timing it produced.
     pub digests: Vec<String>,
+    /// vita only: `(elab_s, sim_s)` from a SEPARATE probe run — see
+    /// [`probe_phases`]. `None` for iverilog, for a workload that did not match,
+    /// and on any machine where the probe could not be read.
+    pub phases: Option<Phases>,
+}
+
+/// The front-end / executor split of one vita run, from `run.json`.
+///
+/// WHY THIS EXISTS. An external report measured a 39% simulation SPEEDUP and a
+/// 22% elaboration SLOWDOWN across the same 51 commits and could see both only
+/// because it read `run.json` by hand; this harness reported one median wall
+/// time, in which the two cancel. A regression that a gate cannot see is a
+/// regression that ships — so the split is a column here, not an anecdote.
+///
+/// ⚠️ ONE SAMPLE, and a separate run from the timed rounds. Folding `--obs-dir`
+/// into the timed command would have added the file writes to every vita wall
+/// time and made this harness's headline number incomparable with the history in
+/// `docs/study/03-workload-corpus.md`. `elab_s`/`sim_s` are internal timers, so
+/// the probe measures the same phases the timed rounds ran; what it does not give
+/// is a spread.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Phases {
+    pub elab_s: f64,
+    pub sim_s: f64,
 }
 
 impl Measurement {
@@ -285,6 +309,7 @@ pub fn measure(jobs: &[Job], reps: usize, budget: Duration) -> Vec<Measurement> 
             median_secs: None,
             secs: Vec::new(),
             digests: Vec::new(),
+            phases: None,
         })
         .collect();
 
@@ -363,10 +388,58 @@ pub fn measure(jobs: &[Job], reps: usize, budget: Duration) -> Vec<Measurement> 
         }
     }
 
-    for m in &mut acc {
+    for (i, m) in acc.iter_mut().enumerate() {
         m.median_secs = median(m.secs.clone());
+        // Only a vita row that actually matched: the probe re-runs the design, and
+        // re-running a workload that refused or hung buys nothing but the wait.
+        if jobs[i].tool == Tool::Vita && m.outcome == Outcome::Match {
+            m.phases = probe_phases(&jobs[i], budget);
+        }
     }
     acc
+}
+
+/// Run one vita job once more with `--obs-dir` and read the phase split back.
+///
+/// `None` on any failure — a missing `run.json`, an unparseable one, a run that
+/// behaved differently under the flag. A reporting side table must never turn a
+/// green corpus red, so every path here degrades to "no number".
+fn probe_phases(job: &Job, budget: Duration) -> Option<Phases> {
+    let dir = std::env::temp_dir().join(format!(
+        "vita_corpus_obs_{}_{}",
+        std::process::id(),
+        job.workload.name
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut cmd = Command::new(&job.program);
+    cmd.args(&job.args)
+        .arg("--obs-dir")
+        .arg(&dir)
+        .current_dir(&job.cwd);
+    let _ = run_bounded(&mut cmd, budget);
+    let text = std::fs::read_to_string(dir.join("run.json")).ok();
+    let _ = std::fs::remove_dir_all(&dir);
+    let text = text?;
+    Some(Phases {
+        elab_s: json_f64(&text, "elab_s")?,
+        sim_s: json_f64(&text, "sim_s")?,
+    })
+}
+
+/// Read one top-level `"key": <number>` out of `run.json`.
+///
+/// A hand parser and not a JSON dependency: this crate has none, the writer is in
+/// this workspace (`cli::obs`), and both numbers are emitted as bare decimals by
+/// `fmt_wall`. Anything else — a missing key, a non-numeric value — is `None`.
+fn json_f64(text: &str, key: &str) -> Option<f64> {
+    let needle = format!("\"{key}\":");
+    let rest = &text[text.find(&needle)? + needle.len()..];
+    let num: String = rest
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-' || *c == 'e' || *c == '+')
+        .collect();
+    num.parse().ok()
 }
 
 /// Build the argument list a tool needs for a workload.

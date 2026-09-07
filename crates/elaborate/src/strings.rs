@@ -339,7 +339,7 @@ impl Elaborator<'_> {
         match &e.kind {
             ast::ExprKind::Paren { inner } => Self::override_is_wide_literal(inner),
             ast::ExprKind::IntLit { kind, raw } => {
-                crate::literal::parse_int_literal(raw, *kind).is_some_and(|c| c.width > 64)
+                crate::literal::int_literal_shape(raw, *kind).is_some_and(|(w, _)| w > 64)
             }
             _ => false,
         }

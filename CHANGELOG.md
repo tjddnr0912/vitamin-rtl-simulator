@@ -9,7 +9,27 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Changed — hierarchical names printed by this release
+
+Several fixes below correct the hierarchical name vita prints for a scope. The behaviour is now the
+one both reference tools produce, but the **strings changed**: a script that greps `%m` output, an
+elaboration diagnostic's `[in …]` context, an instance path or a VCD `$scope` for a literal name may
+need updating. What moved:
+
+- The taken `else` branch of a `generate if … else` is named by **its own** label, not the `if`
+  branch's (`top.u_sb.g_cf[0].SBOX_TBL` → `top.u_sb.g_lut[0].SBOX_TBL`).
+- An unnamed generate block is `genblk<N>` (IEEE §27.6) instead of being invisible.
+- A singleton `generate if` / `case` scope no longer shows an internal `[0]`.
+- `%m` inside a named block, a fork arm or a statement label appends that label chain; inside a
+  subroutine it names the **declaring** scope; inside a class method it names the class's instance.
+
 ### Added
+
+- **`corpus-runner run` reports the front-end / executor split**, one line per workload below the
+  grade table: `elab 0.022s  sim 3.817s  (1% front end)`. It comes from a separate `--obs-dir` probe
+  run, so the timed rounds — and the wall times pinned in `docs/study/03-workload-corpus.md` — are
+  unchanged. A single median wall time hides a regression in one phase behind an improvement in the
+  other, which is exactly what happened between `v0.2.0-49` and `v0.2.0-100`.
 
 - **`$bits` of an unpacked-array typedef name and a non-ANSI port of that type**:
   `typedef logic [7:0] a_t [0:3];` now answers `$bits(a_t)` = 32 (64 for a 2-D one, and through a
@@ -87,6 +107,13 @@ changed for a user of the simulator.
   reference tools refuse that).
 
 ### Fixed
+
+- **Elaboration of a large design is no longer up to 3× slower than it was in `v0.2.0-49`.** A module
+  of 20,000 `wire [31:0]` declarations elaborated in 0.078 s before and 0.228 s after; `biriscv` went
+  0.0202 s → 0.0275 s. Nine constant-folding queries asked a literal only for its width or its
+  signedness and got them by parsing the whole literal — five heap allocations per ask, for a value
+  that was then dropped. Measured after the fix: the 20,000-declaration module 0.082 s, `biriscv`
+  0.0218 s. Simulation timings and every output are unchanged.
 
 - **A name whose innermost binding is a constant is no longer read or written as the outer object of
   the same name.** Inside `generate if (1) begin : g localparam int ROTA = 99;`, with a module-scope

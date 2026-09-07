@@ -294,6 +294,32 @@ fn run_corpus(
         );
     }
 
+    // The front-end / executor split, one line per vita row that produced it.
+    // Printed BELOW the table rather than as a column: the table is fixed-width
+    // and read by column offset, and a new column would move every consumer's
+    // parse. A regression in either phase is invisible in the median wall time,
+    // which is what the external report had to reconstruct by hand.
+    let phase_rows: Vec<_> = results
+        .iter()
+        .filter(|m| m.tool == Tool::Vita)
+        .filter_map(|m| m.phases.map(|p| (m.workload, p)))
+        .collect();
+    if !phase_rows.is_empty() {
+        println!("\nphase split (vita, one probe run each — not the timed rounds)");
+        for (name, p) in phase_rows {
+            let total = p.elab_s + p.sim_s;
+            let pct = if total > 0.0 {
+                100.0 * p.elab_s / total
+            } else {
+                0.0
+            };
+            println!(
+                "{name:<18} elab {:.3}s  sim {:.3}s  ({pct:.0}% front end)",
+                p.elab_s, p.sim_s
+            );
+        }
+    }
+
     // The vita/iverilog ratio is the number the performance track is actually
     // steering by, so compute it here rather than leaving it to be eyeballed.
     if compare {

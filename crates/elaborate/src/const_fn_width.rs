@@ -123,7 +123,7 @@ impl Elaborator<'_> {
             // (ROADMAP §2 🆕 C). A lone fill evaluates at one bit — see the leaf arm
             // in `eval_const_env_at`.
             K::IntLit { kind, raw } if literal::is_fill_literal(raw, *kind) => Some(0),
-            K::IntLit { kind, raw } => parse_int_literal(raw, *kind).map(|c| c.width),
+            K::IntLit { kind, raw } => int_literal_shape(raw, *kind).map(|(w, _)| w),
             K::Paren { inner } => self.const_self_width(inner, envw),
             // A local/formal's declared width, else a module param's, else the
             // value-inferred 32 that `param_decl_width` never goes below.
@@ -258,7 +258,7 @@ impl Elaborator<'_> {
     pub(crate) fn const_signed_env(&self, e: &ast::Expr, envw: &ConstWidths) -> bool {
         use ast::ExprKind as K;
         match &e.kind {
-            K::IntLit { kind, raw } => parse_int_literal(raw, *kind).is_some_and(|c| c.signed),
+            K::IntLit { kind, raw } => int_literal_shape(raw, *kind).is_some_and(|(_, s)| s),
             K::Paren { inner } => self.const_signed_env(inner, envw),
             K::Ident(p) if p.segments.len() == 1 => envw
                 .get(&p.segments[0].name)
