@@ -35,6 +35,12 @@ impl Elaborator<'_> {
                         if self.bare_hit_is_shadowed_pkg_alias(&joined) {
                             return None;
                         }
+                        // §2 🆕 O: an inner CONSTANT shadows the outer array —
+                        // `lookup_net_scoped` walks `symbols` alone and would sail
+                        // past it. See `bare_name_binds_constant`.
+                        if self.bare_name_binds_constant(&joined, p.span) {
+                            return None;
+                        }
                     } else if self.dotted_hit_is_pkg_alias(&joined) {
                         return None;
                     }
@@ -92,6 +98,12 @@ impl Elaborator<'_> {
                     // guards keep the reference loud.
                     if p.segments.len() == 1 {
                         if self.bare_hit_is_shadowed_pkg_alias(&joined) {
+                            return None;
+                        }
+                        // §2 🆕 O, write twin: without this the assignment stored
+                        // into the OUTER array at exit 0 where both oracles reject
+                        // the program outright.
+                        if self.bare_name_binds_constant(&joined, p.span) {
                             return None;
                         }
                     } else if self.dotted_hit_is_pkg_alias(&joined) {

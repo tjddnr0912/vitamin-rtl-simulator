@@ -601,6 +601,16 @@ impl Elaborator<'_> {
         match &e.kind {
             ast::ExprKind::Paren { inner } => self.resolve_intro_net(inner),
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                // §2 🆕 O: the fifth reader of the `symbols`-only walk. `$size(ROTA)`
+                // under `generate if (1) begin : g localparam int ROTA = 99;` answered
+                // the OUTER array's 4 where both oracles answer 32 — the inner
+                // constant's own size. Declining leaves the query loud (a `$size` of a
+                // scalar parameter is separately unsupported, recorded in ROADMAP §2),
+                // which is up the ladder from a wrong number and keeps the five
+                // readers of this walk answering ONE object.
+                if self.bare_name_binds_constant(&p.segments[0].name, p.span) {
+                    return None;
+                }
                 self.lookup_net_scoped(&p.segments[0].name)
             }
             _ => None,

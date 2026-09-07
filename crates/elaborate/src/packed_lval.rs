@@ -215,6 +215,10 @@ impl Elaborator<'_> {
                         .map(|s| s.name.as_str())
                         .collect::<Vec<_>>()
                         .join(".");
+                    // §2 🆕 O, packed write twin.
+                    if p.segments.len() == 1 && self.bare_name_binds_constant(&joined, p.span) {
+                        return None;
+                    }
                     match self.lookup_net_scoped(&joined) {
                         Some(n) if self.packed_dims.contains_key(&n) => break n,
                         _ => return None,

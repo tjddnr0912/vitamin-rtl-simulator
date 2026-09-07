@@ -474,12 +474,14 @@ fn the_v1_limits_are_loud_not_silent() {
         "an array parameter of a multi-dimensional packed type",
     );
     // A write, an assignment pattern and `foreach` stay as loud as on a scalar
-    // parameter.
+    // parameter. §4.5.446 replaced the message: the write funnel now says WHY (`P` is a
+    // constant and constants are not assignable — verilator: "Storing to parameter
+    // variable 'P'") instead of the false "undeclared net/variable `tb.P`".
     loud(
         &format!(
             "module tb;\n{d}\n  initial begin P[1] = 5'd1; #1 $display(\"DIGEST=%0d\", P[1]); #1 $finish; end\nendmodule"
         ),
-        "E3010",
+        "is not assignable",
     );
     // `$size(P)` is answered by the parser from the recorded dimensions (§3 ⑤ ⓔ):
     // the OUTERMOST packed dimension `[3:0]` — 4, as verilator (was a loud E3009 pin;

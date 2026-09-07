@@ -403,11 +403,13 @@ fn an_inner_scalar_shadowing_a_const_array_keeps_both_lanes_on_one_object() {
     // §4.5.416 closed the root: `const_array_ref_of_base` (the one resolution the
     // value table and its geometry twin share) takes the INNERMOST binding of the name
     // over the combined set the value lookups walk and answers only when that binding
-    // IS the array, so the bound is the inner scalar's bit 1 → 2 (verilator). The
-    // RUNTIME read `ROTA[1]` still prints the outer element (20): the runtime lowering
-    // resolves the bare name to the outer array NET before the inner generate-scope
-    // parameter — a pre-existing routing leniency recorded in ROADMAP §2 (🆕 L ⓩ), not
-    // this slice's consumer.
+    // IS the array, so the bound is the inner scalar's bit 1 → 2 (verilator).
+    //
+    // §4.5.446 closed the RUNTIME half (ROADMAP §2 🆕 O): the read `ROTA[1]` printed the
+    // outer array's element (20) because `expr_array_chain` resolved the bare name with
+    // the `symbols`-only walk. It now asks `bare_ident_route` like the lowering does, so
+    // both lanes answer the inner scalar's bit 1 and the two lines agree. verilator is
+    // the sole oracle here and prints `2` then `1`.
     assert_eq!(
         run(
             "  localparam int ROTA [0:3] = '{10, 20, 30, 40};\n\
@@ -419,6 +421,6 @@ fn an_inner_scalar_shadowing_a_const_array_keeps_both_lanes_on_one_object() {
             "    #2;\n"
         )
         .unwrap(),
-        "2|20"
+        "2|1"
     );
 }

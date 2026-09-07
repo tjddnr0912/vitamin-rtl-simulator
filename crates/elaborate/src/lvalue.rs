@@ -224,7 +224,7 @@ impl Elaborator<'_> {
                 // caller's net directly (symmetric with the read side in lower_expr).
                 let net = if path.segments.len() == 1 {
                     self.out_subst_lookup(&path.segments[0].name)
-                        .unwrap_or_else(|| self.resolve_net(path))
+                        .unwrap_or_else(|| self.lval_write_net(path))
                 } else {
                     // Multi-segment: a known dotted symbol (interface-member alias)
                     // resolves directly; an UNKNOWN hierarchical name is a cross-
@@ -533,9 +533,47 @@ impl Elaborator<'_> {
 
     /// An lvalue select's base must reduce to a net Ident in v1 (no nested
     /// selects). Returns NetId; emits + returns [`POISON_NET`] otherwise.
+    /// [`Self::resolve_net`] for a WRITE target: the same resolution, plus the one
+    /// question an lvalue has to ask that a read does not — is this name a constant?
+    ///
+    /// §2 🆕 O: `resolve_net` walks `symbols` alone, so a generate-scope `localparam`
+    /// / `parameter` / genvar shadowing an outer NET does not stop it and the write
+    /// silently landed on the outer net — `SC = 5;` and `SC[1] = 1'b1;` under
+    /// `generate if (1) begin : g localparam int SC = 99;` both ran to exit 0 where
+    /// BOTH oracles reject the program ("Could not find variable `SC` in `top.g`" /
+    /// "Storing to parameter variable 'SC'"). A constant is not assignable, and the
+    /// name the writer spelled binds to one.
+    ///
+    /// This is the write-side twin of the guard the index CHAINS gained
+    /// ([`Self::bare_name_binds_constant`]); it sits on the lvalue funnels rather
+    /// than inside `resolve_net` because that function also serves reads
+    /// (`@(e)`, `->e`, an interface-member fall-through) where over-reporting would
+    /// be a loud regression rather than a refusal.
+    ///
+    /// Beside it, unchanged, is the existing shadowed-package-alias refusal, which
+    /// this generalises: that guard asks the same question about one binder.
+    fn lval_write_net(&mut self, path: &ast::HierPath) -> u32 {
+        if let [seg] = path.segments.as_slice() {
+            if self.bare_name_binds_constant(&seg.name, path.span) {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "`{}` here resolves to a constant (parameter / localparam / \
+                         genvar / enum label), which shadows the net of the same name \
+                         — a constant is not assignable (rename one of them to \
+                         disambiguate)",
+                        seg.name
+                    ),
+                );
+                return POISON_NET;
+            }
+        }
+        self.resolve_net(path)
+    }
+
     pub(crate) fn lval_base_net(&mut self, base: &ast::Lvalue) -> u32 {
         match base {
-            ast::Lvalue::Ident(p) => self.resolve_net(p),
+            ast::Lvalue::Ident(p) => self.lval_write_net(p),
             _ => {
                 self.error(
                     MsgCode::ElabUnsupported,

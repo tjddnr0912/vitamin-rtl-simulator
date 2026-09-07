@@ -118,6 +118,42 @@ impl Elaborator<'_> {
         BareIdentRoute::Other
     }
 
+    /// Does the bare single-segment `name`, read at `at`, bind to a CONSTANT?
+    ///
+    /// The array / packed index CHAINS (`expr_array_chain`, `lval_array_chain`,
+    /// `expr_packed_chain`, `lval_packed_chain`) resolve their base with
+    /// `lookup_net_scoped`, which walks `symbols` ALONE — so a generate-scope
+    /// `localparam` / `parameter` / genvar shadowing an outer ARRAY does not stop
+    /// the walk, and `ROTA[1]` under `generate if (1) begin : g localparam int ROTA
+    /// = 99;` read the OUTER array's element (`20`) where both oracles read bit 1
+    /// of the inner constant (`1`) — while the WHOLE-name read in the same
+    /// `$display` was right, because the lowering routes THAT through
+    /// [`Self::bare_ident_route`]. The write twins were worse: they stored into the
+    /// outer array at exit 0 where both oracles reject the program.
+    ///
+    /// So the chains ask the same question the lowering asks, with the same
+    /// function: a constant binding declines the chain, and the base then lowers
+    /// as the constant it is.
+    ///
+    /// ⚠️ `Subst` / `OutSubst` / `ArrayItem` deliberately do NOT decline — those are
+    /// the inline-formal lanes the chains legitimately serve (an array passed to an
+    /// inlined function is read through the chain by design).
+    ///
+    /// ⚠️ Do not hand-roll this as `params.contains_key(key)`: the v1 flatten
+    /// publishes a hoisted block-local NET under the module's bare name, so a
+    /// module `localparam` and that net collide on ONE key, and only
+    /// `bare_ident_route`'s `block_local_declared_at` / `block_local_covers`
+    /// tie-break gets the reader-position rule right.
+    pub(crate) fn bare_name_binds_constant(&self, name: &str, at: ast::Span) -> bool {
+        matches!(
+            self.bare_ident_route(name, at),
+            BareIdentRoute::Param { .. }
+                | BareIdentRoute::Str(_)
+                | BareIdentRoute::Wide(_)
+                | BareIdentRoute::Real(_)
+        )
+    }
+
     /// Does `e` read (by bare name, anywhere in its tree) a constant whose type is
     /// a guess? A body parameter / localparam initialized from one inherits the
     /// guess: its value was folded from the guessed binding and its own meta is
