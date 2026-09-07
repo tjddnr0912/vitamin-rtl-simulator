@@ -823,3 +823,36 @@ iverilog's answer exactly.
 beat. The corpus exists to find what our own probes do not suspect, and the largest finding
 in this slice — that every call-bearing continuous assign in every design was re-evaluated
 forever — was found by a third-party workload rather than by a §2 row.
+
+## Every row is ≥99% simulation — so the corpus could not see a 3× front end (2026-09-07)
+
+`corpus-runner run` now prints a phase split under the grade table, one line per vita row that
+matched. It comes from a **separate** `--obs-dir` probe run rather than from the timed rounds: the
+flag adds file writes to the wall clock, and the timed medians above are pinned in this file and in
+the README, so polluting them to gain a column would have been the wrong trade. `elab_s` and `sim_s`
+are internal timers, so the probe measures the same phases the timed rounds ran; what it does not
+give is a spread.
+
+| workload | elab | sim | front end |
+|---|---:|---:|---:|
+| biriscv | 0.022 s | 3.817 s | 1% |
+| verilog-ethernet | 0.011 s | 2.123 s | 1% |
+| picorv32 | 0.015 s | 4.131 s | 0% |
+| serv | 0.008 s | 6.893 s | 0% |
+| aes | 0.006 s | 2.598 s | 0% |
+| darkriscv | 0.003 s | 6.301 s | 0% |
+| sha256 | 0.002 s | 1.193 s | 0% |
+| keccak · keccak-arr | 0.001 s | 3.984 / 12.632 s | 0% |
+
+⭐⭐ **That table is the finding, not the column.** The corpus contract (§2 rule 3) asks for a digest
+accumulated over a whole run, which selects for designs that simulate for seconds and elaborate for
+milliseconds. So a front-end regression is arithmetically invisible here: the elaboration cost of
+`0af68af` tripled on a declaration-heavy module and moved **every** median in the table by less than
+the noise floor. It was found by an external report on a design that elaborates six to fourteen times
+per regression target, re-measured against `v0.2.0-49` at +36% on `biriscv` — and the row that
+records it in ROADMAP §2 had graded it *"invisible in real designs"* on the strength of picorv32,
+whose elaboration is 0.4% of its run.
+
+⚠️ Printing the split makes the number READABLE; it does not make the gate see it. A threshold needs
+a front-end-bound row — many declarations, a short simulation — with a pinned digest and an oracle,
+which no workload in the corpus is today. Recorded as `ELAB-PHASE-BLIND` in ROADMAP §5.b.

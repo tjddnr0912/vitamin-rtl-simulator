@@ -110,7 +110,7 @@ end
 ```
 
 NBA region과 stratified event queue의 상세 동작은
-[06-simulation-engine.md](../../../06-simulation-engine.md)를 참고한다.
+[06-simulation-engine.md](../../06-simulation-engine.md)를 참고한다.
 
 ### 정준 shift register 예시
 

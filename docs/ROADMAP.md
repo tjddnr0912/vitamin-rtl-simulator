@@ -249,8 +249,40 @@ WALL(AST self-width) — the size-cast cluster below (width probe, `ir_bits_of` 
 - A continuous assign whose RHS contains ANY `Expr::Call` or `Expr::SysFunc` is re-evaluated 6.00× per input change instead of 1.00× (300,001 evals for 50,000 iterations vs 50,001; the same call in an `always @*` is 1.00×). Root = `levelize::expr_is_pure_of_nets` (`levelize.rs:329`), whose `E::SysFunc{..} | E::Call{..} | E::ArrayItem{..} => false` arm sets `dirty_ok=false` and drops the assign into `ca_always`. `$unsigned(src) ^ …` 1.89×, `… ^ 128'($bits(src))` 4.90×; the inliner trips it (`resize_inline_assign` seals with `$signed`/`$unsigned`, `inline_fn.rs:631,655`) so an inlined function measured 1.98× SLOWER (0.158 s vs 0.080 s). Fix order: (1) a per-`SysFuncId` ALLOW-list, `_`-free exhaustive (~79 variants, ~22 impure); (2) the dep set for `Expr::Call` — `expr_nets`' Call arm (`levelize.rs:161`) walks only the ARGS, so the reject is SOUND today; prize 5.95×; (3) then the body cost (2.33× ceiling). Certification moves the DIAGNOSTIC stream (a pure RHS `errors=5`, the same RHS in a no-op `$unsigned` `errors=9`) and must be adjudicated first. No `pure` flag on `FuncDef`/`SimIr` (frozen); computable out-of-band.
 - `coerce_two_state` names its operand once per TARGET BIT and the engine walks that DAG as a tree: `byte'` 8, `int'` 32, `longint'` 64, `int'(int'(x))` 1024 against iverilog's 1; the discriminator is 2-state-ness, not width (`integer'` and `int'` differ by 27×). The `expr_may_be_unknown` guard in `lower_prim_cast` took 1024 → 32. Still wrong: `int'(f())` names `f` 32 times because a `Call` is conservatively unknown, and a WIDENING cast over a call fans out to the wider width ⇒ needs the `expr_is_repeatable` gate.
 - Coercing at the OPERAND's width instead of the TARGET's took the repro 69.6 s → 6.7 s (10.4×), ping count 32 → 4 (the hand-written `{28'd0, nb}` control is 2.76 s). Still open — the residue is the 4 surviving terms plus the frame call, now the LARGER half. Not shipped: a per-bit skip fires 0 times on 41 cast cells; the third caller (`inline_fn.rs:396`) has no resize in front of it, so narrowing would change the value. The reorder's own silent-wrong: `ir_bits_of` answers `None` for a deferred hierarchical reference (also a `string` net, string-producing system functions, the `pop`/array-reduction family) and the caller FABRICATES 32 — `longint'(u1.w40)` with `logic [39:0] w40` is `0000001234567800` in iverilog and PRE, the unguarded reorder printed `0000000034567800` ⇒ take it only where the width is a DECLARED fact.
+- **The size-cast sign seal still leaves the compiled lane in two shapes, and NEITHER is the one an
+  external report named.** Round-36 R8 shipped the `wprog` seal arm and the report re-filed the
+  residue as *"the operand contains a function call"*. Re-measured at HEAD (2026-09-07,
+  `--obs-procs`, 400,000 iterations each): a call in the operand is **not** the boundary —
+  `acc = acc ^ 8'(hexdig(a) | hexdig(b))` takes **0** `$unsigned` invocations. Two other things are:
+  ⓐ an admitted-operator cast whose width does not match the assignment context
+  (`reg [15:0] acc; acc = 8'((a<<4)|b)` = 400,000 invocations, where the same text into a `reg [7:0]`
+  is 0), and ⓑ **`*` — and by construction `/`, `%`, `**` — has no `wprog` compile arm**
+  (`acc = 16'(a * b)` 400,000 / 0.153 s against `16'(a + b)` 0 / 0.054 s). The reporter's hex parser
+  is `hexdig(c) * 16 + hexdig(d)`, so what they measured was ⓑ. Cost where it fires: the same loop
+  without the cast is 0.050 s against 0.221 s ⇒ **the seal is 77% of that run**.
+  Prerequisite for ⓑ is the sign gate `wprog.rs:120` argues from the admitted set (*"`Div`/`Mod`/
+  `Mul`/`Pow` are not admitted"*), so a `Mul` arm must re-argue it. ⓐ is a census, not a fix, until
+  the decline is located — `compile` is the only honest answer to "will `wprog` take this".
 - 4-state actual → 2-state formal 강제가 런타임 O(선언폭)(3백엔드 동일: `byte` 12.8× `shortint` 23.8× `int` 46.4×). 진짜 수정 = x/z→0 IR 프리미티브(format bump) 또는 엔진 memoize; 완화 둘(per-query 메모·노드 예산)은 개선 0 으로 반증(비용은 바인드 개수에 있고 영속 캐시는 in-place 패치와 충돌).
 - 상수 도메인의 비교/논리/삼항조건 fold 가 ~3배 느리다(값은 정답): `const_int_selfdet` 이 트리를 두 번 더 걷는다 = 피연산자당 6 walk vs 옛 2. 병리적: 1,500 localparam × 60항 0.35 → 1.00 s · 이중 generate-for 3.14 → 11.73 s · 컨트롤 1.00×; 현실 설계에선 안 보인다(picorv32 0.030 → 0.030 s). 처방 ⓐ 폭·부호 walk 융합 ⓑ generate-for bound 의 genvar-free 부분식 메모.
+  - ⚠️ **"현실 설계에선 안 보인다" was measured on ONE design and is false.** picorv32's elaboration is
+    0.4% of its run, so a 3× front end is invisible in its wall time. Measured against
+    `v0.2.0-49` on 2026-09-07: biriscv `elab_s` **0.0202 → 0.0275 s (+36%)**, and a module of
+    20,000 `wire [31:0]` declarations **0.078 → 0.228 s (+193%)** — a plain LITERAL bound, so the
+    walk count was never the whole story. An external report independently measured +22% on their
+    own design and it is the same root. Bisected to `0af68af` (§4.5.423) at +0.0051 s of the
+    +0.0073 s; `2da0465` accounts for +0.0011 and the rest is spread.
+  - ✅ **Half fixed (2026-09-07).** `const_self_width` / `const_signed_env` and seven sibling
+    shape queries called `parse_int_literal` — five heap allocations — to read a `width` or a
+    `signed` bit and drop the value. `literal::int_literal_shape` answers those without building
+    the bits (a `_`-free 1..=9-digit decimal is 32/signed by construction; everything else falls
+    through to the same parse, so the two cannot disagree). biriscv **0.0275 → 0.0218 s**, the
+    20,000-declaration module **0.228 → 0.082 s**, examples byte-identical.
+  - Residue = prescription ⓐ, now the whole of it: `eval_const_env_self` walks the tree three
+    times (`const_self_width`, `const_signed_env`, then the evaluation) where the i64 walk went
+    once. A `[W-1:0]` bound still costs 2 extra `walk_scopes` — 20,000 of them are 0.079 → 0.115 s
+    (+45%). Fusing the width and sign walks halves that; `walk_scopes` returning an owned `String`
+    per lookup is the other half.
 - `==?`/`!=?` 좌편향 체인은 여전히 2^depth: 깊이 22 에서 30 s → 79 s. 값은 정확.
 
 ### Oracle splits (recorded, not chased)
@@ -477,6 +509,8 @@ Performance axis: diminishing returns reached; performance ranks below the corre
 | MON-RENDER | `$monitor`/`$strobe` 의 ③층 렌더 경로 거부 | 렌더가 `sched/run_loop.rs::flush_postponed` 인데 그 경로가 리더를 안 받는다 | 배선 = S1d-4c 와 한 슬라이스 | 거부 해제 |
 | FD-EOF + FEOF | `NetArena` 의 `fd_eof` X-poison 구멍(`fd_eof` 만 "heap/class/frame 없음" 논증 밖 · 지금은 `$feof` 과잉표시가 가림) · `$feof` 가 정본 stmt-effect 술어에서 과잉표시라 `e = $feof(fd);` 거부 · `while (!$feof(fd))` 통과 | `k_feof` 는 순수 읽기인데 `sysfunc_is_stmt_effect` 가 `true` · 한 소비자만 고치면 철자가 둘 | 한 슬라이스로 · 정본 수정 = tier-2 게이트도 넓힘 · byte-identity 논증 | ③층 과잉거부 해소 |
 | NETSLOT-PREV | `NetSlot.prev` 를 읽는 곳이 워크스페이스 전체에서 0(선언·생성자·pass (c) 쓰기뿐) ⇒ pass (c) 의 `clone_from` 2회/변경넷/델타가 죽은 일 | 아무도 안 읽음 | 제거 · 자명함 자체를 검증하는 별도 슬라이스 | perf |
+| WPROG-WHY | An expression falling out of the compiled lane is INVISIBLE. `codegen.reject_reasons` is a per-PROCESS census, so a body reports `able 1/1` while every evaluation of its RHS runs the generic path — which is how an external report inferred the sign-seal boundary from `$signed` call counts and named the wrong cause (§2 Performance). | `wprog::compile` returns bare `None` at ~20 decline sites; nothing counts them | a per-(reason, count) tally on `SimOpts`, folded into `run.json` beside `codegen` — the same shape `builtins` already has. Reject reasons are a REPORTING table: never let one panic or change a value | reads as G2/OBS, not perf |
+| ELAB-PHASE-BLIND | The corpus cannot see a front-end regression: **every** workload is ≥99% simulation (biriscv 1%, the rest 0%), so a 3× elaboration cost moves the median wall time by nothing. Measured 2026-09-07, the run that also found the §2 Performance regression | corpus workloads are chosen for a long accumulating digest, which is the opposite of front-end weight | `corpus-runner run` now prints the phase split per row, which makes the number READABLE; a THRESHOLD needs a front-end-bound row (many declarations, short sim) with a pinned digest and an oracle | a regression the gate can see |
 | LOW-ROI | FMT-CACHE part b(render_template pre-segment) · GEN-3X-STR part a(unroll plan 캐시 = byte-identity 위험>이득) · QUEUE-MID-ON(스펙 내재 O(n) · iverilog 동일) | — | 보류 · QUEUE-MID-ON 은 영구 비권장 monitor-only | — |
 
 ### 5.c Current state
@@ -520,6 +554,22 @@ teeth = 3-way 내부 차분(JSONL ≡ VCD ≡ `$display`) + 결정성 골든. �
 | OBS-4 | `vrun --control stdio` JSON-RPC(peek/poke/step/run_until)+poke 저널 replay | L |
 | OBS-5 | snapshot/restore/rewind(엔진 상태 postcard 직렬화) | L-XL |
 | OBS-6 | X-origin·region-annotated events·정적 backward cone | L+ |
+
+- **R2 item (1) — the CALL TREE, still the top external OBS request, still not shipped.** Re-checked
+  at HEAD 2026-09-07: `processes.items[].domain` is `process` / `assign` only. The blocker is
+  unchanged and is stated in doc-19 §4.9 — vita lowers a subroutine TWO ways (a frame body behind
+  `Terminator::Call` / `Expr::Call`, and an elaborate-time INLINE splice), so a profile built on the
+  runtime seams reports **0 calls for every inlined subroutine**, and "0 calls" reads as "free" about
+  the very thing the user is hunting. What it needs first, in order:
+  ⓐ an elaborate-time record of which call sites were inlined and into which caller
+  (`inline_task.rs` / `inline_fn.rs`; nothing records this today) so an inlined task can be reported
+  as *inlined into its caller* rather than as absent;
+  ⓑ a `SubProfile` on the `BuiltinProfile` pattern (interior-mutable, `&self`-reachable) bumped at
+  the THREE seams — `state/frame_eval.rs::run_frame_call_with` for every function call, and
+  `exec/process.rs`'s `Terminator::Call` arm plus `exec/frame_call.rs::call_here` for task calls;
+  ⓒ a decl `file:line:col` twin for `Sidecars::func_names` (the name half already exists,
+  index-aligned to `ir.funcs`).
+  Ship ⓐ with ⓑ or not at all: a partial table is the failure mode, not a smaller feature.
 
 - 비목표: FSDB/UCDB·SQLite 내장·waveform GUI·UVM 연동. VCD는 사람용 유지.
 

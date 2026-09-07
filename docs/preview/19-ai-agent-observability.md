@@ -1,7 +1,7 @@
 # 19 — AI-Agent Observability (OBS) — G2 "AI-Agent 친화 simulator" 스펙
 
 > **신설: 2026-07-02.** vitamin 최종목표에 **G2**를 추가한다: 기존 **G1**(icarus·verilator·xcelium·vcs급 *정확한* 오픈소스 RTL 시뮬레이터, correct-or-loud)에 더해, **AI Agent(LLM 하네스)가 라운드트립 없이 실패를 진단·국소화하고, 커버리지를 즉답받고, TB 재빌드 없이 시뮬레이션을 프로그램 제어**할 수 있는 시뮬레이터.
-> 요구 원천 = 외부 리뷰어 설계서 **[AI_SIM_OBSERVABILITY.md](../reviews/2026-07-02-ai-sim-observability.md)**(2026-07-01, ROADMAP §6 리포트와 동일 사용자 그룹). 이 문서가 vitamin 측 단일 정본 SPEC이며, 트랙 관리 = ROADMAP §7(OBS-0~6).
+> 요구 원천 = 외부 리뷰어 설계서 **[AI_SIM_OBSERVABILITY.md](../reviews/2026-07-02-ai-sim-observability.md)**(2026-07-01, ROADMAP §6 리포트와 동일 사용자 그룹). 이 문서가 vitamin 측 단일 정본 SPEC이며, 트랙 관리 = ROADMAP §6(OBS-0~6).
 
 ---
 
@@ -346,7 +346,23 @@ and half not is worse than neither, so the slice ships name-level aggregation �
 which is what the reporter asked for in item (2) — and leaves the site axis whole
 for a follow-on.
 
+**Re-checked at HEAD, 2026-09-07.** The external report re-filed item (1) unchanged, and the
+prerequisite above is unchanged with it: `processes.items[].domain` is `process` / `assign` only.
+The shape the slice needs is now written out in ROADMAP §6 (ⓐ the elaborate-time inline record,
+ⓑ a `SubProfile` on the `BuiltinProfile` pattern bumped at the three frame seams, ⓒ a decl
+`file:line:col` twin for `func_names`). ⓐ ships with ⓑ or neither ships — the failure mode of this
+feature is a table that is present and partial.
+
+**A third gap the same report exposed, and it is this rail's rather than the profiler's.** When an
+expression falls out of the compiled lane, nothing says so. `codegen.reject_reasons` is a
+per-PROCESS census, so a body reports `able 1/1` while every evaluation of its right-hand side runs
+the generic path. The reporter had to infer the boundary from `$signed` invocation counts and named
+the wrong cause: they filed it as *"a cast whose operand contains a function call"*, and the measured
+boundaries are a cast width that differs from its assignment context, and `*` having no `wprog`
+compile arm at all (ROADMAP §2 Performance). A per-`(reason, count)` tally beside `codegen`, the
+shape `builtins` already has, would have answered it directly. Filed as `WPROG-WHY` in ROADMAP §5.b.
+
 ## 5. 트래킹
 
-- 단계별 상태·착수 순서 = **ROADMAP §7**(이 표의 요약본). 실행 큐 = LOOPROMPT NEXT(correctness A2 체인 후 OBS-1부터).
+- 단계별 상태·착수 순서 = **ROADMAP §6**(이 표의 요약본). 실행 큐 = LOOPROMPT NEXT(correctness A2 체인 후 OBS-1부터).
 - 스키마 변경은 이 문서 + `schema_ver` bump로만(record envelope는 §3-4핀이 동결 기준).

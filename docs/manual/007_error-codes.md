@@ -251,3 +251,7 @@ already reserved and stable.
 - [Language Reference](003_language-reference.md) — the `` `timescale `` section,
   context for `W-PP-TIMESCALE-DEFAULT`.
 - [Limitations](006_limitations.md) — fail-safe behaviours behind some warnings.
+- [`docs/preview/15-error-code-reference.md`](../preview/15-error-code-reference.md) — the
+  **complete** catalogue. This chapter covers the codes a user hits in practice; the
+  reference lists all 68, including the ones only a malformed artifact or an internal
+  limit can produce, and is kept in step with the code registry (`crates/diag/src/code.rs`).

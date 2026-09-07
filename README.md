@@ -22,7 +22,7 @@ preprocess → lex → parse → elaborate → sim-ir → sim-engine → VCD
 > bisection oracles. The major version stays at `0` while
 > [docs/ROADMAP.md](docs/ROADMAP.md) §2/§3 carry open correctness items — see
 > [CHANGELOG.md](CHANGELOG.md).
-> **6,000+ tests pass**; behaviour is checked against Icarus Verilog (`iverilog`)
+> **7,200+ tests pass**; behaviour is checked against Icarus Verilog (`iverilog`)
 > by live differential review under a strict **correct-or-loud** rule — the
 > simulator never produces a silently wrong result, and anything unsupported is
 > an explicit diagnostic. Platforms: **Linux and macOS** (Windows is not
@@ -92,8 +92,8 @@ interleaved samples with the first round discarded:
 | Icarus Verilog 13 | 4 470 µs | 639× slower |
 
 Against Icarus Verilog specifically, vitamin is ahead — a geometric mean of
-**1.9× faster** across five third-party designs in the workload corpus, and
-**1.6×** across all eight that run, with one design still meaningfully slower
+**1.93× faster** across the seven third-party designs in the workload corpus, and
+**1.74×** across all nine timed rows, with one design still meaningfully slower
 ([docs/study/03](docs/study/03-workload-corpus.md)). Function and task calls
 remain the biggest cost a design can pay: the same algorithm written without
 subroutines runs **6.9× faster** than the version that calls them, and closing
@@ -132,6 +132,8 @@ The **user manual** lives in [`docs/manual/`](docs/manual/), in reading order:
 | 7 | [Error Codes](docs/manual/007_error-codes.md) |
 
 - Runnable [`examples/`](examples/) — counter, ALU, an `enum`-based FSM, a shift register.
+- [`docs/README.md`](docs/README.md) maps the rest of the documentation and says which parts
+  describe HEAD, which are the design contract, and which are frozen history.
 - The authoritative design specification is in [`docs/preview/`](docs/preview/) (developer-internal).
 - The engineering tracker is [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md).
 

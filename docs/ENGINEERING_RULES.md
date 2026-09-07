@@ -3955,3 +3955,42 @@ that goes through the same resolver (`stmt_diag_meta`: `$error`, W4029, `$readme
 …); changing it for one is changing it for all — census the emitters, and measure at least one
 of the others against the oracles. See [[a-default-is-not-a-fact]],
 [[routing-lives-in-several-places]].
+
+## An external report's named CAUSE is a claim, and a benchmark that cannot see a phase (2026-09-07)
+
+Four rules from re-triaging one external report end to end.
+
+**A "we do not see it in real designs" verdict is only as broad as the design it was measured on.**
+ROADMAP §2 already carried the constant-fold slowdown this report re-filed, graded *"invisible in
+real designs"* on the strength of `picorv32 0.030 → 0.030 s`. picorv32's elaboration is 0.4% of its
+run, so that measurement could not have shown anything. Re-measured against a preserved PRE binary:
+`biriscv` +36%, and a module of 20,000 plain `wire [31:0]` declarations +193%. When you grade a cost
+as invisible, say which design you measured and what fraction of ITS run the cost could occupy —
+otherwise the grade is a sample size of one wearing the word "real".
+
+**Bisect a performance regression the same way you bisect a wrong value.** Six builds of a
+throwaway worktree located 70% of the delta in one commit, and the remaining commits accounted for
+the rest in amounts nobody would have guessed from the diffs. The synthetic probe is what made it
+cheap: one module of N identical declarations isolates the front end from everything else, and the
+control twin (the same module with a parameter-expression bound instead of a literal) separated two
+independent costs that the real design mixed together.
+
+**A shape query that parses a value is an allocation the caller drops.** Nine call sites asked a
+literal for its `width` or its `signed` bit through `parse_int_literal`, which builds a despaced
+`String`, a digit `Vec`, a `Vec<Bit>` and two `BitPacked` planes. Adding a walk over those call
+sites tripled elaboration. The fix — `int_literal_shape` — is safe because it decides ONLY the case
+it can decide from the lexeme (a `_`-free 1..=9-digit decimal is 32 bits signed by construction) and
+falls through to the same parse for everything else, so the fast path and the parse cannot disagree
+about a shape the fast path did not compute. Write the equivalence test against the function you are
+skipping, not against a table of expected answers.
+
+**A report's CAUSE needs re-measuring exactly like its severity.** The same report re-filed the
+sign-seal residue as *"the operand contains a function call"*. It does not:
+`acc ^ 8'(hexdig(a) | hexdig(b))` takes zero builtin invocations. A five-cell census found the real
+boundaries — a cast width that differs from its assignment context, and `*` having no `wprog`
+compile arm — and the reporter's design happened to contain the second. They were reasoning from
+`$signed` invocation counts because nothing in `run.json` says why an EXPRESSION left the compiled
+lane (`codegen` is a per-process census), so the wrong cause was the best inference available from
+the instrument. When an outside diagnosis is wrong, ask which instrument would have made it right;
+that missing instrument is usually the more valuable item. See [[report-severity-is-a-claim]],
+[[perf-ab-method-artifacts]], [[pre-binary-three-way-measurement]].

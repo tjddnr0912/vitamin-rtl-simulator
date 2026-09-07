@@ -22,7 +22,7 @@ Vitamin RTL 시뮬레이터 `hdl-builtins` 크레이트 구현에 앞서,
 Phase 1(VCD dump)과 Phase 2(파일·메모리 I/O)에 해당하는 시스템 태스크의
 표준 의미론과 주요 시뮬레이터(Icarus · Verilator) 동작 차이를 확인한다.
 
-VCD dump는 이미 [07-vcd-format.md](../hdl-reference/07-vcd-format.md)에서
+VCD dump는 이미 [07-vcd-format.md](../07-vcd-format.md)에서
 파일 포맷 명세로 다뤘으나, 이번 조사는 **태스크 호출 시그니처와 시뮬레이터 동작**에 집중한다.
 
 ---

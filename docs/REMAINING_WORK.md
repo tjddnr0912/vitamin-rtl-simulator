@@ -9,7 +9,8 @@ Top-level snapshot of what stands between HEAD and the two goals. Rewritten whol
 
 - Default backend `native`; product build `--no-default-features` (one executor); workload corpus 10/10 with 0 rejections.
 - Performance axis: diminishing returns reached; codegen (cranelift), 2-state storage, cycle-based mode, levelize all rejected with recorded re-entry conditions (ROADMAP §5).
-- External reports (round 1–34): closed except the residues filed into ROADMAP §2 / §3.
+- External reports (round 1–38): closed except the residues filed into ROADMAP §2 / §3.
+- `corpus-runner run` prints the elaborate / simulate split per row. Every workload is ≥99% simulation, so the corpus still cannot GATE a front-end regression (ROADMAP §5.b `ELAB-PHASE-BLIND`).
 
 ## B. Queue (canonical = ROADMAP §5.2)
 
@@ -18,6 +19,8 @@ Top-level snapshot of what stands between HEAD and the two goals. Rewritten whol
 | 1 | §3 loud → correct-support | ⑤ⓕ residue: `$bits(pkg::T)` (one gate, its scalar twin too) · `$bits(a_t)` with a parameter-named dim · the tf-port formal (1-oracle for the fixed shape) · ⑤ ⓓ/ⓔ residues · CU-scope items in a class body · ibex DPI export |
 | 2 | §2 silent-wrong | 🆕 P: a continuous assign in a generate block indexing a module-scope array PANICS (exit 101) where both oracles print the element; no shadowing needed |
 | 3 | §2 loud | 🆕 Q: a `localparam` in a plain named `begin : g` block is a parse error; both oracles accept it |
+| 4 | §6 OBS | R2 call tree: task/function rows in `processes.items[]`. Prerequisite ⓐ (an elaborate-time inline record) ships with ⓑ (the `SubProfile` at the three frame seams) or neither does — ROADMAP §6 |
+| 5 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so an outside reader infers the boundary from builtin call counts and gets it wrong — ROADMAP §5.b |
 | next | — | mixed-caller callee, `m #(8)` / `defparam u.T$w`, VCD `$scope` spelling, `genblk<N>` collision (split), 🆕 L ⓦ residue (package constants outside the i64 interpreter), a labelled concurrent `assert property` action block's `%m` |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.

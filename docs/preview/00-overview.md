@@ -2,14 +2,14 @@
 
 ## 비전
 
-**Vitamin**(`vita` CLI placeholder)은 Ubuntu · RHEL · macOS에서 **소스 빌드만으로 동작**하는 RTL 시뮬레이션 EDA 툴이다.
+**Vitamin**(CLI `vita`)은 Ubuntu · RHEL · macOS에서 **소스 빌드만으로 동작**하는 RTL 시뮬레이션 EDA 툴이다.
 설계 목표를 세 가지로 압축한다:
 
 1. **정밀도(precision)** — `timescale` 개념을 충실히 구현해 근소한 타이밍 틀어짐도 시뮬레이션에서 잡아낸다.
 2. **이식성(portability)** — OS가 교체되어도 동일한 원문 소스를 빌드해 동일한 결과를 낸다.
 3. **성능(performance)** — GC 없는 저수준 언어(Rust)로 시뮬레이션 처리 속도를 끌어올린다.
 
-코드네임 `vitamin`, CLI 작업명 `vita`(및 단계별 `vcmp`/`velab`/`vrun`)는 현재 임시 placeholder다.
+이름은 확정됐다 — 프로젝트 `vitamin`, CLI `vita`(및 단계별 `vcmp`/`velab`/`vrun`). 이 문서가 *placeholder* 라고 적어 두었던 2026-05-28 이후 0.2.0 으로 출하됐다.
 
 ## 무엇을 만드나
 
