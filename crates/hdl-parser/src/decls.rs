@@ -360,6 +360,9 @@ impl Parser<'_, '_> {
             None
         };
         let mut port_struct_name: Option<String> = None;
+        // §3 ⑤ⓕ: the typedef's own UNPACKED dims, landed on every NAME below —
+        // the non-ANSI binder's twin of the ANSI port carry.
+        let mut typedef_unpacked: Vec<Dim> = Vec::new();
         let (signed, range) = if let Some((k, s, r, sn, extra, unp)) = typedef_ty {
             net_or_var = Some(k);
             port_struct_name = sn;
@@ -369,15 +372,7 @@ impl Parser<'_, '_> {
                      in v1 (write the port ANSI-style)",
                 );
             }
-            // §3 ⑤: the non-ANSI port declaration is a second binder with its own
-            // dim handling; an unpacked-array typedef here stays honest-loud, with
-            // the reason named, rather than silently binding a SCALAR port.
-            if !unp.is_empty() {
-                self.error(
-                    "an unpacked-array typedef as a non-ANSI port type is unsupported in v1 \
-                     (write the port ANSI-style)",
-                );
-            }
+            typedef_unpacked = unp;
             (s, r)
         } else {
             (self.signed_eff(net_or_var), self.opt_range())
@@ -405,6 +400,21 @@ impl Parser<'_, '_> {
                     match self.parse_dim() {
                         Some(d) => dims.push(d),
                         None => break,
+                    }
+                }
+                // §3 ⑤ⓕ: the typedef's dims, CLONED per name — a comma list
+                // (`input a_t a, b;`) gives each name its own list, and moving one
+                // vector would leave every name after the first silently scalar.
+                // Refused when the name writes dims of its own, the same live
+                // oracle SPLIT on dimension order the ANSI twin refuses.
+                if !typedef_unpacked.is_empty() {
+                    if dims.is_empty() {
+                        dims = typedef_unpacked.clone();
+                    } else {
+                        self.error(
+                            "a port without its own unpacked dimensions (an unpacked-array \
+                             typedef combined with port dimensions is unsupported in v1)",
+                        );
                     }
                 }
                 if port_struct_name.is_some() {

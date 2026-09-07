@@ -143,21 +143,31 @@ impl Parser<'_, '_> {
         // alias returns None → the site stays a normal expr (loud in elaborate) rather
         // than folding a wrong width. (`$bits(real_var)` uses the elaborate path, which
         // sizes a real variable correctly — this only gates a bare TYPE name.)
-        // §3 ⑤: `$bits(a_t)` of an UNPACKED-array typedef is the product of the
-        // element width and every unpacked dim (both oracles say 32 for
-        // `typedef logic [7:0] a_t [0:3]`), which this parse-time table does not
-        // compute — the element width alone would be silently wrong, so decline
-        // and let the site stay loud. (`$bits(x)` of a VARIABLE of that type is
-        // answered correctly by elaborate, which knows the whole shape.)
-        if info.class_name.is_some()
-            || !info.unpacked.is_empty()
-            || !Self::member_kind_is_integral(info.kind)
-        {
+        if info.class_name.is_some() || !Self::member_kind_is_integral(info.kind) {
             return None;
         }
         let mut w = self.member_width_kind(info.kind, &info.range)?;
         for d in &info.packed {
             w = w.checked_mul(self.member_width(&Some(d.clone()))?)?;
+        }
+        // §3 ⑤ⓕ: `$bits(a_t)` of an UNPACKED-array typedef is the element width
+        // times every unpacked dim — both oracles say 32 for
+        // `typedef logic [7:0] a_t [0:3]`, 64 for a 2-D one. Folded with the same
+        // `member_width` / `const_bound` pair the PACKED loop above uses, so a
+        // dimension that does not fold declines the whole answer and the site stays
+        // loud exactly as it did.
+        //
+        // ⚠️ `Dyn` / `Queue` / `Assoc` decline on purpose and there is no oracle to
+        // move toward: iverilog rejects `$bits` of a `[]` / `[$]` typedef
+        // ("Invalid data type for $bits()") and verilator CRASHES on both
+        // ("Verilator internal fault"); `[string]` is iverilog-reject vs verilator 0.
+        for d in &info.unpacked {
+            let n = match d {
+                Dim::Range(r) => self.member_width(&Some(r.clone()))?,
+                Dim::Size(e) => u32::try_from(self.const_bound(e)?).ok()?,
+                Dim::Dyn | Dim::Queue(_) | Dim::Assoc(_) => return None,
+            };
+            w = w.checked_mul(n)?;
         }
         Some(w)
     }

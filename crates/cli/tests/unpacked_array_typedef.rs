@@ -252,3 +252,85 @@ fn the_consumers_that_cannot_carry_the_dims_are_loud() {
         "unpacked-array typedef parameter is unsupported",
     );
 }
+
+/// §3 ⑤ⓕ (§4.5.447): a NON-ANSI port declaration — the second port binder — and
+/// `$bits` of the bare TYPE NAME.
+#[test]
+fn a_non_ansi_port_and_bits_of_the_type_name() {
+    let port = run("typedef logic [7:0] a_t [0:3];\n\
+         module sub(i, o);\n\
+           input a_t i;\n\
+           output logic [7:0] o;\n\
+           assign o = i[1];\n\
+         endmodule\n\
+         module top;\n\
+           a_t arr; logic [7:0] o;\n\
+           sub u(.i(arr), .o(o));\n\
+           initial begin arr[1]=8'h33; #1; $display(\"%h\", o); $finish; end\n\
+           initial #100 $finish;\n\
+         endmodule\n");
+    // Both oracles: 33.
+    assert_eq!(port, "33\n");
+
+    // `$bits` of the type NAME. The element width times every unpacked dim, for both
+    // dimension spellings and through a chained alias.
+    let bits = run("typedef logic [7:0] a_t [0:3];\n\
+         typedef logic [7:0] b_t [0:3][0:1];\n\
+         typedef logic [7:0] c_t [4];\n\
+         typedef a_t d_t;\n\
+         module top;\n\
+           initial begin\n\
+             $display(\"a=%0d b=%0d c=%0d d=%0d\", $bits(a_t), $bits(b_t), $bits(c_t), $bits(d_t));\n\
+             $finish;\n\
+           end\n\
+         endmodule\n");
+    // Both oracles: a=32 b=64 c=32 d=32.
+    assert_eq!(bits, "a=32 b=64 c=32 d=32\n");
+}
+
+/// The non-ANSI port keeps the both-dims refusal, and a comma list gives EVERY name
+/// the dims (a moved rather than cloned vector would leave the second one scalar).
+#[test]
+fn the_non_ansi_port_carries_per_name_and_keeps_the_split_refusal() {
+    let comma = run("typedef logic [7:0] a_t [0:3];\n\
+         module sub(i, j, o);\n\
+           input a_t i, j;\n\
+           output logic [7:0] o;\n\
+           assign o = i[1] ^ j[2];\n\
+         endmodule\n\
+         module top;\n\
+           a_t x, y; logic [7:0] o;\n\
+           sub u(.i(x), .j(y), .o(o));\n\
+           initial begin x[1]=8'hF0; y[2]=8'h0F; #1; $display(\"%h\", o); $finish; end\n\
+           initial #100 $finish;\n\
+         endmodule\n");
+    // Both oracles: ff.
+    assert_eq!(comma, "ff\n");
+
+    loud(
+        "typedef logic [7:0] a_t [0:3];\n\
+         module sub(i);\n\
+           input a_t i [0:1];\n\
+         endmodule\n\
+         module top; a_t q[0:1]; sub u(.i(q)); initial #1 $finish; endmodule\n",
+        "an unpacked-array typedef combined with port dimensions",
+    );
+}
+
+/// `$bits` of a DYNAMIC / QUEUE / ASSOCIATIVE typedef stays loud: there is no oracle
+/// to move toward — iverilog rejects it ("Invalid data type for $bits()") and
+/// verilator crashes ("Verilator internal fault") on the first two.
+#[test]
+fn bits_of_an_unsized_dimension_stays_loud() {
+    for dim in ["[]", "[$]", "[string]"] {
+        loud(
+            &format!(
+                "typedef logic [7:0] u_t {dim};\n\
+                 module top;\n\
+                   initial begin $display(\"%0d\", $bits(u_t)); $finish; end\n\
+                 endmodule\n"
+            ),
+            "E-ELAB",
+        );
+    }
+}
