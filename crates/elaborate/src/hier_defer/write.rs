@@ -7,6 +7,21 @@
 use super::*;
 
 impl Elaborator<'_> {
+    /// Every lvalue net a CONTINUOUS assign writes. Both write resolvers use it to
+    /// tell which lane a sentinel came from: `collect_lval_chunks` is shared by the
+    /// procedural and the continuous lowering, so the sentinel itself carries no
+    /// lane — but one deferral site produces exactly one chunk in exactly one
+    /// arena, so the container it lands in IS the evidence. Needed because the two
+    /// arenas are patched separately AND because the `wire` guard below is a rule
+    /// about PROCEDURAL writes only.
+    pub(crate) fn cont_assign_lval_nets(&self) -> std::collections::BTreeSet<u32> {
+        self.cont_assigns
+            .iter()
+            .flat_map(|ca| ca.lhs.chunks.iter())
+            .map(|c| c.net)
+            .collect()
+    }
+
     /// Record a deferred hierarchical WRITE target and return its sentinel net id
     /// (`HIER_WRITE_SENTINEL_BASE + index`). The chunk carries this sentinel until
     /// `resolve_deferred_hier_write` patches it. Falls back to a loud `resolve_net`
@@ -38,6 +53,7 @@ impl Elaborator<'_> {
             return;
         }
         let mut patch: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
+        let ca_nets = self.cont_assign_lval_nets();
         let ambient = self.cur_span;
         for (i, d) in pending.iter().enumerate() {
             self.cur_span = d.span.or(ambient);
@@ -95,9 +111,13 @@ impl Elaborator<'_> {
                     } else if matches!(
                         self.nets.get(net as usize).map(|nv| &nv.kind),
                         Some(ir::NetKind::Wire)
-                    ) {
-                        // P1-9 (E3018) for the deferred path: a procedural hierarchical
-                        // write may not target a `wire` (iverilog rejects it too).
+                    ) && !ca_nets.contains(&sentinel)
+                    {
+                        // P1-9 (E3018) for the deferred path: a PROCEDURAL hierarchical
+                        // write may not target a `wire` (iverilog rejects it too). A
+                        // continuous assign is the opposite case — driving a wire is what
+                        // `assign` is for, and both oracles run `assign u1.w = v;` — so
+                        // the guard is keyed on the lane, not on the destination alone.
                         self.error(
                             MsgCode::ElabLvalueKind,
                             &format!(
@@ -137,6 +157,18 @@ impl Elaborator<'_> {
                 _ => continue,
             };
             for c in chunks {
+                if let Some(&real) = patch.get(&c.net) {
+                    c.net = real;
+                }
+            }
+        }
+        // …and the CONTINUOUS assigns, which are a separate arena and not `Stmt`s.
+        // Scanning only `stmts` left `assign u1.x = v;` carrying its sentinel all the
+        // way into the engine, where `chunk_width` indexes `nets[0xFF00_0000]` and
+        // PANICS (exit 101) — below loud on the ladder, and it hit every direction
+        // (self / down / up) with no generate block or array index involved.
+        for ca in &mut self.cont_assigns {
+            for c in &mut ca.lhs.chunks {
                 if let Some(&real) = patch.get(&c.net) {
                     c.net = real;
                 }
@@ -182,6 +214,7 @@ impl Elaborator<'_> {
         }
         let mut patch: std::collections::BTreeMap<u32, (ir::LvalChunk, String)> =
             std::collections::BTreeMap::new();
+        let ca_nets = self.cont_assign_lval_nets();
         let ambient = self.cur_span;
         for (i, d) in pending.into_iter().enumerate() {
             self.cur_span = d.span.or(ambient);
@@ -251,9 +284,12 @@ impl Elaborator<'_> {
                     } else if matches!(
                         self.nets.get(net as usize).map(|nv| &nv.kind),
                         Some(ir::NetKind::Wire)
-                    ) {
-                        // P1-9 (E3018): a procedural hierarchical write may not target a
-                        // `wire` — iverilog rejects it too (whole-net precedent).
+                    ) && !ca_nets.contains(&sentinel)
+                    {
+                        // P1-9 (E3018): a PROCEDURAL hierarchical write may not target a
+                        // `wire` — iverilog rejects it too (whole-net precedent). The
+                        // continuous lane is exempt for the whole-net twin's reason:
+                        // `assign u1.w[3:0] = v;` is a driver, not a procedural write.
                         self.error(
                             MsgCode::ElabLvalueKind,
                             &format!(
@@ -295,6 +331,15 @@ impl Elaborator<'_> {
                     } else {
                         *c = rebuilt.clone();
                     }
+                }
+            }
+        }
+        // …and the CONTINUOUS assigns (`assign u1.mem[i] = v;`), the second lvalue
+        // arena. No force/release case here: neither is a continuous assign.
+        for ca in &mut self.cont_assigns {
+            for c in &mut ca.lhs.chunks {
+                if let Some((rebuilt, _)) = patch.get(&c.net) {
+                    *c = rebuilt.clone();
                 }
             }
         }
@@ -424,6 +469,17 @@ impl Elaborator<'_> {
                     }
                 }
                 _ => {}
+            }
+        }
+        // …and the CONTINUOUS assigns, the second rhs-bearing arena. `assign u1.x = '1;`
+        // onto a 12-bit target lowered its fill at width 1 and printed `001` where both
+        // oracles print `fff`: the record was made and the width recomputed, but the
+        // redirect only ever reached `stmts`. Same omission as the two chunk patches
+        // above — three arenas' worth of the same miss, all found by measuring the
+        // shape rather than by reading the lane.
+        for ca in &mut self.cont_assigns {
+            if let Some(&new) = redirect.get(&ca.rhs) {
+                ca.rhs = new;
             }
         }
     }
