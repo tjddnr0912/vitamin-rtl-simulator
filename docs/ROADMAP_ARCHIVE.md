@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.450` **External report round-39: the route census `run.json` was missing, and a refutation of my own that was wrong** (2026-09-07 · §6 OBS R2-ⓐ + §2 perf census · no IR change)
 - `4.5.449` **External report round-38: an elaboration regression, a metric that could not see it, and two re-diagnosed residues** (2026-09-07 · §5 perf + §6 OBS + docs audit · no IR change)
 - `4.5.448` **A parameter declared with a NEGATIVE low bound reads its declared range** (2026-09-07 · §2 🆕 L ⓩ residue · 33 cells · batch with 446/447)
 - `4.5.447` **An unpacked-array typedef on a non-ANSI port, and `$bits` of the type name** (2026-09-07 · §3 ⑤ⓕ · 58 cells · batch with 446/448)
@@ -466,6 +467,128 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.450 — External report round-39: the route census `run.json` was missing, and a refutation of my own that was wrong (2026-09-07 · format 31 · no IR change) ✅
+
+**Source.** The reporter took round-38's reply, re-measured R8 on the same `v0.2.0-100-g43e9286`,
+and published a corrected report. Four items: (1) `elab_s` as a corpus metric — the elaboration
+regression; (2) R8, **withdrawn as a request** but re-filed as a fact; (3) R2, deferral accepted with
+an intermediate proposal; (4) a release note for the generate-`else` scope names. R5 stays theirs
+(pending RHEL8 Xcelium).
+
+**(1) and (4) were already shipped in §4.5.449** and re-verified here rather than asserted.
+`elab_s` at HEAD against the exact binary they measured (`43e9286`, built from `git archive`,
+release, alternating both orders, first round discarded):
+
+| design | `43e9286` | HEAD | Δ |
+|---|---:|---:|---:|
+| biriscv (8.8 k lines) | 0.0270 s | 0.0215 s | **−20%** |
+| picorv32 | 0.0165 s | 0.0147 s | **−11%** |
+| synthetic — 40,000 plain decimal-literal statements | 0.0617 s | 0.0647 s | +4% |
+
+Both real designs improved; the synthetic row is the honest one — it is a shape with no shape-query
+hot path, and HEAD is not only the fix (`75afa6a`) but eight feature slices on top of it. The
+release note for the scope names is the `### Changed — hierarchical names printed by this release`
+block already in the CHANGELOG.
+
+**(2) R8 — the reporter was right and round-38's refutation was wrong.** §4.5.449 recorded that a
+user function call in a size-cast operand was **not** a firing axis, on a census that read the
+`$unsigned` column. A function returning `int` seals with **`$signed`**. Re-measured as a 2×2×2
+(operand sign × contains-user-call × destination wider than the cast, 400,000 iterations per cell):
+
+| | dest == cast width | dest wider |
+|---|---:|---:|
+| signed, no call | 0 | `$signed` 400,000 |
+| signed, call | **`$signed` 400,000** | `$signed` 400,000 |
+| unsigned, no call | 0 | `$unsigned` 400,000 |
+| unsigned, call | **`$unsigned` 400,000** | `$unsigned` 400,000 |
+
+The call axis is real, independent, and shows on both signednesses. One mechanism explains all of
+it: `wprog::compile_node` has no `Expr::Call` arm, so a program containing one declines whole and
+the seal runs interpreted — the same reason `*` and a context-width mismatch decline. Written into
+ROADMAP §2 Performance, replacing the wrong entry.
+
+The reporter also corrected their own cost attribution, and that half is the more useful one: the
+seal is ≈**10%** of their loop (5.16 s cast vs 4.70 s uncast) while the FRAME CALL is **5×**
+(vs 1.03 s with no function at all). R8 is not their priority any more. Nothing was implemented for
+it here — the fix's prerequisite (the `wprog.rs:120` sign gate argues from the admitted set, so a
+`Mul` arm must re-argue it) is unchanged.
+
+**(3) R2 intermediate — shipped.** The reporter accepted the call-tree deferral and asked for its
+minimum form: a per-function static `inlined | frame` classification with a call-site count, so a
+user can see which subroutine is a frame without profiling. `run.json` now carries a `subroutines`
+object (doc-19 §4.10):
+
+```json
+"subroutines": {"counts": {"total": 6, "frame": 4, "inlined": 2},
+  "sites_semantics": "call sites LOWERED …", "uncounted": "class methods and hierarchical calls",
+  "items": [{"module": "leaf", "name": "aut", "kind": "function", "route": "frame", "sites": 2}, …]}
+```
+
+Design decisions, each of which was a way to get it wrong:
+
+- **The route is written at the seams that PICK it**, not re-derived. `inline_function` reads the
+  same `frame_idx` map `emit_frame_call` is selected by, `inline_task` reads the same `is_framed`
+  flag its routing reads, and the scoped `pkg::f` path is recorded `framed` where the comment
+  explains why it is unconditionally framed. A second predicate answering *"would this be framed?"*
+  is free to disagree with the route the design took — which is the failure the table exists to make
+  visible ([[classifier-must-match-lowering-resolver]]).
+- **Seeded per module from the same two sets `lower_frame_funcs` reserves from**, so a
+  declared-but-never-called subroutine still reports its route with `sites: 0`. A seam-only census
+  cannot produce that row, and its absence would read as "no such function".
+- **`sites` is call sites LOWERED**, after generate and instance expansion — a call written once in
+  a module instantiated twice is 2. Said in the file (`sites_semantics`) rather than left to the
+  reader, and so is what is NOT counted (`uncounted`: class methods, hierarchical calls).
+- **Out-of-band and one-shot only.** `Sidecars` is in-memory (no serde), so the field is
+  golden-neutral AND format-version-neutral; `run.json` is not written by staged `vrun`, so nothing
+  needed a trailer. No `format_version` bump.
+
+The surprise the table exists to surface, pinned in `crates/cli/tests/obs_subroutines.rs`:
+`function int f` is FRAMED and `function logic [31:0] f` is INLINED, because `int` is 2-state and
+the frame return slot is what coerces x/z→0. Nobody reads that off the source.
+
+**The defect the soundness lens found, and the restructuring it forced.** The first version recorded
+the route at the three seams that PICK it. That is three of at least nine: a function with an
+`output` formal is hoisted into a temp plus a statement call, so four hoists and two `stmt_main`
+arms reach `emit_frame_func_out_call` without ever passing through `inline_function`. Measured:
+`r = addout(5, d); r = addout(7, d);` reported **`sites: 0`** — a silent undercount in a log, which
+is the one thing this rail must not produce. The fix is structural rather than a fourth call site:
+the frame half is now recorded inside the three EMITTERS (`emit_frame_call`,
+`emit_frame_func_out_call`, `emit_frame_task_call`), which needed a new `frame_keys` table —
+parallel to `funcs`, pushed beside `frame_func_names`, holding the ROUTINE KEY (`frame_func_names`
+holds the `%m` PATH and cannot serve) — so an emitter can file a row from a FuncId alone. The inline
+half has no emitter and stays at the two fall-throughs, which is where a call is decided NOT to be a
+frame. `an_output_formal_call_counts_in_both_spellings` pins both spellings.
+
+**Adversarial review — the soundness lens found the defect above, and the census moved because of
+it.** Differential: the four examples byte-identical (stdout + VCD) against a frozen `6c9e1c9`
+release binary; staged `vcmp→velab→vrun` == one-shot on all four; corpus **10/10** (verilog-axi
+`ruled-split`, not a failure); full gate **7,209 passed / 0 failed / 15 skipped**; clippy
+`--workspace --all-targets --locked -D warnings` clean; `run.json` gains one key and the
+determinism golden (`obs.rs` — byte-identical bar the four isolated timing fields) still passes,
+which is the proof the new object is deterministic.
+
+Soundness: the recording touches no IR and no lowering decision. The two `String` clones per
+recorded call site are the [[entry-or-insert-builds-unconditionally]] shape, so they were MEASURED,
+release, alternating both orders, first round discarded:
+
+| design | PRE `6c9e1c9` | POST | Δ |
+|---|---:|---:|---:|
+| biriscv (real) | 0.02173 s | 0.02170 s | **1.00×** |
+| 30,000 lowered call sites (synthetic) | 0.1149 s | 0.1158 s | +0.8% |
+| 400 instances × 10 subroutines — the SEED path (synthetic) | 0.01213 s | 0.01247 s | +3.1% |
+
+The third row is the per-instance seed re-walking a module's `func_table`; it is 0.4 ms on a
+deliberately pathological shape and sits at the edge of the repo's ±3% no-change band. Not traded
+away: skipping a module already seeded would assume every instance of a module has the same
+`func_table`, which imports and parameters make an assumption rather than a fact.
+
+**Not shipped, and why.** `WPROG-WHY` (a per-`(reason, count)` tally beside `codegen`): it is now
+motivated twice over — both sides of this exchange misread the seal residue from invocation counts —
+but `wprog::compile_node` returns a bare `None` at 46 sites, so threading a reason out is its own
+slice with its own review. Ranked in §5.b. The dynamic half of R2 (ⓑ `SubProfile`, ⓒ decl
+`file:line:col`) is unchanged, and is now unblocked: with ⓐ in the file a `SubProfile`'s 0-call rows
+can be read, because the census says which of them are inlined.
 
 #### 4.5.449 — External report round-38: an elaboration regression, a metric that could not see it, and two re-diagnosed residues (2026-09-07 · format 31 · no IR change) ✅
 

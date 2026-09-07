@@ -307,6 +307,12 @@ impl Elaborator<'_> {
         // made `gmul`'s body's call to `xtime` an undeclared-function error, while
         // spelling the same function `automatic` worked, and so did importing `xtime`
         // as well (which is the caller's business, not the callee's).
+        // R2 intermediate: everything above returned on a FRAME route (and recorded
+        // itself inside the emitter); reaching here is the INLINE decision, so this is
+        // the one place that has to say so. A hierarchical `u1.f(x)` returned much
+        // earlier and is uncounted by design — its target is not bound until the
+        // deferred-hier resolve, after this pass.
+        self.note_subroutine_route(&fname, false, false);
         let pk = self.rtn_key_pkg(fname.as_str());
         self.inline_resolved_func_in_pkg(&func, args, pk)
     }

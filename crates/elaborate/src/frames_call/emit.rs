@@ -14,6 +14,7 @@ impl Elaborator<'_> {
         func: &ast::FunctionDef,
         args: &[ast::Expr],
     ) -> u32 {
+        self.note_frame_call(fid); // R2 route census
         let fname = &func.name.name;
         if func
             .ports
@@ -416,6 +417,7 @@ impl Elaborator<'_> {
         task: &ast::TaskDef,
         args: &[ast::Expr],
     ) {
+        self.note_frame_call(fid); // R2 route census
         let tname = &task.name.name;
         let Some(eff_args) = self.fill_default_args(tname.as_str(), &task.ports, args) else {
             return;
@@ -829,6 +831,7 @@ impl Elaborator<'_> {
         args: &[ast::Expr],
         ret_lval: ir::Lvalue,
     ) {
+        self.note_frame_call(fid); // R2 route census
         let fname = func.name.name.clone();
         // R19 §3.3: reorder `.formal(v)` to positional first — the same G10 step the
         // inline and plain-frame paths take. Only THIS path (a frame function WITH an

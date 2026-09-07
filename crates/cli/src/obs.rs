@@ -73,6 +73,18 @@ pub struct ObsRun<'a> {
     /// as the `native` object. Deterministic; static per (design, run options)
     /// — a `--probe`/stage-instrumented run is ineligible by design (§4.3).
     pub native: &'a sim_engine::native::NativeEligibility,
+    /// R2 intermediate (round-39): the per-subroutine ROUTE census — which user
+    /// functions/tasks were lowered as FRAME calls and which were inlined, with
+    /// the call-site count under that route. DETERMINISTIC and unconditional:
+    /// unlike `processes`/`builtins` it needs no `--obs-procs`, because it is a
+    /// static property of the elaboration, not a measurement.
+    ///
+    /// It exists because the profile cannot answer it. An inlined subroutine
+    /// leaves no call node, so it contributes 0 profile rows — and 0 reads as
+    /// "free". An external report measured a frame call at 5x the cost of the
+    /// same expression without one while the profile was silent about both
+    /// halves; this object is the half that is knowable without running.
+    pub subroutines: &'a elaborate::SubroutineRoutes,
     /// R14 (ROADMAP §3 ⑭): the per-body execution profile, or `None` without
     /// `--obs-procs`. The `evals` half is DETERMINISTIC and belongs in the
     /// golden; the `nanos` half only exists under `--obs-procs-time` and is
@@ -307,6 +319,56 @@ impl ObsRun<'_> {
             s.push_str(&n.to_string());
         }
         s.push_str("}}");
+        // R2 intermediate (round-39): the SUBROUTINE half of the static census.
+        // `codegen` above counts process BODIES; this counts the functions and
+        // tasks those bodies call, and says which of them the elaborator turned
+        // into a frame call rather than inlining.
+        //
+        // Unconditional (no `--obs-procs`) and deterministic, because it is not a
+        // measurement — it is what elaboration decided. That is the property that
+        // makes it useful: a reader who has not profiled anything can still see
+        // that a hot expression contains a frame call.
+        s.push_str(",\n  \"subroutines\": {\"counts\": {\"total\": ");
+        s.push_str(&self.subroutines.len().to_string());
+        let framed = self.subroutines.values().filter(|r| r.framed).count();
+        s.push_str(", \"frame\": ");
+        s.push_str(&framed.to_string());
+        s.push_str(", \"inlined\": ");
+        s.push_str(&(self.subroutines.len() - framed).to_string());
+        // What `sites` is, said rather than left to the reader: the count is of
+        // call sites LOWERED, so a call written once inside a module instantiated
+        // four times is four, and a call inside a `for` loop body is one. It is a
+        // static shape, never an execution count.
+        s.push_str(
+            "}, \"sites_semantics\": \"call sites LOWERED (after generate/instance \
+             expansion), not executions; 0 = declared and never called\", \"uncounted\": \
+             \"class methods and hierarchical calls\", \"items\": [",
+        );
+        for (i, ((module, name), r)) in self.subroutines.iter().enumerate() {
+            if i > 0 {
+                s.push(',');
+            }
+            s.push_str("\n    {\"module\": ");
+            json_str(&mut s, module);
+            s.push_str(", \"name\": ");
+            json_str(&mut s, name);
+            s.push_str(", \"kind\": ");
+            s.push_str(if r.is_task {
+                "\"task\""
+            } else {
+                "\"function\""
+            });
+            s.push_str(", \"route\": ");
+            s.push_str(if r.framed { "\"frame\"" } else { "\"inlined\"" });
+            s.push_str(", \"sites\": ");
+            s.push_str(&r.sites.to_string());
+            s.push('}');
+        }
+        s.push_str(if self.subroutines.is_empty() {
+            "]}"
+        } else {
+            "\n  ]}"
+        });
         // R14: the DYNAMIC counterpart of `codegen`. That object says which
         // bodies the VM *could* compile; this one says which bodies actually
         // ran and how often — the question "which `always_comb` eats the cost"

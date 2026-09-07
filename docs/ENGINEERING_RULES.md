@@ -3984,13 +3984,47 @@ falls through to the same parse for everything else, so the fast path and the pa
 about a shape the fast path did not compute. Write the equivalence test against the function you are
 skipping, not against a table of expected answers.
 
-**A report's CAUSE needs re-measuring exactly like its severity.** The same report re-filed the
-sign-seal residue as *"the operand contains a function call"*. It does not:
-`acc ^ 8'(hexdig(a) | hexdig(b))` takes zero builtin invocations. A five-cell census found the real
-boundaries — a cast width that differs from its assignment context, and `*` having no `wprog`
-compile arm — and the reporter's design happened to contain the second. They were reasoning from
-`$signed` invocation counts because nothing in `run.json` says why an EXPRESSION left the compiled
-lane (`codegen` is a per-process census), so the wrong cause was the best inference available from
-the instrument. When an outside diagnosis is wrong, ask which instrument would have made it right;
-that missing instrument is usually the more valuable item. See [[report-severity-is-a-claim]],
+**A report's CAUSE needs re-measuring exactly like its severity — and so does the re-measurement.**
+The same report re-filed the sign-seal residue as *"the operand contains a function call"*. A
+five-cell census run here said it does not, and named two other boundaries instead. ⚠️ **That
+refutation was wrong**, and the next round said so with a measurement (see the next section). The
+census had counted the `$unsigned` column; a function returning `int` seals with `$signed`, so the
+one cell that would have confirmed the report was the one cell the census could not see. What
+survives from this rule is its second half: they were reasoning from invocation counts because
+nothing in `run.json` says why an EXPRESSION left the compiled lane (`codegen` is a per-process
+census), so the wrong cause was the best inference the instrument allowed — and so was mine. When
+an outside diagnosis is wrong, ask which instrument would have made it right; that missing
+instrument is usually the more valuable item. See [[report-severity-is-a-claim]],
 [[perf-ab-method-artifacts]], [[pre-binary-three-way-measurement]].
+
+## A refuting census must vary the axis it is refuting, and a census belongs where the value is made (2026-09-07, round-39)
+
+**A census that refutes a claim must vary the CLAIM'S axis and hold everything else fixed.** The
+five-cell census above changed the operand shape, the destination width and the operator between
+cells, then read one output column. The claim under test was *"a function call in the operand"*, and
+the cells that had a call also happened to have a SIGNED operand (the function returned `int`), so
+their seal landed in the `$signed` column that was not being read. The 2×2×2 that replaced it —
+operand sign × contains-call × destination width, both output columns — shows the call axis fires on
+both signednesses at equal width, i.e. the report was right. Before publishing a refutation: write
+the factorial table, and check that every OUTPUT the mechanism can produce is in the readout. A
+one-column readout of a two-column mechanism refutes nothing.
+
+**Count a route where the route is TAKEN, not where you think the callers are.** The route census
+(`run.json`'s `subroutines`) was first written at the seams that pick frame-vs-inline —
+`inline_function`, `inline_pkg_function`, `inline_task`. That is three of at least nine: a function
+with an `output` formal is hoisted into a temp plus a statement call, and four hoists and two
+`stmt_main` arms reach the frame emitter without ever passing through `inline_function`. The
+symptom was a row reading `sites: 0` next to two real call sites — a silent-wrong in a log, which is
+the one thing an observability rail must not produce. The fix was structural, not another call site:
+record inside the three EMITTERS (`emit_frame_call`, `emit_frame_func_out_call`,
+`emit_frame_task_call`), which needed a `frame_keys` table so an emitter can file a row from a
+FuncId alone. Then a new caller cannot miss the census, because there is nothing at the caller to
+remember. See [[a-site-census-misses-what-the-callee-selects]], [[routing-lives-in-several-places]].
+
+**A profile that cannot see the inline path reports "free" for it.** vita lowers a subroutine two
+ways, and only one leaves a call node. Any seam-based profile therefore reports 0 calls for every
+inlined subroutine, and `0` is indistinguishable from cheap. That is why the dynamic half of the
+call-tree feature was blocked on a static record of the routing, and why shipping the static half
+ALONE is a real deliverable rather than a placeholder: a reader can now tell an absent row from a
+free one. When a measurement has a blind region, publishing the region's MAP is worth more than
+publishing the measurement.

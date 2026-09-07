@@ -71,6 +71,8 @@ impl<'s> Elaborator<'s> {
             anon_clocking_count: 0,
             func_metas: Vec::new(),
             frame_func_names: Vec::new(),
+            subroutine_routes: SubroutineRoutes::new(),
+            frame_keys: Vec::new(),
             funcs: Vec::new(),
             func_blocks: Vec::new(),
             frame_idx: BTreeMap::new(),

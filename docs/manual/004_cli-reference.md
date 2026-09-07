@@ -149,7 +149,7 @@ vita tb.sv --obs-dir obs/
 
 | file | contents |
 |---|---|
-| `run.json` | The run manifest: tool + `format_version`, source name + blake3, plusargs, `finish_reason`, `exit_code`, `status`, error/warning/fatal counts, which executor ran, and the `codegen`/`native` capability verdicts. |
+| `run.json` | The run manifest: tool + `format_version`, source name + blake3, plusargs, `finish_reason`, `exit_code`, `status`, error/warning/fatal counts, which executor ran, the `codegen`/`native` capability verdicts, and the `subroutines` frame/inline route census. |
 | `results.jsonl` | One `{"v","t","kind":"result",…}` line per run (fully deterministic — no wall-clock field). |
 | `coverage.json` | Functional covergroup coverage, when the design has any. |
 
@@ -272,7 +272,37 @@ row. Per-subroutine rows are a known follow-on; the blocker is that vita lowers
 some subroutine calls by splicing the body into the caller at elaborate time, so
 a profile keyed on runtime call sites would report `0` for exactly those, and a
 task showing `0` reads as "free". See `docs/preview/19-ai-agent-observability.md`
-§4.9.
+§4.9. The **static** half of that answer ships today — see below.
+
+### Which of your functions became a frame call
+
+`run.json` always carries a `subroutines` object — no `--obs-procs` needed,
+because it is not a measurement. It is what elaboration decided:
+
+```json
+"subroutines": {"counts": {"total": 3, "frame": 2, "inlined": 1},
+  "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called",
+  "uncounted": "class methods and hierarchical calls",
+  "items": [
+    {"module": "tb", "name": "hexdig", "kind": "function", "route": "frame",   "sites": 18},
+    {"module": "tb", "name": "mask8",  "kind": "function", "route": "inlined", "sites": 4}
+  ]}
+```
+
+* `route` is `"frame"` (a real call, with a stack frame per invocation) or
+  `"inlined"` (the body was spliced into every caller at elaborate time).
+* `sites` counts call sites **lowered**, after generate and instance expansion:
+  a call written once inside a module you instantiate four times is `4`, and a
+  call inside a `for` loop body is `1`. It is never an execution count.
+  `0` means the subroutine is declared and never called.
+* Class methods and hierarchical calls (`u1.f(x)`) are not counted; the file
+  says so in `uncounted` rather than leaving you to work it out.
+
+Why you want it: a frame call is the more expensive of the two routes, and it is
+not always the one you would guess. `function int f` is framed while
+`function logic [31:0] f` is inlined — `int` is 2-state, and the frame's return
+slot is what forces x/z to 0. If a hot expression calls a `"frame"` subroutine,
+that call is usually a bigger cost than anything inside the expression.
 
 ---
 

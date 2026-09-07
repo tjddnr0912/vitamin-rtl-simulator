@@ -249,20 +249,39 @@ WALL(AST self-width) — the size-cast cluster below (width probe, `ir_bits_of` 
 - A continuous assign whose RHS contains ANY `Expr::Call` or `Expr::SysFunc` is re-evaluated 6.00× per input change instead of 1.00× (300,001 evals for 50,000 iterations vs 50,001; the same call in an `always @*` is 1.00×). Root = `levelize::expr_is_pure_of_nets` (`levelize.rs:329`), whose `E::SysFunc{..} | E::Call{..} | E::ArrayItem{..} => false` arm sets `dirty_ok=false` and drops the assign into `ca_always`. `$unsigned(src) ^ …` 1.89×, `… ^ 128'($bits(src))` 4.90×; the inliner trips it (`resize_inline_assign` seals with `$signed`/`$unsigned`, `inline_fn.rs:631,655`) so an inlined function measured 1.98× SLOWER (0.158 s vs 0.080 s). Fix order: (1) a per-`SysFuncId` ALLOW-list, `_`-free exhaustive (~79 variants, ~22 impure); (2) the dep set for `Expr::Call` — `expr_nets`' Call arm (`levelize.rs:161`) walks only the ARGS, so the reject is SOUND today; prize 5.95×; (3) then the body cost (2.33× ceiling). Certification moves the DIAGNOSTIC stream (a pure RHS `errors=5`, the same RHS in a no-op `$unsigned` `errors=9`) and must be adjudicated first. No `pure` flag on `FuncDef`/`SimIr` (frozen); computable out-of-band.
 - `coerce_two_state` names its operand once per TARGET BIT and the engine walks that DAG as a tree: `byte'` 8, `int'` 32, `longint'` 64, `int'(int'(x))` 1024 against iverilog's 1; the discriminator is 2-state-ness, not width (`integer'` and `int'` differ by 27×). The `expr_may_be_unknown` guard in `lower_prim_cast` took 1024 → 32. Still wrong: `int'(f())` names `f` 32 times because a `Call` is conservatively unknown, and a WIDENING cast over a call fans out to the wider width ⇒ needs the `expr_is_repeatable` gate.
 - Coercing at the OPERAND's width instead of the TARGET's took the repro 69.6 s → 6.7 s (10.4×), ping count 32 → 4 (the hand-written `{28'd0, nb}` control is 2.76 s). Still open — the residue is the 4 surviving terms plus the frame call, now the LARGER half. Not shipped: a per-bit skip fires 0 times on 41 cast cells; the third caller (`inline_fn.rs:396`) has no resize in front of it, so narrowing would change the value. The reorder's own silent-wrong: `ir_bits_of` answers `None` for a deferred hierarchical reference (also a `string` net, string-producing system functions, the `pop`/array-reduction family) and the caller FABRICATES 32 — `longint'(u1.w40)` with `logic [39:0] w40` is `0000001234567800` in iverilog and PRE, the unguarded reorder printed `0000000034567800` ⇒ take it only where the width is a DECLARED fact.
-- **The size-cast sign seal still leaves the compiled lane in two shapes, and NEITHER is the one an
-  external report named.** Round-36 R8 shipped the `wprog` seal arm and the report re-filed the
-  residue as *"the operand contains a function call"*. Re-measured at HEAD (2026-09-07,
-  `--obs-procs`, 400,000 iterations each): a call in the operand is **not** the boundary —
-  `acc = acc ^ 8'(hexdig(a) | hexdig(b))` takes **0** `$unsigned` invocations. Two other things are:
-  ⓐ an admitted-operator cast whose width does not match the assignment context
-  (`reg [15:0] acc; acc = 8'((a<<4)|b)` = 400,000 invocations, where the same text into a `reg [7:0]`
-  is 0), and ⓑ **`*` — and by construction `/`, `%`, `**` — has no `wprog` compile arm**
-  (`acc = 16'(a * b)` 400,000 / 0.153 s against `16'(a + b)` 0 / 0.054 s). The reporter's hex parser
-  is `hexdig(c) * 16 + hexdig(d)`, so what they measured was ⓑ. Cost where it fires: the same loop
-  without the cast is 0.050 s against 0.221 s ⇒ **the seal is 77% of that run**.
-  Prerequisite for ⓑ is the sign gate `wprog.rs:120` argues from the admitted set (*"`Div`/`Mod`/
-  `Mul`/`Pow` are not admitted"*), so a `Mul` arm must re-argue it. ⓐ is a census, not a fix, until
-  the decline is located — `compile` is the only honest answer to "will `wprog` take this".
+- **The size-cast sign seal leaves the compiled lane on THREE independent axes, and a
+  user function call is one of them.** Round-36 R8 shipped the `wprog` seal arm; an external
+  report re-filed the residue as *"the operand contains a function call"*, and the 2026-09-07
+  round-38 entry here **wrongly refuted that** — it counted only the `$unsigned` column, and a
+  function returning `int` seals with **`$signed`**. Re-measured at HEAD as a 2×2×2 census
+  (operand sign × contains-user-call × destination wider than the cast; `--obs-procs`,
+  400,000 iterations per cell, `d8`/`d16` destinations, `fs`/`fu` returning `int`/`logic [7:0]`):
+
+  | | dest == cast width | dest wider than cast |
+  |---|---:|---:|
+  | signed, no call — `8'((sv<<4)\|sv)` | **0** | `$signed` 400,000 |
+  | signed, call — `8'((fs(uv)<<4)\|fs(uv))` | **`$signed` 400,000** | `$signed` 400,000 |
+  | unsigned, no call — `8'((uv<<4)\|uv)` | **0** | `$unsigned` 400,000 |
+  | unsigned, call — `8'((fu(uv)<<4)\|fu(uv))` | **`$unsigned` 400,000** | `$unsigned` 400,000 |
+
+  So: ⓐ a destination wider than the cast fires on both signs (that is the seal doing its job —
+  it is what stops the context width leaking through, `expr_cast.rs`); ⓑ **a user function call in
+  the operand fires even at equal width** — the report's axis, confirmed on both signs, and the
+  column the `$unsigned`-only census could not see; ⓒ `*` (and by construction `/`, `%`, `**`)
+  has no `wprog` compile arm (`16'(a*b)` 400,000 / 0.153 s against `16'(a+b)` 0 / 0.054 s).
+
+  One mechanism under all three: `compile_node`'s entry gate is `sw.width != w || sw.signed !=
+  signed`, and `Expr::Call` has no arm at all — so any program containing one declines whole and
+  the seal runs interpreted. The seal is NOT the cost it looks like: the reporter re-measured their
+  own claim and found the seal worth ≈**10%** (`8'((hexdig<<4)|hexdig)` 5.16 s against the same
+  expression uncast, 4.70 s) while the FRAME CALL is **5×** (against 1.03 s with no function at
+  all). Their round-38 request to close R8 is withdrawn on that measurement, and this entry keeps
+  the census only.
+  Prerequisite for ⓒ is the sign gate `wprog.rs:120` argues from the admitted set (*"`Div`/`Mod`/
+  `Mul`/`Pow` are not admitted"*), so a `Mul` arm must re-argue it. ⓐ/ⓑ are a census, not a fix,
+  until the decline is located — `compile` is the only honest answer to "will `wprog` take this",
+  which is `WPROG-WHY` in §5.b, now motivated by BOTH sides having misread this residue from
+  invocation counts.
 - 4-state actual → 2-state formal 강제가 런타임 O(선언폭)(3백엔드 동일: `byte` 12.8× `shortint` 23.8× `int` 46.4×). 진짜 수정 = x/z→0 IR 프리미티브(format bump) 또는 엔진 memoize; 완화 둘(per-query 메모·노드 예산)은 개선 0 으로 반증(비용은 바인드 개수에 있고 영속 캐시는 in-place 패치와 충돌).
 - 상수 도메인의 비교/논리/삼항조건 fold 가 ~3배 느리다(값은 정답): `const_int_selfdet` 이 트리를 두 번 더 걷는다 = 피연산자당 6 walk vs 옛 2. 병리적: 1,500 localparam × 60항 0.35 → 1.00 s · 이중 generate-for 3.14 → 11.73 s · 컨트롤 1.00×; 현실 설계에선 안 보인다(picorv32 0.030 → 0.030 s). 처방 ⓐ 폭·부호 walk 융합 ⓑ generate-for bound 의 genvar-free 부분식 메모.
   - ⚠️ **"현실 설계에선 안 보인다" was measured on ONE design and is false.** picorv32's elaboration is
@@ -509,7 +528,7 @@ Performance axis: diminishing returns reached; performance ranks below the corre
 | MON-RENDER | `$monitor`/`$strobe` 의 ③층 렌더 경로 거부 | 렌더가 `sched/run_loop.rs::flush_postponed` 인데 그 경로가 리더를 안 받는다 | 배선 = S1d-4c 와 한 슬라이스 | 거부 해제 |
 | FD-EOF + FEOF | `NetArena` 의 `fd_eof` X-poison 구멍(`fd_eof` 만 "heap/class/frame 없음" 논증 밖 · 지금은 `$feof` 과잉표시가 가림) · `$feof` 가 정본 stmt-effect 술어에서 과잉표시라 `e = $feof(fd);` 거부 · `while (!$feof(fd))` 통과 | `k_feof` 는 순수 읽기인데 `sysfunc_is_stmt_effect` 가 `true` · 한 소비자만 고치면 철자가 둘 | 한 슬라이스로 · 정본 수정 = tier-2 게이트도 넓힘 · byte-identity 논증 | ③층 과잉거부 해소 |
 | NETSLOT-PREV | `NetSlot.prev` 를 읽는 곳이 워크스페이스 전체에서 0(선언·생성자·pass (c) 쓰기뿐) ⇒ pass (c) 의 `clone_from` 2회/변경넷/델타가 죽은 일 | 아무도 안 읽음 | 제거 · 자명함 자체를 검증하는 별도 슬라이스 | perf |
-| WPROG-WHY | An expression falling out of the compiled lane is INVISIBLE. `codegen.reject_reasons` is a per-PROCESS census, so a body reports `able 1/1` while every evaluation of its RHS runs the generic path — which is how an external report inferred the sign-seal boundary from `$signed` call counts and named the wrong cause (§2 Performance). | `wprog::compile` returns bare `None` at ~20 decline sites; nothing counts them | a per-(reason, count) tally on `SimOpts`, folded into `run.json` beside `codegen` — the same shape `builtins` already has. Reject reasons are a REPORTING table: never let one panic or change a value | reads as G2/OBS, not perf |
+| WPROG-WHY | An expression falling out of the compiled lane is INVISIBLE. `codegen.reject_reasons` is a per-PROCESS census, so a body reports `able 1/1` while every evaluation of its RHS runs the generic path. Both an external report AND this repo then inferred the sign-seal boundary from `$signed`/`$unsigned` call counts and each named a wrong cause in turn — two rounds spent on a question one tally answers (§2 Performance). | `wprog::compile` returns bare `None` at ~20 decline sites; nothing counts them | a per-(reason, count) tally on `SimOpts`, folded into `run.json` beside `codegen` — the same shape `builtins` already has. Reject reasons are a REPORTING table: never let one panic or change a value | reads as G2/OBS, not perf |
 | ELAB-PHASE-BLIND | The corpus cannot see a front-end regression: **every** workload is ≥99% simulation (biriscv 1%, the rest 0%), so a 3× elaboration cost moves the median wall time by nothing. Measured 2026-09-07, the run that also found the §2 Performance regression | corpus workloads are chosen for a long accumulating digest, which is the opposite of front-end weight | `corpus-runner run` now prints the phase split per row, which makes the number READABLE; a THRESHOLD needs a front-end-bound row (many declarations, short sim) with a pinned digest and an oracle | a regression the gate can see |
 | LOW-ROI | FMT-CACHE part b(render_template pre-segment) · GEN-3X-STR part a(unroll plan 캐시 = byte-identity 위험>이득) · QUEUE-MID-ON(스펙 내재 O(n) · iverilog 동일) | — | 보류 · QUEUE-MID-ON 은 영구 비권장 monitor-only | — |
 
@@ -561,15 +580,22 @@ teeth = 3-way 내부 차분(JSONL ≡ VCD ≡ `$display`) + 결정성 골든. �
   `Terminator::Call` / `Expr::Call`, and an elaborate-time INLINE splice), so a profile built on the
   runtime seams reports **0 calls for every inlined subroutine**, and "0 calls" reads as "free" about
   the very thing the user is hunting. What it needs first, in order:
-  ⓐ an elaborate-time record of which call sites were inlined and into which caller
-  (`inline_task.rs` / `inline_fn.rs`; nothing records this today) so an inlined task can be reported
-  as *inlined into its caller* rather than as absent;
+  ⓐ ✅ **shipped 2026-09-07 (round-39, §4.5.450)** — `run.json`'s `subroutines` object records,
+  per `(module, routine)`, the route the elaborator actually took (`frame` / `inlined`) and the
+  number of call sites lowered under it, written at the three seams that PICK the route
+  (`inline_fn.rs` ×2, `inline_task.rs`) and seeded so a declared-but-never-called subroutine still
+  reports one. Static, unconditional, deterministic. SPEC = doc-19 §4.10. The reporter asked for
+  exactly this as the intermediate form and it answers their own case: their `hexdig` is a frame in
+  every variant they tried, and the frame call — not the size-cast seal they had been chasing — is
+  5× of that expression;
   ⓑ a `SubProfile` on the `BuiltinProfile` pattern (interior-mutable, `&self`-reachable) bumped at
   the THREE seams — `state/frame_eval.rs::run_frame_call_with` for every function call, and
   `exec/process.rs`'s `Terminator::Call` arm plus `exec/frame_call.rs::call_here` for task calls;
   ⓒ a decl `file:line:col` twin for `Sidecars::func_names` (the name half already exists,
   index-aligned to `ir.funcs`).
-  Ship ⓐ with ⓑ or not at all: a partial table is the failure mode, not a smaller feature.
+  ⓑ still may not ship without ⓐ, and now does not have to: with ⓐ in the file a `SubProfile`'s
+  0-call rows can be READ, because the census says which of them are inlined. The partial-table
+  failure mode is what ⓐ removes.
 
 - 비목표: FSDB/UCDB·SQLite 내장·waveform GUI·UVM 연동. VCD는 사람용 유지.
 

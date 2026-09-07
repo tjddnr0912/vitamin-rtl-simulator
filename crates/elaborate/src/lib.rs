@@ -411,6 +411,18 @@ struct Elaborator<'s> {
     /// N1: subroutine name per FuncId, parallel to `func_metas` (pushed together).
     /// Drained into `Sidecars.func_names` for `%m` inside a frame body.
     frame_func_names: Vec<String>,
+    /// R2 intermediate: per-subroutine frame/inline route + call-site count,
+    /// drained into `Sidecars.subroutines`. Written by `note_frame_call` (every
+    /// frame emitter) and `note_subroutine_route` (the inline fall-throughs), and
+    /// seeded once per module so a DECLARED-but-never-called subroutine still
+    /// gets a row.
+    subroutine_routes: SubroutineRoutes,
+    /// R2 intermediate: the ROUTINE KEY of each reserved frame func/task, parallel
+    /// to `funcs`/`func_metas` (pushed beside `frame_func_names`). `frame_func_names`
+    /// cannot serve — it holds the `%m` PATH, not the key the route census is
+    /// filed under. Lets `note_frame_call` take only a FuncId, so the three
+    /// emitters are the whole census and a new call site cannot miss it.
+    frame_keys: Vec<String>,
     /// B1 frame-call: the GLOBAL `FuncDef` arena (→ `ir.funcs`). Accumulates
     /// across instances; index-aligned to `func_metas`. EMPTY for designs with
     /// no frame functions (golden-neutral: `ir.funcs` stays empty).

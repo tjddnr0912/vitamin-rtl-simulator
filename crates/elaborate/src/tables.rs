@@ -337,6 +337,45 @@ pub struct FuncMeta {
 /// `Default` (empty) ⇒ golden-neutral.
 pub type FuncTable = Vec<FuncMeta>;
 
+/// R2 intermediate (round-39): the per-subroutine ROUTE census — for every user
+/// function/task this elaboration saw, whether its calls were lowered as a FRAME
+/// call (an `ir.funcs` entry reached through `Expr::Call` / `Terminator::Call`)
+/// or INLINED into the caller, and how many call sites took that route. Keyed
+/// `(module, routine key)` — a same-named function in two modules is two
+/// subroutines, and a package routine (`pkg::f`) earns a row under each module
+/// that calls it.
+///
+/// ⚠️ Why this table and not a profile: an INLINED subroutine leaves no call node
+/// behind, so it is 0 rows in every seam-based profile — and `0` reads as "free".
+/// An external report (round-39) measured one frame call at **5x** the cost of the
+/// same expression written without it, while the profile said nothing about
+/// either half. This is the STATIC answer, available with no profiling run:
+/// which subroutines are frames.
+///
+/// Filled at the seams that DECIDE the route (`inline_function` /
+/// `inline_task`), never re-derived from a second predicate — a predicate that
+/// re-answers "would this be framed?" is free to disagree with the route the
+/// design actually took, which is exactly the failure this table exists to make
+/// visible. The route a row carries is therefore the one that ran.
+///
+/// NOT counted: class methods (`class_lower`, a separate lowering with its own
+/// table) and hierarchical calls (`u1.f(x)`), whose target is patched after this
+/// pass. Out-of-band; never golden IR.
+pub type SubroutineRoutes = std::collections::BTreeMap<(String, String), SubroutineRoute>;
+
+/// One [`SubroutineRoutes`] row.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SubroutineRoute {
+    /// `true` ⇒ a task (`task`/`endtask`), `false` ⇒ a function.
+    pub is_task: bool,
+    /// `true` ⇒ frame call, `false` ⇒ inlined into the caller.
+    pub framed: bool,
+    /// Call sites LOWERED under this route, counted AFTER generate/instance
+    /// expansion — a subroutine called once inside a module instantiated four
+    /// times counts four. `0` ⇒ declared and never called.
+    pub sites: u64,
+}
+
 /// B2 frame-call (tasks): one task-call site's argument↔formal binding. The
 /// frozen `Terminator::Call` carries only `{target, ret_bb}`, so the positional
 /// mapping rides this sidecar. `in_binds[i] = (callee INPUT formal slot, arg
@@ -507,6 +546,11 @@ pub struct Sidecars {
     /// N1: FuncId → subroutine name, index-aligned to `func_table` / `ir.funcs`.
     /// Consulted only by `%m` rendered inside a frame body. EMPTY ⇒ module scope.
     pub func_names: Vec<String>,
+    /// R2 intermediate: per-subroutine frame/inline route + call-site count (see
+    /// [`SubroutineRoutes`]). Read ONLY by the `run.json` writer — the engine
+    /// never sees it, so it is not on `SimOpts`. EMPTY ⇒ the design declares no
+    /// user function or task.
+    pub subroutines: SubroutineRoutes,
     /// B2 frame-call: task-call sites in process bodies (executor-facing).
     pub task_calls_proc: TaskCallProc,
     /// B2 frame-call: nested task-call sites in task bodies (`run_task`-facing).

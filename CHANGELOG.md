@@ -25,6 +25,16 @@ need updating. What moved:
 
 ### Added
 
+- **`run.json` says which of your functions and tasks became a frame call** (`--obs-dir`, no other
+  flag). The new `subroutines` object gives one row per subroutine — `module`, `name`, `kind`,
+  `route` (`frame` / `inlined`) and `sites`, the number of call sites lowered under that route —
+  plus a `counts` header. It is a static property of elaboration, so it is deterministic and needs
+  no profiling run. This is the half of a call-tree profile that a profile cannot supply: an inlined
+  subroutine leaves no call node, so it shows up as 0 calls, and 0 reads as free. Some routes are
+  not guessable from the source — `function int f` is framed and its `function logic [31:0] f` twin
+  is inlined, because `int` is 2-state and the frame return slot is what coerces x/z to 0. Class
+  methods and hierarchical calls (`u1.f(x)`) are not counted, and the file says so.
+
 - **`corpus-runner run` reports the front-end / executor split**, one line per workload below the
   grade table: `elab 0.022s  sim 3.817s  (1% front end)`. It comes from a separate `--obs-dir` probe
   run, so the timed rounds — and the wall times pinned in `docs/study/03-workload-corpus.md` — are

@@ -40,6 +40,79 @@ impl Elaborator<'_> {
         id
     }
 
+    /// R2 intermediate: give EVERY subroutine this module declares a
+    /// [`SubroutineRoute`] row, so one that is declared and never called still
+    /// reports whether it would have been framed. Idempotent across the instances
+    /// of a module — same key, same route — and the call seams
+    /// (`note_subroutine_route`) only add to `sites` on top of it.
+    ///
+    /// ⚠️ The route here is read from the SAME two sets `lower_frame_funcs` is
+    /// about to reserve from, not from a re-run of the predicates. A row that
+    /// disagreed with the lowering would be worse than no row.
+    fn seed_subroutine_routes(
+        &mut self,
+        frame_set: &std::collections::BTreeSet<String>,
+        task_set: &std::collections::BTreeSet<String>,
+    ) {
+        let module = self.inst_stack.last().cloned().unwrap_or_default();
+        let fnames: Vec<String> = self.func_table.keys().cloned().collect();
+        let tnames: Vec<String> = self.task_table.keys().cloned().collect();
+        for name in fnames {
+            let framed = frame_set.contains(&name);
+            let e = self
+                .subroutine_routes
+                .entry((module.clone(), name))
+                .or_default();
+            e.is_task = false;
+            e.framed = framed;
+        }
+        for name in tnames {
+            let framed = task_set.contains(&name);
+            let e = self
+                .subroutine_routes
+                .entry((module.clone(), name))
+                .or_default();
+            e.is_task = true;
+            e.framed = framed;
+        }
+    }
+
+    /// R2 intermediate: record ONE FRAME call site, by FuncId.
+    ///
+    /// ⚠️ Taking a FuncId and not a name is the whole point. A frame call is
+    /// emitted from THREE places (`emit_frame_call`, `emit_frame_func_out_call`,
+    /// `emit_frame_task_call`) and reached from at least eight — the four hoists,
+    /// two `stmt_main` statement forms, and the two expression paths. A census
+    /// written at the CALLERS undercounted silently: an out-formal call measured
+    /// `sites: 0` for two real call sites, because the hoist rewrites it before
+    /// `inline_function` ever sees it. Recording inside the emitters makes the
+    /// three of them the entire census, and `frame_keys` is what lets them do it
+    /// without a name to thread.
+    pub(crate) fn note_frame_call(&mut self, fid: u32) {
+        let Some(key) = self.frame_keys.get(fid as usize).cloned() else {
+            return; // defensive: a FuncId with no reserved key cannot be filed
+        };
+        let is_task = self.funcs.get(fid as usize).is_some_and(|f| f.is_task);
+        self.note_subroutine_route(&key, is_task, true);
+    }
+
+    /// R2 intermediate: record that ONE call site to `name` was lowered under
+    /// `framed`. `note_frame_call` above is the frame half; the INLINE half is
+    /// called directly from the fall-throughs in `inline_function` /
+    /// `inline_task`, which is where a call is decided NOT to be a frame.
+    /// `framed` is overwritten here on purpose — the seed only supplies the
+    /// never-called case, and the route that ran wins.
+    pub(crate) fn note_subroutine_route(&mut self, name: &str, is_task: bool, framed: bool) {
+        let module = self.inst_stack.last().cloned().unwrap_or_default();
+        let e = self
+            .subroutine_routes
+            .entry((module, name.to_string()))
+            .or_default();
+        e.is_task = is_task;
+        e.framed = framed;
+        e.sites += 1;
+    }
+
     /// Reserve + lower every frame function of the CURRENT module instance. Runs
     /// at step 6.5: RESERVE all (sorted) so a call to a not-yet-lowered frame func
     /// resolves (breaks self + mutual recursion), then lower each body. No-op when
@@ -47,8 +120,9 @@ impl Elaborator<'_> {
     pub(crate) fn lower_frame_funcs(&mut self) {
         let frame_set = self.build_frame_set();
         let task_set = self.build_task_frame_set(); // B2
-                                                    // R5-B: record which framed functions have an output/inout formal so their
-                                                    // calls route to the copy-out path (`emit_frame_func_out_call`) + the hoist.
+        self.seed_subroutine_routes(&frame_set, &task_set);
+        // R5-B: record which framed functions have an output/inout formal so their
+        // calls route to the copy-out path (`emit_frame_func_out_call`) + the hoist.
         self.inout_func_names.clear();
         // §4.5.179: record which FRAMED functions have an `input` dyn-array formal, so a
         // BURIED call to one is hoisted to a `__t = f(a)` temp (re-triggering §4.5.177's

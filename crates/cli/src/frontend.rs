@@ -675,6 +675,9 @@ pub(crate) fn run_vita_str_gated(
     // `native::design_eligibility` has to classify.
     let proc_idents = sc.proc_idents;
     let ca_idents = sc.ca_idents;
+    // R2 intermediate: the subroutine route census — `run.json` only, like the
+    // identity tables above (the engine has no use for it).
+    let subroutines = sc.subroutines;
     let sim_opts = SimOpts {
         fork_modes: sc.fork_modes,
         net_names: sc.net_names,
@@ -815,6 +818,7 @@ pub(crate) fn run_vita_str_gated(
             elab_s,
             sim_s,
             procs,
+            &subroutines,
         );
     }
     final_code
@@ -839,6 +843,7 @@ pub(crate) fn emit_obs(
     elab_s: f64,
     sim_s: f64,
     procs: Option<obs::ObsProcs<'_>>,
+    subroutines: &elaborate::SubroutineRoutes,
 ) {
     let utc_unix_s = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -887,6 +892,7 @@ pub(crate) fn emit_obs(
         codegen: &result.codegen,
         native: &result.native,
         procs,
+        subroutines,
         utc_unix_s,
         wall_s: start.elapsed().as_secs_f64(),
         elab_s,

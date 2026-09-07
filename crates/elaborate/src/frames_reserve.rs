@@ -829,6 +829,7 @@ impl Elaborator<'_> {
         });
         let fp = self.frame_path(&func.name.name);
         self.frame_func_names.push(fp); // %m
+        self.frame_keys.push(name.to_string()); // R2 route census
     }
 
     /// §4.5.435: the `%m` of a frame subroutine — its DECLARING instance (display
@@ -1065,5 +1066,6 @@ impl Elaborator<'_> {
         });
         let fp = self.frame_path(&task.name.name);
         self.frame_func_names.push(fp); // %m
+        self.frame_keys.push(name.to_string()); // R2 route census
     }
 }

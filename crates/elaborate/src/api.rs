@@ -190,6 +190,7 @@ pub fn elaborate_located_params(
         defer_acts: std::mem::take(&mut el.defer_acts),
         func_table: std::mem::take(&mut el.func_metas), // B1 (empty until frame funcs lower)
         func_names: std::mem::take(&mut el.frame_func_names), // N1 %m
+        subroutines: std::mem::take(&mut el.subroutine_routes), // R2 intermediate
         task_calls_proc: std::mem::take(&mut el.task_calls_proc), // B2
         task_calls_func: std::mem::take(&mut el.task_calls_func), // B2
         // SVPART: 2-state net ids, derived from the decl-time kind map (reuses the

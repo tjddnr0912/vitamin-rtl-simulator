@@ -356,11 +356,59 @@ feature is a table that is present and partial.
 **A third gap the same report exposed, and it is this rail's rather than the profiler's.** When an
 expression falls out of the compiled lane, nothing says so. `codegen.reject_reasons` is a
 per-PROCESS census, so a body reports `able 1/1` while every evaluation of its right-hand side runs
-the generic path. The reporter had to infer the boundary from `$signed` invocation counts and named
-the wrong cause: they filed it as *"a cast whose operand contains a function call"*, and the measured
-boundaries are a cast width that differs from its assignment context, and `*` having no `wprog`
-compile arm at all (ROADMAP §2 Performance). A per-`(reason, count)` tally beside `codegen`, the
-shape `builtins` already has, would have answered it directly. Filed as `WPROG-WHY` in ROADMAP §5.b.
+the generic path. Both sides then read the boundary off `$signed`/`$unsigned` invocation counts, and
+**both got it wrong in turn**: the reporter filed it as *"a cast whose operand contains a function
+call"*; this document said (2026-09-07) that the real boundaries were a cast width differing from its
+assignment context and `*` having no `wprog` arm, and that the function-call axis was refuted. The
+refutation counted only the `$unsigned` column — a function returning `int` seals with `$signed`. A
+2×2×2 re-census (ROADMAP §2 Performance) shows the reporter's axis is REAL and independent, on both
+signednesses. A per-`(reason, count)` tally beside `codegen`, the shape `builtins` already has, would
+have ended the exchange at the first measurement instead of the third. Filed as `WPROG-WHY` in
+ROADMAP §5.b.
+
+### 4.10 `subroutines` — the frame/inline route census (R2 intermediate, round-39)
+
+**Shipped 2026-09-07.** No flag beyond `--obs-dir`; one-shot `vita` only. Unlike
+§4.6/§4.9 it is **not a measurement** — it is what elaboration decided — so it is
+emitted unconditionally and it is deterministic (it sits inside the run.json
+determinism golden, not beside it).
+
+**Why it exists.** The call tree (§4.9's item (1)) is still deferred, for the reason
+recorded there: an INLINED subroutine leaves no call node, so a seam-based profile
+reports it 0 times, and `0` reads as *free*. That is not a hypothetical — the
+reporter measured one frame call at **5×** the cost of the same expression written
+without a function, and the ≈**10%** they had attributed to the size-cast seal was
+the smaller half. Nothing in the rail said which of their functions was a frame.
+This object says exactly that, before anyone profiles anything, and it is the
+minimum form of the call tree's prerequisite ⓐ (the elaborate-time inline record).
+
+```json
+"subroutines": {"counts": {"total": 6, "frame": 4, "inlined": 2},
+  "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called",
+  "uncounted": "class methods and hierarchical calls",
+  "items": [
+    {"module": "leaf", "name": "aut", "kind": "function", "route": "frame", "sites": 2},
+    {"module": "leaf", "name": "pure8", "kind": "function", "route": "inlined", "sites": 4},
+    {"module": "top", "name": "p::dbl", "kind": "function", "route": "frame", "sites": 1}
+  ]}
+```
+
+| field | meaning |
+|---|---|
+| `module` | the module whose body was being lowered. A package routine (`p::dbl`) is filed under the module that CALLS it — a package has no instance of its own. Two modules declaring a same-named function are two rows, which is why the key is a pair. |
+| `name` | the routine key the elaborator resolved (`f`, or `pkg::f` for the scoped spelling). |
+| `kind` | `"function"` / `"task"`. |
+| `route` | `"frame"` = an `ir.funcs` body reached through a call node; `"inlined"` = folded into the caller. Read from the SAME map the lowering is selected by, never re-derived — a predicate that re-answers *"would this be framed?"* is free to disagree with the route the design took, which is the failure this table exists to make visible. |
+| `sites` | call sites LOWERED, **after** generate and instance expansion: a call written once inside a module instantiated twice is `2`, a call inside a `for` loop body is `1`. Never an execution count. `0` = declared and never called (the row is seeded from the same two sets `lower_frame_funcs` reserves from, so a dead subroutine still reports its route). |
+| `uncounted` | stated in the file rather than assumed: class methods (a separate lowering with its own table) and hierarchical calls (`u1.f(x)`, whose target is not bound until the deferred-hier resolve, which runs after this seam). |
+
+**What surprises readers, and is the point.** `function int f` is framed and its
+`function logic [31:0] f` twin is inlined — `int` is 2-state and the frame return
+slot is what coerces x/z→0. No one guesses that from the source. `crates/cli/tests/
+obs_subroutines.rs` pins it.
+
+**Still not shipped:** the per-call-site `file:line:col` and the dynamic half
+(how often each frame call actually ran). Those are §4.9's ⓑ+ⓒ, unchanged.
 
 ## 5. 트래킹
 
