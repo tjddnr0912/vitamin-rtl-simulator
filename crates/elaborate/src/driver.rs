@@ -417,13 +417,28 @@ impl<'s> Elaborator<'s> {
                     // DECLARING scope, the same string `%m` prints (`top.t`, not the
                     // `top.$func$t` storage prefix); a class method records the
                     // `.<class>.<method>` marker the engine completes.
-                    instance: match (&self.cur_class_method, &self.block_scope_root) {
-                        (Some(m), _) => format!(".{m}"),
-                        (None, Some(_)) => {
+                    //
+                    // ⭐ The PROCESS path takes the same route (§2 🆕 N): the marker
+                    // is `%m`'s string for the statement, computed by `%m`'s own
+                    // function on the same state. Spelling it `cur_prefix` instead
+                    // dropped the named-block chain (`[in top]` beside `m=top.blk`,
+                    // both oracles `top.blk`) and kept the synthetic `[0]` a
+                    // singleton generate scope stores (`[in top.g[0]]` beside
+                    // `m=top.g`) — vita contradicting itself on one statement.
+                    // Byte-identical where there is nothing to add: with no
+                    // `block_scope_root` and an empty `block_scope`,
+                    // `scope_chain_abs()` is `.{display_prefix()}`, and `display_of`
+                    // is the identity on a path with no singleton `[0]` segment.
+                    //
+                    // ⚠️ The class-method arm must stay FIRST: `class_lower` sets
+                    // `block_scope_root = Some("")` alongside `cur_class_method`, so
+                    // keying on the root instead would undo §4.5.441.
+                    instance: match &self.cur_class_method {
+                        Some(m) => format!(".{m}"),
+                        None => {
                             let s = self.scope_chain_abs();
                             s.strip_prefix('.').unwrap_or(&s).to_string()
                         }
-                        (None, None) => self.cur_prefix.clone(),
                     },
                 },
             );
