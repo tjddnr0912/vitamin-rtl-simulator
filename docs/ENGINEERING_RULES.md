@@ -233,6 +233,53 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ A resolver-first hook inherits the CALLER's scope problem, not the resolver's (2026-09-07 · §4.5.443)
+
+Giving a shared folder's select arms the "ask the name resolver first" probe its sibling arm already
+had is additive on paper — every resolver declined a select before. It is not additive on SCOPE: the
+new arm answers through `lookup_scoped` / `param_sel_range`, which walk MODULE scope, and the caller
+that owns an interpreter ENVIRONMENT (a const-function's formals and locals) had been applying its
+shadow rule in its OWN `Ident` arm, which the select now bypasses. A function formal shadowing a
+non-zero-LSB module parameter folded the module parameter where PRE, both oracles and vita's own
+runtime call all answered the formal — correct → silent-wrong, found by the differential lens.
+**How to apply:** when you add a probe that lets a resolver answer a COMPOSITE node, ask which
+scope rule the caller was applying to that node's LEAVES and re-apply it at the hook, keyed on the
+node's root (peel parentheses and element selects); a fall-through to a second resolver with an empty
+environment asks the same wrong question twice, so the decline must come before both.
+
+### ⭐ A field added to a shared carrier is a census of its READERS, and every one declines positively (2026-09-07 · §4.5.445)
+
+`TypeInfo.unpacked` let a typedef's unpacked dims reach the declaration. The two carries were the easy
+half; the slice was the other seventeen readers, each of which had no slot for the dims and would have
+bound the ELEMENT type in silence — a numeric cast, `$bits` of the bare type name, an enum base, a
+packed-struct member, a subroutine formal, a non-ANSI port, a parameter, a function return type, a
+`for`-init counter, three `parameter type` desugar sites. **How to apply:** grep every read of the
+carrier type (`info.` is enough) and give each site an explicit `!field.is_empty()` decline with the
+reason named; the empty default makes each one a literal-false short-circuit, so the whole set is
+mechanically byte-identical for the existing corpus — which is what lets the census be exhaustive
+instead of selective. Then measure the declines: four of them turned out to be refused by both oracles
+too, which is the difference between a gap and a correct refusal.
+
+### ⭐ A slice that edits ONE arm of a match leaves its siblings unread (2026-09-07 · §4.5.444)
+
+`record_stmt_loc`'s `instance:` match got its class-method arm fixed one slice earlier; the
+`(None, None)` arm beside it still spelled the raw storage prefix, so a `$error` in a named block said
+`[in top]` while the `%m` of the next statement said `top.blk` — vita contradicting itself two lines
+apart, in a match a reviewer had just had open. **How to apply:** when a fix lands in one arm of a
+match on scope/kind, read every other arm in the same sitting and ask whether the fixed arm's REASON
+applies there; and when two strings are built from the same state for the same statement, make them
+call one function — the second formula is where the drift lives.
+
+### ⭐ A deliberate-loud pin has an expiry, and a fail-fast test hides the pins behind it (2026-09-07 · §4.5.443)
+
+Twelve `loud(...)` pins recorded "an ascending or non-zero-LSB element in the wide domain declines on
+purpose", with the reason in the file header. When the fold learned the declared range all twelve
+became values — and each one matched verilator exactly, so they were loud→CORRECT, not regressions.
+**How to apply:** a failing loud pin is a claim to re-measure against the oracle, never a regression on
+sight (LOOPROMPT §5), and the file's prose reason has to move with it. And convert them ALL before
+re-running: a `#[test]` fn asserting many cells stops at the first, so the second population
+(`*_repl`) stayed invisible until the first (`*_cat`) was converted — read the ladder after every rung.
+
 ### ⭐ A folder is written for ONE consumer's rule — an index is a value, a width is a bound (2026-09-06 · §4.5.436)
 
 The copy alias folded an array-word INDEX with the width-tree folder, which saturates (a `[msb:lsb]`

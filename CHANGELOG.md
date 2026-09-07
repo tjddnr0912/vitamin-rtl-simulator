@@ -11,6 +11,23 @@ changed for a user of the simulator.
 
 ### Added
 
+- **Unpacked-array typedefs** (IEEE §6.18): `typedef logic [7:0] a_t [0:3];` is accepted and its
+  dimensions reach the declaration — as a module variable, an ANSI module port (input or output), a
+  package or `$unit`-scope type, a block-local or generate-scope declaration, a declaration
+  initializer `= '{…}`, a chained alias `typedef a_t b_t;`, and with dynamic (`[]`), queue (`[$]`) or
+  associative (`[string]`) dimensions. Previously the `[` after the typedef name was a parse error.
+  Still rejected, each with its reason named: the type as a function return type, a subroutine formal,
+  a non-ANSI port, a `parameter`, a `parameter type`, an enum base, a packed-struct member, a numeric
+  cast `a_t'(e)`, `$bits(a_t)` of the bare type name, and dimensions written on BOTH the typedef and
+  the declarator (the two reference tools disagree about the resulting dimension order).
+- **A select of a parameter whose declared range does not start at zero folds in a concatenation**:
+  `localparam logic [11:4] A = 8'h3C; localparam L = {A[7:4], A[7:4]};` is `cc`, not `33` — the
+  select is read against the DECLARED range, as it already was outside a concatenation. Ascending
+  declarations (`[0:7]`, `[4:11]`), the indexed spellings (`[7 -: 4]`, `[4 +: 4]`), replication
+  counts, range bounds and an element of a constant array parameter (`A[1][7:4]`) all follow. A
+  select reaching outside the declared range now reports `x` for those bits (it used to read whatever
+  sat at that position in the stored value).
+
 - **Package and module functions in constant contexts** (IEEE §13.4.3): a function
   declared in a package — imported with `import p::*`, `import p::f`, or called as `p::f(…)` —
   or in the module itself now folds in a header parameter default (`#(parameter int X = dbl(W))`),
@@ -59,6 +76,13 @@ changed for a user of the simulator.
   reference tools refuse that).
 
 ### Fixed
+
+- **A runtime diagnostic's `[in …]` names the block it is in.** `initial begin : blk $error("boom");
+  end` said `[in top]` and now says `[in top.blk]` — the same string the statement's `%m` prints, and
+  the scope both reference tools report. Nested blocks, fork arms, `always` blocks and generate loops
+  (`top.gl[0].ib`) follow; a singleton generate scope no longer shows the internal `[0]`
+  (`[in top.g]`). The array-index (`E-RUN-RANGE`), `$readmem*` and `unique`/`priority` reports share
+  that record and move with it.
 
 - A procedural read of a whole-net copy (`assign c = v;`) after the reader's own blocking write
   of `v` now reads the fresh value when the read or the write is inside an `automatic` task or

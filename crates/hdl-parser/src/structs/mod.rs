@@ -38,9 +38,12 @@ impl Parser<'_, '_> {
         }
         if let Some(info) = self.peek_typedef_name() {
             let nm = self.type_name_key();
-            if info.class_name.is_some() || !info.packed.is_empty() {
+            // §3 ⑤: an UNPACKED-array member is illegal in a PACKED struct and
+            // this flat layout table cannot hold one either — the dims would be
+            // dropped and the member would silently be one element.
+            if info.class_name.is_some() || !info.packed.is_empty() || !info.unpacked.is_empty() {
                 self.error(
-                    "a simple type for a struct/union member (a class / multi-dim packed member is unsupported in v1)",
+                    "a simple type for a struct/union member (a class / multi-dim packed / unpacked-array member is unsupported in v1)",
                 );
                 return None;
             }

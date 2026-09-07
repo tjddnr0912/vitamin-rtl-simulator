@@ -14,6 +14,9 @@ impl Parser<'_, '_> {
         let info = self.typedefs.get(name)?;
         if info.class_name.is_some()
             || !info.packed.is_empty()
+            // §3 ⑤: there is no cast to an UNPACKED array, and the size+sign
+            // desugar would silently cast to the ELEMENT.
+            || !info.unpacked.is_empty()
             || !matches!(info.kind, NetVarKind::Logic | NetVarKind::Reg)
         {
             return None;
@@ -256,6 +259,9 @@ impl Parser<'_, '_> {
                 || info.class_name.is_some()
                 || info.signed
                 || !info.packed.is_empty()
+                // §3 ⑤: both oracles REFUSE an unpacked array as an enum base
+                // (§6.19 wants an integer atom or vector type).
+                || !info.unpacked.is_empty()
                 || info.range.is_none()
             {
                 self.error(
@@ -303,6 +309,7 @@ impl Parser<'_, '_> {
                 range: None,
                 packed: Vec::new(),
                 class_name: None,
+                unpacked: Vec::new(),
             }
         } else {
             match &base {
@@ -313,6 +320,7 @@ impl Parser<'_, '_> {
                     range: Some(r.clone()),
                     packed: Vec::new(),
                     class_name: None,
+                    unpacked: Vec::new(),
                 },
                 // Base-less `enum {…}` (and any illegal non-integral base that slipped through):
                 // the default enum base is `int` = 32-bit signed 2-state (§4.5.154 — was the
@@ -326,6 +334,7 @@ impl Parser<'_, '_> {
                     range: None,
                     packed: Vec::new(),
                     class_name: None,
+                    unpacked: Vec::new(),
                 },
             }
         };
@@ -444,6 +453,19 @@ impl Parser<'_, '_> {
         let packed = self.opt_packed_dims();
         self.reject_packed_dims_on_nonvector(kind, range.is_some() || !packed.is_empty());
         let tname = self.ident()?;
+        // §3 ⑤: UNPACKED dims after the NAME — `typedef logic [7:0] a_t [0:3];`.
+        // Both oracles accept it and vita's own machinery already runs the shape
+        // (`logic [7:0] y [0:3];` is correct today); what was missing is a carrier
+        // from here to the declaration, so the `[` raised E2002 at the typedef.
+        // Parsed with `parse_decl_name_list`'s own loop, because a declarator's
+        // dims and a typedef's are the same grammar and must not drift.
+        let mut unpacked = Vec::new();
+        while self.at_dim_start() {
+            match self.parse_dim() {
+                Some(d) => unpacked.push(d),
+                None => break,
+            }
+        }
         self.expect(TokenKind::Semi, "';'");
         self.typedefs.insert(
             tname.name.clone(),
@@ -453,6 +475,7 @@ impl Parser<'_, '_> {
                 range: range.clone(),
                 packed: packed.clone(),
                 class_name: None,
+                unpacked,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -652,6 +675,7 @@ impl Parser<'_, '_> {
                 range: Some(Self::dec_range(total.saturating_sub(1))),
                 packed: Vec::new(),
                 class_name: None,
+                unpacked: Vec::new(),
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -734,6 +758,7 @@ impl Parser<'_, '_> {
                 }),
                 packed: Vec::new(),
                 class_name: None,
+                unpacked: Vec::new(),
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -1003,6 +1028,7 @@ impl Parser<'_, '_> {
                 range: Some(Self::dec_range(total.saturating_sub(1))),
                 packed: Vec::new(),
                 class_name: None,
+                unpacked: Vec::new(),
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -1025,10 +1051,22 @@ impl Parser<'_, '_> {
     /// vector typedef port stays honest-loud (the AnsiPort/PortDecl shape carries
     /// no class binding / extra packed dims). Used by both the ANSI
     /// (`parse_ansi_port`) and non-ANSI (`parse_port_decl`) port parsers.
+    ///
+    /// §3 ⑤: the SIXTH slot is the typedef's own UNPACKED dims
+    /// (`typedef logic [7:0] a_t [0:3]; module m(input a_t i, …)`), which the ANSI
+    /// caller lands on the port's `unpacked` list — the field it already fills
+    /// from dims written after the name. Empty for every other typedef.
     #[allow(clippy::type_complexity)]
     pub(crate) fn try_port_typedef(
         &mut self,
-    ) -> Option<(NetVarKind, bool, Option<Range>, Option<String>, Vec<Range>)> {
+    ) -> Option<(
+        NetVarKind,
+        bool,
+        Option<Range>,
+        Option<String>,
+        Vec<Range>,
+        Vec<Dim>,
+    )> {
         let info = self.peek_typedef_name()?;
         let q = self.scope_qualifier_len(); // 0 (bare) or 2 (`pkg::`)
                                             // `<type> <name>`, or (§4.5.425) `<type> [dims] <name>` — a packed array of
@@ -1057,7 +1095,14 @@ impl Parser<'_, '_> {
                      // the typedef's own range.
         let extra = self.opt_packed_dims();
         let struct_name = if is_struct { Some(nm) } else { None };
-        Some((info.kind, info.signed, info.range, struct_name, extra))
+        Some((
+            info.kind,
+            info.signed,
+            info.range,
+            struct_name,
+            extra,
+            info.unpacked,
+        ))
     }
 
     /// One ANSI tf-port: `[input|output|inout] [net_or_var] [signed] [range] name`.
@@ -1140,9 +1185,13 @@ impl Parser<'_, '_> {
         // returns its inner dims in the sixth slot; the caller flattens the formal and
         // binds the dims for the body rewrite, as for the inline spelling.
         let is_struct = self.struct_layouts.contains_key(&nm);
-        if info.class_name.is_some() {
+        // §3 ⑤: an UNPACKED-array typedef. The tuple carries a range and packed
+        // dims and has no slot for unpacked ones, so the formal would silently be
+        // ONE element — honest-loud instead, with the reason named. (The explicit
+        // spelling `input logic [7:0] v [0:3]` is a separate, supported channel.)
+        if info.class_name.is_some() || !info.unpacked.is_empty() {
             self.error(
-                "a class typedef type for a tf-port (a vector / enum / packed-struct / multi-dim packed typedef port is supported)",
+                "a class typedef type for a tf-port (a vector / enum / packed-struct / multi-dim packed typedef port is supported; an unpacked-array typedef formal is unsupported in v1 — write the dimensions on the formal)",
             );
         }
         self.eat_scope_qualifier();
@@ -1178,10 +1227,13 @@ impl Parser<'_, '_> {
                      // cascade). The type name is already consumed, so returning None
                      // lets the plain-assign fallback parse the `name = init`; elaborate's
                      // single follow-on is then the (correct) undeclared-loop-var error.
-        if info.class_name.is_some() {
+                     // §3 ⑤: an unpacked-array typedef is not a loop counter either, and
+                     // `build_for_typed_init` has no dim slot — it would silently declare one
+                     // element.
+        if info.class_name.is_some() || !info.unpacked.is_empty() {
             // Phrased to fit the parser's "expected <X>, found <token>" template
             // (the `found` token names the offending class).
-            self.error("a non-class type for the for-loop variable (a class handle has no loop arithmetic)");
+            self.error("a non-class scalar type for the for-loop variable (a class handle has no loop arithmetic; an unpacked-array typedef is not a counter)");
             return None;
         }
         self.build_for_typed_init(start, info.kind, info.signed, info.range, info.packed)

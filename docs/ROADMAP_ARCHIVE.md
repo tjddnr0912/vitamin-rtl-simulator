@@ -13,6 +13,9 @@
 
 
 **§4.5.220–280**
+- `4.5.445` **An unpacked-array typedef `typedef logic [7:0] a_t [0:3];`** (2026-09-07 · §3 ⑤ · 39 cells · batch with 443/444)
+- `4.5.444` **The `[in …]` context of a runtime diagnostic is the statement's `%m` string** (2026-09-07 · §2 🆕 N residue · 18 cells · batch with 443/445)
+- `4.5.443` **A select of a parameter whose declared range does not start at 0 folds in the wide domain** (2026-09-07 · §2 🆕 L ⓩ · 89 cells · batch with 444/445)
 - `4.5.442` **A sign-mismatched copy and a full-range part-select copy read through with the copy's own sign** (2026-09-06 · §2 🆕 I ⓖ/ⓕ · 14 cells · batch with 440/441)
 - `4.5.441` **A class method's `%m` and diagnostic context name the class's INSTANCE, not the calling generate scope or frame** (2026-09-06 · §2 🆕 N residue · format 30 → 31 · 24 cells · batch with 440/442)
 - `4.5.440` **A package or module function folds in a header default, a `localparam` and a range bound; a non-folding call in a bound is loud** (2026-09-06 · §2 🆕 L ⓦ / §3 · 12 cells · batch with 441/442)
@@ -459,6 +462,152 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.445 — An unpacked-array typedef `typedef logic [7:0] a_t [0:3];` (§3 ⑤) (2026-09-07 · format 31 · batch-reviewed with §4.5.443/444) ✅
+
+**Bug (loud, both oracles accept).** vita refused the construct at the TYPEDEF, never at the use:
+`error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found '['` at the `[` after the typedef
+NAME, in all 13 measured positions. Both oracles run it (`iverilog -g2012`, `verilator --binary
+--timing`), and so does vita's own machinery — every one of the eleven control twins (the same shape
+written `logic [7:0] x [0:3]`) was already correct at HEAD, as a module variable, a module port, a
+function formal, a function output formal, 2-D, size-form, package, block-local and decl-init.
+
+**Mechanism.** `hdl_parser::TypeInfo` (the parse-time typedef registry's value) had no carrier for the
+typedef's unpacked dims, so `parse_typedef_alias` could not accept them and `parse_typed_decl` had
+nothing to land. The fix is one field plus two carries: `TypeInfo.unpacked: Vec<Dim>`, filled by the
+SAME `while at_dim_start { parse_dim }` loop `parse_decl_name_list` uses (so a declarator's dims and a
+typedef's cannot drift); `parse_typed_decl` copies it onto every declarator; `try_port_typedef` returns
+it in a sixth tuple slot and the ANSI port path lands it where a port's own dims go.
+
+⚠️ **Deliberately NOT on `hdl_ast::TypedefKind::Alias`** — that node is a frozen SchemaHash type and a
+field there flips the golden root hash (format 31 → 32 + every `.velab` invalidated). The dims only have
+to survive from the typedef to the declaration, which is one parse, so the parser-internal map is the
+whole carrier. format_version UNCHANGED.
+
+**Byte-identity.** `unpacked` is `Vec::new()` for every typedef that exists today — nothing but the new
+loop can make it non-empty — so the prepend is a no-op on an empty vector and every new guard is a
+literal-false short-circuit (the "shared machinery: semantics must be opt-in" shape).
+
+**Census: 39 cells.** 9 LOUD → CORRECT in the filed set (module variable, package + wildcard import,
+`$unit`, ANSI port, 2-D, size-form, module-local typedef SHADOWING an imported one, block-local,
+decl-init) and 9 more in the review's attack set (multiple declarators, generate-scope typedef,
+dynamic `[]`, queue `[$]`, associative `[string]`, an interface member, a parameterised bound `[0:N]`,
+an OUTPUT port, a body-local typedef). 0 regressions; the explicit twin is byte-identical.
+
+**The soundness lens's census is the other half of the slice.** Every `TypeInfo` consumer was walked to
+the end and each one that has no slot for unpacked dims now DECLINES on `!info.unpacked.is_empty()`
+instead of silently binding the ELEMENT type: a numeric cast `a_t'(e)` (`simple_typedef_cast`),
+`$bits(a_t)` of the bare type name (`bits_of_type_name`), an enum BASE, a packed struct/union MEMBER, a
+tf-port FORMAL, a NON-ANSI port, a `parameter` of that type (`typedef_param_shape`), a function RETURN
+type, a `for`-init counter, and the three `parameter type` desugar sites. The first four are refused by
+both oracles too; the rest are honest-loud with the reason named, and are filed as §3 ⑤ⓕ.
+
+**Kept loud on purpose:** dims on BOTH the typedef and the declarator (`a_t y [0:1]`) — a live oracle
+SPLIT on dimension ORDER (iverilog `$size(y,1)=4 $size(y,2)=2`, verilator `2` / `4`), and iverilog
+contradicts its own answer for the identical explicit type, so there is nothing to build on; the
+chained alias `typedef base_t a_t [4]` keeps its own purpose-written refusal (type composition), while
+`typedef a_t b_t` correctly INHERITS the dims (both oracles).
+
+**Tests:** `cli/tests/unpacked_array_typedef.rs` (+7).
+
+#### 4.5.444 — The `[in …]` context of a runtime diagnostic is the statement's `%m` string (§2 🆕 N residue) (2026-09-07 · format 31 · batch-reviewed with §4.5.443/445) ✅
+
+**Bug (silent-wrong, 2-oracle).** `initial begin : blk $error("boom"); end` reported `[in top]` where
+iverilog reports `Scope: top.blk` and verilator `Assertion failed in top.blk`; a statement under a
+SINGLETON generate scope kept the synthetic `[0]` vita stores (`[in top.g[0]]` for both oracles'
+`top.g`). The proof that it was ONE defect and not a family is a single vita line: the same block
+printed `[in top]` and `m=top.blk` two statements apart — the marker and `%m` were built by different
+formulas from the SAME elaborator state, three lines apart in the same lowering.
+
+**Mechanism.** `driver.rs::record_stmt_loc`'s `instance:` match had a `(None, None)` arm spelled
+`self.cur_prefix.clone()` — the raw storage prefix, which neither appends `block_scope` nor passes
+through `display_of`. §4.5.441 opened that same match and fixed only its class-method arm, so this was
+a SIBLING arm, not the funnel that slice repaired. The fix collapses the two `None` arms onto the
+formula the subroutine path already used, `scope_chain_abs()`, which is `%m`'s own function.
+
+**Byte-identity.** With `block_scope_root == None` and `block_scope` empty — every process-path
+statement outside a named block — `scope_chain_abs()` returns `.{display_prefix()}`, and stripping the
+dot yields `display_of(&cur_prefix)`, which is the identity on any path with no singleton-generate
+`[0]` segment: literally today's value. The class-method arm stays matched FIRST (`class_lower` sets
+`block_scope_root = Some("")` beside `cur_class_method`, so keying on the root would have undone
+§4.5.441).
+
+**Census: 18 cells, all matching iverilog's `Scope:` verbatim and all equal to vita's own `%m`.** Named
+block, nested named blocks, unnamed block (control, unchanged), singleton generate, generate LOOP (the
+index is KEPT — `display_of` strips positively, by `gen_singleton_labels` membership), a nested
+`generate if` + `for` + named block (`top.go.gi[0].nb`, PRE `top.go[0].gi[0]`), both fork arms, an
+`always` block, `$info`/`$warning`/`$fatal`, and — because `stmt_locs` is SHARED — the out-of-range
+array-word report (E4002/W4029), `$readmem*` (W4023) and the `unique case` violation (W4031), each of
+which now names the block instead of the module. A subroutine body is untouched (`top.f`, `top.t`,
+`top.t.tb`). An immediate labelled assert's action block now says `top.b1.ap`, which is verilator's
+answer and the side vita's `%m` already stood on (iverilog drops the label — a live split).
+
+**No format bump.** The `stmt_locs` wire SHAPE is unchanged (still a `String`); what changed is the
+VALUE elaborate computes, which is what an artifact records. Staged `vcmp → velab → vrun` verified
+byte-identical to the one-shot run on the slice's designs.
+
+**Narrowed out:** a labelled CONCURRENT `assert property` action block still drops the label — 1-oracle
+(iverilog refuses concurrent assertions) and the label dies in the PARSER, because
+`hdl_ast::Stmt::ConcurrentAssert` has no `label` field and that is a frozen SchemaHash type; a task
+declared in a generate block is a missing FEATURE behind `generate.rs:801`, whose predicate does not
+mention block naming at all, and verilator is disqualified as its oracle by its own neighbouring answer
+(`top.g.blk` for a named block in `g`, `top.g.g.t` for a task in the same `g`).
+
+**Tests:** `cli/tests/diag_context_named_block.rs` (+4).
+
+#### 4.5.443 — A select of a parameter whose declared range does not start at 0 folds in the wide domain (§2 🆕 L ⓩ) (2026-09-07 · format 31 · batch-reviewed with §4.5.444/445) ✅
+
+**Bug (silent-wrong, 2-oracle).** `localparam logic [11:4] A1 = 8'h3C; localparam L = {A1[7:4],
+A1[7:4]};` printed `33` at exit 0 where both oracles print `cc`. The carry-free bit folder reads a
+select POSITIONALLY (`bp_get(&b, lsb + i)`) against the value stored as `[w-1:0]`, so `A1[7:4]` took
+the value's top nibble instead of the declared bits 7..4. The same text OUTSIDE a concatenation was
+already correct — the i64 lane answers it through `const_param_select`, which normalises by the
+declared range — so vita disagreed with itself two characters apart. A select naming a bit at or above
+the stored width (`A1[11:8]`) was instead honest-LOUD, which pins the mechanism exactly.
+
+**Mechanism.** The LSB rule belongs on the SELECT, never on the NAME: shifting the bits a name resolves
+to would "fix" `{A1[7:4], A1[7:4]}` and break `{A1, A1}`, which is `3c3c` in all three tools. So the
+whole select is answered by a new wide twin of the i64 lane —
+`const_param_select_shifted_bits`, built on the SAME `const_select_resolved` /
+`param_sel_range` / `select_base_at_declared` chain, so the direction rule stays written once — and
+`fold_bits_at`'s `PartSelect` / `IndexedPart` arms gain the resolver-first probe its `BitSelect` arm
+already had. It declines a `[w-1:0]` descending base on purpose (a POSITIVE record of the layouts the
+bit domain cannot index itself), which is what keeps every currently-correct cell on its existing path.
+
+**Out-of-range is answered, not declined.** `A1[3:0]` on a `[11:4]` base names four bits the object does
+not have; the structural arm read four bits that exist and printed `c` where both oracles print `x`. The
+new arm marks exactly those bits UNKNOWN, per bit (a partial overhang keeps the bits that do exist), so
+the untyped integer localparam that holds it is honest-loud instead. `const_select_resolved` was split
+into a `_raw` form plus the range check so the two lanes share one §11.5.1 rule.
+
+**Census: 65 filed cells + 12 array-element cells + 12 review-attack cells.** 12 WRONG → CORRECT,
+20 LOUD → CORRECT, **0 regressions**, 33 CORRECT unchanged. The loud→value column is scored separately
+and every cell in it was verified against both oracles: the upper half and the full declared range
+(`A1[11:8]`, `A1[11:4]`), ASCENDING declarations (`[0:7]`, `[4:11]`), a replication COUNT, a range
+bound, a 128-bit context, and the twelve `array_elem_const_*` cells (`A[1][7:4]` — an element of a
+constant array parameter with a non-zero-LSB or ascending ELEMENT range, in a concatenation or a
+replication count) whose deliberate-loud pins were re-measured against verilator and converted. The
+override actual's stacked second defect went with it (`$bits` 32 → both oracles' 8).
+
+**Review round 1, BLOCKING (lens A, differential).** A function FORMAL shadowing a non-zero-LSB module
+parameter — `localparam logic [11:4] A = 8'h3C;` beside `function f(input logic [7:0] A); f = {A[7:4],
+A[7:4]};` — folded the MODULE parameter (`cc`) where PRE, both oracles and vita's own RUNTIME call all
+answer `ff`: correct → silent-wrong. Every resolver under the new arm walks MODULE scope
+(`lookup_scoped`, `param_sel_range`), and `wide_name_bits` asks again with an empty environment, so the
+shadow rule has to be applied to the SELECT'S ROOT before either runs. Fix: `select_root_name` peels
+parentheses and element `BitSelect`s to the bare root, and the const-function resolver declines the
+whole select when that root is bound in its `env`/`envw`. Round 2 re-measured the mutated repro across
+a block-local, a loop variable, an indexed part-select, a bit-select, parentheses and a hierarchical
+base: PRE == POST on all six. It also closed a pre-existing self-contradiction (a formal shadowing an
+array PARAMETER: the const lane read the module array's element while the runtime read the formal).
+
+**Recorded, not fixed:** a NEGATIVE declared LSB (`logic [3:-4]`) is still read positionally — PRE ==
+POST, `param_range`'s lo is a `u32` (§2 🆕 L ⓩ residue); the runtime `ROTA[1]` neighbour filed with this
+row is a SECOND, opposite root (const twin and write twin both correct, runtime read wrong) and is now
+§2 🆕 O.
+
+**Tests:** `cli/tests/param_declared_lsb_select_fold.rs` (+10); twelve `array_elem_const_*1` pins moved
+from `loud(...)` to their measured verilator values.
 
 #### 4.5.442 — A sign-mismatched copy and a full-range part-select copy read through with the copy's own sign (§2 🆕 I ⓖ/ⓕ) (2026-09-06 · format 31 · batch-reviewed with §4.5.440/441 — differential (lens A, 30 designs × 3 backends, PRE/POST frozen release binaries, both oracles verbatim) + soundness (lens B, producer/consumer census: `copy_alias` has one caller, `read_alias` three consumers — `eval_core` / `wprog` / `native_eval::compile` — and the two compiled declines are per-expression `Option` lowerings that hand the node to `EvalCtx`; 24 cells identical on `native` / `interp` / `vm`; examples + 83 probe designs: zero VCD deltas PRE vs POST): slice CLEAN, 0 BLOCKING; pre-existing recorded: an array-word full-range select `assign c = m[1][7:0]` stays `x` (both oracles read the word), a sign-extending copy into a `logic [15:0]` destination stays `xxxx` (both oracles `ffa5`; the `wire` spelling is a split), `v[7 -: 8]` is a split (iverilog `0` / verilator `4294967295`)) ✅
 

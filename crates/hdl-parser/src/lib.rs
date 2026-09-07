@@ -215,6 +215,17 @@ struct TypeInfo {
     packed: Vec<Range>,
     /// N7: for a `NetVarKind::ClassHandle` alias, the class name; else `None`.
     class_name: Option<String>,
+    /// §3 ⑤: the UNPACKED dimensions of `typedef logic [7:0] a_t [0:3];`, in
+    /// declaration order. Empty for every other typedef — which is why every
+    /// consumer that cannot compose them can decline on `!unpacked.is_empty()`
+    /// and stay byte-identical for the whole existing corpus.
+    ///
+    /// ⚠️ Deliberately NOT on `hdl_ast::TypedefKind::Alias`. That node is a frozen
+    /// SchemaHash type: a field there flips the golden root hash and invalidates
+    /// every `.velab`. These dims only have to survive from the typedef to the
+    /// declaration, which is one parse — this parser-internal map is the whole
+    /// carrier, and the declaration it reaches already has `DeclName.unpacked`.
+    unpacked: Vec<Dim>,
 }
 
 /// A parse-time constant (§3 ⑤ ⓓ table): its value, and the WIDTH and sign of the

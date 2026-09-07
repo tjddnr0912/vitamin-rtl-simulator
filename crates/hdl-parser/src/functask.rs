@@ -169,8 +169,12 @@ impl Parser<'_, '_> {
                              // (`range`); a multi-dim packed typedef (`typedef logic [3:0][7:0]
                              // m_t`) cannot be represented, so loud-reject rather than silently
                              // return only the first dimension's width (correct-or-loud).
-                if !info.packed.is_empty() {
-                    self.error("a multi-dimension packed type as a function return type");
+                             // §3 ⑤: an UNPACKED-array typedef return type has no field to ride
+                             // either — the return would silently be ONE element.
+                if !info.packed.is_empty() || !info.unpacked.is_empty() {
+                    self.error(
+                        "a multi-dimension packed or unpacked-array type as a function return type",
+                    );
                 }
                 signed = info.signed;
                 range = info.range.clone();

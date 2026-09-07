@@ -15,10 +15,10 @@ Top-level snapshot of what stands between HEAD and the two goals. Rewritten whol
 
 | # | track | item |
 |---|---|---|
-| 1 | §3 loud → correct-support | `typedef T a_t[N]` (unpacked-array typedef; both oracles) · ⑤ ⓓ/ⓔ residues · CU-scope items in a class body · class `#(type T)` header · ibex DPI export |
-| 2 | §2 silent-wrong | 🆕 L ⓩ: `{A1[7:4], A1[7:4]}` of a `[11:4]`-declared localparam folds without the declared LSB (vita `33`, oracles `cc`) |
-| 3 | §2 silent-wrong | 🆕 N residue: a `$error` inside a named block reports `[in top]` (iverilog `top.blk`); `%m` in an assertion action block omits the label |
-| next | — | mixed-caller callee, `m #(8)` / `defparam u.T$w`, VCD `$scope` spelling, `genblk<N>` collision (split), 🆕 L ⓦ residue (package constants outside the i64 interpreter) |
+| 1 | §3 loud → correct-support | ⑤ⓕ unpacked-array typedef residue (a subroutine formal, a non-ANSI port, `$bits(a_t)`) · ⑤ ⓓ/ⓔ residues · CU-scope items in a class body · class `#(type T)` header · ibex DPI export |
+| 2 | §2 silent-wrong | 🆕 O: a runtime read of an outer array shadowed by a generate-scope scalar `localparam` reads the outer array's element (`ROTA[1]` = 20, both oracles 1) |
+| 3 | §2 silent-wrong | 🆕 L ⓩ residue: a NEGATIVE declared LSB (`logic [3:-4] A; {A[3:0], A[3:0]}` = `cc`, both oracles `33`) — `param_range` stores an unsigned lo |
+| next | — | mixed-caller callee, `m #(8)` / `defparam u.T$w`, VCD `$scope` spelling, `genblk<N>` collision (split), 🆕 L ⓦ residue (package constants outside the i64 interpreter), a labelled concurrent `assert property` action block's `%m` |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.
 

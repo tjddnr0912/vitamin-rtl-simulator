@@ -143,7 +143,16 @@ impl Parser<'_, '_> {
         // alias returns None → the site stays a normal expr (loud in elaborate) rather
         // than folding a wrong width. (`$bits(real_var)` uses the elaborate path, which
         // sizes a real variable correctly — this only gates a bare TYPE name.)
-        if info.class_name.is_some() || !Self::member_kind_is_integral(info.kind) {
+        // §3 ⑤: `$bits(a_t)` of an UNPACKED-array typedef is the product of the
+        // element width and every unpacked dim (both oracles say 32 for
+        // `typedef logic [7:0] a_t [0:3]`), which this parse-time table does not
+        // compute — the element width alone would be silently wrong, so decline
+        // and let the site stay loud. (`$bits(x)` of a VARIABLE of that type is
+        // answered correctly by elaborate, which knows the whole shape.)
+        if info.class_name.is_some()
+            || !info.unpacked.is_empty()
+            || !Self::member_kind_is_integral(info.kind)
+        {
             return None;
         }
         let mut w = self.member_width_kind(info.kind, &info.range)?;

@@ -158,6 +158,7 @@ impl Parser<'_, '_> {
                     }),
                     packed: Vec::new(),
                     class_name: None,
+                    unpacked: Vec::new(),
                 },
             );
             self.type_params.insert(
@@ -329,6 +330,8 @@ impl Parser<'_, '_> {
                 || self.union_type_names.contains(&key)
                 || info.class_name.is_some()
                 || !info.packed.is_empty()
+                // §3 ⑤: the `T$w`/`T$s` value-parameter desugar has no dim slot.
+                || !info.unpacked.is_empty()
             {
                 return None;
             }
@@ -434,6 +437,7 @@ impl Parser<'_, '_> {
                 info.kind,
                 NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit
             ) || !info.packed.is_empty()
+                || !info.unpacked.is_empty() // §3 ⑤: no dim slot in the desugar
                 || self.struct_layouts.contains_key(&key)
                 || self.sym_struct_layouts.contains_key(&key)
             {
@@ -461,6 +465,7 @@ impl Parser<'_, '_> {
         let info = self.typedefs.get(key)?;
         if !matches!(info.kind, NetVarKind::Logic | NetVarKind::Reg)
             || !info.packed.is_empty()
+            || !info.unpacked.is_empty() // §3 ⑤: no dim slot in the desugar
             || self.struct_layouts.contains_key(key)
             || self.sym_struct_layouts.contains_key(key)
         {

@@ -224,18 +224,23 @@ impl Parser<'_, '_> {
         // struct); with two (`cfg_t [1:0][2:0] r`) `r[i]` is a sub-array and both
         // oracles refuse `r[i].field`, so the name joins no member set (loud).
         let mut typedef_one_dim = false;
-        let (mut signed, mut range, mut packed) = if let Some((k, s, r, sn, extra)) = typedef_ty {
-            net_or_var = Some(k);
-            port_struct_name = sn;
-            typedef_one_dim = extra.len() == 1;
-            self.typedef_dims_layout(s, r, extra)
-        } else {
-            (
-                self.signed_eff(net_or_var),
-                self.opt_range(),
-                self.opt_packed_dims(), // additional packed dims `[3:0][7:0]`
-            )
-        };
+        // §3 ⑤: an unpacked-array typedef's own dims, landed on the port below
+        // (after its NAME, where a port's dims are read).
+        let mut typedef_unpacked: Vec<Dim> = Vec::new();
+        let (mut signed, mut range, mut packed) =
+            if let Some((k, s, r, sn, extra, unp)) = typedef_ty {
+                net_or_var = Some(k);
+                port_struct_name = sn;
+                typedef_one_dim = extra.len() == 1;
+                typedef_unpacked = unp;
+                self.typedef_dims_layout(s, r, extra)
+            } else {
+                (
+                    self.signed_eff(net_or_var),
+                    self.opt_range(),
+                    self.opt_packed_dims(), // additional packed dims `[3:0][7:0]`
+                )
+            };
         // §4.5.156 (§3 全 site): reject an inline packed range/dim on a non-vector port
         // kind (`input byte [7:0] p`). A typedef-typed port has `net_or_var` set to the
         // typedef's resolved kind with its OWN range (an atom typedef has range=None →
@@ -285,6 +290,19 @@ impl Parser<'_, '_> {
             match self.parse_dim() {
                 Some(d) => unpacked.push(d),
                 None => break,
+            }
+        }
+        // §3 ⑤: the typedef's own unpacked dims. Same rule as `parse_typed_decl` —
+        // refused when the port ALSO writes dims, because the resulting dimension
+        // ORDER is a live oracle split.
+        if !typedef_unpacked.is_empty() {
+            if unpacked.is_empty() {
+                unpacked = typedef_unpacked;
+            } else {
+                self.error(
+                    "a port without its own unpacked dimensions (an unpacked-array typedef \
+                     combined with port dimensions is unsupported in v1)",
+                );
             }
         }
         if port_struct_name.is_some() {
@@ -342,13 +360,22 @@ impl Parser<'_, '_> {
             None
         };
         let mut port_struct_name: Option<String> = None;
-        let (signed, range) = if let Some((k, s, r, sn, extra)) = typedef_ty {
+        let (signed, range) = if let Some((k, s, r, sn, extra, unp)) = typedef_ty {
             net_or_var = Some(k);
             port_struct_name = sn;
             if !extra.is_empty() {
                 self.error(
                     "packed dimensions after a typedef name on a non-ANSI port are unsupported \
                      in v1 (write the port ANSI-style)",
+                );
+            }
+            // §3 ⑤: the non-ANSI port declaration is a second binder with its own
+            // dim handling; an unpacked-array typedef here stays honest-loud, with
+            // the reason named, rather than silently binding a SCALAR port.
+            if !unp.is_empty() {
+                self.error(
+                    "an unpacked-array typedef as a non-ANSI port type is unsupported in v1 \
+                     (write the port ANSI-style)",
                 );
             }
             (s, r)
@@ -546,6 +573,29 @@ impl Parser<'_, '_> {
             Vec::new()
         };
         let mut names = self.parse_decl_name_list()?;
+        // §3 ⑤: an UNPACKED-array typedef (`typedef logic [7:0] a_t [0:3]; a_t x;`)
+        // lands its dims on every declarator, which is exactly what the explicit
+        // spelling produces — the elaborate and engine machinery for it is
+        // complete, this is the carry it never had.
+        //
+        // ⚠️ REFUSED when the declarator brings dims of its own (`a_t y [0:1];`):
+        // the two tools disagree about the resulting dimension ORDER (iverilog
+        // `$size(y,1)=4 $size(y,2)=2`, verilator `2` and `4` — and iverilog
+        // contradicts its own answer for the identical explicit type), so there is
+        // no oracle to build on and the honest answer is the one vita gave before.
+        if !info.unpacked.is_empty() {
+            if names.iter().any(|n| !n.unpacked.is_empty()) {
+                self.error_at(
+                    start,
+                    "a declarator without its own unpacked dimensions (an unpacked-array \
+                     typedef combined with declarator dimensions is unsupported in v1)",
+                );
+                return None;
+            }
+            for n in &mut names {
+                n.unpacked = info.unpacked.clone();
+            }
+        }
         self.expect(TokenKind::Semi, "';'");
         for n in &names {
             self.unbind_struct_enum_name(&n.name.name);

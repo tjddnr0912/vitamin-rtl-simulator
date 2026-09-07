@@ -119,6 +119,7 @@ impl Parser<'_, '_> {
                 range: None,
                 packed: Vec::new(),
                 class_name: Some(n.clone()),
+                unpacked: Vec::new(),
             });
         }
     }

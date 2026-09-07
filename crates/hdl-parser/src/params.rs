@@ -396,6 +396,16 @@ impl Parser<'_, '_> {
                 "a non-class typedef on a parameter (a class-handle parameter is unsupported)",
             );
         }
+        // §3 ⑤: an UNPACKED-array typedef. The shape tuple below carries a range
+        // and packed dims and has no slot for unpacked ones, so every arm would
+        // bind a SCALAR parameter of the element type — decline instead, with the
+        // reason named. (An array parameter written explicitly is a separate,
+        // supported channel: `parameter logic [7:0] P [0:3]`.)
+        if !info.unpacked.is_empty() {
+            return Err(
+                "an integral, real or string typedef on a parameter (an unpacked-array typedef parameter is unsupported in v1; write the dimensions on the parameter)",
+            );
+        }
         let none = Vec::new();
         Ok(match info.kind {
             NetVarKind::Int => (ParamType::Integer, Some(NetVarKind::Int), None, None, none),
