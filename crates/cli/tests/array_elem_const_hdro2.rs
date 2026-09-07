@@ -4,8 +4,7 @@
 //! bit-select / indexed / concat / `$size`+`$high`+`$right` / range bound /
 //! generate-if / child override / untyped localparam / replication count / the
 //! runtime twin / whole-element untyped localparam). Loud cells are declines on
-//! purpose: a multi-packed element, an ascending or non-zero-LSB element in the
-//! wide (concat / replication) domain, a header struct-typed override pattern
+//! purpose: a multi-packed element, a header struct-typed override pattern
 //! (§4.5.413 residue), a scoped struct member (§2 🆕 L ⓗ), the runtime `$size` of
 //! a scalar parameter (pre-existing).
 //!

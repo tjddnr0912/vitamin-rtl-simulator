@@ -175,6 +175,127 @@ impl Elaborator<'_> {
         Some(((val >> shift) as i64) & mask)
     }
 
+    /// The WIDE-domain twin of [`Self::const_param_select_env`]: the bits a select
+    /// names, for a base whose DECLARED range does not start at 0.
+    ///
+    /// The carry-free bit folder (`fold_bits_at`) reads a select POSITIONALLY —
+    /// `bp_get(&b, lsb + i)` — which is the right rule for an expression's own bits
+    /// and the wrong one for a name whose declaration says `[11:4]`. It cannot be
+    /// repaired inside the folder: the folder resolves a NAME to bits and a width,
+    /// and a declared LSB is neither. So the SELECT is answered as a whole here,
+    /// through the same [`Self::param_sel_range`] + [`Self::select_base_at_declared`]
+    /// pair the i64 lane uses, and the folder asks before it reads structurally.
+    ///
+    /// ⚠️⚠️ The LSB rule belongs on the SELECT, never on the NAME. Shifting the bits
+    /// a name resolves to would "fix" `{A1[7:4], A1[7:4]}` and break `{A1, A1}`,
+    /// which is `3c3c` in all three tools today: a whole-name read owns its declared
+    /// WIDTH, not its declared position.
+    ///
+    /// ⚠️ It declines a `[w-1:0]` descending base on purpose. Such a base is already
+    /// read correctly by the structural arm, and answering it here would move every
+    /// zero-LSB select onto this narrow, `param_range`-gated path — a blast radius
+    /// with no cell to gain. The decline is a POSITIVE record of the layouts the bit
+    /// domain cannot index itself.
+    ///
+    /// ⚠️⚠️ It answers a select reaching OUTSIDE the declared range too, with those
+    /// bits UNKNOWN (§11.5.1). It has to: the structural arm reads `bp_get(&b, l+i)`
+    /// against the stored `[w-1:0]` value, so `A1[3:0]` on a `logic [11:4]` base —
+    /// four bits the declaration does not have — read four bits that exist, and
+    /// printed `c` where both oracles print `x`. Declining here would hand the select
+    /// straight back to that arm; the whole point of asking first is that for a base
+    /// with a shifted or ascending declaration the resolver is the ONLY reader.
+    pub(crate) fn const_param_select_shifted_bits(
+        &self,
+        e: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &crate::const_fn_width::ConstWidths,
+    ) -> Option<WideBits> {
+        let (val, lo_n, hi_n, dlo, dwidth, asc) =
+            self.const_select_resolved_raw(e, env, envw, 0)?;
+        if dlo == 0 && !asc {
+            return None;
+        }
+        let n = u32::try_from(hi_n.checked_sub(lo_n)?.checked_add(1)?).ok()?;
+        // One word is exactly `bp_zero(n)`'s allocation for n in 1..=64, and the two
+        // planes must stay the same length (`bp_set` indexes both with one word).
+        if n == 0 || n > 64 {
+            return None;
+        }
+        // Result bit `i` is internal bit `base + i`, where `base` is the lower of the
+        // two normalized endpoints: ascending flips the order, so the numerically-low
+        // DECLARED index is the numerically-HIGH internal one. Computed UNCLAMPED —
+        // `const_norm_bit` clamps to 0..63 for the integer lane, which would fold an
+        // out-of-range index onto a bit that exists, the exact confusion this arm
+        // reports as `x`.
+        let norm = |idx: i64| -> i64 {
+            if asc {
+                i64::from(dlo) + i64::from(dwidth) - 1 - idx
+            } else {
+                idx - i64::from(dlo)
+            }
+        };
+        let base = norm(lo_n).min(norm(hi_n));
+        let mut out = bp_zero(n);
+        for i in 0..n {
+            let p = base + i64::from(i);
+            // Outside the declaration ⇒ `x` (§11.5.1), one bit at a time: a PARTIAL
+            // overhang keeps the bits that do exist, which is what both oracles print.
+            if p < 0 || p >= i64::from(dwidth) {
+                bp_set(&mut out, i as usize, false, true);
+                continue;
+            }
+            bp_set(&mut out, i as usize, (val >> p) & 1 == 1, false);
+        }
+        // §11.5.1: the result of a select is UNSIGNED whatever the base is.
+        Some((out, n, false))
+    }
+
+    /// The bare single-segment name a SELECT is ultimately taken from — peeling
+    /// parentheses and any element `BitSelect`s (`A[1][7:4]` → `A`). `None` for a
+    /// non-select, for a `pkg::`-scoped base (which no local can shadow) and for a
+    /// hierarchical one.
+    ///
+    /// This exists so a caller that owns an ENVIRONMENT can apply the shadow rule to
+    /// the select as a whole: every resolver underneath it walks MODULE scope, so a
+    /// local binding of this name has to stop the walk before any of them runs.
+    pub(crate) fn select_root_name(e: &ast::Expr) -> Option<&str> {
+        let mut cur = Self::peel_parens(e);
+        // Only a select has a root to protect; a bare name is the caller's own arm.
+        if !matches!(
+            cur.kind,
+            ast::ExprKind::BitSelect { .. }
+                | ast::ExprKind::PartSelect { .. }
+                | ast::ExprKind::IndexedPart { .. }
+        ) {
+            return None;
+        }
+        loop {
+            cur = Self::peel_parens(match &cur.kind {
+                ast::ExprKind::BitSelect { base, .. }
+                | ast::ExprKind::PartSelect { base, .. }
+                | ast::ExprKind::IndexedPart { base, .. } => base,
+                ast::ExprKind::Ident(path) => {
+                    return match path.segments.as_slice() {
+                        [seg] => Some(&seg.name),
+                        _ => None,
+                    }
+                }
+                _ => return None,
+            });
+        }
+    }
+
+    /// [`Self::const_param_select_shifted_bits`] with no const-function environment
+    /// — the module-scope spelling every wide-domain resolver but the const-function
+    /// interpreter's needs.
+    pub(crate) fn shifted_select_bits(&self, e: &ast::Expr) -> Option<WideBits> {
+        self.const_param_select_shifted_bits(
+            e,
+            &std::collections::BTreeMap::new(),
+            &crate::const_fn_width::ConstWidths::new(),
+        )
+    }
+
     /// One declared-domain index → its internal bit position. The i64 twin of
     /// `norm_offset_for_range`, which the ENGINE side uses for the same job.
     fn const_norm_bit(idx: i64, dlo: i64, dwidth: u32, asc: bool) -> u32 {
@@ -187,12 +308,38 @@ impl Elaborator<'_> {
         p.clamp(0, 63) as u32
     }
 
+    /// [`Self::const_select_resolved_raw`] restricted to a select that lies wholly
+    /// INSIDE its base's declared range.
+    ///
+    /// A select reaching outside reads `x` for the outside bits (§11.5.1) — an
+    /// unknown this integer domain cannot represent, so it declines and the runtime
+    /// lane is left to model the x. The BIT-domain twin
+    /// ([`Self::const_param_select_shifted_bits`]) CAN represent it and takes the raw
+    /// form, marking those bits unknown one at a time.
+    #[allow(clippy::type_complexity)] // one tuple, one caller pair — a struct would not earn its name
+    fn const_select_resolved(
+        &self,
+        e: &ast::Expr,
+        env: &std::collections::BTreeMap<String, i64>,
+        envw: &crate::const_fn_width::ConstWidths,
+        depth: u32,
+    ) -> Option<(u64, i64, i64, u32, u32, bool)> {
+        let r = self.const_select_resolved_raw(e, env, envw, depth)?;
+        let (_, lo_n, hi_n, dlo, dwidth, _) = r;
+        if !Self::select_idx_in_declared_range(lo_n, dlo, dwidth)
+            || !Self::select_idx_in_declared_range(hi_n, dlo, dwidth)
+        {
+            return None;
+        }
+        Some(r)
+    }
+
     /// A select fully resolved against its base:
     /// `(base value, numeric low index, numeric high index, declared lo, declared
     /// width, ascending)`. The one place the direction rule is written, so the fold
     /// and the self-width answer cannot disagree about which bits are named.
     #[allow(clippy::type_complexity)] // one tuple, one caller pair — a struct would not earn its name
-    fn const_select_resolved(
+    fn const_select_resolved_raw(
         &self,
         e: &ast::Expr,
         env: &std::collections::BTreeMap<String, i64>,
@@ -222,14 +369,14 @@ impl Elaborator<'_> {
             // order to check.
             (a.min(b), a.max(b))
         };
-        // A select reaching outside the declared range reads `x` for the outside
-        // bits (§11.5.1) — an UNKNOWN this integer domain cannot represent.
-        // Decline; the runtime lane is the one that models x.
-        let (dlo_i, dhi_i) = (i64::from(dlo), i64::from(dlo) + i64::from(dwidth) - 1);
-        if lo_n < dlo_i || hi_n > dhi_i {
-            return None;
-        }
         Some((val, lo_n, hi_n, dlo, dwidth, asc))
+    }
+
+    /// Is DECLARED index `idx` inside a base declared `dlo` .. `dlo + dwidth - 1`?
+    /// The one spelling of §11.5.1's range test, so the integer lane's decline and
+    /// the bit lane's per-bit `x` cannot disagree about which bits exist.
+    fn select_idx_in_declared_range(idx: i64, dlo: u32, dwidth: u32) -> bool {
+        idx >= i64::from(dlo) && idx < i64::from(dlo) + i64::from(dwidth)
     }
 
     /// The two endpoints of a select. The `bool` is `true` when the pair is written

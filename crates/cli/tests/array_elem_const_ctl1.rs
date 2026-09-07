@@ -4,8 +4,7 @@
 //! bit-select / indexed / concat / `$size`+`$high`+`$right` / range bound /
 //! generate-if / child override / untyped localparam / replication count / the
 //! runtime twin / whole-element untyped localparam). Loud cells are declines on
-//! purpose: a multi-packed element, an ascending or non-zero-LSB element in the
-//! wide (concat / replication) domain, a header struct-typed override pattern
+//! purpose: a multi-packed element, a header struct-typed override pattern
 //! (§4.5.413 residue), a scoped struct member (§2 🆕 L ⓗ), the runtime `$size` of
 //! a scalar parameter (pre-existing).
 //!
@@ -86,7 +85,7 @@ endmodule
         "0",
     );
     // ctl_asc_cat: both oracles
-    loud(
+    digest(
         "ctl_asc_cat",
         r#"module tb;
 typedef struct packed { logic [3:0] a; logic [1:0] b; } s_t;
@@ -96,7 +95,7 @@ initial $display("DIGEST=%h %0d", L, $bits(L));
 initial begin #1 $finish; end
 endmodule
 "#,
-        "parameter `L` value is not a constant: the concatenation `{…}` has no ",
+        "33 8",
     );
     // ctl_asc_genif: both oracles
     digest(
@@ -288,7 +287,7 @@ endmodule
         "c 4",
     );
     // ctl_lsb4_repl: both oracles
-    loud(
+    digest(
         "ctl_lsb4_repl",
         r#"module tb;
 typedef struct packed { logic [3:0] a; logic [1:0] b; } s_t;
@@ -298,7 +297,7 @@ initial $display("DIGEST=%h", L);
 initial begin #1 $finish; end
 endmodule
 "#,
-        "parameter `L` value is not a constant: the replication `{n{…}}` has no",
+        "aaa",
     );
     // ctl_lsb4_rt: both oracles
     loud(

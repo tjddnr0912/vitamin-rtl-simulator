@@ -4,8 +4,7 @@
 //! bit-select / indexed / concat / `$size`+`$high`+`$right` / range bound /
 //! generate-if / child override / untyped localparam / replication count / the
 //! runtime twin / whole-element untyped localparam). Loud cells are declines on
-//! purpose: a multi-packed element, an ascending or non-zero-LSB element in the
-//! wide (concat / replication) domain, a header struct-typed override pattern
+//! purpose: a multi-packed element, a header struct-typed override pattern
 //! (§4.5.413 residue), a scoped struct member (§2 🆕 L ⓗ), the runtime `$size` of
 //! a scalar parameter (pre-existing).
 //!
@@ -90,7 +89,7 @@ endmodule
         "0",
     );
     // pkgs_asc_cat: verilator
-    loud(
+    digest(
         "pkgs_asc_cat",
         r#"package p;
 typedef struct packed { logic [3:0] a; logic [1:0] b; } s_t;
@@ -102,7 +101,7 @@ initial $display("DIGEST=%h %0d", L, $bits(L));
 initial begin #1 $finish; end
 endmodule
 "#,
-        "parameter `L` value is not a constant: the concatenation `{…}` has no ",
+        "33 8",
     );
     // pkgs_asc_genif: verilator
     digest(
@@ -261,7 +260,7 @@ endmodule
         "0",
     );
     // pkgs_lsb4_cat: verilator
-    loud(
+    digest(
         "pkgs_lsb4_cat",
         r#"package p;
 typedef struct packed { logic [3:0] a; logic [1:0] b; } s_t;
@@ -273,7 +272,7 @@ initial $display("DIGEST=%h %0d", L, $bits(L));
 initial begin #1 $finish; end
 endmodule
 "#,
-        "parameter `L` value is not a constant: the concatenation `{…}` has no ",
+        "cc 8",
     );
     // pkgs_lsb4_genif: verilator
     digest(
@@ -337,7 +336,7 @@ endmodule
         "c 4",
     );
     // pkgs_lsb4_repl: verilator
-    loud(
+    digest(
         "pkgs_lsb4_repl",
         r#"package p;
 typedef struct packed { logic [3:0] a; logic [1:0] b; } s_t;
@@ -349,7 +348,7 @@ initial $display("DIGEST=%h", L);
 initial begin #1 $finish; end
 endmodule
 "#,
-        "parameter `L` value is not a constant: the replication `{n{…}}` has no",
+        "aaa",
     );
     // pkgs_lsb4_rt: verilator
     loud(

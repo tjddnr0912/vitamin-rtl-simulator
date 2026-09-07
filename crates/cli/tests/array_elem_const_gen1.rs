@@ -4,8 +4,7 @@
 //! bit-select / indexed / concat / `$size`+`$high`+`$right` / range bound /
 //! generate-if / child override / untyped localparam / replication count / the
 //! runtime twin / whole-element untyped localparam). Loud cells are declines on
-//! purpose: a multi-packed element, an ascending or non-zero-LSB element in the
-//! wide (concat / replication) domain, a header struct-typed override pattern
+//! purpose: a multi-packed element, a header struct-typed override pattern
 //! (§4.5.413 residue), a scoped struct member (§2 🆕 L ⓗ), the runtime `$size` of
 //! a scalar parameter (pre-existing).
 //!
@@ -48,15 +47,6 @@ fn digest(name: &str, src: &str, expect: &str) {
     assert_eq!(v.join("|"), expect, "{name}:\n{out}");
 }
 
-fn loud(name: &str, src: &str, needle: &str) {
-    let (out, rc) = run(src);
-    assert_ne!(rc, Some(0), "{name}: expected a loud reject:\n{out}");
-    assert!(
-        out.contains(needle),
-        "{name}: expected `{needle}` in:\n{out}"
-    );
-}
-
 #[test]
 fn elem_asc() {
     // gen_asc_bound: verilator
@@ -90,7 +80,7 @@ endmodule
         "0",
     );
     // gen_asc_cat: verilator
-    loud(
+    digest(
         "gen_asc_cat",
         r#"module tb;
 typedef struct packed { logic [3:0] a; logic [1:0] b; } s_t;
@@ -102,7 +92,7 @@ end endgenerate
 initial begin #1 $finish; end
 endmodule
 "#,
-        "generate-scope parameter `L` value is not a constant: the concatenatio",
+        "33 8",
     );
     // gen_asc_ip: verilator
     digest(
@@ -247,7 +237,7 @@ endmodule
         "0",
     );
     // gen_lsb4_cat: verilator
-    loud(
+    digest(
         "gen_lsb4_cat",
         r#"module tb;
 typedef struct packed { logic [3:0] a; logic [1:0] b; } s_t;
@@ -259,7 +249,7 @@ end endgenerate
 initial begin #1 $finish; end
 endmodule
 "#,
-        "generate-scope parameter `L` value is not a constant: the concatenatio",
+        "cc 8",
     );
     // gen_lsb4_ip: verilator
     digest(
@@ -309,7 +299,7 @@ endmodule
         "c 4",
     );
     // gen_lsb4_repl: verilator
-    loud(
+    digest(
         "gen_lsb4_repl",
         r#"module tb;
 typedef struct packed { logic [3:0] a; logic [1:0] b; } s_t;
@@ -321,7 +311,7 @@ end endgenerate
 initial begin #1 $finish; end
 endmodule
 "#,
-        "generate-scope parameter `L` value is not a constant: the replication ",
+        "aaa",
     );
     // gen_lsb4_rt: verilator
     digest(

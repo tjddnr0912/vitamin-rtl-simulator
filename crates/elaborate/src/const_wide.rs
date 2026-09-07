@@ -704,6 +704,15 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             Some(bp_bit(v))
         }
         ast::ExprKind::PartSelect { base, msb, lsb } => {
+            // The same first-ask the `BitSelect` arm above makes, for the same
+            // reason: a select whose BASE carries a declared range this domain
+            // cannot represent (a non-zero LSB, an ascending declaration) is a leaf
+            // to the resolver, which answers it through the declared-range fold.
+            // Every resolver declines a select it has no declaration for, so the
+            // structural read below is what a decline lands on — unchanged.
+            if let Some(r) = name(e, false) {
+                return Some(r);
+            }
             let (m, l) = (fold_count(msb, name)?, fold_count(lsb, name)?);
             let (b, w, _) = fold_bits_at0(base, name)?;
             // A DESCENDING select only. An ascending one (`A[0:7]`) is legal against
@@ -732,6 +741,11 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             width,
             dir,
         } => {
+            // The `PartSelect` arm's first-ask, for the indexed spelling of the same
+            // select (`A1[7 -: 4]`, `A1[4 +: 4]`).
+            if let Some(r) = name(e, false) {
+                return Some(r);
+            }
             let n = fold_count(width, name)?;
             let off = fold_count(offset, name)?;
             let (b, w, _) = fold_bits_at0(base, name)?;
@@ -1019,7 +1033,22 @@ impl Elaborator<'_> {
         // the footing `narrow_param_bits` declines the first two). Any other
         // bit-select is not a name and keeps the structural arm.
         if let ast::ExprKind::BitSelect { .. } = &e.kind {
-            return self.const_array_elem_bits(e);
+            if let Some(r) = self.const_array_elem_bits(e) {
+                return Some(r);
+            }
+            return self.shifted_select_bits(e);
+        }
+        // §2 🆕 L ⓩ: a select of a name whose DECLARED range does not start at 0.
+        // The structural arms below index a base positionally, which is the right
+        // rule for an expression and the wrong one for `logic [11:4] A1`, so the
+        // whole select is answered here instead — see
+        // [`Self::const_param_select_shifted_bits`] for why the shift cannot live on
+        // the name. Every `[w-1:0]` base declines and reaches the unchanged arm.
+        if matches!(
+            &e.kind,
+            ast::ExprKind::PartSelect { .. } | ast::ExprKind::IndexedPart { .. }
+        ) {
+            return self.shifted_select_bits(e);
         }
         // `pkg::K` — answered from the package's own wide side map and NOWHERE else.
         // A NARROW package constant deliberately declines: its declared width lives in

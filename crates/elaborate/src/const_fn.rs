@@ -1087,6 +1087,10 @@ impl Elaborator<'_> {
         env: &std::collections::BTreeMap<String, i64>,
         envw: &ConstWidths,
     ) -> Option<(ir::BitPacked, u32, bool)> {
+        // The COUNT-position environment: empty, because a count may not read this
+        // interpreter's locals (the rule spelled out in the resolver below).
+        let empty_env = std::collections::BTreeMap::new();
+        let empty_envw = ConstWidths::new();
         let resolve = |n: &ast::Expr, is_count: bool| -> Option<WideBits> {
             // This resolver answers BARE names itself. A `pkg::name` — and, §3 ⑤ ⓔ, an
             // element `A[i]` of a constant array parameter — is handed to the wide
@@ -1096,6 +1100,39 @@ impl Elaborator<'_> {
             // (`{1'b1, p::X}` was loud in an untyped localparam while the typed twin,
             // which reaches `wide_name_bits` directly, already folded).
             let ast::ExprKind::Ident(path) = &n.kind else {
+                // §2 🆕 L ⓩ: a SELECT of a name whose declared range does not start
+                // at 0 is answered whole (`const_param_select_shifted_bits`), and
+                // here with THIS interpreter's environment so an index naming a body
+                // local folds (`A1[i +: 4]`). A COUNT position may not read those
+                // locals — the rule spelled out below — so it asks with an empty one.
+                //
+                // ⚠️⚠️ THE SHADOW RULE APPLIES TO THE SELECT'S BASE, and it must be
+                // applied HERE, before either attempt: the select resolver reaches
+                // the module parameter through `lookup_scoped`, which knows nothing
+                // about this interpreter's locals, and `wide_name_bits` below asks it
+                // again with an empty environment. Without this, a function formal
+                // shadowing a non-zero-LSB module parameter —
+                // `localparam logic [11:4] A = 8'h3C;` beside
+                // `function f(input logic [7:0] A); f = {A[7:4], A[7:4]};` — folded
+                // the MODULE parameter (`cc`) while vita's own runtime call answered
+                // `ff` with both oracles. Review round 1, BLOCKING.
+                if Self::select_root_name(n)
+                    .is_some_and(|r| envw.contains_key(r) || env.contains_key(r))
+                {
+                    // Neither the shifted arm nor `wide_name_bits` may answer: both
+                    // resolve the root through MODULE scope. Declining hands the
+                    // select to the structural arm, which folds the base through
+                    // this same resolver — whose Ident arm reads the local.
+                    return None;
+                }
+                let (senv, senvw) = if is_count {
+                    (&empty_env, &empty_envw)
+                } else {
+                    (env, envw)
+                };
+                if let Some(r) = self.const_param_select_shifted_bits(n, senv, senvw) {
+                    return Some(r);
+                }
                 return self.wide_name_bits(n);
             };
             let [seg] = path.segments.as_slice() else {
