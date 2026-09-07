@@ -13,6 +13,8 @@
 
 
 **§4.5.220–280**
+- `4.5.452` **`$bits(pkg::T)` — the package-scoped spelling of a bare type name** (2026-09-07 · §3 ⑤ⓕ · 19 cells · batch with 451)
+- `4.5.451` **A continuous assign with a hierarchical lvalue (three arenas, one omission)** (2026-09-07 · §2 🆕 P · 22 cells · batch with 452)
 - `4.5.450` **External report round-39: the route census `run.json` was missing, and a refutation of my own that was wrong** (2026-09-07 · §6 OBS R2-ⓐ + §2 perf census · no IR change)
 - `4.5.449` **External report round-38: an elaboration regression, a metric that could not see it, and two re-diagnosed residues** (2026-09-07 · §5 perf + §6 OBS + docs audit · no IR change)
 - `4.5.448` **A parameter declared with a NEGATIVE low bound reads its declared range** (2026-09-07 · §2 🆕 L ⓩ residue · 33 cells · batch with 446/447)
@@ -467,6 +469,88 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.452 — `$bits(pkg::T)` — the package-scoped spelling of a bare type name (2026-09-07 · format 31 · no IR change) ✅
+
+**Symptom.** `$bits(pk::a_t)` and its scalar twin `$bits(pk::e_t)` were loud
+(`E3009: `pk::a_t` does not name a package constant or variable`) where both oracles fold 32 and 8.
+The BARE-name spelling of the identical typedefs already folded, so this was a spelling gap, not a
+width gap.
+
+**Root.** `parse_bits_type_arg` (hdl-parser `casts.rs`) admitted a data-type KEYWORD or a bare
+identifier followed by `)`. A `pkg::T` argument matched neither, fell through to the expression path,
+and elaborate reported the scoped reference as a missing constant.
+
+**Fix.** One more arm, and no new width rule: the parser already registers a `"pkg::T"` twin of every
+package typedef in `typedefs` / `struct_layouts` / `union_type_names` — the twin `parse_size_or_named_cast`
+reads for `pkg::T'(e)` — so `bits_of_type_name` answers a scoped key exactly as it answers a bare one,
+declines included. The `?` runs BEFORE any `bump`, so an unknown scoped name leaves the cursor intact
+for the expression parse.
+
+**Census, 19 cells, three-way (iverilog 13.0 / verilator 5.052 / vita).** Nine accept cells — unpacked
+array 32, scalar 8, packed 2-D 32, packed struct 12, packed union 8, enum 3, `int` 32, 2-D unpacked 48,
+and a scoped LOCALPARAM 32 (which must stay on the VALUE path) — all identical in all three tools.
+Six decline cells stay loud and each has NO consensus oracle: a `real` typedef is iverilog-reject
+against verilator 64, a `string` one is iverilog-reject against a verilator **internal fault**, `[]`
+and `[$]` are rejected or unsupported by both, and an unknown scoped name is iverilog 0 against a
+verilator error. Four control cells (bare-name twin, scoped variable, scoped enum label, a variable
+declared with the scoped type) are unchanged.
+
+**Test.** `crates/cli/tests/bits_of_scoped_type.rs`.
+
+#### 4.5.451 — A continuous assign with a hierarchical lvalue (three arenas, one omission) (2026-09-07 · format 31 · no IR change) ✅
+
+**Symptom.** `assign u1.x = v;` PANICKED — `index out of bounds: the len is 2 but the index is
+4278190080` at `sim-engine/src/state/init_diag.rs:869`, exit 101. A panic is below loud on the ladder.
+
+**The queue row's stated cause was wrong on both of its axes.** It named a generate block and an
+array index (`generate if (1) begin : g assign top.o = A[1]; end endgenerate`). Re-measured at HEAD,
+neither matters: the panic reproduces with a literal RHS outside any generate block, and in every
+direction — self (`top.o`), down (`u1.x`), up (a child writing `top.o`). The single trigger is a
+hierarchical LVALUE in a continuous assign.
+
+**Root.** `Lvalue` lives in exactly two arenas: four `Stmt` variants (Blocking / Nonblocking / Force /
+Release) and `ContAssign.lhs`. All three post-hoc patch scans in `elaborate/src/hier_defer/write.rs`
+walked `self.stmts` and nothing else, so a continuous assign carried its `HIER_WRITE_SENTINEL_BASE`
+(`0xFF00_0000`) net id straight into the engine, where `chunk_width` indexes `nets[c.net]`.
+
+**Fix — three scans, not one.** The whole-net resolver, the element/part-select resolver, and (found
+by this slice's own soundness lens, AFTER the first two were green) `resolve_pending_fill_widths`.
+That third one is the reason the lens matters: with only the first two in place `assign u1.x = '1;`
+onto a 12-bit target stopped panicking and printed `001` where both oracles print `fff` — a
+loud→silent-wrong the fix itself had created.
+
+**The `wire` guard is a rule about PROCEDURAL writes.** E3018 ("procedural hierarchical write to net
+`x`") fired on `assign u1.w = v;` with a message that called an `assign` procedural. Driving a wire is
+what `assign` is FOR and both oracles run it, so the guard is now keyed on the LANE — and the lane is
+read off the arena the sentinel landed in, because `collect_lval_chunks` is shared and the sentinel
+itself carries no lane. The procedural twin stays loud (iverilog rejects it too).
+
+**Census, 22 cells.** 13 shapes across the trigger axes (generate × array index × direction × select
+kind × destination kind) plus 5 interaction cells the fix newly exposes and 4 controls. 12 of 13 match
+both oracles; the 13th (`assign top.o[0] = 1'b1` read as a whole 32-bit `%0d`) is a three-way split —
+iverilog `Z`, verilator `1`, vita `X` — and vita's `X` is the LRM answer for an undriven `logic`.
+Interactions measured because the resolvers run BEFORE the multidriver scan, which until now had never
+seen a hierarchical continuous assign at all: two continuous drivers on one wire still RESOLVE (`x`,
+= iverilog), two part-select drivers compose (`ab`), an array-element target lands (`b5`), a const
+target stays loud, and the assign re-triggers on an RHS change. Controls: the hierarchical READ side
+of a continuous assign is untouched (reads live in the EXPR arena, which both resolvers already
+scanned).
+
+**Test.** `crates/cli/tests/hier_cont_assign_write.rs`.
+
+**Not shipped in this bundle — §2 🆕 Q, reverted with its measurement.** A `localparam` in a procedural
+block is a parse error in vita and legal in both oracles (7/7 cells, wider than the row's "plain named
+`begin : g`": an unnamed block, `always_comb`, a subroutine body, the `parameter` spelling, and use as
+a later decl's range bound). A bare-name HOIST of the declaration into the enclosing container's item
+queue was built and reverted: it made 6 cells correct and **5 new silent-wrongs**, because the hoisted
+name has no scope — an outer localparam (literal, non-literal, or a header `parameter`) reads the
+block's value after the block, two sibling blocks collapse to the last value, and a read after the
+block answers where both oracles reject the name. The prerequisite is a block-scoped CONSTANT binding,
+which the IR does not have: the parser's `const_locals` is a parse-time i64 fold table read only by
+`try_const_index`, the elaborator's `$blk$<span.lo>` scoping is for block-local NETS, and a
+parser-side rename has no single `ExprKind::Ident` funnel to hook (52 construction sites). Filed
+BLOCKED with the measured cells in ROADMAP §2 🆕 Q.
 
 #### 4.5.450 — External report round-39: the route census `run.json` was missing, and a refutation of my own that was wrong (2026-09-07 · format 31 · no IR change) ✅
 

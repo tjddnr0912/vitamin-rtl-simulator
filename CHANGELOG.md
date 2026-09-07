@@ -118,6 +118,22 @@ need updating. What moved:
 
 ### Fixed
 
+- **A continuous assign with a hierarchical target no longer crashes.** `assign u1.x = v;` aborted
+  with an internal `index out of bounds` panic (exit 101), in every direction — into a child
+  instance, up into the parent, and onto the module's own net through its full path (`top.o`). A
+  hierarchical part-select target (`assign u1.x[3:0] = 4'hb;`) and an array-element one
+  (`assign u1.m[1] = …;`) crashed the same way. Both reference tools run all of these. A related
+  case printed the wrong value rather than crashing: a fill literal on such an assign
+  (`assign u1.x = '1;` onto a 12-bit target) sized to one bit. Also, a hierarchical continuous
+  assign onto a `wire` was refused with a message that called it a "procedural hierarchical write";
+  driving a wire is what `assign` is for, and it is now accepted. A *procedural* hierarchical write
+  to a `wire` is still refused, as Icarus refuses it.
+- **`$bits(pkg::T)` of a package type name folds** instead of reporting that `pkg::T` "does not name
+  a package constant or variable". Every shape the bare-name spelling already answered now answers
+  through the scoped one — unpacked array, scalar, packed array, packed struct and union, enum, and
+  the integer atoms. The shapes with no agreed answer between the reference tools (a `real` or
+  `string` alias, a dynamic array, a queue, an unknown name) stay refused.
+
 - **Elaboration of a large design is no longer up to 3× slower than it was in `v0.2.0-49`.** A module
   of 20,000 `wire [31:0]` declarations elaborated in 0.078 s before and 0.228 s after; `biriscv` went
   0.0202 s → 0.0275 s. Nine constant-folding queries asked a literal only for its width or its

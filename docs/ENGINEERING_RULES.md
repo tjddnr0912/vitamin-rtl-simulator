@@ -4059,3 +4059,49 @@ a constant is a copy, and copies are only as fresh as the last person who rememb
 prose needs the number, say what it is FOR and point at the canonical site, and when a bump ships,
 grep the number itself (`grep -rn 'format_version'`) rather than trusting that the bump's own slice
 touched every restatement.
+
+## A post-hoc patch pass is bounded by the CONTAINERS of the type it patches (2026-09-07, §2 🆕 P)
+
+**Enumerate the containers of the type, not the call sites that build it.** Four deferred-hierarchical
+resolvers patched their sentinel `LvalChunk`s by scanning `self.stmts`, and `Lvalue` lives in exactly
+two arenas: the four `Stmt` variants and `ContAssign.lhs`. Every hierarchical CONTINUOUS assign
+therefore carried its sentinel net id into the engine, where the per-net table is indexed directly —
+a panic, which is below loud. The census that finds this is one grep for the TYPE in the frozen IR
+(`grep -n 'Lvalue' sim-ir/src/lib.rs` → five sites, two containers), not a walk of the lowering.
+
+**The same omission repeats once per pass, so count the passes before believing the fix.** Fixing the
+two chunk-patch scans made the design run, and the third scan of the same family —
+`resolve_pending_fill_widths`, which redirects a re-lowered RHS — still walked `stmts` alone: the
+design stopped panicking and printed `001` where both oracles print `fff`. That is a loud→silent-wrong
+the fix itself introduced, found only because the soundness lens re-ran the shape after the first two
+scans were green. `grep -n 'for s in &mut self.stmts'` in the module was three hits; the fix is three
+edits, and the number to check is the hit count, not the symptom.
+
+**A guard's sentence names a LANE, and routing a new caller in can make it a lie.** The deferred-write
+guard refused a `wire` target with *"procedural hierarchical write to net `x` (declare it reg/logic)"*.
+That rule is true of procedural writes and false of continuous ones — driving a wire is what `assign`
+is FOR, and both oracles run it — so the moment continuous assigns were routed into the resolver the
+guard became a false-loud with a message that contradicted the source. Read every guard's own words
+when you widen its caller set: if the sentence names a construct, the predicate must test for that
+construct. Here the lowering is shared (`collect_lval_chunks` has no lane), so the lane is recovered
+where it is unambiguous — the ARENA the sentinel landed in, since one deferral site produces one chunk
+in one container.
+
+## A hoist without a scope trades loud for silent-wrong (2026-09-07, §2 🆕 Q, reverted)
+
+**Before hoisting a block-local DECLARATION to an enclosing scope, measure the three lifetimes of the
+name.** A `localparam` in a procedural block was a parse error, both oracles accept it, and the IR has
+no block-scoped constant — so the declaration was hoisted to the enclosing container's item queue
+under its BARE name. Six cells went correct and five went silently wrong, all for the one reason the
+hoist erases: (1) SHADOW — an outer constant of the same name (literal, computed, or a header
+`parameter`) is answered by the block's value AFTER the block; (2) SIBLING — two blocks declaring the
+same name collapse to whichever hoisted last; (3) LEAK — a read after the block, which both oracles
+reject as undeclared, answers. Only the outer-NET cell was loud, and it was loud by an unrelated
+guard. Build all three probes before writing the hoist, not after.
+
+**A name-keyed rewrite needs a funnel, and the absence of one is the estimate.** The sound alternative
+— mangle the hoisted name and rewrite the reads inside the block's extent — was priced by asking where
+a single-segment identifier is CONSTRUCTED: 52 sites in the parser, no funnel. That number is the
+slice, and it is what turns "small, additive" into "prerequisite". Revert, and write the prerequisite
+into the queue line with the measured cells beside it, so the next reader inherits the measurement
+rather than the hypothesis.
