@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.456` **A tf-port formal spelled with an unpacked-array typedef, a full-range select of an array word, and a process-order permutation that was built and reverted** (2026-09-08 · §3 ⑤ⓕ + §2 🆕 I ⓒ + §2 row 7 REVERTED · 22 + 13 cells)
 - `4.5.455` **`$bits` of a `real` / `realtime` parameter is 64, like the variable beside it** (2026-09-07 · §2 🆕 L ⓐ · 16 cells · batch with 453/454)
 - `4.5.454` **The `pkg::T` twin respells its UNPACKED dims too — the third container** (2026-09-07 · §3 ⑤ⓕ · 10 cells · batch with 453/455)
 - `4.5.453` **`$bits(a_t)` when a dimension names a PARAMETER — a product, not a number** (2026-09-07 · §3 ⑤ⓕ · 21 cells · batch with 454/455)
@@ -472,6 +473,58 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.456 — A tf-port formal of an unpacked-array typedef, a full-range select of an array WORD, and a process-order permutation that was BUILT AND REVERTED (2026-09-08 · format 31 · no IR change) ✅
+
+A bundle of three slices; two shipped, one reverted after two adversarial rounds.
+
+##### ⓐ §3 ⑤ⓕ — a tf-port FORMAL spelled with an unpacked-array typedef (22 cells)
+
+`typedef logic [7:0] a_t [0:3]; function int f(input a_t v);` was `E-PARSE-UNEXPECTED-TOKEN`. `try_tf_port_typedef` returned a 6-tuple with no unpacked slot, so it declined rather than bind the ELEMENT type.
+
+The fix is a respell, not new machinery: the tuple gains a seventh slot carrying `info.unpacked`, and both binders — the ANSI tf-port list and the non-ANSI formal declaration — seed `TfPort.unpacked` with it through one shared `carry_typedef_formal_dims`. `TfPort.unpacked` is the field the EXPLICIT spelling `input logic [7:0] v [0:3]` already fills, and elaborate's `is_fixed_unpacked_array_formal` / force-frame / `frames_reserve` classifier already consume it — so the resulting port is byte-identical to the explicit one, which is also the regression oracle.
+
+⭐ **The row's oracle count was wrong in both directions, and the control twin is what said so.** iverilog 13.0 refuses the CONTROL spelling itself (`sorry: Subroutine ports with unpacked dimensions are not yet supported`, and `Reference ports not supported yet` for `ref`), so every FIXED cell is ONE-oracle (verilator) — while the DYNAMIC `[]` formal is genuinely two-oracle and is the anchor (`R=12` on iverilog, verilator and vita). The row's separate claim that `parameter type T = a_t` reads `$bits` 32 on both oracles is also false: both read the correct 24, which makes it the strongest cell left in ⑤ⓕ, not a dead one.
+
+| cell | PRE | POST | explicit twin | verilator |
+|---|---|---|---|---|
+| `function int f(input a_t v)` | E2002 | 5 | 5 | 5 |
+| DYNAMIC `input d_t v` (2-oracle) | E2002 | 12 | 12 | 12 (iverilog 12) |
+| task `input` / `output` / `inout` / `ref` | E2002 | 5 / 9 6 / 2 6 / 8 | same | same |
+| non-ANSI `input a_t v;` | E2002 | 5 | 5 | 5 |
+| comma continuation `input a_t v, w` | E2002 | 13 | 13 | 13 |
+| `[N]` size form · 2-D typedef · `pkg::a_t` | E2002 | 5 / 7 / 5 | — | 5 / 7 / 5 |
+
+⚠️ Kept loud, in lockstep with the DECLARATION binder's identical refusal: dims on BOTH the typedef and the declarator (`a_t v [0:1]`) — a live oracle split on dimension ORDER. A class typedef keeps its own refusal, whose message no longer mentions unpacked arrays because that half now works; the struct-with-dims guard is fail-closed and measured UNREACHABLE (both declaration spellings are refused upstream).
+
+##### ⓑ §2 🆕 I ⓒ — a FULL-RANGE select of a constant array WORD renames (13 cells)
+
+`assign c = m[1][7:0]` stayed computed while `assign c = m[1]` beside it renamed, because both `Select` arms in `alias.rs` required a FLAT base and an array is refused twice over. ⭐ The cost was not an `x`: after a later write of the source in the same delta the reader saw the PREVIOUS DEFINITE value (`11` where both oracles read `a5`), and over a 2-state `bit` array a definite wrong `00`.
+
+Both arms gained the word base together — `copied_source` for `copy_nets` membership, `copy_alias` for the alias itself — with the SAME admission the whole-word arm already performs (flat element kind, `word_const` folds, index in range). 13 cells moved PRE `xx` → POST `a5`, all on both oracles: `[7:0]`, `[0+:8]`, `[7-:8]`, a non-zero packed LSB, a non-zero word base, a chain, `logic`/`bit`/signed/`integer`/32-bit elements, beside an all-`z` null driver.
+
+⭐ **The row's other half is refuted.** A RUNTIME index `m[k]` was filed as a 2-oracle defect; re-measured on seven index spellings, iverilog reads `xx` exactly like vita and only verilator reads `a5` — and iverilog cannot be moved toward anyway, since it answers stale on an INDEX change and fresh on a SOURCE change in the same design. `[7-:8]` is the mirror image: iverilog contradicts its own `[7:0]` answer for the identical slice, so it is disqualified there and vita follows verilator.
+
+Guards that held, PRE == POST: the runtime index (both spellings), a partial slice, a bit of a word, a wider destination, an array-word lvalue, a 2-D word, a forced/released copy, and an out-of-range word (still loud E4002).
+
+##### ⓒ §2 row 7 — BUILT AND REVERTED: one ordering key cannot express what the oracles do
+
+The headline is real and two-oracle (a parent `initial` reading a child net at t0 reads `xx` for `ee`), and a `proc_order` permutation — the elaboration rank the declaration initialisers already use — closes it and five more cells. It was built end to end: the rank recorded in `push_process`, carried out of band on a `StagedExtraSidecars` tail (format 31 → 32, `sim_ir::Process` untouched), seeded into the ordering key in both executors. Full suite green, corpus 10/10, example VCDs byte-identical, staged == one-shot.
+
+⭐⭐ **It was wrong three times, and each round the same root came through a different door.** vita has ONE ordering key; iverilog uses a different order per RESUMPTION KIND, and says so in one run of one design:
+
+| resumption kind | iverilog | verilator |
+|---|---|---|
+| `initial` at t0 | CHILD first | parent first |
+| `always_comb` t0 arm | PARENT first | parent first |
+| edge-woken `always` | PARENT first | parent first |
+| `#d` delay resume | CHILD first | parent first |
+| `wait()` resume | PARENT first | parent first |
+| fork-arm wake | PARENT first | parent first |
+
+Round 1: keying the whole run moved the edge and `wait` wakes — a child's `wait(go); top.res = 8'hCC` beat the parent's write, `aa` where BOTH oracles read `cc`. Narrowing to the t0 arm alone then broke the DELAY wheel (a child's `initial #1 $display` printed after its parent's, where iverilog prints it first). Round 2, after re-keying the edge and wait paths: `always_comb`'s t0 arm and the FORK-ARM wake were still on the rank, both oracles disagreeing on both, and the fork one value-visible (`aa` for `cc`) again.
+
+Three consecutive rounds on one axis is the stop signal, so the slice is reverted whole and the row records the prerequisite: a per-resumption-kind ordering model, not a single permutation. Also measured on the way and written into the row — the "already correct" twin list was wrong (a fork arm in the child is a 3-way split), `final` blocks run in ProcId order whatever the processes do, and an output PORT bind and `assign w = u1.s;` are their own 2-oracle silent-wrongs reached through the t0 SETTLE, so no process reordering can touch them.
 
 #### 4.5.455 — `$bits` of a `real` / `realtime` parameter is 64, like the variable beside it (2026-09-07 · format 31 · no IR change) ✅
 

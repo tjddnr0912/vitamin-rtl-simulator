@@ -25,6 +25,28 @@ need updating. What moved:
 
 ### Added
 
+- **A tf-port formal can be spelled with an unpacked-array typedef.**
+  `typedef logic [7:0] a_t [0:3]; function int f(input a_t v);` was a parse error; the typedef's
+  dimensions now ride onto the formal the same way the explicit spelling
+  `input logic [7:0] v [0:3]` writes them, so the two build the same port. Both binders (the ANSI
+  port list and the non-ANSI formal declaration), every direction (`input` / `output` / `inout` /
+  `ref`), a bare comma continuation (`input a_t v, w` gives `w` the array type too), the `[N]` size
+  form, a multi-dimensional typedef and the package-scoped `pkg::a_t` spelling. Dimensions on BOTH
+  the typedef and the declarator stay refused — the two reference simulators disagree about the
+  resulting dimension order — which is the same refusal a declaration already gives.
+
+### Fixed
+
+- **A full-range part-select of a constant array word is read through, like the word itself.**
+  `wire [7:0] c; assign c = m[1][7:0];` followed by a procedural write of `m[1]` in the same delta
+  read the value the net held BEFORE the write, while the identical `assign c = m[1]` beside it read
+  the new one. The observable was not always an `x`: after a later write of the source the reader saw
+  the previous definite value, and over a 2-state `bit` array a definite `0`. Every element geometry
+  moves together — a non-zero packed LSB, a non-zero array base, `[0+:8]` and `[7-:8]`, `logic` /
+  `bit` / signed / `integer` / 32-bit elements, a two-link alias chain, and a copy beside an all-`z`
+  driver. A RUNTIME index (`m[k]`) is deliberately unchanged: the reference simulators disagree about
+  it, and one of them disagrees with itself.
+
 - **`run.json` says which of your functions and tasks became a frame call** (`--obs-dir`, no other
   flag). The new `subroutines` object gives one row per subroutine — `module`, `name`, `kind`,
   `route` (`frame` / `inlined`) and `sites`, the number of call sites lowered under that route —
