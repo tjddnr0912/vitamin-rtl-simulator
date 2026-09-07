@@ -169,6 +169,29 @@ impl Parser<'_, '_> {
             .collect()
     }
 
+    /// The same respell for an UNPACKED dimension list. `Range` and `Size` carry
+    /// expressions that name the package's own constants; `Dyn` / `Queue` / `Assoc`
+    /// carry no bound this walk can bind, so they pass through unchanged.
+    ///
+    /// ⚠️ It exists because §4.5.415 respelled `range` and `packed` and stopped
+    /// there: a `Dim` is a THIRD container of the same expression type, and the
+    /// omission repeats once per container, not once per pass. `typedef logic [7:0]
+    /// a_t [0:N-1];` in a package left `N` bare, so `$bits(pk::a_t)` at a use site
+    /// that never imported the package was loud where both oracles read 32.
+    pub(crate) fn respell_pkg_unpacked(&self, pkg: &str, dims: &[Dim]) -> Vec<Dim> {
+        dims.iter()
+            .map(|d| match d {
+                Dim::Range(r) => Dim::Range(Range {
+                    msb: self.respell_pkg_expr(pkg, r.msb.clone()),
+                    lsb: self.respell_pkg_expr(pkg, r.lsb.clone()),
+                    span: r.span,
+                }),
+                Dim::Size(e) => Dim::Size(self.respell_pkg_expr(pkg, e.clone())),
+                other => other.clone(),
+            })
+            .collect()
+    }
+
     fn respell_pkg_expr(&self, pkg: &str, e: Expr) -> Expr {
         let span = e.span;
         let kind = match e.kind {

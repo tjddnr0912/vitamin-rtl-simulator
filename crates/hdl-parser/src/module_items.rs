@@ -946,6 +946,15 @@ impl Parser<'_, '_> {
                         if !ti.packed.is_empty() {
                             ti.packed = self.respell_pkg_dims(&pkg, &ti.packed);
                         }
+                        // …and the UNPACKED dims, the third container of the same
+                        // expression type. `typedef logic [7:0] a_t [0:N-1];` left
+                        // `N` bare, so `$bits(pk::a_t)` outside the package was loud
+                        // where both oracles read 32 — while the packed twin
+                        // `$bits(pk::p_t)` folded, because only two of the three
+                        // containers were respelled.
+                        if !ti.unpacked.is_empty() {
+                            ti.unpacked = self.respell_pkg_unpacked(&pkg, &ti.unpacked);
+                        }
                         self.typedefs.insert(scoped.clone(), ti);
                     }
                     // Was `n`'s struct/enum layout (re)written by THIS package body?

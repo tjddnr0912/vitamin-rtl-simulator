@@ -158,20 +158,23 @@ fn the_paths_that_already_answered_are_unchanged() {
     assert!(out.contains("R=8"), "{out}");
 }
 
-/// Recorded residue, pinned so it cannot move silently: the PACKAGE-scoped spelling
-/// of the same shape is still loud (both oracles 32). The `pkg::T` twin leaves the
-/// unpacked dimension's names bare, which is a respell question and not the desugar
-/// this slice fixed — its packed twin `$bits(pk::p_t)` folds, so the two are
-/// different machinery.
+/// The PACKAGE-scoped spelling of the same shape is a SEPARATE root and its own
+/// slice (`pkg_scoped_unpacked_dim_twin.rs`): the `pkg::T` twin left the unpacked
+/// dimension's names bare, which is a respell question and not this desugar. Both
+/// spellings are pinned here so the two cannot drift apart — 32 in all three tools.
 #[test]
-fn the_package_scoped_unpacked_spelling_is_still_loud() {
-    let (out, code) = run("package pk; localparam N = 4; typedef logic [7:0] a_t [0:N-1]; endpackage\n\
-         module top; initial begin $display(\"R=%0d\", $bits(pk::a_t)); $finish; end endmodule\n");
-    assert_eq!(code, 1, "{out}");
-    assert!(!out.contains("R="), "{out}");
+fn the_package_scoped_spelling_answers_the_same_width() {
+    let (out, code) = run(
+        "package pk; localparam N = 4; typedef logic [7:0] a_t [0:N-1]; endpackage\n\
+         module top; initial begin $display(\"R=%0d\", $bits(pk::a_t)); $finish; end endmodule\n",
+    );
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("R=32"), "{out}");
 
-    let (out, code) = run("package pk; localparam N = 4; typedef logic [N-1:0] p_t; endpackage\n\
-         module top; initial begin $display(\"R=%0d\", $bits(pk::p_t)); $finish; end endmodule\n");
+    let (out, code) = run(
+        "package pk; localparam N = 4; typedef logic [N-1:0] p_t; endpackage\n\
+         module top; initial begin $display(\"R=%0d\", $bits(pk::p_t)); $finish; end endmodule\n",
+    );
     assert_eq!(code, 0, "the packed twin folds:\n{out}");
     assert!(out.contains("R=4"), "{out}");
 }
