@@ -118,6 +118,21 @@ need updating. What moved:
 
 ### Fixed
 
+- **`$bits` of a typedef whose dimension names a `parameter` now folds, and follows the override.**
+  `typedef logic [7:0] a_t [0:N-1];` made `$bits(a_t)` an elaboration error while the packed
+  spelling `logic [N-1:0]` beside it worked. It now answers `element x every dimension`, as an
+  expression, so two instances of the same module with different `N` each get their own width.
+  A variable or subroutine formal that shares the type's name still wins, as it did before.
+- **A package type's dimensions no longer bind in the module that uses it.** `pk::a_t` where the
+  package wrote `typedef logic [7:0] a_t [0:N-1];` was an error at a use site that never imported
+  the package — and, if that module happened to declare its own `N`, it silently sized the type
+  from the WRONG constant (72 bits instead of 32). Both spellings now read the package's value.
+- **`$bits` of a `real` or `realtime` parameter is 64, not 32.** IEEE 1800 section 6.12.1 makes both
+  the IEEE-754 double. A real *variable* and the `pkg::P` spelling of the same parameter already
+  answered 64, so one object had two answers; a net sized `[$bits(P)-1:0]` was silently half as
+  wide as it should be. A range bound, a `localparam` initializer, a `generate if` condition and a
+  constant-function body all moved with it.
+
 - **A continuous assign with a hierarchical target no longer crashes.** `assign u1.x = v;` aborted
   with an internal `index out of bounds` panic (exit 101), in every direction — into a child
   instance, up into the parent, and onto the module's own net through its full path (`top.o`). A

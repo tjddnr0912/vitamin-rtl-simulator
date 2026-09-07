@@ -16,9 +16,9 @@ Top-level snapshot of what stands between HEAD and the two goals. Rewritten whol
 
 | # | track | item |
 |---|---|---|
-| 1 | §3 loud → correct-support | ⑤ⓕ residue: `$bits(a_t)` with a parameter-named dim · the tf-port formal (1-oracle for the fixed shape) · ⑤ ⓓ/ⓔ residues · CU-scope items in a class body · ibex DPI export |
-| 2 | §2 silent-wrong | row 10: after `import pk::*;` a `K[31:24]` of a >64-bit package parameter reads `11`, both oracles `dd`; the scoped spelling and a `$bits`-sized net are already correct |
-| 3 | §2 silent-wrong | 🆕 H ⓐ: a reduction operator in a range bound clamps to 1 bit, 8 cells, both oracles 3/4 (`^`/`~^` are a split); re-measure at selection whether the fix widens the wide fold's accept set |
+| 1 | §3 loud → correct-support | ⑤ⓕ residue: the tf-port formal (1-oracle for the fixed shape) · a `parameter` of an unpacked-array type · `parameter type T = a_t` · ⑤ ⓓ/ⓔ residues · CU-scope items in a class body · ibex DPI export |
+| 2 | §2 silent-wrong | row 7: a parent `initial` reading a child net at t0 sees X where both oracles read the child's own init. ⚠️ needs a `sim_ir::Process` sidecar ⇒ format bump — price it at grounding |
+| 3 | §2 silent-wrong | 🆕 I ⓒ: the word-alias residue — a RUNTIME index `m[k]` reads `xx` where both oracles read `a5`, and a full-range select of an array word stays `x`. ⚠️ its neighbours are oracle splits; census the 2-oracle cells only |
 | 4 | §6 OBS | R2 call tree: task/function rows in `processes.items[]`. Prerequisite ⓐ **shipped** (`run.json`'s `subroutines` route census, doc-19 §4.10) — what is left is ⓑ the `SubProfile` at the three frame seams and ⓒ a decl `file:line:col`, and ⓑ is no longer blocked: with ⓐ in the file a 0-call row can be told from an inlined one — ROADMAP §6 |
 | 5 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so a reader infers the boundary from builtin call counts and gets it wrong — an external report did, and so did this repo's refutation of it (two rounds) — ROADMAP §5.b |
 | next | — | mixed-caller callee, `m #(8)` / `defparam u.T$w`, VCD `$scope` spelling, `genblk<N>` collision (split), 🆕 L ⓦ residue (package constants outside the i64 interpreter), a labelled concurrent `assert property` action block's `%m` |
@@ -44,6 +44,8 @@ Priority principle: ① silent-wrong with an oracle > ② loud→supported with 
 ## D. Walls (do not start until the prerequisite stands)
 
 - Declared-width / sign provenance in the wide constant fold (§11.8.1 region sign): §2 rows 14 · 15 · 16 · 25 · 26 · 30 · 🆕 F, and every widening of the fold's accept set.
+- §2 🆕 H ⓐ joined that wall (measured 2026-09-07): a bound whose operator is DEFINITE despite an x operand — `&` with a 0, `|` with a 1, `~&`, `~|`, `===`, `&&` — clamps to one bit, and the fix site is `fold_self_bits`'s reduction arm, i.e. the accept set itself.
+- §2 row 10's surviving half (a >64-bit parameter SELECT in a range bound, one bit vs both oracles' 221) needs a wide resolver that reads a select: `selfdet_bits_unsigned` declines it today, so an unguarded bound fallback moved 0 of 18 cells.
 - Tree-wide AST self-width pass: the size-cast cluster in §2 "Size cast / signedness".
 - Clocking (rows 23 / 24 / 34): one oracle, zero corpus demand.
 - Block-scoped CONSTANT binding (§2 🆕 Q): a `localparam` in a procedural block. The bare-name hoist was built and reverted — 6 cells correct, 5 new silent-wrongs (ROADMAP §2 🆕 Q carries the measured cells).

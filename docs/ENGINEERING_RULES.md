@@ -4105,3 +4105,30 @@ a single-segment identifier is CONSTRUCTED: 52 sites in the parser, no funnel. T
 slice, and it is what turns "small, additive" into "prerequisite". Revert, and write the prerequisite
 into the queue line with the measured cells beside it, so the next reader inherits the measurement
 rather than the hypothesis.
+
+## A parser-side fold has no scope, so it must stand down on a declared name (2026-09-07, §3 ⑤ⓕ)
+
+**A fold that resolves a NAME in the parser cannot see shadowing, so widening the set of names it
+claims creates silent-wrongs at every binder the body introduces.** Teaching `$bits(<type>)` to answer
+for one more class of typedef turned a block-local and a subroutine formal of that name from the
+local's declared width into the type's — a correct → silent-wrong trade, because the expression path
+it used to fall through to *did* see the local. The stand-down is the set every declaration site
+already writes; what it did NOT contain was tf FORMALS, and adding them there closed two pre-existing
+instances the same fold had shipped one slice earlier. Before widening a parser-side name fold,
+enumerate the binders that can introduce the same name (module decl, block-local, ANSI formal,
+non-ANSI formal, genvar, instance) and probe each one.
+
+**A stand-down must be scoped to the construct that introduced the name.** Record a formal AFTER the
+enclosing subroutine's scope snapshot, so the restore drops it — otherwise the fix trades one silent
+width for a permanently loud site. Pin both halves: the shadowed spelling inside, and the same text
+outside still folding.
+
+## A per-container omission repeats in the container you did not write down (2026-09-07, §3 ⑤ⓕ)
+
+**When a pass respells or patches expressions held by a type, count that type's containers and pin
+each one.** A package-scoped typedef twin respelled the names in its `range` and its `packed` dims and
+left `unpacked` alone — a third container of the same field type. The visible symptom was LOUD, which
+reads as a missing capability; the invisible one was a SILENT-WRONG that only appears when the
+importer happens to declare the same name, and that is the cell to build first. The signature is a
+sibling spelling that is already correct: if the packed twin folds and the unpacked one does not, the
+difference is a container the pass never visited, not a rule it never learned.

@@ -13,6 +13,9 @@
 
 
 **§4.5.220–280**
+- `4.5.455` **`$bits` of a `real` / `realtime` parameter is 64, like the variable beside it** (2026-09-07 · §2 🆕 L ⓐ · 16 cells · batch with 453/454)
+- `4.5.454` **The `pkg::T` twin respells its UNPACKED dims too — the third container** (2026-09-07 · §3 ⑤ⓕ · 10 cells · batch with 453/455)
+- `4.5.453` **`$bits(a_t)` when a dimension names a PARAMETER — a product, not a number** (2026-09-07 · §3 ⑤ⓕ · 21 cells · batch with 454/455)
 - `4.5.452` **`$bits(pkg::T)` — the package-scoped spelling of a bare type name** (2026-09-07 · §3 ⑤ⓕ · 19 cells · batch with 451)
 - `4.5.451` **A continuous assign with a hierarchical lvalue (three arenas, one omission)** (2026-09-07 · §2 🆕 P · 22 cells · batch with 452)
 - `4.5.450` **External report round-39: the route census `run.json` was missing, and a refutation of my own that was wrong** (2026-09-07 · §6 OBS R2-ⓐ + §2 perf census · no IR change)
@@ -469,6 +472,67 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.455 — `$bits` of a `real` / `realtime` parameter is 64, like the variable beside it (2026-09-07 · format 31 · no IR change) ✅
+
+**§2 🆕 L ⓐ.** `localparam real P = 3; $bits(P)` read **32**. §6.12.1 makes `real` the IEEE-754 double and `realtime` the same type, so both are 64 bits.
+
+⭐ **The oracle was not a preference between tools — it was vita disagreeing with itself.** THREE of vita's own answers for the same object already read 64: a real VARIABLE (`real r; $bits(r)`), the package-SCOPED spelling `$bits(p::P)`, and `$realtobits`. verilator reads 64 for every one of them. iverilog 13.0 answers **1** for a real VARIABLE too, which disqualifies it on this axis by its own neighbouring answer rather than by disagreement (the row had recorded this as an "oracle-SPLIT axis"; re-measured, it is not one).
+
+Root: a real parameter's value lives in `real_param_val`, not the i64 domain, so it has **no `param_meta` width** and `bits_of_view`'s constant arm fell through to the untyped tail's `Some(32)`.
+
+Fixed at `bits_of_view` — the ONE table both `$bits` arms funnel through (`lower_bits_fold` and `const_fn.rs`'s `$bits` SysCall) — so six consumers moved together and cannot drift:
+
+| consumer | PRE | POST | iverilog | verilator |
+|---|---|---|---|---|
+| `$display($bits(P))`, `real`/`realtime`, `localparam`/`parameter` | 32 | **64** | 1 | 64 |
+| a range bound `wire [$bits(P)-1:0]` | 32 | **64** | 1 | 64 |
+| a `localparam` initializer | 32 | **64** | 1 | 64 |
+| a `generate if` condition | 32 | **64** | 1 | 64 |
+| a constant-function body | 32 | **64** | 1 | 64 |
+| a generate-scope `localparam real` | 32 | **64** | 1 | 64 |
+
+⭐ The arm sits INSIDE the existing `!local_shadows` branch, so it inherits the §4.5.430 shadow test instead of adding a second rule. Four shadow cells were measured rather than argued — an inner numeric `P` under an outer real one in a generate block, a function local, a block-local and a child instance's own header parameter — and all four are unchanged and three-way correct.
+
+Unchanged controls: a TYPED integral param reports its declared width (12), `int` / untyped stay 32, a `string` parameter stays 16 (§6.16, vita = iverilog), the real VARIABLE and the scoped spelling keep 64. `shortreal` never arrives — the parser refuses the keyword — so no 32-bit real is widened to 64.
+
+Recorded residue, pinned: the same parameter through `import p::*` still reads 32 (verilator 64). That is §2 🆕 L ⓕ's name-lookup family — a wildcard-imported real does not bind at a module key this walk reaches — and not the width rule, which is why the SCOPED spelling already answered 64.
+
+#### 4.5.454 — The `pkg::T` twin respells its UNPACKED dims too — the third container (2026-09-07 · format 31 · no IR change) ✅
+
+**§3 ⑤ⓕ.** §4.5.415 taught the `pkg::T` twin to respell the package's own constants as `pkg::W`, because the bare name is undefined wherever the twin is used without importing the package. It respelled `range` and `packed` and stopped there. `unpacked` is a **third container of the same expression type**, so `typedef logic [7:0] a_t [0:N-1];` in a package carried a bare `N` out of it.
+
+Two rungs at once:
+
+| cell | PRE | POST | iverilog | verilator |
+|---|---|---|---|---|
+| `$bits(pk::a_t)` at a use site that never imported `pk` | LOUD | **32** | 32 | 32 |
+| `[N]` size dim · 2-D `[0:N-1][0:M-1]` | LOUD | **32 · 96** | 32 · 96 | 32 · 96 |
+| a DECLARATION `pk::a_t v;` | LOUD | **32** | 32 | 32 |
+| the importer declares `localparam N = 9;` | **72** (silent) | **32** | 32 | 32 |
+
+⭐ The last row is the one that mattered: the bare `N` bound in the IMPORTER's scope, so a module that happened to declare the same name silently sized the package's type from its own constant, at exit 0. The packed twin `$bits(pk::p_t)` beside it was correct the whole time — which is the signature of a per-container omission and not a missing capability.
+
+`Dyn` / `Queue` / `Assoc` pass through unchanged and stay loud; neither oracle answers `$bits` of one. Declarator dims on top of the scoped typedef (`pk::a_t v [0:1]`) stay loud — that is the recorded dimension-ORDER oracle split, not this row.
+
+#### 4.5.453 — `$bits(a_t)` when a dimension names a PARAMETER — a product, not a number (2026-09-07 · format 31 · no IR change) ✅
+
+**§3 ⑤ⓕ.** `parse_bits_sym_type_arg` — the desugar that answers `$bits(T)` with a width EXPRESSION so elaborate folds it per instance, AFTER the override — declined `!info.unpacked.is_empty()` with the comment *"no dim slot in the desugar"*, and the numeric twin `bits_of_type_name` cannot fold an overridable name at parse time. So `logic [N-1:0] p_t` answered 8 under `#(.N(8))` while `logic [7:0] a_t [0:N-1]` beside it was E3010 + E3009.
+
+⭐ **The old shape could not have been extended by relaxing the guard.** It took `sym_range_width` of the ELEMENT range alone, so a literal element width beside a symbolic dimension — which is exactly the shape the row names — had nothing symbolic to return. The fix is a PRODUCT: element × every packed dim × every unpacked dim, each factor the literal count where the parse-time table folds it and the symbolic form where it does not. `None` unless at least one factor is symbolic, so every all-literal cell stays with `bits_of_type_name`.
+
+| cell (all under `#(.N(8))` unless noted) | PRE | POST | both oracles |
+|---|---|---|---|
+| `logic [7:0] a_t [0:N-1]`, module default | LOUD | 32 | 32 |
+| the same under an override | LOUD | **64** | 64 |
+| two instances `#(.N(2))` and `#(.N(8))` of one module | LOUD | **16 / 64** | 16 / 64 |
+| `[N]` size dim · `[0:N-1][0:2]` · symbolic ELEMENT `[N-1:0] a_t [0:1]` | LOUD | 64 · 192 · 16 | same |
+| packed `logic [7:0][N-1:0]` · range-free `logic a_t [0:N-1]` | LOUD | 64 · 8 | same |
+| `[]` / `[$]` | LOUD | LOUD | iverilog rejects, verilator internal fault |
+
+⭐⭐ **The differential lens caught a correct → silent-wrong the fix itself created.** The parser folds `$bits(<type>)` with no scope of its own, so claiming a name that the body also DECLARES hijacks the variable: `typedef logic [7:0] a_t [0:N-1];` beside a block-local `logic [11:0] a_t` (or a formal of that name) went from **12** — vita's own answer through the expression path, and verilator's — to **32**. iverilog rejects a name used as both a type and a variable, so verilator is the oracle here.
+
+The stand-down is `local_decl_names`, the set every declaration site already writes, and it closed **two pre-existing instances of the same class** that the SCALAR arm had shipped in §4.5.437 (`typedef logic [N-1:0] p_t` beside a local `p_t` read 4, both PRE and POST, where verilator reads 12). A tf FORMAL was not in that set, so `note_tf_formal_names` records the port names after the header and the tf scope snapshot — taken BEFORE the port list — drops them at `endfunction`, which is pinned: the same `$bits(a_t)` outside the subroutine still folds 32.
 
 #### 4.5.452 — `$bits(pkg::T)` — the package-scoped spelling of a bare type name (2026-09-07 · format 31 · no IR change) ✅
 
