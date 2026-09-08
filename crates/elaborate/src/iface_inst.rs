@@ -173,6 +173,63 @@ impl Elaborator<'_> {
                     .collect();
                 let n_cu = self.cu_imports.len();
                 let local_names = self.gather_local_decl_names(&decl);
+                // The five block-local classifier maps, computed from THIS INTERFACE and
+                // held across both the Nets pass and the Logic loop below — the module
+                // path's `instance.rs:565-586`, verbatim, with `module` -> `&decl`.
+                //
+                // No signature work: `hdl_ast::Item::Interface` holds an
+                // `ast::ModuleDecl`, so every one of these already accepts an interface
+                // body; they were simply never called with one. Until now the maps in
+                // scope here described the PARENT module (this runs inside the parent's
+                // Nets phase), so the hoist below had to refuse any body containing a
+                // user-written block-local — see the deleted admission predicate.
+                //
+                // ⚠️ All five or none. `block_local/hoist.rs`'s `shadows_module` is the
+                // only term that routes a member-colliding local to its own `$blk$<lo>`
+                // net, and it reads `self.local_decl_names`; installing four of the five
+                // would admit more bodies to the hoist while still resolving the
+                // collision against the parent's names.
+                let dbl = self.gather_block_local_names(&decl);
+                let saved_dbl = std::mem::replace(&mut self.decl_block_locals, dbl);
+                let scoped_blocks = Self::compute_scoped_block_locals(&decl, &local_names);
+                let saved_scoped_blocks =
+                    std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
+                let per_entry_blocks = Self::compute_per_entry_block_locals(&decl, &local_names);
+                let saved_per_entry_blocks =
+                    std::mem::replace(&mut self.per_entry_block_locals, per_entry_blocks);
+                let coalesced = Self::compute_coalesced_block_locals(
+                    &decl,
+                    &local_names,
+                    &self.scoped_block_locals.clone(),
+                );
+                let saved_coalesced =
+                    std::mem::replace(&mut self.coalesced_block_locals, coalesced);
+                let saved_local_names =
+                    std::mem::replace(&mut self.local_decl_names, local_names.clone());
+                // ⚠️ The maps are not the only thing the module path does before it
+                // hoists. `instance.rs:801` also runs the CONTAINMENT gate over every
+                // process body, and admitting the interface body to the hoist without it
+                // is loud→silent-wrong — the direction the accuracy ladder forbids:
+                //
+                //   interface ifb; initial begin : outer int x; x = 1;
+                //     begin : inner int x; x = 2; o1 = x; end
+                //     #1 o2 = x;        // must read the OUTER x
+                //   end endinterface
+                //
+                // measured PRE `E3010` ×8 (refused), POST-without-this-call
+                // `o1=02 o2=02` at exit 0 where both oracles give `o1=02 o2=01`, while
+                // the MODULE twin of the identical body still emits the E3009 in POST.
+                // The flat per-body block-local table is what the gate is about and the
+                // interface body has the same one, so it needs the same gate.
+                //
+                // It must run INSIDE the map window: the gate consults
+                // `scoped_block_locals` to skip a name that owns a `$blk$<lo>` net, and
+                // outside the window that map is the parent module's.
+                for it in &decl.body {
+                    if let ast::ModuleItem::Proc(p) = it {
+                        self.check_block_local_scope_leaks(&p.body);
+                    }
+                }
                 let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
                 let mut explicit_imports: std::collections::BTreeSet<String> =
                     std::collections::BTreeSet::new();
@@ -358,11 +415,9 @@ impl Elaborator<'_> {
                     // phase — queued outside the `take` those inits would ride the
                     // MODULE's pending list and be lowered against the module prefix,
                     // which is the misresolve the save/restore above exists to prevent.
-                    if Self::iface_block_locals_are_all_synthesized(&decl.body) {
-                        for it in &decl.body {
-                            if let ast::ModuleItem::Proc(p) = it {
-                                sc.hoist_block_local_nets(&p.body, &decl.ports, &decl.body);
-                            }
+                    for it in &decl.body {
+                        if let ast::ModuleItem::Proc(p) = it {
+                            sc.hoist_block_local_nets(&p.body, &decl.ports, &decl.body);
                         }
                     }
                     for it in &decl.body {
@@ -410,6 +465,14 @@ impl Elaborator<'_> {
                     }
                 }
                 self.iface_insts.insert(path.clone(), iface_name.clone());
+                // Below the Logic loop, not between the two passes: the maps have to
+                // answer the same way in both, which is the half of the prerequisite
+                // that is about POSITION rather than about the maps themselves.
+                self.decl_block_locals = saved_dbl;
+                self.scoped_block_locals = saved_scoped_blocks;
+                self.per_entry_block_locals = saved_per_entry_blocks;
+                self.coalesced_block_locals = saved_coalesced;
+                self.local_decl_names = saved_local_names;
                 self.restore_params(saved_params);
                 self.cur_prefix = saved_prefix;
             }
@@ -443,51 +506,5 @@ impl Elaborator<'_> {
                 }
             }
         }
-    }
-
-    /// Is every procedural block-local in this interface body one the PARSER
-    /// synthesized for a `foreach` — and does none of them collide with a name the
-    /// interface declares at its own scope?
-    ///
-    /// The admission for the interface-body block-local hoist above, and it is a
-    /// PROOF obligation rather than a prefix convention. v1 flattens a block-local to a
-    /// scope-level net by BARE NAME, and the classifier that keeps a colliding one out
-    /// of that flattening reads maps built from a `&ast::ModuleDecl` — which, on this
-    /// path, describe the PARENT module. So the only block-locals safe to hoist here
-    /// are ones that cannot collide at all:
-    ///
-    /// * `__foreach_<index>_<lo>` and `__foreach_st_<lo>` embed the `foreach` token's
-    ///   own byte offset, so two of them are distinct whenever the `foreach`es are;
-    /// * and a user cannot reach that spelling by accident — but "cannot" is a claim,
-    ///   so the interface's own top-level declaration names are checked outright.
-    ///
-    /// Anything else — one user-written `begin int x; … end` anywhere in the body — and
-    /// the whole body keeps the pre-slice refusal. That is deliberately all-or-nothing:
-    /// a per-block filter would have to reproduce the containment and disjointness
-    /// analysis `compute_scoped_block_locals` exists to do.
-    fn iface_block_locals_are_all_synthesized(body: &[ast::ModuleItem]) -> bool {
-        let mut scope_names: std::collections::BTreeSet<&str> = Default::default();
-        for it in body {
-            match it {
-                ast::ModuleItem::NetVar(d) => {
-                    scope_names.extend(d.names.iter().map(|n| n.name.name.as_str()));
-                }
-                ast::ModuleItem::Param(p) => {
-                    scope_names.insert(p.name.name.as_str());
-                }
-                _ => {}
-            }
-        }
-        let mut decls = Vec::new();
-        for it in body {
-            if let ast::ModuleItem::Proc(p) = it {
-                crate::block_local::collect_block_local_decls(&p.body, &mut decls);
-            }
-        }
-        decls.iter().flat_map(|d| d.names.iter()).all(|n| {
-            let s = n.name.name.as_str();
-            (s.starts_with("__foreach_") || s.starts_with("__foreach_st_"))
-                && !scope_names.contains(s)
-        })
     }
 }
