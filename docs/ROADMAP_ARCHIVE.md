@@ -508,7 +508,7 @@
 - 증상: 같은 본문이 `module` 에선 정답이고 `interface` 에선 9에러 — 그중 7개가 `undeclared net/variable top.u.__foreach_i_<n>`, 2개가 enum 이 없는 설계에 대한 `enum method 'v.first' is unavailable`(오도하는 메시지). 파서가 `foreach` 마다 블록로컬 쌍을 합성하는데 `iface_inst.rs` 에 hoist 루프가 아예 없었다.
 - ⚠️⚠️ **적대 리뷰(differential)가 첫 고침을 BLOCKING 으로 잡았다.** hoist 만 붙이는 것은 module 쌍둥이가 아니다 — `instance.rs` 는 먼저 다섯 분류 패스를 `&ast::ModuleDecl` 에서 만들고, 그것이 **스코프 이름과 충돌하는** 블록로컬을 flatten 에서 빼낸다. interface 경로에선 그 맵들이 부모 모듈 것이라, `integer b` 멤버 + `begin integer b; b = 7; end` 가 `OUTER b=7`·`u.b=7` 을 찍었다(두 오라클 `99`). **module 쌍둥이는 PRE·POST 다 정답** — 그게 귀속을 확정한 대조군이다.
 - 좁힌 고침: 파서가 **합성한** `__foreach_*` 만 hoist 한다. 그 이름들은 `foreach` 토큰의 바이트 오프셋을 품어 서로 충돌할 수 없고, 사용자가 그 철자를 쓰지 않았다는 것은 가정이 아니라 interface 스코프 이름 집합으로 **확인**한다. 사용자 블록로컬이 본문에 하나라도 있으면 body 단위로 전부 거절(per-block 필터는 그 다섯 패스의 containment/disjointness 분석을 다시 지어야 한다).
-- 실측: single·multi-dim(`q[i,j]`)·중첩 `foreach`, generate 안의 interface, 파라미터화 interface, modport 전부 3-way 동일. 충돌 셀은 loud 로 복귀. generate **안**의 `foreach`(hoist 루프가 top-level `Proc` 만 본다) 와 사용자 블록로컬은 잔여로 §3.b 에 1줄.
+- 실측: single·multi-dim(`q[i,j]`)·중첩 `foreach`, generate 안의 interface, 파라미터화 interface, modport 전부 3-way 동일. 충돌 셀은 loud 로 복귀. 사용자 블록로컬은 잔여로 §3.b 에 1줄. ⚠️ generate **안**의 `foreach` 를 "hoist 루프가 top-level `Proc` 만 봐서" 로 적었던 것은 **오귀속**이다 — 재동결 후 재실행이 실제 진단을 보여줬다: `generate blocks inside an interface are outside the MVP`(E3009). 그 셀은 이 hoist 이전에 상류에서 거절되므로 §3.b 잔여가 아니라 별개의 pre-existing MVP loud 다.
 - 게이트 완전성 확인: `collect_block_local_decls` 와 `hoist_block_local_nets` 의 statement arm 이 **동일**하므로, 게이트가 보는 집합 = hoist 가 만들 집합.
 
 **리뷰 · 게이트**
