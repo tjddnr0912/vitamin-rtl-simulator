@@ -99,6 +99,137 @@ fn const_of(ir: &SimIr, eid: u32) -> Option<u32> {
     crate::width::const_u32_of_expr(ir, eid)
 }
 
+/// `net → (its constant value at the net's own width, that width, its declared
+/// sign)` — see [`const_driven_nets`]. Empty for every design without an
+/// unpacked array, which is what keeps the fold's cost where its answers are.
+type NetConsts = BTreeMap<u32, (u128, u32, bool)>;
+
+/// The nets whose VALUE is decided before the run starts: a `wire` driven by
+/// exactly ONE undelayed, whole-net continuous assign whose rhs folds.
+///
+/// `assign k = 2'd1; assign c = m[k];` reads the word both oracles read
+/// (`a5`) — the index is a constant, so `c` is a second name for `m[1]` exactly
+/// as the literal spelling is, and vita alone kept the settle's stale value
+/// (§2 🆕 I ⓒ). The property that separates it is "one constant continuous
+/// driver", NOT "the index is a wire": a `buf`-driven net is the §7.3 `z`→`x`
+/// coercion and COMPUTES (`oracle_split_rulings.rs` pins that ruling), and its
+/// desugared `~~in` rhs declines here for the same reason any operator does.
+///
+/// Every OTHER producer of a value disqualifies the net, because the driver's
+/// rhs is then only part of the account:
+///
+/// * a procedural write (`initial k = …`) — the value changes mid-run;
+/// * a `force` / `release` — measured, and load-bearing in both directions: with
+///   `force k = 0` all three tools read `m[0]` through this very copy, so the
+///   alias must keep EVALUATING the index at the read (it does — the fold gates
+///   admission only). The net is excluded anyway, so the forced design keeps
+///   byte-identically the behaviour it has today;
+/// * a second continuous driver of any shape, including a partial-slice one
+///   (`assign k[0] = …`) and a gate on one bit.
+///
+/// TRANSITIVE, by fixpoint: `assign k2 = 2'd1; assign k = k2;` is the same read
+/// spelled through one more name, and both oracles read it through. Splitting
+/// the two spellings would be the "one read, two answers" hazard `copy_alias`
+/// already warns about for the flat/word bases.
+///
+/// NOT closed by this: a PROCEDURALLY assigned index, a delayed constant driver,
+/// a gate-driven one and a `buf` bit — all four are the wider "a computed
+/// continuous driver settles one delta after a same-time procedural read" class
+/// (`assign c = r + 8'd0;` with no array at all reproduces it), which is
+/// ROADMAP §2 🆕 I ⓐ and is held deliberately: the store-side forward that would
+/// close it re-ordered every settle consumer (picorv32 / UDP / keccak).
+fn const_driven_nets(ir: &SimIr) -> NetConsts {
+    let mut out: NetConsts = BTreeMap::new();
+    if !ir.nets.iter().any(|n| n.array_len > 1) {
+        return out;
+    }
+    // The producer census: every statement kind that can put a value on a net.
+    let mut blocked: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    for st in &ir.stmts {
+        let lv = match st {
+            sim_ir::Stmt::BlockingAssign { lhs, .. }
+            | sim_ir::Stmt::NonblockingAssign { lhs, .. }
+            | sim_ir::Stmt::Force { lhs, .. }
+            | sim_ir::Stmt::Release { lhs } => lhs,
+            _ => continue,
+        };
+        blocked.extend(lv.chunks.iter().map(|c| c.net));
+    }
+    // net → `Some(rhs)` while its ONLY driver is one admissible whole-net assign;
+    // `None` as soon as a second driver of any shape touches it. An all-`z`
+    // whole-net constant beside it is not a second driver — `z` is the identity
+    // of every resolution kind, which is the same account [`null_driver`] gives
+    // `copy_nets`, and the two must agree or one spelling of the read renames
+    // while the other does not.
+    let mut cand: BTreeMap<u32, Option<u32>> = BTreeMap::new();
+    for ca in &ir.cont_assigns {
+        if null_driver(ir, ca) {
+            continue;
+        }
+        let whole = ca.delay.is_none()
+            && ca.lhs.chunks.len() == 1
+            && ca.lhs.chunks[0].word.is_none()
+            && ca.lhs.chunks[0].offset.is_none()
+            && ca.lhs.chunks[0].width.is_none();
+        for c in &ca.lhs.chunks {
+            cand.entry(c.net)
+                .and_modify(|e| *e = None)
+                .or_insert(whole.then_some(ca.rhs));
+        }
+    }
+    cand.retain(|net, rhs| {
+        if rhs.is_none() || blocked.contains(net) {
+            return false;
+        }
+        let nv = &ir.nets[*net as usize];
+        matches!(nv.kind, sim_ir::NetKind::Wire)
+            && nv.array_len <= 1
+            && nv.width > 0
+            && nv.width <= 64
+    });
+    // Fixpoint, so a chain of names folds whichever order the nets are numbered
+    // in. Each round adds at least one net or stops, and the SOURCES a round
+    // resolves are what the next round's readers need — so the direction is
+    // alternated: a chain declared source-first settles in one ascending round
+    // and one declared reader-first in one descending round. (Both orders occur;
+    // measured, a 3,000-link reverse chain cost 0.4 s of re-walking without the
+    // alternation. An arbitrarily shuffled chain still costs a round per link,
+    // which is the honest bound on this shape.)
+    let mut pending: Vec<(u32, u32)> = cand
+        .iter()
+        .filter_map(|(&net, rhs)| rhs.map(|r| (net, r)))
+        .collect();
+    for _ in 0..=pending.len() {
+        let mut changed = false;
+        for &(net, rhs) in &pending {
+            if out.contains_key(&net) {
+                continue;
+            }
+            let Some((pat, w, s)) = word_self(ir, rhs, &out) else {
+                continue;
+            };
+            let nv = &ir.nets[net as usize];
+            // The assignment context (`coerce_assign`): the rhs lands at the
+            // net's own width, sign-extended only when the SOURCE is signed.
+            let m = mask(nv.width);
+            let v = if w >= nv.width {
+                pat & m
+            } else if s && w > 0 && (pat >> (w - 1)) & 1 == 1 {
+                (pat | (m & !mask(w))) & m
+            } else {
+                pat & m
+            };
+            out.insert(net, (v, nv.width, nv.signed));
+            changed = true;
+        }
+        if !changed {
+            break;
+        }
+        pending.reverse();
+    }
+    out
+}
+
 /// The value of a constant array-WORD index, or `None` when the index is not a
 /// constant expression of the shapes the lowering builds for one.
 ///
@@ -115,23 +246,25 @@ fn const_of(ir: &SimIr, eid: u32) -> Option<u32> {
 /// the arithmetic operators are context-determined — every operand is extended
 /// to the widest operand of the whole tree, sign-extended only when EVERY operand
 /// is signed — and computed modulo that width; `Concat` / `Replicate` / a bit
-/// `Select` / `Const` are self-determined leaves. Anything else (`Ternary`, a
-/// signal, a wider-than-64-bit or x/z constant) declines. The fold gates
+/// `Select` / `Const` are self-determined leaves, and so is a net whose value is
+/// settled before the run ([`const_driven_nets`] — `assign k = 2'd1;` then
+/// `m[k]`). Anything else (`Ternary`, a net with any other producer, a
+/// wider-than-64-bit or x/z constant) declines. The fold gates
 /// ADMISSION only: the alias carries the index expression itself and the engine
 /// evaluates it at the read, so a fold that disagreed with the engine could at
 /// most admit an out-of-range copy (whose read is `x` either way, plus a repeated
 /// E4002) — never a different word.
-fn word_const(ir: &SimIr, eid: u32) -> Option<u32> {
-    let (w, signed) = word_ctx(ir, eid)?;
+fn word_const(ir: &SimIr, eid: u32, nc: &NetConsts) -> Option<u32> {
+    let (w, signed) = word_ctx(ir, eid, nc)?;
     if w == 0 || w > 66 {
         return None;
     }
-    let v = word_eval(ir, eid, w, signed)?;
+    let v = word_eval(ir, eid, w, signed, nc)?;
     u32::try_from(v).ok()
 }
 
 /// A self-determined leaf of a word-index tree: its bit pattern, width and sign.
-fn word_leaf(ir: &SimIr, eid: u32) -> Option<(u128, u32, bool)> {
+fn word_leaf(ir: &SimIr, eid: u32, nc: &NetConsts) -> Option<(u128, u32, bool)> {
     match ir.exprs.get(eid as usize)? {
         sim_ir::Expr::Const { val } => {
             let c = ir.consts.get(*val as usize)?;
@@ -150,7 +283,7 @@ fn word_leaf(ir: &SimIr, eid: u32) -> Option<(u128, u32, bool)> {
             let mut pat: u128 = 0;
             let mut w: u32 = 0;
             for &p in parts {
-                let (pp, pw, _) = word_self(ir, p)?;
+                let (pp, pw, _) = word_self(ir, p, nc)?;
                 w = w.checked_add(pw)?;
                 if w > 66 {
                     return None;
@@ -161,7 +294,7 @@ fn word_leaf(ir: &SimIr, eid: u32) -> Option<(u128, u32, bool)> {
         }
         sim_ir::Expr::Replicate { count, value } => {
             let n = const_of(ir, *count)?;
-            let (vp, vw, _) = word_self(ir, *value)?;
+            let (vp, vw, _) = word_self(ir, *value, nc)?;
             let w = vw.checked_mul(n)?;
             if w > 66 {
                 return None;
@@ -178,20 +311,25 @@ fn word_leaf(ir: &SimIr, eid: u32) -> Option<(u128, u32, bool)> {
             width,
             kind: sim_ir::SelKind::Bit,
         } => {
-            let (bp, bw, _) = word_self(ir, *base)?;
+            let (bp, bw, _) = word_self(ir, *base, nc)?;
             let off = const_of(ir, *offset)?;
             if const_of(ir, *width)? != 1 || off >= bw {
                 return None;
             }
             Some(((bp >> off) & 1, 1, false))
         }
+        // A net whose value is settled before the run ([`const_driven_nets`]) is
+        // a leaf like a literal of the same width and declared sign — which is
+        // what the index SEAL the lowering wrapped around it expects to find
+        // (`{1'b0, k}` / `{{n{k[msb]}}, k}` reach here through `word_self`).
+        sim_ir::Expr::Signal { net, word: None } => nc.get(net).copied(),
         _ => None,
     }
 }
 
 /// A SELF-DETERMINED subtree: an arithmetic tree evaluated in its own context
 /// (a concatenation operand, a replicated bit, a select base — §11.6), or a leaf.
-fn word_self(ir: &SimIr, eid: u32) -> Option<(u128, u32, bool)> {
+fn word_self(ir: &SimIr, eid: u32, nc: &NetConsts) -> Option<(u128, u32, bool)> {
     match ir.exprs.get(eid as usize)? {
         sim_ir::Expr::Binary {
             op: sim_ir::BinOp::Add | sim_ir::BinOp::Sub | sim_ir::BinOp::Mul,
@@ -201,47 +339,47 @@ fn word_self(ir: &SimIr, eid: u32) -> Option<(u128, u32, bool)> {
             op: sim_ir::UnOp::Minus,
             ..
         } => {
-            let (w, signed) = word_ctx(ir, eid)?;
+            let (w, signed) = word_ctx(ir, eid, nc)?;
             if w == 0 || w > 66 {
                 return None;
             }
-            Some((word_eval(ir, eid, w, signed)?, w, signed))
+            Some((word_eval(ir, eid, w, signed, nc)?, w, signed))
         }
-        _ => word_leaf(ir, eid),
+        _ => word_leaf(ir, eid, nc),
     }
 }
 
 /// The context of a word-index tree: the widest operand and whether every
 /// operand is signed, through the context-determined operators only.
-fn word_ctx(ir: &SimIr, eid: u32) -> Option<(u32, bool)> {
+fn word_ctx(ir: &SimIr, eid: u32, nc: &NetConsts) -> Option<(u32, bool)> {
     match ir.exprs.get(eid as usize)? {
         sim_ir::Expr::Binary {
             op: sim_ir::BinOp::Add | sim_ir::BinOp::Sub | sim_ir::BinOp::Mul,
             lhs,
             rhs,
         } => {
-            let (lw, ls) = word_ctx(ir, *lhs)?;
-            let (rw, rs) = word_ctx(ir, *rhs)?;
+            let (lw, ls) = word_ctx(ir, *lhs, nc)?;
+            let (rw, rs) = word_ctx(ir, *rhs, nc)?;
             Some((lw.max(rw), ls && rs))
         }
         sim_ir::Expr::Unary {
             op: sim_ir::UnOp::Minus,
             operand,
-        } => word_ctx(ir, *operand),
+        } => word_ctx(ir, *operand, nc),
         _ => {
-            let (_, w, s) = word_leaf(ir, eid)?;
+            let (_, w, s) = word_leaf(ir, eid, nc)?;
             Some((w, s))
         }
     }
 }
 
 /// Evaluate a word-index tree at context width `w` (modulo `2^w`).
-fn word_eval(ir: &SimIr, eid: u32, w: u32, signed: bool) -> Option<u128> {
+fn word_eval(ir: &SimIr, eid: u32, w: u32, signed: bool, nc: &NetConsts) -> Option<u128> {
     let m = mask(w);
     match ir.exprs.get(eid as usize)? {
         sim_ir::Expr::Binary { op, lhs, rhs } => {
-            let l = word_eval(ir, *lhs, w, signed)?;
-            let r = word_eval(ir, *rhs, w, signed)?;
+            let l = word_eval(ir, *lhs, w, signed, nc)?;
+            let r = word_eval(ir, *rhs, w, signed, nc)?;
             match op {
                 sim_ir::BinOp::Add => Some(l.wrapping_add(r) & m),
                 sim_ir::BinOp::Sub => Some(l.wrapping_sub(r) & m),
@@ -252,9 +390,9 @@ fn word_eval(ir: &SimIr, eid: u32, w: u32, signed: bool) -> Option<u128> {
         sim_ir::Expr::Unary {
             op: sim_ir::UnOp::Minus,
             operand,
-        } => Some(word_eval(ir, *operand, w, signed)?.wrapping_neg() & m),
+        } => Some(word_eval(ir, *operand, w, signed, nc)?.wrapping_neg() & m),
         _ => {
-            let (pat, lw, ls) = word_leaf(ir, eid)?;
+            let (pat, lw, ls) = word_leaf(ir, eid, nc)?;
             if lw > w {
                 return None;
             }
@@ -334,7 +472,7 @@ fn const_slice(
 /// truncating driver is refused — padding and truncation are computed, not moved.
 /// The second half is the word's index expression when the source is an array
 /// word (`None` for a whole net or a slice).
-fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<(u32, Option<u32>)> {
+fn copied_source(ir: &SimIr, rhs: u32, want: u32, nc: &NetConsts) -> Option<(u32, Option<u32>)> {
     match ir.exprs.get(rhs as usize)? {
         sim_ir::Expr::Signal { net, word: None } => {
             (want == ir.nets[*net as usize].width).then_some((*net, None))
@@ -358,7 +496,7 @@ fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<(u32, Option<u32>)> 
             if !flat_kind || nv.array_len <= 1 || want != nv.width {
                 return None;
             }
-            let idx = word_const(ir, *weid)?;
+            let idx = word_const(ir, *weid, nc)?;
             (idx < nv.array_len).then_some((*net, Some(*weid)))
         }
         sim_ir::Expr::Select {
@@ -397,7 +535,7 @@ fn copied_source(ir: &SimIr, rhs: u32, want: u32) -> Option<(u32, Option<u32>)> 
                     if !flat_kind || nv.array_len <= 1 {
                         return None;
                     }
-                    let idx = word_const(ir, *weid)?;
+                    let idx = word_const(ir, *weid, nc)?;
                     if idx >= nv.array_len {
                         return None;
                     }
@@ -488,6 +626,9 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
     if ir.cont_assigns.is_empty() {
         return Vec::new();
     }
+    // Built ONCE here: the word fold below asks it per driver, and it is the same
+    // answer for every one of them.
+    let nc = const_driven_nets(ir);
     let nulls: std::collections::BTreeSet<usize> = ir
         .cont_assigns
         .iter()
@@ -520,7 +661,7 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
                 }
                 let (_, took) =
                     const_slice(ir, c.kind, c.offset, c.width, ir.nets[c.net as usize].width)?;
-                copied_source(ir, ca.rhs, took)
+                copied_source(ir, ca.rhs, took, &nc)
                     .map(|(s, _)| s)
                     .filter(|&s| s != c.net)
             })
