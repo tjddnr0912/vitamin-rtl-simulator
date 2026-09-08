@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.457` **A constant-driven NET as an array-word index, a REAL time literal and a negated sized literal as delays, and `parameter type T = <unpacked typedef>`** (2026-09-08 · §2 🆕 I ⓒ + §2 Delays + §3 ⑤ⓕ · §2 row 7 residue REFUTED · 13 + 17 + 8 cells)
 - `4.5.456` **A tf-port formal spelled with an unpacked-array typedef, a full-range select of an array word, and a process-order permutation that was built and reverted** (2026-09-08 · §3 ⑤ⓕ + §2 🆕 I ⓒ + §2 row 7 REVERTED · 22 + 13 cells)
 - `4.5.455` **`$bits` of a `real` / `realtime` parameter is 64, like the variable beside it** (2026-09-07 · §2 🆕 L ⓐ · 16 cells · batch with 453/454)
 - `4.5.454` **The `pkg::T` twin respells its UNPACKED dims too — the third container** (2026-09-07 · §3 ⑤ⓕ · 10 cells · batch with 453/455)
@@ -473,6 +474,76 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.457 — A constant-driven NET as an array-word index, a REAL time literal and a negated sized literal as delays, and `parameter type T = <unpacked typedef>` (2026-09-08 · format 31 · no IR change) ✅
+
+A bundle of three slices, all shipped. The queued third slot (§2 row 7's non-ordering half) was REFUTED at HEAD before any code was written and is recorded below in place of the slice it would have been.
+
+##### ⓐ §2 🆕 I ⓒ — an array WORD read through a net whose only driver is a constant (7 cells + 6 guards)
+
+`wire [1:0] k; assign k = 2'd1; assign c = m[k];` read in the same delta as the writer's own `m[1] = 8'hA5` gave the settle's STALE value — `22`, or `xx` uninitialised — where iverilog 13.0 and verilator 5.052 both read the word through and print `a5`. `alias::word_const` folds a word index only to decide ADMISSION into the rename set, and its leaf set had no `Signal` arm, so the copy was refused and the read kept its own storage.
+
+`alias::const_driven_nets` settles, once per `copy_nets` call, which nets hold a compile-time value: a `wire` with exactly ONE undelayed whole-net continuous driver whose rhs folds, never written procedurally and never a `force`/`release` target. Such a net is then a leaf of the same fold, at its own width and declared sign — which is exactly what the index SEAL the lowering wrapped around it (`{1'b0, k}` / `{{n{k[msb]}}, k}`) expects to find. Both `Select` and whole-word arms open together, because they share `word_const`.
+
+| cell | PRE | POST | both oracles |
+|---|---|---|---|
+| `assign k = 2'd1;` (headline) | `22` | `a5` | `a5` |
+| index net wider than the coordinate (`wire [7:0] k`) | `22` | `a5` | `a5` |
+| constant EXPRESSION `2'd1 + 2'd0` · a parameter | `22` | `a5` | `a5` |
+| TRANSITIVE chain `assign k2 = 2'd1; assign k = k2;` | `22` | `a5` | `a5` |
+| an all-`z` driver beside the constant one | `22` | `a5` | `a5` |
+| the SELECT spelling `m[k][7:0]` | `22` | `a5` | `a5` |
+| a SIGNED net index into a negative-base array (`m[-2:1]`, `k = -4'sd2`) | `11` | `a5` | `a5` |
+
+⭐ **The row's separating property was named from an ILLEGAL cell.** The row said a `buf`-driven index is an oracle SPLIT, so the property is "one constant continuous driver" rather than "is a wire". The `buf b(k, 1'b1)` it cites is illegal on a 2-bit `k` (iverilog: "Expression width 2 does not match width 1 of logic gate array port 1"), so that cell had no oracle at all; the legal per-bit spelling is a plain two-oracle defect. The property still holds — for a different reason that was already decided: `oracle_split_rulings.rs` pins a `buf` as the §7.3 `z`→`x` coercion, so it COMPUTES and must not be admitted, and its `~~in` desugar declines here like any operator.
+
+⭐ **The class is wider than the array, and the rest of it is held on purpose.** `assign c = r + 8'd0;` with a plain scalar `reg` and no array reproduces the same stale read on both oracles. That is ROADMAP §2 🆕 I ⓐ — a computed continuous driver settling one delta after a same-time procedural read — whose fix is the store-side forward that reordered picorv32 / UDP / keccak. What this slice closes is the RENAME: a net that is a second name for a word. A procedural index, a delayed constant driver and a gate-driven one stay computed, and `copy_word_net_const_index.rs` pins all four so a later widening has to answer for them.
+
+⚠️ Guards measured PRE == POST: a `force`d index (all three tools read `m[0]` while it is held, so the alias must keep EVALUATING the index at the read — it does), an x/z constant driver, an out-of-range constant (loud E4002, and its diagnostic count unmoved), a truncating destination, a `wor` multi-driver group, and the time-zero event — which PRE fired on the wire-index spelling and not on the literal twin beside it, and now fires on neither, like iverilog.
+
+⚠️ A soundness lens found the fixpoint quadratic on a 3,000-link reverse-ordered chain (0.17 s → 0.56 s). Alternating the round's direction makes both declaration orders one round; an arbitrarily shuffled chain still costs a round per link, which is the honest bound.
+
+##### ⓑ §2 "Delays / events" — a REAL time literal and a negated SIZED literal (17 cells)
+
+Two structural-delay values folded to NO DELAY, silently, at exit 0.
+
+- `assign #(2.5ns) y = a;` — and `#(3.0ns)` too. `delay_ticks_in_scope`'s `TimeLit` arm asked the INTEGER fold and returned `None` for the whole function when it declined; the caller reads `None` as "no delay". The real lane now takes it, converting to the module's own time UNITS first: measured, both oracles round a delay at the unit and not at the precision — `#(25ns)` under `10ns/1ns` is 2.5 units and both delay THREE units, and `#(2.5ns)` under the same header is a quarter of a unit and both delay ZERO.
+- `assign #(-4'd1) y = a;` — a delay is a self-determined position read as UNSIGNED (§11.6), so it is 15; `const_eval_u32`'s 32-bit `wrapping_neg` made it 4294967295 and the assign never fired at all. `const_delay_u64` now negates a sized literal at its OWN width, which is the literal-only twin of the rule `delay_ticks_in_scope`'s integer lane already applies through `const_unsigned_selfdet`.
+
+| delay | PRE | POST | both oracles |
+|---|---|---|---|
+| `0.5ns` `1.5ns` `2.4ns` `2.5ns` `2.6ns` (`1ns/1ps`) | 0 each | 1 2 2 3 3 ns | same |
+| `2.0ns` `3.0ns` — integral, still real | 0 | 2 3 ns | same |
+| `2.5ns` / `25ns` under `10ns/1ns` | 0 / 25 units | 0 / 3 units | same |
+| `-4'd1` · `-(4'd1)` · `-8'sd1` | never fires | 15 · 15 · 255 | same |
+| gate `buf #(2.5ns)` · net-decl `wire #(2.5ns) w = a` · rise/fall `#(2.5ns, 1ns)` | 0 | 3 · 3 · 3/1 | same |
+
+⚠️ A differential lens caught a regression before it shipped: DECLINING the shapes this arm cannot improve (an x/z literal, one wider than 64 bits) made `assign #(-128'd1) y = a;` fire with NO delay, where iverilog never fires it and the pre-slice fold did not either. Those shapes now fall BACK to the fold they had, PRE-identical.
+
+Residues, recorded not chased: a real time literal inside an ARITHMETIC expression (`#(2.5ns + 1ns)`, both oracles 4 ticks, vita 0 — the module-unit value is not an integer, so the integer lane declines and the real lane never sees a bare `TimeLit`); `#(2 * 2.5ns)` is a live oracle split (iverilog 6, verilator 5); a NEGATIVE real time literal is one-oracle (verilator aborts its own run); and the PROCEDURAL `#(2.5ns) stmt;` stays honestly loud (`E3009`), which is a §3 row, not this one.
+
+##### ⓒ §3 ⑤ⓕ — `parameter type T = a_t` where `a_t` is an unpacked-array typedef (the declaration subset)
+
+`typedef logic [7:0] a_t [0:2]; module m #(parameter type T = a_t) (); T v;` was a five-error parse cascade; both oracles run it and answer `$bits(v)` 24, `$size(v)` 3.
+
+The `T$w` / `T$s` value-parameter desugar has no dim slot — and does not need one. The dims ride the TYPEDEF the group already registers for `T`, which is the map every DECLARATION binder reads: `decls.rs` stamps them onto each declarator and `functask.rs` onto a tf-port formal (§4.5.445 / §4.5.456 built both). So `T v;` becomes the `logic [T$w-1:0] v [0:2]` it would have been written as, and a port, a `foreach`, `$size(v,1)`, the `localparam type` spelling and a package-scoped default (`parameter type W = pk::pa_t`) all follow with no further code.
+
+⭐ **The carry had to be OPT-IN, and the grounding lens predicted exactly where.** `parse_type_param_value` serves two callers: the DEFAULT (which has the carrier) and an instance OVERRIDE (which does not). A bare relaxation would have let `m #(.T(b_t))` parse, replace the WIDTH and keep the DEFAULT's dims — `$bits` 48 where both oracles answer 64. The parameter is a literal `false` at the override, so that half is byte-identical. A second, subtler door needed a second guard: `m #(.T(logic [15:0]))` always parsed, and it would have declared `logic [15:0] v [0:2]` and printed 48 where both oracles print 16. `T$s` gained bit 2 = "the default carries dims", so the shape guard the group already synthesizes turns it into an `F4004` — and that bit is 0 for every type value that predates this slice, so the flags are unchanged everywhere else.
+
+Kept loud, each for its own reason: `T'(…)` (NO-ORACLE — iverilog aborts on an internal assertion, verilator refuses the cast, and `T$w` is the ELEMENT width); `$bits(T)` on the bare type name (both oracles 24; the symbolic element width does not fold, so it declines rather than answer 8); an override that is itself an unpacked typedef (the residue the row keeps); the function RETURN type (one oracle, frozen `FunctionDef`); and dims on both the typedef and the declarator (the live split on dimension ORDER).
+
+##### ⓓ §2 row 7's non-ordering half — REFUTED at HEAD, no code written
+
+The queue's third slot claimed an output PORT bind `child u1(.o(w))` and a hierarchical `assign w = u1.s;` were their OWN two-oracle silent-wrongs, reached through the t0 structural SETTLE and therefore separable from row 7's blocked ordering half. Measured at HEAD, both halves of that claim fail:
+
+- The settle is already correct. With a declaration initialiser `reg [7:0] s = 8'hEE;` in the child, vita reads `ee` through BOTH the port bind and the hierarchical assign at the parent's t0 immediate read, matching both oracles — as it does for a constant driver, a parameter driver and a two-level chain. The ONLY spelling that diverges is the one whose value comes from the child's `initial` process, which is process order.
+- "Both oracles `ee`" does not survive perturbation. verilator answers `ee` only because it constant-hoists a single-statement `initial s = <const>;` into the variable's static initialisation; adding a second statement to that initial flips verilator to `00` — vita's answer — while iverilog stays `ee`. The cell is an ORACLE SPLIT on order, not a two-oracle defect.
+
+The row keeps its BLOCKED status and its prerequisite (a per-resumption-kind ordering model), and the split is now recorded beside it.
+
+##### New finding, filed not fixed
+
+An UNSIGNED narrow net index into a negative-base array — `logic [7:0] m[-2:1]; wire [3:0] k; assign k = -4'sd2; assign c = m[k];` — is `E4002` / `xx` in vita where both oracles read `a5`; the SIGNED declaration of the same net is correct at HEAD (and was fixed by ⓐ). PRE == POST, so it is pre-existing: the seal reads the net's declared sign, and the oracles apparently size the index to the array's coordinate instead. One §2 line, one instance.
 
 #### 4.5.456 — A tf-port formal of an unpacked-array typedef, a full-range select of an array WORD, and a process-order permutation that was BUILT AND REVERTED (2026-09-08 · format 31 · no IR change) ✅
 

@@ -25,6 +25,16 @@ need updating. What moved:
 
 ### Added
 
+- **A type parameter can default to an unpacked-array typedef.**
+  `typedef logic [7:0] a_t [0:2]; module m #(parameter type T = a_t) (); T v;` was a parse error;
+  the typedef's dimensions now reach every declaration of `T` — a variable, a port, a
+  function/task formal, `foreach`, `$size(v,1)` — so `$bits(v)` is 24 as in both reference
+  simulators. The `localparam type` spelling and a package-scoped default (`parameter type
+  W = pk::pa_t`) work the same way. An instance OVERRIDE of such a parameter stays refused, and
+  loudly: the width channel an override travels on cannot carry dimensions, so an override that
+  silently kept the default's dimensions would report a wrong `$bits`. A cast `T'(…)`, `$bits(T)`
+  on the bare type name and a function RETURN type of that type also stay refused.
+
 - **A tf-port formal can be spelled with an unpacked-array typedef.**
   `typedef logic [7:0] a_t [0:3]; function int f(input a_t v);` was a parse error; the typedef's
   dimensions now ride onto the formal the same way the explicit spelling
@@ -36,6 +46,27 @@ need updating. What moved:
   resulting dimension order — which is the same refusal a declaration already gives.
 
 ### Fixed
+
+- **A delay written as a real time literal is no longer dropped.**
+  `assign #(2.5ns) y = a;` — and `#(3.0ns)`, and the same value on a gate primitive, a net
+  declaration and the rise/fall pair `#(2.5ns, 1ns)` — propagated with NO delay at all, at exit 0.
+  It now delays what both reference simulators delay. Note the rounding both of them apply: a
+  fractional delay is rounded at the module's **time unit**, not at its precision, so `#(25ns)`
+  under a `10ns/1ns` header is 2.5 units and delays three of them (30 ns), while `#(2.5ns)` under
+  the same header is a quarter of a unit and delays none.
+
+- **A delay written as a negated sized literal fires when it should.**
+  `assign #(-4'd1) y = a;` is a self-determined value read as unsigned — 15 ticks — and vita was
+  computing a 32-bit negation instead (4294967295 ticks), so the assign never fired at all inside
+  a normal run. `#(-8'sd1)` is 255 the same way. The unsized spelling `#(-1)` is unchanged.
+
+- **An array word read through a constant-driven wire index is read through.**
+  `wire [1:0] k; assign k = 2'd1; assign c = m[k];` read in the same time step as a write of
+  `m[1]` returned the previous value, where both reference simulators return the new one. A net
+  whose only driver is one undelayed constant continuous assign is now treated as the constant it
+  is, so `c` renames `m[1]` exactly as the literal spelling does — including through a chain of
+  such names, and for the `m[k][7:0]` select spelling. An index that is written procedurally,
+  driven through a delay, driven by a gate, or held by `force` still computes.
 
 - **A full-range part-select of a constant array word is read through, like the word itself.**
   `wire [7:0] c; assign c = m[1][7:0];` followed by a procedural write of `m[1]` in the same delta

@@ -233,6 +233,48 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ Widening what a DEFAULT may be makes the OVERRIDE channel's capacity a live invariant (2026-09-08 · §4.5.457)
+
+`parameter type T = a_t` on an unpacked-array typedef ships by letting the dims ride the registered
+TYPEDEF rather than the `T$w`/`T$s` value channel. The parse relaxation is opt-in at the default's
+call site (a literal `false` at the override), and that closes the door the new spelling opens — but
+NOT the one that was already open. `m #(.T(logic [15:0]))` always parsed; after the widening it
+replaced the width while the default's `[0:2]` stayed, declaring 48 bits where both oracles answer
+16. **How to apply:** after widening what a producer may carry, ask what the CONSUMER channel can
+carry, and enforce the difference where the two meet — here the shape guard the module already
+synthesizes, whose flag word gained a bit for "the default carries dims". Choose a carrier whose
+new value is impossible for every design that predates the slice (bit 2 is 0 everywhere else), so
+the guard is byte-identical outside the shape it exists for.
+
+### ⚠️ A DECLINE is a change — the shapes your new arm cannot improve must fall BACK, not return `None` (2026-09-08 · §4.5.457)
+
+A new arm ahead of an existing fallback owns every shape it matches, including the ones it cannot
+answer. `const_delay_u64` gained a `Unary Minus` arm so a sized literal negates at its own width;
+returning `None` for the shapes it could not fold (x/z, wider than 64 bits) handed the caller its
+own "no delay" default, and `assign #(-128'd1) y = a;` FIRED IMMEDIATELY where iverilog never fires
+it and the pre-slice fold did not either. The differential lens caught it because it ran the
+neighbours of the fixed cell, not the fixed cell. **How to apply:** in a new match arm, the
+non-improvable sub-shapes call the arm the expression WOULD have taken; and when the fold feeds a
+region/enable test as well as a value, say in the comment which of `None` and `Some(0)` that test
+reads, and prove the arm cannot turn one into the other.
+
+### ⚠️ A cell that no oracle ACCEPTS is not a split, and the property it "proves" is unowned (2026-09-08 · §4.5.457)
+
+§2 🆕 I ⓒ carried "its `buf`-driven twin is a split, so the separating property is one constant
+continuous driver, not is-a-wire". The cited design is illegal — `buf b(k, 1'b1)` on a 2-bit `k`,
+which iverilog rejects at compile — so it was NO-ORACLE, and the legal per-bit spelling is a plain
+two-oracle defect. The property survived for an unrelated reason already on record (a `buf` is the
+§7.3 `z`→`x` coercion, so it computes). **How to apply:** before a row's stated property is used to
+shape a fix, check the cell it rests on COMPILES on both oracles; a rejected cell proves nothing
+about the axis, and the reason your fix is right may have to be found again.
+
+### ⚠️ A declaration-ordered fixpoint is quadratic in the other order — alternate the direction (2026-09-08 · §4.5.457)
+
+A fold that resolves nets by repeated passes over a map in net order settles a source-first chain in
+one round and a reader-first chain in one round PER LINK: measured, 0.17 s → 0.56 s on a 3,000-link
+reverse chain. Reversing the list after each round makes both orders one round, costs two lines, and
+leaves the honest bound (a shuffled chain is still a round per link) to the comment.
+
 ### ⭐⭐ One key, several rules — ask whether the ORACLE orders your axis by kind before keying it once (2026-09-08 · §4.5.456)
 
 - A queue row whose fix shape is "record X and key the shared table on it" is a claim about the ORACLE's model, not just about your code. §2 row 7 read "process rank is not recorded", and the rank was the right fact — but vita has ONE ordering key (`Activity.tie`) where iverilog orders **each resumption kind differently**, and it says so in ONE run of ONE design: `initial` child-first, `always_comb`'s t0 arm parent-first, an edge-woken `always` parent-first, a `#d` delay resume child-first, a `wait()` resume parent-first, a fork-arm wake parent-first. No permutation of one key can be all six.
