@@ -1222,15 +1222,13 @@ impl Elaborator<'_> {
     ///     the plain `const_eval_in_scope`. A wholly integral `#(D/2)` therefore
     ///     keeps integer division (5 units for `D = 11`, both oracles).
     ///
-    /// ⚠️ Deliberately NOT wired into `lower_delay` (the procedural `#delay`), which
-    /// calls the scope-free `const_delay_ticks` to decide `Inactive` vs `Active`
-    /// ONLY. That path lowers the amount as an expression the engine evaluates at
-    /// suspension time, so it was never literal-limited; widening its region test
-    /// would move `#(ZERO_PARAM)` from `Active` (with the engine's runtime
-    /// `ticks == 0` nudge) into `Inactive` — a scheduling change with no defect
-    /// behind it. Keeping the new rule opt-in at the one consumer that needs it is
-    /// the shared-machinery rule in ENGINEERING_RULES.
-    fn delay_ticks_in_scope(&self, e: &ast::Expr) -> Option<u32> {
+    /// ⚠️ `lower_delay` (the procedural `#delay`) asks this too, but ONLY through
+    /// `expr_has_time_lit` — see the §2 ⓓ block there. Every delay WITHOUT a time
+    /// literal keeps the old path exactly, which is what leaves `#(ZERO_PARAM)` in
+    /// `Active` (with the engine's runtime `ticks == 0` nudge) rather than moving it
+    /// to `Inactive`: a scheduling change with no defect behind it. That gate is the
+    /// shared-machinery opt-in from ENGINEERING_RULES.
+    pub(crate) fn delay_ticks_in_scope(&self, e: &ast::Expr) -> Option<u32> {
         let mult = self.cur_time_mult;
         let pmult = self.cur_prec_mult;
         // min:typ:max picks typ — the same branch `const_delay_ticks` took before
@@ -1360,7 +1358,7 @@ impl Elaborator<'_> {
     /// agree about which nodes are descended. Conservative in both directions costs
     /// nothing: a false positive makes the walk decline and the caller falls through
     /// to the lanes it always used, and a false negative is exactly that fall-through.
-    fn expr_has_time_lit(e: &ast::Expr) -> bool {
+    pub(crate) fn expr_has_time_lit(e: &ast::Expr) -> bool {
         use ast::ExprKind as K;
         let r = Self::expr_has_time_lit;
         match &e.kind {
@@ -1400,7 +1398,7 @@ impl Elaborator<'_> {
     /// answered 0 because neither operand is a whole unit there). The bit operators
     /// and the shifts have no meaning on a magnitude, so they decline and the
     /// caller's existing lanes keep whatever they answered.
-    fn delay_units_in_scope(&self, e: &ast::Expr) -> Option<f64> {
+    pub(crate) fn delay_units_in_scope(&self, e: &ast::Expr) -> Option<f64> {
         use ast::ExprKind as K;
         if !Self::expr_has_time_lit(e) {
             return self.delay_plain_units(e);

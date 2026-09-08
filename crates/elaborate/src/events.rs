@@ -677,6 +677,85 @@ impl Elaborator<'_> {
             ast::ExprKind::MinTypMax { typ, .. } => typ.as_ref(),
             _ => e,
         };
+        // §2 "Delays / events" ⓓ: a delay holding a TIME LITERAL is folded in the
+        // DELAY domain first — the same `delay_ticks_in_scope` the structural lanes
+        // (`assign #(…)`, a net delay, a gate) have used since §4.5.458/459. Before
+        // this, the procedural lanes — a statement `#(…)`, a statement prefix, an
+        // intra-assign `=`/`<=`, a task body, `always`, a `fork` arm — went straight
+        // to `lower_expr`, which reaches `const_eval_in_scope`'s `TimeLit` arm; that
+        // arm declines a literal whose unit is finer than the design precision, one
+        // with a real numerator, and one that is not a whole multiple of the module's
+        // time unit, so `#(2500ps);` under `1ns/1ns` was E3009 where both oracles
+        // delay 3 ns. Measured over 6 timescales × 14 literals: 59 false-loud cells,
+        // and the STRUCTURAL twin of every one of them was already right.
+        //
+        // ⚠️ Asked BEFORE `lower_expr`, not as a fallback when it declines. On this
+        // class the integer lane does not merely decline — it ANSWERS WRONG, at exit
+        // 0: `#(3ns / 2)` under `1ns/1ns` folds integer division to one unit where
+        // both oracles delay 2, and `#(5ns / 2ns)` two where both delay 2.5. Eight
+        // such cells were silent-wrong, not loud, and a fallback-on-`None` patch
+        // would leave every one of them. `delay_ticks_in_scope`'s own comment records
+        // the identical ordering decision for the structural lane.
+        //
+        // ⚠️ Gated on `expr_has_time_lit`, so every delay without a time literal —
+        // which is every delay in the existing corpus — keeps the old two lines
+        // byte-for-byte, region included. That gate IS the opt-in: `#(ZERO_PARAM)`
+        // stays `Active` with the engine's runtime `ticks == 0` nudge.
+        //
+        // The amount the IR wants is MODULE TIME UNITS (the engine scales by the
+        // per-process multiplier), so the folded tick count is divided back by
+        // `mult` — which reproduces the structural lane's answer exactly, two-stage
+        // rounding and all, instead of re-deriving it here where the two lanes of one
+        // language construct could drift apart. An integral quotient stays an integer
+        // literal so the 20 already-correct cells do not change shape.
+        //
+        // ⚠️ NEGATIVE delays are excluded, and that exclusion is a measurement, not
+        // caution: `#(1ns - 5ns)` under `1ns/1ns` never fires in iverilog, never
+        // fires in verilator, and never fired in the procedural lane before this —
+        // three tools agreeing. `delay_ticks_in_scope` returns a `u32` and
+        // `real_delay_ticks` CLAMPS a negative amount to 0, so routing one through
+        // here would fire it immediately: a cell that matched both oracles turned
+        // into one that matches neither. The sign has to be read in the units
+        // domain, before the clamp, and a negative one falls through to the path
+        // that was already right. (ROADMAP §2 "Delays / events" ⓒ still holds for
+        // the STRUCTURAL lane, which does fire at 0 — that row is untouched here.)
+        if Self::expr_has_time_lit(pick)
+            && self.delay_units_in_scope(pick).is_some_and(|u| u >= 0.0)
+        {
+            if let Some(ticks) = self.delay_ticks_in_scope(pick) {
+                let m = mult.max(1);
+                let raw = if u64::from(ticks) % m == 0 {
+                    (u64::from(ticks) / m).to_string()
+                } else {
+                    // Shortest round-tripping decimal; `parse_real_f64` is
+                    // `str::parse::<f64>`, so this reads back bit-identical.
+                    format!("{}", f64::from(ticks) / m as f64)
+                };
+                let kind = if raw.contains('.') {
+                    ast::ExprKind::RealLit {
+                        kind: ast::RealLitKind::Fixed,
+                        raw,
+                    }
+                } else {
+                    ast::ExprKind::IntLit {
+                        kind: ast::IntLitKind::Decimal,
+                        raw,
+                    }
+                };
+                let amount = self.lower_expr(&ast::Expr {
+                    kind,
+                    span: pick.span,
+                });
+                // A time literal that PROVABLY rounds to no ticks is `Inactive`, the
+                // same rule `#0` and a sub-half-tick real already take.
+                let region = if ticks == 0 {
+                    ir::DelayRegion::Inactive
+                } else {
+                    ir::DelayRegion::Active
+                };
+                return (amount, region);
+            }
+        }
         let amount = self.lower_expr(pick);
         let region = if const_delay_ticks(pick, mult, self.cur_prec_mult) == Some(0) {
             ir::DelayRegion::Inactive

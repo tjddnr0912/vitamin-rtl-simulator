@@ -227,13 +227,15 @@ fn the_other_two_structural_spellings_share_the_fix() {
 }
 
 #[test]
-fn the_procedural_twin_stays_loud() {
-    // `#(2.5ns + 1ns) x = 1;` is honest-loud (E3009) and must stay that way: that
-    // path lowers the amount as an expression the engine evaluates at suspension
-    // time, and the new lane is deliberately not wired into it. Both oracles do
-    // delay it 3.5 ns, so this is a §3 row, not a silent-wrong.
+fn the_procedural_twin_delays_like_the_structural_one() {
+    // Was `the_procedural_twin_stays_loud`. `#(2.5ns + 1ns) x = 1;` WAS honest-loud
+    // (E3009) because the lane this file's slice added was wired into the
+    // structural delays only; §4.5.460 routed `lower_delay` through the same fold,
+    // so the two spellings of one delay now answer together. Measured at 1 fs:
+    // vita, iverilog and verilator all delay it 3 500 000 fs.
     let src = "`timescale 1ns/1ps\nmodule top;\n  logic x;\n  \
-               initial begin #(2.5ns + 1ns) x = 1; end\n  \
+               initial begin $timeformat(-15,0,\"\",20); #(2.5ns + 1ns) x = 1; \
+               $display(\"T %t\", $realtime); end\n  \
                initial #100 $finish;\nendmodule\n";
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let d = std::env::temp_dir().join(format!("vita_dtle_p_{}_{n}", std::process::id()));
@@ -249,6 +251,6 @@ fn the_procedural_twin_stays_loud() {
     let _ = std::fs::remove_dir_all(&d);
     let all =
         String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr);
-    assert_ne!(out.status.code(), Some(0), "{all}");
-    assert!(all.contains("VITA-E3009"), "{all}");
+    assert_eq!(out.status.code(), Some(0), "{all}");
+    assert!(all.contains("T              3500000"), "{all}");
 }
