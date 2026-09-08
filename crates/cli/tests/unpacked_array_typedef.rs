@@ -233,8 +233,14 @@ fn the_consumers_that_cannot_carry_the_dims_are_loud() {
          endmodule\n",
         "outside the v1 cast scope",
     );
-    // vita-only decline: a parameter, which would otherwise bind the ELEMENT type.
-    // (The subroutine FORMAL that used to sit here is now supported — see
+    // A module-BODY overridable `parameter` of the type. Still loud, but the
+    // reason MOVED: `typedef_param_shape` no longer declines the whole family
+    // (§4.5.460 routes it into the array-parameter channel), so the refusal now
+    // comes from the array gate that refuses the EXPLICIT twin `parameter logic
+    // [7:0] P [0:3]` too — a module body has no override channel at all. The
+    // `localparam` spelling of the same declaration is a VALUE now; see
+    // `unpacked_typedef_array_param.rs`.
+    // (The subroutine FORMAL that used to sit here is supported — see
     // `a_tf_port_formal_carries_the_typedefs_dims` below.)
     loud(
         "typedef logic [7:0] a_t [0:3];\n\
@@ -242,7 +248,7 @@ fn the_consumers_that_cannot_carry_the_dims_are_loud() {
            parameter a_t P = '{1,2,3,4};\n\
            initial begin $display(\"%0d\", P[2]); $finish; end\n\
          endmodule\n",
-        "unpacked-array typedef parameter is unsupported",
+        "`localparam` for an array parameter",
     );
 }
 

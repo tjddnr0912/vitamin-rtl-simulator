@@ -2,13 +2,15 @@
 
 use super::*;
 
-/// `(ParamType, var_kind, forced_range, explicit_range)` — see `typedef_param_shape`.
+/// `(ParamType, var_kind, forced_range, explicit_range, packed_dims, unpacked_dims)`
+/// — see `typedef_param_shape`.
 type TypedefParamShape = (
     ParamType,
     Option<NetVarKind>,
     Option<Range>,
     Option<Range>,
     Vec<Range>,
+    Vec<Dim>,
 );
 
 impl Parser<'_, '_> {
@@ -225,6 +227,11 @@ impl Parser<'_, '_> {
         // §3 ⑤ ⓐ: packed dims after the first range (`logic [3:0][7:0]`, or a
         // typedef's own). See `packed_md.rs`.
         let mut packed_dims: Vec<Range> = Vec::new();
+        // §3 ⑤ ⓕ: the UNPACKED dims of an unpacked-array typedef prefix
+        // (`typedef int a_t [0:2]; localparam a_t P = …`). Non-empty ⇒
+        // `finish_param_assignment` takes the array channel and appends these AFTER
+        // any dims written on the name; empty for every prefix that parsed before.
+        let mut typedef_unpacked: Vec<Dim> = Vec::new();
         let kw_kind = match self.peek() {
             Some(TokenKind::Word(WordKind::Keyword(
                 k @ (Kw::Logic
@@ -296,12 +303,13 @@ impl Parser<'_, '_> {
             self.eat_scope_qualifier();
             self.bump(); // the type-name identifier
             match self.typedef_param_shape(&info) {
-                Ok((t, k, forced, explicit, packed)) => {
+                Ok((t, k, forced, explicit, packed, unpacked)) => {
                     ty = t;
                     var_kind = k;
                     forced_range = forced;
                     typedef_range = explicit;
                     packed_dims = packed;
+                    typedef_unpacked = unpacked;
                     signed = expl0.unwrap_or(info.signed);
                     tyname = Some(key);
                 }
@@ -377,6 +385,7 @@ impl Parser<'_, '_> {
             expl1,
             tyname,
             packed_dims,
+            typedef_unpacked,
         }
     }
 
@@ -389,25 +398,37 @@ impl Parser<'_, '_> {
     /// losing something (a class handle / net / event / container is not a
     /// parameter type) — loud. A multi-dimensional packed vector typedef (§3 ⑤ ⓐ)
     /// returns its extra dims as the fifth field; the parameter is declared flat
-    /// and its selects rewritten (`packed_md.rs`).
+    /// and its selects rewritten (`packed_md.rs`). An UNPACKED-array typedef
+    /// (§3 ⑤ ⓕ) returns its dims as the SIXTH; the caller then takes the array
+    /// channel, so `localparam a_t P` and `localparam int P [0:2]` are one AST.
     fn typedef_param_shape(&self, info: &TypeInfo) -> Result<TypedefParamShape, &'static str> {
         if info.class_name.is_some() {
             return Err(
                 "a non-class typedef on a parameter (a class-handle parameter is unsupported)",
             );
         }
-        // §3 ⑤: an UNPACKED-array typedef. The shape tuple below carries a range
-        // and packed dims and has no slot for unpacked ones, so every arm would
-        // bind a SCALAR parameter of the element type — decline instead, with the
-        // reason named. (An array parameter written explicitly is a separate,
-        // supported channel: `parameter logic [7:0] P [0:3]`.)
-        if !info.unpacked.is_empty() {
-            return Err(
-                "an integral, real or string typedef on a parameter (an unpacked-array typedef parameter is unsupported in v1; write the dimensions on the parameter)",
-            );
-        }
+        // §3 ⑤: an UNPACKED-array typedef. Every arm below describes the ELEMENT,
+        // so the dims ride out in the sixth field and `finish_param_assignment`
+        // hands them to `parse_array_param` — the same `ParamItem::ConstArrayVar`
+        // channel the explicit spelling (`parameter logic [7:0] P [0:3]`) already
+        // uses, which is why the two now answer identically.
+        //
+        // ⚠️ Only the arms that name a `var_kind` can go that way — `parse_array_param`
+        // rejects an implicit-typed array parameter — and the `String` arm below has
+        // none. That one keeps declining (below the match, `unpacked_err`), naming its
+        // own reason instead of one about `localparam int`; its explicit twin
+        // `localparam string P [0:1]` is equally loud, so there is no split to close.
+        let unpacked = info.unpacked.clone();
+        let unpacked_err =
+            "an integral or real typedef on an array parameter (a string unpacked-array typedef parameter is unsupported in v1; write the dimensions on the parameter)";
         let none = Vec::new();
-        Ok(match info.kind {
+        let elem: (
+            ParamType,
+            Option<NetVarKind>,
+            Option<Range>,
+            Option<Range>,
+            Vec<Range>,
+        ) = match info.kind {
             NetVarKind::Int => (ParamType::Integer, Some(NetVarKind::Int), None, None, none),
             NetVarKind::Integer => (
                 ParamType::Integer,
@@ -459,7 +480,14 @@ impl Parser<'_, '_> {
                     "an integral, real or string typedef on a parameter (a net / event / container typedef is not a parameter type)",
                 )
             }
-        })
+        };
+        // An unpacked-array typedef whose ELEMENT has no `var_kind` cannot take the
+        // array channel; say so here rather than let `parse_array_param` name a
+        // reason about the keyword spelling.
+        if !unpacked.is_empty() && elem.1.is_none() {
+            return Err(unpacked_err);
+        }
+        Ok((elem.0, elem.1, elem.2, elem.3, elem.4, unpacked))
     }
 
     /// Finish ONE parameter assignment — `name [array_dims] = value` — using a
@@ -484,6 +512,7 @@ impl Parser<'_, '_> {
             expl1,
             tyname: _,
             packed_dims,
+            typedef_unpacked,
         } = pfx.clone();
         // `logic`/`reg`/`bit` with NO explicit range are ONE bit (§6.11.2). The atom
         // recorded that in `var_kind` and then dropped it: `ParamDecl` has no such
@@ -532,7 +561,15 @@ impl Parser<'_, '_> {
         }
         let name = self.ident()?;
         // A2a: `[` after the parameter name ⇒ an ARRAY parameter (IEEE §6.20.2).
-        if self.peek() == Some(TokenKind::LBracket) {
+        // §3 ⑤ ⓕ: so does an unpacked-array TYPEDEF prefix, whose dims are not in
+        // the token stream at all — `localparam a_t P = '{…}` has to reach the same
+        // channel as `localparam int P [0:2]`, or the shape tuple would bind a
+        // SCALAR of the element type. The two spellings may also COMBINE
+        // (`localparam a_t P [0:1]`), which is why the dims are appended rather
+        // than substituted: measured, the name's dims come FIRST (both oracles read
+        // `P[0][1]` = 2 and `P[1][2]` = 6 over `typedef int a_t [0:2]`), and `$bits`
+        // alone cannot tell the two orders apart.
+        if self.peek() == Some(TokenKind::LBracket) || !typedef_unpacked.is_empty() {
             // §3 ⑤ ⓐ: an ARRAY of a multi-dimensional packed element would need the
             // A2a `NetVarDecl` to carry the packed dims AND the element const-fold
             // to see them; loud until measured (the flat element would silently
@@ -569,6 +606,7 @@ impl Parser<'_, '_> {
                 pfx.tyname.as_deref(),
                 name,
                 start,
+                typedef_unpacked,
             );
         }
         self.expect(TokenKind::Eq, "'=' in parameter");
@@ -675,6 +713,7 @@ impl Parser<'_, '_> {
         tyname: Option<&str>,
         name: Ident,
         start: Span,
+        typedef_dims: Vec<Dim>,
     ) -> Option<ParamItem> {
         // §3 ⑤ ⓒ: the ANSI `#(…)` header IS the override channel, so a header
         // `parameter` array is accepted (`body == false`); the module-body
@@ -714,6 +753,10 @@ impl Parser<'_, '_> {
                 None => break,
             }
         }
+        // §3 ⑤ ⓕ: an unpacked-array typedef's own dims are INNER to any written on
+        // the name, so they go last (`typedef int a_t [0:2]; localparam a_t P [0:1]`
+        // is `P[0:1][0:2]` — both oracles). Empty for every caller but that one.
+        unpacked.extend(typedef_dims);
         if !unpacked
             .iter()
             .all(|d| matches!(d, Dim::Range(_) | Dim::Size(_)))

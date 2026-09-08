@@ -470,6 +470,13 @@ struct ParamPrefix {
     /// declared flat and its selects are rewritten (`packed_md.rs`); empty for
     /// every parameter that parsed before ⇒ byte-identical.
     packed_dims: Vec<Range>,
+    /// §3 ⑤ ⓕ: the UNPACKED dimensions of an unpacked-array typedef prefix
+    /// (`typedef int a_t [0:2]`, a `TypeInfo::unpacked`). Non-empty ⇒
+    /// `finish_param_assignment` desugars the parameter through `parse_array_param`
+    /// like the explicit `localparam int P [0:2]` spelling, appending these AFTER
+    /// the dims written on the name; empty for every prefix that parsed before ⇒
+    /// byte-identical.
+    typedef_unpacked: Vec<Dim>,
 }
 
 /// The components of a parsed `property_spec` (the body shared by an inline
