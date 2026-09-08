@@ -92,6 +92,24 @@ pub(crate) struct ResolvedOverride {
     /// Consumed by `bind_one_param` and ONLY for an extension past the i64 lane —
     /// `None` there means "stay on the route you took before".
     pub(crate) signed: Option<bool>,
+    /// The override expression's OWN `(width, signed)` from Table 11-21, for the
+    /// operator-topped shapes `bits` declines — ROADMAP §2 row 25's operator half.
+    ///
+    /// `bits` carries a width only for a SELF-DETERMINED top, so `#(.P(~8'h5A))` and
+    /// `#(.P(-(|4'b1010)))` arrived with no type at all and `bind_one_param` fell
+    /// through to the DEFAULT declaration's. This is the missing half of the same
+    /// question and is filled by [`Elaborator::override_self_meta`], whose doc carries
+    /// the accept set and the measurements.
+    ///
+    /// ⚠️ Read ONLY on the `Implicit && range.is_none()` lane, and only AFTER `bits`.
+    /// Both restrictions are load-bearing: a DECLARED type survives an override
+    /// (§6.20.2), and the wide channel's answer is what every design that binds
+    /// through it reads today, so consulting this first would move them.
+    pub(crate) self_meta: Option<(u32, bool)>,
+    /// The override expression's value RE-FOLDED at `self_meta`'s width and sign — see
+    /// [`Elaborator::override_self_value`] for why the width cannot travel alone.
+    /// Always `None` when `self_meta` is `None`, and read on exactly the same lane.
+    pub(crate) self_val: Option<i64>,
 }
 
 impl ResolvedOverride {

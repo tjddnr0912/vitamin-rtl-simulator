@@ -184,7 +184,22 @@ pub(crate) type BlockLocalInit = (u32, Vec<u32>, ast::Lvalue, ast::Expr);
 /// so the fold in the second is only the 32-bit self-determined default and is wrong
 /// for any parameter wider than that. `bind_one_param` re-folds it at the declared
 /// width, which is the only place that width is known.
-pub(crate) type DefparamOverride = (String, i64, Option<(ast::IntLitKind, String)>, Option<bool>);
+///
+/// The fourth component is the expression's SIGN and the fifth its own `(width, sign)`
+/// from Table 11-21 (ROADMAP §2 row 25). Both are computed in the collector because the
+/// collector is the only place the override EXPRESSION still exists — by the time the
+/// record reaches `bind_one_param` it is an `i64`. Both must be here, not just the sign:
+/// a `defparam` and a `#()` naming the same expression have to bind the same type, and
+/// the two channels diverging silently is the shape ENGINEERING_RULES records for one
+/// key with several rules.
+pub(crate) type DefparamOverride = (
+    String,
+    i64,
+    Option<(ast::IntLitKind, String)>,
+    Option<bool>,
+    Option<(u32, bool)>,
+    Option<i64>,
+);
 
 /// A parameter's DECLARED packed range: `(lo, width, ascending)` — the tuple the
 /// provenance maps (`param_range`, `pkg_const_range`) carry, named so the save/restore

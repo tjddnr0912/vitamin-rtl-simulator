@@ -386,7 +386,7 @@ impl Elaborator<'_> {
             .remove(inst_path)
             .map(|dps| {
                 dps.into_iter()
-                    .map(|(param, v, fill, sg)| ResolvedOverride {
+                    .map(|(param, v, fill, sg, smeta, sval)| ResolvedOverride {
                         name: Some(param),
                         value: Some(v),
                         is_named: true,
@@ -410,6 +410,11 @@ impl Elaborator<'_> {
                         // read here — `false` is the honest value for "not a literal".
                         str_is_literal: false,
                         str: None,
+                        // Table 11-21, from the same collector and for the same reason
+                        // as `signed` above: `defparam u.P = ~8'h5A` and
+                        // `#(.P(~8'h5A))` must bind ONE type.
+                        self_meta: smeta,
+                        self_val: sval,
                     })
                     .collect()
             })
@@ -1172,10 +1177,18 @@ impl Elaborator<'_> {
                         // `None` = "stay on the route you took before".
                         let sg = Self::sign_is_syntactically_evident(value)
                             .then(|| self.const_signed_env(value, &ConstWidths::new()));
+                        // …and the expression's OWN (width, sign) for an operator top,
+                        // for the same reason and from the same helper the `#()` channel
+                        // uses (ROADMAP §2 row 25). Computed here because here is the
+                        // only place the expression still exists; `override_self_meta`
+                        // declines every name-bearing tree, so this cannot launder a
+                        // `param_meta` width any more than `sg` above can.
+                        let smeta = self.override_self_meta(value);
+                        let sval = smeta.and_then(|m| self.override_self_value(value, m));
                         // Last write wins (IEEE §23.10.1) — drop a prior same-param entry.
                         let entry = self.defparams.entry(fq).or_default();
-                        entry.retain(|(p, _, _, _)| p != &param);
-                        entry.push((param, v, fill, sg));
+                        entry.retain(|(p, _, _, _, _, _)| p != &param);
+                        entry.push((param, v, fill, sg, smeta, sval));
                     }
                 }
                 // A NET declaration initializer (`wire x = expr;`) is an implicit
@@ -1339,6 +1352,10 @@ impl Elaborator<'_> {
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
                         signed: Some(self.const_signed_env(e, &ConstWidths::new())),
+                        self_meta: self.override_self_meta(e),
+                        self_val: self
+                            .override_self_meta(e)
+                            .and_then(|m| self.override_self_value(e, m)),
                         array: self.const_array_override_vals(e),
                         elem_select: self.override_is_elem_select(e),
                     };
@@ -1490,6 +1507,11 @@ impl Elaborator<'_> {
                         signed: value
                             .as_ref()
                             .map(|e| self.const_signed_env(e, &ConstWidths::new())),
+                        self_meta: value.as_ref().and_then(|e| self.override_self_meta(e)),
+                        self_val: value.as_ref().and_then(|e| {
+                            self.override_self_meta(e)
+                                .and_then(|m| self.override_self_value(e, m))
+                        }),
                         array,
                         elem_select: value
                             .as_ref()

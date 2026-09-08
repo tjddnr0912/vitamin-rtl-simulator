@@ -30,6 +30,10 @@ impl Elaborator<'_> {
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
                         signed: Some(self.const_signed_env(e, &ConstWidths::new())),
+                        self_meta: self.override_self_meta(e),
+                        self_val: self
+                            .override_self_meta(e)
+                            .and_then(|m| self.override_self_value(e, m)),
                         array: None,
                         elem_select: false,
                     };
@@ -116,6 +120,11 @@ impl Elaborator<'_> {
                         signed: value
                             .as_ref()
                             .map(|e| self.const_signed_env(e, &ConstWidths::new())),
+                        self_meta: value.as_ref().and_then(|e| self.override_self_meta(e)),
+                        self_val: value.as_ref().and_then(|e| {
+                            self.override_self_meta(e)
+                                .and_then(|m| self.override_self_value(e, m))
+                        }),
                         array: None,
                         elem_select: false,
                     });

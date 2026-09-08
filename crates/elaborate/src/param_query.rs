@@ -431,6 +431,122 @@ impl Elaborator<'_> {
         Self::ctx_width_names_are_evident(e, &ConstWidths::new()) && self.const_ctx_within_i64(e)
     }
 
+    /// An override EXPRESSION's OWN `(width, signed)`, from Table 11-21 — ROADMAP §2
+    /// row 25's operator half.
+    ///
+    /// §6.20.2 gives an UNTYPED, unranged parameter the type of its FINAL override
+    /// value. vita had no channel carrying that type for an operator-topped override:
+    /// `override_bits` only folds a SELF-DETERMINED top (`wide_top_is_self_determined`
+    /// admits the reductions, the comparisons and the selects, not `~`, unary `-`, or
+    /// the arithmetic binaries), so the meta chain in `bind_one_param` fell through to
+    /// `param_decl_width_opt`'s literal arm — which answers the DEFAULT's type even
+    /// when `default_binds == false`. Measured on `module sub #(parameter P = 1)`:
+    /// `#(.P(-(|4'b1010)))` bound `ffffffff` at 32 signed bits, `#(.P(~8'h5A))` bound
+    /// `ffffffa5` / `-91`, `#(.P(-64'd1))` bound 32 bits where the value needs 64.
+    ///
+    /// This is the DEFAULT lane's §4.5.460 arm (`params.rs`'s `sized_by_operator`
+    /// block) one lane over, and it is a separate resolver ON PURPOSE: widening
+    /// `override_bits` instead would route through `override_at_declared_width` and
+    /// move ROADMAP §2 rows 16/17's live oracle splits (`~32'd0`, `32'd0-32'd1`) and
+    /// the DECLARED-width targets they live on. Measured: on a declared `[63:0]`
+    /// target the three tools genuinely disagree about `~32'd0`; on an UNTYPED,
+    /// unranged target they do not disagree about any of row 16's five cells, and vita
+    /// is alone and wrong on four of them. The consumer's `Implicit && range.is_none()`
+    /// guard is what keeps this resolver on the second lane only.
+    ///
+    /// ORACLE STATUS, measured per cell rather than assumed: every tool answers the
+    /// self-determined width when asked DIRECTLY (`$bits(<expr>)`), and each then
+    /// contradicts its own direct answer when the identical text is BOUND — verilator
+    /// on a reduction top (`$bits(|4'b1010)` is 1, `#(.P(|4'b1010))` binds 32),
+    /// iverilog on `+` (`$bits(8'd200+8'd100)` is 8, the binding is 9; ROADMAP §2
+    /// already records the second). So the target is the direct answer, which is also
+    /// Table 11-21 and is already what vita binds for a reduction top today.
+    ///
+    /// ACCEPT SET — each conjunct answers a measured hazard, not a taste:
+    ///  * `ctx_width_names_are_evident` with an EMPTY `ConstWidths` declines a bare
+    ///    NAME in a WIDTH-carrying position (and `SysCall` / `Call` / `PkgScoped` /
+    ///    `Replicate` / every select / `$signed`-`$unsigned`). It must:
+    ///    `const_self_width`'s `Ident` arm resolves through `param_meta` and GUESSES 32
+    ///    on a miss, and `param_meta` is exactly where value-INFERRED widths are
+    ///    recorded — the §4.5.363 laundering door, and the declared-width-provenance
+    ///    wall ROADMAP §2 rows 14/25/26/30 stand on. Fail-closed keeps a name-bearing
+    ///    override at today's answer (`#(.P(W8 + 1'b0))` is unmoved, measured).
+    ///
+    ///    ⚠️ "declines every name" would be too strong, and the review round measured
+    ///    where: a name reaches a SIZE CAST's width through `(W+1)'(3)`, because
+    ///    `casts.rs:74` makes a compound size a `CastTarget::Size` and this predicate's
+    ///    `Cast` arm recurses into the cast's OPERAND only. That is a VALUE position,
+    ///    not a recorded-width one — `const_self_width` folds `W+1` to a number rather
+    ///    than reading `param_meta` — so it is not the laundering door, and it lands on
+    ///    the right answer (`#(.P((W+1)'(3) + 8'd1))` with `W = 52` binds 53, which is
+    ///    verilator's; iverilog says 54, its known `+` self-contradiction). The BARE
+    ///    spelling `W'(3)` never reaches here at all: `casts.rs:73` makes it
+    ///    `CastTarget::Named`, which this predicate's catch-all refuses.
+    ///  * `const_ctx_within_i64` — the value half below re-folds through
+    ///    `eval_const_assign`, whose `ctx = max(self, target).min(64)` CLAMPS; a leaf
+    ///    past 64 bits loses a sign bit to that clamp (§2 row 14's `N65 >>> 1`).
+    ///  * no FILL anywhere — a fill has no width of its own (`const_self_width` answers
+    ///    `Some(0)`), and `'1 ^ 1'b0` is a live split (iverilog 1 bit, verilator 32).
+    ///  * the TOP is an operator: unary `+ - ~`, any binary, or a ternary — the
+    ///    `sized_by_operator` set of the default lane's arm plus the `Ternary` that arm
+    ///    keeps in its own block. A reduction / comparison / select top is deliberately
+    ///    absent: `override_bits` already answers those and already answers them right.
+    ///
+    /// The gate costs nothing on the class it exists for — every cell in the row's
+    /// census is a literal-only tree. It declines only the name-bearing residue
+    /// (`#(.P(W8 + 1'b0))`), which keeps its pre-slice answer.
+    pub(crate) fn override_self_meta(&self, e: &ast::Expr) -> Option<(u32, bool)> {
+        let mut top = e;
+        while let ast::ExprKind::Paren { inner } = &top.kind {
+            top = inner;
+        }
+        let sized_by_operator = matches!(
+            &top.kind,
+            ast::ExprKind::Unary {
+                op: ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot,
+                ..
+            } | ast::ExprKind::Binary { .. }
+                | ast::ExprKind::Ternary { .. }
+        );
+        if !sized_by_operator
+            || ast_contains_fill(e)
+            || !Self::ctx_width_names_are_evident(e, &ConstWidths::new())
+            || !self.const_ctx_within_i64(e)
+        {
+            return None;
+        }
+        let w = self.const_self_width(top, &ConstWidths::new())?;
+        (w > 0).then(|| (w, self.const_expr_signed(top)))
+    }
+
+    /// The same override expression's VALUE, re-folded AT the type
+    /// [`Self::override_self_meta`] just gave it.
+    ///
+    /// The two halves are inseparable, and the measurement that says so is the same one
+    /// §4.5.461 recorded for the parameter-initializer lane: the parent-side fold
+    /// (`const_eval_in_scope`) runs at unlimited precision and masks ONCE, at the end,
+    /// and truncation commutes with `~ - << & | ^ + *` but NOT with `/ % >> >>>`.
+    /// Installing the width alone was measured to move `#(.P(-64'd1))` from
+    /// `ffffffff` at 32 bits to `00000000ffffffff` at 64 — a NEW wrong answer, right
+    /// width over a value folded for the old one — and `#(.P((8'hFF * 8'h02) >> 4))`
+    /// answers 31 through the unlimited lane where both oracles answer 15.
+    ///
+    /// ⚠️ `const_eval_in_scope` must ALREADY answer. That conjunct is the accept set
+    /// row 30 states as "correct a value, never create one": without it an override
+    /// that declines the i64 lane today (`32'd3037000500 * 32'd3037000500`,
+    /// `64'd3 ** 64'd40`) would start manufacturing a value out of an overflow decline
+    /// instead of staying loud.
+    pub(crate) fn override_self_value(&self, e: &ast::Expr, meta: (u32, bool)) -> Option<i64> {
+        self.const_eval_in_scope(e)?;
+        self.eval_const_assign(
+            e,
+            &std::collections::BTreeMap::new(),
+            &ConstWidths::new(),
+            0,
+            Some(meta),
+        )
+    }
+
     /// Is every node this domain descends into within the i64 lane's 64 bits?
     ///
     /// Phrased as "no KNOWN width exceeds 64" rather than "every width is known", so

@@ -27,6 +27,14 @@ pub(crate) struct ParamOverrides {
     /// of the i64 is not enough to decide (three expressions with the same i64 extend
     /// two different ways).
     pub(crate) signed: BTreeMap<String, bool>,
+    /// The override EXPRESSION's own `(width, signed)` from Table 11-21, for the
+    /// operator-topped shapes `bits` declines — see `ResolvedOverride::self_meta` and
+    /// `Elaborator::override_self_meta`. Read by `bind_one_param` on the UNTYPED,
+    /// unranged lane only, and only after `bits`.
+    pub(crate) self_meta: BTreeMap<String, (u32, bool)>,
+    /// The same override's value re-folded at `self_meta` — see
+    /// `Elaborator::override_self_value`. Read only where `self_meta` is read.
+    pub(crate) self_val: BTreeMap<String, i64>,
     /// §3 ⑤ ⓒ: the whole-array channel — see `ResolvedOverride::array`. Consumed
     /// by `bind_array_param` for a header array parameter; a scalar target never
     /// reads it (a scalar override never fills it either).
@@ -76,6 +84,8 @@ impl ParamOverrides {
         self.unfoldable.remove(name);
         self.bits.remove(name);
         self.signed.remove(name);
+        self.self_meta.remove(name);
+        self.self_val.remove(name);
         self.elem_select.remove(name);
     }
 }
@@ -1057,6 +1067,12 @@ impl Elaborator<'_> {
                     // A fill is unsigned and is re-folded at the target width, so the
                     // extension channel never reads this.
                     signed: Some(false),
+                    // `-G` carries TEXT, not an expression: a fill, a decimal, a sized
+                    // literal or a quoted string, all of which state their own type. An
+                    // operator tree cannot be spelled here at all (`-G P=~8'h5A` is
+                    // E3002, measured), so there is nothing for Table 11-21 to size.
+                    self_meta: None,
+                    self_val: None,
                     array: None,
                     elem_select: false,
                 });
@@ -1106,6 +1122,9 @@ impl Elaborator<'_> {
                 // A bare decimal on the command line is a SIGNED integer; a sized
                 // literal carries its own `s`, which `wide` above already holds.
                 signed: Some(sized_signed),
+                // As above: the `-G` grammar has no operator form to size.
+                self_meta: None,
+                self_val: None,
                 array: None,
                 elem_select: false,
             });
@@ -1208,6 +1227,12 @@ impl Elaborator<'_> {
                         if let Some(sg) = ov.signed {
                             o.signed.insert(p.name.name.clone(), sg);
                         }
+                        if let Some(m) = ov.self_meta {
+                            o.self_meta.insert(p.name.name.clone(), m);
+                        }
+                        if let Some(v) = ov.self_val {
+                            o.self_val.insert(p.name.name.clone(), v);
+                        }
                         if let Some(t) = Self::override_text_for(p, ov) {
                             o.text.insert(p.name.name.clone(), t);
                         }
@@ -1264,6 +1289,12 @@ impl Elaborator<'_> {
                         }
                         if let Some(sg) = ov.signed {
                             o.signed.insert(p.name.name.clone(), sg);
+                        }
+                        if let Some(m) = ov.self_meta {
+                            o.self_meta.insert(p.name.name.clone(), m);
+                        }
+                        if let Some(v) = ov.self_val {
+                            o.self_val.insert(p.name.name.clone(), v);
                         }
                         if let Some(t) = Self::override_text_for(p, ov) {
                             o.text.insert(p.name.name.clone(), t);
@@ -1634,6 +1665,16 @@ impl Elaborator<'_> {
                 && !ovr_str.contains_key(p.name.name.as_str())
                 && !ovr_unfoldable.contains(p.name.name.as_str());
             let ovr_bits = ovr.bits.get(p.name.name.as_str());
+            let ovr_self_meta = ovr.self_meta.get(p.name.name.as_str()).copied();
+            let ovr_self_val = ovr.self_val.get(p.name.name.as_str()).copied();
+            // Did the meta come from the OPERATOR channel? Then its value must come
+            // from there too — the two halves are one answer (`override_self_value`).
+            let self_meta_binds = matches!(p.ty, ast::ParamType::Implicit)
+                && p.range.is_none()
+                && !default_binds
+                && !ovr_fill.contains_key(p.name.name.as_str())
+                && ovr_bits.is_none()
+                && ovr_self_meta.is_some();
             // §3 ⑤ ⓔ (review A F1): an UNTYPED, unranged target overridden by a SELECT of
             // an array-parameter element. Its meta below comes from the DEFAULT literal
             // (§2 row 25), not from the select's own width, so the value would bind at
@@ -1693,7 +1734,54 @@ impl Elaborator<'_> {
                     // oracles, and `param_decl_width_declared_overridden` answered the
                     // default's 128 ahead of the override's own width (census: four
                     // bitwise-expression cells and the literal twin alike).
-                    ovr_bits.map(|c| (c.width, c.signed))
+                    //
+                    // The SIGN half is the declaration's when it wrote a keyword, exactly
+                    // as on the operator arm below — §12.2.1: a sign SPECIFICATION with no
+                    // range survives an override, only the RANGE comes from the override
+                    // value. Without this the two arms answered one declaration two ways:
+                    // `parameter signed R = 1` read `-91` through `#(.R(~8'h5A))` and
+                    // `165` through `#(.R(8'hA5))`, where both oracles say `-91` for both
+                    // (review round 2). Measured safe in the other direction too — with no
+                    // keyword `#(.N(8'hA5))` and `#(.N(~8'h5A))` both stay unsigned (165)
+                    // on both arms, and a signed override literal `#(.S(8'shA5))` was
+                    // already right.
+                    ovr_bits.map(|c| (c.width, c.signed || p.signed))
+                } else if matches!(p.ty, ast::ParamType::Implicit)
+                    && p.range.is_none()
+                    && ovr_self_meta.is_some()
+                {
+                    // §6.20.2 (§2 row 25, the OPERATOR half): same rule as the arm
+                    // above, for the tops the wide channel declines. `override_bits`
+                    // folds only a SELF-DETERMINED top, so `~`, unary `-`/`+` and every
+                    // arithmetic binary arrived with no type and the `else` below
+                    // answered the DEFAULT declaration's — `#(.P(~8'h5A))` onto
+                    // `parameter P = 1` bound `ffffffa5` at 32 SIGNED bits where both
+                    // oracles bind `a5` at 8 unsigned, and `#(.P(-64'd1))` bound 32 bits
+                    // where the value needs 64.
+                    //
+                    // Third in the chain, not first, and that order is the measurement:
+                    // a FILL states its own type (§5.7.1) and the WIDE channel is what
+                    // every design binding through it reads today, so both keep
+                    // precedence and this arm is byte-identical for them. The accept
+                    // set — and why it declines every NAME — is on
+                    // `Elaborator::override_self_meta`.
+                    //
+                    // ⚠️ The WIDTH comes from the override; the SIGN does not, when the
+                    // declaration wrote one. §12.2.1 / §6.20.2: a parameter with a sign
+                    // SPECIFICATION but no range keeps that sign and takes only the RANGE
+                    // of the final override value. Taking both was measured (review round
+                    // 1, soundness F1) to trade one silent-wrong for another on
+                    // `parameter signed P = 1` + `#(.P(~8'h5A))`: PRE printed `-91` at a
+                    // wrong 32 bits, this arm printed `165` at the right 8, and both
+                    // oracles say `-91` at 8.
+                    //
+                    // Only the `signed` DIRECTION is recoverable here. `p.signed == false`
+                    // means either `unsigned` was written or nothing was — a default, not
+                    // a fact — so the `unsigned` twin (`parameter unsigned Q = 1` +
+                    // `#(.Q(-8'sd91))`, both oracles `165`) keeps its pre-existing answer
+                    // and is recorded in ROADMAP §2: closing it needs an `is_sign_declared`
+                    // companion on `ast::ParamDecl`.
+                    ovr_self_meta.map(|(w, sg)| (w, sg || p.signed))
                 } else {
                     self.param_decl_width_declared_overridden(p)
                         .or_else(|| ovr_bits.map(|c| (c.width, c.signed)))
@@ -1713,6 +1801,7 @@ impl Elaborator<'_> {
             // `Some(None)` (written, did not fold) also falls through to the declared
             // default; the escalation above has already made that loud.
             let mut chosen_val: Option<i64> = ovr_fill_v
+                .or_else(|| self_meta_binds.then_some(ovr_self_val).flatten())
                 .or_else(|| ovr_by_name.get(p.name.name.as_str()).copied().flatten())
                 .or_else(|| {
                     if default_binds {
@@ -1768,7 +1857,22 @@ impl Elaborator<'_> {
             // also repairs that pre-existing regression.
             if !default_binds {
                 let cv = self.override_at_declared_width(
-                    self.param_decl_width(p),
+                    // ⚠️ On the row-25 OPERATOR lane the declaration has no type to
+                    // resize to — `param_decl_width` answers the DEFAULT literal's,
+                    // which is the very thing that lane exists to stop reading. It is
+                    // not a spare opinion here: the read-back below OVERWRITES
+                    // `chosen_val` with this resize, so passing the default's 32 threw
+                    // the override's own 33/64-bit value away again after the meta
+                    // chain had already got it right (`#(-33'd1)` bound `0ffffffff`
+                    // for `1ffffffff`, `#(-64'd1)` `00000000ffffffff` for all ones —
+                    // both oracles agree, and the width column looked FIXED while the
+                    // value column was still wrong). `meta` is `ovr_self_meta` itself
+                    // on that lane, so this is the same answer, not a second one.
+                    if self_meta_binds {
+                        meta
+                    } else {
+                        self.param_decl_width(p)
+                    },
                     ovr_bits,
                     ovr_fill.get(p.name.name.as_str()),
                     chosen_val,
