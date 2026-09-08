@@ -144,3 +144,89 @@ fn a_cast_to_such_a_type_stays_loud() {
     assert_ne!(rc, Some(0), "{out}");
     assert!(!out.contains("e0="), "no value may be printed\n{out}");
 }
+
+#[test]
+fn bits_of_the_bare_type_parameter_name_is_the_element_times_every_dim() {
+    // `$bits(T)` on the NAME of a dim-carrying type parameter. `T$w` is the
+    // ELEMENT width, so the answer is the symbolic product `T$w × 3` — 24 in
+    // iverilog 13.0 and verilator 5.052 alike, where vita raised the
+    // `E3010 undeclared net/variable` + `E3009 $bits argument shape unsupported`
+    // pair (the argument fell through to the ordinary expression path).
+    //
+    // Not a constant: the product is an EXPRESSION, so it follows an override of
+    // the element width exactly as the packed spelling already did.
+    let (out, rc) = run(&format!(
+        "{TD}module m #(parameter type T = a_t) ();\n  \
+         initial $display(\"bits=%0d\", $bits(T));\nendmodule\n\
+         module top; m u(); initial #10 $finish; endmodule\n"
+    ));
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("bits=24"), "{out}");
+    // A 16-bit element and a 2-D typedef: the answer is a PRODUCT, not the
+    // constant 24 (both oracles 32 and 48).
+    let (out, rc) = run(
+        "`timescale 1ns/1ns\ntypedef logic [15:0] c_t [0:1];\n\
+         typedef logic [7:0] d_t [0:2][0:1];\n\
+         module m2 #(parameter type T = c_t) (); initial $display(\"b2=%0d\", $bits(T)); endmodule\n\
+         module m3 #(parameter type T = d_t) (); initial $display(\"b3=%0d\", $bits(T)); endmodule\n\
+         module top; m2 u2(); m3 u3(); initial #10 $finish; endmodule\n",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("b2=32"), "{out}");
+    assert!(out.contains("b3=48"), "{out}");
+}
+
+#[test]
+fn every_binder_of_a_dim_carrying_type_parameter_answers_bits() {
+    // The four spellings that reach the same parse site, all `bits=24` in both
+    // oracles. The `localparam` one is the reason the product is built from the
+    // type parameter's own record rather than routed through `sym_typedef_bits`:
+    // that builder needs the element range to name an OVERRIDABLE parameter, and
+    // a `localparam type` does not register one.
+    let (out, rc) = run(
+        "`timescale 1ns/1ns\ntypedef logic [7:0] a_t [0:2];\n\
+         package pk; typedef logic [7:0] a_t [0:2]; endpackage\n\
+         module mh #(parameter type T = a_t) (); initial $display(\"h=%0d\", $bits(T)); endmodule\n\
+         module mp #(parameter type T = pk::a_t) (); initial $display(\"p=%0d\", $bits(T)); endmodule\n\
+         module mb (); parameter type T = a_t; initial $display(\"b=%0d\", $bits(T)); endmodule\n\
+         module ml (); localparam type T = a_t; initial $display(\"l=%0d\", $bits(T)); endmodule\n\
+         module top; mh uh(); mp up(); mb ub(); ml ul(); initial #10 $finish; endmodule\n",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    for pin in ["h=24", "p=24", "b=24", "l=24"] {
+        assert!(out.contains(pin), "{pin}\n{out}");
+    }
+    // and as a CONSTANT: `localparam int W = $bits(T)` folded to nothing before
+    // (`parameter W value is not a constant: undefined name T`).
+    let (out, rc) = run(&format!(
+        "{TD}module m #(parameter type T = a_t) ();\n  localparam int W = $bits(T);\n  T v;\n  \
+         initial $display(\"W=%0d bitsv=%0d\", W, $bits(v));\nendmodule\n\
+         module top; m u(); initial #10 $finish; endmodule\n"
+    ));
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("W=24 bitsv=24"), "{out}");
+}
+
+#[test]
+fn a_dim_free_type_parameter_and_a_shadowed_typedef_keep_their_answers() {
+    // The no-move controls for the same parse site. A type parameter WITHOUT
+    // dims composes no factor, so `$bits(T)` stays the bare `T$w` it always was
+    // (both oracles 8).
+    let (out, rc) = run(
+        "`timescale 1ns/1ns\n\
+         module m #(parameter type T = logic [7:0]) (); initial $display(\"pk=%0d\", $bits(T)); endmodule\n\
+         module top; m u(); initial #10 $finish; endmodule\n",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("pk=8"), "{out}");
+    // The TYPEDEF route keeps its `local_decl_names` stand-down: a same-named
+    // variable shadows the type and the fold must not claim the name. Only the
+    // ROUTE changed, not that guard — so this still answers the variable's 12
+    // (verilator's answer; iverilog rejects the source).
+    let (out, rc) = run("`timescale 1ns/1ns\nmodule m #(parameter N = 3) ();\n  \
+         typedef logic [7:0] b_t [0:N-1];\n  logic [11:0] b_t;\n  \
+         initial $display(\"bt=%0d\", $bits(b_t));\nendmodule\n\
+         module top; m u(); initial #10 $finish; endmodule\n");
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("bt=12"), "{out}");
+}

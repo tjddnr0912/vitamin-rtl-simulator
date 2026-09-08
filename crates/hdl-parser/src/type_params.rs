@@ -485,8 +485,29 @@ impl Parser<'_, '_> {
         // every packed and unpacked dim, which is the 24 both oracles answer for
         // `typedef logic [7:0] a_t [0:2]`.
         let e = match self.type_params.get(&key) {
-            Some(tp) if tp.unpacked.is_empty() => Self::ident_expr(&tp.width_name, span),
-            _ => self.sym_typedef_bits(&key, span)?,
+            // `T$w` is the ELEMENT width, so a dim-carrying type parameter multiplies
+            // it by every unpacked dim of the RESOLVED DEFAULT type — the 24 both
+            // oracles answer for `typedef logic [7:0] a_t [0:2]`, 32 for a 16-bit
+            // element and 48 for a 2-D one. A dim-free `T` composes no factor, so it
+            // keeps the bare `T$w` this arm always returned.
+            //
+            // ⚠️ Built from `tp` HERE rather than routed through `sym_typedef_bits`,
+            // even though that builder owns the same product for a typedef NAME: it
+            // opens by standing itself down on `local_decl_names`, and the type
+            // parameter's own registration inserts `T` into that set (see the
+            // `local_decl_names.insert` in `parse_type_param_group`). Routing `T`
+            // through it therefore declines every time. The stand-down must keep
+            // firing for a genuine TYPEDEF key — a same-named variable shadows the
+            // type and verilator reads the variable's width — so the ROUTE changes
+            // and the guard does not. Going through `tp` also avoids
+            // `sym_range_width`'s `names_an_overridable` requirement, which is what
+            // makes the non-overridable `localparam type T = a_t` spelling fold too.
+            Some(tp) => {
+                let elem = Self::ident_expr(&tp.width_name, span);
+                let mut any_sym = false;
+                self.sym_unpacked_dims_mul(&tp.unpacked, elem, span, &mut any_sym)?
+            }
+            None => self.sym_typedef_bits(&key, span)?,
         };
         self.bump(); // type name
         self.bump(); // )
@@ -553,9 +574,40 @@ impl Parser<'_, '_> {
             let f = factor(self, d, &mut any_sym)?;
             acc = Self::mul(acc, f, span);
         }
-        for d in &info.unpacked {
+        let acc = self.sym_unpacked_dims_mul(&info.unpacked, acc, span, &mut any_sym)?;
+        any_sym.then_some(acc)
+    }
+
+    /// Multiply `acc` by one factor per UNPACKED dimension: the literal extent where
+    /// the parse-time table folds it, the symbolic form where it does not.
+    ///
+    /// Shared by the two routes that answer `$bits` of a dim-carrying NAME — the
+    /// typedef one ([`Self::sym_typedef_bits`]) and the type-PARAMETER one
+    /// ([`Self::parse_bits_sym_type_arg`]) — so the product is one rule and not two
+    /// that can drift apart. `Dyn` / `Queue` / `Assoc` decline for both, and there is
+    /// no oracle to move toward: iverilog rejects `$bits` of a `[]` / `[$]` typedef
+    /// and verilator reports an internal fault on both.
+    ///
+    /// `any_sym` is SET, never cleared: the typedef route reads it to decide whether
+    /// its caller's numeric fold already owns the answer, and the type-parameter
+    /// route ignores it because its element (`T$w`) is symbolic by construction.
+    fn sym_unpacked_dims_mul(
+        &self,
+        dims: &[Dim],
+        mut acc: Expr,
+        span: Span,
+        any_sym: &mut bool,
+    ) -> Option<Expr> {
+        for d in dims {
             let f = match d {
-                Dim::Range(r) => factor(self, r, &mut any_sym)?,
+                Dim::Range(r) => match self.member_width(&Some(r.clone())) {
+                    Some(w) => Self::dec_lit(w, span),
+                    None => {
+                        *any_sym = true;
+                        self.sym_range_width(r)?
+                    }
+                },
+                // An unpacked `[N]` is `[0:N-1]`, so the size expression IS the count.
                 Dim::Size(e) => match Self::lit_u32(e) {
                     Some(n) => Self::dec_lit(n, span),
                     None => {
@@ -563,7 +615,7 @@ impl Parser<'_, '_> {
                         // other unfoldable leaf (a variable, a declined constant)
                         // must stay loud rather than reach elaborate as a width.
                         self.names_an_overridable(e)?;
-                        any_sym = true;
+                        *any_sym = true;
                         e.clone()
                     }
                 },
@@ -571,7 +623,7 @@ impl Parser<'_, '_> {
             };
             acc = Self::mul(acc, f, span);
         }
-        any_sym.then_some(acc)
+        Some(acc)
     }
 
     /// `T'(e)` for a type parameter or a symbolic-width vector typedef: the size
