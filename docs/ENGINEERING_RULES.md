@@ -233,6 +233,72 @@
 
 ① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
 
+### ⭐⭐ Your PROBE's resolution can invert a verdict — and a shipped test can pin the right number under the wrong reading (2026-09-08 · §4.5.458)
+
+`$time` is the design's time ROUNDED TO THE MODULE'S TIME UNIT. A delay suite that probed with it
+asserted correct numbers and then explained them backwards: its prose said fractional delays round
+at the module's **unit** and cited `#(25ns)` under `10ns/1ns` as 30 ns. Re-probed with `$realtime`
+at 1 fs, that delay is 25 ns in all three tools — the probe was rounding 12.5 units to 13 and the
+comment was reading its own rounding as the oracle's answer. The same probe made `#(0.4ns)` and
+`#(2.5ps)` look like "both oracles fire at once" when they delay 400 ps and 3 ps.
+
+- A passing assertion does NOT validate the sentence next to it. When a comment states an oracle
+  RULE ("rounds at the unit"), re-derive the rule from a probe finer than the effect.
+- Pick the probe from the smallest quantity the rule can produce, not from the design's units.
+- Fix the prose in place and leave the assertions alone: the numbers were observations, only the
+  reading was wrong. Then put the fine-grained twin in the new file so the rule is pinned once.
+
+### ⭐⭐ The lane BEFORE yours may answer WRONG, not decline — "only adds answers where it returned None" has to be measured (2026-09-08 · §4.5.458)
+
+The safe-looking placement for a new fold lane is last: it can then only add answers where the
+existing ones returned `None`, which is byte-identical by construction. That reasoning is only as
+good as the claim that the existing lane declines. Measured, the integer delay lane did not — it
+folded `#(3ns / 2)` with integer division to 1 ns where both oracles delay 1.5, and `#(5ns / 2ns)`
+to 2 where both delay 2.5. Placed last, the new lane would have preserved both silent-wrongs.
+
+- Before choosing "after", run the shapes your lane handles through the EXISTING one and record
+  what it returns. `None` on all of them earns the safe placement; a wrong number forbids it.
+- Placing it FIRST then costs a gate you must pay explicitly: gate it on a property the old lane's
+  correct cells do not have (here "the tree contains a `TimeLit`"), and sweep for movement.
+
+### ⭐ An accidental immunity sizes itself by the CONTAINER — sweep the container, not one instance (2026-09-08 · §4.5.458)
+
+A signed index handed over unsigned is only VISIBLE where the unsigned reading lands inside the
+object. On a `logic [7:0]` that is index widths 2 and 3 (`-4'sd1` reads 15 — already out of range,
+already `x`, already "correct"); on a `logic [63:0]` it is widths 2 through 6. Probing one width,
+or one net width, returns zero findings and reads as "no defect".
+
+- When a defect's symptom is "reads the wrong element", the immunity band is a function of the
+  CONTAINER's size. Sweep the container dimension too, not just the operand's.
+- The band's edges are the proof of the mechanism: the fix must move every cell inside the band
+  and no cell outside it. Ours moved 42 of 224 and left 182 byte-identical.
+
+### ⭐⭐ Three geometries, one missing seal — the arm that SUBTRACTS NOTHING is the one that skips the rule (2026-09-08 · §4.5.458)
+
+`norm_offset_for_net` normalizes an index three ways: a non-zero declared LSB subtracts it, an
+ascending or negative-bound net mirrors it, and a `lsb == 0` net returns the index VERBATIM because
+"the raw index is already internal". True for the arithmetic, false for everything else the sealed
+arms do on the way — here the SIGN. The `[9:2]` spelling of the select was right all along and the
+`[7:0]` spelling was not, which is the tell.
+
+- An early `return raw` on a no-op arm skips every rule the other arms apply, not just the one it
+  is a no-op for. List what the siblings do besides the arithmetic before trusting it.
+- Its twin has the same shape: `norm_offset_for_range`'s `lo == 0` arm still returns verbatim, and
+  a 0-LSB parameter select is measurably wrong for exactly this reason. Branch parity found it by
+  reading, not by probing — check the SIBLING FUNNEL in the same file every time.
+
+### ⚠️ A guard that a name inserted ITSELF into is not a shadow — check who populated the set (2026-09-08 · §4.5.458)
+
+`sym_typedef_bits` opens with "if this name is locally declared, stand down" — the right rule for a
+typedef shadowed by a same-named variable. It declined for every dim-carrying type parameter,
+because the type-parameter group's own registration inserts the parameter's name into that very
+set. The guard was firing on its own producer.
+
+- When a stand-down never fires positively, census the set's WRITERS before relaxing the guard: a
+  self-insert is not the hazard the guard was built for.
+- Fix it by changing the ROUTE, not the guard — the guard still has real work for the other key
+  kind, and relaxing it would re-open the shadow cell the suite pins.
+
 ### ⭐⭐ Widening what a DEFAULT may be makes the OVERRIDE channel's capacity a live invariant (2026-09-08 · §4.5.457)
 
 `parameter type T = a_t` on an unpacked-array typedef ships by letting the dims ride the registered

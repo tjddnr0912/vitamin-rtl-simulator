@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.458` **`$bits` of a dim-carrying type parameter, a time literal inside an expression, and the vector select that never sealed its sign** (2026-09-08 · §3 ⑤ⓕ + §2 Delays + §2 Index sealing · 15 + 81 + 42 cells fixed, 0 regressed over 494 measured · §2 🆕 I ⓒ REFUTED as an oracle split)
 - `4.5.457` **A constant-driven NET as an array-word index, a REAL time literal and a negated sized literal as delays, and `parameter type T = <unpacked typedef>`** (2026-09-08 · §2 🆕 I ⓒ + §2 Delays + §3 ⑤ⓕ · §2 row 7 residue REFUTED · 13 + 17 + 8 cells)
 - `4.5.456` **A tf-port formal spelled with an unpacked-array typedef, a full-range select of an array word, and a process-order permutation that was built and reverted** (2026-09-08 · §3 ⑤ⓕ + §2 🆕 I ⓒ + §2 row 7 REVERTED · 22 + 13 cells)
 - `4.5.455` **`$bits` of a `real` / `realtime` parameter is 64, like the variable beside it** (2026-09-07 · §2 🆕 L ⓐ · 16 cells · batch with 453/454)
@@ -474,6 +475,48 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.458 `$bits` of a dim-carrying type parameter, a time literal inside an expression, and the vector select that never sealed its sign (2026-09-08, branch main) ✅
+
+한 반복 = 큐 3개. 슬롯 2 의 큐 줄은 그라운딩에서 무너져 같은 트랙의 다른 §2 행으로 대체했다.
+
+**슬라이스 1 — §3 ⑤ⓕ: `$bits(T)` on the bare name of a dim-carrying type parameter** (`crates/hdl-parser/src/type_params.rs`)
+
+- 증상: `typedef logic [7:0] a_t [0:2]; module m #(parameter type T = a_t); … $bits(T)` 가 `E3010 undeclared net/variable` + `E3009 $bits argument shape unsupported` 쌍. 두 오라클 24.
+- 큐 줄의 원인 지목(`casts.rs::bits_of_type_name` 이 리터럴만 접는다)은 **맞지만 그 자리는 옳게 declines 한다** — 거기서 접으면 override 이전 폭을 굽는다. 값이 죽는 자리는 `sym_typedef_bits` 의 첫 줄 `local_decl_names` stand-down 이고, 그 집합에 `T` 를 넣은 것은 **타입 파라미터 등록 자신**이다(자기 그림자). 두 번째 사망 자리는 `sym_range_width` 의 `names_an_overridable` 요구 — `localparam type T = a_t` 는 overridable 을 등록하지 않아 거기서 또 죽는다.
+- 고침: `parse_bits_sym_type_arg` 에서 `sym_typedef_bits` 로 라우팅하지 않고 `TypeParam` 자신에서 곱을 짓는다(원소 `T$w` × 해소된 default 의 unpacked dim 전부). dim 곱 루프는 `sym_unpacked_dims_mul` 로 추출해 두 경로가 한 규칙을 쓴다. stand-down 은 진짜 TYPEDEF 키에 대해 그대로 발화한다(같은 이름 변수가 타입을 가린다 — verilator 12).
+- 측정: 55칸(3 바인더 × 11 default × 인스턴스 3) PRE/POST/iverilog. **15 fixed · 0 regressed.** 남은 20칸은 전부 OVERRIDE 채널(§3 ⑤ⓕ 의 다른 행) — `ovr_pack` 은 E3010 쌍에서 **F4004 로 개선**(shape guard 가 말한다), `ovr_same` 은 E2002 유지.
+- 핀: `type_param_unpacked_typedef.rs` +3 테스트.
+
+**슬라이스 2 — §2 Delays: a time literal inside an EXPRESSION** (`crates/elaborate/src/const_eval.rs`)
+
+- 증상: `assign #(2.5ns + 1ns) y = a;` 가 exit 0 · 무진단 · 즉시 발화. 두 오라클 3.5 ns.
+- 큐 줄의 **클래스 이름이 틀렸다**: "REAL 타임 리터럴" 이 아니다. `#(2500ps + 1000ps)` 엔 real 이 하나도 없고 `#(1ns + 1ns)` 도 `10ns/1ns` 에선 0 이었다. 판별자는 **모듈단위 값이 분수인가**이고, 사망 자리는 `const_eval_in_scope` 의 `TimeLit` arm 의 **두 조건 각각**(비정수 `num` · `ticks % mult != 0`). 세 번째 막이: `expr_mentions_real_opt` 에 `TimeLit` arm 이 없어 real 레인은 트리를 **물어보지도 않는다**.
+- 큐 줄의 **분열 경고도 절반 틀렸다**: `#(2*2.5ns)` 는 `1ns/1ps` 에선 두 오라클 다 5 ns 다. 분열은 **정밀도 == 단위**일 때만 산다.
+- ⚠️ §4.5.457 의 산문이 반대로 적혀 있었다 — 반올림은 모듈 **단위**가 아니라 **정밀도**에서, 완성된 값에 **한 번**. `#(25ns)`@`10ns/1ns` 는 30 이 아니라 25 ns. 원인은 그 파일의 `$time` 프로브가 모듈단위로 반올림해 **자기 반올림을 오라클 답으로 읽은 것**. 어서션은 옳고 산문만 틀렸으므로 산문을 고치고 `$realtime` 쌍둥이를 새 파일에 두었다.
+- 고침: `delay_ticks_in_scope` 안에만, opt-in 3종 — `expr_has_time_lit` 게이트 · `delay_units_in_scope`(모듈단위 f64 walk, TimeLit 잎만 변환) · `delay_plain_units`(TimeLit 없는 부분트리는 **통째로** 기존 두 도메인에 맡긴다 — §11.8.1 은 real 연산자가 정수 피연산자를 그 **자기결정 값**으로 변환한다고 말한다). 완성값을 `real_delay_ticks` 로 한 번 반올림.
+- ⚠️ **정수 레인 앞에** 둔다. 뒤에 두면 byte-identity 는 지키지만 정수 레인이 declines 만 하는 게 아니라 **틀린 답을 낸다** — `#(3ns/2)` 가 정수 나눗셈으로 1 ns(두 오라클 1.5).
+- 측정: 215칸(43 철자 × 5 timescale). **81 fixed · 0 regressed.** 잔여 19칸 = 분열 11 + `e<0` 4 + 음수지연 4, 전부 ROADMAP §2 에 측정치와 함께.
+- 리뷰가 연 것: `%` 를 magnitude 나머지(fmod)로 — `#(5ns % 3ns)`@`10ns/1ns` iverilog 2 ns / 정수 레인 0. 1칸 이동, 0 회귀.
+- 핀: 새 파일 `delay_time_literal_in_expression.rs`(6 테스트, `$realtime` 프로브) + `delay_real_timelit_and_sized_negative.rs` 산문 정정.
+
+**슬라이스 3 — §2 Index sealing: a narrow SIGNED index into a plain `[N:0]` vector** (`crates/elaborate/src/packed.rs`)
+
+- 원래 슬롯 2(§2 🆕 I ⓒ 의 UNSIGNED 좁은 넷 인덱스 × 음수 base 배열)는 그라운딩에서 **무너졌다** — 두 오라클 다 이 칸을 판정할 수 없다(iverilog 의 답이 **배열 크기**에 의존하고, verilator 는 unpacked 범위 밖 읽기에 `x` 자체가 없다). ORACLE-SPLIT 으로 §2 에 기록하고 같은 트랙의 다른 §2 행으로 슬롯을 채웠다.
+- 증상: `logic [7:0] pv; pv[-2'sd1]` 이 비트 3, `pv[3'sd7]` 이 비트 7 을 읽는다(iverilog 둘 다 `x`). 상수만이 아니라 `logic signed [1:0] s = -1` 의 `pv[s]` 도, 상수식 `pv[-2'sd1 + 2'sd0]` 도, 부분선택 base 도 같다.
+- 뿌리: `norm_offset_for_net` 의 `lsb == 0` arm 은 뺄 것이 없어 인덱스를 **verbatim** 반환한다 — 엔진은 인덱스를 `to_u64` 로 읽으므로 부호가 사용자가 쓴 폭에서 사라진다. `[9:2]` 철자가 처음부터 옳았던 것은 non-zero LSB 가 `norm_sub_k` 를 거치기 때문. `const_index_sign.rs` 가 배열 WORD 에 대해 핀한 규칙의 **빠진 컨테이너**.
+- ⚠️ 보이는 대역은 "무부호 읽기가 넷 안에 우연히 떨어지는 곳" — 8비트 넷이면 폭 2·3 뿐, 64비트면 2~6. **한 폭만 쓸면 0건**이 나온다(우연한 면역이 잠복 결함을 가린다).
+- 고침: `seal_narrow_signed_index` — 상수는 참값(부호 포함)을 32비트 도메인으로, 비상수는 signed ∧ 폭<32 ∧ repeatable 일 때 `extend_to(.., 32, true)`. UNSIGNED 는 손대지 않는다(폭 고정 절반은 이 arm 에서 이미 옳다 — `pv[~r3]`·`pv[~r5]` 가 HEAD 에서 iverilog 와 일치).
+- 측정: 224칸(8 넷모양 × 28 인덱스 × read/part-select/write) PRE/POST/iverilog. **42 fixed · 0 regressed · 224/224 iverilog 일치.** 배열 원소 비트선택(`mem[0][…]`)도 같은 퍼널이라 같이 풀렸다.
+- 핀: 새 파일 `packed_select_signed_index.rs`(5 테스트).
+
+**적대 리뷰 1라운드(두 렌즈, 위임 없음)**
+
+- differential: 494칸 3-way(PRE 릴리스 바이너리 md5 `97b5823…` / POST / 오라클). **0 regressed** across all three slices. 분열 11칸은 verilator 로 전수 대조 확인.
+- soundness: `norm_offset_for_range` 의 `lo == 0` arm 이 넷 쪽과 **같은 verbatim 반환**임을 코드에서 찾아 프로브 → 0-LSB 파라미터 셀렉트가 같은 결함으로 남아 있음을 실측(iverilog `x` / vita `0`·`1`). 내 코드 밖 · 다른 퍼널 · pre-existing ⇒ §2 한 줄 + 큐 슬롯 3.
+- 제품이 흔들리지 않아 라운드 1 에서 종료.
+
+**게이트**: `cargo nextest run --workspace --locked --no-fail-fast` 7,276 passed / 0 failed / 0 TIMEOUT · clippy `-D warnings` 0 · fmt 0 · `format_version` 31 불변(파서/elaborate 전용, wire-shape 무변화).
 
 #### 4.5.457 — A constant-driven NET as an array-word index, a REAL time literal and a negated sized literal as delays, and `parameter type T = <unpacked typedef>` (2026-09-08 · format 31 · no IR change) ✅
 

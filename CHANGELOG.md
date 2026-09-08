@@ -25,6 +25,15 @@ need updating. What moved:
 
 ### Added
 
+- **`$bits` of a type parameter that carries array dimensions.**
+  With `typedef logic [7:0] a_t [0:2];`, `$bits(T)` inside `module m #(parameter type T = a_t)`
+  was two errors (`undeclared net/variable T`, then `$bits argument shape unsupported`). It is
+  now the element width times every dimension — 24 here, 32 for a 16-bit element, 48 for a
+  two-dimensional typedef — matching both reference simulators. The answer is an expression, not
+  a number, so it still follows an override of the element width. The body-`parameter`,
+  `localparam type` and package-scoped (`pk::a_t`) spellings all answer, and so does
+  `localparam int W = $bits(T);`.
+
 - **A type parameter can default to an unpacked-array typedef.**
   `typedef logic [7:0] a_t [0:2]; module m #(parameter type T = a_t) (); T v;` was a parse error;
   the typedef's dimensions now reach every declaration of `T` — a variable, a port, a
@@ -47,13 +56,32 @@ need updating. What moved:
 
 ### Fixed
 
+- **A time literal inside an expression is a delay, not no delay.**
+  `assign #(2.5ns + 1ns) y = a;` propagated immediately, at exit 0, with no diagnostic, where
+  both reference simulators delay 3.5 ns. So did a parenthesised `#((2.5ns))`, `#(2 * 2.5ns)`,
+  `#(2.5ns / 2)` and the same values on a gate primitive or a net declaration. Two further
+  surprises came out of measuring it: the class is not "a REAL time literal" — `#(2500ps +
+  1000ps)` contains no real at all and was equally silent — and the integer fold did not merely
+  decline these, it answered some of them **wrongly**: `#(3ns / 2)` was 1 ns where a delay, being
+  a magnitude, is 1.5 ns. A remainder is a magnitude too, so `#(5ns % 3ns)` under a `10ns/1ns`
+  header is now 2 ns rather than no delay.
+
+- **A bit or part select of a plain `[N:0]` vector reads a negative index as negative.**
+  `logic [7:0] pv; pv[-2'sd1]` read bit 3, and `pv[3'sd7]` read bit 7, where the reference
+  simulator returns `x`; a signed net index (`logic signed [1:0] s = -1; pv[s]`) and a
+  part-select base (`pv[3'sd7 -: 2]`) did the same. A vector whose declared low bound is not
+  zero was correct all along, because only the zero-low-bound path skipped the sign. Note the
+  shape of the bug: it was visible only where the unsigned reading happened to land inside the
+  vector — widths 2 and 3 on an 8-bit net, 2 through 6 on a 64-bit one.
+
 - **A delay written as a real time literal is no longer dropped.**
   `assign #(2.5ns) y = a;` — and `#(3.0ns)`, and the same value on a gate primitive, a net
   declaration and the rise/fall pair `#(2.5ns, 1ns)` — propagated with NO delay at all, at exit 0.
   It now delays what both reference simulators delay. Note the rounding both of them apply: a
-  fractional delay is rounded at the module's **time unit**, not at its precision, so `#(25ns)`
-  under a `10ns/1ns` header is 2.5 units and delays three of them (30 ns), while `#(2.5ns)` under
-  the same header is a quarter of a unit and delays none.
+  fractional delay is rounded at the module's **precision**, on the finished value. (An earlier
+  version of this note said "time unit" and gave `#(25ns)` under a `10ns/1ns` header as 30 ns;
+  both were wrong. Re-measured at 1 fs, that delay is 25 ns in all three tools — the `$time`
+  probe behind the old claim rounds to the time unit and was reading its own rounding.)
 
 - **A delay written as a negated sized literal fires when it should.**
   `assign #(-4'd1) y = a;` is a self-determined value read as unsigned — 15 ticks — and vita was
