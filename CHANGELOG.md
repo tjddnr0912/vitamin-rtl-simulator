@@ -82,6 +82,36 @@ need updating. What moved:
 
 ### Fixed
 
+- **A constant parameter initializer now computes at its own width, not at unlimited
+  precision.** `localparam K = (8'd200 + 8'd100) >> 1;` bound `96` where both reference
+  tools bind `16`: the sum was folded without a width and only the finished result was
+  masked, which is the same answer for `+ - * << & | ^` but not for `/ % >> >>>`, where
+  the discarded high bits are the ones that decide it. Reported `$bits` was already
+  correct, so only the value moved. The same fix corrects `%`, `/` and `>>>` over a
+  64-bit unsigned declaration at module scope (they lost the sign), a negative
+  intermediate such as `(8'd10 - 8'd20) >> 1` (previously an error), and the case where
+  the wrapping operator sits *below* a benign one (`((8'd200 + 8'd100) >> 1) + 8'd0`).
+  A parameter whose initializer names another parameter, or mentions an operand wider
+  than 64 bits, keeps its previous value — those two are deliberate limits, not
+  oversights. ⚠️ Wrapping in a *wider* operation still changes the value, and that is
+  the language: `+ 0` makes the expression 32 bits (IEEE §11.6.1), while `+ 8'd0` does
+  not.
+
+- **A context-determined operator over a reduction is no longer refused in an untyped
+  parameter.** `localparam R = ~(|4'b1010);`, `(|4'b1010) << 2` and `-(|4'b1010)` were
+  elaboration errors; they now bind `0`, `0` and `1` at one bit, which is what both
+  reference tools bind, at every binder (module `localparam`, module-body `parameter`,
+  an ANSI header parameter, a `package` constant and inside `generate`). The `generate`
+  spelling also stops emitting four follow-on `undeclared net/variable` errors.
+
+- **`foreach` now works inside an `interface` body.** The identical loop was correct in
+  a `module` and produced nine errors in an `interface`, including a misleading
+  "enum method `v.first` is unavailable" on a design containing no enum. Single-index,
+  multi-dimension (`foreach (q[i,j])`) and nested loops all work, as do interfaces under
+  a `generate`, parameterized interfaces and `modport`s. A *user-written* block-local
+  declaration in an interface body (`begin int x; … end`) is still refused, and refusing
+  it also re-refuses any `foreach` in the same body — see docs/ROADMAP.md §3.b.
+
 - **Procedural delays now accept a time literal the module's time unit cannot hold.**
   `#(2500ps);` under `` `timescale 1ns/1ns `` was an elaboration error where both
   reference tools delay 3 ns; the same held for `#(2.5ns)`, for `#(3ns)` under a

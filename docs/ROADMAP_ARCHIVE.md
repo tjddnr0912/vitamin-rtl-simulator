@@ -478,6 +478,44 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.461 The parameter initializer's VALUE lane made width-aware, the guard it retired, and `foreach` inside an interface (2026-09-08, branch main) ✅
+
+한 반복 = 큐 3개 묶음. 이번엔 **묶음의 ORDER 자체가 측정 결과**였다: 큐가 독립으로 적어 둔 §2 두 줄이 한 뿌리였고, 순서를 뒤집으면 8칸이 loud→silent-wrong 이 된다.
+
+**A. 파라미터 초기화자 VALUE lane 이 폭-인지가 됐다 (§2 Index sealing · 2-오라클)**
+
+- 증상: `localparam K = (8'd200 + 8'd100) >> 1;` 이 폭 8(맞다)에 값 `96`, 두 오라클 `16`. §4.5.460 이 `$bits` 를 이미 고쳐 놨으므로 남은 것은 값뿐.
+- 원인: `eval_param_init` 의 꼬리가 폭-무제한 `const_eval_in_scope` 로 떨어지고 마스킹은 **꼭대기에서 한 번**. 절단은 `+ - * << & | ^` 와 단항들과는 교환되지만 `/ % >> >>>` 와는 안 된다 — 버려지는 상위 비트가 답을 정하는 쪽이라서.
+- 고침: 같은 함수가 이미 갖고 있던 폭-인지 문(`eval_const_assign`, `ctx = max(self, target).min(64)`)을 **소비자 opt-in** 으로 연다(`param_init_width_aware_ok`). 공유 평가기는 넓히지 않는다(ER "shared machinery").
+- 허용집합 = 두 조건, 각각 **실측된** correct→silent-wrong 하나씩에 대응:
+  1. `ctx_width_names_are_evident` — 이름은 전부 사퇴. `const_self_width` 의 name arm 은 `param_meta` 를 읽고, 그건 untyped 파라미터의 **기본값** 폭이라 override 가 오면 사실이 아니게 된다([[a-default-is-not-a-fact]], 이 축에서 세 번째). `eval_const_shift_count` 가 21칸을 태우고 그은 것과 같은 선이라 술어를 복사하지 않고 **같은 헬퍼를 공유**하도록 이름만 중립화했다.
+  2. `const_ctx_within_i64` — >64비트 leaf 거절. `localparam logic signed [64:0] N65 = -65'sd100;` 의 `N65 >>> 1` 은 HEAD·iverilog 다 `ffff…ce` 인데 폭-인지 문을 통과시키면 `7fff…ce` 다(부호비트가 bit 64 인데 ctx 가 64로 clamp). ROADMAP §2 row 14 의 되돌린 슬라이스가 이 leaf 를 지목해 뒀고 **아직 살아 있다**. ⚠️ 같은 문의 **fill arm** 도 이 울타리를 받는다 — `(N65 >>> 1) | '0` 이 HEAD 에서 같은 silent-wrong 이었다(pre-existing, 같은 자리, 같은 조건으로 닫힘).
+- ⚠️ row 14 의 **다른** 블로커(모듈 스코프 `logic [7:0] NM` 을 generate 스코프 `localparam time NM` 에 보증)는 HEAD 에서 재측정 결과 **죽었다** — 두 lane·두 오라클 다 `12c`([[revert-reason-is-a-measurement]]).
+- 큐 줄이 지목한 callee `eval_const_env_self` 는 **반박됐다**: self-determined 위치 전용(호출부 20곳)이고 라우팅하면 `localparam logic [15:0] D16 = (8'd200+8'd100)>>1` 이 22가 된다(세 툴 다 150). 정답은 같은 함수 안에 이미 있던 `eval_const_assign`.
+- 실측: `>>` · `>>>` · `/` · `%` · 8비트 시프트 카운트 철자 · 단항 `-` 포장 · **benign 한 top 아래 중첩**(`((…)>>1) + 8'd0`) · ternary BRANCH · 음수 중간값(`(8'd10 - 8'd20) >> 1` 은 **loud→correct**) — 11칸 고침. 링 연산자(`<< * & - ~ 단항`) · 폭 넓은 형제(`/16'd7`·`/32'd7`) · `**` · `$clog2` · concat · replication · cast · 비교 = **바이트 동일**. `+ - * / %` 폭 칸에서 iverilog 는 자기모순으로 실격(자기 `$bits` 8 vs 파라미터 9), verilator 가 단독 오라클이고 전 칸 일치.
+- 이 슬라이스가 닫은 **기존 핀 4개**(전부 KNOWN-WRONG 으로 적혀 있던 것): 64비트 unsigned `%`·`/`·`>>>` 가 모듈 스코프에서 부호를 잃던 것 · `(64'hFFFFFFFF00000000 >>> 32)` 의 파라미터/런타임 불일치.
+- ⚠️ `const_expr_self_consistency` 의 "`+ 0` 로 감싸도 값이 안 변한다" 는 성질은 **IEEE 상 틀렸다**(§11.6.1: 32비트 형제가 문맥을 넓힌다). PRE 는 전 칸이 **균일하게 틀려서** 통과하고 있었다. 성질을 "**자기 폭의** 값보존 포장"으로 고치고 넓은 포장은 별도 대조군으로 뒀다.
+
+**B. `param_init_kept_loud` 를 네 VALUE 자리에서 삭제 (§2 Index sealing · 2-오라클)**
+
+- 그 술어의 doc 이 스스로 만료조건을 적어 뒀고(§4.5.460 이 그 조건을 만들었다) 이번에 집행했다. `~(|4'b1010)`·`(|4'b1010) << 2`·`-(|4'b1010)`·`(~&4'b1010) + (^4'b1010)` 가 두 오라클의 `0`·`0`·`1`·`1` 을 1비트로 바인딩한다. 바인더 census 5종(모듈 localparam · 모듈 body parameter · ANSI 헤더 · package · generate) 전부 동일, generate 는 덤으로 4에러 cascade 가 사라진다.
+- ⚠️⚠️ **A 없이는 못 한다.** 무제한 fold 위에서 가드만 지우면 `(8'hFF + (|4'b1010)) >> 1` 류 8칸이 loud→silent-wrong(vita 128, 두 오라클 0). 큐는 두 줄을 독립으로 적어 뒀고, 순서는 A→B 다.
+- 남은 호출부는 `params.rs` 꼬리 하나. `!default_binds` 로 **스코프를 명시**했다 — 그 lane 에서 지우면 `#(.P(-1))`·`#(.P(-5))` 가 `-1`/`-5`(두 오라클) 에서 `4294967295`/`4294967291` 로 간다. ⚠️ 이건 **우연한 면역**이지 규칙이 아니다: 가드가 안 덮는 쌍둥이 `~(!4'b0)` 는 지금도 그 lane 에서 silent-wrong 이고, 클래스는 row 25 다.
+- ⚠️ **도달성 확대**: 기본값 쪽 false-loud 가 사라지면서 row 25(override 값의 폭)가 더 많은 설계에서 관측된다. PRE·POST 는 그 축에서 **바이트 동일**(네 철자 전부)이므로 회귀가 아니다 — [[removing-a-loud-gate-exposes-what-it-masked]].
+
+**C. interface 본문의 `foreach` (§3.b · 2-오라클 · PARTIAL)**
+
+- 증상: 같은 본문이 `module` 에선 정답이고 `interface` 에선 9에러 — 그중 7개가 `undeclared net/variable top.u.__foreach_i_<n>`, 2개가 enum 이 없는 설계에 대한 `enum method 'v.first' is unavailable`(오도하는 메시지). 파서가 `foreach` 마다 블록로컬 쌍을 합성하는데 `iface_inst.rs` 에 hoist 루프가 아예 없었다.
+- ⚠️⚠️ **적대 리뷰(differential)가 첫 고침을 BLOCKING 으로 잡았다.** hoist 만 붙이는 것은 module 쌍둥이가 아니다 — `instance.rs` 는 먼저 다섯 분류 패스를 `&ast::ModuleDecl` 에서 만들고, 그것이 **스코프 이름과 충돌하는** 블록로컬을 flatten 에서 빼낸다. interface 경로에선 그 맵들이 부모 모듈 것이라, `integer b` 멤버 + `begin integer b; b = 7; end` 가 `OUTER b=7`·`u.b=7` 을 찍었다(두 오라클 `99`). **module 쌍둥이는 PRE·POST 다 정답** — 그게 귀속을 확정한 대조군이다.
+- 좁힌 고침: 파서가 **합성한** `__foreach_*` 만 hoist 한다. 그 이름들은 `foreach` 토큰의 바이트 오프셋을 품어 서로 충돌할 수 없고, 사용자가 그 철자를 쓰지 않았다는 것은 가정이 아니라 interface 스코프 이름 집합으로 **확인**한다. 사용자 블록로컬이 본문에 하나라도 있으면 body 단위로 전부 거절(per-block 필터는 그 다섯 패스의 containment/disjointness 분석을 다시 지어야 한다).
+- 실측: single·multi-dim(`q[i,j]`)·중첩 `foreach`, generate 안의 interface, 파라미터화 interface, modport 전부 3-way 동일. 충돌 셀은 loud 로 복귀. generate **안**의 `foreach`(hoist 루프가 top-level `Proc` 만 본다) 와 사용자 블록로컬은 잔여로 §3.b 에 1줄.
+- 게이트 완전성 확인: `collect_block_local_decls` 와 `hoist_block_local_nets` 의 statement arm 이 **동일**하므로, 게이트가 보는 집합 = hoist 가 만들 집합.
+
+**리뷰 · 게이트**
+
+- 적대 2렌즈, 직접 수행. differential 이 C 의 BLOCKING 1건(위) + A/B 의 새 고침칸 2건(`>> 8'd1`, 단항 `-` 포장)을 찾았고, soundness 가 `const_ctx_within_i64` 가 `const_fold_children` 에 Concat/Replicate arm 이 없어 **중괄호로 우회 가능**함을 찾았다(오늘 도달 불가 — concat 의 self 폭이 합이라 꼭대기에서 잡힌다 — 이지만 가드는 규칙으로 답하는 arm 도 내려가야 한다: [[an-arm-that-answers-without-descending]]). 둘 다 고치고 델타 재리뷰.
+- 게이트 7,322 green · clippy · fmt · 코퍼스 10/10(REGRESSION·DRIFTED·ORACLE-DRIFT 0, 프론트엔드 시간 ≤1% 불변). format_version 불변(31): SimIr 형상·SchemaHash 타입 무변경, elaborate 시점 상수 값과 `(width, signed)` 메타만 움직인다.
+
 #### 4.5.460 A `localparam` OF an unpacked-array typedef, the procedural delay lane's time literals, and the untyped parameter sized by its operator (2026-09-08, branch main) ✅
 
 한 반복 = 큐 3개 묶음. 세 줄 모두 **증상은 맞고 원인·크기·고침 형태 중 하나 이상이 틀렸다**.

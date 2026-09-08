@@ -102,6 +102,75 @@ about the context width", and with the three excluded `*` kept the wide value wh
   property, the exclusion is the defect.
 - The failing test is the artifact that made the call. Prefer a suite run over an argument.
 
+### ⭐⭐ A self-consistency pin certifies the RELATION — every value under it can be wrong (2026-09-08, §4.5.461)
+
+`const_expr_self_consistency` exists to pin "wrapping an expression in a value-preserving
+operation must not change it", and it had passed since it was written. It passed because every
+column was uniformly WRONG: a self-determined `(8'd200 + 8'd100) >> 2` is 11 and the file read 75
+in all five columns. Worse, the property as stated is not even true — `+ 0` is a 32-bit sibling and
+§11.6.1 makes the whole expression 32 bits, so 75 IS the answer there; the real invariant needed
+the qualifier "of its own width" (`+ 8'd0`), which is the spelling that was missing.
+
+- **A relation pin has no anchor.** Pair every one with a test that pins the VALUES against an
+  oracle, and say so in both files, or the pair drifts together and the suite stays green.
+- **A "value-preserving wrapper" is a width claim.** Before asserting an algebraic identity over
+  a sized domain, name the width each side computes at and check the identity holds at BOTH.
+- The same shape recurs wherever a test asserts `a == b` over two spellings rather than `a == <a
+  measured constant>`.
+
+### ⭐⭐ Retiring a guard is safe only over the lane the guard was compensating for (2026-09-08, §4.5.461)
+
+Two §2 rows were queued independently — "delete `param_init_kept_loud`" and "the parameter value
+fold is width-unlimited" — and they are one root. The guard existed because the value lane folded
+at unlimited precision and masked once at the end; deleting it alone was measured to turn 8 cells
+loud→silent-wrong, because truncation commutes with `~ - << & | ^ + *` (which is why the guard's
+own three cells would have been fine) and NOT with `/ % >> >>>`. The three cells the row cited
+give the same answer under both candidate value rules, so they were not evidence about the order at
+all.
+
+- **Read the guard's justification as a precondition on ANOTHER component, then check that
+  component's current behaviour before removing the guard** — not just the cells the guard names.
+- When two rows share a root, their ORDER is a measurement: run the cells that SEPARATE the two
+  orders, not the cells the rows quote.
+- A guard with several call sites may be doing a different job at each. Here four sites were the
+  expiring job and the fifth was a live one on another lane (`!default_binds`); scope the survivor
+  explicitly rather than letting an earlier arm shadow it, and record when it is right only by
+  ACCIDENT ([[an-accidental-immunity-hides-a-latent-defect]]) with the class that really owns it.
+
+### ⭐⭐ A width fence on the TARGET does not fence the LEAF (2026-09-08, §4.5.461)
+
+`eval_const_assign` computes `ctx = max(self, target).min(64)`, and its call site was already
+gated on `w <= 64` — but `w` is the TARGET. A `logic signed [64:0]` leaf under a 64-bit target
+passes that gate, and the `.min(64)` then CLAMPS the context, deleting a sign bit that lives at
+bit 64: `N65 >>> 1` is `ffff…ce` in the unlimited lane and in iverilog, `7fff…ce` through the
+width-aware one.
+
+- **Fence the operand the clamp will act on, not the destination.** When a helper clamps, the
+  admission predicate has to ask about every node the clamp can reach.
+- Check the arms of whatever child-walk you recurse through: `const_fold_children` has no
+  `Concat`/`Replicate` arm, so a guard built on it is walked past by wrapping the hazard in braces
+  — reachable or not, a GUARD descends where an ANSWER need not
+  ([[an-arm-that-answers-without-descending]]).
+- A branch of the same gate that already existed (here the fill arm) is inside the new fence's
+  blast radius too — the same leaf was already silent-wrong through it.
+
+### ⭐⭐ Branch parity is the PASS, not the loop — count what runs before the twin (2026-09-08, §4.5.461)
+
+`instance.rs` hoists a module body's procedural block-locals in one four-line loop and
+`iface_inst.rs` had no such loop, which reads exactly like a missing-parity one-liner. Adding the
+loop made a colliding block-local silent-wrong (`OUTER b=7`, `u.b = 7`, both oracles 99) because
+the module path first builds FIVE classifier maps from a `&ast::ModuleDecl` — and on the interface
+path those describe the PARENT module. The module twin of the identical text is correct in PRE and
+POST, which is what attributed the defect to the new call rather than to the flatten model.
+
+- **Before copying a call, list what the original's caller set up first.** State the twin reads
+  from `self` is invisible at the call site and is most of the contract.
+- When the prerequisite is real, ship the subset that provably does not need it — here only the
+  PARSER-SYNTHESIZED names, whose uniqueness is structural — and prove the subset rather than
+  asserting it from a prefix convention.
+- A gate that decides "is this body safe to process" must walk with the same statement arms as the
+  processor it gates, or it certifies a set the processor does not act on.
+
 ### ⭐⭐ A census axis you did not vary is where the regression is (2026-09-08, §4.5.460)
 
 The procedural-delay routing was measured over 6 timescales × 14 literals × 5 lanes — 84 cells,
