@@ -458,6 +458,58 @@ impl Elaborator<'_> {
                         }
                     }
                 }
+                // Table 11-21, the rest of the operator table: `~` keeps its operand's
+                // width, a bitwise pair takes the WIDER of the two, a shift and `**`
+                // take the LEFT operand's, and a comparison / equality / logical
+                // operator is ONE bit — none of which is recoverable from the folded
+                // value, so the value-inferred tail below recorded 32 for every one of
+                // them. Measured against both oracles, which agree on all of it:
+                // `localparam E = ~8'h5A` printed `ffffffa5` where they print `a5`,
+                // `8'hFF << 8'd9` kept the bits they shift out (`0001fe00` vs `00`),
+                // `2'd3 ** 4'd10` answered 59049 where they answer 1, and
+                // `8'h5A > 8'h01` was 32 bits wide where they say 1. The unary arm
+                // covers `-`/`+` too: the peel loop above reaches a bare literal
+                // through them, but not `-{4'h5,4'hA}` or `-DD[3:0]` (both oracles 8
+                // and 4), which is the measurement the concatenation arm's comment
+                // above left open.
+                //
+                // ⭐ `+`/`-`/`*` are INCLUDED, and that was the hard call. The two
+                // tools bind them differently — `localparam Q = 8'd200 + 8'd100` is
+                // `12c` at 9 bits on iverilog, `2c` at 8 on verilator, and Table
+                // 11-21 says 8 — so the row was filed as an oracle split. It is not
+                // one: iverilog contradicts ITSELF, twice. Its own
+                // `$bits(8'd200 + 8'd100)` is 8, the same 8 all three tools give,
+                // while the parameter binding grows to 9; and in one design it binds
+                // `32'd100000 * 32'd100000` at 64 bits but `32'd1 << 32'd33` at 32.
+                // Excluding the three would have made vita inherit exactly that
+                // inconsistency — `const_expr_self_consistency` pins the property and
+                // catches it — so the accept set is the whole operator table, and it
+                // lands on verilator's answer in all 60 measured cells.
+                //
+                // ⚠️ Declines under `declared_only` for the ternary arm's reason:
+                // `const_self_width` sizes a NAME from `param_meta` — where
+                // value-INFERRED widths are recorded — and guesses 32 when there is
+                // none, which is exactly the provenance that flag fences off.
+                if default_binds && !declared_only {
+                    let mut opx = &p.value;
+                    while let ast::ExprKind::Paren { inner } = &opx.kind {
+                        opx = inner;
+                    }
+                    let sized_by_operator = matches!(
+                        &opx.kind,
+                        ast::ExprKind::Unary {
+                            op: ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot,
+                            ..
+                        } | ast::ExprKind::Binary { .. }
+                    );
+                    if sized_by_operator {
+                        if let Some(w) = self.const_self_width(opx, &ConstWidths::new()) {
+                            if w > 0 {
+                                return Some((w, self.const_expr_signed(opx)));
+                            }
+                        }
+                    }
+                }
                 // A constant-function CALL is type-determined too: the parameter
                 // takes the function's declared RETURN type (§13.4.1), so
                 // `localparam X = fb()` with `function byte fb()` is 8 bits signed,

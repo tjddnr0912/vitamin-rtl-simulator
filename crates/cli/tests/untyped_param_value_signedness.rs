@@ -201,9 +201,19 @@ fn unsigned_expression_param_stays_unsigned() {
          initial begin s = -1; $display(\"%0d %0d\", s < UE, s < MIX); $finish; end\nendmodule\n",
     );
     assert_eq!(code, Some(0), "{out}");
-    // s (as unsigned in the collective compare) < unsigned RHS.
+    // s (as unsigned in the collective compare) < unsigned RHS — which is what
+    // this test is about, and it is unchanged.
+    //
+    // ⚠️ The first column moved 1 → 0 in §4.5.460, and the SIGN is not why. `UE`
+    // used to be the value-inferred 32 bits, so it held 256; it is now the `+`'s
+    // own 8 (Table 11-21, max-of-operands), so it holds 0 and the unsigned 15 is
+    // no longer below it. Measured: verilator prints `0 1` with `UE` 0 at 8 bits,
+    // exactly as vita now does; iverilog prints `1 1` with `UE` 256 at 9 bits,
+    // which is its own non-LRM growth — the same tool whose `$bits` of that very
+    // expression answers 8. `MIX = UH + 5` keeps `1` because the unsized decimal
+    // is 32 bits wide and the max is still 32.
     assert!(
-        out.contains("1 1"),
+        out.contains("0 1"),
         "unsigned expression stays unsigned:\n{out}"
     );
 }

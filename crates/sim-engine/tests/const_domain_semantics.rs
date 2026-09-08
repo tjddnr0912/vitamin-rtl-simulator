@@ -78,18 +78,28 @@ endmodule
     assert_eq!(out.trim(), "AW=9 A1=0 A2=1");
 }
 
-/// P0-6: `1 << 32` folds to 4294967296 in the i64 domain (iverilog parity);
-/// the old u32 domain gave 1 (wrapping) then 0 (checked).
+/// P0-6: `1 << 32` folds in the i64 domain, not the old wrapping u32 one — so a
+/// DECLARED 64-bit parameter holds 4294967296 where the u32 domain gave 1 then 0.
+///
+/// ⚠️ The UNTYPED twin moved in §4.5.460, and the oracle it used to name is the
+/// reason. `parameter A = 1 << 32` has no declared width, so §6.20.2 gives it the
+/// expression's own type and Table 11-21 makes a shift as wide as its LEFT operand
+/// — 32 bits, holding 0. verilator agrees. iverilog answers 4294967296 at 64 bits,
+/// and contradicts itself doing it: its own `$bits(1 << 32)` is 32, and it folds
+/// the explicitly-sized `32'd1 << 32` to 0 at 32 bits. vita used to answer 34 bits,
+/// which is neither tool's. Now: `A` 0 at 32, `F` unchanged at 64.
 #[test]
 fn param_shift_beyond_32_bits_folds_wide() {
     let out = run(r#"
 module t;
   parameter [63:0] F = 1 << 32;
   parameter A = 1 << 32;
-  initial $display("F=%0d A=%0d", F, A);
+  localparam C = 32'd1 << 32;
+  localparam D = 64'd1 << 32;
+  initial $display("F=%0d A=%0d C=%0d D=%0d", F, A, C, D);
 endmodule
 "#);
-    assert_eq!(out.trim(), "F=4294967296 A=4294967296");
+    assert_eq!(out.trim(), "F=4294967296 A=0 C=0 D=4294967296");
 }
 
 /// P0-6: `>>>` on a negative parameter sign-extends (was: logical shift on
