@@ -186,6 +186,47 @@ fn const_delay_u64(e: &ast::Expr) -> Option<u64> {
             Some(cv.bits.val.first().copied().unwrap_or(0))
         }
         ast::ExprKind::Paren { inner } => const_delay_u64(inner),
+        // §11.6: a delay is a SELF-DETERMINED position read as UNSIGNED, so a
+        // negated SIZED literal wraps at its OWN width — `#(-4'd1)` is 15 and
+        // `#(-8'sd1)` is 255, both oracles, where `const_eval_u32`'s 32-bit
+        // `wrapping_neg` made them 4294967295 and the assign never fired at all
+        // (silent, exit 0 — ROADMAP §2 "Delays / events"). The UNSIZED spelling
+        // `#(-1)` is 32 bits wide and keeps exactly the value it had.
+        // `delay_ticks_in_scope`'s integer lane already folds this rule for the
+        // shapes that need a scope (`const_unsigned_selfdet`); this is the
+        // literal-only twin, and it must agree with it.
+        ast::ExprKind::Unary {
+            op: ast::UnOp::Minus,
+            operand,
+        } => {
+            let mut inner = operand.as_ref();
+            while let ast::ExprKind::Paren { inner: i } = &inner.kind {
+                inner = i;
+            }
+            let ast::ExprKind::IntLit { kind, raw } = &inner.kind else {
+                return const_eval_u32(e).map(|v| v as u64);
+            };
+            // A literal this lane cannot read (an unsized fill `'1`, a malformed
+            // one), one carrying x/z, or one WIDER than 64 bits: hand the shape back
+            // to the fold it had, rather than decline. ⚠️ Measured, and it is not a
+            // formality — `assign #(-128'd1) y = a;` DECLINED fires with no delay at
+            // all, where iverilog never fires it and the pre-slice fold did not
+            // either. A shape this arm cannot improve keeps its answer.
+            let fallback = || const_eval_u32(e).map(|v| v as u64);
+            let Some(cv) = literal::parse_int_literal(raw, *kind) else {
+                return fallback();
+            };
+            if cv.bits.unk.iter().any(|&w| w != 0) || cv.width == 0 || cv.width > 64 {
+                return fallback();
+            }
+            let v = cv.bits.val.first().copied().unwrap_or(0);
+            let m = if cv.width >= 64 {
+                u64::MAX
+            } else {
+                (1u64 << cv.width) - 1
+            };
+            Some(v.wrapping_neg() & m)
+        }
         // Anything else (a param ref, an expression) keeps the pre-existing
         // 32-bit fold: widening those is a separate question about the constant
         // evaluator, not about this wrap.
@@ -1171,18 +1212,32 @@ impl Elaborator<'_> {
         // why (a wrapped delay is a silent EARLY fire).
         let ticks = |v: u64| Some(v.saturating_mul(mult).min(u32::MAX as u64) as u32);
         if let ast::ExprKind::TimeLit { num, unit_exp } = &pick.kind {
-            let val = self.const_unsigned_selfdet(
-                num,
-                &std::collections::BTreeMap::new(),
-                &ConstWidths::new(),
-                0,
-            )?;
             // Sub-precision (finer than the design's global precision) declines, as
             // `const_eval_in_scope`'s arm does — there is no tick to round it to.
+            // Asked BEFORE the value, which is behaviour-neutral (both orders answer
+            // `None` when either half declines) and lets the real lane below share it.
             let e = *unit_exp as i32 - self.global_prec_exp as i32;
             if e < 0 {
                 return None;
             }
+            let Some(val) = self.const_unsigned_selfdet(
+                num,
+                &std::collections::BTreeMap::new(),
+                &ConstWidths::new(),
+                0,
+            ) else {
+                // A REAL time literal — `#(2.5ns)`, and `#(3.0ns)` too: the integer
+                // lane has no value for either, and a bare `?` here handed the caller
+                // its SILENT no-delay (both oracles 3 ns and 3 ns; vita fired at once,
+                // exit 0 — ROADMAP §2 "Delays / events"). Converted to the module's
+                // own time UNITS and then rounded there, which is what the oracles do
+                // and what the `#2.5` spelling of the same delay already gets:
+                // measured, `25ns` under `10ns/1ns` is 2.5 units and both oracles
+                // delay THREE units, not 25 ns rounded at the 1 ns precision.
+                let x = self.const_eval_real_in_scope(num)?;
+                let units = x * 10f64.powi(e) / (mult.max(1) as f64);
+                return Some(real_delay_ticks(units, mult, pmult));
+            };
             // SATURATE on overflow, like every sibling lane — declining here would
             // hand the caller its silent no-delay, and a dropped delay fires EARLIER
             // than a clamped one. (`10^15 × 20000` overflows u64 under a `1s` unit at
