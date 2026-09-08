@@ -162,6 +162,37 @@ fn real_delay_ticks(x: f64, mult: u64, prec_mult: u64) -> u32 {
     stage1.saturating_mul(s_mult).min(u32::MAX as u64) as u32
 }
 
+/// A time literal whose UNIT is finer than the design's PRECISION, in the module's
+/// own time units — the ONE place a delay's value can carry a fraction the tick
+/// grid cannot hold, so it is rounded HERE, at the leaf, and nowhere else.
+///
+/// `x` is the literal's value in its own unit and `e = unit_exp − global_prec` is
+/// negative. `x·10^e` is the value in global precision ticks; the module's grain is
+/// `prec_mult` of those, so the rounded tick count is
+/// `round(x·10^e / prec_mult) · prec_mult`, and dividing by `mult` puts it back in
+/// module units for the caller's own `real_delay_ticks`.
+///
+/// ⚠️⚠️ Leaf rounding, and ONLY for `e < 0`. Both are measured, and neither is the
+/// rule the surrounding lanes use:
+/// - `#(2.5ns + 2.5ns)` under `1ns/1ns` is 5 ns in both oracles, not 6 — a REAL
+///   literal (`e == 0` there) keeps its fraction to the end, which is why this is
+///   gated on the unit rather than on the fraction.
+/// - `#(1250fs + 1250fs)` under `1ns/1ps` is 2 ps in both oracles, not 3 — with the
+///   sum rounded once it would be 2.5 ps → 3. So a sub-precision-UNIT leaf is
+///   rounded before it is added, and the two rules coexist because they are asked
+///   about different literals.
+/// - `#(2500ps + 1000ps)` under `1ns/1ns` is 4 ns in both oracles either way; it is
+///   the cell that does NOT separate them, which is why it cannot be the evidence.
+///
+/// On `#(2*1250ps)` and `#(2500ps/2)` under `1ns/1ns` this lands on iverilog's
+/// answer (2 ns, 2 ns) where verilator says 3 ns and 1.25 ns — an ORACLE SPLIT the
+/// row records. vita answered NEITHER before (it dropped the delay entirely), so
+/// this is a rung up on a split axis, not a side-change.
+fn subprec_unit_ticks(x: f64, e: i32, mult: u64, prec_mult: u64) -> f64 {
+    let g = prec_mult.max(1) as f64;
+    ((x * 10f64.powi(e) / g).round() * g) / mult.max(1) as f64
+}
+
 /// The delay path's own integer fold: the full low-64-bit value of a 2-state
 /// literal, so the caller can SATURATE rather than wrap.
 ///
@@ -1212,13 +1243,31 @@ impl Elaborator<'_> {
         // why (a wrapped delay is a silent EARLY fire).
         let ticks = |v: u64| Some(v.saturating_mul(mult).min(u32::MAX as u64) as u32);
         if let ast::ExprKind::TimeLit { num, unit_exp } = &pick.kind {
-            // Sub-precision (finer than the design's global precision) declines, as
-            // `const_eval_in_scope`'s arm does — there is no tick to round it to.
-            // Asked BEFORE the value, which is behaviour-neutral (both orders answer
-            // `None` when either half declines) and lets the real lane below share it.
             let e = *unit_exp as i32 - self.global_prec_exp as i32;
+            // A literal finer than the design's PRECISION still has a value, and it
+            // is usually not sub-precision: `assign #(2500ps)` under `1ns/1ns` is
+            // 2.5 ns, which BOTH oracles delay 3 ns while vita fired at once, at
+            // exit 0 (ROADMAP §2 "Delays / events" ⓑ). It declined here because
+            // `10^e` has no integer form for a negative `e` — the fraction, not the
+            // value, is what the integer lane cannot hold. `subprec_unit_ticks`
+            // rounds it away at the leaf, which is where the oracles round it.
+            //
+            // The genuinely sub-precision cells still answer 0 through the same
+            // arithmetic (`#(2.5ps)` and `#(0.4ns)` under `1ns/1ns` round to no
+            // ticks in all three tools), and `fold_ca_delay` keeps a zero RISE as
+            // `None` — so those stay byte-identical rather than becoming `#0`.
             if e < 0 {
-                return None;
+                let x = match self.const_unsigned_selfdet(
+                    num,
+                    &std::collections::BTreeMap::new(),
+                    &ConstWidths::new(),
+                    0,
+                ) {
+                    Some(v) => v as f64,
+                    None => self.const_eval_real_in_scope(num)?,
+                };
+                let units = subprec_unit_ticks(x, e, mult, pmult);
+                return Some(real_delay_ticks(units, mult, pmult));
             }
             let Some(val) = self.const_unsigned_selfdet(
                 num,
@@ -1359,12 +1408,7 @@ impl Elaborator<'_> {
         let fin = |v: f64| v.is_finite().then_some(v);
         match &e.kind {
             K::TimeLit { num, unit_exp } => {
-                // Sub-precision declines, exactly as the bare arm does — there is no
-                // tick to round it to.
                 let ex = *unit_exp as i32 - self.global_prec_exp as i32;
-                if ex < 0 {
-                    return None;
-                }
                 let v = match self.const_unsigned_selfdet(
                     num,
                     &std::collections::BTreeMap::new(),
@@ -1374,6 +1418,17 @@ impl Elaborator<'_> {
                     Some(v) => v as f64,
                     None => self.const_eval_real_in_scope(num)?,
                 };
+                // A sub-precision-UNIT leaf rounds HERE — `subprec_unit_ticks` says
+                // why, and why only here. The bare arm shares the same call, so the
+                // two spellings of one delay still cannot land on different ticks.
+                if ex < 0 {
+                    return fin(subprec_unit_ticks(
+                        v,
+                        ex,
+                        self.cur_time_mult,
+                        self.cur_prec_mult,
+                    ));
+                }
                 fin(v * 10f64.powi(ex) / self.cur_time_mult.max(1) as f64)
             }
             K::Paren { inner } => self.delay_units_in_scope(inner),

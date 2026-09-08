@@ -181,10 +181,13 @@ fn the_lanes_that_already_answered_keep_their_answers() {
         run("1ns/1ns", &["4'd15 + 4'd1", "-4'd1", "-8'sd1", "2.5"]),
         ["y0=10000000", "y1=25000000", "y2=265000000", "y3=13000000"]
     );
-    // A sub-precision literal still declines, and the bare-`TimeLit` arm still
-    // owns the bare spelling — `2.5ps` under `1ns/1ps` is a ROUNDING-TIE SPLIT
-    // (iverilog 3 ps, verilator 2 ps) and vita keeps iverilog's answer. The new
-    // lane sits after that arm precisely so this cell cannot move.
+    // ⚠️ These two are NOT sub-precision cells, whatever their units look like: a
+    // `ps` literal under `1ns/1ps` has `unit_exp == global_prec`, so neither the
+    // old `e < 0` decline nor §4.5.459's leaf rounding is reached, and the asserted
+    // 3 ps / 400 ps delays are the proof (a declining cell would fire at the edge).
+    // The bare-`TimeLit` arm owns the bare spelling — `2.5ps` under `1ns/1ps` is a
+    // ROUNDING-TIE SPLIT (iverilog 3 ps, verilator 2 ps) and vita keeps iverilog's
+    // answer. The lane sits after that arm precisely so this cell cannot move.
     assert_eq!(
         run("1ns/1ps", &["2.5ps", "0.4ns"]),
         ["y0=10003000", "y1=10400000"]
