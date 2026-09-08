@@ -25,6 +25,17 @@ need updating. What moved:
 
 ### Added
 
+- A `localparam`/`parameter` may now have an **unpacked-array typedef** as its type
+  (`typedef int a_t [0:2]; localparam a_t P = '{1,2,3};`), including the package,
+  package-scoped (`pk::a_t`), interface-body and ANSI-header spellings, dimensions
+  written on the typedef and on the name together, 2-D typedefs, `[N]` size dims, a
+  dim that names a parameter, and packed/`real`/`signed` element types. A header
+  default of that type takes an override (`#(.P('{7,8,9}))`). A `string` element, a
+  module-body overridable `parameter`, and an interface/program HEADER array
+  parameter stay refused, each for the same reason its explicitly-dimensioned twin
+  is refused.
+
+
 - **A type parameter can be overridden with an array type.**
   With `typedef logic [15:0] b_t [0:3];`, `m #(.T(b_t)) u();` was refused outright ("an integral
   type as the type parameter override"), where both reference simulators run it and answer
@@ -70,6 +81,27 @@ need updating. What moved:
   resulting dimension order — which is the same refusal a declaration already gives.
 
 ### Fixed
+
+- **Procedural delays now accept a time literal the module's time unit cannot hold.**
+  `#(2500ps);` under `` `timescale 1ns/1ns `` was an elaboration error where both
+  reference tools delay 3 ns; the same held for `#(2.5ns)`, for `#(3ns)` under a
+  10 ns unit, and in every procedural lane — a statement delay, a statement prefix,
+  an intra-assign `=`/`<=`, a task body, `always`, a `fork` arm, `repeat` and `for`.
+  Structural delays (`assign #(…)`, a net or gate delay) already handled these.
+- **A procedural delay that divides a time literal no longer truncates.**
+  `#(3ns / 2)` under `` `timescale 1ns/1ns `` delayed 1 ns silently, at exit 0,
+  where both reference tools delay 2 ns; `#(5ns / 2ns)` and `#(7ns / 4)` were the
+  same. These ran with no diagnostic, so a testbench built on them shifted in time.
+- **An untyped parameter whose value is an expression now takes that expression's
+  own width** (IEEE Table 11-21) instead of a 32-bit minimum. `localparam E = ~8'h5A`
+  printed `ffffffa5` where it is `a5`; `8'hFF << 8'd9` kept bits that shift out;
+  `2'd3 ** 4'd10` answered 59049 where it is 1; and `8'h5A > 8'h01` was 32 bits wide
+  where a comparison is one. **This changes values**: an untyped `localparam` whose
+  `+`, `-` or `*` overflows its operands now wraps at the operand width
+  (`localparam Q = 8'd200 + 8'd100` is 44, not 300), and `parameter A = 1 << 32` is
+  0, not 4294967296. Declare a width (`localparam [31:0] Q = …`) to keep the wider
+  value.
+
 
 - **A delay written in a unit finer than the design's precision is a delay, not no delay.**
   `assign #(2500ps) y = a;` under `` `timescale 1ns/1ns `` propagated immediately, at exit 0, with

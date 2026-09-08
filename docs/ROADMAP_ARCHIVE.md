@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.460` **A `localparam` OF an unpacked-array typedef, the procedural delay lane's time literals, and the untyped parameter sized by its operator** (2026-09-08 · §3 ⑤ⓕ + §2 Delays ⓓ + §2 Index sealing residue · 66 + 61 + 60 cells fixed, 0 regressed · all three ROW CLAIMS refuted — the `+ - *` "oracle split" is iverilog contradicting itself, the delay fix is a ROUTING change not the row's impossible opt-in, and the differential caught a regression this slice itself introduced on negative delays)
 - `4.5.459` **The dim-carrying type-parameter OVERRIDE, the delay literal finer than the design precision, and the parameter select that never sealed its sign** (2026-09-08 · §3 ⑤ⓕ + §2 Delays ⓑ + §2 Index sealing · 28 + 26 + 20 cells fixed, 0 regressed over 269 measured · the row's "wider blast radius" and the split's stated discriminator both REFUTED · iverilog disqualified by self-contradiction on the packed-element `+:` overhang)
 - `4.5.458` **`$bits` of a dim-carrying type parameter, a time literal inside an expression, and the vector select that never sealed its sign** (2026-09-08 · §3 ⑤ⓕ + §2 Delays + §2 Index sealing · 15 + 81 + 42 cells fixed, 0 regressed over 494 measured · §2 🆕 I ⓒ REFUTED as an oracle split)
 - `4.5.457` **A constant-driven NET as an array-word index, a REAL time literal and a negated sized literal as delays, and `parameter type T = <unpacked typedef>`** (2026-09-08 · §2 🆕 I ⓒ + §2 Delays + §3 ⑤ⓕ · §2 row 7 residue REFUTED · 13 + 17 + 8 cells)
@@ -476,6 +477,43 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.460 A `localparam` OF an unpacked-array typedef, the procedural delay lane's time literals, and the untyped parameter sized by its operator (2026-09-08, branch main) ✅
+
+한 반복 = 큐 3개 묶음. 세 줄 모두 **증상은 맞고 원인·크기·고침 형태 중 하나 이상이 틀렸다**.
+
+**슬라이스 1 — §3 ⑤ⓕ `localparam a_t P` (`crates/hdl-parser/src/params.rs` · `lib.rs`).**
+
+- 증상: `typedef int a_t [0:2]; localparam a_t P = '{1,2,3};` 가 E2002. verilator `1 2 3 bits=96 size=3`.
+- 뿌리: `typedef_param_shape` 의 `!info.unpacked.is_empty()` decline. 그 shape 튜플은 **원소**를 기술하고 unpacked 슬롯이 없어서, 어느 arm 으로 가도 원소 타입의 SCALAR 를 바인딩했을 것이다.
+- 고침: 튜플에 여섯째 필드(`Vec<Dim>`)를 더하고 `ParamPrefix` 에 `typedef_unpacked` 를 실어, `finish_param_assignment` 가 이름 뒤에 `[` 가 없어도 `parse_array_param` 으로 들어간다 — 명시 철자 `localparam int P [0:2]` 가 쓰던 `ParamItem::ConstArrayVar` 채널 그대로. **순수 라우팅이 아니다**: dim 이 토큰 스트림에 없으므로 preset 인자로 주입해야 한다.
+- 줄의 "route 하나면 된다" 는 목적지는 맞고 배관을 두 필드만큼 **과소평가**했다. 반대로 **성과는 과소평가** — ANSI 헤더 OVERRIDE(`#(.P('{7,8,9}))`)가 기존 `array_param_twin` 을 타고 공짜로 따라온다.
+- 합성 순서가 `$bits` 로는 못 잡는 함정: 이름의 dim 이 **먼저**다(`localparam a_t P [0:1]` 이 `P[0][1]`=2 · `P[1][2]`=6, 두 순서 다 192비트).
+- 오라클 1개(verilator). iverilog 는 전 칸 거부이고 real·string 원소에서는 **abort** 한다. 대조군: 같은 typedef 를 **변수**로 쓰면 세 툴 모두 `1 2 3 bits=96` ⇒ 거부는 typedef 가 아니라 parameter 에 대한 것.
+- 33개 프로브 · 44 철자: body/ANSI-header/package/interface · 바레/`pk::` · 1-D/2-D/합성 · range/size 폼 · 리터럴/파라미터 dim · 원소 ∈ {int, logic[7:0], logic signed[3:0], real, string, struct, enum} · override 유/무. **61칸 fixed · 0 regressed · silent-wrong 0**.
+- 남은 loud 는 각각 자기 이유가 있고 **명시 쌍둥이도 똑같이 loud** 다(닫을 split 이 없다): `string` 원소(`var_kind` 없음) · 모듈 BODY 의 overridable `parameter`(override 채널 자체가 없음) · INTERFACE/program 헤더(모듈 전용 게이트) · struct/enum 원소(상류 `typedefs.rs` 의 chained-alias 게이트에서 막혀 이 자리로 오지 못한다).
+
+**슬라이스 2 — §2 Delays ⓓ PROCEDURAL 레인 (`crates/elaborate/src/events.rs` · `const_eval.rs`).**
+
+- 증상: `#(2500ps);`@`1ns/1ns` 가 E3009, 두 오라클 3 ns. 구조 쌍둥이 `assign #(2500ps)` 는 §4.5.458/459 이후 맞았다.
+- **줄이 셋 다 틀렸다.** (1) 크기: "9칸" 이 아니라 108칸 census 로 **66 fixed · 0 regressed · 23 already · 7 split**. (2) 뿌리: `e < 0` 하나가 아니라 **decline 셋**(`e < 0` 33칸 · real 분자 20칸 · `ticks % mult != 0` 6칸). (3) 형태: "공유 evaluator 에 opt-in bool" 은 **불가능**하다 — `const_eval_in_scope` 는 `Option<i64>` 를 돌려주는데 이 클래스는 0.001·0.3 같은 **분수 모듈단위**가 필요하다.
+- 그리고 줄이 못 본 것: 이 레인은 loud 만이 아니라 **silent-wrong** 이었다. `#(3ns / 2)`@`1ns/1ns` 가 exit 0 으로 1단위(정수 나눗셈), 두 오라클 2. 그래서 delay fold 를 `lower_expr` **앞에서** 묻는다 — decline 을 기다리는 fallback 이었으면 그 8칸이 전부 남는다(구조 레인의 `delay_ticks_in_scope` 가 같은 순서 결정을 이미 적어 뒀다).
+- 고침: `lower_delay` 의 **라우팅**. `const_eval_in_scope` 는 한 바이트도 안 건드린다(호출부 20곳 무영향) — 줄이 요구한 opt-in 보다 강하다. opt-in 게이트는 `expr_has_time_lit`: 타임 리터럴이 없는 지연은 region 까지 옛 두 줄 그대로다.
+- IR 이 원하는 amount 는 **모듈 시간단위**이므로 접힌 tick 을 `mult` 로 되나눈다 — 반올림을 여기서 다시 유도하지 않고 구조 레인의 답을 그대로 재생한다(2단계 반올림 포함). 정수로 떨어지면 정수 리터럴로 낮춰 이미 맞던 칸의 모양을 안 바꾼다.
+- ⚠️ **differential 이 이 슬라이스가 만든 회귀를 잡았다**: `#(1ns - 5ns)` 는 두 오라클이 **발화하지 않고** PROCEDURAL PRE 도 발화하지 않았는데, `delay_ticks_in_scope` 가 `u32` 라 `real_delay_ticks` 가 음수를 0 으로 clamp 해 즉시 발화시켰다. 첫 census 에 **부호 축이 없어서** 놓쳤다. 지금은 units 도메인에서 부호를 먼저 보고 음수면 옛 경로로 흘린다.
+- census: 6 timescale × 18 리터럴 × 5 레인, PRE/POST/iverilog/verilator. `always`·`repeat`·`for`·min:typ:max·task body·`fork` 도 별도 확인. 런타임 지연(`#(v * 1ns)`)은 4-way 동일 = 옛 경로 유지 확인. sub-tick 이 `Inactive` 로 가는 것도 두 오라클과 관측 동일.
+
+**슬라이스 3 — §2 untyped 연산자 초기화자 폭 (`crates/elaborate/src/params.rs`).**
+
+- 증상: `localparam E = ~8'h5A` 가 `ffffffa5` 32비트, 두 오라클 `a5` 8비트. 자리는 value-inferred 꼬리 `min_signed_bits(v).max(32)` — 줄이 맞다.
+- 줄의 **근거**는 stale 했다("E 의 인덱스 대역이 2..5 인 이유"; §4.5.459 가 이미 대역을 고쳤다). 근거는 값·`$bits`·concat·넷 구동 열로 옮겼고 거기서 더 강하다.
+- 줄이 시킨 대로 `+ - *` 를 split 으로 빼려 했더니 **shipped 테스트가 막았다**: `const_expr_self_consistency` 가 "`*` 와 `<<` 가 문맥 폭을 두고 갈리면 안 된다" 를 핀하는데, 뺀 상태에서는 `*` 는 넓게 남고 `<<` 는 32 로 접혀 정확히 그 불일치가 생긴다.
+- 재측정하니 **split 이 아니다 — iverilog 가 자기모순**이다. 네 가지로: 자기 `$bits(8'd200+8'd100)` 는 **8** 인데 파라미터는 9 로 바인딩 · 한 설계에서 `32'd100000*32'd100000` 은 64비트인데 `32'd1<<32` 는 32비트 · `$bits(1<<32)` 는 32 인데 `parameter A = 1<<32` 는 64 · `32'd1<<32` 는 0 인데 `1<<32` 는 4294967296. verilator 는 전 칸 Table 11-21 로 자기일관적이다. ⇒ 허용집합은 **연산자 표 전부**.
+- 60칸(연산자 × 폭 × 문맥 × 소비자 열) 3-way. POST 는 verilator 와 전 칸 일치. 옛 동작을 인코딩한 shipped 핀 3개를 **오라클로 재측정해 갱신**(삭제 아님): `param_shift_beyond_32_bits_folds_wide`(`parameter A = 1 << 32` 가 0/32비트) · `unsigned_expression_param_stays_unsigned`(첫 열 1→0, 폭이 이유이지 부호가 아니다) · `the_consumers_that_cannot_carry_the_dims_are_loud`(사유가 typedef decline 에서 배열 게이트로 **이동**).
+- soundness 발견 2건, 둘 다 pre-existing 이라 기록만: (a) `param_init_kept_loud` 의 전제가 이 슬라이스로 거짓이 됐다(그 doc 이 "꼬리가 self 폭으로 사이즈하면 이 술어도 없앤다" 라고 예고해 뒀고, 호출부가 5곳이라 바인더 census 를 가진 자기 슬라이스). (b) OVERRIDE 쌍둥이는 여전히 기본값의 폭을 읽는다 = row 25 의 연산자 판(PRE·POST 동일).
+- differential 발견 1건: 값 fold 는 아직 폭-무제한이라 `(8'd200 + 8'd100) >> 1` 이 폭 8·값 `96`(두 오라클 `16`). 꼭대기 마스킹으로는 못 닫는다 ⇒ §2 한 줄.
+
+**게이트.** nextest `--workspace --locked` 7,3xx pass · 0 fail · 0 TIMEOUT · clippy 0 · fmt 0 · 코퍼스 10/10 · `format_version` 31 불변(frozen 타입 무변경).
 
 #### 4.5.459 The dim-carrying type-parameter OVERRIDE, the delay literal finer than the design precision, and the parameter select that never sealed its sign (2026-09-08, branch main) ✅
 

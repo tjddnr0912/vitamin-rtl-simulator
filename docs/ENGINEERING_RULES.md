@@ -70,6 +70,65 @@
 - A verilator census is the bottleneck (about 1,500 cells per 30 minutes). Run it on a width subset only, keep one `--prefix` per executable, and hand-IEEE the cells whose oracle is untrusted (property `and`), saying so in the briefing.
 - The shadow set of a name is every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations. A census over declarations alone misses four of the five.
 
+### ⭐⭐ An "oracle split" can be one tool contradicting ITSELF — ask the same expression twice (2026-09-08, §4.5.460)
+
+`+`/`-`/`*` sat in ROADMAP §2 as a documented split: `localparam Q = 8'd200 + 8'd100` is `12c` at
+9 bits on iverilog, `2c` at 8 on verilator. Two answers, so the axis was never chased and vita kept
+a third answer (32 bits) that is neither.
+
+It is not a split. Asked directly, **iverilog's own `$bits(8'd200 + 8'd100)` is 8** — the same 8 the
+other two give — and only the parameter BINDING grows to 9. Three more spellings of the same
+contradiction turned up in one design: `32'd100000 * 32'd100000` binds at 64 bits while
+`32'd1 << 32'd33` binds at 32; `$bits(1 << 32)` is 32 while `parameter A = 1 << 32` binds at 64;
+`32'd1 << 32` folds to 0 at 32 bits while `1 << 32` folds to 4294967296 at 64. One tool, four
+self-contradictions, against a second tool that answers Table 11-21 consistently everywhere.
+
+- **Before recording an axis as a split, ask each tool the SAME question in two positions.** A width
+  has a direct interrogator (`$bits(<expr>)`) as well as an indirect one (bind it and ask). When one
+  tool answers those two differently, it is not an oracle there — the other one is (ER "Disqualify an
+  oracle by self-contradiction", now with a second instance).
+- **A documented split's discriminator ages.** This row had stood for several slices. Re-measuring it
+  cost one probe file.
+
+### ⭐⭐ Excluding a sub-case to dodge a split can hand YOU the split (2026-09-08, §4.5.460)
+
+The first cut of the width arm answered every operator except `+`/`-`/`*`, to stay off the recorded
+split. The full suite caught it: `const_expr_self_consistency` pins "`*` and `<<` must not disagree
+about the context width", and with the three excluded `*` kept the wide value while `<<` folded at
+32 — vita reproducing, exactly, the inconsistency that test exists to forbid and that iverilog has.
+
+- **A partial accept set is a design decision about SIBLINGS, not just about the cells you skipped.**
+  Enumerate what the excluded cases share with the included ones; if a shipped test names the shared
+  property, the exclusion is the defect.
+- The failing test is the artifact that made the call. Prefer a suite run over an argument.
+
+### ⭐⭐ A census axis you did not vary is where the regression is (2026-09-08, §4.5.460)
+
+The procedural-delay routing was measured over 6 timescales × 14 literals × 5 lanes — 84 cells,
+61 fixed, 0 regressed — and shipped a regression anyway: `#(1ns - 5ns)` never fires in either oracle
+and never fired in that lane before, but `delay_ticks_in_scope` returns `u32` and `real_delay_ticks`
+CLAMPS a negative to 0, so it began firing immediately. **Every literal on the axis was
+non-negative.** The differential lens found it only because it probed a shape the census did not have.
+
+- **When you route a value through a narrower type, the axis to add is the one that type cannot
+  represent** — a sign for an unsigned, a fraction for an integer, "never" for a count.
+- A clamp is a silent value change. Read the sign in the domain BEFORE the clamp, and let the shape
+  the clamp cannot carry fall through to the path that was already right.
+
+### ⭐ A guard's doc can name its own expiry — grep for that before the premise changes (2026-09-08, §4.5.460)
+
+`param_init_kept_loud` exists because "the value-inferred tail records the folded value's minimal
+width, never narrower than 32", and its doc ends: *"When the tail learns to size an initializer at
+its self-determined width, this predicate goes with it."* This slice is the tail learning exactly
+that, so the guard is now a pure false-loud over three 2-oracle cells — found by the soundness lens,
+not by any test, because a guard that keeps working looks identical to a guard that is needed.
+
+- **A predicate justified by another component's behaviour is a live obligation on that behaviour.**
+  When you change the component, grep the predicate's doc for the condition it named.
+- The fix is a slice of its own when the predicate has several call sites (five here, across the
+  generate / instance / package / declaration binders): record it with the measurement and the
+  prescribed deletion, do not fold it into the slice that invalidated it.
+
 ### A cell both rules answer the same way is not evidence (2026-09-08, §4.5.459)
 - Two rounding rules were live for a delay expression — round each leaf, or round the finished sum
   — and the cell the queue row named (`#(2500ps + 1000ps)`, 4 ns) gives 4 under BOTH. Adopting
