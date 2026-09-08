@@ -310,6 +310,52 @@ impl Elaborator<'_> {
                     // two interfaces, and a generate-nested interface ran after the generate's
                     // own variable. Both are the enclosing scope's slot, decided by tie-break.
                     let saved_pending = std::mem::take(&mut sc.pending_var_inits);
+                    // Partial branch parity with `instance.rs`'s module-body pass: a
+                    // procedural block-local flattens to a scope-level net, and the
+                    // interface body never did it at all — so the `__foreach_<i>_<n>` /
+                    // `__foreach_st_<n>` pair the PARSER synthesizes for every `foreach`
+                    // resolved to nothing. Measured: an identical body is correct in a
+                    // `module` and emits 9 errors in an `interface`, seven of them
+                    // `undeclared net/variable top.u.__foreach_i_<n>` and two the actively
+                    // misleading "enum method `v.first` is unavailable" on a design with
+                    // no enum. Both oracles run it.
+                    //
+                    // ⚠️⚠️ ADMITTED ONLY WHEN EVERY block-local reachable from this
+                    // interface's procs is one of those SYNTHESIZED names. The module
+                    // twin does not just call the hoist — `instance.rs` first computes
+                    // `local_decl_names`, `decl_block_locals`, `scoped_block_locals`,
+                    // `per_entry_block_locals` and `coalesced_block_locals` from the
+                    // MODULE, and those are what keep a block-local that collides with a
+                    // scope-level name from coalescing onto it. Here those maps hold the
+                    // PARENT module's names (this pass runs inside the parent's Nets
+                    // phase), so the interface's own members are invisible to them.
+                    // Measured with the hoist ungated: `interface ifc; integer b; …
+                    // begin integer b; b = 7; end` printed `OUTER b=7` and `u.b = 7`
+                    // where both oracles print 99 — while the MODULE twin of the same
+                    // text is correct in PRE and POST. That is a loud→silent-wrong, so
+                    // the general case stays refused; its prerequisite is those five
+                    // passes taught to run over an interface body (they are all
+                    // `&ast::ModuleDecl`-typed today) and held across BOTH this Nets pass
+                    // and the Logic pass below. ROADMAP §3 carries it.
+                    //
+                    // The synthesized names need none of that: each embeds its own
+                    // `foreach` token offset, so no two can collide and none can be
+                    // written by a user — proved per design by the `local_names` check
+                    // rather than assumed from the prefix.
+                    //
+                    // ⚠️ INSIDE the isolation, not before it. The hoist queues a
+                    // block-local's non-constant decl-init into the shared
+                    // `pending_var_inits`, and this pass runs during the PARENT's Nets
+                    // phase — queued outside the `take` those inits would ride the
+                    // MODULE's pending list and be lowered against the module prefix,
+                    // which is the misresolve the save/restore above exists to prevent.
+                    if Self::iface_block_locals_are_all_synthesized(&decl.body) {
+                        for it in &decl.body {
+                            if let ast::ModuleItem::Proc(p) = it {
+                                sc.hoist_block_local_nets(&p.body, &decl.ports, &decl.body);
+                            }
+                        }
+                    }
                     for it in &decl.body {
                         if let ast::ModuleItem::NetVar(d) = it {
                             sc.collect_var_init_drivers(d);
@@ -388,5 +434,51 @@ impl Elaborator<'_> {
                 }
             }
         }
+    }
+
+    /// Is every procedural block-local in this interface body one the PARSER
+    /// synthesized for a `foreach` — and does none of them collide with a name the
+    /// interface declares at its own scope?
+    ///
+    /// The admission for the interface-body block-local hoist above, and it is a
+    /// PROOF obligation rather than a prefix convention. v1 flattens a block-local to a
+    /// scope-level net by BARE NAME, and the classifier that keeps a colliding one out
+    /// of that flattening reads maps built from a `&ast::ModuleDecl` — which, on this
+    /// path, describe the PARENT module. So the only block-locals safe to hoist here
+    /// are ones that cannot collide at all:
+    ///
+    /// * `__foreach_<index>_<lo>` and `__foreach_st_<lo>` embed the `foreach` token's
+    ///   own byte offset, so two of them are distinct whenever the `foreach`es are;
+    /// * and a user cannot reach that spelling by accident — but "cannot" is a claim,
+    ///   so the interface's own top-level declaration names are checked outright.
+    ///
+    /// Anything else — one user-written `begin int x; … end` anywhere in the body — and
+    /// the whole body keeps the pre-slice refusal. That is deliberately all-or-nothing:
+    /// a per-block filter would have to reproduce the containment and disjointness
+    /// analysis `compute_scoped_block_locals` exists to do.
+    fn iface_block_locals_are_all_synthesized(body: &[ast::ModuleItem]) -> bool {
+        let mut scope_names: std::collections::BTreeSet<&str> = Default::default();
+        for it in body {
+            match it {
+                ast::ModuleItem::NetVar(d) => {
+                    scope_names.extend(d.names.iter().map(|n| n.name.name.as_str()));
+                }
+                ast::ModuleItem::Param(p) => {
+                    scope_names.insert(p.name.name.as_str());
+                }
+                _ => {}
+            }
+        }
+        let mut decls = Vec::new();
+        for it in body {
+            if let ast::ModuleItem::Proc(p) = it {
+                crate::block_local::collect_block_local_decls(&p.body, &mut decls);
+            }
+        }
+        decls.iter().flat_map(|d| d.names.iter()).all(|n| {
+            let s = n.name.name.as_str();
+            (s.starts_with("__foreach_") || s.starts_with("__foreach_st_"))
+                && !scope_names.contains(s)
+        })
     }
 }
