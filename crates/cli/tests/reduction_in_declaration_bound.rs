@@ -252,29 +252,49 @@ fn an_untyped_parameter_takes_the_reduction_type() {
     assert!(out.lines().any(|l| l == "1 1 1 ff"), "{out}");
 }
 
-/// ⚠️ A context-determined operator OVER a reduction, in an untyped parameter, stays
-/// LOUD. The value-inferred tail sizes such an initializer at 32 bits, and both
-/// oracles compute `~(|4'b1010)` at ONE bit (0), `(|4'b1010) << 2` at one bit (0) and
-/// `-(|4'b1010)` at one bit (1); the width-unlimited fold would print 4294967294, 4 and
-/// 4294967295. Those three were loud before this slice and a loud→silent-wrong trade is
-/// forbidden, so `param_init_kept_loud` keeps them exactly where they were. The
-/// DECLARED twins fold (2, 4, 3 — measured on both oracles), and a top whose
-/// self-determined width is already 32 folds untyped too (`3 32`, verilator; iverilog
-/// says `3 33` for its own reasons).
+/// A context-determined operator OVER a reduction, in an untyped parameter, now binds
+/// the value BOTH oracles bind — at one bit.
+///
+/// It was deliberately LOUD from §4.5.407 to here: the value-inferred tail sized such
+/// an initializer at 32 bits, so folding it would have printed 4294967294, 4 and
+/// 4294967295 where the oracles print 0, 0 and 1, and `param_init_kept_loud` declined
+/// at the four value sites rather than take that loud→silent-wrong trade. §4.5.460 gave
+/// the tail the Table 11-21 arm, which sizes these at one bit, and this slice made the
+/// VALUE lane width-aware to match — so the guard's own stated expiry condition was met
+/// and it is gone from all four sites.
+///
+/// ⚠️ Both halves were needed. Deleting the guard against the OLD unlimited-then-coerce
+/// value lane was measured to turn 8 further cells loud→silent-wrong: truncation
+/// commutes with `~ - << & |` (which is why these three would have been fine) but not
+/// with `/ % >> >>>`, so `(8'hFF + (|4'b1010)) >> 1` would have printed 128 where both
+/// oracles print 0.
 #[test]
-fn a_narrow_context_over_a_reduction_stays_loud_in_an_untyped_parameter() {
-    for init in [
-        "~(|4'b1010)",
-        "(|4'b1010) << 2",
-        "-(|4'b1010)",
-        "(~&4'b1010) + (^4'b1010)",
+fn a_narrow_context_over_a_reduction_binds_at_one_bit_in_an_untyped_parameter() {
+    // The three headline cells, and their `$bits`. Both oracles, five binders
+    // (module `localparam`, module-body `parameter`, ANSI header, package, generate).
+    for (init, want) in [
+        ("~(|4'b1010)", "0 1"),
+        ("(|4'b1010) << 2", "0 1"),
+        ("-(|4'b1010)", "1 1"),
+        // A binary context-determined top over TWO reductions.
+        ("(~&4'b1010) + (^4'b1010)", "1 1"),
     ] {
-        loud(
+        prints(
             &format!("  localparam R = {init};"),
-            "\"%0d\", R",
-            "not a foldable constant expression",
+            "\"%0d %0d\", R, $bits(R)",
+            want,
         );
     }
+    // ⚠️ The one cell where the oracles differ in VALUE, kept as its own record:
+    // verilator says 0 at one bit and iverilog says 2 at two. iverilog is disqualified
+    // HERE by self-contradiction inside one design — its own
+    // `$bits((|4'b1010) + 1'b1)` is 1 and its own expression value is 0, while it binds
+    // the parameter at 2. vita lands on verilator, and on its own runtime spelling.
+    prints(
+        "  localparam R = (|4'b1010) + 1'b1;",
+        "\"%0d %0d\", R, $bits(R)",
+        "0 1",
+    );
     prints(
         "  localparam logic [1:0] R1 = ~(|4'b1010);\n  localparam logic [3:0] R2 = (|4'b1010) << 2;\n  \
          localparam logic [1:0] R3 = -(|4'b1010);",
@@ -291,6 +311,42 @@ fn a_narrow_context_over_a_reduction_stays_loud_in_an_untyped_parameter() {
         "\"%0d %0d\", R, $bits(R)",
         "5 32",
     );
+}
+
+/// The BINDER census the guard's five call sites demanded: the same three initializers
+/// answer the same way at every default binder, because they all reach one funnel
+/// (`param_decl_width_unoverridden` + `eval_param_init`). Both oracles print exactly
+/// this, and the `generate` binder additionally stops emitting a 4-error cascade
+/// (`undeclared net/variable top.g[0].GA`) that the refused value used to leave behind.
+#[test]
+fn every_default_binder_binds_the_reduction_top_alike() {
+    let (out, code) = run("package pk;\n  localparam PA = ~(|4'b1010);\nendpackage\n\
+         module sub #(parameter MP = -(|4'b1010)) ();\n\
+        \x20 initial $display(\"MP %0d %0d\", MP, $bits(MP));\n\
+         endmodule\n\
+         module hdr #(parameter HP = (|4'b1010) << 2) ();\n\
+        \x20 initial $display(\"HP %0d %0d\", HP, $bits(HP));\n\
+         endmodule\n\
+         module top;\n  import pk::*;\n  localparam LA = ~(|4'b1010);\n\
+        \x20 parameter  BP = ~(|4'b1010);\n\
+        \x20 sub u0 ();\n  hdr u1 ();\n\
+        \x20 generate if (1) begin : g\n\
+        \x20   localparam GA = -(|4'b1010);\n\
+        \x20   initial $display(\"GA %0d %0d\", GA, $bits(GA));\n\
+        \x20 end endgenerate\n\
+        \x20 initial begin\n\
+        \x20   $display(\"LA %0d %0d\", LA, $bits(LA));\n\
+        \x20   $display(\"BP %0d %0d\", BP, $bits(BP));\n\
+        \x20   $display(\"PA %0d %0d\", pk::PA, $bits(pk::PA));\n\
+        \x20   #1 $finish; end\n\
+         endmodule\n");
+    assert_eq!(code, Some(0), "{out}");
+    for want in ["LA 0 1", "BP 0 1", "PA 0 1", "GA 1 1", "MP 1 1", "HP 0 1"] {
+        assert!(
+            out.lines().any(|l| l == want),
+            "binder census line `{want}` (both oracles):\n{out}"
+        );
+    }
 }
 
 /// A constant function reduces its own FORMAL at the formal's declared width — and a

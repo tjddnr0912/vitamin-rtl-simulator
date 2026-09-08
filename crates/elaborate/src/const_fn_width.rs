@@ -714,7 +714,7 @@ impl Elaborator<'_> {
         // ⚠️ This is [[a-default-is-not-a-fact]] again, and it is the third slice on
         // this axis to meet it. Widening past `envw` needs the declared-vs-inferred
         // provenance §2 row 14 stopped at — not a guess about which map is fresher.
-        if !Self::shift_count_width_is_evident(e, envw) {
+        if !Self::ctx_width_names_are_evident(e, envw) {
             return Some(v);
         }
         // An unknown or >=64-bit self width leaves the value alone: `const_mask` is the
@@ -725,16 +725,26 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Is every NAME in a shift count's expression one whose width `envw` records?
+    /// Is every NAME in this expression one whose width `envw` records — i.e. is the
+    /// evaluation context this expression states EVIDENT from the expression itself?
     ///
     /// Conservative by construction — a kind this does not enumerate answers `false`, so
     /// a new expression form cannot inherit the mask by falling through a catch-all.
     /// See [`Self::eval_const_shift_count`] for the measurement that made it necessary.
-    fn shift_count_width_is_evident(e: &ast::Expr, envw: &ConstWidths) -> bool {
+    ///
+    /// ⚠️ TWO callers now, and they ask the same question for the same reason: a shift
+    /// COUNT (`eval_const_shift_count`) and an untyped parameter INITIALIZER
+    /// (`param_init_width_aware_ok`) both mask at a width, and both would read that
+    /// width off `param_meta` for a bare NAME — which records the DEFAULT literal's
+    /// width for an untyped parameter and is replaced by the final override's type the
+    /// moment `#(.C(…))` arrives (§6.20.2). Masking at a stale width turns correct
+    /// values into silent-wrong ones; declining keeps the pre-slice answer. The gate is
+    /// therefore one helper, not a predicate copied into a second place.
+    pub(crate) fn ctx_width_names_are_evident(e: &ast::Expr, envw: &ConstWidths) -> bool {
         use ast::ExprKind as K;
         match &e.kind {
             K::IntLit { .. } => true,
-            K::Paren { inner } => Self::shift_count_width_is_evident(inner, envw),
+            K::Paren { inner } => Self::ctx_width_names_are_evident(inner, envw),
             // A subprogram local's declared range, and nothing else.
             //
             // ⚠️ `param_range` was tried as a second admission — the reasoning was that
@@ -751,27 +761,27 @@ impl Elaborator<'_> {
             K::Ident(p) if p.segments.len() == 1 => {
                 matches!(envw.get(&p.segments[0].name), Some((w, _)) if *w > 0)
             }
-            K::Unary { operand, .. } => Self::shift_count_width_is_evident(operand, envw),
+            K::Unary { operand, .. } => Self::ctx_width_names_are_evident(operand, envw),
             K::Binary { lhs, rhs, .. } => {
-                Self::shift_count_width_is_evident(lhs, envw)
-                    && Self::shift_count_width_is_evident(rhs, envw)
+                Self::ctx_width_names_are_evident(lhs, envw)
+                    && Self::ctx_width_names_are_evident(rhs, envw)
             }
             K::Ternary {
                 cond,
                 then_e,
                 else_e,
             } => {
-                Self::shift_count_width_is_evident(cond, envw)
-                    && Self::shift_count_width_is_evident(then_e, envw)
-                    && Self::shift_count_width_is_evident(else_e, envw)
+                Self::ctx_width_names_are_evident(cond, envw)
+                    && Self::ctx_width_names_are_evident(then_e, envw)
+                    && Self::ctx_width_names_are_evident(else_e, envw)
             }
             K::Cast {
                 target: ast::CastTarget::Size(_),
                 expr,
-            } => Self::shift_count_width_is_evident(expr, envw),
+            } => Self::ctx_width_names_are_evident(expr, envw),
             K::Concat { parts } => parts
                 .iter()
-                .all(|q| Self::shift_count_width_is_evident(q, envw)),
+                .all(|q| Self::ctx_width_names_are_evident(q, envw)),
             _ => false,
         }
     }

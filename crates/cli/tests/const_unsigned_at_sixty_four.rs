@@ -161,10 +161,12 @@ fn an_arithmetic_shift_is_logical_at_an_unsigned_context() {
          (both oracles);\n{out}"
     );
 
-    // ⚠️ THE RESIDUE, pinned honestly: at MODULE scope a `localparam` initializer
-    // folds through the width-unlimited `const_eval_in_scope`, which never reaches
-    // this rule — so the same `>>>` is still wrong there while the runtime spelling
-    // is right. ROADMAP §2 owns it; its prerequisite is the AST self-width pass.
+    // ⚠️ THE RESIDUE, now CLOSED: at module scope a `localparam` initializer used to
+    // fold through the width-unlimited `const_eval_in_scope`, which never reached this
+    // rule, so the same `>>>` was wrong there (18446744073709551615) while the runtime
+    // spelling was right. The initializer takes the width-aware walk now
+    // (`param_init_width_aware_ok`), so both columns are the oracles' 4294967295 — and
+    // the constant and runtime spellings of one text agree, which is the property.
     let (out, code) = run(
         "module top;\n  localparam longint unsigned M = (64'hFFFFFFFF00000000 >>> 32);\n\
          \x20 initial begin $display(\"M=%0d R=%0d\", M, (64'hFFFFFFFF00000000 >>> 32));\n\
@@ -172,9 +174,8 @@ fn an_arithmetic_shift_is_logical_at_an_unsigned_context() {
     );
     assert_eq!(code, Some(0), "got:\n{out}");
     assert!(
-        out.contains("M=18446744073709551615 R=4294967295"),
-        "both oracles say 4294967295 for BOTH columns — the constant one is the \
-         recorded module-scope residue;\n{out}"
+        out.contains("M=4294967295 R=4294967295"),
+        "both oracles say 4294967295 for BOTH columns;\n{out}"
     );
 }
 

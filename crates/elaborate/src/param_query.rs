@@ -393,6 +393,78 @@ pub(crate) fn ast_contains_fill(e: &ast::Expr) -> bool {
 }
 
 impl Elaborator<'_> {
+    /// Does the width-aware assignment walk own this parameter initializer?
+    ///
+    /// The OPT-IN half of [`Elaborator::eval_param_init`]'s gate — the CONSUMER asks
+    /// for the width-aware evaluator; the evaluator is not widened underneath its
+    /// other callers (ENGINEERING_RULES "shared machinery").
+    ///
+    /// The defect it admits: a parameter initializer folds in the width-UNLIMITED i64
+    /// lane and is masked ONCE, at the end. Truncation commutes with `+ - * << & | ^`
+    /// and the unary operators, so those cells are right by accident; it does NOT
+    /// commute with `/ % >> >>>`, and there the discarded high bits are the ones that
+    /// decide the answer. Measured, `localparam K = (8'd200 + 8'd100) >> 1;` binds
+    /// `96` where both oracles bind `16` — the inner sum keeps 300 and the shift then
+    /// reads a bit an 8-bit sum does not have. `$bits(K)` was already 8 (§4.5.460), so
+    /// only the VALUE lane was left behind.
+    ///
+    /// Two conditions, each answering a MEASURED correct→silent-wrong:
+    ///
+    /// 1. [`Elaborator::ctx_width_names_are_evident`] — every NAME's width must be
+    ///    stated by the expression, not looked up. `const_self_width`'s name arm reads
+    ///    `param_meta`, which records an untyped parameter's DEFAULT literal width and
+    ///    is replaced by the final override's type the moment `#(.C(…))` arrives
+    ///    (§6.20.2). `envw` is empty at a module-scope initializer, so this admits
+    ///    literal trees and declines every name — the same line `eval_const_shift_count`
+    ///    drew after 21 cells went correct→silent-wrong through the other door.
+    /// 2. [`Self::const_ctx_within_i64`] — no node wider than the i64 lane carries.
+    ///    `eval_const_assign` computes `ctx = max(self, target).min(64)`, and that
+    ///    `.min` is a CLAMP: for `localparam logic signed [64:0] N65 = -65'sd100;`,
+    ///    `N65 >>> 1` is `ffff_ffff_ffff_ffce` at HEAD and in iverilog, and
+    ///    `7fff_ffff_ffff_ffce` through the width-aware walk, because the sign bit
+    ///    lives at bit 64 and masking to 64 deletes it. ROADMAP §2 row 14's reverted
+    ///    slice named this leaf; it is still live and this is the clause that answers
+    ///    it. (Row 14's OTHER named blocker — a generate-scope `localparam time NM`
+    ///    shadowing a module `logic [7:0] NM` — was re-measured at HEAD and is dead:
+    ///    both lanes and both oracles answer `12c`.)
+    pub(crate) fn param_init_width_aware_ok(&self, e: &ast::Expr) -> bool {
+        Self::ctx_width_names_are_evident(e, &ConstWidths::new()) && self.const_ctx_within_i64(e)
+    }
+
+    /// Is every node this domain descends into within the i64 lane's 64 bits?
+    ///
+    /// Phrased as "no KNOWN width exceeds 64" rather than "every width is known", so
+    /// it can also fence the FILL arm of the same gate without narrowing what that
+    /// arm already accepts: a fill answers `Some(0)` and an unmodelled leaf answers
+    /// `None`, and neither is the hazard. The hazard is a leaf whose width the
+    /// evaluation context would have to CLAMP, because a clamp is a silent value
+    /// change ([[widen-a-domain-count-what-it-cannot-carry]]).
+    pub(crate) fn const_ctx_within_i64(&self, e: &ast::Expr) -> bool {
+        if self
+            .const_self_width(e, &ConstWidths::new())
+            .is_some_and(|w| w > 64)
+        {
+            return false;
+        }
+        // ⚠️ `const_fold_children` has NO `Concat` / `Replicate` arm — those answer their
+        // width from §11.4.12 (the sum of the parts) without being asked about their
+        // parts, so a walk that descends only through it is walked past by wrapping the
+        // hazard in braces. The sum makes the TOP check catch a wide part today, so this
+        // descent changes no measured cell; it is here because a GUARD must descend
+        // through the arms that answer from a rule, even where the ANSWER need not
+        // ([[an-arm-that-answers-without-descending-is-where-an-opaque-leaf-hides]]).
+        match &e.kind {
+            ast::ExprKind::Concat { parts } => parts.iter().all(|p| self.const_ctx_within_i64(p)),
+            ast::ExprKind::Replicate { count, value } => {
+                self.const_ctx_within_i64(count)
+                    && value.iter().all(|p| self.const_ctx_within_i64(p))
+            }
+            _ => Self::const_fold_children(e)
+                .iter()
+                .all(|c| self.const_ctx_within_i64(c)),
+        }
+    }
+
     /// An UNTYPED parameter whose initializer CONTAINS an unsized fill: its value at
     /// the initializer's own self-determined width, with the `(width, signed)` an
     /// implicit declaration takes from it (§6.20.2) — ROADMAP §2 🆕 C ⓐ.
@@ -424,32 +496,47 @@ impl Elaborator<'_> {
         Some((v, (w, self.const_expr_signed(&p.value))))
     }
 
-    /// An UNTYPED parameter whose initializer this slice would newly fold, but only
-    /// into a consumer that is known to size it wrong — kept LOUD instead.
+    /// An untyped parameter whose DEFAULT must not be width-inferred on the
+    /// OVERRIDDEN lane — one caller left, and it is no longer about loudness.
     ///
-    /// An implicit parameter takes its type from its initializer (§6.20.2), and the
-    /// value-inferred tail of `param_decl_width_opt` records that width as the folded
-    /// value's minimal width, never narrower than 32. For an initializer whose
-    /// self-determined width is NARROWER than that and whose top operator is
-    /// context-determined, the width-unlimited fold and the recorded width disagree
-    /// with both oracles: `localparam R = ~4'b1010;` prints 4294967285 at 32 bits
-    /// where both say 5 at 4. That class is pre-existing (ROADMAP §2 row 14, the
-    /// declared-vs-inferred provenance wall) and it is not touched here.
+    /// ## What it used to be, and why that expired
     ///
-    /// What IS touched: `const_eval_in_scope` now folds a reduction, so `~(|4'b1010)`,
-    /// `(|4'b1010) << 2` and `-(|4'b1010)` — loud until now — would land on that
-    /// same tail and print `4294967294`, `4` and `4294967295` where both oracles
-    /// print `0`, `0` and `1`. Three cells from loud to silent-wrong is a trade the
-    /// accuracy ladder forbids, so a narrow context-determined top OVER a reduction
-    /// declines in the four untyped-parameter value sites and in the tail, and stays
-    /// exactly as loud as it was. A reduction as the TOP is not this shape: its
-    /// width is a type fact and `param_decl_width_opt` records it as one bit.
+    /// §4.5.407 added it as a delta-limiter: `const_eval_in_scope` had just learned to
+    /// fold a reduction, so `~(|4'b1010)`, `(|4'b1010) << 2` and `-(|4'b1010)` would
+    /// have landed on a value-inferred tail that sized every operator initializer as
+    /// `min_signed_bits(v).max(32)` and printed `4294967294`, `4` and `4294967295`
+    /// where both oracles print `0`, `0` and `1`. Loud→silent-wrong is a trade the
+    /// accuracy ladder forbids, so the four VALUE sites declined instead. Its doc
+    /// named its own expiry: *"when the tail learns to size an initializer at its
+    /// self-determined width, this predicate goes with it."*
     ///
-    /// ⚠️ The "contains a reduction" conjunct limits the guard to this slice's delta
-    /// and makes no semantic claim — `~(!4'b0)` and `~(1 < 2)` sit in the same
-    /// pre-existing class and are not guarded, because they already fold today.
-    /// When the tail learns to size an initializer at its self-determined width, this
-    /// predicate goes with it.
+    /// §4.5.460 built that tail (the Table 11-21 arm in `param_decl_width_opt`) and
+    /// this slice retired the guard from all four value sites. Measured across the
+    /// five default binders — module `localparam`, module-body `parameter`, ANSI
+    /// header, `package`, `generate` — the three cells now bind `0`, `0`, `1` at one
+    /// bit, which is what BOTH oracles print. ⚠️ That deletion is only safe because
+    /// the same slice made the initializer VALUE lane width-aware
+    /// (`param_init_width_aware_ok`): under the old unlimited-then-coerce fold,
+    /// truncation does not commute with `/ % >> >>>`, and deleting the guard alone
+    /// was measured to turn 8 further cells loud→silent-wrong.
+    ///
+    /// ## What survives, and why
+    ///
+    /// One caller, on the `!default_binds` (OVERRIDDEN) lane, where the §4.5.460 arm
+    /// does not run. Without it the tail records `(32, unsigned)` from the DEFAULT's
+    /// value and the override's own sign is lost: measured,
+    /// `sub #(parameter P = ~(|4'b1010))` overridden with `-1` / `-5` binds `-1` / `-5`
+    /// today (both oracles) and `4294967295` / `4294967291` with the guard removed.
+    /// `%h` is identical in every one of those rows — only the recorded SIGN moves — so
+    /// a `%h`-only readout sees nothing.
+    ///
+    /// ⚠️ This is an ACCIDENTAL IMMUNITY, not a rule: the unguarded twin `~(!4'b0)` is
+    /// silent-wrong on that lane RIGHT NOW, for the same reason, and so is every other
+    /// untyped default under an override whose sign differs. The class is ROADMAP §2
+    /// row 25 (the override reads the DEFAULT's width and sign), and the honest fix is
+    /// there, not here. Until row 25 stands, the guard's job is to keep the cells it
+    /// already covers OUT of that class — so it is scoped to that lane explicitly and
+    /// the "contains a reduction" conjunct still makes no semantic claim.
     pub(crate) fn param_init_kept_loud(&self, p: &ast::ParamDecl) -> bool {
         if !matches!(p.ty, ast::ParamType::Implicit) || p.range.is_some() {
             return false;

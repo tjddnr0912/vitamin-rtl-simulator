@@ -564,10 +564,14 @@ impl Elaborator<'_> {
                 if declared_only {
                     return None; // VALUE-inferred — see the doc on this parameter
                 }
-                // Same decision as the four value sites — see `param_init_kept_loud`.
-                // Left to the tail, this would have recorded a 32-bit width for a value
-                // the sites then refuse, and a `$bits` of a parameter with no value.
-                if self.param_init_kept_loud(p) {
+                // The predicate's LAST caller, and the only lane it still decides —
+                // scoped explicitly rather than left to the arms above to shadow it.
+                // On `default_binds` the §4.5.460 operator arm answers first and the
+                // four VALUE sites no longer consult the predicate at all; here, on the
+                // OVERRIDDEN lane, nothing has answered yet and the tail below would
+                // record `(32, unsigned)` from the DEFAULT's value. See
+                // `param_init_kept_loud` for the measurement that keeps it.
+                if !default_binds && self.param_init_kept_loud(p) {
                     return None;
                 }
                 if let Some(v) = self.const_eval_in_scope(&p.value) {
@@ -813,17 +817,27 @@ impl Elaborator<'_> {
         // function's assignment already uses — and the lane below keeps every
         // fill-free initializer byte-identical. A declined walk (x/z fill, a shape it
         // has no arm for) falls through to the answer the lane always gave.
-        // ⚠️ NOT for every sized initializer. §4.5.423's review (A B-1) measured that
-        // routing EVERY sized initializer through this walk fixes `/ % >> >>>` under a
-        // wrapped intermediate (`localparam logic [7:0] M = (P + 8'd100) % 8'd7` with
-        // `P = 200` is 2 in both oracles, 6 here) — and it is ROADMAP §2 row 14's
-        // reverted slice: the walk vouches a module-scope `logic [7:0] NM` for a
-        // generate-scope `localparam time NM` (`NM | 64'h0` = 2c, both oracles 12c, PRE
-        // 12c — a correct→wrong), and a `logic signed [64:0]` leaf whose value fits an
-        // i64 is evaluated as a 64-bit operand (`W65 / 64'd2`, `W65 % 64'd3` — a
-        // different silent-wrong). Row 14's prerequisites stand; the fill gate stays.
+        // ⚠️ STILL NOT for every sized initializer. §4.5.423's review (A B-1) named two
+        // blockers for widening this gate, and they were RE-MEASURED at HEAD rather
+        // than inherited ([[revert-reason-is-a-measurement]]):
+        //   (a) the walk vouching a module-scope `logic [7:0] NM` for a generate-scope
+        //       `localparam time NM` is DEAD — both lanes and both oracles now answer
+        //       `12c` for `NM | 64'h0`, so later scope-key work closed it;
+        //   (b) the `logic signed [64:0]` leaf is LIVE — `N65 >>> 1` is
+        //       `ffff_ffff_ffff_ffce` at HEAD and in iverilog and `7fff…ce` through
+        //       this walk, because `eval_const_assign` CLAMPS `ctx` to 64 and the sign
+        //       bit lives at bit 64.
+        // So the gate opens by an OPT-IN admission that answers (b) — see
+        // `param_init_width_aware_ok` — instead of by trusting the evaluator. The fill
+        // arm takes the same `const_ctx_within_i64` fence, because (b) reaches it too:
+        // `(N65 >>> 1) | '0` is the same silent-wrong at HEAD, through the fill door.
+        // Row 14's declared-vs-inferred provenance wall is untouched: a NAME still
+        // declines, so nothing reads a width off `param_meta`.
         if let Some((w, s)) = meta {
-            if w <= 64 && crate::param_query::ast_contains_fill(e) {
+            if w <= 64
+                && (crate::param_query::ast_contains_fill(e) || self.param_init_width_aware_ok(e))
+                && self.const_ctx_within_i64(e)
+            {
                 if let Some(v) = self.eval_const_assign(
                     e,
                     &BTreeMap::new(),
@@ -1680,9 +1694,6 @@ impl Elaborator<'_> {
             let mut chosen_val: Option<i64> = ovr_fill_v
                 .or_else(|| ovr_by_name.get(p.name.name.as_str()).copied().flatten())
                 .or_else(|| {
-                    if self.param_init_kept_loud(p) {
-                        return None;
-                    }
                     if default_binds {
                         if let Some((v, _)) = self.untyped_fill_init(p) {
                             return Some(v);

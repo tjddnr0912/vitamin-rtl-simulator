@@ -179,18 +179,43 @@ fn the_operators_no_longer_disagree_about_the_domain() {
 }
 
 #[test]
-fn the_value_folds_width_unlimited_below_the_top_operator() {
-    // NOT a bug pin for this slice — a KNOWN residue, recorded so a later reader
-    // does not read the passing width as a passing value. The width rule now says
-    // 8 for `(8'd200 + 8'd100) >> 1`, and both the top-level mask and every other
-    // cell above agree with verilator; but the VALUE still folds through
-    // `const_eval_in_scope`, which is width-UNLIMITED, so the inner sum keeps 300
-    // and the shift reads a bit the 8-bit sum does not have: vita `96`, verilator
-    // `16`. PRE answered `96` at 32 bits, so this is an unfixed pre-existing
-    // defect of the value fold (its width-aware twin is `eval_const_env_self`),
-    // not one this arm introduced — ROADMAP §2 carries it as its own row, because
-    // routing it changes the value of every untyped parameter.
-    expect("(8'd200 + 8'd100) >> 1", "96 8");
+fn the_value_folds_at_the_recorded_width_not_unlimited() {
+    // Was the recorded residue of §4.5.460's width arm: the WIDTH said 8 for
+    // `(8'd200 + 8'd100) >> 1` while the VALUE folded through the width-UNLIMITED
+    // `const_eval_in_scope`, so the inner sum kept 300 and the shift read a bit an
+    // 8-bit sum does not have — vita `96`, both oracles `16`.
+    //
+    // Closed by routing the initializer through `eval_const_assign` under
+    // `param_init_width_aware_ok` (an OPT-IN at the consumer, not a widening of the
+    // shared evaluator). Truncation commutes with `+ - * << & | ^` and the unary
+    // operators, which is why every OTHER cell in this file was already right; it
+    // does NOT commute with `/ % >> >>>`, and those are the cells that moved.
+    expect("(8'd200 + 8'd100) >> 1", "16 8");
+    expect("(8'd200 + 8'd100) >>> 1", "16 8");
+    // The same defect under a BENIGN top operator — the nesting axis. A wrapper of
+    // the initializer's own width does not change the answer.
+    expect("((8'd200 + 8'd100) >> 1) + 8'd0", "16 8");
+    expect("1 ? ((8'd200 + 8'd100) >> 1) : 8'd0", "16 8");
+    // ⚠️ A WIDER wrapper legitimately DOES change it (§11.6.1): a 32-bit sibling
+    // makes the context 32 bits, so the sum is 300 and the shift keeps its bit.
+    // Both spellings are verilator's; iverilog answers 75 for the 8-bit one too,
+    // at its own self-contradicting 9-bit parameter width.
+    expect("((8'd200 + 8'd100) >> 1) + 0", "00000096 32");
+    // A negative intermediate was LOUD and is now the oracles' value.
+    expect("(8'd10 - 8'd20) >> 1", "7b 8");
+    // ⚠️ The fence: a leaf WIDER than the i64 lane keeps the unlimited answer,
+    // because `eval_const_assign` would clamp its context to 64 and a clamp deletes
+    // the sign bit of a 65-bit operand. See `param_init_width_aware_ok`.
+    let (out, code) = run(
+        "module t;\n  localparam logic signed [64:0] N65 = -65'sd100;\n\
+         \x20 localparam logic [63:0] Y = N65 >>> 1;\n\
+         \x20 initial begin $display(\"R %h\", Y); $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("R ffffffffffffffce"),
+        "a >64-bit leaf keeps the unlimited lane (iverilog agrees):\n{out}"
+    );
 }
 
 #[test]

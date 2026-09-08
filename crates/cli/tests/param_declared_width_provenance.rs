@@ -89,12 +89,13 @@ fn a_module_scope_name_does_not_convert_at_its_declared_width_but_a_local_does()
     );
 }
 
-/// The §4.5.366 residue the routing also closed, pinned in its reverted state: at module
-/// scope `/`, `%` and `>>>` over a 64-bit UNSIGNED declaration lose the sign, while `>>`
-/// is already right. All four are iverilog's in the fixed state
-/// (`5 1844674407370955161 1152921504606846975 1152921504606846975`).
+/// The §4.5.366 residue, now CLOSED: at module scope `/`, `%` and `>>>` over a 64-bit
+/// UNSIGNED declaration used to lose the sign (while `>>` was already right), because
+/// the initializer folded in the width-unlimited lane where a 64-bit operand's top bit
+/// reads as an i64 sign. The width-aware walk (`param_init_width_aware_ok`) applies
+/// `const_i64_is_unsigned_at`, so all four columns are now the value BOTH oracles print.
 #[test]
-fn the_sixty_four_bit_unsigned_operators_still_lose_their_sign_at_module_scope() {
+fn the_sixty_four_bit_unsigned_operators_keep_their_sign_at_module_scope() {
     let (o, ok) = run("module top;\n  \
            localparam [63:0] P = 64'hFFFFFFFFFFFFFFFF % 64'd10;\n  \
            localparam [63:0] Q = 64'hFFFFFFFFFFFFFFFF / 64'd10;\n  \
@@ -104,8 +105,8 @@ fn the_sixty_four_bit_unsigned_operators_still_lose_their_sign_at_module_scope()
          endmodule\n");
     assert!(ok, "vita failed:\n{o}");
     assert!(
-        o.contains("OUT=18446744073709551615 0 1152921504606846975 18446744073709551615"),
-        "KNOWN-WRONG in three of four columns; `>>` is already right:\n{o}"
+        o.contains("OUT=5 1844674407370955161 1152921504606846975 1152921504606846975"),
+        "all four columns are iverilog's and verilator's:\n{o}"
     );
 }
 
