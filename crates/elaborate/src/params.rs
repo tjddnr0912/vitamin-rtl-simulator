@@ -240,6 +240,27 @@ impl Elaborator<'_> {
             // default, `int unsigned` / `unsigned integer` flip it — the parser sets
             // `p.signed` accordingly).
             Some((32, p.signed))
+        } else if matches!(p.ty, ast::ParamType::Time) {
+            // §6.11.2: `time` is a 64-bit UNSIGNED integer type, so its width comes
+            // from the declaration and never from the initializer — the same rule the
+            // `Integer` arm above states for `int`/`integer`. Without this arm a
+            // `time` parameter fell through to the untyped tail below, whose SIZED
+            // literal case answers "any reaching param type" and handed back the
+            // LITERAL's width: `localparam time A = 8'd5` recorded 8 bits where both
+            // oracles record 64, and `parameter time TP = 8'd5` overridden with
+            // `16'd9` recorded 8 as well. The tail's own comment already stated this
+            // rule ("a `time` param's width is its declared 64-bit type, not the
+            // literal's") for the DECIMAL case and left the SIZED case unguarded.
+            //
+            // The signedness half is the one that shows as a wrong VALUE rather than
+            // a wrong `$bits`: `localparam time B = -8'sd2` printed `-2` at 8 signed
+            // bits where both oracles print `18446744073709551614`, because `time` is
+            // unsigned. `p.signed` is not consulted — the parser cannot produce a
+            // signed `time` parameter (`localparam time signed X` is E2002), and the
+            // four sibling containers that already carry this rule all spell it the
+            // same way: `hdl-parser/src/params.rs:999`/`:960`, `cover_bins.rs:153`,
+            // `inline_fn.rs:107`/`:31`. This function was the missing container.
+            Some((64, false))
         } else {
             // Untyped/implicit param — IEEE §6.20.2: the type follows the VALUE.
             // A LITERAL initializer carries its own `(width, signedness)`, which

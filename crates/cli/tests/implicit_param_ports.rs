@@ -615,9 +615,19 @@ fn an_x_fill_as_a_declared_default_is_not_folded_to_zero() {
 /// `by_name`, and every guard that decides a fill cannot apply reads `by_name`: these
 /// three then became silent no-ops at exit 0, byte-identical to passing no flag at all.
 ///
-/// The values are vita's own (a fill still folds at 32 bits on a width-less target —
-/// ROADMAP §2); what this pins is that the flag has an EFFECT and that the string
-/// target is loud, which is where PRE was.
+/// What this pins is that the flag has an EFFECT and that the string target is loud,
+/// which is where PRE was.
+///
+/// The two numeric targets no longer share one answer, and the difference is the point:
+///  * `time` is a DECLARED 64-bit unsigned type (§6.11.2), so the fill re-folds at 64 and
+///    `T='1` is `18446744073709551615` — measured identical in verilator's `-GT='1` and,
+///    for the source-level twin `#(.T('1))`, in BOTH oracles. It read `4294967295` until
+///    `param_decl_width_opt` grew its `Time` arm; the 32 was the untyped tail's, not a
+///    width `time` ever had.
+///  * `real` still folds at 32 (`R='1` is `4.29497e+09` where verilator binds `1`). That
+///    is a separate pre-existing residue on the real-parameter arm — ROADMAP §2 — and is
+///    deliberately left here as the control that this test measures the CHANNEL, not the
+///    fold: one target moved to the oracles and the other did not, through the same flag.
 #[test]
 fn a_cli_fill_override_is_not_silently_dropped_on_a_width_less_target() {
     let src = "module tb;
@@ -630,11 +640,11 @@ fn a_cli_fill_override_is_not_silently_dropped_on_a_width_less_target() {
     let (_, e, c) = run_args(src, &["-G", "S='1"]);
     assert_ne!(c, Some(0), "-G S='1 was dropped silently");
     assert!(e.contains("is a string"), "got: {e}");
-    // real and time targets APPLY it (the value is vita's 32-bit fold, not iverilog's,
-    // but "applies" is the property under test — dropping it is the regression)
+    // real and time targets APPLY it — dropping it is the regression under test. `time`
+    // folds at its declared 64 (= both oracles); `real` is still vita's 32-bit fold.
     for (g, want) in [
         ("R='1", "S=abc R=4.29497e+09 T=5"),
-        ("T='1", "S=abc R=1.5 T=4294967295"),
+        ("T='1", "S=abc R=1.5 T=18446744073709551615"),
     ] {
         let (o, e, c) = run_args(src, &["-G", g]);
         assert_eq!(c, Some(0), "stderr: {e}");
