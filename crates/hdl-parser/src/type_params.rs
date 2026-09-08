@@ -48,23 +48,26 @@ pub(crate) struct TypeValue {
 }
 
 impl TypeValue {
-    /// `T$s`: bit 0 = signed, bit 1 = 2-state, bit 2 = carries UNPACKED dims.
+    /// `T$s`: bit 0 = signed, bit 1 = 2-state, bits 2.. = the number of UNPACKED
+    /// dimensions.
     ///
-    /// Bit 2 is what refuses an override of a `parameter type T = a_t` whose
-    /// default is an unpacked-array typedef (§3 ⑤ⓕ). The dims ride the registered
-    /// typedef, not `T$w`, so an override that merely replaced the WIDTH would
-    /// keep the default's `[0:2]` and answer `$bits` 48 where both oracles answer
-    /// the override's own 16 — a silent wrong value. An override can never carry
-    /// dims of its own (`parse_type_param_value(false)` refuses one), so this bit
-    /// is 0 on every override and 1 on such a default, and the shape guard the
-    /// group already synthesizes turns the mismatch into a `$fatal`.
+    /// The dim COUNT is what refuses an override whose ARITY differs from the
+    /// default's (§3 ⑤ⓕ) — a dim-losing `#(.T(logic [15:0]))` on an unpacked
+    /// default, and its mirror, a dim-carrying override of a scalar default. The
+    /// module's declarations of `T` are stamped with the default's dim LIST at
+    /// parse time, so its length is fixed for the life of the module and an
+    /// override that changes it cannot be followed; the shape guard the group
+    /// synthesizes turns the mismatch into a `$fatal`. The EXTENTS are a different
+    /// question — they ride [`Parser::type_param_dim_params`] and DO follow an
+    /// override, so they are deliberately absent here.
     ///
-    /// Byte-identical for every design that predates this: nothing else can set
-    /// bit 2, so every existing type parameter keeps the flags it had.
+    /// Byte-identical for every design that predates the extents carrier: a count
+    /// of 0 and 1 are the `0` and `4` the boolean spelled, and a ≥2-dim default is
+    /// the only value that moves (every override of one was refused at the parse).
     pub(crate) fn shape_flags(&self) -> u32 {
         (self.signed as u32)
             | ((self.two_state as u32) << 1)
-            | ((!self.unpacked.is_empty() as u32) << 2)
+            | ((self.unpacked.len().min((u32::MAX >> 2) as usize) as u32) << 2)
     }
 }
 
@@ -157,6 +160,20 @@ impl Parser<'_, '_> {
                     span,
                 ));
             }
+            // §3 ⑤ⓕ: an OVERRIDABLE type parameter's unpacked EXTENTS ride two more
+            // synthesized value parameters per dim, so `#(.T(b_t))` carries its own.
+            // `None` (a dynamic/queue/assoc dim, which no consumer accepts anyway)
+            // and a non-overridable parameter both keep the literal dims.
+            let carried = match self.type_param_dim_params(&name.name, &tv.unpacked, kind, span) {
+                Some((dim_decls, dims)) if overridable => {
+                    for d in &dim_decls {
+                        self.overridable_params.insert(d.name.name.clone());
+                    }
+                    decls.extend(dim_decls);
+                    dims
+                }
+                _ => tv.unpacked.clone(),
+            };
             // The typedef every use of `T` resolves through: `[T$w-1:0]` of the
             // default's kind and signedness.
             let msb = Self::sub(
@@ -184,8 +201,10 @@ impl Parser<'_, '_> {
                     // which is what every DECLARATION binder already reads
                     // (`decls.rs` stamps them onto each declarator, and the tf-port
                     // formal reads the same map) — so `T v;` is the explicit
-                    // `logic [T$w-1:0] v [0:2]` it would have been written as.
-                    unpacked: tv.unpacked.clone(),
+                    // `logic [T$w-1:0] v [0:2]` it would have been written as. For an
+                    // OVERRIDABLE one the extents are the synthesized names, so the
+                    // same stamp follows an override.
+                    unpacked: carried.clone(),
                 },
             );
             self.type_params.insert(
@@ -193,7 +212,7 @@ impl Parser<'_, '_> {
                 TypeParam {
                     width_name,
                     signed: tv.signed,
-                    unpacked: tv.unpacked.clone(),
+                    unpacked: carried,
                 },
             );
             self.local_decl_names.insert(name.name.clone());
@@ -213,6 +232,79 @@ impl Parser<'_, '_> {
             break;
         }
         (decls, guards)
+    }
+
+    /// §3 ⑤ⓕ: the per-dim value parameters an OVERRIDABLE type parameter's unpacked
+    /// EXTENTS ride, and the dim list that names them.
+    ///
+    /// Two parameters per dim — `T$d<i>a` / `T$d<i>b`, the dim's DECLARED endpoints
+    /// — and the registered typedef gets `[T$d<i>a:T$d<i>b]` in their place, which
+    /// every declaration binder already reads. So an override's own extents reach
+    /// `T v;`, `$size(v,1)`, `$low`/`$high` and the element addresses by the same
+    /// route the element WIDTH reaches them through `T$w`.
+    ///
+    /// `[N]` normalizes to `[0:N-1]` first — measured identical in all three tools
+    /// for `$bits` / `$size` / `$low` / `$high` and the element values — so the
+    /// channel is exactly two values per dim whatever spelling either side used,
+    /// and a POSITIONAL override cannot misalign on the form. The ARITY is not
+    /// carried (the declarators are stamped once, at parse); `shape_flags` records
+    /// it so a mismatch is the `$fatal` it was.
+    ///
+    /// ⚠️ Only for an OVERRIDABLE type parameter. Making a `localparam type` /
+    /// package one's dims symbolic would move `$bits(T)` onto `sym_range_width`,
+    /// which answers only when a bound NAMES an overridable parameter — a decline
+    /// where the literal dims fold today.
+    fn type_param_dim_params(
+        &self,
+        tname: &str,
+        dims: &[Dim],
+        kind: ParamKind,
+        span: Span,
+    ) -> Option<(Vec<ParamDecl>, Vec<Dim>)> {
+        if dims.is_empty() {
+            return None;
+        }
+        let mut decls = Vec::new();
+        let mut out = Vec::new();
+        for (i, d) in dims.iter().enumerate() {
+            let (a, b) = Self::dim_endpoints(d, span)?;
+            let na = format!("{tname}$d{i}a");
+            let nb = format!("{tname}$d{i}b");
+            for (n, v) in [(&na, a), (&nb, b)] {
+                decls.push(ParamDecl {
+                    kind,
+                    signed: false,
+                    ty: ParamType::Implicit,
+                    range: None,
+                    name: Ident {
+                        name: n.clone(),
+                        span,
+                    },
+                    value: v,
+                    span,
+                });
+            }
+            out.push(Dim::Range(Range {
+                msb: Self::ident_expr(&na, span),
+                lsb: Self::ident_expr(&nb, span),
+                span,
+            }));
+        }
+        Some((decls, out))
+    }
+
+    /// One unpacked dim's two DECLARED endpoints, `[N]` read as its `[0:N-1]`
+    /// (IEEE §7.4.2). `None` for a dynamic / queue / associative dim — none of
+    /// which any type-parameter consumer accepts.
+    fn dim_endpoints(d: &Dim, span: Span) -> Option<(Expr, Expr)> {
+        match d {
+            Dim::Range(r) => Some((r.msb.clone(), r.lsb.clone())),
+            Dim::Size(e) => Some((
+                Self::dec_lit(0, span),
+                Self::sub(e.clone(), Self::dec_lit(1, span), span),
+            )),
+            Dim::Dyn | Dim::Queue(_) | Dim::Assoc(_) => None,
+        }
     }
 
     /// `starts_type_param` looking `n` tokens ahead.
@@ -681,7 +773,13 @@ impl Parser<'_, '_> {
             return false;
         }
         let save = self.pos;
-        let Some(tv) = self.parse_type_param_value(false) else {
+        // §3 ⑤ⓕ: an unpacked-array override IS carried — its element width rides
+        // `T$w` and its extents the `T$d…` pair per dim that the default
+        // synthesized. A dim-COUNT mismatch is still refused, by the shape guard
+        // rather than here: the module's declarators were stamped with the
+        // default's dim list at parse time, so a differing arity cannot be
+        // followed and `shape_flags` turns it into the `$fatal` it was.
+        let Some(tv) = self.parse_type_param_value(true) else {
             self.pos = save;
             self.error(
                 "an integral type as the type parameter override (a struct, enum, real, string, class or multi-dimensional type is unsupported in v1)",
@@ -693,6 +791,19 @@ impl Parser<'_, '_> {
             return false;
         }
         let span = start.to(self.prev_span());
+        // A dim this channel cannot spell (dynamic / queue / associative) keeps the
+        // pre-slice refusal rather than reaching the module with its extents lost.
+        let mut dims = Vec::new();
+        for d in &tv.unpacked {
+            let Some(ab) = Self::dim_endpoints(d, span) else {
+                self.pos = save;
+                self.error(
+                    "an integral type as the type parameter override (a struct, enum, real, string, class or multi-dimensional type is unsupported in v1)",
+                );
+                return false;
+            };
+            dims.push(ab);
+        }
         let flags = Self::dec_lit(tv.shape_flags(), span);
         match name {
             Some(n) => {
@@ -712,10 +823,29 @@ impl Parser<'_, '_> {
                     value: Some(flags),
                     span,
                 });
+                for (i, (a, b)) in dims.into_iter().enumerate() {
+                    for (suf, v) in [("a", a), ("b", b)] {
+                        out.push(ParamConn::Named {
+                            name: Ident {
+                                name: format!("{}$d{i}{suf}", n.name),
+                                span: n.span,
+                            },
+                            value: Some(v),
+                            span,
+                        });
+                    }
+                }
             }
             None => {
                 out.push(ParamConn::Positional(tv.width));
                 out.push(ParamConn::Positional(flags));
+                // Same order the group declares them in, so the slots line up
+                // whenever the arity matches — and when it does not, the shape
+                // guard fires on `T$s`, which is bound at its own fixed slot.
+                for (a, b) in dims {
+                    out.push(ParamConn::Positional(a));
+                    out.push(ParamConn::Positional(b));
+                }
             }
         }
         true

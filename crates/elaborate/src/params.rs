@@ -1080,6 +1080,11 @@ impl Elaborator<'_> {
         // carried as `(kind, raw)` and re-folded at the CHILD param's declared width.
         let mut o = ParamOverrides::default();
         let mut pos_i = 0usize;
+        // §3 ⑤ⓕ: one report per type parameter, not one per missing `T$d…` half —
+        // and none at all for a type parameter that is not overridable HERE, whose
+        // `T$w` is equally unknown and whose two reports have already said so.
+        let mut dim_arity_reported: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
         // IEEE 1364-2005 §12.2: the overridable list is the ANSI header when there is
         // one, and the top-level body parameter declarations when there is not (see
         // `param_ports`). Positional binding skips localparams (`positional_param_ports`).
@@ -1124,10 +1129,35 @@ impl Elaborator<'_> {
                         // `.W()` with no value ⇒ keep default (no insert).
                     }
                     None => {
-                        self.error(
-                            MsgCode::ElabPortMismatch,
-                            &format!("override of unknown parameter `{n}`"),
-                        );
+                        // §3 ⑤ⓕ: `T$d<i>a/b` are the extents a type parameter's
+                        // unpacked dims ride. Missing means the module's `T` has
+                        // FEWER dims than the override does — an arity the
+                        // declarators, stamped once at parse, cannot follow. Name
+                        // `T`, not the synthesized carrier, and say which half is
+                        // wrong; the reverse mismatch is the shape guard's `$fatal`.
+                        if let Some(t) = n.strip_suffix("$w") {
+                            // The carrier itself is missing ⇒ `T` is not overridable
+                            // in this position (a BODY `parameter type` under a
+                            // module that has a header, §12.2). Say nothing more
+                            // about its dims; this report is the whole story.
+                            dim_arity_reported.insert(t.to_string());
+                        }
+                        match n.split_once("$d") {
+                            Some((t, _)) if !t.is_empty() => {
+                                if dim_arity_reported.insert(t.to_string()) {
+                                    self.error(
+                                        MsgCode::ElabPortMismatch,
+                                        &format!(
+                                            "type parameter `{t}`: the override has more unpacked dimensions than the default, which the module's declarations of `{t}` cannot follow (an override must keep the default type's dimension COUNT; its extents and element width may differ — v1)"
+                                        ),
+                                    );
+                                }
+                            }
+                            _ => self.error(
+                                MsgCode::ElabPortMismatch,
+                                &format!("override of unknown parameter `{n}`"),
+                            ),
+                        }
                     }
                 }
             } else {

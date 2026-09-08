@@ -9,13 +9,15 @@
 //! `logic [T$w-1:0] v [0:2]` it would have been written as, and `$bits(v)` is 24
 //! in vita, iverilog 13.0 and verilator 5.052 alike.
 //!
-//! The carry is OPT-IN at the one call site that has the carrier: an instance
-//! OVERRIDE cannot take it, because `T$w` would replace the width while the
-//! default's dims stayed — `$bits` 48 where both oracles answer the override's
-//! own 16. Two guards keep that from happening silently, and both are pinned
-//! below: the override position refuses a dim-carrying type outright, and
-//! `T$s` bit 2 records "the default has dims" so a dim-free override trips the
-//! shape guard the group already synthesizes.
+//! An instance OVERRIDE carries the same shape: §4.5.459 gave an OVERRIDABLE type
+//! parameter two more synthesized value parameters per dim (`T$d<i>a` / `T$d<i>b`,
+//! the dim's declared endpoints) and registered `[T$d0a:T$d0b]` as the typedef's
+//! dim, so `#(.T(b_t))` replaces the element width AND the extents together. What
+//! it cannot replace is the dim COUNT — the declarators were stamped with the
+//! default's dim LIST once, at parse — and `shape_flags` records that count so a
+//! mismatch is loud in both directions: a dim-losing override trips the group's
+//! `$fatal`, a dim-ADDING one trips E3002 on the missing `T$d…` half. Both are
+//! pinned below.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -97,27 +99,33 @@ fn a_packed_type_parameter_is_unmoved() {
 }
 
 #[test]
-fn an_override_cannot_replace_a_dim_carrying_default() {
-    // ⚠️ The silent-wrong this slice had to NOT ship. Both are loud, and each is a
-    // different guard.
-    //
-    // (a) an override that IS an unpacked typedef: refused where it is parsed —
-    // `T$w`/`T$s` cannot carry `b_t`'s dims. Oracles run it (`bits=64 size=4`), so
-    // this is honest-loud, not correct — the row keeps that residue.
+fn an_override_replaces_the_element_and_the_extents_together() {
+    // ⚠️ This assertion was the refusal until §4.5.459, for the reason the
+    // refusal's own message gave: `T$w`/`T$s` could not carry `b_t`'s dims, so an
+    // override that replaced only the WIDTH would have kept the default's `[0:2]`
+    // and answered `$bits` 48 where both oracles answer 64. The dims are carried
+    // now — `T$d0a`/`T$d0b` — so both halves move together and the cell is the
+    // value both oracles measure, not a refusal. The extents differ from the
+    // default's on purpose (3 elements → 4): that is the half `T$w` alone could
+    // never have carried.
     let (out, rc) = run("`timescale 1ns/1ns\ntypedef logic [7:0] a_t [0:2];\n\
          typedef logic [15:0] b_t [0:3];\n\
          module m #(parameter type T = a_t) ();\n  T v;\n  \
-         initial $display(\"bits=%0d\", $bits(v));\nendmodule\n\
+         initial $display(\"bits=%0d size=%0d\", $bits(v), $size(v,1));\nendmodule\n\
          module top; m #(.T(b_t)) u1(); initial #10 $finish; endmodule\n");
-    assert_ne!(rc, Some(0), "{out}");
-    assert!(
-        out.contains("as the type parameter override"),
-        "wording pin — the value is the refusal itself\n{out}"
-    );
-    // (b) an override that is a plain packed type: it parses (it always could),
-    // and `T$s` bit 2 is what catches it — without that bit the module would have
-    // declared `logic [15:0] v [0:2]` and answered `$bits` 48 where both oracles
-    // answer 16.
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("bits=64 size=4"), "{out}");
+}
+
+#[test]
+fn an_override_cannot_change_the_dimension_count() {
+    // ⚠️ The silent-wrong this slice had to NOT ship, in both directions. The
+    // module's declarators are stamped with the DEFAULT's dim list at parse time,
+    // so an override may move the extents but never the arity.
+    //
+    // (a) a dim-LOSING override: it parses (it always could), and the dim count in
+    // `T$s` is what catches it — without it the module would have declared
+    // `logic [15:0] v [0:2]` and answered `$bits` 48 where both oracles answer 16.
     let (out, rc) = run(&format!(
         "{TD}module m #(parameter type T = a_t) ();\n  T v;\n  \
          initial $display(\"bits=%0d\", $bits(v));\nendmodule\n\
@@ -128,6 +136,46 @@ fn an_override_cannot_replace_a_dim_carrying_default() {
     assert!(
         !out.contains("bits=48"),
         "the dim-losing width must never be printed\n{out}"
+    );
+    // (b) the mirror — a dim-ADDING override on a scalar default. The `T$d0…`
+    // halves the override pushes name parameters the module never declared, so it
+    // is E3002, reported ONCE and against `T` rather than the synthesized carrier.
+    let (out, rc) = run("`timescale 1ns/1ns\ntypedef logic [15:0] b_t [0:3];\n\
+         module m #(parameter type T = logic) ();\n  T v;\n  \
+         initial $display(\"bits=%0d\", $bits(v));\nendmodule\n\
+         module top; m #(.T(b_t)) u1(); initial #10 $finish; endmodule\n");
+    assert_ne!(rc, Some(0), "{out}");
+    assert!(out.contains("VITA-E3002"), "{out}");
+    assert!(out.contains("dimension COUNT"), "{out}");
+    assert_eq!(
+        out.matches("VITA-E3002").count(),
+        1,
+        "one report, not two\n{out}"
+    );
+    assert!(
+        !out.contains("$d0"),
+        "the carrier name must not leak\n{out}"
+    );
+    // (c) ⚠️ The near-miss the soundness lens caught: a type parameter that is not
+    // OVERRIDABLE here (a body `parameter type` under a module that has a header,
+    // §12.2) has no `T$w` either, so the arity message would have been a false
+    // diagnosis of a real refusal. It is suppressed — the two carrier reports are
+    // the whole story, and iverilog refuses this for the same reason it gives
+    // ("Parameter cannot be overridden in the scope it has been declared in").
+    let (out, rc) = run("`timescale 1ns/1ns\ntypedef logic [7:0] a_t [0:2];\n\
+         typedef logic [15:0] b_t [0:3];\n\
+         module m #(parameter int W = 1) ();\n  parameter type T = a_t;\n  T v;\n  \
+         initial $display(\"bits=%0d\", $bits(v));\nendmodule\n\
+         module top; m #(.W(2), .T(b_t)) u(); initial #10 $finish; endmodule\n");
+    assert_ne!(rc, Some(0), "{out}");
+    assert!(
+        !out.contains("dimension COUNT"),
+        "not an arity failure\n{out}"
+    );
+    assert_eq!(
+        out.matches("VITA-E3002").count(),
+        2,
+        "just the two carriers\n{out}"
     );
 }
 
@@ -229,4 +277,141 @@ fn a_dim_free_type_parameter_and_a_shadowed_typedef_keep_their_answers() {
          module top; m u(); initial #10 $finish; endmodule\n");
     assert_eq!(rc, Some(0), "{out}");
     assert!(out.contains("bt=12"), "{out}");
+}
+
+#[test]
+fn the_overrides_extents_reach_every_declaration_readout() {
+    // The extents are the half `T$w` could never carry, so every readout that
+    // depends on WHERE the elements are — not just how many bits they total — is
+    // asserted: `$size`, `$low`/`$high`, and an element write/read at the
+    // override's own bounds. `[1:4]` is the cell that separates "carries the
+    // COUNT" from "carries the DECLARED endpoints"; a size-only carrier would put
+    // `lo` at 0 and address a word the design never wrote.
+    //
+    // All five instances measured 3-way identical (iverilog 13.0, verilator
+    // 5.052); `u0` is the no-override control and `u1` the identity override,
+    // which must stay on the default's answer.
+    let (out, rc) = run("`timescale 1ns/1ns\ntypedef logic [7:0]  a_t [0:3];\n\
+         typedef logic [15:0] b_t [0:3];\ntypedef logic [15:0] w_t [0:7];\n\
+         typedef logic [15:0] r_t [1:4];\n\
+         module m #(parameter type T = a_t) ();\n  T v;\n  \
+         initial begin v[$low(v)] = 16'h11; v[$high(v)] = 16'h44;\n    \
+         $display(\"bits=%0d sz=%0d lo=%0d hi=%0d vl=%h vh=%h\", $bits(T), $size(v,1), \
+         $low(v), $high(v), v[$low(v)], v[$high(v)]); end\nendmodule\n\
+         module top;\n  m u0(); m #(.T(a_t)) u1(); m #(.T(b_t)) u2();\n  \
+         m #(.T(w_t)) u3(); m #(.T(r_t)) u4();\n  initial #10 $finish;\nendmodule\n");
+    assert_eq!(rc, Some(0), "{out}");
+    for want in [
+        "bits=32 sz=4 lo=0 hi=3 vl=11 vh=44", // u0 and u1: default, and the identity override
+        "bits=64 sz=4 lo=0 hi=3 vl=0011 vh=0044", // u2: element 8 -> 16
+        "bits=128 sz=8 lo=0 hi=7 vl=0011 vh=0044", // u3: extent 4 -> 8
+        "bits=64 sz=4 lo=1 hi=4 vl=0011 vh=0044", // u4: bounds [0:3] -> [1:4]
+    ] {
+        assert!(out.contains(want), "missing `{want}`\n{out}");
+    }
+    assert_eq!(
+        out.matches("bits=32 sz=4 lo=0 hi=3 vl=11 vh=44").count(),
+        2,
+        "the control and the identity override must both stay on the default\n{out}"
+    );
+}
+
+#[test]
+fn every_override_spelling_carries_the_same_dims() {
+    // The POSITIONAL spelling is the one that could have misaligned: the group now
+    // declares 2 + 2*dims parameters, so an override has to push its dim values in
+    // the same order — measured `bits=64 sz=4`, the named spelling's answer and
+    // both oracles'.
+    let (out, rc) = run("`timescale 1ns/1ns\ntypedef logic [7:0] a_t [0:3];\n\
+         typedef logic [15:0] b_t [0:3];\n\
+         module m #(parameter type T = a_t) ();\n  T v;\n  \
+         initial $display(\"bits=%0d sz=%0d\", $bits(T), $size(v,1));\nendmodule\n\
+         module top; m #(b_t) u(); initial #10 $finish; endmodule\n");
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("bits=64 sz=4"), "{out}");
+    // A package-SCOPED override reaches the same channel through the same parse.
+    let (out, rc) = run(
+        "`timescale 1ns/1ns\npackage pk; typedef logic [15:0] pb_t [0:3]; endpackage\n\
+         typedef logic [7:0] a_t [0:2];\n\
+         module m #(parameter type T = a_t) ();\n  T v;\n  \
+         initial $display(\"bits=%0d sz=%0d lo=%0d\", $bits(T), $size(v,1), $low(v));\nendmodule\n\
+         module top; m #(.T(pk::pb_t)) u(); initial #10 $finish; endmodule\n",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("bits=64 sz=4 lo=0"), "{out}");
+    // ⚠️⚠️ The alignment cell. The group declares 2 + 2*dims parameters now, so a
+    // POSITIONAL override followed by a VALUE parameter is where a miscount would
+    // show: `W` would silently keep its default while a dim endpoint ate the 5.
+    // All four instances match iverilog, including the no-override control and an
+    // identity type override with a different `W`.
+    let (out, rc) = run("`timescale 1ns/1ns\ntypedef logic [7:0] a_t [0:2];\n\
+         typedef logic [15:0] b_t [0:3];\n\
+         module m #(parameter type T = a_t, parameter int W = 1) ();\n  T v;\n  \
+         initial $display(\"R bits=%0d sz=%0d W=%0d\", $bits(T), $size(v,1), W);\nendmodule\n\
+         module top;\n  m u0(); m #(b_t, 5) u1(); m #(.T(b_t), .W(5)) u2(); m #(a_t, 7) u3();\n  \
+         initial #10 $finish;\nendmodule\n");
+    assert_eq!(rc, Some(0), "{out}");
+    for want in [
+        "R bits=24 sz=3 W=1",
+        "R bits=64 sz=4 W=5",
+        "R bits=24 sz=3 W=7",
+    ] {
+        assert!(out.contains(want), "missing `{want}`\n{out}");
+    }
+    assert_eq!(
+        out.matches("R bits=64 sz=4 W=5").count(),
+        2,
+        "positional == named\n{out}"
+    );
+    // A TWO-dimensional override, the arity the census showed working end to end:
+    // both oracles `bits=128 s1=4 s2=2` for the identity and `bits=48 s1=2 s2=3`
+    // for a different element and different extents on both dims.
+    let (out, rc) = run(
+        "`timescale 1ns/1ns\ntypedef logic [15:0] b2_t [0:3][0:1];\n\
+         typedef logic [7:0] c2_t [0:1][0:2];\n\
+         module m #(parameter type T = b2_t) ();\n  T v;\n  \
+         initial $display(\"R bits=%0d s1=%0d s2=%0d\", $bits(T), $size(v,1), $size(v,2));\n\
+         endmodule\n\
+         module top; m #(.T(b2_t)) u1(); m #(.T(c2_t)) u2(); initial #10 $finish; endmodule\n",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("R bits=128 s1=4 s2=2"), "{out}");
+    assert!(out.contains("R bits=48 s1=2 s2=3"), "{out}");
+    // ⚠️ The `[N]` spelling normalizes to `[0:N-1]` on BOTH sides of the channel,
+    // which is what makes it exactly two values per dim whatever either side
+    // wrote. All three tools read `[3]` as lo 0 / hi 2, so the normalization is
+    // observationally free — this is that control.
+    let (out, rc) = run(
+        "`timescale 1ns/1ns\ntypedef logic [7:0] a_t [0:2];\ntypedef logic [7:0] sz_t [3];\n\
+         module m #(parameter type T = a_t) ();\n  T v;\n  \
+         initial $display(\"bits=%0d sz=%0d lo=%0d hi=%0d\", $bits(T), $size(v,1), \
+         $low(v), $high(v));\nendmodule\n\
+         module top; m #(.T(sz_t)) u(); initial #10 $finish; endmodule\n",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("bits=24 sz=3 lo=0 hi=2"), "{out}");
+}
+
+#[test]
+fn a_localparam_type_keeps_its_literal_dims() {
+    // ⚠️ The carrier is OPT-IN to an OVERRIDABLE type parameter, and this is why.
+    // `$bits(T)` of a symbolic-extent type is built by `sym_range_width`, which
+    // answers only when a bound NAMES an overridable parameter — so giving a
+    // `localparam type` / package one synthesized extents would turn a literal
+    // fold into a decline. Both spellings stay on the default's literal dims.
+    let (out, rc) = run("`timescale 1ns/1ns\ntypedef logic [7:0] a_t [0:2];\n\
+         module m ();\n  localparam type T = a_t;\n  T v;\n  \
+         initial $display(\"bits=%0d sz=%0d\", $bits(T), $size(v,1));\nendmodule\n\
+         module top; m u(); initial #10 $finish; endmodule\n");
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("bits=24 sz=3"), "{out}");
+    // The second non-overridable spelling: a BODY `parameter type` under a module
+    // that already has a parameter header (§12.2 — the header is the overridable
+    // list, so this one is not overridable either).
+    let (out, rc) = run("`timescale 1ns/1ns\ntypedef logic [7:0] a_t [0:2];\n\
+         module m #(parameter int W = 1) ();\n  parameter type T = a_t;\n  T v;\n  \
+         initial $display(\"bits=%0d sz=%0d w=%0d\", $bits(T), $size(v,1), W);\nendmodule\n\
+         module top; m #(.W(2)) u(); initial #10 $finish; endmodule\n");
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("bits=24 sz=3 w=2"), "{out}");
 }
