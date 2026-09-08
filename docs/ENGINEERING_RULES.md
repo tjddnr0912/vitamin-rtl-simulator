@@ -70,6 +70,55 @@
 - A verilator census is the bottleneck (about 1,500 cells per 30 minutes). Run it on a width subset only, keep one `--prefix` per executable, and hand-IEEE the cells whose oracle is untrusted (property `and`), saying so in the briefing.
 - The shadow set of a name is every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations. A census over declarations alone misses four of the five.
 
+### A cell both rules answer the same way is not evidence (2026-09-08, §4.5.459)
+- Two rounding rules were live for a delay expression — round each leaf, or round the finished sum
+  — and the cell the queue row named (`#(2500ps + 1000ps)`, 4 ns) gives 4 under BOTH. Adopting
+  either from that cell is a coin flip recorded as a measurement. The cells that separate them were
+  elsewhere and disagreed about which wins: a REAL leaf keeps its fraction to the end
+  (`2.5ns + 2.5ns` = 5, not 6) while a sub-precision-UNIT leaf rounds where it is written
+  (`1250fs + 1250fs` @ `1ns/1ps` = 2 ps, not 3). **Before adopting a rule, find the cell where the
+  rules DIFFER and check it is the one you measured** — and when two rules each own a disjoint set
+  of leaves, ship both and say what separates them, rather than picking the one the ambiguous cell
+  allowed.
+- Corollary for a documented ORACLE-SPLIT: check the split's stated DISCRIMINATOR the same way. This
+  row's said the split "only exists where precision == unit"; one cell at `1ns/100ps` refuted it.
+- Landing on ONE oracle where the tool previously answered NEITHER is a rung UP, not a side-change.
+  Eight split cells here went from silent no-delay to iverilog's answer; that is not "touching a
+  split axis", which is what the do-not-start rule is about.
+
+### The stated cause is a claim; measure which override classes need the machinery (2026-09-08, §4.5.459)
+- A row said a feature "needs a dim slot on the `T$w`/`T$s` channel". Two of the four override
+  classes needed no new carrier at all — an override whose dims EQUAL the default's, and one that
+  changes only the element width (`T$w` already carried the whole difference). The refusal was one
+  literal `false` argument at one call site. **Enumerate the sub-classes the row's fix would serve
+  and ask which of them the existing channel already answers**; the answer sizes the slice.
+- When a desugar's parameter COUNT becomes variable, the POSITIONAL binding is the hazard, not the
+  named one: a following value parameter silently eats a carrier slot. Make the count uniform per
+  construct, then measure a design that puts a value parameter AFTER the variable-count one.
+- A new diagnostic that names a synthesized carrier (`T$d0a`) leaks an implementation name AND can
+  misdiagnose: the same "unknown parameter" fires when the construct is simply not overridable
+  there. Report against the USER's name, once, and suppress it when the primary carrier is equally
+  unknown — that case's own reports are the whole story.
+
+### An oracle that answers the same access two ways is not the oracle for it (2026-09-08, §4.5.459)
+- Measured in ONE design: iverilog reads `pv[-2'sd1 +: 2]` as `1x` and `pm[1][-2'sd1 +: 2]` — the
+  same bits, the same index, a packed ELEMENT instead of a vector — as `10`. verilator has no `x`
+  for an out-of-range select at all. Neither is the value oracle for that cell, so the target is
+  **self-consistency**: vita answers `1x` for all four spellings and matches iverilog on the two
+  where iverilog matches itself. Pin the uniformity, and write the disqualifying table into the
+  test so the next round does not re-adopt the contradicting cell.
+- The way to find this is to put the two spellings in the SAME design with the same bits. Across
+  two designs it reads as two independent results.
+
+### A "wider blast radius" warning is a claim too (2026-09-08, §4.5.459)
+- A row warned that a parameter select folds at elaborate time, so the fold's consumers had to be
+  swept. Measured: the fold lane was already honest-loud, including the cell where the unsigned
+  reading is IN range on a 64-bit container — which proves the const lane already sign-extends. The
+  blast radius was the runtime lowering only, and the slice was smaller than the row priced.
+- The decisive probe for "does this lane already handle the sign" is the container size at which the
+  WRONG reading stops being out of range. If the lane still declines there, it is not relying on the
+  range check.
+
 ### A queue's selection criterion is not the row's fix (2026-09-06, §4.5.441)
 - "No format bump" was a criterion for CHOOSING a §2 row, and the row chosen carried a fix ("a per-process inst_prefix sidecar") that needs one: every per-process sidecar rides the `.velab` trailer, so the bump is the fix's cost, not a reason to build the engine-side alternative ("strip generate segments" cannot tell a generate label from an instance name by its string). Read the trailer chain (`cli/src/pipeline.rs` writes, `staged.rs` reads) before choosing between a sidecar and a derivation; the bump procedure is ten commits deep in `header.rs` and costs one hash re-pin.
 - verilator prints the FIRST instance's path for a class method's `%m` in every instance (`top.u1.C.show` from `top.u2`): self-contradicting on the second instance, so multi-instance class-scope cells pin iverilog; single-instance cells stay two-oracle. Record which cells are which.

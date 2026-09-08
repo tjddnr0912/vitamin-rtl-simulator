@@ -25,6 +25,21 @@ need updating. What moved:
 
 ### Added
 
+- **A type parameter can be overridden with an array type.**
+  With `typedef logic [15:0] b_t [0:3];`, `m #(.T(b_t)) u();` was refused outright ("an integral
+  type as the type parameter override"), where both reference simulators run it and answer
+  `$bits(T)` 64 and `$size(v,1)` 4. The override now carries the element width *and* the array
+  bounds together, so `$bits`, `$size`, `$low`/`$high` and the element addresses all follow it —
+  including an override with different extents (`[0:7]`), different bounds (`[1:4]`), the `[N]`
+  spelling, a package-scoped type, two dimensions, and the positional `m #(b_t)` form. A 95-cell
+  comparison against both reference simulators fixed 28 cells and changed nothing that already
+  worked.
+
+  What an override still cannot change is the NUMBER of dimensions: a module's declarations of `T`
+  are shaped once, when the module is read, so an override that adds or drops a dimension is
+  reported rather than silently mis-shaped. Dropping one is the existing fatal; adding one is now
+  an error naming `T` and what is wrong with it.
+
 - **`$bits` of a type parameter that carries array dimensions.**
   With `typedef logic [7:0] a_t [0:2];`, `$bits(T)` inside `module m #(parameter type T = a_t)`
   was two errors (`undeclared net/variable T`, then `$bits argument shape unsupported`). It is
@@ -55,6 +70,36 @@ need updating. What moved:
   resulting dimension order — which is the same refusal a declaration already gives.
 
 ### Fixed
+
+- **A delay written in a unit finer than the design's precision is a delay, not no delay.**
+  `assign #(2500ps) y = a;` under `` `timescale 1ns/1ns `` propagated immediately, at exit 0, with
+  no diagnostic — both reference simulators delay 3 ns. So did `#(1500ps)`, `#(500ps)`,
+  `#(2500ps + 1000ps)`, the same values in `fs` under a `1ns/1ps` design, and all of them on a net
+  declaration, a gate primitive and the rise/fall form. 26 of 102 measured cells were wrong and are
+  now right; none that were already right changed.
+
+  The rounding rule this needed is not the one the surrounding code used, and measuring separated
+  two cases that look alike: a REAL literal keeps its fraction until the whole expression is summed
+  (`#(2.5ns + 2.5ns)` is 5 ns, not 6), while a literal whose UNIT is finer than the precision is
+  rounded where it is written (`#(1250fs + 1250fs)` under `1ns/1ps` is 2 ps, not 3). A genuinely
+  sub-precision delay such as `#(2.5ps)` under `1ns/1ns` still rounds to nothing, exactly as both
+  reference simulators do.
+
+  The procedural spelling `#(2500ps);` is still refused rather than run; it reaches a different,
+  shared evaluator and is tracked separately.
+
+- **A bit or part select of a parameter now reads a negative index as out of range.**
+  `localparam logic [7:0] K = 8'b1010_0101; K[-2'sd1]` printed `0` — the bit at index 3 — where
+  iverilog reads `x`; `K[3'sd7]` printed `1` for the same reason. A narrow signed index was read as
+  though it were unsigned whenever the parameter's range starts at 0, so the select silently landed
+  on a real bit instead of off the end. The same was true of an `int` parameter, an untyped one, a
+  package-scoped one, a generate-scoped one, an overridden one, the `-:`/`+:` forms, and a
+  multi-dimensional packed net's inner select. 20 of 72 measured cells were wrong and all 72 now
+  agree with iverilog.
+
+  ⚠️ The defect is only visible where the unsigned reading happens to land inside the container, so
+  it hid at most index widths: on an 8-bit parameter only widths 2 and 3, on a 64-bit one widths 2
+  through 6. Unsigned indices are deliberately untouched — `K[2'b11]` reads bit 3 in every tool.
 
 - **A time literal inside an expression is a delay, not no delay.**
   `assign #(2.5ns + 1ns) y = a;` propagated immediately, at exit 0, with no diagnostic, where

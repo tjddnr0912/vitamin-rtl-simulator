@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.459` **The dim-carrying type-parameter OVERRIDE, the delay literal finer than the design precision, and the parameter select that never sealed its sign** (2026-09-08 · §3 ⑤ⓕ + §2 Delays ⓑ + §2 Index sealing · 28 + 26 + 20 cells fixed, 0 regressed over 269 measured · the row's "wider blast radius" and the split's stated discriminator both REFUTED · iverilog disqualified by self-contradiction on the packed-element `+:` overhang)
 - `4.5.458` **`$bits` of a dim-carrying type parameter, a time literal inside an expression, and the vector select that never sealed its sign** (2026-09-08 · §3 ⑤ⓕ + §2 Delays + §2 Index sealing · 15 + 81 + 42 cells fixed, 0 regressed over 494 measured · §2 🆕 I ⓒ REFUTED as an oracle split)
 - `4.5.457` **A constant-driven NET as an array-word index, a REAL time literal and a negated sized literal as delays, and `parameter type T = <unpacked typedef>`** (2026-09-08 · §2 🆕 I ⓒ + §2 Delays + §3 ⑤ⓕ · §2 row 7 residue REFUTED · 13 + 17 + 8 cells)
 - `4.5.456` **A tf-port formal spelled with an unpacked-array typedef, a full-range select of an array word, and a process-order permutation that was built and reverted** (2026-09-08 · §3 ⑤ⓕ + §2 🆕 I ⓒ + §2 row 7 REVERTED · 22 + 13 cells)
@@ -475,6 +476,44 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.459 The dim-carrying type-parameter OVERRIDE, the delay literal finer than the design precision, and the parameter select that never sealed its sign (2026-09-08, branch main) ✅
+
+한 반복 = 큐 3개 묶음. 세 슬라이스 모두 슬롯을 고른 시점의 줄이 **부분적으로 틀렸고**, 셋 다 그라운딩에서 고쳐졌다.
+
+**슬라이스 1 — §3 ⑤ⓕ dim 캐리 OVERRIDE (`crates/hdl-parser/src/type_params.rs` · `crates/elaborate/src/params.rs`).**
+
+- 증상: `typedef logic [15:0] b_t [0:3];` 에 `m #(.T(b_t))` 가 E2002. 두 오라클 `bits=64 size=4`.
+- ⚠️ 줄이 말한 원인("`T$w`/`T$s` 채널에 dim 슬롯이 필요")은 **너무 넓다**. 실제 거절은 `type_params.rs` 의 리터럴 `parse_type_param_value(false)` 하나이고, 네 종류의 override 중 **둘은 새 캐리어가 아예 필요 없다**(dims 가 default 와 동일한 경우 · 원소 폭만 다른 경우 — 후자는 `T$w` 가 이미 전부 나른다).
+- 고침: OVERRIDABLE 타입 파라미터의 **extent** 를 dim 당 값 파라미터 둘(`T$d<i>a`/`T$d<i>b`, 선언된 두 끝점)로 나르고, 등록되는 typedef 의 dim 이 그 이름을 부른다. `[N]` 은 양쪽에서 `[0:N-1]` 로 정규화 — 세 툴 다 `$low`/`$high`/`$size`/원소값이 같음을 실측했고, 그래야 채널이 **철자와 무관하게 dim 당 정확히 두 값**이라 POSITIONAL override 가 어긋날 수 없다.
+- ARITY 는 나를 수 없다(선언자는 파스 시점에 default 의 dim LIST 로 한 번 찍힌다) ⇒ `shape_flags` 가 dim COUNT 를 싣고 양방향으로 loud: dim 을 잃는 override 는 기존 F4004, dim 을 **더하는** override 는 E3002 로 `T` 를 이름 불러 보고(캐리어 이름 누출 없음 · 타입 파라미터당 1건).
+- 비-OVERRIDABLE 타입 파라미터(`localparam type` · 패키지 · 헤더 있는 모듈의 body `parameter type`)는 **리터럴 dim 을 유지**한다. 심볼릭으로 바꾸면 `$bits(T)` 가 `sym_range_width` 로 옮겨가는데 그 함수는 bound 가 overridable 파라미터를 **이름 부를 때만** 답하므로, 지금 접히는 것이 decline 이 된다.
+- 측정: 95칸(default 5 × override 10 × named/positional) PRE/POST/두 오라클 — **28 fixed · 0 regressed · PRE 가 값을 낸 칸은 0개가 변함**(95칸 중 87칸이 PRE loud). 2-D override 는 따로 실측(`bits=128 s1=4 s2=2` · `bits=48 s1=2 s2=3`, 두 오라클 일치).
+
+**슬라이스 2 — §2 Delays ⓑ, 설계 정밀도보다 미세한 단위의 지연 (`crates/elaborate/src/const_eval.rs`).**
+
+- 증상: `assign #(2500ps)`@`1ns/1ns` 가 두 오라클 3 ns / vita **무지연, exit 0, 진단 없음**.
+- ⚠️ 줄이 "4칸 · 뿌리 하나" 라 했지만 실측은 **30칸 silent + 9칸 false-loud**, 그리고 같은 조건의 **복사본이 셋**(`delay_ticks_in_scope` bare arm · `delay_units_in_scope` 식 leaf · `const_fn.rs::const_eval_in_scope`). 앞의 둘만 고쳤다 — 셋째는 SHARED evaluator 라 opt-in 이 선행조건(§2 ⓓ 로 큐).
+- 규칙: **sub-precision-UNIT leaf 는 잎에서** 모듈 정밀도로 반올림(`subprec_unit_ticks`). 두 규칙이 공존한다 — REAL leaf 는 끝까지 분수를 갖고(`2.5ns+2.5ns` 두 오라클 5, 잎 반올림이면 6), sub-precision-unit leaf 는 잎에서 반올림한다(`1250fs+1250fs`@`1ns/1ps` 두 오라클 2 ps, 한 번 반올림이면 3). `2500ps+1000ps` 는 **두 규칙이 같은 답을 내므로 증거가 될 수 없는 칸**이다.
+- 진짜 sub-precision(`#(2.5ps)`·`#(0.4ns)`@`1ns/1ns`)은 같은 산술로 0 틱이 되고 `fold_ca_delay` 의 zero-rise 필터가 `None` 을 유지 ⇒ byte-identical(rise/fall 철자 포함).
+- 측정: 102칸(6 timescale × 17 철자) PRE/POST/두 오라클 — **26 fixed · 0 regressed**. rise/fall 사이드카 · net-decl · gate primitive 네 자리 별도 실측, 전부 두 오라클 일치.
+
+**슬라이스 3 — §2 Index sealing, 0-LSB 파라미터 (`crates/elaborate/src/packed.rs`).**
+
+- 증상: `localparam logic [7:0] K = 8'b1010_0101; K[-2'sd1]` vita `0` / iverilog `x`. §4.5.458 이 고친 넷 퍼널 **옆**의 같은 결함.
+- ⚠️ 줄이 경고한 "파라미터 셀렉트는 elaborate 에서 접히니 blast radius 가 넓다" 는 **반박됨**: fold 레인은 이미 정직-loud 다(`localparam L = K[-2'sd1]` = E3009, 64비트에서 무부호 읽기가 범위 **안**인 칸도 decline — 즉 const 레인은 이미 부호확장한다). 범위는 런타임 lowering 뿐.
+- ⚠️ 줄이 지목한 자리도 절반 틀렸다: "0-LSB 파라미터는 `param_range` 항목이 없다" 는 거짓이고(그룹 1·2 는 있다), repro 는 `norm_offset_for_range` 의 descending `lo == 0` arm 에서 죽는다. 항목이 없는 것은 untyped-EXPRESSION 파라미터뿐이고 그것은 최종 fall-through 로 간다. **두 자리 다** 고쳤다.
+- 측정: 72칸 band(8 컨테이너 × 9 인덱스 폭) **20 fixed · 0 regressed · 72/72 iverilog 일치** + shape/form 14칸. 가시 대역 규칙은 `2^w − 1 < container_width`(넷 쪽과 같은 우연한 면역).
+- 반드시 안 움직여야 할 것 5개(무부호 인덱스 `K[u2]`·`K[~r3]`·`K[3]`, 非0-LSB `Q`, ascending `A`) 전부 유지.
+
+**적대 리뷰(2 렌즈 · 위임 없음 · 라운드 2).**
+
+- differential: 269칸 3-way(PRE 릴리스 md5 `201fca402cb7c7b26281a62694ee7300`) — 세 슬라이스 합 **74 fixed · 0 regressed**.
+- differential 발견: packed **원소**의 `+:` 오버행에서 **iverilog 가 자기모순**이다 — 같은 설계에서 `pv[-2'sd1 +: 2]` 는 `1x`, 같은 비트를 담은 `pm[1][-2'sd1 +: 2]` 는 `10`. verilator 는 범위 밖 셀렉트에 `x` 자체가 없다(전부 `01`). PRE 는 `00` 으로 **어느 오라클도 아니고 자기 평행 철자와도 달랐다**; POST 는 네 철자 모두 `1x` 로 균일하고 iverilog 가 자기와 합치하는 두 철자에서 일치한다 ⇒ 자기일관성으로 핀.
+- soundness 발견 2건, 둘 다 수정: ① `params.rs` 의 byte-identity 논거 주석이 stale 해졌다(`norm_offset_for_range(raw, 0, w, false)` 가 더는 no-op 이 아니다) — 논거를 인용한 주석을 같이 갱신. ② dim ARITY 진단이 **비-overridable** 타입 파라미터에도 떠서 진짜 거절 이유를 오진했다 — `T$w` 도 unknown 이면 억제(그 두 보고가 이야기 전부).
+- 코퍼스 10/10 · `REGRESSION`/`DRIFTED`/`ORACLE-DRIFT`/비결정성 0.
+
+**게이트**: `cargo nextest run --workspace --locked --no-fail-fast` 7,284 pass / 0 fail / 0 timeout(7,276 → +8 · 이후 리뷰 핀 추가) · clippy 0 · fmt 0 · `format_version` 31 불변(frozen 타입 무변경 — `ParamConn`/`Dim` 은 이미 Expr 을 싣고, 봉인은 기존 `sim_ir::Expr` 변종만 낸다).
 
 #### 4.5.458 `$bits` of a dim-carrying type parameter, a time literal inside an expression, and the vector select that never sealed its sign (2026-09-08, branch main) ✅
 
