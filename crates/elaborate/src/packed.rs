@@ -1468,6 +1468,60 @@ impl Elaborator<'_> {
         }
     }
 
+    /// Sign-extend an index that is provably SIGNED and narrower than the 32-bit
+    /// index domain, so a negative one stays negative. Identity for everything else.
+    ///
+    /// The missing container of the same rule `seal_index_unsigned` already applies
+    /// to an array WORD and to a packed ELEMENT. `norm_offset_for_net`'s `lsb == 0`
+    /// arm is the one geometry that subtracts nothing, and it therefore handed the
+    /// index over RAW — and the engine reads an index with `to_u64`, so the
+    /// negative-ness was lost at exactly the width the user wrote. Measured against
+    /// iverilog 13 on `logic [7:0] pv`: `pv[-2'sd1]` read bit 3 and `pv[3'sd7]` bit
+    /// 7 where iverilog returns `x`, and a signed `logic signed [1:0] s = -1` used
+    /// as `pv[s]` did the same. The `[9:2]` spelling of the same select was correct
+    /// all along, because a non-zero `lsb` goes through `norm_sub_k`, which seals.
+    ///
+    /// The visible band is "the unsigned reading happens to land inside the net":
+    /// on an 8-bit net only widths 2 and 3 are wrong (`-4'sd1` reads 15, already out
+    /// of range and already `x`), on a 64-bit net widths 2 through 6. That is why
+    /// the class looked like nothing — it hides behind its own accidental immunity.
+    ///
+    /// ⚠️ UNSIGNED indices are deliberately untouched, and not merely for byte
+    /// identity: the width-pinning half of the seal is already right here (measured,
+    /// `pv[~r3]` and `pv[~r5]` agree with iverilog at HEAD), so sealing them would
+    /// re-emit every `[N:0]` select in every design to change nothing.
+    ///
+    /// ⚠️ A negative CONSTANT becomes an index no net can hold, so it stays out of
+    /// range and stays DIAGNOSED — the same promise `seal_index_unsigned`'s constant
+    /// carve-out makes. It is not wrapped into a neighbouring bit.
+    fn seal_narrow_signed_index(&mut self, raw_off: u32) -> u32 {
+        // A constant keeps its TRUE value, including the sign, in the 32-bit domain
+        // the engine reads. `const_index_value` already sign-extends by the const's
+        // own `signed` flag, so this is the same number `norm_sub_k` would have
+        // produced with `k = 0`.
+        if let Some(v) = self.const_index_value(raw_off) {
+            if v < 0 {
+                return self.const_s32_expr(v.clamp(i32::MIN as i64, i32::MAX as i64) as i32);
+            }
+            return raw_off;
+        }
+        let Some(sw) = self.canonical_self_width(raw_off) else {
+            return raw_off;
+        };
+        if !sw.signed || sw.width >= 32 {
+            return raw_off;
+        }
+        // Repeatable only, exactly as the packed-element arm of
+        // `seal_index_unsigned` requires: the seal duplicates the index expression's
+        // position in the tree, so an index with a side effect must not be re-walked.
+        if !self.with_seen(raw_off as usize, |me, seen, gen| {
+            me.index_is_repeatable(raw_off, seen, gen)
+        }) {
+            return raw_off;
+        }
+        self.extend_to(raw_off, sw.width, 32, true)
+    }
+
     pub(crate) fn norm_offset_for_net(&mut self, net: u32, raw_off: u32) -> u32 {
         let Some((msb, lsb)) = self.nets.get(net as usize).map(|nv| (nv.msb, nv.lsb)) else {
             return raw_off;
@@ -1494,7 +1548,10 @@ impl Elaborator<'_> {
         }
         if msb >= lsb {
             if lsb == 0 {
-                return raw_off; // `[N:0]` — raw index is already internal
+                // `[N:0]` — the raw index IS the internal one, so nothing has to be
+                // subtracted. What still has to happen is the SIGN: see
+                // `seal_narrow_signed_index`.
+                return self.seal_narrow_signed_index(raw_off);
             }
             self.norm_sub_k(raw_off, lsb.min(i32::MAX as u32) as i32)
         } else {
