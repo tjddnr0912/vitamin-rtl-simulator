@@ -1249,6 +1249,37 @@ impl Elaborator<'_> {
                 .unwrap_or(u64::MAX);
             return Some(t.min(u32::MAX as u64) as u32);
         }
+        // A TIME LITERAL inside an EXPRESSION — `#(2.5ns + 1ns)`, and `#((2.5ns))`
+        // too, because one paren already puts `pick` past the arm above. Both
+        // oracles delay 3.5 ns, 3 ns and 5 ns for `2.5ns + 1ns`, `(2.5ns)` and
+        // `2 * 2.5ns`; vita fired at once, at exit 0, for every one of them.
+        //
+        // ⚠️ The name "a REAL time literal" that ROADMAP §2 gave this is the wrong
+        // discriminator, measured: `#(2500ps + 1000ps)` has no real anywhere and was
+        // equally silent, and so was `#(1ns + 1ns)` under a `10ns/1ns` module. What
+        // actually declines is `const_eval_in_scope`'s `TimeLit` arm, on EITHER of
+        // its two conditions — a non-integral `num`, or a literal that is not a whole
+        // multiple of the module's time unit. Both are the same fact: a time literal
+        // has a FRACTIONAL module-unit value and the integer lane has nowhere to put
+        // it. So the gate is "does this tree contain a `TimeLit`", not "is it real".
+        //
+        // ⚠️ Asked BEFORE the two lanes below rather than after them. Falling through
+        // first would look safer (it only ever adds answers where they returned
+        // `None`), but the integer lane does not merely decline here — it answers
+        // WRONG: `#(3ns / 2)` folds integer division to one unit where both oracles
+        // delay 1.5 ns, and `#(5ns / 2ns)` two where both delay 2.5. A delay is a
+        // MAGNITUDE, which is the same reason `param_real_value`'s order is the one
+        // this fn already uses for `parameter real`.
+        //
+        // Rounding happens ONCE, on the finished sum, at the module's PRECISION —
+        // `real_delay_ticks`, the same two stages the bare arm above uses. Per-leaf
+        // rounding is refuted: `2.5ns + 2.5ns` is 5 ns in both oracles, not 6, and
+        // `2.5ns + 1.5ns` is 4 ns, not 5.
+        if Self::expr_has_time_lit(pick) {
+            if let Some(units) = self.delay_units_in_scope(pick) {
+                return Some(real_delay_ticks(units, mult, pmult));
+            }
+        }
         // ⚠️ SHADOW-CORRECT realness (`shadow_correct = true`): this predicate is
         // CHOOSING a domain here, not widening one, so the blind `real_param_val`
         // walk is not good enough — an inner `localparam R = 9;` shadowing an outer
@@ -1272,6 +1303,158 @@ impl Elaborator<'_> {
             0,
         )
         .and_then(ticks)
+    }
+
+    /// Does `e` contain a `TimeLit` anywhere the delay walk below can reach?
+    ///
+    /// The OPT-IN gate for [`Self::delay_units_in_scope`], kept beside it so the two
+    /// agree about which nodes are descended. Conservative in both directions costs
+    /// nothing: a false positive makes the walk decline and the caller falls through
+    /// to the lanes it always used, and a false negative is exactly that fall-through.
+    fn expr_has_time_lit(e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        let r = Self::expr_has_time_lit;
+        match &e.kind {
+            K::TimeLit { .. } => true,
+            K::Paren { inner } => r(inner),
+            K::Unary { operand, .. } => r(operand),
+            K::Binary { lhs, rhs, .. } => r(lhs) || r(rhs),
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => r(cond) || r(then_e) || r(else_e),
+            K::MinTypMax { min, typ, max } => r(min) || r(typ) || r(max),
+            _ => false,
+        }
+    }
+
+    /// Fold a delay expression that contains a time literal, in MODULE TIME UNITS.
+    ///
+    /// A `TimeLit` leaf contributes `num × 10^(unit_exp − global_prec) / M` — the same
+    /// product the bare-`TimeLit` arm of [`Self::delay_ticks_in_scope`] computes, so
+    /// the two spellings of one delay cannot land on different ticks. Every other
+    /// operand is ALREADY a count in module units, which is what `#(2.5ns + 1)` being
+    /// 3.5 ns in both oracles says: the unit-less `1` is one module unit, not one of
+    /// anything else.
+    ///
+    /// ⚠️ A subtree with NO time literal is folded WHOLE by [`Self::delay_plain_units`]
+    /// rather than re-walked here, for the reason `const_eval_real_in_scope` records
+    /// at length: §11.8.1 makes a real operator CONVERT its integral operand, and the
+    /// conversion reads that operand's SELF-DETERMINED value. Re-walking it in f64
+    /// would re-implement integer arithmetic width-unlimited — `#(2.5ns + (4'd15 +
+    /// 4'd1))` must add the 4-bit sum's 0, not 16.
+    ///
+    /// Operators are the real domain's: `/` divides and `%` takes the remainder of
+    /// two magnitudes (both oracles delay 1.25 ns for `#(2.5ns/2)`; iverilog delays
+    /// 2 ns for `#(5ns % 3ns)` under a `10ns/1ns` module, which the integer lane
+    /// answered 0 because neither operand is a whole unit there). The bit operators
+    /// and the shifts have no meaning on a magnitude, so they decline and the
+    /// caller's existing lanes keep whatever they answered.
+    fn delay_units_in_scope(&self, e: &ast::Expr) -> Option<f64> {
+        use ast::ExprKind as K;
+        if !Self::expr_has_time_lit(e) {
+            return self.delay_plain_units(e);
+        }
+        let fin = |v: f64| v.is_finite().then_some(v);
+        match &e.kind {
+            K::TimeLit { num, unit_exp } => {
+                // Sub-precision declines, exactly as the bare arm does — there is no
+                // tick to round it to.
+                let ex = *unit_exp as i32 - self.global_prec_exp as i32;
+                if ex < 0 {
+                    return None;
+                }
+                let v = match self.const_unsigned_selfdet(
+                    num,
+                    &std::collections::BTreeMap::new(),
+                    &ConstWidths::new(),
+                    0,
+                ) {
+                    Some(v) => v as f64,
+                    None => self.const_eval_real_in_scope(num)?,
+                };
+                fin(v * 10f64.powi(ex) / self.cur_time_mult.max(1) as f64)
+            }
+            K::Paren { inner } => self.delay_units_in_scope(inner),
+            // min:typ:max picks typ, as every other delay path does.
+            K::MinTypMax { typ, .. } => self.delay_units_in_scope(typ),
+            K::Unary { op, operand } => {
+                let v = self.delay_units_in_scope(operand)?;
+                match op {
+                    ast::UnOp::Plus => Some(v),
+                    ast::UnOp::Minus => Some(-v),
+                    ast::UnOp::LogNot => Some((v == 0.0) as i64 as f64),
+                    // A time has no bit pattern to invert or reduce.
+                    _ => None,
+                }
+            }
+            K::Binary { op, lhs, rhs } => {
+                let a = self.delay_units_in_scope(lhs)?;
+                let b = self.delay_units_in_scope(rhs)?;
+                use ast::BinOp as B;
+                let t = |c: bool| Some(c as i64 as f64);
+                match op {
+                    B::Add => fin(a + b),
+                    B::Sub => fin(a - b),
+                    B::Mul => fin(a * b),
+                    B::Div if b != 0.0 => fin(a / b),
+                    // A REMAINDER of two magnitudes, which the integer domain can
+                    // only answer when both are whole module units: `#(5ns % 3ns)`
+                    // under a `10ns/1ns` module is half a unit modulo three tenths,
+                    // and iverilog delays 2 ns where the integer lane declined to 0.
+                    // (verilator refuses `%` on a time, so this cell is iverilog +
+                    // §11.4.3 — the operator is defined on the values, and a delay
+                    // IS a value.) An all-whole-unit `#(5ns % 3ns)` is 2 either way,
+                    // so nothing the integer lane already answered moves.
+                    B::Mod if b != 0.0 => fin(a % b),
+                    B::Pow => fin(a.powf(b)),
+                    B::Lt => t(a < b),
+                    B::Le => t(a <= b),
+                    B::Gt => t(a > b),
+                    B::Ge => t(a >= b),
+                    B::Eq | B::CaseEq => t(a == b),
+                    B::Ne | B::CaseNe => t(a != b),
+                    B::LogAnd => t(a != 0.0 && b != 0.0),
+                    B::LogOr => t(a != 0.0 || b != 0.0),
+                    _ => None,
+                }
+            }
+            K::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                let c = self.delay_units_in_scope(cond)?;
+                if c != 0.0 {
+                    self.delay_units_in_scope(then_e)
+                } else {
+                    self.delay_units_in_scope(else_e)
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// A time-literal-free delay operand, as a count of MODULE TIME UNITS.
+    ///
+    /// The same two domains [`Self::delay_ticks_in_scope`] asks in the same order, and
+    /// for the same reason — a delay is a magnitude, so `#(RD/2)` over an exactly
+    /// integral `parameter real RD` must not fold integer division. Anything neither
+    /// domain can evaluate declines, which stops the whole tree.
+    fn delay_plain_units(&self, e: &ast::Expr) -> Option<f64> {
+        if self.expr_mentions_real_opt(e, true) {
+            if let Some(x) = self.const_eval_real_in_scope(e) {
+                return Some(x);
+            }
+        }
+        self.const_unsigned_selfdet(
+            e,
+            &std::collections::BTreeMap::new(),
+            &ConstWidths::new(),
+            0,
+        )
+        .map(|v| v as f64)
     }
 
     /// One delay value → ticks: the scope-free fold, then the scope-resolved one.

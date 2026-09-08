@@ -10,10 +10,16 @@
 //!   `wrapping_neg` made it 4294967295 and the assign never fired at all.
 //!
 //! Every tick below was measured on iverilog 13.0 AND verilator 5.052; each
-//! `always @(posedge …)` line is the tools' own output, copied. The rounding the
-//! two agree on is at the module's TIME UNIT, not at its precision: `#(25ns)`
-//! under `10ns/1ns` is 2.5 units and both delay THREE units (30 ns), which is
-//! why the real lane converts to units before rounding.
+//! `always @(posedge …)` line is the tools' own output, copied.
+//!
+//! ⚠️ The probe is `$time`, which is the design's time ROUNDED TO THE MODULE'S
+//! TIME UNIT — so under a `10ns/1ns` module these assertions cannot see anything
+//! finer than 10 ns, and the prose that used to be here read its own rounding as
+//! the tools' answer. Re-measured with `$realtime` at 1 fs: rounding is at the
+//! module's PRECISION, and `#(25ns)` under `10ns/1ns` is 25 ns, not the 30 the
+//! old comment claimed (`$time` reports 12.5 units as 13, which is the `130`
+//! below). The values asserted here are right; only the readings of them were
+//! wrong. The `$realtime` twin lives in `delay_time_literal_in_expression.rs`.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -75,12 +81,16 @@ fn a_real_time_literal_delays_at_the_modules_time_unit() {
     // The integer time literal and the unit-less real spelling of the same delay
     // are the controls: both were already correct and must not move.
     assert_eq!(run("1ns/1ps", &["3ns", "2.5"]), ["y0=13000", "y1=13000"]);
-    // Rounding is at the module's UNIT: `2.5ns` under `10ns/1ns` is a quarter of a
-    // unit and both oracles delay ZERO (the edge is at 100), while `25ns` is 2.5
-    // units and both delay three.
+    // ⚠️ These two are `$time` readings, not delays. Under `10ns/1ns` the true
+    // delays are 3 ns and 25 ns on all three tools ($realtime, 1 fs); `$time`
+    // rounds 10.3 and 12.5 module units to 10 and 13 and prints them at the 1 ns
+    // precision. Kept as the pin they always were, now labelled.
     assert_eq!(run("10ns/1ns", &["2.5ns", "25ns"]), ["y0=100", "y1=130"]);
-    // Sub-precision declines as it always did — `2.5ps` under `1ns/1ps` is 0.0025
-    // units, and both oracles fire at once.
+    // ⚠️ Same rounding: `2.5ps` and `0.4ns` under `1ns/1ps` really delay 3 ps and
+    // 400 ps (a `$realtime` probe reads 10003000 fs and 10400000 fs), which
+    // `$time`'s 1 ns grid reports as the edge. Neither is a sub-precision decline
+    // and neither "fires at once" — `2.5ps` is in fact a rounding-TIE SPLIT
+    // (iverilog 3 ps, verilator 2 ps) and vita keeps iverilog's answer.
     assert_eq!(
         run("1ns/1ps", &["2.5ps", "0.4ns"]),
         ["y0=10000", "y1=10000"]
