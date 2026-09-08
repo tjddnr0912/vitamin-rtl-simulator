@@ -298,7 +298,7 @@ fn a_shape_changing_override_and_a_non_integral_type_are_loud() {
             "  T v;\n  initial begin v = -8'sd100; #1 $display(\"D=%0d %0d\", v, v >>> 2); end",
             "m #(.T(logic [7:0])) u2();",
         ),
-        "the override changes the type's signedness or 2-state kind",
+        "the override changes the type's signedness, 2-state kind or unpacked dimensions",
     );
     // 4-state default, 2-state override
     is_loud(
@@ -307,7 +307,7 @@ fn a_shape_changing_override_and_a_non_integral_type_are_loud() {
             "  T v;\n  initial begin #1 $display(\"D=%h\", v); end",
             "m #(.T(bit [7:0])) u2();",
         ),
-        "the override changes the type's signedness or 2-state kind",
+        "the override changes the type's signedness, 2-state kind or unpacked dimensions",
     );
     // a struct / enum / real default, a struct override, a multi-dimensional
     // packed default: outside the integral vector subset (parse errors)

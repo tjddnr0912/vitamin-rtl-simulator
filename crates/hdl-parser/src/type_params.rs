@@ -29,6 +29,11 @@ pub(crate) struct TypeParam {
     /// The width parameter's name (`T$w`).
     pub(crate) width_name: String,
     pub(crate) signed: bool,
+    /// §3 ⑤ⓕ: the UNPACKED dimensions of `parameter type T = a_t` when `a_t` is an
+    /// unpacked-array typedef. Empty for every other type parameter, which is what
+    /// keeps the consumers that cannot compose a dim (`T'(e)`, an instance
+    /// OVERRIDE) declining positively rather than answering the element's width.
+    pub(crate) unpacked: Vec<Dim>,
 }
 
 /// One resolved integral type: its width EXPRESSION (a literal when it folds) and
@@ -37,12 +42,29 @@ pub(crate) struct TypeValue {
     pub(crate) width: Expr,
     pub(crate) signed: bool,
     pub(crate) two_state: bool,
+    /// The resolved type's UNPACKED dimensions — non-empty only where the caller
+    /// asked for them (`parse_type_param_value(true)`).
+    pub(crate) unpacked: Vec<Dim>,
 }
 
 impl TypeValue {
-    /// `T$s`: bit 0 = signed, bit 1 = 2-state.
+    /// `T$s`: bit 0 = signed, bit 1 = 2-state, bit 2 = carries UNPACKED dims.
+    ///
+    /// Bit 2 is what refuses an override of a `parameter type T = a_t` whose
+    /// default is an unpacked-array typedef (§3 ⑤ⓕ). The dims ride the registered
+    /// typedef, not `T$w`, so an override that merely replaced the WIDTH would
+    /// keep the default's `[0:2]` and answer `$bits` 48 where both oracles answer
+    /// the override's own 16 — a silent wrong value. An override can never carry
+    /// dims of its own (`parse_type_param_value(false)` refuses one), so this bit
+    /// is 0 on every override and 1 on such a default, and the shape guard the
+    /// group already synthesizes turns the mismatch into a `$fatal`.
+    ///
+    /// Byte-identical for every design that predates this: nothing else can set
+    /// bit 2, so every existing type parameter keeps the flags it had.
     pub(crate) fn shape_flags(&self) -> u32 {
-        (self.signed as u32) | ((self.two_state as u32) << 1)
+        (self.signed as u32)
+            | ((self.two_state as u32) << 1)
+            | ((!self.unpacked.is_empty() as u32) << 2)
     }
 }
 
@@ -89,7 +111,7 @@ impl Parser<'_, '_> {
             if !self.expect(TokenKind::Eq, "'=' after the type parameter name") {
                 break;
             }
-            let Some(tv) = self.parse_type_param_value() else {
+            let Some(tv) = self.parse_type_param_value(true) else {
                 self.error(
                     "an integral type as the type parameter's default (`logic [N:0]` / `bit` / `int` / a vector typedef / another type parameter — a struct, enum, real, string, class or multi-dimensional type is unsupported in v1)",
                 );
@@ -158,7 +180,12 @@ impl Parser<'_, '_> {
                     }),
                     packed: Vec::new(),
                     class_name: None,
-                    unpacked: Vec::new(),
+                    // §3 ⑤ⓕ: the dims of an unpacked-array default ride the typedef,
+                    // which is what every DECLARATION binder already reads
+                    // (`decls.rs` stamps them onto each declarator, and the tf-port
+                    // formal reads the same map) — so `T v;` is the explicit
+                    // `logic [T$w-1:0] v [0:2]` it would have been written as.
+                    unpacked: tv.unpacked.clone(),
                 },
             );
             self.type_params.insert(
@@ -166,6 +193,7 @@ impl Parser<'_, '_> {
                 TypeParam {
                     width_name,
                     signed: tv.signed,
+                    unpacked: tv.unpacked.clone(),
                 },
             );
             self.local_decl_names.insert(name.name.clone());
@@ -219,7 +247,7 @@ impl Parser<'_, '_> {
             span,
         };
         let msg = format!(
-            "\"type parameter `{tname}`: the override changes the type's signedness or 2-state kind, which the module's declarations of `{tname}` cannot follow (an override must keep the default type's shape; only its width may differ — v1)\""
+            "\"type parameter `{tname}`: the override changes the type's signedness, 2-state kind or unpacked dimensions, which the module's declarations of `{tname}` cannot follow (an override must keep the default type's shape; only its width may differ — v1)\""
         );
         let call = Stmt::SysTaskCall {
             name: Ident {
@@ -253,7 +281,13 @@ impl Parser<'_, '_> {
     /// (nothing consumed) when the cursor is not on a type this desugar carries:
     /// the caller either errors (a default) or parses an ordinary expression (an
     /// override, where the token may be a value).
-    pub(crate) fn parse_type_param_value(&mut self) -> Option<TypeValue> {
+    /// `allow_unpacked` is the OPT-IN for an unpacked-array typedef (§3 ⑤ⓕ): the
+    /// DEFAULT position carries its dims (they reach `T v;` through the registered
+    /// typedef), an instance OVERRIDE does not — `T$w`/`T$s` have no dim slot, so
+    /// an override that parsed would keep the DEFAULT's dims and answer `$bits` 48
+    /// where both oracles measure 64. A literal `false` there short-circuits every
+    /// line this parameter guards, which is what makes the override byte-identical.
+    pub(crate) fn parse_type_param_value(&mut self, allow_unpacked: bool) -> Option<TypeValue> {
         let save = self.pos;
         let span = self.cur_span();
         // A data-type keyword.
@@ -305,6 +339,7 @@ impl Parser<'_, '_> {
                 width,
                 signed,
                 two_state,
+                unpacked: Vec::new(),
             });
         }
         // A type NAME: another type parameter of this module, or an integral vector
@@ -313,6 +348,9 @@ impl Parser<'_, '_> {
         if self.is_ident() {
             let key = self.type_name_key();
             if let Some(tp) = self.type_params.get(&key).cloned() {
+                if !tp.unpacked.is_empty() && !allow_unpacked {
+                    return None;
+                }
                 self.bump();
                 return Some(TypeValue {
                     width: Self::ident_expr(&tp.width_name, span),
@@ -321,6 +359,7 @@ impl Parser<'_, '_> {
                         .typedefs
                         .get(&key)
                         .is_some_and(|i| i.kind == NetVarKind::Bit),
+                    unpacked: tp.unpacked.clone(),
                 });
             }
             let info = self.peek_typedef_name()?;
@@ -330,8 +369,11 @@ impl Parser<'_, '_> {
                 || self.union_type_names.contains(&key)
                 || info.class_name.is_some()
                 || !info.packed.is_empty()
-                // §3 ⑤: the `T$w`/`T$s` value-parameter desugar has no dim slot.
-                || !info.unpacked.is_empty()
+                // §3 ⑤ⓕ: the `T$w`/`T$s` value-parameter desugar has no dim slot, so
+                // the dims travel beside it — through the typedef this group
+                // registers for `T`, which is where `T v;` reads them. Only the
+                // caller that HAS that carrier opts in.
+                || (!info.unpacked.is_empty() && !allow_unpacked)
             {
                 return None;
             }
@@ -362,6 +404,7 @@ impl Parser<'_, '_> {
                 width,
                 signed: info.signed,
                 two_state,
+                unpacked: info.unpacked.clone(),
             });
         }
         None
@@ -437,10 +480,13 @@ impl Parser<'_, '_> {
         }
         let span = self.cur_span();
         let key = self.cur_text().to_string();
-        let e = if let Some(tp) = self.type_params.get(&key) {
-            Self::ident_expr(&tp.width_name, span)
-        } else {
-            self.sym_typedef_bits(&key, span)?
+        // §3 ⑤ⓕ: `T$w` is the ELEMENT width, so a dim-carrying type parameter takes
+        // the typedef route instead — `sym_typedef_bits` multiplies the element by
+        // every packed and unpacked dim, which is the 24 both oracles answer for
+        // `typedef logic [7:0] a_t [0:2]`.
+        let e = match self.type_params.get(&key) {
+            Some(tp) if tp.unpacked.is_empty() => Self::ident_expr(&tp.width_name, span),
+            _ => self.sym_typedef_bits(&key, span)?,
         };
         self.bump(); // type name
         self.bump(); // )
@@ -534,6 +580,12 @@ impl Parser<'_, '_> {
     pub(crate) fn type_param_cast(&self, key: &str) -> Option<(Expr, bool)> {
         let span = Span::new(0, 0);
         if let Some(tp) = self.type_params.get(key) {
+            // §3 ⑤ⓕ: a cast to an UNPACKED type is NO-ORACLE (iverilog aborts on an
+            // internal assertion, verilator refuses it) and `T$w` is the ELEMENT
+            // width, so answering here would cast to a third of the type. Loud.
+            if !tp.unpacked.is_empty() {
+                return None;
+            }
             return Some((Self::ident_expr(&tp.width_name, span), tp.signed));
         }
         let info = self.typedefs.get(key)?;
@@ -577,7 +629,7 @@ impl Parser<'_, '_> {
             return false;
         }
         let save = self.pos;
-        let Some(tv) = self.parse_type_param_value() else {
+        let Some(tv) = self.parse_type_param_value(false) else {
             self.pos = save;
             self.error(
                 "an integral type as the type parameter override (a struct, enum, real, string, class or multi-dimensional type is unsupported in v1)",
