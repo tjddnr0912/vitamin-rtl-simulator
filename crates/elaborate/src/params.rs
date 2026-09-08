@@ -536,10 +536,14 @@ impl Elaborator<'_> {
     /// 3. nothing else — notably an untyped EXPRESSION initializer, whose recorded
     ///    width is a value inference (see [`Self::param_decl_width_opt`]).
     ///
-    /// ⚠️ Group 2 and the descending zero-LSB half of group 1 are OFFSET NO-OPS at
-    /// runtime — `norm_offset_for_range(raw, 0, w, false)` returns `raw` unchanged —
-    /// so recording them costs nothing on the lowering path and the common shape
-    /// stays byte-identical. What they buy is PROVENANCE: this map becomes the one
+    /// ⚠️ Group 2 and the descending zero-LSB half of group 1 SUBTRACT nothing at
+    /// runtime, but they are no longer offset NO-OPS: since §4.5.459
+    /// `norm_offset_for_range(raw, 0, w, false)` seals a narrow SIGNED index into
+    /// the 32-bit domain the engine reads, because "nothing to subtract" was being
+    /// read as "nothing to do" and `K[-2'sd1]` on a `[7:0]` param read bit 3 where
+    /// iverilog reads `x`. Only a signed-and-narrow index moves; every other index
+    /// is still returned verbatim, so the common shape stays byte-identical. What
+    /// recording them buys is PROVENANCE: this map becomes the one
     /// place that answers "is this param's width a declared fact?", which is exactly
     /// the question the constant-domain select fold has to ask before it extracts
     /// bits. Group 3 declining is what keeps `localparam W = ~8'hCB; W[15:8]` from

@@ -1624,8 +1624,15 @@ impl Elaborator<'_> {
     ) -> u32 {
         if !asc {
             match lo.cmp(&0) {
-                // byte-identical common case: a `[w-1:0]` residual dim
-                std::cmp::Ordering::Equal => raw_off,
+                // A `[w-1:0]` range subtracts nothing — but the SIGN still has to be
+                // sealed, for the reason `seal_narrow_signed_index` gives at length.
+                // This is the net arm's twin, and it is what a 0-LSB PARAMETER
+                // bit/part-select reaches: `localparam logic [7:0] K = 8'b1010_0101;
+                // K[-2'sd1]` read bit 3 and printed `0` where iverilog reads `x`
+                // (ROADMAP §2 "Index sealing"). Both `param_range` groups land here —
+                // an explicitly-ranged param and an untyped one with a literal width
+                // — as does a packed element's residual `[w-1:0]` dim.
+                std::cmp::Ordering::Equal => self.seal_narrow_signed_index(raw_off),
                 std::cmp::Ordering::Greater => {
                     self.norm_sub_k(raw_off, lo.min(i32::MAX as i64) as i32)
                 }
@@ -1724,7 +1731,15 @@ impl Elaborator<'_> {
                 }
             }
         }
-        raw_off
+        // Nothing to SUBTRACT here — but the sign still has to be sealed, the same
+        // rule the two arms above reach through `norm_offset_for_range`. The base
+        // this catches is a param with no `param_range` entry (an untyped one whose
+        // value is an EXPRESSION, `localparam E = ~8'h5A; E[-2'sd1]` — vita `0`,
+        // iverilog `x`), and every base that names nothing this pass resolves. The
+        // seal is a no-op for all of them unless the index is a narrow SIGNED
+        // expression or a negative constant, in which case reading it unsigned is
+        // wrong whatever the base turns out to be.
+        self.seal_narrow_signed_index(raw_off)
     }
 
     /// Is the net (or array-element packed shape) named by `base` declared

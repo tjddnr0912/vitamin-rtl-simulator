@@ -31,7 +31,17 @@
 //! verilator is not the value oracle here: it has no `x` for an out-of-range
 //! select and reads a bit for every cell below. It IS the accept/reject oracle,
 //! and it agrees the access is out of range — it refuses the source outright with
-//! `%Warning-SELRANGE: Selection index out of range` unless that is waived.
+//! `%Warning-SELRANGE: Selection index out of range` unless that is waived. It
+//! also contradicts itself on the PARAMETER twin below (`K[-2'sd1]` = 1 on a
+//! `[7:0]`, `x` on a `[9:2]`), which is the second reason those cells pin iverilog.
+//!
+//! §4.5.459 closed the PARAMETER twin, which the §4.5.458 soundness lens found in
+//! the funnel next to this one. A parameter select reaches `norm_offset_for_range`
+//! (through `param_sel_range`) or, for a param with no declared range at all, the
+//! final fall-through of `norm_offset_if_net` — and BOTH returned the index
+//! verbatim for the same reason the net's `lsb == 0` arm did: nothing to subtract
+//! was read as nothing to do. Band measured over 8 containers × 9 index widths:
+//! 20 fixed, 0 regressed, 72/72 iverilog agreement.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -147,4 +157,133 @@ fn the_unsigned_width_pin_and_the_other_geometries_are_unmoved() {
          $display(\"wr=%b\", wr); end");
     assert_eq!(rc, Some(0), "{out}");
     assert!(out.contains("wr=00000000"), "{out}");
+}
+
+/// The PARAMETER twin of `run`: a `localparam` body with no procedural net.
+fn runp(decls: &str, body: &str) -> (String, Option<i32>) {
+    run(&format!("{decls}\n  initial begin #1;\n{body}\n  end"))
+}
+
+#[test]
+fn a_zero_lsb_parameter_select_seals_its_index_too() {
+    // The three provenance groups a parameter select can have, all measured `x` in
+    // iverilog and all read as a positive index before §4.5.459:
+    //   K  — an explicitly ranged `[7:0]` param      (a `param_range` entry)
+    //   U  — untyped with a literal-width value      (a `param_range` entry)
+    //   E  — untyped with an EXPRESSION value        (NO entry: the fall-through)
+    // `I` is the `int` spelling and `P` the package-scoped one; both are group 1
+    // through a different resolver.
+    let (out, rc) = runp(
+        "  localparam logic [7:0] K = 8'b1010_0101;\n  \
+         localparam int I = 32'h1234_5678;\n  \
+         localparam U = 8'b1010_0101;\n  localparam E = ~8'h5A;",
+        "    $display(\"K=%b I=%b U=%b E=%b\", K[-2'sd1], I[-3'sd1], U[-2'sd1], E[-2'sd1]);",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("K=x I=x U=x E=x"), "{out}");
+}
+
+#[test]
+fn the_parameter_band_is_the_container_size_again() {
+    // Same accidental immunity as the net: only where the UNSIGNED reading lands
+    // inside the parameter. `2^w - 1 < bits` — widths 2..3 on 8 bits, 2..6 on 64.
+    // iverilog reads `x` for every one of the 36 cells below.
+    let mut d = String::new();
+    for (n, t, v) in [
+        ("K8", "logic [7:0]", "8'b1010_0101"),
+        ("K16", "logic [15:0]", "16'hA5A5"),
+        ("K32", "int", "32'h1234_5678"),
+        ("K64", "logic [63:0]", "64'hF0F0_F0F0_F0F0_F0F0"),
+    ] {
+        d.push_str(&format!("  localparam {t} {n} = {v};\n"));
+    }
+    let mut b = String::from("    $write(\"r=\");\n");
+    for n in ["K8", "K16", "K32", "K64"] {
+        for w in [2u32, 3, 4, 5, 6, 7, 8, 16, 32] {
+            b.push_str(&format!("    $write(\"%b\", {n}[-{w}'sd1]);\n"));
+        }
+    }
+    b.push_str("    $write(\"\\n\");");
+    let (out, rc) = runp(&d, &b);
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains(&format!("r={}", "x".repeat(36))), "{out}");
+}
+
+#[test]
+fn the_parameter_shapes_that_were_already_right_do_not_move() {
+    // ⚠️ The controls that named the defect: a NON-zero-LSB param and an ASCENDING
+    // one already normalized through `norm_sub_k` / `norm_k_sub`, which seal. They
+    // are the sibling spellings that were right, and they must stay byte-identical
+    // — a fix that "corrected" them would be re-emitting selects to change nothing.
+    //
+    // The unsigned indices are the other half: all three tools read `K[2'b11]` and
+    // `K[~r3]` as bit 3, and `K[3]` as bit 3. Sealing an unsigned index would be a
+    // fresh silent-wrong, so the seal asks `sw.signed` first.
+    let (out, rc) = runp(
+        "  localparam logic [9:2] Q = 8'b1010_0101;\n  \
+         localparam logic [0:7] A = 8'b1010_0101;\n  \
+         localparam logic [7:0] K = 8'b1010_0101;\n  \
+         logic [1:0] u2; logic [2:0] r3;",
+        "    u2 = 2'b11; r3 = 3'd2; #1;\n    \
+         $display(\"Q=%b A=%b u=%b n=%b l=%b\", Q[-2'sd1], A[-2'sd1], K[u2], K[~r3], K[3]);",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("Q=x A=x u=0 n=1 l=0"), "{out}");
+}
+
+#[test]
+fn a_parameter_part_select_base_shares_the_funnel() {
+    // `-:` and `+:` normalize their base through the same arm as the bit-select, so
+    // both moved with it. iverilog prints `xx` and `1x` — the `+:` overhang keeps
+    // the one bit that IS in range, which is why this cell is not `xx` and why an
+    // "everything becomes x" fix would have been wrong.
+    let (out, rc) = runp(
+        "  localparam logic [7:0] K = 8'b1010_0101;\n  localparam logic [7:0] PK = 8'b1010_0101;",
+        "    $display(\"m=%b p=%b k=%b\", K[-2'sd1 -: 2], K[-2'sd1 +: 2], PK[3'sd7]);",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("m=xx p=1x k=x"), "{out}");
+}
+
+#[test]
+fn a_packed_elements_residual_dim_seals_like_the_plain_vector() {
+    // The third funnel the seal reaches: a multi-dim packed net's sub-select
+    // normalizes against the RESIDUAL dim through `norm_offset_for_range`, so a
+    // `[w-1:0]` residual took the same do-nothing arm the param and the net did.
+    //
+    // ⚠️⚠️ This cell DISQUALIFIES iverilog by self-contradiction, which is why it is
+    // pinned as a consistency assertion rather than against an oracle. Measured on
+    // one design, with `pm[1]` holding exactly `pv`'s bits and the same index:
+    //
+    // | spelling                | vita PRE | vita POST | iverilog | verilator |
+    // |---|---|---|---|---|
+    // | `pv[-2'sd1 +: 2]`       | `1x`     | `1x`      | `1x`     | `01`      |
+    // | `pm[1][-2'sd1 +: 2]`    | `00`     | `1x`      | **`10`** | `01`      |
+    //
+    // iverilog reads the overhanging bit as `x` for the plain vector and as `0` for
+    // the packed element — the same access, two answers, so it cannot be the oracle
+    // for the second row. verilator has no `x` for an out-of-range select at all (it
+    // masks the index and reads `01` for every row), so it is not the value oracle
+    // either. vita PRE was a third answer AND disagreed with its own plain-vector
+    // spelling; POST is uniform and equals iverilog on both rows where iverilog
+    // agrees with itself. The assertion is that uniformity.
+    let (out, rc) = run("  logic [7:0] pv;\n  logic [1:0][7:0] pm;\n  \
+         logic [1:0] r1, r2, r3, r4;\n  logic signed [1:0] s2;\n  \
+         initial begin pv = 8'hA5; pm = 16'hA5_5A; s2 = -1; #1;\n    \
+         r1 = pv[-2'sd1 +: 2]; r2 = pm[1][-2'sd1 +: 2];\n    \
+         r3 = pv[s2 +: 2];     r4 = pm[1][s2 +: 2];\n    \
+         $display(\"elem=%h r1=%b r2=%b r3=%b r4=%b\", pm[1], r1, r2, r3, r4); end");
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("elem=a5 r1=1x r2=1x r3=1x r4=1x"), "{out}");
+    // The `-:` twin on the same residual, where iverilog IS self-consistent: both
+    // spellings `00xx`, and the non-zero-LSB residual `[15:8]` is the control that
+    // was already right (it normalized through `norm_sub_k`, which sealed).
+    let (out, rc) = run(
+        "  logic [1:0][7:0] pm;\n  logic [1:0][15:8] qm;\n  logic [3:0] a, b, c;\n  \
+         initial begin pm = 16'hA5_5A; qm = 16'hA5_5A; #1;\n    \
+         a = pm[0][-2'sd1 -: 2]; b = pm[0][3 -: 2]; c = qm[0][11 -: 2];\n    \
+         $display(\"a=%b b=%b c=%b\", a, b, c); end",
+    );
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("a=00xx b=0010 c=0010"), "{out}");
 }
