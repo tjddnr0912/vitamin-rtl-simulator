@@ -70,6 +70,57 @@
 - A verilator census is the bottleneck (about 1,500 cells per 30 minutes). Run it on a width subset only, keep one `--prefix` per executable, and hand-IEEE the cells whose oracle is untrusted (property `and`), saying so in the briefing.
 - The shadow set of a name is every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations. A census over declarations alone misses four of the five.
 
+### ⭐⭐ A width fix reads CORRECT on `$bits` while the value is still folded for the old width (2026-09-08, §4.5.463)
+
+Installing an override's own `(width, sign)` moved `#(.P(-64'd1))` from `ffffffff` at 32 bits to
+`00000000ffffffff` at 64 — the right width over a value the previous width had already
+truncated. `$bits` said FIXED on every cell. The value half was then added and the cells at 8,
+16 and 32 bits went green, so it looked finished; a width LADDER showed it was still wrong from
+**33 up**, because a later block re-derives the value through
+`override_at_declared_width(param_decl_width(p), …)` and **overwrites** `chosen_val` with that
+resize — re-imposing the DEFAULT's 32 after the meta chain had got it right.
+
+- **A width and its value are one answer.** Truncation commutes with `~ - << & | ^ + *` and not
+  with `/ % >> >>>`, so a cell built from the first family cannot tell you the value survived.
+  Pin a `/` or a `>>` cell, always.
+- **After changing a width, walk forward to every site that RE-DERIVES the value from a width**,
+  not just the sites that read the width. A read-back that assigns into the variable you already
+  set is invisible to a census of readers.
+- **Ladder the axis you changed.** 8/16/32/33/64 cost one design and separates "fixed" from
+  "fixed below the old default's width".
+
+### ⭐⭐ A gate deleted for creating nets was never the thing guarding the COLLISION (2026-09-08, §4.5.464)
+
+An interface body refused every user block-local, recorded as "ungating it is loud→silent-wrong".
+Re-measured: the gate blocked NET CREATION, and a block-local that collides with an existing
+member needs no net created — so the write already landed on the member. The shape was ALREADY
+silent-wrong at exit 0; the design in the pinned test only exited non-zero because of a
+co-located `foreach`, and deleting that one line exposed it.
+
+- **Ask what the gate actually prevents, not what its comment says it prevents.** A refusal that
+  fires for a DIFFERENT reason than the hazard leaves the hazard open.
+- **A test asserting a non-zero exit can be satisfied by an unrelated error in the same design.**
+  When a pin's subject is a VALUE, assert the value; strip every other error source from the cell
+  first and check it still fails.
+- Corollary, measured in the same slice: installing the classifier maps was not parity either.
+  The module path also runs a CONTAINMENT gate before it hoists, and copying only the maps made a
+  nested shadow silent-wrong where the module twin stayed loud. **List every call the original's
+  caller makes before the one you are copying** — this is the second slice in a row where that
+  list was longer than it looked ([[branch-parity-before-new-traffic]]).
+
+### ⭐ Two arms of one chain must apply the same declaration rule, or one declaration has two answers (2026-09-08, §4.5.463)
+
+`bind_one_param` chooses a parameter's meta through several arms. A `signed` keyword with no
+range belongs to the DECLARATION (§12.2.1) and only the RANGE comes from the override — but the
+fix was applied to the new arm alone, so `parameter signed R = 1` reported `-91` through
+`#(.R(~8'h5A))` and `165` through `#(.R(8'hA5))`, in one design.
+
+- **When you add an arm to a selection chain, state which properties of the DECLARATION every arm
+  must preserve, and check the siblings.** The review found the sibling; the census that would
+  have found it first is "which arms can answer for this declaration".
+- **Fixing one arm makes the inconsistency observable** even when the sibling was wrong all
+  along — that is a reason to check siblings, not a reason to leave them.
+
 ### ⭐⭐ An "oracle split" can be one tool contradicting ITSELF — ask the same expression twice (2026-09-08, §4.5.460)
 
 `+`/`-`/`*` sat in ROADMAP §2 as a documented split: `localparam Q = 8'd200 + 8'd100` is `12c` at

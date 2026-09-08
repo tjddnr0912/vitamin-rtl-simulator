@@ -29,14 +29,14 @@ Priority principle: ① silent-wrong with an oracle > ② loud→supported with 
 
 | section | open | breakdown |
 |---|---:|---|
-| §0 promotion queue (T2/T3 residues) | 15 rows | real const-fold residues ⓐ–ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), `-G` aliases and `.velab` header field, `case inside` |
-| §2 start-order table | 28 rows | OPEN 8 · BLOCKED 3 · WALL 5 (declared-width provenance / §11.8.1 region sign) · ORACLE-SPLIT 2 · PERF 2 · LOUD 6 · DO-NOT-START 2 |
-| §2 recorded defects by mechanism | 86 bullets | size cast / signedness 15 · constant domain (i64) 14 · inline / frame binds 16 · index sealing 4 · real 5 · ranges 4 · class fields 3 · scoping 4 · delays / events 6 · diagnostics 4 · performance 6 · oracle splits 5 |
+| §0 promotion queue (T2/T3 residues) | 14 rows | real const-fold residues ⓐ–ⓔ ⓖ ⓗ (ⓕ `time` closed by §4.5.462), enum-label folding ⓐⓑ, negative bounds (part select / port), `-G` aliases and `.velab` header field, `case inside` |
+| §2 start-order table | 27 rows | LOUD 6 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 |
+| §2 recorded defects by mechanism | 93 bullets | inline / frame binds 16 · size cast / signedness 15 · constant domain (i64) 14 · index sealing 8 (row 25's operator half CLOSED; the name-leaf and >64-bit declines plus the `unsigned`-keyword sign are the new rows) · delays / events 7 · performance 7 · oracle splits 6 · real 5 · ranges 4 · scoping 4 · diagnostics 4 · class fields 3 |
 | §3 numbered items | 24 rows | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, incl. ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies / `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 65 rows | parser accept 8 · constants / parameters 11 · subroutine / frame 17 · system tasks & file I/O 9 · nets / timing 6 · diagnostics quality 5 · strings / heap 6 · VCD / real conversion 3 |
+| §3 small residues | 66 rows | subroutine / frame 17 · constants / parameters 11 · parser accept 9 (`iface-blocal` closed by §4.5.464; its flatten-model residue `blocal-flatten` replaces it) · system tasks & file I/O 9 · nets / timing 6 · strings / heap 6 · diagnostics quality 5 · VCD / real conversion 3 |
 | §3 intentionally loud | 12 rows | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | mostly no oracle; hand-IEEE when started |
-| §5 performance / hardening residues | 16 rows | frame-body wprog (5c), native scratch pooling (4b), array-LHS cliff, inline-fold exponential, memory guard, CI nextest, MSRV ceiling, quiescence / render / eof seams |
+| §5 performance / hardening residues | 18 rows | frame-body wprog (5c), native scratch pooling (4b), array-LHS cliff, inline-fold exponential, memory guard, CI nextest, MSRV ceiling, quiescence / render / eof seams |
 | §6 G2 OBS | 6 stages | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin |
 | §7 conditional | 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 1 | DEFPARAM · IMPLICIT-NET · out-of-scope list |

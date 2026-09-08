@@ -13,6 +13,9 @@
 
 
 **§4.5.220–280**
+- `4.5.464` **A user-written block-local in an interface body — the refusal was not what made it safe** (2026-09-08 · §3.b `iface-blocal`, RE-FILED as §2 · the row's stated prerequisite REFUTED: an interface IS an `ast::ModuleDecl`, so zero signature work · review round 1 caught a loud→silent-wrong the map install alone created, closed by also calling the module path's containment gate)
+- `4.5.463` **The width of an OVERRIDE value itself** (2026-09-08 · §2 Index sealing row 25, the operator half · the row's "both oracles 1 bit" REFUTED — verilator binds 32 and contradicts its own `$bits`; the target is the DIRECT answer all three tools agree on · two defects the grounding did not predict, both found by measuring: the width cannot travel without the value, and the wide-install read-back re-imposed the DEFAULT's 32 from width 33 up)
+- `4.5.462` **A `time` parameter is 64 bits because it is DECLARED so** (2026-09-08 · §0 T2 row 8ⓕ CLOSED entirely, including a loud→correct-support half the row did not predict · recorded severity "loud" re-measured as SILENT-WRONG on both the width and the sign columns · the missing container among four siblings that already carried the rule)
 - `4.5.460` **A `localparam` OF an unpacked-array typedef, the procedural delay lane's time literals, and the untyped parameter sized by its operator** (2026-09-08 · §3 ⑤ⓕ + §2 Delays ⓓ + §2 Index sealing residue · 66 + 61 + 60 cells fixed, 0 regressed · all three ROW CLAIMS refuted — the `+ - *` "oracle split" is iverilog contradicting itself, the delay fix is a ROUTING change not the row's impossible opt-in, and the differential caught a regression this slice itself introduced on negative delays)
 - `4.5.459` **The dim-carrying type-parameter OVERRIDE, the delay literal finer than the design precision, and the parameter select that never sealed its sign** (2026-09-08 · §3 ⑤ⓕ + §2 Delays ⓑ + §2 Index sealing · 28 + 26 + 20 cells fixed, 0 regressed over 269 measured · the row's "wider blast radius" and the split's stated discriminator both REFUTED · iverilog disqualified by self-contradiction on the packed-element `+:` overhang)
 - `4.5.458` **`$bits` of a dim-carrying type parameter, a time literal inside an expression, and the vector select that never sealed its sign** (2026-09-08 · §3 ⑤ⓕ + §2 Delays + §2 Index sealing · 15 + 81 + 42 cells fixed, 0 regressed over 494 measured · §2 🆕 I ⓒ REFUTED as an oracle split)
@@ -477,6 +480,233 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.464 A user-written block-local in an interface body — the refusal was not what made it safe (2026-09-08, branch iface-blocal) ✅
+
+§3.b `iface-blocal`, and the row was MIS-FILED: it is a §2 silent-wrong, not a §3
+loud→supported. §4.5.461 had shipped the parser-synthesized `__foreach_*` names only and
+refused every body containing a user block-local, recording the general case as
+"loud→silent-wrong if ungated". Re-measured at HEAD: the gate blocks NET CREATION only,
+and a block-local that COLLIDES with an interface member needs no net created — so the
+write landed on the member and the shape was ALREADY silent at exit 0 whenever the body
+had no `foreach` to make it loud.
+
+The discriminating design (the pinned test's own cell has a co-located `foreach`, so its
+non-zero exit came from that, not from the collision):
+
+```systemverilog
+interface ifc; integer b;
+  initial b = 99;                                   // member written FIRST, t=0
+  initial begin #1; begin integer b; b = 7; end end // block-local, same name
+  initial begin #2 $display("OUTER b=%0d", b); end
+endinterface
+```
+PRE `INNER b=7 / OUTER b=7 / HIER b=7` at exit 0 · POST and BOTH oracles `7 / 99 / 99`.
+The MODULE twin is correct in PRE and POST, which is what attributes the defect to the
+interface path rather than to the flatten model.
+
+A probe that writes the member AFTER the block-local cannot see this — both candidate
+rules end at 99. The member has to be written first.
+
+FIX — `crates/elaborate/src/iface_inst.rs` only, zero signature changes. The row and
+ROADMAP §5.2 both stated the prerequisite as "those five passes are `&ast::ModuleDecl`-
+typed, so the signature is the whole slice". REFUTED: `hdl-ast/src/lib.rs:143` is
+`Item::Interface(ModuleDecl)` — an interface IS an `ast::ModuleDecl`, and `iface_inst.rs`
+was already calling `gather_local_decl_names(&decl)` with it. The slice is five call
+sites plus save/restore:
+`gather_block_local_names` · `compute_scoped_block_locals` · `compute_per_entry_block_locals`
+· `compute_coalesced_block_locals` · installing `local_decl_names`, all computed from the
+INTERFACE decl, installed above the Nets closure and restored below the Logic loop (both
+passes must answer the same way), then `iface_block_locals_are_all_synthesized` and its
+45-line predicate deleted.
+
+ALL FIVE OR NONE: `block_local/hoist.rs`'s `shadows_module` is the only term that routes a
+member-colliding local to its own `$blk$<lo>` net and it reads `local_decl_names`;
+installing four would admit more bodies to the hoist while still resolving collisions
+against the parent's names.
+
+MEASURED: one design, six block-local shapes × two instances — a plain `initial` local, a
+named block, an `always`, a `for` body, two sibling blocks reusing one name, and a
+`foreach` beside them. PRE: 14 × `E3010 undeclared net/variable`, refused. POST: 12 lines
+byte-identical to iverilog AND verilator.
+
+⚠️ REVIEW ROUND 1, BLOCKING — the map install ALONE was loud→silent-wrong. `instance.rs`
+runs `check_block_local_scope_leaks` over every process body BEFORE it hoists, and the first
+cut installed the five maps without that call. A NESTED same-name shadow then silently read
+the inner `x`: PRE `E3010` ×8 (refused), first-cut POST `o1=02 o2=02` at exit 0 where both
+oracles give `02 / 01`, while the MODULE TWIN of the identical body still emitted its E3009.
+The twin is what proved the guard existed and simply was not reached. Fixed by calling the
+same gate on the interface path, INSIDE the map window (the gate consults
+`scoped_block_locals` to skip a name that owns a `$blk$<lo>` net). ENGINEERING_RULES already
+carried the lesson this repeats — "before copying a call, list what the original's caller set
+up first" — and it caught a second thing the first slice missed for the same reason.
+
+REVIEW ROUND 2 (delta, both lenses, 26 designs) found NO defect in that fix. Measured: the
+gate fires on no body PRE or the module twin answers; the `scoped_block_locals` skip still
+skips, per instance and at two instances; the parser-synthesized `__foreach_*` / `__forvar_*`
+names never trip it (no §4.5.461 regression); and on a design with four processes of which one
+leaks, at two instances, the interface and the module twin both print `errors=2 notes=2` with
+byte-identical text and scope names. Four PRE-loud interface bodies became correct output
+matching both oracles.
+
+RESIDUE — three cells, and the module twin gives the IDENTICAL answer on every one, so they
+belong to the flatten model rather than to the interface path (ROADMAP §3.b `blocal-flatten`):
+a declaration initializer not counted as definite assignment for two sibling blocks sharing a
+name; the same guard refusing two mutually-exclusive `if`/`else` branches; and a same-named
+member still clobbered when a nested shadow is present (`member_x=01`, both oracles `a5`).
+Reaching exact module parity was this slice's goal, and that is what the twin column shows.
+
+⚠️ LATENT, for whoever lifts the MVP gate: the interface loop calls the containment gate for
+`ModuleItem::Proc` only, where the module path also calls it for `Func` and `Task`
+(instance.rs:775/788). Unreachable today because an interface function/task is refused
+upstream — but the gate must be added in the same slice that lifts that refusal.
+
+OUT OF SCOPE, each confirmed still loud and separately pre-existing: `generate` inside an
+interface (E3009 MVP), functions/tasks inside an interface (E3009 MVP), nested instances,
+typedefs, `defparam` inside an interface.
+
+#### 4.5.463 The width of an OVERRIDE value itself (2026-09-08, branch row25-operator) ✅
+
+§2 "Index sealing" row 25's operator half, both NEW bullets. §6.20.2 gives an UNTYPED,
+unranged parameter the type of its FINAL override value; vita had no channel carrying that
+type for an operator-topped override, so `bind_one_param` fell through to
+`param_decl_width_opt`'s literal arm — which answers the DEFAULT's type even under
+`default_binds == false`.
+
+THE ROW'S ORACLE CLAIM IS REFUTED, and the replacement argument is stronger. The row said
+"both oracles 1, 1 bit". verilator binds `#(.P(-(|4'b1010)))` at **32** bits, not 1. But
+asked DIRECTLY, all three tools agree on `$bits` of every cell (1, 1, 8, 8) — and each then
+contradicts its own direct answer when the identical text is BOUND: verilator on a
+reduction-topped override (`$bits(|4'b1010)` = 1, the binding = 32), iverilog on `+`
+(`$bits(8'd200+8'd100)` = 8, the binding = 9; §4.5.460 already recorded that one). So the
+width axis is not a split — it is two tools each self-contradicting in a different place
+over one answer all three give when asked directly. That answer is Table 11-21, and it is
+already what vita bound for a reduction top before this slice.
+
+WALL VERDICT — row 25 is inside the declared-width-provenance wall and this sub-case is
+OUTSIDE it, for a NAMED accept set, by measurement:
+ * The laundering door is real: `const_self_width`'s `Ident` arm resolves through
+   `param_meta` and GUESSES 32 on a miss. So the accept set declines EVERY name, via the
+   already-shipped `ctx_width_names_are_evident` with an empty `ConstWidths` (which also
+   declines `SysCall`, `Call`, `PkgScoped`, `Replicate`, every select and `$signed`/
+   `$unsigned` — fail-closed). It costs nothing on this class: every census cell is a
+   literal-only tree.
+ * Rows 16/17's live oracle split lives on the DECLARED-WIDTH target lane. Measured in one
+   design: on `parameter [63:0] K`, `~32'd0` is `ffffffffffffffff` in vita and iverilog and
+   `00000000ffffffff` in verilator — a genuine split. On an UNTYPED, unranged target the
+   same five cells are NOT split, and vita was alone and wrong on four of them. The
+   consumer's `Implicit && p.range.is_none()` guard is what keeps the slice on that second
+   lane, and the DECL64 lane is byte-identical PRE→POST.
+
+FIX — a separate resolver, NOT a widening of `override_bits`. Widening
+`wide_top_is_self_determined` instead would route through `override_at_declared_width` and
+move the split cells and three pinned tests.
+ * `param_query.rs`: `override_self_meta` (Table 11-21 type; accept set =
+   `ctx_width_names_are_evident` ∧ `const_ctx_within_i64` ∧ no fill ∧ top is unary
+   `+ - ~` / any binary / a ternary) and `override_self_value` (its value re-folded at that
+   type through `eval_const_assign`, only when `const_eval_in_scope` ALREADY answers —
+   "correct a value, never create one").
+ * `ResolvedOverride::{self_meta,self_val}` + two `ParamOverrides` maps + `clear_target`;
+   filled at all 7 producers (compiler-enumerated); `DefparamOverride` grew to 6 fields so
+   `defparam u.P = e` and `#(.P(e))` cannot bind two different types.
+ * `bind_one_param`: ONE new arm, THIRD in the meta chain — after `fill` (which states its
+   own type) and after the wide `bits` channel (whose answer every design binding through
+   it reads today), so both keep precedence and are byte-identical.
+
+⚠️ TWO DEFECTS THE GROUNDING DID NOT PREDICT, both found by measuring rather than arguing:
+ 1. The width cannot travel alone. With only the meta installed, `#(.P(-64'd1))` bound
+    `00000000ffffffff` at 64 bits — a NEW wrong answer, the right width over a value folded
+    for the old one. Truncation does not commute with `/ % >> >>>` (re-measured:
+    `(8'hFF*8'h02)>>4` was 31 for both oracles' 15, `(8'd200+8'd100)>>1` was 150 for 22).
+ 2. Even with the value half, the answer was still wrong FROM WIDTH 33 UP. The wide-install
+    block calls `override_at_declared_width(self.param_decl_width(p), …)` and then
+    OVERWRITES `chosen_val` with that resize — re-imposing the DEFAULT's 32 after the meta
+    chain had already got it right. `$bits` read FIXED while the value was still wrong; a
+    width-only readout would have shipped it. Fixed by passing `meta` on that lane only.
+
+⚠️ REVIEW ROUND 1, MAJOR — the first cut took BOTH the width and the sign from the override,
+and §12.2.1 gives a sign SPECIFICATION with no range to the DECLARATION: only the RANGE comes
+from the override. `parameter signed P = 1` + `#(.P(~8'h5A))` printed `165` where both oracles
+print `-91`, i.e. one silent-wrong traded for another on a different column — the accuracy
+ladder's forbidden move, and PRE's `dec` column had been RIGHT. Fixed with
+`(w, sg || p.signed)`.
+
+REVIEW ROUND 2 then found the OTHER half: the wide (`ovr_bits`) arm two lines above had never
+applied `p.signed` either, so one declaration reported two signs depending on which channel
+bound it (`#(.R(8'hA5))` → 165, `#(.R(~8'h5A))` → −91, both oracles −91 for both). Closed the
+same way. Controls measured in both directions: with NO keyword both arms stay unsigned
+(`#(.N(8'hA5))` and `#(.N(~8'h5A))` are 165 = both oracles), and a signed override literal was
+already right. All seven cells are now byte-identical to iverilog.
+
+Round 2 found no other defect in either fix across 26 designs, and pinned that the sign moves
+the VALUE and not only the report: `dec`, `neg`, `>>>` and `/` all move together.
+
+MEASURED PRE→POST, all three tools in the same designs: 5 bind cells (4 move, each from
+wrong-on-both to the self-consistent oracle) · the `-W'd1` width ladder 8/16/32/33/64 (33
+and 64 fixed, the first three unmoved) · 5 non-commuting cells (2 fixed) · row 16's five
+cells on the untyped lane (4 fixed, `~128'd0` FALLS BACK by design) · the declared `[63:0]`
+lane byte-identical · the signed ladder at 1/4/8/33/64 (POST = iverilog on all five) · named,
+positional, `defparam` and interface channels all moving together.
+
+RESIDUES, each measured and filed in ROADMAP §2 rather than left implied: a NAME leaf in the
+override (`#(.P(W8 + 1'b0))`, declined by the provenance clause) · a >64-bit tree (`~128'd0`,
+declined by the i64 clause) · and `parameter unsigned U` overridden by a SIGNED value, where
+`p.signed == false` cannot distinguish "unsigned was written" from "nothing was written" — an
+`is_sign_declared` field on `ast::ParamDecl` closes it and costs a format bump.
+
+⚠️ ONE DOC CLAIM OF MY OWN, refuted by my own probe: the accept set's comment said it
+"declines EVERY name". A name reaches a compound SIZE CAST (`(W+1)'(3)`), because `casts.rs:74`
+makes a compound size a `CastTarget::Size` and the predicate's `Cast` arm recurses into the
+cast's OPERAND only. It is a VALUE position rather than a recorded-width one, so it is not the
+laundering door and it lands on the right answer (53 = verilator) — but the comment now states
+what is and is not declined. The BARE spelling `W'(3)` never reaches it: `casts.rs:73` makes
+that `CastTarget::Named`, which the catch-all refuses.
+
+#### 4.5.462 A `time` parameter is 64 bits because it is DECLARED so (2026-09-08, branch time-param-width) ✅
+
+§0 T2 row 8ⓕ, CLOSED ENTIRELY — including a half the row did not predict — and its recorded
+severity was wrong: the row says "loud", and the measured symptom is silent-wrong on both
+the width and the value columns.
+
+`param_decl_width_opt` answered `Integer` with a declared `(32, p.signed)` and had NO `Time`
+arm, so a `time` parameter fell through to the untyped/§6.20.2 tail — whose SIZED-literal
+case answers for "any reaching param type" and returns the LITERAL's width. The tail's own
+comment already stated the right rule for the DECIMAL case and left SIZED unguarded.
+
+MEASURED (both oracles identical on every row; PRE wrong on all of them):
+| cell | PRE | POST = both oracles |
+| `localparam time A = 8'd5` | 8 / 05 | 64 / 0000000000000005 |
+| `localparam time B = -8'sd2` | 8 / fe / **-2** | 64 / fffffffffffffffe / **18446744073709551614** |
+| `localparam time D = 8'd5 + 8'd3` | 32 | 64 |
+| `parameter time TP = 8'd5` + `#(.TP(16'd9))` | 8 | 64 |
+| two instances, one overridden | **16 and 32** | 64 and 64 |
+| `#(.T('1))` | 4294967295 | 18446744073709551615 |
+The sign half is the one that shows as a wrong VALUE rather than a narrower `$bits`, and the
+two-instances cell is the discriminator: one declaration answered TWO widths, neither of
+them 64, inside a single elaboration.
+
+⭐ The row's own cell — `localparam time T = R*2.0`, recorded as loud — is closed by the same
+arm: PRE `error[VITA-E3009] … `R` is a real`, POST `T=5 bits=64` = both oracles. Giving
+`meta` a value lets `eval_param_init` fold the real through the width-aware target path
+instead of declining. A loud→correct-support promotion rode along.
+
+Four sibling containers already carried this rule (`hdl-parser/src/params.rs` twice,
+`cover_bins.rs`, `inline_fn.rs` twice); this function was the missing container — the shape
+ENGINEERING_RULES records for a re-spell pass with as many sites as the type has containers.
+`p.signed` is not consulted: the parser cannot produce a signed `time` parameter
+(`localparam time signed X` is E2002).
+
+ONE PIN UPDATED, not deleted: `implicit_param_ports.rs`'s `-G T='1` asserted `4294967295`
+and its own comment said the value was "vita's 32-bit fold, not iverilog's". Now
+`18446744073709551615`, confirmed against verilator's `-GT='1` and, for the source-level
+twin, both oracles. Its `real` sibling in the same test is UNMOVED (`4.29497e+09` where
+verilator binds 1) and stays as the control that the test measures the CHANNEL, not the fold.
+
+NOT TOUCHED, recorded as a follow-on: the three sites that lump `Implicit | Time` into
+`param_type_guessed` (`instance.rs`, `generate.rs`, `params.rs`). With `time` now declared
+its meta is a fact, so keeping it there is conservative — measured to make no observable
+difference on the width / derived-width / shift / compare columns. Removing a defensive
+check needs its own producer census.
 
 #### 4.5.461 The parameter initializer's VALUE lane made width-aware, the guard it retired, and `foreach` inside an interface (2026-09-08, branch main) ✅
 

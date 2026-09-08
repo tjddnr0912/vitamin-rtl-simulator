@@ -82,6 +82,47 @@ need updating. What moved:
 
 ### Fixed
 
+- **A parameter override now binds its OWN type, not the declaration's default.** For an
+  untyped, unranged parameter, IEEE 1800 §6.20.2 gives the parameter the range of its final
+  override value. `module sub #(parameter P = 1)` overridden with `#(.P(~8'h5A))` bound
+  `ffffffa5` at 32 signed bits where both reference tools bind `a5` at 8 unsigned, and
+  `#(.P(-64'd1))` bound 32 bits for a value that needs 64. Every operator-topped override was
+  affected — `~`, unary `-`/`+`, and every arithmetic binary — through every channel
+  (`#(.P(e))` named and positional, `defparam`, an instance array, a generate-scope instance
+  and an interface instantiation). The value moves with the width, because truncation does
+  not commute with `/ % >> >>>`: `#(.P((8'hFF * 8'h02) >> 4))` was `31` where both tools say
+  `15`.
+  Two shapes deliberately keep the previous answer and are recorded as open: an override
+  whose expression names a parameter (`#(.P(W + 1'b0))`), and one wider than 64 bits
+  (`#(.P(~128'd0))`).
+
+- **A `signed` keyword on a parameter declaration survives an override.** IEEE 1800 §12.2.1:
+  a sign specification with no range keeps that sign and takes only the *range* from the
+  override. `parameter signed R = 1` printed `165` for `#(.R(8'hA5))` where both reference
+  tools print `-91`, and one declaration could report two different signs depending on which
+  override channel bound it. The sign changes the value, not only the report — `%0d`, a
+  comparison, `>>>` and `/` all move with it.
+  A `parameter unsigned` overridden by a *signed* value is still reported signed; the
+  declaration does not currently record which of the two keywords was written.
+
+- **A `time` parameter is 64 bits unsigned because it is declared so.** `localparam time A =
+  8'd5;` reported `$bits` 8 and `localparam time B = -8'sd2;` printed `-2`, where both
+  reference tools report 64 and `18446744073709551614`. The width had been taken from the
+  initializer literal, so one declaration could even answer two different widths in a single
+  run — 16 in an overridden instance and 32 in an un-overridden one. `localparam time T =
+  R*2.0;` over a `real` was rejected outright and now binds `5`, as both tools do.
+
+- **A block-local declared in an `interface` body now behaves as it does in a module.**
+  `interface ifc; integer b; … begin integer b; b = 7; end` wrote the interface's *member*
+  `b` — `OUTER b=7` and `u.b = 7` at exit 0, where both reference tools keep `99` — and a
+  non-colliding block-local (`begin int x; … end`) was refused with `undeclared
+  net/variable`, which also took down any `foreach` in the same body. Both are fixed: named
+  blocks, `always` blocks, `for` bodies, sibling blocks reusing a name, and multiple
+  instances of one interface all now answer exactly what the identical body in a `module`
+  answers. A block-local referenced outside its declaring block is refused on the interface
+  path with the same diagnostic the module path already gave, rather than silently reading
+  the inner declaration.
+
 - **A constant parameter initializer now computes at its own width, not at unlimited
   precision.** `localparam K = (8'd200 + 8'd100) >> 1;` bound `96` where both reference
   tools bind `16`: the sum was folded without a width and only the finished result was

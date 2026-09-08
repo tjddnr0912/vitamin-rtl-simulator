@@ -643,10 +643,24 @@ takes its *type* from its value, so that one is a real parameter), and `1.0/0.0`
 > matching both oracles. An override that fits an integer keeps the parameter usable as
 > a width or a bound (`logic [K-1:0]`), which a wide-literal override used to destroy.
 >
-> ⚠️ **Two remain.** An override EXPRESSION whose top operator takes its width from the
+> ⚠️ **One remains.** An override EXPRESSION whose top operator takes its width from the
 > context (`#(.K(128'h1 << 100))`) is still loud — folding it at the operand's own width
-> would drop the bits the context keeps. And a `defparam` records no signedness, so a
-> NEGATIVE `defparam` value still stops its sign at bit 63.
+> would drop the bits the context keeps.
+>
+> *(The second item recorded here — "a `defparam` records no signedness, so a NEGATIVE
+> `defparam` value still stops its sign at bit 63" — was fixed by the slice that taught the
+> collector to compute the expression's sign, and the sentence outlived it. Re-measured:
+> `parameter logic [127:0] K` with `defparam a.K = -32'sd7;` is `fff…f9` in vita and in both
+> reference tools.)*
+
+An **untyped, unranged** parameter is a different lane and now takes its type from the
+override, as IEEE 1800 §6.20.2 requires: `module sub #(parameter P = 1)` overridden with
+`#(.P(~8'h5A))` binds `a5` at 8 unsigned bits rather than `ffffffa5` at 32, through every
+channel. Two shapes there keep the older answer and are known gaps — an override expression
+that **names** a parameter (`#(.P(W + 1'b0))`), and one wider than 64 bits (`#(.P(~128'd0))`).
+A `signed` keyword written on such a declaration survives the override (§12.2.1: only the
+*range* comes from the override value); an `unsigned` keyword does not yet, because the
+declaration does not record which of the two words was written.
 
 ---
 
