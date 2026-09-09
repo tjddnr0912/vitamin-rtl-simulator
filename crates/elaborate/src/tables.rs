@@ -116,6 +116,21 @@ pub struct StmtLoc {
     pub instance: String,
 }
 
+/// R2 ⓒ: where a subroutine was DECLARED — the three fields a reader opens a
+/// file with, and nothing else.
+///
+/// Deliberately NOT a [`StmtLoc`]: that record carries an `instance`, because a
+/// module instantiated N times lowers N copies of one statement and each copy
+/// needs its own name. A declaration has no such multiplicity — it is written
+/// once — so borrowing `StmtLoc` here would mean answering a question this
+/// record does not have, in a field a reader would be entitled to trust.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeclLoc {
+    pub file: String,
+    pub line: u32,
+    pub col: u32,
+}
+
 /// StmtId → [`StmtLoc`]. An entry exists only when a `SpanResolver` was
 /// installed — the no-resolver (AST-only / unit-test) paths stay
 /// byte-identical. Rides `SimOpts` / the `.velab` extra-sidecars trailer;
@@ -546,6 +561,16 @@ pub struct Sidecars {
     /// N1: FuncId → subroutine name, index-aligned to `func_table` / `ir.funcs`.
     /// Consulted only by `%m` rendered inside a frame body. EMPTY ⇒ module scope.
     pub func_names: Vec<String>,
+    /// R2 ⓒ: FuncId → the subroutine's DECLARATION site, index-aligned to
+    /// `func_names`. Read only by the `run.json` writer (never `SimOpts`: no
+    /// runtime consumer), so an entry costs nothing on a run without `--obs-dir`.
+    ///
+    /// It is the JOIN KEY the per-call profile needs and `func_names` cannot be.
+    /// `func_names` holds the `%m` PATH, which is PER-INSTANCE (`top.u1.aut` and
+    /// `top.u2.aut` are two FuncIds for one written subroutine); `file:line:col`
+    /// is what the reader typed once and can open. `None` ⇒ no `SpanResolver`
+    /// was installed (AST-only / unit-test paths stay byte-identical).
+    pub func_decl_locs: Vec<Option<DeclLoc>>,
     /// R2 intermediate: per-subroutine frame/inline route + call-site count (see
     /// [`SubroutineRoutes`]). Read ONLY by the `run.json` writer — the engine
     /// never sees it, so it is not on `SimOpts`. EMPTY ⇒ the design declares no

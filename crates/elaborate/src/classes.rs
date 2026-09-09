@@ -686,30 +686,44 @@ impl Elaborator<'_> {
         });
         let (this_net, discard_net) = this_net;
         let locals_len = self.nets.len() as u32 - base_net;
-        self.funcs.push(ir::FuncDef {
-            entry: 0,
-            n_params,
-            locals_len,
-            is_task: false,
-        });
-        self.func_metas.push(FuncMeta {
-            base_net,
-            n_params,
-            return_slot: n_params, // return var sits right after this+formals
-            locals_len,
-            is_automatic: true, // class methods are automatic (fresh locals per call)
-            ret_width,
-            ret_signed,
-            auto_override: 0,
-            str_params,
-            has_hier_call: false,
-            contains_shared_fork: false,
-        });
-        // §4.5.437: `%m` inside a class method names the CLASS and the method
-        // (`top.C.show`, both oracles) — the engine prefixes the calling process's
-        // scope (the class table is global; its declaring instance is not known).
-        self.frame_func_names
-            .push(format!("{cname}.{}", method.name)); // %m
+        let pushed = self.push_func(
+            ir::FuncDef {
+                entry: 0,
+                n_params,
+                locals_len,
+                is_task: false,
+            },
+            FuncMeta {
+                base_net,
+                n_params,
+                return_slot: n_params, // return var sits right after this+formals
+                locals_len,
+                is_automatic: true, // class methods are automatic (fresh locals per call)
+                ret_width,
+                ret_signed,
+                auto_override: 0,
+                str_params,
+                has_hier_call: false,
+                contains_shared_fork: false,
+            },
+            // §4.5.437: `%m` inside a class method names the CLASS and the method
+            // (`top.C.show`, both oracles) — the engine prefixes the calling
+            // process's scope (the class table is global; its declaring instance
+            // is not known).
+            format!("{cname}.{}", method.name),
+            // No route-census key: a class method has no declaring MODULE, and
+            // `SubroutineRoutes` is keyed `(module, routine)`. It still takes its
+            // slot here — omitting the push is what shifted every module
+            // subroutine's key by the class-method count.
+            None,
+            // R2 ⓒ: the method's own declaration site, whichever half it is.
+            method
+                .func
+                .as_ref()
+                .map(|f| f.name.span)
+                .or_else(|| method.task.as_ref().map(|t| t.name.span)),
+        );
+        debug_assert_eq!(pushed, fid, "FuncId reserved above is not the one minted");
         if let Some(ci) = self.class_table.get_mut(cname) {
             ci.methods[mi].fid = Some(fid);
             ci.methods[mi].this_net = Some(this_net);

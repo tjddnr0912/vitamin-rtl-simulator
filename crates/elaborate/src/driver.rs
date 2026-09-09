@@ -73,6 +73,7 @@ impl<'s> Elaborator<'s> {
             frame_func_names: Vec::new(),
             subroutine_routes: SubroutineRoutes::new(),
             frame_keys: Vec::new(),
+            frame_decl_locs: Vec::new(),
             funcs: Vec::new(),
             func_blocks: Vec::new(),
             frame_idx: BTreeMap::new(),

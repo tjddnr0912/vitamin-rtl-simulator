@@ -71,10 +71,21 @@ fn calls(json: &str, name: &str) -> Option<u64> {
 
 /// The `builtins` object's text, so field-level assertions cannot accidentally
 /// match the `processes` object above it.
+///
+/// ⚠️ The end anchor is the NEXT KEY, not the wall-clock block: this slice is
+/// compared across two runs from two different temp directories, so it must not
+/// swallow a sibling object that carries a source PATH. `subroutine_calls` (R2
+/// ⓑ) is such an object — its rows name a declaration `file`, deliberately as
+/// given rather than as a basename (doc-19 §4.6), and it landed between
+/// `builtins` and `utc_unix_s`. Anchoring on `utc_unix_s` made these tests
+/// compare it too and report a path difference as a builtin-table difference.
 fn builtins_obj(json: &str) -> String {
     let i = json.find("\"builtins\": ").expect("no builtins key");
     let rest = &json[i..];
-    let end = rest.find("\"utc_unix_s\"").unwrap_or(rest.len());
+    let end = rest
+        .find("\"subroutine_calls\"")
+        .or_else(|| rest.find("\"utc_unix_s\""))
+        .unwrap_or(rest.len());
     rest[..end].to_string()
 }
 

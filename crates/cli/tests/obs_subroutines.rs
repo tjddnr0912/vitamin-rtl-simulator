@@ -287,3 +287,93 @@ fn an_output_formal_call_counts_in_both_spellings() {
         Some(("function".into(), "frame".into(), 2))
     );
 }
+
+/// A CLASS in the design must not move any `sites` number.
+///
+/// ⚠️ This is the asymmetric-mutation teeth for the FuncId alignment, and it is
+/// the shape the 7,337-test suite could not see: every design in this file was
+/// class-free, and `reserve_class_method` was the one producer that minted a
+/// FuncId without pushing its route key. Class methods are reserved FIRST, so
+/// each one shifted every module subroutine's key by 1 — measured as two `sites`
+/// counts SWAPPED (`aaa` 3 → 0, i.e. "declared and never called", while the
+/// never-called `bbb` reported `aaa`'s 3), and as both silently dropped when the
+/// shifted index ran off the end.
+///
+/// A same-input-twice golden cannot catch that: both runs lie identically. The
+/// only gate that can is a PAIR whose two members must agree — the mutation is
+/// upstream (a class), the observed numbers are downstream (module routines),
+/// and a class contributes no row of its own (`uncounted`).
+#[test]
+fn a_class_does_not_shift_the_module_routine_counts() {
+    // `aaa` is called three times, `bbb` once — derived from the source below.
+    const BODY: &str = "  function automatic int aaa(input int x); aaa = x + 1; endfunction\n\
+                        \x20 function automatic int bbb(input int x); bbb = x + 2; endfunction\n\
+                        \x20 int z;\n\
+                        \x20 initial begin z = aaa(5); z = aaa(z); z = aaa(z); z = bbb(z);\n\
+                        \x20   $display(\"z=%0d\", z); $finish; end\n";
+    let control = format!("module top;\n{BODY}endmodule\n");
+    // Same design, plus a class whose two methods are never called at all. The
+    // class exists only to mint FuncIds ahead of `aaa`/`bbb`.
+    let mutated = format!(
+        "module top;\n\
+         \x20 class C;\n\
+         \x20   int n;\n\
+         \x20   function int f1(input int x); f1 = x; endfunction\n\
+         \x20   function int f2(input int x); f2 = x; endfunction\n\
+         \x20 endclass\n{BODY}endmodule\n"
+    );
+    let (jc, oc, cc) = run_json(&control, &[]);
+    let (jm, om, cm) = run_json(&mutated, &[]);
+    assert_eq!(cc, 0, "{oc}");
+    assert_eq!(cm, 0, "{om}");
+    // The design's own answer must not move either — the mutation is inert.
+    assert!(oc.contains("z=10"), "control stdout: {oc}");
+    assert!(om.contains("z=10"), "mutated stdout: {om}");
+    for (name, sites) in [("aaa", 3u64), ("bbb", 1u64)] {
+        assert_eq!(
+            row(&subs_obj(&jc), "top", name),
+            Some(("function".into(), "frame".into(), sites)),
+            "control row for {name}"
+        );
+        assert_eq!(
+            row(&subs_obj(&jm), "top", name),
+            Some(("function".into(), "frame".into(), sites)),
+            "a class in the design changed `{name}`'s site count"
+        );
+    }
+    // And the class itself earns no row, as `uncounted` promises.
+    assert!(
+        row(&subs_obj(&jm), "top", "f1").is_none() && row(&subs_obj(&jm), "C", "f1").is_none(),
+        "a class method must not appear in `subroutines`: {}",
+        subs_obj(&jm)
+    );
+}
+
+/// The same alignment, one class method and one CALL SITE — the minimal shape.
+/// Declaring a single class method was enough to drop `plain`'s only call site
+/// to `0`, and `0` is the value the object documents as "declared and never
+/// called". The class is never even instantiated here.
+#[test]
+fn one_declared_class_method_does_not_erase_a_call_site() {
+    const BODY: &str = "  function automatic int plain(input int x); plain = x + 1; endfunction\n\
+                        \x20 int z;\n\
+                        \x20 initial begin z = plain(5); $display(\"z=%0d\", z); $finish; end\n";
+    let (jc, oc, cc) = run_json(&format!("module top;\n{BODY}endmodule\n"), &[]);
+    let (jm, om, cm) = run_json(
+        &format!(
+            "module top;\n\
+             \x20 class C; int n; function int m(input int x); m = x; endfunction endclass\n\
+             {BODY}endmodule\n"
+        ),
+        &[],
+    );
+    assert_eq!(cc, 0, "{oc}");
+    assert_eq!(cm, 0, "{om}");
+    let want = Some(("function".into(), "frame".into(), 1u64));
+    assert_eq!(row(&subs_obj(&jc), "top", "plain"), want);
+    assert_eq!(
+        row(&subs_obj(&jm), "top", "plain"),
+        want,
+        "declaring a class method erased a real call site"
+    );
+}

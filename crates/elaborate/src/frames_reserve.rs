@@ -3,6 +3,83 @@
 use super::*;
 
 impl Elaborator<'_> {
+    /// Mint one FuncId, filling EVERY table indexed by it.
+    ///
+    /// ⚠️ A FuncId is `funcs.len()`, and FOUR other `Vec`s are addressed by it:
+    /// `func_metas`, `frame_func_names` (`%m`), `frame_keys` (the R2 route census)
+    /// and `frame_decl_locs` (the R2 ⓒ declaration site). Alignment used to be a
+    /// convention across three producers, and one of them —
+    /// `reserve_class_method` — pushed three of the four then-existing. Class
+    /// methods are reserved FIRST, so every module subroutine's FuncId was
+    /// shifted by the class-method count and `note_frame_call` read another
+    /// routine's key: measured as two `sites` counts SWAPPED (a hot routine
+    /// reported `0` = "declared and never called", the dead one reported its
+    /// caller's 3), and as both dropped in silence when the shifted index ran
+    /// off the end into the `else { return }`. A reporting rail that lies is a
+    /// silent-wrong like any other.
+    ///
+    /// Fixing it at the reader (a bounds tweak in `note_frame_call`) would have
+    /// left a fourth producer free to desync the next table added here, so the
+    /// mint is the funnel: a FuncId cannot exist without every entry. The
+    /// `debug_assert`s below are the checked statement of that set — when a table
+    /// is added, one more assert is added with it, so this doc cannot silently
+    /// fall behind the code again.
+    ///
+    /// `key: None` = this FuncId owns no route-census row (class methods are
+    /// deliberately uncounted — see [`tables::SubroutineRoutes`]). It still gets
+    /// a slot; the slot is the alignment.
+    pub(crate) fn push_func(
+        &mut self,
+        def: ir::FuncDef,
+        meta: FuncMeta,
+        m_path: String,
+        key: Option<String>,
+        decl: Option<ast::Span>,
+    ) -> u32 {
+        debug_assert_eq!(
+            self.funcs.len(),
+            self.func_metas.len(),
+            "FuncId tables desynced before push (func_metas)"
+        );
+        debug_assert_eq!(
+            self.funcs.len(),
+            self.frame_func_names.len(),
+            "FuncId tables desynced before push (frame_func_names)"
+        );
+        debug_assert_eq!(
+            self.funcs.len(),
+            self.frame_keys.len(),
+            "FuncId tables desynced before push (frame_keys)"
+        );
+        debug_assert_eq!(
+            self.funcs.len(),
+            self.frame_decl_locs.len(),
+            "FuncId tables desynced before push (frame_decl_locs)"
+        );
+        let loc = decl.and_then(|sp| self.decl_loc(sp));
+        let fid = self.funcs.len() as u32;
+        self.funcs.push(def);
+        self.func_metas.push(meta);
+        self.frame_func_names.push(m_path);
+        self.frame_keys.push(key);
+        self.frame_decl_locs.push(loc);
+        fid
+    }
+
+    /// R2 ⓒ: resolve a DECLARATION span to `file:line:col`.
+    ///
+    /// `None` without a `SpanResolver`, which is what keeps the AST-only and
+    /// unit-test paths byte-identical — the same contract `record_stmt_loc`
+    /// carries for statements.
+    pub(crate) fn decl_loc(&self, sp: ast::Span) -> Option<DeclLoc> {
+        let loc = self.span_resolver?.resolve(sp.lo, sp.hi);
+        Some(DeclLoc {
+            file: loc.file,
+            line: loc.line,
+            col: loc.col,
+        })
+    }
+
     /// DUP (round-5): collect every `automatic` block-local declaration
     /// (name → declaring `Stmt::Block` span `(lo, hi)`) from a procedural statement
     /// tree. Only `Stmt::Block` carries a scopeable per-block namespace; `Stmt::Fork`
@@ -10,7 +87,10 @@ impl Elaborator<'_> {
     /// its `decls` are skipped (recursed into only to find nested Blocks). STATIC
     /// (non-`automatic`) block-locals are intentionally OMITTED — they safely
     /// coalesce onto one net when two sequential blocks reuse a temp name (see
-    /// `hoist_block_local_nets`), so they need no separate scope.
+    /// `hoist_block_local_nets`), so they need no separate scope. ⚠️ That is true
+    /// only for an INITIALIZER-FREE one; giving init-bearing statics their own
+    /// scope is ROADMAP §3.b `blocal-flatten` ⓐ, and was built and REVERTED — the
+    /// candidacy pass cannot absorb a fourth admission rule (see that row).
     /// `module_names` is [`Self::gather_local_decl_names`]'s set — the module's own
     /// ports, params and nets. A block-local of one of those names SHADOWS it, and a
     /// shadow cannot be answered by the flatten at all: the flattened net IS the
@@ -808,28 +888,32 @@ impl Elaborator<'_> {
         });
         let locals_len = self.nets.len() as u32 - base_net;
         self.frame_idx.insert(name.to_string(), fid);
-        self.funcs.push(ir::FuncDef {
-            entry: 0, // filled by lower_frame_func_body
-            n_params,
-            locals_len,
-            is_task: false,
-        });
-        self.func_metas.push(FuncMeta {
-            base_net,
-            n_params,
-            return_slot: n_params, // convention: return var right after the formals
-            locals_len,
-            is_automatic: func.automatic,
-            ret_width,
-            ret_signed,
-            auto_override,
-            str_params,
-            has_hier_call: false,
-            contains_shared_fork: false,
-        });
-        let fp = self.frame_path(&func.name.name);
-        self.frame_func_names.push(fp); // %m
-        self.frame_keys.push(name.to_string()); // R2 route census
+        let fp = self.frame_path(&func.name.name); // %m
+        let pushed = self.push_func(
+            ir::FuncDef {
+                entry: 0, // filled by lower_frame_func_body
+                n_params,
+                locals_len,
+                is_task: false,
+            },
+            FuncMeta {
+                base_net,
+                n_params,
+                return_slot: n_params, // convention: return var right after the formals
+                locals_len,
+                is_automatic: func.automatic,
+                ret_width,
+                ret_signed,
+                auto_override,
+                str_params,
+                has_hier_call: false,
+                contains_shared_fork: false,
+            },
+            fp,
+            Some(name.to_string()), // R2 route census
+            Some(func.name.span),   // R2 ⓒ declaration site
+        );
+        debug_assert_eq!(pushed, fid, "FuncId reserved above is not the one minted");
     }
 
     /// §4.5.435: the `%m` of a frame subroutine — its DECLARING instance (display
@@ -1045,27 +1129,31 @@ impl Elaborator<'_> {
         });
         let locals_len = self.nets.len() as u32 - base_net;
         self.task_frame_idx.insert(name.to_string(), fid);
-        self.funcs.push(ir::FuncDef {
-            entry: 0, // filled by lower_frame_task_body
-            n_params,
-            locals_len,
-            is_task: true,
-        });
-        self.func_metas.push(FuncMeta {
-            base_net,
-            n_params,
-            return_slot: 0, // unused for tasks (no func-named return var)
-            locals_len,
-            is_automatic: task.automatic,
-            ret_width: 1,
-            ret_signed: false,
-            auto_override,
-            str_params,
-            has_hier_call: false,
-            contains_shared_fork: false,
-        });
-        let fp = self.frame_path(&task.name.name);
-        self.frame_func_names.push(fp); // %m
-        self.frame_keys.push(name.to_string()); // R2 route census
+        let fp = self.frame_path(&task.name.name); // %m
+        let pushed = self.push_func(
+            ir::FuncDef {
+                entry: 0, // filled by lower_frame_task_body
+                n_params,
+                locals_len,
+                is_task: true,
+            },
+            FuncMeta {
+                base_net,
+                n_params,
+                return_slot: 0, // unused for tasks (no func-named return var)
+                locals_len,
+                is_automatic: task.automatic,
+                ret_width: 1,
+                ret_signed: false,
+                auto_override,
+                str_params,
+                has_hier_call: false,
+                contains_shared_fork: false,
+            },
+            fp,
+            Some(name.to_string()), // R2 route census
+            Some(task.name.span),   // R2 ⓒ declaration site
+        );
+        debug_assert_eq!(pushed, fid, "FuncId reserved above is not the one minted");
     }
 }

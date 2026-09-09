@@ -76,7 +76,10 @@ pub use levelize::{
     comb_depth, comb_ranks, fusion_candidates, fusion_candidates_across_copies,
     self_read_write_processes, FusionPair,
 };
-pub use profile::{BuiltinAcc, BuiltinCounts, BuiltinProfile, ProcProfile, ProcProfileCfg};
+pub use profile::{
+    BuiltinAcc, BuiltinCounts, BuiltinProfile, ProcProfile, ProcProfileCfg, SubAcc, SubCounts,
+    SubProfile,
+};
 pub use sched::FinishReason;
 
 use sched::Scheduler;
@@ -829,6 +832,10 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.builtin_prof = opts
         .proc_profile
         .map(|cfg| Box::new(profile::BuiltinProfile::new(cfg)));
+    // R2 ⓑ: the per-subroutine half of the same opt-in.
+    st.sub_prof = opts
+        .proc_profile
+        .map(|cfg| Box::new(profile::SubProfile::new(cfg)));
     st.net_dims = opts.net_dims.clone();
     st.net_decl_ranges = opts.net_decl_ranges.clone();
     st.file_directed_stmts = opts.file_directed_stmts.clone();
@@ -1243,6 +1250,11 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
             // the two halves cannot disagree about whether the run was timed.
             if let Some(bp) = st.builtin_prof.take() {
                 b.builtins = bp.finish();
+            }
+            // R2 ⓑ: same fold, same reason — one record, so the three halves
+            // cannot disagree about whether the run was timed.
+            if let Some(sp) = st.sub_prof.take() {
+                b.subroutines = sp.finish();
             }
             *b
         }),

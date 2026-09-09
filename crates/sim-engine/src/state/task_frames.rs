@@ -35,6 +35,29 @@ impl SimState<'_> {
         in_vals: &[(u32, Value)],
         out_slots: &[u32],
     ) -> Option<Vec<Value>> {
+        // R2 ⓑ: THE seam for every SYNCHRONOUS (subset) task call. Placed here
+        // and not on `run_task_call_with` one level up because a NESTED subset
+        // call inside a frame body reaches this function directly — counting at
+        // the wrapper would have missed that caller, which is the same
+        // picker-vs-emitter mistake R2 ⓐ made and had to measure its way out of.
+        // Synchronous by construction (the body runs to completion here), so
+        // this seam times as well as counts.
+        let Some(p) = self.sub_prof.as_ref() else {
+            return self.run_task_inner(nets, callee, in_vals, out_slots);
+        };
+        let f = p.enter();
+        let out = self.run_task_inner(nets, callee, in_vals, out_slots);
+        p.leave(callee, f);
+        out
+    }
+
+    fn run_task_inner<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        callee: u32,
+        in_vals: &[(u32, Value)],
+        out_slots: &[u32],
+    ) -> Option<Vec<Value>> {
         use sim_ir::{Stmt, Terminator};
         if self.func_table.is_empty() {
             return None;
@@ -564,6 +587,15 @@ impl SimState<'_> {
     /// callee runs to completion before any other activity interleaves); a call that
     /// actually suspends needs the per-activity window (a follow-on phase).
     pub(crate) fn enter_task_frame(&self, callee: u32, in_vals: &[(u32, Value)]) {
+        // R2 ⓑ: THE seam for every SUSPENDABLE task frame (all three callers are
+        // real calls). COUNT only, never timed: this function returns as soon as
+        // the frame is open, and the task may then sit on a `#5` or an
+        // `@(posedge clk)` for the rest of the run — wall time to its `Return`
+        // would be mostly time the task was not running. `SubAcc::timed_calls`
+        // is what tells a reader which rows this applies to.
+        if let Some(p) = self.sub_prof.as_ref() {
+            p.count(callee);
+        }
         let m = self.func_table[callee as usize];
         let base = m.base_net;
         self.call_depth.set(self.call_depth.get() + 1);

@@ -678,6 +678,27 @@ pub(crate) fn run_vita_str_gated(
     // R2 intermediate: the subroutine route census — `run.json` only, like the
     // identity tables above (the engine has no use for it).
     let subroutines = sc.subroutines;
+    // R2 ⓑ/ⓒ: per-FuncId identity for the `subroutine_calls` rows. Built HERE
+    // because `sc.func_names` is MOVED into `SimOpts` below (the engine needs it
+    // for `%m`), and only under `--obs-dir` — without the flag nothing reads it
+    // and the clone would be pure cost.
+    let sub_idents: Vec<obs::SubIdent> = if opts.obs_dir.is_some() {
+        sc.func_names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                let d = sc.func_decl_locs.get(i).and_then(|d| d.as_ref());
+                obs::SubIdent {
+                    name: n.clone(),
+                    file: d.map(|d| d.file.clone()).unwrap_or_default(),
+                    line: d.map_or(0, |d| d.line),
+                    col: d.map_or(0, |d| d.col),
+                }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let sim_opts = SimOpts {
         fork_modes: sc.fork_modes,
         net_names: sc.net_names,
@@ -803,6 +824,7 @@ pub(crate) fn run_vita_str_gated(
             profile,
             proc_idents: &proc_idents,
             ca_idents: &ca_idents,
+            sub_idents: &sub_idents,
         });
         emit_obs(
             dir,

@@ -437,7 +437,15 @@ struct Elaborator<'s> {
     /// cannot serve — it holds the `%m` PATH, not the key the route census is
     /// filed under. Lets `note_frame_call` take only a FuncId, so the three
     /// emitters are the whole census and a new call site cannot miss it.
-    frame_keys: Vec<String>,
+    ///
+    /// `None` = a FuncId that owns no route-census row (a class method — see
+    /// [`tables::SubroutineRoutes`]'s "NOT counted"). It still occupies its slot:
+    /// the entry is the alignment, not the row. Minted only through
+    /// [`Self::push_func`], which is what makes that alignment structural.
+    frame_keys: Vec<Option<String>>,
+    /// R2 ⓒ: DECLARATION site per FuncId, parallel to `frame_func_names`.
+    /// Drained into `Sidecars.func_decl_locs`. `None` = no `SpanResolver`.
+    frame_decl_locs: Vec<Option<DeclLoc>>,
     /// B1 frame-call: the GLOBAL `FuncDef` arena (→ `ir.funcs`). Accumulates
     /// across instances; index-aligned to `func_metas`. EMPTY for designs with
     /// no frame functions (golden-neutral: `ir.funcs` stays empty).

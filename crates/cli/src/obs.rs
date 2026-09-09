@@ -152,6 +152,31 @@ pub struct ObsProcs<'a> {
     pub proc_idents: &'a [sim_engine::ProcIdent],
     /// Per-cont-assign identity, parallel to `profile.ca_evals`.
     pub ca_idents: &'a [sim_engine::ProcIdent],
+    /// R2 ⓑ/ⓒ: per-FuncId identity for the `subroutine_calls` rows, index-
+    /// aligned to `ir.funcs`. EMPTY ⇒ rows fall back to their FuncId alone (an
+    /// unlabelled row is a visible "here is cost I cannot name"; a DROPPED row
+    /// would be the profile silently omitting what the reader is hunting).
+    pub sub_idents: &'a [SubIdent],
+}
+
+/// R2 ⓑ/ⓒ: what a `subroutine_calls` row is called and where it was written.
+///
+/// ⚠️ `name` carries TWO conventions, because `func_names` does. A module
+/// subroutine gets its `%m` PATH, which is PER-INSTANCE (`top.u1.aut` and
+/// `top.u2.aut` are two FuncIds for one written subroutine); a CLASS method gets
+/// the class-relative `C.m` fragment, because a global class table does not know
+/// its declaring instance (the engine prefixes the calling scope at render time).
+/// Nothing in the row discriminates the two, so `name` is a LABEL, not a key.
+///
+/// `file`/`line`/`col` is the DECLARATION, written once however many FuncIds it
+/// minted, and it is the same for both conventions — which is why it, and not the
+/// name, is what identifies a row's source.
+#[derive(Debug, Clone, Default)]
+pub struct SubIdent {
+    pub name: String,
+    pub file: String,
+    pub line: u32,
+    pub col: u32,
 }
 
 /// One serialized profile row, already resolved from the two parallel tables.
@@ -494,6 +519,96 @@ impl ObsRun<'_> {
                     s.push('}');
                 }
                 s.push_str("\n  ]}");
+            }
+        }
+        // R2 ⓑ: the per-SUBROUTINE call table — the DYNAMIC counterpart of the
+        // `subroutines` object above. That one says which functions and tasks
+        // the elaborator turned into frame calls and how many call SITES it
+        // lowered; this one says how many times each was actually entered. A
+        // sibling of `processes` and `builtins` for the same reason those two
+        // are siblings: a subroutine is neither a schedulable body nor a
+        // simulator primitive. Same `--obs-procs` opt-in, same `null` = "not
+        // measured".
+        s.push_str(",\n  \"subroutine_calls\": ");
+        match &self.procs {
+            None => s.push_str("null"),
+            Some(pp) => {
+                let sub = &pp.profile.subroutines;
+                let mut rows: Vec<(&u32, &sim_engine::SubAcc)> = sub.rows.iter().collect();
+                // Descending by CALLS — deterministic — then ascending by
+                // FuncId, a total order, so two runs of one design byte-diff
+                // clean even with timing on.
+                rows.sort_by(|a, b| b.1.calls.cmp(&a.1.calls).then_with(|| a.0.cmp(b.0)));
+                s.push_str("{\"timed\": ");
+                s.push_str(if sub.timed { "true" } else { "false" });
+                // The two things a reader must not assume, said rather than
+                // left to them. (1) These rows and the `subroutines` object
+                // above DO NOT share a key: this one is per-INSTANCE and
+                // includes the class methods and hierarchical calls that one
+                // excludes, so the columns must not be added. `decl_file`/
+                // `decl_line` is the join. (2) `time_s` covers `timed_calls`,
+                // not `calls` — a suspendable task frame is counted and not
+                // timed, because the wall time to its `Return` is mostly time
+                // the task was not running.
+                s.push_str(
+                    ", \"key\": \"per-INSTANCE FuncId. INCLUDES class methods and \
+                     hierarchical calls, which the static `subroutines` object does not file \
+                     at all, and EXCLUDES every INLINED subroutine, which has no call node to \
+                     count — so the two objects share no key and their columns must not be \
+                     added. A row identifies its source by decl_file:decl_line:decl_col; the \
+                     static object does not carry that yet, so read it by name and route\"",
+                );
+                s.push_str(
+                    ", \"time_semantics\": \"time_s is SELF time over timed_calls only \
+                     (nested subroutine time subtracted); timed_calls < calls means the rest \
+                     were SUSPENDABLE task frames, which are counted and never timed. \
+                     total_calls is entries into FRAMED subroutines only — an inlined one \
+                     contributes none, and `subroutines[].route` is what says which is which\"",
+                );
+                s.push_str(", \"distinct\": ");
+                s.push_str(&rows.len().to_string());
+                s.push_str(", \"total_calls\": ");
+                let total: u64 = rows.iter().map(|r| r.1.calls).sum();
+                s.push_str(&total.to_string());
+                s.push_str(",\n  \"items\": [");
+                for (i, (fid, acc)) in rows.iter().enumerate() {
+                    s.push_str(if i > 0 { ",\n    {" } else { "\n    {" });
+                    s.push_str("\"func\": ");
+                    s.push_str(&fid.to_string());
+                    let id = self
+                        .procs
+                        .as_ref()
+                        .and_then(|p| p.sub_idents.get(**fid as usize));
+                    // `func_names` stores `%m`'s ABSOLUTE spelling, with a
+                    // leading `.` the engine consumes when it prefixes the
+                    // calling scope. That marker is meaningless in a report, so
+                    // it is trimmed for display here — a presentation trim, not
+                    // a second renderer of the `%m` string itself.
+                    s.push_str(", \"name\": ");
+                    json_str(
+                        &mut s,
+                        id.map_or("", |d| d.name.strip_prefix('.').unwrap_or(&d.name)),
+                    );
+                    s.push_str(", \"decl_file\": ");
+                    json_str(&mut s, id.map_or("", |d| d.file.as_str()));
+                    s.push_str(", \"decl_line\": ");
+                    s.push_str(&id.map_or(0, |d| d.line).to_string());
+                    s.push_str(", \"decl_col\": ");
+                    s.push_str(&id.map_or(0, |d| d.col).to_string());
+                    s.push_str(", \"calls\": ");
+                    s.push_str(&acc.calls.to_string());
+                    // Emitted only when measured — a `0.0` would read as "this
+                    // subroutine costs nothing", a different claim from "nobody
+                    // asked".
+                    if sub.timed {
+                        s.push_str(", \"timed_calls\": ");
+                        s.push_str(&acc.timed_calls.to_string());
+                        s.push_str(", \"time_s\": ");
+                        s.push_str(&fmt_wall(acc.nanos as f64 / 1e9));
+                    }
+                    s.push('}');
+                }
+                s.push_str(if rows.is_empty() { "]}" } else { "\n  ]}" });
             }
         }
         // ── isolated wall-clock (excluded from the determinism golden) ──

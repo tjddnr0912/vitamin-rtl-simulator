@@ -140,6 +140,7 @@ impl<'a> SimState<'a> {
             proc_inst_scopes: Vec::new(),
             proc_prof: None,
             builtin_prof: None,
+            sub_prof: None,
             cur_scope: "top".to_string(),
             cur_inst_scope: "top".to_string(),
             cur_block_scope: std::cell::RefCell::new(String::new()),

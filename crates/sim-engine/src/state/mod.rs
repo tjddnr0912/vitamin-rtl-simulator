@@ -786,6 +786,11 @@ pub(crate) struct SimState<'a> {
     /// (see [`crate::profile::BuiltinProfile`]'s note). Boxed for the same
     /// reason: `None` costs one pointer.
     pub builtin_prof: Option<Box<crate::profile::BuiltinProfile>>,
+    /// R2 ⓑ: the per-SUBROUTINE call accumulators, or `None` on a run that did
+    /// not ask. A third object for `builtin_prof`'s reason — its three seams are
+    /// `&self` methods on THIS type, so it must be reachable through the same
+    /// shared borrow the frame executors hold. Boxed: `None` costs one pointer.
+    pub sub_prof: Option<Box<crate::profile::SubProfile>>,
 }
 
 /// A heap-allocated class object (N7). `class_id` is the DYNAMIC type (set at

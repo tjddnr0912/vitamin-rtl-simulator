@@ -1449,6 +1449,32 @@ impl<'a> SimState<'a> {
         func: u32,
         args: &[Value],
     ) -> Option<Value> {
+        // R2 ⓑ: THE seam for every `Expr::Call` — plain and package functions,
+        // class methods and constructors, the virtual-dispatch-resolved target,
+        // and hierarchical `u1.f(x)`. All three `NetReader::eval_call` impls
+        // (interpreter, VM, native kernel) funnel here, which is what makes the
+        // count backend-invariant by construction rather than by argument.
+        //
+        // The wrapper exists because the body has five exits: an enter/leave
+        // pair placed inside it would have to be repeated at each, and the
+        // no-profile path must stay one `Option` test. Synchronous by
+        // definition (a function call returns a value), so this seam TIMES as
+        // well as counts.
+        let Some(p) = self.sub_prof.as_ref() else {
+            return self.run_frame_call_inner(nets, func, args);
+        };
+        let f = p.enter();
+        let out = self.run_frame_call_inner(nets, func, args);
+        p.leave(func, f);
+        out
+    }
+
+    fn run_frame_call_inner<N: crate::eval::NetReader + ?Sized>(
+        &self,
+        nets: Option<&N>,
+        func: u32,
+        args: &[Value],
+    ) -> Option<Value> {
         use sim_ir::{Stmt, Terminator};
         if self.func_table.is_empty() {
             return None; // non-frame Call → the eval arm X-poisons

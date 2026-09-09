@@ -89,8 +89,11 @@ impl Elaborator<'_> {
     /// three of them the entire census, and `frame_keys` is what lets them do it
     /// without a name to thread.
     pub(crate) fn note_frame_call(&mut self, fid: u32) {
-        let Some(key) = self.frame_keys.get(fid as usize).cloned() else {
-            return; // defensive: a FuncId with no reserved key cannot be filed
+        // `None` = a FuncId that owns no row (a class method — uncounted by
+        // design). Out of range is unreachable now that `push_func` mints every
+        // FuncId with its key; it used to be the SILENT half of the desync.
+        let Some(Some(key)) = self.frame_keys.get(fid as usize).cloned() else {
+            return;
         };
         let is_task = self.funcs.get(fid as usize).is_some_and(|f| f.is_task);
         self.note_subroutine_route(&key, is_task, true);

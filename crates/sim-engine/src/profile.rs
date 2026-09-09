@@ -66,6 +66,11 @@ pub struct ProcProfile {
     /// EMPTY `rows` means "measured, no builtin ran" — the "not measured" case
     /// is the enclosing `Option<ProcProfile>` being `None`.
     pub builtins: BuiltinCounts,
+    /// R2 ⓑ: the per-SUBROUTINE call table, folded in at the end of the run from
+    /// the interior-mutable [`SubProfile`] the three runtime seams bumped. EMPTY
+    /// `rows` means "measured, no subroutine ran"; "not measured" is the
+    /// enclosing `Option<ProcProfile>` being `None`.
+    pub subroutines: SubCounts,
 }
 
 impl ProcProfile {
@@ -87,6 +92,10 @@ impl ProcProfile {
                 Vec::new()
             },
             builtins: BuiltinCounts {
+                timed: cfg.timed,
+                rows: std::collections::BTreeMap::new(),
+            },
+            subroutines: SubCounts {
                 timed: cfg.timed,
                 rows: std::collections::BTreeMap::new(),
             },
@@ -309,6 +318,137 @@ impl BuiltinProfile {
     /// Freeze into the reportable table.
     pub fn finish(&self) -> BuiltinCounts {
         BuiltinCounts {
+            timed: self.timed,
+            rows: self.acc.borrow().clone(),
+        }
+    }
+}
+
+// ── R2 ⓑ: the per-SUBROUTINE call profile ────────────────────────────────────
+//
+// WHAT IT ANSWERS AND WHY THE STATIC CENSUS CANNOT. `run.json`'s `subroutines`
+// object (R2 ⓐ) says which user functions and tasks the elaborator turned into
+// FRAME calls and how many call sites it lowered under that route. It is a
+// static shape: a call inside a `for` loop is ONE site whether the loop runs
+// once or a million times, and a subroutine on a cold branch looks exactly like
+// one on the hot path. This is the execution half — how many times each
+// subroutine was actually entered.
+//
+// THE KEY IS A FuncId, and that is a deliberate difference from ⓐ. ⓐ files rows
+// under `(module, routine)`, which folds a module instantiated N times into one
+// row and — by design — records NO row for a class method or a hierarchical
+// call. A FuncId is per-instance and covers every one of those, so the two
+// objects answer different questions and a reader must not add their columns.
+// `Sidecars::func_decl_locs` (ⓒ) is what lets a reader join them anyway: the
+// declaration `file:line:col` is written once no matter how many FuncIds it
+// minted.
+//
+// WHY `timed_calls` IS A SEPARATE COLUMN, not an inferred one. Two of the three
+// seams are SYNCHRONOUS — the call returns before the seam does, so an
+// enter/leave pair measures the subroutine. The third (`enter_task_frame`) opens
+// a SUSPENDABLE frame: it returns immediately and the task may sit on a `#5` or
+// an `@(posedge clk)` for the rest of the run, so wall time between its entry
+// and its `Return` is mostly time the task was not running. Charging that to the
+// subroutine would be a wrong number in a file whose whole promise is that its
+// numbers are right, so those calls are counted and NOT timed. `timed_calls`
+// says how much of `calls` the `nanos` column actually covers; when it is less
+// than `calls`, the missing ones are suspendable frames.
+
+/// Cumulative accumulator for ONE subroutine (FuncId).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SubAcc {
+    /// Entries into this subroutine, from all three runtime seams.
+    /// Deterministic.
+    pub calls: u64,
+    /// The subset of `calls` that `nanos` covers — the synchronous seams. Always
+    /// 0 unless the run asked for `--obs-procs-time`; below `calls` when the
+    /// subroutine is a suspendable task frame (see the note above).
+    pub timed_calls: u64,
+    /// SELF (exclusive) nanoseconds over `timed_calls`, nested subroutine time
+    /// subtracted exactly as [`BuiltinProfile::leave`] does it.
+    pub nanos: u64,
+}
+
+/// The finished per-subroutine table handed back on [`ProcProfile`].
+///
+/// `BTreeMap<u32, _>`: the key is the FuncId, a total order that does not depend
+/// on execution order — the same property that keeps [`BuiltinCounts`] byte-
+/// stable across two runs of one design.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SubCounts {
+    pub timed: bool,
+    pub rows: std::collections::BTreeMap<u32, SubAcc>,
+}
+
+/// One open subroutine invocation. Same shape and same reentrancy trick as
+/// [`BuiltinFrame`].
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SubFrame {
+    t0: Option<std::time::Instant>,
+    saved_nested: u64,
+}
+
+/// The live per-subroutine accumulators.
+///
+/// ⚠️ Interior-mutable for [`BuiltinProfile`]'s reason, one step stronger: all
+/// three seams are `&self` methods on `SimState` (`run_frame_call_with`,
+/// `enter_task_frame`, `run_task_with`), reached identically by the interpreter,
+/// the VM and the native kernel. Bumping THERE rather than at the callers is
+/// what makes the counts backend-invariant by construction instead of by
+/// argument — and it is R2 ⓐ's own lesson: ⓐ first counted at the sites that
+/// PICK a route and measured `sites: 0` for two real call sites, because a
+/// rewrite upstream meant the picker never saw them.
+#[derive(Debug, Default)]
+pub struct SubProfile {
+    timed: bool,
+    acc: std::cell::RefCell<std::collections::BTreeMap<u32, SubAcc>>,
+    nested: std::cell::Cell<u64>,
+}
+
+impl SubProfile {
+    /// Allocate for one run. Constructed only when `--obs-procs` was given, so
+    /// `SimState::sub_prof == None` is the whole cost on a run without it.
+    pub fn new(cfg: ProcProfileCfg) -> Self {
+        Self {
+            timed: cfg.timed,
+            acc: std::cell::RefCell::new(std::collections::BTreeMap::new()),
+            nested: std::cell::Cell::new(0),
+        }
+    }
+
+    /// Count one entry into `fid` WITHOUT timing it — the suspendable-frame
+    /// seam, whose open and close are not the same synchronous scope.
+    #[inline]
+    pub(crate) fn count(&self, fid: u32) {
+        self.acc.borrow_mut().entry(fid).or_default().calls += 1;
+    }
+
+    /// Open one SYNCHRONOUS invocation (see [`BuiltinProfile::enter`]).
+    #[inline]
+    pub(crate) fn enter(&self) -> SubFrame {
+        SubFrame {
+            t0: self.timed.then(std::time::Instant::now),
+            saved_nested: self.nested.replace(0),
+        }
+    }
+
+    /// Close one synchronous invocation and charge it to `fid`.
+    #[inline]
+    pub(crate) fn leave(&self, fid: u32, f: SubFrame) {
+        let elapsed = f.t0.map_or(0, |t0| t0.elapsed().as_nanos() as u64);
+        let inner = self.nested.replace(f.saved_nested.saturating_add(elapsed));
+        let mut acc = self.acc.borrow_mut();
+        let slot = acc.entry(fid).or_default();
+        slot.calls += 1;
+        if self.timed {
+            slot.timed_calls += 1;
+        }
+        slot.nanos = slot.nanos.saturating_add(elapsed.saturating_sub(inner));
+    }
+
+    /// Freeze into the reportable table.
+    pub fn finish(&self) -> SubCounts {
+        SubCounts {
             timed: self.timed,
             rows: self.acc.borrow().clone(),
         }
