@@ -246,12 +246,16 @@ fn a_declared_width_target_is_untouched() {
     );
 }
 
-/// The accept set's two declines, pinned as the residues they are rather than left to look
-/// like coverage. Both keep their pre-slice answer.
+/// The accept set's remaining declines, pinned as the residues they are rather than left
+/// to look like coverage. Both keep their pre-slice answer.
 ///
-/// * a NAME leaf (`W8 + 1'b0`) — `ctx_width_names_are_evident` refuses it, because
-///   `const_self_width` would size the name from `param_meta`, where value-INFERRED widths
-///   live. Both oracles bind 8 (iverilog 9, its `+` quirk); vita keeps 32.
+/// * a name whose width is VALUE-INFERRED (`localparam W8 = ~8'hCB` — no declared range).
+///   `declared_override_widths` cannot certify it: `param_range` has no entry, so
+///   `narrow_param_bits` declines and the whole override declines with it, fail-closed.
+///   Both oracles bind 8; vita keeps 32. ⚠️ This is NOT "a name leaf declines" any more —
+///   a name with a DECLARED range now binds at that width
+///   (`a_declared_name_leaf_binds_at_its_declared_width`). What is left is exactly the
+///   provenance the parser does not record.
 /// * a >64-bit tree (`~128'd0`) — `const_ctx_within_i64` refuses it, because the value
 ///   re-fold clamps at 64. Both oracles bind 128; vita keeps 32.
 #[test]
@@ -270,6 +274,187 @@ fn the_declined_shapes_keep_their_pre_slice_answer() {
         [
             "top.name_leaf bits=32 hex=00000034",
             "top.too_wide bits=32 hex=ffffffff",
+        ]
+    );
+}
+
+/// §2 "Index sealing" residue ⓐ: a NAME leaf with a DECLARED range takes that width, at
+/// every operator top the accept set covers.
+///
+/// ⚠️ Where the two oracles part, the cell is annotated with WHICH tool contradicts
+/// itself, by the adjudication this file's header states: iverilog binds `+ - *` at
+/// max+1 while its own `$bits` of the same text says 8; verilator binds `%` at 32 while
+/// its own `$bits` says 8. Every number below is the answer all three give when asked
+/// `$bits(<expr>)` directly — Table 11-21.
+#[test]
+fn a_declared_name_leaf_binds_at_its_declared_width() {
+    let (o, c) = run("module sub #(parameter P = 1) (); initial $display(\"%m bits=%0d dec=%0d hex=%h\", $bits(P), P, P); endmodule\n\
+         module top;\n\
+        \x20 parameter [7:0] W8 = 8'd7;\n\
+        \x20 sub #(.P(W8 + 1'b0)) a_plus();\n\
+        \x20 sub #(.P(W8 << 1))   b_shl();\n\
+        \x20 sub #(.P(~W8))       c_not();\n\
+        \x20 sub #(.P(-W8))       d_neg();\n\
+        \x20 sub #(.P(W8 * 2'd2)) e_mul();\n\
+        \x20 sub #(.P(W8 / 2'd2)) f_div();\n\
+        \x20 sub #(.P(W8 % 3'd3)) g_mod();\n\
+        \x20 sub #(.P(1'b1 ? W8 : 8'd0)) h_tern();\n\
+        \x20 sub #(.P((W8)))      i_paren();\n\
+        \x20 initial #10 $finish;\nendmodule\n");
+    assert_eq!(c, Some(0), "{o}");
+    let mut got = lines(&o);
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            // iverilog binds `+` at 9; verilator and a direct `$bits` say 8
+            "top.a_plus bits=8 dec=7 hex=07",
+            "top.b_shl bits=8 dec=14 hex=0e",  // both oracles
+            "top.c_not bits=8 dec=248 hex=f8", // both oracles — WIDTH and VALUE
+            "top.d_neg bits=8 dec=249 hex=f9", // both oracles
+            // iverilog binds `*` at 10; verilator and a direct `$bits` say 8
+            "top.e_mul bits=8 dec=14 hex=0e",
+            "top.f_div bits=8 dec=3 hex=03", // both oracles
+            // verilator binds `%` at 32; iverilog and a direct `$bits` say 8
+            "top.g_mod bits=8 dec=1 hex=01",
+            "top.h_tern bits=8 dec=7 hex=07",  // both oracles
+            "top.i_paren bits=8 dec=7 hex=07", // a bare name through `override_bits`
+        ]
+    );
+}
+
+/// The same rule reaches the override through every channel and from every scope a name
+/// can be read in — all four measured identical, all matching BOTH oracles.
+///
+/// A `pkg::`-scoped name is deliberately NOT here: `narrow_param_bits` takes a
+/// single-segment path, so a `PkgScoped` leaf is not certified and the override declines
+/// fail-closed (`~pk::PA` keeps 32). Its package twin `pkg_const_range`/`pkg_const_meta`
+/// exists and is the next rung, not this slice.
+#[test]
+fn every_channel_and_name_position_binds_the_same() {
+    const SUB: &str = "module sub #(parameter P = 1) (); initial $display(\"%m bits=%0d dec=%0d hex=%h\", $bits(P), P, P); endmodule\n";
+    for (label, src) in [
+        (
+            "named",
+            format!("{SUB}module top; parameter [7:0] W8 = 8'd7; sub #(.P(~W8)) u(); initial #10 $finish; endmodule\n"),
+        ),
+        (
+            "positional",
+            format!("{SUB}module top; parameter [7:0] W8 = 8'd7; sub #(~W8) u(); initial #10 $finish; endmodule\n"),
+        ),
+        (
+            "defparam",
+            format!("{SUB}module top; parameter [7:0] W8 = 8'd7; sub u(); defparam u.P = ~W8; initial #10 $finish; endmodule\n"),
+        ),
+        (
+            "wildcard-imported package parameter",
+            format!("package pk; parameter [7:0] PA = 8'd7; endpackage\n{SUB}module top; import pk::*; sub #(.P(~PA)) u(); initial #10 $finish; endmodule\n"),
+        ),
+    ] {
+        let (o, c) = run(&src);
+        assert_eq!(c, Some(0), "{label}: {o}");
+        assert_eq!(lines(&o), ["top.u bits=8 dec=248 hex=f8"], "channel {label}");
+    }
+}
+
+/// A generate scope reads an OUTER parameter, and the sign comes from the same env the
+/// width did.
+///
+/// ⚠️ This is why the meta's sign is taken from `const_signed_env` and not
+/// `const_expr_signed`: the latter's `Ident` arm resolves through `fq()` — the current
+/// scope only — where the width walk uses the scope CHAIN. Measured on the sibling
+/// (localparam) lane, an outer `signed [7:0] S8` read from inside a generate block folds
+/// `S8 >>> 1` to 255 while the identical text at module scope folds to −1, both oracles
+/// −1. Asking one env for both answers is what keeps that pre-existing defect (ROADMAP
+/// §2) out of this channel. Both cells below match both oracles.
+#[test]
+fn a_generate_scope_reads_the_outer_declaration_for_width_and_sign() {
+    let (o, c) = run("module sub #(parameter P = 1) (); initial $display(\"%m bits=%0d dec=%0d hex=%h\", $bits(P), P, P); endmodule\n\
+         module top;\n\
+        \x20 parameter signed [7:0] S8 = -8'sd2;\n\
+        \x20 generate if (1) begin : g\n\
+        \x20   localparam [7:0] GL = 8'd7;\n\
+        \x20   sub #(.P(~GL)) u();\n\
+        \x20   sub #(.P(-S8)) v();\n\
+        \x20 end endgenerate\n\
+        \x20 initial #10 $finish;\nendmodule\n");
+    assert_eq!(c, Some(0), "{o}");
+    let mut got = lines(&o);
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            "top.g.u bits=8 dec=248 hex=f8", // both oracles
+            "top.g.v bits=8 dec=2 hex=02",   // both oracles
+        ]
+    );
+}
+
+/// FORWARDING — the half that is a DIFFERENT root, pinned in both directions so the
+/// boundary is a measured fact rather than an omission.
+///
+/// A parent's own untyped parameter `Q` forwarded into a child (`#(.P(Q + 1'b0))`) binds
+/// correctly when `Q` is NOT overridden, and when the override's width happens to equal
+/// the default literal's. It keeps its pre-slice 32 when they differ, because
+/// `param_range` still holds the DEFAULT literal's width for an overridden untyped
+/// parameter while `param_meta` holds the override's — and `narrow_param_bits` refuses a
+/// disagreement rather than picking one. That refusal is the whole reason this slice
+/// cannot regress: the stale entry is declined, not believed.
+///
+/// The oracles bind 4/16 in the differing cells. Closing them means gating
+/// `param_decl_width_opt`'s sized-literal arm on `default_binds`, which is its own slice.
+#[test]
+fn forwarding_binds_when_the_two_width_maps_agree_and_declines_when_they_do_not() {
+    let (o, c) = run("module sub #(parameter P = 1) (); initial $display(\"%m bits=%0d dec=%0d hex=%h\", $bits(P), P, P); endmodule\n\
+         module mid #(parameter Q = 8'd7) ();\n\
+        \x20 sub #(.P(~Q)) f();\n\
+         endmodule\n\
+         module top;\n\
+        \x20 mid              m_def();\n\
+        \x20 mid #(.Q(8'd9))  m_same();\n\
+        \x20 mid #(.Q(16'd9)) m_wide();\n\
+        \x20 initial #10 $finish;\nendmodule\n");
+    assert_eq!(c, Some(0), "{o}");
+    let mut got = lines(&o);
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            "top.m_def.f bits=8 dec=248 hex=f8",  // both oracles
+            "top.m_same.f bits=8 dec=246 hex=f6", // both oracles
+            // RESIDUE: both oracles bind 16 (`fff6`); the two width maps disagree here.
+            "top.m_wide.f bits=32 dec=-10 hex=fffffff6",
+        ]
+    );
+}
+
+/// The shapes this slice must NOT move, measured PRE and POST: a bare name and the
+/// bitwise trees already answered by `override_bits`, a reduction top (1 bit — vita is on
+/// iverilog's side; verilator self-contradicts at 32), and an untyped DECIMAL default,
+/// whose 32 is the correct answer in all three tools.
+#[test]
+fn the_already_correct_shapes_are_untouched() {
+    let (o, c) = run("module sub #(parameter P = 1) (); initial $display(\"%m bits=%0d dec=%0d hex=%h\", $bits(P), P, P); endmodule\n\
+         module top;\n\
+        \x20 parameter [7:0] W8 = 8'd7;\n\
+        \x20 parameter       WD = 7;\n\
+        \x20 sub #(.P(W8))        a_alone();\n\
+        \x20 sub #(.P(W8 | 1'b0)) b_or();\n\
+        \x20 sub #(.P(W8 & 8'hFF))c_and();\n\
+        \x20 sub #(.P(|W8))       d_red();\n\
+        \x20 sub #(.P(WD | 1'b0)) e_untyped_decimal();\n\
+        \x20 initial #10 $finish;\nendmodule\n");
+    assert_eq!(c, Some(0), "{o}");
+    let mut got = lines(&o);
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            "top.a_alone bits=8 dec=7 hex=07",
+            "top.b_or bits=8 dec=7 hex=07",
+            "top.c_and bits=8 dec=7 hex=07",
+            "top.d_red bits=1 dec=1 hex=1",
+            "top.e_untyped_decimal bits=32 dec=7 hex=00000007",
         ]
     );
 }

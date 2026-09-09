@@ -508,15 +508,95 @@ impl Elaborator<'_> {
             } | ast::ExprKind::Binary { .. }
                 | ast::ExprKind::Ternary { .. }
         );
+        // §2 "Index sealing" residue ⓐ: a NAME leaf whose DECLARED width this
+        // scope can prove. Empty for a literal-only tree, which is every cell
+        // §4.5.463's census covered, so that lane is byte-identical.
+        let envw = self.declared_override_widths(e)?;
         if !sized_by_operator
             || ast_contains_fill(e)
-            || !Self::ctx_width_names_are_evident(e, &ConstWidths::new())
+            || !Self::ctx_width_names_are_evident(e, &envw)
             || !self.const_ctx_within_i64(e)
         {
             return None;
         }
-        let w = self.const_self_width(top, &ConstWidths::new())?;
-        (w > 0).then(|| (w, self.const_expr_signed(top)))
+        let w = self.const_self_width(top, &envw)?;
+        // ⚠️ `const_signed_env`, not `const_expr_signed`. The latter's `Ident` arm
+        // resolves through `self.fq()` — the CURRENT scope only — where both
+        // `const_self_width` and this map walk the scope chain. Measured: with a
+        // signed `S8` declared at module scope, `localparam K = S8 >>> 1` inside a
+        // `generate if (1) begin:gb` folds to 255 while the identical text at
+        // module scope folds to −1, and both oracles say −1 in both places. Taking
+        // the sign from the same env the width came from is what stops this slice
+        // inheriting that (pre-existing, recorded in ROADMAP §2) defect.
+        (w > 0).then(|| (w, self.const_signed_env(top, &envw)))
+    }
+
+    /// Every bare NAME in an override expression, at the width its DECLARATION
+    /// gives it — or `None` if any one of them cannot be proved.
+    ///
+    /// ⚠️ WHY THIS IS NOT `param_meta`. `const_self_width`'s `Ident` arm falls back
+    /// to `walk_scopes(name, &self.param_meta)`, and `param_meta` holds the width a
+    /// parameter's VALUE was inferred at, which for an untyped parameter is 32 and
+    /// for an OVERRIDDEN one can be stale. Laundering that through this gate is what
+    /// made `#(.P(W8 + 1'b0))` bind at 32 where both oracles bind at 8.
+    ///
+    /// ⚠️ AND WHY `param_range` ALONE IS NOT ENOUGH EITHER — the gate's own comment
+    /// records an attempt that used it and put a design straight back to wrong. The
+    /// resolver that works is already in the tree and is already called on this
+    /// expression by the sibling channel: [`Self::narrow_param_bits`], which
+    /// answers `#(.P(W8))` and `#(.P(W8 | 1'b0))` correctly TODAY, in this same
+    /// parent scope. Its guard chain is reproduced verbatim below, and the term the
+    /// earlier attempt was missing is the last one: `param_range`'s width and
+    /// `param_meta`'s width must AGREE. A disagreement means one of the two was
+    /// inferred, which is exactly the stale-entry case, and it is refused.
+    ///
+    /// Fail-closed as a whole: one unprovable name declines the entire override, so
+    /// this can only ever move a name-bearing tree from the value-inferred 32 to a
+    /// declared width, never from a declared width to a guess.
+    fn declared_override_widths(&self, e: &ast::Expr) -> Option<ConstWidths> {
+        fn names<'a>(e: &'a ast::Expr, out: &mut Vec<&'a ast::HierPath>) -> bool {
+            use ast::ExprKind as K;
+            match &e.kind {
+                K::Ident(p) if p.segments.len() == 1 => {
+                    out.push(p);
+                    true
+                }
+                K::Paren { inner } | K::Unary { operand: inner, .. } => names(inner, out),
+                K::Cast {
+                    target: ast::CastTarget::Size(_),
+                    expr,
+                } => names(expr, out),
+                K::Binary { lhs, rhs, .. } => names(lhs, out) && names(rhs, out),
+                K::Ternary {
+                    cond,
+                    then_e,
+                    else_e,
+                } => names(cond, out) && names(then_e, out) && names(else_e, out),
+                K::Concat { parts } => parts.iter().all(|q| names(q, out)),
+                // Not a name and not a container this gate descends into — leave it
+                // to `ctx_width_names_are_evident`, which is the authority on the
+                // accept set. Returning `true` here keeps the two in step: this
+                // function's job is only to CERTIFY the names that arm will meet.
+                _ => true,
+            }
+        }
+        let mut found = Vec::new();
+        if !names(e, &mut found) {
+            return None;
+        }
+        let mut out = ConstWidths::new();
+        for path in found {
+            // The REAL path node, never a synthesized one: `narrow_param_bits`
+            // resolves the name through the live scope chain, and handing it a
+            // fabricated span would make this resolver answer about a different
+            // occurrence than the one the fold is about to evaluate.
+            let (_, w, signed) = self.narrow_param_bits(path)?;
+            if w == 0 {
+                return None;
+            }
+            out.insert(path.segments[0].name.clone(), (w, signed));
+        }
+        Some(out)
     }
 
     /// The same override expression's VALUE, re-folded AT the type
