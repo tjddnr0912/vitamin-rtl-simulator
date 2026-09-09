@@ -64,11 +64,80 @@
 
 ### Census mechanics moved out of LOOPROMPT §4 (2026-09-06)
 
+- A post-patch / re-spell pass has as many sites as the type has CONTAINERS; a sibling spelling that
+  is already right is the signal that one container was missed.
+- A parser-side fold has no scope. Widening a name accept set means probing every BINDER
+  (block-local, ANSI and non-ANSI formal, genvar, instance) and tying the stand-down to that
+  syntactic scope.
+- Do not count diagnostics with `VITA_SCW_CHECK` on.
+
 - A typedef census must include the `signed` spelling of every cell; an unsigned-only table certifies the sign axis by omission.
 - One instance per census cell. A two-instance cell prints in display order and reads as NEW-SILENT when it is the second instance's pre-existing value.
 - An ordering defect is fixed by "before its first consumer" (compare spans; split the pass), never by "earlier": moving a binder ahead of everything re-orders every other consumer.
 - A verilator census is the bottleneck (about 1,500 cells per 30 minutes). Run it on a width subset only, keep one `--prefix` per executable, and hand-IEEE the cells whose oracle is untrusted (property `and`), saying so in the briefing.
 - The shadow set of a name is every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations. A census over declarations alone misses four of the five.
+
+### ⭐⭐ A reporting rail's teeth is an ASYMMETRIC MUTATION, never a repeat run (2026-09-09, §4.5.465)
+
+A determinism golden runs the same input twice and byte-compares. It cannot see a rail that reports
+the WRONG number, because both runs report it identically — measured: `run.json`'s subroutine census
+had two counts swapped for any design containing a class, under a golden that had been green for
+rounds. The gate that can see it changes something UPSTREAM that must not move the numbers and
+asserts they did not: add a class to a class-free design; instantiate a module twice; add a comment
+line. Rule: for every emitted table, name the mutation its numbers must be INVARIANT under, and pin
+that pair. And when a suite has never exercised two producers TOGETHER, the count it protects is
+untested no matter how many tests read it.
+
+### ⭐⭐ Parallel `Vec`s indexed by one id need a MINT FUNNEL, not a convention (2026-09-09, §4.5.465)
+
+Four `Vec`s were indexed by a FuncId that is `funcs.len()`, three producers pushed them, and one
+pushed three of the four. Because that producer runs FIRST, every later id was shifted and read
+another entry's data — reported as a wrong count, and, when the shift ran off the end, swallowed by
+a defensive `else { return }`. Guarding at the READER (a bounds check) leaves the next producer free
+to desync the next table, and the very next slice added one. Rule: make the id impossible to mint
+without every parallel table getting its entry — one function, `debug_assert`s for each table, and a
+`None` slot for the case that legitimately owns no row (the slot IS the alignment). ⚠️ The doc that
+enumerates the set is part of the code: it fell one table behind on the same day it was written.
+
+### ⭐⭐ A WALL is a claim; ask whether a SIBLING channel already resolves it (2026-09-09, §4.5.466)
+
+A row carried "prerequisite = the declared-width provenance wall" through four slices. The
+provenance was recorded the whole time, in the same map, and was already being READ AT THE SAME SITE
+by a sibling channel: `#(.P(W8))` bound 8 while `#(.P(W8 + 1'b0))` bound 32, in one scope, in one
+run. Rule: before accepting a wall, find the nearest spelling of the SAME question that already
+works and ask what it calls. ⚠️ And an earlier failed attempt is not proof either — the gate's own
+comment recorded one that used the map ALONE; the missing term was the agreement test between the
+two width maps, which is what refuses a stale entry.
+
+### ⭐⭐ Take the WIDTH and the SIGN from the same environment (2026-09-09, §4.5.466)
+
+A width resolver walked the scope CHAIN while the sign resolver next to it resolved through the
+current scope only. Same expression, two answers: an outer signed parameter read from inside a
+generate block folded unsigned (255) where the identical text at module scope folded −1, both
+oracles −1. Rule: when a gate seeds an environment for one property, read every property it decides
+from THAT environment; two resolvers for one name is a divergence waiting for a scope.
+
+### ⭐⭐ A widening must not SUBTRACT — and the property is per RULE, not per shape (2026-09-09, §4.5.467)
+
+An admission classifier gained a fourth rule. Merely GATHERING a span under it made a name look
+shadowed, collapsed a nesting pair, dropped the survivor below a count bar, and withdrew scoping
+from a DISJOINT block with nothing wrong with it. That property had already broken twice before
+through different doors, and each fix was written for the shape in front of it. Rules: ⓐ state the
+property ("adding a rule can only ADD candidates") and enforce it, do not patch shapes; ⓑ the
+baseline is not one privileged rule — a flag that says "not the original rule" protects only the
+original rule, and the three others stayed exposed (measured: four dynamic-storage kinds went
+value → loud); ⓒ but a general floor ADDS as well, and an addition can remove the diagnostic that
+was MASKING a different, still-broken span — that turned a loud into 18 silent-wrong cells. When the
+third fix on one axis makes the next blocker, the axis is wrong: revert, ship the separable halves,
+and file the thing every attempt kept uncovering as the prerequisite.
+
+### ⚠️ A file that describes itself must be checked against ITSELF (2026-09-09, §4.5.465)
+
+An emitted manifest told its reader to "join on decl_file:decl_line" while the object it named
+carried neither column, and the test that was supposed to protect that text asserted the SENTENCE,
+so it passed. Rules: pin the FACT (does the column exist? does the other object carry it?), never
+the phrasing; and a machine-readable rail that misdescribes itself is a silent-wrong of its own
+kind, because its whole audience is a reader who cannot check.
 
 ### ⭐⭐ A width fix reads CORRECT on `$bits` while the value is still folded for the old width (2026-09-08, §4.5.463)
 

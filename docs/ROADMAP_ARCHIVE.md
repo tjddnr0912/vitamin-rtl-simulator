@@ -481,6 +481,186 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.467 A static block-local's own storage — BUILT AND REVERTED after three blocking rounds (2026-09-09, branch blocal-static-init) ⛔
+
+**ROADMAP row**: §3.b `blocal-flatten` ⓐ.
+
+**What the row claimed, and what was measured instead.** The row said two same-named sibling
+block-locals assigned only by a DECLARATION INITIALIZER are rejected by `block_local/gate.rs`'s
+read-before-assign guard, and that the fix is to count the initializer as a definite assignment.
+Grounding confirmed the symptom (`E3009`, both oracles `o1=44 o2=55`) and REFUTED the fix: a static
+initializer runs ONCE at t0, not at block entry — `int s = 5; s = s + 1;` in an `always` prints
+`6,7,8,9` in all three tools — so with the two names on one flattened net the second initializer
+overwrites the first and passing the guard would print `o1=44 o2=44`. A shipped pin
+(`two_static_initialized_locals_of_one_name_stay_loud`) said exactly that. The queue's fix converts
+a loud into a silent-wrong. Two more row claims fell: ⓑ (`if`/`else` arms) is 2-ORACLE, not
+no-oracle (both run it, both print `44`), and ⓒ is REFUTED at HEAD in all three spellings.
+
+**What was built.** The real site is the STORAGE classifier, not the guard: a fourth admission term
+in `gather_auto_block_locals` (a static declarator carrying an initializer) plus its decl-ANY twin
+in `block_local/hoist.rs`, so each declaration earns its own `$blk$` net and the sharing that made
+the guard necessary is gone. Measured 19 cells loud→value, every one matching BOTH oracles,
+including ⓑ and a widened nested triple; the guard's protected class (an init-free pair where one
+block reads the other's leftover) stayed loud; 19 more cells byte-identical.
+
+**Why it was reverted — three adversarial rounds, each fix producing the next blocker.**
+
+- R1 (soundness): merely GATHERING the new span could SUBTRACT candidacy. A nested pair collapsed
+  under the nesting rule, the lone survivor fell below the two-span bar, and a DISJOINT `automatic`
+  block with nothing wrong with it lost the `$blk$` scope it already had and reported a fresh
+  "collides with an existing net". Fixed by running candidacy over the `automatic`-only floor too
+  and unioning.
+- R2 (both lenses, independently): that floor is the wrong SET. `gather_auto_block_locals` has FOUR
+  admission rules and the per-span flag says only "not `automatic`", so a block scoped by the
+  DYNAMIC-STORAGE rule was still subtracted — all four dynamic kinds went PRE-value → POST-loud.
+  Fixed by recording the admission REASON SET per span and re-running candidacy once per RULE with
+  that rule's exclusive contributions withheld.
+- R3 (differential): the per-rule floor turns a loud into a SILENT-WRONG, 18 cells. The
+  `BL_SHADOWS_MODULE` floor re-admits a span whose loud was the only thing masking a DIFFERENT,
+  still-unscoped shadowing span, whose write then lands on the module net: `MOD=41` where both
+  oracles print `MOD=0`. Verified by the author directly, and isolated by a one-token discriminator
+  (make the innermost span double-admitted and no single-rule floor can withhold it → the design
+  goes back to loud).
+
+Three consecutive rounds of BLOCKING on one axis is the stop signal (LOOPROMPT §4 / D8), and R3's
+defect is strictly worse than the problem the slice set out to fix — loud→silent-wrong against
+loud→value. Reverted whole; §4.5.465 and §4.5.466 shipped from the same bundle.
+
+**The prerequisite, measured rather than argued.** The mis-route R3 exposed is PRE-EXISTING and
+independent of this slice (a control that renames only the innermost declaration prints `MOD=41` on
+PRE, on both intermediate binaries and after the revert, while both oracles print `MOD=0`). It is now
+ROADMAP §2 and queue row 1. Every widening of the block-local scope set uncovers more of it, so it
+has to be closed FIRST — which is why the row's prerequisite is that §2 row and not anything about
+initializers.
+
+**Also found and filed** (§2, both PRE=POST, both 2-oracle): the same class inside a STATIC TASK
+FRAME body is silent-wrong today (`o1=55 o2=55`; a four-call re-entry ladder shows the two variables
+are one counter), on a different storage path (`reserve_frame_block_locals`).
+
+**Kept from the round-1 review** (they were about text, not storage, and survive the revert):
+nothing — all four doc fixes in this slice's files went with it.
+
+Suite: unchanged by the revert (7,352 with §4.5.465 + §4.5.466). format 31 unchanged.
+
+#### 4.5.466 An override expression's NAME leaf binds at its DECLARED width (2026-09-09, branch override-name-width) ✅
+
+**ROADMAP row**: §2 "Index sealing", the residue §4.5.463 explicitly resigned.
+
+**Three of the row's four claims were wrong, including its prerequisite.**
+
+- "두 오라클 8" — REFUTED. `#(.P(W8 + 1'b0))` binds 9 in iverilog, 8 in verilator, 32 in vita. The
+  LITERAL control §4.5.463 already fixed is ALSO 9 in iverilog; asked directly, all three tools
+  answer `$bits` 8. iverilog contradicts itself on `+ - *` (binds max+1) exactly as §4.5.460
+  recorded, and verilator does it on reductions, comparisons AND `%` (a third site, not previously
+  recorded). Target = 8, by the §4.5.463 adjudication.
+- "forwarding `#(.P(Q))` is the same line" — REFUTED. A bare `Ident` is self-determined and never
+  reaches this gate; it is correct today unless the parent's untyped `Q` is overridden at a width
+  other than its default literal's, whose root is `params.rs:313` (§2, queue row 3).
+- "prerequisite = the declared-width provenance WALL (rows 14/25/26/30)" — REFUTED, and this is the
+  measurement that opened the slice. The provenance is recorded, in `param_range`, and is already
+  READ AT THIS EXACT SITE by the sibling channel: `#(.P(W8))` and `#(.P(W8 | 1'b0))` bind 8 today
+  through `narrow_param_bits`, in the same parent scope where `#(.P(W8 + 1'b0))` binds 32.
+
+**Fix.** A new `declared_override_widths` (`param_query.rs`) collects every bare single-segment name
+in the override expression and certifies each through `narrow_param_bits`' guard chain verbatim,
+returning `None` if any one fails; `override_self_meta` seeds `ctx_width_names_are_evident` and
+`const_self_width` with the result instead of an empty map. The gate's own comment records an
+earlier attempt that used `param_range` and put a design straight back to wrong — the term it was
+missing is the last one in that chain: `param_range`'s width and `param_meta`'s width must AGREE,
+which is what refuses the stale entry an overridden untyped parameter leaves behind. Fail-closed as
+a whole: one unprovable name declines the entire override, so this can only move a tree from the
+value-inferred 32 to a declared width, never the other way. `override_self_value` deliberately keeps
+an EMPTY map (`eval_const_env` answers `None` for a name in `envw` but not `env`, so seeding the
+width alone would kill the VALUE — §4.5.463's defect #1 through a new door).
+
+The meta's SIGN moved from `const_expr_signed` to `const_signed_env`. Measured reason: the former's
+`Ident` arm resolves through `fq()` (current scope only) where the width walk uses the scope chain,
+so an outer signed parameter read from inside a generate block reads unsigned — that pre-existing
+defect (`localparam K = S8 >>> 1` → 255 in a generate block, −1 at module scope, both oracles −1) is
+now a §2 row and this channel does not inherit it.
+
+**Census**: 144 cells (8 name kinds × 18 operator tops), PRE vs POST vs both oracles. 71 moved; 35
+match BOTH oracles; 36 match the self-consistent oracle in a documented self-contradiction cell; 0
+match neither; 0 correct→wrong; loud count unchanged (the one loud cell, `S8>>1`, stays E3009 —
+`override_self_value` requires `const_eval_in_scope` to already answer). Four channels (named,
+positional, `defparam`, wildcard-imported package parameter) and a generate scope all fixed and
+matching both oracles. `pkg::`-scoped names decline fail-closed (`narrow_param_bits` takes a
+single-segment path) — the next rung, not this slice.
+
+**Adversarial review**: 74 cells swept across sibling widths 1/8/33/64, signed siblings, both orders
+of the non-commuting operators, nested trees, size casts, concats, and the certification's own guard
+chain (`subst_lookup` shadow, non-zero LSB, ascending declaration, net shadow, genvar,
+decl-after-use, >64-bit declared name). Every one is right or declines to the EXACT pre-slice
+answer, never a third value. 0 correct→wrong, 0 value→loud.
+
+**Found by the review, filed to §2** (PRE=POST, 2-oracle): a 33..64-bit override VALUE onto an
+untyped target is cut at bit 32 while `$bits` correctly reports 33/64 — vita contradicting itself in
+one run, on the literal spelling too.
+
+Files: `crates/elaborate/src/param_query.rs`. Tests: `override_own_width_and_sign.rs` +5. format 31
+unchanged (elaborate-local maps; no SchemaHash type touched).
+
+#### 4.5.465 The subroutine call census was reporting the wrong numbers, and the runtime half that reads it (2026-09-09, branch obs-subprofile) ✅
+
+**ROADMAP row**: §6 R2 residue ⓑ + ⓒ. Grounding found the prerequisite ⓐ, shipped in §4.5.450, was
+itself silent-wrong.
+
+**The shipped defect.** A FuncId is `funcs.len()`, and four `Vec`s are indexed by it. Three
+producers pushed them, and one — `reserve_class_method` — pushed three of the four, omitting
+`frame_keys` (the route-census key). Class methods are reserved FIRST, so every module subroutine's
+FuncId was shifted by the class-method count and `note_frame_call` filed its count under another
+routine's key. Measured two ways: with two functions and one class, the counts SWAP (a routine
+called three times reports `0`, documented as "declared and never called", while the never-called
+one reports 3); with two class methods, the shifted index runs off the end and BOTH counts are
+dropped by a defensive `else { return }`. Declaring a single class method — never instantiating it —
+is enough to erase a real call site. A reporting rail that lies is a silent-wrong like any other
+(ENGINEERING_RULES, G2).
+
+**Why the suite could not see it**: every design in `obs_subroutines.rs` was class-free, so the two
+producers were never exercised together; and a same-input-twice determinism golden cannot catch it,
+because both runs lie identically. The teeth is an asymmetric-mutation PAIR — add a class to a
+design and every `sites` number must be unchanged.
+
+**Fix**: a `push_func` MINT FUNNEL. A FuncId cannot be created without every parallel table getting
+its entry; `frame_keys` became `Vec<Option<String>>` so a class method (deliberately uncounted —
+`SubroutineRoutes` is keyed `(module, routine)` and a class method has no declaring module) still
+OCCUPIES its slot. Guarding at the reader instead would have left the next table free to desync —
+and ⓒ adds exactly that table.
+
+**ⓑ — `SubProfile`.** Interior-mutable on the `BuiltinProfile` pattern, bumped at the THREE `&self`
+funnels on `SimState`, which are NOT the two seams the row named: `run_frame_call_with` (every
+`Expr::Call` — plain, package, class methods, constructors, virtual targets, hierarchical calls;
+all three `NetReader::eval_call` impls converge here), `enter_task_frame` (suspendable task frames)
+and `run_task_with` (synchronous subset tasks). The row's `exec/process.rs::Terminator::Call` and
+`exec/frame_call.rs::call_here` are route PICKERS carrying a sidecar-miss fall-through that would
+overcount, and `run_task_call_with` one level up misses the nested subset call that reaches
+`run_task_with` directly — the same picker-vs-emitter mistake §4.5.450 had to measure its way out
+of. Bumping at the funnels makes the counts backend-invariant BY CONSTRUCTION (native / vm / interp
+measured byte-identical). A suspendable frame is COUNTED and never TIMED — its open and close are
+not one synchronous scope, so wall time to its `Return` is mostly time the task was not running —
+and `timed_calls` is the column that distinguishes "not measured" from "free".
+
+**ⓒ — `Sidecars::func_decl_locs`**, a `DeclLoc` (`file`/`line`/`col`) per FuncId, minted in the same
+funnel. Deliberately not a `StmtLoc`: that record carries an `instance` because one statement lowers
+N times, and a declaration has no such multiplicity. It is the JOIN key — `func_names` holds the
+per-INSTANCE `%m` path, so one written subroutine can be several rows and only the declaration site
+is stable across them.
+
+**Adversarial review** (two rounds, both lenses): 0 NEW-SILENT, 0 LOUD-REGRESSION. What it did find
+was the emitted text describing itself wrongly — the `key` string instructed a join on
+`decl_file:decl_line` that the static object cannot serve, `SubIdent`'s doc claimed one naming
+convention where there are two (a class method's string is class-relative, not per-instance), the
+funnel's own census sentence was one table short, and nothing said an INLINED subroutine has no row.
+All corrected, and the self-description test now pins the FACTS rather than the phrasing — the
+earlier version pinned the sentence and therefore passed while the sentence was false.
+
+Files: `crates/elaborate/src/{frames_reserve,classes,frames_body,tables,api,lib,driver}.rs`,
+`crates/sim-engine/src/{profile,lib,state/*}.rs`, `crates/cli/src/{obs,frontend}.rs`. Tests:
+`obs_subroutines.rs` +2, new `obs_subroutine_calls.rs` +8. format 31 unchanged and `schema_ver` 1
+(additive, doc-19's own precedent; `Sidecars` derives neither serde nor SchemaHash and
+`func_decl_locs` is not in the `.velab` trailer — `--obs-dir` is loud-rejected on the staged path,
+so it has no staged consumer).
+
 #### 4.5.464 A user-written block-local in an interface body — the refusal was not what made it safe (2026-09-08, branch iface-blocal) ✅
 
 §3.b `iface-blocal`, and the row was MIS-FILED: it is a §2 silent-wrong, not a §3

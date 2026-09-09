@@ -10,18 +10,23 @@ Top-level snapshot of what stands between HEAD and the two goals. Rewritten whol
 - Default backend `native`; product build `--no-default-features` (one executor); workload corpus 10/10 with 0 rejections.
 - Performance axis: diminishing returns reached; codegen (cranelift), 2-state storage, cycle-based mode, levelize all rejected with recorded re-entry conditions (ROADMAP §5).
 - External reports (round 1–39): closed except the residues filed into ROADMAP §2 / §3.
+- ⚠️ The G2 rail is now self-checked as well as emitted: `run.json`'s subroutine census was found
+  reporting swapped/dropped counts for any design containing a class, invisible to a same-input
+  determinism golden. The teeth for a reporting rail is an ASYMMETRIC MUTATION (change something
+  upstream that must not move the numbers), not a repeat run.
 - `corpus-runner run` prints the elaborate / simulate split per row. Every workload is ≥99% simulation, so the corpus still cannot GATE a front-end regression (ROADMAP §5.b `ELAB-PHASE-BLIND`).
 
 ## B. Queue (canonical = ROADMAP §5.2)
 
 | # | track | item |
 |---|---|---|
-| 1 | §3 loud → correct-support | ⑤ⓕ residue: `$bits(T)` of a dim-carrying type parameter (2-oracle 24) · a dim-carrying instance OVERRIDE (2-oracle 64; the `T$w`/`T$s` channel has no dim slot) · a `parameter` of an unpacked-array type (1-oracle) · ⑤ ⓓ/ⓔ residues · CU-scope items in a class body · ibex DPI export. The declaration subset and the tf-port formal shipped (§4.5.457 / §4.5.456) |
-| 2 | §2 silent-wrong | 🆕 I ⓒ residue: an UNSIGNED narrow net index into a NEGATIVE-base array is E4002 / `xx` where both oracles read `a5` (the SIGNED spelling is correct at HEAD). ⚠️ row 7 is now do-not-start in BOTH halves — the ordering half needs a per-resumption-kind model, and the half that was filed as settle-reached is refuted (the settle is already correct; verilator's answer is a constant-hoist artifact) |
-| 3 | §2 silent-wrong | Delays residue: a REAL time literal inside an arithmetic expression (`#(2.5ns + 1ns)` — both oracles 4 ticks, vita 0). The bare literal, the negated sized literal and the constant-driven word index all shipped (§4.5.457); ⚠️ `#(2 * 2.5ns)` beside it is a live split |
-| 4 | §6 OBS | R2 call tree: task/function rows in `processes.items[]`. Prerequisite ⓐ **shipped** (`run.json`'s `subroutines` route census, doc-19 §4.10) — what is left is ⓑ the `SubProfile` at the three frame seams and ⓒ a decl `file:line:col`, and ⓑ is no longer blocked: with ⓐ in the file a 0-call row can be told from an inlined one — ROADMAP §6 |
-| 5 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so a reader infers the boundary from builtin call counts and gets it wrong — an external report did, and so did this repo's refutation of it (two rounds) — ROADMAP §5.b |
-| next | — | mixed-caller callee, `m #(8)` / `defparam u.T$w`, VCD `$scope` spelling, `genblk<N>` collision (split), 🆕 L ⓦ residue (package constants outside the i64 interpreter), a labelled concurrent `assert property` action block's `%m` |
+| 1 | §2 silent-wrong | **Block-local shadow MIS-ROUTE** — a block-local that shadows a module net, and whose declaring span the scoping pass drops from candidacy, leaves its write ON the shadowed module net (`MOD=41`, both oracles `0`). It is the measured PREREQUISITE for §3.b `blocal-flatten`, which was built and reverted because every widening of the scope set uncovers more of it |
+| 2 | §2 silent-wrong | **A 33..64-bit override VALUE is cut at bit 32** on an untyped target while `$bits` reports 33/64 — vita contradicting itself in one run, on the literal spelling too. `defparam` cuts further. The declared-width target lane is correct |
+| 3 | §2 silent-wrong | **Forwarding**: an untyped parent parameter overridden at a width other than its default literal's forwards as 32. Root = the sized-literal arm of `param_decl_width_opt` is not gated on `default_binds` |
+| 4 | §6 OBS | Give the static `subroutines` rows a declaration site, so the two subroutine objects can be joined. ⓑ (`SubProfile` → `subroutine_calls`) and ⓒ (per-FuncId declaration site) SHIPPED, and the census they read was itself repaired — it had been reporting swapped or dropped counts for any design containing a class |
+| 5 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so a reader infers the boundary from builtin call counts and gets it wrong — an external report did, and so did this repo's refutation of it (two rounds) |
+| 6 | §3 loud → correct-support | ⑤ⓕ residue: the non-arity axis of `shape_flags`' F4004 (signedness, 2-state kind), multi-dimensional packed type-param default/override, mixed-caller callee, `m #(8)` / `defparam u.T$w`, VCD `$scope` spelling, `genblk<N>` collision (split) |
+| next | — | 🆕 L ⓦ residue, §2 🆕 N residue, a labelled concurrent `assert property` action block's `%m`, the §2 static-task-frame twin of the block-local class |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.
 

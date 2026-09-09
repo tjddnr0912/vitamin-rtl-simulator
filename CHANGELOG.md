@@ -25,6 +25,14 @@ need updating. What moved:
 
 ### Added
 
+- `run.json` gains a **`subroutine_calls`** object under `--obs-procs`: how many times each
+  function/task was actually entered at runtime, with the declaration `file`/`line`/`col` and,
+  under `--obs-procs-time`, self time. It is the dynamic counterpart of the existing static
+  `subroutines` census — that one says which subroutines the elaborator turned into frame calls and
+  how many call SITES it lowered; this one says how often each ran, and unlike the static object it
+  includes class methods and hierarchical calls. The two objects share no key and the file says so;
+  an INLINED subroutine has no row here, and `subroutines[].route` is what says which is which.
+
 - A `localparam`/`parameter` may now have an **unpacked-array typedef** as its type
   (`typedef int a_t [0:2]; localparam a_t P = '{1,2,3};`), including the package,
   package-scoped (`pk::a_t`), interface-body and ANSI-header spellings, dimensions
@@ -81,6 +89,20 @@ need updating. What moved:
   resulting dimension order — which is the same refusal a declaration already gives.
 
 ### Fixed
+
+- `run.json`'s `subroutines` object reported **wrong call-site counts for any design containing a
+  class**. Class methods are reserved before module subroutines and were minting a FuncId without
+  filing their route-census key, which shifted every module subroutine's key by the class-method
+  count: two counts could be SWAPPED — a hot routine reporting `0`, documented as "declared and
+  never called", while a never-called one reported the other's 3 — or both dropped in silence.
+  Declaring a single class method, without ever instantiating it, was enough.
+- An **override expression whose leaf is a named parameter** now binds at that name's DECLARED
+  width, not at 32. `parameter [7:0] W8 = 8'd7;` passed as `#(.P(~W8))` bound a 32-bit
+  `fffffff8`; it is now the 8-bit `f8` both reference tools produce — a WIDTH and, for `~ - / % *`
+  and `?:`, a VALUE change. 71 of 144 measured cells move; the named, positional, `defparam` and
+  wildcard-imported-package spellings all move together, as does a name read from inside a
+  `generate` block. A name whose width is value-inferred rather than declared still keeps its
+  pre-existing answer.
 
 - **A parameter override now binds its OWN type, not the declaration's default.** For an
   untyped, unranged parameter, IEEE 1800 §6.20.2 gives the parameter the range of its final
