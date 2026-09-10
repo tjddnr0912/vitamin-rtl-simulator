@@ -386,36 +386,41 @@ impl Elaborator<'_> {
             .remove(inst_path)
             .map(|dps| {
                 dps.into_iter()
-                    .map(|(param, v, fill, sg, smeta, sval)| ResolvedOverride {
-                        name: Some(param),
-                        value: Some(v),
-                        is_named: true,
-                        had_value: true,
-                        // Carried verbatim so `bind_one_param` re-folds it at the
-                        // TARGET's declared width — the same channel `#(.K('1))`
-                        // uses. `v` above is the parent-side 32-bit fold and is the
-                        // fallback for everything that is not a fill.
-                        fill,
-                        // A defparam carries no wide value either: the value it
-                        // brings has already been folded to i64 by the collector.
-                        bits: None,
-                        array: None,
-                        elem_select: false,
-                        // The collector computed this from the expression when its sign
-                        // is evident there — see the comment at the collector. It used to
-                        // be unconditionally `None` ("stay on the old route"), which
-                        // stopped a negative override's sign at bit 63.
-                        signed: sg,
-                        // A defparam carries no text at all, so the flag is never
-                        // read here — `false` is the honest value for "not a literal".
-                        str_is_literal: false,
-                        str: None,
-                        // Table 11-21, from the same collector and for the same reason
-                        // as `signed` above: `defparam u.P = ~8'h5A` and
-                        // `#(.P(~8'h5A))` must bind ONE type.
-                        self_meta: smeta,
-                        self_val: sval,
-                    })
+                    .map(
+                        |(param, v, fill, sg, smeta, sval, obits)| ResolvedOverride {
+                            name: Some(param),
+                            value: Some(v),
+                            is_named: true,
+                            had_value: true,
+                            // Carried verbatim so `bind_one_param` re-folds it at the
+                            // TARGET's declared width — the same channel `#(.K('1))`
+                            // uses. `v` above is the parent-side 32-bit fold and is the
+                            // fallback for everything that is not a fill.
+                            fill,
+                            // The collector's wide fold, for the same reason as `signed`
+                            // and `self_meta` below: one expression must bind one type
+                            // whichever channel spells it. `None` here (the old constant)
+                            // left the untyped tail reading the DEFAULT initializer's width
+                            // on both the `$bits` and the value column.
+                            bits: obits,
+                            array: None,
+                            elem_select: false,
+                            // The collector computed this from the expression when its sign
+                            // is evident there — see the comment at the collector. It used to
+                            // be unconditionally `None` ("stay on the old route"), which
+                            // stopped a negative override's sign at bit 63.
+                            signed: sg,
+                            // A defparam carries no text at all, so the flag is never
+                            // read here — `false` is the honest value for "not a literal".
+                            str_is_literal: false,
+                            str: None,
+                            // Table 11-21, from the same collector and for the same reason
+                            // as `signed` above: `defparam u.P = ~8'h5A` and
+                            // `#(.P(~8'h5A))` must bind ONE type.
+                            self_meta: smeta,
+                            self_val: sval,
+                        },
+                    )
                     .collect()
             })
             .unwrap_or_default();
@@ -1185,10 +1190,19 @@ impl Elaborator<'_> {
                         // `param_meta` width any more than `sg` above can.
                         let smeta = self.override_self_meta(value);
                         let sval = smeta.and_then(|m| self.override_self_value(value, m));
+                        // …and the WIDE channel, from the same helper the `#()` collector
+                        // calls twenty lines below. Hard-coding it absent made a defparam
+                        // of a wide literal the ONLY override channel with no width at
+                        // all: `defparam e.P = 33'h1_0000_0003` onto `parameter P = 1`
+                        // read `bits=32 val=3` where `#(.P(33'h1_0000_0003))` at least
+                        // reported 33. `override_bits` declines a unary or arithmetic top
+                        // (it folds only bitwise `& | ^` trees), so `~8'h5A` keeps the
+                        // `smeta` route it already took.
+                        let obits = self.override_bits(value);
                         // Last write wins (IEEE §23.10.1) — drop a prior same-param entry.
                         let entry = self.defparams.entry(fq).or_default();
-                        entry.retain(|(p, _, _, _, _, _)| p != &param);
-                        entry.push((param, v, fill, sg, smeta, sval));
+                        entry.retain(|(p, _, _, _, _, _, _)| p != &param);
+                        entry.push((param, v, fill, sg, smeta, sval, obits));
                     }
                 }
                 // A NET declaration initializer (`wire x = expr;`) is an implicit

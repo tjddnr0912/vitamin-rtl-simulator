@@ -193,6 +193,11 @@ pub(crate) type BlockLocalInit = (u32, Vec<u32>, ast::Lvalue, ast::Expr);
 /// a `defparam` and a `#()` naming the same expression have to bind the same type, and
 /// the two channels diverging silently is the shape ENGINEERING_RULES records for one
 /// key with several rules.
+///
+/// The seventh is the WIDE (`ovr_bits`) channel, from `override_bits` — the same helper
+/// the `#()` channel calls. It was hard-coded absent here, so `defparam e.P = 33'h1_0000_0003`
+/// onto an untyped `parameter P = 1` lost BOTH columns (`bits=32 val=3`) where the `#()`
+/// spelling had at least the width. Two channels, one expression, one binding.
 pub(crate) type DefparamOverride = (
     String,
     i64,
@@ -200,6 +205,7 @@ pub(crate) type DefparamOverride = (
     Option<bool>,
     Option<(u32, bool)>,
     Option<i64>,
+    Option<ir::ConstVal>,
 );
 
 /// A parameter's DECLARED packed range: `(lo, width, ascending)` — the tuple the

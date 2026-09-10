@@ -1675,6 +1675,17 @@ impl Elaborator<'_> {
                 && !ovr_fill.contains_key(p.name.name.as_str())
                 && ovr_bits.is_none()
                 && ovr_self_meta.is_some();
+            // The self-determined TWIN of the flag above: did the meta come from the
+            // WIDE (`ovr_bits`) channel? Same rule, same reason — the meta arm below
+            // that answers `ovr_bits.map(|c| (c.width, ..))` and the value resize at
+            // the `!default_binds` block must read ONE width, or the width column reads
+            // fixed while the value column is still cut at the default's width.
+            // Mirrors that arm's predicate exactly (the `ovr_fill` arm precedes it).
+            let ovr_bits_binds = matches!(p.ty, ast::ParamType::Implicit)
+                && p.range.is_none()
+                && !default_binds
+                && !ovr_fill.contains_key(p.name.name.as_str())
+                && ovr_bits.is_some();
             // §3 ⑤ ⓔ (review A F1): an UNTYPED, unranged target overridden by a SELECT of
             // an array-parameter element. Its meta below comes from the DEFAULT literal
             // (§2 row 25), not from the select's own width, so the value would bind at
@@ -1868,7 +1879,26 @@ impl Elaborator<'_> {
                     // both oracles agree, and the width column looked FIXED while the
                     // value column was still wrong). `meta` is `ovr_self_meta` itself
                     // on that lane, so this is the same answer, not a second one.
-                    if self_meta_binds {
+                    //
+                    // ⚠️ BRANCH PARITY: the SELF-DETERMINED lane (`ovr_bits`) has the
+                    // identical hazard and was left on `param_decl_width` for two
+                    // slices. `#(.P(33'h1_0000_0003))` onto `parameter P = 1` bound
+                    // `3` at `$bits` 33 — the meta chain read the override's 33 and
+                    // this resize then cut the value at the DEFAULT's 32 and
+                    // overwrote `chosen_val` with it. The cut is the DEFAULT's width,
+                    // not 32: on `parameter P = 8'd1` the same override binds `3` at
+                    // 8, and on `parameter P = 40'd1` it is already right by accident
+                    // (40 > 33). Both oracles bind `100000003` in every spelling.
+                    //
+                    // For ≤64 bits this is the IDENTITY where it fires: `meta` here IS
+                    // `(c.width, c.signed || p.signed)` from the same `ovr_bits` that
+                    // supplies `bits`, so `resize_bits(bits, c.width, c.width, ..)`
+                    // returns its input. Where the DEFAULT was WIDER than the override
+                    // (`#(.P(8'hFF))` on `parameter P = 64'd1`) the old path resized UP
+                    // to 64 and `coerce_param_value_with` → `coerce_i64_to_width` then
+                    // resized back to the meta width: the same i64 either way. Measured
+                    // PRE = POST on all four of those cells.
+                    if self_meta_binds || ovr_bits_binds {
                         meta
                     } else {
                         self.param_decl_width(p)
