@@ -1335,6 +1335,22 @@ filelist diagnostic.
 remove the noise, set the knob in one place; the command line is the usual home for
 build intent. Promote with `-Werror=W-FLIST-OVERRIDE` for a strict CI.
 
+### VITA-E8010 · `E-FLIST-UNTERMINATED-COMMENT` (Error)
+**A `/*` in a filelist never closes.** Filelist comments are stripped in source order: a `//`
+runs to the end of its line, a `/* */` block runs to its close, and whichever opener comes
+first wins — so a `/*` inside a `//` comment is text. A block that is opened and never closed
+would otherwise swallow every entry after it, and the only symptom was a bare `E0001`. A glob
+such as `tb/*.sv` written outside a comment reads as a `/*` and lands here.
+```
+$ vita -F filelist/tb_sys.f --top tb
+error[VITA-E8010] E-FLIST-UNTERMINATED-COMMENT: filelist 'filelist/tb_sys.f:3' opens a `/*`
+block comment that never closes; every entry after it was swallowed (...)
+```
+Exits 3 (CLI/usage class), like the other expansion errors.
+
+**Fix:** close the block, or move the glob into a `//` comment. When a filelist expands to
+no source at all, `E0001` now names the filelists it read.
+
 ---
 
 ## 9xxx · ARTIFACT / STALENESS

@@ -160,43 +160,75 @@ fn expand_env(tok: &str) -> Result<String, String> {
     Ok(out)
 }
 
-/// Strip comments from a `.f` body: `/* */` blocks (non-nesting), then per
-/// line `//`-tails and leading-`#` lines; join `\`-continuations.
-fn strip_comments(body: &str) -> String {
-    // block comments first (they may span lines).
-    let mut no_block = String::with_capacity(body.len());
-    let mut rest = body;
-    while let Some(open) = rest.find("/*") {
-        no_block.push_str(&rest[..open]);
-        match rest[open + 2..].find("*/") {
-            Some(close) => rest = &rest[open + 2 + close + 2..],
-            None => {
-                rest = "";
-            }
-        }
-        no_block.push(' '); // a comment is a separator, never a token joiner
-    }
-    no_block.push_str(rest);
-
-    let mut out = String::with_capacity(no_block.len());
-    for line in no_block.lines() {
-        let line = match line.find("//") {
-            Some(p) => &line[..p],
-            None => line,
-        };
+/// Strip comments from a `.f` body in SOURCE ORDER: a `//` runs to the end of
+/// its line, a `/* */` block (non-nesting) runs to its close and may span
+/// lines, a leading-`#` line is dropped whole, and a `\`-continuation joins
+/// the next line. Whichever opener comes first wins, so a `/*` inside a `//`
+/// comment is text, not a block opener — `// lint glob: tb/*.sv` used to open
+/// a block that ate every entry after it and left only `E0001 no source files
+/// given` (reviewer R9, 2026-09-09). A `/*` that never closes is `Err(line)`
+/// (1-based) rather than a silent swallow, for the same reason.
+fn strip_comments(body: &str) -> Result<String, usize> {
+    let b = body.as_bytes();
+    let mut out = String::with_capacity(body.len());
+    let mut line = String::new();
+    let mut lineno = 1usize;
+    let mut i = 0usize;
+    // Flush one logical line into `out`, honouring `#` and `\`.
+    let flush = |line: &mut String, out: &mut String| {
         if line.trim_start().starts_with('#') {
             out.push('\n');
-            continue;
-        }
-        if let Some(stripped) = line.trim_end().strip_suffix('\\') {
+        } else if let Some(stripped) = line.trim_end().strip_suffix('\\') {
             out.push_str(stripped);
             out.push(' '); // continuation: join with the next line
         } else {
             out.push_str(line);
             out.push('\n');
         }
+        line.clear();
+    };
+    while i < b.len() {
+        match b[i] {
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if b.get(i + 1) == Some(&b'*') => {
+                let open_line = lineno;
+                i += 2;
+                loop {
+                    if i + 1 >= b.len() {
+                        return Err(open_line);
+                    }
+                    if b[i] == b'*' && b[i + 1] == b'/' {
+                        i += 2;
+                        break;
+                    }
+                    if b[i] == b'\n' {
+                        lineno += 1;
+                    }
+                    i += 1;
+                }
+                line.push(' '); // a comment is a separator, never a token joiner
+            }
+            b'\n' => {
+                flush(&mut line, &mut out);
+                lineno += 1;
+                i += 1;
+            }
+            _ => {
+                // Copy one UTF-8 scalar so a multi-byte path byte is never split.
+                let ch = body[i..].chars().next().expect("in-bounds char");
+                line.push(ch);
+                i += ch.len_utf8();
+            }
+        }
     }
-    out
+    if !line.is_empty() {
+        flush(&mut line, &mut out);
+    }
+    Ok(out)
 }
 
 struct Expander<'a> {
@@ -299,7 +331,25 @@ impl Expander<'_> {
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| self.cwd.clone());
-        let r = self.expand_tokens(&strip_comments(&body), &frame_dir, in_big_f, out);
+        let stripped = match strip_comments(&body) {
+            Ok(s) => s,
+            Err(line) => {
+                self.err(
+                    MsgCode::FlistUnterminatedComment,
+                    format!(
+                        "filelist '{path}:{line}' opens a `/*` block comment that never \
+                         closes; every entry after it was swallowed (a glob such as \
+                         `tb/*.sv` also reads as a `/*`; keep globs inside `//` comments)"
+                    ),
+                );
+                self.stack.pop();
+                if pid.is_some() {
+                    self.phys.pop();
+                }
+                return Err(());
+            }
+        };
+        let r = self.expand_tokens(&stripped, &frame_dir, in_big_f, out);
         self.stack.pop();
         if pid.is_some() {
             self.phys.pop();
@@ -639,8 +689,28 @@ mod tests {
     #[test]
     fn comments_and_continuation() {
         let s =
-            strip_comments("a.sv // tail\n# whole line\nb.sv \\\n  c.sv\n/* block\nspan */d.sv\n");
+            strip_comments("a.sv // tail\n# whole line\nb.sv \\\n  c.sv\n/* block\nspan */d.sv\n")
+                .unwrap();
         let toks: Vec<&str> = s.split_whitespace().collect();
         assert_eq!(toks, ["a.sv", "b.sv", "c.sv", "d.sv"]);
+    }
+
+    /// R9 (2026-09-09): a `/*` inside a `//` comment is text. Before, the
+    /// block scan ran FIRST over the whole body, so `// glob: tb/*.sv` opened
+    /// a comment that swallowed every later entry.
+    #[test]
+    fn slash_star_inside_line_comment_is_text() {
+        let s = strip_comments("// lint glob: tb/*.sv here\na.sv\nb.sv // x /* y\nc.sv\n").unwrap();
+        let toks: Vec<&str> = s.split_whitespace().collect();
+        assert_eq!(toks, ["a.sv", "b.sv", "c.sv"]);
+    }
+
+    /// An unterminated block comment names its opening line instead of
+    /// silently eating the rest of the list.
+    #[test]
+    fn unterminated_block_comment_is_an_error_with_its_line() {
+        assert_eq!(strip_comments("a.sv\nb.sv\ntb/*.sv\nc.sv\n"), Err(3));
+        assert_eq!(strip_comments("/* open"), Err(1));
+        assert!(strip_comments("a.sv /* closed */ b.sv\n").is_ok());
     }
 }

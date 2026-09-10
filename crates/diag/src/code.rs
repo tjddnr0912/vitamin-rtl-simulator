@@ -137,6 +137,7 @@ msgcodes! {
     FlistWrongStage        => ("E-FLIST-WRONG-STAGE",       "VITA-E8007", Error,   "filelist directive wrong for invoking stage"),
     FlistMixedBase         => ("W-FLIST-MIXED-BASE",        "VITA-W8008", Warning, "-f inside -F frame re-anchors to CWD"),
     FlistOverride          => ("W-FLIST-OVERRIDE",          "VITA-W8009", Warning, "single-value knob overridden (last-wins)"),
+    FlistUnterminatedComment => ("E-FLIST-UNTERMINATED-COMMENT", "VITA-E8010", Error, "a `/*` in a filelist never closes; every entry after it was swallowed"),
     // 9xxx ARTIFACT
     ArtFormatMismatch      => ("E-ART-FORMAT-MISMATCH",     "VITA-E9001", Error,   "artifact magic/format_version mismatch"),
     ArtSchemaMismatch      => ("E-ART-SCHEMA-MISMATCH",     "VITA-E9002", Error,   "artifact schema_hash mismatch"),

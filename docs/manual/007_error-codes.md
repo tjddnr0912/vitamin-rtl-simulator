@@ -543,6 +543,7 @@ Emitted while expanding `-f` and `-F` filelists. See the
 | `VITA-E8007` | `E-FLIST-WRONG-STAGE` | Error | A filelist directive is not valid for the applet that was invoked. Exits 3. |
 | `VITA-W8008` | `W-FLIST-MIXED-BASE` | Warning | A `-f` inside a `-F` frame re-anchors relative paths to the current working directory rather than to the frame. |
 | `VITA-W8009` | `W-FLIST-OVERRIDE` | Warning | A single-value knob is set more than once; the last setting wins. Recorded during parsing and replayed through the severity gate at pipeline start. |
+| `VITA-E8010` | `E-FLIST-UNTERMINATED-COMMENT` | Error | A `/*` in a filelist never closes, so every entry after it would be swallowed. The message names the filelist and the opening line. A `/*` inside a `//` comment is text and does not open a block. Exits 3. |
 
 ---
 

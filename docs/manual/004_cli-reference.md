@@ -216,13 +216,15 @@ command line as the outermost frame.
 
 ### 4.1 Lexing
 
-1. `/* … */` block comments are removed first. They do not nest, an unterminated one swallows the
-   rest of the file, and each is replaced by a single space so it separates tokens instead of
-   joining them.
-2. Everything from `//` to end of line is removed.
-3. A line whose first non-blank character is `#` is dropped.
-4. A line ending in `\` is joined to the next with a space.
-5. What remains is split on whitespace.
+1. Comments are stripped in one left-to-right scan: everything from `//` to end of line goes,
+   and a `/* … */` block (which does not nest and may span lines) is replaced by a single space so
+   it separates tokens instead of joining them. Whichever opener comes first wins, so a `/*`
+   inside a `//` comment is text. An unterminated `/*` is `E-FLIST-UNTERMINATED-COMMENT`, naming
+   the filelist and line — a bare glob such as `tb/*.sv` lands there too. When the expansion yields
+   no source at all, `E0001` names the filelists it read.
+2. A line whose first non-blank character is `#` is dropped.
+3. A line ending in `\` is joined to the next with a space.
+4. What remains is split on whitespace.
 
 ### 4.2 Environment expansion
 

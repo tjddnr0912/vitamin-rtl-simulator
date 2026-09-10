@@ -110,6 +110,19 @@ pub fn run(argv: &[String]) -> i32 {
             if let Err(c) = reject_worklib_flags("vita", &io, false, false, true) {
                 return c;
             }
+            if io.pos.is_empty() && !inv.filelists.is_empty() {
+                // R9 (2026-09-09): the bare "no source files given" hid a
+                // filelist whose entries had all been swallowed. Name the lists
+                // that were read so the reader looks there first.
+                eprintln!(
+                    "error[{}]: no source files given — {} filelist(s) expanded without \
+                     contributing a source: {}",
+                    MsgCode::CliBadFlag.code_num(),
+                    inv.filelists.len(),
+                    inv.filelists.join(", ")
+                );
+                return EXIT_CLI_ERROR;
+            }
             let opts = VitaOpts {
                 vcd_path_override: io.out,
                 threads: io.threads,

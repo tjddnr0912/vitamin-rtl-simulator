@@ -425,6 +425,61 @@ fn filelist_glob_and_missing_are_loud() {
     assert!(String::from_utf8_lossy(&miss.stderr).contains("VITA-E8005"));
 }
 
+/// R9 (2026-09-09): a `/*` inside a `//` comment is text. The block scan used
+/// to run first over the whole body, so `// lint glob: tb/*.sv` swallowed every
+/// later entry and the only diagnostic was the bare `E0001`.
+#[test]
+fn filelist_slash_star_inside_line_comment_is_text() {
+    let d = tmpdir("r9text");
+    std::fs::write(
+        d.join("t.sv"),
+        "`timescale 1ns/1ns\nmodule t; initial $finish; endmodule\n",
+    )
+    .unwrap();
+    std::fs::write(
+        d.join("l.f"),
+        format!("// lint glob: tb/*.sv\n{}\n", d.join("t.sv").display()),
+    )
+    .unwrap();
+    let out = vita(&["-F", d.join("l.f").to_str().unwrap()]);
+    let _ = std::fs::remove_dir_all(&d);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// An unterminated `/*` is loud with the filelist and its opening line, and a
+/// filelist that contributes no source is named by `E0001`.
+#[test]
+fn filelist_unterminated_block_comment_and_empty_list_name_the_file() {
+    let d = tmpdir("r9open");
+    std::fs::write(d.join("t.sv"), "module t; endmodule\n").unwrap();
+    std::fs::write(
+        d.join("u.f"),
+        format!(
+            "{}\ntb/*.sv\n{}\n",
+            d.join("t.sv").display(),
+            d.join("t.sv").display()
+        ),
+    )
+    .unwrap();
+    std::fs::write(d.join("e.f"), "// nothing but a comment\n").unwrap();
+    let open = vita(&["-F", d.join("u.f").to_str().unwrap()]);
+    let empty = vita(&["-F", d.join("e.f").to_str().unwrap()]);
+    let _ = std::fs::remove_dir_all(&d);
+    let open_err = String::from_utf8_lossy(&open.stderr);
+    assert_eq!(open.status.code(), Some(3), "{open_err}");
+    assert!(open_err.contains("VITA-E8010"), "{open_err}");
+    assert!(open_err.contains("u.f:2"), "{open_err}");
+    let empty_err = String::from_utf8_lossy(&empty.stderr);
+    assert_eq!(empty.status.code(), Some(3), "{empty_err}");
+    assert!(empty_err.contains("VITA-E0001"), "{empty_err}");
+    assert!(empty_err.contains("e.f"), "{empty_err}");
+}
+
 #[test]
 fn filelist_works_for_staged_vcmp() {
     // The expansion is argv-level, so staged applets accept .f too.
