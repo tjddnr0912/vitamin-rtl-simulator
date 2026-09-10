@@ -15,6 +15,36 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ## 2026-09-11
 
+### A census's fix shape is a claim about every channel it did not name (§4.5.470)
+
+The row and the census both said: gate the literal arm, and the existing `.or_else(ovr.bits)` will
+supply the override's width. True for every channel that WRITES `ovr.bits`. The operator-top
+override (`#(.Q(~8'h5A))`) and `defparam` do not, and both were correct on PRE only because the
+default literal happened to be as wide as the override. Gating the arm alone regressed them 8 → 32.
+The implementer found it by measuring the must-stay set, not by reading the plan. Rule: when a fix
+removes an answer and names one fallback, list every producer that does NOT feed that fallback and
+measure each; a cell that is right by width coincidence is a regression waiting for the gate.
+
+### The branch-parity twin sat under a comment that named the hazard (§4.5.469)
+
+The value re-fold's hazard — "the width column reads fixed while the value column is still cut" —
+was written at the site in §4.5.463 for the `self_meta` lane, and the `ovr_bits` lane three lines
+away had the identical hazard for two more slices. A comment that names a hazard on one branch is
+a census obligation on its siblings: grep the twin predicates at the same site before closing the
+row. The cut also was not "at bit 32" — it was at the DEFAULT's width; the row's number was the
+symptom of one default, which is why the census varied the default (64/8/40) before fixing.
+
+### Two filters, one exemption: fix the first alone and the second eats the survivor (§4.5.468)
+
+Filter A dropped the outer shadow span; exempting it from A put outer+inner into a nesting pair,
+and filter B — which drops BOTH members of a pair — then removed the inner scope that was correct
+before (`c24` 0 → 42). Every candidacy filter downstream of a widened set has to be re-run on the
+widened set, and the control that proves it is the cell that was correct BEFORE the widening. Two
+narrower predicates ("sole admission reason", per-span mixed lifetimes) were each refuted by one
+measured cell; the per-name uniform predicate survived, and its one residue (a static pair beside a
+disjoint `automatic` span) is a §2 row with the measured constraint that a per-span fix must not
+mix lifetimes inside a pair.
+
 ### Two oracles agreeing on a testbench race (bench/keccak)
 
 Measured: vita finished `bench/keccak` at 520025000 where Icarus Verilog reported 500025000 and

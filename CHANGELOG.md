@@ -90,6 +90,24 @@ need updating. What moved:
 
 ### Fixed
 
+- **A block-local that shadows a module net no longer writes the module net when the same name is
+  declared again in a nested block.** With `int s;` at module scope and `begin : outer int s; begin :
+  inner int s; … end s = 8'h41; end`, the outer assignment landed on the module `s` (`MOD=41` where
+  both reference simulators print `0`). Twelve shapes — two and three levels, `string`/`logic`
+  shadows, unlabelled blocks, `always`/`fork`/`for` bodies, a shadowed output port, and the same
+  thing inside an interface — now keep each block's own variable; two nested shapes that were refused
+  before now run and match both simulators.
+- **An override value onto an untyped parameter is no longer cut at the default's width.**
+  `#(.P(33'h1_0000_0003))` onto `parameter P = 1` reported `$bits(P)` 33 but the value `3`; the cut
+  was at the default initializer's width (8 on `parameter P = 8'd1`). Every spelling — literal,
+  named, concatenation, positional, signed, a package constant, and `defparam` (which lost the width
+  too) — now binds the whole value, and a 65-bit override binds whole instead of exiting 0 with a
+  truncated value.
+- **Forwarding an overridden untyped parameter carries the override's width.** In
+  `mid #(parameter Q = 8'd1)` overridden `#(.Q(4'd3))`, `leaf #(.P(~Q))` bound 32 bits where both
+  reference simulators bind 4; `Q`, `Q+1`, `{Q,Q}`, a signed/positional/`defparam` override, and a
+  three-level chain all follow the override now, and `{Q,Q}` on a 64-bit override (128 bits) runs
+  instead of being refused.
 - `run.json`'s `subroutines` object reported **wrong call-site counts for any design containing a
   class**. Class methods are reserved before module subroutines and were minting a FuncId without
   filing their route-census key, which shifted every module subroutine's key by the class-method

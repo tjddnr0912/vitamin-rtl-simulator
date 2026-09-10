@@ -520,3 +520,18 @@ REVERTED under the three-blockers rule: the patch is kept in the row, and the cl
 declines every guessed type instead. Round 3 also caught a round-1 class nobody reported
 (2-D / dynamic / queue elements classified unsigned). 6,452 green, corpus 10/10, digests
 unchanged. Details: ROADMAP_ARCHIVE §4.5.405.
+
+- **Queue rows 1–3 as one bundle — the shadow mis-route, the override value cut, the forwarded
+  width**(§4.5.468/469/470, 2026-09-11, branch `shadow-misroute`, **7,388 green · format 31
+  unchanged · corpus 10/10**): all three rows reproduced at HEAD with both oracles. Row 1's root
+  was a single bool standing in for three admission reasons (`AdmitReason` now carries them); the
+  nesting filter downstream had to be exempted too, or the inner scope that was correct before
+  regressed. Rows 2 and 3 were two sites of one class ("a width inferred from a DEFAULT initializer
+  read on the OVERRIDDEN lane"), landed value-first by measurement (a `1'd1` default would have
+  forwarded a truncated value at a now-correct width). Row 3's census fix shape was incomplete:
+  gating the literal arm alone regressed the operator-top and `defparam` channels, right on PRE
+  only by a width coincidence; a `meta`-keyed range fallback closed it. Review round 1: both
+  lenses clean on code, two comment corrections, four pre-existing residues filed to §2 (a derived
+  `localparam` forwarding at 32, a `pkg::`-scoped override source, a mixed-lifetime shadow pair,
+  an un-overridden non-literal default), one silent→loud on an oracle split. §3.b `blocal-flatten`
+  is unblocked. Details: ROADMAP_ARCHIVE §4.5.468–470.

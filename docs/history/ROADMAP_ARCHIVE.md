@@ -481,6 +481,148 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.470 A forwarded override carries the override's width, not the default literal's (2026-09-11, branch shadow-misroute) ✅
+
+**ROADMAP row**: §2 "Index sealing", forwarding; queue row 3. Third slice of the bundle.
+
+**Defect (2-oracle).** `mid #(parameter Q = 8'd1)` overridden `#(.Q(4'd3))` forwarded
+`leaf #(.P(~Q))` / `#(.P(Q))` / `#(.P(Q+1))` / `#(.P({Q,Q}))` at 32 bits where both oracles bind
+4/16/64 (concat 8/24/128). `$bits(Q)` inside `mid` was already right. A three-level chain cascaded
+at each middle module's own default width (`8/fc` for `4/c`).
+
+**Root, verified verbatim as the row claimed.** `param_decl_width_opt`'s untyped-tail literal arm
+(`params.rs:313`) was gated on neither `declared_only` nor `default_binds`, so `param_decl_range_opt`
+recorded the DEFAULT literal's width in `param_range` while the meta chain recorded the override's
+in `param_meta`; `narrow_param_bits` requires the two to agree and declined, which killed BOTH
+forwarding channels (`override_self_meta` → `declared_override_widths` and `override_bits` →
+`wide_name_bits`), and `bind_one_param`'s `else` answered the leaf's own default.
+
+**Fix.** The literal arm declines on the overridden declared lane (`declared_only && !default_binds`;
+structurally the `Implicit && range.is_none()` tail — `Integer`, `Time` and a declared range are
+declared and keep answering). Caller census: exactly two call sites reach the tail with
+`(true, false)`, both "an override reached this declaration"; the default lane's four spellings and
+their 17 callers are untouched. **The census's fix shape was incomplete and only measurement showed
+it**: gating the arm alone REGRESSED the operator-top override (`#(.Q(~8'h5A))`, 8 → 32) and
+defparam, because neither writes `ovr.bits` and the existing `.or_else(ovr.bits)` was the only
+fallback — both were right PRE by the accident that the default `8'd1` was as wide as the override.
+The range binder gained a third `.or_else` keyed on `meta` (the one width every override channel has
+already agreed on), scoped to the untyped, unranged, overridden lane; an unfoldable declared bound
+keeps declining.
+
+**Census**: 36 cells PRE (slice-2 binary) vs POST vs both oracles. 47 silent→value (incl. 16
+default-width × override-width cells, signed, positional, defparam, fill, a 12-bit `{Q,Q}` twin that
+gives the accidentally-correct 16-bit cell teeth, the three-level chain, and a pre-existing pin in
+`override_own_width_and_sign.rs` whose own comment named this slice as its fix); 1 loud→value
+(`.Q(64'd3)` `{Q,Q}` → `128/30000000000000003`, E3009 before, both oracles); 0 value→loud; 0
+correct→wrong. iverilog is non-evidence on every bound `+` (max+1, §4.5.466) and verilator on the
+fill cell and the un-overridden `#(.P(Q))` (32 vs 8); the other tool arbitrates each.
+
+**Review (round 1, both lenses CLEAN on code).** Soundness censused every reader of `param_range`
+(3 sites, 7 transitive callers): the new `Some` where a non-literal default had `None` only changes
+`narrow_param_bits`; `param_sel_range` and `hier_defer/bits.rs` read `(lo, asc)` = `(0, false)`,
+their map_or default. Differential swept string/real/unsized-decimal/negative/select/package
+override kinds: all match both oracles. Residues filed to §2, all PRE=POST: a `localparam` derived
+from the overridden parameter (`localparam R = ~Q; leaf #(.P(R))` → `32/c`, oracles `4/c`, the
+operator arm's `declared_only` fence on a lane with nothing to fence — queue row 2); a `pkg::`-scoped
+override source (both columns, queue row 3); an un-overridden non-literal default (1-oracle). A
+forwarded out-of-range select (`Q[7:4]` on a 4-bit override) went silent `0` → loud E3009 on an
+oracle split (iverilog `x`, verilator `3`): up the ladder, recorded. 🆕 H ⓑ's ascending / non-zero-LSB
+parent cells stay as they are (left alone by design, control pair recorded in the test).
+
+Files: `crates/elaborate/src/params.rs`. Tests: `param_override_forwarded_width.rs` +8;
+`param_override_value_width.rs` residue pin closed; `override_own_width_and_sign.rs` residue pin
+closed. format 31 unchanged.
+
+#### 4.5.469 An override VALUE onto an untyped parameter binds at the override's width, on every channel (2026-09-11, branch shadow-misroute) ✅
+
+**ROADMAP row**: §2 "Index sealing", the 33..64-bit value cut; queue row 2, CRITICAL. Second slice
+of the bundle; landed BEFORE §4.5.470 by measurement (cell 50: with `parameter Q = 1'd1` overridden
+`4'd3`, fixing the forwarding first would have forwarded Q's already-truncated `1` at a now-correct
+width — silent→silent with the width column reading fixed).
+
+**Two row claims corrected.** "Cut at bit 32" is the symptom: the cut is at the DEFAULT initializer's
+width (64/8/8/40 measured for defaults `64'd1`/`8'd1`/`40'd1`), 32 only because `parameter P = 1`
+infers 32. "§3.b `wide-override` records >64 bits as loud, so this band has no other row" — refuted:
+a 65-bit override onto an untyped target was `bits=65 val=3` at exit 0, same band, same site.
+
+**Root.** `params.rs`'s value re-fold `override_at_declared_width(if self_meta_binds { meta } else {
+self.param_decl_width(p) }, …)` passed the DEFAULT's width on the self-determined (`ovr_bits`)
+lane; `resize_bits` cut the value there and overwrote `chosen_val`. The hazard was documented at the
+site for the `self_meta` lane (§4.5.463) — a branch-parity miss left for two slices. `defparam` had
+no wide channel at all (`instance.rs` hard-coded `bits: None`), so it lost the width column too.
+
+**Fix.** An `ovr_bits_binds` twin of `self_meta_binds` with the meta arm's own predicate; the re-fold
+reads `meta` when either holds. ≤64 bits it is the identity where it fires (`meta` IS
+`(c.width, ..)` from the same `ovr_bits`); where the default was WIDER the old up-resize was undone
+by `coerce_i64_to_width` — same i64, measured PRE=POST on the four cells. >64: the `(64..cv.width)`
+test becomes reachable and the 65-bit override lands CORRECT via `wide_param_bits`
+(`65/10000000000000003`, both oracles), not loud. `DefparamOverride` gains the wide fold from the
+same `override_bits` helper the `#()` collector uses (20 lines; elaborate-local, no SchemaHash).
+
+**Census**: 27 cells + cell 50, PRE vs POST vs both oracles: 16 silent→value (widths 33/40/63/64/65,
+named/literal/concat/positional/signed/wildcard-imported-package sources, `8'd1` and `40'd1`
+defaults, defparam both columns, Q's own value in cell 50); 0 loud→value; 0 value→loud; 0
+correct→wrong; the declared-width control, the §4.5.463/466 operator lane and rows 16/17
+(declared-width targets, oracle split) unmoved.
+
+**Review**: soundness censused every producer of `ovr_bits` (14 spellings incl. `{W33,1'b0}`,
+`W64[40:0]`, `{2{W33}}` at 66 bits, `40'(W33)`): every width equals both oracles' `$bits`, so no
+wrong-width fold now truncates — 0 silent→silent swaps. The `pk::PW33` source declines (`wide_name_bits`
+is single-segment) and stays at the parent's 32-bit fold — pre-existing, now §2 / queue row 3.
+
+Files: `crates/elaborate/src/{params,instance,lib}.rs`. Tests: `param_override_value_width.rs` +8.
+format 31 unchanged.
+
+#### 4.5.468 A block-local that shadows a module net keeps its own storage in a same-name nesting (2026-09-11, branch shadow-misroute) ✅
+
+**ROADMAP row**: §2 "Scoping", the shadow mis-route; queue row 1, the prerequisite §4.5.467's
+revert measured. First slice of the bundle.
+
+**Defect (2-oracle, 12 cells).** With a module net `s` and nested blocks each declaring `s` (outer
+`int s`, inner `string s` / `int s` / `logic [7:0] s`), the OUTER block's `s = 8'h41` landed on the
+module net: `MOD=41` where both oracles print `MOD=0`. Depth 2 and 3, labelled and unlabelled,
+`initial`/`always @(posedge)`/`fork`/`for` bodies, a shadowed output PORT, two disjoint inner
+blocks, and a 4-state `logic [15:0]` module net (`d` where iverilog reads `xxxx`) all leaked. The
+plain single-block shadow was correct; the axis is same-NAME nesting, not nesting.
+
+**Root.** `gather_auto_block_locals` admits a span for three reasons (`automatic`, dynamic storage,
+shadows a module name) but tagged all three with ONE bool, `widened = d.lifetime != Some(true)`,
+so `compute_scoped_block_locals`'s filter A (review S3: drop a widened span that ENCLOSES another
+declaring span of the name) could not tell a static shadow from a dynamic-storage widening and
+dropped the outer shadow from candidacy; a dropped span flattens, and for a shadow the flatten
+target IS the shadowed net.
+
+**Fix.** The bool became `AdmitReason { widened, shadows_module }` (in-memory, elaborate-local; no
+SchemaHash type). Filter A and the §4.5.259 nesting filter both exempt a name whose EVERY declaring
+span is a static shadow. Filter B had to be exempt too — measured: with only A fixed the outer/inner
+pair became a nesting pair, B dropped BOTH, and the inner write leaked instead (c24 regressed
+0 → 42). Nested candidates are sound because the R16 §3.4 hoist already nests `$blk$` segments the
+way the lowering does (`$blk$<outer>.s`, `$blk$<outer>.$blk$<inner>.s`, VCD scopes emitted, rc 0).
+Two narrower predicates were tried and rejected by measurement: "shadow is the SOLE admission
+reason" fails the `string` shadow (also admitted by dynamic storage), and a per-SPAN mixed exemption
+turns the loud `outer static / inner automatic` shape into a silent leak.
+
+**Census**: 26 cells PRE vs POST vs both oracles. 12 silent→value; 2 loud→value that could not be
+held loud without an arbitrary depth cut and match both oracles (depth-3 all-`s`, dynamic `int s[]`
+both levels); 0 value→loud; 0 correct→wrong (7 controls unmoved: single block, one-level shadow
+either way, siblings, parameter shadow, generate-prefixed, no outer write). The ROADMAP non-goal
+"a block that encloses a block and redeclares the same name" is half closed: WITH a module net of
+that name it is now `INNER=9 OUTER=7 MOD=0` (both oracles); WITHOUT one it is outside the shadow
+regime and stays loud — the row now says which half.
+
+**Review (round 1).** Differential beyond the table: interface twin (`iface_inst.rs` shares the
+classifier) 41 → 0, hierarchical `top.s` read under shadow (`HIER=0` at every level, both oracles),
+a shadow pair inside `generate if (0)` beside a live pair (42 → 0), an outer span in a `fork`
+branch with a sibling branch declaring `s` (`MOD=41 SEEN=70` → `MOD=0 SEEN=70`), a `for`-body pair
+that was loud → `ACC=33` (both oracles). Soundness: one comment corrected (a static pair beside a
+DISJOINT `automatic` span of the same name is NOT loud — it keeps the old flatten, `MOD=41` against
+verilator's 0, iverilog rejects the lifetime override; 1-oracle, PRE=POST, filed to §2 with the
+measured constraint that a per-span fix must not mix lifetimes inside one pair). Corpus 10/10.
+
+Files: `crates/elaborate/src/{block_local_class,frames_reserve,lib}.rs`. Tests:
+`block_local_shadow_nested.rs` +19. format 31 unchanged. §3.b `blocal-flatten` is unblocked and is
+queue row 1.
+
 #### 4.5.467 A static block-local's own storage — BUILT AND REVERTED after three blocking rounds (2026-09-09, branch blocal-static-init) ⛔
 
 **ROADMAP row**: §3.b `blocal-flatten` ⓐ.
