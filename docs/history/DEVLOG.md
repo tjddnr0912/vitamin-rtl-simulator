@@ -535,3 +535,11 @@ unchanged. Details: ROADMAP_ARCHIVE §4.5.405.
   `localparam` forwarding at 32, a `pkg::`-scoped override source, a mixed-lifetime shadow pair,
   an un-overridden non-literal default), one silent→loud on an oracle split. §3.b `blocal-flatten`
   is unblocked. Details: ROADMAP_ARCHIVE §4.5.468–470.
+- 2026-09-11 (external aes_top report, 2026-09-09/10): four items closed — R9 filelist `/*` inside
+  `//` (source-order scan, `E8010`, `E0001` names the lists), R5 process multidriver (rules B/C
+  measured per shape against verilator; new `W3060` for the xcelium-only shapes), R10 `function`/
+  `task` inside generate (§27.3, per-scope keys, genvar replay), §3.2 singleton-scope spelling in
+  the per-net name table. The constant forms the report's note called E3009 (`{8'he1,120'h0}`,
+  `128'(8'he1) << 120`) fold on both the report's binary and HEAD — a stale comment. R3-elab is
+  recorded as demand on the existing `eval_const_env_self` perf item, not started. Details:
+  ROADMAP_ARCHIVE §4.5.471–474.

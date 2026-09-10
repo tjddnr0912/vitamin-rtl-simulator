@@ -13,6 +13,10 @@
 
 
 **§4.5.220–280**
+- `4.5.474` **A singleton generate scope prints as `label` in the per-net name table too** (2026-09-11 · external §3.2 · runtime diagnostics, `--probe`, `trace.jsonl` and VCD `$scope` now spell a singleton `generate if` block as `label`, the `%m`/`[in …]` spelling)
+- `4.5.473` **A `function` / `task` declared inside a generate block elaborates** (2026-09-11 · external R10 · IEEE §27.3, 2-oracle · per-scope `g[0]$f` keys registered in the generate `Nets` arm, innermost-first resolution, genvar replay per iteration · bare call from outside, `u.g.f()`, constant-expression use and `defparam` stay loud)
+- `4.5.472` **The process-multidriver check covers every process kind the two tools reject** (2026-09-11 · external R5 / §3.1(c) · verilator's rule measured per shape: both-whole-variable writes only; `always_latch` pairs and the initializer-on-a-register idiom are the new `W3060` warning, not errors · 6 in-tree fixtures said where the first cut was wrong)
+- `4.5.471` **A `/*` inside a `//` filelist comment is text, and an unterminated one is loud** (2026-09-11 · external R9 · source-order comment scan, new `E8010` naming `file:line`, `E0001` names the expanded filelists)
 - `4.5.464` **A user-written block-local in an interface body — the refusal was not what made it safe** (2026-09-08 · §3.b `iface-blocal`, RE-FILED as §2 · the row's stated prerequisite REFUTED: an interface IS an `ast::ModuleDecl`, so zero signature work · review round 1 caught a loud→silent-wrong the map install alone created, closed by also calling the module path's containment gate)
 - `4.5.463` **The width of an OVERRIDE value itself** (2026-09-08 · §2 Index sealing row 25, the operator half · the row's "both oracles 1 bit" REFUTED — verilator binds 32 and contradicts its own `$bits`; the target is the DIRECT answer all three tools agree on · two defects the grounding did not predict, both found by measuring: the width cannot travel without the value, and the wide-install read-back re-imposed the DEFAULT's 32 from width 33 up)
 - `4.5.462` **A `time` parameter is 64 bits because it is DECLARED so** (2026-09-08 · §0 T2 row 8ⓕ CLOSED entirely, including a loud→correct-support half the row did not predict · recorded severity "loud" re-measured as SILENT-WRONG on both the width and the sign columns · the missing container among four siblings that already carried the rule)
@@ -480,6 +484,99 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.474 A singleton generate scope prints as `label` in the per-net name table too (2026-09-11, branch reviewer-r5-r9-r10) ✅
+
+**Source**: external aes_top report 2026-09-09 §3.2 (carried over from 09-08). One runtime
+diagnostic (`W4029`) carried two spellings of one scope: the net was `…g_sw[0].g_subword[0]…` and
+the `[in …]` context `…g_sw.g_subword…`.
+
+**Root.** `net_name_table` (`net_util.rs`) inverted `symbols` verbatim, so the storage key of a
+singleton `generate if` block (`label[0]`) reached every consumer of the table: the runtime
+diagnostics (`W4029`, the unrouted-frame fatal), `--probe` path matching, `trace.jsonl`, and the VCD
+`$scope` line. `%m` and the elaborate-time context already went through `display_of` (§4.5.429).
+
+**Fix.** The table is built through `display_of`. Storage keys are untouched; loop iterations and
+instance-array elements keep their index (`display_of` is keyed on `gen_singleton_labels`). Measured
+on the PRE binary against POST: `` `t.g_sw[0].tbl` `` → `` `t.g_sw.tbl` ``, VCD `$scope module
+g_sw[0]` → `g_sw` (iverilog writes `begin g_sw`; the `module`/`begin` scope-type split is still §2
+row N). A `--probe` path is now typed in the IEEE spelling. Gate: 7,438 green, 0 regressions; no
+test pinned the `[0]` spelling. Pin: `singleton_scope_spelling.rs` (+2).
+
+#### 4.5.473 A `function` / `task` declared inside a generate block elaborates (2026-09-11, branch reviewer-r5-r9-r10) ✅
+
+**Source**: external report R10 (2026-09-10). `E3009 construct deferred inside generate
+(func/task/defparam)` plus one `E3010` per call site; IEEE 1800-2017 §27.3 allows the declaration
+and both oracles run it.
+
+**Grounding (2-oracle).** iverilog and verilator print `f0 0f 10 10` for a generate `f` shadowing a
+module `f`, two gen-if branches each declaring `f`, and a gen-for body declaring `h` that reads its
+genvar. `%m` inside the generate task is a split: iverilog `t.u.g.show` (IEEE), verilator
+`t.u.g.g.show`; iverilog's is pinned.
+
+**Root.** `func_table` / `task_table` are filled by a structural prescan over `module.body` only
+(`instance.rs:749-829`); the generate walker's `Nets` arm rejected the declaration instead of
+registering it, and every bare lookup indexed the table with the bare name.
+
+**Fix.** Registration moved INTO the generate `Nets` arm (the block instance's `cur_prefix` is live
+there and it runs before `lower_frame_funcs`): one entry per elaborated scope under a `.`-free key
+`g[0]$f` / `gl[1]$h` (a `.` in the key would split `walk_scopes_key_inner`'s outward walk; `::` is
+the package separator). `resolve_rtn_key` walks the enclosing generate scopes innermost-first before
+the module key, so a generate `f` shadows the module's and each branch / iteration owns its own;
+the 16 bare-lookup sites go through one `lookup_func` / `lookup_task` funnel. A genvar binding is
+transient, so `rtn_decl_genvars` records it at registration and `with_rtn_decl_scope` replays it
+around reserve and lower — without that the gen-for half was loud (`undeclared … .i`). `%m`
+composes `display_of(inst) . display_of(scope) . bare`. Only the taken gen-if branch registers.
+Kept loud: a bare call from OUTSIDE the block (both oracles reject), a hierarchical `u.g.f()` (no
+`hier_funcs` entry; iverilog runs it — capability gap, §3.b), a generate-scope routine in a
+constant expression (`const_func_table` untouched; iverilog folds it, §3.b), `defparam` in generate
+(its own message now). OBS `subroutines` rows carry the qualified name (`g[0]$f`, sites 2). No
+frozen type touched, `format_version` 31. Gate 7,438 green; one fixture
+(`generate_reject_anchor.rs`) pinned the removed rejection and was rewritten to pin the surviving
+port-decl arm plus a `defparam` twin. Pin: `gen_scoped_subroutines.rs` (+10).
+
+#### 4.5.472 The process-multidriver check covers every process kind the two tools reject (2026-09-11, branch reviewer-r5-r9-r10) ✅
+
+**Source**: external report R5 (carried 08-31 → 09-09): a `int n; initial n = 0; always_ff … n <= n+1;`
+testbench passed vita and was refused by xcelium (`*E,MULAXX`); §3.1(c) row. vita checked one
+shape only (declaration initializer + `always_comb`).
+
+**Grounding, one shape per cell, verilator 5.052 `--lint-only` (xcelium from the report).**
+MULTIDRIVEN: `initial`/`always`/`always_ff`/`final`/continuous `assign`/`force`/procedural
+`assign` beside an `always_comb` or `always_ff` writer. SILENT: a declaration initializer beside
+`always_ff`/`always_latch`; every `always_latch` + other-process pair; a write through a task body
+or an `input` actual; and EVERY pair where either side is a PARTIAL write (`s.x`/`s.y`, `mem[a]`,
+`bits[0]`, `initial for … m[i]=0` beside `always_ff m[a]<=d`, `initial m='{default:0}`,
+`always_ff w<=1; initial w[1]=0`, `$readmemh`). MULTIDRIVEN again for an actual bound to an `inout`
+formal (`always_comb bump(acc)`).
+
+**Rules (new `multidriver.rs`, `var_init.rs` 728 → 555).** A: initializer + `always_comb` → E3001,
+unchanged, still on the conservative `stmt_never_writes_ident` walk (the `inout` cell lives there;
+narrowing it to lvalue roots dropped the cell — measured). B: an `always_comb`/`always_ff` writer
+plus any other module-scope writer, BOTH whole-variable writes (`stmt_writes_whole_ident`) → E3001;
+the same with `always_latch` → warning. C: initializer + `always_ff`/`always_latch` whole write →
+warning. The warning is new `W3060 W-ELAB-MULTIDRIVER-STRICT` ("xcelium rejects, verilator accepts";
+the FPGA power-on idiom that §var_init's earlier attempt at an error broke). Partial writes are
+silent: xcelium on them is UNMEASURED (0 observations), recorded as such. Generate-scope variables
+are not walked (a flat bare-name set would merge two iterations' variables into one false error).
+Gate: first build failed 6 in-tree fixtures — 3 were text pins, 2 were `initial` + `always_latch`
+(the demotion), 1 was the `inout` cell (the rule-A restoration); zero fixtures edited for behaviour.
+Pin: `multidriver_process_pairs.rs` (+33), `-Wno-W-ELAB-MULTIDRIVER-STRICT`.
+
+#### 4.5.471 A `/*` inside a `//` filelist comment is text, and an unterminated one is loud (2026-09-11, branch reviewer-r5-r9-r10) ✅
+
+**Source**: external report R9 (2026-09-09). `// lint glob: tb/*.sv` in a `-F` filelist opened a
+block comment that swallowed every later entry; the only diagnostic was `E0001 no source files
+given`, with no pointer at the list.
+
+**Root.** `filelist.rs::strip_comments` removed `/* */` over the WHOLE body first and `//` per line
+second, so an opener inside a line comment won.
+
+**Fix.** One source-order scan: whichever opener comes first wins; an unterminated `/*` is
+`Err(line)` → new `E8010 E-FLIST-UNTERMINATED-COMMENT` naming `file:line` (a bare glob `tb/*.sv`
+lands there too, instead of silently eating the list). `E0001` from the one-shot applet names the
+filelists it expanded when they contributed no source. `MsgCode` 68 → 69 (→ 70 with §4.5.472),
+doc-15 / manual 007 / bijection pin updated. Pin: `cli_ux.rs` (+2), `filelist.rs` unit tests (+2).
 
 #### 4.5.470 A forwarded override carries the override's width, not the default literal's (2026-09-11, branch shadow-misroute) ✅
 

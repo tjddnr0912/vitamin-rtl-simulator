@@ -15,6 +15,33 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ## 2026-09-11
 
+### A lint error needs two tools per SHAPE, not per rule (§4.5.472)
+
+The rule "no other process may write an `always_ff` variable" is one sentence in the LRM and one
+error in xcelium. Verilator implements it as six decisions: whole-variable writes only, `always_latch`
+excluded, `input` actuals excluded, `inout` actuals included, task-body writes excluded, initializers
+excluded. The first cut, written from the sentence, failed six in-tree fixtures — three of them RTL
+that every tool runs (`initial for (...) m[i] = 0; always_ff m[a] <= d;`). Rule: before an error, put
+one shape per file through the second tool and write the table into the module doc; a cell the second
+tool does not reject is a warning at most, and a cell nobody has run is "unmeasured", not "accepts".
+
+### Register a scoped declaration where the scope is live, not in a structural prescan (§4.5.473)
+
+The census proposed hoisting generate-scoped functions in the module-body prescan under a
+label-qualified key. That would have registered both branches of a generate-if and ONE body per
+generate-for label, and the body reading its genvar would have had no value to read (the binding
+is transient). Registering in the generate `Nets` arm — where `cur_prefix` and the genvar are
+bound — gave one routine per elaborated scope for free, and the only extra work was replaying the
+genvar around the later frame lowering. Rule: when a declaration's meaning depends on its scope
+instance, register it from the walk that instantiates the scope.
+
+### A comment stripper runs in source order (§4.5.471)
+
+Two passes ("block comments over the whole body, then line comments per line") let a `/*` inside a
+`//` comment win, and the symptom was three frames away (`no source files given`). One scan with
+"first opener wins" is shorter than the two passes it replaced, and an unterminated opener becomes a
+located error instead of a silent swallow. Rule: any lexer-shaped strip is one left-to-right scan.
+
 ### A census's fix shape is a claim about every channel it did not name (§4.5.470)
 
 The row and the census both said: gate the literal arm, and the existing `.or_else(ovr.bits)` will

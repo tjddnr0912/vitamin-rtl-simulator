@@ -25,6 +25,18 @@ need updating. What moved:
 
 ### Added
 
+- **A `function` or `task` declared inside a generate block** (IEEE 1800-2017 §27.3) now elaborates
+  and is callable from the block and its nested blocks, shadows a module-scope routine of the same
+  name, and is one routine per generate-if branch and per generate-for iteration (a body may read
+  its genvar). `%m` inside it prints `top.u.g.show`. Still refused, with a diagnostic: calling it by
+  bare name from outside the block (both reference tools refuse too), a hierarchical `u.g.f(x)`, and
+  using it in a constant expression. `run.json` `subroutines` names it `g[0]$f`.
+- **`W3060 W-ELAB-MULTIDRIVER-STRICT`**: a warning for the two-driver shapes xcelium refuses
+  (`*E,MULAXX`) and verilator accepts — a declaration initializer on an `always_ff` / `always_latch`
+  variable, and an `always_latch` variable also written by another process. Suppress with
+  `-Wno-W-ELAB-MULTIDRIVER-STRICT`.
+- **`E8010 E-FLIST-UNTERMINATED-COMMENT`**: a `/*` in a `-f`/`-F` filelist that never closes is an
+  error naming the filelist and line, instead of silently swallowing every entry after it.
 - `run.json` gains a **`subroutine_calls`** object under `--obs-procs`: how many times each
   function/task was actually entered at runtime, with the declaration `file`/`line`/`col` and,
   under `--obs-procs-time`, self time. It is the dynamic counterpart of the existing static
@@ -90,6 +102,18 @@ need updating. What moved:
 
 ### Fixed
 
+- **`E3001` now covers every two-process driver shape both reference tools reject**: a variable
+  written by `always_comb` or `always_ff` and also by `initial`, `always`, `final`, another
+  `always_ff`, a continuous `assign`, `force` or a procedural `assign` (IEEE §9.2.2.2 / §9.2.2.4;
+  verilator `MULTIDRIVEN`, xcelium `*E,MULAXX`). Only whole-variable writes count — `mem[a]`,
+  `s.x`, `w[1]` on either side stay silent, as in verilator. The existing initializer +
+  `always_comb` error is unchanged.
+- **A `/*` inside a `//` filelist comment is text.** Comments are stripped in source order, so
+  `// lint glob: tb/*.sv` no longer opens a block comment that eats the rest of the list. When a
+  filelist expands to no source at all, `E0001` names the filelists it read.
+- **A singleton generate scope is spelled `label` everywhere**, not `label[0]`: runtime
+  diagnostics (`W4029` and the like), `--probe` paths, `trace.jsonl` and the VCD `$scope` now use
+  the same spelling as `%m` and the `[in …]` context. Loop iterations keep their index.
 - **A block-local that shadows a module net no longer writes the module net when the same name is
   declared again in a nested block.** With `int s;` at module scope and `begin : outer int s; begin :
   inner int s; … end s = 8'h41; end`, the outer assignment landed on the module `s` (`MOD=41` where

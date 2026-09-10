@@ -1216,6 +1216,7 @@ frozen. Byte identity comes before performance.
 | Grep every site that decides a default value before flipping it | Only part of the surface moving while the result is called a whole-suite run |
 | Write a log line from a parallel process with a single write, and make the aggregation declare contamination when it meets a value outside the known set | Interleaved fragments tearing rows and inflating counts |
 | Treat a revert as an edit: specify the deleted range by line, grep the deleted symbols for surviving references, and check that adjacent tests, documents and helpers were not deleted with it | A regression test being deleted invisibly, because the suite is green either way |
+| Before a new ERROR from a lint-class rule, run one shape per file through the second tool and put the resulting table in the module doc; a shape the second tool accepts is a warning at most, and a shape nobody ran is recorded "unmeasured", never "accepts" | Six in-tree fixtures failing under a rule written from the LRM sentence (§4.5.472): whole-vs-partial writes, `always_latch`, `input` vs `inout` actuals were all separate cells |
 
 ---
 
