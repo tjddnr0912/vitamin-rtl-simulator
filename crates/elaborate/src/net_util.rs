@@ -286,12 +286,21 @@ impl Elaborator<'_> {
     /// a net mapped by several aliases keeps the lexicographically smallest FQ name
     /// (its canonical declaration path). Order-independent of arena order → 3-OS
     /// stable. Computed before `finish()` (which moves `self.nets`/`self.symbols`).
+    ///
+    /// Spelled through `display_of`, so a SINGLETON generate scope (`generate if` /
+    /// `case` / a bare labelled block, stored as `label[0]`) prints as `label` — the
+    /// spelling both reference tools use and the one every `[in …]` context and `%m`
+    /// already print. Before this, one runtime diagnostic carried two spellings of
+    /// one scope on one line (`…g_sw[0].g_subword[0]…` for the net, `…g_sw.g_subword…`
+    /// for the context; reviewer §3.2, 2026-09-09), and a `--probe` path had to be
+    /// typed in the storage spelling. Loop iterations and instance-array elements
+    /// keep their index; storage keys (`symbols`) are untouched.
     pub(crate) fn net_name_table(&self) -> Vec<String> {
         let mut names = vec![String::new(); self.nets.len()];
         for (fq, &id) in &self.symbols {
             if let Some(slot) = names.get_mut(id as usize) {
                 if slot.is_empty() {
-                    *slot = fq.clone();
+                    *slot = self.display_of(fq);
                 }
             }
         }
