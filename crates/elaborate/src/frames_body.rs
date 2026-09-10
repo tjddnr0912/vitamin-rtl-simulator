@@ -155,7 +155,7 @@ impl Elaborator<'_> {
                 .get(name)
                 .expect("frame func in table")
                 .clone();
-            self.reserve_frame_func(name, &func);
+            self.with_rtn_decl_scope(name, |s| s.reserve_frame_func(name, &func));
         }
         // B2: reserve frame TASKS (after functions; sorted within tasks).
         for name in &task_set {
@@ -164,7 +164,7 @@ impl Elaborator<'_> {
                 .get(name)
                 .expect("frame task in table")
                 .clone();
-            self.reserve_frame_task(name, &task);
+            self.with_rtn_decl_scope(name, |s| s.reserve_frame_task(name, &task));
         }
         // LOWER each function body (sorted) — every frame_idx is now reserved.
         for name in &frame_set {
@@ -174,7 +174,7 @@ impl Elaborator<'_> {
                 .expect("frame func in table")
                 .clone();
             let fid = self.frame_idx[name];
-            self.lower_frame_func_body(name, &func, fid);
+            self.with_rtn_decl_scope(name, |s| s.lower_frame_func_body(name, &func, fid));
         }
         // R22 §3.1 (function half): a framed FUNCTION whose body carries an effect the
         // `&self` executor cannot perform MUST reach the engine as a `Terminator::Call` —
@@ -225,7 +225,7 @@ impl Elaborator<'_> {
                 .expect("frame task in table")
                 .clone();
             let fid = self.task_frame_idx[name];
-            self.lower_frame_task_body(name, &task, fid);
+            self.with_rtn_decl_scope(name, |s| s.lower_frame_task_body(name, &task, fid));
         }
         self.resolve_frame_task_rejects();
     }

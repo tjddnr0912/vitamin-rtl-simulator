@@ -45,6 +45,7 @@ diagnostic code carries three interchangeable spellings — the mnemonic
 | `$finish` / `$stop` reached inside a subroutine body | loud refusal | §2.3 |
 | A default argument whose names bind differently at the call site | loud refusal | §2.4 |
 | The bare label of a `for`-generate block | loud refusal | §2.5 |
+| A subroutine declared inside a generate block, called from outside it | loud refusal | §2.5 |
 | A real value where the language requires an integral constant | loud refusal | §2.6 |
 | Side-effecting system functions in re-evaluated expression positions | loud refusal | §2.7 |
 | Enum methods on a label, and on labels valued from a `parameter` | loud refusal | §2.8 |
@@ -509,6 +510,29 @@ vitamin extension — Icarus Verilog and Verilator both reject it — so write t
 if the design has to build elsewhere. A missing leaf inside a resolved scope, and a scope
 that does not exist, both stay loud.
 
+A `function` or `task` declared inside a generate block (IEEE 1800 §27.3) is supported,
+and it belongs to that block's scope. Only the taken branch of a generate-`if` declares
+one; a generate-`for` body declares one per iteration, each seeing its own genvar value;
+a bare call resolves innermost-first, so a generate-scoped `f` shadows a same-named module
+`f`; and `%m` inside the body names the declaring block (`t.u.g.show`).
+
+The scope is the limit. The name does not leak outward, so a call from the enclosing
+module is `E-ELAB-UNRESOLVED-NAME` / `VITA-E3010` — Icarus Verilog agrees ("Enable of
+unknown task"). A hierarchical call THROUGH the block is a gap rather than an agreement:
+
+```systemverilog
+generate if (1) begin : g
+  function automatic logic [7:0] f (input logic [7:0] v); f = ~v; endfunction
+end endgenerate
+...
+u.g.f(8'h1)     // VITA-E3009, unsupported hierarchical function call — Icarus Verilog runs it
+```
+
+And a generate-scoped routine cannot be folded at elaboration time: a `localparam W =
+f(N)` written inside the same block is `VITA-E3009` (`… value is not a constant`), because
+the constant-function interpreter reads module-body declarations only. Move the function
+to module scope for either case. `defparam` inside a generate block remains deferred.
+
 ### 2.6 Reals where the language requires an integral constant
 
 `parameter real` and `localparam real` are supported: they bind, they participate in real
@@ -726,6 +750,7 @@ follows one and says which.
 | `$readmemh` into a `wire` array | accepted | Icarus Verilog refuses; Verilator accepts |
 | A header default naming a constant from a body import | accepted | Icarus Verilog rejects; Verilator folds |
 | A non-standard string escape such as `"\r"` | `0x0D`, with `W-ELAB-STR-ESCAPE` / `VITA-W3059` naming both readings and suggesting `\015` or `\x0D` | `0x0D` in Verilator; the letter `r` in Icarus Verilog and Xcelium |
+| `%m` inside a subroutine declared in a generate block | `t.u.g.show` — the block scope once, matching Icarus Verilog | Verilator repeats the label: `t.u.g.g.show` |
 | A bit or part select on a base §11.5.1 disallows | accepted, with `W-PARSE-SELECT-BASE` / `VITA-W2004` | Icarus Verilog rejects all four forms; Verilator rejects two and accepts two |
 
 ---

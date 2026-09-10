@@ -854,6 +854,35 @@ struct Elaborator<'s> {
     // frame key of a `p::f()` call already carries it in the key). Saved/restored with
     // `func_table`.
     rtn_pkg: BTreeMap<String, String>,
+    // IEEE 1800-2017 §27.3: the GENERATE scope a routine in `func_table`/`task_table`
+    // was declared in, keyed by that routine's table key. Twin of `rtn_pkg`, and the
+    // marker that a key is generate-scoped at all (a module routine has no entry).
+    //
+    // Key grammar is `<scope-relative-to-the-module>$<bare>` — `g[0]$f`, `gl[1]$h`,
+    // `g[0]$inner[0]$f`. The separator is `$` and NOT `.` on purpose: every scope walk
+    // in `scope.rs` splits a prefix on `.` and stops the outward walk at a segment that
+    // is neither `label[idx]` nor `$func$…`/`$itask$…`/`$blk$…`, so a `.` inside the
+    // key would end the walk at the bare name and cut a frame body off from its own
+    // module's nets. `::` is taken (`rtn_key_pkg` reads it as a package).
+    //
+    // The VALUE is the absolute declaring prefix (`t.u.g[0]`), which is what
+    // `lower_frame_funcs` restores around the reserve+lower of that body (so it reads
+    // the generate scope's nets and its iteration's genvar) and what `frame_path`
+    // spells for `%m`. Saved/restored with `func_table`.
+    rtn_decl_scope: BTreeMap<String, String>,
+    // The GENVAR bindings in force where a §27.3 generate-scoped routine was
+    // registered, keyed like `rtn_decl_scope`: `[(t.u.i, 1)]` for the `gl[1]`
+    // iteration. A genvar binding is transient — it lives only for the duration of
+    // the generate walk that unrolls the loop — but a frame body is lowered LATER
+    // (instance.rs step 6.5), so `function … h = v + 8'(i);` inside a generate-for
+    // resolved `i` against nothing and reported an undeclared net. Replayed by
+    // `with_rtn_decl_scope` around that body's reserve+lower, which is what gives
+    // each iteration's copy its own value. Saved/restored with `func_table`.
+    rtn_decl_genvars: BTreeMap<String, Vec<(String, i64)>>,
+    // The genvar bindings the generate walk currently has in force, innermost last.
+    // Pushed per ITERATION by the generate-for arm, so it is what a registration
+    // inside that iteration's body copies out.
+    gen_genvars: Vec<(String, i64)>,
     // The declaring package of the routine whose BODY is being lowered right now
     // (a stack — a package routine may call another). `resolve_rtn_key` consults it
     // so a bare callee inside that body finds its own package's sibling (injected as

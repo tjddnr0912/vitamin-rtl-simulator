@@ -187,10 +187,14 @@ fn a_non_advancing_genvar_anchors_on_its_loop() {
     );
 }
 
-/// The three vita-only rejections that are not const folds — a function, a task
-/// and a body port declaration inside a generate — used to share the module
-/// header as well. No oracle: iverilog accepts a function inside a generate
-/// block, so only the anchoring is asserted here.
+/// The vita-only rejections that are not const folds used to share the module
+/// header as well: a function, a task and a body port declaration inside a
+/// generate. Two of the three are gone — a `function`/`task` inside a generate
+/// block is SUPPORTED as of the §27.3 slice (see
+/// `crates/cli/tests/gen_scoped_subroutines.rs`), which is what both oracles
+/// always did. What is asserted here is what remains: the port declaration
+/// anchors on its own line and not on the module header, and the two supported
+/// declarations produce no diagnostic at all.
 #[test]
 fn deferred_constructs_inside_generate_anchor_on_themselves() {
     let err = diags(
@@ -206,10 +210,41 @@ fn deferred_constructs_inside_generate_anchor_on_themselves() {
          endmodule\n",
     );
     let anchors = error_anchors(&err);
-    assert_eq!(anchors.len(), 3, "three rejections expected; got:\n{err}");
     assert_eq!(
         anchors,
-        vec!["5:7".to_string(), "6:7".to_string(), "7:7".to_string()],
-        "each deferred construct anchors on its own declaration; got:\n{err}"
+        vec!["7:7".to_string()],
+        "only the port declaration is deferred, on its own line; got:\n{err}"
+    );
+    assert!(
+        err.contains("port declaration not allowed inside generate"),
+        "the port-declaration message is unchanged; got:\n{err}"
+    );
+}
+
+/// The `defparam` third of the same arm is still deferred, and its message no
+/// longer claims the func/task halves it no longer covers.
+#[test]
+fn defparam_inside_generate_is_still_deferred_and_anchored() {
+    let err = diags(
+        "module c #(parameter int P = 1) (output logic o); assign o = P[0]; endmodule\n\
+         module t;\n\
+         \x20 logic z;\n\
+         \x20 initial $display(\"x\");\n\
+         \x20 generate\n\
+         \x20   if (1) begin : b\n\
+         \x20     c u1(.o(z));\n\
+         \x20     defparam u1.P = 2;\n\
+         \x20   end\n\
+         \x20 endgenerate\n\
+         endmodule\n",
+    );
+    assert_eq!(
+        error_anchors(&err),
+        vec!["8:7".to_string()],
+        "the defparam anchors on itself; got:\n{err}"
+    );
+    assert!(
+        err.contains("a `defparam` inside a generate block is deferred"),
+        "message names only what the arm still covers; got:\n{err}"
     );
 }

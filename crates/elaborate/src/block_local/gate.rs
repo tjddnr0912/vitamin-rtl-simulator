@@ -44,10 +44,10 @@ impl Elaborator<'_> {
             return None;
         }
         let nm = callee.segments[0].name.as_str();
-        if let Some(f) = self.func_table.get(nm) {
+        if let Some(f) = self.lookup_func(nm) {
             return Some(&f.ports);
         }
-        if let Some(t) = self.task_table.get(nm) {
+        if let Some(t) = self.lookup_task(nm) {
             return Some(&t.ports);
         }
         None
@@ -410,9 +410,9 @@ impl Elaborator<'_> {
             return true;
         }
         let nm = callee.segments[0].name.as_str();
-        let body = if let Some(t) = self.task_table.get(nm) {
+        let body = if let Some(t) = self.lookup_task(nm) {
             &t.body
-        } else if let Some(f) = self.func_table.get(nm) {
+        } else if let Some(f) = self.lookup_func(nm) {
             &f.body
         } else {
             return true;
@@ -467,9 +467,9 @@ impl Elaborator<'_> {
         if nm == name {
             return false;
         }
-        let (body, body_decls) = if let Some(f) = self.func_table.get(nm) {
+        let (body, body_decls) = if let Some(f) = self.lookup_func(nm) {
             (&f.body, &f.body_decls)
-        } else if let Some(t) = self.task_table.get(nm) {
+        } else if let Some(t) = self.lookup_task(nm) {
             (&t.body, &t.body_decls)
         } else {
             return false;

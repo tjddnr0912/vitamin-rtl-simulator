@@ -326,9 +326,9 @@ impl Elaborator<'_> {
         let [seg] = &callee.segments[..] else {
             return true;
         };
-        let (body, body_decls) = if let Some(f) = self.func_table.get(seg.name.as_str()) {
+        let (body, body_decls) = if let Some(f) = self.lookup_func(seg.name.as_str()) {
             (&f.body, &f.body_decls)
-        } else if let Some(t) = self.task_table.get(seg.name.as_str()) {
+        } else if let Some(t) = self.lookup_task(seg.name.as_str()) {
             (&t.body, &t.body_decls)
         } else {
             return true;
@@ -390,9 +390,9 @@ impl Elaborator<'_> {
         // right and one wrong. `callee_body_cannot_touch` in `gate.rs` already read the
         // right list; this one now matches it.
         let (body, body_decls): (&ast::Stmt, &[ast::NetVarDecl]) =
-            if let Some(f) = self.func_table.get(nm) {
+            if let Some(f) = self.lookup_func(nm) {
                 (&f.body, &f.body_decls)
-            } else if let Some(t) = self.task_table.get(nm) {
+            } else if let Some(t) = self.lookup_task(nm) {
                 (&t.body, &t.body_decls)
             } else {
                 return false;

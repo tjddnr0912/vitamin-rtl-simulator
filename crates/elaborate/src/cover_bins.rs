@@ -139,7 +139,7 @@ impl Elaborator<'_> {
             // (looked up in the func table) — else the default. (`ir_bits_of` can't
             // help here: it returns None for a Call.)
             ast::ExprKind::Call { name, .. } if name.segments.len() == 1 => {
-                match self.func_table.get(&name.segments[0].name) {
+                match self.lookup_func(&name.segments[0].name) {
                     Some(f) => match &f.range {
                         Some(r) => match (
                             self.const_eval_in_scope(&r.msb),

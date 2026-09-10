@@ -167,7 +167,10 @@ width wins, and so does an override's.
 | `for (genvar i = 0; i < 4; i++)` header declaration | Supported | IEEE 1800 §27.4. |
 | Generate `if` / `case` / `for`, labelled `begin : name` | Supported | |
 | Hierarchical reference into a generate scope (`g[0].z`, `cg.c`) | Supported | |
-| `function`, `task` or `defparam` inside `generate` | Loud | `VITA-E3009` `construct deferred inside generate (func/task/defparam)` |
+| `function` / `task` inside `generate` | Supported | IEEE 1800 §27.3. The routine belongs to the block's scope: only the taken branch of a generate-`if` declares one, a generate-`for` body declares one per iteration (its own genvar value), a bare call resolves innermost-first (so it shadows a same-named module routine) and `%m` names the declaring block (`t.u.g.show`). |
+| Calling a generate-scoped routine from OUTSIDE its block | Loud | Not visible by bare name (`VITA-E3010` `call to undeclared function`/`task`); a hierarchical `u.g.f(x)` is `VITA-E3009` `unsupported hierarchical function call`. |
+| Generate-scoped routine in a constant expression | Loud | `localparam W = f(N)` inside the block is `VITA-E3009` `… value is not a constant` — the elaborate-time const-function interpreter reads module-body declarations only. |
+| `defparam` inside `generate` | Loud | `VITA-E3009` ``a `defparam` inside a generate block is deferred`` |
 | `import` inside `generate` | Loud | `VITA-E3009` unless it is redundant with a module-scope import of the same package. |
 | Non-advancing genvar step | Loud | `VITA-E3009` `generate-for genvar does not advance (step leaves it unchanged)` |
 | Unroll beyond the caps | Loud | See §19. |

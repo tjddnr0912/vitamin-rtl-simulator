@@ -647,6 +647,13 @@ impl Elaborator<'_> {
         // non-callable function (output/inout/array/string formal or string return) gets
         // NO entry → a hier call to it stays loud at resolution (correct-or-loud).
         if !name.contains("::")
+            // §27.3: a GENERATE-scoped key (`g[0]$f`) is not a name `hier_resolve`
+            // can ever reconstruct — it rebuilds `<inst>.<fname>` from the call's
+            // own segments (`u`, `g`, `f`). Composing an entry from this key would
+            // register `t.u.g[0].g[0]$f`, which nothing looks up, so a hierarchical
+            // `u.g.f(x)` stays LOUD at resolution. Same rule as the non-callable
+            // function below: no entry rather than a wrong one.
+            && !name.contains('$')
             && !func.ret_string
             && func.ports.iter().all(|p| {
                 matches!(p.dir, ast::PortDir::Input)
@@ -895,7 +902,7 @@ impl Elaborator<'_> {
         });
         let locals_len = self.nets.len() as u32 - base_net;
         self.frame_idx.insert(name.to_string(), fid);
-        let fp = self.frame_path(&func.name.name); // %m
+        let fp = self.frame_path_of(name, &func.name.name); // %m
         let pushed = self.push_func(
             ir::FuncDef {
                 entry: 0, // filled by lower_frame_func_body
@@ -931,12 +938,97 @@ impl Elaborator<'_> {
     /// for a task called from another task). A class method keeps its bare name
     /// (relative): its declaring instance is not known to a global class table.
     pub(crate) fn frame_path(&self, name: &str) -> String {
+        // §27.3: a GENERATE-scoped routine is declared in the generate BLOCK, so
+        // that block is what `%m` names — `t.u.g.show`, not `t.u.g[0]$show` (the
+        // storage key) and not `t.u.show` (the enclosing module). Measured against
+        // both oracles: iverilog 13 prints `t.u.g.show`; verilator 5.052 prints
+        // `t.u.g.g.show` (it repeats the block label). The oracles SPLIT, and
+        // iverilog's spelling is the one pinned — it is the scope path IEEE
+        // §21.2.1 describes, with `display_of` doing the singleton `[0]` strip a
+        // generate-if block already gets everywhere else.
+        if let Some(scope) = self.rtn_decl_scope.get(name) {
+            let d = self.display_of(scope);
+            let bare = Self::rtn_key_bare(name);
+            return if d.is_empty() {
+                bare.to_string()
+            } else {
+                format!(".{d}.{bare}")
+            };
+        }
         let inst = self.display_of(&self.inst_prefix);
         if inst.is_empty() {
             name.to_string()
         } else {
             format!(".{inst}.{name}")
         }
+    }
+
+    /// `%m` of a frame subroutine, given BOTH its table key and its own declared
+    /// name. The two differ for a package-scoped key (`p::f`, whose `%m` is the bare
+    /// `f`) and for a §27.3 generate-scoped key (`g[0]$f`, whose `%m` is the scope the
+    /// key names). Only the key can answer the second, and only the bare name can
+    /// answer the first, so both are passed.
+    pub(crate) fn frame_path_of(&self, key: &str, bare: &str) -> String {
+        if self.rtn_decl_scope.contains_key(key) {
+            self.frame_path(key)
+        } else {
+            self.frame_path(bare)
+        }
+    }
+
+    /// Run `f` with `cur_prefix` moved to the DECLARING scope of routine key `name`.
+    ///
+    /// A no-op for a module routine (no `rtn_decl_scope` entry), which is every
+    /// design that declares no routine inside a generate block. For a §27.3 one it
+    /// is what lets the body read the generate scope's own nets/localparams and, in
+    /// a generate-for, that iteration's genvar. Reserve and lower MUST use the same
+    /// prefix — the formals are added under `<cur_prefix>.$func$<key>` at reserve
+    /// time and resolved under the same scope segment at lower time.
+    pub(crate) fn with_rtn_decl_scope<R>(
+        &mut self,
+        name: &str,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let Some(scope) = self.rtn_decl_scope.get(name).cloned() else {
+            return f(self);
+        };
+        let saved = std::mem::replace(&mut self.cur_prefix, scope);
+        // Replay this declaration's genvar bindings (see `rtn_decl_genvars`): they
+        // were unbound when the generate walk left the iteration, and the body is
+        // lowered here, afterwards.
+        let gvs = self.rtn_decl_genvars.get(name).cloned().unwrap_or_default();
+        // (genvar key, prior value, prior `param_meta`) — restored in reverse below.
+        type SavedGenvar = (String, Option<i64>, Option<(u32, bool)>);
+        let saved_gv: Vec<SavedGenvar> = gvs
+            .iter()
+            .map(|(k, v)| {
+                let old = self.params.get(k).copied();
+                let old_meta = self.param_meta.insert(k.clone(), (32, true));
+                self.bind_param_value(k.clone(), *v);
+                (k.clone(), old, old_meta)
+            })
+            .collect();
+        let r = f(self);
+        for (k, old, old_meta) in saved_gv.into_iter().rev() {
+            match old {
+                Some(v) => {
+                    self.bind_param_value(k.clone(), v);
+                }
+                None => {
+                    self.params.remove(&k);
+                }
+            }
+            match old_meta {
+                Some(m) => {
+                    self.param_meta.insert(k, m);
+                }
+                None => {
+                    self.param_meta.remove(&k);
+                }
+            }
+        }
+        self.cur_prefix = saved;
+        r
     }
 
     /// B2: reserve a frame TASK — allocate its formal nets (input + output, in
@@ -958,6 +1050,8 @@ impl Elaborator<'_> {
         // reconstructs from the enable's segments; `hier_task_port_dirs` records the
         // directions so the resolver can route each arg without the callee def in scope.
         if !name.contains("::")
+            // §27.3: see the function half — a generate-scoped key is not hier-callable.
+            && !name.contains('$')
             && task.ports.iter().all(|p| {
                 // A SCALAR non-`string` formal of any direction is hier-callable (§4.5.201
                 // in/out/inout binds).
@@ -1136,7 +1230,7 @@ impl Elaborator<'_> {
         });
         let locals_len = self.nets.len() as u32 - base_net;
         self.task_frame_idx.insert(name.to_string(), fid);
-        let fp = self.frame_path(&task.name.name); // %m
+        let fp = self.frame_path_of(name, &task.name.name); // %m
         let pushed = self.push_func(
             ir::FuncDef {
                 entry: 0, // filled by lower_frame_task_body

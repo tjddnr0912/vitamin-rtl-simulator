@@ -1082,8 +1082,7 @@ impl Elaborator<'_> {
                 // evaluate the call for its side effects and DISCARD the result.
                 // Routed before `inline_task` so it is not mis-reported as an
                 // undeclared task.
-                if name.segments.len() == 1 && self.func_table.contains_key(&name.segments[0].name)
-                {
+                if name.segments.len() == 1 && self.has_func(&name.segments[0].name) {
                     let call_expr = ast::Expr {
                         kind: ast::ExprKind::Call {
                             name: name.clone(),

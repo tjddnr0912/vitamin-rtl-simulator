@@ -559,7 +559,7 @@ impl Elaborator<'_> {
                 // G4: a call to a user function declared `function string f(...)` is a
                 // string-domain value, so `f(x) == "…"` lowers as a string compare.
                 if name.segments.len() == 1 {
-                    if let Some(f) = self.func_table.get(&name.segments[0].name) {
+                    if let Some(f) = self.lookup_func(&name.segments[0].name) {
                         if f.ret_string {
                             return true;
                         }

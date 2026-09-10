@@ -1443,6 +1443,14 @@ impl Elaborator<'_> {
     /// `f2`'s body call the module's `helper` at exit 0 (measured: 1002 where
     /// iverilog says 4 — an earlier note said 2002, which the design as written does
     /// not produce).
+    ///
+    /// IEEE 1800-2017 §27.3: a routine declared inside a GENERATE block lives in that
+    /// block's scope, so a bare callee resolves innermost-first — the enclosing
+    /// generate scopes outward, then the module. That is what makes a generate `f`
+    /// shadow a module `f`, and what keeps the two branches of a generate-if (or two
+    /// iterations of a generate-for) from ever seeing each other's `f`. The walk sits
+    /// AFTER the package check (a package routine's body is not inside any generate
+    /// scope of the instantiating module) and BEFORE the bare fallback.
     pub(crate) fn resolve_rtn_key(&self, bare: &str) -> String {
         if let Some(pkg) = self.cur_rtn_pkg.last() {
             let scoped = format!("{pkg}::{bare}");
@@ -1450,7 +1458,45 @@ impl Elaborator<'_> {
                 return scoped;
             }
         }
+        // Nothing to walk when this module declares no generate-scoped routine at
+        // all, which is every design that predates §27.3 support.
+        if !self.rtn_decl_scope.is_empty() {
+            if let Some(k) = self.walk_rtn_scopes(bare, |k| {
+                self.func_table.contains_key(k) || self.task_table.contains_key(k)
+            }) {
+                return k;
+            }
+        }
         bare.to_string()
+    }
+
+    /// The `func_table` entry a BARE callee name names here, generate scopes included.
+    ///
+    /// ONE funnel for every membership predicate that used to index `func_table`
+    /// directly with a bare name (the let-vs-callable route, the statement-position
+    /// call route, the hoists, the block-local gates, the dyn-array formal probe, …).
+    /// Each of those bare lookups is a question about the SAME name the call site will
+    /// resolve, so answering it with a different rule is how a generate-scoped routine
+    /// gets classified as "not a routine" by one pass and called by the next.
+    pub(crate) fn lookup_func(&self, bare: &str) -> Option<&ast::FunctionDef> {
+        self.func_table.get(&self.resolve_rtn_key(bare))
+    }
+
+    /// [`Self::lookup_func`] for tasks.
+    pub(crate) fn lookup_task(&self, bare: &str) -> Option<&ast::TaskDef> {
+        self.task_table.get(&self.resolve_rtn_key(bare))
+    }
+
+    /// Does a BARE callee name a function visible here? — [`Self::lookup_func`] as a
+    /// predicate.
+    pub(crate) fn has_func(&self, bare: &str) -> bool {
+        self.lookup_func(bare).is_some()
+    }
+
+    /// Does a BARE callee name a task visible here? — [`Self::lookup_task`] as a
+    /// predicate.
+    pub(crate) fn has_task(&self, bare: &str) -> bool {
+        self.lookup_task(bare).is_some()
     }
 
     /// The package a routine KEY belongs to: `pkg::name` carries it in the key, an

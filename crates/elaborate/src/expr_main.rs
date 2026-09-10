@@ -362,8 +362,8 @@ impl Elaborator<'_> {
                     // callable wins — review: illegal co-declaration must not silent-shadow).
                     if self.let_table.contains_key(seg)
                         && self.lookup_net_scoped(seg).is_none()
-                        && !self.func_table.contains_key(seg)
-                        && !self.task_table.contains_key(seg)
+                        && !self.has_func(seg)
+                        && !self.has_task(seg)
                     {
                         return self.lower_let_use(seg, &[], e.span);
                     }
@@ -1346,8 +1346,8 @@ impl Elaborator<'_> {
                 // both, the function must not be silently shadowed by the let (review).
                 if name.segments.len() == 1
                     && self.let_table.contains_key(&name.segments[0].name)
-                    && !self.func_table.contains_key(&name.segments[0].name)
-                    && !self.task_table.contains_key(&name.segments[0].name)
+                    && !self.has_func(&name.segments[0].name)
+                    && !self.has_task(&name.segments[0].name)
                 {
                     return self.lower_let_use(&name.segments[0].name.clone(), args, e.span);
                 }

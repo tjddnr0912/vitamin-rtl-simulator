@@ -20,7 +20,12 @@ impl Elaborator<'_> {
     pub(crate) fn inout_call_target(&self, e: &ast::Expr) -> Option<(u32, ast::FunctionDef)> {
         if let ast::ExprKind::Call { name, .. } = &e.kind {
             if name.segments.len() == 1 {
-                let n = &name.segments[0].name;
+                // §27.3: `inout_func_names`, `frame_idx` and `func_table` are all
+                // keyed by the TABLE key, so a generate-scoped callee must be resolved
+                // to its key ONCE and the three consulted with it — a bare probe here
+                // would miss the hoist and leave the call on the plain-`Expr::Call`
+                // path that cannot bind an output formal.
+                let n = &self.resolve_rtn_key(&name.segments[0].name);
                 if self.inout_func_names.contains(n) {
                     let fid = *self.frame_idx.get(n)?;
                     let func = self.func_table.get(n)?.clone();
@@ -178,7 +183,8 @@ impl Elaborator<'_> {
     pub(crate) fn dyn_formal_call_target(&self, e: &ast::Expr) -> Option<(u32, ast::FunctionDef)> {
         if let ast::ExprKind::Call { name, .. } = &e.kind {
             if name.segments.len() == 1 {
-                let n = &name.segments[0].name;
+                // §27.3: resolved to the table key — see `inout_call_target`.
+                let n = &self.resolve_rtn_key(&name.segments[0].name);
                 if self.dyn_formal_func_names.contains(n) {
                     let fid = *self.frame_idx.get(n)?;
                     let func = self.func_table.get(n)?.clone();

@@ -753,6 +753,10 @@ impl Elaborator<'_> {
         let mut saved_funcs = std::mem::take(&mut self.func_table);
         let mut saved_tasks = std::mem::take(&mut self.task_table);
         let mut saved_rtn_pkg = std::mem::take(&mut self.rtn_pkg);
+        // §27.3 twin of `rtn_pkg`: generate-scoped routine keys are registered by the
+        // generate Nets walk below and are module-local like the tables they key.
+        let mut saved_rtn_dscope = std::mem::take(&mut self.rtn_decl_scope);
+        let mut saved_rtn_dgv = std::mem::take(&mut self.rtn_decl_genvars);
         // R19-X1: these two tables' contents are declared HERE, at this instance's own
         // prefix. Record it so a filled default-argument value can be checked against
         // the scope IEEE evaluates it in (see `default_binding_matches_decl_scope`).
@@ -997,6 +1001,8 @@ impl Elaborator<'_> {
         std::mem::swap(&mut self.task_table, &mut saved_tasks);
         std::mem::swap(&mut self.frame_idx, &mut saved_frame_idx);
         std::mem::swap(&mut self.rtn_pkg, &mut saved_rtn_pkg);
+        std::mem::swap(&mut self.rtn_decl_scope, &mut saved_rtn_dscope);
+        std::mem::swap(&mut self.rtn_decl_genvars, &mut saved_rtn_dgv);
         std::mem::swap(&mut self.decl_pos, &mut saved_decl_pos);
         std::mem::swap(&mut self.decl_pos_scope, &mut saved_dpos_scope);
         std::mem::swap(&mut self.decl_pos_range, &mut saved_dpos_range);
@@ -1008,6 +1014,8 @@ impl Elaborator<'_> {
         std::mem::swap(&mut self.task_table, &mut saved_tasks);
         std::mem::swap(&mut self.frame_idx, &mut saved_frame_idx);
         std::mem::swap(&mut self.rtn_pkg, &mut saved_rtn_pkg);
+        std::mem::swap(&mut self.rtn_decl_scope, &mut saved_rtn_dscope);
+        std::mem::swap(&mut self.rtn_decl_genvars, &mut saved_rtn_dgv);
         std::mem::swap(&mut self.decl_pos, &mut saved_decl_pos);
         std::mem::swap(&mut self.decl_pos_scope, &mut saved_dpos_scope);
         std::mem::swap(&mut self.decl_pos_range, &mut saved_dpos_range);
@@ -1279,6 +1287,8 @@ impl Elaborator<'_> {
         self.const_fn_pkg = saved_const_fn_pkg;
         self.task_table = saved_tasks;
         self.rtn_pkg = saved_rtn_pkg;
+        self.rtn_decl_scope = saved_rtn_dscope;
+        self.rtn_decl_genvars = saved_rtn_dgv;
         self.decl_pos = saved_decl_pos;
         self.decl_pos_scope = saved_dpos_scope;
         self.decl_pos_range = saved_dpos_range;

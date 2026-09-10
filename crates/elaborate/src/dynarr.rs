@@ -159,9 +159,9 @@ impl Elaborator<'_> {
             return None;
         }
         let nm = callee.segments[0].name.as_str();
-        let ports: Vec<ast::TfPort> = match self.task_table.get(nm) {
+        let ports: Vec<ast::TfPort> = match self.lookup_task(nm) {
             Some(t) => t.ports.clone(),
-            None => self.func_table.get(nm)?.ports.clone(),
+            None => self.lookup_func(nm)?.ports.clone(),
         };
         let mut out: Vec<ast::Expr> = Vec::with_capacity(args.len());
         let mut changed = false;

@@ -301,9 +301,13 @@ impl Elaborator<'_> {
                     // Each iteration's block is a scope of its own: §27.6 numbering
                     // inside it restarts at 1 (`top.L[1].genblk1`, both oracles).
                     let saved_gen_ctr = std::mem::replace(&mut self.gen_ctr, 0);
+                    // §27.3: a routine declared in this body captures the genvar
+                    // binding of THIS iteration — see `rtn_decl_genvars`.
+                    self.gen_genvars.push((gv_key.clone(), iter_val));
                     self.with_scope(&block_prefix, |me| {
                         me.elaborate_generate_scoped(body, phase, depth + 1, map, true);
                     });
+                    self.gen_genvars.pop();
                     self.gen_ctr = saved_gen_ctr;
 
                     // step: fold (with genvar bound) → rebind the genvar.
@@ -784,25 +788,24 @@ impl Elaborator<'_> {
             // Three variants, three spans, one message: each carries its own span,
             // so the arm is split rather than anchored at `cur_span` (the module
             // header, which is where all of these used to point).
-            (GenPhase::Nets, ast::ModuleItem::Func(f)) => {
-                self.error_at(
-                    MsgCode::ElabUnsupported,
-                    f.span,
-                    "construct deferred inside generate (func/task/defparam)",
-                );
-            }
-            (GenPhase::Nets, ast::ModuleItem::Task(t)) => {
-                self.error_at(
-                    MsgCode::ElabUnsupported,
-                    t.span,
-                    "construct deferred inside generate (func/task/defparam)",
-                );
-            }
+            // IEEE 1800-2017 §27.3: a `function`/`task` declared inside a generate
+            // block is a declaration of THAT block's scope. Registered here, in the
+            // Nets phase, rather than in the structural (3.5) prescan, because only
+            // this walk knows WHICH scope: it runs with `cur_prefix` at the block
+            // instance (`g[0]`, `gl[1]`), so only the TAKEN branch of a generate-if
+            // registers, and a generate-for body gets one definition per iteration —
+            // each under its own key, so a body reading the genvar (`h = v + 8'(i)`)
+            // lowers against that iteration's value instead of an unbound name.
+            // Phase order is what makes this legal: this walk (instance.rs step 4)
+            // runs before `lower_frame_funcs` (6.5) reserves and lowers bodies, and
+            // before every call site (6, 6.9, 7, 8).
+            (GenPhase::Nets, ast::ModuleItem::Func(f)) => self.register_gen_func(f),
+            (GenPhase::Nets, ast::ModuleItem::Task(t)) => self.register_gen_task(t),
             (GenPhase::Nets, ast::ModuleItem::Defparam(d)) => {
                 self.error_at(
                     MsgCode::ElabUnsupported,
                     d.span,
-                    "construct deferred inside generate (func/task/defparam)",
+                    "a `defparam` inside a generate block is deferred",
                 );
             }
             // An `import` inside a generate block: imports are applied at MODULE
@@ -835,6 +838,73 @@ impl Elaborator<'_> {
             _ => {}
         }
     }
+    /// The routine-table key this generate scope gives `bare`, or `None` when the
+    /// current position is not inside a generate scope of this module instance.
+    fn cur_gen_rtn_key(&self, bare: &str) -> Option<String> {
+        let inst = self.inst_prefix.as_str();
+        let cur = self.cur_prefix.as_str();
+        let rel = if inst.is_empty() {
+            cur
+        } else {
+            cur.strip_prefix(inst)?.strip_prefix('.')?
+        };
+        Self::gen_rtn_key(rel, bare)
+    }
+
+    /// IEEE 1800-2017 §27.3: register a `function` declared inside a generate block
+    /// under this block instance's scope (see `rtn_decl_scope` for the key grammar).
+    ///
+    /// A redeclaration inside the SAME block scope keeps the first, exactly as the
+    /// module-scope collection does. Two sibling scopes declaring the same name are
+    /// two different keys and never collide, so no warning is possible there.
+    pub(crate) fn register_gen_func(&mut self, f: &ast::FunctionDef) {
+        let Some(key) = self.cur_gen_rtn_key(&f.name.name) else {
+            // Directly inside `generate … endgenerate` with no enclosing block: a
+            // generate REGION is transparent (§27.3), so this IS a module routine
+            // and belongs on the bare key — the same rule the region's nets follow.
+            let name = f.name.name.clone();
+            self.check_block_local_scope_leaks(&f.body);
+            if self.func_table.insert(name.clone(), f.clone()).is_some() {
+                self.warn(&format!(
+                    "function `{name}` redeclared; first declaration used"
+                ));
+            }
+            return;
+        };
+        self.check_block_local_scope_leaks(&f.body);
+        if self.func_table.insert(key.clone(), f.clone()).is_some() {
+            self.warn(&format!(
+                "function `{}` redeclared; first declaration used",
+                f.name.name
+            ));
+        }
+        self.rtn_decl_genvars
+            .insert(key.clone(), self.gen_genvars.clone());
+        self.rtn_decl_scope.insert(key, self.cur_prefix.clone());
+    }
+
+    /// [`Self::register_gen_func`] for a `task`.
+    pub(crate) fn register_gen_task(&mut self, t: &ast::TaskDef) {
+        let Some(key) = self.cur_gen_rtn_key(&t.name.name) else {
+            let name = t.name.name.clone();
+            self.check_block_local_scope_leaks(&t.body);
+            if self.task_table.insert(name.clone(), t.clone()).is_some() {
+                self.warn(&format!("task `{name}` redeclared; first declaration used"));
+            }
+            return;
+        };
+        self.check_block_local_scope_leaks(&t.body);
+        if self.task_table.insert(key.clone(), t.clone()).is_some() {
+            self.warn(&format!(
+                "task `{}` redeclared; first declaration used",
+                t.name.name
+            ));
+        }
+        self.rtn_decl_genvars
+            .insert(key.clone(), self.gen_genvars.clone());
+        self.rtn_decl_scope.insert(key, self.cur_prefix.clone());
+    }
+
     /// Collect `sequence`/`property` declarations from a generate block into the
     /// module-global tables (slice A4). Walks the generate STRUCTURE — For/If/Case/
     /// Block bodies and nested generates — WITHOUT const-eval or genvar binding: a

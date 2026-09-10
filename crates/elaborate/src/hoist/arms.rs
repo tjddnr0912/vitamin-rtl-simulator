@@ -56,7 +56,7 @@ impl Elaborator<'_> {
                 let [seg] = name.segments.as_slice() else {
                     return None;
                 };
-                let f = self.func_table.get(&seg.name)?;
+                let f = self.lookup_func(&seg.name)?;
                 Some((f.signed, ast_func_return_width(f)?))
             }
             IntLit { kind, raw } => {

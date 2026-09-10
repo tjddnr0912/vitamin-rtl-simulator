@@ -534,12 +534,9 @@ impl Elaborator<'_> {
             }
             ast::ExprKind::Call { name, .. } => {
                 name.segments.len() == 1
-                    && self
-                        .func_table
-                        .get(&name.segments[0].name)
-                        .is_some_and(|f| {
-                            matches!(f.ret_type, ast::ParamType::Real | ast::ParamType::Realtime)
-                        })
+                    && self.lookup_func(&name.segments[0].name).is_some_and(|f| {
+                        matches!(f.ret_type, ast::ParamType::Real | ast::ParamType::Realtime)
+                    })
             }
             _ => false,
         }
