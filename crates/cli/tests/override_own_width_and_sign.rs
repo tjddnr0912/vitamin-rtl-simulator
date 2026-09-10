@@ -390,19 +390,22 @@ fn a_generate_scope_reads_the_outer_declaration_for_width_and_sign() {
     );
 }
 
-/// FORWARDING — the half that is a DIFFERENT root, pinned in both directions so the
-/// boundary is a measured fact rather than an omission.
+/// FORWARDING — a DIFFERENT root, pinned in both directions so the boundary is a measured
+/// fact rather than an omission.
 ///
-/// A parent's own untyped parameter `Q` forwarded into a child (`#(.P(Q + 1'b0))`) binds
-/// correctly when `Q` is NOT overridden, and when the override's width happens to equal
-/// the default literal's. It keeps its pre-slice 32 when they differ, because
-/// `param_range` still holds the DEFAULT literal's width for an overridden untyped
-/// parameter while `param_meta` holds the override's — and `narrow_param_bits` refuses a
-/// disagreement rather than picking one. That refusal is the whole reason this slice
-/// cannot regress: the stale entry is declined, not believed.
+/// A parent's own untyped parameter `Q` forwarded into a child binds correctly when `Q` is
+/// NOT overridden, and when the override's width happens to equal the default literal's.
+/// It kept its pre-slice 32 when they DIFFERED, because `param_range` still held the
+/// DEFAULT literal's width for an overridden untyped parameter while `param_meta` held the
+/// override's — and `narrow_param_bits` refuses a disagreement rather than picking one.
+/// That refusal is why the slice that pinned this could not regress: the stale entry was
+/// declined, not believed.
 ///
-/// The oracles bind 4/16 in the differing cells. Closing them means gating
-/// `param_decl_width_opt`'s sized-literal arm on `default_binds`, which is its own slice.
+/// The `m_wide` line was that residue and is now CLOSED: `param_decl_width_opt`'s
+/// untyped-tail literal arm no longer answers under `declared_only` once an override has
+/// reached the declaration, so the two maps agree at 16 and the fold binds `fff6` — which
+/// is what both oracles print. `param_override_forwarded_width.rs` is that slice's census;
+/// this cell stays here as its boundary marker.
 #[test]
 fn forwarding_binds_when_the_two_width_maps_agree_and_declines_when_they_do_not() {
     let (o, c) = run("module sub #(parameter P = 1) (); initial $display(\"%m bits=%0d dec=%0d hex=%h\", $bits(P), P, P); endmodule\n\
@@ -422,8 +425,8 @@ fn forwarding_binds_when_the_two_width_maps_agree_and_declines_when_they_do_not(
         [
             "top.m_def.f bits=8 dec=248 hex=f8",  // both oracles
             "top.m_same.f bits=8 dec=246 hex=f6", // both oracles
-            // RESIDUE: both oracles bind 16 (`fff6`); the two width maps disagree here.
-            "top.m_wide.f bits=32 dec=-10 hex=fffffff6",
+            // WAS the residue `bits=32 dec=-10 hex=fffffff6`. Both oracles: 16 / fff6.
+            "top.m_wide.f bits=16 dec=65526 hex=fff6",
         ]
     );
 }

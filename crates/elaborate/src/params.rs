@@ -310,8 +310,37 @@ impl Elaborator<'_> {
                 }
             }
             if let ast::ExprKind::IntLit { kind, raw } = &e.kind {
-                let value_determined = matches!(kind, ast::IntLitKind::Sized)
-                    || matches!(p.ty, ast::ParamType::Implicit);
+                // ⚠️ DECLARED PROVENANCE ON THE OVERRIDDEN LANE (§6.20.2). Reaching
+                // this tail already means the declaration is `Implicit` with no range
+                // — the `Integer` and `Time` arms above are declared TYPES and the
+                // `p.range` arm above is a declared RANGE, and all three legitimately
+                // survive an override. An initializer literal does not: §6.20.2 gives
+                // an untyped, unranged parameter the range of its FINAL override
+                // value, and the literal whose width this arm reports has been
+                // replaced. Answering it made `param_decl_range_opt` record the
+                // DEFAULT's width in `param_range` while the meta chain recorded the
+                // OVERRIDE's in `param_meta`; `narrow_param_bits` requires the two to
+                // agree (`const_wide.rs`, `mw == w`) and declined on the mismatch, so
+                // BOTH forwarding channels (`override_self_meta` and `override_bits`)
+                // lost their width and `bind_one_param`'s `else` answered the LEAF's
+                // own default. Measured: `mid #(parameter Q = 8'd1)` overridden
+                // `#(.Q(4'd3))` forwarding `leaf #(.P(~Q))` bound 32 bits / fffffffc
+                // where both oracles bind 4 / c, and the wrong width CASCADED through
+                // a three-level chain at each middle module's own default width.
+                // Declining here lets the `ovr.bits` / `meta` fallbacks at the range
+                // binder supply the override's width instead.
+                //
+                // Scoped to `declared_only`: the unrestricted wrapper
+                // (`param_decl_width`, `(false, false)`) is a legacy spelling used on
+                // the DEFAULT lane too and must keep answering the literal's width.
+                // The only callers reaching here with `(true, false)` are
+                // `param_decl_width_declared_overridden` and
+                // `param_decl_range_opt(p, false)` — both by definition "an override
+                // reached this declaration".
+                let overridden_declared_lane = declared_only && !default_binds;
+                let value_determined = !overridden_declared_lane
+                    && (matches!(kind, ast::IntLitKind::Sized)
+                        || matches!(p.ty, ast::ParamType::Implicit));
                 if value_determined {
                     let cv = literal::parse_int_literal(raw, *kind)?;
                     // A plain unsized DECIMAL is signed and sized to its FOLDED
@@ -2000,12 +2029,39 @@ impl Elaborator<'_> {
             // an overridden header parameter's initializer no longer supplies its width.
             // An OVERRIDE supplies one instead — that is what §6.20.2 says the range of
             // an untyped parameter is, and the wide channel is the only one carrying it.
-            let range = self.param_decl_range_opt(p, default_binds).or_else(|| {
-                (!default_binds)
-                    .then(|| ovr.bits.get(p.name.name.as_str()))
-                    .flatten()
-                    .map(|c| (0, c.width, false))
-            });
+            //
+            // …and the wide channel is NOT the only channel carrying one. An operator
+            // top (`#(.Q(~8'h5A))`) arrives through `ovr_self_meta` and a fill through
+            // the fill arm; neither writes `ovr.bits`. While the literal arm of
+            // `param_decl_width_opt` still answered on this lane those two were
+            // covered by accident — the default literal's width happened to equal the
+            // override's — and gating that arm off would have left them with NO range
+            // at all, which is the same `narrow_param_bits` decline in the other
+            // direction (measured: `mid #(parameter Q = 8'd1)` + `#(.Q(~8'h5A))`
+            // forwarding `#(.P(~Q))`, correct at 8 today, would have dropped to 32).
+            // `meta` is the one place every override channel has already agreed on a
+            // width, so the range records exactly it — which is also the agreement
+            // `narrow_param_bits` tests. Scoped to the untyped, unranged, overridden
+            // lane: a declared range or type answers in `param_decl_range_opt` above,
+            // and an UNFOLDABLE declared bound must keep declining rather than take a
+            // width from the override.
+            let range = self
+                .param_decl_range_opt(p, default_binds)
+                .or_else(|| {
+                    (!default_binds)
+                        .then(|| ovr.bits.get(p.name.name.as_str()))
+                        .flatten()
+                        .map(|c| (0, c.width, false))
+                })
+                .or_else(|| {
+                    if default_binds
+                        || !matches!(p.ty, ast::ParamType::Implicit)
+                        || p.range.is_some()
+                    {
+                        return None;
+                    }
+                    meta.map(|(w, _)| (0, w, false))
+                });
             let prev = self.bind_param_value(key.clone(), v);
             self.bind_param_range(&key, range);
             // An override reached an UNTYPED declaration: the meta recorded above is
