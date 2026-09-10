@@ -1,27 +1,31 @@
 # 00 · VHDL (IEEE 1076) Reference
 
-본 폴더는 VHDL (IEEE 1076-2008) 문법·패키지·합성가능성 참조.
+This folder is a reference for VHDL (IEEE 1076-2008) syntax, packages and synthesizability.
 
-## 파일
+## Files
 
-| # | 파일 | 주제 |
+| # | File | Topic |
 |---|---|---|
-| 01 | [lexical](01-lexical.md) | 토큰·식별자·주석·리터럴 |
+| 01 | [lexical](01-lexical.md) | tokens, identifiers, comments, literals |
 | 02 | [types](02-types.md) | scalar/composite, std_logic_1164, numeric_std |
-| 03 | [objects](03-objects.md) | signal/variable/constant/generic + 포트 modes |
-| 04 | design-units | entity/architecture/package/configuration/library |
-| 05 | concurrent | process, concurrent assignment, component, generate |
-| 06 | sequential | if/case/loop, wait, variable assignment |
-| 07 | subprograms | function/procedure |
-| 08 | packages-libraries | ieee, std_logic_1164, numeric_std, std |
-| 09 | synthesizability | VHDL 합성 가능/조건부/비합성 매핑 |
+| 03 | [objects](03-objects.md) | signal/variable/constant/generic + port modes |
+| 04 | [design-units](04-design-units.md) | entity/architecture/package/configuration/library |
+| 05 | [concurrent](05-concurrent.md) | process, concurrent assignment, component, generate |
+| 06 | [sequential](06-sequential.md) | if/case/loop, wait, variable assignment |
+| 07 | [subprograms](07-subprograms.md) | function/procedure |
+| 08 | [packages-libraries](08-packages-libraries.md) | ieee, std_logic_1164, numeric_std, std |
+| 09 | [synthesizability](09-synthesizability.md) | the VHDL synthesizable/conditional/non-synthesizable map |
 
-## 본 프로젝트 위치
+## Relationship to this project
 
-Phase 3 진입 시 VHDL 프론트엔드를 별도 추가 (공유 IR 위에). std_logic_1164 /
-numeric_std는 hdl-builtins의 VHDL 패키지 모듈로 구현한다.
+vita has no VHDL front end; its input language is Verilog/SystemVerilog. A VHDL front end —
+a separate parser, the 9-value `std_logic` value domain, GHDL as the oracle — is a
+conditional, long-term item in [ROADMAP](../../../ROADMAP.md) §7, not part of the
+implementation. These notes document the language itself, so the standard can be consulted
+while implementing; for what vita accepts, the authority is
+[manual/003_language-reference.md](../../../manual/003_language-reference.md).
 
 ## Sources
 
-- 본 spec §10
+- This project's spec, §10
 - IEEE 1076-2008

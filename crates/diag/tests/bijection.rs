@@ -11,16 +11,17 @@ struct DocEntry {
     severity: String, // "Error" (verbatim doc token)
 }
 
-/// Parse every body `### ...` code header before "## 부록 A".
+/// Parse every body `### ...` code header before "## Appendix A".
 fn doc_entries() -> Vec<DocEntry> {
-    let body = DOC15.split("## 부록 A").next().unwrap();
+    let body = DOC15.split("## Appendix A").next().unwrap();
     let mut out = Vec::new();
     for line in body.lines() {
         let l = line.trim_start();
         let Some(rest) = l.strip_prefix("### ") else {
             continue;
         };
-        // mnemonic between the first pair of backticks (skips non-code headers like `### 번호대 예약`).
+        // mnemonic between the first pair of backticks (skips band headers with no code span,
+        // e.g. `### 1xxx · PREPROCESS  (8)`).
         let Some(bt0) = rest.find('`') else { continue };
         let Some(rel) = rest[bt0 + 1..].find('`') else {
             continue;

@@ -1,56 +1,56 @@
-# 06 · SystemVerilog 클래스와 OOP
+# 06 · SystemVerilog Classes and OOP
 
-IEEE 1800-2017 §8 (클래스), §18 (랜덤화) 기준.
+Based on IEEE 1800-2017 §8 (classes) and §18 (randomization).
 
-> **비합성 전용**: 이 문서에서 다루는 모든 기능 — 클래스, 상속, 가상 메서드,
-> 파라미터화 클래스, static 멤버, 랜덤화 — 은 **100% 비합성(non-synthesizable)**이다.
-> 시뮬레이션·검증·UVM 테스트벤치 전용. RTL 설계 코드에 클래스를 포함하면
-> 합성 툴이 에러를 발생시킨다.
+> **Non-synthesizable only**: every feature covered in this document — classes, inheritance,
+> virtual methods, parameterized classes, static members, randomization — is **100%
+> non-synthesizable**. It belongs to simulation, verification and UVM testbenches only.
+> Put a class in RTL design code and the synthesis tool raises an error.
 
 ---
 
-## 클래스 기본 선언 (§8.3)
+## Basic class declaration (§8.3)
 
 ```systemverilog
 class Packet;
-    // 인스턴스 변수 (멤버)
+    // instance variables (members)
     bit [31:0] addr;
     bit [31:0] data;
     int        id;
 
-    // 생성자 — 반환 타입 없음, 비블로킹
+    // constructor — no return type, non-blocking
     function new(int init_id = 0);
         addr = 32'hDEAD_BEEF;
         data = 32'h0;
         id   = init_id;
     endfunction
 
-    // 메서드
+    // method
     function void display();
         $display("[Packet] id=%0d addr=%08h data=%08h", id, addr, data);
     endfunction
 endclass
 ```
 
-객체 생성과 사용:
+Creating and using an object:
 
 ```systemverilog
-Packet pkt;          // 핸들 선언 — 초기값 null
-pkt = new(42);       // 힙에 객체 할당, id=42
+Packet pkt;          // handle declaration — initial value is null
+pkt = new(42);       // allocates the object on the heap, id=42
 pkt.display();
 
-Packet pkt2 = new;   // 선언과 동시에 생성, 기본 인자 사용
+Packet pkt2 = new;   // declare and construct at once, default arguments
 ```
 
-핸들은 포인터와 유사하다. `pkt = null`로 핸들을 해제하면 가비지 컬렉터가
-참조 없는 객체를 회수한다.
+A handle behaves much like a pointer. Release a handle with `pkt = null` and the garbage
+collector reclaims objects that nothing references.
 
 ---
 
-## 생성자 new() (§8.7)
+## The new() constructor (§8.7)
 
-`new()`는 클래스의 유일한 생성자다. 반환 타입이 없고 오버로드가 불가능하다.
-인자를 받을 수 있으며, 기본값을 지정해 선택적으로 만들 수 있다.
+`new()` is a class's only constructor. It has no return type and cannot be overloaded. It may
+take arguments, and default values make them optional.
 
 ```systemverilog
 class Config;
@@ -63,27 +63,28 @@ class Config;
     endfunction
 endclass
 
-Config c1 = new;          // width=8, depth=16 (기본값)
+Config c1 = new;          // width=8, depth=16 (defaults)
 Config c2 = new(32);      // width=32, depth=16
 Config c3 = new(64, 128); // width=64, depth=128
 ```
 
-### this 키워드 (§8.11)
+### The this keyword (§8.11)
 
-`this`는 현재 객체 인스턴스를 참조한다. 생성자 인자와 클래스 멤버 이름이 겹칠 때 구별한다.
+`this` refers to the current object instance. It disambiguates when a constructor argument and
+a class member share a name.
 
 ```systemverilog
 class Packet;
     int id;
     function new(int id);
-        this.id = id;   // this.id = 클래스 멤버, id = 인자
+        this.id = id;   // this.id = the class member, id = the argument
     endfunction
 endclass
 ```
 
 ---
 
-## 상속 — extends / super.new() (§8.13)
+## Inheritance — extends / super.new() (§8.13)
 
 ```systemverilog
 class BasePacket;
@@ -104,29 +105,30 @@ class ExtPacket extends BasePacket;
     logic [31:0] payload;
 
     function new(int s = 64, logic [31:0] p = 0);
-        super.new(s);       // 부모 생성자 명시 호출 — 첫 번째 실행 가능 구문이어야 함
+        super.new(s);       // explicit parent constructor call — must be the first executable statement
         payload = p;
     endfunction
 
     function void show();
-        super.show();       // 부모 메서드 호출
+        super.show();       // call the parent method
         $display("ExtPacket: payload=%08h", payload);
     endfunction
 endclass
 ```
 
-**super.new() 규칙**:
-- 자식 생성자의 **첫 번째 실행 가능 구문**이어야 한다.
-- 부모 생성자가 인자를 요구하면 `super.new(args)` 형태로 전달해야 한다.
-- 자식 생성자에 `super.new()`가 없으면 컴파일러가 `super.new()`를 첫 줄에 자동 삽입한다
-  (부모 생성자가 인자 없이도 호출 가능한 경우에만).
+**super.new() rules**:
+- It must be the **first executable statement** of the child constructor.
+- If the parent constructor requires arguments, they must be passed as `super.new(args)`.
+- If the child constructor has no `super.new()`, the compiler inserts `super.new()` on the
+  first line automatically (only when the parent constructor is callable with no arguments).
 
 ---
 
-## 다형성 — virtual 메서드 (§8.20)
+## Polymorphism — virtual methods (§8.20)
 
-`virtual` 없이 재정의하면 **정적 디스패치** — 핸들의 선언 타입을 기준으로 호출된다.
-`virtual`을 붙이면 **동적 디스패치** — 실제 객체 타입을 기준으로 호출된다.
+Override without `virtual` and the call is **statically dispatched** — resolved against the
+handle's declared type. Add `virtual` and the call is **dynamically dispatched** — resolved
+against the actual object type.
 
 ```systemverilog
 class Shape;
@@ -142,7 +144,7 @@ class Circle extends Shape;
     real radius;
     function new(real r); radius = r; endfunction
     function real area();
-        return 3.14159 * radius * radius;   // virtual 재정의
+        return 3.14159 * radius * radius;   // virtual override
     endfunction
 endclass
 
@@ -150,31 +152,32 @@ class Rect extends Shape;
     real w, h;
     function new(real w, real h); this.w = w; this.h = h; endfunction
     function real area();
-        return w * h;                        // virtual 재정의
+        return w * h;                        // virtual override
     endfunction
 endclass
 
-// 다형성 사용
+// polymorphism in use
 Shape s;
 Circle c = new(5.0);
 Rect   r = new(4.0, 3.0);
 
-s = c;  s.print();   // "Shape area = 78.54" — Circle::area() 호출
-s = r;  s.print();   // "Shape area = 12.00" — Rect::area()   호출
+s = c;  s.print();   // "Shape area = 78.54" — calls Circle::area()
+s = r;  s.print();   // "Shape area = 12.00" — calls Rect::area()
 ```
 
-**가상 메서드 규칙**:
-- 부모에서 `virtual`로 선언하면 자식에서 재정의 시 `virtual` 키워드는 선택 사항이다
-  (상속됨).
-- `virtual` 없는 메서드를 자식에서 재정의하면 부모 핸들로 호출 시 부모 메서드가 실행된다.
+**Virtual method rules**:
+- Once the parent declares a method `virtual`, repeating the `virtual` keyword on the child's
+  override is optional (it is inherited).
+- If a non-`virtual` method is overridden in a child, calling through a parent handle runs the
+  parent method.
 
 ---
 
-## 파라미터화 클래스 (§8.25)
+## Parameterized classes (§8.25)
 
-정수 파라미터 또는 타입 파라미터로 제네릭 클래스를 정의한다.
+A generic class is defined with integer parameters or type parameters.
 
-### 정수 파라미터
+### Integer parameters
 
 ```systemverilog
 class FIFO #(int DEPTH = 8, int WIDTH = 8);
@@ -200,12 +203,12 @@ class FIFO #(int DEPTH = 8, int WIDTH = 8);
     endfunction
 endclass
 
-// 인스턴스화
+// instantiation
 FIFO #(16, 32) deep_fifo;
-FIFO #(.DEPTH(4)) nibble_fifo;   // WIDTH = 8 기본값 유지
+FIFO #(.DEPTH(4)) nibble_fifo;   // WIDTH keeps its default of 8
 ```
 
-### 타입 파라미터
+### Type parameters
 
 ```systemverilog
 class Stack #(type T = int);
@@ -222,26 +225,26 @@ class Stack #(type T = int);
     endfunction
 endclass
 
-// 다양한 타입으로 인스턴스화
+// instantiated with several types
 Stack #(bit [3:0]) nibble_stack = new;
 Stack #(real)      float_stack  = new;
-Stack              int_stack    = new;   // T = int (기본값)
+Stack              int_stack    = new;   // T = int (the default)
 
-// typedef로 별칭 생성
+// an alias via typedef
 typedef Stack #(logic [7:0]) ByteStack;
 ByteStack bstack = new;
 ```
 
 ---
 
-## static 멤버 (§8.9)
+## static members (§8.9)
 
-`static` 변수는 클래스의 모든 인스턴스가 공유한다.
-`static` 메서드는 인스턴스 없이 클래스 이름으로 직접 호출 가능하다.
+A `static` variable is shared by every instance of the class. A `static` method can be called
+directly through the class name, with no instance.
 
 ```systemverilog
 class Packet;
-    static int obj_count = 0;   // 모든 인스턴스 공유
+    static int obj_count = 0;   // shared by every instance
     int id;
 
     function new();
@@ -249,10 +252,10 @@ class Packet;
         id = obj_count;
     endfunction
 
-    // static 메서드 — non-static 멤버(id) 접근 불가
+    // static method — cannot reach a non-static member (id)
     static function int get_count();
         return obj_count;
-        // id = 1;  // 컴파일 에러: non-static 멤버 접근 불가
+        // id = 1;  // compile error: cannot access a non-static member
     endfunction
 
     function void display();
@@ -260,7 +263,7 @@ class Packet;
     endfunction
 endclass
 
-// 사용
+// use
 Packet p1 = new;
 Packet p2 = new;
 Packet p3 = new;
@@ -271,56 +274,58 @@ p1.display();  // id=1 / total=3
 
 ---
 
-## 스코프 해석 연산자 :: (§23.8)
+## The scope resolution operator :: (§23.8)
 
-`::`는 클래스 외부에서 클래스 스코프 내 항목을 참조하거나,
-파라미터화 클래스의 특수화된 스코프에 접근할 때 사용한다.
+`::` is used to reference an item inside a class scope from outside the class, or to reach the
+specialized scope of a parameterized class.
 
 ```systemverilog
-// static 메서드 호출
+// calling a static method
 Packet::get_count();
 
-// static 변수 직접 접근
+// direct access to a static variable
 $display("count = %0d", Packet::obj_count);
 
-// 파라미터화 클래스: 특정 특수화(specialization)를 명시해야 함
-FIFO #(16, 32)::DEPTH;        // ✓ 특수화된 클래스 스코프로 접근
-// FIFO::DEPTH;               // ✗ 비특수화 스코프 — 컴파일 경고 또는 에러
+// parameterized class: the specialization must be named
+FIFO #(16, 32)::DEPTH;        // ✓ reaches the specialized class scope
+// FIFO::DEPTH;               // ✗ unspecialized scope — compile warning or error
 
-// 자식 클래스에서 부모 메서드 호출
-// (super는 내부에서 부모 스코프를 가리키는 :: 변형)
+// calling a parent method from a child class
+// (super is the :: variant that names the parent scope from inside)
 super.show();
 ```
 
 ---
 
-## 랜덤화 — rand / randc / constraint (§18)
+## Randomization — rand / randc / constraint (§18)
 
-> **비합성**: 랜덤화 관련 기능 전체가 합성 불가. 시뮬레이션 전용.
+> **Non-synthesizable**: the whole randomization feature set is non-synthesizable. Simulation
+> only.
 
-### rand와 randc
+### rand and randc
 
-클래스 멤버를 `rand` 또는 `randc`로 선언하면 `randomize()` 호출 시 자동 랜덤화된다.
+Declare a class member `rand` or `randc` and it is randomized automatically on a
+`randomize()` call.
 
 ```systemverilog
 class Transaction;
-    rand  bit [7:0]  opcode;   // 매 호출마다 균등(uniform) 랜덤
-    randc bit [2:0]  tag;      // 0~7 사이클을 순환, 반복 전에 모두 방문
+    rand  bit [7:0]  opcode;   // uniform random on every call
+    randc bit [2:0]  tag;      // cycles through 0..7, visiting all before repeating
     rand  int        length;
     rand  logic [31:0] addr;
 endclass
 ```
 
-| 선언 | 동작 |
+| Declaration | Behaviour |
 |------|------|
-| `rand`  | 매 `randomize()` 호출마다 독립적으로 균등 분포 랜덤값 |
-| `randc` | 가능한 모든 값을 순환한 후에야 동일 값 반복 (카드 덱처럼) |
-| (없음)  | `randomize()` 대상에서 제외 |
+| `rand`  | An independent uniformly distributed random value on every `randomize()` call |
+| `randc` | Repeats a value only after cycling through every possible value (like a deck of cards) |
+| (none)  | Excluded from `randomize()` |
 
-### constraint 블록 (§18.5)
+### constraint blocks (§18.5)
 
-제약 블록은 클래스 내에서 선언하며, 랜덤 변수가 만족해야 할 조건을 정의한다.
-여러 제약 블록은 암묵적으로 AND 관계다.
+A constraint block is declared inside the class and states the conditions the random variables
+must satisfy. Several constraint blocks are implicitly ANDed together.
 
 ```systemverilog
 class Packet;
@@ -329,50 +334,51 @@ class Packet;
     rand int        length;
 
     constraint opcode_c {
-        opcode inside {8'h01, 8'h02, 8'h04, 8'h08};  // 특정 값 집합
+        opcode inside {8'h01, 8'h02, 8'h04, 8'h08};  // a specific value set
     }
 
     constraint addr_c {
-        addr[1:0] == 2'b00;     // 4바이트 정렬
-        addr inside {[32'h1000 : 32'hFFFF]};  // 범위 제한
+        addr[1:0] == 2'b00;     // 4-byte aligned
+        addr inside {[32'h1000 : 32'hFFFF]};  // range limit
     }
 
     constraint length_c {
         length > 0;
         length <= 256;
-        length % 4 == 0;        // 4의 배수
+        length % 4 == 0;        // a multiple of 4
     }
 
-    // 상관 제약
+    // correlated constraint
     constraint correlated_c {
-        if (opcode == 8'h04)    // opcode가 0x04이면
-            length == 64;       //  length는 반드시 64
+        if (opcode == 8'h04)    // if opcode is 0x04
+            length == 64;       //  then length must be 64
     }
 endclass
 ```
 
-### randomize() 메서드
+### The randomize() method
 
 ```systemverilog
 Packet pkt = new;
 
-// 기본 호출 — 반환값 반드시 확인
+// plain call — always check the return value
 if (!pkt.randomize())
     $fatal(1, "Randomization failed!");
 
-// assert 형태 (권장)
+// assert form (recommended)
 assert(pkt.randomize()) else $fatal(1, "Randomization failed!");
 ```
 
-### 인라인 제약 with (§18.7)
+### Inline constraints with `with` (§18.7)
 
-일회성 제약을 `randomize()` 호출 시 추가한다. 클래스 내 기존 제약과 AND 관계.
+Adds a one-off constraint at the `randomize()` call. It is ANDed with the existing constraints
+of the class.
 
 ```systemverilog
-// addr을 특정 값으로 고정하는 일회성 제약
+// a one-off constraint pinning addr to a specific value
 assert(pkt.randomize() with { addr == 32'hA000; });
 
-// 복잡한 인라인 제약
+// a more involved inline constraint
 assert(pkt.randomize() with {
     opcode == 8'h01;
     length inside {[64:128]};
@@ -381,57 +387,57 @@ assert(pkt.randomize() with {
 
 ### pre_randomize / post_randomize (§18.8)
 
-`randomize()` 전후에 자동 호출되는 훅 메서드.
-`pre_randomize()`에서 제약 설정, `post_randomize()`에서 파생 필드 계산에 사용한다.
+Hook methods called automatically before and after `randomize()`. Use `pre_randomize()` to set
+constraints up and `post_randomize()` to compute derived fields.
 
 ```systemverilog
 class Packet;
     rand  bit [31:0] addr;
     rand  int        length;
-    bit   [31:0]     end_addr;   // 파생 필드 (랜덤화 대상 아님)
+    bit   [31:0]     end_addr;   // derived field (not randomized)
 
     function void pre_randomize();
-        // randomize() 직전 — 제약 활성화/비활성화 등
+        // just before randomize() — enable/disable constraints, etc.
         $display("before randomize");
     endfunction
 
     function void post_randomize();
-        // randomize() 직후 — 파생 필드 계산
+        // just after randomize() — compute derived fields
         end_addr = addr + length - 1;
     endfunction
 endclass
 ```
 
-### 제약 상속과 재정의 (§18.9)
+### Constraint inheritance and overriding (§18.9)
 
-자식 클래스는 부모의 제약을 상속받는다.
-같은 이름의 제약 블록으로 재정의(override)할 수 있다.
+A child class inherits its parent's constraints. A constraint block of the same name overrides
+the parent's.
 
 ```systemverilog
 class ExtPacket extends Packet;
-    // 부모의 addr_c 제약을 더 넓은 범위로 재정의
+    // override the parent's addr_c with a wider range
     constraint addr_c {
-        addr inside {[32'h0 : 32'hFFFF_FFFF]};  // 전체 범위 허용
+        addr inside {[32'h0 : 32'hFFFF_FFFF]};  // the full range is allowed
     }
 endclass
 ```
 
-제약 블록 비활성화:
+Disabling a constraint block:
 
 ```systemverilog
-pkt.opcode_c.constraint_mode(0);  // 특정 제약 비활성화
+pkt.opcode_c.constraint_mode(0);  // disable one constraint
 pkt.randomize();
-pkt.opcode_c.constraint_mode(1);  // 다시 활성화
+pkt.opcode_c.constraint_mode(1);  // enable it again
 ```
 
 ---
 
-## 클래스 기반 검증 패턴
+## Class-based verification patterns
 
-UVM 스타일의 기본 구조:
+The basic UVM-style structure:
 
 ```systemverilog
-// 트랜잭션 클래스
+// transaction class
 class APBTxn;
     rand bit [31:0] addr;
     rand bit [31:0] data;
@@ -440,7 +446,7 @@ class APBTxn;
     constraint addr_aligned { addr[1:0] == 2'b00; }
 endclass
 
-// 드라이버 클래스 (virtual interface 사용 — 04-interfaces.md 참고)
+// driver class (uses a virtual interface — see 04-interfaces.md)
 class APBDriver;
     virtual apb_if.TB vif;
 
@@ -461,7 +467,7 @@ class APBDriver;
     endtask
 endclass
 
-// 테스트 시퀀스
+// test sequence
 initial begin
     APBTxn txn;
     APBDriver drv = new(dut_bus.TB);

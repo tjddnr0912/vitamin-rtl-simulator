@@ -16,7 +16,7 @@
 //! is not observed by the clocked checker (the same reason a clocked `cnt<=cnt+1`
 //! misses a finish-coincident edge), so the end-of-sim `final` obligation reads the
 //! prior edge's state. The tests below finish at NON-edge times; offset `$finish`
-//! from the sampling edge in practice. See `run_finals` + docs/DEVLOG.md (49탄).
+//! from the sampling edge in practice. See `run_finals` + docs/history/DEVLOG.md (49탄).
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 

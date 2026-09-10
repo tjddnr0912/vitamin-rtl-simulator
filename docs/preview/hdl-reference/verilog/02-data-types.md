@@ -1,114 +1,117 @@
 # 02 · Verilog Data Types
 
-IEEE 1364-2005 §4 기준. Verilog 데이터 타입은 크게 **넷(net)**과 **변수(variable)**
-두 범주로 나뉜다. 넷은 구조적 연결을 표현하고, 변수는 값을 저장한다.
+Per IEEE 1364-2005 §4. Verilog data types fall into two broad categories, **nets**
+and **variables**. A net expresses a structural connection; a variable stores a value.
 
 ---
 
-## Net vs. Variable 구분
+## Net vs. variable
 
-| 구분 | 대표 타입 | 대입 방법 | 값 저장 |
+| Category | Typical types | How it is assigned | Value storage |
 |------|----------|----------|---------|
-| Net | wire, tri, wand, … | `assign` (continuous), 포트 연결 | 드라이버가 결정 — 자체 저장 없음 |
-| Variable | reg, integer, real | `always`, `initial` (procedural) | 다음 대입까지 값 유지 |
+| Net | wire, tri, wand, … | `assign` (continuous), port connections | decided by its drivers — it holds nothing itself |
+| Variable | reg, integer, real | `always`, `initial` (procedural) | keeps its value until the next assignment |
 
-- `wire`에 `always` 블록에서 대입하면 문법 오류.
-- `reg`를 `assign`으로 구동하는 것도 불가. (SV의 `logic`은 둘 다 허용)
+- Assigning to a `wire` from inside an `always` block is a syntax error.
+- Driving a `reg` with `assign` is equally illegal. (SystemVerilog's `logic` allows
+  both.)
 
 ---
 
-## Net 타입 9종
+## The nine net types
 
-IEEE 1364-2005는 아래 9종 + `uwire`(2005 추가)를 정의한다.
+IEEE 1364-2005 defines these nine plus `uwire` (added in 2005).
 
-| 타입 | 비구동 기본값 | 다중 드라이버 충돌 해소 | 주요 용도 |
+| Type | Undriven default | Multiple-driver resolution | Main use |
 |------|-------------|----------------------|----------|
-| `wire` | `z` | `x` (unknown) | 일반 배선 — 가장 많이 쓰임 |
-| `tri` | `z` | `x` | 다중 드라이버 버스 (wire와 동일, 가독성 구분) |
-| `wand` | `z` | AND 해소 (0 우세) | 와이어드-AND |
-| `triand` | `z` | AND 해소 (0 우세) | 다중 드라이버 와이어드-AND |
-| `wor` | `z` | OR 해소 (1 우세) | 와이어드-OR |
-| `trior` | `z` | OR 해소 (1 우세) | 다중 드라이버 와이어드-OR |
-| `tri0` | `0` (pull 강도) | `x` | 내장 풀다운 저항 모델링 |
-| `tri1` | `1` (pull 강도) | `x` | 내장 풀업 저항 모델링 |
-| `supply0` | `0` (supply 강도) | — | GND / 전원 핀 |
-| `supply1` | `1` (supply 강도) | — | VCC / 전원 핀 |
-| `trireg` | 직전 값 유지 | `x` | 커패시티브 노드 (charge storage) |
-| `uwire` | `z` | 컴파일 에러 | 단일 드라이버 강제 (1364-2005 추가) |
+| `wire` | `z` | `x` (unknown) | ordinary interconnect — by far the most used |
+| `tri` | `z` | `x` | multi-driver bus (identical to wire; the name documents intent) |
+| `wand` | `z` | AND resolution (0 wins) | wired-AND |
+| `triand` | `z` | AND resolution (0 wins) | multi-driver wired-AND |
+| `wor` | `z` | OR resolution (1 wins) | wired-OR |
+| `trior` | `z` | OR resolution (1 wins) | multi-driver wired-OR |
+| `tri0` | `0` (pull strength) | `x` | models a built-in pull-down resistor |
+| `tri1` | `1` (pull strength) | `x` | models a built-in pull-up resistor |
+| `supply0` | `0` (supply strength) | — | GND / supply pin |
+| `supply1` | `1` (supply strength) | — | VCC / supply pin |
+| `trireg` | holds its last value | `x` | capacitive node (charge storage) |
+| `uwire` | `z` | compile error | enforces a single driver (added in 1364-2005) |
 
-### trireg 상세
+### trireg in detail
 
-`trireg`는 Verilog 넷 중 유일하게 값을 저장한다. 드라이버가 활성화되면
-드라이버 값(0/1/x)을 따르고, 드라이버가 모두 `z`가 되면 직전 값을
-`small`/`medium`/`large` 중 하나의 전하 강도로 유지한다.
+`trireg` is the only Verilog net that stores a value. While a driver is active it
+follows the driver's value (0/1/x); once every driver goes to `z`, it holds its
+previous value at one of three charge strengths — `small`, `medium` or `large`.
 
 ```verilog
-trireg (small)  cap_node;   // 약한 전하 유지
-trireg          bus_node;   // 기본(medium) 전하
-trireg (large)  strong_cap; // 강한 전하 유지
+trireg (small)  cap_node;   // weak charge retention
+trireg          bus_node;   // default (medium) charge
+trireg (large)  strong_cap; // strong charge retention
 ```
 
 ### supply0 / supply1
 
-전원 핀은 드라이버 충돌이 의미 없다 — 항상 최강(supply) 강도로 구동.
-게이트 레벨 회로에서 VCC/GND를 명시할 때 사용한다.
+Driver conflicts are meaningless on a supply pin — it is always driven at the
+strongest (supply) strength. Use these to make VCC/GND explicit in a gate-level
+circuit.
 
 ```verilog
 supply1 vcc;
 supply0 gnd;
 ```
 
-### wand / wor (와이어드 로직)
+### wand / wor (wired logic)
 
-오픈-드레인 출력 여러 개를 직접 연결하는 회로 구조를 표현할 때 사용.
+Use these to express a circuit that ties several open-drain outputs together.
 
 ```verilog
-wand  pull_low;  // 어느 드라이버 하나라도 0을 구동하면 0
-wor   bus_req;   // 어느 드라이버 하나라도 1을 구동하면 1
+wand  pull_low;  // 0 if any driver drives 0
+wor   bus_req;   // 1 if any driver drives 1
 ```
 
-### 넷 선언 문법
+### Net declaration syntax
 
 ```
 net_type [signed] [drive_strength] [vectored|scalared] [range] [delay] identifier [= expression];
 ```
 
 ```verilog
-wire                data;           // 1비트 wire
-wire [7:0]          data_bus;       // 8비트 wire 벡터
+wire                data;           // 1-bit wire
+wire [7:0]          data_bus;       // 8-bit wire vector
 wire signed [15:0]  offset;         // signed wire (1364-2001+)
-tri  (strong1, weak0) [3:0] bus;    // 드라이브 강도 지정
-wand #(5, 3)        w;              // rise=5, fall=3 지연
+tri  (strong1, weak0) [3:0] bus;    // explicit drive strengths
+wand #(5, 3)        w;              // rise=5, fall=3 delay
 ```
 
 ---
 
-## 변수(Variable) 타입
+## Variable types
 
 ### reg
 
-값을 저장하는 가장 기본적인 변수. 하드웨어 레지스터와 반드시 일치하지 않는다
-(combinational logic도 `reg`로 모델링됨).
+The basic value-storing variable. It does not necessarily correspond to a hardware
+register — combinational logic is modelled with `reg` too.
 
 ```verilog
-reg         flag;           // 1비트 unsigned
-reg [7:0]   data;           // 8비트 unsigned
-reg signed [7:0]  acc;      // 8비트 signed (1364-2001+)
+reg         flag;           // 1 bit, unsigned
+reg [7:0]   data;           // 8 bits, unsigned
+reg signed [7:0]  acc;      // 8 bits, signed (1364-2001+)
 ```
 
 ### integer
 
-32비트 signed 정수. RTL에서는 루프 카운터나 정수 연산에 사용.
-합성 시 레지스터로 추론될 수 있다.
+A 32-bit signed integer. In RTL it serves as a loop counter or for integer
+arithmetic. Synthesis may infer a register from it.
 
 ```verilog
-integer i;        // 루프 카운터
-integer count;    // 32비트 signed
+integer i;        // loop counter
+integer count;    // 32-bit signed
 ```
 
 ### real / realtime
 
-64비트 IEEE 754 배정도 부동소수점. 시뮬레이션 전용 — **합성 불가**.
+64-bit IEEE 754 double precision floating point. Simulation only — **not
+synthesizable**.
 
 ```verilog
 real     tau = 1.5e-9;
@@ -117,50 +120,52 @@ realtime current_time;
 
 ### time
 
-64비트 unsigned 정수. `$time` 반환값 저장에 주로 사용. **합성 불가**.
+A 64-bit unsigned integer, used mostly to hold a `$time` result. **Not
+synthesizable**.
 
 ```verilog
 time     start_time;
 time     elapsed;
 ```
 
-> **vitamin: IN-MVP** — 64-bit unsigned 4-state 변수(절차 대입 가능, `assign` 구동 불가,
-> 초기값 all-X). unpacked 배열·`parameter time`까지 수용(iverilog 차분 일치).
+> These notes describe the language standard. For which of these types vita
+> supports, and with what restrictions, see
+> [docs/manual/003_language-reference.md](../../../manual/003_language-reference.md).
 
 ---
 
-## 벡터(Vector) 선언
+## Vector declarations
 
 ```verilog
-// 선언 문법
+// declaration syntax
 data_type [msb:lsb] identifier;
 
-// 예시
-wire  [7:0]   byte_bus;    // 8비트, MSB=7, LSB=0
-reg   [15:0]  word_reg;    // 16비트
-reg   [0:7]   rev_byte;    // 역순 (MSB=0, LSB=7) — 합성 가능하나 비권장
+// examples
+wire  [7:0]   byte_bus;    // 8 bits, MSB=7, LSB=0
+reg   [15:0]  word_reg;    // 16 bits
+reg   [0:7]   rev_byte;    // reversed (MSB=0, LSB=7) — synthesizable but discouraged
 ```
 
-- `[msb:lsb]` 에서 msb ≥ lsb 관례 (big-endian 비트 순서)를 따르는 것이 표준
-- 역순 `[0:N-1]` 도 문법상 허용되나 슬라이스 방향이 반전됨
+- The convention is msb ≥ lsb in `[msb:lsb]` (big-endian bit order)
+- The reversed form `[0:N-1]` is legal syntax, but it flips the direction of a slice
 
-### 비트/부분 선택
+### Bit and part selects
 
 ```verilog
-data_bus[3]        // 단일 비트 선택
-data_bus[5:2]      // 4비트 파트 선택 (범위는 상수)
-data_bus[base+:4]  // base부터 4비트 위로 (1364-2001+)
-data_bus[base-:4]  // base부터 4비트 아래로 (1364-2001+)
+data_bus[3]        // single bit select
+data_bus[5:2]      // 4-bit part select (the bounds must be constant)
+data_bus[base+:4]  // 4 bits upward from base (1364-2001+)
+data_bus[base-:4]  // 4 bits downward from base (1364-2001+)
 ```
 
-### scalared / vectored 키워드
+### The scalared / vectored keywords
 
 ```verilog
-reg  scalared [7:0] a;   // 비트 단위 접근 허용
-wire vectored [7:0] b;   // 벡터 전체 단위 최적화 힌트
+reg  scalared [7:0] a;   // permits bit-level access
+wire vectored [7:0] b;   // hints that the vector is used as a whole
 ```
 
-시뮬레이터 최적화 힌트일 뿐, 동작 의미는 동일하다.
+They are optimization hints to the simulator; the semantics are identical either way.
 
 ---
 
@@ -168,7 +173,7 @@ wire vectored [7:0] b;   // 벡터 전체 단위 최적화 힌트
 
 ### parameter
 
-모듈 외부(인스턴스화 시)에서 override 가능한 상수.
+A constant that can be overridden from outside the module, at instantiation.
 
 ```verilog
 module fifo #(
@@ -181,11 +186,11 @@ module fifo #(
     // ...
 endmodule
 
-// 인스턴스화 시 override
+// overridden at instantiation
 fifo #(.DATA_W(16), .DEPTH(256)) u_fifo (…);
 ```
 
-타입·범위 명시:
+With an explicit type or range:
 
 ```verilog
 parameter signed [7:0]  OFFSET = -1;
@@ -195,34 +200,35 @@ parameter real          CLK_PERIOD = 10.0;
 
 ### localparam
 
-모듈 내부 상수 — `defparam`이나 `#()` override 불가.
+A module-internal constant — neither `defparam` nor a `#()` override can change it.
 
 ```verilog
 localparam HALF_W  = DATA_W / 2;
-localparam NUM_SEL = $clog2(DEPTH);  // 합성 환경에서 사용 가능
+localparam NUM_SEL = $clog2(DEPTH);  // usable in a synthesis flow
 ```
 
 ---
 
-## 메모리(배열) 선언
+## Memory (array) declarations
 
 ```verilog
-// 기본 문법
+// basic syntax
 reg [width-1:0] mem_name [0:depth-1];
 
-// 예시
-reg [7:0]    ram  [0:255];      // 256 × 8비트 RAM (2048비트)
-reg [31:0]   rom  [0:1023];     // 1K × 32비트 ROM
-reg [N-1:0]  lut  [0:M-1];     // 파라미터화 LUT
+// examples
+reg [7:0]    ram  [0:255];      // 256 × 8-bit RAM (2048 bits)
+reg [31:0]   rom  [0:1023];     // 1K × 32-bit ROM
+reg [N-1:0]  lut  [0:M-1];     // parameterized LUT
 
-// 접근
-ram[addr]         = data;       // 워드 쓰기
-data = ram[addr];               // 워드 읽기
-// 단, 배열 전체를 한 번에 읽거나 벡터로 쓰는 것은 불가
-// 비트 선택도 불가: ram[addr][3]  (시뮬레이터마다 다름 — 피할 것)
+// access
+ram[addr]         = data;       // word write
+data = ram[addr];               // word read
+// reading the whole array at once, or writing it as a vector, is not allowed
+// nor is a bit select on an element: ram[addr][3] (tool-dependent — avoid it)
 ```
 
-Verilog-2005의 메모리는 **1차원 배열**만 지원. 다차원 배열은 SV에서 추가.
+A Verilog-2005 memory is **one-dimensional** only. Multidimensional arrays arrived
+with SystemVerilog.
 
 ---
 

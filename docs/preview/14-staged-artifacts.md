@@ -1,694 +1,1059 @@
-# 14 · 단계별 산출물 · 해시 결합 · CLI 표면
+# 14 · Staged artifacts
 
-> 04-architecture.md "실행 모델 — 원샷과 단계별 실행" 절의 권위 있는 상세 명세다.
-> 단계 간 산출물의 온디스크 포맷, staleness(신선도) 해시 결합 규칙, 멀티 라이브러리
-> 주소화, CLI 플래그 표면, 구조적 schema 해시 메커니즘을 정의한다.
-> 04는 요약이며, 단계별 실행의 단일 진실 공급원은 본 문서다.
+This is the authoritative specification for everything vita writes to disk between stages: the
+`.vu` and `.velab` container formats, the work library, filelist expansion, the staleness gate,
+the live upstream re-hash rule, and the equivalence contract between the staged chain and the
+one-shot run. [04-architecture.md](04-architecture.md) summarises the execution model; this
+document defines it.
 
 ---
 
-## 설계 결정 (확정)
+## Design decisions
 
-| # | 결정 | 내용 |
+| # | Decision | Content |
 |---|---|---|
-| D1 | 전용 크레이트 | (역)직렬화 · 헤더 · 버전 · staleness · `--dump` 로직은 전용 크레이트 `vita-artifact`가 보유. 형상 해시는 proc-macro 크레이트 `vita-artifact-derive`가 산출하고 런타임 합성은 leaf 크레이트 `vita-schema`가 담당(16). 워크스페이스 11→15(+`vita-artifact`·`vita-artifact-derive`·`vita-schema`·`vita-log`). `cli`는 얇은 글루로 유지. |
-| D2 | 구조적 schema 해시 | schema 버전은 직렬화 타입 **형상의 구조적 파생 해시**(`#[derive(SchemaHash)]`). 손으로 올리는 const가 아니다. 빌드 지문(git sha/dirty/profile)은 provenance 전용으로 별도 stamp(해시 키 아님). |
-| D3 | 멀티 라이브러리 | 설계 단계부터 도입. 단위는 `library:unit` 논리 키로 주소화하며, 논리명→디렉터리 매핑(`cds.lib`/`synopsys_sim.setup` 계열)을 처음부터 지원. |
-| D4 | span-free IR | `sim-ir`는 언어 중립·소스 span 비보유. 런타임 진단 위치는 IR 노드 인덱스로 키잉된 **선택적·독립 버전 사이드테이블**에 둔다. `file_id→path` 맵은 work 매니페스트에. |
+| D1 | Dedicated crates | Container (de)serialization, the header, the version constant and the staleness gate live in `vita-artifact`. The structural shape hash is produced by the proc-macro crate `vita-artifact-derive` and composed at runtime by the leaf crate `vita-schema` ([16-schema-hash-spec.md](16-schema-hash-spec.md)). Body serialization and the trailer layout belong to `cli`, which keeps the container language-neutral. |
+| D2 | Structural schema hash | The schema version is a structural hash derived from the *shape* of the serialized types (`#[derive(SchemaHash)]`), not a hand-incremented constant. The build fingerprint (tool version, git sha, dirty, profile) is stamped for traceability and is never a staleness key. |
+| D3 | Multiple libraries | Compiled units are addressed by the logical key `library:unit`, not by path. A logical name resolves to a directory. |
+| D4 | Span-free IR | `sim-ir` is language-neutral and carries no source spans. Runtime diagnostic locations travel out of band, in a side table keyed by IR node index; the `file → text` map travels on the `.vu`. |
 
 ---
 
-## §1 산출물 레이아웃
+## 1. Artifact layout
 
-파이프라인은 두 경계에서 디스크 산출물을 남긴다. 두 산출물은 **모양이 다르다** —
-compile 산출물은 단위별 디렉터리, elaborate 산출물은 단일 자기완결 파일이다.
-
-```
-vcmp (compile)  →  work/            ← 디렉터리: 설계단위별 분석 결과 (언어 의존)
-velab (elaborate) →  <top>.velab    ← 단일 파일: elaborate된 sim-ir (언어 중립, 자기완결)
-vrun (simulation) →  (VCD, dump 호출 시) + stdout
-```
-
-### vcmp 산출물 — work 라이브러리 (디렉터리)
-
-설계단위(모듈/패키지/엔티티) 하나당 **파싱·국소검사된 AST**를 직렬화한 blob 하나.
-parse가 마지막 언어 의존 단계이므로 이 산출물은 **언어 의존**이며, 계층·파라미터는
-아직 미해소다. 단위별 입도(granularity)가 증분 재분석을 가능하게 한다.
+The pipeline leaves disk artifacts at two boundaries. The shapes differ: the compile output is a
+directory of compiled units, the elaborate output is one self-contained file.
 
 ```
-work/
-├── lib.toml                 # 사람이 읽는 TOML 매니페스트 (버전 독립 텍스트)
-└── units/
-    ├── <unit-a>.vu          # 단위별 바이너리 blob (헤더 + postcard 본문)
-    └── <unit-b>.vu
+vcmp  (compile)     →  <first-source>.vu   or  <work-dir>/     (language-dependent)
+velab (elaborate)   →  <top>.velab                             (language-neutral, self-contained)
+vrun  (simulate)    →  waveform (when the RTL dumps) + stdout
 ```
 
-`work/lib.toml` (매니페스트):
+### 1.1 The container
+
+`.vu` and `.velab` share one container shape and one header type. Only the magic differs.
+
+```
+<8-byte magic> ++ postcard(VelabHeader) ++ <opaque body bytes>
+```
+
+| Constant | Value | Bytes |
+|---|---|---|
+| `MAGIC_VELAB` | `b"VELAB\0\0\0"` | `56 45 4C 41 42 00 00 00` |
+| `MAGIC_VU` | `b"VU\0\0\0\0\0\0"` | `56 55 00 00 00 00 00 00` |
+
+The two magics are deliberately distinct so that a `.vu` handed to `vrun` fails the format gate
+rather than the schema gate, and the diagnostic names the real mistake.
+
+The header is decoded alone, with `postcard::take_from_bytes`, before a single body byte is
+deserialized. A bad magic, a short file or an undecodable header is `E-ART-FORMAT-MISMATCH`.
+
+### 1.2 Header fields
+
+`VelabHeader` has nine fields, in this wire order. It is `Serialize + Deserialize` but is **not**
+`SchemaHash`-derived — the container version guards its layout.
+
+| # | Field | Type | What the producers write |
+|---|---|---|---|
+| 1 | `format_version` | `u32` | `CURRENT_FORMAT_VERSION` = **31** |
+| 2 | `schema_hash` | `[u8; 32]` | `.vu`: `schema_hash::<hdl_ast::SourceUnit>()`. `.velab`: `schema_hash::<sim_ir::SimIr>()` |
+| 3 | `composite_input_hash` | `[u8; 32]` | The upstream digest (§2 RULE V). `vcmp`: blake3 over the concatenated raw source text plus the `-D`/`-I` surface. `velab`: blake3 of the whole consumed `.vu` file. `velab -L`: blake3 over every consumed compilation-unit blob, concatenated |
+| 4 | `global_time_precision` | `i64` | The resolved design-wide precision exponent (`-9` = 1 ns) |
+| 5 | `consumed` | `Vec<(String, [u8; 32])>` | Written empty. Reserved: the live consumption record rides trailer ⑨ |
+| 6 | `worklib_manifest_hash` | `[u8; 32]` | Written all-zero. Reserved, same reason |
+| 7 | `uses_dump` | `bool` | Written `false` |
+| 8 | `tool_semver_major` | `u32` | `CARGO_PKG_VERSION_MAJOR` = **0** (workspace version 0.2.0) |
+| 9 | `provenance` | `Provenance` | Captured at run time from build-time environment |
+
+Fields 5, 6 and 7 are carried through unchanged and are gate-neutral: the gate never reads them.
+
+Backend capability is not a header field. A `.velab` records resolved IR facts only. Whether a
+given engine can execute a builtin or write a waveform is a property of the backend that loads
+the snapshot, so it does not belong in the elaborate output.
+
+### 1.3 Provenance
+
+| Field | Type | Source |
+|---|---|---|
+| `tool_version` | `String` | `env!("CARGO_PKG_VERSION")` |
+| `git_sha` | `Option<String>` | `option_env!("VITA_GIT_SHA")` — `None` on a plain local build |
+| `dirty` | `bool` | `option_env!("VITA_GIT_DIRTY")` is `"1"` or `"true"` |
+| `profile` | `String` | `"debug"` under `debug_assertions`, else `"release"` |
+
+Capture uses `env!` / `option_env!` / `cfg!` only. vita's own crates carry no `build.rs`, so a
+release wrapper injects the sha through the environment and an ordinary `cargo build` degrades
+gracefully to "version and profile, sha unknown". Provenance exists for bug-report traceability
+and is deliberately excluded from the staleness key: a dirty tree must not force a rebuild.
+
+### 1.4 `.vu` body
+
+```
+postcard(hdl_ast::SourceUnit)                        # the schema-gated frame
+++ postcard((unit_exp:        BTreeMap<String, i8>,  # timescale tail
+             global_prec_exp: i8,
+             prec_exp:        BTreeMap<String, i8>))
+++ postcard((files:    Vec<(String, String)>,        # source-map tail
+             segments: Vec<(u32, u32, u32, u32, bool)>))
+```
+
+- `unit_exp` is the per-module time-unit exponent, `prec_exp` the per-module time-precision
+  exponent. Both feed the two-stage delay conversion of
+  [08-timescale-and-timing.md](08-timescale-and-timing.md).
+- The source-map tail carries exactly what a `SourceMap` resolver needs: the file name and full
+  text of each source, and the expansion segments `(exp_start, exp_end, file_id, orig_start,
+  collapsed)`. The machine-local `canon` and `dir` fields are deliberately not carried — they are
+  absolute paths and would break byte-identity across platforms. `velab` rebuilds the resolver
+  from this tail, which is what makes a staged elaborate diagnostic print the same
+  `file:line:col` as the one-shot run.
+- Read tolerance differs by tail. The timescale tail is tolerant: absent means empty maps and
+  `global_prec_exp = -9`. The source-map tail is loud: absent or undecodable is
+  `E-ART-FORMAT-MISMATCH`, because a silently location-less diagnostic is worse than a refusal.
+
+### 1.5 `.velab` body — the golden frame plus fifteen trailers
+
+```
+postcard(sim_ir::SimIr)      # THE GOLDEN FRAME — the only schema-gated part
+++ ① ++ ② ++ … ++ ⑮          # append-only trailer segments, in this exact order
+```
+
+| # | Segment | Type | Read tolerance | Meaning when empty |
+|---|---|---|---|---|
+| ① | `fork_modes` | `BTreeMap<(u32,u32), JoinMode>` | required | — |
+| ② | `net_names` | `Vec<String>` | tolerant | flat `n{i}` waveform names |
+| ③ | timescale | `(Vec<u64>, i8, Vec<u64>)` = (per-process multipliers, global precision exponent, per-process precision multipliers) | tolerant | `(vec![], -9, vec![])` = 1ns/1ns base |
+| ④ | `severities` | `BTreeMap<u32, SeverityKind>` | tolerant | severity tasks degrade to plain `$display` |
+| ⑤ | `radixes` | `BTreeMap<u32, u8>` | tolerant | decimal |
+| ⑥ | `proc_scopes` | `Vec<String>` | tolerant | flat `top` for `%m` |
+| ⑦ | `assign_ranks` | `BTreeSet<u32>` | tolerant | every Force/Release is a real force/release |
+| ⑧ | `queue_bounds` | `BTreeMap<u32, u32>` | tolerant | every queue unbounded |
+| ⑨ | `WorkConsumed` | work-library consumption record | tolerant | no work gate. Always written, even for an explicit-path build, so that ⑩ is unambiguous |
+| ⑩ | `net_dims` | `BTreeMap<u32, Vec<(i64,u32)>>` | tolerant | 1-D zero-based element names |
+| ⑪ | `final_procs` | `BTreeSet<u32>` | tolerant | no `final` blocks. Always written, same reason |
+| ⑫ | `defer_marks` | `BTreeMap<u32, DeferRegion>` | tolerant | no deferred asserts |
+| ⑬ | `defer_acts` | `BTreeMap<u32,(u32,DeferRegion)>` | tolerant | no deferred asserts |
+| ⑭ | `StagedExtraSidecars` | 37-field struct | tolerant → `Default` | plain RTL costs about 13 length-zero bytes |
+| ⑮ | `WorkStamps` | 3-field struct | tolerant → `Default` | every upstream entry re-hashes |
+
+"Tolerant" means the reader checks for an exhausted stream first and substitutes the empty
+default; a present-but-undecodable segment is always `E-ART-FORMAT-MISMATCH`, with a message
+naming the segment. Every segment except the last decodes with `postcard::take_from_bytes`; the
+last uses `postcard::from_bytes`.
+
+Every trailer rides **outside** the hashed `SimIr` frame. The schema gate covers the type shape
+of the golden frame, not these bytes. That is the reason a trailer change requires a
+`format_version` bump rather than a schema-hash flip (§7), and the reason the two hand-maintained
+trailers ⑭ and ⑮ carry their own pinned wire hashes.
+
+### 1.6 Trailer ⑭ — `StagedExtraSidecars`
+
+postcard encodes struct fields positionally, so field order is the wire contract and a rename is
+wire-neutral. Fields 1–27 are unconditional; fields 28–37 carry `#[serde(default)]`, which is what
+makes the tail append-only within one container version.
+
+| # | Field | Type |
+|---|---|---|
+| 1 | `func_table` | `Vec<FuncMeta>` |
+| 2 | `task_calls_proc` | `BTreeMap<(u32,u32), TaskCallInfo>` |
+| 3 | `task_calls_func` | `BTreeMap<u32, TaskCallInfo>` |
+| 4 | `two_state_nets` | `BTreeSet<u32>` |
+| 5 | `class_handle_nets` | `BTreeSet<u32>` |
+| 6 | `class_new_sites` | `BTreeMap<u32,u32>` |
+| 7 | `class_layouts` | `Vec<Vec<(u32,bool,bool)>>` |
+| 8 | `class_field_inits` | `Vec<Vec<Option<BitPacked>>>` |
+| 9 | `class_vtable` | `Vec<Vec<u32>>` |
+| 10 | `class_calls` | `BTreeMap<u32,(Option<u32>,u32)>` |
+| 11 | `class_field_widths` | `BTreeMap<u32,(u32,bool)>` |
+| 12 | `assert_fire` | `BTreeSet<u32>` |
+| 13 | `assert_ctl` | `BTreeMap<u32,u8>` |
+| 14 | `class_rand` | `Vec<Vec<RandBound>>` |
+| 15 | `class_constraints` | `Vec<Vec<Vec<COp>>>` |
+| 16 | `class_dist` | `Vec<Vec<DistField>>` |
+| 17 | `class_randc` | `Vec<Vec<RandcField>>` |
+| 18 | `randomize_with` | `Vec<RandWithCall>` |
+| 19 | `clocking_inputs` | `BTreeSet<u32>` |
+| 20 | `clocking_commit` | `BTreeMap<u32, Vec<(u32,u32)>>` |
+| 21 | `clocking_outputs` | `BTreeMap<u32, Vec<(u32,u32)>>` |
+| 22 | `ca_delays` | `BTreeMap<u32,(u32,u32,u32)>` (rise, fall, turn-off) |
+| 23 | `wired_and_nets` | `BTreeSet<u32>` |
+| 24 | `wired_or_nets` | `BTreeSet<u32>` |
+| 25 | `timeformat_stmts` | `BTreeSet<u32>` |
+| 26 | `handle_copy_stmts` | `BTreeMap<u32,(u32,u32)>` |
+| 27 | `queue_slice_stmts` | `BTreeSet<u32>` |
+| 28 | `func_names` | `Vec<String>` (FuncId → `module.function`) |
+| 29 | `real_elem_dyn_nets` | `BTreeSet<u32>` |
+| 30 | `string_elem_dyn_nets` | `BTreeSet<u32>` |
+| 31 | `net_decl_ranges` | `BTreeMap<u32,(i64,i64)>` |
+| 32 | `file_directed_stmts` | `BTreeSet<u32>` |
+| 33 | `init_procs` | `Vec<u32>` (declaration-initializer ProcIds, in initialization order) |
+| 34 | `stmt_locs` | `BTreeMap<u32, StmtLoc>` |
+| 35 | `stmt_scopes` | `BTreeMap<u32, String>` (StmtId → `%m` named-block chain) |
+| 36 | `expr_scopes` | `BTreeMap<u32, String>` (the `$sformatf` ExprId twin) |
+| 37 | `proc_inst_scopes` | `Vec<String>` (ProcId → instance path, generate scopes stripped) |
+
+Every field is populated one-to-one from the elaborator's own sidecar bundle, so the staged path
+carries what the one-shot path holds in memory (§6).
+
+### 1.7 Trailer ⑮ — `WorkStamps`
+
+```rust
+type FileStamp = (u64, u32, u64);   // (seconds since UNIX_EPOCH, subsec nanos, byte length)
+struct WorkStamps {
+    libs:  Vec<Option<FileStamp>>,
+    blobs: Vec<Option<FileStamp>>,
+    files: Vec<Option<FileStamp>>,
+}
+```
+
+The three vectors run parallel to trailer ⑨'s `libs` / `blobs` / `files` — same order, same
+length. `velab` records `Some(stamp)` only after re-reading the path and confirming that the bytes
+still hash to the recorded digest, and rejects a length mismatch between the read and the stat.
+`None` means "could not verify, always re-hash".
+
+At `vrun` a matching live `(mtime, size)` skips the read and the blake3. Any mismatch, and any
+absent stamp, falls back to the authoritative re-hash. This is a fast path, never a relaxation of
+the rule: the content hash is always the deciding check. The residual hole is a rewrite that
+keeps both the length and the recorded mtime.
+
+### 1.8 Atomic write
+
+Every artifact is written to `<out>.tmp.<pid>` and then renamed onto `<out>`; on a rename failure
+the temporary file is removed. A same-directory rename is atomic on POSIX, so a crash mid-write
+cannot leave a truncated artifact that the staleness gate would report as a format mismatch. No
+`.tmp.` residue survives a successful write.
+
+### 1.9 Serialization mechanism
+
+- **serde derive at the boundary, `postcard 1.x` as the single encoder.** There is no second
+  encoder and no fallback: two mutually incompatible artifact encodings would be two formats.
+- **blake3 for every digest** — shape hashes, source digests, blob digests, manifest digests.
+  Pure Rust, no C dependency, pinned to an exact version. Some recorded field names read
+  `src_sha256`; the algorithm they name is blake3 throughout.
+- **The one-shot run never calls serde.** `vita` streams the live `SourceUnit` and `SimIr` values
+  from stage to stage in memory. Serialization happens only when `vcmp` or `velab` is asked to
+  store something, so it is a purely optional boundary.
+
+What postcard imposes on the design:
+
+| Property | Consequence |
+|---|---|
+| Struct fields encode positionally | A field rename is wire-neutral; an add, remove, reorder or retype is not |
+| Enum discriminants are positional | Appending a variant last leaves every existing value decoding unchanged |
+| Integers are varint, `i64` zigzag | `u32` and `u64` encode identically for every value below 2^32, so widening a `Vec<u32>` element to `Vec<u64>` is wire-neutral; changing `(u32,u32)` to `(i64,u32)` is not |
+| `Box<T>` encodes byte-identically to `T` | Mirrored by the derive's transparent `Box` arm, which is also how the recursive AST terminates |
+| `Vec` and `String` lengths are varint | A length is width-independent, which is why `usize` is banned from schema types but `Vec::len()` is not a hazard |
+
+### 1.10 The frozen process shape
+
+The process body is a structured basic-block sequence, not a bytecode ISA, and the resume state is
+physically reserved in the IR schema. The whole cluster is frozen as one atomic unit: any field
+that changes shape flips `SCHEMA_HASH` and invalidates every `.velab` on disk, so a partial freeze
+is not available. The rationale is in [06-simulation-engine.md](06-simulation-engine.md); the
+shape is:
+
+```rust
+struct Process {                       // a velab body process node
+    sensitivity: Sensitivity,          // static trigger set, ordered Vec
+    body:        Vec<BasicBlock>,      // structured blocks; index = the resume_pc domain
+    entry:       u32,                  // entry block (initial = once at t0, always* = re-armed)
+    suspend:     SuspendState,         // the atomic freeze unit
+}
+struct SuspendState {
+    resume_pc:   u32,                  // block index — never a pointer or a native PC
+    locals:      Vec<FourState>,       // frame-0 locals, ordered Vec
+    join_state:  JoinState,
+    wake_key:    WakeKey,
+    call_stack:  Vec<Frame>,           // LIFO; an inline-only process stores an empty Vec (1 byte)
+    frame_arena: Vec<FourState>,       // per-process flat arena; a Frame addresses it by (base, len)
+}
+struct JoinState {
+    parent:   Option<u32>,             // runtime process-table index, None = top level
+    children: Vec<u32>,                // active children, appended in fork declaration order
+    detached: Vec<u32>,                // join_any remainder plus join_none children — load-bearing
+    flags:    ProcFlags,               // u8 bitset
+}
+struct Frame {
+    return_pc: u32, callee_entry: u32, // return block / callee entry block
+    locals_base: u32, locals_len: u32, // the locals window inside frame_arena
+    is_automatic: bool,                // automatic ⇒ private window, static ⇒ fixed storage alias
+}
+struct WakeKey {
+    cond: WakeCond, region: RegionTag, // the region is stored, never re-derived at wake time
+    tie_break: u32,                    // flattened-hierarchy declaration order, not a user priority
+}
+struct ProcFlags(u8);                              // newtype so the shape is distinct from a bare u8
+enum RegionTag { Active, Inactive, Nba, Monitor }  // the four IEEE 1364 regions that ride the IR
+enum WakeCond {                                    // the closed set of process-suspend conditions
+    Edge { net: u32, kind: EdgeKind }, Level { nets: Vec<u32> }, WaitTrue { expr: u32 },
+    TimeAbs { tick: u64 }, NamedEvent { ev: u32 }, Join { join_ref: u32 },
+}
+// Terminator, inside body: Goto / Branch / Delay / Wait / Fork / Call / Return.
+```
+
+Invariants the shape does not express and the engine must therefore hold:
+
+1. **No `usize` or `isize`, no `f32` or `f64`, no `HashMap` or `HashSet`** in any schema type.
+   The derive rejects all of them at compile time; a widths-vary-by-target field or a
+   hash-ordered container would break byte-identity across platforms.
+2. `children`, `detached`, `call_stack` and `frame_arena` are appended in declaration order and
+   removed order-preservingly. No `swap_remove`, no freed-slot reuse pool.
+3. `WakeKey.region` is filled at elaborate time and stored, so scheduling stays inside the hash.
+4. A new wait kind, or a wider region model, is an intentional `SCHEMA_HASH` flip plus a rebuild.
+   Reserving spare variants in advance is not the route — it only bloats the hashed surface.
+
+`RegionTag` names the four IEEE 1364 regions that ride the frozen IR. Three more regions —
+preponed, observed and reactive — are modelled out of band, where they do not touch the golden
+shape, so seven of IEEE 1800's seventeen are implemented and every construct needing one of the
+remaining ten is honestly loud.
+
+---
+
+## 2. Hash binding
+
+This section is the load-bearing part of the document. Skipping an unchanged stage is only sound
+if every input that can change a stage's output is bound into that stage's staleness identity. One
+omission means a stale artifact is silently reused and the simulation is wrong.
+
+**RULE 0.** Classify a flag by *which stage's output it disturbs*, not by which binary parses it.
+Three buckets:
+
+- **A** — disturbs preprocessing output ⇒ binds into the compile-side source digest.
+- **B** — disturbs the elaborated `SimIr` ⇒ binds into the snapshot's identity.
+- **C** — disturbs neither ⇒ runtime or reporting only, hashed nowhere.
+
+**RULE A (compile-side digest inputs).** Include-path, macro-define, source-library and language-
+dialect flags change the preprocessed bytes or which unit a name resolves to, so they belong in
+the *preimage* of the compile-side digest, not merely stamped beside it. Stamping alone would let
+a dialect switch reuse an artifact whose bytes happen to match.
+
+**RULE B (elaborate-side identity).** Top selection, parameter and defparam overrides, library
+composition, library-map resolution and the resolved global time precision change the flattened
+`SimIr`, so they belong to the snapshot's identity.
+
+Status at HEAD: the `.velab` header's `composite_input_hash` is an **upstream** digest — the bytes
+of the consumed `.vu`, or of the consumed compilation-unit blobs in library mode. Elaborate-side
+argv is not folded in, and `-G` / `--param` is excluded deliberately: `vrun --upstream` must be
+able to recompute the digest from the live file alone, and a digest that mixes in an override
+cannot be reproduced from the file, so every override build would be rejected as stale against a
+file that has not changed. Two snapshots elaborated from the same `.vu` with different overrides
+are therefore indistinguishable to the gate; the snapshot is named by the user, and the gate's job
+is upstream freshness rather than command reconstruction.
+
+**RULE C (runtime only — hashed nowhere).** Plusargs, seeds, `$stop` handling, run-length limits,
+logging, verbosity, warning gating, output naming, colour and version reporting change runtime
+behaviour or packaging. Hashing any of them would break the guarantee that one `.velab` can be run
+twice with different runtime flags and stay valid both times, and would force pointless rebuilds.
+
+**RULE T (the timescale trap — double binding).** A global timescale default is the one input that
+legitimately enters both digests. As an injected preprocessor directive it changes the compiled
+bytes (RULE A); as the source of the global precision recorded in the `.velab` header it changes
+the elaborated time model (RULE B). It must be bound on both sides.
+
+**RULE S (directive inheritance).** Sticky compiler directives such as `` `timescale `` and
+`` `default_nettype `` carry across file boundaries within a compilation unit
+([08-timescale-and-timing.md](08-timescale-and-timing.md)). A later unit's preprocessed output
+therefore depends on the order of its siblings: its own bytes are unchanged, yet it inherits a
+different timescale when an earlier file changes. Two consequences follow. A per-unit source digest
+must be computed over the bytes *after* inheritance, and the ordered list of compilation-unit files
+must itself be a digest input, so that adding, removing or reordering a file invalidates. The
+ordered list is produced by filelist expansion (§4), whose depth-first declaration-order flattening
+is a precondition for that soundness. Every future sticky directive is treated the same way.
+
+Status at HEAD: the compilation unit is a single concatenation, so per-unit preprocessed bytes are
+not defined and the recorded digest is over the raw file bytes of every source plus the include
+closure plus the `-D`/`-I` surface. Detection power is equivalent — any edit to any participating
+byte, in a source or in an included file, trips the gate — but the recorded digest is not the
+post-inheritance form the rule describes. The sibling-order hazard is answered instead at
+expansion time, by `E-FLIST-DUP-CTX-CONFLICT` (§4).
+
+**RULE D2 (the schema hash is an input too).** The structural `SCHEMA_HASH` of the serialized types
+is stamped in both headers. A type-shape change flips it and invalidates every `.vu` and `.velab`
+written before. It composes with the content digests: an artifact is fresh if and only if the
+schema hash matches **and** the content digests match. The build fingerprint is stamped but is not
+a staleness key.
+
+**RULE V (live upstream re-hash).** `vrun` re-validates its upstream chain against the live sources
+on every run, rather than trusting a recorded timestamp or a fast-path skip. Mtime is never a
+sound freshness signal on its own; only the content hash is. When a live digest differs, `vrun`
+refuses to simulate the stale snapshot. This is an intentional departure from the check-skipping
+fast paths that commercial run flags offer. Implementation and diagnostics: §5.3.
+
+**RULE API (make mis-binding structurally impossible).** The hashing functions take typed input
+structs — a preprocess-inputs struct and an elaborate-inputs struct — and never raw argv. Logging,
+packaging and runtime flags have no field in those structs, so they cannot physically reach a
+digest. Adding a new preprocess or elaborate flag requires adding a field, which makes the binding
+decision a compile-time obligation.
+
+**RULE F (a filelist is transport; its contents are hashed).** The `-f` / `-F` flag itself is
+bucket C — the file is never hashed, because how sources were grouped into filelists, or what a
+`.f` was renamed to, must not invalidate an artifact. The expanded *contents* bucket exactly as if
+they had been typed inline: a `+define+` three levels deep binds like a command-line one, a library
+binding binds like a command-line one. There is no "came from a file" bucket.
+
+### Flag buckets at HEAD
+
+| Flag | Stage | Bucket | How it binds |
+|---|---|---|---|
+| `+define+` / `-D` / `--define` | vcmp, vita | A | in the compile digest preimage, as `name=value` lines in argv order |
+| `+incdir+` / `-I` / `--incdir` | vcmp, vita | A | in the preimage as directory lines; every file the preprocessor actually opens is recorded with its own digest |
+| `--work` / `--workdir` | vcmp | A | selects the library name and directory, which is the `library:unit` namespace; the manifest is itself hashed |
+| `--top` | velab, vita | B | selects the elaboration root; not recorded in any digest (see the RULE B status above) |
+| `-G` / `--param` | velab, vita | B | applied at elaborate; deliberately excluded from the digest |
+| `-L` | velab | B | every consumed blob and every source and include behind it is recorded in trailer ⑨ |
+| `-o` / `--out` | all | C | names the output |
+| `--backend`, `--threads` / `-j`, `--timeout`, `+plusargs` | vita, vrun | C | runtime only; output must be byte-identical across backends and thread counts |
+| `-l` / `--log`, `--log-append`, `-q` / `-v` / `-vv` / `--verbosity`, `-Wno-`, `-Werror[=]` | all | C | reporting only |
+| `--obs-dir`, `--obs-procs[-time]`, `--probe`, `--probe-file`, `--hier-tree`, `--inst-paths` | vita | C | observability output only ([19-ai-agent-observability.md](19-ai-agent-observability.md)) |
+| `--upstream` | vrun | C | selects *what* is re-checked; it is not itself hashed |
+| `-f` / `-F`, `--dump-filelist` | all | C | transport and dry-run inspection |
+
+### Specified, not implemented
+
+These belong to the bucket model above and are stated here so a reader never mistakes them for a
+shipped surface. Each is a present fact about HEAD, not a schedule.
+
+| Flag | Intended bucket | Status at HEAD |
+|---|---|---|
+| `--std` / `-g<year>`, `-sv` | A (preimage, plus a global dialect digest) | not accepted; dialect is fixed |
+| `-y <libdir>`, `-Y <ext>` / `+libext+`, `-v <libfile>` | A | not accepted; there is no source-library search |
+| `--timescale`, `--timescale-policy` | A and B (RULE T) | not accepted; the global default resolves to the 1ns/1ns base |
+| `-s` / `--top-module`, `-pvalue+` | B | not accepted; the spellings are `--top` and `-G` / `--param` |
+| `-P<hier.path.param>=`, `-P <dir>`, `--lib-map` | B | not accepted; defparam-style overrides, precompiled-library search and an external logical-name map are absent |
+| `--multi-driver` | B | not accepted; multi-driver resolution is always the IEEE 4-state merge and detection severity is fixed |
+| `-E` (preprocess only), `--dump` (artifact text view) | outside the hash model | not accepted |
+| `--rebuild`, `--clean` | — | no such flag; a stale chain is rebuilt by re-running the stages |
+| `-sv_seed`, `-n` / `-N`, `--finish-at`, `-M` / `-m` | C | not accepted; the run-length cap is `--timeout` |
+
+### Why the buckets matter
+
+Leave `+define+WIDTH=8` out of the compile-side digest and the source bytes still match, so the
+compile is skipped, so a `.vu` compiled with a different macro is reused, so a run intended for
+`WIDTH=16` simulates 8 — silently, at exit 0. RULE A closes that class. RULE S closes the same
+accident arriving through sibling order instead of through a flag.
+
+---
+
+## 3. Work libraries
+
+Compiled units are addressed by the logical key `library:unit` rather than by path, as in the
+commercial library-map flows and in GHDL's `--work` / `-P`. A logical name resolves to a directory.
+
+```
+<dir>/lib.toml                # canonical, machine-written manifest
+<dir>/units/cu_<32 hex>.vu    # content-addressed compilation-unit blobs
+```
+
+A blob is byte-identical to what `vcmp -o` would write for the same input, and is named by the
+first 32 hexadecimal characters of the blake3 digest of its own bytes. With `--work` and no `-o`,
+`vcmp` writes only the library blob and no free-standing `.vu`.
+
+### 3.1 The manifest
+
+`lib.toml` has one canonical text form. It is machine-written, and the parser is strict: the form
+below is the only one accepted, and it is also the byte domain of the manifest digest.
 
 ```toml
-format_version = 31  # work/lib.toml 매니페스트 포맷(현재 31). 산출물 컨테이너 format_version도 31 (CURRENT_FORMAT_VERSION).
-tool           = { version = "0.2.0", git_sha = "…", dirty = false, profile = "release" }
-[library]
-name = "work"                # 논리 라이브러리 이름 (D3 — 기본 work)
-dialect_digest = "blake3:…"  # 전역 dialect(--std/-sv) 다이제스트 (§2 RULE A)
+# vitamin work library manifest (canonical v1; machine-written by `vcmp --work`)
+format_version = 1
+name = "work"
 
-# 정렬된 컴파일 단위 파일 목록 — 추가/삭제/재정렬이 매니페스트 해시를 바꾼다 (§2 RULE S)
-files = [
-  { path = "rtl/a.sv", src_sha256 = "blake3:…" },
-  { path = "rtl/b.sv", src_sha256 = "blake3:…" },
+[[cu]]
+blob = "units/cu_<32 hex>.vu"
+defines = []
+incdirs = []
+sources = [
+  "<64 hex blake3><two spaces><path>",
 ]
-
-[[unit]]
-name       = "cnt"
-kind       = "module"        # module | package | udp | (Phase3: entity/arch)
-lang       = "sv"            # sv | v
-generation = 2012            # IEEE-1364-2005 / IEEE-1800-201x
-timescale  = "1ns/1ps"       # 이 단위에 유효한 (상속 반영 후) timescale
-src_sha256 = "blake3:…"      # 상속 반영 후 전처리 바이트의 다이제스트 (§2 RULE S)
-blob       = "units/cnt.vu"
+includes = [
+  "<64 hex blake3><two spaces><path>",
+]
+units = [
+  "module top",
+]
 ```
 
-각 `<unit>.vu` 헤더(본문과 독립 디코드 가능, 길이 프리픽스):
+- The manifest's own `format_version` is **1**. It is independent of the container
+  `format_version` (§7) and of the schema hash; the two numbers are unrelated.
+- A unit line is `<kind> <name>`, where kind is `module`, `interface`, `package` or `class`.
+- Spacing is literal. `sources= [` is rejected.
+- `emit` is a fixed point: parsing and re-emitting a canonical manifest reproduces it byte for
+  byte, which is what makes the manifest digest meaningful.
+- Escaping covers backslash and double quote only. A recorded path or define containing a newline
+  is rejected when it is recorded, not left to corrupt the next parse.
+- Any deviation is `E-WORK-MANIFEST` (`VITA-E9005`) with a 1-based line number, exit 2.
+- Paths are recorded as they were given to `vcmp`. Storing them relative to a detected build root
+  would make a manifest digest identical across two checkouts of the same sources; at HEAD it is
+  not, so a manifest built from absolute paths is checkout-specific.
 
-```
-magic              "VITWORKU"
-format_version     u32
-schema_hash        [u8; 32]   # hdl-ast 형상의 구조적 해시 (§5)
-lang / generation  태그
-unit_name          문자열
-src_sha256         [u8; 32]   # 상속 반영 후 전처리 소스 다이제스트
-tool_fingerprint   version + git_sha + dirty + profile  (provenance 전용)
-─────── 이하 postcard 본문 ───────
-hdl-ast 단위 트리 (포트·파라미터·문장·식·builtin-call 노드 + 소스 스팬)
-```
+Replacement rule: any existing compilation unit that shares at least one source path with a newly
+compiled one is superseded, and the new unit takes the earliest such slot, so recompiling a source
+updates the library in place. A duplicate unit name that survives that replacement is a real
+redefinition — `E-DUP-UNIT` (`VITA-E2001`), exit 1, manifest untouched. A blob that no unit
+references is collected on a best-effort basis.
 
-### velab 산출물 — sim-ir 스냅샷 (단일 파일)
+### 3.2 What a snapshot records about its library
 
-완전 elaborate된 **언어 중립** sim-ir를 자기완결 스냅샷으로 직렬화한다. vrun이 다른
-입력 없이 이 파일만으로 시뮬레이션할 수 있어야 한다(Xcelium 스냅샷의 "추가 정보 없이
-실행 가능" 속성). Icarus `iverilog → .vvp → vvp` 2-바이너리 모델의 `.vvp` 자리다.
+Trailer ⑨ carries the consumption record:
 
-`<top>.velab` 헤더(본문과 독립 디코드 가능):
+| Vector | Entry |
+|---|---|
+| `libs` | (logical name, directory as given, blake3 of the `lib.toml` bytes) per `-L` |
+| `blobs` | (path as resolved at elaborate time, blake3 of the blob bytes) per consumed unit |
+| `files` | (path, raw blake3) for every source and every include of every consumed unit |
 
-```
-magic                 "VELAB\0"
-format_version        u32
-schema_hash           [u8; 32]   # sim-ir 형상의 구조적 해시 (§5)
-composite_input_hash  [u8; 32]   # elaborate 입력 전체의 합성 해시 (§2 RULE B)
-global_time_precision 정수배율    # 전체 소비단위 min() + --timescale 기본값 (§4)
-consumed              [(lib:unit, src_sha256), …]   # 소비한 단위 트리플 집합
-worklib_manifest_hash [u8; 32]   # 단위 추가/삭제/재정렬 무효화용 (§3)
-uses_dump             bool       # "설계가 dump-family 태스크를 참조하는가" 중립 사실
-tool_fingerprint      provenance 전용
-# 주: 헤더의 consumed/worklib_manifest_hash는 동결 헤더 형상 유지용 vestigial placeholder —
-#     라이브 RULE-V 데이터는 append-only 트레일러(⑨ WorkConsumed)에 실리고, 라이브 re-hash
-#     게이트는 worklib vrun 경로에 실제 구현돼 있다.
-─────── 이하 postcard 본문 ───────
-SimIr 루트 1개:
-  - 평탄화된 계층/인스턴스
-  - net (폭 + 4-state, 0/1/x/z 각 2비트, 벡터 비트팩 순서는 포맷 일부)
-  - process (sensitivity + 구조화 basic-block 본문 `Vec<BasicBlock>` + `SuspendState`{resume_pc/locals/join_state/wake_key/call_stack/frame_arena} — 06 "프로세스 실행 모델", 형상 FROZEN 2026-06-02), continuous assign
-  - 해소된 초기값(time-0 x/z), builtin-call 노드(+ dump-family 마커)
-  - arena/interner 평탄 벡터 (u32 인덱스 엣지 — 재로드 시 포인터 fixup 0)
-```
+Trailer ⑮ runs parallel to it (§1.7). Together they are what makes the RULE-V gate (§5.3) run
+without any argv being re-supplied.
 
-> **엔진-facing 사이드테이블 트레일러(골든 SimIr 프레임 밖, append-only).** 골든 `SimIr` postcard 프레임 뒤에 out-of-band 트레일러 세그먼트를 `write_velab_file`이 다음 순서로 append한다: ① fork_modes ② net_names ③ timescale — v22부터 트리플 `(proc_multipliers, global_prec_exp, proc_prec_mults)` ④ severities ⑤ radixes ⑥ proc_scopes ⑦ assign_ranks ⑧ queue_bounds ⑨ WorkConsumed(worklib v1; legacy explicit-path 빌드도 항상 기록) ⑩ net_dims(per-element VCD) ⑪ final_procs(P2-E `final`) ⑫ defer_marks ⑬ defer_acts(§16.4 deferred immediate assert) ⑭ StagedExtraSidecars(append-only 필드 — 현재 37개. 위치·스코프 계열이 여기 산다: `stmt_locs`(v29. 필드명은 `severity_locs` 에서 바뀌었고 postcard 는 필드를 위치로 인코딩하므로 개명은 wire-중립 — elaborate 가 해석한 문장별 file:line:col+인스턴스, 런타임 진단 위치의 유일한 소스) · `stmt_scopes`/`expr_scopes`(v30 — named block · statement label 의 `%m` 접미 체인) · `proc_inst_scopes`(v31 — ProcId 별 인스턴스 경로, generate 스코프 제거. generate 블록 프로세스나 프레임에서 부른 class 메서드의 `%m` 접두)) ⑮ WorkStamps(RULEV-MTIME). `.vu` 쪽도 tail 을 갖는다: SourceUnit 프레임 ++ timescale tail(v22) ++ **source-map tail(v28 — 파일별 (name, 원문) + 세그먼트, `velab` 이 `MapResolver` 를 재구성해 staged elaborate 진단이 one-shot 과 같은 위치를 갖는다)**. 이들은 `SimOpts`/elaborate IR-0 합성으로 **골든 해시(SimIr 루트)에 무영향** — SVA 체커·named-event·wait fork·frame-call 등 IR-0 기능이 여기 또는 elaborate-합성으로 얹힌다. format_version은 현재 31 — v9~v31 이력은 `crates/vita-artifact/src/header.rs`의 버전별 주석이 정본(SimIr 골든 해시는 v19 re-freeze에 핀·v20 이후는 전부 trailer/tail-only).
+### 3.3 `velab -L` resolution
 
-> **SCHEMA_HASH 루트 = `sim_ir::SimIr` (M3 동결, doc 17).** §5의 구조적 해시는 위 `SimIr` 루트(arena 전체를 `Vec`로 by-value 보유 → `Expr`/`Stmt`/`NetVar`/`ConstVal`까지 도달)에서 산출한다. `Process`만으로는 cross-arena u32 엣지라 arena에 미도달 → `Process`는 런타임 클러스터 sub-pin 골든. `Expr`/`Stmt`/`Lvalue`/`Terminator`/`Sensitivity`/`NetVar`/arena 형상은 doc 17이 동결.
+- `-L name[=dir]` is repeatable; `-L name` alone means the directory `./name`. There is no
+  attached-value spelling, so `-Lfoo` is an unknown flag.
+- Search order is `-L` order: the first library wins a duplicate unit name.
+- At least one `--top` is required in library mode. A library's unrelated units must never become
+  elaboration roots, so the loader walks the instantiation closure breadth-first from the named
+  roots. A named item is emitted only from the compilation unit that the unit map resolves its
+  name to, so a shadowed definition is skipped regardless of load order.
+- A `--top` that no bound library defines is `E-ELAB-UNSUPPORTED` (`VITA-E3009`), exit 1.
+- The global precision is the minimum over the loaded units, defaulting to the 1ns/1ns base.
+- A positional `.vu` and `-L` libraries are mutually exclusive.
 
-> **백엔드 능력은 헤더에 넣지 않는다.** velab 스냅샷은 *해소된 IR 사실*만 담는다.
-> "이 엔진이 어떤 builtin을 실행할 수 있는가/dump를 지원하는가"는 스냅샷을 로드하는
-> 백엔드(vrun 인터프리터 또는 향후 컴파일드 엔진)의 런타임 능력이므로, elaborate
-> 산출물에 박지 않는다. `uses_dump`는 능력 단언이 아니라 중립적 사용 사실이다.
+Status at HEAD: library mode drops the `.vu` source-map tail, so its elaborate-time diagnostics
+carry no `file:line:col`. The merge splices items from several compilation units whose spans each
+index their own expanded buffer from zero, so no single resolver can tell which unit a span
+belongs to, and resolving through the wrong map would print a confidently wrong location. Plain
+`velab <in.vu>` does locate.
 
-> **프로세스 실행 모델 = basic-block PC 상태기계 (06 결정 2026-06-01 · 하위 형상 FROZEN 2026-06-02).**
-> `process` 본문은 바이트코드 ISA가 아니라 **구조화된 basic-block 시퀀스**이며, 재개 상태는 sim-ir
-> 스키마에 **물리적으로 예약·동결**됐다. SD1–SD5 하위 결정(스케줄 범위·fork-join·call-frame·op-set·
-> wake_key)을 `SuspendState` 공유 형상으로 묶어 **하나의 원자 트랜잭션**으로 freeze한 것이다 — 부분
-> 동결 불가(어느 필드든 후일 모양이 바뀌면 SCHEMA_HASH flip → 모든 `.velab` 무효, §5 RULE D2). 근거
-> 메모는 06 "프로세스 실행 모델". **동결 형상(모든 필드 order-stable·u32 엣지·span-free·postcard 바이트
-> 동일·`usize`/`isize` 금지):**
->
-> ```rust
-> struct Process {                       // velab 본문 process 노드
->     sensitivity: Sensitivity,          // [정적] 트리거/감지, 정렬 Vec
->     body:        Vec<BasicBlock>,      // [정적/SD3] 구조화 BB; index = resume_pc 도메인
->     entry:       u32,                  // [정적] 진입 BB (initial=t0 1회, always*=재무장)
->     suspend:     SuspendState,         // [재개/예약] RULE D2 원자 동결 단위
-> }
-> struct SuspendState {
->     resume_pc:   u32,                  // BB 인덱스(포인터/네이티브 PC 금지, operand-stack 누출 없음)
->     locals:      Vec<FourState>,       // 프로세스 frame-0 locals, 순서 Vec
->     join_state:  JoinState,            // [SD1]
->     wake_key:    WakeKey,              // [SD4]
->     call_stack:  Vec<Frame>,           // [SD2] LIFO; 인라인전용=빈 Vec(1바이트); 인라인 vs frame-call 선택 술어는 06 SD2
->     frame_arena: Vec<FourState>,       // [SD2] 프로세스별 flat arena; Frame이 (base,len)로 주소화
-> }
-> struct JoinState {                     // [SD1] vvp two-set 포팅
->     parent: Option<u32>,               // 런타임 프로세스 테이블 인덱스, None=top-level
->     children: Vec<u32>,                // active 자식, fork 선언순 append; order-preserving 제거
->     detached: Vec<u32>,                // join_any 잔여 + join_none 자식 — NOT optional(load-bearing)
->     flags:    ProcFlags,               // u8 bitset, vvp 1-bit 플래그 미러, bit5-7 예약
-> }
-> struct Frame {                         // [SD2] 정수인덱스 콜프레임(네이티브 콜스택 아님)
->     return_pc: u32, callee_entry: u32, // 복귀 BB / callee 진입 BB(body 1회 lowering 공유)
->     locals_base: u32, locals_len: u32, // frame_arena 내 locals window
->     is_automatic: bool,                // automatic⇒사설 window, static⇒고정 저장소 alias
-> }
-> struct WakeKey {                       // [SD4] region 명시 저장
->     cond: WakeCond, region: RegionTag, // region 재유도 금지(해시 밖 로직 차단)
->     tie_break: u32,                    // 평탄계층 선언순 노드 인덱스(사용자-가시 우선순위 아님)
-> }
-> struct ProcFlags(u8);                                // [SD1] newtype(SchemaHash 형상 명시 — bare u8과 구분); vvp 1-bit 플래그 미러
-> enum RegionTag { Active, Inactive, Nba, Monitor }   // [SD4] IEEE 1364 4; 17-region=의도적 Phase-2 flip
-> enum WakeCond {                                      // [SD5] process-suspend 조건의 닫힌 6-variant 집합
->     Edge{net:u32,kind:EdgeKind}, Level{nets:Vec<u32>}, WaitTrue{expr:u32},
->     TimeAbs{tick:u64}, NamedEvent{ev:u32}, Join{join_ref:u32},
-> }   // 7+1 경계→6 variant 매핑(06 SD5): ⑧ #0 = TimeAbs{now}+region:Inactive(별도 variant 아님),
->     //   ⑥ intra-assign nonblocking = scheduled-assign 이벤트(미-suspend, wake_key 미사용)
-> // SD3 Terminator(body 내부): Goto / Branch / Delay / Wait / Fork{children,join,resume_bb}
-> //   / Call{target,ret_bb} / Return.  JoinKind{All,Any,None}는 compile-bake 값 → 형상 churn 없음.
-> ```
+### 3.4 Flag surface
 
-### 직렬화 메커니즘
+| Flag | Stage | Meaning | Status |
+|---|---|---|---|
+| `--work <logical>[=<dir>]` | vcmp | logical work library (default name `work`) plus output directory | accepted |
+| `--workdir <dir>` | vcmp | output directory when `--work` carries no `=<dir>`; alone it implies the name `work` | accepted |
+| `-L <logical>[=<dir>]` | velab | bind a compiled library, repeatable | accepted |
+| `--top <unit>` | velab, vita | elaboration root, repeatable; required in library mode | accepted |
+| `-y`, `-Y` / `+libext+`, `-v <libfile>` | vcmp | source search directories and extensions for on-demand resolution | not accepted |
+| `-P <dir>` | vcmp, velab | precompiled-library search directory | not accepted |
+| `--lib-map <file>` | velab | external logical-name to directory map, with chaining and a search order | not accepted |
 
-- **`serde` derive를 경계 trait으로, `postcard 1.x` 단일 인코더.** bincode 폴백 없음(상호
-  비호환 artifact = 사실상 두 포맷). 텍스트는 `--dump` **뷰 전용**(RON, full-precision
-  float — `$realtime`/timescale 정밀도 손실 방지).
-- **다이제스트는 `blake3` 단일 계열.** 형상 해시·소스 해시·매니페스트 해시 모두 blake3
-  (순수 Rust, C 의존 없음). `src_sha256` 필드명은 관례적 표기이며 실제 알고리즘은 blake3로
-  통일한다(외부 SHA-256 상호운용 요구가 생기기 전까지).
-- **원샷 `vita`는 serde를 호출하지 않는다.** 살아있는 `Module`/`SimIr` 값을 메모리로
-  그대로 다음 단계에 넘긴다. 직렬화는 vcmp/velab가 "저장하라"고 할 때만 일어나는
-  순수 선택적 경계 — 04:45 "디스크 안 남긴다"와 모순 없음.
+Invariants the design holds regardless of which of those exist: a consumer of an external library
+hashes the consumed triples of that library, not only its own work library; the manifest content
+digest invalidates on a unit being added, removed or renamed; and chaining between library maps is
+a keyword inside the map file, never a command-line flag.
 
 ---
 
-## §2 해시 결합 규칙 (핵심)
+## 4. Filelists (`-f`, `-F`)
 
-> 이 절이 본 문서의 **load-bearing** 부분이다. "변경 없는 단계 스킵"(04:71)이 *건전*하려면,
-> 산출물 내용을 바꾸는 **모든** 입력이 그 단계의 staleness 해시에 들어가야 한다. 하나라도
-> 빠지면 stale artifact가 조용히 재사용되어 **틀린 시뮬레이션**이 나온다.
+Large projects collect hundreds of source paths, include directories and defines into filelists
+rather than typing them. A `.f` is tokenized like argv and spliced in place at its point of
+reference, so every flag legal on the command line is legal inside a `.f`. All four applets accept
+them, and expansion happens once, at argv level, before any per-applet parsing.
 
-**RULE 0 (법칙).** 플래그를 *어느 바이너리가 파싱하느냐*가 아니라 *어느 단계의 출력을
-교란하느냐*로 분류한다. 세 버킷:
-- **(A)** 전처리 출력을 교란 → **vcmp 단위 소스 해시**에 들어간다.
-- **(B)** elaborate된 sim-ir를 교란 → **velab 합성 해시**에 들어간다.
-- **(C)** 둘 다 교란하지 않음 → 런타임 전용, **어떤 해시에도 안 들어간다.**
+**Two flags, one difference — the base for relative paths.**
 
-**RULE A (vcmp 소스 해시 입력).** `+incdir+`/`-I`, `+define+`/`-D`, `-y`, `-Y`/`+libext+`,
-`-v`, `--std`/`-g<year>`/`-sv` 는 전처리 바이트 또는 단위 해소 결과를 바꾼다 → 단위별
-전처리-소스 다이제스트의 **preimage**에 포함한다(헤더에 *stamp*만 하는 것과 구별 —
-preimage에 넣어야 바이트가 같아도 dialect 전환이 무효화된다). 전역 dialect 다이제스트는
-매니페스트 해시에도 넣어, `--std` 전역 전환이 모든 단위를 무효화하게 한다.
+- `-f <file>` resolves relative paths inside that frame against the invocation working directory.
+- `-F <file>` resolves them against the directory of the `.f` file itself, which makes a `-F` tree
+  fully relocatable. This is why vendor IP ships with `-F`.
+- The base is a property of how a frame was entered, not something inherited: each `-f` / `-F`
+  token sets the base of the frame it opens. A command-line `-f` / `-F` target always resolves
+  against the working directory; a nested target resolves against the enclosing frame's base.
+- Absolute paths ignore the base. There is no `-c` synonym.
 
-**RULE B (velab 합성 해시 입력).** `-s`/`--top-module`, `-G`/`-pvalue+`, `-P<path>=`
-(defparam), `--multi-driver` 정책, `-L` 라이브러리 compose, `--lib-map` 해소 내용,
-`--timescale`의 전역 정밀도 결과 는 평탄화된 sim-ir를 바꾼다 → velab 합성 해시에 포함한다.
-
-**RULE C (런타임 전용 — 아무 것도 해시 안 함).** `+plusargs`, `-sv_seed`, `-n`/`-N`,
-`--finish-at`, `--log`/`-l`, `-v`/`--verbose`, `-M`/`-m`, `-Wall` 계열, `-o`, `--dump`,
-`--color`, `--version`. 런타임 동작 또는 패키징만 바꾼다. 이 중 하나라도 해시에 넣으면
-"같은 `.velab`를 런타임 플래그만 달리해 두 번 돌리면 둘 다 유효"라는 보장이 깨지고
-불필요한 재실행이 강제된다.
-
-**RULE T (timescale 함정 — 이중 결합).** `--timescale`은 두 해시 모두에 정당하게 들어가는
-유일한 플래그다. 주입된 전처리 디렉티브로서 단위별 전처리 소스를 바꾸고(RULE A), velab
-헤더에 stamp되는 전역 정밀도의 근원으로서 elaborate된 시간 모델을 바꾼다(RULE B). vcmp
-소스 해시와 velab 합성 해시 **둘 다**에 엮어야 한다.
-
-**RULE S (디렉티브 상속 — BLOCKER 차단).** `` `timescale ``·`` `default_nettype `` 같은
-**sticky 컴파일러 디렉티브**는 같은 컴파일 단위 안에서 *파일 경계를 넘어* 다음 단위로
-캐리오버된다(08-timescale §). 따라서 단위 B의 전처리 출력은 형제 단위 A의 순서에 의존한다 —
-B의 *자기 바이트*는 그대로인데 앞 단위가 바뀌면 B가 다른 timescale/nettype을 상속한다.
-**단위별 소스 다이제스트는 반드시 "상속 반영 후" 전처리 바이트 위에서 계산한다**(B의
-기록된 전처리 바이트가 상속된 `1ns/1ps`·`nettype`을 literal로 포함). 추가로 **정렬된
-(파일경로, src_sha256) 컴파일-단위 파일 목록을 매니페스트 해시 입력으로** 둬, 파일
-추가/삭제/**재정렬**이 무효화를 일으키게 한다. 미래의 모든 sticky 디렉티브는 동일 취급.
-이 정렬된 파일 목록은 **filelist 전개기(§3.1)가 생성**하며, 그 깊이우선 선언순 평탄화의
-결정론이 매니페스트 해시 건전성의 전제조건이다.
-
-**RULE D2 (schema 해시도 입력).** 직렬화 타입 형상의 구조적 `SCHEMA_HASH`(§5)는 두 헤더에
-모두 들어간다. 타입 형상이 바뀌면 해시가 뒤집혀 이전 모든 `.vu`/`.velab`를 무효화한다.
-소스/합성 해시와 **합성**된다(단위가 신선 ⟺ schema_hash 일치 **그리고** 소스 해시 일치).
-빌드 지문(git sha/dirty/profile)은 provenance용으로 stamp하지만 **staleness 키가 아니다** —
-dirty 트리가 재컴파일을 강제해선 안 된다.
-
-**RULE V (vrun 건전성 — xrun `-R`/`-r`로부터의 의도적 이탈).** vrun은 매 실행마다 **상류
-체인 전체를 라이브 소스에 대해 재검증**한다 — 소비한 각 단위의 전처리-소스 다이제스트를
-디스크에서 재계산해 스냅샷에 박힌 (lib:unit, src_sha256) 트리플 + 매니페스트 해시와
-대조하고, 두 schema_hash도 재확인한다. 라이브 해시가 하나라도 다르면 vrun은 stale
-스냅샷을 시뮬레이션하지 않고 **실패**한다(또는 명시적 `--rebuild` 시 stale 단계를 재실행).
-**mtime은 절대 쓰지 않는다** — 내용 해시만이 건전한 신선도 신호다. (Xcelium `-R`/`-r`의
-검사-생략 패스트패스는 의도적으로 복제하지 않는다.)
-
-**RULE API (오결합을 구조적으로 불가능하게).** vita-artifact의 해시 함수는 **타입화된
-입력 구조체**(`PreprocInputs { incdirs, defines, libdirs, libexts, std, … }` /
-`ElabInputs { top, param_overrides, multi_driver, lib_bindings, lib_map_resolved,
-time_precision, … }`)를 받고 **raw argv를 절대 받지 않는다.** 로깅·패키징·런타임 플래그는
-이 구조체에 필드가 없으므로 `-Wall`이나 `--log`를 물리적으로 해시에 넣을 수 없다. 새
-전처리/elaborate 플래그를 추가하려면 **구조체 필드를 추가해야 한다**(컴파일 타임 강제 함수).
-
-**RULE F (filelist은 transport, 내용은 해시).** `-f`/`-F` command-file 자체는 bucket C다(파일은
-절대 해시 안 함 — 소스를 어떻게 filelist로 묶었는지, `.f`를 개명했는지가 artifact를 무효화하면
-안 됨). 그러나 전개된 *내용*은 inline 플래그와 똑같이 디렉티브 타입별로 해시된다(RULE 0): 중첩
-`.f` 깊이의 `+define+`은 vcmp 소스 해시에(RULE A), `-L`은 velab 합성 해시에(RULE B). **출처 기반
-버킷은 없다** — `.f`는 전송 수단, 내용은 typed 입력. 상세 §3.1.
-
-### 플래그 → 버킷 표 (MVP)
-
-| 플래그 | 단계 | 버킷 |
-|---|---|---|
-| `+incdir+`/`-I`, `+define+`/`-D`, `-y`, `-Y`/`+libext+`, `-v` | vcmp | A (소스 해시) |
-| `--std`/`-g<year>`, `-sv` | vcmp | A (preimage + dialect 다이제스트) |
-| `--timescale` | vcmp+velab | A **및** B (RULE T) |
-| `--work`/`--workdir` | vcmp | A (lib:unit 키 네임스페이스) |
-| `-s`/`--top-module` | velab | B (합성 해시) |
-| `-G`/`-pvalue+`, `-P<path>=` | velab | B |
-| `-L`, `--lib-map`, `-P<dir>` | velab | B (소비 트리플) |
-| `--multi-driver` | velab | B |
-| `+plusargs`, `-sv_seed`, `-n`/`-N`, `--finish-at`, `--log`/`-l`, `-o`, `-Wall`, `--dump` | vrun/공통 | C (해시 없음) |
-
-### 실패 케이스 (왜 이게 중요한가)
-
-> `+define+WIDTH=8`을 vcmp 단위 소스 해시에서 빠뜨리면 → 소스 바이트가 같으니 vcmp 스킵 →
-> 다른 매크로로 컴파일된 `.vu` 재사용 → `WIDTH=16`으로 돌리려 했는데 8로 시뮬레이션 →
-> **조용히 틀린 결과.** RULE A가 이 클래스를 차단한다. RULE S는 같은 사고를 *형제 단위
-> 순서*에서 막는다.
-
----
-
-## §3 멀티 라이브러리 (D3)
-
-상용 EDA(`cds.lib`/`synopsys_sim.setup`)와 GHDL(`--work`/`-P`)처럼, 단위를 **경로가 아니라
-논리 `library:unit` 키로 주소화**한다. 설계 단계부터 도입하되 MVP 해소 로직은 단순하게.
-
-> **구현 상태(2026-06-12, P2-A v1):** `vcmp --work <name[=dir]>`/`--workdir` + `velab -L <name[=dir]>
-> --top <unit>`(클로저 로딩·first-`-L`-wins) + **vrun RULE-V 자동 게이트**(아래 재검증 알고리즘의
-> step 2~3 — 매니페스트 해시·blob 해시·소스/include raw 다이제스트, 불일치=E9003 exit 2) 동작.
-> v1 단순화(의도): blob=**CU 단위**(단일-CU concat 모델이라 per-unit 전처리 바이트가 미정의 —
-> 모든 unit 엔트리가 자기 CU blob을 가리킴), `src_sha256`=**raw 바이트**+(-D/-I)+include 폐쇄
-> (검출력 동등), 매니페스트=정규형 텍스트(strict 파서, E9005). `-y`/`-v`/`-P`/`--lib-map`·
-> per-unit blob 분리·vrun `-L` 재배치는 후속.
-
-**플래그 표면:**
-
-| 플래그 | 단계 | 의미 |
-|---|---|---|
-| `--work <logical>[=<dir>]` | vcmp | 분석 결과가 들어갈 논리 work 라이브러리 이름(기본 `work`) + 출력 디렉터리 |
-| `--workdir <dir>` | vcmp | `--work`로 함의되지 않은 출력 디렉터리 (GHDL `--workdir` 계열) |
-| `-y <libdir>` / `-Y <ext>`·`+libext+<ext>` | vcmp | 미정의 모듈 자동 해소용 소스 검색 디렉터리 + 확장자 |
-| `-v <libfile>` | vcmp | 단일 파일 on-demand 소스 라이브러리(인스턴스화될 때만 편입). *MVP는 예약 — 멀티-lib corpus가 생기면 활성* |
-| `-L <logical>[=<dir>]` | velab | 이미 컴파일된 논리 라이브러리를 이름으로 바인딩(compose; Xcelium `-reflib`/VCS `-L` 계열) |
-| `-P <dir>` | vcmp+velab | 사전컴파일 라이브러리 검색 디렉터리(GHDL `-P`). analyze·elaborate 양쪽에서 일관 해소 |
-| `--lib-map <file>` | velab(+vcmp) | 논리명→디렉터리 매핑 + 체이닝 + 검색순서를 담은 외부 설정 파일(`cds.lib`/`synopsys_sim.setup` 계열). **해소된 내용**이 해시됨 — 논리 lib 재지정이 인스턴스를 silently 재바인딩하므로 |
-
-**불변식:**
-- `-L`/`-reflib` 소비자는 외부 라이브러리의 **소비 트리플**(lib:unit, src_sha256)을 스냅샷
-  입력 집합에 해시해야 한다 — 로컬 work lib만 보면 안 된다.
-- `work/lib.toml` **내용 해시**가 단위 추가/삭제/재명을 무효화한다(§1 매니페스트의 `files`·
-  `[[unit]]` 목록 포함).
-- `INCLUDE`는 **설정 파일 내부의 체이닝 키워드**이며 CLI 플래그가 아니다. 명령줄에는
-  `--lib-map`만 노출한다(중복 제거).
-
-### §3.1 Filelist (`.f` / `-f`, `-F`) 전개
-
-> **구현 상태(2026-06-10, v1 서브셋):** `-f`/`-F` argv-레벨 in-place 전개가 전 applet에서 동작 —
-> 중첩 재귀·사이클 가드(lexical ∪ 물리 identity)·depth cap 256·주석/`\` 잇기·`$VAR` env(미정의=E8006)·
-> glob 거부(E8004)·`W-FLIST-MIXED-BASE` lint·프레임별 베이스 해소. **2탄(같은 날): typed 버킷 합류** —
-> `-D NAME[=VAL]`/`-I dir` + `+define+N=V+M`(verbatim — 경로 해소 금지)/`+incdir+a+b`(세그먼트별
-> 프레임 베이스 해소) → `PreOpts{cli_defines, incdirs}`(전처리기 측은 기존재) · `E-FLIST-WRONG-STAGE`
-> (velab/vrun에 전처리 버킷=exit 3) · `W-FLIST-OVERRIDE`(단일값 knob 재지정=gated 경고+last-wins — vita-log GatedSink 경유: 기본 로깅+에필로그 집계, `-Werror=`/`-Wno-` 적용).
-> **잔여(Phase-1.x):** `E-FLIST-DUP-CTX-CONFLICT`(sticky 디렉티브 도입 시), `--dump-filelist`,
-> 매니페스트 anchor(§1 work-lib와 함께).
-
-대규모 프로젝트는 수백 개 RTL 경로 + `+incdir+`/`+define+`을 명령줄에 나열하지 않고 **filelist
-(`.f`)** 로 집계한다. `.f`는 argv처럼 토큰화돼 참조 지점에 in-place 전개되므로 명령줄에서 합법인
-모든 플래그가 `.f` 안에서도 합법이다. vcmp·velab·vrun·vita 모두 수용한다.
-
-**두 플래그, 한 차이 — 경로 해소 베이스:**
-- `-f <file>` — 안의 모든 *상대* 경로(소스, `+incdir+`, `-y`/`-v`/`-P` dir, 그리고 중첩 `-f`/`-F`
-  타깃)를 **invocation CWD**(프로세스 시작 dir, 한 번 캡처, 깊이 무관) 기준으로 해소.
-- `-F <file>` — 동일하되 상대 경로를 **그 `.f` 파일이 있는 디렉터리** 기준으로 해소. `-F` 트리는
-  완전 재배치 가능(벤더 IP가 `-F`로 배포하는 이유). 베이스는 프레임마다 재-anchor.
-- 절대 경로는 양쪽 모두 베이스 무관. `-f`/`-F` 자체는 **bucket C**(파일은 해시 안 함). `-c`
-  동의어는 두지 않는다(정규 `-f`/`-F` 한 쌍).
-
-**중첩·재귀 (top-down 집계):** `.f` 안의 `-f`/`-F` 줄이 다른 `.f`를 *그 위치*에 in-place 전개하며
-임의 depth로 재귀한다. 평탄화된 토큰 스트림 = `.f` 포함 트리의 **깊이우선 pre-order 선언순**
-순회(명령줄이 frame 0). 그래서 명령줄의 `+define+`과 세 단계 깊이의 `+define+`이 단일 평탄
-스트림에서 결정론적 위치를 갖는다.
+**Nesting.** A `-f` or `-F` line inside a `.f` splices another filelist at that position and
+recurses to arbitrary depth. The flattened token stream is a depth-first pre-order traversal of
+the inclusion tree, with the command line as frame 0. That is what gives a define three levels deep
+a deterministic position in one flat stream.
 
 ```
 expand(path, base_mode):
-  canon = lexical_normalize(resolve(path, base_mode, invocation_cwd))   # symlink 해소 안 함 (해시/경로용)
-  if canon ∈ active_stack OR phys_id(canon) ∈ active_phys:             # phys_id=dev+inode / Windows file-id
-      error E-FLIST-CYCLE (체인 출력)                                   # symlink 루프도 DEPTH 아닌 CYCLE로 정확 진단 (phys_id는 진단 전용, 해시 미투입)
+  canon = lexical_normalize(resolve(path, base_mode, invocation_cwd))   # symlinks are NOT resolved
+  if canon ∈ active_stack OR phys_id(canon) ∈ active_phys:
+      error E-FLIST-CYCLE (print the chain)
   push canon; push phys_id(canon)
   for tok in lex(read(canon)) in file order:
-    if tok == `-f T`: splice expand(T, CWD-relative)        # invocation_cwd anchor
+    if tok == `-f T`:   splice expand(T, cwd-relative)
     elif tok == `-F T`: splice expand(T, dir(canon)-relative)
-    else: 상대 경로를 이 프레임 base로 해소 → typed token 방출
+    else:               resolve relative paths against this frame's base, emit a typed token
   pop canon; pop phys_id(canon)
 ```
 
-베이스는 "프레임에 *어떻게 진입했나*"의 속성이며 전이 상속이 아니다 — 각 `-f`/`-F` 토큰이
-타깃 프레임의 베이스를 새로 정한다. 깊이는 사실상 무제한(사이클 가드 + backstop depth cap
-256 = `E-FLIST-DEPTH`).
+**Cycle detection uses two keys.** Membership in the active stack is tested against the lexical
+canonical path **and** the physical identity (device plus inode on Unix, the OS-canonical string
+elsewhere). A symlink loop back onto a file's real path has a different lexical form, so a
+lexical-only test would miss it and the run would die at the depth cap with a misleading
+`E-FLIST-DEPTH` that prescribes the wrong fix. Physical identity is used for diagnosis only; it
+never enters a hash or a manifest path, which stay lexical so that identical bytes give identical
+digests on every platform.
 
-> **사이클 가드는 물리 identity로도 검사(잠금).** lexical canon만으로 active-stack 멤버십을 보면
-> symlink로 자기 자신을 가리키는 루프(`a` → 링크 → `a`의 실경로)는 canon이 달라 사이클 가드를
-> 빠져나가 depth cap에서 `E-FLIST-DEPTH`로 *오보*된다(잘못된 처방 유도). 이를 막기 위해 active-stack
-> 멤버십은 **lexical canon ∪ 물리 identity(dev+inode / Windows file-id)** 두 키로 검사하고, 둘 중
-> 하나라도 스택에 있으면 `E-FLIST-CYCLE`로 정확히 진단한다. **물리 identity는 해시·매니페스트 경로에는
-> 투입하지 않는다**(그건 lexical-only 유지 → 3-OS 바이트 결정성 보존). identity 검사는 진단 정확도 전용.
+**Canonicalization is locked for determinism, not for ergonomics.** After base resolution and
+before dedup or hashing: paths are **not** case-folded — every platform treats a path as a
+case-sensitive byte string, and a case collision surfaces as `E-FLIST-NOT-FOUND` — and symlinks
+are **not** resolved, because identity, dedup and manifest paths use pure lexical `.` / `..`
+normalization only. Break either and the same filelist over the same bytes yields a different
+manifest digest per platform, which breaks RULE S and the byte-identity contract.
 
-> **LINT `W-FLIST-MIXED-BASE`(경고).** `-F` 프레임 안의 `-f` 줄은 재배치 가능 서브트리를
-> invocation CWD에 re-anchor하므로 거의 항상 벤더 버그다. 의미는 유효하나 경고로 표면화.
+**Values are not paths.** Frame-base resolution applies to source positionals only. The token
+following a value-taking flag is passed through byte-identical to its command-line form. The
+canonical list of value-taking flags must match every value-taking arm of the argument parser:
 
-**canonicalization (잠금 — 3-OS 결정론 필수, ergonomics 아님):** 베이스로 해소한 뒤 dedup/해시
-전에 정규화하되 — **(1) case-fold 안 함**: 모든 OS에서 경로를 대소문자 구분 바이트열로 취급
-(case-only 차이는 모든 OS에서 두 identity; macOS의 실제 case 충돌은 `E-FLIST-NOT-FOUND`로
-표면화). **(2) symlink 해소 안 함**: identity/dedup/매니페스트 경로는 순수 lexical `.`/`..`
-정규화만 — `std::fs::canonicalize`(symlink 해소 + OS별 차이)를 쓰지 않는다. 이 둘이 깨지면
-같은 `.f`·같은 바이트가 OS마다 다른 매니페스트 해시를 내어 RULE S/§5 "3-OS 바이트 동일"이
-무너진다.
+```
+-o  --out  --threads  -j  --backend  --timeout  -D  --define  -G  --param
+-I  --incdir  -l  --log  --verbosity  --upstream  --work  --workdir
+-L  --top  --obs-dir  --hier-tree  --inst-paths  --probe  --probe-file
+```
 
-**매니페스트 경로 = build-root anchor 상대 (절대 경로 금지):** `work/lib.toml`의 `files[].path`는
-**build root 상대**로 저장한다. anchor 결정 우선순위는 **① 명시 `--root <dir>`(CI 권장) → ②
-git/프로젝트 루트 자동탐지(`.git` 등 상향 탐색) → ③ invocation CWD(폴백)**. anchor는 *소스 트리
-루트*여야 체크아웃 독립이 된다(FuseSoC/Bender 모델) — 절대 경로를 박으면 동일 소스의 두
-체크아웃(`/home/a/proj` vs `/home/b/proj`)이 다른 매니페스트 해시를 내어 RULE V 재사용이
-깨진다. 파일 *접근*은 프레임 베이스(`-f`/`-F`) 해소+canonical로, *저장*은 anchor 상대 재표현
-으로 한다. anchor 자체는 해시하지 않고 상대 경로만 해시하므로, anchor가 달라도 상대 경로가
-같으면 매니페스트 해시가 같다(§1의 `path = "rtl/a.sv"`와 일관). (work-dir anchor는 소스가 work
-밖일 때 `../` 누적 + work 위치 의존으로 비결정 위험이 있어 채택하지 않는다.)
+`-f` and `-F` are deliberately absent from that list: the expander consumes their targets itself,
+and those *are* paths that must resolve. Adding a new value-taking flag without adding it to this
+list makes its value be rewritten as though it were a source path — a top name becomes an absolute
+path and the run fails loudly, or an output path is silently redirected under the filelist's
+directory.
 
-**허용 inline 디렉티브 + RULE API 정규화:** 소스 경로, `+incdir+`/`-I`, `+define+`/`-D`,
-`-y`/`-Y`/`+libext+`/`-v`, `--work`/`--workdir`/`-P`/`--lib-map`, `-L`, `--std`/`-g`/`-sv`,
-`--timescale`, `-s`/`--top-module`, `-G`/`-P<path>=`, `--multi-driver`, 중첩 `-f`/`-F`, bucket C
-(`+plusargs`/`--log`/`-Wall`). **"파일에서 왔음" 버킷은 없다** — 모든 디렉티브가 inline과
-*동일한* typed `PreprocInputs`/`ElabInputs`로 정규화된다(한 코드 경로). 그래서 `-f`-출처
-`+define`과 inline `+define`은 downstream에서 물리적으로 구별 불가 → 해싱에서 발산 불가.
+**Syntax.** Comments are `//` to end of line, non-nesting `/* … */` (replaced by a single space so
+they separate rather than join tokens), and a whole line whose trimmed form starts with `#`. A line
+ending in `\` joins to the next. Whitespace and newlines separate tokens. Multi-value directives
+join on `+` (`+incdir+a+b`, `+define+N=V+M`). Environment references are `$NAME`, `${NAME}` and
+`$(NAME)`, applied to every token, to `-f` / `-F` targets, and to the value of a value-taking flag;
+a lone `$` with no identifier body stays verbatim, for escaped-identifier paths.
 
-> **플래그의 VALUE는 경로가 아니다(2026-07-29 수정·실측).** 프레임 베이스 해소는 **소스
-> positional 에만** 적용된다 — 값 받는 플래그의 다음 토큰은 명령줄에서와 **바이트 동일**하게
-> 전달된다(`cli/src/filelist.rs::takes_value`가 정본 목록). 이 목록이 원래 5개뿐이라 그 뒤에
-> 추가된 모든 플래그의 값이 `-F` 프레임 안에서 소스처럼 재작성되고 있었다: `ip/build.f`의
-> `--top top`이 `--top /abs/ip/top`이 되어 **false-loud**("top module not found"), `--hier-tree
-> h.txt`는 조용히 `ip/h.txt`에 썼다(호출자가 지정한 위치가 아님). `-f`/`-F`는 목록에서 **제외**
-> — 전개기가 직접 소비하고 그 값은 *진짜 경로*라 해소돼야 한다. 새 값-플래그를 추가하면 이
-> 목록도 같이 갱신해야 한다.
+**Wildcards are refused** (`E-FLIST-GLOB`): readdir order is not stable across platforms, which
+would make the RULE S ordering nondeterministic. A generator that needs globbing emits an
+explicitly ordered `.f`.
 
-> **wrong-stage 에러(silent no-op 금지).** 각 단계의 `.f` 전개기는 전체 토큰 문법을 파싱하지만
-> (같은 `.f`가 어디서나 파싱됨), 호출 단계에 속하지 않는 버킷의 디렉티브는 **hard error
-> `E-FLIST-WRONG-STAGE`**다. 예: `velab -f x.f`인데 `x.f`에 `+define+`(전처리 버킷)이 있으면
-> — velab엔 전처리 패스가 없어 silently 무시될 위험을 막아, "preprocessor 디렉티브
-> `+define+WIDTH`는 vcmp 단계 플래그 — elaborate에서 무효"로 거부한다.
+**Token classification inside a frame**, in order: `-f` / `-F` recurse; a value-taking flag and its
+value pass through verbatim; `+define+` segments pass through verbatim, because they are macro text
+and never paths; `+incdir+` segments each resolve against the frame base and re-join; any other
+`-`-prefixed token passes through verbatim; anything else is a source path — glob-checked, then
+resolved against the frame base.
 
-**`.f`의 본분 = 소스 파일 + include path (+ define·라이브러리 설정).** `.f`는 최소한 컴파일할
-**소스 파일 목록과 `+incdir+` include 검색 경로**를 담아야 하며(대규모 프로젝트의 핵심 용도),
-`+define+`·`-y`/`-v`/`-L`/`--work` 같은 파일/라이브러리 스코프 디렉티브도 정상 내용이다. 반면
-`--top-module`/`-s`, `--std`, `--timescale`, `--multi-driver` 같은 **단일값 elaborate 제어
-knob을 `.f`에 넣는 것은 비권장**한다(빌드 의도를 명령줄에 두는 게 추적 가능). 금지는 아니지만
-충돌 시 아래 경고로 표면화된다.
+### 4.1 Diagnostics
 
-**충돌·우선순위 (last-wins + 명령줄 끝 append).** 멀티값 디렉티브(`+define+`/`+incdir+`/`-y`/
-`-L`/소스)는 *누적*(`+define+`은 이름별 last-wins, `+incdir+`은 순서 리스트). 단일값 knob
-(`--top-module`/`--std`/`--timescale`/`--multi-driver`)이 두 곳 이상에서 지정되면 **평탄
-스트림의 마지막 값이 이긴다**. **명령줄 토큰은 모든 `-f`/`-F` 전개 뒤(스트림 끝)에 append**
-되므로, 결과적으로 **명령줄이 `.f`를 override**하되 규칙은 "last-wins" 하나로 설명된다.
+| Condition | Code | Mnemonic | Severity |
+|---|---|---|---|
+| a filelist reaches itself | `VITA-E8001` | `E-FLIST-CYCLE` | Error — prints the whole chain |
+| nesting exceeds 256 levels | `VITA-E8002` | `E-FLIST-DEPTH` | Error — a backstop behind the cycle guard |
+| a source appears twice under differing sticky context | `VITA-E8003` | `E-FLIST-DUP-CTX-CONFLICT` | Error |
+| a token contains `*`, `?` or `[` | `VITA-E8004` | `E-FLIST-GLOB` | Error |
+| an unreadable filelist or source, or a missing `-f` argument | `VITA-E8005` | `E-FLIST-NOT-FOUND` | Error |
+| an undefined environment variable | `VITA-E8006` | `E-FLIST-UNDEF-ENV` | Error — never an empty-string substitution |
+| a directive belonging to another stage | `VITA-E8007` | `E-FLIST-WRONG-STAGE` | Error |
+| a `-f` line inside a `-F` frame | `VITA-W8008` | `W-FLIST-MIXED-BASE` | Warning |
+| a single-value knob set in two places | `VITA-W8009` | `W-FLIST-OVERRIDE` | Warning |
 
-> **필수 경고 `W-FLIST-OVERRIDE` (gated 경고).** 단일값 knob이 두 곳 이상에서 지정돼 override가
-> 일어나면 경고를 로그에 출력한다 — silently 진행하지 않는다. 경고는 두 값, 각
-> 출처(`build.f:3` vs 명령줄), 이긴 값을 보여준다: `W-FLIST-OVERRIDE: --top-module 'b'
-> (vendor.f:3) overridden by 'a' (command line)`. 이 경고는 vita-log **GATED sink**를 경유한다
-> (13-diagnostics-and-logging.md): 기본 = 경고 로깅 + 에필로그 카운트 집계,
-> `-Werror=W-FLIST-OVERRIDE`로 에러 승격(strict CI), `-Wno-W-FLIST-OVERRIDE`로 억제 가능.
-> hard error가 아니라 진행 + 경고 — 명령줄
-> override 워크플로(`velab -s top2 -f build.f`)는 정상 동작으로 두되, 의도치 않은 충돌은
-> 사용자에게 큰 소리로 알린다.
+`W-FLIST-MIXED-BASE` exists because re-anchoring a relocatable subtree onto the invocation working
+directory is almost always a packaging mistake. The meaning is well defined, so it warns rather
+than refuses.
 
-**syntax:** 주석 `//`·`/* */`·줄머리 `#`; 줄 끝 `\` 잇기; whitespace/newline 구분자;
-`+`-조인 멀티값(`+incdir+a+b`); env `$VAR`/`${VAR}`/`$(VAR)`(미정의 = `E-FLIST-UNDEF-ENV` —
-silent 빈 문자열 금지). **glob/wildcard 금지(`E-FLIST-GLOB`)** — readdir 순서가 플랫폼마다
-불안정해 RULE S 정렬을 비결정론으로 만든다. glob이 필요하면 생성기가 명시적 정렬 `.f`를 낸다.
+**Wrong-stage is a hard error, never a silent no-op.** Each stage's expander parses the whole token
+grammar, so the same `.f` parses everywhere, but a directive whose bucket does not belong to the
+invoking stage is refused. Handing `velab` or `vrun` a filelist containing `+define+` is
+`E-FLIST-WRONG-STAGE` (exit 3) with a message saying the directive is a compile-stage input —
+those applets have no preprocess pass, so accepting it would mean discarding it in silence.
 
-**소스 dedup 금지 (BLOCKER 차단):** 소스 파일은 **기본적으로 dedup하지 않는다.** 같은 모듈이
-두 번 나오면 parse 단계 재정의 에러(`E-DUP-UNIT`, 표준 EDA 동작)다. 이유: sticky 디렉티브
-캐리오버(RULE S) 때문에 두 occurrence는 *서로 다른 상속 컨텍스트*에 있어 같은 컴파일 입력이
-아니다 — first-occurrence dedup은 한 상속 컨텍스트를 silently 골라 다른 쪽을 떨군다. 같은
-canonical 경로가 두 번 나오는 경우만 dedup하되, 두 occurrence가 **동일한 상속 sticky-directive
-상태**로 해소돼야 하며 아니면 hard error `E-FLIST-DUP-CTX-CONFLICT`(양쪽 상속 컨텍스트 제시).
-디렉티브는 누적된다(`+incdir+`는 순서 리스트, `+define+`는 이름별 last-wins).
+Status at HEAD: filelist expansion runs before the diagnostic gate is built, so filelist
+diagnostics are ungated — `-Wno-W-FLIST-MIXED-BASE` does not suppress the warning, and a run that
+dies during expansion prints no counts epilogue.
 
-**사이클:** active-stack(현재 열린 `.f`의 canonical 경로)에 이미 있는 경로로 `-f`/`-F`가 해소되면
-`E-FLIST-CYCLE`(전체 체인) hard error — silent 스킵 금지(평탄 순서가 순회 우연에 의존하게 됨).
-다른 가지에서 두 번 도달(diamond)은 사이클 아님(첫 방문 후 pop됨) — 정상 누적.
+### 4.2 Conflicts and precedence
 
-**전개기 위치:** filelist 전개는 `cli`/입력-조립 계층에서 typed `PreprocInputs`/`ElabInputs`를
-생성한 뒤 `hdl-preprocess`가 *해소된 소스만* 보게 한다 — `--lib-map` 해소가 cli/vita-artifact
-관심사인 것과 동형(`hdl-preprocess`의 leaf 의존 방향 보존).
+Multi-value directives accumulate: include directories form an ordered list, defines are last-wins
+per name, sources append. A single-value knob set in more than one place is decided by the last
+value in the flat stream, and command-line tokens are appended after every expansion, so the
+command line overrides a `.f` while the rule stays one rule: last wins.
 
-**`--dump-filelist` (dry-run 디버그, MVP 포함).** 컴파일 없이 **완전 평탄화·canonical·정렬된
-소스 목록 + 해소된 typed 입력 + 각 항목의 버킷**을 출력한다(`xrun.history`의 vitamin 버전).
-각 소스는 `(origin .f:line, base=CWD|file-dir, canonical-path)`로, 디렉티브는
-`(이름, 값, 버킷, 출처)`로 표기 — 깊은 중첩 `.f`의 RULE S 순서·경로 해소·wrong-stage·override를
-사람이 검증할 수 있게 한다. bucket C(해시 무관), 어떤 단계/`vita`에서도 사용 가능.
+Every override records `W-FLIST-OVERRIDE` naming both values, both origins and the winner, so an
+unintended collision is loud while the deliberate override workflow keeps working. The knobs that
+record it are `-o` / `--out`, `--threads` / `-j`, `--backend`, `--timeout`, `--upstream`,
+`--work`, `--workdir`, `-l` / `--log` and `--obs-dir`. Repeatable and accumulating flags do not,
+and neither do the verbosity flags. Unlike the other filelist diagnostics these events are
+replayed through the gated sink at pipeline start, so `-Wno-` and `-Werror=` apply to them and
+they reach the counts epilogue.
+
+A filelist's proper content is the source list and the include search path, plus defines and
+library scoping. Putting a single-value elaborate knob in a `.f` is discouraged — build intent is
+easier to trace on the command line — but it is not refused; a conflict surfaces as the warning
+above.
+
+### 4.3 Duplicate sources
+
+The same canonical source appearing twice in an expansion dedups to its first occurrence. Flags
+and their values are exempt; only bare positionals dedup, and identity is the physical id falling
+back to the lexically normalized path.
+
+Dedup alone would be unsound, because sticky-directive carryover (RULE S) means two occurrences of
+one path sit in different inheritance contexts and are therefore not the same compilation input.
+So whenever a duplicate was dropped, the pre-dedup stream is re-walked, tracking the sticky
+`` `timescale `` state contributed by the kept files with a comment- and string-aware scanner. If
+the dropped occurrence would have inherited a different directive from the kept one, that is the
+hard error `E-FLIST-DUP-CTX-CONFLICT`, which names both inherited contexts (an absent context
+renders as the base `1ns/1ns`).
+
+### 4.4 `--dump-filelist`
+
+A dry-run inspection of the effective inputs: it prints the post-expansion result and exits 0
+without compiling, and it is checked first in every dispatcher so it short-circuits every
+stage-specific rejection. Output goes to stdout, one line each, in this order:
+
+```
+source <path>          # each positional, in post-expansion argv order
+define <NAME>          # a value-less define
+define <NAME>=<VAL>    # a define with a value
+incdir <dir>           # each -I / +incdir+ directory, in order
+```
+
+`W-FLIST-OVERRIDE` events are replayed through a gated sink first. There is no counts epilogue and
+`--log` is not honoured here. The bucket is C.
 
 ---
 
-## §4 vrun 전체 체인 재검증 + vita 동치
+## 5. The staleness gate
 
-### vrun 재검증 알고리즘 (RULE V 구체화)
+### 5.1 Gate order
+
+The header is decoded alone; the body is untouched. Gates fire lowest-numbered first, so the most
+fundamental mismatch is the one reported.
+
+| Order | Condition | Code | Mnemonic | Message |
+|---|---|---|---|---|
+| 0 | magic missing or wrong, or the file is shorter than 8 bytes | `VITA-E9001` | `E-ART-FORMAT-MISMATCH` | `bad or missing {velab\|VU} magic` |
+| 0 | the header itself does not decode | `VITA-E9001` | `E-ART-FORMAT-MISMATCH` | `undecodable {velab\|VU} header: {error}` |
+| 1 | `format_version` differs from this build's | `VITA-E9001` | `E-ART-FORMAT-MISMATCH` | ``format_version={got} but this tool expects {want}; regenerate with `velab` `` |
+| 2 | `tool_semver_major` differs | `VITA-E9004` | `E-ART-VERSION-GATE` | `produced by vitamin {got}.x, this tool is {want}.x; regenerate or install a matching vitamin` |
+| 3 | `schema_hash` differs | `VITA-E9002` | `E-ART-SCHEMA-MISMATCH` | ``sim-ir type shape changed between builds; rerun `velab` `` |
+
+`.vu` readers gate against `schema_hash::<hdl_ast::SourceUnit>()`; `.velab` readers gate against
+`schema_hash::<sim_ir::SimIr>()`. Gate 3's message names sim-ir unconditionally, including when the
+stale artifact is a `.vu` whose hdl-ast shape moved.
+
+The fields that are **not** staleness keys: `composite_input_hash`, `consumed`,
+`worklib_manifest_hash`, `uses_dump`, and every provenance field including git sha, dirty and
+profile.
+
+### 5.2 Body-decode failures
+
+Past the header gate, every decode failure is also `E-ART-FORMAT-MISMATCH`, with a message naming
+the exact segment: `undecodable .vu body`, `undecodable .vu timescale trailer`, `undecodable .vu
+source-map trailer`, `undecodable .velab SimIr body`, and one message per `.velab` trailer — fork,
+name, timescale, severity, radix, scope, assign-rank, queue-bound, work-consumed, net-dims,
+final-procs, defer-marks, defer-acts, extra-sidecars and work-stamps. Naming the segment is what
+turns a mid-file decode failure into an actionable report.
+
+### 5.3 RULE V in practice — `E-ART-STALE-UPSTREAM` (`VITA-E9003`)
+
+Two paths, both live, both content-hash only.
+
+**Explicit: `vrun --upstream <file.vu>`.** Re-reads the live file, blake3-hashes it and compares
+against the snapshot's recorded `composite_input_hash`. On a mismatch:
+``{path}: digest changed since the .velab snapshot (rerun velab, or drop --upstream)``.
+
+**Automatic: the work-library gate.** It runs on every `vrun` whose snapshot carries a non-empty
+trailer ⑨. No flag enables it. It walks the recorded libs, blobs and files and checks each one:
+
+| Entry | Changed | Unreadable |
+|---|---|---|
+| library manifest | ``work library `{name}`: {path} changed since the .velab snapshot (re-run velab)`` | ``work library `{name}`: {path}: {error} (re-run `vcmp --work` + velab)`` |
+| unit blob | ``{path}: library blob changed since the .velab snapshot (re-run velab)`` | ``{path}: {error} (re-run `vcmp --work` + velab)`` |
+| source or include | ``{path}: source changed since `vcmp --work` (re-run vcmp + velab)`` | ``{path}: {error} (re-run `vcmp --work` + velab)`` |
+
+Editing only an included header trips the gate, because the include closure is recorded per
+compilation unit alongside the sources. A stamp from trailer ⑮ may let an unchanged entry skip the
+read and the hash; a stamp miss always re-hashes, so the content check is never bypassed by
+mtime alone.
+
+There is no `--rebuild`: a stale chain is repaired by re-running the stages the message names.
+
+### 5.4 Exit codes
+
+| Code | Constant | Meaning |
+|---|---|---|
+| 0 | `EXIT_OK` | clean run; also `--help`, `--version`, `explain`, `--dump-filelist` |
+| 1 | `EXIT_USER_ERROR` | user or design error: lex, parse, elaborate, a runtime `$fatal`, or a `-Werror`-promoted warning on an otherwise clean run |
+| 2 | `EXIT_STALE` | artifact or staleness rejection: bad magic, format, semver, schema, an undecodable body or trailer, a RULE-V mismatch, an invalid manifest |
+| 3 | `EXIT_CLI_ERROR` | CLI or usage error: unknown flag, missing value, no sources, wrong positional count, unreadable input, unwritable output, a wrong-stage flag, a filelist error |
+
+Exit 2 exists so that CI re-runs the upstream stages instead of debugging RTL. Every artifact
+rejection — `.vu` and `.velab`, header and body, plus every RULE-V rejection and every manifest
+rejection — returns it, through one function. A missing input file is not a staleness failure: it
+is `VITA-E8005` and exit 3.
+
+An artifact diagnostic is rendered without a location, since the failure is about the file as a
+whole:
+
+```
+error[VITA-E9001] E-ART-FORMAT-MISMATCH: bad or missing velab magic
+```
+
+### 5.5 Remedy per gate
+
+| Gate | Remedy |
+|---|---|
+| bad magic | the file is not a vita artifact, or is the wrong kind — regenerate with `vcmp` / `velab` |
+| `format_version` | regenerate with `velab`; for a `.vu`, re-run `vcmp` and then `velab` |
+| `tool_semver_major` | regenerate, or install a matching vitamin |
+| `schema_hash` | re-run `velab` |
+| RULE-V library or blob | re-run `velab`; re-run `vcmp --work` and `velab` when the path is unreadable |
+| RULE-V source or include | re-run `vcmp` and `velab` |
+| `--upstream` digest | re-run `velab`, or drop `--upstream` |
+| manifest | the manifest is not in canonical form at the named line — let `vcmp --work` rewrite it |
+
+### 5.6 Defensive fatals behind the gate
+
+Because the trailers ride outside the schema gate, a hand-truncated `.velab` can pass the header
+gate and reach the engine. Two engine guards re-use `E-ART-FORMAT-MISMATCH` as a runtime Fatal —
+exit class 1, not 2, since the failure is discovered during simulation:
+
+| Guard | Message |
+|---|---|
+| missing fork join-mode entry | `fork join-mode sidecar entry missing for (template={t}, join_bb={b}) — .velab trailer lost or stale; re-run velab` |
+| missing declaration-initializer process | `declaration-initializer sidecar names process {pid}, which this IR does not have — .velab trailer lost or stale; re-run velab` |
+
+A corrupted trailer must produce a clean diagnostic and a clean exit, never a panic or an abort.
+
+### 5.7 Policy: refuse and rebuild
+
+A `format_version`, `schema_hash` or semver-major mismatch is a hard error with an actionable
+rebuild hint. There is no silent reuse and no migration machinery anywhere in the artifact crates:
+because every artifact can always be regenerated from its sources, the policy is version-gate
+rather than version-migrate. Migration becomes a question only if artifacts ever become a
+distribution format.
+
+---
+
+## 6. Re-verification and one-shot equivalence
+
+### 6.1 The `vrun` sequence
 
 ```
 vrun <top>.velab:
-  1. 헤더만 디코드 (본문 역직렬화 전): magic, format_version(현재 31), schema_hash 확인
-     → format/schema 불일치면 hard error + 재빌드 힌트 (본문 안 읽고 거부)
-  2. 스냅샷의 consumed[(lib:unit, src_sha256)] 각 항목에 대해:
-       라이브 소스를 재전처리(상속 반영) → 다이제스트 재계산 → 박힌 값과 대조
-  3. work 매니페스트 라이브 내용 해시 재계산 → worklib_manifest_hash와 대조
-  4. 하나라도 불일치:
-       기본: 실패 ("상류가 stale — vcmp/velab 재실행 또는 vrun --rebuild")
-       --rebuild: stale 단계만 재실행 후 진행
-  5. 전부 일치: 본문 역직렬화 → sim-engine이 SimIr를 walk
+  1. Decode the header alone: magic, format_version, tool_semver_major, schema_hash.
+     A mismatch is a hard error with a rebuild hint — the body is never read.
+  2. Decode the golden SimIr frame, then each trailer in order.
+     A present-but-undecodable segment is a format mismatch naming that segment.
+  3. If trailer ⑨ is non-empty, run the RULE-V gate over every recorded
+     library manifest, unit blob, source and include:
+       stamp hit (mtime and size match) → skip the read
+       otherwise                        → read the bytes and blake3 them
+     Any digest mismatch → E-ART-STALE-UPSTREAM, exit 2, with the fix in the message.
+  4. If `--upstream <f.vu>` was given, re-hash that live file against the
+     recorded composite_input_hash as well.
+  5. All checks pass → hand the SimIr and the sidecars to the engine.
 ```
 
-mtime 비교는 (있다면) 해싱 전 빠른 프리필터로만 쓰고, 단독 신호로는 절대 쓰지 않는다.
+Mtime is a fast-path prefilter only. It is never the deciding signal.
 
-### vrun 재검증 입력 출처 (RULE V 입력 — 비가역 해시 보완)
+The re-verification inputs come from the artifact itself, not from re-supplied argv. The header
+carries irreversible digests and does not keep the original command line, so the recorded library
+manifests are the primary source: each names its own sources, includes, defines and include
+directories with their digests. A bare `vrun <top>.velab` therefore works as long as the recorded
+library directories are still where the snapshot says they are.
 
-재검증(step 2–3)은 라이브 소스를 다시 전처리·해싱해야 하므로 **소스 파일 목록·`+incdir+`·라이브러리 위치**가 필요하다. `.velab` 헤더는 비가역 해시만 담고 원본 argv(`-f`/`+incdir+`)를 보관하지 않으므로, 이 입력은 다음에서 얻는다:
+### 6.2 What must be identical
 
-- **work 매니페스트가 1차 출처.** `consumed[(lib:unit, …)]`의 각 라이브러리는 vcmp가 만든 `work/lib.toml`을 가리키고, 거기에 정렬된 `files = [{path, src_sha256}]`와 dialect가 있다. 재전처리·재해싱은 이 매니페스트의 경로·include 기록을 사용한다 — 원본 RTL argv를 통째로 재입력할 필요가 없다.
-- **라이브러리 위치 해소.** `lib:unit`의 논리명→디렉터리는 D3 lib-map(`cds.lib`/`synopsys_sim.setup` 계열)으로 해소한다. `vrun`에 `-L`/`--lib-map`을 재전달하거나(또는 `-f` filelist), 매니페스트에 기록된 기본 위치를 쓴다.
-- **bare `vrun top.velab`** 는 work 라이브러리가 기록된(또는 기본) 위치에 그대로 있을 때 동작한다. 위치가 옮겨졌으면 `-L`/`--lib-map`으로 재지정한다.
-- `--rebuild`는 같은 출처로 stale 단계의 vcmp/velab를 재구성한다(추가 입력 불요).
+The staged chain and the one-shot run must produce the same observable output for the same inputs:
 
-### vita 인메모리 동치
-
-원샷 `vita`는 살아있는 `Module`/`SimIr` 값을 메모리로 스트리밍하며 **serde 호출 0회,
-디스크 0회, staleness 해시 계산 0회**다(디스크 산출물이 없으니 stale될 대상이 없다).
-의미상 `vcmp→velab→vrun` 마이너스 디스크와 동일하다.
-
-> **전역 정밀도 동치 불변식.** `global_time_precision = min(전체 소비단위의 유효
-> timeprecision)` + `--timescale` 기본값이며, **velab 합성 해시의 일부**다. **소비단위 중 어떤
-> 것도 timescale을 지정하지 않고 `--timescale`도 없으면**(min()의 공집합) → 08의 기저값
-> `1ns/1ns`로 해소하고 `W-PP-TIMESCALE-DEFAULT`(W1017, §15 부록 A) 경고를 발화한다. 기저값은 상수라 합성 해시·
-> 3-OS 결정성을 깨지 않는다. `vita`가 staged
-> 흐름과 의미상 같으려면 동일 argv에서 **동일한 소비-단위 집합**을 구성하고 그 집합 위에서
-> 같은 min()을 계산해야 한다. 소비 트리플 집합 `(lib:unit, src_sha256)`이 "설계"의 정규
-> 정의이며, 두 경로 모두 이 집합을 참조한다. 동치 검증은 `vita`와 `vcmp+velab+vrun`의
-> **VCD + stdout 관측 동치**(바이트 동일이 아니라 관측 동일)로 한다(09 테스트).
-
----
-
-## §5 구조적 schema 해시 메커니즘 (D2)
-
-03의 "cargo가 유일한 빌드 진입점 — cmake/make/별도 빌드 스크립트/codegen 없음" 규칙을
-지키면서 구조적 해시를 산출하는 **3계층** 메커니즘. build.rs 셸아웃 없음, codegen 없음.
-
-**Layer 1 — 구조적 schema 해시 (런타임 staleness/디코드 키).** 신규 proc-macro 크레이트
-`vita-artifact-derive`가 `#[derive(SchemaHash)]`를 제공한다. proc-macro는 rustc *안*에서
-도므로 100% cargo-native(`no build.rs`가 갖지 못하는 깨끗한 탈출구). derive는 타입의 syn
-AST(필드명 + 필드 타입 + variant 형상)를 참여 타입 레지스트리 위에서 재귀적으로 walk해
-정규 형상 문자열로 만들고 `const SCHEMA_HASH: [u8;32] = blake3(shape)`를 emit한다. hdl-ast
-루트 타입(→ `.vu`)과 sim-ir 루트 타입(→ `.velab`)이 이를 derive하고, vita-artifact가 그
-const를 읽어 헤더에 stamp한다. 필드/variant 추가·삭제·재정렬·타입변경이 해시를 뒤집어,
-호환 안 되는 타입 형상으로 빌드된 도구는 silent misparse 대신 디코드 시점에 깨끗한
-"호환 안 되는 도구로 재빌드됨 — 재컴파일" 오류를 낸다.
-
-> **결정론 필수.** derive 구현은 **순서 안정 구조만** 사용한다(Vec/BTreeMap, syn의 소스
-> 순서 필드/variant). 레지스트리는 타입명 사전식 정렬 등으로 **결정론적 순서**로
-> 정규화하며, **HashMap/HashSet 반복을 절대 쓰지 않는다.** 정규 형상 문자열과 그 blake3는
-> OS/arch/툴체인 호출에 무관하게 바이트 동일해야 한다(3-OS 계약 + `--locked` 재현성). CI는
-> 두 플랫폼에서 같은 fixture 타입의 `SCHEMA_HASH`가 같음을 검증한다.
-
-> **process 노드 동결 불변식 (SD1–SD5, FROZEN 2026-06-02).** `SuspendState`와 그 하위 타입
-> (`JoinState`/`Frame`/`WakeKey`/`WakeCond`/`RegionTag` + `body`의 `Terminator`)은 **하나의 원자 단위로
-> freeze**된다 — 어느 필드든 후일 형상이 바뀌면 `SCHEMA_HASH`가 flip돼 모든 `.velab`가 무효화되므로 부분
-> 동결은 불가. 추가 불변식: **(1) `usize`/`isize` 절대 금지** — 32/64-bit에서 폭이 달라져 3-OS 바이트를
-> 깬다(`Vec` 길이 prefix는 varint라 안전). **(2)** `children`/`detached`/`call_stack`/`frame_arena`는
-> **선언순 append + order-preserving 제거**(`swap_remove`·freed-slot 재사용 풀 금지) — 타입이 아닌 엔진
-> 규율 + 2-platform CI로 강제. teardown: `disable fork`는 `detached`만, 일반 `disable <scope>`는
-> `children`(suspended·join-blocked 자식 포함)까지 재귀(06 SD1). **(3)** `WakeKey.region`은 elaborate 시점에 채워 **저장**하고 wake 시
-> 재유도하지 않는다(스케줄을 해시 안에 둠). **(4)** 새 wait 종류·17-region 확장은 **의도된 `SCHEMA_HASH`
-> flip + rebuild**가 유일한 정상 경로다(미리 variant 예약 금지 — 해시 표면 bloat). CI fixture에 fork-reap·
-> delta 재진입·재귀 frame 케이스를 포함한다.
-
-> **wire 민감성.** syn 형상 해시는 Rust 형상은 보지만 정확한 postcard *wire* 인코딩은 못
-> 본다 — `#[serde(rename)]`/`skip`/`with`/`default`/`tag` 같은 serde 속성은 형상을 안
-> 바꾸고도 바이트를 바꾼다. 따라서 derive는 **serde 컨테이너/필드 속성도 shape 문자열에
-> 포함**해, wire에 영향을 주는 편집이 런타임에 `SCHEMA_HASH`를 뒤집게 한다(런타임 경로에서
-> 갭을 닫음 — Layer 3에만 의존하지 않음).
-
-**Layer 2 — 빌드 지문 (provenance, staleness 키 아님).** 모든 `.vu`/`.velab` 헤더와
-`--dump` 출력에 git sha + dirty + profile + 도구 버전을 stamp한다.
-`option_env!("VITA_GIT_SHA")`, `option_env!("VITA_GIT_DIRTY")`, `env!("CARGO_PKG_VERSION")`,
-`cfg!(debug_assertions)`로 읽는다. CI/설치 래퍼/dist가 빌드 시 env로 주입하고, 평범한
-로컬 `cargo build`에는 없으면 "version+profile, sha=unknown"으로 graceful 강등. **빌드
-스크립트 0개.** 지문은 버그리포트 provenance 전용이며 staleness 키에서 의도적으로 제외한다
-(staleness = SCHEMA_HASH + 전처리-소스 트리플 + 매니페스트 해시). 평범한 빌드에서 sha가
-*꼭* 필요해지면, 허용되는 단 하나의 경계 예외는 셸아웃 없는 `vergen-gix` build.rs(순수
-Rust `gix`, 외부 git 프로세스 없음) — 문서화된 최후 수단이며 env 주입 경로가 우선.
-
-**Layer 3 — CI 골든-포맷 가드 (의도적 변경 리뷰, 테스트 전용).** `serde-reflection`은 샘플
-값이 필요한 런타임 tracer라 헤더를 stamp할 수 없다(codegen으로 엮으면 "no codegen" 위반).
-올바른 역할은 워크스페이스 **테스트**다 — hdl-ast·sim-ir의 serde 포맷 골든 Registry(RON)를
-커밋하고, `cargo test`가 재추적해 골든과 diff, wire 포맷이 표류하면 CI 실패. Layer 1이
-런타임 staleness를 게이트하고, Layer 3이 포맷 변경의 의도적 인간 리뷰를 게이트한다 —
-함께 형상 편집과 wire 편집을 모두 커버.
-
-**호환성 규칙:** format_version/schema_hash/tool-semver-major 불일치 시 **hard error,
-silent 재사용 금지.** 진단은 원인 + 실행 가능한 재빌드 힌트를 제시
-("work 라이브러리는 vitamin X(schema N) 산출 — 현재 Y(schema M); `vcmp`/`velab` 재실행
-또는 `vcmp --clean`"). 재생성이 항상 가능하므로 정책은 version-MIGRATE가 아니라
-version-GATE(refuse-and-rebuild). 마이그레이션 기계는 artifact가 배포 포맷이 되기 전까지 연기.
-
----
-
-## §6 CLI 표면
-
-GHDL의 `a`/`e`/`r` 3-verb 모델이 `vcmp`/`velab`/`vrun`에 1:1 대응하고, 원샷 `vita`는 그
-union이다(xrun/GHDL `--elab-run`). iverilog/Verilator/VCS/GHDL 사용자가 익숙하도록 별칭을
-받는다. 각 플래그의 **해시 결합 버킷**(§2)을 함께 명시한다.
-
-**공통 (모든 단계 + vita):** `-f <file>` / `-F <file>` — filelist 전개(`-f`=CWD 상대, `-F`=파일-
-디렉터리 상대 경로 해소; 중첩·재귀 top-down). 버킷 C(파일 자체) — **전개 내용은 디렉티브
-타입별로 A/B/C**. 호출 단계에 안 맞는 디렉티브는 `E-FLIST-WRONG-STAGE`, 단일값 knob 충돌은
-`W-FLIST-OVERRIDE`. `--dump-filelist`(평탄화·정렬 결과 dry-run 출력). 상세 §3.1. ·
-로그는 **상시 자동 기록**(`<stage>.log`; `--log <file>`/`--log-dir`/`--no-log`로 제어),
-`-q`/`-v`/`-vv`, `-Wno-<code>`/`-Werror[=<code>]`, `--color` 등 진단/로깅 플래그는 전부 버킷 C
-(상세 [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md)).
-
-### vcmp (compile)
-
-| 플래그 (정규 / 별칭) | 의미 | 버킷 |
-|---|---|---|
-| `+incdir+<dir>` / `-I<dir>` | `` `include `` 검색 경로 | A |
-| `+define+<name>[=<val>]` / `-D<name>[=<val>]` | 전처리 매크로 | A |
-| `-y <libdir>` | 미정의 모듈 자동 해소 디렉터리 | A |
-| `-Y <ext>` / `+libext+<ext>` | `-y` 디렉터리에서 고려할 확장자 | A |
-| `-v <libfile>` | 단일 파일 on-demand 라이브러리 (예약) | A |
-| `--work <logical>[=<dir>]` / `--workdir <dir>` | 논리 work 라이브러리 + 출력 디렉터리 (D3) | A |
-| `--std <2005\|2012\|…>` / `-g<year>`, `-sv` | 언어 세대 / Verilog-vs-SV dialect | A (preimage) |
-| `--timescale <unit>/<prec>` | `` `timescale `` 없는 모듈 기본값 | A+B (RULE T) |
-| `--timescale-policy <strict\|lenient>` | 부분 지정(일부만 `` `timescale ``) 정책. 기본 lenient(W2016), strict는 E1011 (§15) | A |
-| `-E` | 전처리만 하고 정지 — 전개 텍스트를 **stdout**(또는 `-o <file>`)으로 방출. staged artifact 아님(`work/`·`.velab` 미생성), 동치 모델 밖. gcc/iverilog `-E` 관행 | — (해시·동치 모델 밖) |
-| `-o <work-dir>` | 출력 디렉터리 명명 (단, `-E`와 함께면 전처리 텍스트 파일 경로) | C |
-
-### velab (elaborate)
-
-| 플래그 (정규 / 별칭) | 의미 | 버킷 |
-|---|---|---|
-| `-s <top>` / `--top-module <top>` | elaborate 루트 단위 | B |
-| `-G<name>=<val>` / `-pvalue+<name>=<val>` | top-level 파라미터 오버라이드(clean scoped) | B |
-| `-P<hier.path.param>=<val>` | defparam 식 계층 파라미터 오버라이드 | B |
-| `-L <logical>[=<dir>]` | 컴파일된 논리 라이브러리 compose (D3) | B |
-| `-P <dir>` | 사전컴파일 라이브러리 검색 디렉터리 | B |
-| `--lib-map <file>` | 논리명→dir 매핑 설정 파일(해소 내용 해시됨) | B |
-| `--timescale <unit>/<prec>` | 전역 기본 시간 정밀도 | B |
-| `--multi-driver <warn\|error>` | 다중구동 *검출* 시 심각도(해소는 항상 IEEE 4-state z-merge) | B |
-| `-o <top>.velab` | 스냅샷 산출물 명명 | C |
-
-### vrun (simulation)
-
-| 플래그 (정규 / 별칭) | 의미 | 버킷 |
-|---|---|---|
-| `+<name>[=<value>]` | plusargs (`$value$plusargs`/`$test$plusargs`) | C |
-| `-sv_seed <N\|random>` | `$urandom`/`$random` 시드 (재현성; 로그에 기록, 해시 안 함) | C |
-| `-n` / `-N` | `$stop` 처리: `-n`=`$finish`처럼 클린 종료, `-N`=추가로 exit 1 (CI 실패 감지) | C |
-| `--finish-at <time>` | 실행 길이 제한 (강제 `$finish`) | C |
-| `--log <file>` / `-l <file>` | 런타임 transcript sink (`-`=stderr; `-l`은 vrun 한정 vvp 호환 별칭) | C |
-| `-v` / `--verbose` | 런타임 진행 출력 | C |
-| `-M <dir>` / `-m <module>` | VPI/플러그인 모듈 검색·로드 (예약, post-MVP — MVP는 builtin 정적 링크) | C |
-
-> **VCD는 RTL 주도가 기본이자 MVP 전부.** 단일 실행에서 dump 시스템 태스크
-> (`$dumpfile`/`$dumpvars` …)가 호출되지 않으면 VCD는 생성되지 않는다(no-op). RTL 수정 없이
-> 강제/리다이렉트하는 `vrun --force-dump`/`+dumpfile`은 spec §7(147행) 방침대로 **선택적
-> 후속 기능으로 연기**한다. velab 측 `--trace` 플래그는 두지 않는다(Verilator와 의도적 이탈).
-
-### vita (one-shot)
-
-`vita = UNION(vcmp, velab, vrun)` 한 번 호출. 위 모든 플래그를 받고 preprocess→…→VCD를
-메모리로 스트리밍(serde/디스크 없음). `-E`는 elaborate 전에 short-circuit. **staleness 해시를
-하나도 계산하지 않는다**(디스크 산출물이 없으므로).
-
-### 플래그 충돌 / 별칭 정규화
-
-| 충돌 | 정규 선택 |
+| Observable | Requirement |
 |---|---|
-| `-l` (iverilog=lib-file vs vvp=logfile) | lib-file은 `-v`로, log는 `--log`(+ vrun 한정 `-l` 별칭) |
-| `-g<year>` 세대 vs `-g<NAME>=<VALUE>` VHDL generic | generic 오버라이드는 `=` 필수로 구분(VHDL은 Phase 3 예약) |
-| `-P<dir>` 검색 vs `-P<path>=val` defparam | `=` 유무로 구분; **`-P`는 defparam 전용으로 한정**하고 compose는 `-L`, 검색은 `-y`/`--lib-map` 우선 |
-| `-G` vs `-P` 파라미터 | `-G`=clean scoped 오버라이드, `-P<path>=`=defparam 식 |
+| `$display` transcript | byte-identical |
+| waveform file | byte-identical |
+| diagnostic lines, including `file:line:col` and the instance path | byte-identical |
+| exit class | identical |
 
-별칭(무마찰 포팅): `+incdir+`↔`-I`, `+define+`↔`-D`, `-s`↔`--top-module`, `-G`↔`-pvalue+`.
+Equivalence is defined on observable output, not on internal representation. The one-shot path
+never serializes: it builds the engine's options directly from the elaborator's in-memory sidecar
+bundle. The staged path must therefore carry *every* engine-facing sidecar across the `.velab`
+boundary. Anything dropped is the staged-drop hazard: the staged run silently produces a different
+answer from the one-shot run on the same design, which is the exact failure the whole trailer
+mechanism exists to prevent.
 
-> **04에 추가할 표.** 04 "실행 모델" 절 뒤에 바이너리별 플래그 표(정규/별칭/의미/**버킷**
-> 열 필수)를 두되, 상세·충돌·규칙은 본 문서가 권위. 버킷 열을 필수로 둬 미래 플래그 추가가
-> 반드시 결합을 명시하게 강제한다.
+**Global precision equivalence.** The design-wide precision is the minimum over the effective
+precision of every consumed unit. When no consumed unit specifies a timescale, the base `1ns/1ns`
+applies and `W-PP-TIMESCALE-DEFAULT` (`VITA-W1017`) is emitted; the base is a constant, so it
+breaks neither the recorded precision nor byte-identity. For the two paths to agree, the same argv
+must produce the same set of consumed units and the same minimum over it. The consumption record
+of §3.2 is the canonical definition of "the design", and both paths refer to it.
+
+### 6.3 Sidecars carried on both paths
+
+These are threaded identically by the one-shot driver and by the staged loader:
+
+`fork_modes`, `net_names`, `proc_multipliers`, `proc_prec_mults`, `global_prec_exp`,
+`timescale_unit`, `severities`, `stmt_locs`, `stmt_scopes`, `expr_scopes`, `proc_scopes`,
+`proc_inst_scopes`, `radixes`, `assign_ranks`, `queue_bounds`, `net_dims`, `net_decl_ranges`,
+`timeformat_stmts`, `handle_copy_stmts`, `queue_slice_stmts`, `file_directed_stmts`, `init_procs`,
+`final_procs`, `clocking_inputs`, `clocking_commit`, `clocking_outputs`, `ca_delays`,
+`defer_marks`, `defer_acts`, `func_table`, `func_names`, `task_calls_proc`, `task_calls_func`,
+`two_state_nets`, `real_elem_dyn_nets`, `string_elem_dyn_nets`, `wired_and_nets`, `wired_or_nets`,
+`class_handle_nets`, `class_new_sites`, `class_layouts`, `class_field_inits`, `class_rand`,
+`class_constraints`, `class_dist`, `class_randc`, `randomize_with`, `class_vtable`, `class_calls`,
+`class_field_widths`, `assert_fire`, `assert_ctl`.
+
+### 6.4 One-shot only
+
+The observability rail is a one-shot capability. The staged applets do not accept-and-drop its
+flags; they refuse them, so the difference is loud rather than silent:
+
+| Capability | One-shot | Staged |
+|---|---|---|
+| `--obs-dir` (`run.json`, `results.jsonl`, `coverage.json`) | supported | refused on `vcmp`, `velab`, `vrun`, exit 3 |
+| `--probe` / `--probe-file` (`trace.jsonl`) | supported | refused, exit 3 |
+| `--obs-procs` / `--obs-procs-time` (the `run.json` process objects) | supported | refused, exit 3 |
+| `$vita_stage` (`stage.jsonl`) | supported | `velab` refuses a design that uses it, exit 3 |
+
+Each refusal message names the stage and says where the flag belongs. `--hier-tree` and
+`--inst-paths` are accepted by the staged applets and do nothing, which is the one place the rail
+is quiet rather than loud.
+
+The other per-stage refusals follow the same principle — a flag whose bucket does not match the
+invoking stage is refused, never dropped: preprocess buckets on `velab` and `vrun`, runtime
+plusargs on `vcmp` and `velab`, `--backend` on `vcmp` and `velab`, `-G` on `vcmp` and `vrun`,
+`--work` / `--workdir` outside `vcmp`, and `-L` / `--top` outside their own stages.
+
+### 6.5 Promoted warnings produce no artifact
+
+`vcmp` and `velab` check for an error or fatal *before* writing anything, so a `-Werror`-promoted
+warning fails the stage and leaves no artifact behind to be reused. `vrun` turns an otherwise clean
+exit into exit 1 when a promoted warning fired, matching the one-shot behaviour
+([13-diagnostics-and-logging.md](13-diagnostics-and-logging.md)).
+
+### 6.6 Output naming and the clobber guard
+
+| Applet | Default output |
+|---|---|
+| `vcmp` | the first source with its final extension replaced by `vu`; omitted entirely when `--work` is given without `-o` |
+| `velab` (positional) | the input with its final extension replaced by `velab` |
+| `velab -L` | `<first --top>.velab` |
+| `vrun` | none; `-o` is a waveform override |
+
+Only the final extension component is replaced, so `a.b.sv` becomes `a.b.vu`. Before writing, the
+resolved output is compared against every positional input — by string equality, and by
+canonicalizing both when both exist, so that `./a.sv` against `a.sv` and symlinked aliases are
+caught. A match is refused: `output '<out>' would overwrite an input file`, exit 3.
 
 ---
 
-## §7 진단 위치 사이드테이블 (D4)
+## 7. `format_version` discipline
 
-`sim-ir`는 **span-free**다 — Verilog 구문도, 파일 경로도 모르는 언어 중립 좁은 표면을
-유지한다(04:131). 런타임 진단(`$fatal` at line 42, 런타임 range 위반 등)이 소스를 가리킬 수
-있도록, 위치 정보는 **별도 경로**로 운반한다(Yosys RTLIL이 `src` 어트리뷰트로 위치를
-오버레이하는 선례).
+`CURRENT_FORMAT_VERSION` is **31**. It is the container format version, shared by `.vu` and
+`.velab`, and it guards the on-disk wire layout: the header field layout, and everything in the
+out-of-band trailer and tail segments that the schema hash cannot see. The schema hash covers only
+the type shape of the golden frame.
 
-- **사이드테이블**: `node_index → { file_id, byte_range }` 매핑. 선택적이며(release
-  스냅샷에선 생략 가능) **독립 버전**이다 — sim-ir schema_hash와 별개 축으로 진화.
-- **`file_id → path` 맵**: `sim-ir` 타입이 아니라 work 매니페스트에 둔다.
-- sim-ir 본문(언어 중립 코어)만 schema_hash 대상이며, 사이드테이블은 독립적으로
-  해시/버전된다. 이로써 SchemaHash derive가 중립 코어만 해시하고, 진단 위치가 백엔드
-  교체 경계를 넓히지 않는다.
-- **소비자**: `vita-log`가 런타임 진단을 그릴 때 이 사이드테이블을 읽는다 — builtin-call
-  IR 노드 인덱스 → `{file_id, byte_range}` → 매니페스트 `file_id→path` → SourceLoc 복원 →
-  `diag`에 넘겨 compile 에러와 동일한 caret로 렌더. 상세
-  [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md).
-- **strip 정책 (기본 포함 + 명시 strip + 로드 경고).** 사이드테이블은 **기본적으로
-  스냅샷에 포함**(개발 친화 — 런타임 진단이 항상 file:line을 가리킴)된다. 제거는 명시적
-  opt-out으로만 한다 — `velab --strip-locations`(또는 release 배포 프로파일). strip된
-  스냅샷을 `vrun`이 로드하면 **로드 시점에 1회 경고 `W-RUN-NO-LOCATIONS`**("이 스냅샷은
-  위치 정보가 없어 런타임 진단이 file:line을 못 가리킴 — 위치 포함으로 재-elaborate
-  권장")를 낸다. 이 경고는 `-Wno-W-RUN-NO-LOCATIONS`로 끌 수 있다. 진단이 실제 터질 때만
-  알리는 침묵 방식은 (특히 비결정 실패에서) 너무 늦으므로 채택하지 않는다 — 단, 진단
-  발생 시에도 위치만 "(불가)"로 graceful degrade하고 코드·severity·sim_time은 출력한다.
+**What a bump costs.** Every existing `.vu` and `.velab` refuses to load, with
+`E-ART-FORMAT-MISMATCH` at the header gate, before any body byte is deserialized. The refusal is
+the point: an artifact written under a different wire layout must meet a clean, actionable error
+rather than a mid-file postcard failure or, worse, a successful mis-decode.
+
+**When a change needs a bump.**
+
+| Change | Bump? | Why |
+|---|---|---|
+| a field added, removed, reordered or retyped in any trailer or tail | yes | postcard is positional, so the bytes move |
+| an element type change that alters encoding, such as `(u32,u32)` to `(i64,u32)` | yes | a stale artifact would mis-decode rather than fail |
+| a new variant appended **last** to a trailer enum | yes | old values still decode, but an old binary must meet the header gate rather than the decoder |
+| a header field added or reordered | yes | the header layout is exactly what the constant guards |
+| a field renamed inside a trailer struct | no | postcard encodes fields positionally |
+| widening a trailer `Vec<u32>` to `Vec<u64>` | no | varint encoding is identical below 2^32; the equivalence is pinned by a test |
+| a frozen `sim-ir` type shape change | yes, plus a schema-hash re-pin | the golden root hash flips, and both goldens are regenerated |
+| an engine-facing table synthesized from run options or from elaborate output | no | it rides out of band and never touches the golden shape |
+
+**What is not versioned by it.** The work-library manifest carries its own `format_version = 1`,
+unrelated to the container number. The `sim-ir` golden hash is unchanged across the recent
+container versions, all of which are trailer or tail changes only; the two numbers are not the same
+thing and must not be read as one.
+
+The version-by-version record lives in the doc comment on `CURRENT_FORMAT_VERSION` in
+`crates/vita-artifact/src/header.rs`, and in [../history/README.md](../history/README.md). This
+document states the format as it is.
+
+---
+
+## 8. The schema-hash machinery
+
+Three layers, none of which needs a build script or a code generator; `cargo` stays the only build
+entry point. Full specification: [16-schema-hash-spec.md](16-schema-hash-spec.md); the frozen IR
+backbone: [17-sim-ir-ir-backbone-freeze.md](17-sim-ir-ir-backbone-freeze.md).
+
+**Layer 1 — the structural schema hash (the runtime staleness and decode key).** A proc-macro
+crate provides `#[derive(SchemaHash)]`. A proc-macro runs inside rustc, so it is fully
+cargo-native. The derive walks the type's own body — field names, field types, variant shapes and
+the serde attributes that affect the wire — into a canonical shape string, and registers children
+by name rather than inlining them. A runtime registry walks the whole reachability closure, renders
+it deterministically and blake3-hashes the result. The `.vu` root is `hdl_ast::SourceUnit`; the
+`.velab` root is `sim_ir::SimIr`. Adding, removing, reordering or retyping a field or a variant
+flips the hash, so a tool built against an incompatible type shape reports a clean "rebuilt with an
+incompatible tool" error at decode time instead of mis-parsing in silence.
+
+Determinism is a hard requirement of that layer: the registry uses ordered containers only, never
+a hash-ordered one; the canonical string is sorted by fully-qualified type name; the line
+terminator is a literal newline, never CRLF; and the canonical string and its blake3 must be
+byte-identical on every platform and toolchain.
+
+The canonical key is `module_path!()::Ident`, expanded in the module where the derive is written.
+Moving a `SchemaHash` type into a submodule therefore changes its key, changes the canonical
+string and flips the root hash, invalidating every artifact on disk. That is why the frozen sim-ir
+types and every hdl-ast type live at their crate root.
+
+Serde attributes participate in the shape because they change the wire bytes without changing the
+Rust shape. They are collected, sorted by a fixed priority so that source order does not matter,
+and rendered into the shape string.
+
+**Layer 2 — the build fingerprint.** Tool version, git sha, dirty flag and profile are stamped into
+every header for traceability. Not a staleness key, by design (§1.3).
+
+**Layer 3 — the wire golden.** A `serde-reflection` registry of the frozen types is committed as a
+golden file and re-traced by the test suite, so serde wire drift that the syn-level shape walk
+cannot observe fails a test rather than corrupting artifacts. Layer 1 gates runtime staleness;
+Layer 3 gates deliberate human review of a format change. Together they cover shape edits and wire
+edits. The golden's newline is pinned explicitly, because the default pretty-printer picks the
+platform newline and a byte-compared golden cannot survive that.
+
+---
+
+## 9. Runtime diagnostic locations
+
+`sim-ir` is span-free by design (D4): it holds no `Span` type and no `span` field, and knows
+neither Verilog syntax nor file paths. A runtime diagnostic — a `$fatal` at a particular line, a
+`unique` violation, a deferred assert — must still point at source, so location travels on a
+separate path, the way an RTLIL-style `src` attribute overlays location onto a neutral netlist.
+
+How it works at HEAD:
+
+- The `.vu` carries the source-map tail (§1.4), so `velab` rebuilds the same resolver the one-shot
+  driver uses and staged elaborate diagnostics locate identically.
+- Elaborate resolves each recorded statement to `{ file, line, col, byte_start, byte_end, instance }`
+  **once**, and stores it in trailer ⑭ field `stmt_locs`. Because the resolution happens at
+  elaborate time, the one-shot and staged runs are identical by construction rather than by
+  parallel implementation.
+- `stmt_scopes`, `expr_scopes` and `proc_inst_scopes` carry the `%m` scope chains that the same
+  reports need.
+- The engine consumes these when rendering a runtime diagnostic, so a runtime report gets the same
+  caret rendering as a compile-time one ([13-diagnostics-and-logging.md](13-diagnostics-and-logging.md)).
+
+The table is sparse by construction: entries exist for severity statements (`$fatal`, `$error`,
+`$warning`, `$info`), `unique` and `priority` violations, deferred asserts, statements that index
+an array net, and the file-directed memory tasks. Since the engine's IR cannot re-derive a location
+at run time, this record is the only route by which a runtime diagnostic prints
+`file:line:col [in instance]`.
+
+Status at HEAD: there is no strip option and no load-time warning about a location-less snapshot.
+Locations always ride the artifact. The one place they are absent is `velab -L` library mode
+(§3.3), where the source-map tail is dropped; the loss is confined to elaborate-time diagnostics
+and is refused a wrong answer rather than given a guessed one. The design intent — a separately
+versioned side table, strippable for a release snapshot, with a one-time load warning when it is
+absent — is not implemented.
 
 ---
 
 ## Sources
 
-- 04-architecture.md (실행 모델 · 파이프라인 · 크레이트 표 · IR 설계 원칙)
-- 03-build-and-portability.md (cargo-only 빌드 · MSRV · 3-OS · 워크스페이스)
-- 05-strategy-and-roadmap.md (MVP 범위 · 단계 게이트)
-- 08-timescale-and-timing.md (전역 정밀도 min() · 디렉티브 캐리오버)
-- 09-testing-and-verification.md (직렬화 round-trip · VCD 동치 테스트)
-- 본 spec §5.2/§5.4 — `docs/superpowers/specs/2026-05-26-vitamin-rtl-simulator-design.md`
-- 상용 단계 분리 선례: Cadence `xmvlog`/`xmelab`/`xmsim`·`cds.lib`, Synopsys
-  `vlogan`/`vcs`/`simv`·`synopsys_sim.setup`
-- 오픈소스 선례: Icarus `iverilog`→`.vvp`→`vvp`, GHDL `-a`/`-e`/`-r`·`.cf`, Yosys RTLIL
-- rustc Strict Version Hash (SVH) / StableCrateId — version-gate 모델
+- [03-build-and-portability.md](03-build-and-portability.md) — cargo-only build, MSRV, platform matrix, workspace
+- [04-architecture.md](04-architecture.md) — execution model, pipeline, crate roles, IR design principles
+- [06-simulation-engine.md](06-simulation-engine.md) — the process execution model behind the frozen shape
+- [08-timescale-and-timing.md](08-timescale-and-timing.md) — global precision minimum, directive carryover
+- [09-testing-and-verification.md](09-testing-and-verification.md) — round-trip and equivalence tests
+- [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md) — gated sink, `-Wno-` / `-Werror`, runtime diagnostic rendering
+- [15-error-code-reference.md](15-error-code-reference.md) — the E8xxx and E9xxx bands in full
+- [16-schema-hash-spec.md](16-schema-hash-spec.md) · [17-sim-ir-ir-backbone-freeze.md](17-sim-ir-ir-backbone-freeze.md) — the hash mechanism and the frozen IR
+- [19-ai-agent-observability.md](19-ai-agent-observability.md) — the one-shot observability rail
+- [../manual/004_cli-reference.md](../manual/004_cli-reference.md) · [../manual/007_error-codes.md](../manual/007_error-codes.md) — the user-facing surface
+- [../history/specs/2026-05-26-vitamin-rtl-simulator-design.md](../history/specs/2026-05-26-vitamin-rtl-simulator-design.md) — the originating design
+- Prior art: Cadence `xmvlog` / `xmelab` / `xmsim` with `cds.lib`; Synopsys `vlogan` / `vcs` / `simv` with `synopsys_sim.setup`; Icarus `iverilog` → `.vvp` → `vvp`; GHDL `-a` / `-e` / `-r`; Yosys RTLIL `src` attributes; the rustc strict version hash as a version-gate model

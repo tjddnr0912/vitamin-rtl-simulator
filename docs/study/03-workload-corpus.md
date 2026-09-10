@@ -1,794 +1,456 @@
-# study/03 — 워크로드 코퍼스: 남이 쓴 RTL 로 값을 매기기
+# study/03 — The workload corpus
 
-> **한 줄**: 성능 판단이 설계 **두 개**(picorv32·first-party keccak) 위에 서 있었다. 허가적
-> 라이선스의 서드파티 RTL 여덟 개를 가져와 오라클로 고정하니, **첫 수확이 성능이 아니라
-> 정확성**이었다 — 셋이 거절되고 그 셋이 **전부 같은 축**(상수 도메인의 파라미터 폴딩)이었다.
+Ten real designs, run under `vita` and checked against a digest an external oracle
+produced. This document states what the corpus is for, the contract a workload must
+satisfy, the ten rows and what each exercises, how `corpus-runner` is invoked and how to
+read its table, and what the corpus can and cannot gate.
 
-관련 문서: 성능 축 = [study/01](01-interpreted-vs-compiled.md) · 커버리지 축 =
-[study/02](02-v1-native-coverage.md) · 도구 = `crates/corpus-runner`.
+The tool is [`crates/corpus-runner`](../../crates/corpus-runner); the directory it measures
+is [`bench/`](../../bench/README.md). Companion studies: the performance axis in
+[study/01](01-interpreted-vs-compiled.md), terminology and native-backend coverage in
+[study/02](02-v1-native-coverage.md).
 
 ---
 
-## 1. 왜 지었나
+## 1. What it is for
 
-이 저장소의 성능 결정은 전부 "잴 수 있는 설계" 위에서 내려졌고, 오랫동안 그건 둘이었다:
+A measurement made on one design is a property of that design. Before the corpus, this
+project's performance and coverage judgements rested on two designs — `bench/picorv32`, and
+`bench/keccak`, which was written here to be measured and therefore leans toward the
+bottlenecks already known. A ceiling computed from `keccak_f_arr` alone is a fact about
+`keccak_f_arr`.
 
-| | 출처 | 문제 |
+The corpus exists so that the next claim of the form "this is worth N weeks" is priced
+against RTL nobody here wrote, and so that a defect nobody here suspected has somewhere to
+show up. Both halves pay: the largest single finding it has produced — that every
+continuous assign whose right-hand side reaches a user call was re-evaluated on every settle
+pass — came from a third-party workload rather than from any internal probe.
+
+The RTL is never redistributed. `bench/*/src/` is not committed; the repository carries a
+pinned commit SHA per workload and `corpus-runner fetch` clones it, so any number in this
+document can be reproduced against exactly the source that produced it.
+
+---
+
+## 2. The contract
+
+Canonical text: `crates/corpus-runner/src/lib.rs`. A workload is admitted only if all five
+hold.
+
+1. **Permissive licence** — MIT, BSD-2, BSD-3, ISC or Apache-2.0. A test enforces it.
+2. **An oracle ran it first.** No oracle, no admission, however interesting the design.
+   Icarus Verilog 13.0 is the reference; Verilator 5.050 is a second opinion on 2-state
+   arithmetic only. The oracle runs *before* vita: running vita first leads to trimming the
+   testbench toward what vita accepts, and that destroys the measurement.
+3. **One digest line, accumulated over the whole run** — not final state, which is blind to
+   a divergence the design later overwrites. The pinned digest is the *oracle's* answer, so
+   `corpus-runner run` is a differential gate even on a machine with no other simulator
+   installed.
+4. **Deterministic and self-terminating** — an explicit `$finish`, fixed seeds, a watchdog.
+   A workload must not be able to stall the harness.
+5. **The digest must move when the design changes.** Mutate one line of the upstream RTL
+   and re-run: if the digest survives, the workload gates nothing, and it looks exactly like
+   one that does. Every row is checked this way. A *symmetric* mutation can be dead
+   honestly — in the `verilog-ethernet` loopback, TX and RX share one `lfsr` instance, so a
+   CRC-polynomial change cancels at both ends and only an RX-side datapath mutation moves
+   the digest. A mutation that fails to move a digest and a workload that cannot measure are
+   different conclusions, and asymmetry is what separates them.
+
+Rule 3 also shapes what the corpus can gate at all: a digest accumulated over a whole run
+selects for designs that simulate for seconds and elaborate for milliseconds. §7 is the
+consequence.
+
+---
+
+## 3. The ten workloads
+
+Manifest: `static CORPUS: &[Workload]` in `crates/corpus-runner/src/corpus.rs`. It is a Rust
+`const` table rather than a data file, because the workspace builds `--locked` for
+cross-platform reproducibility and a TOML or JSON manifest would mean a parser dependency
+for a file that changes a few times a year. The compiler checks it instead.
+
+| # | Name | Origin | Shape | Licence | Pinned SHA | Directory | Plusargs | Expect | Oracle |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | `sha256` | github.com/secworks/sha256 | crypto | BSD-2 | `837c5cc396f001d18f2c765721c585716eb439ae` | `sha256` | `+N=2000` | `Runs { exit: 0 }` | iverilog 13.0; verilator 5.050 agrees |
+| 2 | `aes` | github.com/secworks/aes | crypto | BSD-2 | `80dc4718e1dcbbdb4b0dd1bdb393d8f7b98981dc` | `aes` | `+N=200` | `Runs { exit: 1 }` | iverilog 13.0; verilator 5.050 agrees |
+| 3 | `picorv32` | github.com/YosysHQ/picorv32 | cpu | ISC | `a473fc8fca393771d83b0ffcf0b14db3393339d8` | `picorv32` | `+N=400000` | `Runs { exit: 0 }` | iverilog 13.0 only |
+| 4 | `darkriscv` | github.com/darklife/darkriscv | cpu | BSD-3 | `4aa437997cd35253c9111f10a449de13ccaeee78` | `darkriscv/src/sim` | `+N=600000` | `Runs { exit: 0 }` | iverilog 13.0; verilator 5.050 agrees |
+| 5 | `biriscv` | github.com/ultraembedded/biriscv | cpu | Apache-2.0 | `6af9c4be5a0807d368eaad5e49af52322e31d073` | `biriscv` | `+N=50000` | `Runs { exit: 0 }` | iverilog 13.0 |
+| 6 | `serv` | github.com/olofk/serv | cpu | ISC | `41e8aeedfd1e9ad5f95902c5b0dfc83d1c99e5d2` | `serv` | `+N=500000` | `Runs { exit: 0 }` | iverilog 13.0 only |
+| 7 | `verilog-axi` | github.com/alexforencich/verilog-axi | fabric | MIT | `516bd5dadc3365b7f9e225d2af8fe0b8d804fe53` | `verilog-axi` | `+N=5000` | `Split { … }` | iverilog 13.0 |
+| 8 | `verilog-ethernet` | github.com/alexforencich/verilog-ethernet | stream | MIT | `77320a9471d19c7dd383914bc049e02d9f4f1ffb` | `verilog-ethernet` | `+N=1000` | `Runs { exit: 0 }` | iverilog 13.0; verilator 5.050 agrees |
+| 9 | `keccak` | first-party, in this repository | crypto | ours | — | `keccak` | `+N=2000` | `Runs { exit: 0 }` | iverilog 13.0, verilator 5.050 and a Python reference all agree |
+| 10 | `keccak-arr` | first-party, in this repository | crypto | ours | — | `keccak` | `+N=2000` | `Runs { exit: 0 }` | iverilog 13.0, verilator 5.050 and a Python reference all agree |
+
+Shapes, from `enum Shape`, and what each exercises:
+
+| Shape | Rows | Exercises |
 |---|---|---|
-| `bench/picorv32` | 서드파티(ISC) | 하나뿐이다 |
-| `bench/keccak` | **우리가 썼다** | 재려고 쓴 설계다 — 우리가 아는 병목을 재는 쪽으로 저절로 기운다 |
+| `cpu` | picorv32, darkriscv, biriscv, serv | fetch/decode/execute, branchy control, a register file, a bus |
+| `crypto` | sha256, aes, keccak, keccak-arr | a wide fixed datapath, few branches, heavy bit manipulation |
+| `stream` | verilog-ethernet | streaming and handshake pipelines: many small always blocks, high event churn |
+| `fabric` | verilog-axi | parameterised interconnect: elaboration- and generate-heavy |
 
-§4.5.367 이 **아레나 = 6–10 주 · 상한 2.33×** 라는 값을 매겼을 때, 그 65.0% 도 2.33 도
-`keccak_f_arr` **하나**에서 나온 수다. 설계 하나에서 나온 천장은 **그 설계의 성질**이지
-시뮬레이터의 성질이 아니다. 코퍼스는 다음번 *"이건 N 주 값어치가 있다"* 가 **우리가 쓰지 않은
-RTL** 을 상대로 값매김되게 하려고 존재한다.
+Distribution is four crypto, four cpu, one stream, one fabric.
 
-## 2. 계약 — 무엇이 코퍼스에 들어오는가
+### 3.1 Per-row mechanics
 
-`crates/corpus-runner/src/lib.rs` 에 정본이 있고, 넷이다.
+**`sha256`** — four files, the corpus's widest vita margin.
 
-1. **허가적 라이선스만** — MIT / BSD-2 / BSD-3 / ISC / Apache-2.0. RTL 은 **재배포하지
-   않는다**: `bench/*` 는 gitignore 이고, 저장소가 싣는 것은 **핀된 SHA** 뿐이다. 그래서 어떤
-   수치든 그것을 낸 설계를 정확히 복원할 수 있다(`corpus-runner fetch`).
-2. **오라클이 먼저 돌았어야 한다** — 아무리 흥미로워도 오라클 없는 설계는 안 받는다.
-   iverilog 13.0 이 기준이고 verilator 는 2-state 산술에 한한 두 번째 의견이다.
-3. **run 전체를 누적한 다이제스트 한 줄** — 최종 상태가 **아니다**. 최종 상태 비교는 설계가
-   나중에 덮어쓰는 발산에 눈이 멀다. 핀된 다이제스트는 **오라클이 찍은 것**이므로,
-   `corpus-runner run` 은 **시뮬레이터가 없는 기계에서도 차분 게이트**다(CI 엔 iverilog 가 없다).
-4. **결정적이고 스스로 끝난다** — 명시적 `$finish`·고정 시드·watchdog. 워크로드가 하네스를
-   멈춰 세울 수 있으면 안 된다.
-5. ⭐⭐ **설계를 건드리면 다이제스트가 움직여야 한다.** 상류 RTL 한 줄을 변형해 다시 돌려서
-   다이제스트가 **살아남으면 그 워크로드는 아무것도 게이트하지 않는다** — 그리고 게이트하는
-   것과 겉모습이 **정확히 같다**. §4.3 을 보라.
+**`aes`** — seven files. It produces the correct digest and still exits 1: vita reports the
+out-of-range array read in `aes_key_mem.v` as an error where IEEE 1364-2005 §5.2.1 defines
+the behaviour (read x, write ignored) and both oracles stay silent. `Expect::Runs { exit: 1 }`
+pins that rather than grading the workload as a crash, so the over-loud diagnostic stays
+visible and closing it will show up as a row that needs its pin moved.
 
-## 3. 방법 — 오라클 먼저, vita 나중
+**`picorv32`** — the reference RISC-V workload; two files. It uses `tbd.v`, not the older
+`tb.v`, because that one prints final state only and is blind to a divergence the core later
+overwrites. Its oracle is Icarus Verilog only: picorv32's register file starts
+uninitialised, so the design genuinely depends on 4-state semantics and Verilator's 2-state
+approximation produces a different answer (`17b6f447736ac50d`).
 
-여덟 후보를 각각 독립 스카우트가 맡아 같은 순서를 밟았다: clone → 라이선스 → 자립 실행
-구성 → **iverilog** → **그 다음에야** vita. 순서가 요점이다. vita 를 먼저 돌리면 vita 가
-받아들이는 쪽으로 테스트벤치를 깎게 되고, 그 순간 측정이 죽는다. 스카우트에게 준 지침에
-그 문장을 그대로 넣었다:
+**`darkriscv`** — core only; the full SoC (darksocv, darkuart and the rest) is refused, and
+that refusal is a queue row rather than a corpus row. This is the one workload whose `dir`
+differs from its `root`: it runs from `bench/darkriscv/src/sim` because upstream's
+`darkram.v` opens `../src/darksocv.mem` relative to the working directory. Flags are
+`--top tb2 -DSIMULATION=1 -D__WAITSTATE__=7 -I ../rtl` for vita and `-s tb2` with the same
+defines and includes for Icarus Verilog; files `../../tb2.v ../rtl/darkriscv.v
+../rtl/darkram.v`; data `../src/darksocv.mem`.
 
-> *"vita 가 거절하거나 틀리는 설계는 네가 가져올 수 있는 가장 값진 결과다. vita 가 받아들이게
-> 하려고 RTL 을 단순화·재작성·축소하지 마라 — 그건 측정을 파괴한다."*
+**`biriscv`** — dual-issue, 23 source files, the largest design that runs at 8.8k lines.
+`--top tb_top -I src/src/core -D TRACE=0`. Its firmware `prog.hex` is upstream content
+extracted from `test.elf`, so it is not committed; `bench/biriscv/prepare.sh` regenerates
+it.
 
-## 4. 결과
+**`serv`** — bit-serial, roughly 35 clocks per instruction, which makes it a
+scheduler-throughput workload. 27 source files, data `src/sw/blinky.hex` (byte-identical to
+upstream's own copy, so also not committed). `--top tb` / `-s tb` is not optional: the file
+list has three uninstantiated roots (`tb`, `serv_rf_top`, `servile_rf_mem_if`), and without
+the flag the oracle elaborates three designs where vita elaborates one, so the comparison
+stops being between the same thing. Its oracle is Icarus Verilog only: SERV reads an
+uninitialised register file and drives x deliberately, so Verilator's 2-state result
+(`e7e8b5e6c1276563`) is a different design's answer.
 
-### 4.1 정확성 — 거절 셋이 전부 한 축이었다
+**`verilog-axi`** — a 2×2 crossbar, elaboration- and generate-heavy, ten files. It
+elaborates and runs, and its digest is not the oracle's. §6.1 covers the ruling.
 
-셋 다 **상수 도메인**이고, 셋 다 파라미터 값 폴딩이다.
+**`verilog-ethernet`** — GMII loopback, five files, the only streaming shape.
 
-| 설계 | 구문 | 도메인 | 오라클 |
+**`keccak` / `keccak-arr`** — first-party RTL committed in this repository, sharing
+`bench/keccak` and differing in exactly one thing: `keccak_f_arr.sv`'s `rho` builds a
+25-element array on every call where `keccak_f.sv` does not. Same expected digest. That one
+difference is worth 2.0×, which makes `keccak-arr` the corpus worst case and the only design
+from which the frame-arena estimates were computed. The oracle is three-way and anchored
+rather than merely mutual: the all-zero-state first lane is the published Keccak value
+`f1258f7940e1dde7`. Recipe: [`bench/keccak/RUN.md`](../../bench/keccak/RUN.md).
+
+`bench/keccak/keccak_f_flat.sv`, generated by `gen_flat.py`, is deliberately not a corpus
+row: it exists to measure the call regime (study/01 §2.4).
+
+`bench/ibex/` exists on disk and is not in the manifest. Icarus Verilog 13 cannot parse
+`ibex_pkg.sv` — a syntax error on the named assignment pattern of a struct-typed
+`localparam`, and an internal assertion abort in `net_scope.cc` when it is rewritten
+positionally — so contract rule 2 excludes it. That is a reason to build a hand-IEEE pin,
+not a reason to defer; it is recorded as a queue row, and admitting it would make the
+corpus's first SystemVerilog workload.
+
+### 3.2 Pinned digests
+
+| Workload | Pinned digest |
+|---|---|
+| `sha256` | `DIGEST=e75e29e81cff3c66de9e0f419baa516ea08e6414fa1f9f62a757538288351724` |
+| `aes` | `DIGEST=cfaa46dd896b2275ade662d344f5e251` |
+| `picorv32` | `DIGEST=68d30f61bf9bf1d4` |
+| `darkriscv` | `DIGEST=59370cf8b1d0503d` |
+| `biriscv` | `DIGEST=22481d1cacf87584` |
+| `serv` | `DIGEST=f3f45af36093b2b1` |
+| `verilog-axi` | `DIGEST=3b9321d5ea42f302` (oracle) and `DIGEST=fd90a1407928ebc8` (vita) |
+| `verilog-ethernet` | `DIGEST=ca4945d0044f74d8` |
+| `keccak`, `keccak-arr` | `perms=2000 lane0=54aa20c46ef0e0f6 lane1=b19e9f995e1f41d3 acc=767c5ab6776c4bde` |
+
+The manifest's `note` fields deliberately carry no timings. A number written in two places
+rots in one of them; the timings live in §7 of this document, and
+`corpus-runner run --compare` reproduces them.
+
+---
+
+## 4. Running it
+
+`corpus-runner` has no external dependencies (std only), carries `#![forbid(unsafe_code)]`
+and is `publish = false`.
+
+```
+corpus-runner — the vitamin workload corpus
+
+    list                       what the corpus contains, and what is on this machine
+    fetch [--run]              show (or perform) the clones the corpus needs
+    run [--filter S] [--reps N] [--compare]
+                               run each present workload and check its pinned digest
+                               --reps N = N TIMED samples (N+1 rounds; the first is
+                               discarded as cache warm-up). Default 3.
+                               --compare also times iverilog on the same workloads.
+
+exit: 0 = every present workload matched  ·  1 = a mismatch or crash
+      2 = nothing present (run `fetch` first)  ·  3 = usage
+```
+
+Invoke as `cargo run -p corpus-runner -- <cmd>`. With no subcommand, `list` is the default;
+`-h`, `--help` and `help` print the usage text and exit 0. `run` requires a release binary at
+`target/release/vita`, so build first:
+
+```bash
+cargo build --release -p cli --locked
+cargo run -p corpus-runner -- fetch --run
+cargo run -p corpus-runner -- run --compare
+```
+
+### 4.1 Exit codes
+
+| Code | Every path that returns it |
+|---:|---|
+| **0** | `list`; `fetch` (with or without `--run`) where no command failed; `run` where at least one workload is present and no row is a failure |
+| **1** | `fetch --run` where a clone or a `prepare.sh` exits non-zero or fails to spawn; `run` where any row is a failure (stderr: `corpus-runner: {n} failing`) |
+| **2** | `run` where `--filter` matched no workload; `run` where every job was `Absent` (`no workload is present on this machine — run 'corpus-runner fetch --run'`) |
+| **3** | no repository root found (no `bench/` above the crate); an unknown subcommand; `--filter` with no value; `--reps` with an unparseable value; no `vita` binary at `target/release/vita` or `target/debug/vita` |
+
+### 4.2 Reading the `run` table
+
+The table is fixed-width. Parse it by column offset, not by whitespace — the detail column
+contains spaces.
+
+```
+{workload:<18} {tool:<10} {grade:<11} {median:>9}  {detail}
+```
+
+`median` renders as `{s:.3}s`, or `-` when nothing was timed. Tool labels are `vita`,
+`iverilog` and `verilator`; `Tool::Verilator` exists in the enum but no verilator job is ever
+built, because Verilator is a half oracle (§6.2). The phase split is printed *below* the
+table rather than as a column, deliberately: a new column moves every consumer's parse.
+
+**The eight grades.** `is_failure()` is exactly `Regression | Drifted | OracleDrifted` —
+three strings, and nothing else in the output means failure.
+
+| Variant | Printed | Failure? | Meaning |
 |---|---|---|---|
-| **verilog-ethernet** | `parameter SI = (S=="AUTO") ? "RED" : S;` (`lfsr.v`) | **문자열 삼항** | iverilog + verilator — **설계도 최소 재현도 둘 다** |
-| **serv** | `.RESET_STRATEGY(reset_strategy)` — 문자열 파라미터를 아래로 전달 | **문자열 Ident** | iverilog |
-| **verilog-axi** | `parameter S_THREADS = {S_COUNT{32'd2}};` | **정수 replication/concat** | iverilog |
+| `Ok` | `ok` | no | the pinned digest matched |
+| `KnownGap` | `known-gap` | no | a pinned refusal produced its pinned diagnostic — the ladder is working |
+| `Regression(why)` | `REGRESSION` | **yes** | see the grading table below |
+| `Promoted` | `PROMOTED` | no | a refused or split row now matches the oracle. Uppercase, and not a failure |
+| `RuledSplit` | `ruled-split` | no | a split row reproduced vita's own pinned answer. Neither a pass nor a failure |
+| `Drifted { got }` | `DRIFTED` | **yes** | a refused row produced a *different* refusal, so the pin stops describing the design |
+| `Absent` | `absent` | no | the sources are not on this machine |
+| `OracleDrifted { got }` | `ORACLE-DRIFT` | **yes** | the oracle stopped reproducing the pin |
 
-앞의 둘은 **같은 함수**다. `elaborate/src/strings.rs::param_str_literal` 은 `StrLit` 와 `Paren`
-두 팔만 있다 — 문자열 상수 도메인이 **리터럴 전용**이다. §4.5.364 의 *"구조적 지연의 값 fold 가
-리터럴 전용이었다"* 와 **같은 모양**이며, 그때와 마찬가지로 큐에는 한 줄로만 적혀 있었다.
-
-최소 재현으로 좁힌 결과(각 4칸 · iverilog **와 verilator** 둘 다 대조 — 축 자체에 2-오라클이 있다):
-
-```
-parameter A = 1 ? "RED" : "BLUE";          vita: E3009    iverilog: RED     ← 조건이 리터럴이어도 거절
-localparam EQ = (S == "AUTO");             vita: 1        iverilog: 1       ← 문자열 비교는 이미 정확
-parameter SI = "RED";                      vita: RED      iverilog: RED     ← 문자열 리터럴도 이미 정확
-generate if (S == "AUTO") …                vita: took-auto iverilog: took-auto ← generate 도 이미 정확
-```
-
-즉 **막힌 것은 삼항 하나**다. 정수 팔의 삼항은 접히고 문자열 팔은 안 접힌다 — 두 도메인이
-삼항에서 만나지 않는다.
-
-### 4.2 그 밖의 정확성 수확
-
-- **darkriscv 전체 SoC 거절** — `darkuart.v:303` 의 `UART_RFIFO <= $fgetc(…)`. vita 의 술어가
-  *"직접 **blocking** 대입의 rhs"* 로 철자돼 있어 **논블로킹 쌍둥이가 거절**된다. 한 가지에만
-  있는 가드 = [[branch-parity-before-new-traffic]] 그대로다. (코어만 남긴 축소 하네스는 통과해서
-  그쪽이 코퍼스 행이 됐고, SoC 거절은 §3 행으로 갔다.)
-- **ibex = no-oracle** — iverilog 13.0 이 `ibex_pkg.sv` 를 **아예 못 읽는다**. struct 타입
-  localparam 의 named assignment pattern 에서 syntax error 를 내고, positional 로 바꾸면
-  **abort 한다**(`net_scope.cc:449` assertion). vita 도 같은 줄에서 loud 다. 계약 ②에 따라
-  코퍼스에서 뺐다 — 다만 [[no-oracle-not-a-defer-reason]] 대로 *"오라클이 없다"* 는 미루는
-  이유가 아니라 **hand-IEEE 로 지어야 한다**는 뜻이므로 §3 행으로 남긴다.
-
-### 4.3 ⭐⭐ 그리고 워크로드 하나가 **아무것도 재고 있지 않았다**
-
-적대 differential 렌즈가 멈춰 서기 전에 한 줄을 남겼다 — *"picorv32 의 다이제스트가 코어의
-덧셈기를 변형했는데 안 움직인다."* 확인해 보니 사실이었다:
+**The non-determinism marker.** `is_nondeterministic()` is `digests.len() > 1`. When true,
+the detail column is overwritten regardless of grade:
 
 ```
-picorv32.v:1240   reg_op1 + reg_op2   →   reg_op1 + reg_op2 + 32'd1
-CONTROL : DIGEST=7836648e76208dc9
-MUTATED : DIGEST=7836648e76208dc9     ← 바이트 동일
+*** NON-DETERMINISTIC *** {digest1}  |  {digest2}[  |  …]
 ```
 
-⭐ 근인 = **테스트 프로그램이 저장을 안 했다.** `addi`/`add`/`beq` 루프뿐이라 계산된 레지스터
-값이 **메모리 버스에 한 번도 나오지 않는다**. 그런데 다이제스트가 볼 수 있는 건 버스뿐이다 ⇒
-그 다이제스트는 **설계 검사의 이름을 단 프로그램 카운터 추적**이었다. 사이클 해상도였고,
-결정적이었고, iverilog 와 일치했다 — **그리고 코어에 대해 아무것도 주장하지 않았다.**
+The check runs *before* the grade match, deliberately: two distinct digests from one tool is
+a bigger fact than whichever one the last round happened to produce, and gating the marker
+behind `Grade::Ok` makes it unreachable, since a differing digest retires the job as a
+mismatch. A flapping tool would then be reported as a consistently wrong one.
 
-고침 = 프로그램이 매 바퀴 `sw x5, 64(x0)` 로 저장하고 `x1` 을 바퀴 사이로 나른다. 같은 변형이
-이제 다이제스트를 움직인다.
+**Otherwise the detail column is:**
 
-그리고 이건 **한 워크로드의 사고가 아니라 계약의 구멍**이었으므로, 나머지 여덟도 전부 상류
-RTL 한 줄씩 변형해 확인했다 — **아홉 전부 움직인다**.
+| Grade or outcome | Detail |
+|---|---|
+| `Regression(why)` | `why`, verbatim |
+| `Drifted { got }` | `expected a different refusal; got {got}` |
+| `Promoted` | `now runs — move its manifest row to Expect::Runs` |
+| `RuledSplit` | `ruled split — {why}` |
+| `KnownGap` with `Refused { diag }` | `diag` |
+| `OracleDrifted { got }` | `the ORACLE no longer reproduces the pin: {got}` (verbatim tool output) |
+| `Absent` | `fetch first` |
+| anything else | empty |
 
-| 워크로드 | 변형한 자리 | |
+**After the table**, `run` prints the phase split (one line per matched vita row:
+`{name:<18} elab {elab_s:.3}s  sim {sim_s:.3}s  ({pct:.0}% front end)`); with `--compare`,
+one comparison line per workload
+(`{name:<18} vita {v:.3}s  iverilog {i:.3}s  = {ratio:.2}x {faster|SLOWER}`, where
+`ratio = iverilog / vita` and the verdict word is `faster` at 1.0 or above); one line per
+promoted row; and always
+`coverage: {runs}/{total} of the corpus runs under vita`.
+
+`list` prints `{workload:<18} {shape:<7} {origin:<9} {licence:<12} {vita:<9} note`, the same
+coverage line, and one indented line per row that is not plain `Runs`. `origin` renders as
+`in-repo` or `upstream`; the `vita` column renders `runs`, `refused` or `split`.
+
+### 4.3 The grading table
+
+For any tool other than vita the only question is whether the oracle still reproduces the
+pin: `Absent` grades `Absent`, `Match` grades `Ok`, and every other outcome — a mismatch, a
+refusal, a non-zero exit, a timeout — grades `ORACLE-DRIFT`.
+
+For vita:
+
+| Manifest `Expect` | Outcome | Grade |
 |---|---|---|
-| picorv32 | `picorv32.v` ALU 덧셈기 | ✅ (고친 뒤) |
-| sha256 | `sha256_core.v` 의 `t1` 라운드 상수 | ✅ |
-| aes | `aes_encipher_block.v` 의 `new_block` | ✅ |
-| biriscv | `biriscv_alu.v` 의 `ALU_ADD` | ✅ |
-| darkriscv | `darkriscv.v` 의 `RMDATA` | ✅ |
-| serv | `serv_alu.v` 의 `result_add` | ✅ (X 로 발산 = 움직임) |
-| keccak · keccak-arr | `keccak_f*.sv` 의 theta rotl | ✅ |
-| verilog-axi | `axi_ram.v` 의 read 경로 | ✅ |
-| verilog-ethernet | `axis_gmii_rx.v` 의 RX 데이터패스 | ✅ |
+| any | `Absent` | `absent` |
+| `Runs` | `Match` | `ok` |
+| `Runs` | `Mismatch { got }` | `REGRESSION` — *digest changed: {got}* |
+| `Runs` | `Refused { diag }` | `REGRESSION` — *newly refused: {diag}* |
+| `Runs` | `Crashed { code, tail }` | `REGRESSION` — *exit {code}: {tail}* |
+| `Runs` | `Timeout` | `REGRESSION` — *timed out* |
+| `Refused` | `Match` | `PROMOTED` |
+| `Refused` | `Refused { got }` containing the pinned fragment | `known-gap` |
+| `Refused` | `Refused { got }` not containing it | `DRIFTED` |
+| `Refused` | `Mismatch { got }` | `REGRESSION` — *was loud, now silently wrong: {got}* |
+| `Refused` | `Crashed` | `REGRESSION` — *was loud, now crashes* |
+| `Refused` | `Timeout` | `REGRESSION` — *was loud, now hangs* |
+| `Split` | `Match` (the oracle digest) | `PROMOTED` — the split closed |
+| `Split { vita }` | `Mismatch { got }` where `got == vita` | `ruled-split` |
+| `Split { vita }` | `Mismatch { got }` where `got != vita` | `REGRESSION` — *digest changed* |
+| `Split` | `Refused` / `Crashed` / `Timeout` | `REGRESSION` |
 
-⚠️ **죽은 변형에 속지 마라.** verilog-ethernet 은 처음에 *"안 움직인다"* 를 냈는데 결함이
-아니었다 — 이 설계는 **루프백**이고 TX·RX 가 **같은 `lfsr` 모듈**을 쓴다. CRC 다항식을 바꾸면
-TX 가 틀린 FCS 를 붙이고 RX 가 그것을 **정확하다고 검증**한다 ⇒ 대칭 변형은 상쇄된다. RX
-쪽만 건드리니 즉시 움직였다. **변형이 안 먹혔다는 것과 워크로드가 못 잰다는 것은 다른
-결론**이고, 둘을 가르는 건 변형의 **비대칭성**이다.
+The `Refused → Mismatch` cell is pinned by name in a unit test,
+`loud_becoming_silently_wrong_is_a_regression`, because loud-to-silently-wrong is the one
+move the accuracy ladder forbids. A refused design that starts answering, and answers
+wrongly, must not grade as a promotion.
 
-⇒ 계약에 다섯 번째 항목이 생겼다(§2-5). 그리고 ⭐ **멈춰 선 렌즈의 부분 출력도 결과다** —
-이 슬라이스의 가장 값진 발견 하나가 5시간 stall 로 죽은 에이전트가 남긴 한 문장에서 나왔다.
+The exit code lives inside `Expect::Runs { exit }` rather than beside it as a free field, so
+a refused row has nowhere to write one. A refused workload is expected to exit **0** if it
+ever starts running — that is the promotion, and it has to be observable. A correct digest
+with the wrong exit code grades `Crashed` with the tail
+*"digest correct but exit {c}, expected {want}"*, not a mismatch.
 
-### 4.4 성능 — 서드파티에서는 vita 가 이긴다
+### 4.4 Measurement discipline built into the harness
 
-`bench/keccak` 이 그리던 그림("iverilog 와 동률, `keccak_f_arr` 에서만 진다")과 **다른 그림**이
-나왔다. 실제로 남이 쓴 RTL 에서 vita 는 대체로 앞선다.
+`measure(jobs, reps, budget)` is called once by `main` with **all** jobs and a 600-second
+budget, so round-robin interleaving is the default shape rather than an option. The full
+protocol these implement is study/01 §5.
 
-| 워크로드 | 모양 | 라이선스 | iverilog | vita | 비 |
-|---|---|---|---|---|---|
-| **sha256** (secworks) | crypto | BSD-2 | 3.988 s | **1.287 s** | **3.10×** |
-| **biriscv** (ultraembedded, dual-issue) | cpu | Apache-2.0 | 8.934 s | **3.932 s** | **2.27×** |
-| **aes** (secworks) | crypto | BSD-2 | 5.878 s | **2.628 s** | **2.24×** |
-| *keccak* (1st-party) | crypto | ours | 8.917 s | **4.074 s** | **2.19×** |
-| **picorv32** (YosysHQ) | cpu | ISC | 6.801 s | **4.336 s** | **1.57×** |
-| **darkriscv** (코어만) | cpu | BSD-3 | 6.890 s | **6.429 s** | **1.07×** |
-| **serv** (bit-serial) | cpu | ISC | 7.040 s | 7.456 s | **0.94×** |
-| *keccak-arr* (1st-party) | crypto | ours | 8.766 s | 12.959 s | **0.68×** |
-| verilog-axi · verilog-ethernet | — | — | 6.8–7.8 s | **거절** | — |
+- The loop is `for round in 0..=reps.max(1)`, so there are `reps + 1` rounds, and a sample is
+  recorded only when `round > 0`. The first round is discarded as cache warm-up. `--reps`
+  defaults to 3, giving 4 rounds and 3 timed samples. `--reps N` means N *samples*.
+- `median()` sorts and returns the middle element, or the average of the middle pair for an
+  even count, and `None` for an empty set.
+- A job that did not produce `Match` is retired and not re-run: repeating it cannot change
+  the verdict and would delay the jobs still being timed. A `ruled-split` row is therefore
+  never timed and shows `-` in the median column.
+- Presence is tested on the **sources** (`missing_source()`), not on the directory, because
+  `fetch` creates `bench/<root>/src` and that makes `bench/<root>` exist. Testing the
+  directory turns a `cannot read 'tb.v'` into a refusal and grades it *newly refused*.
+- `run_bounded()` enforces the wall-clock budget by hand, since macOS ships no `timeout(1)`,
+  and drains both pipes on their own threads for the child's whole life. The common
+  `try_wait` plus `wait_with_output` shape deadlocks the moment a workload outruns the pipe
+  buffer — the child blocks in `write`, so it never exits, and the parent never reads because
+  it has not exited — which then reports an honest, immediate refusal as a hang.
+  `verilog-axi` emits 19 238 bytes of diagnostics and a macOS pipe starts at 16 KiB.
+- `digest_line()` scans **stdout only**, in reverse, for a line containing `DIGEST=` or
+  ` acc=`; the contract is that the digest is the last such line. stdout and stderr are kept
+  apart so a stderr line containing `DIGEST=` can never outrank the real one.
+- `refusal()` prefers the pinned diagnostic wherever it appears in stderr and falls back to
+  the first `error[` or `error:` line only when the pin is absent. Grading on emission order
+  would make a harmless reordering read as a drift: `verilog-ethernet` emits 24 warnings
+  before its pinned error, and `verilog-axi` emits 54 errors of which the pinned one is
+  merely first.
+- `prepare_iverilog()` compiles the `.vvp` **before** the timed rounds
+  (`iverilog -g2012 {args} -o {vvp} {files}` in the workload's directory), so what is timed
+  on each side is simulation rather than vita paying for elaboration while Icarus Verilog
+  pays for nothing. A failure prints `corpus-runner: no iverilog comparison for {name}: {e}`
+  and is not a corpus failure. `vvp_path()` writes the `.vvp` outside `dir` so `darkriscv`,
+  which runs from inside its clone, does not dirty it.
+- `probe_phases()` runs one **extra** vita invocation with `--obs-dir` and reads `elab_s` and
+  `sim_s` out of `run.json`. One sample, and a separate run: folding `--obs-dir` into the
+  timed command would add its file writes to every vita wall time and make the headline
+  numbers incomparable with the ones pinned in this file and the README.
+- `vita_binary()` prefers `target/release/vita`, falls back to `target/debug/vita` and warns
+  on that path — `corpus-runner: WARNING measuring a debug binary; timings are not
+  comparable` — and with no binary at all errors `run 'cargo build --release' first` and
+  exits 3.
 
-> 기하평균 **1.58×** (도는 여덟) · **1.72×** (서드파티 여섯) · **1.94×** (serv 를 뺀
-> 서드파티 다섯 = 2026-08-23 과 같은 집합). 측정 = 릴리즈 바이너리,
-> **인터리브 · 타임드 샘플 3개**(라운드 4회, 첫 회 폐기), 다른 부하 없는 상태.
-> 재현 = `corpus-runner run --compare`. ⚠️ 이 표가 **수치의 유일한 자리**다 — 매니페스트의
-> `note` 는 일부러 시간을 안 들고 있다(두 벌을 적었더니 실제로 여섯 행이 셋째 자리에서 갈렸다).
+Interleaving is a property of the call site, not of the type. Passing all jobs at once makes
+round-robin the default, but calling `measure(&jobs[0..1])` and then `measure(&jobs[1..2])`
+is block-sequential measurement again.
 
-⭐ **`keccak` 가 1.10× → 2.18× 로 올라갔다** (2026-08-28, 다섯 변경). 아래 재측정 절을 보라.
-`keccak_f_arr` 는 지금도 코퍼스 최악(0.68×)이고, 아레나 추정 2.33× 는 전부 **그 하나**에서
-나온 수다.
+---
 
-⚠️ **지는 셋 중 둘이 사라졌다.** `darkriscv` 는 **1.08× — 앞선다**이고 `serv` 는 0.80 → **0.95×**
-다. 둘 다 아레나 가설과 **무관한 이유**로 지고 있었다는 것이 2026-08-28 에 드러났다: 기본
-백엔드가 델타마다 `Vec` 두 개를 새로 할당하고 있었고(interp 쪽은 수년째 재사용한다), 그건
-프레임 레짐과 아무 상관이 없다. 트래커가 *"다음 계측은 darkriscv 부터"* 라고 적어 둔 이유가
-정확히 이것이었고 — 아무도 그 설계를 들여다보지 않은 채 해결됐다.
+## 5. Fetching, and what is committed
 
-남은 하나는 `keccak_f_arr`(0.67×)이고, 그건 여전히 호출마다 25원소 배열을 짓는 프레임 로컬
-배열이다.
+`plan_fetch(root)` produces one `FetchStep` per upstream workload. `fetch` prints the plan
+and executes it only with `--run`:
 
-#### Re-measurement, 2026-08-28
-
-The whole corpus was re-timed after two changes to how a process body reaches the
-compiled backend. Nothing else in the table moved by more than run-to-run noise,
-which is itself the finding: the two changes are worth a lot on exactly one shape.
-
-- **A user call no longer excludes the body that holds it.** The compile gate used
-  to refuse an entire process body if any expression in it called a function or a
-  task, so a single call dropped the whole body onto the generic evaluator.
-- **A `case` evaluates its scrutinee once.** It used to be re-evaluated per arm —
-  and, with a default-only `case`, not at all. That was a correctness defect in two
-  directions before it was a performance one.
-
-Together they moved `keccak_f.sv` from 8.11 s to 5.41 s (**-33%**) at an unchanged
-digest. `keccak-arr` did not move at all: the per-call frame-local array it exists to
-measure is a different cost.
-
-A **third** change, later the same day, moved both. `Value::resize_keep_sign` — which
-every whole-net read goes through — combined the signedness, called `resize`, and
-re-stamped the signedness; at EQUAL width that call is a 72-byte copy in and a copy
-out to perform two field writes, because `resize`'s own arm at equal width does
-nothing else. Answering equal width in place is **keccak_f −17.2%, keccak_f_arr
-−13.7%**, and −11% to −18% across the corpus — the first change on this axis that
-helped a design with no subroutine calls in its hot path.
-
-That took the `keccak` row from 1.10× to **2.09×**, and `keccak-arr` from 0.53× to
-**0.67×**. `darkriscv` went 0.78× → **0.96×** — and a fourth change later the same day
-took it the rest of the way to parity (see below).
-
-The standing call-regime measurement is `keccak_f.sv` against `keccak_f_flat.sv`
-(same algorithm, subroutines expanded by `gen_flat.py`): **4.07 s vs 0.59 s = 6.9×**,
-down from 8.9×. That is the headroom still on the table, and it is why compiling the
-*callee* body is the next item rather than a finished one. Full numbers, including
-verilator, in `bench/keccak/RUN.md`.
-
-#### A fourth change, and the reason it is filed separately
-
-Later on 2026-08-28 the default backend stopped allocating two `Vec`s per DELTA, and
-stopped throwing away `ca_dirty`'s capacity on every continuous-assign fixpoint pass.
-Neither is in the eval/frame regime at all, and that is the point: **serv −14.6%,
-sha256 −9.8%, picorv32 −5.0%, darkriscv −4.9%**, while `keccak` and `aes` — the two
-most call-heavy rows — did not move.
-
-⭐ So the corpus's two losing CPU rows were losing for a reason the arena hypothesis
-never explained, and the tracker had said so: it named `darkriscv` as the next thing to
-measure precisely because *"지는 이유가 아레나 가설과 다를 수 있다"*. It was. The
-interpreter had had the fix for years; the default backend never got it.
-
-⚠️ A census of the corpus also re-prices the arena item itself. `frame_bodies` is **0**
-on sha256, picorv32 and darkriscv — their 38, 33 and 9 functions are all INLINED — so a
-frame arena would do nothing for them. Its demand is aes (18), biriscv (7) and keccak (3),
-and that is the whole of it.
-
-#### A fifth change: the frame window itself, before the arena
-
-The arena item's own first two slices landed the same day and are worth separating from
-it, because they need none of its machinery.
-
-All three frame-entry sites rebuilt the callee's local window from the IR on **every
-call** — a `Vec` allocation, `locals_len` `Value` constructions, and a `free` at the pop —
-for a list that is a pure function of the immutable IR. It is now a per-function template
-built once, plus a capacity-capped free-list of retired windows. ⭐ And the arm for a
-function whose locals are all STATIC — which is what a plain non-`automatic` Verilog
-function is — built that window on every call and handed it to `entry().or_insert()`,
-which **drops it on every call but the first**. Separately, the static slab moved off a
-`BTreeMap` keyed by a dense `FuncId` onto a `Vec` indexed by it: deterministic by
-construction, an index instead of a tree descent.
-
-```text
-  keccak     -7.7%     aes  -6.8%     keccak-arr -3.5%     sha256 -3.3%
-  picorv32   -2.2%     biriscv -1.4%  serv -0.5%           darkriscv +0.6% (noise)
+```
+git clone --filter=blob:none --no-checkout {repo} bench/{root}/src
+git -C bench/{root}/src fetch --depth 1 origin {sha}
+git -C bench/{root}/src checkout --detach {sha}
+[sh bench/{root}/prepare.sh]
 ```
 
-⚠️ Two of those rows have **`frame_bodies` = 0**, so the win there is the *other* half of
-the change: `sha256` and `picorv32` never take a frame call, and what moved for them is
-the throwaway-window arm plus the slab index.
+A workload that is already present still re-runs its `prepare.sh` under `--run`: those
+scripts regenerate deliberately uncommitted artifacts and are idempotent.
+`bench/biriscv/prepare.sh` is the only one, regenerating `prog.hex` from upstream's
+`test.elf`.
 
-⭐ Note what this says about the arena estimate. Two of the three slices scoped under it
-(5a, 5b) delivered a corpus-wide win **without touching the window's representation at
-all** — the thing the 6-to-10-week estimate is about. The remaining slice (5c, the flat
-word buffer that lets `wprog` compile frame bodies) is where that estimate actually lives,
-and it should be re-priced against a fresh profile rather than against the number written
-before these two.
+Two kinds of file live under `bench/`, treated oppositely. Testbenches, file lists,
+`RUN.md`, `run.sh`, `prepare.sh` and the first-party `bench/keccak/*.sv` are committed: they
+are this project's work product, and a pinned SHA reconstructs the upstream RTL but not the
+harness — and the harness is what produced the digest. The upstream clone, the firmware
+images extracted from it, and every build product are not. `.gitignore` implements this as
+an **allow-list**: everything under `bench/` is ignored, with explicit re-adds for `tb*.v`,
+`tb*.sv`, `files.txt`, `RUN.md`, `README.md`, `run.sh`, `prepare.sh`, `*.py` and
+`bench/keccak/*.sv`, and outright ignores for `/bench/*/src/`, `/bench/*/obj_dir*/` and
+`/bench/ibex/`. A stray binary or scratch probe cannot be committed by accident.
 
-#### The re-pricing, and why it moved the next slice off the arena
+---
 
-That re-pricing was done the same day, and it came back reversed in two directions.
+## 6. Current state
 
-**The ceiling went UP, and it is not where the estimate said.** Leaf-attributed profiles
-(`/usr/bin/sample`, idle thread excluded) put the share of the run spent inside a frame
-call, and within that the share spent in the generic evaluator and `Value` — the part a
-compiled frame body would replace:
+`coverage()` counts rows that are not `Expect::Refused`. No row is refused, so `list` and
+`run` print `coverage: 10/10`. A clean run grades nine rows `ok` and one, `verilog-axi`,
+`ruled-split`.
 
-| design | inside a frame call | generic-evaluator share | ceiling if removed |
-|---|---|---|---|
-| **aes** | 88.8% | **68.0%** | **3.13×** |
-| keccak-arr | 82.5% | 60.4% | 2.52× |
-| keccak_f | 44.8% | 39.3% | 1.65× |
+### 6.1 The ruled split
 
-⭐ The standing "ceiling 2.33×" was computed from `keccak-arr` alone. The real maximum is
-**aes** — a third-party design, and one already winning at 2.22×. `keccak-arr`, the design
-the estimate was built on, is only second.
+`verilog-axi` elaborates and runs. Its digest is not the oracle's, and the whole of the
+difference is `XC=29` against `XC=0`: 29 cycles out of 123 166 in which the crossbar's
+registered `valid` outputs are `x` in Icarus Verilog and definite in vita. Everything else
+matches — the same cycle count, the same handshake, the same per-master data digests.
 
-**And the next slice is still not the arena.** `darkriscv` sits at parity and has
-`frame_bodies` = **0**, so nothing above applies to it — yet 45% of its run is in the
-generic evaluator (`eval_ctx` 16.8%, `eval_binary_ctx` 6.7%, `read_net` 5.6%, `log_eq`
-5.2%, `Value::clone` 3.6%, `from_packed` 2.8%, `mask_top` 2.7%, `resize` 2.4%) while the
-compiled `WProg::run` is 6.8%. Its process bodies are **13 of 16 admitted**, so the gap is
-not body admission — it is expression-level `wprog` declines *inside* admitted bodies.
+Two states were not enough for this row. `Expect::Refused` grades it *"was loud, now
+silently wrong"* — the right shape for a refused row that starts answering wrongly, and
+permanently red here. `Expect::Runs` with vita's own digest would be self-certifying, which
+is what the corpus exists to prevent.
 
-A temporary execution-weighted census (instrumentation measured and reverted, not
-committed) found **325k of 568k compile requests declined — 57% — and one node kind is
-78% of them**:
+The axis is measured and ruled. The residual is time-zero continuous-assign event ordering
+(ROADMAP §2-N), where **the oracle answers two ways to the same question**: with identical
+operands and identical values, `wire w = a | b;` fires the `always @*` that reads it at time
+zero and `wire w = a & b;` does not. Verilator settles everything and has no vote. There is
+no oracle to match, only a ruling.
 
-```text
-  declined 252975  ok 17487   Ternary        w=32
-  declined  20000  ok     0   BitXor         w=92   (over the 64-bit lane)
-  declined  19999  ok     0   Eq             w=1
-  declined  16645  ok  2504   LogOr          w=1
-  declined   8746  ok     0   LogAnd         w=1
-  declined   2500  ok     0   Ne             w=1
-```
+`Expect::Split { vita, why }` pins **both** digests and names the ruling. It is not a pass:
+the row reads `ruled-split` on every run with its reason on the line. vita's own answer
+moving is still a `REGRESSION`, and the day the two agree the row grades `PROMOTED`, which
+is the event it waits for. The state exists for a divergence the oracle cannot arbitrate and
+for nothing else — a digest that merely fails to match is a finding, not a split.
 
-⭐⭐ And the work-list is **small**. The compile cache runs `compile` once per
-`(eid, w, signed)`, so those request counts are execution weight, not distinct
-expressions: the Ternary bucket is **29 distinct expressions** requested 253k times, and
-they decline because a BRANCH declines (17 else, 6 cond, 4 then) — only 2 for the
-`LoadIdx`-in-an-untaken-branch rule the arm is written around. The width-1 comparisons
-never compile on this design at all (31k requests, 0 successes), which is the
-`lw.signed != rw.signed` gate — the same family `wprog`'s own header records a round-34
-report finding worth **2.9×**.
+### 6.2 Which oracle applies to which row
 
-⚠️ That header's census was over **picorv32 and keccak**. This corpus exists because that
-pair is not the corpus, and `darkriscv` and `serv` were not in it. So the next performance
-slice is `wprog` expression admission, not 5c: a 29-item list, covering exactly the three
-designs (`sha256`, `picorv32`, `darkriscv`) an arena would do nothing for, and not a
-six-to-ten-week item.
+Verilator is a half oracle and the manifest records per row which tool arbitrates it. It
+agrees on sha256, aes, verilog-ethernet and darkriscv. It disagrees on picorv32
+(`17b6f447736ac50d`) and serv (`e7e8b5e6c1276563`), and in both cases the design reads an
+uninitialised register file on purpose, so a 2-state approximation is answering a different
+question. `--compare` therefore invokes Icarus Verilog only.
 
-#### Is 4-state the cost? A corpus census says no — the METADATA is
+The two `keccak` rows have the strongest oracle in the corpus: three independent
+implementations agree, and the agreement is anchored to a published constant rather than
+being mutual.
 
-VCS is a 4-state simulator and it is fast, which by itself refutes "4-state is why we are
-slower". 4-state doubles the DATA; it cannot explain a 44x gap. So what does the extra cost
-actually buy?
+---
 
-vitamin's `Value` is 72 bytes: two 32-byte `Words` (each an inline `[u64; 2]` or a heap
-`Vec`, with a discriminant) plus width, signedness, and the `is_real`/`is_str` flags. Of that,
-**16 bytes are the 4-state data**. The other 56 are metadata — what an INTERPRETER needs, and
-what a compiled simulator bakes into its generated code as literals.
+## 7. Performance, and the limits of what the corpus gates
 
-The census (instrumentation measured and reverted, not committed) counts every value returned
-by `eval_ctx` on all eight running workloads:
+Median of three timed samples, round-robin interleaved with the first round discarded,
+release binaries, no other load. Reproduce with `cargo run -p corpus-runner -- run --compare`.
+Ratio is `iverilog / vita`; above 1 means vitamin is faster.
 
-```text
-                    definite   <=64 bits   BOTH     heap
-  picorv32           100.00%    100.00%    100.00%   0.00%
-  keccak             100.00%     99.95%     99.95%   0.05%
-  keccak-arr         100.00%     99.72%     99.72%   0.28%
-  biriscv             99.91%     99.94%     99.86%   0.00%
-  aes                 99.99%     97.49%     97.49%   0.00%
-  darkriscv           98.49%     97.89%     96.38%   0.00%
-  serv                89.66%    100.00%     89.66%   0.00%
-  sha256             100.00%     83.93%     83.93%  16.07%
-```
-
-⭐⭐ **83.9% to 100% of all evaluated values are simultaneously definite and at most 64 bits**
-— geometric mean **95.7%**, median 99.7%. That is exactly the shape `wprog`'s compiled lane
-already carries: `W = (val, unk)` is **16 bytes**, and its 2-state lane is a bare `u64` at
-**8**. The representation vitamin needs is already in the tree; what is missing is how much of
-the design reaches it.
-
-⭐ Two secondary readings sharpen it further:
-
-* **The heap is not the cost.** `Value`'s `Vec` spill fires on 0.00% of evaluations in six of
-  eight designs (sha256 is the exception at 16%, its 512-bit blocks). So the 72 bytes are
-  moved BY VALUE, inline — which is precisely the defect measured twice this month:
-  `resize_keep_sign` answering equal width in place was **-17.2%** on keccak, and it did no
-  arithmetic at all.
-* **Making the unknown plane lazy is NOT the prize.** At <=64 bits both planes are inline, so
-  the unk plane costs no allocation — only 16 of the 72 bytes and some ALU. The 56 bytes of
-  metadata dominate, and they are metadata a compiled program does not carry.
-
-⚠️ One column is a BIASED SUBSAMPLE and must not be read as a design-wide x/z rate: the
-`genpath_reads` figures (aes 11.65% definite, sha256 39.54%) count only `read_net`, the general
-`Value`-returning path, which is reached exactly when the fast `read_scalar_words` path
-DECLINES. Those are the nets that already fell off the fast lane, so they over-represent x/z by
-construction. The `eval_ctx` column has no such bias — it sees every value.
-
-⚠️ `serv` is the floor at 89.66% definite, and it is one of the two designs vitamin loses on.
-Its x/z is real (a bit-serial core reading an uninitialized register file), which is also why a
-GLOBAL 2-state mode with an x trip-wire is the wrong shape: on this corpus it would trip
-immediately after reset and stay tripped. The per-operation lane is the right granularity, and
-it already exists.
-
-⚠️⚠️ And VCS itself has never been measured by this project. The architectural reading above
-stands on its own, but any numeric target needs a licensed single-core run of this corpus.
-
-#### Widening the lane, step one: the sign gate at a leaf
-
-Acting on that census. A fresh execution-weighted decline census put **6,600,872 requests from
-exactly TWO expressions** on one gate in `darkriscv` — 92% of its declines — namely
-`compile_node`'s entry gate `sw.signed != signed` firing on a `Signal` LEAF at EQUAL width.
-
-⚠️ `wprog`'s own header records that dropping that gate's sign half for EVERY node was built,
-measured sound, measured **1.00x**, and reverted — over **picorv32 and keccak**, which the
-header says. `darkriscv` was not in that pair. This is the same two-design trap this corpus
-exists to break.
-
-Only the LEAF exemption was taken, and its argument is that the arm never ASKS: no exit of the
-`Signal` arm reads `signed`, directly or through a mask. It requires `slot.width == w`, and the
-arena's slot invariant — established at the write producers, which all mask — is what lets the
-load skip a mask of its own.
-
-```text
-  picorv32 -3.4%   darkriscv -1.6%   biriscv -1.6%   serv -1.2%
-  sha256 -0.9%     keccak -0.4%      aes / keccak-arr flat
-```
-
-every pinned digest unchanged. ⭐ The corpus deltas understate what the lane does where it
-applies: on hot single-shape designs the review measured **4.8x** for a mixed-sign expression
-tree, **2.0x** for `signed ^ unsigned`, and **2.3x** for a signed memory read through a runtime
-index. The corpus numbers are small because those shapes are a minority THERE, not because the
-lane is.
-
-⚠️ Re-censusing after the change shows the gate did not disappear — it MOVED UP. darkriscv's
-6.6M leaf declines became **6,425,888 requests from four `Ternary` nodes** failing the same
-test, because the gate is per-node and a parent inherits nothing from an admitted child. The
-next question is which non-leaf kinds are also sign-inert at equal width; that is the reverted
-set-wide relaxation, and re-measuring it on THIS corpus is the follow-on. It needs `AShr`'s
-guard rewritten from `signed` to `sw.signed && signed` first — dropping the entry gate is
-exactly what stops those two being the same question.
-
-Remaining top buckets, for whoever takes the next one: `aes` is 387k requests on
-`root ctx-width>64 (w=128)` (a wide lane, not an admission); `keccak` and `biriscv` are
-`Call w=64` (the frame axis, 5c); `picorv32` is 533k on `Ternary` inner-gate and 178k on the
-same sign gate at `Unary(BitNot)`; `serv` is 500k each on `Select(PartConst) w=6` and
-`Ternary w=2`.
-
-#### Step two: removing the sign admission entirely — built, re-measured, reverted AGAIN
-
-The obvious next step was the rest of that gate: the leaf exemption had only moved it up, to
-**6,425,888 requests from four `Ternary` nodes** on darkriscv. Removing the sign half outright
-is the change §5.1 built, measured sound, measured **1.00×** and reverted in 2026-08 — over
-picorv32 and keccak. This corpus has eight designs, so the value question looked re-askable.
-
-It was built (with `>>>`'s guard rewritten from `signed` to `sw.signed && signed` first, since
-the gate was the only thing making those the same question), and it is **sound**: the module's
-own battery grew 8,225 → 8,260 admitted trees and 45,180 → 48,660 widening programs, all
-value-identical to the generic evaluator, and the adversarial review measured **~330,000 cells**
-with PRE and POST byte-identical everywhere plus all ten corpus workloads byte-identical.
-
-⭐ It also fires hard where it applies: the review timed **13 of 14 hot shape families at
-2.1×–4.7×** (a 24-assign mixed-sign expression design went 1.26 s → 0.27 s).
-
-⚠️⚠️ **And it is still 1.00× on the corpus.** It was reverted again.
-
-⭐⭐ The reason this is worth writing down is that **the first measurement said −4.5% and was
-wrong**, and two independent verifiers caught it. The method was the defect: alternating the two
-binaries by copying each into `target/release/vita` and always running PRE first, POST second.
-Reversing the order reverses the sign of the answer —
-
-```text
-  PRE first:   PRE 4.582 mean   POST 4.591   -> POST looks 0.2% SLOWER
-  POST first:  POST 4.564 mean  PRE 4.616    -> POST looks 1.1% FASTER
-```
-
-— so the true delta is inside a ±1% order bias. ⚠️ This is the SECOND time in one session that a
-copy-then-time A/B misled this project (the other invented a −1.5% for a change that had been
-accidentally reverted, and re-adding it measured +3.2%). **Interleave in both orders, or the
-first-vs-second position is what you are measuring.**
-
-What the corpus now says, on eight designs rather than two: the §5.1 verdict **stands**. The
-admission is worth 2–4× on mixed-sign expression trees and those are not in these designs' hot
-loops. A design that is mixed-sign-heavy would want it; ours are not, and the queue line should
-say that rather than "worthless".
-
-#### The decline census has to be NORMALISED, and I ranked the next candidates without doing it
-
-The remaining buckets were ranked by absolute request count, which put `serv` first: two
-declining expressions, 500,015 requests each, one distinct expression apiece — the cheapest
-possible diagnosis for the largest apparent prize.
-
-Both were diagnosed in one run, by labelling every early return in the two arms:
-
-```text
-  serv:  req 20015  distinct 3   SEL: offset is NOT a Const
-         req 20015  distinct 1   TERN: a branch can report (LoadIdx)
-```
-
-Both are documented, deliberate non-admissions. The first is the runtime-offset select
-(`x[i +: 4]`) the module's own comment says it does not take, and a bit-serial core does it
-constantly. The second is the diagnostic-ordering rule: the compiled lane has no control flow,
-so it evaluates BOTH ternary branches, and an untaken branch holding an out-of-range array read
-would report an access the generic path never performs.
-
-⚠️⚠️ **And then the number that should have come first.** Those buckets are 1,043,305 declined
-requests against **72,500,547 admitted** ones — `serv` is already **98.6% compiled**, the
-highest rate in the corpus:
-
-| design | ok | declined | decline rate |
+| Workload | vita | iverilog | Ratio |
 |---|---:|---:|---:|
-| keccak | 1,712,105 | 1,546,018 | **47.5%** |
-| darkriscv | 10,527,654 | 7,025,920 | **40.0%** |
-| aes | 592,296 | 387,885 | **39.6%** |
-| picorv32 | 7,889,493 | 1,022,255 | 11.5% |
-| biriscv | 5,015,105 | 196,393 | 3.8% |
-| sha256 | 3,312,068 | 50,003 | 1.5% |
-| **serv** | 72,500,547 | 1,043,305 | **1.4%** |
-
-⭐⭐ `serv` is the LEAST promising target for lane coverage, not the most — and it is one of the
-two designs vitamin loses on, so **whatever makes serv slow is not the compiled lane's
-coverage**. That is a separate investigation and the profile has to name it.
-
-The corrected ranking is `keccak` / `darkriscv` / `aes`, and the first two of those are the two
-axes already filed: `Call` (the frame arena) and the non-leaf sign gate (measured 1.00× and
-reverted, above). `aes` is the wide lane.
-
-⚠️ The methodological point, because it cost a ranking: **a decline count is meaningless without
-the admitted count beside it.** 500,015 requests is enormous next to `aes`'s 387,885 and
-negligible next to `serv`'s own 72.5 million.
-
-#### That slice landed, and the axis was one thing
-
-Sharpening the census to the FIRST failing node (not the root) collapsed it further:
-
-```text
-darkriscv, 325k declined requests, by first failing node
-   241266   7 distinct   CMP: operand WIDTH 3 vs 32
-    24162   2            CMP: operand WIDTH 4 vs 32
-    15442  11            Signal        w=32 sw.w=1    sw.width != w
-     7924   2            Unary(LogNot) w=32 sw.w=1    sw.width != w
-     7498   4            CMP: operand WIDTH 2 vs 32
-     2501   1            Select        w=32 sw.w=7    sw.width != w
-```
-
-⭐⭐ **84% of it is one missing capability: `wprog` could not EXTEND a narrower value into a
-wider context**, and the comparison arm's demand that both operands share a width is the
-same gap one level up. serv and picorv32 have the same two families at the top.
-
-The fix admits a narrower node, and *how* is decided by the LRM's sizing rule rather than
-by the width: a SELF-determined node (a leaf, a select, a concat, and every one-bit result)
-is compiled at its own width and converted; a CONTEXT-determined operator is computed at
-the context width. Sign extension calls `value::resize_word` — the same function
-`Value::resize` uses — so the conversion is the generic path's own rather than a second
-spelling. Truncation still declines.
-
-⚠️⚠️ **`sw.width < w` does NOT mean "fold narrow, then extend".** The first version applied
-it to everything and `logic [7:0] s = v[8:11] + 4'd1` became **0** instead of **16** — 15+1
-folded at four bits. A pinned test caught it, which is why the classification is an
-`_`-free match over the operator enums.
-
-```text
-  darkriscv -6.2%     serv -2.7%     picorv32 -1.8%
-  aes / keccak / keccak-arr: flat (their cost is inside frame bodies)
-```
-
-every pinned digest unchanged, and `darkriscv` moved from parity to **1.08× ahead**.
-
-⭐ The adversarial review was CLEAN on the differential lens over ~100k generated cases
-(including exhaustive 64×64 comparison sweeps and every 4-state value pair at small
-widths), and its fuzz turned up a **pre-existing** silent-wrong unrelated to the slice: a
-comparison does not push its unsignedness DOWN into its operands, so
-`(b >>> 4) > 8'd100` with `b = 8'shB3` is 1 in vita and 0 in both oracles. Recorded as
-ROADMAP §2 row 🆕 A with a two-operator repro.
-
-⚠️ **serv is new to this table.** It began running only in §4.5.382, so its 0.78×
-is a first measurement rather than a regression, and the 1.60× figure quoted before
-2026-08-28 was over a corpus that did not include it. The five-design geometric mean
-is reprinted above so the two dates can be compared over the same set.
-
-⚠️ **verilator 는 절반의 오라클이다.** sha256·aes·verilog-ethernet·darkriscv 에선 일치하지만
-**picorv32 와 serv 에선 갈린다** — 둘 다 레지스터 파일이 초기화되지 않은 채 x 를 읽는 설계라
-2-state 근사가 다른 답을 낸다(picorv32 `17b6f447736ac50d` vs `8bdb7a2fb9b56280`). 조용히
-버리지 않고 매니페스트의 `oracle` 필드에 어느 툴이 그 행의 오라클인지 적었다.
-
-
-## 5. 도구 — `corpus-runner`
-
-의존성 **0개**(std 만)로 지었다. 매니페스트는 데이터 파일이 아니라 **Rust `const` 테이블**이다:
-워크스페이스가 3-OS 재현성 때문에 `--locked` 로 빌드하는데, 일 년에 몇 번 바뀌는 파일을 읽자고
-파서 의존성을 들이는 건 값이 안 맞는다. 컴파일러가 대신 검사해 준다.
-
-```
-corpus-runner list                 # 무엇이 들었고 이 기계엔 무엇이 있나
-corpus-runner fetch [--run]        # 핀된 SHA 로의 clone 계획(또는 실행)
-corpus-runner run [--compare]      # 각 워크로드를 돌려 핀된 다이제스트와 대조
-```
-
-### 거절을 **일급 상태**로 둔다
-
-vita 가 이미 도는 설계만 든 코퍼스는 아무것도 알려줄 수 없다. 그래서 매니페스트의 각 행은
-`Expect::Runs` 아니면 `Expect::Refused { diag }` 를 들고, 러너는 밖에서 보면 똑같아 보이는 다섯
-가지를 구분한다:
-
-| 매니페스트 | 실제 | 등급 | 게이트 |
-|---|---|---|---|
-| Runs | 다이제스트 일치 | `ok` | 초록 |
-| Refused | **핀된** 진단 | `known-gap` | 초록 — 사다리가 작동 중이다 |
-| Refused | **다른** 진단 | `DRIFTED` | **빨강** — 핀이 더는 설계를 설명하지 못한다 |
-| Refused | 다이제스트 일치 | `PROMOTED` | 초록 + *"행을 옮겨라"* |
-| Refused | 다이제스트 **불일치** | `REGRESSION` | **빨강** — loud→silent-wrong, 사다리가 금지하는 유일한 이동 |
-
-마지막 줄이 이 설계의 이유다. 거절되던 설계가 갑자기 **답을 하는데 틀린 답**을 하는 것을
-승격으로 채점하면 안 된다. 단위 테스트가 그 칸을 직접 고정한다
-(`loud_becoming_silently_wrong_is_a_regression`).
-
-### 측정 규율을 API 에 박았다
-
-`measure()` 는 잴 것을 **한꺼번에** 받아 **라운드로빈**으로 돌리고 첫 라운드를 버린다 —
-인터리브가 **기본 모양**이 되도록. ⚠️ 다만 *"순차 측정을 불가능하게 만들었다"* 는 아니다:
-`measure(&jobs[0..1])` 를 두 번 부르면 그게 순차다(적대 렌즈가 첫 판본의 그 문구를 반증했다).
-이 프로젝트는 순차 A-then-B 로 **가짜 +12.5%** 를, debug 바이너리로 **가짜 +88%** 를 한 번씩
-냈다([[perf-ab-method-artifacts]]). 러너는 debug 바이너리를 쓰면 경고를 찍고, `--reps N` 은
-**타임드 샘플 N개**를 뜻한다(라운드는 N+1 회 — "3 라운드 중 하나 폐기" 로 적으면 셋이라 읽히고
-둘을 준다).
-
-## 5.5 적대 리뷰가 잡은 것 — 도구가 자기 목적을 배신하고 있었다
-
-BLOCKING 넷. 순서대로 심각도가 아니라 **아이러니** 순이다.
-
-**① `Grade::Promoted` 가 도달 불가능했다.** 매니페스트 각 행에 `expect`(Runs/Refused) **옆에**
-`expect_exit` 를 자유 필드로 뒀고, 거절 행 셋은 vita 가 **거절하면서** 내는 코드라 `1` 이었다.
-그러면 갭이 닫히는 날 vita 는 **0** 으로 나가고, 동등 비교가 깨지고, 등급은
-`"was loud, now crashes"` **빨간불**이 된다. ⭐⭐ **코퍼스가 존재하는 이유인 바로 그 사건이,
-거짓 문구로 실패 보고되게 배선돼 있었다.** 고침은 값을 옮기는 것 = **`Expect::Runs { exit }`**
-— 거절 행에는 이제 exit 코드를 **적을 자리가 없다**. (`aes` 도 같은 모양의 잠복이었다: 오늘
-정답을 찍으며 exit 1 인데, 그 과잉-loud 를 언젠가 고치면 행이 회귀로 뜬다.)
-
-**② 여덟 행이 다른 기계에서 복원되지 않았고, 그 실패를 vita 회귀로 채점했다.** 테스트벤치는
-전부 **1st-party 인데 `bench/*` 가 통째로 gitignore** 였다. 핀된 SHA 는 **상류 RTL 을** 복원하지
-**하네스를** 복원하지 않는데, 다이제스트를 만든 건 하네스다. 게다가 존재 판정이
-`cwd.is_dir()` 였다 — `fetch` 가 `bench/<name>/src` 를 만드는 순간 디렉터리는 생기므로
-`absent` 가 아니라 **실행**되고, `cannot read 'tb.v'` 가 `Refused` 로 읽혀
-**"newly refused"** 회귀 여덟 개가 뜬다. 고침 둘: gitignore 를 **allow-list** 로 뒤집어(상류
-클론과 빌드 산출물만 제외) 하네스 30개 파일을 커밋하고, 존재 판정을 **소스와 런타임 데이터
-파일**로 옮겼다. ⚠️ 곁가지로 펌웨어 이미지 둘이 실은 상류 것임이 드러났다(serv 의 `blinky.hex`
-는 상류 `sw/` 와 바이트 동일 · biriscv 의 `prog.hex` 는 상류 `test.elf` 에서 추출) ⇒ 커밋하지
-않고 **클론에서 참조하거나 `prepare.sh` 로 재생성**한다.
-
-**③ 파이프를 안 비웠다.** `try_wait` 로 폴링하고 종료 뒤에 `wait_with_output` 하는 흔한 모양은
-워크로드가 파이프 버퍼를 넘기는 순간 **교착**한다 — 자식이 `write` 에서 막히니 안 끝나고,
-부모는 안 끝났으니 안 읽는다. 그러면 예산 600초를 다 쓰고 **`Timeout`** 으로,
-`Expect::Refused` 행에서는 **"was loud, now hangs"** 로 보고된다. 즉 **정직하고 즉각적으로
-거절하는 설계를 행업으로 무고한다.** 가설이 아니다 — `verilog-axi` 는 2×2 크로스바 하나로
-**19,238 바이트**를 stderr 로 쏟고 macOS 파이프는 16 KiB 로 시작한다(내 주석은 *"한 줄이라
-버퍼 안쪽에 한참 못 미친다"* 고 적고 있었다). 고침 = 양쪽 파이프를 **각자의 스레드로** 끝까지
-빨아들인다. 곁가지로 stdout/stderr 를 **분리**해 다이제스트는 stdout, 진단은 stderr 에서 찾는다.
-
-**④ `cargo fmt --check` 실패** — CI 게이트다.
-
-그리고 NIT 열셋 중 눈에 남는 셋:
-
-- ⚠️⚠️ **내가 ENGINEERING_RULES 에 *"호출자가 순차 측정을 할 방법이 없다"* 고 ★★★ 교훈으로
-  적었는데 거짓이었다** — `measure(&jobs[0..1])` 를 두 번 부르면 그게 순차다. 하필
-  *"규칙은 타입이어야 한다"* 를 주장하는 문단에서 **타입이 아닌 것을 타입이라 불렀다**.
-  같은 슬라이스에서 그게 **진짜로 가능했던** 자리는 ① 이었다.
-- **비결정성 검출기가 죽은 코드였다.** `Grade::Ok` 뒤에 가둬 뒀는데, 다이제스트가 갈리면
-  `Mismatch` 로 은퇴하므로 `Ok` 에 도달할 수 없다 ⇒ **흔들리는 툴이 일관되게 틀린 툴로**
-  보고된다. 이제 등급보다 먼저 본다.
-- **`--reps 3` 이 샘플 둘을 줬다**(라운드 셋 중 하나 폐기). "median" 이라 적힌 평균이다 ⇒
-  `--reps` 는 **타임드 샘플 수**로 재정의.
-
-⭐ 두 렌즈 중 **soundness 가 넷을 다 잡았다**. 이 슬라이스엔 제품 코드 변경이 없어
-differential 이 겨눌 과녁이 얇았고, 결함은 전부 **도구가 자기 매니페스트를 읽는 방식**에
-있었다 — code-path census 의 영역이다.
-
-## 5.6 첫 실사용 — 코퍼스가 **지어진 다음 커밋에** 빨간불을 냈다
-
-§4.5.370 이 문자열 상수 도메인을 열자 `corpus-runner run` 이 serv 와 verilog-ethernet 을
-**`DRIFTED`(빨강)** 로 보고했다. 갭이 **사라진 게 아니라 옮겨간 것**이다 — 핀된 진단이 더는 그
-설계를 설명하지 못한다는 뜻이고, 그게 정확히 그 등급이 존재하는 이유다.
-
-| | PRE | POST |
-|---|---|---|
-| serv | E3009 **7** + E3010 3 | E3010 **3**(⚠️ PRE 에도 있던 셋) |
-| verilog-ethernet | E3009 4 + E3010 2 | E3009 **2** |
-
-⭐ 그 다음 갭까지 좁히는 데 census 넷이면 됐다: verilog-ethernet 이 걸린 것은
-*"함수 본문의 system task call"* 이라는 **진단 문구보다 훨씬 좁다** —
-`$display`·`$error`·`$warning`·`$fatal` 은 **전부 통과**하고 **`$finish` 하나만** 거절된다.
-둘 다 §3 ⑦⑧ 로 기록하고 핀을 갱신해 `known-gap` 으로 되돌렸다.
-
-⇒ 코퍼스가 값을 낸 방식이 **거절 수를 줄인 게 아니라 거절의 정체를 갱신한 것**이라는 데 주목할
-것. 3/10 은 그대로지만, 그 셋이 무엇인지는 완전히 달라졌다.
-
-### 5.1 그리고 한 번은 `PROMOTED` 가 떴다 (2026-08-25 · §4.5.382)
-
-⭐⭐ **serv 가 돈다 — 8/10.** `Expect::Refused` 행이 exit 0 으로 나가자 러너가
-`PROMOTED — now runs; move its manifest row to Expect::Runs` 를 냈다. 이것이 §4.2 의 적대
-리뷰가 *"도달 불가능하다"* 고 잡아냈던 바로 그 등급이고(거절 행이 `exit: 1` 을 들고 있어서 갭이
-닫히는 날 **"was loud, now crashes"** 로 오보하게 돼 있었다), `Expect::Runs { exit }` 로 고친 뒤
-처음으로 제 일을 했다. 다이제스트는 `f3f45af36093b2b1` — §4.5.373 이 되돌리기 전에 iverilog 와
-맞춰 두고 간 값 그대로다.
-
-**verilog-axi 는 두 칸 전진했다.** 핀이 두 번 옮겨졌다: `S_THREADS`(파라미터 replication count)
-→ `$clog2(M_ISSUE[n*32 +: 32]+1)`(per-port 벡터 슬라이스) → 지금은 `calcBaseAddrs(…)`, i64 보다
-넓은 누산기를 가진 **상수 함수**. 세 번 다 `DRIFTED` 가 먼저 알려 줬다.
-
-⭐ 그리고 **성능 쪽에서도 코퍼스 밖 리포트가 진단을 하나 반박당했다** — round-33 은 `native` 가
-`vm` 에 지는 축을 *"unpacked 배열 원소 LHS"* 로 짚었는데, 한 번에 하나씩만 바꾼 쌍둥이가 축이
-**RHS 의 계산된 인덱스**임을 보였다(0.92× vs 2.05×, 같은 다이제스트). 남이 쓴 RTL 은 갭을
-찾아 주지만, **어느 갭인지는 여전히 컨트롤을 세워야 알 수 있다**.
-
-## 6. 남은 것
-
-**코퍼스 자체**
-
-- **10 중 2 가 거절**이다(2026-08-25 · §4.5.382 에서 serv 가 `PROMOTED`). 이 숫자가 이 코퍼스의
-  존재 이유다. ⭐ **§3 ① 은 하루 만에 닫혔다**
-  (§4.5.370 — 문자열 상수 도메인) — 그런데 **거절 수는 그대로 셋**이다: serv 와 verilog-ethernet
-  이 사라진 게 아니라 **더 깊은 갭으로 전진**했고, 코퍼스가 그것을 `DRIFTED` 빨간불로 정확히
-  잡아냈다(serv 에러 10→3 · vether 6→2). ⭐ **그 셋 중 둘은 §4.5.382 에서 닫혔다** — ②(count)와
-  ⑦(리덕션)이 같은 뿌리(폭의 declared provenance)로 함께 열렸고 **serv 가 PROMOTED** 됐다.
-  남은 둘 = **⑫**(verilog-axi · 상수 함수의 wide 누산기 · ② 가 서면서 드러난 다음 칸) ·
-  ⑧(vether).
-- **ibex 는 못 들어왔다** — 오라클이 없어서다(§4.2). 현대 SV 코어의 입구라 §3 ⑤로 남겼고,
-  hand-IEEE 로 열리면 코퍼스의 첫 SystemVerilog 워크로드가 된다.
-- **모양이 넷**(cpu·crypto·stream·fabric)인데 stream 과 fabric 이 **각각 하나**뿐이고 둘 다
-  거절 상태다. 즉 지금 도는 일곱은 전부 cpu 아니면 crypto 다 — 이 편향은 §3 ②⑦⑧ 이 닫히기
-  전까지 남는다.
-
-**도구**
-
-- `--compare` 는 iverilog 만 부른다. verilator 는 절반의 오라클이라 자동 비교에 넣지 않았다.
-- 워크로드 크기는 iverilog 기준 3–15 초로 맞춰 뒀다. 전체 `run --compare` 가 약 2분이다.
-
-**아직 안 한 것**
-
-- CI 에 붙이지 않았다. 코퍼스 RTL 은 저장소에 없고 CI 는 clone 하지 않으므로, CI 가 도는 것은
-  **매니페스트 위생 테스트 8개**(라이선스·SHA 형식·이름 충돌·다이제스트 마커·모양 다양성)뿐이다.
-  실제 실행은 개발 기계의 수동 게이트다 — iverilog 차분 스위트와 같은 취급이다.
-
-
-
-## 9/10 — and the tenth row needed a third state (2026-09-01)
-
-`verilog-axi` elaborates and runs. Its digest is not iverilog's, and the whole of the
-difference is `XC=29` against `XC=0` — 29 cycles out of 123,166 in which the crossbar's
-registered `valid` outputs are `x` in iverilog and definite in vita. Everything else
-matches: the same cycle count, the same handshake, the same per-master data digests.
-
-The contract had two states and neither was true here. `Expect::Refused` graded it *"was
-loud, now silently wrong"* — right about the shape of a refused row that starts producing a
-wrong answer, wrong about this one and permanently red. `Expect::Runs` with vita's own
-digest would have been self-certifying: pinning our answer as the expected one is exactly
-what the corpus exists to prevent.
-
-The axis was already measured. ROADMAP §2-N found that the residual is time-zero
-continuous-assign event ordering, and that **iverilog answers two ways to the same
-question**: with identical operands and identical values, a `wire w = a | b;` fires the
-`always @*` that reads it at time zero and a `wire w = a & b;` does not. verilator settles
-everything and has no vote. So there is no oracle to match here, only a ruling.
-
-`Expect::Split { vita, why }` pins BOTH digests and names the ruling. It is not a pass:
-the row reads `ruled-split` on every run, with the reason on the line. vita's own answer
-moving is still a `REGRESSION`, and the day the two agree again the row grades `PROMOTED`,
-which is the event it is waiting for.
-
-⚠️ The state exists for a divergence the ORACLE cannot arbitrate, and for nothing else. A
-digest that merely fails to match is a finding, not a split.
-
-## 10/10 — and the last row cost two changes, one of which was not in its queue line (2026-09-02)
-
-`verilog-ethernet` runs. `DIGEST=ca4945d0044f74d8`, the digest both oracles produce, in
-**2.24 s** against iverilog's **7.72 s**.
-
-The queue had one line for it, ROADMAP §3 ⑧: a `$finish` in a function body is refused, and
-`lfsr_mask`'s sits in a defensive branch its parameters never take. That line was right and
-it was half the work. Deleting the statement by hand — the first thing anyone would try —
-makes the design **elaborate in 1.03 s and simulate for about 38 hours**.
-
-⭐⭐ **The other half was not in this workload's row, or in any row.** `lfsr.v` generates one
-`wire [39:0] mask = lfsr_mask(n);` per LFSR bit, `n` a genvar, eighty of them across the two
-CRC instances. `--obs-procs-time` puts **99.99% of the run** on those two source lines, at
-240 evaluations each over twenty cycles. The cause is not in `lfsr.v` and not in the corpus:
-`levelize::expr_is_pure_of_nets`, the predicate that decides which continuous assigns the
-dirty settle may skip, answered `false` for **every** `Expr::Call`. Reduced to three lines,
-`wire [7:0] cc = 8'd3 + 8'd4;` is evaluated once, `assign c = 8'd9;` once, and
-`assign a = sm(8'd3);` — a trivial function of a constant — ninety times, the same as
-`assign b = sm(q)`. Any continuous assign that reaches a call was re-evaluated forever.
-
-⭐ **The rule that unblocks it is not the one the predicate's comment implies.** Its comment
-said a call is impure because "a user function can read state no net records", which is true
-and is the wrong criterion. iverilog and verilator both re-evaluate a continuous assign
-exactly when a net in its sensitivity list moves; matching that rule needs only a COMPLETE
-dependency set, not a pure function. `levelize::func_read_deps` now collects the module nets
-a callee reads, through nested calls, and declines anything it cannot attribute.
-
-Two measurements decided the shape, in opposite directions:
-
-* `assign m = f();` where `f` reads a module net through no argument is an **oracle split** —
-  iverilog freezes `m` at its time-zero value, verilator tracks the net, and vita was already
-  on verilator's side. Certifying without collecting that read would have silently moved vita
-  to iverilog's answer. So the reads are collected, and the split is preserved.
-* A function that carries a static local between calls looked like the dangerous case and is
-  not one. iverilog carries the same state under the same trigger rule, and all three tools
-  agree on that design today. `ca_always`'s once-per-pass evaluation was the anomaly.
-
-That second point generalises, and it is what let the two halves meet. A `$display` inside
-such a function, with nothing for it to depend on, printed **30 times** over a five-cycle run
-and now prints **once**, which is what both oracles print; `$error` went 30 → 1. With a
-dependency the count is one per change of it (26 → 3, measured by review) — the same rule, and
-a number neither oracle can arbitrate, since iverilog's sensitivity list is empty and verilator
-aborts on the first `$error`. An effect's right occurrence count is the
-oracle's evaluation count, and this change is what makes vita's evaluation count the oracle's.
-It is also why `$finish` had to be admitted into that certification rather than excluded from
-it: `lfsr_mask` contains an `$error`, and excluding the whole system-task family kept the
-design correct and eighty-times slow.
-
-⚠️ What is still excluded, and why: a system FUNCTION. `$random` advances a seed other
-readers draw from and `$fgetc` advances a file position, and neither is a net, so a
-dependency set built out of nets cannot name what changed between two evaluations. `wire m =
-f()` with `$random` in `f` keeps re-drawing where both oracles freeze it — ROADMAP §2 row 31.
-
-**The corpus after this slice** (median of three, `run --compare`):
-
-| workload | vita | iverilog | ratio |
-|---|---|---|---|
-| sha256 | 1.25 s | 4.06 s | **3.25×** |
-| verilog-ethernet | 2.24 s | 7.72 s | **3.45×** |
+| sha256 | 1.25 s | 4.06 s | 3.25× |
+| verilog-ethernet | 2.24 s | 7.72 s | 3.45× |
 | aes | 2.70 s | 6.03 s | 2.23× |
 | biriscv | 4.05 s | 9.20 s | 2.27× |
 | keccak | 4.24 s | 9.26 s | 2.19× |
@@ -796,44 +458,21 @@ f()` with `$random` in `f` keeps re-drawing where both oracles freeze it — ROA
 | darkriscv | 6.63 s | 7.10 s | 1.07× |
 | serv | 7.42 s | 7.32 s | 0.99× |
 | keccak-arr | 13.58 s | 9.14 s | 0.67× |
-| verilog-axi | — | — | ruled split (§2-N) |
+| verilog-axi | — | — | ruled split; retired from timing |
 
-Geometric mean **1.74×** over the nine timed rows, **1.93×** over the seven third-party ones,
-**2.15×** with `serv` excluded. The two losses are unchanged and their causes are recorded:
-`keccak-arr` is the frame-arena row (§4.5.390), `serv` the x-heavy one (§4.5.394).
+Geometric mean **1.74×** over the nine timed rows, **1.93×** over the seven third-party
+rows, **2.15×** with `serv` excluded. This table is the only place these numbers live.
 
-⚠️⚠️ **The certification needed a second condition, and adversarial review is what supplied
-it.** The static-local argument above is true of an IDEMPOTENT local and false of a counter:
-a function that increments a static local returns a value that depends on how many times it
-has run, and how many times it runs is the one thing this change alters. Measured on that
-design, with the assign depending on a moving net, the first version answered `2 3 3` where
-the previous release answered `3 3 3` — verilator's answer exactly — and iverilog says
-`1 2 3`; the non-saturating twin went from a loud `did not converge` to a silent `2 3 4`.
+Two rows are losses and their causes are recorded. `keccak-arr` builds a 25-element array on
+every subroutine call and is the frame-path row. `serv` is the x-heavy row, and its cost is
+not compiled-lane coverage: it is the corpus's *most* compiled design at 98.6% of compile
+requests admitted, the highest rate of the ten.
 
-The fix is definite assignment (no own-window slot may be read before it is written), and by
-itself it reverts this whole section: `lfsr_mask` clears its mask arrays in a `for` loop, and
-a loop that might run zero times is not definite assignment. What ships is a **disjunct** —
-definite assignment OR an empty dependency set — because an assign with no dependencies is
-evaluated once, which is what both simulators do with an empty sensitivity list. On the same
-counter function with its dependency removed, that turns a `did not converge` failure into
-iverilog's answer exactly.
+### 7.1 Every row is at least 99% simulation
 
-⚠️ Reaching 10/10 does not retire the corpus, and the two rows it did not move say why:
-`verilog-axi` is still a ruled split, and `serv` is still the only workload vita does not
-beat. The corpus exists to find what our own probes do not suspect, and the largest finding
-in this slice — that every call-bearing continuous assign in every design was re-evaluated
-forever — was found by a third-party workload rather than by a §2 row.
+From the separate `--obs-dir` probe run (one sample per row, not the timed rounds):
 
-## Every row is ≥99% simulation — so the corpus could not see a 3× front end (2026-09-07)
-
-`corpus-runner run` now prints a phase split under the grade table, one line per vita row that
-matched. It comes from a **separate** `--obs-dir` probe run rather than from the timed rounds: the
-flag adds file writes to the wall clock, and the timed medians above are pinned in this file and in
-the README, so polluting them to gain a column would have been the wrong trade. `elab_s` and `sim_s`
-are internal timers, so the probe measures the same phases the timed rounds ran; what it does not
-give is a spread.
-
-| workload | elab | sim | front end |
+| Workload | elab | sim | Front end |
 |---|---:|---:|---:|
 | biriscv | 0.022 s | 3.817 s | 1% |
 | verilog-ethernet | 0.011 s | 2.123 s | 1% |
@@ -842,17 +481,90 @@ give is a spread.
 | aes | 0.006 s | 2.598 s | 0% |
 | darkriscv | 0.003 s | 6.301 s | 0% |
 | sha256 | 0.002 s | 1.193 s | 0% |
-| keccak · keccak-arr | 0.001 s | 3.984 / 12.632 s | 0% |
+| keccak / keccak-arr | 0.001 s | 3.984 / 12.632 s | 0% |
 
-⭐⭐ **That table is the finding, not the column.** The corpus contract (§2 rule 3) asks for a digest
-accumulated over a whole run, which selects for designs that simulate for seconds and elaborate for
-milliseconds. So a front-end regression is arithmetically invisible here: the elaboration cost of
-`0af68af` tripled on a declaration-heavy module and moved **every** median in the table by less than
-the noise floor. It was found by an external report on a design that elaborates six to fourteen times
-per regression target, re-measured against `v0.2.0-49` at +36% on `biriscv` — and the row that
-records it in ROADMAP §2 had graded it *"invisible in real designs"* on the strength of picorv32,
-whose elaboration is 0.4% of its run.
+That table is a property of the corpus, and it follows directly from contract rule 3: a
+digest accumulated over a whole run selects for designs that simulate for seconds and
+elaborate for milliseconds.
 
-⚠️ Printing the split makes the number READABLE; it does not make the gate see it. A threshold needs
-a front-end-bound row — many declarations, a short simulation — with a pinned digest and an oracle,
-which no workload in the corpus is today. Recorded as `ELAB-PHASE-BLIND` in ROADMAP §5.b.
+**What the corpus can gate.** Simulation correctness and simulation speed. Every pinned
+digest is an accumulated trace, so a divergence anywhere in the run is caught even if the
+design later overwrites it, and the timings are dominated by exactly the phase the digests
+check.
+
+**What it cannot gate.** Front-end cost. An elaboration cost that triples on a
+declaration-heavy module moves every median in the table by less than the noise floor; the
+same cost measures +36% on `biriscv` and +193% on a module of 20 000 plain `wire [31:0]`
+declarations when elaboration is timed on its own. Printing the phase split makes the number
+readable; it does not make the gate see it. A threshold needs a front-end-bound row — many
+declarations, a short simulation — with a pinned digest and an oracle, and no workload here
+is that. Tracked as `ELAB-PHASE-BLIND` in [ROADMAP](../ROADMAP.md) §5.b.
+
+**Neither can it gate what it does not contain.** A shape absent from the corpus is a shape
+the corpus is silent about: an admission rule measured at 1.00× across these ten designs is
+worth 2–4× on mixed-sign expression trees, which are simply not in these designs' hot loops.
+Two of the ten shapes have exactly one row each (`stream`, `fabric`), so those axes rest on
+a single design.
+
+---
+
+## 8. What CI runs
+
+CI does **not** run `corpus-runner run`: the corpus RTL is not in the repository and CI does
+not clone it. What CI runs is the manifest hygiene suite — `crates/corpus-runner/tests/manifest.rs`,
+eight tests — plus 17 unit tests inside `run.rs` covering the grading table, the reverse
+digest scan and the median.
+
+| Test | Enforces |
+|---|---|
+| `every_upstream_workload_is_permissively_licensed` | contract rule 1 |
+| `every_upstream_workload_is_pinned_to_a_full_commit_sha` | reproducibility of any quoted number |
+| `workload_names_are_unique` | `--filter` cannot be ambiguous |
+| `every_pinned_digest_is_one_the_scanner_can_find` | the pin matches `digest_line`'s contract |
+| `every_workload_has_sources_and_an_oracle` | contract rule 2 |
+| `every_pinned_refusal_names_a_reason` | a `Refused` row cannot pin an empty diagnostic |
+| `coverage_is_reported_over_the_whole_corpus` | the coverage line's denominator |
+| `the_corpus_covers_more_than_one_shape` | shape diversity |
+
+Running the corpus itself is a manual gate on a development machine, the same treatment the
+Icarus Verilog differential suite gets. A full `run --compare` takes about two minutes;
+workload sizes are tuned to 3–15 seconds under Icarus Verilog.
+
+---
+
+## 9. Open items
+
+**The corpus.**
+
+- One row is a ruled split (`verilog-axi`) and one is a loss vita has not closed (`serv`).
+  Reaching 10/10 did not retire the corpus; those two rows are why.
+- `ibex` is excluded for want of an oracle (§3.1). It is the entry point to a modern
+  SystemVerilog core, and a hand-IEEE pin would make it the corpus's first SystemVerilog
+  workload.
+- `stream` and `fabric` have one row each. Until that changes, those two shapes rest on a
+  single design apiece.
+- The full `darkriscv` SoC is refused and is a queue row rather than a corpus row.
+- `aes` exits 1 on an IEEE-defined out-of-range read (§3.1); closing that over-loud
+  diagnostic will require moving its pin.
+
+**The tool.**
+
+- `--compare` invokes Icarus Verilog only; Verilator is a half oracle (§6.2) and is not
+  automated.
+- The corpus is not wired into CI (§8).
+- There is no front-end-bound row, so `ELAB-PHASE-BLIND` stands (§7.1).
+
+---
+
+## 10. Related documents
+
+- [study/01 — the performance axis](01-interpreted-vs-compiled.md) — the class of simulator,
+  the standing verdicts on acceleration, and the A/B protocol §4.4 implements.
+- [study/02 — terminology and native-backend coverage](02-v1-native-coverage.md) — census,
+  coverage and mutation, and the gate a refusal comes from.
+- [`bench/README.md`](../../bench/README.md) — what is committed under `bench/` and why.
+- [`bench/keccak/RUN.md`](../../bench/keccak/RUN.md) — the first-party rows' recipe, oracle
+  and cross-tool table.
+- [ROADMAP](../ROADMAP.md) — the open silent-wrong and loud-gap queues the corpus feeds.
+- [ENGINEERING_RULES](../ENGINEERING_RULES.md) — the accuracy ladder the grading table
+  encodes.

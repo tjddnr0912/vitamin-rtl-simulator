@@ -1,9 +1,6 @@
 #!/bin/sh
 # servant SoC (SERV bit-serial RISC-V) workload -- see RUN.md.
 # Prefer `corpus-runner run --filter serv --compare`; this is the by-hand equivalent.
-#
-# NOTE: vita REFUSES the unmodified upstream file list (ROADMAP §3 (1)) -- that is the
-# recorded state, not a broken script.
 set -e
 cd "$(dirname "$0")"
 F=$(cat files.txt)

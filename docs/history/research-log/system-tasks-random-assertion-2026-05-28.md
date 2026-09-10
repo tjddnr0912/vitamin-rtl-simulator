@@ -115,7 +115,7 @@ Icarus는 PLI 유래 $dist_* 함수를 포함해 완전 지원으로 알려져 �
 ### Observed 리전과 샘플링 의미론
 
 SVA concurrent assertion의 sampling 타이밍은 시뮬레이션 스케줄러 리전 구조와 직결된다.
-관련 상세는 [06-simulation-engine.md](../06-simulation-engine.md)에서 다루고,
+관련 상세는 [06-simulation-engine.md](../../preview/06-simulation-engine.md)에서 다루고,
 여기서는 핵심만 정리한다.
 
 클록 에지가 발생하면 Active → Inactive → NBA 리전에서 설계 로직이 실행되어

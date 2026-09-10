@@ -1,6 +1,6 @@
 # [외부 리뷰 원문] AI_SIM_OBSERVABILITY.md — LLM 친화적 시뮬레이션 관찰(로그/DB) 설계
 
-> **보존 사유(2026-07-02)**: 외부 리뷰어(crypto 해시 IP 검증팀, 2026-06-29 호환성 리포트=ROADMAP §6과 동일 원천)가 제공한 "시뮬레이터 제작자 전달용" 설계서 원문. vitamin의 신규 최종목표 **G2(AI-Agent 친화 simulator)**의 요구 원천이다. vitamin 측 대응 SPEC = [`../preview/19-ai-agent-observability.md`](../preview/19-ai-agent-observability.md), 트랙 = ROADMAP §6(OBS). 원문 내 상대링크(VERIFICATION_RULES.md·../CLAUDE.md 등)는 리뷰어 저장소 기준이라 여기선 dead — 문맥용으로만 남긴다.
+> **보존 사유(2026-07-02)**: 외부 리뷰어(crypto 해시 IP 검증팀, 2026-06-29 호환성 리포트=ROADMAP §6과 동일 원천)가 제공한 "시뮬레이터 제작자 전달용" 설계서 원문. vitamin의 신규 최종목표 **G2(AI-Agent 친화 simulator)**의 요구 원천이다. vitamin 측 대응 SPEC = [`../preview/19-ai-agent-observability.md`](../../preview/19-ai-agent-observability.md), 트랙 = ROADMAP §6(OBS). 원문 내 상대링크(VERIFICATION_RULES.md·../CLAUDE.md 등)는 리뷰어 저장소 기준이라 여기선 dead — 문맥용으로만 남긴다.
 
 ---
 

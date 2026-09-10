@@ -1,49 +1,52 @@
-# 01 · 합성 가능성 표기 범례
+# 01 · Synthesizability legend
 
-본 폴더의 모든 참조 문서는 각 구문/기능마다 다음 마커를 사용한다.
+Every reference note in this folder marks each construct or feature with one of the following markers.
 
-## 범례
+## Legend
 
-| 마커 | 의미 |
+| Marker | Meaning |
 |---|---|
-| ✅ | **합성 가능** — 표준 합성 도구가 게이트로 변환 가능 |
-| ⚠️ | **조건부** — 특정 형식만 합성 가능 / 도구 의존 / 합성 가능하나 권장 안 됨 |
-| ❌ | **비합성** — 시뮬레이션 · 검증 전용 (예: `class`, assertion, `wait`, dynamic memory) |
+| ✅ | **Synthesizable** — a mainstream synthesis tool turns it into gates |
+| ⚠️ | **Conditional** — only certain forms synthesize / tool-dependent / synthesizable but not recommended |
+| ❌ | **Not synthesizable** — simulation and verification only (for example `class`, assertions, `wait`, dynamic memory) |
 
-## 사용 예
+## How it is used
 
 ```
 ### `always_ff @(posedge clk)`
-✅ 합성 가능. 표준 클록드 레지스터로 합성.
+✅ Synthesizable. Synthesizes to an ordinary clocked register.
 
 ### `initial`
-⚠️ 시뮬레이션용. FPGA 합성은 일부 지원(초기값), ASIC은 일반적으로 비합성.
+⚠️ Simulation construct. FPGA synthesis supports it in part (initial values); for ASIC it is
+generally not synthesizable.
 
 ### `class`
-❌ 비합성. 검증 전용(SV OOP 확장).
+❌ Not synthesizable. Verification only (the SV OOP extension).
 ```
 
-## 판단 기준
+## How the marker is decided
 
-합성 가능성 분류는 세 도구 기준을 교차 참조한다.
+The classification is cross-referenced against three tools.
 
-- **Synopsys Design Compiler (DC)** — ASIC 합성 업계 표준
-- **Xilinx Vivado Synthesis** — FPGA 합성 대표 도구
-- **Cadence Genus** — ASIC 합성 주요 도구
+- **Synopsys Design Compiler (DC)** — the industry standard for ASIC synthesis
+- **Xilinx Vivado Synthesis** — the representative FPGA synthesis tool
+- **Cadence Genus** — a major ASIC synthesis tool
 
-세 도구 중 두 곳 이상에서 RTL로 인식·변환되면 ✅. 도구별로 결과가 다르거나 구조에 따라 합성 여부가 달라지면 ⚠️. 어느 도구도 게이트 변환을 지원하지 않으면 ❌.
+If at least two of the three recognize the construct as RTL and translate it, the marker is ✅. If the tools disagree, or synthesizability depends on the shape written, the marker is ⚠️. If no tool turns it into gates, the marker is ❌.
 
-## 본 프로젝트와의 관계
+## Relationship to this project
 
-본 프로젝트 Vitamin은 **시뮬레이터**다 — 합성은 비목표(본 spec §2.1). 그러나 참조 문서에 합성 가능 여부를 명기하는 이유는 두 가지다.
+Vitamin is a **simulator**; synthesis is a non-goal (see [01-goals-and-scope.md](../01-goals-and-scope.md)). These notes still record synthesizability for two reasons.
 
-1. 사용자가 실제 RTL 작성 시 합성 친화적 코드를 식별할 수 있도록 돕는다.
-2. Phase 1 MVP 범위인 "SV 합성 가능 RTL 서브셋"(= Verilog-2005 RTL 전부)을 구현 우선순위 기준으로 사용한다 — ✅ 항목이 Phase 1 대상, ❌ 항목은 후속 단계.
+1. It helps a user writing real RTL recognize which forms are synthesis-friendly.
+2. It names the boundary that a design intended for hardware has to stay inside, which is a different boundary from the one the simulator draws.
+
+The markers therefore say what a synthesis tool would accept — they are not a statement about what vita accepts, and the two sets do not coincide: `initial`, `#delay`, `$display`, `$finish`, assertions, classes and randomization are all marked ❌ or ⚠️ here and are all simulated. For the construct-by-construct status of vita itself, the authority is [manual/003_language-reference.md](../../manual/003_language-reference.md); for the scope of the project, [01-goals-and-scope.md](../01-goals-and-scope.md).
 
 ## Sources
 
-- 본 spec §2.1 (참조 문서에 합성 가능 여부 명기 요구사항)
+- This project's spec, §2.1 (the requirement that these reference notes mark synthesizability)
 - Synopsys Design Compiler Synthesis User Guide
 - Xilinx Vivado Design Suite User Guide: Synthesis (UG901)
 - Cadence Genus Synthesis Solution User Guide
-- IEEE 1800-2017 §A (Synthesizable subset annex)
+- IEEE 1800-2017 §A (synthesizable subset annex)

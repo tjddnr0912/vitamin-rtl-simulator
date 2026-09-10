@@ -1,1448 +1,1653 @@
-# 15 · 에러 코드 레퍼런스
+# 15 · Error Code Reference
 
-> vitamin이 내는 **모든 진단 메시지 코드의 원인·예시·해결을 정의하는 단일 권위 레퍼런스**다.
-> `vita explain <CODE>`의 소스이며, **vitamin 구현의 산출물(deliverable)** 로서 코드가
-> 추가·변경될 때마다 본 문서도 함께 갱신된다(아래 거버넌스).
+The single authoritative catalogue of every diagnostic vitamin can print: cause, worked
+example and fix for each code. This file is also a deliverable of the implementation —
+`crates/cli/src/lib.rs` embeds it with `include_str!`, and `vita explain <CODE>` prints one
+entry from it verbatim. Severity semantics, gating and exit classes are specified in
+[13-diagnostics-and-logging.md](13-diagnostics-and-logging.md); this file is the catalogue.
 
----
+## Governance
 
-## 거버넌스 (이 문서의 규칙)
+- This document is not generated from code. It is a hand-written explanation of causes,
+  kept 1:1 with the exhaustive `MsgCode` enum in the `diag` crate.
+- CI sync gate: `crates/diag/tests/bijection.rs` asserts that every `MsgCode` variant has an
+  entry here and that every code here exists in the enum, with matching number and declared
+  severity. Adding a diagnostic without adding its entry fails the build. That gate is the
+  mechanism that keeps this catalogue synchronised.
+  - The gate covers exactly the codes registered in the enum, which is the set of full
+    entries in the body sections below. The reserved codes in Appendix A are not enum
+    variants and are excluded. Promoting a reserved code means adding the enum variant and
+    the body entry in the same change; promotion is what puts it under the gate.
+- The mnemonic is the primary stable identifier (`E-ELAB-MULTIDRIVER`). It is fixed by
+  meaning and never renumbered. CLI flags (`-Wno-`/`-Werror=`), the corpus (`expect_codes`)
+  and prose all refer to codes by mnemonic, not by number.
+- The `VITA-<S>####` number is a secondary, grep-friendly handle. A number, once assigned, is
+  permanent: gaps stay gaps, and numbers are never reused or renumbered (the rustc `E0001`
+  convention). The severity letter `S` is `E`=Error, `W`=Warning, `I`=Info, `F`=Fatal. New
+  codes take the next free number in their band; the band is not re-sorted alphabetically,
+  so neither the enum table nor this file is in numeric order overall.
+- `MsgCode::resolve` accepts three spellings of a code, case-insensitively, everywhere a code
+  is typed — `vita explain`, `-Wno-`, `-Werror=`:
 
-- **이 문서는 코드에서 자동 생성되지 않는다.** 사람이 작성하는 원인 설명 산출물이며, `diag`
-  크레이트의 `MsgCode` exhaustive enum과 **1:1 동기**를 유지한다.
-- **CI 동기 게이트:** CI는 `MsgCode` enum의 모든 variant가 본 문서에 항목을 가지며, 본 문서의
-  모든 코드가 enum에 존재함을 검증한다 — **새 에러를 추가하면 본 문서 항목 추가 없이는 빌드가
-  통과하지 못한다.** 이것이 "에러 추가 시 문서 동기 갱신"을 강제하는 메커니즘이다.
-  - **게이트 대상 = `MsgCode` enum에 실재하는 코드 = 본문 §0–9의 full-entry 코드뿐이다.** 부록 A의
-    예약(미구현) 코드는 아직 enum에 등재되지 않았으므로 **bijection 게이트에서 제외**한다. 예약 코드가
-    본문 형식으로 승격될 때 enum variant 추가와 **동시에** 게이트 대상이 된다(승격이 곧 enum 등재).
-- **mnemonic이 1차 안정 식별자다**(예 `E-ELAB-MULTIDRIVER`) — 의미로 고정, **renumber 불가**.
-  CLI(`-Wno-`/`-Werror=`)·corpus(`expect_codes`)·문서는 **숫자가 아닌 mnemonic으로 참조**한다.
-- **`VITA-<S>####` 숫자는 보조**(빠른 grep용). 한 번 부여하면 **영구**(빈 번호는 빈 채로,
-  재사용·renumber 금지 — rustc `E0001` 방식). severity 접두 `S` ∈ {E=Error, W=Warning,
-  I=Info, F=Fatal}. **초기 36개**(시드 할당)는 카테고리 내 mnemonic 알파벳순으로 부여했고(현재 본문
-  full-entry 코드는 **59개** — 2026-07-22 기준·W3057 auto-top ambiguity 추가), **이후 추가는
-  해당 밴드의 다음 빈 번호를 단조 부여**한다(알파벳 재정렬 금지). 공식 출처 기반 추가 케이스
-  인벤토리는 **부록 A** 참조(미구현 예약 코드 107개 + 밴드 5/6/7).
-- severity·게이트·exit 의미는 [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md).
-- **억제/승격 플래그는 구현됨(2026-06-10):** `-Wno-<MNEMONIC>`(Warning/Info 억제; Error/Fatal
-  spine은 불가)·`-Werror`(전체)·`-Werror=<MNEMONIC>`(코드별 승격, 원 코드번호 유지·exit class 1)이
-  전 applet에서 동작. 알 수 없는 mnemonic = E0001 usage error(오타는 loud). 인라인 `lint_off`
-  프라그마·`-Wwarn=`/`--suppress=` alias는 Phase-1.x 잔여.
-- **본문 등재 = 발행 보장이 아니다(예약 dead codes):** 다음 코드는 enum에 실재하나 **현 구현에
-  emitter가 0개**인 의도적 예약 상태다 — `W-PARSE-IMPLICIT-NET`(vitamin v1은 implicit net을
-  생성하지 않음 — 미선언 참조는 E3010 hard error; 추후 IEEE 기본 동작 구현 시 활성화),
-  `E/F/I/W-ELAB-USER-*`(elaboration-time severity 태스크 — 현재 severity 태스크는 런타임
-  4xxx로 발행), `E-RUN-ASSERT-FAIL`(assert는 Phase-1.x), `W-RUN-NO-LOCATIONS`,
-  `W-LINT-UNCLOSED`(lint_off 프라그마 미구현), `W-ELAB-WIDTH-TRUNC`(실제 폭-절단 경고
-  emitter 구현 전까지 예약), `F-LIMIT-ERRORS`(`--error-limit` 플래그 미구현 — emit 지점 0개).
+  | form | example |
+  |---|---|
+  | mnemonic | `W-ELAB-FEATURE-LIMIT` |
+  | printed number | `VITA-W3056` |
+  | number without the prefix | `W3056` |
 
-### 번호대 예약
+  An unresolvable spelling is a hard CLI usage error (`VITA-E0001`, exit 3), never a silently
+  ignored flag.
+- Suppression and promotion: `-Wno-<CODE>` drops a Warning, Info or Note before it reaches
+  the sink; `-Werror` promotes every Warning and `-Werror=<CODE>` promotes one. Error and
+  Fatal are the always-logged spine — `-Wno-` on them resolves and has no effect. A promoted
+  diagnostic keeps its original code number and only changes its severity token, so
+  `error[VITA-W4007] W-RUN-USER-WARNING: …` is the expected shape under `-Werror`. Info and
+  Note are suppressible but not promotable.
 
-| 번호대 | 카테고리 | 단계 |
+## Number bands
+
+| Band | Category | Stage |
 |---|---|---|
-| `0xxx` | GENERAL / SYSTEM | CLI·usage·error-limit |
-| `1xxx` | PREPROCESS | 전처리(`include`/매크로/lint 프라그마) |
-| `2xxx` | PARSE | 어휘·구문·설계단위 |
-| `3xxx` | ELABORATE | 파라미터 해소·계층·연결성·elaboration severity |
-| `4xxx` | RUNTIME | 시뮬레이션·RTL severity 태스크·assert |
-| `5xxx` | ASSERTION / SVA | 동시 assert·assume·cover·unique 위반 (예약 — SVA **기능**은 Phase-3 구현됐으나 실패는 합성 체커의 E4003로 방출, 5xxx enum 등재는 미발화 예약. assume/cover/SVA 전용 코드는 부록 A 인벤토리 보유) |
-| `6xxx` | SV-TYPE | enum·const·$cast·class 등 SV 데이터타입 (밴드 자체는 예약 — 부록 A · 별도 6xxx 코드는 아직 미발화). ⚠️ **기능은 전부 구현됐다**: enum/typedef/packed struct · dynamic array/queue/assoc · string 에 더해 **class/OOP(상속+가상 디스패치)·CRV·`$cast` 도 구현**이다(이 줄의 옛 판본은 *"class/OOP·$cast는 미구현 N7"* 이라 적고 있었다 — 실측 2026-08-16). 미발화인 것은 **코드**이지 기능이 아니다 |
-| `7xxx` | VHDL | VHDL 진단 (예약, Phase 3 — 부록 A) |
-| `8xxx` | FILELIST | `.f` 전개(`-f`/`-F`) |
-| `9xxx` | ARTIFACT | 산출물 staleness·버전 게이트 |
+| `0xxx` | GENERAL / SYSTEM | CLI and usage |
+| `1xxx` | PREPROCESS | `` `include ``, macros, directives |
+| `2xxx` | PARSE | lexing, syntax, design units |
+| `3xxx` | ELABORATE | parameters, hierarchy, connectivity, elaboration severity tasks |
+| `4xxx` | RUNTIME | simulation, RTL severity tasks, engine limits |
+| `5xxx` | ASSERTION / SVA | reserved band, no enum variants (see below) |
+| `6xxx` | SV-TYPE | reserved band, no enum variants (see below) |
+| `7xxx` | VHDL | reserved band, no enum variants |
+| `8xxx` | FILELIST | `.f` expansion (`-f` / `-F`) |
+| `9xxx` | ARTIFACT | artifact staleness and version gates |
+
+Two of the reserved bands describe conditions that are already handled under other codes:
+
+- `5xxx` — SVA is implemented (sequences, property operators, `cover property`, deferred
+  `assert #0` / `assert final`, multi-clock, named property and sequence). A failing
+  assertion reports through the synthesised checker's `$error`, which is `VITA-E4003`. What
+  is unassigned is the 5xxx *code*, not the feature.
+- `6xxx` — the SV data-type features are implemented: `enum` / `typedef` / packed `struct`,
+  dynamic arrays, queues, associative arrays, `string`, and class/OOP with inheritance and
+  virtual dispatch, CRV and `$cast`. Type-rule violations report through `E-ELAB-UNSUPPORTED`
+  or the runtime degrade codes. Again the *code* is unassigned, not the feature.
+
+## Status at HEAD
+
+Registration in this catalogue guarantees that a code resolves, explains, and can be gated.
+It does not guarantee that anything emits it. Three sets of facts are stated per entry as
+well, and collected here:
+
+Codes with no emitter anywhere in the tree:
+
+| Code | Mnemonic | Why nothing raises it |
+|---|---|---|
+| `VITA-F0002` | `F-LIMIT-ERRORS` | there is no `--error-limit` flag; the three internal caps behave differently (see the entry) |
+| `VITA-W1003` | `W-LINT-UNCLOSED` | no `lint_off` pragma exists; suppression is `-Wno-` only |
+| `VITA-W3008` | `W-ELAB-WIDTH-TRUNC` | the generic elaborate simplification channel reports `W-ELAB-FEATURE-LIMIT` |
+| `VITA-W3011` | `W-ELAB-CASEZ-APPROX` | `casez`/`casex` lower to exact `CasezEq`/`CasexEq`; nothing approximates |
+| `VITA-E4001` | `E-RUN-ASSERT-FAIL` | a failing assertion reports through its implicit `$error`, i.e. `VITA-E4003` |
+| `VITA-W4006` | `W-RUN-NO-LOCATIONS` | nothing strips the location side-table from a snapshot |
+
+Codes emitted at a severity other than their declared default:
+
+| Code | Declared | Emitted | Where |
+|---|---|---|---|
+| `VITA-F3005` | Fatal | Error | the elaboration `$fatal` arm routes through the shared error path |
+| `VITA-E9001` | Error | Fatal | the two runtime `.velab` sidecar guards raise it as Fatal |
+
+A code's severity is chosen by its emitter, not by the code. `default_severity()` is read in
+exactly two places: this file's bijection gate, and the `explain` fallback headline.
+
+Codes whose emitter exists but which no current design reaches: `W-RUN-BACKEND-FALLBACK`
+(`VITA-W4030`) — see its entry.
 
 ---
 
 ## 0xxx · GENERAL / SYSTEM
 
 ### VITA-E0001 · `E-CLI-BAD-FLAG` (Error)
-**알 수 없거나 잘못된 명령줄 플래그/값.** 인자 파서가 모르는 플래그, 형식·범위가 틀린 값,
-또는 해당 단계가 받지 않는 플래그를 만났을 때. 오타 플래그(`--timescal`)가 silently 무효가 되어
-미묘하게 틀린 시뮬을 내는 것을 막기 위해 컴파일 전에 큰 소리로 실패한다.
+**An unknown or invalid command-line flag or value.** The argument parser met a flag it does
+not know, a value of the wrong form or range, or a flag the invoked stage does not accept.
+A misspelled flag (`--timescal`) that silently did nothing would produce a subtly wrong
+simulation, so the run fails loudly before compiling anything.
 ```
-$ vcmp --timescal 1ns/1ps rtl/top.sv
-error[VITA-E0001] E-CLI-BAD-FLAG: unknown flag '--timescal' (did you mean '--timescale'?)
+$ vita --bogusflag design.sv
+error[VITA-E0001]: unknown flag '--bogusflag'
 ```
-**해결:** §6 CLI 표면대로 철자·값을 고치거나 받는 단계로 옮긴다. 억제 불가(exit class 3).
+This code is also the carrier for every usage error printed straight to stderr — a missing
+flag argument, an unreadable input, an unknown diagnostic code in `-Wno-`/`-Werror=`, an
+output path that would overwrite an input. Those lines are raw: they print
+`error[VITA-E0001]: <message>` with no mnemonic, they bypass the gate, and they are not
+counted in the epilogue, because argv has not been parsed yet when they fire.
+
+**Fix:** correct the spelling or the value, or pass the flag to the stage that owns it
+(see [../manual/004_cli-reference.md](../manual/004_cli-reference.md)). Not suppressible;
+exit class 3.
 
 ### VITA-F0002 · `F-LIMIT-ERRORS` (Fatal)
-**에러 한도(`--error-limit N`) 도달 — 단계 중단.** Error 누적이 임계(Verilator 기본 50;
-warning 미포함)에 도달하면, 깨진 파일이 수천 줄 cascade를 뱉지 않게 단계를 즉시 중단한다.
-개별 Error는 기록-후-계속이지만 한도 도달은 그 자체가 Fatal이다.
-```
-$ vcmp broken.sv
-error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: ...   (×50)
-fatal[VITA-F0002] F-LIMIT-ERRORS: error limit reached (50); aborting compile
-  errors=50 warnings=3 notes=0
-```
-**해결:** 가장 앞 에러부터 고친다(뒤는 cascade인 경우 많음). `--error-limit <N>`으로 조정.
-억제 불가(exit class 1).
+**An error-count limit was reached and the stage aborted.** Reserved for a
+user-configurable error budget: past the budget, a badly broken file stops cascading
+thousands of follow-on lines and the stage ends.
+
+**Status at HEAD: no emitter.** There is no `--error-limit` flag. Three internal caps exist
+instead, and none of them reports through this code:
+
+| Cap | Value | Behaviour on reaching it |
+|---|---|---|
+| parser error cap | 50 | further parse errors are not recorded; no diagnostic marks the cap |
+| elaborate error cap | 200 | one `Severity::Error` `VITA-E3009` with `too many elaborate errors; further diagnostics suppressed (cap 200)`; later errors and their notes are dropped |
+| runtime index-report cap | 8, with separate budgets for known and unknown indices | report 8 becomes `further out-of-range diagnostics suppressed` / `further unknown-index diagnostics suppressed`; reports 9 and later print nothing |
+
+**Fix:** fix the earliest error first — the rest are usually cascade. Not suppressible;
+exit class 1.
 
 ---
 
 ## 1xxx · PREPROCESS
 
 ### VITA-E1001 · `E-PP-INCLUDE-NOT-FOUND` (Error)
-**`` `include `` 대상 파일을 검색 경로에서 못 찾음.** 현재 파일 디렉터리 + 모든
-`+incdir+`/`-I`(RULE A 입력)를 뒤져도 없을 때. 텍스트 치환은 전처리 시점 동작이라 대상이
-없으면 붙일 바이트가 없다(IEEE 1364 §19.5 / 1800 §22.4). include 스택 Frame으로 출처 표기.
+**An `` `include `` target was not found on the search path.** The preprocessor looked in the
+including file's directory and in every `+incdir+` / `-I` directory and found nothing. Text
+substitution happens at preprocess time, so a missing target means there are no bytes to
+splice in (IEEE 1364-2005 §19.5, IEEE 1800-2017 §22.4). The include stack is attached as
+frames so the origin is visible.
 ```
-`include "defs/config.svh"        // 어느 +incdir+ 아래에도 없음
-$ vcmp top.sv +incdir+./rtl
-error[VITA-E1001]: `include "defs/config.svh" not found on search path
+$ vita design.sv
+design.sv:1:19: error[VITA-E1001] E-PP-INCLUDE-NOT-FOUND: `include "nope.svh" not found on search path
 ```
-**해결:** `+incdir+<dir>`로 헤더 디렉터리를 추가하거나 경로/파일명(대소문자 포함 — 경로는 모든
-OS에서 대소문자 구분)을 고친다. `.f` 트리 안이면 `--dump-filelist`로 확인. 억제 불가.
+**Fix:** add the header directory with `+incdir+<dir>`, or correct the path or file name
+(paths are case-sensitive on every platform vita supports). Inside a filelist tree,
+`--dump-filelist` shows what actually reached the stage. Not suppressible.
 
 ### VITA-E1002 · `E-PP-MACRO-ARITY` (Error)
-**함수형 매크로를 잘못된 인자 개수로 호출.** `` `define NAME(a,b,…) `` 매크로를 형식 인자
-개수와 다른 실인자로 전개할 때(IEEE 1364 §19.3.1 / 1800 §22.5.1). 호출 위치와 정의 위치를
-둘 다 Frame으로 첨부.
+**A function-like macro was called with the wrong number of arguments.** A
+`` `define NAME(a,b,…) `` macro was expanded with an actual count that does not match the
+formals and cannot be filled from defaults (IEEE 1364-2005 §19.3.1, IEEE 1800-2017 §22.5.1).
+Both the call site and the definition site are attached.
 ```
-`define MAX(a, b) ((a) > (b) ? (a) : (b))
-assign y = `MAX(x);               // arity 1, 2 기대
-error[VITA-E1002]: macro `MAX expects 2 arguments, got 1
+`define MAX(a,b) ((a)>(b)?(a):(b))
+module m; wire y = `MAX(1); endmodule
+->  m.sv:3:20: error[VITA-E1002] E-PP-MACRO-ARITY: macro `MAX expects 2 argument(s), got 1
+    — formal `b` has no default
 ```
-**해결:** 형식 인자 수에 맞춰 호출하거나 `` `define `` 을 고친다. (객체형 매크로 뒤의 `(`는
-호출이 아니라 리터럴 텍스트 — arity 검사 대상 아님.) 억제 불가.
+**Fix:** pass the formals the macro declares, or change the `` `define ``. A `(` after an
+object-like macro is literal text, not a call, and is not arity-checked. Not suppressible.
 
 ### VITA-W1003 · `W-LINT-UNCLOSED` (Warning)
-**inline `// vitamin lint_off` 프라그마가 닫히지 않고 EOF 도달.** `lint_off <CODE>` 구간이
-짝 `lint_on` 없이 파일 끝(또는 textually-inlined `` `include `` 범위 끝)에 도달하면, 나머지
-전체의 진단이 silently 억제되는 편집 실수일 가능성이 크므로 표면화한다.
-```
-// vitamin lint_off W-PARSE-IMPLICIT-NET
-assign w = a & b;
-// ... EOF, 짝 lint_on 없음 ...
-warning[VITA-W1003]: 'lint_off W-PARSE-IMPLICIT-NET' at alu.sv:2 never closed before EOF
-```
-**해결:** 의도한 끝에 `// vitamin lint_on <CODE>`를 추가. 전파는 textually-inlined
-`` `include ``만, `-y`/`-v` 라이브러리 단위로는 안 넘어감. `-Wno-W-LINT-UNCLOSED`로 억제.
+**An inline `lint_off` pragma reached end of file without its matching `lint_on`.** An
+unclosed suppression region would silently swallow diagnostics for the whole remainder of a
+file, which is nearly always an editing mistake rather than an intent.
+
+**Status at HEAD: no emitter.** No inline lint pragma exists anywhere in the tree; the only
+suppression surface is `-Wno-<CODE>` and `-Werror[=<CODE>]` on the command line, which is
+scoped to the whole run and cannot be left unclosed.
+
+**Fix:** suppress with `-Wno-<CODE>` rather than an inline region. Suppressible with
+`-Wno-W-LINT-UNCLOSED` if it ever fires.
 
 ### VITA-E1004 · `E-PP-RECURSIVE-MACRO` (Error)
-
-텍스트 매크로가 자기 자신의 확장 도중 다시 호출되어 무한 확장에 빠졌다. 전처리기는 활성 확장 집합(active-expansion set)으로 이를 감지하고 해당 사용을 리터럴로 남긴 뒤 이 에러를 보고한다.
-
-```verilog
-`define A `A
-`A    // E-PP-RECURSIVE-MACRO
+**A text macro re-entered its own expansion.** The preprocessor tracks the set of
+macros currently expanding; a use of a macro already in that set would expand forever, so the
+use is left as literal text and this error is reported.
 ```
-
-해결: 매크로 본문에서 자기 참조를 제거하거나, 재귀 대신 충분히 펼친 형태로 정의한다.
+`define A `A
+module m; wire y = `A; endmodule
+->  m.sv:3:20: error[VITA-E1004] E-PP-RECURSIVE-MACRO: recursive expansion of macro `A
+```
+**Fix:** remove the self-reference from the macro body, or write the fully expanded form
+instead of a recursive one. Not suppressible.
 
 ### VITA-E1005 · `E-PP-RECURSIVE-INCLUDE` (Error)
-
-`include 체인이 순환하여 이미 열려 있는 파일을 다시 포함하려 했다. canonical 경로 스택으로 감지하고 재포함을 건너뛴다.
-
-```verilog
-// a.svh
-`include "b.svh"
-// b.svh
-`include "a.svh"   // E-PP-RECURSIVE-INCLUDE
+**An `` `include `` chain is cyclic.** A file tried to include one that is already open on
+the include stack. Detection is on the canonical path stack, and the re-inclusion is
+skipped rather than followed.
 ```
-
-해결: 순환 포함을 제거하거나 include guard(`ifndef/`define/`endif)를 사용한다.
-
-### VITA-E1013 · `E-PP-BAD-DIRECTIVE` (Error)
-
-알 수 없는 컴파일러 지시어, 미정의 매크로 사용, 떠돌이 backtick, 범위 밖 지시어 형태, 불균형/중복 조건부, 비리터럴 include 인자, 지시어 이름에 대한 `undef 등 전처리 형식 오류 전반을 포괄한다.
-
-```verilog
-`frobnicate        // E-PP-BAD-DIRECTIVE (unknown directive)
-`UNDEFINED_MACRO   // E-PP-BAD-DIRECTIVE (undefined macro use)
-`endif             // E-PP-BAD-DIRECTIVE (no open conditional)
+// a.svh:  `include "b.svh"
+// b.svh:  `include "a.svh"
+->  top.sv:1:19: error[VITA-E1005] E-PP-RECURSIVE-INCLUDE: cyclic `include of "a.svh"
 ```
-
-해결: 지시어 철자를 확인하거나, 매크로를 먼저 `define 하거나, 조건부 블록의 짝을 맞춘다.
+**Fix:** break the cycle, or guard the headers with `` `ifndef ``/`` `define ``/`` `endif ``.
+Not suppressible.
 
 ### VITA-W1007 · `W-PP-MACRO-REDEFINED` (Warning)
-
-`define가 기존 매크로를 다른 본문/파라미터로 재정의했다. 새 정의가 적용되며 경고만 발생한다(동일 본문 재정의는 무경고).
-
-```verilog
-`define W 1
-`define W 2   // W-PP-MACRO-REDEFINED
+**A `` `define `` replaced an existing macro with different text or different parameters.**
+The new definition takes effect and the run continues. Redefining a macro with identical
+text is silent.
 ```
-
-해결: 의도된 재정의가 아니면 매크로 이름을 분리하거나 `undef 후 재정의한다.
+`define W 1
+`define W 2
+->  m.sv:1:19: warning[VITA-W1007] W-PP-MACRO-REDEFINED: macro `W redefined with different text
+```
+**Fix:** if the redefinition was not intended, rename one of the macros, or `` `undef `` the
+name before redefining it. Suppress with `-Wno-W-PP-MACRO-REDEFINED`, promote with
+`-Werror=`.
 
 ### VITA-W1008 · `W-PP-UNDEF-UNDEFINED` (Warning)
-
-`undef가 현재 정의되지 않은 이름을 대상으로 했다. 동작은 무해하며 경고만 발생한다.
-
-```verilog
-`undef NEVER_DEFINED   // W-PP-UNDEF-UNDEFINED
+**An `` `undef `` names a macro that is not currently defined.** The operation is harmless;
+the warning exists because the usual cause is a typo in the macro name.
 ```
+`undef NEVER
+->  m.sv:1:19: warning[VITA-W1008] W-PP-UNDEF-UNDEFINED: `undef of macro `NEVER that was never defined
+```
+**Fix:** check the spelling, or `` `undef `` only where the macro is known to be defined.
+Suppress with `-Wno-W-PP-UNDEF-UNDEFINED`, promote with `-Werror=`.
 
-해결: 대상 매크로 이름의 철자를 확인하거나, 정의 이후에만 `undef 한다.
+### VITA-E1013 · `E-PP-BAD-DIRECTIVE` (Error)
+**A malformed or unrecognised preprocessor construct.** This is the general preprocess-form
+error: an unknown compiler directive, use of an undefined macro, a stray backtick, a
+directive in a position where it is not allowed, an unbalanced or duplicated conditional, a
+non-literal `` `include `` argument, and `` `undef `` of a directive name.
+```
+`frobnicate
+->  m.sv:1:19: error[VITA-E1013] E-PP-BAD-DIRECTIVE: undefined macro use `frobnicate
+```
+```
+`endif             // no conditional is open
+`UNDEFINED_MACRO   // never `defined
+```
+**Fix:** check the directive spelling, `` `define `` the macro before using it, or balance
+the conditional block. Not suppressible.
 
 ### VITA-W1017 · `W-PP-TIMESCALE-DEFAULT` (Warning)
-
-설계의 어떤 모듈도 `` `timescale ``을 선언하지 않았고 `--timescale` 플래그도 없다. 전역 시간 단위/정밀도를 기저값 `1ns/1ns`로 잠그고 경고만 발생한다(§08). 기저값은 OS·컴파일 순서와 무관한 상수이므로 결정성을 깨지 않는다.
-
-```verilog
-module top;            // `timescale 없음 → W-PP-TIMESCALE-DEFAULT
-  initial #2.5 $finish; // 2.5ns → 1ns 입도 반올림 = 3ns
-endmodule
+**No module in the design declares a `` `timescale `` and no `--timescale` was given.** The
+global time unit and precision lock to the `1ns/1ns` base and the run continues (see
+[08-timescale-and-timing.md](08-timescale-and-timing.md)). The base is a constant, independent
+of OS and compile order, so determinism is unaffected.
 ```
+module top;             // no `timescale anywhere
+  initial #2.5 $finish; // 2.5 ns rounded to the 1 ns grid = 3
+endmodule
+->  warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+```
+**Fix:** declare the unit and precision you mean at the top of the file, for example
+`` `timescale 1ns/1ps ``. Suppress with `-Wno-W-PP-TIMESCALE-DEFAULT`, promote with
+`-Werror=`.
 
-해결: 의도한 단위/정밀도를 `` `timescale 1ns/1ps `` 형태로 파일 상단에 선언한다(부분 지정은 별개 코드 `W-PARSE-TIMESCALE-PARTIAL`/`E-PP-TIMESCALE-PARTIAL`).
+### VITA-W1018 · `W-PP-TIMESCALE-MIXED` (Warning)
+**Some modules in the design carry a `` `timescale `` and others do not.** IEEE 1800-2017
+§3.14.2.2 requires all or none. The message names the ungoverned modules — up to eight, then
+`(and N more)` — because "somewhere in ten files" is not actionable.
+```
+$ vita leaf.sv top.sv         # only top.sv has a `timescale
+warning[VITA-W1018] W-PP-TIMESCALE-MIXED: some modules have a `timescale and these do not:
+  leaf — IEEE 1800 §3.14.2.2 requires all or none, and other tools refuse to elaborate the
+  mixed form (they take the 1ns/1ns base here)
+```
+vita and iverilog both run the mixed design, with the ungoverned modules on the `1ns/1ns`
+base. Xcelium refuses to elaborate it (`*F,CUMSTS: Timescale directive missing on one or more
+modules`) and Verilator reports `Error-TIMESCALEMOD`, so a design that is green here can fail
+at sign-off. It is a warning rather than an error because the simulation itself is correct.
+
+**Fix:** give every module a `` `timescale ``, or none. Promote with
+`-Werror=W-PP-TIMESCALE-MIXED` in CI; suppress with `-Wno-`.
 
 ---
 
 ## 2xxx · PARSE
 
-
-### VITA-W1018 · `W-PP-TIMESCALE-MIXED` (Warning)
-
-Some modules in the design carry a `` `timescale `` directive and others do not.
-IEEE 1800-2017 §3.14.2.2 requires all or none.
-
-```
-// rtl/leaf.sv  — no `timescale
-// tb/top.sv    — `timescale 1ns/1ps
-->  warning[VITA-W1018] W-PP-TIMESCALE-MIXED: some modules have a `timescale and these
-    do not: leaf — IEEE 1800 §3.14.2.2 requires all or none, …
-```
-
-vita and iverilog both RUN the mixed design (the ungoverned modules take the 1ns/1ns
-base), but xrun refuses to elaborate it (`*F,CUMSTS: Timescale directive missing on one
-or more modules`) and Verilator reports `Error-TIMESCALEMOD` — so a design that is green
-here fails at sign-off. A warning rather than an error because the simulation itself is
-correct; promote it with `-Werror=W-PP-TIMESCALE-MIXED` in CI. The message names the
-ungoverned modules (up to eight, then a count).
-
 ### VITA-E2001 · `E-DUP-UNIT` (Error)
-**설계 단위(module/package) 재정의.** 같은 단위 이름이 분석 소스에 두 번 이상 정의될 때(예
-filelist에 소스 파일 중복, 또는 두 파일이 같은 `module m` 선언). 논리 라이브러리는 한
-`library:unit` 키에 두 단위를 못 담는다. **소스는 기본 dedup하지 않는다**(§3.1 BLOCKER) — sticky
-디렉티브 상속(RULE S) 때문에 두 occurrence는 다른 컨텍스트라 같은 입력이 아니므로 silent dedup이
-위험하다.
+**A design unit (module or package) is defined more than once.** The same unit name appears
+twice in the analysed sources — a source file listed twice in a filelist, or two files each
+declaring `module m`. A logical library cannot hold two units under one `library:unit` key.
+Sources are not deduplicated by default: sticky directive inheritance means two occurrences
+of the same path can carry different context, so silent dedup would drop a genuinely
+different input.
 ```
-# build.f 가 adder.sv 를 두 번 나열 (또는 두 파일이 module adder 선언)
-error[VITA-E2001]: design unit 'adder' redefined
-  note: first defined at adder.sv:1   note: redefined (second occurrence)
+module adder; endmodule
+module adder; endmodule
+->  error[VITA-E2001] E-DUP-UNIT: module `adder` declared 2 times
 ```
-**해결:** 중복 소스 항목 제거 또는 한쪽 단위 개명. `--dump-filelist`로 평탄화 순서 확인.
-(같은 canonical 경로가 *다른* 상속 컨텍스트로 두 번이면 `E-FLIST-DUP-CTX-CONFLICT`.) 억제 불가.
+**Fix:** remove the duplicate source entry or rename one unit. `--dump-filelist` shows the
+flattened order. The same canonical path listed twice under *differing* sticky context is a
+different code, `E-FLIST-DUP-CTX-CONFLICT`. Not suppressible.
 
 ### VITA-E2002 · `E-PARSE-UNEXPECTED-TOKEN` (Error)
-**문법에 맞지 않는 예기치 못한 토큰.** 어느 valid production도 이어갈 수 없는 토큰(누락 `;`,
-잘못된 키워드, 불균형 `begin`/`end`, 잘못된 식). parse는 마지막 언어 의존 단계이며 토큰에
-file/line/col이 붙어 diag가 caret로 밑줄. `--error-limit` 도달 시 `F-LIMIT-ERRORS`로 중단.
+**A token that no valid grammar production can continue.** A missing `;`, a wrong keyword,
+unbalanced `begin`/`end`, a malformed expression. Parse is the last language-dependent stage,
+and every token carries file, line and column, so the diagnostic points at the exact source
+position. The lexer's own errors — unterminated string, unterminated block comment, bad
+number literal and the rest — also report under this code.
 ```
 module m;
-  assign y = a &        // 우변 누락 + ';' 누락
+  assign y = a &        // missing operand and ';'
 endmodule
-error[VITA-E2002]: unexpected token 'endmodule', expected expression  --> m.sv:3:1
+->  m.sv:4:1: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found keyword 'endmodule'
+    m.sv:4:1: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected ';', found keyword 'endmodule'
 ```
-**해결:** 해당 위치 문법을 고친다. `--std`/`-g<year>`/`-sv` dialect가 파일과 맞는지 확인(2005↔SV
-불일치가 valid SV 토큰을 예기치 못하게 만들 수 있음). 억제 불가.
+When the token text cannot be recovered, the message is just `expected <what>` — the tail is
+dropped rather than guessed.
 
-### VITA-W2004 · `W-PARSE-SELECT-BASE` (Warning)
-**비트/부분 선택이 net·variable 이 아닌 것에 붙었다.** IEEE 1800-2017 §11.5.1 은 select 를
-**variable reference**(이름 · 인덱싱·멤버 선택으로 좁혀진 것 포함)에만 허용한다. vita 는 아무 primary
-에나 붙여 주므로 아래가 전부 **동작하고**, 그것이 vita 확장이다. **값은 바꾸지 않는다** — 이 경고만
-낸다(§3.2 의 `\r` 과 같은 정책: 오라클이 갈리는 곳에서 값을 바꾸면 지금 도는 설계가 조용히 깨진다).
-
-| 형태 | vita | iverilog 13 | Verilator 5.050 |
-|---|---|---|---|
-| `((a^b)>>8)[7:0]` | 동작 | 거부 | **거부** |
-| `16'hABCD[7:0]` | 동작 | 거부 | **거부** |
-| `f(a)[7:0]` | 동작 | 거부 | **동작**(같은 값) |
-| `{a,b}[7:0]` | 동작 | 거부 | **동작**(같은 값) |
-
-```
-o = ((a ^ b) >> 8)[7:0];
-warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an
-expression, not to a net or variable — …  --> m.sv:3:23
-```
-**해결:** 값을 변수에 먼저 대입하고 그 변수에서 선택한다(`logic [15:0] t = (a^b)>>8; o = t[7:0];`).
-`-Wno-W-PARSE-SELECT-BASE` 로 억제, `-Werror=` 로 승격.
-
-⚠️ **경고하지 않는 것**(전부 두 오라클 모두 동작): `a[7:0]` · **`pk::W[7:0]`**(패키지 스코프 이름 — §26.3 상 이것도 이름이고 두 오라클 다 받는다. §4.5.383 이전엔 경고했다: 같은 select 가 `import pk::*` 뒤 bare 철자로 쓰면 조용하고 `pk::` 로 쓰면 경고였다) · `p.hi[3:0]`(packed struct 멤버 —
-파서가 part-select 로 desugar 하므로 **AST 로는 못 가른다. 판별자는 provenance**: 체인이 이름에서
-시작했는가) · `m[1][3:0]`(배열 원소). ⚠️ **아직 경고하지 않는 것 1건**: `a[7:0][3:0]`(slice-of-slice)
-는 이름에서 시작하므로 이 검사를 통과하는데 **iverilog 는 거부한다** — 별개 판별자가 필요해 남겼다.
+**Fix:** correct the syntax at that position. Check that the dialect matches the file: a
+2005-versus-SystemVerilog mismatch can make a valid SystemVerilog token unexpected. Not
+suppressible.
 
 ### VITA-W2003 · `W-PARSE-IMPLICIT-NET` (Warning)
-**`default_nettype wire` 하에서 암시적 net 추론.** 미선언 식별자를 net 문맥에 써서 1-bit net으로
-암시 선언될 때(IEEE 1364 §19.2 / 1800 §22.8). `default_nettype none`이면 같은 코드가 hard error.
-오타(`enabel`)가 silently 새 wire가 되는 고전 버그라 경고. 유효 `default_nettype`은 sticky·파일 간
-상속(RULE S)이라 이 경고 유무는 컴파일 순서에 의존.
+**An undeclared identifier was inferred as an implicit net under `` `default_nettype wire ``.**
+IEEE 1364-2005 §3.5 creates a 1-bit net for an undeclared identifier in specific positions.
+The classic bug is a typo (`enabel`) quietly becoming a new wire, so the inference is
+reported. The effective `` `default_nettype `` is sticky and inherited across files in
+compile order, so whether this fires can depend on compile order.
 ```
-assign y = a & enabel;            // 'enabel' 오타 -> 암시 1-bit wire
-warning[VITA-W2003]: implicit net 'enabel' inferred (default_nettype wire)  --> m.sv:3:18
+assign enabel = a & b;   // 'enabel' was never declared
+->  m.sv:1:8: warning[VITA-W2003] W-PARSE-IMPLICIT-NET: implicit net `m.enabel` inferred as a
+    1-bit wire (IEEE 1364-2005 §3.5); declare it explicitly, or use ``default_nettype none``
+    to make this an error
 ```
-**해결:** net 명시 선언 또는 오타 수정. 프로덕션 RTL은 `` `default_nettype none `` 권장.
-`-Wno-W-PARSE-IMPLICIT-NET`(또는 인라인 `lint_off`)로 억제, `-Werror=`로 승격.
+Only two positions infer a net. Everywhere else an undeclared name is `VITA-E3010`:
 
-> **✅ 구현됨 (2026-08-03, §4.5.284).** 위 정책 — *"vitamin v1은 implicit net을 생성하지 않는다;
-> 사실상 `` `default_nettype none ``; 이 코드는 예약(emitter 0)"* — 은 **폐지됐다.** 보수적이었지만
-> **비준수**였고, 결정적으로 **사용자가 고칠 수 없었다**: 실사용 ASIC 트리에서 이 구문이 파운드리
-> 납품 셀 라이브러리와 IP 모델 안에 있었다(외부 round-28). 이제 IEEE 1364-2005 §3.5 를 구현하고,
-> refusal 이 사던 안전은 **이 경고가 산다**(`-Werror=W-PARSE-IMPLICIT-NET` 로 hard error 복원).
->
-> **경계(iverilog 로 핀)** — §3.5 는 **두 위치만** 커버하고 나머지는 여전히 E3010 이다:
->
-> | 위치 | 동작 |
-> |---|---|
-> | 게이트/모듈 인스턴스 **터미널 리스트** | 암시 1-bit wire + W2003 |
-> | continuous assign **LHS** | 암시 1-bit wire + W2003 |
-> | 평범한 rhs (`assign y = TYPO`) | **E3010** |
-> | procedural lvalue (`initial TYPO = 1`) | **E3010** |
-> | `` `default_nettype none `` 하의 모든 위치 | **E3010** |
-> | `.name` **shorthand** (IEEE 1800 §23.3.2.2) | **E3010** — 선언된 객체를 요구한다 |
-> | **interface instance** as an actual (`simple_if bus(); child c(bus);`) | no diagnostic — it is a declaration |
->
-> **An interface instance is not a §3.5 position (V34-6, 2026-08-26).** It only looked
-> like one: the flatten registers symbols for the interface MEMBERS (`t.bus.d`) and never
-> for the bare instance name, so the terminal-list walk saw an undeclared bare ident and
-> warned `implicit net t.bus …`. Everything about that warning was wrong — `bus` is
-> declared one line above, an interface instance cannot be "declared as a net" as the
-> advice asked, `` `default_nettype none `` made the warning VANISH instead of becoming
-> the promised error, and it fired once per module SHARING the bus. The pass now skips the
-> interface-instance names of the same module body, which also removes the phantom
-> `$var wire 1 … bus` (stuck at `z`) from the VCD and drops `net_count` by one per
-> interface instance. verilator 5.050 is the oracle here; iverilog 13 cannot parse an
-> interface PORT at all.
->
-> **§3.5 net 은 스칼라다.** 더 넓은 드라이버는 bit 0 만 남기고 버린다 — 모든 시뮬레이터가 조용히
-> 하는 일이므로 vita 는 폭을 말하는 **W3056** 을 추가로 낸다(`… drives it with 12 bits and the top
-> 11 are discarded`). `` `default_nettype `` 디렉티브는 파일 순서 sticky(RULE S)로 지원된다.
+| Position | Behaviour |
+|---|---|
+| gate or module instance terminal list | implicit 1-bit wire, `VITA-W2003` |
+| continuous-assign LHS | implicit 1-bit wire, `VITA-W2003` |
+| ordinary RHS (`assign y = TYPO`) | `VITA-E3010` |
+| procedural lvalue (`initial TYPO = 1`) | `VITA-E3010` |
+| any position under `` `default_nettype none `` | `VITA-E3010` |
+| `.name` shorthand (IEEE 1800-2017 §23.3.2.2) | `VITA-E3010` — it requires a declared object |
+| an interface instance used as an actual | no diagnostic; it is a declaration, not a net |
+
+The inferred net is scalar, as §3.5 mandates, so a wider driver keeps only bit 0. Every
+simulator does that silently; vita additionally reports the discarded width as
+`VITA-W3056`.
+
+**Fix:** declare the net, or fix the typo. Production RTL should use
+`` `default_nettype none ``. Suppress with `-Wno-W-PARSE-IMPLICIT-NET`; restore the strict
+behaviour with `-Werror=W-PARSE-IMPLICIT-NET`.
+
+### VITA-W2004 · `W-PARSE-SELECT-BASE` (Warning)
+**A bit or part select applies to an expression rather than to a net or variable.**
+IEEE 1800-2017 §11.5.1 allows a select only on a variable reference — a name, possibly
+indexed or member-selected. vita accepts a select on any primary, and that acceptance is a
+vita extension. The value is not changed; only this warning is added, because changing the
+value where the oracles disagree would quietly break a design that runs today.
+
+| Form | vita | iverilog 13 | Verilator 5.050 |
+|---|---|---|---|
+| `((a^b)>>8)[7:0]` | runs | rejects | rejects |
+| `16'hABCD[7:0]` | runs | rejects | rejects |
+| `f(a)[7:0]` | runs | rejects | runs, same value |
+| `{a,b}[7:0]` | runs | rejects | runs, same value |
+
+```
+assign o = ((a ^ b) >> 8)[7:0];
+->  m.sv:2:14: warning[VITA-W2004] W-PARSE-SELECT-BASE: a bit/part select here applies to an
+    expression, not to a net or variable — IEEE 1800-2017 §11.5.1 allows one only on a
+    variable reference (a name, possibly indexed or member-selected). vita accepts it;
+    iverilog rejects every form of it and Verilator rejects a select on a parenthesised
+    expression or on a literal. Assign the value to a variable first, then select from that
+```
+Not warned, because both oracles accept all of them: `a[7:0]`; `pk::W[7:0]`, a package-scoped
+name; `p.hi[3:0]`, a packed-struct member, which the parser desugars to a part-select so the
+AST cannot distinguish it — the discriminator is provenance, whether the chain started at a
+name; and `m[1][3:0]`, an array element. One form is accepted without a warning that iverilog
+rejects: `a[7:0][3:0]`, slice-of-slice, which starts at a name and so passes this check.
+
+**Fix:** assign the value to a variable first and select from that
+(`logic [15:0] t = (a^b)>>8; o = t[7:0];`). Suppress with `-Wno-W-PARSE-SELECT-BASE`, promote
+with `-Werror=`.
 
 ---
 
 ## 3xxx · ELABORATE
 
 ### VITA-E3001 · `E-ELAB-MULTIDRIVER` (Error)
-**엔진이 해소할 수 없는 continuous-assign 비트구간 겹침.** 실제 트리거는 문서 초안보다 좁다:
-한 net의 **부분 비트범위 continuous assign 구간들이 서로 겹치는데**(overlapping intervals) 엔진이
-그 겹침을 해소할 수 없을 때만 발화한다. whole-net 복수 드라이버(`assign w = a; assign w = b;`)는
-IEEE §6.6 4-state wired-logic **wire 해소로 합법**이며 이 코드를 발화하지 **않는다**(값은 항상
-해소됨). `%m` 계층 경로와 함께 보고.
-```
-wire [7:0] w;  assign w[3:0] = a;  assign w[5:2] = b;   // [3:2] 구간 겹침 — 해소 불가
-$ velab -s top   ->  VITA-E3001 at top.w
-```
-**해결:** 겹치는 part-select 구간을 분리하거나 단일 드라이버로 재구성. 문서화됐던
-`velab --multi-driver warn|error` 정책 플래그(warn 강등 선택)는 **미구현 future work**다 —
-현재는 정책 선택 없이 항상 Error.
+**Two drivers the engine cannot resolve.** Two distinct conditions share this code.
 
-**두 번째 트리거 — 변수의 두 드라이버 (round 37 신설).** IEEE 1800 §9.2.2.2 는
-`always_comb` 가 구동하는 변수를 **다른 어떤 프로세스도 구동할 수 없다**고 규정하고,
-선언 초기화자는 그 다른 드라이버다. 따라서 아래는 E3001 이다:
-```systemverilog
-logic rdy = 1'b1;                           // 드라이버 ①
-always_comb rdy = (cnt < 8'd128);           // 드라이버 ②  -> VITA-E3001
+**Overlapping continuous-assign bit ranges.** Part-select continuous assignments to one net
+overlap and the overlap cannot be resolved. Whole-net multiple drivers
+(`assign w = a; assign w = b;`) are legal 4-state wired-logic resolution under IEEE 1800-2017
+§6.6 and do *not* raise this code — the value is always resolved. A net keeps this check
+when any of its drivers is delayed, multi-chunk, an array element, or otherwise outside the
+resolved set. Dynamic (non-constant) offsets are not counted, so a disjoint dynamic split is
+not falsely rejected.
 ```
-승격 전에는 경고였고, 그래서 개발 루프는 통과하고 xrun elaboration 이 `*E,MULAXX` 로
-죽는 왕복이 났다.
+wire [7:0] w;  assign w[3:0] = a;  assign w[5:2] = b;    // [3:2] overlaps
+->  error[VITA-E3001] E-ELAB-MULTIDRIVER: net `m.w` driven by multiple overlapping continuous assignments
+```
 
-⚠️⚠️ **`always_comb` 만이다 — `always_ff`·`always_latch` 는 넣지 않는다.** 외부 리포트가
-*"조항은 블록 종류에 따라 달라지지 않는다"* 를 근거로 셋 다 요청했는데, **달라진다.**
-kind 별로 파일을 나눠 verilator 5.050 `--lint-only -Wall` 로 실측:
+**A declaration initializer on a variable that `always_comb` writes.** IEEE 1800-2017
+§9.2.2.2 says no other process may drive a variable an `always_comb` drives, and a
+declaration initializer is such a driver.
+```
+logic rdy = 1'b1;                    // driver 1
+always_comb rdy = (cnt < 8'd128);    // driver 2
+->  m.sv:2:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `rdy` has a declaration
+    initializer AND is written by `always_comb`, which is two drivers on one variable
+    (IEEE §9.2.2.2) — drop the initializer or the `always_comb` write
+```
+The rule is scoped to `always_comb` only. Measured against Verilator 5.050 with
+`--lint-only -Wall`, one file per block kind:
 
-| 선언 초기화자 + | verilator |
+| Declaration initializer plus | Verilator |
 |---|---|
-| `always_comb` | **MULTIDRIVEN** (IEEE 1800-2023 9.2.2.2 인용) |
-| `always_ff` | **PROCASSINIT 만** (스타일 노트) |
-| `always_latch` | **PROCASSINIT 만** |
+| `always_comb` | `MULTIDRIVEN`, citing IEEE 1800-2023 §9.2.2.2 |
+| `always_ff` | `PROCASSINIT` only, a style note |
+| `always_latch` | `PROCASSINIT` only |
 
-iverilog 는 셋 다 침묵한다. 그리고 이 분리는 verilator 의 누락이 아니라 **규칙의 목적**
-이다 — `always_comb` 는 조합논리를 모델링하므로 출력이 항상 입력의 함수여야 하고, 다른
-어떤 쓰기도 그 프로시저가 주장하는 성질을 깨뜨린다. `always_ff` 는 **레지스터**를
-모델링하고 **선언 초기화자는 그 레지스터의 power-on 값**이다 —
-`logic [7:0] c = 0; always_ff @(posedge clk) c <= c + 1;` 은 합성툴이 구현하는 표준
-FPGA 초기화 관용구다.
+iverilog is silent on all three. The split is the purpose of the clause, not a Verilator
+omission: `always_comb` models combinational logic, so its output must always be a function
+of its inputs and any other write destroys that property, whereas `always_ff` models a
+register and the declaration initializer is that register's power-on value —
+`logic [7:0] c = 0; always_ff @(posedge clk) c <= c + 1;` is the standard FPGA idiom.
+A plain `always` is excluded for a different reason: `logic clk = 0; always #5 clk = ~clk;`
+is a testbench idiom every tool accepts and the clause reaches only inferring procedures.
+`initial` and `final` are excluded likewise.
 
-⭐ 넓힌 버전은 **지어서 되돌렸다**. 반증한 것은 이 저장소 자신의 `obs_procs` 픽스처였다 —
-정확히 그 관용구로 쓰여 있고 elaboration 이 멈췄다. **도는 테스트 설계가 깨지는 것은 새
-거절에 대한 반증이지 근거가 아니다.**
+The `always_comb` decision procedure over-approximates, so one guard is attached: the
+definite-assignment walk is name-based and treats an unresolved call as a write, which
+false-positives when a block-local shadow redeclares the same name inside the `always_comb`.
+A procedure that declares a local of that name is skipped whole. A write through a task
+`inout` actual is still a driver.
 
-⚠️ 평범한 `always` 는 또 다른 이유로 제외다 — `logic clk = 0; always #5 clk = ~clk;` 는
-모든 툴이 받는 TB 관용구이고 조항이 추론 프로시저에만 닿는다. `initial`·`final` 도 같다.
-
-⚠️ **판정기는 과대근사이므로 가드가 하나 붙어 있다.** `stmt_never_writes_ident`(definite-
-assignment walk)는 accept-gate 용이라 이름 기반이고 미해결 호출을 "쓴다"로 본다. 블록 로컬
-**섀도**(`always_comb` 안에서 같은 이름을 다시 선언)에서 오탐이 실측됐고,
-`declares_local_named` 가 그 프로시저를 통째로 건너뛴다. 경고였다면 성가심이지만 에러이므로
-합법 RTL 거절이 된다. task `inout` 실인자를 통한 쓰기는 여전히 드라이버다.
+**Fix:** separate the overlapping part-select ranges or restructure to a single driver; or
+drop either the initializer or the `always_comb` write. Not suppressible; there is no policy
+flag to demote it to a warning.
 
 ### VITA-E3002 · `E-ELAB-PORT-MISMATCH` (Error)
-**인스턴스 포트 연결이 모듈 포트 선언과 비호환.** 모듈에 없는 named 포트 `.foo()`, 포트 수를
-넘는 positional 연결, 방향/종류 비호환 등 바인딩 자체가 무의미할 때(IEEE 1800 §23.3.2). 폭
-불일치(복구 가능 `W-ELAB-WIDTH-TRUNC`)와 구별 — 인스턴스를 형성할 수 없다. `%m` + AST span 첨부.
+**An instance port binding is incompatible with the module's port declarations.** A named
+connection to a port the module does not have, more positional connections than ports, or a
+direction or kind that makes the binding meaningless (IEEE 1800-2017 §23.3.2). This is
+distinct from a recoverable width mismatch: the instance cannot be formed at all. The
+hierarchical path and the AST span are attached.
 ```
 module child(input a, output y); endmodule
-child u0(.a(1'b0), .z(y));         // .z 는 child 의 포트가 아님
-->  VITA-E3002 at top.u0 (no port `z` on module `child`)
+module top; wire y; child u0(.a(1'b0), .z(y)); endmodule
+->  top.sv:3:27: error[VITA-E3002] E-ELAB-PORT-MISMATCH: connection `.z(...)` names no port
+    of module `child` [in top.u0]
 ```
-**해결:** 선언된 포트로 연결 수정(이름/positional 수·방향). 미연결 포트는 `.z()`로 비운다.
-억제 불가.
+**Fix:** connect the ports the module declares, by name or by position, with matching
+directions. Leave a port unconnected explicitly with `.z()`. Not suppressible.
 
 ### VITA-E3003 · `E-ELAB-UNRESOLVED-INSTANCE` (Error)
-**인스턴스화한 모듈을 컴파일된 설계 단위로 해소 불가.** 계층 평탄화 중 인스턴스 타깃 모듈이 work
-라이브러리·`-L` compose·`-y`/`-v` 검색 어디에도 없을 때. vcmp는 단위를 고립 컴파일하므로(parse가
-마지막 언어 의존 단계) 누락 참조는 elaborate 시점에야 드러난다.
+**An instantiated module cannot be resolved to a compiled design unit.** While flattening the
+hierarchy, the instance's target module was not found in the work library, in any `-L`
+library, or by library search. `vcmp` compiles units in isolation — parse is the last
+language-dependent stage — so a missing reference only surfaces at elaboration.
 ```
-alu u_alu(.a(x), .b(y));          // 모듈 alu 가 work 에 컴파일된 적 없음
-$ vcmp top.sv && velab -s top   ->  VITA-E3003: cannot resolve instance `u_alu` of module `alu`
+module t; alu u_alu(.a(1),.b(2)); endmodule
+->  t.sv:2:8: error[VITA-E3003] E-ELAB-UNRESOLVED-INSTANCE: unknown module `alu` instantiated [in t]
 ```
-**해결:** 누락 단위 소스를 vcmp filelist에 추가, 또는 `-L <lib>`/`-y <libdir>`로 발견 가능하게,
-또는 모듈명 오타 수정. (`-L`/`-y` 해소 내용은 bucket B 해시 입력.) 억제 불가.
+**Fix:** add the missing unit's source to the `vcmp` inputs, make it discoverable with
+`-L <lib>`, or correct the module name. Library resolution is a hash input to the artifact,
+so a change there invalidates downstream snapshots. Not suppressible.
 
 ### VITA-E3004 · `E-ELAB-USER-ERROR` (Error)
-**elaboration 시점 `$error` 발화.** 절차 블록 밖(모듈 레벨·generate)에서 elaboration 평가된
-`$error`가 design-time 검사 실패로 발화(IEEE §20.11). `elaborate` 크레이트가 runtime과 같은
-LogEvent 경로로 내되 **sim_time 없음**, span은 AST 직접. IEEE상 기록 후 **계속**(중단 아님).
+**An elaboration-time `$error`.** A `$error` evaluated outside a procedural block — at module
+level or inside a generate — failed a design-time check (IEEE 1800-2017 §20.11). The
+`elaborate` crate emits it through the same event path as runtime diagnostics but with no
+simulation time; the span comes straight from the AST. Per IEEE it records and continues.
 ```
-if (DEPTH <= 0) $error("DEPTH=%0d must be positive", DEPTH);   // elaboration-time
-$ velab -s fifo   ->  VITA-E3004: DEPTH=0 must be positive (elaboration continues)
+parameter DEPTH = 0;
+if (DEPTH <= 0) begin : g $error("DEPTH=%0d must be positive", DEPTH); end
+->  m.sv:4:29: error[VITA-E3004] E-ELAB-USER-ERROR: DEPTH=0 must be positive [in m.g]
 ```
-**해결:** 파라미터/오버라이드를 고친다(`-G DEPTH=16`). `$error`만으로는 중단 안 함(중단 원하면
-RTL에서 `$fatal`). `-Wno-E-ELAB-USER-ERROR`로 억제.
+Elaboration continues, but the run ends with no artifact and exit 1, because any elaborate
+Error discards the IR.
+
+**Fix:** correct the parameter or its override (`-G DEPTH=16`). Use `$fatal` in the RTL if
+the check should stop elaboration at that point. Suppress with `-Wno-E-ELAB-USER-ERROR`
+resolves but has no effect — Error is part of the always-logged spine.
 
 ### VITA-F3005 · `F-ELAB-USER-FATAL` (Fatal)
-**elaboration 시점 `$fatal` 발화.** 모듈 레벨·generate에서 평가된 `$fatal(n,…)`이 design-time
-검사 실패로 발화(IEEE §20.11). elaboration을 **즉시 중단**하고 스냅샷을 만들지 않는다("no simv"
-analogue). `n`은 exit-stats verbosity만 제어. velab/vita는 **exit class 1**(staleness class 2와
-구별).
+**An elaboration-time `$fatal`.** A `$fatal(n, …)` evaluated at module level or inside a
+generate failed a design-time check (IEEE 1800-2017 §20.11). The leading `n` is the IEEE
+finish_number, not a shell code; it is consumed and discarded. No snapshot is written and the
+stage ends with exit class 1, which is deliberately distinct from the staleness class 2.
 ```
 if (IN_W < 1 || IN_W > 64) $fatal(1, "IN_W=%0d out of range", IN_W);
-$ velab -s mac -G IN_W=128   ->  VITA-F3005, elaboration aborts, exit 1, no snapshot
+$ velab -G IN_W=128 top.vu
+->  error[VITA-F3005] F-ELAB-USER-FATAL: IN_W=128 out of range
+    no .velab is written, exit 1
 ```
-**해결:** 유효 파라미터 공급(`-G IN_W=32`) 또는 guard 수정. Fatal은 억제 불가(중단을 un-abort
-못함). class-1 + 이 코드 = RTL/파라미터 실패(재빌드 필요한 staleness 아님).
+**Status at HEAD: declared Fatal, emitted at Error severity.** The elaboration `$fatal` arm
+routes through the shared error path, which hardcodes `Severity::Error`. The printed token is
+therefore `error`, elaboration records and continues rather than stopping at that statement,
+and the run still ends with no artifact and exit 1 because an elaborate Error discards the IR.
+
+**Fix:** supply valid parameters (`-G IN_W=32`) or correct the guard. Not suppressible.
 
 ### VITA-I3006 · `I-ELAB-USER-INFO` (Info)
-**elaboration 시점 `$info` 발화.** 모듈 레벨·generate에서 평가된 `$info`가 정보 출력(해소된
-파라미터·선택된 generate 구성 보고). Info severity, sim_time 없음, exit 무관.
+**An elaboration-time `$info`.** An `$info` at module level or inside a generate printing
+information — resolved parameters, which generate configuration was selected. Info severity,
+no simulation time, no effect on the exit code.
 ```
 $info("elaborating dcache with WAYS=%0d", WAYS);
-->  info[VITA-I3006]: elaborating dcache with WAYS=4
+->  info[VITA-I3006] I-ELAB-USER-INFO: elaborating dcache with WAYS=4
 ```
-**해결:** 조치 불요. `-q`/`-Wno-I-ELAB-USER-INFO`로 조용히.
+**Fix:** nothing to do. Silence it with `-q` or `-Wno-I-ELAB-USER-INFO`.
 
 ### VITA-W3007 · `W-ELAB-USER-WARNING` (Warning)
-**elaboration 시점 `$warning` 발화.** 모듈 레벨·generate에서 평가된 `$warning`이 합법이지만
-의심스러운 design-time 조건을 표시(IEEE §20.11). 계속 진행, `-Werror` 승격 시에만 nonzero.
+**An elaboration-time `$warning`.** A `$warning` at module level or inside a generate marking
+a legal but suspicious design-time condition (IEEE 1800-2017 §20.11). Elaboration continues;
+the exit code changes only under promotion.
 ```
 if (LATENCY < 1) $warning("LATENCY=%0d is unusually small", LATENCY);
-$ velab -s pipe -G LATENCY=0   ->  warning[VITA-W3007]: LATENCY=0 is unusually small
+->  warning[VITA-W3007] W-ELAB-USER-WARNING: LATENCY=0 is unusually small
 ```
-**해결:** 파라미터 조정 또는 의도면 수용. `-Wno-`로 억제, `-Werror=W-ELAB-USER-WARNING`로 RTL
-수정 없이 CI 실패(통합 게이트).
+**Fix:** adjust the parameter, or accept it if intended. Suppress with `-Wno-`; promote with
+`-Werror=W-ELAB-USER-WARNING` to fail CI on an RTL-authored warning without editing the RTL.
 
 ### VITA-W3008 · `W-ELAB-WIDTH-TRUNC` (Warning)
-**폭 불일치가 묵시적 truncation/extension으로 해소.** 포트 연결·`assign`·파라미터 식에서 소스
-폭이 타깃보다 크거나(상위 비트 손실) 작을 때. IEEE §11.6.1상 묵시 size cast는 합법이라 진행하되,
-silent truncation은 고전 오류 원인이라 표면화. 두 폭 + `%m` + span 보고.
-```
-wire [7:0] wide = 8'hAB;  wire [3:0] narrow;
-assign narrow = wide;             // 8 -> 4 비트, 상위 nibble 손실
-->  warning[VITA-W3008]: width 8 truncated to 4 (top, assign narrow)
-```
-**해결:** cast를 명시(`wide[3:0]`)하거나 폭을 맞춘다. `-Wno-W-ELAB-WIDTH-TRUNC`(또는 인라인
-`lint_off`, RULE S로 소스 해시 반영)로 억제, `-Werror=`로 승격.
+**A width mismatch was resolved by implicit truncation or extension.** Reserved for a
+dedicated width-mismatch report on port connections, `assign` and parameter expressions,
+naming both widths and the hierarchical path. An implicit size cast is legal under
+IEEE 1800-2017 §11.6.1, so the run would continue; silent truncation is a classic defect
+source, so it would be surfaced.
 
-### VITA-W3011 · `W-ELAB-CASEZ-APPROX` (Warning)
+**Status at HEAD: no emitter.** The generic elaborate simplification channel reports
+`W-ELAB-FEATURE-LIMIT` (`VITA-W3056`) instead, and that is also where the one measured
+width-loss report lives — an implicit scalar net driven with more bits than it can hold.
 
-**(역사적 — 현재 미발화.)** v1이 `casez`를 `reduction_or(scrut^label)!==1` 근사로 lowering하던 시기, explicit-`x` 라벨 비트가 z처럼 don't-care로 처리됨을 알리던 경고. v7의 정밀 `CasezEq`/`CasexEq`(casez=양측 z/`?`만 와일드카드·explicit-x 라벨은 x하고만 매치, casex=x/z 둘 다)가 근사를 대체하면서 이 경고는 더 이상 발화하지 않는다. 코드 번호는 doc-15 bijection 보존을 위해 유지된다.
+**Fix:** make the cast explicit (`wide[3:0]`) or match the widths. Suppressible and
+promotable if it fires.
 
 ### VITA-E3009 · `E-ELAB-UNSUPPORTED` (Error)
+**The loud-reject surface for constructs elaborate cannot lower faithfully.** This is the
+central code of the correct-or-loud contract: rather than produce a wrong value with no
+error, elaboration stops. Most of the pipeline is implemented, so this code comes from the
+remaining unsupported sub-forms. Everything listed below is measured against the binary at
+HEAD; the full remaining list is [ROADMAP §3](../ROADMAP.md) and
+[../manual/006_limitations.md](../manual/006_limitations.md).
 
-**elaborate가 지원하지 않는 구문의 loud-reject 표면.** correct-or-loud 원칙의 중심 코드 —
-silent-wrong(틀린 출력·무에러)을 내느니 명시적으로 중단한다. 파이프라인 대부분은 구현돼 있고,
-이 코드는 **잔여 미지원 서브폼**에서 나온다. 아래 목록은 실제 바이너리로 검증한 현행 표면이다
-(전체 잔여 목록 = [ROADMAP §3](../ROADMAP.md)).
+This code also carries the elaborate error cap: at error 201 a single
+`too many elaborate errors; further diagnostics suppressed (cap 200)` is emitted under this
+code and every later elaborate error, and its notes, are dropped.
 
-> **§4.5.278 — output/inout formal 을 가진 함수 호출의 문구가 바뀌었다.** 이 코드의 가장 긴 메시지는
-> `function \`f\` has an output/inout formal, so its copy-out has to be emitted as a statement before
-> the expression that calls it …` 로 시작해 **남은 미지원 위치**를 열거한다. 이전 판은 그 열거에
-> *"a frame body's writes have to stay frame-local … though a BARE call statement there does work"* 가
-> 있었는데, **그 bare call statement 가 바로 rc=101 로 abort 하던 형태**였다 — 문구를 믿고 식을 bare
-> 문장으로 바꾸면 loud 가 crash 로 바뀌었다. 지금은 프레임 **태스크** 본문이 모든 once-evaluated 위치를
-> 지원하고, 남은 것은 프레임 **함수** 본문뿐이다(함수는 `Expr::Call` 로 표현식 평가 중에 진입하므로
-> 자기 소유의 call terminator 가 없다 — 같은 호출을 `task` 본문이나 모듈 프로세스에 두면 동작한다).
-> 같은 슬라이스에서 `classify_frame_body` 가 거부한 terminator 를 **전부** "a timing/suspend/fork
-> control (#delay, @, wait, fork)" 로 보고하던 것도 고쳤다 — 타이밍 제어가 한 줄도 없는 본문이 그렇게
-> 보고되고 있었다.
-
-**① 정수를 요구하는 자리에 real 값이 온 경우** (가장 흔한 발생 원인)
-
-IEEE §11.5.1은 select 인덱스·범위 바운드를, §11.4.12.2는 replication count를 **정수 상수**로
-요구한다. vita는 값이 **정확히 정수인 real**이면 문맥 경계에서 변환해 받아들이고, 그렇지 않으면
-거부한다 — 조용히 반올림하거나 f64 비트패턴을 정수로 읽는 일이 없도록.
-
+**1. A real value where an integral one is required.** IEEE 1800-2017 §11.5.1 requires select
+indices and range bounds to be integral constants, and §11.4.12.2 requires the same of a
+replication count. vita converts a real that is exactly integral at the context boundary and
+rejects anything else, so it never rounds silently and never reads an f64 bit pattern as an
+integer.
 ```systemverilog
 module m;
-  parameter real R = 1.5;          // 정확한 정수가 아님
+  parameter real R = 1.5;          // not exactly integral
   logic [7:0] v;
   initial v[R] = 1'b1;
 endmodule
-->  error[VITA-E3009]: a select index / bound / size must be integral, not real (IEEE §11.5.1)
+->  m.sv:4:11: error[VITA-E3009] E-ELAB-UNSUPPORTED: a select index / bound / size must be
+    integral, not real (IEEE §11.5.1) [in m]
 ```
-
-같은 코드가 나오는 자리: select 인덱스·part-select 바운드·indexed part-select의 offset/width ·
-배열 word 인덱스 · `new[N]` 크기 · queue/assoc 인덱스와 `.exists()`/`.delete()` 키 ·
-string 메서드 인자 · `$readmem*`/`$writemem*`/`$fread`의 주소 인자 · replication count.
-**real을 반환하는 함수**(`function real f()`)를 이 자리에 쓴 경우도 포함한다.
-
+The same code covers: select indices, part-select bounds, the offset and width of an indexed
+part-select, array word indices, `new[N]` sizes, queue and associative-array indices and the
+keys of `.exists()`/`.delete()`, string-method arguments, the address arguments of
+`$readmem*`/`$writemem*`/`$fread`, and replication counts. A call to a `function real` in one
+of those positions is included.
 ```systemverilog
 module m;
   parameter real R = 8.5;
-  logic [R-1:0] v;                 // width가 정수로 접히지 않음
+  logic [R-1:0] v;                 // the width does not fold to an integer
 endmodule
-->  error[VITA-E3009]: a real parameter is not an integral constant and cannot be used in a
-    width / range bound (assign it to an integer localparam first)
+->  m.sv:3:10: error[VITA-E3009] E-ELAB-UNSUPPORTED: a real parameter is not an integral
+    constant and cannot be used in a width / range bound (assign it to an integer localparam
+    first) [in m]
 ```
+**Fix:** declare the value with an integer type (`parameter int`) if it is one, or convert
+explicitly with `$rtoi()` or `int'()`. A real that folds to an exact integer, such as
+`parameter real R = 4;`, is usable in an integral context as it stands.
 
-**해결:** 값이 정수라면 정수형으로 선언하거나(`parameter int`), `$rtoi()`/`int'()`로 명시 변환한다.
-`parameter real R = 4;`처럼 **정확히 정수로 접히는** real은 정수 문맥에서 그대로 쓸 수 있다.
-
-**② real 파라미터의 override가 상수로 접히지 않는 경우**
-
+**2. A parameter override that reads a real parameter.**
 ```systemverilog
 module s #(parameter W = 8) (); endmodule
 module m; parameter real R = 4.5; s #(.W(R)) u(); endmodule
-->  error[VITA-E3009]: a parameter override that reads a real parameter is unsupported
-    (a real has no integral constant value)
+->  m.sv:2:8: error[VITA-E3009] E-ELAB-UNSUPPORTED: a parameter override that reads a real
+    parameter is unsupported (a real has no integral constant value) [in m]
 ```
+An override that folds to an integer, such as `#(.R(3))` or `#(.R(i+2))`, applies normally.
 
-정수로 접히는 override(`#(.R(3))`, `#(.R(i+2))`)는 정상 적용된다.
+**3. Other remaining sub-forms.** A part-select target of `force`/`release`; a runtime `==?`
+pattern; a hierarchical reference to a real parameter; a `parameter real` binding in an
+interface body or a generate scope; a whole-value assignment through a dynamic-storage handle.
 
-**③ 그 밖의 잔여 미지원 서브폼**
+**4. Per-entry equivalence for a block-local `automatic`.** v1 lowers a procedural block's
+locals to a single flattened variable. An `automatic` local is accepted only when that
+flattening is indistinguishable from real per-entry storage, and rejected under this code
+otherwise. The rejections that remain are:
 
-`force`/`release`의 part-select 대상 · 런타임 `==?` 패턴 · 계층 real 파라미터 참조 ·
-interface body/generate scope의 `parameter real` 바인딩 · dynamic-storage 핸들의
-whole-value 대입. 현행 전체 목록은 [ROADMAP §3](../ROADMAP.md)와 매뉴얼 [006 Limitations].
+- A fixed-size array whose coverage cannot be proved: an element read that this entry did not
+  write, or a computed index (`foreach (a[i]) a[i] = …;`) that fills it.
+- A call whose callee body can reach the flattened name, whether by bare name or by a
+  hierarchical self-path (`t.a`).
+- Shadowing where one block *encloses* another and redeclares the same name. Reuse between
+  sibling blocks is supported at any nesting depth.
+- A statement that advances time inside a block that genuinely shares one flattened variable
+  with another block of the same name — the scheduler can run the other block and write that
+  single variable, so a later read sees a value its own storage could not have held.
+- A hierarchical reference *to* an `automatic` block-local (`tb.a`, or `t.a` from a task in
+  the same module). IEEE 1800-2017 §23.9 forbids it: automatic storage has no static address
+  to name.
 
-**④ 블록 로컬 `automatic` 의 per-entry 등가성**(2026-07-29 갱신)
+Accepted: a local that is never written anywhere in the block, of any type — the flattened
+variable is initialised once to the type default and nobody changes it, so every entry sees
+the default; a first write carrying timing (`#1 x = 7;`, `@(posedge clk) x = 7;`,
+`x = #1 7;`, `wait (c) x = 7;`, all blocking); every statement form after a definite write;
+and chained method calls (`s.substr(a,b).atoi()`).
 
-v1 은 절차 블록의 로컬을 **평탄화된 변수 하나**로 만든다. `automatic` 은 그 평탄화가 진짜
-per-entry 저장과 **구분 불가능할 때만** 받아들이고, 아니면 이 코드로 거부한다. 받아들이는
-쪽이 넓어졌으므로 **거부가 남는 자리**만 적는다:
+A rejection produced because the analysis stopped carries a `note:` giving the
+`file:line:col` of the statement that stopped it and one of six reasons: read here, partial
+select write, an unmodelled statement form, an unproven call, an `input` actual read, or time
+advancing in a shared variable. That position can be many statements after the declaration,
+or in another file, which is why the note exists.
 
-- 이번 진입에서 **쓰지 않은** 원소를 읽거나, 계산 인덱스(`foreach (a[i]) a[i] = …;`)로 채워
-  커버리지를 증명할 수 없는 고정 배열.
-- callee 본문이 평탄화된 이름에 닿을 수 있는 호출 — bare name 이든 계층 self-path(`t.a`)든.
-- 한 블록이 다른 블록을 **감싸면서** 같은 이름을 재선언하는 shadowing(형제 블록의 재사용은
-  중첩 깊이와 무관하게 지원).
-- 두 블록이 실제로 평탄화된 변수 **하나를 공유**할 때(같은 이름·다른 블록), 그 안에서 **시간을
-  진행시키는** 문장 — 스케줄러가 다른 블록으로 넘어가 그 하나뿐인 변수를 쓰므로 이후 읽기가
-  자기 저장이 가질 수 없던 값을 본다.
-- `automatic` 블록 로컬로의 **계층 참조**(`tb.a`, 같은 모듈 안 task 의 `t.a`). IEEE 1800 §23.9 가
-  금지한다 — automatic 저장에는 이름 붙일 정적 주소가 없다.
+**5. The position of a call to a function with an output or inout formal.** Copy-out for such
+a function (IEEE 1800-2017 §13.5.2) lowers to a *statement*, so the copy-out must be emitted
+ahead of the expression that contains the call. Every position a statement evaluates exactly
+once is supported: a direct RHS, a condition, a `case` scrutinee, a `repeat` count, a
+concatenation element, an argument of another call, a select index, a cast operand, a
+`$display` argument, a task argument, a nonblocking-assignment RHS, a `return` value, an
+lvalue index, and the right operand of `&&`/`||` and the arms of `?:` at any depth
+(a conditional position emits into a guard block, so a short circuit also skips the write,
+and an x condition evaluates both arms).
 
-**받아들이는 쪽**(2026-07-29 확대): 블록 어디서도 **쓰이지 않는** 로컬(타입 무관 — 평탄화 변수가
-타입 기본값으로 한 번 초기화된 뒤 아무도 안 바꾸므로 매 진입 기본값과 같다) · **타이밍이 붙은
-첫 쓰기**(`#1 x = 7;` · `@(posedge clk) x = 7;` · `x = #1 7;` · `wait (c) x = 7;` — 전부 blocking) ·
-확실히 쓰인 뒤의 **모든** 문장 형태 · 체인 메서드 호출(`s.substr(a,b).atoi()`).
+The rejected positions are:
 
-**분석이 멈춰서 나온 거부에는 `note:` 가 따라붙는다** — 멈춘 구문의 `file:line:col` 과 이유
-6가지(여기서 읽힘 · 부분 select 쓰기 · 모델링 안 된 문장 형태 · 증명 못한 호출 · `input` actual
-읽기 · 공유 변수에서 시간 진행) 중 하나. 그 위치는 선언보다 여러 문장 뒤이거나 **다른 파일**일 수
-있고, 그것이 이 note 가 존재하는 이유다.
+- **Continuously re-evaluated expressions** — `assign`, `force`, a `wait` condition. A
+  copy-out cannot fire again on every change.
+- **Intra-assignment delay** (`x = #1 f(...)`), `min:typ:max`, and constraint or `with`
+  expressions.
+- **Cases where evaluation order cannot be preserved.** Reading the output actual to the
+  *left* of the call must see the pre-call value, so vita takes a copy first; three shapes
+  make that copy useless and are rejected — the read is through a hierarchical path (`t.o`)
+  or inside the called function's own body, so the substitution cannot reach it; the target
+  is not a plain bit-vector net (an unpacked array or struct root cannot be copied to one
+  net); or two calls in one expression write the same target, which needs two generations
+  and has one copy.
 
-**⑤ output/inout formal 을 가진 함수 호출의 위치**(2026-07-30 신설)
+The workaround is the same in every case: assign the call to a temporary first
+(`t = f(...);`) and use `t`.
 
-그런 함수의 copy-out(IEEE §13.5.2)은 **문장**으로 낮춰지므로, 호출을 감싼 표현식보다 앞에
-copy-out 을 emit 할 수 있어야 한다. **문장이 한 번만 평가하는 위치는 전부 지원한다**(§4.5.275) —
-직접 rhs · 조건 · `case` scrutinee · `repeat` 카운트 · concat 조각 · 다른 호출의 인자 ·
-select 인덱스 · cast 피연산자 · `$display` 인자 · task 인자 · NBA rhs · `return` 값 · lvalue
-인덱스, 그리고 **임의 깊이의** `&&`/`||` 우변과 `?:` arm(조건부 자리는 guard 블록에 emit 되므로
-단락되면 쓰기도 일어나지 않고, x 조건은 두 arm 을 다 평가한다).
+The diagnostic deliberately does not enumerate the *supported* positions, only the remaining
+rejections. An enumeration of what works is the shape that goes stale and sends a reader
+hunting for a workaround that is not needed.
 
-거부되는 자리는 다음뿐이다:
+**6. The snapshot slot for a dynamic-array formal.** `function f(input byte b []);` places a
+marker immediately before the call expression that snapshots the caller's array into the
+formal's slot, so the call may appear only where that marker can be placed. Supported,
+measured across seventeen positions: a blocking or nonblocking assignment RHS, a `return`
+value, a `?:` arm when the function has no side effects, and an unconditionally evaluated
+operand of one of those (a concatenation, arithmetic, a comparison, a system-task argument).
+Rejected: the right operand of `&&`/`||`, an argument of another call, a select or lvalue
+index, a `case` scrutinee, a `repeat` count, and a cast or replication operand. There is one
+slot per formal, so calling the same function twice in one expression, or calling it
+recursively from its own body, is also rejected — both would read the last snapshot.
 
-- **연속 재평가 표현식** — `assign` · `force` · `wait` 조건. copy-out 은 변화마다 다시 터질 수 없다.
-- **intra-assignment delay**(`x = #1 f(...)`) · `min:typ:max` · 제약/`with` 표현식.
-- **평가 순서를 보존할 수 없는 경우**. output actual 을 호출 **왼쪽**에서 읽으면 호출 전 값을
-  봐야 하므로 vita 가 사본을 먼저 뜨는데, 그 사본이 소용없는 세 형태는 거부한다 — 읽기가 계층
-  경로(`t.o`)거나 **호출된 함수 본문 안**이라 치환이 닿지 않을 때 · 대상이 평범한 비트벡터 넷이
-  아닐 때(unpacked 배열/struct 루트는 넷 하나로 복사 불가) · 한 표현식에서 **두 호출이 같은
-  대상을 쓸 때**(세대가 둘이라 사본 하나로 부족).
+The workaround is to assign the call to a variable first (`x = f(arr);`). These rejections are
+tracked in [ROADMAP §3](../ROADMAP.md); the general hoister already opens those positions for
+output-formal calls.
 
-회피는 어느 경우든 같다 — 호출을 먼저 임시 변수에 대입하고(`t = f(...);`) `t` 를 쓴다.
-
-> 진단이 지원 위치를 **열거하지 않는** 이유: 그 목록이 stale claim 의 상습 지점이었다(§4.5.274 는
-> 문장 위치를 빼먹어 리포터가 없는 우회로를 찾아 헤맸고, 그 다음엔 `?:` arm 을 미지원이라고
-> 적은 채 지원되기 시작했다). 메시지는 **남은 것만** 말한다.
-
-**⑥ dynamic-array formal 의 스냅샷 슬롯**(2026-07-30 갱신)
-
-`function f(input byte b []);` 는 호출 표현식 직전에 caller 배열을 formal 슬롯으로
-스냅샷하는 마커를 놓는다. 그래서 호출은 **그 마커를 놓을 수 있는 자리**에만 올 수 있다 —
-지원(17-위치 실측): blocking/nonblocking 대입 rhs · `return` 값 · **부작용 없는 함수라면** `?:` arm ·
-그중 하나의 무조건 평가 피연산자(concat · 산술 · 비교 · system-task 인자).
-거부: `&&`/`||` 우변 · **다른 호출의 인자** · select/lvalue **인덱스** · `case` scrutinee ·
-`repeat` 카운트 · cast/replicate 피연산자. formal 당 슬롯이 **하나**라 한 표현식에서
-**같은 함수를 두 번** 부르거나 본문에서 **자기를 재귀** 호출하는 형태도 거부한다(둘 다
-마지막 스냅샷을 읽게 된다). 해결은 호출을 변수에 먼저 대입하는 것(`x = f(arr);`).
-
-> 이 코드의 **문구가 곧 진단**이다 — 2026-07-29 에 "module-process level" 이라는 이미
-> 사라진 제약과, 상대 선언의 lifetime 을 **추론**하던 문장을 제거했다. 2026-07-30 에 다시
-> 갱신했는데, 이번엔 stale 이 **양방향**이었다: `?:` arm 을 미지원이라고 적은 채 r18 이 그것을
-> 지원하기 시작했고, 실제로 남은 자리(인자·인덱스·scrutinee·카운트)는 **한 번도 적힌 적이
-> 없었다**. round-20 리포터는 지원 위치(비교)에서 다른 이유로 loud 를 맞고 문구가 나열한 세
-> 원인 중 아무것도 자기 코드에 없는 것을 확인해야 했다. 위 두 목록은 전부 실측이다.
-
-> **거부 목록이 곧 잔여 과제다** — ROADMAP §3 "dyn-array-formal 위치 갭"(범용 hoister 가
-> 이미 그 자리들을 output-formal 호출에는 열어 두었다). 승격되면 위 목록에서 지워라.
-
-> **주의 — package-scope `parameter real`은 이 코드를 내지 않는다.** loud가 아니라
-> **조용히 정수 나눗셈**을 한다(`pk::PR/2`가 1.5 대신 1.0). ROADMAP §2의 알려진 결함이며,
-> "미지원=E3009"로 오인하지 말 것.
-
-> **문서 검증 규칙**: 이 절의 예시는 CI의 bijection 게이트(코드 번호·니모닉·심각도 1:1)가
-> **검사하지 않는다** — 발생 조건은 사람이 실제 바이너리로 확인해야 한다. 기능이 loud→supported로
-> 승격되면 여기서도 지워라. 2026-07-26 점검에서 unpacked `struct`·queue slice `q[a:b]`·계층
-> 함수호출 `u1.f(x)` 세 항목이 **이미 지원되는데 미지원으로 남아 있어** 제거했다.
+**Fix:** the message names the specific sub-form; each subsection above states its workaround.
+Not suppressible.
 
 ### VITA-E3010 · `E-ELAB-UNRESOLVED-NAME` (Error)
-**선언되지 않은 net/variable 참조.** `assign`/식/lvalue에서 심볼 테이블에 없는 이름을 참조할 때.
-모듈 해소용 `E-ELAB-UNRESOLVED-INSTANCE`(E3003)와 구분되는, net-name 전용 코드다.
+**A reference to an undeclared net or variable.** A name used in an `assign`, an expression or
+an lvalue is not in the symbol table. This is the net-name counterpart to
+`E-ELAB-UNRESOLVED-INSTANCE`, which is about module resolution.
 ```
-module m; wire y; assign y = z;  endmodule   // z 미선언
-->  error[VITA-E3010]: undeclared net/variable `z`
+module m; wire y; assign y = z; endmodule
+->  m.sv:2:8: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `m.z` [in m]
 ```
-**해결:** 누락된 net/reg 선언을 추가하거나 오타를 바로잡는다.
+**Fix:** add the missing declaration or correct the typo. In the two positions listed under
+`W-PARSE-IMPLICIT-NET` an undeclared name becomes an implicit net instead — unless
+`` `default_nettype none `` is in effect, which routes every position here. Not suppressible.
+
+### VITA-W3011 · `W-ELAB-CASEZ-APPROX` (Warning)
+**A `casez` treats an explicit `x` label bit as a don't-care.** Reserved for an approximate
+`casez` lowering, where a label bit written as an explicit `x` would be matched like a `z`
+wildcard.
+
+**Status at HEAD: no emitter.** `casez` and `casex` lower to exact `CasezEq`/`CasexEq`
+comparisons — `casez` treats only `z` and `?` on either side as wildcards and an explicit `x`
+label bit matches only `x`, while `casex` treats both `x` and `z` as wildcards. Nothing
+approximates, so nothing raises this code. The number is retained because numbers are never
+reused.
+
+**Fix:** nothing to do. Suppressible and promotable if it fires.
 
 ### VITA-E3018 · `E-ELAB-LVALUE-KIND` (Error)
-**대입 종류와 대상 kind 불일치 — continuous→variable / procedural→net.** 사용자
-`assign`이 `reg`/`integer`/`real` 변수를 구동하거나, `initial`/`always` 절차 대입이
-`wire`를 대상으로 할 때(iverilog도 양방향 모두 거부; Verilator CONTASSREG/PROCASSWIRE).
-SV `logic`은 IEEE 1800상 단일 continuous 드라이버 또는 절차 구동 어느 쪽도 적법하므로
-양쪽 모두 통과한다. 포트 바인딩이 합성한 암묵 연결은 검사 대상이 아니다(IEEE 1800
-§23.3.3 var-port 적법).
+**The assignment kind does not match the target's kind.** A user `assign` drives a variable
+(`reg`, `integer`, `real`, `string`), or a procedural assignment in an `initial`/`always`
+targets a `wire`. iverilog rejects both directions; Verilator reports `CONTASSREG` and
+`PROCASSWIRE`. SystemVerilog `logic` passes either way, because IEEE 1800-2017 admits both a
+single continuous driver and procedural writes. The implicit connections synthesised by port
+binding are exempt — IEEE 1800-2017 §23.3.3 makes variable ports legal.
 ```
 module m; reg r; assign r = 1'b1; endmodule
-->  error[VITA-E3018] E-ELAB-LVALUE-KIND: continuous assign drives variable `r` (reg)
+->  m.sv:1:8: error[VITA-E3018] E-ELAB-LVALUE-KIND: continuous assign drives variable `m.r`
+    (declare it wire/logic) [in m]
 ```
-**해결:** 대상 선언을 `wire`↔`reg`(또는 SV `logic`)로 맞추거나 대입 형태를 바꾼다.
-(부록 A에서 본문 승격.)
+The procedural direction reads
+``procedural assignment to net `m.w` (declare it reg/logic)``.
+
+**Fix:** change the declaration to `wire` or `reg` (or SystemVerilog `logic`) to match, or
+change the form of the assignment. Not suppressible.
 
 ### VITA-W3056 · `W-ELAB-FEATURE-LIMIT` (Warning)
-**적법 구문을 수용하되 단순화 — elaborate 범용 simplification 경고.** v1이 의도적으로
-근사/생략하는 적법 구문 전반(미연결 포트, inout 단방향 근사, intra-assignment delay 드롭,
-미지원 `$task` skip, fork-local decl 공유 스코프 등)에 부여되는 catch-all 코드.
-(부록 A에서 본문 승격 — Verilator MINTYPMAXDLY/RISEFALLDLY류 대응. 종전에는 이 부류가
-전부 `W-ELAB-WIDTH-TRUNC`로 잘못 찍혀 코드 라우팅이 깨져 있었다; W3008은 실제 폭-절단
-경고 구현 전까지 본문 예약 상태로 남는다.)
+**A legal construct is accepted but simplified.** The general elaborate simplification
+channel: constructs v1 deliberately approximates or drops rather than refuses — an
+unconnected port, a unidirectional approximation of `inout`, a dropped intra-assignment
+delay, a skipped system task, a shared scope for `fork`-local declarations. The IR survives
+and the module keeps running; this is the opposite lever to `E-ELAB-UNSUPPORTED`, which
+discards it.
 ```
-module m(input i); endmodule  module t; m u1(); endmodule   // 포트 미연결
-->  warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: input port `i` left unconnected
+module ch(input i); endmodule  module t; ch u1(); endmodule
+->  t.sv:3:14: warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: input port `i` left unconnected —
+    it floats at `z`, and every value the instance derives from it is unknown (tie it off
+    explicitly) [in t.u1]
 ```
-**해결:** 대부분 무해(의도 확인용). `-Wno-`/`-Werror=`로 억제·승격.
-
----
-
-
-### VITA-W3058 · `W-ELAB-STR-TERNARY` (Warning)
-
-`$display`/`$write` given ONE argument that is a ternary whose arms are both string
-LITERALS.
-
+It also carries the width report for an implicit net, which is scalar by IEEE 1364-2005 §3.5:
 ```
-$display(n == 1 ? "[PASS] all vectors" : "[FAIL] mismatch");
-->  warning[VITA-W3058] W-ELAB-STR-TERNARY: … prints a decimal number, not text
-     474126782513561311909906896596181057
+->  warning[VITA-W3056] W-ELAB-FEATURE-LIMIT: `m.w` is an IMPLICIT net, so it is 1 bit wide
+    (IEEE 1364-2005 §3.5) — this assignment drives it with 12 bits and the top 11 are
+    discarded. Declare it with the width you meant.
 ```
-
-⚠️ **Not a value defect.** IEEE 1800 §5.9 makes a string literal a packed integral;
-the ternary puts both arms in an integral context, and a single non-format argument
-prints as decimal. iverilog prints the identical number — vita is not diverging from
-the oracle, and the value is deliberately unchanged.
-
-It is warned because the shape is always a mistake (nobody wants the number), it is the
-ordinary way people write a PASS/FAIL line, and it silently makes a test log
-unreadable. Use `if`/`else`, or `$display("%s", cond ? "a" : "b")`. Deliberately narrow
-— one argument, a ternary, a string literal on BOTH arms — so a `%s` format, a ternary
-of string VARIABLES, and a numeric ternary do not trip it.
-
-### VITA-W3059 · `W-ELAB-STR-ESCAPE` (Warning)
-
-A string literal contains a backslash escape that IEEE 1800-2017 Table 5-1 does not
-define. vita still gives it a value; the warning is that other tools give it a
-different one.
-
-```
-if (c == "\r") ...
-->  warning[VITA-W3059] W-ELAB-STR-ESCAPE: `\r` is not a string escape in IEEE
-     1800-2017 Table 5-1 — vita and Verilator read it as 0x0D, iverilog and Xcelium
-     read it as the character `r`. …
-```
-
-⚠️ **Not a value defect, and that is what makes it expensive.** The design compiles
-on every tool and evaluates differently on each. An external report lost two
-sign-off round trips to exactly this line: their `.vec` parser trimmed line ends
-with `== "\r"`, Xcelium read the letter `r`, real `r` characters were cut off
-mid-record, and 807 CMAC vectors reported "MAC mismatch" — a symptom that looks
-like a DUT bug and is reachable from no single-simulator experiment.
-
-Table 5-1 defines `\n \t \\ \" \v \f \a \ddd \xhh` and nothing else. Two shapes trip
-this warning:
-
-- **`\r`** — vita and Verilator read 0x0D (the C meaning); iverilog and Xcelium
-  drop the backslash and read the letter. The oracles genuinely split, so there is
-  no majority to follow and the value is deliberately unchanged.
-- **any other `\X`** — vita keeps BOTH characters, so the string is also one byte
-  wider; iverilog and Xcelium keep just the character.
-
-Write the byte you mean: `"\015"` (octal) or `"\x0D"` (hex) are Table 5-1 escapes and
-read the same everywhere. One line per distinct escape per literal, anchored at the
-literal — not at the statement, so two escapes on one line are two locations.
+**Fix:** usually nothing — read it as a confirmation of intent. Suppress with `-Wno-`, promote
+with `-Werror=`.
 
 ### VITA-W3057 · `W-ELAB-AUTOTOP-AMBIGUOUS` (Warning)
-**auto-top이 인스턴스화되지 않은 root 후보 2개 이상 중에서 선택 — 명시 top 미지정.** `--top` 없이
-one-shot `vita <sources>`(또는 `-f`)에 여러 module을 넘겼을 때, 어디에도 인스턴스화되지 않은
-module(=root 후보)이 2개 이상이면 vita는 IEEE 1364/iverilog 패리티로 **그들 전부를 독립 top으로
-elaborate**한다. 이는 적법하지만, 사용자가 특정 top을 의도했다면 다른 root의 `$finish`가 먼저 걸려
-의도한 top의 출력이 가려질 수 있다(과거엔 이 상황이 **무진단**이라 correct-or-loud 위반이었다). 이제
-root 후보 이름을 나열해 경고하고, `--top <module>`로 결정적 단일 top을 고정하도록 안내한다.
+**Auto-top chose among two or more uninstantiated roots because no top was pinned.** With no
+`--top`, one-shot `vita <sources>` (or `-f`) elaborates every module that is instantiated
+nowhere as an independent top, matching IEEE 1364 and iverilog. That is legal, but if one
+particular top was intended, a `$finish` in another root can end the run and hide its output.
+The warning names the root candidates.
 ```
-module aaa; ... endmodule   module zzz; ... endmodule   // 둘 다 root
+module aaa; ... endmodule   module zzz; ... endmodule
 $ vita tworoot.sv
-->  warning[VITA-W3057] W-ELAB-AUTOTOP-AMBIGUOUS: auto-top selected 2 uninstantiated roots (aaa, zzz); ...
+->  warning[VITA-W3057] W-ELAB-AUTOTOP-AMBIGUOUS: auto-top selected 2 uninstantiated roots
+    (aaa, zzz); all are elaborated as independent tops — pin one with `--top <module>` for a
+    deterministic single top
 ```
-**해결:** `--top <module>`로 원하는 top을 명시(one-shot `vita`/`-f`도 지원). 여러 독립 top을
-의도했다면 무해 — `-Wno-`/`-Werror=`로 억제·승격.
+**Fix:** pass `--top <module>` (supported by one-shot `vita` and by `-f`). If several
+independent tops are intended, the warning is harmless. Suppress with `-Wno-`, promote with
+`-Werror=`.
+
+### VITA-W3058 · `W-ELAB-STR-TERNARY` (Warning)
+**`$display`/`$write` was given one argument that is a ternary whose arms are both string
+literals.** IEEE 1800-2017 §5.9 makes a string literal a packed integral value; the ternary
+puts both arms in an integral context, and a single non-format argument prints as decimal.
+```
+$display(n == 1 ? "[PASS] all vectors" : "[FAIL] mismatch");
+->  m.sv:2:30: warning[VITA-W3058] W-ELAB-STR-TERNARY: `$display` was given ONE argument that
+    is a ternary of string literals — IEEE 1800 §5.9 makes those packed integers, so this
+    prints a decimal number, not text (use `if`/`else`, or `$display("%s", cond ? "a" : "b")`)
+     7954527441615041037357320920738594452107891
+```
+This is not a value defect. iverilog prints the identical number, so vita is not diverging
+from the oracle and the value is deliberately unchanged. It is warned because the shape is
+always a mistake — nobody wants the number — it is the ordinary way a PASS/FAIL line gets
+written, and it silently makes a test log unreadable. The trigger is deliberately narrow: one
+argument, a ternary, a string literal on *both* arms. A `%s` format, a ternary of string
+variables, and a numeric ternary do not trip it.
+
+**Fix:** use `if`/`else`, or `$display("%s", cond ? "a" : "b")`. Suppress with `-Wno-`, promote
+with `-Werror=`.
+
+### VITA-W3059 · `W-ELAB-STR-ESCAPE` (Warning)
+**A string literal contains a backslash escape IEEE 1800-2017 Table 5-1 does not define.**
+vita gives it a value; the warning is that other tools give it a different one.
+```
+if (c == "\r") ...
+->  m.sv:2:30: warning[VITA-W3059] W-ELAB-STR-ESCAPE: `\r` is not a string escape in IEEE
+    1800-2017 Table 5-1 — vita and Verilator read it as 0x0D, iverilog and Xcelium read it as
+    the character `r`. Write the byte explicitly (`\015` octal or `\x0D` hex) to mean the same
+    thing everywhere
+```
+This is not a value defect, and that is what makes it expensive: the design compiles on every
+tool and evaluates differently on each. A vector-file parser that trims line ends with
+`== "\r"` reads the letter `r` under Xcelium, cuts real `r` characters mid-record, and reports
+hundreds of data mismatches — a symptom that looks like a DUT defect and is unreachable from
+any single-simulator experiment.
+
+Table 5-1 defines `\n \t \\ \" \v \f \a \ddd \xhh` and nothing else. Two shapes trip this
+warning:
+
+| Shape | vita and Verilator | iverilog and Xcelium |
+|---|---|---|
+| `\r` | 0x0D, the C meaning | the letter `r` |
+| any other `\X` | both characters kept, so the string is one byte wider | just the character |
+
+The oracles genuinely split on `\r`, so there is no majority to follow and the value is
+deliberately unchanged. One line is emitted per distinct escape per literal, anchored at the
+literal rather than at the statement, so two escapes on one line are two locations.
+
+**Fix:** write the byte you mean — `"\015"` (octal) or `"\x0D"` (hex) are Table 5-1 escapes
+and read the same everywhere. Suppress with `-Wno-`, promote with `-Werror=`.
 
 ---
 
 ## 4xxx · RUNTIME
 
 ### VITA-E4001 · `E-RUN-ASSERT-FAIL` (Error)
-**action block 없는 assert 실패 — 묵시 `$error` severity.** immediate `assert(...)` 또는
-concurrent `assert property(...)`가 거짓이고 `else`(fail) 블록이 없을 때, IEEE §16.3상 묵시
-`$error` severity를 갖는다. RTL `$error`와 **같은 게이트**로 라우팅, 실패 플래그 기록 후 계속.
-(immediate `assert`(✅ else $error/$fatal severity)·deferred `assert #0`/`assert final`(✅ 22탄)·
-concurrent `assert property`(SVA, ✅ Phase-3 — full 시퀀스 서브셋·multi-clock·named property/sequence까지)
-모두 구현됨 — 단, 실패는 합성 clocked-always 체커 또는 severity 팩터의 `$error`
-(→`E-RUN-USER-ERROR` E4003)로 방출되어 이 코드 자체는 **예약-미발화**.)
-```
-always @(posedge clk) assert (state != ERR_STATE);   // state==ERR_STATE 시 실패
-->  error[VITA-E4001] E-RUN-ASSERT-FAIL: assertion failed at tb.dut.fsm (state.sv:42) time=1750ns
-```
-**해결:** 설계/벤치를 고치거나 명시 action block(`assert(...) else $warning(...)`). `-Wno-`/
-`-Werror=`로 억제·승격. corpus(`--error-exit` 기본 ON)에선 1회 발화가 FAIL — `expect_codes`로
-코드 assert.
+**An assertion failed and had no action block.** An immediate `assert(...)` or a concurrent
+`assert property(...)` evaluated false with no `else` block has an implicit `$error` severity
+under IEEE 1800-2017 §16.3. Reserved for reporting that failure under its own code, routed
+through the same gate as an RTL `$error`.
+
+**Status at HEAD: no emitter.** Assertions are implemented — immediate `assert` with `else`
+severity, deferred `assert #0` and `assert final`, and concurrent `assert property` including
+the sequence subset, multi-clock and named property and sequence. A failure is emitted by the
+synthesised clocked checker or by the severity factory as a `$error`, which reports as
+`VITA-E4003`.
+
+**Fix:** fix the design or the bench, or give the assertion an explicit action block
+(`assert(...) else $warning(...)`). Suppressible and promotable if it fires.
 
 ### VITA-E4002 · `E-RUN-RANGE` (Error)
-**런타임 배열 인덱스/비트·파트 셀렉트 범위 초과.** 동적 인덱스가 선언 범위를 벗어날 때. IEEE
-§11.5.1상 범위 밖 셀렉트는 `x`를 읽고(쓰기는 무시) crash하지 않으므로, 표준 read-x/ignore-write
-값 의미를 지키며 동시에 이 진단으로 silent corruption을 보이게 한다. sim-ir는 span-free라
-**§7 side-table**로 file:line 복원 + sim_time.
+**A runtime array index or bit/part select is out of range with a known index.** IEEE
+1800-2017 §11.5.1 makes an out-of-range select read `x` and drops an out-of-range write rather
+than trapping, so the value semantics are preserved and the access is reported instead of
+being silently corrupting. `sim-ir` is span-free, so `file:line:col` is restored from the
+location side-table and the simulation time is attached.
 ```
-logic [7:0] mem [0:15];  int idx = 20;  $display("%0h", mem[idx]);  // 20 > 15
-->  error[VITA-E4002] E-RUN-RANGE: index 20 out of range [0:15] at tb.mem (mem.sv:9)
+logic [7:0] mem [0:15];  int idx = 20;  $display("%0h", mem[idx]);
+->  m.sv:3:19: error[VITA-E4002] E-RUN-RANGE: array word index of `m.mem` (out of range;
+    read X / write ignored) [in m] [at time 1]
 ```
-**해결:** 셀렉트 전에 인덱스 검증/clamp 또는 배열 크기 확대. 값 의미는 표준(read x), 기록 후 계속.
-`-Wno-E-RUN-RANGE`로 억제, `-Werror=`로 CI 중단. `(source location unavailable)`이면 위치 없는
-스냅샷 — `W-RUN-NO-LOCATIONS` 참조.
+Reports are capped at eight per run, with a budget separate from the unknown-index cap so one
+cannot starve the other; report eight becomes
+`further out-of-range diagnostics suppressed` and later ones print nothing.
+
+**Fix:** validate or clamp the index before the select, or size the array to match. The value
+semantics are standard (read `x`, write dropped) and the run continues. Suppress with
+`-Wno-E-RUN-RANGE`, promote with `-Werror=` to stop CI. An index that is *unknown* rather than
+out of range is `VITA-W4029`.
 
 ### VITA-E4003 · `E-RUN-USER-ERROR` (Error)
-**시뮬레이션 시점 RTL `$error` 발화.** 절차/시뮬 문맥(initial/always/task, 또는 SVA `else
-$error`)에서 실행. IEEE §20.11상 메시지 출력 후 **계속**(`$finish` 안 부름, exit 클래스 자체로는
-무변). hdl-builtins가 LogEvent로 방출 → `$display`와 sim-time 순 인터리브. severity+file:line(§7)+
-`%m`+sim_time 조립.
+**A simulation-time RTL `$error`.** Executed in a procedural or simulation context — an
+`initial`, an `always`, a task, or an SVA `else $error`. IEEE 1800-2017 §20.11 prints the
+message and continues; `$finish` is not called and the exit class does not change by itself.
+The diagnostic interleaves with `$display` output in simulation-time order and carries
+severity, `file:line:col`, the instance path and the simulation time.
 ```
 if (dut_result !== expected) $error("MISMATCH got=%0h exp=%0h", dut_result, expected);
-->  error[VITA-E4003] E-RUN-USER-ERROR: MISMATCH got=ab exp=cd at tb (tb.sv:31) time=1200ns
+->  tb.sv:2:25: error[VITA-E4003] E-RUN-USER-ERROR: MISMATCH got=ab exp=cd [in m] [at time 0]
 ```
-**해결:** 의도된 벤치 출력 — 벤치가 표시한 조건을 고친다. 기본은 IEEE(계속, exit 무관);
-`--error-exit`로 `$error` 발화 시 nonzero(corpus가 이걸로 게이트). `-Wno-`/`-Werror=`(통합 게이트).
+An `$error` with an empty message renders the code's title in its place. A failing assertion
+with no action block also arrives here.
+
+**Fix:** this is an intended bench output — fix the condition the bench flagged. An
+accumulated Error latches the error exit class, so the run ends with exit 1 even though
+simulation completed. Not suppressible (Error is spine).
 
 ### VITA-F4004 · `F-RUN-FATAL` (Fatal)
-**시뮬레이션 단계에서 실행을 중단시킨 치명 조건.** Fatal 진단 후 시뮬 단계 중단,
-**exit class 1**(staleness class 2와 구별). 앞 `n`(0/1/2)은 shell code가 아니라 exit-stats
-verbosity(0=silent,1=time+loc,2=+stats). **두 부류가 이 코드를 공유하므로 메시지로 구분한다.**
+**A fatal condition ended the simulation stage.** After the diagnostic, the simulation stage
+stops with exit class 1, deliberately distinct from the staleness class 2. Two distinct
+families share this code, told apart by the message.
 
-**(a) RTL `$fatal` 발화** — IEEE §20.11상 묵시 `$finish`로 즉시 종료.
+**(a) An RTL `$fatal`.** IEEE 1800-2017 §20.11: an implicit `$finish`, immediate termination.
+The leading `n` (0, 1 or 2) is the IEEE finish_number, not a shell code; vita consumes and discards
+it and prints no exit statistics at any level.
 ```
 if (cfg_invalid) $fatal(1, "bad config word %0h", cfg);
-->  fatal[VITA-F4004] F-RUN-FATAL: bad config word deadbeef at tb.dut (dut.sv:88) time=500ns (exit 1)
+->  dut.sv:2:115: fatal[VITA-F4004] F-RUN-FATAL: bad config deadbeef [in m] [at time 0]
 ```
-**해결:** 치명 조건 해소 — `$fatal`은 작성자의 명시적 "계속 불가". Fatal은 continue로 억제 불가.
-(elaboration 시점 `$fatal`은 `F-ELAB-USER-FATAL`.)
 
-**(b) 엔진 능력 한계 — correct-or-loud의 런타임 쪽.** 조용히 틀린 값을 내느니 멈춘다.
-설계에 `$fatal`이 없는데 이 코드가 나오면 전부 이쪽이고, **사용자 코드의 버그가 아니라
-시뮬레이터의 미지원 형태**다. 현재 발화 조건:
+**(b) An engine capability limit** — the runtime half of correct-or-loud. Rather than produce
+a quietly wrong value the run stops. If the design contains no `$fatal` and this code appears,
+it is this family: not a defect in the user's code but a shape the simulator does not support.
 
-| 메시지 머리 | 조건 | 회피 |
+| Message head | Condition | Way around it |
 |---|---|---|
-| `internal: a frame-local dynamic array … was still held at frame entry…` | **불변식** 가드(능력 한계 아님). 동시 활성화는 §4.5.228 이후 **지원된다** — 각 활성화가 서스펜드 중 자기 배열을 힙 밖으로 park 한다. 이 메시지가 나오면 그 park/unpark 불변식이 깨진 것 | 설계를 리포트 — 회피 대상이 아니다 |
-| `writing an element of (or a whole store to) a dynamic-array \`input\` formal…` | 읽기 전용으로 aliasing된 dyn-array formal에 쓰기 | 값을 로컬 dyn 배열에 복사 후 수정 |
-| `an associative-array iteration (\`first/next/last/prev\`) whose key…` | assoc 순회 키가 지원 위치 밖 | 키를 frame-local 변수로 |
-| `` `X` does its work as a statement-level effect… `` | **R19-X2 → §4.5.277 재작성.** 문장 수준 효과(목적지·ref 인자 쓰기, fd 전진, seed 갱신)는 `&mut` 프로세스 실행기만 수행한다. 동기 `&self` 프레임 실행기가 그 자리에 오면 순수 `eval` 로 떨어져 **0 + 목적지 미변경**이 된다. 계열(정본 = `sim_ir::sysfunc_frame_executor_cannot_perform`) = `$fgets`/`$fscanf`/`$sscanf`/`$fread`/`$feof`/`$fgetc`/`$ungetc` · `$fopen` · `$value$plusargs` · seeded `$random`/`$dist_*` · `$cast` · queue pop. **§4.5.277 전까지는 앞의 6종만 loud 였고 나머지는 silent 였다.** `$sformatf` 는 계열이 아니다(프레임 실행기에 동작하는 인터셉트가 있다) | **§4.5.277 이후 남은 자리는 세 곳뿐**: 클래스 메서드 본문 · 연속 재평가 위치(`assign`/`force`/`wait` 조건) · intra-assignment delay(`x = #1 f(...)`). 모듈 프로세스, 그리고 **문장에서 호출되는 태스크/함수**(`automatic` 여부·output formal 유무 무관)에서는 **동작한다** — 거기서 변수에 받아 그 변수를 쓴다. *(옛 문구가 권하던 "`automatic` 을 떼라"는 실측과 반대였다 — 떼면 `string` 목적지에서 loud 가 아니라 **silent** 가 됐다.)* |
-| `frame-task recursion exceeded the depth limit (N)` / `frame-call …` | 재귀 깊이가 `MAX_CALL_DEPTH` 초과 — 무한 재귀를 hang 대신 loud로 | 종료 조건 점검 |
-| `a subroutine running on the synchronous frame executor tried to write \`NAME\`…` | **§4.5.278 신설.** 프레임 실행기가 자기 프레임-로컬이 아닌 net(모듈/인스턴스 net)을 쓰려 했다 — 그 실행기에는 flat store 도 dirty 채널도 없다. **이전에는 진단이 아니라 `.expect("frame lvalue net is routed")` 로 프로세스가 abort 했다**(rc=101, `errors=` 줄 없음, vita 내부 file:line). 그 자리를 만들던 형태(프레임 본문의 bare call statement 가 모듈 net 에 copy-out)는 §4.5.278 에서 **correct-support** 가 되었으므로, 이것은 남은 어떤 경로가 닿을 때의 correct-or-loud 바닥이다 | 쓰기를 `task` 본문으로 옮기거나(태스크 본문의 창-밖 쓰기는 자동으로 프로세스 실행기로 라우팅된다) 호출하는 프로세스로 옮긴다 |
-| `fork exceeds the v1 tie-encoding limit …` | top-level 프로세스 > 65534 또는 arm > 65536(결정적 순서 인코딩 한계) | 해당 없음(실 벤치 범위 밖) |
+| `internal: a frame-local dynamic array … was still held at frame entry…` | An invariant guard, not a capability limit. Concurrent activations are supported — each activation parks its own array off the heap while suspended. This message means that park/unpark invariant broke | Report the design; there is nothing to work around |
+| ``writing an element of (or a whole store to) a dynamic-array `input` formal…`` | A write to a dynamic-array `input` formal, which is aliased read-only | Copy the value into a local dynamic array and modify that |
+| ``an associative-array iteration (`first/next/last/prev`) whose key…`` | An associative iteration key outside the supported positions | Move the key into a frame-local variable |
+| `` `X` does its work as a statement-level effect… `` | Statement-level effects — writing a destination or a `ref` argument, advancing a file descriptor, updating a seed — are performed only by the `&mut` process executor. On the synchronous `&self` frame executor the call falls back to a pure evaluation, which would return 0 and leave the destination unchanged. The family, spelled canonically by `sim_ir::sysfunc_frame_executor_cannot_perform`, is `$fgets`/`$fscanf`/`$sscanf`/`$fread`/`$feof`/`$fgetc`/`$ungetc`, `$fopen`, `$value$plusargs`, seeded `$random`/`$dist_*`, `$cast`, and queue pop. `$sformatf` is not in the family — the frame executor has a working intercept for it | Three positions remain: a class-method body, a continuously re-evaluated position (`assign`/`force`/a `wait` condition), and an intra-assignment delay (`x = #1 f(...)`). Module processes, and tasks or functions called from a statement, do work regardless of `automatic` or output formals — call there, assign to a variable, and use the variable |
+| `frame-task recursion exceeded the depth limit (N)` / `frame-call …` | Recursion past `MAX_CALL_DEPTH` — an unbounded recursion is made loud instead of hanging | Check the termination condition |
+| ``a subroutine running on the synchronous frame executor tried to write `NAME`…`` | The frame executor tried to write a net that is not frame-local — a module or instance net — and it has neither a flat store nor a dirty channel | Move the write into a `task` body (a task body's out-of-window write routes to the process executor automatically) or into the calling process |
+| `fork exceeds the v1 tie-encoding limit …` | More than 65534 top-level processes, or more than 65536 arms, past the deterministic ordering encoding | Outside the range of real benches |
 
-**해결:** (b)는 사용자가 고칠 조건이 아니라 **회피**하는 조건이다 — 위 표의 회피 열을 따르거나
-ROADMAP에 등재된 후속 슬라이스를 기다린다. corpus는 class-1 내 compile-fail vs runtime-fail을
-요약 MsgCode로 구분(`F-RUN-FATAL`=돌다 중단).
+**Fix:** for (a), resolve the condition the RTL author declared unrecoverable. For (b), take
+the way around from the table above or track the follow-on work in
+[ROADMAP §3](../ROADMAP.md). Fatal is not suppressible — an abort cannot be un-aborted.
+The elaboration-time `$fatal` is `F-ELAB-USER-FATAL`.
 
 ### VITA-I4005 · `I-RUN-USER-INFO` (Info)
-**시뮬레이션 시점 RTL `$info` 발화.** 절차/시뮬 문맥에서 정보 출력(예 "test PASSED"). IEEE
-§20.11상 순수 정보, 계속, exit 무관. severity+file:line+`%m`+sim_time을 붙여 plain `$display`
-(severity 없는 RtlOutput)과 구별.
+**A simulation-time RTL `$info`.** Informational output from a procedural or simulation
+context. IEEE 1800-2017 §20.11: purely informational, the run continues, the exit code is
+unaffected. Severity, `file:line:col`, the instance path and the simulation time distinguish
+it from a plain `$display`, which carries no severity and no code.
 ```
 if (pass) $info("test PASSED (%0d vectors)", n);
-->  info[VITA-I4005] I-RUN-USER-INFO: test PASSED (256 vectors) at tb (tb.sv:54) time=9000ns
+->  tb.sv:2:98: info[VITA-I4005] I-RUN-USER-INFO: PASSED [in m] [at time 0]
 ```
-**해결:** 조치 불요(exit 무관). `-q`/`-Wno-I-RUN-USER-INFO`로 조용히(단 `-q`는 stdout 복사만,
-자동 로그파일엔 기록됨).
+**Fix:** nothing to do. Silence it with `-q` or `-Wno-I-RUN-USER-INFO`. Note that `-q`
+suppresses only the stdout copy of progress and RTL text; diagnostics always reach stderr, and
+`--log <file>` receives every line regardless of verbosity.
 
 ### VITA-W4006 · `W-RUN-NO-LOCATIONS` (Warning)
-**로드한 `.velab`의 위치 side-table이 제거됨 — 런타임 진단이 file:line 불가.** §7 위치
-side-table은 선택적이며 release 스냅샷은 없이 배포될 수 있다(D4). 없으면 런타임 진단이 caret
-대신 `(source location unavailable)`로 degrade — 시뮬레이터는 절대 crash 안 하고 code/severity/
-sim_time/`%m`은 출력. 로드 시점 **1회** 경고.
-```
-$ vrun build/cpu.velab
-warning[VITA-W4006] W-RUN-NO-LOCATIONS: snapshot has no location side-table;
-  runtime diagnostics will omit file:line (rebuild without --strip-locations, or vrun --rebuild)
-```
-**해결:** 위치 포함으로 재-elaborate(side-table은 **기본 포함**이며 `velab --strip-locations`로만
-빠진다 — strip을 안 하면 됨), 또는 `vrun --rebuild`. 권고성이라 시뮬은 정상 진행.
-`-Wno-W-RUN-NO-LOCATIONS`로 억제(의도적 strip 스냅샷), `-Werror=`로 CI 실패.
+**The loaded `.velab` carries no location side-table, so runtime diagnostics cannot show
+`file:line:col`.** Reserved for a snapshot shipped without locations: runtime diagnostics
+would degrade to `(source location unavailable)` while the code, severity, simulation time and
+instance path keep printing, and the warning would be issued once at load.
+
+**Status at HEAD: no emitter.** `velab` always writes the elaborate-time-resolved `stmt_locs`
+into the `.velab` trailer and `vrun` always threads it back, so a staged run prints the same
+diagnostic line as one-shot; parity is pinned by a test that compares the whole line and pins
+the location absolutely. There is no flag that strips the table. A `.vu` whose source-map tail
+is absent or undecodable is refused loudly as `VITA-E9001` rather than degraded, because a
+tolerant fallback would stamp every diagnostic at `:1:1`.
+
+**Fix:** re-elaborate with the current tools. Suppressible and promotable if it fires.
 
 ### VITA-W4007 · `W-RUN-USER-WARNING` (Warning)
-**시뮬레이션 시점 RTL `$warning` 발화.** IEEE §20.11상 경고 출력 후 계속, 도구 억제 가능.
-compile-time warning과 **같은 게이트**를 지나므로 `-Werror=W-RUN-USER-WARNING`이 RTL `$warning`을
-소스 수정 없이 CI 실패로(GHDL `--warn-error` 선례). 승격 시에만 nonzero.
+**A simulation-time RTL `$warning`.** IEEE 1800-2017 §20.11: print and continue, tool-
+suppressible. It passes the same gate as a compile-time warning, so
+`-Werror=W-RUN-USER-WARNING` turns an RTL `$warning` into a CI failure without editing the
+RTL. The exit code changes only under promotion.
 ```
 if (fifo_almost_full) $warning("fifo near full: depth=%0d", depth);
-->  warning[VITA-W4007] W-RUN-USER-WARNING: fifo near full: depth=14 at tb.dut.u_fifo time=620ns
+->  tb.sv:2:75: warning[VITA-W4007] W-RUN-USER-WARNING: near full [in m] [at time 0]
 ```
-**해결:** 경고 조건 처리 또는 수용. `-Wno-`/`--suppress=`로 억제, `-Werror=`로 승격.
-always-logged spine이 아니라 `-q`는 stdout 복사만 영향(자동 로그엔 기록). `--error-limit`은
-warning 미계수.
+This code is the RTL's own `$warning` only. A `unique`/`priority` violation is the simulator's
+own report and carries `VITA-W4031`, so suppressing one never suppresses the other.
+
+**Fix:** handle the flagged condition, or accept it. Suppress with `-Wno-`, promote with
+`-Werror=`.
 
 ### VITA-F4016 · `F-RUN-NO-CONVERGE` (Fatal)
-**델타 한도 내 수렴 실패 — zero-delay 루프/조합 발진.** 한 타임스텝의 델타 사이클 수가
-`max_deltas`(기본 1,000,000)를 초과: cont-assign 발진(`assign a = ~a`), 타이밍 제어 없는
-절차 루프(`always begin a=~a; end`), 또는 0-딜레이 피드백. 시뮬 즉시 중단, exit class 1.
-(부록 A에서 본문 승격 — Verilator DIDNOTCONVERGE 대응.)
+**A time step did not reach a fixed point within the delta limit.** The delta-cycle count for
+one time step exceeded `SimOpts::max_deltas` (default 1,000,000): a continuous-assign
+oscillation, a procedural loop with no timing control, or zero-delay feedback. The simulation
+stops immediately with exit class 1.
 ```
-assign a = ~a;
-->  fatal[VITA-F4016] F-RUN-NO-CONVERGE: did not converge: delta limit (1000000) exceeded at time 0
+->  fatal[VITA-F4016] F-RUN-NO-CONVERGE: did not converge: delta limit (1000000) exceeded at
+    time 0 (zero-delay loop / combinational oscillation)
 ```
-**해결:** 피드백 경로를 끊거나(레지스터 삽입) 루프에 타이밍 제어(`#`/`@`)를 넣는다.
-의도된 깊은 체인이면 `SimOpts.max_deltas` 상향. 억제 불가(Fatal).
+One diagnostic per run: every overflow path — settle at time 0, the run loop, the interpreter's
+in-body activation guard and the VM guard — funnels through one single-shot emitter.
+
+**Fix:** break the feedback path (insert a register) or add timing control (`#` or `@`) to the
+loop. If the chain is genuinely deep and intended, raise `SimOpts::max_deltas`. Not
+suppressible. This is a different condition from `VITA-F4027`, which is one activation running
+long, not the scheduler failing to settle.
 
 ### VITA-W4018 · `W-RUN-VCD-OPEN-FAIL` (Warning)
-**`$dumpfile` 경로 열기 실패 — VCD 없이 시뮬 계속.** `$dumpvars` 시점에 dump 파일을
-생성할 수 없을 때(없는 디렉터리, 권한, 읽기 전용 FS). 주 산출물이 조용히 증발하는 대신
-경고를 남기고 시뮬은 정상 진행(파형만 없음). exit class 무변.
+**The `$dumpfile` path could not be opened, and the simulation continues without a waveform.**
+At `$dumpvars` time the dump file could not be created — a missing directory, permissions, a
+read-only filesystem. Rather than let the primary artifact vanish silently, the failure is
+reported with the path and the OS error and the run proceeds. The exit class is unchanged.
 ```
 $dumpfile("/no/such/dir/wave.vcd"); $dumpvars;
-->  warning[VITA-W4018] W-RUN-VCD-OPEN-FAIL: cannot open VCD dump file '/no/such/dir/wave.vcd': No such file or directory (os error 2)
+->  warning[VITA-W4018] W-RUN-VCD-OPEN-FAIL: cannot open VCD dump file
+    '/no/such/dir/wave.vcd': No such file or directory (os error 2)
 ```
-**해결:** 디렉터리 생성/권한 수정 또는 `-o`로 출력 경로 재지정. `-Werror=`로 CI 승격 가능.
+**Fix:** create the directory or fix permissions, or redirect the output with `-o`. Promote
+with `-Werror=` for CI.
 
 ### VITA-W4019 · `W-RUN-VCD-WRITE-FAIL` (Warning)
-**VCD flush/write 실패 — 파형이 잘렸을 수 있음.** 시뮬 종료 시 `finalize_vcd`의 flush가
-실패할 때(디스크 풀, I/O 에러). 마지막 완료 write까지는 유효한 truncated VCD가 남는다.
+**A waveform write or flush failed, so the waveform may be truncated.** The final flush at end
+of simulation failed (disk full, I/O error). Everything up to the last completed write remains
+a valid, truncated VCD. The same code reports a failed FST transcode.
 ```
-->  warning[VITA-W4019] W-RUN-VCD-WRITE-FAIL: VCD flush failed: disk full
+->  warning[VITA-W4019] W-RUN-VCD-WRITE-FAIL: VCD flush failed: <io error>
+->  warning[VITA-W4019] W-RUN-VCD-WRITE-FAIL: FST transcode failed for 'wave.fst': <io error>
 ```
-**해결:** 디스크 공간/마운트 상태 확인 후 재실행. `-Werror=`로 CI 승격 가능.
+**Fix:** check free space and the mount state, then re-run. Promote with `-Werror=` for CI.
 
 ### VITA-W4020 · `W-RUN-DYN-DEGRADE` (Warning)
-**dynamic-storage 연산이 명세된 degraded 경로를 탔음** (v5 (C)): `new[n]`의 n이 X/Z →
-빈 배열, 범위 밖 인덱스 read → X / write → 무시, queue empty pop → X, 직접-대입
-위치 밖의 pop(NBA rhs·중첩 식 등) → X(미-pop), 원소 cap(1<<24) 초과 push/new/assoc-write
-→ drop/clamp, assoc X/Z 키 read → X / write·delete(k) → 무시 / exists → 0, assoc
-미존재 키 read → X, concat-lvalue 안의 assoc 원소 chunk → 무시
-등 (설계 문서 2026-06-10 §4, IEEE §7.8.6 invalid-index). 단 queue `q[size()] = v`는
-**push_back 동등으로 합법-무음**(IEEE §7.10.1 — 경고 아님)이고, assoc **미존재 키
-write는 원소 생성**(§7.8), **`delete(k)` 미존재 키는 무음 no-op**(§7.9) — 셋 다 경고
-아님. **핸들 net당 1회만** 발행(warn-once 래치) — 루프 안의 degraded 연산이 진단
-스트림을 폭주시키지 않는다.
+**A dynamic-storage operation took its specified degraded path.** The degradations, all of
+which keep running with a defined value: `new[n]` with an x/z size gives an empty array; an
+out-of-range index reads x and drops the write; a pop from an empty queue gives x; a pop
+outside a direct-assignment position (a nonblocking RHS, a nested expression) gives x without
+popping; a push, `new` or associative write past the element cap of `1<<24` is dropped or
+clamped; an associative read with an x/z key gives x, and a write or `delete(k)` with one is
+ignored while `exists` answers 0; an associative read of an absent key gives x; an associative
+element chunk inside a concatenation lvalue is ignored. The same code carries the null
+class-handle degrade — a read gives x, a write is a no-op.
 ```
 ->  warning[VITA-W4020] W-RUN-DYN-DEGRADE: new[] size is X/Z; array degraded to empty
 ```
-**해결:** 크기/인덱스 식의 X 근원을 수정. `-Werror=`로 CI 승격 가능.
+Three related operations are legal and silent, not degradations: `q[size()] = v` on a queue is
+equivalent to `push_back` (IEEE 1800-2017 §7.10.1); an associative write to an absent key
+creates the element (§7.8); `delete(k)` on an absent key is a no-op (§7.9).
+
+Emitted once per handle net, so a degraded operation inside a loop cannot flood the
+diagnostic stream.
+
+**Fix:** find and fix the source of the x in the size or index expression. Promote with
+`-Werror=` for CI.
 
 ### VITA-W4021 · `W-RUN-DUMP-MULTI` (Warning)
-**두 번째 이후의 `$dumpvars` 호출이 무시됨** (Phase-1.x ⑤b: 첫 호출이 VCD를 열고
-필터(depth/scope/net 인자)를 확정 — VCD 헤더는 한 번만 쓸 수 있으므로 추가 호출의
-인자 합집합(LRM 누적 모델)은 v1 컷). 추가 호출은 이 경고 1회(run당) 후 no-op.
+**A second or later `$dumpvars` call was ignored.** The first call opens the waveform and
+fixes the filter (depth, scope and net arguments). A VCD header can only be written once, so
+the accumulating union of later calls is outside v1. Later calls are a no-op after one warning
+per run.
 ```
 ->  warning[VITA-W4021] W-RUN-DUMP-MULTI: extra $dumpvars call ignored (v1: the first call wins)
 ```
-**해결:** 모든 덤프 대상을 첫 `$dumpvars` 호출에 모으기.
+**Fix:** collect every dump target into the first `$dumpvars` call. Suppress with `-Wno-`,
+promote with `-Werror=`.
 
 ### VITA-W4022 · `W-RUN-BAD-FD` (Warning)
-
-파일 연산($fdisplay/$fwrite/$fclose)이 유효하지 않거나 이미 닫힌 디스크립터를 받음 — 해당 연산은 무시된다(iverilog 동작 동일). fd당 1회만 경고.
-
+**A file operation received an invalid or already-closed descriptor, and was ignored.**
+`$fdisplay`, `$fwrite`, `$fclose` and friends on a descriptor that was closed, that is x/z, or
+that is the 0 returned by a failed `$fopen`. iverilog behaves the same way. Emitted once per
+descriptor.
 ```
-->  warning[VITA-W4022] W-RUN-BAD-FD: file operation on an invalid/closed descriptor ignored
+->  warning[VITA-W4022] W-RUN-BAD-FD: file operation on invalid/closed descriptor 0x80000003 ignored
 ```
-
-- **원인**: `$fclose` 후 같은 fd로 쓰기, X/Z fd, `$fopen` 실패(0) 값 사용.
-- **해결**: fd 수명을 확인하고 `$fopen` 반환값이 0이 아닌지 검사.
+**Fix:** check the descriptor's lifetime, and test that `$fopen` returned nonzero before
+using its result. Suppress with `-Wno-`, promote with `-Werror=`.
 
 ### VITA-W4023 · `W-RUN-READMEM` (Warning)
-
-`$readmemb`/`$readmemh`가 파일을 열지 못했거나, 주소 지시어 없는 파일의 토큰 수가 요청 범위와 안 맞음(부족/초과). 메모리는 부분 적재되고 실행은 계속된다(iverilog는 missing file을 "ERROR" 텍스트로 찍지만 exit 0 — vitamin은 exit 패리티를 유지하며 Warning으로 분류).
-
+**`$readmemb`/`$readmemh` could not open the file, or the token count does not match the
+requested range.** The memory is partially loaded and execution continues. iverilog prints
+its own "ERROR" text for a missing file but still exits 0; vita keeps that exit parity and
+classifies the condition as a warning.
 ```
-->  warning[VITA-W4023] W-RUN-READMEM: $readmemb/h problem (missing file / word-count mismatch); memory partially loaded
+$readmemh("/no/such/file.hex", mem);
+->  m.sv:2:39: warning[VITA-W4023] W-RUN-READMEM: $readmem: unable to open
+    '/no/such/file.hex' for reading [in m] [at time 0]
 ```
-
-- **원인**: 경로 오타, 토큰 수 ≠ 범위 크기, 범위 밖 `@addr`.
-- **해결**: 파일 경로/내용을 범위와 맞추거나 명시적 start/finish 인자를 사용.
+**Fix:** correct the path, match the token count to the range, or pass explicit start and
+finish arguments. An `@addr` directive outside the range has the same effect. Suppress with
+`-Wno-`, promote with `-Werror=`.
 
 ### VITA-F4024 · `F-RUN-CLASS-LIMIT` (Fatal)
-
-N7 class 객체 수가 `SimOpts::max_class_objs`(기본 1,000,000) 한도를 초과 — class 힙은 GC가 없어 절대 회수되지 않으므로, 루프 안의 무한 `new()`는 한도 없이 자란다. 한도 초과 시 묵시적 `$finish`(graceful, exit 1)로 OOM 대신 loud하게 중단한다(delta-limit `F-RUN-NO-CONVERGE`와 동일한 자원-한도 패턴).
-
+**The class-object budget was exceeded.** More than `SimOpts::max_class_objs` (default
+1,000,000) class objects were allocated. The class heap is not garbage-collected, so an
+unbounded `new()` in a loop grows without limit; on reaching the budget the run ends with a
+graceful implicit `$finish` (exit class 1) rather than running out of memory. This is the same
+resource-limit pattern as the delta limit.
 ```
-->  fatal[VITA-F4024] F-RUN-CLASS-LIMIT: class object budget (1000000) exceeded — likely an unbounded `new()` ...
+->  fatal[VITA-F4024] F-RUN-CLASS-LIMIT: class object budget (1000000) exceeded — likely an
+    unbounded `new()` (the class heap is not garbage-collected); raise
+    SimOpts::max_class_objs if intended
 ```
-
-- **원인**: 매 사이클 `h = new();`처럼 핸들을 덮어쓰며 객체를 무한 생성(이전 객체는 회수 불가).
-- **해결**: 라이브 객체 재사용, 또는 의도된 대량 할당이면 `SimOpts::max_class_objs`를 상향.
+**Fix:** reuse live objects instead of overwriting the handle (`h = new();` every cycle leaves
+the previous object unreclaimable), or raise `SimOpts::max_class_objs` for an intentionally
+large allocation. Not suppressible.
 
 ### VITA-W4025 · `W-RUN-WIDE-ARITH` (Warning)
-
-multi-word 산술(`*`/`/`/`%`/`**`)의 피연산자 폭이 `WIDE_ARITH_CAP`(2^20, `MAX_NET_WIDTH`와 동일)을 초과 — 선언-합법 net은 2^20 이하지만 replication concat(`{16{a}}`)이 *피연산자*를 16M-bit까지 부풀릴 수 있다. 초과 시 super-linear 커널(`*` O(n²)·복원 `/`·`%` O(bits·n)·`**` square-multiply)이 수십~수백 초 stall하므로 결과를 X로 poison한다(div-by-zero degrade 선례). `simulate` 시작 시 해당 노드가 존재하면 1회 loud 경고. `+`/`-`는 O(n)이라 어떤 폭에서도 정확.
-
+**Multi-word arithmetic exceeds the width cap and the result is poisoned to X.** An operand of
+`*`, `/`, `%` or `**` is wider than `WIDE_ARITH_CAP` (2^20, the same as `MAX_NET_WIDTH`). A
+declared net cannot exceed 2^20 bits, but a replication concatenation (`{16{a}}`) can inflate
+an *operand* to 16 M bits, where the super-linear kernels — `*` at O(n²), restoring `/` and `%`
+at O(bits·n), `**` by square-and-multiply — stall for tens to hundreds of seconds. The result
+is poisoned to X instead, following the divide-by-zero degrade precedent. One warning is
+emitted at the start of `simulate` if such a node exists. `+` and `-` are O(n) and stay exact
+at any width.
 ```
-->  warning[VITA-W4025] W-RUN-WIDE-ARITH: multi-word arithmetic exceeds the width cap; result poisoned to X
+->  warning[VITA-W4025] W-RUN-WIDE-ARITH: multi-word arithmetic exceeds the 1048576-bit width
+    cap; result poisoned to X (the kernel would otherwise stall — narrow the operands)
 ```
-
-- **원인**: replication/concat로 2^20-bit를 넘는 곱셈·나눗셈·거듭제곱(예: `{2{a}} * {2{a}}`, `a`는 2^20-bit).
-- **해결**: 피연산자 폭을 `MAX_NET_WIDTH` 이하로 줄인다(2^20-bit 초과 산술은 v1 범위 밖).
+**Fix:** reduce the operand widths to `MAX_NET_WIDTH` or less. Arithmetic above 2^20 bits is
+outside v1. Suppress with `-Wno-`, promote with `-Werror=`.
 
 ### VITA-W4026 · `W-RUN-VCD-PKGVAR-SKIP` (Warning)
-
-package-level 변수(예약 `$pkg$<pkg>` 스코프의 저장소)는 v1에서 VCD 표면이 없다 — bare `$dumpvars`는 package 변수를 선언하지 않으며(iverilog parity: iverilog도 덤프하지 않음), `$dumpvars(…, pkg_var)`처럼 **명시적으로 선택**했을 때만 이 경고를 1회 내고 해당 net을 제외한다(silent 무시 금지; iverilog는 이 지점에서 assert 크래시).
-
+**A package variable was named in `$dumpvars` and has no VCD surface, so it is excluded.**
+Package-level variables live in the reserved `$pkg$<pkg>` scope and v1 gives them no waveform
+surface. A bare `$dumpvars` never declares them — iverilog does not dump them either — so this
+warning fires only when one is *explicitly* selected, as in `$dumpvars(…, pkg_var)`. The net
+is excluded rather than silently ignored; iverilog aborts on an assertion at this point.
 ```
-->  warning[VITA-W4026] W-RUN-VCD-PKGVAR-SKIP: package variable has no VCD surface (v1); excluded from the dump
+->  warning[VITA-W4026] W-RUN-VCD-PKGVAR-SKIP: a package variable has no VCD surface (v1):
+    it is excluded from the dump
 ```
-
-- **원인**: `$dumpvars` 인자로 import된 package 변수(또는 그 스코프)를 직접 지정.
-- **해결**: 관찰이 필요하면 모듈 변수에 복사해 덤프하거나 `$display`/OBS probe로 관찰(패키지 변수 파형은 후속).
+**Fix:** copy the value into a module variable and dump that, or observe it with `$display`
+or the observability probe rail. Suppress with `-Wno-`, promote with `-Werror=`.
 
 ### VITA-F4027 · `F-RUN-BODY-STEP-LIMIT` (Fatal)
-
-**한 프로세스 활성화가 정지 없이 body-step 예산을 넘겼다.** `#delay`/`@(…)`/`wait` 에 한 번도
-도달하지 않은 채 블록 스텝을 `SimOpts::max_body_steps`(기본 **100,000,000**)회 실행했다.
-
+**One process activation ran past the body-step budget without suspending.** A single
+activation executed `SimOpts::max_body_steps` block steps (default 100,000,000) without ever
+reaching a `#delay`, an `@(…)` or a `wait`.
 ```
-->  fatal[VITA-F4027] F-RUN-BODY-STEP-LIMIT: one process executed 100000000 block steps at time 0
-    without reaching a `#delay`, `@(…)` or `wait` — either it is an unbounded loop, or it is a long
-    computation that needs a larger budget (`SimOpts::max_body_steps`)
+module m; integer x=0; initial while (1) x = x + 1; endmodule
+->  fatal[VITA-F4027] F-RUN-BODY-STEP-LIMIT: one process executed 100000000 block steps at
+    time 0 without reaching a `#delay`, `@(…)` or `wait` — either it is an unbounded loop, or
+    it is a long computation that needs a larger budget (`SimOpts::max_body_steps`)
 ```
+**Fix:** if it is an unbounded loop, add a suspension point. If it is a genuinely long
+computation — parsing a vector file or preloading a memory at time 0 — raise the budget. Not
+suppressible.
 
-- **원인**: `while (1) x = x + 1;` 처럼 정지 지점 없는 무한 루프. 또는 time 0 에서 벡터 파일 파싱·
-  메모리 프리로드처럼 **진짜로 오래 걸리는 계산**.
-- **해결**: 전자면 루프에 정지 지점을 넣는다. 후자면 예산을 올린다.
-- **⚠️ `VITA-F4016`(`F-RUN-NO-CONVERGE`)과 다른 조건이다.** F4016 은 **스케줄러가 fixpoint 에
-  도달하지 못한 것**(zero-delay loop / 조합 발진)이고, 이것은 **한 활성화가 오래 돈 것**뿐이다.
-  이 둘이 한 진단을 공유하던 동안, 피드백도 발진도 없는 `for (i=0;i<500000;i++)` 한 줄이
-  "zero-delay loop / combinational oscillation" 으로 보고됐다(외부 리포트 round-25 §3.4).
-  진단은 **관측한 것만** 말한다.
-
----
+This is a different condition from `VITA-F4016`. F4016 means the *scheduler* did not reach a
+fixed point, a zero-delay loop or a combinational oscillation; this one means *one activation*
+ran long. A plain `for (i=0;i<500000;i++)` with no feedback and no oscillation belongs here,
+and the diagnostic reports only what it observed.
 
 ### VITA-W4028 · `W-RUN-PLUSARGS-INVALID` (Warning)
-
-**매칭된 plusarg 의 값이 `$value$plusargs` 포맷으로 변환 불가.** `%d` 값에 숫자 아닌 문자
-(`+N=5x9`), 선행 밑줄(`+N=_5`), 맨 `+` 부호(`+N=+5`) 등. 변수는 **all-X** 로 쓰이고 status 는
-1(매칭된 plusarg 는 있었다) — 둘 다 iverilog 실측 동작이라, 이 경고가 없으면 잘못 철자한
-plusarg 가 exit 0 으로 X 만 남기고 이유를 아무도 말하지 않는다.
-
+**A matched plusarg's value could not be converted in the `$value$plusargs` format.** A
+non-digit character in a `%d` value (`+N=5x9`), a leading underscore (`+N=_5`), a bare `+`
+sign (`+N=+5`). The variable is written all-X and the status is 1, because a matching plusarg
+*was* present — both are measured iverilog behaviour. Without this warning a misspelled
+plusarg leaves nothing but X values and an exit code of 0.
 ```
-->  warning[VITA-W4028] W-RUN-PLUSARGS-INVALID: invalid decimal value "5x9" in a matched plusarg; variable written all-X
+$ vita design.sv +N=5x9
+->  warning[VITA-W4028] W-RUN-PLUSARGS-INVALID: invalid decimal value "5x9" in a matched
+    plusarg; variable written all-X
 ```
-
-- **원인**: plusarg 값의 오타(`+N=5x9`), 잘못된 radix(`%o` 에 `19`), 지원 안 되는 부호 표기(`+5`).
-- **해결**: 값 철자를 고친다. x/z 자리·밑줄 구분자는 **유효**하다(`+A=1x2z`, `+F=1_2` 는 경고 없이
-  리터럴 관례로 파싱된다 — 단 밑줄이 앞에 올 수는 없다).
+**Fix:** correct the value. x and z digits and underscore separators are valid
+(`+A=1x2z`, `+F=1_2` parse by the literal convention with no warning), but an underscore
+cannot lead. Suppress with `-Wno-`, promote with `-Werror=`.
 
 ### VITA-W4029 · `W-RUN-RANGE-UNKNOWN` (Warning)
-
-An array-word index or a select offset evaluated to an UNKNOWN value (x/z) at run
-time. The read answers all-X and the write is ignored — exactly what IEEE 1364
-§5.2.1 prescribes, so this is legal behaviour, not an error.
-
+**A runtime array word index or select offset evaluated to an unknown (x/z) value.** The read
+answers all-X and the write is ignored, exactly as IEEE 1364-2005 §5.2.1 prescribes, so this
+is legal behaviour rather than an error.
 ```
-reg [7:0] mem [0:3];  reg [1:0] idx_q;   // X until the first clock edge
-assign o = mem[idx_q];
-->  warning[VITA-W4029] W-RUN-RANGE-UNKNOWN: array word index is unknown (x/z); read X / write ignored
+reg [7:0] mem [0:3];  reg [1:0] q;      // x until the first clock edge
+assign o = mem[q];
+->  warning[VITA-W4029] W-RUN-RANGE-UNKNOWN: array word index of `m.mem` is unknown (x/z);
+    read X / write ignored [at time 0]
 ```
-
-Split out of `E-RUN-RANGE` because the two are different facts about a design: an
-x index before reset is ordinary RTL, while a KNOWN index past the end of an array
-is almost always a bug. Reporting both as errors made the reset window fill the log
-with errors and set exit 1 on a correct design. A known out-of-range index is still
-`VITA-E4002`. Suppress with `-Wno-W-RUN-RANGE-UNKNOWN`, or promote it back with
-`-Werror=W-RUN-RANGE-UNKNOWN`. Capped per run independently of E4002, so a flood of
+It is a separate code from `E-RUN-RANGE` because the two are different facts about a design:
+an x index before reset is ordinary RTL, while a *known* index past the end of an array is
+almost always a defect. Reporting both as errors filled the log during the reset window and set
+exit 1 on a correct design. Capped per run independently of `E-RUN-RANGE`, so a flood of
 unknown-index warnings cannot starve the out-of-range budget.
 
+**Fix:** nothing, if the x window is expected. Suppress with `-Wno-W-RUN-RANGE-UNKNOWN`, or
+restore error behaviour with `-Werror=W-RUN-RANGE-UNKNOWN`.
+
 ### VITA-W4030 · `W-RUN-BACKEND-FALLBACK` (Warning)
-
-**요청한 실행 백엔드가 이 설계를 못 돌려서 다른 백엔드가 돌렸다.** 답은 영향받지 않고
-(세 실행기는 바이트 동일이 게이트다) **속도만 달라진다** — 그래서 Error 가 아니라 Warning 이다.
-
+**The requested execution backend could not run this design, and a different one ran it.**
+The three executors are gated on byte-identical output, so the answer is unaffected and only
+the speed changes. That is why it is a warning, not an error.
 ```
 $ vita --backend native design.sv
 ->  warning[VITA-W4030] W-RUN-BACKEND-FALLBACK: requested backend `native` cannot run this
-    design (a task frame that FORKS (a `fork` inside the body): S3b); ran on `vm` instead
+    design (a task frame that FORKS (a `fork` inside the body): S3b); ran on `vm` instead —
+    the result is unaffected, the speed is
 ```
+A silent fall-back is the thing this code exists to prevent: a design run with
+`--backend native` that actually executed on the VM produces identical output, so the run
+reads as agreement between the native backend and the oracle. The facts were always in
+`run.json` under `backend_requested`, `backend` and `native.refused`, but only for a reader who
+went looking.
 
-⭐ **왜 있는가 — 조용한 폴백이 실제로 이 프로젝트를 물었다.** `--backend native` 로 돌린 설계가
-사실은 VM 으로 떨어져 있었는데 출력이 같아서 *"native 와 iverilog 가 완벽히 일치한다"* 로 읽혔고,
-`run.json` 을 보지 않았으면 그대로 배송될 뻔했다(ROADMAP §5.1-o). 판정은 `run.json` 의
-`backend_requested` / `backend` / `native.refused` 에 **늘 실려 있었지만**, 그것은 **찾아봐야
-보이는** 것이지 말해 주는 것이 아니었다.
+The severity follows the accuracy ladder. A fall-back is a slower answer, not a wrong one, so
+making it `exit != 0` in the default build would demote correct-support to loud. In a build
+where the fall-back target is not compiled (`--no-default-features`), the only choices are loud
+or wrong, and there a refusal is a graceful fatal instead.
 
-⚠️ **Error 가 아닌 이유는 정확도 사다리다.** 폴백은 **틀린 답이 아니라 느린 답**이다
-(correct-support). 기본 빌드에서 `exit≠0` 으로 만들면 correct-support → loud 로 **내려간다**.
-폴백 대상이 **컴파일되지 않은** 빌드(`--no-default-features`)에서는 선택지가 loud 아니면 wrong
-뿐이므로 거기서만 Error 로 승격한다(Phase B4b · ROADMAP §5.1-b1).
+**Status at HEAD: the emitter exists and nothing reaches it.** Every reachable row of the three
+eligibility layers is closed — the workload corpus records 6,470 of 6,470 designs eligible with
+zero refusals — so no source design produces this warning. It is built fail-closed and its
+teeth are exercised by a corrupted sidecar forcing a storage-layer refusal; a new gate row will
+be reported by it automatically.
 
-⚠️ **오늘 이 경고는 발화 인구가 0 이다.** Phase A 가 게이트 세 층의 도달 가능한 행을 전부 닫았으므로
-(코퍼스 6,470 중 거부 0) 소스로 이 경고를 만들 수 없다. **fail-closed 로 지었고**, 이빨은 손상된
-사이드카로 STORAGE 층을 거부시켜 세운다 — 새 게이트 행이 생기는 날 이 경고가 자동으로 그것을 말한다.
-
-`-Wno-W-RUN-BACKEND-FALLBACK` 으로 억제, `-Werror=W-RUN-BACKEND-FALLBACK` 으로 승격.
+**Fix:** none needed — the result is correct. Suppress with `-Wno-W-RUN-BACKEND-FALLBACK`,
+promote with `-Werror=W-RUN-BACKEND-FALLBACK`.
 
 ### VITA-W4031 · `W-RUN-UNIQUE-VIOLATION` (Warning)
-
-**`unique`/`priority` 로 한정된 `case`/`if` 가 어떤 가지에도 안 맞았다**(IEEE 1800-2017
-§12.4.2/§12.5.3 violation report). `unique0`/`priority0` 은 이 검사를 **일부러 억제**하므로
-발화하지 않는다. `else`/`default` 를 가진 문장은 **못 놓치므로** 역시 발화하지 않는다.
-
+**A `unique` or `priority` `case`/`if` matched no branch.** The IEEE 1800-2017 §12.4.2 /
+§12.5.3 violation report. `unique0` and `priority0` deliberately suppress this check and do not
+fire. A statement with an `else` or a `default` cannot miss, and does not fire either.
 ```
 logic [1:0] s = 2'b11;
 unique case (s) 2'b00: ; 2'b01: ; endcase
-->  warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or unique
-    case statement [at time 0]
+->  m.sv:3:26: warning[VITA-W4031] W-RUN-UNIQUE-VIOLATION: value is unhandled for priority or
+    unique case statement [in m] [at time 1]
 ```
+This is the simulator's own report, not the RTL's `$warning`, and IEEE places the two in
+different clauses — §12.5.3 is a violation report, §20.10 is a severity task; one is a task the
+design called and the other is a fact the tool produced. vita desugars the violation arm into a
+`$warning` statement in the parser, which is why the two need distinct codes at the reporting
+end: sharing one made `-Wno-W-RUN-USER-WARNING` delete every RTL `$warning` in order to silence
+one benign violation, and made `-Werror=W-RUN-USER-WARNING` break CI on designs containing no
+`$warning` at all.
 
-⭐ **왜 `W-RUN-USER-WARNING`(W4007) 이 아닌가 — 그건 RTL 의 `$warning` 이고 이건 시뮬레이터의
-보고다.** IEEE 는 둘을 다른 절에 둔다(§12.5.3 violation report vs §20.10 severity task): 하나는
-**설계가 부른 태스크**이고 하나는 **도구가 만든 사실**이다. vita 는 위반 arm 을 파서에서
-`$warning` 문장으로 desugar 하므로 **한동안 실제로 같은 코드였고**, 그 결과 외부 라운드 29 가
-잰 두 가지가 전부 참이었다 — ⓐ 알려진 benign 위반 하나를 죽이려고 `-Wno-W-RUN-USER-WARNING` 을
-켜면 **RTL 의 `$warning` 이 전부** 사라지고, ⓑ 이 문서가 CI 게이트로 명시한
-`-Werror=W-RUN-USER-WARNING` 이 **`$warning` 이 한 줄도 없는 설계에서도** CI 를 깨뜨렸다.
+The message text (`value is unhandled for priority or unique case statement`) is pinned to
+iverilog, because the differential oracle answers with that exact string. Only the code
+differs.
 
-⚠️ 텍스트(`value is unhandled for priority or unique case statement`)는 **iverilog 핀**이라
-그대로 둔다 — 차분 오라클이 그 문자열로 답한다. 바뀐 것은 **코드**뿐이다.
+**Fix:** cover the missing value, add a `default`, or use `unique0`/`priority0` if the gap is
+intended. Suppress with `-Wno-W-RUN-UNIQUE-VIOLATION`, promote with
+`-Werror=W-RUN-UNIQUE-VIOLATION` — both independent of `$warning`.
 
-`-Wno-W-RUN-UNIQUE-VIOLATION` 으로 억제, `-Werror=W-RUN-UNIQUE-VIOLATION` 으로 승격 —
-이제 **양쪽 다 `$warning` 과 독립**이다.
+---
 
 ## 8xxx · FILELIST
 
+Filelist diagnostics are emitted during argv expansion, before the gate policy exists, so they
+are not affected by `-Wno-`/`-Werror=` and a run that dies during expansion prints no counts
+epilogue. `W-FLIST-OVERRIDE` is the exception: it is recorded during parsing and replayed
+through the gated sink once the pipeline starts.
+
 ### VITA-E8001 · `E-FLIST-CYCLE` (Error)
-**filelist 사이클 — 활성 스택에 이미 있는 `.f`를 재포함.** 중첩 `-f`/`-F`가 (베이스 해소+lexical
-canonical 후) 현재 열린 `.f` active-stack의 경로로 해소될 때. 평탄화는 트리여야 하므로 back-edge는
-silent 스킵 금지 — 전체 체인을 보고. diamond(다른 가지서 도달, 이미 pop)는 사이클 아님.
+**A filelist cycle: a `.f` already on the active stack was re-included.** A nested `-f`/`-F`
+resolved, after base resolution and lexical canonicalisation, to a path already open on the
+active stack. Flattening must be a tree, so a back edge is reported with the whole chain rather
+than skipped silently. A diamond — the same file reached by a second branch after the first has
+popped — is not a cycle.
 ```
-# build.f: -f sub.f      # sub.f: -f build.f
-error[VITA-E8001] E-FLIST-CYCLE: filelist cycle: build.f -> sub.f -> build.f
+# g2.f contains: -f g2.f
+error[VITA-E8001] E-FLIST-CYCLE: filelist cycle: /tmp/g2.f -> /tmp/g2.f
 ```
-**해결:** 사이클을 끊는다(자기/조상 참조 제거, 공유 내용은 leaf `.f`로 분리 = diamond 합법).
-억제 불가(exit class 3).
+**Fix:** break the cycle by removing the self or ancestor reference; put shared content in a
+leaf `.f`, which makes it a legal diamond. Not suppressible; exit class 3.
 
 ### VITA-E8002 · `E-FLIST-DEPTH` (Error)
-**중첩 깊이가 backstop cap(256) 초과.** 중첩은 사실상 무제한(사이클 가드)이나, 비순환 폭주
-체인이 OS 스택을 소진하기 전에 256 프레임에서 중단한다.
+**Filelist nesting exceeded the backstop depth cap of 256.** Nesting is effectively unlimited —
+the cycle guard is the real protection — but a non-cyclic runaway chain would exhaust the OS
+stack, so expansion stops at 256 frames.
 ```
-# 생성된 체인 f0.f -> f1.f -> ... (사이클 아님, 그냥 깊음)
-error[VITA-E8002] E-FLIST-DEPTH: filelist nesting exceeded depth cap 256 at f256.f
+# a generated chain f0.f -> f1.f -> …  (not a cycle, just deep)
+error[VITA-E8002] E-FLIST-DEPTH: filelist nesting exceeded 256 levels at 'f256.f'
 ```
-**해결:** 생성을 평탄화(대개 생성기가 한두 단계로) 또는 독립 top-level 호출로 분리. 억제 불가
-(exit class 3).
+**Fix:** flatten the generation (a generator can usually emit one or two levels), or split into
+separate top-level invocations. Not suppressible; exit class 3.
 
 ### VITA-E8003 · `E-FLIST-DUP-CTX-CONFLICT` (Error)
-*(silent-dedup arm 구현 2026-06-11; **CONFLICT arm도 같은 날 구현** — 추적되는 sticky
-컨텍스트는 상속 `` `timescale``(comment/string-aware 라이트 스캔, 중복 존재 시에만 컨텍스트
-워크 실행). `default_nettype`은 v1 미지원(E3010 정책)이라 컨텍스트 밖; RULE S 매니페스트
-해시 통합은 worklib 도입 시.)*
-**같은 canonical 소스가 다른 상속 sticky 컨텍스트로 두 번.** 소스는 기본 dedup 안 함(중복 모듈은
-`E-DUP-UNIT`). 같은 canonical 경로가 두 번인 경우만 dedup하되, 두 occurrence가 다른 상속 sticky
-디렉티브(`timescale`/`default_nettype`, RULE S) 컨텍스트면 같은 입력이 아니므로 silent dedup이
-한쪽을 떨군다 → hard error로 양쪽 컨텍스트 제시.
+**The same canonical source appears twice under differing inherited sticky context.** Sources
+are not deduplicated in general — a duplicated module is `E-DUP-UNIT`. The same canonical path
+appearing twice *is* deduplicated, but only when both occurrences carry the same inherited
+sticky directive context. The tracked context is the inherited `` `timescale ``, detected by a
+comment- and string-aware light scan and walked only when a duplicate actually exists. When the
+two contexts differ they are not the same input, so silent dedup would drop one, and both
+contexts are presented instead.
 ```
-# a.f: `timescale 1ns/1ps  then shared.sv
-# b.f: `timescale 1ps/1ps  then shared.sv   (같은 경로, 다른 상속 timescale)
-error[VITA-E8003] E-FLIST-DUP-CTX-CONFLICT: rtl/shared.sv included twice under differing sticky context
+# a.f:  `timescale 1ns/1ps  then shared.sv
+# b.f:  `timescale 1ps/1ps  then shared.sv     (same path, different inherited timescale)
+error[VITA-E8003] E-FLIST-DUP-CTX-CONFLICT: rtl/shared.sv included twice under differing
+  sticky context
 ```
-**해결:** 두 occurrence를 일치시키거나(동일 sticky 디렉티브 선행, 또는 한 번만 포함), 파일이
-자기 `timescale`/`default_nettype`를 self-contained하게. 억제 불가(silent dedup은 RULE S 매니페스트
-해시를 오염; exit class 3).
+**Fix:** make the two occurrences agree (the same sticky directive ahead of each, or include
+the file once), or make the file self-contained by declaring its own `` `timescale ``. Not
+suppressible; exit class 3.
 
 ### VITA-E8004 · `E-FLIST-GLOB` (Error)
-**filelist의 glob/wildcard 거부.** 소스/디렉터리 토큰의 `*`/`?`/`[...]`는 거부 — readdir 순서가
-플랫폼 불안정이라 RULE S 정렬을 비결정으로 만들고 §5 "3-OS 바이트 동일"을 깬다. silent 전개 안 함.
+**A glob or wildcard in a filelist is refused.** `*`, `?` and `[...]` in a source or directory
+token are rejected: `readdir` order is not stable across platforms, which would make the
+sticky-inheritance ordering non-deterministic and break byte-identical output across operating
+systems. Expansion is never performed silently.
 ```
-rtl/*.sv                          # 플랫폼마다 비결정
-error[VITA-E8004] E-FLIST-GLOB: wildcard 'rtl/*.sv' not allowed; emit an explicitly sorted file list
+rtl/*.sv
+error[VITA-E8004] E-FLIST-GLOB: wildcard '*.sv' not allowed in a filelist
 ```
-**해결:** 명시적 정렬 경로로 대체. 생성 필요 시 생성기가 정렬해 명시 `.f`를 낸다. 억제 불가
-(exit class 3).
+**Fix:** list explicitly sorted paths. If the list is generated, sort it in the generator and
+emit an explicit `.f`. Not suppressible; exit class 3.
 
 ### VITA-E8005 · `E-FLIST-NOT-FOUND` (Error)
-**filelist 또는 참조 경로가 프레임 베이스 해소 후 없음.** `-f`/`-F` 타깃·소스·검색 디렉터리가
-프레임 베이스(`-f`=invocation CWD, `-F`=`.f` 자기 디렉터리) 기준으로 존재하지 않을 때.
-canonicalization이 case-fold를 안 하므로 대소문자만 다른 경로는 여기서 표면화(macOS
-case-insensitive FS 충돌을 silent alias 대신 가시화).
+**A filelist or a path it references does not exist after frame-base resolution.** The `-f`/`-F`
+target, a source, or a search directory does not exist relative to its frame base — the
+invocation CWD for `-f`, the `.f` file's own directory for `-F`. Canonicalisation does not
+case-fold, so a path differing only in case surfaces here rather than silently aliasing on a
+case-insensitive filesystem.
 ```
--F ./ip/Core.f                    # 실제 파일은 ip/core.f (대소문자 차이)
-error[VITA-E8005] E-FLIST-NOT-FOUND: cannot open './ip/Core.f' (base=file-dir)
+-F ./ip/Core.f                    # the real file is ip/core.f
+error[VITA-E8005]: cannot read './ip/Core.f': No such file or directory (os error 2)
 ```
-**해결:** 경로(대소문자 포함)/베이스를 고친다. `-f`=CWD 상대, `-F`=파일 디렉터리 상대를 혼동하기
-쉬움. `--dump-filelist`로 (origin, base, canonical-path) 확인. 억제 불가(exit class 3).
+**Fix:** correct the path, including its case, or the base you expected. `-f` is CWD-relative
+and `-F` is file-directory-relative, which is easy to confuse; `--dump-filelist` shows origin,
+base and canonical path for each entry. Not suppressible; exit class 3.
 
 ### VITA-E8006 · `E-FLIST-UNDEF-ENV` (Error)
-**filelist의 미정의 환경변수 참조.** `$VAR`/`${VAR}`/`$(VAR)`가 환경에 없을 때. silent 빈
-문자열 치환은 잘못된 경로(FS 루트로 붕괴 등) + 환경마다 다른 해시를 내어 재현성을 해치므로
-hard-error.
+**A filelist references an undefined environment variable.** `$VAR`, `${VAR}` or `$(VAR)` with
+no value in the environment. Substituting an empty string would produce a wrong path — often
+collapsing to the filesystem root — and a different hash per environment, so it is a hard
+error.
 ```
-$RTL_ROOT/cpu/alu.sv              # RTL_ROOT 미export
-error[VITA-E8006] E-FLIST-UNDEF-ENV: undefined environment variable 'RTL_ROOT' in build.f:1
+$RTL_ROOT/cpu/alu.sv              # RTL_ROOT not exported
+error[VITA-E8006] E-FLIST-UNDEF-ENV: undefined environment variable '$RTL_ROOT'
 ```
-**해결:** 변수 export 또는 구체/상대 경로로 대체. CI는 필요한 변수를 명시 설정. 억제 불가
-(exit class 3).
+**Fix:** export the variable, or use a concrete or relative path. CI should set the variables
+it needs explicitly. Not suppressible; exit class 3.
 
 ### VITA-E8007 · `E-FLIST-WRONG-STAGE` (Error)
-**filelist 디렉티브가 호출 단계의 버킷에 안 맞음.** 각 단계 전개기는 전체 `.f` 문법을 파싱하되,
-호출 단계가 소유하지 않는 버킷의 디렉티브는 silent no-op이 아니라 hard error. 예: `velab -f x.f`에
-`+define+`(전처리/bucket A) — velab엔 전처리 패스가 없어 무시하면 의도 위반.
+**A filelist directive belongs to a bucket the invoking stage does not own.** Every stage's
+expander parses the full `.f` grammar, but a directive owned by another stage is a hard error
+rather than a silent no-op. `+define+` reaching `velab` is the canonical case: `velab` has no
+preprocess pass, so ignoring it would violate the user's intent.
 ```
-# elab.f: --top top  /  +define+WIDTH=8     # 전처리 디렉티브 — elaborate에 무효
-$ velab t.vu +define+WIDTH=8
-error[VITA-E8007]: +define+/+incdir+/-D/-I are compile-stage (vcmp/vita) inputs — 'velab'
-has no preprocess pass, so they would be silently meaningless
+$ vita velab top.vu -f elab.f       # elab.f contains +define+WIDTH=8
+error[VITA-E8007]: +define+/+incdir+/-D/-I are compile-stage (vcmp/vita) inputs — 'velab' has
+no preprocess pass, so they would be silently meaningless
 ```
-**해결:** 소유 단계로 옮긴다(`+define+`/`+incdir+`/`-D`/`-I`는 vcmp, `--top`/`-L`은 velab,
-`+plusarg`는 vrun), 또는 union을 받는 원샷 `vita` 사용. 억제 불가(exit class 3).
-런타임 plusarg를 컴파일 단계에 주면 대칭적으로 거부된다(`runtime plusargs (+FOO) are
-vita/vrun arguments — 'vcmp' compiles, it does not simulate`).
-> 이 단락의 옛 판본은 `-s`/`-G`를 velab 플래그로 적었으나 **둘 다 미구현**이다 — 루트 지정은
-> `--top`이고, elaborate 단계 파라미터 override(`-G`/`-pvalue+`)는 doc-14 §RULE B에 스펙만
-> 있는 미배선 항목이다(ROADMAP §0 T2-14).
+The reverse is refused symmetrically:
+`runtime plusargs (+FOO) are vita/vrun arguments — 'vcmp' compiles, it does not simulate`.
+The same family covers `--backend` on a compile stage, `-G` on `vcmp`/`vrun`, `--obs-dir`,
+`--probe` and `--obs-procs` on a staged applet, and the work-library flags on the wrong stage.
 
-> **어떤 인자가 실제로 어느 단계에 도달했는지 보려면 `-v`** — 해소된 invocation 블록
-> (`invocation`/`cwd`/`filelists`/`sources`/`defines`/`plusargs`/…)을 전사 맨 앞에 찍고,
-> `-l/--log` 가 같은 파일에 담는다(doc-13 · manual 004 "What actually ran").
+**Fix:** move the directive to the stage that owns it — `+define+`/`+incdir+`/`-D`/`-I` to
+`vcmp`, `--top`/`-L` to `velab`, plusargs to `vrun` — or use one-shot `vita`, which accepts the
+union. Pass `-v` to print the resolved invocation block (`invocation`, `cwd`, `filelists`,
+`sources`, `defines`, `plusargs`) at the head of the transcript, which `-l`/`--log` captures to
+the same file. Not suppressible; exit class 3.
 
 ### VITA-W8008 · `W-FLIST-MIXED-BASE` (Warning)
-**`-F` 프레임 안의 `-f` 줄이 재배치 가능 서브트리를 CWD에 re-anchor.** `-F`는 자기 디렉터리 기준
-해소라 재배치 가능(벤더 IP)인데, 내부 `-f` 줄은 그 서브트리를 invocation CWD에 re-anchor해
-재배치성을 깬다 — 거의 항상 벤더 패키징 버그. 의미는 유효해 경고.
+**A `-f` line inside a `-F` frame re-anchors a relocatable subtree to the CWD.** `-F` resolves
+against its own directory, which is what makes a vendor IP subtree relocatable; a `-f` line
+inside it re-anchors that subtree to the invocation CWD and destroys the relocatability. It is
+almost always a packaging defect, but the meaning is well defined, so it is a warning.
 ```
-# vendor.F: -F ./rtl/core.F  /  -f ./rtl/extra.f   # extra.f 를 CWD에 re-anchor
-warning[VITA-W8008] W-FLIST-MIXED-BASE: -f inside -F frame re-anchors to CWD (relocatability lost)
+# vendor.F:  -F ./rtl/core.F  /  -f ./sub/inner.f
+warning[VITA-W8008] W-FLIST-MIXED-BASE: '-f ./sub/inner.f' inside a -F frame resolves against
+  the invocation CWD, not the filelist directory
 ```
-**해결:** `-F` 트리 안에선 중첩 포함도 `-F` 사용. CWD anchor가 의도면 `-Wno-W-FLIST-MIXED-BASE`로
-억제, `-Werror=`로 승격.
+**Fix:** use `-F` for nested includes inside a `-F` tree. If CWD anchoring is intended, suppress
+with `-Wno-W-FLIST-MIXED-BASE`; promote with `-Werror=`.
 
 ### VITA-W8009 · `W-FLIST-OVERRIDE` (Warning)
-**단일값 knob이 두 곳에서 지정 — last-wins override 적용(gated 경고).** 단일값 elaborate knob
-(`--top-module`/`-s`, `--std`, `--timescale`, `--multi-driver`)이 평탄 `-f`/`-F`+명령줄 스트림의
-두 곳 이상에 있을 때. 명령줄 토큰이 전개 뒤에 append되어 명령줄이 `.f`를 override. silent override를
-막기 위해 vita-log **GATED sink** 경유로 두 값·출처·승자를 보인다 — 기본은 경고 로깅+에필로그
-카운트 집계, `-Wno-W-FLIST-OVERRIDE`로 억제, `-Werror=W-FLIST-OVERRIDE`로 승격 가능.
+**A single-value knob was set twice; the last one wins.** A knob that holds one value appeared
+more than once across the flattened `-f`/`-F` stream and the command line. Command-line tokens
+are appended after expansion, so the command line overrides the filelist. Rather than override
+silently, both values are shown. The knobs that record this are `-o`/`--out`, `--threads`/`-j`,
+`--backend`, `--timeout`, `--upstream`, `--work`, `--workdir`, `-l`/`--log` and `--obs-dir`.
+Accumulating flags do not: `-L`, `--top`, `-G`, `-D`, `-I`, `--hier-tree`, `--inst-paths`,
+`--probe`, `--probe-file` and the verbosity flags.
 ```
-# build.f: --top-module dut_b
-$ velab -s dut_a -f build.f
-warning[VITA-W8009] W-FLIST-OVERRIDE: --top-module 'dut_b' (build.f:1) overridden by 'dut_a' (command line)
+$ vita design.sv -o o1.vcd -o o2.vcd
+warning[VITA-W8009] W-FLIST-OVERRIDE: -o 'o1.vcd' overridden by 'o2.vcd' (last wins)
 ```
-**해결:** 의도된 override(`velab -s top2 -f build.f`)는 지원 워크플로 — 경고는 정보성, 진행됨.
-노이즈를 없애려면 knob을 한 곳에만(빌드 의도는 명령줄 권장). `-Werror=W-FLIST-OVERRIDE`로 strict
-CI에서 실패.
+The events are collected during parsing and replayed through the gated sink at pipeline start,
+so `-Wno-`/`-Werror=` apply to them and the counts epilogue includes them — unlike every other
+filelist diagnostic.
+
+**Fix:** an intended override is a supported workflow and the warning is informational. To
+remove the noise, set the knob in one place; the command line is the usual home for
+build intent. Promote with `-Werror=W-FLIST-OVERRIDE` for a strict CI.
 
 ---
 
 ## 9xxx · ARTIFACT / STALENESS
 
 ### VITA-E9001 · `E-ART-FORMAT-MISMATCH` (Error)
-**산출물 magic 또는 format_version 불일치.** 헤더 전용 디코드(본문 역직렬화 전)에서 magic
-(`VITWORKU`/`VELAB\0`) 또는 `format_version`이 이 빌드 기대와 다를 때 — foreign/손상 파일 또는
-비호환 컨테이너 레이아웃. 본문을 안 읽으므로 misparse 불가, 재빌드 힌트와 함께 거부. (타입 형상의
-`E-ART-SCHEMA-MISMATCH`보다 하위 게이트.)
+**The artifact's magic or `format_version` does not match this build.** A header-only decode,
+before any body deserialisation, found a magic (`VITWORKU` or `VELAB\0`) or a `format_version`
+that this tool does not expect — a foreign or damaged file, or an incompatible container
+layout. The body is never read, so a misparse is impossible; the file is refused with a rebuild
+hint. This is the lowest gate, below the type-shape gate `E-ART-SCHEMA-MISMATCH`.
 ```
-error[VITA-E9001] E-ART-FORMAT-MISMATCH: top.velab has format_version=2, this vitamin expects 1
-  hint: regenerate with `velab` (or `vcmp --clean`)
+$ vita vrun bad.velab
+error[VITA-E9001] E-ART-FORMAT-MISMATCH: bad or missing velab magic
+errors=1 warnings=0 notes=0
+EXIT=2
 ```
-**해결:** 현재 도구로 재생성(`vcmp`/`velab`, 또는 `vcmp --clean`). 산출물은 항상 재생성 가능하므로
-refuse-and-rebuild(version-GATE), silent 마이그레이션 없음. exit class 2. 억제 불가.
+Other messages under this code: `undecodable {velab|vu} header: {e}`,
+`` format_version={h} but this tool expects {t}; regenerate with `velab` ``, and
+`undecodable .vu source-map trailer: {e}` — the last because a tolerant fallback would stamp
+every staged diagnostic at `:1:1`.
 
-> **런타임 재사용(방어적 Fatal).** 같은 코드가 **런타임에도** can't-happen 가드로 재사용된다:
-> `.velab`의 fork join-mode 트레일러 항목이 누락된 경우(손-절단/stale 산출물;
-> `sched.rs::fatal_fork_mode_missing`) join 모드를 지어내는 대신 이 코드로 **loud하게 즉시 종료**
-> 한다(exit class 1). 본문에 기술한 1차 용도(헤더-전용 로드 게이트, exit class 2)는 불변.
+**Status at HEAD: also emitted at Fatal severity.** Two runtime sidecar guards reuse this code
+as a can't-happen check: a `.velab` missing its `fork` join-mode trailer entries — a truncated
+or stale artifact — ends the run immediately at Fatal rather than inventing a join mode, with
+exit class 1. The primary use described above, the header-only load gate, stays Error with exit
+class 2.
+
+**Fix:** regenerate with the current tools (`vcmp`, then `velab`). Artifacts are always
+regenerable, so the policy is refuse-and-rebuild with no silent migration. Not suppressible.
 
 ### VITA-E9002 · `E-ART-SCHEMA-MISMATCH` (Error)
-**산출물 schema_hash가 도구의 구조적 타입-형상 해시와 다름.** 헤더의 `schema_hash`(D2/§5의
-`#[derive(SchemaHash)]` 구조적 다이제스트)가 실행 도구에 컴파일된 값과 다를 때. 필드/variant
-추가·삭제·재정렬·타입변경 — 또는 wire 영향 serde 속성(`rename`/`skip`/…) — 이 해시를 뒤집어,
-비호환 형상 빌드의 산출물이 silent misparse되는 것을 헤더 단계에서 거부.
+**The artifact's `schema_hash` differs from this tool's structural type-shape hash.** The
+header's `schema_hash` — the `#[derive(SchemaHash)]` structural digest specified in
+[16-schema-hash-spec.md](16-schema-hash-spec.md) — differs from the value compiled into the
+running tool. Adding, removing, reordering or retyping a field or variant, or changing a
+wire-affecting serde attribute, flips that hash, and the mismatch is refused at the header
+stage so an artifact from an incompatible shape can never be misparsed.
 ```
-error[VITA-E9002] E-ART-SCHEMA-MISMATCH: top.velab schema 9f3c.., current tool schema 7a10..
-  hint: rerun `velab`; the sim-ir type shape changed between builds
+error[VITA-E9002] E-ART-SCHEMA-MISMATCH: sim-ir type shape changed between builds; rerun `velab`
 ```
-**해결:** 현재 도구로 재빌드(`velab`, 또는 `vcmp` 후 `velab`). version-GATE(refuse-and-rebuild),
-마이그레이션 기계 없음. exit class 2. 억제 불가.
+**Fix:** rebuild with the current tools (`velab`, or `vcmp` then `velab`). Version-gate policy,
+no migration machinery. Exit class 2. Not suppressible.
 
 ### VITA-E9003 · `E-ART-STALE-UPSTREAM` (Error)
-*(검증 시임 구현 2026-06-11: `vrun --upstream <file.vu>`가 라이브 .vu를 재해시해 `.velab`의
-`composite_input_hash`와 대조 — 불일치 = 이 에러, exit class 2. **2026-06-12 worklib v1로 자동
-발견 체인 가동:** lib-모드 `.velab`은 소비한 매니페스트/blob/소스·include 다이제스트를 기록하고
-bare `vrun`이 전부 라이브 재해시 — 어느 하나라도 다르면 이 에러.)*
-**vrun이 라이브 소스 재해시 후 stale 스냅샷 거부(RULE V).** 매 실행 vrun이 상류 체인 전체를
-라이브 소스에 재검증 — 소비 (lib:unit, src_sha256) 트리플마다 라이브 파일을 재전처리(상속 적용)해
-다이제스트 재계산, 매니페스트 내용 해시·두 schema 해시 재확인. 라이브 해시가 스냅샷에 박힌 값과
-다르면 stale이므로 틀린 결과를 내느니 거부. **mtime 안 씀** — 내용 해시만 건전.
+**`vrun` re-hashed the live sources and the snapshot is stale (RULE V).** Two paths reach this
+code. `vrun --upstream <file.vu>` re-hashes the named live artifact and compares it with the
+`composite_input_hash` recorded in the `.velab`. In library mode, a `.velab` records the
+digests of every manifest, compiled-unit blob, source and include it consumed, and a bare
+`vrun` re-hashes all of them; any difference is stale. Modification times are never used —
+content hashes only.
 ```
-$ velab -s top && vrun top.velab           # ok
-$ echo '// edit' >> rtl/alu.sv ; vrun top.velab
-error[VITA-E9003] E-ART-STALE-UPSTREAM: rtl/alu.sv digest changed since snapshot
-  hint: rerun vcmp/velab, or vrun --rebuild
+$ velab -o top.velab top.vu && vita vrun top.velab      # ok
+$ echo '// edit' >> rtl/alu.sv ; vita vrun top.velab
+error[VITA-E9003] E-ART-STALE-UPSTREAM: work library `w`: rtl/alu.sv changed since the .velab
+  snapshot (re-run velab)
 ```
-**해결:** stale 단계 재실행(`vcmp`/`velab`) 후 `vrun`, 또는 `vrun --rebuild`. exit class 2(RTL
-버그 아닌 재빌드임을 CI가 앎; silent 재사용 없음). 억제 불가.
+**Fix:** re-run the stale stage (`vcmp`, `velab`) and then `vrun`. Exit class 2 tells CI to
+rebuild rather than to debug RTL. There is no silent reuse. Not suppressible.
 
 ### VITA-E9004 · `E-ART-VERSION-GATE` (Error)
-**생산 도구의 semver-major가 소비 도구와 비호환.** provenance/도구 지문에 기록된 생산 도구
-semver-major가 비호환일 때(컨테이너 포맷·schema 해시 일치 여부와 무관). §5상 format_version/
-schema_hash/tool-semver-major 불일치는 hard error + 재빌드 힌트, silent 재사용 없음. 빌드 지문
-(git sha/dirty/profile)은 provenance 전용·staleness 키 아님(dirty 트리만으론 안 걸림).
+**The producing tool's semver major is incompatible with the consuming tool.** The producer's
+semver major, recorded in the artifact's provenance, is incompatible — independently of whether
+the container format and schema hash happen to agree. Build fingerprints (git SHA, dirty flag,
+profile) are provenance only and are *not* staleness keys, so a dirty tree alone does not trip
+this gate.
 ```
-error[VITA-E9004] E-ART-VERSION-GATE: top.velab produced by vitamin 2.x, this tool is 1.x
-  hint: regenerate with this tool's `velab`, or install a matching vitamin
+error[VITA-E9004] E-ART-VERSION-GATE: produced by vitamin 2.x, this tool is 1.x; regenerate or
+  install a matching vitamin
 ```
-**해결:** 소비 도구와 major가 맞는 도구로 재생성하거나 맞는 버전 설치. refuse-and-rebuild;
-마이그레이션은 산출물이 배포 포맷이 될 때까지 연기. exit class 2. 억제 불가.
+**Fix:** regenerate with a tool whose major matches, or install the matching vitamin. Refuse-
+and-rebuild; migration is deferred until artifacts become a distribution format. Exit class 2.
+Not suppressible.
 
 ### VITA-E9005 · `E-WORK-MANIFEST` (Error)
-**work 라이브러리 매니페스트(`lib.toml`)가 없거나 정규형이 아님.** `-L`이 가리킨 디렉터리에
-`lib.toml`이 없거나, 기계-작성 정규형(canonical v1)을 벗어나 strict 파서가 거부했거나, 논리
-이름이 요청과 다를 때. 매니페스트는 vcmp `--work`가 기계-작성하며 수동 편집은 내용 해시를
-바꿔 하류 스냅샷을 stale로 만든다(그건 E9003) — 이 에러는 그 이전, 읽기/파싱 자체의 실패다.
+**A work-library manifest (`lib.toml`) is missing or not in canonical form.** The directory a
+`-L` names has no `lib.toml`, or the file departs from the machine-written canonical form and
+the strict parser refused it, or the logical name it declares differs from the one requested,
+or a referenced library blob is missing. The manifest is written by `vcmp --work`; hand-editing
+it changes its content hash and makes downstream snapshots stale, which is `E-ART-STALE-UPSTREAM`.
+This code is the earlier failure: reading or parsing it at all.
 ```
 $ velab -L work=./w --top cpu
 error[VITA-E9005] E-WORK-MANIFEST: ./w/lib.toml: not a canonical work manifest (line 1)
-  hint: regenerate the library with `vcmp --work`, or fix the -L path
 ```
-**해결:** `vcmp --work`로 라이브러리 재생성, 또는 `-L` 경로 교정. exit class 2(아티팩트 클래스 —
-RTL 버그 아님). 억제 불가.
+Related messages under this code: ``./w/lib.toml: directory holds library `x` (requested `work`)``
+and ``./w/…: <io error> (library blob missing — re-run `vcmp --work`)``.
+
+**Fix:** regenerate the library with `vcmp --work`, or correct the `-L` path. Exit class 2 —
+an artifact-class failure, not an RTL defect. Not suppressible.
 
 ---
 
-## 부록 A · 조사 기반 에러/경고 케이스 인벤토리 (공식 출처)
+## Appendix A · Reserved codes (survey inventory)
 
-> 본문(§0~9)의 59개(현재 full-entry / `MsgCode` enum 등재 수, 2026-07-22 기준)는 **MVP 설계·구현 대상** 코드다. 본 부록은 실제 시뮬레이터
-> (Verilator · Icarus iverilog · VCS · Xcelium · GHDL) 공식 문서 + IEEE 1800/1364가 정의하는
-> **추가 오류/경고 조건 107개를 미리 수집한 인벤토리**다 — 추후 구현 시 어떤 케이스를 처리해야
-> 하는지 미리 드러내 구현을 용이하게 하려는 목적이다. **이 코드들은 아직 미구현(예약)** 이며,
-> 구현될 때 본문 형식의 전체 항목(원인·예시·해결)으로 승격된다.
->
-> **"예약"의 의미 (혼동 방지).** `MVP-SIM` 태그 코드는 **설계상 반드시 구현될 동작**이다 — '예약'은
-> *본문 전체 항목(prose)·`MsgCode` enum 등재가 아직 없음*을 뜻하지, 그 **동작**이 선택적이라는 뜻이
-> 아니다(이 점이 선택적 `LINT`/미래 `SVA`·`SV-TYPE`·`VHDL` 밴드와 다르다). 그래서 다른 문서가
-> `W-PP-TIMESCALE-DEFAULT`(W1017)·`E-PP-TIMESCALE-PARTIAL`(E1011)·`W-PARSE-TIMESCALE-PARTIAL`(W2016)을
-> "잠금"으로 참조하는 것은 그 *동작 규칙*이 확정됐다는 뜻이고, **코드 자체는 구현 시 본문+enum으로
-> 승격**된다. bijection 게이트는 승격(=enum 등재) 후에만 그 코드를 대상으로 한다.
+The body sections above define the 68 codes registered in the `MsgCode` enum. This appendix is
+a separate inventory: 96 additional error and warning conditions defined by IEEE 1800-2017 and
+IEEE 1364-2005, and by the published documentation of Verilator, Icarus iverilog, VCS, Xcelium
+and GHDL. They are collected in advance so that implementing one of those conditions starts
+from a named code and a cited source rather than from a blank page. **None of these codes is
+registered in the enum and none can be emitted.** A code moves out of this appendix by gaining
+an enum variant and a full body entry — cause, example, fix — in the same change, which is also
+what puts it under the bijection gate.
 
-**scope 태그:** `MVP-SIM` = Verilog-2005/SV-subset 시뮬레이터가 반드시 다뤄야 함(구현 대상) ·
-`LINT` = 스타일/린트(선택; Verilator 기본 off 다수) · `SVA`/`SV-TYPE`/`VHDL` = 예약 밴드(향후 기능).
-*sev* 약어 Erro=Error.
+What "reserved" means here differs by scope tag. A `MVP-SIM` code names a behaviour the design
+requires: reserved says the prose entry and the enum row do not exist yet, not that the
+behaviour is optional. That is the difference from the `LINT` tag and from the future `SVA`,
+`SV-TYPE` and `VHDL` bands, which are genuinely optional or later. So when another document
+refers to a rule such as partial-`` `timescale `` handling as fixed, that means the *behaviour
+rule* is decided; the code itself is promoted when implemented.
 
-**번호 부여 (거버넌스 보강):** 초기 36개(시드)는 알파벳순으로 부여했고(현재 본문 58개), **이후 추가는 해당 밴드의
-다음 빈 번호를 영구 부여한다(재정렬·renumber 금지)** — 그래서 본 부록 번호는 알파벳순이 아니다.
-mnemonic이 1차 안정 키임은 동일. 구현 전이므로 일부 번호는 향후 통합·재배치될 수 있다(미구현
-인벤토리 한정).
+Scope tags: `MVP-SIM` = a Verilog-2005 / SystemVerilog-subset simulator must handle it ·
+`LINT` = style or lint, optional, many off by default in Verilator · `SVA` / `SV-TYPE` /
+`VHDL` = reserved bands for later features. The `sev` column abbreviates Error as `Erro` and
+Fatal as `Fata`.
 
-**기존 코드로 흡수/중복 정리:** Verilator 세분 코드 일부는 기존 코드의 하위 케이스로 흡수 —
-포트 폭 불일치(Verilator WIDTHCONNECT)는 `W-ELAB-WIDTH-TRUNC`(W3008)에, 다중 클럭 구동(CDC)
-린트(Verilator MULTIDRIVEN)는 `E-ELAB-MULTIDRIVER`(E3001)에 교차참조. `` `timescale `` 부분
-지정은 strict `E-PP-TIMESCALE-PARTIAL`(E1011)와 lenient `W-PARSE-TIMESCALE-PARTIAL`(W2016) 두
-정책 코드로 제공한다(한 조건, 정책 선택). **out-of-box 기본은 lenient(W2016)** — iverilog `-Wtimescale`
-관행. 선택은 `--timescale-policy <strict|lenient>`(§14 vcmp/velab 플래그, 버킷 A)로 한다. 아무 모듈도
-지정 안 한 *전무* 사례는 별개 코드 `W-PP-TIMESCALE-DEFAULT`(W1017, 기저 `1ns/1ns`)가 담당한다(08).
+Numbering follows the same governance as the body: the initial seed allotment was assigned
+alphabetically within each category, and every code added since takes the next free number in
+its band permanently, with no re-sorting. That is why this appendix is not in alphabetical
+order. The mnemonic remains the primary key. Because these are unimplemented, some numbers may
+still be merged or relocated — that latitude applies to this inventory only.
 
-### 1xxx · PREPROCESS  (9)
+Some surveyed conditions are sub-cases of a code that already exists and were not given their
+own: Verilator's `WIDTHCONNECT` (port width mismatch) belongs to `W-ELAB-WIDTH-TRUNC` (W3008),
+and Verilator's `MULTIDRIVEN` for multiple-clock driving belongs to `E-ELAB-MULTIDRIVER`
+(E3001). Partial `` `timescale `` specification is offered as two policy codes for one
+condition — strict `E-PP-TIMESCALE-PARTIAL` (E1011) and lenient `W-PARSE-TIMESCALE-PARTIAL`
+(W2016) — with lenient as the intended out-of-box default, matching iverilog's `-Wtimescale`
+convention; the policy selector for that pair does not exist at HEAD, and the mixed-timescale
+condition is reported today by the live `W-PP-TIMESCALE-MIXED` (W1018) at Warning. The case
+where *no* module specifies one is a separate live code, `W-PP-TIMESCALE-DEFAULT` (W1017).
 
-> 참고: E1004/E1005/E1013/W1007/W1008는 preprocessor MVP에서 본문 §1xxx로 승격되었다(2026-06-04).
+### 1xxx · PREPROCESS  (8)
 
-| 번호 | mnemonic | sev | scope | 조건 | 출처 / 매핑 |
+E1004, E1005, E1013, W1007, W1008 and W1017 were promoted out of this inventory into the body.
+
+| Number | Mnemonic | sev | scope | Condition | Source / mapping |
 |---|---|---|---|---|---|
 | E1006 | `E-PP-REDEFINE-DIRECTIVE` | Erro | MVP-SIM | Redefining a reserved compiler directive as a macro | IEEE 1364-2005 §19.3.1 |
 | E1009 | `E-PP-UNDEF-MACRO-USE` | Erro | MVP-SIM | Use of an undefined text macro | IEEE 1364-2005 §19.3.1 |
 | E1010 | `E-PP-UNBALANCED-CONDITIONAL` | Erro | MVP-SIM | Unbalanced `` `ifdef/`else/`endif `` | IEEE 1364-2005 §19.4 |
-| E1011 | `E-PP-TIMESCALE-PARTIAL` | Erro | MVP-SIM | Some modules have `` `timescale `` and others do not (strict) | IEEE 1364-2005 §19.8 |
-| E1012 | `E-PP-RESETALL-IN-MODULE` | Erro | MVP-SIM | `` `resetall `` inside a module/UDP declaration | IEEE 1364-2005 §19.6 |
-| W1014 | `W-PP-IFDEF-VALUE-ZERO` | Warn | MVP-SIM | `` `ifdef `` tests a macro defined as 0 (definedness ≠ value) | Verilator PREPROCZERO |
-| W1015 | `W-PP-BACKSLASH-SPACE` | Warn | MVP-SIM | Backslash followed by whitespace before newline | Verilator BSSPACE |
-| W1016 | `W-PP-DEF-OVERRIDE` | Warn | MVP-SIM | Command-line `+define` overrides an in-source `` `define `` | Verilator DEFOVERRIDE |
-| W1017 | `W-PP-TIMESCALE-DEFAULT` | Warn | MVP-SIM | No `` `timescale ``/`timeunit` anywhere and no `--timescale` → 기저값 `1ns/1ns` 적용 | iverilog -Wtimescale; IEEE 1364-2005 §19.8 (08 §no-timescale base) |
+| E1011 | `E-PP-TIMESCALE-PARTIAL` | Erro | MVP-SIM | Some modules have `` `timescale `` and others do not (strict policy) | IEEE 1364-2005 §19.8 |
+| E1012 | `E-PP-RESETALL-IN-MODULE` | Erro | MVP-SIM | `` `resetall `` inside a module or UDP declaration | IEEE 1364-2005 §19.6 |
+| W1014 | `W-PP-IFDEF-VALUE-ZERO` | Warn | MVP-SIM | `` `ifdef `` tests a macro defined as 0 (definedness is not value) | Verilator PREPROCZERO |
+| W1015 | `W-PP-BACKSLASH-SPACE` | Warn | MVP-SIM | Backslash followed by whitespace before a newline | Verilator BSSPACE |
+| W1016 | `W-PP-DEF-OVERRIDE` | Warn | MVP-SIM | A command-line `+define` overrides an in-source `` `define `` | Verilator DEFOVERRIDE |
 
 ### 2xxx · PARSE  (17)
 
-| 번호 | mnemonic | sev | scope | 조건 | 출처 / 매핑 |
+| Number | Mnemonic | sev | scope | Condition | Source / mapping |
 |---|---|---|---|---|---|
-| E2004 | `E-PARSE-UNSIZED-CONCAT` | Erro | MVP-SIM | Unsized operand inside concatenation/replication | Verilator WIDTHCONCAT; IEEE 1364-2005 §5.1.14 |
-| E2005 | `E-PARSE-ZERO-REPL` | Erro | MVP-SIM | Zero replication count outside an enclosing concat | Verilator ZEROREPL; IEEE 1800 §11.4.12.1 |
+| E2004 | `E-PARSE-UNSIZED-CONCAT` | Erro | MVP-SIM | Unsized operand inside a concatenation or replication | Verilator WIDTHCONCAT; IEEE 1364-2005 §5.1.14 |
+| E2005 | `E-PARSE-ZERO-REPL` | Erro | MVP-SIM | Zero replication count outside an enclosing concatenation | Verilator ZEROREPL; IEEE 1800 §11.4.12.1 |
 | E2006 | `E-PARSE-RESERVED-KEYWORD` | Erro | MVP-SIM | Reserved keyword used as an identifier | IEEE 1364-2005 §3.7.2 / Annex B |
 | E2007 | `E-PARSE-ILLEGAL-NUMBER` | Erro | MVP-SIM | Malformed number literal | IEEE 1364-2005 §3.5.1 |
-| E2008 | `E-PARSE-UNTERMINATED-TOKEN` | Erro | MVP-SIM | EOF inside block comment or string literal | IEEE 1364-2005 §3.3/§3.6 |
-| E2009 | `E-PARSE-END-LABEL` | Erro | MVP-SIM | Mismatched end/endmodule block label | Verilator ENDLABEL; IEEE 1800 §9.3.4 |
-| E2010 | `E-PARSE-NOT-REDOP` | Erro | MVP-SIM | Logical-NOT before an unparenthesized reduction op | Verilator NOTREDOP |
-| E2011 | `E-PARSE-NULL-PORTLIST` | Erro | MVP-SIM | Empty/null element in module port list | Xcelium *E,NULLLP; IEEE 1364-2005 §12.3 |
-| E2012 | `E-PARSE-DECL-AFTER-STMT` | Erro | MVP-SIM | Declaration after a statement (Verilog-2005) | Xcelium *E,BADDCL; iverilog |
-| W2013 | `W-PARSE-IMPLICIT-DIMENSIONS` | Warn | MVP-SIM | Port/net redeclaration missing dimensions | iverilog -Wimplicit-dimensions |
-| W2014 | `W-PARSE-ANACHRONISM` | Warn | MVP-SIM | Deprecated/removed feature for the selected standard | iverilog -Wanachronisms |
-| W2015 | `W-PARSE-NEWER-STD` | Warn | MVP-SIM | Construct requires a newer language standard | Verilator NEWERSTD; iverilog -g<year> |
-| W2016 | `W-PARSE-TIMESCALE-PARTIAL` | Warn | MVP-SIM | Some modules set `` `timescale ``, others inherit (lenient) | Verilator TIMESCALEMOD; iverilog -Wtimescale |
-| W2017 | `W-PARSE-DECL-AFTER-USE` | Warn | MVP-SIM | Identifier declared after first use (tolerated) | iverilog -Wdeclaration-after-use |
-| W2018 | `W-LINT-ASCENDING-RANGE` | Warn | LINT | Ascending `[0:N]` packed range instead of `[N:0]` | Verilator ASCRANGE/LITENDIAN |
-| W2019 | `W-LINT-DECL-FILENAME` | Warn | LINT | Module name ≠ file basename | Verilator DECLFILENAME |
-| W2020 | `W-LINT-MISINDENT` | Warn | LINT | Misleading indentation suggests wrong grouping | Verilator MISINDENT |
+| E2008 | `E-PARSE-UNTERMINATED-TOKEN` | Erro | MVP-SIM | EOF inside a block comment or a string literal | IEEE 1364-2005 §3.3 / §3.6 |
+| E2009 | `E-PARSE-END-LABEL` | Erro | MVP-SIM | Mismatched `end`/`endmodule` block label | Verilator ENDLABEL; IEEE 1800 §9.3.4 |
+| E2010 | `E-PARSE-NOT-REDOP` | Erro | MVP-SIM | Logical NOT before an unparenthesised reduction operator | Verilator NOTREDOP |
+| E2011 | `E-PARSE-NULL-PORTLIST` | Erro | MVP-SIM | Empty or null element in a module port list | Xcelium `*E,NULLLP`; IEEE 1364-2005 §12.3 |
+| E2012 | `E-PARSE-DECL-AFTER-STMT` | Erro | MVP-SIM | Declaration after a statement (Verilog-2005) | Xcelium `*E,BADDCL`; iverilog |
+| W2013 | `W-PARSE-IMPLICIT-DIMENSIONS` | Warn | MVP-SIM | Port or net redeclaration missing dimensions | iverilog `-Wimplicit-dimensions` |
+| W2014 | `W-PARSE-ANACHRONISM` | Warn | MVP-SIM | Deprecated or removed feature for the selected standard | iverilog `-Wanachronisms` |
+| W2015 | `W-PARSE-NEWER-STD` | Warn | MVP-SIM | Construct requires a newer language standard | Verilator NEWERSTD; iverilog `-g<year>` |
+| W2016 | `W-PARSE-TIMESCALE-PARTIAL` | Warn | MVP-SIM | Some modules set `` `timescale ``, others inherit (lenient policy) | Verilator TIMESCALEMOD; iverilog `-Wtimescale` |
+| W2017 | `W-PARSE-DECL-AFTER-USE` | Warn | MVP-SIM | Identifier declared after first use (tolerated) | iverilog `-Wdeclaration-after-use` |
+| W2018 | `W-LINT-ASCENDING-RANGE` | Warn | LINT | Ascending `[0:N]` packed range instead of `[N:0]` | Verilator ASCRANGE / LITENDIAN |
+| W2019 | `W-LINT-DECL-FILENAME` | Warn | LINT | Module name differs from the file basename | Verilator DECLFILENAME |
+| W2020 | `W-LINT-MISINDENT` | Warn | LINT | Misleading indentation suggests the wrong grouping | Verilator MISINDENT |
 
 ### 3xxx · ELABORATE  (44)
 
-> 참고: `E3009`/`E3010`는 elaborate v1에서 **본문 §3xxx** 코드로 승격되었다
-> (`E-ELAB-UNSUPPORTED`/`E-ELAB-UNRESOLVED-NAME`). 아래 예약 인벤토리의
-> `E-ELAB-DUP-DECL`·`E-ELAB-IMPLICIT-NET-NONE`는 충돌을 피하려 `E3005`/`E3006`으로
-> 재배정했고, 옛 예약 `E3023 = E-ELAB-UNSUPPORTED`는 본문 `E3009`로 대체되어 제거했다.
+E3009 and E3010 were promoted into the body as `E-ELAB-UNSUPPORTED` and
+`E-ELAB-UNRESOLVED-NAME`. The reserved `E-ELAB-DUP-DECL` and `E-ELAB-IMPLICIT-NET-NONE` were
+reassigned to E3005 and E3006 to avoid the collision, and the reserved E3023 was dropped
+because the body's E3009 covers it.
 
-| 번호 | mnemonic | sev | scope | 조건 | 출처 / 매핑 |
+| Number | Mnemonic | sev | scope | Condition | Source / mapping |
 |---|---|---|---|---|---|
-| E3005 | `E-ELAB-DUP-DECL` | Erro | MVP-SIM | Name declared twice in the same scope | IEEE 1364-2005 §4.11/§12.3.3 |
+| E3005 | `E-ELAB-DUP-DECL` | Erro | MVP-SIM | Name declared twice in the same scope | IEEE 1364-2005 §4.11 / §12.3.3 |
 | E3006 | `E-ELAB-IMPLICIT-NET-NONE` | Erro | MVP-SIM | Undeclared net under `` `default_nettype none `` | IEEE 1364-2005 §19.2 |
 | E3011 | `E-ELAB-MIXED-PARAM-OVERRIDE` | Erro | MVP-SIM | Mixed ordered and named parameter overrides | IEEE 1364-2005 §12.2.1 |
 | E3012 | `E-ELAB-OVERRIDE-LOCALPARAM` | Erro | MVP-SIM | Override targets a localparam | IEEE 1364-2005 §4.10.2 |
-| E3013 | `E-ELAB-GENLOOP-NONTERMINATING` | Erro | MVP-SIM | Generate-for loop non-terminating / genvar reuse | IEEE 1364-2005 §12.4 |
-| E3014 | `E-ELAB-GENBLOCK-NAME-CONFLICT` | Erro | MVP-SIM | Generate-block name conflicts with another decl | IEEE 1364-2005 §12.4 |
+| E3013 | `E-ELAB-GENLOOP-NONTERMINATING` | Erro | MVP-SIM | Non-terminating generate-for loop, or genvar reuse | IEEE 1364-2005 §12.4 |
+| E3014 | `E-ELAB-GENBLOCK-NAME-CONFLICT` | Erro | MVP-SIM | Generate-block name conflicts with another declaration | IEEE 1364-2005 §12.4 |
 | E3015 | `E-ELAB-UWIRE-MULTIDRIVER` | Erro | MVP-SIM | `uwire` net driven by more than one source | IEEE 1364-2005 §4.6.5; IEEE 1800 §6.6 |
-| E3016 | `E-ELAB-HIER-NAME-UNRESOLVED` | Erro | MVP-SIM | Hierarchical name resolves to no object | IEEE 1364-2005 §12.4/§3.13 |
+| E3016 | `E-ELAB-HIER-NAME-UNRESOLVED` | Erro | MVP-SIM | Hierarchical name resolves to no object | IEEE 1364-2005 §12.4 / §3.13 |
 | E3017 | `E-ELAB-ASSIGN-INPUT` | Erro | MVP-SIM | Assignment to a module input port | Verilator ASSIGNIN; IEEE 1800 §23.3.3 |
-| E3019 | `E-ELAB-CONTASS-INIT` | Erro | MVP-SIM | Variable both initialized and continuously assigned | Verilator CONTASSINIT |
+| E3019 | `E-ELAB-CONTASS-INIT` | Erro | MVP-SIM | Variable both initialised and continuously assigned | Verilator CONTASSINIT |
 | E3020 | `E-ELAB-PARAM-NO-DEFAULT` | Erro | MVP-SIM | Parameter without a required default | Verilator PARAMNODEFAULT |
 | E3021 | `E-ELAB-FUNC-TIMING` | Erro | MVP-SIM | Time control or task call inside a function | Verilator FUNCTIMECTL; IEEE 1800 §13.4 |
-| E3022 | `E-ELAB-PROTOTYPE-MISMATCH` | Erro | MVP-SIM | Out-of-block method def disagrees with prototype | Verilator PROTOTYPEMIS |
-| E3057 | `E-ELAB-UNDEF-SYSTASK` | Erro | MVP-SIM | Call to an unrecognized system task/function | Xcelium *E,MSSYSTF; IEEE 1800 §20 |
-| W3024 | `W-ELAB-WIDTH-EXPAND` | Warn | MVP-SIM | Rvalue narrower than lvalue, silently zero-extended | Verilator WIDTHEXPAND |
+| E3022 | `E-ELAB-PROTOTYPE-MISMATCH` | Erro | MVP-SIM | Out-of-block method definition disagrees with the prototype | Verilator PROTOTYPEMIS |
+| E3057 | `E-ELAB-UNDEF-SYSTASK` | Erro | MVP-SIM | Call to an unrecognised system task or function | Xcelium `*E,MSSYSTF`; IEEE 1800 §20 |
+| W3024 | `W-ELAB-WIDTH-EXPAND` | Warn | MVP-SIM | Rvalue narrower than the lvalue, silently zero-extended | Verilator WIDTHEXPAND |
 | W3025 | `W-ELAB-WIDTH-XZEXPAND` | Warn | MVP-SIM | X/Z value expanded to a wider target | Verilator WIDTHXZEXPAND |
-| W3026 | `W-ELAB-BLOCKING-MIX` | Warn | MVP-SIM | Same var driven by both blocking and non-blocking | Verilator BLKANDNBLK (Error); IEEE 1800 §4 |
-| W3027 | `W-ELAB-NBA-IN-COMB` | Warn | MVP-SIM | Non-blocking assignment in a combinational block | Verilator COMBDLY; IEEE 1800 §10.4.2 |
-| W3028 | `W-ELAB-NBA-IN-INITIAL` | Warn | MVP-SIM | Non-blocking assignment in an initial/final block | Verilator INITIALDLY |
-| W3029 | `W-ELAB-CASE-INCOMPLETE` | Warn | MVP-SIM | `case` no default and not all selector values covered | Verilator CASEINCOMPLETE |
-| W3030 | `W-ELAB-CASE-OVERLAP` | Warn | MVP-SIM | Overlapping case items (later unreachable) | Verilator CASEOVERLAP |
-| W3031 | `W-ELAB-CASE-WITH-X` | Warn | MVP-SIM | Plain `case` item contains a literal x/z bit | Verilator CASEWITHX |
-| W3032 | `W-ELAB-LATCH` | Warn | MVP-SIM | Latch inferred in a combinational block | Verilator LATCH/NOLATCH |
-| W3033 | `W-ELAB-IMPLICIT-STATIC` | Warn | MVP-SIM | Implicit static lifetime on a task/function var | Verilator IMPLICITSTATIC |
-| W3034 | `W-ELAB-SELRANGE` | Warn | MVP-SIM | Constant bit/part-select provably out of range | Verilator SELRANGE; iverilog -Wselect-range |
-| W3035 | `W-ELAB-CMP-CONST` | Warn | MVP-SIM | Comparison provably always true/false | Verilator CMPCONST |
-| W3036 | `W-ELAB-UNSIGNED-CMP` | Warn | MVP-SIM | Unsigned comparison with constant result | Verilator UNSIGNED |
+| W3026 | `W-ELAB-BLOCKING-MIX` | Warn | MVP-SIM | Same variable driven by both blocking and nonblocking assignments | Verilator BLKANDNBLK (Error); IEEE 1800 §4 |
+| W3027 | `W-ELAB-NBA-IN-COMB` | Warn | MVP-SIM | Nonblocking assignment in a combinational block | Verilator COMBDLY; IEEE 1800 §10.4.2 |
+| W3028 | `W-ELAB-NBA-IN-INITIAL` | Warn | MVP-SIM | Nonblocking assignment in an `initial` or `final` block | Verilator INITIALDLY |
+| W3029 | `W-ELAB-CASE-INCOMPLETE` | Warn | MVP-SIM | `case` with no `default` that does not cover all selector values | Verilator CASEINCOMPLETE |
+| W3030 | `W-ELAB-CASE-OVERLAP` | Warn | MVP-SIM | Overlapping case items (a later one unreachable) | Verilator CASEOVERLAP |
+| W3031 | `W-ELAB-CASE-WITH-X` | Warn | MVP-SIM | Plain `case` item contains a literal x or z bit | Verilator CASEWITHX |
+| W3032 | `W-ELAB-LATCH` | Warn | MVP-SIM | Latch inferred in a combinational block | Verilator LATCH / NOLATCH |
+| W3033 | `W-ELAB-IMPLICIT-STATIC` | Warn | MVP-SIM | Implicit static lifetime on a task or function variable | Verilator IMPLICITSTATIC |
+| W3034 | `W-ELAB-SELRANGE` | Warn | MVP-SIM | Constant bit or part select provably out of range | Verilator SELRANGE; iverilog `-Wselect-range` |
+| W3035 | `W-ELAB-CMP-CONST` | Warn | MVP-SIM | Comparison provably always true or always false | Verilator CMPCONST |
+| W3036 | `W-ELAB-UNSIGNED-CMP` | Warn | MVP-SIM | Unsigned comparison with a constant result | Verilator UNSIGNED |
 | W3037 | `W-ELAB-REAL-CONVERT` | Warn | MVP-SIM | Implicit real-to-integer conversion (precision loss) | Verilator REALCVT; IEEE 1800 §6.12.2 |
-| W3038 | `W-ELAB-INFINITE-LOOP` | Warn | MVP-SIM | Statically-always-true loop with no exit | Verilator INFINITELOOP; iverilog -Winfloop (opt-in) |
-| W3039 | `W-ELAB-PIN-MISSING` | Warn | MVP-SIM | Instance leaves a declared port unconnected | Verilator PINMISSING; iverilog -Wportbind; VCS TFIPC-L |
+| W3038 | `W-ELAB-INFINITE-LOOP` | Warn | MVP-SIM | Statically always-true loop with no exit | Verilator INFINITELOOP; iverilog `-Winfloop` (opt-in) |
+| W3039 | `W-ELAB-PIN-MISSING` | Warn | MVP-SIM | Instance leaves a declared port unconnected | Verilator PINMISSING; iverilog `-Wportbind`; VCS TFIPC-L |
 | W3041 | `W-ELAB-PORT-SHORT` | Warn | MVP-SIM | Module output port tied to a constant | Verilator PORTSHORT |
 | W3042 | `W-ELAB-MULTITOP` | Warn | MVP-SIM | Multiple uninstantiated top modules | Verilator MULTITOP; IEEE 1800 §3.12 |
 | W3043 | `W-ELAB-IGNORED-RETURN` | Warn | MVP-SIM | Non-void function called as a statement | Verilator IGNOREDRETURN |
 | W3044 | `W-ELAB-NO-RETURN` | Warn | MVP-SIM | Non-void function never sets its return value | Verilator NORETURN |
-| W3045 | `W-ELAB-NO-EFFECT` | Warn | MVP-SIM | Statement/expression has no observable effect | Verilator NOEFFECT |
-| W3046 | `W-ELAB-ALWCOMBORDER` | Warn | MVP-SIM | `always_comb` reads a var before assigning it | Verilator ALWCOMBORDER |
-| W3047 | `W-ELAB-ALWAYS-NEVER` | Warn | MVP-SIM | `always @*` with empty sensitivity never triggers | Verilator ALWNEVER |
-| W3048 | `W-ELAB-SENS-ENTIRE-ARRAY` | Warn | MVP-SIM | `always @*` word-select pulls whole array into sens | iverilog -Wsensitivity-entire-array |
-| W3049 | `W-ELAB-SENS-ENTIRE-VECTOR` | Warn | LINT | `always @*` part-select pulls whole vector into sens | iverilog -Wsensitivity-entire-vector (opt-in) |
-| W3050 | `W-ELAB-FLOATING-NET` | Warn | LINT | Net present in design but has no drivers | iverilog -Wfloating-nets (opt-in) |
+| W3045 | `W-ELAB-NO-EFFECT` | Warn | MVP-SIM | Statement or expression has no observable effect | Verilator NOEFFECT |
+| W3046 | `W-ELAB-ALWCOMBORDER` | Warn | MVP-SIM | `always_comb` reads a variable before assigning it | Verilator ALWCOMBORDER |
+| W3047 | `W-ELAB-ALWAYS-NEVER` | Warn | MVP-SIM | `always @*` with an empty sensitivity list never triggers | Verilator ALWNEVER |
+| W3048 | `W-ELAB-SENS-ENTIRE-ARRAY` | Warn | MVP-SIM | `always @*` word select pulls a whole array into the sensitivity list | iverilog `-Wsensitivity-entire-array` |
+| W3049 | `W-ELAB-SENS-ENTIRE-VECTOR` | Warn | LINT | `always @*` part select pulls a whole vector into the sensitivity list | iverilog `-Wsensitivity-entire-vector` (opt-in) |
+| W3050 | `W-ELAB-FLOATING-NET` | Warn | LINT | Net present in the design but with no drivers | iverilog `-Wfloating-nets` (opt-in) |
 | W3052 | `W-LINT-DEFPARAM` | Warn | MVP-SIM | Deprecated `defparam` parameter override | Verilator DEFPARAM; IEEE 1364-2005 §12.2.1 |
 | W3053 | `W-LINT-VAR-HIDDEN` | Warn | LINT | Variable shadows one in an enclosing scope | Verilator VARHIDDEN |
-| W3054 | `W-LINT-UNUSED` | Warn | LINT | Signal/parameter/genvar unused or undriven | Verilator UNUSEDSIGNAL/UNDRIVEN/UNUSEDPARAM |
-| W3055 | `W-LINT-STYLE-MISC` | Warn | LINT | Assorted off-by-default style issues (catch-all) | Verilator BLKSEQ/EOFNEWLINE/IMPORTSTAR/… |
+| W3054 | `W-LINT-UNUSED` | Warn | LINT | Signal, parameter or genvar unused or undriven | Verilator UNUSEDSIGNAL / UNDRIVEN / UNUSEDPARAM |
+| W3055 | `W-LINT-STYLE-MISC` | Warn | LINT | Assorted off-by-default style issues (catch-all) | Verilator BLKSEQ / EOFNEWLINE / IMPORTSTAR and others |
 
-### 4xxx · RUNTIME  (9)
+### 4xxx · RUNTIME  (8)
 
-| 번호 | mnemonic | sev | scope | 조건 | 출처 / 매핑 |
+The reserved `W-RUN-UNIQUE-VIOLATION` was promoted into the body and holds the number
+`VITA-W4031`.
+
+| Number | Mnemonic | sev | scope | Condition | Source / mapping |
 |---|---|---|---|---|---|
 | E4008 | `E-RUN-DIV-ZERO` | Erro | MVP-SIM | Integer division or modulo by zero (result x) | IEEE 1364-2005 §5.1.5 |
-| E4009 | `E-RUN-ILLEGAL-SCALAR-SELECT` | Erro | MVP-SIM | Bit/part-select of a scalar or real value | IEEE 1364-2005 §4.2.1 |
-| I4015 | `I-RUN-STOP` | Info | MVP-SIM | `$stop` executed (simulation suspended) | IEEE 1800 §20.2; iverilog/vvp -n/-N |
-| W4010 | `W-RUN-FORMAT-MISMATCH` | Warn | MVP-SIM | Format-specifier / argument count or type mismatch | IEEE 1364-2005 §17.1.1.2 |
+| E4009 | `E-RUN-ILLEGAL-SCALAR-SELECT` | Erro | MVP-SIM | Bit or part select of a scalar or a real value | IEEE 1364-2005 §4.2.1 |
+| I4015 | `I-RUN-STOP` | Info | MVP-SIM | `$stop` executed (simulation suspended) | IEEE 1800 §20.2; iverilog / vvp `-n`/`-N` |
+| W4010 | `W-RUN-FORMAT-MISMATCH` | Warn | MVP-SIM | Format specifier versus argument count or type mismatch | IEEE 1364-2005 §17.1.1.2 |
 | W4011 | `W-RUN-WAIT-CONST` | Warn | MVP-SIM | `wait` on a compile-time constant condition | Verilator WAITCONST |
-| W4012 | `W-RUN-STMT-DELAY` | Warn | MVP-SIM | Procedural statement delay under limited delay model | Verilator STMTDLY |
+| W4012 | `W-RUN-STMT-DELAY` | Warn | MVP-SIM | Procedural statement delay under a limited delay model | Verilator STMTDLY |
 | W4013 | `W-RUN-ZERO-DELAY` | Warn | MVP-SIM | `#0` zero delay (inactive-region scheduling) | Verilator ZERODLY; IEEE 1800 §15.4 |
-| W4014 | `W-LINT-ASSIGN-DELAY` | Warn | LINT | Intra-assignment delay on a non-blocking assign | Verilator ASSIGNDLY (off-by-default) |
-| W4017 | `W-RUN-UNIQUE-VIOLATION` | Warn | MVP-SIM | `unique`/`priority` case or if violation at runtime | IEEE 1800-2017 §12.5.3 (mandatory report) |
+| W4014 | `W-LINT-ASSIGN-DELAY` | Warn | LINT | Intra-assignment delay on a nonblocking assignment | Verilator ASSIGNDLY (off by default) |
 
-### 5xxx · ASSERTION / SVA (예약, Phase 2)  (3)
+### 5xxx · ASSERTION / SVA  (3)
 
-| 번호 | mnemonic | sev | scope | 조건 | 출처 / 매핑 |
+| Number | Mnemonic | sev | scope | Condition | Source / mapping |
 |---|---|---|---|---|---|
-| E5001 | `E-SVA-CONCURRENT-ASSERT-FAIL` | Erro | SVA | Concurrent assertion property fails (default $error) | IEEE 1800-2017 §16.5/§16.3 |
-| W5002 | `W-SVA-ASSUME-COVER` | Warn | SVA | `assume` fails or `cover` property never hit | IEEE 1800-2017 §16.12/§16.13 |
-| W5004 | `W-SVA-PAST-DEPTH` | Warn | SVA | `$past` delay exceeds practical depth | Verilator TICKCOUNT; IEEE 1800 §16.9 |
+| E5001 | `E-SVA-CONCURRENT-ASSERT-FAIL` | Erro | SVA | Concurrent assertion property fails (default `$error`) | IEEE 1800-2017 §16.5 / §16.3 |
+| W5002 | `W-SVA-ASSUME-COVER` | Warn | SVA | `assume` fails, or a `cover` property is never hit | IEEE 1800-2017 §16.12 / §16.13 |
+| W5004 | `W-SVA-PAST-DEPTH` | Warn | SVA | `$past` delay exceeds a practical depth | Verilator TICKCOUNT; IEEE 1800 §16.9 |
 
-### 6xxx · SV-TYPE (예약)  (7)
+### 6xxx · SV-TYPE  (7)
 
-| 번호 | mnemonic | sev | scope | 조건 | 출처 / 매핑 |
+| Number | Mnemonic | sev | scope | Condition | Source / mapping |
 |---|---|---|---|---|---|
 | E6001 | `E-TYPE-ENUM-VALUE` | Erro | SV-TYPE | Enum assigned a non-member value without a cast | Verilator ENUMVALUE; IEEE 1800 §6.19 |
 | E6002 | `E-TYPE-ENUM-ITEM-WIDTH` | Erro | SV-TYPE | Enum item value does not fit the enum base width | Verilator ENUMITEMWIDTH |
-| E6003 | `E-TYPE-CONST-WRITTEN` | Erro | SV-TYPE | Assignment to a `const` after initialization | Verilator CONSTWRITTEN |
+| E6003 | `E-TYPE-CONST-WRITTEN` | Erro | SV-TYPE | Assignment to a `const` after initialisation | Verilator CONSTWRITTEN |
 | E6004 | `E-TYPE-CAST-FAILURE` | Erro | SV-TYPE | Dynamic `$cast` failure | IEEE 1800-2017 §6.24.2; Verilator CASTCONST |
-| E6006 | `E-TYPE-CLASS-RULE` | Erro | SV-TYPE | SystemVerilog class/OOP rule violation | Verilator ENCAPSULATED/LIFETIME/… |
-| W6005 | `W-TYPE-RANDOM-LIMIT` | Warn | SV-TYPE | Constrained-random/coverage unsupported or unsat | Verilator CONSTRAINTIGN/COVERIGN/RANDC |
-| W6007 | `W-TYPE-REAL-CONVERT` | Warn | SV-TYPE | Real-to-integer conversion in typed context (dup of W3037) | Verilator REALCVT; IEEE 1800 §6.12.2 |
+| E6006 | `E-TYPE-CLASS-RULE` | Erro | SV-TYPE | SystemVerilog class or OOP rule violation | Verilator ENCAPSULATED / LIFETIME and others |
+| W6005 | `W-TYPE-RANDOM-LIMIT` | Warn | SV-TYPE | Constrained-random or coverage construct unsupported or unsatisfiable | Verilator CONSTRAINTIGN / COVERIGN / RANDC |
+| W6007 | `W-TYPE-REAL-CONVERT` | Warn | SV-TYPE | Real-to-integer conversion in a typed context (duplicate of W3037) | Verilator REALCVT; IEEE 1800 §6.12.2 |
 
-### 7xxx · VHDL (예약, Phase 3)  (9)
+### 7xxx · VHDL  (9)
 
-> Phase-3 설계 주의: VHDL의 bound-check/overflow는 **중단(Fatal)** 이지만 Verilog 범위 초과는
-> x를 읽고 **계속**한다 — `E-RUN-RANGE` 의미를 VHDL에 재사용하지 말 것.
+A design note for this band: VHDL bound-check and overflow failures abort, whereas a Verilog
+out-of-range select reads x and continues. The `E-RUN-RANGE` semantics must not be reused for
+VHDL.
 
-| 번호 | mnemonic | sev | scope | 조건 | 출처 / 매핑 |
+| Number | Mnemonic | sev | scope | Condition | Source / mapping |
 |---|---|---|---|---|---|
-| E7001 | `E-VHDL-NOT-DECLARED` | Erro | VHDL | VHDL name has no visible declaration | GHDL 'no declaration for'; IEEE 1076 |
-| E7002 | `E-VHDL-UNIT-NOT-FOUND` | Erro | VHDL | VHDL design unit not found in library | GHDL 'unit not found in library' |
-| E7003 | `E-VHDL-DUP-DECLARATION` | Erro | VHDL | Identifier already used in the declarative region | GHDL 'identifier already used' |
-| E7004 | `E-VHDL-TYPE-MISMATCH` | Erro | VHDL | Type incompatibility / association failure | GHDL type/association errors |
+| E7001 | `E-VHDL-NOT-DECLARED` | Erro | VHDL | VHDL name has no visible declaration | GHDL "no declaration for"; IEEE 1076 |
+| E7002 | `E-VHDL-UNIT-NOT-FOUND` | Erro | VHDL | VHDL design unit not found in the library | GHDL "unit not found in library" |
+| E7003 | `E-VHDL-DUP-DECLARATION` | Erro | VHDL | Identifier already used in the declarative region | GHDL "identifier already used" |
+| E7004 | `E-VHDL-TYPE-MISMATCH` | Erro | VHDL | Type incompatibility or association failure | GHDL type and association errors |
 | E7009 | `E-VHDL-UNRESOLVED-MULTIDRIVER` | Erro | VHDL | Multiple drivers on an unresolved-type signal | GHDL resolution-function enforcement |
-| F7005 | `F-VHDL-ASSERTION-FAILURE` | Fata | VHDL | `assert`/`report` at/above the stopping severity | GHDL --assert-level; IEEE 1076 §8.2 |
-| F7006 | `F-VHDL-BOUND-CHECK` | Fata | VHDL | Runtime constraint (bound-check) failure | GHDL 'bound check failure' |
-| F7007 | `F-VHDL-OVERFLOW` | Fata | VHDL | Arithmetic overflow (CONSTRAINT_ERROR) | GHDL 'overflow' |
-| W7008 | `W-VHDL-METAVALUE` | Warn | VHDL | NUMERIC_STD metavalue detected in conversion | GHDL --ieee-asserts |
+| F7005 | `F-VHDL-ASSERTION-FAILURE` | Fata | VHDL | `assert`/`report` at or above the stopping severity | GHDL `--assert-level`; IEEE 1076 §8.2 |
+| F7006 | `F-VHDL-BOUND-CHECK` | Fata | VHDL | Runtime constraint (bound-check) failure | GHDL "bound check failure" |
+| F7007 | `F-VHDL-OVERFLOW` | Fata | VHDL | Arithmetic overflow (CONSTRAINT_ERROR) | GHDL "overflow" |
+| W7008 | `W-VHDL-METAVALUE` | Warn | VHDL | NUMERIC_STD metavalue detected in a conversion | GHDL `--ieee-asserts` |
 
-### 제외 (구현 범위 밖)
+### Excluded from the inventory
 
-순수 synthesis-only / 컴파일드-모델 아티팩트는 코드를 부여하지 않았다: Verilator
-GENCLK(5.000 이후 미발생) · SYMRSVDWORD(C++ 키워드 충돌 — vitamin은 C++ codegen 없음) ·
-NEEDTIMINGOPT/NOTIMING(`--timing` opt-in) · UNOPTFLAT(컴파일드 정적 스케줄 성능 — 실제 조합
-루프는 `F-RUN-NO-CONVERGE`가 커버) · BLKLOOPINIT/UNOPTTHREADS/HIERBLOCK 등 멀티스레드-빌드
-진단(인터프리터에 해당 없음).
+Purely synthesis-only and compiled-model artefacts carry no code: Verilator GENCLK (does not
+occur past 5.000), SYMRSVDWORD (a C++ keyword clash, and vitamin does no C++ code generation),
+NEEDTIMINGOPT and NOTIMING (`--timing`, opt-in), UNOPTFLAT (a compiled static-schedule
+performance note; a real combinational loop is covered by `F-RUN-NO-CONVERGE`), and the
+multithreaded-build diagnostics BLKLOOPINIT, UNOPTTHREADS and HIERBLOCK, which have no
+counterpart in an interpreter.
 
 ---
 
 ## Sources
 
-- [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md) — severity lattice · MsgCode 체계 ·
-  게이트 · exit 코드 · RTL severity 통합 (본 카탈로그의 상위 설계)
-- [14-staged-artifacts.md](14-staged-artifacts.md) — FLIST/ART 코드의 hash·staleness·filelist 의미
-- [09-testing-and-verification.md](09-testing-and-verification.md) — corpus가 코드로 assert,
-  exit 분류
-- hdl-reference/system-tasks/04-simulation-control.md · 13-misc.md · 01-display-io.md;
-  systemverilog/07-assertions-sva.md — `$info`/`$warning`/`$error`/`$fatal`/assert severity
-- IEEE 1800-2017 §16(assertions) §20.10–20.12(severity/elaboration tasks) §22(preprocess) ·
-  IEEE 1364-2005 §19
-- **부록 A 공식 출처:** Verilator 경고 목록 https://verilator.org/guide/latest/warnings.html ·
-  Icarus Verilog `-W` 플래그(https://steveicarus.github.io/iverilog/usage/command_line_flags.html) ·
-  Synopsys VCS / Cadence Xcelium 메시지 클래스 · GHDL 진단(VHDL Phase 3 예약,
-  https://ghdl.github.io/ghdl/) · IEEE 1800-2017 §11(연산자/폭)·§12(case/generate)·§13(tasks/functions)·
-  §6(types) · IEEE 1364-2005 §5·§12 · IEEE 1076-2008(VHDL)
+- [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md) — severity lattice, the
+  `MsgCode` scheme, gating, exit codes and RTL severity integration; the design above this
+  catalogue.
+- [14-staged-artifacts.md](14-staged-artifacts.md) — hashing, staleness and filelist semantics
+  for the FLIST and ARTIFACT codes.
+- [09-testing-and-verification.md](09-testing-and-verification.md) — how the corpus asserts on
+  codes and classifies exits.
+- [16-schema-hash-spec.md](16-schema-hash-spec.md) — the structural digest behind
+  `E-ART-SCHEMA-MISMATCH`.
+- [08-timescale-and-timing.md](08-timescale-and-timing.md) — the `1ns/1ns` base and sticky
+  timescale inheritance.
+- [../manual/007_error-codes.md](../manual/007_error-codes.md) — the user-facing summary;
+  [../manual/004_cli-reference.md](../manual/004_cli-reference.md) — the flag surface;
+  [../manual/006_limitations.md](../manual/006_limitations.md) — the supported-subset boundary.
+- [hdl-reference/system-tasks/04-simulation-control.md](hdl-reference/system-tasks/04-simulation-control.md),
+  [hdl-reference/system-tasks/01-display-io.md](hdl-reference/system-tasks/01-display-io.md),
+  [hdl-reference/system-tasks/13-misc.md](hdl-reference/system-tasks/13-misc.md) and
+  [hdl-reference/systemverilog/07-assertions-sva.md](hdl-reference/systemverilog/07-assertions-sva.md)
+  — `$info` / `$warning` / `$error` / `$fatal` and assertion severity.
+- IEEE 1800-2017 §16 (assertions), §20.10–20.12 (severity and elaboration tasks), §22
+  (preprocessing); IEEE 1364-2005 §19.
+- Appendix A sources: the Verilator warning list (https://verilator.org/guide/latest/warnings.html);
+  Icarus Verilog `-W` flags
+  (https://steveicarus.github.io/iverilog/usage/command_line_flags.html); the Synopsys VCS and
+  Cadence Xcelium message classes; GHDL diagnostics (https://ghdl.github.io/ghdl/);
+  IEEE 1800-2017 §11 (operators and widths), §12 (case and generate), §13 (tasks and functions),
+  §6 (types); IEEE 1364-2005 §5 and §12; IEEE 1076-2008.

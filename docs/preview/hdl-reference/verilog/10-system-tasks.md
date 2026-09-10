@@ -1,15 +1,15 @@
-# 10 · System Tasks (Verilog 관점)
+# 10 · System Tasks (the Verilog view)
 
-Verilog (IEEE 1364-2005)의 표준 시스템 태스크/함수 개요. 자세한 카테고리별 참조는
-`../system-tasks/`로 cross-link.
+An overview of the standard system tasks and functions of Verilog (IEEE 1364-2005). For
+the detailed per-category reference, cross-link to `../system-tasks/`.
 
 ---
 
-## Verilog에 포함된 시스템 태스크 카테고리
+## System task categories included in Verilog
 
-| 카테고리 | 주요 항목 | 상세 |
+| Category | Main items | Detail |
 |---|---|---|
-| Display & I/O | `$display`, `$write`, `$monitor`, `$strobe` + `b/o/h` 접미사 | [../system-tasks/01-display-io.md](../system-tasks/01-display-io.md) |
+| Display & I/O | `$display`, `$write`, `$monitor`, `$strobe` plus the `b`/`o`/`h` suffixes | [../system-tasks/01-display-io.md](../system-tasks/01-display-io.md) |
 | File I/O | `$fopen`, `$fclose`, `$fwrite`, `$fdisplay`, `$fread` | [../system-tasks/02-file-io.md](../system-tasks/02-file-io.md) |
 | Memory load | `$readmemb`, `$readmemh` | [../system-tasks/03-memory-load.md](../system-tasks/03-memory-load.md) |
 | Sim control | `$finish`, `$stop` | [../system-tasks/04-simulation-control.md](../system-tasks/04-simulation-control.md) |
@@ -18,23 +18,25 @@ Verilog (IEEE 1364-2005)의 표준 시스템 태스크/함수 개요. 자세한 
 | VCD dump | `$dumpfile`, `$dumpvars`, `$dumpon`, `$dumpoff`, `$dumpall`, `$dumpflush`, `$dumplimit` | [../system-tasks/10-vcd-dump.md](../system-tasks/10-vcd-dump.md) |
 | Random | `$random`, `$dist_*` | [../system-tasks/09-random.md](../system-tasks/09-random.md) |
 
-## SV 전용 (Verilog 미포함)
+## SystemVerilog only (not in Verilog)
 
 `$urandom`/`$urandom_range`, `$past`/`$rose`/`$fell`/`$stable`/`$changed` (assertion
-sampling), `$bits`/`$clog2`/`$countones`, `$value$plusargs`/`$test$plusargs`는
-IEEE 1800 (SystemVerilog) 확장이다. Verilog-2005 단독 환경에서는 사용 불가.
+sampling), `$bits`/`$clog2`/`$countones` and
+`$value$plusargs`/`$test$plusargs` are IEEE 1800 (SystemVerilog) extensions. They are
+not available in a Verilog-2005-only environment.
 
-자세한 내용은 `../system-tasks/` 폴더 전체와
-`../systemverilog/08-functions-tasks.md` 참조.
+For the details, see the whole `../system-tasks/` folder and
+`../systemverilog/08-functions-tasks.md`.
 
-## 합성 가능 여부
+## Synthesizability
 
-❌ 모든 시스템 태스크/함수는 **비합성**이다. 시뮬레이션 및 검증 전용.
-합성 도구는 `$display`, `$monitor` 등 시스템 태스크를 무시하거나 경고를 낸다.
-RTL 코드 안에 시스템 태스크를 넣어야 한다면 `` `ifndef SYNTHESIS `` / `` `endif ``
-로 감싸는 것이 표준 관행이다.
+❌ Every system task and system function is **non-synthesizable**. They are for
+simulation and verification only. Synthesis tools ignore system tasks such as
+`$display` and `$monitor`, or warn about them. When a system task has to live inside
+RTL code, the standard practice is to wrap it in `` `ifndef SYNTHESIS `` /
+`` `endif ``.
 
 ## Sources
 
 - IEEE 1364-2005 §17 (system tasks and functions)
-- ../system-tasks/ 폴더 전체 (카테고리별 상세)
+- the whole `../system-tasks/` folder (per-category detail)

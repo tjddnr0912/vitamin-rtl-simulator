@@ -1,32 +1,32 @@
-# 08 · VHDL 패키지 & 표준 라이브러리
+# 08 · VHDL Packages & Standard Libraries
 
-IEEE 1076-2008 §4 (package 문법), §16 (standard packages) 기준.
+Per IEEE 1076-2008 §4 (package syntax) and §16 (standard packages).
 
 ---
 
-## Package 문법
+## Package syntax
 
-패키지(package)는 타입, 상수, subprogram, 컴포넌트 선언을 하나의 네임스페이스로 묶는다.
+A package bundles types, constants, subprograms and component declarations into one namespace.
 
 ```vhdl
--- 패키지 선언 (spec)
+-- package declaration (spec)
 package PKG_NAME is
-    -- 타입 선언
+    -- type declaration
     type my_state_t is (IDLE, RUN, DONE);
 
-    -- 상수
+    -- constant
     constant CLK_FREQ : integer := 100_000_000;
 
-    -- subprogram 선언 (시그니처만)
+    -- subprogram declaration (the signature only)
     function to_slv(val : my_state_t) return std_logic_vector;
 
-    -- 컴포넌트 선언 (선택적 — VHDL-2008에서는 direct instantiation 권장)
+    -- component declaration (optional — VHDL-2008 prefers direct instantiation)
     component uart_rx
         port (clk, rx : in std_logic; data : out std_logic_vector(7 downto 0));
     end component;
 end package PKG_NAME;
 
--- 패키지 본체 (body) — subprogram 구현 필요 시
+-- package body — needed when a subprogram has to be implemented
 package body PKG_NAME is
     function to_slv(val : my_state_t) return std_logic_vector is
     begin
@@ -35,43 +35,44 @@ package body PKG_NAME is
 end package body PKG_NAME;
 ```
 
-### Library + Use 절
+### library and use clauses
 
 ```vhdl
-library WORK;                   -- 현재 작업 라이브러리 (기본 포함됨)
-use work.PKG_NAME.all;          -- 패키지 전체 가시화
+library WORK;                   -- the current work library (included by default)
+use work.PKG_NAME.all;          -- make the whole package visible
 
 library IEEE;
-use ieee.std_logic_1164.all;    -- IEEE 패키지
+use ieee.std_logic_1164.all;    -- the IEEE packages
 use ieee.numeric_std.all;
 ```
 
 ---
 
-## 표준 패키지 전체 목록
+## The standard packages
 
-| 패키지 | 합성 | 용도 요약 |
+| Package | Synthesis | Summary |
 |--------|------|----------|
-| `std.standard` | ✅ | 기본 타입 전체 (묵시적 — use 불필요) |
-| `std.textio` | ❌ | 파일 I/O (testbench) |
-| `ieee.std_logic_1164` | ✅ | 9값 로직 · std_logic 계열 |
-| `ieee.numeric_std` | ✅ | signed/unsigned 산술 **[권장]** |
-| `ieee.std_logic_arith` | ⚠️ | **DEPRECATED — 사용 금지** |
-| `ieee.std_logic_unsigned` | ⚠️ | **DEPRECATED — 사용 금지** |
-| `ieee.std_logic_signed` | ⚠️ | **DEPRECATED — 사용 금지** |
-| `ieee.numeric_std_unsigned` | ✅ | std_logic_vector 직접 산술 (2008+) |
-| `ieee.math_real` | ❌ | 수학 함수 (testbench/elaboration) |
-| `ieee.fixed_pkg` | ✅⚠️ | 고정소수점 (2008+, 도구 지원 확인) |
-| `ieee.float_pkg` | ✅⚠️ | 부동소수점 IEEE 754 (2008+, 면적 주의) |
+| `std.standard` | ✅ | all the base types (implicit — no use clause needed) |
+| `std.textio` | ❌ | file I/O (testbench) |
+| `ieee.std_logic_1164` | ✅ | 9-value logic, the std_logic family |
+| `ieee.numeric_std` | ✅ | signed/unsigned arithmetic **[recommended]** |
+| `ieee.std_logic_arith` | ⚠️ | **DEPRECATED — do not use** |
+| `ieee.std_logic_unsigned` | ⚠️ | **DEPRECATED — do not use** |
+| `ieee.std_logic_signed` | ⚠️ | **DEPRECATED — do not use** |
+| `ieee.numeric_std_unsigned` | ✅ | arithmetic directly on std_logic_vector (2008+) |
+| `ieee.math_real` | ❌ | maths functions (testbench / elaboration) |
+| `ieee.fixed_pkg` | ✅⚠️ | fixed point (2008+, check tool support) |
+| `ieee.float_pkg` | ✅⚠️ | IEEE 754 floating point (2008+, mind the area) |
 
 ---
 
-## std.standard — 묵시적, use 불필요
+## std.standard — implicit, no use clause
 
-모든 VHDL design unit에 자동으로 포함된다. 명시적 `use` 절 없이도 아래 타입을 사용할 수 있다.
+Included automatically in every VHDL design unit. The types below are available without any explicit
+`use` clause.
 
 ```vhdl
--- use 절 없이 사용 가능
+-- usable without a use clause
 signal flag  : boolean;                         -- false / true
 signal bit0  : bit;                             -- '0' / '1'
 signal vec   : bit_vector(7 downto 0);
@@ -80,27 +81,27 @@ signal str   : string(1 to 8);
 signal n     : integer range 0 to 2**16-1;
 signal nat   : natural;                         -- 0 to integer'high
 signal pos   : positive;                        -- 1 to integer'high
-signal r     : real;                            -- (합성 불가)
-signal t     : time;                            -- (합성 불가)
+signal r     : real;                            -- (not synthesizable)
+signal t     : time;                            -- (not synthesizable)
 ```
 
-**predefined subtype:**
+**Predefined subtypes:**
 
-| 이름 | 정의 |
+| Name | Definition |
 |------|------|
 | `natural` | `integer range 0 to integer'high` |
 | `positive` | `integer range 1 to integer'high` |
 
 ---
 
-## std.textio — 파일 I/O, testbench 전용
+## std.textio — file I/O, testbench only
 
 ```vhdl
 use std.textio.all;
 ```
 
 ```vhdl
--- 파일 읽기 예시 (testbench)
+-- reading a file (testbench)
 file input_file : text open READ_MODE is "stimulus.txt";
 variable line_buf : line;
 variable val      : integer;
@@ -108,8 +109,8 @@ variable val      : integer;
 process
 begin
     while not endfile(input_file) loop
-        readline(input_file, line_buf);     -- 한 줄 읽기
-        read(line_buf, val);                -- 정수로 파싱
+        readline(input_file, line_buf);     -- read one line
+        read(line_buf, val);                -- parse it as an integer
         data_in <= std_logic_vector(to_signed(val, 8));
         wait until rising_edge(clk);
     end loop;
@@ -117,49 +118,51 @@ begin
 end process;
 ```
 
-> **VHDL-2008:** `std_logic_textio`(std_logic read/write 절차)의 기능이 `ieee.std_logic_1164`로 통합됐다. `std_logic_textio`는 stub이 됐으나 하위 호환을 위해 여전히 선언할 수 있다.
+> **VHDL-2008:** what `std_logic_textio` provided (the std_logic read/write procedures) has been
+> folded into `ieee.std_logic_1164`. `std_logic_textio` is now a stub, but it can still be named for
+> backward compatibility.
 
 ---
 
-## ieee.std_logic_1164 — 9값 로직 표준
+## ieee.std_logic_1164 — the 9-value logic standard
 
 ```vhdl
 library ieee;
 use ieee.std_logic_1164.all;
 ```
 
-### 9값 로직 (std_ulogic)
+### The nine values (std_ulogic)
 
-| 값 | 의미 |
+| Value | Meaning |
 |----|------|
 | `'U'` | Uninitialized |
-| `'X'` | Unknown (강함) |
-| `'0'` | Logic 0 (강함) |
-| `'1'` | Logic 1 (강함) |
+| `'X'` | Unknown (strong) |
+| `'0'` | Logic 0 (strong) |
+| `'1'` | Logic 1 (strong) |
 | `'Z'` | High impedance |
-| `'W'` | Unknown (약함) |
-| `'L'` | Logic 0 (약함) |
-| `'H'` | Logic 1 (약함) |
+| `'W'` | Unknown (weak) |
+| `'L'` | Logic 0 (weak) |
+| `'H'` | Logic 1 (weak) |
 | `'-'` | Don't care |
 
 ### std_ulogic vs std_logic
 
 ```vhdl
--- std_ulogic: 단일 드라이버만 허용 (비결선형)
+-- std_ulogic: a single driver only (unresolved)
 signal u : std_ulogic;
 
--- std_logic: 결선 함수(resolution function) 포함
--- → 여러 드라이버가 연결될 때 버스/tri-state 구현 가능
-signal s : std_logic;                  -- 포트 기본 타입
+-- std_logic: carries a resolution function
+-- → several drivers may be connected, so buses and tri-states can be modelled
+signal s : std_logic;                  -- the default port type
 signal v : std_logic_vector(7 downto 0);
 ```
 
-합성 관점에서는 std_logic과 std_ulogic이 동일하게 처리된다.
+For synthesis, std_logic and std_ulogic are treated identically.
 
-### 변환 함수
+### Conversion functions
 
 ```vhdl
--- std_logic ↔ bit 변환 (레거시 bit 타입 연동)
+-- std_logic ↔ bit conversion (interworking with the legacy bit type)
 b  := to_bit(sl);                      -- std_logic → bit ('H'→'1', 'L'→'0')
 bv := to_bitvector(slv);               -- std_logic_vector → bit_vector
 sl := to_stdulogic(b);                 -- bit → std_ulogic
@@ -167,112 +170,115 @@ sl := to_stdlogic(b);                  -- bit → std_logic (VHDL-2008+)
 sv := to_stdlogicvector(bv);           -- bit_vector → std_logic_vector
 ```
 
-### 주요 연산자 (오버로딩)
+### The main (overloaded) operators
 
-`and`, `or`, `nand`, `nor`, `xor`, `xnor`, `not` — std_logic/_vector에 정의됨.
+`and`, `or`, `nand`, `nor`, `xor`, `xnor`, `not` — defined for std_logic and std_logic_vector.
 
 ```vhdl
--- 리듀션 연산자 (VHDL-2008+)
-result <= and  slv;    -- 모든 비트 AND
-result <= or   slv;    -- 모든 비트 OR
-result <= xor  slv;    -- 모든 비트 XOR (홀수 패리티)
+-- reduction operators (VHDL-2008+)
+result <= and  slv;    -- AND of every bit
+result <= or   slv;    -- OR of every bit
+result <= xor  slv;    -- XOR of every bit (odd parity)
 result <= nand slv;
 result <= nor  slv;
-result <= xnor slv;    -- 모든 비트 XNOR (짝수 패리티)
+result <= xnor slv;    -- XNOR of every bit (even parity)
 ```
 
 ---
 
-## ieee.numeric_std — 산술 표준 **[신규 설계 필수]**
+## ieee.numeric_std — the arithmetic standard **[required for new designs]**
 
 ```vhdl
 library ieee;
 use ieee.numeric_std.all;
 ```
 
-`signed`와 `unsigned` 두 타입을 정의. 내부는 std_logic 배열 기반.
+Defines the two types `signed` and `unsigned`, both built on arrays of std_logic.
 
 ```vhdl
-signal u : unsigned(7 downto 0) := to_unsigned(200, 8);  -- 무부호
-signal s : signed(7 downto 0)  := to_signed(-100, 8);    -- 2의 보수
+signal u : unsigned(7 downto 0) := to_unsigned(200, 8);  -- unsigned
+signal s : signed(7 downto 0)  := to_signed(-100, 8);    -- two's complement
 ```
 
-### 산술/비교 연산
+### Arithmetic and comparison
 
 ```vhdl
--- 오버플로 주의: 결과 폭을 직접 관리
+-- mind the overflow: you manage the result width yourself
 signal a, b : unsigned(7 downto 0);
 signal sum9 : unsigned(8 downto 0);
 
-sum9 <= ('0' & a) + ('0' & b);         -- 9비트로 올림수 포함
+sum9 <= ('0' & a) + ('0' & b);         -- 9 bits, so the carry fits
 
--- 비교 (숫자적 해석)
+-- comparison (numeric interpretation)
 if unsigned(addr) < to_unsigned(BASE, 16) then ...
 ```
 
-### 변환 함수
+### Conversion functions
 
 ```vhdl
 -- signed/unsigned → integer
-n := to_integer(u_val);               -- unsigned → integer (항상 >= 0)
-n := to_integer(s_val);               -- signed → integer (음수 포함)
+n := to_integer(u_val);               -- unsigned → integer (always >= 0)
+n := to_integer(s_val);               -- signed → integer (negatives included)
 
--- integer → signed/unsigned (크기 명시 필수)
-u := to_unsigned(42, 8);             -- 8비트 unsigned
-s := to_signed(-5,  8);              -- 8비트 signed
+-- integer → signed/unsigned (the size must be given)
+u := to_unsigned(42, 8);             -- 8-bit unsigned
+s := to_signed(-5,  8);              -- 8-bit signed
 
--- 크기 변경
-u2 := resize(u, 16);                 -- unsigned: 0 확장 (zero-extend)
-s2 := resize(s, 16);                 -- signed: 부호 확장 (sign-extend)
+-- changing the size
+u2 := resize(u, 16);                 -- unsigned: zero-extend
+s2 := resize(s, 16);                 -- signed: sign-extend
 ```
 
-### 시프트 / 회전
+### Shift and rotate
 
 ```vhdl
--- 시프트 (빈 자리: 0 채움)
-u_shifted := shift_left (u, 3);       -- 논리 좌시프트 (*8)
-u_shifted := shift_right(u, 3);       -- 논리 우시프트 unsigned: 0 채움
-s_shifted := shift_right(s, 3);       -- 산술 우시프트 signed: MSB 복제
+-- shifts (vacated positions filled with 0)
+u_shifted := shift_left (u, 3);       -- logical left shift (*8)
+u_shifted := shift_right(u, 3);       -- logical right shift, unsigned: fills with 0
+s_shifted := shift_right(s, 3);       -- arithmetic right shift, signed: replicates the MSB
 
--- 회전
+-- rotates
 u_rot := rotate_left (u, 2);
 u_rot := rotate_right(u, 2);
 ```
 
-### 형 변환 패턴
+### Type-conversion patterns
 
 ```vhdl
--- std_logic_vector ↔ unsigned/signed 캐스팅
-u_val := unsigned(slv);               -- 재해석 (비트 복사 없음)
+-- casting between std_logic_vector and unsigned/signed
+u_val := unsigned(slv);               -- a reinterpretation (no bits are copied)
 s_val := signed(slv);
 slv   := std_logic_vector(u_val);
 ```
 
 ---
 
-## ieee.std_logic_arith — ⚠️ DEPRECATED, 사용 금지
+## ieee.std_logic_arith — ⚠️ DEPRECATED, do not use
 
 ```vhdl
--- 아래 패키지들은 절대 신규 설계에 사용하지 않는다
+-- never use these packages in a new design
 -- use ieee.std_logic_arith.all;      -- ❌ DEPRECATED
 -- use ieee.std_logic_unsigned.all;   -- ❌ DEPRECATED
 -- use ieee.std_logic_signed.all;     -- ❌ DEPRECATED
 ```
 
-**왜 위험한가:**
+**Why they are dangerous:**
 
-1. **비표준** — Synopsys가 작성. IEEE가 공식 표준화한 적 없음.
-2. **이식성 파괴** — Synopsys/Cadence/Mentor 구현이 서로 다름. 동일한 IEEE namespace에 호환 안 되는 타입 정의.
-3. **충돌** — `std_logic_arith`의 `SIGNED`/`UNSIGNED`가 `numeric_std`의 것과 **다른 타입**. 두 패키지를 함께 사용하면 컴파일 오류.
-4. **상호 배타** — `std_logic_signed`와 `std_logic_unsigned`를 같은 design unit에서 동시 사용 불가.
+1. **Non-standard** — written by Synopsys. The IEEE never standardised them.
+2. **They break portability** — the Synopsys, Cadence and Mentor implementations differ from one
+   another, defining incompatible types in the same IEEE namespace.
+3. **They collide** — the `SIGNED` / `UNSIGNED` of `std_logic_arith` are **different types** from
+   those in `numeric_std`. Using both packages together is a compile error.
+4. **Mutually exclusive** — `std_logic_signed` and `std_logic_unsigned` cannot be used in the same
+   design unit.
 
-**대체:**
+**Use instead:**
 
 ```vhdl
--- 신규 설계 표준 조합
+-- the standard combination for new designs
 library ieee;
 use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;              -- 모든 산술은 여기서
+use ieee.numeric_std.all;              -- all arithmetic comes from here
 ```
 
 ---
@@ -283,48 +289,51 @@ use ieee.numeric_std.all;              -- 모든 산술은 여기서
 use ieee.numeric_std_unsigned.all;
 ```
 
-`std_logic_vector`를 캐스팅 없이 직접 산술 연산할 수 있다. `std_logic_unsigned`의 표준 대체제.
+Lets `std_logic_vector` take part in arithmetic directly, without a cast. This is the standard
+replacement for `std_logic_unsigned`.
 
 ```vhdl
--- numeric_std_unsigned 사용 시
+-- with numeric_std_unsigned
 signal a, b, c : std_logic_vector(7 downto 0);
-c <= a + b;                            -- unsigned 산술 직접 적용
-c <= a + "00000001";                   -- 상수와도 가능
-if a > b then ...                      -- 숫자 비교
+c <= a + b;                            -- unsigned arithmetic applied directly
+c <= a + "00000001";                   -- constants work too
+if a > b then ...                      -- numeric comparison
 ```
 
-> `ieee.numeric_std`와 동시에 `use`하면 `+`, `<` 등의 연산자가 중의적이 될 수 있다. 같은 design unit에서 혼용 주의.
+> Using it together with `ieee.numeric_std` can make operators such as `+` and `<` ambiguous. Be
+> careful about mixing them in one design unit.
 
 ---
 
-## ieee.math_real — 수학 함수, testbench 전용
+## ieee.math_real — maths functions, testbench only
 
 ```vhdl
 use ieee.math_real.all;
 ```
 
 ```vhdl
--- 상수
+-- constants
 MATH_PI        -- 3.14159...
 MATH_E         -- 2.71828...
 MATH_SQRT2     -- 1.41421...
 MATH_LOG2E     -- log2(e)
 
--- 함수
+-- functions
 sqrt(x)        ceil(x)    floor(x)   round(x)
 log(x)         log2(x)    log10(x)   exp(x)
 sin(x)         cos(x)     tan(x)
 arcsin(x)      arccos(x)  arctan(x)  arctan2(y, x)
-uniform(s1, s2, r)  -- 균일 분포 난수 [0.0, 1.0)
+uniform(s1, s2, r)  -- uniformly distributed random number in [0.0, 1.0)
 ```
 
-**합성 불가.** testbench stimulus 생성, elaboration 시간 상수 계산에만 사용.
+**Not synthesizable.** Use it only for generating testbench stimulus and computing
+elaboration-time constants.
 
 ```vhdl
--- 용례: CLK_PERIOD에서 파라미터 계산 (elaboration constant)
+-- use: deriving a parameter (an elaboration constant)
 constant SAMPLES : integer := integer(ceil(MATH_PI * real(N)));
 
--- 난수 기반 stimulus (testbench)
+-- random stimulus (testbench)
 impure function rand_slv(len : natural) return std_logic_vector is
     variable r    : real;
     variable s1, s2 : integer := 47;
@@ -340,60 +349,62 @@ end function;
 
 ---
 
-## ieee.fixed_pkg — 고정소수점 (VHDL-2008+)
+## ieee.fixed_pkg — fixed point (VHDL-2008+)
 
 ```vhdl
 use ieee.fixed_pkg.all;
 ```
 
-### 타입 및 인덱스 표기
+### The types and their index notation
 
 ```vhdl
--- sfixed(정수부_MSB downto 소수부_LSB)
--- 이진 소수점: 인덱스 0과 -1 사이
-signal x : sfixed( 7 downto -8);   -- 8.8 포맷: 16비트, ±127.996
-signal y : ufixed( 7 downto -8);   -- 8.8 포맷: 16비트, 0 ~ 255.996
-signal z : sfixed(15 downto -16);  -- 16.16 포맷: 32비트
+-- sfixed(integer_part_MSB downto fractional_part_LSB)
+-- the binary point sits between index 0 and index -1
+signal x : sfixed( 7 downto -8);   -- 8.8 format: 16 bits, ±127.996
+signal y : ufixed( 7 downto -8);   -- 8.8 format: 16 bits, 0 .. 255.996
+signal z : sfixed(15 downto -16);  -- 16.16 format: 32 bits
 ```
 
 ```vhdl
--- 연산 예시
+-- arithmetic
 signal a, b : sfixed(7 downto -8);
-signal c    : sfixed(8 downto -8);   -- +1비트: 오버플로 방지
+signal c    : sfixed(8 downto -8);   -- one extra bit: prevents overflow
 
-c <= a + b;                           -- 자동 소수점 정렬
-c <= resize(a + b, c'high, c'low);    -- 명시적 크기 조정
+c <= a + b;                           -- the binary points are aligned automatically
+c <= resize(a + b, c'high, c'low);    -- resized explicitly
 ```
 
-합성 가능 (Vivado 지원). 일부 구형 도구는 부분 지원 — 사용 전 툴 확인 권장.
+Synthesizable (Vivado supports it). Some older tools support it only in part — check the tool before
+using it.
 
 ---
 
-## ieee.float_pkg — 부동소수점 IEEE 754 (VHDL-2008+)
+## ieee.float_pkg — IEEE 754 floating point (VHDL-2008+)
 
 ```vhdl
 use ieee.float_pkg.all;
 ```
 
 ```vhdl
-signal f32 : float32;                     -- IEEE 754 단정밀도
-signal f64 : float64;                     -- IEEE 754 배정밀도
+signal f32 : float32;                     -- IEEE 754 single precision
+signal f64 : float64;                     -- IEEE 754 double precision
 
--- integer/real ↔ float 변환
+-- integer/real ↔ float conversion
 f32 <= to_float(42, f32);                 -- integer → float32
 f32 <= to_float(3.14, f32);              -- real → float32
 n   := to_integer(f32);
 r   := to_real(f32);                      -- (elaboration time only)
 ```
 
-합성 가능하나 **상당한 LUT 면적**을 소비한다. FPGA 설계에서는 IP 코어(Vivado Floating Point IP 등) 사용을 먼저 검토.
+Synthesizable, but it consumes a **substantial amount of LUT area**. In FPGA designs, look at an IP
+core (Vivado's Floating Point IP, for example) first.
 
 ---
 
-## 권장 use 절 조합
+## Recommended use-clause combinations
 
 ```vhdl
--- RTL 설계 (합성 대상)
+-- RTL design (to be synthesized)
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -405,7 +416,7 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 use std.textio.all;
 
--- 고정소수점 RTL (VHDL-2008+)
+-- fixed-point RTL (VHDL-2008+)
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -417,9 +428,9 @@ use ieee.fixed_pkg.all;
 ## Sources
 
 - IEEE 1076-2008 §4 (Packages and package bodies), §16 (Predefined packages)
-- HDL Factory — VHDL IEEE Libraries and Numeric Type Conversion (2025): https://www.hdlfactory.com/post/2025/06/29/vhdl-ieee-libraries-and-numeric-type-conversion-a-definitive-reference/ ✓ WebFetch 검증
-- Sigasi — Deprecated IEEE Libraries: https://www.sigasi.com/tech/deprecated-ieee-libraries/ ✓ WebFetch 검증
+- HDL Factory — VHDL IEEE Libraries and Numeric Type Conversion: https://www.hdlfactory.com/post/2025/06/29/vhdl-ieee-libraries-and-numeric-type-conversion-a-definitive-reference/ (WebFetch ✓)
+- Sigasi — Deprecated IEEE Libraries: https://www.sigasi.com/tech/deprecated-ieee-libraries/ (WebFetch ✓)
 - Doulos — VHDL-2008: Incorporates existing standards: https://www.doulos.com/knowhow/vhdl/vhdl-2008-incorporates-existing-standards/
 - VHDL-2008 Support Library (fphdl ReadTheDocs): https://fphdl.readthedocs.io/en/docs/
 - HDLworks — Std_Logic_1164: https://www.hdlworks.com/hdl_corner/vhdl_ref/VHDLContents/StdLogic1164.htm
-- Research log: [vhdl-subprograms-pkg-synth-2026-05-28.md](../../research-log/vhdl-subprograms-pkg-synth-2026-05-28.md)
+- Research log: [vhdl-subprograms-pkg-synth-2026-05-28.md](../../../history/research-log/vhdl-subprograms-pkg-synth-2026-05-28.md)

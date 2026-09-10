@@ -1,67 +1,71 @@
-# 08 · SystemVerilog 함수·태스크 확장
+# 08 · SystemVerilog Function and Task Extensions
 
-IEEE 1800-2017 §13 기준. 이 문서는 Verilog-2005 대비 SystemVerilog가 추가한
-함수·태스크 기능을 다룬다. Verilog 기초는 `../verilog/06-tasks-functions.md` 참조.
+Based on IEEE 1800-2017 §13. This document covers the function and task features
+SystemVerilog adds over Verilog-2005. For the Verilog basics see
+`../verilog/07-tasks-functions.md`.
+
+> This document describes the language. For which of these constructs vita itself accepts,
+> refuses loudly, or supports only in part, see
+> [docs/manual/003_language-reference.md](../../../manual/003_language-reference.md).
 
 ---
 
-## Verilog 대비 주요 추가 사항
+## The main additions over Verilog
 
-| 기능 | Verilog-2005 | SystemVerilog |
+| Feature | Verilog-2005 | SystemVerilog |
 |------|-------------|---------------|
-| void 반환 함수 | ❌ (반환값 필수) | ✅ `function void f(...)` |
-| ref 인자 | ❌ | ✅ `ref type var` |
-| const ref 인자 | ❌ | ✅ `const ref type var` |
-| `let` 선언 | ❌ | ✅ compile-time inline |
+| void-returning function | ❌ (a return value is mandatory) | ✅ `function void f(...)` |
+| ref arguments | ❌ | ✅ `ref type var` |
+| const ref arguments | ❌ | ✅ `const ref type var` |
+| `let` declaration | ❌ | ✅ compile-time inline |
 | `return;` (void) | ❌ | ✅ |
-| automatic 기본 | ❌ (static 기본) | class/program에서 automatic 기본 |
-| ANSI 포트 스타일 | ❌ | ✅ |
+| automatic by default | ❌ (static by default) | automatic by default in a class or program |
+| ANSI port style | ❌ | ✅ |
 
 ---
 
-## let 선언 — compile-time inline (§11.13)
+## let declarations — compile-time inline (§11.13)
 
-`let`은 모듈·패키지·블록 내부에서 표현식에 이름을 부여하는 **컴파일 타임 인라인 치환**이다.
-`define` 매크로와 달리 **로컬 스코프**를 가지며 타입 안전성이 보장된다.
+`let` gives a name to an expression inside a module, package or block: a **compile-time inline
+substitution**. Unlike a `define` macro it has a **local scope** and is type-safe.
 
 ```systemverilog
-// 기본 형태: 인자 없음
+// basic form: no arguments
 let max_addr = (1 << ADDR_W) - 1;
 
-// 인자 있는 형태
+// form with arguments
 let compare(a, b) = (a == b) ? "Pass" : "Fail";
 let in_range(x, lo, hi) = (x >= lo) && (x <= hi);
 
-// 사용
+// use
 $display("max_addr = %0h", max_addr);
 $display("%s", compare(exp_data, act_data));
 assert (in_range(addr, BASE_ADDR, BASE_ADDR + SIZE - 1));
 ```
 
-### let vs `define 비교
+### let vs `define
 
-| 특성 | `let` | `` `define `` |
+| Property | `let` | `` `define `` |
 |------|-------|--------------|
-| 스코프 | 선언된 블록/모듈/패키지 내 로컬 | 파일 전체(전역) |
-| 타입 체크 | ✅ (인자 타입 추론) | ❌ |
-| 다중 선언 | 스코프별로 동일 이름 가능 | 마지막 선언이 덮어씀 |
-| 사용 목적 | 표현식 재사용, SVA 보조 | 텍스트 치환 |
+| Scope | Local to the block, module or package that declares it | The whole file (global) |
+| Type checking | ✅ (argument types are inferred) | ❌ |
+| Multiple declarations | The same name may be used once per scope | The last declaration overwrites |
+| Purpose | Expression reuse, SVA helpers | Textual substitution |
 
-assertion 내부에서 자주 쓰인다:
+It is frequently used inside assertions:
 
 ```systemverilog
-// SVA 보조로 let 활용
+// let as an SVA helper
 let addr_aligned = (addr[1:0] == 2'b00);
 assert property (@(posedge clk) wr_en |-> addr_aligned);
 ```
 
 ---
 
-## void Function (§13.4)
+## void functions (§13.4)
 
-반환값이 없는 함수. `return;`으로 조기 종료 가능.
-Verilog에서는 함수가 반드시 하나의 값을 반환해야 했으나 SV에서 side-effect 전용
-함수를 선언할 수 있다.
+A function with no return value. `return;` exits it early. In Verilog a function had to return
+exactly one value; SV lets you declare a function purely for its side effects.
 
 ```systemverilog
 function void print_state(input logic [1:0] state);
@@ -71,55 +75,33 @@ function void print_state(input logic [1:0] state);
         2'b10: $display("DONE");
         default: begin
             $warning("Unknown state: %02b", state);
-            return;    // void function의 조기 종료
+            return;    // early exit from a void function
         end
     endcase
 endfunction
 ```
 
-void function 호출 시 반환값을 받지 않아도 된다:
+A void function may be called without taking a return value:
 
 ```systemverilog
-print_state(curr_state);   // 반환값 무시 — SV에서는 합법적
+print_state(curr_state);   // return value ignored — legal in SV
 ```
 
-> **Verilog와의 차이**: Verilog 함수는 반드시 반환값이 있고, 호출 결과를 반드시 사용해야 한다. SV의 non-void function을 void처럼 호출하려면 `void'(func_call)` cast를 사용한다.
+> **Difference from Verilog**: a Verilog function always has a return value and the result of the call must be used. To call a non-void SV function as if it were void, use the `void'(func_call)` cast.
 
 ```systemverilog
-void'(some_func_with_return());   // 반환값 명시적 무시
+void'(some_func_with_return());   // return value explicitly discarded
 ```
-
-> **vitamin 지원 (§4.5.278) — output/inout formal 을 가진 호출이 서브루틴 본문 안에 있을 때.**
-> IEEE §13.4 는 함수가 `output`/`inout` formal 을 갖는 것을 허용하고, vitamin 은 그 호출의
-> **copy-out** 을 호출 표현식 앞의 문장으로 방출한다. **`task` 본문 안에서는 한 번만 평가되는
-> 모든 위치가 지원되고, copy-out 목적지도 제한이 없다** — 호출자의 로컬·자기 output formal 은
-> 물론 **모듈/인스턴스 net** 도 된다(`inner(a, gv);` · `r = nxt(a, gv);` · `void'(nxt(a, gv));` ·
-> `r = nxt(a, gv) + 10;` · bit/part-select · 배열 원소 · `string` 목적지 · 중첩 프레임 · 루프 안).
->
-> ```systemverilog
-> int gv;
-> task automatic outer (input int a, output int done);
->     inner(a, gv);        // bare call statement, 목적지 = 모듈 net
->     done = 1;
-> endtask
-> ```
->
-> §4.5.278 전에는 이 형태가 **진단 없이 exit 101 로 죽었고**, 같은 본문에 무관한 `#5` 나 `else`
-> 가지를 하나 넣으면 동작했다 — 호출이 메모리를 쓰는지가 **옆에 무슨 문장이 있는지**로 갈렸다.
->
-> **남은 미지원은 `function` 본문 하나뿐**이다: 함수는 자기를 부른 표현식 안에서 진입하므로
-> callee 의 copy-out 을 실어 나를 **자기 소유의 호출 문장이 없다**. 같은 호출을 `task` 본문이나
-> 모듈 프로세스에 두거나, 임시 변수에 먼저 받아라. 진단(`E3009`)이 어느 경우인지 말해 준다.
 
 ---
 
-## ref 인자 — 참조 전달 (§13.5.2)
+## ref arguments — pass by reference (§13.5.2)
 
-`ref`로 선언된 인자는 원본 변수의 참조를 전달한다. 함수/태스크 내에서의 변경이
-호출자에 즉시 반영된다.
+An argument declared `ref` passes a reference to the original variable. A change made inside
+the function or task is visible to the caller immediately.
 
 ```systemverilog
-// ref로 swap 구현
+// swap implemented with ref
 task automatic swap(ref logic [7:0] a, ref logic [7:0] b);
     logic [7:0] tmp;
     tmp = a;
@@ -127,19 +109,19 @@ task automatic swap(ref logic [7:0] a, ref logic [7:0] b);
     b   = tmp;
 endtask
 
-// 호출
+// call
 logic [7:0] x = 8'hAA, y = 8'h55;
 swap(x, y);   // x = 0x55, y = 0xAA
 ```
 
-### const ref — 읽기 전용 참조
+### const ref — a read-only reference
 
-`const ref`는 참조를 전달하되 내부에서 변경을 금지한다. 대형 배열이나 구조체를
-값 복사(by value) 없이 전달할 때 **성능 최적화**에 사용한다.
+`const ref` passes a reference but forbids modification inside the subroutine. It is used as a
+**performance optimization** to pass a large array or structure without copying it by value.
 
 ```systemverilog
 function automatic logic [31:0] calc_checksum(
-    const ref logic [7:0] data [],   // 동적 배열을 복사 없이 전달
+    const ref logic [7:0] data [],   // a dynamic array passed without a copy
     input int size
 );
     logic [31:0] sum = 0;
@@ -149,13 +131,13 @@ function automatic logic [31:0] calc_checksum(
 endfunction
 ```
 
-### ref 인자 제약
+### Restrictions on ref arguments
 
-- `ref` 인자는 **`automatic` 서브루틴에서만 사용** 가능하다.
-- `static` lifetime 서브루틴에서 ref 인자 사용 시 컴파일 에러.
+- A `ref` argument may be used **only in an `automatic` subroutine**.
+- Using a ref argument in a subroutine with `static` lifetime is a compile error.
 
 ```systemverilog
-function static void bad_ref(ref int x);   // ❌ 컴파일 에러
+function static void bad_ref(ref int x);   // ❌ compile error
     x = 0;
 endfunction
 
@@ -166,37 +148,29 @@ endfunction
 
 ---
 
-## automatic vs static — lifetime 맥락 (§13.4.2)
+## automatic vs static — the lifetime context (§13.4.2)
 
-Verilog에서 모든 서브루틴은 기본적으로 `static` lifetime이다.
-SV는 컨텍스트에 따라 기본값이 다르다.
+In Verilog every subroutine has `static` lifetime by default. In SV the default depends on the
+context.
 
-| 컨텍스트 | 기본 lifetime |
+| Context | Default lifetime |
 |----------|--------------|
-| `module` 내 task/function | **static** (Verilog 호환) |
-| `class` 메서드 | **automatic** (§8.6) |
-| `program` 블록 내 | **automatic** |
-| `package` 함수/태스크 | static (명시 권장) |
-| 명시 선언 | `automatic`/`static` 키워드로 재정의 |
-
-> **vitamin 지원 (§4.5.277)**: `task static tk (…)` / `function static int fn (…)` 의 **명시적
-> `static` lifetime 키워드**(IEEE 1800 §13.3)가 파싱된다. 그 전에는 헤더 하나가 E2002 10건을
-> 냈다(`automatic` 만 파싱됐다). 동작상으로는 무의미한 명시다 — `static` 은 (non-`automatic`
-> 모듈의) 서브루틴 기본 lifetime 이므로 키워드를 쓰든 안 쓰든 같다. `static` 은 vitamin lexer 의
-> **예약어가 아니므로**(Verilog-2005 식별자) `task static;` 처럼 **`static` 이라는 이름의**
-> 서브루틴도 계속 합법이다 — 구별은 뒤 토큰으로 한다(lifetime 뒤엔 헤더가 더 오고, 이름 뒤엔
-> `;` 또는 `(` 가 온다).
+| task/function inside a `module` | **static** (Verilog compatibility) |
+| a `class` method | **automatic** (§8.6) |
+| inside a `program` block | **automatic** |
+| a `package` function/task | static (declaring it explicitly is recommended) |
+| explicit declaration | overridden with the `automatic`/`static` keyword |
 
 ```systemverilog
-// module 내부 — static이 기본값이므로 automatic 명시 필요
+// inside a module — static is the default, so automatic must be stated
 module my_mod;
     task automatic reentrant_task(input int n);
-        // 재귀 가능, 각 호출마다 독립 스택 프레임
+        // recursion is possible; each call gets its own stack frame
         if (n > 0) reentrant_task(n - 1);
     endtask
 endmodule
 
-// package 내 — automatic 명시 권장
+// inside a package — stating automatic is recommended
 package util_pkg;
     function automatic int abs_val(input int x);
         return (x >= 0) ? x : -x;
@@ -204,21 +178,21 @@ package util_pkg;
 endpackage
 ```
 
-### automatic이 필요한 경우
+### When automatic is required
 
-1. **재귀(recursive) 호출** — static에서는 지역 변수 공유로 오동작
-2. **ref 인자 사용** — static에서는 컴파일 에러
-3. **병렬 태스크 인스턴스** — fork-join 내에서 태스크를 여러 번 동시 실행
-4. **클래스 메서드** — 이미 automatic (별도 명시 불필요)
+1. **Recursive calls** — under static lifetime the shared local variables misbehave
+2. **ref arguments** — a compile error under static lifetime
+3. **Parallel task instances** — running a task several times concurrently inside a fork-join
+4. **Class methods** — already automatic (no need to state it)
 
 ---
 
-## 함수/태스크 선언 스타일 — ANSI 포트 (§13.4~13.5)
+## Function and task declaration style — ANSI ports (§13.4~13.5)
 
-SV는 Verilog 전통 방식 외에 더 간결한 ANSI C 스타일 선언을 지원한다.
+Besides the traditional Verilog form, SV supports the more compact ANSI C style declaration.
 
 ```systemverilog
-// ANSI 스타일 (권장)
+// ANSI style (recommended)
 function automatic logic [31:0] adder(
     input  logic [31:0] a,
     input  logic [31:0] b,
@@ -227,7 +201,7 @@ function automatic logic [31:0] adder(
     {carry, adder} = {1'b0, a} + {1'b0, b};
 endfunction
 
-// 태스크 ANSI 스타일
+// task in ANSI style
 task automatic wait_for_ack(
     input  logic       clk,
     input  logic       req,
@@ -247,20 +221,20 @@ endtask
 
 ---
 
-## 관련 문서
+## Related documents
 
-- `../verilog/06-tasks-functions.md` — Verilog 함수/태스크 기초
+- `../verilog/07-tasks-functions.md` — Verilog function/task basics
 - `../system-tasks/` — SV system functions: `$urandom`, `$bits`, `$cast`, `$past`
-- `../system-tasks/11-assertion-sampling.md` — `$past`, `$rose`, `$fell`, `$stable`, `$sampled` 상세
-- [07-assertions-sva.md](07-assertions-sva.md) — `let`의 SVA 활용 패턴
-- [05-packages.md](05-packages.md) — package 내 function automatic 패턴
-- [06-classes-oop.md](06-classes-oop.md) — 클래스 메서드 (automatic 기본)
+- `../system-tasks/11-assertion-sampling.md` — `$past`, `$rose`, `$fell`, `$stable`, `$sampled` in detail
+- [07-assertions-sva.md](07-assertions-sva.md) — using `let` in SVA
+- [05-packages.md](05-packages.md) — the function automatic pattern inside a package
+- [06-classes-oop.md](06-classes-oop.md) — class methods (automatic by default)
 
 ---
 
 ## Sources
 
 - IEEE 1800-2017 §13 (Tasks and functions), §11.13 (let expression)
-- asic4u.wordpress.com/2015/12/26/the-let-construct/ — let 선언 (WebFetch ✓)
-- chipverify.com/systemverilog/systemverilog-functions — ref/void/automatic (WebFetch ✓ 부분)
-- fpgatutorial.com/systemverilog-functions/ — ANSI 스타일, automatic 컨텍스트
+- asic4u.wordpress.com/2015/12/26/the-let-construct/ — let declarations (WebFetch ✓)
+- chipverify.com/systemverilog/systemverilog-functions — ref/void/automatic (WebFetch ✓ partial)
+- fpgatutorial.com/systemverilog-functions/ — ANSI style, automatic contexts

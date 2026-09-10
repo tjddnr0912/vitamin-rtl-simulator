@@ -5,7 +5,7 @@
 //! verbatim; this table lives ENTIRELY in engine state. It encodes each expr's
 //! self-determined (bottom-up) width and signedness per §5.4.1 / §5.5.
 //!
-//! See `docs/superpowers/plans/2026-06-04-width-inference-spec.md`.
+//! See `docs/history/plans/2026-06-04-width-inference-spec.md`.
 
 use sim_ir::SimIr;
 

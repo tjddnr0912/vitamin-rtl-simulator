@@ -1,1819 +1,766 @@
-# doc-21 · ③층(네이티브 컴파일드) 백엔드 — 방향 조사 보고
+# doc-21 · The native backend
 
-> **성격**: 조사·계획 문서. 착수 결정 전이며, 구현은 없다.
-> **선행 문서**: [preview/18](18-acceleration-analysis.md)(모든 실측의 정본) ·
-> [study/01 §9](../study/01-interpreted-vs-compiled.md)(①→②→③ 층 구분과 ③층 시도 기록).
-> **모든 수치는 이 저장소에서 잰 것**이며 출처를 표기한다. 재지 않은 것은 **재지 않았다고 적는다.**
+The design contract for `native`, vita's shipping process-body executor. It covers what the
+backend is, what disqualifies a design from running on it, how its net storage is laid out and
+why that layout is sound, how a body the compiler declines is executed instead, what it must
+report when it declines a whole design, and the equivalence gate that keeps its answers
+identical to the other two executors' answers.
 
----
-
-> **개정 4 (2026-08-03)** — 리포터가 **완주 추정치를 작업량 기준으로 정정**해 왔다: 레코드 수가
-> 아니라 **메시지 총량**으로 재면 완주 ≈ **56 분**, Xcelium 31 초 대비 **≈ 108×**(레코드 수로 나눈
-> ~200× 는 무거운 파일이 먼저 끝나 과대평가). 그리고 **제기할 문제가 0 건**이다 — 즉 남은 격차는
-> 전부 처리량이고, 정확성 부채가 그것을 가리고 있지 않다. **§0.3 을 먼저 읽을 것.**
->
-> **개정 3 (2026-08-03)** — 리뷰어 round-26 을 받고, 그 위에서 **③층을 처음으로 실제로 측정했다.**
-> verilator 5.050 을 설치해 **같은 설계·같은 기계로 3개 층을 나란히 쟀다**(doc-18 round-26).
-> 이 문서에서 가장 오래 비어 있던 칸 — *"격차 크기는 모른다"* — 이 채워졌고, 동시에
-> **②층이 고갈되지 않았다는 사실**이 드러났다. **§0.4 를 먼저 읽을 것.**
->
-> **개정 2 (2026-08-03)** — 리뷰어 round-25 리포트를 받아 갱신했다. **선행 디버깅 4건은 완료**
-> (커밋 `3ec7dc7`, 5051 tests green). 그 결과가 이 문서의 **§1.1 근거와 §7 우선순위를 바꿨다** —
-> §0.5 참조.
-
-## 0. 요약 — 조사 결과 세 줄
-
-1. **막고 있는 계약은 큰 것들이 아니다.** SchemaHash 동결도 correct-or-loud 도 ③층을 막지 않는다
-   (전자는 **건드릴 필요가 없고**, 후자는 오히려 **유일한 검증 수단**이다). 실제로 깨야 하는 것은
-   **no-unsafe 정책**과 **MSRV 1.85** 둘뿐이며, 둘 다 범위가 좁다.
-2. **진짜 장벽은 계약이 아니라 두 가지 구조적 사실이다** — ⓐ ③층은 넷 저장을 소유하므로
-   **바디 단위 폴백이 불가능**하다(설계 단위 all-or-nothing), ⓑ 엔진 동작의 상당수가 SimIr 이 아니라
-   **`SimOpts` 사이드카 75개**에 산다. 이 둘이 v1 범위를 결정한다.
-3. **좋은 소식이 하나 있다**: 가장 어려울 것으로 예상됐던 **정지/재개가 이미 IR 에 명시돼 있다**
-   (`Terminator::Delay { amount, region, resume }`). 상태기계 변환이 연구가 아니라 기계적 작업이다.
+The execution record that produced this backend is not part of the contract; it lives in
+[history/ROADMAP_ARCHIVE_PHASE_A-D](../history/ROADMAP_ARCHIVE_PHASE_A-D.md). The numbers that
+justify a rule are quoted here in the present tense, without the work item that measured them.
 
 ---
 
-## 0.-19 ⭐⭐⭐ 개정 26 — **Phase D 완료: 여덟 형태 전부 VM 을 앞서고, 코드젠은 기각한다** (2026-08-17, ROADMAP §5.1-ay~-be)
+## 1. What the backend is
 
-### 성적표
+`crates/sim-engine/src/native/` — an executor that owns net storage. Flat net values live in a
+`NetArena` the backend builds from the frozen `SimIr`, not in the engine's `SimState.nets`, and
+resolving one net's metadata happens once at build rather than on every access.
 
-| 형태 | D1 착수 native/vm | **종료 시** |
-|---|---:|---:|
-| wide-struct-heavy | **2.52** | **0.98** |
-| wide-heavy | 1.71 | **0.91** |
-| struct-heavy | 1.16 | **0.49** |
-| eval / expr / mem | 0.58 / 0.56 / 0.39 | 0.54 / 0.47 / 0.37 |
-| real / codegen | — | 0.89 / 0.86 |
+Owning storage is the defining property and it sets the granularity of everything else: an
+interpreter body cannot see the arena, so there is no body-level fallback. A design is wholly
+eligible or wholly on the engine.
 
-### 무엇이 그것을 만들었나 — 전부 *"안 해도 되는 일"* 의 제거였다
+The source calls this backend tier-3, after the three-tier model in
+[study/01](../study/01-interpreted-vs-compiled.md): tier-1 is the tree-walking interpreter,
+tier-2 the bytecode VM, tier-3 the executor with its own storage. Refusal strings and module
+documentation use that name; `--backend` and `run.json` use `native`.
 
-| 슬라이스 | 없앤 것 |
-|---|---|
-| **D2-a** | **두 번째 평면** — 계측이 *"벤치 8/8 이 100% definite · picorv32 90.1%"* 라고 답했다 ⇒ 한 평면 레인 + **정본 폴백**(정확성 표면 0) |
-| **D5** | **이미 증명한 라우팅** — 목적지가 평평하다고 컴파일 시점에 증명해 놓고 `write_routed` 를 매번 다시 걸었다 |
-| **D6** | **호출마다의 1,280 B memset** — `NativeScratch::default()`(struct-heavy 300,000회 = 384 MB) ⇒ 커널이 **빌린다** |
-| §5.1-az | **leaf 마다의 `Value`** — tier-3 합성 리더가 `read_scalar_words` 에 `None` 을 돌려줘 **빠른 경로가 아예 없었다** |
-
-### D4 — 지어서, 배선해서, 재서, 기각
-
-⚠️⚠️ **① `jit` feature 가 컴파일조차 안 되고 있었다**(융합 op 둘이 추가된 이래) — 잡은 것은
-**`_`-free match**. **② 전 스위트를 `VITA_JIT=1` 로 돌리자 silent-wrong** — 컴파일된 바디가
-문장마다의 `k_call_fatal` 을 **안 물어** 폭주가 `Error` 대신 `Quiescent` 로 끝났다(tier-2 는 이
-모듈로 스위트를 돌린 적이 없어 아무도 물어본 적이 없었다). **③ 그리고 14~47% 느리다** — 런의
-**~38% 가 shim**(`s_load` 13.7% = leaf 마다 trait object 통과 · `jit::mk` 12.4% = **72 B `Value` 가
-경계에서 부활**).
-
-**판정 = 산술**: 완벽한 코드젠이 없앨 수 있는 건 **op 디스패치 8.9~11.3%** 인데 경계가 **~38%**
-(mk 를 다 없애도 25%) ⇒ **11% 벌려고 25% 내는 거래**. 게다가 경계를 없애려면 **표현식 의미를
-cranelift IR 로 재작성**해야 하고 그것이 §4.5.279 결함 부류다.
-
-⇒ **기본 OFF 로 남되 이제 빌드되고·배선돼 있고·측정돼 있고·정확하다**(`VITA_JIT=1` 로 전 스위트
-green · examples·keccak·picorv32 **바이트 동일**). ⭐ **다시 볼 조건은 하나** — leaf 로드와 2-state
-산술을 **생성 코드 안에 인라인**(호출 0). **그 전제조건은 Phase D 가 방금 만들었다.**
-
-⚠️ **정직한 한계: picorv32 의 native/vm 은 거의 안 움직였다**(0.61 → 0.60). 벤치 형태는 산술
-루프이고 그 설계의 시간은 다른 데 있다 — **어디인지는 아직 안 쟀다** ⇒ 성능을 다시 본다면
-**스케줄러 축부터 프로파일**.
-
----
-
-## 0.-18 ⭐⭐⭐ 개정 25 — **Phase C 완료 · Phase D 착수: 하네스가 제품 백엔드를 한 번도 안 쟀다** (2026-08-17, ROADMAP §5.1-au~-ay)
-
-### C — interp 의 강등은 코드가 아니라 **계약**이었다
-
-절반은 Phase B 가 이미 했다(`oracle` feature 가 곧 경계 · 제품 빌드엔 `Backend::Interpreter` 가
-**없다**). 남은 절반 = **그 사실을 계약으로 적는 것**이고, 그러다 **사용자에게 보이는 거짓말**을
-찾았다 — `--help` 이 *"'vm' (default)"* 와 *"native … no fork, no `final`, no class …"* 를 아직
-말하고 있었다(**Phase A 가 전부 닫았다**). ⭐⭐ 교훈은 *갱신을 빠뜨렸다*가 아니라 **능력을 열거하는
-도움말은 슬라이스마다 썩는다** 이고, 대체판은 **각 값의 역할**을 적는다. 본체는 `Backend::Interpreter`
-doc 의 두 문장 — ⓐ **테스트 도구이지 제품 표면이 아니다** ⓑ ⚠️⚠️ **성능 최적화 영구 제외**
-(레퍼런스를 빠르게 만드는 것이 곧 **읽을 수 없게 되는 길** ⇒ 프로파일이 `run_process` 를 지목하면
-답은 *"그 설계가 여기서 돌면 안 된다"*).
-
-### D1 — ⚠️⚠️ **산출은 코드가 아니라 두 숫자 표이고 둘 다 계획을 바꿨다**
-
-형태별 벤치 하네스(`perf_baseline.rs` · 8 형태)는 **이미 있었는데 `report()` 가 `interp`/`vm` 만
-쟀다** — tier-3 전 생애 동안, B1 이 native 를 기본으로 만든 뒤에도 ⇒ **이 하네스에서 나온 모든 중단
-판정은 tier-2 에 관한 진술이었다.** 넓혀 재니 **native 가 8 중 셋에서 vm 보다 느렸다**(struct 1.16 ·
-wide 1.71 · wide-struct **2.52**). 그리고 **깊이 표가 내가 두 턴 전에 쓴 것을 반증했다** — 인용한
-*"104×"* 는 이미 배송된 dirty-settle 수정의 **before 열**이었다 ⇒ **D3 는 이미 끝나 있었다.**
-
-### D1.5 · D1.6 — 거부의 **한정어**, 그리고 경계의 **근사치**
-
-| | 원인 | 수정 |
-|---|---|---|
-| **D1.5** | `CompileCtx` 의 `natives: None` 주석이 *"양쪽이 받는 식"* 에 대해서만 참이고 **`wprog` 가 거부하는 셋째 부류에 침묵**했다 ⇒ 모든 wide 식이 일반 트리 워크까지 떨어졌다 | 스위치가 아니라 **분할**(`wprog` 는 자기가 받는 것을 지키고 `native_eval` 이 나머지를 받는다) |
-| **D1.6** | 그 경계가 **근사치**였다 — *"`wprog` 가 거부할 때만"* 이라 적고 실제로는 **폭 검사**(= `compile` 의 첫 줄)를 물었다. **필요조건이지 충분조건이 아니다**(census: ≤64bit 에서 **75번 거부**) | 경계가 **`compile` 자신에게** 묻는다(클로저) |
-
-**결과**: wide **1.63×** · wide-struct **2.42×** · struct **1.48×** 빨라졌고, **어떤 형태도
-native/vm 1.13× 를 안 넘는다**(시작 때 2.52×) ⇒ **D1 이 찾은 회귀 부류가 닫혔다.**
-
-### D2-a — census 가 **정적 증명과 트랩을 전부 불필요**하게 만들었다
-
-이 문서와 ROADMAP 이 D2 를 *"넷마다 X 불도달을 정적으로 증명하고, 실패 넷은 4-state 로 남기고,
-생성 코드에 X 진입 트랩"* 으로 스케치했다. ⭐⭐ **계측이 셋을 다 지웠다** — `WProg::run` 의 leaf
-마다 `unk` 를 OR 해 재니 **벤치 8형태가 전부 100% definite** 이고 **picorv32 가 90.1% 실행 /
-91.1% ops** 다. ⇒ 지은 것은 **`run_2s`**(같은 op 열을 **한 평면**으로) + 미지 leaf 에서 **정본 루프로
-폴백**이고, **정확성 표면이 0** 이다 — **폴백이 정본 구현 그 자체이지 그것의 근사가 아니다.**
-
-expr **−11.5%** · mem **−8.3%** · struct **−4.9%**. ⚠️⚠️ **이득의 크기를 그대로 적는다** —
-`WProg::run` 은 전체의 **~20%**(§4.5.334) 이므로 **그 안쪽 최적화의 천장이 ~20%** 이고 관측값이 정확히
-그 범위다. 남은 **D2-b(저장소 수준 2-state)** 는 훨씬 크지만 **정확성 거래를 요구**한다.
-
----
-
-## 0.-17 ⭐⭐⭐ 개정 24 — **Phase B 완료: 제품 표면이 native 하나다** (2026-08-16, ROADMAP §5.1-aq~-at)
-
-**기본 백엔드가 `native` 이고**(플래그 없이 `vita design.sv` → ③층), 제품 형태
-(`--no-default-features`)는 **실행기가 하나**다.
-
-⭐⭐ **이 문서의 §0.2 ⓐ 진단이 여기서 값을 냈다** — *"③층은 넷 저장을 소유하므로 바디 단위 폴백이
-불가능하다(설계 단위 all-or-nothing)"*. 그 성질 때문에 **폴백 대상이 컴파일되지 않은 빌드에서는
-게이트 거부가 loud 일 수밖에 없고**, 그것이 Phase B 가 노린 사다리 상승이다(`fatal[F4004]` · exit 1).
-기본 빌드에서는 같은 거부가 **경고**(`W4030`)에 그친다 — 폴백은 **틀린 답이 아니라 느린 답**이라
-`exit≠0` 이 하강이기 때문이다.
-
-⚠️⚠️ **그러나 이 문서가 예상한 "제품 표면을 좁히는 법" 은 틀렸다.** 계획은 *"VM 5,430줄 삭제 +
-`exec/` 3,246줄 감싸기"* 였는데 착수 전 측정이 둘 다 뒤집었다(§5.1-b2): Phase A 를 지나며
-**tier-3 이 사실상 전부를 공유**하게 됐다 — `backend.rs` 의 `CompiledBody`/`vm_exec`/
-`is_codegen_able` 은 tier-3 의 **빠른 경로**이고, `exec/process.rs` 안에는
-**`compute_effect`/`apply_effect`**(= 문장 의미 전부)가 있다. ⇒ **없앨 것은 코드가 아니라
-선택지였고, 삭제한 줄은 0 이다.** 그 수렴은 이 문서의 §0.2 ⓑ(사이드카 75개)와 함께 이 축의 가장 큰
-구조적 발견이다.
-
-**빌드 두 형태의 계약**(상세 = [03 §feature](03-build-and-portability.md) · 그림 =
-[04 §실행 백엔드 아키텍처](04-architecture.md)):
-
-| | 기본 | `--no-default-features` |
-|---|---|---|
-| 실행기 | interp · vm · **native**(기본) | **native** |
-| `--backend vm` | 동작 | `error[E0001]` · exit 3 |
-| 게이트 거부 | `warning[W4030]` + 폴백 · exit 0 | **`fatal[F4004]` · exit 1** |
-| 테스트 | 5,470 | **147**(`-p sim-engine --lib`) · CI 축 `build-no-oracle` |
-
-⚠️ **성능은 여전히 이 축의 몫이 아니다** — picorv32 native/vm **1.63×**(실측 0.513 vs 0.838 s),
-빨라지는 일은 **Phase D**(본체 = 2-state 좁히기 · cranelift 는 마지막)다.
-
-**⇒ 다음은 Phase C** — `--backend interp` 를 제품 표면에서 빼고 **테스트 전용 오라클**로 강등.
-⭐ 절반은 이미 끝났다: `oracle` feature 가 곧 그 경계이고, C 에 남은 것은 **정책·문서**다.
-
----
-
-## 0.-16 ⭐⭐⭐ 개정 23 — **Phase A(V1) 완주 · 커버리지 100.00% · 거부 0** (2026-08-16, ROADMAP §5.1-ap)
-
-**코퍼스 6,470 / 6,470 = 100.00% native · flip 발산 0 · 전 스위트 5,468 green.**
-`simulate()` 호출 전부가 ③층으로 돈다. **이 문서에서 두 번째로 오래 비어 있던 칸 — *"③층이 받을 수
-있는 설계가 얼마나 되는가"* — 이 닫혔다**(첫 번째는 개정 3 의 격차 크기였다).
-
-⭐⭐ **이 문서의 §0.2 ⓐ·ⓑ 진단은 옳았고, 그것이 곧 작업의 성격을 정했다.** ⓐ *"③층은 넷 저장을
-소유하므로 바디 단위 폴백이 불가능하다(설계 단위 all-or-nothing)"* 가 참이었기 때문에 커버리지는
-**설계 단위 게이트**의 문제가 되었고, ⓑ *"엔진 동작의 상당수가 SimIr 이 아니라 `SimOpts` 사이드카에
-산다"* 가 참이었기 때문에 **하네스가 사이드카를 안 심으면 두 백엔드가 아무도 하지 않은 일에
-일치하는** 함정이 열세 번 반복됐다.
-
-⭐⭐ **그러나 예상은 한 가지에서 크게 틀렸다 — "구현" 이 아니라 "재측정" 이 일의 대부분이었다.**
-30여 슬라이스 중 **커널 코드 0줄**로 끝난 것이 여럿이고(SVA · `handle_copy` · `has_hier_call` 등),
-나머지도 대개 **위임 한 줄 + 라우팅**이었다. 거부 행에 달린 이유가 *"…할 수 없다"* / *"…이기 전까지는"*
-형태이면 **다음 슬라이스가 그것을 거짓으로 만들어 놓고도 행은 남아 있다**는 것이 이 축의 중심
-발견이다.
-
-**게이트의 세 층이 전부 비었다** — `gate_refused!` 매크로 사이트 **17 → 0**(매크로 삭제) ·
-`systask_refusal` 집합 **6→4→2→0** · 실행기 거부 표 **4→5→4→3→1→0** · design 행 도달 가능 **0**.
-⚠️ **검사를 지운 것이 아니다**: 세 함수와 그 소비자는 남아 있고 `_`-free match 가 새 종류를 분류하도록
-강제하며, 핀하는 것은 *"지금 비어 있다"* 다.
-
-⚠️ **성능은 이 축이 손대지 않았다.** picorv32 native/vm **1.73×** 는 §4.5.335 이후 그대로이고,
-빨라지는 일은 **Phase D**(본체 = 2-state 좁히기 · cranelift 는 마지막)의 몫이다.
-
-**⇒ 다음은 Phase B(빌드 분리).** 해설·용어·전체 서사(초보자용) =
-**[study/02](../study/02-v1-native-coverage.md)**.
-
----
-
-## 0.-15 ⭐⭐ 개정 22 — **Phase A~D 확정 · A1 완료 + A5-a** — 78.73% → **81.66%** (2026-08-12, ROADMAP §5.1-f~-m)
-
-**오너가 실행 순서를 확정했다(2026-08-12)**: **A** 커버리지 완주 → **B** V2 = **빌드 분리**
-(제품 = native 하나 · 개발/테스트 = 둘 · **제품 빌드에서 게이트 거부가 loud**) → **C** interp 강등 +
-오라클 정책 갱신 → **D** 기계어 코드젠(D1 벤치 확장 · **D2 2-state 좁히기 = 본체** · D3
-dirty-driven settle · D4 cranelift). 정본 = ROADMAP §5.1.
-
-⭐⭐ **§4.5.334 census 의 범위를 정정한다.** 그것이 반증한 것은 *"오늘의 IR + `Value` 모델 위에
-cranelift 를 얹으면 이긴다"* 이지 *"코드젠이 진다"* 가 아니다 — 그 census 의 **인라인 불가 30.8%**
-(`LogBin` 17.4 + `Unary1` 7.9 + `Cmp` 5.5)가 비싼 이유는 **호출이라서가 아니라 4-state 라서**다
-(`log_bin_tri` 는 `Tri` 둘, `RedFacts::absorb` 는 `known0` 재마스크, `unary1_word` 는 real 가드).
-**2-state 로 좁혀지면 셋 다 기계어 한 명령이다.** ⇒ **P1(2-state)이 본체이고 cranelift 는 마지막.**
-⚠️ **S4 중단 판정(≈6%)도 철회** — picorv32 한 설계의 숫자이고, `levelize.rs` 가 반례를 이미 표로
-갖고 있다(cont-assign 체인 깊이 1→24 에서 **7.8 ms → 814.4 ms = 104×**).
-
-### A1 census (전 스위트 6,304 호출) — **두 숫자를 정정했다**
-
-⭐⭐ **①: §5.1-b 의 greedy 표는 stale 하다.** 지금 상태의 가족 단독 이득: **A3 서브루틴 프레임
-+506(86.76%)** · A2 class+CRV +182 · **A1 `stmt_effect` +155** · A5 +56 · A6 +69 · A7 +64 ·
-A8 +53 · A4 fork **0**. **A3 가 단독으로도 greedy 로도 1위이고 A1 의 3.3배다.**
-⚠️ **행 단위로 재면 A3 가 사라진다**(`X:CALL STATEMENT` 단독 +71 · `S:task frames` 단독 **+1**) —
-네 행이 겹쳐 발화하므로 **가족 단위로만** 의미가 있다.
-
-⭐⭐ **②: A1 은 겹침이 정확히 0 인 7개 sub-slice 다** — 155 설계의 멤버 집합이
-52(file)+28(assoc-iter)+26(seeded-rng)+19(`$sformat`)+18(queue pop)+8(`$readmem*`)+4(`$cast`) = **155**.
-
-⚠️⚠️ **`$sformat`/`$readmem*`/`$cast`(태스크형)는 `systask_refusal` 에 없다** — dispatch 는
-통과시키는데 dest 는 `sched.st.write_lvalue`(**엔진 스토어**)로 쓴다. **지금 그것을 막는 유일한
-것이 `stmt_effect` 행이다.**
-
-### A5-a — `$fclose`/`$dumplimit` (+27 → **81.66%**)
-
-**바꾼 줄 둘.** 각자 fd/size 를 **맨손 `sched.eval`** 로 읽고 있었다 → `eval_task_arg` 스레드 +
-`systask_refusal` 행 삭제. ⭐⭐ **행이 대던 이유가 두 겹으로 stale** — *"`int_arg` 를 통해 읽는다"*
-인데 ⓐ `int_arg` 는 **이미 스레드돼 있고** ⓑ **이 둘은 `int_arg` 를 안 쓴다**(§4.5.338 재발).
-⭐ **이것이 A1-iv 를 쓸 수 있게 만든다** — 열고·읽고·**닫는** 평범한 TB 가 이제 네이티브로 돈다.
-⚠️ 앵커에 알려진 발산 명시(더블 `$fclose` 의 경고 — vita 는 fd 당 한 번). **뮤테이션 2/2.**
-⚠️ 두 뮤테이션 다 첫 시도에서 **패턴이 4곳에 맞아 미적용**이었다 → 줄 번호 지정(§5.1-l 규칙 재발).
-
-### A1-iv-c = **A1 완료** — `$fread` (+8 → **81.24%**)
-
-가족에서 **유일하게 자기 목적지를 읽는다**(원소마다 이전 값과 병합). seam 셋으로 **가족의 마지막 raw
-엔진 쓰기**도 사라졌다. ⭐⭐ **`stmt_effect` 가 census 목록에서 완전히 사라졌다** — 전 멤버 배선(15형
-핀). ⚠️ 행은 **안 지웠다**: 새 effectful id 가 오면 다시 발화해야 옳고, 핀하는 것은 *"지금 비어 있다"*.
-⚠️⚠️ **뮤테이션 하나의 "생존" 이 전부 하네스 artifact 였다**(치환 실패·컴파일 실패를 SURVIVED 로 기록·
-stale 바이너리 실행). 제대로 걸자 앵커가 즉시 잡는다(`4546beef` → `4546xxxx`). ⭐ **그래도 값을 냈다** —
-*"왜 두 스토어가 같은 답을?"* 이 진짜 결함을 찾았다: **`k_read_net` 이 `NetReader::read_net` 의 라우팅을
-두 번째로 철자**하고 있었다. ⚠️ 판별자는 **부분 읽기뿐**(완전히 채워지면 이전 값이 덮인다).
-
-**A1 전체: 78.73% → 81.24%**(+158 설계).
-
-### A1-iv-b — fd 가족 여섯 (+28 → **81.13%**)
-
-`$fopen`·`$fgetc`·`$feof`·`$ungetc`·`$fgets`·`$fscanf`(`$fread` 만 남음 = A1-iv-c). ⭐ **파일 테이블은
-라우팅이 필요 없다** — `SimState` 에 있고 두 백엔드가 같은 객체를 본다(`dyn_heap` 과 동일) ⇒ 필요한
-것은 **좁은 테이블 seam 셋**뿐. ⚠️⚠️ **뮤테이션 2 생존이 등가가 아니라 내 테스트의 눈먼 축이었다** →
-판별자를 지어 **6/6**: `$feof` 의 bad-fd 경고는 **같은 fd 를 `$fgetc` 도 만지고 `bad_fd_warn` 이 fd 당
-한 번**이라 안 죽었고(→ 아무도 안 만지는 두 번째 bad fd), `$ungetc` 의 read-capability 검사는 모든
-pushback 이 **읽기 가능한 fd** 를 향해서 안 죽었다(→ **write-only fd** · 답은 −1 이고 요점은 **경고가
-없다**는 것). ⇒ **"경고가 나온다" 는 그 생산자가 하나일 때만 판별자다.** ⚠️⚠️ **`$fclose` 가 실사용
-파일 TB 를 아직 VM 에 묶는다**(`systask_refusal` · fd 를 `int_arg` 로 읽는다) → **A5 즉시 착수 지점**.
-
-### A1-iv-a — `$sscanf` (+23 → **80.72%**)
-
-⭐ **census 가 file 가족(52)을 다시 쪼갰다** — `$sscanf` 혼자 **20**이고 **fd 를 안 쓴다**(문자열 스캔)
-⇒ file-table 배관 없이 먼저 배송. 남은 fd 가족 32 = A1-iv-b. 지은 것 = `scan_run`/`scan_next`/
-`scan_unget`/`scan_write_dst` 를 **`K: Kernel` 제네릭**으로 + 좁은 seam 둘(`k_file_read_byte`/
-`k_file_unget`). ⚠️ **`k_sched(&mut self) -> &mut Scheduler` 는 컴파일이 거부했다**(`Scheduler<'a,'ir>`
-가 `'a` 에 불변) — 결과적으로 더 나은 설계다: 메서드 둘은 공유 바디에 엔진의 넷을 **줄 수가 없다**.
-**구조체를 노출하지 말고 연산을 노출하라.** ⭐ 파일 테이블은 `dyn_heap` 과 같다(공유 객체) ⇒ 라우팅
-문제이지 저장소 문제가 아니다. **뮤테이션 4/4 사망 · 셋을 새 앵커만 잡았고 그 앵커는 iverilog 핀**
-(판별자는 **B/C 쌍** — 매치 실패는 0 이고 목적지 보존, 빈 소스는 −1 · 틀린 스토어면 B 가 −1 로 무너진다).
-
-### A1-iii — SysTask 목적지 쓰기 셋 (+31 → **80.40%**)
-
-`$sformat` · `$readmem*` · `$cast` 태스크형. 셋 다 `k_dispatch_systask` 를 통과하면서 dest 를
-**엔진 스토어**로 썼고 막던 것은 `stmt_effect` 행뿐이었다. 지은 것 = **`TaskWrites` 싱크 하나**
-(`Direct` = 원래 호출 = 기계적 불변 · `Collect` = tier-3 가 dispatch 후 `k_write_lvalue` 로 드레인).
-⭐ **힙 목적지는 필요 없었다** — `write_lvalue` 가 넷 id 로 `dyn_heap` 라우팅(공유) ⇒ `$s.itoa` 와
-`string` `$sformat` 은 원래 맞았고 **flat 목적지만** 틀렸다. ⭐⭐ **차분이 첫 수정의 발산을 즉시
-잡았다 — 쓰기만 라우팅하고 읽기를 안 했다**(`sc=8'd200; $cast(dc,sc)` → native `dc=x`), 그리고 같은
-클래스가 하나 더(`readmem` 의 윈도 인자). ⚠️ **첫 프로브가 그것을 놓쳤다**: hex 에 `@addr` 지시자가
-있으면 윈도가 판별력을 잃는다 → 지시자 없는 파일 + 넷 경계로 앵커 재작성. **뮤테이션 6/6 사망.**
-
-### A1-ii — ref-arg 쓰기 넷 (+60 → **79.94%**)
-
-`$random(seed)` · `$dist_*` · `ok = $cast(dst,src)` · assoc 반복. ⭐⭐ **쓰기는 처음부터 옳았고
-틀린 것은 읽기였다** — 넷 다 이미 `k_write_lvalue` 로 ref-arg 를 썼는데(부르는 커널의 스토어)
-피연산자는 `Scheduler::eval` 로 **엔진의 넷**을 읽었다. 수정 = **바디를 `exec::stmt_effect` 로 옮기고
-`&mut impl Kernel` 을 받게 한 것**(엔진 경로는 기계적으로 바이트 동일). 새 seam 여섯(`k_eval` ·
-`k_ir` · `k_lvalue_width` · `k_self_width` · `k_assoc_iter_cur_key` · `k_assoc_iter_compute`), 전부
-읽기 전용, 네이티브 `k_eval` 은 **힙 라우팅**. ⭐ **두 번째 철자 하나 삭제**(`Scheduler::assoc_iter_step`).
-⭐⭐ **앵커 절반이 iverilog 핀** — `$random` 은 Annex-N LCG 이고 iverilog 가 레퍼런스라 **드로우+seed
-되쓰기**가 교차검증된다. ⚠️ **`$dist_normal` 은 일부러 뺐다**(vita 53 / iverilog 54 — pre-existing
-반올림 차이 · **알려진 발산을 앵커에 넣으면 앵커가 아니게 된다**). ⚠️ **거부 핀 둘이 `$random` 을
-쓰고 있어 공허해질 뻔했다** → 아직 거부되는 `$fopen`/`$fgetc` 로 옮겼다.
-
-### A1-i — queue pop (+21 → **79.03%**)
-
-**커널 코드 한 줄.** `NativeKernel::k_queue_pop` 의 **위임**과 `stmt_effect_wired` **carve-out**.
-⭐ 위임이 정당한 이유는 읽어서 확인했다 — `Scheduler::k_queue_pop` 은 IR · **공유 `dyn_heap`** ·
-IR 유래 폭 · 공유 warn latch 만 읽고 **넷 값을 하나도 안 읽는다**.
-
-**뮤테이션 8 중 7 사망 · 1 생존.** ⭐⭐ **B(공유 코드 front/back swap)가 §5.1-e 의 깨끗한 실증** —
-**차분은 killer 목록에 없었고** 앵커 10개가 잡았다. ⚠️ 그 10 중 9는 **기존** iverilog-pinned
-테스트다(G 도 마찬가지) ⇒ **앵커 의무는 유효하되 먼저 기존 앵커를 세어라.**
-⭐ **H 생존은 등가**(`lw.max(sw.width)` 의 `lw` 는 잉여 — `write_lvalue` 가 목적지 폭·부호를 다시
-적용한다. concat·part-select·wide dest 셋 다 바이트 동일 실측 · §4.5.338 `formal_width` 와 같은 클래스).
-
-## 0.-14 ⭐⭐ 개정 21 — **슬라이스 3b: 원소 정제, 그리고 하네스가 세 번째로 같은 함정을 밟았다** — 75.99% → **78.73%** (2026-08-12, ROADMAP §5.1-d)
-
-**커널 코드 0줄.** 지운 것은 `design_eligibility` 의 행 둘(`dyn_elem_string`·`dyn_elem_real`).
-
-슬라이스 2a 는 **컨테이너**만 열고 정제 둘을 일부러 남겼다 — *"string 원소는 바이트열, real 원소는
-f64 이고 둘 다 컨테이너 행이 측정된 비트벡터 원소가 아니다"*. 재보니 **두 lane 이 전부 `SimState`
-자기 힙 메서드 안에 산다**(`coerce_dyn_elem`·`alloc_dyn_array`·`dyn_read`/`dyn_write`) — 슬라이스 2
-가 이미 모든 힙 접근을 그리로 라우팅하므로 **정제는 컨테이너만큼이나 보수적이었다.**
-
-### ⚠️⚠️ 하네스 갭, 세 번째 — 그리고 이번엔 두 실패 모드가 동시에 보였다
-
-`build_with_opts` 가 `string_elem_dyn_nets`/`real_elem_dyn_nets` 를 설치하지 않았다:
-
-| 반쪽 | 증상 |
-|---|---|
-| **string** | 두 백엔드가 **똑같이** `[ ][\u{1}][ ] len=0` — 설계가 말하는 것과 다른 것을 재면서 **완벽히 일치** |
-| **real** | 실제로 **발산**(VM `2.000000` / native `1.500000`) — 핸들이 `is_real` 이 아니라 원소 강제가 비트 resize 로 떨어진다 |
-
-⇒ **string 만 있는 슬라이스였다면 초록으로 배송됐다.** 사이드카를 설치하고 값 자체를 고정하는
-**절대 앵커**를 지었다(`new[]` 의 IEEE §7.5.2 원소 기본값 `""`/`0.0` 포함) — **차분은 이 선을
-원리적으로 못 지킨다.**
-
-⭐ **일반 규칙**: 사이드카는 선택적 문맥이 아니라 **소스의 의미의 일부**다. 코퍼스가 철자할 수 있는
-것은 전부 자기 테이블을 하네스에 가져야 한다. (§4.5.337 `assert_ctl` · 2c `queue_slice_stmts` ·
-3b 여기 — **세 번 다 같은 함수**.)
-
-### task frames 는 재보고 미뤘다
-
-`Terminator::Call` 은 tier-3 워크에 arm 이 없다. 엔진의 그 팔은 **두 갈래**다 — suspendable
-태스크(콜스택 push·park/resume·dyn stash·재귀 깊이)와 **subset 태스크의 동기 실행**(입력 평가 →
-`run_task_call` → 호출자 lvalue 로 copy-out). 후자만이면 3a 와 같은 라우팅 문제다
-(copy-out 이 `sched.st.write_lvalue` = 엔진 store → `write_routed` 필요).
-
-**착수 전에 쟀다**: 이 행에 걸린 **391 중 143(36.6%) 만 suspendable 태스크가 0개**
-(`tasks=1 susp=1` 196 · `tasks=1 susp=0` 133) ⇒ **subset 만 지어도 상한이 +143**, 그것도 프로세스
-바디에 새 terminator arm 과 `Kernel` seam 을 지어야 한다. **`stmt_effect`(205)·`class`(164) 보다
-크지 않으므로 순서를 뒤로 미룬다.**
-
----
-
-## 0.-13 ⭐⭐ 개정 20 — **슬라이스 3a: 다른 목적으로 지은 seam 이 거부 행을 무효화했다** — 72.75% → **75.99%** (2026-08-12, ROADMAP §5.1-d)
-
-**커널 코드 0줄.** 지운 것은 `native::frames` 의 행 하나(`a call in a system-task argument: S3b`).
-
-### 그 행의 이유는 자기 주석에 정확히 적혀 있었고, 이미 거짓이었다
-
-> *"`k_dispatch_systask` 는 `&mut Scheduler` 를 들고 있어서 `dispatch` 에 아레나를 **혼자** 넘기고
-> `&SimState` 를 composite 로 함께 빌려줄 수 없다"*
-
-그래서 `$display("%0d", f(x))` 의 호출이 `NetArena::eval_call`(**loud panic**)에 닿았다. 그런데
-**V1 슬라이스 2 가 한 층 아래에 composite 를 지어 뒀다** — `SimState::eval_expr_with` 가 힙 넷을
-라우팅하려고 리더를 `HeapRouted` 로 감싸고, **그 래퍼가 두 store 를 다 든다.** 그 `st` 쪽에서
-호출 가족을 답하면 끝이고, 답은 `NativeKernel` 이 한 층 위에서 주는 것과 **같다**
-(`SimState::run_frame_call` · 같은 window/slab · `frames_admitted` 가 *"모듈 넷을 안 읽는다"* 를
-증명한 프레임 클래스).
-
-⭐⭐ **교훈: 거부 행은 자기 이유가 언제 거짓이 되는지 모른다.** 슬라이스 2 는 힙 이야기였고 이
-행은 호출 이야기였는데, **필요한 물건이 같았다**(두 store 를 함께 든 프레임). 행의 이유가
-*"…할 수 없다"* 형태면, **다음 슬라이스마다 그 문장을 다시 읽어라.**
-
-### ⚠️⚠️ 호출 가족은 넷이고, 뒤의 셋에 대한 내 주장을 뮤테이션이 반증했다
-
-`eval_call` 만이 아니라 `resolve_virtual_call`·`formal_width`·`formal_is_string` 도 같이 간다.
-나는 *"아레나의 `eval_call` 은 패닉이지만 `formal_*` 는 **트레이트 기본값**이라 조용히 틀린다"* 라
-적고 전용 차분 행까지 지었다. **셋 다 생존했다.**
-
-실측: 셋을 아레나로 되돌려도 narrow·widening-signed·string formal 이 **바이트 동일**하고,
-결정적으로 **적대적인 `formal_width`(모든 formal 에 `Some((1,false))`)를 줘도 출력이 안 변한다.**
-`eval_core` 의 강제는 **pre-sizing** 이고 `run_frame_call` 이 자기 메타데이터로 다시 바인딩한다 —
-**리더의 답은 덮어써진다.**
-
-⇒ **셋은 오늘 동치 뮤테이션이다.** 그래도 `st` 로 보낸다(커널과 같은 답 · `resolve_virtual_call`
-이 이미 적어 둔 이유). ⚠️ **뮤테이션 둘을 동시에 걸면 서로를 가린다** — B·C 를 함께 적용했을 때
-`formal_is_string=false` 가 `formal_width` 의 1비트 답을 우회시켰다.
-
-### 게이트 쪽
-
-그 행을 증명하던 refusal 설계 3개는 **positive 테스트로 뒤집었다**
-(`a_call_in_a_system_task_argument_is_admitted`) — 줄어드는 벡터는 *"키가 사라졌다"* 를 보일 뿐
-*"그 형태가 돈다"* 를 안 보인다. `frames.rs` 모듈 doc 의 *"둘 다 S3b"* 도 실제 상태로 정정
-(**남은 것은 `schedule_delayed_cas` 하나** — 그 경로는 `eval_expr_with` 를 안 지난다).
-
-**발산 0** — flip 런 5387 중 5384 통과, 실패 3건은 전부 백엔드 이름 핀.
-
----
-
-## 0.-12 ⭐⭐ 개정 19 — **V1 슬라이스 2(heap) 완료** — 재측정 **54.66% → 72.75%** · 발산 0 (2026-08-11, ROADMAP §5.1-c)
-
-V0 이 정한 순서의 2번. 넷으로 갈라 **넷 다 닫았다** — 2a `dyn_array` · 2b `string` ·
-2c `queue`(+`queue_ops`) · 2d `assoc`+`AssocStr`.
-
-**재측정(투영 아님)**: V0 의 계기를 다시 세워 전 스위트를 돌렸다.
-
-| | V0 (2026-08-10) | 슬라이스 1+2 후 |
-|---|---|---|
-| `simulate()` 호출 | 6,251 | **6,290** |
-| 네이티브 | 3,417 (**54.66%**) | **4,576 (72.75%)** |
-| 발산 | 0 | **0**(기본 백엔드 flip: 5385 중 5382 통과 · 실패 3건은 전부 *"기본 백엔드가 vm"* 핀) |
-
-⚠️ **슬라이스마다 적어 둔 투영은 ≈74.0% 였고 실측은 72.75%다.** census 는 실측이지만 그 위의
-greedy 누적은 산술이고, 슬라이스가 **자기 거부 행을 새로 만들면**(아래 concat lvalue) 어긋난다.
-
-### 값은 넷 슬롯이 아니라 `dyn_heap[net]` 에 있다
-
-힙은 **핸들이 아니라 넷 id 로 키잉된 별도 저장소**이고 `NativeKernel` 은 이미 그 `SimState` 를
-빌린다. 그래서 이것은 "새 저장소를 짓는 일" 이 아니라 **라우팅**이다. 지은 것:
-
-1. **쓰기 퍼널 하나** — `NativeKernel::write_routed`(7 사이트 → 1). 힙 넷이면 `dyn_write`.
-2. **복합 리더를 전면적(total)으로** — `NetReader` 21 메서드 중 tier-3 이 오버라이드한 것이
-   **7개뿐**이었고 나머지 14개의 기본값은 전부 **그럴듯한 값**을 낸다(`None`→X-poison ·
-   `false`="assoc 아님" · `xs`). **게이트가 닫혀 있는 동안만 무해하다.**
-3. **`HeapRouted`** — 포맷/인자 경로가 아레나를 리더로 받으므로, 힙 넷만 `SimState` 로 되돌리는
-   래퍼. 자리는 `SimState::eval_expr_with` = **힙 소유자와 호출자의 store 를 함께 든 유일한
-   프레임**. 리더가 `routes_heap_to_state()` 로 요청할 때만 켜지므로 엔진은 `if false`.
-
-### ⭐⭐ 그리고 2c 의 산출은 queue 가 아니라, 2a·2b 가 **틀린 채 배송돼 있었다**는 발견이다
-
-`builtins::dispatch` 는 대체 store 를 파라미터로 받지만 **포맷터를 거치는 arm 만** 그것을 쓴다.
-나머지는 `Scheduler::eval` / `eval_ctx_top` / `assoc_key_of` 로 **`SimState` 자기 넷** 위에
-`EvalCtx` 를 짓는데, 그것이 네이티브 런이 **한 번도 안 쓰는** store 다. 힙 종류가 전부 거부되던
-동안엔 도달 불가였고, 2a/2b/2c 가 넷을 도달 가능하게 만들었다:
-
-| 철자 (인자가 넷) | native | VM |
-|---|---|---|
-| `d = new[n]` | `size=0` | `size=3` |
-| `s.itoa(v)` | `s=0` | `s=200` |
-| `q.push_back(a)` | `q[0]=x` | `q[0]=42` |
-| `r = q[a:b]` | 빈 큐 | `size=2` |
-
-⭐ **판별자는 "인자가 넷" 하나뿐이다** — 바로 옆의 `q.insert(i, 32'd99)` 는 리터럴이라 맞았고,
-2a·2b 의 차분 행이 **전부 리터럴 인자**라 두 스위트가 초록이었다.
-⇒ **슬라이스가 태스크를 admit 하면 그 태스크의 인자는 두 번째 store 읽기이고, 자기 행이 필요하다.**
-
-고친 방법은 §4.5.294 가 이미 지어 둔 `eval_task_arg` + 폭 쌍둥이 `eval_task_arg_ctx`(원소 폭으로
-context-size 하는 mutator 용). 둘 다 `None` 팔이 **예전 그 호출 자체**라 엔진은 기계적 불변
-(§4.5.314 opt-in 규칙). 구조 핀 `every_untreaded_store_read_in_builtins_sits_behind_a_reject_row`
-가 남은 raw 읽기 14개를 **파일별 개수 + 각각을 막는 행 이름**으로 고정한다 — 행을 여는 슬라이스는
-거기서 먼저 깨진다.
-
-### ⭐ 계기를 두 번 지었고 두 번 다 표적을 지목했다
-
-**`NetArena::heap[net]` + `assert_owns(net, site)`** — 아레나가 자기가 소유하지 않은 넷으로
-불리면 죽는다. 16개 슬롯 인덱싱 지점을 눈으로 감사하는 대신 계기를 달았더니 우회 지점을
-**정확히** 지목했다(포맷 엔진이 아레나를 제네릭 리더로 받는 §4.5.293/294 경로). 그리고 2b 에서는
-**빌드 시점**에 잡았다 — `string` 의 선언 init 은 패킹된 리터럴인데 슬롯은 원소 폭이라 t0 init 이
-터졌다(⇒ heap 넷은 t0 슬롯 init 을 건너뛴다).
-
-⚠️ **거부 핀 셋이 공허해질 뻔했다** — `native_gate.rs`·`cli/obs.rs`·`cli/backend_flag.rs` 가 전부
-`string s; int q[$]` 를 "거부되는 설계" 로 쓰고 있었다(슬라이스 2 가 셋 다 admit). `real` 로
-옮겼다 — **양쪽 게이트 절반이 자기 이름으로 거부**하는 유일한 남은 종류다.
-
-⚠️ **`k_queue_pop` 을 막는 행이 바뀌었다**: 예전 이유(*"NetKind 스캔이 queue 저장을 거부"*)는 이제
-거짓이고 실제로 막는 것은 `stmt_effect` 다(`x = q.pop_front()` 는 `rhs_is_stmt_effect` 가 세는
-`BlockingAssign`). 측정으로 확인 — pop 없는 queue 설계는 오늘 네이티브로 돈다.
-
-### ⭐⭐ 뮤테이션 11/11 사망 — 그리고 배터리가 자기를 반증했다
-
-처음엔 셋이 **"소스 스캔 핀만 잡았다"** 로 보고됐다. 두 원인이 겹쳐 있었다:
-
-1. ⚠️ **`cargo nextest` 는 기본이 fail-fast** 라 첫 실패에서 나머지를 취소한다 — 기록된 killer 는
-   가장 먼저 도는 테스트 하나였다. `--no-fail-fast` 로 다시 물으니 둘은 **코퍼스가 이미 잡고 있었다**.
-2. ⭐⭐ 남은 하나는 **진짜로 코퍼스가 눈멀어 있었다** — `build_with_opts` 가
-   `queue_slice_stmts`/`queue_bounds` 를 설치하지 않아 `r = q[a:b]` 는 슬라이스가 아니었고
-   `int bq[$:2]` 는 bound 가 아니었다. **§4.5.337 이 `assert_ctl` 로 겪은 함정의 재발.**
-
-⇒ **소스 스캔 핀은 변경 탐지기이지 동작 테스트가 아니다.** 핀만 잡는 뮤테이션이 남으면 그것은
-게이트가 강하다는 신호가 아니라 **그 행이 공허하다는 신호**다.
-
-### 파형 축 (그라운딩 질문 ⓓ)
-
-*"VCD·dirty·엣지 채널이 힙 넷을 어떻게 다루는가"* 의 답은 **양쪽 백엔드에서 셋 다 밖**(넷 dirty
-채널 없음 = dyn 선례)이고, 옆의 평면 넷은 그대로 변화를 낸다. `$dumpvars` 를 든 queue+string 행이
-`agree` 의 **VCD 바이트 비교**를 타므로 영구화됐다.
-
-### 2d: assoc — 유일하게 새 arm 이 필요했던 종류, 그리고 flip 이 찾은 2a 의 구멍
-
-dyn/string/queue 는 전부 공유 `dyn_write` 로 갔다. **assoc 키는 i64(또는 바이트열)라
-`(offset, word)` u32 쌍을 못 탄다** — `resolve_offsets` 가 키를 `Offsets::AssocKey`/`AssocStrKey`
-로 **대역 밖**에 싣고 `as_slice()` 는 `&[]` 를 낸다. 그래서 `unwrap_or((0,0))` 이 **모든 키를
-조용히 0 으로** 만들었다: `aa[3]=7; aa[9]=11` 이 `x x 0 0`(VM `7 11 2 1`). 수정 = `write_routed`
-가 `SimState::write_lvalue` 와 **같은 지점에서 같은 두 메서드로** 분기.
-
-키 읽기 둘도 배선하면서 **키 규칙을 추출**했다(`assoc_key_eval_ctx`·`assoc_key_of_value`·
-`assoc_str_key_of_value`) — `EvalCtx::assoc_key` 는 이제 그 위의 한 줄이고, 옛 진입점
-`Scheduler::assoc_key_of`/`assoc_str_key_of` 는 **지웠다**(두 번째 철자는 한 편집만큼 떨어져
-있으면 언젠가 **쓰기 lane 과 다른 엔트리**를 가리킨다).
-
-⚠️ **string 키는 배선 전에도 일치했고 그것은 운이었다** — `string` 키 자체가 힙 넷이라 엔진 store
-가 마침 들고 있었다. **packed 키**(`reg [15:0] k = "hi"`)가 판별자다.
-
-⚠️ **구조 핀에 패턴 구멍**: `sched.assoc_key_of(` 가 `assoc_str_key_of` 를 안 셌다 —
-**한 식구의 이름 하나를 적은 패턴은 스캔이 아니라 화이트리스트다.**
-
-#### ⭐⭐ flip 런이 2a 이래의 결함을 찾았다 — 그리고 코퍼스는 그것을 원리적으로 못 본다
-
-`write_routed` 는 lvalue **전체가 한 청크**일 때만 라우팅하고, 엔진은 **청크마다** 라우팅한다
-(`write_chunk` 의 첫 질문이 `dyn_is_handle[net]`). `{d[0], x} = 8'hAB` 이 두 청크를 다 아레나로
-보냈고 힙 청크가 `assert_owns` 에 닿았다. **그 두 테스트는 기본 백엔드로 도니 아레나에 아예 도달
-하지 않는다** — 신호는 **전 스위트 백엔드 flip** 뿐이었다.
-
-**거부했다**(storage 게이트·자기 이름). 라우팅은 소스를 청크별로 쪼개 서로 다른 store 로 보내는
-일이고 **그 분할 규칙은 이미 `NetArena::write_lvalue` 안에 있다** — 라우터의 두 번째 철자가
-§4.5.279 클래스다. 비용은 고르기 전에 쟀다(설계 3건). correct-support 는 퍼널에 **청크별 탈출구**
-를 주는 별도 슬라이스.
-
-⚠️ `string` 은 이 행에 없다: `{s, x} = …` 는 **어느 게이트에도 도달 안 한다**(elaborate 가 이미
-거부) — 넣었으면 공허한 행이었다.
-
-### 다음 표적 (census · 첫 blocker 기준이라 과소평가)
-
-| 잔여 blocker | 건수 |
-|---|---|
-| `task frames (Terminator::Call)`: S3b | **391** |
-| `dyn_elem_string` | **206** |
-| ~~`a call in a system-task argument`: S3b~~ **✅ 3a 해소(+205)** | ~~203~~ |
-| `stmt_effect` | **200** |
-| `class` 164 · `fork` 94 · `handle_copy` 87 · `real` 69 · `coverage` 64 | |
-
-⭐ 상위 셋 중 **둘이 같은 것**(서브루틴 프레임 = 슬라이스 3)이고, **`dyn_elem_string` 206** 은
-슬라이스 2 가 일부러 남긴 원소 정제라 heap 가족의 자연스러운 다음 조각이다.
-
----
-
-## 0.-11 ⭐⭐ 개정 18 — **V1 슬라이스 1(SVA): 거부가 순전히 보수적이었다** — 54.7% → 66.8% (2026-08-11, §4.5.337)
-
-V0 이 정한 순서의 1번. **커널 코드는 한 줄도 안 늘었다** — `design_eligibility` 의 `sva` 행을
-지웠을 뿐이다.
-
-### 왜 아무것도 지을 게 없었나
-
-**SVA 는 런타임 기계장치가 아니다.** elaborate 가 `assert property(@(clk) a |-> b)` 를
-`always @(clk) if (a && !b) $error(…)` 로 **desugar** 하므로 엔진에 도착하는 것은 평범한 IR 이고,
-SVA 고유의 런타임 상태는 StmtId 테이블 **둘**(`assert_fire`·`assert_ctl`)뿐이다. 그리고 그 둘은
-**공유 `builtins::dispatch` 안**에서 읽히는데, tier-3 은 §4.5.293 이래 이미 거기로 배선돼 있다.
-
-⭐ **그리고 진짜 기계장치가 필요한 SVA 형태는 이미 자기 이름으로 거부되고 있었다** — `cover
-property` 와 SVA liveness 는 `final_procs` 엔트리를 만들므로 `executor_rows` 가 **`final` 블록**
-으로 거부하고(실측), §16.4 deferred assertion 은 `mature_deferred` 훅이 tier-3 리전 캐스케이드에
-없어 **별도 `deferred_assert` 행**이다. census 로 몫을 갈랐다: **`sva` 혼자 760 · `deferred_assert`
-혼자 14 · 겹침 0** ⇒ 슬라이스는 `sva` 행 **하나**.
-
-### 게이트
-
-전 스위트를 `Backend::Native` 기본으로 돌려 **발산 0**(새 실패는 지운 행을 핀하던 게이트
-테스트 하나뿐). 영구 게이트 = 차분 코퍼스에 SVA 5행 추가(`|->`·`|=>`·assert control·
-sampled-value 5종·NBA 카운터 위 property) + 거부 이웃 핀 + **절대 앵커**.
-
-### ⭐⭐ 그리고 이 슬라이스의 값은 게이트가 세 번 자기 자신을 반증한 데 있다
-
-**① 하네스가 사이드카를 설치하지 않았다.** `build_with_opts` 는 손으로 고른 부분집합만 넣는데
-거기 `assert_fire`/`assert_ctl`/`defer_*` 가 없었다 → `$assertoff` 가 **플래그를 안 뒤집고 그냥
-출력되는** 설계로 두 백엔드를 비교하고 있었다(= 설계가 말하는 것과 다른 것을 재고 있었다).
-발견 방법은 **거부 이웃 핀이 `Ok(())` 를 낸 것** — CLI 는 같은 설계를 `deferred_assert` 로
-거부하는데 하네스는 통과시켰다.
-
-**② ⭐⭐ 차분은 공유 코드에 구조적으로 눈멀었다 — 실측.** 뮤테이션 E(`assert_fire` 억제
-early-return 삭제)·F(`assert_ctl` 이 절대 disable 안 함)는 **엔진 게이트를 전부 통과**하고
-`cli::sva_rest` 의 절대 핀에서만 죽었다. 두 백엔드가 한 자리에서 읽는 규칙은 **둘이 함께
-움직이므로** 값 일치로는 볼 수 없다. → 절대 앵커
-(`sva_assert_control_actually_suppresses_exactly_one_violation`)를 지었고, 그러자 E·F 가
-**엔진에서도** 죽는다. 같은 앵커가 하네스 뮤테이션 B·C 도 죽인다(그 전엔 **생존**했다).
-
-**③ 앵커를 짓다 내 기대가 틀린 것을 쟀다.** `$asserton` 시점에 `a=1,b=0` 이 **그대로 남아**
-다음 posedge 에서도 위반한다 — 재활성화 전에 창을 비워야 "정확히 하나" 가 참이 된다.
-**뮤테이션 6/6 사망.**
-
-⚠️ **절차 사고**: 뮤테이션 스크립트가 복원에 `git checkout -- <file>` 을 써서, dirty 였던 이
-슬라이스의 **커밋 안 된 편집 둘을 HEAD 로 되돌려 지웠다**(그 결과 앵커 실패 2건과 **가짜 kill**
-2건이 나왔다). 복원은 **바이트 스냅샷**이어야 한다.
-
----
-
-## 0.-10 ⭐⭐ 개정 17 — **V0: 커버리지를 처음으로 쟀다** — 54.7% 네이티브 · **발산 0** · 상위 슬라이스 셋이 87% (2026-08-10, §4.5.336)
-
-성능 축이 닫힌 뒤(개정 16) 첫 커버리지 측정. **기본 백엔드를 `Backend::Native` 로 flip 하고 전
-스위트를 돌렸다** — 이 저장소가 기록해 둔 기법 그대로다(*"a corpus differential is far weaker than
-5000 real tests"*, `Backend::Bytecode` 의 doc comment).
-
-### 결과 — 두 숫자
-
-| | 값 |
-|---|---|
-| `simulate()` 호출 | **6,251** |
-| **네이티브 실행** | **3,417 (54.7%)** |
-| fallback | 2,834 — design 2,230 · storage 496 · executor 108 |
-| 테스트 | 5377 중 **5374 통과** |
-| **출력 발산** | **0** |
-
-⭐⭐ **실패 3건은 전부 "기본 백엔드가 vm 이다" 를 단언하는 테스트**다
-(`the_default_backend_is_the_vm` · `run_json_codegen_is_backend_invariant_and_backend_is_recorded` ·
-`run_json_codegen_pins_the_vm_claim_and_reasons`). **오늘의 ③층은 자기가 받아들이는 절반에 대해
-이미 바이트 정확하다** — 남은 일은 전부 커버리지이고, 정확성 부채가 아니다.
-
-### 계기가 두 번 틀렸고, 두 번 다 측정 자신이 잡았다
-
-⚠️ **① `SimOpts::default()` 가 enum default 를 안 쓴다.** `backend: Backend::Bytecode` 를
-**하드코딩**하고 있어서, `#[default]` 만 옮기면 움직이는 것은 CLI 절반뿐이다(`unwrap_or_default()`).
-**"기본값을 뒤집었다" 가 참이 되려면 두 자리를 뒤집어야 한다.**
-
-⚠️ **② 병렬 census 의 찢어진 쓰기.** `writeln!` 은 **unbuffered `File`** 에 포맷 조각마다
-`write(2)` 를 낸다. nextest 는 테스트마다 프로세스라 그 조각들이 섞여 `okok`·`designrow`·
-바이너리 경로가 붙은 행이 나왔고 **행 수가 1.85× 부풀었다**(11,563 vs 실제 6,251). 수정 = 미리
-포맷한 한 줄을 `write_all` 로 한 번(O_APPEND 는 작은 쓰기가 원자적). ⭐ 판별자는 **레이아웃을
-아는 파서**였다 — census 스크립트가 알려진 층 이름 집합에 없는 값을 만나면 오염을 **선언**한다.
-
-### ⭐⭐ 그리고 첫 census 는 V1 을 정렬하지 못했다 — 게이트가 **단락**하기 때문이다
-
-프로덕션은 design → storage → executor 순으로 **먼저 걸리면 멈춘다**. 그래서 design 에서 걸린
-설계의 storage/executor 상태는 **측정되지 않고**, *"행 X 를 닫으면 몇 개가 네이티브가 되는가"* 는
-원리적으로 답할 수 없다. 계기를 고쳐 **세 층을 독립으로** 물었고, 그러자 구조가 나왔다:
-
-⭐⭐ **design 게이트와 storage 게이트가 같은 기능을 두 번 이름 부른다.** `string` 넷은
-`D:string`(설계 행)이면서 `S:heap-slot`(저장 거부)이다 — 그래서 **`D:string` 은 369회 발화하는데
-단독 원인이 0회**이고, 한쪽만 닫으면 이득이 **정확히 0**이다. `D:real`(74회) / `S:real-slot`(69회)도
-같은 짝. **⇒ 슬라이스의 단위는 행이 아니라 한 기능이 걸린 게이트 전부의 집합이다.**
-
-거부 설계의 blocker 개수 분포도 그 얘기를 한다 — 1개 1,338 · 2개 1,038 · 3개 328 · 4개 이상 130.
-**절반 이상이 다중 blocker** 라서 행 단위 히스토그램은 순서를 거짓말한다.
-
-### V1 슬라이스 순서 (greedy, 누적)
-
-**SVA +774 → 67.0% · heap 저장+네 종류 +560 → 76.0% · 서브루틴 프레임 +712 → 87.4%** ·
-`stmt_effect` +241 → 91.2% · class/OOP/CRV +163 → 93.9% · fork +104 → 95.5% · 거부 시스템태스크
-+83 → 96.8% · `real` +72 → 98.0% · coverage +64 → 99.0% · 나머지 다섯 +61 → 100%.
-(전체 표 = ROADMAP §5.1-b)
-
-⭐ **상위 셋이 87.4% 를 산다**, 그리고 그 셋은 vita 의 Phase-2/3+ 자산 그 자체다.
-⚠️ `fork`·`file_directed` 는 **단독 이득 0** — 항상 다른 것과 함께 발화한다.
-
-⚠️ **테스트 단위 귀속은 이 측정에서 쓸 수 없다**: fallback 2,834 중 **2,656(93.7%)이 CLI
-서브프로세스**라 `cli::*` 통합 테스트가 전부 바이너리 경로 하나로 뭉친다. 단위는 `simulate()`
-호출이다. (그 무게가 한 설계의 반복이 아님은 별도로 확인했다 — 예컨대 SVA 는 CLI 테스트 **26
-파일·400+ 함수**에 퍼져 있다.)
-
-**스캐폴드는 되돌렸다** — 트리 변경 0(§5.1 의 *"되돌리기 0, 구현 아님"* 그대로).
-
----
-
-## 0.-9 ⭐⭐ 개정 16 — **S4: 중단 판정이 발동한다**(이득 <1.3×) · 그리고 다음은 속도가 아니라 커버리지다 (2026-08-10, §4.5.335)
-
-§4.5.334 의 census 로 S3 의 cranelift 절을 닫고, 계획대로 **S4(스케줄 소거)**로 갔다.
-
-### 한 일
-
-`settle_cont_assigns` — 이 백엔드의 가장 뜨거운 루프 — 가 **연속 대입 평가마다 `Lvalue` 를 clone**
-하고 있었다. `Lvalue` 는 `Vec<LvalChunk>` 를 소유하므로 **대입당·패스당 힙 할당**이다. 강제한 것은
-아무것도 없었다: `ir` 은 이 함수의 파라미터라 `k` 와 **독립적으로** 빌려지고, 그래서 `&mut k` 쓰기를
-가로질러 살아남는다. 멀티드라이버 루프의 그룹 멤버 `Vec` clone(그룹당·패스당)도 같은 자리에 있었다.
-
-**picorv32 0.517 → 0.504 (+2.5%)** · keccak_f_flat 1.340 → 1.329.
-
-### ⭐⭐ 그리고 프로파일이 S4 의 나머지를 **짓기 전에** 결론냈다
-
-S4 가 실제로 겨냥하는 것(런타임 깨우기 탐색)의 몫:
-
-| | % |
-|---|---|
-| `propagate` | 2.1 |
-| `WakeTable::wake` | 1.4 |
-| `pass` 구성(take+extend+sort+dedup, 패스마다) | ~2 |
-| **합계** | **≈ 6%** |
-
-⚠️ `settle_cont_assigns` 의 9.1% 는 대부분 **스케줄이 아니라 실제 평가**다 — 정적 깨우기 마스크로
-바꿔도 사라지지 않는다.
-
-**즉 S4 의 남은 상한은 ≈ 1.06× 이고, §7.3 이 적어 둔 중단 판정은 "이득 <1.3× 면 기록 후 유지"다.**
-→ **S4 중단 판정 발동. 스케줄러는 남긴다.** 정적 깨우기 마스크는 **짓지 않는다** — 프로파일이
-그것이 값을 못 낸다고 이미 말했다.
-
-### ⭐⭐ 그래서 남은 격차는 단가가 아니다
-
-picorv32 고정 비용(parse+elaborate+setup) = **19 ms · 런의 3.7%** → **시뮬레이션이 공짜여도 상한 26.8×**
-(⚠️ §6.3 의 *"~85 ms · 14% · 상한 약 7×"* 는 낡았다 — 이 실측으로 정정).
-
-그런데 S3 도 S4 도 1.1× 를 못 넘고, S5(NBA 전용화)의 표적도 `k_schedule_nba_scalar` 3.8% 뿐이다.
-1.7× 와 26.8× 사이의 대부분은 **vita 가 일부러 안 하는 것**(2-state 좁히기 · levelize)과
-**vita 에 없는 축**(멀티코어)이 메운다 — verilator 76× · VCS/Xcelium 이 하는 일이 그것이다.
-
-**⇒ ③층 v1 의 성능 축은 여기서 수확 체감에 도달했다. 다음 표적은 속도가 아니라 커버리지다**(§5.1).
-
-## 0.-8 ⭐⭐ 개정 15 — S3 코드젠 본체 착수 · **census 가 S3 의 전제를 반증했다** (2026-08-10, §4.5.334)
-
-S3 §5 의 논거는 한 문장이다 — *"넷은 슬롯 주소로 직접 store/load — **커널 호출 없음**(여기가 ②층 JIT 이
-진 지점이다)"*. 즉 **핫 패스가 leaf load + 산술이므로 그것을 인라인하면 이긴다**는 것이다.
-코드를 쓰기 전에 그 전제를 쟀다.
-
-### 실행 census (picorv32, `--backend native`)
-
-| | |
-|---|---|
-| `WProg` 실행 | **6,287,743** |
-| 실행된 op | **24,862,723** (평균 **3.95** op/프로그램) |
-| 활성화 | **662,913** (컴파일 542,907 + 워크 120,006) → **9.49 프로그램/활성화** |
-| 활성화당 시간 | 815 ns · 그중 `WProg::run` **166 ns** |
-
-**op 별:**
-
-| WOp | % | cranelift 로 인라인되나 |
-|---|---|---|
-| `Load` | **39.3** | ✅ 그런데 **이미 Rust 에서 `buf[vi]` 직접 읽기다** |
-| `Const` | 17.6 | ✅ |
-| **`LogBin`** | **17.4** | ❌ `eval::binops::{log_and,log_or}` **공유 자유 함수 호출** |
-| **`Unary1`** | **7.9** | ❌ `eval::unary_self_of` |
-| **`Cmp`** | **5.5** | ❌ `eval::binops::{relational,log_eq,case_eq}` |
-| `Splice` 5.1 · `Slice` 4.2 | 9.3 | ✅ |
-| `Tern` | 1.4 | ~ |
-| **산술 전부**(`Add`·`Sub`·`And`·`Or`·`Xor`·`Not`·시프트·`LoadIdx`) | **1.5** | ✅ |
-
-**프로그램 모양별** (84 종 · 상위 14 가 75.3%):
-
-| 모양 | % |
-|---|---|
-| `L` (Load 하나) | **28.3** |
-| `C` (Const 하나) | **18.9** |
-| `LCK` 5.5 · `LU` 2.9 · `LLB` 2.7 · `LLUB` 2.5 · … | |
-
-### ⭐⭐ 그래서 전제가 셋 다 틀렸다
-
-1. **인라인할 산술이 없다 — 1.5%다.** 실행되는 것은 로드·상수·**4-state 규칙 함수**다.
-2. **leaf load 는 이미 직접 접근이다.** `WOp::Load` 는 `buf[vi]`, `buf[vi+1]` 두 줄이다. ②층 JIT 이
-   진 이유(*"every leaf load is a CALL back into Rust"*)는 ②층 저장소가 Rust 자료구조라서였고,
-   **③층은 S1 에서 이미 그 문제를 없앴다.** 코드젠이 더 없앨 것이 없다.
-3. **인라인 불가한 30.8%(`LogBin`+`Unary1`+`Cmp`)가 하필 §4.5.315·330·331 이 "한 철자"로 통합한 바로
-   그 함수들이다.** cranelift IR 로 다시 쓰면 **의미 재진술**이고 그것이 §4.5.279(②층이 넷 갈래로 조용히
-   어긋난 사건)의 클래스다. 콜백으로 부르면 **op 마다 경계**이고 그것이 ②층 JIT 이 진 모양이다.
-
-⭐⭐ **남은 win 은 프로그램을 컴파일하는 데 있지 않고 프로그램 *주위의 기계장치*를 없애는 데 있다.**
-실행의 **47.2% 가 op 하나짜리 프로그램**인데 그 두 번의 메모리 읽기 주위에서 갈라진 경로는
-`wcache` borrow + `Rc` clone, `lvalue_width` 의 IR 워크, 72바이트 `Value` 생성, `resize`,
-그리고 이미 알려준 청크 폭을 **쓰기 퍼널이 다시 유도**하는 것을 전부 낸다. **그 전부가 op 당 컴파일 시점
-상수다.**
-
-### 이 슬라이스가 한 것
-
-`Kernel` 에 **대입 전체**를 하나로 보는 seam 둘(`k_eval_write_scalar`/`k_eval_nba_scalar`)을 냈다.
-**기본 구현이 지금의 두 호출 그대로**라 ②층은 기계적으로 불변이고, ③층만 평면 경로로 오버라이드한다 —
-증명된 plain scalar 목적지가 한 워드면 `run_cached_wprog`(캐시 borrow **안**에서 실행 → `Rc` clone 0) →
-`resize_word` → `write_chunk_word`. **`Value` 가 한 번도 안 생긴다.**
-
-**picorv32 0.540 → 0.517.** 슬라이스 1 의 워크 기준선(0.562) 대비 누적 **+8.0%**(native/vm **1.71×**).
-
-### ⭐ 뮤테이션 7 중 6 생존, 그리고 그것이 옳다
-
-이 경로는 **정본이 강제하는 지름길**이라 값에 독립적인 내용이 거의 없다. 도달은 `panic!` 프로브로
-확인했고(5 테스트 전부 실패), 생존 각각을 증명했다:
-
-- 문맥 폭 `max` 제거 · 저장 폭 `w`↔`s.width` · NBA `Value` 폭 — **하류 마스킹/클램프로 값이 같다**.
-- `resize_word` 의 `signed` — **`w >= s.width` 라 확장 팔에 도달 불가**(죽은 인자임을 실측으로 증명).
-- `width > 64` 가드 — **`words == 1` 이 이미 그 뜻**이라 중복. → **삭제하고 이유를 적었다.**
-- 기본 seam 의 `k_schedule_nba_scalar`→`k_schedule_nba` — §4.5.333 의 동치(같은 큐 엔트리).
-- **캐시 키의 `signed`** — 원리적으로는 실재 차이(`wprog` 가 비교 op 에 부호를 굽는다)이나
-  **ExprId 는 소스 한 자리라 한 폭·한 부호로만 요청된다** → 어떤 설계도 판별 못 한다.
-  → 술어를 `WCacheSlot::hits` 로 **공유**해 두 독자가 어긋날 여지를 없앴다.
-
-## 0.-7 ⭐⭐ 개정 14 — **S3 착수**: ③층이 컴파일된 바디를 실행한다 · 그리고 **컴파일된 표현 자체는 win 이 아니다** (2026-08-10, §4.5.333)
-
-**S2 는 §4.5.329 에서 닫혔고, §4.5.330~332 는 그 뒤의 프로파일 주도 정리였다.** 이 슬라이스부터 다시
-계획(§5)의 단계다 — **S3 · 바디 코드 생성**의 1단계.
-
-### 왜 이것이 S3 의 1단계인가 (우회가 아니라)
-
-§5 의 S3 는 *"`CompiledBody` → cranelift 함수"* 라고 적혀 있다. 그런데 착수 전 그라운딩이 두 가지를
-확인했다:
-
-- `CompiledBody` 는 **이미 있다** — ②층 VM 의 컴파일 형태이고, `jit.rs::compile_body(&CompiledBody)`
-  가 이미 그것을 cranelift 로 내린다. S3 가 가리키는 것이 이것이다.
-- `backend::vm_exec` 는 **`impl Kernel` 로 제네릭**이다. 즉 ③층 커널이 그대로 실행할 수 있고,
-  의미는 재진술되지 않는다(`compute_effect`/`apply_effect` 와 **같은 커널 메서드를 같은 순서로** 부른다).
-
-그래서 ③층이 `CompiledBody` 를 **갖는 것**이 코드젠의 선행조건이고, 이 슬라이스가 그것이다.
-
-### 측정 — **표현은 win 이 아니었다**
-
-같은 바이너리에서 실행기만 바꿔 잰 A/B(best-of-6, `--backend native`):
-
-| 설계 | 워크 | 컴파일 바디(융합 전) | 컴파일 바디(융합 후) |
+| Executor | `--backend` spelling | Feature gate | Role |
 |---|---|---|---|
-| picorv32 | 0.562 | 0.559 | **0.540 (+3.9%)** |
-| keccak_f_flat | 1.365 | 1.392 | 1.382 (−1.2%) |
-| keccak_f | 1.196 | 1.185 | 1.194 (0%) |
-| keccak_f_arr | 1.111 | 1.121 | 1.123 (−1.1%) |
-
-⭐⭐ **융합 전은 완전한 wash 였다.** 프로파일이 이유를 말했다: `k_resolve_lvalue_offsets` **3.1% 가
-통째로 사라지고** malloc 이 7.6→5.4% 로 줄었는데, 그만큼을 **op 루프**(`dispatch_body` 7.2→8.8%)와
-`k_schedule_nba_scalar`(3.2→4.3%)가 먹었다. 한 문장이 **두 op** 이 되고, 그 사이에서 `Value`(72B)가
-**레지스터 파일을 경유**한다 — 워크의 `compute_effect`→`apply_effect` 는 그 왕복이 없다.
-
-⭐ 그래서 **평가+쓰기를 한 op 으로 융합**했다(`EvalWriteScalar`/`EvalNbaScalar`, 목적지가 컴파일
-시점에 증명된 plain scalar 이고 평가가 커널 호출일 때). picorv32 op **2000 → 1068(−46.6%)**,
-대입 995 중 **932(93.7%)가 융합**. 그러자 +3.9% 가 나왔다.
-
-⭐⭐ **결론은 계획을 확인한다: ③층의 남은 비용은 커널 호출을 *고르는* 데 있지 않고 그 *안*에 있다**
-(`WProg::run` 20.4% · `write_lvalue` 9.8% · `settle` 8.3%). 같은 커널 호출을 계속 하는 컴파일된
-표현은 그것을 줄일 수 없다. **S3 의 값은 전적으로 코드젠 단계 — 호출 자체를 없애는 것 — 에 있다**
-(§5 S3 의 *"넷은 슬롯 주소로 직접 store/load — 커널 호출 없음"*). 이 슬라이스는 그 입력이다.
-
-native/vm: picorv32 **1.57× → 1.64×** · flat 1.93× · keccak_f 1.19× · keccak_f_arr 1.07×.
-
-### 착수 전 그라운딩이 잡은 결함 하나 (②층에도 있던 것)
-
-`vm_exec` 에 **문장 경계가 없었다** — `run_body` 가 문장마다 하는 `k_call_fatal`/`k_drain_diags` 가
-둘 다 빠져 있다. op 열에는 문장 경계 표시가 없지만 **정확히 복원할 수 있다**: 모든 문장은 다섯 op
-(`WriteLval`·`WriteScalar`·`ScheduleNba`·`ScheduleNbaScalar`·`SysTask`, 그리고 융합 둘) 중 하나로
-끝난다 → `Op::ends_statement`(`_`-free).
-
-⭐⭐ 그리고 그 둘의 **위상이 다르다**:
-
-- **`k_call_fatal` 은 실재하고 관측된다.** `is_codegen_able` 은 주석에 *"any expr position that can
-  REACH a frame Call excludes the body"* 라고 적어 두고 **lvalue 인덱스 식을 안 본다** — `mem[f(i)] = 1`
-  에서 `f` 안의 `$fatal` 이 컴파일된 바디에 도달한다. 이 줄이 없으면 바디가 fatal 을 지나 계속 돈다.
-  **②층 vs 인터프리터의 실제 발산이었고 이 슬라이스가 닫는다.**
-- **`k_drain_diags` 는 백스톱이고 오늘 관측 불가다.** `format_args_str_with` 가 모든 출력 줄 앞에서
-  드레인하고 런 루프가 바디 뒤에 드레인하므로, 경계 드레인이 순서를 정하는 설계는 없다.
-  **`body.rs` 가 자기 사본에 대해 이미 그렇게 측정해 적어 뒀다** — 내 첫 주석은 그 문장을 잊고
-  *"없으면 모든 진단이 바디 뒤로 간다"* 라고 과장했고, 뮤테이션이 그것을 반증했다.
-
-⚠️ 그리고 `ends_statement` 가 **op 마다가 아니라 문장마다**인 것이 load-bearing 이다: `ResolveOff`
-뒤에서 fatal 을 소비하면 `WriteLval` 을 건너뛰어 **그 쓰기가 빚진 E4002 를 잃는다**(뮤테이션 C 로 실측).
-
-### 게이트
-
-- **코퍼스 72설계 × (컴파일 ON/OFF)** — 인터리브된 stdout+진단 스트림·finish·time·exit·VCD 바이트.
-  ⚠️ **72 중 30 만 비공허하다** — 코퍼스 설계 대부분이 `initial … #d …` 라 바디에 `Delay` 가 있고
-  codegen-able 이 아니다. 그 42 는 워크를 워크와 비교한다. **개수를 따로 핀해서 숨기지 않는다.**
-- **판별 설계 7** — 각각 `acts > 0` 단언(그 행이 실제로 컴파일된 바디를 돌렸는가).
-- 예제 4 + bench 4 **stdout·stderr·exit·VCD 바이트 동일**.
-- **뮤테이션 9 중 7 사망.** 생존 둘은 **동치**이고 근거를 코드에 적었다 — 경계 드레인(위)과
-  `EvalNbaScalar`→`k_schedule_nba`(`NbaLhs::of([c])` 가 `One(c.clone())` 이고 plain scalar 의
-  resolve 가 바로 `(0,0)` 이라 **큐에 들어가는 것이 같다**; 다른 것은 비용뿐이라 핀은 값 차분이 아니라
-  **op-mix census** 다).
-
-⭐ 뮤테이션이 내 테스트의 구멍 둘을 직접 찾았다 — **`k_enter_body` 삭제가 전 스위트를 통과했다**
-(`%m`/timescale 이 다른 두 프로세스가 번갈아 도는 설계가 0개였다), 그리고 `k_call_fatal` 삭제도
-(lvalue 인덱스 호출 설계가 0개였다). 둘 다 행을 지어 닫았다.
-
-⚠️ **`cfg(not(test))` 의 `use_compiled_default() = true` 는 어떤 테스트도 볼 수 없다** — 프로덕션이
-컴파일 경로를 타는지는 CLI 바이트 동일성과 성능 측정만이 증거다. 기록해 둔다.
-
-## 0.-6 ⭐⭐ 개정 13 — 쓰기 퍼널의 한 워드 진입점: picorv32 **1.53×** (2026-08-10, §4.5.332)
-
-개정 12 가 지목한 표적(**결과 경로 + 쓰기 퍼널**)의 본체. 정본 `write_lvalue` 가 자기 정규화(real→int 강제·목적지 폭)를 마친 뒤, **목적지가 아레나 워드 하나에 들어가면**(`s.words == 1 ∧ total ≤ 64) 평면 진입점 `write_chunk_word` 로 위임한다.
-
-| 설계 | vm | 68dc20a | **지금** |
-|---|---|---|---|
-| **picorv32** | 0.909 | 0.633 (1.44×) | **0.594 (1.53×)** |
-| keccak_flat | 0.085 | 0.062 (1.37×) | **0.059 (1.44×)** |
-| keccak_arr | 1.218 | 1.132 (1.08×) | 1.132 (1.08×) |
-| 혼합폭 | 0.646 | 0.609 (1.06×) | 0.609 (1.06×) |
-
-**이번 슬라이스만: picorv32 0.633 → 0.594 = 6.2%.** 프로파일이 확인해 준다 — `write_chunk` 가 상위 22 에서 **사라졌고**(잔여 1.4% 일반 경로만 남았다), 퍼널+`resize` 블록이 **20.6% → 12.5%**(`write_chunk` 6.73 + `write_lvalue` 4.85 + `resize` 5.78 + `mask_top` 3.22 → `write_lvalue` 8.63 + `resize` 2.16 + `mask_top` 1.70).
-
-⭐⭐ **표적을 정한 것은 census 이고, 그 census 가 내 계획의 절반을 버렸다.** 착수 전 10분 계측(picorv32 한 런):
-
-| | 건수 | 비율 |
-|---|---|---|
-| `write_lvalue` | 4,012,519 | — |
-| ├ 단일 청크 | 4,001,093 | 99.7% |
-| ├ 값 폭 == 목적지 폭 | 3,109,488 | 77.5% |
-| `write_chunk` | 4,058,223 | — |
-| ├ **통짜 원소 저장** | **4,001,093** | **98.6%** |
-| └ 부분(비트 직렬) | 57,130 | **1.4%** |
-| `k_eval_for_lvalue` | 4,012,520 | — |
-| └ **wprog admit** | 3,721,015 | **92.7%** |
-
-내가 먼저 고치려던 것은 **비트 직렬 루프**였는데 그것은 1.4% 다 — 실제 표적은 **통짜 저장까지 가는 길 전체**(퍼널 전문 + `resize` + `mask_top`)였다. **셈이 없었으면 1.4% 를 최적화하고 있었을 것이다.**
-
-**추출한 규칙 셋, 정본이 위임한다**: `value::resize_word`(≤64비트 리사이즈를 평면으로 — `Value::resize` 의 한 워드 빠른 경로가 이걸 부른다) · `chunk_lsb`(청크가 **어느 비트**를 지칭하는가 — 하강 `-:` 의 `- cw + 1` 은 한 글자라 사본 둘이면 조용히 다른 창을 고른다) · `chunk_elem`(**어느 원소**인가 + OOB 드롭이 E4002/W4029 를 지운다는 부작용까지 한 자리).
-
-⭐ **차분이 공허해지지 않게 하는 방법** = 진입점을 **리터럴 `bool` 파라미터**로 켜고 끈다(`write_lvalue_general_for_test`). 위임하는 퍼널을 자기 자신과 비교하면 실패할 수 없는 테스트가 된다. 스윕은 14 사이트 × 오프셋 8(음수·범위밖 포함) × 워드 4(범위내·범위밖·미지) × 평면 5 × 소스 9 = **20,160행**, 비교 대상은 **`changed` + 아레나 스냅샷 전체**(buf·dirty·slot_edge·last_blocking_writer·vcd_pending·pending_range).
-
-⭐⭐ **그리고 내 스윕을 리뷰해서 구멍 둘을 스스로 찾았다** — ⓐ 설계에 **엣지 감도가 0개**라 `is_edge_target` 이 전부 false 였고 **글리치 캡처와 `accumulate_edge` 가 통째로 미도달**이었다(`always @(posedge a)` 한 줄로 복구) · ⓑ `Value::zeros` 는 `is_real`/`is_str` 을 절대 안 세우는데 **진입점의 admission 논거가 바로 그 두 플래그에 관한 것**이었다(real 행이 "강제가 이미 끝났다"를 주장이 아니라 **시험**으로 만든다). 구멍을 막기 전에는 뮤테이션 G·H·I 가 **다른 테스트의 무한루프**로만 죽었고(스위트가 내 테스트에 도달조차 못 했다), 막은 뒤에는 **셋 다 내 테스트가 직접** 죽인다.
-
-**뮤테이션 12/12 사망.** 그중 **E(소스 부호 무시)는 오직 새 차분만 잡는다** — 기존 S1c 엔진 차분은 한 워드 목적지에 더 좁은 signed 소스를 쓰는 형태에 도달하지 않는다. **K(`resize_word` 의 폭-0 가드)는 처음에 생존**했고, 판별자는 **일반 경로(>64비트)** 였다(폭 0 소스는 `nwords(min) = 0` 워드를 복사하므로 결과가 0이다 — 프로덕션은 모든 생성자가 `top_mask(0)=0` 으로 마스킹하므로 둘을 구분할 수 없고, 그래서 그 행이 유일한 판별자다).
-
-**남은 표적**(POST 프로파일) = `wprog_for` **3.74%**(평가마다 `RefCell` borrow + `Rc` clone) · `k_resolve_lvalue_offsets` 2.62 + `k_eval_for_lvalue` 2.96 = 대입당 디스패치 · 그리고 **`settle_cont_assigns` 8.50% + `run_body` 6.51%** 가 S3 본체다.
-
-## 0.-5 ⭐⭐ 개정 12 — W 평가기에서 `Value` 가 사라졌다: picorv32 **1.43×** (2026-08-10, §4.5.331)
-
-개정 11 이 남긴 마지막 두 소비자 — **한 비트 단항**(`!` + 6 리덕션)과 **`&&`/`||`** — 도 평면으로 내렸다. 이제 `WProg::run` 은 어떤 팔에서도 `Value` 를 만들지 않는다.
-
-| 설계 | vm | 57a6d6c | **지금** |
-|---|---|---|---|
-| **picorv32** | 0.903 | 0.712 (1.27×) | **0.633 (1.43×)** |
-| keccak_flat | 0.085 | 0.062 (1.37×) | **0.061 (1.39×)** |
-| keccak_arr | 1.216 | 1.131 (1.08×) | 1.130 (1.08×) |
-| 혼합폭+`?:` | 0.704 | 0.630 (1.12×) | 0.633 (1.11×) |
-
-**이번 슬라이스만: picorv32 0.712 → 0.633 = 11.1%.** picorv32 가 크게 움직인 이유는 그 설계가 한 비트 단항과 `&&`/`||` 를 많이 쓰기 때문이고, keccak(균일 64비트 산술)은 그 팔에 거의 안 들어가므로 변화가 없다 — **형태가 다르면 같은 수정이 다른 값을 낸다**는 것을 그대로 보여준다.
-
-**추출한 것 넷, 전부 정본이 위임한다**: `RedFacts::absorb`(한 워드가 리덕션에 기여하는 사실 — `known0` 의 재마스크가 사본이 흘리기 쉬운 줄이다) · `reduce_verdict`(리덕션 진리표) · `unary1_word`(한 비트 단항 가족의 평면 진입점 — `unary_self_of` 가 비-real·1..=64비트면 위임) · `log_bin_tri`(`&&`/`||` 를 `Tri` 두 개로 받는다).
-
-⚠️ **개정 11 과 같은 대가**: 공유하는 순간 배터리가 그 함수들에 눈멀어진다. 뮤테이션 넷(`And`+unknown → 1 · `known0` 마스크 제거 · `&&` 의 흡수 0 제거 · `!` 반전)이 전부 **`native_eval::tests::arith_bits` 의 오라클 핀**에서 사망하는 것을 확인했다.
-
-**남은 `Value`** = **결과 경로**(`run_wprog` 이 감싸고 `write_lvalue` 가 다시 `resize`)와 **쓰기 퍼널**(`write_chunk` 6.7 + `write_lvalue` 3.6 = 10.3%). 그 둘이 다음이고, 그다음이 S3.
-
-## 0.-4 ⭐⭐ 개정 11 — 비교 3종을 평면으로 내렸다: picorv32 **1.28×** (2026-08-10, §4.5.330)
-
-개정 10 이 지목한 표적(`Value` 마샬링 15.7%)의 큰 조각. `Cmp` 가 이미 두 u64 평면에 값을 갖고 있으면서 공유 규칙을 부르려고 **72바이트 `Value` 를 두 개** 만들고, 그 안에서 `resize_keep_sign` 이 **다시 클론**했다.
-
-| 설계 | vm | 468e895 | f56b4bc(truthiness) | **지금(비교)** |
-|---|---|---|---|---|
-| **picorv32** | 0.906 | 0.807 (1.12×) | 0.781 (1.16×) | **0.709 (1.28×)** |
-| 부분선택 산술(`selA`) | 0.429 | 0.345 | 0.348 | **0.327 (1.31×)** |
-| 혼합폭+`?:`(`mixbig`) | 0.706 | 0.667 | 0.658 | **0.638 (1.11×)** |
-| keccak_arr | 1.217 | 1.147 | 1.154 | **1.139 (1.07×)** |
-
-**이번 슬라이스만: picorv32 0.781 → 0.709 = 9.2%.**
-
-**⭐ 평면 형태가 두 번째 철자가 되지 않게 하는 방법** — 정본 함수(`relational`/`log_eq`/`case_eq`)가 **자기 정규화를 마친 뒤 한 워드면 그 평면 형태로 위임한다**. 그래서 판정 로직의 철자가 하나고, ③층은 그것을 한 층 아래에서 부를 뿐이다(admission 이 이미 *"두 피연산자가 폭과 부호를 공유한다"* 를 보장하므로 정규화가 no-op 이다).
-
-⚠️ **그 공유의 대가는 차분이 눈멀어진다는 것이다** — wprog 와 제네릭이 같은 함수를 부르므로 배터리는 그 함수의 결함을 원리적으로 못 본다. 뮤테이션 넷(부호 순서 뒤집기·`&!u` 제거·unk 평면 무시·`(Le,Equal)` 제거)이 전부 **`native_eval::tests::arith_bits` 의 오라클 핀**에서 죽는 것을 확인했다.
-
-## 0.-3 ⭐⭐ 개정 10 — **S2 admission 은 여기서 끝난다**(프로파일이 정했다) · 다음 표적은 `Value` 마샬링과 쓰기 퍼널 (2026-08-10, §4.5.329)
-
-**남은 admission 축(폭·부호 불일치)을 구현하기 전에 프로파일을 다시 쟀고, 그 축이 죽었다는 것이 확인됐다.** picorv32 네이티브(집계 2,280 샘플, 시작 비용 제외):
-
-| | 이전(슬라이스 4 시점) | **지금** |
-|---|---|---|
-| 제네릭 트리워커 `eval_ctx` | ~50% | **2.2%** |
-| `WProg::run`(특수화 평가기) | 4.0% | **15.4%** |
-
-⭐⭐ **거절을 더 줄여서 살 수 있는 것이 2.2% 뿐이다** — 유일 루트 admission 이 93.8% 이고 잔여가 대부분 폭·부호 불일치인데, 그 축을 전부 열어도 상한이 저 2.2%다. **S2 는 닫힌다**(이번엔 ablation 이 아니라 프로파일이 근거다).
-
-**남은 비용의 실제 분포**(같은 프로파일):
-
-| 축 | 비중 |
-|---|---|
-| `WProg::run` — 실제 작업 | 15.4% |
-| **`Value` 마샬링** (`one_word_value` 7.3% + `resize` 4.7% + `mask_top` 3.7%) | **15.7%** |
-| **쓰기 퍼널** (`write_chunk` 4.9% + `write_lvalue` 3.8%) | **8.7%** |
-| `settle_cont_assigns` · `run_body` · 스케줄러 | ~13% |
-
-⭐ **doc-21 §2 의 R2 목표(*"`Value`(72B) 를 이 경로에서 완전히 제거"*)가 절반만 끝나 있었다** — 특수화 평가기가 값을 계산해 놓고 공유 규칙을 부르려고 다시 `Value` 로 감싼다. 이번 슬라이스가 그중 **truthiness** 를 평면 레벨로 내렸다(`truthiness_word`): picorv32 네이티브 **0.769 → 0.745(3.1%)**, native/vm **1.16×**.
-
-⚠️ **기대했던 층간 파급은 실측되지 않았다** — 정본 `truthiness` 가 ≤64비트에서 O(1) 이 됐으니 interp/vm 도 빨라질 것이라 적었으나, 실측은 둘 다 노이즈 범위였다(interp 1.355→1.351 · vm 0.860→0.863). ②층은 `native_eval` 안에 자체 인라인 truthiness 를 갖고 있고, 인터프리터는 조건 비중이 작다.
-
-**⇒ 다음 슬라이스는 admission 이 아니라 `Value` 제거의 나머지**(비교 3종의 평면 진입점 + 결과를 평면으로 쓰는 경로), 그다음이 S3 이다.
-
-## 0.-2 ⭐⭐ 개정 9 — `Ternary` admission: 게으름은 값이 아니라 **진단**의 문제였다 (2026-08-10, §4.5.328)
-
-`wprog` 가 `?:` 를 admit 한다 — **두 가지 어느 쪽도 보고할 수 없을 때**. picorv32 **1.03× → 1.12×**.
-
-| 설계 | vm | base(b2f2f00) | 슬라이스 6 | **슬라이스 7** |
-|---|---|---|---|---|
-| **picorv32(실물)** | 0.855 | 0.979 (0.87×) | 0.828 (1.03×) | **0.763 (1.12×)** |
-| 삼항이 산술 위에(`terA`) | 0.404 | 0.408 (0.98×) | — | **0.330 (1.22×)** |
-| **4중 중첩 삼항**(`terN`) | 0.428 | 0.483 (0.89×) | — | **0.353 (1.21×)** |
-
-⭐ **"중첩에서 즉시평가가 오히려 느릴 것"이라는 내 우려는 실측이 반증했다** — 5개 팔을 전부 평가해도 제네릭 한 팔보다 훨씬 빠르다(0.483→0.353). 그리고 `terA` 는 **삼항이 아예 없는 기준선(0.332)에 착지**했다.
-
-**admission 이 폭이 아니라 평가 순서에 관한 것이다.** `eval_ctx` 의 `Ternary` 는 조건을 평가한 뒤 **취한 가지만** 돌린다(둘 다 도는 것은 조건이 미지일 때뿐). 이 모듈은 제어흐름이 없어 늘 둘 다 도는데, 그것은 **값은 같고**(admitted op 은 전부 순수) **진단은 다르다** — `LoadIdx` 가 범위 밖 원소 읽기를 **센다**. 그래서 검사는 문법이 아니라 **컴파일된 op** 에 대고 한다(정확하고 국소적이다).
-
-⭐⭐ **그 앵커를 지으면서 ②층에서 같은 결함을 찾았다 — 그리고 그것은 기본 백엔드다.** `native_eval` 의 삼항도 똑같이 즉시평가인데 가드가 없어서, `r = c ? 8'hAA : mem[9];`(원소 4개짜리 `mem`)가 **값은 맞고 `E4002` 를 낸다**. `E4002` 는 `Severity::Error` 라 CLI 가 종료코드로 세므로 **`--backend vm` 이 exit 1, interp·native·iverilog 는 exit 0**. 같은 슬라이스에서 같은 형태의 가드로 고쳤다.
-
-**남은 거절(picorv32 전수 census)** — 유일 루트 기준 **845 admit / 56 decline = 93.8%**. 잔여는 대부분 **폭·부호 불일치**(개정 6 의 ablation 이 0으로 잰 바로 그 축)와 `SysFunc` 3. `Ternary` arm 의 거절은 **41 → 0**.
-
-## 0.-1 ⭐⭐ 개정 8 — `Select` admission 으로 **네이티브가 실물 설계에서 처음 VM 을 앞섰다** (2026-08-10, §4.5.327)
-
-개정 7 이 남긴 표적(`Select` 73 · `Ternary` 39) 중 **둘의 천장을 먼저 재고** 순서를 정했다 — 판별 설계로:
-
-| 형태 | vm | native | |
-|---|---|---|---|
-| 부분선택 둘이 산술 안에 (`selA`) | 0.415 | **0.501** | **0.83×** |
-| 같은 산술, 선택 없음 (`selB`) | 0.383 | 0.329 | 1.16× |
-| 삼항이 산술 위에 (`terA`) | 0.399 | 0.408 | 0.98× |
-| 같은 산술, 삼항 없음 (`terB`) | 0.387 | 0.332 | 1.17× |
-| 4중 중첩 삼항 (`terN`) | 0.432 | 0.483 | 0.89× |
-
-`Select` 가 손해가 크고(0.83×) 기계가 단순하다(상수·범위내 창 = **시프트 하나와 마스크 하나**). `Ternary` 는 제네릭이 **취한 가지만 평가**하므로 게으름(=W 프로그램의 제어흐름)이 필요하고, 중첩에서 즉시평가는 오히려 느려질 수 있다 — **별도 슬라이스**. 그래서 이 슬라이스는 `Select`.
-
-| 설계 | vm | base(b2f2f00) | 슬라이스 5 | **슬라이스 6** |
-|---|---|---|---|---|
-| **picorv32(실물)** | 0.855 | 0.979 (0.87×) | 0.945 (0.90×) | **0.828 (1.03×)** |
-| 부분선택 산술(`selA`) | 0.413 | 0.510 (0.81×) | 0.508 (0.81×) | **0.329 (1.26×)** |
-| 배열 읽기(`big`) | 0.425 | 0.459 (0.93×) | 0.340 (1.25×) | 0.342 (1.24×) |
-
-⭐⭐ **`--backend native` 가 실사용 설계에서 처음으로 `--backend vm` 을 앞섰다(1.03×).** 그리고 두 판별 설계 모두 **선택 없는 기준선에 정확히 착지**했다(0.501→0.329 vs 0.329 · 0.370→0.327 vs 0.323) — 이 형태에서 거절 비용이 0이 됐다는 뜻이다.
-
-**남은 거절 census(picorv32, 실측 60건)** — `Select` **73→0** · `Concat` **32→0** · 잔여는 **`Ternary` 41**(68%) · `SysFunc` 3 · 폭·부호 불일치 16(대부분 `Const` 10). ⇒ **다음 표적은 `Ternary` 이고, 그 값은 위 표에서 이미 쟀다**(0.98×/0.89× → 천장 1.17×).
-
-## 0.0 ⭐⭐ 개정 7 — 개정 6 은 **틀린 축을 쟀다**: `Concat` arm 하나가 배열 읽기를 1.34× 만들었다 (2026-08-10, §4.5.326)
-
-**바로 아래 §0.1(개정 6)의 판정 — *"S2 admission 은 레버가 아니다, S2 를 닫는다"* — 을 철회한다.**
-그 실험은 `compile_node` 의 **폭·부호 균일 게이트**(`sw.width != w || sw.signed != signed`)를 무력화해
-0을 쟀다. 그러나 이 문서가 최악이라 지목한 형태(**배열 읽기**)는 균일성이 아니라 **arm 이 아예 없는
-노드**에서 거절된다 — 그리고 **arm 이 없는 노드는 균일 게이트를 꺼도 그대로 거절된다.** 즉 그 ablation
-이 원리적으로 볼 수 없는 축이었고, 나는 한 축의 0 을 가족 전체의 0 으로 일반화했다.
-
-**거절 사유를 세었더니(계측 10분) 답이 한 노드였다** — `mem[ad2]` 한 줄짜리 설계의 거절이 **정확히
-1건, `kind=Concat`**. §4.5.308 이 배열 워드 인덱스를 `{22'b0, ad2}` 로 **봉인**하는데 `wprog` 에
-`Concat` arm 이 없어서, **모든 설계의 모든 런타임 배열 인덱스**가 트리 전체를 제네릭으로 떨어뜨리고
-있었다.
-
-| 설계 | vm | PRE-native | POST-native | PRE | POST |
-|---|---|---|---|---|---|
-| **배열 읽기만** | 0.428 | 0.455 | **0.340** | 0.94× | **1.26×** |
-| **메모리(읽기+쓰기)** | 0.794 | 0.861 | **0.429** | 0.92× | **1.85×** |
-| **배열 쓰기만** | 0.089 | 0.070 | **0.062** | 1.27× | **1.44×** |
-| picorv32(실물) | 0.855 | 0.977 | **0.938** | 0.88× | **0.91×** |
-| 식 지배 · 스케줄러 지배 · keccak 2종 | — | — | — | 변화 없음 | 변화 없음 |
-
-⭐ **§0.1 표에서 가장 크게 지던 두 형태가 가장 크게 이기는 두 형태가 됐다.** 상수 인덱스 천장(같은
-설계의 `mem[7]`)이 0.316 이므로 런타임 인덱스의 잔여는 **7%** 다.
-
-**따라서 S2 는 닫히지 않았다.** 남은 표적은 측정된 거절 census 다 — picorv32 기준 `Select` **73** ·
-`Ternary` **39** · `SysFunc` 3. 그 둘의 값은 **아직 안 쟀다**(개정 6 의 실수를 반복하지 않기 위해
-여기 그렇게 적는다). S3(바디 코드젠)은 그다음이며, 판단 근거는 **`wprog` 가 붙은 뒤에도 남는 비용**
-이어야 한다.
-
-## 0.1 ⭐⭐ 개정 6 — S2 admission 은 레버가 아니다 (2026-08-10, 실측 8설계) — ⚠️ **판정 철회, §0.0 참조**
-
-**폭·부호 균일 게이트를 떼는 것이 이 문서와 NEXT 큐가 지목한 S2 잔여 표적이었는데, 측정하니 효과가 0이다.** `compile_node` 첫 줄의 `sw.width != w || sw.signed != signed` 를 env 로 무력화한 빌드와 기본 빌드를 나란히 재면(best-of-2, 출력·종료시각 동일 확인):
-
-| 설계 | vm | native | wprog 끔 | **균일게이트 끔** |
-|---|---|---|---|---|
-| picorv32 | 1.25 | 1.70 | 1.83 | **1.70** |
-| keccak_flat | 0.09 | 0.06 | 0.12 | **0.06** |
-| keccak_arr | 1.60 | 1.54 | 1.60 | **1.53** |
-| 메모리 배열 | 0.11 | 0.13 | 0.15 | **0.13** |
-| 혼합폭+`?:` | 0.13 | 0.14 | 0.16 | **0.13** |
-
-⚠️ **첫 1회 측정은 2.47 s(=45% 악화)를 냈고 그것은 오염이었다** — best-of-2 로 다시 재면 정확히 동률이다. 단발 벤치를 기록하지 마라.
-
-**그리고 `wprog` 자체는 어디서나 이득이다**(끄면 14~342% 악화). 즉 특수화 평가기는 값을 내고 있고, **거절 사유를 넓히는 일이 값을 못 낸다.**
-
-### 네이티브가 지는 곳은 스케줄러도 식도 아니다
-
-판별 설계로 축을 분리하면(각 best-of-2·vm 대비):
-
-| 형태 | native/vm | |
-|---|---|---|
-| 식 지배(1 proc·60항 균일 64비트) | **1.67×** | 크게 이긴다 |
-| 배열 **쓰기**만 | **1.17×** | 이긴다 |
-| 스케줄러 지배(400 proc·1비트 대입) | 1.01× | 동률 |
-| 혼합폭 + `?:` | 0.96× | |
-| 메모리(읽기+쓰기) | 0.87× | |
-| **배열 읽기만** | **0.80×** | 가장 크게 진다 |
-| picorv32(실물) | 0.74× | |
-
-⭐ **스케줄러가 병목이라는 가설은 반증됐다**(400 프로세스 설계에서 동률). ⭐ **식 평가도 아니다**(균일 폭에서 1.67× 우세). 남는 것은 **배열 원소 읽기**이고, 거기서 native(0.074)는 **interp(0.078)와 거의 같고 vm(0.063)에 진다** — 특수화가 그 형태에서 값을 못 낸다.
-
-⚠️ 가설 하나를 더 지어서 반증했다: `run_wprog` 가 결과를 `Value` 로 감싸는 것이 힙 할당이라 생각했으나 **`Words` 는 ≤2워드에서 인라인**이라 할당이 없다.
-
-~~**⇒ 판정.** S2 admission(`?:` 34·`Select` 12·폭 불일치 14)은 **남은 격차를 원리적으로 못 닫는다** — `wprog` 가 이미 붙어 있는 형태에서조차 native 가 vm 에 지기 때문이다. 배열 읽기의 잔여 비용은 rhs 평가가 아니라 **문장당 디스패치**(`compute_effect` → `Value` → `apply`)에 있고, 그것을 지우는 것이 **S3 의 정의 그 자체**다. 따라서 **다음 구현 슬라이스는 S3 이고, S2 는 닫는다.**~~
-
-⚠️ **위 판정은 §0.0(개정 7)이 실측으로 철회했다.** 두 전제가 다 틀렸다 — ⓐ *"`wprog` 가 이미 붙어 있는 형태"* 가 아니었다(배열 읽기는 **인덱스 봉인의 `Concat`** 에서 트리 전체가 거절되고 있었다) · ⓑ 문장당 디스패치는 표적이 아니다(**분류 술어 13개를 통째로 건너뛰는 상한 실험이 0~4%**, picorv32 −0.3%). `Concat` arm 하나로 배열 읽기 0.94→**1.26×**, 메모리 0.92→**1.85×**.
-
-## 0.2 ⭐ 개정 5 — verilator 는 성능 목표가 아니다 (2026-08-09)
-
-이 문서의 §0.3~§0.5 는 verilator 와의 벽시계 격차를 ③층의 근거 일부로 쓴다. **그 인용은 계약이 다르다는 단서와 함께 읽어야 한다** — verilator 는 2-state·컴파일·사이클 지향이고 vita/iverilog 는 4-state·이벤트 구동이라, x/z 평면·델타 사이클·이벤트 큐 비용이 전부 "vita 가 느리다" 로 계상된다.
-
-- **성능 기준선 = iverilog + vita 자신의 `--backend vm`**(둘 다 같은 계약). 회귀·개선은 이 둘로만 주장한다.
-- verilator 수치는 **"컴파일이 원리적으로 살 수 있는 상한"** 으로만 인용한다 — ③층의 방향은 유효하지만 **"verilator 대비 N× 뒤짐" 을 성적표로 적지 않는다**.
-- verilator 의 정식 역할은 **제2 오라클**이다(적용 범위 = 2-state 산술·폭·부호. x/z·범위 밖 인덱스·이벤트 순서에는 오라클이 아니다 — 실측). 규칙 전문 = `docs/ENGINEERING_RULES.md`.
-
-## 0.3 ⭐⭐ 개정 4 — **착수 판정이 뒤집혔다: 지금 ③층을 시작한다**
-
-개정 3 은 *"③층은 옳다, 그러나 지금은 아니다"* 로 끝났다. 그 판정의 근거는 **하나**였다 —
-②층에 미청구 10.7× 가 있으니 그것부터 청구해서 ③층 예산을 확정하자. **그 근거가 약해졌다.**
-
-### ① 리포터가 격차를 정정했다 — 그리고 그것은 **정직한 상한**이다
-
-| | |
-|---|---|
-| 리포터 완주 추정 (작업량 기준) | **≈ 56 분** |
-| Xcelium 같은 스윕 | **31 초** |
-| 격차 | **≈ 108×** |
-
-리포터가 스스로 *"레코드 수로 단순히 나누면 ~200× 로 과대평가된다"* 고 정정했다 — 완료분이 무거운
-쪽(LongMsg)에 쏠려 있었기 때문이다. **자기 쪽 수치를 낮추는 정정**이므로 신뢰도가 높고, 이것이
-이 문서가 가진 **유일한 실사용 워크로드 격차**다.
-
-### ② 그 108× 를 ②층이 덮을 수 없다 — 산수로 확인된다
-
-| 축 | 최대 이득 | 근거 |
-|---|---|---|
-| T1+T2 (VM 커버리지 0% → 전부) | **≤ 10.7×** | doc-18 round-26, 인라인형 실측 상한 |
-| T3+T4 (프레임 호출·배열 쓰기 단가) | T1/T2 와 **겹친다** | 같은 경로의 비용이다 |
-| **②층 합계 낙관 상한** | **~11×** | 위 둘이 독립이 아니므로 곱하지 않는다 |
-| 남는 격차 | **108 / 11 ≈ 10×** | ②층을 **전부** 청구해도 |
-
-**즉 ②층을 완전히 청구해도 Xcelium 에 10× 뒤진다.** 개정 3 이 T 를 앞세운 이유는
-"③층 예산을 확정하기 위해"였는데, **예산은 이제 확정됐다 — 어느 쪽이든 ③층이 필요하다.**
-
-### ③ 그리고 T 단계는 ③층 안에서 **다시 하게 된다**
-
-이것이 결정적이다. T1/T2 가 푸는 문제 = *"호출을 가진 바디를 컴파일 대상으로 만들기"*.
-③층도 **정확히 같은 문제**를 풀어야 하고(호출을 못 삼키는 ③층은 똑같이 커버리지 0%),
-③층은 §4.1 때문에 **폴백이 없으므로 더 강한 형태**로 풀어야 한다. T 를 먼저 하면:
-
-- 그 설계를 **두 번** 한다(②층 콜아웃 ABI 한 번, ③층 경계 한 번),
-- 그리고 ②층 버전은 ③층이 완성되는 순간 **죽은 코드**가 된다(백엔드가 바뀌므로).
-
-개정 3 은 이것을 *"리허설"* 이라고 불렀다. 리허설의 값은 **본 공연이 불확실할 때** 크다.
-①②가 본 공연을 확정지었으므로, 리허설의 값은 그만큼 줄었다.
-
-### ④ 사용자 지시 — 파괴를 허용한다
-
-> *"기존의 것들을 파괴하고 새로운 길을 가더라도 충분히 가치가 있으니까"*
-
-개정 1~3 이 계획을 좁게 잡은 이유의 상당 부분은 **기존 엔진과의 공존**이었다(§4.4 additive).
-그 제약이 풀렸다면 §4.1 의 "설계 단위 all-or-nothing" 은 **위험이 아니라 전제**가 된다 —
-폴백을 설계 목표에서 빼면 경계 설계가 오히려 단순해진다.
-
-### 판정
-
-| | 개정 3 | **개정 4** |
-|---|---|---|
-| ③층이 옳은가 | 그렇다 | 그렇다 |
-| 지금 시작하나 | **아니다** (T 먼저) | **⭐ 그렇다 — S0 착수** |
-| T0~T4 는 | 선행 필수 | **T0 만 유지**(계기·되돌리기 0), T1~T4 는 **③층에 흡수** |
-| 이유 | ②층 10.7× 미청구 | **②층 전부라도 10× 부족**하고, T1/T2 는 ③층 안에서 다시 한다 |
-
-> T0(커버리지 계기화)만 남기는 이유: **되돌리기 0 이고 측정이지 구현이 아니다.** ③층 S0 의
-> 적격률 측정과 **같은 자료**를 필요로 하므로 어차피 만들어야 한다.
+| `Native` | `native` | always compiled | The default. The shipping executor |
+| `Bytecode` | `vm`, `bytecode` | `oracle` | Bytecode VM. A bisection oracle, and the fallback target when a native refusal happens in a build that has one |
+| `Interpreter` | `interp`, `interpreter` | `oracle` | Tree walk over `SimIr` — the reference semantics. A test instrument, and permanently excluded from performance work |
+
+`Backend::Native` is `#[default]` on the enum and in `SimOpts::default()`; both spellings of
+that default are pinned by `backend_equiv::the_default_backend_is_native`. `backend_name()` has
+one spelling shared by the engine and by `cli::stage_args`, so a diagnostic and `run.json`
+cannot disagree about what ran.
+
+The interpreter's machinery is not gated behind `oracle` — only the `Backend` variant and the
+dispatch that selects it are. The statement semantics (`exec::compute_effect` /
+`exec::apply_effect`) and the synchronous frame executor are compiled in every build, and the
+native backend calls both.
 
 ---
 
-## 0.4 ⭐ 개정 3 — ③층 격차를 처음으로 **쟀다** (76×), 그리고 ②층이 **고갈되지 않았다**
+## 2. Why it exists
 
-리뷰어 round-26 은 문자열 결함 수정을 확인하고 *"병목이 string 에서 **DUT 로 옮겨갔다**"* 고 보고했다.
-그것은 **위치**이지 **원인**이 아니다 — round-25 에서 똑같은 형태의 문장이 ③층과 무관한 결함으로
-판명났다. 그래서 이번엔 판별식을 세우고 **직접 쟀다**: Keccak-f[1600] 을 써서(`bench/keccak/`,
-1st-party, Python 참조 · vita · iverilog · verilator **넷이 같은 다이제스트**) —
+The limit the backend removes is the runtime representation, not the executor. A nonblocking
+assignment on the engine's flat store carries these costs, none of which is the arithmetic:
 
-### ① ②→③ 격차 = **76×** (순열 1회당 한계비용, 같은 기계)
-
-| | 서브루틴 호출 있음 | 서브루틴 인라인 |
+| | Engine store | Native backend |
 |---|---|---|
-| vita (②층) | 5340 µs | **498 µs** |
-| iverilog 13 (②층) | 4450 µs | 1398 µs |
-| **verilator 5.050 (③층)** | **6.6 µs** | **6.56 µs** |
+| Value | `Value`, 72 bytes | Two `u64` plane words for a ≤64-bit net; a word pair per element otherwise |
+| Destination | `Lvalue` → chunks → `Offsets` resolved per execution | Slot index resolved at build; offsets cached per `ExprId` |
+| Write | Runtime branch over the metadata plus the routing bitmaps | Two stores at a computed word index |
+| Wake | `net_to_edge` / dirty / waiter lookups | The same lookups, over the arena's own channel |
 
-이 저장소가 **처음 자기 손으로 잰 ②→③ 격차**다. verilator 는 2-state·levelize 를 거래했으므로
-**낙관적 상한**이지만, 상한이 76× 라는 사실은 남는다. → **③층은 여전히 ③층에 도달하는 유일한 경로다.**
+Flattening the layout alone yields nothing, and the reason is the read path: a leaf load asks
+`is_real` / `array_len` / `width` / `signed` before it can interpret the bits, so shortening the
+pointer chase leaves every question standing. The elimination is of the questions.
 
-### ② 그런데 같은 표가 ②층의 미청구 잔고를 드러낸다 — **10.7×**
-
-같은 설계·같은 결과인데 열 하나가 **10.7×** 다. 차이는 **사용자 함수 호출**뿐이고, 그 안에
-vita 만의 절벽이 있다:
-
-| 설계 | `--backend interp` | `--backend bytecode` | VM 기여 |
+| | Elimination | Question it removes | Status at HEAD |
 |---|---|---|---|
-| PicoRV32 | 1.35 s | 0.86 s | 1.57× |
-| **Keccak (호출 있음)** | **1.11 s** | **1.11 s** | **0%** |
-| Keccak (인라인) | 0.21 s | 0.10 s | 2.1× |
+| R1 | Static net allocation | "What is this net's width, element count, signedness, kind?" | Implemented — `native::arena` |
+| R2 | Width-specialised operations | "How many words is this value, and must the top word be masked?" | Implemented for the admitted subset — `native::wprog` |
+| R3 | Schedule elimination | "Which processes wake when this net changes?" | Not implemented. The run loop answers it at runtime from a wake table, as the engine does |
+| R4 | Nonblocking specialisation | "What shape and offset is this update's destination?" | Not implemented. Updates ride the shared queue |
 
-`backend::is_codegen_able` 은 terminator 가 `Goto`/`Return` 이 아니면 프로세스를 통째로 거부하고,
-`Terminator::Call` 은 그 밖이다. 게다가 `codegen_coverage` 는 `ir.processes` 만 순회한다 —
-**함수/태스크 바디는 애초에 컴파일 대상이 아니다.** 프로파일이 `eval_ctx`(①층 트리워커)를 1위로
-찍는다.
+The order is forced. R2 cannot specialise on a width R1 has not fixed, and R3/R4 move nothing
+while value access is still generic — a faster wake in front of a generic load leaves the total
+where it was.
 
-> **즉 사용자 함수를 부르는 RTL — 대부분의 실 RTL 과 거의 모든 TB — 에서 vita 는 ②층을 쓰지 않는다.**
-> "바이트코드 VM 이 기본 백엔드"는 참이지만, **그 백엔드가 그 설계를 안 받는다.**
+What the backend is not for:
 
-### ③ 그래서 §1.1 은 (두 번째로) 좁혀진다
-
-개정 1: *"현 표현 위의 상수항 여지가 고갈됐다."* → **PicoRV32(VM 이 커버하는 설계)에 대해서만 참.**
-개정 2 는 string 축에서 이 문장을 좁혔고, 개정 3 은 **호출 축에서 다시 좁힌다.** 같은 실수를
-두 라운드 연속으로 했다: **벤치 하나의 모양을 "여지 없음"으로 일반화한 것.**
-
-### ④ 두 결론은 모순되지 않는다
-
-| | |
-|---|---|
-| ③층은 옳은가 | **그렇다.** vita 최선에서도 verilator 가 **76×** 빠르다. ②층에서 10× 를 더 짜내도 못 간다 |
-| 그럼 지금 ③층인가 | **아니다.** ②층에 **10.7×** 가 측정된 채로 놓여 있고, 그 중 **2.1×** 는 백엔드 플래그를 바꾸는 것만으로 증명된다 |
-| 왜 순서가 중요한가 | ③층 백엔드도 **같은 호출 문제를 풀어야 한다.** 호출을 못 삼키는 ③층은 똑같이 커버리지 0% 다 — **②층에서 먼저 푸는 것이 그 설계의 리허설이다** |
+- It is a speed axis and never an accuracy trade. Four-state semantics, `correct-or-loud`, and
+  byte-identical output across platforms hold exactly as they do on the other executors; see
+  [ENGINEERING_RULES](../ENGINEERING_RULES.md) for the accuracy ladder the rule comes from.
+- Verilator is not the target. Verilator buys its speed with two-state values and a levelised
+  schedule, and vita gives up neither ([study/01](../study/01-interpreted-vs-compiled.md)).
+- `SimIr` is read-only to this backend. Nothing here enters the frozen IR, so the schema hash
+  and `format_version` are unaffected ([16](16-schema-hash-spec.md),
+  [17](17-sim-ir-ir-backbone-freeze.md)).
 
 ---
 
-## 0.5 ⚠️ 리뷰어 리포트가 바꾼 것 — ③층의 근거가 **약해졌다**
+## 3. Selecting the backend
 
-doc-21 개정 1 은 **PicoRV32 하나**의 측정 위에서 쓰였고, "현 표현 위의 상수항 여지가 고갈됐다"를
-③층의 근거로 삼았다. 리뷰어의 실사용 워크로드(hash_top v0.15, CAVP 8,187 벡터)가 그 전제를 반증했다.
+### 3.1 Features
 
-### 격차의 위치가 RTL 이 아니었다
+| Feature | Crate | Default | Effect |
+|---|---|---|---|
+| `oracle` | `sim-engine` | on | Compiles the `Interpreter` and `Bytecode` variants, their dispatch, and the native-refusal fallback arm. It gates the choice, not the semantics; nothing is deleted |
+| `oracle` | `cli` | on | Forwards `sim-engine/oracle`; makes the four oracle `--backend` spellings accepted |
+| `jit` | `sim-engine` | off | Adds the five cranelift crates and the machine-code path inside tier-3 |
+| `jit` | `cli` | off | Forwards `sim-engine/jit` |
 
-리포터가 **DUT 를 완전히 제거한 하네스**로 분해한 결과:
+The `cli` crate declares its `sim-engine` dependency `default-features = false`. That is
+load-bearing: without it, feature unification silently re-enables `oracle` in a
+`--no-default-features` CLI build, and the product-shape axis tests nothing.
 
-| | |
-|---|---|
-| Xcelium 전체 스윕(RTL 포함) | **31 s** |
-| vita 의 **문자열 처리만** (8 파일, RTL 0 사이클) | **430.1 s** = Xcelium 전체의 **13.9배** |
-| `hex2bytes` 호출만 제거하면 | `SHA256LongMsg` 383.9 → **2.2 ms/rec** |
-| ⇒ TB 측 비용의 | **99.4%가 `hex2bytes`** |
-| 대조: DUT 직결(문자열 0) | Keccak 라운드당 **~1.4 ms — 충분히 빠름** |
+### 3.2 `--backend`
 
-**즉 격차는 시뮬레이션 커널이 아니라 단일 함수에 있었다.** 그리고 그것은 ③층과 무관한
-알고리즘 결함이었다 — `value_str_bytes` 가 바이트를 **비트 단위로** 조립했고(문자 하나 읽는 데
-`get_vu` 128,000회), `.getc()` 가 매번 문자열 전체를 materialize 했다. 고친 뒤:
+`vita` and `vrun` accept the flag. `vcmp` and `velab` reject it — it is a simulate-side
+argument and nothing in the artifact depends on it:
 
 ```
-h2b(N) 호출 비용:  4k 0.12→0.001   8k 0.40→0.001   16k 1.74→0.010   32k 6.90→0.040 s
-스케일             O(N²) → O(N)                                  N=32,000 에서 172×
+error[VITA-E0001]: '--backend {name}' is a simulate-side argument — '{stage}' does not run
+process bodies. Pass it to `vita` or `vrun` instead; the choice does not affect the artifact
+'{stage}' writes
 ```
 
-### 이것이 §1.1 을 무효화한다
-
-개정 1 은 이렇게 썼다: *"현 표현 위의 상수항 여지가 측정으로 고갈됐다 — 착지 11 · 반증 9."*
-**그 측정은 PicoRV32 한 설계 위의 것이었고, 다른 워크로드에는 172× 짜리 결함이 남아 있었다.**
-"고갈"은 **그 설계에 대해서만** 참이었다.
-
-> **교훈**: 벤치 하나로 "여지가 없다"를 말할 수 없다. ③층 같은 구조 전환의 근거로는 더더욱.
-
-### 그래서 §7 의 선결 조건 ①이 이미 답을 줬다
-
-개정 1 은 착수 전 조건으로 "리뷰어 성능 테스트 결과 수령 — 다른 설계에서 크게 뒤지면 ③층 근거가
-강해지고, 비슷하면 우선순위가 내려간다"를 적었다. **결과는 셋째 경우였다**: 크게 뒤졌지만
-**그 원인이 ③층이 고칠 수 있는 것이 아니었다.**
-
----
-
-## 1. 목적 — 왜 지금 ③층인가
-
-### 1.1 정직한 근거 (그리고 정직하지 않은 근거)
-
-**쓰지 않을 근거**: "VCS/Xcelium 이 10–100배 빠르니까." — **이 저장소는 둘 다 측정한 적이 없다.**
-그 수치는 문헌이지 우리 데이터가 아니다.
-
-**실제 근거**: **현 표현(representation) 위의 상수항 여지가 측정으로 고갈됐다.**
-
-2026-08-01~03 작업에서 실물 설계(PicoRV32+TB, 40000 cycle) 기준:
-
-| | |
-|---|---|
-| 착지한 개선 | **11건** → 1.243 s → **0.57 s = 2.18×** |
-| 측정으로 **반증**한 가설 | **9건** (levelize · 프로세스 융합 · 2-state · allow-list 확장 · resize · 식 JIT · 바디 JIT · 평평한 아레나 · iverilog 비교 수치 오류) |
-| 도달점 | iverilog 13 (0.58 s + compile 0.03) **동률/추월** |
-
-11건의 착지 중 **4-state 연산 자체를 건드린 것은 하나도 없다.** 전부 그 *주변*의 낭비였고
-(재계산·할당·이미 정해진 분기·안 쓰는 버퍼·도달 못 하던 실행기), **그 주변은 이제 비었다.**
-남은 축을 정리하면:
-
-| 축 | 상태 |
-|---|---|
-| levelize (순서를 컴파일 시점에) | ❌ 반증(1.00×) + `$display` 순서 계약 위반 |
-| 2-state | ❌ 실측 7%, 그리고 **G1 정확성 목표와 충돌**(X-optimism) |
-| P9 allow-list 확대 | ❌ 시간 기준 상한 **4.3%** |
-| 병렬화(BSP) | ⏸ 조건부 2~3×, 현 워크로드에 조건 부재(doc-18) |
-| **표현 소거 = ③층** | **유일하게 남은 구조적 축이며, 정확성을 거래하지 않는다** |
-
-> **이것이 ③층이 옳은 방향인 이유다** — 격차를 재서가 아니라, **정확성을 팔지 않고 남은 유일한 축**이기 때문이다.
-
-> ⚠️ **개정 2 단서**: 위 표는 **PicoRV32 한 설계**에서 반증한 것이다. §0.5 가 보여주듯 다른 워크로드에는
-> ③층과 무관한 172× 짜리 결함이 남아 있었다. **"남은 유일한 축"은 그 설계에 대해서만 참이다** —
-> 실사용 설계를 더 넓게 재기 전까지 이 문장은 ③층 착수의 근거로 쓸 수 없다.
->
-> ⚠️⚠️ **개정 3 단서 — 같은 문장이 두 번째로 좁혀졌다.** §0.4: 사용자 함수를 부르는 RTL 에서
-> **바이트코드 VM 의 커버리지가 0%** 이고, 거기 **10.7×** 가 미청구로 남아 있다. 위 표의
-> "P9 allow-list 확대 ❌ 상한 4.3%" 줄은 **PicoRV32 의 시간 분포로 잰 상한**이며, 커버리지가 0% 인
-> 설계에는 적용되지 않는다. → **§7.3 의 T 단계**가 이 잔고를 청구한다.
-
-### 1.2 무엇을 목표로 삼나
-
-- **G1 유지**: 4-state · correct-or-loud · 3-OS 바이트 동일. ③층은 **속도 축이지 정확성 거래가 아니다.**
-- **비목표**: Verilator 를 이기는 것(그쪽은 2-state·levelize 거래를 했다). 겨루는 계층은 **VCS/Xcelium** 이다.
-
----
-
-## 2. 무엇이 실제로 바뀌어야 하나 — 표현 소거
-
-[study/01 §9.9](../study/01-interpreted-vs-compiled.md) 이 확정한 한계점: **실행기가 아니라 런타임 표현.**
-논블로킹 대입 하나로 비교하면(전부 실측):
-
-| | vita 현재 | ③층이 생성해야 할 것 |
-|---|---|---|
-| 값 | `Value` **72 바이트** 구조체 | 폭별 스칼라 (`u32`/`u64`/배열) |
-| 목적지 | `Lvalue` → chunks → `Offsets` 해석 | 컴파일 시점 확정된 슬롯 |
-| 쓰기 | 런타임 **분기 11 / 사이드테이블 6** | store 명령 2개 |
-| NBA | `NbaUpdate` ~112 B 큐 push | 대입별 전용 레코드 또는 더블버퍼 |
-| 깨우기 | `net_to_edge`/dirty/waiter **런타임 조회** | 생성된 직접 호출 또는 정적 비트 |
-
-### 2.1 네 가지 소거 — **하나만 해서는 이득이 0**
-
-이건 추정이 아니라 실측이다. 저장 배치만 평평하게 만든 프로브는 **0%** 였다(doc-18 §아레나).
-이유: `read_scalar_words` 가 `is_real`/`array_len`/`width`/`signed` 를 보려고 **이미 `NetSlot` 을 로드**하므로,
-포인터 추적을 줄여도 그 질문들이 남아 있는 한 값이 안 나온다.
-
-| # | 소거 대상 | 없어지는 질문 |
-|---|---|---|
-| **R1** | 정적 넷 할당 | "이 넷의 폭은? 배열인가? 실수인가? 핸들인가?" |
-| **R2** | 폭별 특수화 연산 | "이 값은 몇 워드인가? 상위를 마스킹해야 하나?" |
-| **R3** | 스케줄 구조 소거 | "이 넷이 바뀌면 누가 깨어나는가?" |
-| **R4** | NBA 전용화 | "이 업데이트의 목적지 모양은? 오프셋은?" |
-
-**R1 없이 R2 는 불가능**(폭을 모르면 특수화할 수 없다), **R1+R2 없이 R3 은 무의미**(값 접근이 여전히 범용이면
-깨우기만 빨라져도 전체가 안 움직인다). 즉 **R1→R2→R3→R4 는 순서가 강제된 묶음**이다.
-
----
-
-## 3. 계약 감사 — 무엇이 실제로 막는가
-
-사용자 지시는 "계약이 진로를 방해하면 과감히 깨라"였다. **먼저 무엇이 실제로 막는지 확인했고, 결과는 반직관적이다.**
-
-| 계약 | ③층을 막는가 | 근거 |
-|---|---|---|
-| **SchemaHash 동결 / `format_version`** | ❌ **막지 않음** | ③층은 `SimIr` 을 **읽기만** 한다. 필요한 정적 정보(`NetVar.width`/`signed`/`array_len`/`kind`)가 **이미 다 있다.** 타입을 바꿀 이유가 없다 |
-| **correct-or-loud** | ❌ **막지 않음 — 오히려 필수** | 새 백엔드의 **유일한 검증 수단**이다. 5043 테스트가 오라클이고, 이번 JIT 실험에서 실제로 실버그를 잡았다 |
-| **3-OS 바이트 동일** | ⚠️ **명세이지 벽이 아님** | cranelift IR 은 시프트 등을 **아키텍처 무관하게 정의**한다(aarch64 실측, doc-18). 남는 건 "cranelift 정의 ≠ Verilog 정의"뿐이고 **arch 무관한 가드**로 해결된다 |
-| **cargo-only / vita 크레이트에 build.rs 없음** | ❌ 막지 않음 | cranelift 의존성에 build.rs 가 있으나 blake3·serde 선례가 있다. **vita 자체 크레이트는 여전히 없음** |
-| **파일당 ≤1000줄** | ❌ 막지 않음 | 서브모듈 분할 패턴이 확립돼 있다 |
-| **no-unsafe 정책** | ✅ **깨야 함** | 현재 워크스페이스 `unsafe` 는 **1개**(`signal(2)`). ③층은 ⓐ 생성 코드 호출, ⓑ 넷 저장 원시 접근에서 필요 |
-| **MSRV 1.85** | ✅ **깨야 함(권장)** | cranelift 0.120 은 1.85 에서 빌드되나 **2년 묵은 라인**이다. 0.134 는 rustc **1.94** 요구. RHEL9/UBI CI 레그 영향 확인 필요 |
-
-### 3.1 결론 — 깨야 할 것은 둘뿐이고, 둘 다 범위가 좁다
-
-가장 무거워 보였던 두 계약(**SchemaHash 동결**, **correct-or-loud**)이 **막지 않는다.**
-전자는 손댈 필요가 없고 **후자는 이 프로젝트가 ③층을 시도할 수 있는 이유 그 자체**다 —
-5043개 테스트라는 오라클 없이 새 백엔드를 쓰는 것은 무모하다.
-
-**깨야 할 것:**
-
-1. **no-unsafe 정책 → "격리된 unsafe 허용"으로 개정.**
-   조건: ⓐ `unsafe` 는 지정된 모듈에만, ⓑ 각 블록에 `// SAFETY:` 근거 필수,
-   ⓒ 해당 모듈은 miri/sanitizer 대상, ⓓ 그 밖에서는 여전히 금지.
-2. **MSRV 1.85 → 최신 cranelift 가 요구하는 버전.**
-   3-OS CI(ubuntu / macOS / RHEL9-UBI)에서 툴체인 확보 가능성을 **먼저 확인**해야 한다.
-   불가하면 cranelift 0.120 고정으로 시작하고 나중에 올린다(가능함 — 실측으로 빌드 확인).
-
----
-
-## 4. 구조 판정 — 이것이 계획을 결정한다
-
-### 4.1 ⚠️ ③층은 바디 단위 폴백이 **불가능**하다
-
-②층 VM 이 additive 일 수 있었던 이유는 **커널을 공유**했기 때문이다 — VM 이 못 먹는 바디는
-인터프리터가 **같은 넷 테이블**을 보고 실행했다.
-
-③층은 넷 저장을 **소유**한다(그게 R1 의 정의다). 따라서 인터프리터가 실행하는 바디와 **같은 넷을 볼 수 없다.**
-
-> **→ ③층은 설계 단위 all-or-nothing 이다.** 설계 하나가 통째로 적격이거나, 통째로 기존 엔진으로 간다.
-
-### 4.2 그래서 v1 은 **정지(suspend)를 반드시 지원해야 한다**
-
-②층의 P9 allow-list 는 `Delay`/`Wait`/`Fork` 를 배제한다. 그런데 **모든 실제 설계에는
-`#delay` 를 쓰는 테스트벤치가 있다.** 즉 "P9 적격 설계"는 존재하지 않는다 —
-실측: examples/ 4개 전부 템플릿의 **40~50% 가 부적격**이고, 그것들이 테스트벤치다.
-
-**따라서 ③층 v1 은 정지를 다뤄야 한다.** 그리고 여기가 좋은 소식이다:
-
-```rust
-Terminator::Delay { amount, region, resume }   // ← resume 블록이 이미 IR 에 있다
-Terminator::Wait  { cause, resume }
-```
-
-**정지점과 재개 지점이 이미 IR 에 명시돼 있다.** 바디를 `fn body(state, resume_bb) -> Step` 형태의
-**상태기계로 낮추는 것은 기계적 변환**이다(진입점에서 `resume_bb` 로 분기). 컴파일드 시뮬레이터에서
-가장 어렵다고 알려진 부분이 vita 에서는 이미 풀려 있다.
-
-### 4.3 v1 이 거부해야 할 것 — 사이드카 75개의 분류
-
-엔진 동작의 상당수가 `SimIr` 이 아니라 `SimOpts` **사이드카 75개**에 산다. ③층은 이것들을 소비하거나
-거부해야 한다. 분류(실측 목록 기준):
-
-**코어 — v1 이 반드시 지원 (약 20)**
-`max_deltas` `time_limit` `timescale_unit` `global_prec_exp` `proc_multipliers` `proc_prec_mults`
-`net_names` `net_dims` `net_decl_ranges` `proc_scopes` `ca_delays` `assign_ranks`
-`two_state_nets` `wired_and_nets` `wired_or_nets` `radixes` `severities` `plusargs` `init_procs` `final_procs`
-
-**v1 이 거부 — 설계 수준 게이트가 하나라도 있으면 기존 엔진으로 (약 55)**
-`class_*`(16개) `fork_modes` ~~`func_table`/`task_calls_*`~~ `queue_*` `*_dyn_nets` `handle_copy_stmts`
-`clocking_*` `defer_*` `coverage_*` `probed_nets` `trace` `stage` `assert_*` `file_directed_stmts` …
-
-> **개정 4 수정(S0 구현에 반영, 2026-08-03)**: `func_table`/`task_calls_*`(사용자 서브루틴 호출)는
-> **거부가 아니라 코어**다 — S3 이 T1/T2 를 흡수해 "정지 + **호출** 포함"이 됐고, S3 의 중단 판정이
-> 문자 그대로 *"호출을 삼키지 못하면 중단"* 이므로 호출을 거부하는 게이트는 자기 계획과 모순된다.
-> 또 `*_dyn_nets` 사이드카는 **plain `int q[$]` 를 못 본다**(사이드카가 없다) — 완전한 검출기는
-> net 테이블의 `NetKind` 스캔이고, S0 게이트(`native::design_eligibility`)는 그렇게 구현됐다.
-> 게이트의 SimOpts 분류는 **`..` 없는 전수 destructure** 라 새 사이드카 추가 = 컴파일 에러 = 강제 분류.
-
-> **핵심**: v1 의 범위는 **"합성 가능 RTL + 기본 테스트벤치"** 다. 즉 Phase-1 MVP 의 범위와 거의 일치하며,
-> class/CRV/dynamic/coverage/assertion 을 쓰는 설계는 **기존 엔진이 계속 담당**한다.
-> 이것은 후퇴가 아니라 **정확도 사다리를 지키는 방식**이다 — 지원 못 하는 것을 조용히 틀리게 하지 않는다.
-
-### 4.4 additive 로 갈 수 있다
-
-위 셋을 합치면 구조가 나온다:
+An unrecognised value is a loud CLI error at exit code 3:
 
 ```
-Backend::Interpreter   기존 (레퍼런스)
-Backend::Bytecode      기존 (현 기본값)
-Backend::Native        신규 — 자기 저장·자기 스케줄러. 설계 단위 all-or-nothing.
-                       설계 게이트가 거부하면 자동으로 Bytecode 로 폴백.
+error[VITA-E0001]: '--backend' takes 'native' (the DEFAULT — it runs every design), or, to
+bisect a suspected defect against a second implementation, 'interp' (the readable reference
+semantics) or 'vm' (the bytecode VM). Same output whichever you pick — that equivalence is the
+gate, so this only moves wall-clock. --obs-dir run.json records which executor actually ran
+beside the one requested
 ```
 
-**기존 엔진은 한 줄도 안 바뀐다.** 등가 게이트는 이미 있는 것을 그대로 쓴다 —
-`cli/tests/backend_flag.rs` 가 stdout + VCD 바이트를 비교하고,
-**전 스위트를 `--backend native` 로 돌리는 것**이 이번 세션에서 39건을 찾아낸 그 기법이다.
+In a build without `oracle`, `interp` and `vm` are a distinct loud rejection rather than an
+unknown value, and never a silent downgrade to `native`:
 
----
+```
+error[VITA-E0001]: '--backend' takes only 'native' in this build — the oracle executors
+('vm', 'interp') are compiled out. Rebuild with the `oracle` feature to select them.
+```
 
-## 5. 단계별 계획
+### 3.3 The two build shapes
 
-각 단계는 **그 자체로 측정 가능한 가설**이고, **통과 못 하면 다음 단계로 안 간다.**
-
-### S0 · 설계 수준 게이트 + 적격률 측정 (착수 판단)
-
-- `native::design_eligible(ir, opts) -> bool` — 사이드카 55개 중 하나라도 비어 있지 않으면 거부.
-- **측정**: examples/ 4개 + P6 corpus 72개 + PicoRV32 중 몇 %가 적격인가.
-- **게이트**: 적격률이 낮으면(예: corpus 의 절반 미만) **여기서 중단**. 만들어도 아무도 안 탄다.
-- 산출: 새 코드 ~200줄. **되돌리기 비용 0.**
-
-### S1 · 넷 저장 소유 (R1) — *기존 엔진과 무관한 새 모듈*
-
-- `native::NetArena` — 넷마다 컴파일 시점 확정 폭의 슬롯. `(val, unk)` 인접 배치.
-- 아직 코드 생성 없음. **인터프리터 형태로** 이 저장 위에서 도는 최소 실행기를 쓴다.
-- **게이트**: corpus 적격분에 대해 `--backend native` 가 기존과 **바이트 동일**.
-- **이 단계에서 이미 배울 것**: 범용 표현을 벗은 것만으로 얼마가 나오는가.
-  (doc-18 의 아레나 프로브는 0% 였지만 그건 *질문을 남긴 채* 배치만 바꾼 것이다 — 여기서는 질문도 없앤다.)
-
-> **S1 내부 분해 (2026-08-03, S1 착수 시 확정)** — 기존 스케줄러는 측정으로 핀된 행동 수십 개를
-> 담고 있어(glitch 엣지 마스크·inertial 세대 취소·edge 1회 collapse·waiter arm 스냅샷·self-write
-> 억제 …), "새 스케줄러 + corpus 바이트 동일"을 한 슬라이스에 지으면 **검증이 구현을 못 따라간다**.
-> byte-identity 논증을 각 층에서 세울 수 있도록 넷으로 가른다 — 각각이 자기 게이트를 갖는다:
->
-> | | 무엇 | 게이트 (전부 기존 엔진 대비 in-crate 차분) |
-> |---|---|---|
-> | **S1a ✅ (2026-08-03)** | `NetArena` — 슬롯 레이아웃·t0 초기값. **R1 의 중단 판정("폭별로 안 나뉘면 중단")이 여기서 답해진다 → 통과**(corpus 72 설계 전수에서 폭별 고정 슬롯 빌드 성공) | ✅ corpus 297넷 전수: 아레나 `read_net` ≡ 엔진 `read_net`(원소·whole·OOB) + 워드 경계 사다리(1~200b) 라운드트립 |
-> | **S1b ✅ (2026-08-03)** | 아레나 **read-path 를 기존 eval 밑에**(`impl NetReader for NetArena` — 슬롯 desc 한 번의 dense 로드가 NetSlot 메타 질문·라우팅 비트맵 전부를 대체). **평가기 의미는 공유 = byte-parity by construction**; 평가기 교체(인라인 값·폭 특수화)는 R2 = S2 의 일이다 | ✅ 미러 차분 **17,940건 발산 0**(72 설계 × 5 랜덤 4-state 상태 × 全 pure expr × 2 문맥 폭 · 카운트 정확 핀) |
-> | **S1c ✅ (2026-08-03)** | **쓰기 퍼널**(whole/bit/part/array lvalue·concat LHS·OOB drop·X-index no-op·2-state 강제·real→int 반올림·change 판정). 오프셋 해석은 엔진과 **한 함수**(`eval::resolve_offsets`)로 통일 | ✅ 문장 단위 차분 **3,150(corpus) + 270(적대 형태) 발산 0** + drop-arm 결정적 teeth. ⭐ 이 게이트가 **내 퍼널의 silent-wrong 1건**을 잡았다(§4.5.287) |
-> | **S1d-1 ✅ (2026-08-03)** | **백엔드 선택 + 런타임 게이트** — `Backend::Native` · `--backend native` · `native::runtime_gate`(설계 게이트 ∧ 아레나 빌드) · run.json 이 **실제 실행기**와 **두 층 판정**(`eligible`/`buildable`/`refused`)을 기록 | ✅ 요청해도 **출력 바이트 불변**(stdout+VCD, 게이트 수용/거부 양쪽) · runtime gate ≡ 두 반쪽(corpus 전수) · `buildable` ≡ `build` |
-> | **S1d-2 ✅ (2026-08-03)** | **dirty/edge 채널** — 스케줄링의 절반은 루프가 아니라 **쓰기**에 달린다: `dirty`(멤버십 = 변경 집합 · A→B→A 왕복 보존) · `last_blocking_writer` · **`slot_edge`**(끝점이 잃은 엣지 **종류**). edge-target 스캔은 엔진과 **한 철자** | ✅ 채널 차분(배치 후 (net, mask, writer) 3튜플 · corpus + 클럭 형태) · **7개 행동 전부 teeth 검증**(하나씩 깨면 게이트가 운다) |
-> | **S1d-3 ✅ (2026-08-03)** | **wake 결정** — 변경 집합 → 어느 프로세스가 ready 이고 어떤 순서인가(정적 Edge = pass (a) · 정적 Level/**Comb/Latch** = pass (b) `arm=None`). 적격성이 fork/clocking 을 거부하므로 activity ≡ process·`Ready` 가 proc id 로 붕괴 | ✅ 결정 차분(Active 큐 **델타** 대조 · 두 관측 granularity) · **8규칙 teeth** · ⭐ 리뷰가 **조합 프로세스 전체 미등록**을 잡았다 |
-> | **S1d-4a~4c ✅ (2026-08-04)** | `impl Kernel`(§4.5.292) → 포맷/dispatch(§4.5.293/294) → NBA 드레인(§4.5.295) → `k_rearm`(§4.5.296) → 바디 워크(§4.5.297) → **런 루프 + `Delay` 정지 + `simulate` 배선**(§4.5.298). ③층이 **실제로 설계를 돌린다** | ✅ 코퍼스 적격 **65 설계 stdout+finish+시간+exit class 동일** + 판별 설계 19 + 적대 differential **316 설계 0 diff**. ⭐⭐ 게이트가 `exit_class` 를 안 보던 동안 **OOB 배열 진단이 조용했다**(FIFO 가 FAIL→PASS) |
-> | **S1d-4c-2d ✅ (2026-08-04)** | **in-body 웨이터**(§4.5.299) — `k_suspend_on`·공유 워크의 `Wait` 암·`fire_waiters`. `Named` 는 **구성 불가**로 판명(named event → 카운터 넷) | ✅ 전용 설계 37(코퍼스 커버리지 0) · differential **246 native 확인 0 diff** · ⭐⭐ `wait(e)` 술어가 범위 진단의 **세 번째 생산자**라 세 종료 경로에서 진단이 사라졌다(FAIL→PASS) |
-> | **S1d-4d-1 ✅ (2026-08-05)** | **zero-delay cont-assign settle**(§4.5.300) — 거부는 delayed·wired·multi-driver 셋만. **picorv32 네이티브 실행 + 바이트 일치** | ✅ 판별 설계 41 · differential 218 native 0 diff · 뮤테이션 11/11. ⭐⭐ byte-identity 논증이 **값 축에서만** 참 · `arm_t0` 가 t0 settle 변경집합 유실 |
-> | **S1d-4d-2 ✅ (2026-08-05)** | **VCD**(§4.5.301) — `full_snapshot_with` 제네릭 리더 · `emit_vcd_change` 분리 · `note_change` 에 `word` 복원 · **값을 store 지점에서 캡처** | ✅ **`examples/` 4개 stdout+VCD 바이트 동일** — 원래 S1 게이트가 실사용 설계에서 통과. 코퍼스 dump 37 VCD 비교 · differential 498 native 0 diff · 뮤테이션 11/12 |
-
-> **S1d-4d-2 그라운딩 (2026-08-05, 착수 前 실측) — 이음매 넷이 특정됐다.**
->
-> 1. **`full_snapshot(st)` → `full_snapshot_with<N: NetReader>(st, nets)`** (`builtins/queues_io.rs:601`).
->    `$dumpvars`/`$dumpall`/`$dumpon` 이 부르는 t0 값 덤프만이 스토어를 읽는다 — 헤더·선언·필터
->    (`dump_filter_from_args`)는 전부 IR/메타데이터라 **넷 값을 안 만진다**. 즉 `$dumpvars` 거부 사유
->    (*"`full_snapshot` 이 `&st.nets` 를 통째로 걷는다"*)는 **한 함수**의 문제다. 패턴은
->    `format_args_str_with`/`dispatch_with` 와 동일(리더를 제네릭으로).
-> 2. **`SimState::emit_vcd_change(net, word)` 를 둘로**(`state/changes.rs:65`): id 조회
->    (`vcd_id`/`vcd_word_ids`)+writer 호출은 그대로 두고, **값을 인자로 받는** `emit_vcd_value`
->    변종을 낸다. id 표는 `$dumpvars` 가 채우는 **정적 메타데이터**라 양쪽이 공유한다.
-> 3. **아레나 `note_change` 에 `word` 인자를 되돌린다**(현재 `note_change(net)` — 호출부 두 곳
->    `native/write.rs:312,354` 은 원소 인덱스를 이미 갖고 있다). 배열은 **원소마다 VCD id** 가
->    따로라 word 없이는 잘못된 레코드가 나간다. S1d-2 가 기록해 둔 의무.
-> 4. **값은 store 지점에서 캡처해 버퍼링**하고 드레인은 나중에 — `pending_range` 와 같은 구조.
->    ⚠️ (net, word)만 버퍼링하고 드레인 때 읽으면 **한 슬롯 안의 A→B→A 글리치가 한 레코드로
->    합쳐진다**(dirty.rs 가 경고해 둔 바로 그것). `now` 는 **복사하지 않는다** — 드레인 지점이
->    전부 `now` 불변 구간(문장 경계·settle·NBA apply)이라 드레인 때 스탬프해도 같다.
->
-> **게이트** = `examples/` 4개 + picorv32 의 **VCD 바이트 동일**(VM vs native). ⚠️ 바이트 게이트 前
-> 결정 6건(ROADMAP §2)은 전부 **vita-vs-iverilog** 차이라 이 게이트(vita-vs-vita)를 막지 않는다.
-> | **S1d-4d-3 ✅ (2026-08-05)** | **delayed CA**(§4.5.302) — 엔진 로직을 `schedule_delayed_cas`/`take_due_delayed_ca` 로 **추출**해 양쪽이 공유 | ✅ **코퍼스 72/72 바이트 동일** · differential 175 native 0 diff · PRE/POST 엔진 경로 0 diff · 뮤테이션 9/9. ⭐⭐ LHS 오프셋만 엔진 스토어라 동적 인덱스 쓰기가 **조용히 사라졌다** · 공유 부분은 **차분이 못 지켜** iverilog 절대값 앵커 2개 신설 |
-> | **S1d-4d-4 ✅ (2026-08-05)** | **multi-driver·wired 해상**(§4.5.303) — fold 를 `resolve_md_group` 로 추출해 공유·그룹 분류는 스케줄러의 `md_groups` 한 철자 | ✅ **S1 거부 행에서 cont-assign 계열 소멸**(잔여 = `final`·fork·서브루틴·`$monitor` 계열). differential 45설계 3-way 0 diff·폴백 0 · 앵커 4(iverilog 절대값) · 뮤테이션 비등가 11/11 kill. ⭐ 평가 **순서**는 impure 드라이버 쌍으로, 루프 **위치**는 델타 예산 스윕으로 핀 — 값-전용 설계로는 못 보는 두 축 |
-
-> **⭐⭐ S3 착수 전 그라운딩 실측 (2026-08-08) — 큐가 적어 둔 전제가 반대였다.**
-> 이 문서와 ROADMAP 은 *"picorv32 native/vm = 0.97× 이고 남은 병목은 표현식이 아니라
-> **스케줄러**"* 라고 적고 있었다. 셋 다 정정한다.
->
-> **① 0.97× 는 stale 이다 — 현재 0.81×.** 세 커밋을 인터리브 best-of-4 로 재측정(release ·
-> `bench/picorv32` CYCLES=40000):
->
-> | 커밋 | vm | native | native/vm |
-> |---|---:|---:|---:|
-> | `e5d3136` (§4.5.312) | 1.035 s | 1.066 s | **0.972×** ← 기록된 값 |
-> | `7cc8c85` (§4.5.313 aes_top) | 0.878 s | 1.082 s | 0.811× |
-> | `bb5d287` (§4.5.314) | 0.871 s | 1.072 s | **0.813×** |
->
-> **② 그런데 이것은 native 의 회귀가 아니다.** native 의 절대시간은 세 슬라이스 내내
-> **평평하다**(1.066 → 1.072). 움직인 것은 **VM 으로, aes_top 슬라이스에서 1.18× 빨라졌다**
-> (1.035 → 0.878). 원인은 귀속하지 않았다 — 그 슬라이스가 인덱스 규칙과 E4002/W4029 경로를
-> 손댔고 picorv32 는 `mem[0:255]` 를 매 사이클 인덱싱한다는 정황뿐이다. **비율만 보면 native 가
-> 나빠진 것처럼 읽히므로, 이 축의 기록은 항상 절대시간과 함께 남긴다.**
->
-> **③ 그리고 native 의 병목은 스케줄러가 아니라 표현식이다.** unstripped release +
-> `/usr/bin/sample`(top-of-stack, vita 프레임만):
->
-> | picorv32 · **native** | | picorv32 · **vm** | |
-> |---|---:|---|---:|
-> | `eval::eval_core::eval_ctx` | **15.8%** | `sched::propagate::propagate_changes` | **40.1%** |
-> | `value::Value::mask_top` | 11.2% | `native_eval::exec_vm::run` | 14.8% |
-> | `value::Value::resize` | 10.4% | `sched::scan_arm::settle_cont_assigns` | 6.4% |
-> | `eval::sysfunc::truthiness` | 6.7% | `sched::scan_arm::run_body` | 6.4% |
-> | `native::arena::…::read_net` | 6.0% | `…SimState::read_scalar_words` | 5.6% |
-> | `eval::eval_core::eval_binary_ctx` | 5.4% | `state::init_diag::store_words` | 4.4% |
-> | `native::kernel::…::run_wprog` | **4.0%** | | |
->
-> **제네릭 트리워커(`EvalCtx` + `Value`)가 native 시간의 ~50%** 이고, S2 가 지은 폭-특수화
-> 평가기 `run_wprog` 은 **4.0%** 다. 즉 picorv32 의 식은 대부분 **admit 되지 않는다**.
-> **스케줄러 지배는 VM 쪽 성질**이다(`propagate_changes` 40.1%).
->
-> **④ 대조군은 커밋된 벤치로 재현된다.** 같은 프로파일러로 `bench/keccak/keccak_f_flat`(균일
-> 64비트 레인 · admission 성공)을 재면 순서가 뒤집힌다 — `run_wprog` **18.4%**(1위) ·
-> `write_chunk` 11.2% · `write_lvalue` 6.8% 이고 **`eval_ctx` 는 상위 8위 밖**이다.
-> 두 설계의 차이는 규모가 아니라 **폭의 균일성**이다.
->
-> **⑤ 표적.** `wprog::compile_node` 의 진입 조건이 *"한 노드의 서브트리 안에서 폭과 부호가
-> 균일"* 이고, 어긋나면 **트리 전체**를 거절한다. 32비트 데이터패스에 5비트 select·1비트 flag·
-> concat 이 섞인 실 CPU 는 이 조건을 거의 못 맞춘다. 그러므로 **picorv32 에서 S3(바디 코드젠)를
-> 먼저 하는 것은 순서가 틀렸다** — 바디를 코드로 만들어도 그 안의 식이 여전히 제네릭으로
-> 떨어진다. 순서는 **admission 확대(S2 본체) → S3** 다. keccak 은 이미 균일하므로 S3 의
-> 이득을 그쪽에서 먼저 재는 것은 여전히 유효하다.
->
-> ⚠️ `bench/picorv32` 는 gitignore 라 이 숫자는 로컬 재현이다. **커밋된 재현 가능한 절반은
-> ④의 keccak 대조**이며, 두 프로파일의 정성적 결론(균일 폭 = `run_wprog` 지배 / 혼합 폭 =
-> `eval_ctx` 지배)은 그것만으로 선다.
-
-> | **S1d-5 ✅ (2026-08-05)** | **`$value$plusargs` 배선**(§4.5.304) — `stmt_effect` 가족 첫 구성원. 공유 `exec::plusargs::effect` + 게이트 carve-out(`value_plusargs_rhs` 한 철자) | ✅ **keccak_f_flat 네이티브·바이트 동일**. ③층 기준선 실측(N=5000·release): interp 5.22 / vm 2.53 / **native 4.49** / iverilog 7.05 — ②보다 1.8× 느림 = S2/S3 이 지울 표현 비용의 시작점. ⚠️ stmt_effect 가 가리던 다음 행이 드러났다: 호출형·배열형 keccak = **frame-local(S3)** |
->
-> **⭐ S1d-4 착수 그라운딩 (2026-08-03) — 계획이 바뀐다: "두 번째 실행기"가 아니라 `impl Kernel`.**
-> 엔진은 이미 이 이음매를 **의도적으로** 만들어 뒀다(`exec/mod.rs`: *"`apply_effect` 의 커널 호출이
-> P7b 의 트레이트 표면이 된다"*). 실측으로 그 경계가 **어디까지인지** 확정했다:
->
-> | | 제네릭인가 | 결과 |
-> |---|---|---|
-> | `compute_effect` / `apply_effect` | ✅ `K: Kernel` | 문장 단위 의미 **전부 재사용** — `$display` 디스패치·NBA 예약·형변환까지 |
-> | `run_process`(바디 워크: 블록 순회·terminator·정지/재개) | ❌ `&mut Scheduler` 고정 | 아레나 쪽이 **자기 워크를 가져야** 한다 |
-> | `Kernel` 구현자 | **1개**(`Scheduler`) | 두 번째 구현자가 곧 ③층 실행기다 |
->
-> **`Kernel` 표면 52 메서드가 정확히 셋으로 갈린다** — 그리고 이 분해가 S1d-4 의 진짜 크기다:
-> **① 코어 ~16**(eval·write·NBA·delay·systask·truthy·rearm·fatal) = 반드시 구현 ·
-> **② 게이트가 거부하는 가족 ~9**(force/release·queue·assoc-iter·class·disable fork) = S0 가
-> 도달 불가로 만들지만 **트레이트는 본문을 요구한다** — 각각 정직한 답이 필요(조용한 no-op 은 금지) ·
-> **③ ~27 = 바로 그 "퍼널 밖 효과" 선결 과제**(seeded `$random`/`$dist_*`·`$cast`·`$value$plusargs`·
-> 파일 계열 16·`$sformatf`). **즉 노트로 들고 있던 그 선결 과제는 트레이트가 구조적으로 강제한다** —
-> `Kernel` 을 구현하면서 그것들을 답하지 않을 방법이 없다.
->
-> **✅ S1d-4a 완료 (2026-08-03) — 그리고 셋으로 갈린 게 아니라 넷이었다.**
-> 52 를 실제로 구현하면서 분해가 정정됐다: **① 스토어 코어 13**(eval·eval_native·offsets·write·
-> write_scalar·NBA 3종·delay·truthy 2종·max_deltas·mark_fatal) · **② 분류 술어 17**
-> (`k_*_rhs` 15 + `rhs_is_stmt_effect_family` + `class_new_site`) · **③ 거부 워커 20** ·
-> **④ 미배선 1**(`k_dispatch_systask`). ②가 계획에 없던 축이고 **이 슬라이스에서 제일 중요한 결정**이다:
-> 술어는 값을 만들지 않고 **`compute_effect` 가 어떤 문장을 짓는지**를 정한다. 거부 가족이라고 `false`
-> 로 스텁하면 그 문장은 **loud 해지지 않고 다른 문장이 된다**(pure-eval 경로로 조용히 흘러간다) —
-> 그래서 술어는 **전부 진짜로 답하고**, `exec::kpred` 로 **엔진과 한 철자**를 쓴다(§4.5.291 의 교훈을
-> 강제 가능한 형태로 바꾼 것: 쌍둥이를 안 쓰면 쌍둥이가 갈릴 수 없다). 워커만 loud.
->
-> ⭐ **`k_dispatch_systask` 의 범위가 숫자가 됐다.** 그것만은 스토어에서 답할 수 없다
-> (`builtins::dispatch` 가 `&SimState` 로 렌더한다). 실측: **적격 설계에서 `builtins` 가 넷을 만지는
-> 곳은 읽기 4 곳뿐**(`render.rs:260,377` · `queues_io.rs:690,756`)이고 **쓰기는 0**이다 — 넷을 쓰는
-> 태스크(`$sformat`·`$readmem*`·`$cast`·string/heap 뮤테이터·`ClassRandomize`)는 §4.5.291 의
-> `stmt_effect` 행이나 storage 행이 이미 전부 거부한다. **즉 4b 의 dispatch 배선은 3.6k 줄 재작성이
-> 아니라 4-site 파라미터화다.**
->
-> ⚠️ **게이트가 또 내 결함을 잡았다 — 그리고 이번엔 "다시 옮겨 적기"가 원인이었다.**
-> `delay_ticks` 를 엔진에서 **기억으로 재진술**했더니 네 절 중 둘(X/Z 가드 · `u64::MAX` 포화 센티널)이
-> 사라져 **무한 지연이 t+0 에 발화**했다. 값 비교로는 절대 안 보인다(지연량은 저장된 비트가 아니다).
-> 수정은 "더 잘 옮겨 적기"가 아니라 **`eval::delay_ticks_of` 로 공유**(`resolve_offsets` 와 같은 자리).
-> 그리고 `max_body_steps` 기본값이 `u64::MAX` 였다 — "의견 없음"이 아니라 **종료 가드 없음**이라
-> **생성자 인자로 승격**.
->
-> ⚠️ **teeth 가 처음엔 절반이었다**: 17 뮤테이션 중 **5개 생존**(컨텍스트 폭 규칙 · write_scalar ·
-> truthy · delay_ticks · eval_native — 뒤 넷은 `compute_effect` 가 assign 에서 **부르지 않는 표면**이라
-> 진입 0회). 게이트를 **control/VM 표면 워크 + 컨텍스트-폭 설계군 + `class_new_site` 표 주입**으로
-> 넓혀 전부 kill. 남은 두 생존(`prec_mult` · `now`)은 **코퍼스가 그 형태를 안 갖고 있어서**였고
-> (real 값 지연 · `$time` 읽기 · 비-1 타임스케일), 전용 설계로 닫았다.
->
-> 그래서 S1d-4 는 다시 쪼갠다: **S1d-4a = `impl Kernel` 코어 16 + 거부 가족 9 의 정직한 본문**
-> (게이트 = 같은 상태·같은 문장에서 `apply_effect` 결과가 양 스토어 동일 — 문장 실행기를 **공유**
-> 하므로 미러가 아니라 **구조적** 동일) → **S1d-4b = 바디 워크**(블록·terminator·정지) →
-> **S1d-4c = 리전 큐·델타·in-body 웨이터·`busy`** → **S1d-4d = settle·wired + 바이트 동일 게이트**.
-> ③의 27개는 4a 에서 **정직한 loud** 로 두고(도달하면 fatal, 조용한 오답 불가), 실제 배선은 그
-> 가족이 필요한 설계를 게이트가 받을 때 — 즉 **`rhs_is_stmt_effect` 를 S0 거부로 올릴지**를 4a 에서
-> 결정한다(tier-2 와 같은 술어를 쓰면 판정이 갈릴 수 없다).
->
-> ⚠️ **S1d 착수 前 필수 4건**(S1c 와 그 적대 리뷰가 발굴 · 정본은 `native/write.rs` 모듈 독):
-> ① ~~프레임 로컬~~ · ~~런타임 게이트 통일~~ **둘 다 닫힘(S1d-1)** — `NetArena::build`/`buildable` 이
-> `func_table` 을 거부하고, `native::runtime_gate` 가 **설계 게이트 ∧ 아레나 빌드**다. run.json 이
-> 두 층을 따로 싣는다(`eligible` = 범위 상한 · `buildable` = 오늘의 저장소 · `refused` = AND 의 이유).
-> ② **퍼널을 통과하지 않는 효과** — `sim_ir::rhs_is_stmt_effect` 가족(seed 를 되쓰는 `$random`/
-> `$dist_*`·`$cast`·`$value$plusargs`·파일 계열)과 효과 있는 SysTask(`$readmem*`·`$sformat`)는
-> **`write_lvalue` 를 한 번도 부르지 않는다**. `r = $random(seed)` 는 **오늘 적격**이고, 배선 없이
-> 돌리면 매 draw 가 같은 값이 된다. S0 는 이것을 **일부러 거부하지 않는다**(무엇을 S1d 가 배선할 수
-> 있는지가 미정 — 추측 거부는 측정을 반대 방향으로 오염시킨다). 판정은 tier-2 와 **같은 술어**로.
-> ③ **dirty/edge 채널** — `note_change`+`accumulate_edge` 는 정확히 두 store 지점에 달린다.
-> `changed` 만 소비하고 intra-slot 엣지 마스크를 안 남기면 값은 맞고 **posedge 가 사라진다**.
-> ④ **`warn_run_range` stderr** — 값은 이미 일치하지만 바이트 동일 게이트는 stderr 도 본다.
->
-> ~~S1d 전에는 `--backend native` 가 존재하지 않으므로~~ **S1d-1 에서 배선됐다**: 플래그는 받되
-> 실행기가 없어 **항상 VM 폴백**이고, run.json 이 `backend`/`backend_requested`(폴백 가시화)와
-> `native{eligible, buildable, refused}`(범위 상한 / 오늘의 저장소 / AND 의 이유)를 싣는다.
-> eligibility-set ≡ executor-set 은 `native::runtime_gate` 로 코드가 됐다.
-
-### S2 · 폭별 특수화 연산 (R2)
-
-- 폭 ≤32 / ≤64 / 그 외로 갈라 연산을 특수화. `Value`(72B) 를 이 경로에서 **완전히 제거**.
-- **게이트**: 동일 + 배속 측정. **여기서 부호가 안 나오면 R3/R4 는 무의미하다 → 중단 판정.**
-
-> **슬라이스 1 ✅ (2026-08-05, §4.5.305) · 슬라이스 2 ✅ (2026-08-05, §4.5.306) — 중단 판정 통과.**
-> `native/wprog.rs` = admission-gated 폭 특수화 평가기(`W=(val,unk)` u64 두 평면 · 컴파일 시점 확정
-> 슬롯 인덱스 · **ExprId 직접 인덱스 캐시**). **admission 이 정확성 논증**: 한 트리의 모든 노드가
-> **같은 폭과 같은 부호** ⇒ 넓힘·부호확장·절단이 존재하지 않는다. 슬라이스 2 가 **부호**(예외 = signed
-> `>>>` 거절)와 **비교 6종**(피연산자가 폭·부호를 공유할 때 · 비교 자체는 `eval::binops` 자유 함수를
-> 공유)을 더하고 **조건(`k_truthy`)** 을 라우팅했다. 마스크는 프로그램이 아니라 **op 마다** 붙는다
-> (한 프로그램이 두 폭을 갖는다 — 비교 피연산자 `ow` vs 결과 1).
-> 4-state 테이블은 **소진 배터리 36형 × 65,536 + 코퍼스 admitted 7,575** 로 제네릭 평가기와 0 발산.
->
-> 슬라이스 3 이 **lvalue 오프셋**을 특수화했다(§4.5.307) — 인덱스→비트위치 규칙을 `offset_of_index_value`
-> 로 추출해 공유하고, ExprId 별 캐시가 상수 인덱스를 접는다. 어느 한 인덱스라도 미admit 이면 **lvalue
-> 전체**가 제네릭으로 되돌아가고, 그 성질이 곧 E4002 기계 보존의 논증이다.
->
-> **native 4.49 → 1.79 s = 2.51×**, keccak_f_flat·N=5000·release — ②층(2.56 s) 대비 **1.43×**.
-> ⚠️ 이것은 **표현식 무거운** 설계의 숫자다: **picorv32 는 0.83×(더 느리다)** — 남은 일이 스케줄러/
-> 클럭 지배 구간에 있다는 뜻이고, 그것이 S3/S4 의 표적이다.
-> 슬라이스 1 의 And arm 실측 = 로드 2 + 분기·호출·할당 0 + ALU 9, 재설계 사유 없음.
->
-> ⚠️ **W 경로에 닿는 진입점은 둘뿐**: `k_eval_for_lvalue`(대입 rhs·NBA 샘플·force·CA settle)와
-> `k_truthy`(분기 조건·`wait(e)`). 시스템 태스크 인자(`$display("%b", a<b)`)는 `eval_task_arg` 로
-> 가고, lvalue 오프셋은 `resolve_offsets` 로 간다 — **다음 슬라이스의 표적이 그 둘**(대입당 71.9k 회
-> 전량 제네릭 · 동적 인덱스 배열 읽기).
-> ⚠️ **측정 비교가능성**: bench/keccak 의 TB 가 `start` 를 설계가 샘플하는 바로 그 posedge 에 세워
-> **Active 리전 순서 레이스**를 만든다(IEEE 1364 §11 미정의). 재측정 슬라이스가 TB 를 고치고 숫자를
-> 다시 잰다.
-
-### S3 · 바디 코드 생성 (정지 포함)
-
-- `CompiledBody` → cranelift 함수. `Terminator::Delay/Wait` 의 `resume` 로 **상태기계** 진입 분기.
-- 넷은 슬롯 주소로 직접 store/load — **커널 호출 없음**(여기가 ②층 JIT 이 진 지점이다).
-- **게이트**: 전 스위트를 `--backend native` 로 + P5 differential.
-
-### S4 · 스케줄 소거 (R3)
-
-- "이 넷이 바뀌면 누가 깨어나는가"를 컴파일 시점에 확정 → 생성된 직접 호출 또는 정적 비트마스크.
-- **게이트**: 동일 + `$display` 순서·델타 순서가 바이트 동일(계약 유지 확인).
-
-### S5 · NBA 전용화 (R4)
-
-- 대입마다 전용 업데이트 레코드 또는 더블버퍼. 범용 큐 제거.
-- **게이트**: 동일. NBA 순서(`seq`) 의미 보존이 핵심 위험.
-
-### S6 · 3-OS 결정성 검증
-
-- x86-64(ubuntu/RHEL9) vs aarch64(macOS)에서 **VCD/stdout 바이트 동일** 확인.
-- 시프트·나눗셈·FP 를 arch 무관 가드로 emit 했는지 검사하는 **전용 핀** 추가.
-
----
-
-## 6. 규모·위험 추정
-
-### 6.1 규모
-
-| | |
-|---|---|
-| 현 sim-engine | **28,431 LOC** |
-| 신규 예상(S1~S5) | **5,000 ~ 10,000 LOC** (저장 + 코드젠 + 스케줄러 + 게이트) |
-| 재사용 | 프론트엔드 전부(`SimIr`) · 오라클 전부(5043 테스트 / CLI 테스트 파일 358개 / 단언 2601개) · JIT 인프라(§9 의 `jit.rs`, feature 뒤에 이미 있음) |
-
-**VCS 30년·Verilator 20년 중 대부분은 백엔드가 아니라 프론트엔드와 의미론 코퍼스에 들어갔다.
-vita 는 그 둘을 이미 갖고 있다.** 이것이 이 시도가 무모하지 않은 이유다.
-
-### 6.2 위험 (높은 순)
-
-| 위험 | 완화 |
-|---|---|
-| **네 번째 의미 구현체.** 인터프리터·VM·JIT 에 이어 넷째. 이번 세션에 둘째가 넷 가지로 조용히 어긋났다(§4.5.279) | **전 스위트를 새 백엔드로 돌리는 것을 CI 필수 레그로.** corpus differential 로는 부족하다는 것이 이미 증명됐다 |
-| **메모리 안전.** 원시 슬롯 접근은 잘못되면 값이 아니라 **오염** | unsafe 를 지정 모듈에 격리 + miri/sanitizer 레그 + 슬롯 접근을 단일 퍼널로 |
-| **3-OS 발산.** arch 별로 다른 답 | S6 전용 핀 + cranelift IR 이 이미 arch 무관 정의(실측) |
-| **적격률이 낮아 아무도 안 탐** | **S0 에서 먼저 측정하고 중단 판정** |
-| **부호가 안 나옴** | **S2 에서 중단 판정** — R3/R4 착수 전에 결론이 난다 |
-
-### 6.3 예상 이득 — **모른다고 적는다**
-
-②층 JIT 은 −7~−15% 였고, 그 원인이 경계였음을 격리 측정했다. ③층은 그 경계를 없애는 것이므로
-**부호는 바뀔 것으로 기대**하지만, **크기는 예측하지 않는다.** doc-18 의 규율대로
-**S2 에서 실측하고 그 숫자로 계속 여부를 정한다.**
-
-참고로 알 수 있는 상한 하나: 실물 설계에서 **parse+elaborate 가 ~85 ms(런의 14%)** 이고 이건 ③층이
-줄이지 않는다. 즉 시뮬레이션 부분을 **무한히 빠르게** 해도 이 워크로드에서 상한은 **약 7×** 다.
-
----
-
-## 7. 착수 판정 — **개정 4: 시작한다**
-
-### 7.1 판정이 뒤집힌 이유 (요약 — 근거는 §0.3)
-
-| | |
-|---|---|
-| 실사용 격차 | **≈ 108×** (리포터가 작업량 기준으로 **스스로 낮춰** 정정한 값) |
-| ②층을 **전부** 청구하면 | **~11×** (T1~T4 는 같은 경로라 곱하지 않는다) |
-| 남는 것 | **≈ 10×** — ②층으로는 도달 불가 |
-| T1/T2 를 먼저 하면 | 같은 설계를 **두 번** 하고, ②층 버전은 ③층 완성 시 **죽은 코드** |
-| 사용자 지시 | *"기존의 것들을 파괴하고 새로운 길을 가더라도 충분히 가치가 있다"* → §4.4 additive 제약 해제 |
-
-**개정 3 의 T-우선은 "③층 예산이 불확실하다"에 기대고 있었다. 예산이 확정된 지금 그 근거는 없다.**
-
-### 7.2 그래서 T 단계는 어떻게 되는가
-
-| | 개정 3 | 개정 4 |
+| | Default build | `--no-default-features` |
 |---|---|---|
-| **T0** 커버리지 계기화 | 1순위 | **유지** — 되돌리기 0, 구현이 아니라 측정이고, **S0 이 같은 자료를 필요로 한다** |
-| **T1** `Call` 프로세스를 VM 이 | 2순위 | **③층 S3 에 흡수** (같은 문제, 더 강한 형태) |
-| **T2** 프레임 바디를 VM 대상 | 3순위 | **③층 S3 에 흡수** |
-| **T3** 프레임 호출 단가 650 ns | 4순위 | **③층 R1/R2 에 흡수** — 원인이 `Value` 왕복이고, R1/R2 가 `Value` 를 없앤다 |
-| **T4** 함수 지역 배열 쓰기 21× | 5순위 | **독립 유지** — ③층과 무관한 국소 결함일 가능성이 높고 싸다. **기회 슬라이스**로 남긴다 |
+| Executors compiled | `interp`, `vm`, `native` | `native` |
+| `--backend vm` | accepted | loud CLI error, exit 3 |
+| A gate refusal | `warning[VITA-W4030]` plus fallback to `vm`, exit unchanged | `fatal[VITA-F4004]`, run declines to execute, exit class Fatal |
+| CI job | `build-native` (ubuntu, macOS), `build-rhel` (RHEL9/UBI) | `build-no-oracle` |
 
-> T3 를 흡수하는 근거: 프로파일 1위가 `Value::resize`/`mask_top`/`clone` 이었다. 그건
-> **표현의 비용**이지 호출 규약의 비용이 아니다 — R1/R2 가 정확히 그것을 없앤다.
-
-### 7.3 개정된 단계 계획 — **S0 부터, 각 단계에 중단 판정**
-
-번호는 §5 의 S0~S6 을 유지한다(그 절이 각 단계의 내용 정본). 여기서는 **순서·게이트·흡수분**만 적는다.
-
-| 단계 | 무엇 | 착수 게이트 | 중단 판정 |
-|---|---|---|---|
-| **T0 ✅ (2026-08-03)** | codegen 적격률 + 거부 사유 히스토그램 → `--obs-dir` run.json — **완료**: run.json `codegen{able,total,frame_bodies,reject_reasons}`. 히스토그램은 VM compile gate 와 **한 walk 를 공유**(`reject_reasons_into` — 로그가 실행기와 어긋날 수 없다) | — | — (계기) |
-| **S0 ✅ (2026-08-03)** | 설계 수준 게이트 + **적격률 측정** — **완료**: `sim_engine::native::design_eligibility(ir, opts)` + run.json `native{eligible,reject_reasons}`. **측정 결과는 §7.3.1** — 중단 판정 통과, **S1 go** | T0 | 실사용 설계 4종에서 적격률이 **0%** 면 v1 범위를 다시 그린다 |
-| **S1** | **R1 정적 넷 할당** — `Value` 를 없앤다. 새 모듈, 기존 엔진 무관 | S0 적격 설계 ≥1 | 넷 저장이 폭별로 안 나뉘면 중단(= R2 불가) |
-| **S2** | **R2 폭별 특수화 연산** | S1 | 64-bit 이하에서 `and_w` 가 **기계어 2 op** 로 안 떨어지면 재설계 |
-| **S3** | **바디 코드 생성 (정지 + 호출 포함)** ⭐ T1/T2 흡수 | S2 | **호출을 삼키지 못하면 중단** — 커버리지 0% 는 ②층에서 이미 본 실패 모드다 |
-| **S4** | **R3 스케줄 소거** | S3 | 이득 <1.3× 면 기록 후 유지(스케줄러는 남긴다) |
-| **S5** | **R4 NBA 전용화** | S4 | 동상 |
-| **S6** | **3-OS 결정성 검증** | S5 | **바이트 동일 실패 = v1 범위에서 제외**(플랫폼 한정 기능으로 강등) |
-| — | **재측정** | S6 | 리포터 워크로드에서 **≥30×** 못 내면 ③층 v1 은 실패로 기록한다 |
-
-**≥30× 를 성공 기준으로 잡는 근거**: verilator 는 2-state·levelize 를 거래하고 vita 는 안 한다.
-같은 설계에서 verilator 가 76× 였으므로, 4-state 를 유지한 ③층이 그 절반 이하를 내는 것은
-비현실적이지 않다 — 그리고 **30× 면 리포터의 56 분이 2 분이 된다**(sign-off 를 vita 로 옮길 수 있는 선).
-
-### 7.3.1 S0 측정 결과 (2026-08-03) — **적격률 100%, S1 go**
-
-`vita <design> --obs-dir` 한 번이 측정이다(run.json `codegen`/`native`). 전부 이 기계, HEAD 빌드:
-
-| 설계 | ② VM claim (able/total) | 거부 사유 | ③ 적격 |
-|---|---|---|---|
-| examples/000_counter | 2/4 | delay 2 · wait 1 | ✅ |
-| examples/001_alu | 1/2 | delay 1 | ✅ |
-| examples/002_traffic_fsm | 3/5 | delay 2 · wait 1 | ✅ |
-| examples/003_shift_register | 3/5 | delay 2 · wait 1 | ✅ |
-| bench/picorv32 + TB | **65/68** | delay 1 · wait 2 | ✅ |
-| bench/keccak **호출형** | **1/4** · frame_bodies **3** | delay 1 · stmt_effect_rhs 1 · **user_call_in_expr 1** · wait 1 | ❌ *(갱신: `stmt_effect` — 아래 참조)* |
-| bench/keccak 인라인 | 2/4 | delay 1 · stmt_effect_rhs 1 · wait 1 | ❌ *(갱신: `stmt_effect` — 아래 참조)* |
-| P6 corpus 72개 | — | — | **72/72** (`native_gate.rs` 핀) |
-
-- **중단 판정("실사용 4종 0%") 통과 — 여유 있게.** 실사용 7종 + corpus 72 = **79/79 적격**
-  *(이 줄은 최초 측정치다 — 2026-08-03 `stmt_effect` 추가 후 **77/79**, 아래 갱신 블록이 정본)*.
-  ③층 v1 의 "합성 RTL + 기본 TB" 범위가 실제 설계 모양과 일치한다는 뜻이다.
-- keccak 호출형 행이 **round-26 맹점의 계기화 그 자체다**: 프로세스 4개 중 1개만 VM 이 받고
-  일 전부는 frame_bodies 3 에 있다 — 이것이 이제 `--backend` A/B 타이밍 없이 JSON 한 줄로 보인다.
-- ⚠️ 이 100% 는 **설계 수준 상한**이다(§4.3 사이드카 + NetKind 스캔). 문장 수준 능력("S3 컴파일러가
-  모든 body 의 모든 문장을 emit 할 수 있나")은 S3 이 생기는 시점에 게이트에 합류한다 — S0 가
-  그 질문에 미리 답하는 척하는 것이 더 나쁘다(정직한 상한 > 추측한 정답).
-- **⭐ 두 번째 숫자(2026-08-03, S1c 적대 리뷰 후 추가)**: 상한 옆에 **아레나가 실제로 지을 수 있는
-  집합**을 같이 적는다 — 둘을 한 숫자로 뭉치면 상한이 능력으로 읽힌다.
-
-  | | 적격(설계 수준 상한) | **아레나 빌드 성공(S1a 실측)** |
-  |---|---|---|
-  | 실사용 7종 | 7/7 | **6/7** — keccak **호출형**은 `NetArena::build` 가 거부(frame-local 저장은 S3) |
-  | P6 corpus | 72/72 | **72/72** |
-  | 합계 | **79/79** | **78/79** |
-
-  게이트는 이 라운드에 **세 방향으로 정정**됐는데(`disable` → `disable_fork` 로 축소·`real` 을 거부로
-  추가·frame-local 을 `build` 의 구조적 거부로) **측정 집합은 움직이지 않았다** — 엄격해진 쪽도
-  느슨해진 쪽도 실사용 설계를 잃거나 얻지 않았다. S1d 의 런타임 게이트는 **오른쪽 열**이 정본이다.
-- ⚠️ **열린 모순 하나를 기록한다**: 리포터 워크로드(hash_top 류)는 TB 가 string 을 쓰므로
-  **v1 범위 밖**인데(string net = 거부), §7.3 의 성공 기준은 "리포터 워크로드 ≥30×"다.
-  즉 v1 게이트 그대로면 성공 기준을 **잴 수 없다**. 해소 후보 = ⓐ S3 시점에 string 을 v1 로 승격
-  ⓑ 기준을 DUT-직결형(리포터의 "라운드당 ~1.4 ms" 형태)으로 재정의. **여기서 정하지 않는다** —
-  S2 배속 실측이 나온 뒤 재측정 게이트에서 판정(스펙 변경은 2회+ 검토 룰).
-
-### 7.4 무엇을 파괴하는가 — 사용자 승인 범위의 명시
-
-사용자가 파괴를 허용했으므로 **무엇을 깨는지 먼저 적는다.** 아래는 승인 요청이 아니라
-**계획이 실제로 건드리는 목록**이다.
-
-| # | 깨는 것 | 왜 필요한가 | 되돌릴 수 있나 |
-|---|---|---|---|
-| 1 | **§4.4 additive 원칙** — ③층은 기존 엔진과 **공존하지 않는 설계 단위 백엔드** | §4.1: 넷 저장을 소유하므로 바디 단위 폴백이 불가능 | ✅ 백엔드 플래그로 선택(기존 엔진 삭제 없음) |
-| 2 | **`unsafe` 격리 사용** — 코드 생성 경계 | 2026-08-03 승인됨(모듈 한정·`// SAFETY:`·miri) | ✅ 조건부 |
-| 3 | **MSRV 상한 없음** | 2026-08-03 승인됨 | ✅ |
-| 4 | **3-OS 바이트 동일이 ③층에서는 게이트가 아니라 S6 판정 대상** | 부동소수/코드젠 차이를 **측정 전에** 배제할 수 없다 | ⚠️ 실패 시 ③층을 플랫폼 한정으로 강등(기존 엔진은 무영향) |
-| 5 | **T1/T2 를 ②층에 만들지 않는다** | 같은 설계를 두 번 하고 한 번은 죽는다 | ✅ 언제든 되살릴 수 있다(§0.4 측정치가 남아 있다) |
-
-**깨지 않는 것 (재확인)**: SchemaHash 동결 · correct-or-loud · `format_version` · 기존 백엔드 2개.
-③층은 `SimIr` 을 **읽기만** 하고, 정확성 검증 수단은 여전히 correct-or-loud 뿐이다(§3).
-
-### 7.5 계약 개정은 그대로 유효하다 (2026-08-03 승인)
-
-- **`unsafe` 격리 허용** — ⓐ 지정 모듈에서만 ⓑ `// SAFETY:` 필수 ⓒ miri/sanitizer 대상 ⓓ 그 밖 금지.
-- **MSRV 상한 없음** — 새 Rust 가 나오면 따라간다. 현재 최소 rustc 와 주요 의존성 최소 버전은
-  CLAUDE.md 표가 정본. cranelift 는 `0.120`(1.85 에서 빌드되는 최신 라인).
-
-> **남은 전제조건은 하나뿐이다**: RHEL9/UBI CI 에서 최신 rustc 확보 가능성 — 정책이 아니라
-> **CI 실현 가능성**. S6 전까지 확인하면 된다(S1~S5 는 로컬 개발).
+Both shapes are real and answer different questions. The product shape must stay a separate CI
+axis rather than an extra step on the workspace jobs, because a `--workspace` build's
+dev-dependencies pull `sim-engine` with default features and re-enable `oracle` for every crate.
+Details in [03 · build and portability](03-build-and-portability.md).
 
 ---
 
-## 부록 · 이 문서가 근거로 쓴 실측치
+## 4. Eligibility
 
-| 수치 | 출처 |
+### 4.1 Three layers, three questions
+
+| Layer | Function | Question |
+|---|---|---|
+| Design | `native::design_eligibility(ir, opts) -> NativeEligibility` | Is this feature family inside scope? |
+| Storage | `NetArena::buildable(ir, opts)` | Can this design's values live in the arena? |
+| Executor | `native::run::executor_rows(ir, opts)` | Can the executor that exists run every body? |
+
+`native::runtime_gate` is design ∧ storage. `simulate` asks the design layer once, while `opts`
+is still whole — the scheduler consumes `opts.fork_modes` by value further down, and a later
+read would see an emptied table and call a forking design eligible. When nothing has refused,
+`simulate` then asks `executor_rows` and writes its answer into the same `refused` field, so the
+verdict `run.json` publishes and the decision `simulate` executed come from one evaluation.
+
+`NativeEligibility` carries four fields, and `run.json`'s `native` object is their serialisation
+([19 · observability](19-ai-agent-observability.md)):
+
+| Field | Meaning |
 |---|---|
-| 1.243 → 0.57 s (2.18×), iverilog 0.58 s | PicoRV32+TB 40000 cycle, best-of-7, interleaved |
-| `Value` = 72 B | `size_of::<Value>()` |
-| `write_lvalue` 분기 11 / 사이드테이블 6 | 코드 판독 + `plain_scalar` 도입 시 열거 |
-| `NbaUpdate` ~112 B | 필드 합산 |
-| FFI 경계 33 ns | 콜백 없는 `Const` 전용 JIT 프로그램, 1,228,796 runs |
-| P9 22/25 템플릿 · 활성화 81.9% · 폴백은 시간의 4.3% | `VITA_VMSPLIT` / 리전 타이머 |
-| 쓰기 4,000,553 건 중 71.3% 동일값 | `store_words` 카운터 |
-| native eval 6,509,189 회 · op 평균 4.2 · 46.3% 가 op 1개 | opcode 인구조사 |
-| 바디 13.3 op/활성화 · 56% 커널 호출 | op 카운터 |
-| 평평한 아레나 프로브 0% | `SimState.mirror`, 디버그 스위트 5043개로 동기화 증명 |
-| sim-engine 28,431 LOC · `SimOpts` 75 필드 | `wc -l` / 필드 카운트 |
-| 테스트 5043 · CLI 테스트 파일 358 · 단언 2601 | `cargo test` / `ls` / grep |
+| `eligible` | The design layer found no disqualifier ⇔ `reject_reasons` is empty |
+| `buildable` | The storage layer accepted the design |
+| `refused` | The runtime gate's reason, or `null` |
+| `reject_reasons` | Reject family → count of offending items. Any non-zero row disqualifies |
 
-| Xcelium 31 s vs 문자열 처리만 430.1 s · `hex2bytes` 가 TB 비용의 99.4% | 외부 리뷰어 round-25 (hash_top v0.15, CAVP 8,187 벡터) |
-| `h2b` 4k/8k/16k/32k = 0.12/0.40/1.74/6.90 → 0.001/0.001/0.010/0.040 s | 리포터 측정 → 수정 후 이 저장소 실측 (커밋 `3ec7dc7`) |
+`eligible` and `buildable` are reported side by side rather than folded together because they
+answer different questions and their answers differ. `refused` carries two vocabularies: when
+the design layer refused it is a key of `reject_reasons` (the byte-lexicographically first when
+several fired), and when the design layer passed and storage refused it is that refusal's own
+prose, which appears in no map. A consumer joining `refused` back to `reject_reasons` must read
+a miss as the storage case, not as an error.
 
-### 개정 3 이 추가한 실측치 — 전부 `bench/keccak/`, 같은 기계, interleaved
+### 4.2 The design gate
 
-| 수치 | 출처 |
+`design_eligibility` destructures `SimOpts` exhaustively, with no `..` rest pattern. Adding a
+sidecar to `SimOpts` without classifying it here is a compile error rather than a silent
+eligibility over-claim. The same rule governs the two loops below it: both are `_`-free, so a
+new `Stmt` kind or a new `NetKind` must be classified on purpose.
+
+Sidecars that bind to `_` fall into three groups.
+
+| Group | Members |
 |---|---|
-| **②→③ 격차 = 76×** (vita 498 µs vs verilator 6.56 µs / 순열) | Keccak 인라인형, N 2점 기울기, verilator 5.050 |
-| 호출형: vita 5340 · iverilog 4450 · verilator 6.6 µs/순열 | 동상 |
-| **VM 기여 0%** (Keccak 호출형 interp 1.11 = bytecode 1.11 s) | `--backend` A/B |
-| VM 기여 1.57× (PicoRV32) · 2.1× (Keccak 인라인형) | `--backend` A/B |
-| 인라인 64-bit 산술: vita 110 ns vs iverilog 610 ns (**vita 5.5× 빠름**) | `probe/call.sv`, 2M 반복 차분 |
-| 사용자 함수 호출 오버헤드: vita 650 ns vs iverilog 375 ns | 동상 |
-| 함수 지역 배열 원소 쓰기: vita **514 ns** vs iverilog **24 ns** | `probe/arr.sv`, 25↔250 쓰기 차분 |
-| 모듈 레벨 배열 원소 쓰기는 대등 (vita 1.63 s vs iverilog 1.71 s / 4M) | `probe/arr.sv` |
-| 프로파일 1위 `eval_ctx`(①층 트리워커) | unstripped release + `/usr/bin/sample` |
-| 오라클 4중 일치 (Python 참조 · vita · iverilog 13 · verilator 5.050) | 첫 레인 `f1258f7940e1dde7` = 공표된 Keccak 참조값 |
+| Configuration knobs, not design features | `vcd_path_override`, `timescale_unit`, `vcd_date`, `max_deltas`, `max_body_steps`, `max_class_objs`, `time_limit`, `backend`, `threads`, `plusargs` |
+| Core sidecars the backend supports | `net_names`, `net_dims`, `net_decl_ranges`, `proc_multipliers`, `proc_prec_mults`, `global_prec_exp`, `proc_scopes`, `proc_inst_scopes`, `ca_delays`, `assign_ranks`, `two_state_nets`, `wired_and_nets`, `wired_or_nets`, `radixes`, `severities`, `init_procs`, `final_procs`, `timeformat_stmts`, `stmt_locs`, `stmt_scopes`, `expr_scopes` |
+| Feature families routed rather than refused | `func_table`, `func_names`, `task_calls_proc`, `task_calls_func`, `fork_modes`, `assert_fire`, `assert_ctl`, `queue_slice_stmts`, `queue_bounds`, `coverage_manifest`, `clocking_inputs`, `clocking_commit`, `clocking_outputs`, `defer_marks`, `defer_acts`, `handle_copy_stmts`, `file_directed_stmts`, `real_elem_dyn_nets`, `string_elem_dyn_nets`, the twelve `class_*` / `randomize_with` tables, `probed_nets`, `stage_stmts`, `proc_profile` |
+
+Three entries in the third group carry a rule worth stating outright, because comments elsewhere
+in the tree say the opposite:
+
+- `probed_nets` is core. `--probe` does not disqualify a design. The arena emits probe rows at
+  its own store point, and a `--probe`-armed run reports `"backend": "native"` with
+  `"native": {"eligible": true, …}`.
+- `stage_stmts` is core. `$vita_stage` does not disqualify a design; its argument reads are
+  threaded through the alternate net reader, so a native run records the values the design
+  actually wrote.
+- `proc_profile` is core. `--obs-procs` counters live on `SimState` and both executors bump them
+  at their own dispatch seam, so a profiled run is not a different design.
+
+`native_gate::stage_markers_are_core` pins the first two together.
+
+Three of those rows would double-book if they were counted here. `fork_modes` describes a
+process-level fork, whose bookkeeping is the scheduler's and whose remaining unhandled shapes
+are refused by the storage and executor layers under their own names. `real_elem_dyn_nets` and
+`string_elem_dyn_nets` describe heap-kind handle nets the net-kind scan already classifies, so
+they carry no axis of their own. A row that names a feature rather than missing machinery
+refuses designs the executor gets right, which is a rung down the accuracy ladder.
+
+One family remains counted, `stmt_effect`, and it is a scan of `ir.stmts` rather than a sidecar.
+Its criterion is "writes a net from inside the call" — an effect that never passes through
+`write_lvalue`:
+
+| Half | Predicate | Carve-out |
+|---|---|---|
+| A `BlockingAssign` whose RHS is in the statement-effect family | `sim_ir::rhs_is_stmt_effect` — the same function the VM's compile gate consults, never a second spelling | `native::stmt_effect_wired`, which names each wired member through the canonical `exec::kpred` predicate |
+| A `SysTask` whose net write is `NetWrite::Flat` | `sim_ir::systask_net_write` | `Sformat`, `ReadmemB`, `ReadmemH`, `Cast` |
+
+The wired set is `value_plusargs_rhs`, `queue_pop_rhs`, `random_seeded_rhs`, `dist_seeded_rhs`,
+`cast_rhs`, `assoc_iter_rhs`, `sscanf_rhs`, `fopen_rhs`, `fgetc_rhs`, `feof_rhs`, `ungetc_rhs`,
+`fgets_rhs`, `fscanf_rhs`, `fread_rhs`.
+
+Naming a member in that set whose `k_*` still refuses is a silent-wrong rather than a compile
+error: the design runs natively and its effect lands in the engine's store. Every addition to
+the set therefore ships with both a differential and an absolute anchor — as the backend
+delegates more shared code, a differential against the engine goes blind exactly where the
+delegation is.
+
+`$sformatf` in its function form is deliberately outside this family. Its only effect is the
+rendered value, written through the ordinary funnel — true for an executor that routes
+statements through `compute_effect` / `apply_effect`, which the native backend does. The VM
+bypasses those and must exclude it; that is the one documented delta between the two gates.
+
+The net-kind scan admits every `NetKind`. `Wire`, `Reg`, `Logic` and `Integer` are the arena's
+own ground. `Real` is ordinary word storage plus a flag — the 64 bits of an IEEE-754 double fit
+the word plane, and what the kind carries is that reads stamp `is_real` and writes take the
+real↔int coercion. `DynArray`, `String`, `Queue`, `Assoc` and `AssocStr` keep their values in
+`SimState::dyn_heap`, keyed by net id, which both kernels borrow — so admitting them is routing,
+not a second store. The shapes that mutate a heap net from inside a call (`q.pop_front()`,
+`aa.first(i)`, `foreach`) are refused under `stmt_effect`, by their own name.
+
+Status at HEAD: no design-gate family is reachable from a design a compiler can produce. The map
+comes back empty, and what the gate pins today is that emptiness. The loops and the counted
+family are kept so that a new statement kind, net kind or sidecar has to be classified.
+
+### 4.3 The storage gate
+
+`NetArena::buildable` is the same refusals as `build` without the allocation, so `run.json` can
+carry the storage verdict on every run at the cost of one scan, and `build` calls it first —
+one predicate, not two that can drift. It refuses:
+
+| Refusal | Cause |
+|---|---|
+| `arena exceeds u32 words` | The accumulated word offset does not fit `u32` |
+| `arena exceeds usize` | The accumulated word offset does not fit `usize` |
+| `a module body that names a frame-local net` | A process body reads or writes a subroutine's local, whose value lives in the activation window |
+| `a call in a delayed continuous assign: S3b` | A delayed continuous assign whose RHS calls a subroutine |
+| `a system task the tier-3 kernel refuses, inside a task frame` | A task frame reaches a system task this kernel declines to dispatch |
+| `a nonblocking assign to a frame-local net: S3b` | An NBA destination inside the frame window |
+| `a nested call with no sidecar entry: S3b` | A call site with no `task_calls_*` entry |
+| `a nested call to an unresolved target: S3b` | A call site whose callee is not resolved |
+| `a subroutine that WRITES a net outside its own frame: S3b` | The delegation precondition fails: the body names a net outside `[base, base+len)` |
+| `a subroutine statement the frame executor drops` | The engine's `&self` frame executor has no arm for a statement in the body |
+| `a subroutine body that suspends, forks or calls a task` | Outside the delegable subset |
+| `malformed frame sidecar (…)` | Four shape checks over `func_table`: table length, frame window range, return-slot range, block-id range |
+
+Frame refusals sit in the storage layer rather than the executor layer because they are about
+where the values live. A subroutine whose frame never needs the module store is delegated whole;
+everything outside that subset refuses here, in its own words.
+
+### 4.4 The executor gate
+
+`executor_rows` walks every process and asks two questions:
+
+| Row | Predicate | Refusal |
+|---|---|---|
+| Can the walk run this body? | `body_is_walkable`, with `frames::call_site_runnable` deciding each call site | ``a `wait fork`, a `fork`, or a call statement whose callee forks: S3b`` |
+| Does the body reach only dispatchable system tasks? | `body_dispatch_ok` over `native::kernel::systask_refusal` | `a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)` |
+
+`body_is_walkable` is a reachability scan from the process entry. `Goto`, `Branch` and `Return`
+are structural; `Delay` and a `Wait` on `Edge`, `Level`, `Expr` or `Fork` push their resume block
+and do not disqualify; `Fork` pushes its children and its resume block, because an arm that
+reaches a shape the walk cannot run is still a refusal, just not because of the arm; `Call`
+consults `call_site_runnable`. A `Wait` on `WaitCause::Named` refuses — nothing fires it, so
+parking on one is a hang. That variant is not constructible from source today (elaborate lowers
+a named event to a counter net and `@(ev)` to a `Level` wait); the arm is explicit so a future
+lowering change is a compile-time question rather than a hang.
+
+`call_site_runnable` is `callee_mode(...).is_some()`, and the mode is what the walk does with
+the call:
+
+| Mode | Condition | Execution |
+|---|---|---|
+| `Synchronous` | The callee is not in `compute_suspendable_tasks` | Delegated whole to the engine's `&self` frame executor |
+| `DrivenFrame` | The callee would be driven from a `FrameRec`, but its body reaches no suspending terminator | The walk drives the callee's CFG to `Return` without leaving this activation |
+
+`systask_refusal` returns `None` for every `SysTaskId` — the refused set is empty. The function
+and both of its consumers are kept: `k_dispatch_systask` panics on a `Some`, and this gate row
+refuses the design so nothing reaches that panic. Written as two separate matches the gate would
+go stale the first time an arm is added, and the symptom would be a mid-run panic on a design
+the gate called runnable. A new `SysTaskId` that reads a store this seam does not thread has to
+land in that one function.
+
+### 4.5 Reachability of the gates
+
+Status at HEAD: no gate row of any layer has an input a compiler can produce. Every refusal
+string above is reachable only through a corrupted or truncated artifact sidecar, and that is
+deliberately how the rows are tested — `native_gate.rs` pins that each reject family actually
+fires, because a gate that never fires is vacuous, and pins the generated-corpus eligibility as
+an exact count. Completeness of the classification is not a test; it is the compile-time
+exhaustive destructure inside `design_eligibility`.
+
+---
+
+## 5. The arena
+
+### 5.1 The slot descriptor
+
+One dense record per net, fully resolved at build, replacing the per-access metadata questions
+and the routing bitmaps in front of them:
+
+| Field | Meaning |
+|---|---|
+| `off` | Word index of element 0's `val` plane in `buf` |
+| `words` | Words per plane per element — `nwords(width).max(1)` |
+| `width` | Element width in bits (the declared packed width) |
+| `elems` | Element count — `array_len.max(1)`; 1 is a scalar |
+| `signed` | Declared signedness |
+| `two_state` | A two-state variable: the write funnel coerces X/Z bits to 0 before they land (IEEE 1800 §6.11.3). Resolved at build from `two_state_nets`, so the write path never asks a side table |
+| `is_real` | `NetKind::Real`: the stored 64 bits are an IEEE-754 double. Seeded from the net's kind, which cannot change during a run |
+
+### 5.2 Layout and invariants
+
+One flat `u64` buffer. Element `e` of net `n` owns `2 * words` consecutive words at
+`off + e * 2 * words` — the `val` plane, then the `unk` plane adjacent. `(val, unk)` is the
+four-state encoding shared with the engine: `unk=1` means x when `val=0` and z when `val=1`.
+
+Three invariants make the fast paths sound:
+
+1. Elements are word-aligned by construction. The engine's flat store packs elements
+   bit-contiguously and pays a bit-serial fallback on an unaligned base; that path does not
+   exist here.
+2. Bits above `width` in a top word are zero. Writes mask, so reads may copy words verbatim and
+   re-mask only the top word, and a specialised load needs no mask at all.
+3. A net whose value is not in this store still owns a slot, so `slots[net]` keeps meaning net
+   `net`. That slot is dead, and the arena says so through the bitmaps in §6 rather than by
+   giving the net no slot.
+
+### 5.3 Initialisation at time zero
+
+Per net, the width-wide element initial value is extracted once and broadcast to every element.
+A heap-kind net is skipped: its declared initialiser describes the packed literal, whose bits
+run above the width the dead slot was sized to, and its real initial value is the heap's
+(IEEE 1800 §7.5.2). A debug assertion pins that no declared initialiser carries bits above its
+own width — the arena keeps those bits zero and the engine's scalar init path word-resizes
+without masking, so an initialiser with junk above the width would make the two stores agree on
+every read and disagree once, on a whole-net write's `changed` verdict.
+
+### 5.4 The dirty and edge channel
+
+Half of scheduling hangs off the write, not off the loop, and it lives on the arena for the same
+reason it lives on `SimState`: the two points where a stored word actually changes are inside
+the write funnel, and a channel the funnel could not reach would have to be updated by its
+callers.
+
+| Carried | Rule |
+|---|---|
+| `dirty` | The nets that took a real bit change since the last sweep, in write order. Membership alone is the changed set — an A→B→A round trip inside one slot ends with `cur == prev` and is still a change the observer must see (IEEE 1364 §9 fires the glitch once). An endpoint comparison drops exactly those |
+| `last_blocking_writer` | Who authored the change, so a process is not re-fired on a net it blocking-wrote itself |
+| `slot_edge` | The intra-slot bit-0 edge summary, OR-accumulated per transition and reset on the net's first dirtying each slot. This recovers the edge kind for a glitch the endpoints lost. Maintained only for `is_edge_target` nets |
+
+`note_change` takes the element word as well as the net, because an unpacked array has one VCD
+identifier per element, and the waveform record is emitted at the store point rather than at
+sweep time — a sweep-time emitter would collapse an intra-slot A→B→A into one record.
+
+### 5.5 The wake decision
+
+The changed set with its intra-slot masks feeds one question: which processes become ready, in
+what order. Three rules are not simplifications and must hold in any reimplementation:
+
+1. Fire from the intra-slot mask, never from an endpoint comparison — an A→B→A clock pulse still
+   ticks once.
+2. A busy process is skipped. A static edge registration is permanent, but IEEE does not re-enter
+   an `always` until it completes and re-arms; a process suspended mid-body is woken through the
+   waiter path.
+3. A clock handler diverts at the position the engine's `commit_clocking` intercept occupies —
+   the edge is consumed and the process is not queued.
+
+---
+
+## 6. Routing — "is this net ours?"
+
+Flat net values are the arena's. Frame windows, the dynamic heap, class objects, the file table,
+the RNG and the output sink stay in `SimState`, which the native kernel borrows. The ownership
+question is therefore asked in four places, and the contract is that they agree.
+
+| Site | Function | How it answers |
+|---|---|---|
+| Read funnel | `NativeKernel as NetReader::read_net` | A class field select first (a method's `this` is both a handle and a frame-local, and the field must win); then a frame-local or heap net delegates to `SimState::read_net`, which routes on its own bitmaps; otherwise the arena |
+| Write funnel | `NativeKernel::write_routed` | The assoc key lanes, then the frame lane, then the heap lane, then the arena. The split is the one `SimState::write_lvalue` makes, at the same point, delegating to the same methods |
+| Specialised evaluator | `wprog::compile` | It resolves a `Signal` to an arena slot at compile time and cannot route at all, so it must decline — the arena's `heap` / `frame` / `class` bitmaps exist on the arena, not only on `SimState`, so that this function can ask |
+| Reader wrapper | `state::HeapRouted` | Wraps a foreign reader and answers `dyn_is_handle` and `frame_local` nets from `SimState`. The split is by ownership: `st` owns the heaps, the iteration context and the file table; the wrapped reader owns the flat slots |
+
+Two rules follow, and both come from measurement rather than taste:
+
+- Opening a net class the arena does not own means visiting all four sites before writing code.
+  Fixing one makes a different part of one design's output correct, so any stopping point looks
+  like success.
+- A class handle is the one partly-dead slot: the handle's own value (the object id, `0` for
+  null) is in this store, and the object's fields are in `SimState::class_heap` under the same
+  net id with a field id in the `word` position. Every consumer must ask
+  `class[net] && word.is_some()`. Routing on the bitmap alone sends a bare handle read to the
+  heap, where there is nothing to read.
+
+Every entry point below the arena `debug_assert`s on the ownership bitmaps, which turns "audit
+sixteen call sites that index `slots` by net id" into "run the suite once and read the panics".
+It is a debug assertion because the release path must stay byte-identical.
+
+---
+
+## 7. Executing a body
+
+### 7.1 Two executors inside the backend
+
+`native::run::dispatch_body` is the one place tier-3 chooses:
+
+| Condition | Executor |
+|---|---|
+| The activity is its own template and `is_codegen_able` accepts the body | `backend::vm_exec` over a `CompiledBody`, run against the arena |
+| The same, plus the `jit` feature and `VITA_JIT` set | `jit::run_body_jit` for the entry block |
+| Otherwise, and always for a fork child | `native::body::run_body`, a walk over `SimIr` |
+
+A child activity always takes the walk. `vm_exec` carries one process id and uses it for both
+roles the walk keeps apart — the body it indexes and the identity it schedules under — so a
+child running its parent's compiled body would schedule as its parent. The guard is
+structurally unreachable today, because `is_codegen_able` refuses both terminators that can
+create a child activity, and it stays because that is a property of today's codegen coverage
+rather than of the identity split, and because the failure mode if it changes is silent.
+
+The two are not two semantics. `vm_exec` calls the same `Kernel` methods in the same order that
+`compute_effect` / `apply_effect` do, and `compile_body`'s documentation pins that
+correspondence. What the compiled form adds is that the statement kind, the lvalue offsets and
+the RHS program are decided once per process template rather than on every execution — and it is
+also cranelift's input, which is why it is the compiled path rather than a detour around one.
+
+`Op::ends_statement` recovers statement boundaries from the op stream, so `k_call_fatal` and
+`k_drain_diags` fire at the same points the walk fires them. Omitting that marker makes a
+runaway body end `Quiescent` instead of `Error` — the op stream has no statement boundary of its
+own to hang the check on.
+
+### 7.2 Statement meaning is shared
+
+`compute_effect` and `apply_effect` are generic over `K: Kernel`, so statement semantics come
+from the same code the engine runs. `Scheduler` and `NativeKernel` are the two implementors.
+What the native side must restate is the block loop and the terminator decisions —
+`exec::run_process` is `&mut Scheduler`-fixed, and it is the one piece that could not be shared.
+
+Two consequences are contract, not convenience:
+
+- Every `Kernel` predicate (`*_rhs`, `class_new_site`) forwards to the canonical `exec::kpred`.
+  A predicate does not produce a value; it decides which statement `compute_effect` builds. A
+  refused family stubbed to `false` does not become loud — it becomes a different statement, and
+  flows silently down the pure-eval path. So the predicates all answer truthfully and share one
+  spelling with the engine; only the workers are loud.
+- Any rule the engine already spells (`eval::resolve_offsets`, `eval::delay_ticks_of`,
+  `value::coerce_assign`, `eval::binops::*`, `resolve_md_group`, `offset_of_index_value`) is
+  called, never re-spelled. Restating a rule from memory drops the clauses that are not visible
+  in a value comparison: a re-derived delay conversion that loses its X/Z guard and its
+  saturation sentinel makes an infinite delay fire at `t+0`, and no value differential can see
+  that.
+
+### 7.3 The specialised expression evaluator
+
+`native::wprog` compiles an expression tree into a program over `W = (val, unk)`, one plane word
+each, loading directly from compile-time-resolved buffer indices.
+
+Admission is the correctness argument. A program is compiled only when every node is one of:
+
+- `Const` (numeric) whose self width and sign equal the context's;
+- `Signal` reading a whole ≤64-bit integral net, a constant in-bounds element of a ≤64-bit-element
+  array, or a runtime element whose index expression is itself admitted;
+- `BitNot`, `BitAnd`, `BitOr`, `BitXor`, `Add`, `Sub`;
+- `Shl`, `Shr`, `AShr` by a two-state constant amount, except a signed `AShr`, whose sign fill is
+  the one shift whose bits depend on the sign;
+- the eight comparisons, whose operands are mutually context-determined at `max(self-width)` with
+  their pair signedness (IEEE 1800 §11.8.1 — the comparison's own context is one unsigned bit and
+  does not inherit the enclosing one);
+- `LogAnd` / `LogOr`, whose operands are self-determined;
+- `LogNot` and the six reductions over a self-determined operand;
+- `Concat` and `Replicate`, whose parts are self-determined and tile the result exactly;
+- `Select` over a self-determined base at a constant, provably in-range offset;
+- `Ternary` whose branches cannot report — the one admission about evaluation order rather than
+  width.
+
+The soundness claim is that every conversion is the generic path's own. The only one this module
+emits is a sign extension calling `value::resize_word`, the single spelling `Value::resize`'s
+≤64-bit arm uses, emitted under exactly `resize_keep_sign`'s condition. Truncation exists
+nowhere: the compiler declines instead. Which nodes may be converted is decided against the LRM's
+sizing rules, because converting a context-determined operator instead of computing it at the
+context width is a wrong answer — `v[8:11] + 4'd1` is 16 at eight bits and 0 at four.
+
+A program can hold several widths at once (a comparison's operands are `ow` bits wide while its
+result is one), so the mask rides the op rather than the program, and every stack value stays
+masked to its own width.
+
+Per-op four-state bit semantics are pinned by an exhaustive per-bit-state differential against
+the generic evaluator plus a corpus mirror sweep. Nothing is restated: the comparisons call
+`eval::binops::{relational, log_eq, case_eq}`, `&&` and `||` call `eval::binops::log_bin_tri`,
+and `!` and the reductions call `eval::unary_self_of` — the same functions the generic evaluator
+reaches.
+
+### 7.4 The two-state lane
+
+Most evaluated values are definite. The four-state work is therefore the metadata, not the
+arithmetic, and the program is run on one plane first: `run_2s` executes the same op sequence
+over the `val` plane alone and returns `None` on the first unknown, at which point the canonical
+four-state loop runs from the start.
+
+The accuracy surface of this is zero, and that is the design rule: the fallback is the canonical
+implementation itself, not an approximation of it. A definite result is returned only when every
+leaf was definite, and on definite leaves every admitted op is definite-preserving — measured by
+the battery, not assumed. The index of an element load is checked separately from the element:
+an index arriving from definite ops does not make the element definite.
+
+### 7.5 The partition with `native_eval`
+
+`wprog` takes uniform width at ≤64 bits. Everything it declines would otherwise fall all the way
+to the generic tree walk, which is measurably slower than the backend being replaced on wide
+arithmetic and wide select/concat. So the two specialised evaluators partition rather than
+exclude each other: `wprog` keeps every RHS it accepts, and the compile context's
+`NativesWhen::OnlyWhereWprogDeclines` hands the rest to `native_eval`.
+
+The boundary asks `wprog::compile` itself, through a closure, rather than re-deriving what it
+accepts. Asking only its width refusal is a necessary condition and not a sufficient one — the
+compiler declines ≤64-bit trees for other reasons, a runtime-offset part-select being the common
+one, and each of those would route to neither evaluator. The cost is one extra compile per RHS
+per template; the runtime cache builds its own regardless.
+
+The `native_eval` stacks are leased from the kernel behind a `RefCell`, not built per call.
+`NativeScratch` is two fixed arrays totalling 1,280 bytes, so constructing one per call is a
+memset on the hot path. Reuse is sound for the reason the engine's copy is: the run drives a
+stack pointer from zero and every read is of something the same call pushed.
+
+### 7.6 Frames
+
+A subroutine call is core, not refused. Which mechanism runs it is `callee_mode`'s answer (§4.4),
+and both mechanisms are the engine's:
+
+- A synchronous call is delegated whole to the engine's `&self` frame executor, reached through
+  the kernel's composite reader; `HeapRouted` splits the store so a frame slot is answered from
+  `SimState` and a module net from the arena.
+- A driven frame's CFG is walked here, to `Return`, without leaving the activation.
+
+The delegation precondition is one question with two halves, and a caller that asks only the
+first delegates a body that reads the module store: does the body use only what the `&self`
+executor runs, and does it name only nets inside its own window `[base, base + len)`?
+
+### 7.7 The run loop
+
+`native::run::run` mirrors `Scheduler::run` region for region, because region-for-region
+identity is what the byte gate compares against. An outer loop over timesteps, an inner loop
+draining the current time through the region cascade:
+
+```
+t0 structural settle → arm_t0
+  → snapshot_preponed
+  → [ settle continuous assigns → Active → Inactive → NBA ]   (to a stable point)
+  → Observed → Reactive
+  → propagate (re-drain if anything woke)
+  → Postponed
+  → advance time: min over the wheel, delayed NBA, next delayed continuous assign
+```
+
+A design that cannot converge in the t0 settle is stopped rather than run on a divergent t0. The
+loop shares the scheduler for everything that is not a net value — output sink, file table,
+`now`, RNG — so `Scheduler` is still constructed and `NativeKernel` borrows it.
+
+Continuous assigns run their full model here: the zero-delay fixpoint, the delayed wheel, and
+multi-driver and `wand`/`wor` resolution through the shared `resolve_md_group` fold over the
+scheduler's `md_groups`. What elaborate rejects for both executors alike (`E3001` for partial,
+dynamic or delayed overlaps) never reaches this gate.
+
+### 7.8 The `jit` path
+
+Behind the `jit` feature and additionally gated at runtime by the `VITA_JIT` environment
+variable; `VITA_JIT_STATS` prints per-run codegen statistics. It compiles a `CompiledBody`'s
+entry block to machine code through cranelift, caching per template in `Scheduler::jit_bodies`,
+where a `None` entry means "tried and refused" and is remembered. Ops whose Verilog semantics
+cranelift IR does not reproduce exactly are refused, and the program runs on the VM instead.
+
+Status at HEAD: it builds, it is wired, it is measured, and it is correct — the whole suite runs
+green under `VITA_JIT=1`, and `examples/`, keccak and picorv32 are byte-identical. It is off by
+default and it is slower than the path it replaces. The arithmetic is the reason and it is not a
+tuning matter: op dispatch is a tenth of the run, while the boundary between generated code and
+Rust is roughly two-fifths of it — every leaf load is a call back into Rust and a 72-byte `Value`
+is reconstructed at the boundary. Turning it on trades a larger cost for a smaller one. The one
+condition under which it is worth revisiting is inlining leaf loads and two-state arithmetic into
+the generated code, so the boundary is not crossed at all.
+
+Determinism note carried in the module: cranelift IR masks shift counts itself, so
+`ushr(x, 64) == ushr(x, 0)` on both aarch64 and x86-64. This is measured; a host ISA divergence
+here is not a hazard the feature carries.
+
+---
+
+## 8. Refusal and fallback
+
+The contract is that a refusal is never silent and never a wrong answer.
+
+| | Default build | `--no-default-features` |
+|---|---|---|
+| Outcome | Falls back to `Bytecode` | `st.fatal_run(...)`, and the run declines to execute |
+| Diagnostic | `warning[VITA-W4030]` (`W-RUN-BACKEND-FALLBACK`) | `fatal[VITA-F4004]` (`F-RUN-FATAL`), latching `had_fatal` and `finished` |
+| Exit | Unchanged by the fallback itself | Non-zero exit class (Fatal) |
+
+The warning text:
+
+```
+requested backend `{req}` cannot run this design ({reason}); ran on `{eff}` instead — the
+result is unaffected, the speed is
+```
+
+The fatal text:
+
+```
+backend `native` cannot run this design ({row}), and this build carries no other executor —
+the `oracle` backends are compiled out
+```
+
+Why the severities differ is the accuracy ladder rather than politeness. Byte identity across
+the executors is a gate, so the VM's answer is the native answer; a fallback is a slower answer,
+not a wrong one, and making it `exit != 0` in a build that has a fallback would trade
+correct-support for loud, which is a rung down. In the build where no fallback target is
+compiled, the choice is loud-or-wrong instead of loud-or-correct, so the same event is fatal.
+The fatal form is graceful — it latches rather than panicking in `NetArena::build`, which is what
+a storage refusal would otherwise reach.
+
+Publication is separate from saying. `SimResult.backend` reports what actually ran; `run.json`
+carries `backend_requested` beside `backend`, and `native.refused` names the layer. Publication
+alone is not enough: a fallback a reader has to go looking for is one nobody looks for. This is
+why an anchor test that does not assert `"backend": "native"` cannot tell a native run from a
+fallback — a design that has fallen back matches an external oracle exactly, and reads as
+agreement.
+
+The path is written fail-closed so that a newly added gate row reports itself without anyone
+remembering to. Its teeth are a corrupted sidecar.
+
+---
+
+## 9. The equivalence contract
+
+Selecting a backend must never change one output byte. One structural invariant and five gates
+hold that.
+
+The invariant: the shared net-write and VCD choke points (`state.rs::write_lvalue`,
+`emit_vcd_change`) stay on the shared side across all three executors, so only process-body
+control flow differs. Output bytes cannot diverge in a backend-specific way.
+
+| Gate | Where | What it compares |
+|---|---|---|
+| Backend differential | `sim-engine/tests/backend_equiv.rs` | 72 generated corpus designs built once into a `SimIr`, then run on two backends concurrently; identical stdout, VCD bytes, `sim_time`, `finish_reason`, `exit_class`. Plus hand-written shapes the generator cannot emit. A plain `#[test]`, no skip, so it is a hard gate on every CI leg |
+| Tier-3 differential | `native/run_tests.rs` | `agree(src, name)` runs the same IR on `Bytecode` and `Native` with per-design VCD targets and a merged output/diagnostic sink |
+| Design gate | `sim-engine/tests/native_gate.rs` | Each reject family actually fires; corpus eligibility is an exact pinned count |
+| iverilog differential | `sim-engine/tests/differential.rs` | vita against `iverilog` + `vvp`; skips gracefully when the tools are absent, and the design still runs through vita |
+| The whole suite with this default | The default build | The gate that finds what a corpus differential cannot: 7,352 tests, all backends' shared paths exercised by real designs |
+
+Three anti-vacuity rules are part of the gate, not decoration:
+
+- `agree` asserts `r_nat.backend == Backend::Native` before anything else. Without it a fallback
+  makes every later assertion compare the VM against itself.
+- `agree` calls `runnable()` first and counts a refusal, rather than passing silently.
+- `backend_equiv::gate_actually_compares_vcd_bytes` asserts the compared VCD bytes are
+  non-trivial.
+
+A corpus differential is far weaker than the full suite, and the obligation to run the whole
+suite on a backend belongs to whichever backend is the default. Keep running it in both
+directions while two executors exist.
+
+---
+
+## 10. Limits
+
+| | Present state |
+|---|---|
+| Body-level fallback | Does not exist and cannot. Storage ownership makes eligibility a whole-design property |
+| R3 schedule elimination | Not implemented. Wake is decided at runtime from the changed set |
+| R4 nonblocking specialisation | Not implemented. Updates ride the shared queue |
+| Machine-code generation | Behind `jit`, off by default, slower than the compiled-op path (§7.8) |
+| Frame bodies | Delegated to the engine's `&self` frame executor, or walked in place; the backend has no frame store of its own |
+| `unsafe` | None in `native/`. The arena is safe Rust. The workspace's only `unsafe` is the `jit` call boundary and `cli/src/frontend.rs`'s `signal(2)`, each in a designated module with a `// SAFETY:` note |
+| Toolchain | rustc 1.85.0 minimum; cranelift pinned at 0.120, the newest line that builds on 1.85 (0.134 needs 1.94) |
+| Platforms | Linux and macOS, x86-64 and aarch64. `.github/workflows/ci.yml` runs ubuntu-latest, macos-latest and a RHEL9/UBI container |
+
+Determinism is a gate rather than an aspiration on this axis: cross-platform byte identity is
+asserted by the same suites that assert backend equivalence, and the vendored libm carries bit
+pins so a real-valued design does not diverge by host libm.
+
+---
+
+## 11. Measurements the rules rest on
+
+Numbers a design rule cites, all from this repository, release builds, interleaved, first round
+discarded ([09 · testing and verification](09-testing-and-verification.md) states the A/B method
+a performance claim must follow).
+
+| Measurement | Value | Rule it grounds |
+|---|---|---|
+| Coverage of `simulate()` calls the native backend runs | 6,470 / 6,470 = 100.00%, zero refusals | Making it the default routes nobody silently to another executor |
+| picorv32, best-of-5 | interp 1.319 s · vm 0.838 s · native 0.513 s (iverilog 13: 0.585 s) | The ranking of the three executors |
+| `size_of::<Value>()` | 72 bytes | R2 is representation removal, not arithmetic tuning |
+| Flat-layout probe with the metadata questions left standing | 0% | The elimination is of the questions, not the pointer chase |
+| Definite values among evaluated leaves | 100% on every benchmark shape; 90.1% of runs and 91.1% of ops on picorv32 | The one-plane lane with a canonical fallback, and no static X-freedom proof |
+| `NativeScratch` per call | 1,280 bytes, memset per evaluation | Leasing the stacks rather than constructing them |
+| Declines at the `wprog` admission gate, execution-weighted on picorv32 | 90.4% of generic-path evaluations, 47.6% for sign alone | Widening admission on the sign axis measures 1.00×, so it is not taken. A first-failure histogram overstates a fix — removing one gate helps only a tree that fails nowhere else |
+| Front end on real designs | ≥99% of every corpus row is simulation | An executor change is what moves these workloads; a front-end regression is arithmetically invisible in them |
+
+---
+
+## 12. Extending the backend
+
+The gates are built so that a change which would widen the backend's reach cannot land silently.
+The forcing functions, and the obligation each one leaves to the author:
+
+| Change | What forces the question | Obligation |
+|---|---|---|
+| A new `SimOpts` sidecar | The exhaustive destructure in `design_eligibility` fails to compile | Classify it as a knob, a core family, or a counted reject family |
+| A new `sim_ir::Stmt` kind | The `_`-free statement loop fails to compile | Decide whether it writes a net from inside the call |
+| A new `NetKind` | The `_`-free net loop, `arena::kind_is_heap`, and a `format_version` bump | Decide which store owns it, then check all four routing sites in §6 |
+| A new `SysTaskId` that reads a store this seam does not thread | `systask_refusal`, whose two consumers are the dispatch panic and the executor gate row | Add an arm naming what it reads, or thread the read |
+| Wiring one more `stmt_effect` member | Nothing — this one is a silent-wrong if it is wrong | Ship a differential and an absolute anchor together; the differential alone goes blind as delegation grows |
+| A new refusal row anywhere | The fallback path is fail-closed and reports itself | Give the row a reason that names the predicate that decides, not the feature |
+
+Two rules apply to the reasons themselves. A refusal row does not know when its own reason goes
+stale, so a row is worded in terms of the predicate that decides it rather than in terms of the
+construct that currently trips it. And a row phrased as a limitation ("cannot", "until") is a
+claim to re-measure before it is relied on: the slice that makes it false does not update it.
+
+---
+
+## Related documents
+
+- [00 · overview](00-overview.md) and [04 · architecture](04-architecture.md) — where the backend
+  sits in the pipeline.
+- [06 · simulation engine](06-simulation-engine.md) — the scheduler this loop mirrors.
+- [03 · build and portability](03-build-and-portability.md) — the feature matrix and the two
+  build shapes.
+- [09 · testing and verification](09-testing-and-verification.md) — the suites named in §9.
+- [13 · diagnostics and logging](13-diagnostics-and-logging.md) and
+  [15 · error-code reference](15-error-code-reference.md) — `VITA-W4030` and `VITA-F4004`.
+- [18 · acceleration analysis](18-acceleration-analysis.md) and
+  [20 · cycle-mode feasibility](20-cycle-mode-feasibility.md) — the other speed axes and why they
+  are not taken.
+- [19 · AI-agent observability](19-ai-agent-observability.md) — `run.json`'s `native` and
+  `codegen` objects.
+- [study/01](../study/01-interpreted-vs-compiled.md), [study/02](../study/02-v1-native-coverage.md)
+  and [study/03](../study/03-workload-corpus.md) — the tier model, the coverage report, and the
+  workload corpus.
+- [manual/004 · CLI reference](../manual/004_cli-reference.md) — the user-facing `--backend`
+  entry.

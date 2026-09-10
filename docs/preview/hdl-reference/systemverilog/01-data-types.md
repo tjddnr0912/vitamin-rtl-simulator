@@ -1,76 +1,77 @@
-# 01 · SystemVerilog 데이터 타입
+# 01 · SystemVerilog Data Types
 
-IEEE 1800-2017 §6/§7 기준. Verilog가 4-state 타입만 가졌던 것에 비해 SV는 2-state 타입,
-집합 타입(enum/struct/union), 그리고 검증용 특수 타입을 추가했다.
+Per IEEE 1800-2017 §6/§7. Where Verilog offered 4-state types only, SV adds 2-state types,
+aggregate types (enum/struct/union) and a handful of types meant for verification.
 
 ---
 
 ## 2-state vs 4-state
 
-Verilog의 모든 타입은 4-state(0/1/X/Z)였다. SV는 X/Z가 없는 2-state 타입을 도입해
-시뮬레이션 속도를 높이고 소프트웨어 정수 연산과의 호환성을 개선했다.
+Every Verilog type was 4-state (0/1/X/Z). SV introduces 2-state types, which carry no X/Z, to
+speed up simulation and to line up with software integer arithmetic.
 
-### 타입 비교표
+### Type comparison
 
-| 타입 | state | 크기 | 부호 | Verilog 대응 |
-|------|-------|------|------|-------------|
-| `logic` | 4 | 가변 | unsigned | wire + reg 통합 대체 |
-| `reg` | 4 | 가변 | unsigned | reg (레거시) |
-| `integer` | 4 | 32비트 | signed | integer (레거시) |
-| `time` | 4 | 64비트 | unsigned | time (합성 불가) |
-| `bit` | 2 | 가변 | unsigned | — (SV 신규) |
-| `byte` | 2 | 8비트 | signed | — (SV 신규) |
-| `shortint` | 2 | 16비트 | signed | — (SV 신규) |
-| `int` | 2 | 32비트 | signed | — (SV 신규) |
-| `longint` | 2 | 64비트 | signed | — (SV 신규) |
+| Type | State | Size | Sign | Verilog counterpart |
+|------|-------|------|------|--------------------|
+| `logic` | 4 | variable | unsigned | replaces wire + reg with a single type |
+| `reg` | 4 | variable | unsigned | reg (legacy) |
+| `integer` | 4 | 32-bit | signed | integer (legacy) |
+| `time` | 4 | 64-bit | unsigned | time (not synthesizable) |
+| `bit` | 2 | variable | unsigned | — (new in SV) |
+| `byte` | 2 | 8-bit | signed | — (new in SV) |
+| `shortint` | 2 | 16-bit | signed | — (new in SV) |
+| `int` | 2 | 32-bit | signed | — (new in SV) |
+| `longint` | 2 | 64-bit | signed | — (new in SV) |
 
-- 2-state 타입의 초기화 기본값은 `0` (4-state는 `X`)
-- 2-state는 시뮬레이션 속도 이점이 있으나, RTL에서 X-propagation이 필요하면 `logic`을 유지
-- `real`(64비트 IEEE 754) / `shortreal`(32비트)은 SV에서도 유지 — 합성 불가
+- A 2-state type initializes to `0` by default; a 4-state type initializes to `X`.
+- 2-state types simulate faster, but keep `logic` wherever the RTL relies on X propagation.
+- `real` (64-bit IEEE 754) and `shortreal` (32-bit) remain available in SV — neither is synthesizable.
 
-### logic vs reg 구분
+### logic vs reg
 
-`logic`은 SV §6.3.4에서 정의된 4-state 변수 타입이다. Verilog에서 `wire`는 `assign`/포트
-연결에만, `reg`는 `always`/`initial`에만 쓸 수 있어 컨텍스트마다 암기가 필요했다.
-`logic`은 두 컨텍스트를 모두 허용하되, 단일 드라이버를 컴파일 타임에 강제한다.
+`logic` is the 4-state variable type defined in SV §6.3.4. In Verilog a `wire` could only be
+driven by `assign` or a port connection and a `reg` only from `always`/`initial`, so which one
+to declare had to be memorised per context. `logic` is legal in both contexts, but it enforces
+a single driver at compile time.
 
 ```systemverilog
-logic       flag;           // 1비트
-logic [7:0] data;           // 8비트 벡터
-bit   [3:0] nibble;         // 4비트 2-state
-int         count;          // 32비트 signed 2-state
+logic       flag;           // 1 bit
+logic [7:0] data;           // 8-bit vector
+bit   [3:0] nibble;         // 4-bit, 2-state
+int         count;          // 32-bit signed, 2-state
 ```
 
-다중 드라이버 버스(`tri`, `wor` 등)는 기존 net 타입을 그대로 사용한다.
+A multi-driver bus (`tri`, `wor`, …) still uses the existing net types.
 
 ---
 
 ## Enum
 
-사용자 정의 열거 타입. 기본 타입(`int`, `logic` 등)을 지정할 수 있다.
+A user-defined enumeration type. A base type (`int`, `logic`, …) may be given.
 
 ```systemverilog
-// 명시 값 — 지정하지 않은 항목은 이전+1 자동 증가
+// explicit values — a member left unlabelled takes the previous value + 1
 typedef enum logic [1:0] {
     IDLE  = 2'b00,
     RUN   = 2'b01,
     DONE  = 2'b10,
-    ERROR             // 자동 = 2'b11
+    ERROR             // implicitly 2'b11
 } state_e;
 
 state_e s = IDLE;
 ```
 
-### 내장 메소드 (§6.19)
+### Built-in methods (§6.19)
 
-| 메소드 | 동작 |
-|--------|------|
-| `.first()` | 첫 번째 멤버 값 반환 |
-| `.last()` | 마지막 멤버 값 반환 |
-| `.next(N)` | N번째 다음 값 (기본 N=1) |
-| `.prev(N)` | N번째 이전 값 (기본 N=1) |
-| `.num()` | 멤버 총 개수 반환 |
-| `.name()` | 현재 값의 문자열 표현 반환 |
+| Method | Effect |
+|--------|--------|
+| `.first()` | returns the value of the first member |
+| `.last()` | returns the value of the last member |
+| `.next(N)` | the Nth following value (N defaults to 1) |
+| `.prev(N)` | the Nth preceding value (N defaults to 1) |
+| `.num()` | returns the total number of members |
+| `.name()` | returns the string spelling of the current value |
 
 ```systemverilog
 state_e s = IDLE;
@@ -83,27 +84,28 @@ int n = state_e.num();     // 4
 
 ## Struct
 
-여러 타입의 멤버를 하나의 이름으로 묶는다.
+Groups members of several types under one name.
 
 ### packed struct
 
-멤버들이 연속 비트 벡터로 매핑된다. 슬라이싱 가능. 합성 가능.
+The members map onto one contiguous bit vector, so the struct can be sliced. Synthesizable.
 
 ```systemverilog
 typedef struct packed {
     logic [3:0]  opcode;
     logic [11:0] address;
     logic [7:0]  data;
-} instr_t;   // 24비트 단일 벡터
+} instr_t;   // a single 24-bit vector
 
 instr_t ins;
 ins.opcode = 4'hA;
-logic [23:0] raw = ins;  // 전체를 벡터로 접근
+logic [23:0] raw = ins;  // read the whole struct as a vector
 ```
 
 ### unpacked struct
 
-멤버 사이 갭을 허용하며 합성 불가. 검증/모델링용.
+Gaps between members are allowed, and the type is not synthesizable. For verification and
+modelling.
 
 ```systemverilog
 typedef struct {
@@ -113,24 +115,25 @@ typedef struct {
 } student_t;
 ```
 
-### rand / randc 필드
+### rand / randc fields
 
-클래스 내 struct 필드에 `rand`/`randc` 한정자를 붙이면 `randomize()` 호출 시 무작위화에 포함된다.
+Marking a struct field inside a class with the `rand`/`randc` qualifier includes it in
+randomization when `randomize()` is called.
 
 ---
 
 ## Union
 
-모든 멤버가 동일한 저장 공간을 공유한다.
+Every member shares the same storage.
 
 ### packed union
 
-모든 멤버가 동일 비트 폭이어야 한다. 합성 가능.
+Every member must have the same bit width. Synthesizable.
 
 ```systemverilog
 typedef union packed {
     logic [31:0]       word;
-    logic [3:0][7:0]   bytes;   // 4 × 8비트
+    logic [3:0][7:0]   bytes;   // 4 × 8 bits
 } word_u;
 
 word_u u;
@@ -140,8 +143,8 @@ $display("%h", u.bytes[3]);   // DE
 
 ### tagged union
 
-마지막에 쓴 멤버를 내부 태그로 기록한다. 다른 멤버로 읽으면 런타임 에러.
-멤버 크기가 달라도 되며, 합성 불가.
+The member written last is recorded in an internal tag; reading through a different member is
+a runtime error. Members may differ in size, and the type is not synthesizable.
 
 ```systemverilog
 typedef union tagged {
@@ -152,14 +155,14 @@ typedef union tagged {
 
 data_t d;
 d = tagged a 32'hffff;
-// d.b;  → 런타임: "Invalid member usage of a tagged union"
+// d.b;  → at run time: "Invalid member usage of a tagged union"
 ```
 
 ---
 
 ## typedef
 
-타입 별칭 선언. struct/union/enum과 함께 이름을 부여하는 것이 표준 패턴.
+Declares a type alias. Naming a struct/union/enum with `typedef` is the standard pattern.
 
 ```systemverilog
 typedef logic [7:0] byte_t;
@@ -170,22 +173,23 @@ typedef struct packed { logic [7:0] r, g, b; } rgb_t;
 
 ## string
 
-동적 크기 문자열. 합성 불가.
+A dynamically sized string. Not synthesizable.
 
 ```systemverilog
 string s = "Hello";
-int    n = s.len();         // 길이
-s = {s, " World"};         // 연결 연산
-s = s.toupper();           // 대문자 변환
-int v = s.atoi();          // 문자열 → 정수
+int    n = s.len();         // length
+s = {s, " World"};         // concatenation
+s = s.toupper();           // to upper case
+int v = s.atoi();          // string → integer
 ```
 
 ---
 
 ## chandle
 
-DPI(Direct Programming Interface)를 통해 C/C++ 함수가 반환한 포인터를 SV에서 저장·전달하는
-불투명 핸들 타입. SV 코드에서는 비교(`==`, `!=`, `null` 체크)만 가능하고 역참조는 불가.
+An opaque handle type that lets SV hold and pass a pointer returned by a C/C++ function through
+the DPI (Direct Programming Interface). SV code can only compare it (`==`, `!=`, a `null`
+check); it cannot be dereferenced.
 
 ```systemverilog
 import "DPI-C" function chandle alloc_ctx();
@@ -196,8 +200,8 @@ chandle ctx = alloc_ctx();
 
 ## virtual interface
 
-interface 인스턴스에 대한 핸들. 클래스는 포트를 가질 수 없기 때문에, 클래스 기반 검증
-컴포넌트가 하드웨어 신호에 접근하기 위해 사용한다. interface 문서는 `04-interfaces.md` 참조.
+A handle to an interface instance. A class cannot have ports, so a class-based verification
+component uses one to reach hardware signals. For interfaces themselves see `04-interfaces.md`.
 
 ```systemverilog
 interface axi_if(input logic clk);
@@ -206,7 +210,7 @@ interface axi_if(input logic clk);
 endinterface
 
 class Driver;
-    virtual axi_if vif;   // 핸들 — 실제 인터페이스 인스턴스는 외부에서 주입
+    virtual axi_if vif;   // handle — the real interface instance is injected from outside
     task run();
         vif.addr = 32'h0;
     endtask

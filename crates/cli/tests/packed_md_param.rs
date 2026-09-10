@@ -16,7 +16,7 @@
 //! packed-array parameter ("sorry: packed array parameters are not supported yet")
 //! and aborts on a multi-dimensional packed typedef VARIABLE, so verilator is the
 //! sole oracle. The slice's census (195 cells, a keyword-spelled control twin and a
-//! variable twin per position) is in ROADMAP_ARCHIVE §4.5.412.
+//! variable twin per position) is in docs/history/ROADMAP_ARCHIVE.md §4.5.412.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 

@@ -1,15 +1,16 @@
-# 04 · Verilog 모듈과 계층 구조
+# 04 · Verilog Modules and Hierarchy
 
-IEEE 1364-2001/2005 기준. 모듈(module)은 Verilog 설계의 기본 단위다. 포트,
-파라미터, 인스턴스, generate 블록을 통해 계층적 설계(hierarchical design)를 구성한다.
+Per IEEE 1364-2001/2005. The module is the basic unit of a Verilog design. Ports,
+parameters, instances and generate blocks together build a hierarchical design.
 
 ---
 
-## 모듈 선언 — ANSI vs non-ANSI 포트 스타일
+## Module declaration — ANSI vs. non-ANSI port style
 
-### non-ANSI 스타일 (Verilog-1995 이래)
+### non-ANSI style (since Verilog-1995)
 
-포트 이름은 헤더 목록에, 방향·타입은 본문에서 따로 선언한다.
+The header lists port names only; direction and type are declared separately in the
+body.
 
 ```verilog
 module adder (a, b, cin, sum, cout);
@@ -22,9 +23,10 @@ module adder (a, b, cin, sum, cout);
 endmodule
 ```
 
-### ANSI 스타일 (Verilog-2001 추가 — 권장)
+### ANSI style (added by Verilog-2001 — recommended)
 
-방향·타입·폭을 포트 목록에 한 번에 선언한다. 중복이 없고 실수를 줄인다.
+Direction, type and width are declared once, in the port list. Nothing is repeated,
+so there is less to get wrong.
 
 ```verilog
 module adder #(
@@ -40,28 +42,28 @@ module adder #(
 endmodule
 ```
 
-### 비교 요약
+### Side by side
 
-| 항목 | non-ANSI | ANSI |
+| Aspect | non-ANSI | ANSI |
 |------|---------|------|
-| 도입 표준 | IEEE 1364-1995 | IEEE 1364-2001 |
-| 포트 방향 위치 | 모듈 본문 별도 선언 | 포트 목록 내 인라인 |
-| 가독성 | 선언이 분산됨 | 한 곳에 집중 |
-| 추천 여부 | 레거시 코드 리딩 시 | 신규 코드에 권장 |
-| interface 포트 | 불가 | 가능 (SV) |
+| Introduced by | IEEE 1364-1995 | IEEE 1364-2001 |
+| Where the direction lives | a separate declaration in the module body | inline in the port list |
+| Readability | declarations are scattered | everything in one place |
+| When to use it | reading legacy code | recommended for new code |
+| interface ports | not possible | possible (SystemVerilog) |
 
 ---
 
-## 포트 방향
+## Port directions
 
-| 키워드 | 방향 | 기본 net 타입 | 설명 |
+| Keyword | Direction | Default net type | Notes |
 |--------|------|-------------|------|
-| `input` | 외부 → 모듈 | wire | 읽기 전용, reg 대입 불가 |
-| `output` | 모듈 → 외부 | wire (reg 지정 가능) | 내부에서 구동 |
-| `inout` | 양방향 | wire | tri-state 버스; 비사용 시 `z` 구동 필요 |
+| `input` | outside → module | wire | read-only; cannot be assigned as a reg |
+| `output` | module → outside | wire (may be declared reg) | driven from inside |
+| `inout` | bidirectional | wire | tri-state bus; must be driven to `z` when idle |
 
 ```verilog
-// inout 사용 예 (양방향 버스 드라이버)
+// inout in use (a bidirectional bus driver)
 module bus_driver (
     inout  [7:0] data_bus,
     input        oe,        // output enable
@@ -75,9 +77,9 @@ endmodule
 
 ---
 
-## 파라미터 (parameter / localparam)
+## Parameters (parameter / localparam)
 
-### parameter — 인스턴스 시점에 override 가능
+### parameter — overridable at instantiation
 
 ```verilog
 module fifo #(
@@ -92,7 +94,7 @@ module fifo #(
 endmodule
 ```
 
-### localparam — 내부 상수 (외부 override 불가)
+### localparam — an internal constant (no external override)
 
 ```verilog
 module fsm (input clk, rst, input go, output done);
@@ -107,26 +109,27 @@ endmodule
 
 ### defparam — deprecated ⚠️
 
-`defparam`은 인스턴스 선언과 분리된 위치에서 파라미터를 강제 변경할 수 있었다.
-IEEE 1800-2017 §23.10에서 명시적으로 deprecated 처리되었다.
+`defparam` could force a parameter to a new value from somewhere entirely apart
+from the instance declaration. IEEE 1800-2017 §23.10 deprecates it explicitly.
 
 ```verilog
-// ❌ defparam — 사용 금지
+// ❌ defparam — do not use
 defparam u_fifo.DEPTH = 32;
 defparam u_fifo.WIDTH = 16;
 
-// ✅ 대체: named parameter override (Verilog-2001 이후 권장)
+// ✅ instead: a named parameter override (recommended since Verilog-2001)
 fifo #(.DEPTH(32), .WIDTH(16)) u_fifo (.clk(clk), .rst(rst), ...);
 ```
 
-**deprecated 이유**: defparam 문이 인스턴스와 파일이나 위치가 달라도 적용되어
-가독성과 도구 복잡도 문제를 만든다. 현대 Lint/합성 도구는 대부분 경고 또는 오류를 출력한다.
+**Why it was deprecated**: a `defparam` statement applies even from a different
+position — or a different file — than its instance, which hurts readability and
+complicates tools. Most modern lint and synthesis tools warn or error on it.
 
 ---
 
-## 모듈 인스턴스화
+## Module instantiation
 
-### named 연결 (권장)
+### Named connections (recommended)
 
 ```verilog
 adder #(.WIDTH(8)) u_adder (
@@ -138,33 +141,36 @@ adder #(.WIDTH(8)) u_adder (
 );
 ```
 
-포트 이름을 명시하므로 모듈 포트 순서가 바뀌어도 연결이 유지된다.
+Because each port is named, reordering the module's ports does not break the
+connection.
 
-### positional 연결 (비권장)
+### Positional connections (discouraged)
 
 ```verilog
 adder u_adder (op_a, op_b, carry_in, result, carry_out);
 ```
 
-포트 선언 순서에 의존 — 순서 변경 시 무성하게 잘못 연결될 수 있다.
+This depends on the order the ports were declared in — reorder them and the design
+silently mis-connects.
 
-### 포트 연결 규칙
+### Port connection rules
 
-| 경우 | 결과 |
+| Case | Result |
 |------|------|
-| output → wire | net에 직접 연결 |
-| output → reg | 포트에서는 wire, 내부 reg가 assign으로 구동 |
-| input 미연결 | 고임피던스(z)로 처리 |
-| output 미연결 | 허용 (단, 경고) |
+| output → wire | connects directly to the net |
+| output → reg | the port is still a wire; an internal reg drives it through an assign |
+| input left unconnected | treated as high impedance (z) |
+| output left unconnected | allowed (with a warning) |
 
 ---
 
-## generate 블록 (Verilog-2001)
+## generate blocks (Verilog-2001)
 
-generate 블록은 **elaboration time**에 구문을 조건부로 확장하거나 반복 인스턴스화한다.
-`genvar`는 elaboration time 전용 정수 변수 — 시뮬레이션에는 존재하지 않는다.
+A generate block conditionally expands constructs, or instantiates them repeatedly,
+at **elaboration time**. `genvar` is an elaboration-time-only integer variable — it
+does not exist during simulation.
 
-### generate-for: 반복 인스턴스화
+### generate-for: repeated instantiation
 
 ```verilog
 module ripple_carry #(parameter N = 4)(
@@ -193,10 +199,11 @@ module ripple_carry #(parameter N = 4)(
 endmodule
 ```
 
-`begin : gen_fa` — 레이블을 붙이면 `gen_fa[0].u_fa`, `gen_fa[1].u_fa` 계층명으로 접근 가능.
-레이블 없는 generate loop에 대해 일부 도구는 경고를 내므로 항상 이름을 붙이는 것이 좋다.
+`begin : gen_fa` — with a label, the instances are reachable by the hierarchical
+names `gen_fa[0].u_fa`, `gen_fa[1].u_fa`. Some tools warn about an unlabelled
+generate loop, so it is best to always name one.
 
-### generate-if: 조건부 구현 선택
+### generate-if: choosing an implementation
 
 ```verilog
 module adder_impl #(parameter USE_CARRY_LOOKAHEAD = 0)(
@@ -215,7 +222,7 @@ module adder_impl #(parameter USE_CARRY_LOOKAHEAD = 0)(
 endmodule
 ```
 
-### generate-case: 다중 구현 선택
+### generate-case: selecting among several implementations
 
 ```verilog
 module encoder #(parameter TYPE = 0)( ... );
@@ -229,38 +236,39 @@ module encoder #(parameter TYPE = 0)( ... );
 endmodule
 ```
 
-### generate 블록 내 허용/금지 항목
+### What a generate block may and may not contain
 
-| 허용 | 금지 |
+| Allowed | Forbidden |
 |------|------|
 | module instance | port declaration (input/output) |
 | gate primitive | specify block |
-| continuous assign | parameter/localparam 선언 |
-| initial / always 블록 | |
-| 데이터 타입 (net, reg, integer, real) | |
-| task/function (if/case generate 내에서만) | |
+| continuous assign | parameter/localparam declaration |
+| initial / always block | |
+| data types (net, reg, integer, real) | |
+| task/function (only inside an if/case generate) | |
 
 ---
 
-## 계층적 이름 접근 (Hierarchical Name)
+## Hierarchical names
 
-dot-separated path로 설계의 어느 위치에 있는 신호든 참조할 수 있다.
+A dot-separated path reaches any signal anywhere in the design.
 
 ```verilog
-// 계층: tb → dut → core → alu
+// hierarchy: tb → dut → core → alu
 $display("ALU result: %h", tb.dut.core.alu.result);
 
-// generate block 레이블이 있는 경우
+// with a labelled generate block
 $display("FA cout[2]: %b", tb.dut.u_rca.gen_fa[2].u_fa.cout);
 ```
 
-주요 사용처:
+Where they are used:
 
-- 테스트벤치에서 내부 신호 관측 (`$monitor`, `$display`, force/release)
-- `defparam`의 대상 지정 (비권장 — 위 항목 참고)
-- 디버그 중 특정 레지스터 직접 읽기
+- observing internal signals from a testbench (`$monitor`, `$display`, force/release)
+- naming the target of a `defparam` (discouraged — see above)
+- reading a specific register directly while debugging
 
-**주의**: 계층적 참조는 합성 불가 — 시뮬레이션/검증 전용.
+**Note**: hierarchical references are not synthesizable — they are for simulation
+and verification only.
 
 ---
 
@@ -269,8 +277,8 @@ $display("FA cout[2]: %b", tb.dut.u_rca.gen_fa[2].u_fa.cout);
 - IEEE 1364-2001 §12 (module declaration, ANSI port syntax)
 - IEEE 1364-2005 §12, §14 (parameter, generate)
 - IEEE 1800-2017 §23 (module definitions and hierarchy), §23.10 (defparam deprecated)
-- sigasi.com/tech/ansi-vs-non-ansi/ (ANSI vs non-ANSI 포트 — WebFetch 검증)
-- chipverify.com/verilog/verilog-parameters (parameter/defparam — WebFetch 검증)
-- chipverify.com/verilog/verilog-generate-block (generate 구문 — WebFetch 검증)
-- vlsiverify.com/verilog/generate-blocks-in-verilog/ (genvar, 계층명 — WebFetch 검증)
+- sigasi.com/tech/ansi-vs-non-ansi/ (ANSI vs. non-ANSI ports — verified by WebFetch)
+- chipverify.com/verilog/verilog-parameters (parameter/defparam — verified by WebFetch)
+- chipverify.com/verilog/verilog-generate-block (generate syntax — verified by WebFetch)
+- vlsiverify.com/verilog/generate-blocks-in-verilog/ (genvar, hierarchical names — verified by WebFetch)
 - sutherland-hdl.com/pdfs/verilog_2001_ref_guide.pdf (Verilog-2001 Quick Reference)

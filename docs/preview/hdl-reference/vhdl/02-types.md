@@ -1,62 +1,63 @@
-# 02 · VHDL 타입 시스템
+# 02 · VHDL Type System
 
-IEEE 1076-2008 §5 기준. `std` 및 `ieee` 패키지 포함.
-
----
-
-## 타입 분류 개요
-
-```
-타입 (type)
-├── 스칼라 (scalar)
-│   ├── 정수 (integer)          — integer, natural, positive
-│   ├── 부동소수 (real)
-│   ├── 물리 (physical)         — time
-│   └── 열거 (enumeration)     — bit, boolean, character, severity_level, file_open_kind
-├── 복합 (composite)
-│   ├── 배열 (array)            — bit_vector, string, ...
-│   └── 레코드 (record)
-├── 액세스 (access)             — 포인터, 시뮬레이션 전용
-└── 파일 (file)                 — 시뮬레이션 전용
-```
+Per IEEE 1076-2008 §5, including the `std` and `ieee` packages.
 
 ---
 
-## 스칼라 타입
+## Type classification
 
-### 정수 타입
+```
+type
+├── scalar
+│   ├── integer                 — integer, natural, positive
+│   ├── floating point (real)
+│   ├── physical                — time
+│   └── enumeration             — bit, boolean, character, severity_level, file_open_kind
+├── composite
+│   ├── array                   — bit_vector, string, ...
+│   └── record
+├── access                      — pointer, simulation only
+└── file                        — simulation only
+```
+
+---
+
+## Scalar Types
+
+### Integer types
 
 ```vhdl
--- 표준 패키지 선언
+-- as declared in the standard package
 type integer is range -(2**31-1) to 2**31-1;
 
 subtype natural  is integer range 0 to integer'high;
 subtype positive is integer range 1 to integer'high;
 ```
 
-| 타입 | 범위 |
+| Type | Range |
 |------|------|
-| `integer` | −(2³¹−1) ~ 2³¹−1 (구현에 따라 더 넓을 수 있음) |
-| `natural` | 0 이상 |
-| `positive` | 1 이상 |
+| `integer` | −(2³¹−1) … 2³¹−1 (an implementation may make it wider) |
+| `natural` | 0 and up |
+| `positive` | 1 and up |
 
-### 부동소수 타입
+### Floating-point type
 
 ```vhdl
 type real is range -1.0E308 to 1.0E308;
 ```
 
-시뮬레이션·검증 전용. 합성 불가. 연산 후 정밀도는 구현 의존.
+Simulation and verification only; not synthesizable. The precision left after an operation is
+implementation-defined.
 
-### 물리 타입 (Physical Type)
+### Physical types
 
-단위(unit)가 있는 정수. 시간 모델링에 필수.
+An integer carrying a unit. Essential for modelling time.
 
 ```vhdl
--- 표준 패키지 time 정의 (축약)
+-- the standard package definition of time (abridged)
 type time is range -(2**63-1) to 2**63-1
   units
-    fs;                 -- femtosecond (기준 단위)
+    fs;                 -- femtosecond (the primary unit)
     ps  = 1000 fs;
     ns  = 1000 ps;
     us  = 1000 ns;
@@ -67,15 +68,15 @@ type time is range -(2**63-1) to 2**63-1
   end units;
 ```
 
-사용 예:
+In use:
 
 ```vhdl
 constant CLK_PERIOD : time := 10 ns;
 wait for 5 ns;
-signal #: time := now;
+signal t_now : time := now;
 ```
 
-### 열거 타입 (Enumeration)
+### Enumeration types
 
 ```vhdl
 type boolean        is (FALSE, TRUE);
@@ -85,9 +86,9 @@ type file_open_kind is (READ_MODE, WRITE_MODE, APPEND_MODE);
 type file_open_status is (OPEN_OK, STATUS_ERROR, NAME_ERROR, MODE_ERROR);
 ```
 
-`character`는 ISO-8859-1 기준 256개 문자의 열거형 (VHDL-1993부터).
+`character` is an enumeration of the 256 ISO-8859-1 characters (since VHDL-1993).
 
-**사용자 정의 열거**:
+**User-defined enumeration**:
 ```vhdl
 type state_t is (IDLE, FETCH, DECODE, EXECUTE, WRITEBACK);
 signal state : state_t := IDLE;
@@ -95,11 +96,11 @@ signal state : state_t := IDLE;
 
 ---
 
-## 복합 타입
+## Composite Types
 
-### 배열 (Array)
+### Arrays
 
-**제약 배열(constrained array)**: 선언 시 범위 고정.
+**Constrained array**: the range is fixed at the declaration.
 
 ```vhdl
 type byte_t      is array(7 downto 0) of bit;
@@ -107,41 +108,41 @@ type word_t      is array(15 downto 0) of bit;
 type rom_256x8_t is array(0 to 255) of byte_t;
 ```
 
-**비제약 배열(unconstrained array)**: `range <>` — 범위를 포트/제네릭/서브타입에서 결정.
+**Unconstrained array**: `range <>` — the range is settled by a port, a generic or a subtype.
 
 ```vhdl
--- 표준 패키지 정의
+-- as declared in the standard package
 type bit_vector  is array(natural range <>) of bit;
 type string      is array(positive range <>) of character;
 
--- 포트 선언 시 범위 지정
+-- the range given at the port declaration
 port (data_in : in bit_vector(7 downto 0));
 
--- 서브타입으로 제약
+-- constrained by a subtype
 subtype byte_vec is bit_vector(7 downto 0);
 ```
 
-**다차원 배열**:
+**Multidimensional arrays**:
 ```vhdl
 type matrix_t is array(0 to 3, 0 to 3) of integer;
 variable m : matrix_t;
 m(0, 0) := 1;
 ```
 
-**배열 속성(attributes)**:
-| 속성 | 의미 |
+**Array attributes**:
+| Attribute | Meaning |
 |------|------|
-| `a'length` | 요소 개수 |
-| `a'left` | 좌측 인덱스 |
-| `a'right` | 우측 인덱스 |
-| `a'high` | 최대 인덱스 |
-| `a'low` | 최소 인덱스 |
-| `a'range` | 범위 (`low to high` 또는 `high downto low`) |
-| `a'reverse_range` | 역방향 범위 |
+| `a'length` | number of elements |
+| `a'left` | left index |
+| `a'right` | right index |
+| `a'high` | highest index |
+| `a'low` | lowest index |
+| `a'range` | the range (`low to high` or `high downto low`) |
+| `a'reverse_range` | the range reversed |
 
-### 레코드 (Record)
+### Records
 
-이종 필드의 묶음. SystemVerilog `struct`에 해당.
+A bundle of heterogeneous fields — the counterpart of a SystemVerilog `struct`.
 
 ```vhdl
 type axi_t is record
@@ -157,76 +158,77 @@ axi_bus.valid <= '1';
 
 ---
 
-## 액세스 타입 (Access Type)
+## Access Types
 
-동적 메모리 할당 포인터. **시뮬레이션 전용, 합성 불가**.
+A pointer into dynamically allocated memory. **Simulation only, not synthesizable.**
 
 ```vhdl
 type node_t;
 type link_ptr is access node_t;
 type node_t is record
   val  : integer;
-  next : link_ptr;
+  nxt  : link_ptr;
 end record;
 
 variable head : link_ptr;
-head := new node_t'(val => 0, next => null);
+head := new node_t'(val => 0, nxt => null);
 ```
 
-`deallocate(ptr)` 로 해제.
+`deallocate(ptr)` releases it.
 
 ---
 
-## 파일 타입 (File Type)
+## File Types
 
-시뮬레이션 I/O. **합성 불가**.
+Simulation I/O. **Not synthesizable.**
 
 ```vhdl
-type text is file of string;   -- 표준 패키지 정의
+type text is file of string;   -- as declared in the standard package
 file my_file : text open READ_MODE is "input.txt";
 ```
 
 ---
 
-## std_logic_1164 패키지
+## The std_logic_1164 Package
 
 `library ieee; use ieee.std_logic_1164.all;`
 
-IEEE Std 1164. VHDL 설계의 표준 로직 타입.
+IEEE Std 1164 — the standard logic type of VHDL design.
 
-### std_ulogic — 9값 열거형
+### std_ulogic — a 9-value enumeration
 
 ```vhdl
 type std_ulogic is ('U','X','0','1','Z','W','L','H','-');
 ```
 
-| 값 | 이름 | 시뮬레이션 의미 |
+| Value | Name | Meaning in simulation |
 |----|------|----------------|
-| `'U'` | Uninitialized | 초기화 전 상태. 시뮬레이션 시작 기본값 |
-| `'X'` | Forcing Unknown | 강한 드라이버 충돌 또는 미결정 |
-| `'0'` | Forcing 0 | 강한 로직 0 (VCC 접지) |
-| `'1'` | Forcing 1 | 강한 로직 1 (VCC 연결) |
-| `'Z'` | High Impedance | 트라이스테이트: 드라이버 비활성 |
-| `'W'` | Weak Unknown | 약한 드라이버 충돌 |
-| `'L'` | Weak 0 | 풀다운 저항 |
-| `'H'` | Weak 1 | 풀업 저항 |
-| `'-'` | Don't Care | 합성 최적화 힌트; 시뮬레이션에서는 `'X'` 동작 |
+| `'U'` | Uninitialized | the state before initialization; the default at the start of simulation |
+| `'X'` | Forcing Unknown | a strong-driver conflict, or an undetermined value |
+| `'0'` | Forcing 0 | a strong logic 0 (tied to ground) |
+| `'1'` | Forcing 1 | a strong logic 1 (tied to VCC) |
+| `'Z'` | High Impedance | tri-state: the driver is off |
+| `'W'` | Weak Unknown | a weak-driver conflict |
+| `'L'` | Weak 0 | a pull-down resistor |
+| `'H'` | Weak 1 | a pull-up resistor |
+| `'-'` | Don't Care | a hint for synthesis optimization; in simulation it behaves as `'X'` |
 
-합성 도구가 실제로 인식하는 값: `'0'`, `'1'`, `'Z'`, `'-'`.
+The values a synthesis tool actually recognizes are `'0'`, `'1'`, `'Z'` and `'-'`.
 
-### std_logic — 해소 서브타입
+### std_logic — the resolved subtype
 
 ```vhdl
 function resolved(s : std_ulogic_vector) return std_ulogic;
 subtype std_logic is resolved std_ulogic;
 ```
 
-`std_ulogic`은 단일 드라이버만 허용. `std_logic`은 `resolved` 함수를 통해
-다중 드라이버(버스 공유)를 지원한다. `resolved`는 9×9 결정 테이블로 대표값을 반환.
+`std_ulogic` permits a single driver only. `std_logic` supports multiple drivers (a shared
+bus) through the `resolved` function, which returns the representative value from a 9×9
+decision table.
 
-해소 테이블 주요 케이스:
+The main cases of the resolution table:
 
-| 드라이버 A | 드라이버 B | 결과 |
+| Driver A | Driver B | Result |
 |-----------|-----------|------|
 | `'0'` | `'0'` | `'0'` |
 | `'1'` | `'1'` | `'1'` |
@@ -239,123 +241,124 @@ subtype std_logic is resolved std_ulogic;
 | `'U'` | (any) | `'U'` |
 | `'-'` | (any) | `'X'` |
 
-### 배열 타입
+### Array types
 
 ```vhdl
 type std_ulogic_vector is array (natural range <>) of std_ulogic;
--- VHDL-2008: std_logic_vector는 std_ulogic_vector 서브타입
+-- VHDL-2008: std_logic_vector is a subtype of std_ulogic_vector
 subtype std_logic_vector is (resolved) std_ulogic_vector;
 ```
 
-VHDL-2008 이전에는 `std_logic_vector`와 `std_ulogic_vector`가 별개 타입이어서
-직접 대입 시 타입 변환(`std_logic_vector(...)`)이 필요했다.
-2008부터는 서브타입 관계이므로 묵시적 변환이 가능하다.
+Before VHDL-2008, `std_logic_vector` and `std_ulogic_vector` were distinct types, so assigning
+one to the other required an explicit type conversion (`std_logic_vector(...)`). From 2008 on
+they are related as subtype and base type, so the conversion is implicit.
 
-### VHDL-2008 신규 기능
+### New in VHDL-2008
 
 ```vhdl
--- 리덕션 연산자
-and_reduce(v)   -- 전체 AND
-or_reduce(v)    -- 전체 OR
-xor_reduce(v)   -- 홀수 패리티
+-- reduction operators
+and_reduce(v)   -- AND of all elements
+or_reduce(v)    -- OR of all elements
+xor_reduce(v)   -- odd parity
 
--- 매칭 비교 (don't care '-' 처리)
+-- matching comparison (honours the don't-care '-')
 a ?= b    -- matching equality
 a ?/= b   -- matching inequality
 
--- 변환 함수
+-- conversion functions
 to_string(v)    -- "10110..."
 to_hstring(v)   -- "FF"
 to_ostring(v)   -- "377"
-to_bstring(v)   -- = to_string
+to_bstring(v)   -- same as to_string
 ```
 
 ---
 
-## numeric_std 패키지
+## The numeric_std Package
 
 `library ieee; use ieee.numeric_std.all;`
 
-IEEE Std 1076.3. 합성 가능한 정수 산술.
+IEEE Std 1076.3 — synthesizable integer arithmetic.
 
-### 타입 선언
+### Type declarations
 
 ```vhdl
 type unsigned is array (natural range <>) of std_logic;
 type signed   is array (natural range <>) of std_logic;
 ```
 
-| 타입 | 해석 | 범위 (n비트) |
+| Type | Interpretation | Range (n bits) |
 |------|------|-------------|
-| `unsigned` | 비부호 정수 | 0 ~ 2ⁿ−1 |
-| `signed` | 2의 보수 | −2ⁿ⁻¹ ~ 2ⁿ⁻¹−1 |
+| `unsigned` | unsigned integer | 0 … 2ⁿ−1 |
+| `signed` | two's complement | −2ⁿ⁻¹ … 2ⁿ⁻¹−1 |
 
-### 주요 연산
+### The main operations
 
 ```vhdl
--- 산술
-a + b     -- 같은 타입, 같은 길이
+-- arithmetic
+a + b     -- same type, same length
 a - b
-a * b     -- 결과 폭 = 입력 폭의 합
+a * b     -- the result width is the sum of the operand widths
 abs a     -- signed only
 
--- 비교 (std_logic 반환)
+-- comparison (returns std_logic)
 a < b   a <= b   a > b   a >= b   a = b   a /= b
 
--- 비트 조작
+-- bit manipulation
 shift_left(a, n)    shift_right(a, n)
 rotate_left(a, n)   rotate_right(a, n)
 
--- 폭 변환
-resize(a, new_size)   -- signed: 부호 확장; unsigned: 제로 확장
+-- width conversion
+resize(a, new_size)   -- signed: sign-extend; unsigned: zero-extend
 
--- 타입 변환
+-- type conversion
 to_integer(u)              -- unsigned/signed → integer
-to_unsigned(n, size)       -- integer → unsigned (size비트)
-to_signed(n, size)         -- integer → signed (size비트)
-std_logic_vector(u)        -- unsigned → slv (타입 변환)
+to_unsigned(n, size)       -- integer → unsigned (size bits)
+to_signed(n, size)         -- integer → signed (size bits)
+std_logic_vector(u)        -- unsigned → slv (type conversion)
 unsigned(slv)              -- slv → unsigned
 signed(slv)                -- slv → signed
 ```
 
-### 혼합 타입 연산 금지
+### Mixed-type operations are illegal
 
-`unsigned`와 `signed`는 직접 연산 불가. 명시적 변환 필요.
+`unsigned` and `signed` cannot be combined directly; an explicit conversion is required.
 
 ```vhdl
--- 오류
+-- error
 result <= u_val + s_val;
 
--- 올바른 방법
+-- correct
 result <= u_val + unsigned(resize(s_val, u_val'length));
 ```
 
 ---
 
-## 서브타입 (Subtype)
+## Subtypes
 
-기존 타입에 제약을 추가하거나 이름을 붙인다.
+A subtype adds a constraint to an existing type, or just names it.
 
 ```vhdl
 subtype byte_t     is integer range 0 to 255;
 subtype nibble_vec is std_logic_vector(3 downto 0);
 ```
 
-서브타입은 부모 타입과 동일 타입으로 취급 → 타입 변환 없이 대입 가능.
+A subtype is treated as the same type as its parent, so it can be assigned without a
+conversion.
 
 ---
 
-## 타입 변환 (Type Conversion)
+## Type Conversion
 
-관련 타입 간 명시적 변환:
+Explicit conversion between closely related types:
 
 ```vhdl
-integer(r)              -- real → integer (반올림)
+integer(r)              -- real → integer (rounds)
 real(i)                 -- integer → real
 std_logic_vector(u)     -- unsigned → slv
 unsigned(slv)           -- slv → unsigned
 to_integer(u)           -- unsigned → integer (numeric_std)
-to_unsigned(i, n)       -- integer → unsigned, n비트
+to_unsigned(i, n)       -- integer → unsigned, n bits
 ```
 
 ---

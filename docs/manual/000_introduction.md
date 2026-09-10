@@ -1,150 +1,231 @@
-# Introduction
+# 000 · Introduction
 
-**vitamin** is an open-source RTL simulator written in Rust. You feed it
-Verilog / SystemVerilog RTL, it runs the design, and — when your RTL asks for it —
-writes a VCD waveform you can open in GTKWave, Surfer, or any standard viewer.
+This chapter states what vitamin is, who it serves, how its four commands relate, what each
+pipeline stage decides, and which platforms it runs on. The supported language surface appears
+here at chapter granularity; the construct-by-construct detail is in
+[Language Reference](003_language-reference.md).
 
-If you already write RTL and have used a simulator like Icarus Verilog or VCS,
-vitamin will feel familiar: it compiles, elaborates, and simulates your design,
-and emits the same waveform and `$display` output you expect. What is different
-is *how* it is built — for **determinism and reproducibility** rather than for
-the broadest possible language coverage.
+---
 
-## What problem it solves
+## What vitamin is
 
-Most RTL simulators are either commercial (VCS, Xcelium — closed, license-gated)
-or distributed as prebuilt binaries whose results can subtly differ across hosts.
-vitamin targets three things instead:
+vitamin is an open-source RTL simulator written in Rust and distributed as source. It reads
+Verilog and SystemVerilog, elaborates the design, runs an event-driven 4-state kernel over it,
+writes the `$display` transcript to stdout, and — when the RTL asks for one — writes a VCD or FST
+waveform that opens in GTKWave or Surfer.
 
-- **Deterministic, byte-reproducible results.** The same source builds and runs
-  to the *same* result on Linux and macOS. Run it on your laptop, run it in CI,
-  get identical output.
-- **Source-only builds.** No prebuilt binaries, minimal/zero C dependencies.
-  `cargo build` is the whole story.
-- **Timing precision without a GC.** An event-driven core with a faithful
-  `timescale` model, written in Rust so that deterministic timing accuracy does
-  not fight a garbage collector.
+The command-line surface is deliberately familiar to anyone who has used Icarus Verilog or a
+commercial flow: `-D`/`-I` for the preprocessor, `-f` filelists, `-G` parameter overrides,
+`-o` for the output path, and a one-shot driver alongside a compile / elaborate / simulate split.
 
-vitamin uses Icarus Verilog as its **golden reference** for differential
-verification: signal values and transition times are checked to match `iverilog`.
+vitamin belongs to the same class of tool as Icarus Verilog: event-driven, 4-state, with a
+faithful event queue. A compiled 2-state simulator such as Verilator, and the commercial
+simulators, are one to two orders of magnitude faster; that difference is structural, because
+4-state values and event ordering are exactly what vitamin keeps. Against Icarus Verilog on the
+ten-design workload corpus — `corpus-runner run --compare`, release binaries, median of three
+runs — vitamin's geometric mean is 1.74× faster over the nine timed designs, two of which
+vitamin loses.
 
-## The four CLIs
+## Who it is for
 
-vitamin ships as a single multicall binary, `vita`, that behaves as four tools
-depending on how it is invoked. You can run the whole flow in one shot, or split
-it into stages.
+| Reader | What vitamin offers |
+|---|---|
+| **RTL designer** | A simulator that installs from source with one `cargo` command, runs a synthesizable design end to end, and produces a standard waveform |
+| **Verification engineer** | Assertions, functional coverage, classes, and constrained random, with every unsupported construct refused by a coded diagnostic rather than approximated |
+| **CI owner** | The same source produces byte-identical stdout and byte-identical waveform bytes on Linux and macOS, so a diff means a design change |
+| **Tooling and agents** | A machine-readable run report, a value-change trace, and a hierarchy dump, all written on request to a directory ([`--obs-dir`](004_cli-reference.md)) |
 
-| Command | Role | Consumes | Produces |
-|---------|------|----------|----------|
-| `vita`  | one-shot: compile → elaborate → simulate | `.sv` / `.v` source | VCD (+ stdout) |
-| `vcmp`  | compile (preprocess + lex + parse)       | source              | `.vu` |
-| `velab` | elaborate                                | `.vu`               | `.velab` |
-| `vrun`  | simulate                                 | `.velab`            | VCD (+ stdout) |
+---
 
-The staged tools mirror the compile / elaborate / simulate split of commercial
-EDA flows (Cadence `xmvlog`/`xmelab`/`xmsim`, Synopsys `vlogan`/`vcs`/`simv`).
-They let you rebuild and debug one stage at a time and **skip stages whose inputs
-have not changed** by reusing the on-disk artifact.
+## The four commands
 
-The staged applets are dispatched by the program's basename, so they can be
-installed as symlinks to `vita`, or invoked explicitly as subcommands:
+vitamin ships one executable, `vita`. It behaves as four tools: the one-shot driver, and the
+three staged tools that split the same pipeline.
+
+| Command | Stage | Consumes | Produces |
+|---|---|---|---|
+| `vita` | the whole pipeline in one invocation | `.v` / `.sv` sources | RTL stdout, waveform |
+| `vcmp` | preprocess, lex, parse | `.v` / `.sv` sources | `.vu` compile snapshot |
+| `velab` | elaborate | one `.vu`, or work libraries selected with `-L` | `.velab` elaborated artifact |
+| `vrun` | simulate | one `.velab` | RTL stdout, waveform |
+
+The staged split mirrors the compile / elaborate / simulate stages of commercial EDA flows
+(`xmvlog`/`xmelab`/`xmsim`, `vlogan`/`vcs`/`simv`). It lets one stage be rebuilt and inspected on
+its own, and lets an unchanged stage be skipped by reusing the artifact on disk.
+
+### Dispatch: argv0 and the subcommand token
+
+`vita` is a multicall binary. Which applet runs is decided from the invocation, in this order:
+
+1. The file stem of `argv[0]` is taken — the stem, so an extension is discarded, while a
+   decorated name such as `vita-0.2` matches nothing. If the stem is `vcmp`, `velab` or `vrun`,
+   that stage runs and every remaining argument belongs to it.
+2. Otherwise, if the first argument is exactly `vcmp`, `velab` or `vrun`, that token is
+   consumed and selects the stage.
+3. Otherwise the one-shot `vita` pipeline runs.
+
+So a stage is reachable either through a link named after it or through the subcommand form, and
+the two are the same code path:
 
 ```sh
 # one-shot
 vita design.sv
 
-# staged — explicit subcommand form (no symlinks needed)
+# staged, subcommand form — no links needed
 vita vcmp  design.sv      # -> design.vu
 vita velab design.vu      # -> design.velab
-vita vrun  design.velab   # -> design.vcd (if the RTL calls $dumpvars)
+vita vrun  design.velab   # -> waveform + stdout
 
-# staged — via symlinks named vcmp / velab / vrun
+# staged, through links named vcmp / velab / vrun
 vcmp design.sv && velab design.vu && vrun design.velab
 ```
 
-A `.velab` is gated against the exact front-end shape it was elaborated from: if
-an upstream source changes, running `vrun` on a stale artifact is **refused**
-(by content hash, not mtime) rather than silently producing wrong results.
+The subcommand token has to be first; a `vita` invocation that names it later runs the one-shot
+path and treats the token as a positional argument.
+
+A `.velab` records the digest of everything upstream of it. Running `vrun` on an artifact whose
+sources have changed is refused with exit code 2 and a message naming the rebuild, rather than
+replaying a stale design.
+
+---
 
 ## The pipeline
 
-Both the one-shot and staged flows run the same stages in the same order:
+The one-shot and staged flows run the same stages in the same order. Every stage validates as it
+goes; there is no separate checking pass.
 
 ```
-HDL source
-  → preprocess   (`define / `ifdef / `include / `timescale)
-  → lex          (token stream)
-  → parse        (AST, syntax checks)
-  → elaborate    (params, hierarchy, type/port checks, multiple-driver checks)
-  → sim-ir       (language-neutral intermediate representation)
-  → sim-engine   (event-driven IEEE-1364 kernel, timescale time model)
-  → VCD          (emitted only when the RTL calls $dumpfile / $dumpvars / …)
+sources (.v / .sv)
+  → preprocess   → lex → parse        [vcmp writes .vu here]
+  → elaborate                         [velab writes .velab here]
+  → sim-ir
+  → simulate                          [vrun starts here]
+  → waveform (VCD or FST) + stdout
 ```
 
-Checking is not a separate pass — each stage validates as it goes. Syntax errors
-surface at **parse**; connectivity, type/port, and multiple-driver errors surface
-at **elaboration**, each reported with a source location and a stable error code.
+| Stage | What it decides | What it reports |
+|---|---|---|
+| **preprocess** | Macro definition and expansion, conditional compilation, `` `include `` resolution against the including file's directory then the `-I` list, the `` `timescale `` region table, and a byte-offset source map so later diagnostics point back into the original file | Undefined macro use, macro arity, unbalanced conditionals, a precision coarser than its unit, and the warning raised when a design carries no `` `timescale `` at all |
+| **lex** | The token stream; attribute instances `(* … *)` are removed here | Unterminated literals, comments and attributes |
+| **parse** | The AST — the last representation that knows the source language. `vcmp` serializes it as `.vu` | Syntax errors, and constructs the front end does not accept |
+| **elaborate** | Parameter values and overrides, `generate` unrolling, the instance tree, port and type checking, implicit nets, multiple-driver resolution, and the lowering into `sim-ir`. `velab` serializes the result as `.velab` | Port and type mismatches, unresolvable hierarchical names, unsupported net kinds, and every construct refused above the parser |
+| **sim-ir** | Nothing: it is the frozen, language-neutral contract between the front end and the engine, gated by a structural schema hash | — |
+| **simulate** | Event ordering on the time wheel, expression evaluation in 4-state, process scheduling, system-task execution, and the reason the run ended | Runtime diagnostics, `$fatal`/`$error`, delta-limit non-convergence, and the closing `simulation ended (…) at time N` line |
+| **waveform** | Value-change records for the nets the dump filter selected. An output path ending in `.fst` is transcoded from a sidecar VCD when the run finalizes | A failed open or a failed transcode is a warning; the run still completes |
 
-Note the last line: **VCD is not dumped automatically.** A waveform is written
-only when your RTL explicitly calls a dump system task (`$dumpfile`, `$dumpvars`,
-`$dumpon`/`$dumpoff`/`$dumpall`). This matches Icarus/VCS behaviour and keeps the
-RTL in control of what gets recorded.
+A waveform appears only when the RTL calls `$dumpvars`. `$dumpfile` on its own records a pending
+path and creates no file, and `$dumpon`/`$dumpoff`/`$dumpall` before the first `$dumpvars` do
+nothing. The resolved path is `-o` if given, else the `$dumpfile` argument, else `dump.vcd`; the
+format follows the extension, `.fst` for FST and anything else for VCD.
+
+---
 
 ## Design philosophy
 
-- **Deterministic and reproducible across OSes.** The same source produces the
-  same VCD bytes on Linux and macOS. Determinism is enforced structurally — a
-  schema hash gates artifact staleness, and the IR avoids platform-dependent
-  encodings — not by convention.
-- **Frozen IR.** `sim-ir` is the golden contract between the front end and the
-  engine. Its serialized shape is frozen behind a schema hash; changing it is a
-  deliberate, versioned act that invalidates old artifacts. This is what makes
-  cached `.velab` reuse safe.
-- **Language-dependent until parse, neutral after.** Everything up to and
-  including `parse` knows about Verilog/SystemVerilog. From `sim-ir` onward the
-  representation is language-neutral. That boundary keeps the engine simple, and
-  leaves room to add more source languages — or a compiled/JIT backend — later
-  without rewriting the simulator core.
+### Determinism
 
-## Phase-1 scope
+The same sources produce the same bytes, on every supported host and on every run.
 
-Phase 1 (the current MVP) implements the **synthesizable SystemVerilog RTL
-subset**, which includes **all of Verilog-2005 RTL**: modules, ports,
-`parameter`/`localparam`, `generate`/`genvar`; `wire`/`reg`/`logic`/`integer`,
-packed and (multi-dimensional) unpacked arrays; `initial`/`always` and
-`always_ff`/`always_comb`/`always_latch`; blocking/non-blocking assignment,
-`if`/`case`/`casez`/`casex`, the loop family, and `fork`/`join`; functions and
-tasks; the `#delay`/`@(event)`/`wait` timing constructs and `assign`; plus the
-SystemVerilog data types **`enum`, `typedef`, and packed `struct`**. The core
-system tasks for display/output, time, simulation control, and VCD dump are
-supported. Values are 4-state (`0`/`1`/`x`/`z`).
+| Source of variance | How it is removed |
+|---|---|
+| Wall clock in the waveform | The VCD `$date` field is the fixed string `vitamin-sim`; no clock is read |
+| Serialization drift | One encoder for every artifact — serde plus postcard — with blake3 digests |
+| Platform-dependent layout | Frozen IR types are BTree-ordered, span-free, and carry no `usize`, `isize`, `f32` or `f64` |
+| Floating-point libraries | Transcendentals come from a vendored pure-Rust libm built without hardware intrinsics, so `f64` results are bit-identical on every IEEE-754 target |
+| Thread count | `--threads` moves waveform writing to its own thread and changes wall clock only; the bytes are identical for every value |
+| Executor choice | The `native`, `vm` and `interp` executors are required to produce identical stdout and identical waveform bytes; a test suite compares them design by design |
 
-Process bodies run on a **compiled op-stream over a flat arena** — the backend
-named `native`, which is the default and the only executor a released build
-contains. (Two other executors, `interp` and `vm`, exist in a development build
-purely so a suspected defect can be bisected against a second implementation of
-the same semantics; all three are required to print identical bytes. See
-[`--backend`](004_cli-reference.md#choosing-a-backend).)
+### Correct, or loud
 
-Beyond the RTL core, waveforms can be written as **FST** as well as VCD (give
-the output an `.fst` extension via `$dumpfile` or `-o`), and functional
-coverage (`covergroup`/`coverpoint`/`bins`/`cross`) is implemented, alongside
-SVA and class-based constrained-random verification. Out of scope for now:
-synthesis itself, a waveform GUI, other wave formats (FSDB), and the UVM
-ecosystem (plus UPF, SDF back-annotation, DPI-C).
+Accuracy is a ladder: a silently wrong answer is worse than a refusal, and a refusal is worse
+than correct support. Movement is only ever upward.
+
+- A construct outside the supported set is refused with a source location and a stable
+  diagnostic code, never approximated. `vita explain <CODE>` prints the entry for one code.
+- Where Icarus Verilog accepts a construct, its behaviour is the differential oracle: a test
+  suite runs `iverilog`/`vvp` live and compares the transcript.
+- Where Icarus Verilog rejects the construct — assertions, classes, constrained random,
+  parameterized classes, virtual interfaces — the expected value is derived from the IEEE 1364
+  and 1800 text and pinned as a literal in the test, with the reason recorded beside it.
+- Where an argument and a measurement disagree, the measurement decides.
+
+### A source build with cargo and nothing else
+
+`cargo` is the entire build. No vita crate has a `build.rs`, and there is no cmake, no make, and
+no shell-out step. The workspace holds 17 member crates; the single vendored third-party
+dependency, `third_party/libm`, is excluded from the workspace so a workspace-wide lint does not
+reach it.
+
+Artifacts inherit the same discipline. A `.velab` carries a format version, the tool's major
+version, and a structural schema hash of the IR shape; any mismatch is a refusal with exit code
+2 telling you to regenerate, so a cached artifact can be reused safely.
+
+---
+
+## What the language surface covers
+
+The table below is the chapter-level shape of the supported subset. Each row is expanded, with
+the exact refusals, in [Language Reference](003_language-reference.md); constructs that stay
+loud are catalogued in [Limitations](006_limitations.md).
+
+| Area | Covered |
+|---|---|
+| **Design units** | Modules with ANSI and non-ANSI ports, `parameter`/`localparam` and overrides, `generate`/`genvar`, packages and `import`, interfaces with modports and virtual interfaces, programs, classes, clocking blocks, `bind`, user-defined primitives, compilation-unit scope declarations, and work libraries |
+| **Preprocessor** | `` `define `` object-like and function-like with default arguments, `` `undef ``, `` `include ``, `` `ifdef ``/`` `ifndef ``/`` `elsif ``/`` `else ``/`` `endif ``, `` `timescale ``, `` `default_nettype ``, `` `__FILE__ ``, `` `__LINE__ `` |
+| **Data types** | `wire`/`tri`/`uwire`/`wand`/`wor`, `reg`, `logic`, `integer`, `time`, `event`, `real`/`realtime`, the 2-state atoms `bit`/`byte`/`shortint`/`int`/`longint`, `string`, packed and multi-dimensional unpacked arrays, dynamic arrays, queues, associative arrays, `enum`, `typedef`, packed `struct`, and scalar unpacked structs |
+| **Procedural blocks** | `initial`, `final`, `always`, `always_ff`, `always_comb`, `always_latch`, `fork`/`join`/`join_any`/`join_none`, and `disable` |
+| **Statements** | Blocking and non-blocking assignment, `if`, `case`/`casez`/`casex` with `unique`/`unique0`/`priority`/`priority0`, `for`/`while`/`repeat`/`forever`/`do…while`/`foreach`, `break`/`continue`/`return`, increment/decrement and compound assignment, `#delay`, `@(event)`, `wait`, `assign`/`deassign`, and `force`/`release` |
+| **Expressions** | The full Verilog operator set including reductions, concatenation and replication, part-selects and indexed part-selects, `inside`, casts, streaming operators, and assignment patterns |
+| **Functions and tasks** | Static and automatic lifetime, recursion, `input`/`output`/`inout`/`ref` formals, default arguments, and hierarchical calls |
+| **Timing** | Per-module `` `timescale `` unit and precision, a global precision tick base taken as the finest precision in the design, and two-stage delay conversion |
+| **Verification** | Immediate and deferred assertions, concurrent SVA sequences and properties, `cover property`, covergroups with coverpoints, bins and crosses, classes with single inheritance and virtual dispatch, and constrained random with `rand`/`randc`, constraint blocks, `randomize() with`, and `dist` |
+| **System tasks** | The display and write family with full format-specifier support, the severity tasks, simulation control, assertion control, time, conversion, bit-vector queries, the IEEE real-math set, random and distribution functions, plusargs, file I/O, memory load and dump, introspection, and the waveform dump family |
+
+Values are 4-state throughout: `0`, `1`, `x`, `z`.
+
+### Executors
+
+Process bodies run on `native`, the default executor: net values live in a flat arena and
+uniform-width expressions run on a specialised evaluator. A build with default features also
+carries two alternative executors — `interp`, a tree-walking reference implementation, and `vm`,
+a bytecode virtual machine — selectable with `--backend` so a suspected defect can be bisected
+against a second implementation of the same semantics. All three are required to print identical
+bytes, so the flag moves wall clock only. A build made with `--no-default-features` carries
+`native` alone, and then a request for `interp` or `vm` is refused rather than quietly
+downgraded. See [CLI Reference](004_cli-reference.md).
+
+### Out of scope
+
+Synthesis, a waveform GUI, FSDB and other vendor wave formats, UVM, UPF, SDF back-annotation,
+and DPI-C.
+
+---
 
 ## Supported platforms
 
-vitamin runs on **Linux and macOS** (Apple Silicon and Intel). It builds from
-source with `cargo` against a pinned toolchain (MSRV **1.85**, edition 2021); use
-`--locked` for reproducible builds. **Windows is not supported.**
+| Item | Value |
+|---|---|
+| Operating systems | Linux and macOS |
+| Targets | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin` |
+| Windows | Not supported: not a build target in `rust-toolchain.toml`, and not exercised in CI |
+| Rust toolchain | 1.85.0, pinned by `rust-toolchain.toml`; vitamin's own crates are edition 2021 |
+| Version | 0.2.0 across all workspace crates |
+| Licence | MIT OR Apache-2.0, at your option |
+
+CI runs the full suite on `ubuntu-latest`, on `macos-latest`, and inside a `redhat/ubi9`
+container.
+
+---
 
 ## Where to go next
 
-- [Installation](001_installation.md) — building from source with `cargo`.
-- [Quick Start](002_quickstart.md) — your first one-shot and staged runs.
-- [Language Reference](003_language-reference.md) — the supported RTL subset in detail.
-- [CLI Reference](004_cli-reference.md) — `vita` / `vcmp` / `velab` / `vrun` usage.
-- [System Tasks](005_system-tasks.md) — `$display`, `$dumpvars`, and friends.
-- [Limitations](006_limitations.md) — known v1 simplifications.
+- [Installation](001_installation.md) — prerequisites, building from source, and what gets
+  installed where.
+- [Quickstart](002_quickstart.md) — one worked example from source file to waveform.
+- [Language Reference](003_language-reference.md) — the supported subset, construct by
+  construct.
+- [CLI Reference](004_cli-reference.md) — every command and flag, the staged flow, and the
+  observability rail.
+- [System Tasks](005_system-tasks.md) — `$display`, `$dumpvars`, file I/O, and the rest.
+- [Limitations](006_limitations.md) — what is refused, and how the refusal is spelled.
 - [Error Codes](007_error-codes.md) — the diagnostic-code reference.

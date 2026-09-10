@@ -1,29 +1,34 @@
 # 03 · Memory Load / Store System Tasks
 
-## 개요
+## Overview
 
-메모리 배열을 텍스트 파일에서 초기화하거나 파일로 저장하는 태스크 카테고리다.
-ROM 초기화, 테스트 벡터 로드, 시뮬레이션 메모리 덤프 등에 사용한다.
-합성 가능성은 도구 의존적이며(초기값 ROM은 합성 도구가 지원하기도 함),
-`hdl-builtins` memory-load 카테고리가 구현한다.
+The category of tasks that initialise a memory array from a text file, or dump
+one back out to a file. They are used for ROM initialisation, for loading test
+vectors and for dumping simulation memory. Synthesizability is tool-dependent —
+some synthesis tools do accept a `$readmem*` call as a ROM initialiser.
 
-## 지원 Phase (vitamin 구현 상태)
+## Scope of this page
 
-- **✅ 구현됨 (Phase-2/v7)**: `$readmemh`, `$readmemb` — `@addr`(hex)·`//`/`/* */` 주석·`_`·`x`/`z`,
-  1364-2005 lowest-ascending, 디렉티브-유무 shortfall 규칙, 범위 인자(start/finish), 초과 시 W4023.
-  iverilog 차분 핀.
-- **✅ 구현됨 (Phase-2/v9)**: `$writememh`, `$writememb` — `$readmemh/b`가 다시 읽을 수 있는 포맷으로
-  메모리 배열을 파일에 덤프(주소별 `@<hex>` 헤더, x/z nibble 압축, 범위 인자 start/finish, OOB=W-warn).
+- **Load**: `$readmemh`, `$readmemb`, and the file format they both read —
+  `@<hex>` address directives, `//` and `/* */` comments, `_` separators, `x`/`z`
+  digits, and the IEEE 1364-2005 lowest-address-ascending fill rule.
+- **Dump**: `$writememh`, `$writememb`, which write a file the load tasks can
+  read back.
+
+These notes describe the standard. For what vita accepts, and for its exact
+warning behaviour on a short file or an out-of-range address, see
+[manual/005_system-tasks.md](../../../manual/005_system-tasks.md) and
+[manual/003_language-reference.md](../../../manual/003_language-reference.md).
 
 ---
 
-## 항목 상세
+## Item detail
 
 ### `$readmemh` / `$readmemb`
 
-- **시그니처**:
+- **Signature**:
   ```sv
-  // 4가지 형태 — 인자 개수에 따라 범위가 다름
+  // four forms — the argument count sets the range
   $readmemh("filename", mem_array);
   $readmemh("filename", mem_array, start_addr);
   $readmemh("filename", mem_array, start_addr, end_addr);
@@ -33,127 +38,131 @@ ROM 초기화, 테스트 벡터 로드, 시뮬레이션 메모리 덤프 등에 
   $readmemb("filename", mem_array, start_addr, end_addr);
   ```
 
-- **표준**: IEEE 1364-2005 §17.2.8 / IEEE 1800-2017 §21.4
+- **Standard**: IEEE 1364-2005 §17.2.8 / IEEE 1800-2017 §21.4
 
-- **의미**:
-  - `$readmemh` — 16진수(hex) 데이터 파일에서 읽는다
-  - `$readmemb` — 2진수(binary) 데이터 파일에서 읽는다
-  - `start_addr` / `end_addr`: 메모리 배열의 로딩 시작·끝 주소를 제한한다.
-    생략 시 배열의 선언 범위 전체를 사용한다.
+- **Meaning**:
+  - `$readmemh` — reads a hexadecimal data file
+  - `$readmemb` — reads a binary data file
+  - `start_addr` / `end_addr`: bound the addresses of the memory array that may
+    be written. Omitted, the array's whole declared range is used.
 
-- **반환**: void
-- **예시**:
+- **Returns**: void
+- **Example**:
 
 ```sv
-// 기본 — 전체 배열 초기화
+// the plain form — initialise the whole array
 reg [7:0] rom [0:255];
 initial $readmemh("rom_contents.hex", rom);
 
-// 주소 범위 제한 — [0x10, 0x1F] 구간만 로드
+// bounded — load only the range [0x10, 0x1F]
 reg [15:0] sram [0:4095];
 initial $readmemh("patch.hex", sram, 16'h10, 16'h1F);
 
-// 이진수 파일 로드
+// a binary file
 reg [3:0] lut [0:15];
 initial $readmemb("lut_init.bin", lut);
 ```
 
 ---
 
-## 메모리 파일 포맷 규칙 (IEEE 1364-2005 §17.2.8)
+## Memory file format rules (IEEE 1364-2005 §17.2.8)
 
-메모리 파일(.hex, .mem 등)이 따라야 하는 포맷 규칙.
+The rules a memory file (`.hex`, `.mem`, …) has to follow.
 
-### 데이터 구분자
+### Data separators
 
-공백(스페이스), 탭, 개행 모두 구분자로 사용된다.
-여러 공백/개행이 연속해도 무방하다.
+Spaces, tabs and newlines all separate data. Any number of them in a row is
+fine.
 
 ```text
 AA BB CC DD
 EE FF
 ```
 
-### 주석
+### Comments
 
-Verilog 소스와 동일한 두 가지 주석 형식을 지원한다.
+Both Verilog comment forms are accepted.
 
 ```text
-// 라인 주석: 이 줄 끝까지 무시
-AA BB CC   // 첫 세 바이트
+// line comment: ignored to the end of this line
+AA BB CC   // the first three bytes
 
-/* 블록 주석:
-   여러 줄에 걸쳐 무시됨 */
+/* block comment:
+   ignored across several lines */
 DD EE FF
 ```
 
-### `@<hex>` 주소 지시자
+### The `@<hex>` address directive
 
-파일 내에서 로딩 시작 주소를 변경할 때 사용한다.
-`@` 뒤에 **16진수** 주소값을 쓴다 (항상 hex, `0x` prefix 없음).
+Changes the address the load continues from. The value after `@` is **always
+hexadecimal**, with no `0x` prefix.
 
 ```text
-@00 AA BB CC DD      // 주소 0x00부터: AA, BB, CC, DD
-// 주소 0x04~0x0F는 건너뜀 — 변경 없음
-@10 00 11 22 33      // 주소 0x10부터: 00, 11, 22, 33
-@FF EE               // 주소 0xFF에: EE
+@00 AA BB CC DD      // from address 0x00: AA, BB, CC, DD
+// addresses 0x04..0x0F are skipped — left unchanged
+@10 00 11 22 33      // from address 0x10: 00, 11, 22, 33
+@FF EE               // address 0xFF: EE
 ```
 
-`@addr` 지시자가 없으면 기본으로 배열의 시작 주소(또는 `start_addr` 인자)에서부터 순서대로 채운다.
+With no `@addr` directive the load starts at the array's first address (or at the
+`start_addr` argument) and fills upwards in order.
 
-### 언더스코어(`_`) — 가독성용 구분자
+### Underscores (`_`) — readability separators
 
-숫자 값 내부에 `_`를 넣어 가독성을 높일 수 있다. 값에 영향을 주지 않는다.
+An `_` may be placed inside a numeric value to make it readable. It does not
+affect the value.
 
 ```text
-// $readmemh 파일에서: 32비트 값
-DEAD_BEEF   // 0xDEADBEEF와 동일
+// in a $readmemh file: 32-bit values
+DEAD_BEEF   // same as 0xDEADBEEF
 1234_5678
 
-// $readmemb 파일에서: 8비트 값
-1111_0000   // 8'b11110000과 동일
+// in a $readmemb file: 8-bit values
+1111_0000   // same as 8'b11110000
 ```
 
-### 4-state 값 (`x`, `z`)
+### 4-state values (`x`, `z`)
 
-`x`(unknown), `z`(high-Z) 값도 파일에 포함할 수 있다.
+`x` (unknown) and `z` (high-impedance) digits may appear in the file too.
 
 ```text
 // $readmemh
-xX   // 불확정 (hex 자리에 x)
-zZ   // 고임피던스
+xX   // unknown (an x in a hex digit position)
+zZ   // high impedance
 
 // $readmemb
-xxxx_0000   // 상위 4비트 x, 하위 4비트 0
+xxxx_0000   // top 4 bits x, low 4 bits 0
 ```
 
 ---
 
-## 파일 길이와 배열 크기가 다른 경우
+## When the file and the array are different sizes
 
-### 파일 < 배열 (파일이 더 짧음)
+### File shorter than the array
 
-`start_addr`부터 파일에 있는 데이터만 로드된다.
-배열의 나머지 원소는 변경되지 않는다 (초기화 전 상태 유지).
-이 동작은 `@addr` 지시자로 비연속 구간을 채울 때도 동일하다.
+Only the data present in the file is loaded, starting at `start_addr`. The
+remaining elements of the array are left alone — they keep whatever they held
+before (x, if they were never initialised). The same holds for the gaps an
+`@addr` directive skips over.
 
 ```sv
-// 256원소 배열에 파일에 64개 데이터만 있는 경우
-// → [0]~[63]만 파일값으로 채워지고, [64]~[255]는 x (미초기화 상태)
+// a 256-element array, but only 64 values in the file
+// → [0]..[63] take the file's values; [64]..[255] stay x (uninitialised)
 reg [7:0] mem [0:255];
 initial $readmemh("partial.hex", mem);
 ```
 
-### 파일 > 배열 (파일이 더 긺)
+### File longer than the array
 
-배열 범위를 초과하는 데이터가 있으면 시뮬레이터는 경고 또는 오류를 발생시킨다.
-동작은 시뮬레이터 구현에 의존한다 — Icarus는 경고, 일부 도구는 오류로 중단.
+Data beyond the end of the array makes the simulator issue a warning or an
+error; which one is implementation-dependent — Icarus warns, some tools stop
+with an error.
 
 ---
 
 ## `$writememh` / `$writememb`
 
-- **시그니처**:
+- **Signature**:
   ```sv
   $writememh("filename", mem_array);
   $writememh("filename", mem_array, start_addr);
@@ -164,29 +173,33 @@ initial $readmemh("partial.hex", mem);
   $writememb("filename", mem_array, start_addr, end_addr);
   ```
 
-- **표준**: IEEE 1800-2017 §21.4 (SV에서 추가)
-- **의미**: 메모리 배열의 내용을 `$readmemh`/`$readmemb`가 다시 읽을 수 있는
-  포맷으로 파일에 출력한다.
-  `start_addr`/`end_addr`를 지정하면 해당 범위만 출력한다.
-- **출력 포맷**: 각 주소 앞에 `@<hex_addr>` 지시자를 삽입하며 데이터를 기록.
-  이 파일은 `$readmemh`/`$readmemb`로 그대로 다시 로드 가능.
-- **반환**: void
-- **예시**:
+- **Standard**: IEEE 1800-2017 §21.4 (added by SystemVerilog)
+- **Meaning**: writes the contents of a memory array to a file in a format that
+  `$readmemh`/`$readmemb` can read back.
+  With `start_addr`/`end_addr`, only that range is written.
+- **Output format**: the data, with an `@<hex_addr>` directive marking the
+  address it belongs to. The resulting file can be loaded again by
+  `$readmemh`/`$readmemb` as it stands.
+- **Returns**: void
+- **Example**:
 
 ```sv
-// 시뮬 후 메모리 내용을 파일로 저장
+// save the memory contents after the run
 reg [7:0] ram [0:255];
-// ... 시뮬레이션 실행 후 ...
+// ... simulation runs ...
 initial begin
-  // 전체 저장
+  // the whole array
   $writememh("ram_dump.hex", ram);
 
-  // 특정 구간만 저장
+  // one range only
   $writememh("ram_patch.hex", ram, 8'h10, 8'h1F);
 end
 ```
 
-**`$writememh` 출력 예시** (`ram[0]=8'hAA`, `ram[1]=8'hBB`):
+**Illustrative `$writememh` output** (`ram[0]=8'hAA`, `ram[1]=8'hBB`). What the
+standard requires is only that the load tasks can read the file back; the exact
+layout — where address directives are emitted, how many words go on a line, and
+whether a leading comment is written — differs between simulators:
 
 ```text
 @00
@@ -197,7 +210,7 @@ BB
 
 ---
 
-## 완전한 사용 예시
+## A complete example
 
 ```sv
 module tb_rom;
@@ -206,14 +219,14 @@ module tb_rom;
   reg [7:0] addr;
   wire [7:0] data_out;
 
-  // ROM 초기화
+  // ROM initialisation
   initial begin
-    // hex 파일: @00 DE AD BE EF ... (주소+데이터)
+    // the hex file: @00 DE AD BE EF ... (addresses and data)
     $readmemh("rom_init.hex", rom);
     $display("rom[0]=%h rom[1]=%h", rom[0], rom[1]);
   end
 
-  // 시뮬 후 덤프
+  // dump after the run
   final begin
     $writememh("rom_verify_dump.hex", rom);
   end
@@ -221,62 +234,53 @@ module tb_rom;
 endmodule
 ```
 
-**rom_init.hex 내용 예시**:
+**What `rom_init.hex` might contain**:
 
 ```text
-// ROM 초기화 데이터 (IEEE 1364 §17.2.8 포맷)
+// ROM initialisation data (the IEEE 1364 §17.2.8 format)
 @00
-DE AD BE EF   // 주소 0~3
+DE AD BE EF   // addresses 0..3
 @10
-00 11 22 33   // 주소 16~19 직접 지정
-// 사이 주소 4~15는 미초기화 상태 유지
+00 11 22 33   // addresses 16..19, set explicitly
+// addresses 4..15 in between stay uninitialised
 ```
 
 ---
 
-## Icarus / Verilator 동작 차이
+## Icarus / Verilator differences
 
-| 태스크 | Icarus Verilog | Verilator |
-|--------|---------------|-----------|
-| `$readmemh` | 완전 지원 | 지원 (단일 차원만) |
-| `$readmemb` | 완전 지원 | 지원 (단일 차원만) |
-| `@addr` 지시자 | 지원 | 지원 |
-| `//`, `/* */` 주석 | 지원 | 지원 |
-| `_` 언더스코어 | 지원 | 지원 여부 불확실 |
-| `$writememh` | 지원 | 미명시 (불확실) |  *(vitamin: ✅ 구현, v9)*
-| `$writememb` | 지원 | 미명시 (불확실) |  *(vitamin: ✅ 구현, v9)*
-| 다차원 배열 | 지원 | **미지원** |
+| Task | Icarus Verilog | Verilator |
+|------|---------------|-----------|
+| `$readmemh` | fully supported | supported (one dimension only) |
+| `$readmemb` | fully supported | supported (one dimension only) |
+| `@addr` directive | supported | supported |
+| `//`, `/* */` comments | supported | supported |
+| `_` underscore | supported | unclear whether supported |
+| `$writememh` | supported | unstated (unclear) |
+| `$writememb` | supported | unstated (unclear) |
+| Multidimensional arrays | supported | **not supported** |
 
-**Verilator 제약**: `$readmemh`/`$readmemb`는 1차원 배열(`reg [N:0] mem [0:M]`)만 지원한다.
-`reg mem [N][M]` 형태의 다차원 배열에는 사용할 수 없다.
-
----
-
-## 합성 가능성
-
-합성 가능성은 도구 의존적이다:
-- 일부 FPGA 합성 도구(Xilinx Vivado, Intel Quartus)는 `initial` 블록 내
-  `$readmemh`를 ROM 초기화로 인식해 합성 가능.
-- 범용 ASIC 합성 도구는 대부분 비합성.
-- `$writememh`/`$writememb`는 항상 비합성.
+**Verilator restriction**: `$readmemh`/`$readmemb` handle a one-dimensional array
+(`reg [N:0] mem [0:M]`) only. They cannot be used on a multidimensional array of
+the `reg mem [N][M]` shape.
 
 ---
 
-## 본 프로젝트 구현 메모
+## Synthesizability
 
-- `$readmemh`/`$readmemb`는 `sim-engine` `builtins.rs` `readmem()`이 실행(`hdl-builtins`는 stub).
-- **✅ 파서 구현**: `@addr`(hex), `//`, `/* */`, `_`, `x`/`z` 모두 처리. 선언-인덱스 도메인 @addr,
-  1364-2005 lowest-ascending, 디렉티브 유무에 따른 shortfall 규칙, 범위 초과 시 W4023.
-- `$fread`(binary stream)는 별도 file-io 카테고리에서 구현(v9); 본 카테고리는 `$readmem*`(ASCII 텍스트).
-- 주소 범위 인자(start/finish): 명시적 start/finish가 배열 선언 범위보다 우선, 로드 범위 외=stopped.
-- `$writememh`/`$writememb`: **✅ 구현(v9)** — `sim-engine` `builtins.rs` `writemem()`; 주소별 `@<hex>` 헤더,
-  x/z nibble 압축, 범위 인자(start/finish), OOB=비치명 warn.
+Synthesizability is tool-dependent:
+- Some FPGA synthesis tools (Xilinx Vivado, Intel Quartus) recognise a
+  `$readmemh` inside an `initial` block as a ROM initialiser and synthesize it.
+- General-purpose ASIC synthesis tools mostly do not.
+- `$writememh`/`$writememb` are never synthesizable.
+
+---
 
 ## Sources
 
 - IEEE 1364-2005 §17.2.8 (readmem tasks — primary standard)
-- IEEE 1800-2017 §21.4 (writemem tasks, SV 확장)
-- research-log: [system-tasks-io-memory-2026-05-28.md](../../research-log/system-tasks-io-memory-2026-05-28.md)
+- IEEE 1800-2017 §21.4 (writemem tasks, the SystemVerilog extension)
+- research-log: [system-tasks-io-memory-2026-05-28.md](../../../history/research-log/system-tasks-io-memory-2026-05-28.md)
 - [projectf.io — Initialize Memory in Verilog](https://projectf.io/posts/initialize-memory-in-verilog/)
 - [peterfab.com — File I/O Functions](https://peterfab.com/ref/verilog/verilog_renerta/mobile/source/vrg00016.htm)
 - [ovisign.com — Verilog Write/Read File Operations](https://ovisign.com/verilog-verification/verilog-write-read-file-operations/)

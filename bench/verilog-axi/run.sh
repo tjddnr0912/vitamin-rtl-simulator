@@ -12,4 +12,4 @@ echo "== iverilog =="
 iverilog -g2012 -o "$D/x.vvp" $FILES
 time vvp "$D/x.vvp" +N=$N | grep -E '^(OPS|D0|CYCD|DIGEST|WATCHDOG)'
 echo "== vita =="
-time vita $FILES +N=$N || echo "vita exit=$?"
+time "$D/../../target/release/vita" $FILES +N=$N | grep -E '^(OPS|D0|CYCD|DIGEST|WATCHDOG)'

@@ -1,361 +1,644 @@
-# ROADMAP — open work (vitamin)
+# ROADMAP — open work
 
-Forward-only. Completed slices live in [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md) (`#### 4.5.<N>`, index at the top); Phase A–D execution records in [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md); the pre-2026-07-16 text in [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md). Section numbers (§0–§9) are stable: tests and CLAUDE.md cite them. Row numbers in §2 and circled numbers in §3 are never reused.
+This file tracks open work only: what is wrong or missing at HEAD, where the fix site is, what
+evidence exists, what prerequisite blocks it, and its priority band. Anything finished is removed
+from here and lives in [history/](history/README.md).
 
-Baseline counts (tests, format_version, MsgCode) are kept in CLAUDE.md only.
+Section numbers §0–§9 are stable — tests and CLAUDE.md cite them. Row identifiers in §2 and the
+circled identifiers in §3 are never reused, and source comments cite them (`ROADMAP §2 🆕 I ⓐ`,
+`ROADMAP §3 ⑭`, `ROADMAP §5.1-be`). Baseline counts (tests, `format_version`, `MsgCode`) are in
+the fact table in [../README.md](../README.md).
 
-Operating rule: when a slice lands, append its record to the ARCHIVE and delete the item here; a residue survives as its own row. New findings are added as one row in the matching section. Every row states: symptom with repro and oracle values, root cause and code site, fix shape, prerequisite, oracle status.
+Every row states: symptom with repro and oracle values, root cause and code site, fix shape,
+prerequisite, oracle status. A row's priority band is its section's band in the Summary table below
+unless the row's own status says otherwise; `BLOCKED`, `WALL`, `DO-NOT-START` and `ORACLE-SPLIT` do
+not start. When a row lands, its record is appended to [history/ROADMAP_ARCHIVE.md](history/ROADMAP_ARCHIVE.md)
+and the row is deleted here; a residue survives as its own row.
 
 ## Summary
 
-| order | § | track | open items | oracle | notes |
-|---:|---|---|---:|---|---|
-| 1 | §2 | silent-wrong (correctness) | see §2 tables | 2-oracle unless marked | fills LOOPROMPT slots 2·3; walls and oracle splits are listed but not started |
-| 2 | §3 | loud → correct-support | see §3 tables | mostly ✓ | fills LOOPROMPT slot 1; §0 T2 residues are the cheaper end of the same ladder |
-| 3 | §6 | G2 observability (OBS) | 6 stages | internal 3-way | orthogonal to correctness; parallelizable |
-| 4 | §5 | performance | residues only | measured | below the correctness ladder; codegen / 2-state storage / cycle mode rejected |
-| — | §4 | SVA honest-loud | 6 | mostly none | hand-IEEE when started |
+| order | § | track | open items | oracle | band |
+|---:|---|---|---|---|---|
+| 1 | §2 | silent-wrong (correctness) | 27 rows + the mechanism lists | 2-oracle unless the row says otherwise | ① |
+| 2 | §3 | loud → correct-support | 24 numbered + 66 small + 12 intentional | mostly present | ② |
+| 3 | §6 | G2 observability (OBS) | 6 stages | internal 3-way differential | ④ |
+| 4 | §5 | performance and hardening | 18 residues | measured | below the ladder |
+| — | §0 | correct-support promotion queue | 14 rows | mixed | ③ |
+| — | §4 | SVA honest-loud | 6 | mostly none; hand-IEEE when started | ③ |
 | — | §7 | conditional / long-term | 4 | — | trigger-gated |
 | — | §8 | non-goals | 1 | — | permanent |
 
-Priority principle (time-invariant): ① CRITICAL silent-wrong with an oracle > ② loud→supported with an oracle > ③ honest-loud promotion whose prerequisite is met > ④ G2 OBS. Performance does not enter this ladder. "No oracle" is not a reason to defer: implement from the LRM and pin by hand.
+Priority principle (time-invariant): ① a CRITICAL silent-wrong with an oracle, then ② loud→supported
+with an oracle, then ③ an honest-loud promotion whose prerequisite holds, then ④ G2 OBS. Performance
+does not enter this ladder. "No oracle" is not a reason to defer: implement from the LRM and pin by
+hand.
 
-## 0. correct-support 승격 큐
+## 0. correct-support promotion queue
 
-비목표(의도적 loud): fixed 배열 `new[]` · multi-dim partial 인덱스 `s[0]`(둘 다 iverilog도 거부) · cross-type SoA whole-element 복사 · generate case 의 real scrutinee(§4.5.243 핀).
+Deliberately loud, not gaps: `new[]` on a fixed array; a multi-dimensional partial index `s[0]`
+(iverilog rejects both); a cross-type SoA whole-element copy; a `real` scrutinee in a `generate case`.
 
 ### iverilog defects (vita is IEEE-correct) — oracle disqualifiers, regression-pinned
 
 | # | repro | iverilog | vita |
 |---|---|---|---|
-| ① | `string s[5]; s[0]="abcdefg"` 원소 `.len()` | 5(배열 크기) | 7 |
-| ② | 동시 fork 활성화가 automatic string 배열 공유 | `A!` | `A!!` |
-| ③ | 같은 fd 에 `$fmonitor` 두 번 | 누적(자기 싱글턴 `$monitor` 와 모순) | destination 별 replace |
-| ④ | 빈 string 배열 원소 `%s` | 공백 1칸 | 빈 문자열 |
-| ⑤ | `$clog2(4'sd7+4'sd1)` (§20.8.1 = 인자 자기 폭의 비트 패턴) | 32 | 3(verilator 도 3 · §4.5.343) |
-| ⑥ | `$itor(64'h1_0000_0008)` (unsigned·signed `longint` 둘 다 8 ⇒ 부호 축 아님) | 8 | 4294967304(verilator 동일) |
-| ⑦ | `s="ab"` 일 때 `s<"ab"`·`s<"aa"`·`s<"zz"` | 전부 1(동시 참 불가) | `0 0 1`(verilator 동일) |
+| ① | `.len()` of an element of `string s[5]; s[0]="abcdefg"` | 5 (the array size) | 7 |
+| ② | concurrent fork activations share an `automatic` string array | `A!` | `A!!` |
+| ③ | `$fmonitor` twice on the same fd | accumulates (contradicting its own singleton `$monitor`) | replaces per destination |
+| ④ | `%s` of an empty string-array element | one blank | the empty string |
+| ⑤ | `$clog2(4'sd7+4'sd1)` (§20.8.1 = the bit pattern at the argument's own width) | 32 | 3 (verilator also 3) |
+| ⑥ | `$itor(64'h1_0000_0008)` (unsigned and signed `longint` both give 8, so this is not the sign axis) | 8 | 4294967304 (verilator identical) |
+| ⑦ | `s<"ab"`, `s<"aa"`, `s<"zz"` with `s="ab"` | all 1 (they cannot all be true) | `0 0 1` (verilator identical) |
 
 ### T2 residues (each its own slice)
 
 | id | symptom · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle |
 |---|---|---|---|---|
-| 8ⓐ | 암시 변환 `logic [R-1:0]`·`{R{1'b1}}`, loud | — | 비목표 | 분열(폭은 verilator 거부/iverilog 3, count 는 iverilog 거부/verilator 3) |
-| 8ⓑ | 무타입 localparam 의 real 값, loud | §6.20.2 상 real 파라미터 | 반올림 = §4.5.232 가 철회한 silent-wrong | 2-oracle |
-| 8ⓒ | 실수 override `#(.R(2.5))`, loud | override 채널이 i64 | 채널을 real 로 | 2-oracle |
-| 8ⓓ | `1.0/0.0`, loud | real 도메인이 비유한을 의도적 거절 | 의도적 | 2-oracle |
-| 8ⓔ | `R<<1`(실수 미정의 연산자), loud | — | 비목표 | 분열(iverilog 거부/verilator 6) |
-| 8ⓖ | 상수함수 본문의 `$rtoi`, loud | 모듈 스코프 resolver ⇒ shadow 위험 | env 아는 walk 로 이동 | 2-oracle |
-| 8ⓗ | `int'(real'(R))` 중첩, loud | — | 명시 변환 경계 확장 | 2-oracle |
-| 10ⓐ | `parameter` 라벨은 접으면 안 된다 — override 가 라벨 값을 바꾼다(`m #(.K(9))` 에서 iverilog 10/`first=9`), 파서는 override 전에 돈다 | 파서 `const_locals` 라벨 폴드 | enum-method desugar 를 elaborate 로(아키텍처) | 2-oracle |
-| 10ⓑ | `localparam L = 8'h5` 라벨이 안 접혀 enum 이 `enum_defs` 에 안 들어가고 모든 메서드가 "hierarchical function call" loud | `const_locals` 가 decimal 만 기록 | 그 표는 generate 인덱스와 공유 ⇒ 생산자를 넓히면 다른 소비자가 움직인다(별도 항목). 절단 필요 리터럴(unsized `'h1FFFFFFFF`·mis-sized `4'hFF`) 거부는 유지(두 오라클도 거부) | 2-oracle |
-| 11 | 음수 range bound 잔여 = PART select `x[1:-2]`(정직한 loud) · 포트/formal(warn+clamp) | 바운드 접기가 unsigned | 포트 비대칭은 의도적 opt-in | 2-oracle |
-| 14-a | `-pvalue+<name>=<val>` 미구현(`grep -rn pvalue crates/` = 0건) | — | `-G` 별칭이므로 argv 파싱만 | n/a |
-| 14-b | `-P<path>=<val>`(계층 경로) 미구현 | defparam 이 direct-child 한정 | 같은 제약을 물려받는다 | n/a |
-| 14-c | 서로 다른 `-G` 로 만든 두 `.velab` 이 헤더 128바이트 동일, 게이트가 구분 못 함(값은 맞다·위험은 provenance) | `-G` 가 RULE-V upstream 다이제스트에 안 들어간다; 섞었더니 안 바뀐 `.vu` 에 `vrun --upstream` 이 `E9003 digest changed` 거짓 stale | 헤더 자기 필드(doc-14 §RULE B) = `format_version` bump | n/a |
-| 13 | `case (x) inside {…}` loud | — | hand-IEEE + 내부 차분 | no-oracle(iverilog 13.0 이 `case inside`/`inside` op/array reduction 거부) |
+| 8ⓐ | implicit conversion `logic [R-1:0]` and `{R{1'b1}}` from a real, loud | — | non-goal | split (width: verilator rejects, iverilog 3; count: iverilog rejects, verilator 3) |
+| 8ⓑ | a real value in an untyped `localparam`, loud | a real parameter under §6.20.2 | rounding here is a withdrawn silent-wrong | 2-oracle |
+| 8ⓒ | a real override `#(.R(2.5))`, loud | the override channel is i64 | widen the channel to real | 2-oracle |
+| 8ⓓ | `1.0/0.0`, loud | the real domain refuses non-finite values on purpose | deliberate | 2-oracle |
+| 8ⓔ | `R<<1` (an operator undefined on real), loud | — | non-goal | split (iverilog rejects, verilator 6) |
+| 8ⓖ | `$rtoi` in a constant-function body, loud | the module-scope resolver would allow a shadow | move to an environment-aware walk | 2-oracle |
+| 8ⓗ | nested `int'(real'(R))`, loud | — | widen the explicit-conversion boundary | 2-oracle |
+| 10ⓐ | a `parameter` label must not be folded — an override changes the label's value (`m #(.K(9))` gives iverilog 10 / `first=9`), and the parser runs before overrides | the parser's `const_locals` label fold | move the enum-method desugar into elaborate (architectural) | 2-oracle |
+| 10ⓑ | a `localparam L = 8'h5` label does not fold, so the enum never enters `enum_defs` and every method is a loud "hierarchical function call" | `const_locals` records decimals only | that table is shared with generate indices, so widening the producer moves another consumer (its own item). Keep rejecting literals that need truncation (unsized `'h1FFFFFFFF`, mis-sized `4'hFF`) — both oracles reject them too | 2-oracle |
+| 11 | negative range-bound residue = a PART select `x[1:-2]` (honest loud) and ports/formals (warn + clamp) | bound folding is unsigned | the port asymmetry is deliberate opt-in | 2-oracle |
+| 14-a | `-pvalue+<name>=<val>` is unimplemented (`grep -rn pvalue crates/` = 0 hits) | — | it is an alias of `-G`, so argv parsing only | n/a |
+| 14-b | `-P<path>=<val>` (a hierarchical path) is unimplemented | `defparam` is direct-child only | it inherits the same restriction | n/a |
+| 14-c | two `.velab` files built from different `-G` values have byte-identical 128-byte headers, so the gate cannot tell them apart (values are right; the risk is provenance) | `-G` does not enter the RULE-V upstream digest; mixing them makes `vrun --upstream` report a false `E9003 digest changed` on an unchanged `.vu` | a header field of its own (doc-14 §RULE B) = `format_version` bump | n/a |
+| 13 | `case (x) inside {…}` is loud | — | hand-IEEE plus an internal differential | no oracle (iverilog 13.0 rejects `case inside`, the `inside` operator and array reduction) |
 
-## 0-B. 소형 follow-on (loud 유지)
+## 0-B. Small follow-ons (kept loud)
 
-- `void'(getnext())` void-cast of output-formal fn · frame-formal array 를 nested hier 로 forward(OUTPUT/INOUT) · param/call leaf size-cast `8'(P*a)`(§4.5.212 잔여).
-- fork-in-frame 잔여(§4.5.214, Minor/safe): `fork_arms_self_contained` resolve-time 재-walk 중복 제거 · 공유 `enter_task_frame` arm comment · forking task 를 호출하는 fork arm 의 elaborate-time reject(현재 F4004 tie-cap runtime guard 로 안전, clean E3009 가 명확) · same-instant zero-delay sibling visibility differential-미검증.
+- `void'(getnext())` — a void cast of a function with an output formal; forwarding a frame-formal
+  array into a nested hierarchical call (OUTPUT/INOUT); a size cast on a param or call leaf,
+  `8'(P*a)`.
+- fork-in-frame residue (minor, safe): duplicate resolve-time re-walk in
+  `fork_arms_self_contained`; the shared `enter_task_frame` arm comment; an elaborate-time reject
+  for a fork arm that calls a forking task (the `F4004` tie-cap runtime guard makes it safe today,
+  and a clean `E3009` would be clearer); same-instant zero-delay sibling visibility is not
+  differentially verified.
 
-## 0-C. 대형 항목 착수 판단표 (크기 재추정 금지)
+## 0-C. Large items — start decision table (do not re-estimate the size)
 
-| 항목 | 비용 | payoff | 선행조건 / 함정 |
+| item | cost | payoff | prerequisite / trap |
 |---|---|---|---|
-| A. 파일위치 함수군(`$ftell`/`$fseek`/`$rewind`/`$ferror`) | format_version bump 확정 | 中 | 신규 `SysFuncId` = frozen-root 변경 → SimIr 스키마해시·canonical·RON 골든 재핀 + 전 `.velab` 무효화. 사이드카 우회 불가(겹치는 기존 id 없음, 실측). `$feof`/`$fgetc`/`$ungetc` 만 쓰면 bump 없이 가능 |
-| B. literal 파싱 공유 크레이트(§4.5.234 안 ①) | 中~大(559줄 이동+어댑터+전 리터럴 재검증) | 小 — 거부 형태는 절단 리터럴(`4'hFF` in `[3:0]`)·unsized+`s` 인데 iverilog 도 절단 거부; 얻는 것은 두-술어 위험 제거 | `literal.rs` 가 `sim_ir::{BitPacked,ConstRepr,ConstVal}` 의존 → 옮기면 hdl-parser 가 sim-ir 을 본다(레이어링 역전). 분해 = digit→bits(중립)/ConstVal 패킹(IR) |
+| A. file-position family (`$ftell`, `$fseek`, `$rewind`, `$ferror`) | a `format_version` bump is certain | medium | a new `SysFuncId` is a frozen-root change: re-pin the SimIr schema hash, the canonical string and the RON goldens, and invalidate every `.velab`. A sidecar cannot route around it (no overlapping existing id, measured). `$feof`/`$fgetc`/`$ungetc` alone are possible without a bump |
+| B. shared literal-parsing crate | medium to large (559 lines moved, an adapter, and every literal re-verified) | small — the rejected shapes are truncating literals (`4'hFF` in `[3:0]`) and unsized + `s`, and iverilog rejects truncation too; the gain is removing a two-predicate hazard | `literal.rs` depends on `sim_ir::{BitPacked,ConstRepr,ConstVal}`, so moving it makes hdl-parser see sim-ir (a layering inversion). The split is digit→bits (neutral) versus `ConstVal` packing (IR) |
 
-순서 A > B: A 는 format bump 가치가 있을 때, B 는 두-술어 제거가 우선순위를 얻을 때만.
+Order A > B: A when the format bump is worth taking, B only when removing the two-predicate hazard
+earns priority.
 
-## 1. 착수 우선순위 — 원칙만 (현재 큐 = §5.2)
+## 1. Start priority — principle only (the live queue is §5.2)
 
-1. 오라클 있는 CRITICAL silent-wrong (§2) — 최우선. 정확성이 이 저장소의 최상위 원칙이다.
-2. 오라클 있는 loud→supported (§3 · additive=저위험). "오라클이 없다" 는 미루는 이유가 아니다 — 없으면 hand-IEEE 로 짓는다.
-3. 전제조건 충족된 honest-loud 승격 (§0 · §4~§5).
-4. G2 OBS 슬라이스 (§6).
+1. A CRITICAL silent-wrong with an oracle (§2). Correctness is this repository's top principle.
+2. loud→supported with an oracle (§3; additive, therefore low risk). "There is no oracle" is not a
+   reason to defer — build from the LRM and pin by hand.
+3. An honest-loud promotion whose prerequisite holds (§0, §4, §5).
+4. A G2 OBS slice (§6).
 
-성능은 이 사다리 위에 올라오지 않는다. 새 큐를 여기 만들지 마라.
+Performance does not climb this ladder. Do not create a new queue here.
 
-T4(기회 슬라이스): 함수 지역 배열 원소 쓰기 514 ns vs iverilog 24 ns(ARCHIVE_PHASE_A-D §5.0-b).
+T4 (opportunistic): a function-local array element write costs 514 ns against iverilog's 24 ns.
 
-## 2-N. 신규 silent-wrong (verilog-axi census 부산물)
+## 2-N. Silent-wrong from the verilog-axi census
 
 | id | symptom · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle |
 |---|---|---|---|---|
-| 2-N-1 | verilog-axi 미승격: `m_axi_awvalid`/`m_axi_wvalid`/`m_axi_arvalid` 가 리셋 직후 iverilog x, vita 0 — 123,166 사이클 중 29(`XC=29` vs `XC=0`, N=200 불변·다이제스트 불변). 기능 일치(같은 사이클 완료)·vita 가 낙관적이라 x 전파 버그를 가린다 | 크로스바가 register slice 에 computed 와이어로 도달(`int_s_axi_wready[m] = int_axi_wready[w_select_reg*S_COUNT+m] \|\| w_drop_reg`); vita 만 t0 이벤트. vita 규칙 = 계산하는 구동자는 초기 상태를 갖고 비트를 옮기는 구동자는 안 갖는다(`sim_engine::alias::copy_nets`) | 두 번째 오라클 없이 쫓지 않는다; 승격 = 다이제스트가 x-사이클을 안 세거나 oracle-split 판정 | oracle-split: `assign w = a \| b` → ivl c=1 이지만 `a & b` → c=0(피연산자·값 동일); `pr & 1'b1`·`~(~pr)`·`{pr}`·`1'b1 ? pr : 1'b0` 는 접고 `pr \| 1'b0`·`pr ^ 1'b0` 는 안 접는다 = elaborator 가 멈추는 지점. verilator 도 아님: `a=10 b=11` vs iverilog·vita `a=x b=x` |
-| 2-N-2 | FST 가 `$dumpvars` 스냅샷을 잃는다: 초기화만 다른 두 설계가 byte-identical 473-byte `.fst`(전 신호 `x`, exit 0); VCD 가 다른 24 설계가 동일 FST ⇒ 파형 differential 오라클 불가 | 없는 time step 이 아니다 — time 0 을 lazily 열어도(arm 1회 발화) `xxxxxxxx` 불변 | 값이 fst-writer 의 per-var INITIAL value 로 흡수 ⇒ 다음은 그 라이브러리의 initial-value API. 투기적 변경 revert | n/a |
+| 2-N-1 | verilog-axi is not promoted: `m_axi_awvalid` / `m_axi_wvalid` / `m_axi_arvalid` are x in iverilog and 0 in vita just after reset — 29 of 123,166 cycles (`XC=29` against `XC=0`; invariant at N=200, digest unchanged). Function matches (same completion cycle); vita is the optimistic side, which hides x-propagation bugs | the crossbar reaches a register slice through a computed wire (`int_s_axi_wready[m] = int_axi_wready[w_select_reg*S_COUNT+m] \|\| w_drop_reg`), and only vita raises a t0 event. vita's rule: a driver that COMPUTES has an initial state, a driver that MOVES bits does not (`sim_engine::alias::copy_nets`) | do not chase without a second oracle; promotion requires either a digest that does not count x-cycles or an oracle-split ruling | oracle-split: `assign w = a \| b` gives iverilog c=1 but `a & b` gives c=0 with identical operands and values; `pr & 1'b1`, `~(~pr)`, `{pr}`, `1'b1 ? pr : 1'b0` fold while `pr \| 1'b0` and `pr ^ 1'b0` do not — that is where the elaborator stops. verilator is not the tiebreak either: `a=10 b=11` against iverilog's and vita's `a=x b=x` |
+| 2-N-2 | FST loses the `$dumpvars` snapshot: two designs differing only in initialization produce byte-identical 473-byte `.fst` files (every signal `x`, exit 0); 24 designs with differing VCD produce identical FST, so a waveform differential oracle is impossible | not a missing time step — opening time 0 lazily (the arm fires once) leaves `xxxxxxxx` unchanged | the value is absorbed into fst-writer's per-variable INITIAL value, so the next step is that library's initial-value API | n/a |
 
-t0-event 잔여(pre-existing · PRE == POST · 의도적 보류):
+t0-event residue (pre-existing, held on purpose):
 
-- `assign w = 1'bx;`(값이 `x` 인 computed driver 도) vita t0 이벤트, iverilog 아님 — vita driven-net 기본 `z`, iverilog 사실상 `x`.
-- 절단 copy `wire [3:0] w; assign w = r8;` — iverilog collapse, vita 는 computed(widening 은 양쪽 발화). `assign #1 w = r;` — iverilog 0, vita 2. multi-driver·2-구동자 `wand`/`wor` — iverilog 0, vita 1(단일 구동자는 copy 규칙으로 해결). concat lvalue `assign {x,y} = …` 는 single-chunk 게이트로 제외.
-- vita dirty 채널은 NET 단위, iverilog collapse 는 BIT 단위 ⇒ `bus[1]` 상수 구동자가 vita 에서 `bus[0]` 독자를 깨운다.
-- oracle-SPLIT `wire w; assign w = 1'b1; reg r = w;` = iverilog `z`, verilator·vita `1`(§6.8 은 procedure 앞만 정하고 continuous assignment 는 procedure 가 아니다) ⇒ 핀만.
-- `buf b1(o1, zin)` vita `x` / iverilog `z`(이웃 `assign o2 = zin;` 은 양쪽 `z`); LRM 표는 x, `oracle_split_rulings.rs` 핀 — `buf` 는 bit move 가 아니라 IEEE 1364 §7.3 z→x 강제.
+- `assign w = 1'bx;` — a computed driver whose value is `x` also raises a vita t0 event where
+  iverilog does not; vita's driven-net default is `z`, iverilog's is effectively `x`.
+- A truncating copy `wire [3:0] w; assign w = r8;` — iverilog collapses it, vita treats it as
+  computed (widening fires on both sides). `assign #1 w = r;` — iverilog 0, vita 2. Multi-driver and
+  two-driver `wand`/`wor` — iverilog 0, vita 1 (a single driver is resolved by the copy rule). A
+  concat lvalue `assign {x,y} = …` is excluded by the single-chunk gate.
+- vita's dirty channel is per NET where iverilog's collapse is per BIT, so a constant driver on
+  `bus[1]` wakes a reader of `bus[0]`.
+- Oracle split `wire w; assign w = 1'b1; reg r = w;` — iverilog `z`, verilator and vita `1` (§6.8
+  fixes only what precedes a procedure, and a continuous assignment is not a procedure). Pinned only.
+- `buf b1(o1, zin)` is vita `x` and iverilog `z` (the neighbouring `assign o2 = zin;` is `z` in
+  both). The LRM table says x, and `oracle_split_rulings.rs` pins it: a `buf` is not a bit move but
+  the IEEE 1364 §7.3 z→x coercion.
 
-## 2-R residue
+## 2-R. Usability residue
 
-- 리포트 ③ 미착수: 미사용 패키지 함수도 프레임화되고 같은 원인이 인스턴스마다 보고된다(사용성 축).
+- An unused package function is still framed, and one cause is reported once per instance.
 
-## 2. Silent-wrong 잔여
+## 2. Silent-wrong residues
 
-Row numbers are cited from tests (`§2 row 7/14/21/25/27/33`, `§2 🆕 I/L/M/N`); never reuse a number. Resolved rows are in ROADMAP_ARCHIVE 「§2 표 해소 행」: 1 · 1d · 1e · 1f · 🆕A · 2 · 2b · 3 · 4 · 6 · 8 · 8b · 9 · 11 · 12 · 13 · 18 · 20 · 21 · 22 · 27 · 28 · 33 · 🆕C · 🆕D · 🆕E · 🆕G · 🆕K.
+Row identifiers are cited from tests (`§2 row 7/14/21/25/27/33`, `§2 🆕 I/L/M/N`); a number is never
+reused. Resolved rows are listed in [history/ROADMAP_ARCHIVE.md](history/ROADMAP_ARCHIVE.md).
 
-WALL(provenance) — rows 14 · 15 · 16 · 25 · 26 · 30 · 🆕 F stop in one place: `const_wide.rs`'s `fold_bits_at` decides an expression's sign NODE-LOCALLY (`sg = ls && rs`) where §11.8.1 makes the whole region unsigned if ANY operand is, and a module-scope initializer folds through the width-UNLIMITED `const_eval_in_scope` while a function local's declared width lives in `envw`. Routing a DECLARED-width/sign target through `eval_const_assign` works (row 14: 27 divergent → 3 of 44 cells) but the shared walk is not correct on its own terms — §11.4.10 makes a shift's RIGHT operand self-determined and unsigned, and the i64-lane bound was on the TARGET only — so each attempt was built, measured and reverted. `param_declared_width_provenance.rs` pins the reverted state, the prerequisites and the cells a fix must not move.
+WALL(provenance) — rows 14, 15, 16, 25, 26, 30 and 🆕 F stop in one place: `const_wide.rs`'s
+`fold_bits_at` decides an expression's sign NODE-LOCALLY (`sg = ls && rs`) where §11.8.1 makes the
+whole region unsigned if ANY operand is, and a module-scope initializer folds through the
+width-UNLIMITED `const_eval_in_scope` while a function local's declared width lives in `envw`.
+Routing a DECLARED-width/sign target through `eval_const_assign` moves the cells (row 14: 27
+divergent down to 3 of 44), but the shared walk is not correct on its own terms — §11.4.10 makes a
+shift's RIGHT operand self-determined and unsigned, and the i64-lane bound is on the TARGET only.
+`param_declared_width_provenance.rs` pins the current state, the prerequisites, and the cells a fix
+must not move.
 
-WALL(AST self-width) — the size-cast cluster below (width probe, `ir_bits_of` fallbacks, real × fill, prim cast) needs a tree-wide AST pass answering a node's self width WITHOUT lowering it. §4.5.346 proved that pass already stands INSIDE a cast (`const_self_width` + `const_signed_env`).
+WALL(AST self-width) — the size-cast cluster below (the width probe, the `ir_bits_of` fallbacks,
+real × fill, the prim cast) needs a tree-wide AST pass that answers a node's self width WITHOUT
+lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const_signed_env`).
 
 | row | status | symptom · repro · oracle values | root cause · code site | fix shape · prerequisite / wall |
 |---|---|---|---|---|
-| 🆕 B | BLOCKED(sign provenance) | ⓐ `localparam [31:0] L1=(B>>>2)+8'd0` = 4294967276, runtime twin 44 (oracles 44); net size polluted too (`logic [((B>>>2)+8'd0)-1:0] bus` 22 bits vs 44) · ⓑ `case (b>>>2)` with an unsigned label: vita `eq236`, oracles `eq44` | ⓐ `const_fn.rs:162` `AShr => Some(a >> b)` has no sign in its signature; wide twin `const_wide.rs:308` uses the left-operand rule · ⓑ `stmt_flow.rs:~605` wraps the lowered scrutinee in an outer `$unsigned`, whose argument is self-determined | ⓐ the right rule is one file over, `const_fn_width.rs:427`; WALL(provenance) · ⓑ re-lower with `lower_size_ctx_entry(scrutinee, w, ext=false)`, wrapper kept as FALLBACK (6 `case`/`casez`/`casex` cells; `case (b/c)` 1 → 3, `b%c` 2 → 1); prerequisite = sign provenance told apart from a default (`expr_self_signed`'s catch-all is not a fact for calls, non-whitelisted sysfuncs, constants folded from them) |
-| 3b | BLOCKED(field-key map) | class-property ascending/negative bound normalisation has nowhere to be recorded (PRE == POST) | class fields are not nets (`ClassField` → heap slot); the map is keyed by NetId | prerequisite = a field-key normalisation map · 1 oracle (iverilog dies on an assertion) and the minimal repro is loud for another reason (`C c = new();`) |
-| 5 | LOUD | `s = string'(24'h610062);` → iverilog `len=2`·`s=="ab"` / vita E2002 | parser | §3, not §2 · the NUL-stripping report does not parse in vita, so that axis needs another repro |
-| 7 | BLOCKED(one ordering key) | a parent `initial` READING a child net at t0 sees X: `initial s = 8'hEE` in a child read as `r = u1.s;` → oracles `ee`, vita `xx` (2-oracle, still open). Re-measured 2026-09-08: the claimed-correct twins are not all correct — a fork arm in the child is a 3-way SPLIT (iverilog `ee` / verilator `00` / vita `xx`), and ⚠️ the claim that an output PORT bind `child u1(.o(w))` and `assign w = u1.s;` are their OWN 2-oracle silent-wrongs REACHED THROUGH THE SETTLE is REFUTED (2026-09-08, §4.5.457): with a declaration initialiser in the child, vita reads `ee` through both at the parent's t0 immediate read, as it does for a constant driver, a parameter driver and a two-level chain — the only diverging spelling is the one whose value comes from the child's `initial`, i.e. process order; and verilator answers `ee` there only because it constant-hoists a SINGLE-statement `initial s = <const>;` — a second statement in that initial flips verilator to vita's answer, so the cell is an ORACLE SPLIT on order · `final` blocks run in ProcId order (`final_procs` is a `BTreeSet<ProcId>`), so any process reordering leaves vita disagreeing with itself | ⚠️ NOT "the rank is not recorded" — the rank machinery is complete (`with_rank_scope` / `init_ranks` / `RANK_MOD_INSTANCE(1) < RANK_MOD_OWN(2)`), it is only applied to declaration-initialiser processes. The real root: vita has ONE ordering key (`Activity.tie`) where the oracles use a DIFFERENT order per RESUMPTION KIND | ⚠️ PREREQUISITE, measured — a `proc_order` permutation seeded into the ordering key was BUILT and REVERTED (§4.5.456). It closes the headline and 5 more 2-oracle cells, and iverilog answers the kinds differently in ONE run of ONE design, so a single key cannot express it: `initial` child-first, `always_comb` t0 PARENT-first, edge PARENT-first, `#d` delay child-first, `wait` PARENT-first, fork-arm wake PARENT-first. Three rounds, three doors: keying only the t0 arm broke the delay wheel; keying `Activity.tie` broke the edge and `wait` wakes (`aa` for `cc`, a VALUE); re-keying those two broke `always_comb`'s t0 arm and the fork-arm wake (`aa` for `cc` again) — both oracles agreed against vita on every one. Start only with a per-resumption-kind ordering model in hand. Costs a format bump (`proc_order` on the `StagedExtraSidecars` tail; `sim_ir::Process` is NOT touched) · zero corpus demand |
-| 10 | OPEN | the stated symptom is RESOLVED at HEAD (re-measured 2026-09-07: bare `K[31:24]`, `pk::K[31:24]`, `K[31 -: 8]`, `K[24]` and a `$bits`-sized net are all three-way identical on a `parameter [135:8] K` 128 bits wide). What survives is the RANGE BOUND consumer: `wire [K[31:24]-1:0] n;` is ONE BIT at exit 0 where both oracles declare 221, and the ≤64-bit twin of the same text is correct | `const_range_bound_fold` has no wide-bit-domain fallback — the i64 select fold declines a >64-bit base (`select_base_at_declared` returns `None` for `dwidth > 64`) and both of the bound's fallbacks are i64. `$clog2` of the SAME text answers 8, so the value exists one funnel over | PREREQUISITE: `selfdet_bits_unsigned` declines the select too (only `selfdet_clog2_wide` answers it), so routing the bound at the wide domain buys nothing until that resolver reads it — measured, an unguarded fallback moved 0 of 18 cells |
-| 14 | WALL(provenance) | `localparam logic signed [7:0] NM = -8'sd2; localparam logic [63:0] X = NM ^ 64'h0;` = `fffffffffffffffe`, oracles `00000000000000fe`; the same expression over a FUNCTION LOCAL folds `00…fe` · the routing also fixes `localparam logic [7:0] M = (P + 8'd100) % 8'd7` (P=200: 6, oracles 2), `pk::PA ^ 64'h0`, `int S = (D - C) / 2` (2147483641), the generate-scope `time NM` shadow (2c for 12c), the 65-bit-leaf `/ %` | a module-scope initializer folds through width-UNLIMITED `const_eval_in_scope` | route a DECLARED-width/sign target through `eval_const_assign`; the gate must demand provenance of every LEAF (`param_meta` is a DEFAULT for an untyped parameter, ABSENT for a `time` one), decline above the i64 lane, refuse an unsized FILL operand, answer THREE-valued in the scope walk, and NOT route the PACKAGE binder (row 26) · prerequisite = a width-aware walk correct on its own terms: §11.4.10 shift count (`16'hFF01 << 3'b101` = 0, 30 correct→wrong + 36 loud→wrong, reachable through a constant FUNCTION ⇒ its own row, closes first) and an i64 bound not on the TARGET only (83 cells) |
-| 15 | BLOCKED(2-state field) | an OVERRIDE carrying a sized x/z literal loses the unknown plane: `#(.K(8'b1010_010x))` onto `parameter logic [7:0] K` binds `10100100` at exit 0 where oracles keep the x; `8'bzzzzz1z0` binds `11111110`. Five cells, every channel | `params.rs`'s i64-lane test reads only VALUE bits (`bp_get(..).0`); the sibling `fill` arm declines with `fill_is_unknown` | `bp_any_unknown` was shipped and reverted (76 CORRECT cells go loud: a 2-STATE declaration converts x and z to 0) · prerequisite = record the parameter's 2-state-ness (`hdl-parser/src/params.rs` computes `var_kind` and DROPS it; an `hdl-ast` field + SchemaHash re-pin, parser-only), which also closes z→0 (today 1) · the ORIGINAL headline (an unknown plane in the narrow store, 22 loud cells, ~40 sites, demand 0) is separate and stacks on row 14; above bit 64 what survives is z, not x |
-| 16 | ORACLE-SPLIT | 12 override cells: 5 diverge from iverilog, but verilator sides with VITA on 4 (`-64'd1`, `<ones> + 64'd1`, `<ones> << 4`) and `~32'd0` is a 3-way split | that is row 17 | a fix would "correct" one side of a live split ⇒ row 21 did NOT thread the context through `override_bits` · the only 2-oracle sub-case = operands already ≥ the target width: `#(.K(~128'd0))` vita `00…00ffffffffffffffff` vs oracles all-ones |
-| 17 | ORACLE-SPLIT | `leaf #(.K(32'd0 - 32'd1))` on `parameter logic [127:0] K`: iverilog `ffff…ffff`, verilator `0000…0000ffffffff`, vita `0000000000000000ffffffff_ffffffff` (zero-extends from 64, the i64 lane's width) | — | do not chase: vita matches NEITHER and §6.20.2 does not settle it · neighbours are not split (`64'hFFFF_FFFF_FFFF_FFFF + 64'd0` zero-extends in all three, `-(64'sd1)` sign-extends in all three) |
-| 19 | PERF | a 2-D / 3-D / packed element as a continuous-assign LHS costs ~10× on BOTH backends; against 50.0 ns for a 1-D unpacked element: 2-D `arr[0:15][0:3]` 546.7 ns native / 675.8 vm, 3-D 829.2 / 967.5, packed `logic [63:0][31:0]` 410.8 / 441.7 | not located; native/vm ratio 0.81–0.93 ⇒ SHARED PLUMBING | needs its own census; the report's and §4.5.382's diagnoses were both refuted on the 1-D axis |
-| 23 | LOUD | `clocking cb; input a_b;` beside `clocking cb_a; input b;` is legal (verilator `R1=17 R2=34`) and vita refuses it with ``net/variable `top.__clk_cb_a_b` redeclared`` at exit 1 | the `__clk_`/`__clkout_` mangling in `sva_clocking.rs:727`/`:657` | correct→loud, verilator is the accept/reject oracle ⇒ §3; a new sigil must be taught to the VCD and FST filters · the naming half is a one-token fix (`:745` computes the instance-qualified `alias`, `:750` re-formats it without `fq`; the `[in …]` suffix is `lvalue.rs:179`) |
-| 24 | DO-NOT-START (row 34) | 24a CLOBBER (silent-wrong, exit 0, verilator oracle): a signal merely DECLARED as a clocking output is destroyed to `x` or frozen — `vita x,171,171,171,171,171` vs `verilator 170,171,172,173,174,175`, 4 cells, one across a module boundary · 24b one-cycle LAG, 4 cells | 24a `init_diag.rs::clocking_commit_plan` (~1202), OUTPUT phase unconditional; the INPUT phase is correct · 24b §14.16 skew `#0` in Re-NBA, a scheduler-REGION question with no anchor | 24a = a written flag produced at the write site, `out_pairs` grows a third field riding `SimOpts` out-of-band (no format bump) · corpus demand 0 |
-| 25 | WALL(provenance) | `parameter P = 5` + `#(.P(32'hF0F0F0F0))` binds a SIGNED 32-bit −252645136 (`P < 0` = 1, `%0d` negative); `parameter Q = 8'sd1` + `#(.Q(32'hDEADBEEF))` is `ef` with `$bits(Q)` 8 — oracles bind the override's own type (§6.20.2) | `params.rs::param_decl_width_opt`'s literal arm answers the DEFAULT's literal type even when `default_binds == false` (§4.5.460 measured the OPERATOR twin of the same wall: `parameter HE = ~8'h5A` + `#(.HE(~4'h5))` binds 32 bits where verilator binds 4, PRE and POST alike — the default lane now sizes by the operator and the override lane still does not, so closing this needs the override channel to carry a width from the override's OWN expression); `ResolvedOverride` carries `signed` but no `width` | the producer patch is kept (`scratchpad/r29/row25/producer.patch`, 317 lines + 5 tests; fixed 7,982 of 122,774 cells and serv's `\|WITH_CSR`) but three rounds each found a NEW correct→silent edge (`defparam` with a NAME rhs, a `time` parameter with a DECIMAL default, `$signed(64'h…)` resized down) ⇒ reverted; the size-cast slice ships `param_type_guessed` DECLINING every guessed type · prerequisite = a parent-side resolver that DECLINES on meta-less names and answers `$signed/$unsigned` by operand, carried through every channel including `defparam`; a fill onto an untyped parameter binds `(1, false)` |
-| 26 | WALL(provenance) | routing the PACKAGE binder through the width-aware fold is a net loss: 8,748 package-consumer designs, 1,233 correct→silent-wrong against 714 fixed, plus one correct→loud | it makes `pk::X`'s stored value canonical (i64 −2 for `logic signed [7:0] PA = 8'hFE`) while every consumer still folds through the width-unlimited walk and sign-extends it | prerequisite is on the CONSUMER side: `every_name_has_a_declared_width` does not enumerate `ExprKind::PkgScoped`, an imported constant is in no provenance set — closing both turns those 1,233 cells correct · until then the identical text answers `00…fe` in a module and `ff…fe` in a package |
-| 30 | WALL(§11.8.1 sign) | `localparam logic [127:0] C = '1 ^ 1'b0;` → vita `…00000000ffffffff`, oracles 128 ones; the same text as `r = …`, `assign c = …` and through a port prints 128 ones. 165 of 264 cells (22 operator forms × {32,33,64,65,96,128} × {`logic`,`logic signed`}), 0 splits, all four binder copies; the old band ("wrong from 33 up") is a property of its operands — `logic [7:0] A = '1 >> 2` is `ff`, oracles `3f`, 82 more cells at widths 1..31 | the wide fold's fill arm plus node-local region sign | the 4-piece fix works (`fold_bits_at` fill arm folds at `ctx` when `ctx>0` and not x/z · `param_i64_fill_at_declared` ahead of the i64 walk in all four binders · a LOCAL predicate with a `Cast` arm · a `fill_width_survived_the_fold` guard): 778 FIXED / 0 new-silent / 0 new-loud over 1,622 cells — reverted; §11.6.1 evaluates at `max(ctx, every self-determined operand's width)` so freezing the fill at the LEAF is wrong (150 cells), the ROUTING predicate cannot serve as the guard (104 NEW-LOUD; a decline at `param_bits_at_declared` is `E3009`), and of 504 PRE-loud→value cells 215 are silently wrong on the SIGN axis (`localparam logic [7:0] B = ($signed(4'hF)+1) \| 8'h00;` `00` vs oracles' `10`, no fill anywhere) ⇒ PREREQUISITE = §11.8.1 region sign in the wide fold; ACCEPT set = "correct a value, never create one" |
-| 🆕 F | WALL(§11.8.1 sign) | a narrow SIGNED operand is ZERO-extended in an unsigned context: `localparam logic [7:0] A = 8'hFF - (-1'sb1);` is `fe` and `8'hF0 \| (-1'sb1)` is `f1`; oracles `00` and `ff`. 24 cells at widths 2..32, both sign declarations (no fill involved) | §11.8.2 reinterprets each operand at the EXPRESSION's sign; `const_wide.rs`'s bitwise/arith arms compute `cs = ls && rs` then `resize_bits(.., cs)` for BOTH | same root as row 30's prerequisite — file the fix once |
-| 🆕 H | BLOCKED(§11.8.1 wall) | ⓐ `(&4'b110x)`·`(\|4'b101x)` 이 바운드에서 1비트 clamp — 두 오라클 3/4 · 8칸(`^`/`~^` 는 분열). 2026-09-07 재측정: 클래스는 리덕션보다 넓다 — `~&`·`~\|`·`===`·`&&`(0 피연산자) 도 IEEE 로는 확정인데 전부 조용히 1비트가 된다(각각 두 오라클 4·3·4·3). 고침 자리는 `fold_self_bits` 리덕션 arm 의 `bp_any_unknown` decline = **wide fold 허용집합 확장** ⇒ §5.2 "Do not start" 에 걸린다 · ⓑ ascending `parameter [0:3] P` · lo≠0 `parameter [7:4] P` 의 `\|P` 바운드가 loud(두 오라클 4) · ⓒ `localparam E = 4'hF \| 4'h0; wire [(&E)+2:0]` loud(두 오라클 4) · ⓓ `localparam R = ~(\|4'b1010);` 는 의도적 loud(두 오라클 `0`·`$bits` 1) · ⓔ const-fn 본문 지역 대입 후 리덕션(`t = a[5:0]; return (\|t)+2;`) loud(오라클 3) | ⓐ `fold_self_bits` 리덕션 arm 이 unknown 하나에도 decline · ⓑ `narrow_param_bits` 가 `lo != 0 \|\| ascending` 거절 · ⓔ 본문 지역 폭이 envw 에 없다 | ⓑ 리덕션 전용 레이아웃-무관 resolver · ⓒ WALL(provenance) · ⓓ RESOLVED §4.5.461(그 클래스를 기다리지 않았다 — 폭-인지 VALUE lane 이 선행조건이었고 네 VALUE 자리에서 삭제됐다) |
-| 🆕 I | OPEN | ⓐ another process's read in the same delta: `initial #1 v = 8'hA5;` declared before `initial #1 $display(c);` — oracles `a5`, vita `00` · ⓒ word-alias residue. A FULL-RANGE select of a constant word (`assign c = m[1][7:0]`) SHIPPED §4.5.456 (13 cells, both oracles) · ⚠️ the RUNTIME index `m[k]` is REFUTED as a defect, re-measured 2026-09-08 on seven index spellings: iverilog reads `xx` exactly like vita and only verilator reads `a5`, and iverilog is not usable to move toward — it answers stale on an INDEX change and fresh on a SOURCE change in the same design. ORACLE-SPLIT, do not chase · RESOLVED §4.5.457: a wire index driven by exactly ONE constant continuous assign (`alias::const_driven_nets` — a `wire` with one undelayed whole-net driver that folds, never written procedurally, never `force`d; TRANSITIVE, and an all-`z` driver beside it does not count). ⚠️ the row's `buf` split was named from an ILLEGAL cell (`buf b(k,1'b1)` on a 2-bit `k` — iverilog rejects it); the legal per-bit spelling is a plain 2-oracle defect and stays declined for the RULING reason instead (`oracle_split_rulings.rs`: a `buf` is the §7.3 `z`→`x` coercion, so it computes). Still open on the same axis and held on purpose (= ⓐ's class): a PROCEDURAL index, a DELAYED constant driver, a gate-driven one — `assign c = r + 8'd0;` with no array at all reproduces them · ⚠️ REFUTED 2026-09-08 (§4.5.458 grounding), was "NEW (pre-existing, 1 instance), both oracles `a5`": an UNSIGNED narrow net index into a NEGATIVE-base array is NOT a 2-oracle defect. Width sweep on `logic [7:0] m[-2:1]` holding the −2 bit pattern: iverilog `xx` at widths 2–3 and `a5` at 4+, verilator `a5` at every width, vita `xx` below 32 and `a5` at 32+. Neither tool can judge it — **iverilog's answer depends on the ARRAY'S SIZE** for a fixed index pattern and fixed `lo` (threshold 4 for `m[-2:1]`, 5 for `m[-6:1]` AND for `m[-2:9]`), which no reading of §7.4.6 licenses; and **verilator has no `x` for an out-of-range unpacked read at all** (`m[2:5]` with `k=14` reads `00`, not `x`), so its `a5` is masking, not an answer — `array_word_index_domain.rs` already records that. Under the LRM the index value is 14, outside `[-2,1]`, so vita's E4002/`x` is the honest answer at widths 2–31; vita's own `a5` at width ≥32 is the INCONSISTENT half (a 32-bit `Add` in `dim_coord` overflowing to coordinate 0), and closing it would move a cell where all three tools agree. ORACLE-SPLIT, do not chase; the SIGNED declaration is correct at HEAD and stays the supported spelling · a 2-D array word `reg [7:0] m[0:1][0:1]; assign c = m[0][1]` (iverilog `a5`, verilator `00` — split, and the 1-D twin renames) · splits: `m[1][2]`, `m[32'hFFFFFFFE]` / `m[64'd0 - 64'd2]` (vita E4002 / W4029), a GENVAR index `assign cw[g] = m[g-2]` (iverilog `a5 5a`), an all-`z` driver beside a partial/delayed driver (E3001), a `force`d copy after `release` · ⓔ `bit [7:0] c; assign c = v;` excluded and unexercised (vita refuses `bit` copy destinations, `E-ELAB-LVALUE-KIND`) · ⓖ a callee body is ONE set of expressions ⇒ marked only for roots EVERY calling process writes (3 of 4 cells); still computed, all oracle SPLITS: an array-WORD-target copy `assign c[0] = v[0]` (iverilog `a5` / verilator `00`), a sign-EXTENDING copy `[15:0] <= signed [7:0]` (iverilog `ffa5` / verilator `0000` for a `wire` destination — for a `logic [15:0]` destination BOTH oracles `ffa5`, vita `xxxx`: pre-existing 2-oracle, review A §4.5.442), a zero-extending / truncating / concat copy, a partial slice `v[3:0]` (iverilog `x` / verilator `5`), `v[7 -: 8]` (iverilog `0` / verilator `4294967295`, vita = verilator); RESOLVED §4.5.456: a full-range select of an ARRAY WORD `assign c = m[1][7:0]` (both `copy_alias` and `copied_source` now admit a constant in-range word base); an `always_comb` whose only read is inside a called task runs at HEAD (`a5` = verilator; iverilog `xx` with "no sensitivities", split) | ⓐ a §5.4.1 race kept on the settle's value ON PURPOSE (the store-side forward broke picorv32 / UDP / keccak parity) · ⓕ interpreter/VM take the extension sign from the slot (255), the native path from the node · ⓖ callee reads are not in the sensitivity derivation | ⓖ the copy's declared sign is re-stamped on the aliased read in `eval_core` and `read_scalar_words` (§4.5.442); a mismatch ANYWHERE in a chain disables the tail below it |
-| 🆕 J | LOUD | ⓑ and ⓒ RESOLVED at HEAD (re-measured 2026-09-07: `wire [('1)+2:0]` is 2 and all twelve `$bits('1 <op> …)` operator forms are three-way identical) · ⓓ `{'1, 1'b0}` — illegal (§11.4.12), oracles lenient (2), vita loud; keep · ⓔ `v['1]` — split (iverilog 0, verilator 1), vita = iverilog · ⓕ `'1 * 2'd2` / `'1 + 1'b1` / `4'd8 - '1` widths — verilator 2/1/4, iverilog 3/2/5, values agree, vita = verilator · ⓖ `localparam U = '1; localparam Y = U + 4'd1;` → `$bits(Y)` 32, oracles 4/5 | ⓖ fill-INDEPENDENT (`localparam U = 1;` shows the same 32), the row-14 value-inferred tail (`min_signed_bits(v).max(32)`) | ⓐ (a fill as LEFT operand under a TYPED declaration, 11 cells) is row 30 · ⓖ WALL(provenance) |
-| 🆕 M | LOUD | ⓐ `m #(.P('1 ^ 1'b0)) u();` onto `parameter logic [39:0] P` — vita 32 bits (`00ffffffff`), iverilog target-sized (`ffffffffff`), verilator ONE bit (`0000000001`); 40 pre-existing + 9 split cells · ⓑ `(\|'1)` and `{('1 ^ 1'b0)}` in a constant stay loud · ⓔ `cover property (… (a \|-> b))` is loud (`cover.rs` has its own sequence-only grammar) · ⓕ verilator prints NO failure for `a \|-> b and b \|-> a` where §16.12.8 fails at the first failing operand (vita t=35) — not an oracle for property-level `and` | ⓐ the parent folds the override before the target's width is known (`resolve_param_overrides` → `ovr_by_name`) | ⓐ prerequisite = a target-typed override evaluation (row 17's axis) · residue: a select of an ascending or value-sized hierarchical parameter stays loud; `$bits` of a hierarchical string is loud (split 1/16); an override CARRYING past the operands' top bit (`~`, `+`, `<<`, unary minus, `?:`) stays loud; a decimal / `-(64'sd1)` override of an untyped 128-bit-default parameter keeps 128 bits (row 25's i64 half) |
-| 🆕 N | OPEN | still open: VCD `$scope` names the block `gi[0]` / `genblk1[0]` (iverilog `begin gi` / `begin genblk1`); a task declared in an unnamed block is a split (iverilog `top.genblk1.t`, verilator `top.genblk1.genblk1.t`, vita loud); a user block named `genblk1` beside an implicit one is not disambiguated (iverilog `genblk01`, verilator refuses); `%m` in a CONCURRENT `assert property` action block omits the assertion label (`top.nb` for verilator's `top.nb.ap`; iverilog refuses concurrent assertions ⇒ 1-oracle) — the label dies in the parser: `hdl_ast::Stmt::ConcurrentAssert` has no `label` field, and adding one to that frozen SchemaHash type flips the root hash (an IMMEDIATE labelled assert already carries its label, verilator's side of a live split); the leniency `gi[0].x` on a conditional scope (oracles reject); a class method called from a generate-block process / a frame names its INSTANCE since §4.5.441 (a label inside the method is kept, verilator; iverilog drops it — split); a `$unit` class prints `top.C.show` (split); a package class, and a class method calling a module task / `$strobe` in a class, are loud; a parameterized class prints `C__8` (verilator `C__N8`); an ELABORATE-time diagnostic in a class spells `[in $class$C$m]`; a package function is `top.pf` (iverilog `p::pf` / verilator `p.pf`, split); `--hier-tree` / `--inst-paths` list no generate scopes | the class table is global and its declaring INSTANCE unknown, so the CALLING scope is prefixed | beside it (loud): an instance ARRAY of a PORTLESS module (`ch w[1:0]()`) is refused with "child has non-ANSI ports" — a false reason on a valid design |
-| 🆕 O | OPEN | residue of §4.5.446 (which closed the four index chains, the lvalue write funnel and `resolve_intro_net`): `lookup_net_scoped` — the `symbols`-only walk — has ~90 callers and this slice guarded the six the census reached, so a further reader that resolves a bare name without asking `bare_ident_route` is the same class. Recorded splits, unmoved: an ENUM LABEL shadowing an outer array reads the array in vita and iverilog, the label in verilator; `foreach` over a shadowed name is `i=0` in vita and iverilog, `i=31` in verilator | the guarded readers now ask [`bare_ident_route`] like the lowering does (`bare_name_binds_constant`) | a new instance = add the same one-line guard; the splits are recorded, not chased | 2-oracle for the class, split for the two rows above |
-| 🆕 Q | BLOCKED | a `localparam` declared in a procedural block is a parse error (`E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'localparam'`, plus a cascade of follow-on "expected statement" errors); both oracles accept it. Re-measured at HEAD the class is wider than "a plain named `begin : g`": an UNNAMED block, an `always_comb`, a subroutine body, the `parameter` spelling (§6.20.1 makes it a localparam), and use as a RANGE BOUND of a later block-local decl (`localparam W = 7; logic [W-1:0] v;` — both oracles `v=127`) are all the same refusal, 7/7 two-oracle | there is no BLOCK-SCOPED CONSTANT binding in the IR. The parser's `const_locals` is a parse-time i64 fold table read only by `try_const_index`, and the elaborator's `$blk$<span.lo>` scoping is for block-local NETS, which are not constants | ⚠️ PREREQUISITE, measured — a bare-name HOIST of the declaration into the enclosing container's item queue was built and REVERTED: it made 6 cells correct and **5 new silent-wrongs**, because the hoisted name has no scope. Measured with the hoist in the tree: an outer literal localparam, an outer non-literal one and an outer HEADER parameter each read the block's value after the block (`out=7`, oracles `3`); two sibling blocks declaring the same name collapse to the LAST value (`a=9 b=9`, oracles `a=7 b=9`); and a read AFTER the block answers 7 where both oracles reject the name. Only the outer-NET cell was loud. A parser-side rename is not the cheap way out either — there is no single `ExprKind::Ident` funnel (52 construction sites). Start only with a block-scoped constant binding in hand | 2-oracle | M |
-| 🆕 L | LOUD | ⓐ SHIPPED (§4.5.455): `$bits` of a `real`/`realtime` parameter is 64 in every consumer. Residue = the WILDCARD-IMPORTED spelling only, still 32 (verilator 64) — that is ⓕ's name-lookup family, not the width rule · ⓑ `$bits` of a string parameter — vita + iverilog 16 (§6.16), verilator 64: vita = LRM, keep · ⓒ `localparam real Q = 1.5; localparam W = Q * 2;` — E3009, oracles 3.0 · ⓓ a 2-state struct's `'{…}` in a constant is loud (`w'(longint'(e))` has no const-fold arm); a 4-state struct's folds · ⓔ a fill inside a `'{…}` in a constant is loud · ⓕ a string or `real` package parameter through `import p::*` — E3010 / E3009 (scoped `p::S` works) · ⓖ `m #(.X('{1'b0, 5'd7}))` of a struct-typed header parameter — E3009, verilator 21 · ⓗ `p::v.a` — E2002 (the struct desugar keys on the bare first segment) · ⓙ `gather_local_decl_names` omits functions, tasks, genvars, instance names, typedef names, array parameters, generate-block contents, and a package importing a package passes an EMPTY set · ⓚ an `import` inside a generate BLOCK is loud E3009 unless redundant; per-scope application is the remaining work · ⓛ `union packed` containing an anonymous `struct packed` fails to parse; `import`/`localparam` in a function body is loud · ⓠ `logic [1:0] i; F[i*4+3:i*4]` → `0000` and `F[i*4 +: 0]` → `0` in silence (verilator refuses; illegal SV) · ⓡ a block-local variable shadowing a wildcard-imported package VARIABLE is read as the local AFTER its block (`SX` → `11`, oracles `a5`) · ⓢ a header parameter redeclared in the body answers the body declaration · ⓣ `c #(.A(x), .A(y)) u();` is accepted, last wins · ⓤ an x/z WRITE into a 2-state member of a 4-state packed struct keeps the x/z — `o.q = 4'bx1z0;` vita `xx1z0x`, iverilog `x0100x` (§7.2.1); the parser knows the member is 2-state (`StructFieldLayout.5`), the write path does not squash · ⓦ residue (loud): a package function whose body reads a package constant outside the i64 interpreter (real / string / array / enum); an INTERFACE importing a package function into a range bound (`apply_import_const_funcs` is wired for modules and packages only — PRE was a silent 1-bit net, both oracles 8, now loud); an `import` inside a generate block (unapplied, loud twice) · ⓧ a compilation-unit `import` after the module still applies, and a package constant used before its declaration folds (iverilog rejects both) · ⓨ the declared-range gate's span dedup reports a generate loop's bad bound once (iverilog three times) · ⓩ residue (§4.5.443 closed the shifted / ascending declared range in the wide fold; §4.5.448 the NEGATIVE declared LSB, 13 cells): what is left on the negative axis is three separate roots — a negative select BOUND (`A[0:-2]`) false-louds because `const_bound_u32` folds it unsigned (`-2` reads `0xFFFF_FFFE`) and then trips the direction check, message naming the wrong fact (both oracles `p=7`); a >64-bit negative-LSB base is still positional (`logic [67:-4] A; A[7:0]` = `34`, both oracles `33` — `const_wide.rs` reads `param_range` directly and `select_base_at_declared` refuses `dwidth > 64`); an explicit `[m:l]` PART select of a NET/variable declared with a negative low bound is loud by its own gate (`packed.rs`, both oracles answer, and the message understates itself — both INDEXED spellings and every bit-select already work on that net) · loud beside it: runtime `$size(P)` of a scalar parameter, a multi-packed ELEMENT array parameter, a >64-bit base's select (`logic [191:64] A; A[127:64]`, both oracles fold), a whole-NAME read of a shifted or ascending parameter in a >64-bit concatenation (`logic [11:4] A; logic [79:0] L = {A, 72'h0}` — the zero-LSB twin folds; `narrow_param_bits` declines the NAME, which is what keeps the structural select arm sound) · (aa) 324-cell residue: UNTYPED `localparam G = C + D` stays i64 (iverilog 16 / verilator 0, split); enum labels are the same split (vita = verilator); `$clog2(C+D)` in an untyped declaration folds the 32-bit sum (oracles the 4-bit 0); a `byte` operand in a bound (`[Y+Y:0]`, `Y = 100`) reads the LRM/iverilog 57 where verilator and PRE read 201 | ⓩ the three residues have three roots: the unsigned select-bound fold · the wide lane's own `param_range` read · the net lane's part-select gate | ⓩ each residue is its own slice; demand is ZERO (no negative packed declaration in the 1,462 corpus RTL files), so they rank below any cell the corpus exercises · (aa) the elaborate VALUE lane is row 14's wall · also recorded: the `endpackage` export of `packed_md_params` has no `local_decl_names` filter; `foreach` over a multi-dim packed formal is loud with a misleading enum-method diagnostic |
-| 31 | PERF | all 126 pure-family cells are already three-way correct in all nine positions; `assign p1 = $signed(a)*$signed(b)` measured 603 evaluations against 201 for `a*b` (3.0×), same for `a >> $clog2(8)`; demand 22 continuous assigns / 29 occurrences in ibex and verilog-ethernet | — | do not start as a §2 item; re-filed to §5.2 rank 4 · the STATE half is do-not-chase: of 32 wrong cells only 6 are arbitrable (26 have both oracles constant but disagreeing, ivl `z` vs vlt `0`; 4 split on constancy) and the decline makes the one reachable hazard WORSE (2,406,546 settle spins) |
-| 32 | LOUD | real, 6 cells, but the run ends with `F4004` and exit 1; the residue is one extra `$display` line | `frame_eval.rs::run_frame_call_with`, one funnel | → §3 tail, ~10–20 product lines · vita's own TASK path already bails without committing the caller's lvalue and matches iverilog; verilator is disqualified because it prints after a TOP-LEVEL `$finish` too |
-| 34 | DO-NOT-START | rows 23/24 (clocking): 36 silent-wrong cells and startable, still excluded — 1-oracle only (iverilog 13 cannot parse `clocking`) and demand is zero twice over (no corpus row; all 16 `endclocking` files are inside interfaces, which vita refuses through an unrelated gate) | — | worse than recorded: the signal is destroyed PERMANENTLY, and with a 2-state declaration it clobbers to `0,0,0,…` — a plausible value with no `x` anywhere |
+| 🆕 B | BLOCKED (sign provenance) | ⓐ `localparam [31:0] L1=(B>>>2)+8'd0` is 4294967276 where the runtime twin and both oracles are 44; net size is polluted too (`logic [((B>>>2)+8'd0)-1:0] bus` is 22 bits against 44) · ⓑ `case (b>>>2)` with an unsigned label: vita `eq236`, oracles `eq44` | ⓐ `const_fn.rs:162` `AShr => Some(a >> b)` carries no sign in its signature; the wide twin `const_wide.rs:308` uses the left-operand rule · ⓑ `stmt_flow.rs:~605` wraps the lowered scrutinee in an outer `$unsigned`, whose argument is self-determined | ⓐ the right rule is one file over at `const_fn_width.rs:427`; WALL(provenance) · ⓑ re-lower with `lower_size_ctx_entry(scrutinee, w, ext=false)` keeping the wrapper as a FALLBACK (6 `case`/`casez`/`casex` cells; `case (b/c)` 1 → 3, `b%c` 2 → 1). BLOCKED BY: sign provenance told apart from a default — `expr_self_signed`'s catch-all is not a fact for calls, non-whitelisted system functions, or constants folded from them |
+| 3b | BLOCKED (field-key map) | class-property ascending/negative bound normalisation has nowhere to be recorded | class fields are not nets (`ClassField` → heap slot) and the map is keyed by NetId | BLOCKED BY: a field-key normalisation map · 1 oracle (iverilog dies on an assertion) and the minimal repro is loud for another reason (`C c = new();`) |
+| 5 | LOUD | `s = string'(24'h610062);` → iverilog `len=2` and `s=="ab"`, vita E2002 | parser | belongs to §3, not §2 · the NUL-stripping shape does not parse in vita, so that axis needs another repro |
+| 7 | BLOCKED (one ordering key) | a parent `initial` READING a child net at t0 sees X: `initial s = 8'hEE` in a child, read as `r = u1.s;` → oracles `ee`, vita `xx` (2-oracle). A fork arm in the child is a 3-way SPLIT (iverilog `ee` / verilator `00` / vita `xx`). An output PORT bind `child u1(.o(w))` and `assign w = u1.s;` both read `ee` at the parent's t0 immediate read, as do a constant driver, a parameter driver and a two-level chain — the only diverging spelling is the one whose value comes from the child's `initial`, i.e. process order; verilator answers `ee` there only because it constant-hoists a SINGLE-statement `initial s = <const>;`, and a second statement in that initial moves verilator to vita's answer, so that cell is an ORACLE SPLIT on order. `final` blocks run in ProcId order (`final_procs` is a `BTreeSet<ProcId>`), so any process reordering leaves vita disagreeing with itself | the rank machinery is complete (`with_rank_scope`, `init_ranks`, `RANK_MOD_INSTANCE(1) < RANK_MOD_OWN(2)`) and is applied only to declaration-initialiser processes. The root is that vita has ONE ordering key (`Activity.tie`) where the oracles use a DIFFERENT order per RESUMPTION KIND | BLOCKED BY: a per-resumption-kind ordering model. A single `proc_order` permutation seeded into the ordering key cannot express it — iverilog answers the kinds differently in ONE run of ONE design (`initial` child-first, `always_comb` t0 PARENT-first, edge PARENT-first, `#d` delay child-first, `wait` PARENT-first, fork-arm wake PARENT-first): keying only the t0 arm breaks the delay wheel, keying `Activity.tie` breaks the edge and `wait` wakes (`aa` for `cc`, a VALUE), and re-keying those two breaks `always_comb`'s t0 arm and the fork-arm wake, with both oracles against vita every time. Closes the headline plus 5 more 2-oracle cells. Costs a format bump (`proc_order` on the `StagedExtraSidecars` tail; `sim_ir::Process` is untouched) · corpus demand zero |
+| 10 | OPEN | the RANGE BOUND consumer: `wire [K[31:24]-1:0] n;` on a `parameter [135:8] K` 128 bits wide is ONE BIT at exit 0 where both oracles declare 221, and the ≤64-bit twin of the same text is correct. Bare `K[31:24]`, `pk::K[31:24]`, `K[31 -: 8]`, `K[24]` and a `$bits`-sized net are all three-way identical | `const_range_bound_fold` has no wide-bit-domain fallback — the i64 select fold declines a >64-bit base (`select_base_at_declared` returns `None` for `dwidth > 64`) and both of the bound's fallbacks are i64. `$clog2` of the SAME text answers 8, so the value exists one funnel over | BLOCKED BY: `selfdet_bits_unsigned` declines the select too (only `selfdet_clog2_wide` answers it), so routing the bound at the wide domain buys nothing until that resolver reads it — an unguarded fallback moves 0 of 18 cells |
+| 14 | WALL (provenance) | `localparam logic signed [7:0] NM = -8'sd2; localparam logic [63:0] X = NM ^ 64'h0;` is `fffffffffffffffe` against the oracles' `00000000000000fe`; the same expression over a FUNCTION LOCAL folds `00…fe`. The same routing also fixes `localparam logic [7:0] M = (P + 8'd100) % 8'd7` (P=200: 6 against 2), `pk::PA ^ 64'h0`, `int S = (D - C) / 2` (2147483641), the generate-scope `time NM` shadow (2c for 12c), and the 65-bit-leaf `/` and `%` | a module-scope initializer folds through the width-UNLIMITED `const_eval_in_scope` | route a DECLARED-width/sign target through `eval_const_assign`; the gate must demand provenance of every LEAF (`param_meta` is a DEFAULT for an untyped parameter and ABSENT for a `time` one), decline above the i64 lane, refuse an unsized FILL operand, answer THREE-valued in the scope walk, and NOT route the PACKAGE binder (row 26). BLOCKED BY: a width-aware walk correct on its own terms — the §11.4.10 shift count (`16'hFF01 << 3'b101` is 0; 30 correct→wrong plus 36 loud→wrong, reachable through a constant FUNCTION, so it is its own row and closes first) and an i64 bound that is not on the TARGET only (83 cells) |
+| 15 | BLOCKED (2-state field) | an OVERRIDE carrying a sized x/z literal loses the unknown plane: `#(.K(8'b1010_010x))` onto `parameter logic [7:0] K` binds `10100100` at exit 0 where the oracles keep the x; `8'bzzzzz1z0` binds `11111110`. Five cells, every channel | `params.rs`'s i64-lane test reads only VALUE bits (`bp_get(..).0`); the sibling `fill` arm declines with `fill_is_unknown` | a `bp_any_unknown` test alone turns 76 CORRECT cells loud, because a 2-STATE declaration converts x and z to 0. BLOCKED BY: recording the parameter's 2-state-ness (`hdl-parser/src/params.rs` computes `var_kind` and drops it; an `hdl-ast` field plus a SchemaHash re-pin, parser-only), which also closes z→0 (1 cell today) · the separate headline (an unknown plane in the narrow store, 22 loud cells, ~40 sites, demand 0) stacks on row 14; above bit 64 what survives is z, not x |
+| 16 | ORACLE-SPLIT | 12 override cells: 5 diverge from iverilog, but verilator sides with VITA on 4 (`-64'd1`, `<ones> + 64'd1`, `<ones> << 4`) and `~32'd0` is a 3-way split | that is row 17 | a fix would "correct" one side of a live split, so the context is not threaded through `override_bits` · the only 2-oracle sub-case is operands already ≥ the target width: `#(.K(~128'd0))` is vita `00…00ffffffffffffffff` against all-ones in both oracles |
+| 17 | ORACLE-SPLIT | `leaf #(.K(32'd0 - 32'd1))` on `parameter logic [127:0] K`: iverilog `ffff…ffff`, verilator `0000…0000ffffffff`, vita `0000000000000000ffffffff_ffffffff` (zero-extending from 64, the i64 lane's width) | — | do not chase: vita matches NEITHER and §6.20.2 does not settle it · the neighbours are not split (`64'hFFFF_FFFF_FFFF_FFFF + 64'd0` zero-extends in all three, `-(64'sd1)` sign-extends in all three) |
+| 19 | PERF | a 2-D, 3-D or packed element as a continuous-assign LHS costs ~10× on BOTH backends; against 50.0 ns for a 1-D unpacked element: 2-D `arr[0:15][0:3]` 546.7 ns native / 675.8 vm, 3-D 829.2 / 967.5, packed `logic [63:0][31:0]` 410.8 / 441.7 | not located; the native/vm ratio is 0.81–0.93, so it is SHARED PLUMBING | needs its own census; the diagnoses offered so far were refuted on the 1-D axis |
+| 23 | LOUD | `clocking cb; input a_b;` beside `clocking cb_a; input b;` is legal (verilator `R1=17 R2=34`) and vita refuses it with ``net/variable `top.__clk_cb_a_b` redeclared`` at exit 1 | the `__clk_` / `__clkout_` mangling in `sva_clocking.rs:727` and `:657` | correct→loud with verilator as the accept/reject oracle, so it belongs to §3; a new sigil must be taught to the VCD and FST filters · the naming half is a one-token fix (`:745` computes the instance-qualified `alias`, `:750` re-formats it without `fq`; the `[in …]` suffix is `lvalue.rs:179`) |
+| 24 | DO-NOT-START (see row 34) | 24a CLOBBER (silent-wrong, exit 0, verilator oracle): a signal merely DECLARED as a clocking output is destroyed to `x` or frozen — `vita x,171,171,171,171,171` against `verilator 170,171,172,173,174,175`; 4 cells, one across a module boundary · 24b a one-cycle LAG, 4 cells | 24a `init_diag.rs::clocking_commit_plan` (~1202), OUTPUT phase unconditional; the INPUT phase is correct · 24b the §14.16 skew `#0` in Re-NBA, a scheduler-REGION question with no anchor | 24a = a written flag produced at the write site; `out_pairs` grows a third field riding `SimOpts` out-of-band (no format bump) · corpus demand 0 |
+| 25 | WALL (provenance) | `parameter P = 5` with `#(.P(32'hF0F0F0F0))` binds a SIGNED 32-bit −252645136 (`P < 0` is 1, `%0d` negative); `parameter Q = 8'sd1` with `#(.Q(32'hDEADBEEF))` is `ef` with `$bits(Q)` 8 — the oracles bind the override's own type (§6.20.2) | `params.rs::param_decl_width_opt`'s literal arm answers the DEFAULT's literal type even when `default_binds == false`; `ResolvedOverride` carries `signed` but no `width`. The operator twin of the same wall: `parameter HE = ~8'h5A` with `#(.HE(~4'h5))` binds 32 bits where verilator binds 4 — the default lane sizes by the operator and the override lane does not | a producer patch is kept out of tree (`scratchpad/r29/row25/producer.patch`, 317 lines and 5 tests; it fixes 7,982 of 122,774 cells and serv's `\|WITH_CSR`) but each shape of it opens a NEW correct→silent edge (`defparam` with a NAME rhs, a `time` parameter with a DECIMAL default, `$signed(64'h…)` resized down); the size-cast slice ships `param_type_guessed`, which DECLINES every guessed type. BLOCKED BY: a parent-side resolver that DECLINES on meta-less names and answers `$signed`/`$unsigned` by operand, carried through every channel including `defparam`; a fill onto an untyped parameter binds `(1, false)` |
+| 26 | WALL (provenance) | routing the PACKAGE binder through the width-aware fold is a net loss: over 8,748 package-consumer designs it is 1,233 correct→silent-wrong against 714 fixed, plus one correct→loud | it makes `pk::X`'s stored value canonical (i64 −2 for `logic signed [7:0] PA = 8'hFE`) while every consumer still folds through the width-unlimited walk and sign-extends it | the prerequisite is on the CONSUMER side: `every_name_has_a_declared_width` does not enumerate `ExprKind::PkgScoped`, and an imported constant is in no provenance set — closing both turns those 1,233 cells correct · until then the identical text answers `00…fe` in a module and `ff…fe` in a package |
+| 30 | WALL (§11.8.1 sign) | `localparam logic [127:0] C = '1 ^ 1'b0;` is vita `…00000000ffffffff` against 128 ones in both oracles; the same text as `r = …`, `assign c = …` and through a port prints 128 ones. 165 of 264 cells (22 operator forms × {32,33,64,65,96,128} × {`logic`,`logic signed`}), 0 splits, all four binder copies. The band is a property of the operands, not the width: `logic [7:0] A = '1 >> 2` is `ff` against the oracles' `3f`, 82 more cells at widths 1..31 | the wide fold's fill arm plus node-local region sign | the 4-piece shape measures 778 FIXED / 0 new-silent / 0 new-loud over 1,622 cells (`fold_bits_at`'s fill arm folding at `ctx` when `ctx>0` and not x/z; `param_i64_fill_at_declared` ahead of the i64 walk in all four binders; a LOCAL predicate with a `Cast` arm; a `fill_width_survived_the_fold` guard) but it does not stand alone: §11.6.1 evaluates at `max(ctx, every self-determined operand's width)`, so freezing the fill at the LEAF is wrong (150 cells); the ROUTING predicate cannot serve as the guard (104 NEW-LOUD, since a decline at `param_bits_at_declared` is `E3009`); and of 504 loud→value cells 215 are silently wrong on the SIGN axis (`localparam logic [7:0] B = ($signed(4'hF)+1) \| 8'h00;` is `00` against the oracles' `10`, no fill anywhere). BLOCKED BY: §11.8.1 region sign in the wide fold. ACCEPT set = "correct a value, never create one" |
+| 🆕 F | WALL (§11.8.1 sign) | a narrow SIGNED operand is ZERO-extended in an unsigned context: `localparam logic [7:0] A = 8'hFF - (-1'sb1);` is `fe` and `8'hF0 \| (-1'sb1)` is `f1` against the oracles' `00` and `ff`. 24 cells at widths 2..32, both sign declarations, no fill involved | §11.8.2 reinterprets each operand at the EXPRESSION's sign; `const_wide.rs`'s bitwise and arithmetic arms compute `cs = ls && rs` then `resize_bits(.., cs)` for BOTH | the same root as row 30's prerequisite — file the fix once |
+| 🆕 H | BLOCKED (§11.8.1 wall) | ⓐ `(&4'b110x)` and `(\|4'b101x)` clamp to one bit in a bound where both oracles answer 3 or 4; 8 cells (`^` and `~^` are split). The class is wider than reduction — `~&`, `~\|`, `===` and `&&` with a 0 operand are IEEE-definite and all silently become one bit (both oracles 4, 3, 4, 3) · ⓑ the `\|P` bound of an ascending `parameter [0:3] P` or a lo≠0 `parameter [7:4] P` is loud (both oracles 4) · ⓒ `localparam E = 4'hF \| 4'h0; wire [(&E)+2:0]` is loud (both oracles 4) · ⓓ `localparam R = ~(\|4'b1010);` is deliberately loud (both oracles `0`, `$bits` 1) · ⓔ a reduction after a local assignment in a constant-function body (`t = a[5:0]; return (\|t)+2;`) is loud (oracle 3) | ⓐ `fold_self_bits`'s reduction arm declines on a single unknown (`bp_any_unknown`) · ⓑ `narrow_param_bits` rejects `lo != 0 \|\| ascending` · ⓔ the body local's width is not in `envw` | ⓐ the fix site is the wide fold's ACCEPT SET, so it falls under the §5.2 do-not-start line · ⓑ a reduction-only, layout-independent resolver · ⓒ WALL(provenance) |
+| 🆕 I | OPEN | ⓐ another process's read in the same delta: `initial #1 v = 8'hA5;` declared before `initial #1 $display(c);` — oracles `a5`, vita `00`. Held on purpose · ⓒ residue on the same axis, also held: a PROCEDURAL index, a DELAYED constant driver and a gate-driven one; `assign c = r + 8'd0;` with no array at all reproduces them · ⓔ `bit [7:0] c; assign c = v;` is excluded and unexercised (vita refuses `bit` copy destinations, `E-ELAB-LVALUE-KIND`) · ⓖ a callee body is ONE set of expressions, so a root is marked only when EVERY calling process writes it (3 of 4 cells); a `logic [15:0]` destination taking a sign-extending copy of a `signed [7:0]` source is `xxxx` in vita where BOTH oracles print `ffa5` (pre-existing 2-oracle). Recorded splits, not chased: the RUNTIME index `m[k]` (iverilog reads `xx` exactly like vita and only verilator reads `a5`; iverilog answers stale on an INDEX change and fresh on a SOURCE change in the same design); an UNSIGNED narrow net index into a NEGATIVE-base array (iverilog's answer depends on the ARRAY'S SIZE for a fixed index pattern and fixed `lo` — threshold 4 for `m[-2:1]`, 5 for `m[-6:1]` and for `m[-2:9]` — which no reading of §7.4.6 licenses, and verilator has no `x` for an out-of-range unpacked read at all, so its `a5` is masking; `array_word_index_domain.rs` records this, the SIGNED declaration is correct at HEAD, and vita's own `a5` at width ≥32 is the inconsistent half, a 32-bit `Add` in `dim_coord` overflowing to coordinate 0); a 2-D array word `reg [7:0] m[0:1][0:1]; assign c = m[0][1]` (iverilog `a5` / verilator `00`); `m[1][2]`; `m[32'hFFFFFFFE]` and `m[64'd0 - 64'd2]` (vita E4002 / W4029); a GENVAR index `assign cw[g] = m[g-2]` (iverilog `a5 5a`); an all-`z` driver beside a partial or delayed driver (E3001); a `force`d copy after `release`; an array-WORD-target copy `assign c[0] = v[0]` (iverilog `a5` / verilator `00`); a zero-extending, truncating or concat copy; a partial slice `v[3:0]` (iverilog `x` / verilator `5`); `v[7 -: 8]` (iverilog `0` / verilator `4294967295`, vita = verilator); an `always_comb` whose only read is inside a called task (vita and verilator `a5`, iverilog `xx` with "no sensitivities") | ⓐ a §5.4.1 race kept on the settle's value ON PURPOSE (a store-side forward breaks picorv32, UDP and keccak parity) · ⓕ the interpreter and VM take the extension sign from the slot (255), the native path from the node · ⓖ callee reads are not in the sensitivity derivation | ⓖ the copy's declared sign is re-stamped on the aliased read in `eval_core` and `read_scalar_words`; a mismatch ANYWHERE in a chain disables the tail below it |
+| 🆕 J | LOUD | ⓓ `{'1, 1'b0}` is illegal (§11.4.12) and the oracles are lenient (2) where vita is loud; keep · ⓔ `v['1]` is split (iverilog 0, verilator 1) and vita follows iverilog · ⓕ the widths of `'1 * 2'd2`, `'1 + 1'b1` and `4'd8 - '1` are verilator 2/1/4 and iverilog 3/2/5 with values agreeing; vita follows verilator · ⓖ `localparam U = '1; localparam Y = U + 4'd1;` gives `$bits(Y)` 32 against the oracles' 4/5 | ⓖ is fill-INDEPENDENT (`localparam U = 1;` shows the same 32) — it is the row-14 value-inferred tail (`min_signed_bits(v).max(32)`) | ⓐ (a fill as LEFT operand under a TYPED declaration, 11 cells) is row 30 · ⓖ WALL(provenance) |
+| 🆕 M | LOUD | ⓐ `m #(.P('1 ^ 1'b0)) u();` onto `parameter logic [39:0] P` is 32 bits in vita (`00ffffffff`), target-sized in iverilog (`ffffffffff`) and ONE bit in verilator (`0000000001`); 40 pre-existing plus 9 split cells · ⓑ `(\|'1)` and `{('1 ^ 1'b0)}` stay loud in a constant · ⓔ `cover property (… (a \|-> b))` is loud (`cover.rs` has its own sequence-only grammar) · ⓕ verilator prints NO failure for `a \|-> b and b \|-> a` where §16.12.8 fails at the first failing operand (vita t=35), so it is not an oracle for property-level `and` | ⓐ the parent folds the override before the target's width is known (`resolve_param_overrides` → `ovr_by_name`) | ⓐ BLOCKED BY: a target-typed override evaluation (row 17's axis) · residue: a select of an ascending or value-sized hierarchical parameter stays loud; `$bits` of a hierarchical string is loud (split 1/16); an override CARRYING past the operands' top bit (`~`, `+`, `<<`, unary minus, `?:`) stays loud; a decimal or `-(64'sd1)` override of an untyped 128-bit-default parameter keeps 128 bits (row 25's i64 half) |
+| 🆕 N | OPEN | VCD `$scope` names a generate block `gi[0]` / `genblk1[0]` where iverilog writes `begin gi` / `begin genblk1`; a task declared in an unnamed block is a split (iverilog `top.genblk1.t`, verilator `top.genblk1.genblk1.t`, vita loud); a user block named `genblk1` beside an implicit one is not disambiguated (iverilog `genblk01`, verilator refuses); `%m` in a CONCURRENT `assert property` action block omits the assertion label (`top.nb` against verilator's `top.nb.ap`; iverilog refuses concurrent assertions, so this is 1-oracle) — the label dies in the parser, since `hdl_ast::Stmt::ConcurrentAssert` has no `label` field and adding one to that frozen SchemaHash type flips the root hash (an IMMEDIATE labelled assert already carries its label, which is verilator's side of a live split); `gi[0].x` on a conditional scope is accepted where the oracles reject it; a class method called from a generate-block process or a frame names its INSTANCE (a label inside the method is kept, matching verilator; iverilog drops it, a split); a `$unit` class prints `top.C.show` (split); a package class, and a class method calling a module task or `$strobe` in a class, are loud; a parameterized class prints `C__8` against verilator's `C__N8`; an ELABORATE-time diagnostic inside a class spells `[in $class$C$m]`; a package function is `top.pf` against iverilog `p::pf` and verilator `p.pf` (split); `--hier-tree` and `--inst-paths` list no generate scopes | the class table is global and its declaring INSTANCE is unknown, so the CALLING scope is prefixed | beside it (loud): an instance ARRAY of a PORTLESS module (`ch w[1:0]()`) is refused with "child has non-ANSI ports", a false reason on a valid design |
+| 🆕 O | OPEN | `lookup_net_scoped` — the `symbols`-only walk — has ~90 callers, and any reader that resolves a bare name without asking `bare_ident_route` is this class. Recorded splits, unmoved: an ENUM LABEL shadowing an outer array reads the array in vita and iverilog and the label in verilator; `foreach` over a shadowed name is `i=0` in vita and iverilog and `i=31` in verilator | the guarded readers ask `bare_ident_route` the way the lowering does (`bare_name_binds_constant`) | a new instance is the same one-line guard; the splits are recorded, not chased · 2-oracle for the class, and the two recorded cases above are oracle splits |
+| 🆕 Q | BLOCKED | a `localparam` declared in a procedural block is a parse error (`E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'localparam'`, plus a cascade of follow-on "expected statement" errors) where both oracles accept it. The class is wider than a plain named `begin : g`: an UNNAMED block, an `always_comb`, a subroutine body, the `parameter` spelling (§6.20.1 makes it a localparam) and use as a RANGE BOUND of a later block-local declaration (`localparam W = 7; logic [W-1:0] v;` — both oracles `v=127`) are the same refusal, 7 of 7 two-oracle | there is no BLOCK-SCOPED CONSTANT binding in the IR. The parser's `const_locals` is a parse-time i64 fold table read only by `try_const_index`, and the elaborator's `$blk$<span.lo>` scoping is for block-local NETS, which are not constants | BLOCKED BY: a block-scoped constant binding. A bare-name HOIST of the declaration into the enclosing container's item queue makes 6 cells correct and 5 NEW silent-wrongs, because the hoisted name has no scope: an outer literal localparam, an outer non-literal one and an outer HEADER parameter each read the block's value after the block (`out=7`, oracles `3`); two sibling blocks declaring the same name collapse to the LAST value (`a=9 b=9`, oracles `a=7 b=9`); a read AFTER the block answers 7 where both oracles reject the name. Only the outer-NET cell is loud. A parser-side rename is not cheaper — there is no single `ExprKind::Ident` funnel (52 construction sites) · 2-oracle |
+| 🆕 L | LOUD | ⓑ `$bits` of a string parameter is 16 in vita and iverilog (§6.16) and 64 in verilator: vita follows the LRM, keep · ⓒ `localparam real Q = 1.5; localparam W = Q * 2;` is E3009 against the oracles' 3.0 · ⓓ a 2-state struct's `'{…}` in a constant is loud (`w'(longint'(e))` has no const-fold arm); a 4-state struct's folds · ⓔ a fill inside a `'{…}` in a constant is loud · ⓕ a string or `real` package parameter through `import p::*` is E3010 / E3009 (the scoped `p::S` works); `$bits` of a WILDCARD-IMPORTED real parameter is 32 against verilator's 64, the same name-lookup family · ⓖ `m #(.X('{1'b0, 5'd7}))` of a struct-typed header parameter is E3009 against verilator's 21 · ⓗ `p::v.a` is E2002 (the struct desugar keys on the bare first segment) · ⓙ `gather_local_decl_names` omits functions, tasks, genvars, instance names, typedef names, array parameters and generate-block contents, and a package importing a package passes an EMPTY set · ⓚ an `import` inside a generate BLOCK is loud E3009 unless redundant; per-scope application is the remaining work · ⓛ `union packed` containing an anonymous `struct packed` fails to parse, and `import` or `localparam` in a function body is loud · ⓠ `logic [1:0] i; F[i*4+3:i*4]` gives `0000` and `F[i*4 +: 0]` gives `0` in silence (verilator refuses; illegal SV) · ⓡ a block-local variable shadowing a wildcard-imported package VARIABLE is read as the local AFTER its block (`SX` → `11`, oracles `a5`) · ⓢ a header parameter redeclared in the body answers the body declaration · ⓣ `c #(.A(x), .A(y)) u();` is accepted, last wins · ⓤ an x/z WRITE into a 2-state member of a 4-state packed struct keeps the x/z — `o.q = 4'bx1z0;` is vita `xx1z0x` against iverilog `x0100x` (§7.2.1); the parser knows the member is 2-state (`StructFieldLayout.5`) and the write path does not squash · ⓦ loud residue: a package function whose body reads a package constant outside the i64 interpreter (real, string, array, enum); an INTERFACE importing a package function into a range bound (`apply_import_const_funcs` is wired for modules and packages only; both oracles 8); an `import` inside a generate block (unapplied, loud twice) · ⓧ a compilation-unit `import` after the module still applies, and a package constant used before its declaration folds (iverilog rejects both) · ⓨ the declared-range gate's span dedup reports a generate loop's bad bound once where iverilog reports it three times · ⓩ three separate roots on the negative axis: a negative select BOUND (`A[0:-2]`) false-louds because `const_bound_u32` folds it unsigned (`-2` reads `0xFFFF_FFFE`) and then trips the direction check, with the message naming the wrong fact (both oracles `p=7`); a >64-bit negative-LSB base is still positional (`logic [67:-4] A; A[7:0]` is `34` against both oracles' `33` — `const_wide.rs` reads `param_range` directly and `select_base_at_declared` refuses `dwidth > 64`); an explicit `[m:l]` PART select of a net or variable declared with a negative low bound is loud by its own gate (`packed.rs`; both oracles answer, and the message understates itself, since both INDEXED spellings and every bit-select already work on that net) · loud beside it: runtime `$size(P)` of a scalar parameter, a multi-packed ELEMENT array parameter, a >64-bit base's select (`logic [191:64] A; A[127:64]`, both oracles fold), and a whole-NAME read of a shifted or ascending parameter in a >64-bit concatenation (`logic [11:4] A; logic [79:0] L = {A, 72'h0}`; the zero-LSB twin folds, and `narrow_param_bits` declines the NAME, which is what keeps the structural select arm sound) · (aa) 324-cell residue: an UNTYPED `localparam G = C + D` stays i64 (iverilog 16 / verilator 0, split); enum labels are the same split (vita = verilator); `$clog2(C+D)` in an untyped declaration folds the 32-bit sum where the oracles fold the 4-bit 0; a `byte` operand in a bound (`[Y+Y:0]`, `Y = 100`) reads the LRM and iverilog value 57 where verilator reads 201 | ⓩ three roots: the unsigned select-bound fold, the wide lane's own `param_range` read, and the net lane's part-select gate | ⓩ each residue is its own slice, and demand is ZERO (no negative packed declaration in the 1,462 corpus RTL files), so they rank below any cell the corpus exercises · (aa) the elaborate VALUE lane is row 14's wall · also recorded: the `endpackage` export of `packed_md_params` has no `local_decl_names` filter, and `foreach` over a multi-dim packed formal is loud with a misleading enum-method diagnostic |
+| 31 | PERF | all 126 pure-family cells are three-way correct in all nine positions; `assign p1 = $signed(a)*$signed(b)` measures 603 evaluations against 201 for `a*b` (3.0×), and `a >> $clog2(8)` the same; demand is 22 continuous assigns / 29 occurrences in ibex and verilog-ethernet | — | do not start as a §2 item; it is filed at §5.2 rank 4 · the STATE half is do-not-chase: of 32 wrong cells only 6 are arbitrable (26 have both oracles constant but disagreeing, iverilog `z` against verilator `0`; 4 split on constancy) and declining makes the one reachable hazard WORSE (2,406,546 settle spins) |
+| 32 | LOUD | real, 6 cells, but the run ends with `F4004` and exit 1; the residue is one extra `$display` line | `frame_eval.rs::run_frame_call_with`, one funnel | belongs to the §3 tail, ~10–20 product lines · vita's own TASK path already bails without committing the caller's lvalue and matches iverilog; verilator is disqualified because it prints after a TOP-LEVEL `$finish` too |
+| 34 | DO-NOT-START | rows 23 and 24 (clocking): 36 silent-wrong cells and startable, still excluded — 1-oracle only (iverilog 13 cannot parse `clocking`) and demand is zero twice over (no corpus row; all 16 `endclocking` files sit inside interfaces, which vita refuses through an unrelated gate) | — | worse than the rows record: the signal is destroyed PERMANENTLY, and with a 2-state declaration it clobbers to `0,0,0,…`, a plausible value with no `x` anywhere |
 
 ### Size cast / signedness
 
-- 너비 프로브가 진단을 두 번 낸다(값은 정확): 좁힘 판정용 lowering 이 진단과 사이드테이블 등록을 전부 실행한다 — `8'(a >> pk::nope)` E3009 ×2, `2'({u1.nope} % 4)` E3010 ×2, 죽은 노드가 직렬화돼 깊이 32 중첩에서 `.velab` 5.7×(5884 B vs 1035 B). WALL(AST self-width).
-- `w = ir_bits_of(plain)` 은 노드의 폭이라 캐스트 피연산자 전체의 self 폭을 못 본다 — `2'((s8>>u3)*s16)` vita `11` / 두 오라클 `01`, 11칸.
-- 폭을 모를 때는 어느 기본값도 옳지 않다(시도·되돌림): `2'(u1.mem[0] % 4)`·`2'(u1.k[7:0] % 4)` vita `xx` / iverilog `11`, `2'(s % 4)`(`string s="A"`) `xx` / hand-IEEE `01`. `ir_bits_of` 가 `None` 인 곳 = 지연-hier 읽기 · `string` 넷 · string 을 내는 `SysFunc` 가족. `unwrap_or(u32::MAX)` 는 더 나쁘다(`4'('0 / {u1.k})` `0000` → `xxxx` · `.velab` 22.4× · RSS 10 MB → 1.1 GB · 회귀 41칸) ⇒ WALL(AST self-width).
-- 4-state 좁힘이 x 를 떨어뜨린다: `a=8'bxxxx_0011` 에서 `2'(a+1)`·`2'(a*2)`·`2'(-a)`·`2'(a-1)` 이 전부 known / iverilog `xx`(`<<`·`&` 는 4-state 에서도 폐쇄, 4,116칸 발산 0).
-- A size cast over a FUNCTION-CALL leaf evaluates at self width (2-oracle): `ast_ctx_signed` answers `None` for a call, so `64'(f(1) - 40)` is `00000000ffffffd0` for the oracles' `ffffffffffffffd0`, 16 of 720 cells. Fix = give `expr_self_signed`'s `_ => false` (21 callers) the declared return type. Residue: a DYNAMIC/queue/associative element's sign is invisible to the classifier; a HIERARCHICAL or class-member operand keeps the pre-slice classifier; a `time` constant from a guessed parameter declines.
-- 크기 캐스트의 real 이 fill 과 만나면 조용하다(오라클 ✓): 반대편이 fill ∧ real 원천이 평범한 real 넷이 아님(`parameter real`·real 리터럴·real 반환·`$signed(r)`·`$realtime`·`$sqrt(r)`) ∧ 연산자가 real 비전파(`& | ^ << >> >>> %`) 면 퍼널에 안 들어간다 — 288칸 중 84칸(`4'(RP ^ '0)`·`4'($sqrt(r) & '1)` exit 0, iverilog 는 전부 거부). 자물쇠 둘(`ast_ctx_signed` = `None`, `expr_is_real` 의 `Binary` 팔에 비트/시프트/`%` 없음) ⇒ CLASS · WALL(AST self-width).
-- `$signed(real)`/`$unsigned(real)` 이 위치 의존적이다: 캐스트 안 15자리는 거부, 7자리는 exit 0(`$signed(r)*2` → 15 · `%0d`/`%0f` · int/real 대입); iverilog 는 전부 거부. 곁: 2인자 `$signed(r, u)` 를 조용히 받는다.
-- prim cast 가 타깃 폭을 문맥결정 피연산자에 안 내린다(오라클 ✓): `a=8'hFF` 에서 `int'(a*a)` `00000001` / iverilog `0000fe01`, `shortint'(a*a)` `00000001` / `fffffe01`. `lower_prim_cast` 는 `lower_ctx_or_plain`(fill 만); 그대로 배선하면 `refuse_real_size_operand` 가 `int'(r)` 를 loud 로 만든다 ⇒ WALL(AST self-width).
-- 캐스트의 문맥폭이 안쪽 자기결정 노드에서 멈춘다(두 오라클 ✓): `64'(-16'(u16))` `000000000000fffb` / `fffffffffffffffb`, `8'(s4 * 4'(s8))` `…f9` / `…09`, `16'(s8 + 4'(u8))` `000c` / `010c`; 무중첩 `64'(-u16)` 정상 ⇒ 트리거는 중첩 캐스트·`$signed`/`$unsigned` 노드. 10,368칸 중 143칸.
-- 넓히는 캐스트가 불순한 피연산자의 부호 수정을 못 받는다: `extend_to` 의 부호 fill 이 피연산자를 두 번 부르므로 `16'(f())`·`int'(f())` 는 무부호 답 유지(오라클 `fffd`/`fffffffd`) ⇒ 한 번만 부르는 4-state 보존 확장 또는 callee 순수성 술어.
-- 캐스트/인라인의 확장 부호가 미러에서 온다 — signed 클래스 필드는 순수·반복 가능한데도 못 받는다: `function signed [63:0] fw; fw = c.sf;`(`8'hAB`) `00…ab` / hand-IEEE `ff…ab`.
-- 캐스트가 원소의 부호를 청구하지 못하는 나머지 철자들: `unpacked_elem_signed` 는 base 가 단일 세그먼트 ident 일 때만 청구 — 전부 `40'(x[0]*1)` 에서 vita `00000000fd` / iverilog `fffffffffd`: 다차원 `g[i][j]` · `pk::pm[0]` · 프레임 로컬 배열 · dyn/queue 원소 · 인터페이스 배열 원소. 패키지 철자가 급하다 — `arrays.rs` 는 `pkg::arr[i]` arm 을 이미 갖고 있어 분류기가 자기 lowering 리졸버와 어긋나 있고 한 설계에서 `pm[0]` 정답 · `pk::pm[0]` 오답. 곁: `16'(u1.sarr[0])` `000000000000fff9` / iverilog `fffffffffffffff9`.
-- A FILL override (`'1`/`'0`, `#()` or `-G`) binds at the default's width; both oracles bind ONE bit: `#(.P('1))` onto `parameter P = 5` is `-1 bits=32` in vita and `1 bits=1` in both oracles (§6.20.2). Fix = a fill onto an UNTYPED parameter binds `(1, false)`.
-- fill override 가 타깃 폭이 아니라 32비트로 접히는 자리 셋(오라클 ✓) — `param_decl_width` 가 `None` 인 형태: ⓐ >64비트(`parameter [127:0] K` + `'1` → `0000…ffffffffffffffff`, iverilog 128비트 전부 1; "wide 파라미터 OVERRIDE 는 loud" 불변식의 구멍) ⓑ `time`(`#(.T('1))` 4294967295 / 18446744073709551615) ⓒ untyped(§12.2.2 — `#(.K(64'hDEADBEEF))` −559038737 / 3735928559) ⓓ `real`(`#(.R('1))` 와 `-G R='1` 이 `4294967295.0` / `1.0`). 한 뿌리 = 한 슬라이스; 세 채널(`#()`·`defparam`·`-G`)의 현재 일치를 깨지 마라.
-- A `time` parameter with a DECIMAL default forwards as 32-bit unsigned: `parameter time T = 1 << 40` has no `param_meta`, so `#(.P(T))` types it `(32, unsigned)` via `const_self_width`'s `map_or(32)` and truncates 2^40 to 0; oracles bind 64 bits. Fix = a typed (`time`/`integer`/`int`) declaration records its type as meta even for a non-literal default.
+- The width probe emits its diagnostics twice (values are correct): the lowering used to decide
+  narrowing also runs diagnostics and side-table registration — `8'(a >> pk::nope)` gives E3009 ×2,
+  `2'({u1.nope} % 4)` gives E3010 ×2 — and the dead node is serialized, so a depth-32 nesting is 5.7×
+  the `.velab` (5884 B against 1035 B). WALL(AST self-width).
+- `w = ir_bits_of(plain)` is the NODE's width, so it cannot see the whole cast operand's self width:
+  `2'((s8>>u3)*s16)` is vita `11` against both oracles' `01`, 11 cells.
+- When the width is unknown, no default is right: `2'(u1.mem[0] % 4)` and `2'(u1.k[7:0] % 4)` are
+  `xx` against iverilog's `11`, and `2'(s % 4)` with `string s="A"` is `xx` against hand-IEEE `01`.
+  `ir_bits_of` answers `None` for a deferred hierarchical read, a `string` net, and the `SysFunc`
+  family that produces a string. `unwrap_or(u32::MAX)` is worse (`4'('0 / {u1.k})` `0000` → `xxxx`,
+  `.velab` 22.4×, RSS 10 MB → 1.1 GB, 41 cells regressed). WALL(AST self-width).
+- A 4-state narrowing drops x: with `a=8'bxxxx_0011`, `2'(a+1)`, `2'(a*2)`, `2'(-a)` and `2'(a-1)`
+  are all known where iverilog answers `xx` (`<<` and `&` are closed even in 4-state; 4,116 cells,
+  0 divergent).
+- A size cast over a FUNCTION-CALL leaf evaluates at self width (2-oracle): `ast_ctx_signed` answers
+  `None` for a call, so `64'(f(1) - 40)` is `00000000ffffffd0` against the oracles'
+  `ffffffffffffffd0`, 16 of 720 cells. Fix = give `expr_self_signed`'s `_ => false` (21 callers) the
+  declared return type. Residue: a dynamic, queue or associative element's sign is invisible to the
+  classifier; a HIERARCHICAL or class-member operand keeps the older classifier; a `time` constant
+  from a guessed parameter declines.
+- A real inside a size cast is silent when it meets a fill (oracles agree): if the other side is a
+  fill, the real source is not a plain real net (`parameter real`, a real literal, a real return,
+  `$signed(r)`, `$realtime`, `$sqrt(r)`) and the operator does not propagate real (`&`, `|`, `^`,
+  `<<`, `>>`, `>>>`, `%`), the expression never enters the funnel — 84 of 288 cells
+  (`4'(RP ^ '0)`, `4'($sqrt(r) & '1)` at exit 0; iverilog rejects all of them). Two locks
+  (`ast_ctx_signed` is `None`; `expr_is_real`'s `Binary` arm has no bitwise, shift or `%` case), so
+  this is a CLASS. WALL(AST self-width).
+- `$signed(real)` and `$unsigned(real)` are position-dependent: 15 positions inside a cast are
+  refused and 7 exit 0 (`$signed(r)*2` → 15, `%0d`/`%0f`, int and real assignment); iverilog refuses
+  all of them. Beside it, two-argument `$signed(r, u)` is accepted silently.
+- A prim cast does not push the target width down to a context-determined operand (oracles agree):
+  with `a=8'hFF`, `int'(a*a)` is `00000001` against iverilog's `0000fe01`, and `shortint'(a*a)` is
+  `00000001` against `fffffe01`. `lower_prim_cast` uses `lower_ctx_or_plain` (fill only); wiring it
+  directly makes `refuse_real_size_operand` turn `int'(r)` loud. WALL(AST self-width).
+- A cast's context width stops at an inner self-determined node (both oracles agree):
+  `64'(-16'(u16))` is `000000000000fffb` against `fffffffffffffffb`, `8'(s4 * 4'(s8))` is `…f9`
+  against `…09`, `16'(s8 + 4'(u8))` is `000c` against `010c`; un-nested `64'(-u16)` is correct, so
+  the trigger is a nested cast or a `$signed`/`$unsigned` node. 143 of 10,368 cells.
+- A widening cast cannot take an impure operand's sign correction: `extend_to`'s sign fill names the
+  operand twice, so `16'(f())` and `int'(f())` keep the unsigned answer (oracles `fffd` /
+  `fffffffd`). Fix = a 4-state-preserving extension that names it once, or a callee-purity predicate.
+- The extension sign of a cast or inline comes from the mirror, so a signed class field cannot
+  supply it even though it is pure and repeatable: `function signed [63:0] fw; fw = c.sf;` with
+  `8'hAB` gives `00…ab` against hand-IEEE `ff…ab`.
+- Spellings where a cast cannot claim an element's sign: `unpacked_elem_signed` claims it only when
+  the base is a single-segment ident, so `40'(x[0]*1)` is vita `00000000fd` against iverilog's
+  `fffffffffd` for a multi-dimensional `g[i][j]`, `pk::pm[0]`, a frame-local array, a dynamic or
+  queue element, and an interface-array element. The package spelling is the urgent one — `arrays.rs`
+  already has a `pkg::arr[i]` arm, so the classifier disagrees with its own lowering resolver and one
+  design answers `pm[0]` correctly and `pk::pm[0]` wrongly. Beside it, `16'(u1.sarr[0])` is
+  `000000000000fff9` against iverilog's `fffffffffffffff9`.
+- A FILL override (`'1` / `'0`, through `#()` or `-G`) binds at the default's width where both
+  oracles bind ONE bit: `#(.P('1))` onto `parameter P = 5` is `-1 bits=32` in vita and `1 bits=1` in
+  both oracles (§6.20.2). Fix = a fill onto an UNTYPED parameter binds `(1, false)`.
+- A fill override folds at 32 bits instead of the target width in four shapes, all of them where
+  `param_decl_width` is `None` (oracles agree): ⓐ >64 bits (`parameter [127:0] K` with `'1` gives
+  `0000…ffffffffffffffff` against iverilog's 128 ones — a hole in the "a wide parameter OVERRIDE is
+  loud" invariant); ⓑ `time` (`#(.T('1))` gives 4294967295 against 18446744073709551615); ⓒ untyped
+  (§12.2.2 — `#(.K(64'hDEADBEEF))` gives −559038737 against 3735928559); ⓓ `real` (`#(.R('1))` and
+  `-G R='1` give `4294967295.0` against `1.0`). One root, one slice; do not break the current
+  agreement of the three channels (`#()`, `defparam`, `-G`).
+- A `time` parameter with a DECIMAL default forwards as 32-bit unsigned: `parameter time T = 1 << 40`
+  has no `param_meta`, so `#(.P(T))` types it `(32, unsigned)` through `const_self_width`'s
+  `map_or(32)` and truncates 2^40 to 0 where the oracles bind 64 bits. Fix = a typed (`time`,
+  `integer`, `int`) declaration records its type as meta even for a non-literal default.
 
 ### Constant domain (i64)
 
-- i64 상수 도메인이 오버플로에서 거절한다 — 언어는 문맥 폭에서 wrap 한다(CLASS · 2-오라클 합치): `3037000500 * 3037000500` 두 오라클 145474192 / vita loud · `64'h7FFF… + 64'd1` 0 / loud · `3 ** 40` 689956897 / loud. 문맥 폭 없이 모듈러로 접지 마라(mod 2^64 는 ≤64비트 문맥에서만 옳고 `localparam [127:0] P = 3 ** 41` 이 이미 잘린 값을 zero-extend). 선행조건 = 폭-인식 모듈 스코프 fold; vita 런타임은 전부 정확하다.
-- 64비트 상수의 부호 없는 값이 i64 도메인에서 음수로 읽힌다(2-오라클 합치): `localparam L = (64'hFFFFFFFF00000000 > 0) ? 111 : 222;` vita 222 / 두 오라클 111(`parameter [63:0] BIG` 철자도 같다). 뿌리 = `const_eval_i64_lit` 의 64비트 재해석 arm(range 검사가 비교 위치엔 없다); 닫히면 `a_placement_that_does_not_fit_the_i64_domain_declines` 도 연다.
-- 폭이 정확히 64 인 비교는 조용히 틀린다(2-오라클 합치): `((64'd1 - 64'd2) > 64'd0)` 두 오라클 1 / vita 0 — `masking = ctx_w > 0 && ctx_w < 64` 의 off-by-one.
-- module-scope `localparam` 의 `/`·`%`·`>>>` 는 선언 폭이 있어도 부호를 잃는다: `% 64'd10` 18446744073709551615(ivl 5) · `/ 64'd10` 0(ivl 1844674407370955161) · `>>> 4` 18446744073709551615(ivl 1152921504606846975); `>>` 는 정확 ⇒ 표 14 와 한 항목, 따로 착수하지 마라.
-- >64비트는 의도적 decline(`w == 64` 만 unsigned): 두 방향이 서로 반대로 틀린다 — `(64'hFFFF…FFFF + 65'd1) > 64'hFFFF…FFFF` 는 signed 읽기가, `((65'd1-65'd2) > 65'd0)` 은 unsigned 읽기가 맞다(오라클 각 1) ⇒ 추측 금지. 핀 = `const_unsigned_at_sixty_four.rs::above_sixty_four_bits_keeps_the_pre_slice_answer`.
-- `*` 의 64비트 unsigned 오버플로는 loud(`64'h8000…0000 * 64'd2` 두 오라클 0 / vita 거부, `checked_mul`). 문맥 폭이 정확히 64일 때만 wrap.
-- untyped `localparam` 의 거대 `**` 는 iverilog 가 행(hang) 한다(오라클 부재): `localparam L = 3 ** (64'd0 - 64'd8);` 10분 100% CPU ⇒ verilator 단독 판정.
-- placement/캐스트 fold 잔여(honest-loud): carry 연산이 든 concat(`{4'd2,(4'd1+4'd1)}` iverilog 34) · concat 안의 x/z · prim/signing 캐스트(`int'(7)` iverilog 7) · 지역변수에서 온 replication count. carry-free folder 확장 금지 — 해석기 자신의 폭-인식 걷기로 라우팅.
-- wrap 하는 SIZE 의 const-도메인 셀은 decline(loud E3009 · iverilog 1): `const_eval_cast` 의 절단 fold 는 무제한 operand fold 위에서 unsound(`4'((4'd8+4'd8)/4'd3)` SV 0 vs 절단 5). 곁: real-반환 const fn 본문 폭(`f = 4'd15+4'd1` → 16.0, self-det 0.0 이 정답). WALL(AST self-width).
-- decl-init 호출 사슬이 깊이 캡 64 에 걸린다(correct→loud): 상수함수 70개 사슬이 iverilog 71 / PRE 71 / POST loud — 대안(미구현) = 실행 중인 함수로 재진입할 때만 한 레벨 과금.
-- 4-state 지역변수의 무초기화 기본값이 0 이다: `integer x; g = x + 1;` vita 1 / iverilog `x`(2-state `int x;` 는 정답).
-- packed 차원 곱이 u32 를 넘으면 패닉(진단 없음): `bit [65535:0][65535:0] tt;` 가 `attempt to multiply with overflow` — 넷 할당 자리.
-- 선언 폭 모델이 셋인데 하나만 packed 를 본다: `const_decl_wsign`(곱) · `const_bound.rs::decl_is_wide`(첫 차원만) · `ast_kind_range_width`; 지금은 건전하나 폭을 줄이는 차원 규칙이 생기면 조용히 깨진다.
-- 파라미터 선언 fold 가 네 벌(오라클 ✓): 정본 `params.rs::bind_one_param` 밖의 셋이 각자 다르게 빠뜨린다 — `instance.rs`(override 없음) · `generate.rs` · `package.rs`. generate/package 는 fill 기본값을 선언 폭으로 안 접고(`parameter [63:0] Q = '1` → `00000000ffffffff`), `package.rs` 는 `param_range` 를 기록하지 않고(`parameter [15:8] P` 의 부분선택이 `x`) `string`/`real` 을 라우팅하지 않는다. CLASS.
+- The i64 constant domain declines on overflow where the language wraps at the context width (CLASS,
+  both oracles agree): `3037000500 * 3037000500` is 145474192 in both oracles and loud in vita;
+  `64'h7FFF… + 64'd1` is 0 against loud; `3 ** 40` is 689956897 against loud. Do not fold modularly
+  without a context width — mod 2^64 is right only in a ≤64-bit context, and
+  `localparam [127:0] P = 3 ** 41` already zero-extends an already-truncated value. Prerequisite = a
+  width-aware module-scope fold; the vita runtime is exact throughout.
+- A 64-bit constant's unsigned value reads negative in the i64 domain (both oracles agree):
+  `localparam L = (64'hFFFFFFFF00000000 > 0) ? 111 : 222;` is vita 222 against 111 in both oracles
+  (the `parameter [63:0] BIG` spelling behaves the same). Root = `const_eval_i64_lit`'s 64-bit
+  reinterpretation arm; the range check is not present at the comparison site. Closing it also opens
+  `a_placement_that_does_not_fit_the_i64_domain_declines`.
+- A comparison at exactly width 64 is silently wrong (both oracles agree):
+  `((64'd1 - 64'd2) > 64'd0)` is 1 in both oracles and 0 in vita — an off-by-one in
+  `masking = ctx_w > 0 && ctx_w < 64`.
+- A module-scope `localparam`'s `/`, `%` and `>>>` lose the sign even with a declared width:
+  `% 64'd10` gives 18446744073709551615 (iverilog 5), `/ 64'd10` gives 0 (iverilog
+  1844674407370955161), `>>> 4` gives 18446744073709551615 (iverilog 1152921504606846975); `>>` is
+  exact. This is one item with row 14 — do not start it separately.
+- Above 64 bits the decline is deliberate (only `w == 64` is unsigned): the two directions are wrong
+  in opposite ways — `(64'hFFFF…FFFF + 65'd1) > 64'hFFFF…FFFF` wants the signed reading and
+  `((65'd1-65'd2) > 65'd0)` wants the unsigned one (each oracle answers 1), so do not guess. Pin =
+  `const_unsigned_at_sixty_four.rs::above_sixty_four_bits_keeps_the_pre_slice_answer`.
+- A 64-bit unsigned `*` overflow is loud (`64'h8000…0000 * 64'd2` is 0 in both oracles and refused by
+  vita's `checked_mul`). Wrap only when the context width is exactly 64.
+- An untyped `localparam` with a huge `**` hangs iverilog, so there is no oracle:
+  `localparam L = 3 ** (64'd0 - 64'd8);` runs 10 minutes at 100% CPU, leaving verilator as sole judge.
+- Placement and cast fold residue (honest-loud): a concat containing a carry operation
+  (`{4'd2,(4'd1+4'd1)}`, iverilog 34); x/z inside a concat; a prim or signing cast (`int'(7)`,
+  iverilog 7); a replication count taken from a local variable. Do not widen the carry-free folder —
+  route to the interpreter's own width-aware walk.
+- A const-domain cell whose SIZE wraps declines (loud E3009 against iverilog's 1): `const_eval_cast`'s
+  truncating fold is unsound on top of an unlimited operand fold (`4'((4'd8+4'd8)/4'd3)` is SV 0
+  against a truncated 5). Beside it, the body width of a real-returning constant function
+  (`f = 4'd15+4'd1` gives 16.0 where the self-determined 0.0 is right). WALL(AST self-width).
+- A decl-init call chain hits the depth cap of 64 (correct→loud): a 70-deep constant-function chain
+  is 71 in iverilog and loud in vita. The unimplemented alternative charges a level only when
+  re-entering a function that is already running.
+- A 4-state local's uninitialised default is 0: `integer x; g = x + 1;` is vita 1 against iverilog's
+  `x` (the 2-state `int x;` is correct).
+- A packed dimension product above u32 panics with no diagnostic: `bit [65535:0][65535:0] tt;` gives
+  `attempt to multiply with overflow` at the net-allocation site.
+- There are three declared-width models and only one sees packed dimensions: `const_decl_wsign`
+  (product), `const_bound.rs::decl_is_wide` (first dimension only), `ast_kind_range_width`. Sound
+  today, silently broken the moment a dimension rule that SHRINKS a width appears.
+- The parameter declaration fold exists in four copies (oracles agree), and the three outside the
+  canonical `params.rs::bind_one_param` each omit something different: `instance.rs` (no override),
+  `generate.rs`, `package.rs`. generate and package do not fold a fill default at the declared width
+  (`parameter [63:0] Q = '1` gives `00000000ffffffff`), and `package.rs` records no `param_range` (a
+  part-select of `parameter [15:8] P` is `x`) and routes neither `string` nor `real`. CLASS.
 
 ### Index sealing
 
-- queue·dynamic 배열의 인덱스에는 봉인이 없다 — 상수도 넷도(오라클 ✓): 256엔트리 `int q[$]` 에서 `q[-8'sd1]`·`q[s8]`(−1)이 진단 없이 원소 255(iverilog 기본값 `0`), `int d[]` 도 같다. 쓰기 쪽은 loud(W4020) = read/write 비대칭이고 `dynarr.rs` 가 `seal_index_unsigned` 를 안 부른다. verilator 는 2의 거듭제곱 크기에서 마스킹하므로 오라클이 아니다.
-- 함수 호출 인덱스는 어느 봉인에도 못 온다(오라클 ✓): `arr[fneg(0)]`(`-8'sd1`)이 조용히 원소 255 / iverilog `xx` — 봉인이 `Call` 을 반복 가능성에서 거절.
-- ORACLE-SPLIT(§4.5.459 differential 발견 · 쫓지 말 것): packed **원소**의 `+:` 오버행에서 iverilog 가 자기모순이다 — 같은 설계에서 `pv[-2'sd1 +: 2]` 는 `1x`, 같은 비트를 담은 `pm[1][-2'sd1 +: 2]` 는 `10`. verilator 는 범위 밖 셀렉트에 `x` 자체가 없다(전부 `01`). vita 는 네 철자 모두 `1x` 로 균일하고, iverilog 가 자기와 합치하는 두 철자에서 일치한다 ⇒ 자기일관성으로 핀(`packed_select_signed_index.rs`).
-- RESOLVED §4.5.460: untyped **연산자** 초기화자가 연산자의 self 폭을 갖는다(Table 11-21) — `localparam E = ~8'h5A` 가 32비트 `ffffffa5` 였다. 자리는 `param_decl_width_opt` 의 value-inferred 꼬리(`min_signed_bits(v).max(32)`); 새 arm 이 `~`/`-`/`+` 와 **모든** 이항 연산자를 `const_self_width` 로 보낸다. 60칸 3-way, verilator 와 전 칸 일치. `+ - *` 를 split 으로 적어 둔 줄은 **반박됨** — iverilog 가 자기모순이다(자기 `$bits(8'd200+8'd100)` 는 8 인데 파라미터는 9 로 바인딩 · 한 설계에서 `32'd100000*32'd100000` 은 64비트인데 `32'd1<<32` 는 32비트). 빼면 vita 가 그 불일치를 물려받는다(`const_expr_self_consistency` 가 잡는다).
-- RESOLVED §4.5.463: OVERRIDE 값 자체의 폭(row 25 의 연산자 판). 두 NEW 불릿이 한 뿌리였다 — `#(.P(-(|4'b1010)))`·`~(|4'b1010)`·`~8'h5A`·`8'd200+8'd100`, 그리고 `#(.HE(~4'h5))`·`4'h5<<1` 이 전부 32비트였다. 폭 축은 split 이 아니다: 세 툴 모두 `$bits(<식>)` 을 **직접** 물으면 같은 답을 주고, 바인딩에서 각자 다른 자리에서 자기모순한다(verilator = reduction 탑, iverilog = `+`). 자리는 `override_bits` 가 아니라 새 `override_self_meta`/`override_self_value` + `ResolvedOverride::{self_meta,self_val}`, 소비는 `bind_one_param` 의 세 번째 arm(`Implicit && range.is_none()` 한정). 선언 `signed` 키워드는 두 arm 모두에서 살아남는다(§12.2.1). 잔여 = 아래 두 줄.
-- RESOLVED §4.5.461: 파라미터 초기화자 VALUE lane 이 폭-인지가 됐고(`param_init_width_aware_ok` 가 `eval_param_init` 의 `eval_const_assign` 문을 opt-in 으로 연다), 그 위에서 `param_init_kept_loud` 를 네 VALUE 자리에서 삭제했다. 두 절반은 분리 불가 — 무제한 fold 는 절단이 `~ - << & |` 와만 교환되므로 가드만 지우면 `/ % >> >>>` 8칸이 loud→silent-wrong 이 된다(실측). 남은 호출부는 `params.rs` 꼬리 하나뿐이고 `!default_binds` 로 스코프를 명시했다(그 lane 에서 지우면 음수 override 3칸이 correct→silent-wrong). 허용집합은 `ctx_width_names_are_evident`(이름은 전부 사퇴 — `param_meta` 는 override 로 갈리는 사실이 아니다) × `const_ctx_within_i64`(>64비트 leaf 는 ctx clamp 가 부호비트를 지운다).
-- RESOLVED §4.5.466: override 식의 leaf 가 **선언 범위를 가진 이름**이면 그 폭으로 바인딩한다. 벽(rows 14/25/26/30)은 **반박됐다** — provenance 는 `param_range` 에 이미 있고 형제 채널 `narrow_param_bits` 가 **같은 자리에서** 그것을 푼다(`#(.P(W8))`·`#(.P(W8|1'b0))` 는 이미 8). 자리는 새 `declared_override_widths`(`param_query.rs`)가 그 guard chain 을 그대로 돌려 이름을 인증하고 `override_self_meta` 의 두 호출부에 seed 하는 것. 앞선 시도가 실패한 이유는 `param_range` **단독** 사용이었고, 빠진 항이 `param_range` 폭 == `param_meta` 폭 **일치 검사**다(overridden untyped 파라미터의 stale 엔트리를 거절한다). 144칸 census 71칸 이동 · 35칸 두 오라클 · 36칸 자기모순 셀의 정합 오라클 · loud→value 0 · correct→wrong 0. 큐 줄의 「두 오라클 8」은 반박(iverilog 9 = `+` 자기모순), 「forwarding 도 같은 줄」도 반박(뿌리가 다르다 — 아래).
-- 잔여 ⓑ: **>64비트** 트리(`~128'd0`)는 `const_ctx_within_i64` 가 거절 — 값 재-fold 가 64에서 clamp 한다. 두 오라클 128, vita 32.
-- 🆕 (§4.5.466 그라운딩 · 2-오라클): **forwarding** — 부모의 untyped `Q` 가 **기본값 리터럴과 다른 폭**으로 override 되면 `#(.P(~Q))` 가 32비트. 두 오라클은 override 자신의 폭(4/16/64). 뿌리는 위 줄이 아니라 `params.rs:313` 의 sized-literal arm 이 `default_binds` 로 게이트되지 않는 것 — `param_decl_range_opt` 가 여전히 기본값 리터럴 폭을 답해 `.or_else(ovr.bits)` 로 못 간다. §4.5.466 는 두 폭 맵이 어긋나면 **사퇴**한다(fail-closed, 실측).
-- 🆕 (§4.5.466 리뷰 R1 differential · 2-오라클 · CRITICAL): **33~64비트 override 값이 비트 32에서 잘린다**(untyped 타깃). `parameter logic [32:0] W33 = 33'h1_0000_0003` 를 `#(.P(W33))` 로 넘기면 vita `$bits` 는 33 을 맞게 보고하면서 값은 `000000003` — 한 런 안에서 자기모순. 33비트 **리터럴** override 도 같다. `defparam` 은 32비트로 더 잘린다. 선언 폭 타깃(`parameter logic [39:0] P`)은 정답. §3.b `wide-override` 는 >64비트를 loud 로 적었고 rows 16/17/25 는 다른 축이라, 이 **silent 대역은 미기록이었다**.
-- 🆕 (§4.5.466 그라운딩 · 2-오라클): `const_expr_signed` 의 `Ident` arm 이 `self.fq()`(현재 스코프)로 풀어 `const_self_width`/`const_signed_env` 의 `walk_scopes` 와 갈린다 — 모듈 스코프의 `parameter signed [7:0] S8` 을 `generate if(1) begin:gb` 안에서 읽으면 `localparam K = S8>>>1` 이 255, 같은 텍스트가 모듈 스코프에선 −1, 두 오라클 −1. §4.5.466 는 meta 의 부호를 `const_signed_env` 로 옮겨 **물려받지 않았다**.
-- NEW(pre-existing · §4.5.463 리뷰 라운드 2 · 2-오라클): `parameter unsigned U = 1` 을 **부호 있는** 값으로 override 하면(`#(.U(-8'sd91))`) 두 오라클 `165`, vita `-91`. 폭은 §4.5.463 이 8로 고쳤고 부호 열만 남았다. 원인은 `ast::ParamDecl.signed` 가 `false` 로 «unsigned 키워드» 와 «키워드 없음» 을 구별 못 하는 것(`sg || p.signed` 가 볼 수 없는 방향). 고침 = `hdl-ast` 에 `is_sign_declared: bool` — **SchemaHash 루트 필드 ⇒ format bump**. 같은 필드가 아래 typedef-prefix 줄도 닫는다.
-- NEW(pre-existing · §4.5.463 리뷰 라운드 2 soundness · 관측만): `p.signed` 를 파라미터 자신의 키워드가 **아닌** 곳에서 쓰는 생산자 2곳 — `hdl-parser/src/params.rs:313`(`signed = expl0.unwrap_or(info.signed)`, typedef prefix) · `module_items.rs:740`(`signed: d.signed`, NetVarDecl 형 헤더 엔트리, `ty: ParamType::Implicit`). 도달 가능한 typedef 철자는 실측 무해(PRE=POST, 네 툴 동일). 위 `is_sign_declared` 가 같이 닫는다.
-
-- 🆕 (§4.5.467 리뷰 R3 · 2-오라클 · pre-existing): **모듈 넷을 shadow 하는 블록로컬의 쓰기가 모듈 넷에 남는다.** 세 겹 중첩 블록이 각각 같은 이름을 선언하면(바깥 `int s`, 가운데 `string s`, 안쪽 `int t`) 바깥 `s = 8'h41` 이 모듈 `s` 에 착지해 다른 프로세스가 `MOD=41` 로 읽는다. 두 오라클 `MOD=0`. 자리 = `compute_scoped_block_locals` 의 filter A 가 **다른 스팬을 포함하는 widened 스팬을 후보에서 뺄 때** 그 스팬은 flatten 으로 떨어지는데, shadow 인 경우 flatten 대상이 곧 shadow 된 넷이다.
-- 🆕 (§4.5.467 리뷰 R1 differential · 2-오라클 · pre-existing): **static task frame 본문** 안의 같은 이름 형제 블록로컬 두 개가 선언 초기화자만으로 대입되면 조용히 한 변수가 된다 — `o1=55 o2=55`, 두 오라클 `o1=44 o2=55`. 4회 재진입 사다리로 재면 두 변수가 **하나의 카운터**임이 보인다(`a=56 b=57 c=58 d=59` vs 오라클 `45 56 46 57`). 대조군 정상: `automatic` task · function · 다른 이름. 저장소 경로가 다르다(`reserve_frame_block_locals`) — 모듈 절차 경로의 §3.b `blocal-flatten` 과 **같은 클래스, 다른 자리**.
+- Queue and dynamic-array indices have no seal, for constants or nets (oracles agree): on a
+  256-entry `int q[$]`, `q[-8'sd1]` and `q[s8]` (−1) read element 255 with no diagnostic where
+  iverilog gives the default `0`, and `int d[]` behaves the same. The write side is loud (W4020), so
+  read and write are asymmetric, and `dynarr.rs` never calls `seal_index_unsigned`. verilator is not
+  an oracle here — it masks at power-of-two sizes.
+- A function-call index reaches no seal (oracles agree): `arr[fneg(0)]` with `-8'sd1` silently reads
+  element 255 against iverilog's `xx`, because the seal rejects a `Call` as not repeatable.
+- ORACLE-SPLIT, do not chase: on a packed ELEMENT's `+:` overhang iverilog contradicts itself — in
+  one design `pv[-2'sd1 +: 2]` is `1x` and `pm[1][-2'sd1 +: 2]`, holding the same bits, is `10`.
+  verilator has no `x` for an out-of-range select at all (everything is `01`). vita is uniform `1x`
+  across all four spellings and agrees with iverilog on the two spellings where iverilog agrees with
+  itself. Pinned by self-consistency (`packed_select_signed_index.rs`).
+- A >64-bit override tree (`~128'd0`) declines because `const_ctx_within_i64` refuses it — the value
+  re-fold clamps at 64. Both oracles 128, vita 32.
+- Forwarding (2-oracle): when a parent's untyped `Q` is overridden at a width other than its default
+  literal's, `#(.P(~Q))` binds 32 bits where both oracles bind the override's own width (4/16/64).
+  Root = the sized-literal arm at `params.rs:313` is not gated on `default_binds`, so
+  `param_decl_range_opt` still answers the default literal's width and `.or_else(ovr.bits)` is
+  unreachable. The declared-override-width path stands down when the two width maps disagree
+  (fail-closed, measured).
+- A 33..64-bit override VALUE is cut at bit 32 on an untyped target (2-oracle, CRITICAL): passing
+  `parameter logic [32:0] W33 = 33'h1_0000_0003` through `#(.P(W33))` makes vita report `$bits` 33
+  correctly and the value `000000003` — self-contradiction inside one run. A 33-bit LITERAL override
+  behaves the same, and `defparam` cuts further. A declared-width target (`parameter logic [39:0] P`)
+  is correct. §3.b `wide-override` records >64 bits as loud and rows 16/17/25 are a different axis,
+  so this silent band has no other row.
+- `const_expr_signed`'s `Ident` arm resolves with `self.fq()` (the current scope) and so diverges
+  from `const_self_width` / `const_signed_env`'s `walk_scopes`: reading a module-scope
+  `parameter signed [7:0] S8` inside `generate if(1) begin:gb` makes `localparam K = S8>>>1` 255,
+  where the same text at module scope is −1 and both oracles are −1. The meta sign moved to
+  `const_signed_env` and this arm did not inherit it.
+- `parameter unsigned U = 1` overridden with a SIGNED value (`#(.U(-8'sd91))`) binds `-91` where
+  both oracles bind `165`. The width axis is correct; only the sign column is open. Root =
+  `ast::ParamDecl.signed` is `false` for both "the `unsigned` keyword" and "no keyword", a direction
+  `sg || p.signed` cannot see. Fix = an `is_sign_declared: bool` on `hdl-ast`, which is a SchemaHash
+  ROOT field and therefore a format bump. The same field closes the typedef-prefix item below.
+- Observation only: two producers write `p.signed` from something that is NOT the parameter's own
+  keyword — `hdl-parser/src/params.rs:313` (`signed = expl0.unwrap_or(info.signed)`, a typedef
+  prefix) and `module_items.rs:740` (`signed: d.signed`, the NetVarDecl-shaped header entry with
+  `ty: ParamType::Implicit`). The reachable typedef spellings are harmless in measurement (all four
+  tools agree). The `is_sign_declared` field above closes this too.
 
 ### Inline / frame binds
 
-- 인라인 경로가 선언 폭을 본문 안으로 안 내린다 — 프레임 경로는 내린다(오라클 ✓): `function [31:0] fh(input [7:0] x); fh = fld * x;`(8'hFF)가 static `00000001`, `automatic` `0000fe01` = iverilog. `lower_ctx_or_plain(rhs, ctx_w)` 는 fill 만 크기를 준다.
-- 프레임 인자 바인드가 §11.6.1 확장 부호를 안 쓴다(오라클 ✓): `8'shf7` → `000000f7` / iverilog `0000fff7`. 세 퍼널 공유(프레임 함수·태스크·클래스 메서드) = CLASS, 1,920칸 중 24칸; 넷 대입과 포트 연결은 정답이라 자리는 바인드.
-- `expr_is_repeatable` 이 배열 원소를 거절해 `f(mem[i])` 가 바인드를 못 받는다(오라클 ✓): `gs(arr[2])` `00…f7` / iverilog `ff…f7`. 필요한 것은 반복 가능성이 아니라 부작용 없는 중복.
-- 계층 참조·클래스필드 actual 은 선언 폭을 못 받는다: 지어진 32 라 `trusted_self_width` 가 `None` → 바인드가 사퇴하고 결과가 actual 폭으로 나온다(`gs={x,x}` 에 `hi.hv` → 8비트). generate 스코프 이름도 같다.
-- `cast_operand_is_real` 의 AST 절반이 bare 단일 세그먼트만 본다(오라클 ✓): `pa(f(0))` 4(정답) · `pa(p::f(0))` 는 f64 페이로드가 2-state formal 로(`c.cm()` 도) — 넓히면 호출부 8곳.
-- 인라인 body-local 의 2-state 선언은 x/z 를 안 떨어뜨린다(오라클 ✓): `bit [7:0] b; b = x;` `x7` / iverilog `07`; `fold_straight_line` 에 2-state 단계만 없다 — 바인드와 한 자리로.
-- 인라인 바인드의 폭 결정이 `ir_bits_of` 의 지어진 폭을 믿는다: 클래스 필드가 32 를 답해 절단/확장 판정이 뒤집힌다 — `i16(c.bu)`(8비트 필드) `xxc3`. 창은 `필드폭 < formal폭 < 32`; 정본 `canonical_self_width`.
-- `real` rhs 는 §10.7 을 건너뛴다 — `resize_inline_assign` 의 `expr_is_real` early-return(`f = r + x*x` `013b` / iverilog `3b`).
-- `!trusted_w` 카브아웃 아래는 아직 샌다(설계상 트레이드): `fh = c.big + 1'b1;`(40비트 필드)가 대상 폭에 따라 `00000000` vs `0000010000000000`.
-- 곁: actual 이 formal 보다 넓으면 절단하지 않는다(의도적): `f(8'hFF)` `ff` / iverilog `0f`; `{f(8'h02){1'b1}}` 0 / `f`.
-- The verbatim inline actual's mirror is wrong on its own path: an 8-bit signed frame-call actual into a 16-bit signed formal (`fs16_add(g(-16))` → `00f0`, oracles `fff0`) — `bind_formal_actual` widens by the actual's MIRROR sign (`Call ⇒ false`).
-- 바인딩 자리는 넷이 아니라 아홉 — 다섯이 남았다(2-오라클 · `f(300.0)`→`input byte` 가 300, 오라클 44): ⓐ output formal 을 가진 frame 함수 ⓑ 계층 task 호출(인자가 `inline_task.rs` 에서 formal 폭 없이 미리 lowering) ⓒ 계층 함수 호출 ⓓ class 메서드/task ⓔ class 생성자. ⓑⓒ 는 구조가 다르다.
-- `expr_is_repeatable` decline 이 남기는 조용한 기본값(2-오라클): 사용자 `Call`(`f(rfn(3))`) · real 배열/큐 원소 · 화이트리스트 밖 SysFunc(`$sqrt`·`$itor`·`$bitstoreal`) · `p::rf(...)`. `$random` 은 decline 이 옳다.
-- `time` 선언의 명시 `signed` 한정자가 버려진다(2-오라클): `input time signed k` 에서 `k/2` 오라클 −4 / vita 9223372036854775804 — `kind_signedness` 가 `time`→unsigned 하드코딩.
-- 범위 밖 real 의 정수 클램프: `real rv = 1.0e300; byte'(rv)` 두 오라클 0 / vita −1(`±inf`·NaN 포함).
-- `int'($random*1.0)` 의 draw 횟수(둘 다 틀렸고 값이 바뀌었다): `lower_prim_cast` 에 `expr_is_repeatable` 게이트가 없어 캐스트당 4회 draw(iverilog 1회).
+- The inline path does not push the declared width into the body where the frame path does (oracles
+  agree): `function [31:0] fh(input [7:0] x); fh = fld * x;` with `8'hFF` is `00000001` when static
+  and `0000fe01` when `automatic`, which is iverilog's answer. `lower_ctx_or_plain(rhs, ctx_w)`
+  sizes fills only.
+- A frame argument bind does not apply the §11.6.1 extension sign (oracles agree): `8'shf7` becomes
+  `000000f7` against iverilog's `0000fff7`. Three funnels share it (frame function, task, class
+  method), so it is a CLASS — 24 of 1,920 cells. Net assignment and port connection are correct, so
+  the site is the bind.
+- `expr_is_repeatable` rejects an array element, so `f(mem[i])` cannot get the bind (oracles agree):
+  `gs(arr[2])` is `00…f7` against iverilog's `ff…f7`. What is needed is not repeatability but
+  side-effect-free duplication.
+- A hierarchical reference or class-field actual cannot get the declared width: the fabricated 32
+  makes `trusted_self_width` answer `None`, the bind stands down, and the result comes out at the
+  actual's width (`hi.hv` into `gs={x,x}` is 8 bits). A generate-scope name behaves the same.
+- `cast_operand_is_real`'s AST half sees only a bare single segment (oracles agree): `pa(f(0))` is 4
+  (correct) while `pa(p::f(0))` sends an f64 payload into a 2-state formal (and so does `c.cm()`).
+  Widening it touches 8 call sites.
+- An inline body-local's 2-state declaration does not drop x/z (oracles agree): `bit [7:0] b; b = x;`
+  is `x7` against iverilog's `07` — `fold_straight_line` has no 2-state step. Fix it with the bind,
+  in one place.
+- The inline bind's width decision trusts `ir_bits_of`'s fabricated width: a class field answers 32
+  and inverts the truncate/extend decision — `i16(c.bu)` on an 8-bit field is `xxc3`. The window is
+  `field width < formal width < 32`; the canonical answer is `canonical_self_width`.
+- A `real` rhs skips §10.7 — `resize_inline_assign` has an `expr_is_real` early return
+  (`f = r + x*x` is `013b` against iverilog's `3b`).
+- Below the `!trusted_w` carve-out the bind still leaks (a deliberate trade): `fh = c.big + 1'b1;`
+  on a 40-bit field is `00000000` or `0000010000000000` depending on the destination width.
+- Beside it, deliberate: an actual wider than the formal is not truncated — `f(8'hFF)` is `ff`
+  against iverilog's `0f`, and `{f(8'h02){1'b1}}` is 0 against `f`.
+- The verbatim inline actual's mirror is wrong on its own path: an 8-bit signed frame-call actual
+  into a 16-bit signed formal (`fs16_add(g(-16))` → `00f0`, oracles `fff0`), because
+  `bind_formal_actual` widens by the actual's MIRROR sign (`Call ⇒ false`).
+- There are nine binding sites, not four, and five are open (2-oracle; `f(300.0)` into an
+  `input byte` gives 300 where the oracles give 44): ⓐ a frame function with an output formal;
+  ⓑ a hierarchical task call (the argument is pre-lowered in `inline_task.rs` without the formal
+  width); ⓒ a hierarchical function call; ⓓ a class method or task; ⓔ a class constructor. ⓑ and ⓒ
+  are structurally different.
+- `expr_is_repeatable`'s decline leaves a silent default (2-oracle): a user `Call` (`f(rfn(3))`), a
+  real array or queue element, a non-whitelisted SysFunc (`$sqrt`, `$itor`, `$bitstoreal`), and
+  `p::rf(...)`. Declining `$random` is correct.
+- An explicit `signed` qualifier on a `time` declaration is discarded (2-oracle): with
+  `input time signed k`, `k/2` is −4 in the oracles and 9223372036854775804 in vita, because
+  `kind_signedness` hard-codes `time` to unsigned.
+- An out-of-range real clamps wrongly on integer conversion: `real rv = 1.0e300; byte'(rv)` is 0 in
+  both oracles and −1 in vita (the same for ±inf and NaN).
+- `int'($random*1.0)` draws the wrong number of times (both values wrong, and the value changes):
+  `lower_prim_cast` has no `expr_is_repeatable` gate, so it draws 4 times per cast against
+  iverilog's 1.
 
 ### Real
 
-- `automatic`(framed) real 함수를 직접 피연산자로 쓰면 넓힌다(2-오라클): `fa(1) + (-s)` 두 오라클 −7 / vita 9; 곁 `{fa(1), 1'b0}` 이 조용히 통과. 공유 규칙의 `Call` arm 이 그 형태에 도달하지 않는다.
-- package/class 함수도 같은 구멍: `p::one() + (-s)` · `c.getr() + (-s)` 두 오라클 −7 / vita 9.
-- 나머지 변환 경계는 문맥-결정: `real r; r = (-s);` −8.0 / 8.0, `r = (s+s)` 0.0 / −16.0 ⇒ Binary·Ternary 는 닫혔고 단순 대입은 남았다.
-- real-반환 const fn 의 본문은 §2 가 아니라 §3: `localparam real R = f();` 에 `E3009 … not a foldable constant expression`(iverilog 0.000000) = honest-loud.
-- `$realtobits`/`$bitstoreal` 이 64비트 아닌 인자를 조용히 받는다(iverilog "requires a 64-bit argument"); vita 는 저64비트를 답한다.
+- Using an `automatic` (framed) real function directly as an operand widens it (2-oracle):
+  `fa(1) + (-s)` is −7 in both oracles and 9 in vita; beside it `{fa(1), 1'b0}` passes silently. The
+  shared rule's `Call` arm does not reach that shape.
+- Package and class functions have the same hole: `p::one() + (-s)` and `c.getr() + (-s)` are −7 in
+  both oracles and 9 in vita.
+- The remaining conversion boundaries are context-determined: `real r; r = (-s);` is −8.0 against
+  8.0 and `r = (s+s)` is 0.0 against −16.0, so `Binary` and `Ternary` are closed and plain
+  assignment is open.
+- The body of a real-returning constant function belongs to §3, not §2:
+  `localparam real R = f();` gives `E3009 … not a foldable constant expression` where iverilog gives
+  0.000000 — honest-loud.
+- `$realtobits` and `$bitstoreal` silently accept a non-64-bit argument (iverilog says "requires a
+  64-bit argument"); vita answers with the low 64 bits.
 
 ### Ranges / bounds / selects
 
-- 파라미터의 PART-SELECT 를 폭 바운드로 쓰면 조용히 1비트(오라클 ✓ iverilog): `localparam logic [31:0] W = 32'hdeadbeef; logic [W[7:0]-1:0] v;` `$bits(v)=1` / iverilog 239. 전체 파라미터는 정상 ⇒ part-select 가 상수 바운드 도메인에 안 닿는다.
-- const 배열을 가리는 안쪽 스칼라 — GAP-G 의 shadow 검사가 첫 가지에만 없다(오라클 하나, verilator): generate 안쪽 `localparam int ROT = 99;` 가 `localparam int ROT [0:3]` 을 가리면 `logic [ROT[1]:0] v` 가 vita `$bits=21` / verilator 2. `const_array_vals_of_base` 의 첫 가지가 `walk_scopes_key` 히트에서 바로 반환해 둘째 가지의 inner-wins 검사를 건너뛴다; 모듈 스코프 철자는 정확.
-- loud 잔여(오라클은 답한다): >64비트 파라미터 셀렉트(`wide_param_bits` 에 비트가 있고 i64 `params` 엔 없다) · 헤더 파라미터가 다른 헤더 파라미터의 셀렉트로 기본값을 받는 형태 · `#(.N(W[7:0]))` override · `defparam` · struct 멤버 폭(파서 갭) · 클래스 속성.
-- self-referential 반환 range 는 스택 오버플로(오라클 없음 — iverilog 도 abort): `function [f():0] f();` — `const_fn_ret_wsign` 이 call 깊이를 안 끈다. 처방 = `depth + 1` 한 줄.
+- A parameter PART-SELECT used as a width bound is silently one bit (oracle: iverilog):
+  `localparam logic [31:0] W = 32'hdeadbeef; logic [W[7:0]-1:0] v;` gives `$bits(v)=1` against
+  iverilog's 239. The whole parameter is correct, so the part-select does not reach the constant
+  bound domain.
+- An inner scalar shadowing a const array: the GAP-G shadow check is missing on the first branch (one
+  oracle, verilator). Inside a generate, `localparam int ROT = 99;` shadowing
+  `localparam int ROT [0:3]` makes `logic [ROT[1]:0] v` give vita `$bits=21` against verilator's 2,
+  because `const_array_vals_of_base`'s first branch returns immediately on a `walk_scopes_key` hit
+  and skips the second branch's inner-wins check. The module-scope spelling is correct.
+- Loud residue where the oracles answer: a >64-bit parameter select (the bits are in
+  `wide_param_bits` and not in the i64 `params`); a header parameter whose default is a select of
+  another header parameter; a `#(.N(W[7:0]))` override; `defparam`; a struct member width (a parser
+  gap); a class property.
+- A self-referential return range overflows the stack (no oracle — iverilog aborts too):
+  `function [f():0] f();` — `const_fn_ret_wsign` does not carry call depth. Prescription = one line,
+  `depth + 1`.
 
 ### Class fields
 
-- `ir_bits_of` 가 클래스 필드의 폭을 핸들넷에서 읽는다: 진짜 폭은 `class_field_widths` 사이드카에만 있어 틀린 `Some(32)`(`16'(c.sb)` `xxxd` / hand-IEEE `fffd`). CLASS, 정본 `canonical_self_width`. 두 번째 증상: 캐스트 폭이 지어진 32 와 같으면 `Ordering::Equal` 이 resize 를 건너뛰어 캐스트가 사라진다 — `32'(c.s8)` `fd`(`fffffffd`) · `32'(c.s8 + ua[0])` `fa`(`000001fa`).
-- 오름차순 음수 bound 가 클래스 속성에서만 클램프된다(오라클 하나 — verilator 4비트, iverilog assertion 사망): `class C; logic [-3:0] q;` 가 W3056 + exit 0 로 틀린 값(표 3b). 더 값싼 절반: 정규화 안 된 클래스 필드 셀렉트는 lsb≠0 인 `logic [7:1] q` 에서도 깨져 있다.
-- packed 음수 low bound dim 의 비트 선택은 좌표를 만들지 못한다: `logic [-3:0][1:0] x; x[-3]` — 옳은 좌표 `(lo+size-1) - idx` 의 부호 있는 뺄셈을 `dim_coord` 의 오름차순 arm 이 안 짓는다(두 빌드 모두 loud). 전체 값과 `$bits` 는 정확.
+- `ir_bits_of` reads a class field's width from the handle net, where the real width is only in the
+  `class_field_widths` sidecar, so it answers a wrong `Some(32)` (`16'(c.sb)` is `xxxd` against
+  hand-IEEE `fffd`). CLASS; the canonical answer is `canonical_self_width`. Second symptom: when the
+  cast width equals the fabricated 32, `Ordering::Equal` skips the resize and the cast disappears —
+  `32'(c.s8)` is `fd` (should be `fffffffd`) and `32'(c.s8 + ua[0])` is `fa` (should be `000001fa`).
+- An ascending negative bound is clamped only on a class property (one oracle — verilator 4 bits;
+  iverilog dies on an assertion): `class C; logic [-3:0] q;` gives W3056 and exit 0 with a wrong
+  value (row 3b). The cheaper half: an un-normalised class-field select is broken on `logic [7:1] q`
+  (lsb ≠ 0) as well.
+- A bit select of a packed dimension with a negative low bound cannot build a coordinate:
+  `logic [-3:0][1:0] x; x[-3]` — `dim_coord`'s ascending arm does not build the signed subtraction
+  of the correct coordinate `(lo+size-1) - idx` (loud on both builds). The whole value and `$bits`
+  are correct.
 
 ### Scoping / imports / block-locals
 
-- block-local 선언이 같은 이름의 IMPORT 된 package 변수를 clobber 한다(2-오라클 합치): `import pk::*` 뒤 `begin : blk integer pv; pv = 99; end` 이후 `pk::pv` 가 vita 99 / 두 오라클 5 — bare name 으로 모듈 net 에 flatten 하는 v1 모델이 import alias 와 같은 칸에 앉는다.
-- 파라미터와 넷을 같은 이름으로 선언하면 vita 만 받는다(두 오라클 모두 거부): `localparam N = 7; logic [3:0] N;` 를 vita 는 받고 파라미터로 해석한다(`r=7`). vita 가 지어낸 확장이라 loud 화는 사다리 하강이 아니고, shadow 규칙의 `!params` 절이 유일하게 관측되는 자리라 불변임을 핀해 뒀다(`block_local_shadows_param.rs`).
-- queue·assoc 원소의 part-select 쓰기가 조용히 사라진다(verilator 오라클 · iverilog 구문 거부): `q[0][15:8]=8'h0F;` → verilator `ffff0fff` / vita `ffffffff`; dyn(`q[]`) 철자는 맞는다 = write-twin 갭.
-- 폭 0 인덱스 part-select 를 조용히 받는다: `parameter P = 0; t[i +: P] = …` 를 iverilog 는 거부, vita 는 exit 0(§3 성격).
+- A block-local declaration clobbers an IMPORTED package variable of the same name (both oracles
+  agree): after `import pk::*`, `begin : blk integer pv; pv = 99; end` makes `pk::pv` read 99 in vita
+  and 5 in both oracles — the v1 model that flattens to a module net by bare name lands in the same
+  slot as the import alias.
+- A block-local that SHADOWS a module net leaves its write ON the module net (2-oracle,
+  pre-existing): with three nested blocks each declaring the same name (outer `int s`, middle
+  `string s`, inner `int t`), the outer `s = 8'h41` lands on the module `s` and another process reads
+  `MOD=41` where both oracles read `MOD=0`. Site = `compute_scoped_block_locals`'s filter A: when it
+  drops a widened span from candidacy because that span contains another, the span falls through to
+  the flatten, and for a shadow the flatten target IS the shadowed net.
+- Two same-named sibling block-locals inside a STATIC TASK FRAME body silently become one variable
+  when they are assigned only by declaration initialisers: `o1=55 o2=55` against both oracles'
+  `o1=44 o2=55`. A four-entry re-entry ladder shows the two variables are one counter
+  (`a=56 b=57 c=58 d=59` against the oracles' `45 56 46 57`). Controls behave correctly: an
+  `automatic` task, a function, and different names. The storage path is different
+  (`reserve_frame_block_locals`) — the same class as §3.b `blocal-flatten` on the module procedural
+  path, at a different site.
+- Declaring a parameter and a net with the same name is accepted by vita alone (both oracles reject
+  it): vita takes `localparam N = 7; logic [3:0] N;` and reads it as the parameter (`r=7`). This is
+  a vita invention, so making it loud is not a step down the ladder; the shadow rule's `!params`
+  clause is the only observable site, and the current behaviour is pinned
+  (`block_local_shadows_param.rs`).
+- A part-select WRITE into a queue or associative element vanishes silently (oracle: verilator;
+  iverilog rejects the syntax): `q[0][15:8]=8'h0F;` gives verilator `ffff0fff` against vita's
+  `ffffffff`; the dynamic (`q[]`) spelling is correct — a write-twin gap.
+- A width-0 indexed part-select is accepted silently: `parameter P = 0; t[i +: P] = …` is rejected by
+  iverilog and exits 0 in vita (§3 in character).
 
 ### Delays / events
 
-- 런타임 변수 지연(2-오라클): `assign #(dv) y = a;` dv=5 면 오라클 5 / vita 0 — 엔진이 서스펜션 시점에 평가해야 한다. `#(D, dv)` 부분 fold 도 같은 뿌리(rise 만 접히고 fall 이 rise 값). 핀 = `structural_delay_scope_fold.rs::a_runtime_variable_delay_is_still_zero_delay_and_still_quiet`.
-- zero-rise 사이드카 거래(`#(ZERO_PARAM, F)` 의 fall 이 버려진다 · `#(0,F)` 는 맞다): 뿌리는 엔진 — `Some(0)` 은 CA 를 delayed 레인으로 보내고 zero-tick write 가 Postponed 리전 뒤에 착지한다(두 오라클 1 / vita 0) ⇒ silent↔silent 맞바꿈 금지로 보류; zero-tick lag 를 고치면 둘 다 열린다.
-- ⓐ 반올림 ORACLE-SPLIT(쫓지 말 것 · §4.5.459 에서 재측정해 **줄이 반박됨**): "정밀도 == 단위일 때만 산다" 는 거짓이다 — `2*1250ps`@`1ns/100ps` 도 갈린다(iverilog 2.6 ns / verilator 2.5 ns). 진짜 판별자는 "leaf 가 모듈 정밀도의 정수배가 아니다". 갈리는 축은 두 규칙이다: **REAL** leaf 는 끝까지 분수를 갖고(`2.5ns+2.5ns` 두 오라클 5), **sub-precision-UNIT** leaf 는 잎에서 반올림한다(`1250fs+1250fs`@`1ns/1ps` 두 오라클 2 ps, 한 번 반올림이면 3). §4.5.459 는 후자만 채택했으므로 real leaf 칸은 PRE 와 byte-identical(vita = verilator). 12칸 중 8칸은 PRE 가 **무지연**이었어서 wrong-on-both → right-on-one(iverilog) 으로 올라갔다.
-- ⓒ 음수 지연 `#(1ns - 5ns)`: 두 오라클 **발화 안 함**. STRUCTURAL 레인은 PRE·POST 둘 다 즉시 발화(`real_delay_ticks` 가 0 으로 clamp) — 그 절반은 그대로. PROCEDURAL 레인은 **발화 안 하는 쪽이 맞았고**, §4.5.460 의 첫 라우팅이 그걸 0 으로 clamp 해 깨뜨렸다(differential 이 잡음). 지금은 units 도메인에서 부호를 보고 음수면 옛 경로로 흘린다 ⇒ 두 오라클과 일치. 구조 레인을 마저 고치려면 tick 이 "안 발화" 를 표현할 수 있어야 한다(u32 는 못 한다).
-- ⓓ RESOLVED §4.5.460: PROCEDURAL/intra-assign/`always`/`fork`/task-body/`repeat`/`for` 레인이 구조 레인과 같은 delay fold 를 쓴다. 줄이 적은 "9칸 · `const_fn.rs` 의 `e < 0` 하나 · 공유 evaluator 의 opt-in 파라미터" 는 **셋 다 반박됨** — 108칸 census 로 **66 fixed · 0 regressed**, decline 은 셋(`e < 0` 33 · real 분자 20 · `ticks % mult != 0` 6), 그리고 8칸은 loud 가 아니라 **silent-wrong** 이었다(`#(3ns / 2)` 가 정수 나눗셈으로 1단위, 두 오라클 2). 고침은 `const_eval_in_scope` 를 건드리지 않는다(호출부 20곳 무영향) — `events.rs::lower_delay` 의 **라우팅**이고, opt-in 은 `expr_has_time_lit` 게이트다.
-- ⓔ NEW(ORACLE-SPLIT · §4.5.459 grounding): MULTI-timescale 설계에서 `global_prec_exp` 가 더 미세해져 `e < 0` 이 아예 안 걸리는 칸 — iverilog 는 모듈 **자기** 정밀도에서, verilator 는 설계 **전역** 정밀도에서 반올림한다. 단일 timescale 에선 둘이 같아 물지 않는다.
-- cont-assign 만 구동하는 wire 가 t=0 에 가짜 이벤트를 낸다(iverilog 1오라클 · verilator 미조회 ⇒ 3-오라클 census 필수): `wire b; assign #5 b = a;` 에서 b 가 z 로 시작해 t=0 settle 의 z→x 가 `always @(b)` 를 깨운다; iverilog 는 t=0 이벤트가 없다. `assign d = c ^ 1'b0;` 도 같다 ⇒ 초기값 도메인 문제.
+- A runtime variable delay (2-oracle): `assign #(dv) y = a;` with dv=5 gives 5 in both oracles and 0
+  in vita — the engine must evaluate at the suspension point. The partial fold of `#(D, dv)` has the
+  same root (the rise folds and the fall takes the rise value). Pin =
+  `structural_delay_scope_fold.rs::a_runtime_variable_delay_is_still_zero_delay_and_still_quiet`.
+- The zero-rise sidecar trade (the fall of `#(ZERO_PARAM, F)` is discarded; `#(0,F)` is correct): the
+  root is the engine — `Some(0)` sends the continuous assign into the delayed lane and the zero-tick
+  write lands after the Postponed region (both oracles 1, vita 0). Held, because taking it now trades
+  one silent-wrong for another; fixing the zero-tick lag opens both.
+- ⓐ Rounding is an ORACLE SPLIT (do not chase). The discriminator is "the leaf is not an integer
+  multiple of the module precision", and the axis splits by two rules: a REAL leaf keeps its
+  fraction to the end (`2.5ns+2.5ns` is 5 in both oracles) and a sub-precision-UNIT leaf rounds at
+  the leaf (`1250fs+1250fs` at `1ns/1ps` is 2 ps in both oracles; rounding once would give 3). Only
+  the latter is adopted, so the real-leaf cells match verilator.
+- ⓒ A negative delay `#(1ns - 5ns)`: both oracles DO NOT FIRE. The STRUCTURAL lane fires immediately
+  (`real_delay_ticks` clamps to 0) and that half is open. The PROCEDURAL lane matches both oracles by
+  reading the sign in the units domain and routing a negative value down the older path. Finishing
+  the structural lane requires a tick representation that can express "does not fire", which u32
+  cannot.
+- ⓔ ORACLE-SPLIT: in a MULTI-timescale design `global_prec_exp` becomes finer and the `e < 0` case
+  never triggers — iverilog rounds at the module's OWN precision and verilator at the design's GLOBAL
+  precision. With a single timescale the two coincide and it does not bite.
+- A wire driven only by a continuous assign raises a false event at t=0 (1 oracle: iverilog;
+  verilator not consulted, so a 3-oracle census is required): with `wire b; assign #5 b = a;`, b
+  starts at z and the t=0 settle's z→x wakes `always @(b)` where iverilog has no t=0 event.
+  `assign d = c ^ 1'b0;` behaves the same — an initial-value domain problem.
 
 ### Diagnostics / artifacts
 
-- 기본 백엔드의 Mul 체인이 밑수를 n 번 재-lower 해 진단을 n 배로 낸다: `r <= m[idx] ** 16;` 이 interp/native E4002 2건, bytecode 8건 + "further suppressed". 값은 안 틀리지만 8-cap 을 먹어 뒤쪽 진단을 지운다.
-- `coverpoint_domain` 의 Pow arm 이 정본과 어긋난다: `max(lw,rw)`/`ls && rs` 로 접는데 정본은 LHS 폭·base 부호. 영향 = 커버리지 auto-bin 개수뿐.
-- `--obs-dir` 의 run.json 이 `-G` 를 안 싣는다: `-G W=9` 와 `-G W=100` 의 run.json 이 타임스탬프 말고 동일 — 효과가 다른 설계인 유일한 플래그에 OBS rail 이 눈멀어 있다(§6 OBS-1 과 같이).
-- `%h` 가 1비트 미지 EXPRESSION 결과를 `x` 로, iverilog 는 `X` 로 찍는다: `$display("%h", ^a)`; 같은 값의 1비트 NET 은 양쪽 다 `x` 라 iverilog 가 일관되지 않고 IEEE §21.2.1.3 은 vita 편. 215설계 중 17칸.
+- The default backend re-lowers a Mul chain's base n times and emits n copies of the diagnostic:
+  `r <= m[idx] ** 16;` gives 2 E4002 for interp and native and 8 plus "further suppressed" for
+  bytecode. The value is right, but it consumes the 8-report cap and erases later diagnostics.
+- `coverpoint_domain`'s Pow arm disagrees with the canonical rule: it folds with `max(lw,rw)` and
+  `ls && rs` where the canonical rule is the LHS width and the base's sign. The effect is limited to
+  the number of coverage auto-bins.
+- `run.json` under `--obs-dir` does not carry `-G`: the run.json for `-G W=9` and for `-G W=100` are
+  identical outside the timestamps, so the OBS rail is blind to the one flag that changes the
+  design's meaning (see §6 OBS-1).
+- `%h` prints a 1-bit unknown EXPRESSION result as `x` where iverilog prints `X`
+  (`$display("%h", ^a)`); the 1-bit NET of the same value is `x` in both, so iverilog is
+  inconsistent and IEEE §21.2.1.3 is on vita's side. 17 of 215 designs.
 
 ### Performance (open, recorded)
 
-- A continuous assign whose RHS contains ANY `Expr::Call` or `Expr::SysFunc` is re-evaluated 6.00× per input change instead of 1.00× (300,001 evals for 50,000 iterations vs 50,001; the same call in an `always @*` is 1.00×). Root = `levelize::expr_is_pure_of_nets` (`levelize.rs:329`), whose `E::SysFunc{..} | E::Call{..} | E::ArrayItem{..} => false` arm sets `dirty_ok=false` and drops the assign into `ca_always`. `$unsigned(src) ^ …` 1.89×, `… ^ 128'($bits(src))` 4.90×; the inliner trips it (`resize_inline_assign` seals with `$signed`/`$unsigned`, `inline_fn.rs:631,655`) so an inlined function measured 1.98× SLOWER (0.158 s vs 0.080 s). Fix order: (1) a per-`SysFuncId` ALLOW-list, `_`-free exhaustive (~79 variants, ~22 impure); (2) the dep set for `Expr::Call` — `expr_nets`' Call arm (`levelize.rs:161`) walks only the ARGS, so the reject is SOUND today; prize 5.95×; (3) then the body cost (2.33× ceiling). Certification moves the DIAGNOSTIC stream (a pure RHS `errors=5`, the same RHS in a no-op `$unsigned` `errors=9`) and must be adjudicated first. No `pure` flag on `FuncDef`/`SimIr` (frozen); computable out-of-band.
-- `coerce_two_state` names its operand once per TARGET BIT and the engine walks that DAG as a tree: `byte'` 8, `int'` 32, `longint'` 64, `int'(int'(x))` 1024 against iverilog's 1; the discriminator is 2-state-ness, not width (`integer'` and `int'` differ by 27×). The `expr_may_be_unknown` guard in `lower_prim_cast` took 1024 → 32. Still wrong: `int'(f())` names `f` 32 times because a `Call` is conservatively unknown, and a WIDENING cast over a call fans out to the wider width ⇒ needs the `expr_is_repeatable` gate.
-- Coercing at the OPERAND's width instead of the TARGET's took the repro 69.6 s → 6.7 s (10.4×), ping count 32 → 4 (the hand-written `{28'd0, nb}` control is 2.76 s). Still open — the residue is the 4 surviving terms plus the frame call, now the LARGER half. Not shipped: a per-bit skip fires 0 times on 41 cast cells; the third caller (`inline_fn.rs:396`) has no resize in front of it, so narrowing would change the value. The reorder's own silent-wrong: `ir_bits_of` answers `None` for a deferred hierarchical reference (also a `string` net, string-producing system functions, the `pop`/array-reduction family) and the caller FABRICATES 32 — `longint'(u1.w40)` with `logic [39:0] w40` is `0000001234567800` in iverilog and PRE, the unguarded reorder printed `0000000034567800` ⇒ take it only where the width is a DECLARED fact.
-- **The size-cast sign seal leaves the compiled lane on THREE independent axes, and a
-  user function call is one of them.** Round-36 R8 shipped the `wprog` seal arm; an external
-  report re-filed the residue as *"the operand contains a function call"*, and the 2026-09-07
-  round-38 entry here **wrongly refuted that** — it counted only the `$unsigned` column, and a
-  function returning `int` seals with **`$signed`**. Re-measured at HEAD as a 2×2×2 census
-  (operand sign × contains-user-call × destination wider than the cast; `--obs-procs`,
-  400,000 iterations per cell, `d8`/`d16` destinations, `fs`/`fu` returning `int`/`logic [7:0]`):
+- A continuous assign whose RHS contains ANY `Expr::Call` or `Expr::SysFunc` is re-evaluated 6.00×
+  per input change instead of 1.00× (300,001 evaluations for 50,000 iterations against 50,001; the
+  same call in an `always @*` is 1.00×). Root = `levelize::expr_is_pure_of_nets`
+  (`levelize.rs:329`), whose `E::SysFunc{..} | E::Call{..} | E::ArrayItem{..} => false` arm sets
+  `dirty_ok=false` and drops the assign into `ca_always`. `$unsigned(src) ^ …` is 1.89×,
+  `… ^ 128'($bits(src))` is 4.90×; the inliner trips it (`resize_inline_assign` seals with
+  `$signed`/`$unsigned`, `inline_fn.rs:631,655`), so an inlined function measures 1.98× SLOWER
+  (0.158 s against 0.080 s). Fix order: (1) a per-`SysFuncId` ALLOW-list, `_`-free exhaustive (~79
+  variants, ~22 impure); (2) the dep set for `Expr::Call` — `expr_nets`' Call arm
+  (`levelize.rs:161`) walks only the ARGS, so the reject is SOUND today; prize 5.95×; (3) then the
+  body cost (2.33× ceiling). Certification moves the DIAGNOSTIC stream (a pure RHS gives
+  `errors=5`, the same RHS inside a no-op `$unsigned` gives `errors=9`) and must be adjudicated
+  first. There is no `pure` flag on `FuncDef`/`SimIr` (frozen); it is computable out-of-band.
+- `coerce_two_state` names its operand once per TARGET BIT and the engine walks that DAG as a tree:
+  `byte'` 8, `int'` 32, `longint'` 64, `int'(int'(x))` 1024 against iverilog's 1. The discriminator
+  is 2-state-ness, not width (`integer'` and `int'` differ by 27×). The `expr_may_be_unknown` guard
+  in `lower_prim_cast` takes 1024 down to 32. Still wrong: `int'(f())` names `f` 32 times because a
+  `Call` is conservatively unknown, and a WIDENING cast over a call fans out to the wider width, so
+  it needs the `expr_is_repeatable` gate.
+- Coercing at the OPERAND's width instead of the TARGET's takes the repro from 69.6 s to 6.7 s
+  (10.4×) and the ping count from 32 to 4 (the hand-written `{28'd0, nb}` control is 2.76 s). Open:
+  the residue is the 4 surviving terms plus the frame call, now the LARGER half. Not shipped: a
+  per-bit skip fires 0 times on 41 cast cells, and the third caller (`inline_fn.rs:396`) has no
+  resize in front of it, so narrowing there would change the value. The reorder's own silent-wrong:
+  `ir_bits_of` answers `None` for a deferred hierarchical reference (also a `string` net, the
+  string-producing system functions, and the `pop`/array-reduction family) and the caller FABRICATES
+  32 — `longint'(u1.w40)` with `logic [39:0] w40` is `0000001234567800` in iverilog and in vita, and
+  an unguarded reorder prints `0000000034567800`. Take it only where the width is a DECLARED fact.
+- The size-cast sign seal leaves the compiled lane on THREE independent axes, and a user function
+  call is one of them. Census (operand sign × contains-user-call × destination wider than the cast;
+  `--obs-procs`, 400,000 iterations per cell, `d8`/`d16` destinations, `fs`/`fu` returning
+  `int`/`logic [7:0]`):
 
   | | dest == cast width | dest wider than cast |
   |---|---:|---:|
-  | signed, no call — `8'((sv<<4)\|sv)` | **0** | `$signed` 400,000 |
-  | signed, call — `8'((fs(uv)<<4)\|fs(uv))` | **`$signed` 400,000** | `$signed` 400,000 |
-  | unsigned, no call — `8'((uv<<4)\|uv)` | **0** | `$unsigned` 400,000 |
-  | unsigned, call — `8'((fu(uv)<<4)\|fu(uv))` | **`$unsigned` 400,000** | `$unsigned` 400,000 |
+  | signed, no call — `8'((sv<<4)\|sv)` | 0 | `$signed` 400,000 |
+  | signed, call — `8'((fs(uv)<<4)\|fs(uv))` | `$signed` 400,000 | `$signed` 400,000 |
+  | unsigned, no call — `8'((uv<<4)\|uv)` | 0 | `$unsigned` 400,000 |
+  | unsigned, call — `8'((fu(uv)<<4)\|fu(uv))` | `$unsigned` 400,000 | `$unsigned` 400,000 |
 
-  So: ⓐ a destination wider than the cast fires on both signs (that is the seal doing its job —
-  it is what stops the context width leaking through, `expr_cast.rs`); ⓑ **a user function call in
-  the operand fires even at equal width** — the report's axis, confirmed on both signs, and the
-  column the `$unsigned`-only census could not see; ⓒ `*` (and by construction `/`, `%`, `**`)
-  has no `wprog` compile arm (`16'(a*b)` 400,000 / 0.153 s against `16'(a+b)` 0 / 0.054 s).
-
-  One mechanism under all three: `compile_node`'s entry gate is `sw.width != w || sw.signed !=
-  signed`, and `Expr::Call` has no arm at all — so any program containing one declines whole and
-  the seal runs interpreted. The seal is NOT the cost it looks like: the reporter re-measured their
-  own claim and found the seal worth ≈**10%** (`8'((hexdig<<4)|hexdig)` 5.16 s against the same
-  expression uncast, 4.70 s) while the FRAME CALL is **5×** (against 1.03 s with no function at
-  all). Their round-38 request to close R8 is withdrawn on that measurement, and this entry keeps
-  the census only.
-  Prerequisite for ⓒ is the sign gate `wprog.rs:120` argues from the admitted set (*"`Div`/`Mod`/
-  `Mul`/`Pow` are not admitted"*), so a `Mul` arm must re-argue it. ⓐ/ⓑ are a census, not a fix,
-  until the decline is located — `compile` is the only honest answer to "will `wprog` take this",
-  which is `WPROG-WHY` in §5.b, now motivated by BOTH sides having misread this residue from
-  invocation counts.
-- 4-state actual → 2-state formal 강제가 런타임 O(선언폭)(3백엔드 동일: `byte` 12.8× `shortint` 23.8× `int` 46.4×). 진짜 수정 = x/z→0 IR 프리미티브(format bump) 또는 엔진 memoize; 완화 둘(per-query 메모·노드 예산)은 개선 0 으로 반증(비용은 바인드 개수에 있고 영속 캐시는 in-place 패치와 충돌).
-- 상수 도메인의 비교/논리/삼항조건 fold 가 ~3배 느리다(값은 정답): `const_int_selfdet` 이 트리를 두 번 더 걷는다 = 피연산자당 6 walk vs 옛 2. 병리적: 1,500 localparam × 60항 0.35 → 1.00 s · 이중 generate-for 3.14 → 11.73 s · 컨트롤 1.00×; 현실 설계에선 안 보인다(picorv32 0.030 → 0.030 s). 처방 ⓐ 폭·부호 walk 융합 ⓑ generate-for bound 의 genvar-free 부분식 메모.
-  - ⚠️ **"현실 설계에선 안 보인다" was measured on ONE design and is false.** picorv32's elaboration is
-    0.4% of its run, so a 3× front end is invisible in its wall time. Measured against
-    `v0.2.0-49` on 2026-09-07: biriscv `elab_s` **0.0202 → 0.0275 s (+36%)**, and a module of
-    20,000 `wire [31:0]` declarations **0.078 → 0.228 s (+193%)** — a plain LITERAL bound, so the
-    walk count was never the whole story. An external report independently measured +22% on their
-    own design and it is the same root. Bisected to `0af68af` (§4.5.423) at +0.0051 s of the
-    +0.0073 s; `2da0465` accounts for +0.0011 and the rest is spread.
-  - ✅ **Half fixed (2026-09-07).** `const_self_width` / `const_signed_env` and seven sibling
-    shape queries called `parse_int_literal` — five heap allocations — to read a `width` or a
-    `signed` bit and drop the value. `literal::int_literal_shape` answers those without building
-    the bits (a `_`-free 1..=9-digit decimal is 32/signed by construction; everything else falls
-    through to the same parse, so the two cannot disagree). biriscv **0.0275 → 0.0218 s**, the
-    20,000-declaration module **0.228 → 0.082 s**, examples byte-identical.
-  - Residue = prescription ⓐ, now the whole of it: `eval_const_env_self` walks the tree three
-    times (`const_self_width`, `const_signed_env`, then the evaluation) where the i64 walk went
-    once. A `[W-1:0]` bound still costs 2 extra `walk_scopes` — 20,000 of them are 0.079 → 0.115 s
-    (+45%). Fusing the width and sign walks halves that; `walk_scopes` returning an owned `String`
-    per lookup is the other half.
-- `==?`/`!=?` 좌편향 체인은 여전히 2^depth: 깊이 22 에서 30 s → 79 s. 값은 정확.
+  ⓐ a destination wider than the cast fires on both signs — that is the seal doing its job, stopping
+  the context width from leaking through (`expr_cast.rs`); ⓑ a user function call in the operand
+  fires even at equal width, on both signs — the column an `$unsigned`-only census cannot see;
+  ⓒ `*` (and by construction `/`, `%`, `**`) has no `wprog` compile arm (`16'(a*b)` 400,000 /
+  0.153 s against `16'(a+b)` 0 / 0.054 s). One mechanism under all three: `compile_node`'s entry
+  gate is `sw.width != w || sw.signed != signed`, and `Expr::Call` has no arm at all, so any program
+  containing one declines whole and the seal runs interpreted. The seal is not the cost it looks
+  like — it is worth about 10% (`8'((hexdig<<4)|hexdig)` 5.16 s against the same expression uncast,
+  4.70 s) while the FRAME CALL is 5× (against 1.03 s with no function at all). Prerequisite for ⓒ:
+  the sign gate at `wprog.rs:120` argues from the admitted set ("`Div`/`Mod`/`Mul`/`Pow` are not
+  admitted"), so a `Mul` arm must re-argue it. ⓐ and ⓑ stay a census, not a fix, until the decline is
+  located: `compile` is the only honest answer to "will `wprog` take this", which is `WPROG-WHY` in
+  §5.b.
+- Coercing a 4-state actual into a 2-state formal is O(declared width) at runtime (identical on all
+  three backends: `byte` 12.8×, `shortint` 23.8×, `int` 46.4×). The real fix is an x/z→0 IR
+  primitive (format bump) or engine memoisation; two mitigations are refuted with zero improvement
+  (a per-query memo and a node budget), because the cost is in the number of binds and a persistent
+  cache conflicts with in-place patching.
+- Constant-domain width and sign resolution walks the tree three times: `eval_const_env_self` runs
+  `const_self_width`, `const_signed_env` and then the evaluation where the i64 walk needs one. A
+  `[W-1:0]` bound costs 2 extra `walk_scopes` — 20,000 declarations are 0.079 s without the bound
+  and 0.115 s with it (+45%). Values are correct. Prescription ⓐ fuse the width and sign walks
+  (half of it) and stop `walk_scopes` returning an owned `String` per lookup (the other half);
+  ⓑ memoise the genvar-free sub-expressions of a generate-for bound. Front-end cost is invisible to
+  the workload corpus (§5.b `ELAB-PHASE-BLIND`), so this needs a front-end-bound measurement of its
+  own.
+- A left-leaning `==?` / `!=?` chain is still 2^depth: depth 22 goes from 30 s to 79 s. Values are
+  correct.
 
 ### Oracle splits (recorded, not chased)
 
-- untyped localparam 의 정수 init 폭: `localparam L = 4'd15 + 4'd1` 이 vita 16 = iverilog 16 / verilator 0.
-- iverilog 는 64비트 unsigned `%` 에서 자기모순: `64'hFFFFFFFFFFFFFFFF % 64'd10` = 5 인데 `(64'd0 - 64'd1) % 64'd10` = 1 ⇒ 그 축의 오라클로 `(0-1)` 철자를 쓰지 마라.
-- 크로스스코프 t0 decl-init race(양쪽 §6.8 합법) · 런타임 구성 `-0.0` 표시 · iverilog 자인 결함들(expression-force "evaluated once" 등).
-- `$stime` 의 부호: `16'($stime)` 이 t=0x8000 에서 vita/verilator 5.050 `00008000`, iverilog 13.0 `ffff8000`; IEEE 1364-2005 §17.7.2 = "returns an unsigned integer that is a 32-bit time" 이고 vita 는 캐스트 밖에서도 무부호(`q = $stime` at t=2^31 → `0000000080000000`).
-- Mutual recursion across two packages in a constant function (`p::f(4)` ↔ `q::g`): vita 10 = hand-IEEE (4+3+2+1+0), verilator 8, iverilog cannot parse it (review A, §4.5.440).
-- `#(.S("str"))` 가 적용되기 전에 W3056 을 한 번 낸다(값은 정답): 부모 쪽 숫자 fold 가 먼저 실패해 "override 는 상수가 아니다; 기본값 유지" 를 찍고 그 다음 string 채널이 적용한다.
+- The init width of an untyped localparam's integer initializer: `localparam L = 4'd15 + 4'd1` is 16
+  in vita and iverilog and 0 in verilator.
+- iverilog contradicts itself on 64-bit unsigned `%`: `64'hFFFFFFFFFFFFFFFF % 64'd10` is 5 while
+  `(64'd0 - 64'd1) % 64'd10` is 1 — do not use the `(0-1)` spelling as an oracle on that axis.
+- A cross-scope t0 decl-init race (legal under §6.8 both ways); a runtime-composed `-0.0` rendering;
+  iverilog's self-admitted defects (expression-force "evaluated once" and its family).
+- The sign of `$stime`: `16'($stime)` at t=0x8000 is `00008000` in vita and verilator 5.050 and
+  `ffff8000` in iverilog 13.0. IEEE 1364-2005 §17.7.2 says "returns an unsigned integer that is a
+  32-bit time", and vita is unsigned outside a cast too (`q = $stime` at t=2^31 gives
+  `0000000080000000`).
+- Mutual recursion across two packages in a constant function (`p::f(4)` ↔ `q::g`): vita 10 =
+  hand-IEEE (4+3+2+1+0), verilator 8, iverilog cannot parse it.
+- `#(.S("str"))` emits one W3056 before it is applied (the value is right): the parent's numeric
+  fold fails first and prints "the override is not a constant; keeping the default", and then the
+  string channel applies it.
 
-## 3. Loud→supported 후보 (전부 loud=안전 · additive)
+## 3. loud → correct-support candidates (all loud = safe, additive)
 
-코퍼스 10/10 에 거절 0 ⇒ 워크로드 코퍼스는 더 이상 §3 착수 순서를 정하지 않는다. §3 의 남은 줄은 §2 정확성 큐 뒤에 선다.
+The workload corpus is 10/10 with zero rejections, so it does not order §3 any more. §3 stands
+behind the §2 correctness queue.
 
 ### 3.a Numbered open items
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| ③ⓐ | `&&`/`\|\|` 우항 · `?:` arm 의 파일읽기 호출 hoist 불가 | 건너뛸 수 있는 평가(§11.4.7/§11.4.11) · `hoist/general.rs` guard block | `guarded_hoist` 적용 + fd 상태 순서 증명 | iverilog | — |
-| ③ⓑ | `while`/`for` 조건의 호출 | 한 번 hoist 는 한 번만 읽는다 | 루프 본문 안으로 재작성(`lower_shortcircuit_cond` 모양) | iverilog | — |
-| ③ⓒ | `$feof` 가 살아남는 문장 전부 거절 · `x = $feof(fd)*10 + $fgetc(fd)` EOF 근처 vita 9 / iverilog −1(파일 중간은 일치) | `$feof` 는 파일 위치를 읽는데 hoist 가 변이를 앞으로 옮긴다 · arm 마다 순서 규약이 다름(`assign_seq` rhs→인덱스 · `Case` scrutinee→라벨 · 태스크 인자열) | 선행조건 = `order_walk` 급 순서 판정기 | iverilog | — |
-| ③ⓓ | 별칭을 이름으로 못 붙이는 읽기(`m.a` · `p::v` · `Shape::NoHoist` 자식) + 호출이 ref 를 쓰면 fail-closed 거절 | 겹침을 루트 이름으로 판정 | net 동일성으로 판정 | iverilog | — |
-| ⑤ | ibex 페이지 19→13 = `export "DPI-C"`(12, loud by design) + ibex_core:2481 `cs_registers_i.g_pmp_csrs[i_region].x`(1) | 파서가 상수 인덱스만 세그먼트 이름에 접는다; genvar 는 elaborate 만 안다 | path segment 에 인덱스 식 = AST 모양 ⇒ DEEP | verilator | DEEP |
-| ⑤ⓐ | multi-packed 파라미터: `$size`/`$left`/`$dimensions` · 값으로서의 `'{…}` · 그런 타입의 ARRAY 파라미터 · `import p::*; import q::*` 가 둘 다 `P` export | `packed_md.rs` flat 재작성 밖 | 소비자별 arm | verilator (iverilog: "packed array parameters are not supported yet") | — |
-| ⑤ⓒ | header array parameter: NESTED(2-D) override 패턴 · 원소 >64bit override/whole-array default · `defparam` · interface-header array parameter · override 로서의 `'{default: v}` · 헤더 뒤 BODY `localparam` 이 원소 폭을 이름 부르는 형태 | `array_param_twin`/`const_array_override_vals` 밖 | 채널 확장 | verilator-value | — |
-| ⑤ⓔ | element select: MULTI-PACKED element(`logic [1:0][3:0] A[2]` 의 `A[1][0]`·whole-element read·`$size(A,2)`) · concat/replication count 안의 ascending·non-zero-LSB element · `p::S[1].b` · 런타임 `$size` · 원소 밖 select · UNTYPED child param 의 element-select override | 원소 capture 가 declines(PRE 동일) | 도메인 확장 | verilator-value | — |
-| ⑤ⓕ | unpacked-array typedef residue (§4.5.445 the declaration, the ANSI port and every declaration binder; §4.5.447 the NON-ANSI port and `$bits` of the bare TYPE name; §4.5.453/454 `$bits(a_t)` under a PARAMETER dim and its `pkg::` twin; **§4.5.456 the tf-port FORMAL**; **§4.5.457 `parameter type T = a_t` — the DECLARATION subset**): still loud — a function RETURN type (**1-oracle**, and iverilog does not merely refuse it, it SIGABRTs: `Assertion failed: (lwid == ivl_signal_width(lsig))`; needs an unpacked slot on the FROZEN `hdl_ast::FunctionDef` ⇒ format bump — worst evidence-per-cost in the row) · **§4.5.460 shipped the `localparam`/`parameter` OF that type** — `typedef_param_shape` now returns the typedef's unpacked dims as a sixth field and `finish_param_assignment` enters the `ParamItem::ConstArrayVar(NetVarDecl)` channel the explicit `localparam int P [0:2]` already used, so the two spellings are one AST. Not a bare route: the dims are not in the token stream, so `TypedefParamShape` and `ParamPrefix` each gained a `Vec<Dim>` and `parse_array_param` a preset argument. 12 sub-classes, **1-oracle** (verilator; iverilog refuses every one and ABORTS on the real- and string-element forms, while running the identical typedef as a VARIABLE — the control twin). Composition order is the trap `$bits` cannot catch: the NAME's dims come first (`localparam a_t P [0:1]` reads `P[0][1]`=2, `P[1][2]`=6). It also delivers the ANSI-header OVERRIDE for free through the existing `array_param_twin`, which the row did not claim. Residues, each loud for its own reason and each its own site: a `string` element (`var_kind` is `None`; its explicit twin is equally loud), a module-BODY overridable `parameter` (the array gate, same as the explicit twin), an INTERFACE/program HEADER array parameter (`module_items.rs`'s module-only gate), and `typedef <struct/enum/alias> x_t [dims];` which is refused upstream at `typedefs.rs`'s chained-alias gate and so cannot be reached from here (1-oracle) · `parameter type T = a_t` SHIPPED §4.5.457 (the `T v;` declaration subset — the dims ride the registered TYPEDEF, which every declaration binder already reads, so a port, a tf-port formal, `foreach`, `$size(v,1)`, the `localparam type` spelling and a `pk::` default all follow). **§4.5.459 shipped the dim-carrying OVERRIDE** (`#(.T(b_t))`): an OVERRIDABLE type parameter's extents now ride two more synthesized value parameters per dim (`T$d<i>a`/`T$d<i>b`, the declared endpoints, `[N]` normalized to `[0:N-1]` on both sides so the channel is two values per dim whatever spelling either side used), and the registered typedef names them, so the element width AND the extents follow an override together. 95-cell census (5 defaults × 10 overrides × named/positional) PRE/POST/two oracles: **28 fixed · 0 regressed · 0 PRE-value changed** (87 of 95 were loud in PRE), plus 2-D overrides measured separately (`bits=128 s1=4 s2=2` / `bits=48 s1=2 s2=3`, both oracles). The ARITY is the half that cannot follow — declarators are stamped with the default's dim LIST once, at parse — so `shape_flags` carries the dim COUNT and a mismatch is loud in both directions (dim-losing ⇒ the group's F4004; dim-ADDING ⇒ E3002 named on `T`, suppressed when `T$w` is equally unknown because then `T` is simply not overridable here). Residues, each loud for its own reason: an override that CHANGES the dim count (**§4.5.461 grounding: DO-NOT-START, prerequisite measured absent — see §5.2's do-not-start line; and the row's 1-oracle marking is REFUTED for it, both oracles print `bits=256 s1=2 dims=3`**), `T'(…)` (NO-ORACLE) — **§4.5.458 shipped `$bits(T)` on the bare type name** (the element `T$w` times every unpacked dim of the resolved default: 24 / 32 / 48 / a `pk::` default / the body-`parameter` and `localparam type` spellings and `localparam int W = $bits(T)`, 15 cells, 0 regressed. Built from the type parameter's own record rather than routed through `sym_typedef_bits`, which stands itself down on `local_decl_names` — a set the type-param group's own registration inserts `T` into; that stand-down must keep firing for a genuine TYPEDEF key, so the ROUTE changed and the guard did not) · dims on BOTH the typedef and the declarator (`a_t y [0:1]`, a live oracle SPLIT on dimension ORDER — iverilog `$size(y,1)=4 $size(y,2)=2`, verilator `2` / `4`, and iverilog contradicts its own answer for the identical explicit type) (§4.5.453 shipped `$bits(a_t)` when a dim names a PARAMETER — the desugar now multiplies the element by every dim, so the answer is an EXPRESSION and follows the override; §4.5.454 shipped the package-SCOPED twin of the same shape) | each consumer reads `TypeInfo` and has no slot for unpacked dims. The DECLARATION consumers (a variable, a port, a tf-port formal, a type-parameter default) now carry the dims through the map instead; the ones left decline on `!info.unpacked.is_empty()` rather than bind the element type | per-consumer, each its own slice; the split row is do-not-start | 2-oracle except the function return type (1) and the declarator-dims split (0) | S each |
-| ⑤ⓓ | nested struct member: 비-fill 비-0 `v` 의 `default: v` · `o.i.e.name()` · packed ARRAY 멤버 `in_t [1:0] i` · UNPACKED record 안의 packed struct · `u.c.perms.q` · `o.i[1+:2] = …` · 멤버 폭이 `1 << 3`/`8'd5`/전방참조 localparam/header `parameter`(overridable=correct-loud) | 파서 flat layout 표가 받는 소스 종류 밖 | 소비자별 확장 | 2-oracle (`default: v` = verilator whole / iverilog 거절) | — |
-| ⑤ | CU-scope: unit-scope VARIABLE/net · class 본문의 unit enum label · unit 상수 사이 전방참조 · `$unit::t` · `assign` 이 구동하는 enum-typed output port(E3018) | 파서 unit-scope 클론 밖 | 항목별 | 2-oracle (전방참조는 split, vita 는 iverilog 편) | — |
-| ⑤ | parser/preprocessor: multi-dim packed formal 이 동시에 unpacked array(`logic [1:0][3:0] a [2]`) · 32비트 미만 파라미터의 based-literal 값이 parse-time 표 밖 · 비-ANSI `<type> [dims]` 포트 · dims 를 가진 atom typedef · dims 를 가진 SIGNED typedef element · 이름 없는/중복 `define formal | 파서 flat 재작성 · `define 인자 파서 | 표/재작성 확장 | 2-oracle / split (verilator lenient) | — |
-| ⑤ | `parameter type` 의 struct/enum/union/real/string/class 또는 다차원 default·override | `T$w`/`T$s` 두 값 파라미터 desugar 로 표현 불가 | loud by design | 2-oracle | — |
-| ⑧ | 함수 본문의 시스템 함수 거절 — `assign m = f()` 안의 `$random`/`$time` 이 매 패스 다시 뽑힌다 | 씨앗은 넷이 아니라 `levelize::func_read_deps` 가 이름 부를 수 없다 | 넷 아닌 상태를 의존 집합에 표현 | 2-oracle(둘 다 얼린다) | — |
-| ⑧ | 도달한 `$finish` 다음 문장이 실행된다(`$fatal` 과 같은 동작) | `SimState::frame_end_is_loud` 의 경계가 문장 | 경계를 식 수준으로 | iverilog 는 멈춘다 | — |
-| ⑧ | output formal 을 가진 함수는 `Terminator::Call` 로 라우팅돼 `$finish` 를 수행(exit 0) — 같은 구문이 formal 방향에 따라 두 답 | 라우팅이 formal 방향에 갈린다 | 라우팅 통일 | iverilog 는 구문 자체를 거부 | — |
-| ⑧ | 카운터를 이월하는 함수의 잔여 불일치는 규칙이 아니라 평가 한 번 | vita 의 t0 추가 settle 패스 | 이 가족의 정직한 인증 선행조건 | 2-oracle | — |
-| ⑨ | `import pk::*;` 뒤 바레 string/real 파라미터 이름 loud(fold 성공, import 바인딩만 없음) | `apply_import_consts` 가 `params`(i64)로만 재바인딩 | string/real 사이드맵에 같은 대우 = 라우팅 아닌 배관, 호출부 둘. 핀 = `string_const_domain.rs` · `real_params.rs` | 2-oracle | — |
-| ⑨ | `generate if (P::R > 1.0)` real 조건 loud | `const_real.rs` 에 `PkgScoped` arm 없음 | arm 추가 | 2-oracle | small |
-| ⑬ | 서브루틴 본문 안 배열 접근이 CALL 문에 귀속 | tier-3 arena 가 RECORD 만 하고 caller 문장 경계에서 drain ⇒ callee StmtId 를 모른다 | 두 번째 `cur_stmt` 원본 또는 `Rc<Cell>` 공유. 트랩: publish 를 넣으면 interp 가 `d.sv:6`, native 가 무위치 ⇒ 백엔드 일치를 택했다 | — | — |
-| ⑬ | terminator 조건(`if (mem[i])`) · cont-assign settle · t0 arm · delayed-CA apply drain 은 무위치 | 블록 마지막 문장 뒤 평가라 `cur_stmt` 를 NO_STMT 로 지운다 | 틀린 줄보다 무위치가 낫다(의도) | — | — |
-| ⑬ | W4022 · W4028 · delta-limit · RunRange · W4020 · W4029/W4007 인스턴스 경로 = `location: None` | sid 없는 진단군은 접근 문장 키가 엔진에 없다 | `cur_stmt` + `stmt_diag_meta`(배관 존재) · §4.5.249 `SpanResolver` + StmtId→span 사이드카 | — | — |
-| ⑭ | call-tree-to-task 미출하: 인라인된 서브루틴은 0 calls 로 보고돼 "free" 로 읽힌다 | 호출을 두 방식으로 lower — call seam frame body, elaborate-time INLINE splice(`inline_task.rs`/`inline_fn.rs`; 14.39 s inline vs 0.35 s frame) | 선행조건 = 인라인 사이트→caller 의 elaborate-time 기록(`Sidecars::func_names` 존재, 선언 `file:line:col` 쌍둥이만 없음) | — | — |
-| ⑭ | 리포터는 ~440 cycle/s 를 원하고 20.4 를 잰다 = 21x scheduler/executor | 관측성 아님 | Phase D codegen + arena — §5.1 에서 추적 | — | — |
+| ③ⓐ | a file-read call in the right operand of `&&` / `\|\|` or in a `?:` arm cannot be hoisted | skippable evaluation (§11.4.7 / §11.4.11) · `hoist/general.rs` guard block | apply `guarded_hoist` plus an fd-state ordering proof | iverilog | — |
+| ③ⓑ | a call in a `while` / `for` condition | a hoist reads once, and the condition must read every iteration | rewrite into the loop body (the `lower_shortcircuit_cond` shape) | iverilog | — |
+| ③ⓒ | every statement a `$feof` survives into is refused · near EOF `x = $feof(fd)*10 + $fgetc(fd)` is vita 9 against iverilog −1 (mid-file they agree) | `$feof` reads the file position and the hoist moves the mutation ahead of it · each arm has its own ordering convention (`assign_seq` rhs→index, `Case` scrutinee→labels, a task argument list) | prerequisite = an `order_walk`-grade ordering judge | iverilog | — |
+| ③ⓓ | reads that cannot be named by an alias (`m.a`, `p::v`, a `Shape::NoHoist` child) plus a fail-closed refusal when the call uses a ref | overlap is judged by root name | judge by net identity | iverilog | — |
+| ⑤ | the ibex page is 19→13 = `export "DPI-C"` (12, loud by design) plus `ibex_core:2481` `cs_registers_i.g_pmp_csrs[i_region].x` (1) | the parser folds only a constant index into a segment name; a genvar is known only to elaborate | an index expression in a path segment is an AST shape ⇒ DEEP | verilator | DEEP |
+| ⑤ⓐ | multi-packed parameters: `$size` / `$left` / `$dimensions`, `'{…}` as a value, an ARRAY parameter of such a type, and `import p::*; import q::*` where both export `P` | outside `packed_md.rs`'s flat rewrite | one arm per consumer | verilator (iverilog: "packed array parameters are not supported yet") | — |
+| ⑤ⓒ | header array parameters: a NESTED (2-D) override pattern, an element >64 bits or a whole-array default override, `defparam`, an interface-header array parameter, `'{default: v}` as an override, and a BODY `localparam` after the header that names the element width | outside `array_param_twin` / `const_array_override_vals` | widen the channel | verilator-value | — |
+| ⑤ⓔ | element select: a MULTI-PACKED element (`A[1][0]`, a whole-element read and `$size(A,2)` on `logic [1:0][3:0] A[2]`), an ascending or non-zero-LSB element inside a concat or replication count, `p::S[1].b`, runtime `$size`, a select outside the element, and an element-select override of an UNTYPED child parameter | the element capture declines | widen the domain | verilator-value | — |
+| ⑤ⓕ | unpacked-array typedef residue, still loud: a function RETURN type of the typedef (1-oracle; iverilog does not merely refuse it, it SIGABRTs with `Assertion failed: (lwid == ivl_signal_width(lsig))`; it needs an unpacked slot on the FROZEN `hdl_ast::FunctionDef`, i.e. a format bump — the worst evidence-per-cost in the row) · a `string` element (`var_kind` is `None`; the explicit twin is equally loud) · a module-BODY overridable `parameter` of that type (the array gate, same as the explicit twin) · an INTERFACE or program HEADER array parameter (`module_items.rs`'s module-only gate) · `typedef <struct/enum/alias> x_t [dims];`, refused upstream at `typedefs.rs`'s chained-alias gate and unreachable from here (1-oracle) · an override that CHANGES the dim count (DO-NOT-START, see §5.2; both oracles print `bits=256 s1=2 dims=3`) · `T'(…)` (no oracle) · dims on BOTH the typedef and the declarator (`a_t y [0:1]`, a live oracle SPLIT on dimension ORDER — iverilog `$size(y,1)=4 $size(y,2)=2`, verilator `2` / `4`, and iverilog contradicts its own answer for the identical explicit type). Composition order is the trap `$bits` cannot catch: the NAME's dims come first (`localparam a_t P [0:1]` reads `P[0][1]`=2 and `P[1][2]`=6). ARITY is the half that cannot follow an override — declarators are stamped with the default's dim LIST once at parse — so `shape_flags` carries the dim COUNT and a mismatch is loud in both directions (dim-losing ⇒ the group's F4004; dim-ADDING ⇒ E3002 named on `T`, suppressed when `T$w` is equally unknown, because then `T` is simply not overridable here) | each consumer reads `TypeInfo` and has no slot for unpacked dims. The DECLARATION consumers (a variable, a port, a tf-port formal, a type-parameter default) carry the dims through the map; the rest decline on `!info.unpacked.is_empty()` rather than bind the element type | per consumer, each its own slice; the split row is do-not-start | 2-oracle except the function return type (1) and the declarator-dims split (0) | S each |
+| ⑤ⓓ | nested struct members: `default: v` with a non-fill non-zero `v` · `o.i.e.name()` · a packed ARRAY member `in_t [1:0] i` · a packed struct inside an UNPACKED record · `u.c.perms.q` · `o.i[1+:2] = …` · a member width given as `1 << 3`, `8'd5`, a forward-referenced localparam, or a header `parameter` (overridable = correct-loud) | outside the source kinds the parser's flat layout table accepts | widen per consumer | 2-oracle (`default: v`: verilator whole / iverilog rejects) | — |
+| ⑤ | CU scope: a unit-scope VARIABLE or net · a unit enum label in a class body · a forward reference between unit constants · `$unit::t` · an enum-typed output port driven by `assign` (E3018) | outside the parser's unit-scope clone | per item | 2-oracle (the forward reference is split; vita follows iverilog) | — |
+| ⑤ | parser / preprocessor: a multi-dim packed formal that is also an unpacked array (`logic [1:0][3:0] a [2]`) · a based-literal value for a parameter narrower than 32 bits, outside the parse-time table · a non-ANSI `<type> [dims]` port · an atom typedef with dims · a SIGNED typedef element with dims · an unnamed or duplicate `` `define `` formal | the parser's flat rewrite · the `` `define `` argument parser | widen the table and the rewrite | 2-oracle / split (verilator lenient) | — |
+| ⑤ | `parameter type` with a struct, enum, union, real, string or class default or override, or a multi-dimensional one | not expressible by the `T$w` / `T$s` two-value-parameter desugar | loud by design | 2-oracle | — |
+| ⑧ | system functions in a function body are refused — `$random` / `$time` inside `assign m = f()` re-draw on every pass | the seed is not a net, and `levelize::func_read_deps` cannot name it | represent non-net state in the dependency set | 2-oracle (both freeze it) | — |
+| ⑧ | the statement after a reached `$finish` executes (the same behaviour as `$fatal`) | `SimState::frame_end_is_loud`'s boundary is the statement | move the boundary to expression level | iverilog stops | — |
+| ⑧ | a function with an output formal is routed through `Terminator::Call` and PERFORMS the `$finish` (exit 0), so the same syntax has two answers depending on formal direction | routing splits on formal direction | unify the routing | iverilog rejects the syntax itself | — |
+| ⑧ | the residual mismatch for a function that carries a counter forward is one evaluation, not a rule | vita's extra t0 settle pass | prerequisite for an honest certification of this family | 2-oracle | — |
+| ⑨ | after `import pk::*;` a bare string or real parameter name is loud (the fold succeeds; only the import binding is missing) | `apply_import_consts` re-binds through `params` (i64) only | give the string and real side maps the same treatment — plumbing, not routing, two call sites. Pins = `string_const_domain.rs`, `real_params.rs` | 2-oracle | — |
+| ⑨ | a real condition in `generate if (P::R > 1.0)` is loud | `const_real.rs` has no `PkgScoped` arm | add the arm | 2-oracle | small |
+| ⑬ | an array access inside a subroutine body is attributed to the CALL statement | the tier-3 arena only RECORDS and drains at the caller's statement boundary, so it does not know the callee StmtId | a second `cur_stmt` source or a shared `Rc<Cell>`. Trap: adding a publish makes interp report `d.sv:6` and native report no location, so backend agreement was chosen | — | — |
+| ⑬ | a terminator condition (`if (mem[i])`), a continuous-assign settle, a t0 arm and a delayed-CA apply drain have no location | they are evaluated after the block's last statement, which clears `cur_stmt` to NO_STMT | no location is better than a wrong line (deliberate) | — | — |
+| ⑬ | W4022, W4028, the delta limit, RunRange, W4020 and the W4029/W4007 instance path all report `location: None` | the sid-less diagnostic family has no access-statement key in the engine | `cur_stmt` plus `stmt_diag_meta` (the plumbing exists) · a `SpanResolver` plus a StmtId→span sidecar | — | — |
+| ⑭ | the call tree to task granularity is not shipped: an inlined subroutine reports 0 calls and reads as "free" | calls are lowered two ways — a call-seam frame body and an elaborate-time INLINE splice (`inline_task.rs` / `inline_fn.rs`; 14.39 s inlined against 0.35 s framed) | prerequisite = an elaborate-time record of inline site → caller (`Sidecars::func_names` exists; only the declaration `file:line:col` twin is missing) | — | — |
+| ⑭ | a reporter wants ~440 cycles/s and measures 20.4 — a 21× scheduler/executor gap | not an observability item | Phase D codegen plus arena — tracked in §5 | — | — |
 
 ### 3.b Small residues
 
@@ -363,311 +646,306 @@ WALL(AST self-width) — the size-cast cluster below (width probe, `ir_bits_of` 
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| specify | `specify … endspecify` 블록 자체가 E2002(`specparam` 은 모듈 상수로 수용) | 파서 미수용 | `specparam` hoist + 경로지연/타이밍체크 폐기. 선행 = `hdl_parser::parse` 에 경고 채널이 없어 조용히 버리면 `$setup` 이 loud→silent ⇒ `ModuleItem` 마커 + elaborate `W3056` | iverilog | — |
-| case-inside | `case (x) inside {…}`(§12.5.4) = E2002 | 파서 미수용 | hand-IEEE `==?` + 내부차분 | no-oracle | — |
-| based-ws | `64'sh FFFF` = lexer reject | 렉서 | 허용 | iverilog 허용 | minor |
-| tf-localparam | `task automatic t; localparam int K = 3;` → `E2002 expected statement, found keyword 'localparam'`(IEEE §6.20 허용) | 파서 statement 위치 | 선언 수용 | iverilog | small |
-| R30-1 | 빠진 패키지 → E2002 7줄, 패키지 이름 0줄 | tf-port 의 `IDENT::IDENT` 를 파서가 타입으로 못 받는다 | 타입으로 받고 elaborate 가 "unknown package" ⇒ 1줄 | — | 파서 |
-| blocal-flatten | ⓐ 같은 이름을 쓰는 두 형제 블록이 **선언 초기화자**로만 대입돼도 read-before-assign 가드가 거절(두 오라클 `o1=44 o2=55`) ⓑ 상호배타 `if/else` 두 가지가 같은 이름을 선언하면 같은 가드가 거절 — **2-오라클이다**(둘 다 `o1=44`; 「무오라클」은 §4.5.467 그라운딩이 반박) ⓒ 중첩 shadow 가 멤버를 덮는 건 **HEAD 에서 반박됨**(module·interface·read 세 철자 전부 vita = 두 오라클 `a5`) | `block_local/gate.rs` 의 read-before-assign 가드는 **증상 자리**다. 진짜 자리는 저장소 분류기 `gather_auto_block_locals` — 정적 초기화자는 블록 진입이 아니라 t0 1회이므로(3-툴 실측 `6,7,8,9`) 가드에 초기화자를 세면 `o1=44 o2=44` 로 **loud→silent-wrong** 이 된다 | **지었다가 되돌렸다**(§4.5.467). 분류기에 「초기화자를 가진 static」 항을 더하면 ⓐⓑ 와 widened 중첩까지 19칸이 loud→value(전부 두 오라클 일치)지만, 후보 판정 pass 가 **네 번째 허용 규칙을 흡수하지 못한다**: 넓힘이 후보를 **뺀다**(리뷰 R1 — 인접 `automatic` 블록이 스코프를 잃음) → `automatic` 바닥으로 고치면 **동적 저장소 4종이 loud 회귀**(R2) → 규칙별 바닥으로 고치면 shadow 규칙의 바닥이 **다른 스팬의 loud 를 지워 18칸 loud→silent-wrong**(R3, 위 §2 shadow 행). 3라운드 연속 BLOCKING ⇒ revert. **선행조건 = 위 §2 shadow mis-route 를 먼저 닫는 것**(그것이 있는 한 스코프를 넓히면 가려져 있던 오답이 드러난다) | ⓐ 2-oracle ⓑ 2-oracle ⓒ 반박 | — |
-| enum-label | `enum bit[3:0] {A=8'hFF}` → `enum_defs` 미등록 → `.first`/`.next`/`.name` 全 E3010/E3009; out-of-range 검증 skip 으로 silent-truncate | `const_lit` 이 unsized-decimal 만 fold | const_lit 확장 또는 elaborate-time 검사 | iverilog reject | — |
-| md-packed-write | md-packed nested part-select WRITE: ascending/non-zero-lsb leaf · genvar-index `x[g][m:l]`(over-reject) · const-OOB packed idx = silent no-op | §4.5.145 는 descending zero-lsb leaf 한정 | leaf 기하 확장 | — | — |
-| misc-parse | 음수-LSB 멤버 sub-select · generate 내 `import` · package 자기-func init · SYS-READ hier-element dest · hier-write sentinel panic→loud · EXT2-A2c `logic[1:0][7:0] PK` · EXT2-NAP `'{k:v}` | — | hand-IEEE + 내부차분 | no-oracle | — |
+| specify | a `specify … endspecify` block is E2002 (`specparam` is accepted as a module constant) | the parser does not accept it | hoist `specparam` and discard path delays and timing checks. Prerequisite: `hdl_parser::parse` has no warning channel, so discarding silently would turn `$setup` from loud into silent — needs a `ModuleItem` marker plus an elaborate `W3056` | iverilog | — |
+| case-inside | `case (x) inside {…}` (§12.5.4) is E2002 | the parser does not accept it | hand-IEEE `==?` plus an internal differential | no oracle | — |
+| based-ws | `64'sh FFFF` is a lexer reject | lexer | accept it | iverilog accepts | minor |
+| tf-localparam | `task automatic t; localparam int K = 3;` gives `E2002 expected statement, found keyword 'localparam'` (IEEE §6.20 allows it) | the parser's statement position | accept the declaration | iverilog | small |
+| R30-1 | a missing package gives 7 lines of E2002 and never names the package | the parser cannot take `IDENT::IDENT` in a tf-port as a type | take it as a type and let elaborate say "unknown package" ⇒ 1 line | — | parser |
+| blocal-flatten | ⓐ two sibling blocks using the same name are refused by the read-before-assign guard even when they are assigned only by declaration initialisers (both oracles `o1=44 o2=55`) · ⓑ two mutually exclusive `if`/`else` branches declaring the same name hit the same guard, and it is 2-oracle (both `o1=44`) | `block_local/gate.rs`'s read-before-assign guard is the SYMPTOM site. The real site is the storage classifier `gather_auto_block_locals`: a static initialiser runs once at t0 rather than on block entry (measured `6,7,8,9` across three tools), so counting initialisers in the guard turns the cells into `o1=44 o2=44`, loud→silent-wrong | adding a "static with an initialiser" term to the classifier turns ⓐ, ⓑ and the widened nesting — 19 cells, all agreeing with both oracles — from loud into a value, but the candidacy pass cannot absorb the fourth admission rule: widening REMOVES candidates (an adjacent `automatic` block loses its scope), an `automatic` floor then makes 4 kinds of dynamic storage loud, and a per-rule floor makes the shadow rule's floor erase another span's loud, 18 cells loud→silent-wrong. BLOCKED BY: the §2 shadow mis-route above — while it stands, widening the scope exposes the wrong answers it was hiding | ⓐ 2-oracle ⓑ 2-oracle | — |
+| enum-label | `enum bit[3:0] {A=8'hFF}` never reaches `enum_defs`, so `.first` / `.next` / `.name` are all E3010 / E3009, and the skipped out-of-range check silently truncates | `const_lit` folds unsized decimals only | widen `const_lit` or check at elaborate time | iverilog rejects | — |
+| md-packed-write | multi-dim packed nested part-select WRITE: an ascending or non-zero-lsb leaf · a genvar-indexed `x[g][m:l]` (over-rejected) · a const out-of-bounds packed index is a silent no-op | the current support is limited to a descending zero-lsb leaf | widen the leaf geometry | — | — |
+| misc-parse | a negative-LSB member sub-select · `import` inside a generate · a package's own-function initializer · a SYS-READ hierarchical-element destination · a hierarchical-write sentinel panic that should be loud · `logic[1:0][7:0] PK` · `'{k:v}` | — | hand-IEEE plus an internal differential | no oracle | — |
 
 **Constants / parameters**
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| wide-override | wide(>64bit) 파라미터 OVERRIDE loud — `#(.K(128'h…))` 거절 | override 채널이 i64/string 뿐 | `ResolvedOverride` 에 wide 슬롯; 자식 폭을 모르는 부모에서 접으므로 원문을 넘겨 자식 폭에서 재폴딩 | — | — |
-| §3.3 | wide `localparam` part-select fold — `{A[127:64], 64'h0}` | 인덱스 fold 가 필요한 별개 arm | arm 추가 | iverilog 는 접는다 | — |
-| real-fold | `localparam/parameter real` 의 `+`·`*`·`/`·`-`·`**` 全 E3009 "not foldable"; `$clog2(real-lit)` 동근 | `const_eval_in_scope` = i64-only | real f64 arithmetic 추가 | iverilog folds | broad |
-| xz-fill-param | `localparam logic [W] P = 'x` 가 0 bind(x 소실) → `P==0`·`P+1`·`P ==? pat` 全 divergent | `fill_to_i64`/`fill_literal_const` | 상수 도메인에 x/z | — | broad |
-| compound-==? | `==?` fold 잔여 = unsized x/z 패턴 · negative-signed LHS · non-literal RHS · param override 비상수(W3056→error) · longint MIN fold(package) · loud-message 품질 2건 | §4.5.146 은 sized 패턴만 | 확장 | — | — |
-| defparam-iface | `ifc a(); defparam a.D = 255;` → `W3056 … matched no instance` + 기본값 유지(iverilog `d=ff`, vita `d=8`) | `defparams` 소비가 `elaborate_instance` 에만 · `iface_inst.rs` 는 자기 `overrides` 만 | `defparams.remove(path)` 를 정본 바인더에서 병합 | iverilog | small |
-| neg-ascending | `reg [-33:-2]` → `$bits` vita 1 / iverilog 32, loud `W3056`. 하강 `[-2:-33]`·혼합 `[3:-2]` 정상 | `array_geom.rs` `allow_neg_lsb` opt-in | 그 조합을 opt-in 경로에 | iverilog | — |
-| neg-bound-part | 음수 bound net PART select: `q[-3 +: 2]`·`q[-1 -: 2]` 정확, `[msb:lsb]` 만 막힘. 쓰기 비대칭 — `x[-3:-2]=…` 조용히 정확, `x[-1:0]=…` 은 "out of order" 라는 사실과 다른 방향 진단으로 loud | 바운드 fold 가 unsigned | `const_bound_signed` | verilator | — |
-| neg-elem-bound | `logic [-3:0] q[$]` W3056 클램프(verilator `q[0][-3]`=1) | 원소 net 이 `elaborate_netvar_decl_inner` early-`continue` 경로라 선언 사이드맵에 안 닿는다 | 사이드맵에 닿게 | verilator | — |
-| §3.1(c) | `always_comb` 구동 변수의 선언 초기화자 무경고 — verilator `MULTIDRIVEN` error · xrun `*E,MULAXX` · iverilog 실행(2:1) | elaborate 층 · 감도 리스트 합성이 그 집합을 안다 | W2004 급 경고 한 줄 | split(lint) | small |
-| aes§2 | 인라이너 판별자가 `automatic` 만이 아니다 — plain 3/5 · `automatic`·`for`·`if`·`case` 1/5 · `p::f()` 2/5 | 인라이너 판별자 | 인라이너 확장 | 실측 | — |
+| wide-override | a wide (>64-bit) parameter OVERRIDE is loud — `#(.K(128'h…))` is refused | the override channel carries i64 and string only | a wide slot on `ResolvedOverride`; since the parent folds without knowing the child's width, pass the source text and re-fold at the child's width | — | — |
+| §3.3 | a wide `localparam` part-select fold — `{A[127:64], 64'h0}` | a separate arm that needs an index fold | add the arm | iverilog folds | — |
+| real-fold | `+`, `*`, `/`, `-` and `**` on a `localparam` / `parameter real` are all E3009 "not foldable"; `$clog2(real-lit)` has the same root | `const_eval_in_scope` is i64-only | add real f64 arithmetic | iverilog folds | broad |
+| xz-fill-param | `localparam logic [W] P = 'x` binds 0 (the x is lost), so `P==0`, `P+1` and `P ==? pat` all diverge | `fill_to_i64` / `fill_literal_const` | x/z in the constant domain | — | broad |
+| compound-==? | `==?` fold residue = an unsized x/z pattern · a negative signed LHS · a non-literal RHS · a non-constant parameter override (W3056→error) · a longint MIN fold (package) · two loud-message quality items | the current fold handles sized patterns only | widen it | — | — |
+| defparam-iface | `ifc a(); defparam a.D = 255;` gives `W3056 … matched no instance` and keeps the default (iverilog `d=ff`, vita `d=8`) | `defparams` is consumed only in `elaborate_instance`, and `iface_inst.rs` reads only its own `overrides` | merge `defparams.remove(path)` into the canonical binder | iverilog | small |
+| neg-ascending | `reg [-33:-2]` gives `$bits` 1 in vita against iverilog's 32, plus a loud `W3056`. Descending `[-2:-33]` and mixed `[3:-2]` are correct | `array_geom.rs`'s `allow_neg_lsb` is opt-in | put that combination on the opt-in path | iverilog | — |
+| neg-bound-part | a negative-bound net PART select: `q[-3 +: 2]` and `q[-1 -: 2]` are exact and only `[msb:lsb]` is blocked. Writes are asymmetric — `x[-3:-2]=…` is silently exact while `x[-1:0]=…` is loud with an "out of order" diagnostic that names the wrong fact | the bound fold is unsigned | `const_bound_signed` | verilator | — |
+| neg-elem-bound | `logic [-3:0] q[$]` gives a W3056 clamp (verilator `q[0][-3]`=1) | the element net takes `elaborate_netvar_decl_inner`'s early-`continue` path and never reaches the declaration side map | make it reach the side map | verilator | — |
+| §3.1(c) | no warning for a declaration initializer on a variable driven by `always_comb` — verilator gives a `MULTIDRIVEN` error, xrun `*E,MULAXX`, iverilog runs it (2:1) | the elaborate layer; sensitivity-list synthesis already knows the set | one W2004-grade warning line | split (lint) | small |
+| aes§2 | the inliner's discriminator is more than `automatic` — plain 3/5, and `automatic` / `for` / `if` / `case` 1/5, `p::f()` 2/5 | the inliner's discriminator | widen the inliner | measured | — |
 
 **Subroutine / frame**
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| §3.11 | `function automatic` 인라인 — "비-재귀 automatic 은 인라인과 동일" 은 측정으로 반증(전 스위트 15 실패 · `$random` 두 번) | 인라인 확장이 피연산자를 두 번째로 이름 부른다 | ⓐ 한 번만 이름 부르기(callee-purity 술어) · ⓑ codegen 개방(`is_codegen_able` 의 `Terminator::Call` 거부 = §5 T1/T2) | — | — |
-| static-local | `function integer f(input integer x); integer s; begin s = s + x; f = s; end` → E3010 `undeclared net/variable top.s` | 블록-로컬 flatten 이 definite-assignment 요구; 제어 흐름이 있으면 프레임이 되어 정상 ⇒ 갭은 "직선 본문 + 읽고-쓰는 static 로컬" 뿐 | flatten 에 read-before-write 슬롯 | iverilog 는 X 로 실행 | — |
-| frame-oob | 프레임-로컬 배열 OOB 읽기에 E4002 없음(모듈 배열은 E4002+exit 1) | 프레임 로컬 배열은 packed 슬롯이라 array-word 개념이 없다 | elaborate 가 슬롯의 원래 기하를 남긴다 | vita 내부 비일관 | — |
-| 2seg-call | output-formal 호출 왼쪽의 `c.m()`·`u.size()`·`t.size()`·`ci.get_coverage()` loud. 의도된 교환: PRE 는 조용히 틀렸다(`t.o` 로 `q=12`, 정답 11) | `order_walk` opacity 를 `callee_body_cannot_touch`(단일 세그먼트 전용)로 답할 수 없다 | 클래스 메서드/패키지 함수 본문 리졸버 | iverilog | — |
-| dyn-formal-pos | dyn-formal 호출 불가 자리 = `&&`/`\|\|` 우변 · 다른 호출의 인자 · select/lvalue 인덱스 · `case` scrutinee · `repeat` 카운트 · cast/replicate 피연산자. 지원 7 / loud 10(9건 iverilog PASS = false-loud) | 좁은 hoister(`hoist_dyn_formal_calls`)와 범용 hoister(`shape()`)가 다른 위치 집합 | 범용 hoister 흡수(`__t = f(arr)`). 함정: stand-down 이 `frame_fn_lowering` 이라 프레임 함수 본문만 남았고 거기선 hoist 가 정상 ⇒ call-kind 단위로 쪼갠다 | iverilog 9/10 | — |
-| pkg-default | package 함수 default 인자 스코프 — `default_binding_matches_decl_scope` 가 `tf_decl_scope` 와 비교하나 package 함수는 import 한 모듈 프리픽스로 기록 | 심볼별 선언 스코프 미기록 | 심볼별 선언 스코프 기록 | iverilog | — |
-| fgets-rhs | `return $fgets(line, fd);` = E3009 "…only as the direct rhs of a blocking assignment" | 라우팅 술어와 로워링이 같은 형태에 키잉 | 둘을 함께 넓힌다 | iverilog | — |
-| V3/V4 | `wait(<frame-local>)` · `repeat(<non-const>) @`(hidden counter 가 SHARED net) · NBA-to-frame-local · `fork`/`disable fork`/`wait fork`-in-task | per-activation repeat counter · in-frame fork machinery 부재 | 각각 별개 슬라이스 | iverilog | — |
-| frame-array | frame-local array 의 multi-dim · non-zero-based · non-simple-element · whole-copy(`b=a`) · `foreach` · NBA-elem · `'{…}` init | §4.5.169 범위 밖 | 확장 | iverilog | — |
-| V2A/V5 | automatic/recursive task 의 dyn-array formal(frame formal 이 scalar slot) · FUNCTION dyn-array local(`&self` 실행기가 `new[]`=`&mut` heap 실행 불가) · recursion/concurrent · multi-dim/packed/non-bit-vector element | `&self` 실행기 | handle-in-slot · per-activation heap stash | iverilog | — |
-| foreach-fn | FUNCTION + `foreach`-on-dyn-formal loud | framed function dyn formal 미지원 | function-frame dyn-formal 슬라이스 | iverilog | — |
-| r16-exec | ① dyn local/formal 을 쓰는 recursion ② string/real/class-handle element 의 dyn formal ③ unwritten output formal = IEEE §13.5.2 empty copy-out | — | per-activation heap stash | iverilog 는 by-ref = 非준수 | — |
-| re-forward | FUNCTION 이 자기 dyn-formal 을 재전달(`return sum(c)`) | framed function formal 이 heap-resident 라 `dyn_array_actual_net` 이 못 resolve | mutual-recursion soundness hole ⇒ frame-route 시 guard | iverilog | — |
-| hier-task | output/inout/array/string formal(cross-boundary copy-out) · STATIC task hier-call · nested-in-frame-body hier enable(`task_calls_func` transitivity) · generate-block 내 hier task call | — | frame⊂inline 동등화 | iverilog | large |
-| array-formal | non-zero-base descending 배열 formal · hier-task OUTPUT/INOUT 배열 formal · frame-formal 배열을 nested hier 로 forward · 재전달 · non-zero-LSB 원소 · 2-D/signed/task array formal | — | — | iverilog | hard |
-| blk-automatic | block-local automatic lifetime(`automatic int j=k*10`) | per-activation storage = deep block-local-flatten | — | iverilog 도 거부 | deep |
-| misc-sub | `q.min()[0]` · `x.name().len()` · pkg TASK statement call · method/ctor NAME-default class-scope · G4 string-return frame call | — | — | no-oracle | — |
+| §3.11 | inlining `function automatic` — "a non-recursive automatic is identical to an inline" is refuted by measurement (15 suite failures, `$random` drawn twice) | the inline expansion names the operand a second time | ⓐ name it once (a callee-purity predicate) · ⓑ open codegen (`is_codegen_able`'s `Terminator::Call` reject, §5 T1/T2) | — | — |
+| static-local | `function integer f(input integer x); integer s; begin s = s + x; f = s; end` gives E3010 `undeclared net/variable top.s` | block-local flatten demands definite assignment; with control flow it becomes a frame and works, so the gap is exactly "straight-line body plus a read-then-write static local" | a read-before-write slot in the flatten | iverilog runs it with X | — |
+| frame-oob | a frame-local array OOB read has no E4002 (a module array gives E4002 and exit 1) | a frame-local array is a packed slot with no array-word concept | elaborate must keep the slot's original geometry | vita is internally inconsistent | — |
+| 2seg-call | `c.m()`, `u.size()`, `t.size()` and `ci.get_coverage()` to the left of a call with an output formal are loud. A deliberate trade: the silent answer was wrong (`t.o` gave `q=12` where 11 is right) | `order_walk` opacity cannot be answered by `callee_body_cannot_touch` (single-segment only) | a resolver for class-method and package-function bodies | iverilog | — |
+| dyn-formal-pos | positions where a dyn-formal call is impossible: the right operand of `&&` / `\|\|`, an argument of another call, a select or lvalue index, a `case` scrutinee, a `repeat` count, a cast or replicate operand. 7 supported / 10 loud (9 of which iverilog PASSes, i.e. false-loud) | the narrow hoister (`hoist_dyn_formal_calls`) and the general hoister (`shape()`) cover different position sets | absorb into the general hoister (`__t = f(arr)`). Trap: the stand-down is `frame_fn_lowering`, so only frame-function bodies remain and the hoist is fine there — split it per call kind | iverilog 9/10 | — |
+| pkg-default | package-function default-argument scope — `default_binding_matches_decl_scope` compares against `tf_decl_scope`, but a package function is recorded with the importing module's prefix | the declaration scope is not recorded per symbol | record it per symbol | iverilog | — |
+| fgets-rhs | `return $fgets(line, fd);` gives E3009 "…only as the direct rhs of a blocking assignment" | the routing predicate and the lowering key on the same shape | widen both together | iverilog | — |
+| V3/V4 | `wait(<frame-local>)` · `repeat(<non-const>) @` (the hidden counter is a SHARED net) · an NBA to a frame local · `fork` / `disable fork` / `wait fork` inside a task | no per-activation repeat counter, no in-frame fork machinery | each is its own slice | iverilog | — |
+| frame-array | a frame-local array that is multi-dim, non-zero-based, non-simple-element, whole-copied (`b=a`), `foreach`-ed, NBA-assigned per element, or `'{…}`-initialized | outside the current scope | widen | iverilog | — |
+| V2A/V5 | a dyn-array formal on an automatic or recursive task (the frame formal is a scalar slot) · a FUNCTION dyn-array local (the `&self` executor cannot run `new[]`, which needs `&mut` heap) · recursion and concurrency · a multi-dim, packed or non-bit-vector element | the `&self` executor | handle-in-slot · a per-activation heap stash | iverilog | — |
+| foreach-fn | FUNCTION plus `foreach` on a dyn formal is loud | a framed function dyn formal is unsupported | the function-frame dyn-formal slice | iverilog | — |
+| r16-exec | ① recursion using a dyn local or formal ② a dyn formal with a string, real or class-handle element ③ an unwritten output formal = IEEE §13.5.2 empty copy-out | — | a per-activation heap stash | iverilog is by-ref, i.e. non-conforming | — |
+| re-forward | a FUNCTION re-forwards its own dyn formal (`return sum(c)`) | a framed function formal is heap-resident, so `dyn_array_actual_net` cannot resolve it | a mutual-recursion soundness hole ⇒ guard when routing to a frame | iverilog | — |
+| hier-task | output / inout / array / string formals (cross-boundary copy-out) · a STATIC task hierarchical call · a hierarchical enable nested in a frame body (`task_calls_func` transitivity) · a hierarchical task call inside a generate block | — | make frame and inline equivalent | iverilog | large |
+| array-formal | a non-zero-base descending array formal · hierarchical-task OUTPUT/INOUT array formals · forwarding a frame-formal array into a nested hierarchical call · re-forwarding · a non-zero-LSB element · 2-D, signed and task array formals | — | — | iverilog | hard |
+| blk-automatic | block-local `automatic` lifetime (`automatic int j=k*10`) | per-activation storage = deep block-local flatten | — | iverilog rejects it too | deep |
+| misc-sub | `q.min()[0]` · `x.name().len()` · a package TASK statement call · a method or constructor NAME default at class scope · a G4 string-returning frame call | — | — | no oracle | — |
 
 **System tasks & file I/O**
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| plusargs-%0d | `$value$plusargs` 의 `%0d` 폭-지정 스펙 과잉거부 — iverilog 는 받는다(값 5), vita E3009 | 스펙 파서가 폭 수식자를 안 벗긴다 | 폭 수식자 제거 — `exec::plusargs::effect` 의 conv 문자 추출과 한 철자(풀리면 `'0'` 이 %s 로 읽히는 함정) | iverilog | small |
-| writemem-local | `task automatic t; reg [7:0] loc[0:1]; … $writememh("x.txt", loc);` = E3009 "a whole unpacked-array formal has no value here" | 두 백엔드 동일 pre-existing | 여는 슬라이스는 seam 도 함께 — `read_task_net` 이 이 거부를 도달 불가 논거로 아레나를 맨손으로 읽는다; 핀 = `writemem_targets_the_seam_cannot_own_are_refused_before_the_backend` | iverilog 는 파일을 쓴다 | — |
-| filepos | `$ftell`/`$sscanf` = E3009 "unsupported system function in expression", `$fseek` = W3056 warn+skip | expression 문맥의 side-effect sysfunc | statement-form desugar 확장 | iverilog 동작(`A=6 B=0 C=6 D=0`, `$sscanf`→`2 12 34`) | — |
-| fmonitor | `$fmonitor`/`$fstrobe` = W3056 skip = 파일출력 silent drop(warned) | `FmtCapture` 에 fd 가 없다 | `FmtCapture` 에 `fd:Option<u32>` + strobe drain 을 `file_write` 라우팅. format bump 필요 · STDIN read 는 결정성 설계 | — | 전용 슬라이스 |
-| $typename | enum / packed struct 가 base 타입으로 렌더(`logic[1:0]`; IEEE §20.6.1 은 `enum{...}`) | 렌더 한정 | 렌더 확장 · 핀 `typename_pins.rs` | no-oracle | 값 무영향 |
-| %p-ⓐ | UNPACKED STRUCT 와 `string sa[2]` 가 DECLARATION 에서 E3010 ⇒ 렌더할 net 이 없다 | 선언 갭 | 그 feature 아래로 재filing | verilator | — |
-| %p-ⓒ | 기록된 발산 둘: NEGATIVE assoc key(vita 는 IEEE §7.9.4 SIGNED key 순, verilator 는 hex 정렬; `-1` 이 64비트) · `real` unpacked array(verilator 는 원소 0 만, QUEUE 는 정확 = 자기모순 ⇒ vita 는 verilator 자신의 재귀 규칙) | — | 핀 유지 | verilator only | — |
-| sformatf | `$sformatf` 를 ternary arm / 단락 우변 / `$monitor`·`$strobe` 인자 / 태스크 인자에 두는 형태 | `eval` 의 `SysFuncId::Sformatf` arm 이 포맷 문자열을 무시 | `format_args_str`/`render_template` 을 리더 제네릭으로 올려 `EvalCtx` 에서 쓰면 통째로 닫히고 statement-level hoist 은퇴 | — | — |
-| ext-round20 | ① §4.11 의 미격리 79 건 ② 감싸는 같은-이름 쌍은 shadowing 이라 loud, 모듈 넷과 이름이 겹치는 블록 로컬도 그대로 | — | — | — | — |
+| plusargs-%0d | `$value$plusargs` over-rejects a width-qualified `%0d` spec — iverilog accepts it (value 5), vita gives E3009 | the spec parser does not strip the width modifier | strip it — one spelling in `exec::plusargs::effect`'s conversion-character extraction (the trap when it is relaxed: `'0'` reads as `%s`) | iverilog | small |
+| writemem-local | `task automatic t; reg [7:0] loc[0:1]; … $writememh("x.txt", loc);` gives E3009 "a whole unpacked-array formal has no value here" | pre-existing and identical on both backends | the opening slice must take the seam with it — `read_task_net` uses this refusal as an unreachability argument and reads the arena bare-handed; pin = `writemem_targets_the_seam_cannot_own_are_refused_before_the_backend` | iverilog writes the file | — |
+| filepos | `$ftell` and `$sscanf` give E3009 "unsupported system function in expression"; `$fseek` gives a W3056 warn-and-skip | a side-effecting system function in expression context | widen the statement-form desugar | iverilog works (`A=6 B=0 C=6 D=0`, `$sscanf` → `2 12 34`) | — |
+| fmonitor | `$fmonitor` and `$fstrobe` are a W3056 skip, i.e. a warned silent drop of file output | `FmtCapture` has no fd | add `fd:Option<u32>` to `FmtCapture` and route the strobe drain to `file_write`. Needs a format bump · STDIN reads are a determinism decision | — | its own slice |
+| $typename | an enum or packed struct renders as its base type (`logic[1:0]`; IEEE §20.6.1 says `enum{...}`) | rendering only | widen the renderer · pin `typename_pins.rs` | no oracle | no value effect |
+| %p-ⓐ | an UNPACKED STRUCT and `string sa[2]` are E3010 at DECLARATION, so there is no net to render | a declaration gap | re-file under that feature | verilator | — |
+| %p-ⓒ | two recorded divergences: a NEGATIVE associative key (vita follows IEEE §7.9.4 SIGNED key order, verilator sorts hex; `-1` is 64 bits) · a `real` unpacked array (verilator prints element 0 only while rendering a QUEUE of the same shape correctly, so it self-contradicts and vita follows verilator's own recursive rule) | — | keep the pins | verilator only | — |
+| sformatf | `$sformatf` in a ternary arm, a short-circuit right operand, a `$monitor` / `$strobe` argument or a task argument | `eval`'s `SysFuncId::Sformatf` arm ignores the format string | lift `format_args_str` / `render_template` to a reader-generic form so `EvalCtx` can use them; that closes the family and retires the statement-level hoist | — | — |
+| ext-shadow | ① 79 un-isolated items under §4.11 ② an enclosing same-name pair is shadowing and therefore loud, and a block local that collides with a module net stays as it is | — | — | — | — |
 
 **Nets / timing**
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| E3001-delayed | `assign #(D) bus = en ? d : 1'bz;` 둘 이상 겹친 tri-state 버스가 exit 1(E3001) | `check_whole_net_multidriver` 가 "드라이버 중 하나라도 delayed 면 4-state wire 해석 대상 아님" 으로 `md_nets` 를 그대로 비춘다 | 엔진 `md_nets` 가 delayed 드라이버를 해석. 트랩: 렌즈의 "PRE 는 맞았다" BLOCKING 은 자기 프로브의 10 ns 격자가 버려진 2 ns 지연을 못 본 것이라 철회됐다 | 2-oracle (1 ns: `t=11 bus=1` / iverilog `bus=z`) | — |
-| E3001-overlap | 같은-범위 part-select 쌍(`assign z8[3:0]=…` ×2)·delayed+plain 겹침을 iverilog 는 비트 단위로 해상(`zzzz0xx1`), vita 는 E3001 | 비트 단위 드라이버 맵 부재 | 비트 단위 드라이버 맵(§2 ⓑ 인프라) 선결 | iverilog | — |
-| hier-event | ``always @(`TOP.a_uVDC.RTRIM_I)`` — 읽기는 이미 동작 ⇒ sensitivity 등록만 | 패치 대상이 `Process.sensitivity.edges[i].net` 이고 그 프로세스는 아직 push 되지 않았다 | (proc_idx, edge_idx) 예약 후 instance 확정 시 패치하는 새 lane | iverilog | — |
-| xproc-disable | cross-process `disable` | 미지원 | "suspend 상태가 아닌 대상의 `disable` 은 no-op" 만으로 그 라이브러리 통과. 경계: suspend 중인 대상까지 무시하면 silent-wrong — 활성이면 loud | iverilog | — |
-| timescale | partial-timescale 진단(`W-PARSE-TIMESCALE-PARTIAL`/`E-PP-TIMESCALE-PARTIAL`) — 일부 모듈만 선언 시 무진단 1ns/1ns(전무 케이스만 W1017) | 배선 부재 | doc-08 §15 설계 · `rt.default_used` 존재 — 배선만 | — | small |
-| deep | t0 race · `@(*)` decl-init wake · runtime `==?` pattern · inline body NON-fill context-width · modport 방향 강제 · force part-select · assoc key/clocking array-output word0 · 음수 range bound 의 PART select(§2) | — | — | — | deep |
+| E3001-delayed | `assign #(D) bus = en ? d : 1'bz;` — two or more overlapping tri-state drivers exit 1 with E3001 | `check_whole_net_multidriver` mirrors `md_nets` on the rule "if any driver is delayed it is not a 4-state wire resolution target" | let the engine's `md_nets` resolve delayed drivers. Trap: a probe at 10 ns resolution cannot see a discarded 2 ns delay | 2-oracle (at 1 ns: `t=11 bus=1` against iverilog's `bus=z`) | — |
+| E3001-overlap | iverilog resolves same-range part-select pairs (`assign z8[3:0]=…` twice) and delayed+plain overlap bit by bit (`zzzz0xx1`) where vita gives E3001 | there is no per-bit driver map | a per-bit driver map is the prerequisite | iverilog | — |
+| hier-event | ``always @(`TOP.a_uVDC.RTRIM_I)`` — the read already works, so only sensitivity registration is missing | the patch target is `Process.sensitivity.edges[i].net` and that process is not pushed yet | a new lane that reserves `(proc_idx, edge_idx)` and patches when the instance is fixed | iverilog | — |
+| xproc-disable | a cross-process `disable` | unsupported | "a `disable` of a target that is not suspended is a no-op" alone passes that library. Boundary: ignoring a suspended target too would be silent-wrong — if it is active, be loud | iverilog | — |
+| timescale | partial-timescale diagnostics (`W-PARSE-TIMESCALE-PARTIAL` / `E-PP-TIMESCALE-PARTIAL`): when only some modules declare one, there is no diagnostic and 1ns/1ns is assumed (only the none-at-all case gives W1017) | not wired | the design is in doc-08 §15 and `rt.default_used` exists — wiring only | — | small |
+| deep | a t0 race · an `@(*)` decl-init wake · a runtime `==?` pattern · a NON-fill context width in an inline body · modport direction enforcement · a force on a part-select · an associative key or clocking array output word0 · a PART select of a negative range bound (§2) | — | — | — | deep |
 
 **Diagnostics quality**
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| E3009-anchor | `E3010`/`E3009` file:line 비일관 — 붙는 자리(`d_trunc.v:3:20`)도, 계층 경로만 나오는 자리도 있다 | 앵커 미전달 | `diag::SpanResolver` 존재 ⇒ 앵커를 안 넘기는 호출 지점 전수가 범위 | — | — |
-| error_at | 앵커와 `found` 가 다른 토큰 — `g[w].u.q` 는 앵커 `w`, 메시지 `found '.'` | `error_at` 은 더 이른 노드에, `found` 는 커서 토큰 | R29-1 이 별개 필드로 분리 ⇒ correct-but-confusing. 사이트 10곳 | — | — |
-| #9 | `velab -L`(worklib 병합) 경로에 위치 없음 | 각 CU 스팬이 자기 확장 버퍼(0부터)를 인덱싱해 좌표공간이 겹친다; 틀린 CU 맵이면 틀린 file:line ⇒ `None` 유지 | 병합 시 스팬 오프셋 재작성(AST 전체 walk) | — | — |
-| cli-lib | `cargo test -p cli --no-default-features --lib` 이 E0004 로 죽는다(pre-existing) | lib 테스트 타깃이 dev-dep 링크로 sim-engine 의 `oracle` 만 되살리고 cli feature 는 꺼진 채라 `backend_name` 의 `#[cfg(feature="oracle")]` arm 둘이 잘린다 | cli dev-dep 을 `default-features = false` 로 잡거나 두 crate 의 `oracle` 을 하나로. CI 는 못 본다 ⇒ 그 명령에 `-p cli` 를 더하지 마라 | — | — |
-| EXT2-DOC | 문서 stale(CLI-ref · lang-ref · system-tasks · explain) | — | — | — | — |
+| E3009-anchor | `E3010` / `E3009` file:line is inconsistent — some sites attach it (`d_trunc.v:3:20`) and some print only the hierarchical path | the anchor is not passed through | `diag::SpanResolver` exists, so the scope is every call site that does not pass an anchor | — | — |
+| error_at | the anchor and the `found` token differ — `g[w].u.q` anchors at `w` and the message says `found '.'` | `error_at` takes an earlier node while `found` takes the cursor token | they are separate fields, so this is correct-but-confusing; 10 sites | — | — |
+| #9 | the `velab -L` (worklib merge) path has no locations | each compilation unit's spans index its own expansion buffer from 0, so the coordinate spaces overlap; a wrong CU map would give a wrong file:line, so `None` is kept | rewrite span offsets at merge time (a whole-AST walk) | — | — |
+| cli-lib | `cargo test -p cli --no-default-features --lib` dies with E0004 (pre-existing) | the lib test target revives sim-engine's `oracle` through a dev-dependency link while the cli feature stays off, so two `#[cfg(feature="oracle")]` arms of `backend_name` are cut | set the cli dev-dependency to `default-features = false`, or merge the two crates' `oracle` into one. CI cannot see it, so do not add `-p cli` to that command | — | — |
+| EXT2-DOC | stale documents (CLI reference, language reference, system tasks, explain) | — | — | — | — |
 
 **Strings / heap**
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| paren-select | 괄호 base 의 string byte select 가 조용히 0 — `(p)[0]`=0 vs `p[0]`=119(`(v)[0]`·`(v)[3:0]` 은 정확) | `string_index_read` base gate 가 `Ident\|BitSelect` 만 `matches!` 하고 `Paren` 을 unwrap 안 함 → width-0 handle 의 packed bit-select 로 낙하 | gate 에 `Paren` unwrap | no-oracle | 한 gate |
-| real-part-write | `real x; x[3:0] = 4'hF` → 값 불변·무진단 | §4.5.220 이 dyn `real` ELEMENT 를 loud 화 ⇒ scalar 가 뒤처진 비대칭 | scalar 도 loud | iverilog 거부("can not select part of real") | — |
-| reduction-init | `string s = $sformatf("%0d", arr.sum());` 가 E3009 "unsupported hierarchical function call arr.sum"(`q.size()`·`.len()`·`.substr()`·`.name()` 은 동작) | t0 pre-sweep 경로의 갭 | pre-sweep 경로에 reduction | — | — |
-| string-array | §0 T1: FIXED string array decl-init(`string s[2]='{"a","b"}`) · fixed array 런타임 인덱스/`foreach` · `string q[$]` · `string s[2][2]` · 계층 `u.s[0]` · frame-local string array(static task=E3018 · function/automatic=E3009) · dyn element byte select `d[0][0]` | fixed 는 element-net 표현 때문에 const-index 전용 | — | iverilog ✓ | T1 |
-| inline-string | static task inline string local(`hoist_inline_task_locals`) = Wire→E3018 | inline 경로 = frame-slot 아님 · 순진 String 화 시 str_bytes twin 미적용 | 별개 inline-string-storage 슬라이스 | — | — |
-| string-misc | substr-actual `s[i]` · `s[i:j]` · `s[i].len()` · whole-element read(`x=arr[i]`) · record array-of-record · queue/assoc 의 string·real 요소 · string queue · block-local queue decl · `u.q[0]` 계층 read | — | — | — | — |
+| paren-select | a string byte select on a parenthesised base is silently 0 — `(p)[0]` is 0 against `p[0]`'s 119 (`(v)[0]` and `(v)[3:0]` are exact) | `string_index_read`'s base gate `matches!` only `Ident \| BitSelect` and does not unwrap `Paren`, so it falls through to a width-0 handle's packed bit select | unwrap `Paren` in the gate | no oracle | one gate |
+| real-part-write | `real x; x[3:0] = 4'hF` leaves the value unchanged with no diagnostic | the dynamic `real` ELEMENT is loud, so the scalar is the asymmetric half | make the scalar loud too | iverilog rejects it ("can not select part of real") | — |
+| reduction-init | `string s = $sformatf("%0d", arr.sum());` gives E3009 "unsupported hierarchical function call arr.sum" (`q.size()`, `.len()`, `.substr()` and `.name()` work) | a gap on the t0 pre-sweep path | add reduction to the pre-sweep path | — | — |
+| string-array | T1: a FIXED string array declaration initializer (`string s[2]='{"a","b"}`) · a fixed array runtime index and `foreach` · `string q[$]` · `string s[2][2]` · a hierarchical `u.s[0]` · a frame-local string array (static task = E3018, function/automatic = E3009) · a dynamic element byte select `d[0][0]` | the fixed case is const-index-only because of the element-net representation | — | iverilog supports it | T1 |
+| inline-string | a static task's inline string local (`hoist_inline_task_locals`) becomes a Wire and gives E3018 | the inline path is not a frame slot, and a naive String conversion does not get the `str_bytes` twin | its own inline-string-storage slice | — | — |
+| string-misc | a substr actual `s[i]` · `s[i:j]` · `s[i].len()` · a whole-element read (`x=arr[i]`) · an array of records inside a record · string and real elements of a queue or associative array · a string queue · a block-local queue declaration · a hierarchical `u.q[0]` read | — | — | — | — |
 
 **VCD / real conversion**
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| vcd | cosmetic encoding 차이(decode 동일): ① vita full-width(`bxxxxxxxx`) vs iverilog strip(`bx`·`b0`) ② t=0 초기덤프 = `$dumpvars` 에 pre-assign X + `#0` change vs settled 값 ③ logic 절차구동 시 vita `wire` vs iverilog `reg` · `int`=`reg` vs `integer` ④ real size `64` vs `1` ⑤ `parameter` 미덤프 | elaborate packed-md `NetVar.lsb` stale(VCD helper 서 flat fallback 우회) | — | iverilog | 큰 golden churn |
-| x→real | X-bearing integral→real — vita 는 whole X → `0.0`, iverilog 는 per-bit X→0(`4'bxx01`→1). `$itor`/`$sqrt`/`$pow`/real-`**` 공통 | `real_arg` = `to_i128_signed().unwrap_or(0)` | per-bit 변환 | iverilog | non-silent |
-| wide→real | width>128 정수→real 은 여전히 `0.0`(65..=128 은 수정됨) | `to_i128_signed` 가 128 비트까지 | word-grid f64 근사 | — | 초희귀 |
+| vcd | cosmetic encoding differences (decoding identical): ① vita writes full width (`bxxxxxxxx`) where iverilog strips (`bx`, `b0`) ② the t=0 initial dump is a `$dumpvars` pre-assign X plus a `#0` change against a settled value ③ a procedurally driven `logic` is `wire` in vita and `reg` in iverilog, and `int` is `reg` against `integer` ④ a real's size is 64 against 1 ⑤ `parameter` is not dumped | elaborate's packed-md `NetVar.lsb` is stale (the VCD helper routes around it with a flat fallback) | — | iverilog | large golden churn |
+| x→real | an X-bearing integral converted to real: vita takes the whole value to `0.0` where iverilog converts per bit (`4'bxx01` → 1). Shared by `$itor`, `$sqrt`, `$pow` and real `**` | `real_arg` is `to_i128_signed().unwrap_or(0)` | convert per bit | iverilog | not silent |
+| wide→real | an integer wider than 128 bits converts to `0.0` (65..=128 is exact) | `to_i128_signed` reaches 128 bits | a word-grid f64 approximation | — | very rare |
 
 ### 3.c Intentionally loud (not gaps)
 
 | id | reason |
 |---|---|
-| §3.1 DPI-C · `export "DPI-C" function` | 영구 비목표 |
-| `$value$plusargs` in an arbitrary expression | `ok = $value$plusargs(…)` 와 `if ($value$plusargs(…))` 는 이미 동작; 남은 `$display("%0d", $value$plusargs(…))` 류는 side-effect sysfunc 패밀리의 설계(single-eval 보장을 위한 statement-form lower)라 desugar 할 statement 가 없어 loud 가 정답 |
-| `%p` of `int a[0:0]` | `sim_ir::NetVar` 는 `array_len` 만 나르고 scalar 도 1, `unpacked_array_nets` 는 엔진에 안 닿는다 ⇒ 받으면 중괄호 없이 원소만 exit 0 으로 찍는다. 선행조건 = IR 의 array-ness 또는 새 사이드카 + format bump |
-| unpacked 배열 포트의 방향 불일치(`[0:3]` ↔ `[3:0]`) | IEEE §7.6 은 원소를 위치로 짝지어 flat-index 연결이 순서를 뒤집는다(vita 4 / iverilog 1); 구현하려면 위치↔인덱스 매핑을 `wire_array_port` 와 배열 대입이 한 철자로 써야 한다 |
-| 커버리지를 증명할 수 없는 고정 배열 채움(계산 인덱스·조건부 쓰기·불완전 집합) | 규칙이지 갭이 아니다; 진단이 이유를 직접 말한다 |
-| 한 프레임 본문 식에서 같은 dyn-formal 함수를 2회 또는 자기 재귀 호출 | 마커 슬롯이 하나 |
-| 블록이 블록을 감싸며 같은 이름을 재선언하는 shadowing | 초기화자를 가진 static 블록 로컬 둘이 한 이름이면 평탄화된 넷 하나에 pre-arm 초기화가 둘 걸려 뒤가 앞을 덮는다(iverilog 7/9 → 9/9) |
-| `$readmem*` child-vs-parent `initial` 경쟁 | IEEE §4.7 이 `initial` 순서를 nondeterministic 으로 두고 두 오라클이 반대로 쓴다 — iverilog `aa bb cc dd`, verilator `01 02 03 04`, vita == verilator ⇒ ORACLE SPLIT |
-| `$readmemh` into a `wire` array | iverilog 거부 · verilator 수용 ⇒ split; vita 는 local/hierarchical parity 로 수용 |
-| header default 가 body import 의 상수를 이름 부르는 것 | split — iverilog 거절, verilator fold |
-| iverilog 13.0 결함 2건(vita 가 IEEE 정답) | ① 루프 본문 블록이 로컬을 선언하면 `break` 가 `continue` 처럼 동작 ② `case` item 안 `continue` 에서 `vthread.cc` assertion abort |
-| `%u`/`%z` · `%l` | 양쪽 다 문서화된 선택(vita 무출력 · iverilog raw 바이트) · `%l` 은 cosmetic |
+| §3.1 DPI-C and `export "DPI-C" function` | permanent non-goal |
+| `$value$plusargs` in an arbitrary expression | `ok = $value$plusargs(…)` and `if ($value$plusargs(…))` already work; the remaining `$display("%0d", $value$plusargs(…))` shape belongs to the side-effecting system-function family, whose design lowers to a statement form to guarantee single evaluation — there is no statement to desugar into, so loud is the right answer |
+| `%p` of `int a[0:0]` | `sim_ir::NetVar` carries only `array_len` and a scalar is 1 too, and `unpacked_array_nets` does not reach the engine, so accepting it would print the element without braces at exit 0. Prerequisite = array-ness in the IR or a new sidecar plus a format bump |
+| a direction mismatch on an unpacked array port (`[0:3]` against `[3:0]`) | IEEE §7.6 pairs elements by position, so a flat-index connection reverses the order (vita 4, iverilog 1); implementing it requires `wire_array_port` and array assignment to spell the position↔index mapping the same way |
+| a fixed-array fill whose coverage cannot be proved (computed index, conditional write, incomplete set) | a rule, not a gap; the diagnostic states the reason directly |
+| calling the same dyn-formal function twice, or recursively, in one frame-body expression | there is one marker slot |
+| shadowing by a block that encloses a block and redeclares the same name | two static block locals with initialisers under one name put two pre-arm initialisations on one flattened net, so the later overwrites the earlier (iverilog 7/9 → 9/9) |
+| a `$readmem*` child-versus-parent `initial` race | IEEE §4.7 leaves `initial` order nondeterministic and the two oracles write it opposite ways — iverilog `aa bb cc dd`, verilator `01 02 03 04`, vita = verilator ⇒ ORACLE SPLIT |
+| `$readmemh` into a `wire` array | iverilog rejects, verilator accepts ⇒ split; vita accepts for local/hierarchical parity |
+| a header default that names a constant from a body import | split — iverilog rejects, verilator folds |
+| two iverilog 13.0 defects (vita is IEEE-correct) | ① when a loop body block declares a local, `break` behaves like `continue` ② `continue` inside a `case` item aborts on a `vthread.cc` assertion |
+| `%u` / `%z` and `%l` | both are documented choices (vita prints nothing, iverilog prints raw bytes); `%l` is cosmetic |
 
-## 4. SVA / 검증 honest-loud 잔여
+## 4. SVA / verification honest-loud residues
 
-- empty-match `##0`/unbounded `##[m:$]` 융합 — 오라클 부재 — 선행 = §16.9.2.1 불연속.
-- N2c full sequence local var(중첩 attempt 각자 데이터=L급) — 단일-capture 는 지원 — 선행 = 중첩 attempt 데이터 모델.
-- later-antecedent read · outer-`|=>` prop-ref skew 고급형 — 오라클 없음 — 선행 = 2-cycle·중첩·cross-clock census.
-- SVA-QUAD collapse default-flip — `VITA_SVA_COLLAPSE` opt-in 상태 — 선행 = full-VCD 골든 audit.
-- N4 clocking 잔여 = skew 값 자체(블록 전역 `default input/output SKEW`(IEEE §14.3)는 파싱·적용된다) — `output #0` 은 iverilog 가 `clocking` 을 파싱 못 하고 verilator 는 Observed 리전 샘플이라 앵커가 없다 — 선행 = hand-IEEE §14.11/§14.16. `input #0`/`#N`/`##N` 은 다른 리전이라 loud 유지.
-- class: down-cast `Derived'(base)` · real→longint cast · base-shadow `Base'(d).v` · cast-as-receiver `(B'(d)).foo()` — 선행 = `$cast` 타입가드.
+- Fusing an empty-match `##0` with an unbounded `##[m:$]` — no oracle — prerequisite = the §16.9.2.1
+  discontinuity.
+- N2c full sequence local variables (each nested attempt has its own data, L-grade) — a single
+  capture is supported — prerequisite = a nested-attempt data model.
+- A later-antecedent read and the advanced form of an outer `|=>` property-reference skew — no
+  oracle — prerequisite = a 2-cycle, nested and cross-clock census.
+- SVA-QUAD collapse default flip — currently opt-in behind `VITA_SVA_COLLAPSE` — prerequisite = a
+  full-VCD golden audit.
+- N4 clocking residue = the skew VALUE itself (the block-wide `default input/output SKEW` of
+  IEEE §14.3 is parsed and applied). `output #0` has no anchor — iverilog cannot parse `clocking` and
+  verilator samples in the Observed region — prerequisite = hand-IEEE §14.11 / §14.16. `input #0`,
+  `#N` and `##N` are a different region and stay loud.
+- class: a down-cast `Derived'(base)` · a real→longint cast · a base-shadow `Base'(d).v` · a
+  cast-as-receiver `(B'(d)).foo()` — prerequisite = a `$cast` type guard.
 
-## 5. perf / 하드닝
+## 5. Performance / hardening
 
-Performance axis: diminishing returns reached; performance ranks below the correctness ladder.
-재개는 각 행의 재진입 조건이 사실이 될 때만.
+The performance axis has reached diminishing returns and ranks below the correctness ladder. A row
+resumes only when its own re-entry condition becomes true. The full measurement records behind the
+`§5.1-<x>` identifiers are in [history/ROADMAP_ARCHIVE_PHASE_A-D.md](history/ROADMAP_ARCHIVE_PHASE_A-D.md).
 
-### 5.a 서 있는 판정
+### 5.a Standing verdicts
 
 | id | verdict | reason (one clause) | re-entry condition |
 |---|---|---|---|
-| codegen (cranelift) | 기각 | 경계가 런의 ~38% 인데 천장이 8.9~11.3%(§5.1-be) · 실행되는 wprog 프로그램의 56~86% 가 op 하나짜리 `Load`/`Const` | leaf 로드와 2-state 산술을 생성 코드에 인라인(호출 0)하면서 의미를 두 번 안 적을 방법 |
-| D2-b 저장소 2-state | 거부 | 트랩이 사다리 하강이다 | 정확성 거래 없는 방법을 먼저 찾을 것 |
-| cycle-based 모드 | 거부 | picorv32 비율 10.32 vs 게이트 1.84 · 조합 블록이 사이클당 0.097 회만 평가되어 이벤트 구동이 이미 조합 작업의 90.3% 를 건너뛴다 | 블록당 평가/사이클 ≥1 인 실수요 |
-| levelize (랭크 순 Active 드레인) | 폐기 | 랭크를 지어 재니 깊이 1~24 전 구간 1.00× · 뿌리는 `settle_cont_assigns` 였고 dirty-settle 이 닫았다 | 없음 |
-| 프로세스 융합(E 축) | REVERTED | intra-delta 순서를 iverilog 에 핀한 시뮬레이터에서 의미보존이 아니다 — 체인 출력의 독자가 완전 전파된 값을 봐서 exit 0 · 진단 없음 · 값이 다름 = silent-wrong | 없음(반례 = `a_comb_chain_output_is_sampled_mid_propagation`) |
-| 넷 개수 축소(flatten) | 보류 | `--probe`/계층 VCD/`%m`/계층 참조가 지목하는 대상을 지운다(G2 충돌) | 오너 판정 |
-| S4 스케줄 소거 · S5 NBA 전용화 | 중단 | S4 표적 합 ≈6% = 1.06× 로 중단 판정(<1.3×) 아래 · S5 는 `k_schedule_nba_scalar` 3.8% | 없음 |
-| settle 안 wprog 거절 가족 | 착수 안 함 | 전부 승인해도 serv 전체의 ~2~2.5% 인데 `Tern` 을 조건부 점프로 바꿔야 한다 | 상금이 기구를 넘길 때 |
-| §5.1-c | 완료 | 슬라이스 2(heap) 그라운딩 — 넷으로 갈린다 | — |
-| §5.1-e | 기록 | 오라클 부식 — V1 이 자기 오라클을 무디게 한다(실측) | — |
-| §5.1-f | 완료 | A1 그라운딩 census — Phase A 의 두 숫자를 정정 | — |
-| §5.1-n | 완료 | A3-i subset 호출 · 81.66% → 84.91% | — |
-| §5.1-p | 완료 | A2-i plain OOP · 88.55% → 90.59% · 착수 전 census 재실행 규칙의 출처 | — |
-| §5.1-av | 완료 | D1 벤치 확장 — 하네스가 제품 백엔드를 안 재고 있었다 | — |
-| §5.1-ax | 완료 | D1.6 — 필요조건을 충분조건으로 쓴 대가 · struct 축 회복 | — |
-| §5.1-az | 완료 | D4 착수 전 재census — 프로파일이 cranelift 가 다음이 아니라고 답했다 | — |
-| §5.1-bb | 기각 | `drain_range_diags` early-out — 이득 0 | — |
-| §5.1-be | 기각 | D4 기계어 코드젠 — 지어서, 배선해서, 재서 기각 | codegen 행과 동일 |
+| codegen (cranelift), including the `§5.1-be` machine-code experiment | rejected | the boundary is ~38% of a run while the ceiling is 8.9–11.3%, and 56–86% of executed `wprog` programs are a single `Load` / `Const` op | a way to inline leaf loads and 2-state arithmetic into generated code (zero calls) without writing the semantics twice |
+| D2-b two-state storage | rejected | the trap is a step DOWN the accuracy ladder | find a way with no correctness trade first |
+| cycle-based mode | rejected | picorv32's ratio is 10.32 against the gate's 1.84, and a combinational block is evaluated only 0.097 times per cycle, so event-driven already skips 90.3% of the combinational work | real demand with ≥1 evaluation per block per cycle |
+| levelize (rank-ordered Active drain) | discarded | building the ranks and measuring gives 1.00× across depths 1–24; the root was `settle_cont_assigns` and the dirty settle closed it | none |
+| process fusion (the E axis) | not adopted | it is not semantics-preserving in a simulator whose intra-delta order is pinned to iverilog — a reader of the chain's output sees the fully propagated value, so exit 0 with no diagnostic and a different value = silent-wrong | none (counter-example: `a_comb_chain_output_is_sampled_mid_propagation`) |
+| net-count reduction (flatten) | on hold | it erases the targets `--probe`, hierarchical VCD, `%m` and hierarchical references name (a G2 conflict) | an owner ruling |
+| S4 schedule elision · S5 NBA specialisation | stopped | S4's target sum is ≈6% = 1.06×, below the 1.3× stop threshold; S5's `k_schedule_nba_scalar` is 3.8% | none |
+| the `wprog` reject family inside settle | not started | admitting all of it is ~2–2.5% of serv overall, and it requires turning `Tern` into a conditional jump | when the prize exceeds the machinery |
+| `drain_range_diags` early-out | rejected | zero gain | none |
 
-`§5.1-<x>` 원문 = ROADMAP_ARCHIVE_PHASE_A-D.md `#### 5.1-`.
-
-### 5.b 열린 성능·하드닝 잔여
+### 5.b Open performance and hardening residues
 
 | id | symptom · measurement | mechanism · code site | fix shape · prerequisite | expected gain (as stated) |
 |---|---|---|---|---|
-| 4b-r | interp 는 풀링하는데 native 는 안 한다 | `fire_waiters` 의 `Vec<bool>` · `settle_cont_assigns` 의 md-group `vals` | 커널 스크래치 재사용 | 미측정 |
-| 5c | 프레임 본문이 컴파일 백엔드에 안 들어간다 · POST 프로파일(keccak_f · 5,949 샘플) 제네릭 walk 25.1% vs `WProg::run` 2.0% | 프레임 윈도가 `Vec<Value>`(`state/mod.rs:585`)라 슬롯 읽기마다 72바이트 복제(`frame_eval.rs:281`) · `wprog` 의 `Load { vi }` 는 평탄한 u64 쌍을 요구 ⇒ `arena.frame` declines(`wprog.rs:461`) | 평탄 워드 윈도 · 선행 = arena | 6–10주 · 대체분 ~38% · 상한 2.33×(keccak_f_arr 한 행) · 재가격 aes 3.13× · arr 2.52× · keccak_f 1.65× |
-| ARR-LHS | 2-D/3-D/packed element LHS 가 양 백엔드에서 ~10× 절벽 — 1-D 50.0 ns 대비 2-D 546.7/675.8 · 3-D 829.2/967.5 · packed `logic [63:0][31:0]` 410.8/441.7 ns(native/vm) | 미특정 · 비가 0.81–0.93 이라 공유 plumbing | 자체 census 선행 — 추측 금지 | 미산정 |
-| INLINE-FOLD | 인라인 fold 가 지수적 — `elab_s` 0.35 ms 평탄, `sim_s` 0.16 s → 14.36 s · 로컬을 1회 읽는 6문장은 0.19 s 인라인 / 0.24 s 프레임, 3회면 14.39 s / 0.35 s | 아레나가 서브트리를 DAG 로 공유하는데 평가기가 TREE 로 재-walk | per-activation memoisation · 인라이너 확장은 반대 방향 | 미산정 |
-| MEM-GUARD | 프로세스 수준 메모리 가드가 없다 — 폭주한 `vita` 하나가 33 GB × 2 를 잡아 커널 패닉까지 몰았다 | 기존 가드(`max_deltas`·`max_body_steps`·`time_limit`)는 델타도 문장도 진행하지 않는 시스템태스크 내부 루프를 못 본다(`$writemem*` 는 닫힘) | ⓑ RSS 워치독 + 기본 상한 + `--max-mem` · 선행 = macOS `mach_task_basic_info` 가 unsafe FFI · ⓐ 할당 카운팅 allocator 는 기본 ON 이면 회귀 | — |
-| CI-NEXTEST | `cargo test --workspace` 450 타깃 순차 = 724 s(per-target 합 62 s) vs `cargo nextest run --workspace` 같은 5183 테스트 30 s · CI 4잡만 남았다 | 두 실행기는 빌드 트리를 공유하지 않아 전환마다 ≈470 s 재빌드 | ci.yml 4잡 교체 + nextest 0.9.100(0.9.143 은 rustc 1.91 요구) · 선행 = temp 이름 충돌(368개 파일 `vita_<tag>_<pid>_<프로세스별 카운터>` · nextest 는 테스트마다 새 프로세스라 카운터 0 부터 + PID 재사용) | 24× |
-| MSRV-CEIL | "새 Rust 를 따라간다" 정책 미검증 — toolchain·`rust-version`·ci.yml 4잡 전부 1.85.0 고정 · `stable`/`beta` 잡 0개 | 천장을 아무도 안 밟는다 | 비차단 `stable` 잡 1개 | — |
-| EXEC-ROWS | `native::run::executor_rows` 가 모든 `simulate` 에서 백엔드와 무관하게 전 프로세스의 전 문장을 훑는다 | census 는 실행기와 무관해야 하므로 무조건이 맞다 | 비용이 문제면 캐시 | — |
-| DELAY-CLAMP | u32::MAX 를 넘는 `#delay` 는 여전히 CLAMP — 4.29e9 틱에 실제로 도달하는 런에서만 틀리다 | IR 필드가 u32(동결 타입) | 표현하려면 format bump · 알리려면 새 W-code | correct-or-loud 완성 |
-| KPRED-3RD | ③층 판정에 "오늘의 커널이 돌릴 수 있는가" 층이 없다 — `$sformatf`·`$display`·transport-delay NBA·재arm 은 적격·빌드 가능인데 커널이 없다 | run.json 은 `eligible`/`buildable` 만 싣고 `kpred::rhs_routes_to_worker` 는 게이트에 안 물려 있다 | dispatch 배선 때 세 번째 층 | 오독 제거 |
-| QUIESCE-NBA | ③층 quiescence 가 커널의 `delayed_nba` 를 안 본다 — 트랜스포트가 유일한 대기 작업이면 quiescent 로 보고되고 업데이트가 사라진다 | 엔진 `next` 는 `Scheduler` 의 `wheel`/`delayed_ca`/`delayed_nba` 최소값인데 네이티브 런에서 그 맵은 비어 있다 | S1d-4c-2 | 사다리 하강의 유일한 잔여 |
-| BYTE-GATE-6 | S1d-4d 바이트 동일 게이트가 만날 pre-existing 오라클 차이 6건(전부 PRE==POST): ① `$finish` 틱의 pending NBA/트랜스포트 ② VCD intra-tick 입도 ③ t=0 initial 순서 ④ t0 arm 순서 ⑤ 읽기 집합이 빈 `always @(*)` 는 vita 만 t0 에 돈다 ⑥ `.velab` 이 `vcmp` 실행 간 재현 안 됨(RULEV-MTIME) | 의도된 설계 반 · LRM 미정의 반 | 여섯 개를 어느 쪽으로 고정할지 먼저 | — |
-| MON-RENDER | `$monitor`/`$strobe` 의 ③층 렌더 경로 거부 | 렌더가 `sched/run_loop.rs::flush_postponed` 인데 그 경로가 리더를 안 받는다 | 배선 = S1d-4c 와 한 슬라이스 | 거부 해제 |
-| FD-EOF + FEOF | `NetArena` 의 `fd_eof` X-poison 구멍(`fd_eof` 만 "heap/class/frame 없음" 논증 밖 · 지금은 `$feof` 과잉표시가 가림) · `$feof` 가 정본 stmt-effect 술어에서 과잉표시라 `e = $feof(fd);` 거부 · `while (!$feof(fd))` 통과 | `k_feof` 는 순수 읽기인데 `sysfunc_is_stmt_effect` 가 `true` · 한 소비자만 고치면 철자가 둘 | 한 슬라이스로 · 정본 수정 = tier-2 게이트도 넓힘 · byte-identity 논증 | ③층 과잉거부 해소 |
-| NETSLOT-PREV | `NetSlot.prev` 를 읽는 곳이 워크스페이스 전체에서 0(선언·생성자·pass (c) 쓰기뿐) ⇒ pass (c) 의 `clone_from` 2회/변경넷/델타가 죽은 일 | 아무도 안 읽음 | 제거 · 자명함 자체를 검증하는 별도 슬라이스 | perf |
-| WPROG-WHY | An expression falling out of the compiled lane is INVISIBLE. `codegen.reject_reasons` is a per-PROCESS census, so a body reports `able 1/1` while every evaluation of its RHS runs the generic path. Both an external report AND this repo then inferred the sign-seal boundary from `$signed`/`$unsigned` call counts and each named a wrong cause in turn — two rounds spent on a question one tally answers (§2 Performance). | `wprog::compile` returns bare `None` at ~20 decline sites; nothing counts them | a per-(reason, count) tally on `SimOpts`, folded into `run.json` beside `codegen` — the same shape `builtins` already has. Reject reasons are a REPORTING table: never let one panic or change a value | reads as G2/OBS, not perf |
-| ELAB-PHASE-BLIND | The corpus cannot see a front-end regression: **every** workload is ≥99% simulation (biriscv 1%, the rest 0%), so a 3× elaboration cost moves the median wall time by nothing. Measured 2026-09-07, the run that also found the §2 Performance regression | corpus workloads are chosen for a long accumulating digest, which is the opposite of front-end weight | `corpus-runner run` now prints the phase split per row, which makes the number READABLE; a THRESHOLD needs a front-end-bound row (many declarations, short sim) with a pinned digest and an oracle | a regression the gate can see |
-| LOW-ROI | FMT-CACHE part b(render_template pre-segment) · GEN-3X-STR part a(unroll plan 캐시 = byte-identity 위험>이득) · QUEUE-MID-ON(스펙 내재 O(n) · iverilog 동일) | — | 보류 · QUEUE-MID-ON 은 영구 비권장 monitor-only | — |
+| 4b-r | interp pools scratch buffers and native does not | `fire_waiters`'s `Vec<bool>` · the md-group `vals` in `settle_cont_assigns` | reuse kernel scratch | not measured |
+| 5c | a frame body does not enter the compiled backend · profile (keccak_f, 5,949 samples): the generic walk is 25.1% against `WProg::run`'s 2.0% | the frame window is a `Vec<Value>` (`state/mod.rs:585`), so every slot read copies 72 bytes (`frame_eval.rs:281`), while `wprog`'s `Load { vi }` needs a flat u64 pair ⇒ `arena.frame` declines (`wprog.rs:461`) | a flat word window · prerequisite = arena | 6–10 weeks · addressable ~38% · ceiling 2.33× (the keccak_f_arr row) · re-priced aes 3.13×, arr 2.52×, keccak_f 1.65× |
+| ARR-LHS | a 2-D / 3-D / packed element LHS is a ~10× cliff on both backends — against 1-D's 50.0 ns: 2-D 546.7/675.8, 3-D 829.2/967.5, packed `logic [63:0][31:0]` 410.8/441.7 ns (native/vm) | not located; the 0.81–0.93 ratio makes it shared plumbing | its own census first — do not guess | not estimated |
+| INLINE-FOLD | the inline fold is exponential — `elab_s` is flat at 0.35 ms while `sim_s` goes 0.16 s → 14.36 s; six statements reading a local once are 0.19 s inlined against 0.24 s framed, and three reads are 14.39 s against 0.35 s | the arena shares subtrees as a DAG and the evaluator re-walks them as a TREE | per-activation memoisation · widening the inliner is the wrong direction | not estimated |
+| MEM-GUARD | there is no process-level memory guard — a runaway `vita` can take 33 GB, and two of them can drive the machine to a kernel panic | the existing guards (`max_deltas`, `max_body_steps`, `time_limit`) cannot see a loop inside a system task that advances neither a delta nor a statement (`$writemem*` is closed) | ⓑ an RSS watchdog plus a default cap and `--max-mem` · prerequisite = macOS `mach_task_basic_info` is unsafe FFI · ⓐ an allocation-counting allocator is a regression if ON by default | — |
+| CI-NEXTEST | `cargo test --workspace` runs 450 targets sequentially in 724 s (per-target sum 62 s) against `cargo nextest run --workspace` at 30 s for the same 5183 tests · 4 CI jobs remain | the two runners do not share a build tree, so each switch costs ≈470 s of rebuild | replace the 4 jobs in ci.yml and pin nextest 0.9.100 (0.9.143 requires rustc 1.91) · prerequisite = temp-name collisions (368 files named `vita_<tag>_<pid>_<per-process counter>`; nextest gives every test a new process, so the counter restarts at 0 and PIDs are reused) | 24× |
+| MSRV-CEIL | the "follow new Rust" policy is unverified — the toolchain file, `rust-version` and all 4 ci.yml jobs pin 1.85.0, and there is no `stable` or `beta` job | nobody stands on the ceiling | one non-blocking `stable` job | — |
+| EXEC-ROWS | `native::run::executor_rows` scans every statement of every process on every `simulate`, independent of the backend | a census must be executor-independent, so unconditional is correct | cache it if the cost matters | — |
+| DELAY-CLAMP | a `#delay` above u32::MAX is CLAMPED — wrong only in a run that actually reaches 4.29e9 ticks | the IR field is u32 (a frozen type) | representing it needs a format bump; announcing it needs a new W-code | completes correct-or-loud |
+| KPRED-3RD | the tier-3 decision has no "can today's kernel run it" layer — `$sformatf`, `$display`, transport-delay NBA and re-arm are eligible and buildable with no kernel | run.json carries only `eligible` / `buildable`, and `kpred::rhs_routes_to_worker` is not on the gate | add the third layer when dispatch is wired | removes a misreading |
+| QUIESCE-NBA | tier-3 quiescence does not consult the kernel's `delayed_nba` — if a transport is the only pending work the run reports quiescent and the update disappears | the engine's `next` is the minimum of the `Scheduler`'s `wheel` / `delayed_ca` / `delayed_nba`, and in a native run those maps are empty | S1d-4c-2 | the only remaining step down the ladder |
+| BYTE-GATE-6 | the S1d-4d byte-identity gate will meet 6 pre-existing oracle differences: ① pending NBA/transport at the `$finish` tick ② VCD intra-tick granularity ③ t=0 `initial` order ④ t0 arm order ⑤ an `always @(*)` with an empty read set runs at t0 in vita only ⑥ a `.velab` is not reproducible across `vcmp` runs (RULEV-MTIME) | half deliberate design, half LRM-undefined | decide which way each of the six is pinned, first | — |
+| MON-RENDER | the tier-3 render path refuses `$monitor` / `$strobe` | rendering lives in `sched/run_loop.rs::flush_postponed` and that path takes no reader | wiring — one slice with S1d-4c | lifts the refusal |
+| FD-EOF + FEOF | the `fd_eof` X-poison hole in `NetArena` (`fd_eof` alone is outside the "no heap/class/frame" argument; the `$feof` over-marking currently hides it) · `$feof` is over-marked in the canonical statement-effect predicate, so `e = $feof(fd);` is refused while `while (!$feof(fd))` passes | `k_feof` is a pure read while `sysfunc_is_stmt_effect` says `true`; fixing one consumer leaves two spellings | one slice · fixing the canonical predicate also widens the tier-2 gate · a byte-identity argument | removes a tier-3 over-refusal |
+| NETSLOT-PREV | nothing in the workspace reads `NetSlot.prev` (only the declaration, the constructor and pass (c)'s write), so pass (c)'s two `clone_from` calls per changed net per delta are dead work | nobody reads it | remove it, plus a separate slice that verifies the obviousness itself | perf |
+| WPROG-WHY | an expression falling out of the compiled lane is INVISIBLE. `codegen.reject_reasons` is a per-PROCESS census, so a body reports `able 1/1` while every evaluation of its RHS runs the generic path, and the compiled-lane boundary can only be inferred from `$signed`/`$unsigned` call counts — an inference that has produced two wrong causes (§2 Performance) | `wprog::compile` returns a bare `None` at ~20 decline sites and nothing counts them | a per-(reason, count) tally on `SimOpts`, folded into `run.json` beside `codegen` — the shape `builtins` already has. Reject reasons are a REPORTING table: never let one panic or change a value | reads as G2/OBS, not perf |
+| ELAB-PHASE-BLIND | the corpus cannot see a front-end regression: EVERY workload is ≥99% simulation (biriscv 1%, the rest 0%), so a 3× elaboration cost moves the median wall time by nothing | corpus workloads are chosen for a long accumulating digest, which is the opposite of front-end weight | `corpus-runner run` prints the phase split per row, which makes the number READABLE; a THRESHOLD needs a front-end-bound row (many declarations, short simulation) with a pinned digest and an oracle | a regression the gate can see |
+| LOW-ROI | FMT-CACHE part b (`render_template` pre-segmentation) · GEN-3X-STR part a (an unroll-plan cache — byte-identity risk exceeds the gain) · QUEUE-MID-ON (O(n) is inherent to the spec, and iverilog is the same) | — | on hold · QUEUE-MID-ON is permanently monitor-only | — |
 
 ### 5.c Current state
 
 | | |
 |---|---|
-| 기본 백엔드 | `native`(③층) · 코퍼스 100.00% 실행 · 발산 0 |
-| 제품 형태 | `--no-default-features` = 실행기 하나 · 게이트 거부는 치명 |
-| 워크로드 코퍼스 | 10/10 · 거절 0 |
-| 코드젠 | 기본 OFF · 기각됨(§5.1-be) — 빌드·배선·측정·정확성은 갖춰 둔 상태 |
+| default backend | `native` (tier 3) · corpus 100.00% executed · 0 divergences |
+| product shape | `--no-default-features` = one executor · a gate refusal is fatal |
+| workload corpus | 10/10 · 0 rejections |
+| codegen | OFF by default and rejected — the build, the wiring, the measurement and the correctness are all in place |
 
 ## 5.2 Queue (start order)
 
-Canonical start order. LOOPROMPT.md NEXT mirrors this table; when they differ this table wins. A bundle is one track item + two rows meeting the §1 slot rule (single root, two oracles, outside the walls and the oracle splits, no format bump visible at selection). ⚠️ Two rows with the SAME ROOT are one slot, and their ORDER is a measurement: §4.5.461's two §2 rows had to land value-lane-first, because deleting the guard over the old unlimited fold was 8 cells of loud→silent-wrong.
+Canonical start order. LOOPROMPT.md's NEXT mirrors this table; when they differ this table wins. A
+bundle is one track item plus two rows meeting the §1 slot rule (single root, two oracles, outside
+the walls and the oracle splits, no format bump visible at selection). Two rows with the SAME ROOT
+are one slot, and their ORDER is a measurement: a value lane must land before the guard over an
+unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 shadow MIS-ROUTE (new, §4.5.467 R3): a block-local that SHADOWS a module net and whose span filter A drops from candidacy leaves its write ON the shadowed module net (`MOD=41`, two oracles `0`). Site = `compute_scoped_block_locals`'s widened-span filter vs the flatten it falls back to. ⚠️ This is §3.b `blocal-flatten`'s measured PREREQUISITE — that row was built and reverted because widening the scope set uncovers exactly this | §2 | ① |
-| 2 | 2 | §2 override VALUE cut at bit 32 (new, §4.5.466 R1): a 33..64-bit override onto an UNTYPED target reports `$bits` 33/64 and a value truncated at 32, in ONE run. Literal and named spellings alike; `defparam` cuts further; the declared-width target lane is correct. Two oracles | §2 Index sealing | ① |
-| 3 | 3 | §2 forwarding (new, §4.5.466 grounding): an untyped `Q` overridden at a width other than its default literal's forwards as 32. Root = `params.rs:313`'s sized-literal arm is not gated on `default_binds`, so `param_decl_range_opt` answers the DEFAULT's width and `.or_else(ovr.bits)` is unreachable. Two oracles | §2 Index sealing | ① |
-| 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls` currently says they cannot be) | ROADMAP §6 | ④ |
-| 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has). Nothing today says why an EXPRESSION left the compiled lane, so both an external report and this repo's refutation of it inferred the boundary from builtin call counts and each named a wrong cause — two rounds | ROADMAP §5.b | ④ |
-| 6 | next | §3 ⑤ⓕ 의 **비-arity 축**: `shape_flags` 의 F4004 는 signedness · 2-state kind · arity 셋을 한 `!=` 로 거절한다. 앞 둘은 arity 캐리어가 필요 없고 2-오라클 실측(`int`→`logic [31:0]`, `int`→`int unsigned`, `logic [7:0]`→`logic signed [7:0]` 전부 두 오라클 일치, vita F4004; 폭만 바꾸는 대조군은 3-way 통과) · 다차원 **packed** type-param default/override 가 파스에서 E2002(오라클 둘 다 실행) · mixed-caller callee · `m #(8)` / `defparam u.T$w` · VCD `$scope` `[0]` · `genblk<N>` 라벨 충돌(split) · 🆕 L ⓦ residue · §2 🆕 N residue | §4.5.432/436/437/440/444 | ② |
-| 7 | hygiene | `params.rs` 2,019 lines (policy 1,000, not on the exception list); `param_query.rs` is the precedent for that split. NOT inside a correctness bundle — a refactor is a design nobody has reviewed | CLAUDE.md 코드원칙 | — |
+| 1 | 1 | §2 shadow MIS-ROUTE: a block-local that SHADOWS a module net and whose span filter A drops from candidacy leaves its write ON the shadowed module net (`MOD=41`, two oracles `0`). Site = `compute_scoped_block_locals`'s widened-span filter against the flatten it falls back to. This is §3.b `blocal-flatten`'s measured PREREQUISITE | §2 Scoping | ① |
+| 2 | 2 | §2 override VALUE cut at bit 32: a 33..64-bit override onto an UNTYPED target reports `$bits` 33/64 and a value truncated at 32, in ONE run. Literal and named spellings alike; `defparam` cuts further; the declared-width target lane is correct. Two oracles | §2 Index sealing | ① |
+| 3 | 3 | §2 forwarding: an untyped `Q` overridden at a width other than its default literal's forwards as 32. Root = `params.rs:313`'s sized-literal arm is not gated on `default_binds`, so `param_decl_range_opt` answers the DEFAULT's width and `.or_else(ovr.bits)` is unreachable. Two oracles | §2 Index sealing | ① |
+| 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
+| 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
+| 6 | next | §3 ⑤ⓕ's NON-ARITY axis: `shape_flags`'s F4004 rejects signedness, 2-state kind and arity through one `!=`. The first two need no arity carrier and are 2-oracle measured (`int`→`logic [31:0]`, `int`→`int unsigned`, `logic [7:0]`→`logic signed [7:0]` all agree in both oracles while vita gives F4004; the width-only control passes three-way) · a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
+| 7 | hygiene | `params.rs` is 2,019 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` is the precedent for the split. NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
-Do not start: rows 16/26/30 and 🆕 F (§11.8.1 region sign wall — ⚠️ rows 14/25's declared-width provenance half is REFUTED as a wall by §4.5.466: `param_range` carries the provenance and `narrow_param_bits` resolves it at the override fold; what remains is the i64/CARRY axis, not provenance), row 34 (one oracle, zero demand), row 31 (pure half correct ⇒ performance), 🆕 Q (BLOCKED — a block-scoped CONSTANT binding is the prerequisite; the bare-name hoist was built and measured 5 new silent-wrongs, §4.5.451), any widening of the wide fold's accept set before §11.8.1 region sign stands — which now includes §2 🆕 H ⓐ (measured 2026-09-07: the fix site is `fold_self_bits`'s reduction arm, so the row moved to BLOCKED), and §2 row 10's surviving bound half, whose prerequisite is a wide resolver that reads a SELECT. Added: §3 ⑤ⓕ 의 **arity**(dim COUNT) 축 — 선행조건이 실측으로 없다: 선언자 dim 리스트는 `decls.rs:606` 에서 파스 시 모듈당 한 번 찍히고 `ast::DeclName.unpacked` 에 per-instance 슬롯이 없다. `monomorph` 는 공급할 수 없다(`hdl-parser/src/monomorph.rs`, `ModuleDecl` 참조 0건, 호출부 1곳, CLASS 전용) · `ModuleMap` 이 모듈을 `&'a ast::ModuleDecl` 로 들고 있어 per-instance AST 사본이 없다 · 고치려면 `Dim`/`DeclName`(둘 다 SchemaHash, hdl-ast 루트)에 심볼릭 arity 마커 + elaborate `.unpacked` 독자 83곳. ALL of §2 row 7 (§4.5.456 measured that one ordering key cannot express what the oracles do — iverilog orders `initial` child-first and `always_comb` / edge / `wait` / fork-arm PARENT-first in the same run; and §4.5.457 refuted the supposedly settle-reached half — the settle is already correct, and verilator's `ee` is a constant-hoist of a single-statement `initial`, so the cell is an oracle split on order), and §3 ⑤ⓕ's function RETURN type (1-oracle, iverilog SIGABRTs, frozen `FunctionDef`). Added: §3.b `blocal-flatten` (built and REVERTED, §4.5.467 — do not restart before queue row 1 lands).
+Do not start:
 
-External reports (round-N) pre-empt the queue; reproduce every item at HEAD first. Oracle-split axes (§2 "Oracle splits") are never chased.
+- §2 rows 16, 26, 30 and 🆕 F — the §11.8.1 region-sign wall. Rows 14 and 25's declared-width
+  provenance half is NOT a wall: `param_range` carries the provenance and `narrow_param_bits`
+  resolves it at the override fold; what remains there is the i64/CARRY axis.
+- §2 row 34 (one oracle, zero demand) and row 31 (the pure half is correct, so it is performance).
+- §2 🆕 Q — a block-scoped CONSTANT binding is the prerequisite; the bare-name hoist measures 5 new
+  silent-wrongs.
+- Any widening of the wide fold's accept set before §11.8.1 region sign stands, which includes
+  §2 🆕 H ⓐ (the fix site is `fold_self_bits`'s reduction arm, i.e. the accept set itself).
+- §2 row 10's surviving bound half, whose prerequisite is a wide resolver that reads a SELECT.
+- ALL of §2 row 7: one ordering key cannot express what the oracles do, and the settle-reached half
+  is already correct, so the remaining cell is an oracle split on order.
+- §3 ⑤ⓕ's ARITY (dim COUNT) axis: the prerequisite is measurably absent. The declarator dim list is
+  stamped once per module at parse (`decls.rs:606`) and `ast::DeclName.unpacked` has no per-instance
+  slot; `monomorph` cannot supply it (`hdl-parser/src/monomorph.rs`, 0 references to `ModuleDecl`,
+  1 call site, class-only); `ModuleMap` holds a module as `&'a ast::ModuleDecl`, so there is no
+  per-instance AST copy. A fix needs a symbolic arity marker on `Dim` / `DeclName` (both SchemaHash
+  roots in hdl-ast) plus 83 elaborate readers of `.unpacked`.
+- §3 ⑤ⓕ's function RETURN type (1 oracle, iverilog SIGABRTs, frozen `FunctionDef`).
+- §3.b `blocal-flatten` — blocked by queue row 1.
 
-## 6. G2 — AI-Agent 친화 OBS 트랙 (SPEC=[preview/19](preview/19-ai-agent-observability.md))
+Incoming compatibility reports pre-empt the queue; reproduce every item at HEAD first. Oracle-split
+axes (§2 "Oracle splits") are never chased.
 
-완료: OBS-0 스펙 · OBS-1a run.json+results.jsonl(§4.5.73) · OBS-1b coverage.json(§4.5.99) · OBS-2 v1 trace.jsonl(§4.5.100) · OBS-3 stage.jsonl(§4.5.101) · OBS-S0 `--hier-tree`/`--inst-paths`.
+## 6. G2 — the AI-agent observability track
 
-teeth = 3-way 내부 차분(JSONL ≡ VCD ≡ `$display`) + 결정성 골든. 틀린 로그 = silent-wrong 과 동급.
-값 인코딩: trace `old`/`new` = full-width 4-state binary · stage `vals[]` = `%0d` decimal(doc-19 §3 pin 4).
+SPEC = [preview/19-ai-agent-observability.md](preview/19-ai-agent-observability.md).
 
-현재 위치: 다음 = 표 첫 행(OBS-2 잔여) · 트랙 전체는 §2·§3 뒤 3순위.
+Teeth = a 3-way internal differential (JSONL ≡ VCD ≡ `$display`) plus a determinism golden, and an
+ASYMMETRIC MUTATION for anything that REPORTS (change something upstream that must not move the
+numbers; a same-input repeat run cannot see a reporting defect). A wrong log ranks with a
+silent-wrong. Value encoding: `trace`'s `old` / `new` are full-width 4-state binary, `stage`'s
+`vals[]` are `%0d` decimal (doc-19 §3 pin 4). The whole track ranks third, behind §2 and §3.
 
-| 단계 | 산출물 | 공수 |
+| stage | deliverable | size |
 |---|---|---|
-| OBS-2 잔여 | sva.jsonl(R-L6·SVA property명+support-cone v0) · per-element array probe · class/event probe(no-oracle) | M |
-| OBS-1 잔여 | staged/vrun obs(.velab source-identity) · compile-fail manifest · `--seed` | S-M |
-| R-L4 | 로그 채널 분리 | M |
-| OBS-4 | `vrun --control stdio` JSON-RPC(peek/poke/step/run_until)+poke 저널 replay | L |
-| OBS-5 | snapshot/restore/rewind(엔진 상태 postcard 직렬화) | L-XL |
-| OBS-6 | X-origin·region-annotated events·정적 backward cone | L+ |
+| OBS-2 residue | `sva.jsonl` (R-L6: property name plus support cone, v0) · a per-element array probe · a real, class or event probe (no oracle) — all three are loud-rejected at the CLI today | M |
+| OBS-1 residue | staged `vcmp`/`velab`/`vrun` obs (`.velab` source identity) · a compile-fail manifest (a front-end or elaborate failure writes no obs directory) · `--seed` (`"seed": null` is hard-coded) · `run_id` · `-G` / `--param` overrides in `run.json` · full input identity in `source.blake3` (it covers the source TEXT only, so two runs of one `` `ifdef ``-switched file with and without `-D FOO` report the same digest) · `results.jsonl` v2 (per-testcase ledger, `detail_ref` on FAIL) · R-L2 failure detail (`fail/*.json`) · R-L5 SVA pass/fail and cover-property counts and per-bin hit detail in `coverage.json` | S-M |
+| R-L4 | log-channel separation (handshake and protocol channel events) | M |
+| OBS-4 | `vrun --control stdio` JSON-RPC (`peek`/`poke`/`step`/`run_until`/`finish`) plus a poke journal for replay | L |
+| OBS-5 | snapshot / restore / rewind (postcard serialization of engine state) | L-XL |
+| OBS-6 | X-origin (`cause: uninit \| multi-drv \| arith-X`) · region-annotated events (no record carries a region or delta field) · a static backward dataflow slice | L+ |
 
-- **R2 item (1) — the CALL TREE, still the top external OBS request, still not shipped.** Re-checked
-  at HEAD 2026-09-07: `processes.items[].domain` is `process` / `assign` only. The blocker is
-  unchanged and is stated in doc-19 §4.9 — vita lowers a subroutine TWO ways (a frame body behind
-  `Terminator::Call` / `Expr::Call`, and an elaborate-time INLINE splice), so a profile built on the
-  runtime seams reports **0 calls for every inlined subroutine**, and "0 calls" reads as "free" about
-  the very thing the user is hunting. What it needs first, in order:
-  ⓐ ✅ **shipped 2026-09-07 (round-39, §4.5.450)** — `run.json`'s `subroutines` object records,
-  per `(module, routine)`, the route the elaborator actually took (`frame` / `inlined`) and the
-  number of call sites lowered under it, seeded from the same two sets the lowering reserves from
-  so a declared-but-never-called subroutine still reports a row. The frame half is counted inside
-  the three frame EMITTERS (`frames_call/emit.rs` — `emit_frame_call`, `emit_frame_task_call`,
-  `emit_frame_func_out_call`), NOT at the seams that pick the route: recording at the pickers
-  measured `sites: 0` for two real call sites, because an `output`-formal call is rewritten by the
-  hoist into a temp + statement call and never reaches `inline_function` (found by this slice's own
-  soundness lens; the inline half stays at its two fall-throughs in `inline_fn.rs` / `inline_task.rs`).
-  Static, unconditional, deterministic. SPEC = doc-19 §4.10. The reporter asked for
-  exactly this as the intermediate form and it answers their own case: their `hexdig` is a frame in
-  every variant they tried, and the frame call — not the size-cast seal they had been chasing — is
-  5× of that expression;
-  ⓑ a `SubProfile` on the `BuiltinProfile` pattern (interior-mutable, `&self`-reachable) bumped at
-  the THREE seams — `state/frame_eval.rs::run_frame_call_with` for every function call, and
-  `exec/process.rs`'s `Terminator::Call` arm plus `exec/frame_call.rs::call_here` for task calls;
-  ⓒ a decl `file:line:col` twin for `Sidecars::func_names` (the name half already exists,
-  index-aligned to `ir.funcs`).
-  ⓑ ✅ **shipped 2026-09-09 (§4.5.465)** — a `SubProfile` on the `BuiltinProfile` pattern
-  (interior-mutable, `&self`-reachable) counting runtime entries, serialized as `run.json`'s
-  `subroutine_calls`. The seams are the THREE `&self` funnels on `SimState`
-  (`state/frame_eval.rs::run_frame_call_with` for every `Expr::Call` including class methods,
-  constructors, virtual targets and hierarchical calls; `state/task_frames.rs::enter_task_frame`
-  for suspendable task frames; `state/task_frames.rs::run_task_with` for synchronous subset
-  tasks) — NOT the two the row named. `exec/process.rs`'s `Terminator::Call` arm and
-  `exec/frame_call.rs::call_here` are ROUTE PICKERS, and both carry a sidecar-miss
-  fall-through that would overcount; and `run_task_call_with` one level up misses the nested
-  subset call that reaches `run_task_with` directly. Bumping at the `SimState` funnels makes
-  the counts backend-invariant BY CONSTRUCTION (native / vm / interp measured identical), which
-  is ⓐ's own picker-vs-emitter lesson applied one level down. A suspendable frame is counted and
-  never TIMED (its open and close are not one synchronous scope), and `timed_calls` is the
-  column that says so;
-  ⓒ ✅ **shipped 2026-09-09 (§4.5.465)** — `Sidecars::func_decl_locs`, a `DeclLoc`
-  (`file`/`line`/`col`, deliberately NOT a `StmtLoc`: a declaration has no instance
-  multiplicity) per FuncId, minted in the same funnel. It is the JOIN key and not a nicety:
-  `func_names` holds the per-INSTANCE `%m` path, so `top.u1.aut` and `top.u2.aut` are two rows
-  for one written subroutine and only the declaration site is stable across them.
-  ⚠️ **ⓐ was reporting the wrong numbers and nobody could see it.** `reserve_class_method`
-  minted a FuncId while pushing three of the four tables indexed by it, and class methods are
-  reserved FIRST, so every module subroutine's `frame_keys` entry was shifted by the
-  class-method count: measured as two `sites` counts SWAPPED (a hot routine reporting `0` =
-  "declared and never called" while the never-called one reported its caller's 3) and as both
-  dropped in silence when the shifted index ran off the end. Fixed by a `push_func` MINT FUNNEL
-  — a FuncId cannot be created without every parallel table getting its entry. The suite could
-  not see it because every design in `obs_subroutines.rs` was class-free; the teeth is an
-  asymmetric-mutation PAIR (add a class, the numbers must not move), because a
-  same-input-twice golden lies identically in both runs.
+Open items beside the staged track:
 
-- 잔여 (§4.5.465 follow-on): the static `subroutines` rows carry no declaration site, so the
-  two objects cannot be joined by a consumer — `subroutine_calls`'s `key` text says so rather
-  than instructing a join it cannot serve. Giving `SubroutineRoute` a `DeclLoc` closes it
-  (the elaborator already resolves one at reserve; the route census is filed in a different
-  pass, so it is a small threading slice, not a new mechanism).
+- The CALL TREE (doc-19 §4.9 item 1) is the top outstanding request and is not shipped:
+  `processes.items[].domain` is `process` / `assign` only. The blocker is stated in doc-19 §4.9 —
+  vita lowers a subroutine TWO ways (a frame body behind `Terminator::Call` / `Expr::Call`, and an
+  elaborate-time INLINE splice), so a profile built on the runtime seams reports 0 calls for every
+  inlined subroutine, and "0 calls" reads as "free" about the very thing the user is hunting.
+- The static `subroutines` rows carry no declaration site, so a consumer cannot join them to
+  `subroutine_calls`; the runtime object's `key` text says so rather than instructing a join it
+  cannot serve. Giving `SubroutineRoute` a `DeclLoc` closes it — the elaborator already resolves one
+  at reserve and the route census is filed in a different pass, so it is a threading slice, not a new
+  mechanism. This is §5.2 queue item 4.
+- Per-CALL-SITE builtin rows (`{"name":"$sscanf","file":…,"line":…}`) are not emitted; the `builtins`
+  table is name-level aggregation.
+- `--hier-tree` and `--inst-paths` are parsed for every applet but reach `VitaOpts` only on the
+  one-shot path and are not in `reject_obs_dir`, so a staged invocation exits 0, prints no
+  diagnostic and writes no file. This is the one accept-and-drop on the rail; every other obs flag
+  is loud on a staged applet.
+- `--hier-tree` collapses generate scopes (§2 🆕 N).
+- doc-19 §3 pin 4 asks for enum values rendered as NAMES; there is no name path — `trace` values are
+  4-state binary and `stage` values are `%0d` decimal.
+- R-I1 (config-driven signal introspection: an auto-named JSONL dump with no hand-written bind) is
+  partial — `--probe` / `--probe-file` is a manual path list. R-I2 (a semantic transaction log) has
+  no producer.
+- `WPROG-WHY` (§5.b) reads as an OBS item: it is the tally that answers why an expression left the
+  compiled lane.
 
-- 비목표: FSDB/UCDB·SQLite 내장·waveform GUI·UVM 연동. VCD는 사람용 유지.
+Non-goals: FSDB/UCDB, an embedded SQLite, a waveform GUI, UVM integration. VCD stays the
+human-facing format.
 
-## 7. 조건부 / 장기 (재진입 트리거 충족 시에만 승격 · 정확성과 직교)
+## 7. Conditional / long-term (promoted only when the re-entry trigger fires; orthogonal to correctness)
 
-| id | 항목 | 트리거 |
+| id | item | trigger |
 |---|---|---|
-| BACKEND | ① 2-state 별도 모드 기각 ② PDES BSP 병렬(Amdahl 상한 T4≈2.5x) ③ native-eval 잔여 lane(signed>64·>128bit·sysfunc·real) ④ in-process JIT(cranelift-jit) 기각 | ② 지속 W≥64+grain≥200ns ③ 저ROI 상시 defer ④ 근거·재개 조건 = §5.a codegen 행 |
-| VHDL | VHDL 프론트엔드(9-value std_logic 매핑·별도 파서·GHDL 오라클·E7xxx) | SV plateau + 값도메인 결정 + GHDL 셋업 |
-| VCD-EXT | `$dumpports*`(포트 strength) | 파형 툴 수요 (FST=§4.5.149·150 지원 — `$dumpfile("x.fst")`/`-o x.fst`; known-edge=소형 타임테이블 fst-writer [issue #4] loud 거부) |
-| MVP-CUT | string concat-nonassign · wildcard assoc `[*]` · package internal-import/scoped-call 잔여 · cross-frame disable | 개별 수요 시 |
+| BACKEND | ① a separate 2-state mode (rejected) ② PDES BSP parallelism (Amdahl ceiling T4 ≈ 2.5×) ③ the native-eval residual lane (signed >64, >128 bits, system functions, real) ④ an in-process JIT via cranelift-jit (rejected) | ② sustained W≥64 with grain ≥200 ns ③ low ROI, deferred standing ④ the reasons and re-entry are the §5.a codegen row |
+| VHDL | a VHDL front end (9-value std_logic mapping, a separate parser, GHDL as oracle, E7xxx codes) | an SV plateau plus a value-domain decision plus a GHDL setup |
+| VCD-EXT | `$dumpports*` (port strength) | waveform-tool demand (FST is supported — `$dumpfile("x.fst")` / `-o x.fst`; a known-edge small time table is a loud refusal from fst-writer issue #4) |
+| MVP-CUT | string concat outside an assignment · a wildcard associative index `[*]` · the package internal-import and scoped-call residue · a cross-frame `disable` | individual demand |
 
-## 8. 비계획 (영구 비목표 · gap 아님)
+## 8. Non-goals (permanent, not gaps)
 
-- DEFPARAM(IEEE deprecated·`#(.param())`로 충분) · IMPLICIT-NET(정책=E3010 명시 에러) · OOS(synthesis·waveform GUI·UPF/SDF/DPI-C·shortreal·trireg·UVM 생태계·unique/priority 다중-match 검사).
+- IMPLICIT-NET (policy: an explicit `E3010` error) · out of scope: synthesis, a waveform GUI,
+  UPF/SDF/DPI-C, `shortreal`, `trireg`, the UVM ecosystem, and unique/priority multiple-match
+  checking.
+- `defparam` is not extended: a direct-child `instance.param` target with a constant value works, and
+  a multi-level path or a non-constant value is a loud refusal. IEEE deprecates it and
+  `#(.param())` covers the need, so the refusals stay (the residues that ARE tracked are §0 row 14-b
+  and §3.b `defparam-iface`).
 
-## 9. 완료 이력 포인터
+## 9. History
 
-- 완료 슬라이스 상세 로그(§4.5.x) = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md)(§번호 보존).
-- Phase A~D 실행 기록(§5.1-x · ③층 native 백엔드 · 슬라이스 59건) = [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)(무삭제·§번호 보존). 코드·커밋의 `ROADMAP §5.1-<x>` 는 거기서 찾는다.
-- 구 §0~§7 원문 = [ROADMAP_ARCHIVE_2026-07-16.md](ROADMAP_ARCHIVE_2026-07-16.md)(§번호 보존).
-- 탄 단위 내러티브·방법론 교훈 = [DEVLOG.md](DEVLOG.md)·ARCHIVE §3.
-- 외부 호환성 리포트 1·2차 전말(A1~C1·EXT2 체인) = ARCHIVE §6·§6-2 — 잔여는 §3 "외부 리포트 잔여" 3건뿐.
+Completed slices, phase execution records, review records and the per-shot narrative are in
+[history/](history/README.md).

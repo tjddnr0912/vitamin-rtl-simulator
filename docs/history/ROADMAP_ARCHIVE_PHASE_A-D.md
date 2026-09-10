@@ -1,6 +1,6 @@
 # ROADMAP ARCHIVE — Phase A~D 실행 기록 (③층 native 백엔드 · 2026-08-10 ~ 2026-08-17) ✅ 완료
 
-> [ROADMAP.md](ROADMAP.md) §5 에서 이관한 **완료된 실행 기록**. **§번호는 이관 당시 그대로 보존**한다 —
+> [ROADMAP.md](../ROADMAP.md) §5 에서 이관한 **완료된 실행 기록**. **§번호는 이관 당시 그대로 보존**한다 —
 > 다른 문서·커밋 메시지·코드 주석의 `ROADMAP §5.1-<x>` 참조는 **이 파일**에서 찾는다(`#### 5.1-` 로 검색).
 >
 > **이관 사유 (2026-08-18)**: 이 블록이 ROADMAP.md 3,931 줄 중 **3,074 줄(78%)** 을 차지했고 그 전부가
@@ -8,10 +8,10 @@
 > 재개하는 사람이 무엇이 남았는지 읽을 수 없었다. 2026-07-28 의 `ROADMAP_ARCHIVE_2026-07-16.md` 분리와
 > **같은 사유·같은 규칙**(무삭제·§번호 보존)이다.
 >
-> - **살아있는 전방 문서**: 잔여 = [ROADMAP.md](ROADMAP.md) · 재개 지점 = [ROADMAP.md §5.2](ROADMAP.md) ·
->   상위 스냅샷 = [REMAINING_WORK.md](REMAINING_WORK.md) · 슬라이스 상세(§4.5.x) = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md).
-> - **해설·용어**(초보자 기준 서사) = [study/02 — ③층 커버리지 0%→100%](study/02-v1-native-coverage.md).
-> - **아키텍처** = [preview/04](preview/04-architecture.md) · **③층 SPEC** = [preview/21](preview/21-tier3-native-backend.md).
+> - **살아있는 전방 문서**: 잔여 = [ROADMAP.md](../ROADMAP.md) · 재개 지점 = [ROADMAP.md §5.2](../ROADMAP.md) ·
+>   상위 스냅샷 = [REMAINING_WORK.md](../REMAINING_WORK.md) · 슬라이스 상세(§4.5.x) = [ROADMAP_ARCHIVE.md](ROADMAP_ARCHIVE.md).
+> - **해설·용어**(초보자 기준 서사) = [study/02 — ③층 커버리지 0%→100%](../study/02-v1-native-coverage.md).
+> - **아키텍처** = [preview/04](../preview/04-architecture.md) · **③층 SPEC** = [preview/21](../preview/21-tier3-native-backend.md).
 
 ## 결과 요약 (한 화면)
 
@@ -22,7 +22,7 @@
 | **C** | interp 강등 | interp = **테스트 도구**(제품 표면 아님) · **성능 최적화 영구 제외**를 규칙으로 · §5.1-e 를 빌드의 성질로 확정 |
 | **D** | 기계어 코드젠 | 벤치 **10/10 에서 native < vm**(착수 때 셋에서 졌고 최악 2.52×) · ⛔ **cranelift 코드젠은 지어서·배선해서·재서 기각**(런의 ~38% 가 shim · 천장 8.9~11.3%) |
 
-⚠️ **재개하려면 이 파일이 아니라 [ROADMAP.md §5.2 재개 지점](ROADMAP.md)** 을 보라. 여기 있는 것은
+⚠️ **재개하려면 이 파일이 아니라 [ROADMAP.md §5.2 재개 지점](../ROADMAP.md)** 을 보라. 여기 있는 것은
 전부 끝난 일이고, 남은 판정(D2-b 거부 · 코드젠 재착수 조건)은 §5.2 가 한 줄씩 들고 있다.
 
 ---
@@ -91,7 +91,7 @@
 > ⚠️ **검사를 지운 것이 아니다** — 세 함수와 소비자는 남아 있고 `_`-free match 가 새 종류를
 > 강제한다. 핀하는 것은 *"지금 비어 있다"* 이고 `is_empty()` 단언으로 박혀 있다.
 >
-> **해설·용어·전체 서사(초보자용) = [study/02](study/02-v1-native-coverage.md).**
+> **해설·용어·전체 서사(초보자용) = [study/02](../study/02-v1-native-coverage.md).**
 > 슬라이스별 상세 = §5.1-g ~ §5.1-ap.
 
 ### Phase B — V2 = **빌드 분리** (오너 제안 채택 · 옛 "VM 삭제" 를 대체)
@@ -347,8 +347,8 @@ B2′ 가 폴백 arm 을 feature 뒤로 보내면서 **이 빌드에서 게이�
 > correct-support), 제품 빌드의 거부는 **치명**(폴백 대상이 없어 loud 아니면 wrong). 같은 사실에 각자
 > 옳은 답이다.
 >
-> 아키텍처 그림·용어·전체 서사 = **[preview/04 §아키텍처](preview/04-architecture.md)** ·
-> **[study/02](study/02-v1-native-coverage.md)**.
+> 아키텍처 그림·용어·전체 서사 = **[preview/04 §아키텍처](../preview/04-architecture.md)** ·
+> **[study/02](../study/02-v1-native-coverage.md)**.
 
 ### Phase C — V3 + 오라클 재정의
 
@@ -2531,7 +2531,7 @@ exit 0). A8-b 가 deferred assertion 을 배선한 이래 있던 결함이고, *
 
 > **⇒ Phase A 종료. 다음은 Phase B(빌드 분리) — B1 전 스위트 native 초록 · B2 VM 삭제 · B3 `oracle`
 > feature · **B4 제품 빌드에서 게이트 거부를 loud 로**(삭제만으론 안 생기는 사다리 상승) · B5 CI 축.**
-> 해설·용어·전체 서사 = **[study/02](study/02-v1-native-coverage.md)**.
+> 해설·용어·전체 서사 = **[study/02](../study/02-v1-native-coverage.md)**.
 
 #### 5.1-e ⚠️⚠️ 오라클 부식 — **V1 이 자기 오라클을 무디게 한다**(실측)
 
@@ -2570,7 +2570,7 @@ exit 0). A8-b 가 deferred assertion 을 배선한 이래 있던 결함이고, *
 | 단계 | 무엇 | 게이트 / 중단 판정 |
 |---|---|---|
 | **V0** ✅ | **커버리지 격차 측정 (2026-08-10 · §4.5.336).** 기본 백엔드를 `Native` 로 flip 하고 전 스위트를 돌렸다. **결과 = 아래 두 표.** 스캐폴드는 되돌렸다(트리 변경 0) | — (계기). **이 숫자가 V1 의 슬라이스 목록이다** |
-| **V1** ✅ **완료 (2026-08-16)** | **커버리지 확장 = Phase A.** §5.1-b 의 측정된 순서대로 30여 슬라이스 — **54.7% → 100.00%**(코퍼스 6,470 중 거부 0 · flip 발산 0). 슬라이스별 상세 = §5.1-g~-ap · 해설 = [study/02](study/02-v1-native-coverage.md) | 슬라이스마다 **VM 과 바이트 동일 + 절대 앵커**(§5.1-e) |
+| **V1** ✅ **완료 (2026-08-16)** | **커버리지 확장 = Phase A.** §5.1-b 의 측정된 순서대로 30여 슬라이스 — **54.7% → 100.00%**(코퍼스 6,470 중 거부 0 · flip 발산 0). 슬라이스별 상세 = §5.1-g~-ap · 해설 = [study/02](../study/02-v1-native-coverage.md) | 슬라이스마다 **VM 과 바이트 동일 + 절대 앵커**(§5.1-e) |
 | **V2** ✅ **완료 (2026-08-16)** | **= Phase B(빌드 분리).** 기본값을 native 로(§5.1-aq) · 교체를 경고로(§5.1-ar) · **`oracle` feature**(기본 ON)로 제품 표면을 native 하나로(§5.1-as) · 제품 빌드에서 거부를 치명으로(§5.1-at). ⚠️ **삭제한 줄은 0** — 착수 전 측정이 옛 표적(5,430줄 삭제·`exec/` 감싸기)을 뒤집었다(§5.1-b2) | 기본 5,470 green · **제품 형태 lib 147 green** · clippy 양쪽 0 |
 | **V3** ✅ **완료 (2026-08-17)** | **= Phase C.** `--backend interp` 를 **테스트 도구**로 명시(제품 빌드엔 변형 자체가 없다) · **성능 최적화 영구 제외**를 `Backend::Interpreter` doc 에 규칙으로 · §5.1-e 를 빌드의 성질로 확정. ⚠️ 그 과정에서 **`--help` 한 문단이 통째로 거짓**임을 발견해 다시 썼다(§5.1-au) | 5,470 green · 제품 형태 147 green · 도움말 핀 **강화** |
 
@@ -2996,7 +2996,7 @@ coverage·string·queue·real math·program·vif)를 따라잡는 일이라 **�
 > **S3b(잔여)** = 프레임이 모듈 넷을 읽게 — `(st, nets)` 헬퍼에 split 리더 배선 →
 > `k_dispatch_systask` · delayed CA · task 프레임. 거부 사유는 `native::frames` 가 각자 이름으로 말한다.
 
-**판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](preview/21-tier3-native-backend.md).
+**판정이 뒤집혔다.** 정본·근거·파괴 범위 = [preview/21 §0.3 + §7](../preview/21-tier3-native-backend.md).
 
 > **S1d-4d-3 완료 (2026-08-05 · §4.5.302) — delayed CA.** `assign #d` 배선 → **코퍼스 72/72 네이티브·
 > 바이트 동일**(30→65→72). 재진술 대신 **추출**(엔진도 같은 함수를 통과·PRE/POST 179설계 0 diff).
@@ -3080,8 +3080,8 @@ T1/T2 가 푸는 문제("호출을 가진 바디를 컴파일 대상으로")는 
 
 ### 5.0-b (참고) T 단계의 원래 측정치 — ③층 예산의 근거 (§4.5.282)
 
-정본 계획·중단 판정·근거표 = **[preview/21 §7.3](preview/21-tier3-native-backend.md)**.
-측정 원본 = **[preview/18 round-26](preview/18-acceleration-analysis.md)**. 요약:
+정본 계획·중단 판정·근거표 = **[preview/21 §7.3](../preview/21-tier3-native-backend.md)**.
+측정 원본 = **[preview/18 round-26](../preview/18-acceleration-analysis.md)**. 요약:
 
 | | 서브루틴 호출 있음 | 인라인 | |
 |---|---|---|---|

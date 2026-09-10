@@ -1,22 +1,23 @@
-# 05 · Verilog 동작 구문 (Behavioral)
+# 05 · Verilog Behavioral Statements
 
-IEEE 1364-2001/2005 기준. `initial`과 `always`는 Verilog의 두 가지 절차적 실행
-컨텍스트다. 이 안에서 사용하는 대입 연산자의 선택 — blocking(`=`) vs
-non-blocking(`<=`) — 이 합성 결과와 시뮬레이션 정확도를 결정한다.
+Per IEEE 1364-2001/2005. `initial` and `always` are Verilog's two procedural
+execution contexts. Inside them, the choice of assignment operator — blocking (`=`)
+vs. nonblocking (`<=`) — decides both the synthesis result and the simulation
+accuracy.
 
 ---
 
-## initial vs always
+## initial vs. always
 
-| 항목 | `initial` | `always` |
+| Aspect | `initial` | `always` |
 |------|----------|--------|
-| 실행 횟수 | 시뮬레이션 t=0에 한 번, 자연 종료 | 영구 반복 (무한 루프) |
-| 주요 용도 | 테스트벤치 초기화, 파형 생성 | RTL 논리 기술 |
-| 합성 가능 여부 | ❌ 비합성 | ✅ (조건 충족 시) |
-| 중복 존재 | 가능 — 여러 initial이 t=0에 병렬 시작 | 가능 — 여러 always가 병렬 실행 |
+| Times executed | once at simulation t=0, then finishes on its own | repeats forever (an infinite loop) |
+| Main use | testbench initialization, stimulus generation | describing RTL logic |
+| Synthesizable | ❌ not synthesizable | ✅ (when the conditions are met) |
+| Several of them | allowed — every initial starts in parallel at t=0 | allowed — every always runs in parallel |
 
 ```verilog
-// initial — 테스트벤치 초기화
+// initial — testbench initialization
 initial begin
     clk = 0;
     rst = 1;
@@ -24,39 +25,39 @@ initial begin
     #200 $finish;
 end
 
-// always — 클록 생성
-always #5 clk = ~clk;   // 10 time-unit 주기
+// always — clock generation
+always #5 clk = ~clk;   // a 10 time-unit period
 ```
 
 ---
 
-## always 블록의 sensitivity list
+## The sensitivity list of an always block
 
-sensitivity list는 `@(...)` 안에 나열한 신호 중 하나가 변화할 때 always 블록을
-트리거한다.
+The sensitivity list triggers the always block whenever one of the signals listed
+inside `@(...)` changes.
 
-### 레벨 감지 (조합 논리)
+### Level sensitive (combinational logic)
 
 ```verilog
-// 명시적 목록 — Verilog-1995 스타일
+// explicit list — the Verilog-1995 style
 always @(a or b or sel) begin
     y = sel ? a : b;
 end
 
-// 암시적 전체(@*) — Verilog-2001 권장
+// implicit "everything" (@*) — recommended since Verilog-2001
 always @(*) begin
-    y = sel ? a : b;    // a, b, sel 자동 추가
+    y = sel ? a : b;    // a, b and sel are added automatically
 end
 ```
 
-`@(*)` 는 블록 내에서 **읽히는** 모든 신호를 자동으로 sensitivity list에 포함한다.
-명시적 목록에서 신호를 누락하면 시뮬레이션은 래치처럼 동작하지만 합성은 멀티플렉서로
-만들어 **시뮬레이션/합성 불일치**가 발생한다.
+`@(*)` puts every signal **read** inside the block into the sensitivity list
+automatically. Leave a signal out of an explicit list and simulation behaves like a
+latch while synthesis builds a multiplexer — a **simulation/synthesis mismatch**.
 
-### 에지 감지 (순서 논리)
+### Edge sensitive (sequential logic)
 
 ```verilog
-// 동기 리셋
+// synchronous reset
 always @(posedge clk) begin
     if (rst)
         q <= 0;
@@ -64,7 +65,7 @@ always @(posedge clk) begin
         q <= d;
 end
 
-// 비동기 리셋 (negedge active-low)
+// asynchronous reset (active-low, negedge)
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n)
         q <= 0;
@@ -73,49 +74,50 @@ always @(posedge clk or negedge rst_n) begin
 end
 ```
 
-| 키워드 | 트리거 조건 |
+| Keyword | Trigger condition |
 |--------|-----------|
-| `posedge sig` | sig의 0→1 전환 (x/z→1, 0→x 포함) |
-| `negedge sig` | sig의 1→0 전환 (x/z→0, 1→x 포함) |
-| `sig` (에지 없음) | sig의 어떠한 값 변화도 |
+| `posedge sig` | a 0→1 transition of sig (includes x/z→1 and 0→x) |
+| `negedge sig` | a 1→0 transition of sig (includes x/z→0 and 1→x) |
+| `sig` (no edge) | any value change of sig |
 
 ---
 
-## blocking(=) vs non-blocking(<=)
+## blocking (=) vs. nonblocking (<=)
 
-### blocking 대입 (=)
+### Blocking assignment (=)
 
-RHS를 평가한 즉시 LHS에 갱신하고 다음 문장으로 넘어간다.
-시뮬레이션 스케줄러의 **Active region**에서 순서대로 실행된다.
+Evaluates the RHS, updates the LHS immediately, then moves to the next statement.
+It executes in order, in the scheduler's **Active region**.
 
 ```verilog
 always @(*) begin
-    // 조합 논리 — blocking 사용
+    // combinational logic — use blocking
     a = b & c;
-    y = a | d;   // a는 이미 b&c로 갱신된 상태
+    y = a | d;   // a already holds b&c here
 end
 ```
 
-### non-blocking 대입 (<=)
+### Nonblocking assignment (<=)
 
-RHS를 **Active region**에서 샘플(평가)하고, LHS 갱신은 **NBA region**으로 예약한다.
-NBA region에서 해당 time-step의 모든 non-blocking 갱신이 일괄 적용된다.
+Samples (evaluates) the RHS in the **Active region** and schedules the LHS update
+for the **NBA region**. Every nonblocking update of that time step is then applied
+together in the NBA region.
 
 ```verilog
 always @(posedge clk) begin
-    // 순서 논리 — non-blocking 사용
-    b <= a;   // Active: a 샘플. NBA: b ← a_old
-    c <= b;   // Active: b 샘플(아직 이전 값). NBA: c ← b_old
+    // sequential logic — use nonblocking
+    b <= a;   // Active: sample a. NBA: b ← a_old
+    c <= b;   // Active: sample b (still its old value). NBA: c ← b_old
 end
 ```
 
-NBA region과 stratified event queue의 상세 동작은
-[06-simulation-engine.md](../../06-simulation-engine.md)를 참고한다.
+For the details of the NBA region and the stratified event queue, see
+[06-simulation-engine.md](../../06-simulation-engine.md).
 
-### 정준 shift register 예시
+### The canonical shift register
 
 ```verilog
-// ✅ 올바른 4비트 shift register — non-blocking
+// ✅ a correct 4-bit shift register — nonblocking
 module shift4 (
     input        clk,
     input        d,
@@ -125,50 +127,52 @@ module shift4 (
 
     always @(posedge clk) begin
         q0 <= d;    // NBA: q0 ← d
-        q1 <= q0;   // NBA: q1 ← q0(이전 값)
-        q2 <= q1;   // NBA: q2 ← q1(이전 값)
-        q3 <= q2;   // NBA: q3 ← q2(이전 값)
+        q1 <= q0;   // NBA: q1 ← the old q0
+        q2 <= q1;   // NBA: q2 ← the old q1
+        q3 <= q2;   // NBA: q3 ← the old q2
     end
-    // 결과: 매 클럭마다 한 비트씩 우측 이동
+    // result: one bit shifts right on every clock
 endmodule
 ```
 
 ```verilog
-// ❌ 잘못된 shift register — blocking
+// ❌ a broken shift register — blocking
 always @(posedge clk) begin
-    q0 = d;     // 즉시 q0 = d
-    q1 = q0;   // q0가 이미 d → q1도 d
-    q2 = q1;   // 마찬가지로 d
-    q3 = q2;   // 결국 q3 = d (shift 없음, 4개 모두 d)
+    q0 = d;     // q0 = d immediately
+    q1 = q0;   // q0 is already d → q1 becomes d too
+    q2 = q1;   // likewise d
+    q3 = q2;   // so q3 = d as well (no shift; all four hold d)
 end
 ```
 
-### 대입 연산자 선택 규칙
+### Choosing the assignment operator
 
-| 상황 | 연산자 | 이유 |
+| Situation | Operator | Why |
 |------|--------|------|
-| 조합 논리 (`always @(*)`) | `=` blocking | 순서적 RHS 의존 관계 표현 |
-| 순서 논리 (`always @(posedge clk)`) | `<=` non-blocking | NBA region 분리로 플립플롭 동작 보장 |
-| 같은 always 내 혼용 | ❌ 금지 | 시뮬레이션/합성 불일치 원인 |
-| testbench 자극 | `=` blocking | 결정론적 자극 순서 보장 |
+| combinational logic (`always @(*)`) | `=` blocking | expresses the sequential RHS dependency |
+| sequential logic (`always @(posedge clk)`) | `<=` nonblocking | the NBA region separation guarantees flip-flop behavior |
+| mixing both in one always | ❌ forbidden | a source of simulation/synthesis mismatch |
+| testbench stimulus | `=` blocking | guarantees a deterministic stimulus order |
 
 ---
 
-## 주요 주의사항
+## Points to watch
 
-**always 안에서 대입되는 변수는 reg여야 한다.** (SystemVerilog의 `logic`과 달리
-Verilog `wire`는 continuous assign으로만 구동한다.)
+**A variable assigned inside an always block must be a reg.** (Unlike
+SystemVerilog's `logic`, a Verilog `wire` can only be driven by a continuous
+assignment.)
 
 ```verilog
 wire  y_wire;
 reg   y_reg;
 
 assign y_wire = a & b;       // ✅ wire → continuous assign
-always @(*) y_reg = a & b;  // ✅ reg → always 내 blocking
+always @(*) y_reg = a & b;  // ✅ reg → blocking inside an always
 ```
 
-**initial 블록에서의 non-blocking**: 문법적으로 허용되지만 NBA region 스케줄링이
-발생하므로 테스트벤치 자극에는 blocking을 쓰는 것이 더 예측 가능하다.
+**Nonblocking assignments in an initial block**: legal syntax, but they go through
+NBA region scheduling, so blocking assignments make testbench stimulus more
+predictable.
 
 ---
 
@@ -176,8 +180,8 @@ always @(*) y_reg = a & b;  // ✅ reg → always 내 blocking
 
 - IEEE 1364-2001 §9.7–§9.8 (procedural blocks), §9.10 (sensitivity list)
 - IEEE 1800-2017 §9.2 (initial/always), §9.4 (event control), §10.4 (blocking), §10.4.2 (non-blocking)
-- chipverify.com/verilog/verilog-always-block (sensitivity list — WebFetch 검증)
-- chipverify.com/verilog/verilog-blocking-non-blocking-statements (NBA 메커니즘 — WebFetch 검증)
+- chipverify.com/verilog/verilog-always-block (sensitivity list — verified by WebFetch)
+- chipverify.com/verilog/verilog-blocking-non-blocking-statements (NBA mechanism — verified by WebFetch)
 - analogcircuitdesign.com/verilog-blocking-and-non-blocking/ (timing semantics)
-- eclipse.umbc.edu/robucci/cmpe316/lectures/L04__VerilogIntroII/ (initial vs always)
-- 06-simulation-engine.md (NBA region 상세, stratified event queue)
+- eclipse.umbc.edu/robucci/cmpe316/lectures/L04__VerilogIntroII/ (initial vs. always)
+- 06-simulation-engine.md (NBA region details, stratified event queue)

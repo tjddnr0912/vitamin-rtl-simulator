@@ -1,391 +1,659 @@
-# 17 · sim-ir IR 백본 동결 (M3)
+# 17 · sim-ir backbone freeze
 
-> **Status:** 동결 sign-off 스펙 (2026-06-04 승인). 구현자가 Rust를 verbatim 전사한다. PR1-B가 `SuspendState` 폐포를 동결했고, M3는 **나머지 sim-ir 백본**(`Expr`/`Stmt`/`Lvalue`/`Terminator` 본문 + net/expr arena + `Process`/`SimIr` 루트)을 동결해 **골든 루트를 `SimIr`로 락**한다.
-> **Grounded in:** `01-goals-and-scope.md`(Phase-1 freeze 표), `06-simulation-engine.md`(프로세스 모델 SD1–SD5, line ~129–147), `14-staged-artifacts.md` §1(frozen node·SimIr root, line ~85–164)/§5, `16-schema-hash-spec.md`(SchemaHash 결정성 규칙).
-> **검증:** 9-에이전트 설계 스파이크(선행연구 iverilog/Verilator/yosys/CXXRTL + MVP 서브셋 oracle + 제약 oracle) → 설계 → 4-렌즈 적대 검증(커버리지/결정성/프로세스-fit/진화성) → 최종. BLOCKER 2(루트, Fork/Call)·MAJOR 6 해소.
-
----
-
-## 0. 동결 원칙
-
-- **골든 루트 = `schema_hash::<sim_ir::SimIr>()`** (NOT `Process`). `Process`의 타입-도달 폐포는 모든 cross-arena 엣지가 `u32` 인덱스라 `Expr`/`Stmt`/`NetVar`/`ConstVal`에 **도달하지 못한다** → Process 루트로는 arena가 hash-밖에서 evolvable. `SimIr`가 arena를 `Vec`로 **by-value 보유**하므로 그 폐포가 전 백본 + (`Vec<Process>` 경유) PR1-B 폐포 전체를 덮는다. doc 16의 `Process` vs `SimIrRoot` 불일치도 이로써 `SimIr`로 통일.
-- **모든 inter-node 엣지 = `u32`/`u64`/`Option<u32>`/`Vec<u32>` arena 인덱스.** `Box<Self>`/`Vec<Self>` 자기재귀 0 → 타입-도달 그래프 유한 acyclic. 재로드 시 포인터 fixup 0(doc 14:104–109).
-- **결정성(3-OS 바이트 동일):** `HashMap`/`HashSet` 일절 금지, `BTreeMap`/`BTreeSet`/`Vec`만. **`usize`/`isize`/`f32`/`f64` 금지**(아래 §8 derive 가드로 강제). order-stable `Vec`. span-free(위치는 노드-인덱스 키 side-table, sim-ir 밖). 전 타입 monomorphic(제네릭/lifetime/const-generic 없음). frozen 타입 serde 속성 0.
-- **진화 가능:** Expr/Stmt variant 추가 = 루트 해시 flip = 의도적 re-freeze(전 `.velab` 재생성). M3는 **백본 + MVP variant 집합**을 동결; Phase-2 구문은 §10 re-freeze 슬롯.
-- **이미 동결된 형상은 verbatim 재현:** `Process`/`SuspendState` 폐포(PR1-B), `Terminator::Fork{children,join,resume_bb}`·`Call{target,ret_bb}`(doc 14:162, 2026-06-02 RULE-D2 동결).
+`sim-ir` is the language-neutral simulation IR, and its root type `sim_ir::SimIr` is the golden
+shape that gates `.velab` staleness. This document is the catalogue of that frozen backbone: which
+types are in it, their exact shapes, the rules that keep those shapes stable, how the arena indices
+resolve, what the front end lowers onto them, what deliberately rides outside them, and what a
+re-freeze costs. The hash mechanism is [16-schema-hash-spec.md](16-schema-hash-spec.md); the
+container that carries the hash is [14-staged-artifacts.md](14-staged-artifacts.md).
 
 ---
 
-## 1. `Expr` — 식 enum
+## 1. Freeze principles
 
-> **주(M3-baseline verbatim).** §1/§2의 verbatim 블록은 **M3 동결 시점의 baseline 형상**이다
-> (`Expr` 10-variant, `BinOp`에 `CasezEq/CasexEq` 부재 등). 이후의 **의도적 re-freeze**(v4~v19,
-> §10 및 `crates/vita-artifact/src/header.rs` 주석에 기록)가 이를 확장했다 — 예:
-> `Expr::ArrayItem`(v17), `BinOp::CasezEq/CasexEq`(v7). 블록은 baseline 기록으로 보존한다.
+| # | Principle | What it means in practice |
+|---|---|---|
+| P1 | The golden root is `schema_hash::<sim_ir::SimIr>()` | `SimIr` holds every arena by value, so its type-reachability closure covers the whole backbone. `Process` is a sub-pin only (§2) |
+| P2 | Every inter-node edge is an arena index | `u32`, `u64`, `Option<u32>` or `Vec<u32>`. There is no `Box<Self>` or `Vec<Self>` self-recursion, so the type-reachability graph is a finite acyclic DAG and reloading needs zero pointer fixup |
+| P3 | The shapes are byte-identical on every platform | No `HashMap`, no `HashSet`; `BTreeMap`, `BTreeSet` and `Vec` only. No `usize`, `isize`, `f32` or `f64`. Order-stable `Vec`. Every type monomorphic — no type parameter, lifetime or const generic. Zero serde attributes |
+| P4 | The IR is span-free | No `Span` type and no `span` field exists anywhere in `sim-ir`. Source locations travel in an out-of-band table keyed by node index |
+| P5 | Growth is deliberate, never incidental | Adding, removing or reordering a field or a variant flips the root hash. That is legitimate, and it is a re-freeze: `format_version` bump, every artifact regenerated, both goldens re-pinned (§10) |
+| P6 | A frozen type stays at the crate root | The registry key embeds `module_path!()`, so relocating a type into a submodule flips the hash on its own ([16](16-schema-hash-spec.md) §4) |
+
+Every frozen type carries the same derive list:
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]   // + Copy where small
+```
+
+Only `SchemaHash` and the two serde derives are part of the contract. `Copy` is present on the
+small value types and affects nothing on the wire.
+
+---
+
+## 2. Why the root is `SimIr` and not `Process`
+
+`Process`'s own type-reachability closure stops at the process boundary: every edge out of it —
+into expressions, statements, nets or constants — is a bare `u32` arena index, and a `u32` reaches
+no type. A hash rooted at `Process` would therefore leave `Expr`, `Stmt`, `NetVar` and `ConstVal`
+free to change outside the hash.
+
+`SimIr` holds each arena as a `Vec<T>` by value, so its closure covers the whole backbone and,
+through `Vec<Process>`, the runtime process cluster as well. It is the compatibility gate.
+
+`Process` is kept as a **sub-pin**: a second, cheap golden that gives an immediate signal when the
+runtime cluster moves. It is not a gate, and a bump that touches only the expression or statement
+arenas leaves the sub-pin unchanged — which is the correct reading, not a missed regression.
+
+---
+
+## 3. The frozen catalogue
+
+Thirty-seven types, all at the crate root of `crates/sim-ir/src/lib.rs`, all with empty attribute
+slots.
+
+| Type | Kind | Size |
+|---|---|---|
+| `FourState` | enum | 4 |
+| `EdgeKind` | enum | 3 |
+| `ProcFlags` | newtype | `u8` |
+| `RegionTag` | enum | 4 |
+| `WakeCond` | enum | 6 |
+| `WakeKey` | struct | 3 |
+| `Frame` | struct | 5 |
+| `JoinState` | struct | 4 |
+| `SuspendState` | struct | 6 |
+| `UnOp` | enum | 10 |
+| `BinOp` | enum | 26 |
+| `SelKind` | enum | 4 |
+| `SysFuncId` | enum | 82 |
+| `Expr` | enum | 11 |
+| `SysTaskId` | enum | 41 |
+| `DisableKind` | enum | 2 |
+| `Stmt` | enum | 6 |
+| `Lvalue` | struct | 1 |
+| `LvalChunk` | struct | 5 |
+| `DelayRegion` | enum | 2 |
+| `WaitCause` | enum | 5 |
+| `Terminator` | enum | 7 |
+| `SensKind` | enum | 5 |
+| `EdgeTerm` | struct | 2 |
+| `Sensitivity` | struct | 2 |
+| `NetKind` | enum | 10 |
+| `PortDir` | enum | 4 |
+| `BitPacked` | struct | 2 |
+| `NetVar` | struct | 8 |
+| `ConstRepr` | enum | 3 |
+| `ConstVal` | struct | 4 |
+| `BasicBlock` | struct | 2 |
+| `Process` | struct | 4 |
+| `ContAssign` | struct | 3 |
+| `Instance` | struct | 4 |
+| `FuncDef` | struct | 4 |
+| `SimIr` | struct | 9 |
+
+The canonical string is one sentinel line plus one line per type, committed as
+`crates/testdata/sim_ir_canonical.txt`.
+
+**Outside the closure by design.** `sim_ir::COp` and `sim_ir::CBinOp`, the constraint-solver
+postfix ops, derive `Serialize` and `Deserialize` but not `SchemaHash`. They ride the out-of-band
+`class_constraints` and `randomize_with` sidecars, so their wire shape is gated by
+`format_version` instead of by the root hash. That is a division of labour, not a coverage hole.
+The `sim_ir` submodules `analysis`, `mw`, `names`, `realness` and `selfwidth` hold no serialized
+type; non-serialized code may live in a submodule, a `SchemaHash` type may not (P6).
+
+---
+
+## 4. The shapes
+
+### 4.1 Runtime process cluster
+
+```rust
+pub enum FourState { Zero, One, X, Z }
+
+pub enum EdgeKind { Posedge, Negedge, AnyEdge }
+
+pub struct ProcFlags(pub u8);
+
+pub enum RegionTag { Active, Inactive, Nba, Monitor }
+
+pub enum WakeCond {
+    Edge       { net: u32, kind: sim_ir::EdgeKind },
+    Level      { nets: Vec<u32> },
+    WaitTrue   { expr: u32 },
+    TimeAbs    { tick: u64 },
+    NamedEvent { ev: u32 },
+    Join       { join_ref: u32 },
+}
+
+pub struct WakeKey {
+    pub cond:      sim_ir::WakeCond,
+    pub region:    sim_ir::RegionTag,
+    pub tie_break: u32,
+}
+
+pub struct Frame {
+    pub return_pc:    u32,
+    pub callee_entry: u32,
+    pub locals_base:  u32,
+    pub locals_len:   u32,
+    pub is_automatic: bool,
+}
+
+pub struct JoinState {
+    pub parent:   Option<u32>,
+    pub children: Vec<u32>,
+    pub detached: Vec<u32>,
+    pub flags:    sim_ir::ProcFlags,
+}
+
+pub struct SuspendState {
+    pub resume_pc:   u32,
+    pub locals:      Vec<sim_ir::FourState>,
+    pub join_state:  sim_ir::JoinState,
+    pub wake_key:    sim_ir::WakeKey,
+    pub call_stack:  Vec<sim_ir::Frame>,
+    pub frame_arena: Vec<sim_ir::FourState>,
+}
+```
+
+`ProcFlags` is a newtype rather than a bare `u8` so its structural shape is distinct: the postcard
+bytes are identical, the registry entries are not.
+
+`Frame` holds no `Box<Frame>` or `Vec<Frame>` — the call stack is owned by `SuspendState` — so the
+cluster contributes no self-edge.
+
+Status at HEAD: this whole cluster is **inert**. Elaborate emits one constant `SuspendState` per
+process (`resume_pc` equal to the entry block, empty `locals`, `call_stack` and `frame_arena`, and
+a `WakeKey` of `Level{nets:[]}` / `RegionTag::Active` / `tie_break: 0`) and no engine code reads or
+writes any part of it. Live suspension state is engine-side. See §9.
+
+### 4.2 Expressions
+
+```rust
 pub enum Expr {
-    Const     { val: u32 },                                       // -> consts[val] : ConstVal
-    Signal    { net: u32, word: Option<u32> },                    // net read; word = unpacked-array 원소 인덱스 식
-    Select    { base: u32, offset: u32, width: u32, kind: SelKind }, // bit/part/indexed select
-    Concat    { parts: Vec<u32> },                                // {a,b,...} MSB-first, 순서 동결
-    Replicate { count: u32, value: u32 },                         // {N{x}} ; count = 상수-elaborated 식 인덱스
-    Unary     { op: UnOp,  operand: u32 },
-    Binary    { op: BinOp, lhs: u32, rhs: u32 },
-    Ternary   { cond: u32, then_e: u32, else_e: u32 },            // ?:
-    SysFunc   { which: SysFuncId, args: Vec<u32> },               // $time/$realtime/$signed/$unsigned/$clog2
-    Call      { func: u32, args: Vec<u32> },                      // INLINABLE user 함수 호출 -> funcs[func]
+    Const     { val: u32 },                                              // -> consts[val]
+    Signal    { net: u32, word: Option<u32> },                           // net read; word = unpacked element index expr
+    Select    { base: u32, offset: u32, width: u32, kind: sim_ir::SelKind },
+    Concat    { parts: Vec<u32> },                                       // {a,b,...} MSB-first, order frozen
+    Replicate { count: u32, value: u32 },                                // {N{x}}
+    Unary     { op: sim_ir::UnOp,  operand: u32 },
+    Binary    { op: sim_ir::BinOp, lhs: u32, rhs: u32 },
+    Ternary   { cond: u32, then_e: u32, else_e: u32 },
+    SysFunc   { which: sim_ir::SysFuncId, args: Vec<u32> },
+    Call      { func: u32, args: Vec<u32> },                             // -> funcs[func]
+    ArrayItem { index: bool, width: u32, signed: bool },                 // array-method `with` iterator
 }
-```
 
-**유효성 불변식(구조 아님 — elaboration 강제):**
-- **(I-E1)** `Expr::Call.func`는 elaborator가 inline 가능한 함수여야 한다. 비-inline(재귀/불확실) 함수가 식 위치면 `E-ELAB-UNSUPPORTED`(E3023, doc 06 SD2)로 거부. frame-call(`call_stack`) 실행은 문장 위치 `Terminator::Call`로만 도달.
-- **(I-E2)** `Replicate.count`는 elaboration 시 상수-foldable(Verilog 요구). 식 인덱스로 저장(`Select` width와 동형); 비상수는 elaboration 에러.
-
-```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum UnOp {
-    Plus, Minus, LogNot, BitNot,                                  // + - ! ~
-    RedAnd, RedNand, RedOr, RedNor, RedXor, RedXnor,              // & ~& | ~| ^ ~^ (reduction)
+    Plus, Minus, LogNot, BitNot,                                         // + - ! ~
+    RedAnd, RedNand, RedOr, RedNor, RedXor, RedXnor,                     // & ~& | ~| ^ ~^
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum BinOp {
-    Add, Sub, Mul, Div, Mod, Pow,                                // + - * / % **
-    BitAnd, BitOr, BitXor, BitXnor,                              // & | ^ ~^  (^~ -> BitXnor 정규화)
-    LogAnd, LogOr,                                               // && ||
-    Lt, Le, Gt, Ge,                                             // < <= > >=
-    Eq, Ne, CaseEq, CaseNe,                                     // == != === !==   (==? !=? Phase-2)
-    Shl, Shr, AShl, AShr,                                       // << >> <<< >>>
+    Add, Sub, Mul, Div, Mod, Pow,                                        // + - * / % **
+    BitAnd, BitOr, BitXor, BitXnor,                                      // & | ^ ~^   (^~ normalizes to BitXnor)
+    LogAnd, LogOr,                                                       // && ||
+    Lt, Le, Gt, Ge,                                                      // < <= > >=
+    Eq, Ne, CaseEq, CaseNe,                                              // == != === !==
+    Shl, Shr, AShl, AShr,                                                // << >> <<< >>>
+    CasezEq, CasexEq,                                                    // per-label casez / casex match
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub enum SelKind { Bit, PartConst, PartIdxUp, PartIdxDown }      // x[i] / x[m:l] / x[b+:w] / x[b-:w]
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub enum SysFuncId { Time, Realtime, Signed, Unsigned, Clog2 }   // $random은 Phase-2
+pub enum SelKind { Bit, PartConst, PartIdxUp, PartIdxDown }              // x[i] / x[m:l] / x[b+:w] / x[b-:w]
 ```
-reduction vs bitwise는 **arity로** 구분(reduction=`UnOp`, bitwise=`BinOp`), 토큰 아님.
 
----
+Reduction and bitwise operators are distinguished by arity — reduction lives in `UnOp`, bitwise in
+`BinOp` — not by a token.
 
-## 2. `Stmt` — BB 내 straight-line 연산 (제어흐름 없음)
+`CasezEq` treats a position as don't-care when either side is `z`; `CasexEq` when either side is
+`x` or `z`. Both always produce a known `1'b0`/`1'b1`, like `CaseEq`.
+
+`ArrayItem` is the per-element iterator inside an array method's `with` clause. `index = false`
+reads the current element's value at the element type; `index = true` reads its zero-based
+position, 32-bit signed. The width and signedness ride in the node so the static width table can
+size it.
+
+`SysFuncId` has 82 variants, in declaration order — the order is itself contract, because it fixes
+the postcard discriminant and enters the hash:
+
+```
+Time, Realtime, Signed, Unsigned, Clog2, Rtoi, Itor, RealToBits, BitsToReal,
+DynSize, QPopBack, QPopFront, AssocExists, AssocNum, AssocFirst, AssocNext, AssocLast, AssocPrev,
+Random, Urandom, UrandomRange, CountOnes, OneHot, OneHot0, IsUnknown, Stime,
+Fopen, Sformatf, TestPlusargs, ValuePlusargs,
+StrLen, StrGetC, StrSubstr, StrToUpper, StrToLower, StrCmp,
+Fgets, Fscanf, Sscanf, Fread, Feof, Fgetc, Ungetc,
+DistUniform, DistNormal, DistExponential, DistPoisson, DistChiSquare, Cast,
+ArrSum, ArrProduct, ArrAnd, ArrOr, ArrXor,
+StrAtoi, StrAtohex, StrAtooct, StrAtobin, StrAtoreal,
+Ln, Log10, Exp, Sqrt, Pow, Floor, Ceil, Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Hypot,
+Sinh, Cosh, Tanh, Asinh, Acosh, Atanh,
+DistT, DistErlang
+```
+
+The 21 real-math identifiers compute through the vendored pure-Rust libm, built with
+`default-features = false` so no hardware intrinsic is used and the results are byte-identical on
+every target ([03-build-and-portability.md](03-build-and-portability.md)). Several of these are
+side-effecting on a reference argument — the queue pops, `Random`'s seeded form, `Fopen`, `Fgets`,
+`Fscanf`, `ValuePlusargs`, the `$dist_*` family, the function form of `Cast`, and the assoc
+iterators — and are legal only as the direct right-hand side of a blocking assignment, where the
+lowering intercepts them at statement level.
+
+Structural invariant: `Expr::Call.func` is a `FuncId` into `funcs`. It is the frame-call node in
+expression position. A function that the front end inlines produces no `Expr::Call` at all — its
+body is folded into the caller.
+
+`Replicate.count` must be constant-foldable at elaboration; it is stored as an expression index for
+uniformity with `Select`'s width, and a non-constant count is an elaboration error.
+
+### 4.3 Statements
+
+A statement is straight-line work inside a basic block. It carries no control flow.
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum Stmt {
-    BlockingAssign    { lhs: Lvalue, rhs: u32 },                  // =
-    NonblockingAssign { lhs: Lvalue, rhs: u32 },                  // <=  (NBA region 스케줄)
-    SysTask           { which: SysTaskId, fmt: Option<u32>, args: Vec<u32> }, // $display/.../$dump*
-    Disable           { scope_kind: DisableKind, target: u32 },   // 해시된 reap-scope
+    BlockingAssign    { lhs: sim_ir::Lvalue, rhs: u32 },                                  // =
+    NonblockingAssign { lhs: sim_ir::Lvalue, rhs: u32, delay: Option<u32> },              // <=  (NBA region)
+    SysTask           { which: sim_ir::SysTaskId, fmt: Option<u32>, args: Vec<u32> },
+    Disable           { scope_kind: sim_ir::DisableKind, target: u32 },
+    Force             { lhs: sim_ir::Lvalue, rhs: u32 },                                  // force lhs = rhs
+    Release           { lhs: sim_ir::Lvalue },                                            // release lhs
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub enum SysTaskId {
-    Display, Write, Monitor, Strobe,                             // 텍스트 출력
-    Finish, Stop,                                               // sim 제어
-    DumpFile, DumpVars, DumpOn, DumpOff, DumpAll,               // VCD dump family
-}
+pub enum DisableKind { Fork, Scope }                                     // detached-only vs enclosing-scope teardown
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub enum DisableKind { Fork, Scope }                            // detached-only vs recursive-children reap
-```
+pub struct Lvalue { pub chunks: Vec<sim_ir::LvalChunk> }                 // concat-LHS = many chunks; simple = one
 
-- **(D-S1)** ~~intra-assign delay 필드 없음(MVP 제외)~~ **v5 갱신(2026-06-10)**: `NonblockingAssign`이 `delay:Option<u32 ExprId>`를 가짐(transport NBA — 실행 시 평가, t+d NBA region에 값-운반 이벤트). blocking 형 `a = #d b`는 필드 없이 tmp-capture + `Delay` terminator로 lower(둘 다 구현됨). 문장-선두 `#d`/`@()`는 종전대로 terminator.
-- **(D-S2)** `SysTask{which,fmt,args}`: `fmt:Option<u32>`는 `consts`의 `ConstVal{repr:StrUtf8}`(format-control 문자열)을 가리킴. `args`는 post-format 식 인덱스. format 없는 태스크(`$finish`/`$dumpvars`)는 `fmt=None`. format 문자열이 수치 operand와 **구조적으로 구분**(별도 필드 + 가리키는 const가 자기-식별)되어 3-OS 바이트 동일 `$display` 충족(doc 01:46). `$monitor`/`$strobe` 영속: 엔진이 (`fmt`,`args`) 인덱스 튜플을 보존(인덱스 안정 → 형상 변화 0).
-- **(D-S3)** `Disable{scope_kind,target}`: `target`=`ProcId`(reap할 스코프), `scope_kind`=teardown 의미(doc 14 RULE-D2 inv.2: `Fork`=`detached`만, `Scope`=`children` 재귀). reap-scope는 **해시 필드**(side-metadata 아님 — doc 06:139가 해시 밖 스케줄링 로직 금지). CFG 엣지는 disabling BB의 `Goto`로.
-- **(D-S4)** `ContinuousAssign`은 `Stmt` 아님 — top-level `ContAssign` arena(§7).
-
----
-
-## 3. `Lvalue` — 대입 타깃
-
-```rust
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub struct Lvalue { pub chunks: Vec<LvalChunk> }                 // concat-LHS = 다중 chunk; 단순 = 1 chunk
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct LvalChunk {
-    pub net:    u32,                                             // -> nets[net]
-    pub word:   Option<u32>,                                     // unpacked-array word 인덱스 식 (None=scalar/whole)
-    pub offset: Option<u32>,                                     // part-select base 식 (None=offset 0)
-    pub width:  Option<u32>,                                     // None = whole net; Some(w) = 명시 width
-    pub kind:   SelKind,
-}
-```
-- **(D-L1)** whole-net write 정규형: `{net, word:None, offset:None, width:None, kind:Bit}`. `width:Option<u32>`(None=whole)로 `net_width` denormalize 회피, `SelKind` 4-variant 유지. select 방향/width는 `nets[net].msb/lsb` 조인으로 해소(arena IR이므로 self-contained 아님 — 수용).
-- **enum discriminant 없음:** 아래 frozen enum 어느 것도 명시 discriminant 미사용. reorder-안전은 variant 이름+소스 위치로 보장(discriminant 토큰 아님). 명시 discriminant·고정배열 `[T;N]` 미사용 → derive whitespace 경로(F2) 미진입(§8).
-
----
-
-## 4. `Terminator` — FROZEN-이름·FROZEN-형상 제어흐름 (SD3)
-
-> **`Fork`/`Call`은 RULE-D2 원자 동결 블록(doc 14:162, 2026-06-02)에서 verbatim 재현** — M3가 정하는 게 아님. `Goto`/`Branch`/`Delay`/`Wait`/`Return` 본문만 M3 확정(SD3 §1에서 이름만 줬던 것).
-
-```rust
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub enum Terminator {
-    Goto   { target: u32 },                                      // -> blocks[target]
-    Branch { cond: u32, then_bb: u32, else_bb: u32 },            // if + case/casez/casex -> Branch chain
-    Delay  { amount: u32, region: DelayRegion, resume: u32 },    // region 베이크 (#0 => Inactive)
-    Wait   { cond: WaitCause, resume: u32 },                     // 제한 cause (full WakeCond 아님)
-    Fork   { children: Vec<u32>, join: u32, resume_bb: u32 },    // FROZEN VERBATIM (14:162). join_kind compile-bake.
-    Call   { target: u32, ret_bb: u32 },                         // FROZEN VERBATIM (14:162). args via frame ABI.
-    Return,                                                      // body 끝 / task return
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub enum DelayRegion { Active, Inactive }                        // #d>0 / #0
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub enum WaitCause {                                             // in-body @()/wait — 시간은 구조적 배제
-    Edge  { net: u32, kind: EdgeKind },                          // @(posedge/negedge/edge net)
-    Level { nets: Vec<u32> },                                    // @(a or b ...) / @(*)
-    Expr  { expr: u32 },                                         // wait(expr)
-    Named { ev: u32 },                                           // @(named_event)
+    pub net:    u32,                                                     // -> nets[net]
+    pub word:   Option<u32>,                                             // unpacked word index expr (None = scalar/whole)
+    pub offset: Option<u32>,                                             // part-select base expr (None = offset 0)
+    pub width:  Option<u32>,                                             // None = whole net; Some(w) = explicit width
+    pub kind:   sim_ir::SelKind,
 }
 ```
 
-- **(D-T1) Fork**: `kind:JoinKind`는 **필드 아님** — `JoinKind{All,Any,None}`은 elaboration 시 compile-bake(doc 14:163). `resume_bb`=join 충족 후 부모 PC 착지, `join`=자식 rendezvous BB. 부모는 런타임 `WakeCond::Join{join_ref}`로 arm. `join_any`/`join_none`은 lowering-only Phase-2(이름 이미 베이크 → re-freeze 불요).
-- **(D-T2) Call**: `func` rename 없음(`target`=동결 이름), `args` 필드 없음. 인자 바인딩은 caller BB에서 `Call` 앞에 `Stmt::BlockingAssign`으로 callee `frame_arena` window(`Frame.locals_base..+locals_len`)에 emit(동결 `Frame` ABI, doc 06:143). 반환값은 ABI상 caller-가시 local. `Return`은 fieldless.
-- **(D-T3) Delay**: `region:DelayRegion` elaboration 베이크(엔진 재유도 금지, RULE D2 inv.3). `#0→Inactive`, `#d(d>0)→Active`. suspend 시 엔진이 `WakeCond::TimeAbs{tick=now+eval(amount)}` 계산 + `wake_key.region=region`. `amount`만 런타임 eval, 라우팅은 data-independent.
-- **(D-T4) Wait**: `WaitCause`는 full `WakeCond` 아닌 제한 enum → `Wait{TimeAbs}` illegal state 구조적 배제(time=`Delay`). suspend 시 엔진이 정적 `WaitCause`를 `wake_key.cond`로 **복사**(lift: `Edge→Edge`, `Level→Level`, `Expr→WaitTrue`, `Named→NamedEvent`). 프로세스-레벨 `Sensitivity`(always_*)는 §6 별도, 프로세스 entry로 re-arm.
+`SysTaskId` has 41 variants, in declaration order:
 
----
+```
+Display, Write, Monitor, Strobe, Finish, Stop,
+DumpFile, DumpVars, DumpOn, DumpOff, DumpAll, DumpFlush, DumpLimit,
+DynNew, DynDelete, QPushBack, QPushFront, AssocDeleteKey, QInsert, QDeleteIdx,
+Fclose, Fdisplay, Fwrite, Sformat, ReadmemB, ReadmemH, StrPutC,
+WritememB, WritememH, Cast, MonitorOn, MonitorOff, ClassRandomize,
+ArrSort, ArrRsort, ArrReverse,
+StrItoa, StrHextoa, StrOcttoa, StrBintoa, ArrLocator
+```
 
-## 5. Lowering 표 — 제어 구문 → Terminator
+Rules that attach to these shapes:
 
-| 소스 구문 | Lowering |
+| # | Rule |
 |---|---|
-| `if (c) T else E` | BB가 `Branch{cond:c, then_bb:T, else_bb:E}`로 종료 |
-| `case/casez/casex` | `Branch` chain; arm마다 `Branch{cond:(sel ===/wildcard item), then_bb:arm, else_bb:next}`; `default`=마지막 `else_bb`. casez/casex don't-care는 `cond` 식에 materialize(item 리터럴의 x/z 자릿수와 `CaseEq`); **`nets`에 저장 안 함** |
-| `for(i;c;s){B}` | init-BB `Goto`→test-BB `Branch{c, body, exit}`; body 끝 `Goto`→step-BB `Goto`→test |
-| `while(c){B}` | test-BB `Branch{c, body, exit}`; body 끝 `Goto`→test |
-| `repeat(n){B}` | elaborated 카운터 local(`SuspendState.locals`, in-body `@`-suspend 생존); 카운터 `Branch`; body 감소, `Goto`→test |
-| `forever{B}` | body 끝 `Goto`→body-entry; exit 엣지 없음(Verilog가 내부 `@`/`#` 요구 → same-tick 무한루프 없음) |
-| `begin…end` | `Goto`로 직렬 BB 연결; named-block 라벨 → side metadata(진단 전용) |
-| `disable scope` | `Stmt::Disable{scope_kind,target}` 실행 후 BB의 `Goto`가 post-disable BB로 |
-| `#d` | `Delay{amount:d, region:(d==0?Inactive:Active), resume:next_bb}` |
-| `@(...)` / `wait(c)` | `Wait{cond:WaitCause::…, resume:next_bb}` |
-| `fork…join[_any/_none]` | `Fork{children, join, resume_bb}`; join flavor는 `join`/`resume_bb` BB 그래프에 compile-bake |
-| task call(문장) | `Call{target, ret_bb}` (인자 frame window에 `BlockingAssign` 선바인딩) |
-| function call(식) | `Expr::Call{func, args}` — INLINABLE만; 비-inline → E3023 |
-| block/body 끝 | `Return` |
+| S1 | `NonblockingAssign.delay` is an `ExprId` evaluated at execution time. Each activation carries its own captured value to `t + d`, so overlapping activations stay independent. `None` is a plain same-tick NBA. The blocking form `a = #d b` needs no field: it lowers to a temporary capture plus a `Delay` terminator |
+| S2 | `SysTask.fmt` points at a `consts` entry whose `repr` is `ConstRepr::StrUtf8` — the format-control string. `args` are post-format expression indices, and a task with no format string uses `fmt = None`. Keeping the format string in its own field, pointing at a self-identifying constant, is what makes `$display` output byte-identical across platforms |
+| S3 | `$monitor` and `$strobe` persist by index: the engine keeps the `(fmt, args)` index tuple, so their persistence costs no shape |
+| S4 | A continuous assignment is not a `Stmt`. It lives in the top-level `cont_assigns` arena |
+| S5 | `Force`/`Release` are live. Procedural `assign`/`deassign` also lower onto them, at a weaker rank carried by the out-of-band `assign_ranks` sidecar. Only a bit- or part-select force target is refused |
 
-**새 terminator 이름 0.** `foreach`/`unique`/`priority`/`do-while`(Phase-2)도 `Goto`/`Branch`로 lower — lowering-only.
-
----
-
-## 6. `Sensitivity` · net/var 테이블 · 4-state 값 · 상수 풀
+### 4.4 Control flow
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub struct Sensitivity { pub kind: SensKind, pub edges: Vec<EdgeTerm> } // provenance + 해소 trigger 집합
+pub enum Terminator {
+    Goto   { target: u32 },
+    Branch { cond: u32, then_bb: u32, else_bb: u32 },
+    Delay  { amount: u32, region: sim_ir::DelayRegion, resume: u32 },
+    Wait   { cond: sim_ir::WaitCause, resume: u32 },
+    Fork   { children: Vec<u32>, join: u32, resume_bb: u32 },
+    Call   { target: u32, ret_bb: u32 },
+    Return,
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub struct EdgeTerm { pub net: u32, pub kind: EdgeKind }         // PR1-B 동결 EdgeKind{Posedge,Negedge,AnyEdge} 재사용
+pub enum DelayRegion { Active, Inactive }                                // #d > 0 / #0
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub enum WaitCause {
+    Edge  { net: u32, kind: sim_ir::EdgeKind },                          // @(posedge/negedge/edge net)
+    Level { nets: Vec<u32> },                                            // @(a or b ...) / @(*)
+    Expr  { expr: u32 },                                                 // wait(expr)
+    Named { ev: u32 },                                                   // @(named_event)
+    Fork,                                                                // wait fork
+}
+```
+
+| # | Rule |
+|---|---|
+| T1 | `Fork` carries no join-kind field. `join` names the child rendezvous block and `resume_bb` the parent's landing block; the join mode itself rides the out-of-band `fork_modes` sidecar, keyed by `(template ProcId, join block)`. A `Fork` with no matching sidecar entry is a clean fatal naming the missing trailer, never a guess |
+| T2 | `Call` names the callee by `FuncId` in `target` and the caller's landing block in `ret_bb`. It carries no argument list: the caller emits `Stmt::BlockingAssign` into the callee's frame window before the terminator, and the return value is a caller-visible local by the same ABI |
+| T3 | `Delay.amount` is an `ExprId` for the delay value in the process's own module time units, raw and unscaled. Only the amount is evaluated at run time; `region` is baked at elaboration (`#0` is `Inactive`, `#d` with `d > 0` is `Active`) so routing stays data-independent and no scheduling logic re-derives it |
+| T4 | `WaitCause` is a restricted enum, not the full `WakeCond`. Time is structurally excluded from a `Wait` — a delay is a `Delay` — so `Wait { TimeAbs }` cannot be constructed |
+| T5 | Exactly one terminator ends each basic block |
+
+`Return` is fieldless. A process-level sensitivity list is not a `Wait`; it belongs to `Sensitivity`
+(§4.5) and re-arms at the process entry.
+
+### 4.5 Sensitivity, nets, values and constants
+
+```rust
+pub struct Sensitivity {
+    pub kind:  sim_ir::SensKind,
+    pub edges: Vec<sim_ir::EdgeTerm>,
+}
+
+pub struct EdgeTerm { pub net: u32, pub kind: sim_ir::EdgeKind }
+
 pub enum SensKind { Initial, Comb, Latch, Edge, Level }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct NetVar {
-    pub kind:      NetKind,                                      // wire | reg | logic | integer
-    pub width:     u32,                                         // 총 비트폭 (1=scalar)
-    pub msb:       u32,                                         // [msb:lsb] 상한 (post-elaboration)
-    pub lsb:       u32,                                         // 하한 (msb<lsb = 역순 [0:N])
-    pub signed:    bool,                                        // signed 산술 / arithmetic-shift fill
-    pub array_len: u32,                                        // 1-D unpacked 원소 수 (1=배열 아님)
-    pub dir:       PortDir,                                     // Input/Output/Inout/Internal
-    pub init:      BitPacked,                                   // time-0 해소 4-state (reg/logic=x, net=z)
+    pub kind:      sim_ir::NetKind,
+    pub width:     u32,                                                  // total bit width (1 = scalar)
+    pub msb:       u32,                                                  // [msb:lsb] upper bound, post-elaboration
+    pub lsb:       u32,                                                  // lower bound (msb < lsb = descending [0:N])
+    pub signed:    bool,
+    pub array_len: u32,                                                  // flat unpacked element count (1 = not an array)
+    pub dir:       sim_ir::PortDir,
+    pub init:      sim_ir::BitPacked,                                    // time-0 4-state value
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub enum NetKind { Wire, Reg, Logic, Integer }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub enum NetKind { Wire, Reg, Logic, Integer, Real, DynArray, Queue, Assoc, AssocStr, String }
+
 pub enum PortDir { Input, Output, Inout, Internal }
 
-// 비트팩 4-state: 2-plane, 2비트/비트. doc 14 벡터 pack 순서는 포맷 일부.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct BitPacked {
-    pub val: Vec<u64>,                                          // value plane:  ceil(width/64) words, word0 bit0=LSB
-    pub unk: Vec<u64>,                                          // unknown plane: (v,u)=00→0,10→1,01→X,11→Z
+    pub val: Vec<u64>,                                                   // value plane:   ceil(width/64) words, word0 bit0 = LSB
+    pub unk: Vec<u64>,                                                   // unknown plane: (v,u) = 00→0, 10→1, 01→X, 11→Z
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct ConstVal {
     pub width:  u32,
-    pub signed: bool,                                          // 's 리터럴 => signed 재해석
-    pub repr:   ConstRepr,                                     // numeric vs string payload 구분
-    pub bits:   BitPacked,                                     // 2-plane (string => UTF-8 바이트 팩)
+    pub signed: bool,
+    pub repr:   sim_ir::ConstRepr,
+    pub bits:   sim_ir::BitPacked,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub enum ConstRepr { Numeric, StrUtf8 }                        // 수치 4-state 리터럴 vs display format/string 리터럴
+pub enum ConstRepr { Numeric, StrUtf8, Real }
 ```
 
-- **(D-N1)** `Sensitivity`=struct: uniform `edges` + 직교 `kind`. Level/comb/latch는 `EdgeKind::AnyEdge` 엔트리. `Initial`→빈 `edges`.
-- **(D-N2)** `EdgeKind`는 PR1-B 동결 enum 재사용(lib.rs) — 레지스트리 단일 엔트리, 재선언 금지.
-- **(D-V1)** 2-plane `(val,unk)`, 비트맵 `00→0,10→1,01→X,11→Z`, word0-bit0=LSB 정규(포맷 일부).
-- **(D-V2)** `init:BitPacked` inline(자기완결 스냅샷). 자기-엣지 없음 → acyclic.
-- **(D-V3)** `BitPacked`에 `width` 필드 없음 — width는 부모(`NetVar.width`/`ConstVal.width`) 소유.
-- **(D-V4)** 범위 `(msb,lsb)`; 역순 `[0:N]`은 `msb<lsb`. `array_len:u32`(flat 원소 수); flat `init`이 `width*array_len` 비트. **다차원 UNPACKED 배열은 elaborate에서 row-major 평탄화(`i*s0+…`)로 단일 `array_len`+단일 word ExprId에 매핑 → IR 형상 무변경(골든 불변).** per-dim 크기/lo는 elaborate-로컬 사이드테이블에만. PACKED 다차원·동적/연관 배열만 Phase-2 `dims:Vec<u32>` re-freeze 대상.
-- **(D-V5)** `NetKind`=4 MVP kind; `tri/wand/wor` → Phase-2. genvar/param/localparam은 elaboration 시 `consts`로 fold(`NetVar` 아님).
-- **(D-V6)** `ConstRepr{Numeric,StrUtf8}`로 format/string 리터럴을 수치 operand와 **구조적** 구분 — `$display` format 표현 명확.
+| # | Rule |
+|---|---|
+| N1 | `Sensitivity` is a struct, not an enum: a uniform `edges` list with an orthogonal `kind`. Level, comb and latch sensitivity use `EdgeKind::AnyEdge` entries; `Initial` has empty `edges` |
+| N2 | `EdgeKind` is one registry entry shared by `EdgeTerm`, `WaitCause::Edge` and `WakeCond::Edge`. It is never redeclared |
+| V1 | The 4-state encoding is two planes, two bits per bit position: `00` is 0, `10` is 1, `01` is X, `11` is Z, with word 0 bit 0 as the LSB. The packing order is part of the format |
+| V2 | `NetVar.init` is an inline `BitPacked`, a self-contained snapshot with no back edge |
+| V3 | `BitPacked` carries no width. The width belongs to the parent — `NetVar.width` or `ConstVal.width` |
+| V4 | A range is `(msb, lsb)`; a descending declaration `[0:N]` is `msb < lsb`. `array_len` is a flat element count, and `init` holds `width * array_len` bits. A multidimensional **unpacked** array is flattened row-major at elaboration onto that single `array_len` and a single word expression, so the IR shape does not grow; the per-dimension geometry rides the out-of-band `net_dims` sidecar, which exists for per-element waveform naming |
+| V5 | `Real` and `realtime` share `NetKind::Real`. A real value is stored as `f64::to_bits()` in `init.val[0]` with `width = 64`, `signed = true` and `unk = [0]`, so no `f32`/`f64` field enters the IR and the determinism rule of P3 holds with reals as full participants in the golden shape rather than in a side lane. `ConstRepr::Real` mirrors it for literals |
+| V6 | `DynArray`, `Queue`, `Assoc`, `AssocStr` and `String` are HANDLE kinds. The storage lives in the engine heap, never in the flat packed store; `width` is the element width (zero for `String`) and `array_len` is 0 |
+| V7 | `ConstRepr` distinguishes a format or string literal from a numeric operand structurally, which is what makes `$display` formatting unambiguous |
+| V8 | `genvar`, `parameter` and `localparam` are folded into `consts` at elaboration. They are never `NetVar` entries |
 
----
-
-## 7. `BasicBlock` · `Process` · top-level arena · `SimIr` 루트
+### 4.6 Blocks, processes, top-level arenas and the root
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct BasicBlock {
-    pub stmts: Vec<u32>,                                        // -> stmts[..] 직렬 연산, 순서대로
-    pub term:  Terminator,                                      // 정확히 1개 terminator (doc 06 불변식)
+    pub stmts: Vec<u32>,                                                 // -> stmts[..], executed in order
+    pub term:  sim_ir::Terminator,                                       // exactly one
 }
 
-// PR1-B 동결 (lib.rs). 그대로 — 수정 금지.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct Process {
-    pub sensitivity: Sensitivity,
-    pub body:        Vec<BasicBlock>,
+    pub sensitivity: sim_ir::Sensitivity,
+    pub body:        Vec<sim_ir::BasicBlock>,                            // PRIVATE block arena
     pub entry:       u32,
-    pub suspend:     SuspendState,
+    pub suspend:     sim_ir::SuspendState,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub struct ContAssign { pub lhs: Lvalue, pub rhs: u32, pub delay: Option<u32> } // assign (+옵션 #delay)
+pub struct ContAssign {
+    pub lhs:   sim_ir::Lvalue,
+    pub rhs:   u32,
+    pub delay: Option<u32>,
+}
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub struct Instance { pub parent: Option<u32>, pub module: u32, pub first_net: u32, pub net_count: u32 }
+pub struct Instance {
+    pub parent:    Option<u32>,
+    pub module:    u32,
+    pub first_net: u32,
+    pub net_count: u32,
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
-pub struct FuncDef { pub entry: u32, pub n_params: u32, pub locals_len: u32, pub is_task: bool }
+pub struct FuncDef {
+    pub entry:      u32,
+    pub n_params:   u32,
+    pub locals_len: u32,
+    pub is_task:    bool,
+}
 
-// 골든 루트. schema_hash::<sim_ir::SimIr>()가 pinned 게이트.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct SimIr {
-    pub instances:    Vec<Instance>,
-    pub nets:         Vec<NetVar>,
-    pub processes:    Vec<Process>,
-    pub cont_assigns: Vec<ContAssign>,
-    pub funcs:        Vec<FuncDef>,
-    pub exprs:        Vec<Expr>,
-    pub stmts:        Vec<Stmt>,
-    pub blocks:       Vec<BasicBlock>,
-    pub consts:       Vec<ConstVal>,
+    pub instances:    Vec<sim_ir::Instance>,
+    pub nets:         Vec<sim_ir::NetVar>,
+    pub processes:    Vec<sim_ir::Process>,
+    pub cont_assigns: Vec<sim_ir::ContAssign>,
+    pub funcs:        Vec<sim_ir::FuncDef>,
+    pub exprs:        Vec<sim_ir::Expr>,
+    pub stmts:        Vec<sim_ir::Stmt>,
+    pub blocks:       Vec<sim_ir::BasicBlock>,
+    pub consts:       Vec<sim_ir::ConstVal>,
 }
 ```
 
-- **(D-R1)** 골든 게이트는 `schema_hash::<SimIr>()` 루트. `Process` 루트는 **sub-pin** 골든(런타임 클러스터 회귀 신호)으로 유지하되 호환성 게이트 아님.
-- **(D-R2)** dump/builtin 마커는 `Stmt::SysTask`, 루트 필드 아님. 헤더 `uses_dump:bool`(doc 14:101)은 해시된 `SimIr` 본문 밖 별도 provenance.
-- **(D-R3)** `Instance`=평탄 계층(`parent`, `module` 이름-ref, `[first_net, first_net+net_count)` net slice) — 진단/스코핑, 동작 없음.
-- **(D-R4)** `FuncDef{entry,n_params,locals_len,is_task}` — `Call` 바인딩 최소 ABI.
+| # | Rule |
+|---|---|
+| R1 | The compatibility gate is `schema_hash::<sim_ir::SimIr>()`. `schema_hash::<sim_ir::Process>()` is a sub-pin (§2) |
+| R2 | **A process body is a private block arena.** `Process.body` holds its own blocks and `Process.entry` and every `Terminator` block target inside that body index it. The top-level `SimIr.blocks` arena holds function and task body CFGs only, rebased into one global space; `FuncDef.entry` and every terminator target inside a function body index that one. The two index spaces are distinct |
+| R3 | Waveform-dump intent is a `Stmt::SysTask`, never a root field |
+| R4 | `Instance` is a flat hierarchy record — a parent link, a module name reference and the half-open net slice `[first_net, first_net + net_count)`. It carries no behaviour |
+| R5 | `FuncDef` is the minimum call ABI. The window into which arguments are bound, the return slot and the suspendability classification ride the out-of-band `func_table` sidecar, index-aligned to `funcs` |
 
-### Arena 레이아웃 (인덱스 해소)
+---
 
-`SimIr`가 flat arena. 모든 엣지는 정확히 한 `Vec`의 인덱스, 로드 시 `vec[idx as usize]`로 해소 — `usize` cast는 resolver의 transient, **저장 필드 아님**(no-`usize` 규칙 유지).
+## 5. Arena layout
 
-| `SimIr` 의 Vec | 원소 | 인덱스 | 참조처 |
+`SimIr` is a flat arena of arenas. Every edge is an index into exactly one `Vec`, resolved at load
+as `vec[idx as usize]`. That cast is transient in the resolver and never a stored field, so the
+no-`usize` rule holds.
+
+| `SimIr` field | Element | Index | Referenced by |
 |---|---|---|---|
-| `exprs` | `Expr` | ExprId=u32 | rhs, cond, operand, args, `Select.*`, `ContAssign.rhs` |
-| `stmts` | `Stmt` | StmtId=u32 | `BasicBlock.stmts:Vec<u32>` |
-| `blocks` | `BasicBlock` | BlockId=u32 | `Process.body`/`entry`, 모든 `Terminator` BB 타깃, `FuncDef.entry` |
-| `nets` | `NetVar` | NetId=u32 | `Signal.net`, `LvalChunk.net`, `EdgeTerm.net`, `WaitCause` nets, `Instance` slice |
-| `consts` | `ConstVal` | ConstId=u32 | `Expr::Const.val`, `SysTask.fmt` |
-| `processes` | `Process` | ProcId=u32 | top-level; `Disable.target`, `JoinState.children/detached` |
-| `cont_assigns` | `ContAssign` | CaId=u32 | top-level |
-| `instances` | `Instance` | InstId=u32 | `Instance.parent` |
-| `funcs` | `FuncDef` | FuncId=u32 | `Expr::Call.func`, `Terminator::Call.target` |
+| `exprs` | `Expr` | ExprId = `u32` | every `rhs`, `cond`, `operand`, `args`, `Select.*`, `Replicate.*`, `ContAssign.rhs`, `Delay.amount`, `WaitCause::Expr.expr`, `LvalChunk.word`/`offset`/`width` |
+| `stmts` | `Stmt` | StmtId = `u32` | `BasicBlock.stmts` |
+| `blocks` | `BasicBlock` | BlockId = `u32` | `FuncDef.entry` and every terminator target inside a function or task body |
+| `nets` | `NetVar` | NetId = `u32` | `Signal.net`, `LvalChunk.net`, `EdgeTerm.net`, `WaitCause::Edge`/`Level`, `Instance` slice |
+| `consts` | `ConstVal` | ConstId = `u32` | `Expr::Const.val`, `Stmt::SysTask.fmt` |
+| `processes` | `Process` | ProcId = `u32` | top level; `Terminator::Fork.children` |
+| `cont_assigns` | `ContAssign` | CaId = `u32` | top level |
+| `instances` | `Instance` | InstId = `u32` | `Instance.parent` |
+| `funcs` | `FuncDef` | FuncId = `u32` | `Expr::Call.func`, `Terminator::Call.target` |
 
-node-kind당 append-only `Vec` 1개 = 재로드 시 포인터 fixup 0.
+One append-only `Vec` per node kind means reloading a `.velab` needs no pointer fixup at all.
 
----
-
-## 8. derive 가드 (V-PRIM) — **구현 완료(DONE)**
-
-> **현 derive는 `usize`/`isize`/`f32`/`f64`를 하드 거부한다(구현됨).** `vita-artifact-derive/src/lib.rs`가 4개 타입 전부에 `compile_error!` reject arm을 두고(HashMap/HashSet 가드 미러), `PRIMITIVES`에서 이 4개는 제거됐다. 초안이 지적했던 "가드가 코드에 없다" 상태는 해소됨 — M3 결정성 prerequisite 충족.
-
-**구현 내역:**
-1. `render_path_type`에서 `PRIMITIVES.contains` arm **앞에** `usize`/`isize`/`f32`/`f64` reject arm → `compile_error!`(HashMap/HashSet 가드 미러). `PRIMITIVES`에서 이 4개 제거. ✅
-2. belt-and-suspenders 테스트 `crates/sim-ir/tests/no_float_usize.rs`: `schema_hash::<SimIr>()`의 canonical 문자열이 토큰 `usize`/`isize`/`f32`/`f64`를 **하나도 안 담음** 단언. ✅
-
-이 가드로 stray `usize` 인덱스 필드는 작성자 머신에서 이미 **컴파일 타임에 loud 거부**된다 — 런타임 3-OS 바이트 결정성이 컴파일 신호 없이 깨질 경로 차단.
-
-**F2 경로(disc/array-len whitespace):** M3 frozen 타입 중 명시 discriminant·고정배열 `[T;N]` 사용 0 → F2 경로 미진입, F2 수정 불요.
+Block indices inside a `Process` are the exception: they index `Process.body`, that process's own
+arena, not `SimIr.blocks` (R2).
 
 ---
 
-## 9. vita-artifact 변경
+## 6. Lowering — control constructs onto terminators
 
-- **루트 해시:** `SuspendState` → **`SimIr`**. 헤더 stamp·골든 게이트 모두 `schema_hash::<sim_ir::SimIr>()`. `Process`는 런타임 클러스터 sub-pin 골든으로 유지.
-- **format_version 4 (2026-06-10) — 의도적 re-freeze:** `Terminator::Delay.amount`가 **ExprId 의미**로
-  전환(런타임 `#delay`; u32 형상 동일이라 해시 단독으론 못 잡아 컨테이너 버전이 게이트) +
-  `SysTaskId::{DumpFlush,DumpLimit}` + `Stmt::{Force,Release}` 형상 선예약 — **semantics도 같은 날 landed**(sample-once 모델,
-  per-net forced 플래그가 모든 일반 write 경로를 차단; release는 net=settle 복원/var=값 유지). 루트 해시 재pin(d6d078bc…), Process 서브pin 불변(=정상 sanity),
-  canonical/RON 골든 재생성(`REGEN_GOLDEN=1` 스위치 신설), 전 `.velab`/`.vu`는 FORMAT 게이트에서
-  exit 2로 거부(의도된 staleness).
-- **format_version 5–8 (2026-06-10~14) — 후속 re-freeze:** v5=`NonblockingAssign.delay`(NBA transport delay)
-  +`NetKind` Dyn 3종(동적 배열/queue/assoc)+`SysFunc`/`SysTask` 메서드 — v6=queue `insert/delete`·assoc iter·string 키
-  — v7=`BinOp::CasezEq/CasexEq`+`SysFuncId`/`SysTaskId` 다수($random·파일 I/O·readmem·bit-vector)+`NetKind::String`
-  — **v8=`WaitCause::Fork`(wait fork IR)**. **현재 골든 `format_version` = 31**(SimIr 골든 해시는
-  **v19 re-freeze에 핀** — v20 이후는 전부 trailer/tail-only bump·골든 불변; 버전별 이력 정본 =
-  `crates/vita-artifact/src/header.rs::CURRENT_FORMAT_VERSION` 주석. 이 숫자는 복사본이므로 정본을 먼저 봐라). SVA(concurrent assert·시퀀스·
-  sampled fn·named property/sequence·multi-clock)와 wait fork **기능**은 v8 위에 **순수 IR-0 desugar + AST-flip**으로
-  얹혀 `.vu` AST-해시만 재핀(SimIr 골든 무변경).
-- **`format_version` bump:** M3가 전 백본 동결 → 루트 해시 by construction 변경 → 이전 모든 `.velab` 무효(decode 시 incompatible-tool 하드 에러, silent misparse 없음). M3 동결로 1회 bump; 새 `schema_hash_is_pinned` EXPECTED + canonical 골든(SimIr 루트) 커밋.
-- **decode 게이트:** 정책 불변(version-GATE refuse-and-rebuild).
-- **Layer-3 RON 골든:** `serde-reflection` tracer 루트를 `Process` 클러스터 → `SimIr`로 확장.
-
----
-
-## 10. 잔여 리스크 + Phase-2 re-freeze 슬롯
-
-**잔여(수용):**
-1. `Select`/`LvalChunk` 비-self-contained(방향/width는 `nets[net].msb/lsb` 조인). arena IR이므로 수용.
-2. `SensKind` provenance 5-variant(런타임은 ~2). 진단 가치로 수용.
-3. `Const`→`consts` 간접화(작은 리터럴). uniform pool dedup으로 수용.
-4. ~~derive 가드(§8)가 prerequisite.~~ ✅ 착지 완료(§8 DONE — reject arm + `no_float_usize.rs`).
-5. `with=`-클래스 wire 변경은 Layer-1 사각(doc 16 경계) — Layer-3 RON 전담. M3 frozen 타입 `#[serde(with=)]` 0이라 노출 nil.
-
-**Phase-2 re-freeze (의도적 루트-해시 flip, 전 `.velab` 재생성):**
-
-| Phase-2 구문 | re-freeze 위치 |
+| Source construct | Lowering |
 |---|---|
-| ~~casez/casex 정밀(`==?`/`!=?`)~~ ✅ v7(`BinOp::CasezEq/CasexEq`) · `inside`, 스트리밍 `{>>}/{<<}`(잔여) | `BinOp` 확장 / 새 `Expr` variant |
-| ~~`$readmemh`/`$fopen`/파일 I/O, `$random`~~ ✅ v7 | `SysTaskId`/`SysFuncId` 확장(`$random`=`SysFuncId`) |
-| ~~`$bits`/`$countones`~~ ✅ v7 · `$signed` 확장(잔여) | `SysFuncId` 확장 |
-| ~~intra-assign delay `lhs = #5 rhs`~~ ✅ v4/v5 | blocking=tmp+`Delay` terminator(v4, 필드 불요) · NBA=`NonblockingAssign.delay`(v5) |
-| ~~named `event` + `->ev`~~ ✅ 2026-06-11 | **형상 0**: 카운터 desugar(64-bit Reg + `e=e+1` + AnyEdge) — `WaitCause::Named`/`WakeCond::NamedEvent`는 예약-미사용 유지 |
-| net types `tri/wand/wor`, drive strength | `NetKind` 확장 / strength 필드 |
-| 다차원 PACKED / 동적·연관 array | `NetVar.array_len:u32` → `dims:Vec<u32>` (UNPACKED 다차원은 elaborate 평탄화로 이미 처리됨 — re-freeze 불요) |
-| struct/union/enum/typedef | `NetKind` 확장(packed struct는 `BitPacked` fit); unpacked→`dims` |
-| interface ref | `Instance`-인접 arena + 새 `Expr`/`Lvalue` leaf |
-| ~~SVA(concurrent assert·시퀀스·sampled fn·named property/sequence·multi-clock)·wait fork~~ ✅ v8 | **IR-0 / AST-flip만** — 합성 clocked-always 체커 desugar, `.vu` 재핀(SimIr 골든 무변경) |
-| `real`/`realtime` 저장 | **✅ DONE — 의도적 sim-ir re-freeze (format_version 2→3).** 당초 "re-freeze 아님(별도 비해시 lane)" 결정을 **의도적으로 번복**: `NetKind::Real` + `ConstRepr::Real`(둘 다 fieldless) + `SysFuncId::{Rtoi,Itor,RealToBits,BitsToReal}` 4종 추가. f64는 **f64 필드 없이** `f64::to_bits()→u64`로 기존 `BitPacked.val[0]`에 저장(width=64, unk=[0]) → no-float derive 가드(usize/f32/f64 reject) 그대로 만족 + reals가 골든 IR/결정성에 **참여**(side-lane보다 엄격히 깨끗). 루트 해시 1회 flip → `EXPECTED_SIMIR_HASH` 재pin(`EXPECTED_PROCESS_HASH`는 불변=정상 sanity gate), 전 `.velab`/`.vu`는 FORMAT 게이트에서 stale 거부(의도된 staleness). 엔진의 `is_real` 플래그는 비해시 런타임 `Value`/`NetSlot`에만 존재(IR 불침투). 상세: `docs/superpowers/plans/2026-06-04-real-domain-spec.md`. |
-| `final`, `foreach`, `unique`/`priority`, `do-while`, `join_any`/`join_none` | **lowering-only** — 기존 `Terminator`/`Branch`/`Goto`/`Fork`, 새 이름 0, re-freeze 0 |
+| `if (c) T else E` | the block ends with `Branch { cond: c, then_bb: T, else_bb: E }` |
+| `case` / `casez` / `casex` | a `Branch` cascade. The scrutinee is lowered once — captured into a temporary net where it must not be re-evaluated — and each label becomes a compare against it: `CaseEq` for `case`, `CasezEq`/`CasexEq` for the wildcard forms. `default` is the final `else_bb`. Wildcard positions are realized in the compare, never stored in `nets` |
+| `for (i; c; s) B` | init block `Goto` → test block `Branch { c, body, exit }`; body ends `Goto` → step block `Goto` → test |
+| `while (c) B` | test block `Branch { c, body, exit }`; body ends `Goto` → test |
+| `repeat (n) B` | a small constant count unrolls straight, with no runtime counter. A runtime or large count desugars to a signed down-counter loop: the count is evaluated once, and a zero or negative count runs the body zero times |
+| `forever B` | body ends `Goto` back to the body entry; no exit edge. Verilog requires an in-body `@` or `#`, so a same-tick infinite loop is not reachable |
+| `begin … end` | serial blocks joined by `Goto`. A named-block label becomes out-of-band metadata for `%m` and for diagnostics |
+| `disable <enclosing named block>` | `Stmt::Disable { scope_kind: Scope, .. }` followed by a `Goto` to the block's exit, which is what actually carries the control flow |
+| `disable fork` | `Stmt::Disable { scope_kind: Fork, .. }` — straight-line, no control flow |
+| `#d` | `Delay { amount: d, region: (d == 0 ? Inactive : Active), resume: next_bb }` |
+| `@(...)` / `wait(c)` | `Wait { cond: WaitCause::…, resume: next_bb }` |
+| `wait fork` | `Wait { cond: WaitCause::Fork, resume: next_bb }` |
+| `fork … join` / `join_any` / `join_none` | `Fork { children, join, resume_bb }`; the join mode rides the `fork_modes` sidecar (T1) |
+| task call (statement) | `Call { target, ret_bb }`, with arguments pre-bound into the callee's frame window by `BlockingAssign` |
+| function call (expression) | `Expr::Call { func, args }` for a frame function; an inlined function produces no node at all |
+| end of a body or block | `Return` |
+
+**No new terminator names.** `foreach`, `break` and `continue` desugar in the parser or onto the
+existing `Goto`/`Branch`/`Disable` shapes, and `unique`/`priority` qualifiers become an additional
+violation check rather than a new control shape.
 
 ---
 
-## 11. 커버리지 (MVP 그룹 → 타입; in-MVP 누락 0)
+## 7. The rules that keep the shapes stable
 
-| MVP-서브셋 그룹 (doc 01 Phase-1) | 표현 타입 |
+| Rule | Enforced by |
 |---|---|
-| 설계단위: module/port/param/localparam/generate/genvar | `Instance` + `NetVar.dir`(port); param/localparam/genvar는 elaboration 시 `ConstVal` |
-| 자료형: wire/reg/logic/integer, 벡터, packed array | `NetVar.kind:NetKind` + width/msb/lsb(벡터) + array_len(1-D unpacked); packed array=더 넓은 `BitPacked` |
-| 절차블록: initial/always/always_ff/comb/latch | `Process` + `Sensitivity{kind:SensKind, edges}` |
-| 문장: `=` `<=` if case casez casex for while repeat forever begin/end | `Stmt::{BlockingAssign,NonblockingAssign}` + `Terminator::{Branch,Goto}` chain(§5) |
-| 타이밍: #delay @(event) wait | `Terminator::Delay`/`Wait{cond:WaitCause}` |
-| 연속대입: assign(+delay) | `ContAssign{lhs,rhs,delay}` |
-| system tasks: $display/$write/$monitor/$strobe / $time/$realtime / $finish/$stop / $dump* | `Stmt::SysTask{which:SysTaskId,fmt,args}` + `Expr::SysFunc{which:SysFuncId}`($time/$realtime) |
-| 식: Verilog-2005 연산자 집합 | `Expr` 10 variant + `UnOp`(6 reduction 포함) + `BinOp`(산술/비트/논리/관계/`==`/`!=`/`===`/`!==`/shift `<<<`/`>>>`) + `Ternary` + `Concat`/`Replicate` + `Select`+`SelKind` + `Signal.word` + signedness |
+| No `usize`, `isize`, `f32` or `f64` in a schema type | The derive rejects the four type paths with a `compile_error!`; `crates/sim-ir/tests/no_float_usize.rs` additionally asserts that none of the four tokens appears anywhere in the canonical string, which catches an aliased reintroduction |
+| No `HashMap` or `HashSet` | The derive rejects the literal type-path head |
+| Every type monomorphic | The derive rejects any type, lifetime or const-generic parameter |
+| Zero serde attributes on a frozen type | `crates/sim-ir/tests/no_serde_attrs.rs` root-walks the closure and asserts every attribute slot is exactly `#[]`, so a new frozen type is covered without editing the test |
+| Every cross-type field spelled `sim_ir::Foo` | `crates/sim-ir/tests/body_refs.rs`, two tests: every `sim_ir::X` token in a body must be a registry key, and no bare user-type identifier may appear in type position. `sim-ir` declares `extern crate self as sim_ir;` to make that spelling legal. A bare, `crate::`-qualified or `use`-aliased spelling would emit a body reference that is not a key — a dangling reference the hash would not notice |
+| Frozen types stay at the crate root | The registry key embeds `module_path!()`; moving a type flips the root hash by itself ([16](16-schema-hash-spec.md) §4) |
+| Exact shapes | `crates/sim-ir/tests/frozen_shapes.rs` pins nine verbatim shapes and asserts every name is crate-root fully qualified; `crates/sim-ir/tests/m3_shapes.rs` pins `BinOp`, `Expr`, `Terminator` and `SimIr` verbatim and checks the closure builds without a collision |
+| The whole canonical string | `crates/sim-ir/tests/schema_hash.rs::canonical_string_golden` against `crates/testdata/sim_ir_canonical.txt` |
+| serde wire form | `crates/sim-ir/tests/reflection.rs::serde_reflection_ron_golden` against `crates/testdata/sim_ir_registry.ron`, traced from the real derives ([16](16-schema-hash-spec.md) §10) |
 
-concat-LHS→`Lvalue.chunks`; casez/casex don't-care→`Branch.cond`(match 패턴, `nets` 미저장); multi-edge→`Sensitivity.edges`/in-body `WaitCause`; comb/latch→`SensKind`+`AnyEdge`; string 리터럴→`ConstVal{repr:StrUtf8}`. **in-MVP 미표현 0.**
+Two details that hold P2 and P3 without any test:
+
+- No frozen enum uses an explicit discriminant, and no frozen type uses a fixed-size array `[T; N]`.
+  Reorder safety comes from variant names plus source position, not from a discriminant token.
+- postcard varint-encodes `Vec` and `String` lengths, so a sequence length is width-independent and
+  only the element type enters the hash.
 
 ---
 
-## Sources
-- 01-goals-and-scope.md (Phase-1 freeze 표), 06-simulation-engine.md (프로세스 모델 SD1–SD5), 14-staged-artifacts.md §1/§5, 16-schema-hash-spec.md
-- hdl-reference/verilog/{02,03,05,06}, /01-goals
-- 선행연구(2026-06-04 검증): Icarus `ivl_expr_t`/`ivl_statement_t`/`ivl_lval_t`, Verilator `V3AstNodeExpr`, Yosys RTLIL `State`/`SigChunk`, CXXRTL
+## 8. What rides outside the shape
+
+The backbone stays small because everything the engine needs but the *shape* does not have to carry
+travels out of band — either in a `SimOpts` field synthesized from run options, or in a `.velab`
+trailer segment. None of it can flip the root hash; a change to any of it is gated by
+`format_version` instead ([14-staged-artifacts.md](14-staged-artifacts.md) §6, §7).
+
+| Construct | Carrier |
+|---|---|
+| fork join mode | `fork_modes`, keyed by `(template ProcId, join block)` |
+| wired-AND / wired-OR net resolution | `wired_and_nets`, `wired_or_nets` |
+| continuous-assign rise / fall / turn-off delays | `ca_delays` |
+| class layout, field initializers, vtable, call sites, field widths | `class_layouts`, `class_field_inits`, `class_vtable`, `class_calls`, `class_field_widths` |
+| constrained random: bounds, predicates, distributions, cyclic fields, inline `with` | `class_rand`, `class_constraints`, `class_dist`, `class_randc`, `randomize_with` |
+| deferred assertions | `defer_marks`, `defer_acts` |
+| clocking blocks | `clocking_inputs`, `clocking_commit`, `clocking_outputs` |
+| frame-call metadata: window, return slot, suspendability | `func_table`, index-aligned to `funcs` |
+| runtime diagnostic locations | `stmt_locs` — the IR is span-free (P4), so this table is the only way a runtime report can print `file:line:col [in instance]`. It is resolved once, at elaboration, so staged and one-shot output are identical by construction |
+| `%m` scope names | `proc_scopes`, `proc_inst_scopes`, `stmt_scopes`, `expr_scopes`, `func_names` |
+| waveform names, per-dimension geometry, declared ranges | `net_names`, `net_dims`, `net_decl_ranges` |
+| severity kind, output radix, queue bounds, assign ranks, two-state nets, real / string dynamic elements, declaration-initializer order, `final` blocks | the corresponding trailer segments |
+| SVA concurrent assertions, sequences and properties | synthesized clocked checker processes built from the existing shapes; no IR node of their own |
+| named events | a 64-bit counter register; `-> e` lowers to `e = e + 1`, so every waiter sees a guaranteed change and a double trigger in one slot is not lost |
+| packed multidimensional parameters, packed struct and union members | rewritten in the parser to the flat part-select those bits occupy |
+| interfaces | flattened at elaboration into ordinary nets and instances |
+
+---
+
+## 9. Shape the IR carries that nothing reads
+
+Stated plainly, because a frozen field that no consumer reads is still part of the on-disk contract
+and still costs a re-freeze to remove.
+
+| Shape | State at HEAD |
+|---|---|
+| `Process.suspend` and the whole `SuspendState` closure — `WakeKey`, `WakeCond`, `RegionTag`, `Frame`, `JoinState`, `ProcFlags`, `FourState` | Elaborate emits one constant value per process; no engine code reads or writes any part of it. Live suspension state is engine-side, in the scheduler's own activity, waiter and wheel structures |
+| `RegionTag::Nba`, `RegionTag::Monitor` | Constructed nowhere in the workspace. The four IEEE regions are implemented, but the engine's own Active/Inactive tags are in-memory wheel entries and the NBA and Postponed regions have no `RegionTag` representation. The only scheduling-region field the engine reads from the IR is `Terminator::Delay.region`, which is `DelayRegion` — a different enum |
+| `WaitCause::Named`, `WakeCond::NamedEvent` | Reserved and never emitted: a named event lowers to a counter register (§8), so a `Wait` on `Named` cannot arise from source. The engine's classifiers treat it as the never-waking case |
+| `SimIr.instances` | Populated by elaborate and read by no consumer. The hierarchy dumps `--hier-tree` and `--inst-paths` are served from an out-of-band elaborate table |
+| `NetVar.dir` | Written by elaborate; no reader. Port direction is provenance for diagnostics, not a runtime input |
+| `Stmt::Disable.target` | Written; no reader. The engine matches on `scope_kind` alone, and `DisableKind::Scope` executes as a no-op because the elaborator has already emitted the `Goto` that carries the control flow |
+
+---
+
+## 10. Re-freeze protocol
+
+A change to any frozen shape is legitimate; it is not free, and it is never accidental.
+
+1. Make the shape change. Appending a variant **last** to a frozen enum still flips the root hash —
+   that is the opposite of the trailer rule in [14](14-staged-artifacts.md) §7, where postcard's
+   positional discriminants let an appended variant leave old values decoding unchanged.
+2. Bump `CURRENT_FORMAT_VERSION` in `crates/vita-artifact/src/header.rs` and record what moved in
+   its doc comment, which is the canonical version-by-version record.
+3. Regenerate the goldens through the sanctioned switch, never by hand:
+
+```bash
+REGEN_GOLDEN=1 cargo test -p sim-ir --test schema_hash -- --nocapture   # canonical string + both hashes
+REGEN_GOLDEN=1 cargo test -p sim-ir --test reflection                   # the serde-reflection RON golden
+```
+
+4. Paste the printed root hash into `EXPECTED_SIMIR_HASH`. Update `EXPECTED_PROCESS_HASH` only if
+   the runtime cluster itself moved; an unchanged sub-pin alongside a changed root is the expected
+   reading for an expression- or statement-arena change, and is a sanity signal rather than a
+   failure.
+5. Re-pin whatever else asserts the number: the `run.json` `format_version` field in
+   `crates/cli/tests/obs.rs`, and the cli-local wire-shape fixtures if a trailer moved as well.
+6. Run the full gate: `cargo nextest run --workspace --locked`.
+
+**What the bump costs.** Every `.vu` and `.velab` on disk is stale. Each one refuses to load with
+`E-ART-FORMAT-MISMATCH` at the header gate, before a single body byte is deserialized, and exits 2
+so CI rebuilds upstream instead of debugging RTL. There is no migration path and no silent reuse:
+the refusal is the feature.
+
+The container version and the schema hash are independent numbers and must not be read as one. A
+trailer-only or tail-only change bumps `format_version` and leaves the golden hash untouched; a
+frozen shape change moves both.
+
+---
+
+## 11. Coverage
+
+Every Phase-1 construct group maps onto a frozen type.
+
+| Construct group | Expressed by |
+|---|---|
+| design units: module, port, parameter, localparam, generate, genvar | `Instance` plus `NetVar.dir` for ports; parameters, localparams and genvars fold to `ConstVal` at elaboration |
+| data types: wire, reg, logic, integer, vectors, packed arrays | `NetVar.kind` plus `width`/`msb`/`lsb` for vectors and `array_len` for a flat unpacked array; a packed array is simply a wider `BitPacked` |
+| real and realtime | `NetKind::Real` and `ConstRepr::Real`, stored as raw IEEE-754 bits (V5) |
+| dynamic arrays, queues, associative arrays, strings | the handle kinds of `NetKind` (V6), with heap storage engine-side |
+| procedural blocks: initial, always, always_ff, always_comb, always_latch, final | `Process` plus `Sensitivity { kind, edges }`; `final` blocks are identified by an out-of-band set |
+| statements: `=`, `<=`, if, case, casez, casex, for, while, repeat, forever, begin/end | `Stmt::{BlockingAssign, NonblockingAssign}` plus the `Branch`/`Goto` cascades of §6 |
+| force / release / assign / deassign | `Stmt::{Force, Release}` (S5) |
+| timing: `#delay`, `@(event)`, `wait`, `wait fork` | `Terminator::Delay` and `Terminator::Wait { cond: WaitCause }` |
+| fork / join family | `Terminator::Fork` plus the join-mode sidecar (T1) |
+| functions and tasks | `FuncDef`, `Terminator::Call` for statement position, `Expr::Call` for expression position; an inlined function folds into the caller |
+| continuous assignment, with optional delay | `ContAssign { lhs, rhs, delay }` |
+| system tasks and functions | `Stmt::SysTask { which, fmt, args }` and `Expr::SysFunc { which, args }`, over the 41 and 82 identifier sets of §4 |
+| expressions | `Expr`'s eleven variants plus `UnOp`, `BinOp`, `Ternary`, `Concat`, `Replicate`, `Select` with `SelKind`, `Signal.word` and per-net signedness |
+
+Concatenated assignment targets become multiple `Lvalue.chunks`; wildcard positions in a `casez`
+or `casex` label live in the compare rather than in `nets`; multi-edge sensitivity becomes several
+`Sensitivity.edges` entries or an in-body `WaitCause`; comb and latch sensitivity is `SensKind`
+plus `EdgeKind::AnyEdge`; a string literal is a `ConstVal` with `repr: StrUtf8`.
+
+---
+
+## 12. What the frozen shape cannot express
+
+| Construct | State at HEAD |
+|---|---|
+| drive strengths | Refused. A strength specification does not parse, so it surfaces as a parse error rather than an approximation |
+| `trireg`, `supply0`, `supply1`, `tri0`, `tri1`, `triand`, `trior` | Parsed, then refused at elaboration with `E-ELAB-UNSUPPORTED` (`VITA-E3009`). `tri` and `uwire` collapse to `NetKind::Wire` with no strength or pull behaviour; only `wand` and `wor` get real wired resolution, through a sidecar (§8) |
+| a negative declared packed low bound | The bits are correct but the frozen bounds are not expressive enough: `NetVar.msb`/`lsb` are `u32`, so such a net is stored normalized to `[w-1:0]` and the declared bounds ride the `net_decl_ranges` sidecar for waveform naming |
+| per-dimension geometry of a multidimensional unpacked array | Not in the shape by design: the array is flattened row-major onto one `array_len` (V4) and the dimension list rides `net_dims` |
+| source locations | Excluded by rule (P4). They ride `stmt_locs` |
+
+### Accepted residuals
+
+- `Select` and `LvalChunk` are not self-contained: the direction and declared width of a select
+  resolve by joining against `nets[net].msb`/`lsb`. That is inherent to an arena IR and is accepted.
+- `SensKind` carries five provenance variants where the runtime distinguishes fewer. The extra
+  discrimination is kept for diagnostics.
+- `Expr::Const` indirects into `consts` even for a small literal. A uniform pool that deduplicates
+  is worth the indirection.
+- A `#[serde(with = "…")]` module's internals are a Layer-1 blind spot
+  ([16](16-schema-hash-spec.md) §1.2). Exposure is nil here: no frozen type carries a serde
+  attribute of any kind, and a test asserts it.
+
+---
+
+## Related documents
+
+- [16-schema-hash-spec.md](16-schema-hash-spec.md) — the hash that gates these shapes
+- [14-staged-artifacts.md](14-staged-artifacts.md) — the container, the trailers and the staleness gate
+- [06-simulation-engine.md](06-simulation-engine.md) — the process model these shapes serve
+- [01-goals-and-scope.md](01-goals-and-scope.md) — the supported construct set
+- [08-timescale-and-timing.md](08-timescale-and-timing.md) — how `Delay.amount` converts to ticks
+- [09-testing-and-verification.md](09-testing-and-verification.md) — the golden gates listed in §7

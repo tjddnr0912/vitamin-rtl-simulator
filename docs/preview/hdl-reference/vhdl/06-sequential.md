@@ -1,27 +1,28 @@
-# 06 · VHDL 순차문 (Sequential Statements)
+# 06 · VHDL Sequential Statements
 
-IEEE 1076-2008 §10 기준. `process`, `function`, `procedure` 내부에서만 사용. 위에서 아래 순서대로 실행된다.
+Per IEEE 1076-2008 §10. Usable only inside a `process`, a `function` or a `procedure`. They execute
+top to bottom, in the order written.
 
 ---
 
-## 순차문 종류 요약
+## The sequential statements at a glance
 
-| 문장 | 키워드 | 주요 용도 |
+| Statement | Keyword | Main use |
 |------|--------|----------|
-| if | `if/elsif/else` | 조건 분기 |
-| case | `case/when` | 다중 선택 (완전 커버) |
-| matching case | `case?/when` | don't care 지원 (VHDL-2008) |
-| for 루프 | `for ... in ... loop` | 고정 반복 |
-| while 루프 | `while ... loop` | 조건 반복 |
-| 무한 루프 | `loop` | exit으로 탈출 |
-| next | `next` | 루프 현재 반복 건너뜀 |
-| exit | `exit` | 루프 탈출 |
-| wait | `wait` | 이벤트/시간/조건 대기 |
-| 변수 할당 | `:=` | 즉시 반영 |
-| 신호 할당 | `<=` | delta cycle 후 반영 |
-| assert | `assert` | 조건 검사 + 메시지 |
-| report | `report` | 메시지 출력 |
-| return | `return` | 함수·프로시저 반환 |
+| if | `if/elsif/else` | Conditional branch |
+| case | `case/when` | Multi-way selection (full coverage) |
+| matching case | `case?/when` | don't-care support (VHDL-2008) |
+| for loop | `for ... in ... loop` | Fixed iteration count |
+| while loop | `while ... loop` | Conditional iteration |
+| Infinite loop | `loop` | Left with exit |
+| next | `next` | Skips the rest of the current iteration |
+| exit | `exit` | Leaves the loop |
+| wait | `wait` | Waits for an event, a time or a condition |
+| Variable assignment | `:=` | Takes effect immediately |
+| Signal assignment | `<=` | Takes effect after a delta cycle |
+| assert | `assert` | Checks a condition and reports |
+| report | `report` | Prints a message |
+| return | `return` | Returns from a function or procedure |
 
 ---
 
@@ -39,16 +40,17 @@ else
 end if;
 ```
 
-`elsif` 절과 `else` 절은 모두 선택적. `elsif`는 개수 제한 없음.
+Both the `elsif` clauses and the `else` clause are optional. There is no limit on the number of
+`elsif` clauses.
 
-### 동기 레지스터 패턴
+### The synchronous register pattern
 
 ```vhdl
 process(clk, rst_n)
 begin
-  if rst_n = '0' then          -- 비동기 리셋
+  if rst_n = '0' then          -- asynchronous reset
     q <= (others => '0');
-  elsif rising_edge(clk) then  -- 동기 로직
+  elsif rising_edge(clk) then  -- synchronous logic
     if en = '1' then
       q <= d;
     end if;
@@ -56,12 +58,12 @@ begin
 end process;
 ```
 
-### 조합 논리 패턴
+### The combinational pattern
 
 ```vhdl
 process(all)
 begin
-  -- 모든 분기 커버 필수 (else 없으면 래치 추론)
+  -- every branch must be covered (a latch is inferred without the else)
   if sel = '0' then
     y <= a;
   else
@@ -78,20 +80,21 @@ end process;
 case expression is
   when value1 =>
     statements;
-  when value2 | value3 =>    -- OR: 여러 값을 하나의 분기로
+  when value2 | value3 =>    -- OR: several values in one branch
     statements;
-  when value4 to value7 =>   -- 범위 (integer/열거형)
+  when value4 to value7 =>   -- a range (integer or enumeration)
     statements;
-  when others =>             -- 나머지 전체 (선택적이지만 권장)
+  when others =>             -- everything else (optional, but recommended)
     null;
 end case;
 ```
 
-- 선택 항목은 **완전 커버** 필수 (`when others`로 마무리하거나 명시적으로 모두 나열).
-- choices **중복 불허** — 하나의 값이 두 branch에 동시에 속하면 컴파일 오류.
-- `null`은 아무 동작도 하지 않는 명시적 빈 분기.
+- The choices must give **full coverage** (either finish with `when others` or list every value
+  explicitly).
+- Choices **may not overlap** — a value belonging to two branches is a compile error.
+- `null` is an explicitly empty branch that does nothing.
 
-### 4-to-1 MUX 예시
+### A 4-to-1 MUX
 
 ```vhdl
 process(all)
@@ -104,7 +107,7 @@ begin
   end case;
 end process;
 
--- std_logic_vector는 'U','X' 등 추가 값이 있으므로 when others 권장
+-- std_logic_vector has further values ('U', 'X', ...), so when others is recommended
 process(all)
 begin
   case sel is
@@ -116,7 +119,7 @@ begin
 end process;
 ```
 
-### 상태기계 패턴
+### The state-machine pattern
 
 ```vhdl
 type state_t is (IDLE, RUN, DONE);
@@ -140,13 +143,14 @@ end process;
 
 ---
 
-## case? (Matching Case) — VHDL-2008
+## case? (matching case) — VHDL-2008
 
-일반 `case`의 확장. `?=` 매칭 연산자를 이용해 `'-'`(don't care)와 `std_logic` 약값(`'H'`='1', `'L'`='0')을 처리한다.
+An extension of the ordinary `case`. It uses the `?=` matching operator, so it handles `'-'`
+(don't care) and the weak `std_logic` values (`'H'` = `'1'`, `'L'` = `'0'`).
 
 ```vhdl
 case? opcode is
-  when "1---" => execute_branch;    -- '-' = don't care: 1xxx 모두 일치
+  when "1---" => execute_branch;    -- '-' = don't care: matches all of 1xxx
   when "01--" => execute_load;
   when "001-" => execute_store;
   when "0001" => execute_halt;
@@ -154,51 +158,51 @@ case? opcode is
 end case?;
 ```
 
-### case vs case? 비교
+### case vs case?
 
-| 항목 | `case` | `case?` |
+| Item | `case` | `case?` |
 |------|--------|---------|
-| `'-'` 처리 | 값 `'-'` 그대로 비교 | don't care (모든 값 일치) |
-| `'H'`/`'L'` | 리터럴 비교 | `'1'`/`'0'`로 매칭 |
-| 연산자 | `=` | `?=` |
-| 키워드 | `case` / `end case;` | `case?` / `end case?;` |
-| 도입 버전 | VHDL-87 이후 | VHDL-2008 |
+| `'-'` | compared as the literal value `'-'` | don't care (matches every value) |
+| `'H'` / `'L'` | compared literally | match `'1'` / `'0'` |
+| Operator | `=` | `?=` |
+| Keyword | `case` / `end case;` | `case?` / `end case?;` |
+| Introduced in | VHDL-87 onwards | VHDL-2008 |
 
-### 패턴 중복 주의
+### Watch for overlapping patterns
 
 ```vhdl
--- 잘못된 예: "1-" 와 "11" 중복
+-- wrong: "1-" and "11" overlap
 case? sel is
-  when "1-" => ...   -- "11"도 일치
-  when "11" => ...   -- 중복 — 컴파일러/툴 오류
+  when "1-" => ...   -- "11" matches too
+  when "11" => ...   -- overlap — a compiler/tool error
   when others => ...
 end case?;
 ```
 
-don't care를 포함하는 패턴 설계자가 중복이 없도록 보장해야 한다.
+Where patterns contain don't cares, it is the designer who must guarantee there is no overlap.
 
-### 툴 지원
+### Tool support
 
-- GHDL: 구현 이슈 보고 (issue #1940). 버전 확인 필요.
-- Vivado / Quartus: 컴파일 시 `-2008` 옵션 또는 VHDL-2008 프로젝트 설정 필요.
-- ModelSim: `vcom -2008` 옵션 필요.
+- GHDL: implementation issues reported (issue #1940). Check the version.
+- Vivado / Quartus: needs the `-2008` compile option or a VHDL-2008 project setting.
+- ModelSim: needs `vcom -2008`.
 
 ---
 
-## 루프 (Loop)
+## Loops
 
-### for 루프
+### for loop
 
 ```vhdl
-for i in 0 to 7 loop          -- 오름차순 (0, 1, ..., 7)
+for i in 0 to 7 loop          -- ascending (0, 1, ..., 7)
   result(i) := data(i) xor mask(i);
 end loop;
 
-for i in 7 downto 0 loop      -- 내림차순
+for i in 7 downto 0 loop      -- descending
   sum := sum + to_integer(unsigned'(0 => vec(i)));
 end loop;
 
--- 레이블 붙이기
+-- with labels
 outer : for i in 0 to N-1 loop
   inner : for j in 0 to M-1 loop
     matrix(i, j) := i * M + j;
@@ -206,11 +210,11 @@ outer : for i in 0 to N-1 loop
 end loop outer;
 ```
 
-- 인덱스 변수(`i`)는 루프 내에서 자동 선언 — 별도 변수 선언 불필요.
-- 인덱스 변수는 **읽기 전용** — 루프 내에서 수정 불가.
-- 범위 표현식은 상수여야 한다 (합성 시).
+- The index variable (`i`) is declared implicitly by the loop — no separate declaration is needed.
+- The index variable is **read-only** — it cannot be modified inside the loop.
+- The range expression must be constant (for synthesis).
 
-### while 루프
+### while loop
 
 ```vhdl
 while count < LIMIT loop
@@ -218,22 +222,22 @@ while count < LIMIT loop
   data(count) := some_val;
 end loop;
 
--- 조건이 처음부터 false면 루프 본체 실행 안 됨
-while false loop   -- 실행 안 됨
+-- if the condition is false to begin with, the body never runs
+while false loop   -- never executes
   ...
 end loop;
 ```
 
-### 무한 루프
+### Infinite loop
 
 ```vhdl
--- exit으로 탈출하는 무한 루프
+-- an infinite loop left with exit
 clock_gen : loop
   clk <= '0';  wait for CLK_PERIOD/2;
   clk <= '1';  wait for CLK_PERIOD/2;
 end loop clock_gen;
 
--- 조건부 탈출
+-- conditional exit
 scan : loop
   read_byte(byte_val);
   exit scan when byte_val = STOP_BYTE;
@@ -244,35 +248,35 @@ end loop scan;
 
 ## next / exit
 
-### next — 현재 반복 건너뜀
+### next — skip the current iteration
 
 ```vhdl
 for i in 0 to 15 loop
-  next when data(i) = '0';    -- '0'이면 이 반복 건너뜀
+  next when data(i) = '0';    -- if '0', skip this iteration
   process_bit(i);
 end loop;
 
--- 중첩 루프에서 외부 루프 레이블 지정
+-- naming an outer loop from a nested one
 outer : for i in 0 to N-1 loop
   for j in 0 to M-1 loop
-    next outer when skip_row(i) = '1';   -- outer 루프 다음 반복으로
+    next outer when skip_row(i) = '1';   -- on to the next iteration of outer
     matrix(i, j) := compute(i, j);
   end loop;
 end loop outer;
 ```
 
-### exit — 루프 탈출
+### exit — leave the loop
 
 ```vhdl
 for i in 0 to 255 loop
-  exit when found = '1';     -- 조건 만족 시 루프 종료
+  exit when found = '1';     -- end the loop once the condition holds
   search(i, found);
 end loop;
 
--- 중첩 루프 탈출
+-- leaving a nested loop
 outer : for i in 0 to N-1 loop
   for j in 0 to M-1 loop
-    exit outer when matrix(i, j) = TARGET;  -- 두 루프 모두 탈출
+    exit outer when matrix(i, j) = TARGET;  -- leaves both loops
   end loop;
 end loop outer;
 ```
@@ -281,55 +285,56 @@ end loop outer;
 
 | | `next` | `exit` |
 |--|--------|--------|
-| 동작 | 현재 반복의 나머지 건너뛰고 다음 반복 | 루프 전체 탈출 |
-| 레이블 없음 | 가장 안쪽 루프에 적용 | 가장 안쪽 루프에 적용 |
-| 레이블 있음 | 해당 루프의 다음 반복으로 | 해당 루프 탈출 |
+| Effect | skips the rest of this iteration and starts the next | leaves the loop entirely |
+| Without a label | applies to the innermost loop | applies to the innermost loop |
+| With a label | on to the next iteration of that loop | leaves that loop |
 
 ---
 
-## wait 문
+## The wait statement
 
-`wait`는 프로세스를 일시 정지한다. **감도 목록이 있는 프로세스에는 사용 불가** (LRM §11.3).
+`wait` suspends the process. It **cannot be used in a process that has a sensitivity list**
+(LRM §11.3).
 
-### 네 가지 형태
+### The four forms
 
 ```vhdl
-wait;                                  -- (1) 무한 대기
-wait on sig1, sig2;                    -- (2) 이벤트 대기
-wait until condition;                  -- (3) 조건 대기
-wait for time_expression;             -- (4) 시간 대기
+wait;                                  -- (1) wait forever
+wait on sig1, sig2;                    -- (2) wait for an event
+wait until condition;                  -- (3) wait for a condition
+wait for time_expression;             -- (4) wait for a time
 ```
 
-조합도 가능:
+They can be combined:
 
 ```vhdl
-wait on clk until clk = '1';          -- 이벤트 + 조건
-wait until clk = '1' for 100 ns;      -- 조건 + 타임아웃
+wait on clk until clk = '1';          -- event + condition
+wait until clk = '1' for 100 ns;      -- condition + timeout
 wait on sig1, sig2 until cond for 50 ns;
 ```
 
-### 사용 예시
+### Examples
 
 ```vhdl
--- testbench 리셋 시퀀스
+-- a testbench reset sequence
 process
 begin
   rst_n <= '0';
-  wait for 20 ns;               -- 20ns 동안 리셋
+  wait for 20 ns;               -- hold reset for 20 ns
   rst_n <= '1';
-  wait;                         -- 이후 무한 대기 (한 번만 실행)
+  wait;                         -- then wait forever (runs only once)
 end process;
 
--- 클록 에지 기다리기
+-- waiting for a clock edge
 process
 begin
-  wait until rising_edge(clk);  -- 상승 에지 대기
+  wait until rising_edge(clk);  -- wait for the rising edge
   data <= test_vector;
   wait until rising_edge(clk);
   check_output(expected, actual);
 end process;
 
--- 타임아웃 대기 (handshake)
+-- waiting with a timeout (handshake)
 process
 begin
   req <= '1';
@@ -344,48 +349,48 @@ end process;
 
 ---
 
-## 변수 할당 `:=` vs 신호 할당 `<=`
+## Variable assignment `:=` vs signal assignment `<=`
 
-### 즉시 반영 vs delta cycle 후 반영
+### Immediate vs after a delta cycle
 
 ```vhdl
 process
   variable v : std_logic_vector(7 downto 0) := X"00";
 begin
-  v := X"FF";          -- 즉시 반영
-  result1 <= v;        -- X"FF" 전달 (v 현재 값)
+  v := X"FF";          -- takes effect immediately
+  result1 <= v;        -- passes X"FF" (the current value of v)
 
-  sig <= X"AA";        -- 스케줄: 다음 delta에 반영
-  result2 <= sig;      -- 이전 sig 값 전달 (X"AA" 아직 아님)
+  sig <= X"AA";        -- scheduled: takes effect in the next delta
+  result2 <= sig;      -- passes the old value of sig (not X"AA" yet)
 
   wait for 10 ns;
 end process;
 ```
 
-### 언제 무엇을 쓰는가
+### Which to use when
 
-| 상황 | 권장 |
+| Situation | Recommended |
 |------|------|
-| 중간 계산 결과 저장 | `variable` + `:=` |
-| 조합 계산 후 출력 | 마지막에 `<=` |
-| 레지스터 (FF) | `signal` + `<=` |
-| 루프 카운터 | `variable` + `:=` |
-| 공유 상태 (주의) | `shared variable` + `:=` |
+| Holding an intermediate result | `variable` + `:=` |
+| Driving the output after a combinational computation | `<=` at the end |
+| A register (flip-flop) | `signal` + `<=` |
+| A loop counter | `variable` + `:=` |
+| Shared state (careful) | `shared variable` + `:=` |
 
-### 신호 할당 지연 모델
+### Signal assignment delay models
 
 ```vhdl
--- inertial (기본): 지연보다 짧은 펄스 필터링
+-- inertial (the default): filters pulses shorter than the delay
 y <= a after 5 ns;
-y <= inertial a after 5 ns;   -- 명시적 동일
+y <= inertial a after 5 ns;   -- explicitly the same thing
 
--- transport: 모든 전이 전달 (전송선 모델)
+-- transport: passes every transition on (transmission-line model)
 y <= transport a after 5 ns;
 
--- reject N ns inertial: 최소 펄스폭 N ns 지정
-y <= reject 2 ns inertial a after 5 ns;   -- 2ns 미만 펄스 필터
+-- reject N ns inertial: sets the minimum pulse width to N ns
+y <= reject 2 ns inertial a after 5 ns;   -- filters pulses under 2 ns
 
--- 파형 (waveform): 여러 전이 예약
+-- a waveform: several transitions scheduled at once
 clk <= '1', '0' after 5 ns, '1' after 10 ns, '0' after 15 ns;
 ```
 
@@ -396,20 +401,20 @@ clk <= '1', '0' after 5 ns, '1' after 10 ns, '0' after 15 ns;
 ### assert
 
 ```vhdl
--- 기본 형태
+-- the basic form
 assert boolean_condition
   [report string_expression]
   [severity severity_level];
 
--- 예시: 리셋 후 카운터 초기값 검증
+-- example: check the counter's initial value after reset
 assert counter = 0
   report "Counter not zero after reset, got: " & integer'image(counter)
   severity ERROR;
 
--- report 없이
+-- without report
 assert a /= b severity WARNING;
 
--- severity 없이 (기본: ERROR)
+-- without severity (defaults to ERROR)
 assert valid = '1'
   report "Data not valid";
 ```
@@ -417,36 +422,36 @@ assert valid = '1'
 ### report
 
 ```vhdl
--- assert 없이 메시지만 출력
+-- print a message without an assertion
 report string_expression [severity severity_level];
 
 report "Simulation started at " & time'image(now);
 report "Test case 1 passed" severity NOTE;
-report "Unexpected condition" severity FAILURE;  -- 즉시 중단
+report "Unexpected condition" severity FAILURE;  -- stops immediately
 ```
 
-### severity 레벨
+### Severity levels
 
-| 레벨 | 값 | 기본 동작 | 용도 |
+| Level | Value | Default behaviour | Use |
 |------|----|----------|------|
-| `NOTE` | 0 | 메시지 출력, 계속 | 정보성 메시지, 진행 상황 |
-| `WARNING` | 1 | 메시지 출력, 계속 | 비정상이지만 치명적이지 않은 상황 |
-| `ERROR` | 2 | 메시지 출력, 계속 | 설계 오류, 기본 severity |
-| `FAILURE` | 3 | 시뮬레이션 즉시 중단 | 복구 불가 오류 |
+| `NOTE` | 0 | prints the message, continues | informational messages, progress |
+| `WARNING` | 1 | prints the message, continues | abnormal but not fatal |
+| `ERROR` | 2 | prints the message, continues | a design error; the default severity |
+| `FAILURE` | 3 | stops the simulation immediately | unrecoverable error |
 
-- `assert`의 기본 severity: `ERROR` (report/severity 모두 생략 시).
-- `report`의 기본 severity: `NOTE`.
-- 툴 설정으로 특정 severity에서 시뮬레이션 중단 임계값을 조정할 수 있다.
+- The default severity of `assert`: `ERROR` (when both report and severity are omitted).
+- The default severity of `report`: `NOTE`.
+- Tool settings can change the severity threshold at which simulation stops.
 
-### 실용 패턴
+### A practical pattern
 
 ```vhdl
--- testbench 자기 검사 (self-checking testbench)
+-- a self-checking testbench
 process
   variable pass_count : integer := 0;
   variable fail_count : integer := 0;
 begin
-  -- 테스트 케이스 실행
+  -- run the test case
   apply_stimulus(X"AA");
   wait until rising_edge(clk);
   if output = X"55" then
@@ -458,7 +463,7 @@ begin
       severity ERROR;
   end if;
 
-  -- 최종 결과
+  -- the final result
   report "Total: " & integer'image(pass_count) & " pass, "
        & integer'image(fail_count) & " fail";
   assert fail_count = 0
@@ -474,17 +479,17 @@ end process;
 ## return
 
 ```vhdl
--- procedure: 값 없이 반환 (조기 탈출)
+-- procedure: returns no value (an early exit only)
 procedure check_range(val : integer; lo, hi : integer) is
 begin
   if val < lo or val > hi then
     report "Out of range" severity ERROR;
-    return;             -- 조기 반환
+    return;             -- early return
   end if;
-  -- 범위 내 처리 계속
+  -- carry on with the in-range handling
 end procedure;
 
--- function: 반드시 값 반환
+-- function: must return a value
 function max_val(a, b : integer) return integer is
 begin
   if a >= b then
@@ -497,18 +502,18 @@ end function max_val;
 
 ---
 
-## 순차문 합성 체크리스트
+## Sequential-statement synthesis checklist
 
-| 패턴 | 합성 결과 | 주의 |
+| Pattern | Synthesis result | Watch out for |
 |------|----------|------|
-| `if rising_edge(clk)` | 플립플롭 | 표준 클록 에지 패턴 |
-| `if` (else 없음) | 래치 (조합 process) | 모든 분기 커버 필수 |
-| `case` (others 없음) | 일부 값 래치 가능 | `when others` 권장 |
-| `for i in 0 to N-1` | N번 언롤(unroll) | N은 컴파일 시간 상수 |
-| `while` | 합성 제한 — 종료 보장 불가 | RTL에서 회피 |
-| `wait` | 합성 제한 | testbench 전용 |
-| `variable :=` | 와이어(조합) or FF(동기) | 문맥에 따라 결정 |
-| `assert/report` | 합성 툴 무시 | 시뮬레이션 전용 |
+| `if rising_edge(clk)` | flip-flop | the standard clock-edge pattern |
+| `if` (no else) | latch (in a combinational process) | every branch must be covered |
+| `case` (no others) | some values may latch | `when others` recommended |
+| `for i in 0 to N-1` | unrolled N times | N must be a compile-time constant |
+| `while` | limited synthesis — termination cannot be guaranteed | avoid in RTL |
+| `wait` | limited synthesis | testbench only |
+| `variable :=` | a wire (combinational) or a flip-flop (synchronous) | decided by context |
+| `assert` / `report` | ignored by synthesis tools | simulation only |
 
 ---
 
@@ -517,7 +522,8 @@ end function max_val;
 - IEEE 1076-2008 §10 (Sequential statements)
 - portal.cs.umbc.edu/help/VHDL/sequential.html ✓
 - fpgatutorial.com/vhdl-for-while-loop-if-case-statement/ ✓
-- vhdlwhiz.com/sensitivity-list/ ✓ (wait equivalence)
-- Doulos VHDL-2008 small changes (case? — 403, snippet 검증)
+- vhdlwhiz.com/sensitivity-list/ ✓ (the wait equivalence)
+- Doulos, VHDL-2008 small changes (case? — 403, verified from the snippet)
 - GHDL issue #1940 (case? implementation notes)
-- Research log: vhdl-design-units-statements-2026-05-28.md
+- Research log:
+  [vhdl-design-units-statements-2026-05-28.md](../../../history/research-log/vhdl-design-units-statements-2026-05-28.md)

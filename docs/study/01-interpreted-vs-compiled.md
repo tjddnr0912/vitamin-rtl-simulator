@@ -1,741 +1,257 @@
-# 스터디 · 인터프리티드 vs 컴파일드 RTL 시뮬레이션
+# study/01 — The performance axis
 
-> **완성본 — 2026-08-03.** (초안 2026-08-01 → 성능 작업 완료 후 갱신.) 초안이 `[TBD-P2]` 로 비워둔 자리는 전부 실측으로 채워졌고, 초안이 **틀리게 적었던 세 곳을
-> 본문에서 명시적으로 정정한다** — ① iverilog 대비 성능 수치(§9.2 각주 및 preview/18), ② "x86/arm 시프트
-> 의미가 갈린다"(§9.2), ③ "단일 레버가 없으므로 구조를 바꿔야만 한다"(§8.8).
->
-> **8장이 이 문서의 중심이다.** 읽는 순서를 정할 수 없다면 0장 → 8장 → 9장 순으로 읽어도 된다.
->
-> **읽는 법**: 0장은 배경지식 0을 가정한다. 용어는 처음 나올 때 굵게 표시하고 **§부록 A 용어집**에
-> 전부 다시 정의한다. 실측 수치는 전부 이 저장소에서 잰 것이고 재현 명령을 함께 적었다.
+What class of simulator vitamin is, what that class determines, where it measures against
+the reference tools, where its time goes, the standing verdict on every acceleration that
+has been evaluated, and the A/B protocol any future performance claim has to follow.
+Every figure below carries the method that produced it.
 
----
-
-## 0장 · 먼저, RTL 시뮬레이터가 하는 일
-
-### 0.1 RTL 이란
-
-**RTL**(Register Transfer Level, 레지스터 전송 수준)은 디지털 회로를 "매 클럭마다 어떤 레지스터에서
-어떤 레지스터로 값이 옮겨가는가"로 기술하는 추상화 수준이다. Verilog/SystemVerilog 로 쓴다.
-
-```systemverilog
-always @(posedge clk)      // 클럭이 0→1 로 오를 때마다
-  q <= d;                  // d 값을 q 로 옮긴다   ← 이것이 "레지스터 전송"
-```
-
-회로에는 두 종류의 논리만 있다고 봐도 된다.
-
-- **조합 논리**(combinational logic): 입력이 바뀌면 **즉시** 출력이 따라 바뀐다. 기억이 없다.
-  `assign y = a & b;` 또는 `always_comb y = a & b;`
-- **순차 논리**(sequential logic): **클럭 엣지에서만** 값을 갱신한다. 기억이 있다.
-  `always @(posedge clk) q <= d;`
-
-**시뮬레이터**는 이 기술을 읽어서, 시간이 흐르는 동안 모든 신호가 어떤 값을 갖는지 계산해 준다.
-출력은 보통 두 가지다: `$display` 로 찍은 **텍스트 로그**, 그리고 모든 신호의 시간별 값을 담은
-**파형 파일**(VCD/FST).
-
-### 0.2 왜 어려운가 — "동시에 일어난다"를 순차 컴퓨터로 흉내내기
-
-실제 회로에서는 모든 게이트가 **물리적으로 동시에** 동작한다. 그런데 CPU 는 명령을 하나씩 처리한다.
-그래서 시뮬레이터는 "동시"를 흉내내는 규칙이 필요하다. 그 규칙이 **스케줄링 모델**이다.
-
-이 문서 전체가, 사실상 이 한 문장을 파고드는 것이다.
-
-### 0.3 두 개의 시간 — 시뮬레이션 시간과 델타
-
-핵심 개념이라 천천히 간다.
-
-**시뮬레이션 시간**(simulation time)은 회로 안의 시간이다. `#5` 는 "5 시간단위 기다려라"다.
-`$display("%t", $time)` 이 찍는 게 이 시간이다.
-
-그런데 조합 논리는 "즉시" 전파된다 — 즉 **시뮬레이션 시간을 소비하지 않는다.**
-
-```systemverilog
-always_comb b = a + 1;   // a 가 바뀌면 b 도 "같은 시각에" 바뀐다
-always_comb c = b + 1;   // b 가 바뀌면 c 도 "같은 시각에" 바뀐다
-```
-
-`a` 가 바뀌면 `b`, `c` 가 전부 **같은 시뮬레이션 시각**에 바뀌어야 한다. 하지만 CPU 는 순서대로만
-계산할 수 있다. `b` 를 먼저 계산하고, 그 다음에야 `c` 를 계산할 수 있다.
-
-그래서 시뮬레이터는 **한 시각 안에 여러 번의 "미니 스텝"** 을 둔다. 이걸 **델타 사이클**(delta cycle)
-이라 한다. 시뮬레이션 시간은 안 흐르지만, 계산은 한 걸음 진행한다.
-
-```
-시각 t=10
-  ├─ 델타 0 : a 가 바뀜 → b 를 계산하는 프로세스를 깨움
-  ├─ 델타 1 : b 계산됨  → c 를 계산하는 프로세스를 깨움
-  ├─ 델타 2 : c 계산됨  → 더 깨울 게 없음
-  └─ 안정(stable) → 시각 t=11 로 진행
-```
-
-**"조합 깊이 D 인 회로는 한 시각에 D 개의 델타를 쓴다"** — 이 문장이 이 문서 후반부 전체의 원인이다.
-
-### 0.4 블로킹과 논블로킹 — 왜 두 개인가
-
-```systemverilog
-a = b;    // 블로킹    (blocking)     : 즉시 대입. 다음 줄이 새 값을 본다
-a <= b;   // 논블로킹  (nonblocking)  : 나중에 대입. 이 시각의 모든 계산이 끝난 뒤 한꺼번에
-```
-
-논블로킹이 있는 이유는 **시프트 레지스터** 때문이다.
-
-```systemverilog
-always @(posedge clk) begin
-  q1 <= q0;    // q0 의 "옛날" 값이 q1 로
-  q2 <= q1;    // q1 의 "옛날" 값이 q2 로
-end
-```
-
-만약 블로킹(`=`)이었다면 `q1` 이 먼저 새 값을 받고, 그 다음 줄이 그 **새** 값을 `q2` 로 넘겨서
-한 클럭에 두 칸을 이동해 버린다 — 회로가 아니라 버그다. 논블로킹은 "이 시각의 모든 우변을 먼저
-읽고, 그 다음 좌변에 한꺼번에 쓴다"를 보장한다.
-
-시뮬레이터는 이를 위해 **NBA 영역**(NonBlocking Assignment region)이라는 별도의 대기열을 둔다.
-IEEE 1800 §4 가 정의한 **계층화 영역**(stratified regions)의 일부다.
-
-> **오늘 이 문서에서 이 절이 중요한 이유**: 4장에서 "융합"이 실패하는 사례의 절반이
-> 이 블로킹/논블로킹 구분과 델타 경계에 걸려 있다.
+Companion studies: terminology and native-backend coverage in
+[study/02](02-v1-native-coverage.md); the workload corpus and its harness in
+[study/03](03-workload-corpus.md).
 
 ---
 
-## 1장 · 두 개의 직교하는 축
+## 1. What class of simulator this is
 
-여기서부터가 이 문서의 본론이다. 흔히 "컴파일드 시뮬레이터가 빠르다"고 뭉뚱그리는데,
-**서로 다른 두 가지가 섞여 있다.**
+### 1.1 Two orthogonal axes
 
-### 1.1 축 1 — 인터프리티드 vs 컴파일드 (*무엇으로 실행하는가*)
+"Compiled simulators are fast" conflates two independent choices.
 
-| | 인터프리티드 | 컴파일드 |
+| Axis | Option A | Option B |
 |---|---|---|
-| 설계를 무엇으로 만드나 | 자료구조(트리/배열) | 기계어 또는 바이트코드 |
-| 실행 방법 | 자료구조를 **매번 순회**하며 해석 | 만들어진 코드를 **그냥 호출** |
-| 비유 | 악보를 보며 한 음씩 읽어 연주 | 미리 녹음해 둔 것을 재생 |
-| 준비 비용 | 거의 0 | 크다(컴파일) |
-| 실행 비용 | 크다 | 작다 |
+| **What executes the design** | *interpreted* — a data structure is walked on every activation | *compiled* — the design is lowered once to bytecode or machine code and then called |
+| **When execution order is decided** | *dynamic / event-driven* — at run time, from which nets actually changed | *static / levelized* — at compile time, by topological sort of the dependency graph |
 
-**인터프리터**(interpreter)는 `a + b` 를 만날 때마다 "이건 Binary 노드고, op 는 Add 고, 왼쪽을
-평가하고, 오른쪽을 평가하고, 더한다"를 매번 다시 판단한다. 그 판단 자체가 비용이다.
+The first axis costs re-deciding "this node is an Add, evaluate left, evaluate right" on
+every visit. The second decides whether a combinational chain of depth *D* costs *D* delta
+cycles or one pass.
 
-**컴파일드**는 그 판단을 **한 번만** 하고 결과를 코드로 굳힌다. 이후엔 판단 없이 실행만 한다.
+### 1.2 Where the tools sit
 
-### 1.2 축 2 — 동적 스케줄 vs levelized (*언제 순서를 정하는가*)
-
-**이게 사람들이 자주 놓치는 축이고, vita 이야기의 핵심이다.**
-
-| | 동적(이벤트구동) | 정적(levelized) |
+| | Interpreted | Compiled |
 |---|---|---|
-| 실행 순서를 언제 정하나 | **런타임**에 "무엇이 바뀌었나" 보고 | **컴파일 타임**에 미리 위상정렬 |
-| 조합 깊이 D 의 비용 | D 개의 델타 | **1 패스** |
-| 필요한 것 | 이벤트 큐 + 감지 리스트 | 순환 없는 의존 그래프 |
+| **Event-driven, 4-state** | Verilog-XL, Icarus Verilog, **vitamin** | VCS, Xcelium, Questa |
+| **Cycle-based, usually 2-state** | (rare) | Verilator |
 
-**levelize**(레벨화)는 회로의 조합 논리를 의존 순서대로 줄 세우는 것이다.
+VCS and Xcelium are compiled but not cycle-based: they keep event ordering, 4-state values
+and timing, and compile only the execution. Verilator changes both axes at once and gives
+up sign-off suitability for the speed. vitamin is event-driven and 4-state, which places it
+in the same class as Icarus Verilog, and against a compiled 2-state simulator or a
+commercial simulator it is one to two orders of magnitude slower. That distance is
+structural, not a tuning defect.
 
-```
-a → b → c → d      의존 그래프
-   레벨0 레벨1 레벨2 레벨3
+### 1.3 What the class determines
 
-levelized:  레벨 순서대로 한 번씩만 계산 → 1 패스
-동적      :  a 바뀜→b 깨움→(델타)→c 깨움→(델타)→d → 3 델타
-```
+**4-state values cost two planes.** A value is stored as two bit planes, `val` and `unk`,
+one machine word each per 64 bits, so one instruction still processes 64 bits at a time.
+Every operation, every mask, every width conversion and every net read therefore does two
+sets of work. Section 3 quantifies this.
 
-### 1.3 두 축을 교차하면
+**Sparse activity is an algorithmic advantage.** A large design toggles 1–5% of its nets
+per cycle, and an event-driven kernel evaluates only what a changed net wakes. A
+levelized kernel evaluates the whole cone.
 
-| | 인터프리티드 | 컴파일드 |
-|---|---|---|
-| **이벤트구동**(full 4-state) | Verilog-XL, **iverilog**, **vita** | **VCS · Xcelium · Questa** |
-| **사이클기반**(보통 2-state) | (드묾) | **Verilator** |
+**A combinational chain of depth D propagates across D deltas.** A process that wakes in an
+intermediate delta and reads the chain's output sees a partially propagated value. IEEE
+1800 §4 leaves intra-region process order implementation-defined; vitamin pins its order to
+Icarus Verilog, because the differential against that tool is what gives correct-or-loud
+its teeth. Any acceleration that reorders or coalesces process execution changes observable
+values, which is why fusion and levelization are ruled out of the default mode (§4).
 
-여기서 반드시 붙잡아야 할 사실:
-
-> **VCS·Xcelium 은 "컴파일드"이지 "사이클기반"이 아니다.** 이벤트구동과 4-state 와 타이밍을
-> 전부 유지한 채로, 실행만 네이티브 코드로 한다. 그래서 사인오프(최종 검증)에 쓸 수 있다.
-> Verilator 는 **둘 다** 바꿔서(컴파일드 + 사이클기반) 10~100× 를 얻고 사인오프 자격을 포기했다.
-
-vita 가 "컴파일드로 갈 수 있나"를 물었을 때, 사실은 **두 개의 다른 질문**을 한 것이었다.
-그리고 4장에서 보듯 **답도 달랐다.**
+**Sign-off suitability follows from 4-state.** Dropping the `unk` plane makes an
+uninitialised signal read as 0, so a reset defect passes in simulation and diverges on
+silicon. That is the trade Verilator advertises. vitamin's stated goal is correct-or-loud
+accuracy at the level of Icarus Verilog, Verilator, Xcelium and VCS, so a global 2-state
+mode is excluded by the goal independently of what it would be worth.
 
 ---
 
-## 2장 · vita 의 실제 구조 — 이벤트구동 커널 해부
+## 2. Measured position
 
-추상론이 아니라 이 저장소의 코드다.
+### 2.1 Against three tools on one algorithm
 
-### 2.1 파이프라인
+Keccak-f[1600], macOS arm64, release builds, interleaved samples with the first round
+discarded. All four tools produce
+`lane0=54aa20c46ef0e0f6 lane1=b19e9f995e1f41d3 acc=767c5ab6776c4bde`, and the first lane of
+the all-zero state is the published Keccak value `f1258f7940e1dde7`, so the agreement is
+anchored to an external reference rather than mutual. Recipe and raw table:
+[`bench/keccak/RUN.md`](../../bench/keccak/RUN.md).
 
-```
-preprocess → lex → parse → elaborate → sim-ir → sim-engine → VCD/FST
-└──────── 언어 의존 ────────┘└──────── 언어 중립 ────────┘
-```
+| Simulator | Design | Wall | Per permutation | Relative to Verilator |
+|---|---|---:|---:|---:|
+| Verilator 5.050, `--binary --timing`, N=200000 | `keccak_f.sv` | 1.39 s | **7.0 µs** | 1× |
+| vitamin | `keccak_f_flat.sv` (calls expanded) | 0.59 s | 295 µs | 42× slower |
+| vitamin | `keccak_f.sv` (function/task calls) | 4.07 s | 2 035 µs | 291× slower |
+| Icarus Verilog 13 | `keccak_f.sv` | 8.94 s | 4 470 µs | 639× slower |
 
-**elaborate**(정련)는 모듈 계층을 펼쳐서 평평한 넷/프로세스 배열로 만드는 단계다.
-그 산출물이 **`SimIr`** — 시뮬레이션 중간표현이며, 이후 단계는 Verilog 를 모른다.
+### 2.2 Against Icarus Verilog on the workload corpus
 
-### 2.2 스케줄러 루프 (`sched/run_loop.rs`)
+Median of three timed samples per row, round-robin interleaved with the first round
+discarded, release binaries, no other load. Reproduce with
+`cargo run -p corpus-runner -- run --compare`. Ratio is `iverilog / vita`; above 1 means
+vitamin is faster.
 
-```
-loop {                                   // 시간 슬롯
-  loop {                                 // 델타
-    settle_cont_assigns()                // ① 연속대입 정착
-    Active   배치 드레인 → propagate     // ② 프로세스 실행
-    Inactive(#0) 승격                    // ③
-    NBA 적용 → propagate                 // ④ 논블로킹 일괄 반영
-    Observed / Reactive                  // ⑤ deferred assert
-  }                                      // 전부 빌 때까지
-  시간 전진
-}
-```
+| Workload | vita | iverilog | Ratio |
+|---|---:|---:|---:|
+| sha256 | 1.25 s | 4.06 s | 3.25× |
+| verilog-ethernet | 2.24 s | 7.72 s | 3.45× |
+| aes | 2.70 s | 6.03 s | 2.23× |
+| biriscv | 4.05 s | 9.20 s | 2.27× |
+| keccak | 4.24 s | 9.26 s | 2.19× |
+| picorv32 | 4.32 s | 7.06 s | 1.64× |
+| darkriscv | 6.63 s | 7.10 s | 1.07× |
+| serv | 7.42 s | 7.32 s | 0.99× |
+| keccak-arr | 13.58 s | 9.14 s | 0.67× |
+| verilog-axi | — | — | ruled split, not timed |
 
-①~⑤가 IEEE 1800 §4 의 **계층화 영역**이다. 순서가 표준으로 정해져 있다.
+Geometric mean **1.74×** over the nine timed rows, **1.93×** over the seven third-party
+rows, **2.15×** with `serv` excluded. Two rows are losses: `keccak-arr` builds a
+25-element array on every subroutine call and is the corpus worst case for the frame path;
+`serv` is bit-serial and reads an uninitialised register file, so it is the x-heavy row.
 
-### 2.3 "무엇이 깨어나는가"는 dirty 넷이 정한다
+### 2.3 The three executors on one design
 
-```rust
-// sched/propagate.rs
-let mut cand = std::mem::take(&mut self.st.dirty);  // 실제로 비트가 바뀐 넷만
-```
+picorv32 with its testbench, release build, interleaved, best of five. All three executors
+and Icarus Verilog end at simulated time `399995000`, i.e. the same workload.
 
-정적 랭크가 아니라 **실제로 값이 바뀐 넷 목록**을 훑어서, 그 넷에 감지 등록된 프로세스를 깨운다.
-이게 이벤트구동의 정의다. 그리고 **희소 활성**(sparse activity) — 대형 SoC 는 사이클당 1~5%만
-토글하므로, 이벤트구동은 그 1%만 계산한다. 이건 진짜 알고리즘적 이점이다.
+| Executor | Time | vs `native` | What it does |
+|---|---:|---:|---|
+| `--backend interp` | 1.319 s | 2.57× slower | walks the IR tree on every activation |
+| `--backend vm` | 0.838 s | 1.63× slower | compiles each body to bytecode once, runs an op loop |
+| `--backend native` (default) | **0.513 s** | 1.00× | net values in a flat arena; uniform-width expressions on a specialised evaluator |
+| Icarus Verilog 13 | 0.585 s | 1.14× slower | — |
 
-### 2.4 ⭐ 여기서 중요한 성질 하나
+Reproduce: `cargo build --release -p cli --locked`, then from `bench/picorv32`,
+`vita --backend <b> tb.v picorv32.v`.
 
-> **깊이 D 인 조합 체인은 D 델타에 걸쳐 전파된다.**
-> 그래서 **중간 델타에 그 체인의 출력을 읽으면, 아직 다 전파되지 않은 값**을 본다.
+The bytecode VM measured against the interpreter alone (release, best of five,
+`crates/sim-engine/tests/perf_baseline.rs`): expression-bound ~2.2×, structure-bound ~2.8×,
+wide 100-bit ~1.7×, clock- or scheduler-bound ~1.0×, because evaluation is not the
+bottleneck there.
 
-지금은 그냥 사실로 받아두면 된다. **4장 E 축이 이것 하나 때문에 죽는다.**
+The interpreter is a test instrument and is permanently excluded from performance work.
+Making the reference faster is how a reference stops being readable, and a second
+specialised spelling of a semantic rule is this repository's defect class. Its numbers
+above are for scale, not as a target.
+
+### 2.4 The call regime
+
+The same algorithm in two spellings — `bench/keccak/keccak_f.sv` with three looping
+functions, and `keccak_f_flat.sv` with the calls expanded by `gen_flat.py` — produces a
+byte-identical digest and differs by **6.9×** (4.07 s against 0.59 s). This is the
+standing measurement of what writing a round behind `function` costs.
+
+The pair is a gate, not just a probe. `crates/cli/tests/perf_call_regime.rs` asserts, in
+tests that are not `#[ignore]`d, that the two spellings print the same digest and that the
+digest is not all-X, that the caller body is admitted to the compiled backend for both, and
+that `flat.frame_bodies == 0` while `called.frame_bodies == 2`. A drifted pair still
+produces two timings and still divides them, so the equality assertion is what makes the
+ratio a measurement.
+
+The gap closes more slowly than each improvement suggests, because it narrows at both ends:
+the flat design is exempt from the call, not from a whole-net read or a scheduler
+allocation.
+
+Two layers make up the cost. The **caller** layer is closed: a process body holding a user
+call is admitted to the compiled backend, and only the one expression holding the call
+declines to the generic evaluator. The **callee** layer is open: a function body runs on
+`SimState::run_frame_call`, the generic `Value` tree-walk, on every backend.
+
+### 2.5 What is not measured
+
+VCS and Xcelium have never been run by this project. Their speed advantage over an
+open-source 4-state simulator is a given and is not hedged, but no number in this
+repository is a measurement of it. Any numeric target against them needs a licensed
+single-core run of the corpus.
+
+Verilator is measured, because it is free and it is a genuinely compiled backend, which
+makes it a usable ceiling gauge even though its 2-state cycle semantics disqualify it as a
+sign-off oracle.
 
 ---
 
-## 3장 · 컴파일드 시뮬레이터는 무엇을 다르게 하나
-
-### 3.1 VCS — Verilog **C**ompiled-code **S**imulator
-
-Chronologic Simulation(1991) → Viewlogic(1994) → Synopsys(1997). 당시 골든 레퍼런스였던
-인터프리티드 Verilog-XL 을 **순전히 속도로** 밀어냈다. 이름 자체가 방법론 선언이다.
-
-- `vcs design.v` → 각 프로세스 바디를 함수로 lowering → 링크 → **독립 실행 파일 `simv`**
-- 초기 버전은 C 를 방출해 호스트 컴파일러로 빌드했고, 이후 컴파일 시간을 줄이려 자체 코드젠으로 이동
-- 조합 cone 을 컴파일 타임에 위상정렬해 **랭크 순 1회 평가**
-- `+rad`(Radiant), `-partcomp`(분할 컴파일), 증분 컴파일 — 전부 "컴파일 비용을 늘려 런타임을 줄인다"
-
-> **증분/분할 컴파일이 대표 기능이라는 사실 자체가 자백이다** — 컴파일 시간이 사용자의
-> 크리티컬 패스에 올라왔다는 뜻이다.
-
-### 3.2 Xcelium — NC = **N**ative **C**ompiled
-
-Verilog-XL(인터프리티드 골든) → **NC-Verilog**(1995~, VCS 에 대한 Cadence 의 응답) →
-Incisive → **Xcelium**(2017).
-
-구조적으로 vita 와 닮은 지점이 있다:
-
-| Cadence | vita |
-|---|---|
-| `xmvlog` (compile) | `vcmp` |
-| `xmelab` (elaborate) | `velab` |
-| `xmsim` (simulate) | `vrun` |
-| `xrun` (one-shot) | `vita` |
-
-**같은 3단 구조인데 결과가 갈리는 이유는 elaborate 산출물의 성격이다.** `xmelab` 은 스케줄과
-네이티브 코드를 굳히고, `velab` 은 **해석될 IR**(`SimIr`)을 굳힌다.
-
-### 3.3 Verilator — 다른 거래
-
-컴파일드 **+ 사이클기반(2-state 기본)**. 인트라사이클 스케줄링을 버리고 클럭당 일괄 평가.
-10~100× 를 얻고 미세 타이밍·일부 4-state 를 포기 → 사인오프 부적합.
-
-**중요**: 아무도 이걸 버그라 부르지 않는다. **광고했기 때문이다.** (7장에서 다시 나온다.)
-
----
-
-## 4장 · vita 의 컴파일드화 시도 — 여섯 축 전수 기록
-
-여기가 이 문서의 심장이다. **여섯 개 축을 전부 측정했고, 다섯 개가 죽었다.**
-그리고 죽는 방식이 전부 달랐다.
-
-### 4.0 측정 규율 (이게 결론보다 중요할 수 있다)
-
-> **가정한 payoff 위에 기계를 지으면 매번 틀린다.**
-
-이 세션은 이 명제를 **여섯 번** 확인했다. 각 축마다 "짓기 전에 재는" 프로브를 먼저 만들었고,
-그 프로브가 다섯 번 축을 죽였다. 죽은 축의 코드를 되돌린 것이 이 규율의 증거다.
-
-### 4.1 A 축 — 바이트코드 VM 을 CLI 에 노출 ✅ **유일한 성공**
-
-**바이트코드 VM**(bytecode VM)은 "완전한 기계어"와 "트리 순회 인터프리터"의 중간이다.
-프로세스 바디를 미리 단순한 명령 배열로 컴파일해 두고, 그걸 루프로 실행한다.
-
-vita 는 이미 이걸 갖고 있었다(Stage C). **그런데 켤 방법이 없었다** — `SimOpts::backend` 가
-라이브러리 전용이라 CLI 플래그가 없었다. **1.4–2.0× 가 잠긴 재고로 있었다.**
-
-노출하기 전에 먼저 잰 것: **P9 적중률**(VM 이 실제로 먹을 수 있는 프로세스 비율).
-
-| 설계 | VM 이 먹는 프로세스 | 배속 |
-|---|---|---|
-| 식-바운드 | 1/2 | 1.92× |
-| 구조-바운드 | 1/2 | 2.04× |
-| **SHA-256 라운드** | **2/3** | **1.49×** |
-| `examples/` 4종 | 50–60% | — |
-
-⭐ **중요한 반증**: "실 RTL 은 `function` 을 쓰니 적중률 0 일 수 있다"는 내 우려가 틀렸다.
-SHA-256 라운드를 인라인/`function` 두 형태로 재보니 **둘 다 2/3 · 0.67×/0.66×** — vita 가
-elaborate 에서 함수를 인라인하므로 바디에 호출이 안 남는다.
-
-**결과**: `--backend <interp|vm>` 출하. 재현: `cargo test -p sim-engine --test perf_baseline --release -- --ignored --nocapture perf_p9_coverage`
-
-### 4.2 B 축 — native-eval 잔여 lane ⏸ defer
-
-식 평가를 레지스터 머신으로 내리는 작업의 나머지 부분(>64bit signed, sysfunc, real 등).
-`real` lane 은 **구현했다가 0.90× 로 측정되어 폐기**됐다 — 실수 산술이 합성 RTL 핫패스에 사실상
-없기 때문. 저ROI 로 보류.
-
-### 4.3 C 축 — allow-list 확장 ❌ **상한은 컸는데 실현치가 0.2%**
-
-VM 이 못 먹는 바디는 `#delay`/`@`/`fork` 가 있는 것들 — 주로 **스티뮬러스**(테스트벤치)다.
-이걸 먹게 만들면(**resume-PC 상태기계** 필요) 상한이 2.84–4.24× 로 올라간다.
-
-**그런데 짓기 전에 물었다**: VM 이 *가벼운* 바디를 애초에 빠르게 만드는가?
-C 를 짓지 않고 답할 수 있다 — 이미 VM 이 먹는 바디에서 **활성당 작업량을 스윕**하면 된다.
-
-| 문장/활성 | vm/interp |
-|---|---|
-| **1** | **0.99×** |
-| **2** | **0.99×** |
-| 8 | 0.91× |
-| 64 | 0.75× |
-
-**활성당 고정비**(레지스터 파일 리스·프롤로그·디스패치 루프)가 8문장 아래에선 상각되지 않는다.
-스티뮬러스 바디는 1–3 문장이다 → **실현치 +0.2~0.3%**. 상한 4.24× 대비.
-
-**교훈**: **상한(ceiling)은 도달 가능 범위의 상계이지 예측이 아니다.**
-
-### 4.4 D 축 — levelize ❌ **1.00×, 그리고 진단이 틀렸었다**
-
-1장에서 본 levelize 를 실제로 구현했다. 정적 조합 랭크(`comb_ranks`)를 만들고, Active 배치를
-랭크 순으로 배출하고, 랭크 사이에 정착시켰다.
-
-**깊이 1~24 전 구간 1.00×.** 되돌렸다.
-
-왜? 이전 라운드가 기록해 둔 진단("사이클당 프로세스 활성이 `7 6 5 4 3 2 1` 삼각형")이 **틀렸다.**
-총 사이클을 고정하고 깊이만 스윕해 보니:
-
-| depth | 단일 모듈(cont-assign 없음) | 인스턴스 체인(포트 cont-assign) |
-|---|---|---|
-| 1 | 3.3 ms | 7.8 ms |
-| 24 | **31.5 ms** | **814.4 ms** |
-
-**순수 조합 체인은 깊이에 선형이다**(24단이 1단의 9.6× = 깊이 페널티 0). 게다가 wake 사슬이
-델타당 프로세스 1개라 **정렬할 배치가 애초에 없다.** 2차 비용은 **연속대입을 거칠 때만** 났다.
-
-### 4.5 ⭐ 그리고 진짜 원인을 찾았다 — dirty-settle ✅ **14.1×**
-
-**`settle_cont_assigns` 가 매 델타마다 전체 연속대입을 전수 재평가**하고 있었다.
-깊이 D 체인은 전파에 D 델타를 쓰고 O(D) 개의 대입을 들고 있으니 **O(D²)**.
-
-고친 것: **의존성이 움직인 대입만** 재평가(dirty 기반).
-
-| depth | before | after | 배속 |
-|---|---|---|---|
-| 6 | 71.2 ms | 13.3 ms | 5.4× |
-| 24 | **814.4 ms** | **57.9 ms** | **14.1×** |
-
-**2차 항이 사라졌다.** 그리고 결정적으로 — **이건 프로세스 실행 순서를 안 바꾼다.**
-의존성이 안 움직인 대입은 같은 값을 다시 계산하고, 쓰기 퍼널이 같은-값 쓰기를 변경 없이 버린다.
-즉 **건너뛴 방문은 관측상 no-op** 였다.
-
-> **교훈**: D 축이 겨냥한 문제는 실재했지만, **원인이 지목된 곳에 없었다.**
-> 그리고 진짜 원인은 정확성 대가를 한 푼도 안 쓰고 고칠 수 있었다.
-
-### 4.6 E 축 — 프로세스 융합 ❌ **가장 값비싼 실패**
-
-**융합**(fusion)이란 연결된 조합 프로세스들의 바디를 **하나의 활성**에서 연달아 실행하는 것이다.
-깊이 D 사다리가 D 개 활성 대신 1 개 활성이 된다.
-
-먼저 **짓기 전에** 물었다: 융합이 VM 수익을 올리는가? (동일 로직·동일 깊이, 세 형태)
-
-| depth | form | interp | vm | VM 배속 |
-|---|---|---|---|---|
-| 48 | instances | 143.4 ms | 120.4 | 1.19× |
-| 48 | separate | 73.2 ms | 49.0 | 1.49× |
-| 48 | **fused** | **39.8 ms** | **16.5** | **2.44×** |
-
-**두 축이 동시에 움직인다** — 인터프리터 자체 3.6×, 그 위 VM 수익 1.19→2.44×.
-
-그래서 구현했다. 안전 조건도 세웠다: 연결 넷을 **아무도 다른 이가 안 읽을 때만** 융합.
-게이트도 걸었다 — 코퍼스 72개 설계 × 양 백엔드 × 융합 on/off, stdout·VCD·요약 전부 동일.
-**통과했다.** 실측 1.7–2.5×.
-
-**그리고 틀렸다.**
-
-CLI 테스트를 쓰다가 발산을 잡았다:
-
-| stimulus | iverilog | nofuse | **fuse** |
-|---|---|---|---|
-| `#1 clk=1; #1 clk=0` | `00000288` | `00000288` ✓ | `00000288` ✓ |
-| **`clk=~clk; #1`** | `xxxxxxxx` | `xxxxxxxx` ✓ | **`0000017c`** ✗ |
-
-**뿌리** — 2.4 절에서 받아둔 그 사실이다:
-
-> unfused 는 깊이 D 체인이 **D 델타에 걸쳐** 전파된다. 같은 배치에서 깨어나 체인 **출력**을 읽는
-> 프로세스는 *부분 전파된* 값을 본다. 융합하면 한 활성에 완주하므로 *완전 전파된* 값을 본다.
-
-내 안전 조건은 체인의 **중간 넷**을 지켰지만 **출력이 언제 fresh 해지는가**를 지키지 않았다.
-그런데 그 출력의 독자가 바로 **flop** — 조합 cone 의 존재 이유다. "출력에 동시 독자 없음"을
-요구하면 **안전 집합이 빈다.**
-
-⭐ **게이트가 왜 못 잡았나**: 코퍼스 전 설계가 `#1 clk=1` 형태(초기화와 첫 엣지가 **다른 타임스텝**)
-였다. hazard 는 둘이 **같은 활성**에 있어야 드러난다.
-
-> **교훈 1**: **게이트는 그 안에 든 형태만큼만 강하다.**
-> **교훈 2**: 두 값 모두 IEEE 합법이다(§4 는 region 내 순서를 implementation-defined 로 둔다).
-> 틀린 게 아니라 **계약 위반**이었다.
-
-되돌렸다. 반례를 영구 핀으로 박았다(`a_comb_chain_output_is_sampled_mid_propagation`).
-
-### 4.7 F 축 — JIT / 네이티브 ❌ **두 번 기각**
-
-**JIT**(Just-In-Time compilation)은 실행 중에 기계어를 만들어 바로 실행하는 기법이다.
-
-먼저 기각 사유를 정정했다. 원래 결정 기록(P0a)은 네이티브 방출을 "런타임 rustc/cc + libloading
-필요"로 기각했는데, 그건 **소스 방출**에 특유한 이유다. **in-process JIT 은 후보에 없었다.**
-실측: `cranelift-jit 0.121.2` 의 `rust-version` 이 **1.85.0 — vita MSRV 와 정확히 일치**.
-
-그래서 재개방했다. 그리고 **Amdahl 상한**으로 판정했다.
-
-> **Amdahl 의 법칙**: 프로그램의 비율 `f` 만 빨라지게 만들 수 있다면, 그 부분을 무한히 빠르게
-> 해도 전체 배속의 상한은 `1/(1−f)` 다.
-
-어떤 바디-측 백엔드(더 빠른 VM · JIT · 네이티브)든 **같은 P9 allow-list 를 상속**하므로 `f` 가 같다.
-
-| shape | fuse | f | 상한 | VM 실배속 | **JIT 잔여** |
-|---|---|---|---|---|---|
-| in-module 48 | on | 71.2% | 3.47× | 2.13× | 1.63× |
-| **instances 48 (실 RTL)** | on | 33.1% | 1.49× | 1.41× | **1.06×** |
-
-**실 RTL 형태엔 사실상 여유가 없다.** 융합 후에도 `total 52.8 / vm 17.5 / fallback 1.2`
-→ **엔진이 64.6%**(넷 부기·propagate·NBA). 바디-측 백엔드가 못 건드리는 곳이다.
-
-게다가 E 가 되돌려졌으므로 f 상승(33→71%)도 없다 → **F 기각은 더 강해졌다.**
-
-### 4.8 여섯 축 정산표
-
-| 축 | 결과 | 죽은 방식 |
-|---|---|---|
-| **A** VM CLI 노출 | ✅ 출하 | — |
-| **B** native-eval lane | ⏸ defer | ROI |
-| **C** allow-list 확장 | ❌ | **상한은 컸으나 실현치 0.2%** |
-| **D** levelize | ❌ | **1.00× — 진단이 틀렸음.** 진짜 원인은 dirty-settle 로 14.1× |
-| **E** 융합 | ❌ | **값 발산 — 계약 위반** |
-| **F** JIT | ❌ | **잔여 1.06% — E 종속** |
-
-> ⚠️ **이 표는 초안 시점(축 탐색 단계)의 것이다.** 그 뒤 F 는 실제로 구현되어 다시 기각됐고(§9),
-> A 는 "출하"를 넘어 **기본 백엔드**가 됐으며, 표에 없는 레버 8개가 착지했다(§8.8). 최종 정산은 §8.8 과 §9.
-
-### 4.9 최종 정산 — 착지 11 · 반증 9
-
-**착지**(§8.8 표에 상세):
-
-```
-1.243 s  →  0.57 s     =  2.18×          iverilog 13: 0.58 s (+compile 0.03) → 추월
+## 3. Where the time goes
+
+### 3.1 Simulation, not elaboration
+
+`corpus-runner run` prints a phase split under its grade table, from a separate
+`--obs-dir` probe run — one sample per row, not the timed rounds, because the flag's file
+writes would otherwise be charged to every timed median. `elab_s` and `sim_s` are internal
+timers written into `run.json`, so the probe measures the same phases the timed rounds ran.
+
+| Workload | elab | sim | Front end |
+|---|---:|---:|---:|
+| biriscv | 0.022 s | 3.817 s | 1% |
+| verilog-ethernet | 0.011 s | 2.123 s | 1% |
+| picorv32 | 0.015 s | 4.131 s | 0% |
+| serv | 0.008 s | 6.893 s | 0% |
+| aes | 0.006 s | 2.598 s | 0% |
+| darkriscv | 0.003 s | 6.301 s | 0% |
+| sha256 | 0.002 s | 1.193 s | 0% |
+| keccak / keccak-arr | 0.001 s | 3.984 / 12.632 s | 0% |
+
+Every row is at least 99% simulation. Simulation speed is therefore the whole of the
+performance axis for these designs, and a front-end cost is arithmetically invisible in
+the corpus medians: an elaboration cost that triples on a declaration-heavy module moves
+every median in the table by less than the noise floor, while the same cost measures +36%
+on `biriscv` and +193% on a module of 20 000 plain `wire [31:0]` declarations when
+elaboration is timed on its own. Printing the split makes the number readable; it does not
+make the corpus gate it. A threshold needs a front-end-bound row — many declarations, a
+short simulation — with a pinned digest and an oracle, which no workload currently is.
+Tracked as `ELAB-PHASE-BLIND` in [ROADMAP](../ROADMAP.md) §5.b.
+
+### 3.2 The runtime value representation
+
+`sim_engine::Value` is 72 bytes: two 32-byte `Words` (each an inline `[u64; 2]` or a heap
+`Vec`, plus a discriminant), a width, a signedness and the `is_real` / `is_str` flags.
+**16 of those bytes are the 4-state data.** The other 56 are metadata — exactly what an
+interpreter needs at run time and what a compiled simulator bakes into generated code as
+literals.
+
+An execution-weighted census of every value returned by `eval_ctx`, over the eight
+then-running corpus workloads (instrumentation measured and reverted, not committed):
+
+```text
+                    definite   <=64 bits   BOTH     heap
+  picorv32           100.00%    100.00%    100.00%   0.00%
+  keccak             100.00%     99.95%     99.95%   0.05%
+  keccak-arr         100.00%     99.72%     99.72%   0.28%
+  biriscv             99.91%     99.94%     99.86%   0.00%
+  aes                 99.99%     97.49%     97.49%   0.00%
+  darkriscv           98.49%     97.89%     96.38%   0.00%
+  serv                89.66%    100.00%     89.66%   0.00%
+  sha256             100.00%     83.93%     83.93%  16.07%
 ```
 
-**측정으로 반증한 가설 9건.** 이 목록이 착지 목록만큼 중요하다:
-
-| 가설 | 반증 |
-|---|---|
-| levelize 하면 빨라진다 | **1.00×** — 진짜 원인은 dirty-settle 이었다 |
-| 프로세스 융합 | **값 발산** — 계약 위반, revert + 반례 핀 |
-| 2-state 로 가면 큰 레버 | **7%** (30% 게이트에 미달) |
-| P9 allow-list 확장 | **실현치 0.2%**, 그리고 시간 기준 상한은 **4.3%** |
-| `resize` fast path 가 레버 | **약 1%** |
-| 식 단위 JIT | **−15%** (경계 33 ns > 대상) |
-| 바디 단위 JIT | **−7%** (경계를 12배 줄여도) |
-| 평평한 아레나 | **0%** (20분 프로브가 며칠을 막았다) |
-| *(문서 오류)* vita 가 iverilog 보다 빠르다 | **cold 첫 실행을 쟀다** — 정정 후 당시엔 1.28× 느렸다 |
-
----
-
-## 5장 · 왜 실패했나 — 근본 원인 분석
-
-### 5.1 실패는 셋으로 분류된다
-
-1. **워크로드 사실**(C) — 스티뮬러스 바디는 원래 가볍다. 설계 문제가 아니다.
-2. **오진**(D) — 비용이 지목된 곳에 없었다. 고치자 정확성 대가 없이 14.1×.
-3. **계약**(E, 그리고 그에 종속된 F) — **여기만이 진짜 설계 결정이다.**
-
-### 5.2 그 계약이 무엇인가
-
-```
-IEEE 1800 §4 :  region 내 프로세스 실행 순서 = implementation-defined
-vita 의 계약  :  intra-delta 순서를 iverilog 에 핀   ← 블로커
-```
-
-**IEEE 가 명시적으로 열어둔 자유를, vita 가 스스로 닫아둔 것이다.**
-VCS·Xcelium·Verilator 는 전부 그 자유를 행사해서 levelize/fuse 한다 — 그게 그들이 빠른 이유다.
-
-### 5.3 왜 그 계약이 있는가 — 공짜가 아니다
-
-vita 의 G1 주장은 "correct-or-loud — 조용히 틀리지 않는다"이고, 그 이빨은 **iverilog 차분**에서
-나온다. 4,689 개 인라인 골든이 그 오라클로부터 저작됐다. **오라클을 느슨하게 하면 방법론 전체가
-약해진다.** 그게 vita 의 차별점이므로, 계약 파기는 성능 결정이 아니라 **제품 정체성 결정**이다.
-
-### 5.4 그리고 계약을 안 깨는 길이 있다
-
-E 의 코드와 사이클 모드의 코드는 **같다.** 사다리 위치만 정반대다.
-
-| | 되돌린 융합 | 선언된 사이클 모드 |
-|---|---|---|
-| 하는 일 | 조합 cone 원자 정착 | **동일** |
-| 약속 | iverilog 바이트 동일 | cone 원자 정착 |
-| 사용자가 아는가 | ❌ | ✅ |
-| 사다리 | **silent-wrong** | **correct-support**(다른 계약에 대해) |
-
-Verilator 가 정확히 이 거래를 하고 아무도 버그라 부르지 않는다 — **광고했으니까.**
-
----
-
-## 6장 · 방법론 — 어떻게 측정했나 (재사용 가능한 자산)
-
-결론보다 이게 더 오래 갈 수 있다.
-
-### 6.1 짓기 전에 재는 프로브
-
-| 프로브 | 무엇을 답하나 | 죽인 축 |
-|---|---|---|
-| `perf_p9_coverage` | VM 이 실제로 먹는 프로세스 비율 | (A 를 살림) |
-| `perf_work_per_body_crossover` | 활성당 몇 문장부터 VM 이 이득인가 | **C** |
-| `perf_depth_cost_shape` | 깊이 비용이 어디서 나는가 | **D** |
-| G0 스크래치 타이머 | `f` = 적격 바디 wall-clock 몫 | **F** |
-| `perf_fusion_spike` | 융합이 VM 수익을 올리는가 | (E 를 시작시킴) |
-| `perf_fusion_opportunity` | 실 설계에 융합 기회가 있는가 | (E 의 형태를 정함) |
-
-### 6.2 PRE 바이너리 3-way 차분
-
-`git archive <sha>` 로 이전 커밋을 빌드해서 **iverilog / PRE / POST** 를 나란히 비교한다.
-iverilog 단독 차분으로는 "false-loud 회귀"와 "원래 없던 기능"을 구분할 수 없다.
-
-### 6.3 스크래치 계기 — 재고 되돌린다
-
-`run_body` 두 arm 에 타이머를 걸어 `f` 를 쟀다. 관측자 효과 ±3% 를 함께 보고하고,
-**측정 후 전량 되돌렸다**(엔진 최핫 경로에 클럭 읽기 2개를 남길 수 없다).
-
-### 6.4 게이트의 함정 — 이 세션이 두 번 당했다
-
-1. **공허한 통과**: 융합 등가 게이트가 통과했는데, 코퍼스에 융합 대상 설계가 **0개**였다.
-   → **teeth 테스트**(게이트가 실제로 발화하는지 검사하는 테스트)를 먼저 쓰고 붉은 걸 확인.
-2. **형태 부족**: 코퍼스 전 설계가 `#1 clk=1` 형태라 E 의 hazard 를 못 잡았다.
-   → **반례 형태를 먼저 코퍼스에 넣고** 시작해야 한다.
-
-> **게이트는 그 안에 든 형태만큼만 강하다.**
-
-### 6.5 실패한 작업이 부품을 남긴다
-
-`comb_ranks` 는 **1.00× 로 기각된 levelize 의 유산**인데, 사이클 모드(7장)의 **스케줄링
-원시연산 그 자체**다. 죽은 축의 코드를 전부 버리지는 않는다.
-
----
-
-## 7장 · 앞으로 — 세 갈래
-
-| 갈래 | 내용 | 기본 모드 정확성 | 공수 |
-|---|---|---|---|
-| **①** | 바이트코드 VM | ✅ 무손상 | **완료** |
-| **②** | 계약 파기 — 기본 모드 levelize/fusion | 🔴 약화(골든 4,689 재판정) | L + 무한 재판정 |
-| **③a** | 완전 사이클 엔진 (Verilator 정공법) | ✅ 무손상 | **XL**(엔진 2개, TB 의미론 신규) |
-| **③b** | **하이브리드 — 이벤트 커널 유지, 조합 cone 만 원자 정착** | ✅ 무손상 | **~3–4 세션** ✅ 권장 |
-
-### 7.1 3b 가 왜 값싼가
-
-되돌린 융합이 **정확히 3b 의 변환**이다. 구현이 git 이력에 있다. TB 는 이벤트구동 그대로라
-`#delay`/`fork`/SVA 재정의가 필요 없다. 실질 신규분은 하나뿐 —
-
-### 7.2 hazard 검출기 — 이 설계의 값어치 전부
-
-선언만 하고 끝내면 correct-or-loud 를 모드 밖으로 민 것에 불과하다. 사용자는 자기 설계가
-영향권인지 여전히 모른다.
-
-> **검출 대상**: 조합 cone 의 **출력**을 읽는 프로세스가, 그 cone 의 **입력**이 바뀌는 것과
-> **같은 배치에서** 활성화될 수 있는가?
-
-과대근사면 안전하다(과잉 경고는 무해, 놓치면 silent). 그리고 결정적으로:
-
-> **후보 0 ⇒ 두 모드가 바이트 동일해야 한다** — 이게 **검출기 완전성 게이트**다.
-> 검출기와 게이트가 서로를 검증한다.
-
-### 7.3 선결 측정 (착수 금지 조건)
-
-| # | 측정 | 통과 기준 |
-|---|---|---|
-| M1 | 실 대형 RTL 의 조합 깊이 | ≥6 cone 실재 |
-| M2 | 그 설계의 `f` | 융합 시 유의미 상승 |
-| M3 | hazard 후보 수 | 0 또는 소수 |
-
-**Phase 1 결과 (2026-08-01, PicoRV32)** — `bench/` 에 실물 오픈소스 코어를 넣고 측정:
-
-| | 측정값 | 판정 |
-|---|---|---|
-| 규모 | 43 프로세스 · 562 넷 · 152 연속대입 | — |
-| **M1** 조합 깊이 | **1** (최초 `cyc` 는 내 분석 결함이었음) | ⚠️ **재해석** |
-| **M2** P9 커버리지 | **100%** | ✅ **PASS**(예상 초과) |
-| **M3** 융합 후보 | **4** / 43 | ❌ **FAIL** |
-
-⭐ **M2 = 100% 가 이 세션 전체에서 가장 큰 긍정 발견이다.** 합성 벤치는 50–67% 였는데, **테스트벤치가 없는 실물 DUT 는 전 프로세스가 VM 적격**이다 — `#delay` 를 가진 스티뮬러스 절반이 애초에 없기 때문. `--backend vm` 의 가치가 측정했던 것보다 크다.
-
-⭐ **M1 의 "순환"은 내 분석 결함이었고, 고치자 답이 바뀌었다.** 프로세스가 **자기가 쓰는 넷을 읽으면**(`always_comb begin y = a; z = y+1; end` — PicoRV32 43개 중 4개가 그렇다) relaxation 이 무한 상승한다: `rank[p] ≥ net_rank[y]` 와 `net_rank[y] ≥ rank[p]+1` 이 동시에 성립할 수 없다. 자기가 쓴 넷을 읽는 건 **한 활성 안의 자기 중간값**이지 다른 생산자를 기다리는 게 아니므로 의존이 아니다. 제외하니 **M1 = 1**.
-
-## ⭐⭐ 그리고 이것이 D/E 축 전체를 재해석한다
-
-**M1 = 1 은 "얕다"가 아니라 "프로세스 사이에 조합 사슬이 없다"는 뜻이다.**
-
-PicoRV32 는 몇 개의 **큰 `always @*` 블록**으로 쓰였고, 각 블록은 레지스터를 읽어 자기 출력을 계산한다. 조합 작업은 **블록 안**에 있지 **블록 사이**에 있지 않다.
-
-| | 합성 벤치 | 실물 RTL(PicoRV32) |
-|---|---|---|
-| 조합 작업의 위치 | 프로세스 **사이** (체인) | 프로세스 **안** (큰 블록) |
-| 프로세스간 깊이 | 24, 48 | **1** |
-| 융합 후보 | 23/24 | **4/43** |
-| P9 커버리지 | 50–67% | **100%** |
-
-**D(levelize)와 E(융합)는 프로세스간 깊이를 겨냥한다. 실물 RTL 에는 그게 없다.**
-반대로 **A(VM)는 프로세스 안의 작업을 겨냥하고, 실물 RTL 은 정확히 거기에 작업을 둔다** — 게다가 바디가 크므로 C-GAIN 곡선의 **오른쪽**에 있다.
-
-⇒ 여섯 축 중 유일하게 살아남은 A 가, 우연이 아니라 **실물 RTL 의 구조상 옳은 축**이었다.
-
-⇒ **3b 는 이 설계에서 근거가 없다**(융합 대상 4개). 다만 그 이유가 "3b 가 나쁘다"가 아니라 **"실물 RTL 이 융합할 형태가 아니다"** 로 바뀌었다.
-
-✅ **닫힘 (실측)**. 실물 DUT + 테스트벤치(PicoRV32, 40000 cycle)에서 잰 값:
-
-| | |
-|---|---|
-| P9 적격 템플릿 | **22 / 25 = 88%** |
-| VM 이 먹은 **활성화** | **542,883 / 662,889 = 81.9%** |
-| 바디 리전이 wall-clock 에서 | **약 53%** (VM 기준) |
-
-즉 `f` 는 합성 벤치의 31–55% 보다 **컸다**(81.9%). 그런데도 F 는 다시 기각됐다 — 이유가 `f` 가 아니었기
-때문이다. **경계 비용이 대상보다 컸다**(§9.3). 낮은 `f` 위에서 내려졌던 기각이, 높은 `f` 위에서 **더 확실하게**
-재확인된 셈이다.
-
-한 가지 덧붙일 것: 폴백되는 18.1% 의 활성화는 시간으로는 **4.3%** 뿐이다(건당 257 ns vs VM 바디 709 ns).
-`#delay` 를 품어 폴백되는 바디는 대개 **한 걸음 딛고 바로 멈추는 테스트벤치 코드**지 계산하는 코드가 아니다.
-→ **P9 커버리지를 넓히는 축(C)은 상한이 4.3% 다.**
-
-### 7.4 그래도 남는 천장
-
-융합 후에도 실 RTL 은 **엔진이 64.6%** 다. 더 가려면 **넷 개수 축소**가 필요하고, 그건
-`--probe`·계층 VCD·`%m`·계층 참조가 지목하는 대상을 지운다 → **G2 관찰성과 충돌**.
-단 **모드 경계에서 스코프 가능**하다.
-
-✅ **닫힘 (실측)**. 실물 설계에서 리전을 갈라 보면(0.58 s 시점, 최적화 이후):
-
-```
-native eval 전부   130 ms  (22%)   ← ablation 으로 정확히 측정(프로그램을 두 번 돌린 차이)
-startup(parse+elaborate) ~85 ms  (14%)   ← 짧은 런에서는 지배적, 시뮬 속도 레버는 아님
-write_lvalue        ~57 ms  (10%)
-schedule_nba        ~22 ms   (4%)
-resolve_offsets      10 ms   (2%)
-enter_body           10 ms   (2%)
-스케줄러 코어(미분해) 나머지
-```
-
-**"엔진이 64.6%" 라는 초안의 관측은 여전히 유효하고, 그 안에 단일 레버가 없다는 것도 유효하다.**
-다만 §8.8 이 보여주듯 그것이 "할 수 있는 게 없다"를 뜻하지는 않았다 — 위 항목 중 절반 이상이
-이 세션에서 실제로 줄었다.
-
-넷 개수 축소가 G2 관찰성과 충돌한다는 지적은 그대로 유효하며, **모드 경계에서 스코프 가능**하다는 결론도 그대로다.
-
----
-
-## 8장 · ⭐ "고르게 퍼져 있다 · 단일 레버가 없다 · 전부 4-state 비트 조작이다"
-
-이 문장은 초안 §4~§6 이 결론처럼 던지고 지나간 것인데, **배경지식 없이는 한 글자도 이해할 수 없다.**
-여기서 처음부터 쌓는다. 아무것도 모른다고 가정한다.
-
-그리고 이 장의 끝에 **반전**이 하나 있다. 저 문장은 **맞았지만**, 거기서 흔히 내리는 결론
-("그러니 할 수 있는 게 없다")은 **틀렸다.** 이 세션이 그것을 실측으로 뒤집었다.
-
----
-
-### 8.1 4-state 가 무엇이고, 왜 평면이 두 개인가
-
-#### 8.1.1 디지털 신호가 왜 0/1 만으로 부족한가
-
-교과서적으로 디지털 회로의 선(wire)은 0 아니면 1 이다. 그런데 **실제 칩과 그 시뮬레이션에는 그 둘로
-표현할 수 없는 상태가 둘 더 있다.**
-
-**`x` — 모른다(unknown).** 전원을 켠 직후 플립플롭은 0 일 수도 1 일 수도 있다. 물리적으로는 둘 중 하나지만
-**설계자는 어느 쪽인지 모르고, 알아서도 안 된다.** 리셋 전에 그 값을 읽는 회로는 버그다. 시뮬레이터가 이걸
-"편의상 0"으로 채우면 그 버그가 **시뮬레이션에서는 안 보이고 실제 칩에서만 터진다.** 그래서 `x` 라는
-"모른다"를 값으로 들고 다니며, `x` 가 섞인 연산의 결과도 `x` 로 오염시켜 **버그가 눈에 보이게** 한다.
-
-```verilog
-reg [7:0] r;          // 리셋 전: 8비트 전부 x
-if (r == 8'd0) ...    // 이 비교의 답은 참도 거짓도 아니다 → x
-```
-
-**`z` — 아무도 안 구동한다(high-impedance).** 여러 회로가 하나의 선을 공유하고 자기 차례에만 구동하는
-구조(버스)에서, 자기 차례가 아닌 회로는 선을 **놓는다**. 그 상태가 `z` 다. `z` 는 "모른다"가 아니라
-**"내가 안 잡고 있다"** 이고, 그래서 `x` 와 구분해야 한다 — 둘을 합치면 "아무도 안 잡은 선"과 "값이 충돌한 선"을
-구별할 수 없어져 버스 설계의 오류를 놓친다.
-
-> 정리: **`0`, `1`, `x`, `z` 네 값**. 이것이 **4-state** 다. `0/1` 만 쓰는 것이 **2-state**.
-
-#### 8.1.2 네 값을 어떻게 저장하는가 — 두 개의 평면
-
-값이 넷이니 **비트 하나를 표현하는 데 2비트**가 필요하다. vita 는 이렇게 나눈다:
-
-| | `val` 비트 | `unk` 비트 |
-|---|---|---|
-| `0` | 0 | 0 |
-| `1` | 1 | 0 |
-| `x` | 0 | **1** |
-| `z` | 1 | **1** |
-
-핵심은 이 2비트를 **비트마다 나란히 두지 않는다**는 것이다. 32비트 신호라면 `val` 32비트를 한 워드에,
-`unk` 32비트를 **다른 워드에** 모아 둔다. 이것을 **평면(plane)** 이라고 부른다.
-
-```
-32비트 신호 하나 =  val: [b31 b30 ... b1 b0]   ← 워드 하나
-                   unk: [b31 b30 ... b1 b0]   ← 또 다른 워드 하나
-```
-
-왜 이렇게 하는가? **한 번의 CPU 명령이 64비트를 동시에 처리하게 하려고.** 만약 2비트를 나란히 뒀다면
-(`v0 u0 v1 u1 ...`) 32비트 AND 하나를 하려고 비트를 하나씩 꺼내 32번 반복해야 한다. 평면으로 나누면
-`val` 워드끼리, `unk` 워드끼리 **통째로 한 명령에** 처리할 수 있다.
-
-즉 **평면 분리는 이미 최적화의 결과**다. 하지만 그 대가가 이 장의 주제다: **모든 것이 두 벌이 된다.**
-
----
-
-### 8.2 그 인코딩이 모든 연산을 어떻게 바꾸는가
-
-#### 8.2.1 2-state 에서 AND 는 명령 하나다
-
-```rust
-let r = a & b;      // CPU 명령 1개. 끝.
-```
-
-#### 8.2.2 4-state 에서 AND 는 무엇을 해야 하나
-
-먼저 **의미**부터. 4-state AND 의 진리표는 이렇다:
-
-| AND | 0 | 1 | x | z |
-|---|---|---|---|---|
-| **0** | 0 | 0 | **0** | **0** |
-| **1** | 0 | 1 | x | x |
-| **x** | **0** | x | x | x |
-| **z** | **0** | x | x | x |
-
-굵게 칠한 칸이 요점이다. **한쪽이 확실히 0 이면, 다른 쪽이 무엇이든 결과는 0 이다.** "모른다"가 섞여 있어도
-답은 확실하다. 반대로 **양쪽 다 확실히 1 이어야 결과가 1** 이고, 그 외에는 전부 `x` 다.
-
-그래서 계산이 이렇게 갈린다:
-
-- **확실히 0 인 자리**(known0) = 왼쪽이 확실히 0 **이거나** 오른쪽이 확실히 0
-- **확실히 1 인 자리**(known1) = 왼쪽이 확실히 1 **이고** 오른쪽도 확실히 1
-- **나머지 전부** = `x`
-
-이걸 그대로 옮긴 것이 vita 의 실제 코드다(`crates/sim-engine/src/value.rs`):
+83.9% to 100% of evaluated values are simultaneously definite and at most 64 bits —
+geometric mean 95.7%, median 99.7%. That is the shape the compiled `wprog` lane already
+carries: `W = (val, unk)` is 16 bytes and its 2-state lane is a bare `u64` at 8. The
+representation the workloads need is already in the tree; what limits it is how much of a
+design reaches it.
+
+Three readings follow, and each rules out a candidate lever:
+
+- **The heap is not the cost.** `Value`'s `Vec` spill fires on 0.00% of evaluations in six
+  of eight designs; `sha256` is the exception at 16%, from its 512-bit blocks. The 72 bytes
+  move by value, inline.
+- **A lazy unknown plane is not the prize.** At ≤64 bits both planes are inline, so the
+  `unk` plane costs no allocation — 16 of the 72 bytes and some ALU work. The 56 metadata
+  bytes dominate, and a compiled program does not carry them.
+- **A global 2-state mode with an x trip-wire is the wrong granularity.** `serv` is the
+  floor at 89.66% definite and its x is real, so such a mode would trip immediately after
+  reset and stay tripped. The per-operation lane is the right granularity and already
+  exists.
+
+One column of the wider census is a biased subsample and must not be read as a design-wide
+x/z rate: `genpath_reads` (aes 11.65% definite, sha256 39.54%) counts only `read_net`, the
+general `Value`-returning path, which is reached exactly when the fast `read_scalar_words`
+path declines. Those nets have already fallen off the fast lane, so they over-represent
+x/z by construction. The `eval_ctx` column has no such bias — it sees every value.
+
+### 3.3 What two planes cost per operation
+
+A 4-state bitwise AND over one word is thirteen machine operations, against one for
+2-state:
 
 ```rust
 pub(crate) fn and_w(av: u64, au: u64, bv: u64, bu: u64) -> (u64, u64) {
@@ -745,87 +261,29 @@ pub(crate) fn and_w(av: u64, au: u64, bv: u64, bu: u64) -> (u64, u64) {
 }
 ```
 
-`!au & !av` 를 읽는 법: `au` 는 "모른다 평면"이므로 `!au` 는 **"안다"**. `!av` 는 "값이 0". 둘을 AND 하면
-**"확실히 0"** 이다. 나머지도 같은 방식으로 읽힌다.
+`!au` reads as "known", `!av` as "the value bit is 0", so `!au & !av` is "definitely 0".
+`or_w`, `xor_w`, `xnor_w` and `not_w` have the same shape.
 
-#### 8.2.3 명령을 세어 보자
+Arithmetic is cheaper, not dearer, because a partially known sum is impossible — any `x` in
+either operand poisons the whole result, so the implementation is one branch plus a 2-state
+add. Operations are not uniformly expensive.
 
-| | 연산 |
+Three further sites double because the planes do:
+
+| Site | Why it is two sets of work |
 |---|---|
-| `!au` | 1 |
-| `!av` | 2 |
-| `& ` | 3 |
-| `!bu` | 4 |
-| `!bv` | 5 |
-| `& ` | 6 |
-| `\|` → known0 | 7 |
-| `!au & av` (`!au` 재사용) | 8 |
-| `!bu & bv` (`!bu` 재사용) | 9 |
-| `& ` → known1 | 10 |
-| `!known0` | 11 |
-| `!known1` | 12 |
-| `& ` → unk | 13 |
+| `mask_top` | a signal width is rarely a multiple of 64, so the unused high bits of the last word must be cleared after every operation — once for `val`, once for `unk` |
+| `resize` | widening sign-extends the top bit of `val` *and* the top bit of `unk`, so an `x` sign bit widens to `x`; narrowing truncates both |
+| whole-net read | two loads, two masks, and one `Value` construction |
 
-**AND 하나가 CPU 명령 13개다.** 2-state 라면 1개다. 그리고 이건 AND 하나 얘기이고,
-`or_w`/`xor_w`/`xnor_w`/`not_w` 가 전부 같은 구조를 갖는다.
+An instruction count is not a time measurement, and this is where that matters most:
+removing the work the `unk` plane causes measures about **7%**, far below the 30% bar set
+for taking the trade, because the second plane is usually all zeros, stays in cache, and
+`& 0` retires almost free on a superscalar core.
 
-> **여기가 4-state 시뮬레이터의 근본 비용이다.** 알고리즘이 나빠서도, 코드가 게을러서도 아니다.
-> **정확하려면 치러야 하는 값**이다.
+### 3.4 The profile is flat
 
-#### 8.2.4 산술은 더 나쁘다 — 아니, 더 낫다
-
-덧셈은 어떨까? 4-state 덧셈은 **한 비트라도 `x` 면 결과 전체가 `x`** 다(자리올림이 전파되므로).
-그래서 오히려 단순하다:
-
-```rust
-if (au & m) != 0 || (bu & m) != 0 {
-    (0, m)                      // 어디든 x 가 있으면 전부 x
-} else {
-    (av.wrapping_add(bv) & m, 0) // 아니면 평범한 덧셈
-}
-```
-
-비트연산과 달리 산술은 "부분적으로 안다"가 불가능해서 **분기 하나 + 2-state 덧셈**이면 된다.
-이것이 뒤에서 중요해진다 — **모든 연산이 똑같이 비싼 게 아니다.**
-
----
-
-### 8.3 왜 `mask_top` / `resize` / `net 읽기` 가 전부 "두 배"인가
-
-평면이 둘이라는 사실은 연산에만 영향을 주는 게 아니다. **값을 만지는 모든 곳**에서 두 벌이 된다.
-
-#### 8.3.1 `mask_top` — 남는 비트 지우기
-
-Verilog 신호는 폭이 5비트, 12비트처럼 64의 배수가 아닌 경우가 대부분이다. 그런데 저장은 64비트 워드
-단위다. 그래서 5비트 신호의 워드에는 **쓰이지 않는 상위 59비트**가 있고, 연산 결과가 그 자리를 오염시키면
-안 된다(예: `not_w` 는 `!0 & !0 = 1` 이라 상위를 전부 1로 만든다).
-
-그래서 연산이 끝날 때마다 상위를 지운다:
-
-```rust
-let m = low_mask(w);        // 하위 w 비트만 1
-(rv & m, ru & m)            // ← 두 번. val 한 번, unk 한 번.
-```
-
-**마스킹 하나가 두 개의 AND 다.**
-
-#### 8.3.2 `resize` — 폭 맞추기
-
-`wire [31:0] a = b;` 에서 `b` 가 8비트라면 32비트로 늘려야 한다. 부호 있는 값이면 최상위 비트를 복제해
-채우고(sign-extend), 없으면 0으로 채운다. 줄일 때는 자른다.
-
-문제는 **`unk` 평면도 똑같이 늘리거나 잘라야** 한다는 것이다. 그리고 sign-extend 는 `val` 뿐 아니라
-**`unk` 의 최상위 비트도 복제**해야 한다 — 부호 비트가 `x` 였다면 늘어난 자리도 전부 `x` 여야 하니까.
-즉 확장 로직이 **두 벌 돌고, 두 번째 벌은 첫 번째와 조건이 얽혀 있다.**
-
-#### 8.3.3 넷 읽기 — 저장소에서 값 꺼내기
-
-신호 하나를 읽으면 `val` 워드들과 `unk` 워드들을 **각각** 꺼내 `Value` 구조체를 만든다. 폭이 64 이하면
-워드 하나씩이지만, 그래도 **두 번의 로드, 두 번의 마스킹, 그리고 구조체 하나 생성**이다.
-
-#### 8.3.4 그래서 프로파일이 이렇게 생겼다
-
-세션 초반, 실물 설계(PicoRV32)의 자체시간(self-time) 상위:
+Self-time profile of a real design (picorv32), before the specialised lane existed:
 
 ```
 eval          26.7%
@@ -835,602 +293,396 @@ mask_top      13.0%
 eval_binary   12.5%
 ```
 
-**다섯 항목이 전부 "평면이 둘이라서 두 벌 하는 일"이다.** 이것이 "**전부 4-state 비트 조작이기 때문이다**"의 뜻이다.
+By Amdahl's law, making a fraction `f` of a run infinitely fast bounds the whole speedup at
+`1 / (1 − f)`:
 
----
-
-### 8.4 프로파일을 어떻게 읽는가 — "16% 니까 고치면 16% 빨라진다"가 틀린 이유
-
-이 절은 이 문서에서 가장 실전적인 부분이다. **프로파일 숫자를 오독하는 것이 이 세션에서 가장 많은 시간을 날렸다.**
-
-#### 8.4.1 함정 1 — 심볼 귀속은 인라인된 코드까지 모은다
-
-Rust 는 작은 함수를 호출 지점에 **인라인**한다. 그러면 그 코드는 **호출한 함수의 이름으로** 프로파일에 잡힌다.
-`resize 16.6%` 는 "`resize` 라는 함수가 16.6%" 가 아니라 **"`resize` 라는 이름으로 귀속된 기계어가 16.6%"** 이고,
-그 안에는 `resize` 가 인라인해 들어간 마스킹·복사·분기가 전부 섞여 있다.
-
-**그래서 "`resize` 를 없앤다"는 것이 무슨 뜻인지 자체가 불분명하다.** 없앨 대상이 함수가 아니라 *일*이기 때문이다.
-
-#### 8.4.2 함정 2 — 계측이 대상보다 비쌀 수 있다
-
-이 세션에서 실제로 두 번 당했다.
-
-- 리전별 타이머를 **바디마다** 붙였더니 `bodies = 3762 ms` 가 나왔다. 그런데 **계측 안 한 같은 런의
-  전체 wall-clock 이 1234 ms** 였다. 타임스탬프 480만 개가 측정 대상보다 컸다.
-- `write_lvalue` 에 타이머를 붙였더니 121 ms 가 나왔는데, 호출 400만 회 × 타이머 쌍 ≈ **오버헤드만 64 ms** 였다.
-
-> **교훈**: 호출 횟수가 많은 것을 타이머로 재면 안 된다. **ablation**(그 일을 두 번 시키고 wall-clock 차이를
-> 보는 것)을 쓴다 — 그건 계측 코드가 0이다. 이 문서 §6 의 방법론이 그것이다.
-
-#### 8.4.3 함정 3 — 상한과 실현치는 다르다
-
-`resize` 를 통째로 없애도 16.6% 만큼 빨라지지 않는다. `resize` 가 하던 일(마스킹·확장)은
-**여전히 누군가 해야 하기 때문**이다. 없앨 수 있는 건 그 일 중 *중복분*뿐이다.
-
-실제로 이 세션은 `resize` 에 한 워드 fast path 를 넣어 봤고 — **약 1%** 였다.
-
----
-
-### 8.5 "단일 레버가 없다"의 정확한 뜻 — 숫자로
-
-**레버(lever)** 란 "그것 하나를 당기면 전체가 크게 움직이는 것"이다. 비용이 한 곳에 몰려 있으면 레버가 있다.
-
-Amdahl 의 법칙: 전체의 비율 `f` 를 차지하는 부분을 **무한히 빠르게** 만들어도, 전체 배속의 상한은
-
-```
-1 / (1 − f)
-```
-
-이다. 이 식을 위 프로파일에 넣어 보자.
-
-| 항목 | `f` | 그것을 **공짜로 만들었을 때** 상한 |
-|---|---|---|
+| Item | `f` | Ceiling if it became free |
+|---|---:|---:|
 | `eval` | 26.7% | 1.36× |
 | `resize` | 16.6% | 1.20× |
 | `netread` | 13.1% | 1.15× |
 | `mask_top` | 13.0% | 1.15× |
 | `eval_binary` | 12.5% | 1.14× |
 
-**어느 하나를 완전히 없애도 1.2× 언저리다.** 그리고 실제로 없앨 수 있는 건 그중 일부뿐이므로
-실현치는 몇 %가 된다 — 실측이 정확히 그랬다(`resize` fast path ≈ 1%).
+No single item is worth more than about 1.2×, and only part of each is removable — a
+one-word fast path in `resize` measures about 1%. That is what "the cost is evenly spread"
+means, and it is an observation about where cost sits, not a verdict that nothing can be
+done: the same profile says 4-state arithmetic is roughly a quarter of the run and the
+other three quarters are elsewhere.
 
-**이것이 "고르게 퍼져 있다 · 단일 레버가 없다"의 뜻이다.** 비용이 최대 항목조차 27% 이고,
-그 아래로 완만하게 흩어져 있다. 큰 배속을 원한다면 **하나를 고쳐서는 안 된다.**
+Three ways to misread such a profile, each of which has produced a wrong number here:
+
+1. **Symbol attribution absorbs inlined code.** `resize 16.6%` means "machine code
+   attributed to the name `resize`", including everything inlined into it. What can be
+   removed is duplicated *work*, not a function.
+2. **Instrumentation can cost more than its subject.** Per-body region timers reported
+   `bodies = 3762 ms` on a run whose uninstrumented wall clock was 1234 ms — 4.8 million
+   timestamps outweighed the subject. A timer on `write_lvalue` reported 121 ms of which
+   about 64 ms was the timer pair itself, at four million calls. Use ablation instead:
+   make the engine do the work twice and take the wall-clock difference, which adds no
+   instrumentation.
+3. **A ceiling is an upper bound, not a prediction.** See §4, where a 4.24× ceiling
+   realised 0.2%.
+
+### 3.5 Compiled-lane admission
+
+Inside the default backend, an expression compiles to a `wprog` program when its shape and
+width are in the specialised lane; otherwise it declines to the generic evaluator.
+An execution-weighted census of `compile` requests (instrumentation measured and reverted,
+not committed) gives the per-design admission rate. The compile cache runs `compile` once
+per `(eid, w, signed)`, so these counts are execution weight rather than distinct
+expressions.
+
+| Design | Admitted | Declined | Decline rate |
+|---|---:|---:|---:|
+| keccak | 1 712 105 | 1 546 018 | 47.5% |
+| darkriscv | 10 527 654 | 7 025 920 | 40.0% |
+| aes | 592 296 | 387 885 | 39.6% |
+| picorv32 | 7 889 493 | 1 022 255 | 11.5% |
+| biriscv | 5 015 105 | 196 393 | 3.8% |
+| sha256 | 3 312 068 | 50 003 | 1.5% |
+| serv | 72 500 547 | 1 043 305 | 1.4% |
+
+A decline count is meaningless without the admitted count beside it: `serv`'s 500 015
+requests on a single expression are enormous next to `aes`'s whole decline budget and
+negligible against `serv`'s own 72.5 million admissions. `serv` is the least promising
+target for lane coverage and is also one of the two designs vitamin loses on, which
+locates its cost somewhere other than lane coverage.
+
+The declines that remain are documented and deliberate, or are filed axes:
+
+- A `Select` with a runtime offset (`x[i +: 4]`) is not in the lane, and a bit-serial core
+  does it constantly.
+- A `Ternary` evaluates both branches in the compiled lane, which has no control flow, so a
+  branch holding an out-of-range array read would report an access the generic path never
+  performs. The lane declines rather than report it.
+- `Call` at width 64 is the frame axis (§2.4).
+- A root context width above 64 bits is the wide lane; `aes` is 387k requests of it.
+
+### 3.6 What a compiled simulator does differently
+
+For one nonblocking assignment `a <= b`, vitamin performs: construction of a 72-byte
+`Value`; resolution of an `Lvalue` through a chunk array and an `Offsets` table; a write
+funnel that asks, at run time, whether the destination is real, frame-local, a handle,
+2-state, an array, and how wide — eleven branches and six side tables; a push of a ~112-byte
+`NbaUpdate`; and a run-time lookup of the wake set through `net_to_edge`, the dirty list
+and waiter vectors.
+
+Code generated by a compiled simulator performs two stores. Width, signedness, kind,
+array-ness and the wake set were all answered when the code was generated, and the
+generated code does not contain the questions. A net is a variable, not a table entry, and
+can live in a register.
+
+The relevant difference is not the instruction count but the presence of the questions.
+vitamin's branches are the price of run-time generality, and the limit reached by adding a
+code generator on top of the existing representation is that generality, not the executor.
+A real tier-3 backend is a second engine, and it requires four things together — static
+net allocation, width-specialised operations, erasure of the schedule lookup into direct
+calls or static bits, and a specialised NBA record — none of which pays alone. The
+direction is surveyed in
+[preview/21 — tier-3 native backend](../preview/21-tier3-native-backend.md).
 
 ---
 
-### 8.6 그래서 왜 `unk` 평면 제거(2-state)가 "유일한 구조적 레버"로 보였나
+## 4. Accelerations evaluated, and the standing verdict on each
 
-위 다섯 항목을 다시 보면 — `eval`, `resize`, `netread`, `mask_top`, `eval_binary` — **전부 같은 원인을 공유한다.**
-평면이 둘이라서 두 벌 한다는 것.
+Each row states what was measured, the verdict that stands today, and the condition that
+reopens it.
 
-레버의 정의가 여기서 나온다: **하나를 당겼을 때 여럿이 동시에 줄어드는 것.** `unk` 평면을 없애면
-
-- AND 가 13개 명령에서 1개로
-- 마스킹이 두 번에서 한 번으로
-- `resize` 의 확장 로직이 두 벌에서 한 벌로
-- 넷 읽기가 로드 두 번에서 한 번으로
-
-즉 다섯 항목이 **한꺼번에** 줄어든다. 개별 상한은 1.15× 인데 합치면 훨씬 크다. **그래서 유일한 구조적 레버로 보였다.**
-
-#### 8.6.1 그런데 실측해 보니 7% 였다
-
-이 세션은 그 가설을 그냥 믿지 않고 쟀다(M1 실험). `unk` 평면을 다루는 일을 제거했을 때 실제로 줄어든 것은
-**약 7%** 였고, 착수 판단 기준으로 잡았던 30% 에 한참 못 미쳤다.
-
-왜인가? **평면이 둘이어도 두 번째 평면은 대개 전부 0 이기 때문**이다. 실제 RTL 은 리셋 이후 `x` 가 거의 없다.
-`unk` 워드는 0으로 채워진 채 캐시에 붙어 있고, `& 0` 은 CPU 가 아주 빨리 한다. **"명령 수가 13배"가
-"시간이 13배"를 뜻하지 않는다** — 분기 예측과 슈퍼스칼라 실행이 그 대부분을 흡수한다.
-
-> **§8.4 의 교훈이 여기서도 반복된다: 명령을 세는 것은 시간을 재는 것이 아니다.**
-
----
-
-### 8.7 2-state 로 가면 무엇을 잃는가
-
-가령 7% 가 아니라 30% 였다고 하자. 그래도 대가가 있다.
-
-**X-optimism.** `x` 가 없으면 미초기화 신호가 0 으로 읽힌다. 그러면
-
-```verilog
-if (r == 0) do_something();   // r 이 리셋 전 미정이어도 "0 이니까 참"
-```
-
-**리셋 버그가 시뮬레이션에서 통과한다.** 실제 칩에서는 r 이 1 일 수도 있으므로 동작이 갈린다.
-이것을 "낙관적으로 본다"고 해서 X-optimism 이라 부른다.
-
-**사인오프 부적합.** 그래서 4-state 시뮬레이터(VCS·Xcelium·icarus)와 2-state 시뮬레이터(Verilator)는
-**용도가 다르다.** Verilator 는 이 거래를 명시적으로 했고 — 그래서 매우 빠르고 — 아무도 그것을 버그라
-부르지 않는다. 다만 **칩을 제작에 넘기기 전 최종 검증(sign-off)에는 쓰지 않는다.**
-
-vita 의 목표(G1: icarus·verilator·xcelium·vcs 급 정확성, correct-or-loud)는 4-state 쪽이다.
-**그래서 이 레버는 목표와 충돌한다.** 7% 라는 실측이 아니었어도 기본값으로 삼을 수는 없었다.
-
----
-
-### 8.8 ⭐ 그런데 결론이 뒤집혔다 — 단일 레버가 없다 ≠ 할 수 있는 게 없다
-
-여기까지가 초안이 남긴 이야기다. **"고르게 퍼져 있다, 단일 레버가 없다"는 맞다.** 이 세션이 다시 확인했다.
-
-그런데 초안은 거기서 암묵적으로 이렇게 이어갔다: *"그러니 큰 개선은 구조를 바꿔야만 나온다."*
-**그 부분이 틀렸다.**
-
-이 세션은 단일 레버를 찾는 대신 **작은 레버 8개를 차례로 당겼다.** 각각은 1~10% 였다.
-
-| # | 무엇 | 실물 설계 |
+| Acceleration | Verdict | Reopens when |
 |---|---|---|
-| 1 | dirty-settle (연속대입을 dirty 것만 재평가) | 깊이 24 에서 **14.1×** |
-| 2 | 분기 조건 네이티브 컴파일 | 1.065 → 1.160× |
-| 3 | 리프 읽기 fast path (Value 두 개 생성 제거) | → 1.364× |
-| 4 | 연속대입 RHS 네이티브 컴파일 | interp **1.092×** |
-| 5 | **VM 을 기본 백엔드로** | 1.10 → **0.78 s** |
-| 6 | NBA 목적지를 값으로(malloc 247만 쌍 제거) | 0.78 → 0.74 |
-| 7 | write 의 99.7% 모양 shortcut | 0.74 → 0.71 |
-| 8 | native-eval 스택을 호출자 소유로 | 0.71 → 0.66 |
-| 9 | VM 레지스터 슬롯 재사용 | 0.66 → 0.60 |
-| 10 | scalar write/NBA 컴파일 시점 특수화 | 0.60 → 0.58 |
-| 11 | op 1개짜리 프로그램은 루프 생략 | 0.58 → **0.57** |
+| Bytecode VM reachable from the CLI | shipped; `--backend vm` in an oracle build | — |
+| Flat net storage + specialised evaluator (`native`) | shipped; the default executor | — |
+| Widening the compiled lane's admission | partly shipped; see below | a design whose hot loop is mixed-sign |
+| Widening the suspend-free allow-list | rejected — ceiling 4.3% of run time | stimulus bodies become compute-heavy |
+| Levelization of the Active batch | rejected — 1.00× | a design shows inter-process combinational depth ≥ 6 |
+| Process fusion in the default mode | rejected — value divergence | only as a declared cycle mode with a hazard detector |
+| JIT / machine-code generation (cranelift) | rejected — 14–47% slower on tier-3 | leaf loads and 2-state arithmetic can be inlined into generated code with no second spelling of the semantics |
+| Flat mirror for leaf reads | rejected — 0.0% | — |
+| Global 2-state (dropping the `unk` plane) | rejected — ~7%, and it conflicts with the accuracy goal | never, as a default |
+| Frame arena for callee bodies | open; per-design ceilings measured (§4, last block) | it is the open half of the call axis (§2.4) |
 
-```
-1.243 s  →  0.57 s      =  2.18×
-iverilog 13: 0.58 s (+ compile 0.03)  →  추월
-```
+**Compiled-lane admission.** Two admissions are shipped and one is measured and declined.
+A leaf `Signal` at equal width is admitted regardless of the sign gate, because no exit of
+that arm reads `signed`: corpus effect picorv32 −3.4%, darkriscv −1.6%, biriscv −1.6%,
+serv −1.2%, sha256 −0.9%, keccak −0.4%, aes and keccak-arr flat, every pinned digest
+unchanged. Admitting a node narrower than its context is shipped and is classified by the
+LRM's sizing rule rather than by width — a self-determined node (a leaf, a select, a
+concat, every one-bit result) compiles at its own width and converts, a context-determined
+operator computes at the context width, truncation still declines; corpus effect darkriscv
+−6.2%, serv −2.7%, picorv32 −1.8%, the three call-bound rows flat, and darkriscv moves
+from parity to 1.08× ahead. The sizing classification is an `_`-free match over the
+operator enums because "narrower than the context" is two different rules: folding
+`v[8:11] + 4'd1` at four bits yields 0 where 16 is correct.
 
-**단일 레버는 끝까지 없었다.** 가장 큰 것도 전체의 10% 남짓이었다. 그런데 그것들이 **곱해져서** 2.18× 가 됐다.
+Removing the sign half of the admission gate outright is built, measured sound and
+declined. It is sound — the module's battery grows to 8 260 admitted trees and 48 660
+widening programs, all value-identical to the generic evaluator, with about 330 000
+adversarial cells byte-identical and all ten corpus workloads byte-identical — and it fires
+hard where it applies, 13 of 14 hot shape families at 2.1×–4.7×, a 24-assign mixed-sign
+design at 1.26 s against 0.27 s. On the corpus it is **1.00×**, because mixed-sign
+expression trees are not in these designs' hot loops. The queue line records that, rather
+than recording it as worthless.
 
-#### 8.8.1 왜 이게 가능했나 — 각 레버의 성격
+**Suspend-free allow-list widening.** Bodies the compiled path refuses are those holding
+`#delay`, `@` or `fork`, which are mostly stimulus. Sweeping work per activation on bodies
+already admitted answers the value question without building the resume-PC state machine
+that widening needs: 1 statement per activation is 0.99×, 2 is 0.99×, 8 is 0.91×, 64 is
+0.75×. Per-activation fixed cost is not amortised below about eight statements, and
+stimulus bodies are one to three. On a real design and testbench the fallback activations
+are 18.1% of activations but only **4.3% of time** (257 ns each against 709 ns for a
+compiled body), which is the ceiling for this axis. The measured ceiling of 2.84–4.24×
+realised 0.2–0.3%: a ceiling bounds the reachable range and does not predict it.
 
-주목할 것은, 위 11개 중 **4-state 연산 자체를 건드린 것이 하나도 없다**는 점이다. 전부 그 **주변**이다:
+**Levelization.** Static combinational ranks, an Active batch drained in rank order and a
+settle between ranks measure 1.00× across depths 1 through 24. A depth sweep at fixed cycle
+count shows why: a pure combinational chain is linear in depth (3.3 ms at depth 1, 31.5 ms
+at depth 24 in a single module), and the wake chain carries one process per delta, so there
+is no batch to sort. The quadratic term appeared only when the chain ran through continuous
+assigns (7.8 ms at depth 1, 814.4 ms at depth 24), and its cause was that every settle pass
+re-evaluated every continuous assign. Evaluating only assigns whose dependencies moved
+removes the quadratic term — 71.2 ms to 13.3 ms at depth 6, 814.4 ms to 57.9 ms at depth 24
+(14.1×) — and changes no process execution order, because the skipped visits recompute the
+same value and the write funnel discards a same-value write. Real RTL puts its
+combinational work inside large `always @*` blocks rather than between processes: picorv32
+has inter-process depth 1 and 4 fusion candidates out of 43 processes.
 
-- **불필요한 재계산**(1) — 안 바뀐 것을 다시 계산하고 있었다
-- **불필요한 할당**(3, 6, 8) — 값 하나 옮기려고 힙을 만졌다
-- **불필요한 분기**(7, 10) — 런타임에 물어보던 것이 컴파일 시점에 이미 정해져 있었다
-- **불필요한 초기화**(8, 9) — 쓰지도 않을 버퍼를 매번 0으로 채웠다
-- **더 빠른 실행기를 안 쓰고 있었다**(2, 4, 5) — VM 이 만들어져 있는데 도달할 수 없었다
+**Process fusion.** Running a connected chain of combinational processes in one activation
+measures 1.7–2.5× and passes a 72-design backend-equivalence gate on stdout, VCD bytes and
+run summary. It is rejected because it diverges on value. With a stimulus of
+`clk = ~clk; #1`, the fused build prints `0000017c` where Icarus Verilog and the unfused
+build print `xxxxxxxx`. The mechanism is §1.3: unfused, a depth-D chain propagates across D
+deltas and a process waking in the same batch reads a partially propagated output; fused,
+it reads a fully propagated one. A safety condition on the chain's *interior* nets does not
+cover *when its output becomes fresh*, and the reader of that output is the flop the cone
+exists to drive, so requiring "no concurrent reader of the output" empties the safe set.
+Both values are IEEE-legal; what is violated is vitamin's own pin to Icarus Verilog. The
+counterexample is pinned as
+`sim-engine::backend_equiv::a_comb_chain_output_is_sampled_mid_propagation`. The equivalence
+gate did not catch it because every corpus design used `#1 clk = 1`, which puts
+initialisation and the first edge in different timesteps; the hazard requires both in one
+activation. A gate is only as strong as the shapes inside it.
 
-**§8.3 의 프로파일이 "4-state 비트 조작"을 가리킨 것은 맞지만, 그것이 "그 외에는 낭비가 없다"를
-뜻하지는 않았다.** 4-state 연산이 27% 라면 **나머지 73% 가 있고**, 그 안에 위의 낭비가 흩어져 있었다.
+The same transform is legitimate as an advertised mode rather than a default, which is what
+Verilator does. Its design, including the hazard detector whose completeness gate is
+"zero candidates implies the two modes are byte-identical", is
+[preview/20 — cycle-mode feasibility](../preview/20-cycle-mode-feasibility.md).
 
-#### 8.8.2 그리고 이것이 방법론의 결론이다
+**JIT / machine-code generation.** Present in the tree behind the `jit` Cargo feature,
+which is off by default, and additionally gated at run time by the `VITA_JIT` environment
+variable; `VITA_JIT_STATS` prints per-run codegen statistics. cranelift is pinned at 0.120,
+the newest line that builds on rustc 1.85, and adds ~29 crates. Determinism is not the
+obstacle it was assumed to be: cranelift IR masks shift counts itself, so
+`ushr(x, 64) == ushr(x, 0)` on both aarch64 and x86-64, which makes the determinism pin a
+specification the generated code must satisfy rather than a wall.
 
-> **"단일 레버가 없다"는 관측이지 판결이 아니다.**
-> 그것이 말하는 것은 "한 번에 크게 못 움직인다"이지 "못 움직인다"가 아니다.
-> 작은 레버는 **찾기 어려울 뿐**이고, 찾는 방법은 하나다 — **재고, 반증하고, 안 되면 되돌린다.**
+Three measurements, all negative, and they agree:
 
-이 세션의 실제 성적표가 그것을 보여준다:
+- **Per expression.** 0.58 s to 0.67 s, +23.5 ns per call. Isolated with a callback-free
+  `Const`-only program — machine code whose entire body returns two constants — the boundary
+  alone is +32.6 ns over 1 228 796 runs. At 6 509 189 `eval_native` calls, a 33 ns boundary
+  is 215 ms against a 130 ms target.
+- **Per body.** `run_body` is called 12× less often, 542 883 times, so the same boundary
+  is 18 ms. Coverage 16 of 22 templates, 382 877 of 542 883 activations = 70.5%. Result:
+  0.57 s to 0.61 s, +104 ns per activation. Reducing the boundary count by 12× does not
+  change the sign, because a compiled body turns every kernel call and shim op into a
+  non-inlinable `extern "C"` call, where the VM path has them all inlined in Rust.
+- **On tier-3, after two of the three reopen conditions were met.** 14–47% slower. About
+  38% of the run is shim, half of that `jit::mk`, which rebuilds a 72-byte `Value` on every
+  write — the exact representation cost tier-3 exists to avoid.
 
-| | 건수 |
+The finding that generalises: an interpreter's advantage is inlining, not dispatch, and
+every boundary a JIT introduces costs more than the dispatch it removes. Correctness is not
+the obstacle — the CLI and sim-engine suites pass with the JIT enabled, and running the
+whole suite under `VITA_JIT=1` found a real defect in compile-time specialisation of
+`Op::WriteScalar`. Two by-products are kept: `Select`, `Reduce` and `Ternary` are extracted
+into `native_eval::op_*` so the VM arm and any compiled body call the same function rather
+than growing a third spelling of a bit-loop rule.
+
+**Flat mirror for leaf reads.** A probe placed word 0 of every net in one flat vector and
+served leaf reads from it, with three write sites synchronised and a `debug_assert` on
+every read so the debug suite proved the synchronisation. Baseline 0.57 s, flat mirror
+0.57 s. `read_scalar_words` already loads the `NetSlot` to read `is_real`, `array_len`,
+`width` and `signed`, so that cache line is hot and the extra pointer hop does not show.
+Storage layout alone is worth nothing; representation erasure only pays as a bundle (§3.6).
+
+**Frame arena for callee bodies.** Leaf-attributed profiles (`/usr/bin/sample`, idle thread
+excluded) give the share of the run inside a frame call, and within that the share in the
+generic evaluator and `Value` — the part a compiled frame body would replace:
+
+| Design | Inside a frame call | Generic-evaluator share | Ceiling if removed |
+|---|---:|---:|---:|
+| aes | 88.8% | 68.0% | **3.13×** |
+| keccak-arr | 82.5% | 60.4% | 2.52× |
+| keccak_f | 44.8% | 39.3% | 1.65× |
+
+The demand is bounded by which designs make frame calls at all: `frame_bodies` is **0** on
+sha256, picorv32 and darkriscv, whose 38, 33 and 9 functions are all inlined by elaborate,
+so a frame arena does nothing for them. Its demand is aes (18), biriscv (7) and keccak (3).
+
+### 4.1 Measured costs of individual engine behaviours
+
+Each figure is the wall-time share attributable to one behaviour, measured by the A/B
+protocol in §5 with every pinned digest unchanged.
+
+| Behaviour | Cost |
 |---|---|
-| 착지한 개선 | **11** |
-| 측정으로 **반증**한 가설 | **9** (levelize · 프로세스 융합 · 2-state · allow-list 확장 · resize · 식 JIT · 바디 JIT · 평평한 아레나 · 그리고 내가 틀리게 적었던 iverilog 비교 수치) |
-
-**반증이 착지만큼 많다.** 그리고 반증 하나하나가 며칠짜리 작업을 몇십 분에 끝냈다.
-평평한 아레나 가설은 **20분짜리 프로브가 며칠짜리 리팩터링을 막았다.**
+| A whole-net read at equal width copying a 72-byte `Value` in and out to perform two field writes | 17.2% of `keccak_f`, 13.7% of `keccak_f_arr`, 11–18% across the corpus |
+| Two `Vec` allocations per delta, plus discarding `ca_dirty`'s capacity on every continuous-assign fixpoint pass | 14.6% of `serv`, 9.8% `sha256`, 5.0% `picorv32`, 4.9% `darkriscv`; 0 on `keccak` and `aes` |
+| Rebuilding a callee's local window from the IR on every frame call | 7.7% of `keccak`, 6.8% of `aes`, 3.5% `keccak-arr`, 3.3% `sha256`, 2.2% `picorv32`, 1.4% `biriscv`, 0.5% `serv` |
+| Refusing a whole process body because one expression in it holds a user call | `keccak_f.sv` 8.11 s against 6.91 s |
+| Re-evaluating a `case` scrutinee once per arm | with the above, `keccak_f.sv` 8.11 s against 5.41 s (−33%) |
+| Treating every `Expr::Call` as impure in the continuous-assign dirty settle, so any assign reaching a call re-evaluates forever | `verilog-ethernet` ~38 hours of simulation against 2.24 s |
+| Full re-evaluation of all continuous assigns per settle pass | 814.4 ms against 57.9 ms at combinational depth 24 |
+| Net-order fixpoint traversal in a fixed direction rather than alternating | 0.56 s against 0.17 s on a 3 000-link reverse chain |
 
 ---
 
-## 9장 · 네이티브 코드젠을 실제로 지었다 — 그리고 졌다
+## 5. The A/B protocol
 
-초안은 F 축(JIT/네이티브)을 "잔여가 작다"는 이유로 두 번 기각했다. 오너 판정으로 **그것을 실제로 지었다.**
-결과는 음수지만, **왜** 음수인지가 이 문서에서 가장 값진 부분일 수 있다.
+Any performance claim in this repository is produced by this procedure. Each rule answers a
+measured artifact, and the magnitude of that artifact is given so the rule is not taken on
+authority.
 
-### 9.1 먼저 — "컴파일드"에는 층이 있다
+1. **Build both ends with `--release`.** Timing a debug binary reports a fake **+88%**
+   regression. `debug` is 25.9 MB against `release` 5.7 MB; check the size.
+   `corpus-runner` warns when it falls back to `target/debug/vita`.
+2. **Freeze both binaries.** Copy each out to a fixed path before measuring. A measurement
+   against a binary that is still being rebuilt retracts its own findings.
+3. **Verify the pair computes the same thing.** A drifted pair still produces two timings
+   and still divides them; the failure mode looks exactly like a measurement. Assert the
+   digest equality, and assert it is not the degenerate value — an all-X pair "matches".
+4. **Interleave A and B; never run one block then the other.** Five PRE runs then five POST
+   runs on a 0.45 s design reports a fake **+12.5%** where interleaving reports −0.9%.
+   `corpus_runner::measure` takes every job at once so round-robin is the default shape.
+   Interleaving is a property of the call site, not of the type: calling
+   `measure(&jobs[0..1])` and then `measure(&jobs[1..2])` is block-sequential again.
+5. **Run both orders, A→B and B→A.** Interleaving alone leaves a ±1% position bias that
+   flips the sign of a small delta. Measured on one such change: PRE first gives POST 0.2%
+   slower; POST first gives POST 1.1% faster; the true delta is 1.00×.
+6. **Discard the first round.** `measure` records a sample only when `round > 0`, so
+   `--reps N` means N timed samples over N+1 rounds. The default is 3.
+7. **Take the median, not the mean**, and report the sample count.
+8. **Run nothing else.** No parallel agents, no concurrent builds, no other load.
+9. **Treat ±3% as no change.**
+10. **Report coverage beside the ratio.** A body-level JIT at 7.4% coverage measuring
+    "0.58 to 0.59" is not a result; the same experiment at 70.5% coverage is.
+11. **Normalise before ranking.** A decline, refusal or activation count means nothing
+    without the admitted count beside it (§3.5).
+12. **Prove the gate can move.** A digest or golden gate that survives a mutation of its own
+    design is measuring nothing and looks exactly like one that is measuring something.
+    Every corpus workload is checked by mutating one line of its RTL, and a *symmetric*
+    mutation can be dead honestly — in a loopback design where TX and RX share one LFSR
+    instance, a CRC-polynomial change cancels at both ends, so the mutation must be
+    asymmetric.
 
-| 층 | 방식 | 대표 |
-|---|---|---|
-| ① | **트리 워킹 인터프리터** — 활성화마다 IR 트리를 다시 걷는다 | 세션 시작 시점의 vita |
-| ② | **바이트코드 VM** — 바디를 템플릿당 한 번 선형 op 열로 낮추고 루프로 실행 | 지금의 vita, **그리고 iverilog `vvp`** |
-| ③ | **네이티브 컴파일드** — 기계어를 생성한다. 디스패치 루프 자체가 없다 | VCS · Xcelium · Verilator |
+Instrumentation rules, from §3.4:
 
-이 세션이 한 것은 ①→② 다. **iverilog 도 ② 다** — 즉 우리가 겨루던 상대는 같은 계층이었지
-컴파일드 시뮬레이터가 아니었다.
-
-> 이 장은 ③층 시도의 기록인데, 결론을 "③층은 실패"로 읽으면 **너무 넓다.**
-> 무엇이 실제로 실패했고 진짜 ③층은 무엇인지는 **§9.9** 에서 좁힌다 — 이 장에서 가장 중요한 절이다.
-
-### 9.2 Phase 0 — 타당성
-
-| | |
-|---|---|
-| cranelift **0.120** | 고정 툴체인 rustc 1.85 에서 빌드 (0.134 는 1.94 요구) |
-| 추가 크레이트 | 29개 (80 → 109) · `Cargo.lock` +43 패키지 |
-| clean release 빌드 | 17.8 s |
-| aarch64 JIT | 정상 동작 |
-
-**⚠️ 이 문서의 앞선 주장 하나를 정정한다.** "x86 과 arm 의 시프트 의미가 갈리므로 아키텍처마다
-재현해야 한다"고 썼는데 — **cranelift IR 층에서는 안 갈린다.** `ushr(x, 64)` 는 두 아키텍처 모두
-`ushr(x, 0)` 이다. 시프트 카운트를 **기계가 아니라 IR 이** 마스킹하기 때문이고, 이는 타깃 무관하게
-**정의된 동작**이다(aarch64 실측). 남는 것은 "cranelift 정의 ≠ Verilog 정의"뿐이고,
-그건 **아키텍처 무관한 가드 하나**다. 결정성 핀은 **벽이 아니라 생성 코드가 만족해야 할 명세**였다.
-
-### 9.3 Phase 1 — 식 단위: −15%
-
-식 하나를 함수 하나로 컴파일했다.
-
-| | |
-|---|---|
-| OFF → ON | 0.58 → 0.67 s |
-| 컴파일 비용 | 7.8 ms (무시 가능) |
-| **호출당** | **+23.5 ns** |
-
-그리고 원인을 **격리**했다. **콜백이 하나도 없는 `Const` 전용 프로그램**만 JIT 했다 — 그 기계어의 전부가
-"상수 두 개를 반환"이고 넷 읽기도 콜백도 없다. 그런데도:
-
-```
-runs = 1,228,796      0.58 → 0.62 s      호출당 +32.6 ns
-```
-
-**코드젠 품질 문제가 아니다. FFI 경계 자체가 ≈33 ns 이고, 그건 대체하려던 대상 전체보다 크다.**
-같은 일을 Rust 로 하면 `out.val[0] = val` 두 줄이 호출자에 **완전히 인라인**되어 1~2 ns 다.
-개선 2회(결과·콜백 모두 레지스터 반환)로 0.69 → 0.67 이 됐을 뿐 부호는 안 바뀌었다.
-
-**산수상 필연이었다**: `eval_native` 는 6,509,189 번 불린다. × 33 ns = **215 ms 의 경계** 대 **130 ms 의 대상**.
-
-### 9.4 Phase 2 — 바디 단위: −7%
-
-식이 틀린 단위였다. 컴파일드 시뮬레이터가 쓰는 단위는 **프로세스 바디**다. `run_body` 는 542,883 번 —
-**12배 적다**. 같은 경계가 18 ms 가 된다.
-
-지었다: 블록·분기·delta 가드·모든 커널 호출을 shim 으로, 식은 인라인. 결정적으로 유리한 조건 하나가 있었다 —
-**P9 allow-list 가 이미 suspend-free 바디만 통과시키므로, 컴파일드 시뮬레이터에서 가장 어려운
-"바디 중간에서 멈췄다 재개하기"를 구현할 필요가 없었다.**
-
-| | |
-|---|---|
-| 커버리지 | 16/22 템플릿, 활성화 **382,877 / 542,883 = 70.5%** |
-| OFF → ON | 0.57 → 0.61 s (**활성화당 +104 ns**) |
-
-**두 단계가 같은 답으로 수렴한다.** 경계 횟수를 12배 줄여도 진다. 이유는 경계가 줄어든 만큼 **바디 안에서
-새 경계가 생기기 때문**이다 — 컴파일된 바디는 커널 호출(write/nba/systask)과 shim op 하나하나를
-**인라인 불가능한 `extern "C"` 호출**로 한다. VM 경로에서는 그게 전부 Rust 인라인이다.
-
-> ### 9.4.1 이 문서의 핵심 발견
-> **인터프리터의 우위는 디스패치가 아니라 인라이닝이다.**
-> JIT 이 도입하는 모든 경계가, 제거하는 디스패치보다 비싸다.
-
-### 9.5 그럼 이기려면 — 그리고 왜 그것도 막히나
-
-이기려면 커널 호출까지 인라인해야 한다. 즉 `write_lvalue`·`schedule_nba`·넷 테이블을
-**cranelift IR 로 옮겨야** 한다. 그 첫 단계(S1: 스칼라 store 인라인)의 상한을 쟀다:
-
-```
-stores = 4,000,553    same_value = 2,851,441  (71.3%)
-```
-
-**쓰기의 71.3% 가 같은 값을 쓴다** → `note_change` 가 아예 안 불린다 → S1 은 "값을 비교해 같으면 호출을
-건너뛴다"로 충분하다. 유망해 보였다.
-
-**그런데 그 비교를 기계어로 할 수 없다.** 넷 값은 `Vec<NetSlot>` → `NetSlot.cur: BitPacked` → `val: Vec<u64>`
-인데 **`Vec` 의 내부 필드 배치를 Rust 가 보장하지 않는다.** 우회(넷별 raw 포인터 굽기)는 *어디에도 강제되지
-않은* 불변식에 걸리고, 틀리면 잘못된 값이 아니라 **메모리 오염**이다 — `unsafe` 가 하나뿐인 코드베이스에서
-위험 범주가 한 단계 올라간다.
-
-### 9.6 그래서 데이터 배치를 의심했다 — 그것도 틀렸다
-
-"진짜 병목은 cranelift 가 아니라 데이터 배치다. 평평한 아레나로 바꾸면 JIT 인라이닝이 안전해지고
-**인터프리터도 같이 빨라진다**" — 그렇게 적었다. 그리고 **저장 계층을 재작성하는 대신 프로브를 만들었다.**
-
-`SimState.mirror: Vec<(u64,u64)>` — 넷마다 word 0 을 하나의 평평한 벡터에 두고 리프 읽기만 거기서.
-**진짜 아레나와 메모리 접근 프로파일이 같다**(인덱스 로드 1회 vs 포인터 추적 2회). 쓰기 3곳에서 동기화하고
-읽기에 `debug_assert` 를 걸어 **디버그 스위트 5043개가 동기화를 증명**하게 했다.
-
-| | |
-|---|---|
-| baseline | 0.57 s |
-| flat mirror | **0.57 s** |
-
-**차이 없음.** `read_scalar_words` 는 `is_real`/`array_len`/`width`/`signed` 를 보려고 **이미 `NetSlot` 을
-로드**하므로, 그 캐시라인이 뜨거워 포인터를 한 번 더 따라가는 비용이 안 잡힌다.
-
-**20분짜리 프로브가 며칠짜리 리팩터링을 막았다.** 그리고 이로써 ⓐ 축은 모든 단계가 측정으로 닫혔다.
-
-### 9.7 실패가 남긴 것
-
-음수 결과였지만 부산물은 남았고, 그중 둘은 값이 크다.
-
-**① `Select`/`Reduce`/`Ternary` 를 `native_eval::op_*` 로 추출.** 이 셋은 규칙이 **비트 루프와 표**다 —
-cranelift IR 로 다시 쓰면 조용히 틀리기 딱 좋은 종류다. 그래서 다시 쓰지 않고 **VM 의 arm 과 컴파일된 바디가
-같은 함수를 부르게** 했다. 세 번째 구현체가 그만큼 안 생겼다.
-
-**② 게이트가 실버그를 잡았다.** `Op::WriteScalar` 는 컴파일 시점 특수화로 `ResolveOff` 가 없는데,
-RHS 인라인이 실패했을 때 `off` 를 소비하는 shim 으로 보내 패닉했다. **전 스위트를 `VITA_JIT=1` 로
-돌려서** 나왔다 — 이 세션에서 39건짜리 백엔드 결함을 찾아낸 것과 같은 기법이다.
-
-정확성: **CLI 4275 + sim-engine 509 테스트가 JIT 을 켠 채 통과**한다. 코드는 `jit` feature 뒤에 있고
-기본값 OFF 이므로 기본 빌드·기본 바이너리·5043 테스트는 무영향이다.
-
-### 9.8 재진입 조건
-
-이 기각은 **이 설계, 이 시점**의 측정이다. 다음이 성립하면 다시 볼 값이 있다:
-
-- **바디가 훨씬 커질 때** — 경계는 활성화당 한 번인데 바디가 크면 상각된다. 지금 활성화당 13.3 op 이
-  수백 op 이면 부호가 바뀔 수 있다.
-- **커널 호출 비율이 떨어질 때** — 지금은 바디 op 의 56% 가 커널 호출이다. 순수 계산 바디가 지배적인
-  설계라면 인라인할 수 있는 몫이 커진다.
-- **넷 저장이 이미 평평해진 뒤** — 아레나는 단독으로는 값이 없지만(§9.6), 다른 이유로 그렇게 된다면
-  S1 이 건전해진다.
-
-#### ⭐⭐⭐ 후기 — **재진입 조건이 충족됐고, 재진입했고, 그래도 졌다** (2026-08-17 · ROADMAP §5.1-be)
-
-위 셋 중 **둘이 실제로 성립했다**: 넷 저장이 평평해졌고(tier-3 `NetArena`), 커널 호출 비율도
-떨어졌다(융합 op + 평평한 저장 + 2-state 레인). 그래서 **다시 봤다** — `jit` 을 고쳐서 tier-3 에
-배선하고 쟀다.
-
-**결과: 14~47% 느리다.** 그리고 프로파일이 이유를 바꿔 말한다 — 이제 문제는 *"바디가 작아서 경계가
-상각이 안 된다"* 가 아니라 **경계 안에서 하는 일 자체**다: 런의 **~38% 가 shim** 이고, 그 중 절반이
-`jit::mk` — **쓰기마다 72바이트 `Value` 를 다시 짓는다.** §9.9 이 *"③층의 첫 줄은 `Value` 를 없애는
-것"* 이라고 적었고 tier-3 이 그것을 해냈는데, **JIT 경계가 그것을 되살린다.**
-
-⇒ 재진입 조건을 **다시 쓴다**: 남은 하나는 *"leaf 로드와 2-state 산술을 **생성 코드 안에 인라인**
-(호출 0)하고, 그러면서 **의미를 두 번 적지 않는** 방법"* 이다. 오늘 그 방법은 없다.
+- Do not put a timer on a function called millions of times; use ablation.
+- Report the observer effect of any instrument that stays in place (the region timers used
+  here report ±3%), and remove the instrument after measuring — the engine's hottest path
+  does not keep two clock reads.
+- A profile's symbol shares are attribution, not a work breakdown.
 
 ---
 
-### 9.9 ⭐ 그래서 진짜 ③층은 무엇인가 — 그리고 한계점은 어디였나
-
-§9.3~§9.6 을 읽고 나면 자연스러운 결론이 하나 나온다: *"③층은 실패했다. 우리는 ②층까지다."*
-**그 결론은 너무 넓다.** 여기서 정확히 좁힌다.
-
-#### 9.9.1 실패한 것은 ③층이 아니다
-
-내가 지은 것은 이것이다:
-
-> **기존 엔진의 op 열을 기계어로 만들고, 기존 엔진의 커널을 계속 호출하는 것.**
-
-VCS·Xcelium 은 **그걸 하지 않는다.** 되돌아갈 커널이 애초에 없기 때문이다.
-즉 §9 의 음수 결과는 "③층이 불가능하다"의 증거가 아니라,
-**"표현(representation)을 그대로 두고 실행기만 바꾸면 안 된다"** 의 증거다.
-
-#### 9.9.2 `a <= b` 하나로 비교하면
-
-**vita 가 논블로킹 대입 하나에 하는 일:**
-
-| | |
-|---|---|
-| 값 | `Value` **72 바이트** 구조체 생성 (`val`/`unk` 각 32B + `width`/`signed`/`is_real`/`is_str`) |
-| 목적지 | `Lvalue` → `chunks` 배열 → `Offsets` 해석 |
-| 쓰기 | 런타임에 **분기 11개 / 사이드 테이블 6개** 조회 — real 인가? frame-local 인가? handle 인가? 2-state 인가? 배열인가? 폭은? |
-| NBA | `NbaUpdate` 약 112 바이트를 큐에 push |
-| 깨우기 | `net_to_edge` / dirty 리스트 / waiter 벡터를 **런타임에 조회** |
-
-**VCS 가 생성한 코드가 하는 일:**
-
-```c
-a_val = b_val;      /* store 명령 하나 */
-a_unk = b_unk;      /* store 명령 하나 */
-```
-
-폭도, 부호도, real 인지도, 배열인지도, **누가 깨어나는지도** — 코드를 만들 때 이미 답이 나왔고,
-**생성된 코드에는 그 질문이 존재하지 않는다.** 넷은 테이블 항목이 아니라 **변수**이고, 레지스터에 살 수도 있다.
-
-> 이 비교에서 눈여겨볼 것은 명령 수가 아니라 **질문의 유무**다.
-> vita 의 11개 분기는 "느린 코드"가 아니라 **런타임 범용성의 값**이다.
-
-#### 9.9.3 그래서 한계점은 실행기가 아니라 **런타임 표현**이었다
-
-vita 는 "어떤 폭·어떤 종류의 넷이든 실행 중에 처리하는" 범용 자료구조 위에 서 있다.
-컴파일드 시뮬레이터는 **그 범용성을 컴파일 시점에 전부 소거한다.**
-
-내 JIT 은 **제어흐름만 컴파일하고 표현은 그대로 뒀다.** 그래서 기계어 ↔ 범용 런타임 경계를
-호출마다 넘어야 했고, 그 값이 **33 ns** 였다(§9.3 에서 콜백 없는 프로그램으로 격리 측정).
-
-> **실제 컴파일드 시뮬레이터에는 그 경계가 없다. 건너편에 범용 런타임이 없기 때문이다.**
-
-이것이 §9 전체의 한 줄 요약이고, 동시에 이 문서에서 ③층에 대해 말할 수 있는 가장 정확한 문장이다.
-
-#### 9.9.4 그럼 진짜 ③층 백엔드는 무엇을 요구하나
-
-"JIT 을 추가한다"가 아니라 **두 번째 엔진**이다. 필요한 것:
-
-1. **정적 넷 할당** — 넷마다 컴파일 시점에 확정된 폭의 슬롯/변수. `nets[i]` 조회와 폭 검사가 사라진다.
-2. **폭별 특수화 연산** — 32비트는 `u32`, 64비트는 `u64`, 그 이상만 배열. 지금은 전부 하나의 `Value`(72B)로 처리한다.
-3. **스케줄 구조 소거** — "누가 깨어나는가"를 런타임 조회가 아니라 **생성된 직접 호출 또는 정적 비트**로.
-4. **NBA 전용화** — 범용 큐 엔트리 대신 대입마다 전용 레코드, 또는 아예 더블버퍼 변수 쌍.
-
-그리고 위 넷 중 **어느 하나만 해서는 이득이 없다.** §9.6 이 그 증거다 — 저장 배치만 평평하게 한 프로브는
-**0%** 였다. 표현 소거는 **함께 해야 값이 나오는 묶음**이고, 그래서 규모가 크다.
-
-#### 9.9.5 그런데 비싼 절반은 이미 있다
-
-VCS 30년, Verilator 20년 중 대부분은 **백엔드가 아니라** 두 곳에 들어갔다:
-
-- **프론트엔드** — preprocess → lex → parse → elaborate → 언어 중립 IR. vita 는 이걸 갖고 있다(`SimIr`).
-- **의미론 코퍼스** — "이 구문이 정확히 무슨 값을 내는가"를 고정한 테스트. vita 는 **5043개**와
-  correct-or-loud 규율을 갖고 있다.
-
-**새 백엔드의 오라클이 이미 준비돼 있다는 뜻이다.** 실제로 §9 의 JIT 실험에서 그것이 작동했다 —
-전 스위트를 `VITA_JIT=1` 로 돌려 실버그를 잡았고(§9.7), 그 기법은 세션 앞부분에서 백엔드 결함 39건을
-찾아낸 것과 같은 것이다. ③층 백엔드도 **같은 오라클로 검증된다.**
-
-#### 9.9.6 ⚠️ 정직하게 — 격차 크기는 이 문서가 모른다
-
-> **🔄 2026-08-03 갱신 — 이 소제목은 더 이상 사실이 아니다. 잰다.** §9.9.10 참조.
-> 아래 원문은 그때의 판단 기록으로 보존한다.
-
-이번에 잰 것은 **vita vs iverilog** 이고 **둘 다 ②층**이다. 거기서 동률에 도달했다.
-**VCS·Xcelium 은 가지고 있지 않아 한 번도 재본 적이 없다.**
-흔히 인용되는 "10–100배"는 **문헌의 통설이지 이 문서의 측정이 아니다.**
-
-그리고 하나 더 — **알고리즘상 불리하지 않다.**
-
-- VCS 도 **event-driven** 이다. 희소 활성(sparse activity) 이점은 vita 도 그대로 갖는다.
-- 즉 격차는 **복잡도 계층이 아니라 상수항**이다. 상수항은 줄일 수 있다.
-- **Verilator 만 다른 거래를 했다** — levelize + 2-state. 그래서 가장 빠르고, 동시에 sign-off 부적합이다(§8.7).
-
-#### 9.9.7 그래서 어디에 서 있나
-
-| | |
-|---|---|
-| **지금** | ②층에서 **iverilog 와 동률** — 오픈소스 4-state 레퍼런스 계층에 도달 |
-| **③층** | **막힌 것이 아니라 안 간 것.** 조건은 "표현 소거", 규모는 두 번째 백엔드 |
-| **재진입 신호** | 실사용 설계가 iverilog 대비 크게 뒤지거나, 바디가 훨씬 커져 경계가 상각될 때(§9.8) |
-
-#### 9.9.8 이 실패가 남긴 가장 쓸모 있는 것
-
-**어디를 건드리면 안 되는지**를 측정으로 확정했다.
-
-> **표현을 그대로 두고 코드젠만 얹는 길은 닫혔다.**
-> 다음에 ③층을 간다면 **첫 줄은 `Value` 를 없애는 것이지 cranelift 를 부르는 것이 아니다.**
-
-#### 9.9.9 그 "다음"의 계획서
-
-이 절이 던진 방향을 실제 계획으로 조사한 문서가 있다 —
-**[preview/21 · ③층 네이티브 백엔드 방향 조사](../preview/21-tier3-native-backend.md)**.
-
-세 줄 요약:
-
-- **막고 있는 계약은 큰 것들이 아니다.** SchemaHash 동결은 **건드릴 필요가 없고**(③층은 SimIr 을 읽기만 한다),
-  correct-or-loud 는 막기는커녕 **유일한 검증 수단**이다. 실제로 깨야 하는 것은 **no-unsafe 정책**과
-  **MSRV** 둘뿐이며 범위가 좁다.
-- **진짜 장벽은 구조다.** ③층은 넷 저장을 소유하므로 **바디 단위 폴백이 불가능**하다
-  (설계 단위 all-or-nothing) → v1 은 **정지(`#delay`)를 반드시 지원**해야 한다. 그리고 엔진 동작의
-  상당수가 SimIr 이 아니라 **`SimOpts` 사이드카 75개**에 살아, v1 범위는 그 분류가 정한다.
-- **가장 어려울 줄 알았던 것이 이미 풀려 있다.** `Terminator::Delay { amount, region, resume }` —
-  **정지점과 재개 지점이 IR 에 명시돼 있어** 상태기계 변환이 기계적이다.
-
-그리고 이것은 §8.8 의 교훈과 정확히 같은 모양이다 — 관측("단일 레버가 없다", "JIT 이 졌다")을
-판결("할 수 있는 게 없다", "③층은 불가능하다")로 읽지 않는 것.
-**두 경우 모두, 관측이 실제로 말한 것은 "어느 방향이 아닌지"였다.**
-
-#### 9.9.10 ⭐ 갱신 (2026-08-03) — **쟀다. 76×. 그리고 ②층은 고갈되지 않았다**
-
-§9.9.6 은 *"VCS·Xcelium 을 가지고 있지 않아 재본 적이 없다"* 로 끝났다. 그 문장에 빠진 것이 있었다 —
-**verilator 는 무료이고 ③층이다.** `brew install verilator` 한 줄이면 된다. 2-state·levelize 를
-거래했으므로 **sign-off 오라클로는 부적합**하지만(§8.7), **속도 상한을 재는 자로는 완벽하다.**
-
-Keccak-f[1600] 을 새로 써서(`bench/keccak/`, 1st-party) 3개 층을 같은 기계에서 나란히 쟀다.
-오라클은 넷 — Python 참조 · vita · iverilog 13 · verilator — 이고 넷이 같은 다이제스트를 낸다.
-첫 레인이 공표된 참조값 `f1258f7940e1dde7` 이므로 **상호 일치가 아니라 외부 앵커**다.
-
-| 순열 1회당 한계비용 | 서브루틴 호출 있음 | 서브루틴 인라인 |
-|---|---|---|
-| vita (②층) | 5340 µs | **498 µs** |
-| iverilog 13 (②층) | 4450 µs | 1398 µs |
-| verilator 5.050 (③층) | 6.6 µs | **6.56 µs** |
-
-**②→③ = 76×** (vita 최선 기준). 문헌의 "10–100배"와 같은 자릿수이고, **이제 우리 데이터다.**
-
-**그런데 같은 표가 §9.9.7 의 "지금 = iverilog 와 동률" 을 좁힌다.** 같은 설계·같은 결과인데
-열 하나가 **10.7×** 이고 차이는 **사용자 함수 호출뿐**이다. `--backend interp` 와 `bytecode` 가
-Keccak 에서 **같은 시간**을 낸다 — `is_codegen_able` 이 `Terminator::Call` 을 가진 프로세스를
-통째로 거부하므로 **VM 기여가 0%** 이고, `codegen_coverage` 는 `ir.processes` 만 순회하므로
-**함수/태스크 바디는 애초에 컴파일 대상이 아니다.** 프로파일 1위가 `eval_ctx` — ①층 트리워커다.
-
-> **즉 §9.9.7 의 "②층에서 동률" 은 정확히는 "PicoRV32 처럼 VM 이 받는 설계에서 동률" 이다.**
-> 사용자 함수를 부르는 RTL — 대부분의 실 RTL 과 거의 모든 TB — 에서 vita 는 **①층에서 돈다.**
-
-§9.9.8 은 여전히 옳다(표현을 그대로 두고 코드젠만 얹는 길은 닫혔다). 다만 **다음 한 줄이
-바뀐다** — ③층으로 가기 전에 **②층의 측정된 10.7× 를 먼저 청구**해야 하고, 그것이 ③층 예산을
-확정한다. 계획은 [preview/21](../preview/21-tier3-native-backend.md) 개정 3 의 **T0~T4**.
-
-> **이 절의 교훈**: *"못 잰다"* 고 적은 칸은 **정말 못 재는지 다시 확인하라.**
-> 이 문서는 그 칸을 두 달 비워뒀는데, 채우는 데 든 비용은 명령 한 줄이었다.
-
----
-
----
-
-## 부록 A · 용어집
-
-가나다순. **처음 보는 용어는 여기부터 봐도 된다.**
-
-| 용어 | 뜻 |
-|---|---|
-| **4-state** | 신호가 `0/1/x/z` 네 값을 갖는 모델. `x`=미정, `z`=고임피던스(아무도 안 구동). 2-state 는 `0/1`만 — 빠르지만 초기화 버그를 놓친다 |
-| **Amdahl 의 법칙** | 비율 `f` 만 가속 가능하면 전체 상한은 `1/(1−f)`. 이 문서 F 축 판정의 근거 |
-| **NBA** | NonBlocking Assignment. `<=` 대입. 이 시각의 모든 우변을 읽은 뒤 좌변에 일괄 반영 → 시프트 레지스터가 성립하는 이유 |
-| **RTL** | Register Transfer Level. "매 클럭 어느 레지스터에서 어디로"로 회로를 기술하는 추상화 수준 |
-| **SimIr** | vita 의 시뮬레이션 중간표현. elaborate 산출물이며 언어 중립. 형상이 동결돼 있고 해시로 staleness 를 검사 |
-| **감지 리스트** (sensitivity list) | 프로세스를 깨울 신호 목록. `always @(a, b)` 의 `a, b` |
-| **게이트** (gate, 테스트 문맥) | 통과하지 않으면 진행을 막는 자동 검사. "품질 게이트" |
-| **결정성** (determinism) | 같은 입력에 항상 같은 출력. vita 는 3-OS 바이트 동일을 목표로 함 |
-| **계층화 영역** (stratified regions) | IEEE 1800 §4 가 정의한 한 시각 내 실행 단계 순서 (Active → Inactive → NBA → …) |
-| **골든** (golden) | 정답으로 고정해 둔 기대 출력. vita 는 Rust 소스 안 문자열 리터럴로 4,689개 보유 |
-| **논블로킹 대입** | `<=`. → NBA |
-| **델타 사이클** (delta cycle) | 시뮬레이션 시간은 안 흐르지만 계산이 한 걸음 진행하는 미니 스텝 |
-| **랭크 / levelize** | 조합 논리를 의존 순서로 줄 세우는 것. 랭크 = 그 순서 번호 |
-| **바이트코드 VM** | 프로세스 바디를 단순 명령 배열로 미리 컴파일해 루프로 실행. 트리 인터프리터와 네이티브의 중간 |
-| **블로킹 대입** | `=`. 즉시 대입되어 다음 줄이 새 값을 본다 |
-| **사이클기반** (cycle-based) | 클럭당 일괄 평가. 인트라사이클(클럭 사이) 타이밍을 모델링하지 않음 |
-| **사인오프** (sign-off) | 칩을 제작에 넘기기 전 최종 검증. 여기 쓸 수 있으려면 4-state·타이밍 정확성이 필요 |
-| **상한 / 천장** (ceiling) | 도달 가능 범위의 **상계**. 예측이 아니다 (C 축의 교훈) |
-| **연속대입** (continuous assign) | `assign y = a & b;`. 우변이 바뀌면 좌변이 계속 따라감. 모듈 포트 연결도 이것으로 내려간다 |
-| **오라클** (oracle) | 정답을 알려주는 외부 기준. vita 는 iverilog |
-| **이벤트구동** (event-driven) | 값이 바뀐 것만 보고 런타임에 실행 순서를 정하는 방식 |
-| **인터프리터** | 자료구조를 매번 순회하며 해석 실행 |
-| **적대 리뷰** (adversarial review) | 자기 수정을 깨뜨리려 작정하고 보는 리뷰. vita 는 2렌즈(differential + soundness) 필수 |
-| **정련** (elaborate) | 모듈 계층을 펼쳐 평평한 넷/프로세스 배열로 만드는 단계 |
-| **정착** (settle) | 값이 더 안 바뀔 때까지 반복 계산하는 것. `settle_cont_assigns` |
-| **조합 논리** | 기억 없이 입력→출력이 즉시 따라가는 논리 |
-| **조합 깊이** (combinational depth) | 조합 논리가 몇 단 연결돼 있는가. 델타 수를 결정 |
-| **컴파일드** (compiled) | 설계를 기계어/바이트코드로 만들어 두고 실행 |
-| **파형** (waveform) | 시간에 따른 신호 값 기록. VCD/FST 포맷 |
-| **프로세스** (process) | `always`/`initial` 블록 하나. 시뮬레이터의 실행 단위 |
-| **희소 활성** (sparse activity) | 대형 설계에서 사이클당 극히 일부만 토글하는 성질. 이벤트구동의 알고리즘적 이점 |
-| **silent-wrong** | 조용히 틀린 결과. 진단도 비정상 종료도 없이 값만 다름. vita 가 가장 싫어하는 것 |
-| **correct-or-loud** | "정확하거나, 아니면 시끄럽게 거부하거나". 조용히 틀리지 않는다는 계약 |
-| **정확도 사다리** | silent-wrong ≪ loud ≪ correct-support. 올라가되 절대 내려가지 않는다 |
-| **teeth (테스트 문맥)** | 게이트가 실제로 뭔가를 검사하고 있음을 보장하는 장치. "이빨" |
-| **P9 allow-list** | VM 이 먹을 수 있는 프로세스 바디의 조건 목록 (suspend 없음 등) |
-| **f (이 문서에서)** | 적격 바디가 차지하는 wall-clock 비율. Amdahl 상한의 입력 |
-| **평면** (plane) | 4-state 값의 `val` / `unk` 두 벌 저장. 비트를 나란히 두지 않고 워드 단위로 갈라 **한 명령이 64비트를 동시에** 처리하게 하는 최적화 (§8.1.2) |
-| **`val` / `unk`** | 4-state 인코딩의 두 평면. `unk=1` 이면 그 비트는 `x`(val 0) 또는 `z`(val 1) |
-| **X-optimism** | `x` 를 0 으로 낙관해 읽는 것. 2-state 시뮬레이터의 성질이며, **리셋 버그를 시뮬레이션에서 숨긴다** (§8.7) |
-| **known0 / known1** | 4-state 연산에서 "확실히 0/1 인 자리". 4-state AND 가 명령 13개가 되는 이유 (§8.2.3) |
-| **ablation** | 어떤 일을 **두 번 시키고** wall-clock 차이를 보는 측정법. 계측 코드가 0이라 호출이 잦은 대상에도 왜곡이 없다 (§8.4.2) |
-| **자체시간** (self-time) | 프로파일에서 그 함수 자신이 쓴 시간. **인라인된 코드가 호출자 이름으로 잡히므로** 함수 단위 해석은 위험하다 (§8.4.1) |
-| **JIT** | Just-In-Time. 런타임에 기계어를 생성해 실행 |
-| **cranelift** | 순수 Rust 코드 생성기(Wasmtime 백엔드). 외부 툴체인 불필요 |
-| **FFI 경계** | 생성된 기계어 ↔ Rust 사이의 호출 지점. 인라이닝이 끊기고 이 문서 기준 **≈33 ns** (§9.3) |
-| **shim** | 기계어가 Rust 함수를 부르기 위한 `extern "C"` 얇은 래퍼 |
-| **superinstruction** | 자주 붙어 나오는 op 열을 하나의 op 으로 융합해 디스패치를 줄이는 기법. §9 의 인구조사가 **더 나은 답(op 1개짜리는 루프 생략)** 을 보여 채택되지 않았다 |
-| **trivial-shape shortcut** | 프로그램이 op 하나뿐일 때 VM 루프를 아예 안 도는 것. 실행의 **46.3%** 가 여기 해당 |
-| **런타임 표현** (representation) | 시뮬레이터가 실행 중에 값·목적지·스케줄을 담는 자료구조. ③층의 한계점은 실행기가 아니라 **이것**이었다 (§9.9.3) |
-| **표현 소거** | 폭·부호·종류·감지 대상을 컴파일 시점에 확정해 **생성된 코드에서 그 질문 자체를 없애는 것.** 컴파일드 시뮬레이터의 정의에 가깝다 |
-| **P5 게이트** | 인터프리터 vs VM 이 **바이트 동일**함을 강제하는 차분 검사. corpus 가 좁으면 **공허하게 통과**한다 — 이 세션이 그것으로 39건을 놓쳤다 |
-
-## 부록 B · 재현 명령
+## 6. Reproducing
 
 ```bash
-# P9 적중률 · 활성당 작업량 크로스오버 · 깊이 비용
+# The pre-build probes: VM allow-list hit rate, work-per-activation crossover, depth cost
 cargo test -p sim-engine --test perf_baseline --release -- --ignored --nocapture perf_p9_coverage
 cargo test -p sim-engine --test perf_baseline --release -- --ignored --nocapture perf_work_per_body_crossover
 cargo test -p sim-engine --test perf_baseline --release -- --ignored --nocapture perf_depth_cost_shape
 
-# 융합 스파이크 · 기회
+# Fusion spike and fusion opportunity
 cargo test -p sim-engine --test perf_baseline --release -- --ignored --nocapture perf_fusion_spike
 cargo test -p sim-engine --test perf_baseline --release -- --ignored --nocapture perf_fusion_opportunity
 
-# E 축 반례 (기본 모드가 지켜야 할 것)
+# The call regime: the gates, then the timed row
+cargo test -p cli --test perf_call_regime
+cargo test --release -p cli --test perf_call_regime -- --ignored --nocapture
+
+# The counterexample the default mode must keep answering
 cargo test -p sim-engine --test backend_equiv -- a_comb_chain_output_is_sampled_mid_propagation
 
-# 백엔드 등가 — 이 세션의 가장 강력한 게이트.
-# corpus differential(72 디자인)이 아니라 전 스위트를 다른 default 로 돌린다.
+# Backend equivalence
 cargo test -p sim-engine --test backend_equiv
-cargo test -p cli --test backend_flag
 
-# 네이티브 코드젠 실험 (9장). feature 뒤, 기본 OFF.
+# Cross-tool and cross-design timings
+cargo build --release -p cli --locked
+cargo run -p corpus-runner -- run --compare
+
+# The JIT experiment: behind a feature, off by default
 cargo build --release -p cli --bin vita --features jit
-VITA_JIT=1 VITA_JIT_STATS=1 ./target/release/vita <design.v>   # 커버리지 출력
-VITA_JIT=1 cargo test -p cli --features jit                     # JIT 을 켠 채 전 스위트
+VITA_JIT=1 VITA_JIT_STATS=1 ./target/release/vita <design.sv>
+VITA_JIT=1 cargo test -p cli --features jit
 ```
 
-### 부록 B.1 · 이 문서의 측정을 재현하는 방법 (§8.4 의 규율)
+`crates/sim-engine/tests/perf_baseline.rs` holds fourteen `#[ignore]`d probes over fixed
+designs (`CODEGEN_HEAVY`, `EVAL_HEAVY`, `EXPR_HEAVY`, `STRUCT_HEAVY`, `WIDE_HEAVY`,
+`WIDE_STRUCT_HEAVY`, `REAL_HEAVY`, `CONT_ASSIGN_HEAVY`, `CONT_ASSIGN_ELEM`, `HEAP_HEAVY`,
+`MEM_HEAVY`, `DUMP_HEAVY`, `SHA256_INLINE`, `SHA256_FUNCS`, `STIM_LIKE`). They time through
+a `NullSink` so wall time reflects the engine rather than the sink, and they assert
+`finish_reason == Finish` on every repetition. They are data, not gates: `#[ignore]` keeps
+them out of the normal suite so timing variance can never fail CI, and none of them asserts
+a ratio.
 
-- **호출이 잦은 것은 타이머로 재지 마라.** `write_lvalue`(400만 회)에 타이머를 붙이면 오버헤드가 64 ms 로
-  신호를 삼킨다. 대신 **ablation**: 그 일을 두 번 시키고 wall-clock 차이를 본다(순수 함수여야 한다).
-- **벤치 바이너리를 갓 만든 직후 한 번 재지 마라.** cold 첫 실행은 이 문서에서 iverilog 를 0.85 s 로
-  잘못 읽게 만들었다(실제 0.58 s). **번갈아(interleaved) 반복 + best-of-N.**
-- **커버리지 없는 배속은 무의미하다.** 바디 JIT 은 7.4% 커버리지에서 "0.58 → 0.59" 였는데 그 숫자에는
-  뜻이 없었다. 70.5% 로 올린 뒤에야 판정이 가능했다.
+Writing `function` is not the same as reaching the frame path. `SHA256_INLINE` against
+`SHA256_FUNCS` does not measure the call regime: those transforms are straight-line,
+`body_needs_frame` is false, elaborate folds every call, and the two designs produce a
+byte-identical `CodegenReport`. The keccak pair in §2.4 differs by one `for` loop, which is
+the whole of what forces a frame.
 
-## 부록 C · 관련 문서
+---
 
-- ⭐ [study/02 — ③층 커버리지를 0%에서 100%로](02-v1-native-coverage.md) — **이 문서의 후속편.**
-  이 문서가 *"③층을 왜 짓는가(속도)"* 를 다뤘다면 그것은 *"③층이 받을 수 있는 설계를 어떻게
-  100% 로 만들었는가"* 를 다룬다. 용어(census·커버리지·뮤테이션·게이트 세 층)를 초보자 기준으로
-  설명하고, 2026-08-10~16 의 30여 슬라이스 전체를 다섯 가지 모양으로 정리한다.
-- [preview/18 가속 분석](../preview/18-acceleration-analysis.md) — 모든 실측의 정본
-- [preview/20 사이클 모드 타당성](../preview/20-cycle-mode-feasibility.md) — 3b 설계
-- [ROADMAP §5·§7](../ROADMAP.md) — 융합 revert 기록 · BACKEND 축
-- [ENGINEERING_RULES](../ENGINEERING_RULES.md) — 정확도 사다리 · 리뷰 방법론의 정본
+## 7. Glossary
+
+| Term | Meaning |
+|---|---|
+| **4-state** | a signal carries `0`/`1`/`x`/`z`. 2-state carries `0`/`1` only |
+| **ablation** | measuring a cost by making the engine do the work twice and taking the wall-clock difference; adds no instrumentation |
+| **Amdahl's law** | accelerating a fraction `f` of a run bounds total speedup at `1/(1−f)` |
+| **ceiling** | an upper bound on a reachable range, not a prediction |
+| **combinational depth** | how many levels of combinational logic are chained; sets the number of deltas |
+| **compiled** | the design is lowered to bytecode or machine code before execution |
+| **continuous assign** | `assign y = a & b;`. Module port connections lower to these |
+| **cycle-based** | evaluation batched per clock, with no intra-cycle timing model |
+| **delta cycle** | a step in which computation advances but simulation time does not |
+| **event-driven** | execution order decided at run time from which nets changed |
+| **`f`** | the wall-clock fraction eligible for an acceleration; the input to an Amdahl ceiling |
+| **FFI boundary** | the call between generated machine code and Rust; inlining stops there, and it measures ≈33 ns |
+| **golden** | an expected output pinned as a literal in a test |
+| **levelize** | order combinational logic by dependency rank at compile time |
+| **NBA** | nonblocking assignment (`<=`): all right-hand sides read, then all left-hand sides written |
+| **oracle** | an external tool that supplies the expected answer; here Icarus Verilog 13, with Verilator 5.050 as a second opinion on 2-state arithmetic |
+| **plane** | one of the two word arrays (`val`, `unk`) that encode a 4-state value |
+| **process** | one `always` or `initial` block; the scheduler's unit of execution |
+| **representation erasure** | fixing width, signedness, kind and wake set at compile time so the generated code does not contain the question |
+| **self-time** | profile time attributed to a symbol; includes code inlined into it |
+| **sensitivity list** | the signals that wake a process |
+| **shim** | an `extern "C"` wrapper through which generated code calls Rust |
+| **sign-off** | final verification before tape-out; requires 4-state and timing accuracy |
+| **sparse activity** | only a small fraction of nets toggle per cycle; the algorithmic advantage of event-driven execution |
+| **stratified regions** | the IEEE 1800 §4 execution phases within one time step |
+| **teeth** | a test that proves a gate actually checks something |
+| **trivial-shape shortcut** | skipping the VM loop when a compiled program is a single op; 46.3% of executions |
+| **X-optimism** | reading `x` as `0`; hides reset defects, and is a property of 2-state simulation |
+
+---
+
+## 8. Related documents
+
+- [study/02 — terminology and native-backend coverage](02-v1-native-coverage.md) — what
+  the tier-3 backend accepts, how a refusal is reported, and how equivalence is gated.
+- [study/03 — the workload corpus](03-workload-corpus.md) — the ten workloads, the harness,
+  and the timings quoted in §2.2.
+- [preview/18 — acceleration analysis](../preview/18-acceleration-analysis.md).
+- [preview/20 — cycle-mode feasibility](../preview/20-cycle-mode-feasibility.md) — the
+  advertised-mode form of process fusion, with its hazard detector.
+- [preview/21 — tier-3 native backend](../preview/21-tier3-native-backend.md) — the survey
+  of what a real machine-code backend requires.
+- [preview/06 — simulation engine](../preview/06-simulation-engine.md) — the scheduler and
+  region model this axis is measured against.
+- [ENGINEERING_RULES](../ENGINEERING_RULES.md) — the accuracy ladder and the review method.
+- [`bench/keccak/RUN.md`](../../bench/keccak/RUN.md) — the cross-tool recipe and raw table
+  behind §2.1.

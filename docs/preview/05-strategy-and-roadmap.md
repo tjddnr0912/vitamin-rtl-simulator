@@ -1,133 +1,90 @@
-# 05 · 전략 · 로드맵 (SystemVerilog-first)
+# 05 · The scope ladder
 
-## 전략 요지
+Language scope is a ladder of four tiers. Each tier names a body of language and the machinery the
+implementation must own to support it, and each tier rests on the one below: the constructs at a
+higher tier are lowered onto the machinery the lower tiers already provide. This document defines the
+tiers and states which one the implementation satisfies. It is not a delivery plan — open work is in
+[../ROADMAP.md](../ROADMAP.md), and the order in which the tiers were built is in
+[../history/](../history/README.md).
 
-IEEE 1800(SystemVerilog)은 IEEE 1364(Verilog)를 흡수한 상위 호환 표준이다. 따라서 SV RTL 서브셋을 구현하면 Verilog-2005 RTL 전체가 자동으로 커버된다 — 별도 Verilog 프론트엔드는 필요 없다. 단일 SV 프론트엔드로 두 언어를 동시에 지원하는 것이 이 전략의 핵심이다.
+## One front end for two languages
 
-VHDL(IEEE 1076)은 다른 언어이므로 별도 프론트엔드(lexer/parser/elaborator)가 필요하다. 그러나 elaborate 이후 단계 — sim-ir, sim-engine, hdl-builtins, vcd-writer — 는 언어 중립 설계이므로 SV 경로와 공유한다. VHDL 프론트엔드는 공유 IR 위에 얹는 구조다.
+IEEE 1800 (SystemVerilog) is a superset of IEEE 1364 (Verilog). Implementing the SystemVerilog
+subset therefore covers Verilog-2005 RTL in full, and a second lexer, parser and elaborator for
+Verilog would be duplicated machinery with a second set of defects. There is one front end.
 
----
+VHDL (IEEE 1076) is a different language and would need its own lexer, parser and elaborator.
+Everything from `sim-ir` onward — the frozen IR, the event kernel, the `$` builtins and the waveform
+writers — is language-neutral and is shared. That boundary is what makes a second front end an
+addition rather than a rewrite, and keeping it clean is a standing constraint on the elaborate output
+([04](04-architecture.md), [17](17-sim-ir-ir-backbone-freeze.md)).
 
-## Phase 1 — MVP
+## The ladder
 
-**범위:** SV 합성가능 RTL 서브셋. Verilog-2005 RTL 전체를 포함한다.
+| Tier | Language scope | What the implementation must own | State at HEAD |
+|---|---|---|---|
+| L0 · synthesizable RTL core | `module` and ports, `parameter`/`localparam`, `generate`/`genvar`, nets and variables, packed vectors and arrays, multi-dimensional unpacked arrays, continuous assignment, `initial`/`always`/`always_ff`/`always_comb`/`always_latch`, the `case` family, the loop forms, subroutines, gate primitives and UDPs, `#delay`/`@`/`wait`, the display, time, control and dump task families | an event-driven 4-state kernel with the IEEE 1364 region core (Active, Inactive, NBA, Postponed); an integer time axis with a timescale and precision conversion rule; elaboration that resolves parameters, unrolls `generate`, builds the instance hierarchy and detects multiple drivers; a waveform writer whose bytes are a golden | satisfied |
+| L1 · SystemVerilog structure | `interface`/`modport`, `package`/`import`, `typedef`, `enum`, packed `struct` and `union`, unpacked records, `string`, dynamic arrays, queues, associative arrays, `foreach`, `unique`/`priority`, assignment patterns, streaming operators, type parameters, compilation-unit items | a symbol and type layer above nets: interfaces, packages and virtual interfaces resolve by flattening and aliasing rather than by a new net kind; engine-side heap storage for the dynamic kinds, with a degrade-loudly contract on a null or absent handle; out-of-band sidecar tables, so that none of this widens the frozen IR — a construct that adds a frozen field costs a `format_version` bump and invalidates every artifact | satisfied |
+| L2 · verification layer | classes with single inheritance and virtual dispatch, parameterized classes, constrained random (`rand`, `constraint`, `dist`, `randomize() with`), concurrent assertions with the sequence and property operators, deferred assertions, functional coverage, `automatic` and recursive subroutines, hierarchical references, `program`, `clocking`, the file-I/O and introspection task families | a call-frame model with its own storage and lifetime rules; scheduling regions beyond the 1364 core — Preponed sampling, Observed and Reactive maturation; a constraint solver with a fixed draw order; and the discipline that every one of these lowers to IR-0, synthesizing ordinary nets and processes plus sidecars and adding no frozen IR node | satisfied, with the per-construct restrictions tabulated in [01](01-goals-and-scope.md) |
+| L3 · VHDL | IEEE 1076: `entity`/`architecture`, `process`/`wait`, signal assignment, and `std_logic_1164` / `numeric_std` recognised as builtins | a second lexer, parser and elaborator emitting the same `sim-ir`; the VHDL type system mapped onto the existing net kinds; multi-valued `std_logic` resolution | not present. No VHDL front end exists. The re-entry trigger is recorded in [ROADMAP §7](../ROADMAP.md): a SystemVerilog plateau, a decision that the value domain is worth a second front end, and a GHDL-based oracle |
 
-**산출물:** preprocess → lex → parse → elaborate → event-driven sim → VCD. ⚠️ **백엔드 문구는 낡았다 (superseded 2026-08-17)** — the shipping backend is `native` (a compiled op-stream over a flat arena) and it is the default; `interp` (IR-walking) survives only as the reference semantics in a development build. See [01 §백엔드](01-goals-and-scope.md).
+The tiers are scope, not sequence. A construct is admitted at the tier whose machinery it needs; an
+item that would need L3 machinery is not admissible at L2 by writing it differently.
 
-`timescale` 정밀도와 VCD 생성은 MVP 1일차부터 지원한다. 정확성 없이 속도만 높이는 방향은 택하지 않는다.
+## What holds at every tier
 
-**system tasks 핵심 셋 (Phase 1):**
+These are not tier-specific and do not graduate:
 
-- 출력: `$display` / `$write` / `$monitor` / `$strobe` (형식 변형 포함)
-- 시간 조회: `$time` / `$realtime`
-- 시뮬레이션 제어: `$finish` / `$stop`
-- VCD dump 패밀리: `$dumpfile` / `$dumpvars` / `$dumpon` / `$dumpoff` / `$dumpall`
+- Mixed `` `timescale `` modules share one global time axis, and the conversion is exact at the
+  declared precision ([08](08-timescale-and-timing.md)).
+- Waveform output is driven by the RTL's dump tasks, in VCD or FST, and is regression-gated by a
+  golden diff ([07](07-vcd-format.md)).
+- Every supported construct is verified differentially against a live oracle, and pinned by hand
+  against the LRM clause where no tool implements it ([09](09-testing-and-verification.md)).
+- A diagnostic carries a source location, a stable code and a message a user can act on
+  ([13](13-diagnostics-and-logging.md), [15](15-error-code-reference.md)).
+- The system-task compliance corpus keeps at least one case per family.
+- The same design produces byte-identical output across platforms and across all three executors.
 
-**Phase 1 마일스톤:**
+## Scope-control rules
 
-1. 단일 모듈 + `always`/`always_ff`/`always_comb`/`always_latch` 블록 / clock 토글 + `$display` 정상 동작
-2. 다계층 모듈 + parameter resolution
-3. `$dumpvars` 호출로 VCD 파일 생성
-4. Icarus Verilog와 차등검증 PASS (신호값·천이 시각 일치)
+1. The boundary is the tables in [01](01-goals-and-scope.md). The synthesizability legend in
+   [hdl-reference/](hdl-reference/01-synthesizability-legend.md) answers a different question, and
+   several constructs a synthesis tool rejects — `initial`, `#delay`, `$display`, `$finish` — are
+   mandatory here.
+2. A construct enters the supported set with its verification path attached. With neither a live
+   oracle nor an LRM-derived hand pin, it stays loud. The absence of an oracle is not a reason to
+   defer the construct itself: a tool that refuses a legal construct is evidence about that tool.
+3. When two oracles disagree, the IEEE LRM decides. Where the LRM leaves an answer
+   implementation-defined — the `$urandom` stream, `$readmem` address handling, the ordering of
+   `initial` blocks across instances — vitamin fixes its own answer and documents it as a pin rather
+   than presenting it as an oracle.
+4. A promotion from loud to supported is additive. It may not make a working construct loud, and it
+   is re-reviewed under both review lenses when its design changes.
+5. Feature pressure is answered by the ladder, not by the queue. Scope grows a tier at a time, and
+   the tier states the machinery the growth requires.
 
-**Phase 1 인프라 트랙 (코어와 병행 — Phase 1 완료 게이트):**
+## Extensions that were built, measured and rejected
 
-- **단계 산출물 직렬화** — `vita-artifact`(+`vita-artifact-derive` proc-macro): `work/` 라이브러리 + `.velab` 스냅샷 + 구조적 schema 해시(D2). (→ §14)
-- **filelist 전개기** — `-f`/`-F` 재귀 중첩, `+incdir+`/`+define+` 집계. (→ §14 §3.1)
-- **진단/로깅** — `diag`(단일 진단 렌더) + `vita-log`(transcript·로그파일 tee·severity·exit-code). (→ §13)
-- **에러 코드 카탈로그** — 안정 `MsgCode` + §15 레퍼런스 + CI 1:1 동기 게이트.
-- **건전성 게이트 (Phase 1 PASS 조건):** RULE V(stale 스냅샷 `vrun` 거부), RULE S(디렉티브 carryover 해시), API(typed PreprocInputs/ElabInputs)가 동작·테스트돼야 한다.
+Each of these is closed with a measurement rather than an opinion, and each carries a re-entry
+condition, so re-proposing one means producing a number that beats the recorded one.
 
----
+| Extension | Verdict | Where the measurement lives |
+|---|---|---|
+| In-process machine-code generation (cranelift) | rejected: wired into the arena backend it is slower than the interpreted op stream, because about 38% of a run is the shim across the code-generation boundary while the opcode dispatch it could remove is 9 to 11%. It survives as the `jit` cargo feature, off by default and additionally gated by an environment variable | [18](18-acceleration-analysis.md), [ROADMAP §5](../ROADMAP.md) |
+| A separate 2-state simulation mode | rejected: the measured cost of 4-state evaluation is the per-value metadata, not the extra states, and the overwhelming majority of evaluated values are already definite and within one machine word | [ROADMAP §5](../ROADMAP.md) |
+| A cycle-based execution mode | rejected, with the feasibility argument and its verdict written out | [20](20-cycle-mode-feasibility.md) |
+| Levelized combinational evaluation | rejected on measurement | [ROADMAP §5](../ROADMAP.md) |
 
-## Phase 2 — SV 확장
+Performance work that was kept — the flat arena, width-specialised expression evaluation, and the
+per-body compiled op stream — is described in [21](21-tier3-native-backend.md) and measured in
+[study/01](../study/01-interpreted-vs-compiled.md).
 
-**범위:** Phase 1 RTL 서브셋에서 SV 고유 구문으로 확장.
+## Where the open work is
 
-**주요 언어 기능:** `interface` / `modport`, `package`, `struct` / `enum` / `typedef`, `foreach`, `unique` / `priority` (구조적 SV)
-
-> `always_comb`/`always_ff`/`always_latch`는 합성가능 RTL이므로 **Phase 1로 이동**한다. 1차 근거는 06 엔진 스펙의 Phase-1 예제·auto-sensitivity 동작이며, `W-ELAB-ALWCOMBORDER`(W3046, §15 부록 A의 MVP-SIM 인벤토리 코드)도 이를 전제한다. Phase 2에는 구조적 SV만 남는다.
->
-> **✅ Phase 2 전 항목 완료(2026-06-12, format_version 7).** `interface`/`modport`·`package`/`import`/`pkg::`·`struct`/`enum`/`typedef`·`foreach`·`unique`/`priority`·full `string`·동적 배열/queue/연관 배열 전부 IN 승격. 파일 I/O·`$readmemb/h`·`$random`(Annex N)·plusargs·bit-vector(`$bits`/`$countones`/`$onehot(0)`/`$isunknown`)도 함께 승격. **이후 v9(2026-06-18)에서 추가 승격**: 파일 READ 패밀리(`$fread`/`$fscanf`/`$fgets`/`$sscanf`/`$feof`/`$fgetc`)·`$writememb/h`·`$countbits`·introspection(`$typename`/`$cast`/`$size`/`$left`/`$right`/`$low`/`$high`/`$increment`/`$dimensions`/`$isunbounded`)·`$changed`/`$sampled`·`$exit`(=`$finish` 별칭)·`$monitoron/off`·`$dist_uniform`. **잔여 컷(loud)**: math transcendentals(N6)·비-uniform `$dist_*`(`$dist_normal`/`$dist_exponential` 등)·`$system`·`$assertcontrol`.
-
-**system tasks 확장 셋 (Phase 2):**
-
-- 파일 I/O: ✅ `$fopen` / `$fclose` / `$fwrite` / `$fdisplay`(구현, v7 — b/o/h·MCD) · `$sformat` / `$sformatf`(구현) · `$fread` / `$fscanf` / `$fgets` / `$sscanf` / `$feof` / `$fgetc`(✅ 구현, v9 — blocking-assign rhs)
-- 메모리 로드: ✅ `$readmemh` / `$readmemb`(구현, v7) · `$writememh` / `$writememb`(✅ 구현, v9)
-- 변환: `$signed` / `$unsigned` / `$rtoi` / `$itor` / `$bitstoreal` / `$realtobits`
-- 비트벡터: ✅ `$bits` / `$clog2` / `$countones` / `$onehot` / `$onehot0` / `$isunknown`(구현, v7) · `$countbits`(✅ 구현, v9)
-- 수학: `$pow`(정수=구현) · `$ln` / `$log10` / `$exp` / `$sqrt` / `$sin` / `$cos` / `$tan`(*math transcendentals — N6, pure-Rust libm 3-OS 결정성 핀 대기로 loud reject*)
-- random: ✅ `$random`(IEEE Annex N) / `$urandom` / `$urandom_range`(구현, v7 — 자체 계약) · `$dist_uniform`(✅ 구현, v9) · 비-uniform `$dist_*`(`$dist_normal`/`$dist_exponential` 등, 후속·loud)
-- assertion 샘플링: ✅ `$past` / `$rose` / `$fell` / `$stable` / `$changed` / `$sampled`(*전부 구현 — prev-reg desugar, Phase-3 SVA 트랙*)
-- introspection: ✅ `$typename` / `$cast` / `$size` / `$left` / `$right` / `$low` / `$high` / `$increment` / `$dimensions` / `$isunbounded`(✅ 구현, v9 — const-fold/태스크·함수 양형)
-- 기타: ✅ `$value$plusargs` / `$test$plusargs`(구현) · `$exit`(✅ 구현, v9 — `$finish` 별칭) · `$system`(후속·loud)
-
-**Phase 2 마일스톤:**
-
-1. ✅ `package` + `typedef` 정상 동작 (v7)
-2. ✅ `interface`로 신호 그룹 전달
-3. ✅ assertion 샘플링 함수(`$past` / `$rose` / `$fell` / `$stable`) 동작 — 구현 완료(Phase-3 SVA 트랙)
-
----
-
-## Phase 3 — VHDL
-
-> **현 상태(2026-06):** Phase 3은 **SVA(SystemVerilog Assertions) 서브셋 트랙으로 먼저 진입·완료**됐다
-> (format_version 8, 순수 IR-0 desugar — 단일/다중-클럭 concurrent assert·전 시퀀스 연산자(`##n`/`##[m:n]`/`##[m:$]`/`[*n]`/`[*m:n]`/`throughout`/`[->n]`/`[=n]`/`within`)·sampled
-> value func·named property/sequence+formal args·property-level `and`/`or`·recursive property(tail)·cross-clock N-clock chains·generate-scope·disable iff·module-level assert property·action block; 상세 = `docs/ROADMAP.md` §4.3 #6).
-> **이어 frame-call(automatic/recursive 콜스택, B-track 2026-06-17)·repeat-event NBA(N1)·계층 read-only 이름 참조(N3/N3.1)도 완료**(전부 순수 IR-0).
-> **faithful deferred immediate asserts**(`assert #0`=Observed·`assert final`=Reactive)도 구현(22탄). 잔여 SVA(loud, 후속) = multi-term cross-clock segment lane·sequence local variable(N2c=조건부 defer)·outer-`|=>` prop-ref skew 고급형.
-> **clocking block은 조건부 NO-GO**(N4 — Preponed/sampled-value 스케줄링 리전 부재로 `@(cb); x=cb.sig`서 1-cycle lag silent-wrong, 스파이크 후 revert).
-> 아래 VHDL 프론트엔드는 Phase-3의 **후속** 트랙이며 아직 미착수다.
-
-**범위:** IEEE 1076 프론트엔드를 별도로 구축하되, elaborate 이후 공유 IR 위에 얹는다.
-
-재사용 대상: sim-ir, sim-engine, hdl-builtins, vcd-writer — Phase 1/2와 동일 경로.
-
-**빌트인 패키지:** `std_logic_1164` / `numeric_std`는 VHDL 프론트엔드가 인식하는 빌트인으로 처리한다.
-
-**Phase 3 마일스톤:**
-
-1. `entity` / `architecture` + signal assignment 동작
-2. `process` + `wait` 동작
-3. IEEE 패키지(`std_logic_1164`, `numeric_std`) 빌트인 동작
-
----
-
-## 상시 횡단
-
-단계 구분 없이 모든 Phase에 걸쳐 지속 관리하는 항목:
-
-- **timescale 정밀도** — 서로 다른 `timescale` 모듈 혼재 시에도 전역 시간축이 어긋나지 않음
-- **VCD 생성** — RTL dump 태스크 호출 기반, golden diff 회귀
-- **차등검증** — Icarus Verilog / Verilator와 신호값·천이 시각 비교
-- **진단 품질** — 소스 위치 포함 오류 메시지, 사용자가 직접 수정 가능한 수준
-- **system tasks 컴플라이언스 코퍼스** — 범주별 최소 1개 케이스 전수 통과
-
----
-
-## 후속 (여력 시)
-
-현재는 비목표이나 IR 경계를 열어두고 후속 단계에서 검토한다:
-
-- ~~**컴파일드/JIT 백엔드**~~ — ⛔ **2026-08-17 기각.** 지어서(`jit` feature) tier-3 에 배선하고 쟀더니 **14~47% 느리다**: 런의 **~38% 가 shim** 이고, 없앨 수 있는 op 디스패치는 **8.9~11.3%** 뿐이다(ROADMAP §5.1-be). 성능은 대신 **평면 아레나 + 폭 특수화 평가기 + 2-state 레인**으로 얻었다 — 벤치 8형태 **전부 native < vm**
-- ~~**FST 파형** — LZ4 압축 기반, 대용량 설계 대응~~ → ✅ **구현됨(2026-07-17)**: `$dumpfile("x.fst")`/`-o x.fst`(`.fst` 확장자 디스패치) — VCD→FST 트랜스코드(`vcd-writer/src/fst.rs`), 순수-Rust `fst-writer` 위임
-- **SV assertion 영역 확장** — Preponed / Observed / Reactive / Postponed (program block용)
-- **확장 VCD** — `$dumpports*` 지원
-
----
-
-## 리스크 / 의존성
-
-**SV 범위 통제:** SystemVerilog 표준은 방대하다. Phase 1을 합성가능 RTL 서브셋으로 엄격히 제한하지 않으면 MVP 범위가 무한 확장된다. 기능 추가 압력에 대해 Phase 경계를 명시적으로 유지해야 한다.
-
-**차등검증 도구 간 의미 차이:** Icarus Verilog와 Verilator는 표준의 미묘한 부분에서 구현이 다를 수 있다. 두 도구가 충돌할 때는 IEEE LRM(1차 표준)을 최종 권위로 삼는다.
-
-**system tasks 비결정 영역:** `$urandom`의 seed·스트림 관리, `$random`의 분포, `$readmemh`의 주소 해석 등 도구마다 구현이 다른 영역이 있다. 이 항목들은 "표준 정의 + Icarus 의미"를 기준으로 명시적으로 문서화하고, 컴플라이언스 코퍼스에 해당 케이스를 포함한다.
-
----
-
-## Sources
-
-- 본 spec §9 (로드맵) — `docs/superpowers/specs/2026-05-26-vitamin-rtl-simulator-design.md`
-- 본 spec §2 (목표/비목표), §5 (아키텍처), §8 (검증 전략), §14 (리스크) — 상동
+| Question | Document |
+|---|---|
+| what is wrong or missing, by section | [../ROADMAP.md](../ROADMAP.md) — §2 silent-wrong, §3 loud to correct-support, §4 assertion residues, §5 performance and hardening, §6 the observability rail, §7 conditional items, §8 permanent non-goals |
+| one screen of status and the next few items | [../REMAINING_WORK.md](../REMAINING_WORK.md) |
+| what a user can and cannot rely on today | [../manual/003_language-reference.md](../manual/003_language-reference.md) and [../manual/006_limitations.md](../manual/006_limitations.md) |
+| the order in which the tiers were built | [../history/](../history/README.md) |

@@ -18,12 +18,12 @@ module tb;
         if (got == 0) nperm = 100;
         din = 1600'd0;
         @(posedge clk); @(posedge clk);
-        rst_n = 1'b1;
+        rst_n <= 1'b1;
         @(posedge clk);
         for (n = 0; n < nperm; n = n + 1) begin
-            start = 1'b1;
+            start <= 1'b1;
             @(posedge clk);
-            start = 1'b0;
+            start <= 1'b0;
             wait (done == 1'b1);
             @(posedge clk);
             // chain: next input = previous output, lane 0 stirred by the counter

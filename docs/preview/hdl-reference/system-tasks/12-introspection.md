@@ -1,37 +1,33 @@
 # 12 · Introspection Functions
 
-## 개요
+## Overview
 
-SystemVerilog의 introspection(내성) 함수는 실행 중인 시뮬레이션 안에서
-타입·배열·파라미터 정보를 조회하는 수단을 제공한다.
-`$typename`은 타입 이름 문자열을, `$cast`는 런타임 동적 캐스트를,
-`$isunbounded`는 파라미터 unbounded 여부를 확인한다.
-`$size` / `$left` / `$right` / `$low` / `$high` / `$increment` /
-`$dimensions` / `$unpacked_dimensions`는 배열의 차원 정보를 런타임에 쿼리한다.
+SystemVerilog's introspection functions are the means by which running code queries type, array and
+parameter information from inside the simulation.
+`$typename` returns a type's name as a string, `$cast` performs a run-time dynamic cast, and
+`$isunbounded` reports whether a parameter is unbounded.
+`$size`, `$left`, `$right`, `$low`, `$high`, `$increment`, `$dimensions` and
+`$unpacked_dimensions` query an array's dimension information at run time.
 
-이 함수들은 파라미터화 모듈, 제네릭 테스트벤치, 동적 OOP 코드에서
-타입에 독립적인 범용 코드를 작성할 때 특히 유용하다.
+These functions are most useful when writing type-independent, general-purpose code: parameterised
+modules, generic testbenches and dynamic OOP code.
 
-## 구현 상태
+## vita support
 
-- ✅ **구현됨**: `$typename`, `$isunbounded`, `$size`, `$left`, `$right`, `$low`, `$high`,
-  `$increment`, `$dimensions`, `$unpacked_dimensions` — 전부 elaborate-time const-fold
-  (`try_introspect_fold`; net 인자 해소 → 차원 디스크립터/타입 spelling 조회. type-literal·indexed·
-  expression 인자는 여전히 loud). `$cast` — task 형태(`SysTaskId::Cast`)·function 형태(`SysFuncId::Cast`)
-  모두 배선됨(enum/value 캐스트; class 다운캐스트는 OOP(N7) 트랙과 연동).
-  hand-IEEE 핀(iverilog 13.0이 이들을 거부 → 차분 오라클 부재).
+This note describes the language, not the simulator. What vita accepts today is recorded in
+[docs/manual/003_language-reference.md](../../../manual/003_language-reference.md).
 
 ---
 
-## 타입 쿼리
+## Type queries
 
-### `$typename(expr_or_type)` — 타입 이름 문자열 반환
+### `$typename(expr_or_type)` — the type name as a string
 
-- **표준**: IEEE 1800-2017 §20.6
-- **반환**: string — 인자의 "해결된 타입 이름"
-- 표현식(expression)과 타입(data type) 양쪽을 인자로 받는다.
+- **Standard**: IEEE 1800-2017 §20.6
+- **Returns**: string — the argument's "resolved type name"
+- It accepts either an expression or a data type as its argument.
 
-typedef, enum, parameterized type 모두 원래 이름을 보존해 반환한다:
+A typedef, an enum or a parameterised type all come back under their original name:
 
 ```sv
 typedef logic [7:0] byte_t;
@@ -46,10 +42,10 @@ $display("%s", $typename(b));       // "byte_t"
 $display("%s", $typename(s));       // "state_e"
 $display("%s", $typename(nibble));  // "logic [3:0]"
 $display("%s", $typename(n));       // "int"
-$display("%s", $typename(byte_t));  // "byte_t"  (타입 직접 전달도 가능)
+$display("%s", $typename(byte_t));  // "byte_t"  (a type may be passed directly)
 ```
 
-파라미터화 모듈에서 어떤 타입이 바인딩되었는지 로그로 확인할 때 유용하다:
+It is useful for logging which type got bound inside a parameterised module:
 
 ```sv
 module checker #(type T = logic [7:0]) (input T data);
@@ -57,57 +53,57 @@ module checker #(type T = logic [7:0]) (input T data);
 endmodule
 ```
 
-**주의**: 반환 문자열의 정확한 포맷은 구현 정의(implementation defined)다.
-문자열 내용을 파싱해 분기 로직을 만드는 것은 이식성을 깨뜨린다.
-디버그·로깅 목적으로만 사용할 것.
+**Careful**: the exact format of the returned string is implementation defined.
+Parsing that string to drive branch logic destroys portability.
+Use it for debugging and logging only.
 
-**Icarus**: 기본 타입은 동작, typedef 이름 보존은 부분적.
-**Verilator**: 지원 (`--sv` 모드).
+**Icarus**: the built-in types work; typedef-name preservation is partial.
+**Verilator**: supported (`--sv` mode).
 
 ---
 
-### `$cast(dest, src)` — 런타임 동적 캐스트
+### `$cast(dest, src)` — a run-time dynamic cast
 
-- **표준**: IEEE 1800-2017 §20.5
-- 소스 값(src)이 대상 타입(dest)에 런타임에 적합한지 확인하고 대입한다.
-- 정적 캐스트(`type'(expr)`)는 컴파일타임 체크인 데 반해,
-  `$cast`는 **런타임에 값(value)을 직접 검사**한다 — 변수 선언 타입이 아니라 실제 값을 본다.
+- **Standard**: IEEE 1800-2017 §20.5
+- Checks at run time whether the source value (src) fits the destination type (dest), then assigns.
+- A static cast (`type'(expr)`) is a compile-time check, whereas `$cast` **examines the value
+  itself at run time** — it looks at the actual value, not at the variable's declared type.
 
-두 가지 호출 형태가 있다:
+It has two call forms:
 
-#### 태스크(task) 형태
+#### The task form
 
-캐스트에 실패하면 런타임 에러를 발생시키고 dest는 변경되지 않는다.
+On a failed cast it raises a run-time error and leaves dest unchanged.
 
 ```sv
 $cast(dest_handle, src_handle);
 ```
 
-#### 함수(function) 형태
+#### The function form
 
-성공이면 1, 실패이면 0을 반환한다. 실패해도 런타임 에러가 발생하지 않으며
-dest는 변경되지 않는다. 직접 오류 메시지를 커스터마이즈할 때 사용한다.
+Returns 1 on success and 0 on failure. A failure raises no run-time error and leaves dest
+unchanged. Use it when you want to write your own error message.
 
 ```sv
 if (!$cast(dest_handle, src_handle))
   $error("cast failed: src type mismatch at %0t", $time);
 ```
 
-**사용 예 1 — enum 범위 확인**:
+**Example 1 — checking an enum range**:
 
 ```sv
 typedef enum logic [1:0] { S0, S1, S2 } fsm_t;
 logic [1:0] raw_val;
 fsm_t       state;
 
-// raw_val = 2'b11 이면 cast 실패 (열거값에 없음)
+// raw_val = 2'b11 fails the cast (it is not one of the enumerated values)
 if (!$cast(state, raw_val))
   $error("invalid state encoding: %0b", raw_val);
 else
   $display("state = %s", state.name());
 ```
 
-**사용 예 2 — 클래스 계층 다운캐스트**:
+**Example 2 — a downcast within a class hierarchy**:
 
 ```sv
 class Packet;
@@ -121,37 +117,40 @@ endclass
 Packet    base_pkt;
 EthPacket eth_pkt;
 
-base_pkt = new EthPacket();   // 부모 핸들로 자식 객체 참조 (업캐스트)
+base_pkt = new EthPacket();   // a child object referenced through a parent handle (an upcast)
 
-// 다운캐스트 — 부모 핸들이 실제로 EthPacket을 가리킬 때만 성공
+// the downcast — it succeeds only when the parent handle really points at an EthPacket
 if ($cast(eth_pkt, base_pkt))
   $display("vlan=%0d", eth_pkt.vlan);
 else
   $error("not an EthPacket");
 ```
 
-**핵심**: `$cast`는 **타입이 아닌 값**을 보기 때문에 같은 코드라도 런타임 값에 따라 결과가 달라진다. 항상 함수 형태로 호출해 반환값을 확인하는 것이 권장 패턴이다.
+**The essential point**: `$cast` looks at the **value, not the type**, so the same code can produce
+different outcomes depending on the run-time value. The recommended pattern is always to call the
+function form and check its return value.
 
-**Icarus**: 클래스 OOP 지원이 제한적 — class hierarchy cast 제한됨; enum cast 부분 지원.
-**Verilator**: class OOP 포함 완전 지원.
+**Icarus**: class OOP support is limited — casting across a class hierarchy is restricted; enum
+casts are partially supported.
+**Verilator**: fully supported, class OOP included.
 
 ---
 
-### `$isunbounded(expr)` — unbounded 파라미터 확인
+### `$isunbounded(expr)` — is the parameter unbounded
 
-- **표준**: IEEE 1800-2017 §20.6
-- 인자가 unbounded 값(`$`)이면 1'b1(true), 아니면 1'b0(false)을 반환한다.
+- **Standard**: IEEE 1800-2017 §20.6
+- Returns 1'b1 (true) when the argument is the unbounded value (`$`), and 1'b0 (false) otherwise.
 
-SystemVerilog에서 파라미터는 `$`(unbounded)를 값으로 가질 수 있다.
-`$isunbounded`는 이 값을 감지해 분기 처리할 때 사용한다.
+In SystemVerilog a parameter may take `$` (unbounded) as its value.
+`$isunbounded` detects that value so the code can branch on it.
 
 ```sv
 module memctrl #(
-  parameter int DEPTH = $,    // 기본값: unbounded
+  parameter int DEPTH = $,    // default: unbounded
   parameter int WIDTH = 8
 ) (...);
 
-  // 파라미터 유효성 체크
+  // parameter validity check
   initial begin
     if (!$isunbounded(DEPTH) && DEPTH < 4)
       $fatal(1, "DEPTH must be >= 4 or $ (unbounded), got %0d", DEPTH);
@@ -163,24 +162,25 @@ module memctrl #(
 endmodule
 ```
 
-SVA의 unbounded 반복(`##[n:$]`)과 조합해 사용하는 경우도 있다.
+It is also used in combination with SVA's unbounded repetition (`##[n:$]`).
 
-**Icarus / Verilator**: 지원.
+**Icarus / Verilator**: supported.
 
 ---
 
-## 배열 차원 쿼리
+## Array dimension queries
 
-### 차원 번호 체계 (dim argument)
+### The dimension numbering (the dim argument)
 
-배열 쿼리 함수들은 모두 선택적 `dim` 인자를 받는다. 번호 규칙:
+Every array query function takes an optional `dim` argument. The numbering rule:
 
-- `dim = 1`: 가장 왼쪽 **unpacked** 차원
-- 이후 오른쪽 방향으로 unpacked 차원 번호 증가
-- unpacked 차원 소진 후, 왼쪽에서 오른쪽 방향으로 **packed** 차원 번호 계속 증가
-- **dim 생략**: 기본값 1 (첫 번째 unpacked 차원)
+- `dim = 1`: the leftmost **unpacked** dimension
+- the unpacked dimension numbers increase rightwards from there
+- once the unpacked dimensions are exhausted, the **packed** dimension numbers continue, again
+  left to right
+- **dim omitted**: defaults to 1 (the first unpacked dimension)
 
-예시로 아래 선언을 기준으로 설명한다:
+The declaration below is the reference for the examples:
 
 ```sv
 logic [7:0][15:0] arr [3:0][0:7];
@@ -190,31 +190,33 @@ logic [7:0][15:0] arr [3:0][0:7];
 
 ---
 
-### `$size(arr [, dim])` — 원소 수
+### `$size(arr [, dim])` — the element count
 
-- **표준**: IEEE 1800-2017 §20.7
-- 지정 차원의 원소 수를 반환한다. `$high(arr,dim) - $low(arr,dim) + 1`과 동등.
-- dim 생략 시 dim=1.
+- **Standard**: IEEE 1800-2017 §20.7
+- Returns the number of elements in the named dimension. Equivalent to
+  `$high(arr,dim) - $low(arr,dim) + 1`.
+- With dim omitted, dim = 1.
 
 ```sv
 logic [7:0] byte_arr [0:3];
 
-$size(byte_arr)      // = 4  (dim=1 unpacked)
+$size(byte_arr)      // = 4  (dim=1, unpacked)
 $size(byte_arr, 1)   // = 4
-$size(byte_arr, 2)   // = 8  (dim=2 packed [7:0])
+$size(byte_arr, 2)   // = 8  (dim=2, the packed [7:0])
 ```
 
-동적 배열은 현재 할당 크기를, 큐는 현재 원소 수를 반환한다.
-연관 배열에는 `$size`를 쓸 수 없다 — `.num()` 메서드로 대체한다.
+A dynamic array answers with its currently allocated size and a queue with its current element
+count.
+`$size` cannot be used on an associative array — use the `.num()` method instead.
 
 ---
 
-### `$left(arr [, dim])` / `$right(arr [, dim])` — 선언 경계
+### `$left(arr [, dim])` / `$right(arr [, dim])` — the declared bounds
 
-- **표준**: IEEE 1800-2017 §20.7
-- `$left`: 선언에서 **왼쪽**에 적힌 경계값을 반환한다.
-- `$right`: 선언에서 **오른쪽**에 적힌 경계값을 반환한다.
-- 방향(up-counting / down-counting)을 그대로 반영한다.
+- **Standard**: IEEE 1800-2017 §20.7
+- `$left`: returns the bound written on the **left** in the declaration.
+- `$right`: returns the bound written on the **right**.
+- Both reflect the declared direction (up-counting or down-counting) as written.
 
 ```sv
 logic [7:0] a_down [3:0];   // left=3, right=0 (down-counting)
@@ -228,152 +230,135 @@ $right(a_up)    // = 3
 
 ---
 
-### `$low(arr [, dim])` / `$high(arr [, dim])` — 절대 최솟값·최댓값
+### `$low(arr [, dim])` / `$high(arr [, dim])` — the absolute minimum and maximum
 
-- **표준**: IEEE 1800-2017 §20.7
-- 선언 방향에 무관하게 항상 **작은 값**이 `$low`, **큰 값**이 `$high`.
+- **Standard**: IEEE 1800-2017 §20.7
+- Regardless of the declared direction, `$low` is always the **smaller** value and `$high` the
+  **larger**.
 
 ```sv
 logic [7:0] a_down [3:0];
 logic [7:0] a_up   [0:3];
 
-$low(a_down)    // = 0   (3과 0 중 작은 쪽)
+$low(a_down)    // = 0   (the smaller of 3 and 0)
 $high(a_down)   // = 3
 $low(a_up)      // = 0
 $high(a_up)     // = 3
 ```
 
-배열 순회에서 방향에 독립적인 코드를 쓰고 싶을 때 `$low`/`$high`를 쓴다.
-선언된 방향 자체를 확인해야 할 때는 `$left`/`$right`를 쓴다.
+Use `$low` and `$high` to write array traversal that does not depend on the declared direction.
+Use `$left` and `$right` when the declared direction itself is what you need to know.
 
 ---
 
-### `$increment(arr [, dim])` — 인덱스 방향
+### `$increment(arr [, dim])` — the index direction
 
-- **표준**: IEEE 1800-2017 §20.7
-- `$left >= $right`이면 **1**, `$left < $right`이면 **-1**을 반환한다.
-- 인덱스 순회 방향을 런타임에 감지할 때 사용한다.
+- **Standard**: IEEE 1800-2017 §20.7
+- Returns **1** when `$left >= $right` and **-1** when `$left < $right`.
+- Used to detect the index traversal direction at run time.
 
 ```sv
 logic [7:0] a_down [7:0];   // $left=7 >= $right=0 → +1
 logic [7:0] a_up   [0:7];   // $left=0 < $right=7  → -1
 
-// 방향 독립적 순회
+// direction-independent traversal
 for (int i = $low(arr); i <= $high(arr); i++)
   process(arr[i]);
 
-// increment를 이용한 정방향/역방향 선택
+// choosing forward or reverse using increment
 initial begin
   automatic int step = $increment(arr);
   automatic int idx  = $left(arr);
   repeat ($size(arr)) begin
     process(arr[idx]);
-    idx -= step;  // down-count면 -(+1)=-1 → 감소, up-count면 -(-1)=+1 → 증가
+    idx -= step;  // down-counting: -(+1) = -1 → decrement; up-counting: -(-1) = +1 → increment
   end
 end
 ```
 
 ---
 
-### `$dimensions(arr)` / `$unpacked_dimensions(arr)` — 차원 수
+### `$dimensions(arr)` / `$unpacked_dimensions(arr)` — the dimension count
 
-- **표준**: IEEE 1800-2017 §20.7
-- `$dimensions`: packed + unpacked 전체 차원 수.
-  1-D scalar 비트 벡터나 문자열은 1 반환. 비-배열 타입은 0.
-- `$unpacked_dimensions`: unpacked 차원 수만. packed-only 배열은 0.
+- **Standard**: IEEE 1800-2017 §20.7
+- `$dimensions`: the total dimension count, packed plus unpacked.
+  A 1-D scalar bit vector or a string answers 1. A non-array type answers 0.
+- `$unpacked_dimensions`: the unpacked dimension count only. A packed-only array answers 0.
 
 ```sv
 logic [7:0][15:0] arr [3:0][0:7];
 
-$dimensions(arr)             // = 4 (unpacked 2 + packed 2)
+$dimensions(arr)             // = 4 (2 unpacked + 2 packed)
 $unpacked_dimensions(arr)    // = 2
 
 logic [7:0] packed_only;
-$dimensions(packed_only)     // = 1 (packed 1차원)
+$dimensions(packed_only)     // = 1 (one packed dimension)
 $unpacked_dimensions(packed_only) // = 0
 ```
 
-**제네릭 테스트벤치 패턴** — 차원 수를 런타임에 확인해 로직 분기:
+**A generic-testbench pattern** — branch on the dimension count checked at run time:
 
 ```sv
 module auto_checker #(type T = logic [7:0]) (input T dut_out, T ref_out);
   initial begin
     if ($dimensions(dut_out) > 1)
       $display("multi-dim array: %0d dims", $dimensions(dut_out));
-    // 차원별 루프는 generate나 recursive task로 구현
+    // per-dimension loops are written with a generate block or a recursive task
   end
 endmodule
 ```
 
 ---
 
-## 함수 정리 비교
+## The functions side by side
 
-| 함수 | 반환 | 주요 용도 |
+| Function | Returns | Main use |
 |------|------|---------|
-| `$typename(e)` | string | 디버그 타입 이름 출력 |
-| `$cast(dst, src)` | 1/0 (function form) | 런타임 동적 타입 캐스트 |
-| `$isunbounded(e)` | bit | 파라미터 unbounded 확인 |
-| `$size(arr [,dim])` | int | 차원 원소 수 |
-| `$left(arr [,dim])` | int | 선언 왼쪽 경계 |
-| `$right(arr [,dim])` | int | 선언 오른쪽 경계 |
-| `$low(arr [,dim])` | int | 절대 최솟값 경계 |
-| `$high(arr [,dim])` | int | 절대 최댓값 경계 |
-| `$increment(arr [,dim])` | 1 or -1 | 인덱스 방향 |
-| `$dimensions(arr)` | int | 전체 차원 수 |
-| `$unpacked_dimensions(arr)` | int | unpacked 차원 수 |
+| `$typename(e)` | string | printing a type name while debugging |
+| `$cast(dst, src)` | 1/0 (function form) | a run-time dynamic type cast |
+| `$isunbounded(e)` | bit | checking whether a parameter is unbounded |
+| `$size(arr [,dim])` | int | the element count of a dimension |
+| `$left(arr [,dim])` | int | the left declared bound |
+| `$right(arr [,dim])` | int | the right declared bound |
+| `$low(arr [,dim])` | int | the absolute minimum bound |
+| `$high(arr [,dim])` | int | the absolute maximum bound |
+| `$increment(arr [,dim])` | 1 or -1 | the index direction |
+| `$dimensions(arr)` | int | the total dimension count |
+| `$unpacked_dimensions(arr)` | int | the unpacked dimension count |
 
 ---
 
-## Icarus / Verilator 지원
+## Icarus / Verilator support
 
-| 함수 | Icarus Verilog | Verilator |
+| Function | Icarus Verilog | Verilator |
 |------|---------------|-----------|
-| `$typename` | 기본 타입 지원, typedef 부분적 | 지원 (`--sv`) |
-| `$cast` (enum) | 부분 지원 | 지원 |
-| `$cast` (class) | 제한적 (OOP 미완성) | 지원 |
-| `$isunbounded` | 지원 | 지원 |
-| `$size` | 지원 (단순 1-dim) | 지원 |
-| `$left/$right/$low/$high` | 부분 지원 | 지원 |
-| `$increment` | 제한적 | 지원 |
-| `$dimensions/$unpacked_dimensions` | 제한적 | 지원 |
+| `$typename` | built-in types supported, typedefs partial | supported (`--sv`) |
+| `$cast` (enum) | partial | supported |
+| `$cast` (class) | limited (OOP incomplete) | supported |
+| `$isunbounded` | supported | supported |
+| `$size` | supported (simple 1-dim) | supported |
+| `$left/$right/$low/$high` | partial | supported |
+| `$increment` | limited | supported |
+| `$dimensions/$unpacked_dimensions` | limited | supported |
 
-Icarus는 SV 배열 쿼리의 서브셋만 구현한다. 멀티-dim 배열에서 dim 인자를 지정한 쿼리는
-동작하지 않거나 잘못된 값을 반환할 수 있다.
-Verilator는 SystemVerilog 서브셋에서 이 함수들을 안정적으로 지원한다.
-
----
-
-## 합성 가능성
-
-❌ 전 함수 비합성 — 시뮬레이션 및 검증 전용.
-`$typename`/`$dimensions`/`$size` 등은 elaborate-time 상수로 계산될 수 있으나
-합성 도구가 이를 인식하지 않는 경우가 대부분이므로 RTL에서 사용하지 않는다.
+Icarus implements only a subset of the SV array queries. A query on a multi-dimensional array that
+names a dim argument may not work, or may return the wrong value.
+Verilator supports these functions reliably across its SystemVerilog subset.
 
 ---
 
-## 본 프로젝트 구현 메모
+## Synthesizability
 
-> ✅ **구현됨** — `$typename`/`$isunbounded`/`$size`/`$left`/`$right`/`$low`/`$high`/`$increment`/
-> `$dimensions`/`$unpacked_dimensions`는 elaborate-time const-fold(`try_introspect_fold`),
-> `$cast`는 task/function 양형 배선. 아래는 구현 배경·설계 메모다.
+❌ None of these functions is synthesizable — they are for simulation and verification only.
+`$typename`, `$dimensions`, `$size` and the rest can be computed as elaboration-time constants, but
+most synthesis tools do not recognise them, so keep them out of RTL.
 
-- **$typename**: 타입 메타데이터 조회 API — 타입 시스템 인프라에서 타입 ID → 이름 맵 유지.
-  typedef alias가 있으면 alias 이름을 우선 반환.
-- **$cast (function form)**: 런타임 타입 ID 비교 + 다운캐스트 허용 여부 체크.
-  실패 시 0 반환, dest_var 불변 보장.
-- **$cast (task form)**: 내부적으로 function form 호출 후 실패 시 `SimError` raise.
-- **$isunbounded**: `$`는 내부 특수 상수값(예: `Value::Unbounded`)으로 표현.
-  `$isunbounded(v)` = `v == Value::Unbounded`.
-- **$size / $left / $right / $low / $high / $increment**: 배열 디스크립터 구조체에
-  차원별 `(left, right)` 쌍을 저장. 쿼리 시 dim 인자로 인덱싱.
-  동적 배열은 디스크립터를 런타임에 갱신.
-- **$dimensions / $unpacked_dimensions**: 배열 디스크립터의 총 차원 수 / unpacked 차원 수 필드.
+---
 
 ## Sources
 
 - IEEE 1800-2017 §20.5 ($cast), §20.6 ($typename, $isunbounded), §20.7 (array dimension query)
-- research-log: [system-tasks-introspection-misc-2026-05-28.md](../../research-log/system-tasks-introspection-misc-2026-05-28.md)
+- research-log: [system-tasks-introspection-misc-2026-05-28.md](../../../history/research-log/system-tasks-introspection-misc-2026-05-28.md)
 - [circuitcove.com — Data and Array Query Functions](https://circuitcove.com/system-tasks-query/) (WebFetch ✓)
 - [vlsiverify.com — SystemVerilog Casting](https://vlsiverify.com/system-verilog/systemverilog-casting/) (WebFetch ✓)
 - [siemens verificationhorizons — $cast() runtime checks](https://blogs.sw.siemens.com/verificationhorizons/2021/06/28/runtime-checks-with-the-cast-method/) (WebFetch ✓)

@@ -1,51 +1,53 @@
-# 09 · Verilog 컴파일러 지시자 (Compiler Directives)
+# 09 · Verilog Compiler Directives
 
-IEEE 1364-2001/2005 기준. 백틱(`` ` ``)으로 시작하며 컴파일러·시뮬레이터에게 명령을
-내린다. 한 번 선언되면 **파일 경계와 모듈 경계를 모두 넘어** 이후 소스에 계속 효력이
-미친다. 합성 대상 하드웨어를 기술하는 것이 아니라 컴파일 방식을 제어한다.
+Per IEEE 1364-2001/2005. A compiler directive starts with a backtick (`` ` ``) and
+instructs the compiler or simulator. Once declared, it stays in effect for all source
+that follows, **crossing both file boundaries and module boundaries**. A directive does
+not describe hardware to be synthesised; it controls how compilation happens.
 
 ---
 
-## `define — 매크로 정의
+## `define — macro definition
 
-### 단순 상수 매크로
+### Simple constant macros
 
 ```verilog
 `define DATA_WIDTH 8
 `define RESET_VAL  8'h00
 
-// 사용 — 항상 백틱으로 참조
+// use — always referenced with a backtick
 wire [`DATA_WIDTH-1:0] bus;
 assign bus = `RESET_VAL;
 ```
 
-### 인수 있는 함수형 매크로
+### Function-like macros with arguments
 
 ```
-`define MACRO_NAME(arg1, arg2, ...) 매크로_본문
+`define MACRO_NAME(arg1, arg2, ...) macro_body
 ```
 
 ```verilog
 `define MAX(a, b)   ((a) > (b) ? (a) : (b))
 `define ADD3(x, y, z) ((x) + (y) + (z))
 
-// 사용
+// use
 assign result = `MAX(sig_a, sig_b);
 assign sum    = `ADD3(p, q, r);
 ```
 
-**인수를 반드시 괄호로 감싸는 이유**: 인수에 연산자가 들어오면 우선순위 문제가 생긴다.
+**Why every argument must be parenthesised**: an argument containing an operator runs
+into precedence problems.
 
 ```verilog
-`define DOUBLE(x) x * 2          // ❌ 위험
-`define DOUBLE(x) ((x) * 2)      // ✅ 안전
+`define DOUBLE(x) x * 2          // ❌ hazardous
+`define DOUBLE(x) ((x) * 2)      // ✅ safe
 
 assign y = `DOUBLE(a + b);
-// ❌ 전개: a + b * 2  → 잘못된 결과
-// ✅ 전개: ((a + b) * 2)
+// ❌ expands to: a + b * 2  → wrong result
+// ✅ expands to: ((a + b) * 2)
 ```
 
-### 여러 줄 매크로 (백슬래시 줄 이어 쓰기)
+### Multi-line macros (backslash line continuation)
 
 ```verilog
 `define LONG_EXPR(a, b, c) \
@@ -55,11 +57,11 @@ assign y = `DOUBLE(a + b);
 assign result = `LONG_EXPR(p, q, r);
 ```
 
-마지막 줄 뒤에는 백슬래시가 없어야 한다.
+The final line must not end with a backslash.
 
-### 토큰 붙이기 (Token Paste)
+### Token pasting
 
-두 백틱 ` `` ` 으로 인수를 서로 붙인다:
+A pair of backticks (``` `` ```) pastes an argument onto the adjacent text:
 
 ```verilog
 `define SIGNAL(n) sig_``n
@@ -70,37 +72,37 @@ assign result = `LONG_EXPR(p, q, r);
 
 ---
 
-## `undef — 매크로 해제
+## `undef — undefining a macro
 
 ```verilog
 `define TEMP 100
-// ... TEMP 사용 ...
+// ... TEMP used here ...
 `undef TEMP
-// 이후 `TEMP 참조 → 컴파일 에러
+// referencing `TEMP after this point → compile error
 ```
 
-파일 범위를 제한하거나 헤더 파일 끝에서 정리하는 용도로 사용한다.
+Used to limit a macro to one file, or to clean up at the end of a header file.
 
 ---
 
-## `ifdef / `ifndef / `elsif / `else / `endif — 조건부 컴파일
+## `ifdef / `ifndef / `elsif / `else / `endif — conditional compilation
 
 ```verilog
 `define SYNTHESIS
 
 `ifdef SYNTHESIS
-    // 합성 전용 코드 (시뮬레이터는 이 구간을 읽지 않음)
+    // synthesis-only code (the simulator never reads this section)
     assign out = fast_path;
 `elsif FPGA_TARGET
-    // FPGA 전용 코드
+    // FPGA-only code
     assign out = fpga_path;
 `else
-    // 나머지 (시뮬레이션)
+    // everything else (simulation)
     assign out = sim_path;
 `endif
 ```
 
-`ifndef`는 `ifdef`의 반전이다:
+`ifndef` is the inverse of `ifdef`:
 
 ```verilog
 `ifndef GATE_SIM
@@ -108,12 +110,12 @@ initial $display("RTL simulation");
 `endif
 ```
 
-`ifdef / `else / `endif 는 중첩 가능하다. 하지만 단계가 깊어지면 가독성이 떨어지므로
-최소화한다.
+`ifdef / `else / `endif can be nested, but deep nesting hurts readability — keep it to
+a minimum.
 
 ---
 
-## `include — 파일 삽입
+## `include — file inclusion
 
 ```verilog
 `include "defs.vh"
@@ -121,15 +123,17 @@ initial $display("RTL simulation");
 `include "/abs/path/to/defines.vh"
 ```
 
-해당 위치에 파일 전체 내용이 삽입된다. 검색 경로는 컴파일러 옵션으로 추가한다:
+The entire contents of the file are inserted at that point. Search paths are added
+through compiler options:
 
 ```
 iverilog -I ./include -I ../shared ...
 vcs     +incdir+./include+../shared ...
 ```
 
-상대 경로는 **현재 소스 파일 위치** 기준이다 (컴파일러 실행 위치가 아님). 헤더 파일은
-중복 삽입 방지를 위해 include guard 패턴을 사용한다:
+A relative path is resolved against **the location of the current source file** (not
+the directory the compiler was run from). Header files use the include-guard pattern to
+avoid being inserted twice:
 
 ```verilog
 // defs.vh
@@ -142,41 +146,43 @@ vcs     +incdir+./include+../shared ...
 
 ---
 
-## `timescale — 시간 단위와 정밀도
+## `timescale — time unit and precision
 
 ```
 `timescale <time_unit> / <time_precision>
 ```
 
 ```verilog
-`timescale 1ns  / 1ps    // 단위 1 ns, 정밀도 1 ps
-`timescale 10ns / 1ns    // 단위 10 ns, 정밀도 1 ns
-`timescale 1us  / 100ns  // 단위 1 µs, 정밀도 100 ns
+`timescale 1ns  / 1ps    // unit 1 ns, precision 1 ps
+`timescale 10ns / 1ns    // unit 10 ns, precision 1 ns
+`timescale 1us  / 100ns  // unit 1 µs, precision 100 ns
 ```
 
-허용 단위: `1`, `10`, `100` 조합 + `s / ms / us / ns / ps / fs`.
-정밀도는 반드시 단위보다 작거나 같아야 한다 (`1ns/10ns`는 불법).
+Permitted units: `1`, `10` or `100` combined with `s / ms / us / ns / ps / fs`. The
+precision must be less than or equal to the unit (`1ns/10ns` is illegal).
 
-### 범위 동작
+### Scoping behaviour
 
-`timescale`은 선언된 뒤 이후 모든 모듈에 적용된다. 파일 경계를 넘는다.
-여러 파일에서 서로 다른 `timescale`을 선언하면 **마지막 선언이 이후를 덮어쓴다**.
+A `timescale` applies to every module declared after it, and it crosses file
+boundaries. When several files each declare a `timescale`, **the last declaration
+overrides what follows it**.
 
 ```verilog
 // fileA.v
 `timescale 1ns/1ps
 module A; ... endmodule
 
-// fileB.v  (fileA.v 후에 컴파일)
+// fileB.v  (compiled after fileA.v)
 `timescale 1us/1ns
 module B; ... endmodule
-// 이 시점부터 A 모듈의 내부도 1us/1ns로 재해석될 수 있음
+// from here on, the insides of module A may be reinterpreted as 1us/1ns
 ```
 
-이 누수를 막으려면 각 파일 앞에 `` `resetall ``을 놓고 원하는 `timescale`을 재선언한다:
+To stop this leakage, put a `` `resetall `` at the head of each file and re-declare the
+`timescale` you want:
 
 ```verilog
-// fileA.v — 안전 패턴
+// fileA.v — the safe pattern
 `resetall
 `timescale 1ns/1ps
 `default_nettype none
@@ -185,85 +191,87 @@ module A; ... endmodule
 
 ---
 
-## `default_nettype — 암묵적 net 타입 지정
+## `default_nettype — implicit net type
 
 ```verilog
-`default_nettype none    // 암묵적 net 선언 비활성화
-`default_nettype wire    // 기본값 (암묵적 wire 허용)
+`default_nettype none    // disable implicit net declarations
+`default_nettype wire    // the default (implicit wires allowed)
 ```
 
-### `default_nettype none 의 실용적 이점
+### Why `default_nettype none` is worth using
 
-기본값 `wire` 상태에서는 선언하지 않은 신호 이름이 자동으로 1비트 `wire`로 만들어진다.
-오탈자 net이 조용히 생성되어 연결이 끊긴 채 시뮬레이션이 X를 전파한다:
+Under the `wire` default, any undeclared signal name silently becomes a 1-bit `wire`. A
+typo creates a net that is not connected to anything, and the simulation quietly
+propagates X:
 
 ```verilog
-// ❌ default_nettype wire (기본값) — 위험
+// ❌ default_nettype wire (the default) — hazardous
 module buggy(output y, input a, b);
-    assign y = aaaa & b;   // 오타: 'a' → 'aaaa'
-    // 'aaaa'가 암묵적 wire로 생성됨 → a와 단절, y는 항상 0
-    // 컴파일 에러 없음 → 디버깅 매우 어려움
+    assign y = aaaa & b;   // typo: 'a' → 'aaaa'
+    // 'aaaa' is created as an implicit wire → disconnected from a, y is always 0
+    // no compile error → very hard to debug
 endmodule
 ```
 
 ```verilog
-// ✅ default_nettype none — 안전
+// ✅ default_nettype none — safe
 `default_nettype none
 module safe(output y, input a, b);
-    assign y = aaaa & b;   // 'aaaa' 미선언 → 즉시 컴파일 에러
+    assign y = aaaa & b;   // 'aaaa' undeclared → immediate compile error
 endmodule
 ```
 
-파일 끝에서 기본값을 복원해 다른 파일에 영향을 주지 않는다:
+Restore the default at the end of the file so other files are not affected:
 
 ```verilog
 `default_nettype none
-// ... 모듈 선언 ...
-`default_nettype wire   // 복원 (또는 `resetall)
+// ... module declarations ...
+`default_nettype wire   // restore (or `resetall)
 ```
 
 ---
 
-## `begin_keywords / `end_keywords — 예약어 집합 제어
+## `begin_keywords / `end_keywords — selecting the reserved-word set
 
 ```verilog
 `begin_keywords "1364-2001"
-// 이 구간에서 Verilog-2001 키워드만 예약어로 인식
-// SV 추가 키워드(interface, program 등)는 식별자로 사용 가능
+// inside this region only Verilog-2001 keywords are reserved
+// the SV additions (interface, program, ...) may be used as identifiers
 module old_code;
-    wire interface;   // SV에서는 예약어지만 이 구간에서는 허용
+    wire interface;   // reserved in SV, but allowed inside this region
 endmodule
 `end_keywords
 ```
 
-### 유효 버전 문자열
+### Valid version strings
 
-| 버전 문자열 | 키워드 집합 |
+| Version string | Keyword set |
 |-----------|-----------|
-| `"1364-1995"` | Verilog-95 키워드 |
-| `"1364-2001"` | Verilog-2001 키워드 |
-| `"1364-2005"` | Verilog-2005 키워드 |
-| `"1800-2005"` | SystemVerilog-2005 키워드 |
-| `"1800-2009"` | SystemVerilog-2009 키워드 |
-| `"1800-2012"` | SystemVerilog-2012 키워드 |
-| `"1800-2017"` | SystemVerilog-2017 키워드 (기본) |
+| `"1364-1995"` | Verilog-95 keywords |
+| `"1364-2001"` | Verilog-2001 keywords |
+| `"1364-2005"` | Verilog-2005 keywords |
+| `"1800-2005"` | SystemVerilog-2005 keywords |
+| `"1800-2009"` | SystemVerilog-2009 keywords |
+| `"1800-2012"` | SystemVerilog-2012 keywords |
+| `"1800-2017"` | SystemVerilog-2017 keywords (default) |
 
-모듈·프리미티브·인터페이스·프로그램·패키지 **바깥에서만** 선언할 수 있다.
-주 용도: SV 툴체인으로 구버전 Verilog 코드를 처리할 때 새 키워드가 기존 식별자와
-충돌하는 것을 막는다.
+It may only be declared **outside** a module, primitive, interface, program or package.
+Its main use: processing older Verilog code with a SystemVerilog toolchain, where the
+newer keywords would otherwise collide with existing identifiers.
 
 ---
 
-## `resetall — 모든 지시자 초기화
+## `resetall — reset every directive
 
-모든 기본값이 있는 지시자를 초기값으로 되돌린다. 영향을 받는 지시자:
-- `` `timescale `` (제거)
+Returns every directive that has a default to its initial value. Directives affected:
+- `` `timescale `` (removed)
 - `` `default_nettype `` → `wire`
-- `` `unconnected_drive `` (제거)
-- `` `celldefine `` / `` `endcelldefine `` (제거)
+- `` `unconnected_drive `` (removed)
+- `` `celldefine `` / `` `endcelldefine `` (removed)
 
 ```verilog
-// 파일 시작에 놓는 관례 — 다른 파일에서 흘러든 설정을 초기화
+// the convention is to put this at the head of the file — it clears settings that
+// leaked in from another file
 `resetall
 `timescale 1ns/1ps
 `default_nettype none
@@ -272,15 +280,16 @@ module my_module;
     // ...
 endmodule
 
-`resetall   // 파일 끝에서 복원 (선택적)
+`resetall   // restore at the end of the file (optional)
 ```
 
 ---
 
-## `celldefine / `endcelldefine — 라이브러리 셀 표시
+## `celldefine / `endcelldefine — marking library cells
 
-사이에 선언된 모듈을 라이브러리 셀로 마킹한다. SDF(Standard Delay Format)
-back-annotation 도구나 타이밍 분석기가 이 플래그를 보고 내부를 블랙박스로 처리한다:
+Marks the modules declared between them as library cells. SDF (Standard Delay Format)
+back-annotation tools and timing analysers read the flag and treat the contents as a
+black box:
 
 ```verilog
 `celldefine
@@ -296,64 +305,68 @@ endmodule
 `endcelldefine
 ```
 
-표준 셀 라이브러리 작성 시 모든 셀 모듈에 적용한다.
+Apply it to every cell module when writing a standard cell library.
 
 ---
 
-## `pragma — 툴 전용 힌트
+## `pragma — tool-specific hints
 
-표준은 `pragma 구문을 정의하지만 키워드 의미는 툴마다 다르다:
+The standard defines the `pragma syntax, but the meaning of the keywords differs from
+tool to tool:
 
 ```verilog
-// synthesis translate_off (Synopsys/Xilinx 관용)
+// synthesis translate_off (the Synopsys/Xilinx convention)
 initial $display("debug: x=%0h", x);
 // synthesis translate_on
 
-`pragma protect begin    // IP 암호화 시작 (Xilinx/Cadence)
-// ... 암호화 대상 코드 ...
+`pragma protect begin    // start of IP encryption (Xilinx/Cadence)
+// ... code to be encrypted ...
 `pragma protect end
 ```
 
-`pragma`는 표준화되지 않아 컴파일러 간 이식성이 없다. 조건부 컴파일이 목적이라면
-`` `ifdef SYNTHESIS `` 패턴을 우선 사용한다.
+`pragma is not standardised, so it does not port between compilers. When conditional
+compilation is what you actually want, prefer the `` `ifdef SYNTHESIS `` pattern.
 
-> **vitamin 정책(수용-무시):** `` `pragma <한 줄> ``은 무진단으로 줄 전체를 소비하고 버린다
-> (IEEE 1800 §22.11 — 의미 해석은 툴 재량). 어느 pragma 키워드도 동작에 영향을 주지 않는다.
+> **Interpretation is left to the tool.** IEEE 1800 §22.11 leaves the meaning of a
+> pragma to the implementation, so no pragma keyword carries portable semantics. For
+> what vita does with the directive, see
+> [docs/manual/003_language-reference.md](../../../manual/003_language-reference.md).
 
 ---
 
-## `line — 소스 위치 정보 삽입
+## `line — inserting source-position information
 
-코드 생성기나 전처리기가 에러 메시지에 원본 파일·라인 번호를 표시하도록 삽입한다:
+Inserted by code generators and preprocessors so that error messages name the original
+file and line number:
 
 ```
 `line <line_number> "<filename>" <level>
 ```
 
-- `level = 0`: 일반 (현재 파일 내)
-- `level = 1`: include 파일 진입
-- `level = 2`: include 파일에서 복귀
+- `level = 0`: ordinary (within the current file)
+- `level = 1`: entering an include file
+- `level = 2`: returning from an include file
 
 ```verilog
 `line 42 "original_source.v" 0
-// 이후 컴파일 에러는 "original_source.v:42"로 표시
+// compile errors after this point are reported as "original_source.v:42"
 ```
 
-직접 작성하는 RTL 코드에서는 거의 쓰지 않는다. 자동 생성 코드나 매크로 전개 툴의
-출력에 삽입된다.
+Rarely used in hand-written RTL. It appears in the output of code generators and
+macro-expansion tools.
 
 ---
 
-## 지시자 범위와 파일 패턴 요약
+## Directive scope and file patterns, summarised
 
-| 지시자 | 기본값 | 파일 경계 유지 | 권장 패턴 |
+| Directive | Default | Confined to one file | Recommended pattern |
 |--------|-------|--------------|----------|
-| `` `define `` | 없음 | ❌ (파일 넘어 효력) | 헤더 파일 + include guard |
-| `` `timescale `` | 없음 | ❌ | 각 파일 앞에 명시 + `resetall 패턴 |
-| `` `default_nettype `` | `wire` | ❌ | `none` 선언 + 파일 끝에 `resetall |
-| `` `celldefine `` | 비활성 | ❌ | 셀 라이브러리 파일 전체에 적용 |
-| `` `begin_keywords `` | "1800-2017" | ✅ (`end_keywords` 구간) | 구버전 코드 구간만 한정 |
-| `` `resetall `` | — | — | 파일 시작에 삽입 |
+| `` `define `` | none | ❌ (leaks past the file) | header file + include guard |
+| `` `timescale `` | none | ❌ | state it at the head of every file, with the `` `resetall `` pattern |
+| `` `default_nettype `` | `wire` | ❌ | declare `none`, then `` `resetall `` at the end of the file |
+| `` `celldefine `` | inactive | ❌ | apply across a whole cell-library file |
+| `` `begin_keywords `` | "1800-2017" | ✅ (bounded by `` `end_keywords ``) | limit it to the legacy-code region |
+| `` `resetall `` | — | — | insert at the head of the file |
 
 ---
 
@@ -361,10 +374,10 @@ initial $display("debug: x=%0h", x);
 
 - IEEE 1364-2001 §19 (compiler directives)
 - IEEE 1800-2017 §22 (compiler directives)
-- chipverify.com/verilog/verilog-compiler-directives (WebFetch 검증 ✓)
-- chipverify.com/verilog/verilog-define-macros (WebFetch 검증 ✓, 매크로 인수 구문)
-- hdlworks.com/hdl_corner/verilog_ref/items/CompilerDirectives.htm (WebFetch 검증 ✓, `resetall/`line/`celldefine)
-- vlsiverify.com/verilog/compiler-directives/ (조건부 컴파일 예제)
-- accellera.org P1800 keyword compatibility directive proposal (`begin_keywords 버전 문자열 교차 확인)
-- front-end-verification.blogspot.com (default_nettype none 타이포 포착 동작 검증)
-- analogcircuitdesign.com/verilog-compiler-directives/ (`timescale 범위 동작)
+- chipverify.com/verilog/verilog-compiler-directives (verified by WebFetch ✓)
+- chipverify.com/verilog/verilog-define-macros (verified by WebFetch ✓, macro argument syntax)
+- hdlworks.com/hdl_corner/verilog_ref/items/CompilerDirectives.htm (verified by WebFetch ✓, `resetall / `line / `celldefine)
+- vlsiverify.com/verilog/compiler-directives/ (conditional compilation examples)
+- accellera.org P1800 keyword compatibility directive proposal (cross-check of the `begin_keywords version strings)
+- front-end-verification.blogspot.com (verification that default_nettype none catches typos)
+- analogcircuitdesign.com/verilog-compiler-directives/ (`timescale scoping behaviour)

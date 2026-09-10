@@ -1,206 +1,296 @@
-# 08 · Timescale · 정밀 시간
+# 08 · Timescale and Precision
 
-## 왜 정밀도가 핵심인가
+How a module's time unit and precision are resolved, how a `#delay` becomes an integer
+number of simulation ticks, how time is reported back to the design, and how all of that
+survives the staged artifact path. The scheduler that consumes the resulting ticks is
+[06-simulation-engine.md](06-simulation-engine.md).
 
-시뮬레이터 버그는 조용한 오답을 만든다. 신호 천이 시각이 1 precision unit만 어긋나도 setup/hold time 위반 검출이 빠지거나, 두 이벤트의 선후가 뒤바뀌어 설계 오류가 통과될 수 있다. 파형 덤프(VCD)에는 틀린 시각이 기록되고, 검증 엔지니어는 올바른 회로를 디버깅하느라 시간을 낭비한다.
-
-따라서 시뮬레이터가 `timescale`을 정확히 구현했는지는 단순 기능 요구가 아니라 **시뮬레이터 신뢰성의 기준**이다.
+Time is a correctness property, not a convenience. A transition placed one precision unit
+off can hide a setup or hold violation, invert the order of two events, and write the
+wrong timestamp into a waveform — all at exit 0, with nothing to notice. Accumulating
+time in floating point makes exactly that failure inevitable: a value like 0.1 has no
+exact IEEE-754 binary representation, and after enough additions the low bits of the
+current time are gone. vitamin therefore keeps simulation time in a single 64-bit integer
+and does every conversion at a defined rounding point.
 
 ---
 
-## `` `timescale unit/precision ``
-
-### 문법
+## 1. `` `timescale unit/precision ``
 
 ```verilog
 `timescale <time_unit>/<time_precision>
 ```
 
-두 인수 모두 `{1|10|100}<단위>` 형식이어야 한다. 허용값:
+Each side is a mantissa and a unit. Both are mandatory.
 
-| 필드 | 허용 숫자 | 허용 단위 |
-|------|-----------|-----------|
-| time_unit | 1, 10, 100 | s, ms, us, ns, ps, fs |
-| time_precision | 1, 10, 100 | s, ms, us, ns, ps, fs |
+| Field | Mantissa | Unit |
+|---|---|---|
+| `time_unit` | `1`, `10`, `100` | `s`, `ms`, `us`, `ns`, `ps`, `fs` |
+| `time_precision` | `1`, `10`, `100` | `s`, `ms`, `us`, `ns`, `ps`, `fs` |
 
-제약:
-- `time_precision ≤ time_unit` — precision이 unit보다 클 수 없다.
-- `timescale`은 컴파일러 디렉티브이므로 모듈 정의 바깥, 파일 최상단에 위치한다.
+Internally each side is a base-10 exponent of seconds: `s` is 0, `ms` −3, `us` −6, `ns`
+−9, `ps` −12, `fs` −15, plus 0, 1 or 2 for the mantissa. So `100ps` is −10 and `10ns` is
+−8.
 
-예시:
+| Rule | Behaviour |
+|---|---|
+| Mantissa other than 1, 10, 100 | `E-PP-BAD-DIRECTIVE` |
+| Precision coarser than unit | `E-PP-BAD-DIRECTIVE`: *time_precision (…) coarser than time_unit (…)* |
+| Placement | a compiler directive, outside any module declaration |
+
 ```verilog
-`timescale 1ns/1ps     // 1ns 단위, 1ps 정밀도 — 일반 RTL 검증에 흔한 조합
-`timescale 10ns/100ps  // 10ns 단위, 100ps 정밀도
-`timescale 1us/1ns     // 느린 아날로그 인터페이스 모델
+`timescale 1ns/1ps     // the common RTL verification pairing
+`timescale 10ns/100ps
+`timescale 1us/1ns     // a slow interface model
 ```
-
-### 모듈별 적용 vs 컴파일 단위
-
-`timescale`은 **파일 내 이후에 오는 모든 모듈**에 적용된다. 다음 `timescale` 선언이 나올 때까지 유지된다. 이 파일-순서 의존성은 복잡한 설계에서 함정이 된다:
-
-```
-파일 A: `timescale 1ns/1ps
-         module fast_logic ... endmodule
-
-파일 B: module no_timescale_here ... endmodule
-          ↑ 파일 B를 파일 A 뒤에 컴파일하면 1ns/1ps 상속
-          ↑ 파일 B를 단독으로 컴파일하면 툴 default 받음
-          → 컴파일 순서 바뀌면 결과가 달라지는 고전 버그
-```
-
-**vitamin 기저값 (no-timescale base — 잠금).** 어떤 모듈도 `` `timescale ``/`timeunit`을 선언하지 않고 `--timescale` 플래그도 없으면, 전역 시간 단위/정밀도의 기저값을 **`1ns/1ns`** 로 적용하도록 잠그고(동작 규칙 확정), 구현은 **`W-PP-TIMESCALE-DEFAULT`**(W1017, §15 부록 A 인벤토리 — 구현 시 본문+enum 승격) 경고를 발화한다. 이 기저값이 §14의 `global_time_precision = min(소비단위 유효 precision)` 계산에서 **공집합 min()을 정의**한다(빈 집합 → 기저 정밀도 `1ns`). 기저값은 OS/컴파일 순서와 무관한 상수이므로 "3-OS 동일 결과"·velab 합성 해시(RULE T)의 결정성을 깨지 않는다. 일부 모듈만 `` `timescale ``을 가진 **부분 지정**은 별개 조건으로, 현재 구현은 미지정 모듈에 기저값 `1ns/1ns`를 **조용히** 배정한다(전체 부재 시에만 `W-PP-TIMESCALE-DEFAULT` 경고). 부분 지정 전용 정책 진단(lenient `W-PARSE-TIMESCALE-PARTIAL` / strict `E-PP-TIMESCALE-PARTIAL` / `--timescale-policy` 선택)은 **미구현 future work**다(ROADMAP §3 트래킹).
-
-SystemVerilog는 이를 해결하는 **모듈 내 선언** 방식을 IEEE 1800에 추가했다:
-
-```systemverilog
-module precise_block;
-  timeunit 1ns;
-  timeprecision 1ps;
-  // 이 모듈은 컴파일 순서와 무관하게 항상 1ns/1ps
-  // ...
-endmodule
-```
-
-규칙 (IEEE 1800-2012): 모듈, program, package, interface, $root 각각 최대 하나의 `timeunit`/`timeprecision`. 반드시 해당 스코프의 다른 아이템보다 먼저 선언.
 
 ---
 
-## 64-bit 정수 시간 모델
+## 2. Which timescale governs a module
 
-### 전역 simulation tick
+A `` `timescale `` applies to **every module that follows it in the expanded text**,
+until the next one. The preprocessor records each directive's offset in expanded-text
+coordinates; a module is governed by the **last region whose offset is at or before the
+module's own span start**. A module that precedes every region uses the base.
 
-혼합 timescale 설계에서 시뮬레이터는 **전체 설계에서 가장 작은(finest) precision**을 1 simulation tick으로 사용한다.
+| Situation | Result |
+|---|---|
+| The design contains no `` `timescale `` anywhere | every module takes the base **1ns/1ns**, and the run emits `W-PP-TIMESCALE-DEFAULT` (`VITA-W1017`): *no \`timescale in the design; assuming the 1ns/1ns base* |
+| Some modules are governed and some are not | the ungoverned modules take the 1ns/1ns base, and the run emits `W-PP-TIMESCALE-MIXED` (`VITA-W1018`), naming up to eight of them and then `(and N more)` |
+| Every module is governed | no diagnostic |
 
-```
-설계 내 모든 `timescale` / timeunit 선언에서:
-  global_precision = min(precision_1, precision_2, ..., precision_n)
-```
+IEEE 1800 §3.14.2.2 makes the mixed form an error, and other tools refuse to elaborate
+it. vitamin runs it — the design does have a well-defined answer here, and Icarus Verilog
+accepts it too — but says so, and names the modules, so the warning is actionable. A CI
+that wants the standard's severity gets it with `-Werror=W-PP-TIMESCALE-MIXED`.
 
-모든 시간 값은 이 global_precision 단위의 64-bit 정수로 저장된다. 부동소수는 사용하지 않는다.
+The base is a constant, independent of platform and of compilation order, so it does not
+weaken the byte-identical-output contract or the artifact staleness hash.
 
-### 왜 정수인가
+### 2.1 File order and its guards
 
-부동소수(float/double)를 누적하면 표현 오차가 쌓인다. 0.1 같은 소수는 IEEE 754 binary64에서 정확히 표현되지 않는다. 수백만 번의 시각 진전 후 마지막 유효 비트가 소실되고 시각이 조용히 어긋난다.
-
-역사적 사례 — Patriot 방공 시스템(1991, 걸프전): 0.1초씩 float로 누적 → 100시간 후 0.34초 오차 → 표적 추적 실패 → 28명 사망. 시뮬레이터 버그가 무기 시스템만큼 치명적이지 않더라도, **동일한 수학적 원리로 조용한 오답**을 만든다.
-
-64-bit 정수는 이 문제가 없다. 2^64 − 1 tick까지 정확히 표현하며, 10ps precision으로 잡으면 최대 표현 가능 시간 ≈ 184,467초 — 어떤 RTL 시뮬레이션에도 충분하다.
-
-### 모듈별 unit/precision → 전역 tick 환산
-
-각 모듈의 `#delay`는 다음 두 단계로 정수 tick으로 변환된다:
-
-> **구현 위치(format_version 4, 2026-06-10):** 이 환산은 **엔진이 suspension-time에** 수행한다 —
-> `Terminator::Delay.amount`는 모듈 단위의 RAW 값을 평가하는 ExprId이므로 `#5` 같은 상수와
-> `#d`/`#(d*2)`/`#r` 같은 **런타임 식이 한 경로**를 공유한다(상수는 Const 노드로 폴딩될 뿐).
-> X/Z delay는 0 tick(iverilog parity), 정수는 u64-saturating × M, real은 아래 round 규칙 그대로.
-
-**1단계: 모듈 precision으로 반올림**
-```
-반올림 규칙: fractional_part >= 0.5 → 올림, < 0.5 → 내림
-```
-
-**2단계: global_precision으로 스케일**
-```
-ticks = rounded_value_in_module_unit × (module_unit / global_precision)
-```
-
-> **구현 상태(format_version 22, 2026-07-17):** 이 2단계 동작은 **구현 완료**. 이전 구현은 모듈 precision 반올림 없이 global grain에서 1회만 반올림했으나(silent-wrong), 모듈별 `prec_exp` threading(`ResolvedTimescales.prec_exp` → `Sidecars.proc_prec_mults` → `SimOpts.proc_prec_mults`)으로 수정 — iverilog 차분 검증 완료.
-
-### 구체 계산 예시
+The rule is order-sensitive by construction, and that is a real hazard: the same file
+compiled after a different neighbour inherits a different unit.
 
 ```
-// ModuleA: `timescale 1ns/100ps
-//   time_unit = 1ns = 1000ps, time_precision = 100ps
-// ModuleB: `timescale 1us/10ns
-//   time_unit = 1us = 1,000,000ps, time_precision = 10ns = 10,000ps
-// global_precision = min(100ps, 10,000ps) = 100ps
+file A: `timescale 1ns/1ps
+        module fast_logic … endmodule
 
-// ModuleA에서 #1.55 처리:
-//   1단계: 1.55ns → 1.6ns (100ps precision으로 반올림: 1600ps → 가장 가까운 100ps = 1600ps)
-//         정확히: 1.55 × 10 = 15.5 → 반올림 16 → 1600ps
-//   2단계: 1600ps / 100ps = 16 ticks
-
-// ModuleA에서 #0.49 처리:
-//   1단계: 0.49ns → 0.5ns? 아니, 정밀도 기준:
-//         0.49 × 10 = 4.9 → 반올림 5 → 500ps
-//   2단계: 500ps / 100ps = 5 ticks
-
-// ModuleA에서 #0.044 처리 (precision보다 작은 경우):
-//   1단계: 0.044 × 10 = 0.44 → 반올림 0 → 0ps
-//   결과: 0 ticks — 이 delay는 아무 시간도 소비하지 않음 (advance 없음)
-//   → VCD에 기록되지 않고 동일 time-step에서 처리됨
-
-// ModuleB에서 #3.4 처리:
-//   1단계: 3.4us → 3.4 × 100 = 340 → 반올림 340 → 3,400,000ps
-//   2단계: 3,400,000ps / 100ps = 34,000 ticks
+file B: module no_timescale_here … endmodule
+        └ compiled after A → governed by 1ns/1ps
+        └ compiled alone   → the 1ns/1ns base + W-PP-TIMESCALE-DEFAULT
 ```
 
-반올림 규칙 요약: precision 단위의 배수 중 가장 가까운 값으로. 정확히 중간(0.5)이면 올림.
+Two guards bound the damage:
+
+- The mixed-specification warning above fires whenever the design is order-sensitive in
+  the way that matters.
+- In the filelist path, when the same source appears twice and the duplicate is dropped,
+  the sticky `` `timescale `` state each occurrence would have inherited is compared. A
+  difference is a hard `E-FLIST-DUP-CTX-CONFLICT` (`VITA-E8003`) rather than a silent
+  pick: *`{tok}` included twice under differing sticky context: first (`{first}`)
+  inherits `X`, duplicate inherits `Y`*, where an absent context renders as
+  `(base 1ns/1ns)`.
+
+`` `resetall `` strips its own token and nothing else. It does **not** reset the
+timescale, macros or `` `default_nettype ``.
+
+### 2.2 In-module declarations
+
+> **Status at HEAD.** `timeunit` and `timeprecision` are not implemented. Neither word
+> appears in the lexer, the parser or elaborate, so it lexes as an ordinary identifier
+> and the declaration dies at `VITA-E2002` (`E-PARSE-UNEXPECTED-TOKEN`). The
+> preprocessor directive is the supported channel for setting a module's time unit and
+> precision.
+
+There is no `--timescale` command-line override either. The design's own directives are
+the only input.
 
 ---
 
-## $time vs $realtime
+## 3. The global tick
 
-두 시스템 함수 모두 현재 simulation 시각을 반환하지만, 반환 타입과 정밀도 처리가 다르다.
+A mixed-timescale design cannot store time in per-module units. vitamin picks one grain
+for the whole design:
 
-| | `$time` | `$realtime` |
-|---|---------|-------------|
-| 반환 타입 | 64-bit 정수 | `real` (64-bit IEEE 754 double) |
-| 단위 | 호출 모듈의 `time_unit` | 호출 모듈의 `time_unit` |
-| Precision 반영 | 아니오 — `time_unit`로 최근접 반올림(round-half-up) | 예 — 소수점으로 표시 |
-| 용도 | 이벤트 시각 비교, 조건 분기 | 파형 출력, 사람이 읽는 로그 |
-
-```systemverilog
-// `timescale 1ns/100ps 모듈에서
-// 현재 내부 시각 = 2500ps (global tick)
-
-$display($time);      // 출력: 3  (2.5ns를 최근접 정수로 반올림; 2.5→3, IEEE §20.3.1)
-$display($realtime);  // 출력: 2.5 (precision 반영한 소수)
+```
+global_prec_exp = min(prec_exp) over every module in the design
 ```
 
-`$stime`(IEEE: `$time`의 하위 32비트)는 **구현됨**(v7) — `$time`처럼 모듈 단위로 최근접 반올림한 뒤 하위 32비트로 절단한다.
+An empty set — no module carries a timescale — yields the base exponent −9, i.e. a 1 ns
+tick. Every time value in the engine is a count of these ticks, held in a `u64`. No
+floating-point value ever accumulates.
 
-본 프로젝트 구현 방침:
-- 내부 시간 레지스터는 `u64` (전역 tick)
-- `$time` 구현: `(current_tick + M/2) / M` (M = `time_unit / global_precision`) — 최근접 정수 반올림(round-half-up; 시각 ≥ 0이라 round-half-away-from-zero와 동일해 iverilog와 일치). 단순 절사가 **아님**(IEEE 1800-2017 §20.3.1 "rounded to an integer value").
-- `$realtime` 구현: `current_tick as f64 * global_precision_in_ns / time_unit_in_ns`
-- VCD 타임스탬프 출력: 전역 tick 그대로 (`$timescale` 헤더에 global_precision 기록)
+At a 1 ps tick, `u64` spans roughly 2.1×10^7 seconds, about 213 days of simulated time;
+at the finest 1 fs grain, about five hours. Either bound is far past any RTL run, and the
+count is exact at every point in between.
 
 ---
 
-## 정밀도 회귀 테스트
+## 4. Per-module multipliers
 
-서로 다른 timescale 모듈이 혼재하는 설계에서 천이 시각이 1 precision unit까지 Icarus Verilog와 일치하는지 확인한다.
+Two integers per module carry the timescale into the engine, both derived at elaborate
+time and both at least 1:
 
-### 테스트 케이스 1 — 기본 반올림
+| Symbol | Definition | Meaning |
+|---|---|---|
+| `M` | `10^(unit_exp − global_prec_exp)` | one of the module's time units, in global ticks |
+| `S` | `10^(prec_exp − global_prec_exp)` | one step of the module's **own** precision, in global ticks |
+| `P` | `M / S` | steps of the module's own precision per module time unit |
+
+A module absent from either map — the no-timescale base — defaults to the global
+exponent, so `M = S = 1`. The exponent is capped at 18 so the power of ten cannot
+overflow a `u64` on an absurd ratio.
+
+These become two parallel per-process vectors that ride the sidecar tables into
+`SimOpts`, next to the scalar `global_prec_exp`. The engine sets its current multipliers
+**per activation**, from the entry for the process's template; empty tables mean
+`M = S = 1`, which is exactly the single-timescale case.
+
+Because the multipliers are per process, a system function that reports time answers in
+the units of the module that is *running*, not of the module that happens to be last in
+the design.
+
+---
+
+## 5. Delay conversion
+
+### 5.1 Where a delay is converted
+
+`Terminator::Delay.amount` is an ExprId whose value is in the declaring module's **time
+units**, and it is evaluated **at suspension time**. A constant `#5` and a runtime `#d`,
+`#(d*2)` or `#r` therefore share one path; a constant is simply folded to a constant
+node. The conversion is one shared function, `delay_ticks_of(value, M, S)`.
+
+One class of delay is converted earlier: a delay expression that contains a **time
+literal** (`#5ns`, `#(2500ps)`, `#(2.5ns + 1ns)`) is folded in the delay domain at
+elaborate time, before generic expression lowering, in both the procedural and the
+structural (`assign #d`) lanes. The fold is asked first rather than as a fallback,
+because the generic integer path would answer some of these shapes wrongly rather than
+declining. A delay with no time literal keeps the generic path untouched.
+
+### 5.2 The rule
+
+| Input | Result |
+|---|---|
+| real | two-stage: `r = round(v × P)`; if `r < 0` the delay is `u64::MAX` and never fires; otherwise `r × S`, saturating |
+| any X or Z bit | **0 ticks** |
+| integral | `v × M`, saturating; a negative integer yields `u64::MAX` and never fires |
+
+Rounding is half away from zero, which for a non-negative delay is half up.
+
+Region selection at the terminator is `inactive = (region == Inactive) || ticks == 0`, so
+**any** delay that resolves to zero ticks lands in the Inactive queue, not only a
+syntactic `#0`.
+
+### 5.3 Why the rounding has two stages
+
+Stage 1 rounds at the **declaring module's own precision**. Stage 2 scales the result to
+global ticks. Rounding once at the global grain instead would keep digits the module
+declared away, which is a silent wrong answer for any mixed-precision design.
+
+```
+// top:  `timescale 1us/10ns
+// fine: `timescale 1ns/100ps      ← drags the global precision to 100 ps
+//
+// global_prec_exp = -10           (100 ps tick)
+// top: M = 10^(-6 - -10) = 10,000     one microsecond = 10,000 ticks
+//      S = 10^(-8 - -10) =    100     one 10 ns step  =    100 ticks
+//      P = M / S         =    100     100 precision steps per microsecond
+//
+// #3.453 in top:
+//   stage 1: round(3.453 × 100) = round(345.3) = 345   → 3.45 us, top's own grain
+//   stage 2: 345 × 100 = 34,500 ticks
+//   $realtime in top reads 3.45
+//
+// One-stage rounding would give round(3.453 × 10,000) = 34,530 ticks — a delay
+// resolved 100× finer than the module declared.
+```
+
+```
+// top:  `timescale 1ns/1ns        ← precision equals unit
+// fine: `timescale 1ns/1ps        ← global precision is 1 ps
+//
+// top: M = 1000, S = 1000, P = 1
+// #2.5 in top:
+//   stage 1: round(2.5 × 1) = 3    (half away from zero) → 3 ns
+//   stage 2: 3 × 1000 = 3,000 ticks; $realtime reads 3
+//
+// One-stage rounding would give round(2.5 × 1000) = 2,500 ticks, i.e. 2.5 ns —
+// a half-nanosecond delay in a module that declared nanosecond precision.
+```
+
+When every module's precision equals the global precision — the overwhelmingly common
+single-timescale case — `S` is 1, `P` is `M`, and the two stages collapse into one
+rounding. A design with one `` `timescale 1ns/1ps `` and `#2.5` gives 2,500 ticks either
+way.
+
+### 5.4 Pinned boundaries
+
+| Delay | Ticks | Note |
+|---|---|---|
+| `#0` | 0 | Inactive queue |
+| a real that rounds to zero, `-0.0` included | 0 | `-0.0` compares `>= 0` and fires as a zero delay |
+| `#(-1e-9)` under a coarse precision | 0 | rounds to zero, then fires |
+| `#(-1.0)` | never fires | the **rounded** value decides the sign, not the raw product |
+| a negative integer | never fires | `u64::MAX` |
+| `#(1ns - 5ns)` | never fires | the sign is read in the units domain, before any clamp |
+| a delay with an X or Z bit | 0 | matches Icarus Verilog |
+| an integer that overflows the tick domain | saturates | a wrapped delay would fire *early*, which is worse than one that fires late or not at all |
+| `min:typ:max` | the `typ` arm | |
+
+The elaborate-side fold saturates at `u32::MAX` ticks; the runtime path saturates at
+`u64::MAX`. Neither wraps.
+
+### 5.5 Time literals finer than the design precision
+
+A time literal whose own unit is finer than the design's global precision is the one
+place a delay value can carry a fraction the tick grid cannot hold. It is rounded **at
+the leaf** — `round(x·10^e / S) · S`, converted back to module units — and nowhere else.
+The gate is the literal's unit, not the presence of a fraction, because the two rules
+answer different questions:
+
+| Expression | Timescale | Ticks | Why |
+|---|---|---|---|
+| `#(2.5ns + 2.5ns)` | `1ns/1ns` | 5 ns | a real literal at the design grain keeps its fraction to the end of the expression |
+| `#(1250fs + 1250fs)` | `1ns/1ps` | 2 ps | each sub-precision leaf is rounded before the addition; rounding the sum once would give 3 ps |
+| `#(2500ps)` | `1ns/1ns` | 3 ns | 2.5 module units, rounded half away from zero at the module grain |
+| `#(2.5ps)`, `#(0.4ns)` | `1ns/1ns` | 0 | genuinely sub-precision; they resolve to no delay |
+
+A continuous-assign rise delay that resolves to zero stays "no delay" rather than
+becoming a `#0`.
+
+> **Status at HEAD.** `#(2*1250ps)` and `#(2500ps/2)` under `1ns/1ns` land on Icarus
+> Verilog's answer (2 ns for both) where Verilator says 3 ns and 1.25 ns. The two
+> reference tools disagree here, so this is an oracle split rather than a settled value;
+> [../ROADMAP.md](../ROADMAP.md) carries the row.
+
+### 5.6 Worked examples
 
 ```verilog
 `timescale 1ns/100ps
-module test_round;
+module round_probe;
   reg a;
   initial begin
     a = 0;
-    #1.44 a = 1;  // 1.44ns → 1400ps → 1400ps  (round: 14.4→14)
-    #0.05 a = 0;  // 0.05ns →   50ps →   100ps  (round: 0.5→1)
-    #0.04 a = 1;  // 0.04ns →   40ps →     0ps  (round: 0.4→0, advance 없음)
+    #1.44 a = 1;  // round(14.4) = 14 → 14 ticks = 1400 ps
+    #0.05 a = 0;  // round( 0.5) =  1 →  1 tick  → 1500 ps
+    #0.04 a = 1;  // round( 0.4) =  0 →  0 ticks, same time step (Inactive)
     $finish;
   end
 endmodule
-// 기대 VCD: a=1 at 1400ps, a=0 at 1500ps, a=1 at 1500ps (동일 tick)
+// waveform: a=1 at 1400 ps, then a=0 and a=1 both at 1500 ps
 ```
-
-### 테스트 케이스 2 — 혼합 timescale
 
 ```verilog
 `timescale 1ns/100ps
 module fast_mod(output reg q);
-  initial #2.5 q = 1;  // 2500ps
+  initial #2.5 q = 1;      // M = 10, S = 1 → 25 ticks = 2500 ps
 endmodule
 
 `timescale 1us/10ns
 module slow_mod(output reg r);
-  initial #1 r = 1;    // 1us = 1,000,000ps → 1,000,000ps
+  initial #1 r = 1;        // integral: M = 10,000 → 10,000 ticks = 1 us
 endmodule
 
 `timescale 1ns/100ps
@@ -214,79 +304,175 @@ module tb;
     #1001000 $finish;
   end
 endmodule
-// 기대: global precision = 100ps
-// q: 1 at 2500ps (25 ticks × 100ps)
-// r: 1 at 1,000,000ps (10,000 ticks × 100ps)
+// global precision = 100 ps
+// q rises at tick 25      (2500 ps)
+// r rises at tick 10,000  (1 us)
 ```
-
-### 테스트 케이스 3 — $time vs $realtime 차이
-
-```verilog
-`timescale 1ns/100ps
-module test_time;
-  initial begin
-    #2.3;
-    $display("$time    = %0d",  $time);     // 기대: 2
-    $display("$realtime = %0f", $realtime); // 기대: 2.3
-  end
-endmodule
-```
-
-### 테스트 케이스 4 — zero-time advance 감지
-
-```verilog
-`timescale 1ns/1ns
-module test_zero;
-  reg a;
-  initial begin
-    a = 0;
-    #0.4 a = 1;   // 0.4ns → 반올림 0 → 동일 time-step
-    $display("T=%0d a=%b", $time, a);
-    // 기대: a=1이 즉시 보임 (advance 없으므로 T=0에서 a=1)
-    $finish;
-  end
-endmodule
-```
-
-### 테스트 케이스 5 — precision 경계 정확성
 
 ```verilog
 `timescale 10ns/1ns
-module test_boundary;
+module boundary;
   reg clk;
   initial clk = 0;
-  always #5 clk = ~clk;  // 5ns 토글 → 1ns precision으로 5ns = 5 ticks
-
-  integer count;
-  initial begin
-    count = 0;
-    repeat(10) @(posedge clk) count++;
-    // 10번 posedge: 0→5→10→15...→50ns
-    $display("Final time = %0d ns (expect 50)", $time);
-    $finish;
-  end
+  always #5 clk = ~clk;    // integral: 5 × M(=10) = 50 ticks = 50 ns per half period
+  // A posedge every 100 ns; ten of them at 1000 ns, i.e. $time == 100 in this
+  // module's 10 ns units.
 endmodule
-// 기대: $time = 50, 각 posedge 간격 정확히 5ns
 ```
-
-### 검증 방법
-
-1. 각 테스트를 Icarus Verilog로 실행해 VCD 생성
-2. 동일 소스를 본 시뮬레이터로 실행해 VCD 생성
-3. VCD 타임스탬프를 파싱해 1 precision unit 이내 일치 확인
-4. 불일치 시 반올림 계산 로그를 덤프해 어느 단계에서 갈렸는지 추적
 
 ---
 
-## Sources
+## 6. `$time`, `$realtime`, `$stime`
 
-- 본 spec §6.3 (Timescale and Timing)
-- research-log: [`timescale-precision-2026-05-28.md`](research-log/timescale-precision-2026-05-28.md)
-- IEEE 1800-2012 §3 (Scheduling), §20 ($time, $realtime)
-- IEEE 1364-2005 §17 (Compiler directives), §6 (Expressions and operators)
-- https://www.chipverify.com/verilog/verilog-timescale (syntax, rounding)
-- https://www.chipverify.com/verilog/verilog-timescale-scope (scoping)
-- https://systemverilog.dev/6.html (mixed timescale, 64-bit integer time)
-- https://sagar5258.blogspot.com/2017/11/timeunit-and-timeprecision-in.html (timeunit/timeprecision SV declarations)
-- https://circuitcove.com/system-tasks-time/ ($time vs $realtime semantics)
-- https://verilator.org/guide/latest/warnings.html (TIMESCALEMOD, --timescale flag)
+All three report the current time in the **calling module's time unit**, and differ in
+how they treat the part below that unit.
+
+| | `$time` | `$realtime` | `$stime` |
+|---|---|---|---|
+| Return type | 64-bit integer | `real` (IEEE-754 double) | 32-bit unsigned |
+| Unit | the calling module's `time_unit` | same | same |
+| Sub-unit part | rounded to the nearest integer | kept as a fraction | rounded, then truncated to 32 bits |
+| Typical use | comparing event times, control flow | waveform annotation, human-readable logs | legacy 32-bit code |
+
+```
+$time     = (now + M/2) / M          // round half up; time is non-negative, so this
+                                      // is also round half away from zero
+$realtime = now as f64 / M as f64
+$stime    = ((now + M/2) / M) & 0xffff_ffff
+```
+
+`$time` **rounds, it does not truncate** — IEEE 1800 §20.3.1 says "rounded to an integer
+value", so 1.5 gives 2 and 2.5 gives 3, matching Icarus Verilog.
+
+```systemverilog
+// `timescale 1ns/100ps, so M = 10 and one tick is 100 ps.
+// After #2.3 the current time is 23 ticks.
+$display($time);      // 2    — (23 + 5) / 10
+$display($realtime);  // 2.3  — 23 / 10
+```
+
+A `$strobe` or `$monitor` capture snapshots **its registering module's** `M` (and its
+scope for `%m`). The postponed flush drives the current multiplier from that snapshot per
+render and restores the entering value afterwards, so a mixed-timescale design does not
+report one module's time in another module's units just because that module ran last in
+the time step.
+
+---
+
+## 7. `%t` and `$timeformat`
+
+`%t` renders a time value through the live `$timeformat` state:
+
+```rust
+struct TfState { units_exp: i32, prec: u32, suffix: String, minw: i32 }
+```
+
+| State | Default when `$timeformat` has never been called |
+|---|---|
+| `units_exp` | the global precision exponent |
+| `prec` | 0 fraction digits |
+| `suffix` | empty |
+| `minw` | 20 |
+
+The value handed to `%t` is in the current module's units, so the net decimal shift is
+`log10(M) − (units_exp − global_prec_exp)`. A non-negative shift appends zeros; a
+negative shift cuts into the digits. A real value is scaled in f64 and rounded to `prec`
+digits; an integral value is shifted as exact decimal string arithmetic. A value that is
+entirely unknown collapses to a single `x` or `z` character with the zeros and the
+zero-filled fraction appended; a scale-down clears the unknown bits and goes numeric. The
+suffix is appended verbatim, and the result is right-justified in the explicit `%Nt` or
+`%0t` width if one is given, else in `minw` — a negative `minw` left-justifies in its
+absolute value.
+
+`$timeformat` itself:
+
+| Rule | Behaviour |
+|---|---|
+| Zero arguments | resets to the defaults above |
+| Exactly four arguments | `(units, precision, suffix, min_field_width)`, evaluated as runtime expressions at execution time |
+| Any other arity | `E3009`: *$timeformat requires zero or four arguments (units, precision, suffix, min_field_width)* |
+| As a deferred-assertion action | `E3009` — it would be captured for maturation instead of updating the format state; call it as a plain statement |
+| `units` clamp | `[global_prec_exp − 64, global_prec_exp + 64]` |
+| `precision` clamp | `[0, 64]` |
+| `min_field_width` clamp | `[-4096, 4096]` |
+| `suffix` | a string literal keeps its exact text; every other expression, a numeric literal included, goes through the same value path, so a literal `8'h6E` and a register holding `8'h6E` both render `n` |
+
+`$printtimescale` is not recognised: it falls through the system-task map and produces a
+warn-and-skip.
+
+---
+
+## 8. Waveform timestamps
+
+Waveform timestamps are the **raw global tick count**, and the header names the grain.
+
+- The VCD `$timescale` line carries `SimOpts.timescale_unit`, rendered by
+  `timescale_unit_string(global_prec_exp)`: the exponent is clamped to `[-15, 2]`,
+  floored to a multiple of three to pick the unit word, and the remainder becomes a
+  mantissa of 1, 10 or 100. So −10 renders `100ps` and −8 renders `10ns`.
+- A design with no directive gets `$timescale 1ns $end`.
+- FST output derives its own exponent from the same string.
+
+A `#1` delay under `` `timescale 10ps/1ps `` therefore appears as time 10 in a file whose
+header reads `1ps`: the header states the tick grain, and the timestamp counts ticks.
+Details of both writers are in [07-vcd-format.md](07-vcd-format.md).
+
+---
+
+## 9. The staged flow
+
+The one-shot and staged (`vcmp` → `velab` → `vrun`) paths must resolve identical time.
+Three carriers do that, and each is documented in
+[14-staged-artifacts.md](14-staged-artifacts.md).
+
+| Stage | Carrier | Shape | Missing-trailer behaviour |
+|---|---|---|---|
+| `.vu` (compile) | timescale tail after the hashed source-unit frame | `(unit_exp: BTreeMap<String, i8>, global_prec_exp: i8, prec_exp: BTreeMap<String, i8>)` | tolerant: empty maps and `global_prec_exp = -9`, i.e. the 1ns/1ns base |
+| `.velab` (elaborate) | timescale trailer segment | `(proc_multipliers: Vec<u64>, global_prec_exp: i8, proc_prec_mults: Vec<u64>)` | tolerant: `(vec![], -9, vec![])` |
+| observability | `run.json` field `global_time_precision` | `i64` — the resolved exponent, `-9` for the base | — |
+
+The timescale trailers are deliberately **tolerant** rather than loud, because their
+absent form has a well-defined meaning (the base) rather than an unknown one.
+
+The resolution is per compilation unit at compile time, and re-resolved at link time.
+When `velab` merges several `.vu` files, the global precision is the **minimum across
+every unit**, and the per-module unit and precision maps merge with first-occurrence-wins
+under the same search-order rule that decides which copy of a duplicated module survives.
+So a design compiled unit-by-unit resolves the same global grain as the same design
+compiled in one shot.
+
+The trailer is what makes that hold: `vrun` sees only the `.velab`, and re-deriving the
+multipliers would require the source it does not have.
+
+---
+
+## 10. Verification
+
+Every rounding value in this document is pinned against live Icarus Verilog, and the
+mixed-precision cases are the reason the conversion has two stages rather than one.
+
+| Gate | What it holds |
+|---|---|
+| `crates/cli/tests/timescale_two_stage.rs` | the three shapes of §5.3: a module whose precision is coarser than the global grain rounds at its own precision first; a `1ns/1ns` module rounds `#2.5` half away from zero to 3 ns; a single-timescale design is byte-identical to a one-stage conversion |
+| `crates/cli/tests/timescale_postponed.rs` | a `$strobe` or `$monitor` in the postponed region renders time with the multiplier of the module that **registered** it, not of whichever process ran last in the time step |
+| `crates/cli/tests/timeformat.rs` | the full `%t` and `$timeformat` surface, byte-pinned to Icarus Verilog except the one scale-down case where that tool's own output is malformed |
+| `crates/cli/tests/procedural_delay_time_literal.rs`, `delay_time_literal_in_expression.rs`, `delay_real_timelit_and_sized_negative.rs` | the time-literal fold across a census of six timescales, eighteen literals and five procedural lanes, differentially against Icarus Verilog and Verilator |
+| `crates/cli/tests/time_param_declared_width.rs` | a delay named by a parameter converts at the parameter's declared width |
+| the staged-flow suite | a timescaled design threads through `vcmp` → `velab` → `vrun` to byte-identical output |
+
+The method for a new timescale case is the same one those tests use: run the design under
+Icarus Verilog and under vitamin, parse the waveform timestamps, and require agreement to
+the last precision unit. When they differ, dump the per-stage rounding — the module's own
+`P`, the stage-1 integer, `S`, the final tick — because the divergence is almost always a
+missing stage rather than a wrong arithmetic.
+
+---
+
+## 11. Related documents
+
+- [06-simulation-engine.md](06-simulation-engine.md) — the scheduler, the time wheel, and where a converted delay lands.
+- [07-vcd-format.md](07-vcd-format.md) — the `$timescale` header and timestamp encoding.
+- [14-staged-artifacts.md](14-staged-artifacts.md) — the `.vu` and `.velab` trailers that carry the resolved timescale.
+- [15-error-code-reference.md](15-error-code-reference.md) — `VITA-W1017`, `VITA-W1018`, `VITA-E8003`, `VITA-E3009`.
+- [../manual/005_system-tasks.md](../manual/005_system-tasks.md) — the user-facing description of `$time`, `$realtime`, `$timeformat` and `%t`.
+- [../manual/006_limitations.md](../manual/006_limitations.md) — the shipped limits, including the unimplemented `timeunit` / `timeprecision`.

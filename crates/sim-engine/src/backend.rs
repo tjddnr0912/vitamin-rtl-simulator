@@ -340,7 +340,7 @@ pub(crate) fn expr_has_call(exprs: &[Expr], eid: u32) -> bool {
 // NBA, scheduling and float formatting reproduce BY CONSTRUCTION (the P5 gate proves
 // byte-identity). C2 delegates expression eval to the kernel (`k_eval_for_lvalue`);
 // native value registers are C3. The VM's only new code is control flow + cache.
-// See `docs/superpowers/plans/2026-06-06-bytecode-vm-stage-c.md`.
+// See `docs/history/plans/2026-06-06-bytecode-vm-stage-c.md`.
 
 /// Per-activation scratch register file: one value slot per (blocking+nonblocking)
 /// assign. `Value` has no `Default`/`take`, so the `Option` lets `WriteLval`/`ScheduleNba`

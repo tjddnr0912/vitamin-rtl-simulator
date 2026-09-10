@@ -1,4553 +1,1222 @@
-# 엔지니어링 규칙 — silent-wrong 재발 방지 (vitamin)
-
-> 누적 슬라이스의 **적대 리뷰에서 실제로 silent-wrong을 한 번씩 막았던** 규칙만 모았다.
-> 일화·§번호·SHA는 [ROADMAP_ARCHIVE](ROADMAP_ARCHIVE.md)에 있고 여기엔 **규칙만** 둔다.
-> 구현 전에 읽고, 새 교훈은 해당 절에 1줄로 병합한다.
-
-## 리뷰 방법론 (구현·설계 이후)
-
-- **적대적 코드 리뷰** — 라이브 차분(iverilog 등)으로 silent-wrong을 실제 재현해 검증.
-- **Fagan Inspection** — 역할(Sub-agent)을 **Author / Moderator / Reviewer / Recorder** 로 분리해 진행.
-  - 사전 정의 체크리스트는 **Spec 문서**(`docs/preview/`)로 대체. 별도 체크리스트가 있으면 대체가 아니라 **합산**.
-  - 코드의 **논리적 오류**를 검증.
-- 리뷰 관점 4축: **Architecture & System Integration** · **Performance & Efficiency** · **Maintainability & Readability** · **Robustness & Testability**.
-
-## 적대 리뷰 실행 (브리핑·배터리 — LOOPROMPT §4 에서 이관)
-
-**브리핑에 항상 넣을 것 (라운드 시간을 정하는 것은 브리핑이다).**
-
-- PRE 바이너리를 **미리 빌드해 경로로** 준다 + **작업 트리 수정 금지**.
-- **이미 죽인 뮤테이션·문서화된 생존자 목록**을 주고 "이 목록 밖"을 요구한다.
-- **직전 라운드 수치**를 재측정 대상으로 명시한다.
-- *"clean 을 그대로 말하는 것이 좋은 결과다 — 발견을 지어내지 마라."*
-- soundness 에겐 **별도 `CARGO_TARGET_DIR` 뮤턴트**를 허용한다.
-- 라운드 2 이후는 **바뀐 것만** 겨냥한다.
-- staged 를 만질 거면 **먼저 `--features separate-bins`** 로 빌드하라고 적는다.
-
-**브리핑 전에 스냅샷 커밋.** PRE 를 `git archive <branch>` 로 주고, 그 커밋이 **복원의 정본**이 된다
-(`git checkout --`). /tmp 스냅샷은 사라진다 — 실측.
-
-**뮤테이션 배터리 운용.**
-
-- 복원은 **소스와 바이너리 둘 다**. 소스만 되돌리고 재빌드를 빠뜨리면 정본이 뮤턴트 값을 낸다 — 실측 2회.
-- ⚠️⚠️ **복원 집합은 뮤턴트 목록에서 유도하라 — 하드코딩 금지**(2026-08-20 실측). 스냅샷을 두 파일로
-  적어 두고 세 번째 파일을 건드리는 뮤턴트를 넣었더니, 그 뮤턴트가 **런의 나머지 내내 적용된 채로
-  남아** 이후 판정이 전부 **거짓 KILL** 이 됐다(그 변이 하나만으로도 같은 테스트가 죽는다). 증상이
-  *"무변화여야 할 뮤턴트가 죽는다"* 로 나타나면 그것은 배터리가 오염됐다는 신호다 — 그 한 건을
-  해명하지 말고 **트리 상태부터 `git diff` 로 확인**하라. 그리고 배터리가 끝난 뒤에도 시작 시점의
-  `git status --porcelain` 과 대조해 **파일 집합이 같은지** 확인하라.
-- 치환은 **줄 번호로 지정**하라. 같은 패턴이 두 사이트에 맞으면 조용히 미적용되고 SURVIVED 로 오기록된다.
-- 스코프의 기본은 **`--workspace`**. 좁은 필터는 킬러가 그 밖에 있을 때 **가짜 SURVIVED** 를 만든다.
-  `-p A -p B --test X` 는 cargo 가 `--test` 를 모든 패키지에 걸어 A 의 유닛을 통째로 뺀다.
-  ⚠️ **다만 "아끼는 것은 케이스당 ~30초" 는 이 머신에서 거짓이다**(2026-08-20 · §4.5.345 실측):
-  뮤턴트마다 전 워크스페이스가 재링크되고 macOS 가 **새 바이너리 ~600개를 첫 실행 때 전부 검증**해
-  테스트 열거에만 **15분**이 든다 — 14 뮤턴트면 4시간이다. 그때는 **좁게-먼저, 생존만 전체로 확정**:
-  좁은 필터는 **false KILLED 를 만들 수 없고 false SURVIVED 만** 만들므로, 좁은 세트에서 죽으면 그것이
-  최종 판정이고 살아남은 것만 `--workspace` 로 재판정하면 **건전성이 보존된다**. 좁은 세트는 넉넉히
-  잡아라(이 슬라이스는 const 도메인을 만지는 cli 타깃 19개).
-- 결과 파서는 **FAIL 외에 TIMEOUT·SIGABRT·SIGSEGV 도** 세라. hang 을 FAIL 로만 세면 진짜 결함이 SURVIVED 로 보고된다.
-- ⚠️⚠️ **루프 탈출 조건을 건드리는 뮤테이션은 bounded runner 로만 채점하라 — 전 스위트에 걸지 마라.**
-  무한 시뮬레이션이 머신을 내린다(실측 2회: 프로세스가 수십 GB → jetsam → 커널 패닉, 그때마다 세션이 죽어
-  **뮤테이션이 트리에 남았다**). 배터리는 **포그라운드**로 — 백그라운드는 teardown 에 죽는다.
-- **생존 = 등가가 아니다.** 판별자를 지어 실측하고, 등가면 그 논거를 코드에 적어라. 도달 불가는 `panic!` 프로브로 재라.
-
-**PRE 3-way 측정.** iverilog 대조만으로는 *"PRE 에서 되던 것이 POST 에서 loud"* 가 안 보인다(둘 다 "vita loud").
-`git archive main | tar -x -C <scratch>/presrc` 후 **별도 빌드**(worktree 금지). 기존 바인딩·분류를 바꾸는
-슬라이스는 필수. 스윕은 **3분류**(loud→정답 / silent→loud / 문구만)로 센다.
-
-### 적대 리뷰 — LOOPROMPT §4 에서 이관한 판정 규칙 (2026-08-22)
-
-- **soundness 에 명시 의뢰할 것**: ALL-sites·variant 열거 · disjoint 증명 · 동명 충돌 · guard traversal 완전성 · **소비하는 map 의 POPULATION 경로 감사**.
-- **차분은 SEMANTIC 등가로** — STRUCTURAL 비교는 버그를 은폐한다. probe 가 갈리면 4-way 로 판정: 진짜 갭 / 무오라클(iverilog `"sorry"`=hand-IEEE · `"error"`=vita loud) / vita-ahead / 하네스 포맷. **iverilog 가 자기모순이면 vita spec-correct 를 타깃으로.**
-- **같은 hazard 의 두 철자가 갈리면 그것이 신호다** — 직접은 거부, 간접은 통과 = 워커가 한 겹 아래를 못 본다.
-- **부분 지원이 silent-wrong 을 맞바꾸기만 하면 기능을 빼라** — 정답은 더 나은 절반이 아니라 honest-loud + defer. 단 **빼기 전에 소비자×값 매트릭스를 세라**(빼는 것도 편집이고 회귀를 만든다).
-
-### Census mechanics moved out of LOOPROMPT §4 (2026-09-06)
-
-- A post-patch / re-spell pass has as many sites as the type has CONTAINERS; a sibling spelling that
-  is already right is the signal that one container was missed.
-- A parser-side fold has no scope. Widening a name accept set means probing every BINDER
-  (block-local, ANSI and non-ANSI formal, genvar, instance) and tying the stand-down to that
-  syntactic scope.
-- Do not count diagnostics with `VITA_SCW_CHECK` on.
-
-- A typedef census must include the `signed` spelling of every cell; an unsigned-only table certifies the sign axis by omission.
-- One instance per census cell. A two-instance cell prints in display order and reads as NEW-SILENT when it is the second instance's pre-existing value.
-- An ordering defect is fixed by "before its first consumer" (compare spans; split the pass), never by "earlier": moving a binder ahead of everything re-orders every other consumer.
-- A verilator census is the bottleneck (about 1,500 cells per 30 minutes). Run it on a width subset only, keep one `--prefix` per executable, and hand-IEEE the cells whose oracle is untrusted (property `and`), saying so in the briefing.
-- The shadow set of a name is every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations. A census over declarations alone misses four of the five.
-
-### ⭐⭐ A reporting rail's teeth is an ASYMMETRIC MUTATION, never a repeat run (2026-09-09, §4.5.465)
-
-A determinism golden runs the same input twice and byte-compares. It cannot see a rail that reports
-the WRONG number, because both runs report it identically — measured: `run.json`'s subroutine census
-had two counts swapped for any design containing a class, under a golden that had been green for
-rounds. The gate that can see it changes something UPSTREAM that must not move the numbers and
-asserts they did not: add a class to a class-free design; instantiate a module twice; add a comment
-line. Rule: for every emitted table, name the mutation its numbers must be INVARIANT under, and pin
-that pair. And when a suite has never exercised two producers TOGETHER, the count it protects is
-untested no matter how many tests read it.
-
-### ⭐⭐ Parallel `Vec`s indexed by one id need a MINT FUNNEL, not a convention (2026-09-09, §4.5.465)
-
-Four `Vec`s were indexed by a FuncId that is `funcs.len()`, three producers pushed them, and one
-pushed three of the four. Because that producer runs FIRST, every later id was shifted and read
-another entry's data — reported as a wrong count, and, when the shift ran off the end, swallowed by
-a defensive `else { return }`. Guarding at the READER (a bounds check) leaves the next producer free
-to desync the next table, and the very next slice added one. Rule: make the id impossible to mint
-without every parallel table getting its entry — one function, `debug_assert`s for each table, and a
-`None` slot for the case that legitimately owns no row (the slot IS the alignment). ⚠️ The doc that
-enumerates the set is part of the code: it fell one table behind on the same day it was written.
-
-### ⭐⭐ A WALL is a claim; ask whether a SIBLING channel already resolves it (2026-09-09, §4.5.466)
-
-A row carried "prerequisite = the declared-width provenance wall" through four slices. The
-provenance was recorded the whole time, in the same map, and was already being READ AT THE SAME SITE
-by a sibling channel: `#(.P(W8))` bound 8 while `#(.P(W8 + 1'b0))` bound 32, in one scope, in one
-run. Rule: before accepting a wall, find the nearest spelling of the SAME question that already
-works and ask what it calls. ⚠️ And an earlier failed attempt is not proof either — the gate's own
-comment recorded one that used the map ALONE; the missing term was the agreement test between the
-two width maps, which is what refuses a stale entry.
-
-### ⭐⭐ Take the WIDTH and the SIGN from the same environment (2026-09-09, §4.5.466)
-
-A width resolver walked the scope CHAIN while the sign resolver next to it resolved through the
-current scope only. Same expression, two answers: an outer signed parameter read from inside a
-generate block folded unsigned (255) where the identical text at module scope folded −1, both
-oracles −1. Rule: when a gate seeds an environment for one property, read every property it decides
-from THAT environment; two resolvers for one name is a divergence waiting for a scope.
-
-### ⭐⭐ A widening must not SUBTRACT — and the property is per RULE, not per shape (2026-09-09, §4.5.467)
-
-An admission classifier gained a fourth rule. Merely GATHERING a span under it made a name look
-shadowed, collapsed a nesting pair, dropped the survivor below a count bar, and withdrew scoping
-from a DISJOINT block with nothing wrong with it. That property had already broken twice before
-through different doors, and each fix was written for the shape in front of it. Rules: ⓐ state the
-property ("adding a rule can only ADD candidates") and enforce it, do not patch shapes; ⓑ the
-baseline is not one privileged rule — a flag that says "not the original rule" protects only the
-original rule, and the three others stayed exposed (measured: four dynamic-storage kinds went
-value → loud); ⓒ but a general floor ADDS as well, and an addition can remove the diagnostic that
-was MASKING a different, still-broken span — that turned a loud into 18 silent-wrong cells. When the
-third fix on one axis makes the next blocker, the axis is wrong: revert, ship the separable halves,
-and file the thing every attempt kept uncovering as the prerequisite.
-
-### ⚠️ A file that describes itself must be checked against ITSELF (2026-09-09, §4.5.465)
-
-An emitted manifest told its reader to "join on decl_file:decl_line" while the object it named
-carried neither column, and the test that was supposed to protect that text asserted the SENTENCE,
-so it passed. Rules: pin the FACT (does the column exist? does the other object carry it?), never
-the phrasing; and a machine-readable rail that misdescribes itself is a silent-wrong of its own
-kind, because its whole audience is a reader who cannot check.
-
-### ⭐⭐ A width fix reads CORRECT on `$bits` while the value is still folded for the old width (2026-09-08, §4.5.463)
-
-Installing an override's own `(width, sign)` moved `#(.P(-64'd1))` from `ffffffff` at 32 bits to
-`00000000ffffffff` at 64 — the right width over a value the previous width had already
-truncated. `$bits` said FIXED on every cell. The value half was then added and the cells at 8,
-16 and 32 bits went green, so it looked finished; a width LADDER showed it was still wrong from
-**33 up**, because a later block re-derives the value through
-`override_at_declared_width(param_decl_width(p), …)` and **overwrites** `chosen_val` with that
-resize — re-imposing the DEFAULT's 32 after the meta chain had got it right.
-
-- **A width and its value are one answer.** Truncation commutes with `~ - << & | ^ + *` and not
-  with `/ % >> >>>`, so a cell built from the first family cannot tell you the value survived.
-  Pin a `/` or a `>>` cell, always.
-- **After changing a width, walk forward to every site that RE-DERIVES the value from a width**,
-  not just the sites that read the width. A read-back that assigns into the variable you already
-  set is invisible to a census of readers.
-- **Ladder the axis you changed.** 8/16/32/33/64 cost one design and separates "fixed" from
-  "fixed below the old default's width".
-
-### ⭐⭐ A gate deleted for creating nets was never the thing guarding the COLLISION (2026-09-08, §4.5.464)
-
-An interface body refused every user block-local, recorded as "ungating it is loud→silent-wrong".
-Re-measured: the gate blocked NET CREATION, and a block-local that collides with an existing
-member needs no net created — so the write already landed on the member. The shape was ALREADY
-silent-wrong at exit 0; the design in the pinned test only exited non-zero because of a
-co-located `foreach`, and deleting that one line exposed it.
-
-- **Ask what the gate actually prevents, not what its comment says it prevents.** A refusal that
-  fires for a DIFFERENT reason than the hazard leaves the hazard open.
-- **A test asserting a non-zero exit can be satisfied by an unrelated error in the same design.**
-  When a pin's subject is a VALUE, assert the value; strip every other error source from the cell
-  first and check it still fails.
-- Corollary, measured in the same slice: installing the classifier maps was not parity either.
-  The module path also runs a CONTAINMENT gate before it hoists, and copying only the maps made a
-  nested shadow silent-wrong where the module twin stayed loud. **List every call the original's
-  caller makes before the one you are copying** — this is the second slice in a row where that
-  list was longer than it looked ([[branch-parity-before-new-traffic]]).
-
-### ⭐ Two arms of one chain must apply the same declaration rule, or one declaration has two answers (2026-09-08, §4.5.463)
-
-`bind_one_param` chooses a parameter's meta through several arms. A `signed` keyword with no
-range belongs to the DECLARATION (§12.2.1) and only the RANGE comes from the override — but the
-fix was applied to the new arm alone, so `parameter signed R = 1` reported `-91` through
-`#(.R(~8'h5A))` and `165` through `#(.R(8'hA5))`, in one design.
-
-- **When you add an arm to a selection chain, state which properties of the DECLARATION every arm
-  must preserve, and check the siblings.** The review found the sibling; the census that would
-  have found it first is "which arms can answer for this declaration".
-- **Fixing one arm makes the inconsistency observable** even when the sibling was wrong all
-  along — that is a reason to check siblings, not a reason to leave them.
-
-### ⭐⭐ An "oracle split" can be one tool contradicting ITSELF — ask the same expression twice (2026-09-08, §4.5.460)
-
-`+`/`-`/`*` sat in ROADMAP §2 as a documented split: `localparam Q = 8'd200 + 8'd100` is `12c` at
-9 bits on iverilog, `2c` at 8 on verilator. Two answers, so the axis was never chased and vita kept
-a third answer (32 bits) that is neither.
-
-It is not a split. Asked directly, **iverilog's own `$bits(8'd200 + 8'd100)` is 8** — the same 8 the
-other two give — and only the parameter BINDING grows to 9. Three more spellings of the same
-contradiction turned up in one design: `32'd100000 * 32'd100000` binds at 64 bits while
-`32'd1 << 32'd33` binds at 32; `$bits(1 << 32)` is 32 while `parameter A = 1 << 32` binds at 64;
-`32'd1 << 32` folds to 0 at 32 bits while `1 << 32` folds to 4294967296 at 64. One tool, four
-self-contradictions, against a second tool that answers Table 11-21 consistently everywhere.
-
-- **Before recording an axis as a split, ask each tool the SAME question in two positions.** A width
-  has a direct interrogator (`$bits(<expr>)`) as well as an indirect one (bind it and ask). When one
-  tool answers those two differently, it is not an oracle there — the other one is (ER "Disqualify an
-  oracle by self-contradiction", now with a second instance).
-- **A documented split's discriminator ages.** This row had stood for several slices. Re-measuring it
-  cost one probe file.
-
-### ⭐⭐ Excluding a sub-case to dodge a split can hand YOU the split (2026-09-08, §4.5.460)
-
-The first cut of the width arm answered every operator except `+`/`-`/`*`, to stay off the recorded
-split. The full suite caught it: `const_expr_self_consistency` pins "`*` and `<<` must not disagree
-about the context width", and with the three excluded `*` kept the wide value while `<<` folded at
-32 — vita reproducing, exactly, the inconsistency that test exists to forbid and that iverilog has.
-
-- **A partial accept set is a design decision about SIBLINGS, not just about the cells you skipped.**
-  Enumerate what the excluded cases share with the included ones; if a shipped test names the shared
-  property, the exclusion is the defect.
-- The failing test is the artifact that made the call. Prefer a suite run over an argument.
-
-### ⭐⭐ A self-consistency pin certifies the RELATION — every value under it can be wrong (2026-09-08, §4.5.461)
-
-`const_expr_self_consistency` exists to pin "wrapping an expression in a value-preserving
-operation must not change it", and it had passed since it was written. It passed because every
-column was uniformly WRONG: a self-determined `(8'd200 + 8'd100) >> 2` is 11 and the file read 75
-in all five columns. Worse, the property as stated is not even true — `+ 0` is a 32-bit sibling and
-§11.6.1 makes the whole expression 32 bits, so 75 IS the answer there; the real invariant needed
-the qualifier "of its own width" (`+ 8'd0`), which is the spelling that was missing.
-
-- **A relation pin has no anchor.** Pair every one with a test that pins the VALUES against an
-  oracle, and say so in both files, or the pair drifts together and the suite stays green.
-- **A "value-preserving wrapper" is a width claim.** Before asserting an algebraic identity over
-  a sized domain, name the width each side computes at and check the identity holds at BOTH.
-- The same shape recurs wherever a test asserts `a == b` over two spellings rather than `a == <a
-  measured constant>`.
-
-### ⭐⭐ Retiring a guard is safe only over the lane the guard was compensating for (2026-09-08, §4.5.461)
-
-Two §2 rows were queued independently — "delete `param_init_kept_loud`" and "the parameter value
-fold is width-unlimited" — and they are one root. The guard existed because the value lane folded
-at unlimited precision and masked once at the end; deleting it alone was measured to turn 8 cells
-loud→silent-wrong, because truncation commutes with `~ - << & | ^ + *` (which is why the guard's
-own three cells would have been fine) and NOT with `/ % >> >>>`. The three cells the row cited
-give the same answer under both candidate value rules, so they were not evidence about the order at
-all.
-
-- **Read the guard's justification as a precondition on ANOTHER component, then check that
-  component's current behaviour before removing the guard** — not just the cells the guard names.
-- When two rows share a root, their ORDER is a measurement: run the cells that SEPARATE the two
-  orders, not the cells the rows quote.
-- A guard with several call sites may be doing a different job at each. Here four sites were the
-  expiring job and the fifth was a live one on another lane (`!default_binds`); scope the survivor
-  explicitly rather than letting an earlier arm shadow it, and record when it is right only by
-  ACCIDENT ([[an-accidental-immunity-hides-a-latent-defect]]) with the class that really owns it.
-
-### ⭐⭐ A width fence on the TARGET does not fence the LEAF (2026-09-08, §4.5.461)
-
-`eval_const_assign` computes `ctx = max(self, target).min(64)`, and its call site was already
-gated on `w <= 64` — but `w` is the TARGET. A `logic signed [64:0]` leaf under a 64-bit target
-passes that gate, and the `.min(64)` then CLAMPS the context, deleting a sign bit that lives at
-bit 64: `N65 >>> 1` is `ffff…ce` in the unlimited lane and in iverilog, `7fff…ce` through the
-width-aware one.
-
-- **Fence the operand the clamp will act on, not the destination.** When a helper clamps, the
-  admission predicate has to ask about every node the clamp can reach.
-- Check the arms of whatever child-walk you recurse through: `const_fold_children` has no
-  `Concat`/`Replicate` arm, so a guard built on it is walked past by wrapping the hazard in braces
-  — reachable or not, a GUARD descends where an ANSWER need not
-  ([[an-arm-that-answers-without-descending]]).
-- A branch of the same gate that already existed (here the fill arm) is inside the new fence's
-  blast radius too — the same leaf was already silent-wrong through it.
-
-### ⭐⭐ Branch parity is the PASS, not the loop — count what runs before the twin (2026-09-08, §4.5.461)
-
-`instance.rs` hoists a module body's procedural block-locals in one four-line loop and
-`iface_inst.rs` had no such loop, which reads exactly like a missing-parity one-liner. Adding the
-loop made a colliding block-local silent-wrong (`OUTER b=7`, `u.b = 7`, both oracles 99) because
-the module path first builds FIVE classifier maps from a `&ast::ModuleDecl` — and on the interface
-path those describe the PARENT module. The module twin of the identical text is correct in PRE and
-POST, which is what attributed the defect to the new call rather than to the flatten model.
-
-- **Before copying a call, list what the original's caller set up first.** State the twin reads
-  from `self` is invisible at the call site and is most of the contract.
-- When the prerequisite is real, ship the subset that provably does not need it — here only the
-  PARSER-SYNTHESIZED names, whose uniqueness is structural — and prove the subset rather than
-  asserting it from a prefix convention.
-- A gate that decides "is this body safe to process" must walk with the same statement arms as the
-  processor it gates, or it certifies a set the processor does not act on.
-
-### ⭐⭐ A census axis you did not vary is where the regression is (2026-09-08, §4.5.460)
-
-The procedural-delay routing was measured over 6 timescales × 14 literals × 5 lanes — 84 cells,
-61 fixed, 0 regressed — and shipped a regression anyway: `#(1ns - 5ns)` never fires in either oracle
-and never fired in that lane before, but `delay_ticks_in_scope` returns `u32` and `real_delay_ticks`
-CLAMPS a negative to 0, so it began firing immediately. **Every literal on the axis was
-non-negative.** The differential lens found it only because it probed a shape the census did not have.
-
-- **When you route a value through a narrower type, the axis to add is the one that type cannot
-  represent** — a sign for an unsigned, a fraction for an integer, "never" for a count.
-- A clamp is a silent value change. Read the sign in the domain BEFORE the clamp, and let the shape
-  the clamp cannot carry fall through to the path that was already right.
-
-### ⭐ A guard's doc can name its own expiry — grep for that before the premise changes (2026-09-08, §4.5.460)
-
-`param_init_kept_loud` exists because "the value-inferred tail records the folded value's minimal
-width, never narrower than 32", and its doc ends: *"When the tail learns to size an initializer at
-its self-determined width, this predicate goes with it."* This slice is the tail learning exactly
-that, so the guard is now a pure false-loud over three 2-oracle cells — found by the soundness lens,
-not by any test, because a guard that keeps working looks identical to a guard that is needed.
-
-- **A predicate justified by another component's behaviour is a live obligation on that behaviour.**
-  When you change the component, grep the predicate's doc for the condition it named.
-- The fix is a slice of its own when the predicate has several call sites (five here, across the
-  generate / instance / package / declaration binders): record it with the measurement and the
-  prescribed deletion, do not fold it into the slice that invalidated it.
-
-### A cell both rules answer the same way is not evidence (2026-09-08, §4.5.459)
-- Two rounding rules were live for a delay expression — round each leaf, or round the finished sum
-  — and the cell the queue row named (`#(2500ps + 1000ps)`, 4 ns) gives 4 under BOTH. Adopting
-  either from that cell is a coin flip recorded as a measurement. The cells that separate them were
-  elsewhere and disagreed about which wins: a REAL leaf keeps its fraction to the end
-  (`2.5ns + 2.5ns` = 5, not 6) while a sub-precision-UNIT leaf rounds where it is written
-  (`1250fs + 1250fs` @ `1ns/1ps` = 2 ps, not 3). **Before adopting a rule, find the cell where the
-  rules DIFFER and check it is the one you measured** — and when two rules each own a disjoint set
-  of leaves, ship both and say what separates them, rather than picking the one the ambiguous cell
-  allowed.
-- Corollary for a documented ORACLE-SPLIT: check the split's stated DISCRIMINATOR the same way. This
-  row's said the split "only exists where precision == unit"; one cell at `1ns/100ps` refuted it.
-- Landing on ONE oracle where the tool previously answered NEITHER is a rung UP, not a side-change.
-  Eight split cells here went from silent no-delay to iverilog's answer; that is not "touching a
-  split axis", which is what the do-not-start rule is about.
-
-### The stated cause is a claim; measure which override classes need the machinery (2026-09-08, §4.5.459)
-- A row said a feature "needs a dim slot on the `T$w`/`T$s` channel". Two of the four override
-  classes needed no new carrier at all — an override whose dims EQUAL the default's, and one that
-  changes only the element width (`T$w` already carried the whole difference). The refusal was one
-  literal `false` argument at one call site. **Enumerate the sub-classes the row's fix would serve
-  and ask which of them the existing channel already answers**; the answer sizes the slice.
-- When a desugar's parameter COUNT becomes variable, the POSITIONAL binding is the hazard, not the
-  named one: a following value parameter silently eats a carrier slot. Make the count uniform per
-  construct, then measure a design that puts a value parameter AFTER the variable-count one.
-- A new diagnostic that names a synthesized carrier (`T$d0a`) leaks an implementation name AND can
-  misdiagnose: the same "unknown parameter" fires when the construct is simply not overridable
-  there. Report against the USER's name, once, and suppress it when the primary carrier is equally
-  unknown — that case's own reports are the whole story.
-
-### An oracle that answers the same access two ways is not the oracle for it (2026-09-08, §4.5.459)
-- Measured in ONE design: iverilog reads `pv[-2'sd1 +: 2]` as `1x` and `pm[1][-2'sd1 +: 2]` — the
-  same bits, the same index, a packed ELEMENT instead of a vector — as `10`. verilator has no `x`
-  for an out-of-range select at all. Neither is the value oracle for that cell, so the target is
-  **self-consistency**: vita answers `1x` for all four spellings and matches iverilog on the two
-  where iverilog matches itself. Pin the uniformity, and write the disqualifying table into the
-  test so the next round does not re-adopt the contradicting cell.
-- The way to find this is to put the two spellings in the SAME design with the same bits. Across
-  two designs it reads as two independent results.
-
-### A "wider blast radius" warning is a claim too (2026-09-08, §4.5.459)
-- A row warned that a parameter select folds at elaborate time, so the fold's consumers had to be
-  swept. Measured: the fold lane was already honest-loud, including the cell where the unsigned
-  reading is IN range on a 64-bit container — which proves the const lane already sign-extends. The
-  blast radius was the runtime lowering only, and the slice was smaller than the row priced.
-- The decisive probe for "does this lane already handle the sign" is the container size at which the
-  WRONG reading stops being out of range. If the lane still declines there, it is not relying on the
-  range check.
-
-### A queue's selection criterion is not the row's fix (2026-09-06, §4.5.441)
-- "No format bump" was a criterion for CHOOSING a §2 row, and the row chosen carried a fix ("a per-process inst_prefix sidecar") that needs one: every per-process sidecar rides the `.velab` trailer, so the bump is the fix's cost, not a reason to build the engine-side alternative ("strip generate segments" cannot tell a generate label from an instance name by its string). Read the trailer chain (`cli/src/pipeline.rs` writes, `staged.rs` reads) before choosing between a sidecar and a derivation; the bump procedure is ten commits deep in `header.rs` and costs one hash re-pin.
-- verilator prints the FIRST instance's path for a class method's `%m` in every instance (`top.u1.C.show` from `top.u2`): self-contradicting on the second instance, so multi-instance class-scope cells pin iverilog; single-instance cells stay two-oracle. Record which cells are which.
-- A copy alias that substitutes the SOURCE net hands the source's declared sign to every consumer that reads sign from storage (the interpreter's `Value.signed`, the arena slot); the node's own sign survives only where the compiler keeps it. Re-stamp at the one interpreter read and make the compiled paths decline on the mismatch — two backends spelling one sign rule is how they diverge.
-- A package function's body folds in the PACKAGE's scope: seed the callee env with the package constants and refuse the module-scope fallback for a bare name inside it (a same-named module `localparam` is a different object than the text says). The same-named shadow cell is the control that separates the two scopes.
-
-### 리뷰 오리엔테이션 — 비용을 줄이는 것은 검증이 아니다 (LOOPROMPT §4 에서 이관 · 2026-08-22)
-
-- **측정 결과를 파일로 넘겨라** — 스윕 표(셀 × iverilog/PRE/POST × 분류)를 주고 *"이 표 밖을 쳐라"* 로 시작시킨다. 안 주면 리뷰어가 그 표를 처음부터 다시 만든다.
-- **예산을 브리핑에 적어라**(예: *"tool call ≤20 · 설계 ≤10 · 넘으면 가진 것만 보고하고 다음에 할 일을 적어라"*). 예산이 없으면 항상 끝까지 쓴다.
-- **라운드 2 는 델타만** — 바뀐 hunk 목록과 이미 죽인 뮤테이션을 주고 그 밖을 요구한다.
-- **바이너리는 스냅샷해서 넘기고 해시를 적어라.** 트리가 움직이면 렌즈들이 서로 다른 빌드를 채점하고, 최종 판정이 *"보고된 것이 아직 살아 있는가"* 를 HEAD 에서 전부 재측정해야 한다(2026-08-22 실측 · §4.5.363).
-
-## 작성 원칙
-
-> 누적 슬라이스의 적대 리뷰에서 실제로 silent-wrong을 한 번씩 막았던 규칙들. 일화·§번호는 [ROADMAP_ARCHIVE](ROADMAP_ARCHIVE.md)에 있고 여기엔 **규칙만** 둔다. 새 교훈은 이 절에 1줄로 병합.
-
-### 정확도 서열 (최우선 불변)
-
-- **정의/서열**: silent-wrong(틀린 출력·무에러)=최악 > honest-loud(명시 거부)=항상 안전. **검증 불가면 구현하지 말 것**(오라클도 전제조건도 없으면 loud 유지).
-- **철자를 세는 분류기는 같은 설계 안에서 자기와 모순된다.** §4.5.310: "이 인덱스는 컴파일타임 상수인가" 를 **형태 목록**(`Const`·부호캐스트·리터럴 부호)으로 답했더니 `m[64'h1_0000_0002]` 는 loud 인데 **같은 값**인 `m[~64'hFFFF_FFFE_FFFF_FFFD]` 는 조용히 다른 원소에 썼다. 성질을 묻는 술어는 **철자를 열거하지 말고 식을 걷어라**(`_`-free 화이트리스트·모르는 변종은 fail-closed).
-- **같은 성질을 가진 자리를 하나 고쳤으면 `grep` 으로 나머지를 세라.** §4.5.310: 같은 `depth > 64` 캡이 **네 곳**에 있었는데 하나만 고치고 "절벽을 없앴다" 고 커밋했다 — 게다가 같은 커밋의 다른 변경이 그 함수를 도달 불가로 만들어 **수정 자체가 관측 불가**였다(캡을 되돌려도 전 스위트 통과). 그리고 **등가 논증은 자기가 인용하는 전제와 함께 늙는다**: 형제 캡의 "도달 불가" 주석이 근거로 든 문장을 같은 커밋이 지워, 주석은 남고 근거는 사라졌다. 한 자리를 고칠 때 **그 자리의 성질을 문자열로 grep 해 나머지를 세고, 등가 논증을 인용한 주석을 함께 갱신하라.**
-- **"도달 설계를 못 지었다" 를 "등가" 로 적지 마라.** §4.5.310: dedup 하나를 그렇게 기록했는데 다음 라운드가 **753 바이트**로 반증했다 — 게다가 내가 붙인 이유("입력이 트리라서")도 틀렸고 진짜 원인은 **내 수정 자신이 만든 복제**(`extend_to`)가 워크에 재진입하는 것이었다. 등가를 주장하려면 **왜 도달 불가인지의 메커니즘**을 적어야 하고, 그게 없으면 **"미측정"** 이라고 적어라.
-- **새 가드를 심었으면 되돌린 바이너리로 그 테스트를 한 번 돌려라.** §4.5.310: 수정과 함께 심은 테스트가 통과하기에 teeth 가 있다고 적었는데, **수정을 되돌려도 전 스위트가 통과**했다 — 설계가 그 코드 경로를 아예 안 태웠기 때문이다(가드는 프리픽스가 더러울 때만 도는데, 그 설계의 계층 참조는 바깥 인덱스를 정규화하는 **같은 패스**가 해상해서 프리픽스가 깨끗했다). **초록은 커버리지의 증거가 아니다** — 되돌림이 빨개지는 것이 증거다.
-- **아레나가 트리라고 가정하지 마라 — 이 IR 에는 역방향 간선이 있다.** §4.5.310: 지연-계층 해상이 resolve 로 지은 노드를 **낮은 슬롯에 복제 설치**하므로 자식 id 가 부모보다 클 수 있다. 그 사실을 아는 워크는 파일 안에 이미 있었는데(주석까지 달려 있었다) 새로 쓴 셋은 몰랐고, 인덱스 루트 크기로 잡은 버퍼가 그 간선을 만나 fail-closed 로 떨어져 **봉인이 통째로 사라졌다**. 새 워커를 쓸 때는 **기존 워커가 무엇을 필터하는지 먼저 읽어라** — 그 필터가 곧 이 아레나의 성질에 대한 문서다.
-- **한계를 옮기는 것은 없애는 것이 아니다 — 비용 모델을 고쳐야 없어진다.** §4.5.310: 재귀 깊이 캡을 지우고 같은 자리에 노드 예산을 넣은 뒤 *"소진할 캡이 없다"* 고 커밋했는데, 아레나가 **DAG**(기하가 한 인덱스를 세 번 이름 붙인다)라 워크가 `O(경로)` 였고 **7단계 중첩·소스 1.6 kB** 에서 100만을 넘겨 봉인이 조용히 사라졌다. 고칠 것은 상한이 아니라 **dedup**(방문 스탬프)이었고, 그것을 이미 가진 형제가 파일 안에 있었다. ⚠️ 그리고 **선형 테스트는 지수 비용을 못 본다** — 그때 심은 깊이 테스트는 패드 200개짜리 선형 체인이라 한계에서 세 자릿수 떨어져 있었다.
-- **깊이·개수 한계를 `false`/`true` 로 접지 마라 — 그 값은 다른 질문의 답이다.** 같은 슬라이스에서 `index_all_const` 의 `false` 는 "상수 아님" 이라 **정적 out-of-range 진단을 지웠고**(loud→silent), `index_is_repeatable` 의 `false` 는 "복제 불가" 라 봉인을 지웠다. 한계 소진은 **구별되는 상태**여야 하고, 없앨 수 있으면 없애라(재귀를 반복 구조로 바꾸면 캡 자체가 사라진다).
-- **표현식을 두 번 쓰는 IR 구성은 그 자체가 의미 변경이다.** 같은 슬라이스: 부호 확장은 `Concat[Replicate(e[msb]), e]` 라 `e` 가 두 번 놓이고, `m[byte'($urandom)]` 이 **한 뽑기의 부호비트와 다른 뽑기의 하위비트**로 인덱스를 만들었다. 복제를 넣기 전에 **관측 가능성**(부작용·뽑기·진단 카운트)을 술어로 막아라. ⚠️ 그리고 **문맥에 맡기는 우회는 §5.5.1 에서 실패한다** — 부호 결정은 전체 식에서 정해져 **아래로 전파**되므로 무부호 문맥이 `$signed(e) * 32'sd1` 까지 무부호로 만든다(self-determined 구조만 면역이고, 그것이 곧 복제다).
-- **정본 술어를 부를 때 그것이 답하는 질문이 내 질문인지 확인하라.** 같은 슬라이스: `sysfunc_is_stmt_effect` 는 bare `$urandom` 을 **순수**라 답한다(자기 목적엔 옳다 — ref 인자도 파일/시드 상태도 안 건드린다). "두 번 평가해도 되나" 는 다른 질문이라 **뽑기 집합을 델타로 명시**해야 한다. 반대로 전부 닫으면 `$time` 처럼 진짜 순수한 것까지 잃는다(측정이 4칸으로 되돌렸다).
-- **경로-의존 기능=경로 결정 선언 통제 probe** — 함수 RETURN 타입이 lowering 경로 변경(2-state→FRAME·4-state→INLINE·`build_frame_set`). 통제 없으면 오분류. **행렬을 짤 때 callee 가 그 경로를 실제로 타는지 확인** — 사소한 본문은 INLINE 되어 대상 기구를 안 타므로 그 행렬은 아무것도 측정하지 않는다(§4.5.276: 그 행렬로 쓴 진단 문구가 stale). **수정도 全 경로 커버**: 한 경로만 고치면 **divergence>uniform-wrong**→全 경로 enumerate 후 fix-or-loud(deep=loud)·**같은 반복 완결**(다음 반복 미룸=divergence 잔존). 런타임 op fix=CONST-fold+VM `native_eval` 4-site 확인(VM=decline→커널 bail·op-family uniformly loud=broad gap).
-- '거부된다'고 새 인프라 前 **기존 부분지원 grep**(갭=sub-form 1개 흔함). 무에러 system task도 empty 출력 의심(미매핑=W3056 silent-skip). documented caveat도 ① 후보. **additive 파서처럼 보여도 STORAGE/eval-모델 갭일 수 있음** — 값 저장·해소 위치 먼저 grep(single-scalar에 aggregate 욱여넣기=deep·전용 멀티파트). **§3 기록 lenient-수용 후보도 재그라운딩서 ① 승격 가능**(조용한 truncate=silent)·loud-add=**fail-open**(미fold/미지-폭 skip)으로 over-reject 정조준.
-- **"우리가 앞서 있다" 는 오라클을 하나만 썼을 때 나오는 결론이다.** ⚠️ 그리고 그 결론은 **테스트에 박혀 퍼진다** — §4.5.310 은 같은 주장을 인코딩한 핀을 **세 군데**(cli 차분 표·③층 런 게이트 행 F·엔진 P0-4 테스트)에서 찾았고, 전부 *"iverilog 는 이렇지만 LRM 엔 그 단계가 없다"* 는 같은 문장이었다. **vita-ahead 를 적을 때는 그 판단이 몇 군데 복제되는지 세고, 뒤집힐 때 함께 뒤집을 목록을 남겨라.** §4.5.310: 어떤 칸에서 iverilog 와 갈리자 §4.5.308 은 *"LRM 에 그 단계가 없으니 vita 가 spec-correct·vita-ahead"* 로 기록하고 테스트까지 심었는데, **두 번째 오라클(verilator)을 들이자 그쪽도 iverilog 와 같았다** — vita 는 앞선 게 아니라 혼자였다. **vita-ahead 를 선언하기 전에 오라클을 하나 더 대라.** 그리고 두 오라클이 갈리면 그때는 **다수결이 아니라 사다리가 정한다**(정적으로 아는 인덱스가 정적으로 아는 범위 밖이면 값이 어느 쪽이든 말해야 한다). ⚠️ 새 오라클은 **적용 범위를 먼저 재라** — verilator 는 범위 밖 배열 인덱스를 2의 거듭제곱 배열에 **마스킹**해 답처럼 보이는 쓰레기를 낸다.
-- **"아직 모른다" 를 "아니다" 로 접으면 그것이 silent-wrong 이다.** §4.5.309: 계층 참조는 로워링 시점에 **placeholder**(`POISON_NET`/`POISON_FID`)라, 폭·부호 규칙에 물으면 없는 넷을 읽고 **1비트 무부호로 폴백**한다. 그 값은 틀린 답이 아니라 **날조된 답**인데, 호출부가 `bool` 을 받으니 "무부호" 로 읽혀 correct-support 가 loud-wrong 으로 떨어졌다. **결정에 쓰이는 질의는 3-상태여야 한다**(`Option`) — 그리고 폴백을 넣을 때는 *"엔진에선 안 보인다"* 가 아니라 **"이 답을 결정에 쓰는 호출자가 있는가"** 를 물어라.
-- **무효화 없는 메모는 "값이 안 변한다" 는 주장이고, 그 주장은 검증 대상이다.** 같은 슬라이스: 캐시 주석이 *"expr 은 push 되면 안 바뀐다"* 라고 단언했으나 지연-계층 해상이 **제자리 패치**를 다섯 곳에서 한다 → 파일 **끝에 무관한 세 줄**을 더하면 그 **위** 문장의 결과가 조용히 바뀌었다(exit 0 양쪽). 캐시를 넣으면 (a) 무엇이 그 항목을 무효화할 수 있는지 **쓰기 지점을 전수로 grep** 하고, (b) 무효화가 불가능한 **접두부로 캐시를 좁혀라**(여기선 "placeholder 가 없는 구간만"). 그리고 **메모 자체에 테스트가 없으면 그 캐시는 뮤테이션에 통째로 살아남는다**.
-- **정본으로 통일하는 것이 곧 개선은 아니다 — 보수적 술어를 정확한 규칙으로 바꾸면 그 술어가 "우연히 맞던" 칸이 깨진다.** §4.5.309 는 손-술어를 정본 규칙으로 교체했더니 `$stime`/`$urandom` 이 처음으로 **무부호로 증명**되면서 봉인 경로에 들어갔고, 음수 base 에서 옛 경로의 **32비트 랩이 곧 오라클의 답**이었기에 13칸이 correct→wrong 이 됐다. 교체 전에 **"이 술어가 false 를 답해서 지금 안 도는 코드 경로가 무엇인가"** 를 세라. 그리고 **두 무리를 가르는 축이 없으면**(여기선 폭도 base 도 못 갈랐다 — 같은 32비트 무부호 두 개가 서로 반대 답을 요구했다) **그 절반은 옛 결정에 동결하고 이유를 적어라**. 동결은 부채가 아니라 **다른 질문임을 인정한 것**이다.
-- **커버리지 0인 표면은 "구현했다"가 아니다 — 뮤테이션으로 진입을 재라.** §4.5.292 의 첫 게이트는 17 뮤테이션 중 **5개가 생존**했고 그중 넷은 `compute_effect` 가 assign 문에서 **아예 부르지 않는** 메서드였다(진입 0회). 정직한 본문 + 초록 스위트 + 파일 안의 코드 = 커버된 것처럼 읽힌다(§4.5.289 의 bit-serial 과 같은 모양). **뮤테이션이 못 보는 축은 따로 있다**: derive 가 없어 비교되지 않는 필드(§4.5.292 는 NBA **목적지**를 한 번도 안 비교했고 하필 그게 파일 유일의 손-재진술 함수를 지키는 필드였다) · 합산 floor(반쪽이 사라져도 초록) · 집계 단언(15개 성질 중 **하나** 스텁을 통과) · `catch_unwind` 가 **아무 패닉**이나 수용. 개수 단언은 **정확 핀**, 성질 단언은 **성질마다** 하나씩(§4.5.293 은 집계 anti-vacuity 를 **사이트별**로 바꿔야 했다).
-- **한 소비자를 배선했다고 그 소비자가 부르는 것까지 배선된 건 아니다.** §4.5.294: 포맷 엔진에 리더를 넘겼는데 **태스크 자기 인자**(`$fdisplay` 의 fd · `$timeformat` 의 units)는 포맷터를 안 거치는 넷 읽기라 여전히 옛 스토어를 읽었다 — 값은 새 스토어, 그 하나는 옛 스토어 = **줄이 통째로 사라졌다**(적격+빌드가능 설계에서). 배선 후에는 **호출 그래프를 스토어 접근 기준으로 다시 훑어라**(이름 목록이 아니라 `sched.eval`·`st.eval_expr`·`&st.nets` 같은 **접근 철자** 전수). 그리고 **거부로 때울 수 없는 경우가 있다** — `$timeformat` 은 `Display`+sid 로 낮춰지므로 **task id 로 키를 잡는 것 자체가 틀렸다**(키가 틀렸으면 배선이 답이다).
-- **효과가 스토어에 안 나타나는 문장은 스토어 비교가 못 본다 — 무엇을 실행하는지 세어 봐라.** §4.5.297 의 바디 차분은 실행 문장 **83 중 46 이 NBA**(효과가 전부 큐 push)라 **모든 NBA 를 버려도 전 테스트가 초록**이었다. 게이트를 짜면 **그것이 실행하는 문장/효과의 종류를 세고**, 각 종류가 **어떤 관측자에 걸리는지** 대응시켜라(스토어·큐·진단·exit code·arm 상태). "제어 흐름 차이는 다른 비트로 나타난다" 류의 주장은 **입력 분포를 세기 전에는 쓰지 마라**.
-- **전제조건 술어는 호출자가 실제로 쓸 인자에 대해 물어야 한다.** §4.5.297: `body_is_suspend_free` 가 **선언된 entry** 에서 스캔하는데 워크는 **호출자가 준 entry** 에서 시작했다(그 파라미터의 존재 이유가 "다른 데서 재개" 인데도). 둘이 갈리는 설계에서 술어는 "안전" 이라 답하고 실행부는 **호출자가 통과한 검사를 탓하며** 패닉한다. 모든 호출자가 같은 값을 넘기는 동안은 뮤테이션도 안 죽는다 — **갈리는 입력을 만드는 설계를 지어라**.
-- **한쪽만 보는 관측자는 한쪽만 검증한다.** §4.5.296 의 differential 은 엔진의 **Level 웨이터**만 봤고, 그래서 **엔진의** `rearm` 이 Edge 를 재등록하는(=그 코드가 막으려는 바로 그 2^k 버그) 뮤테이션이 통과했다. 대칭 규칙("A 는 하고 B 는 하지 않는다")을 검증할 땐 **A 와 B 를 각각 관측**하라 — 한쪽 관측자로 양쪽을 주장하면 이름만 differential 이다.
-- **내 수정이 다른 테스트의 teeth 를 죽일 수 있다.** §4.5.296: 빈-읽기집합 가드를 sensitivity **kind 에도** 걸었더니 Edge 가 **두 독립적 이유로** arm 불가가 되어, 직전까지 잡히던 "Edge 를 arm" 뮤테이션이 **보이지 않게** 됐다(동작은 여전히 옳다). **질문 하나에 조건 하나** — 조건을 겹쳐 걸면 방어는 깊어지고 **관측 가능성은 사라진다**. 수정 후 **전체 뮤테이션 세트를 다시** 돌려라(새로 죽는 것만 보지 말고 **살아난 것**을 봐라).
-- **경계값으로 쓴 probe 가 그 경로에 아예 안 들어가는 수가 있다.** §4.5.295 는 트랜스포트 NBA 를 `#0` 로 썼는데 **`d > 0` 만 그 경로로 간다** — 버킷이 한 번도 안 차서 관련 뮤테이션 **넷이 공허 통과**했다. "가장 작은 값"은 흔히 **다른 분기**다(0·빈 문자열·1비트·같은 시각). probe 를 짜면 **그 분기에 실제로 들어갔는지**를 먼저 단언하라(카운터·`assert!(queue.len() > 0)`·역순 여부 단언 등).
-- **상수 문맥은 항등원을 숨긴다 — 계산의 각 항을 따로 죽여 봐라.** §4.5.295 의 `now + ticks` 는 모든 하네스가 `now == 0` 이라 **`ticks` 와 구별 불가**였다(프로덕션이면 `now` 미만 키에 파일 → 영원히 안 드레인 → **조용히 소실**). 합/곱/시프트가 있으면 **각 피연산자를 개별로** 뮤테이트하고, 하네스의 기본값이 그 연산의 항등원(0·1·같은 폭·같은 시각)이 아닌지 확인하라.
-- **테스트 하네스가 사이드테이블을 안 깔면 그 경로는 존재하지 않는다.** §4.5.294 의 뮤테이션 생존 4건 중 하나는 `$error` 였다 — `Display`+`severities` sid 로 낮춰지는데 하네스가 그 테이블을 안 깔아 렌더 사이트에 **한 번도 진입하지 않았다**(같은 이유로 `$timeformat` 도). 사이드테이블로 의미가 갈리는 구성은 **하네스가 그 테이블을 설치했는지 먼저 확인**하라. 나머지 셋도 전부 같은 부류였다: **"코퍼스에 그 형태가 없다"**(`$write` 미사용 · `$fdisplay` 는 **다른 task id** 라 필터가 안 모음 · 거부 arm 미시험).
-- **같음으로는 출처를 시험할 수 없다.** 두 소스를 **미러링**해 놓고 "두 결과가 같다"를 단언하는 게이트는 **인자를 무시하고 한쪽만 읽는 구현도 통과**시킨다 — §4.5.293 은 그 형태로 "리더를 무시" 뮤테이션 **4개를 전부 놓쳤다**. **provenance(어느 쪽을 읽었는가)** 를 묻는 게이트는 두 소스를 **일부러 어긋나게** 하고 "A 를 준 호출은 A 의 답이어야 한다"를 단언해야 한다(미러 게이트는 **값 동등성**에만 유효). 따름정리: **어떤 뮤테이션으로도 안 죽는 파라미터는 넣지 마라** — 진짜 갭과 구별이 안 된다(§4.5.293 은 `Expr::Const` early-return 헬퍼들의 리더 파라미터를 되돌렸다).
-- **한 소비자가 읽는 컨텍스트를 쪼개 들지 마라.** §4.5.293: 포맷터는 `nets` 말고도 `now`·`cur_time_mult`·`rng`·`timeformat`·`cur_scope` 를 **한 곳(`&SimState`)** 에서 읽는데 새 백엔드가 앞 셋의 **자기 복사본**을 들었다 → 배선하는 순간 값은 A 스토어, 시간·난수는 B 상태 = **틀린 한 줄**(컴파일 에러 아님·적격+빌드가능 설계에서 실측). 하나만 파라미터화하는 seam 은 **문제의 절반**이다. 그리고 **"cold field" 로 정당화하지 마라** — `now`/`cur_time_mult` 는 런 루프가 매 타임스텝·프로세스 디스패치가 매 활성화마다 다시 쓴다(복사 = 첫 타임스텝을 기다리는 staleness).
-- **주석 블록 앞에 새 항목을 끼우면 그 주석이 재부모화된다.** §4.5.295 는 새 테스트를 기존 doc 블록과 그 함수 사이에 넣어 **doc 을 훔쳤고**(원래 함수는 무주석이 됐다) 새 doc 은 남의 문장으로 시작하게 됐다. splice 후 **삽입 지점 앞뒤 20줄을 읽어라** — 빌드도 테스트도 이걸 못 잡는다.
-- **스크립트 splice 는 앵커 존재를 단언하고 결과를 확인하라.** §4.5.293 준비 중 발견: 직전 반복이 이 파일에 병합했다고 커밋 메시지에 적은 규칙 하나가 **앵커 불일치로 조용히 no-op** 이었다(문구가 "…하지 마라" vs 실제 "…하지 말 것"). `assert old in s` 없는 `replace` 는 **실패를 성공처럼 보고한다**.
-- **오라클 없는 영역**(SVA·OOP·CRV·clocking·array-param 등 iverilog 거부분)= hand-IEEE 핀 + **vita-내부 등가 차분**(신규 형태 ≡ 검증된 기존 형태 byte-identical)이 teeth.
-- **G2 확장**: 관찰 rail(JSONL)도 **틀린 로그=silent-wrong**(LLM 오도). 관찰값=엔진 단일소스 파생(이중계산 금지·재도출=EXACT 미러)·**VALUE export=formatter 지원 kind만 allow-list**(non-bit-vector=loud)·미해석 probe=loud·teeth=3-way+결정성 골든.
-- soundness와 differential이 충돌하면 **differential이 이긴다**(측정>주장).
-
-### 정확도·게이트
-
-- 가능한 IR-0. 공통경로 funnel(인터프리터+VM 단일 청크포인트) 먼저 확인. 비대상 디자인 byte-identical(가드/사이드카=값 다를 때만).
-- **공유 분류기/게이트 확장 = ALL consumer 전수**: accept-gate walker는 conservative or `_`-free-exhaustive(under-detecting=반복 silent 원천)·**분류기는 자기가 분류하는 표현식의 LOWERING과 동일 resolver를 써야** 한다(다르면 shadowing에서 조용히 갈림·IR twin의 AST-레벨 projection이 되면 불일치 구조적 불가). §4.5.276 은 **한 슬라이스에서 이 함정을 세 번** 밟았다 — ①params-only fold vs net-aware lowering ②caller 스코프 folder 를 callee 본문에 들고 감 ③`lookup_net_scoped` vs **mangled 사이드맵**(라우팅된 고정 `string` 배열은 `<name>$sad` 로 등록되고 선언 이름은 일부러 비워 둔다). 매번 갈린 것은 "이름을 어떻게 푸는가" 하나였다. **새 술어가 이름을 푼다면, 그 이름을 소비하는 코드가 쓰는 함수를 그대로 불러라**(여기선 `dyn_handle`). **그리고 쌍둥이 술어는 쌍둥이의 성질을 상속하지 않는다** — §4.5.291 은 `sysfunc_is_stmt_effect`(`_`-free) 옆에 SysTask 판을 **3-id `matches!`** 로 써서 암묵 catch-all 을 만들었고, **여섯 줄 위 자기 주석이 "`_` arm 이 없어 새 id 가 조용한 쪽으로 기본값이 될 수 없다"고 주장하는 동안** `$cast` 의 task 형이 통과했다(주석은 이웃 함수에 대해 참이었다). 룰 셋: ⓐ **`matches!` 는 게이트 술어의 철자가 아니다**(exhaustive `match` 만 — 컴파일러가 새 변종을 잡는다) ⓑ **주석이 주장하는 성질은 그 파일에서 다시 증명하라**(이웃의 성질을 옮겨 적으면 그 순간 거짓) ⓒ 질문의 정본 자리는 **소비자가 아니라 쌍둥이 옆**(sim-ir) — 소비자에 두면 두 번째 소비자가 두 번째 철자를 만든다. ⓓ **"못 온다"의 이유가 두 종류면 매크로도 두 개여야 한다** — §4.5.292 는 게이트가 거부하는 18개와 **적격 설계가 도달하는데 아직 안 지은** 4개를 한 `refused!` 로 썼고, 그 문구가 *"design_eligibility 가 거부한다"* 라고 단언해 **있지도 않은 게이트 행을 가리켰다**. 더 나쁜 건 그 오해가 코드로 샜다는 것: 같은 술어를 **테스트의 admission 필터**에도 써서 커널이 패닉하는 설계를 워크에 들일 뻔했다(`$sformatf` — 정본이 일부러 `false` 인데 **tier-2 는 이미 그 delta 를 이유까지 적어 갖고 있었다**). 룰: 거부 사유가 "상위 층이 막는다"면 **어느 층인지 이름을 적고**(설계 게이트 ∧ 런타임 게이트는 다른 층이다), 필터·게이트·패닉이 **같은 질문**을 물어야 한다.
-- **테스트 오라클을 지을 때의 두 함정(루프 파일에서 이관)**: ⓐ **string 값을 돌려주는 메서드의 오라클은 synthetic `function string`(case→literal)로 짓고 EXACT-length 를 확인하라** — 리터럴들의 ternary 는 **가장 긴 가지로 PAD** 되어 조용히 길이가 늘어난다. ⓑ **파서가 AST item 을 생성하면 BTreeMap 으로 결정성을 주입하라** — HashMap 은 골든(3-OS 바이트 동일) 위반이다.
-- **`Value::resize` 류 변환 primitive 의 EARLY RETURN 을 확인하라 — "이미 맞는 폭" 은 "아무것도 안 해도 된다" 가 아니다.** §4.5.311: `resize` 는 폭이 바뀌는 두 경로에서 `is_str` 를 지웠는데 `new_width == self.width` early return 만 안 지웠고, 그 한 칸이 **텍스트 폭 == 목적지 폭**인 모든 문자열→packed 대입에서 (ⓐ bare `%s` 가 raw 바이트를 내고 ⓑ 하류 `resize_keep_sign` 이 같은 플래그에서 short-circuit 해 **부호가 안 찍힌다**) silent-wrong 을 만들었다. 네 번의 적대 라운드가 이 하나를 leaf 에서부터 거슬러 올라왔다 — intercept → write funnel → 두 번째 레인 → 인자 바인딩 → **primitive**. 룰: ⓐ 값 변환 primitive 의 **종료 경로들이 같은 후조건을 안 만족하면 그 차이가 의도인지 적어라** — early return 이 제일 자주 어긴다. (`resize` 의 `is_real` early return 은 플래그를 **일부러** 남긴다: real→int 는 비트 리사이즈가 아니라 `real_to_int_round` 라 여기서 지우면 IEEE-754 패턴을 정수로 재해석하게 된다. 즉 규칙은 "전부 같아야 한다" 가 아니라 "다르면 이유가 적혀 있어야 한다" 다.) ⓑ **보정용 clear 를 소비자에 두면 두 철자가 서로를 가려 어느 쪽도 뮤테이션으로 안 죽는다** — 실측으로 셋 다 생존했다; 규칙은 한 곳에 두고 소비자는 그것에 기대라 ⓒ 그 primitive 의 소비자 중 **Value 를 통째로 저장하는 레인**(class field·dyn elem·assoc)은 bits 를 저장하는 레인과 다른 답을 낸다 — "퍼널이 래퍼를 버린다" 는 논거는 **레인마다 다시 확인**해야 한다.
-- **테스트 임시 디렉터리는 `{pid}_{n}` 로 유일하지 않다 — 시작할 때 지워라.** §4.5.311: nextest 는 테스트마다 프로세스를 띄우므로 카운터가 매번 0 부터 시작하고 OS 는 PID 를 재사용한다. **부재를 단언하는 테스트**(`compile_error_writes_no_obs` = "run.json 이 없어야 한다", worklib 의 아티팩트 검사)는 이전 프로세스가 남긴 파일 때문에 **전체 스위트에서만 빨갛고 격리하면 통과**한다 — 제품 결함으로 오진하기 딱 좋다. `create_dir_all` 前에 `remove_dir_all` 한 줄.
-- **두 경로가 우연히 일치하는 연산만 테스트하면 분류기 갭이 은닉된다** — 기존 테스트가 `==`(등길이)와 `.len`만 봐서 concat/relational 전 family가 숨어 있었다. **갈리는 연산**(길이 다른 비교·concat·replicate)을 반드시 포함.
-- **최강 회귀 테스트 = vita-내부 등가 차분**(신규 형태 ≡ 등가 기존 형태 byte-id stdout·**미지원 케이스는 둘 다 동일 loud**까지 assert). staged 패리티=`$fatal`-on-wrong+`cli::run_*` exit-code.
-- **sweep엔 "출력 없음 + exit 0" 탐지기를 넣어라** — 값 불일치만 스캔하면 **결과가 통째로 사라진 회귀**를 놓친다(가장 위험한 형태). **스윕이 조용하면 코퍼스가 그 조합을 갖고 있는지 grep 으로 확인하라** — r20 §3.1 은 "dyn-formal 호출 + output-formal 선언"을 **함께** 가진 설계가 코퍼스에 없어서 4078 스윕이 통과했고 외부 리포터가 찾았다.
-- 신규 경로가 기존 헬퍼 호출=헬퍼 잠복 버그 감사(unchecked 산술→`checked_*`·shift mask `(1i64<<w)-1` w==63 debug-panic→u64 mask·copy 함수=원본 버그 상속→공유 헬퍼 리팩터). write-access 서브에이전트 직접 수정=`git diff` 전수+오라클 재검증.
-- desugar 슬라이스=생성할 EXPRESSION을 sim서 사전 검증. context-determined 기능=ALL 변종 구현 전 핀. 큰 의미공간=전용 슬라이스. 계획=scratchpad에 durable 기록. 
-- **최저위험 순서**: 순수 파서 desugar(기존 AST 재사용) > 기존 메커니즘 라우팅(grep 등가 기구) > 단일-속성 primitive COMPOSE(신규 결합 primitive=골든 영향) > 신규 인프라.
-- **loud→supported 후보를 그라운딩할 때 형제 경로와 capability-parity 매트릭스를 비교하라** — 같은 문맥 집합(concat·compare·method·arg·display)을 두 경로에 모두 돌리면 **양쪽 공통 silent-wrong**이 드러난다(이번 반복의 ① 발굴 경로).
-- **거부/미지원 판단 전 기존 부분지원 grep · STORAGE 갭 의심 → ENGINEERING_RULES**.
-- **아티팩트 불변식**: **format_version 은 `header.rs::CURRENT_FORMAT_VERSION` 이 정본**(이 문장에 숫자를 복사하지 마라 — 29 로 굳어 두 bump 를 놓쳤다). bump 사유 3종=①frozen sim-ir 형상 변경(골든 재생성·드묾) ②staged trailer 사이드카 **추가**(v20/21/22/28/29/30/31 선례 — v28 은 `.vu` 쪽 tail·SimIr 골든 불변·wire-pin+`obs.rs` pin 재생성·구 `.velab` loud-reject) ③**기존 사이드카의 enum 이 variant 를 얻을 때**(v27 선례). ⚠️ ③ 은 **하위호환인데도 bump 한다** — postcard 는 discriminant 를 쓰므로 **마지막에 추가하면** 구 아티팩트는 그대로 디코드되고 **새 아티팩트 × 구 바이너리**만 깨진다. bump 하지 않아도 loud 이긴 하지만(`undecodable … trailer`) 그 메시지는 **고치는 법을 말하지 않는다** ⇒ 헤더 게이트의 `E-ART-FORMAT-MISMATCH` 로 받게 하려고 bump 한다. **더 정확한 loud 를 사는 것이 bump 의 이유**이고, variant 를 중간에 끼우면 ③ 이 아니라 ①(구 아티팩트 mis-decode)이다. 그 외 전부 **IR-0**(엔진/elaborate-local·SimOpts 사이드카). **3-OS byte-identical**이 perf보다 우선. AST 필드 추가=`.vu` 해시만 re-pin(`hdl-ast/tests/schema_hash.rs`)·format 불변·VALUE만 변경=둘 다 불변. **`block_body` 재귀 경로(파서) 수정=2 MiB 스택 depth_guard 확인 필수**(`RUST_MIN_STACK=2097152`·프레임 비대→`#[inline(never)]` cold-helper 추출/Box화).
-- **READ 경로를 넓히면 WRITE twin을 같은 반복에 전수하라** — read 하나를 고치면 대개 write 쪽에 같은-클래스 silent가 여러 형태로 잠복해 있다(select 3형·concat). twin 판정 기준=**scalar/fixed 쌍둥이가 loud인데 이 경로만 조용하면 그 경로가 이상한 것**.
-- **guard는 문서화된 단일 퍼널에 두고 全 site가 술어 하나를 공유하라** — 별도 site에 두면 형제 축(concat 등)이 열린 채 남고, 술어를 둘로 나누면 (string/real처럼) 축마다 커버리지가 갈린다. 술어 이름은 **금지 사유**(bit-addressable 아님)로 짓고 타입 열거로 짓지 마라.
-- **공유 기구(walk·분류기·퍼널)에 semantics를 추가할 땐 default가 아니라 OPT-IN 파라미터로** — consumer마다 순서 의존성·안전 전제가 다르다(한 곳을 위해 14개 전부에 리스크를 지우지 마라). opt-in 함수 doc에 **양성 전제조건**(언제 켜도 되는지)을 반드시 적어라(금지 조건만 적으면 다음 사람이 같은 함정에 빠진다).
-- **mutable elaboration state(`symbols` 등)에 name resolution/분류를 걸면 phase 재실행과 충돌**한다 — 진단이 특정 phase에만 있으면 **결과가 조용히 삭제**된다(generate body 통째 소멸·exit 0). 순서 의존이 의심되면 **AST-gathered pure-function 집합**으로 판정하라.
-- **한 arm 의 hazard 를 위한 stand-down 을 함수 전체 early-return 으로 쓰지 마라 — 게이트의 SCOPE 와 KEY 를 둘 다 물어라.** §4.5.276(round-20 §3.1, 내가 만든 회귀): 프레임 본문에서 copy-out 을 못 내는 것은 **inout arm 의** 사정인데 `hoist_stmt_top` **맨 위**에서 물러났고, 키는 `!inout_func_names.is_empty()` 즉 **모듈 전역** 속성("이 설계에 output-formal 함수가 하나라도 선언됐나")이었다. 그래서 **호출되지도 않는 함수의 선언 하나**가 같은 match 의 **무관한 dyn-formal arm 전부**를 껐다 — 리포터가 잰 9개 경계(void/task/no-output/다른 모듈은 PASS, package/non-automatic 은 error)가 전부 그 술어의 그림자였다. early-return 은 "literal false 면 byte-identity" 라는 안전 논거로 정당화하기 쉽지만, 그 논거는 **키**만 답하고 **범위**를 묻지 않는다. stand-down 은 그 arm 의 guard 에 두라 — 거기서는 arm 자신의 술어(`expr_has_inout_call`)가 이미 "그 hazard 가 실제로 있다"를 말한다. 검출법: 게이트가 **statement 를 보지 않고 답할 수 있으면** 그 게이트는 statement 단위 결정에 쓰일 수 없다.
-- **"읽지만 그 값이 죽었다"는 읽기가 아니다 — 단, 죽음의 증명은 "쓰기 前에 안 읽음"이 아니라 "모든 경로에서 반드시 쓴다"다.** §4.5.276(§3.2): `inout` formal 의 copy-in 은 실제로 actual 을 읽지만, callee 가 그 formal **전체**를 보기 전에 덮어쓰면 copy-in 값은 아무도 관측하지 않으므로 flatten 잔값이 보일 수 없다. 함정은 재사용할 술어를 잘못 고르는 것 — `automatic_local_definitely_assigned` 의 계약은 "**첫 쓰기 前에 읽기 없음**"이고 그건 블록 로컬용 질문이다. `if (c) r = 1;` 은 그 계약을 만족하면서 살아있는 경로에 **쓰기가 없고**, copy-out 이 잔값을 그대로 caller 에 돌려준다. 필요한 계약은 "**definitely written**". 재사용 전에 **그 함수가 Ok 를 돌려주는 정확한 의미**를 읽어라(끝에서 `assigned` 를 안 보고 `Ok(())` 하는지).
-- **`Stmt::Block` 을 풀어 `stmts` 만 도는 순간 `decls` 를 잃는다 — 그리고 그 손실은 "같은 hazard 의 두 철자가 갈린다"로 나타난다.** §4.5.276: `match body { Block{stmts,..} => stmts }` 가 선언 초기화자를 떨어뜨려 `int save = r;` 은 통과하고 **문장으로 쓴 `save = r;` 은 거부**됐다(`da_stmt` 의 `Block` arm 은 중첩 블록의 decl-init 을 바로 그 이유로 검사한다). 두 렌즈가 독립으로 같은 구멍을 찾았다. **검출법**: 새 워커를 짤 때 같은 의미를 **선언 초기화자로도** 써서 두 철자가 같은 답을 내는지 확인하라. 그리고 서브루틴 본문을 걸을 땐 **재선언(shadow)** 도 물어라 — 중첩 블록이 그 이름을 다시 선언하면 그 쓰기는 다른 변수의 쓰기다.
-- **입력을 제한해서 남의 fold 를 길들이려 하지 말고, 목표 도메인에서 도는 평가기를 직접 써라 — LEAF 를 묶어도 RESULT 가 도메인을 벗어난다.** §4.5.276: trip-count 증명이 리터럴을 `0..=i32::MAX` 로 묶고 `const_eval_in_scope`(i64 `checked_*`)에 넘겼는데, 허용된 리프로 만든 `65536*65536`·`2147483647+1`·`2**32`·`1<<32` 가 32비트를 벗어나고 **엔진은 그것들을 0회로 돈다**(iverilog 일치) — loud→silent 5철자. 해결은 입력 제한을 더 조이는 게 아니라 **checked i32 평가기를 직접 쓰는 것**이었고, 그러면 연산자별 도메인 차이도 명시적으로 배제할 수 있다(`**`/`<<`/`>>` 는 `const_binop` 자신의 주석이 "iverilog 에 맞춰 넓게 접는다"고 증언 = 엔진과 다르다).
-- **가드를 두 번 잘못 스코프했으면 세 번째 시도 대신 되돌리고 조건을 측정하라.** §4.5.276 은 프레임 본문의 copy-out 패닉을 `in_frame_body()` 로 막으려다 **두 번** 되돌렸다: 12 형태 중 **10 개가 PRE 에서 정답**(iverilog 오라클)이었고 그중엔 이 슬라이스의 동기가 된 워커도 있었다. 실제 조건은 훨씬 좁았다 — 호출이 프레임 본문의 **첫 문장**일 때만 패닉하고, 앞에 아무 문장이나 하나 있으면 사라진다. **패닉은 loud 이지 silent-wrong 이 아니다**: 사다리에서 패닉을 고치겠다고 correct-support 를 loud 로 바꾸는 것은 순손실이다. 조건을 이름 붙일 수 없으면 pre-existing 으로 되돌리고 **측정된 형태와 함께 등재**하라.
-- **교훈을 적어 둔 파일에서 그 교훈을 다시 어길 수 있다 — 같은 클래스의 두 번째 지점을 함께 고쳐라.** §4.5.276 은 "tf-body 의 top-level 선언은 `body_decls` 에 산다"를 주석으로 30줄 위에 적어 두고, **중첩 callee 를 보는 두 번째 워커**에는 적용하지 않아 같은 silent-wrong 을 한 겹 안쪽에서 재현했다. 어떤 사실을 알아냈으면 `grep` 으로 **그 사실을 필요로 하는 모든 지점**을 세라(여기선 `f.body` 를 읽는 곳 전부).
-- **whitelist 는 이름을 검사하지 정체를 검사하지 않는다 — 대상을 적극 식별하라.** §4.5.276: `container_method_is_pure` 로 "내장 컨테이너 메서드니까 유저 본문이 없다"를 논증했는데 그 술어는 **메서드 이름 문자열 whitelist** 일 뿐이라, `size`/`len`/`min`/… 로 이름 지은 **유저 클래스 메서드·자식 인스턴스 함수·모듈 자기 함수**가 34개 중 30개 이름에서 통과했다(수신자를 아무도 안 봤다). 논증이 "X 라서 안전"이면 술어가 **X 를 실제로 판정하는지** 확인하라 — 여기선 수신자를 `lookup_net_scoped` 로 컨테이너/문자열 넷임을 **적극 확인**하는 것이 답이었다(클래스 핸들은 정수 넷, 인스턴스·모듈 이름은 넷이 아님).
-- **구문 워커는 한 겹 아래를 못 본다 — 그리고 그걸 닫는 법은 새 워커가 아니라 이미 exhaustive 한 워커의 opt-in 재사용이다.** §4.5.276: 새 게이트가 "쓰기 前에 아무도 못 읽는다"를 `expr_no_ref_deep`(Call arm 이 callee 본문 미진입)과 `da_stmt`(이름 미언급 문장은 통째 skip)로 걸어서 `int save = rd();` 가 통과했다(**직접 철자는 거부**되고 있었다 = 같은 hazard 의 두 철자 불일치, 이번 라운드에서만 세 번째 발현). 닫을 때 새 exhaustive 워커를 쓰지 말고 **이미 `_`-free-exhaustive 한 것**(`stmt_may_write_ident`)을 찾아 **한 축만 opt-out**(direct-lvalue 테스트) 하도록 파라미터화하라 — 리터럴 `true` 면 byte-identical 이므로 기존 consumer 는 무영향이고, 표현식 위치 열거를 다시 짤 필요가 없다.
-- **술어를 교체할 땐 옛 술어의 arm 을 전수 이관 대조하라 — 흘린 arm 하나가 회귀, 다른 하나가 silent-wrong 이었다.** §4.5.276: `call_effect` → `callee_body_cannot_touch` 로 바꾸면서 두 arm 을 잃었다. ①**2-세그먼트 arm**(`qq.size()`·`ss.len()` 이 동작→loud = 내가 만든 회귀) ②**omitted formal 의 DEFAULT 절**(default 는 caller 스코프에서 낮춰지므로 formal 을 읽을 수 있다 = silent-wrong). 그리고 ①을 되돌릴 때 옛 arm 을 **그대로** 복원하면 안 됐다 — 그것은 컨테이너 메서드엔 타당하고 **클래스 메서드엔 부당**했다(본문이 계층 경로로 모듈 넷에 닿는다: PRE 에서 이미 silent-wrong). 축을 갈라서(`container_method_is_pure`) 회귀를 되돌리며 pre-existing silent-wrong 을 loud 로 올렸다. **교체는 "새 술어가 더 정확하다"가 아니라 "옛 술어의 모든 의무를 덮는다"를 증명해야 한다.**
-- **상수 fold 로 런타임 동작을 예측할 땐 fold 의 도메인과 resolver 가 엔진과 같은지 물어라 — 셋 중 어느 축이 달라도 조용히 갈린다.** §4.5.276 의 trip-count 증명은 세 축 전부에서 샜다(두 렌즈가 독립 발견): ①**도메인** — `const_eval_in_scope` 는 i64 부호 있는 fold 라 선언 폭도 IEEE §11.8.1(피연산자 하나가 unsigned 면 비교 전체가 unsigned)도 안 본다(`for (byte j=200; j>100; j--)`·`for (int j=-1; j<4'd3; j++)` 는 실제 **0회**인데 "≥1"). ②**resolver** — `Ident` arm 이 `lookup_scoped`(params 전용·net 무인식)라 net 이 param 을 가리면 lowering 과 갈린다. ③**스코프** — 그 folder 를 **다른 스코프의 본문**(callee body)에 들고 가면 그쪽 formal/local 이 이쪽 param 값으로 접힌다(`LIM`/`N`/`WIDTH` 를 양쪽에 쓰는 건 평범한 코드다). 그리고 ②를 "shadow-aware 로 만들면 된다"는 길은 `walk_scopes_key_shadowed` 계약이 **금지**한다(`const_eval_in_scope` 도달 consumer 의 opt-in = 순서 의존 → 과거에 generate body 조용한 삭제). 순서 무관한 답은 **식별자를 아예 안 받는 allow-list** 다(값 리터럴만 · 시작값은 **0** — 0 은 모든 폭·부호에서 0 이라 절단 축이 사라진다). 정밀도를 잃더라도 그것이 정직하다.
-- **루프 본문의 쓰기를 인정하려면 trip-count 와 escape 를 따로 증명해야 한다 — 그리고 `break` 는 walk 의 join 이 이미 지워서 안 보인다.** §4.5.276(§3.3): `for (int j=0; j<3; j++) fill(cur);` 는 본문이 반드시 돌지만, 그것만으로는 부족하다. `if (c) break;` 는 **루프 바로 뒤**에 착지하는데 `If` arm 의 merge 가 `merge(Jumps, Falls(x)) = Falls(x)` 로 그 경로를 **떨어뜨려** 버리므로 body 의 `DaOut` 에 흔적이 없다(`Jumps.state()` 가 join 항등원인 `true` 인 것도 같은 이유로 위험 — `.state()` 말고 `Falls(true)` 를 직접 매치하라). 그래서 trip-count 증명 옆에 **구문적 escape 검사**가 필요하다. 그리고 loop 4형(`for`/`while`/`repeat`/`forever`)을 **한 번에** 다뤄라 — `repeat (3)` 과 `for (…; j<3; …)` 은 같은 trip count 에 대한 같은 진술이고, 한쪽만 고치면 사용자가 서로 바꿔 쓸 때 elaborate 여부가 바뀐다.
-- **차분 게이트를 "짰다"와 그 게이트가 "무언가를 검사한다"는 다른 말이다 — 각 행동을 하나씩 깨 보고 게이트가 우는지 확인하기 전까지 후자를 주장하지 마라.** §4.5.289: 새 채널의 7개 행동 중 **2개가 공허**했고(정렬 계약·glitch 누적), 원인은 술어가 아니라 **관측 시점**이었다 — 쓰기마다 채널을 take 하면 dirty 길이가 항상 1이라 **정렬은 정의상 no-op** 이고 같은 슬롯 재기록이 없어 **누적이 일어나지 않는다**. 배치로 바꾸자(실제 델타가 하는 일) 4개가 teeth 를 얻었고, 나머지는 그 상태를 **일부러 만들어야** 했다(작성자 태그를 실제로 세우고, 클럭을 퍼널을 통해 `0→1→0→1` 구동하며 사이사이 관측 — 연속 관측의 마스크가 **달라야** cross-slot 독립성이 보인다). 검출법 = **N개 행동 × 한 번에 하나씩 revert**, 전부 실패해야 통과. ⭐ 그리고 **그 N을 어디서 뽑는가가 규칙의 절반이다** — §4.5.289 의 적대 리뷰는 내가 목록을 새 모듈의 **개념**에서 뽑은 탓에 **호출부가 열거하는 두 store 지점 중 하나가 0회 진입**(그 지점의 코드를 통째로 지워도 전 패키지 초록)인 것을 찾았다. 목록은 **기구가 붙는 자리**(call site)에서 뽑고, 각 자리가 실제로 진입되는지 **카운터로 측정**하라. ⭐⭐ 그리고 **관측 granularity 는 선택이 아니라 축이다** — §4.5.289/290: 이벤트마다 관측하면 배치 효과(순서·누적·소비)가 정의상 사라지고, 배치로 관측하면 개별 이벤트 효과(마스크 비트)가 누적에 묻힌다. **서로를 가리므로 둘 다 쓸어야** 한다. 같은 함정의 셋째 얼굴: 두 축(관측 방식·상태 프로파일)이 **같은 술어를 공유**하면 행렬의 절반이 안 쓸린다.
-- **byte-identity 논증은 어느 축에 대한 것인지 적어라 — "값이 같다"는 "출력이 같다"가 아니다.** §4.5.300: 워크리스트를 빼고 매 패스 모든 cont-assign 을 방문하는 것을 "byte-identical, 그저 느릴 뿐" 이라고 적었고 **엔진 자신의 주석이 그 근거였다**(*"입력이 안 움직인 assign 은 이전 값을 재계산하고 퍼널이 같은 값 쓰기를 변경으로 안 친다"*). 그 문장은 **값**에 관한 것이고, 재평가는 **진단**을 또 낸다 — 범위 밖 원소를 읽는 RHS 가 picorv32 에서 `errors` 6 → 9. 룰: ⓐ 최적화를 "관측상 no-op" 이라 부르기 전에 **관측 채널을 열거하라**(값·진단·exit class·순서·시각) ⓑ 남의 주석을 근거로 쓸 때는 **그 주석이 어느 채널을 말하는지** 확인하라.
-- **슬라이스가 자기 전제를 무효화했는지 확인하라 — 새 단계를 앞에 끼워 넣으면 뒤 단계의 주석이 거짓이 된다.** §4.5.300: `arm_t0` 는 dirty 를 통째로 비우면서 *"여기엔 settle 이 없다(거부됨)이므로 초기화자가 유일한 작성자"* 라고 적어 두었는데, **같은 슬라이스가 그 앞에 settle 을 넣었다**. 결과는 t0 settle 의 변경 집합 전체 유실 = `assign w = 1'b1;` 에 `always @(w)` 가 안 뜨는 조용한 오답(퍼즈 270 중 49). 엔진은 **바로 그 결함을 이미 고치고 주석으로 남겨 두었다**. 검출법: 파이프라인에 단계를 추가하면 **그 뒤 단계들이 "앞에 X 가 없다" 를 전제로 쓴 문장**을 `grep` 하라.
-- **게이트가 새 코드에 이빨이 있는지 `panic!` 로 확인하라 — 그리고 커버리지 숫자가 안 움직이면 그게 신호다.** §4.5.300: settle 최상단의 `panic!("MUTANT")` 이 전 워크스페이스를 통과했다(코퍼스의 CA 설계는 plain+delayed 를 쌍으로 내보내 전부 다른 행에 걸리고, 판별 설계 34 개에 `assign` 이 한 줄도 없었다). **신호는 이미 단언 안에 있었다** — 거부를 좁혔는데 `ran` 이 65 에서 그대로였다. 룰: 거부 행을 좁히거나 새 실행 경로를 열었으면 **admitted 개수가 움직였는지 먼저 보고**, 안 움직였으면 그 경로를 타는 설계를 짓기 전에는 슬라이스가 끝나지 않은 것이다.
-- **"상위 층이 먼저 거부한다"는 논증은 그 층의 사이드카가 실제로 채워지는지 측정하고 써라.** §4.5.299: `body_is_walkable` 의 `Fork` 암을 *"S0 `fork` 행이 먼저 거부하므로 커버 불가"* 라고 적고 뮤테이션 생존을 근거로 인용했는데, **`wait fork;` 는 `fork_modes` 를 하나도 만들지 않는다** — 그 설계는 `eligible ∧ buildable` 이고 그 암이 **유일한 거부자**였다(통과시키면 아무도 못 깨우는 웨이터에 영원히 park = 행). 룰: ⓐ 거부 논증을 적기 前 그 층의 판정을 **그 형태로 실제 실행**해 확인하라(`--obs-dir` run.json 한 줄) ⓑ **"측정했다"를 근거로 커버를 지우지 마라** — 뮤테이션 생존은 "그 형태를 가진 설계가 내 세트에 없다"와 구별되지 않는다 ⓒ 사용자에게 나가는 거부 문구는 **도달 가능한 원인을 앞에** 놓아라(옛 문구는 구성 불가한 named-event 를 광고하고 실제 원인은 안 적었다).
-- **새 자리에서 대체 스토어를 읽기 시작하면 그 자리가 진단 생산자다 — 드레인 쌍둥이를 같은 슬라이스에 지어라.** §4.5.298 이 NBA 경로에 대해 이 클래스를 고쳤고 쌍둥이 테스트를 둘 남겼는데, §4.5.299 가 `wait(e)` 술어 평가라는 **세 번째 생산자**를 추가하면서 쌍둥이를 안 지어 같은 FAIL→PASS 를 두 슬라이스 연속으로 냈다. 검출법: `grep` 으로 그 스토어를 읽는 자리를 전부 세고, **각 자리 뒤에 드레인이 도달하는가**를 종료 경로별로(정상·시간한도·델타한도·quiescent) 따로 답하라.
-- **리뷰어가 측정하는 동안 바이너리를 다시 빌드하지 마라.** 리뷰어에게 "작업 트리 수정 금지"를 지시하는 규칙은 있었지만 **내 쪽 금지가 없었다** — §4.5.299 에서 두 번 재빌드해 리뷰어가 측정 시각별로 어느 바이너리였는지 주석을 달아야 했다. 리뷰 중 수정이 필요하면 **사본에서** 하고, 리뷰가 끝난 뒤 트리에 반영한 다음 재리뷰하라.
-- **슬라이스 경계는 개념이 아니라 오라클이 있는 곳에서 그어라 — 코퍼스를 먼저 재라.** §4.5.298: 계획은 "루프 먼저, 정지 나중" 이었는데 재 보니 코퍼스 **72 설계 중 0 개**가 전 프로세스 정지-없음이라 그 순서로 지었으면 **코퍼스 설계를 한 개도 못 돌리는 게이트**가 나온다. 반대로 정지 터미네이터 **138 개가 전부 한 종류**(`Delay`)여서 "루프 + 그 한 종류"가 오라클이 있는 단위였고, 나머지 종류(`Wait`)는 커버리지가 **0** 이라 전용 설계로 지어야 하는 별도 슬라이스다. **착수 전 한 번의 코퍼스 스캔이 계획을 고친다** — 개념적으로 깔끔한 분해가 검증 가능한 분해와 다를 때, 이기는 쪽은 검증이다.
-- **판정 층을 늘렸으면 PUBLISH 하는 값도 늘려라 — 결정과 보고가 다른 평가에서 나오면 rail 이 거짓말한다.** §4.5.298: `simulate` 가 세 번째 게이트 층을 **로컬**에 계산해 결정에 쓰고, run.json 에는 **두 층짜리 구조체**를 실었다 — 새 층이 거부한 모든 폴백이 `refused: null` 로 나갔고 그 필드의 doc 은 *"null 이면 아무것도 거부하지 않았다"* 라고 주장 중이었다. 설명이 일인 관측 rail 에서 이것은 값 손실이 아니라 **오답**이다. 검출법: 판정 층을 추가할 때 그 층의 이유 문자열이 **어디로 나가는지** 를 같은 커밋에서 따라가라.
-- **게이트가 수정을 거부하도록 굳을 수 있다 — "수정을 넣었더니 테스트가 깨졌다"를 회귀로 읽기 전에 그 테스트가 무엇을 모델링하는지 다시 보라.** §4.5.290: 빠진 등록(`Comb`/`Latch`)을 추가하자 게이트가 실패했는데, 원인은 수정이 아니라 **짝이 되는 초기 상태**였다(엔진은 그 종류를 t0 에 **arm 하지 않고 큐잉**하므로 armed 초기값이 종류별로 달라야 한다). 한 줄만 고치면 게이트가 정당하게 운다 — 두 줄이 한 사실의 두 반쪽이었다.
-- **분기를 "여기선 못 일어난다"로 지울 땐 그 분기의 조건에 들어가는 **모든 입력**을 세라 — 분기 이름이 가리키는 입력 하나만 확인하면 절반만 답한 것이다.** §4.5.287: 새 쓰기 퍼널이 엔진의 real 강제 변환 arm 을 "real **넷**은 이 저장소를 못 짓는다"로 지웠는데, 그 arm 의 조건은 `(목적지가 real, 값이 real)` **2×2** 였고 지운 근거는 목적지 축만 답했다 — `x = $itor(n)/2.0` 은 real 넷이 하나도 없이 real **값**을 만든다. 결과는 적격 판정을 받은 설계에서 **엔진은 반올림·미러는 IEEE 비트 그대로** = silent-wrong. 검출법: 지우려는 분기의 조건을 **진리표로 펼치고** 각 행마다 "이 행을 만드는 입력이 정말 불가능한가"를 따로 답하라. 그리고 미러를 만들 때는 **원본의 조건식을 그대로 옮겨 적은 뒤** 불가능한 행만 지워라(요약해서 옮기면 축이 사라진다).
-- **캐시를 테스트할 때는 그 캐시가 살아남아야 한다 — 상태마다 소유자를 새로 만들면 staleness 는 구조적으로 안 보인다.** §4.5.307: 인덱스 캐시의 유일한 신규 위험이 staleness 인데, 게이트가 상태마다 커널(=캐시)을 새로 만들어 **채운 상태로만** 조회했다. 그래서 "첫 평가 결과를 상수로 얼린다" 는 순수 staleness 뮤테이션이 그 슬라이스의 테스트를 **전부 통과**했다(잡은 것은 상속받은 차분뿐). 룰: 메모/캐시의 테스트는 **소유자를 살려 둔 채 입력 상태를 바꾸고 다시 물어라**. 소유권 때문에 어려우면 그 자체가 신호다 — 상태를 넘겨주는 seam(`&mut` 접근자)을 만들되, **캐시는 넘기지 말고 유지**하라.
-- **편집이 실제로 반영됐는지 확인하고 나서 그것을 사실로 적어라.** §4.5.308 에서 여러 편집을 한 스크립트에 담았다가 **중간 assert 로 죽어 앞선 write 가 전부 유실**되는 사고가 네 번 났고, 매번 "적었다" 고 믿은 채 다음으로 넘어갔다. 최악의 발현: 봉인이 두 funnel 중 **한 곳에만** 걸렸는데 주석에는 *"Both funnels must do it"* 이라 적혀 있었다 — 피하려던 divergence 를 스스로 만들고 그것을 부정하는 문장을 남긴 것이다. 룰: **편집마다 독립 write**, 직후 `grep` 으로 확인, 그 다음에 주석·보고를 쓴다. 다중 편집 스크립트를 쓸 거면 실패한 항목을 **보고하고 나머지는 계속**하게 하라(assert 로 전체를 중단시키지 마라).
-- **"사라졌다" 를 발견으로 삼기 전에, 그 실행이 일어났는지부터 세어라.** 없어야 할 것이 없는 것과 **아무것도 안 돈 것**은 같은 모양으로 보인다. §4.5.307 그라운딩에서 셸이 `--backend native` 를 한 단어로 넘겨 vita 가 `E0001 unknown flag` 로 죽었는데, 필터가 그 줄을 지워서 "네이티브에서 진단이 통째로 사라졌다" 는 가짜 발견이 나왔다(두 번째 재발). 룰: 부재를 주장하는 프로브는 **긍정 마커도 함께 센다** — 기대 출력 한 줄(`$display` 결과·`errors=` 트레일러·run.json 의 `backend`)을 같은 명령에서 확인하고, 0 이면 발견이 아니라 **하네스 고장**으로 먼저 의심하라.
-- **슬라이스의 중심 변경일수록 커버리지를 세어라 — "그 변경이 존재하는 이유가 되는 형태" 가 스위트에 0개일 수 있다.** §4.5.306: `WOp` 를 per-op 마스크로 재편한 이유가 *"한 프로그램이 두 폭을 갖는다"* 였는데, 전 스위트에서 컴파일된 비교 프로그램 **~690 개가 전부 피연산자 단일 Load**(복합 피연산자 **0**)라 그 재편을 되돌리는 뮤테이션이 **전 스위트를 통과**했다. 검출법: 새 구조가 **어떤 형태에서만 의미가 있는지** 한 문장으로 쓰고, 그 형태를 **세어라**(계측·census). 0 이면 테스트가 아니라 **설계 근거가 없는 것**이므로 그 형태를 먼저 지어라.
-- **테스트에 "핀"·"측정" 이라 쓰기 전에 단언을 읽어라.** 같은 슬라이스: census 테스트의 doc 이 *"a MEASUREMENT pinned as a test"* 였으나 단언은 `assert!(admitted > 0)` 하나였고 숫자는 캡처되는 `eprintln!` 로만 나갔다 — 어떤 변화도 보이지 않는다. 게다가 붙어 있던 "파일 없으면 skip" 은 **거짓**이었다(`.gitignore` 가 그 경로를 un-ignore 한다). 룰: 이름·주석이 주장하는 성질은 **단언 한 줄로 환원되는지** 확인하고, skip/early-return 의 전제는 **그 자리에서 확인**하라(`git ls-files` 한 번이면 끝난다).
-- **진단을 소유한 규칙에 fast path 를 붙이면 "값이 같다" 로는 등가가 아니다 — 진단 수도 비교하라, 그리고 그 비교가 공허하지 않은지 확인하라.** §4.5.312: lvalue 오프셋 특수화가 슬롯을 하나씩 **컴파일하며 즉시 실행**해서, 첫 슬롯이 admit 되고 범위를 벗어나면 E4002 를 내고, 두 번째 슬롯이 decline 하면 전체를 되돌리는데 — 그 뒤 제네릭 경로가 **같은 접근을 다시 보고**한다. 진단에 런당 cap 이 있으면 중복이 cap 을 먹어 **뒤의 진짜 보고를 지운다**. 룰 둘: ⓐ fast path 는 **결정과 실행을 분리**한다(전부 판정한 뒤 실행 ⇒ *"decline 은 부작용 0"* 이 코드의 성질이 된다) ⓑ 등가 게이트는 값뿐 아니라 **진단 카운터**를 비교하고, 코퍼스에 그 카운터를 움직이는 admit 형태가 있는지 세라 — 0개면 그 비교는 영원히 0-vs-0 이다.
-- **지름길 arm 이 admission 검사를 건너뛰면, admission 이 지키던 모든 성질이 그 arm 에서 무너진다.** §4.5.305: 폭 특수화 평가기에서 `k >= width` 상수 시프트가 *"어차피 전 비트가 나간다"* 며 lhs 서브트리를 **컴파일하지 않고** 상수 0 을 내놓았다. 그런데 그 컴파일이 곧 **거절 판정**이라, 거절돼야 할 lhs 가 통째로 admit 됐다 — OOB 인덱스의 진단이 사라지고(loud→silent·exit class 변경) `$urandom` 의 draw 가 사라져 **이후 난수 스트림 전체가 밀렸다**(exit 0 값 발산). 룰: **분류를 수행하는 재귀는 어떤 arm 에서도 건너뛰지 마라** — 결과를 버릴 것이라면 먼저 **컴파일하고 나서** 버려라(여기서는 `Const{0,0}` 과 AND 로 소멸시켜 4-state 전 입력에서 같은 값이 나온다). 검출법: 각 arm 에서 "재귀 호출이 몇 번 나오는가" 를 세라 — 다른 arm 보다 적으면 그 차이가 곧 미검사 서브트리다.
-- **"exhaustive 하게 측정했다" 는 주석은 그 exhaustive 가 무엇을 훑는지 세기 전엔 쓰지 마라.** 같은 슬라이스: 위 arm 의 주석이 *"exhaustive tests 로 측정했다"* 였으나, 배터리의 시프트가 **전부 `k < w`** 라 그 arm 은 단 한 번도 실행되지 않았다(상수 뮤턴트가 58 테스트를 통과). 배터리·스윕·퍼즈를 근거로 인용할 때는 **그 입력 집합이 이 분기를 지나가는지**를 별도로 확인하고, 안 지나가면 행을 추가하라.
-- **게이트 스위트가 빨간 채로 두지 마라 — 빨간 테스트는 자기 영역의 뮤테이션을 가린다.** §4.5.304: 배선이 게이트 테스트의 거부 단언을 뒤집어 그 테스트가 빨간 동안, carve-out 반전 뮤테이션이 **같은 테스트의 다른 단언**으로 죽음이 옮겨가 신호가 사라졌다. 빨강은 "고칠 일 목록" 이 아니라 **검증 능력의 구멍**이다 — 행동을 바꾸는 변경은 그 행동의 단언을 같은 편집에서 뒤집어라(거부→수용). 그리고 **거부 행을 걷어낼 때는 다음 행이 드러난다** — "이것 하나로 적격" 은 첫 거부 행 기준의 주장이므로, 걷어낸 뒤 반드시 재측정하라(stmt_effect 뒤에 frame-local 이 있었다).
-- **값이 안 움직이는 축이 둘 있다: 가환 연산의 피연산자 순서, 그리고 수렴 루프의 단계 배치 — 각각 전용 관측 채널이 필요하다.** §4.5.303 soundness 뮤테이션이 실측: ① 해상 fold 는 가환이라 **드라이버 평가 순서를 뒤집어도 값-전용 게이트 전체가 통과**한다. 순서가 관측되는 채널은 **부작용 있는 평가**뿐 — `$random` 이 admitted 라면 impure 항 둘을 한 그룹에 넣으면 평가 순서가 곧 draw 순서다. 게이트가 admit 하는 impure 표면을 열거해 보면 순서-핀 설계가 그 안에 있다. ② fixpoint 안의 루프 **위치**를 옮겨도 값은 수렴하므로 스트림이 안 움직인다 — 움직이는 것은 **수렴에 드는 패스 수**이고, 그것은 **예산 경계 스윕**(budget 1..=N, 매 값에서 A/B 비교 + regime 교차 anti-vacuity)으로만 보인다. 룰: 뮤테이션 생존을 "등가" 로 접기 전에, 값 밖의 관측면(부작용 순서·자원 소모·진단 수)에서 갈리는지 먼저 물어라.
-- **앵커의 기대 출력에 알려진 발산이 들어가면, 앵커가 앵커이길 그만둔다.** §4.5.302: 공유 코드를 지킬 절대값 앵커를 지으면서 관측을 `always @(y)` 엣지 모니터로 잡았더니, 기대 줄에 **오라클엔 없는 vita 의 t=0 이벤트**가 딸려 들어왔다. 그대로 고정했으면 그 테스트는 **틀린 동작을 영구히 보증**하고 나중에 고칠 때 "회귀"라며 막아섰을 것이다. 룰: 앵커는 **뮤테이션이 움직이는 것만** 관측하라 — 엣지 모니터·전체 스트림 덤프처럼 넓은 관측은 무관한 발산을 끌어들이므로, **시각 지정 샘플링**처럼 좁은 관측으로 좁혀라. 그리고 오라클과 다른 줄이 나오면 그것은 앵커의 잡음이 아니라 **발견**이다 — 측정해서 기록하고(§2) 소유자를 지정하라.
-- **한 기능을 두 스토어로 나눠 쓰지 마라 — 절반만 seam 을 통과하면 나머지 절반이 조용히 틀린다.** §4.5.302: 지연 cont-assign 을 추출하면서 **RHS 는 대체 리더로 읽고 LHS 오프셋은 엔진 스토어로** 해석했다. 네이티브 런에서 그 스토어는 안 움직이므로 동적 인덱스가 X → out-of-range 센티널 → **쓰기가 통째로 사라졌다**(exit code·출력 동일, 한 비트만 없다). 검출법: 한 기능이 스토어를 **몇 번** 읽는지 세라(값·오프셋·폭·인덱스는 각각 읽기다) — `grep` 으로 그 함수의 `self.st`/`resolve_*`/`eval_*` 를 전부 열거하고 **하나라도 seam 밖이면 미완성**이다. ⭐ 이 결함이 보였던 이유도 기록할 값이 있다: 같은 기능의 **X-drive 반쪽은 아레나를 썼고**, 그래서 `x` 가 맞는 비트 자리에 찍혀 증상이 "값이 이상하다" 가 아니라 "한쪽만 맞다" 로 나타났다.
-- **공유 코드의 뮤테이션은 A-vs-B 차분이 원리적으로 못 잡는다 — 그 반쪽은 다른 앵커가 지켜야 한다.** §4.5.301: `emit_vcd_change` 를 id 조회 + 값-받는 쓰기로 쪼개 양쪽 백엔드가 **쓰기 절반을 공유**하게 했더니, 거기서 `set_time` 을 지우는 뮤테이션이 **VM-vs-native 게이트 전체를 통과**했다 — 차분의 양쪽이 같이 움직이기 때문이다(§4.5.293 의 *"같음으로는 출처를 시험 못 한다"* 가 한 층 위에서 재현). 잡은 것은 **iverilog 앵커 테스트**뿐. 룰: 두 구현자가 공유하는 코드를 늘릴 때마다 **그 부분을 지키는 앵커가 무엇인지 이름을 대라**(오라클 테스트·골든·형식 검사). 공유는 드리프트를 없애지만 **차분의 감도도 같이 없앤다**. §4.5.302 가 이것을 실행으로 옮겼다 — 지연 CA 의 inertial 규칙을 엔진과 공유하자 **generation 필터를 지워도 전 차분 게이트가 통과**했고, 고친 방법은 차분을 늘리는 게 아니라 **iverilog 로 측정한 절대값 앵커**(좁은 펄스는 LHS 에 절대 안 닿는다·rise/fall 이 정확히 언제 발화한다)를 세우는 것이었다.
-- **파일을 비교할 땐 "둘 다 없음" 이 통과하지 않게 하라.** §4.5.301: 파형 비교가 `Option<Vec<u8>>` 동등성이라 `None == None` 이 통과했고, `dumpvars_with` 를 양쪽 no-op 으로 만들면 "37 파형 일치" 가 **무 대 무 37건**이었다. 산출물을 비교하는 단언에는 **산출물이 존재한다는 단언**을 짝지어라.
-- **진단 코드를 쪼개면 옛 코드에 대한 NEGATIVE 단언이 전부 공허해진다 — 갱신이 아니라 재조준이 필요하다.** §4.5.340 이 `unique`/`priority` 위반을 W4007 에서 W4031 로 옮기자 `assert_eq!(err.matches("W4007").count(), 2)` 는 **빨개져서 스스로 알렸는데**, 같은 파일의 `assert!(!err.contains("W4007"))` 두 행(0-variant 가 억제한다 · 명시 default 가 있으면 안 난다)은 **초록인 채로 아무것도 안 검사하게 됐다**(이제 그 코드는 어디서도 안 나온다). ⇒ 신호를 A 에서 B 로 옮기는 모든 변경에서 **A 를 언급하는 행을 전부 세고**, 양성 단언은 갱신하되 **음성 단언은 B 로 재조준**하라. ⚠️ 판별법: 그 파일에서 A 가 **한 번도 안 나올 수 있게** 됐다면 A 에 대한 `!contains` 는 전부 공허다.
-- **desugar 가 만드는 진단은 desugar 대상과 코드를 공유하면 안 된다.** 파서가 §12.5.3 위반을 `$warning` 문장으로 낮추자 **시뮬레이터가 만드는 사실**과 **설계가 부른 태스크**가 한 코드가 되어 `-Wno-`/`-Werror` 로 **분리 불가**였다(§4.5.340). 낮춤은 구현 수단이지 **정체성이 아니다** — 낮춘 결과가 사용자에게 보이는 이름을 물려받으면, 그 이름을 제어하는 모든 플래그가 두 개념을 함께 움직인다. ⭐ 그리고 낮춤이 elaborate 에게 말하는 채널이 **이름뿐**이라면 그 이름공간을 **예약**하라 — 소스가 그 이름을 쓸 수 있으면 **일어나지 않은 사실을 소스가 보고**할 수 있다(규칙으로 막아야 다음 desugar 도 덮인다).
-- **테스트 하네스가 사이드카를 설치하는지 확인하라 — 미설치면 그 규칙을 시험하는 테스트가 다른 것을 재고 있다.** ⭐ **A2-i·A8-a·A7 에서 다섯~일곱 번째가 나왔고 셋 다 실패가 아니라 앞선 주석들을 읽어서 예방했다** ⭐⭐ **일곱 번째(`coverage_manifest`)의 실패 모드가 이 목록의 존재 이유다** — 그것 없이도 설계는 **돌고 비트맵 비트도 세팅된다**. 다만 `SimResult.coverage` 가 `None` 이 될 뿐이라, 요약을 단언하는 테스트가 **`None` 과 `None` 을 비교하며 통과**하고 정작 검사하려던 store 라우팅은 한 번도 안 돈다. **사이드카가 빠지면 테스트가 실패하는 게 아니라 공허해진다.**(여섯 번째 = `handle_copy_stmts` — 없으면 `d2 = d1` 이 **아무것도 출력·복사 안 하는** no-op `Display` 라 두 백엔드가 아무도 수행 안 한 깊은 복사에 일치한다) — `build_with_opts` 에 `class_field_widths` 만 들어 있어 **덮인 것처럼 보였는데**, 정작 `class_handle_nets`(= `SimState::class_is_handle` **와** 아레나 비트맵을 **둘 다** 채우는 표)가 없었다. 그것 없이는 `o.f = 7` 이 필드 접근이 아니라 핸들 슬롯 자체에 대한 쓰기가 되어 **두 백엔드가 똑같이 틀린 일을 하고 일치한다.** ⇒ **가족의 표 하나가 들어 있다고 그 가족이 배선된 것이 아니다 — 그 가족 전부를 세라.** §4.5.299~304 에서 **네 번** 나왔다(네 번째는 `plusargs` — 소스만 파싱하는 하네스라 CLI 유래 사이드카는 구조적으로 못 싣는다: helper 가 받게 하고 주석으로 함정을 적었다): `final_procs` 없으면 `final` 거부 행이 도달 불가 · `wired_and_nets` 없으면 `wand` 가 평범한 multi-driver 로 읽힌다 · `ca_delays` 없으면 rise/fall 테스트가 **균일 지연을 재고 있다**. 규칙이 사이드카에 실려 있으면(elaborate 가 `Display`+표, `assign #d`+표 식으로 낮추는 모든 것) 테스트 빌더에 그 표를 넣기 전까지는 **그 규칙을 시험할 수 없다**.
-- **차분 게이트가 비교하는 STREAM 을 세라 — 값이 같아도 진단이 사라지면 그것은 exit code 가 사라진 것이다.** §4.5.298: 두 백엔드를 `simulate_capture` 의 문자열로 비교했는데 그 sink 는 `RtlOutput` **만** 남긴다 — 즉 stdout 비교는 **모든 `Diagnostic` 에 구조적으로 눈멀어 있다**. 새 스토어가 OOB 배열 접근의 `warn_run_range` 를 빠뜨렸고, 그것은 `Severity::Error` 라 `ExitClass::HadErrors` → **CLI exit 1**. 리터럴 OOB 가 소스에 하나도 없는 평범한 FIFO 에서 **stdout 은 바이트 동일한데 FAIL 이 PASS 로** 뒤집혔다. 룰 ⓐ 백엔드/경로 차분은 **stdout · 진단 · exit class(또는 counts)** 를 전부 비교하라(하나라도 빠지면 그 축의 하강이 통과한다) ⓑ **"stderr 만 다르다"는 크기 추정이 아니다** — 진단의 severity 가 exit class 를 정하는지 먼저 확인하라(트리는 이 의무를 적어 뒀으나 "값은 맞고 stderr 가 안 맞는다"로 **한 등급 낮게** 적어 두어 두 슬라이스를 미뤘다) ⓒ 새 스토어가 `&self` 라 sink 에 못 닿으면 **세고, 소유자가 원본 emitter 로 보고**하라(캡·문구·severity 재진술 0) ⓓ **그리고 보고 지점은 "값이 생기는 곳" 이 아니라 "리더와 sink 를 동시에 드는 곳" 이다** — §4.5.298 round 2: 문장 경계에서 보고했더니 `$error("%0d", mem[i])` 의 범위 진단이 자기 `$error` 줄 **뒤로** 갔다. 두 진단이 같은 stderr 로 나가므로 fd 합류 문제가 아니라 **한 스트림 안의 발산**이다. 맞출 수 있는 유일한 자리는 포맷 엔진(`format_args_str_with` — 대체 리더와 `&SimState` 의 sink 를 둘 다 든다): 인자 렌더 직후·호출자 emit 직전. 원본 구현자에겐 기본값 0 인 트레이트 훅으로 두면 그 경로는 **구조적으로 no-op** 이다 ⓔ **"관측 불가" 라고 적기 전에 그 진단이 어느 스트림으로 나가는지 확인하라** — 나는 "두 fd 를 합칠 때만 보인다" 고 기록했고 그것은 **틀렸다**(같은 스트림 케이스가 있었다). 스트림을 세는 것과 스트림을 확인하는 것은 다른 일이다.
-- **런 관측치(verdict/report)를 옵션·입력 구조체에서 "런 끝에" 읽지 마라 — 필드가 이미 실행기로 move/take 됐을 수 있다.** verdict 는 그 소비자가 생기기 **前에** 채취하라(§4.5.285: `opts.fork_modes` 가 스케줄러로 move — 끝에서 읽었으면 fork 설계가 **빈 테이블 위에서 eligible** 로 조작될 뻔). 부분 move 는 컴파일러가 잡지만 `mem::take`/`Option::take` 는 조용하다 — grep 감사는 clone 만 보고 move 를 놓친다.
-- **정적 능력 census 를 로그로 내보낼 땐 실행 문맥(선택된 백엔드 등)을 같은 레코드에 실어라** — census 단독은 실행 로그로 오독된다(§4.5.285: `--backend interp` 런의 `able==total` 이 "VM 이 돌렸다"로 읽힘 → `backend` 필드 동반). 그리고 **분류기의 관측 export 는 새 술어가 아니라 분류기 자신을 reason-수집형으로 재구성해서 얻어라**(한 walk 공유 = 드리프트 구조적 불가).
-- **ALL-sites 전수(최다 재발 패턴)**: 공유 함수/desugar가 도는 **모든** 스코프·caller·parser 변종·assign-site(≥7)·net RESERVE 경로(`grep add_net`: module·frame·inline·class-method 별개 예약)·statement-dispatch·decl-level 검증=공유 헬퍼 추출로 全 decl+type-spec site 배선. **RESERVE site=frame reserve와 FULL parity**(packed_dims·dim_desc·intro_kind co-register). **eligibility-set ≡ process-set**(차집합=silent-drop). 미검증 스코프=`allow_*` gate loud 격리. dispatch hook=최상단(detection-FIRST). **deny 훅도 ALL write-path 전수**.
-- **scope/safety guard=ENUMERATION보다 ALLOW-LIST**: '위험한 것' 열거는 category 누락 반복·'증명가능 안전'만 허용+나머지 reject=construction상 완전(§S⑤). 재귀 allow-list=全 compound가 全 value sub-expr **AND-recurse**(미방문 1개=escape). **가드가 대상 subset에 실제 발화 검증**(vacuous guard 주의·robust=직접 per-net 카운트). §4.5.276 위반 실례: 새 decl-init 검사가 body `Block` 의 `decls` 를 읽었는데 tf-body 의 top-level 선언은 `body_decls` 에 살고 래퍼는 `decls: Vec::new()` 로 만들어진다 — **항상 빈 리스트**를 도는 죽은 코드가 가드처럼 보였다(정본 철자는 통과, 한 블록 깊은 것·문장으로 쓴 것만 거부 = 한 hazard 의 세 철자 중 둘만 맞음). **리스트를 읽는 검사는 그 리스트를 채우는 코드를 함께 열어라.**
-
-### 확장·라우팅
-
-- **fix/routing이 잠복 gap과 상호작용=값 맞아도 리그레션**: (a) 공유 경로+deferred gap 경유 (b) 정확-라우팅이 목적지 갭을 CONSUMING 컨텍스트서 노출 (c) masking loud-guard 제거→pre-existing 노출. **深 residual=loud-guard>부분정규화**. 게이트 술어=목적지 CONSUMER set과 EXACT 일치. 안전형=**strictly ADDITIVE/fail-closed 부분집합**·나머지 old 경로 유지. **blanket-reject RELAX=숨기던 全 shape 노출**→old-reject 전수 enum+live-oracle differential. teeth=vs main sweep regress 0.
-- 확장=discriminator-BRANCH(기존 경로 verbatim)·신규 eligibility set은 disjoint 증명. 1-D→N-D 전 offset/stride N-D 처리 확인(DIRECTION 1곳=double-flip 방지). **deferred 미러(write→read)=offset+방향-의존 KIND(±:)도 resolution서 결정**(lowering-baked=반대silent). **nested/packed select WRITE=read의 flatten-prefix 미러**(leaf=stride·fail-closed desc-zero-lsb·var-packed=loud).
-- **정확도 사다리 = silent-wrong ≪ loud ≪ correct-support · 올라가되 절대 내려가지 마라**(동작하던 걸 loud화=회귀·loud는 "못 하는 것"에만 정당). **silent-wrong을 다른 silent-wrong과 맞바꾸지도 마라** — 타입 변환은 **leaf가 아니라 문맥 경계**에서. 문맥 도메인을 못 만들면 **변환 말고 loud**.
-- **경로 A가 경로 B보다 능력이 좁으면 그 비대칭 자체가 정확도 갭**(우회 말고 정공법으로 동등화). 사다리는 **순서대로** 올라야 안전(전제 슬라이스 먼저).
-- **loud verdict도 재검증 대상**: 직접 테스트 없이 mental model로 gate한 것은 과보수일 수 있다(인접 동작 사실과 대조·distinct-value/non-square로 경험 확인). 단, 상호작용이 예측 불가면 **cleanly-verifiable subset만 지원하고 나머지는 loud**(억지 지원=silent).
-- **pre-resolve(elaborate) vs post-resolve(engine) compute divergence**는 sidecar flag로 over-approximate(양측이 동일 소스에서 derive→divergence 무의미화).
-- **defer→resolve 머신**: defer 시점에 미지인 것(callee shape)은 resolve로 미루고, caller-scope 의존(actual net)은 defer 시 미리 resolve해 사이드카에 저장. 방향 등 미지 정보는 각 arg를 필요한 표현 전부(value+lvalue)로 lower해두고 resolve 시 sidecar로 선택.
-- **술어가 자기 주석과 다르면 그 간극이 곧 버그다.** §4.5.253 S1: 주석은 "스칼라 `string` 이 합류한다"인데 술어는 kind-only 라 `string s[2]` 를 삼켰고, 그 원소 저장소는 선언 prefix 아래에 있어 길이 0·전 쓰기 폐기·exit 0 이었다. 게다가 두 줄 위 옛 주석이 "이건 여기 못 온다"고 **보증**하고 있었다 — 가드가 바뀌면 그 보증도 다시 읽어라.
-- **초기화자를 두 리스트로 쪼개면 §6.8 선언 순서가 사라진다.** 같은 블록의 초기화자를 메인 sweep 과 후행 그룹으로 나누면 인터리브가 없어진다(§4.5.253 S2: `a` 가 1번째, `q` 가 4번째 draw). **블록을 단위로** 라우팅하라. 그리고 스코프 키를 문자열 정렬하면 `"$blk$148" < "$blk$32"` 다 — 오프셋은 숫자로 정렬.
-- **분류 집합을 넓히면 넓힌 것만 얻는 게 아니라 남의 것을 뺏을 수도 있다.** §4.5.253 S3: 감싸는 선언을 gather 에 넣은 것만으로 그 이름이 shadowed 로 보여 이미 잘 돌던 쌍의 스코핑이 철회됐다. 확장 항목은 **후보 자격을 얻지도, 남의 자격을 없애지도** 않게 표시해서 다루라.
-- **평가를 옮기는 변환은 세 질문을 통과해야 한다 — 몇 번·언제·무엇을 읽고.** §4.5.250 은 세 축 전부에서 샜다: `$monitor`/`$strobe` 인자로 옮겨 **횟수**가 굳었고, 단락 `&&` 우변·`{0{…}}` 에서 **횟수**가 0↔1 로 바뀌었고, 형제 인자를 앞질러 **순서**가 뒤집혔고, 큐 clear 앞뒤가 바뀌어 **읽는 값**이 비워진 자기가 됐다. "순수하니 옮겨도 공짜"는 순수성만 답하고 나머지 둘을 묻지 않는다. 왼쪽으로 옮길 때는 **지나치는 것이 전부 무해한지**(`expr_is_inert` 류)를 반드시 술어로 쓰라.
-- **워커의 극성은 워커가 아니라 게이트가 정한다.** 같은 보수적 워커(`expr_no_ref`: "모르면 참조할지도")가 ACCEPT 게이트에선 안전하고 REJECT 게이트에선 **정상 코드를 거부**한다(§4.5.250: `pkg::PARAM` 초기화자 거부 + 초기화자에 없는 변수 지목). reject 게이트에는 **양의 워커**(`expr_definitely_refs`: 검증한 형태에서만 true)를 쓰라 — 여기서의 과소검출은 원래 동작으로 되돌아갈 뿐이지만, 과대검출은 동작하던 설계를 깬다.
-- **제약의 근거가 충분조건이면 필요조건을 직접 써라.** BL1 은 fork arm 블록 로컬을 "값이 상수라 concurrency-immune"으로 열었는데 그건 충분조건일 뿐이고, 진짜 불변식은 **블록의 살아있는 활성이 하나**다. 그걸 직접 쓰자(§4.5.248: `fork_multi` 를 fork 의 *존재*가 아니라 *spawn 이 반복되는가*에서 전파) 실전 관용구(워치독)가 통째로 열렸다. "X 라서 안 된다"를 만나면 X 가 정말 필요조건인지 다시 물어라.
-- **외부 리포트의 진단명을 믿지 마라 — 재현은 하되 원인은 다시 찾아라.** round-20 §4.8 은 "named argument 미지원"으로 보고됐지만 함수 호출에서는 이미 동작했고, 근인은 **보수적 참조 워커에 `NamedArg` arm 이 없어** 명백한 whole-var write 를 "참조할지도 모름"으로 답한 것이었다. 증상 위치와 원인 위치가 다른 것이 사람·에이전트 모두에게 가장 비싼 실패다.
-- **진단에 위치가 없으면 그 진단은 좁힐 수 없다.** 같은 문구 81 개는 정보량이 1 개다(§4.5.249). elaborate 처럼 span 은 있는데 resolver 가 없는 계층은 **트레이트 한 개**로 프런트엔드에서 주입하면 되고, 이는 G2(에이전트 친화)의 전제이기도 하다. 새 loud 를 넣을 때는 **식별자와 판별 규칙**을 문구에 넣어라 — "왜 이건 안 되고 저건 되는가"가 메시지 안에 있어야 한다.
-- **"이름이 안쪽 스코프 키에 있다"와 "그 스코프가 선언했다"는 다르다** — v1 이 flatten 한 블록 로컬은 키만 안쪽(`t.g.W`)일 뿐 **한 프로세스의 사설 변수**다. shadow 판정 집합은 **그 스코프가 실제로 선언한 것**이어야 하며, 아니면 그 스코프의 다른 모든 reader 가 남의 지역변수를 집는다(§4.5.247: per-instance override·genvar·enum label 까지 오염).
-- **주석이 "X 가 이긴다"고 말하는데 코드가 그렇지 않으면, 대개 fall-through 가 자기 walk 를 다시 돈다** — `lower_expr` 은 결합 집합 위에서 innermost 키를 도출해 놓고, 떨어지는 곳에서 `lookup_scoped`(params 전용)를 불러 그 키를 버렸다(§4.5.246). **도출한 결정을 소비하는지**를 확인하라.
-- **"공통 퍼널을 먼저 만들어야 한다"는 선행조건도 의심하라** — 퍼널이 이미 있고 **한 호출부만 안 부르는** 경우가 있다(§4.5.241: generate 스코프 param 이 `param_real_value` 를 건너뛰고 정수 도메인만 썼다). 인프라 착수 전에 **누가 안 부르는지**부터 세라.
-- **제약이 "머신러리 부재"로 보이면 대개 "가정"이다** — 기존 코드가 이미 일반형을 계산하는데 호출부가 특수형을 *가정*해 좁혀둔 경우가 흔하다. 새로 만들기 전에 **일반 경로가 이미 무엇을 정규화하는지** 확인하고, 가정 대신 **조회**로 바꿔라(특수형은 그 조회가 항등이 되게 해서 IR byte-identical 유지).
-- **masking loud-guard를 걷어내면 그 밑의 pre-existing silent-wrong이 드러난다 — 그것도 loud→silent 하강이다.** 게이트 제거는 반드시 PRE 3-way로 "가려져 있던 형태"를 전수하고, 아직 못 고치는 형태는 **실제 이유로 문구를 바꾼 loud를 유지**하라(원래 문구를 남기면 다음 사람이 잘못된 근인을 물려받는다).
-- **source가 destination과 aliasing될 수 있으면 capture→mutate→install 순서로** — 재귀에서 caller net == callee net이 되는 경우(자기 formal을 자기 actual로 넘김·copy-out) in-place 순서는 조용히 값을 잃는다. 두 net이 다를 때와 같을 때 **양쪽 다 옳은** 순서를 고르고 doc에 두 경우를 다 적어라.
-- **"executor가 X를 못 한다"는 대개 거짓** — (a) 저장소 interior-mutability (b) 그 경로로 보낸 분류/라우팅이 틀린 것. 재작성 전에 **가장 단순한 형태를 fresh-probe**. 깊다고 판정한 기능도 **Case 분할**하면 대부분이 기존 모델로 공짜 동작하고 일부만 신규 인프라가 필요.
-
-- **한 술어로 두 resolver 를 못 섬긴다** — 값이 두 표현을 가지면 subsystem 마다 lookup 순서가 달라진다(const-fold=`params` vs lower=`real_param_val` 우선). consumer 를 resolver 별로 묶고 **술어를 갈라라**.
-- **가드를 구문(리터럴 모양)으로 세우지 마라** — 새 슬라이스가 그 구문 밖의 값을 도달시키는 순간 뚫린다(`expr_is_real_literal` 가드가 `R`·`R+1` 을 흘려 자식이 조용히 잘못된 param 으로 실행). **값 기반**으로.
-- **새 저장 클래스로 재분류하면 기존 클래스의 능력을 상속시켜라** — real 재분류만으로 정수 능력 8형이 통째 false-loud된 사례 有. **두 표현이 정확히 일치할 때는 양쪽 등록이 정답**(근사면 등록 금지).
-- **shape(AST walker) 판정보다 값(lower된 IR/전 하위식) 판정이 구조적으로 완전** — walker는 새 shape를 놓치지만 값은 못 숨는다(`_`-free 열거보다 강함). 폭 가드를 리프로 세웠다가 중간값 오버플로를 놓친 §4.5.229 가 같은 교훈.
-
-- **loud 를 silent 로 넓히지 마라** — 근인이 pre-existing 이어도 내 변경이 그 표면을 loud→silent 로 확대하면 내 회귀다(근인은 defer, 표면은 loud 유지).
-- **"이 래퍼가 모든 site 를 덮는다" 는 주석은 테스트로 고정하라** — 6 중 4 만 참이었고 남은 2 가 폭주였다.
-- **loud gate 를 추가하면 그 gate 를 우회하는 간접 경로(함수 호출·계층 이름·메서드)를 전수하라** — "이 gate 가 유일한 그물"이라고 썼으면 실제로 유일한지 측정하라.
-
-### 영역별 레퍼런스 (그 영역을 건드릴 때만)
-
-- **width/type 축**: self-width table(`width.rs`)·eval 일치. **width-분기는 width-0 HANDLE(string/dyn/queue) 오분기**→NetKind discriminator를 width 前·is_str 라우팅=설정처 grep 단일소스. target-width fill=`lower_ctx_or_plain`. 4-state raw=`val&!unk`. resize=RHS 부호 extend·TARGET 부호 stamp. **real→int 가드=strict `<2^N`**. **2-state X/Z→0=per-WRITE-path·per-STORAGE**. string/dyn HANDLE formal=사이드카 마스크. **타입-signedness=全 decl 대칭**·**signedness fidelity가 全 consumer 도달**·**compare/case=COLLECTIVE**(§11.8.1)·**untyped param=값이 타입 결정**(§6.20.2·fail-open). **const-fold=단일-Const만 provably-safe**. 상세=ARCHIVE.
-- **name/scope 축**: comma-list sticky 속성 스레드. flat map+nested scope=lazy snapshot/restore(TYPE+VAR·ALL decl-region). alias/copy=이름 keyed ALL 사이드맵+**set-or-CLEAR**. **flat 레지스트리+scoped resolution=scope PRECEDENCE 미모델→wrong-shadow silent→dedicated infra**. 새 var-binding=decl-binding 미러+enclosing snapshot/restore 격리. collect→apply=consumption-tracking(leftover=loud). **symbols alias=중앙 퍼널(resolve_net)**. **sub-select offset 정규화=선언 base `dbase=min(msb,lsb)` 차감**(clamp=silent→loud).
-- **인프라 선례**: **systask 사다리**=부작용無→elaborate None·엔진 state만→no-op Display+StmtId 사이드테이블·엔진효과+직렬화→frozen SysTaskId=format bump. side-effect sysfunc expr=statement-form desugar(single-eval). 엔진-facing 사이드카=`StagedExtraSidecars` append-only(`#[serde(default)]`·신규 필드=format bump ②). 공유 버퍼 재사용=`mem::take`/restore 격리. **1 parse fn이 N item emit=pending-queue+drain at collection-LOOP top**(종료조건에 `!pending.empty`). **persistent 사이드맵은 scope-restore 안 됨→pollution**(save/restore·set-or-CLEAR).
-
-### §2 항목 착수 규칙 11종 (LOOPROMPT §0b 에서 이관 · 2026-08-22)
-
-전부 실측에서 나온 것이고, §2 의 어떤 항목을 착수하든 적용된다.
-
-① 큐에 적힌 **메커니즘도** 증상만큼 재측정하라. ② 넓게 적힌 항목은 **3-오라클 census 로 스코프를 먼저** 갈라라(갈리는 축은 불가침). ③ **거부로 닫지 마라** — decline 을 조용한 기본값으로 먹는 소비자가 있다. ④ 조용한 기본값을 없앨 땐 **그 기본값과 참값이 같은 칸**을 스윕에 넣어라. ⑤ 지우는 캡이 **능력 제한인지 도메인 가드인지** 먼저 정하고 경계 양쪽 한 칸씩 재라. ⑥ i64 오버플로를 **문맥 폭 없이 모듈러로 접지 마라**. ⑦ **폭을 재는 프로브는 폭을 보존하는 포맷으로**. ⑧ 정적 주장을 **새로 소비하기 시작하면** 그 주장이 값에 대해 참인지 먼저 보고 **상쇄되던 자리**를 찾아라. ⑨ **부호를 묻는 자리는 자기결정 폭에서 물어라**(폭-무제한 fold 는 같은 비트 패턴의 signed/unsigned 를 구분 못 해 맞는 설계를 false-reject 한다). ⑩ **옵트인은 "켤 수 있는 곳" 이 아니라 "짝이 되는 기록에 도달하는 곳"** — 켜는 자리와 기록하는 자리 사이의 early-return 을 세어라. ⑪ **PRE 출력을 `head -1` 로 자르지 마라**(경고 다음 줄의 패닉을 놓쳐 pre-existing 을 내 회귀로 오판했다).
-
-### ⭐⭐ Your PROBE's resolution can invert a verdict — and a shipped test can pin the right number under the wrong reading (2026-09-08 · §4.5.458)
-
-`$time` is the design's time ROUNDED TO THE MODULE'S TIME UNIT. A delay suite that probed with it
-asserted correct numbers and then explained them backwards: its prose said fractional delays round
-at the module's **unit** and cited `#(25ns)` under `10ns/1ns` as 30 ns. Re-probed with `$realtime`
-at 1 fs, that delay is 25 ns in all three tools — the probe was rounding 12.5 units to 13 and the
-comment was reading its own rounding as the oracle's answer. The same probe made `#(0.4ns)` and
-`#(2.5ps)` look like "both oracles fire at once" when they delay 400 ps and 3 ps.
-
-- A passing assertion does NOT validate the sentence next to it. When a comment states an oracle
-  RULE ("rounds at the unit"), re-derive the rule from a probe finer than the effect.
-- Pick the probe from the smallest quantity the rule can produce, not from the design's units.
-- Fix the prose in place and leave the assertions alone: the numbers were observations, only the
-  reading was wrong. Then put the fine-grained twin in the new file so the rule is pinned once.
-
-### ⭐⭐ The lane BEFORE yours may answer WRONG, not decline — "only adds answers where it returned None" has to be measured (2026-09-08 · §4.5.458)
-
-The safe-looking placement for a new fold lane is last: it can then only add answers where the
-existing ones returned `None`, which is byte-identical by construction. That reasoning is only as
-good as the claim that the existing lane declines. Measured, the integer delay lane did not — it
-folded `#(3ns / 2)` with integer division to 1 ns where both oracles delay 1.5, and `#(5ns / 2ns)`
-to 2 where both delay 2.5. Placed last, the new lane would have preserved both silent-wrongs.
-
-- Before choosing "after", run the shapes your lane handles through the EXISTING one and record
-  what it returns. `None` on all of them earns the safe placement; a wrong number forbids it.
-- Placing it FIRST then costs a gate you must pay explicitly: gate it on a property the old lane's
-  correct cells do not have (here "the tree contains a `TimeLit`"), and sweep for movement.
-
-### ⭐ An accidental immunity sizes itself by the CONTAINER — sweep the container, not one instance (2026-09-08 · §4.5.458)
-
-A signed index handed over unsigned is only VISIBLE where the unsigned reading lands inside the
-object. On a `logic [7:0]` that is index widths 2 and 3 (`-4'sd1` reads 15 — already out of range,
-already `x`, already "correct"); on a `logic [63:0]` it is widths 2 through 6. Probing one width,
-or one net width, returns zero findings and reads as "no defect".
-
-- When a defect's symptom is "reads the wrong element", the immunity band is a function of the
-  CONTAINER's size. Sweep the container dimension too, not just the operand's.
-- The band's edges are the proof of the mechanism: the fix must move every cell inside the band
-  and no cell outside it. Ours moved 42 of 224 and left 182 byte-identical.
-
-### ⭐⭐ Three geometries, one missing seal — the arm that SUBTRACTS NOTHING is the one that skips the rule (2026-09-08 · §4.5.458)
-
-`norm_offset_for_net` normalizes an index three ways: a non-zero declared LSB subtracts it, an
-ascending or negative-bound net mirrors it, and a `lsb == 0` net returns the index VERBATIM because
-"the raw index is already internal". True for the arithmetic, false for everything else the sealed
-arms do on the way — here the SIGN. The `[9:2]` spelling of the select was right all along and the
-`[7:0]` spelling was not, which is the tell.
-
-- An early `return raw` on a no-op arm skips every rule the other arms apply, not just the one it
-  is a no-op for. List what the siblings do besides the arithmetic before trusting it.
-- Its twin has the same shape: `norm_offset_for_range`'s `lo == 0` arm still returns verbatim, and
-  a 0-LSB parameter select is measurably wrong for exactly this reason. Branch parity found it by
-  reading, not by probing — check the SIBLING FUNNEL in the same file every time.
-
-### ⚠️ A guard that a name inserted ITSELF into is not a shadow — check who populated the set (2026-09-08 · §4.5.458)
-
-`sym_typedef_bits` opens with "if this name is locally declared, stand down" — the right rule for a
-typedef shadowed by a same-named variable. It declined for every dim-carrying type parameter,
-because the type-parameter group's own registration inserts the parameter's name into that very
-set. The guard was firing on its own producer.
-
-- When a stand-down never fires positively, census the set's WRITERS before relaxing the guard: a
-  self-insert is not the hazard the guard was built for.
-- Fix it by changing the ROUTE, not the guard — the guard still has real work for the other key
-  kind, and relaxing it would re-open the shadow cell the suite pins.
-
-### ⭐⭐ Widening what a DEFAULT may be makes the OVERRIDE channel's capacity a live invariant (2026-09-08 · §4.5.457)
-
-`parameter type T = a_t` on an unpacked-array typedef ships by letting the dims ride the registered
-TYPEDEF rather than the `T$w`/`T$s` value channel. The parse relaxation is opt-in at the default's
-call site (a literal `false` at the override), and that closes the door the new spelling opens — but
-NOT the one that was already open. `m #(.T(logic [15:0]))` always parsed; after the widening it
-replaced the width while the default's `[0:2]` stayed, declaring 48 bits where both oracles answer
-16. **How to apply:** after widening what a producer may carry, ask what the CONSUMER channel can
-carry, and enforce the difference where the two meet — here the shape guard the module already
-synthesizes, whose flag word gained a bit for "the default carries dims". Choose a carrier whose
-new value is impossible for every design that predates the slice (bit 2 is 0 everywhere else), so
-the guard is byte-identical outside the shape it exists for.
-
-### ⚠️ A DECLINE is a change — the shapes your new arm cannot improve must fall BACK, not return `None` (2026-09-08 · §4.5.457)
-
-A new arm ahead of an existing fallback owns every shape it matches, including the ones it cannot
-answer. `const_delay_u64` gained a `Unary Minus` arm so a sized literal negates at its own width;
-returning `None` for the shapes it could not fold (x/z, wider than 64 bits) handed the caller its
-own "no delay" default, and `assign #(-128'd1) y = a;` FIRED IMMEDIATELY where iverilog never fires
-it and the pre-slice fold did not either. The differential lens caught it because it ran the
-neighbours of the fixed cell, not the fixed cell. **How to apply:** in a new match arm, the
-non-improvable sub-shapes call the arm the expression WOULD have taken; and when the fold feeds a
-region/enable test as well as a value, say in the comment which of `None` and `Some(0)` that test
-reads, and prove the arm cannot turn one into the other.
-
-### ⚠️ A cell that no oracle ACCEPTS is not a split, and the property it "proves" is unowned (2026-09-08 · §4.5.457)
-
-§2 🆕 I ⓒ carried "its `buf`-driven twin is a split, so the separating property is one constant
-continuous driver, not is-a-wire". The cited design is illegal — `buf b(k, 1'b1)` on a 2-bit `k`,
-which iverilog rejects at compile — so it was NO-ORACLE, and the legal per-bit spelling is a plain
-two-oracle defect. The property survived for an unrelated reason already on record (a `buf` is the
-§7.3 `z`→`x` coercion, so it computes). **How to apply:** before a row's stated property is used to
-shape a fix, check the cell it rests on COMPILES on both oracles; a rejected cell proves nothing
-about the axis, and the reason your fix is right may have to be found again.
-
-### ⚠️ A declaration-ordered fixpoint is quadratic in the other order — alternate the direction (2026-09-08 · §4.5.457)
-
-A fold that resolves nets by repeated passes over a map in net order settles a source-first chain in
-one round and a reader-first chain in one round PER LINK: measured, 0.17 s → 0.56 s on a 3,000-link
-reverse chain. Reversing the list after each round makes both orders one round, costs two lines, and
-leaves the honest bound (a shuffled chain is still a round per link) to the comment.
-
-### ⭐⭐ One key, several rules — ask whether the ORACLE orders your axis by kind before keying it once (2026-09-08 · §4.5.456)
-
-- A queue row whose fix shape is "record X and key the shared table on it" is a claim about the ORACLE's model, not just about your code. §2 row 7 read "process rank is not recorded", and the rank was the right fact — but vita has ONE ordering key (`Activity.tie`) where iverilog orders **each resumption kind differently**, and it says so in ONE run of ONE design: `initial` child-first, `always_comb`'s t0 arm parent-first, an edge-woken `always` parent-first, a `#d` delay resume child-first, a `wait()` resume parent-first, a fork-arm wake parent-first. No permutation of one key can be all six.
-- **The signature is a root that comes back through a DIFFERENT DOOR each round.** Not a new root — the same one, reached by a spelling the previous fix did not cover. Round 1: keying the whole run broke the edge and `wait` wakes (a wrong VALUE, both oracles against). Narrowing to the t0 arm broke the DELAY wheel. Round 2, after re-keying edge and wait: `always_comb`'s t0 arm and the FORK-ARM wake were still on the rank, both oracles against, value-visible again. Three rounds is the stop signal — revert whole, and write the prerequisite ("a per-resumption-kind model") into the row instead of a fourth patch.
-- **A green suite, a green corpus and byte-identical VCDs are not evidence about an ordering change.** All three were green on the version that printed `aa` where both oracles print `cc`. What found it was a design with two same-time processes writing the SAME variable — an ordering defect is only observable where the order decides a value or a print sequence, and the corpus has neither.
-- **Enumerate the resumption KINDS, not the code sites.** A site census answered "all converted" twice while a kind was still uncovered, because two kinds share a site (`seed_base_activities` seeds Initial and Comb alike) and one kind reaches the queue through a composition (`compose_child_tie` reads the parent's field, so re-keying the parent's wake left the child's alone). Ask: initial · comb/latch t0 arm · static edge · static level · dynamic wait · delay wheel · `#0` inactive · fork-arm wake · fork-join parent resume · `final`. Ten kinds; each needs its own two-oracle cell.
-- **A "kept correct" twin list in a row is a claim.** Row 7 listed four twins as already correct; measured, one was a 3-way split and two others were separate 2-oracle silent-wrongs on a DIFFERENT path (the t0 structural settle), which no process reordering could ever have closed. Measure the twins before using them as the regression baseline.
-
-### ⭐ A control twin refutes an ORACLE COUNT in both directions, not just downward (2026-09-08 · §4.5.456)
-
-- §3 ⑤ⓕ's row said a tf-port formal was 1-oracle and `parameter type T = a_t` read "`$bits` 32 on both oracles". Measured: the FIXED formal is 1-oracle because iverilog refuses the CONTROL (non-typedef) spelling itself, the DYNAMIC `[]` formal is genuinely 2-oracle, and the type parameter reads the CORRECT 24 on both — the row had undersold its own strongest cell. Run the control spelling on every oracle before writing a count, and re-run it when the row is next picked up.
-- **A tool that crashes is not a lenient oracle, it is no oracle.** iverilog SIGABRTs on an unpacked-array function return type (`Assertion failed: (lwid == ivl_signal_width(lsig))`). Record the crash text, mark the cell 1-oracle, and do not read the absence of output as agreement.
-- **Two spellings of one slice must not disagree, whatever the oracles say.** The tf-port carry's regression oracle is vita's own EXPLICIT spelling (`input logic [7:0] v [0:3]`), because the fix's whole claim is that the typedef builds the same port. Where iverilog refuses both, the twin is still decisive.
-
-### ⭐⭐ Fixing the READ moved the write from a wrong object to a wrong bit — the write needs its own funnel (2026-09-07 · §4.5.446)
-
-Five readers shared a `symbols`-only name walk, so a generate-scope `localparam` shadowing an outer
-array did not stop it: the SELECT `ROTA[1]` read the outer array while the whole-name read in the same
-`$display` was right. Declining the index chains fixed every READ — and moved the WRITE from "stores
-into the outer array's word 1" to "stores into a different bit of the same net", because the lvalue
-path fell through to the plain bit-select lane. Both oracles reject the program; both vita answers are
-silent at exit 0, and swapping one silent-wrong for another is the move the ladder forbids.
-**How to apply:** when a read fix routes a name away from an object, walk the WRITE path to its end
-and name what it lands on; give the write its own refusal (`a constant is not assignable`) at the
-LVALUE funnels rather than inside the shared resolver, which also serves reads (`@(e)`, `->e`, an
-interface-member fall-through) where over-reporting is a loud regression instead of a refusal. The
-write guard then closes shapes the read fix never touched — here the same shadow on a SCALAR net,
-silently accepted since before the slice.
-
-### ⭐ A queue row's ORACLE COUNT is a claim, and the control twin is what tests it (2026-09-07 · §4.5.447)
-
-The row said a subroutine formal of an unpacked-array typedef was two-oracle. Measured: iverilog 13.0
-refuses `input logic [7:0] v [0:3]` — the EXPLICIT spelling vita already supports — with `sorry:
-Subroutine ports with unpacked dimensions are not yet supported`, so it is not an oracle for any fixed
-unpacked formal and nine of the row's ten cells are verilator-only. The cost-per-two-oracle-cell of
-that item was 4 edit sites for 1 cell, against 1 site for 7 on each of its neighbours.
-**How to apply:** run the CONTROL TWIN through both oracles, not just the defect — an oracle that
-refuses the working spelling cannot arbitrate the broken one; and price a loud→correct item in
-two-oracle cells per edit site before picking it out of a row that lists several.
-
-### ⭐ A decline that was right for a CLAMP is not right for a truthful record (2026-09-07 · §4.5.448)
-
-`param_decl_range_opt` refused a negative declared bound, and its comment recorded exactly why: a
-previous attempt wrote `min(l).max(0)` and an ascending `[-2:3]` recorded `(0, 6, true)`, turning two
-correct cells into silent-wrongs. The comment made the refusal look load-bearing. It was load-bearing
-for the CLAMP — the value type's `u32` was the actual constraint, and widening it to `i64` made the
-record truthful, closed 13 cells and left every non-negative declaration byte-identical because the
-keys that gain an entry are exactly the ones with a negative bound.
-**How to apply:** when a guard's comment names the LIE it prevents rather than a property of the
-domain, ask whether the lie is the TYPE's fault; and check what the consumers already do — here
-`norm_offset_for_range` and `const_norm_bit` were already `i64` and already exercised by a
-neighbouring path, which is why the runtime lane was right and only the fold lane was wrong.
-
-### ⭐⭐ A resolver-first hook inherits the CALLER's scope problem, not the resolver's (2026-09-07 · §4.5.443)
-
-Giving a shared folder's select arms the "ask the name resolver first" probe its sibling arm already
-had is additive on paper — every resolver declined a select before. It is not additive on SCOPE: the
-new arm answers through `lookup_scoped` / `param_sel_range`, which walk MODULE scope, and the caller
-that owns an interpreter ENVIRONMENT (a const-function's formals and locals) had been applying its
-shadow rule in its OWN `Ident` arm, which the select now bypasses. A function formal shadowing a
-non-zero-LSB module parameter folded the module parameter where PRE, both oracles and vita's own
-runtime call all answered the formal — correct → silent-wrong, found by the differential lens.
-**How to apply:** when you add a probe that lets a resolver answer a COMPOSITE node, ask which
-scope rule the caller was applying to that node's LEAVES and re-apply it at the hook, keyed on the
-node's root (peel parentheses and element selects); a fall-through to a second resolver with an empty
-environment asks the same wrong question twice, so the decline must come before both.
-
-### ⭐ A field added to a shared carrier is a census of its READERS, and every one declines positively (2026-09-07 · §4.5.445)
-
-`TypeInfo.unpacked` let a typedef's unpacked dims reach the declaration. The two carries were the easy
-half; the slice was the other seventeen readers, each of which had no slot for the dims and would have
-bound the ELEMENT type in silence — a numeric cast, `$bits` of the bare type name, an enum base, a
-packed-struct member, a subroutine formal, a non-ANSI port, a parameter, a function return type, a
-`for`-init counter, three `parameter type` desugar sites. **How to apply:** grep every read of the
-carrier type (`info.` is enough) and give each site an explicit `!field.is_empty()` decline with the
-reason named; the empty default makes each one a literal-false short-circuit, so the whole set is
-mechanically byte-identical for the existing corpus — which is what lets the census be exhaustive
-instead of selective. Then measure the declines: four of them turned out to be refused by both oracles
-too, which is the difference between a gap and a correct refusal.
-
-### ⭐ A slice that edits ONE arm of a match leaves its siblings unread (2026-09-07 · §4.5.444)
-
-`record_stmt_loc`'s `instance:` match got its class-method arm fixed one slice earlier; the
-`(None, None)` arm beside it still spelled the raw storage prefix, so a `$error` in a named block said
-`[in top]` while the `%m` of the next statement said `top.blk` — vita contradicting itself two lines
-apart, in a match a reviewer had just had open. **How to apply:** when a fix lands in one arm of a
-match on scope/kind, read every other arm in the same sitting and ask whether the fixed arm's REASON
-applies there; and when two strings are built from the same state for the same statement, make them
-call one function — the second formula is where the drift lives.
-
-### ⭐ A deliberate-loud pin has an expiry, and a fail-fast test hides the pins behind it (2026-09-07 · §4.5.443)
-
-Twelve `loud(...)` pins recorded "an ascending or non-zero-LSB element in the wide domain declines on
-purpose", with the reason in the file header. When the fold learned the declared range all twelve
-became values — and each one matched verilator exactly, so they were loud→CORRECT, not regressions.
-**How to apply:** a failing loud pin is a claim to re-measure against the oracle, never a regression on
-sight (LOOPROMPT §5), and the file's prose reason has to move with it. And convert them ALL before
-re-running: a `#[test]` fn asserting many cells stops at the first, so the second population
-(`*_repl`) stayed invisible until the first (`*_cat`) was converted — read the ladder after every rung.
-
-### ⭐ A folder is written for ONE consumer's rule — an index is a value, a width is a bound (2026-09-06 · §4.5.436)
-
-The copy alias folded an array-word INDEX with the width-tree folder, which saturates (a `[msb:lsb]`
-width cannot wrap). An index VALUE wraps at its context width: `m[-2]` on `m[-2:1]` is the
-coordinate `(-2) + 2`, and `0xFFFF_FFFE + 2` saturated to WIDTH_MAX, so every negative-base,
-parameter, arithmetic and narrow-signed index was declined — silently stale, never wrong-valued,
-which is why three censuses did not see it. **How to apply:** before reusing a constant folder, name
-the consumer it was written for and the rule that consumer needs (bound vs value, saturate vs wrap,
-self-determined vs context width); an index folder implements §11.6/§11.8.1 itself. And keep such a
-fold ADMISSION-only where you can — the alias carries the eid and the engine evaluates it, so a fold
-that disagrees with the engine can admit an out-of-range copy (loud, `x`) but never a different word.
-
-### ⭐ A scope recorded RELATIVE to a runtime prefix encodes the caller; record it absolute and mark it (2026-09-06 · §4.5.435)
-
-`%m` inside a task body was rendered as `<executing process's scope>.<task>.<labels>` — right only
-while the caller lived in the declaring scope; a generate-block caller, a recursion, a task called
-through another task each printed the call chain. The declaring scope is known at LOWERING time and
-the executing scope only at RUN time, so a chain stored relative to the latter cannot be repaired by
-the renderer. **How to apply:** when a recorded string will be prefixed by a runtime value, decide
-at the producer whether it is relative or absolute, spell absoluteness in the string itself (a
-leading `.`, no sidecar shape change) and make every renderer honour the marker — census the
-renderers (`m_scope`, the strobe/monitor capture, the frame executor's three arms) as you would any
-funnel. A relative fallback must reproduce the old output byte-for-byte for the producers you did
-not convert (class methods).
-
-### ⭐⭐ Strip by a POSITIVE record of the shape, never by "not the other shape" (2026-09-06 · §4.5.429)
-
-`%m` had to drop the `[0]` vita stores on a singleton generate scope. The first draft dropped every
-`label[0]` whose label was not in `gen_loop_labels` — and an instance-array element `w[0]` is also a
-`[0]` segment and also not a loop label, so `ch w[1:0]()` printed `top.w` for element 0 and
-`top.w[1]` for element 1 (correct → silent-wrong, review B B1). **How to apply:** when a rendering
-or a resolution must treat one producer's spelling specially, record that producer's keys at the
-one site that mints them (`gen_singleton_labels`, the twin of `gen_loop_labels`) and key on
-membership; a complement ("everything that is not X") silently includes every shape you did not
-enumerate — instance arrays, interface arrays, whatever the next slice mints.
-
-### ⭐ A second renderer of the same format string calls the first one's rules, or it disagrees (2026-09-06 · §4.5.428)
-
-The elaboration-task message renderer folded arguments to an i64 and printed `%h` of `v as u64`:
-`$info("A=%h", N)` with `logic signed [7:0] N = -1` printed sixteen `f`s where vita's own runtime
-`render_template` (and verilator) print `ff`. The first fix READ the width and sign and masked —
-and the differential lens then found the rest of the rule set missing (bare `%d` has a default
-field width, `%5d`/`%04h`/`%8s` carry theirs, `%s` of a packed value is its bytes, `%-` justifies):
-re-deriving a rule set one finding at a time converges on the runtime only asymptotically.
-**How to apply:** a constant-domain twin of a runtime renderer does not re-derive; the value-free
-rules move to a crate BOTH can reach (`diag::fmt`: `parse_flags`, `dec_field_width`, `pad_dec`,
-`pad_radix`, `justify`, `packed_chars`) and both call them. The twin's test is the runtime spelling
-of the SAME `$display` in the same design: elaboration line == runtime line, byte for byte, before
-the oracle is consulted. When the dependency runs the wrong way (sim-engine depends on elaborate),
-that is the signal the rules belong lower, not that the twin may approximate.
-
-### ⭐ A sidecar reaches the engine through THREE copies, and a runtime map of 0 is the symptom (2026-09-06 · §4.5.426)
-
-An out-of-band table (`stmt_scopes`) was added to elaborate's `SimOpts`, the engine's `SimOpts`, its
-`SimState` copy and the render arm — and rendered nothing: the CLI builds the engine's `SimOpts` from
-elaborate's `Sidecars` FIELD BY FIELD (`frontend.rs`), the staged path again from the `.velab`
-trailer (`staged.rs`), and a native test fixture a third time (`native/tests.rs`); a field the copies
-do not name is silently empty at runtime. **How to apply:** after adding a sidecar, grep an existing
-sibling (`stmt_locs`) across `crates/` and mirror EVERY site, then assert the map is non-empty at the
-consumer on the grounding design before reading the output.
-
-### ⭐ `%m` has four render sites; one seam is not the funnel (2026-09-06 · §4.5.426)
-
-The dispatch seam (`dispatch_with`) is where "every backend converges" — for statements executed by a
-process. A `$sformatf` renders in two kernels (`sched`, `native`) and a frame body's display /
-severity / `$sformatf` render in the `&self` frame executor with no seam at all. **How to apply:** a
-per-statement rendering fact needs the `&self` executor to be able to write it (`RefCell`), and a
-census cell per site (a task-body block, a function-body block, a `$sformatf` in an argument, a
-`$strobe`/`$monitor` rendered later under another statement).
-
-### ⚠️ A struct-typed name's SHAPE is decided after its dims, not at its type (2026-09-06 · §4.5.425)
-
-The ANSI port path bound a struct-typed port as a SCALAR struct at the type token, before the
-unpacked dims after the NAME were parsed; a constant index happened to work through another path,
-and a genvar / runtime index fell to the generate-array hierarchical reference parser ("expected a
-constant generate-array index" for `csr_pmp_cfg_i[r].mode`). **How to apply:** bind the shape sets
-(`struct_scalar_vars` / `struct_1d_array_vars` / `struct_packed_array_vars`) once the whole
-declarator is parsed, at every binder (variable, ANSI port, non-ANSI port, tf-port, package replay),
-and census the index kinds — a constant index is the control that hides the defect.
-
-### ⭐⭐ A review finding's fix is a slice — grep §2 for the code site BEFORE building it (2026-09-05 · §4.5.423)
-
-Lens A reported "a typed initializer folds `/ % >>` unbounded and wraps after" with 17 designs; the
-one-line routing that fixed all 17 (and three KNOWN-WRONG pins) was ROADMAP §2 row 14's slice,
-reverted four days earlier after seven BLOCKINGs — and its recorded regression reproduced on the
-first row-14 design run (`localparam time NM` in a generate scope over a module-scope `logic [7:0]
-NM`: 2c for 12c). The queue-row rule ("grep §2 by the defect's code site before starting") applies to
-a finding raised mid-review exactly as it applies to a queue row: the finding names a symptom, §2
-may already name the fix and why it cannot be shipped. **How to apply:** before implementing any
-review finding, grep §2 for the function you are about to change (`eval_param_init`,
-`const_eval_in_scope`); if a row says BUILT/REVERTED, run its designs first and file the finding as
-that row's upside instead of shipping the fix.
-
-### ⭐⭐ A width rule is two steps; a bottom-up fold does one and looks right on every leaf (2026-09-05 · §4.5.423)
-
-IEEE §11.6.1/§11.8.2 size an expression FIRST (the largest of every context-determined operand and the
-context; signed only when all are) and evaluate every node AT that width SECOND. A fold that computes
-each node at its own width and extends the result afterwards passes every cell whose operands already
-share the final width, and fails exactly where a narrow sub-expression sits beside a wider sibling:
-`g[-C+16]` (4-bit `C`) wrapped `-C` at 4 bits before the 32-bit literal widened the sum — `g[17]` where
-both oracles read `g[1]`; `[(C+D)%3:0]` was `[0:0]` for `[1:0]`. Two REGRESSION cells in a 324-cell
-census that was otherwise green. **How to apply:** write the shape pass (`cw_shape`) and the
-evaluation pass (`cw_eval`) as two functions and let the second take the width the first computed;
-in the census, put a NARROW constant beside a WIDE literal under a unary minus, a `%` and a `/` —
-those are the operators where the wrapped intermediate is not recoverable by extension.
-
-### ⭐ One funnel for a range bound — a swap at the site the probe hit closes one reader of dozens (2026-09-05 · §4.5.423)
-
-`[C+D:0]` folded at i64 in the parser table's readers (the queue row) AND at 56 elaborate sites in 13
-files that each called `const_eval_in_scope(&r.msb)` on their own declaration kind (net, param, typedef,
-unpacked dim, formal, function local, inline task, instance array, string array). The first probe fixed
-the net range and the param range still said 17. **How to apply:** when a defect is "the same text
-folded by the same evaluator at N sites", grep the evaluator call on the field (`(&r.msb)`), route
-every site through one named funnel with the old call as its FALLBACK (accept set identical by
-construction), and measure the funnel's new lane for the shapes it must not change (the unsigned
-`[W-1:0]` underflow that row 11 keeps graceful needed a `<= i32::MAX` guard).
-
-### ⭐ A parse-time page hides the pages behind it — read the ladder after every rung, not the count (2026-09-05 · §4.5.422)
-
-The parser stops at 50 diagnostics. Clearing the `ASSERT_INIT` page (30) did not reduce ibex's count
-(50 → 50): three pages that were behind the cap became visible (a scoped-constant dim on a port, a
-genvar-indexed member access, DPI export). **How to apply:** after a ladder rung, diff the per-file
-distribution and the first line of each file's page, never the total; write the next page's shape
-into the queue with its file:line so the next iteration starts at the source, not at the count.
-
-### ⭐ A named source replacing a literal: gate on CONSTNESS at the consumer, not on resolvability (2026-09-04 · §4.5.413)
-
-§4.5.413 let an array parameter's `'{…}` be replaced by a NAMED array (an override, a whole-array
-default `= pkg::Rst` / `= R`). The first cut resolved the name through the constant-array capture
-and, when that failed, fell back to the pre-existing runtime whole-array copy. Two facts made that
-fallback wrong in opposite directions, and only a design pair told them apart:
-
-- A name that resolves LATE is still a constant. A sibling header array declared after its
-  reader, or a non-0-based source the capture does not cover, is not in the capture map when the
-  reader is captured — but its net is registered as a constant by the time the decl-init flush
-  runs. Refusing "unresolved" there would have turned two correct designs loud (`fwd.sv`,
-  `nz.sv`: PRE `6 7 3 4`, verilator the same).
-- A name that resolves to a VARIABLE is illegal (verilator: "variable isn't const"), and the
-  runtime copy the fallback emits reads it BEFORE its own decl-init: `x x` at exit 0. The
-  body-localparam control had been answering `6 7` for that illegal shape all along (pre-existing
-  leniency); the new header placement — the array leads the body — moved the copy ahead of the
-  source's init and turned the leniency into a wrong value (review A F1a).
-
-The rule that survived both: at the consumer that has the nets, resolve the name to its net and
-ask `const_param_nets` — constant ⇒ keep the copy (it is right whenever it runs), variable ⇒ loud.
-"Does it resolve now?" is a property of pass order; "is it a constant?" is a property of the
-design. Gate on the second.
-
-Two smaller ones from the same review. (a) An AST-field-free TWIN (`ParamDecl` + `NetVarDecl`,
-same name, same `span`) is a legitimate way to occupy a slot the frozen AST has no field for —
-but write the pairing predicate so a user-written collision cannot satisfy it (two declarations
-never share a span) and measure the collision on PRE (`edge_collide`: the silent redeclaration
-was pre-existing, §2 🆕 L ⓢ). (b) Verilator prints later instances' `initial` output first; a
-census cell with two instances reads as NEW-SILENT until the line SETS are compared — put one
-instance per cell, or compare sorted lines, before filing a divergence.
-
-### ⭐ A name-keyed parser rewrite has three lifetimes to census: declaration, SHADOW, and export (2026-09-04 · §4.5.412)
-
-- §3 ⑤ ⓐ rewrote every select on a multi-dim packed PARAMETER to a flat part-select, keyed on the
-  name like the packed-struct member desugar. The declaration lifetime was right on the first build
-  (141/195 cells); the two others were not. **Shadow:** a block-local PLAIN `logic [7:0] P;`
-  unbound the name (`unbind_struct_enum_name`) and `block_body` snapshotted the scope only for a
-  typedef or struct/enum-typed local, so after `end` the module's `P[1]` was silently flat bit 1
-  (the same hole was merely LOUD for a struct variable — E2002 after the block — which is why nobody
-  had seen it). **Export:** the dims captured at `endpackage` still spelled the package's own `W`
-  bare, so `p::P[i]` in an importer without `W` was E3010 (loud, but every scoped/explicit-import
-  cell). Rule: when a binding keyed on a NAME is added, write three cells before the census — a
-  same-named block-local plain decl with a read AFTER the block, a same-named decl in a sibling
-  scope, a same-named PORT (ANSI and non-ANSI) and function/task FORMAL (review A-1 found the
-  port list and both tf-port sites unbound `var_struct` but not the new map), and a package export
-  read through `pkg::` with none of the package's constants imported.
-- A hand-computed expected value is not a pin. Three of the first twelve tests were wrong by hand
-  (`P[i+1]` with a 2-bit `i` is 32-bit arithmetic, a bit table, an LFSR permutation) and the
-  tests were green against the census's oracle only after the values were REPLACED by verilator's.
-  Write the census first and copy the oracle's raw line into the test.
-- A rewrite that routes a NEW shape into an old evaluator inherits that evaluator's leniencies
-  as silent-wrongs: the flat `+:` answers a 0-width select in silence, and a flat `[hi:lo]` with a
-  runtime bound answers 0 in silence (both pre-existing on any parameter, both unreachable from
-  legal source before). Before choosing the target shape, run the target evaluator on the
-  DEGENERATE inputs your rewrite can produce (width 0, negative, runtime bound) and pick the one
-  whose failure is loud — or refuse at the rewrite when it is decidable there.
-- Two verilator quirks to keep a control for: `$signed(elem) < 0` on a `signed` multi-dim
-  PARAMETER (0; the identical variable is 1 on verilator and iverilog) and `import p::*; import
-  q::P;` (verilator answers p's even for a scalar keyword control where iverilog and PRE answer
-  q's). A harness can be the loud: a CU-scope `typedef` before `module` is a vita parse error,
-  `$bits(u.X)` is loud, and two parallel verilator builds sharing one `-Mdir` race on `verilated.d`.
-
-### ⭐ A queue row that names a KEYWORD as the blocker may be two blockers — read the LRM's context rule first (2026-09-04 · §4.5.411)
-
-- §3 ⑤ ⓒ was written as "an overridable array `parameter` (A2a is body `localparam` only), ibex_pkg.sv:791,
-  ibex_top overrides it" and priced as "the override channel for aggregates". Measured: the line the row
-  cites is INSIDE A PACKAGE, and IEEE §6.20.1 says a `parameter` declared in a package, a generate block,
-  a class body or at compilation-unit scope "shall be treated as a localparam" — nothing can override it.
-  That half was one context flag (`Parser::in_package`) and closed for free inside ⓑ; the real remainder
-  is the ANSI-header array parameter with a whole-array default (`#(parameter pkg::cfg_t C[N] = pkg::Rst)`),
-  which the row never named. **Before building the machinery a row prices, run the row's own line and ask
-  which LRM context it is in** — a keyword's meaning is context-dependent, and a reject gate keyed on the
-  keyword alone is over-rejecting in every context the LRM neutralises it.
-- The same slice re-learned two pins: a `shapes_that_stay_loud` case was loud because of the PARSER's
-  keyword reject, not the const arm it claimed to pin (with `localparam` the previous binary already
-  answered 52), and a "kept loud in v1" pin for the very shape the next slice builds. **A loud pin must
-  name the gate it measures, and the test for that gate is: change the spelling the gate does not key on
-  and see whether the pin still fails.** (§4.5.382's "a pin can pass for a different reason" — the
-  loud-side twin.)
-- A census cell's own HARNESS can be the loud: the generate-position cells put a `function` inside the
-  generate block, which vita defers loudly — 14 cells read "still-loud" for a reason unrelated to the
-  parameter, and the keyword control twin (also loud) could not tell, because it shared the harness.
-  **When a whole position column is loud, diff the cell's diagnostic text against the control's before
-  classifying** — the text named the function, not the parameter.
-
-### ⭐⭐ "One rule opens the workload" is a measurement, and the control twin is what attributes a defect (2026-09-03 · §4.5.410)
-
-The queue said the ibex blocker was one parse rule (`localparam <typedef> X = …`) and that it
-was the assignment pattern. Measured before starting: the pattern already desugared on a
-variable and was never reached on a parameter; measured after the rule: four more blockers
-stand behind it, the largest (nested packed structs) not in any queue line. **Rule**: when a
-queue line claims a rule "opens" a design, run the real design after the rule and write the
-ladder that follows — the claim is a hypothesis about the SECOND error page, which nobody has
-seen. Two more from the same slice: ① every census cell needs a **keyword-spelled control
-twin** — two "new" silent-wrongs (a package's derived constant folding from the untruncated
-initializer; a wildcard import shadowing a module-local variable) were pre-existing on
-`localparam logic [3:0] P`, and only the twin could say so; ② a value that moves between two
-slots of one record (`forced_range` → `explicit_range`) has readers on BOTH slots — the
-array-element consumer wanted the vector slot, the non-vector-dimension reject reads the same
-slot, and `typedef byte` went loud until the split honoured both. Census the readers of a
-slot before moving anything into it.
-
-Review of the same slice, three rounds, nine findings — all in the import carry, and
-five of them made by the previous round's fix. Two rules from that: ④ **a "twin" of a
-predicate in another phase must be the same WALK, not the same intent** — the parser's
-"local declaration shadows the wildcard" was applied at the moment a declaration was
-parsed, while elaborate's walks the whole module before any import binds; a declaration
-standing BEFORE the import was invisible to the parser twin and a design PRE ran went
-loud. Ask "over which set of names does the twin quantify, and when is that set complete
-at the point of use". ⑤ **a new loud gate is measured on the designs it will refuse, not on
-the one that motivated it** — "an import inside a generate block is ignored, make it loud"
-was right for the motivating cell and a regression for the redundant import the corpus
-style writes (module imports `p::*`, block re-imports `p::K`), and for a bare `generate`
-region, which is not a scope at all. Before adding a loud arm, enumerate the syntactic
-shapes that reach it and run PRE on each.
-
-### ⭐ A leaf with no width of its own needs a tri-state width: `None` (unknown), `Some(0)` (context-sized), `Some(w)` (2026-09-03 · §4.5.409)
-
-An unsized fill has no self width; the width table answered 32 (the parser's container)
-and every self-determined consumer sized it wrong. Answering `Some(0)` is right for the
-consumers that `max` it with a sibling or gate masking on `w > 0` — but one predicate
-(`ast_selfwidths_all_known`) read `w >= 1` as "known", so a fill now read as UNKNOWN, the
-tier-3 count fold declined, and `{('1)+1{8'hA5}}` fell to the engine's lowering, which
-replicated twice where both oracles reject a zero count: a loud became a value. **Rule**:
-when a table gains a third answer, grep every consumer for the predicate it uses to tell
-the other two apart (`unwrap_or(0)`, `>= 1`, `is_some_and`) and decide per site which of
-"unknown" and "context-sized" it meant; and the region made only of such leaves has a
-width of its own (one bit) that the evaluator, not the table, must supply.
-
-### ⭐⭐ Fix a stale-read defect at the READ, not at the STORE — the settle's consumers are order-sensitive (2026-09-03 · §4.5.408)
-
-Two fixes make `v = 8'hA5; cap = c;` read the fresh copy: forward `v`'s words into `c`
-inside the write funnel, or let the read of `c` resolve to `v`. Only the second is
-observationally confined to the defect. The store-side forward also makes every SETTLE
-consumer of `c` — a UDP, a gate, a downstream assign — see the new value in the same
-pass, which changed picorv32's oracle-pinned digest, made a DFF chain sample its fresh
-input on the same edge, split native from the VM on keccak, and reordered VCD records in
-three of four examples. **Rule**: when a value is stale "for a delta", ask which READER
-the oracle proves wrong, and change what that reader resolves to — statically, in the one
-sidecar every backend already consults — rather than when the value moves. Then prove
-the rest is untouched by the three cheapest byte-identity oracles the repo has: the
-examples' VCDs, the corpus digests and the full suite, each before any review round.
-
-### ⭐⭐ A newly foldable leaf lands on EVERY consumer — count the ones whose rule is wrong (2026-09-03 · §4.5.407)
-
-Adding a fold arm for a leaf (here the six reductions) does not choose its consumers: the
-same `Some(v)` reaches a range bound (a 32-bit self-determined position, where the i64 walk
-is exact), a port, a replication count, and an UNTYPED parameter — whose value-inferred
-tail sizes at ≥32 and computes a context-determined top at unlimited width. Three cells
-that were LOUD (`~(|4'b1010)`, `(|x) << 2`, `-(|x)`) would have become silent-wrong on that
-one consumer while 165 became correct on the others. **Rule**: before widening a shared
-fold, list its consumers and, for each, whether its context rule is exact for the new
-leaf; where it is not, decline at THAT consumer for the delta only (`param_init_kept_loud`
-— keyed on the shape the slice opens, documented as a delta-limiter) rather than shrinking
-the fold or loud-ing the consumer's pre-existing class. And a text folded by TWO
-evaluators (`const_eval_in_scope` and the width-aware twin) needs the arm in both: the
-first arm fixed 117 cells and left every bound holding a parameter SELECT at 1 bit.
-
-### ⭐⭐ An arm that answers WITHOUT descending is where an opaque leaf hides (2026-09-03 · §4.5.405)
-
-A guard that walks the operand for a hazard is only as good as the arms that DESCEND. `Concat` and
-`Replicate` answer `Some(false)` from §5.4.1 without looking at their parts, so every syntactic
-guard the slice added was walked past by wrapping the hazard in braces — a hierarchical call NAME
-(the args were walked, the callee's path was not), an inline formal bound to a hierarchical actual
-(no hierarchical spelling in the operand at all), a select whose own `[msb+:w]` gives a width while
-its base is a placeholder. **Rule**: when you add a hazard walk, enumerate the arms that answer
-from a rule rather than from their children — those are the ones that must still descend for the
-GUARD even though they need not for the ANSWER. And gate every consumer of the walk (sign AND
-width) on one predicate, not each on its own.
-
-### ⚠️ A stricter rule can regress by declining what the baseline accepted (2026-09-03 · §4.5.405)
-
-"Route only what the walk can measure" is simpler and stricter than the guard it would replace, and
-it regressed 458 cells: the pre-slice classifier ROUTED operands whose width the new walk cannot
-measure, so declining them is a change away from the baseline, not toward it. **Rule**: before
-replacing a guard with a stricter invariant, measure what the BASELINE did for the shapes the
-invariant would newly refuse — a restriction is only safe where the baseline was already refusing.
-
-### ⭐⭐ Call the lowering's DECISION, not a mirror of its maps (2026-09-02 · §4.5.405)
-
-The size-cast classifier re-derived "where does this bare name bind" from the same side
-maps the lowering reads — and got the ORDER wrong twice: an inline formal binds before any
-constant (`subst_lookup`), and the innermost combined key binds a generate-scope
-`localparam` before an outer module net. Both were review BLOCKINGs on designs the suite
-never sees. **Rule**: when a predicate must agree with a lowering, extract the lowering's
-decision into a side-effect-free function (`bare_ident_route`) and make the lowering match
-on it too. A docstring saying "mirrors X" is a drift waiting to be measured.
-
-Round 2 of the same slice added the second half: the shared decision hands back an ExprId
-for an inline formal, and the IR MIRROR (`expr_self_signed` / `ir_bits_of`) of that node is
-only exact when the node was BUILT for the formal (`resize_inline_assign` at its declared
-type). An actual handed over VERBATIM — a frame call (`Call ⇒ false`), a class field (a
-32-bit handle), a hierarchical placeholder — carries its real sign in a sidecar the mirror
-cannot see. So the decision function must also say WHICH of its answers are facts
-(`verbatim_actuals`), and the classifier answers `None` for the rest.
-
-### ⚠️⚠️ The queue row is not the only line about its defect (2026-09-02 · §4.5.405)
-
-Row 29 said "no prerequisite". Two bullets below it, the same defect's older entry held
-the reason §4.5.318 built the fix and reverted it. **Rule**: before trusting a row's
-"prerequisite" field, grep §2 for the SITE (`ast_ctx_signed`, `lower_size_ctx`) and read
-every line that names it; the older line is usually the one that was measured.
-
-### ⚠️ A path that is right by accident is a latent producer defect (2026-09-02 · §4.5.405)
-
-`64'(P >> 1)` was right on the fill-only path with a wrongly-SIGNED parameter because the
-shift's result was positive; the moment the classifier read the parameter's sign, the
-cell went wrong. `P < 0` and `64'(P)` had been wrong the whole time. **Rule**: when a
-review's "regression" only reads an input that was already wrong, fix the producer
-(here `param_decl_width_opt` typing an overridden parameter by its DEFAULT) — and then
-run the corpus, because the producer feeds more than the consumer you were looking at
-(`param_range`, and serv). **And if the producer axis then yields a new blocker in each of
-three review rounds, revert it and make the consumer DECLINE on what it cannot vouch for**
-(`param_type_guessed`) — the consumer's fix ships, the producer's patch and its edges go
-into its own row (§2 row 25). The 7,982 cells it fixed are not lost; they are measured.
-
-### ⭐⭐ A predicate borrowed from another PHASE is a mirror, and mirrors drift on contact (2026-09-01 · §4.5.398)
-
-Four queue rows, five blocking defects in the fixes, and four of the five are one shape: **a rule
-written twice, or a predicate copied from a phase that does not share its inputs.**
-
-- The new elaborate §6.19 check tried to skip "what the parser already policed" with a local
-  `is_literal`. The parser's actual fold takes a DECIMAL literal, unary minus and `+ - *`; the
-  mirror took any `IntLit`, parens and any unary. The two accept-sets are neither equal nor nested,
-  so `[(3):0]` and `[8'd7:0]` fell between them and stayed fail-open — the exact hole the row
-  existed to close. **The fix was to delete the mirror**: a parser error halts the pipeline, so
-  there was never anything to skip.
-- The three enum-label binders each say "see `instance.rs`" and one of them took its auto-increment
-  from the raw value while the others took it from the masked one. Same enum, loud at module scope,
-  silent in a package.
-- The `$itor` gate asked "is this expression real?" at the AST, where the crate's own comment four
-  hundred lines away says that predicate is blind to a real-returning frame call. **Asking the
-  VALUE in the one evaluator answered it for every spelling at once** — and removed a sign flip past
-  2^63 and an `--obs-procs` census inflation with it.
-
-**Rules.**
-1. Before mirroring a predicate across a phase boundary, print BOTH accept-sets and name the
-   difference. If you cannot share the code, ask whether you need the skip at all — the pipeline
-   may already order the two checks for you.
-2. When a comment says "twin of X", diff the two bodies as part of writing the comment. A review
-   lens read three such comments and found one of them false.
-3. Prefer the funnel that sees the VALUE over the one that sees the SYNTAX. A gate on the AST
-   inherits every hole in the AST-level predicate; a gate on the value has none of them, and it is
-   usually one arm instead of three.
-4. Arithmetic that builds a range from a WIDTH must be capped at the width the value can actually
-   occupy. `1i128 << w` for a `w` that comes from a user-parameterised declaration wraps in release
-   and panics in debug, and the caller's "this cannot be that wide" was never checked.
-
-### ⭐⭐ A rule copied from a tool that COLLAPSES two objects inherits an aliasing you do not have (2026-09-01 · §4.5.397)
-
-§2-N's copy-net rule was derived from iverilog, which turns `assign n = m;` into ONE net: `n` and `m`
-share a value, a default and an event. vita keeps two nets, each with its own storage default — a
-driven `wire` starts `z`, a `logic`/`reg` starts `x` — so the sentence the rule is built on, *"`n` has
-no state of its own"*, is true of the VALUE and false of the DEFAULT. Both naive translations were
-shipped and both were caught by adversarial review, one per round, failing in opposite directions:
-
-- **Mirroring the source's event** (`dirty[n] := OR over sources`) INVENTS events. The source
-  legitimately moves while the destination provably never does — `assign vv = {1'b1,1'bx};` moves,
-  and a `logic` copy of bit 0 is `x` before and after — so the mirror woke a child module on a port
-  that holds `x` for the whole run. 16 of 56 generated cells, correct→silent-wrong.
-- **Suppressing on the IMMEDIATE source** LOSES events. A copy can stay put for a reason unrelated
-  to its source: its own default already equals the copied value. `assign vv = 2'b1z;` moves, the
-  `wire` copy of bit 0 does not (its `z` default already matches), and the `logic` copy of THAT one
-  does — and iverilog fires on it.
-
-The property that survives the split is **transitive**: suppress only when nothing in the source
-CHAIN moved, and let a copy forward its sources' movement whether or not it moved itself.
-
-**Rule**: when you import a rule from a simulator, ask what that simulator MERGES that you keep
-separate — storage, defaults, identity, event channels — and write the failing design for each merged
-field before shipping. And build the twin that differs only in the merged field (here `2'b1z` vs
-`2'b1x`, where the oracle answers differently), because that pair is the only thing that separates
-"forward the movement" from "mirror the event".
-
-⚠️ Corollary for review rounds: **the fix for round N is the finding of round N+1**. Two rounds here,
-each correcting the previous correction, neither found by the author. A delta round is not optional
-after a design change, and its brief must name the delta so the lenses attack the new claim rather
-than re-measure the old one.
-
-⚠️ Corollary for verifiers: when a verify phase dies wholesale (here: a session limit killed all ten),
-its lens findings are UNVERIFIED, not cleared. The blocking repro as written did not reproduce for me;
-rebuilding it from the stated mechanism did, and the mechanism was exactly right.
-
-### ⭐⭐ A rewrite justified by an equivalence inherits its PREMISE as a live obligation (2026-08-27 · §4.5.387)
-
-The round-36 cast reorder is provably value-neutral: coercing a widening 2-state cast at
-the OPERAND's width and extending afterwards equals coercing the extended value, because
-the extension bits are a literal 0 or copies of the sign bit and `CaseEq` is a per-bit
-function. Both signednesses were derived, written into the comment, and RUN against live
-iverilog over 90 cells — PRE == POST on all 90.
-
-**And it was still a silent-wrong**, because the argument says *the operand's width*, and
-the code says `ir_bits_of(e).unwrap_or(32)`. Where `ir_bits_of` answers `None` (a deferred
-hierarchical reference, a `string` net, the string-producing system functions, the
-element-typed `pop`/array-reduction family) that 32 is a FABRICATION. The two orders are
-built on the same guess and degrade differently: the old one takes the low `tw` bits of a
-concat of unknown real width (and the engine's post-resolve width table still widens it
-correctly), the new one FREEZES the guess into the low half. Measured:
-`longint'(u1.w40)` with `logic [39:0] w40` is `0000001234567800` in iverilog 13 and in
-PRE, and `0000000034567800` under the unguarded reorder, at exit 0. **The whole 6,181-test
-suite was green over it**, and so was the 90-cell three-way sweep — every operand in both
-had a declared width, which is precisely the field the argument depends on.
-
-**Rule**: after deriving an equivalence, read the code back and name every input the
-derivation assumed. For each one, ask *what does this expression do when that input is a
-DEFAULT rather than a fact* — a `unwrap_or`, a fabricated width, an `is_none_or`. Then
-build the design where it is a default and run it. The premise is not discharged by the
-derivation; it becomes a gate you owe. (Same family as §4.5.371's *computing a width is
-not vouching for its provenance* and §4.5.373's *narrowing by theorem: measure the
-premise* — this is the third time the fabricated-width default has been the leak.)
-
-⚠️ Corollary for benchmarks-as-tests: a differential sweep certifies only the field values
-it varies. Ours varied width, sign and x/z placement across 90 cells and never varied
-*width KNOWN vs width FABRICATED*, which was the only axis that mattered.
-
-### ⭐⭐ A gate in an EARLIER phase cannot supply your phase's precondition (2026-08-25 · §4.5.384)
-
-§4.5.384 needed §4.5.373's second prerequisite — *the recorded width is only usable if the
-stored value is CANONICAL at it* — and argued it was already supplied: §6.19 makes an
-out-of-range enum label a loud `E2002`, with a test file to prove it. **Both adversarial
-lenses refuted that independently, from opposite ends**, and they were right: the check
-runs in the PARSER, over bare literals, while the fold runs at ELABORATE over
-`const_eval_in_scope`, which resolves parameters, package constants and constant
-functions. Everything in the gap is accepted silently — and both oracles REJECT those
-designs, so vita was alone.
-
-**Rule**: when you lean on an existing gate for a precondition, compare the two phases'
-**resolvers**, not their intents. A check that folds less than you do cannot cover you.
-Then ask what actually holds the invariant — here it was that every consumer NARROWS to
-the recorded width, which is a stronger and simpler argument than the gate ever was — and
-say so in the doc, because the next slice inherits whichever sentence you wrote.
-
-⚠️ Corollary: cap the recorded quantity at the SOURCE. The masking consumers were safe;
-the one operation that would AMPLIFY (a width above 64, which sign-extends rather than
-truncates) was unreachable only because a different component happened to refuse first.
-
-### ⚠️ A probe whose ANSWER equals its failure mode certifies itself (2026-08-25 · §4.5.384)
-
-`EA[5]` is 1, and a bound the fold declines clamps to 1 as well, so the bit-select and
-equal-endpoint cells of the census read "correct" in PRE. Scaling the result (`EA[5]*52`)
-separated them and both turned out broken. This is §4.5.365's *"a probe whose value fits
-the width cannot see a width defect"* one level up: there the VALUE collided, here the
-probe's ANSWER collided with what failure returns.
-
-**Rule**: for every cell, ask what the number would be if the feature did nothing. If that
-equals the expected answer, the cell is decoration — scale it, offset it, or pick another
-constant.
-
-### ⭐⭐ A side map keyed like another map is owned by nobody until there is exactly ONE binder (2026-08-25 · §4.5.383)
-
-`param_range` is keyed exactly like `params` and is written by 5 of ~13 binders. That was safe for
-months for a reason nobody had written down: the FQ key made every scope disjoint, so **no binder
-could ever rebind a key another binder had ranged**. §4.5.383 broke that property without noticing —
-a wildcard `import pk::*` binds a PACKAGE declaration at the MODULE's own key, and then a local enum
-label, a genvar, a real parameter's integer twin or a body parameter rebinds that same key one phase
-later. Two of those were live correct→silent-wrong, and the author had already added the clear at
-three sites and believed it complete.
-
-**Rule**: when you make a key space REBINDABLE, every writer of the primary map becomes a writer of
-the side map. Do not patch the writers you can think of — the adversarial census found 13 and the
-author had found 3. Route them through one funnel (`bind_param_value` clears the range; a ranging
-binder calls `bind_param_range` right after, and a `debug_assert` there enforces the order), so that
-`grep` for the raw writer returns only the funnel itself. *"A writer that forgot"* has to be
-unrepresentable, not merely absent.
-
-### ⚠️⚠️ A census that varies one field of a record certifies the lanes where the others are no-ops (2026-08-25 · §4.5.383)
-
-The queue line said *"the runtime lane already prints the right value in all three tools"*, and it had
-been measured — on a **zero-LSB** declaration, where the offset normalization is the identity. With
-`parameter [39:8] B`, the same runtime read printed **171** against both oracles' 52, at exit 0.
-
-**Rule**: when the thing you are testing is a RECORD (`lo`, `width`, `direction`), the census must vary
-every field, or the no-op combination will certify a lane that does not work. The same shape as
-*"프로브의 값이 폭에 들어맞으면 폭 결함이 안 보인다"* (§4.5.365), one level up: there the VALUE hid the
-defect, here the DECLARATION did.
-
-### ⭐ Build the new table with the same producer as its twin (2026-08-25 · §4.5.383)
-
-§4.5.382's rule — *the prerequisite a reverted slice wrote down may already be answered by a map you
-have* — has a second half for when it is NOT. §4.5.383 genuinely needed a new map (`pkg_const_range`),
-and what made it safe was that it is filled by the **same `param_decl_range_opt`** the module twin is
-read back through. One producer means one provenance rule, so *"a value-inferred width declines"* did
-not have to be re-argued in the second scope, and the review could check the claim by reading one
-function. A second, independently-written producer would have been a second rule wearing the first
-one's name.
-
-### ⭐⭐ 되돌린 슬라이스가 적어 둔 **선행조건**은, 이미 있는 맵이 답하고 있을 수 있다 (2026-08-25 · §4.5.382)
-
-§4.5.373 은 리덕션을 짓고 되돌리며 선행조건을 **두 단계**로 적었다: *"폭이 declared provenance 여야
-하고, 그 폭에서 값이 canonical 이어야 한다"*. 그리고 그것을 **새로 지어야 할 것**으로 읽어
-*"`param_meta` 를 쓰는 여덟 자리가 합의해야 한다"* 까지 계산해 두었다.
-
-⭐⭐ **둘 다 이미 있는 맵 하나가 답한다.** `param_range` 는 `param_decl_range` 가 **선언된 range /
-타입 / sized 리터럴에서만** 채우고, 선언 range 가 있으면 바인딩에서 `coerce_param_value_with` 가
-값을 이미 그 폭으로 자른다. 반례를 그대로 재면 그 자리에서 보인다 — `parameter A=4'h1; localparam
-logic [3:0] W=A<<4;` 는 vita 0 · iverilog 0.
-
-**규칙**: 되돌린 슬라이스의 선행조건을 읽었으면, **짓기 전에 그 성질을 이미 기록하는 자료구조가
-있는지 먼저 찾아라.** 무엇을 세워야 하는지는 그 슬라이스가 정확히 적어 뒀으므로, 검색어는 이미
-손에 있다. §4.5.371 의 count 네 블로커도 같은 모양으로 답해졌다(새 evaluator 가 아니라 **주변
-fold 가 이미 쓰는 resolver**).
-
-### ⚠️⚠️ 캐스트는 피연산자의 **문맥**이지, 나중에 하는 절단이 아니다 (2026-08-25 · §4.5.382)
-
-§11.6.1: `N'(e)` 는 `e` 를 `max(self(e), N)` 에서 평가한다. 자기 폭에서 접고 나서 `resize` 하는
-것은 **다른 연산**이다 — `65'(64'd18446744073709551615 + 64'd1) >> 64` 는 두 오라클 1(합이 비트
-64로 올라간다), 자기 폭 64에서 접으면 0.
-
-**규칙**: 폭을 나르지 못하는 walk 는 **문맥-결정 top 이 자기보다 넓은 문맥으로 가야 할 때 declines**
-해야 한다. 같은 문장이 replication count·`$clog2` 인자·generate 조건에는 **적용되지 않는다** —
-그 셋은 LRM 이 자기결정이라 선언한 자리라 문맥이 없다. **어느 쪽인지는 LRM 이 정하지 코드가 정하지
-않는다.**
-
-### COUNT / SIZE 위치의 resolver 는 **상수만** 답해야 한다 (2026-08-25 · §4.5.382)
-
-일반 resolver 를 count 자리에 재사용하면 인터프리터의 **지역 변수**가 count 를 공급한다
-(`int n = 2; {n{4'hA}}` 가 접힌다 · iverilog 는 *"a reference to a net or variable is not allowed
-in a constant expression"*). shadow 만 있고 값이 없는 경우엔 **그 자리에서 declines** 해야 한다 —
-지나쳐서 같은 이름의 모듈 파라미터를 잡으면 참조가 가리키지 않은 객체를 답한다.
-
-**규칙**: 위치를 **플래그로 전달**하고(`is_count`), 그 플래그를 받은 resolver 가 env 를 보면
-**읽지도 지나치지도 말고 거절**하라. 두 실패는 §4.5.371 의 BLOCKING ⓶⓷ 로 이미 측정돼 있다.
-
-### ⚠️⚠️ 핀이 **자기가 주장하는 것과 다른 이유로** 통과하고 있을 수 있다 (2026-08-25 · §4.5.382)
-
-`generate_scope_decl_init_is_loud` 는 *"generate 본문의 큐 decl-init 은 desugar 되지 않으므로
-loud"* 라고 적혀 있었다. 그 desugar 는 §4.5.228 에서 열렸고, 셀이 계속 통과한 이유는 **키워드 없는
-`if (1) begin … end` 가 파싱되지 않아서**였다. 파서가 §27.3 을 받자 설계가 돌고 iverilog 의 답을
-찍었다.
-
-같은 라운드에서 `unbound_local_never_resolves_a_same_named_param` 의 *"폭이 미상이면 loud"* 셀도
-실은 **초기화자가 안 접혀서** 통과하고 있었다.
-
-**규칙**: 핀이 주장하는 성질을 **다른 방법으로 한 번 더 성립시켜** 보라(다른 철자, 다른 초기화자).
-한 가지 방법으로만 성립한다면 그 핀은 성질이 아니라 **경로**를 재고 있다.
-
-### 리포트의 진단은 가설이다 — **컨트롤 쌍둥이**를 세워라 (2026-08-25 · §4.5.382)
-
-round-33 은 성능 축을 *"unpacked 배열 원소 LHS"* 로 짚었고, 그 근거는 세 설계의 비교였다(원소 LHS
-1.88× 패 · 스칼라 승 · 절차적 무승부). 한 번에 하나씩만 바꾸면 축이 달라진다: **같은 원소 LHS 로**
-인덱스만 `a[gy][gx]` ↔ `a[gy][(gx+2*gy)%5]` 로 바꾸면 0.92× ↔ 2.05×. LHS 는 인덱스가 존재하게
-만드는 것일 뿐이었다.
-
-**규칙**: 리포트가 축을 지목하면 **그 축만 고정하고 나머지를 바꾼 쌍둥이**를 세워라. 세 설계가
-서로 여러 곳에서 다르면 어느 차이가 결과를 낳았는지 그 셋으로는 알 수 없다. — 그리고 축을 잘못
-짚은 채 고치면(여기서는 `wprog` 에 `*`/`/`/`%` 를 더한 것) **바이트 동일하고 아무것도 안 움직인다.**
-
-### ⭐⭐ 방어 검사를 **제거**할 땐 초록 스위트가 아니라 **생산자 전수 census** 로 정당화하라 (2026-08-23 · §4.5.368)
-
-§4.5.368 은 `Value::resize` 에서 중복 `mask_top()` 을 없애고, 근거로 *"`debug_assert` 를 박고 5,812 테스트를 돌렸는데 발화 0회"* 를 제시했다. 적대 렌즈가 **엔진으로 불변식을 반증**했다 — `$realtobits` 가 `width = 64` 를 찍으면서 평면은 인자 폭 그대로 두므로 `$realtobits(<128비트>)` 가 non-canonical 을 만든다. 어떤 테스트도 그 호출을 64비트 아닌 인자로 하지 않았을 뿐이다.
-
-**규칙**: 제거하는 검사가 지키던 불변식을 적고, 그 불변식을 **세우는 자리를 전수로 세라**(`grep` 으로 생성자·직접 struct 리터럴·`.width =`·평면 직접 쓰기까지). *"스위트가 통과했다"* 는 **커버리지 진술**이지 증명이 아니다.
-⚠️ 그리고 **위험의 방향을 확인하라**: 여기선 release 가 멀쩡하고 **debug/CI 만 죽는다**(소비자가 `nwords(net width)` 로 인덱싱해 여분 워드를 흡수한다) — release 가 맞는 설계에서 디버그가 죽는 것은 가장 디버깅하기 나쁜 분열이고, 그래서 고침은 **소비자가 아니라 생산자**에 있다.
-⭐ 불변식이 **side condition 에 기대면 안 된다**: 같은 라운드에서 `arena.rs` 의 zero-width arm 이 "폭 0 net 은 오늘 만들어지지 않는다" 에 기대고 있었고, 도달 불가여도 함께 고쳤다.
-
-### 성능 A/B 는 **런 단위로 인터리브**하라 (2026-08-23 · §4.5.368)
-
-PRE 를 5회 돌리고 POST 를 5회 돌리는 순차 배치가 picorv32(0.45 s)에서 **가짜 +12.5%** 를 냈다. 인터리브하니 −0.9% 였다. 머신 상태가 블록 사이에 드리프트한다. 직전 슬라이스의 *"debug 바이너리로 +88%"* 와 같은 계열이고, 둘 다 **비교 대상이 아니라 비교 방법**이 만든 숫자다.
-
-### ⭐⭐ 헬퍼의 **계약**을 읽어라 — 특히 "대상은 0이어야 한다" (2026-08-23 · §4.5.367)
-
-`copy_bits` 는 비트를 **OR-merge** 하고 *"The destination range must be ZERO on entry"* 를 doc 에 못박아 두었다. 모든 기존 호출부가 `Value::zeros` 에 build 하기 때문에 성립하는 계약이다. part-select **쓰기**의 대상은 슬롯의 **현재 값**이라 그 계약이 깨지고, 그대로 부르면 `8'hF0` 에 `8'h0F` 를 써서 `8'hFF` 가 나온다 — 4-state 슬롯은 x-init 이라 anchor 가 터지지만 **2-state 슬롯은 첫 쓰기가 정확하고 재대입만 오염**돼 조용히 통과한다.
-**규칙**: 기존 헬퍼를 새 호출부에 쓰기 전에 doc 의 **전제**를 읽고, 새 호출부가 그것을 만족하는지 한 문장으로 답하라. 못 만족하면 **형제 함수**를 만들어라(§4.5.367 은 `replace_bits` = clear 후 같은 `copy_bits` — 비트 이동의 철자는 하나로 유지). ⚠️ 그리고 새 형제가 물려받는 **다른** 전제도 확인하라: `copy_bits` 는 `dst.val[dw]` 를 직접 인덱싱해 **할당을 늘리지 않는데**, 그것이 대체한 `set_vu` 는 늘린다.
-
-### 게이트를 **두 번째 자리에 복사하는 순간** 헬퍼로 뽑아라 (2026-08-23 · §4.5.367)
-
-`width > 0 && lsb >= 0 && lsb + width <= BOUND` 를 두 파일에 손으로 복사했고 bound 철자도 둘이었다(`net_w` / `w`). §4.5.359 는 같은 실수를 **여섯 철자**가 된 뒤에 잡았다. 적대 렌즈가 *"둘일 때 잡혔다"* 고 지적했고, 고침은 동작 무변화 함수 하나(`window_in_range`)다.
-⭐ 그리고 그 헬퍼의 doc 은 **호출자를 이름으로 세지 마라** — "`frame_part_write` 가 그것을 검사한다" 라고 썼는데 호출자는 둘이었다.
-
-### 성능 슬라이스의 리뷰 스냅샷은 **release** 여야 한다 (2026-08-23 · §4.5.367)
-
-성능 슬라이스인데 `target/debug/vita` 를 렌즈에 넘겼다(25.9 MB vs release 5.7 MB). 렌즈는 그것으로 **+88% picorv32 회귀**를 재다가 스스로 알아채고 release 를 다시 빌드했다. 디버그 빌드의 타이밍은 의미가 없다 — 스냅샷을 뜰 때 **크기로 확인**하고 브리핑에 프로파일을 적어라.
-
-### 숫자에 **메커니즘**이 없으면 아직 결과가 아니다 (2026-08-23 · §4.5.367)
-
-self 6.6% 인 자리를 고쳐 **−15.6%** 가 나왔다. 모순처럼 보이지만 아니다 — `Value::set_vu` 가 **인라인되지 않아** 자기 스택 프레임으로 나타나고, 그 leaf 12.8% 는 호출자의 **inclusive** 에만 들어간다 ⇒ 실제 표적은 ~19% 다.
-**규칙**: 측정한 이득이 표적의 self time 보다 크면 **설명을 찾을 때까지 결과로 쓰지 마라**. 대개 인라인되지 않은 자식이거나, 그 코드가 강제하던 다른 비용이다.
-
-### ⭐⭐ 한 자리를 고치면 **같은 축의 잠복 결함이 드러난다** — 그것도 내 회귀다 (2026-08-23 · §4.5.366)
-
-§4.5.366 은 상수 비교를 64비트 unsigned 로 읽게 고쳤다. 그러자 `>>>`(같은 축의 **다른** 부호 민감 연산)의 잠복 결함이 **드러나** 14칸이 correct→silent-wrong 이 됐다. `>>>` 는 그 전에도 틀렸지만, 비교가 signed 로 읽는 동안에는 두 오류가 상쇄돼 답이 맞았다.
-**규칙**: 한 축의 부호/폭 해석을 바꾸기 전에 **그 축의 모든 연산자를 분류하라** — sign-sensitive 인가 bit-pattern 인가. 분류표를 주석에 적고, 덮지 않은 sign-sensitive 연산자가 있으면 **그것이 상쇄로 맞고 있던 것은 아닌지** 먼저 측정하라. *"이미 틀렸으니 내 것이 아니다"* 는 상쇄가 깨지는 순간 거짓이 된다([[removing-a-loud-gate-exposes-what-it-masked]] 의 부호 축 판본).
-
-### 술어가 주장하는 성질을 **walk 가 보장하는지** 확인하라 (2026-08-23 · §4.5.366)
-
-`const_i64_is_unsigned_at(w, signed)` 는 *"이 i64 는 폭 w 의 unsigned 비트패턴이다"* 를 주장한다. 그런데 그 walk 는 `masking` 이 꺼진 문맥에서 **leaf 정규화(`leaf_into_ctx`)를 건너뛴다** — 즉 좁은 **signed** leaf 가 부호확장된 채 도착하고, 술어를 믿은 코드가 그 확장을 **크기로** 읽는다. 그 위에 세운 part-select 폭은 loud→silent-wrong 이었다.
-**규칙**: 새 술어를 도입하면 *"이 성질을 누가 세우는가"* 를 코드로 답하라. 답이 *"이 문맥에선 아무도"* 면 두 선택뿐이다 — **성질을 세우거나**(정규화를 그 문맥까지 확장) **술어를 그 문맥으로 좁히거나**. §4.5.366 은 둘 다 했다(leaf 정규화 확장 + `>= 64` → `== 64`).
-
-### 두 방향이 **서로 반대로** 틀리면 그건 추측이다 (2026-08-23 · §4.5.366)
-
->64비트에서 i64 는 값을 이미 절단했다. 그 절단값을 unsigned 로 읽으면 뺄셈 모양(`(65'd1-65'd2) > 65'd0`)은 맞고 carry 모양(`(64'hFF..FF + 65'd1) > 64'hFF..FF`)은 틀린다. signed 로 읽으면 정확히 반대다. **어느 쪽도 지배하지 않는 것이 추측의 정의**이고, 추측은 도메인 밖이라는 뜻이다 ⇒ 경계를 그어 pre-slice 를 유지하고 §2 에 적어라. ⭐ 그 경계가 이미 어딘가에 그어져 있는지 먼저 봐라 — §4.5.366 에선 형제 헬퍼(`const_unsigned_selfdet`)가 **같은 자리에 이미** 그어 두었다.
-
-### 참조 구현이 이미 트리 안에 있는지 먼저 물어라 (2026-08-22 · §4.5.365)
-
-한 규칙을 여러 자리가 구현할 때, **그중 하나가 이미 맞고 있는지**를 census 로 먼저 확인하라. §4.5.365 의 네 바인딩 자리 중 **inline task** 는 이미 정확했다 — 입력 actual 을 **formal-폭 지역 net 에 copy-in** 해서 그 저장이 `coerce_assign` 을 타기 때문이다. 그 자리를 찾자 설계 질문이 *"규칙을 어떻게 쓸까"* 에서 *"나머지 셋을 어떻게 여기 맞출까"* 로 바뀌었고, 공유 헬퍼 하나가 답이 됐다.
-⭐ **맞는 자리는 옳음의 증거이자 설계의 사양이다.** census 를 라우팅별로 갈라라 — 전부 틀렸다고 가정하지 마라.
-
-### ⚠️ 프로브의 **값이 폭에 들어맞으면** 폭 결함이 안 보인다 (2026-08-22 · §4.5.365)
-
-*"frame 경로는 이미 정확하다"* 를 `input int` formal 에 `3.0` 을 넣어 확인하고 문서에 적었다. **32비트에 들어맞는 값**이라 좁히기가 일어나든 말든 답이 같았다. 폭보다 큰 값(`f(300.0)` → `input byte`)을 넣자 세 라우팅이 전부 틀렸다.
-**규칙**: 폭/절단을 재는 프로브는 **반드시 목적지를 넘치는 값**으로. 지연이면 격자가 D 보다 촘촘해야 하고(§4.5.364), 폭이면 값이 폭을 넘어야 한다 — 같은 규칙의 두 축이다.
-
-### 좁은 가지의 근사가 넓은 가지에는 없다 — **네가 그 가지로 트래픽을 보내면 네 것이 된다** (2026-08-22 · §4.5.365)
-
-`lower_real_to_int_cast` 는 >32비트에서 `trunc + (frac≥½ ? ±1 : 0)` 이라는 **정확한** 반올림을 쓰고 그 이유(f64 tie-to-even)를 주석에 적어 두었는데, ≤32비트 가지는 `$rtoi(e ± 0.5)` 였다. |e| 가 [2⁵², 2⁵³) 인 홀수에서 ulp 가 1.0 이라 그 덧셈은 **tie** 이고 답이 `e+1` 이 된다. `int'()`/`byte'()` 만 닿을 땐 오래 숨어 있었지만, ≤32비트 formal 전부를 그리로 보내는 순간 **wrong↔wrong 맞바꿈**이 된다.
-**규칙**: 기존 헬퍼를 **새 트래픽으로 채우기 전에**, 그 헬퍼의 가지들이 **서로 같은 정확도**인지 확인하라. 한 가지에만 있는 가드는 *"다른 가지엔 필요 없다"* 가 아니라 대개 *"아직 안 옮겼다"* 이다. 옮기면 원래 결함도 함께 해소된다(여기서 40칸).
-
-### ⚠️ 진단을 emit 하는 함수를 두 번 부르지 마라 (2026-08-22 · §4.5.365)
-
-부호가 필요해 `range_to_dims` 를 한 번 더 불렀는데 그 함수는 **진단을 emit 한다** — `input logic [3:-2]` 에서 같은 W3056 이 두 번 찍혔다(에러 카운트도 2→3). 값이 필요하면 **첫 호출의 결과를 바인딩**하라. 사다리 위반은 아니지만 진단을 세는 테스트를 깨고, 사용자에겐 같은 말을 두 번 한다.
-
-### ⭐⭐ 두 도메인의 **순서는 소비자가 정하고**, decline 에는 **반드시 fallback** (2026-08-22 · §4.5.364)
-
-정수 도메인과 real 도메인이 둘 다 답할 수 있는 자리에서, *"어느 쪽을 먼저 묻나"* 는 **그 값이 무엇에 쓰이는지**가 정한다. 같은 코드베이스에 두 정답이 이미 적혀 있었다:
-
-- **진리값 소비자**(`const_truth_in_scope` = generate 조건)는 **정수 먼저**로 충분하다 — 절단은 0/비0 을 안 바꾼다.
-- **크기(magnitude) 소비자**(지연 값·폭·개수)는 **real 먼저**여야 한다. `param_real_value` 가 그 이유를 적어 두었다: **정확히 정수인 `parameter real R = 11` 은 `real_param_val` 과 `params` 양쪽에 등록**되므로 정수 walk 가 i64 쌍둥이를 찾아 `R/2` 를 **정수 나눗셈**으로 접는다(두 오라클 5.5). §4.5.364 는 `const_truth_in_scope` 의 순서를 베꼈다가 이 silent-wrong 을 만들었다.
-
-⚠️ **그러나 real-먼저를 `return` 으로 쓰면 더 큰 구멍이 난다.** real 도메인엔 `%`·비트·shift·`$clog2`·call arm 이 없어서, 그 decline 을 그대로 돌려주면 소비자의 **조용한 기본값**이 된다 — `#(RD % 4)`·`#($clog2(RD))`·`#(half(RD))` 다섯 칸이 correct→silent-wrong 이 됐다. ⇒ **real 먼저, 정수로 fallback.**
-⭐ 그게 거래가 아니라는 증명은 구조적이다: i64 쌍둥이는 real 이 **정확히 정수**일 때만 존재하므로 두 레인은 **값**에서 갈릴 수 없고 **연산자**에서만 갈리는데, real 에 없는 연산자는 전부 정수 전용이다.
-
-### 술어가 **도메인을 고르면** shadow-correct 여야 한다 (2026-08-22 · §4.5.364)
-
-같은 술어라도 *"이 식을 real 도메인으로 넓힐까"* 에 쓸 때는 관대해도 되지만, *"어느 도메인에서 평가할까"* 를 **고르는** 데 쓰면 이름 해석이 하강과 같아야 한다. `expr_mentions_real` 의 이름 arm 은 `real_param_val` **단독 walk** 라, 안쪽 `localparam R = 9;` 가 바깥 `parameter real R = 5;` 를 가려도 real 이라 답하고 real 레인이 **바깥 5** 를 접는다(두 오라클 9). 저장소가 이미 적어 둔 함정이다 — `real_param_is_non_integral` 주석: *"`real_param_val` 단독 walk 는 안쪽 net/숫자 param 이 가려도 바깥 real 을 잡아 한 이름을 두 가지로 해석한다."*
-**해법 = 옵트인 파라미터**(`expr_mentions_real_opt(e, shadow_correct)`): 기존 호출자는 리터럴 `false` ⇒ 기계적 바이트 동일. ⭐ 그리고 **새 resolver 의 방향을 증명하라** — 결합 술어가 상위집합이면 walk 는 같거나 더 안쪽에서 멈추므로 차이는 `true→false` 방향뿐이고, 그 레인으로 **새로 들어가는 것은 없다**.
-
-### decline 정책은 **레인마다 같아야** 한다 (2026-08-22 · §4.5.364)
-
-한 값에 여러 fold 레인이 있으면 **오버플로·도메인 밖 처리도 한 정책**이어야 한다. §4.5.364 의 새 TimeLit 레인만 `?` 로 decline 하고 형제 둘은 saturate 했는데, 소비자가 decline 을 *"딜레이 없음"* 으로 먹으므로 **버려진 지연은 clamp 된 지연보다 더 이르다** — `#(20000s)` 가 즉시 발화했다. 두 렌즈가 독립적으로 같은 발견을 냈다.
-
-### ⚠️ 프로브의 **격자 해상도**가 판정을 뒤집는다 (2026-08-22 · §4.5.364)
-
-적대 렌즈가 *"PRE 는 두 오라클과 바이트 동일 = correct→loud 회귀"* 로 BLOCKING 을 냈는데, 같은 설계를 **10 ns 대신 1 ns 격자**로 재니 PRE 는 지연을 **조용히 버리고 있었다**(PRE `t=11 bus=1` / iverilog `bus=z`). 샘플이 전부 `[t, t+D)` 밖에 떨어졌던 것이다.
-**규칙**: *"PRE 도 맞았다"* 를 주장하기 전에, **네 프로브가 결함의 크기를 분해할 수 있는지** 먼저 물어라 — 지연이 D 면 격자는 D 보다 촘촘해야 하고, 폭이 문제면 포맷이 폭을 보존해야 한다(규칙 ⑦의 시간 축 쌍둥이). 그리고 반례를 못 만들면 **왜 구조적으로 불가능한지**를 적어라(여기선 *"지연 드라이버는 `[0,D)` 동안 x 를 쥐는데 PRE 엔 그 구간이 아예 없다"*).
-
-### ⭐⭐ 문맥 규칙은 **공유 평가기가 아니라 소비자**에게 둔다 (2026-08-22 · §4.5.363)
-
-새로 생긴 좁은 leaf(파라미터 셀렉트·fill 리터럴·self 폭을 가진 노드) 때문에 그 위 산술이 감긴다면, *"이 노드는 폭-정직하게 평가하라"* 는 리다이렉트를 **공유 평가기 안에 넣지 마라**. 문맥을 아는 것은 **소비자**다.
-
-§4.5.363 이 `const_eval_in_scope` 의 Binary arm 에 넣었다가 셋을 한꺼번에 냈다 — 그 함수를 **폭 규칙이 정반대인** 소비자들이 공유하기 때문이다:
-
-- 선언 range bound·차원·반복수는 **자기결정**(§11.6.1) — 거기선 옳다.
-- **파라미터의 값은 대입**(§11.6): RHS 는 `max(self, target)` 에서 평가된다. 자기결정을 강요하니 `localparam int Q = W[7:0] + 8'd240` 이 36(두 오라클 292)이 됐고, 그 칸은 **honest-loud 였다** ⇒ loud→silent-wrong.
-- **한 arm 안의 가드는 가드가 아니다** — Unary arm 이 그냥 지나가 `~W[3:0]` 이 silent-wrong 을 **다른** silent-wrong 과 맞바꿨다(막으려던 바로 그것).
-- 모든 Binary 노드마다 부분트리를 걸으면 **Θ(n²)** — 셀렉트 **없는** 8000항 상수식이 **121배** 느려졌다.
-
-같은 술어를 `array_geom` 의 선언-range fold 로 옮기니 넷이 동시에 사라졌고 bound 당 O(1) 이 됐다.
-**적용법**: 문맥/폭 규칙을 넣기 전에 *"이 함수를 누가 부르고, 그들이 문맥에 합의하는가"* 를 grep 으로 물어라. 둘이 갈리면 규칙은 **호출부**에 산다. 정의상 자기결정인 소비자는 안전한 집이고, 공유 평가기는 결코 아니다. 새 모양에 키잉해 나머지는 같은 경로를 타게 하라(§4.5.218 옵트인).
-
-### 형제 경로 확장 (§4.5.243)
-
-- **"형제 경로도 따라가야 하는가"는 일관성 논증이 아니라 오라클에게 물어라.** generate 의 스코프 선언·if/for 조건을 real 도메인으로 넓힌 뒤 case scrutinee 도 자연스러워 보였지만, **iverilog 가 그 형태를 거부**한다 — 일관성만으로 확장하면 **검증 불가 영역을 자발적으로 늘리는 것**이다.
-- **비목표를 핀할 때는 반대편(동작하는 형태)도 같이 핀하라** — real 이 loud 라는 것만 박아두면, 그 loud 가 나중에 조용히 넓어져 정수형까지 삼켜도 아무도 모른다.
-
-### 거부는 caller 만큼만 loud 하다 (2026-08-18 · §4.5.339)
-
-- *"폭을 모르면 접지 말고 거부"* 는 correct-or-loud 처럼 들리지만, **decline 을 조용한 기본값으로 소비하는 자리**(범위 바운드·replication count·part-select 폭)가 있으면 그 거부는 **소리를 내지 않는다** — 측정: 폭-미상 지수를 거부하자 `logic [f():0]` 이 **1비트 넷 · exit 0 · 진단 0** 으로 지어졌고 PRE·iverilog 는 10비트였다(correct→**silent-wrong** = 사다리 하강).
-- **규칙**: 새 거부를 넣기 전에 **그 fold 의 소비자 전부**가 decline 을 어떻게 소비하는지 세라. 한 곳이라도 기본값을 넣으면 거부는 그 경로에서 **틀린 값**이 된다.
-- ⭐ 그리고 그때의 정답은 대개 *"거부를 어디까지 넓힐까"* 가 아니라 **"모르는 것을 알 수 있게 만들기"** 다 — 같은 구문의 두 번째 철자(`RPS'(e)` vs `4'(e)`)에 폭·부호를 답해 주자 loud 였던 칸이 **정답으로 접혔다**(loud 보다 위).
-
-### 깊이를 재설정하는 위임은 사이클의 원천 — 게이트는 "무엇이 들어 있나"가 아니라 "어느 깊이인가"로 (2026-08-18 · §4.5.339)
-
-- 재귀 예산(`depth`)을 **청구할 자리는 사이클이 있는 위치뿐**이다. 인자는 **유한 AST 하강**(`g(g(g(0)))` = 서로 다른 세 노드)이라 사이클이 없는데 청구하면 **정상 중첩이 반으로 줄어든다**(측정: 65단 인자 중첩이 correct→LOUD). 사이클은 **default 인자**처럼 *callee 자신의 선언 노드로 되돌아가는* 위치에만 있다.
-- 위임 대상이 깊이를 **0 으로 재시작**한다면 그 위임을 게이트해야 하지만, 게이트를 *"call 을 품었나"* 단독으로 걸면 **module-scope 정상 셀이 loud 가 된다**. `깊이 == 0` ∨ `call-free` 처럼 **서로소인 두 안전 이유**를 나열하라.
-- ⚠️ *"깊이 0 이면 호출이 안 떠 있다"* 는 대개 **거짓**이다(body-local init 과 평문 `Call` arm 이 caller 깊이를 그대로 쓴다 — 프로브가 기존 스위트 세 테스트에서 발화). 종료를 보장하는 진짜 사실을 찾아 **그것을** 주석에 적어라.
-
-### 남아 있는 백엔드 split 은 스코프 판정이 아니라 "아직 안 고친 자리" 의 신호다 (2026-08-09 · §4.5.319)
-
-- 한 결함을 고치자 백엔드 census 의 split 이 6 → 12 로 **늘었다**. 어느 백엔드도 나빠지지 않았으므로(WORSE 0) 나는 그것을 *"서로 다른 백엔드가 서로 다른 만큼 고쳐진 결과"* 로 읽고 CLASS 로 미뤘다. **틀렸다** — 마지막 한 자리를 고치자 split 이 **0** 이 되고 census 가 120/120 정답이 됐다.
-- **규칙**: 백엔드가 갈린다는 것은 *같은 의미의 두 철자가 아직 다르다*는 뜻이다. WORSE 0 은 "회귀가 없다" 는 뜻일 뿐 "여기서 멈춰도 된다" 는 뜻이 아니다. **split 이 0 이 될 때까지가 한 슬라이스**이고, 그 전에 멈추려면 남은 split 각각의 자리를 **이름으로** 적어라(추정한 원인이 아니라 측정한 자리로).
-- ⚠️ 실제로 내가 §2 에 적은 원인(*"bytecode 가 지수를 자기결정 안 한다"*)은 **틀린 자리를 가리키고 있었다** — 지수는 IR 에서 이미 자기결정된 `Const` 였고, 진짜 자리는 그 상수를 **자기 폭으로 마스킹해 읽는** 코드젠 술어였다. 틀린 defer 기록은 다음 수정자를 엉뚱한 곳으로 보낸다.
-
-### 네가 편집한 주석은 네가 소유한다 (2026-08-09 · §4.5.319)
-
-- 스테일 주석 하나를 정정하려고 블록을 열었는데, **같은 블록의 다른 문장이 거짓인 것을 못 봤다** — 그 문장(*"a negative signed const reads huge here → rejected below"*)이 정확히 그 자리의 silent-wrong 을 설명하고 있었다. `to_u128` 은 **상수 자기 폭으로 마스킹**하므로 좁은 음수를 "huge" 가 아니라 그 폭의 양수로 읽는다.
-- **규칙**: 주석 블록을 편집하면 **그 블록의 모든 주장을 검증하라.** 한 문장만 고치고 나가면 나머지 거짓 문장에 네 서명이 붙는다.
-- ⚠️ 그리고 **코드젠 레인은 `initial` 블록으로 재현되지 않는다** — 코드젠이 안 붙어 특수화 레인에 아예 안 들어간다. 기본 백엔드의 특수화 경로를 시험하려면 **클럭된 프로세스**로 지어라(같은 식이 `initial` 에서는 멀쩡해 보인다).
-
-### 공유 커널의 계약이 안 맞으면 피연산자를 계약에 맞게 다시 쓰지 마라 — 계약을 고쳐라 (2026-08-09 · §4.5.319)
-
-- **증상**: 공유 산술 커널이 두 피연산자를 **집합 부호 하나**로 읽는데, `**` 만 그 계약을 깬다(IEEE Table 11-21 = 지수는 자기결정 ⇒ 두 부호가 독립). 커널은 그 불일치를 **지수의 부호를 밑수의 것으로 찍어** 무마하고 있었고, 그것은 값 보존이 아니라 **비트 재해석**이다.
-- ⚠️ **커널을 안 건드리려고 피연산자를 "등가인 쌍" 으로 다시 쓰는 것은 함정이다.** 실측: 부호가 다를 때만 1비트 확장해 둘 다 signed 로 만드는 트릭이 값 축에서는 완벽했는데 **두 극단을 동시에 깼다** — 폭 상한(`WIDE_ARITH_CAP`)을 그 1비트가 넘겨 correct→**조용한 x** 를 만들었고(그 loud 게이트는 **선언 폭**을 보므로 내부에서 만든 폭에는 구조적으로 발화 불가), byte-identity 논증이 딛고 선 등식이 특수 타입에서 거짓이었다.
-- **옳은 형태 = 불리언 하나가 대신하고 있던 질문들을 분리한다.** 산술의 부호는 사실 셋이다 — **왼쪽을 어떻게 읽는가 · 오른쪽을 어떻게 읽는가 · 결과의 부호는 무엇인가.** 대부분의 연산자에서 셋이 우연히 같기 때문에 하나로 접혀 있었을 뿐이다. 분리하면 나머지 연산자에서는 셋이 같은 값이라 **기계적으로 항등**이고(측정 가능한 주장이다), 갈리는 연산자만 갈린다.
-- **일반 규칙**: *"이 자리는 특별하다"* 를 피연산자 쪽에서 표현하려 들면 표현 비용이 다른 축(폭·레인·성능)으로 샌다. 특별함은 **그것을 아는 자리**(계약)에서 표현하라.
-
-### 불변식이라고 쓴 등식은 short-circuit 하는 헬퍼 앞에서 거짓이 된다 (2026-08-09 · §4.5.319)
-
-- `base.width == w` 를 byte-identity 논증의 근거로 썼는데, 그 폭을 만드는 `resize_keep_sign` 이 **`is_str`/`is_real` 에서 short-circuit** 해 자기 폭을 그대로 돌려준다. 문자열 피연산자에서 등식이 깨지고 연산이 32비트에서 돌았다.
-- ⚠️ **스위트 커버리지가 0 이면 그 주장은 "참" 이 아니라 "미검증" 이다.** 리뷰어가 그 arm 에 프로브를 심어 전 스위트를 돌린 결과 **진입 114회 중 위반 0회** — 주장은 스위트가 닿는 모든 곳에서 참이었고 **그 바깥에서만** 거짓이라 아무 테스트도 못 잡았다. 논증이 등식에 기대면 **그 등식을 깨는 타입을 먼저 세어라**(값 타입 목록이 아니라 **그 폭을 만드는 함수의 early-return 목록**).
-
-### 오라클의 적용 범위는 축마다 다르다 — iverilog 도 예외가 아니다 (2026-08-09 · §4.5.319)
-
-- **iverilog 13.0 은 폭 ≥ 33 의 음수 지수 `**` 에서 오라클이 아니다**(실측·32/33 경계에서 정확히 뒤집힌다): `(-1) ** -2` 가 폭 32 에서 1, 폭 33·64 에서 **0**; `0 ** -2` 가 폭 32 에서 `x`, 폭 33 에서 **0**. wide 경로가 IEEE Table 11-6 의 ±1 행과 0-베이스 행을 통째로 잃는다.
-- ⚠️ **이 사실을 기록하지 않으면 다음 폭 스윕이 오라클의 결함을 vita 회귀로 오독한다** — 실제로 리뷰어의 첫 폭 스윕이 **36칸 거짓 REGRESSION** 을 냈다.
-- **오라클 둘이 서로 다른 축에서 각자 틀릴 수 있다.** verilator 는 ±1 행을 전 폭에서 지키지만 2-state 라 `x` 행이 없고, 같은 식을 **상수폴딩에선 `x`·런타임엔 0** 으로 내며 자기모순이었다. 그런 자리에서는 다수결이 아니라 **규격 조문**이 정하고(Table 11-6 은 op1 의 **값**을 본다 ⇒ 무부호 all-ones 는 −1 이 아니다), 그 판정을 **폭 조건과 함께** 적어라.
-
-### 바이트 출력을 비교할 때는 hexdump 후 비교하라 (루프 파일에서 이관, 2026-08-09)
-
-- NUL/제어 바이트는 터미널에서 사라지므로 눈으로 보면 "빈 출력" 으로 오진단한다. 출력이 바이트 스트림인 기능(파일 쓰기·`$fwrite`·packed 문자열·VCD/FST)은 **`hexdump -C` 를 거친 뒤** 비교하라.
-- 같은 이유로 **element-select 의 silent-wrong 은 WHOLE-value 연산을 먼저 재라** — 그게 정상이면 접근 라우팅(shallow), 틀리면 저장 갭(deep)이다. 어느 쪽인지가 슬라이스 크기를 정한다.
-
-### 오라클과 성능 기준선은 다른 도구다 — verilator 의 역할 (2026-08-09 결정)
-
-- **성능 기준선 = iverilog + vita 자신의 `--backend vm`.** 둘 다 vita 와 **같은 계약**(4-state · 이벤트 구동)이라 벽시계가 같은 것을 잰다. 회귀·개선은 이 둘로만 주장하라.
-- ⚠️ **verilator 를 성능 목표로 삼지 마라.** 2-state · 컴파일 · 사이클 지향이라 계약이 다르다 — x/z 평면·델타 사이클·이벤트 큐 비용이 전부 "vita 가 느리다" 로 계상된다. verilator 수치는 **목표가 아니라 "컴파일이 원리적으로 살 수 있는 상한"** 으로만 인용하고, 인용할 때 **계약이 다르다는 문장을 같이** 써라(안 쓰면 그 숫자가 거짓말을 한다).
-- **verilator 의 진짜 자리 = 제2 오라클.** 두 오라클이 일치하는데 vita 만 다르면 그건 논쟁이 아니라 **결함**이고, iverilog 와 갈리면 그때 사다리가 판정한다. vita-ahead 를 선언하기 전에는 반드시 대라(§4.5.310 이 이 규칙을 만든 사건).
-- ⚠️ **verilator 가 오라클이 아닌 축을 먼저 재라**(전부 실측): **x/z**(2-state 라 4-state 답을 못 낸다) · **범위 밖 인덱스**(2의 거듭제곱 배열에 마스킹해 답처럼 보이는 쓰레기를 낸다) · **이벤트/델타 순서**. 즉 적용 범위는 **2-state 산술·폭·부호** 질문이다.
-
-### 무오라클 능력 (§4.5.235 · §4.5.236)
-
-- **오라클이 미지원하는 스펙은 결함이 있어도 영원히 안 보인다.** iverilog 가 `%p` 를 아예 구현하지 않아 차분이 침묵했고, 실제로 real 이 정수로 반올림돼(2.5→3) 값이 사라지고 있었다. **테스트 0건인 스펙/포맷을 찾는 것** 자체가 유효한 silent-wrong 탐색 전략이다(`grep -rl '%p' tests/` 가 비면 그 자리가 후보).
-
-- **오라클이 거부하는 영역에서 우리가 앞서 있으면, 테스트가 유일한 방어선이다.** iverilog 가 구문을 거부하는 기능(modport 타입 포트·함수 결과 part-select 등)은 **차분으로 회귀를 감지할 수 없다** — 핀이 없으면 리팩터 한 번에 조용히 사라진다. fresh 스윕이 clean 으로 끝나도 결론은 "할 일 없음"이 아니라 **"핀 없는 무오라클 능력을 찾아 핀하라"**.
-
-### 두 술어 봉인 (§4.5.234)
-
-- **값 술어가 둘이 되는 걸 피할 수 없으면, 두 구현이 반드시 일치하는 부분집합으로 좁혀라.** 규칙이 같기를 바라지 말고 **불일치가 가능한 입력을 거부**하라 — 파서의 리터럴 폴드는 *절단이 필요한* 리터럴을 아예 안 받는다(`'h1FFFFFFFF` 를 elaborate 는 33비트로 키우고 파서는 32비트로 마스킹했다). 남는 것은 정의상 안전하고, 거부된 것은 이전 동작(loud) 그대로다.
-- **두 술어의 teeth 는 결과를 한 줄에 같이 찍는 것**(`x.name()` 과 `x` 값). 어느 한쪽만 보면 불일치가 "이름만 빈 문자열" 같은 조용한 형태로 숨는다.
-- **타입이 있는 값의 부호는 "리터럴이 뭐라 쓰였나"가 아니라 "어떤 타입의 값인가"가 정한다.** enum 라벨은 §6.19 상 **base 타입의 값**이므로 `32'hDEADBEEF` 는 `enum integer` 에서 −559038737 이다 — 리터럴의 `s` 마커로 부호를 정하면 한쪽은 **false-loud**, 반대쪽은 **이름만 조용히 빈 문자열**이 된다. 폴드는 **패턴+폭**만 내놓고 **해석은 타입을 아는 호출부**에서.
-- **범위/유효성 검사의 판별자가 정말 "폭"인지 의심하라** — enum 라벨 검사는 폭이 아니라 **출처**(명시 값 vs 자동증가)가 기준이었다. 명시적 `-1` 은 오류지만 `64'sh7FFF…` 다음의 wrap 은 합법이다. 값만 보면 둘 다 "음수 i64" 로 같아 보인다.
-
-### 크기 추정 (§4.5.240)
-
-- **"loud 하다"를 갭으로 적기 전에 그 loud 가 어느 패밀리의 규칙인지 보라.** side-effect sysfunc 는 single-eval 보장을 위해 **statement-form 으로 lower** 되므로 임의 expression 위치의 loud 는 **고칠 대상이 아니라 지켜야 할 불변식**이다. 게다가 관용적 배치(대입 rhs·if 조건)는 이미 동작하고 있었다 — **갭의 크기를 재기 전에 실제로 못 쓰는 형태가 무엇인지부터 세라**.
-- **내가 큐에 적은 크기 추정도 다음 반복을 오도한다** — 오판을 발견하면 항목을 지우지 말고 **정정 사유와 함께 다시 쓰라**(지우면 다음 사람이 같은 오판을 반복한다).
-
-### 크기 추정 (§4.5.233)
-
-- **"작아 보이는 loud→supported" 는 값이 필요한 TIME 을 먼저 물어라.** enum 라벨 폴드는 30줄짜리로 보였지만 값이 **파스 타임**에 필요했고, 그 값을 만드는 함수는 파서에 **의존하는** 크레이트에 있었다(순환). 근인이 한 줄이어도 **그 한 줄이 사는 레이어**가 슬라이스 크기를 정한다.
-- **같은 값을 두 번 파싱하게 되면 그것은 "두 술어" 함정이다** — 어긋나는 순간 조용히 틀린다(여기선 `.name()` 표와 상수가 다른 라벨을 가리킴). 불가피하면 teeth 는 반드시 **내부 차분**(두 술어의 결과가 같은 소스에서 일치하는지)으로.
-
-### 능력 확장 (§4.5.232)
-
-- **철자 비대칭을 없애려는 "능력 확장"이 규칙의 전제를 무너뜨릴 수 있다.** 어떤 규칙(§11.8.1 실수 우선 순서)을 적용하는 site 가 **하나뿐**인데 그 규칙이 막고 있던 능력(정수 twin)을 전역에 열면, 규칙을 모르는 **모든 consumer** 가 조용히 틀린다 — generate 분기 오선택 등 5건이 한 번에 열렸다. 확장 전에 **"이 능력을 소비하는 site 가 몇 개이고 각자 이 규칙을 아는가"** 를 세라. 셋 이상이면 규칙을 먼저 공통 퍼널로 올린 뒤에 확장하라.
-- **핵심 성과와 확장을 분리해서 평가하라** — 실수 산술 폴드(핵심)는 twin 과 무관해 철회해도 100% 남았다. 리뷰가 blocking 을 내면 **확장만 떼어내 슬라이스를 살리는** 선택지가 있는지 먼저 보라.
-
-### 오라클 검증 (§4.5.231)
-
-- **"오라클과 다르다"를 결함으로 접수하기 前에 오라클의 자기일관성을 먼저 측정하라.** 같은 하위식을 `+0` 으로 감싸 값이 바뀌는지, 형제 연산자(`+`/`*` vs `<<`)가 같은 문맥 폭을 쓰는지 — **한 모델로 오라클의 답 전부를 재현할 수 있는지**를 물어라. 재현 못 하면 그건 갭이 아니라 오라클 결함이고, 쫓아가면 우리 쪽이 비일관이 된다.
-- **오라클이 없을 때의 teeth = 자기 대 자기 항등식.** "값 보존 래퍼가 값을 바꾸면 안 된다", "연산자끼리 문맥 폭을 두고 갈리면 안 된다" 는 오라클 없이도 검증 가능하고, 나중에 모델을 바꿔도 **여전히 참이어야 하는** 성질이라 회귀 테스트로 오래 산다.
-
-### 상수 접기 (§4.5.230)
-
-- **오라클이 없거나 모호하면 자기 엔진이 오라클이다.** elaborate 인터프리터와 런타임이 **같은 소스**를 다르게 계산하면 그 자체가 결함이다 — 이 차분이 슬라이스 전체를 이끌었고(9형 중 6형 불일치), iverilog 는 사후 확인이었을 뿐이다.
-- **값·폭·부호는 세 개의 술어이고 함께 움직인다.** 접기를 넓히면 `const_expr_signed` 와 `param_decl_width` 도 같은 arm 집합을 가져야 한다 — `Cast` 에서 배운 교훈이 `Call` 에서 **그대로 반복**됐다(반환 타입을 몰라 −56 이 4294967240 으로).
-- **폭 문맥에서 부호는 문맥당 한 번 정하고 내려보내라**(IEEE §11.8.1). 노드마다 다시 계산하면 부호 있는 하위식이 부호 없는 부모 밑에서 sign-extend 돼 **정답이 오답으로 하강**한다(`(b+b)/u` 100→228). 자기결정 위치(비교 피연산자 등)만 자기들끼리 다시 통일한다.
-- **재진입하는 헬퍼는 깊이를 리셋한다.** 폭을 구하려고 `const_eval_in_scope` 를 부르면 그 안의 call 깊이가 0 부터 다시 세어져 `bit [f()-1:0]` 이 스택을 넘겼다. 깊이 캡보다 **그 형태를 아예 접지 않는** 구조적 제거가 낫다.
-- **변환은 리프의 선언 경계에서** — 좁은 signed 로컬은 env 에 이미 sign-extend 된 i64 로 들어있다. 문맥이 unsigned 면 §11.6.1 은 **자기 폭에서 zero-extend** 하라고 하는데, 리프를 그대로 두고 연산자 폭에서 마스킹하면 sign 비트가 살아남아 비교가 뒤집힌다. (§4.5.229 의 "문맥 경계에서 변환" 과 짝 — 경계는 **양쪽**에 있다.)
-- **"거부(None)"는 "모름"이어야지 기본값이 되면 안 된다** — 폭을 못 구한 선언을 읽는 쪽이 `(32, unsigned)` 로 추측하는 순간, 거부의 안전성(=이전 동작 유지)이 사라지고 64비트 값이 조용히 잘린다. 모름은 **마스킹 안 함**으로 전파하라.
-- **폭을 알게 되면 "모르니 거부"였던 규칙을 재검토하라** — 음수의 논리 `>>` 는 폭 의존이라 거부하고 있었는데, 문맥 폭이 생긴 순간 **비트패턴으로 정확히 계산**할 수 있게 됐다(거부를 남겨두면 correct→loud 하강).
-
-### 상수 접기 (§4.5.229)
-
-- **폭 정확성 가드는 리프가 아니라 값으로 세워라.** "모든 리프가 ≥32비트면 안전"은 두 방향으로 틀렸다 — `(32'd1<<32'd33)>>32'd30` 은 리프가 전부 32비트인데 **중간값이 32비트를 넘었다 돌아와** SV 와 갈리고(그 자리는 PRE 가 **정답**이었으므로 correct→silent-wrong 하강), 반대로 `4비트 param * 2` 는 SV 가 max-폭으로 32비트에 계산하는데 과잉거부된다. 판정은 **모든 하위식의 값**이 안전 범위에 있는지로 하고, 그 traversal 은 세 조건이 **하나를 공유**하게 하라.
-- **"이 잔차는 기존 경로도 갖고 있다"는 정당화는 측정 전엔 거짓으로 취급하라.** `*`·`<<`·`%` 는 엔진이 애초에 접지 않아 폭 1 로 떨어졌고 **그 폭 1 이 정답**이었다. 기존 경로가 접는 연산(`+`/`-`)만 그 잔차를 갖고 있었다.
-- **약한 folder 를 강한 것으로 바꿀 때, 약한 쪽의 "이상한 동작"에 의존하던 곳을 먼저 찾아라.** 리터럴 folder 의 의도적 `wrapping_neg`(음수 리터럴 → 0xFFFF_FFFF)는 방향 검사가 읽던 신호였는데, 그 값으로 폭을 계산하자 **u32 오버플로 패닉**(release 는 0폭)이 됐다. 폭 산술은 u64 checked + `MAX_NET_WIDTH` 상한.
-- **fold 를 넓히면 그 값의 SIGNEDNESS 를 읽는 형제 술어도 같이 넓혀라.** `const_eval_in_scope` 에 `Cast` arm 을 더하자 `localparam P = int'(-300)` 이 **접히기는 하는데 `const_expr_signed` 에 Cast arm 이 없어 unsigned 로 바인딩**됐다(loud→silent-wrong). 값 술어와 부호 술어는 같은 arm 집합을 가져야 한다.
-- **인터프리터를 신뢰 경계로 쓸 거면 그 내부 폭도 확인하라.** 상수함수 호출을 접기 전에 **반환 폭만** 보면 부족하다 — 인터프리터가 대입을 선언 폭으로 coerce 하지 않으므로 narrow 한 **로컬/포멀 하나**로 발산한다(`bit [3:0] t = 4'd15+4'd15` = SV 14, i64 30).
-
-### round-20 (§4.5.228) — 기록된 전제를 먼저 재측정하라
-
-- **"deep 이라 못 한다"는 기록은 근거가 아니라 가설이다.** ROADMAP 이 "깊은 스케줄러 rework" 라 적어둔 fork 건은 **bb 번호공간 충돌 한 곳**이었다. 근인을 지목한 것은 코드 읽기가 아니라 **판별 실험**(task CFG 에 dead `if` 9개 → resume bb 를 밀면 같은 설계가 통과 ⇒ 충돌이 원인). 가설이 "무엇을 바꾸면 증상이 사라지는가"로 표현되면 바로 실험이 된다.
-- **"loud 로 기록됨"은 loud 라는 뜻이 아니다.** 음수 하한 배열은 `a[-1]` 을 **명시적으로 건드릴 때만** E4002 였고, 순수 `foreach` 는 **무성**이었다. multi-packed 음수 bound 도 "warn+clamp" 로 적혀 있었지만 그 경고는 **형제 선언**에서 나오고 있었다. 분류를 신뢰하지 말고 **그 항목만 있는 최소 설계**로 재현하라.
-- **플래그가 이유를 설명하는 것처럼 보이면 의심하라.** `allow_string_init=false` 는 "그 스코프는 flush 를 안 돈다"고 읽혔지만 flush 는 있었다. 진짜 이유는 선언 시점 쓰기가 **bare-name 으로 모듈 리스트에 새는 것**. 플래그는 결함의 *설명*이 아니라 *대역*이었고, 이유를 고치자 flag 4개가 한꺼번에 열렸다.
-- **수명 문제는 이미 그 수명을 가진 것에 붙여라.** 동시 활성화 dyn 배열은 새 arena 가 아니라 **AUTOMATIC window 의 수명**(같은 두 지점의 park/unpark)으로 풀렸다. 단, **공유와 부재는 다르다** — window 는 핸들로 공유되지만 park 된 배열은 힙에서 *사라진다*. 그래서 arm 이 부모 배열을 x 로 읽는 회귀가 났고, **16k 설계 스윕만 그것을 잡았다**(이 슬라이스용으로 쓴 프로브는 전부 통과했다).
-- **폭과 정규화는 함께 켜라.** 음수 packed bound 에서 폭만 넓히고 선택 정규화를 빠뜨리면 "넓지만 잘못된 비트를 짚는 net" = silent-wrong 이 된다. 그래서 opt-in 파라미터로 묶고 **기록할 수 있는 호출부만** 켰다(나머지는 리터럴 `false` 로 바이트 동일·loud 유지). 비대칭이 남지만 **loud 한 비대칭**이다.
-- **동결 enum 에 변종을 더하기 전에 사이드카를 보라.** `$fmonitor`/`$fstrobe` 는 `Monitor`/`Strobe` id 재사용 + StmtId 사이드카로 끝났다(SysTaskId 변종이었다면 SimIr 해시 flip → 전 골든 재핀). 그리고 **fd 위치를 판단하는 술어는 하나여야 한다** — 분할과 기록이 각자 판단하면 언젠가 어긋난다.
-- **오라클이 자기 자신과 모순되면 그것은 결함이다.** iverilog 는 같은 fd 에 `$fmonitor` 를 누적하면서 `$monitor` 는 싱글턴으로 둔다. 측정>주장이지만, **측정된 것이 오라클의 내부 모순일 때는** hand-IEEE 로 가고 그 측정값을 테스트에 기록하라.
-
-### ⭐⭐ 정적 타입 주장을 **새로 소비하기 시작할 때**는, 그 주장이 값에 대해 참인지 먼저 확인하라 (2026-08-20 · §4.5.349)
-
-- 공유 규칙이 *"어느 한 arm 이 real 이면 이 삼항은 real 이다"* 라고 답하는데, **엔진의 삼항은 취해진 정수 arm 을 변환하지 않았다**. 그 어긋남은 아무도 그 주장을 쓰지 않는 동안 무해했다 — 그러다 이 슬라이스가 이항 연산에서 그것을 **소비하기 시작하자** 드러났다.
-- **드러난 방식이 함정이다**: PRE 에서는 두 피연산자가 똑같이 틀린 문맥을 받아 **오차가 상쇄**되어 답이 맞았다. 한쪽만 고치는 순간 상쇄가 깨져 **correct→silent-wrong**. 즉 *"고친 쪽은 옳아졌는데 결과는 나빠졌다"* 가 성립한다.
-- **처방은 주장을 약화시키는 것이 아니라 값을 주장에 맞추는 것**이다(삼항이 실제로 real 을 생산하게). 그렇게 하면 그 주장에 기대던 pre-existing 결함도 함께 닫힌다.
-- **체크리스트**: 정적 술어를 새 자리에서 읽기 시작하면 ⓐ 그 술어가 참이라고 말하는 노드가 **런타임에 실제로 그 타입의 값을 내는지** 확인하고 ⓑ 옛 코드에서 **두 곳이 같은 방향으로 틀려 상쇄되던 자리**가 있는지 찾아라(한쪽만 고치는 수정은 그 자리에서 회귀한다).
-
-### ⚠️ 관측 하네스가 값을 절단하면 **메커니즘을 오진한다** — 폭을 재는 프로브는 폭을 안 깎는 포맷으로 (2026-08-20 · §2 mixed-real 그라운딩)
-
-- 넓힘 폭을 핀하려고 `real` 결과를 `$rtoi()` 로 찍었더니 32비트로 절단돼, **32비트 피연산자 칸이 우연히 오라클과 일치**했다. 거기서 *"넓힘은 정확히 32"* 라고 결론냈는데 `%f` 로 다시 재니 **64** 였다(그리고 그 64 는 real const 의 self width 라는 코드상의 사실과 맞아떨어진다).
-- **폭을 측정하는 프로브는 관측 경로가 폭을 보존해야 한다.** real 은 `%f`, 넓은 정수는 `%h`/`%0d` 를 타깃 폭 그대로. 편의 변환(`$rtoi`·`$signed`·좁은 대입)을 끼우면 그 변환이 **판별자를 지운다**.
-- 일반화: **probe 의 결론이 코드에서 읽은 상수와 안 맞으면 하네스를 먼저 의심하라.** 4-way 판정의 "하네스 포맷" 가지가 이 자리다.
-
-### ⭐⭐ 블록을 헬퍼로 빼낼 때 **그 블록이 공유하던 계산**을 함께 옮겼는지 보라 — 아니면 깊은 체인에서 지수 폭주다 (2026-08-20 · §4.5.346)
-
-- `const_eval_in_scope` 의 Binary 팔에서 whole-node 특례 둘을 헬퍼로 추출했다. 원본에서는 `let a = const_eval_in_scope(lhs)?` 가 특례와 **일반 경로가 공유하는 한 번의 계산**이었는데, 헬퍼가 그것을 자기 몫으로 복사하면서 **모든 이항 노드가 좌변을 두 번** 접게 됐다 = **2^depth**. 200단 좌편향 인덱스(`(~r5) - 5'd0 - …`)가 밀리초에서 **4분 초과(스위트 타임아웃)** 로 갔다.
-- **잡은 것은 리뷰가 아니라 게이트다** — 두 렌즈와 스윕 147칸이 전부 통과했고 값은 어디서도 안 틀렸다. 성능 붕괴는 **값 차분에 안 보인다**.
-- **추출 체크리스트**: ⓐ 옮긴 블록이 읽던 지역값이 있는가 ⓑ 그 값이 호출부에도 남아 있는가(=이제 두 번 계산되는가) ⓒ 그 노드 종류가 **재귀 체인의 마디**인가. 셋이면 헬퍼 안에서 **먼저 조기 반환**해 그 계산에 안 닿게 하라.
-- ⚠️ **`--no-fail-fast` 만으로는 부족하다 — TIMEOUT 줄을 따로 세라.** nextest 는 `SLOW`→`TERMINATING`→`TIMEOUT` 로 찍고 요약은 *"5,631 passed, 1 timed out"* 이다. `FAIL` 만 grep 하면 **초록으로 읽힌다**.
-
-### ⭐⭐ 네가 지우는 캡이 **능력 제한**인지 **도메인 가드**인지 먼저 정하라 (2026-08-20 · §4.5.345 라운드 3)
-
-- 손수 짠 concat fold 를 공용 folder 로 교체하면서 그 루프의 `total > 63` 캡을 *"i64 로 64비트도 담을 수 있으니 능력을 좁히던 것"* 으로 읽고 `w > 64` 로 완화했다. 실제로 그것은 **도메인 가드**였다 — i64 상수 도메인은 부호 없는 **63비트**만 담고, `coerce_int_width(v, 64, false)` 는 항등이라 최상위 비트가 선 64비트 배치가 **음수 i64** 로 새어 나간다. 결과는 `> 0` 이 거짓, generate-if 가 **다른 계층을 elaborate**, case item 이 miss — 전부 **exit 0**. PRE 는 전부 loud 였으니 **loud→silent-wrong** 이다.
-- **판별 질문 두 개**: ⓐ 그 상수는 *표현 가능한 값의 경계*인가, *지원하는 문법의 경계*인가. ⓑ 경계를 넘긴 값이 **어떤 타입으로 소비되는가**(여기서는 `i64` 인데 생산자는 부호 없는 비트열이었다).
-- **처방은 폭이 아니라 적합성으로 거절하는 것**이다. `w > 64` 도 `w > 63` 도 아니고 *"이 값이 도메인에 들어가는가"* — 그래야 최상위 비트가 빈 64비트 배치라는 **진짜 이득**을 안 버린다.
-- **스윕이 이것을 놓친 이유도 기록해 둘 것**: 89칸 중 ≥64비트 배치를 만드는 셀이 **하나도 없었다**. 도메인 경계를 옮기는 슬라이스는 **경계 양쪽 한 칸씩**을 반드시 짓는다.
-- ⚠️ **확장 vs 신규**: 같은 결함이 이미 다른 문법(여기서는 64비트 리터럴·파라미터)에 pre-existing 이더라도, 그것이 **새 문법으로 넓히는 라이선스는 아니다**. pre-existing 은 §2 에 한 줄, 새 경로는 거절.
-
-### ⭐⭐ 큐에 적힌 **메커니즘**도 증상만큼 재측정하라 — 그대로 고치면 회귀가 나올 수 있다 (2026-08-20 · §4.5.345)
-
-- **증상 재현으로는 부족하다.** §2 항목은 *"`eval_const_assign` 의 `w.max(tw)` 가 `tw=0` 을 실폭처럼 쓴다"* 라고 **자리와 이유까지** 적혀 있었고 증상(9 vs 169)도 그대로 재현됐다. 그런데 적힌 대로 고치자(폭-0 을 무제한 도메인으로 degrade) **다른 칸이 16 → 10000 으로 무너졌다** — correct→silent-wrong. `max(self, 0)` = RHS 자기 폭은 *옳은* degrade 였고(참 타깃이 RHS 보다 좁거나 같은 모든 칸에서 정답), 진짜 결함은 **계산 가능한 폭(packed 차원의 곱)을 declined 한 것**이었다.
-- **이것을 가르는 것은 PRE-3-way 뿐이다.** iverilog 만 보는 차분에서는 두 판이 똑같이 *"vita 가 틀렸다"* 로 읽힌다. **기존 분류·바인딩을 바꾸는 슬라이스에 PRE 가 필수인 이유가 바로 이 모양**이다.
-- **판별 질문**: 적힌 자리를 고치면 *어떤 칸이 새로 정답이 되는가*, 그리고 *어떤 칸이 지금 정답인가*. 후자를 세지 않으면 자기가 만든 회귀를 못 본다.
-
-### ⭐⭐ 조용한 기본값이 우연히 맞는 부분집합을 세라 — 그것이 loud 화를 사다리 하강으로 만든다 (2026-08-20 · §4.5.345)
-
-- **`unwrap_or(0)` 같은 조용한 기본값은 참값이 0 인 칸에서 *정답이다*.** 그 자리를 그냥 loud 로 바꾸면 그 부분집합은 **correct→loud** 다. 적대 리뷰가 실제로 그 셀을 지어 냈다(`{2{2'b00}}` — 스윕이 고른 참값이 전부 0 이 아니어서 표에 안 잡혔다).
-- **답은 되돌리기가 아니라 *위로 닫기*다** — 접히지 않던 형태를 **접히게** 만들면 그 부분집합이 통째로 correct 가 된다. §4.5.345 는 concat·replication·SIZE 캐스트를 이미 존재하는 carry-free folder 로 라우팅해 닫았다(산술을 두 번 쓰지 않는다).
-- **스윕 설계 규칙**: 조용한 기본값을 없애는 슬라이스는 **그 기본값과 같은 참값을 갖는 칸을 반드시 포함**하라. 안 그러면 표 전체가 `wrong→LOUD` 로만 보인다.
-
-### 초기화 순서 (§4.5.254/255) — 순서는 "언제"가 아니라 "누구 것"이다
-
-- **순서 규칙은 관찰 가능한 증인으로 측정하라.** `$random` 은 draw 마다 값이 달라서 **어느 초기화자가 먼저 돌았는지**를 출력이 직접 말해준다. "블록 로컬 string 이 뒤로 간다"는 리포트를 그 증인으로 재보니 실제 규칙은 **모듈 전부 → 블록 로컬 전부**였고, 리포트가 본 건 그 한 면이었다. 증상 하나를 고치기 전에 **규칙 전체를 측정**하라.
-- **증상만 고친 대역은 다음 슬라이스의 결함이 된다.** r19 는 모듈-vs-블록로컬 역전을 **string 사례로만** 보고 string 만 맨 끝으로 미뤘다. 그 대역이 모듈 관계는 고치고 **블록 안 관계를 깼다**. 대역을 쓸 거면 무엇을 위한 대역인지 적고, 근원을 고칠 때 **대역을 걷어라**.
-- **prefix 는 "어느 스코프"를, 소유권 플래그는 "누구 것"을 답한다.** vita 가 prefix 를 안 만드는 스코프(generate `case` arm, 라벨 없는 `if`/`begin`)가 있으면 **키가 같아진다**. 키만으로 claim 하는 flush 는 남의 초기화자를 가져가고, 그 순간 두 자료구조가 소유권을 서로 다르게 판단하면(한쪽은 플래그로 나누고 한쪽은 키로) **한 선언의 `new[n]` 과 원소 쓰기가 다른 프로세스로 갈라져** 배열이 조용히 빈다. 소유권을 도입했으면 **그것을 읽는 모든 곳**을 같이 바꿔라.
-- **소유권 순서와 초기화 순서는 다른 축이다.** flush 는 innermost-first(= 소유 순서)인데 iverilog 의 중첩 generate 초기화는 outermost-first 다. 한 축으로 둘을 만족시키려 하면 한쪽이 반드시 틀린다 — 축이 둘이면 자료구조도 둘이어야 한다.
-- **경계에서 리셋하지 않은 상태 플래그는 경계를 넘어 거짓말한다.** `in_generate_body` 를 인스턴스 진입에서 리셋하지 않아, generate 안에 인스턴스화된 자식이 **자기 본문 전체**를 generate-owned 로 태깅했다. `cur_prefix` 를 save/restore 하는 자리가 곧 그 답이 있는 자리다.
-- **테스트의 교집합을 세라.** 두 테스트 파일 다 generate 를 갖고 있었고 둘 다 모듈 블록 로컬을 갖고 있었는데, **둘을 함께 가진 테스트가 하나도 없었다** — 회귀는 정확히 거기 살았다. 새 축을 도입하면 기존 축과의 **교차곱**을 최소 하나는 핀하라.
-- **누락은 구조상 안 보인다 → loud 로 만들어라.** 초기화자가 어떤 flush 에도 claim 되지 않으면 IR 에 그냥 없다(진단 0, exit 0). 성공 경로에서 pending 맵이 비었는지 검사하면 그 부류가 통째로 **silent → loud** 로 올라간다.
-
-### 초기화 phase (§4.5.256~259) — "먼저 실행된다"를 ProcId 로 근사하지 마라
-
-- **순서를 pass 순서로 표현할 수 없으면 데이터로 만들어라.** 자식 인스턴스 초기화자가 부모보다 먼저여야 하는데 부모 프로세스는 자식이 존재하기도 전에 생성된다 — 어떤 pass 재배치로도 안 나온다. `(slot, seq)` **랭크 경로**로 기록하니 elaborate pass 를 **한 줄도 안 옮기고** 끝났다. 축이 둘(소유권 · 초기화 순서)이면 자료구조도 둘이어야 한다.
-- **"낮은 ProcId 라서 먼저 돈다"는 근사이고, 경계를 못 넘는다.** §6.21 "before any initial or always block starts" 를 vita 는 그렇게 근사했는데 **인스턴스 경계에서 깨진다**(자식 초기화자는 pass 8, 부모 자기 프로세스는 pass 7). 그리고 그 근사에 의존하던 곳은 **주석이 그렇게 적혀 있는 곳**이다 — 근사를 진짜로 바꿀 땐 그 문장을 전문 검색해서 전부 재검하라(패키지 flush 가 정확히 그렇게 남았다).
-- **"먼저 실행"과 "이벤트를 안 만든다"는 다른 요구다.** 초기화자를 올바른 **순서**로 돌려도 이미 arm 이 끝났으면 `reg clk = 0;` 이 `always @clk` 에 엣지를 준다. 실측이 그렇게 말하면 그건 순서 문제가 아니라 **phase 가 필요하다**는 뜻이다.
-- **이벤트를 죽일 땐 자기가 만든 것만 죽여라.** dirty 리스트를 통째로 비우면 **그 앞에서 돈 다른 단계**(t0 cont-assign settle)의 이벤트까지 사라지고, 값은 나중에 복구돼도 **이벤트는 복구되지 않는다**(같은 값 재기록은 변화가 아니다). 범위를 잘라라 — `len()` 을 찍고 `split_off`.
-- **최적화가 값을 순서 밖으로 빼돌린다.** 상수를 `net.init` 으로 접는 것은 순수한 최적화처럼 보이지만 그 값을 **초기화 순서에서 제거**한다. 그래서 같은 읽기가 `= 77` 이면 77, `= f()` 이면 0 — **vita 가 자기와 모순**했다. 오라클보다 이 자기모순이 더 강한 근거다.
-- **카운터를 공유하는 두 순회가 서로 다른 집합을 방문하면 그 카운터는 안정적이지 않다.** 네 generate walk 중 하나만 `Instance` 를 방문했고, 그래서 인스턴스 뒤에 쓰인 generate 가 phase 마다 다른 번호를 받았다. 슬롯(=비교의 상위 키)마다 카운터를 나누면 구조적으로 해결된다.
-- **분류기가 안 보는 곳은 기능이 없는 곳이다.** generate 안 블록 로컬이 전부 loud 였던 건 기계가 없어서가 아니라 **분류기가 `module.body` 의 `Proc` 만 훑어서** 그 프로세스들이 분류 대상 집합에 없었기 때문이다. "이 기능이 저기서만 안 된다"면 기계를 찾기 전에 **입력 집합**부터 확인하라.
-- **하나가 실격이면 전체를 실격시키지 마라.** 중첩 span 하나가 **이름 전체**의 스코핑을 철회시켜, 죽은 `if(0)` arm 이 다른 곳의 살아있는 쌍을 망가뜨렸다. 실격은 **문제가 있는 원소만**. 그리고 동시에 존재할 수 없는 것들(한 generate if/case 의 서로 다른 arm)은 애초에 서로를 실격시킬 자격이 없다.
-- **두 대상이 서로 다른 pass 에서 세어지면 카운터로는 못 섞는다.** 인터페이스는 Nets pass, 모듈 자식은 Instances pass 에서 elaborate 된다 — 같은 슬롯의 카운터를 주면 소스 순서와 무관하게 **한쪽이 통째로 앞선다**. 고쳐도 "틀린 절반이 맞바뀔" 뿐이었고, 순열 행렬이 양쪽 실패가 **겹치지 않는다**는 것으로 그걸 보여줬다. 순서의 정의가 "선언 위치"면 키도 **선언 위치**여야 한다(소스 오프셋) — pass 와 무관한 값만이 pass 사이에서 안정적이다.
-- **한 값이 세 질문에 답하고 있으면 성분을 나눠라.** 인스턴스 랭크 키로 소스 오프셋 하나를 쓰자 세 곳에서 깨졌다 — root 는 `--top`/라이브러리 유닛 때문에 오프셋이 순서가 아니고, `bind` 는 **다른 선언 우주**(컴파일 유닛)에 살고, 배열 원소는 **서로 구분돼야** 한다. 각각이 다른 질문이었다.
-- **"tie-break 가 처리한다"는 정말 tie 일 때만 참이다.** 배열 원소가 키를 공유해도 그 서브트리의 랭크 벡터는 서로 **다르다**(자식 스코프와 자기 변수의 슬롯이 다르니까). 사전식 정렬은 동률이 아니라 **슬롯 기준으로 원소를 가로질러** 묶었다. 정렬 키를 근거로 쓸 땐 **비교되는 벡터 전체**를 적어 보고 확인하라.
-- **한 함수가 두 역할을 하면, 붙이는 동작이 어느 역할의 것인지 적어라.** `elaborate_generate` 는 `generate … endgenerate` **리전**(순수 문법·IEEE §27.3)과 generate **블록 본문**(진짜 스코프) 둘 다에 쓰이는데, 거기에 스코프성 동작(랭크·플래그·flush)을 달자 **리전이 블록처럼 굴었다**. 역할이 둘이면 파라미터로 갈라라 — 호출부가 어느 쪽인지 알고 있다.
-- **"루프 두 개면 두 순서"** — 선언 순서로 섞여야 하는 것을 서로 다른 루프에서 모으면 **절대** 섞이지 않는다. `int a; generate int b; endgenerate int c;` 가 시리즈 전엔 a,c,b, 후엔 b,a,c 였고 정답 a,b,c 는 **한 바퀴**로만 나온다.
-- **소유권 판별자는 "구분해야 할 것들"만큼 표현력이 있어야 한다.** "generate 안인가"라는 **bool** 은 **중첩된 두 generate 스코프**를 못 가른다 — 둘 다 yes 이고, prefix 를 안 만드는 쪽은 부모의 키까지 공유한다. 판별자를 고를 땐 **가장 가까운 두 후보가 서로 다른 답을 내는지** 확인하라. 여기선 이미 있던 **랭크 경로**가 그 답이었다(순서가 기대는 성질을 소유권도 그대로 쓴다).
-- **가드는 리팩터링 중에 값을 낸다.** 소유권을 바꾸자마자 "미방출 초기화자" 가드가 **인터페이스가 스코프 밖에서 넷을 만들고 안에서 flush 하던 것**을 즉시 loud 로 잡았다. 조용히 사라졌을 값이었다 — 안 보이는 실패에 가드를 다는 값은 그것을 도입한 슬라이스가 아니라 **그 다음 슬라이스**에서 회수된다.
-
-### ⭐ 평면 진입점을 낼 때, **정본이 그리로 위임하게 하라** — 그리고 공유가 차분을 눈멀게 한다는 것을 알고 하라 (2026-08-10 · §4.5.330)
-
-- **특수화 경로가 이미 원시 표현을 들고 있다면, 공유 규칙에 그 표현의 진입점을 내라.** 두 u64 평면을 72바이트 `Value` 두 개로 감싸 비교 함수를 부르던 것이 picorv32 의 **9.2%** 였다.
-- ⭐ **그 진입점이 두 번째 철자가 되지 않게 하는 방법은 하나다 — 정본이 자기 정규화를 마친 뒤 그리로 위임하는 것.** 그러면 판정 로직의 철자가 하나이고, 특수화 경로는 그것을 **한 층 아래에서 부를 뿐**이다. 그렇게 해도 되는 근거는 admission 이다(*"두 피연산자가 폭과 부호를 공유한다"* ⇒ 정규화가 no-op).
-- ⚠️ **공유의 대가: 그 순간부터 차분은 그 함수에 눈멀어진다.** 특수화와 제네릭이 같은 함수를 부르므로 둘을 비교하는 배터리는 그 안의 결함을 **원리적으로** 못 본다. **공유로 옮기는 슬라이스마다 그 규칙을 지키는 절대(오라클) 앵커가 있는지 뮤테이션으로 확인하라** — §4.5.327 에서 같은 교훈을 만났고, 여기서는 넷 전부를 확인했다.
-
-### ⭐⭐ 오라클 부식 — **차분의 이빨은 V1 이 진행될수록 단조 감소한다. 위임 슬라이스는 절대 앵커가 의무다** (2026-08-12 · ROADMAP §5.1-e)
-
-위 §4.5.330 규칙("공유는 차분을 눈멀게 한다")의 **일반형이자 강화형**이다. 그 규칙은 *슬라이스 하나*에 대한 주의였지만, ③층 V1 의 **방법 자체가 위임**이다 — 최근 다섯 슬라이스 중 넷이 커널 코드 0줄이고 전부 native 를 공유 코드(`SimState`·`builtins::dispatch`·`eval::*`)로 보냈다.
-
-- ⭐⭐ **native 가 interp/VM 에 위임할수록 차분은 자기 자신을 비교한다. 커버리지 100% 는 오라클 이빨 0% 를 뜻한다.** 이것은 추측이 아니라 세 번 실측됐다: §4.5.330/331(공유 함수 뮤테이션 넷이 차분을 전부 통과) · §4.5.337ⓑ(공유 dispatch 뮤테이션 둘이 엔진 게이트를 전부 통과) · V1 슬라이스 3b(**두 백엔드가 똑같이 `[ ][\u{1}][ ] len=0` 을 찍었다** — 차분 초록, 설계 오답).
-- ⭐ **그래서 "VM 과 바이트 동일" 은 위임 슬라이스의 충분 증거가 아니다.** 게이트에 **절대 앵커**(hand-IEEE 기대출력 — `new[]` 원소 기본값 `""`/`0.0` 처럼 **차분이 원리적으로 못 지키는 선**)를 반드시 함께 넣어라.
-- ⚠️ **대체재로 세 번째 실행기를 짓지 마라.** 그것이 §4.5.279 이탈 클래스이고, `sim-engine/Cargo.toml` 이 `jit` 를 기본 OFF 로 두는 이유로 이미 그 문장을 적어 두고 있다. 허용되는 분리는 **역할**(interp = 이분 도구·의미의 정본 텍스트)과 **빌드**(feature)뿐이다.
-
-**✅ 확정 (Phase C · 2026-08-17) — 이 규칙은 이제 권고가 아니라 빌드의 성질이다.**
-
-- ⭐⭐ **제품 빌드에는 오라클이 없다.** `oracle` feature(기본 ON)가 `interp`·`vm` 을 들고 있고 `--no-default-features` 빌드에는 그 변형이 **존재하지 않는다** ⇒ 제품에서 두 실행기를 비교하는 일은 **불가능**하고, **절대 앵커가 유일한 방어선**이다. 위 문단의 *"충분 증거가 아니다"* 는 이제 *"제품에는 그 증거 자체가 없다"* 로 읽어야 한다.
-- ⭐ **interp 의 역할이 코드에 못박혀 있다**(`Backend::Interpreter` 의 doc): **테스트 도구이지 제품 표면이 아니고, 성능 최적화 대상에서 영구 제외**다. 레퍼런스를 빠르게 만드는 것이 곧 레퍼런스가 읽을 수 없게 되는 길이다 — 모든 특수화가 규칙의 두 번째 철자이고, 그것이 이 저장소의 결함 클래스다. **프로파일이 `run_process` 를 지목하면 답은 "그 설계가 여기서 돌면 안 된다" 이지 "여기를 고치자" 가 아니다.**
-- ⚠️ **flip 런의 방향이 뒤집혔다**(§5.1-aq) — 기본이 native 이므로 이제 **`native → vm`** 으로 물어야 오라클 축이 계속 시험된다. 안 물으면 스위트가 조용히 native 전용이 되고, 그때 이 규칙 전체가 공허해진다.
-- ⚠️ **그리고 "역할" 분리는 `run_process` 를 죽은 코드로 만들지 않는다** — 오라클 빌드에서 VM 은 `is_codegen_able` 이 거부하는 바디마다 그리로 떨어지고 tier-3 은 프레임 바디를 그리로 위임한다. *"제품 표면이 아니다"* 는 **`--backend` 플래그**에 대한 말이다.
-
-### ⭐⭐ 빌드에 실패한 뮤테이션을 SURVIVED 로 보고하지 마라 (2026-08-12 · ROADMAP §5.1-l)
-
-- **실사고**: 배터리의 치환 스크립트가 `assert count==1` 로 죽었는데 러너가 **종료코드를 안 봐서** 트리가 안 바뀐 채 테스트가 돌았고, 결과가 `SURVIVED` 로 기록됐다. 손으로 다시 걸었을 때도 **트레이트가 스코프에 없어 컴파일 에러**였는데 stale 바이너리를 실행해 같은 오답을 봤다.
-- ⇒ **러너는 치환·빌드의 종료코드를 반드시 검사하고, 실패는 `BUILD-FAIL`(≠ SURVIVED)로 기록하라.** 그리고 치환 후 **소스에서 바뀐 줄을 grep 으로 눈으로 확인**하라.
-- ⭐ **그래도 값이 있었다**: 그 가짜 생존이 *"왜 두 스토어가 같은 답을 내지?"* 를 묻게 했고, 그 질문이 진짜 결함을 찾았다 — `k_read_net` 이 `NetReader::read_net` 의 **라우팅을 두 번째로 철자**하고 있었다(frame-local·heap 은 아레나 것이 아니다). **가짜 생존도 조사해라 — 조사 대상은 뮤테이션이 아니라 "왜 안 죽었는가" 다.**
-
-### ⭐⭐ 커버리지 축이 끝나면 **하네스도 함께 비운다** — 빈 거부 표는 지우지 말고 `is_empty()` 로 핀하라 (2026-08-16 · ROADMAP §5.1-ap)
-
-- **실측**: Phase A 완주 시점에 게이트 세 층이 전부 비었다 — `gate_refused!` 매크로 사이트 **17 → 0** · `systask_refusal` 집합 **6→4→2→0** · 실행기 거부 표 **4→5→4→3→1→0** · design 행 도달 가능 **0**.
-- ⇒ **비어 있는 표를 지우지 마라. `is_empty()` 단언 + "왜 지금 비어 있는지" 노트로 남겨라.** 그래야 다음 슬라이스가 행을 추가할 때 **설계를 짓거나 왜 못 짓는지 적게** 된다(§5.1-ab 가 SVA 표에서 처음 쓴 형태).
-- ⇒ **주제가 사라진 테스트는 "반전" 이 기본이고 "은퇴" 는 이빨을 옮긴 뒤에만.** A4-d 에서 거부 핀 7개 중 **여섯은 positive 로 반전**했고(설계는 그대로 두고 기대값만 뒤집는다 — 그 소스가 마지막 non-empty 를 만든 그것이므로 재발 시 다시 잡는다), **하나만 은퇴**시켰는데 그때도 이빨을 **소스 스캔**(`gate_refused!` 가 다시 나타나면 실패)으로 옮겼다.
-- ⚠️ **호출자 없는 매크로/헬퍼는 삭제한다**(A1-iv-a 규칙) — 다만 **삭제 사유를 그 자리에 남겨라**. 다음 사람이 "게이트에 아직 이빨이 있다" 고 믿는 것이 삭제보다 비싸다.
-
-### ⭐⭐ 위임을 위해 필요해진 배관이 **다른 기능의 pre-existing silent-wrong** 을 드러낼 수 있다 (2026-08-16 · ROADMAP §5.1-ap)
-
-- **실사고**: A4-d(`disable fork`)가 자기 kill set 의 **뿌리**로 `cur_aid` 를 필요로 했다. 그것을 tier-3 dispatch 에 넣자, **전혀 다른 기능**의 결함이 드러났다 — §16.4 deferred 리포트는 `(marker_sid, cur_aid, cur_gen)` 로 키잉되는데 tier-3 이 그 쌍을 **한 번도 세팅한 적이 없어** 전부 활동 0 으로 파일되고 있었다. 두 프로세스가 **같은 `assert #0`** 에 닿으면 **`$error` 하나가 조용히 사라진다**(exit 0). A8-b 이래 있던 결함이다.
-- ⇒ **"엔진이 이 자리에서 무엇을 하는가" 를 옮길 때는 옮기는 이유가 된 필드만 보지 말고 그 자리에서 세팅되는 것을 전부 세라.** 한 함수가 세팅하는 두 필드는 대개 **한 사실**이고, 반쪽만 옮기면 나머지 반쪽의 소비자가 조용히 틀린다(→ `set_cur_activity` 를 한 철자로 추출한 이유).
-- ⚠️ **그 축은 공유 코드라 차분이 원리적으로 못 본다** — 양 백엔드가 똑같이 틀린다. 잡은 것은 **절대 앵커**였고, 그 앵커는 **엔진 쪽 테스트에도 없던** 것이다.
-
-### ⭐⭐ **거부 주석의 한정어를 읽어라 — 참인 문장이 셋째 경우에 침묵할 수 있다** (2026-08-17 · ROADMAP §5.1-aw)
-
-- **실사고**: tier-3 이 tier-2 의 식 VM 을 안 쓰는 이유가 이렇게 적혀 있었다 — *"Emitting natives there would swap the faster path for the slower one **on every RHS both accept**."* 그 문장은 **참**이고 실측으로도 확인됐다(무조건 켜면 expr 157→478 ms). 그런데 **한정어가 경우를 하나로 좁히고 있었다**: *양쪽이 받는* RHS. **한쪽만 받는 RHS**(여기선 `wprog` 가 폭 때문에 거부하는 >64bit 식)에 대해서는 아무 말도 하지 않는다 — 그리고 거기서 제품 백엔드가 은퇴시킨 백엔드보다 **1.70×·2.62× 느렸다.**
-- ⇒ **"…하면 안 된다" 형 주석에 조건절이 붙어 있으면, 그 조건이 거짓인 경우를 세어라.** §4.5.338 은 *이유가 시간이 지나 거짓이 된다*였고, 이것은 **이유가 지금도 참인데 전체를 안 덮는다**이다. 후자가 더 안 보인다 — 주석을 읽어도 틀린 데가 없기 때문이다.
-- ⭐⭐⭐ **지는 실험이라도 진짜 실행기에 배선해서 전 스위트를 돌려라** (2026-08-17 · §5.1-be). `jit` 은 기본 OFF 로 오래 있었고 ⓐ **컴파일조차 안 되고 있었으며**(융합 op 둘이 추가된 이래) ⓑ **문장마다의 `k_call_fatal` 검사를 통째로 빠뜨려** 폭주 설계가 `Error` 대신 `Quiescent` 로 끝났다. 둘 다 **그 모듈로 스위트를 한 번도 안 돌렸기 때문에** 아무도 물어본 적이 없다. ⇒ **feature 뒤에 있다는 것은 검증 면제가 아니다** — 성능에서 질 것이 뻔해도, **정확성은 배선해서 물어봐야 답이 나온다.**
-- ⭐ **커버리지 계기가 한 실행기만 답하면 실험이 "안 도는 것" 으로 읽힌다** — `VITA_JIT_STATS` 가 엔진 경로에만 있어 **기본 백엔드에서 침묵**했다. 계기를 옮기기 전엔 *"JIT 이 tier-3 에서 안 돈다"* 가 사실처럼 보였다.
-- ⭐⭐ **프로파일의 한 줄은 함수가 아니라 인라인된 덩어리다 — 콜그래프를 열어라** (2026-08-17 · §5.1-bc). `dispatch_body` 6~12% 를 미세조정하러 갔더니 그 줄은 **`vm_exec` 가 통째로 인라인된 op 루프**였고, 진짜 표적은 그 안의 **`memset` 4.5%**(호출마다 짓는 1,280 B 스크래치)였다. **top-of-stack 표는 표적을 이름 부르지 않는다 — 그 아래를 봐야 이름이 나온다.**
-- ⭐ **"이건 의미가 아니라 할당 선택" 이라고 적힌 줄은 언젠가 뜨거워진다** — `k_eval_native` 의 per-call 스크래치가 공짜였던 이유(*"tier-3 이 여기로 아무것도 안 보낸다"*)를 **D1.5 가 거짓으로 만들었다**(§4.5.338 의 세 번째 재발). ⇒ 라우팅을 바꾸는 슬라이스는 **새로 뜨거워진 경로의 "무해한 선택" 들을 다시 읽어야 한다.**
-- ⭐ **재사용의 안전성은 오염 프로브로 잰다** — 빌린 버퍼를 매 호출 직전에 **쓰레기로 채우고** 전 스위트를 돌린다. 통과하면 *"이 호출이 쓰지 않은 슬롯을 아무도 안 읽는다"* 가 **측정된 사실**이 된다(주장이 아니라).
-- ⭐⭐ **뜨거운 꼬리를 추출했으면 인라인을 확인하라 — 그리고 그 판별자는 대조군이다** (2026-08-17 · §5.1-ba). 두 경로가 공유하도록 두 줄을 함수로 뽑자 **eval-heavy 가 두 런 연속 +12.5%**(mem +5%) 였다. 판별한 것은 **내장 대조군**이다 — 그 형태들은 새 호출자를 **한 번도 안 부르므로** 거기서 움직인 것은 **레이아웃일 수밖에 없다**(`#[inline(always)]` 로 둘 다 0.4%/0.2% 로 소멸). ⇒ **추출은 공짜가 아니다**: 공유는 옳은데 대가가 있고, 대가는 **바뀔 수 없는 형태의 움직임**으로 잡는다.
-- ⭐⭐ **생존한 뮤테이션이 "그 검사가 필요 없다"는 뜻일 때가 있다** (§5.1-ba 의 L) — force 검사를 지워도 스위트가 통과한 이유는 눈먼 축이 아니라 **callee 가 그 게이트를 이미 갖고 있고 쌍둥이 경로는 그 검사를 한 번도 가진 적이 없다**는 것이었다. 그런 중복은 fail-closed 가 아니라 **두 쌍둥이가 "어디서 답하는가" 에 대해 어긋나게 만드는 두 번째 철자**다 ⇒ 지운다. **생존을 등가/눈먼축 둘로만 분류하지 마라 — 셋째는 "잉여" 다.**
-- ⭐⭐ **테스트 이름을 인용하는 doc 은 잠금이 아니다 — 그 이름을 grep 하라** (2026-08-17 · §5.1-az). 엔진의 leaf fast path 가 *"Locked by `leaf_fast_path_matches_read_net`"* 라고 적고 있었는데 **그 테스트는 존재한 적이 없다.** 그 경로는 쓰인 이래 한 번도 잠긴 적 없이 *"잠겨 있다"* 고 읽혔고, 다음 슬라이스가 그 옆에 **두 번째 사본**을 놓을 참이었다. ⇒ 인용된 이름은 **주장**이지 사실이 아니다(§4.5.306 의 *"내가 '핀' 이라 쓴 census 가 핀이 아니었다"* 와 같은 부류이고, 이번엔 **다른 크레이트의 doc** 이 그것을 했다).
-- ⭐ **그리고 워드만 비교하는 잠금은 타입 스탬프에 구조적으로 눈멀다** — real 넷을 정수 빠른 경로로 읽으면 **비트는 같고 `is_real` 만 사라진다**(§5.1-az 의 생존 H). 반환형이 실을 수 없는 성질은 그 반환형을 비교하는 어떤 테스트로도 못 잡는다 ⇒ 그런 가드는 **테스트가 아니라 규칙의 다른 반쪽**을 근거로 남긴다.
-- ⭐⭐ **싼 검사는 뒤에 진짜가 있을 때만 안전하다** (2026-08-17 · §5.1-ay 가 §5.1-ax 의 대칭). Bloom filter 가 안전한 이유가 그것이다 — *"없다"* 는 확실하고 *"있다"* 는 **진짜 자료구조를 한 번 더 확인한다.** D1.5 는 근사치를 **뒤가 빈 경계**에 놓아 잘못 라우팅된 식이 **어느 평가기에도 안 갔고**, D2-a 의 2-state 레인은 같은 모양인데 **폴백이 정본 구현 그 자체**라 틀려도 **답이 아니라 재실행**을 잃는다. ⇒ 근사치를 넣기 전에 **"이게 틀리면 무엇이 잡아 주나"** 를 먼저 답하라. 답이 *"아무도"* 면 그것은 근사치가 아니라 **판정**이고, 진짜를 물어야 한다.
-- ⭐ **그리고 재실행 폴백은 부작용이 없을 때만 성립한다** — 빠른 경로가 부작용을 낸 뒤 bail 하면 정본이 그것을 **두 번** 낸다(D2-a 의 `LoadIdx` OOB 진단이 그 자리 · bail 을 보고 **앞**에 둔다). 폴백 설계에서 먼저 세어야 할 것은 op 이 아니라 **부작용 사이트**다.
-- ⭐⭐ **그리고 그 경계에 근사치를 쓰지 마라 — 필요조건은 충분조건이 아니다** (2026-08-17 · §5.1-ax). D1.5 는 *"`wprog` 가 거부할 때만"* 이라 적어 놓고 실제로는 그 admission 의 **첫 줄(폭)** 만 물었다. 식을 안 걷고 답할 수 있어 매력적이지만, `compile` 은 **노드 종류**로도 거부한다 — census 로 세니 **≤64bit 문맥에서 75번**이었고(런타임 오프셋 part-select 가 대표), 그것들은 **어느 평가기에도 안 가고** 일반 경로로 떨어졌다. 실제 판정을 묻자 그 형태가 **1.48× 빨라졌다**. ⇒ **"이 구현이 이걸 받나?" 의 정직한 답은 그 구현을 돌려 보는 것뿐이다.**
-- ⭐ **답은 대개 스위치가 아니라 분할이다.** 두 구현이 각자 잘하는 영역이 다르면 *"어느 쪽을 쓸까"* 가 아니라 *"어디서 갈라지나"* 가 질문이고, 그 경계는 **한쪽의 admission 술어**다. 그 술어는 **추출해서 묻고**(여기선 `wprog::width_admits` = `compile` 의 첫 줄) **다시 쓰지 마라** — 두 사본이 갈리면 **증상이 느린 경로를 타는 것뿐이라 어떤 테스트도 못 본다.**
-- ⚠️ **선택지를 `bool` 로 적지 마라.** 질문이 *"켠다/끈다"* 가 아니라 *"어느 입력을 넘긴다"* 이면 enum 이어야 하고, 그래야 세 번째 정책이 생길 때 호출자가 다시 생각한다.
-
-### ⭐⭐ **능력을 열거하는 사용자 문서는 슬라이스마다 썩는다 — 역할을 적어라** (2026-08-17 · ROADMAP §5.1-au)
-
-- **실사고**: `vita --help` 의 `--backend` 문단이 **통째로 거짓**이었다. *"'vm' (default)"* 는 B1 이 기본을 옮긴 뒤 틀렸고, *"'native' … **no fork, no `final`, no class, no string net, no $monitor/$strobe**, 서브루틴은 **FUNCTIONS 만**"* 은 **Phase A 가 그 전부를 닫았다.** 배속 수치도 낡았다. 어느 슬라이스도 이 문단을 일부러 방치하지 않았다 — **그냥 매번 갱신 대상이 아니었을 뿐**이다.
-- ⇒ **사용자 문서에 능력 목록(무엇을 지원/거부하는가)을 쓰지 마라.** 그 목록은 기능이 하나 열릴 때마다 거짓이 되고, 거짓이 된 줄은 **테스트가 없으면 영원히 남는다**. 대신 **역할**을 적어라 — *"이건 디버그 노브다 · X 가 기본이고 전부 돌린다 · 나머지는 이분용이다"* 는 기능이 열려도 참이다.
-- ⭐ **핀은 약화가 아니라 강화로 갱신한다.** 기존 도움말 핀은 단어 하나(`byte-identical`)만 봤다. 갱신판은 셋을 보고(등가·**어느 것이 기본인지**·**나머지가 디버그 노브**) + **닫힌 제약을 아직 나열하지 않는지**를 문자열로 확인한다 ⇒ **같은 부류의 거짓말이 다시 들어오면 그 자리에서 잡힌다.**
-- ⚠️ **`--help` 은 테스트가 잘 안 닿는 표면이다** — 출력이 사람용이라 단언이 느슨해지기 쉽고, 그래서 가장 오래 거짓으로 남는다. 사용자에게 보이는 문장을 바꾸는 슬라이스는 **그 문장을 지키는 핀을 함께 강화**하라.
-
-### ⭐⭐ 레퍼런스 구현은 **성능 최적화 대상에서 영구 제외**다 (2026-08-17 · §5.1-au / C1)
-
-- **레퍼런스를 빠르게 만드는 것이 곧 레퍼런스가 읽을 수 없게 되는 길이다.** 모든 특수화가 규칙의 **두 번째 철자**이고, 두 번째 철자가 이 저장소의 결함 클래스다 — §4.5.279 에서 VM 이 인터프리터로부터 **조용히 네 갈래로** 갈렸다.
-- ⇒ **프로파일이 `exec::run_process` 를 지목하면 답은 "그 설계가 여기서 돌면 안 된다" 이지 "여기를 고치자" 가 아니다.** 실측은 규모 참고용이지 표적이 아니다(picorv32 interp 1.319 s vs native 0.513 s).
-- ⚠️ **"제품 표면이 아니다" 는 "죽은 코드다" 가 아니다** — 오라클 빌드에서 VM 은 `is_codegen_able` 이 거부하는 바디마다 인터프리터로 떨어지고 tier-3 은 프레임 바디를 그리로 위임한다. 강등의 대상은 **`--backend` 플래그**이지 함수가 아니다.
-
-### ⭐⭐ feature 로 표면을 가를 때 — **"빌드가 초록" 은 feature 가 동작한다는 뜻이 아니다** (2026-08-16 · ROADMAP §5.1-as·-at)
-
-Phase B 가 `oracle` feature(기본 ON)로 제품 표면을 native 하나로 좁히며 **세 번 같은 모양으로 속았다.**
-셋 다 증상이 *"빌드가 초록인데 아무것도 시험 안 함"* 이다.
-
-- ⚠️⚠️ **feature unification** — 의존 크레이트를 `default-features = false` 없이 참조하면 상위의 `--no-default-features` 가 **무력화된다**(하위의 `default` 가 그대로 들어온다). `cli → sim-engine` 이 그랬고 **빌드는 성공했으며 feature 는 아무것도 안 했다.** ⇒ **`cargo tree -p <crate> --no-default-features -e features` 로 확인하라.** 그리고 그 축은 **별도 CI 잡**이어야 존재한다(워크스페이스 한 곳이라도 켜면 전부 켜진다).
-- ⚠️ **`--lib` 필수** — 통합 테스트 타깃이 dev-dependency 로 그 feature 를 되살린다.
-- ⚠️ **바이너리 경로를 두 구성이 공유한다**(`target/debug/vita`) — 구성을 바꿨으면 **재빌드 후 재측정**. stale 바이너리가 *"거부돼야 할 플래그가 받아들여졌다"* 는 거짓 신호를 냈다.
-
-### ⭐⭐ feature 로 **폴백 대상을 지우면** 그 판정의 소비자도 함께 사라진다 (2026-08-16 · §5.1-at)
-
-- **실사고**: 폴백 arm 을 `#[cfg]` 뒤로 보내자 **그 빌드에서 게이트 판정을 소비하는 유일한 자리가 없어졌고**, `simulate` 는 거부된 설계를 **그냥 실행했다**(강제 거부 프로브로 실측: 설계 실행 · **exit 0 · 진단 0**). 게이트가 *"범위 밖"* 이라고 했는데 아무도 안 들었다.
-- ⇒ **분기 하나를 지울 때는 "그 분기가 유일한 소비자였던 값" 을 세어라.** 판정을 만드는 코드가 남아 있어도 소비자가 없으면 그것은 **죽은 판정**이고, 죽은 판정은 조용하다.
-- ⚠️ **그리고 "치명을 래치했다" 는 "실행을 건너뛴다" 가 아니다** — `fatal_run` 이 `had_fatal`/`finished` 를 세운 뒤에도 실행이 계속돼 `expect` 에서 **패닉**했다. graceful fatal 은 **실행기 선택이 그 래치를 먼저 묻는 것**까지가 한 벌이다.
-- ⭐ **사다리를 빌드마다 다르게 읽어라** — 폴백이 있는 빌드에서 거부를 `exit≠0` 으로 만들면 **correct-support → loud 하강**이다(폴백은 느린 답이지 틀린 답이 아니다). 폴백 대상이 **컴파일되지 않은** 빌드에서만 선택지가 `loud` 아니면 `wrong` 이 되고, 거기서만 승격이 상승이다.
-
-### ⚠️ `cmd | tail` 뒤의 `$?` 는 **`tail` 의 종료코드다** — 게이트를 그렇게 적으면 컴파일 실패가 초록으로 보인다 (2026-08-16 · §5.1-aq)
-
-- **실사고**: `cargo clippy … 2>&1 | tail -3; echo "CLIPPY=$?"` 로 게이트를 돌렸고 **`CLIPPY=0`** 이 찍혔다. 실제로는 `error: could not compile ... (test "backend_equiv")` 였다(떠 있는 doc 주석). 출력에 에러 줄이 보이는데도 판정이 0 이라 **하마터면 그대로 커밋**할 뻔했다.
-- ⇒ **게이트는 파이프 없이 파일로 리다이렉트하고 종료코드를 따로 잡아라.** `cargo … > /tmp/x.log 2>&1; T=$?` · 부득이 파이프면 zsh `${pipestatus[1]}` / bash `${PIPESTATUS[0]}`.
-- ⭐ **§5.1-ao 와 같은 부류다** — 그때는 배터리의 결과 파서가 `TIMEOUT` 을 못 봤고, 이번엔 게이트의 종료코드 자체가 엉뚱한 프로세스 것이었다. **판정을 읽는 경로가 실패 모드보다 좁으면 초록은 정보가 아니다.**
-
-### ⭐⭐ 배터리의 킬러 탐지는 실패 모드보다 넓어야 한다 — `FAIL` 만 보면 **행/타임아웃/크래시가 SURVIVED 로 보고된다** (2026-08-16 · ROADMAP §5.1-ao)
-
-- **실사고**: A4-c 배터리의 케이스 D(`wait fork` 의 `resume_bb` 를 0 으로)가 **SURVIVED** 로 나왔다. 손으로 걸어 보니 **설계가 무한 루프**가 된다(블록 0 재개 = fork 재실행 · 실측 출력이 t=2672 까지 계속 늘었다). 러너가 `FAIL` 로 시작하는 줄만 킬러로 셌는데 **nextest 는 그것을 `TIMEOUT` 으로 보고**한다.
-- ⇒ **탐지를 `FAIL`·`TRY 1 FAIL`·`TIMEOUT`·`SIGSEGV`/`SIGABRT`/`ABORT`·`LEAK-FAIL` 전부로 넓혀라.** §5.1-aa 가 *"배터리의 필터가 킬러보다 좁으면 SURVIVED 는 정보가 아니라 잡음이다"* 라고 적은 것의 두 번째 형태 — 그때는 **테스트 필터**였고 이번엔 **결과 파서**다.
-- ⚠️ **그리고 무한 루프는 값싼 kill 이 아니다** — `.config/nextest.toml` 의 `terminate-after 4×60 s` 가 잡아 주지만 그 4분 동안 자식 프로세스가 파이프로 계속 찍는다. 케이스가 hang 을 만들 수 있으면 **배터리에서 빼고 손으로 한 번만 재라**(§5.1-ae 의 33 GB 사고와 같은 자리).
-
-### ⭐⭐ 뮤테이션 배터리는 `--workspace` 로 돌려라 — 비용은 링크이고, 테스트 필터는 그걸 못 줄인다 (2026-08-12 제정 · **2026-08-15 정정** · ROADMAP §5.1-h/-am)
-
-- **실측**: 전 워크스페이스 한 패스 = **rustc 재링크 ~8분 + 실제 테스트 ~30초**. 원인은 개수다 — `cli` 통합 테스트 **376 바이너리** vs `sim-engine` **32**(`ls crates/*/tests/*.rs | wc -l`). 소스 한 줄을 바꾸면 442개가 전부 다시 링크된다.
-- ⚠️⚠️ **이 항목의 원래 결론(`-p sim-engine` 으로 스코프하라 · "tier-3 의 킬러는 전부 거기 산다")은 거짓이고 배터리 한 패스를 통째로 버렸다.** tier-3 슬라이스는 이빨을 **절대 앵커**로 심고 절대 앵커는 `crates/cli/tests/*.rs` 다 — A4-a(프로세스 fork)는 **킬러가 전부 `cli::fork_join`** 이라 `-p sim-engine` 이면 **7 케이스 전부 SURVIVED** 로 나온다.
-- ⚠️⚠️ **그리고 그 "고침" 이 두 번째 함정이다** — `-p sim-engine -p cli --test fork_join --test obs` 는 **`--test` 가 선택된 모든 패키지에 걸려** sim-engine 의 유닛 테스트를 통째로 뺀다(**58 개**가 돌았다, 5457 이 아니라). **`-p A -p B --test X` 를 절대 쓰지 마라.**
-- ⇒ **배터리는 `cargo nextest run --workspace --locked --no-fail-fast`.** 케이스당 비용은 어차피 **빌드**가 지배하므로 필터가 아끼는 것은 ~30초뿐이고, 대신 §5.1-aa 의 실패("**배터리의 필터가 킬러보다 좁으면 SURVIVED 는 정보가 아니라 잡음이다**")를 산다.
-- ⚠️ **사전 `cargo build --tests` 를 넣지 마라** — `nextest` 가 어차피 빌드하므로 패스가 두 배가 된다.
-- ⚠️ **폴링에 `pgrep -f "<script>.sh"` 를 쓰지 마라** — 대기 셸의 명령줄에 그 문자열이 들어 있어 **자기 자신을 매치**하고 교착한다. **PID 로 기다려라**(`while kill -0 $PID; do sleep …; done`).
-- ⚠️ **`cargo nextest` 를 빌드 도중에 죽이면 잠금이 남아** 다음 런이 0% CPU 로 수십 분 블록된다. 증상은 `ps -o stat` 이 `S` 인데 누적 CPU 가 몇 초뿐이고 rustc 자식이 없는 것.
-
-### ⭐⭐ census 는 *무엇이* 거절되는지만 말한다 — *그것이 값을 내는지*는 프로파일이 말한다 (2026-08-10 · §4.5.329)
-
-- **거절 목록이 남아 있다는 것이 그 축에 값이 있다는 뜻이 아니다.** 유일 루트 admission 93.8%, 잔여는 대부분 폭·부호 불일치 — 그런데 프로파일을 재니 **제네릭 트리워커가 이미 2.2%** 였다. 즉 그 축을 전부 열어도 상한이 2.2%다. **구현하기 전에 재라.** (§4.5.326 은 "가족을 닫으려면 census 를 재라" 였다. 이것은 그 다음 단계다 — **census 다음은 프로파일이다.**)
-- ⭐ **"공유 함수를 고쳤으니 모든 층이 이득"은 측정 전에는 주장이 아니다.** 정본 `truthiness` 를 ≤64비트 O(1) 로 만들며 세 층 모두 빨라진다고 적었는데, 실측은 **네이티브만**(3.1%) 이었다 — ②층은 자체 인라인 사본을 갖고 있었고 인터프리터는 조건 비중이 작다. 파급을 적기 전에 **각 층에서 그 함수가 실제로 몇 %인지** 확인하라.
-- ⭐ **등가성은 재진술 없이 증명할 수 있다.** 빠른 경로와 느린 경로가 한 함수 안에 있으면, **같은 비트를 두 폭으로 물어라** — 4비트(빠른 경로)와 상위가 0인 128비트(루프). 그러면 **루프 자신이 오라클**이고 테스트 안에 규칙의 사본이 없다.
-- ⭐ **핀은 기록이 아니라 유도여야 한다.** 판정 분포를 `(175, 1, 80)` 으로 박되 *왜* 그 수인지 함께 적어라(비트마다 0/1/x/z ⇒ True = 256−3⁴). 유도가 없으면 다음 사람은 그 숫자가 옳은지 알 수 없고, 틀린 값으로 다시 핀할 뿐이다.
-
-### ⭐ 후보가 둘이면 **둘의 천장을 먼저 재고** 순서를 정하라 (2026-08-10 · §4.5.327)
-
-- **census 가 표적 둘을 남기면 개수로 고르지 마라 — 각자의 천장을 판별 설계로 재라.** `Select` 73 vs `Ternary` 39 였는데, 재보니 손해는 `Select` 가 크고(0.83× vs 0.98×) 기계는 `Select` 가 단순했다(상수·범위내 창 = 시프트+마스크). 개수로 골랐어도 같은 답이었겠지만, **그것은 우연이지 논거가 아니다**.
-- ⭐⭐ **게으름은 값이 아니라 진단의 문제다.** 제네릭 `?:` 는 **취한 가지만** 평가한다. 즉시평가로 바꾸면 값은 같아도 안 취한 가지의 `LoadIdx` 가 **없던 E4002 를 낸다** — loud 가 늘어나는 것도 발산이다. 어떤 노드를 admit 하기 전에 **제네릭이 무엇을 평가하지 않는지** 확인하라. ⭐⭐ **§4.5.328 에서 이것이 가설이 아니라 실물이었다** — ②층(기본 백엔드)의 삼항이 정확히 같은 즉시평가인데 가드가 없어, 안 취한 가지의 `mem[9]` 가 `E4002` 를 내고 **`--backend vm` 만 exit 1** 이었다(interp·native·iverilog 는 0).
-- ⭐⭐ **성질 앵커는 네가 바꾼 백엔드가 아니라 모든 백엔드에 대고 돌려라.** 위 결함을 찾은 것은 새 admission 을 증명하려고 지은 앵커였고, 찾은 이유는 그것이 **두 백엔드 위에서** 돌았기 때문이다. 한쪽만 핀했으면 형제 백엔드의 같은 결함은 그대로 남았다.
-- ⭐ **아무것도 결정하지 못하는 행은 없는 것보다 나쁘다 — 커버리지처럼 읽힌다.** 미지-조건 병합 전용 행을 두 번 지었는데 둘 다 **실측 잉여**였다(65,536 상태 스윕이 이미 모든 일치 패턴에 도달한다). 지우고 **왜 없는지**를 소스에 적었다. 행을 넣기 전에 *그 행이 없으면 사는 뮤턴트*를 하나 대라.
-- ⭐ **거절 arm 에 행이 없으면 그 거절을 지키는 뮤테이션이 전부 공허하다.** 범위 검사를 약화시키는 뮤턴트를 죽인 것은 배터리의 `a[4:1]`(한 비트 걸치는 창) 한 행이었다. **admit 되는 행만으로 이루어진 배터리는 admission 을 시험하지 못한다.**
-- ⭐ **공유 함수의 뮤테이션은 차분이 원리적으로 못 잡는다**(양쪽이 같이 움직인다) — `-:` 의 `- width + 1` 을 지운 뮤턴트를 죽인 것은 **CLI 절대 앵커**였다. 규칙을 공유로 옮길 때는 그 규칙을 지키는 **절대값 앵커**가 있는지 확인하라.
-
-### ⭐⭐ 게이트를 끄는 실험(ablation)은 **그 게이트의 축만** 잰다 — 가족 전체를 닫지 마라 (2026-08-10 · §4.5.326)
-
-- **한 축을 무력화해 0 이 나왔다고 그 축이 속한 가족이 0 인 것이 아니다.** doc-21 개정 6 은 `wprog` 의 **폭·부호 균일 게이트**를 끄고 8설계에서 0 을 재고 *"S2 admission 은 레버가 아니다 → S2 를 닫는다"* 고 적었다. 그런데 최악 형태(배열 읽기)는 균일성이 아니라 **arm 이 아예 없는 노드**(`Concat`)에서 거절되고, **arm 없는 노드는 그 게이트를 꺼도 그대로 거절된다** — 그 실험이 원리적으로 볼 수 없는 축이었다. `Concat` arm 하나로 배열 읽기 0.94→**1.26×**, 메모리 0.92→**1.85×**.
-- ⭐⭐ **닫으려면 ablation 이 아니라 census 를 재라.** 거절 지점(`compile_node` 의 fallthrough)에 **노드 종류를 찍는** 10분짜리 계측이 즉시 축을 분리했다(`Concat` 32·`Select` 73·`Ternary` 39). *"왜 거절되는가"* 의 집계는 *"한 원인을 껐을 때"* 의 측정보다 **싸고 완전하다**.
-- ⭐ **가족을 닫는 문장에는 "무엇을 재서 무엇을 못 쟀는가" 를 같이 적어라.** 개정 6 은 잰 것(균일 게이트)과 닫은 것(admission 전체)의 범위가 달랐고, 그 격차가 문서에 남지 않아 이틀 뒤에야 드러났다.
-- ⭐ **초록인 핀 안에 다음 슬라이스가 적혀 있을 수 있다.** 이번 답은 `s2_specialized_offsets_...` 의 실패 메시지가 §4.5.308 이래 **문자 그대로** 담고 있었다(*"a `Concat` arm in `wprog` would win them back"*). 핀이 초록이면 아무도 그 메시지를 안 읽는다 — **큐를 다시 고를 때 핀 메시지를 grep 하라.**
-- ⭐ **필터가 있는 하네스는 필터된 축에 구조적으로 눈멀어 있다.** `both_backends_print` 는 `out|t=` 만 남기므로 진단에 눈멀었고, **진단 순서**를 재려던 새 테스트 둘이 **빈 스트림과 비교해 처음에 통과**했다. 하네스를 재사용하기 전에 그것이 무엇을 **버리는지** 읽어라.
-- ⭐⭐ **행이 뮤턴트를 죽이는지는 위치가 정한다.** signed 파트의 부호확장 버그를 잡으려고 `{sa, b}` 를 지었는데 **구조적으로 면역**이었다(fill 이 결과 폭 위로 나가 마스크가 지운다). 죽인 것은 `{a, sa, b}` — **중간 위치**다. "이 성질을 시험한다" 는 행을 지을 때, 그 행에서 **버그의 증상이 나갈 자리가 있는지** 확인하라.
-
-### 최적화의 표적은 프로파일이 아니라 **census** 가 정한다 (2026-08-10 · §4.5.332)
-
-- ⭐⭐ **프로파일은 "어디가 뜨거운가" 를 말하고, census 는 "그 안에서 어느 형태가 도는가" 를 말한다 — 그리고 후자 없이 고르면 1.4% 를 최적화한다.** §4.5.332 는 프로파일이 쓰기 퍼널을 18.9% 로 지목한 뒤 **비트 직렬 루프**를 고치려 했다. 착수 전 10분 계측이 그것을 버렸다: 실제 write 4,058,223 건 중 비트 직렬은 **57,130건(1.4%)** 이고 **98.6% 가 통짜 원소 저장**이었다. 표적은 루프가 아니라 **거기까지 가는 길 전체**였다. **뜨거운 함수를 열었으면, 그 함수 안에서 실제로 도는 가지의 수를 세라.**
-- ⭐⭐ **위임하는 정본을 자기 자신과 비교하는 차분은 실패할 수 없다.** 빠른 경로를 정본 안에 넣는 순간, 정본을 통과하는 모든 기존 테스트는 **빠른 경로만** 시험한다. 진입점을 **리터럴 `bool` 파라미터**로 켜고 끄는 테스트 전용 진입점을 만들어라(프로덕션 호출부는 리터럴이라 브랜치가 접힌다) — 그것이 차분의 반대편이다.
-- ⭐⭐ **store point 를 새로 만들면 그 자리가 소유한 채널을 **전부** 비교하라.** 값(`buf`)만 비교하는 스냅샷은 dirty 집합·엣지 종류(`slot_edge`)·마지막 blocking writer·VCD 대기열·지연 진단 큐에 눈멀어 있다. §4.5.332 의 스냅샷은 여섯을 전부 담고, 그래서 `note_change` 제거·엣지 누적 제거·unk 평면 별칭이 **직접** 죽는다.
-- ⭐⭐ **내 테스트 설계를 리뷰하는 것이 리뷰의 일부다 — 그리고 그것이 구멍 둘을 찾았다.** ⓐ 테스트 설계에 **엣지 감도가 한 줄도 없어서** `is_edge_target` 이 전부 false 였고, 글리치 캡처와 `accumulate_edge` 는 20,160행 스윕에서 **한 번도 실행되지 않았다**. ⓑ `Value::zeros` 는 `is_real`/`is_str` 을 절대 세우지 않는데 **진입점 admission 의 논거가 바로 그 두 플래그**였다 — 즉 **주장에는 행이 0개**였다. 막기 전에는 뮤테이션 셋이 *다른 테스트의 무한루프*로만 죽었다(스위트가 내 테스트에 도달조차 못 한다). **"이 코드가 도는가" 를 단언으로 박아라**(엣지 타깃 수 > 0).
-- ⭐ **뮤테이션이 무한루프로 죽으면 그것은 "내 테스트가 잡았다" 가 아니다.** 스위트가 멈추면 어느 행이 판별했는지 알 수 없다. 그 뮤테이션은 **내 테스트만 필터해서** 다시 돌려라.
-- ⭐ **생존한 뮤테이션이 "등가" 인지 판단하려면 판별자가 어디에 있을지 먼저 물어라.** `resize_word` 의 폭-0 가드는 프로덕션에서 구분 불가였지만(모든 생성자가 `top_mask(0)=0` 으로 마스킹한다) **일반 경로(>64비트)** 가 판별자였다. 판별자를 못 찾으면 그때 등가라고 적어라 — 순서가 반대면 공허한 행을 짓거나 실제 결함을 놓친다.
-- ⚠️ **절차: 뮤테이션 러너를 두 개 띄우면 트리가 오염된다.** 죽은 줄 알았던 첫 러너가 살아 있어 둘이 같은 파일을 번갈아 쓰고, 결과가 둘 다 무의미해지며 **한 뮤테이션이 트리에 남았다**(두 번). 대책 셋: ⓐ 러너는 결과를 **줄마다 flush** 한다(죽으면 거기까지는 남는다), ⓑ 시작 전에 **원본을 트리 밖에 복사**해 둔다(`finally` 는 SIGKILL 을 못 잡는다), ⓒ 러너를 다시 띄우기 전에 **PID 로** 기존 것을 죽였는지 확인한다(`grep -c` 는 인용부호 때문에 거짓 0을 낸다).
-
-### 문맥 폭을 좁히는 것과 넓히는 것은 같은 코드가 아니다 (2026-08-08 · 사이즈 캐스트)
-
-- **IEEE §11.8.1 의 문맥 전파는 `max(self, context)` 다 — 문맥은 넓히기만 한다.** 문맥 폭을 그대로 피연산자에 주는 코드는 **넓힐 때만** 맞고, 같은 코드가 좁히기도 하면 조용히 다른 계산이 된다(`2'(k%4)` 가 제수 `4` 를 `0` 으로 만들어 `xx`). 문맥 폭을 내려보내는 자리를 고칠 때는 **좁힘/같음/넓힘 세 방향을 다 재라** — 한 방향만 재면 나머지 둘은 우연히 맞거나 조용히 틀린다.
-- **저비트 폐쇄는 2-state 에서만 성립한다.** `+ - * & | ^ <<` 는 결과 저 N비트가 피연산자 저 N비트로 결정되지만, **`x` 가 하나라도 있으면** IEEE 는 결과 전체를 `x` 로 만들므로 좁혀서 계산하면 x 가 사라진다. "이 연산자는 좁혀도 안전" 이라는 논증에는 **4-state 단서를 붙여라**.
-- ⭐⭐ **이미 깨진 base case 로는 두 결함을 못 가른다.** 리뷰어가 신규 결함의 증상을 보고도 기각했다 — 자기 base case(`40'({u1.k})`)가 **main 에서 이미 틀려서** 신규 결함이 그 뒤에 숨었다. 결함 A를 분리하려면 base case 는 **A 이외의 축에서 정상임이 확인된 것**이어야 한다(여기선 `u1.k[7:0]` 가 main 에서 맞으므로 갈랐을 것이다).
-- ⭐ **"게이트가 그 형태를 거절한다" 는 형태별로 재라.** 한 철자(whole-net 계층 읽기)가 거절된다고 그 가족 전체가 거절되는 것이 아니다 — 원소·비트/부분선택·string 은 그대로 들어와 같은 결함을 낸다.
-- ⭐⭐ **"이 값이 정하는 것은 X 뿐" 이라고 쓰기 전에 그 값의 소비자를 grep 하라.** 폭 판정용 임시값에 `u32::MAX` 를 넣으며 *"정하는 것은 어느 가지가 도는가뿐"* 이라 적었는데, 같은 값이 몇 줄 아래에서 **fill 사이징 문맥**으로도 쓰이고 있었다 — 결과는 값 회귀 + `.velab` 22× + **RSS 10 MB → 1.4 GB**. 센티넬을 쓰려면 그 변수의 **모든 소비자**가 센티넬을 견디는지 먼저 확인하고, 못 견디면 **두 값으로 쪼개라**(판정용과 실제 폭).
-- ⭐⭐ **스윕이 넓다고 판별력이 있는 것이 아니다.** 내 1675칸 스윕이 "회귀 0" 을 냈고, 같은 코드를 리뷰어가 **자기 형태로** 74,400칸 재니 **1,586 회귀**가 나왔다. 차이는 크기가 아니라 **형태**였다(내 피연산자 쌍에 그 조합이 없었다). 스윕을 짤 때 셀 수를 늘리기 전에 **어떤 축을 곱하고 있는지** 적어라 — 빠진 축은 몇만 칸으로도 안 보인다. 그리고 **자기 스윕으로 "회귀 0" 을 주장하지 마라**: 그것은 리뷰가 다른 형태로 재봐야 서는 주장이다.
-- ⭐ **넷 중 하나만 갈리면 그것이 신호다.** 같은 규칙으로 묶은 연산자 넷 중 셋이 정상이고 하나가 아니면, 공통 규칙이 틀린 게 아니라 **그 하나의 성질**(여기선 `>>>` 의 부호가 연산 자체를 바꾼다)을 놓친 것이다.
-- ⭐⭐ **"오답이 줄었다" 는 "회귀 0" 이 아니다.** 스윕에서 틀린 칸 수가 줄어도 그 안에는 **원래 맞던 칸이 틀려진 것**이 섞일 수 있다. 실측: 한 수정이 886칸을 고치고 856칸을 깼는데 총계만 보면 거의 같아 보였다. 성능이든 정확성이든 **fixed 와 regressed 를 따로 세라** — 총계는 두 방향을 상쇄해 숨긴다.
-- ⭐⭐ **문맥을 버리는 것으로 문맥 오용을 고치지 마라.** "문맥 폭이 잘못 좁힌다" 를 "이 노드는 자기결정으로 취급" 으로 고치면 **폭과 함께 부호도** 잃는다(문맥의 signedness 는 무조건 전파된다). 실측: 좁힘 397칸을 고치면서 넓힘·부호 245칸을 깼다 — **개선이 아니라 맞바꾸기**이고 사다리가 금지한다. 고칠 것은 전파하는 **값**(`max(self,N)`)이지 전파 자체가 아니다.
-
-### 스윕은 크기가 아니라 축이다 — 그리고 빠진 축은 자기가 없다고 알려주지 않는다 (2026-08-09 · §4.5.318)
-
-- ⭐⭐ **한 슬라이스에서 "0 regressed" 를 세 번 주장했고 세 번 다 리뷰가 다른 형태로 뒤집었다** — 1,764칸(빠진 축: unsized fill) → 1,620칸(빠진 축: 중첩 폭-민감 부분식) → 6,720칸. 칸 수를 늘리는 것은 방어가 아니다. 스윕을 짜기 전에 **곱하는 축의 목록을 적고**, 그 목록을 리뷰어에게 넘겨 *"여기 없는 축"* 을 요구하라. 축 목록을 스크립트 상단에 주석으로 적어도 부족했다 — 적은 축만 곱했기 때문이다.
-- ⭐⭐ **`None` 폴백은 결함을 고치는 게 아니라 가린다.** 어떤 분류기가 "모르겠다" 를 답해서 보수적 경로로 떨어지고 있다면, 그 경로가 **맞아서** 정답이 나오는지 **우연히** 맞는지는 다른 질문이다. 분류기를 똑똑하게 만드는 순간 가려져 있던 하위 결함이 전부 드러나고, **그것들도 내 회귀로 계산된다**(§4.5.318: leaf 해석을 붙이자 fill 60칸 → 그걸 고치자 중첩 폭 42칸 → 함수 leaf 이중 평가 → formal 부호). 분류기를 넓히기 전에 **넓힌 뒤 도달하게 될 경로**를 먼저 감사하라.
-- ⭐⭐ **그리고 "모른다" 는 틀린 답의 대체재가 아니다.** 분류기가 **틀린 답**을 내고 있을 때 그것을 `None` 으로 바꾸는 것은 고치는 것이 아니다 — `None` 은 보수적 경로로 라우팅하는 **별개의 지시**이고, 그 경로가 기계를 떨어뜨릴 수 있다. §4.5.320: unpacked 배열 원소를 무부호라 답하던 자리를 `None`(= "이 leaf 는 못 푼다") 로 바꿨더니 캐스트가 §4.5.212 문맥 하강을 통째로 건너뛰어 **1,560칸 중 170칸이 깨졌다**. 답은 **원소의 부호**였다. 세 상태를 구분하라 — *틀린 답* · *모른다* · *맞는 답*.
-- ⭐⭐ **한 자리에서 여러 성질을 적용해야 한다면, 부분 적용이 미적용보다 나쁠 수 있다 — 그리고 그 판정은 측정으로만 난다.** §4.5.323: 인라인 함수의 인자 바인드는 formal 의 **폭·부호·2-state** 셋을 적용해야 하는데(프레임 경로는 formal 이 넷이라 셋을 공짜로 받는다) 부호만 넣으면 45칸이 회귀하고, 폭까지 넣으면 다른 경로의 선행조건에 걸린다. **셋이 서로의 전제**이므로 "일단 하나만" 이 성립하지 않는다. 착수 전에 물어라: *이 자리에서 소비자가 기대하는 성질이 몇 개이고, 하나만 켜면 나머지와 모순되는가?*
-- ⭐⭐ **선행조건이 다른 코드 경로에 있으면 그 경로를 먼저 고쳐라 — 우회는 라운드마다 새 회귀를 낳는다.** §4.5.323 은 절단이 상수를 접어 §4.5.310 의 상수-인덱스 carve-out(인덱스를 무부호로 읽는다)에 착지하는 것을 **우회하려다** 3라운드 연속 회귀를 냈다: 노드 종류로 키잉한 skip 이 같은 값의 여섯 철자를 놓쳤고(§4.5.310 이 **이미 기록한 함정**의 재발), 그 skip 은 반대 방향으로 정답 수정도 막았다. **우회 술어가 두 번 틀리면 그것은 술어 문제가 아니라 순서 문제다.**
-- ⭐ **후퇴안도 측정하라 — "한 번도 회귀 안 한 교집합" 은 가설이지 사실이 아니다.** 같은 슬라이스에서 "안전한 부분집합" 으로 좁힌 안이 오히려 **FIXED 303→215 · REGRESSED 0→80** 이었다(중첩 바인드가 서로를 먹인다). 스코프를 줄이는 편집도 편집이고, 전 매트릭스를 다시 돌려야 한다.
-- ⭐⭐ **조건부 스탬프는 조건이 거짓일 때 봉인이 없다는 뜻이다.** §4.5.321: 인라인 반환의 `$signed`/`$unsigned` 를 *"이미 그 부호면 노드를 아끼자"* 로 조건화했더니, 스탬프가 생략되는 바로 그 경우가 **아무것도 자기결정으로 만들지 않는 경우**였다(1,440칸 중 48칸, 전부 그 한 구멍). 노드 하나를 아끼는 최적화가 **성질을 조건부로 만들면** 그 성질은 사라진 것이다 — 불변식을 주장하는 꼬리는 **무조건**이어야 하고, 아끼고 싶으면 값-항등을 따로 측정하라. 검출법: *"이 스탬프가 안 붙는 입력은 무엇이고, 그때 무엇이 성질을 지키는가?"*
-- ⭐ **우연히 맞는 절반이 있으면 결함 특성화가 그 축에 눈멀게 된다.** 위 48칸은 전부 **무부호** 반환이었다 — 부호 반환은 무부호 rhs 때문에 스탬프가 "달라서" 붙었고 그래서 **우연히** 봉인돼 있었다. 특성화가 한 값에 100% 몰리면 그것은 규칙이 아니라 **다른 절반이 다른 이유로 살아 있다**는 신호다.
-- ⭐⭐ **경계를 실체화하는 수정은 결함을 만들지 않는다, 드러낸다 — 그러니 게이트를 "모양 목록" 이 아니라 "그림이 믿을 만한가" 로 걸어라.** §4.5.320 이 캐스트에 자기결정 봉인을 넣자 적대 4라운드가 회귀 다섯을 냈고 **전부 한 뿌리**였다: elaborate 가 피연산자의 폭·부호를 틀리게 안다(placeholder·string 은 `None` → 32 를 **지어냄** · 클래스 필드는 핸들넷의 **틀린 `Some(32)`** · 원소는 packed 규칙 적용 · 부호확장 fill 이 피연산자를 두 번 부름). 봉인 전에는 바깥 문맥이 트리를 다시 돌며 그 틀린 그림을 **우연히 상쇄**하고 있었다. 룰 셋: ⓐ **지어낸 `Some` 은 `None` 만큼 위험하다** — 신뢰성 판정은 **두 출처를 대조**해야 한다(`ir_bits_of` vs 정본 폭) ⓑ 특수 케이스를 열거하면 다음 라운드가 다음 케이스를 낸다 ⓒ **PRE 가 맞던 칸이 "우연히" 맞았는지 확인하라** — 상쇄로 맞던 칸은 봉인 뒤 전부 회귀로 보인다.
-- ⭐ **값이 폭에 의존하는 leaf 가 있다.** unsized fill(`'0`/`'1`/`'x`/`'z`)은 "폭을 정한 뒤 값을 읽는" 게 아니라 **폭이 곧 값**이다. "저비트 폐쇄" 나 "좁혀도 같은 계산" 류의 논증은 leaf 의 값이 폭에 불변일 때만 성립한다 — fill 이 있으면 성립하지 않는다.
-- ⭐ **부호 규칙은 대개 range 에 의존하지 않는다.** 선언의 부호를 얻으려고 range 를 접으면 **진단이 난다**(분류기가 프로그램을 바꾼다). 부호 절반을 순수 함수로 추출해 공유하면 재진술 0으로 부작용이 사라진다.
-- ⭐ **뮤테이션이 생존했다고 보고하기 전에, 그 뮤테이션이 실제로 의미를 바꾸는지 확인하라.** 키가 FQ 인 맵에 bare 이름으로 조회하는 뮤테이션은 늘 실패→폴백이라 **등가**다. 등가 뮤테이션의 생존은 이빨 구멍이 아니다.
-- ⭐⭐ **어느 고정된 이름-해석 순서도 규칙이 아니다.** "넷 먼저" 도 "파라미터 먼저" 도 각각 다른 설계를 깬다(§4.5.318: 두 순서가 서로의 킬러를 갖는다). 이름을 푸는 분류기는 lowering 의 **결정 절차 전체**를 따라야 하며, 그 절차에는 인라인 치환 같은 사전 단계도 들어 있다.
-
-### 하강이 연산을 자기 철자로 다시 지으면 이미 있던 게이트를 침묵시킨다 (2026-08-09 · §4.5.317)
-
-- ⭐⭐ **"이 자리는 원래 loud 였다" 를 특수 경로에서 다시 재라.** 크기 캐스트 안의 `4'(u << r)` 은 조용했는데 **캐스트 밖의 똑같은 `u << r` 은 loud** 였다 — 특수 하강이 시프트를 자기 철자로 재구성하면서 일반 경로의 real 게이트를 지나지 않았다. 어떤 노드를 **재구성하는** 코드(문맥 하강·특수화 백엔드·desugar)를 지을 때는, 그 노드가 일반 경로에서 받던 **진단**도 같이 옮겨졌는지 확인하라. 값만 같으면 통과하는 차분은 이것을 못 본다.
-- ⭐⭐ **가드는 "자리" 가 아니라 "퍼널" 이다.** 한 함수(leaf)에 가드를 넣고 완전하다고 적었으나, 같은 하강이 피연산자를 만드는 자리가 **여섯 개**였다. 피연산자를 만드는 지점을 **전부 열거**한 뒤 하나의 함수로 통과시켜라 — "피연산자" 의 두 번째 철자가 곧 게이트가 그것들을 잃는 방법이다.
-- ⭐⭐ **래퍼를 뚫는 술어는 재귀 안에 있어야 한다.** `$signed`/`$unsigned` 는 값의 도메인에 투명한데, 그 투명성을 **호출부의 래퍼**로 구현하면 래퍼가 **연산 아래**에 있는 경우(`Binary{Mul, $signed(r), 2}`)를 못 본다. 최상위에서 한 겹 벗기는 것과 재귀가 매 노드에서 벗기는 것은 다른 술어다.
-- ⭐ **등가 논증은 자기가 인용하는 전제와 함께 늙는다.** *"A 를 B 앞에 두어야 한다"* 는 같은 커밋의 다른 변경이 B 를 무해하게 만들면 **거짓이 된다**. 순서·배치의 근거를 주석에 적었으면, 그 근거를 무효화하는 변경을 같은 슬라이스에서 했는지 커밋 전에 되짚어라.
-- ⭐ **진단은 사용자가 쓴 구문 단위로 세라.** 잎마다 보고하면 `MAX_ELAB_ERRORS` 캡을 N배 빨리 먹어 **무관한 뒤쪽 진단이 사라진다**(실측). 오라클이 몇 건을 내는지가 기준이고, 중복 억제 플래그는 **구문 단위로 저장·복원**해야 중첩된 같은 구문이 자기 몫을 잃지 않는다.
-- ⭐⭐ **형제로는 저장·복원을 시험할 수 없다.** 억제 플래그를 진입 시 리셋하는 설계에서는 **형제**가 구조적으로 면역이라, 형제 쌍 테스트는 복원 코드를 통째로 지워도 통과한다. 저장·복원이 지키는 방향은 **중첩**이다 — 플래그를 소비하는 안쪽이 있고 그 뒤에 바깥쪽이 와야 판별된다.
-- ⭐ **인자 슬롯을 판별하려면 real 을 0번이 아닌 곳에 두어라.** `args[0]` 술어와 `args.iter().any()` 술어는 첫 슬롯이 표적이면 **같은 답**을 낸다. 킬러 설계는 술어가 보는 자리 **밖**에 표적을 놓아야 한다.
-
-### 성능 기록은 재측정 없이 다음 슬라이스의 전제가 될 수 없다 (2026-08-08 · preview/21 그라운딩)
-
-- **비율만 적으면 그 축은 거짓말한다.** `native/vm` 이 0.97× → 0.81× 로 "나빠졌"지만 **native 절대시간은 평평했고 VM 이 1.18× 빨라진 것**이었다. 두 층을 비교하는 수는 **양쪽 절대시간과 함께** 기록하라 — 안 그러면 상대가 개선될 때마다 내 층이 회귀한 것처럼 읽히고, 다음 반복이 없는 회귀를 쫓는다.
-- **기록된 병목은 그 시점의 병목이다.** 큐가 *"남은 병목은 스케줄러"* 라 적어 둔 설계를 실제로 프로파일하니 그것은 **VM 쪽 성질**이었고(`propagate_changes` 40%), native 는 **제네릭 트리워커가 ~50%** 였다. 특수화 백엔드에서 *"내 특수화 코드가 프로파일에 거의 없다"* 는 빠르다는 뜻이 아니라 **그 경로에 안 들어간다**는 뜻이다(§2 룰의 프로파일 쪽 쌍둥이).
-- **대조군은 커밋된 것으로 골라라.** gitignore 된 서드파티 벤치의 숫자는 재현되지 않는다. 정성적 결론(균일 폭 = 특수화 평가기 지배 / 혼합 폭 = 제네릭 지배)이 **커밋된 벤치만으로도 서도록** 대조 쌍을 구성하면 기록이 살아남는다.
-- **macOS 프로파일 함정**: 이 저장소의 `[profile.release]` 는 `strip = "symbols"` 라 `/usr/bin/sample` 이 전부 `???` 를 낸다. `CARGO_PROFILE_RELEASE_STRIP=none CARGO_PROFILE_RELEASE_DEBUG=1` + 별도 `CARGO_TARGET_DIR` 로 짓고, "Sort by top of stack" 절을 파싱하라(호출 트리 절을 세면 루트가 전부를 먹는다).
-
-### 루프 파일에서 이관 (2026-08-08 · §4.5.314 압축) — 절차가 아니라 코드베이스 규칙이다
-
-- **공유 의미(변환·리사이즈·폭 규칙)를 고치기 前에 primitive 의 호출자를 전수 grep 하라 — 그 열거가 곧 스코프 결정이다.** 2분이면 되고 라운드 넷을 아낀다. 그리고 **보정 코드를 소비자에 두지 마라**: 규칙이 두세 철자로 갈리면 서로를 가려 **어느 것도 뮤테이션으로 안 죽는다**(실측: 셋 다 생존).
-- **커버리지 정확 핀을 floor 로 완화하지 마라**(`kernel_tests.rs` 에 이유가 있다 — 참값이 자란 뒤 절반으로 떨어져도 floor 는 통과). 핀이 자주 깨지면 답은 완화가 아니라 **게이트를 싸게 만드는 것**이다.
-
-### 타입이 다른 테이블에 값을 실으면 이름만 풀린다 (§4.5.314) — **그리고 부분 지원은 silent-wrong 을 맞바꾼다**
-
-- **어떤 값을 "그 값이 아닌 타입"의 조회 테이블에 등록하면 NAME 은 resolvable 해지고 VALUE 는 틀린다.** i64 테이블(`hier_params`)에 real 을 실으면 `a.P` 는 풀리지만 `a.P/2` 가 정수 나눗셈을 한다 — **loud 였던 것이 조용히 틀린 값이 된다**. 같은 모양이 한 슬라이스에서 **네 번** 나왔다(fill 을 32비트로 접기 · real 을 i64 로 · fill override 를 `value:None` 로 보내 모든 가드를 무력화 · 인터페이스 republish). 저장 테이블을 고를 때 물어야 할 것은 "이름이 풀리는가"가 아니라 **"소비자가 이 표현으로 정답을 낼 수 있는가"** 다.
-- **leaf 를 패치하는 해소는 문맥이 이미 결정된 뒤에 온다.** 지연 계층 참조는 lowering 시점에 placeholder 라, 그것을 감싸는 캐스트·concat·폭 문맥은 **placeholder 를 보고** 정수 경로를 굽는다. 나중에 leaf 만 real Const 로 바꾸면 소비자는 **비트를 읽는다**(`int'(a.P)`=0 · `longint'`=IEEE-754 워드). ["문맥 경계에서 변환하라, leaf 가 아니라"](#) 와 같은 뿌리 — **해소가 enclosing 노드를 다시 내리지 못하면 그 지원은 지을 수 없다.**
-- **두 표현을 다 지어서 재고, 둘 다 맞바꾸기면 축 전체를 빼라.** 정확도 서열은 silent-wrong 끼리의 교환을 금지하므로, 부분 지원이 *"이 문맥은 고치고 저 문맥은 깨는"* 형태로만 가능하면 정답은 더 나은 절반이 아니라 **honest-loud + ROADMAP defer** 다. 빼는 것도 결과이고, 그 판단은 **둘 다 측정한 뒤에만** 할 수 있다.
-
-### 판별하지 못하는 값으로 쓴 테스트는 기능을 증명하지 않는다 (§4.5.314)
-
-- `parameter real P = 4` 로 쓴 테스트는 `4/2 == 2` 라서 **정수 도메인과 실수 도메인을 가르지 못한다**. 그 한 글자 때문에 "PRE 에서 동작하던 기능" 이라는 잘못된 전제가 서고, 그 위에서 내린 결정이 하강을 하나 만들었으며, 라운드 3까지 아무도 못 봤다. **테스트 값은 갈리는 값으로 골라라** — 나눗셈이면 홀수, 폭이면 32를 넘겨서, 부호면 음수로. 이미 있는 룰("갈리는 연산을 포함하라")의 **피연산자 쪽 쌍둥이**다.
-- ⭐⭐ **판별 실패는 값뿐 아니라 방향에서도 난다** (§4.5.315). 두 피연산자의 폭이 달라질 수 있는 코드에 판별 행을 넣으면서 `a && (a<b)`(넓은 쪽이 왼쪽)를 골랐는데, 그것은 **무해한 방향**이다 — 작은 값을 넓게 다시 읽으면 0비트만 붙는다. 위험한 방향은 `(a<b) && b` 이고, 그 행이 없으니 "두 피연산자에 같은 폭을 쓴다" 는 뮤테이션이 5280 테스트를 통과했다(그리고 실 RTL 은 그 형태를 만든다). **비대칭한 파라미터를 시험할 때는 양쪽 순서를 다 넣어라** — 한쪽만 넣은 것은 넣지 않은 것과 같을 수 있다.
-- ⭐⭐ **슬라이스의 correctness 논거 자체에 테스트를 지어라** (§4.5.315). *"이 최적화가 옳은 이유는 X 이기 때문"* 이라고 주석에 쓴 X 는 테스트가 아니다. `&&` 를 즉시 평가해도 되는 근거(*"제네릭도 단락하지 않는다"*)를 문단으로 적었지만 핀이 없어서, 단락을 넣는 뮤테이션이 전 스위트를 통과하며 native 를 **loud → SILENT**(exit 1→0)로 만들었다. **논거를 뒤집는 뮤테이션을 상상하고, 그것을 죽이는 설계를 같은 커밋에 넣어라.**
-- ⭐⭐ **그리고 한 칸을 고쳤다고 축을 안 것이 아니다.** 위 사고 직후 나는 "판별자는 값(`P = 4`)이다" 로 일반화했고, 그 위에서 기능을 뺐다. **다음 라운드가 매트릭스를 세어 반증했다** — 판별자는 값이 아니라 **연산자**(분수 몫 나눗셈)였고, 실제 분포는 **72칸 정답 / 6칸 오답**이라 내가 한 것은 회귀였다. **"이 표현이 몇 칸에서 맞는가" 는 세어야 알 수 있고, 기능을 빼거나 넣는 결정은 그 수 없이는 내리지 마라** — 소비자 × 값의 작은 매트릭스면 충분하다(13×6 이면 몇 분).
-- **되돌리기도 편집이다.** revert 가 인접한 테스트·문서·헬퍼를 같이 지우지 않았는지 **삭제 후 grep 으로 확인**하라. 이 슬라이스는 되돌리다 회귀 테스트 하나를 지웠고, 그 손실은 **전 스위트 초록**이라 보이지 않았다(그 문구를 되돌리는 뮤테이션이 그동안 통과했다). 삭제 범위를 줄 단위로 특정하고, 지운 심볼 이름을 grep 해 남은 참조를 확인하라.
-
-### 워커 완전성과 정지 상태 (§4.5.269~271) — 빠진 arm 하나가 모든 이름을 거부한다
-
-- **표현식 워커의 `_ => false` 는 "이 노드에 대해 모르겠다"가 아니라 "이 노드는 무엇이든 참조할 수 있다"이다.** 보수적 accept 게이트에서 그 답은 **질문한 이름과 무관하게** 나오므로, 체인 메서드(`s.substr(a,b).atoi()`) 하나가 그 블록의 **뒤에 선언된 모든 로컬**을 거부한다 — 대상 변수 자신까지. 새 `ExprKind` 를 추가하면 **모든 워커에 arm 을 넣었는지** 확인하라. 리포터가 관측한 "체인을 두 문장으로 쪼개면 통과"는 이 구조의 지문이다.
-- **콜 경로의 머리는 함수 이름일 수도 리시버일 수도 있고, 세그먼트 수가 그걸 가른다.** `f(x)` 의 머리는 함수지만 `s.atoi()` 의 머리는 **읽히는 변수**다(`pkg::f()` 는 별도 노드라 다중 세그먼트는 항상 dot-path). 인자만 보는 워커는 `q.size()`·`a.push_back(x)` 를 전부 놓치고, 그 위에 선 scope-leak 검출기는 **블록 밖 참조를 못 봐서** 조용히 잘못된 넷을 읽게 한다.
-- **정지(포기) 상태를 값으로 만들어라 — 그러면 진단이 저절로 정확해진다.** 워크가 `None` 으로 포기하면 호출자는 **왜·어디서**를 모르고, 인쇄할 수 있는 위치는 선언뿐이다. 리포터가 진단 21건을 정확한 위치와 함께 받고도 **하나도 축소하지 못한** 이유가 그것이다. `Result<T, GiveUp{span, reason}>` 로 바꾸면 note 한 줄이 나오고, **그 note 가 다음 라운드의 축소 도구**가 된다.
-- **"안전한 상태에 도달했다"는 판정을 최상위에서만 하지 마라.** DA 워크는 문장 사이에서 `if assigned { return true }` 를 했지만 **중첩 구조 안에서는 안 했다** — 그래서 루프 밖 대입은 통하고 루프 안 대입은 안 통했다(리포터의 in-situ 관찰 그대로). 불변식이 "한 번 참이면 계속 참"이면, **모든 재귀 지점**에서 그것을 쓸 수 있어야 한다.
-- **접두사가 붙었다는 이유만으로 문장 형태를 모르는 것으로 취급하지 마라.** `#1 y = 3;` 은 `y = 3;` 만큼도 다른 이름을 참조하지 않는데 `delay.is_some()` 하나로 "미검증"이 되어 워크 전체를 끝냈다. 타이밍 접두는 **표현식이 더 있을 뿐**이다.
-- **우연히 걸려 있던 loud 를 걷을 때는 그것이 무엇을 막고 있었는지 재라.** 타이밍 형태를 모델링하자 **generate 스코프 넷과 이름이 겹치는 블록 로컬**의 회귀 핀이 깨졌다 — 그 핀은 `#1` 이 catch-all 로 떨어지는 우연에 기대고 있었고 **그 우연이 옳았다**. 우연을 규칙으로 승격하라: 넷이 **공유될 때만**, 시간을 진행시키는 문장은 다른 블록에 스케줄러를 넘기므로 거부한다. 그리고 그 검사는 **재귀적이고 ref-free 빠른 경로보다 먼저**여야 한다 — 로컬을 언급도 안 하는 `begin #1 y=3; end` 도 똑같이 넘긴다.
-- **오라클을 만드는 과정 자체가 측정이다.** 체인을 iverilog 가 파싱조차 못 해 분해 오라클(`t = s.substr(a,b); t.atoi()`)을 만들었더니, **분해본에서** vita 와 iverilog 가 갈렸다 — `atoi` 계열이 `strtol` 이었다. 우회로를 만들 때 **원본과 우회본이 같은 답을 주는지** 먼저 확인하면 이런 것이 걸린다(chained == decomposed == iverilog 3연쇄).
-- **"저쪽 구현이 버그"라고 적힌 주석은 인용문을 직접 열어 확인하라.** `parse_radix_prefix` 에는 "iverilog 13 drops it, its bug" 라는 주석과 그 동작을 고정한 핀이 있었지만, IEEE 1800 §6.16.9 는 *"scans all leading **digits and underscore characters** and stops as soon as it encounters any other character"* 다 — 공백도 부호도 스캔을 즉시 끝내고 `_` 는 **스캔되며 값에 기여하지 않는다**. LRM 인용을 단 `strtol` 이었고, **두 렌즈(LRM·iverilog)가 같은 편**이었다.
-- **loud 게이트를 걷으면 그 아래 있던 것이 드러나고, 그건 당신 것이다.** never-written accept 를 열자 IEEE §23.9(automatic 변수로의 **계층 참조 금지**) 구멍이 노출됐다 — v1 flatten 이 정적 주소를 만들어 줘서 다른 모듈의 `tb.a = 99` 가 per-entry 저장을 쓰고 있었다. 측정해 보면 **pre-existing** 이지만, 도달 범위를 넓힌 것은 이 슬라이스다. 함께 닫아라.
-
-### 대체 store 를 쓰는 백엔드는 **전 스위트 flip** 으로만 보이는 결함을 갖는다 (V1 슬라이스 2d)
-
-- **⭐⭐ 코퍼스 차분이 원리적으로 못 보는 축이 하나 더 있다 — 그 설계가 기본 백엔드로 돌 때.** `{d[0], x} = 8'hAB`(concat lvalue 안의 힙 청크)는 슬라이스 2a 이래 계속 틀렸는데, 그 형태를 가진 두 테스트가 **기본 백엔드(vm)로 도니 대체 store 에 아예 도달하지 않았다.** 계기(`assert_owns`)도 코퍼스도 아무 말을 못 했고, **기본값을 flip 해 전 스위트를 돌린 것만이** 신호였다. ⇒ **슬라이스 묶음을 닫을 때 flip 런은 선택이 아니다.**
-- **거부와 라우팅 사이에서 고를 때, 이미 있는 규칙을 두 번 쓰게 되는 쪽을 버려라.** 청크별 라우팅은 소스를 청크 폭으로 쪼개는 분할 규칙을 필요로 하는데 그것은 이미 정본 퍼널 안에 있다 — 라우터에 두 번째 철자를 두는 것이 §4.5.279 클래스다. **loud 로 올리고 correct-support 는 퍼널에 탈출구를 주는 별도 슬라이스로.** 그리고 **고르기 전에 비용을 재라**(이번엔 전 스위트에서 설계 3건).
-- **거부 행에 이웃 핀을 지을 때, 위 단계가 이미 거부하는 형태를 넣지 마라.** `{s, x} = …`(string) 은 **어느 게이트에도 도달하지 않는다** — elaborate 가 먼저 거부한다. 넣었으면 아래 단계가 위 단계의 일을 한다고 주장하는 **공허한 행**이었다.
-- **⚠️ 한 식구의 이름 하나를 적은 소스-스캔 패턴은 스캔이 아니라 화이트리스트다.** `sched.assoc_key_of(` 는 스무 줄 위의 `assoc_str_key_of` 를 안 셌다. 접두사(`sched.assoc_`)로 물어라.
-- **옛 진입점은 남기지 말고 지워라.** 배선하면서 정본을 옮겼으면 `Scheduler::assoc_key_of` 같은 옛 메서드는 **두 번째 철자**이고, 한 편집만큼 떨어져서 언젠가 쓰기 lane 과 **다른 엔트리**를 가리킨다.
-- **투영과 실측을 구분해 적고, 묶음이 닫히면 재라.** 슬라이스마다 census 투영을 적는 것은 싸고 옳지만, 슬라이스가 **자기 거부 행을 새로 만들면** 누적이 어긋난다(투영 ≈74.0% vs 실측 72.75%).
-
-### 행을 열면 그 기능이 부르는 태스크의 **인자**도 두 번째 store 읽기다 (V1 슬라이스 2 · ROADMAP §5.1-c)
-
-- **⭐⭐ 대체 store 를 파라미터로 받는 함수는, 그 파라미터를 실제로 쓰는 경로만 대체 store 를 읽는다.** `builtins::dispatch` 는 `nets` 를 받지만 **포맷터를 거치는 arm 만** 그것을 쓰고, 나머지는 `Scheduler::eval` / `eval_ctx_top` / `assoc_key_of` 로 **자기 `SimState` 넷** 위에 `EvalCtx` 를 짓는다. 힙 종류가 전부 거부되던 동안엔 그 arm 들이 도달 불가였고 — **행을 여는 순간 조용한 오답이 된다.** 실측: `d = new[n]` 이 `size=0`, `s.itoa(v)` 가 `s=0`, `q.push_back(a)` 가 `q[0]=x`.
-- **⭐⭐ 판별자가 "인자가 넷이라는 것" 하나뿐인 결함은 리터럴로 지은 차분 행에 **구조적으로** 눈멀어 있다.** 바로 옆의 `q.insert(i, 32'd99)` 는 리터럴이라 맞았고, 슬라이스 2a·2b 의 차분 행이 전부 리터럴 인자여서 **두 스위트가 초록인 채 배송됐다.** 새 태스크를 admit 할 때 그 태스크의 **모든 인자 자리에 넷을 놓은 행**을 지어라.
-- **남은 우회 경로는 개수로 고정하라.** 소스 스캔 핀(`every_untreaded_store_read_in_builtins_sits_behind_a_reject_row`)이 raw 읽기를 **파일별 개수 + 각각을 막는 행 이름**으로 못 박는다. 행을 여는 다음 슬라이스는 **거기서 먼저 깨진다** — 그것이 요점이다. 런타임 단언으로는 못 한다(도달 불가한 코드에는 호출 지점이 없다).
-- **거부 행이 무엇을 막는지의 *이유*는 이웃 슬라이스가 조용히 무효화한다.** `k_queue_pop` 은 *"NetKind 스캔이 queue 저장을 거부"* 라 적혀 있었는데 슬라이스 2c 가 그 스캔을 열었다 — 실제로 막는 것은 `stmt_effect` 다. **행을 열 때, 그 종류를 이유로 대던 다른 문장을 전부 찾아 다시 재라.**
-- **⚠️ 거부를 핀하는 테스트는 그 shape 이 admit 되는 순간 공허해진다.** `native_gate.rs`·`cli/obs.rs`·`cli/backend_flag.rs` 셋이 전부 `string s; int q[$]` 를 "거부되는 설계" 로 쓰고 있었고, 슬라이스 2 가 셋 다 admit 했다. 거부 핀의 shape 은 **양쪽 게이트 절반이 자기 이름으로 거부**하고 로드맵상 한참 남은 종류로 골라라.
-- **계기를 달면 눈으로 감사하지 않아도 된다.** `NetArena::heap[net]` + `assert_owns(net, site)`(소유하지 않은 넷으로 불리면 죽는다)가 16개 인덱싱 지점 감사를 대신했고 우회 지점을 **정확히** 지목했다. 같은 계기가 다음 슬라이스에서는 **빌드 시점**에 표적을 지목했다(`string` 의 선언 init 은 패킹된 리터럴이라 원소 폭 슬롯에 안 들어간다 ⇒ heap 넷은 t0 슬롯 init 을 건너뛴다).
-- **⭐⭐ "사망" 만 기록하는 뮤테이션 배터리는 소스 스캔 핀에 속는다.** 소스 스캔은 **변경 탐지기**이고 동작 테스트가 아니다 — 같은 결함을 다른 철자로 넣으면 안 잡는다. 그러므로 배터리는 **무엇이 죽였는지**를 기록해야 하고, ⚠️ **`cargo nextest` 는 기본이 fail-fast 라 첫 실패에서 나머지를 취소한다** — `--no-fail-fast` 없이 모은 "killer" 목록은 **가장 먼저 도는 테스트 하나**일 뿐이다(이번에 셋이 그렇게 "핀만 잡았다" 로 보였고, 실제로는 하나만 진짜였다). 핀만 잡은 뮤테이션이 남으면 **그 행이 공허하다는 뜻**이다.
-- **하네스의 손으로 고른 사이드카 목록은 슬라이스마다 다시 확인해야 한다** — §4.5.337 이 같은 함정을 SVA 로 겪었고 슬라이스 2c 가 queue 로 다시 겪었다(`queue_slice_stmts`/`queue_bounds` 미설치 ⇒ **슬라이스는 슬라이스가 아니고 bound 는 bound 가 아니다** ⇒ 그 행은 쓰인 날부터 공허했다). 판별법도 같다: **새 기능을 admit 했으면, 그 기능의 사이드카가 하네스에 있는지 뮤테이션으로 물어라.**
-- **트레이트의 기본 구현은 조용한 capability opt-out 이다.** `NetReader` 21 메서드 중 tier-3 의 오버라이드가 7개뿐이었고 나머지 14개의 기본값은 전부 **그럴듯한 값**을 낸다(`None`→호출자가 X-poison · `false`="assoc 아님" · `xs`). 게이트가 닫혀 있는 동안만 무해하다 — **행을 열기 전에 리더를 전면적(total)으로 만들고, 구조 핀으로 유지하라.**
-
-### 행 하나의 이득은 그 행이 발화하는 설계 수가 아니다 (A2-i · ROADMAP §5.1-p)
-
-- **⭐⭐ 문서에 적힌 "다음 슬라이스" 는 가설이지 측정이 아니다 — 착수 전에 다시 재라.** §5.1-o 는 *"다음 = A3-ii-b(+81)"* 로 끝났는데, 재측정에서 그 저장소 행의 **단독 이득은 +1** 이었다. 그 행이 발화하는 81 설계 중 **80 이 실행기 행에도 걸리고**, 그중 40 은 `fork` 에도 걸린다. **닫아야 하는 것은 행이 아니라 짝**(V0 의 교훈)이고, 짝을 맞춰도 +37 인데 그 대가가 park/resume·윈도 stash·per-activity 콜스택 전부다. 같은 census 가 **A2 class 를 +160(라우팅만)** 으로 보여 순서를 뒤집었다. ⇒ **슬라이스를 시작하기 전에 census 를 다시 돌려라. 앞 슬라이스가 게이트를 움직였으면 자기가 적어 둔 다음 표적의 숫자도 함께 움직인다.**
-- **⭐⭐ 한 단어짜리 거부 행은 자기 안의 분포를 감춘다.** `class` 는 열두 사이드카를 묶은 *"OOP 가 얼마나 있나"* 행이라 `class C; int f; endclass` 와 제약 풀이가 같은 단어로 거부됐다. 실측 분포는 **121 대 39**(plain OOP 대 CRV+virtual). ⇒ **거부 행을 쪼갤 때 기준은 어떤 테이블이 있느냐가 아니라 설계가 무엇을 *하느냐* 다.** 여기서 사이드카는 아무것도 못 가른다 — 160 **전부**가 `class_rand`·`class_vtable` 을 갖는다(클래스 단위라 `rand` 필드나 메서드를 **선언만** 해도 생긴다). **아무도 안 읽는 테이블은 아무것도 거부하지 않는다.**
-- **⚠️ 계획에 있던 거부 행도 짓기 전에 재라 — 과잉거부는 사다리 하강이다.** `class_virtual` 은 설계 문서와 커널 주석이 둘 다 필요하다고 말했지만, `resolve_virtual_call` 은 이미 평가된 수신자 핸들 **값**과 공유 테이블만 읽고 **넷을 하나도 안 읽는다.** 3단 상속 설계가 네이티브로 돌고 3-way 일치해서 행을 지웠다.
-- **⭐ 라우팅 비트맵이 다 같은 모양은 아니다.** heap·frame 넷은 슬롯이 통째로 죽지만 **클래스 핸들의 슬롯은 반만 죽는다** — 핸들 id 는 그 store 에 있고 **필드만** 힙에 있다. 그래서 질문이 `class[net]` 이 아니라 **`class[net] ∧ word.is_some()`** 이다. 비트맵만 보고 라우팅하면 맨 핸들 읽기가 아무것도 없는 힙으로 간다.
-- **⭐ 오라클이 있다고 가정하지도, 없다고 가정하지도 마라 — 물어보라. 그리고 반쪽일 수 있다.** 이 저장소는 N7 이래 클래스를 무오라클로 취급했는데 **iverilog 13 은 SV 클래스를 지원한다.** 다만 반쪽이다: **null 핸들 역참조는 `ivl` 이 컴파일 중 SEGFAULT** 하고 **virtual dispatch 를 틀린다**(IEEE §8.20 — vita 3 백엔드가 LRM 과 일치 = 이 항목은 vita 가 앞선다). ⇒ 셋을 **각각 다른 테스트에 핀했다**(§4.5.302: 알려진 발산이 기대 출력에 들어가면 앵커가 앵커이길 그만둔다).
-
-### "라우팅" 은 한 군데가 아니다 (A3-ii-a · ROADMAP §5.1-o)
-
-- **⭐⭐ 대체 store 를 쓰는 백엔드에서 "이 넷은 우리 store 에 없다" 는 판단은 *여러 곳*에 산다. 하나만 고치면 출력의 *일부만* 맞는다.** tier-3 이 프레임 바디를 실행하기 시작하자 셋이 차례로 틀렸다: **쓰기 퍼널**(`write_routed` — 읽기 쪽은 S3a 이래 라우팅했는데 짝이 없었다) · **특수화 평가기**(`wprog::compile` 이 `Signal` 을 **컴파일 시점에 슬롯으로** 해석) · **리더 래퍼**(`HeapRouted` 가 힙만 라우팅 ⇒ 포매터가 프레임에 눈멀었다). 매 수정마다 출력의 다른 조각이 맞아서 **어디서 멈춰도 "동작한다" 로 보였다.** ⇒ **새 store 를 여는 슬라이스는 "그 넷은 우리 것이 아니다" 를 묻는 자리를 전부 세고 시작하라** — 읽기 퍼널, 쓰기 퍼널, 특수화 경로, 래퍼.
-- **⚠️⚠️ "두 백엔드가 일치한다" 는 native 가 실제로 돌았을 때만 의미가 있다.** 이 슬라이스의 첫 end-to-end 확인이 **`buildable:false` 로 VM 에 떨어져** iverilog 와 완벽히 일치했다. **`run.json` 의 `backend`/`refused` 를 읽지 않은 비교는 비교가 아니다.**
-- **⭐ 전제조건은 기능이 아니라 *실행기*를 따라간다.** 같은 서브루틴 바디라도 **위임**되면(엔진의 `&self` 실행기 = 엔진의 flat store) 자기 창 밖 넷을 이름부르면 안 되고, **구동**되면(커널을 탄다) 모듈 넷을 이름부르는 것이 정상이다. 위임 쪽 전제조건을 구동 쪽에 그대로 적용해서 **이 슬라이스가 겨냥한 설계를 전부 거부**했다(실측). **"이 바디는 무엇을 해도 되나" 는 "누가 실행하나" 없이는 답이 없다.**
-- **⭐ 컴파일러 경고가 결함을 잡을 수 있다 — 죽은 저장이 곧 버그였다.** `Return` arm 의 `else` 를 빠뜨려 프레임 pop 뒤 그대로 `k_rearm`+`Done` 으로 흘렀고(첫 태스크 반환에서 프로세스 종료), rustc 는 *"value assigned to `bb` is never read"* 로 말했다. **제어 흐름을 새로 짜는 arm 에서는 unused-assignment 경고를 스타일 문제로 읽지 마라.**
-- **⭐⭐ 네 번째 실증(A3-iii)은 *쓰기 인덱스* 축이었고, 그것도 판별자를 짓다가 나왔다.** 위임 프레임 실행기에 리더를 스레드하면서 rhs·분기·lvalue 인덱스 셋을 고쳤는데, 생존한 뮤테이션 둘의 판별 설계를 지었더니 **뮤테이션이 아니라 진짜 발산**이 나왔다 — `frame_or_class_write` 와 `frame_write_lvalue` 의 **원소 read-modify-write** 가 아직 엔진 store 로 인덱스를 풀고 있어서 `loc[sel] = src[fd]` 가 `loc[0]` 에 착지했다. ⇒ **"생존 뮤테이션의 판별자를 지어라" 는 뮤테이션을 죽이는 절차가 아니라 결함을 찾는 절차다.**
-- **⚠️⚠️ 그리고 거부 행 하나가 실행기 *둘*을 덮고 있을 수 있다.** S3a 의 *"창 밖 넷을 이름 부르지 않는다"* 는 `run_frame_call`(식 호출)과 `run_task`(subset 호출문) **둘 다**를 막고 있었다. 앞의 것만 스레드하고 행을 열자 뒤의 것이 조용히 틀렸고, **전 스위트가 초록**이었다(그 설계의 테스트가 기본 백엔드로 돈다) — **flip 런만 잡았다, 세 번째로.** ⇒ **행을 좁히기 전에 "이 행이 막고 있는 코드 경로가 몇 개인가" 를 세어라.**
-- **⚠️ 거부 설계를 지을 때 그 형태가 *더 앞 단계*에서 거부되는지 확인하라.** A3-iii 의 거부 케이스를 모듈 넷 대입(`g = g + 1`)으로 지으면 **elaborate 가 E3009 로 먼저 거부**해서 테스트가 통과한다 — 재는 것은 아무것도 없이. 실제로 그 행에 닿는 것은 **클래스 필드 쓰기**였고, 그것은 프로브로 찾았다.
-- **⭐⭐ 거부 행의 이유가 "언제" 에 관한 주장이면, 다음 *단계*가 그것을 무효화한다 (A3-iv · §5.1-v).** `has_hier_call` 은 *"`Call.target` 이 placeholder 라서 못 뚫는다"* 라고 적혀 있었고 그것은 **elaborate 안에서** 참이다 — `force_suspend` 가 존재하는 이유가 정확히 그것이다. 그런데 그 행을 읽는 술어는 **`simulate` 에서, 패치 후에** 돈다. 계측: 그 행에 닿는 모든 설계에서 **미해결 타깃 0개**. ⇒ **거부 이유를 읽을 때 "어느 단계에서 참인가" 를 물어라.** 그리고 이 파일은 같은 행을 **세 번 다르게** 적었다(dead → LIVE 19설계 → gone).
-- **⚠️ "이 행은 dead 다" 는 슬라이스마다 만료된다.** `has_hier_call` 을 이 저장소가 **두 번** dead 라고 적었고(S3a: `is_task` 가 먼저 잡는다 · A3-i: suspendable 이 먼저 잡는다), A3-ii-a 가 non-parking suspendable 을 받자 **19 설계가 이 행에만 걸린다.** §4.5.338 의 거부-행 규칙과 같은 클래스: **행이 dead 라는 주장도 이유가 있고, 그 이유는 이웃 슬라이스가 무효화한다.**
-
-### 하류가 다시 바인딩하면 상류의 문맥은 **안 보인다** (A3-i · ROADMAP §5.1-n · §4.5.303 H 와 같은 클래스)
-
-- **⭐⭐ 뮤테이션이 "안 죽는다" 고 할 때, 등가라고 결론내기 전에 *누가 그 값을 다시 정하는지* 를 찾아라.** A3-i 의 카피-인은 §13.4.3 대로 actual 을 formal 의 폭·부호로 평가하는데, 그 **폭을 지워도 부호를 지워도 `k_frame_base` 를 0 으로 만들어도** 첫 배터리가 전부 통과했다. 이유는 하나였다 — `run_task` 의 **`bind_formal` 이 프레임 진입에서 각 actual 을 formal 의 선언 타입으로 다시 바인딩**한다. ⇒ **상류의 문맥은 "더 좁은 폭에서 평가했다면 값이 이미 파괴됐을 때" 만 관측 가능하다.**
-- **그래서 판별자는 한 가지 모양뿐이다: formal 이 actual 보다 넓고, actual 이 자기 self-width 를 넘칠 때.** `wide(a + b, r)` 에서 `200 + 57` 은 16비트 formal 안에서 **257** 이고 8비트에서 평가하면 **1** 이다. 그 행 하나가 뮤테이션 셋(폭·부호·frame base)을 동시에 죽인다. **평범한 넓은/좁은 actual 은 판별하지 못한다** — 하류가 어차피 같은 답으로 되돌린다.
-- **같은 규칙의 다른 얼굴: 목적지가 전부 다르면 *순서* 를 볼 수 없다.** 카피-아웃 루프를 뒤집는 뮤테이션은 **두 output formal 을 한 목적지에 앨리어싱한 행**에서만 죽는다. §4.5.303 의 `lw.max(sw.width)`(하류 `write_lvalue` 가 목적지 폭을 다시 적용)와 정확히 같은 클래스다.
-- **⭐ 생존을 등가라고 부르지 말고 *도달 불가* 인지 재라 — 그 둘은 다른 사실이고 다르게 적어야 한다.** A3-i 의 생존 둘은 등가가 아니라 도달 불가였고, 각각을 설계로 지어서 확인했다: 사이드카 없는 호출 사이트는 **엔진 시점엔 항상 존재**하고(계층 enable 로 실측 `missing_sidecar=0`), dyn output formal 을 가진 태스크는 **전부 suspendable** 이다(`new[]` 는 `SysTask` · `o = i` 는 handle-copy 마커 — 둘 다 suspend 신호). **옮겨온 코드의 미도달 arm 을 kill 로 위장하지 마라.**
-
-### 게이트 행을 지울 때 (§4.5.337) — **거부는 종종 기계장치가 아니라 보수성이다**
-
-- **"이 기능을 지원하려면 무엇을 지어야 하나" 보다 "이 거부가 실제로 무엇을 막나" 를 먼저 물어라.** SVA 는 elaborate 가 통째로 desugar 하므로 엔진에 도착하는 것은 평범한 IR + StmtId 테이블 둘이고, 그 둘은 이미 **공유 dispatch 안**에서 읽힌다. 거부 행은 순전히 보수적이었고 삭제 한 줄이 커버리지 12%를 샀다. **지으러 가기 전에 재라.**
-- **⭐ 진짜로 기계장치가 필요한 부분은 대개 이미 다른 이름으로 거부되고 있다.** `cover property`/liveness 는 `final_procs` → `final` 행, deferred assertion 은 별도 행이었다. 한 기능의 이름으로 뭉뚱그린 행을 지우기 전에 **census 로 몫을 갈라라**(여기선 760 vs 14 vs 겹침 0 → 슬라이스는 하나).
-- **행 제거의 유일한 실패 모드는 "이제 도는 설계" 다.** 그러므로 지운 행의 **이웃마다** 여전히 거부한다는 핀을, **이유까지** 함께 지어라 — 틀린 이유로 거부되면 나중에 누군가 진짜 load-bearing 행을 지운다.
-- **⭐⭐ 두 백엔드를 비교하는 차분은 둘이 한 자리에서 읽는 규칙에 원리적으로 눈멀었다 — 실측으로 확인하라.** 공유 dispatch 의 억제 규칙을 지우는 뮤테이션 둘이 **엔진 게이트를 전부 통과**하고 CLI 절대 핀에서만 죽었다. 답은 **절대 앵커**(그 설계가 무엇을 *의미하는지* 를 값으로 고정)이고, 그것을 짓자 같은 앵커가 하네스 뮤테이션까지 죽였다.
-- **테스트 하네스의 손으로 고른 사이드카 목록은 공허성의 원천이다.** `assert_ctl` 이 없으면 `$assertoff` 는 그냥 출력하는 `Display` 가 되고 — **두 백엔드가 똑같이 그렇게 한다.** 코퍼스 행은 초록인데 설계는 자기가 말하는 것을 하지 않는다. 새 기능의 사이드카를 하네스에 넣었는지 확인하는 법: **그 기능의 거부 행을 핀하는 테스트를 지어 보라. `Ok(())` 가 나오면 하네스가 비어 있는 것이다.**
-- ⚠️ **뮤테이션 스크립트의 복원에 `git checkout -- <file>` 을 쓰지 마라.** 그것은 뮤테이션 이전이 아니라 **HEAD** 로 되돌리므로, 아직 커밋하지 않은 그 슬라이스의 편집을 지운다(실제로 두 파일을 잃었고 가짜 kill 둘을 만들었다). 복원은 **바이트 스냅샷**(`cp`)이다.
-- **뮤테이션이 살아남으면 게이트가 약한 것인지 뮤테이션이 부족한 것인지 먼저 가려라.** 거부 행이 `a.len() + b.len()` 인데 `a` 만 지우면 행은 계속 발화한다 — 그 생존은 게이트에 대해 아무것도 말하지 않는다.
-
-### 단락하는 게이트는 "무엇을 닫으면 얼마를 버는가"에 답할 수 없다 (§4.5.336)
-
-- **커버리지를 재는 가장 싼 계기는 기본값을 뒤집고 전 스위트를 돌리는 것이다.** 코퍼스 차분보다 훨씬 강하고(§4.5.279 가 그렇게 18 타깃 39건을 찾았다), **구현이 아니라 측정**이라 끝나면 통째로 되돌린다. V0 은 이 한 번으로 *"③층은 이미 54.7% 를 바이트 정확하게 실행하고, 실패 3건은 전부 기본값 이름을 단언하는 테스트다"* 를 얻었다 — **정확성 부채가 아니라 커버리지라는 판정**이 곧 다음 단계 전체의 성격을 정한다. ⭐ **그 판정이 옳았다** — 30여 슬라이스 뒤 커버리지는 **100.00%**(2026-08-16 · 6,470 중 거부 0)이고, 그 사이 발견된 정확성 결함은 대부분 **pre-existing**(엔진 쪽 또는 다른 기능 쪽)이었다. 전체 서사·용어 = [study/02](study/02-v1-native-coverage.md).
-- **`Default` 구현이 enum 의 `#[default]` 를 쓴다고 가정하지 마라.** `SimOpts::default()` 는 `backend: Backend::Bytecode` 를 **하드코딩**하고 있었다. `#[default]` 만 옮기면 CLI 절반만 움직이고, 그것을 "전 스위트" 라 부르게 된다. **기본값을 뒤집기 전에 그 값을 정하는 자리를 전부 grep 하라.**
-- **병렬 프로세스가 쓰는 로그는 한 번의 `write_all` 이어야 한다.** `writeln!` 은 unbuffered `File` 에 **포맷 조각마다** `write(2)` 를 내므로, 프로세스마다 테스트를 도는 러너에서 행이 찢어진다 — 이번엔 **행 수가 1.85× 부풀었다**. 그리고 **그것을 알아챈 것은 눈이 아니라 레이아웃을 아는 파서**였다: census 스크립트가 알려진 값 집합에 없는 층 이름을 만나면 오염을 **선언**한다. 집계 스크립트에 그 검사를 넣어라.
-- **⭐⭐ 단락(short-circuit)하는 판정을 그대로 로깅하면 순서를 못 정한다.** 게이트가 design → storage → executor 로 **먼저 걸리면 멈추므로**, design 에서 걸린 설계의 나머지 두 층은 **측정되지 않는다** → *"이 행을 닫으면 몇 개가 통과하는가"* 는 원리적으로 답이 없다. **계기는 세 층을 독립으로 물어야 한다**(프로덕션의 단락은 그대로 두고, 계기만 전부 평가).
-- **⭐⭐ 두 게이트가 같은 기능을 두 번 이름 부르면, 슬라이스의 단위는 행이 아니라 집합이다.** `string` 넷은 설계 행 `D:string` 이면서 저장 거부 `S:heap-slot` 이다 — 그래서 `D:string` 은 369회 발화하는데 **단독 원인이 0회**이고, 한쪽만 닫으면 이득이 **정확히 0**이다. 판별법은 간단하다: **"이것만 blocker 인 경우가 몇 번인가"를 세라.** 0 이면 그 행은 혼자 닫을 수 없다.
-- **한계이득(greedy)과 단독이득은 다른 수치이고, 둘 다 필요하다.** 서브루틴 프레임은 **혼자 닫으면 +545, 위 둘 뒤에 닫으면 +712** 다. 그리고 `fork`·`file_directed` 는 **단독 이득이 0** 이라 "작은 것부터 워밍업" 이 불가능하다. 계획표에 누적만 적으면 이 사실이 사라진다.
-- **귀속 단위가 오염됐으면 그렇게 적어라.** fallback 의 **93.7% 가 CLI 서브프로세스**라 통합 테스트 전체가 바이너리 경로 하나로 뭉쳤다 — "테스트 N개" 는 이 측정에서 의미가 없고 단위는 `simulate()` 호출이다. 다만 **그 무게가 한 설계의 반복이 아님은 따로 확인해야 한다**(SVA 가 CLI 테스트 26 파일·400+ 함수에 퍼져 있음을 세어 확인했다).
-
-### 다음 단계의 상한을 짓기 전에 재라 (§4.5.335) — **중단 판정은 구현 후가 아니라 구현 전에 쓸 수 있다**
-
-- **중단 판정("이득 <1.3× 면 유지")은 단계를 끝낸 뒤 채점하라고 있는 게 아니다.** S4 가 겨냥하는 것의 프로파일 몫을 먼저 더하면 **≈6% = 1.06×** 이고, 그 순간 정적 깨우기 마스크를 **짓지 않기로** 결정할 수 있다. 지어서 재는 것보다 싸고 결론은 같다.
-- **핫 함수의 이름이 곧 그 함수가 하는 일은 아니다.** `settle_cont_assigns` 9.1% 를 "스케줄 비용"으로 읽으면 S4 의 표적이 9%처럼 보이지만, 그 대부분은 **연속 대입을 실제로 평가하는 시간**이다. 정적 마스크로 바꿔도 안 사라진다. **표적을 잡을 때는 함수가 아니라 그 안의 *어느 줄*이 사라지는지를 세라.**
-- **가장 뜨거운 루프에 `.clone()` 이 있으면 그것이 정말 필요한지부터 물어라.** `settle_cont_assigns` 는 연속 대입 평가마다 `Lvalue`(=`Vec<LvalChunk>`)를 clone 했고, **아무것도 그것을 강제하지 않았다** — `ir` 은 함수의 파라미터라 `k` 와 독립적으로 빌려진다. 빌림 검사기를 달래려고 넣은 clone 은 나중에 조건이 바뀌어도 남는다.
-- **"고정 비용" 수치는 늙는다.** doc-21 은 *"parse+elaborate 가 ~85 ms(14%)이므로 상한 약 7×"* 를 근거로 계획을 세우고 있었는데 실측은 **19 ms · 3.7% · 상한 26.8×** 였다. 계획의 전제가 되는 수치에는 **잰 날짜**를 붙이고, 그 전제로 판단하기 전에 다시 재라.
-- **여지가 크다는 것과 계획이 그것을 가져온다는 것은 다른 명제다.** 상한 26.8× 인데 남은 세 단계의 합이 1.1× 라면, 문제는 실행이 아니라 **계획이 겨냥하는 축**이다. 그때 나올 답은 "더 열심히"가 아니라 "**축을 바꾸거나, 여기서 마감하고 그렇게 기록한다**"이다.
-
-### 코드젠 전에 op 을 세라 (§4.5.334) — **"인라인하면 이긴다"는 실행 분포에 대한 주장이다**
-
-- **코드젠 계획의 전제는 "핫 패스가 무엇으로 이루어져 있는가"이고, 그것은 세면 알 수 있다.** ③층 코드젠 계획은 *"leaf load 와 산술을 인라인한다"* 였는데 실행 census 는 **산술 1.5%**, **`Load` 39.3%(이미 직접 메모리 접근)**, **4-state 규칙 함수 호출 30.8%** 였다. **코드를 쓰기 전에 op 을 세면 계획이 반증된다.**
-- **"이전 시도가 X 때문에 졌다"는 이유가 지금도 유효한지 확인하라.** ②층 JIT 은 *"every leaf load is a CALL back into Rust"* 라서 졌다. ③층은 **S1 에서 저장소를 평평한 `u64` 버퍼로 바꾸며 그 이유를 이미 없앴다** — 즉 코드젠이 없앨 몫이 그만큼 사라졌다. **선행 단계가 후행 단계의 논거를 소진할 수 있다.**
-- **공유하기로 결정한 함수는 코드젠의 벽이다.** 4-state 규칙을 자유 함수로 통합한 것(§4.5.315/330/331)은 옳았고, 그 결과 **그 규칙들은 기계어로 내릴 수 없다** — IR 로 다시 쓰면 의미 재진술이고, 콜백으로 부르면 op 당 경계다. **"한 철자"와 "인라인"은 같은 함수에 동시에 적용할 수 없다.** 어느 쪽을 살릴지는 판정이지 구현 디테일이 아니다.
-- **프로그램 길이 분포를 보라 — 절반이 op 하나면 비용은 프로그램이 아니라 호출 규약에 있다.** 실행의 47.2%가 1-op 프로그램이었고, 그 주위에 `Rc` clone·IR 워크·72바이트 값 생성·리사이즈·퍼널 재유도가 붙어 있었다. **최적화 대상은 "무엇을 계산하는가"가 아니라 "계산 하나를 하기 위해 무엇을 하는가"였다.**
-- **지름길에 대한 뮤테이션 생존은 정상이다 — 단, 각각을 증명하고 도달을 따로 확인했을 때만.** 7 중 6 생존이 전부 동치였고, 도달 여부는 `panic!` 프로브로 따로 확인했다(생존을 "테스트가 없다"와 구분하는 유일한 방법). 증명 과정에서 **중복 가드 하나와 죽은 인자 하나**를 발견했다 — 동치 증명은 리뷰이기도 하다.
-- **지름길이 정본에서 읽지 않고 지어낸 값은 `debug_assert_eq!` 로 정본에 되물어라.** 목적지 폭을 IR 워크 대신 슬롯에서 읽는 것이 이 특수화의 유일한 비자명 전제였고, 논증 대신 전 스위트가 매 실행 확인하게 했다.
-
-### 컴파일된 표현이 곧 속도는 아니다 (§4.5.333) — **디스패치를 줄여도 비용이 호출 *안*에 있으면 0 이다**
-
-- **"트리 워크를 컴파일된 형태로 바꾸면 빨라진다"는 측정 전에는 주장이다.** ③층에 ②층의 `CompiledBody` 를 태웠더니 **완전한 wash** 였다. 프로파일이 이유를 말했다: 없앤 것(`k_resolve_lvalue_offsets` 3.1% · malloc 2.2%)만큼을 **새 op 루프**가 먹었다. **비용이 "어떤 커널 호출을 할지 고르는 데" 있지 않고 "그 호출 안"에 있으면**(`WProg::run` 20% · 쓰기 퍼널 10% · 스케줄러 8%), 같은 호출을 계속 하는 표현 변경은 원리적으로 그것을 못 줄인다. **먼저 프로파일에서 "고르기"와 "하기"의 비율을 재라.**
-- **컴파일된 op 열이 워크보다 *느려질* 수 있는 구체적 이유: 레지스터 파일이 ABI 다.** 한 문장이 두 op 이 되면 그 사이에서 결과값이 `regs[dst]` 에 들어갔다 나온다 — `Value` 가 72바이트면 **대입마다 메모리 왕복**이다. 워크의 `compute_effect`→`apply_effect` 에는 그 왕복이 없다. 컴파일 시점에 증명된 목적지에 대해 **평가와 쓰기를 한 op 으로 융합**하면 사라진다(op 2000→1068·대입의 93.7%).
-- **정본이 이미 측정해 적어 둔 문장을 다시 쓰지 마라.** `vm_exec` 에 문장 경계 드레인을 넣으며 *"없으면 모든 진단이 바디 뒤로 간다"* 라고 적었는데, **같은 파일 계열의 `body.rs` 가 자기 사본에 대해 "삭제해도 전 스위트 초록·25설계 바이트 동일 — 검증되지 않은 백스톱으로 취급하라" 라고 이미 적어 뒀다.** 뮤테이션이 반증했다. **주석을 쓰기 전에 같은 규칙의 다른 사본이 뭐라고 적었는지 읽어라.**
-- **문장 경계를 op 마다로 근사하지 마라.** `k_call_fatal` 을 op 마다 소비하면 `ResolveOff` 와 `WriteLval` 사이에서 반환해 **그 쓰기와 그것이 빚진 E4002 를 잃는다**. op 열에 경계 표시가 없어도 **"어떤 op 이 문장을 끝내는가"는 로워링이 아는 사실**이므로 `_`-free 술어로 복원할 수 있다.
-- **공유 분류기의 "모든 X 를 본다"는 주석은 열거를 세어 확인하라.** `is_codegen_able` 은 *"any expr position that can REACH a frame Call excludes the body"* 라고 적고 **lvalue 인덱스 식을 안 본다** — `mem[f(i)] = 1` 이 통과한다. 그 구멍이 ②층에 **실재 발산**을 남기고 있었다.
-- **뮤테이션 생존이 곧 결함은 아니지만, 생존 이유를 적지 않으면 구분이 안 된다.** 이번 9건 중 2건은 동치였고(경계 드레인 · `EvalNbaScalar`→`k_schedule_nba`) 그 근거는 **`NbaLhs::of([c])` 가 `One(c.clone())` 이라 큐에 들어가는 것이 같다**는 한 줄이다. 비용만 다른 특수화의 핀은 **값 차분이 아니라 op-mix census** 다.
-- **차분의 비공허 개수를 총 개수와 따로 핀하라.** 코퍼스 72 중 **30 만** 컴파일된 바디를 돌린다(나머지는 바디에 `Delay` 가 있다). "72 설계 일치" 로만 적으면 42 는 워크를 워크와 비교한 것이 숨는다.
-
-### 사이드 테이블에 사는 쓰기 (§4.5.278) — 분류기가 arena 만 걷으면 그것은 안 보인다
-
-- **`Stmt` lvalue 를 걷는 분류기는 사이드 테이블에 사는 쓰기를 못 본다.** `compute_suspendable_tasks` 는 r18 이래 "이 문장이 프레임 창 `[lo,hi)` 밖을 쓰나"를 물어왔는데, **호출의 copy-out 목적지는 문장이 아니다** — `Terminator::Call` 은 `{target, ret_bb}` 만 들고 있고 목적지는 `task_calls_func`(Call 블록의 전역 id 로 키)에 산다. 그래서 워크가 한 번도 본 적이 없었고, `inner(a, gv)` 의 caller 가 "subset" 으로 남아 동기 `&self` 실행기가 모듈 net 을 쓰다 **진단 없이 rc=101** 로 죽었다. **어떤 IR 노드가 "쓰기"를 하는데 그 목적지가 노드 안에 없다면, 그 노드를 보는 모든 분류기를 감사하라** — 노드를 순회한다고 그 노드의 효과를 본 것이 아니다.
-- **"옆 문장이 답을 정한다"는 두 라운드 연속 같은 뿌리였다(재확인).** `#5 inner(a, gv);` 와 `if (c) inner(a,gv); else gv = 0;` 는 **고치기 전에도 동작**했다 — 전자는 `Delay` terminator 가, 후자는 else arm 자신의 창-밖 쓰기가 **무관한 이유로** 태스크를 suspendable 로 만들었기 때문이다. §4.5.277 의 `$display` 와 정확히 같은 형태다. **탐지 규칙을 상시 적용하라: 무관한 문장을 넣고 빼서 답이 바뀌면 분류기가 문장의 일부만 보고 있다.**
-- **두 계산이 공유하는 새 입력은 "같은 자료"가 아니라 "같은 함수"로 줄여라.** elaborate 와 엔진의 `TaskCallInfo` 는 서로 다른 struct 다(한쪽은 elaborate 사이드 테이블, 한쪽은 `SimOpts` 사이드카). 양쪽이 각자 축약 루프를 쓰면 pure-function 계약이 **두 표현식의 일치**에 걸린다. 축약 함수(`sim_ir::call_out_nets`)를 하나 두고 양쪽이 그것을 부르면 **한 표현식의 성질**이 된다.
-- **두 계산의 입력 크기가 정당하게 다를 수 있다 — 그 차이가 이미 다른 축으로 보정되는지 확인하라.** elaborate 는 resolve 前에 돌아서 deferred hier enable 이 맵에 없고, 엔진은 있다. "없는 엔트리 = 보수적으로 신호"로 두면 오히려 **두 집합이 갈린다**. 그 caller 들은 `FuncMeta.has_hier_call` 로 이미 양쪽에서 force-suspend 되므로 **없는 엔트리는 신호 아님**이 정답이다(§4.5.208 이 만들어 둔 보정을 재사용).
-- **loud 를 걷으면 그 밑이 드러난다 — 이번엔 호출과 무관한 것이었다(재확인).** `s[i] = f(a, o)` 를 프레임 본문에서 허용하자 문자열이 **조용히 안 바뀌었다**. 뿌리는 `SysTaskId::StrPutC` 가 `dyn_heap[net]`(모듈 문자열 저장소)를 무조건 쓴 것 — **프레임-로컬 `string` 은 프레임 슬롯에 slab-저장**된다. 호출도 output formal 도 없이 `string s; s = "zz"; s[0] = 65;` 만으로 재현되는 **pre-existing** 이었다. **읽기 경로가 저장 위치를 묻는다면 쓰기 경로도 물어야 한다** — `read_net` 은 `frame_local`/`dyn_is_handle` 을 분기하는데 이 쓰기만 안 물었다.
-- **성능 리포트의 "뿌리"도 오라클로 반증하라.** "깊은 조합 cone 을 levelize 안 해서 비용이 깊이²"라는 진단은 **총 작업량을 고정한 깊이 스윕에서 iverilog 가 같은(더 가파른) 스케일링**(4.15× vs vita 3.55×)을 보이면서 반증됐다 — 그 비용은 인터프리티드 이벤트구동의 성질이고, 비교 대상(Xcelium)은 컴파일-타임 levelize 를 하는 컴파일드 시뮬레이터다. **정확성 리포트에 differential 을 요구하듯 성능 리포트에도 요구하라.** 그리고 원인 후보는 실험으로 지워라: 배치 정렬(오름/내림)이 동일했으므로 순서는 지렛대가 아니다.
-- **측정 이득이 없는 최적화는 넣지 마라 — 두 번째 코드 경로는 그 자체가 드리프트 위험이다.** 프로파일이 `Value::resize`/`mask_top` 를 19% 로 지목해 원워드 fast-path 를 넣었으나 0.190→0.188 s(측정 이득 0)라 폐기했다. **프로파일의 심볼 귀속은 인라인된 코드까지 그 이름으로 모으므로, "호출 오버헤드" 로 읽으면 틀린다.**
-
-### 표준 준수 vs 보수적 거부 (§4.5.284) — **고칠 수 없는 코드 앞에서 정책은 갭이다**
-
-- **"의도된 보수적 정책"이라고 문서에 적혀 있어도, 비준수 + 사용자가 고칠 수 없음 = 갭이다.** doc-15 는 implicit net 미지원을 *"오타가 조용히 wire 가 되는 사고 클래스가 원천 차단되는 보수적 선택"* 이라고 명문화하고 있었고 그 논리는 옳다. 뒤집은 것은 두 가지다 — IEEE 1364-2005 §3.5 가 **표준이고 기본값이 `wire`** 라는 것, 그리고 그 구문이 **파운드리 납품 셀 라이브러리 안**에 있어 사용자가 손댈 수 없다는 것. **거부가 사던 안전은 경고가 대신 살 수 있다**(그리고 `-Werror=` 가 원래 정책을 되돌려준다). 정책을 재검토하는 트리거는 "누가 불평했다"가 아니라 **"그 코드를 고칠 권한이 사용자에게 있나"** 다.
-- **관용을 추가할 때 경계는 추론하지 말고 오라클로 핀하라.** §3.5 는 두 위치만 커버하는데, 그 사실을 스펙 문장에서 읽는 것과 **rhs·procedural lvalue·``default_nettype none`·`.name` shorthand 를 각각 돌려보는 것**은 다르다. 넷 다 iverilog 도 error 였다 — 즉 이건 관용이 아니라 준수다. 경계를 재보지 않았으면 "표준이니까 넓게" 가 조용한 오타 수용이 됐을 것이다.
-- **desugar 는 판별식을 지운다 — 그리고 그 손실은 기존 핀이 잡는다.** 파서가 `.a` shorthand 를 `.a(a)` 로 desugar 하므로 "named port actual 은 전부 §3.5 위치" 규칙이 **`.a` 를 조용히 받아들였다**(IEEE 1800 §23.3.2.2 는 선언된 객체를 요구하고 iverilog 는 거부한다). `dotname_missing_signal_is_loud` 가 즉시 실패했다. **desugar 를 지나 판단하는 새 규칙을 넣을 때는 desugar 가 무엇을 합쳤는지부터 확인하고**, 합쳐진 두 형태의 오라클 답이 다르면 **플래그를 복원하라**(span 비교 같은 우연한 판별식 말고).
-- **"암시적 선언"은 사용이 아니라 선언이다 — 그러므로 phase 다.** 사용 지점에서 만들었더니 vita 가 cont-assign 을 인스턴스보다 먼저 낮추는 바람에 `sub u(.o(IMPL)); assign o = IMPL;` 이 **읽기에서는 E3010, 터미널에서는 성공** — 한 설계가 phase 순서에 따라 두 판정을 냈다. §4.5.256 과 같은 형태의 교훈이다: **순서 무관해야 하는 것은 arm 이 아니라 그 앞의 phase 에 둔다.** 그리고 수집기는 **하나만** 둔다.
-- **값은 오라클과 맞추고, 위험은 말하라.** §3.5 net 은 스칼라라 더 넓은 드라이버가 상위 비트를 버린다 — 합법이므로 **모든 시뮬레이터가 조용히** 한다. differential 이 이기므로 값은 절단한 채로 두고, **폭 두 개를 말하는 경고**를 얹었다. correct-or-loud 는 "값을 바꿔라"가 아니라 "모르게 하지 마라"이다.
-
-### ★ 렉싱/스캔의 층위 (§4.5.283) — **주석과 문자열이 코드 구조를 정할 수 있으면 그것은 렉서 버그다**
-
-- **원문(raw text) 위의 구분자 스캔은 주석과 문자열을 뚫는다 — 그래서 코드가 아닌 텍스트가 코드를 정한다.** attribute instance `(* … *)` 를 logos 스킵 정규식으로 지웠더니, `always @(*) a = b;  // *)…` 에서 **주석 안의 `*)`** 가 감도 리스트의 `(*` 를 닫고 **주석 나머지가 실행 코드**가 됐다 — `errors=0` 으로 틀린 값. **고칠 곳은 정규식이 아니라 층위다**: 같은 짝짓기를 **토큰 스트림**에서 하면 주석은 이미 사라졌고 문자열은 한 토큰이라 구분자를 공급할 **수가 없다**. 원문 스캔이 필요해 보이면 먼저 "이 판단에 주석/문자열이 개입할 수 있나"를 물어라.
-- **"이 정규식은 X 를 매치할 수 없다"는 증명은 X 를 고립시켜 보면 항상 참이다.** 코드 주석이 *"`(*)` 는 남은 문자가 `)` 뿐이라 종결자에 도달할 길이 없다"* 고 적어두고 있었고 **맞았고 무관했다** — 본문 `([^*]|\*[^)])*` 이 그 `)` 를 먹고 **단위 어디든 다음 `*)`** 까지 갔다. 정규식 논증은 **그 매치가 소비할 수 있는 최대 범위**로 하라. 세 글자만 보면 안 된다.
-- **무진단 폴백은 결함을 비국소로 만든다 — 그것 자체가 correct-or-loud 위반의 전제다.** 짝을 못 찾은 `(*` 가 조용히 평범한 토큰으로 되돌아갔기 때문에, 발현 여부가 **컴파일 단위 전체의 `(*`/`*)` 개수와 순서**에 달렸다: 파일에 `@(*)` 가 하나면 통과, 둘이면 파괴, 진단은 **원인이 아닌 두 번째**에 찍히고 **파일 경계를 넘었다**. 스캐너가 여는 구분자를 인정했으면 **닫지 못한 것은 에러**다.
-- **문법에 같은 철자가 두 뜻으로 있으면 렉서가 문맥을 봐야 한다.** `(*` 는 attribute 여는 구분자이면서 `@ (*)`(IEEE 1364-2005 A.6.5 event_control)의 일부다. 답은 **직전 유효 토큰**이고, 토큰 스트림에서는 그것이 `out.last()` 한 줄이다 — `@(*)`·`@ (*)`·`@ /* c */ (*)` 가 같은 검사에 걸린다.
-- **가드를 하나 세웠으면 그 가드가 반대 방향에도 필요한지 물어라.** 여는 쪽에서 `@(*)` 를 제외했더니, **닫는 쪽**에서 `@(*)` 안의 인접 `*` `)` 가 여전히 종결자로 쓰여 **안 닫힌 attribute 가 다음 감도 리스트까지 조용히 삼켰다** — 같은 비국소 동작이 한 단계 뒤로 물러난 것뿐이다.
-- **"이 선을 지키려고 쓴 테스트"가 지키고 있는지 실측하라 — vacuous 는 이렇게 만들어진다.** `attribute_instances_are_skipped_without_eating_implicit_sensitivity` 는 이름 그대로 이 경계를 지키려고 쓰였고 **지키지 못했다**: 설계마다 `@(*)` 가 **하나**이고 뒤에 `*)` 가 없어서, 정규식이 조용히 실패하고 폴백이 구해줬다. **경계 테스트는 그 경계가 깨지는 최소 조건을 넣어야 한다** — 여기서는 "둘"이었다. 그리고 그 테스트의 doc 주석이 **틀린 논증을 권위처럼** 들고 있어서 다음 사람이 재검토하지 않게 만들었다.
-
-### 루프 파일에서 이관 (2026-08-03) — 이것들은 절차가 아니라 코드베이스 규칙이다
-
-- **저장 클래스를 통합/라우팅하기 전에 capability-parity 를 실측하라.** "새 표현이 더 낫다"는 직관은 자주 틀리고(양쪽이 서로 다른 축에서 우세), 통합하면 열세 축이 **조용히 퇴행**한다. 어느 쪽도 우세하지 않으면 통합이 아니라 **additive 확장**이 답이다.
-- **게이트가 "엔진이 X 를 못 한다"를 전제하면 엔진 코드를 직접 확인하라.** 이미 가능한데 게이트만 자기 술어를 under-approximate 한 사례가 있다(fallback 경로가 이미 그 shape 를 처리 중이었다). 판별자가 **그것이 구동하는 저장소와 같은 집합**을 쓰면 "admit 불가"가 구조적 논거가 된다.
-- **mapping 이 맞아도 실행 ORDER 는 별도 검증 대상이다.** 코드 경로로 mapping 을 몇 번 확인해도 순서는 안 잡힌다. order-sensitive probe 는 **mapping 순서 ≠ 실행 순서인 쪽**(descending 등)에서 만들어라 — 같은 쪽에서 만들면 두 순서가 구분되지 않아 vacuous 다.
-- **REJECT(loud) 게이트는 근사가 아니라 PRE 빌드로 실측한 hazard set 으로 잘라라.** "이름이 충돌한다" 같은 proxy 로 만든 게이트가 byte-correct 설계를 대량 false-reject 했다(정확도 사다리 하강). **리뷰어가 제안한 게이트 술어도 실측 검증 대상이다.**
-
-### 성능 결론의 유효 범위 (§4.5.282) — **"이 설계에서"를 빼면 그 문장은 거짓이다**
-
-- **벤치 하나로 "여지가 고갈됐다"를 말하지 마라 — 두 라운드 연속으로 틀렸다.** PicoRV32 하나에서
-  11건 착지·9건 반증을 하고 "현 표현 위의 상수항 여지가 고갈"이라고 적었다. round-25 는 **string 축**에서
-  그것을 반증했고(172×), round-26 은 **호출 축**에서 다시 반증했다(10.7×). 두 번 다 원인은 같다 —
-  **벤치의 모양이 결론의 범위를 정하는데 그 범위를 문장에 안 썼다.** 성능 문장에는 항상 측정한
-  설계·워크로드를 함께 적어라.
-- **"병목이 X 로 옮겨갔다"는 위치이지 원인이 아니다.** 리포터가 "격차는 RTL 이 아니라 string"이라 했을 때
-  그 위치는 맞았지만 원인은 알고리즘 결함이었고, 다음 라운드에 "이제 DUT 다"라고 했을 때도 위치는
-  맞았지만 원인의 절반은 **VM 커버리지 0%** 였다. **위치를 받으면 판별식을 세우고 직접 재라** —
-  round-26 의 판별식은 *"realistic RTL 에서 우리가 같은 계층의 기준선과 나란한가"* 였고, 그 답이
-  "그 설계에선 나란하지만 다른 모양에선 2.6× 뒤진다"였다.
-- **비교 대상 계층을 보유하지 않았다면 구해서 재라.** doc-18 은 오랫동안 *"격차 크기는 모른다 —
-  VCS/Xcelium 을 보유하지 않는다"* 라고 적어두고 있었다. **verilator 는 무료이고 ③층이다.**
-  `brew install verilator` 한 줄로 3개 층을 같은 설계·같은 기계에서 나란히 잴 수 있었고, 그 수치가
-  ③층 계획의 예산을 처음으로 확정했다. **못 잰다고 적은 칸은 정말 못 재는지 다시 확인하라.**
-- **커버리지는 속도와 다른 축이다 — 그리고 커버리지 0% 는 벤치를 바꿔야만 보인다.** 바이트코드 VM 은
-  "기본 백엔드"이고 홈그라운드에서 iverilog 보다 5.5× 빠르지만, 사용자 함수를 부르는 프로세스를
-  `is_codegen_able` 이 통째로 거부하므로 Keccak 에서 기여가 **정확히 0** 이다(`--backend interp` 와
-  `bytecode` 가 같은 시간). **최적화의 효과를 주장하기 전에 그 최적화가 그 설계를 받는지 A/B 로 재라.**
-- **오라클을 넷으로 두면 벤치 자체가 검증된다.** 새 벤치(Keccak-f[1600])는 Python 참조·vita·iverilog·
-  verilator 넷이 같은 다이제스트를 내고, 그 값이 **공표된 참조값**(`f1258f7940e1dde7`)과 같다.
-  상호 일치만으로는 넷이 함께 틀릴 수 있다 — **외부 앵커를 하나 끼워라.**
-
-### 실행기 라우팅 (§4.5.277) — 문장을 목적지로만 분류하면 효과는 rhs 에 숨는다
-
-- **"이 실행기가 이 문장을 돌릴 수 있나"를 묻는 게이트는 문장 전체를 봐야 한다 — 목적지만 보면 효과가 rhs 에 숨는다.** `compute_suspendable_tasks` 의 blocking-assign arm 은 **lhs 가 프레임 밖을 쓰나**만 물었다. 그래서 `rc = $fgets(line, fd)` 는 "in-frame 쓰기 = subset" 으로 읽혔고 태스크가 동기 `&self` 실행기에 남아 순수 `eval` 경로로 떨어져 **0 을 돌려주고 아무것도 안 썼다**. 효과는 목적지가 아니라 **rhs** 에 있었다. 증상이 그것을 그대로 말해줬다 — 본문에 **무관한 `$display("x")` 한 줄**을 넣으면 읽기가 성공했다(`Stmt::SysTask` 가 `_ => true` 로 떨어져 태스크 전체가 `&mut` 실행기로 옮겨간다). **검출법: 무관한 문장 하나를 추가/삭제해서 결과가 바뀌면 분류기가 문장을 부분만 보고 있는 것이다.**
-- **같은 집합이라도 소비자에 따라 과대표시 비용이 다르다 — 라우팅 SUPERSET 은 공짜, 호출 SHAPE 은 아니다.** suspend 분류는 과대표시가 안전하다(`&mut` 는 `&self` 의 상위집합). 그 **같은 집합**으로 함수의 **호출 형태**를 바꿨더니 `foreach (b[i])` 가 `b.first(i)`/`b.next(i)` 로 desugar 되는 바람에 dyn-formal 함수가 통째로 재라우팅됐고, copy-out 경로는 dyn 배열 formal 을 바인딩할 수 없어 **동작하던 설계가 loud** 가 됐다. **두 질문에는 두 술어**: `sysfunc_is_stmt_effect`(효과인가) 와 `sysfunc_frame_executor_cannot_perform`(이 실행기가 절대 못 하나)는 다르다 — assoc 반복은 **효과이지만** 키가 body-local 이면 `&self` 가 해낸다.
-- **삽입 지점은 "그것을 읽는 코드"가 정한다.** 함수 라우팅 집합을 태스크 reject 단계에서 채웠더니 **프레임 태스크 본문**의 호출 자리가 이미 낮춰진 뒤였다(프레임 **함수** 본문과 달리 태스크 본문은 중첩 Call 이 허용된다 — `allow_call=true`). 정답은 함수 본문 lowering **직후**, 태스크 본문 lowering **직전** 한 곳뿐이었다. 새 집합을 만들면 **채우는 시점 vs 읽는 시점**을 전수로 대조하라.
-- **fatal 이 멈추지 않으면 fatal 이 아니다 — 그리고 래치는 본문을 돌린 "직후"에 봐야 한다.** `&self` 문맥의 fatal 은 표현식 한가운데서 `Step::Fatal` 을 못 돌려주니 `Cell` 에 래치한다. 스케줄러가 그 래치를 **본문 실행 前** 세 자리에서만 폴링해서, 자기 본문에서 fatal 을 켠 프로세스가 **자기 `$finish` 까지 그대로 달려** 깨끗한 Finish 로 끝났다 — 진단은 찍히는데 그 뒤 판정이 전부 유효한 것처럼 보인다. **시간 순서가 결정한다**: 본문 안에서 먼저 일어난 fatal 이 나중에 도달한 `$finish` 를 이긴다. 문장 루프에도 폴링을 넣어 **fatal 지점에서 프로세스를 세워라**(안 그러면 TB 가 자기 PASS 를 출력한다). 부수 효과로 "진단이 1건으로 합쳐진다"는 불평이 **정답**이 된다 — 첫 건에서 멈추므로.
-- **같은 개념의 N 번째 수집기를 찾아라(재확인).** body-local 넷 kind 수집기가 **셋**이었다(모듈 스코프 · frame body-local · inline/static task body-local). `string` arm 이 있는 곳은 앞의 둘뿐이라, 같은 `string s;` 가 `task automatic` 에서는 맞고 static `task` 에서는 Wire 로 떨어졌다. 그 하나의 Wire 가 **두 가지 실패**를 냈다 — 평범한 `s = "hi"` 는 loud(E3018), `$fgets(s, fd)` 는 **silent**(시스템 함수의 목적지 쓰기는 E3018 을 내는 lvalue 검사를 지나가지 않는다). **어떤 사실을 알아냈으면 `grep add_net` 으로 그 사실이 필요한 지점을 전부 세라.**
-- **"이름 붙일 수 없는 조건" 은 측정하면 이름이 붙는다 — 세 번째 추측 대신 세 번째 측정을 하라.** 코드 주석이 "패닉의 진짜 조건은 **아직 이름이 없다**(NOT YET NAMED)" 라고 적고 두 번 되돌린 가드가 있었다. 실제 조건은 `in_frame_body` 가 아니라 **copy-out 목적지가 프레임 창 밖인가** 였다 — frame-local 목적지(body-local·자기 output formal)는 중첩 TASK 호출의 `out_binds` 가 이미 하는 그 쓰기라 안전하고, 모듈 넷 목적지만 `frame lvalue net is routed`(rc=101)로 죽는다. **본문 전체가 아니라 목적지로 게이팅**하니 열 개의 측정된-정답 형태를 잃지 않고도 패닉이 사라졌다.
-- **loud 를 pin 한 테스트는 그 loud 가 correct 가 되면 갱신 대상이지 보존 대상이 아니다.** 사다리를 올린 슬라이스는 이전 슬라이스가 "fatal 이 뜬다"로 박아둔 pin 을 반드시 밟는다. 그 테스트는 **삭제하지 말고** 값 pin 으로 바꾸고, 왜 loud 였는지의 서사는 doc 주석에 남겨라.
-- **`lower_lvalue` 를 부르는 새 arm 은 "FIRST 로 탐지한다"고 적힌 검사들 아래에 놓아라.** `s[i] = f(…)` 는 `lower_lvalue` 가 먼저 닿으면 **조용한 packed BIT-write** 가 된다 — 그 파일 자신이 §6.16.3 주석으로 경고하고 있었다. 새 특수형은 기존 특수형 체인의 **어느 지점**에 들어가는지가 곧 정확성이다.
-
-### 한 서술을 여러 워커가 공유하기 (§4.5.275) — 그리고 판정 이름은 계약이다
-
-- **노드의 "자식이 누구고 어떤 순서로 어떤 조건에서 평가되나"를 한 곳에만 적어라.** 표현식 위치를 전면 개방할 때 탐지기·도달성 게이트·평가순서 게이트·변환기 넷이 각자 재귀하면 반드시 갈린다. `shape()` 하나를 두고 전부 그것을 소비하게 하면 분류기/로워링 불일치가 **구조적으로 불가능**해진다(같은 규칙의 §4.5.274 판이 게이트-로워링 짝맞춤이었다면, 이번 판은 그 짝을 **자료구조로** 만든 것).
-- **판정 이름이 약속하는 것보다 약하게 참이면 그것은 silent-wrong 이다.** `ExprDa::Writes` 의 계약은 "**모든** 평가가 쓴다"인데, 중첩 `&&` 의 **조건부** 쓰기에 그것을 줬다. 읽기 안전성만 성립하는 사실로 assigned 를 주장한 셈이고, 단락 경로에서 같은 이름 형제 블록의 **잔값을 exit 0 에 읽었다**. 필요한 것은 `Clean` — "읽기는 안전, 쓰기는 약속 안 함". **격자에 값을 추가할 때는 각 값의 계약을 doc 에 쓰고, 새 자리에서 그 계약이 문자 그대로 참인지 확인하라.**
-- **위험 분석의 범위는 변환의 범위와 같아야 한다.** copy-out 을 rhs↔lvalue 인덱스, 인덱스↔인덱스, 인자↔인자 경계를 **넘어서** 앞으로 옮기면서 분석은 각 조각만 봤다 — 그래서 경계를 넘는 순서 위험이 안 보였고, "한 표현식에 같은 대상을 쓰는 호출 2개" 가드까지 무력화됐다. 문장이 순서대로 평가하는 표현식들은 **한 시퀀스로** 분석하라.
-- **수리 가능한 위험과 수리 불가능한 위험을 다른 채널로 나눠라.** 치환으로 고칠 수 있는 읽기(단일 세그먼트)와 닿을 수 없는 읽기(계층 경로 · callee 본문 · 해소 안 되는 메서드 본문)를 한 집합에 담으면 후자를 조용히 "고쳤다"고 믿는다. 후자는 **stand-down 신호**여야 한다.
-- **부작용이 없는 곳을 hoist 하지 마라 — 평가하지 않는 자리가 있다.** `$bits`/배열 질의는 피연산자를 **평가하지 않고**(IEEE §20.5/§20.6), `$monitor`/`$strobe` 는 인자를 **나중에 다시 렌더**한다. 전자는 소스에 없는 부작용을, 후자는 얼어붙은 temp 를 만든다. 이런 목록은 **한 벌만** 두고 모든 hoister 가 공유해야 한다(§4.5.250 이 이미 만든 목록을 두 번째 hoister 가 안 보고 있었다).
-- **진리값 포착을 `x || x` 로 쓰지 마라.** 같은 expr id 를 두 번 이름하면 엔진이 **두 번 평가**한다 — `$random` 피연산자가 두 번 뽑혀 시퀀스가 어긋난다. `!!x` 가 같은 4-state 축약이면서 평가 1회다.
-- **loud 를 걷어내면 그 밑이 드러난다(재확인) — 그리고 이번엔 자기 워커가 그 뚜껑이었다.** 계층 읽기와 callee 본문 읽기는 옛 안전 게이트(`reads_ident_outside_inout`)가 **단일 세그먼트만 보고 본문을 안 봐서** PRE 에서도 조용히 post-call 값을 읽고 있었다. 게이트를 하나로 합치면서만 보였다 — **비슷한 두 게이트를 남겨 두면 둘 다 감사받지 않는다.**
-- **PRE 가 loud 였다는 리뷰어의 주장도 실측하라.** 두 렌즈가 같은 형태에서 반대로 보고했고(PRE loud vs PRE 56), 코퍼스 스윕이 **PRE 56**(= pre-existing silent-wrong)임을 정리했다. 귀속을 바꾸는 주장은 스윕으로 확정하라.
-- **리뷰어에게 작업 트리를 만지지 말라고 명시하라.** soundness 렌즈가 PRE 빌드를 만들려고 라이브 파일을 `git checkout HEAD --` 해서 진행 중 작업을 덮어쓸 뻔했다. PRE 바이너리는 **내가 미리 빌드해서 경로로 넘기고**, 프롬프트에 수정 금지를 박아라.
-
-### 재리뷰가 잡은 것들 (§4.5.275 round 2) — 목적지는 읽기가 아니고, "어차피 거부된다"는 게이트마다 다르다
-
-- **문장 자기 call 의 output actual 은 읽기가 아니라 쓰기 목적지다.** 평가순서 스냅샷은 읽기를 바꾸는데, 목적지를 바꾸면 callee 의 copy-out 이 스냅샷 넷에 떨어지고 **사용자 변수는 낡은 값**으로 남는다 — 값이 틀린 게 아니라 **쓰기가 사라진다**. 인자를 다룰 때는 `callee_arg_dirs` 로 **방향을 물어라**. `inout` 은 copy-in 이 **읽기이면서 목적지**라 스냅샷으로 못 고친다(stand-down).
-- **"어차피 다른 게이트가 거부한다"는 정당화는 그 게이트가 하나일 때만 유효하다.** `Shape::Opaque` 가 읽기를 기록하지 않은 근거는 "범용 경로가 어차피 거부"였는데, 같은 술어(`order_clean`)가 **좁은 경로의 게이트이기도** 했다. 술어를 통합하면 그 통합 사실을 근거로 쓰는 주석을 **전수 재검토**하라.
-- **"모른다"를 노드 단위로 뭉개지 말고 자식을 명시하라.** 탐지기가 미지원 노드에서 무조건 "호출이 있을 수 있다"고 답하면, 그 노드가 **호출 없이 인자로만** 있어도 문장 전체가 stand-down 한다(동작하던 설계의 false-loud). 대신 (a)hoist 사이트가 아니지만 **평가되는**(=읽는) 노드와 (b)**평가되지 않는** 노드(`$bits` — 타입 질의)를 나누고 자식을 나열하라. 그러면 탐지는 정직해지고 거부는 필요한 곳에만 남는다.
-- **워커 두 개가 같은 자식 집합을 봐야 한다면, 자식 목록을 반환하는 함수도 하나여야 한다.** `order_walk` 이 기록한 읽기를 `shape_children` 이 안 내주면 치환이 못 닿아 조용히 틀린다. 못 닿는 읽기는 **수리 불가로 표시**(stand-down)해서 두 워커의 답을 일치시켜라.
-- **별칭 판정은 철자가 아니라 대상으로.** 계층 읽기가 bare 로컬과 같은 저장을 가리키는 것은 **self-path** 일 때뿐이다(플래튼이 bare name 이므로) — 세그먼트 이름이 같다고 오염시키면 무관한 자식 스코프가 부모를 죽인다.
-- **판별자가 두 개인 상태를 하나로 물어보지 마라.** frame **함수** 본문과 frame **태스크** 본문은 플래그가 다르다. 하나만 보고 "frame body 안인가"를 물으면 나머지 절반에서 게이트가 없고, 그 절반이 엔진 `debug_assert` 를 밟아 **진단 없는 패닉**(release 면 남의 넷에 쓰기)이 된다. "…안인가"는 **전용 술어 하나**로 물어라.
-- **집합을 소비하는 검사는 그 집합의 POPULATION 경로를 같이 감사하라(재확인).** callee-body/method-body 불투명 검사가 완벽해도 `candidates` 가 좁은 워커로 채워져 **비어 있으면** 검사는 한 번도 돌지 않는다. 그리고 그 채우기가 formal 을 **위치로** zip 하면 named argument 는 통째로 안 보인다.
-- **PANIC 은 loud 가 아니다.** 엔진의 `debug_assert` 는 release 에서 사라지므로 그것에 기대는 것은 correct-or-loud 가 아니다. elaborate 가 못 하는 일은 **elaborate 에서** 거부하라.
-
-### 인정 위치와 실행 위치 (§4.5.274) — 게이트가 아는 자리는 로워링이 하는 자리와 같아야 한다
-
-- **"어디서 쓰기가 일어나는가"를 문장 모양으로 적으면, 값을 반환하는 순간 틀린다.** BL4 는 output actual 의 쓰기를 맨몸 호출 문장과 조건 전체에서만 인정했다 — 그 둘은 *문장 모양*의 부분집합이다. 호출이 값을 반환하면 표현식이 갈 수 있는 아무 데나 가고, 거기서는 `expr_no_ref` 만 물었는데 **그 워커에게 "언급"은 언제나 읽기**다. 리포트 34건 중 33건이 이 하나였다.
-- **인정 노드 집합은 로워링이 실제로 copy-out 을 낼 수 있는 노드 집합과 같게 맞춰라.** 게이트가 로워링보다 넓으면 어차피 로워링에서 loud(무해), 좁으면 **false-loud**(이번 결함). 새 워크의 SCOPE 를 `hoist_inout_calls` 의 hoist 사이트와 동일하게 못 박아 두 곳이 따로 자라지 않게 했다.
-- **분기는 조건의 *값*을 안다.** `a && f(r)` 이 참이면 두 피연산자가 모두 평가됐으므로 **본문**은 쓰기를 알고 **탈출**은 모른다. `a || f(r)` 이 거짓이면 둘 다 평가됐으므로 `else` 가 안다. 조건 전체의 한 비트로 뭉개면 표준 `.rsp` 워커 관용구가 통째로 loud 가 된다. 이 4가지 전제는 **주장하지 말고 iverilog 로 재라** — 출력 부작용을 세워서 그대로 실측했다.
-- **"조건부 쓰기"는 읽기가 아니다.** 효과 격자에 `Clean`(읽기 없음·주장 없음)을 따로 두면 `c && f(out r)` 이 "참조함 ⇒ 읽기"로 떨어지지 않는다. 3-값이 필요한 이유는 정밀도가 아니라 **읽기와 쓰기가 다른 질문**이기 때문이다.
-- **기존 답을 바꾸지 않는 fallback 을 명시하라.** 새 워크의 catch-all 을 `call_effect` 로 보내면 "해결 못 한 callee"가 표현식 위치까지 엄격해져 **이름을 언급조차 안 하는** 조건이 읽기가 된다. 새 주장(Writes) 외의 모든 답은 pre-R19 워커의 답을 **글자 그대로** 내게 하라 — 문장 위치와 표현식 위치의 엄격도 비대칭은 pre-existing 이고, 옮기는 것은 별도 슬라이스다.
-- **우회로가 막혀 있으면 결함은 두 개다.** 리포트 §3.2 는 "§3.1 의 자연스러운 우회(`void'(f(out r))`)도 거부된다"였고, 그 자리는 사실 **가장 쉬운 경우**(반환값을 버리므로 temp 하나면 끝)였다. 그리고 그 loud 의 **문구가 지원 위치 목록에서 문장 위치를 빼먹은 것**이 없는 우회로를 찾아 헤매게 만들었다 — 지원 목록을 적은 메시지는 능력이 늘 때마다 같이 고쳐라.
-- **"미지원"이라는 진단명을 믿지 마라(재확인).** §3.3 "named argument 호출"의 근인은 리졸버가 **매핑을 안 쓴 것**뿐이었고, 그 매핑을 쓰자 진짜 결함(`emit_frame_func_out_call` 이 G10 재정렬을 아예 안 함)이 드러났다. R18 과 같은 교훈이 같은 자리에서 다시 나왔다.
-- **쌍둥이 규칙은 클래스/비클래스에도 적용된다.** default 인자 스코프 위험은 **클래스 메서드에서는 이미 닫혀 있었다**(`default_is_scope_safe`, 주석까지 달린 채) — 평범한 함수/태스크 쌍둥이만 안 닫혀 있었다. 어떤 규칙을 한 종류의 호출 가능 객체에 걸었으면 **나머지 종류를 그 자리에서 확인하라**.
-- **이름을 금지하지 말고 바인딩을 비교하라.** 그 default 가드를 "이름을 쓰면 거부"로 만들면 generate 블록/서브루틴 본문에서 모듈 넷을 가리키는 **정상** 케이스까지 죽는다. 두 스코프에서 같은 것을 가리키면 두 낮추기는 같은 낮추기다 — 프리픽스가 같고 subst 가 비면 O(1) 통과, 다를 때만 실제 바인딩을 비교.
-- **elaborate 게이트로 잡을 수 없는 것도 있다 — 사본이 둘일 때.** `task automatic` 은 frame 과 inline **두 벌**로 낮춰지고 호출자가 쓰는 건 inline 쪽일 수 있다. frame 사본에 건 elaborate 게이트는 **정상 동작하는 설계를 false-loud** 로 만들었다(실측). 실행기가 못 하는 일은 **실행기에서** fatal 로 잡아라(`fatal_frame_heap_write` 채널) — 그 사본이 실제로 도는 순간에만 터진다.
-- **게이트를 열면 그 아래 경로가 실제로 도는지 끝까지 몰아 봐라.** §3.1 을 연 뒤 리포트의 실제 관용구를 파일 I/O 까지 포함해 재현해 보고서야 R19-X2 를 만났다. 최소 재현으로 게이트만 확인하고 멈추면 그 밑의 silent-wrong 은 사용자가 먼저 만난다.
-
-### 얕은/깊은 쌍둥이와 정지 조건 (§4.5.273) — 같은 실수는 쌍둥이에도 있다
-
-- **워커를 얕은/깊은 쌍으로 나눴다면, 한쪽을 고칠 때 다른 쪽도 열어라.** R17 은 얕은 `stmt_no_ref` 의 타이밍-접두 처리를 고쳤지만 **깊은 `stmt_no_ref_deep`(callee 본문용)에는 손대지 않았다** — 그래서 `@(posedge clk)` 한 줄이 든 표준 클럭 드라이버 태스크를 부르는 것만으로 caller 의 뒤쪽 로컬이 전부 못 쓰게 됐고, 그게 라운드 하나의 진단 12건 중 11건이었다. 쌍둥이는 **같은 버그를 두 번 갖는다**.
-- **"참조하나"와 "시간이 흐르나"는 다른 질문이고, 다른 리졸버가 필요하다.** callee 가 어떤 이름에 대해 **inert 임이 증명돼도** 그 callee 는 스케줄러를 넘길 수 있다. 참조 게이트를 여는 슬라이스에서 시간 게이트를 같이 열지 않으면, 참조 쪽 완화가 시간 쪽 구멍을 **넓힌다**.
-- **"이미 안전한 상태니 끝"이라는 早期 return 은 불변식이 정말 단조로울 때만 옳다.** 신선한 넷에서는 "한 번 쓰이면 계속 우리 것"이지만 **공유 넷에서는 아니다** — suspend 가 정확히 그 소유권을 넘기는 순간이다. 그 早期 return 때문에 공유-넷 규칙에 **닿지도 못한** 코드 경로가 있었고, 규칙이 존재한다는 사실이 그것이 실행된다는 뜻은 아니었다.
-- **순서에 의존하는 게이트는 첫 번째 대상을 절대 검사하지 않는다.** "심볼이 이미 있으면 충돌"이라는 게이트는 **두 번째 이후 선언만** 본다. 첫 선언은 자기 넷이 사설인 줄 알고 통과한다 — 그건 의미가 아니라 도착 순서다. 답이 대칭이어야 하면 **순수 AST 사전 계산**으로 옮겨라(이 repo 의 `compute_*_block_locals` 3형제 패턴).
-- **파서가 조용히 강등한 lifetime 을 의심하라.** `automatic <unpacked-struct> r;` 은 타입명이 `typedefs` 에 없어 자동-lifetime 헬퍼가 실패하고, 뒤이은 멤버 fan-out 이 **lifetime 없이** 파싱했다 — `automatic` 이 무음으로 static 이 됐다. **같은 자리에 다른 타입을 넣어 대조하라**(`int`/enum/alias 는 되고 struct 만 안 되면 파싱 경로가 다른 것이다).
-- **desugar 를 아는 것이 규칙을 단순하게 만든다.** struct 멤버는 파서가 상수 part-select 로 바꾸므로 DA 시점엔 셀 멤버가 없다 — **비트 커버리지**가 더 단순하면서 더 일반적이다(단일 멤버·필드별·손으로 쓴 part-select 가 한 규칙으로).
-- **fan-out 은 이름을 바꾸지만 호출 인자는 안 바꾼다.** SoA 는 변수를 `$unp$v$m` 로 쪼개도 **인자는 `v` 그대로** 남는다 — 멤버 이름을 추적하는 워크에는 그 인자가 **아무것도 안 건드리는 것처럼** 보인다(쓰기는 false-loud, `inout` 의 copy-in 읽기는 잠재 unsound).
-
-### 인자 관측성 (§4.5.272) — 최종 형태를 남기는 곳이 없으면 로그는 못 답한다
-
-- **사람이 읽는 인자와 프로세스가 받는 인자는 다른 텍스트다.** Makefile/래퍼로 실행되면 셸이 `$(WIDTH)` 를 이미 치환했고, filelist 전개기가 `-f` 프레임을 없앴고, env 로 온 knob 은 argv 에 **흔적이 없다**. 그리고 **후자만이 실행을 결정했다.** 로깅 시점엔 복원 불가이므로, **전개 前 argv 를 그 자리에서 포착**해 두지 않으면 그 정보는 영구히 사라진다.
-- **"디버그용 dump 서브커맨드가 있다"는 답이 아니다.** `--dump-filelist` 는 **exit** 하므로 실행 로그와 **공존할 수 없다** — 실패한 그 실행이 무엇을 컴파일했는지 답하지 못한다. 관측 출력은 **실행과 같은 프로세스·같은 스트림**에 있어야 한다.
-- **관측 출력은 진단과 같은 writer 로 흘려라.** 별도 `eprintln!` 은 `--log` tee 에 안 담기고 순서도 어긋난다. 기존 `Progress` 이벤트로 내면 로그 파일이 **완전한 실행 기록**이 되고, `-q`/게이트 정책도 자동으로 일관된다.
-- **파생값은 값과 함께 출처를 찍어라.** `threads: 4` 만으로는 `--threads` 인지 `VITA_THREADS` 인지 auto 인지 모른다 — 그리고 세 번째 경우가 가장 찾기 어렵다.
-- **줄바꿈은 의미를 가른다.** 값 목록을 접을 때 **플래그와 그 값을 갈라 놓으면 안 된다** — 줄 끝의 `-D` 와 다음 줄 머리의 `W=32` 는 "맨몸 플래그 + 떠도는 소스 파일"로 읽혀, 관측 출력의 목적과 정반대가 된다. 단일 값이 마진보다 길면 **쪼개지 말고** 넘겨라(끊긴 경로가 긴 줄보다 나쁘다).
-- **관측 기능이 결함을 드러내면 그것이 그 기능의 첫 증명이다.** echo 를 붙이자 전개기의 `takes_value` 가 원래 5개 시절 그대로임이 보였다 — 그 뒤 추가된 **모든** 값-플래그의 값이 `-F` 프레임에서 소스처럼 재작성돼, `--top top` 은 false-loud 였고 `--hier-tree h.txt` 는 **exit 0 으로 조용히** 다른 디렉터리에 썼다. **"플래그 목록"류 술어는 새 플래그를 추가할 때 같이 갱신되지 않으면 조용히 썩는다** — 정본 위치에 그 이유를 주석으로 박아라.
-
-### 정적 분석 게이트 (§4.5.266~268) — 거부의 근거를 측정하라
-
-- **분석의 격자가 답해야 할 것보다 좁으면, 좁음 자체가 오진이 된다.** definite-assignment 워크가 assigned **bool 하나**만 들고 다니면 "다음 문장으로 흘러간다"와 "뛰어서 나간다"를 **구분할 수 없고**, 그래서 첫 쓰기 앞의 `break`/`continue` 가 나중 읽기에 미기록으로 도달하는 살아있는 경로로 읽힌다(리포트 84건 중 49건이 이 하나였다). 격자를 넓히기 전에 **틀린 답 두 개가 같은 값으로 뭉개지고 있지 않은지** 보라.
-- **"안전하니까 전부 그렇게 취급"이 바로 그 다음 silent-wrong 이다.** `break`/`continue` 를 non-fallthrough 로 만들 때 **일반 `disable` 까지** 그렇게 하면, 조상이 아닌 블록을 지목한 `disable` 은 실제로는 계속 흐르므로 그 경로가 join 에서 빠지고 **진짜 read-before-write 가 조용히 통과**한다. 합성 라벨(`$break$`/`$continue$`)처럼 **구별 가능한 근거**가 있을 때만 특별 취급하라 — 그리고 escaped identifier 는 `$` 를 담을 수 있으니 사용자가 같은 철자를 쓸 수 있는지도 확인하라.
-- **"일부러 미검증"이라 적힌 자리는 근거가 실재하는지 재측정하라 — 그리고 대개 실재한다.** 문장 위치 user call 이 DA 워크를 끝내던 것은 버그가 아니라 F5 리뷰의 결론이었고(v1 은 블록 로컬을 모듈 넷으로 publish 하므로 callee 본문이 그 이름을 부를 수 있다), **실측해 보니 사실이었다**(`$display(a)` 로도, 계층 `t.a = 99` 로도). 답은 제약을 걷는 게 아니라 **callee 가 그 이름을 건드릴 수 없음을 증명**하는 것이다. 리포트가 "오진"이라고 불러도 근거부터 재현하라.
-- **caller 자기 문장에 맞는 경로 규칙이 callee 본문에는 안 맞는다.** head-segment 규칙(`p.segments.first()`)은 로컬 `a` 를 `a`/`a.f`/`a[i]` 로 보는 데는 정확하지만, flatten 된 넷은 **계층 self-path** `t.a` 로도 닿는다. 질문이 "이 callee 가 저 넷을 건드릴 수 있나"로 바뀌면 규칙은 **모든 세그먼트**여야 한다. 사본을 만들지 말고 **opt-in 파라미터**로 넣어라(리터럴 `false` 가 오늘 동작으로 단락되면 회귀 여지가 없다).
-- **뻔한 수정을 구현했으면 측정하고, 틀리면 되돌려라.** 초기화자 없는 `automatic` 을 per-entry 로 만들어 진입마다 리셋하는 것은 §6.21 을 그대로 읽은 것처럼 보이지만 **틀렸다** — automatic 저장은 블록 진입이 아니라 **ACTIVATION** 마다 만들어진다(iverilog: 루프 3회 진입 `xx, 10, 11` **잔값 생존** vs 호출 3회 `xx, xx, xx`). 초기화자만 진입마다 다시 돈다. 사양 문장을 인용하기 전에 **두 상황을 갈라서 재라**.
-- **증명할 수 없으면 커버리지를 좁혀라, 의미를 바꾸지 말고.** 원소별로 채운 고정 배열은 "전부 썼는가"를 일반적으로 증명할 수 없다(`foreach` 인덱스는 상수가 아니다). 증명 가능한 부분집합(리터럴 인덱스 · 블록 최상위 · 배열을 읽지 않는 rhs)만 받아들이고 나머지는 loud 로 두는 편이, 전체를 받기 위해 런타임 의미를 바꾸는 것보다 **항상** 안전하다.
-- **한 선언의 declarator 들은 서로 독립이다.** `d.names.first()` 로 판정하고 전체에 적용하면, 아무 문제 없는 이름이 **존재하지 않는 넷과 충돌한다**는 말을 듣고 선언이 통째로 버려져 이후 모든 사용이 "undeclared" 가 된다(모듈 넷 하나 → 진단 8건, 그중 7건이 무고). 분할은 **판정이 갈릴 때만** 하면 기존 설계는 한 바이트도 안 변한다.
-- **두 단계가 같은 이름을 만드는 규칙은 한 곳에 적고 양쪽이 그걸 쓰게 하라.** Nets 단계 hoist 는 평평하게 재귀하고 Logic 단계는 `with_scope` 로 중첩하면, 두 레벨이 다 스코프인 순간 **넷이 있는 경로와 찾는 경로가 갈라진다**. 그걸 피하려고 분류기가 "중첩된 후보를 전부 버리는" 규칙을 갖게 되고, 그 규칙이 곧 기능 제한(한 레벨은 되고 두 레벨은 안 됨)으로 표면화된다. **제한처럼 보이는 것의 근거가 다른 단계의 구현 세부면, 그 세부를 고쳐라.**
-- **"직계 자식"으로 쓴 규칙은 중첩이 생기는 순간 조용히 틀린다.** 블록 로컬 flush 가 `!rest.contains('.')` 로 **깊이 1** 만 claim 하고 있었고, 블록이 스코프를 중첩할 수 있게 되자 더 깊은 키를 **아무도 claim 하지 않았다**. 그 부류를 잡은 것은 테스트가 아니라 **미방출 가드**다 — 안 보이는 실패에 가드를 다는 값은 이렇게 회수된다.
-- **진단은 아는 것만 말하고 추론하지 마라.** "this one is `automatic`, so the OTHER is not" 은 "이 쌍이 스코프를 못 받았다"에서 끌어낸 **추론**이고, 스코핑이 보류되는 이유는 여럿이므로 **거짓일 수 있다** — 리포트의 사례에서는 둘 다 `automatic` 이었고 독자는 존재하지 않는 static 쌍둥이를 찾아다녔다. 아는 사실(이 선언의 lifetime)만 말하고 조건은 **나열**하라.
-- **resolve 패스에서 뜨는 진단은 span 을 실어 나르지 않으면 위치가 없다.** 계층 task call 거부는 리포트 84건 중 **유일하게** `file:line:col` 이 없었고, 그것만 나오는 TB 에서는 로그 전체에 위치가 하나도 없었다. defer 레코드에 **defer 시점의 span** 을 담고 resolve 루프가 그것을 세팅하면 된다.
-- **스냅샷을 표현식 앞에 한 번 방출하는 기구는 슬롯이 하나다.** dyn-array formal 의 마커를 표현식 전체에 대해 방출하면, 같은 함수를 **두 번** 부르는 표현식은 둘 다 마지막 스냅샷을 읽고, **재귀** 호출은 자기 formal 을 덮어쓴 뒤에 읽는다(모든 레벨이 같은 배열을 넘길 때만 우연히 맞는다 — 기존 핀이 정확히 그걸 잡았다). temp 로 쪼갤 수 없는 자리(프레임 본문)에서는 **거부**가 정답이고, 그 거부 메시지는 "슬롯이 하나"라는 진짜 이유를 말해야 한다.
-
-- **성능도 사다리다 — 값이 같아도 비용이 바뀌면 회귀다.** 정확성을 사는 프리미티브가 **피연산자를 몇 번 언급하는지**를 세라: `extend_to` 의 sign-fill 은 2회, `coerce_two_state` 는 **선언 비트마다 1회**이고, 엔진은 아레나 DAG 를 **트리로** 걷는다(3백엔드 전부 · 폭에 선형). 그래서 ⓐ 불순 피연산자는 언급이 늘면 **부작용이 늘고**(랜덤 스트림이 밀린다), ⓑ 순수 피연산자도 런타임이 O(폭) 이 된다. 값 게이트는 이 축에 **구조적으로 눈이 멀다** — 바이트 동일성 코퍼스에 그 형태가 0개면 비용 변화는 안 보인다(실측: `examples/`·`bench/` 에 2-state formal 0개). **비용을 바꾸는 수정에는 그 형태를 담은 벤치를 함께 지어라.**
-- **상호작용하는 성질은 전부 적용하거나 전부 미적용이다 — 그리고 게이트는 성질마다가 아니라 *하나*여야 한다.** 폭·부호·2-state 처럼 서로의 전제인 셋을 부분 적용하면 미적용보다 나쁘다(세 번 실측). 하나의 선행조건(신뢰 가능한 폭 등)에 셋을 함께 걸고, 없으면 pre-slice 를 verbatim 으로 두어라. **후퇴안도 측정 대상이다.**
-- **한 규칙을 두 자리에서 적용하면 가드가 따라오지 않는다.** 프리미티브 *밖*에 단계를 하나 더 붙이면 그 프리미티브의 real/string/폭 가드를 **상속하지 않는다** — 새 단계는 가드를 **함수 꼭대기로 올려** 두 단계가 함께 받게 하라.
-- **뮤테이션 생존이 몰려 있으면 그것은 코드가 아니라 *테스트 축*의 진단이다.** 생존자들의 공통점을 세라 — "actual 축에 real 이 없다·계층 참조가 없다·unsigned 변종이 없다·피연산자가 전부 4-state 라 세 팔이 결정에 참여조차 안 한다" 처럼 **한 문장**으로 나오면 그 문장이 다음 행들의 설계도다.
-
-## 외부 aes_top 3판 (2026-08-18 · §4.5.341)
-
-- **⭐⭐ "경고해 달라"는 요청이 왔으면 먼저 그 축 전체를 오라클로 재라 — 요청의 스코프는 측정의 스코프가 아니다.**
-  외부 리포트가 `"\r"` 하나에 대해 *"고쳐 달라가 아니라 경고해 달라"* 라고 정확히 적어 왔다(그들 쪽
-  버그였고 이미 고쳤다). 요청대로 그 한 글자에 경고만 붙였으면 끝났을 텐데, **escape 축 전체를
-  iverilog+verilator에 대고 재자 IEEE Table 5-1이 정의하는 다섯(`\ddd`·`\xhh`·`\v`·`\f`·`\a`)이
-  전부 조용히 틀려 있었다** — 값도 폭도. ⚠️⚠️ **그리고 리포터가 제안한 우회(`"\015"`, `"\x0D"`)가
-  그 다섯 중 둘이었다**: 요청대로만 했으면 우리가 낸 경고가 **동작하지 않는 해결책**을 권했을 것이다.
-  ⇒ 리포터는 자기가 밟은 칸을 알지 자기가 안 밟은 칸을 모른다. **한 칸이 틀렸다는 보고는 그 표를
-  전부 재라는 뜻이다.**
-
-- **⭐ 모델에 필드가 있는데 채우는 곳도 읽는 곳도 없으면 "미구현"이 아니라 죽은 계약이다.**
-  `Diagnostic::context: Vec<Frame>`(계층/인스턴스 경로)는 크레이트가 생긴 이래 **생성 사이트 35곳
-  중 0곳이 채우고 렌더러에 arm이 0개**였다. 그 사이 외부 리포트가 *"같은 경고 4줄이 전부 다른
-  인스턴스인데 구분이 안 된다"* 를 올렸다 — **필드는 그 질문의 답으로 설계돼 있었다.**
-  ⇒ 새 진단 축을 지을 때 "모델에 자리가 있나"가 아니라 **"소비자가 있나"를 census 하라.**
-  같은 런에서 `location`도 33/35가 `None`이었다(실측: picorv32 진단 71건 중 위치 있는 것 **0**).
-
-- **⚠️⚠️ 차분 하네스가 "0 발산"을 내면 제품보다 하네스를 먼저 의심하라 — 한 sweep에서 세 형태가
-  연달아 나왔다.** ⓐ **BSD `join`은 `-o`가 파일 앞에 와야 한다** — 인자 순서가 틀리면 usage를
-  찍고 **0행을 비교한 뒤 "0 발산"** 이 된다(종료코드를 안 보면 초록). ⓑ **`64'("\r")`로 재면
-  escape가 아니라 캐스트를 잰다** — iverilog가 그 캐스트에 0을 답해서 **모든 행이 0으로 일치**했다.
-  ⓒ **정규식 구분자가 데이터와 충돌하면 한 칸이 조용히 빠진다** — 백틱으로 감싼 메시지에서
-  `` `([^`]+)` `` 는 escape가 백틱일 때 못 잡아 **"이 칸만 경고가 없다"는 가짜 결함**을 만든다.
-  ⇒ **행 수를 먼저 단언하라**(양쪽 파일의 행 수 + 키 정렬), 그리고 **알려진 발산 하나를 sweep에
-  심어 그것이 잡히는지 확인하라**(공허성 방지).
-
-- **⭐ 테스트의 needle이 한 글자면 그것은 키가 아니다.** `count(&err, "R")`가 `$error("R")` 세 건을
-  세고 있었는데, 세 줄에 R이 하나씩이라 **우연히 3**이었다. 렌더러가 mnemonic(`E-RUN-USER-ERROR`,
-  R 세 개)을 찍기 시작하자 **18**이 됐다. ⇒ 진단을 세는 needle은 **렌더된 형태의 판별 가능한
-  조각**이어야 한다(`": R [at time 0]"`). 메시지 텍스트가 짧을수록 이 함정이 크다.
-
-- **⭐ 비결정적 필드를 추가하면 determinism golden이 먼저 묻는다 — 그것이 결정을 강제하는 자리다.**
-  `run.json`에 `elab_s`/`sim_s`를 넣자 `two_runs_byte_identical_bar_wallclock`이 즉시 빨개졌다.
-  통과시키는 방법은 둘뿐이고 **둘 다 명시적 선언**이다: isolated 목록에 넣거나, 결정적으로 만들거나.
-  ⇒ 그 게이트는 "번거로운 검사"가 아니라 **새 필드의 성질을 코드에 적게 만드는 장치**다(그 자리에
-  존재 단언도 함께 두어 제외 규칙이 공허해지지 않게 유지한다).
-
-- **⚠️⚠️ 뮤테이션 배터리 안에서 `git checkout -- .` 를 쓰면 커밋 안 된 슬라이스가 사라진다 — 두 번째 실사고.**
-  §4.5.337이 이 규칙을 적었는데(*"바이트 스냅샷을 써라"*), 이번엔 **배터리 본체가 아니라 그 앞의
-  "패턴이 맞는지 확인하는 루프"** 에서 재발했다: 케이스마다 치환해 보고 `git checkout -q -- .` 로
-  되돌렸는데, 그것이 **32파일 중 스냅샷에 없던 22개를 HEAD로 되돌렸다**(스냅샷은 뮤테이션 대상
-  10개뿐이었다). 증상은 `git diff --stat`이 32 → 10으로 준 것뿐이고 빌드는 그대로 됐다.
-  ⇒ 규칙을 **두 방향으로** 강화한다: ⓐ 복원은 **경로가 명시된 `cp` 스크립트**여야 하고(스냅샷
-  파일명↔경로 매핑을 손으로 재구성하지 마라 — `_`↔`/` 치환은 `vita-log` 같은 이름에서 깨진다),
-  ⓑ **스냅샷은 뮤테이션 대상이 아니라 `git status`의 수정 파일 전체**여야 한다. 치환 패턴을
-  미리 검증하고 싶으면 **트리를 건드리지 말고 문자열 count만** 세라.
-  ⓒ **복원 루프는 bash 로 돌려라 — zsh 는 미인용 `$VAR` 를 word-split 하지 않는다**(#10 실사고):
-  `for f in $RESTORE; do cp …` 가 zsh 에서 목록 전체를 **한 인자**로 만들어 cp 가 조용히 실패했고,
-  뮤테이션 7개가 **스택**된 채 다음 케이스의 killer 가 돌았다(첫 케이스 이후의 kill 은 전부 귀속
-  불가 = 라운드 폐기). 재실행 스크립트는 ⓐ `#!/bin/bash` 명시 ⓑ 케이스 진입 전 **스냅샷과
-  diff 하는 격리 가드**(pre-dirty 면 즉시 중단)를 갖춰라 — 가드가 있으면 이 실패 모드는 첫
-  케이스에서 loud 다.
-  ⓓ **복원은 스크립트 안의 `trap restore EXIT` 로 걸어라 — 바깥 타임아웃은 복원 직전에 명령을
-  죽인다**(§4.5.343 실사고): `mutate && suite && restore` 를 한 컴파운드로 띄우고 러너 타임아웃이
-  suite 도중 SIGTERM 을 보내자 **restore 가 영원히 안 돌아 트리가 뮤턴트 상태로 남았다**(exit 143).
-  복원을 EXIT trap 으로 스크립트 안에 넣으면 타임아웃·중단·실패 어느 경로로 죽어도 복원이 돈다 —
-  단 SIGKILL 은 trap 도 못 잡으므로 ⓑ 의 격리 가드는 여전히 필수다(가드가 다음 진입에서 잡는다).
-
-## 큐 항목과 클래스 (2026-08-21 · §4.5.353 · §4.5.350)
-
-### ★★★ "안 부르는 것" 은 정확성 축에서도 같은 크기의 표적이다
-
-§4.5.351·352 는 **성능** 축에서 *"빠른 경로를 지어 놓고 안 부른다"* 를 찾아 −3.9%·−10.5% 를 얻었다.
-§4.5.353 은 **정확성** 축에서 **똑같은 모양**을 찾았다 — `resize_fill_rhs` 는 IEEE §5.7.1 을 정확히
-구현해 놓고 이미 세 곳에서 불리고 있었는데, **다른 세 곳이 안 불렀다**. 새 머신러리 0줄, 고침은
-같은 함수 한 줄씩 세 군데.
-
-⇒ **탐지기는 축과 무관하다**: *"이 규칙을 구현한 함수가 있나? 그걸 부르는 자리를 전부 세어 봤나?"*
-`grep` 로 호출자 목록을 뽑고 **호출해야 하는데 안 하는 자리**를 세는 것이 첫 수순이다.
-
-### ★★ 큐는 **증상**을 적고 census 는 **클래스**를 적는다 — 두 번 연속 그랬다
-
-| 슬라이스 | 큐에 적힌 개수 | census 가 센 개수 |
-|---|---:|---:|
-| §4.5.350 (음수 상수 소비자) | 2 | **3** |
-| §4.5.353 (fill 문맥 폭) | 1 | **3** |
-
-큐 항목은 *"누군가 부딪힌 한 모양"* 이다. **착수 첫 행동은 구현이 아니라 census** 이고, 그 census 는
-모양이 아니라 **코드**에서 출발해야 한다(대입형 IR 을 만드는 자리를 전부 grep → 각각 fill 이 닿는지 판정
-→ 오라클로 확인). §4.5.353 에서 ⓑ`force`·ⓒ절차적 continuous assign 은 **write-twin 스윕**이 찾았고,
-큐가 준 ⓐ 만 고쳤으면 둘은 조용히 틀린 채 남았다.
-
-### ★★ 같은 구문을 두 번 하강하면, 그 둘을 **직접 diff 하는 설계**를 써라
-
-`wire [7:0] a = '1;` 은 **암묵적 continuous assign** 이다. 그러니 `assign a = '1;` 과 답이 같아야 한다.
-그 한 줄이 자리를 찍었다:
-
-```systemverilog
-wire [7:0] a = '1;      // 00000001  ← 틀림
-wire [7:0] c; assign c = '1;  // 11111111  ← 맞음
-reg  [7:0] b = '1;      // 11111111  ← 맞음
-```
-
-**탐지기**: 언어에 *"같은 뜻의 다른 철자"* 가 있으면(선언 초기화 vs `assign`, 절차적 `assign` vs `force`,
-`always_comb` vs `assign`) **한 파일에 나란히 놓고 한 줄로 출력**하라. 셋이 다르면 자리는 이미 좁혀졌다.
-
-### ★★ 규칙을 고칠 땐 **그 규칙의 반대 절반**도 같이 핀하라
-
-문맥-결정을 고쳤으면 **자기결정**을 같이 고정해야 한다. §4.5.353 은 shift 량·`**` 지수·`&&`/`||`
-피연산자·비트 인덱스의 fill 이 **1비트로 남는지**를 8칸 실측하고 테스트로 박았다. 안 그러면
-`8'd1 << '1` 이 `1 << 255` = 0 이 되는 **silent-wrong ↔ silent-wrong 맞바꾸기**를 했는지 알 수 없다.
-*"고쳤다"* 와 *"옮겼다"* 를 구분하는 건 반대편 핀뿐이다.
-
-### ★ 2-state 오라클의 0 은 **분열이 아니다**
-
-`wire [7:0] a = 'x;` 에서 iverilog 는 `xxxxxxxx`, verilator 는 `00000000` 을 준다. 이건 오라클 분열이
-아니라 **verilator 가 2-state** 인 것이다. LRM(§5.7.1)이 명시적이면 iverilog + LRM 이 정본이다.
-반대로 `'{m: '1}` struct 패턴은 **iverilog 가 거부하고 verilator 가 수용** — 그건 진짜 분열이고 불가침.
-
-### ★★★ 공유 헬퍼에 호출을 **더할** 때는, 그 헬퍼가 이미 틀리고 있는 입력을 먼저 세라
-
-§4.5.353 의 초안은 `resize_fill_rhs` 를 세 곳에 더 불렀고 **`real` 타깃에서 correct→silent-wrong** 을
-만들었다(`force r = '1;` 이 1.0 → 1.84467e+19). 적대 리뷰가 잡았다.
-
-⭐ **가드를 어디 두느냐가 결과를 갈랐다.** 호출부 셋에 달았으면 내 회귀만 막고 끝이었다.
-**헬퍼 안**에 두니 — 규칙 하나, 철자 하나 — **선행 호출자들이 이미 같은 방식으로 틀려 있던 4건**
-(`real e; e='1;` · `real d='1;` · `real f[0]='1;`)까지 같이 고쳐졌다.
-
-⇒ **절차**: 공유 헬퍼에 N 번째 호출자를 붙이기 전에, **기존 N−1 개 호출자에 그 입력을 먹여 보라.**
-같이 틀리면 자리는 호출부가 아니라 **헬퍼 안**이다. 그리고 그때 고침의 값어치는 N 배가 된다.
-
-### ★ 뮤턴트의 **예상 결과를 먼저 적고**, 틀리면 그게 발견이다
-
-§4.5.353 배터리에서 단축 평가 제거 mutant 에 *"SURVIVE 예상 — IR/성능 가드일 뿐"* 이라 적어 두고 돌렸다.
-**KILLED** 였다(`cli::clog2_repl_count` 4건). 이유: `lower_expr_ctx` 의 Replicate arm 은 count 를
-`lower_index_expr` 로 내리는데 `lower_expr` 의 arm 은 `$clog2` 폴드 경로를 쓴다 — 즉 그 단축 평가는
-**값 가드**였다. 예상을 안 적었으면 *"또 하나 죽었네"* 로 지나갔을 것이고, 새 가드를 그 **앞**에 둘 뻔했다.
-
-⇒ 배터리 표에 **`exp=` 칸을 반드시 채워라.** 맞으면 확인이고, **틀리면 그 자리가 내가 잘못 알고 있던 곳**이다.
-
-### ★★ 게이트 술어가 **under-detect** 하면 고침이 조용히 빗나간다
-
-`resize_fill_rhs` 는 `if !expr_contains_fill(rhs) { return rhs_id; }` 로 시작한다. 그 walk 이
-`MinTypMax` 를 안 걸어서, `(1:'1:2)` 는 **고친 자리에서도 안 고쳐졌다**. `lower_expr` 는 그것을
-투명하게 `typ` 로 내리는데 **게이트만 못 본** 것이다.
-
-**탐지기**: 조기 반환 술어가 **AST 를 걷는다면**, 그 walk 의 arm 집합이 **하강의 arm 집합과 같은지**
-확인하라(memory: accept-gate-walker-completeness). 하강이 투명 pass-through 하는 노드는 walk 도
-투명해야 한다. `_ => false` 는 편하지만 **빠뜨린 arm 을 조용히 만든다**.
-
-## 성능 — 무엇을 재는가 (2026-08-21 · §4.5.351/352 · doc-20 M4)
-
-### ★★ 1% 아래를 물으려면 wall 이 아니라 **retired instructions** 로 재라 (§4.5.352 리뷰)
-
-*"이 변경의 최악 케이스가 0 인가"* 를 wall 로 물었더니 같은 설계 25라운드에 **+0.24% 와 +0.59% 가 둘 다**
-나왔다(min 과 median 이 부호까지 어긋남). 검증자가 macOS `/usr/bin/time -l` 의 **instructions retired**
-(arm64 · 재현성 ±0.02%)로 바꾸자 즉시 결론이 났다 — 무해 대조군 +0.007% vs 변경 +0.360% ⇒ **비용은
-레이아웃이 아니라 그 루프**. 게다가 **선형성**(딜레이 iteration 당 +3 명령 · 건너뛴 iteration 당 −3.3)까지
-읽혀 **손익분기점**이 나왔다. ⇒ **표적 델타가 1% 미만이면 wall 은 계기가 아니다.**
-
-### ★★ 성능 A/B 에는 **무해 대조군**이 필요하다 — 형태별 ±1~2% 는 실행이 아니라 배치다 (§4.5.352 리뷰)
-
-구조체에 필드를 하나 더하면 이후 필드 오프셋이 전부 밀리고 text 섹션이 바뀐다. 리뷰 렌즈가 네 번째
-바이너리 **`Apad`**(= PRE 소스 + **필드만 추가**, 루프는 옛것 그대로 = 실행 명령은 PRE 와 동일)를 지어
-재니 **picorv32 +0.9% · cont_assign_heavy −5%** 가 움직였다. 실행된 코드는 한 줄도 안 바뀌었는데.
-
-⇒ **형태별 ±1~2% 는 증거가 아니다.** 표적 형태의 큰 델타만 신뢰하고, 나머지 형태는 *"노이즈 바닥
-안"* 이라고만 말하라. 같은 소스를 두 번 빌드해 **0.0% 바닥**을 먼저 보여 두면 더 좋다.
-
-### ★★ 두 `/usr/bin/sample` 프로파일을 비교할 때 물어야 할 것 **둘** (§4.5.352 · 리뷰가 나를 고쳤다)
-
-**ⓐ 분모가 같은가.** `sample <pid> N` 의 분모는 **샘플링 창 N** 이지 런의 wall 이 아니다 —
-프로세스가 창보다 오래 살면 PRE/POST 분모가 같고 share 를 그대로 비교해도 된다. **그런데 프로세스가
-창 안에서 끝나면** 분모가 줄어 안 바뀐 함수가 전부 오른 것처럼 보인다. 내가 정확히 그랬다:
-10 s 창에 POST 런이 ~10.3 s 라 **분모가 7482 vs 6879 (−8%)** 였다. ⇒ **창을 짧은 쪽 런보다 확실히 짧게**
-잡고(6 s 로 재니 4474 vs 4499 = 일치) **두 분모를 반드시 적어라**. 다르면 그 쌍은 비교 불가다.
-
-**ⓑ 분모가 같아도 share 는 절대 시간이 아니다.** 전체가 10% 빨라지면 **안 바뀐 함수의 share 는
-1/0.896 = 1.116 배로 오른다**. 분모를 맞춘 재측정에서 `exec_vm::run` 은 12.96% → 14.60%(비 1.127)
-= 예측대로 **평평**이었다. *"이 함수가 변했나"* 를 물을 땐 **share × wall** 로 바꿔서 비교하라.
-*"지금 무엇이 비싼가"*(다음 표적 고르기)를 물을 땐 **POST share 를 그대로** 쓰는 게 맞다 — 두 질문은
-다르고 정규화를 섞어 쓰면 후자가 틀린다.
-
-### ★★ 나눗셈은 게이트가 아니라 **탐색**이다 (2026-08-21 · §4.5.352)
-
-바로 위 규칙(*"짓기 전에 나눗셈"*)을 지키려고 추천 후보의 함수를 프로파일했는데, **같은 함수 안에
-6배 큰 것**이 있었다. 추천 후보(반 B)는 진짜였고 −2.4%, 나눗셈이 찾아낸 것(반 A)은 **−8.4%** 였다.
-
-⇒ 나눗셈의 값어치는 *"지을까 말까"* 를 정하는 데 있지 않다. **그 함수를 열어 보게 만드는 데** 있다.
-후보가 작아 보여도 나눗셈은 하라 — 답이 "하지 마라" 여도, 그 과정에서 표적이 바뀐다.
-
-### ★★ `continue` 만 하는 루프 바디는 소스에서 안 보이고 프로파일에서 거대하다
-
-```rust
-for ci in 0..self.st.ir.cont_assigns.len() {
-    let Some(d) = self.st.ir.cont_assigns[ci].delay else { continue };
-```
-
-읽으면 *"딜레이 붙은 것들을 처리한다"* 이다. 실제로는 **전부 만진다**. picorv32 에서
-`delay` 붙은 게 **0개**인데 **278,601,194 회** 돌았고 그게 런타임의 **7.2%** 였다.
-
-**탐지기**: `for … in 0..len` 의 첫 문장이 `if !cond { continue }` 계열이면, 그 `cond` 를
-**한 번만** 물을 수 있는지 보라. 정적 IR 필드면 언제나 그렇다.
-
-### ★★ 스캔의 단위를 **호출 빈도**와 곱해서 봐라 — 함수 이름은 단위를 알려주지 않는다
-
-`settle_cont_assigns` 는 이름만 보면 타임스텝당으로 읽힌다. **델타당**이다 — 200k 사이클에
-1,400,006 회(사이클당 7). O(설계 크기) 스캔이 델타당 함수 안에 있으면 **O(설계 × 델타)** 다.
-프로파일을 믿기 전에 계측으로 **호출 횟수를 세라**(이번엔 프로파일 7.24% 와 산술 7.3% 가 독립으로 일치).
-
-### ★ 사전필터를 넣을 때 원래 판정문을 **verbatim 으로 남겨라**
-
-집합을 미리 걸러 순회를 줄일 때 바디의 `let Some(d) = … else { continue }` 를 `unwrap` 으로 바꾸면
-사전필터가 규칙의 **두 번째 철자**가 된다(memory: classifier-must-match-lowering-resolver). 그대로 두면
-ⓐ 필터가 틀려도 옛 경로로 안전하게 떨어지고 ⓑ **계측으로 `skip == 0` 을 보여** 필터와 바디가
-런타임에 같은 판단을 한다는 증명이 공짜로 나온다. 비용은 분기 하나다.
-
-### ★ 같은 결함 모양은 **리전 수만큼** 있다
-
-flat store 를 안 부르는 자리: 블로킹(D1.6) → NBA(§4.5.351) → cont-assign settle(§4.5.352). 세 번째가
-**델타당 도는 리전**이라 가장 컸다. 한 리전을 고쳤으면 **"이 질문을 아직 안 받은 리전"의 census** 를
-바로 떠라 — 세 번 다 답이 있었다.
-
-### ★★ 가장 비싼 레버는 "안 지은 것" 이 아니라 **"지어 놓고 안 부르는 것"** 이다
-
-`k_write_scalar` 는 평범한 스칼라 쓰기용 flat store 로 **이미 존재했고**, 자기 주석에 존재 이유까지
-적어 뒀다. 그런데 `apply_nba` 가 한 번도 안 불렀고, 그 경로가 같은 설계에서 **24배의 물량**을
-나른다. picorv32 −3.9% 가 거기 있었다. 코드젠·스케줄러 재작성·cycle-mode 를 다 재고 죽인 뒤
-남은 것이 이것이었다. ⇒ **성능을 볼 때 첫 질문은 "무엇을 새로 지을까" 가 아니라
-"이미 있는 빠른 경로를 전부 부르고 있나" 다.**
-
-그 변형: **증명을 만들어 놓고 버리는 자리**를 찾아라. 여기서는 `Op::ScheduleNbaScalar` 가
-`plain_scalar_dest` 로 게이팅되므로 **스케줄 시점엔 알고 있었는데**, `NbaUpdate` 가 값과 offset 만
-나르고 분류를 안 날라서 apply 시점에 사라졌다. 리전을 건너는 자료구조는 분류를 흘린다.
-
-### ★ 짓기 전에 나눗셈을 해라 — 프로파일 %를 표적 크기로 착각하지 마라
-
-§4.5.350 에서 `wprog` 거절 census 가 *"47.6% 가 이 게이트"* 라 했고 나는 그것을 표적 크기로 읽었다.
-실제로 구제된 건 **19%** 였고(첫 실패 ≠ 유일 실패 — 대부분 다음 게이트에서 또 떨어진다), 그 19% 를
-시간으로 환산하면 **0.8%** 로 **노이즈 아래**였다. 계산은 짓기 전에 3분이면 된다:
-
-> (옮길 호출 수) × (경로당 비용 차) ÷ (전체 런타임) — 셋 다 이미 프로파일에 있다.
-
-### ★ 성능 측정의 하네스 규칙 셋 (전부 이번에 물렸다)
-
-- **제품 구성과 오라클 구성이 `target/debug/vita` 를 공유한다.** `--no-default-features` 빌드를 한 뒤
-  `cargo build -p cli` 가 *"Finished in 0.03s"* 로 넘어가면 **이전 구성의 바이너리가 남아 있다.**
-  그 상태로 잰 값이 회귀처럼 보였고 30분을 썼다. 구성을 바꿨으면 `touch` 후 재빌드.
-- **전체 스위트 두 개를 겹쳐 돌리지 마라.** `crates/cli/tests/` 에 **하드코딩 `/tmp` 경로가 12곳**
-  있어서 두 프로세스가 같은 파일을 동시에 쓴다(`bare_fscanf_writes_dest` 실측). 격리 재실행이
-  통과하면 flake 이고, 그 flake 는 내가 만든 것이다.
-- **A/B 는 백투백으로.** 세션 중 머신 상태가 드리프트한다 — 같은 POST 가 2.29 와 2.34 사이에서
-  움직였다. PRE 를 다시 재서 짝지어야 숫자가 산다.
-
-### ★ 리뷰에 **비공허성 증명**을 명시로 요구하라
-
-바이트 동일성은 **빠른 경로가 실제로 발화할 때만** 의미가 있다. differential 렌즈에 그것을 시켰더니
-계측 바이너리를 지어 *"fast arm 이 27 설계 중 22 에서 발화했고, 기록된 모든 발화에서 offsets 가
-예외 없이 `(0,0)` 이며 `else` 는 `(0,17)` 류를 본다"* 를 냈다. 그게 없으면 *"아무 일도 안 일어나서
-같았다"* 와 구분이 안 된다.
-
-## 음수 상수와 소비자 (2026-08-20 · §4.5.350)
-
-### 부호는 자기결정 폭에서만 존재한다 — "음수인가?" 를 폭-무제한 도메인에 묻지 마라
-
-한 소비자가 상수의 **부호**를 봐야 할 때(음수 replication count 거부, 음수 bound 처리),
-폭-무제한 fold(`const_eval_in_scope`)에 물으면 **맞는 설계를 false-reject** 한다. 실측:
-`{(4'd0-4'd1){1'b1}}` 는 두 오라클에서 15 복사(255)이고 `{(4'sd0-4'sd1){1'b1}}` 는 거부인데,
-무제한 도메인은 **둘 다 -1** 이라고 답한다. 두 철자는 비트 패턴이 같고 **폭과 부호 속성만** 다르다.
-⇒ 부호를 묻는 자리는 `const_bound_u32` 와 **같은 admission** 위의 자기결정 walk 를 써라
-(`const_bound_signed`). 그리고 경계 두 칸(unsigned wrap / signed wrap)을 **반드시 테스트에 핀**하라 —
-나중에 누가 "간단히" 무제한 fold 로 바꾸면 그 테스트가 먼저 깨져야 한다.
-
-### 한 값을 두 표현(lowered 노드 / AST)에서 읽어야 가족이 덮이는 자리가 있다
-
-replication count 는 파라미터면 `Const` 로 접히고, `{(2-3){…}}`·`{(W-4){…}}` 는 `Add`/`Sub` 로
-남는다. 후자에 u32 fold 를 걸면 **saturate 해서 0** 이 되므로 zero-체크가 *"count of zero"* 라고
-**-1 에 대해** 말한다 — loud 이긴 한데 **문구가 거짓**이다. 한 읽기만 두면 반드시 절반이 샌다.
-두 읽기를 OR 하되 **둘 다 폭·부호 정확**해야 한다(아니면 false-reject 를 하나 더 만든다).
-
-### "degenerate 한 특수 케이스" 라고 적힌 가정은 오라클로 다시 재라
-
-`declared_neg_lsb` 에는 *"`msb<0`, `lsb≥0` 은 degenerate 파라미터 언더플로"* 라는 주석이 있었고
-그 자리는 폭 1 로 클램프 + *"param value 0?"* 경고였다. 실측하면 두 오라클 모두 **2비트**를 내고,
-같은 분기에 **파라미터가 없는 리터럴 `logic [-1:0]`** 도 들어온다 — 즉 진단이 **존재하지 않는
-현상**을 지목하고 있었다. 방향이 어느 bound 가 내부 비트 0 인지를 정하는 것이지 **어느 쪽이
-음수인지가 정하는 게 아니다**. 옛 슬라이스가 절반만 열었다면, 나머지 절반을 막는 것은 대개
-머신러리가 아니라 **그때 세운 가정**이다(memory: restriction-may-be-assumption-not-missing-machinery).
-
-### 조용한 클램프는 조용한 truncation 과 같은 등급이다
-
-같은 코드에서 `.min(MAX_NET_WIDTH)` 로 **소리 없이** 폭을 자르고 있었다(§4.5.228 이 남긴 것).
-평범한 경로는 같은 조건에서 `exceeds the v1 cap` 에러를 낸다. 캡을 만나는 새 분기를 쓸 때는
-**옆 분기가 캡을 어떻게 처리하는지** 먼저 보고 맞춰라 — 안 그러면 슬라이스가 silent-wrong 을
-하나 새로 만든다.
-
-### 두 렌즈가 수렴한 발견은 고신뢰지만, 그 **귀속**은 내가 다시 재야 한다
-
-두 렌즈가 같은 `debug_assert` 패닉을 냈다. 한쪽은 *"PRE 도 패닉한다 = pre-existing"*, 나는 앞서
-*"PRE 는 경고만 냈다 = 내 하강"* 이라고 적었다. 갈린 이유는 내가 PRE 출력을 **`head -1` 로 잘라
-읽은 것**이었다 — 경고 다음 줄에 패닉이 있었다. **PRE 를 볼 때는 자르지 마라.** 그리고 `debug_assert`
-는 그 자체가 냄새다: 불변식이 거짓이면 debug 는 패닉, **release 는 조용히 틀린 답**이라 같은
-바이너리의 두 프로파일이 사다리의 서로 다른 칸에 있게 된다.
-
-### 옵트인은 "그 기능을 켤 수 있는 곳" 이 아니라 **"짝이 되는 기록이 실제로 실행되는 곳"** 이다
-
-`allow_neg_lsb` 는 *"폭과 사이드맵 기록을 함께 켠다"* 는 계약을 주석에 갖고 있었는데, 켜는 자리와
-기록하는 자리가 **같은 함수 안에서 550줄 떨어져 있었고 그 사이에 early-`continue` 가 다섯 개** 있었다.
-dyn/queue 원소 net 은 그중 하나를 타서 **넓은 폭만 받고 기록은 못 받았다** — 옛 클램프는 경고라도
-했으니 정확히 사다리 하강이다. ⇒ 옵트인을 쓸 때는 **켜는 조건**이 아니라 **기록 지점까지의 도달성**을
-술어로 써라(여기서는 "dyn 저장이 아닌 평범한 벡터").
-
-## 문서 구조 (2026-08-18 · ROADMAP 재편에서 실측)
-
-### ★ 정본이 둘이면 하나는 반드시 썩는다 — 그리고 썩은 쪽이 더 위에 있다
-
-`REMAINING_WORK §A` 는 *"다음 할 일은 ROADMAP §5.2"* 라 적고 `§B` 는 *"정본 순서 = ROADMAP §1"* 이라
-적고 있었다. **§1 쪽이 15일 썩어 있었다** — 그 NEXT 큐 0번이 2026-08-03 에 완료된 `③층 S1d-4a` 였고,
-거기 붙은 오너 지시(*"성능 T 단계가 우선순위 4단계 위에 올라간다"*)도 Phase D 종료가 뒤집은 뒤였다.
-세션이 끊긴 뒤 **파일 앞쪽(§1)을 먼저 읽으면 끝난 일을 다시 시작한다.**
-
-⇒ **한 질문에 정본은 하나.** 두 절이 필요하면 **질문을 갈라라** — 이 저장소의 답은
-*"§1 = 어떤 종류를 먼저 하나(시간 불변 원칙) · §5.2 = 지금 무엇을 하나(현재 큐)"* 이고,
-**서로를 이름으로 부르고 "여기에 두 번째 큐를 만들지 마라"를 본문에 적어 뒀다.**
-
-### ★★ 이관은 무손실 검증을 동반한다 — 그리고 그 검증이 진짜 손실을 잡았다
-
-ROADMAP 3,931 줄 중 **3,074 줄(78%)이 종료된 Phase A~D 서사**라 열린 작업이 14% 뿐이었다
-(= **절 번호가 큐 깊이를 전혀 뜻하지 않는다**). 별도 파일로 이관하면서 두 단계로 검증했다:
-
-1. **헤딩 집합**: `원본 ⊆ (신규 ∪ 아카이브)` — 차이는 의도적으로 개제목한 것만이어야 한다.
-2. **행 집합**(공백 제외·정렬·유일화): 같은 포함관계. ⭐ **이 두 번째가 진짜 손실을 잡았다** —
-   포인터라고 생각하고 지운 §1 의 NEXT 목록이 **§2 본문 어디에도 없는 항목 4건**을 들고 있었다
-   (`폭 인식 상수 접기`의 진입점 · package-scope `real` · 구조적 지연 · `real`→`input int` formal ·
-   그리고 DEEP 의 선행조건 서술). ⇒ **"목록처럼 생긴 것"이 목록인지 내용인지는 grep 이 답한다.**
-
-⚠️ **삭제로 보이는 편집 앞에서는 `comm -23`** — 헤딩만 세면 통과한다. 그리고 **§번호는 보존**한다
-(코드 주석·커밋 메시지가 `ROADMAP §5.1-<x>` 로 참조하므로, 번호를 바꾸면 그 참조가 전부 끊긴다).
-
-### ⚠️⚠️ 두 실행 경로가 "의미상 동일" 하다는 주장은 그 경로들의 핀을 세어 검증하라 (2026-08-19 · §3.11)
-
-`function automatic` 을 프레임 대신 인라인으로 보내는 계획의 근거는 *"비-재귀 automatic 함수는
-인라인이 의미상 동일하다 — SSA-fold 는 호출마다 새 지역을 주므로 그것이 곧 automatic 의 정의다"*
-였다. 논리는 그럴듯했고 **틀렸다**: 전 스위트가 **15건** 실패했고 기제 교체가 아니라 **동작 변화**였다.
-가장 선명한 것은 `$random` 인자가 **두 번 뽑힌 것**이고, 그 이유는 실패한 테스트 자신의 doc 에
-이미 적혀 있었다 — **인라인 확장이 피연산자를 두 번째로 이름 부른다**(`Select{Bit, base: e}`).
-
-⇒ **경로 A 를 경로 B 로 바꾸기 전에, B 를 지키는 테스트 이름을 읽어라.** *"…is_a_documented_gap"* ·
-*"…matches_bare"* · *"…never_evaluates_an_impure_operand_twice"* 같은 이름은 **그 경로가 가진
-결함의 목록**이고, 라우팅을 바꾸는 것은 **그 결함을 새 인구에게 상속시키는 일**이다. 두 경로가
-같은 답을 낸다는 주장은 스위트가 세어 준다 — 짓기 전에 한 번, 짓고 나서 한 번.
-
-⭐ 그리고 **더 곧은 길이 있는지 먼저 보라**: 이 경우 목표는 codegen 커버리지였고, 라우팅을 바꾸는
-대신 **codegen 쪽 거부**(`is_codegen_able` 의 `Terminator::Call`)를 열면 프레임 경로를 유지한 채
-같은 지표가 오른다 — 사다리를 전혀 안 건드리고.
-
-## 두 번째 dispatch (2026-08-21 · §4.5.354)
-
-### ★★★ 같은 노드 종류를 다시 분기하는 함수는 기능이 아니라 **부채**다 — 그리고 대개 삭제가 답이다
-
-`lower_expr_ctx` 는 `lower_expr` 이 다루는 문맥 전파 6종을 **다시** 분기했다. 원본에는 도메인
-라우트가 넷(string concat·string replicate·StrCmp·handle gate) 있었고 트윈은 **하나도** 제대로
-안 갖췄다 — 그래서 *"노드 어딘가에 fill 리터럴이 있다"* 가 그 라우트 전부를 끄는 **스위치**였다.
-
-⭐ **삭제 판정 기준은 한 줄이다: 그 arm 이 자식에게 넘기는 문맥이 상수인가?** `Concat`/`Replicate`
-피연산자는 self-determined 라 트윈 arm 은 모든 피연산자에 `ctx = 0` 을 넘기고 있었는데, 그건
-**정의상 원본이 하는 것과 같다**. 즉 그 두 arm 은 순수 중복이었고, 중복은 항상 **뒤처진 중복**이었다
-(`repl_zero_ok` 미설정 ⇒ 거짓 loud · 음수 count 무검사 ⇒ silent-wrong). 가드를 넷 다는 것보다
-**arm 을 지우는 것**이 짧고, 부수적으로 둘을 더 고치고, 다시 어긋날 수도 없다.
-
-진짜로 가드가 필요한 자리는 트윈이 **실제로 일을 하는** arm 하나뿐이었다. 그 가드는 원본 사이트의
-조건을 **그 사이트의 순서대로 verbatim 복사**해라 — 추론이 아니라 `diff` 로 검사되도록.
-
-### ★★★ census 표에 "쌍둥이" 열을 만들어라 — 채워지면 그건 N개가 아니라 **하나**다
-
-여섯 모양을 찾았을 때 각각에 대해 *"fill 을 `1'b1` 로 바꾼 형제는 어떻게 도나?"* 를 적었더니
-**여섯 줄 전부** 형제가 정상이었다. 그 열이 곧 뿌리의 진술이다 — 버그 여섯 개가 아니라
-**라우팅 스위치 하나**. 그 열이 없었으면 가드를 여섯 번 달았을 것이다.
-
-### ★★ 상호 tail call 은 **릴리즈에서 안 보인다**
-
-`A → B → A` 가 둘 다 tail 위치면 스택이 안 자란다. 증상은 **100% CPU 에 RSS 고정**이라 프로세스만
-보면 "무한 재귀" 가 아니라 "무한 루프" 로 읽힌다(디버그 빌드만 스택 오버플로로 죽는다). ⇒ RSS 가
-평평하다는 것에서 *"재귀는 아니다"* 를 추론하지 마라.
-
-그리고 고칠 때 **종료성을 구조로** 만들어라. *"`is_ctx_node` 가 받는 종류는 전부 명시 arm 이 있으니
-`_` 는 되돌아올 수 없다"* 는 **손으로 하는 감사**이고, 종류 하나만 추가되면 부활한다.
-게이트 없는 진입점(`lower_expr_ungated`)을 만들어 불변식을 한 문장으로 줄여라 —
-*떠나는 모든 호출은 진부분식이거나 게이트 없는 진입점이다.*
-
-⚠️⚠️ **그리고 §4.5.354 에서 그 감사는 실제로 거짓이 됐다 — 같은 슬라이스 안에서.** 위 문장을
-`_` arm 주석에 *"그러니 두 철자는 바이트 동일"* 이라고 적어 두었는데, 같은 슬라이스가 그 뒤에
-`Concat`/`Replicate` arm 을 **삭제**했다. 그러자 그 두 종류가 `_` 로 떨어지고, 둘 다 `is_ctx_node`
-라 게이트가 다시 발화한다 ⇒ **게이트 있는 철자는 사이클을 그대로 복원한다.** 주석은 쓸 때 참이었고
-30분 뒤 거짓이 됐다.
-
-⇒ 교훈 둘. ⓐ **"이 두 철자는 등가"라는 주석은 그 등가성이 의존하는 조건을 함께 적어라** — 조건이
-사라지면 주석이 거짓이 되는데, 코드는 여전히 컴파일된다. ⓑ **그 주석을 뮤턴트로 만들어라.** 이건
-"등가일 것"이라 예측하고 넣은 뮤턴트가 **8개 테스트를 죽이며** 잡아냈다. 예측이 틀린 것이 곧 발견이다
-— 뮤테이션 배터리가 소스가 아니라 **내 추론**을 검사한 사례.
-
-### ★★ 비종료를 고쳤으면 테스트 하네스에 **타임아웃**을 넣어라
-
-회귀하면 `Command::output()` 은 그냥 멈춘다 — CI 가 영원히 매달리고 출력도 없다. 시간 제한을 두고
-*"상호 tail call 이 돌아왔다"* 는 **문장과 함께** 실패시켜라. 그 타임아웃 자체가 뮤테이션 대상이기도
-하다(사이클을 복원하는 뮤턴트가 그것으로 KILLED 되는지가 이빨의 증명이다).
-
-### ★★★ *"오라클이 없다"* 가 **내 변경의 성질인지 이미 그랬던 조건인지** 구분하라
-
-이 항목은 큐에 *"오라클이 없다 ⇒ 검증 불가 ⇒ **loud 가 정답**"* 이라고 못까지 박혀 있었고, 그건
-틀렸다. `{s,'1}` 에 오라클이 없는 건 맞지만 **fill 없는 `{s, 8'h0F}` 도 똑같이 없다** — 즉 오라클
-부재는 이 슬라이스가 만든 조건이 아니라 그 경로에 원래 있던 조건이고, 내 변경이 **추가하는 단계**는
-따로 있다. 물어야 할 것은 *"이 모양에 오라클이 있나"* 가 아니라 **"내가 더하는 단계가 고정 가능한가"** 다.
-여기선 가능했다:
-
-- 규칙 절반(*"concat 피연산자는 self-det ⇒ fill 은 1비트"*)은 **두 오라클이 string-free 족속에서** 확인;
-- 나머지 절반(문자열 처리)은 **내가 안 건드린** 기존 경로이고, 같은 구문의 **문장 레벨 하강**과
-  `1'b1` 쌍둥이라는 vita 안의 두 철자가 값을 고정.
-
-⇒ **합성 differential**. 오라클이 없는 자리에서도 *내 변경분*은 거의 항상 이렇게 쪼갤 수 있다.
-
-### ★★ 산출 비교는 **바이트**로 해라 — 터미널은 값을 같아 보이게 만든다
-
-네 산출(iverilog·verilator·PRE·POST)이 전부 `r=ab` 로 보였고, `od -c` 로 보니 넷 다 `ab \001` 이었다.
-같아서 다행이었지 **터미널은 다른 경우에도 같아 보이게 했을 것**이다. 첫 테스트 기대값이 실제로
-그래서 틀렸다(`"ab"` 로 적었다). 차분의 비교 단위는 사람이 읽는 줄이 아니라 바이트다.
-
-### ★★ 오라클이 갈리면 테스트는 **값이 아니라 성질**을 고정한다
-
-`s <= 1'b1` 은 iverilog `1` / verilator `0` 이다. 이 슬라이스가 책임지는 건 그 값이 아니라
-**"fill 철자와 `1'b1` 쌍둥이가 일치한다"** 이므로, 테스트는 두 출력의 **쌍별 일치**를 단언하고 값은
-단언하지 않는다. 분열은 §2 에 별도 항목으로 남긴다. 값을 단언했으면 **분열을 조용히 판결**한 것이
-됐을 것이다.
-
-### ★★ 리뷰 전에 확정한 설계는 **너무 일찍 확정한 설계**다
-
-1차 설계(가드 넷)는 census 4칸을 전부 고쳤고 게이트도 통과했다. soundness 렌즈가 그 다음에 찾은
-두 개(둘 다 PRE==POST = 내가 만든 게 아닌 같은 뿌리의 나머지)를 보고서야 *"arm 둘이 그냥 중복"*
-이라는 구조가 보였다. ⇒ 리뷰는 *"내 설계가 맞나"* 를 묻는 단계가 아니라 **설계를 바꿀 수 있는
-입력을 얻는 단계**다. 바꿨으면 재리뷰·재측정한다(census·differential·게이트 전부 다시 돌렸다).
-
-### ★★★ "real 의 폭" 을 묻는 함수는 **저장 크기**를 답한다 — 두 번 물렸다
-
-§4.5.353 은 `ir_lvalue_width` 가 real 타깃에 **64** 를 답해 `force r = '1;` 을 1.0 → 1.84467e+19 로
-만드는 것을 잡았다. §4.5.354 는 **정확히 같은 덫이 한 층 아래**에 있는 것을 잡았다 —
-`ir_bits_of` 가 real 피연산자에 **64** 를 답해 `r + '1` 이 `2.5 + (2^64−1)` 이 됐다(두 오라클 4).
-
-⇒ **real 은 비트 폭이 없다**(§6.12). *"폭을 알려주는 함수"* 를 real 에 물으면 답이 오지만 그건
-**저장 크기**이지 언어가 노출하는 폭이 아니다. 그런 함수의 반환값을 문맥으로 쓰기 전에 real 을 먼저
-걸러라 — 그리고 §11.8.1 상 혼합식의 정수 피연산자는 **자기결정 폭**을 유지한다(오라클의
-`2.5 + 1 = 3.5 → 4` 가 그 폭이 1비트임을 증명한다).
-
-같은 덫이 두 층에서 나왔다는 사실 자체가 규칙이다: **한 층에서 고쳤으면 나머지 층을 찾아가라.**
-그리고 §4.5.354 는 그 문장을 **쓴 직후 자기 자신에게 적용해서** 둘을 더 찾았다 — `ir_bits_of` 를
-**전수 grep** 했더니 fill 문맥을 먹이는 자리가 넷 더 있었고, 둘이 진짜였다(Ternary 분기 ·
-`case` 셀렉터). 나머지 둘은 이미 막혀 있었다(하나는 real 을 loud 로 거부, 하나는 첫 줄에서 반환).
-⇒ 규칙을 문서에 적는 것으로 끝내지 마라. **그 자리에서 grep 하라.**
-
-⚠️ 그리고 **프로브 방향이 증상을 숨긴다**: `c ? '1 : r` 은 `c ? r : '1` 과 똑같이 잘못 sizing
-되는데도 그 분기가 선택되지 않아 출력이 멀쩡하다. 조건부/선택 구문을 프로브할 때는 **결함이 있는
-가지가 실제로 선택되게** 만들어라.
-
-### ★★ 진단 블록 안에 **라우트**가 섞여 있을 수 있다 — 복사하지 말고 뽑아내라
-
-`lower_expr` 의 §6.2 블록은 대부분 *"이 연산자는 real 에 금지"* 라는 진단이지만, 그 안에
-`**` → `$pow` **desugar** 가 하나 섞여 있었다. 트윈이 블록 전체를 안 갖고 있었으므로 잃은 것은
-진단만이 아니라 **연산자 자체**였다(`r ** '1` 이 두 오라클 3 을 0 으로).
-
-⇒ 공유하려고 블록을 복사하면 *"진단이니 순서만 맞으면 된다"* 고 착각하기 쉽다. **함수로 뽑아라** —
-반환 타입(`Option<u32>`)이 *"연산자가 대체될 수 있다"* 는 사실을 **타입으로** 말해 준다.
-
-### ★★ 3-way census 는 "회귀 1" 을 보고할 것이다 — **우연한 일치**인지 먼저 봐라
-
-real 축 240칸에서 불일치가 80 → 16 으로 줄었고, 딱 한 칸(`'0 % r`)이 *"오라클과 일치 → loud"* 로
-이동했다. 그러나 같은 경로가 `'1 % r` 에는 **틀린** 답을 냈고 `1'b0 % r` 쌍둥이는 **이미** loud 였다
-⇒ PRE 의 일치는 **깨진 경로가 한 입력에서 우연히 맞은 것**이지 correct-support 가 아니다.
-
-⇒ 사다리를 셀 때 세는 것은 *"맞는 숫자가 나왔는가"* 가 아니라 **"맞는 이유로 나왔는가"** 다.
-판정 기준은 언제나 **쌍둥이** — 같은 구문의 다른 철자가 PRE 에 어떻게 굴었는지가 답한다.
-
-## 늦은 값 (2026-08-21 · §4.5.355)
-
-### ★★★ "이 값을 알 수 없다" 와 **"아직 모른다"** 는 다른 문제다
-
-계층 타깃의 fill 이 1비트가 된 이유는 폭이 **없어서**가 아니라 lowering 시점에 **아직 없어서**였다.
-그런데 그 아키텍처는 이미 같은 문제를 풀고 있었다 — net id 도 그때 모르니 **센티널로 낮추고 나중에
-패치**한다. 폭은 그때 모르는 **두 번째 값**일 뿐이고, 같은 대우를 받으면 된다.
-
-⇒ 값이 늦어서 잘못됐을 때, **주변에 이미 "늦은 값"을 다루는 기제가 있는지** 먼저 봐라. 있으면
-새 기제를 짓지 말고 거기에 태워라 — 정당화가 코드가 아니라 **대칭**에서 나온다.
-
-### ★★★ 늦게 다시 물을 때는 **같은 질문**을 물어라 — 하위 케이스를 열거하지 마라
-
-계층 쓰기 지연 레인은 둘이고, 그 안에 전체-net·part-select·element·**bit-select** 가 섞여 있다.
-폭 규칙을 하위 케이스별로 쓰려 하면 넷을 열거해야 하고, 그중 **bit-select 는 이미 옳다**(1비트
-타깃 · 세 오라클 일치) — 열거하다 그것을 빠뜨리면 맞는 것을 깨뜨린다.
-
-실제 고침은 규칙을 하나도 새로 쓰지 않았다: 두 레인이 **자기가 결정한 chunk 를 publish** 하고,
-lowering 때 1 을 답했던 **바로 그 `ir_lvalue_width`** 를 그 chunk 에 다시 물었다. 그러자 네 하위
-케이스가 전부 떨어지고, bit-select 는 **폭 1 → 변화 없음** 으로 **구조적으로** 보호된다.
-
-⇒ *"나중에 고친다"* 의 올바른 형태는 **답을 다시 계산하는 것이 아니라 질문을 다시 던지는 것**이다.
-
-### ★★★ 큐에 적힌 **근인**도 가설이다 — 착수 첫 계측으로 확인하라
-
-ROADMAP 은 근인을 *"센티널 = `HIER_WRITE_SENTINEL_BASE`"* 라고 못 박아 두었다. 임시 계장을 넣어
-실제로 찍어 보니 레인이 **둘**이었고(`0xFE000000` element/select 레인이 기록에 없었다), 그 두 번째
-레인 안에 **고치면 안 되는 칸**(bit-select)이 들어 있었다. 근인 기록만 믿고 짰으면 회귀를 냈다.
-
-⇒ *"재-census 하라"* 는 **증상 목록에만** 적용되는 규칙이 아니다. **근인 서술에도** 적용된다.
-
-### ★★★ 프로브의 크기가 결론을 조작한다 — 경계를 바꿔서 다시 물어라
-
-중첩 fill(`'1+1`·`{2{'1}}`·`c?'1:12'h0`·`~'0`)을 **12비트** 타깃으로 프로브하고 전부 오라클과
-맞기에 *"bare fill 이 곧 깨진 집합 전체"* 라고 결론냈다. **틀렸다.** 규칙은 `max(ctx, sibling)` 이라
-형제가 타깃보다 **좁을 때만** ctx 가 유일한 출처인데, 12비트에서는 두 경로가 우연히 만난다.
-64비트 타깃을 넣은 520칸 스윕이 `u.wide = '1+1` = 4294967296(로컬은 0)을 내놓고서야 보였다.
-
-⇒ *"이 모양은 이미 맞다"* 를 **한 가지 크기로** 확인하지 마라. 폭·부호·깊이처럼 규칙에 등장하는
-축은 **경계를 바꿔 가며** 물어야 한다. 그리고 결론이 뒤집히면 **그 결론을 인용한 주석·테스트 이름
-까지** 따라가 고쳐라 — §4.5.354 의 m8 이 잡은 것과 정확히 같은 실패 모드(주석이 쓸 때는 참,
-나중에 거짓)다.
-
-### ★★★ "규칙의 절반"은 방향이 있다 — **양끝이 다 움직이는지** 확인하라 (2026-08-21 · §4.5.356)
-
-§12.5 는 case 식과 **모든 아이템**을 공통 max 로 sizing 한다. vita 는 *"셀렉터 폭을 라벨로 밀어
-준다"* 만 갖고 있었고, 그건 **셀렉터가 폭을 가질 때만** 규칙 전체다. bare fill 셀렉터는 폭이 없다.
-
-1차 고침(*"셀렉터를 라벨들의 max 로"*)은 census 를 통과했지만 한 칸이 잡았다 —
-`case ('1) 8'h01: ; '1: ;` 는 두 오라클이 `'1` arm 을 고르는데, 셀렉터만 넓히면 라벨 `'1` 이 옛
-1비트에 남아 **default 로 떨어진다**. 맞던 답이 **다른 틀린 답**이 된 것이고, 그건 이 저장소가
-금지하는 맞바꿈이다.
-
-⇒ *"A 가 B 에게 폭을 준다"* 를 고칠 때는 **B 도 A 에게 줄 게 있는지** 물어라. 대칭 규칙(공통 max,
-공통 signedness, 상호 변환)에서 한쪽만 고치면 **증상이 옮겨갈 뿐** 사라지지 않는다.
-
-### ★★★ 1차 고침 뒤의 **잔여를 세어라** — 일반화는 대개 거기서 나온다
-
-셀렉터-fill 만 고쳤을 때 420칸 스윕에 **15칸이 남았다.** 하나씩 보니 전부 **셀렉터에 fill 이 없는**
-형태였다 — 공통 max 는 셀렉터와 라벨 사이만이 아니라 **라벨끼리도** 성립하기 때문이다. 게이트를
-*"셀렉터에 fill"* 에서 **"어디든 fill"** 로 넓히자 420/420 이 됐다.
-
-⇒ 잔여가 **0 이 아닌데 "pre-existing 이겠지"** 로 넘기지 마라. 잔여의 **모양을 분류**하면 그것이
-곧 규칙의 안 고친 부분이다. 이번엔 15칸이 전부 한 모양이었고, 그게 답을 그대로 알려 줬다.
-
-### ★★★ "이 모양만 가능하다" 는 제약을 **긍정형으로 다시 진술**하면 대개 넓어진다 (§4.5.357)
-
-§4.5.355 는 *"bare fill 만 지연 가능"* 이라고 적었다. 참이었지만 **이유의 진술이 아니라 결과의
-진술**이었다. 진짜 제약은 *"resolve 패스엔 lowering 스코프가 없다"* 이고, 그걸 긍정형으로 쓰면
-조건은 **"lowering 이 스코프에 아무것도 안 묻는 식"** 이 된다 — bare fill 보다 훨씬 넓고, 24칸 중
-20칸이 그 안에 들어왔다.
-
-⇒ 제약을 적을 때 **"무엇이 되는가"** 가 아니라 **"무엇이 막고 있는가"** 를 적어라. 전자는 다음
-사람이 그대로 믿고 멈추고, 후자는 다음 사람이 경계를 다시 잴 수 있다.
-
-### ★★★ 더 나은 길이 있는지 **계측으로 기각**한 다음에 우회로를 지어라
-
-이 슬라이스의 첫 행동은 넓히는 게 아니라 *"지연 자체가 필요한가"* 를 묻는 것이었다 — lowering
-시점에 `hier_lookup` 이 성공한다면 제약이 통째로 사라진다. 임시 계장을 넣어 찍었더니 **모든
-케이스에서 `None`** 이었다. 그제서야 우회로를 지었다.
-
-⇒ 우회로는 **막힌 길을 확인한 뒤**에 지어라. 확인하지 않으면 필요 없는 기제를 짓고, 그 기제가
-그대로 다음 슬라이스의 제약이 된다.
-
-### ★★ 자료구조의 **불변식**은 패닉으로만 배우게 되어 있다 — 그리고 그게 이전 설계를 설명한다
-
-새로 lower 한 부분식의 루트를 옛 arena 슬롯에 복사했더니 48칸이 출력을 잃었고, 패닉이 이유를
-말해 줬다: **expr arena 는 post-order** 다(부모 id > 모든 자식 id). ⭐ 그 순간 이전 슬라이스가
-왜 통했는지도 설명됐다 — bare fill 은 `Const` **하나**, 즉 자식이 없어서 옮길 수 있었던 것이다.
-
-⇒ *"전에 되던 방식"* 을 일반화할 때는 **왜 되던 것인지**를 먼저 말로 만들어라. 말이 안 만들어지면
-그건 일반화가 아니라 우연에 기댄 확장이고, 불변식이 그 자리에서 잡아 준다(잡아 주면 운이 좋은
-것이다 — release 에서 조용히 틀렸을 수도 있다).
-
-### ★★★ 같은 질문을 하는 자리를 **전부** 찾기 전에는 고쳤다고 하지 마라 — 반쯤 고친 엔진은 **조건부로** 맞는다 (§4.5.358)
-
-`real` 대입의 문맥 폭을 엔진에서 고칠 때 자리가 **셋**이었다: 스케줄러 `eval_for_lvalue`,
-네이티브 `k_eval_for_lvalue`, 그리고 **네이티브 프로그램 컴파일러**. 앞의 둘만 고쳤을 때 증상은
-사라지지 않고 **모양을 바꿨다**:
-
-> `real r; r = -b;` 가 **`#1` 이 있는 프로세스에선 맞고 없는 프로세스에선 틀리다.**
-
-딜레이 없는 프로세스가 네이티브 프로그램으로 컴파일되기 때문이다. ⚠️ 이 저장소의 테스트는
-습관적으로 `#1 $display(…)` 를 쓴다 — **그 습관대로만 썼으면 반쯤 고쳐진 엔진이 통과했다.**
-
-⇒ 교훈 둘. ⓐ 술어는 **이름 있는 공유 함수**로 만들어라 — grep 한 번으로 자리를 세게 된다.
-ⓑ 백엔드/실행 경로가 여러 개인 프로젝트에서는 **테스트가 경로를 고르는 축**(여기서는 딜레이 유무)을
-파라미터로 돌려라. 값이 같은지가 아니라 **경로마다 같은지**가 검증할 성질이다.
-
-### ★★ 큐 항목이 가리킨 자리에 **아무것도 없을 수 있다** — 그때 census 는 멈추지 말고 넓혀라
-
-§2 항목 2 가 적어 둔 세 모양은 재보니 **이미 전부 두 오라클과 일치**했다(이후 슬라이스들이 닫았고
-큐가 몰랐다). 거기서 *"닫힘"* 이라고 적고 끝냈으면 그걸로 끝이었겠지만, 같은 주제로 코퍼스를 33칸
-넓히자 **새 칸 하나**가 나왔고 그게 12칸 클래스였다.
-
-⇒ 큐 항목은 **주제의 좌표**이지 결함의 좌표가 아니다. 적힌 repro 가 통과하면 그건 **census 를 넓힐
-신호**이지 항목을 지울 신호가 아니다.
-
-### ★★★ "여기 말고 다른 자리에도 있다" 를 **계측으로** 찍어라 — 28개 중 5개였다 (§4.5.359)
-
-음수 bound 를 clamp 하는 자리를 찾을 때 `range_to_dims` 의 호출부가 **28개**였다. 하나씩 읽고
-고르는 대신 그 함수에 `#[track_caller]` 와 임시 `eprintln!(Location::caller())` 를 달고 census
-설계를 돌렸다 — **정확히 5개**가 찍혔다. 읽어서 골랐으면 static/automatic 처럼 겉이 같은 쌍
-중 하나를 놓쳤을 것이다(실제로 census 가 그 쌍 때문에 셋을 여섯으로 늘렸다).
-
-⇒ 호출부가 열 개를 넘으면 **읽지 말고 찍어라.** `#[track_caller]` 는 그 목적의 도구다.
-
-### ★★★ 같은 개념의 **collector 가 몇 개인지** 세라 — automatic 과 static 은 다른 자리다
-
-vita 에는 서브프로그램 지역 변수를 만드는 collector 가 **두 개**(framed = automatic, inline =
-static)이고, 블록 지역까지 세면 **세 개**다. census 를 `function automatic` 으로만 돌면 절반만
-보인다. 실제로 이 슬라이스의 여섯 자리 중 하나(static task 지역)는 **두 철자를 다 돌린 census 가
-아니었으면 안 보였다.**
-
-⇒ 이건 §4.5.358 의 *"딜레이 유무로 실행 경로가 갈린다"* 와 같은 규칙의 다른 축이다:
-**언어 키워드가 구현 경로를 가르는 지점**을 census 축으로 삼아라(automatic/static,
-delay/no-delay, packed/unpacked, module/interface/class).
-
-### ★★ 고칠 자리가 **N개**면 코드를 N번 복사하지 말고 **1번 뽑아라** — 그리고 그 함수가 곧 다음 자리의 체크리스트다
-
-여섯 자리를 붙이는 방법은 두 가지였다: 20줄을 여섯 번 복사하거나, 한 번 뽑고 여섯 번 부르거나.
-전자는 **한 규칙의 여섯 철자**가 되고, 일곱 번째 선언 자리가 생기면 그 자리는 아무것도 모른 채
-잘못된 채로 태어난다. 후자는 함수 이름 하나를 grep 하면 **아직 안 부른 자리**가 보인다.
-
-⚠️ 그리고 뽑을 때 **호출자가 여럿인 헬퍼를 전역으로 바꾸지 마라**: `func_return_dims` 는 호출자가
-셋이었고 그중 하나만 기록할 자리를 갖는다 ⇒ opt-in 변형을 따로 두고 나머지는 리터럴 `false` 로
-남겨 **바이트 동일**을 유지했다(§4.5.350 이 세운 규칙 그대로).
-
-### ★★★★★ 오라클로 쓰기 전에 **그 툴에게 같은 질문을 목적지 없이** 던져라 (§4.5.362 — §4.5.361 정정)
-
-§4.5.361 은 바로 위 규칙(*"어느 툴이 여기서 오라클이 아닌가"*)을 이 문서에 적어 넣고, **같은
-세션에서 그것을 적용하지 않은 채** `'1 ** r` 을 닫았다. iverilog 가 480 을 내니 vita 의 480 이
-맞다고 보고, 후보 고침을 **iverilog 일치도로 채점**해 기각했다(267 → 247). ⚠️⚠️ **그 점수가 재고
-있던 것이 바로 그 툴의 버그였다.**
-
-실격 증거는 한 질문 거리에 있었다 — **대입 폭이 없는 곳에 같은 식을 보내라**:
-
-```
-logic [15:0] a = ('1+4'h0) ** r;   // iverilog 480     ← 목적지 있음
-real         x = ('1+4'h0) ** r;   // iverilog 871.42  ← 목적지 없음, 세 툴 전부
-                 $pow(('1+4'h0), r) // 871.42          ← 세 툴 전부
-```
-
-**밑수의 값이 결과를 나중에 담을 변수의 폭에 따라 달라질 수는 없다.** 두 답을 나란히 놓으면 480 이
-목적지의 역류라는 것이 계산 없이 보인다.
-
-⭐⭐ **일반형 — 값이 문맥에 오염됐는지 의심되면, 문맥을 없앤 자리에서 같은 식을 물어라.** 실무적으로
-세 가지가 거의 항상 있다:
-- **`real` 목적지**(비트 폭이 존재하지 않는다)
-- **LRM 이 그 연산자의 정의로 지정한 시스템 함수 철자**(`**` on real ⇒ §11.4.9 `$pow`) — ⭐ 함수
-  인자는 자기결정이라 문맥이 닿을 자리가 없고, 그래서 **연산자형 == 함수형** 이 툴에 의존하지 않는
-  게이트가 된다(이 슬라이스의 채점표가 그것이다: 192쌍 115 → 192)
-- **이웃 연산자**: 같은 피연산자를 `+`/`-`/`*`/`/` 에 물려 보라. 여기서는 같은 네 밑수가 `+ r` 에서
-  **4·18·2·18**(형제 폭 반영)인데 `** r` 에서는 **480 넷**이었다 — 한 툴이 한 연산자에서만 규칙을
-  어기고 있다는 것이 즉시 드러난다.
-
-⚠️ 그리고 **채점표를 툴이 아니라 같은 툴의 다른 철자로 세워라.** 오라클이 그 축에서 새고 있으면
-"오라클 일치도" 점수는 누수를 재고, 맞는 고침을 기각한다.
-
-### ★★★ 인접한 가드를 복사하면 **그 가드가 답하는 질문까지** 같은지 확인하라 (§4.5.362)
-
-`**` 의 밑수를 자기결정으로 바꾸면서 조건을 `Pow && fill(lhs) && !fill(rhs)` 로 썼다 — 바로 아래
-arith 팔의 `lf && !rf` 를 그대로 베낀 것이다. 그 팔의 `!rf` 는 *"어느 쪽이 폭을 공급하는가"* 를 묻기
-때문에 있고(두 fill 은 둘 다 공급하지 못한다), 새 자리가 묻는 것은 *"지수의 도메인"* 이다. **조건이
-이월되지 않는다**: fill 자체는 real 이 될 수 없어도 **fill 을 품은 식은 real 이 된다**(`r + '1`).
-결과로 `('1+4'h0) ** (r + '1)` 이 고쳐지지 않은 채 남았다(64976 / `$pow` 13071). 적대 리뷰의
-*"게이트가 닿는데 안 잰 모양"* 열거가 잡았다.
-
-### ★★★ 오라클 분열은 **"어느 답이 맞나"가 아니라 "어느 툴이 여기서 오라클이 아닌가"** 로 물어라 (§4.5.361)
-
-두 오라클이 갈리면 큐에 *"2-오라클 합의가 없으므로 착수 불가"* 라고 적고 넘어가기 쉽다. 네 건이
-그렇게 묶여 있었고, **질문을 바꾸자 셋이 즉시 닫혔다** — 그중 둘은 **vita 를 쳐다보지도 않고** 닫혔다.
-
-**한 툴의 답들끼리 모순이면 그 툴은 그 축에서 실격이다.** 비교가 필요 없다:
-
-- iverilog 는 `s="ab"` 에서 `s<"ab"`·`s<"aa"`·`s<"zz"` 를 **전부 1** 이라 답한다. 폭도 부호도 변환도
-  없는 string↔string 비교이고, 셋이 동시에 참일 수 없다 ⇒ 그 `1` 은 **정보가 아니다**.
-- iverilog 는 `$itor(64'h1_0000_0008)` 을 `longint unsigned` 에서도 signed `longint` 에서도 **똑같이 8**
-  로 읽는다. 부호 해석이면 두 답이 갈려야 한다 ⇒ 이 분열은 부호 축이 아니라 **컨테이너 절단**이다.
-
-⭐ 실격 증명은 **분열 난 칸이 아니라 그 옆칸**에서 나온다. 분열 칸 하나만 보면 "둘 다 그럴싸함" 에서
-멈추지만, 같은 연산자를 **답을 이미 아는 입력**에 물리면 한 툴이 스스로 무너진다. 분열을 보면
-**그 툴에게 쉬운 질문 3개를 더 던져라.**
-
-그리고 **관대함은 합의가 아니다**: `%` 를 real 에 쓰면 두 툴이 다 실행하지만 **서로 다른 답**을 낸다
-(fmod 1.5 / 반올림 0). 정의된 의미가 있으면 두 구현이 같은 답을 낸다 — 다른 답은 **미정의 구석의
-서명**이고, 불법 코드에 대한 loud reject 는 사다리 최상단이므로 §3 갭이 **아니다**.
-
-⚠️ 판정이 no-op 이어도 **테스트는 남겨라.** 저장소의 다른 모든 differential 테스트는 *두 툴이
-합의했고 vita 가 달랐다* 라서 존재한다. 판정된 분열은 정반대라서, 미래의 스윕이 *"한 툴과 다르네"* 를
-보고 **'고쳐서' silent-wrong 을 만드는** 경로가 열려 있다. `oracle_split_rulings.rs` 는 기능 테스트가
-아니라 **그 경로를 막는 방어물**이다 — 특히 "iverilog 에 맞추자" 는 편집이 가장 먼저 걸리도록
-**anti-절단 핀**(분열의 원인 요소가 빠진 이웃 칸)을 같이 넣어라.
-
-### ★★★★ **내부 불일치는 버그의 증거지만 방향의 증거가 아니다** — 방향은 PRE-3-way 가 정한다 (§4.5.361)
-
-이 슬라이스에서 가장 비싸게 배운 것. 판정 넷 중 하나(`'1 ** r`)만 "고칠 것 있음" 으로 나왔고, 근거는
-**vita 자신의 불일치**라 반박이 어려워 보였다:
-
-```
-logic [15:0] a; real r = 2.5;
-a = '1 ** r;              // vita 480
-a = (4'd15+4'd1) ** r;    // vita 0     ← 같은 all-ones 밑수, 다른 답
-```
-
-불일치는 진짜다. 고쳤고, 빌드도 깨끗했다. 그리고 288칸 PRE-3-way 가 **iverilog 일치 267 → 247**,
-**옮겨간 35칸이 전부 멀어짐**을 냈다. 되돌렸다.
-
-⭐⭐ **"A 와 B 가 다르다" 는 A 를 고칠지 B 를 고칠지 말해 주지 않는다.** 내부-일관성 논증은 soundness
-축이고, 이 저장소의 규칙은 *soundness 와 differential 이 충돌하면 differential 이 이긴다* 이다. 이건
-그 규칙이 **실제로 발동한 첫 기록**이다. 불일치를 발견하면 고치기 전에 물어라: **두 값 중 어느 쪽이
-오라클과 일치하는가?** 여기서는 480 이 iverilog 값이었고, 0 이 틀린 쪽이었다 — 즉 **고쳐야 할 것은
-내가 손대려던 그 팔이 아니었다.**
-
-⭐ 그리고 측정은 기각만 한 게 아니라 **진단을 뒤집었다**. 반대편을 물어보니
-`(4'd15+4'd1) ** r` 이 iverilog 에서 **1024**(=16^2.5) 였다 — 대입 문맥이 `**` 의 밑수에 **닿는다**.
-그러면 결함은 *fill 경로가 문맥을 더 준 것* 이 아니라 *non-fill 경로가 덜 준 것* 이고, 원래 고치려던
-480 은 **이미 맞는 쪽**이었다. **기각된 슬라이스가 다음 슬라이스의 정확한 사양을 남긴다** — 되돌릴 때
-코드만 되돌리고 측정은 큐에 적어라.
-
-### ★★★ 내가 적은 **선행조건**도 결과의 진술일 수 있다 — 다음 슬라이스에서 다시 재라 (§4.5.360)
-
-§4.5.357 은 *"제약을 긍정형으로 다시 진술하면 넓어진다"* 를 배우고 나서, 자기가 남긴 잔여에
-**그 규칙을 적용하지 않은** 선행조건을 달았다 — *"resolve 시점에 쓸 수 있는 lowering 스코프
-스냅샷이 필요하다"*. 다음 슬라이스가 실제로 재 보니 그 "스코프" 는 **문자열 하나**(`cur_prefix`)
-였다. 나머지는 elaboration 내내 살아 있는 FQ 테이블이라 애초에 스냅샷할 것이 없었다.
-
-⇒ **잔여에 붙인 선행조건은 다음 슬라이스의 첫 census 대상이다.** 내가 적었다고 해서 측정된
-것은 아니다. 특히 *"X 가 필요하다"* 형태는 거의 항상 *"X 없이는 안 된다고 생각했다"* 의 준말이다.
-
-### ★★★ 되돌릴 수 없는 부작용이 있는 재시도는 **읽기 전용으로 먼저 확인**하라
-
-`lower_expr_ctx` 는 미해결 이름을 **진단을 emit 해서** 알린다. 즉 "일단 해 보고 실패하면 되돌린다"
-가 불가능하다 — 오류는 이미 sink 로 나갔다. 그리고 ⚠️ **틀린 값이 거짓 loud 로 바뀌는 것은,
-값이 틀렸다는 사실과 무관하게 회귀다**(사다리는 silent-wrong ≪ loud 지만 그건 *같은 입력에 대해
-더 정직해진* 경우이고, 잘 돌던 설계를 못 돌게 만든 것은 다른 이야기다).
-
-⇒ 부작용이 있는 연산을 조건부로 하려면 **부작용 없는 술어를 먼저** 두어라. 그리고 그 술어는
-연산이 쓰는 **바로 그 리졸버**를 불러야 한다 — 안 그러면 술어가 yes 인데 연산이 no 인 틈이 생긴다.
-
-## 워크로드 코퍼스 (2026-08-23 · §4.5.369)
-
-### ★★★★★ **당신이 재던 코퍼스가 곧 당신이 아는 전부다** — 그리고 그중 하나를 당신이 썼다면 더 좁다
-
-성능 판단이 오래도록 설계 **둘** 위에 서 있었다: `picorv32`(서드파티)와 `bench/keccak`(**우리가
-쓴 것**, 그것도 재려고 쓴 것). 그 둘이 그린 그림은 *"iverilog 와 동률이고 `keccak_f_arr` 하나에서만
-진다"* 였다. 허가적 라이선스의 서드파티 여덟을 가져와 오라클로 고정하니 그림이 **양방향으로**
-뒤집혔다 — 실제 남의 RTL 에서 vita 는 iverilog 를 **대체로 앞서고**, 동시에 **여덟 중 셋은 아예
-안 돈다**.
-
-⚠️ 더 중요한 건 그 셋이 **전부 같은 축**이었다는 것이다(상수 도메인의 파라미터 폴딩 — 문자열
-삼항 · 문자열 Ident · 정수 replication). 우리 자신의 프로브에서 나온 §2 큐에는 그 축이 **한 줄**로
-있었다. 우리가 만든 프로브는 우리가 의심하는 것을 찾고, 남의 RTL 은 **우리가 의심하지 않는
-것**을 찾는다.
-
-⇒ *"이건 N 주 값어치가 있다"* 를 설계 하나에서 나온 수로 말하지 마라. 설계 하나에서 나온
-천장은 **그 설계의 성질**이다. 그리고 우선순위를 매기기 전에 **남이 쓴 코드로 한 번 훑어라** —
-비용이 며칠이고, 큐의 한 줄이 세 설계를 막는 축인지 알려 준다.
-
-### ★★★★ 오라클을 **먼저** 돌려라 — vita 를 먼저 돌리면 테스트벤치가 vita 쪽으로 깎인다
-
-여덟 스카우트 전부에게 같은 순서를 강제했다: clone → 라이선스 → 자립 실행 구성 →
-**iverilog** → *그 다음에야* vita. 순서가 요점이다. vita 를 먼저 보면 거절당한 구문을 피해
-테스트벤치를 다시 쓰게 되고, 그렇게 만들어진 워크로드는 **vita 가 이미 할 줄 아는 것만** 잰다.
-지침에 이 문장을 그대로 넣었다:
-
-> *"vita 가 거절하거나 틀리는 설계는 네가 가져올 수 있는 가장 값진 결과다. vita 가 받아들이게
-> 하려고 RTL 을 단순화·재작성·축소하지 마라 — 그건 측정을 파괴한다."*
-
-⇒ 이건 사람에게도 똑같이 적용된다. **거절이 결과다.** 워크로드를 깎아서 초록을 만드는 것은
-측정이 아니라 자기기만이다.
-
-### ★★★★ **최종 상태 다이제스트는 오라클이 아니다** — run 전체를 누적해라
-
-`bench/picorv32` 의 테스트벤치는 `trap=%b addr=%h` 를 찍는다. 즉 **마지막 순간의 두 값**이다.
-설계가 나중에 덮어쓰는 발산은 전부 눈에 안 보인다. 코퍼스 계약을 *"run 전체를 누적한
-`DIGEST=` 한 줄"* 로 잡은 이유이고, 스카우트들이 짠 테스트벤치는 리셋 이후 **매 사이클** 버스와
-핸드셰이크 비트를 rotate-xor 로 접는다.
-
-⇒ 다이제스트의 해상도가 곧 차분의 해상도다. [[probe-granularity-can-flip-a-verdict]] 의 시간축
-버전이며, 같은 실수의 다른 얼굴이다.
-
-### ★★★★★ 다이제스트가 **설계를 건드려도 안 움직이면** 그건 게이트가 아니다 — 그리고 게이트와 **겉모습이 같다**
-
-`bench/picorv32` 의 코퍼스 테스트벤치는 사이클마다 메모리 버스를 rotate-xor 로 접었다.
-결정적이었고, 사이클 해상도였고, iverilog 와 정확히 일치했고, 재실행마다 바이트 동일했다.
-그리고 **코어에 대해 아무것도 주장하지 않았다**:
-
-```
-picorv32.v:1240   reg_op1 + reg_op2   →   reg_op1 + reg_op2 + 32'd1
-CONTROL : DIGEST=7836648e76208dc9
-MUTATED : DIGEST=7836648e76208dc9          ← 덧셈기를 뒤집었는데 바이트 동일
-```
-
-⭐ 근인은 테스트벤치가 아니라 **프로그램**이었다 — `addi`/`add`/`beq` 루프뿐이라 계산된
-레지스터 값이 **버스에 한 번도 안 나온다**. 다이제스트가 볼 수 있는 건 버스뿐이므로, 그건
-**설계 검사의 이름을 단 프로그램 카운터 추적**이었다.
-
-⚠️⚠️ 무서운 건 이게 **정상과 구별되지 않는다**는 것이다. 결정성·오라클 일치·사이클 해상도는
-전부 통과한다. 통과하지 않는 유일한 검사가 **변형(mutation)** 이다.
-
-⇒ **새 워크로드/골든/차분 게이트를 만들 때마다 상류 코드 한 줄을 변형해 다시 돌려라.**
-안 움직이면 그 게이트는 비어 있다. 이 코퍼스는 그 뒤 아홉을 전부 이렇게 확인했다.
-
-⚠️ **죽은 변형에 속지 마라.** verilog-ethernet 이 처음에 *"안 움직인다"* 를 냈는데 결함이
-아니었다 — 루프백 설계라 TX 와 RX 가 **같은 `lfsr` 인스턴스**를 쓴다. CRC 다항식을 바꾸면
-TX 가 틀린 FCS 를 붙이고 RX 가 그걸 **정확하다고 검증**해 상쇄된다. RX 쪽만 건드리니 즉시
-움직였다. ⇒ **변형은 비대칭이어야 한다.** *"변형이 안 먹혔다"* 와 *"워크로드가 못 잰다"* 는
-다른 결론이고, 둘을 가르는 건 변형이 데이터 경로의 **한쪽 끝만** 건드렸는지다.
-
-### ★★★★ 멈춰 선 에이전트의 **부분 출력도 결과다**
-
-이 슬라이스의 가장 값진 발견은 **5시간 stall 로 죽은 differential 렌즈**가 킬 시점에 남긴
-한 문장에서 나왔다 — *"picorv32 의 다이제스트가 코어의 덧셈기를 변형했는데 안 움직인다.
-죽은 변형인지 더 나쁜 것인지 iverilog 컨트롤을 돌려 보는 중."* 그 렌즈는 최종 보고를 끝내
-못 냈고, 나는 그 사이에 다른 렌즈의 결과만으로 커밋까지 했다.
-
-⇒ **에이전트를 죽이기 전에 부분 출력을 읽어라.** 그리고 stall 이 곧 무성과는 아니다 —
-멈춘 지점이 곧 *"여기서 뭔가 이상했다"* 는 표시다.
-
-### ★★★ 거절을 **일급 상태**로 기록하면 다섯 가지가 구분된다 — 특히 loud→silent-wrong
-
-vita 가 이미 도는 설계만 든 코퍼스는 아무것도 알려줄 수 없다. 매니페스트의 각 행이
-`Expect::Runs` / `Expect::Refused { diag }` 를 들게 하니, 밖에서는 똑같아 보이던 것이 갈라진다 —
-핀된 진단대로의 거절(`known-gap`, 초록: 사다리가 작동 중이다) · **다른 이유**의 거절(`DRIFTED`,
-빨강: 핀이 더는 설계를 설명하지 못한다) · 도는 것으로 바뀜(`PROMOTED`, 초록 + *"행을 옮겨라"*) ·
-⚠️⚠️ **거절되던 설계가 답을 하는데 틀린 답을 함**(`REGRESSION`, 빨강).
-
-마지막 칸이 이 설계의 이유다. 그걸 승격으로 채점하면 **사다리가 금지하는 유일한 이동**을
-초록으로 통과시키게 된다. 단위 테스트가 그 칸을 이름으로 고정한다
-(`loud_becoming_silently_wrong_is_a_regression`).
-
-### ★★★ 측정 규율은 **기본 모양**으로 박아라 — 다만 "불가능하게 만들었다" 고 말하지 마라
-
-`measure()` 는 잴 것을 **전부 한꺼번에** 받는다. 그래야 라운드로빈이 **기본 모양**이 되고 첫
-라운드를 버릴 수 있다. 이 프로젝트는 순차 A-then-B 로 가짜 +12.5% 를, debug 바이너리로 가짜
-+88% 를 이미 한 번씩 냈다([[perf-ab-method-artifacts]]). 러너는 debug 바이너리를 감지하면
-경고를 찍는다.
-
-⚠️⚠️ **그런데 나는 이걸 처음에 *"호출자가 순차 측정을 할 방법이 없다"* 라고 적었고, 적대
-soundness 렌즈가 그 자리에서 반증했다** — `measure(&jobs[0..1])` 다음에 `measure(&jobs[1..2])`
-는 컴파일되고, 그게 바로 그 가짜 +12.5% 다. 인터리브는 **타입의 성질이 아니라 호출부의
-성질**이었다. ⭐⭐ 하필 *"규칙은 타입이어야 한다"* 를 주장하는 문단에서 타입이 아닌 것을
-타입이라 불렀다는 게 요점이다.
-
-⇒ **기본값을 옳은 쪽으로 놓는 것**과 **틀린 쪽을 표현 불가능하게 만드는 것**은 다른 주장이다.
-후자를 말하려면 *"이 타입으로는 그 상태를 만들 수 없다"* 를 실제로 보일 수 있어야 한다. 같은
-슬라이스에서 그게 **진짜로 가능했던** 자리는 따로 있다 — 아래 `Expect::Runs { exit }`.
-
-### ★★★★ 승격을 감지하려던 필드가 승격을 **불가능하게** 만들고 있었다
-
-매니페스트 각 행에 `expect`(Runs / Refused)와 **그 옆에** `expect_exit` 를 자유 필드로 뒀다.
-거절 행 셋은 vita 가 **거절하면서** 내는 코드라 `expect_exit: 1` 이었다. 그러면 갭이 닫히는 날
-vita 는 **0** 으로 나가고, 동등 비교가 깨지고, 등급은 **`"was loud, now crashes"`** 가 된다 —
-**코퍼스가 존재하는 이유인 바로 그 사건이 빨간불로, 그것도 거짓 문구로** 보고되게 배선돼
-있었다. `Grade::Promoted` 와 그 메시지 전체가 도달 불가능한 죽은 코드였다.
-
-⚠️ 자유 필드라서 그렇다. 고침은 값을 옮기는 것이다 — **`Expect::Runs { exit: i32 }`**. 이제
-거절 행에는 exit 코드를 **적을 자리가 없고**, 승격은 "0으로 나가며 핀된 다이제스트를 찍는다"
-라는 원래 의미를 되찾는다.
-
-⇒ **두 필드가 서로의 유효성을 좌우하면 하나는 다른 하나 *안에* 들어가야 한다.** 그리고
-⭐ *"이 상태 조합은 나올 리 없다"* 고 생각한 조합이 이미 매니페스트에 **적혀 있는지** 세어라 —
-셋 중 셋이 그랬다.
-
-## 문자열 상수 도메인 (2026-08-23 · §4.5.370)
-
-### ★★★★★ 도메인을 넓히기 전에 **그 도메인이 무엇을 못 들고 다니는지** 세어라
-
-문자열 상수 도메인의 값은 `str_param_raw` 에 사는데, 그 맵은 **폭을 안 들고 다닌다**. 그리고
-파라미터 소비자들은 문자열 경로를 **폭을 들고 다니는 수치 경로보다 먼저** 묻는다. 그래서 도메인을
-넓히자마자 `localparam [95:0] X = {"A","B"}` 가 96비트를 **16비트**로 접었다(두 오라클 96) —
-PRE 에선 loud 였던 것이 **silent-wrong** 이 됐다.
-
-⇒ **표현이 못 담는 것을 담는 척하지 마라.** 같은 슬라이스에서 두 번 물렸다: 폭 말고도 `{"ab",""}`
-의 `""` 는 **NUL 한 바이트**(§5.9 · 두 오라클 0x616200)인데 텍스트 join 은 그것을 **0글자**로
-표현한다 ⇒ 0x6162. 둘 다 답은 같다 — **declines**. 못 담으면 loud 로 남는 게 정직하다.
-
-### ★★★★★ `Implicit` 은 *"타입이 없다"* 가 아니라 *"내가 기록하지 않은 타입"* 이었다
-
-폭 게이트를 `p.range.is_none() && p.ty == Implicit` 로 썼다. 세 키워드가 그 틈으로 빠졌다 —
-**범위 없는 `logic`/`reg`/`bit`** 는 폭이 **1비트**인데 `ty` 는 `Implicit` 이고 `range` 는 `None`
-이다. 파서는 그걸 `var_kind` 에 기록했다가 **버렸고**, `ParamDecl` 엔 그런 필드가 없어서
-`parameter bit P` 와 `parameter P` 가 하류에서 **문자 그대로 구별 불가능**했다.
-
-⭐⭐ 그리고 그 틈은 문자열과 무관하게 **이미 silent-wrong 을 내고 있었다**:
-`localparam bit N = 8'hFF` 를 vita 는 **255/8비트**로 읽었고 두 오라클은 **1/1비트**다. 내 게이트가
-그 위에 새 실패를 얹으려다 원래 있던 것을 드러낸 셈이다.
-
-⇒ **열거형의 "기타" 팔을 게이트의 술어로 쓰지 마라.** `Implicit` 같은 이름은 대개 *"분류가 안 된
-것"* 이 아니라 *"분류했지만 안 적은 것"* 이다. 파서가 아는 것을 AST 가 버리고 있지 않은지
-확인하라 — 여기선 `var_kind` 가 `finish_param_assignment` 까지 살아 있어서 **세 줄**로 고쳐졌다
-(단, **explicit range 가 이기도록** 마지막 fallback 으로 — `forced_range` 에 넣으면
-`parameter logic [7:0] P` 가 1비트가 된다).
-
-### ★★★★ 가드를 넓히면 **그 가드가 답하는 질문**까지 넓어진다
-
-*"이 파라미터는 문자열인가?"* 를 묻는 escalation 가드가 있었고, 그것을 **값 도메인**(넓힌 리졸버)에
-물었다. 그러자 기본값이 우연히 문자열 식인 평범한 수치 파라미터 —
-`parameter W = {"A","B"}` — 가 **합법적인 숫자 override 를 거절**했다(두 오라클 `#(.W(9))`=9,
-PRE 도 9) = **correct→loud**.
-
-⚠️⚠️ 더 나쁜 건 그 다음이다: 가드만 되돌리니 이번엔 **폴드된 기본값이 override 를 삼켜서**
-9 대신 16706 이 exit 0 로 나왔다 — loud 를 고치려다 **silent-wrong** 을 만들었다. 답은 셋째
-버전이었다: *"숫자 override 가 이 파라미터를 겨누면 폴드 fallback 은 물러선다"*.
-
-⇒ **가드는 그것이 답하는 질문의 도메인으로 물어라.** *"선언이 문자열인가"* 는 **선언** 질문이고
-*"이 식이 문자열로 접히나"* 는 **값** 질문이다. 같은 이유로 `systask.rs` 의 진단 가드는 넓히지
-않고 리터럴 전용 헬퍼에 남겼다 — 그건 *"리터럴인가"* 를 묻는다.
-
-### ★★★ 소비자가 **하나뿐인** 리졸버는 절반만 지어진 리졸버다
-
-`const_str_in_scope` 는 StrLit·Paren·Ident·PkgScoped 를 이미 풀고 있었는데 호출자가 **하나**였다 —
-문자열 **동등비교** 전용이라 아무도 **값**을 묻지 않았다. 그래서 파라미터 바인딩 일곱 자리가 전부
-리터럴 전용 쌍둥이(`param_str_literal`)를 쓰고 있었고, 그게 서드파티 설계 셋을 막고 있었다.
-
-⇒ [[restriction-may-be-assumption-not-missing-machinery]] 의 변주다. *"이 기능이 없다"* 를 만나면
-**비슷한 이름의 함수가 이미 있는지**, 그리고 있다면 **호출자를 세라**. 하나면 그 함수는 그 하나의
-질문에만 맞춰 자랐을 가능성이 높다.
-
-## 상수 도메인의 값과 폭 (2026-08-23 · §4.5.371)
-
-### ★★★★★ **초기화식의 self-폭은 override 를 견디지 못한다** — 선언 타입과 다르다
-
-무타입 파라미터의 폭을 초기화식(concat/replication)의 self-폭에서 가져오게 했다. 그러자
-`#(parameter P = {2{8'h1}})` 를 `#(.P(32'hDEADBEEF))` 로 덮은 인스턴스가 **16비트 `beef`** 가 됐다
-(두 오라클 32비트 `deadbeef`). §6.20.2 는 무타입 파라미터의 범위를 **최종 override 값**에서
-가져온다. 한 칸은 더 나빴다 — `wire [P-1:0] bus` 를 단 형태는 **PRE 가 loud** 였는데 POST 가
-**514비트 버스를 조용히** 지었다.
-
-⭐ 내가 그 arm 을 *"타입-결정 계열에 속한다"* 고 주석에 적은 것이 정확히 틀린 지점이다 —
-**선언된 타입은 override 를 견디지만**(`parameter byte P` 는 덮여도 8비트) **값에서 결정된 폭은
-못 견딘다**. 그 값이 교체됐기 때문이다.
-
-⇒ *"이 폭은 어디서 왔나"* 다음에 반드시 **"그 출처가 아직 살아 있나"** 를 물어라. 게이트는
-**네 override 채널 전부**(by_name·fill·text·unfoldable)를 봐야 한다.
-
-### ★★★★★ 폭을 **계산할 수 있는 것**과 그 폭이 **declared provenance 인 것**은 다르다
-
-같은 arm 을 `declared_only` 아래서도 답하게 두고 *"폭이 피연산자의 선언 폭에서 온다"* 고
-정당화했다. ⚠️⚠️ **그것을 계산하는 resolver 가 반증한다**: 이름의 폭을 `param_meta` 에서 읽는데
-거긴 **값-추론 폭이 기록되는 자리**이고, 메타가 없으면 `unwrap_or((32,false))` 로 **추측**한다.
-즉 concat 은 `declared_only` 가 막으려던 provenance 를 **세탁하는 래퍼**였다 —
-`localparam W = ~8'hCB; localparam Q = {W}; logic [(Q[15:8])+8-1:0] v;` 가 **263비트** net 을
-선언했다(iverilog 1). §4.5.363 이 닫은 바로 그 회귀가 **concat 문으로 재진입**한 것이다.
-
-⇒ 어떤 값을 **계산할 수 있다**는 것과 그 값의 **출처를 보증할 수 있다**는 것은 별개다. 후자를
-주장하려면 계산 경로의 **모든 leaf** 가 그것을 보증하는지 봐야 한다 — 여기선 sized 리터럴만
-자격이 있고 이름 leaf 는 declines 한다.
-
-### ★★★★★ **고칠 때마다 새 BLOCKING 이 나오면 그건 설계가 아니라 축이 틀렸다는 신호다**
-
-replication count 를 넓히는 축에서 세 라운드에 걸쳐 BLOCKING 이 넷 나왔고 **마지막 셋은 전부
-앞 수정이 만든 것**이다:
-
-1. 값만 넓히고 **폭 쌍둥이**를 안 넓혀 폭-인식 walk 가 무제한 도메인으로 degrade;
-2. 이름 resolver 로 접으니 상수함수 **지역변수**를 잡아 **170**(§11.4.12.1 상 count 는 상수식);
-3. 모듈 스코프 evaluator 로 고쳤더니 **같은 이름의 지역변수를 지나쳐 파라미터**를 잡아 **43690**
-   — 170 을 지우고 43690 을 설치했다;
-4. 그 evaluator 는 **콜 깊이를 0으로 재시작**해 count 안의 호출이 **스택 오버플로**(PRE 는 loud).
-
-⭐⭐ 넷을 관통하는 것은 하나다: **count 는 값 도메인의 질문이 아니라 스코프·깊이·provenance 의
-질문**이고, 그 셋은 내가 손대던 폭 축과 **다른 머신러리**다. 개별 수정은 전부 국소적으로 옳았고,
-그래서 계속 다음 누수가 나왔다.
-
-⇒ **한 슬라이스에서 같은 축의 BLOCKING 이 셋을 넘으면 고치지 말고 세라.** 되돌리고 메커니즘을
-기록하는 것이 손해가 아니다(§4.5.361 선례) — 다음 시도는 큐의 한 줄이 아니라 **선행조건이 적힌
-줄**에서 시작한다. 여기선 그 줄이 *"깊이를 이어받는 상수 평가 진입점"* 이다.
-
-### ★★★★ **vita 가 자기 자신과 다르면 오라클이 필요 없다**
-
-폭 쌍둥이 결함은 `({N{4'd15}} + 4'd1) > 4'd0` 이 **1**, 같은 파일의 `({2{4'd15}} + 4'd1) > 4'd0`
-이 **0** 이라는 것으로 잡혔다. 두 답이 동시에 옳을 수 없으므로 **버그인 것은 확정**이다(방향은
-여전히 오라클이 정한다 — [[internal-inconsistency-is-not-direction]]).
-
-⇒ 넓히는 슬라이스에선 **넓힌 철자와 원래 철자를 나란히** 두는 칸을 census 에 반드시 넣어라.
-그 칸은 오라클이 없어도 회귀를 잡는다.
-
-## 프레임 본문에서 런을 끝내기 (2026-08-23 · §4.5.372)
-
-### ★★★★★ **중간에 멈춘 본문은 반환값이 없다** — 그리고 그 자리에서 세 시뮬레이터가 세 답을 낸다
-
-`$finish` 를 프레임(서브루틴) 본문에 넣으려면 **본문이 중간에 멈춰야** 한다. 그런데 멈춘 본문이
-호출자의 lvalue 에 무엇을 써야 하는지는 정의돼 있지 않고, `r = f(7)` 한 줄에서 셋이 갈렸다:
-
-| iverilog | verilator | vita(내 구현) |
-|---|---|---|
-| **55** (대입 자체를 안 한다) | **21** (본문을 끝까지 돌린다) | **x** (중단하고 부분값을 커밋) |
-
-즉 어느 답을 골라도 **loud 를 silent 와 맞바꾼다**. ⇒ *"이 문장을 실행할 수 있나"* 를 묻기 전에
-**"멈추면 무엇을 남기나"** 를 물어라. 남길 것이 정의돼 있지 않으면 그 기능은 아직 없는 것이다.
-
-### ★★★★★ 억제를 **한 sink 에만** 넣으면 silent 를 다른 silent 와 맞바꾼다
-
-`$fatal` 이 인자에서 걸렸을 때 `$display`/`$write` 의 출력을 막았다. 같은 자리의
-`$fdisplay`/`$fwrite` 와 postponed `$strobe`/`$monitor` 에는 그 검사가 없다. 여기까지는 잔여다.
-
-⚠️⚠️ 그런데 같은 슬라이스에서 **본문을 중간에 멈추는 bail** 을 더하자, 검사가 없는 그 sink 들이
-찍는 값이 **8 → x** 로 바뀌었다. 억제되지 않는 출력의 **값**을 바꾼 것이다 = **silent↔silent
-맞바꿈**, 사다리가 명시적으로 금지하는 것.
-
-⇒ **어떤 값이 새는 자리를 남겨 뒀다면, 그 값을 바꾸는 변경은 그 자리를 먼저 닫고 해야 한다.**
-잔여를 남기는 것과 잔여의 답을 바꾸는 것은 다른 결정이다.
-
-### ★★★★ 래치는 **지워지지 않는다** — 그걸 술어로 쓰면 뒤에 오는 것까지 삼킨다
-
-`call_fatal` 은 소비돼도 클리어되지 않는다(런이 끝나가므로 그럴 이유가 없었다). 그 셀을 그대로
-*"지금 출력하지 마라"* 의 술어로 쓰자 **`final` 블록의 모든 출력**이 사라졌다 — `final` 은
-스케줄러가 래치를 소비한 **뒤에** 돈다. iverilog 도, 검사가 없던 PRE 의 vita 도 그것을 찍는다.
-
-⇒ 술어는 `call_fatal && !finished` — **"지금 끝나는 중"** 과 **"이미 끝났다"** 는 다른 상태다.
-클리어되지 않는 플래그를 술어로 쓰기 전에 **그 플래그가 참인 채로 더 실행되는 코드가 있는지**
-찾아라.
-
-### ★★★ 같은 서브셋을 **세 곳이** 열거하고 있었다
-
-프레임 본문에 무엇이 허용되는지를 `elaborate/frames_classify.rs` · `sim-engine/native/frames.rs` ·
-`state/frame_eval.rs` **셋이 각자** 열거한다. 하나만 가르치면 elaborate 는 받아들이고 native 는
-거절해 vm 으로 폴백하는데, 그 폴백 메시지가 *"실행기가 그 문장을 드롭한다"* 였다 — **실행기는
-그것을 실행한다**. 거짓 진단이 사용자에게 나가는 자리다.
-
-⇒ [[routing-lives-in-several-places]] 의 재발이고, 이번엔 **진단 문구가 거짓이 되는** 형태였다.
-서브셋을 넓힐 때는 `grep` 으로 **그 서브셋을 열거하는 자리를 전부** 먼저 세라.
-
-### ★★★★ 두 슬라이스 연속으로 **내 수정이 blocking 의 과반을 만들었다**
-
-§4.5.371 은 BLOCKING 넷 중 셋, §4.5.372 는 여섯 중 넷이 **앞 수정이 만든 것**이었다. 두 번 다
-개별 수정은 국소적으로 옳았고, 두 번 다 축이 잘못돼 있었다. §4.5.371 에서 쓴 규칙이 §4.5.372 에서
-그대로 다시 맞았다:
-
-⇒ **한 축에서 blocking 이 셋을 넘고 그중 다수가 앞 수정의 산물이면, 다음 수정을 쓰지 말고 세라.**
-분리 가능한 절반을 싣고, 나머지는 **선행조건을 적어서** 되돌린다. 그게 손해가 아니라, 다음 시도가
-큐의 한 줄이 아니라 **측정된 줄**에서 시작하게 만드는 유일한 방법이다.
-
-## 폭을 값으로 쓰기 (2026-08-24 · §4.5.373)
-
-### ★★★★★ **정리로 좁혔으면 그 정리의 전제를 측정하라**
-
-리덕션 여섯을 상수 도메인에 넣자 폭의 provenance 문제가 터졌다(`param_meta` 는 선언 폭과 추론
-폭을 섞어 담고 미스는 32로 때운다). 1차 좁힘은 **정리**로 갈랐다 —
-
-> 창을 넓히면 피연산자 **바깥** 비트만 더해진다. 음이 아니면 0, 부호확장된 음수면 1인데 음수는
-> 이미 set 된 비트가 있다. 따라서 *"어떤 비트든 set 인가"* 는 폭이 커져도 불변이다.
-
-⇒ `|`·`~|` 는 어떤 폭에서도 안전, 나머지 넷은 소스가 폭을 명시할 때만. 깔끔해 보였고 표적도
-지켰다(SERV 는 `|` 를 쓴다).
-
-⚠️⚠️ **그런데 전제가 거짓이었다.** *"기록된 i64 는 참값의 zero/sign 확장"* 이 성립해야 하는데,
-vita 는 파라미터를 **주장한 폭으로 감싸지 않고** 기록한다:
-`parameter A = 4'h1; localparam W = A << 4;` 가 **W=16 · $bits=32** 인데 두 오라클은 **W=0 ·
-4비트**다. 여분 비트가 참 피연산자 **바깥이 아니라 안쪽**에 있으니 `|W` 가 1(오라클 0)이고
-`generate if (|W)` 가 가지를 뒤집는다.
-
-⇒ **정리는 자기 전제만큼만 참이다.** 전제가 *"저장된 표현이 canonical 하다"* 같은 자료구조
-불변식이면, 그 불변식이 **실제로 성립하는지 측정**하라 — 문서나 이름이 그렇게 보인다는 것으로는
-부족하다([[removing-a-defensive-check-needs-a-producer-census]] 의 값 축 버전이다).
-
-### ★★★★★ **어서션이 없는 테스트는 회귀를 «기대 동작»으로 박제한다**
-
-좁힘 뒤에 쓴 테스트가 `code == Some(0)` 과 `bits=32` 만 확인하고 **`VAL` 은 확인하지 않았다**.
-그래서 값이 오라클과 반대인 채로 초록이었고, 게다가 docstring 에 *"PRE 도 0 을 찍는다 =
-pre-existing"* 라고 적었는데 **PRE 는 E3009 였다**. 적대 렌즈가 둘 다 잡았다.
-
-⇒ 잔여를 핀하는 테스트일수록 **관측한 값 자체**를 어서션에 넣어라. *"exit 0 이고 폭이 32다"* 는
-정상과 결함을 구분하지 못한다. 그리고 **PRE 를 인용하려면 PRE 를 돌려라** — 기억으로 적으면
-회귀를 잔여로 오인한 문서가 남는다.
-
-### ★★★★ 같은 벽을 **세 문으로** 쳤다 — 그러면 벽을 큐에 적어라
-
-§4.5.371 은 select 바운드로, 같은 슬라이스가 concat 폭으로, §4.5.373 은 리덕션으로 각각 도달했고
-셋 다 같은 자리에서 멈췄다: **폭을 계산할 수는 있는데 그 폭을 보증할 수 없다.** 그리고 §4.5.373 이
-그 아래 한 겹을 더 팠다 — 보증 이전에 **값이 그 폭에서 canonical 하지 않다**.
-
-⇒ 서로 다른 기능 요청 셋이 같은 선행조건에서 멈추면, 그건 기능 큐가 아니라 **인프라 항목**이다.
-큐의 세 줄에 각각 적지 말고 **벽 자체를 한 줄로 적고** 세 줄이 그것을 가리키게 하라. 안 그러면
-다음 사람이 네 번째 문으로 같은 벽을 친다.
-
-## 효과를 옮길 때 (2026-08-24 · §4.5.374)
-
-### ★★★★★ **"쓰는 게 없으니 위험도 없다" 는 자원을 이름으로만 세는 사람의 말이다**
-
-부수효과 있는 호출을 문장 앞으로 끌어내는 hoist 를 짓고, 겹침 게이트를 **루트 이름**으로 만들었다.
-그리고 인자를 안 쓰는 형태(`$fgetc`·`$fopen`·`$ungetc`)에는 조기탈출을 달았다. 근거를 주석에
-이렇게 적었다 —
-
-> *"they mutate only fd state, **which no expression in the statement can read**
-> (`$feof` is a separate call, and it is PURE and so never hoisted — it would be
-> re-evaluated where it stands either way)"*
-
-**거짓이다.** `$feof(fd)` 는 **인자에 대해서만** pure 하고 파일 위치를 읽는다. 그리고
-*"제자리에서 재평가된다"* 는 안전 근거가 아니라 **결함의 정의**다 — 그것은 제자리에 있고,
-**변이가 그 앞으로 옮겨간다**. 측정: 파일 소진 후 `x = $feof(fd)*10 + $fgetc(fd)` 가 vita **9**,
-iverilog **−1**, PRE 는 loud.
-
-⇒ **효과를 옮기는 변환에서 "무엇이 위험한 자원인가" 는 "무엇이 이름을 갖는가" 와 다르다.**
-파일 위치·시드·스트림 상태처럼 **식이 이름으로 붙잡지 않는 자원**이 있으면, 루트 집합은 비고
-그 비어 있음이 통과 사유가 된다. 옮기는 효과마다 **관측자를 전수하라** — 그리고 그 전수는
-"이 이름이 인자를 쓰는가" 가 아니라 **"이 이름이 그 자원을 읽는가"** 로 해야 한다.
-
-⚠️ 이 결함은 **값 의존적**이었다. 파일 중간에서는 두 도구가 일치하고 EOF 근처에서만 갈린다 ⇒
-끝까지 읽지 않는 프로브는 **틀린 답 위에서 초록**이다. 상태를 옮기는 변환의 테스트는
-**경계에서** 재라.
-
-⚠️ 그리고 이 슬라이스는 그 규칙의 **세 번째 사례**를 스스로 냈다 — 전체 스위트가 **옛 제한을
-인코딩한 핀 여덟**을 하나씩 내놓았고(nextest 는 첫 실패에서 멈추므로 한 번에 하나씩), 그중 하나가
-*"An arbitrary expression position has no statement to desugar into, so it is loud —
-**deliberately, not as a gap to close cheaply**"* 라고 적힌 핀이었는데, 이 슬라이스가 정확히 그
-문장을 지었다. 잔여를 못박는 주석은 **왜 못 하는지**가 아니라 **무엇을 재서 그렇게 판단했는지**를
-적어야 한다.
-
-⚠️⚠️ 그리고 이건 [[narrowing-by-theorem-measure-the-premise]] 가 **한 슬라이스 만에 같은 모양으로
-재발**한 것이다. §4.5.373 에서는 정리의 전제(*"기록된 값이 canonical"*)가 거짓이었고, 여기서는
-조기탈출의 전제(*"그 자원은 읽히지 않는다"*)가 거짓이었다. 둘 다 **내가 주석에 명문화한** 문장이다.
-**주석에 「~할 수 없다」 를 쓰는 순간 그것은 측정해야 할 주장이 된다.**
-
-### ★★★★ 기존 arm 을 미러링할 때는 **조건을 세라**
-
-`hoist_stmt_general` 의 statement arm 들을 새 계열에 맞게 옮겨 적으면서 `UserTaskCall` arm 의
-`task_call_inout_root_written` 을 빠뜨렸다. 그 arm 옆에는 왜 필요한지가 **이미 주석으로 적혀
-있었다**(inout actual 은 copy-IN 이 있어 자기 actual 을 **읽는다**).
-
-⭐ 그런데 되살려도 안 됐다 — 그 술어는 inout **함수 호출**을 보는 것이라 시스템함수를 못 본다.
-⇒ **미러링은 조건의 목록이 아니라 조건이 답하는 질문의 목록으로 하라.** 질문
-(*"rewrite 되지 않는데 읽히는 식이 있는가"*)을 옮겼더니 답이 달라졌고, 그 답이 옳았다.
-
-### ★★★★ 게이트의 사각은 **열거하지 말고 fail-closed 로 닫아라**
-
-겹침 게이트가 별칭을 두 방향으로 놓쳤다 — 자기-계층 경로(`m.a` 는 v1 flatten 상 `a` 와 같은 net)
-와 패키지 스코프 이름(`p::v` 는 `Ident` arm 에 안 걸린다). 형태를 하나씩 추가하는 대신
-**`opaque` 플래그**를 뒀다: 걷다가 **루트 이름을 붙일 수 없는 읽기**를 만나면 세우고, 세워졌으면
-문장을 거절한다.
-
-⇒ 비용이 구조적으로 좁다는 것까지 확인하라 — 여기서는 write 가 있는 형태에만 걸리고, 표적
-(`$fgetc`)은 write 가 없어 그 코드를 아예 안 탄다. **fail-closed 는 표적을 안 막을 때만 싸다.**
-
-### ★★★ 리팩터가 계약을 먹었다
-
-이중 `shape()` 호출을 접으면서 `Shape::Unevaluated` 를 `Shape::Uncond` 와 한 팔에 묶었다.
-`Unevaluated` 는 *"`$bits` 와 배열 질의는 피연산자의 **타입**을 보고하고 런타임에 아무것도 읽지
-않는다"*(§20.5/§20.6)는 계약이 있고, `shape_children` 은 그래서 `[]` 를 준다. 묶은 결과
-`$bits(a)` 가 `a` 를 읽기로 기여해 무해한 문장을 false-reject 했다.
-
-⇒ **enum 팔을 합칠 때는 두 팔의 계약이 같은지 보라.** 같은 타입이라는 것은 같은 의미라는 뜻이
-아니다.
-
-## Removing a gate, and measuring against a moving binary (2026-08-24 · §4.5.375)
-
-### ★★★★★ **A silent `return` on an unexpected argument shape is a wrong answer, not a decline**
-
-`$readmem*`/`$writemem*` accepted only a string LITERAL for the file name:
-
-```rust
-let name = match sched.st.ir.exprs.get(a0 as usize) {
-    Some(sim_ir::Expr::Const { val }) => const_string(sched.st.ir, *val),
-    _ => return,                       // ← no file read, no diagnostic, exit 0
-};
-```
-
-The branch immediately below it — the memory argument — WARNS when it does not recognise its
-operand. The two branches sat four lines apart and disagreed about whether an unrecognised
-operand is worth mentioning. IEEE 1800 §21.4 asks only for a string EXPRESSION, and the
-canonical SoC testbench keeps the name in `reg [1023:0] firmware_file`, so the shape that hit
-the silent arm was the common one, not an exotic one.
-
-⇒ **When a handler cannot use an argument, say so.** A bare `return` in a system task is
-indistinguishable from "there was nothing to do", and it is the one outcome no user can
-debug. Read the neighbouring branches: if one of them warns and yours does not, that
-asymmetry is the bug ([[branch-parity-before-new-traffic]] on the diagnostic axis).
-
-### ★★★★★ **Removing a loud gate is a promise about everything underneath it**
-
-The gate being removed was the hierarchical memory argument. Underneath it were TWO
-independent pre-existing defects, and neither was visible until it came off:
-
-1. the silent file name above — found by building the target testbench's exact line and
-   seeing it run to exit 0 with the memory unchanged;
-2. **the t0 process order** — vita runs a parent's `initial` before its child's, both oracles
-   the reverse, so a RAM that loads its own memory overwrites the testbench's load.
-
-The second is why the slice reverted: opening the construct turned a loud reject into a
-silent wrong answer on the very idiom the construct exists to serve.
-
-⇒ **Before removing a loud gate, run the REAL design the gate was blocking** — not a
-reduction of it. Both defects were invisible to the minimal probe (`$readmemh("f.hex",
-dut.mem)` with a literal name and no child `initial`) and both appeared the moment the probe
-was widened to what serv actually ships. See
-[[removing-a-loud-gate-exposes-what-it-masked]]; this is the third slice in a row where the
-thing under the gate cost more than the gate.
-
-### ★★★★ **Fix it, or revert it — but the choice belongs to the ROOT, not to the effort spent**
-
-The feature was correct: 40+ shapes matching both oracles, one lens CLEAN, the real SoC
-running end to end. It still had to go, and the deciding facts were about the root, not about
-how much work it was:
-
-- the ordering is **pre-existing and independent** (a plain hierarchical write already loses
-  to a child's `initial`, with no `$readmem` anywhere) ⇒ the construct adds a door to an
-  already-open room rather than creating the room;
-- `sim_ir::Process` is **frozen** and has no instance field ⇒ the order cannot live in the IR
-  and needs an out-of-band rank sidecar;
-- the scheduler's `tie` is shared with combinational seeding and with fork children ⇒ the
-  blast radius is every design with a child `initial`.
-
-Three separate reasons the fix is *different machinery*. That is the same test §4.5.371/372/373
-applied, and it is the one to apply — not "I have already built it".
-
-⇒ And when you revert, **ship the part that stands alone**. The file-name fix needs no
-hierarchy at all, so it went out while the construct that uncovered it did not.
-
-### ★★★★★ **A construct that writes into another instance needs an ORDERING census, not just a routing one**
-
-The soundness lens ran an exhaustive **routing** census on the hierarchical memory argument
-— which nets the exemption admits (heap kinds, mangled names, automatic locals, clocking
-holds, `NetKind::String`, const parameters), and whether each write lands in the right
-storage, on both backends and through the staged pipeline. It reported CLEAN, twice.
-
-It never asked **when** the write lands relative to the target instance's own
-initialization, and that is where the defect was. Its own words afterwards: *"every probe I
-wrote gave the child RAM no initializer of its own, so the ordering could not show — and the
-shape that exposes it is the motivating idiom, not an edge case. My forty-odd shapes were a
-de-risked variant of the real thing."*
-
-⇒ **Write into another scope and you have two questions, not one**: *does the value reach
-the right storage* (routing) and *does it reach it at the right time relative to what that
-scope does to itself* (ordering). A routing census answers the first exhaustively and is
-silent about the second, which is exactly how it can be CLEAN over a silent-wrong.
-
-⇒ And the first probe should be **the upstream idiom verbatim, initializers included** —
-not a reduction of it. See [[run-the-real-design-the-gate-blocked]]; both defects in
-§4.5.375 were invisible to the reduced form and both appeared the moment it was restored.
-
-### ★★★ **Escape a name in every diagnostic, not in the ones that can see a bad byte**
-
-The file-name fix escaped non-printables at the two sites that could receive a NUL, and left
-three others interpolating raw — defensible, because those three fire only after the
-filesystem accepted the name and a path may not contain a NUL. The reviewer verified the
-reasoning and still flagged it: those three can see a **tab or a newline**, and a newline
-splits one warning across two lines.
-
-⇒ When a rule is "this value is unsafe to print", apply it at **every** site that prints the
-value. A per-site exception has to be re-derived by every later reader, and the derivation
-("can a NUL reach here?") is harder than the rule.
-
-### ★★★★ **A reviewer measuring against a binary you are rebuilding is measuring noise**
-
-The differential lens ran while this session rebuilt `target/release/vita` three times. It
-had to **retract four findings** — all four had matched both oracles once re-measured. It
-recovered by copying the binary to a frozen snapshot, recording its md5 and the md5 of the
-`git diff` it was built from, and re-running everything against that.
-
-⇒ **Give a review a frozen artifact, or stop building while it runs.** Copy the binary
-somewhere the working tree cannot reach and hand the reviewer that path; a review that
-silently measures three different binaries reports findings that cannot be reproduced, and
-the retraction costs more than the copy.
-
-### ★★★ **A truncated tool result is not a completed edit**
-
-2026-08-24, caught by the owner rather than by me. A tool call ended with
-*"Tool result did not finish before the conversation ended"*, and I carried on as though the edit
-had landed. It had not — the file was unchanged, and the next several steps were reasoning about a
-tree that did not exist.
-
-The trap is that a truncated result looks like a *display* problem (the output was cut off), when it
-is equally consistent with an *execution* problem (the call never completed). Nothing in the message
-distinguishes them, so treating it as cosmetic is a guess, and it is the guess that fails silently:
-the work continues on a false premise and the divergence only surfaces later, usually as a
-"regression" that never happened.
-
-⇒ **After any tool result that did not visibly complete, re-establish the state before continuing** —
-`git status --short` and `git diff --stat` for an edit, a re-read for a write, a re-run for a
-measurement. The check costs one call; skipping it costs every step built on top of it.
-⭐ This is the same rule as *"a green suite is coverage, not proof"* and *"measure the premise"*, one
-level down: **the premise here is that the previous step happened at all.**
-
-### ★★★ **A revert's reason is a measurement, not a finding — re-measure it before you build on it**
-
-2026-08-24 (§4.5.376). §4.5.375 built the hierarchical `$readmem*` memory argument, matched
-forty-odd shapes against both oracles, ran the real serv SoC end to end — and reverted it,
-because a parent's `initial` runs before its child's *"while **both oracles** run the child's
-first"*. That sentence was the whole case for the revert. It was wrong. Re-measured on the exact
-design it cites: iverilog prints `aa bb cc dd`, **verilator prints `01 02 03 04`** — vita's own
-answer. The two oracles do not agree; IEEE 1800 §4.7 makes `initial` execution order explicitly
-nondeterministic and each tool uses that freedom differently. There was no two-oracle
-silent-wrong, so there was nothing to revert for.
-
-Two things made it hard to catch, and both are general.
-
-**A revert propagates its reason faster than a feature propagates its behaviour.** Within one
-slice the claim was written into the §3 queue line, into a new §2 row, into the §5.2 briefing,
-and into a test docstring — four copies, each citing the others' neighbourhood, none an
-independent measurement. A day later it read as thoroughly corroborated, and it ranked the next
-slice. ⇒ **When a claim's only evidence is a previous slice's prose, it is one measurement, not
-four.** The [[a-comment-saying-cannot-is-a-claim-to-measure]] rule applies to a revert's reason
-exactly as it does to a docstring's "cannot".
-
-**"Both oracles agree" is a two-part claim, and the second part is the load-bearing one.** The
-first oracle is usually the one that motivated the investigation and gets measured carefully; the
-second is the one that turns a divergence into a defect, and it is the one most likely to have
-been assumed. ⇒ **Record the second oracle's actual output text, not the conclusion drawn from
-it.** A queue line that says "both oracles print X" and cannot show you X from each tool is
-citing a belief.
-
-⭐ The check that settled it was cheap and is worth copying: when a tool's answer matches the
-value a *competing* write would leave, **you cannot tell ordering from a dropped write** — the
-two look identical. Remove the competitor and ask again. Verilator honoured the parent's
-hierarchical `$readmemh` on its own (`aa bb cc dd`), which is what made `01 02 03 04` provably an
-ordering result rather than a silently ignored statement. Same shape as
-[[ask-the-same-expression-without-a-destination]]: re-ask the question with the confound deleted.
-
-⚠️ And check the demand claim with the same suspicion as the correctness claim. The revert also
-said the construct went "silent-wrong on its own motivating idiom" — but **none of the four
-upstream testbenches it named has a competing child load** (serv never sets `+firmware=`;
-picorv32's `wb_ram` is instantiated without `.memfile`), and serv does not elaborate with or
-without the construct: PRE and POST stop at the same three unrelated errors, byte-identical. The
-cited serv digest difference therefore could not have come from the construct at all.
-
-### ★★★ **Routing a value out of a map breaks every predicate that used that map as a proxy**
-
-2026-08-24 (§4.5.377). The package parameter fold answered one question — `const_eval_in_scope`,
-integer-only — so `pkg_consts` happened to hold *every* package parameter. Adding the string and
-real domains routed those two out of it, and **both regressions the slice produced were code that
-had been using `pkg_consts` to mean something else**:
-
-- the duplicate-name check for a package's single name space (IEEE §26.3) asked `consts`, so
-  `parameter S = "RED"; int S;` ran at exit 0 where both oracles reject it — while the integer twin
-  `parameter N = 7; int N;` stayed loud, which is the tell;
-- `nonconst_bound_reason` fell through for a name it no longer recognised, so
-  `logic [P::S-1:0] v;` silently clamped to **one bit** where both oracles give 5391684. Its own
-  comment had predicted this: *"an UNKNOWN `pkg::name` keeps the pre-existing silent-unfoldable
-  behavior."*
-
-Neither is a bug in the new routing. Both are the old code's **proxy** going stale: a predicate
-about the *name space* was spelled as a lookup in the *integer value map*, and that was correct
-only for as long as the two sets coincided.
-
-⇒ **When you route a value out of a shared map, enumerate that map's readers before measuring
-anything.** Ask of each: is it reading a VALUE, or using membership as a proxy for a property the
-map no longer fully carries? The second kind fails silently and looks like your feature working.
-
-⇒ **Fix the proxy by retyping it, not by extending the predicate.** The dup check now takes the
-package's parameter NAME SET, because that is what it was always about; a fourth domain has one
-obvious place to register instead of a fourth `||`. Same move as
-[[context-rule-belongs-on-the-consumer]] — say what you mean in the type.
-
-⭐ Two cheap detectors, both of which fired here:
-- **The domain twin.** Write the identical design in the domain you did NOT change (the integer
-  `parameter N = 7; int N;`). If the old domain is loud and the new one is quiet, the guard was
-  keyed on the old domain's storage.
-- **The scope twin.** Write it at the scope you did NOT change. Module scope was loud for
-  `logic [S-1:0]` with a string `S`; the package scope going quiet is branch parity broken, and it
-  says the loud belongs on a shared path, not that the shape is newly legal.
-
-⚠️ Both were found by the slice's OWN soundness lens, not by the suite — the suite went green with
-both defects present, because no test had ever paired a string parameter with those two contexts.
-A green suite is coverage, not proof ([[removing-a-defensive-check-needs-a-producer-census]]).
-
-### ★★★ **A diagnostic's text is a claim, and it decays when the slice that made it true is superseded**
-
-2026-08-25 (§4.5.380), from an external report. §4.5.374 removed the "direct rhs of a
-blocking assignment" restriction on the file-read system functions. The **diagnostics that
-state that restriction were not touched**, so for a month vita told users that working code
-was illegal — the report's tester correctly noted that following the message would make
-them revert four spellings that pass today. The `(v9)` tag pointed at the rule of the day
-rather than at today's.
-
-Three things generalise.
-
-**One removed rule can be quoted in several places, and they need not share a reason.** Two
-sites carried it here — the file-read family and `$value$plusargs` — and they reject for
-*different* reasons: the first because a hoist would change how many times the call runs,
-the second because it would move a ref write ahead of a read in the same statement. A
-single find-and-replace would have made one of them false again. ⇒ **When a slice lifts a
-restriction, grep the diagnostic text for the restriction's wording, and re-derive each
-site's reason separately.**
-
-**A corrected message is a new claim and needs the same measurement as a code change.** My
-replacement said "a task argument … is supported" — and `$monitor`'s argument is a task
-argument that is correctly refused, because `$monitor` re-renders and would show the frozen
-temporary. An existing pin caught it. ⇒ **Write the replacement against the cases that
-still reject, not against the ones the slice opened.** The rule that survived contact was
-not a list of positions at all but a principle: the call must run *the same number of times
-as written*.
-
-**The caret is part of the claim.** These pointed at the statement head, so a multi-line
-condition sent the reader to the `if` rather than to the offending call — while the
-queue-pop diagnostic one module away already did it correctly. ⇒ Point at the operand the
-message is about, and when a neighbour already does, copy it.
-
-⭐ Corollary for external reports, and the reason [[external-report-fresh-probe-triage]]
-keeps paying: this report was filed four slices back, and re-running every item at HEAD is
-what separated "still true" (N32-1, and both stale texts) from "already fixed" and from
-"true but not a defect" — its `always_comb`-initializer item is accepted by iverilog too,
-so it is a lint request, not a two-oracle bug, and recording it as the latter would have
-put a false row in the queue.
-
-## Round 34 — two external reports (2026-08-26 · §4.5.385)
-
-### ★★★★★ **A report's SEVERITY is a claim to re-measure, not just its repro**
-
-`R5` arrived as a LOUD gap: *"`-G/--param` cannot carry a value wider than 64 bits"*. The
-repro was exact and the triage was still wrong, because the report varied the OVERRIDE and
-held the DECLARATION fixed. Varying the declaration instead found **19 silent-wrong cells**
-under the same line: on `parameter logic [127:0] K = <wide default>`, `#(.K(5))` was
-DISCARDED and the default used, at `errors=0`.
-
-The reporter cannot be blamed for this — they hit the loud wall first and stopped, which is
-what a loud wall is for. But it means a census must vary **every field of the shape**, not
-only the one the report names. The field that mattered here is the one the report held
-constant.
-
-Corollary: *"this item is loud, so it is not urgent"* is a conclusion about the cells the
-reporter tried.
-
-### ★★★★★ **A revert's conclusion is scoped to the workloads that measured it**
-
-`wprog.rs`'s module header records, in detail, that dropping the sign half of the admission
-gate was built, measured SOUND, measured *"slow lane −19.0%"* and **1.00×**, and reverted.
-Every one of those numbers is right. The conclusion — *"it buys nothing"* — was true of
-picorv32 and keccak, which is what was measured, and false of a `localparam int` operand,
-which is what SV RTL writes and what a `generate for` genvar is. There the same gate costs
-**1.61×**.
-
-This is [[§4.5.369]]'s lesson arriving from the other direction: our own benchmarks find
-what we already suspect, so a revert justified by *"no gain on our benchmarks"* is a
-statement about our benchmarks. Record the SHAPE the measurement covered, not only the
-verdict — and when a new workload shows the shape, re-run before trusting the verdict.
-
-### ★★★★★ **A wording assertion outlives the limitation it describes**
-
-Three pins broke this round, all of the same kind: they asserted the TEXT of a refusal, and
-the round removed the refusal. `a_wide_literal_override_is_named_for_what_it_is` asserted
-*"WIDER than the 64-bit integer channel"*; two streaming pins asserted *"§11.4.14"* appears.
-Each was correct when written and each had to be rewritten as a VALUE assertion, which is
-the strictly stronger form of the same complaint.
-
-⇒ When a construct has no value yet, pin the wording AND say in the docstring that it is a
-wording pin, so the next author knows to convert rather than delete it. When it has a
-value, pin the value.
-
-### ★★★★ **A probe whose input is a fixed point certifies itself**
-
-`{<<{8'hA5}}` reverses bits, and `8'hA5` is `1010_0101` — a palindrome. That cell passes
-whether the implementation reverses, copies, or returns its input. It is the same failure
-as a benchmark whose digest does not move under mutation ([[digest-must-move-under-mutation]]),
-one level down: choose inputs where every wrong implementation gives a different answer,
-and say in the comment why THAT input.
-
-### ★★★★ **An extension needs the EXPRESSION's signedness, not the container's sign**
-
-`64'hFFFF_FFFF_FFFF_FFFF + 64'd0`, `-(64'sd1)` and `32'd0 - 32'd1` all reach parameter
-binding as the same `i64`. Both oracles extend the first with zeros and the second with
-ones. Reading the sign of the container would be right for two of the three and silently
-wrong for the other, and nothing downstream could tell which.
-
-⇒ If a value has to cross a width boundary, the channel that carries it must carry the
-signedness the SOURCE had. And when a channel cannot know it (a `defparam`, whose collector
-folds before the record exists), `None` must DECLINE rather than pick a default — a guess
-here is a silent-wrong either way it guesses.
-
-### ★★★ **Predicting an oracle's answer and pinning it is not measuring it**
-
-A cell in the new sign battery asserted `-100 >>> -7 == -1`, reasoned from §11.4.10's
-sign fill. It is 0: a negative SIGNED right operand makes the whole expression unsigned
-(§11.8.1), so the fill is zero. All three tools said 0 and the test failed on the first
-run — which is the good outcome, but only because the value was asserted at all. A cell
-that had asserted "exit code 0" would have shipped the wrong understanding silently.
-
-## Round 35 — one external report (2026-08-26 · §4.5.386)
-
-### An A/B on hand-written source text is not an A/B on the compiler's transform
-
-The report measured its own design two ways — calling a small `function`, and pasting
-that function's body into the call site — got −30% for the pasted version, and asked for
-vita's inliner to be widened so it would do that automatically.
-
-Both halves of the measurement were real. The inference between them was not. **Pasted
-source text has no formals.** Vita's inliner binds the actual to the declared formal, and
-for a 2-state formal (`int`, `int unsigned` — what SystemVerilog RTL actually writes) that
-binding builds a per-bit coercion. Routing the report's own `idx()` through the real
-inliner measured **98× slower** than the frame call it was asking to replace, against
-0.83 s for the text they pasted. The design that motivated the request is the
-counter-example to it.
-
-The rule: when a report proposes "make the tool do automatically what I did by hand",
-build the cell where the tool does it. That cell is usually missing from the report,
-because the reporter could not run it — that is why they are asking.
-
-### A fan-out multiplier hides as a "slow operator"
-
-The same round chased a ternary that appeared to cost 10–50× what plain arithmetic cost
-in the same loop, on all three backends. The ternary was innocent. `int'(e)` lowers to a
-`Concat` of one `CaseEq(Select(e, i), 1'b1)` **per target bit**, the evaluator walks that
-DAG as a tree, and so the cast names its operand exactly `target_width` times. The
-ternary was expensive only because a cast was replicating it.
-
-Two things made it findable, and both are cheap:
-
-* **Count, do not time.** A `$display` inside the operand turns a timing mystery into an
-  integer: 8 for `byte'`, 32 for `int'`, 64 for `longint'`, 1024 for `int'(int'(x))`, 1
-  for iverilog. Timing said "expensive"; counting said what the multiplier *was*, and the
-  multiplier was exactly the declared width.
-* **Vary one attribute against a twin that shares the others.** `integer'` and `int'` are
-  both 32-bit and signed and differ only in 2-state-ness — 27× apart. That single pair
-  named the mechanism; the whole width ladder only confirmed it.
-
-### The guard you need may already exist one call site away
-
-`coerce_two_state` has two callers. The inline path's formal binding gates it on
-`expr_may_be_unknown` and carries a comment recording this exact measurement ("42.7x on a
-`longint` one, 23x `.velab` growth, and nesting multiplies it"). The cast path called the
-same routine with no gate at all. The fix was to give the second caller the first one's
-predicate.
-
-So before designing a gate, grep for the other callers of the thing you are gating. A
-sibling that already solved it also tells you the predicate is sound, gives you the
-measurement, and — as here — its comment may be the bug report you are about to write.
-
-⚠️ And when you add the guard, check what the *other* paths into it build. A widening cast
-goes through `extend_to`, which produces `Concat[Replicate(sign), e]`; `expr_may_be_unknown`
-had no `Replicate` arm, so every widening cast fell into the catch-all `_ => true` and
-rebuilt the coercion the new guard was meant to skip. The guard measured as a no-op until
-that arm existed — a gate can be correct and still be dead.
-
-### Fixing part of a wrong count is a rung, not a resolution
-
-The guard takes `int'(int'(f()))` from 1024 evaluations of `f` to 32. Icarus evaluates it
-once. The values are byte-identical either way, so nothing on the accuracy ladder moved
-for a pure expression — but for an operand with a side effect (`int'($random)` is the
-canonical one) the count *is* the semantics, and 32 is still wrong.
-
-Record that in the queue in the same slice, with the number. A partially-fixed silent
-defect looks exactly like a fixed one from the outside, and the next reader has no way to
-tell which it was unless the slice says so.
-
-### "It collapses" is a claim about a curve; measure the curve
-
-A report observed a five-engine top running about five times slower per cycle than a
-single-core testbench and read it as throughput collapsing with instance count. Over a
-128× sweep the cost is a straight line to within 3.6%, with the marginal cost per
-instance-cycle flat from N=2 to N=128. Five engines costing 5× is what linear predicts.
-
-Two points cannot distinguish linear from super-linear, and the reporter had two. Before
-accepting or rejecting a scaling claim, get enough points to fit — and report the
-residuals, because "it fits a line" is only meaningful with them.
-
-## Round 36 — one external report (2026-08-27 · §4.5.387)
-
-### A green suite over a fabricated default
-
-The round-36 cast fix rests on a stated equivalence: coercing at *the operand's width* and
-extending gives the same bits as extending and coercing at the target's. The code that
-implemented it asked `ir_bits_of(e).unwrap_or(32)`.
-
-For a deferred hierarchical reference the width is not known yet, so `unwrap_or(32)` did not
-read a width — it **invented** one, and `longint'(u1.w40)` on a `logic [39:0]` silently
-dropped its top 8 bits at exit 0. The full **6,185-test suite passed**, and so did a
-purpose-built **90-cell three-way sweep against live Icarus**, because every operand in both
-had a declared width.
-
-The rule that caught it: when a change rests on a property (*"this is the operand's width"*),
-find the code that establishes the property and check it cannot answer with a default. An
-`unwrap_or` under a correctness argument is a fabricated fact wearing the argument's clothes,
-and no amount of green tells you otherwise — the tests can only exercise the shapes someone
-thought to write.
-
-### The profile is not allowed to say zero for something that runs
-
-The reporter asked for a call tree to task granularity. vita lowers a subroutine two ways: a
-frame body entered through a runtime call seam, and an **inline splice** that copies the
-callee's statements into the caller at elaborate time. A profile keyed on the runtime seam
-would report `0 calls` for every inlined subroutine — and a task showing 0 reads as *"this one
-is free"*, which is a reporting silent-wrong about precisely the thing the user is hunting.
-
-So the call tree was refused and the per-builtin half — which the reporter had named as an
-acceptable fallback — shipped instead, with the prerequisite written into the queue: an
-elaborate-time record of which call sites were inlined and into which caller, so a seam-less
-task can be reported as *"inlined into its caller"* rather than as absent.
-
-The accuracy ladder applies to the OBSERVABILITY rail too. A profile that under-reports is not
-a partial feature, it is a wrong answer with a number attached.
-
-### State the attribution convention in the artifact, not in a doc
-
-A nested-cost table is ambiguous until someone says whether a row's time includes its
-children. The `builtins` object answers it in the file — `attribution: "self"` and
-`included_in_processes: true` — so a consumer never has to infer it, and a reader who sums the
-two arrays is contradicted by the data rather than by a paragraph they did not read.
-
-Verify the convention by construction, not by assertion: on a nested
-`$fdisplay(fd, "%s", $sformatf(…))` the inclusive convention sums *past its own parent*, so the
-double-count is visible in the numbers if it is ever reintroduced.
-
-### Measure the settle, not just the expression
-
-Three rounds of this report chased the cost of *evaluating* an expression. The largest single
-term turned out to be **how many times the expression is evaluated**: a continuous assign whose
-RHS contains any call or any system function is visited 6.00× per input change instead of 1.00×,
-because the purity predicate that feeds the dirty worklist rejects both node kinds outright.
-
-Two lessons. First, a per-evaluation cost and an evaluation count multiply, and profiling tools
-that report time-per-row show you their product — divide it out early. Second, the blast radius
-of a conservative predicate is invisible until someone counts: this one also fires on vita's own
-inliner output, making an inlined function measurably *slower* than the same expression written
-by hand, which is the opposite of what the inliner exists to do.
-
-## Round 37 — one external report (2026-08-27 · §4.5.388)
-
-### A green test on one spelling is why the sibling spelling stayed invisible
-
-The report was "vita can't do hierarchical references into generate blocks". Three of the
-four things that phrase covers already worked, and the fourth had been broken since the
-beginning. `hier_ref.rs::named_generate_block_read` pins `gblk.x` and has been green since
-the initial commit — so every casual check of "can we reference a generate block?" came back
-yes, while `u.gblk.x` (the same name, one dot further out) was E3010 in 19 measured cells.
-
-This is the same shape as *widen a read, sweep the write twin* and *branch parity before new
-traffic*, arriving through the test suite rather than the code: **a passing test is evidence
-about the spelling it uses and nothing else.** When a report names a FEATURE, enumerate the
-spellings of that feature and measure each; do not let one green cell stand for the family.
-The census here cost an hour and moved the diagnosis from "generate blocks" to one axis —
-and then found a second root the report never mentioned.
-
-### The comment that describes the limitation is the bug report
-
-`hier_resolve`'s arm (b) said, in as many words, *"Map only the leading segment."* That
-sentence is the entire defect, written down, sitting in the function that has it. It read as
-a scope note rather than a gap because for the same-module spelling the leading segment IS
-the block — the restriction was true of the case its author was looking at.
-
-Companion to *a comment saying "cannot" is a claim to measure*: a comment saying "only"
-deserves the same treatment. Ask what the other cases are and run one.
-
-### Storage cannot recover a syntactic fact — and the one-instance case is where you find out
-
-§27.4 makes a generate-`for`'s blocks an array whose name is illegal unindexed; a
-conditional block is a singleton whose name is legal bare. Both leave the same key in the
-symbol table when the loop runs once. The first draft of the fallback keyed on storage
-alone ("does `[1]` exist"), which answered a bare label on a two-trip loop with element 0 —
-a correct loud refusal traded for a silent pick, exactly what the ladder forbids. Adding the
-`[1]` test fixed that cell and left the subtler one: a ONE-trip loop still resolved, so the
-reference worked at one iteration and went loud at two, and would have started failing the
-day a parameter moved from 1 to 2.
-
-**When a predicate needs a fact the source has and the data structure does not, record the
-fact at the site that knows it** — here, the single place that mints a loop scope. And test
-the degenerate count: a container with one element is where "is this a container?" and "how
-many are in it?" stop being the same question.
-
-### Re-wrapping beats extending the AST
-
-Fixing the dropped generate-`case` label looked like it needed a `label` field on
-`GenCaseItem`, which would have flipped the `hdl-ast` SchemaHash. It did not: wrapping the
-labelled body in the `GenItem::Block` the elaborator already scopes reuses the existing
-`label[0]` naming instead of writing a second copy of it. Before adding a field to a frozen
-or hashed type, check whether an existing node already carries the meaning you want.
-
-## Rows 8b and 11 — a two-pass binding, and a funnel with a poison net (2026-09-01)
-
-### ★★★★★ Doing something twice is only safe if the second time is provably identical
-
-Binding enum labels once in declaration order and once afterwards looked monotone: the
-first pass only ADDS bindings the second would make anyway, and the unwind is a stack. It
-is not monotone, and two review lenses each measured that independently, with a third
-mechanism only one of them saw. All three had one shape — **a consumer that runs BETWEEN
-the two passes keeps the first answer while everything after it keeps the second**, so one
-name has two values in one elaboration at exit 0.
-
-Two of the three were gateable (an unfoldable label value, a base width that is not yet a
-fact — and note that the gate has to decline the WHOLE group, because the labels share an
-auto-increment counter and a width). The third was not: the fold SUCCEEDED in both passes,
-with a different answer, because a name in it resolved to a wildcard import in one and to a
-body declaration in the other. No gate can see that.
-
-**So the second pass has to VERIFY, not overwrite.** Record what the first pass bound and
-compare; a mismatch is a loud diagnostic, not a silent replacement. That also covers the
-mechanism you have not thought of, which — on the evidence of three findings from two
-lenses — there is one of.
-
-### ★★★★ A funnel that resolves a name answers nothing before the name exists
-
-The read-only check is called at every write position, so "every write position calls it"
-read as "every write position is checked". It is not: a destination inside an `automatic`
-task, or written hierarchically, is lowered before its name is resolvable, so the funnel is
-handed a poison net and returns false. **Adding one keyword to a design flipped the same
-statement from loud to silent-wrong** — that loud↔silent neighbour is the detector.
-
-One spelling was already correct there, and for the wrong reason: `$readmem*` happened to
-carry a side map into the deferred-resolution pass for an unrelated purpose, and the pass
-asked the read-only question off the back of it. When one member of a family behaves and
-its siblings do not, find out what the working one has that the others lack before
-concluding the rule is enforced.
-
-### ★★★ A guard that cites another guard as its model is a census of two
-
-The `$sformat` check says in its own comment that it *mirrors the `$cast` dest guard above*.
-`$cast` never called the funnel at all — and neither did the seed argument of `$random` and
-`$dist_*`, which the engine advances and which therefore is a write position that looks like
-a read. A census that enumerates the sites you edited will not find those. Enumerate what
-the RESOURCE is (here: every argument the engine writes back), not what the code does.
-
-### ★★★ A corpus row can need a third state
-
-`verilog-axi` started running and disagreed with the oracle by 29 x-cycles out of 123,166,
-on an axis already measured and ruled un-arbitrable (iverilog answers two ways to the same
-question). The runner graded that *"was loud, now silently wrong"* — true of the shape and
-false of this row, and permanently red. Pinning vita's own answer instead would have been
-self-certifying. The honest representation pins BOTH answers and names the ruling: vita
-moving is still a regression, and the two agreeing again is the promotion the row waits for.
-
-## Row 14 — declared width provenance: built, measured, reverted (2026-09-01)
-
-### ★★★★★ When the tool contradicts itself, the correct half is the implementation
-
-Three earlier slices stopped at *"a parameter's declared width is not available in the
-constant domain"* and each proposed building it. It was already built, one scope over: a
-constant FUNCTION's body folds through a width-aware walk that carries each local's
-declared width and sign and converts a leaf into its context (§11.8.2) — and gets the
-answer right. The module-scope initializer folded through a width-*unlimited* walk that has
-no context to convert into.
-
-So the same expression had two answers depending on where it was written, and the fix was
-to route one entry point at the other's walk. **Before building the mechanism a wall is
-attributed to, write the same expression in the neighbouring scope and see whether that
-scope already has it.**
-
-### ★★★★ A width is only a fact if a declaration says so
-
-The routing is gated on `param_decl_width_declared` and not on `param_meta`, whose width
-can be inferred from the initializer's own value. That distinction is the whole reason this
-was safe to ship: §6.20.2 gives an untyped parameter the type of its FINAL override, so a
-width read off the declared default is not a fact about the parameter once an override
-arrives — and review found a live case where it is not
-([[self-determined-width-does-not-survive-an-override]], now §2 row 25).
-
-### ★★★ "One prerequisite, three rows" is a claim with a domain in it
-
-Rows 14, 16 and 21 were filed as one infrastructure item because all three want a declared
-width. Closing 14 closed only 14: the other two need the >64-bit fold to compute at the
-CONTEXT width, and the ≤64-bit walk that fixed 14 does not reach them. They share the
-provenance and not the domain. **When collapsing N rows into one item, name the mechanism,
-not the missing input — and re-measure the others the day the item lands.**
-
-### ★★★★★ A producer cannot go canonical while its consumers still guess
-
-Review round 1 pointed out that a package folded `NS ^ 64'h0` to `ff…fe` where a module
-folded the identical text to `00…fe`, and routing the package binder through the same
-width-aware fold looks like the one-line answer. It is a **net loss**: it makes the
-package's stored VALUE canonical while every consumer of `pk::X` still folds through the
-width-unlimited walk, which has no context to convert the leaf into and sign-extends it.
-Measured over 8,748 package-consumer designs: **1,233 correct→silent-wrong against 714
-fixed**, plus one correct→loud.
-
-The two halves are one change. When a fix makes a stored value more precise, enumerate who
-READS it before shipping — and if the readers cannot use the precision, the asymmetry you
-were trying to remove is the safer state.
-
-### ★★★★ Set-or-clear is two-valued; scope resolution needs three
-
-A provenance set written `insert`-or-`remove` and probed by an outward scope walk cannot
-distinguish "this scope bound the name and it is not declared" from "this scope never bound
-the name" — so the walk sails outward and vouches for an ANCESTOR's declaration while the
-consumer resolves the leaf to that ancestor's width. A module-scope `logic [7:0] NM` beside
-a generate-block `localparam time NM = 300;` made `NM | 64'h0` answer 44, at exit 0, through
-five scope kinds.
-
-The fix is to stop at the first level that BINDS the name and answer from there. Pick the
-level marker carefully: `param_meta` was the obvious choice and is wrong, because the very
-declaration that has to stop the walk (`time`) is deliberately absent from it. The VALUE map
-is the one every binding writes.
-
-This is [[a-default-is-not-a-fact]] one level down — an absence read as a value — and it
-appeared in the slice written to fix exactly that.
-
-### ★★★★★ Count the rounds, and read WHERE the blockers are — that is the stop signal
-
-Three review rounds, seven BLOCKING, and the attribution decided the outcome:
-
-- **Round 1 (three)** — all one root in my design: the gate demanded provenance of the
-  TARGET and let the walk size every LEAF out of a map whose width is a default. Fixed.
-- **Round 2 (two)** — one from the fix I made for a round-1 NIT (the package routing), one
-  in the gate mechanism (the two-valued set). Reverted the first, repaired the second.
-  Different responses to superficially similar findings.
-- **Round 3 (two)** — both in the SHARED width-aware walk, and both there since round 1.
-
-That third row is the stop signal. When the remaining blockers are no longer in the thing
-you built but in the thing you routed TO, you are not finishing a slice — you are
-discovering a prerequisite. The clincher was one measurement: the shift-count defect
-reproduces **today**, through a constant function, with none of the new routing involved.
-A defect the change merely EXPOSES belongs to the code it exposes, and fixing it there is a
-different slice with a different blast radius.
-
-So the change was reverted with its diagnosis, both prerequisites, and a pinned test that
-records what a future fix must move and what it must not — the §4.5.361/371/373 pattern.
-**A fix that works and cannot be defended is worth less than the measurement that says
-why.**
-
-### ★★★ A "resolved" residue is only resolved if the thing that resolved it ships
-
-Routing the initializer also closed a separately-filed four-operator residue, and I marked
-that row RESOLVED before the review finished. It came back with the revert. Do not
-propagate a closure out of a slice until the slice is committed — and when re-opening one,
-re-measure it rather than restoring the old text: the row said four operators lost the sign
-and only three do.
-
-## Re-grounding the queue — six rows, six changed shapes (2026-09-01)
-
-Before picking the next slice, every open candidate was reproduced at HEAD against
-iverilog and verilator. **All six changed shape**, and in four different directions. That
-ratio is the lesson, not any one row:
-
-| row | what the queue said | what it measures |
-|---|---|---|
-| shift count | a constant-function corner | reachable at module scope with **no function and no name** — a silently wrong bus width, and a `generate if` taking the wrong branch |
-| const OOR select | a loud gap, one prerequisite | a **10-cell silent-wrong** sits under it with a one-conditional fix; the recorded headline is the part to *not* start |
-| `**` at a wide target | loud | **48/108 silent-wrong**; the `**` examples are the rare loud corner |
-| duplicate name | 3 spellings, §2 | **126 cells**, and it belongs in §3 (nothing correct is got wrong) |
-| clocking output | "a write lands as x" | declaring the output **destroys the signal with no write at all**, across a module boundary |
-| verilog-ethernet | one ~10-line gate | the gate passes elaborate in 1.03 s and then **simulates in 38 hours vs 7.6 s** |
-
-Three rules fall out.
-
-**A queue line ages against the binary that wrote it.** These rows were accurate when
-filed. What changed underneath them was other slices — and a row's *class* (loud vs
-silent-wrong) ages fastest, because the surrounding code stops declining before the row is
-re-read. Re-measure class first: it is what decides ranking.
-
-**A row that names a symptom will be scoped to that symptom.** Every one of the six was
-filed from the cell that produced it. The shift-count row said "constant function" because
-that is where it was found; the real reachability was a net's declared width. Ask what the
-*mechanism* can reach, not what the reporter ran.
-
-**"Closing this unblocks the corpus" is a claim with two halves.** The verilog-ethernet
-gate really is ten lines and really does make the design elaborate. It would still not
-run — 18,000× iverilog, with `--obs-procs-time` putting 100.0% of it in eighty continuous
-assigns that re-evaluate a constant-argument function call on every scheduler pass. This
-project has now had a corpus refusal *move* rather than close three times; measure the
-next gap before promising the promotion.
-
-## Row 27 — the shift count, and two ways a fix meets an old wall (2026-09-01)
-
-### ★★★★★ An accidental immunity is load-bearing until you remove it
-
-Reading a shift count as SIGNED was wrong, and it was also the only thing keeping a
-second defect invisible. A count of −3 is out of `0..64` at any width, so the shift
-collapsed to 0 — which is the correct answer for the 32-bit count the language says that
-parameter has. Making the count unsigned made the stored width matter for the first time,
-and the stored width is an untyped parameter's DEFAULT, not the type §6.20.2 gives it once
-an override arrives. Twenty-one cells went correct → silent-wrong.
-
-**Before removing a conversion, ask what it was hiding.** The signal here was that the
-values were right for the wrong reason: 0 from "out of range" rather than 0 from a
-computed count.
-
-### ★★★★ Try the discriminator, then MEASURE it
-
-The obvious fix was to admit any name whose width has declared provenance, and
-`param_range` is documented as exactly that map. It has an entry for the offending
-overridden parameter — measured, in the design that mattered, in under a minute. The
-census went back to 30 fixed and the blocking design went straight back to wrong.
-
-Two maps looked like they answered "is this width a fact" and neither did. The gate ended
-at the one map whose widths are declared subprogram locals, and the cost — the
-module-scope named spelling — is recorded rather than guessed at. **A map's docstring
-describes its intent; only a run describes its contents.**
-
-### ★★★★ The parser computes the fact and throws it away
-
-The x/z override guard needs to know whether a parameter's declared type is 2-state, since
-`bit`/`byte`/`int` convert x and z to 0 and dropping the plane IS that conversion. The
-parser computes `var_kind` for exactly those keywords and drops it, because `ParamDecl` has
-no such field — and the file's own comment documents the same gap for the 1-bit `logic`
-range it had to work around earlier.
-
-So a five-cell fix turned 76 correct cells loud, and the prerequisite is an AST field, not
-a conditional. [[implicit-means-unrecorded-not-untyped]] again — and the tell was that the
-guard had no way to name the thing it was deciding about.
-
-## Row 21 — a context width, and three ways a narrowing gate was load-bearing (2026-09-01)
-
-### ★★★★★ Removing a decline transfers responsibility to whatever answers instead
-
-The wide fold declined a context-determined top it could not widen, and the caller then
-fell back to the width-unlimited integer walk — which happens to be right for `+`, `*`,
-`<<` and `?:`. Threading a context width made the decline stop firing, and a stale
-`Paren` arm two lines away began answering instead, at the operand's width. One pair of
-parentheses, two lines from its own twin, turned a correct value into a wrong one; the
-slice's own headline cell got *worse* through a paren.
-
-The guard and the value were produced by two different walks, and only the guard was
-updated. **When you make a refusal unreachable, find out who answers now** — the fallback
-was doing real work and nobody had written that down.
-
-### ★★★★ The runtime is an oracle you already own
-
-`widen_to` extended each operand in its own signedness. §11.8.2 decides the *expression's*
-sign first and coerces operands to it, so a signed operand in an unsigned expression is
-zero-extended — and vita's runtime evaluator already did exactly that. The constant domain
-was contradicting the runtime, in the same binary, on the same text.
-
-Both review lenses found it, and neither needed iverilog to do so. **Before reaching for
-an external oracle, ask whether another lane of your own tool already answers the
-question** — a self-contradiction is a proof of a defect and needs no third party.
-
-### ★★★★ "The classification is not written here" is a claim to check against the code
-
-The docstring said the arms consult the canonical context-determined list. They
-hand-match, so the file is a sixth reading of it — and the drift was already real:
-`BitXnor` was in the list and missing from the arm, so `~^` was wrong before and after.
-Review caught the sentence, not the operator.
-
-A comment asserting that duplication *was avoided* is worth exactly as much as a comment
-asserting a limitation: check it, or write what the code actually does.
-
-### ★★★ A pin that names its prerequisite pays for itself
-
-Four unrelated tests refused a value and each said, in its docstring, precisely which
-missing capability made the refusal honest. When that capability landed they failed
-loudly, and re-aiming them was mechanical — the expected values were already in the
-comments, measured on both oracles.
-
-The opposite habit costs a slice: a pin that says only "this is loud" tells a future
-reader nothing about whether loud is still right.
-
-### ★★★★ A skip is licensed by a COMPLETE dependency set, not by purity
-
-The scheduler's "may this continuous assign be skipped?" predicate refused every call,
-with a comment giving the reason: "a user function can read state no net records." True,
-and the wrong criterion — so `assign y = f(...)` was re-evaluated on every settle pass of
-every delta for the life of the run, and one third-party design spent 99.99% of its
-runtime there.
-
-The correct criterion came from asking what the answer is being compared against.
-iverilog and verilator both re-evaluate a continuous assign **exactly when a net in its
-sensitivity list moves**. Reproducing that rule reproduces their answer, so the obligation
-is not "this is a mathematical function" but "the dependency set names everything that can
-change the value". Collect the callee's reads and the call is skippable; fail to attribute
-one read and decline.
-
-Two consequences that look like hazards and are not, both measured before the change:
-
-- A function carrying a STATIC local between calls still works, because the oracles carry
-  the same state under the same trigger rule. The every-pass evaluation was the anomaly.
-- A `$display` in the body prints once instead of thirty times, because an effect's right
-  occurrence count *is* the oracle's evaluation count. That is not a side benefit; it is
-  the same theorem, and it is what makes admitting a side effect into the certification
-  defensible rather than reckless.
-
-The one thing that genuinely breaks it is a read the set cannot name: `$random`'s seed,
-`$fgetc`'s file position, `$time`. Those decline — see
-[[moving-an-effect-name-the-resource]], which is the same distinction from the other side.
-
-### ★★★ When two halves of a gap block each other, measure the pair, not each half
-
-ROADMAP §3 ⑧ had one queue line — a `$finish` in a function body refuses the design — and
-closing it made the design elaborate in 1.03 s and simulate for **38 hours**. The
-performance defect underneath was in a different file, had no queue row of its own, and
-was reached only because the refusal was lifted first on a scratch copy.
-
-Then the two collided: the performance certification had to admit a system task for the
-motivating function to qualify (it contains an `$error`), and the `$finish` promotion had
-to be admitted into that same certification or the design stayed eighty-times slow. Fixing
-either alone produces a *worse* report than fixing neither — the refusal moves instead of
-closing, which this project has now done three times.
-
-⇒ When a re-grounding says "closing this moves the refusal", the unit of work is the pair.
-Measure the end-to-end outcome (does the real design RUN, at what time, with which digest)
-before deciding either half is done.
-
-### ★★★ A defensive arm you cannot reach is worth keeping, and worth measuring
-
-The `$finish` promotion needed an arm in the task executor for symmetry with the function
-one. Instrumenting it across the whole suite and every spelling of a task `$finish` showed
-it never fires: those tasks stay on the statement executor and finish cleanly. The arm was
-kept anyway, because the alternative at that point in the match is a `_ => {}` that DROPS
-the statement — but the docstring says it was measured dead, says how, and says what the
-honest behaviour would be if a routing change ever reaches it (a task has no return value
-to lose, so it should finish rather than refuse).
-
-"Unreachable" and "unreached in every test I ran" are different claims. Write the second
-one, with the method.
-
-### ★★★★ "Both oracles agree today" is a property of the design you built, not of the class
-
-The certification above rests on a measurement: a function carrying a static local across
-calls agrees in all three tools, so evaluating on dependency changes reproduces it. The
-probe that produced it carried a local whose value was IDEMPOTENT — re-evaluating with the
-same inputs wrote the same thing. Review built the non-idempotent twin, a counter, and the
-three tools did not agree at all; the ungated change answered `2 3 3` where the previous
-release answered `3 3 3` (verilator's answer exactly) and iverilog said `1 2 3`.
-
-The docstring said the measurement "disposes of the hazard". It disposed of one instance of
-it. When a hazard is *"the value depends on hidden state"*, the probe has to make the hidden
-state actually change the answer — an accumulator, not a flag that settles.
-
-⇒ Before writing "measured, this is fine" about a class, ask what the DEFECT would look
-like and build that, rather than building the shape and observing it is fine.
-
-### ★★★★ When a sound gate kills the feature, look for a disjunct, not a weaker gate
-
-The fix for the above is definite assignment: no own-window slot may be read before it is
-written. It is correct and it reverted the slice's entire headline — the motivating library
-function clears its arrays in a `for` loop, and a loop that *might* run zero times is not
-definite assignment. Every attempt to weaken the analysis (may-assign instead of
-must-assign, same-block writes, automatic-only) either admitted the counter again or still
-refused the loop.
-
-The answer was a second, independent reason to be safe: **an assign with an EMPTY dependency
-set is evaluated once**, so "how many times" is one and cannot vary. That arm is not a
-loophole — it is what both simulators do with an empty sensitivity list, and it was measured
-to give iverilog's answer exactly on the very counter function the gate exists to refuse,
-with its dependency removed.
-
-⇒ A hazard stated as a property ("the value must not depend on the evaluation count") often
-has more than one sufficient condition. Enumerate them before weakening the one you have —
-weakening trades soundness for coverage, a disjunct does not.
-
-### ★★★ A diagnostic's text is a claim, and it is the one users act on
-
-The new fatal said "vita ends the run here rather than choose what the calling expression
-receives". Measured, the body keeps executing: the latch is read at the enclosing statement,
-so a `$display` after the `$finish` still prints. The sentence described a bail the executor
-does not have, and it was repeated in two docstrings and a comment because they were written
-from the same intent.
-
-Review found all three. Run the design and read the OUTPUT before writing what the output
-means — and when the same claim appears in a diagnostic, a docstring and a comment, fixing
-one is fixing a third of it.
-
-### ★★ A wait loop must be checked against the string the producer actually writes
-
-Waiting for the review to finish, I armed a background loop on
-`grep -c finished <journal> -ge 2`. The journal writes `{"type":"result",…}`; the word
-`finished` never appears in it, so the loop could not terminate and ran for four hours
-until the user noticed it in the task list. The review itself had completed long before —
-I read the journal directly, so nothing depended on the loop and nothing signalled that it
-was still alive.
-
-Two habits, both cheap: run the predicate ONCE by hand before arming it, and prefer a
-condition read from the artifact you have already inspected over one you assume. And when
-you stop needing a background wait, kill it — a wait whose result you obtained another way
-is a leak, not a spare.
-
-### ★★★★★ A premise about YOUR OWN engine needs a producer census, not an argument
-
-The fix for round 1's BLOCKING rested on one sentence: *an assign with no dependencies is
-evaluated once, at the settle seed, and never again.* I reasoned it from the seeding code
-and shipped it. Round 2 measured it false in one design: `k_release` calls
-`redirty_drivers_of` on its target unconditionally — on purpose, so a released wire snaps
-back in the same settle — so the assign is evaluated `1 + releases` times, and round 1's
-whole BLOCKING table came back through the other arm of the disjunct.
-
-The census that should have preceded the sentence takes one grep: `ca_dirty_flag[..] = true`
-has exactly three producers — the seed, `note_change`, and `redirty_drivers_of`. Running it
-afterwards is also what made the fix precise instead of defensive: naming the force/release
-target nets names *every* evaluation not caused by a dependency change, so the gate is
-provably complete rather than plausibly adequate.
-
-⇒ When a change's soundness rests on "this can only happen once/here/never", enumerate the
-WRITERS of the thing you are claiming about. It is the same rule as
-[[removing-a-defensive-check-needs-a-producer-census]], applied to a premise instead of a
-check — and the same failure, one slice later.
-
-### ★★★★ Fixing a BLOCKING is a design change, and the new design has not been reviewed
-
-Round 1 returned one BLOCKING. Fixing it added a definite-assignment analysis and a
-disjunct — new code with its own reasoning, none of which any lens had seen. Round 2 found
-**three** more BLOCKINGs, all of them in that fix, and all three let the same counter design
-back in through a different door: `release`, a zero-parameter function's return slot counted
-as a formal (the bound was tested *after* the insert), and a partial write establishing
-definite assignment for the whole net.
-
-Two of the three were reachable by a one-token edit to round 1's own repro. That is the
-signal: when a fix is a new mechanism rather than a corrected constant, the reviewers'
-existing repro is the first thing to mutate, and the re-review is not optional.
-
-### ★★★ A comment that pre-emptively excuses an imprecision is a claim, and it will be wrong
-
-I wrote: *"ARRAY-WORD IMPRECISION … what that can produce is a value depending on an
-unwritten WORD of an array the body does write — narrower than the counter above, and a
-shape no corpus design or probe has produced."* Review refuted both halves in one design:
-the laundering needs no array at all (a packed part-select on a plain `reg [15:0]` does it),
-and two probes produced it.
-
-Naming a known imprecision is good; bounding its consequences in the same breath is a
-measurement, and I did not run it. If the bound is worth writing, it is worth building the
-design that tests it — see [[a-comment-saying-cannot-is-a-claim-to-measure]].
-
-## Row 30 — a fill's width, and three rounds of fixing my own fix (2026-09-03 · §4.5.406)
-
-An unsized fill (`'0`/`'1`) is context-determined, and vita's constant folder gave it a
-hard 32. The fix is four small pieces and it works — 165 of a 264-cell census, 778 of the
-review lenses' 1,622, zero regressions on its own axis. It was reverted anyway. Every
-lesson below came out of that gap between "works" and "shippable".
-
-### A context width is not the leaf's width
-
-§11.6.1 evaluates a context-determined operand at `max(the context, EVERY self-determined
-operand's width)`. Handing the LEAF the context and letting it freeze there is wrong the
-moment a sibling is wider: the operator above computes the real width and extends the
-frozen value — with ZEROS, because a fill is unsigned — and the bits it should have had
-are gone. `localparam logic [7:0] M = ('1 & 32'hff00) >> 8;` is `ff` in both oracles and
-became `00`; `~('1 & 32'hff00) >> 8` was an honest `E3009` and became a silent `ff`.
-150 cells. Both lenses found it independently, and neither the 264-cell census nor the
-"byte-identity" argument saw it, because **every form in that census paired the fill with
-a one-bit sibling**. A census's band is a property of its operands, not of the defect —
-widen the OTHER operand on every axis before believing a boundary. Same blindness made
-"width 32 and below is already correct" false: `logic [7:0] A = '1 >> 2` is `ff` and both
-oracles say `3f`, 82 more cells at widths 1..31.
-
-### A routing gate and a soundness guard need different predicates
-
-They fail in opposite directions. A routing gate that over-reports costs nothing — the
-fold declines and the chain continues. A guard whose decline is a LOUD cannot over-report
-at all. Reusing one predicate for both put a fill in a SELF-determined position (a shift
-count) into the guard's hazard set, where it never belonged, and declined folds the
-pre-slice build performed correctly: 104 NEW-LOUD, in all four binder copies. The guard's
-predicate has to be read off the walk's own arms — which operand does this arm fold at a
-non-zero `ctx`? — and nothing else. Related: [[predicate-must-be-guaranteed-by-the-walk]].
-
-### "Declining is always safe" is a claim about the CHAIN, and it must be censused
-
-The argument was "every caller reaches this fold as one link of an `or_else` chain whose
-next link is the pre-slice route". Measured false: `param_bits_at_declared` is reached
-through `param_i64_at_declared`, which is the **LAST** link of every binder chain — its
-`None` goes to `param_value_unfoldable`, i.e. `E3009`. Before writing "a decline is free",
-walk each caller to the END of its chain and say what is there. A decline is only free
-where the pre-slice fold would have declined too.
-
-### Count the loud → value cells separately; a pre-existing silent beneath them is yours
-
-The accuracy ladder forbids trading a loud for a silent-wrong, and OPENING a fold's accept
-set is exactly that trade whenever the newly-reachable computation is already wrong for
-another reason. Of the 504 cells this slice converted from loud to a value, **215 were
-silently wrong on the SIGN axis**: `localparam logic [7:0] B = ($signed(4'hF) + 1) | 8'h00;`
-is `00` against both oracles' `10` **with no fill anywhere, before and after alike**,
-because `fold_bits_at` decides an expression's sign node-locally (`sg = ls && rs`) where
-§11.8.1 makes the whole region unsigned if ANY operand is. The slice did not create it; it
-removed the loud standing over it. So: a fill-free CONTROL for every axis the new cells
-touch, and the loud→value column counted on its own.
-See [[removing-a-loud-gate-exposes-what-it-masked]].
-
-### Three rounds of blockers, all in my own fixes, means the axis — stop and separate
-
-Round 1's defect was in the slice; round 2's was in round 1's fix; round 3's was in round
-2's fix and landed on a different axis, in shared code the slice only ROUTES into, that
-predates it. That is the stop signal, and the answer is not a fourth fix: revert, ship the
-part that separates, and write the prerequisite into the queue line. Here the separable
-part was the shift COUNT (a fill there is one bit, §5.7.1 + §11.4.10) — it needs no width
-and no sign context, every cell it moves already had a wrong number, and it fixed 288 of an
-880-cell census with nothing turning from loud into a value.
-See [[three-blockers-on-one-axis-means-stop]].
-
-### A predicate that promises to cost nothing has to be measured saying so
-
-"A literal `false` for every design without a fill" was true of the ANSWER and false of the
-cost: the predicate opened by delegating to a whole-subtree walk and then recursed, so it
-re-walked the subtree at every node. A **fill-free** 8,000-term initializer went 0.31 s to
-1.26 s, superlinear (3.2x per doubling against a linear 2x). Grep any predicate that calls
-a whole-tree helper and then recurses.
-
-### Freeze the binary, and if you unfreeze it, say so
-
-Two review rounds in a row were handed a stale artifact because the tree moved after the
-snapshot, and both times a lens opened its report with that instead of with a finding.
-Snapshot, record the hash, and if a blocking fix lands mid-round, re-freeze and tell the
-lenses which binary their numbers describe. See [[freeze-the-binary-for-a-review]].
-
-### A parser-side constant table has four gates, and a key stored in one map must outlive the other (§4.5.414)
-
-Widening a parse-time constant table (`const_locals`) so a struct member width can fold looked like
-"record more parameters". It was four separate decisions, and the review found a defect behind
-each one the slice had skipped: (1) **overridability** — IEEE §6.20.1 makes a package `parameter`
-and a body `parameter` behind an ANSI header localparams, everything else must stay out (both
-oracles lay a header-parameter width out per instance); (2) **the declared type** — decline only
-a PROVABLE mismatch (`byte B = 200` is −56 downstream); declining what you merely cannot prove
-made three PRE-correct designs loud (review B-2); (3) **every declaration of the name drops the
-entry** — ports, variables, params, genvars, tf formals; the one path that did not (`genvar`)
-turned a wildcard-imported constant into a silently-folded generate index (B-3), and a header
-genvar's drop must be restored after the loop (§27.4 — the differential lens's own design caught
-it on the delta); (4) **the readers you did not write** — the table already fed the generate-index
-and enum-label folds, so the "five new shapes" byte-identity claim was short by one shape (A F1;
-one of them a PRE silent-wrong fixed by the scope snapshot). And a layout that names another type by
-its BARE key dies at `endpackage`: the wildcard-import cell passed, the explicit-import / scoped /
-cross-package cells failed — key by the `pkg::t` twin. **Rule**: for a parse-time table list the
-four gates and census each with a control twin; for a stored key name its lifetime.
-See [[layout-keys-must-outlive-the-unit]], [[gate-on-constness-not-resolvability]].
-
-### A width guard on the PRODUCER is a threshold; the defect lives in the CONSUMER's fold (§4.5.418)
-
-- **A queue row names one shape; the root is usually a lane (§4.5.420).** 🆕 E said "a fill in a self-determined position declines the whole initializer"; the plain twin `localparam logic [39:0] X = '1 ^ 1'b0;` was already wrong, because the i64 lane reads any fill at 32 and the wide lane declined a fill leaf — the position was incidental. Before building for the row's shape, probe its plain twin (no parens, no comparison) at three widths (≤32, 33–64, >64): the answer tells you which lane, and a lane fix is one consumer (`eval_param_init`) plus one leaf arm, not a per-position patch. A binder census for a parameter rule has FOUR channels — module body, instance-elaborated, package, instance override — and the override channel is a different binder (the value is folded in the parent before the target's width exists), so it gets a §2 line, not a fifth call site.
-- **Three slices, one review (§4.5.419–421).** A batch amortises the review (the ~75 % cost) only if attribution stays per slice: disjoint files per slice, one PRE and one POST binary, a census per slice with its own cell prefix, and the lenses' questions grouped per slice. A finding then reverts one slice without touching the other two.
-
-- **"Only admit values ≥ 32 bits" answered the census cell and not the class.** The parse-time
-  constant table folds at i64; the census control twin showed a 4-bit pair silently 17 (oracles 1),
-  so the new based-literal spelling was declined below 32 bits. The soundness lens moved the value to
-  2³²−1 and a 32-bit `W+2` still folded 4294967297 (oracles wrap to 1) — the same class, one width up.
-  A guard on what enters the table cannot make the fold width-correct; the fold has to know the
-  width. Fix at the consumer: record each constant's declared width and sign beside its value and
-  fold a layout bound per §11.6 (`try_const_index_w`), falling back to the old fold only where the
-  twin declines. That closed BOTH spellings (the decimal one was pre-existing silent) instead of
-  keeping one loud.
-- **A name-keyed rewrite that was read-only gains a write side when the key gains a writable
-  binder.** The multi-dim packed rewrite was built for PARAMETERS, so only the expression side had
-  it; binding a FORMAL under the same key made `o[i] = …` a bit write on the flat vector (measured
-  `xxxxxxxa` vs `13121110`). When a table's key set widens, enumerate the AST forms the new keys can
-  appear in that the old keys could not (lvalues, `foreach`, port connections) before the census.
-- **A "same key, different unpacked shape" reuse is a silent miss, not a loud one.** The rewrite
-  cannot see unpacked dims, so a formal `logic [1:0][3:0] a [2]` read its unpacked index as the
-  outer packed dim (`x` vs 5). A shape the machinery cannot represent must be refused at the binder,
-  not left to the rewrite's arithmetic.
-- **Hand-computed expected values are not pins.** Three pins written from the mechanism were wrong
-  on the digest's second field; the oracle lines replaced them. Copy the census's oracle output.
-
-### Three errors with one root: a text form the oracles keep, a joiner that flattened it (§4.5.417)
-
-- **A diagnostic count is not a defect count.** The whole-ibex page read as three items (`define
-  defaults, unterminated `ifdef, undefined `ASSERT); two of them and the third's 12 uses were ONE
-  root — the `define body joiner replaced every backslash-newline with a space, so a body's `ifdef
-  took the rest of the body as its argument. Bisect the page by including each header alone before
-  pricing the items.
-- **Keep the text form the oracles keep.** Both oracles expand a multi-line body with its newlines
-  and evaluate a body's conditional at EXPANSION time; a joiner that "normalises" the text away
-  from that form changes which bytes a later directive consumes. When a preprocessor stage rewrites
-  text, ask what the next consumer of that text keys on (here: the line) before rewriting it.
-- **An offset is only meaningful in the buffer it indexes.** A directive met inside an expansion
-  reported its newline with an offset into the expansion STRING, mapped as if it were a byte of the
-  use-site FILE. Any provenance emit inside `scan_text` must go through the collapse site; grep the
-  verbatim emitters for callers that can run with `site_for_collapse` set.
-- **`__LINE__` is a position of the USE's end, not its start** — a multi-line macro use reports the
-  line where the argument list closes in both oracles; a probe with a single-line use cannot tell
-  the two apart, so the census needs the multi-line cell.
-
-### A loud→value column over a pre-existing silent is closed at the consumer's own type rule, and a parser-flattened shape is queried where the shape still exists (§4.5.416)
-
-- **The scalar control twin is what turns "loud→value" into a verdict.** Every census consumer had a
-  scalar-parameter spelling beside the element spelling. The untyped-localparam column went loud→value
-  on the elements and the control twin showed the SAME value with `$bits` 32 (both oracles 4) —
-  a pre-existing silent the element spelling was about to inherit (the §4.5.409 trade the ladder
-  forbids). Without the twin the column reads as 31 wins.
-- **Do not decline what a type rule answers.** The tempting move was "decline the untyped consumer
-  for elements" (keep the loud, leave the scalar silent). A select is self-determined (§11.5.1) and an
-  element read has the element's declared type — a width fact of the OPERATOR, the same family as the
-  reduction / concatenation arms in `param_decl_width_opt`, not the value-inferred tail. Adding the
-  arm closed the scalar spelling's pre-existing silent too (31 FIXED-SILENT) instead of freezing it
-  behind a decline. Ask "which rule sizes this initializer" before asking "which consumer to keep loud".
-- **A shape the parser flattens has no elaborate-side truth.** The multi-packed parameter is declared
-  flat (`[7:0]`) and its selects are rewritten at parse; an elaborate `$size(P)` read the flat range
-  (8 for `[1:0][3:0]`, oracles 2) and the AST could not tell. The query is answered where the dims
-  still exist — the parser, next to the select rewrite — with a parse error for a dimension index it
-  cannot fold rather than a fall-through to the flat answer. Whoever flattens a shape owns every
-  query on it.
-- **Run the real design behind the row and take the next page in the same slice when it is the same
-  table.** With ⓔ folded, ibex_cs_registers' next errors were six typedef casts whose bounds fold
-  through the §4.5.414 parse-time table already used for member widths — two lines. The ladder was
-  written from the design, not predicted.
-
-### An import has a position, and a new loud gate is measured against the suite before it is believed (§4.5.415)
-
-The header-import defect was an ORDERING defect in a pass that already existed: the parser put the
-header imports where they belonged, elaborate applied every import after the header was bound. The
-fix is not "apply imports earlier" — a body import must NOT reach the header (the oracles split
-there) — but "apply each import before the first thing it must be visible to", which is a span
-comparison against the first header parameter, in two passes around the binder. Two rules fell
-out. (1) A new loud gate on a shape the engine used to accept silently ("a declared range that does
-not fold") is a claim that no PRE-correct design depended on the silence; the full suite refuted it
-in one test (a typedef's dims copied verbatim across a package made a header parameter's range
-unfoldable while its VALUE was right by value-inference) and the right repair was upstream (re-spell
-the twin), not a narrower gate. Run the suite, the corpus and the examples before the review, and
-when the gate refuses a working design, ask what made it work. (2) A gate that exists for one
-consumer (`check_const_range_bound` for nets) is the gate for every consumer of the same shape —
-parameters had three binders and none called it — and the review found a FOURTH copy (the
-non-overridden body branch) the docstring had already claimed. (3) A scope rule names its scope:
-§26.3's collision is for an import written IN the scope; a compilation-unit import is an outer
-scope and a local declaration shadows it in silence (both oracles) — the review's first finding
-was that gate applied to the CU spelling. Census every rule at every spelling of the scope it names
-(module, interface, package, compilation unit). See [[a-default-is-not-a-fact]],
-[[removing-a-loud-gate-exposes-what-it-masked]], [[import-has-a-position]].
-
-### A parse-time refusal keyed on "did not fold" is two populations, and a symbolic width is a formula with a domain (§4.5.431–433)
-
-The lockstep struct needed a member width the parser cannot fold — a header parameter — laid out per
-instance. The first draft opened the symbolic path to EVERY member whose width failed the fold, and
-25 suite pins measured what that column holds: a `localparam` the table declines ON PURPOSE (an `x`
-bit, a truncating initializer, a based literal narrower than its type) — the decline is the thing
-that keeps elaborate's wrong value out of the layout. "Did not fold" is two populations, "the table
-has no value" and "the table refused a value", and only the first is per-instance. Key the new path
-POSITIVELY on the names that are per-instance (`overridable_params`: the header's `parameter`s, a
-header-less body `parameter`, a localparam DERIVED from one) — the same shape as
-`gen_singleton_labels` one batch earlier. Three rules fell out. (1) A width formula has a domain:
-`msb + 1` is right for `msb ≥ 0` and `[W-1:0]` at `W = 0` is `[-1:0]`, two bits (§7.4.1); the
-review's B1 was the one value of `W` the census did not run. Write the LRM form, and when the
-emitted shape feeds back into the walker (a nested symbolic member's range is that ternary),
-extend the walker to its own output. (2) A per-level frame is a budget: one map added to
-`ScopeSnapshot` cost `block_body` 144 B per nesting level through two by-value temporaries and the
-depth guard overflowed; the parser's `depth_guard` test is the canary — box the value in the callee
-(`snapshot_scope_boxed`), never in the recursive frame. (3) Giving a block a scope of its own removes
-an accidental immunity: everything that was resolved at MODULE scope and worked only because the
-block's nets were flattened there (`pending_sva` / `pending_cover`) breaks the moment the block is a
-scope. Census the consumers that resolve names LATER than they are collected, and carry the
-collection scope with the item. See [[an-accidental-immunity-hides-a-latent-defect]],
-[[count-the-loud-to-value-column]], [[reject-gate-measure-hazard-set]].
-
-### A call terminator's target is a snapshot; dispatch data lives in the sidecar (§4.5.437–439)
-
-The frame read-through walk followed `Terminator::Call.target` to find the callee's blocks. That
-field is the callee's entry AS KNOWN WHEN THE CALLER LOWERED — a callee declared later still had
-its reservation placeholder (`entry: 0`) — so the walk missed every nested task whose name sorted
-after its caller's, and the same design gave `xx` or `a5` depending on which task was called `aaa`.
-The engine never had this problem because it dispatches on the sidecar's `callee` FuncId. When a
-new analysis reads an IR field to follow control flow, ask what the RUNTIME reads for the same
-decision and read that; a field that is only ever patched after the fact is a snapshot, not a
-fact. Two more from the batch. (1) A feature the AST cannot carry can still be delivered by a
-DESUGAR that keeps every axis the consumers need: a type parameter is a width, a signedness and a
-2-state kind; the width can be a value parameter, the two shape bits cannot follow a declaration
-— so make them a value parameter TOO and guard them (`initial if (T$s != …) $fatal`), which turns
-the one axis the desugar cannot honour into a loud refusal instead of a silently unsigned type.
-Pick the guard's construct by what it perturbs: a generate `if` would renumber the user's
-`genblk<N>`; a process does not. (2) A diagnostic's context string is shared by EVERY emitter
-that goes through the same resolver (`stmt_diag_meta`: `$error`, W4029, `$readmem`, unique-case,
-…); changing it for one is changing it for all — census the emitters, and measure at least one
-of the others against the oracles. See [[a-default-is-not-a-fact]],
-[[routing-lives-in-several-places]].
-
-## An external report's named CAUSE is a claim, and a benchmark that cannot see a phase (2026-09-07)
-
-Four rules from re-triaging one external report end to end.
-
-**A "we do not see it in real designs" verdict is only as broad as the design it was measured on.**
-ROADMAP §2 already carried the constant-fold slowdown this report re-filed, graded *"invisible in
-real designs"* on the strength of `picorv32 0.030 → 0.030 s`. picorv32's elaboration is 0.4% of its
-run, so that measurement could not have shown anything. Re-measured against a preserved PRE binary:
-`biriscv` +36%, and a module of 20,000 plain `wire [31:0]` declarations +193%. When you grade a cost
-as invisible, say which design you measured and what fraction of ITS run the cost could occupy —
-otherwise the grade is a sample size of one wearing the word "real".
-
-**Bisect a performance regression the same way you bisect a wrong value.** Six builds of a
-throwaway worktree located 70% of the delta in one commit, and the remaining commits accounted for
-the rest in amounts nobody would have guessed from the diffs. The synthetic probe is what made it
-cheap: one module of N identical declarations isolates the front end from everything else, and the
-control twin (the same module with a parameter-expression bound instead of a literal) separated two
-independent costs that the real design mixed together.
-
-**A shape query that parses a value is an allocation the caller drops.** Nine call sites asked a
-literal for its `width` or its `signed` bit through `parse_int_literal`, which builds a despaced
-`String`, a digit `Vec`, a `Vec<Bit>` and two `BitPacked` planes. Adding a walk over those call
-sites tripled elaboration. The fix — `int_literal_shape` — is safe because it decides ONLY the case
-it can decide from the lexeme (a `_`-free 1..=9-digit decimal is 32 bits signed by construction) and
-falls through to the same parse for everything else, so the fast path and the parse cannot disagree
-about a shape the fast path did not compute. Write the equivalence test against the function you are
-skipping, not against a table of expected answers.
-
-**A report's CAUSE needs re-measuring exactly like its severity — and so does the re-measurement.**
-The same report re-filed the sign-seal residue as *"the operand contains a function call"*. A
-five-cell census run here said it does not, and named two other boundaries instead. ⚠️ **That
-refutation was wrong**, and the next round said so with a measurement (see the next section). The
-census had counted the `$unsigned` column; a function returning `int` seals with `$signed`, so the
-one cell that would have confirmed the report was the one cell the census could not see. What
-survives from this rule is its second half: they were reasoning from invocation counts because
-nothing in `run.json` says why an EXPRESSION left the compiled lane (`codegen` is a per-process
-census), so the wrong cause was the best inference the instrument allowed — and so was mine. When
-an outside diagnosis is wrong, ask which instrument would have made it right; that missing
-instrument is usually the more valuable item. See [[report-severity-is-a-claim]],
-[[perf-ab-method-artifacts]], [[pre-binary-three-way-measurement]].
-
-## A refuting census must vary the axis it is refuting, and a census belongs where the value is made (2026-09-07, round-39)
-
-**A census that refutes a claim must vary the CLAIM'S axis and hold everything else fixed.** The
-five-cell census above changed the operand shape, the destination width and the operator between
-cells, then read one output column. The claim under test was *"a function call in the operand"*, and
-the cells that had a call also happened to have a SIGNED operand (the function returned `int`), so
-their seal landed in the `$signed` column that was not being read. The 2×2×2 that replaced it —
-operand sign × contains-call × destination width, both output columns — shows the call axis fires on
-both signednesses at equal width, i.e. the report was right. Before publishing a refutation: write
-the factorial table, and check that every OUTPUT the mechanism can produce is in the readout. A
-one-column readout of a two-column mechanism refutes nothing.
-
-**Count a route where the route is TAKEN, not where you think the callers are.** The route census
-(`run.json`'s `subroutines`) was first written at the seams that pick frame-vs-inline —
-`inline_function`, `inline_pkg_function`, `inline_task`. That is three of at least nine: a function
-with an `output` formal is hoisted into a temp plus a statement call, and four hoists and two
-`stmt_main` arms reach the frame emitter without ever passing through `inline_function`. The
-symptom was a row reading `sites: 0` next to two real call sites — a silent-wrong in a log, which is
-the one thing an observability rail must not produce. The fix was structural, not another call site:
-record inside the three EMITTERS (`emit_frame_call`, `emit_frame_func_out_call`,
-`emit_frame_task_call`), which needed a `frame_keys` table so an emitter can file a row from a
-FuncId alone. Then a new caller cannot miss the census, because there is nothing at the caller to
-remember. See [[a-site-census-misses-what-the-callee-selects]], [[routing-lives-in-several-places]].
-
-**A profile that cannot see the inline path reports "free" for it.** vita lowers a subroutine two
-ways, and only one leaves a call node. Any seam-based profile therefore reports 0 calls for every
-inlined subroutine, and `0` is indistinguishable from cheap. That is why the dynamic half of the
-call-tree feature was blocked on a static record of the routing, and why shipping the static half
-ALONE is a real deliverable rather than a placeholder: a reader can now tell an absent row from a
-free one. When a measurement has a blind region, publishing the region's MAP is worth more than
-publishing the measurement.
-
-## The docs written before the review are the ones the review invalidates (2026-09-07, round-39 doc sweep)
-
-**A document that names WHERE a mechanism lives is a claim about code, and a review that moves the
-mechanism silently falsifies it.** The slice above wrote ROADMAP §6's R2-ⓐ paragraph while the census
-still lived at the three route-PICKING seams, then the soundness lens moved the recording into the
-three frame EMITTERS — and the paragraph shipped saying *"written at the three seams that PICK the
-route (`inline_fn.rs` ×2, `inline_task.rs`)"*, which is now false in both the place and the count.
-Every gate was green, because no test reads prose. The rule: when a review changes the DESIGN, re-read
-the docs written before it, not just the code. The high-risk sentences are the ones naming a file, a
-function, or a count — a doc that only states the CONTRACT (what `subroutines` reports) survives the
-move; one that states the IMPLEMENTATION does not. Prefer the contract, and where the implementation
-must be named, name it with the reason it is there (here: "the emitters, because an `output`-formal
-call never reaches `inline_function`"), so a later move reads as a contradiction instead of a detail.
-
-**The queue that declares itself canonical must be the one that GAINS the row.** Two queues describe
-the same start order: ROADMAP §5.2 ("LOOPROMPT.md NEXT mirrors this table; when they differ this
-table wins") and REMAINING_WORK §B ("canonical = ROADMAP §5.2"). The slice filed its two deferrals —
-R2-ⓑ/ⓒ and `WPROG-WHY` — into REMAINING_WORK and LOOPROMPT's prose but not into §5.2, so both
-mirrors carried rows their own declared source did not have, and a reader following the pointer to
-the canonical table would have concluded the items were dropped. A deferral is a queue edit: write it
-where the queue is canonical FIRST, then mirror. Detection is one grep per queued item across the
-three files, and it is cheap enough to run at every slice close.
-
-**A version constant repeated in prose decays silently.** `format_version` is pinned in one place in
-code (`header.rs::CURRENT_FORMAT_VERSION`) and restated in three SPEC documents; at HEAD 31 they read
-29, 29, 22 and 22 — drifting nine, nine and two bumps behind while every gate stayed green. Restating
-a constant is a copy, and copies are only as fresh as the last person who remembered them. Where the
-prose needs the number, say what it is FOR and point at the canonical site, and when a bump ships,
-grep the number itself (`grep -rn 'format_version'`) rather than trusting that the bump's own slice
-touched every restatement.
-
-## A post-hoc patch pass is bounded by the CONTAINERS of the type it patches (2026-09-07, §2 🆕 P)
-
-**Enumerate the containers of the type, not the call sites that build it.** Four deferred-hierarchical
-resolvers patched their sentinel `LvalChunk`s by scanning `self.stmts`, and `Lvalue` lives in exactly
-two arenas: the four `Stmt` variants and `ContAssign.lhs`. Every hierarchical CONTINUOUS assign
-therefore carried its sentinel net id into the engine, where the per-net table is indexed directly —
-a panic, which is below loud. The census that finds this is one grep for the TYPE in the frozen IR
-(`grep -n 'Lvalue' sim-ir/src/lib.rs` → five sites, two containers), not a walk of the lowering.
-
-**The same omission repeats once per pass, so count the passes before believing the fix.** Fixing the
-two chunk-patch scans made the design run, and the third scan of the same family —
-`resolve_pending_fill_widths`, which redirects a re-lowered RHS — still walked `stmts` alone: the
-design stopped panicking and printed `001` where both oracles print `fff`. That is a loud→silent-wrong
-the fix itself introduced, found only because the soundness lens re-ran the shape after the first two
-scans were green. `grep -n 'for s in &mut self.stmts'` in the module was three hits; the fix is three
-edits, and the number to check is the hit count, not the symptom.
-
-**A guard's sentence names a LANE, and routing a new caller in can make it a lie.** The deferred-write
-guard refused a `wire` target with *"procedural hierarchical write to net `x` (declare it reg/logic)"*.
-That rule is true of procedural writes and false of continuous ones — driving a wire is what `assign`
-is FOR, and both oracles run it — so the moment continuous assigns were routed into the resolver the
-guard became a false-loud with a message that contradicted the source. Read every guard's own words
-when you widen its caller set: if the sentence names a construct, the predicate must test for that
-construct. Here the lowering is shared (`collect_lval_chunks` has no lane), so the lane is recovered
-where it is unambiguous — the ARENA the sentinel landed in, since one deferral site produces one chunk
-in one container.
-
-## A hoist without a scope trades loud for silent-wrong (2026-09-07, §2 🆕 Q, reverted)
-
-**Before hoisting a block-local DECLARATION to an enclosing scope, measure the three lifetimes of the
-name.** A `localparam` in a procedural block was a parse error, both oracles accept it, and the IR has
-no block-scoped constant — so the declaration was hoisted to the enclosing container's item queue
-under its BARE name. Six cells went correct and five went silently wrong, all for the one reason the
-hoist erases: (1) SHADOW — an outer constant of the same name (literal, computed, or a header
-`parameter`) is answered by the block's value AFTER the block; (2) SIBLING — two blocks declaring the
-same name collapse to whichever hoisted last; (3) LEAK — a read after the block, which both oracles
-reject as undeclared, answers. Only the outer-NET cell was loud, and it was loud by an unrelated
-guard. Build all three probes before writing the hoist, not after.
-
-**A name-keyed rewrite needs a funnel, and the absence of one is the estimate.** The sound alternative
-— mangle the hoisted name and rewrite the reads inside the block's extent — was priced by asking where
-a single-segment identifier is CONSTRUCTED: 52 sites in the parser, no funnel. That number is the
-slice, and it is what turns "small, additive" into "prerequisite". Revert, and write the prerequisite
-into the queue line with the measured cells beside it, so the next reader inherits the measurement
-rather than the hypothesis.
-
-## A parser-side fold has no scope, so it must stand down on a declared name (2026-09-07, §3 ⑤ⓕ)
-
-**A fold that resolves a NAME in the parser cannot see shadowing, so widening the set of names it
-claims creates silent-wrongs at every binder the body introduces.** Teaching `$bits(<type>)` to answer
-for one more class of typedef turned a block-local and a subroutine formal of that name from the
-local's declared width into the type's — a correct → silent-wrong trade, because the expression path
-it used to fall through to *did* see the local. The stand-down is the set every declaration site
-already writes; what it did NOT contain was tf FORMALS, and adding them there closed two pre-existing
-instances the same fold had shipped one slice earlier. Before widening a parser-side name fold,
-enumerate the binders that can introduce the same name (module decl, block-local, ANSI formal,
-non-ANSI formal, genvar, instance) and probe each one.
-
-**A stand-down must be scoped to the construct that introduced the name.** Record a formal AFTER the
-enclosing subroutine's scope snapshot, so the restore drops it — otherwise the fix trades one silent
-width for a permanently loud site. Pin both halves: the shadowed spelling inside, and the same text
-outside still folding.
-
-## A per-container omission repeats in the container you did not write down (2026-09-07, §3 ⑤ⓕ)
-
-**When a pass respells or patches expressions held by a type, count that type's containers and pin
-each one.** A package-scoped typedef twin respelled the names in its `range` and its `packed` dims and
-left `unpacked` alone — a third container of the same field type. The visible symptom was LOUD, which
-reads as a missing capability; the invisible one was a SILENT-WRONG that only appears when the
-importer happens to declare the same name, and that is the cell to build first. The signature is a
-sibling spelling that is already correct: if the packed twin folds and the unpacked one does not, the
-difference is a container the pass never visited, not a rule it never learned.
+# Engineering rules
+
+This is the rulebook for changing vita. It states how work is decided, measured, reviewed and gated:
+the accuracy ladder every change is scored against, the two adversarial review lenses, what a census
+is and what makes one valid, how to write a gate that does not under-detect, what counts as
+evidence, what gives a test teeth, how performance is measured, and the artifact and determinism
+discipline. Each entry is one imperative plus the failure mode it prevents.
+
+## 1. Scope and standing
+
+This document is canonical for method. Where another document in this tree describes how work is
+done and disagrees with a rule here, this file wins. A rule learned while implementing is merged
+into the matching section as one line; the measurement that produced it goes to
+[history/lessons.md](history/lessons.md).
+
+Read this before implementing. The queues of open work are in [ROADMAP.md](ROADMAP.md) (§2
+silent-wrong residue, §3 loud-to-supported, §6 observability) with a snapshot in
+[REMAINING_WORK.md](REMAINING_WORK.md); the specifications the review checklist is drawn from are in
+[preview/](preview/); the user-facing surface a change must keep true is in [manual/](manual/).
+
+Vocabulary used throughout:
+
+| Term | Meaning |
+|---|---|
+| **silent-wrong** | A wrong answer with no diagnostic and a success exit. The outcome this repository exists to prevent |
+| **honest-loud** | A refusal or diagnostic that names what the tool cannot do. Always safe, never as good as support |
+| **correct support** | The construct runs and its value matches the oracle |
+| **PRE** | A binary built from the tree before the change, extracted with `git archive <branch>` into a scratch directory and built separately |
+| **POST** | The binary built from the tree with the change applied |
+| **lens** | One adversarial reviewer with a fixed attack method. Two are mandatory: differential and soundness |
+| **census** | An enumeration, from the source, of every site that can reach a question, each cell measured rather than argued |
+| **cell** | One design plus one measured output, in a census or sweep |
+| **control twin** | A second cell identical except for the axis under test, used to attribute a result to that axis |
+| **anchor** | An expected value fixed independently of any implementation, so a change to shared code cannot move it |
+| **hand-IEEE** | An expected value derived by reading the IEEE 1364/1800 text, used where no external tool can arbitrate |
+| **oracle** | An independent tool or standard text that decides a cell. Live oracle: `iverilog` plus `vvp`, invoked by the differential harnesses. Second opinion: `verilator`, obtained by hand on 2-state arithmetic, width and sign |
+
+## 2. The accuracy ladder
+
+### 2.1 The ladder itself
+
+| Rule | Prevents |
+|---|---|
+| Rank every outcome on one ladder: silent-wrong worst, honest-loud always safe, correct support best. Climb it; never descend | A change that reads as an improvement being a descent |
+| Do not implement what cannot be verified: with no oracle and no precondition, stay loud | An unverifiable implementation shipping as a silent-wrong |
+| Treat making a working construct loud as a regression; loud is earned only by what the tool genuinely cannot do | A refusal added for tidiness stopping designs that worked |
+| Treat a panic as loud, not as silent-wrong, and never trade correct support for loud in order to remove one | A net loss on the ladder dressed up as robustness |
+| When soundness and differential conflict, the differential wins | An internally consistent argument overriding a measurement |
+
+### 2.2 Never trade one wrong for another
+
+| Rule | Prevents |
+|---|---|
+| Never trade one silent-wrong for another: convert types at the context boundary, not at the leaf, and stay loud where the context domain cannot be built | A leaf conversion destroying the value before the enclosing operator sees it |
+| Remove a feature whose partial support only trades one silent-wrong for another, and build the consumer-by-value matrix before removing, because removal is an edit | Shipping "the better half" of a broken feature, keeping a silent-wrong and adding a regression |
+| Treat a clamp as a silent value change: read the sign in the domain before the clamp and let a shape the clamp cannot carry fall through to the path that is already right | A clamped negative becoming a legal value that then fires |
+| Equalise head-on an asymmetry where one path is narrower than its twin, prerequisite slices first, rather than routing around it | The workaround becoming the next change's constraint |
+| Support only the cleanly verifiable subset where interaction is unpredictable, and keep the rest loud | Forcing support and getting a silent-wrong |
+| Do not widen a loud into a silent: a pre-existing root cause does not license expanding the surface. Defer the root and keep the surface loud | The widening being your own regression |
+| Treat a fix or a routing that interacts with a latent gap as a regression even when the value is right | The value being correct and the run being worse |
+| Prefer a loud guard to partial normalisation for a deep residue | Partial normalisation being a silent-wrong |
+| Enumerate the old rejects exhaustively and run a live-oracle differential before relaxing a blanket reject; the teeth are zero regressions against a full sweep | Shapes the blanket reject hid becoming silent-wrong |
+| Do not close a queue item by refusing | Some consumer eating the decline as a silent default and producing a wrong value |
+| Build both representations and measure them; when both are trades, remove the axis and file honest-loud plus a deferral | Shipping the half that looks better |
+| Recognise that a leaf-patching resolution arrives after the enclosing context is decided; support that requires re-lowering the enclosing node cannot be built that way | The cast, concat and width context being baked around a placeholder and the leaf's bits read later |
+| Ask whether the consumer can produce the right answer from a representation, not whether the name resolves, when choosing a storage table | Registering a value in a table of the wrong type, which resolves the name and makes the value wrong |
+| Read how the neighbouring branch handles a cap before writing a new branch that meets it | A new branch adding a silent clamp where the neighbour raises an error |
+| Ask what a halted body leaves before asking whether the statement may run; where nothing is defined, the feature does not exist yet | Every choice trading loud for silent because the outcome was never specified |
+| Close every leaking sink before changing the value that leaks | Suppression at one sink plus a mid-body bail turning the other sinks' values into a different silent-wrong |
+| Find the code that still runs while a non-clearing latch is true before using that latch as a predicate | Confusing "finishing now" with "already finished" and deleting the output of everything that runs after |
+
+### 2.3 Accidental correctness and cancellation
+
+| Rule | Prevents |
+|---|---|
+| Check that a static claim you begin consuming is true of the runtime value, and look for the place where two errors were cancelling | Fixing one side breaking the cancellation and turning a correct cell silent-wrong |
+| Ask what a conversion was hiding before removing it; the signal is values that are right for the wrong reason | An accidental immunity that is load-bearing being deleted along with the conversion |
+| Gate on whether the picture is trustworthy, not on a list of shapes, when a fix materialises a boundary: decide trust by comparing two sources, and check whether the old cells were right only by cancellation | A fabricated answer being as dangerous as a missing one |
+| Measure what an accidental loud was blocking before removing it, and promote the accident to a rule when it turns out to have been right | Deleting a coincidence that was doing real work |
+| Treat a pre-existing defect in another syntax as a queue line, never as a licence to widen the same defect into a new syntax | The new path inheriting the defect deliberately |
+| Fix the producer when a reported regression only reads an input that was already wrong, then run the corpus, because the producer feeds more than the consumer in front of you | A path that is right by accident becoming wrong the moment the classifier reads the truth |
+| Feed the input to the existing callers before adding another call to a shared helper; when they are wrong too, the fix belongs inside the helper | Guarding the call sites and fixing only your own regression |
+| Measure the premise of a theorem used to narrow a change, especially a data-structure invariant such as "the stored representation is canonical" | A narrowing resting on a premise nobody measured |
+| Draw a boundary and keep pre-slice behaviour when two readings are wrong in opposite directions; a guess means out of domain | Either reading breaking a different shape |
+| Treat an IR construction that places one expression twice as a semantic change, and gate on observability (side effects, draws, diagnostic counts) before duplicating | One operand being evaluated twice and the two draws mixing |
+
+### 2.4 Width, context and provenance
+
+| Rule | Prevents |
+|---|---|
+| Treat a cast as the operand's context, not a later truncation: `N'(e)` evaluates `e` at `max(self(e), N)`, so a walk that cannot carry a width must decline | Folding at the operand's own width and resizing afterwards, which is a different operation |
+| Fix context misuse by fixing the propagated value (`max(self, N)`), never by discarding context | Discarding context also losing the signedness, which always propagates |
+| Hand the context width to the operator, not to the leaf: a context-determined operand evaluates at `max(context, every self-determined operand's width)` | Freezing the context at the leaf and losing bits the moment a sibling is wider |
+| Give a routing gate and a soundness guard different predicates: over-reporting is free for a router and a loud regression for a guard | One predicate for both putting a self-determined position into the hazard set and producing new louds |
+| Walk each caller to the end of its chain and say what is there before writing that a decline is free | A decline being free only where the pre-change fold would also have declined |
+| Count the loud-to-value column on its own and give every axis those new cells touch a control twin without the new construct | Opening a fold's accept set inheriting whatever is already wrong underneath |
+| Fix a width-correctness defect at the consumer's fold, not with an admission threshold on the producer: record each constant's declared width and sign beside its value and fold per the standard | A threshold answering the census cell and not the class, so the defect reappears one width up |
+| Ask which rule sizes an initializer before asking which consumer to keep loud; do not decline what a type rule answers | Declining the consumer keeping the loud and freezing a scalar spelling's pre-existing silent behind it |
+| Answer a query about a shape the parser flattens where the shape still exists, with a parse error for an index that cannot be folded rather than a fall-through | Whoever flattens a shape leaving every query on it to a layer that cannot see it |
+| Ask whether the source of a width is still alive after asking where the width came from: a width inferred from an initializer's value does not survive an override, a declared type does. Check every override channel | An overridden parameter binding at the initializer's width |
+| Gate on a width a declaration states, never on a width that may have been inferred from an initializer's value | Reading a width off a default that an override replaces |
+| Enumerate who reads a stored value before making it more precise; when the readers cannot use the precision, the asymmetry being removed was the safer state | A canonical producer against consumers that still guess |
+| Carry the source's signedness on any channel that moves a value across a width boundary, and decline rather than pick a default where the channel cannot know it | Several expressions arriving as one integer and the container's sign being right for only some |
+| Count what a domain cannot carry before widening it, and decline what it cannot represent | A fold silently dropping a width or a byte, turning loud into silent-wrong |
+| Refuse at the binder a shape the machinery cannot represent, rather than leaving it to a rewrite's arithmetic | A key reused across different shapes reading one index as another dimension |
+| Read every guard's own words when widening its caller set: if the sentence names a construct, the predicate must test for that construct, and a shared lowering must recover the lane from something unambiguous | A guard written for one lane becoming a false-loud whose message contradicts the source |
+| Measure the three lifetimes of a name before hoisting a block-local declaration into an enclosing scope: shadow, sibling and leak. Build all three probes before writing the hoist | A hoist without a scope trading loud for silent-wrong |
+| Deliver a feature the AST cannot carry by a desugar that keeps every axis the consumers need, turning the axis the desugar cannot honour into a loud refusal | A desugar silently dropping the axis it cannot express |
+| Ask what the next consumer of a text keys on before a preprocessor stage rewrites it, and keep the form the oracles keep | A normalising joiner changing which bytes a later directive consumes |
+| Route any provenance emitted inside an expansion through the collapse site | An offset being meaningful only in the buffer it indexes |
+
+### 2.5 Declines, defaults and folds
+
+| Rule | Prevents |
+|---|---|
+| Make the sub-shapes a new match arm cannot improve call the arm the expression would otherwise have taken; a decline is a change, not a no-op | A new arm owning a shape it cannot answer and the caller's default firing |
+| Keep a fold that predicts runtime behaviour admission-only where possible, so a disagreement with the engine can admit an out-of-range copy (loud) but never a different word | A fold that disagrees with the engine writing the wrong word |
+| List a shared fold's consumers before widening it and ask for each whether its context rule is exact for the new leaf; decline at that consumer for the delta only, documented as a delta-limiter | A widening that fixes many cells on some consumers and silently breaks a few on another |
+| Count how every consumer of a fold consumes a decline before adding a refusal; a refusal is only as loud as its caller, and making the unknown knowable usually beats widening the refusal | A refusal producing a silent default at a success exit |
+| After deriving an equivalence, read the code back and name every input the derivation assumed, then build the design where that input is a default | A provably value-neutral rewrite being a silent-wrong because an input is a fabricated default |
+| Audit the path a widened classifier will newly reach before widening; a missing-answer fallback masks defects rather than fixing them, and every unmasked defect counts as your regression | Defects appearing one after another behind a widening |
+| Ask before starting how many properties a site's consumer expects and whether enabling one contradicts the rest; partial application of interacting properties can be worse than none | Applying one property alone regressing cells that the pair would fix |
+| Close a silent default upward by making the unfoldable shape foldable, rather than turning the default loud, and include cells whose true value equals the default | The subset where the default is accidentally correct going correct-to-loud |
+| Make a structurally invisible omission loud: assert on the success path that the pending set is empty | An unclaimed item being simply absent from the IR, with no diagnostic |
+| Treat folding a constant into an initial value as removing that value from the initialisation order, not as a pure optimisation | The same read answering differently for a literal and a call |
+| Check what the generic path does not evaluate before admitting a node: laziness is a diagnostic question, not a value question | Eager evaluation adding a diagnostic that did not exist and splitting the exit class across backends |
+| Recover a statement boundary with an exhaustive predicate rather than approximating it per operation | Returning between two operations losing the write and the diagnostic it owed |
+| Find out who answers now when a refusal is made unreachable | A stale neighbouring arm beginning to answer at the wrong width |
+| Look for a second, independent sufficient condition when a sound gate kills the feature; weakening trades soundness for coverage and a disjunct does not | Every weakening either re-admitting the counter-example or still refusing the target |
+| Enumerate the writers when a change's soundness rests on "this can only happen once, here, or never" | A premise about the engine's own behaviour that the engine refutes |
+| Freeze one half at the old decision and write the reason when no axis separates two groups; a freeze is an admission that they are different questions | Forcing one rule over both halves and breaking the half it does not fit |
+
+### 2.6 Guards, gates and what removing one promises
+
+| Rule | Prevents |
+|---|---|
+| Check that a general floor does not remove a diagnostic that was masking a different, still-broken span | Adding a floor turning loud cells into silent-wrong |
+| Read "fixing one arm makes the inconsistency observable" as a reason to check the siblings, not as a reason to leave them | A sibling defect being protected because fixing the first arm exposed it |
+| Read landing on one oracle where the tool answered neither as a rung up, not as touching a split axis | A genuine improvement being refused by the rule against split axes |
+| Run a three-way census of every masked shape before removing a masking loud guard, and keep a loud with corrected wording for what cannot yet be fixed | The pre-existing silent-wrong beneath becoming yours, with the original wording handing the next reader a wrong root cause |
+| Walk the write path to its end and name what it lands on when a read fix routes a name away from an object; give the write its own refusal at the lvalue funnels, not inside the shared resolver | Fixing the read moving the write from a wrong object to a wrong bit |
+| Fix a stale-read defect at the read, not at the store: change what the reader resolves to, statically, in the one sidecar every backend consults | A store-side forward reordering every settle consumer, digest and record order |
+| Close what a removed loud gate exposes in the same slice | The pre-existing defect becoming yours because you widened its reach |
+| Cut a reject gate from a hazard set measured on a PRE build, never from a proxy; a proposed gate predicate is itself subject to measurement | A proxy predicate false-rejecting byte-correct designs in bulk |
+| Run the real design a loud gate was blocking, not a reduction of it, before removing the gate; removing a loud gate is a promise about everything underneath | Independent pre-existing defects being invisible to a minimal probe |
+| Say so when a handler cannot use an argument, and read the neighbouring branches: if one warns and yours does not, the asymmetry is the defect | A bare return being indistinguishable from "there was nothing to do", the one outcome no user can debug |
+| Record a partially fixed count in the queue with the number, in the same slice; for a side-effecting operand the count is the semantics | A partially fixed silent defect looking exactly like a fixed one |
+| Make a second pass verify rather than overwrite when a computation is done twice: record what the first pass produced and make a mismatch loud | A consumer running between the two passes keeping the first answer while everything after keeps the second |
+| Make executor selection ask a latched fatal first; latching is not skipping execution | Execution continuing past the latch and failing at an unwrap |
+| Read the ladder per build: a change is a promotion only where the fallback is not compiled | The same change being a promotion in one build and a descent in another |
+| Narrow the coverage, not the semantics, when something cannot be proved | Changing runtime semantics in order to admit everything |
+| Judge each declarator of a declaration independently and split only where the verdicts differ | One name's verdict discarding the whole declaration and making every later use undeclared |
+| Gate interacting properties on one precondition, all or nothing, and leave pre-slice behaviour verbatim when the precondition is absent | Partial application being worse than none |
+| Refuse where a snapshot mechanism has one slot and the expression needs more | Two calls in one expression, or a recursive call, reading the same overwritten snapshot |
+| Catch what an executor cannot do in the executor, not in elaborate, when a body is lowered into two copies and the caller may use either | An elaborate gate on one copy false-louding designs that run through the other |
+| State the fallback that leaves existing answers literally unchanged when adding a new claim, and move a pre-existing strictness asymmetry in its own slice | A new catch-all changing an unrelated verdict |
+| Check whether the workaround for a refused construct is itself blocked, and update a message that lists supported positions whenever the capability list changes | The user searching for a workaround that does not exist |
+| Refuse in elaborate what elaborate cannot do; a debug assertion disappears in release, so a panic is not loud | Release silently doing the wrong thing |
+| Ask the direction table for an argument's direction: an output actual is a write destination and an `inout` is both, which is a stand-down | A snapshot redirecting the destination so the write disappears |
+| Give a verdict name a documented contract and check the promise is literally true at every new site | A "writes on every evaluation" verdict given to a conditional write, and a short-circuit path reading a stale value |
+| Poll a latched fatal inside the statement loop so the process stops at the fatal point | A fatal that does not stop, letting a testbench print its own success line afterwards |
+| Do delimiter matching on the token stream, not on raw text | A delimiter inside a comment or a string closing a construct and making the rest executable |
+| Make an unmatched opening delimiter an error | A diagnostic-free fallback making the defect non-local, dependent on the whole compilation unit |
+| Ask the storage question on the write path wherever the read path asks it | A frame-local value writing unconditionally into module storage and silently not changing |
+| Match the value to the oracle and state the risk in a warning: correct-or-loud means "do not let it go unnoticed", not "change the value" | Truncating silently, or refusing legal code |
+| Treat non-conformance plus "the user cannot change the source" as a gap even where a document calls the refusal a deliberate policy; a warning can buy the safety the refusal was buying | A vendor-supplied library that cannot be simulated at all |
+| Route initializers by block; splitting one block's initializers into a main sweep and a trailing group destroys declaration order | Interleaving disappearing and draws coming out in the wrong order |
+| Wire rather than refuse when the key is wrong | A refusal papering over a mis-keyed lookup |
+| Inherit the old storage class's capabilities when reclassifying into a new one, and register in both tables only when the two representations match exactly | Capabilities going false-loud on reclassification |
+| Kill only the events you created: split the dirty list rather than clearing it, because a value can be restored and an event cannot | A previous stage's events disappearing, since re-writing the same value is not a change |
+| Write a truth capture as a negation of a negation, never as one expression named twice | Naming the same expression identifier twice making the engine evaluate it twice |
+
+### 2.7 Diagnostics and observability are product surfaces
+
+| Rule | Prevents |
+|---|---|
+| Treat a machine-readable rail that misdescribes itself as a silent-wrong of its own kind, because its audience cannot check it | A wrong manifest being graded as a documentation nit |
+| Report a diagnostic against the user's own name once, never a synthesized carrier name, and suppress it when the primary carrier is equally unknown | The diagnostic leaking an implementation name and misdiagnosing a construct that is simply not overridable |
+| Treat a wrong observability log as a silent-wrong: derive every observed value from the single engine source, allow-list value exports to formatter-supported kinds, keep unparsed probes loud, and gate with a three-way comparison plus a determinism golden | A wrong log misleading its only audience |
+| Put the reachable cause first in a user-facing refusal message | The message advertising an unconstructible cause and omitting the real one |
+| Publish the same values you decide with: when you add a judging layer, follow its reason string to wherever it is reported, in the same commit | A rail reporting "nothing was refused" while a layer refuses locally |
+| Do not let a desugar's diagnostics share a code with the constructs it desugars, and reserve the name space a lowering uses as a channel | Warning suppression moving a simulator-generated fact and a user-called task together |
+| Report from the place that holds the reader and the sink together, not from where the value is produced | A range diagnostic landing after the line it belongs to inside one stream |
+| Carry the execution context in the same record as a static capability census | A count from one executor reading as though another had run |
+| Put the identifier and the discriminating rule into a new loud message, and inject a resolver through a single trait where a layer has spans but no resolver | Many copies of one sentence carrying the information of one, with no anchor for the agent rail |
+| Count diagnostics per user-written construct, using the oracle's count as the standard, and save and restore the duplicate-suppression flag per construct | Reporting per leaf eating the error cap faster and deleting unrelated later diagnostics |
+| Write the role, not a capability list, in user-facing documentation | A capability list being false the moment a feature opens, with no test to catch it |
+| Capture the pre-expansion argument vector at the point it exists | A wrapper's substitution, a filelist expansion or an environment knob leaving no trace, so the run cannot say what it compiled |
+| Emit observability output in the same process and stream as the run | A dump subcommand that exits being unable to coexist with a run log |
+| Send observability output through the same writer as diagnostics | A separate print not being captured, and its order being wrong |
+| Stamp a derived value with its provenance: flag, environment variable, or automatic | The hardest case to find being the one that came from neither flag nor environment |
+| Do not break a line between a flag and its value; carry a long value past the margin instead | A wrapped flag reading as a bare flag plus a stray source file |
+| Read a defect an observability feature exposes as that feature's first proof, and comment the canonical site of any list-of-flags predicate with the reason it must be updated | A frozen flag list rewriting later flags' values as paths |
+| State only what a diagnostic knows and list the conditions; do not infer | A message sending the reader after something that does not exist |
+| Carry the defer-time span in the defer record and set it in the resolve loop | The only diagnostic in a log having no file, line and column |
+| Grep the wording of a restriction in diagnostic text when a change lifts it, and re-derive each site's reason separately | The tool telling users that working code is illegal, and a blanket replacement making one site false again |
+| Point the caret at the operand the message is about, copying a neighbour that already does | A multi-line condition sending the reader to the wrong token |
+| Apply an escaping rule at every site that prints the value | A control character in a name splitting a warning across two lines |
+| Refuse a per-call profile that cannot see every execution path rather than shipping it, and publish the blind region's map instead | A rail reporting zero where it cannot see, which reads as free |
+| State an attribution convention in the artifact and verify it by construction | A consumer having to infer the convention from prose, and a reintroduced double count being invisible |
+| Run the design and read the output before writing what the output means; when one claim appears in a diagnostic, a docstring and a comment, fixing one fixes a third of it | A message describing behaviour the executor does not have |
+| Record a refusal as a first-class expected state, separate from a run with an exit code, so refused-as-pinned, refused-for-another-reason, promoted, and refused-becomes-silently-wrong are distinct outcomes | The one move the ladder forbids being graded as a promotion |
+| Make a give-up state a value carrying a span and a reason, not an empty answer | Diagnostics with accurate locations that cannot be narrowed |
+| Check that a node's diagnostics moved with it when code rebuilds an operation in its own spelling | A value-only differential being unable to see that the same expression is loud in one form and silent in another |
+
+## 3. Review method
+
+Every design or implementation change gets an adversarial review of at least two lenses,
+differential and soundness. A design that changed during review is re-reviewed.
+
+### 3.1 What a review is
+
+| Rule | Prevents |
+|---|---|
+| Verify a suspected silent-wrong by reproducing it against a live differential oracle, not by argument | A defect that is argued about rather than reproduced being neither confirmed nor refuted |
+| Run the inspection with the roles separated: author, moderator, reviewer, recorder | One agent playing every role and validating its own reasoning |
+| Use the specifications under [preview/](preview/) as the review checklist; where a separate checklist exists, add it rather than substituting it | A review with no predefined checklist inspecting whatever the reviewer happens to notice |
+| Review on four axes: architecture and system integration, performance and efficiency, maintainability and readability, robustness and testability | A single-axis review missing the defect classes it never asks about |
+
+### 3.2 The briefing
+
+The briefing decides what a round costs, so it carries all of this.
+
+| Rule | Prevents |
+|---|---|
+| Build the PRE binary before the briefing and hand the reviewer its path | A reviewer building its own PRE overwriting in-progress work or measuring a different tree |
+| Tell reviewers explicitly not to touch the working tree | A lens restoring files to build PRE and destroying uncommitted work |
+| Take a snapshot commit before briefing and hand PRE out as `git archive <branch>`; that commit, not a scratch directory, is the restore canon | A scratch snapshot disappearing and the tree being unrestorable |
+| Give the reviewer the list of already-killed mutations and documented survivors, and require findings outside it | A round re-deriving the previous round's results |
+| Name the previous round's numbers in the briefing as re-measurement targets | Prior numbers being inherited as facts and never re-checked |
+| Say that reporting clean is a good result and that findings must not be invented | A reviewer under implicit pressure producing noise |
+| Allow the soundness lens a separate `CARGO_TARGET_DIR` for mutant builds | Mutant builds colliding with the session's build state |
+| Aim later rounds only at what changed since the previous one | A full re-review spending the budget on settled ground |
+| Require a build with `--features separate-bins` when the staged binaries are in scope | A stale staged binary replaying pre-fix behaviour, with the finding attributed to current code |
+| Hand the reviewer the measurement table (cell by oracle by PRE and POST by classification) as a file, and open with "attack outside this table" | The reviewer rebuilding the table from scratch |
+| Write the budget into the briefing in tool calls and designs, and require a report of what was found plus what to do next when it is exceeded | A review without a budget always spending the whole of it |
+| Hand out a snapshotted binary and record its hash; when a blocking fix lands mid-round, re-freeze and say which binary the numbers describe | Lenses scoring different builds, so every finding has to be re-measured |
+| Keep attribution per slice when several slices share one review: disjoint files, one PRE and one POST binary, a census per slice with its own cell prefix, and questions grouped per slice | A finding that cannot be reverted without touching the other slices |
+| Do not rebuild the binary while a reviewer is measuring; make changes in a copy and re-review afterwards | The reviewer having to annotate which binary each measurement used |
+| Require an explicit non-vacuity proof: byte-identity means something only when the fast arm actually fires, with the firing count and observed argument values recorded | "Nothing happened, so they were the same" being indistinguishable from a working optimisation |
+
+### 3.3 The differential lens
+
+The differential lens reproduces behaviour against a live oracle and reports, per divergence, the
+oracle's raw output text and a classification. Its report names the probe resolution used.
+
+| Rule | Prevents |
+|---|---|
+| Compare semantic equivalence, never structural | Structurally different but semantically identical output reading as a divergence, and the reverse |
+| Classify every divergence four ways: real gap, no-oracle, vita-ahead, harness format | Undifferentiated divergences all being treated as defects, or all dismissed |
+
+### 3.4 The soundness lens
+
+The soundness lens argues from the source and the standard, and its premises are censuses, not
+prose. Commission it explicitly.
+
+| Rule | Prevents |
+|---|---|
+| Commission the soundness lens for: all-sites and variant enumeration, disjointness proof, same-name collision, guard traversal completeness, and an audit of the population path of every map being consumed | A soundness lens without a task list checking whatever it finds interesting |
+
+### 3.5 Rounds and deltas
+
+| Rule | Prevents |
+|---|---|
+| Make a later round a delta briefing: the changed hunk list and the already-killed mutations, plus a demand for findings outside them | A later round re-measuring the first |
+| Re-review after fixing a blocking finding: the fix is a new mechanism no lens has seen, and the reviewers' existing reproduction is the first thing to mutate | The next round's blockers all sitting inside the previous round's fix |
+| Treat the fix for one round as the finding of the next: a delta round is not optional after a design change, and its brief must name the delta | Each round correcting the previous correction, none found by the author |
+| Read a verify phase that dies wholesale as leaving its findings unverified, not cleared, and rebuild a failing reproduction from the stated mechanism | Sub-verifications dying and the findings being filed as clear |
+| Read a stalled reviewer's partial output before killing it; the point where it stopped marks where something looked wrong | The most valuable finding of a slice sitting in a lens that never filed a report |
+
+### 3.6 Stopping, reverting and prerequisites
+
+The round budget is three. A fourth is a scope signal, not a fourth patch.
+
+| Rule | Prevents |
+|---|---|
+| Stop and count when each fix on one axis produces the next blocking finding: revert, ship the separable halves, and file what every attempt uncovered as the prerequisite | A fourth patch on an axis that is wrong |
+| Revert and measure the condition after mis-scoping a guard twice, instead of attempting a third scope | The third attempt being another guess |
+| Revert to pre-existing behaviour and register the measured shapes when the condition cannot be named | An unnamed condition being encoded as a guess |
+| Read a root that returns through a different door each round as the stop signal: revert whole and write the prerequisite into the queue row | Each narrowing breaking a different case |
+| Revert a producer axis that yields a new blocker every round and make the consumer decline on what it cannot vouch for; the producer's patch gets its own row with its measured cells | A fourth attempt on the producer axis |
+| Fix the other code path first when a precondition lives there; a workaround predicate that is wrong twice is an ordering problem, not a predicate problem | Consecutive rounds of regressions from workarounds |
+| Ship the separable half and revert the rest with the prerequisite written down when blockers on one axis exceed three and most are products of your own fixes | Two slices in a row, each fix locally correct, the axis wrong both times |
+| Decide fix-or-revert from the root, never from the effort spent: ask whether the root is pre-existing and independent, whether the fix needs machinery the frozen IR cannot hold, and how wide the blast radius is | A separable half going out with the revert because nobody looked |
+| Count the rounds and read where the blockers are: when they sit outside what you built, in what you routed to, you are discovering a prerequisite | A fourth fix on shared code with a different blast radius |
+| Do not propagate a closure out of a slice until the slice is committed, and re-measure rather than restoring old text when re-opening one | A row marked resolved coming back with the revert, its old text overstating the residue |
+| File the wall as one infrastructure line and point the feature rows at it when three requests stop at the same prerequisite | The next person walking into the same wall through a fourth door |
+| Record the mechanism, not the verdict, when reverting, so the next attempt starts from a measured prerequisite line rather than from the queue line, and treat a defect a change merely exposes as belonging to the code it exposes | The next attempt repeating the reverted one, and a slice absorbing an unrelated root cause |
+
+## 4. Census method
+
+A census is an enumeration, taken from the source, of every site that can reach a question, with
+each cell measured rather than argued. It is the unit of work here: a slice opens with a census and
+closes with one. Four kinds recur, and they answer different questions — a producer census asks who
+writes a value, a routing census asks where a value goes, an ordering census asks when it arrives,
+and a consumer census asks who reads it and what each reader does with it. One never substitutes for
+another.
+
+### 4.1 Start from a census, not from an implementation
+
+| Rule | Prevents |
+|---|---|
+| Start a queue item with a census from the code — grep every site that builds the construct, decide whether the defect reaches each, confirm with the oracle — never with an implementation | The queue recording a symptom and the class being larger than the row says |
+| Ask whether a function already implements the rule and whether every place that should call it does; the detector is axis-independent | A rule implemented exactly and called from only some of its sites |
+| Re-run the census before starting a slice: an estimate written at the end of the previous slice is a hypothesis | The previous slice having moved the gates the estimate was measured against |
+| Re-measure every open queue row at HEAD against both oracles before ranking, and re-measure class (loud versus silent-wrong) first, because class decides ranking and ages fastest | Ranking rows on shapes that have since changed |
+| Ask what a row's mechanism can reach, not what the reporter ran | A row that names a symptom being scoped to that symptom |
+| Grep the open queue for the function you are about to change before implementing any review finding; where a row says built or reverted, run its designs first | A one-line routing fix reproducing a regression that was already measured and reverted |
+| Grep the queue for the site and read every line that names it before trusting a row's "no prerequisite" field | The older line, which is usually the measured one, going unread |
+| Grep the failure messages of green pins when choosing the next item | A green test's message containing the next slice verbatim and nobody reading it |
+| Measure the whole-value operation first for an element-select silent-wrong: correct there means access routing, wrong means a storage gap | The slice being sized from the symptom |
+| Enumerate the sub-classes a row's fix would serve and ask which of them the existing channel already answers | A row's stated cause pricing machinery most of its sub-classes do not need |
+| Write both what was measured and what could not be measured into any sentence that closes a family | The gap between what was measured and what was closed leaving the document |
+| Instrument the rejection point with the node kind and aggregate it, rather than ablating one gate | An ablation measuring only that gate's axis, so a kind with no arm looks the same either way |
+
+### 4.2 Containers, spellings and passes
+
+| Rule | Prevents |
+|---|---|
+| Give a post-patch or re-spell pass as many sites as the type has containers, and read a sibling spelling that is already correct as the signal that one container was missed | An omission looking like a missing capability |
+| Enumerate all sites for a shared function or desugar: every scope, caller, parser variant, assign site, reserve path, statement dispatch and declaration-level validation | The most frequently repeated defect class in this repository |
+| Count a type's containers and pin each one when a pass respells or patches expressions held by that type | A per-container omission repeating, with the loud spelling visible and the silent one not |
+| Enumerate the containers of the type a post-hoc patch pass patches, by grepping the type in the frozen IR, not the call sites that build it | A container carrying an unpatched sentinel into the engine |
+| Count the passes of one family and check the hit count, not the symptom | The same omission repeating once per pass, so fixing some of them makes the design run and print the wrong value |
+| Record a route census inside the emitters, with the table an emitter needs to file a row from an identifier alone, never at the callers | A new caller bypassing the seam and a row reading zero beside real call sites |
+| Census the emitters that share a diagnostic's context string through one resolver, and measure at least one of the others against the oracles | A change made for one emitter silently moving the others |
+| Census the consumers that resolve names later than they are collected, and carry the collection scope with the item, when a block gets a scope of its own | Everything that worked only because the block's names were flattened breaking at once |
+| Treat a gate that exists for one consumer as the gate for every consumer of the same shape, and count the copies | Binders that call none of the copies, and a further copy the docstring already claimed |
+| Census a scope rule at every spelling of the scope it names: module, interface, package, compilation unit | A rule about a declaration written in one scope being applied to a spelling where it does not hold |
+| Enumerate the AST forms new keys can appear in that the old keys could not, such as lvalues, iteration and port connections, when a table's key set widens | A read-only rewrite gaining a write side and an element write becoming a bit write |
+| Bisect a diagnostic page per header or per file before pricing the items | A page that reads as several items being one root plus its uses |
+| Probe a queue row's plain twin at three widths — at most 32, 33 to 64, and above 64 — before building for the row's shape; the answer names the lane | The position named in the row being incidental while the plain twin was already wrong |
+| Census a parameter rule over four channels: module body, instance-elaborated, package, and instance override, filing the override channel as its own row | The override channel folding in the parent, before the target's width exists |
+| List a parse-time constant table's gates and census each with a control twin: overridability, the declared type, every declaration of the name, and the readers you did not write | Each skipped gate hiding a defect, including correct designs turned loud |
+| Run the real design behind the row and take the next page in the same slice when it is the same table | The next page being two lines away and deferred to another slice |
+| Put the multi-line cell in the census for a position query | A single-line use being unable to tell two readings of position apart |
+| Give every census consumer a scalar control twin beside the element spelling | A column reading as wins where the control twin shows a pre-existing silent the element spelling is about to inherit |
+| Widen the other operand on every axis before believing a boundary; a census band is a property of its operands, not of the defect | A band that is an artefact of pairing every cell with the same sibling |
+| Keep the eligibility set identical to the process set | Designs dropped between eligibility and processing with no diagnostic |
+
+### 4.3 Producers, populations and writers
+
+| Rule | Prevents |
+|---|---|
+| Justify removing a defensive check with an exhaustive producer census — constructors, struct literals, field writes, direct plane writes — not with a green suite | A green suite being a coverage statement rather than a proof of the invariant |
+| Census a set's writers before relaxing a guard that never fires positively | The guard firing on its own producer, so relaxing it re-opens a real case |
+| Enumerate the resource — every argument the engine writes back — not the sites you edited, and treat a guard that cites another guard as its model as a census of two | The cited model never having called the funnel either |
+| Search for a data structure that already records a property before building the mechanism a reverted slice named as its prerequisite | Building what an existing map already answers |
+| Open the code that populates a list your check reads | A check over a list that is always empty being dead code shaped like a guard |
+| Audit the population path of any set a check consumes, and check that the population does not zip formals positionally | The candidate set being empty, so the check never runs, and named arguments being invisible |
+| Count everything the site you are moving sets, not only the field that motivated the move; two fields set by one function are usually one fact | Moving half a fact and making the other half's consumers silently wrong |
+| Search the text of an approximation you are replacing; the places that depend on it are the places that say so in a comment | One consumer being left on the approximation |
+| Find the further collectors of a concept by grepping the constructor, not the name | The same declaration falling into different kinds in different collectors |
+| Enumerate a shared map's readers before measuring anything when routing a value out of it, and ask of each whether it reads a value or uses membership as a proxy | A proxy going stale and the regression living in old code |
+| Write the same expression in the neighbouring scope before building the mechanism a wall is attributed to; when the tool contradicts itself, the correct half is the implementation | Building what is already built one scope over |
+| Name the mechanism, not the missing input, when collapsing several rows into one infrastructure item, and re-measure the others the day it lands | Rows that share a provenance but not a domain, so closing one closes only one |
+| Measure the end-to-end outcome of the pair when a re-grounding says closing one item moves the refusal | Fixing either half alone producing a worse report than fixing neither |
+| Check the input set before looking for missing machinery when a feature works in one place and not another | The classifier walking a narrower set than the feature reaches |
+
+### 4.4 Routing, ordering and consumers
+
+| Rule | Prevents |
+|---|---|
+| Count every place that asks whether a value belongs to a store before opening a new one: the read funnel, the write funnel, the specialised evaluator and the reader wrapper | Each fix making a different piece of the output correct, so stopping anywhere looks like success |
+| Count how many code paths a reject row blocks before narrowing it; one row can cover two executors | Threading one executor and leaving the other silently wrong, green in the whole suite |
+| Run an ordering census as well as a routing census for a construct that writes into another instance: routing answers whether the value reaches the right storage and is silent about when | An exhaustive routing census reporting clean over an ordering silent-wrong |
+| Grep every read of a shared carrier type and give each site an explicit non-empty decline naming its reason, then measure the declines | Readers with no slot for a new field binding the wrong type in silence |
+| Census the readers of both slots before moving a value from one slot of a record to another | One consumer reading the slot the other one wants |
+| Count how many times one feature reads the store — value, offset, width and index are each a read — and route every read through the seam | One read left outside the seam making the write land elsewhere |
+| Re-walk the call graph by store-access spelling after wiring a consumer, not by a list of names | A task's own arguments bypassing the formatter and reading the old store |
+| Re-check a "the funnel discards the wrapper" argument per lane: a lane that stores a whole value answers differently from one that stores bits | One lane keeping the flag the funnel was supposed to drop |
+| Ground a loud-to-supported candidate by running the same context set through both the candidate path and its sibling and comparing a capability-parity matrix | A silent-wrong common to both paths being invisible |
+| Widen a read and sweep the write twin in the same iteration; the detector is a scalar or fixed twin that is loud while this path is quiet | Fixing one read leaving several same-class write silent-wrongs |
+| Measure capability parity before unifying or routing storage classes; where neither representation dominates, extend additively | The weaker axis silently regressing |
+
+### 4.5 The axes a census must vary
+
+| Rule | Prevents |
+|---|---|
+| Include the `signed` spelling of every cell in a typedef census | An unsigned-only table certifying the sign axis by omission |
+| Put one instance per census cell, or compare sorted line sets | A two-instance cell printing in display order, so a second instance's pre-existing value reads as new |
+| Add the census axis a narrower type cannot represent when routing a value through it: a sign for an unsigned, a fraction for an integer, "never" for a count | Every literal on the axis being non-negative and the regression shipping |
+| Sweep the container dimension as well as the operand's when the symptom is "reads the wrong element"; the immunity band is a function of container size | Probing one width, finding nothing, and reading that as no defect |
+| Put a narrow constant beside a wide literal under unary minus, remainder and division in the census; those are the operators where a wrapped intermediate cannot be recovered | A large census being green over regressions in the non-commuting family |
+| Vary every field of a record — base, width, direction — because the no-op combination certifies a lane that does not work | A normalisation measured only where it is the identity |
+| Give every census cell a keyword-spelled control twin | New silent-wrongs turning out to be pre-existing on the plain spelling |
+| Measure "the gate rejects that shape" per spelling | One refused spelling not refusing the family |
+| Read one of several grouped operators diverging as the signal that the divergent one has a property the grouping missed | The common rule being blamed instead of the operator's own property |
+| Read a characterisation that concentrates entirely on one value as a signal that the other half survives for a different reason | An accidentally correct half blinding the characterisation to its own axis |
+| Classify every operator on an axis as sign-sensitive or bit-pattern before changing that axis's interpretation, write the table into a comment, and measure whether an uncovered operator was right only by cancellation | Fixing one operator exposing a latent defect in its neighbour |
+| Census by routing and ask whether one of the sites implementing a rule is already correct; the correct site is both the proof and the specification | Assuming everything is wrong and missing the reference implementation already in the tree |
+| Build one cell on each side of a domain boundary in any change that moves that boundary | A large sweep containing no cell that reaches the boundary |
+| Write the factorial table and check that every output the mechanism can produce is in the readout before publishing a refutation; a refuting census varies the claim's axis and holds everything else fixed | A one-column readout of a multi-column mechanism refuting nothing |
+| Vary every field of a reported shape, not only the one the report names | The field held constant being the one that matters |
+
+### 4.6 Queue rows and incoming reports are claims
+
+| Rule | Prevents |
+|---|---|
+| Split a broadly written item's scope with a three-oracle census first; an axis where the oracles split is off limits | The slice taking on an unarbitrable axis |
+| Include the cells where the silent default equals the true value when removing that default | The whole table reading as wrong-to-loud, hiding the correct-to-loud subset |
+| Ask whether the oracle orders your axis by kind before keying a shared table on one fact | One ordering key being unable to reproduce several per-kind orders |
+| Enumerate the resumption kinds, not the code sites, and give each its own two-oracle cell | Two kinds sharing a site, so a site census answers "all converted" twice |
+| Measure the twins a row lists as "kept correct" before using them as the regression baseline | Listed twins turning out to be a split and separate silent-wrongs |
+| Run the row's own cited line and ask which context it is in before building the machinery a row prices; a keyword's meaning is context-dependent | A reject gate keyed on a keyword over-rejecting everywhere the standard neutralises it |
+| Diff a census cell's diagnostic text against its control's before classifying, when a whole position column is loud | Cells reading as still loud for a reason unrelated to the feature |
+| Run the real design after a rule a queue line claims will open it, and write the ladder that follows | The claim being a hypothesis about a second error page nobody has seen |
+| Measure a new loud gate on the designs it will refuse, not on the one that motivated it: enumerate the syntactic shapes that reach the arm and run PRE on each | Ordinary style and non-scope regions going loud |
+| Measure the end-to-end outcome before promising that closing a gate unblocks a design | A refusal moving instead of closing |
+| Add the arm to both evaluators when a text is folded by two | The first arm fixing many cells and leaving a whole family at the wrong width |
+| Measure the whole axis against the oracles when a report names one cell | A reporter knowing the cells they hit and not the cells they did not, including their own suggested workarounds |
+| Census the consumers of a diagnostic model field, not just whether the model has a slot | A field nobody fills and nobody renders being a dead contract, not an unimplemented feature |
+| Re-run every item of an incoming report at HEAD | "Still true", "already fixed" and "true but not a defect" being indistinguishable |
+| Survey third-party RTL before ranking priorities | A corpus you wrote yourself finding what you already suspect |
+| Run the oracle first and vita second when building a workload, and forbid simplifying or rewriting the RTL so vita accepts it; a refusal is a result | The workload measuring only what vita can already do |
+| Count how many rows of a manifest already contain a state combination you believe cannot occur | A believed-impossible combination being present and unhandled |
+| Re-measure with the oracle any assumption written as a degenerate special case | A diagnostic pointing at a phenomenon that does not exist |
+| Count a resolver's callers when you meet "this capability does not exist"; a resolver with one consumer has grown to fit that one question | Several binding sites using a literal-only twin while a general resolver sits unused |
+| Grep every place that enumerates a subset before widening it | One layer accepting, another refusing, and the fallback message asserting something false |
+| Check a demand claim with the same suspicion as a correctness claim | A revert's justification resting on usage nobody verified |
+| Enumerate the spellings of a feature a report names and measure each | A passing test being evidence about its own spelling and nothing else |
+| Treat a comment saying "only" the way you treat one saying "cannot": ask what the other cases are and run one | The sentence that is the entire defect reading as a scope note |
+| Run the suite, the corpus and the examples before the review when adding a loud gate on a shape the engine used to accept, and ask what made a refused working design work | The full suite refuting the claim in one test |
+| Measure a planned reject row before building it; over-rejection is a ladder descent | A row planned because two documents say it is needed, over code that never reads the input |
+| Ask at which phase a reject row's reason is true; "this row is dead" expires | The same row being recorded three different ways |
+| Ask what a refusal actually blocks before asking what to build | A refusal that is pure conservatism, where deleting one line buys coverage |
+| Split a feature-named row with a census; the part that genuinely needs machinery is usually already refused under another name | A row bundling unrelated shares |
+| Split a one-word reject row by what designs do, not by which tables exist; a table nobody reads refuses nothing | Unrelated populations sharing a word and a priority |
+| Re-measure every sentence that cites a kind as its reason when you open that kind's row | A comment claiming a scan refuses something a neighbouring change already opened |
+| Read a function that takes an alternative store as a parameter as using that store only on the paths that name the parameter | Opening a row leaving the other arms silently wrong |
+
+### 4.7 Completeness for a change already under way
+
+| Rule | Prevents |
+|---|---|
+| Define a name's shadow set as every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations | A census over declarations alone missing most of the binders |
+| Find the nearest spelling of the same question that already works, and ask what it calls, before accepting a stated wall | A prerequisite being carried through several slices while the machinery already exists |
+| Walk forward after changing a width to every site that re-derives the value from a width, not only the sites that read the width | A read-back that assigns into the variable you already set being invisible to a census of readers |
+| List every call the original's caller makes before copying a call; the twin reads from its own state and most of the contract is invisible at the call site | Copying the maps without the containment gate and making a nested case silent-wrong |
+| Re-measure a documented split's discriminator; it ages | A row standing for several slices on a discriminator that does not hold today |
+| Include the pre-existing branches of the same gate in a new fence's blast radius | The same leaf staying silent-wrong through the older branch |
+| Grep a predicate's documentation for the condition it named before changing the component that condition is about | A guard becoming a pure false-loud that looks identical to one still needed |
+| Record which census cells are single-instance and which are multi-instance when an oracle contradicts itself on the second instance | A self-contradicting oracle being cited for a multi-instance cell |
+| Grep a property's string after fixing one site and count the rest, updating every comment that cites the equivalence argument in the same edit | Identical sites staying unfixed and a comment surviving its own premise |
+| Control a path-dependent feature by the declaration that decides the path, verify the callee takes that path, and fix every path in one iteration | A matrix that never enters the mechanism it claims to measure, and divergence between paths, which is worse than uniform wrong |
+| Grep for existing partial support before building infrastructure for a construct recorded as rejected, and treat an additive-looking parser gap as a possible storage or evaluation-model gap | New infrastructure built for a one-sub-form gap |
+| Grep for every site that needs a fact you have just learned, and fix the second instance of the class in the same slice | The same silent-wrong being reproduced one layer in |
+| Grep for downstream comments that assume "there is no such thing before this point" after inserting a stage into a pipeline | A later stage's comment becoming false and a whole change set being lost |
+| Measure the claim "the upper layer refuses this first" by running that shape through that layer | Mutation survival being indistinguishable from "no design of that shape in my set" |
+| Build the drain twin in the same slice when a new site starts reading an alternative store, answering the drain question separately for each termination path | The same failure being produced in consecutive slices |
+| Write in one sentence which shape makes a new structure meaningful and count that shape | Zero meaning the design has no basis, not that the test is missing |
+| Count who does not call an existing funnel before building one | Infrastructure built for a one-call-site omission |
+| Enumerate and measure the indirect paths — calls, hierarchical names, methods — that bypass a new loud gate before claiming it is the only net | The gate not being the only net, with the claim untested |
+| Read the sibling funnel in the same file every time; branch parity finds this by reading, not by probing | The twin funnel having the same shape and the same defect |
+| Read every other arm of a match in the same sitting when a fix lands in one, and ask whether the fixed arm's reason applies there | Two arms two lines apart giving different answers |
+| Grep an existing sibling across the workspace after adding a sidecar, mirror every copy site, and assert the map is non-empty at the consumer before reading the output | A sidecar reaching the engine through separate field-by-field copies, one of which is silently empty |
+| Count the render sites of a per-statement fact and give an executor without a seam the ability to write it, with a census cell per site | One seam being mistaken for the funnel |
+| Route every site that folds the same field through one named funnel with the old call as its fallback, then measure the funnel's new lane for the shapes it must not change | The same text folded by the same evaluator at many sites being fixed at one |
+| Census three lifetimes for a name-keyed parser rewrite: declaration, shadow, and export | The declaration lifetime being right on the first build while the other two are silent-wrong or loud |
+| Census the regions that have not yet been asked the same question after fixing one | The same defect shape existing once per region, the largest one last |
+| Count how often a row is the sole blocker; a row with no sole-blocker cases cannot be closed alone | Closing one of a pair gaining nothing |
+| Record marginal and standalone gain separately | A plan of cumulative numbers hiding rows with no standalone gain |
+| Grep every caller of a primitive before changing shared semantics such as conversion, resize or width rules; that enumeration is the scope decision | Review rounds spent walking from the leaf back to the primitive |
+| Count the small consumer-by-value matrix before adding or removing a feature | Fixing one cell being mistaken for knowing the axis |
+| Add an arm to every walker when adding an expression kind | One walker's catch-all swallowing the new kind |
+| Ask a source-scan pattern by prefix; a pattern naming one family member is a whitelist, not a scan | A sibling function a few lines away going uncounted |
+| Make a classifier that walks statement lvalues also audit the side tables that hold write destinations | Walking a node not being the same as seeing its effect |
+| Re-audit every comment that cites "another gate rejects it anyway" when you unify predicates | The justification holding only while there is exactly one gate |
+| Check the other kinds of callable object in the same sitting when applying a rule to one | One half being closed with a comment and the other left open |
+| Drive the whole idiom, file access included, to the end after opening a gate | A minimal reproduction stopping short of the silent-wrong beneath, which the user meets first |
+| Fix both halves of a shallow and deep walker pair in the same slice | Twins having the same defect twice |
+| Reproduce the stated basis before calling a place marked deliberately unverified a misdiagnosis | A reported false positive being a measured, correct constraint |
+
+## 5. Gates, predicates and classifiers
+
+Under-detection in a shared walker is the repeating source of silent-wrongs here, so a gate is
+written to fail closed and is measured on what it refuses as well as on what it admits.
+
+### 5.1 One rule, one home
+
+| Rule | Prevents |
+|---|---|
+| Put the canonical home of a question beside its twin in `sim-ir`, not at the consumer | A second consumer inventing a second spelling |
+| Put a guard in one documented funnel that every site shares, and name the predicate after the prohibition reason, not after a type enumeration | Per-site guards leaving sibling axes open and a split predicate giving each axis different coverage |
+| Add semantics to shared machinery as an opt-in parameter, never a default, and document the positive precondition — when it is safe to turn on | One consumer's need imposing risk on every other, and the next reader falling into the same trap |
+| Move the value-free rules of a renderer into a crate both the constant-domain twin and the runtime can reach, and make both call them | A twin re-deriving a rule set one finding at a time and converging only asymptotically |
+| Put a context or width rule on the consumer, never inside a shared evaluator: grep who calls the function and whether they agree on context, and where two disagree the rule lives at the call site | One consumer's context being imposed on all of them |
+| Expose a flat entry point by having the canonical implementation finish its normalisation and delegate to it | A second spelling of the judgement drifting |
+| Choose refusal over routing when routing would spell an existing rule a second time, and make correct support a separate slice that gives the funnel an escape hatch | A second spelling of a split rule |
+| Delete the old entry point when the canonical implementation moves | The old method being one edit away from pointing at a different entry, so read and write lanes diverge |
+| Reduce a new shared input to one function rather than one datum, so the contract is a property of one expression | Two reduction loops having to agree |
+| Write a node's children, their order and their evaluation conditions in one place and have every walker consume it | Independent recursions inevitably diverging |
+| Keep one shared list of positions that must not be hoisted and have every hoister consume it | The second hoister not reading the first hoister's list |
+| Give two walkers that must see the same child set one child-list function, and mark unreachable reads unrepairable so both answers agree | A recorded read the transformation cannot reach being silently wrong |
+| Write the naming rule two stages share once and have both use it; a limitation whose reason is another stage's implementation detail is a defect in that stage | The path where the name exists and the path that looks for it diverging |
+| Treat a guard as a funnel, not a site: enumerate every place that builds the operand and pass them all through one function | A guard at one leaf missing the other operand-building sites |
+| Mint an identifier that indexes parallel vectors through one funnel that fills every table, with an assertion per table and an explicit empty slot for the case that owns no row; do not guard at the reader | One producer pushing some of the tables, shifting every later identifier, so a reader returns another entry's data |
+| Treat every writer of the primary map as a writer of the side map when a key space becomes rebindable, and route them all through one funnel so a grep for the raw writer returns only the funnel | "A writer that forgot" being merely absent rather than unrepresentable |
+| Fill a new table with the same producer as its twin, so one provenance rule covers both scopes | A second, independently written producer being a second rule wearing the first one's name |
+| Split a predicate per resolver when a value has two representations; one predicate cannot serve two lookup orders | Subsystems disagreeing about which map wins |
+| Frame two implementations with different strengths as "where do they split", and extract the split predicate once | Two copies of an admission predicate drifting invisibly, whose only symptom is a slow path |
+
+### 5.2 A predicate that cannot under-detect
+
+| Rule | Prevents |
+|---|---|
+| Answer a property question by walking the expression, never by enumerating spellings; use an exhaustive allow-list and fail closed on unknown variants | A spelling-counting classifier contradicting itself inside one design |
+| Extend a shared classifier or gate only with a full consumer census, and make accept-gate walkers conservative or exhaustive | Under-detection in a shared walker, the repeating source of silent-wrongs |
+| Spell a gate predicate as an exhaustive match, never as a boolean shorthand; the compiler must catch a new variant | An implicit catch-all letting a new identifier default to the quiet side |
+| Close a syntactic walker's blind spot by opting into an already exhaustive walker with one axis parameterised, not by writing a new walker | A new walker repeating the old one's omissions |
+| Build a scope or safety guard as an allow-list of provably safe forms plus a reject, not as an enumeration of dangers; a recursive allow-list recurses over every value sub-expression | Enumerating dangers repeatedly omitting a category, and one unvisited sub-expression being an escape |
+| Choose a walker's polarity from the gate: an accept gate takes a conservative walker, a reject gate takes a positive one | A conservative walker in a reject gate refusing working designs |
+| Read a catch-all answering false in an expression walker as "this node may reference anything", not as "unknown" | A conservative accept gate giving an answer independent of the name asked about |
+| Never skip the classifying recursion in any arm: compile first and discard the result if you must, and count the recursive calls per arm | A shortcut arm skipping admission, so a diagnostic disappears and a draw vanishes |
+| Enumerate the arms of a hazard walk that answer from a rule rather than from their children; those must still descend for the guard | Wrapping the hazard in braces walking past every syntactic guard |
+| Gate every consumer of one walk on one predicate, not each on its own | Consumers of the same walk diverging |
+| Print both accept sets and name the difference before mirroring a predicate across a phase boundary, and ask whether the skip is needed at all | Two accept sets that are neither equal nor nested leaving the shapes between them fail-open |
+| Prefer the funnel that sees the value to the one that sees the syntax | A gate on the AST inheriting every hole in the AST-level predicate |
+| Compare the two phases' resolvers, not their intents, when leaning on an existing gate for a precondition | A check that folds less than you do being unable to cover you |
+| Count the enumeration behind a shared classifier's "sees all of them" comment | An expression position not being seen, leaving a real divergence |
+| List the children instead of smearing "unknown" over a node, and separate nodes that are evaluated from nodes that are not | A node with no effect in it standing the whole statement down and making a working design loud |
+| Widen an analysis lattice until it can distinguish the answers you need; a narrower lattice is itself a misdiagnosis | One boolean being unable to separate two outcomes, so a large share of reported items are that collapse |
+| Special-case only where you have a distinguishable reason, and check whether a user can write the same spelling | A blanket special case dropping a live path from the join |
+| Use all segments, not the head segment, when the question becomes "can this callee touch that name", and add it as an opt-in parameter rather than copying the walker | A flattened name being reachable by a path the head-segment rule cannot see |
+| Check that an early-return predicate's walk has the same arm set as the lowering it gates | An under-detecting gate making the fix miss one spelling |
+| Mirror the questions an existing arm's conditions answer, not the conditions themselves | A restored predicate answering for the wrong family |
+| Close a gate's blind spots fail-closed with an opaque flag raised when a read has no nameable root, not by enumerating shapes, and confirm the cost is structurally narrow | Hierarchical and package-scoped names escaping an identifier-keyed gate |
+| Check that two enumeration arms share a contract before merging them; the same type is not the same meaning | A merge making an unevaluated position contribute a read and false-rejecting a harmless statement |
+| Write a width formula in its standard form with its domain, and extend the walker to its own output when the emitted shape feeds back into it | The one parameter value the census did not run |
+| Do not assume the expression arena is a tree: read what the existing walkers filter before writing a new one, because that filter documents the arena's properties | A buffer sized by index meeting a back edge and the whole seal disappearing |
+| Never fold a depth or count limit into a plain true or false; make limit exhaustion a distinct state, and remove the limit where an iterative rewrite can | The folded value being another question's answer, deleting a diagnostic |
+| Confirm that a canonical predicate answers your question before calling it, and state the delta explicitly when it does not | "Is it pure" not being "may it be evaluated twice", and closing everything losing the genuinely pure cases |
+| Make every query used for a decision three-state; folding "not yet known" into "no" is a silent-wrong | A placeholder answering with a fabricated fact that the caller reads as a fact |
+| Ask whether a caller uses the answer for a decision before adding a fallback, not whether it is visible in the engine | A fallback that looks harmless in one lane demoting correct support to loud-wrong in another |
+
+### 5.3 The predicate must match what it gates
+
+| Rule | Prevents |
+|---|---|
+| Make a classifier use the same name resolver as the lowering of the expression it classifies | Classifier and lowering diverging silently under shadowing |
+| Extract a lowering's decision into a side-effect-free function and make the lowering match on it too | A docstring saying "mirrors X" being a drift waiting to be measured |
+| Make the shared decision function say which of its answers are facts | A mirror being exact only for nodes it built itself |
+| Make a gate that decides whether a body is safe to process walk the same statement arms as the processor it gates | The gate certifying a set the processor does not act on |
+| Put a dispatch hook at the very top, detection first, and enumerate deny hooks over every write path | A hook below another check never seeing the case |
+| Make a gate predicate match the destination consumer set exactly | Over- or under-approximation at the gate |
+| Build extensions as strictly additive, fail-closed subsets that leave the remainder on the old path | A non-additive change moving cells that were already right |
+| Extend by adding a discriminator branch with the existing path kept verbatim, and prove the new eligibility set disjoint | A rewritten shared path moving existing cells |
+| Pay for a first placement with an explicit gate keyed on a property the old lane's correct cells do not have, and sweep for movement | Placing a new lane first and silently moving cells the old lane got right |
+| Check the accuracy parity of a helper's branches before filling it with new traffic; a guard present in one branch is usually unmoved, not unnecessary | Routing new traffic into the narrow branch turning wrong into a different wrong |
+| Re-apply the caller's scope rule at a resolver-first hook, keyed on the node's root, and put the decline before both resolvers | A new arm bypassing the caller's own arm and folding the wrong object |
+| Name the consumer a constant folder was written for and the rule that consumer needs — bound versus value, saturate versus wrap, self-determined versus context width — before reusing it | A folder silently declining a whole family, never wrong-valued, so censuses miss it |
+| Make a twin of a predicate in another phase the same walk, not the same intent, and ask over which set of names it quantifies and when that set is complete | A parse-time twin being blind to declarations an elaborate-time walk sees |
+| Give a leaf with no width of its own a tri-state width — unknown, context-sized, or a known width — and grep every consumer for the predicate it uses to tell the first two apart | One predicate reading a placeholder as known, so a fold declines and a loud becomes a value |
+| Let the evaluator, not the table, supply the width of a region made only of context-sized leaves | The table having no answer for such a region |
+| Pass the position as a flag and make a resolver in a count or size position refuse rather than read an environment | A general resolver letting a local supply a count, or answering past a shadow |
+| Attach the four-state qualifier to any argument that an operator is safe to narrow | Low-bit closure holding only in two-state, so narrowing deletes an unknown |
+| Distinguish three states — a wrong answer, unknown, and a right answer — because replacing a wrong answer with unknown routes to a conservative path and can drop machinery | An "unknown" answer making a cast skip context descent |
+| Attach a width-invariance qualifier to low-bit closure and to "narrowing computes the same thing": some leaves' value depends on their width | An argument valid for ordinary leaves being applied to a fill |
+| Extract the sign half of a declaration rule as a pure function rather than folding the range to get it | A classifier emitting diagnostics and changing the program |
+| Follow the lowering's whole decision procedure, including pre-steps such as inline substitution; no fixed name-resolution order is a rule | Two orders each holding the other's counter-example |
+| Put a wrapper-piercing predicate inside the recursion | A wrapper below an operator being invisible |
+| Keep the original verdict statement verbatim in the body when adding a pre-filter, so a wrong filter falls back safely and instrumentation can show it never fires | The pre-filter becoming a second spelling of the rule |
+| Answer in code who establishes the property a new predicate asserts; when the answer is nobody, either establish it or narrow the predicate to a context where it holds | A predicate asserting a representation property being handed a value that lacks it |
+| Fix the contract of a shared kernel when an operand does not fit it, rather than rewriting the operand into an equivalent pair | A trick that is perfect on the value axis breaking a width cap into a silent unknown |
+| Separate the questions a single boolean was answering — how each operand is read, and what the result's sign is | Special-casing at the operand leaking cost into width, lanes and performance |
+| Count the early returns of the function that produces a width before basing a byte-identity argument on a width comparison | A short circuit on a special type running the operation at the wrong width |
+| Ask two questions of a cap you intend to delete — whether the constant is the boundary of representable values or of supported syntax, and what type consumes a value past it — and reject on fitness, not on width | Relaxing a domain guard as if it were a capability limit and leaking an out-of-domain value |
+| Read two spellings of one hazard diverging — direct refused, indirect accepted — as proof that the walker cannot see one layer down | A partial guard being accepted as complete |
+| Treat a parser-side fold as scope-free: widening the set of names it claims means probing every binder and tying the stand-down to that syntactic scope | A parser fold answering for a name a later declaration shadows |
+| Fix an ordering defect by moving a binder before its first consumer — a span comparison, or a split pass — never by moving it earlier | Moving a binder ahead of everything re-ordering every other consumer |
+| Treat an earlier failed attempt recorded in a comment as evidence about that attempt, not about the question, and name the term it was missing | A recorded failure being read as proof of impossibility |
+| Read every property a gate decides from the same environment it seeded | Two resolvers for one name being a divergence waiting for a scope |
+| State a widening's property — adding a rule can only add candidates — and enforce it, rather than patching the shapes in front of you | Each fix being written for one shape and the property breaking again through another door |
+| Make the baseline of a widening the whole rule set, not one privileged rule | A flag meaning "not the original rule" protecting only the original rule |
+
+### 5.4 Arms, early returns and escapes
+
+| Rule | Prevents |
+|---|---|
+| Ask what a gate actually prevents, not what its comment says it prevents | A refusal that fires for a different reason than the hazard leaving the hazard open |
+| State which properties of the declaration every arm must preserve, and check the siblings, when adding an arm to a selection chain | One declaration getting two answers in one design |
+| Treat a partial accept set as a decision about siblings: enumerate what the excluded cases share with the included ones | Excluding a sub-case to dodge a split reproducing the split inside the tool |
+| Read a guard's justification as a precondition on another component and check that component's current behaviour before removing the guard | Deleting the guard alone turning loud cells into silent-wrong |
+| Scope a surviving call site of a multi-site guard explicitly rather than letting an earlier arm shadow it, and record when a site is right only by accident | A guard with several call sites being retired wholesale while one site was doing a different, live job |
+| Fence the operand a clamp will act on, not the destination; the admission predicate must ask about every node the clamp can reach | A wide leaf under a narrow target passing the gate and losing a sign bit |
+| Check the arms of the child walk you recurse through: a guard must descend where an answer need not | Wrapping the hazard walking past the guard |
+| Treat the positional binding as the hazard when a desugar's parameter count becomes variable: make the count uniform per construct and measure a following value parameter | A following parameter silently eating a carrier slot |
+| Re-stamp a copy alias's sign at the one interpreter read and make the compiled paths decline on a mismatch | An alias that substitutes the source handing the source's declared sign to every consumer |
+| Fold a package function's body in the package's scope, and refuse the module-scope fallback for a bare name inside it | A same-named module constant answering for a different object than the text says |
+| Count which code paths do not run today because a conservative predicate answers false, before replacing it with the canonical rule | Cells that were accidentally right through the old path going correct-to-wrong |
+| Make a precondition predicate ask about the argument the caller actually passes, not the declared one | The predicate answering "safe" and the executor failing, blaming the check |
+| Do not split the context one consumer reads; "it is a cold field" is not a justification | Values coming from a new store while time and randomness come from the old one |
+| Give each kind of unreachable case its own assertion and name the layer that refuses; the filter, the gate and the assertion must ask the same question | One refusal claiming a gate row that does not exist, and the misunderstanding leaking into a test's admission filter |
+| Check the early returns of a value-conversion primitive: "already the right width" is not "nothing to do", and a difference between exit paths must be written down as intentional | One path keeping a flag the others clear, so every same-width assignment is silently wrong |
+| Keep a compensating clear in one place and let consumers rely on it | Two spellings in consumers hiding each other, so neither dies under mutation |
+| Audit an existing helper for latent defects when a new path starts calling it: unchecked arithmetic, shift masks at the width boundary, copied functions inheriting the original's defect | The new traffic inheriting an old defect |
+| Judge name resolution and classification from an AST-gathered pure-function set rather than from mutable elaboration state | A diagnostic that exists only in one phase silently deleting a whole body at a success exit |
+| Put a stand-down in the arm whose hazard it answers, keyed on the statement; a gate that can answer without looking at the statement cannot be used for a statement-level decision | A module-global early return turning off unrelated arms of the same match |
+| Prove a value dead with "definitely written on every path", not "not read before the first write", and read the exact meaning of the reused predicate's success case | A conditional write satisfying the wrong contract and copy-out returning a stale value |
+| Do not unwrap a block to iterate its statements; that drops its declarations. Write the same meaning as a declaration initializer to check both spellings, and ask about redeclaration in a subroutine body | The declaration-initializer spelling passing while the statement spelling is refused |
+| Write an evaluator in the target domain rather than restricting inputs to tame someone else's fold; bounding the leaves does not bound the result | Permitted leaves building a result outside the domain, so spellings go loud-to-silent |
+| Positively identify a subject rather than trusting a name whitelist | A method-name whitelist admitting user class methods, child instance functions and module functions with the same names |
+| Transfer-audit every arm of the old predicate when replacing one: the replacement must prove it covers all of the old obligations, not that it is more accurate | One dropped arm being a regression and another a silent-wrong |
+| Restore a dropped arm by axis, not verbatim | A verbatim restore reinstating a pre-existing silent-wrong |
+| Check a constant fold used to predict runtime behaviour on three axes — domain, resolver and scope — and prefer an identifier-free allow-list where order independence is required | Any one axis differing diverging silently from the engine |
+| Prove trip count and syntactic escape separately before admitting a loop body's writes, and handle every loop form at once | An escape being erased by the walk's join, and elaboration depending on which loop form the user wrote |
+| Expand the condition of a branch you want to delete into a truth table and answer each row separately | Answering only the axis the branch is named after and leaving half the rows unexamined |
+| Separate decision from execution in a fast path — decide everything, then execute — so that "a decline has no side effects" becomes a property of the code | A partially executed fast path emitting a diagnostic and then declining |
+| Collect a run observation before its consumer exists, not at the end of the run from a structure whose fields may have been moved out | A move being silent where a partial move would be a compile error, and a grep audit missing it |
+| Obtain a classifier's observation export by restructuring the classifier itself to collect reasons, never by writing a new predicate | A second predicate drifting from the classifier |
+| Confirm every offset and stride is handled when going from one dimension to several, and keep direction in one place | A double flip of direction |
+| Decide a deferred mirror's offset and direction-dependent kind at resolution time | Baking it at lowering time making the opposite case silent |
+| Mirror the read's flatten prefix for a nested or packed select write, failing closed on the shapes it cannot express | The write landing on a different bit |
+| Defer what is unknown at defer time, pre-resolve caller-scope dependencies into the sidecar, and lower each argument into every representation resolution may need | Information unavailable at one phase being guessed |
+| Treat a gap between a predicate and its own comment as the defect, and re-read every guarantee near a guard you change | A kind-only predicate swallowing a shape its comment excludes |
+| Mark items added to a classification set so they neither gain candidacy nor remove anyone else's | Merely gathering a span under a new rule making a name look shadowed |
+| Pass three questions before moving an evaluation — how many times, when, and what it reads — and use an inertness predicate for everything the move passes over | "It is pure, so moving it is free" answering only purity |
+| Write the necessary condition when a constraint's stated justification is only sufficient | A whole idiom staying closed behind a sufficient condition |
+| Define a shadow set as what a scope actually declared, not as what appears under its key | A flattened block-local, whose key merely looks inner, being picked up by every other reader of that scope |
+| Verify that a derived decision is actually consumed; when a comment says one key wins and the code does not, a fall-through is usually re-running its own walk | The innermost key being derived and then thrown away |
+| Replace an assumption with a lookup: a constraint that looks like missing machinery is usually a caller assuming a special case the general path already normalises. Keep the special case an identity so the IR stays byte-identical | New machinery duplicating an existing normalisation |
+| Use capture, mutate, install where the source can alias the destination, and document both the aliased and the non-aliased case | In-place ordering silently losing a value in recursion or copy-out |
+| Fresh-probe the simplest form before rewriting on the strength of "the executor cannot do this": check storage interior mutability and the classification that routed it there | Building infrastructure for a feature that mostly works already |
+| Build a guard on the value, not on syntax | A literal-shape guard being pierced by the first change that reaches the same value another way |
+| Prefer a value-based judgement, over the lowered IR and over every sub-expression, to a shape-based one | A walker missing new shapes, where a value cannot hide |
+| Decide whether a cap you are deleting is a capability limit or a domain guard, and measure one cell on each side of the boundary | Relaxing a domain guard leaking an out-of-domain value at a success exit |
+| Ask about sign at the self-determined width | A width-unlimited fold being unable to separate signed from unsigned with the same bit pattern, and false-rejecting correct designs |
+| Define opt-in as "where the paired record is actually reached", not "where it can be enabled", and count the early returns in between | The flag turning on the width while the record never runs |
+| Do not fold an overflow modulo without a context width | The fold answering at a width the language does not use |
+| Check that a static claim is true of the value when you begin consuming it, and find the place where it was cancelling out | Fixing one side breaking the cancellation |
+| List what the sibling arms do besides the arithmetic before trusting an early return on a no-op arm | A no-op for one rule skipping every rule |
+| Fix a self-firing guard by changing the route, not the guard | Relaxing the guard re-opening the case the suite pins |
+| Ask what the consumer channel can carry after widening what a producer may carry, and enforce the difference where the two meet | The new spelling's door being closed while the open door declares the wrong width |
+| Say in the comment which of the two "no value" answers a region or enable test reads when a fold feeds both a value and a test, and prove the arm cannot turn one into the other | The enable test reading the wrong one |
+| Ask whether the lie a guard's comment names is the type's fault, and check what the consumers already do | A decline that was right for a clamp being kept for a truthful record and blocking correct cells |
+| Decide at the producer whether a recorded string is relative or absolute, spell absoluteness in the string itself, make every renderer honour the marker, and census the renderers | A value recorded relative to a runtime prefix encoding the caller and being unrepairable downstream |
+| Record a producer's keys at the one site that mints them and key on membership; never strip by "everything that is not this" | A complement silently including every shape you did not enumerate |
+| Bind a declaration's shape sets once the whole declarator is parsed, at every binder, and census the index kinds | A shape being bound at the type token, before the dimensions after the name are parsed |
+| Write a width rule as two functions — a shape pass and an evaluation pass — and let the second take the width the first computed | A bottom-up fold computing each node at its own width and looking right on every leaf whose operands already share the final width |
+| Gate a named source replacing a literal on constness at the consumer that has the names, not on resolvability | "Does it resolve now" being a property of pass order, so refusing turns correct designs loud and accepting a variable reads before initialisation |
+| Write the pairing predicate of a twin without an AST field so a user-written collision cannot satisfy it, and measure the collision on PRE | A user redeclaration satisfying the twin predicate |
+| Run the target evaluator on the degenerate inputs your rewrite can produce before choosing the target shape, and pick the one whose failure is loud | A rewrite routing a new shape into an old evaluator inheriting that evaluator's leniencies |
+| Cap arithmetic that builds a range from a width at the width the value can actually occupy | A shift by a user-parameterised width wrapping in release and failing in debug |
+| Cap a recorded quantity at the source | An amplifying path being unreachable only because a different component happens to refuse first |
+| Check the direction of the risk: release correct with debug or CI failing is the worst split to debug, and the fix belongs at the producer | A consumer-side absorption hiding a producer defect |
+| Do not let an invariant rest on a side condition, and fix an unreachable arm that leans on one in the same round | The side condition changing and the invariant becoming false |
+| Let the standard, not the code, decide which positions are self-determined | A context rule being applied where the standard declares self-determination |
+| Grep a value's consumers before writing "this only decides one thing", and split the variable in two when a sentinel cannot be tolerated everywhere | A sentinel doubling as a sizing context |
+| Make a tail that asserts an invariant unconditional | A conditional stamp meaning the property is absent exactly when the condition is false |
+| Treat a memo without invalidation as a claim that the value cannot change: grep every write site, and narrow the cache to a prefix where invalidation is impossible | In-place patching changing a cached answer, so unrelated later lines change an earlier result |
+
+### 5.5 Scope, ownership and order
+
+| Rule | Prevents |
+|---|---|
+| Keep "which scope" and "whose it is" as separate answers, and change every reader when you introduce ownership | Scopes without a minted prefix sharing a key, so a flush claims someone else's item |
+| Give ownership order and initialisation order separate data structures | One axis being unable to satisfy both |
+| Make an ordering requirement data — a rank path — when it cannot be expressed as pass order | No rearrangement of passes being able to satisfy it |
+| Separate "runs first" from "creates no event"; when measurement says the order is right and the behaviour is still wrong, you need a phase | An initialisation write handing an edge-sensitive process an edge |
+| Disqualify only the offending element, never the whole name; things that cannot exist simultaneously have no standing to disqualify each other | A dead branch of a conditional generate breaking a live pair elsewhere |
+| Split a value that answers three questions into its components | One key breaking in several places at once |
+| Record which role an added behaviour belongs to when a function serves two, and split by parameter | A syntactic region behaving like a real scope |
+| Collect in one pass what must interleave in declaration order | Two loops producing two orders that never interleave |
+| Choose an ownership discriminator expressive enough to separate the two nearest candidates, and check that they give different answers | A boolean being unable to separate two nested scopes |
+| Read the qualifiers in a refusal comment and count the cases where the condition is false | A true sentence being silent about a third case, which is harder to see than one that has expired |
+| Answer "what catches this if it is wrong?" before adding an approximation; when the answer is nobody, it is a judgement and must ask the real question | A misrouted expression reaching no evaluator at all |
+| Count side-effect sites, not operations, when designing a re-run fallback, and put the bail before the effect | The canonical path emitting a diagnostic twice |
+| Count the values whose only consumer was the branch you are deleting | A verdict with no consumer being dead, and dead verdicts being silent |
+| Recognise that a call path's head may be the function name or the receiver, and that the segment count decides which | An argument-only walker missing every method call on a variable |
+| Apply a monotone invariant at every recursion point, not only at the top level | A construct working outside a loop and not inside one |
+| Do not treat a statement as unknown because it carries a timing prefix; a timing prefix only adds expressions | One prefixed statement ending the whole walk |
+| Make a reader total before opening a row, and keep it total with a structural pin | A trait's default implementation being a silent capability opt-out that returns plausible values |
+| Check the shape of each routing bitmap: a handle's slot can be half-dead, so the question is membership and a present word | A bare handle read being routed to an empty heap |
+| Attach a precondition to the executor, not the feature | The delegated path's precondition applied to the driven path refusing every target design |
+| Check whether an existing correction already covers a legitimate difference in two computations' input sizes before adding a conservative signal | Treating a missing entry as a signal and making the two sets diverge |
+| Check what a desugar merged before adding a rule that judges after it, and restore the flag when the merged forms have different oracle answers | A shorthand being silently accepted under a rule written for a different form |
+| Make an implicit declaration a phase, not a use-site action, and keep exactly one collector | One design giving two verdicts depending on pass order |
+| Make a regex argument about the maximum range the match can consume | "This pattern cannot match that" being true only when the counter-example is isolated |
+| Let the lexer look at the previous significant token when one spelling has two meanings in the grammar | Different spacings of one construct being treated differently |
+| Ask whether a guard is needed in the opposite direction after building it in one | The closing side still consuming the terminator |
+| Read the engine code when a gate's premise is "the engine cannot do this", and make the discriminator use the same set as the storage it drives | The fallback path already handling the shape while the gate under-approximates |
+| Make a gate that asks whether an executor can run a statement look at the whole statement; the effect can be in the right-hand side | An assignment being classified by its destination and silently doing nothing |
+| Use different predicates for "is this an effect" and "can this executor never do it" | Re-using one set for both re-routing a whole family and turning working designs loud |
+| Let the code that reads a set decide where it is populated, and compare fill time against read time exhaustively | The set being filled after the call sites that read it are lowered |
+| Measure a third time instead of guessing a third time when a comment says the real condition is not yet named, and gate on the destination rather than the whole body | Reverts that lose measured-correct shapes |
+| Place a new arm that lowers an lvalue below every check documented as detected first | A string element write becoming a silent packed bit write |
+| Make the scope of a hazard analysis equal to the scope of the transformation, and analyse the expressions a statement evaluates as one sequence | Cross-boundary ordering hazards being invisible and an existing guard being disabled |
+| Put repairable and unrepairable hazards on different channels | Unrepairable reads being quietly believed fixed |
+| Merge two similar gates rather than leaving both | Two similar gates both being unaudited |
+| Judge aliasing by target, not by spelling | An unrelated child scope disqualifying its parent |
+| Ask a two-discriminator state with one dedicated predicate | Checking one flag leaving the other half ungated, which fails in debug and writes to the wrong destination in release |
+| Do not describe where a write happens as a statement shape; a call that returns a value can appear anywhere an expression can | Most reported items in a family being that one defect |
+| Make the set of admitted nodes equal to the set where the lowering can emit copy-out: wider than the lowering is loud, narrower is a false-loud | Working designs being refused |
+| Use the branch's knowledge of the condition's value, and measure those premises with an oracle rather than asserting them | Collapsing a condition to one bit making a standard idiom loud |
+| Add a third lattice value for "read-safe, no write promised" | A conditional write falling into "references, therefore reads" |
+| Compare the binding rather than forbidding a name; when two scopes resolve to the same thing, the two lowerings are the same lowering | Ordinary cross-scope references being killed |
+| Open the time gate in the same slice as the reference gate | A callee proven inert for a name still yielding the scheduler |
+| Justify an early return on "already safe" only where the invariant is monotone | Ownership changing exactly at the point the early return skips |
+| Move a symmetric decision into a pure pre-computation | An order-dependent gate never checking the first declaration |
+| Use the desugar's own representation to state the rule where it is simpler and more general | A member-based rule being unable to express hand-written part-selects |
+| Remember that structure fan-out renames a variable but not the call argument | A walk that tracks member names seeing the argument as touching nothing |
+| Re-check any rule written as "direct child" the moment nesting becomes possible | Deeper keys being claimed by nobody |
+| Raise a primitive's guards to the top of the function when you add a stage outside the primitive | The new stage not inheriting the primitive's guards |
+| Nest a dependent field inside the variant whose validity it depends on | An invalid combination having somewhere to be written, so a grade's message becomes dead code |
+| Ask about sign on a self-determined walk with the same admission as the bound walk | A width-unlimited fold being unable to tell two spellings apart that differ only in width and sign |
+| Read a value from both representations when one alone leaks half a family, and make both width- and sign-correct | A saturating fold turning a negative into a count and reporting a false message |
+| Write an opt-in predicate as reachability to the recording site, not as the condition for enabling | Early exits between the enable and the record |
+| Do not use an enumeration's catch-all arm as a gate predicate; a name such as "implicit" usually means classified and not recorded | The parser knowing something the AST throws away, so distinct declarations are indistinguishable downstream |
+| Put a recovered parser fact in as the last fallback so an explicit declaration still wins | An explicit range being overridden by the recovered default |
+| Ask a guard in the domain of the question it answers: whether a declaration is of a type is a declaration question, whether an expression folds to one is a value question | Widening the resolver refusing a legal override, and reverting letting the folded default swallow it |
+| Separate "the width can be computed" from "the width's provenance can be vouched for"; to claim the second, every leaf on the path must vouch for it | Provenance being laundered through a map that also records inferred widths |
+| Enumerate the observers of every effect you move, asking whether a name reads that resource, not whether it uses its argument | An overlap gate keyed on root names being empty, and its emptiness becoming the reason to pass |
+| Fix a stale proxy by retyping it — take the set it was always about — not by extending the predicate | Each new domain needing another alternation term |
+| Check what the other paths into a guard build | A predicate with no arm for a generated shape falling into its catch-all and measuring as a no-op |
+| Record a syntactic fact at the site that knows it when a predicate needs a fact the data structure does not carry, and test the degenerate count | A degenerate case leaving the same key as the general one |
+| Ask whether a funnel is reached before the name is resolvable | "Every write position calls it" not being "every write position is checked" |
+| Use a three-valued provenance record for scope resolution: set-or-clear cannot distinguish "this scope bound the name and it is not declared" from "this scope never bound it" | The walk sailing outward and vouching for an ancestor |
+| Name a stored key's lifetime: a layout that names another type by its bare key dies at the end of the unit that declared it | Cells outside the one spelling that was tested failing |
+| Apply each import before the first thing it must be visible to, in two passes around the binder, not "earlier" | A body import reaching the header |
+| Key a new path positively on the names it is for, never on "did not fold": that predicate is two populations | Deliberate declines being admitted to the new path |
+| Read what the runtime reads for the same decision when a new analysis follows an IR field for control flow; a field only ever patched after the fact is a snapshot, not a fact | A walk missing every target whose placeholder is still in place |
+| Record a stand-down after the enclosing construct's scope snapshot so the restore drops it, and pin both halves | The fix trading one silent width for a permanently loud site |
+
+### 5.6 Domain reference
+
+Two reference rows carry the width and name axes that recur across gates. Each item is a measured
+source of silent-wrongs; keep them in agreement when touching either axis.
+
+| Axis | Rules that hold together |
+|---|---|
+| **Width and type** | Keep the self-width table and evaluation in agreement; route a width branch on the storage-kind discriminator before width, because handle kinds have width zero; keep string routing single-sourced; use the context-or-plain lowering for a target-width fill; read four-state raw as value masked by known; extend a resize by the right-hand sign and stamp the target sign; guard real-to-integer strictly; apply two-state unknown-to-zero per write path and per storage; carry string and handle formals in a sidecar mask; keep type signedness symmetric across every declaration; make comparison and case collective per the standard; give an untyped parameter its type from the value, failing open; const-fold only a single constant as provably safe |
+| **Name and scope** | Thread sticky attributes across a comma list; pair a flat map with nested scopes by lazy snapshot and restore covering both type and variable over the whole declaration region; keep alias and copy side maps name-keyed with set-or-clear; treat a flat registry plus scoped resolution as unmodelled scope precedence and file it as infrastructure; mirror a new variable binding on the declaration binding with enclosing snapshot and restore isolation; track consumption in collect-then-apply and make leftovers loud; funnel symbol aliases through the one resolver; normalise a sub-select offset by subtracting the declaration base and make a clamp loud rather than silent |
+
+## 6. Measurement
+
+Measurement beats argument. A claim about behaviour is not settled until a probe, a sweep or a
+census has produced it, and the probe itself is a claim to check.
+
+### 6.1 What counts as evidence
+
+| Rule | Prevents |
+|---|---|
+| Write why a counter-example is structurally impossible when it cannot be built | A failed reproduction attempt being recorded as "it does not happen" |
+| Treat a line that differs from the oracle inside an anchor as a finding: measure it, record it, assign an owner | A divergence being filed as anchor noise |
+| Confirm whether a diagnostic's severity decides the exit class before writing that only the error stream differs | An item being graded a grade too low and deferred |
+| Confirm which stream a diagnostic goes to before writing "unobservable"; counting streams and checking streams are different jobs | A same-stream case being recorded as needing merged descriptors |
+| Distinguish a projection from a measurement in writing, and re-measure when a batch closes | A projected number being cited as a measured one while new rows drift the accumulation |
+| Settle a claim about attribution with a corpus sweep | Two lenses reporting opposite things about the same shape |
+| Ask which instrument would have made an outside diagnosis right when it is wrong | The missing instrument being the more valuable item and going unbuilt |
+| Re-measure the re-measurement: a refutation is a claim too | A narrow census refuting a correct report because it read one output column |
+| Re-measure a revert's stated reason before ranking or building on it | A revert propagating its reason faster than a feature propagates its behaviour, so several documents citing each other are one measurement |
+| Delete the competitor and ask again when a tool's answer matches what a competing write would leave | Ordering and a dropped write looking identical |
+| Measure a candidate discriminator against the design that matters | A map's docstring describing its intent while only a run describes its contents |
+| Build the design that tests any bound you write beside a known imprecision | A bound asserted in the same breath as the imprecision going unmeasured |
+| Count the input distribution before arguing that a control-flow difference shows up in other bits | An untested assumption standing in for a measurement |
+| Name the axis of a byte-identity argument and enumerate the observation channels — value, diagnostic, exit class, order, time — and check which channel someone else's comment was about | "The values are the same" being read as "the output is the same" |
+
+### 6.2 Probes
+
+| Rule | Prevents |
+|---|---|
+| Re-derive a stated oracle rule from a probe finer than the effect | The probe's own rounding being read as the oracle's answer |
+| Pick a probe from the smallest quantity the rule can produce, not from the design's units | The probe being unable to resolve the effect |
+| Use the band's edges as the proof of the mechanism: the fix must move every cell inside the band and none outside it | A fix accepted without evidence that it is the right mechanism |
+| Build a twin that fixes the axis a report names and varies everything else | Designs differing in several places being unable to say which difference produced the result |
+| Overflow the destination in any probe that measures width or truncation, and make the grid finer than the delay being measured | A value that fits giving the same answer whether narrowing happens or not |
+| Compare byte output through `hexdump -C` | Control bytes disappearing in a terminal, so output reads as empty |
+| Suspect the harness first when a probe's conclusion disagrees with a constant read from the code, and observe through a width-preserving path with no convenience conversion | A convenience conversion truncating and coincidentally matching the oracle |
+| Use a width-preserving format in any probe that measures width | A convenience conversion erasing the discriminator |
+| Never truncate PRE output | A failure on the second line being missed and a pre-existing defect attributed to your change |
+| Re-measure attribution yourself even when two lenses converge, and read a debug-only assertion as a smell because debug fails where release is silently wrong | A pre-existing defect being filed as your regression |
+| Measure an ordering rule with an observable witness whose value differs per occurrence, and measure the whole rule before fixing one symptom | A report seeing one face of the rule and the patch breaking another relation |
+| Move a coverage instrument so it answers for every executor | An instrument present in one path making an experiment look dead |
+| Flip the default and run the whole suite as the cheapest coverage instrument; it is a measurement, not an implementation, so revert it afterwards | A corpus differential being far weaker and missing the alternative path entirely |
+| Instrument all layers independently even where production short-circuits | The layers behind the first refusal never being measured |
+| Say so when the attribution unit is contaminated, and check that the weight is not one design repeated | A count of tests being meaningless because most of them are one path |
+| Read the run manifest's backend and refusal fields before claiming two backends agree | A comparison that did not check which backend ran not being a comparison |
+
+### 6.3 PRE, POST and sweeps
+
+| Rule | Prevents |
+|---|---|
+| Extract PRE with `git archive main` into a scratch directory (`tar -x -C <scratch>/presrc`) and build it separately, not as a worktree; a change to existing binding or classification requires it | An oracle-only differential being unable to distinguish a correct-turned-loud cell from a pre-existing gap |
+| Score a PRE-and-POST sweep in three classes: loud-to-correct, silent-to-loud, wording-only | A two-class sweep hiding the class that is a regression |
+| Ask of every queue mechanism both which cells become correct and which cells are correct today | The change fixing the reported cell and breaking a neighbouring correct one |
+| Re-measure a queue row's mechanism as carefully as its symptom | Fixing the recorded site breaking a cell that is correct today |
+| Run the shapes your new lane handles through the existing lane and record what it returns before placing yours later; a wrong number forbids the safe placement | "It can only add answers where the old one had none" preserving both silent-wrongs |
+| Diff the per-file distribution and the first line of each file's page after a ladder rung, never the total | A diagnostic cap hiding the pages behind it, so clearing some leaves the count unchanged |
+| Measure what the baseline did for the shapes a stricter invariant would newly refuse; a restriction is only safe where the baseline was already refusing | A simpler, stricter rule regressing in bulk |
+| Read a differential sweep as certifying only the fields it varies | The only axis that mattered never being varied |
+| Measure narrowing, equal and widening separately when changing a site that passes a context width down | The same code being right for widening and a different computation for narrowing |
+| Write down which axes a sweep multiplies before counting cells, and do not claim zero regressions from your own sweep | A large sweep of one shape saying zero while a sweep of another shape says otherwise |
+| Count fixed and regressed separately | A total hiding two directions that nearly cancel |
+| Write the axis list before building a sweep and hand it to the reviewer with a demand for the missing axis | A missing axis not announcing itself, and adding cells not being a defence |
+| Measure the fallback plan too | "The intersection that never regressed" being a hypothesis |
+
+### 6.4 Oracle censuses and their budget
+
+| Rule | Prevents |
+|---|---|
+| Do not count diagnostics with the `VITA_SCW_CHECK` self-check enabled | The check's own diagnostics inflating the count |
+| Budget a hand-run oracle census at the rate it actually sustains — a `verilator` census runs about 1500 cells per 30 minutes: run it over a width subset, keep one `--prefix` per executable, and hand-IEEE the cells whose oracle is untrusted, saying so in the briefing | The census not finishing, or an untrusted oracle cell being recorded as measured |
+| Treat a width and its value as one answer: truncation commutes with some operators and not with division, remainder or right shift, so always pin a cell from the non-commuting family | A census built from the commuting family certifying a value that was already truncated |
+| Ladder the axis you changed across the width boundaries: 8, 16, 32, 33, 64 | "Fixed" being indistinguishable from "fixed below the old default's width" |
+| Treat a value-preserving wrapper as a width claim: name the width each side computes at and check the identity holds at both | The stated invariant not being true at the width the expression uses |
+| Treat the order of two queue rows that share a root as a measurement: run the cells that separate the two orders, not the cells the rows quote | Cells that both candidate orders answer the same way being cited as evidence |
+| Find the cell where two candidate rules differ before adopting one, and check it is the cell you measured; where each rule owns a disjoint set of leaves, ship both and say what separates them | A cell both rules answer the same way being recorded as a measurement, making the choice a coin flip |
+| Measure a warning that a change has a wider blast radius; the decisive probe is the size at which the wrong reading stops being out of range | A slice being priced for a sweep it does not need |
+
+## 7. Testing
+
+The full local gate is `cargo nextest run --workspace --locked`: 7352 tests, 15 skipped. Named gates
+that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
+frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
+diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,
+backend equivalence, and the vendored-libm determinism pins.
+
+A test has teeth when a wrong implementation fails it. Coverage, a green suite and byte-identity are
+not teeth on their own; the standard of proof is a mutation that must die, a control the fix must
+move, or an anchor no shared code can shift.
+
+### 7.1 What gives a test teeth
+
+| Rule | Prevents |
+|---|---|
+| Run a new guard's test against the reverted binary: green is coverage, a red revert is evidence of teeth | A test passing because the design never burns the code path |
+| Measure entry to a zero-coverage surface with mutation | An honest body plus a green suite plus code in the file reading exactly like coverage |
+| Know the axes mutation cannot see — fields nothing compares, summed floors, aggregate assertions satisfied by one stub, and catch-alls accepting any failure — and pin counts exactly, one property per assertion | A battery reporting full coverage over an unprotected field |
+| Count what a gate executes by statement and effect kind, and map each kind to the observer that can see it: store, queue, diagnostic, exit code, arm state | Half the executed statements having their whole effect in a queue, so dropping them keeps the suite green |
+| Build the design where the two inputs diverge | A parameter's existence being unverified while every caller passes the same value |
+| Observe both sides separately when verifying an asymmetric rule | A one-sided observer certifying both sides |
+| Keep one condition per question, and re-run the whole mutation set after a fix, looking at what came back to life as well as what newly dies | Overlapping guards deepening defence and destroying observability, so a fix silently kills another test's teeth |
+| Assert that a probe entered the branch it was written for, with a counter or an ordering assertion | Mutations passing vacuously because the branch was never entered, the smallest value often being a different branch |
+| Mutate each operand of a sum, product or shift separately, and check the harness default is not that operation's identity | An operand being indistinguishable from the whole expression because the other one is always the identity |
+| Test provenance by deliberately desynchronising two sources and asserting that a call given one answers with that one's value | A gate asserting the two results are equal passing an implementation that ignores its argument |
+| Do not add a parameter no mutation can kill | A dead parameter being indistinguishable from a real gap |
+| Include the operations where two paths diverge — comparison of unequal lengths, concatenation, replication — not only the ones where they coincide | A whole operator family staying hidden behind equality and length |
+| Put a detector for "no output and a success exit" in every sweep, and grep the corpus for the combination when a sweep is silent | A regression that deletes the result entirely scanning as clean |
+| Prove a differential gate has teeth by reverting each of its behaviours one at a time and requiring every revert to fail, drawing the behaviour list from the call sites | Vacuous behaviours and store sites that are never entered |
+| Treat observation granularity as an axis and sweep both: per-event observation erases batch effects, batch observation buries per-event effects | Half the matrix never being swept because two axes share a predicate |
+| Verify a gate's teeth on new code with a deliberate failure, and read a coverage number that does not move as the signal that the path is not entered | A narrowed refusal leaving the admitted count unchanged and the work looking finished |
+| Re-read what a failing test models before calling it a regression; a gate can harden against the fix | A correct fix being reverted because its paired initial state was not updated |
+| Test a cache by keeping the owner alive and changing the input state; when ownership makes that hard, build a seam that hands over state without handing over the cache | A fresh owner per state making staleness structurally invisible |
+| Count a positive marker in any probe that asserts absence; zero means suspect the harness first | "The diagnostic disappeared" being a harness failure that reads as a finding |
+| Read the assertions before calling a test a pin or a measurement, and verify the premise of any skip or early return on the spot | A census test asserting only that something is non-zero and printing its numbers to a captured stream |
+| Compare diagnostic counters as well as values in an equivalence gate, and count whether the corpus contains an admitted shape that moves the counter | A duplicate diagnostic eating the per-run cap, and a comparison of zero against zero certifying nothing |
+| Confirm that a battery, sweep or fuzz you cite actually passes through the branch in question before writing that it was measured exhaustively | Every case in the battery sitting on one side of the branch |
+| Do not leave a gate suite red: flip the behaviour's assertion in the same edit that changes the behaviour, and re-measure after removing a refusal row | A red test masking its own area's mutations |
+| Give a dedicated observation channel to each axis where the value does not move: operand order needs a side-effecting evaluation, stage placement needs a boundary sweep | A value-only gate passing every reordering and every relocation |
+| Observe only what the mutation moves in an anchor | A broad observation dragging in a known divergence, so the anchor certifies wrong behaviour and later blocks its fix |
+| Name the anchor that protects shared code every time you widen sharing | Sharing removing drift and removing the differential's sensitivity with it |
+| Pair an artifact comparison with an assertion that the artifact exists | Two absent artifacts comparing equal and counting as a match |
+| Count every line that mentions a signal when moving it from one place to another: update the positive assertions and re-aim the negative ones | Negative assertions staying green in a file where the subject cannot appear at all |
+| Count the whole family of sidecar tables a feature needs, not one of them | A missing sidecar making a test vacuous rather than failing, so both backends do the same wrong thing |
+| Compare stdout, diagnostics and exit class in a backend or path differential | Omitting one channel letting a descent on that axis pass |
+| Verify a guard actually fires on its target subset, a direct per-item count being the robust form | A vacuous guard reading as protection |
+| Pin any "this wrapper covers every site" comment with a test | Most of the sites being covered and the rest running away |
+| Ask what the number would be if the feature did nothing; when that equals the expected answer, the cell is decoration | A probe whose answer equals its failure mode certifying itself |
+| Establish a pin's claimed property a second way | A property that holds only one way measuring a path, not a property |
+| Run the neighbours of the fixed cell, not the fixed cell | The fix being confirmed on the only cell that was ever checked |
+| Build a design with two same-time processes writing the same variable to test an ordering change | A green suite, a green corpus and byte-identical waveforms being no evidence at all about order |
+| Convert all deliberate-loud pins before re-running, because a test asserting many cells stops at the first | A fail-fast test hiding the pins behind it |
+| Test a twin renderer against the runtime spelling of the same construct in the same design, byte for byte, before consulting the oracle | The twin approximating, with the divergence found only by an oracle sweep |
+| Write the census first and copy the oracle's raw line into the test | Hand-computed expected values not being pins |
+| Make a loud pin name the gate it measures, and test it by changing the spelling the gate does not key on | The pin being loud because of a different gate than the one it claims |
+| Prove the rest untouched with the cheapest byte-identity oracles the repository has — the examples' waveforms, the corpus digests and the full suite — before any review round | An observationally unconfined change being reviewed instead of measured |
+
+### 7.2 Anchors, differentials and oracle-free areas
+
+| Rule | Prevents |
+|---|---|
+| In oracle-free areas the teeth are hand-IEEE pins plus an internal equivalence differential: a new spelling must be byte-identical to a verified existing one | An unverifiable area having no regression detection at all |
+| Ask what a simulator you are importing a rule from merges that vita keeps separate — storage, defaults, identity, event channels — and write the failing design for each merged field | The sentence the rule rests on being true of one object and false of the other |
+| Build the twin that differs only in the merged field | Both naive translations shipping and failing in opposite directions |
+| Pin the working form as well as the non-goal when pinning a non-goal | The loud widening later and swallowing the working form |
+| Choose a base case verified correct on every axis except the one under test | A broken base case being unable to separate two defects |
+| Verify a mutation actually changes meaning before reporting survival | An equivalent mutation's survival being filed as a coverage hole |
+| Test save and restore with nesting, never with siblings | A design that resets on entry making siblings structurally immune |
+| Put the discriminating operand somewhere other than the first argument slot | Two different implementations giving the same answer on the first slot |
+| Pin at least one cross product of a new axis with each existing axis | Two test files each having one axis and none having both, which is exactly where the regression lives |
+| Add a guard for an invisible failure even when its value is only recovered by the next slice | A value that silently disappears |
+| Confirm with mutation, in every change that moves code into sharing, that an absolute anchor protects the rule | Shared-function mutations passing the whole differential battery |
+| Treat a differential's teeth as decreasing as delegation grows: full coverage can mean no oracle teeth, so a delegation change owes an absolute anchor | Both backends printing the same wrong answer with the differential green |
+| Read the product build as having no oracle: the alternative executors are selectable only behind a default-on feature, and a build without it cannot choose them | "Byte-identical to the other backend" being cited in a build where the other backend cannot run |
+| Ask the flip run in the current default's direction so the oracle axis keeps being exercised | The suite quietly becoming single-backend and the whole rule going vacuous |
+| Pin an emptied gate table with an emptiness assertion and a note on why it is empty, rather than deleting it | The next row being added with no obligation to build a design or say why it cannot |
+| Invert a test whose subject has disappeared — keep the design, flip the expectation — and retire it only after moving the teeth somewhere else | The design that produced the last real case being deleted with the test |
+| Wire a losing experiment into the real executor and run the whole suite | Being behind a feature flag being treated as an exemption from verification |
+| Measure the safety of buffer reuse with a contamination probe: fill the borrowed buffer with garbage before every call and run the whole suite | "Nobody reads a slot this call did not write" staying an assertion |
+| Classify a surviving mutation three ways — equivalent, blind axis, or redundant — and delete a duplicate check the callee already performs | A redundant check making two twins disagree about where the question is answered |
+| Grep the name of any test a comment cites as a lock | The cited test never having existed, so the path was never locked |
+| Justify a guard whose property the return type cannot carry by the other half of the rule, not by a test | A comparison that is structurally blind to a type stamp |
+| Update a documentation pin by strengthening it | A pin that checks one word letting the same class of falsehood return |
+| Strengthen the pin that protects a user-visible sentence in the same change that alters it | The help surface being the least-tested and staying false longest |
+| Read a verdict path narrower than the failure modes as no information at all | Green meaning nothing |
+| Prove an equivalence without restating the rule: ask the same bits at two widths so the general path is the oracle | The test containing a copy of the rule |
+| Make a pin a derivation, not a record: write why the number is what it is | The next reader being unable to tell whether the number is right, and re-pinning a wrong one |
+| Run a property anchor against every backend, not only the one you changed | The sibling backend keeping the same defect |
+| Name the mutant that would survive without a proposed test row before adding it | A row that decides nothing being worse than none, because it reads as coverage |
+| Include rows on the reject arm | A battery made only of admitted rows being unable to test admission |
+| Read what a harness filters before reusing it | A filtered harness being structurally blind to the filtered axis |
+| Check that a test row leaves the defect's symptom somewhere it can be observed; position decides whether a row kills a mutant | A defect being structurally immune in the position the row happens to use |
+| Give a fast path placed inside the canonical implementation a test-only entry point with an explicit switch | Every existing test through the canonical path exercising only the fast path |
+| Compare every channel a new store point owns: value, dirty set, edge kind, last writer, waveform queue, deferred diagnostic queue | A value-only snapshot being blind to the other channels |
+| Review your own test design and assert that the code under test runs | A test design that never enters the paths it was written for |
+| Re-run a mutation that died by non-termination against your own tests only | A suite that stops being unable to say which row discriminated |
+| Ask where the discriminator would be before calling a surviving mutation equivalent, and write "equivalent" only after failing to find one | A vacuous row being built, or a real defect missed |
+| Write the equivalence test for a shape fast path against the function you are skipping, not against a table of expected answers | The fast path and the general path disagreeing about a shape the fast path did not compute |
+
+### 7.3 Oracles: choosing, disqualifying and recording
+
+| Rule | Prevents |
+|---|---|
+| Pin the fact a self-describing artifact asserts, never the phrasing | A test asserting the sentence and passing while the sentence is false |
+| Assert the value when a pin's subject is a value, and strip every other error source from the cell to confirm it still fails | A test asserting a non-zero exit being satisfied by an unrelated error in the same design |
+| Ask each tool the same question in two positions — a direct interrogator and an indirect one — before recording an axis as an oracle split; a tool that answers those differently is not an oracle there | An axis being parked as unarbitrable while a third, wrong answer is kept |
+| Prefer a suite run to an argument | A decision being defended in prose while a shipped test already refutes it |
+| Pair every relation pin with a test that pins the values against an oracle, and say so in both files | Both columns being uniformly wrong, the relation holding, and the suite staying green |
+| Put two spellings of the same access in one design with the same bits; when an oracle answers them differently it is not the oracle for that cell | Two designs making one contradiction read as two independent results |
+| Write "unmeasured", not "equivalent", when you could not construct a reaching design | A gap being closed on paper and refuted by a small design later |
+| Write linear tests knowing they cannot see exponential cost | A depth test proving nothing about the limit it was written for |
+| Bring a second oracle before declaring vita ahead, count how many places the claim is encoded, and leave the list of things to flip with it | A single-oracle conclusion being pinned in several places and then refuted |
+| Let the ladder decide when two oracles split, not a majority, and measure a new oracle's scope of applicability before using it | A masking oracle producing plausible garbage that is adopted as an answer |
+| Give a memo its own test | The cache being unprotected and indistinguishable from dead code |
+| Confirm the harness installs a feature's sidecar before testing that feature | A missing sidecar making the path nonexistent rather than failing |
+| Build the oracle for a string-returning method as a synthetic function and check exact length | An oracle silently padding its own answer |
+| Remove a test temporary directory before creating it; process identifiers are reused and each test is its own process | A test asserting absence being red only in the full suite, which reads as a product defect |
+| Build the strongest regression test as an internal equivalence differential: a new spelling produces byte-identical output to an equivalent existing spelling, and unsupported cases are identically loud on both | A new spelling drifting from the verified one |
+| Fix prose in place and leave correct assertions alone when a reading was wrong; then add the fine-grained twin so the rule is pinned once | Correct measurements being deleted along with the wrong explanation |
+| Check that the cell a row's property rests on compiles on both oracles before shaping a fix around that property | A rejected cell being recorded as an oracle split |
+| Run the control spelling on every oracle before writing an oracle count, and re-run it when the row is picked up again | A row underselling its strongest cell, or overselling a one-oracle cell as two-oracle |
+| Record the crash text and mark the cell one-oracle when a tool crashes | Silence being read as agreement |
+| Keep vita's own explicit spelling as the regression oracle where both external oracles refuse | An oracle-free cell having no regression detection |
+| Treat a failing deliberate-loud pin as a claim to re-measure against the oracle, never a regression on sight, and move the file's prose reason with it | A loud-to-correct conversion being reverted as a regression |
+| Ask the oracle whether a sibling path should follow, never a consistency argument | Extending by consistency alone voluntarily enlarging the unverifiable area |
+| Measure first the axes where a two-state tool is not an oracle: unknown values, out-of-range indices and event or delta order. Its scope is two-state arithmetic, width and sign | Plausible garbage being adopted as an oracle answer |
+| Read zero suite coverage of an arm as unverified, not as true | A claim being true everywhere the suite reaches and false outside it |
+| Record an oracle's own defects with the width or range condition attached | The next sweep reading the oracle's defect as a vita regression |
+| Let the specification decide, not a majority, when two oracles are each wrong on a different axis, and record the verdict with its condition | A self-contradicting oracle being followed |
+| Read a value differential as blind to a performance collapse; the gate is what catches it | Two lenses and a large sweep passing while a cost explodes |
+| Ask whether an oracle exists rather than assuming either way, and expect it to be half an oracle; pin the halves to different tests | A whole area being treated as oracle-free for many slices |
+| Pin the boundary of a new leniency with the oracle by running each position, rather than inferring it from a specification sentence | "It is standard, so be generous" becoming silent acceptance of typos |
+| Anchor a new benchmark against an external published reference value as well as against mutual agreement between tools | Several tools being wrong together |
+| Convert a test that pins a loud into a value pin when the loud becomes correct, and keep the narrative in the docstring | The reason it was loud being lost |
+| Contrast a suspicious construct with a different type in the same position when the parser may have silently demoted a lifetime | A qualifier being dropped in silence for one type only |
+| Measure an obvious fix and revert it when wrong | Reading a specification sentence without separating the two situations it covers |
+| Read a two-state oracle's zero as its two-state-ness, not as an oracle split; where one oracle rejects and the other accepts, it is a real split and off limits | A two-state artefact parking an axis as unarbitrable |
+| Record the second oracle's actual output text, not the conclusion drawn from it | The load-bearing half of "both oracles agree" being the one that was assumed |
+| Check a testbench for same-time-step blocking writes to a sampled input before reading a finish-time or cycle-count divergence as a defect; two oracles agreeing on a §4.7 ordering race is a coincidence of their schedulers, and the race-free (non-blocking) form is what settles it | A conformant process order being filed as a silent-wrong |
+| Ask whether another lane of the tool already answers the question before reaching for an external oracle; a self-contradiction proves a defect and needs no third party | A defect that one binary demonstrates against itself going unmeasured |
+| Name the missing capability in a loud pin's docstring, with the measured expected values from both oracles | A pin that says only "this is loud" telling a future reader nothing about whether loud is still right |
+| Open and read the cited text when a comment calls another implementation buggy | The standard and the other tool being on the same side, with vita the outlier |
+
+### 7.4 The mutation battery
+
+| Rule | Prevents |
+|---|---|
+| Default the battery scope to the whole workspace — `cargo nextest run --workspace --locked --no-fail-fast` — and never select packages and a test target together (`-p A -p B --test X`), because the target filter applies to every selected package | A narrow filter manufacturing false survivals |
+| Run a generous narrow set first and re-confirm only the survivors at full scope when a full pass is prohibitively slow; a narrow filter can produce a false survival but never a false kill | Either abandoning the battery as too slow or trading away its soundness |
+| Count non-termination, crash signals, leak failures and retried failures as kills, not only plain failures: scan the runner's output for `FAIL`, `TRY 1 FAIL`, `TIMEOUT`, `SIGSEGV`/`SIGABRT`/`ABORT` and `LEAK-FAIL` | A hang or crash being reported as survived, filing a real defect as covered |
+| Treat survival as unexplained: build a discriminator and measure it, write the equivalence argument into the code where it is equivalent, and prove unreachability with a deliberate failure | Survival being filed as equivalence and a real gap closed on paper |
+| Investigate a fake survival anyway; the question is why it did not die, not whether the mutation was applied | A false survival being discarded along with the real defect it points at |
+| Fill an expectation column before running: state the expected outcome of every mutant | A wrong expectation passing unnoticed as another death, so a misunderstanding ships |
+| Give every emitted table a gate that is an asymmetric upstream mutation: name the change its numbers must be invariant under and pin that pair | A determinism golden that runs the same input twice being unable to see a rail that reports the wrong number |
+| Treat a count protected only by tests that never exercise two producers together as untested | Coverage of each producer alone certifying a combination nobody ran |
+| Prove each shortcut mutation's equivalence individually and confirm reachability separately | Survival being indistinguishable from "no test exists" |
+| Ask the canonical implementation back with an equality assertion for any value a shortcut invents rather than reads | A non-obvious premise being defended by argument |
+| Write down why each mutation survived, and pin a cost-only specialisation with an operation-mix census rather than a value differential | Equivalent and uncovered being indistinguishable |
+| Pin the non-vacuous count separately from the total in a differential | A count of agreeing designs hiding how many compared one implementation with itself |
+| Do not relax an exact coverage pin into a floor; when a pin breaks often, make the gate cheaper instead | A floor passing after the true value grows and then halves |
+| Choose test values that separate the domains: an odd number for division, a value past the word boundary for width, a negative for sign | A value that cannot separate two domains letting a wrong premise stand |
+| Include both orders when testing an asymmetric parameter | Only the harmless direction being present |
+| Build a test for the correctness argument itself: imagine the mutation that inverts the argument and put the design that kills it in the same commit | A paragraph of reasoning having no pin |
+| Verify that a decomposed oracle gives the same answer as the original form | The decomposition itself diverging |
+| Run a whole-suite flip when a backend uses an alternative store | A design that runs on the default backend never reaching the alternative store, so nothing sees the defect |
+| Do not put a shape an earlier stage already rejects into a reject row's neighbouring pin | The pin being vacuous and claiming the lower stage does the upper stage's job |
+| Put a name in every argument position when admitting a new task | A defect whose only discriminator is a non-literal argument being structurally invisible |
+| Pin the remaining bypass paths by count per file plus the name of the row that blocks each | The next change that opens a row breaking there first, which is the point |
+| Choose the shape of a refusal pin so that both halves of the gate refuse it by their own name | One change admitting every test that used the same refused shape |
+| Instrument instead of auditing by eye | A multi-site audit done by reading |
+| Record what killed each mutant, and run the battery with `--no-fail-fast` | Several killers turning out to be one test, and change-detector pins reading as coverage |
+| Re-check the harness's hand-picked sidecar list every slice | A row having been vacuous from the day it was written |
+| Read an unused-assignment warning in a control-flow arm as a possible defect, not a style issue | A missing alternative branch ending a process early |
+| Treat building the discriminator for a surviving mutation as a defect-finding procedure, not a mutation-killing one | Survivors hiding a real divergence |
+| Check that a refusal design is not refused at an earlier stage | The test passing while measuring nothing |
+| Find who re-decides the value before concluding a surviving mutation is equivalent | A downstream re-binding making upstream context invisible |
+| Build the one discriminator shape that works, even when it is awkward | Ordinary inputs being unable to discriminate |
+| Alias two destinations to see order | Order being invisible when every destination differs |
+| Measure whether a survivor is unreachable rather than equivalent, and write the two differently | An unreached arm of moved code being disguised as a kill |
+| Pin every neighbour of a removed row with its reason | A wrong reason letting someone later delete a load-bearing row |
+| Build an absolute anchor that fixes what a design means as a value | A differential between two backends being blind in principle to a rule they both read |
+| Detect an empty harness by writing a test that pins the feature's refusal | The row being green while the design does not do what it says |
+| Separate "the gate is weak" from "the mutation is insufficient" before reading a survival | Deleting one of two summed terms leaving the row firing and saying nothing |
+| Add and remove an unrelated statement and see whether the answer changes | A classifier that sees only part of the statement passing for an unrelated reason |
+| Read clustered survivors as a diagnosis of the test axis and state their common property in one sentence | Survivors being treated as code defects one at a time |
+| Keep a defensive arm you cannot reach where the alternative silently drops the statement, and write in the docstring that it was measured dead, how, and what the honest behaviour would be | "Unreachable" and "unreached in every test run so far" being treated as the same claim |
+| Ask what the defect would look like and build that, rather than building the shape and observing it is fine | A probe whose operation is idempotent making the hazard invisible |
+| Restore both the source and the binary after each mutation case | A source-only restore leaving the canonical build emitting mutant values |
+| Derive the restore set from the mutant list, never hard-code it, and compare `git status --short` before and after the battery | A mutation outside the hard-coded set staying applied, making every later verdict a false kill |
+| Read "a mutant that should change nothing died" as battery contamination and check the tree before explaining the case | A contaminated run being rationalised case by case |
+| Specify each substitution by line number | A pattern matching two sites applying to neither and being recorded as survived |
+| Score a mutation that touches a loop-exit condition on a bounded runner only, and run the battery in the foreground | An unbounded simulation exhausting memory, taking the machine down, and leaving the mutation in the tree |
+| Check the exit code of the substitution and of the build, record a failure as a build failure rather than a survival, and grep the source for the changed line | A failed edit running a stale binary and the result being recorded as survival |
+| Restore a mutation from a byte snapshot copied by explicit path with `cp`, never with `git checkout -- .` | Uncommitted work being destroyed and later kills becoming unattributable |
+| Snapshot every file the working tree reports as modified, not only the mutation targets | Files outside the snapshot being reverted and the change's edits vanishing silently |
+| Run the restore loop under a shell that word-splits as the script expects: declare `#!/bin/bash`, because `zsh` passes an unquoted `$VAR` list as one argument | The restore silently copying nothing and mutations stacking across cases |
+| Install the restore as `trap restore EXIT` inside the script, and keep an isolation guard that diffs against the snapshot before each case | An external timeout killing the command before the restore runs |
+| Verify a substitution pattern by counting string occurrences, never by applying it to the tree and reverting | The verification pass itself reverting unrelated files |
+| Flush the runner's results line by line, keep a copy of the original outside the tree, and confirm by process identifier — not by `grep -c`, whose quoting returns a false zero — that no previous runner is alive | Two runners writing the same files and leaving a mutation in the tree |
+
+### 7.5 Golden, corpus and determinism gates
+
+| Rule | Prevents |
+|---|---|
+| Put the minimum condition that breaks a boundary into the boundary's test, and do not let a docstring carry a wrong argument as authority | The test named for the boundary not defending it |
+| Build an order-sensitive probe on the side where mapping order and execution order differ | A same-side probe being unable to separate the two orders |
+| Suspect the harness first when a differential reports zero divergences: assert the row counts of both files and the key ordering, and plant a known divergence | A comparison of zero rows reading as agreement |
+| Make a diagnostic-counting needle a discriminating fragment of the rendered form | A one-character needle being coincidentally right and later wrong |
+| Measure a corrected diagnostic message against the cases that still reject, not against the ones the change opened | The replacement claiming support for a position that is correctly refused |
+| Accumulate a digest over the whole run, folded per cycle after reset, not over the final state | A final-state print hiding every divergence the design later overwrites |
+| Mutate one line of the upstream design and re-run every new workload, golden or differential gate | A digest that does not move being empty and indistinguishable from a working one |
+| Make the mutation asymmetric, touching one end of the data path only | A symmetric mutation cancelling on both ends, so "the mutation did not take" and "the workload cannot measure" are confused |
+| Give a corpus row a third state when its axis has been ruled unarbitrable: pin both answers and name the ruling | The row being permanently red, or pinning vita's own answer and self-certifying |
+| Put two spellings of the same construct side by side in one file with one output line where a language offers several spellings of one meaning | Spellings differing and nobody noticing |
+| Pin the opposite half of any rule you fix | Being unable to tell whether the rule was fixed or moved |
+| Pin the two boundary cells, unsigned wrap and signed wrap | A later simplification undoing the narrowing silently |
+| Put the widened spelling and the original spelling side by side in the census | A width-twin defect being invisible without the pair, where the tool contradicting itself proves a defect |
+| Put the observed value in the assertion of a residue-pinning test, quoting PRE only after running PRE | A regression being enshrined as expected behaviour |
+| Test a state-moving transformation at the boundary | A value-dependent defect agreeing with the oracle in the middle and diverging only at the end |
+| Use two cheap detectors when routing: the domain twin and the scope twin | The suite going green with both defects present because no test paired the new domain with those contexts |
+| Pin the wording of a refusal only while the construct has no value, say in the docstring that it is a wording pin, and convert it to a value pin when a value exists | Wording pins breaking in bulk when the refusals they quote are removed |
+| Choose probe inputs where every wrong implementation gives a different answer, and say in the comment why that input | A fixed-point input passing whatever the implementation does |
+| Assert the value in a new battery cell rather than an exit code | Predicting an oracle's answer and pinning the prediction instead of measuring it |
+
+## 8. Performance measurement
+
+A performance number is a measurement with a method, or it is nothing. Every A/B is release-built,
+interleaved, run in both orders, and attributed to a mechanism before it is used.
+
+### 8.1 The A/B protocol
+
+| Rule | Prevents |
+|---|---|
+| Interleave a performance A/B by run and run both orders, discarding the first run | Sequential blocks and a single order each producing a result whose sign is an artefact of position |
+| Measure with release binaries only, check the binary size when snapshotting, and record the profile in the briefing | A debug binary reporting a large fake regression |
+| Measure retired instructions, not wall time, when the target delta is below one percent | Repeated rounds disagreeing in sign between minimum and median |
+| Build a harmless control binary — the pre-change source plus the layout change only — for any A/B; per-shape movement of a percent or two is layout, not execution | A field addition alone moving benchmarks in both directions with no executed code changed |
+| Check that two profiles share a denominator, and record both | A run that ends inside the sampling window shrinking the denominator, so every unchanged function looks larger |
+| Convert share to share times wall time when asking whether a function changed, and keep the post-change share as-is when asking what is expensive now | An overall improvement raising every unchanged function's share |
+| Run an A/B back to back and re-measure the baseline each time | Machine state drifting within a session |
+| Bisect a performance regression the way you bisect a wrong value, using a synthetic probe and a control twin that changes one attribute | A real design mixing two costs that a probe separates |
+| Build measurement discipline into the default shape of the tool — take everything to be measured at once, so round-robin is the default and the first round is discarded — and warn when handed a debug binary | Each caller re-deriving the protocol and getting it wrong |
+| Choose a committed control for a performance record | Numbers from untracked third-party material not reproducing |
+| Build with `CARGO_PROFILE_RELEASE_STRIP=none CARGO_PROFILE_RELEASE_DEBUG=1` and a separate `CARGO_TARGET_DIR` to profile, and parse the "Sort by top of stack" section | Stripped symbols making every frame anonymous, and the call-tree section giving the root everything |
+| Verify inlining after extracting a hot tail, and use the built-in control group of shapes that never call the new callee to attribute movement to layout | A small extraction costing several percent until it is inlined |
+| Write the design and workload a performance sentence was measured on into the sentence | A statement about headroom being refuted by the next shape |
+| State the design and the workload behind any estimate of what an optimisation is worth | A ceiling from one design being a property of that design |
+| Record the shape a revert's measurement covered, not only its verdict, and re-run when a new workload shows that shape | "It buys nothing" being true of the designs measured and false of real RTL |
+| Say which design a cost was measured on and what fraction of its run the cost could occupy when grading a cost invisible | A measurement that could not have shown anything being cited as evidence of nothing |
+
+### 8.2 Attribution before optimisation
+
+| Rule | Prevents |
+|---|---|
+| Do not use a measured gain as a result until you have a mechanism for it | The number being right and the attribution wrong |
+| Record both absolute times with any ratio between two layers | A ratio alone lying when the other layer improves |
+| Re-profile before trusting a recorded bottleneck, and read "my specialised code is barely in the profile" as the path not being entered | The queue naming one component and the profile naming another |
+| Do the division even when the candidate looks small — its value is that it makes you open the function | A larger win inside the same function going unfound |
+| Do the division before building: calls to move times cost difference per path, over total runtime | A profile percentage being mistaken for a target size, and the first failing gate for the only one |
+| Multiply a scan's unit by its call frequency and count the calls by instrumentation | A function's name not giving its unit, so a per-delta cost reads as per-timestep |
+| Ask first whether every fast path that already exists is being called | A helper that documents its own reason for existing having a caller that never calls it |
+| Look for places that build a proof and then discard it | A structure that crosses regions dropping the classification the next region has to recompute |
+| Open the call graph under a profile line | A top-of-stack row being an inlined blob that does not name the target |
+| Re-read the "this is an allocation choice, not semantics" notes on any path a routing change makes newly hot | A per-call scratch allocation that was free becoming the cost |
+| Ask the real admission predicate by extracting and calling it, rather than approximating a boundary with a necessary condition | Approximating the boundary sending shapes to no evaluator at all |
+| Profile after the census: a remaining rejection list does not mean the axis is worth anything | Opening a whole axis for a ceiling that is a rounding error |
+| Measure what percentage a shared function occupies in each layer before writing that fixing it benefits all of them | One layer having its own inlined copy and another barely using the function |
+| Measure both candidates' ceilings with discriminating designs before ordering them | Choosing by count being luck rather than an argument |
+| Count how many branches inside a hot function actually run before optimising it; the profile says where it is hot and only a census says which shape runs there | Optimising the branch that almost never runs |
+| Write the stop verdict before implementing: sum the profile share of what a stage targets and compare it with the stop threshold | The stage being built and then scored |
+| Count which lines inside a hot function disappear, not the function's share | A hot function's name not being what it does |
+| Ask whether a clone in the hottest loop is required | A clone added to satisfy the borrow checker outliving the condition that needed it |
+| Date any fixed-cost number a plan rests on and re-measure it before deciding | A plan built on a number that has since changed by a large factor |
+| Treat headroom and a plan that captures it as different propositions; when the remaining stages sum to a fraction of the ceiling, change the axis or close and record it | "Try harder" replacing a decision |
+| Count the executed operations before writing a code-generation plan | The plan's premise being a claim about the hot path's composition that nobody measured |
+| Check whether the reason a previous attempt lost still holds | A preceding stage having consumed a later stage's justification |
+| Treat a function you decided to share as a wall for code generation; one spelling and inlined cannot both apply | The decision being made implicitly as an implementation detail |
+| Look at the program-length distribution: when half the executed programs are one operation, the cost is in the calling convention | The optimisation targeting what is computed instead of what it takes to compute one thing |
+| Measure the ratio of choosing which call to make against what the call does before changing the representation | Replacing one form with another being a complete wash |
+| Treat a register file as an interface: splitting a statement into two operations sends a large value to memory and back | The compiled form being slower than the interpreted walk |
+| Demand a differential for a performance report's root cause as well as for a correctness report's, and delete cause candidates by experiment | A scaling diagnosis being refuted by the oracle showing steeper scaling |
+| Do not add an optimisation with no measured gain | A second code path being a drift risk in itself |
+| Build a discriminating question and measure it yourself when a report gives you a location | A bottleneck's location not being its cause |
+| Acquire the comparison tier and measure it rather than recording that you cannot | A document carrying "the gap size is unknown" while the tool is one install away |
+| Run an A/B on whether an optimisation accepts a design before claiming its effect | Coverage being a different axis from speed, with zero coverage visible only by changing the benchmark |
+| Count how many times a correctness primitive names its operand: performance is also a ladder | An impure operand named more often meaning more side effects, and a pure one becoming linear in width |
+| Build the benchmark that contains the shape in the same change that alters its cost | The cost change being invisible |
+| Build the cell where the tool does automatically what a report did by hand | Pasted source text having no formals, so the comparison is not the one the report asked for |
+| Count rather than time when an operator looks slow: put a print inside the operand and read the multiplier as an integer | Timing saying "expensive" where counting says the multiplier is exactly the declared width |
+| Grep the other callers of the thing you are about to gate | A sibling that already solved it holding the sound predicate, the measurement and often the report |
+| Get enough points to fit a curve before accepting or rejecting a scaling claim, and report the residuals | Two points being unable to distinguish linear from super-linear |
+| Divide a per-evaluation cost out from the evaluation count early | A conservative purity predicate's blast radius being invisible until someone counts |
+| License a skip by a complete dependency set, not by purity: reproduce the rule the oracles use, collect the callee's reads, and decline when one read cannot be attributed | Refusing every call and re-evaluating on every pass |
+| Grep any predicate that delegates to a whole-tree helper and then recurses; a promise about the answer is not a promise about the cost | A construct-free input becoming superlinear |
+| Ask whether the condition of a loop over a whole collection can be asked once | A loop that reads as processing a subset touching everything |
+
+### 8.3 Baselines and targets
+
+| Rule | Prevents |
+|---|---|
+| Use `iverilog` and vita's own alternative backend as the performance baseline; both share vita's contract of four-state, event-driven simulation | A different contract measuring something else |
+| Never make a two-state compiled simulator a performance target; cite its numbers only as the ceiling compilation can buy, always with the sentence that the contract differs | Unknown-value planes, delta cycles and event-queue cost all being booked as slowness |
+| Fix the cost model rather than moving a limit; a recursion depth cap replaced by a node budget is still a cap unless the walk deduplicates | The seal disappearing on a small, deeply nested source |
+| Alternate the direction of a fixpoint that iterates a map in declaration order, and leave the honest bound in the comment | A chain in the unfavourable direction settling one link per round |
+| Check three things when extracting a block into a helper: whether the block read a local, whether that local remains at the call site, and whether the node kind is a link in a recursive chain — and return early inside the helper when all three hold | Each node folding its operand twice, which is exponential in depth |
+
+## 9. Artifacts and determinism
+
+Artifacts are byte-identical across supported platforms, and the `sim-ir` shapes that back them are
+frozen. Byte identity comes before performance.
+
+| Rule | Prevents |
+|---|---|
+| Prefer a change that leaves the golden IR untouched: check the common funnel shared by both executors first, and keep non-target designs byte-identical | A change flipping the golden root hash for designs it does not affect |
+| Treat `crates/vita-artifact/src/header.rs::CURRENT_FORMAT_VERSION` as the only canonical statement of the format version; never copy the number into prose | A restated constant freezing while the real one moves |
+| Bump the format version for exactly three reasons: a frozen `sim-ir` shape change, adding a staged trailer sidecar, and an existing sidecar's enumeration gaining a variant | An artifact silently mis-decoding, or a skipped bump giving the user an unhelpful loud |
+| Bump for an appended enumeration variant even though it is backward compatible: the bump buys the accurate format-mismatch diagnostic. Inserting a variant in the middle is a frozen-shape change instead | The user getting "undecodable trailer", which does not say how to fix it |
+| Put cross-platform byte identity ahead of performance | A faster non-deterministic representation breaking reproducibility |
+| Re-pin only the AST schema hash for an AST field addition; a value-only change re-pins neither | A needless full artifact regeneration, or a missed one |
+| Use an ordered map when a parser generates AST items | A hash map violating the cross-platform byte-identical golden |
+| Sort scope keys numerically, not as strings | Lexicographic ordering interleaving generated scope numbers wrongly |
+| Key an order by a pass-independent value such as a source offset when the order's definition is declaration position | Two things counted in different passes never interleaving |
+| Split a counter per slot when two traversals share it and visit different sets | The same item getting a different number in each phase |
+| Write out the whole vector being compared before citing a sort key as justification | Lexicographic sorting grouping across slots instead of by element, where the tie-break is not really a tie |
+| Key a new rule on the new shape so everything else takes the same path as before | Existing designs moving |
+| Choose a carrier value that is impossible for every design predating the change | The guard perturbing designs it has nothing to do with |
+| Make a relative fallback reproduce the old output byte for byte for producers you did not convert | Unconverted producers changing output |
+| Over-approximate a divergence between a pre-resolve and a post-resolve computation with a sidecar flag so both sides derive from one source | The two phases computing different answers |
+| Read the trailer chain — what the pipeline writes and what the staged reader reads — before choosing between a sidecar and a derivation; a format bump is the fix's cost, not a reason to build an alternative | A criterion for choosing an item being mistaken for a constraint on its fix |
+| Answer a determinism golden that goes red on a new non-deterministic field by an explicit declaration — isolate it or make it deterministic — and keep an existence assertion beside the exclusion | The field's property never being written down in code, and the rule going vacuous |
+| Check whether an existing node already carries the meaning before adding a field to a frozen or hashed type | An avoidable schema-hash flip |
+| Follow the infrastructure precedents: climb the system-task ladder from no side effect, to engine state with a side table, to an engine effect with a frozen identifier and a format bump; desugar a side-effecting system function in statement form for single evaluation; keep engine-facing sidecars append-only with defaults; isolate a reused shared buffer by taking and restoring it; emit several items from one parse function through a pending queue drained at the top of the collection loop; save, restore and clear persistent side maps, because scope restore does not reach them | Each item being a measured source of artifact or pollution defects |
+
+## 10. Working rules
+
+### 10.1 Files, modules and frozen-type placement
+
+| Rule | Prevents |
+|---|---|
+| Keep a source file under about a thousand lines and split on approach: submodules with a prelude re-export, crate-visible items, and re-export from the crate root. Types stay at the crate root so child modules keep access to private fields | A file growing past the point where a reviewer can hold it, and a split that has to fight visibility |
+| Keep a single large function and a single trait implementation whole; those are the documented exceptions to the size rule | A split that breaks a trait implementation into pieces no reader can follow |
+| Never move a schema-hashed type between modules: the canonical key embeds the module path, so a move flips the hash and invalidates every artifact on disk. Frozen `sim-ir` types and every AST type live at their crate root | An invisible artifact-wide staleness caused by a refactor |
+| Keep frozen types verbatim: adding, removing or reordering a field flips the root hash. Do it only deliberately, with the format bump and the golden re-pin in the same commit | An accidental shape change invalidating every artifact |
+| Spell `sim-ir` cross-type fields fully qualified as `sim_ir::Foo`; `crates/sim-ir/tests/body_refs.rs` rejects bare references | A bare reference producing a registry key that does not match the canonical one |
+| Check parser recursion with `RUST_MIN_STACK=2097152` — the 2 MiB CI test-thread stack the depth guard is tuned to, where a local shell defaults to 8 MiB — after touching the block-body path, and extract an `#[inline(never)]` cold helper or box large locals when the frame grows | Deep nesting overflowing the stack |
+| Treat a per-level frame as a budget: box a value in the callee, never in the recursive frame, and use the parser's depth-guard test as the canary | One added value costing bytes per nesting level until the depth guard overflows |
+| Separate concurrent sessions with a worktree | A shared checkout moving its head under another session and stranding commits |
+
+### 10.2 Planning and slicing
+
+| Rule | Prevents |
+|---|---|
+| Ship the subset that provably does not need a prerequisite, and prove the subset rather than asserting it from a naming convention | A change being blocked entirely, or shipping on an unproven convention |
+| Make the retirement of a multi-call-site predicate a change of its own, recorded with the measurement and the prescribed deletion | Folding it into the change that invalidated it widening that change's blast radius |
+| Pre-verify in simulation the expression a desugar will generate, pin every variant of a context-determined feature before implementing, give a large semantic space its own slice, and record the plan durably | The desugar emitting an expression the simulator handles differently |
+| Order work by risk: a pure parser desugar reusing existing AST, then routing to an existing mechanism, then composing single-property primitives, then new infrastructure | The riskiest option being chosen first |
+| Draw slice boundaries where the oracle is, and measure the corpus before planning the order | A conceptually clean decomposition producing a gate that cannot run a single corpus design |
+| Reproduce an incoming report and then re-find the cause | The reported diagnosis naming a feature that already works |
+| Price a loud-to-correct item in two-oracle cells per edit site before picking it out of a row that lists several | Several edit sites buying one cell while a neighbour buys many for one |
+| Read a dependency running the wrong way as the signal that the rules belong lower, not that a twin may approximate | A twin being allowed to diverge for a build-graph reason |
+| Do not build a third executor as a substitute; the only permitted separations are role and build | A third implementation being a third spelling of the semantics |
+| Keep the reference interpreter out of performance optimisation; when the profile points at it, the answer is that the design should not be running there | Every specialisation becoming a second spelling of the rule |
+| Read "not a product surface" as a statement about the selection flag, not about the function | Live code being treated as dead |
+| Write an option as an enumeration, not a boolean, when the question is which input to pass rather than on or off | A third policy being added without the callers reconsidering |
+| Distinguish "the default is the right shape" from "the wrong shape is unrepresentable", and claim the second only when the type makes the wrong state impossible | A paragraph arguing that rules must be types while the wrong form still compiles |
+| Price a name-keyed rewrite by asking where the key is constructed; the absence of a funnel is the estimate | "Small and additive" turning out to be a prerequisite |
+
+### 10.3 Comments, documents and queues
+
+| Rule | Prevents |
+|---|---|
+| Treat the document that enumerates a parallel-table set as part of the code and update it in the same edit | The enumeration falling a table behind on the day it is written |
+| Re-prove in this file any property a comment asserts | A neighbour's property copied into a comment being false the moment it is copied |
+| Diff the two bodies as part of writing a comment that says "twin of" | The comment being false |
+| Name what actually holds an invariant and say so in the documentation | The next change leaning on the same false argument |
+| Re-check before committing whether another change in the same slice invalidated the premise you wrote into a comment | The stated reason being false and carrying your signature |
+| Say what a temporary workaround is for when you use one, and remove it when you fix the root | The workaround becoming the next change's defect |
+| Delete a caller-less macro or helper but leave the reason for its deletion in place | The next reader believing the gate still has teeth |
+| Read what another copy of the same rule already says before writing a comment about it | One file documenting a backstop as required while another records that removing it is byte-identical |
+| Write what you measured to reach a "cannot" verdict, not why it cannot be done | "Cannot" in a comment being a claim that the next change refutes |
+| Check against the code any comment asserting that duplication was avoided | Hand-matched arms drifting while the comment says they cannot |
+| Re-read the documents written before a review when the review changes the design; the high-risk sentences are the ones naming a file, a function or a count | A paragraph shipping false in both its place and its count, with every gate green, because no test reads prose |
+| Name an implementation with the reason it is there when it must be named | A later move reading as a detail instead of a contradiction |
+| Write a queue edit, including a deferral, into the canonical queue first and mirror it afterwards, checking the mirrors at every close | Mirrors carrying rows their own declared source does not have |
+| Say what a constant is for and point at the canonical site instead of restating it in prose, and grep the number itself when a bump ships | Restated constants decaying silently with every gate green |
+
+### 10.4 Tooling and machine safety
+
+| Rule | Prevents |
+|---|---|
+| Read twenty lines either side of an insertion point after a scripted splice | A new item inserted before a documentation block stealing that block |
+| Assert the anchor exists before a scripted splice and verify the result | A replacement that matched nothing reporting failure as success |
+| Require a full diff and an oracle re-verification for any agent given write access | A write tool replacing a whole file, with a small count change as the only symptom |
+| Make each edit an independent write, grep to confirm it landed, then write the comment or the report; a multi-edit script must report failures and continue rather than aborting | An abort in the middle losing every earlier write while the comment claims a state that does not exist |
+| Re-establish the state after any tool result that did not visibly complete: `git status --short` and `git diff --stat` for an edit, a re-read for a write, a re-run for a command | A truncated result being equally consistent with an execution failure, so later steps reason about a tree that does not exist |
+| Rebuild after changing build configuration, because product and oracle configurations share a target path | A fast "finished" line meaning the previous configuration's binary is still there |
+| Never run two full suites concurrently | Hard-coded temporary paths making the two processes write the same files, which reads as a product flake |
+| Verify a feature flag with `cargo tree -p <crate> --no-default-features -e features`, reference dependent crates with `default-features = false`, and rebuild after the change | Feature unification silently re-enabling the default and a green build proving nothing |
+| Redirect a gate's output to a file and capture its exit code separately (`cargo … > /tmp/x.log 2>&1; T=$?`); after an unavoidable pipe, read zsh's `${pipestatus[1]}` or bash's `${PIPESTATUS[0]}`, because `$?` reports the last command's status | A compile failure reading as green |
+| Take a hang out of the battery and measure it once by hand | A terminate-after not being a cheap kill, because the child keeps writing to the pipe |
+| Do not add a pre-emptive build before the test runner; the runner builds anyway | The build pass running twice |
+| Wait on a process identifier (`while kill -0 $PID; do sleep …; done`), never on a `pgrep -f` pattern that matches the waiting shell's own command line | A permanent deadlock that looks exactly like a slow compile |
+| Run a background wait's predicate once by hand before arming it, prefer a condition read from an artifact you have inspected, and kill the wait when the answer arrives another way | A wait on a string the producer never writes running until someone notices |
+| Never send an uncatchable kill to a test runner mid-build | The lock surviving and the next run blocking at no CPU |
+| Grep every site that decides a default value before flipping it | Only part of the surface moving while the result is called a whole-suite run |
+| Write a log line from a parallel process with a single write, and make the aggregation declare contamination when it meets a value outside the known set | Interleaved fragments tearing rows and inflating counts |
+| Treat a revert as an edit: specify the deleted range by line, grep the deleted symbols for surviving references, and check that adjacent tests, documents and helpers were not deleted with it | A regression test being deleted invisibly, because the suite is green either way |
+
+---
+
+The measurements behind these rules — the designs that were run, the numbers that came back, and
+which rule each incident bought — are in [history/lessons.md](history/lessons.md).

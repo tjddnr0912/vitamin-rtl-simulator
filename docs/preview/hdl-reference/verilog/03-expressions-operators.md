@@ -1,233 +1,236 @@
 # 03 · Verilog Expressions and Operators
 
-IEEE 1364-2005 §4.1–§4.4 기준. 표현식은 피연산자(operand)와 연산자(operator)로
-구성되며, 연산자의 우선순위와 결합성(associativity)에 따라 평가 순서가 결정된다.
+Per IEEE 1364-2005 §4.1–§4.4. An expression is built from operands and operators;
+the order of evaluation follows operator precedence and associativity.
 
 ---
 
-## 완전 연산자 우선순위 표
+## Full operator precedence table
 
-우선순위 1이 가장 높다 (먼저 평가됨). 같은 우선순위는 좌에서 우로 평가
-(단, `**`는 우에서 좌로).
+Level 1 is the highest (evaluated first). Operators of equal precedence evaluate
+left to right, except `**`, which is right to left.
 
-| 우선순위 | 연산자 | 종류 | 결합 |
+| Precedence | Operator | Kind | Associativity |
 |---------|--------|------|------|
-| 1 (최고) | `( )` `[ ]` | 괄호, 비트/부분 선택 | — |
-| 2 | `!` `~` 단항`+` 단항`-` `&` `~&` `\|` `~\|` `^` `~^` | 단항 / Reduction | 우→좌 |
-| 3 | `**` | 거듭제곱 | 우→좌 |
-| 4 | `*` `/` `%` | 곱셈, 나눗셈, 나머지 | 좌→우 |
-| 5 | `+` `-` | 이진 덧셈/뺄셈 | 좌→우 |
-| 6 | `<<` `>>` `<<<` `>>>` | 논리/산술 시프트 | 좌→우 |
-| 7 | `<` `<=` `>` `>=` | 관계 비교 | 좌→우 |
-| 8 | `==` `!=` `===` `!==` | 동등 비교 | 좌→우 |
-| 9 | `&` | 이진 비트AND | 좌→우 |
-| 10 | `^` `~^` / `^~` | 이진 비트XOR / XNOR | 좌→우 |
-| 11 | `\|` | 이진 비트OR | 좌→우 |
-| 12 | `&&` | 논리AND | 좌→우 |
-| 13 | `\|\|` | 논리OR | 좌→우 |
-| 14 (최저) | `? :` | 조건(삼항) | 우→좌 |
+| 1 (highest) | `( )` `[ ]` | parentheses, bit/part select | — |
+| 2 | `!` `~` unary `+` unary `-` `&` `~&` `\|` `~\|` `^` `~^` | unary / reduction | right → left |
+| 3 | `**` | power | right → left |
+| 4 | `*` `/` `%` | multiply, divide, modulus | left → right |
+| 5 | `+` `-` | binary add/subtract | left → right |
+| 6 | `<<` `>>` `<<<` `>>>` | logical/arithmetic shift | left → right |
+| 7 | `<` `<=` `>` `>=` | relational | left → right |
+| 8 | `==` `!=` `===` `!==` | equality | left → right |
+| 9 | `&` | binary bitwise AND | left → right |
+| 10 | `^` `~^` / `^~` | binary bitwise XOR / XNOR | left → right |
+| 11 | `\|` | binary bitwise OR | left → right |
+| 12 | `&&` | logical AND | left → right |
+| 13 | `\|\|` | logical OR | left → right |
+| 14 (lowest) | `? :` | conditional (ternary) | right → left |
 
-### 우선순위 사용 예
+### Precedence in practice
 
 ```verilog
-// a + b << 2  →  a + (b << 2)   (시프트 > 덧셈이 아님! 덧셈이 시프트보다 높음)
-// 실제: +는 5, <<는 6이므로  +가 먼저 → (a+b) << 2
-// → 의도가 a + (b << 2)라면 괄호 필수
+// a + b << 2 does NOT parse as a + (b << 2) — shift does not outrank addition
+// In fact: + is level 5 and << is level 6, so + binds first → (a + b) << 2
+// → if a + (b << 2) is what you meant, the parentheses are mandatory
 assign y = a + (b << 2);
 
-// & 와 == 혼동 주의: a & b == c  →  a & (b == c)
-// == 이 & 보다 높음
-assign z = (a & b) == c;   // 괄호로 의도 명시
+// & versus == is the other classic trap: a & b == c parses as a & (b == c)
+// because == outranks &
+assign z = (a & b) == c;   // parenthesized to state the intent
 ```
 
 ---
 
-## 연산자 종류별 상세
+## Operators by category
 
-### 산술 연산자
+### Arithmetic operators
 
-| 연산자 | 의미 | 비고 |
+| Operator | Meaning | Notes |
 |--------|------|------|
-| `+` | 덧셈 | |
-| `-` | 뺄셈, 단항 부호 반전 | |
-| `*` | 곱셈 | |
-| `/` | 정수 나눗셈 (소수점 버림) | 제수 0 → `x` |
-| `%` | 나머지 | 제수 0 → `x` |
-| `**` | 거듭제곱 (1364-2001+) | 밑 0, 지수 음수 → `x` |
+| `+` | addition | |
+| `-` | subtraction, unary negation | |
+| `*` | multiplication | |
+| `/` | integer division (fraction discarded) | divisor 0 → `x` |
+| `%` | modulus | divisor 0 → `x` |
+| `**` | power (1364-2001+) | base 0 with a negative exponent → `x` |
 
-### 비트 연산자 (Bitwise)
+### Bitwise operators
 
-비트 대 비트 연산, 결과 폭은 두 피연산자 중 넓은 쪽.
+Bit-by-bit operations; the result width is that of the wider operand.
 
-| 연산자 | 의미 |
+| Operator | Meaning |
 |--------|------|
-| `~` | 비트 NOT |
-| `&` | 비트 AND |
-| `\|` | 비트 OR |
-| `^` | 비트 XOR |
-| `~^` / `^~` | 비트 XNOR |
+| `~` | bitwise NOT |
+| `&` | bitwise AND |
+| `\|` | bitwise OR |
+| `^` | bitwise XOR |
+| `~^` / `^~` | bitwise XNOR |
 
-### 논리 연산자 (Logical)
+### Logical operators
 
-결과는 항상 1비트 (`1'b0` 또는 `1'b1`). 피연산자는 0이면 거짓, 비0이면 참.
+The result is always 1 bit (`1'b0` or `1'b1`). An operand of 0 is false, anything
+non-zero is true.
 
-| 연산자 | 의미 |
+| Operator | Meaning |
 |--------|------|
-| `!` | 논리 NOT |
-| `&&` | 논리 AND |
-| `\|\|` | 논리 OR |
+| `!` | logical NOT |
+| `&&` | logical AND |
+| `\|\|` | logical OR |
 
-### Reduction 연산자
+### Reduction operators
 
-단항으로 벡터의 모든 비트를 연산하여 1비트 결과를 반환.
+Unary operators that combine every bit of a vector into a 1-bit result.
 
-| 연산자 | 의미 | 예시 (4비트 입력 `4'b1010`) |
+| Operator | Meaning | Example (4-bit input `4'b1010`) |
 |--------|------|-----------------------------|
-| `&a` | 모든 비트 AND | `1 & 0 & 1 & 0` = `0` |
-| `~&a` | 모든 비트 NAND | `~(1&0&1&0)` = `1` |
-| `\|a` | 모든 비트 OR | `1\|0\|1\|0` = `1` |
-| `~\|a` | 모든 비트 NOR | `~(1\|0\|1\|0)` = `0` |
-| `^a` | 짝수 패리티 (XOR) | `1^0^1^0` = `0` |
-| `~^a` | 홀수 패리티 (XNOR) | `~(1^0^1^0)` = `1` |
+| `&a` | AND of all bits | `1 & 0 & 1 & 0` = `0` |
+| `~&a` | NAND of all bits | `~(1&0&1&0)` = `1` |
+| `\|a` | OR of all bits | `1\|0\|1\|0` = `1` |
+| `~\|a` | NOR of all bits | `~(1\|0\|1\|0)` = `0` |
+| `^a` | even parity (XOR) | `1^0^1^0` = `0` |
+| `~^a` | odd parity (XNOR) | `~(1^0^1^0)` = `1` |
 
 ```verilog
 wire [7:0] data;
-wire parity = ^data;    // 8비트 짝수 패리티
-wire all_one = &data;   // 모든 비트 1 여부 확인
-wire any_bit = |data;   // 0이 아닌지 확인 (불 변환)
+wire parity = ^data;    // even parity over 8 bits
+wire all_one = &data;   // are all bits 1?
+wire any_bit = |data;   // is it non-zero? (boolean conversion)
 ```
 
-### 시프트 연산자
+### Shift operators
 
-| 연산자 | 종류 | 빈 자리 채움 |
+| Operator | Kind | Vacated bits filled with |
 |--------|------|-------------|
-| `<<` | 논리 좌시프트 | 0 |
-| `>>` | 논리 우시프트 | 0 |
-| `<<<` | 산술 좌시프트 (1364-2001+) | 0 |
-| `>>>` | 산술 우시프트 (1364-2001+) | signed이면 MSB, unsigned이면 0 |
+| `<<` | logical left shift | 0 |
+| `>>` | logical right shift | 0 |
+| `<<<` | arithmetic left shift (1364-2001+) | 0 |
+| `>>>` | arithmetic right shift (1364-2001+) | the MSB if signed, 0 if unsigned |
 
 ```verilog
 reg [7:0] a = 8'sb1111_0000;  // -16
 reg [7:0] b;
 
-b = a >> 2;    // 논리: 0 채움 → 8'b0011_1100 = +60
-b = a >>> 2;   // 산술: 부호 비트(1) 채움 → 8'b1111_1100 = -4
+b = a >> 2;    // logical: fills 0 → 8'b0011_1100 = +60
+b = a >>> 2;   // arithmetic: fills the sign bit (1) → 8'b1111_1100 = -4
 ```
 
-### 비교 연산자
+### Comparison operators
 
-결과는 1비트: 참=1, 거짓=0, 미결=x.
+The result is 1 bit: true = 1, false = 0, undetermined = x.
 
-| 연산자 | 의미 | x/z 포함 시 |
+| Operator | Meaning | With x/z operands |
 |--------|------|------------|
-| `<` | 미만 | `x` |
-| `<=` | 이하 | `x` |
-| `>` | 초과 | `x` |
-| `>=` | 이상 | `x` |
-| `==` | 논리 동등 | `x` |
-| `!=` | 논리 부등 | `x` |
-| `===` | 케이스 동등 | 0 또는 1 (x/z 값으로 정확히 비교) |
-| `!==` | 케이스 부등 | 0 또는 1 (x/z 값으로 정확히 비교) |
+| `<` | less than | `x` |
+| `<=` | less than or equal | `x` |
+| `>` | greater than | `x` |
+| `>=` | greater than or equal | `x` |
+| `==` | logical equality | `x` |
+| `!=` | logical inequality | `x` |
+| `===` | case equality | 0 or 1 (x/z compared exactly, as values) |
+| `!==` | case inequality | 0 or 1 (x/z compared exactly, as values) |
 
-`===` / `!==` 는 x와 z 자체를 값으로 비교하므로 시뮬레이션 전용
-(합성 불가 — RTL에서 사용하면 합성 도구가 오류 또는 경고 발생).
+Because `===` and `!==` compare x and z as values in their own right, they are
+simulation-only constructs (not synthesizable — a synthesis tool will error or warn
+if they appear in RTL).
 
-### 연결(Concatenation) 및 반복(Replication)
+### Concatenation and replication
 
 ```verilog
-{a, b}          // a와 b를 비트 연결
-{a, 4'b0000}    // a 뒤에 4비트 0 추가
-{4{a[1:0]}}     // a[1:0]을 4번 반복 (8비트)
-{2{a}, 3{b}}    // 혼합
+{a, b}          // concatenate the bits of a and b
+{a, 4'b0000}    // append four 0 bits after a
+{4{a[1:0]}}     // a[1:0] repeated 4 times (8 bits)
+{2{a}, 3{b}}    // mixed
 ```
 
-크기가 없는 상수(`'0`, `'1`, `'x`, `'z`)는 연결 안에서 컨텍스트 폭으로 확장됨
-(1364-2001+ 기능 — 단, 일부 도구는 미지원).
+An unsized constant (`'0`, `'1`, `'x`, `'z`) expands to the context width inside a
+concatenation (a 1364-2001+ feature — some tools do not support it).
 
-### 조건(삼항) 연산자
+### The conditional (ternary) operator
 
 ```verilog
 y = condition ? true_expr : false_expr;
 
-// 예시
+// examples
 assign mux_out = sel ? a : b;
 assign safe_div = (divisor != 0) ? (dividend / divisor) : 0;
 ```
 
-`condition`이 `x` 또는 `z`이면 두 분기를 비트 단위로 병합한다:
-- 두 분기의 같은 위치 비트가 동일하면 그 값 유지
-- 다르면 `x`
+When `condition` is `x` or `z`, the two arms are merged bit by bit:
+- where the two arms agree on a bit position, that value is kept
+- where they differ, the bit is `x`
 
 ---
 
-## Signed 산술 규칙 (IEEE 1364-2001+)
+## Signed arithmetic rules (IEEE 1364-2001+)
 
-### 기본 원칙
+### The basic principle
 
-표현식 결과 타입은 **모든 피연산자가 signed일 때만 signed**이다.
-하나라도 unsigned이면 전체가 unsigned로 변환된 후 연산된다.
+An expression's result is **signed only if every operand is signed**. If even one
+operand is unsigned, the whole expression is converted to unsigned before the
+operation.
 
 ```verilog
 reg signed [7:0] a = -8;   // 8'sb1111_1000
 reg        [7:0] b = 200;  // 8'b1100_1000
 
-// a + b: b가 unsigned → 전체 unsigned 연산
-// a는 256-8=248로 해석됨 → 248+200 = 448 (8비트 truncation: 192)
+// a + b: b is unsigned → the whole operation is unsigned
+// a is read as 256-8=248 → 248+200 = 448 (truncated to 8 bits: 192)
 ```
 
-### signed 선언 방법
+### Declaring something signed
 
 ```verilog
 reg  signed [7:0]  acc;         // signed reg
 wire signed [15:0] offset;      // signed wire (1364-2001+)
 parameter signed [7:0] BIAS = -10;  // signed parameter
 
-// signed 리터럴
-4'sd5     // 4비트 signed +5
-8'sb1000  // 8비트 signed -128
+// signed literals
+4'sd5     // 4-bit signed +5
+8'sb1000  // 8-bit signed -128
 ```
 
-### $signed / $unsigned 변환
+### $signed / $unsigned conversion
 
 ```verilog
-$signed(a)    // a를 signed로 해석하여 연산에 사용 (비트 값 유지)
-$unsigned(a)  // a를 unsigned로 해석 (비트 값 유지)
+$signed(a)    // use a as signed in the operation (bit pattern unchanged)
+$unsigned(a)  // use a as unsigned (bit pattern unchanged)
 ```
 
 ```verilog
 reg [7:0] u = 200;          // unsigned
 integer result;
-result = $signed(u) + 1;    // 200을 signed(=−56)로 해석 → −55
+result = $signed(u) + 1;    // 200 read as signed (= −56) → −55
 ```
 
-### 확장(Extension) 규칙
+### Extension rules
 
-표현식 내 피연산자 폭이 다를 때 넓은 쪽으로 맞춘다:
-- unsigned → 0 확장(zero-extension)
-- signed → 부호 확장(sign-extension, MSB 반복)
+When operands in an expression differ in width, the narrower one is widened to match:
+- unsigned → zero extension
+- signed → sign extension (the MSB repeats)
 
 ---
 
-## x/z 전파 규칙
+## x/z propagation rules
 
-시뮬레이션 중 x(unknown) 또는 z(high-Z)가 포함된 표현식의 결과:
+The result of an expression containing x (unknown) or z (high-Z) during simulation:
 
-| 연산 | 동작 |
+| Operation | Behavior |
 |------|------|
-| 산술 (`+`, `-`, `*`, `/`, `%`, `**`) | 피연산자에 x 또는 z → 결과 전체 x |
-| `/`, `%` (제수 0) | 결과 x |
-| 비교 (`<`, `<=`, `>`, `>=`) | 피연산자에 x 또는 z → 결과 1비트 x |
-| 논리 동등 (`==`, `!=`) | 피연산자에 x 또는 z → 결과 1비트 x |
-| 케이스 동등 (`===`, `!==`) | x/z 값 자체를 비교 → 항상 0 또는 1 |
-| 논리 (`&&`, `\|\|`, `!`) | 피연산자에 x → 결과 x (단, `1 \|\| x = 1` 처럼 논리적으로 확정되면 확정값) |
-| 비트AND (`&`) | `0 & x = 0`, `1 & x = x`, `x & x = x`, `z`는 `x`로 처리 |
-| 비트OR (`\|`) | `1 \| x = 1`, `0 \| x = x`, `x \| x = x` |
-| 비트XOR (`^`) | 피연산자에 x 또는 z → 해당 비트 x |
-| 시프트 (`<<`, `>>`, `<<<`, `>>>`) | 시프트 량(우측 피연산자)에 x 또는 z → 결과 전체 x |
-| 조건 (`? :`) | 조건이 x 또는 z → 두 분기를 비트 병합 (다른 비트 위치는 x) |
-| Reduction | 입력에 x 포함 → 해당 비트 x로 처리되어 결과에 영향 |
+| arithmetic (`+`, `-`, `*`, `/`, `%`, `**`) | any x or z operand → the entire result is x |
+| `/`, `%` with divisor 0 | result x |
+| relational (`<`, `<=`, `>`, `>=`) | any x or z operand → a 1-bit x result |
+| logical equality (`==`, `!=`) | any x or z operand → a 1-bit x result |
+| case equality (`===`, `!==`) | compares x/z as values → always 0 or 1 |
+| logical (`&&`, `\|\|`, `!`) | an x operand → x, unless logic already decides it (`1 \|\| x = 1`) |
+| bitwise AND (`&`) | `0 & x = 0`, `1 & x = x`, `x & x = x`; `z` is treated as `x` |
+| bitwise OR (`\|`) | `1 \| x = 1`, `0 \| x = x`, `x \| x = x` |
+| bitwise XOR (`^`) | any x or z operand → that bit is x |
+| shift (`<<`, `>>`, `<<<`, `>>>`) | an x or z in the shift amount (right operand) → the entire result is x |
+| conditional (`? :`) | an x or z condition → the arms merge bitwise (differing positions become x) |
+| reduction | an x in the input is treated as x for that bit and affects the result |
 
-### 비트AND x/z 진리표 (1비트)
+### Bitwise AND truth table with x/z (1 bit)
 
 | a \ b | 0 | 1 | x | z |
 |-------|---|---|---|---|
@@ -236,9 +239,10 @@ result = $signed(u) + 1;    // 200을 signed(=−56)로 해석 → −55
 | x | **0** | **x** | x | x |
 | z | **0** | **x** | x | x |
 
-`0 & x = 0` 은 0이 FALSE이므로 AND 결과가 확정된다 (x 전파 예외).
+`0 & x = 0` because 0 is FALSE, which already determines the AND (an exception to x
+propagation).
 
-### 비트OR x/z 진리표 (1비트)
+### Bitwise OR truth table with x/z (1 bit)
 
 | a \ b | 0 | 1 | x | z |
 |-------|---|---|---|---|
@@ -247,7 +251,8 @@ result = $signed(u) + 1;    // 200을 signed(=−56)로 해석 → −55
 | x | **x** | **1** | x | x |
 | z | **x** | **1** | x | x |
 
-`1 | x = 1` 은 1이 TRUE이므로 OR 결과가 확정된다 (x 전파 예외).
+`1 | x = 1` because 1 is TRUE, which already determines the OR (an exception to x
+propagation).
 
 ---
 

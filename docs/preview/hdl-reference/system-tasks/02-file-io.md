@@ -1,128 +1,115 @@
 # 02 · File I/O System Tasks
 
-## 개요
+## Overview
 
-시뮬레이션 중 파일을 읽고 쓰는 태스크/함수 카테고리다.
-테스트벤치에서 자극 데이터를 파일에서 로드하거나, 결과를 파일에 저장해
-포스트 프로세싱하는 용도로 사용한다.
-합성 불가능(simulation-only)이며 `hdl-builtins` file-io 카테고리가 구현한다.
+The category of tasks and functions that read and write files during simulation.
+A testbench uses them to load stimulus from a file, or to save results for
+post-processing. All of them are simulation-only and cannot be synthesized.
 
-## 지원 Phase (vitamin 구현 상태)
+## Scope of this page
 
-- **✅ 구현됨 (WRITE family + string format, Phase-2)**: `$fopen`(mcd/fd 모드 분기, **$fopen은
-  대입 RHS 특수형으로만 지원** — direct rhs 외엔 loud E3009), `$fclose`, `$fwrite`/`$fdisplay`
-  (+b/o/h 변형, MCD bit0=stdout 브로드캐스트, closed-fd=W4022), `$sformat`, `$sformatf`
-  ($sformatf도 대입 RHS 특수형 — string-literal 포맷 필수).
-- **✅ 구현됨 (READ family, v9)**: `$fread`/`$fscanf`/`$fgets`/`$sscanf`/`$feof`/`$fgetc` — 모두 blocking
-  assign의 직접 rhs 형태(`n = $fscanf(...)`)로만 지원(statement-level intercept; ref-VAR/메모리 쓰기).
-  **반환을 버리는 맨몸 문장**(`$fgets(line, fd);`)도 지원 — 모듈 프로세스·인라인 태스크·프레임
-  태스크 본문 전부(§4.5.277; 프레임 태스크 본문은 그 전까지 `W3056 … skipped` 로 효과가 조용히
-  사라졌다). 프레임 **함수** 본문의 맨몸 형태만 여전히 loud.
-- **📍 어느 서브루틴 안에서 읽을 수 있나 (§4.5.277)**: 문장 수준 효과(목적지·ref 인자 쓰기, fd
-  전진, seed 갱신)는 `&mut` 프로세스 실행기만 수행한다. **모듈 프로세스, 그리고 문장에서 호출되는
-  태스크·함수 전부에서 동작한다** — `automatic` 여부, output/inout formal 유무, static lifetime,
-  중첩·재귀·루프·다중 호출 자리 무관. 남은 loud 는 셋뿐: **클래스 메서드 본문** · **연속 재평가
-  위치**(`assign`/`force`/`wait` 조건) · **intra-assignment delay**(`x = #1 f(...)`) → `fatal[VITA-F4004]`.
-  §4.5.277 전에는 `automatic` + formal 조합에 따라 loud/silent 가 갈렸고, 무관한 `$display("x")`
-  한 줄이 결과를 바꿨다. 같은 규칙이 `$fopen`·`$value$plusargs`·seeded `$random`/`$dist_*`·`$cast`·
-  queue pop 에도 적용된다(같은 계열).
-- **✅ 구현됨 (pre-opened descriptors §21.3.4, 2026-07-02 ROADMAP §4.5.61)**: STDOUT
-  `32'h8000_0001`(=`$display`와 같은 결정적 싱크로 문장 순서 interleave)·STDERR `32'h8000_0002`
-  (프로세스 stderr). `$fclose`(pre-opened)=warn+no-op(계속 사용 가능)·read는 write-only 룰
-  (`$fgetc`=-1·`$feof`=0·무경고). **STDIN `32'h8000_0000` read/pushback은 deferred**(byte-결정성
-  — W4022 + -1)·STDIN write=W4022 warn+drop(iverilog는 무음 drop).
-- **미구현 (silent-degrade — 미인식 $task은 WARN + skip, IR 미생성)**: `$fmonitor`, `$fstrobe`,
-  `$fflush`(vita의 파일 write는 무버퍼 `write_all`이라 출력 바이트 무영향=accept-무해 후보).
-  본 페이지의 IEEE 표준 레퍼런스 항목은 vitamin 지원 표기가 아니다.
+- **Write side**: `$fopen`, `$fclose`, `$fwrite`/`$fdisplay` (plus their b/o/h
+  variants and the MCD broadcast form), `$fstrobe`, `$fmonitor`.
+- **Read side**: `$fread`, `$fscanf`, `$fgets`, `$sscanf`, `$feof`, `$fgetc`.
+- **String formatting**: `$sformat`, `$sformatf`.
+
+These notes describe the standard. Which spellings vita accepts, in which
+statement positions a file read may appear, and how each descriptor behaves are
+documented in [manual/005_system-tasks.md](../../../manual/005_system-tasks.md),
+[manual/003_language-reference.md](../../../manual/003_language-reference.md) and
+[manual/006_limitations.md](../../../manual/006_limitations.md).
 
 ---
 
-## mcd vs fd — 반드시 알아야 할 구분
+## mcd vs fd — the distinction to get right first
 
-Verilog 파일 I/O에는 두 가지 파일 핸들 방식이 공존한다.
-혼동하기 쉬운 핵심 미묘점이다.
+Verilog file I/O carries two file-handle schemes side by side. Confusing them is
+the single most common mistake in this category.
 
-### mcd (multi-channel descriptor) — Verilog-2001 이전 레거시
+### mcd (multi-channel descriptor) — the pre-Verilog-2001 legacy form
 
-`$fopen("filename")` — 모드 인자 없이 파일명만 주면 mcd를 반환한다.
+`$fopen("filename")` — a file name and no mode argument returns an mcd.
 
-- 32비트 비트필드 (`reg [31:0]`)로, 하나의 bit만 set
-- bit 0 = stdout (항상 열려있음, 닫을 수 없음)
-- bit 31 = 예약 (사용 불가)
-- 최대 30개 파일 동시 open
-- OR 연산으로 여러 파일에 동시 출력 가능
+- A 32-bit bit field (`reg [31:0]`) with exactly one bit set
+- bit 0 = stdout (always open, cannot be closed)
+- bit 31 = reserved (unusable)
+- at most 30 files open at once
+- OR the handles together to write to several files in one call
 
 ```sv
-// mcd 방식 — 두 파일에 동시 출력
+// mcd form — write to two files at once
 reg [31:0] fd_log, fd_csv;
-fd_log = $fopen("sim.log");   // 모드 없음 → mcd 반환
+fd_log = $fopen("sim.log");   // no mode → returns an mcd
 fd_csv = $fopen("data.csv");
 $fdisplay(fd_log | fd_csv, "time=%0t val=%h", $time, val);
-// stdout에도 함께 출력: fd_log | fd_csv | 32'h1
+// to send it to stdout as well: fd_log | fd_csv | 32'h1
 ```
 
-### fd (file descriptor) — IEEE 1364-2001 이후 현대 방식
+### fd (file descriptor) — the modern IEEE 1364-2001 form
 
-`$fopen("filename", "mode")` — 모드 인자를 주면 fd를 반환한다.
+`$fopen("filename", "mode")` — a mode argument returns an fd.
 
-- 양의 정수 핸들 (C의 FILE* 스타일)
-- 0이면 open 실패
-- 읽기 모드, seek, binary I/O 등 고급 기능 사용 가능
-- mcd와 달리 OR 조합 불가
+- A positive integer handle (the C `FILE*` style)
+- 0 means the open failed
+- read modes, seeking and binary I/O are available
+- unlike an mcd, fds cannot be OR-ed together
 
 ```sv
-// fd 방식 — 읽기/쓰기 포함 고급 I/O
+// fd form — the advanced I/O, reading included
 integer fd;
-fd = $fopen("output.txt", "w");   // 모드 있음 → fd 반환
+fd = $fopen("output.txt", "w");   // a mode → returns an fd
 if (fd == 0) $display("open failed");
 $fdisplay(fd, "result=%d", result);
 $fclose(fd);
 ```
 
-**요약**: 쓰기 전용 단순 로깅은 mcd, 읽기·seek·binary 등 고급 I/O는 fd 방식.
+**In short**: mcd for simple write-only logging, fd for reading, seeking, binary
+data and anything else beyond it.
 
 ---
 
-## 항목 상세
+## Item detail
 
 ### `$fopen`
 
-- **시그니처**:
+- **Signature**:
   ```sv
-  // mcd 방식 (Verilog-2001 이전)
+  // mcd form (pre-Verilog-2001)
   reg [31:0] mcd;
   mcd = $fopen("filename");
 
-  // fd 방식 (IEEE 1364-2001+, SV)
+  // fd form (IEEE 1364-2001+, SV)
   integer fd;
   fd = $fopen("filename", "mode");
   ```
-- **표준**: IEEE 1800-2017 §21.3 / IEEE 1364-2005 §17.4.1
-- **모드 문자열**:
+- **Standard**: IEEE 1800-2017 §21.3 / IEEE 1364-2005 §17.4.1
+- **Mode strings**:
 
-| 모드 | 동작 |
-|------|------|
-| `"r"` / `"rb"` | 읽기 전용 (파일 없으면 실패→0 반환) |
-| `"w"` / `"wb"` | 쓰기 (파일 생성 또는 기존 내용 삭제) |
-| `"a"` / `"ab"` | 추가 쓰기 (파일 없으면 생성) |
-| `"r+"` / `"rb+"` | 읽기+쓰기 (기존 파일 필요) |
-| `"w+"` / `"wb+"` | 읽기+쓰기 (생성 또는 덮어쓰기) |
-| `"a+"` / `"ab+"` | 읽기+추가 |
+| Mode | Behaviour |
+|------|-----------|
+| `"r"` / `"rb"` | read only (fails and returns 0 if the file does not exist) |
+| `"w"` / `"wb"` | write (creates the file, or truncates an existing one) |
+| `"a"` / `"ab"` | append (creates the file if it does not exist) |
+| `"r+"` / `"rb+"` | read and write (the file must already exist) |
+| `"w+"` / `"wb+"` | read and write (creates or truncates) |
+| `"a+"` / `"ab+"` | read and append |
 
-`b` suffix = binary mode (Unix에서는 텍스트/바이너리 구분 없음, Windows에서 줄 끝 처리 차이).
+The `b` suffix means binary mode (no text/binary distinction on Unix; on Windows
+it changes line-ending handling).
 
-- **반환**: mcd 방식은 32비트 mcd (실패 시 0), fd 방식은 정수 fd (실패 시 0)
+- **Returns**: the mcd form a 32-bit mcd, the fd form an integer fd; 0 on failure
+  either way
 
 ---
 
 ### `$fclose`
 
-- **시그니처**: `$fclose(fd_or_mcd)`
-- **표준**: IEEE 1800-2017 §21.3 / IEEE 1364-2005 §17.4.2
-- **의미**: 파일을 닫는다.
-  해당 파일에 active한 `$fmonitor`와 `$fstrobe`가 자동으로 취소된다.
-- **반환**: void
-- **예시**:
+- **Signature**: `$fclose(fd_or_mcd)`
+- **Standard**: IEEE 1800-2017 §21.3 / IEEE 1364-2005 §17.4.2
+- **Meaning**: closes the file. Any `$fmonitor` or `$fstrobe` still active on
+  that file is cancelled automatically.
+- **Returns**: void
+- **Example**:
 
 ```sv
 integer fd;
@@ -135,37 +122,38 @@ $fclose(fd);
 
 ### `$fwrite` / `$fdisplay` / `$fmonitor` / `$fstrobe`
 
-콘솔 출력 태스크($write/$display/$monitor/$strobe)와 동일하지만
-첫 인자로 파일 핸들(fd 또는 mcd)을 받는다.
+The same tasks as the console family (`$write`/`$display`/`$monitor`/`$strobe`),
+except that the first argument is a file handle (an fd or an mcd).
 
-- **시그니처**:
+- **Signature**:
   ```sv
   $fdisplay(fd_or_mcd [, "format" [, args...]]);
   $fwrite(fd_or_mcd [, "format" [, args...]]);
   $fstrobe(fd_or_mcd [, "format" [, args...]]);
   $fmonitor(fd_or_mcd [, "format" [, args...]]);
   ```
-- **표준**: IEEE 1800-2017 §21.2 / IEEE 1364-2005 §17.3
-- **실행 시점 및 개행**:
+- **Standard**: IEEE 1800-2017 §21.2 / IEEE 1364-2005 §17.3
+- **When each one runs, and whether it appends a newline**:
 
-| 태스크 | 실행 시점 | 자동 개행 |
-|--------|----------|---------|
-| `$fdisplay` | Active/Inactive 영역 (즉시) | ✅ |
-| `$fwrite` | Active/Inactive 영역 (즉시) | ❌ |
-| `$fstrobe` | Postponed 영역 (NBA 반영 후) | ✅ |
-| `$fmonitor` | Postponed 영역 (인자 변화 시 자동) | ✅ |
+| Task | When it runs | Newline appended |
+|------|--------------|------------------|
+| `$fdisplay` | Active/Inactive region (immediately) | ✅ |
+| `$fwrite` | Active/Inactive region (immediately) | ❌ |
+| `$fstrobe` | Postponed region (after nonblocking updates) | ✅ |
+| `$fmonitor` | Postponed region (automatically, on an argument change) | ✅ |
 
-b/o/h 변형 존재: `$fdisplayh`, `$fwriteb`, `$fstrobeo`, `$fmonitorh` 등.
+The b/o/h variants exist here too: `$fdisplayh`, `$fwriteb`, `$fstrobeo`,
+`$fmonitorh` and so on.
 
-- **반환**: void
-- **예시**:
+- **Returns**: void
+- **Example**:
 
 ```sv
 integer log_fd;
 initial begin
   log_fd = $fopen("sim.log", "w");
 
-  // 콘솔과 파일에 동시 출력 (mcd OR 방식)
+  // console and file at once (the mcd OR form)
   reg [31:0] both;
   both = log_fd | 32'h1;   // bit0 = stdout
   $fdisplay(both, "starting simulation");
@@ -173,7 +161,7 @@ end
 
 always @(posedge clk) begin
   $fwrite(log_fd, "t=%0t d=%b q=%b  ", $time, d, q);
-  $fstrobe(log_fd, "q_final=%b", q);   // NBA 후 최종값
+  $fstrobe(log_fd, "q_final=%b", q);   // the settled value, after the NBA
 end
 ```
 
@@ -181,27 +169,28 @@ end
 
 ### `$fread`
 
-- **시그니처**:
+- **Signature**:
   ```sv
   integer n;
   n = $fread(reg_or_mem_target, fd);
   n = $fread(reg_or_mem_target, fd, start_addr);
   n = $fread(reg_or_mem_target, fd, start_addr, count);
   ```
-- **표준**: IEEE 1800-2017 §21.4 / IEEE 1364-2005 §17.4.4
-- **의미**: 바이너리 데이터를 파일에서 읽는다.
-  `target`이 단일 reg이면 해당 폭(비트 수/8 바이트)만큼 읽는다.
-  `target`이 memory 배열이면 `start_addr`부터 순서대로 원소를 채운다.
-  `count`를 지정하면 해당 원소 수만큼만 읽는다.
-- **반환**: 실제 읽은 바이트 수 (EOF 또는 오류 시 0 이하)
-- **예시**:
+- **Standard**: IEEE 1800-2017 §21.4 / IEEE 1364-2005 §17.4.4
+- **Meaning**: reads binary data from a file.
+  If `target` is a single reg, it reads as many bytes as that width takes
+  (bit count / 8).
+  If `target` is a memory array, it fills elements in order from `start_addr`.
+  With `count` given, it reads that many elements and no more.
+- **Returns**: the number of bytes actually read (0 or less at EOF or on error)
+- **Example**:
 
 ```sv
 reg [7:0] mem [0:255];
 integer fd, n;
 initial begin
   fd = $fopen("data.bin", "rb");
-  n = $fread(mem, fd, 0, 256);   // 주소 0부터 256 원소 로드
+  n = $fread(mem, fd, 0, 256);   // load 256 elements starting at address 0
   $display("read %0d bytes", n);
   $fclose(fd);
 end
@@ -211,12 +200,13 @@ end
 
 ### `$fscanf`
 
-- **시그니처**: `integer n = $fscanf(fd, "format_string", var1, var2, ...)`
-- **표준**: IEEE 1800-2017 §21.3 / IEEE 1364-2005 §17.4.3
-- **의미**: 파일에서 한 줄(또는 필드)을 읽어 포맷 문자열에 따라 파싱한다.
-  C `fscanf()`와 동일한 포맷 specifier 사용.
-- **반환**: 성공적으로 매칭한 항목 수 (EOF에 도달하면 음수, 오류 시 0)
-- **예시**:
+- **Signature**: `integer n = $fscanf(fd, "format_string", var1, var2, ...)`
+- **Standard**: IEEE 1800-2017 §21.3 / IEEE 1364-2005 §17.4.3
+- **Meaning**: reads a line (or a field) from the file and parses it against the
+  format string, using the same conversion specifiers as C's `fscanf()`.
+- **Returns**: the number of items matched successfully (negative at EOF, 0 on
+  error)
+- **Example**:
 
 ```sv
 integer fd, addr, val, n;
@@ -236,12 +226,13 @@ end
 
 ### `$fgets`
 
-- **시그니처**: `integer n = $fgets(str_var, fd)`
-- **표준**: IEEE 1800-2017 §21.3 / IEEE 1364-2005 §17.4.3
-- **의미**: 파일에서 한 줄을 읽어 `str_var`에 저장한다.
-  newline 또는 EOF까지 읽는다. `str_var`의 크기가 한계를 정한다.
-- **반환**: 읽은 문자 수 (오류 또는 EOF 즉시 도달 시 0)
-- **예시**:
+- **Signature**: `integer n = $fgets(str_var, fd)`
+- **Standard**: IEEE 1800-2017 §21.3 / IEEE 1364-2005 §17.4.3
+- **Meaning**: reads one line from the file into `str_var`, up to and including a
+  newline or up to EOF. The size of `str_var` sets the limit.
+- **Returns**: the number of characters read (0 on error, or when EOF is reached
+  immediately)
+- **Example**:
 
 ```sv
 reg [255*8-1:0] line;
@@ -261,11 +252,12 @@ end
 
 ### `$sscanf`
 
-- **시그니처**: `integer n = $sscanf(source_string, "format_string", var1, var2, ...)`
-- **표준**: IEEE 1800-2017 §21.3
-- **의미**: 파일이 아닌 **문자열**에서 파싱한다. `$fscanf`의 문자열 버전.
-- **반환**: 성공적으로 매칭한 항목 수
-- **예시**:
+- **Signature**: `integer n = $sscanf(source_string, "format_string", var1, var2, ...)`
+- **Standard**: IEEE 1800-2017 §21.3
+- **Meaning**: parses a **string** instead of a file — the string counterpart of
+  `$fscanf`.
+- **Returns**: the number of items matched successfully
+- **Example**:
 
 ```sv
 string line = "addr=FF data=AB";
@@ -278,13 +270,15 @@ n = $sscanf(line, "addr=%h data=%h", addr_v, data_v);
 
 ### `$sformat`
 
-- **시그니처**: `$sformat(output_reg, "format_string" [, arg1, arg2, ...])`
-- **표준**: IEEE 1800-2017 §20.9 / IEEE 1364-2005 §17.1.3
-- **의미**: 포맷 문자열과 인자를 조합해 `output_reg`에 문자열로 저장한다.
-  **task** — void, 반환값 없음.
-  첫 인자 `output_reg`는 결과를 받는 `reg` 또는 `string` 변수.
-- **반환**: void (task)
-- **예시**:
+- **Signature**: `$sformat(output_reg, "format_string" [, arg1, arg2, ...])`
+- **Standard**: IEEE 1800-2017 §20.9 / IEEE 1364-2005 §17.1.3
+- **Meaning**: renders the format string and its arguments and stores the result
+  as a string in `output_reg`.
+  It is a **task** — it returns nothing.
+  The first argument `output_reg` is the `reg` or `string` variable that receives
+  the result.
+- **Returns**: void (task)
+- **Example**:
 
 ```sv
 reg [255*8-1:0] msg;
@@ -296,76 +290,66 @@ $display("%s", msg);
 
 ### `$sformatf`
 
-- **시그니처**: `string s = $sformatf("format_string" [, arg1, arg2, ...])`
-- **표준**: IEEE 1800-2017 §20.9.1 (SV 전용)
-- **의미**: `$sformat`과 동일하나 **function** — string을 직접 반환한다.
-  `$sformat`과의 차이: `$sformat`은 task(첫 인자에 결과 저장),
-  `$sformatf`는 function(반환값이 string). SV에서는 `$sformatf`가 선호된다.
-- **반환**: `string` (function)
-- **예시**:
+- **Signature**: `string s = $sformatf("format_string" [, arg1, arg2, ...])`
+- **Standard**: IEEE 1800-2017 §20.9.1 (SystemVerilog only)
+- **Meaning**: the same rendering as `$sformat`, but as a **function** — it
+  returns the string directly.
+  The difference: `$sformat` is a task that stores its result in its first
+  argument, `$sformatf` is a function whose return value is the string. In
+  SystemVerilog, `$sformatf` is the preferred form.
+- **Returns**: `string` (function)
+- **Example**:
 
 ```sv
-// $sformatf는 expression 위치에 직접 사용 가능
+// $sformatf can be used directly in an expression position
 $display($sformatf("val=0x%08X tick=%0d", val, $time));
 
-// 문자열 조합에 편리
+// convenient for building up strings
 string prefix = "ERROR";
 string msg = $sformatf("[%s] mismatch at addr=%h", prefix, addr);
 ```
 
 ---
 
-## $sformat vs $sformatf 비교
+## $sformat vs $sformatf
 
-| 항목 | `$sformat` | `$sformatf` |
+| Item | `$sformat` | `$sformatf` |
 |------|-----------|------------|
-| 종류 | task (void) | function (반환값 있음) |
-| 결과 받는 방법 | 첫 인자 reg에 저장 | 반환값으로 직접 사용 |
-| 가용 표준 | IEEE 1364-2001+ | IEEE 1800-2017 (SV 전용) |
-| 권장 환경 | Verilog 호환 필요 시 | SystemVerilog (현대 TB) |
+| Kind | task (void) | function (returns a value) |
+| How the result arrives | stored in the first argument | used directly as the return value |
+| Available from | IEEE 1364-2001+ | IEEE 1800-2017 (SystemVerilog only) |
+| Where it fits | when Verilog compatibility is needed | SystemVerilog (a modern testbench) |
 
 ---
 
-## Icarus / Verilator 동작 차이 + vitamin 구현 상태
+## Icarus / Verilator differences
 
-| 태스크 | Icarus Verilog | Verilator | vitamin |
-|--------|---------------|-----------|---------|
-| `$fopen` (mcd/fd 양방식) | 완전 지원 | Generally supported | ✅ (대입 RHS 특수형) |
-| `$fclose` | 완전 지원 | Generally supported | ✅ |
-| `$fdisplay` / `$fwrite` | 완전 지원 | Generally supported | ✅ (+b/o/h, MCD) |
-| `$fstrobe` / `$fmonitor` | 완전 지원 | Generally supported | ❌ 미구현 (silent-degrade) |
-| `$fread` | 완전 지원 | 미명시 (확인 불가) | ✅ (v9 — blocking-assign rhs) |
-| `$fscanf` | 완전 지원 | Generally supported | ✅ (v9 — blocking-assign rhs) |
-| `$fgets` / `$fgetc` | 완전 지원 | Generally supported | ✅ (v9 — blocking-assign rhs) |
-| `$sscanf` | 완전 지원 | Generally supported | ✅ (v9 — blocking-assign rhs) |
-| `$sformat` | 완전 지원 | 미명시 | ✅ |
-| `$sformatf` | 완전 지원 | 미명시 | ✅ (대입 RHS 특수형) |
-
----
-
-## 합성 가능성
-
-❌ 비합성 — 전 태스크/함수가 시뮬레이션 전용.
+| Task | Icarus Verilog | Verilator |
+|------|---------------|-----------|
+| `$fopen` (both mcd and fd forms) | fully supported | generally supported |
+| `$fclose` | fully supported | generally supported |
+| `$fdisplay` / `$fwrite` | fully supported | generally supported |
+| `$fstrobe` / `$fmonitor` | fully supported | generally supported |
+| `$fread` | fully supported | unstated (could not be confirmed) |
+| `$fscanf` | fully supported | generally supported |
+| `$fgets` / `$fgetc` | fully supported | generally supported |
+| `$sscanf` | fully supported | generally supported |
+| `$sformat` | fully supported | unstated |
+| `$sformatf` | fully supported | unstated |
 
 ---
 
-## 본 프로젝트 구현 메모
+## Synthesizability
 
-- WRITE family는 `sim-engine` `builtins.rs`가 실행(`hdl-builtins`는 stub; 기능은 sim-engine 인라인).
-- **✅ mcd/fd 분기 구현(Phase-2/v7)**: `$fopen`을 대입 RHS 특수형(`fopen_special`, `elaborate`)으로
-  처리 — 모드 유무로 mcd(`reg [31:0]`)/fd 분기, 인자=string literal 필수, intra-assignment delay 불가.
-  fd 핸들 0x8000_0003…, MCD bit1…(bit0=stdout 브로드캐스트), closed-fd=W4022 warn-once.
-- **✅ `$sformatf` 구현(Phase-2/v7, string 타입과 함께)**: 대입 RHS 특수형(`sformatf_special`),
-  string-literal 포맷 필수. `$sformat`은 일반 task(`Sformat`)로 매핑.
-- **✅ READ family 구현(v9)**: `$fread`(바이너리 stream)·`$fscanf`·`$fgets`·`$sscanf`·`$feof`·`$fgetc`는
-  blocking assign rhs 전용 statement-level intercept(`k_fscanf`/`k_fgets`/`k_fread` 등, `sim-engine`)로 구현됨.
-  `$fmonitor`/`$fstrobe`만 미매핑(silent-degrade).
+❌ Not synthesizable — every task and function here is simulation-only.
+
+---
 
 ## Sources
 
 - IEEE 1800-2017 §21 (File I/O system functions/tasks)
 - IEEE 1364-2005 §17.4 (Verilog file I/O)
-- research-log: [system-tasks-io-memory-2026-05-28.md](../../research-log/system-tasks-io-memory-2026-05-28.md)
+- research-log: [system-tasks-io-memory-2026-05-28.md](../../../history/research-log/system-tasks-io-memory-2026-05-28.md)
 - [chipverify.com — Verilog File IO Operations](https://chipverify.com/verilog/verilog-file-io-operations)
 - [circuitcove.com — File I/O Tasks](https://circuitcove.com/system-tasks-file-io/)
 - [hdlworks.com — System File I/O Tasks](https://www.hdlworks.com/hdl_corner/verilog_ref/items/SystemFileTasks.htm)

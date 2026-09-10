@@ -1,45 +1,46 @@
-# 09 · VHDL 합성 가능성 (Synthesizability)
+# 09 · VHDL Synthesizability
 
-IEEE 1076-2008 기준. 합성 도구(Vivado, Quartus 등)가 VHDL 소스를 실제 게이트 넷리스트로 변환할 수 있는지 여부를 정리한다.
+Per IEEE 1076-2008. Records whether a synthesis tool (Vivado, Quartus and the like) can turn VHDL
+source into a real gate-level netlist.
 
-**범례:**
-- ✅ 합성 가능 (Universal) — 주요 툴 모두 지원
-- ⚠️ 조건부 — 툴/버전/사용 방식에 따라 지원 여부 다름
-- ❌ 비합성 — RTL 설계에서 사용 불가 (시뮬레이션·testbench 전용)
+**Legend:**
+- ✅ Synthesizable (universal) — supported by all the mainstream tools
+- ⚠️ Conditional — support depends on the tool, the version or how it is written
+- ❌ Not synthesizable — unusable in RTL design (simulation and testbench only)
 
 ---
 
-## ✅ 합성 가능 (Universal)
+## ✅ Synthesizable (universal)
 
-### 신호 타입
+### Signal types
 
 ```vhdl
-signal a : std_logic;                        -- 1비트 로직
-signal b : std_logic_vector(7 downto 0);     -- 벡터
-signal c : std_ulogic;                       -- 비결선형 (합성 동일)
-signal d : unsigned(7 downto 0);            -- numeric_std 타입
+signal a : std_logic;                        -- one bit of logic
+signal b : std_logic_vector(7 downto 0);     -- a vector
+signal c : std_ulogic;                       -- unresolved (identical to std_logic for synthesis)
+signal d : unsigned(7 downto 0);            -- the numeric_std types
 signal e : signed(7 downto 0);
 ```
 
 ```vhdl
--- integer: 반드시 range 제약 명시 (무한 범위는 비합성)
+-- integer: a range constraint is mandatory (an unbounded range is not synthesizable)
 signal cnt : integer range 0 to 255;         -- ✅
-signal bad : integer;                        -- ⚠️ 도구에 따라 경고/오류
+signal bad : integer;                        -- ⚠️ a warning or an error, depending on the tool
 ```
 
-### 열거형 / boolean
+### Enumerations and boolean
 
 ```vhdl
 type state_t is (IDLE, FETCH, DECODE, EXECUTE, WRITEBACK);
-signal state : state_t;         -- 자동으로 바이너리 또는 one-hot 인코딩
+signal state : state_t;         -- encoded automatically, binary or one-hot
 
 signal flag : boolean;          -- false/true → 0/1
 ```
 
-### Process (완전 감도 목록)
+### Process (with a complete sensitivity list)
 
 ```vhdl
--- 동기 (클록 + 비동기 리셋)
+-- synchronous (clock + asynchronous reset)
 process(clk, rst_n)
 begin
     if rst_n = '0' then
@@ -49,8 +50,8 @@ begin
     end if;
 end process;
 
--- 조합 (VHDL-2008: process(all))
-process(all)                     -- all = 모든 읽기 신호 자동 포함
+-- combinational (VHDL-2008: process(all))
+process(all)                     -- all = every signal read is included automatically
 begin
     y <= a and b;
 end process;
@@ -59,31 +60,31 @@ end process;
 ### if / case
 
 ```vhdl
--- if: else 없으면 래치 추론 → 조합 process에서는 else 필수
+-- if: without an else a latch is inferred → in a combinational process the else is mandatory
 if sel = '1' then
     y <= a;
 else
-    y <= b;                      -- else 있어야 래치 회피
+    y <= b;                      -- the else is what avoids the latch
 end if;
 
--- case: when others 포함 권장 (std_logic_vector는 'U','X' 등 추가 값)
+-- case: when others is recommended (std_logic_vector has further values such as 'U' and 'X')
 case opcode is
     when "00" => exec_add;
     when "01" => exec_sub;
-    when others => exec_nop;     -- 나머지 모두 커버
+    when others => exec_nop;     -- covers everything else
 end case;
 ```
 
-### for-loop (정적 범위)
+### for loops (static range)
 
 ```vhdl
--- 합성 시 자동 unroll → N개 병렬 하드웨어
+-- unrolled by synthesis → N pieces of parallel hardware
 for i in 0 to 7 loop
     result(i) <= a(i) xor b(i);
 end loop;
 
--- generic으로 크기 파라미터화
-for i in 0 to WIDTH-1 loop      -- WIDTH가 elaboration 시 상수이면 OK
+-- parameterised by a generic
+for i in 0 to WIDTH-1 loop      -- fine as long as WIDTH is an elaboration-time constant
     sum := sum + to_integer(unsigned'(0 => vec(i)));
 end loop;
 ```
@@ -91,27 +92,27 @@ end loop;
 ### generate
 
 ```vhdl
--- for-generate: N개 인스턴스 자동 생성
+-- for-generate: creates N instances automatically
 gen_ff : for i in 0 to N-1 generate
     dff_i : dff port map(clk => clk, d => d(i), q => q(i));
 end generate;
 
--- if-generate: 파라미터 조건부 구조
+-- if-generate: structure conditional on a parameter
 gen_rst : if HAS_RESET generate
     reset_logic : process(clk, rst_n) ...
 end generate;
 
--- case-generate (VHDL-2008): ⚠️ 부분 지원 (아래 조건부 섹션 참고)
+-- case-generate (VHDL-2008): ⚠️ partial support (see the conditional section below)
 gen_sel : case ARCH_TYPE generate
     when "fast" => fast_inst : fast_module port map(...);
     when others => slow_inst : slow_module port map(...);
 end generate;
 ```
 
-### Function / Procedure (제약 만족 시)
+### Functions and procedures (when the restrictions are met)
 
 ```vhdl
--- pure function → 조합 논리로 매핑
+-- a pure function maps to combinational logic
 function parity(v : std_logic_vector) return std_logic is
     variable p : std_logic := '0';
 begin
@@ -119,7 +120,7 @@ begin
     return p;
 end function;
 
--- wait·file·외부 상태 없는 procedure
+-- a procedure with no wait, no file and no external state
 procedure gray_encode(
     bin  : in  std_logic_vector;
     gray : out std_logic_vector
@@ -128,43 +129,44 @@ procedure gray_encode(
 end procedure;
 ```
 
-### 패키지 연산자
+### Package operators
 
 ```vhdl
--- ieee.std_logic_1164: and/or/xor 등 std_logic 연산
+-- ieee.std_logic_1164: the std_logic operations and/or/xor/...
 y <= a and b;
 
--- ieee.numeric_std: signed/unsigned 산술
+-- ieee.numeric_std: signed/unsigned arithmetic
 sum <= a + b;
 diff <= a - b;
 ```
 
 ---
 
-## ⚠️ 조건부 합성 (Tool-dependent)
+## ⚠️ Conditionally synthesizable (tool-dependent)
 
-### record 타입
+### record types
 
 ```vhdl
 type pixel_t is record
     r, g, b : unsigned(7 downto 0);
 end record;
 
-signal px : pixel_t;          -- 신호·변수: 대부분 도구 OK
+signal px : pixel_t;          -- as a signal or variable: fine in most tools
 ```
 
-| 사용 위치 | 지원 여부 |
+| Where it is used | Support |
 |----------|----------|
-| signal, variable | ✅ 대부분 도구 OK |
-| entity port | ⚠️ Vivado 2019+: OK; 일부 도구: 미지원 |
-| generic | ⚠️ VHDL-2008+, 부분 지원 |
+| signal, variable | ✅ fine in most tools |
+| entity port | ⚠️ Vivado 2019+: fine; some tools: unsupported |
+| generic | ⚠️ VHDL-2008+, partial support |
 
-Vivado에서 record port를 사용할 경우 `-2008` 컴파일 옵션 및 프로젝트 언어 버전 설정 필요.
+Using a record port in Vivado requires the `-2008` compile option and the matching project language
+setting.
 
-### variable (공유 변수)
+### Variables (and shared variables)
 
 ```vhdl
--- process-local variable: ✅ 합성 가능
+-- a process-local variable: ✅ synthesizable
 process(clk)
     variable cnt : integer range 0 to 15 := 0;
 begin
@@ -173,11 +175,11 @@ begin
     end if;
 end process;
 
--- shared variable: ⚠️ 합성 도구마다 다름
-shared variable global_cnt : integer := 0;   -- 주의: 대부분 합성 경고
+-- a shared variable: ⚠️ handled differently by each synthesis tool
+shared variable global_cnt : integer := 0;   -- careful: most tools warn
 ```
 
-### protected 타입 (VHDL-2008+)
+### protected types (VHDL-2008+)
 
 ```vhdl
 type counter_t is protected
@@ -186,24 +188,25 @@ type counter_t is protected
 end protected;
 ```
 
-시뮬레이션에서 thread-safe 카운터로 유용. 합성: **매우 제한적** — 주요 툴 미지원.
+Useful in simulation as a thread-safe counter. Synthesis: **very limited** — the mainstream tools do
+not support it.
 
-### generic 타입 (VHDL-2008+)
+### Generic types (VHDL-2008+)
 
 ```vhdl
--- 타입 파라미터 entity
+-- an entity parameterised by a type
 entity sorter is
     generic (type T; N : natural; function "<"(a, b : T) return boolean is <>);
     port (data : in my_array_t; sorted : out my_array_t);
 end entity;
 ```
 
-**부분 지원** — Vivado에서 제한적으로 지원. Quartus 지원 수준 확인 필요.
+**Partial support** — Vivado supports it to a limited extent. Check what Quartus supports.
 
-### 재귀 (정적 깊이)
+### Recursion (static depth)
 
 ```vhdl
--- elaboration 시 완전히 unroll 가능한 재귀: ✅ (도구 지원 확인)
+-- recursion that unrolls completely during elaboration: ✅ (confirm tool support)
 function clog2(n : positive) return natural is
 begin
     if n <= 1 then return 0;
@@ -211,86 +214,87 @@ begin
     end if;
 end function;
 
-constant ADDR_W : natural := clog2(MEM_SIZE);  -- 상수 계산에만 사용
+constant ADDR_W : natural := clog2(MEM_SIZE);  -- used only to compute a constant
 ```
 
-Vivado: 정적 깊이 재귀 OK. 런타임 깊이 재귀: ❌.
+Vivado: static-depth recursion is fine. Run-time-depth recursion: ❌.
 
 ### case-generate (VHDL-2008)
 
 ```vhdl
 gen_arch : case IMPLEMENTATION generate
-    when 0 => ...    -- LUT 기반
-    when 1 => ...    -- DSP 기반
+    when 0 => ...    -- LUT-based
+    when 1 => ...    -- DSP-based
     when others => ...
 end generate;
 ```
 
-**부분 지원** — Vivado 2019+: OK. 구버전 및 일부 툴: 미지원.
+**Partial support** — Vivado 2019+: fine. Older versions and some tools: unsupported.
 
 ### fixed_pkg / float_pkg
 
-- **합성 가능하나 면적 비용 큼.**
-- `fixed_pkg`: Vivado OK. 구형 도구는 manual expansion 필요.
-- `float_pkg`: Vivado 합성 지원. 단, 단정밀도 FP 연산 하나가 수백 LUT.
-  → 복잡한 FP 연산은 Vivado Floating Point IP 코어 사용 권장.
+- **Synthesizable, but the area cost is large.**
+- `fixed_pkg`: fine in Vivado. Older tools need manual expansion.
+- `float_pkg`: Vivado synthesizes it, but one single-precision FP operation costs hundreds of LUTs.
+  → For a complex FP datapath, use the Vivado Floating Point IP core instead.
 
 ---
 
-## ❌ 비합성 (Simulation/Testbench only)
+## ❌ Not synthesizable (simulation/testbench only)
 
-### file 타입 / textio
+### file types / textio
 
 ```vhdl
--- 하드웨어에 파일 시스템 없음 → 비합성
+-- hardware has no file system → not synthesizable
 file stim_file : text open READ_MODE is "input.txt";
 use std.textio.all;
 ```
 
-### access 타입 (포인터 / 동적 메모리)
+### access types (pointers / dynamic memory)
 
 ```vhdl
--- access = VHDL 포인터. 동적 할당 → 하드웨어 매핑 불가
+-- access = the VHDL pointer. Dynamic allocation cannot be mapped to hardware
 type int_ptr is access integer;
 variable ptr : int_ptr;
-ptr := new integer'(42);            -- ❌ new 키워드 자체 비합성
+ptr := new integer'(42);            -- ❌ the new keyword itself is not synthesizable
 deallocate(ptr);
 ```
 
-### wait for (시간 지정)
+### wait for (an explicit time)
 
 ```vhdl
-wait for 10 ns;                     -- ❌ 물리 시간 = 시뮬레이터 개념
-wait for CLK_PERIOD / 2;            -- ❌ testbench 전용
+wait for 10 ns;                     -- ❌ physical time is a simulator concept
+wait for CLK_PERIOD / 2;            -- ❌ testbench only
 
--- Quartus: 단일 wait until은 허용; 복수 또는 wait for는 거부
-wait until rising_edge(clk);        -- ✅ (단일 wait until, 일부 툴)
+-- Quartus: a single wait until is accepted; several of them, or a wait for, are rejected
+wait until rising_edge(clk);        -- ✅ (a single wait until, in some tools)
 ```
 
-### after 지연 (신호 할당)
+### after delays on a signal assignment
 
 ```vhdl
--- after 키워드는 합성 시 무시되거나 오류 처리
-y <= a after 5 ns;                  -- ❌ 합성 무시 (파형 모델링 전용)
-clk <= not clk after 5 ns;         -- ❌ testbench 클록 생성 전용
+-- the after keyword is either ignored by synthesis or treated as an error
+y <= a after 5 ns;                  -- ❌ ignored by synthesis (waveform modelling only)
+clk <= not clk after 5 ns;         -- ❌ testbench clock generation only
 ```
 
-### real 타입 산술 / math_real
+### real arithmetic / math_real
 
 ```vhdl
-signal r : real;                    -- ❌ 합성 도구 거부
+signal r : real;                    -- ❌ rejected by synthesis tools
 r := 3.14 * 2.0;
 
 use ieee.math_real.all;
-x := sqrt(2.0);                     -- ❌ 합성 불가
+x := sqrt(2.0);                     -- ❌ not synthesizable
 ```
 
-> 예외: `real` 값이 **elaboration time 상수** 계산에만 쓰이는 경우 일부 도구 허용. 신호·변수로 선언하면 거부.
+> Exception: some tools allow a `real` value when it is used only to compute an **elaboration-time
+> constant**. Declaring it as a signal or a variable is rejected.
 
-### 무한 루프 (정적 exit 없음)
+### Infinite loops (with no static exit)
 
 ```vhdl
--- testbench 클록 생성 패턴 (RTL 금지)
+-- the testbench clock-generation pattern (forbidden in RTL)
 loop
     clk <= '0'; wait for 5 ns;
     clk <= '1'; wait for 5 ns;
@@ -298,68 +302,68 @@ end loop;
 
 -- while true with no static exit: ❌
 while true loop
-    ...         -- 합성 도구가 종료 조건을 정적으로 판단 불가
+    ...         -- a synthesis tool cannot decide the termination condition statically
 end loop;
 ```
 
-### 전역 상태 의존 impure function
+### An impure function that depends on global state
 
 ```vhdl
 shared variable global_state : integer := 0;
 
 impure function get_state return integer is
 begin
-    return global_state;           -- 글로벌 mutable 상태 참조
+    return global_state;           -- reads mutable global state
 end function;
 ```
 
-합성 시 side-effect를 하드웨어로 표현할 수 없음.
+Synthesis has no way to express the side effect in hardware.
 
 ---
 
-## 합성 설계 체크리스트
+## Synthesizable-design checklist
 
 ```
-신호 타입
-  [ ] std_logic / std_logic_vector 사용
-  [ ] integer에 range 제약 명시
-  [ ] record port 사용 시 툴 VHDL-2008 모드 확인
+Signal types
+  [ ] use std_logic / std_logic_vector
+  [ ] give every integer a range constraint
+  [ ] for record ports, confirm the tool is in VHDL-2008 mode
 
 Process
-  [ ] 동기 process: clk + rst_n 만 감도 목록
-  [ ] 조합 process: process(all) 또는 완전 감도 목록
-  [ ] wait 문 포함 여부 확인 (합성 process에 wait 금지)
+  [ ] synchronous process: only clk and rst_n in the sensitivity list
+  [ ] combinational process: process(all) or a complete sensitivity list
+  [ ] check for wait statements (no wait in a process meant for synthesis)
 
-분기/루프
-  [ ] if에 else 포함 (래치 방지)
-  [ ] case에 when others 포함
-  [ ] for-loop 범위가 elaboration 상수
-  [ ] while/무한 루프 RTL에서 제거
+Branches and loops
+  [ ] every if has an else (to avoid a latch)
+  [ ] every case has when others
+  [ ] every for-loop range is an elaboration constant
+  [ ] no while or infinite loops left in RTL
 
-패키지
-  [ ] ieee.numeric_std 사용 (std_logic_arith 금지)
-  [ ] math_real, textio를 synthesizable 파일에서 제거
-  [ ] fixed_pkg/float_pkg 사용 시 면적 예산 확인
+Packages
+  [ ] use ieee.numeric_std (never std_logic_arith)
+  [ ] keep math_real and textio out of synthesizable files
+  [ ] if fixed_pkg/float_pkg is used, check the area budget
 
-Subprogram
-  [ ] 합성 대상 function에 wait / file I/O 없음
-  [ ] 재귀 함수의 깊이가 elaboration 상수
-  [ ] 합성 파일에 testbench 전용 procedure 혼입 금지
+Subprograms
+  [ ] no wait and no file I/O in a function meant for synthesis
+  [ ] every recursive function's depth is an elaboration constant
+  [ ] no testbench-only procedure mixed into a synthesizable file
 ```
 
 ---
 
-## 비합성 패턴 → 합성 대체 패턴
+## Non-synthesizable patterns → synthesizable replacements
 
-| 비합성 패턴 | 합성 대체 |
+| Non-synthesizable pattern | Synthesizable replacement |
 |------------|----------|
-| `wait for N ns` | 카운터 + 클록 에지 기반 타이밍 |
-| `after N ns` | 레지스터 파이프라인 딜레이 |
-| `real` 변수 | `integer`(고정소수점) 또는 `sfixed`/`ufixed` |
-| `access` 타입 | 정적 배열 + 포인터 인덱스 integer |
-| `math_real.sqrt(x)` | 뉴턴-랩슨 반복 알고리즘, CORDIC, 또는 LUT |
-| `file` stimulus | ROM (초기화된 배열 constant) |
-| `shared variable` | FSM 또는 독립 신호로 리팩터링 |
+| `wait for N ns` | a counter plus clock-edge timing |
+| `after N ns` | a register pipeline delay |
+| a `real` variable | `integer` (fixed point) or `sfixed`/`ufixed` |
+| an `access` type | a static array plus an integer index |
+| `math_real.sqrt(x)` | Newton-Raphson iteration, CORDIC, or a LUT |
+| `file` stimulus | a ROM (an initialised array constant) |
+| a `shared variable` | refactor into an FSM or separate signals |
 
 ---
 
@@ -369,5 +373,5 @@ Subprogram
 - AMD Vivado UG901 — Supported/Unsupported VHDL Data Types: https://docs.amd.com/r/en-US/ug901-vivado-synthesis/Supported-and-Unsupported-VHDL-Data-Types
 - Intel/Altera — Quartus wait constructs: https://www.intel.com/content/www/us/en/support/programmable/articles/000076012.html
 - EDAboard — real data type synthesis: https://www.edaboard.com/threads/vhdl-real-data-type-error-10414.353096/
-- HDL Factory — VHDL IEEE Libraries (2025): https://www.hdlfactory.com/post/2025/06/29/vhdl-ieee-libraries-and-numeric-type-conversion-a-definitive-reference/ ✓
-- Research log: [vhdl-subprograms-pkg-synth-2026-05-28.md](../../research-log/vhdl-subprograms-pkg-synth-2026-05-28.md)
+- HDL Factory — VHDL IEEE Libraries: https://www.hdlfactory.com/post/2025/06/29/vhdl-ieee-libraries-and-numeric-type-conversion-a-definitive-reference/ (WebFetch ✓)
+- Research log: [vhdl-subprograms-pkg-synth-2026-05-28.md](../../../history/research-log/vhdl-subprograms-pkg-synth-2026-05-28.md)

@@ -1,28 +1,29 @@
-# 04 · VHDL 설계 단위 (Design Units)
+# 04 · VHDL Design Units
 
-IEEE 1076-2008 §3 기준. entity / architecture / package / library·use / configuration.
+Per IEEE 1076-2008 §3: entity / architecture / package / library and use / configuration.
 
 ---
 
-## 설계 단위 종류 요약
+## The design units at a glance
 
-| 단위 | 역할 | 합성 |
+| Unit | Role | Synth |
 |------|------|------|
-| entity | 외부 인터페이스 선언 (generics + ports) | ✅ |
-| architecture | 내부 구현 (entity에 종속) | ✅ |
-| package declaration | 타입·상수·컴포넌트·함수 선언 공유 | ✅ |
-| package body | 함수·프로시저 구현, 지연 상수 값 | ✅ (함수 내용) |
-| configuration | 컴포넌트를 entity-arch 쌍에 바인딩 | ❌ (대부분 툴 미지원) |
+| entity | declares the external interface (generics + ports) | ✅ |
+| architecture | the internal implementation (belongs to an entity) | ✅ |
+| package declaration | shares type, constant, component and subprogram declarations | ✅ |
+| package body | subprogram bodies, and the values of deferred constants | ✅ (the subprogram bodies) |
+| configuration | binds a component to an entity-architecture pair | ❌ (most tools do not support it) |
 
-컨텍스트 절(`library` + `use`)은 독립 설계 단위가 아니라 설계 단위 앞에 붙는 헤더다.
+A context clause (`library` + `use`) is not a design unit of its own; it is a header attached
+in front of a design unit.
 
 ---
 
 ## entity
 
-하드웨어 모듈의 **외부 인터페이스**를 선언한다. 동작은 담지 않는다.
+An entity declares the **external interface** of a hardware module. It carries no behaviour.
 
-### 문법
+### Syntax
 
 ```vhdl
 entity entity_name is
@@ -37,17 +38,19 @@ entity entity_name is
 end entity entity_name;
 ```
 
-- `generic` 절과 `port` 절 모두 선택적.
-- `end entity entity_name;` — `entity` 키워드와 이름은 생략 가능 (하지만 명시 권장).
+- Both the `generic` clause and the `port` clause are optional.
+- In `end entity entity_name;` the `entity` keyword and the name may be omitted, though
+  spelling them out is recommended.
 
 ### generic
 
-인스턴스화 시 외부에서 주입되는 파라미터. `constant`와 유사하나 설계 단위 경계에서 값을 받는다.
+A parameter injected from outside at instantiation. It is like a `constant`, except that the
+value arrives across the design-unit boundary.
 
 ```vhdl
 entity adder is
   generic (
-    WIDTH     : integer := 8;        -- 기본값 있음
+    WIDTH     : integer := 8;        -- with a default
     SIGNED_OP : boolean := false
   );
   port (
@@ -57,38 +60,40 @@ entity adder is
 end entity adder;
 ```
 
-### port 모드
+### Port modes
 
-| 모드 | 내부 읽기 | 내부 쓰기 | 다중 드라이버 |
+| Mode | Read inside | Write inside | Multiple drivers |
 |------|-----------|-----------|--------------|
 | `in` | ✅ | ❌ | N/A |
 | `out` | ❌ (93) / ✅ (2008+) | ✅ | ❌ |
 | `inout` | ✅ | ✅ | ✅ |
 | `buffer` | ✅ | ✅ | ❌ |
-| `linkage` | 제한 | 제한 | — |
+| `linkage` | restricted | restricted | — |
 
-VHDL-2008에서 `out` 포트를 아키텍처 내부에서 읽을 수 있게 되어 `buffer`의 필요성이 크게 줄었다.
+Because VHDL-2008 allows an `out` port to be read inside the architecture, `buffer` is far
+less often needed.
 
 ---
 
 ## architecture
 
-entity의 **내부 구현**을 담는다. 하나의 entity에 여러 architecture를 붙일 수 있다.
+An architecture holds the **internal implementation** of an entity. One entity may have
+several architectures.
 
-### 문법
+### Syntax
 
 ```vhdl
 architecture arch_name of entity_name is
-  -- 선언 영역: signal, constant, component, type, subtype, function, procedure, ...
+  -- declarative region: signal, constant, component, type, subtype, function, procedure, ...
 begin
-  -- 동시문(concurrent statements) 영역
+  -- concurrent statements
 end architecture arch_name;
 ```
 
-### 1개 entity — 여러 architecture
+### One entity, several architectures
 
 ```vhdl
--- RTL 구현
+-- the RTL implementation
 architecture rtl of adder is
 begin
   sum <= std_logic_vector(
@@ -96,7 +101,7 @@ begin
   );
 end architecture rtl;
 
--- 동작 모델 (시뮬레이션용)
+-- a behavioural model (for simulation)
 architecture behavioral of adder is
 begin
   process(a, b)
@@ -108,9 +113,10 @@ begin
 end architecture behavioral;
 ```
 
-툴은 기본적으로 **마지막 컴파일된** 아키텍처를 선택한다. 명시적 선택이 필요하면 configuration을 사용한다.
+By default a tool picks the **most recently compiled** architecture. Use a configuration when
+the choice has to be explicit.
 
-### 선언 영역
+### The declarative region
 
 ```vhdl
 architecture rtl of top is
@@ -129,26 +135,27 @@ end architecture;
 
 ## package
 
-타입·상수·컴포넌트·서브프로그램 선언을 여러 설계 단위에 **공유**한다.
+A package **shares** type, constant, component and subprogram declarations across several
+design units.
 
-### package declaration (선언부)
+### package declaration
 
 ```vhdl
 library IEEE;
 use IEEE.std_logic_1164.all;
 
 package my_pkg is
-  -- 상수 (즉시 값)
+  -- a constant with its value here
   constant DATA_WIDTH : integer := 8;
 
-  -- 지연 상수 (deferred constant) — 값은 바디에서
+  -- a deferred constant — the value comes from the body
   constant MAX_COUNT  : integer;
 
-  -- 타입·서브타입
+  -- types and subtypes
   subtype byte_t  is std_logic_vector(7 downto 0);
   type state_t    is (IDLE, ACTIVE, DONE);
 
-  -- 컴포넌트 선언
+  -- a component declaration
   component fifo
     generic (DEPTH : integer := 16);
     port (clk, rst, wr_en, rd_en : in  std_logic;
@@ -157,23 +164,23 @@ package my_pkg is
           full, empty             : out std_logic);
   end component;
 
-  -- 함수·프로시저 선언 (바디 없음)
+  -- subprogram declarations (no body)
   function parity(v : byte_t) return std_logic;
   procedure swap(a, b : inout integer);
 end package my_pkg;
 ```
 
-- **선언부만 외부에서 보인다.** 바디 내용은 외부 불가.
-- 서브프로그램 바디가 없으면 패키지 바디 자체를 생략할 수 있다.
+- **Only the declaration is visible from outside.** Nothing in the body is.
+- If there are no subprogram bodies, the package body itself may be omitted.
 
-### package body (바디)
+### package body
 
 ```vhdl
 package body my_pkg is
-  -- 지연 상수 값 부여
+  -- give the deferred constant its value
   constant MAX_COUNT : integer := 255;
 
-  -- 함수 구현
+  -- the function implementation
   function parity(v : byte_t) return std_logic is
     variable p : std_logic := '0';
   begin
@@ -183,7 +190,7 @@ package body my_pkg is
     return p;
   end function parity;
 
-  -- 프로시저 구현
+  -- the procedure implementation
   procedure swap(a, b : inout integer) is
     variable tmp : integer;
   begin
@@ -192,62 +199,65 @@ package body my_pkg is
 end package body my_pkg;
 ```
 
-주의: 바디 내에서 새로 선언한 상수·타입은 외부에서 보이지 않는다 — 흔한 혼동 지점.
+Note: a constant or type newly declared inside the body is not visible from outside — a common
+point of confusion.
 
 ---
 
-## library · use 절
+## library and use clauses
 
-### 문법
+### Syntax
 
 ```vhdl
 library library_name;
 use library_name.package_name.item_or_all;
 ```
 
-### 관용 패턴
+### The idiomatic patterns
 
 ```vhdl
--- IEEE 표준 패키지
+-- IEEE standard packages
 library IEEE;
 use IEEE.std_logic_1164.all;   -- std_logic, std_logic_vector
 use IEEE.numeric_std.all;      -- unsigned, signed
 
--- 현재 프로젝트 패키지
-library work;                  -- 암시적으로 항상 적용 (선언 생략 가능)
-use work.my_pkg.all;           -- 패키지 전체
-use work.my_pkg.parity;        -- 선택적 임포트
+-- the current project's own package
+library work;                  -- implicitly always in effect (the clause may be omitted)
+use work.my_pkg.all;           -- the whole package
+use work.my_pkg.parity;        -- a selective import
 ```
 
-### 동작 규칙
+### The rules
 
-- `library` 절은 라이브러리를 현재 컨텍스트에 추가.
-- `work`는 현재 프로젝트의 기본 컴파일 목적지 — `library work;` 생략해도 항상 유효.
-- 컨텍스트 절은 설계 단위 **앞**에 위치하며 그 설계 단위에만 적용된다.
-- 패키지를 변경하면 그것을 `use`한 모든 설계 단위를 재컴파일해야 한다.
+- A `library` clause adds a library to the current context.
+- `work` is the default compilation target of the current project — it is always available
+  even without `library work;`.
+- A context clause sits **in front of** a design unit and applies only to that design unit.
+- Changing a package requires recompiling every design unit that `use`s it.
 
-### 표준 라이브러리
+### The standard libraries
 
-| 라이브러리 | 패키지 | 주요 내용 |
+| Library | Package | Main content |
 |-----------|--------|----------|
-| `IEEE` | `std_logic_1164` | `std_logic`, `std_logic_vector`, 변환 함수 |
-| `IEEE` | `numeric_std` | `unsigned`, `signed`, 산술 연산 |
-| `IEEE` | `math_real` | `sqrt`, `log`, 삼각함수 (시뮬레이션 전용) |
-| `STD` | `standard` | `integer`, `boolean`, `bit` 등 기본 타입 (항상 내포) |
-| `STD` | `textio` | 파일 I/O (시뮬레이션 전용) |
+| `IEEE` | `std_logic_1164` | `std_logic`, `std_logic_vector`, conversion functions |
+| `IEEE` | `numeric_std` | `unsigned`, `signed`, arithmetic operators |
+| `IEEE` | `math_real` | `sqrt`, `log`, trigonometry (simulation only) |
+| `STD` | `standard` | `integer`, `boolean`, `bit` and the other base types (always implicit) |
+| `STD` | `textio` | file I/O (simulation only) |
 
 ---
 
 ## configuration
 
-아키텍처 내 컴포넌트 인스턴스를 **특정 entity-architecture 쌍에 바인딩**한다.
+A configuration **binds a component instance** inside an architecture to a particular
+entity-architecture pair.
 
 ### configuration declaration
 
 ```vhdl
 configuration cfg_name of entity_name is
   for architecture_name
-    -- 컴포넌트 인스턴스 바인딩
+    -- bind a component instance
     for instance_label : component_name
       use entity lib_name.entity_name(arch_name);
       generic map (generic_name => value);
@@ -257,10 +267,10 @@ configuration cfg_name of entity_name is
 end configuration cfg_name;
 ```
 
-### 실제 예시: 두 가지 구현체 교체
+### A worked example: swapping two implementations
 
 ```vhdl
--- 빠른 구현 선택
+-- pick the fast implementation
 configuration cfg_fast of top is
   for rtl
     for u_alu : alu_comp
@@ -269,7 +279,7 @@ configuration cfg_fast of top is
   end for;
 end configuration cfg_fast;
 
--- 검증용 행동 모델 선택
+-- pick the behavioural model, for verification
 configuration cfg_behav of top is
   for rtl
     for u_alu : alu_comp
@@ -279,7 +289,7 @@ configuration cfg_behav of top is
 end configuration cfg_behav;
 ```
 
-### 계층 구조 바인딩
+### Binding down the hierarchy
 
 ```vhdl
 configuration cfg_full of system is
@@ -296,7 +306,7 @@ configuration cfg_full of system is
 end configuration cfg_full;
 ```
 
-### configuration specification (아키텍처 내 인라인 바인딩)
+### configuration specification (binding inline in the architecture)
 
 ```vhdl
 architecture rtl of top is
@@ -304,7 +314,7 @@ architecture rtl of top is
     port (a, b : in std_logic_vector(7 downto 0); result : out std_logic_vector(7 downto 0));
   end component;
 
-  -- 선언 영역에서 바인딩 (configuration specification)
+  -- bound in the declarative region (a configuration specification)
   for u_alu : alu_comp
     use entity work.alu(rtl);
   end for;
@@ -313,25 +323,27 @@ begin
 end architecture;
 ```
 
-### 합성 제한
+### The synthesis restriction
 
-대부분의 합성 툴(Vivado, Quartus 등)은 configuration을 지원하지 않는다. 실무에서는:
-- 시뮬레이션/검증 환경에서 구현체 교체에 사용
-- RTL 합성에서는 직접 entity 인스턴스화 + architecture 이름 명시가 대안
+Most synthesis tools (Vivado, Quartus and the rest) do not support configurations. In practice:
+
+- use them in a simulation or verification environment, to swap implementations;
+- for RTL synthesis, the alternative is direct entity instantiation with the architecture name
+  spelled out.
 
 ---
 
-## 설계 단위 파일 구조 관례
+## The conventional file layout of a design unit
 
 ```vhdl
 -- my_module.vhd
 
--- 1. 컨텍스트 절 (모든 설계 단위 앞에)
+-- 1. the context clause (in front of every design unit)
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
--- 2. entity
+-- 2. the entity
 entity my_module is
   generic (WIDTH : integer := 8);
   port (
@@ -342,7 +354,7 @@ entity my_module is
   );
 end entity my_module;
 
--- 3. architecture (같은 파일 또는 별도 파일)
+-- 3. the architecture (same file, or a separate one)
 architecture rtl of my_module is
   signal count : unsigned(3 downto 0) := (others => '0');
 begin

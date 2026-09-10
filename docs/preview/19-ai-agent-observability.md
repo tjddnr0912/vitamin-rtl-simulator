@@ -1,110 +1,309 @@
-# 19 — AI-Agent Observability (OBS) — G2 "AI-Agent 친화 simulator" 스펙
+# 19 — AI-agent observability (the OBS rail)
 
-> **신설: 2026-07-02.** vitamin 최종목표에 **G2**를 추가한다: 기존 **G1**(icarus·verilator·xcelium·vcs급 *정확한* 오픈소스 RTL 시뮬레이터, correct-or-loud)에 더해, **AI Agent(LLM 하네스)가 라운드트립 없이 실패를 진단·국소화하고, 커버리지를 즉답받고, TB 재빌드 없이 시뮬레이션을 프로그램 제어**할 수 있는 시뮬레이터.
-> 요구 원천 = 외부 리뷰어 설계서 **[AI_SIM_OBSERVABILITY.md](../reviews/2026-07-02-ai-sim-observability.md)**(2026-07-01, ROADMAP §6 리포트와 동일 사용자 그룹). 이 문서가 vitamin 측 단일 정본 SPEC이며, 트랙 관리 = ROADMAP §6(OBS-0~6).
+This is the specification for goal G2: a simulator an LLM harness can read and drive without a
+round trip through a human. It defines the machine-readable rail vita writes beside a simulation —
+every emitted file, its complete schema, the flag that gates it, and the guarantees a consumer may
+rely on. G1 (correct-or-loud accuracy) is the companion goal; the rail inherits its rules, because a
+wrong log misleads a machine exactly as a wrong value does.
 
----
+The order in which open items are taken is [ROADMAP §6](../ROADMAP.md). The requirement identifiers
+used below (R-L0 … R-I2) trace to the requirements document in
+[docs/history/reviews](../history/reviews/2026-07-02-ai-sim-observability.md).
 
-## 0. 요약 (결론 먼저)
+## 1. Contract
 
-- **왜 vitamin인가**: 리뷰어 §9("legacy가 구조적으로 못 주는 것")의 전제조건 — **결정성(동일 seed→byte-identical 출력·이벤트 순서 동일)** — 을 vitamin은 이미 코어 불변식으로 보유(3-OS byte-identical·BTree-only·seeded RNG·SchemaHash 게이트). legacy sim이 사후에 못 붙이는 계약을 우리는 무료로 상속한다. 관찰(JSONL rail)·제어(JSON-RPC)는 그 위의 직렬화기/REPL이다.
-- **correct-or-loud의 확장**: **틀린 로그 = silent-wrong과 동급**(LLM을 오도해 잘못된 디버깅으로 유인). 관찰값은 엔진 단일 소스에서만 파생(이중 계산 경로 금지), 미해석 probe 경로·미지원 질의는 조용히 스킵하지 않고 **loud**(E-code). 표준 teeth = **3-way 내부 차분(JSONL ≡ VCD ≡ `$display`)**.
-- **우선순위**: correctness(A2 체인·silent-wrong 사냥)가 항상 선순위. OBS는 그 다음 슬롯에서 OBS-1(MVP)부터 단계 순.
+Five properties. Every rule further down is a consequence of one of them.
 
-## 1. 자료수집 — 요구사항 인벤토리 (리뷰어 문서 → REQ ID)
+| # | Property | What it forbids |
+|---|---|---|
+| 1 | **Rail separation.** VCD/FST is the human waveform; the OBS rail is a separate set of JSON and JSONL artifacts for a program to read. | Making a consumer parse a waveform to answer "what happened". |
+| 2 | **Determinism.** The same input with the same options produces byte-identical rail output, event order included. Wall clock is isolated to named fields listed in §11. | Any map iterated in hash order, any sort without a total tiebreak, any time-derived sort key. |
+| 3 | **Single source.** Every observed value is derived from the engine value the simulation used. | A second computation path that can disagree with the run. |
+| 4 | **Loud, never approximate.** An unresolved probe path, an unsupported net kind or an unsupported request is a diagnostic and a non-zero exit. | Silently skipping a request, or emitting an approximation that reads as a measurement. |
+| 5 | **Token economy.** Transitions and events only; PASS is one line; FAIL is where the detail goes. | A per-cycle dump, a magic number with no schema, a run whose ledger costs more to read than the log. |
 
-| REQ | 내용 | 원문 | 분류 |
+The anti-pattern contract is binding on consumers as well: a waveform is not an LLM input, a final
+digest diff is not a verdict, every record carries its envelope version and its time, and tool
+identity and version are always present so a transcript can be attributed.
+
+Correctness rules that apply to this rail as they apply to the engine (see
+[ENGINEERING_RULES](../ENGINEERING_RULES.md)): a wrong log ranks with a silent-wrong; the standard
+teeth for an OBS change are a three-way internal differential (JSONL ≡ VCD ≡ `$display`) plus the
+determinism golden; and anything that *reports* is additionally tested by an asymmetric upstream
+mutation — change something the numbers must follow and confirm they move, because a repeat run of
+the same input cannot see a reporting defect.
+
+Nothing on the rail changes the simulation, stdout, the waveform or the exit code. A rail write
+failure prints `error[VITA-E0001]` on stderr and leaves the exit code as the simulation set it.
+
+Constants:
+
+| | Value |
+|---|---|
+| OBS `schema_ver` | `1` |
+| `tool` | `"vita"` |
+| `version` | `"0.2.0"` (the workspace version) |
+| `format_version` | `31` (the frozen artifact format this build emits) |
+| Exit codes | `0` OK · `1` RTL or user error · `2` stale artifact · `3` CLI misuse |
+| Every OBS flag diagnostic | `VITA-E0001` (`E-CLI-BAD-FLAG`) |
+| `$vita_stage` elaborate errors | `VITA-E3009` (`E-ELAB-UNSUPPORTED`) |
+
+The rail is out-of-band with respect to the frozen IR: obs settings travel on `SimOpts` and CLI
+sidecars, the `SimIr` shape is unchanged, and `format_version` does not move when the rail changes.
+The rail versions itself with `schema_ver`.
+
+## 2. Requirement inventory and status
+
+| REQ | Requirement | Served by | Status at HEAD |
 |---|---|---|---|
-| R-L0 | run manifest(run.json — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·**backend**·**backend_requested**·**codegen{able,total,frame_bodies,reject_reasons{…}}**·**native{eligible,reject_reasons{…}}**·**processes**(R14 · § 4.6 — `--obs-procs` 없이는 `null`)·**builtins**(R2 · §4.9 — 같은 플래그 · 없으면 `null`)·utc_unix_s·wall_s. `backend`/`codegen`/`native`=T0/S0 계기(doc-21 §7.3, 2026-08-03 additive — 기존 kind 위 필드 추가라 schema_ver 1 유지): `backend`=**실제 실행기** + `backend_requested`=**요청된 것**(둘 다 `--backend` 어휘 · `backend` 는 결과에서 읽는다). ⚠️ **Corrected 2026-08-25 — this entry described the pre-Phase-B world and was actively misleading.** It said *"`--backend native` still falls back to the VM, so writing the request verbatim would report an executor that did not run"* and *"`native` currently appears only in `backend_requested`"*. Neither is true: **`native` is the DEFAULT executor, it runs 100.00% of the corpus, and `backend` reports `"native"` on an ordinary run** (verified: a plain `vita --obs-dir …` writes `backend: native`, `backend_requested: native`, `native.refused: null`). An agent reading this field must NOT infer that vita interprets. The two fields still exist for the same reason and **their comparison is still the only fallback signal**: `native.refused` 는 설계의 성질이라 아무것도 거부하지 않을 때 `null` 이고, 그때가 바로 폴백이 일어나는 경우다 · `codegen` 이 정적 census 라 이 필드 없이는 interp 강제 런의 `able` 이 "VM 이 돌렸다"로 오독됨), `codegen`=②층 VM 이 이 설계에서 무엇을 거부했는가(엔진 compile gate 와 같은 walk = 단일 소스 · `sformatf` 키는 desugar 된 string concat 도 포함 — "소스가 $sformatf 를 썼다"가 아니라 "IR 이 $sformatf 노드에 닿는다"), `native`=③층 판정 **두 층**: `eligible`=v1 **범위**가 받는가(설계 수준 상한) · `buildable`=오늘의 **저장소**가 실제로 담을 수 있는가(`NetArena::buildable`) · `refused`=런타임 게이트(둘의 AND)가 거부한 이유 또는 `null` — **어휘가 둘**이다: 설계 게이트가 거부하면 `reject_reasons` 의 **키**(여럿이면 그 맵의 사전순 첫 항 = 결정적이지만 "하나의" 이유), 저장소가 거부하면 **맵에 없는 자체 문구**(소비자는 조인 실패를 오류가 아니라 저장소 경우로 읽어야 한다). 둘을 한 플래그로 접으면 **상한이 능력으로 읽힌다**(서브루틴 설계는 eligible 이지만 buildable 아님). (설계, 런 옵션) 별 정적 — `--probe`/stage 계측 런은 설계상 부적격(doc-21 §4.3). 리뷰어 원문의 `run_id`는 **미구현-연기**, wall-clock 키는 `utc`가 아니라 `utc_unix_s`/`wall_s`) | §2 L0 | 로그 rail |
-| R-L1 | test-case ledger(results.jsonl, PASS=1줄 terse·FAIL=detail_ref) | §2 L1 | 로그 rail |
-| R-L2 | failure detail(fail/*.json, 발산점 값 우선) | §2 L2 | 로그 rail |
-| R-L3 | FSM/state trace(**transition만**, hang용 stuck_in) | §2 L3 | 로그 rail |
-| R-L4 | handshake/protocol event(채널 fire 전수) | §2 L4 | 로그 rail |
-| R-L5 | coverage summary(coverage.json — "무엇이 안 돌았나" 즉답) | §2 L5 | 로그 rail |
-| R-L6 | SVA log(property **이름**+연루 신호값) | §2 L6 | 로그 rail |
-| R-S0 | **design-structure export**(elaborate 후 module hierarchy tree + instance full-path 목록·scope 설정/signal force copy-paste용) | round-10 요청 | 정적 export |
-| R-S3 | emulator↔sim 공통 **stage-trace** 스키마 + golden stage hook(정렬 diff→모듈 지목) | §3·§9.2 | 로그 rail(훅) |
-| R-C1 | 프로그램 제어 API: `poke/peek/step/run_until` (stdio JSON-RPC, TB 없이 루프 폐합) | §9.1 | 제어 capability |
-| R-C2 | 결정적 checkpoint/replay/time-travel(`snapshot/restore/rewind_to`) | §9.1 | 제어 capability |
-| R-C3 | delta-cycle/region 순서 event(NBA vs active, glitch↔settled 구분) | §9.1 | 관찰 capability |
-| R-C4 | X-전파 origin(`cause: uninit\|multi-drv\|arith-X`, first-X 우선) | §9.1 | 관찰 capability |
-| R-C5 | dataflow backward slice(값을 결정한 구동 cone) | §9.1 | 관찰 capability(stretch) |
-| R-I1 | config-driven signal introspection(hand-`bind` 없이 named JSONL 자동 dump) | §9.2 | 자동화 |
-| R-I2 | semantic transaction log(채널 1회 기술→L4 자동 emit) | §9.2 | 자동화 |
-| R-F1 | 형식 계약: JSONL+`schema_ver`·안정 계층경로 문자열·**명시폭 hex+enum 문자열**·windowed 질의·**동일 seed→byte-identical** | §9.3 | 계약 |
-| R-A | anti-pattern 계약: VCD를 LLM 입력으로 금지·최종 digest-diff 금지·magic number 금지·전 cycle dump 금지·PASS terse·seed/version 필수 | §6 | 계약 |
+| R-L0 | Run manifest | `run.json` (§5) | Implemented; `run_id` and `--seed` absent (§13) |
+| R-L1 | Test-case ledger, PASS terse | `results.jsonl` (§6) | Implemented as one line per run; the per-test-case form is not implemented |
+| R-L2 | Failure detail (`fail/*.json`, divergence value first) | — | Not implemented |
+| R-L3 | State trace, transitions only | `trace.jsonl` (§8) | Implemented for scalar/vector/packed nets; `stuck_in` hang detection is not implemented |
+| R-L4 | Handshake and protocol channel events | — | Not implemented |
+| R-L5 | Coverage summary | `coverage.json` (§7) | Implemented for functional covergroups only |
+| R-L6 | SVA log (property name plus implicated signal values) | — | Not implemented |
+| R-S0 | Design-structure export (hierarchy tree, instance paths) | `--hier-tree` / `--inst-paths` (§10) | Implemented, one-shot only |
+| R-S3 | Stage-trace schema shared with an emulator, plus a golden stage hook | `$vita_stage` → `stage.jsonl` (§9) | Implemented |
+| R-C1 | Program control API (`peek`/`poke`/`step`/`run_until`/`finish`) | — | Not implemented |
+| R-C2 | Deterministic checkpoint, replay, time travel | — | Not implemented |
+| R-C3 | Delta-cycle and region-ordered events | — | Not implemented; no record carries a region or delta field |
+| R-C4 | X-propagation origin (`uninit` / `multi-drv` / `arith-X`) | — | Not implemented |
+| R-C5 | Dataflow backward slice | — | Not implemented |
+| R-I1 | Config-driven signal introspection (auto-named dump with no hand-written `bind`) | `--probe` / `--probe-file` | Partial: a manual path list, not a config |
+| R-I2 | Semantic transaction log | — | Not implemented |
+| R-F1 | Format contract: JSONL, `schema_ver`, stable hierarchical path strings, explicit value encoding, byte-identical repeat runs | §1 property 2, §11 | Implemented, with the value encoding of §3 pin 4 |
+| R-A | Anti-pattern contract | §1 | Adopted in full |
 
-리뷰어 자체 우선순위: 로그 측(§8) = L0+L1+L5 MVP → stage trace → L4+L2 → L3+L6. capability 측(§9.4) = ① 제어 API+replay ② config introspection ③ delta/region event ④ X-origin·(stretch) slice.
+R-F1 costs vita nothing that a legacy simulator would have to retrofit: determinism is already a
+core invariant (byte-identical output across the supported platforms, `BTreeMap`-only iteration,
+seeded RNG, the SchemaHash staleness gate). The rail is a serializer on top of that invariant, not
+a new guarantee.
 
-## 2. 타당성검토 — vitamin 현재 자산 대비 fit/gap
+## 3. Design pins
 
-| REQ | 현재 자산 (fit) | gap (해야 할 일) | 공수 |
+1. **Two rails.** VCD/FST for people, semantic JSONL for programs. Neither is derived from the other.
+2. **Determinism is a gate, not an aspiration.** Byte-identical repeat output is a golden test, and
+   it is the prerequisite for checkpointing, bisecting and stage diffing.
+3. **The log obeys correct-or-loud.** One source (the engine), no second computation, loud on
+   anything unresolved, and a three-way internal differential as the standard teeth.
+4. **Record envelope.** Every JSONL record is a self-contained one-line JSON object whose first
+   keys are `{"v":1,"t":<u64>,"kind":"…"}`, followed by a per-`kind` payload. Key order is fixed by
+   the serializer, which is what makes byte-identity possible. Value encoding: `trace.jsonl`'s
+   `old`/`new` are **full-width, unprefixed, MSB-first 4-state binary strings** (characters
+   `0` `1` `x` `z`), so a value is bit-precise with no width ambiguity; `stage.jsonl`'s `vals[]` are
+   **`%0d` decimal strings**, deliberately mirroring a parallel `$display("%0d", …)` so the two can
+   be byte-compared as the three-way teeth. Paths are the full hierarchical string the VCD `$scope`
+   rules produce (`top.u0.state_q`).
+5. **Logs before capabilities.** The observation rail is small, immediately useful and low-risk; the
+   control and time-travel surfaces are large. §13 states which of them exist.
+
+Non-goals, outside the rail by decision: FSDB and UCDB, an embedded SQLite (one external loader
+script is enough), a waveform GUI, UVM integration, and automatic inference of protocol channels —
+R-I2 would be config-described, never guessed. VCD stays the human-facing format.
+
+## 4. Surfaces
+
+| Surface | Kind | Emits | Gate |
 |---|---|---|---|
-| R-F1 결정성 | **이미 코어 불변식**(3-OS byte-identical·seeded RNG·BTree-only) — legacy 대비 구조 우위 그대로 상속 | JSONL sink가 같은 게이트(골든 byte-diff 테스트)를 통과하게 작성 | S |
-| R-F1 경로/값 | VCD writer가 계층 `$scope` 안정 경로 보유·enum 이름은 IR/사이드카에 존재·4-state 값 모델 | 경로 문자열 규칙(VCD scope 규칙 재사용)·값 포맷터(4-state x/z 문자 유지 — 출하 인코딩은 §3 핀4: trace=full-width 이진·stage=`%0d` 10진)·envelope(`v`,`t`,`kind`) 확정=**본 스펙 §3** | S |
-| R-L0/L1/L5 | exit-code 분류·`$fatal`/assertion 카운트·**N5 functional coverage + SVA/cover 카운터 이미 구현**·plusargs 파서 존재 | `--obs-dir` CLI + 직렬화기. 주의: vitamin은 현재 1 run=1 test 모델 → v1 test_id=run 단위(TB-루프 분절은 `$vita_test_begin/end` v2) | S-M |
-| R-L3/R-I1 | 엔진에 net 변경 감지 스트림 존재(VCD가 그 소비자)·net_names 사이드카 | **JSONL probe sink** = 같은 변경 스트림의 2번째 소비자(`--probe <path>`/`--probe-file`). 미해석 경로=loud | M |
-| R-L4/R-I2 | — (채널 추상화는 설계 지식이라 sim이 강제 불가) | config로 채널 기술(valid/ready/data 튜플)→fire-event 자동 emit. probe sink 위의 얇은 층 | M |
-| R-L6 | SVA 체커가 property 이름·실패 시각을 내부 보유(§4.5.x SVA 트랙) | sva.jsonl emit + support-cone v0(property expr의 leaf 신호 값 dump) | M |
-| R-S3 | `$display`/`$fwrite` 이미 지원(리뷰어 §7의 수동 방식은 오늘도 가능) | 전용 벤더 태스크 **`$vita_stage("label", vals…)`** → stage.jsonl(구조화·escape 불필요). iverilog에 없는 태스크=`` `ifdef VITA `` 가드 문서화 | M |
-| R-C1 제어 API | vrun이 **단일 스레드 이벤트 루프를 소유** — time-step 경계 REPL 삽입이 구조적으로 깨끗. `run_until(time/cond)`은 기존 워치독/이벤트 기구 재사용 | stdio JSON-RPC(`peek/poke/step/run_until/finish`)·poke=스케줄된 주입 이벤트(저널에 기록→재현성 유지) | L |
-| R-C2 checkpoint | 엔진 상태가 serde-문화(postcard 단일 인코더)·힙 컬렉션 전부 BTree/Vec | 스냅샷 경계 정의(NetVar 값·스케줄 큐·frame 스택·class heap·RNG 상태·시각·VCD append 오프셋)=신중 설계 필요. OBS-4 이후 | L-XL |
-| R-C3 region event | 스케줄러가 IEEE stratified region 큐를 **명시 보유** — region 주석은 내부 구조의 노출이지 신규 기계 아님 | probe-set 한정 + windowed로 이벤트 폭발 방지 | M-L |
-| R-C4 X-origin | 4-state 코어 — X 생성 지점(uninit/multi-driver/arith)이 코드 상 식별 가능 | per-net first-X 태깅 v1(전수 이력은 비목표) | L |
-| R-C5 slice | sim-ir가 CA 의존 에지 보유 | 정적 backward cone v1(질의 시)·동적 slice=stretch | L/XL |
+| `--obs-dir <DIR>` | flag with value | `run.json`, `results.jsonl`, and conditionally `coverage.json`, `trace.jsonl`, `stage.jsonl` | one-shot `vita` only |
+| `--obs-procs` | boolean flag | populates `run.json`'s `processes`, `builtins`, `subroutine_calls` (counts only) | requires `--obs-dir` |
+| `--obs-procs-time` | boolean flag | the same three objects plus `time_s` / `timed_calls` / `obs_overhead_est_s` | requires `--obs-dir`; implies `--obs-procs` |
+| `--probe <NET>` | flag with value, repeatable | `trace.jsonl` | requires `--obs-dir`; one-shot only |
+| `--probe-file <FILE>` | flag with value | merged into the `--probe` set | requires `--obs-dir`; one-shot only |
+| `$vita_stage("label"[, vals…])` | vendor system task in RTL | `stage.jsonl` | requires the `+STAGE_TRACE` plusarg and `--obs-dir`; one-shot only |
+| `--hier-tree <FILE>` | flag with value | a plain-text instance tree | one-shot `vita` only |
+| `--inst-paths <FILE>` | flag with value | a plain-text instance-path list | one-shot `vita` only |
 
-**제약(전 단계 공통)**:
-- **골든 무영향**: obs 설정은 CLI/SimOpts 사이드카(out-of-band) — frozen SimIr 형상 불변=**전부 IR-0**, format_version 불변. obs rail 자체 버전은 별도 `schema_ver`(초기 1).
-- **결정성 게이트**: 동일 입력+seed+obs 설정 → JSONL **byte-identical**(이벤트 순서 포함)을 골든 테스트로 상시 게이트. wall-clock(`utc_unix_s`,`wall_s`)은 manifest의 명시 필드 2개에만 격리(비교 시 제외 규칙을 스펙에 핀).
-- **loud 관찰**: probe 경로 미해석·미지원 kind·windowed 질의 범위 오류 = E-code loud. 값은 엔진 값에서만 파생(3-way 차분이 teeth).
-- **token 경제**: PASS=1줄 terse·FAIL=rich·transition/event만(전 cycle 덤프 금지)·VCD는 사람용으로 유지(JSONL은 별도 rail).
+`--obs-dir` creates its directory, nested components included. All four applets (`vita`, `vcmp`,
+`velab`, `vrun`) share one argv parser, so every spelling above is recognised everywhere and is
+answered on a staged applet by the refusals in §4.2. The filelist expander knows which of them take
+a value, so a filelist cannot swallow an argument. `vita --help` lists all of them under
+`Observability (machine-readable run facts -- doc-19):`, and a test enumerates the literal match
+arms in the parser to assert that it does.
 
-## 3. 방향성 — 설계 결정 5핀
+### 4.1 Flag grammar
 
-1. **rail 분리**: VCD(사람용)와 semantic JSONL(LLM용)은 별개 산출물. 리뷰어 anti-pattern 계약(R-A) 전문 채택.
-2. **결정성 계약의 승격**: R-F1의 "동일 seed→byte-identical 로그"를 vitamin 골든 게이트로 승격(기존 3-OS 결정성 인프라 재사용). 이것이 legacy 대비 1호 차별점이자 checkpoint/bisect/stage-diff의 전제.
-3. **로그도 correct-or-loud**: 틀린 로그=silent-wrong. 이중 계산 금지(엔진 단일 소스)·미해석=loud·**3-way 내부 차분(JSONL≡VCD≡`$display`)을 OBS 슬라이스의 표준 teeth**로. 적대 2-sub 리뷰 프로토콜(LOOPROMPT §4) 동일 적용.
-4. **record envelope(스키마 계약)**: 매 record = self-contained 1줄 JSON, 최소 필드 `{"v":1,"t":<time u64>,"kind":"..."}` + kind별 payload. **값 인코딩(출하 확정 — 초안의 "명시폭 hex(`"8'h1x"`)"에서 의도적으로 변경·수용된 설계)**: `trace.jsonl`의 `old`/`new` = **full-width 무접두 4-state 이진 문자열**(MSB-first, 문자 0/1/x/z, 예 `"1010101111001101"`) — bit-정밀·폭 모호성 0; `stage.jsonl`의 `vals[]` = **10진 `%0d` 문자열**(의도적 — 병행 `$display %0d`와의 3-way 차분 teeth를 위한 미러) · enum=**이름 문자열**(미명명 값은 폴백) · 경로=VCD scope 규칙의 full-hier 문자열(`"top.u0.state_q"`). 키 순서 고정(직렬화기가 결정)=byte-identity.
-5. **단계 순서 = 리뷰어 §8(로그 먼저) → §9.4(capability)**: MVP가 즉시 유용하고 저위험(S-M)·제어 API는 L급. OBS-1→2→3→4→5→6.
+| Spelling | Value | Empty value | Repeat |
+|---|---|---|---|
+| `--obs-dir` | required | `'--obs-dir' needs a non-empty directory` | last wins, recorded as an override for the `-v` echo |
+| `--obs-procs` | none | — | idempotent |
+| `--obs-procs-time` | none | — | idempotent |
+| `--hier-tree` | required, non-empty | `'--hier-tree' needs a non-empty path` | last wins |
+| `--inst-paths` | required, non-empty | `'--inst-paths' needs a non-empty path` | last wins |
+| `--probe` | required, non-empty | `'--probe' needs a non-empty net path` | accumulates |
+| `--probe-file` | required | accepted, then fails at open | last wins |
 
-## 4. 단계별 계획 (step-by-step)
+`--obs-procs` and `--obs-procs-time` fold into one profile configuration: either flag turns the
+profile on, and `--obs-procs-time` sets its `timed` bit. `--obs-procs-time` alone is therefore
+sufficient and yields a timed profile.
 
-> 각 단계 = LOOPROMPT 표준 루프(그라운딩→구현→적대 2-sub→게이트→문서→커밋) 1~2 슬라이스. **전부 IR-0.**
+### 4.2 Loud rejections
 
-| 단계 | 산출물 | 구현 스케치 | 검증(teeth) | 공수 |
-|---|---|---|---|---|
-| **OBS-0 ✅** | 본 스펙(계약·스키마·우선순위) | — | — | — |
-| **OBS-1 (MVP)** | `--obs-dir D` → `run.json`(R-L0 — 출하 필드: schema_ver·tool·version·format_version·seed·plusargs·source{name,blake3}·finish_reason·exit_class·exit_code·sim_time·counts{…}·status·backend·backend_requested·codegen{…}·native{eligible,buildable,refused,…}·processes(§4.6 · `--obs-procs` 없이는 null)·builtins(§4.9 · 같은 플래그)·utc_unix_s·wall_s; `run_id`는 미구현-연기) + `results.jsonl`(R-L1: v1=run당 1줄, status=PASS/FAIL(exit·`$fatal`·assertion fail)·finish time) + `coverage.json`(R-L5: **functional covergroup 커버리지만** 직렬화 — `groups[]{instance, coverage_pct, coverpoints[]{name,is_cross,num_bins,covered_bins,coverage_pct}}`; assertion pass/fail·cover property 카운트는 **미포함** — OBS-2 `sva.jsonl` 슬라이스로 라우팅) | CLI 플래그+직렬화기(vita-log 인접 신규 모듈). 엔진의 기존 카운터를 종료 시 flush | 골든 byte-diff(같은 입력 2-run 동일)·수치는 기존 `$display`/exit와 3-way 대조 | S-M |
-| **OBS-2** | `--probe <path>`(반복)/`--probe-file F` → `trace.jsonl`(R-L3/R-I1: **변경 시만** `{v,t,kind:"chg",path,old,new}`) + `sva.jsonl`(R-L6: property명·시각·verdict·leaf 신호값=support-cone v0) | VCD 변경 스트림의 2번째 소비자로 probe sink 연결·경로 해소는 elaborate 심볼 테이블(미해석=loud E-code) | 3-way 차분(trace.jsonl ≡ VCD 동일 net 타임라인 ≡ `$monitor`)·probe 오타=loud 테스트 | M |
-| **OBS-3** | `$vita_stage("label", v0, v1, …)` → `stage.jsonl`(R-S3: `{v,t,kind:"stage",label,idx,vals[]}`) — 사용자 TB가 emulator와 동일 스키마로 정렬 diff 가능 | 벤더 시스템 태스크(no-op Display+StmtId 사이드테이블 선례=§4.5.x `$timeformat` 패턴, IR-0·bump 회피)·`+STAGE_TRACE` plusarg 게이트 | 라벨 순서·값을 `$display` 병행 emit과 바이트 대조·iverilog 호환은 `` `ifdef VITA `` 가드 문서화 | M |
-| **OBS-4** | `vrun --control stdio` JSON-RPC(R-C1): `peek(path)`·`poke(path,val)`·`step(n)`·`run_until(time)`·`finish` + 에러 계약(unknown path/bad val=구조화 에러) | time-step 경계에 REPL(단일 스레드 유지)·poke=스케줄 주입 이벤트·**전 명령을 run.json에 저널**(→동일 세션 재생=replay v0) | 제어 세션 기록→비대화식 재실행이 byte-identical·poke≡`force/release`-등가 케이스 내부 차분 | L |
-| **OBS-5** | `snapshot()→file`·`restore(file)`·`rewind_to(t)`(R-C2) | 엔진 상태 postcard 직렬화(스냅샷 경계=OBS-4 저널과 결합해 재현). VCD는 restore 후 신규 파일(append 이어쓰기 비목표) | `snapshot→restore→계속` ≡ 무중단 실행 전 구간 byte-diff | L-XL |
-| **OBS-6** | X-origin(R-C4: per-net first-X `{t,path,cause}`)·region-annotated events(R-C3: `region:"active\|nba\|…"`,probe-set 한정)·정적 backward cone(R-C5 v1) | X 생성 3지점(uninit/multi-drv/arith) 태깅·스케줄러 region 큐 노출·sim-ir 에지 역추적 | X-cause를 수작업 유도 케이스로 핀·region 순서는 스케줄러 스펙(doc-06)과 대조 | L+ |
+| Condition | Message | Exit |
+|---|---|---|
+| `--obs-dir` on `vcmp`/`velab`/`vrun` | ``'--obs-dir {dir}' is a one-shot `vita` argument — '{stage}' does not emit the obs rail (a staged-run manifest is a follow-on)`` | 3 |
+| `--probe`/`--probe-file` on a staged applet | ``'--probe'/'--probe-file' is a one-shot `vita` argument — '{stage}' does not emit the trace rail (staged probing is a follow-on)`` | 3 |
+| `--obs-procs`/`--obs-procs-time` on a staged applet | ``'--obs-procs'/'--obs-procs-time' is a one-shot `vita` argument — '{stage}' does not emit run.json (a staged-run manifest is a follow-on)`` | 3 |
+| `--obs-procs` without `--obs-dir` | ``'--obs-procs' requires '--obs-dir <D>' (the profile is published as run.json's `processes` object)`` | 3 |
+| `--probe` without `--obs-dir` | `'--probe' requires '--obs-dir <D>' (trace.jsonl is written there)` | 3 |
+| `--probe-file` unreadable | `cannot read --probe-file '{f}': {e}` | 3 |
+| A `--probe` path that is not a net | ``--probe path '{p}' does not resolve to a net (check the hierarchical name; `--dump-filelist`-style net listing is a follow-on)`` | 3 |
+| A `--probe` path of an unsupported kind | ``--probe path '{p}' is {r} — v1 can trace only a scalar/vector/packed net (real / per-element array / handle probing is a follow-on)``, where `{r}` is `a dynamic-array/queue/string handle`, `an unpacked array` or `a real/realtime net` | 3 |
+| `$vita_stage` in a design fed to staged `velab` | ``` `$vita_stage` is a one-shot `vita` task — `velab` does not stage it (run one-shot: `vita <design> --obs-dir <D> +STAGE_TRACE`) ``` | 3 |
+| `$vita_stage()` with no arguments | ``$vita_stage requires at least a label argument (`$vita_stage("label"[, values…])`)`` | 1 |
+| `$vita_stage` as a deferred-assertion action | `$vita_stage as a deferred-assertion action is unsupported — call it as a plain statement` | 1 |
 
-| **OBS-S0 (구현됨)** | `--hier-tree <path>`(module hierarchy tree: top부터 `<instance> : <module>` indented) + `--inst-paths <path>`(전 instance full dotted path `top.u_cpu.u_alu` 1/line·VCD `$scope` 일치)(R-S0) — scope 설정/signal force copy-paste용 | elaborate `InstanceInfo{path,module,parent}` out-of-band sidecar(`elaborate_instance` hook·frozen-IR 무영향)·CLI가 elaborate 후 렌더·one-shot `vita`(staged velab=follow-on) | tree/paths 텍스트 대조·nested/arrayed/generate scope 이름 = VCD `$scope`와 일관 | **S(완료 2026-07-13, §4.5.129)** |
+Order of operations on the one-shot path: preprocess → lex → parse → elaborate → write
+`--hier-tree` → write `--inst-paths` → resolve probes → check `--obs-procs` has a directory →
+simulate → finalise the exit code → write the obs directory. Two consequences a consumer must
+expect: a rejected `--probe` still leaves the hierarchy files behind and writes no obs directory at
+all, and a front-end or elaborate failure writes no obs directory either. Absence of `run.json` is
+therefore "the design never ran", not "the run said nothing".
 
-> **OBS-2 probe 의미론(출하)**: `probe_prev`는 **t0 이전 construction 값**으로 arm된다 — 따라서 t0에 처음 구동된 값도 **첫 `chg`로 기록**된다(`old`=construction 기본값, 보통 x). transition-only dedup은 그 이후부터 적용.
+### 4.3 The `-v` echo
 
-**비목표(rail 밖)**: FSDB/UCDB·SQLite 내장(외부 로더 스크립트 1개로 충분 — 리뷰어도 optional)·waveform GUI·UVM 연동·L4 채널 자동 추론(R-I2는 config 기술 기반만). VCD는 사람용으로 유지.
+The effective-invocation block printed under `-v` carries:
 
-### 4.6 `processes` — the per-body execution profile (R14 / ROADMAP §3 ⑭)
+```
+obs-dir:    <dir>                       # only when set
+obs-procs:  counts (--obs-procs)        # or: counts+time (--obs-procs-time)
+probes:     top.y1 top.clk              # always present, empty when no --probe was given
+```
 
-**Shipped 2026-08-26.** Flags: `--obs-procs` (counts) and `--obs-procs-time`
-(counts + cumulative wall clock; implies `--obs-procs`). Both require
-`--obs-dir` and are one-shot `vita` only, like the rest of the rail.
+The `probes:` row lists `--probe` values only, not the paths merged in from `--probe-file`.
+`--hier-tree` and `--inst-paths` have no echo row.
 
-**Why it exists.** An external report measured 20.4 cycle/s against a 440
-cycle/s budget and asked, as their explicit fallback to a faster scheduler, for
-"per-process evaluation counts and cumulative time … if we knew which
-`always_comb` eats the cost we could reduce it on our side". Everything
-`run.json` carried before this was STATIC: `codegen` says which bodies the VM
-*could* compile, `native` says whether tier-3 accepts the design. Neither says
-which body actually ran, or how often. `processes` is the dynamic half, and it
-is the half a user can act on without changing the simulator.
+## 5. `run.json`
 
-**Shape.** `null` when the flags were not given — deliberately distinct from an
-empty object, so a consumer can tell *"not measured"* from *"measured, nothing
-ran"*.
+Written on every one-shot run that reaches simulation with `--obs-dir` set — PASS or FAIL, `$fatal`
+included. The JSON is hand-rolled with a fixed key order and one top-level field per line, so a
+`diff` on two runs points at a field rather than at a reflowed line. String escaping covers `"`,
+`\`, `\n`, `\r`, `\t` and any scalar below `0x20` as `\u00XX`; UTF-8 passes through.
+
+### 5.1 Top-level keys, in emission order
+
+| # | Key | Type | Meaning |
+|---|---|---|---|
+| 1 | `schema_ver` | int | `1`. Bumped only when the record envelope changes, never for an additive field |
+| 2 | `tool` | string | `"vita"` |
+| 3 | `version` | string | the crate version |
+| 4 | `format_version` | int | the frozen artifact format this build emits |
+| 5 | `seed` | null | always `null`; there is no `--seed` flag (§13) |
+| 6 | `plusargs` | array of string | runtime plusargs in command-line order, leading `+` stripped (`+STAGE_TRACE` → `"STAGE_TRACE"`) |
+| 7 | `source` | object `{name, blake3}` | `name` is the basename of the first source file only, so the same design run from two directories byte-diffs clean; `blake3` is the digest of the concatenated source text of every command-line file (a `\n` is appended to any file not ending in one) |
+| 8 | `finish_reason` | string | `"finish"` · `"stop"` · `"quiescent"` · `"delta_limit"` · `"error"`. Descriptive — how the run stopped, never the verdict. `--timeout` produces `"quiescent"` |
+| 9 | `exit_class` | string | `"ok"` · `"had_errors"` · `"fatal"`, derived from the final exit code and the fatal count rather than from the engine result, so a `-Werror`-promoted warning cannot report `"ok"` beside `exit_code: 1` |
+| 10 | `exit_code` | int | the process exit code actually returned |
+| 11 | `sim_time` | int | final simulation time in raw ticks of the global precision |
+| 12 | `counts` | object `{errors, warnings, fatals}` | from the diagnostic sink. `errors` **excludes** fatals; the stderr epilogue's `errors=` token is errors plus fatals, so the two differ exactly when `fatals > 0` |
+| 13 | `status` | string | `"PASS"` when `exit_code == 0`, else `"FAIL"` |
+| 14 | `backend` | string | the executor that actually ran process bodies: `"native"` · `"vm"` · `"interp"` |
+| 15 | `backend_requested` | string | what `--backend` asked for; the default request is `native` |
+| 16 | `codegen` | object | the bytecode-VM static capability census (§5.2) |
+| 17 | `native` | object | the native-backend eligibility verdict (§5.3) |
+| 18 | `subroutines` | object | the static frame/inline route census (§5.6). Unconditional |
+| 19 | `processes` | object or `null` | per-body activation profile (§5.4) |
+| 20 | `builtins` | object or `null` | per-builtin call profile (§5.5) |
+| 21 | `subroutine_calls` | object or `null` | runtime per-`FuncId` subroutine profile (§5.7) |
+| 22 | `utc_unix_s` | int | wall-clock epoch seconds. Isolated non-deterministic field |
+| 23 | `wall_s` | number | total wall seconds. Isolated |
+| 24 | `elab_s` | number | wall seconds before simulation (preprocess, lex, parse, elaborate). Isolated |
+| 25 | `sim_s` | number | wall seconds inside simulation — the only part `--backend` can move. Isolated |
+
+Every seconds field, and every `time_s` anywhere in the file, is formatted to six decimals; a
+non-finite value renders as `0.0`.
+
+`backend` versus `backend_requested` is the only fallback signal in the file, and it is why both
+fields exist. `native` is the default executor and an ordinary run reports `"backend": "native"`
+with `"native": {"eligible": true, …, "refused": null}` — a consumer must not read the presence of
+these fields as evidence that vita interprets. When the effective backend differs from the requested
+one the engine also emits the warning `W-RUN-BACKEND-FALLBACK` (`VITA-W4030`).
+
+### 5.2 `codegen`
+
+```json
+"codegen": {"able": 3, "total": 5, "frame_bodies": 2, "reject_reasons": {"delay": 1, "wait": 1}}
+```
+
+| Key | Meaning |
+|---|---|
+| `able` | process templates the VM's own compile gate accepts |
+| `total` | the number of process templates in the IR |
+| `frame_bodies` | the number of function and task bodies. None of them is a compile candidate, so a design whose work lives in subroutines can report `able == total` and still run none of its work on the VM |
+| `reject_reasons` | cause → number of process templates exhibiting it. A template with two causes counts under both, so the column sum may exceed the number of rejected templates |
+
+The closed key vocabulary: `class_new` · `delay` · `disable` · `force_release` · `fork` ·
+`frame_call` · `nba_transport_delay` · `sformatf` · `stmt_effect_rhs` · `wait`. `sformatf` means
+"the body reaches a `$sformatf`-shaped IR node", not "the source spells `$sformatf`" — elaboration
+desugars string concatenation onto that node. The census comes from the same walk the compile gate
+runs, which is property 3 of §1 applied to a capability claim; the map is a `BTreeMap`, so key
+order is stable.
+
+### 5.3 `native`
+
+```json
+"native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}}
+```
+
+| Key | Meaning |
+|---|---|
+| `eligible` | the scope gate accepted the design; true exactly when `reject_reasons` is empty |
+| `buildable` | the storage gate accepted it (the net arena can hold this design) |
+| `refused` | the reason of the first gate that refused — design, then storage, then executor — or `null` when nothing refuses |
+| `reject_reasons` | reject family → count of offending items. Any non-zero row disqualifies |
+
+The two gates are separate fields because folding them into one flag makes a scope limit read as an
+implementation capability: a subroutine-heavy design can be `eligible` and not `buildable`.
+
+`refused` carries **two vocabularies**. When the design gate refused, it is a key of
+`reject_reasons` — the byte-lexicographically first when several fired, which is deterministic but
+is one reason out of several. When the design gate passed, it is the prose of the next gate that
+refused — storage first, then the executor gate — and that prose appears in no map. A consumer
+joining `refused` back to `reject_reasons` must read a miss as the storage or executor case, not as
+an error. The design gate has exactly one family key, `"stmt_effect"`. The storage refusals, from
+`NetArena::buildable` and the frame admission it calls, are:
+
+```
+a call in a delayed continuous assign: S3b
+a module body that names a frame-local net
+a nested call to an unresolved target: S3b
+a nested call with no sidecar entry: S3b
+a nonblocking assign to a frame-local net: S3b
+a subroutine body that suspends, forks or calls a task
+a subroutine statement the frame executor drops
+a subroutine that WRITES a net outside its own frame: S3b
+a system task the tier-3 kernel refuses, inside a task frame
+arena exceeds u32 words
+arena exceeds usize
+malformed frame sidecar (block id out of range)
+malformed frame sidecar (frame window out of range)
+malformed frame sidecar (func_table length)
+malformed frame sidecar (return slot out of range)
+```
+
+The executor gate adds two of its own, published in the same field when the design and storage
+gates both pass:
+
+```
+a `wait fork`, a `fork`, or a call statement whose callee forks: S3b
+a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)
+```
+
+Neither `--probe` nor `$vita_stage` is a reject axis: both are native-backend core, an instrumented
+run reports `"backend": "native"`, and instrumentation therefore never changes which executor the
+measurement describes. The gate itself is specified in
+[21-tier3-native-backend.md](21-tier3-native-backend.md).
+
+### 5.4 `processes` — the per-body activation profile
+
+`--obs-procs` (counts) or `--obs-procs-time` (counts and cumulative wall clock). `null` when neither
+flag was given, and `null` is deliberately distinct from an empty object: "not measured" is a
+different statement from "measured, nothing ran".
+
+Everything else in `run.json` about execution is static — `codegen` says which bodies the VM *could*
+compile, `native` says whether the design is accepted. `processes` is the dynamic half: which body
+actually ran, and how often. It is the half a user can act on without changing the simulator.
 
 ```json
 "processes": {"timed": false, "counts": {"processes": 5, "assigns": 1, "total_evals": 57},
@@ -116,104 +315,87 @@ ran"*.
   ]}
 ```
 
-| field | meaning |
+| Field | Meaning |
 |---|---|
-| `timed` | whether `--obs-procs-time` was given. When false, rows carry no `time_s` AT ALL — a `0.0` would read as "this body is free", a different claim from "nobody asked". |
-| `counts.processes` / `.assigns` | the size of each domain = `SimIr.processes.len()` / `.cont_assigns.len()`. Rows are emitted for ALL of them, zero-eval ones included: "this `always_comb` never fired" is a finding too. |
-| `counts.total_evals` | the sum over every row, for normalising a share. |
-| `domain` | `"process"` or `"assign"`. Explicit rather than inferred from `kind`, because `kind`'s vocabulary can grow. |
-| `index` | the index into that domain's IR vector. Stable for a given design + run options. |
-| `kind` | the SOURCE construct: `initial` · `always` · `always_ff` · `always_comb` · `always_latch` · `final` · `assign` · `net_init` (a `wire a = expr;` declaration initializer) · `port` (a synthesized port hookup) · `var_init` (the §6.8 declaration-initializer flush) · `sva` · `covergroup` · `clocking` · `synth` (a body vita synthesized with no more specific label). The last seven have NO keyword at the cited line — they are labelled apart precisely so a reader is not sent hunting for an `always` that is not there. |
-| `scope` | the INSTANCE path this body was elaborated under (`tb.u1`), the same string `%m` renders. A module instantiated N times contributes N rows with the same `file:line:col` and different `scope`, which is exactly the question "which of them eats the cost" asks. |
-| `file`/`line`/`col` | the construct's own source position. ⚠️ `file` is the path AS GIVEN on the command line (the same string diagnostics print), NOT the basename `source.name` carries — a 19-file design needs the directory to be actionable. For `kind:"port"` this is the PORT CONNECTION in the parent's instantiation — the whole `.p(expr)` (or the `.p` shorthand) from its `.`, or the connection expression for a positional list — so `col` is what tells apart connections written on ONE line. Round-35 R3 measured 1,267 `port` rows = 51% of all evals on one design with a 39-connection instance, where `scope` alone could not name any of them. An UNPACKED ARRAY port lowers to one row per ELEMENT and all of them carry that one connection's position, which is honest: the source holds one connection and the split is vita's (see `wire_array_port`). |
-| `"", 0, 0` | an HONESTLY unlocated row, never a placeholder for a location that exists. Two producers: a run with no span resolver installed (AST-only paths), and a `.*` wildcard port connection, which the elaborator synthesizes per unnamed port and which therefore has no source text of its own. Explicitly written connections in the same instantiation still locate. |
-| `evals` | ACTIVATIONS. A process that suspends on `#5` and resumes counts twice; the two halves are two dispatches. A continuous assign counts one settle-fixpoint visit that evaluated its RHS (the dirty worklist skips the rest, and a skipped visit costs nothing). |
-| `time_s` | present only under `--obs-procs-time`: cumulative seconds inside that body, 6 decimals. |
+| `timed` | whether `--obs-procs-time` was given. When false, rows carry no `time_s` at all — a `0.0` would read as "this body is free", which is a different claim from "nobody asked" |
+| `counts.processes` / `.assigns` | the size of each IR domain. Rows are emitted for all of them, zero-eval ones included: "this `always_comb` never fired" is a finding too |
+| `counts.total_evals` | the sum over every row, for normalising a share |
+| `domain` | `"process"` or `"assign"`, stated explicitly rather than inferred from `kind`, whose vocabulary can grow |
+| `index` | the index into that domain's IR vector; stable for a given design and run options |
+| `kind` | the source construct (vocabulary below) |
+| `scope` | the instance path the body was elaborated under, the same string `%m` renders. A module instantiated N times contributes N rows with one `file:line:col` and N different `scope` values, which is exactly what "which of them eats the cost" asks |
+| `file` | the source path **as given on the command line** — the string diagnostics print, not the basename `source.name` carries. A multi-file design needs the directory to be actionable |
+| `line` / `col` | 1-based position of the construct, or `0` when unknown |
+| `evals` | activations (see below) |
+| `time_s` | emitted only when `timed`: cumulative seconds inside that body, six decimals |
 
-**Row order** is `evals` descending, then `(domain, index)` ascending. The
-tiebreak is total, so the order is DETERMINISTIC — including on a timed run,
-which is why `evals` and not `time_s` is the sort key: a file whose row order
-moved between two runs of the same design could not be byte-diffed, and R-F1
-(§3-2) is the contract the whole rail rests on.
+`kind` vocabulary:
 
-**Determinism (R-F1).** `evals` is a function of (design, run options) alone and
-belongs INSIDE the determinism golden. `time_s` is wall clock and is isolated
-exactly like `wall_s`/`elab_s`/`sim_s` — which is the whole reason timing is a
-SECOND flag rather than implied: a transcript showing `--obs-procs` alone is a
-transcript whose `run.json` is byte-reproducible.
+| Group | Values |
+|---|---|
+| User-written processes | `initial` · `always` · `always_ff` · `always_comb` · `always_latch` · `final` |
+| Processes vita synthesizes | `sva` · `covergroup` · `clocking` · `var_init` (the declaration-initializer flush) |
+| Continuous assigns | `assign` · `net_init` (a `wire a = expr;` declaration initializer) · `port` (a synthesized port hookup) |
+| Fail-safe | `synth` — a synthesized body with no more specific label. No producer reaches it; seeing it in a `run.json` means a new producer appeared unlabelled |
 
-**Backend-invariance.** Both `--backend` executors bump the same counters at
-their own dispatch seam (`Scheduler::run_body` / `native::run::dispatch_body`)
-and their own settle fixpoint, and both count the same event — so the same
-design profiles identically on `interp`, `vm` and `native`. `--obs-procs` is NOT
-a tier-3 disqualifier (unlike `--probe`, doc-21 §4.3): it adds a `u64` after the
-body, it does not change what the body must do.
+The synthesized labels exist so a reader is not sent hunting for an `always` that is not at the
+cited line.
 
-**⚠️ Observer effect, and it is asymmetric.** `--obs-procs-time` takes two
-`Instant::now()` per activation (~40 ns here). For a fat `always_ff` that is
-noise; for a one-bit continuous assign it can exceed the work it measures, so a
-timed run's `sim_s` is longer than the same run's untimed `sim_s` and the
-per-row shares are biased TOWARD the cheap rows. Read `evals` first; reach for
-`time_s` only to break a tie between rows with similar counts.
+An **evaluation** is one activation of the body by the scheduler. A process that suspends on `#5`
+and resumes counts twice — the two halves are two dispatches. A continuous assign counts one
+settle-fixpoint visit that actually evaluated its right-hand side; a visit the dirty worklist skips
+costs nothing and counts nothing. A fork child is charged to the process template it belongs to.
 
-**Cost when NOT asked for.** Measured PRE (`git archive HEAD`) vs POST, both
-`--release`, interleaved A/B, first round discarded, on macOS arm64:
+`kind: "port"` rows locate the **port connection in the parent's instantiation**: the whole
+`.p(expr)` (or the `.p` shorthand) starting at the `.`, or the connection expression for a
+positional list, so `col` is what distinguishes connections written on one line. A design with a
+39-connection instance can put half its evaluations in `port` rows that `scope` alone cannot tell
+apart. An unpacked-array port lowers to one row per element, all carrying that single connection's
+position — the source holds one connection and the split is vita's.
 
-| workload | PRE | POST | delta | spreads |
-|---|---|---|---|---|
-| `bench/keccak` `keccak_f.sv +N=400` | 1.657 s | 1.651 s | **−0.34%** | 0.8% / 0.5% |
-| same, earlier round | 1.679 s | 1.681 s | **+0.12%** | 1.5% / 1.7% |
-| seam-dominated synthetic | 3.814 s | 3.847 s | **+0.87%** | 1.8% / 0.7% |
-| same, repeated | 3.801 s | 3.861 s | **+1.58%** | 2.3% / 1.5% |
+`"", 0, 0` is an honestly unlocated row, never a stand-in for a location that exists. Two producers
+reach it: a run with no span resolver installed, and a `.*` wildcard connection, which the
+elaborator synthesizes per unnamed port and which has no source text of its own. Explicitly written
+connections in the same instantiation still locate. An identity table shorter than its accumulator
+falls back to this unlocated row rather than dropping it: a profile that silently omits the body the
+user is hunting is worse than one that admits it cannot name it.
 
-The real workload is INSIDE the noise (the two rounds straddle zero). The
-synthetic is deliberately the worst case this instrumentation can have: 64
-one-line `always @(posedge clk)` blocks plus a 64-deep continuous-assign chain
-over 200k cycles ≈ 26M seam crossings, so the dispatch seam and the settle visit
-ARE the run. It costs ~1.3%, and that is the floor for a runtime-flag design —
-an experiment that constant-folded the settle counters away measured **+0.11%**,
-so the residue is the per-visit test itself, not the code around it. Removing
-even that would need the settle pass monomorphised over a `const PROF: bool`,
-i.e. a second copy of the simulator's hottest loop; not worth 1.3% on a shape no
-real design has.
+**Row order** is `evals` descending, then `domain` ascending, then `index` ascending. The tiebreak
+is total, so the order is deterministic even on a timed run — which is why `evals`, never `time_s`,
+is the sort key.
 
-⚠️ **Two plausible explanations for that 1.3% were both wrong**, and saying so
-is the point — a performance comment that names the wrong cause is worse than
-none. Hoisting the `proc_prof` read out of the settle fixpoint (it was two
-pointer hops per visit) moved nothing: +1.45% before, +1.45% after. Collapsing a
-profiled/unprofiled ARM SPLIT — each arm carrying its own call to the evaluator,
-which inlines, so the split doubled the loop body — moved nothing either. Only
-compiling the counters out located the cost, which is where the +0.11% number
-above comes from. The shipped shape (one call site, charge after) is kept for
-being smaller, not for being faster.
+**Determinism.** `evals` is a function of design and run options alone and belongs inside the
+determinism golden. `time_s` is wall clock and is isolated exactly like `wall_s`/`elab_s`/`sim_s`.
+That is the reason timing is a second flag rather than implied: a transcript taken with
+`--obs-procs` alone has a byte-reproducible `run.json`.
 
-### 4.9 `builtins` — the per-builtin execution profile (R2, round-36)
+**Backend invariance.** Both dispatch seams bump the same counters at their own dispatch point and
+their own settle fixpoint, counting the same event, so one design profiles identically under
+`--backend interp`, `vm` and `native`.
 
-**Shipped 2026-08-27.** Same flags and same requirements as §4.6: `--obs-procs`
-(counts) / `--obs-procs-time` (counts + wall clock), `--obs-dir` mandatory,
-one-shot `vita` only.
+**Observer effect, and it is asymmetric.** `--obs-procs-time` takes two clock reads per activation
+(tens of nanoseconds). For a fat `always_ff` that is noise; for a one-bit continuous assign it can
+exceed the work it measures, so a timed run's `sim_s` is longer than the same run's untimed `sim_s`
+and the per-row shares are biased toward the cheap rows. Read `evals` first and reach for `time_s`
+only to break a tie between rows with similar counts.
 
-**Why it exists — and what it is NOT.** §4.6 gives one row per body the user
-wrote. The external report that asked for this ran into that granularity's
-limit: their single largest row is
+**Cost when not asked for.** The counters are a runtime test, not a compile-time one. On a real
+clocked workload the difference is inside the measurement noise; on a synthetic built to be the
+worst case this instrumentation can have — 64 one-line `always @(posedge clk)` blocks plus a
+64-deep continuous-assign chain, where the dispatch seam and the settle visit *are* the run — it is
+about 1.3%, and that residue is the per-visit test itself rather than the code around it. Removing
+it would need the settle pass monomorphised over a compile-time flag, i.e. a second copy of the
+simulator's hottest loop, which is not worth 1.3% on a shape no real design has.
 
-```json
-{"domain":"process","kind":"initial","scope":"tb_aes_top","line":729,"evals":1434,"time_s":43.66}
-```
+### 5.5 `builtins` — the per-builtin call profile
 
-= 60% of the whole run, one `initial` that calls a vector-driver stack
-(`run_all` → `run_vec_file` → per-record drive/check tasks, with `$fgets` /
-`$sscanf` / string work and queue operations inside). Every nested cost is summed
-into the calling process, so the profile says THAT the testbench is expensive and
-not WHICH LINE to fix. They asked, in priority order, for **(1)** a call tree
-decomposed to task granularity and **(2)**, failing that, per-builtin cumulative
-time. **This section is (2).** For why (1) is a separate slice and what it needs
-first, see *"The call tree, and its prerequisite"* below.
+Same flags and same requirements as §5.4. A **sibling** of `processes`, not a member of it: a
+`processes` row is a body the author can edit, a `builtins` row is a simulator primitive that body
+called. `null` without the flag, on the same "not measured" convention.
 
-**Shape.** A SIBLING of `processes`, not a member of it — a `processes` row is a
-body the author can edit, a `builtins` row is a simulator primitive that body
-called; two domains, two objects. `null` without the flag, on the same
-"not measured" ≠ "measured, nothing ran" convention.
+It exists because one row per user-written body has a granularity limit. A single `initial` that
+drives a vector file through a stack of tasks can be 60% of a run, and every nested cost sums into
+it, so the profile says *that* the testbench is expensive and not *which primitive* to attack.
 
 ```json
 "builtins": {"timed": true, "attribution": "self-plus-arguments",
@@ -228,159 +410,82 @@ called; two domains, two objects. `null` without the flag, on the same
   ]}
 ```
 
-| field | meaning |
+| Field | Meaning |
 |---|---|
-| `timed` | whether `--obs-procs-time` was given. When false the rows carry no `time_s` at all, for §4.6's reason. |
-| `attribution` | `"self-plus-arguments"` — see the arithmetic contract below. A field rather than a documented assumption, so a consumer can refuse a value it does not understand. ⚠️ It said `"self"` through round-36 and that was **misleading in the direction that matters**; corrected 2026-08-31 after a reviewer measured a row at 64% of a run whose real removal gain was 9.7%. |
-| `time_semantics` | one sentence naming what the number is good for: **ranking**, and an **upper bound** on what removing the call would save. Emitted so a consumer cannot read a row as a saving without meeting the caveat. |
-| `obs_overhead_est_s` | present only when `timed` — a MEASURED estimate of what the timing itself cost this run (a batch of the same clock reads an invocation pays, calibrated on this machine at emit time, scaled by `total_calls`). Asked for by a reviewer who could not tell how much of a `time_s` was the instrument. It is an estimate and the name says so. |
-| `included_in_processes` | always `true` — this time is ALSO inside the `processes` row of whichever body called it. It is stated in the file because the one mistake a reader can make here is adding the two arrays together. |
-| `distinct` | number of rows = builtins this run touched at least once. |
-| `total_calls` | Σ `calls`. |
-| `name` | the IDENTITY, and it is the builtin's name because a builtin has no declaration site: it is not declared in the user's source, so the `file:line:col` that identifies a `processes` row has no counterpart. `$…` = the IEEE system task/function spelling the user typed; `.name()` = a METHOD-form builtin (`q.push_back(v)`, `s.len()`, `a.sum()`) — printing `$qpushback` for one of those would send the reader looking for a system task that does not exist. |
-| `calls` | invocations. DETERMINISTIC — a function of (design, run options) alone. |
-| `time_s` | present only under `--obs-procs-time`: cumulative seconds, 6 decimals. ⚠️ **Not self time in the strict sense** — the arms evaluate this call's ARGUMENTS inside the timed span, so `$signed(<big expression>)` charges the big expression here. Nested BUILTINS are subtracted; ordinary expression work is not. |
+| `timed` | whether `--obs-procs-time` was given; when false, rows carry no `time_s` at all |
+| `attribution` | the literal string `"self-plus-arguments"`. A field rather than a documented assumption, so a consumer can refuse a value it does not understand |
+| `time_semantics` | the literal sentence `"ranking and UPPER BOUND on removal gain: a row's time_s includes evaluating that call's own arguments (nested builtins are subtracted, ordinary expression work is not), so removing the call recovers at most this, usually much less"`. Emitted in the file so a consumer cannot read a row as a saving without meeting the caveat |
+| `included_in_processes` | the literal `true` — this time is already inside the `processes` row of whichever body made the call. The one mistake a reader can make here is adding the two arrays |
+| `distinct` | number of rows: builtins this run touched at least once |
+| `total_calls` | the sum of `calls` |
+| `obs_overhead_est_s` | emitted only when `timed`: a measured estimate of what the timing itself cost this run, calibrated at emit time by timing a batch of the same clock reads an invocation pays and scaling by `total_calls`. It is an estimate and the name says so |
+| `items[].name` | the identity. A builtin has no declaration site — it is not declared in the user's source — so the name is the key |
+| `items[].calls` | invocations; deterministic |
+| `items[].time_s` | emitted only when `timed`: cumulative seconds, six decimals |
 
-**⚠️ What a row is NOT (2026-08-31).** A reviewer took a `time_s` of 64% of a run
-and measured the actual gain from deleting that call: **9.7%** — 6.6× over. The
-instrumentation overhead (~11%) does not explain it. The cause is above: the
-timed span covers the call's own argument evaluation. So a row RANKS, and bounds
-the prize from above; it does not predict a saving. That is what `time_semantics`
-says in the file, and why `attribution` no longer claims `"self"`.
+**Name vocabulary.** Two spellings by design: `$…` is the IEEE system task or function spelling the
+user typed (`$display`, `$fgets`, `$sscanf`, `$finish`, …); `.name()` is a method-form builtin
+(`.push_back()`, `.size()`, `.sort()`, `.randomize()`, `.substr()`, …) — printing `$qpushback` for
+one of those would send a reader looking for a system task that does not exist. The name table has
+no catch-all arm, so a new frozen-enum variant is a build error rather than an `"unknown"` row.
+`$cast` is the one deliberate merge: the task form and the function form are one construct to the
+author and both render `"$cast"`.
 
-**The arithmetic contract (`attribution: "self-plus-arguments"`).** `time_s` is the wall clock
-of one invocation MINUS the wall clock of any builtin invoked inside it. That
-nesting is real, not hypothetical: `$display("%0d", q.size())` evaluates
-`.size()` during `$display`'s argument rendering, i.e. inside the outer builtin's
-own dispatch. Under an inclusive convention that span would appear in both rows
-and the column would not add up. With self time the rows are **disjoint**, so
-`Σ time_s` is a true "simulator-builtin subtotal" and each row's share of it is
-meaningful. What you may NOT do is add `builtins` to `processes`:
-`included_in_processes: true` says the builtin seconds are already inside the
-process seconds. The useful subtraction is the other direction — *this `initial`
-costs 43.7 s, of which 18.2 s is `$fgets` + `$sscanf`, so 25.5 s is my RTL.*
+Six constructs share one internal display identifier and are un-folded by the label so their cost
+appears on their own row rather than inside `$display`: the severity tasks
+(`$info`/`$warning`/`$error`/`$fatal` and the `unique`/`priority` check), `$timeformat`,
+`$vita_stage`, the assertion-control family, a whole-handle copy, and a queue slice.
 
-**Row order** is `calls` descending, then `name` ascending. The tiebreak is a
-total order over `&'static str` keys, so the object is byte-identical across two
-runs of one design — including a timed run, since `time_s` never participates in
-the order. Same reasoning as §4.6.
+**A row counts IR nodes, not source text** — the same caveat `codegen`'s `sformatf` key carries.
+Elaboration desugars some constructs onto a builtin the author never typed: a string concatenation
+becomes a `$sformatf` node, a `foreach` over a queue becomes associative-iteration steps, a
+`unique case` violation becomes the `$warning` shape. A row whose count exceeds the call sites
+visible in the source is that, and it is still the honest answer to "what is this run spending
+itself on".
 
-**Backend-invariance.** Four seams see a builtin run, and all four charge ONE
-object (`SimState::builtin_prof`, interior-mutable so a `&self` seam can reach
-it):
+**The arithmetic contract.** `time_s` is the wall clock of one invocation minus the wall clock of
+any builtin invoked inside it, so rows are disjoint and their sum is a true simulator-builtin
+subtotal. That nesting is real: `$display("%0d", q.size())` evaluates `.size()` during `$display`'s
+argument rendering, i.e. inside the outer builtin's own dispatch. What the span does **not**
+exclude is the call's own argument evaluation, so `$signed(<big expression>)` charges the big
+expression to `$signed`. A row therefore ranks, and bounds the prize from above; it does not
+predict a saving. The useful subtraction is the other direction: *this `initial` costs 43.7 s, of
+which 18.2 s is `$fgets` plus `$sscanf`, so 25.5 s is my RTL.*
 
-| seam | covers | reached by |
+**Row order** is `calls` descending, then `name` ascending — a total order over static string keys,
+so the object is byte-identical across two runs including a timed one.
+
+**Backend invariance.** Four seams see a builtin run and all four charge one interior-mutable
+profile object, so a `&self` seam can reach it:
+
+| Seam | Covers | Reached by |
 |---|---|---|
-| `builtins::dispatch_with` | every system TASK | interpreter, VM, JIT, tier-3 — all four converge here |
-| `exec::apply_effect` | the statement-effect system FUNCTIONS (`$fgets`, `$fscanf`/`$sscanf`, `$fread`, `$fgetc`, `$feof`, `$ungetc`, `$fopen`, `$sformatf`, `$value$plusargs`, seeded `$random`/`$dist_*`, `$cast`, queue pop, assoc iteration, class `new()`) | interpreter + tier-3 |
-| `EvalCtx::eval_sysfunc_ctx` | the PURE system functions in expression position — `.len()`, `.substr()`, `.size()`, `.sum()`, `$clog2`, `$countones`, the real-math family | every executor (the shared evaluator) |
-| `state/frame_eval.rs`'s system-task arms | `$display`/`$write`/`$info`/`$warning`/`$error`/`$fatal` inside a subroutine body run by the synchronous `&self` frame executor | that executor only — it does NOT go through `builtins::dispatch` |
+| the shared builtin dispatch | every system task | interpreter, VM, JIT and native all converge here |
+| statement-effect application | statement-effect system functions (`$fgets`, `$fscanf`/`$sscanf`, `$fread`, `$fgetc`, `$feof`, `$ungetc`, `$fopen`, `$sformatf`, `$value$plusargs`, seeded `$random`/`$dist_*`, `$cast`, queue pop, associative iteration, class `new()`) | interpreter and native |
+| the shared expression evaluator | pure system functions in expression position (`.len()`, `.substr()`, `.size()`, `.sum()`, `$clog2`, `$countones`, the real-math family) | every executor |
+| the frame executor's system-task arms | prints inside a subroutine body run by the synchronous frame executor | that executor only — it does not go through the shared dispatch |
 
-The fourth row is the one worth knowing about: a hook only in the shared dispatch
-would silently under-report every print inside a subset function body. A pinned
-test asserts a `$display` inside a `function automatic` counts, and another
-asserts the whole table is identical under `--backend native|vm|interp`.
+The fourth row is the one worth knowing about: a hook only in the shared dispatch would silently
+under-report every print inside a subset function body. Tests pin that a `$display` inside a
+`function automatic` counts, and that the whole table is identical under
+`--backend native|vm|interp`.
 
-**⚠️ Six constructs share `SysTaskId::Display`** and are separated only by a
-StmtId-keyed sidecar: `$info`/`$warning`/`$error`/`$fatal`, `$timeformat`,
-`$vita_stage`, `$assertoff`-family, a whole-handle copy, and a queue slice. The
-label un-folds all of them, so an `$error`-heavy testbench's cost appears on an
-`$error` row rather than being hidden inside `$display`. `$cast` is the one
-deliberate merge: the task form and the function form are one construct to the
-author, so both render `"$cast"`.
+**Observer effect, worse than §5.4's.** Two clock reads per invocation against a `.len()` on a short
+string is most of the measurement. Read `calls` first; `time_s` separates rows with comparable call
+counts, and the expensive builtins (file I/O, formatting, `$readmem*`, sorting) are exactly the ones
+where the overhead is negligible. Counting without timing costs under 1% even on a design that does
+nothing but evaluate pure system functions, which is within the noise band a control workload that
+touches none of the four seams establishes.
 
-**⚠️ A row counts IR NODES, not source text** — the same caveat `codegen`'s
-`sformatf` key carries (§1 R-L0). elaborate desugars some constructs onto a
-builtin the author never typed: a string concatenation becomes a `$sformatf`
-node, a `foreach` over a queue becomes assoc-iteration steps, a `unique case`
-violation becomes the `$warning` shape. A row whose count exceeds the number of
-call sites you can find in the source is that, not a bug — and it is still the
-honest answer to *"what is this run spending itself on"*, which is the question
-the object exists for.
+### 5.6 `subroutines` — the static route census
 
-**⚠️ Observer effect, worse than §4.6's.** Two `Instant::now()` per invocation
-(~40 ns here) against a `.len()` on a short string is not noise — it is most of
-the measurement. Read `calls` first; `time_s` is for separating rows with
-comparable call counts, and the expensive builtins (file I/O, formatting,
-`$readmem*`, sorting) are exactly the ones where the overhead is negligible.
+Emitted on every `--obs-dir` run; `--obs-procs` does not move it. It is not a measurement — it is
+what elaboration decided — so it is deterministic and sits inside the `run.json` determinism golden
+rather than beside it.
 
-**Cost when NOT asked for.** Measured PRE (`git archive HEAD`) vs POST, both
-`--release`, interleaved A/B, first round discarded, macOS arm64, 6 samples each:
-
-| workload | PRE mean | POST mean | delta | min/min |
-|---|---|---|---|---|
-| 3M `$clog2`+`$countones`+`$onehot` in a loop (worst case) | 1.2418 s | 1.2525 s | **+0.86%** | +0.47% |
-| same, repeated | 1.2429 s | 1.2500 s | **+0.57%** | +0.39% |
-| 200 × (20 × 200-iteration task calls) + `$sformatf` | 0.3413 s | 0.3419 s | **+0.15%** | +0.31% |
-| clocked RTL, no builtin in the loop (control) | 1.6172 s | 1.5872 s | **−1.86%** | −1.94% |
-
-The control moving −1.9% is the honest bound on this method's noise here: it
-touches none of the four seams, so its delta is pure code-layout luck. The worst
-case — a design that does nothing but evaluate pure system functions, where the
-added work is exactly one `Option` test per evaluation — is +0.6…0.9% across two
-independent rounds, i.e. under the noise band the control establishes. Nothing
-was measurably slowed.
-
-**The call tree, and its prerequisite.** The reporter's item (1) is not shipped,
-and the reason is structural rather than budgetary. vita lowers a subroutine call
-TWO ways: a frame body entered through `Terminator::Call` / `Expr::Call`, and an
-INLINE splice where the callee's statements are copied into the caller's block at
-elaborate time (`elaborate/src/inline_task.rs`, `inline_fn.rs`; round-35 R4
-measured the two at 14.39 s vs 0.35 s on one design, so both are live). A
-profile built on the runtime call seams would report **zero** for every inlined
-subroutine — and a task showing 0 calls reads as "this is free", which is the one
-answer a profile must never give about the thing the user is hunting. Closing
-item (1) therefore needs, first, an elaborate-time record of which call sites
-were inlined and into which caller, so a task with no runtime seam can be
-reported as *inlined into its caller* rather than as absent. That record does not
-exist today. Recorded as the prerequisite; the identity half is already there
-(`Sidecars::func_names` is parallel to `SimIr.funcs`, and only a declaration
-`file:line:col` twin is missing).
-
-**Not shipped, deliberately: per-CALL-SITE rows.** `{"name":"$sscanf","file":…,
-"line":312}` would be strictly more actionable than a per-name total, and the
-system-task half could have it today (`sid` + the `stmt_locs` sidecar). The
-sysfunc half could not: `apply_effect` receives an effect that carries no StmtId,
-and the pure evaluator has no statement context at all. Half the table locating
-and half not is worse than neither, so the slice ships name-level aggregation —
-which is what the reporter asked for in item (2) — and leaves the site axis whole
-for a follow-on.
-
-**Re-checked at HEAD, 2026-09-07.** The external report re-filed item (1) unchanged, and the
-prerequisite above is unchanged with it: `processes.items[].domain` is `process` / `assign` only.
-The shape the slice needs is now written out in ROADMAP §6 (ⓐ the elaborate-time inline record,
-ⓑ a `SubProfile` on the `BuiltinProfile` pattern bumped at the three frame seams, ⓒ a decl
-`file:line:col` twin for `func_names`). ⓐ ships with ⓑ or neither ships — the failure mode of this
-feature is a table that is present and partial.
-
-**A third gap the same report exposed, and it is this rail's rather than the profiler's.** When an
-expression falls out of the compiled lane, nothing says so. `codegen.reject_reasons` is a
-per-PROCESS census, so a body reports `able 1/1` while every evaluation of its right-hand side runs
-the generic path. Both sides then read the boundary off `$signed`/`$unsigned` invocation counts, and
-**both got it wrong in turn**: the reporter filed it as *"a cast whose operand contains a function
-call"*; this document said (2026-09-07) that the real boundaries were a cast width differing from its
-assignment context and `*` having no `wprog` arm, and that the function-call axis was refuted. The
-refutation counted only the `$unsigned` column — a function returning `int` seals with `$signed`. A
-2×2×2 re-census (ROADMAP §2 Performance) shows the reporter's axis is REAL and independent, on both
-signednesses. A per-`(reason, count)` tally beside `codegen`, the shape `builtins` already has, would
-have ended the exchange at the first measurement instead of the third. Filed as `WPROG-WHY` in
-ROADMAP §5.b.
-
-### 4.10 `subroutines` — the frame/inline route census (R2 intermediate, round-39)
-
-**Shipped 2026-09-07.** No flag beyond `--obs-dir`; one-shot `vita` only. Unlike
-§4.6/§4.9 it is **not a measurement** — it is what elaboration decided — so it is
-emitted unconditionally and it is deterministic (it sits inside the run.json
-determinism golden, not beside it).
-
-**Why it exists.** The call tree (§4.9's item (1)) is still deferred, for the reason
-recorded there: an INLINED subroutine leaves no call node, so a seam-based profile
-reports it 0 times, and `0` reads as *free*. That is not a hypothetical — the
-reporter measured one frame call at **5×** the cost of the same expression written
-without a function, and the ≈**10%** they had attributed to the size-cast seal was
-the smaller half. Nothing in the rail said which of their functions was a frame.
-This object says exactly that, before anyone profiles anything, and it is the
-minimum form of the call tree's prerequisite ⓐ (the elaborate-time inline record).
+It exists because vita lowers a subroutine two ways, and nothing else in the rail says which way a
+given routine went. A frame call can cost several times the same expression written inline, and a
+reader cannot guess the route from the source.
 
 ```json
 "subroutines": {"counts": {"total": 6, "frame": 4, "inlined": 2},
@@ -393,24 +498,498 @@ minimum form of the call tree's prerequisite ⓐ (the elaborate-time inline reco
   ]}
 ```
 
-| field | meaning |
+| Field | Meaning |
 |---|---|
-| `module` | the module whose body was being lowered. A package routine (`p::dbl`) is filed under the module that CALLS it — a package has no instance of its own. Two modules declaring a same-named function are two rows, which is why the key is a pair. |
-| `name` | the routine key the elaborator resolved (`f`, or `pkg::f` for the scoped spelling). |
-| `kind` | `"function"` / `"task"`. |
-| `route` | `"frame"` = an `ir.funcs` body reached through a call node; `"inlined"` = folded into the caller. Read from the SAME map the lowering is selected by, never re-derived — a predicate that re-answers *"would this be framed?"* is free to disagree with the route the design took, which is the failure this table exists to make visible. |
-| `sites` | call sites LOWERED, **after** generate and instance expansion: a call written once inside a module instantiated twice is `2`, a call inside a `for` loop body is `1`. Never an execution count. `0` = declared and never called (the row is seeded from the same two sets `lower_frame_funcs` reserves from, so a dead subroutine still reports its route). |
-| `uncounted` | stated in the file rather than assumed: class methods (a separate lowering with its own table) and hierarchical calls (`u1.f(x)`, whose target is not bound until the deferred-hier resolve, which runs after this seam). |
+| `counts.total` / `.frame` / `.inlined` | rows, framed rows, and the remainder |
+| `sites_semantics` | the literal sentence quoted above, so the meaning of `sites` travels with the data |
+| `uncounted` | the literal string `"class methods and hierarchical calls"` — stated in the file rather than assumed |
+| `items[].module` | the module whose body was being lowered. A package routine is filed under the module that **calls** it, since a package has no instance of its own. Two modules declaring a same-named function are two rows, which is why the key is a pair |
+| `items[].name` | the routine key the elaborator resolved: `f`, or the scoped spelling `pkg::f` |
+| `items[].kind` | `"function"` or `"task"` |
+| `items[].route` | `"frame"` = a body reached through a call node; `"inlined"` = folded into the caller. Read from the same map the lowering is selected by, never re-derived — a predicate that re-answers "would this be framed?" is free to disagree with the route the design actually took, which is the failure this table exists to make visible |
+| `items[].sites` | call sites **lowered**, after generate and instance expansion: a call written once inside a module instantiated twice is `2`; a call inside a `for` loop body is `1`. Never an execution count. `0` means declared and never called |
 
-**What surprises readers, and is the point.** `function int f` is framed and its
-`function logic [31:0] f` twin is inlined — `int` is 2-state and the frame return
-slot is what coerces x/z→0. No one guesses that from the source. `crates/cli/tests/
-obs_subroutines.rs` pins it.
+Rows are seeded for every declared subroutine from the same two sets the frame lowering reserves
+from, so a dead subroutine still reports its route; the call seams then increment `sites`, and the
+route a call actually took overwrites the seed. Items are sorted by `(module, name)`.
 
-**Still not shipped:** the per-call-site `file:line:col` and the dynamic half
-(how often each frame call actually ran). Those are §4.9's ⓑ+ⓒ, unchanged.
+Class methods and hierarchical calls are excluded by construction: class methods are a separate
+lowering with its own table, and a hierarchical call's target is not bound until the deferred
+resolve, which runs after this seam. The runtime object in §5.7 covers both.
 
-## 5. 트래킹
+What surprises readers is the point of the table: `function int f` is framed and its
+`function logic [31:0] f` twin is inlined, because `int` is 2-state and the frame return slot is
+what coerces x/z to 0. No one guesses that from the source.
 
-- 단계별 상태·착수 순서 = **ROADMAP §6**(이 표의 요약본). 실행 큐 정본 = **ROADMAP §5.2**(LOOPROMPT NEXT 가 미러). 출하분 = OBS-0/1a/1b·OBS-2 v1·OBS-3·OBS-S0 + R2 의 ⓐ(`subroutines`, §4.10). 다음 = OBS-2 잔여이고, R2 ⓑ/ⓒ 와 WPROG-WHY 는 §5.2 큐 4·5번.
-- 스키마 변경은 이 문서 + `schema_ver` bump로만(record envelope는 §3-4핀이 동결 기준).
+### 5.7 `subroutine_calls` — the runtime per-`FuncId` profile
+
+Gated by `--obs-procs`; `null` otherwise, on the same convention.
+
+```json
+"subroutine_calls": {"timed": true, "key": "…", "time_semantics": "…",
+  "distinct": 5, "total_calls": 5,
+  "items": [
+    {"func": 0, "name": "C.new", "decl_file": "cls.sv", "decl_line": 3, "decl_col": 12,
+     "calls": 1, "timed_calls": 1, "time_s": 0.000008},
+    {"func": 4, "name": "top.slow", "decl_file": "cls.sv", "decl_line": 10, "decl_col": 18,
+     "calls": 1, "timed_calls": 0, "time_s": 0.000000}
+  ]}
+```
+
+| Field | Meaning |
+|---|---|
+| `timed` | whether `--obs-procs-time` was given |
+| `key` | the literal sentence ``"per-INSTANCE FuncId. INCLUDES class methods and hierarchical calls, which the static `subroutines` object does not file at all, and EXCLUDES every INLINED subroutine, which has no call node to count — so the two objects share no key and their columns must not be added. A row identifies its source by decl_file:decl_line:decl_col; the static object does not carry that yet, so read it by name and route"`` |
+| `time_semantics` | the literal sentence ``"time_s is SELF time over timed_calls only (nested subroutine time subtracted); timed_calls < calls means the rest were SUSPENDABLE task frames, which are counted and never timed. total_calls is entries into FRAMED subroutines only — an inlined one contributes none, and `subroutines[].route` is what says which is which"`` |
+| `distinct` | number of rows |
+| `total_calls` | the sum of `calls` |
+| `items[].func` | the `FuncId`, per instance |
+| `items[].name` | a **label**, not a key. A module subroutine gets its `%m` path, which is per-instance (`top.u1.aut`, `top.u2.aut`); a class method gets the class-relative `C.m` fragment. Nothing in the row discriminates the two conventions |
+| `items[].decl_file` / `decl_line` / `decl_col` | the declaration site, written once however many `FuncId`s it minted; this is what identifies a row's source. The span is the routine name's own, so `decl_col` points at the identifier. `""` / `0` / `0` when no span resolver was installed |
+| `items[].calls` | entries into this subroutine from all three runtime seams; deterministic |
+| `items[].timed_calls` | emitted only when `timed`: the subset of `calls` that `time_s` covers |
+| `items[].time_s` | emitted only when `timed`: self seconds over `timed_calls`, nested subroutine time subtracted |
+
+Three runtime seams feed it, all methods on one shared state object, so the counts are
+backend-invariant by construction:
+
+| Seam | Covers | Timed |
+|---|---|---|
+| frame call evaluation | every call expression — plain and package functions, class methods and constructors, virtual-dispatch targets, hierarchical `u1.f(x)` | yes |
+| synchronous task call | every synchronous task call, nested calls included | yes |
+| suspendable task frame entry | every suspendable task frame | no — counted only |
+
+The third seam is why `timed_calls` is a separate column: frame entry returns as soon as the frame
+is open, and the task may then sit on a `#5` for the rest of the run. Timing that wall span would
+report waiting as work.
+
+**Row order** is `calls` descending, then `FuncId` ascending.
+
+The two subroutine objects answer different questions and do not join today:
+
+| Axis | `subroutines` (static) | `subroutine_calls` (runtime) |
+|---|---|---|
+| Key | `(module, routine key)` | per-instance `FuncId` |
+| Flag | none, `--obs-dir` alone | `--obs-procs` |
+| Class methods | excluded | included |
+| Hierarchical calls | excluded | included |
+| Inlined subroutines | included, `route: "inlined"` | absent — no call node exists to count |
+| Multiple instances | folded into one row | one row per instance |
+| Package routine name | `p::dbl` under `module: "top"` | `top.dbl` — the `%m` path, package qualifier gone |
+| Declaration site | not carried | `decl_file:decl_line:decl_col` |
+| Counted quantity | `sites` = lowered call sites | `calls` = runtime entries |
+
+The stated join key is the declaration site and the static object does not carry it, so the only
+cross-read available is by name and route. The `key` string says exactly that rather than
+instructing a join it cannot serve. Closing it is a ROADMAP §6 item.
+
+## 6. `results.jsonl` — the ledger
+
+Written alongside `run.json`. One line per run, terminated by `\n`, no wall-clock field at all, so
+the whole file byte-diffs clean.
+
+```json
+{"v":1,"t":35,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":35,"errors":0,"warnings":1,"fatals":0}
+```
+
+| Key | Type | Meaning |
+|---|---|---|
+| `v` | int | record-envelope version, always `1` |
+| `t` | int | the record's time — here the final simulation time, identical to `sim_time` |
+| `kind` | string | always `"result"` |
+| `status` | string | `"PASS"` or `"FAIL"` |
+| `finish_reason` | string | the `run.json` vocabulary |
+| `exit_code` | int | the process exit code |
+| `sim_time` | int | final simulation time in ticks |
+| `errors` / `warnings` / `fatals` | int | the same three counts; `errors` excludes fatals |
+
+vita's model is one run = one test case, so v1 of this file is one line. A per-test-case ledger and
+a `detail_ref` pointing at failure detail are the v2 shape and are not implemented (§13).
+
+## 7. `coverage.json` — functional coverage
+
+Written only when the design produced a coverage summary, which requires at least one covergroup
+**instance** carrying at least one coverage item. A design with no covergroup simply does not get
+the file.
+
+```json
+{
+  "schema_ver": 1,
+  "kind": "coverage",
+  "groups": [
+    {"instance": "top.c", "coverage_pct": 70.833333, "coverpoints": [
+      {"name": "cp_v", "kind": "coverpoint", "num_bins": 4, "covered_bins": 3, "coverage_pct": 75.000000},
+      {"name": "cp_w", "kind": "coverpoint", "num_bins": 2, "covered_bins": 2, "coverage_pct": 100.000000},
+      {"name": "cross_0", "kind": "cross", "num_bins": 8, "covered_bins": 3, "coverage_pct": 37.500000}]}
+  ]
+}
+```
+
+| Key | Type | Meaning |
+|---|---|---|
+| `schema_ver` | int | `1` |
+| `kind` | string | always `"coverage"` |
+| `groups[].instance` | string | the covergroup instance's fully qualified name |
+| `groups[].coverage_pct` | number, six decimals | the weighted average, mirroring what `c.get_coverage()` returns inside the design |
+| `groups[].coverpoints[]` | array | one entry per coverage item: coverpoints first, then crosses |
+| `…[].name` | string | the coverpoint label, or `cp_{i}` when unlabelled. For a cross it is always `cross_{i}` — a user-written cross label is not carried |
+| `…[].kind` | string | `"cross"` or `"coverpoint"` |
+| `…[].num_bins` | int | the item's bin count |
+| `…[].covered_bins` | int | the popcount of the final hit bitmap, excluding unknown bits |
+| `…[].coverage_pct` | number, six decimals | `covered * 100 / num_bins`, or `0.0` when `num_bins == 0` |
+
+The overall percent is computed by the same routine the RTL's own `get_coverage()` uses — property
+3 of §1 — and the accumulation order is part of the contract because floating-point addition is
+order-sensitive: per item `pct = covered * 100 / num_bins`, a coverpoint with no bins is excluded
+from the average, a cross always counts with an implicit weight of 1, terms are accumulated
+coverpoints then crosses, and the result is `sum / total_weight`, or `0.0` when the total weight is
+zero. Percentages format as six decimals, matching `$display("%f", …)`; a non-finite value renders
+as `0.000000`. The internal per-item weight is not serialized.
+
+Not in this file: SVA assertion pass/fail counts, cover-property counts, and per-bin hit detail
+(§13).
+
+## 8. `trace.jsonl` — the `--probe` change stream
+
+Written whenever at least one `--probe` or `--probe-file` path resolved, and always written in that
+case even when it is empty (a probed net that never changes). `--probe` requires `--obs-dir`, so
+absence of the file means no probe was given.
+
+### 8.1 Probe grammar
+
+1. The `--probe` values are taken in command-line order.
+2. `--probe-file F` is read as UTF-8; each line is trimmed, a line that is empty or starts with `#`
+   is skipped, and every other line is appended after the `--probe` values.
+3. An empty path set means no probing.
+4. A non-empty path set with no `--obs-dir` is a loud error, exit 3.
+5. Each path is resolved by **exact string equality** against the elaborated net-name table. There
+   is no glob, wildcard, prefix, regular expression or bit/element selection syntax: the path must
+   be the full dotted hierarchical name as the table spells it (`top.y1`, `top.u1.y`, `top.clk`).
+   An unresolved path is loud, never a silent skip.
+6. Kind filter: a dynamic-array, queue or string **handle** is rejected, an unpacked **array** is
+   rejected, a **real** net is rejected. v1 traces a scalar, vector or packed net.
+7. Duplicates are harmless — the same net is armed once and emits once.
+
+There is no CLI surface that lists available net names; the rejection message says so.
+
+### 8.2 Record schema
+
+```json
+{"v":1,"t":5,"kind":"chg","path":"top.u1.y","old":"xxxx","new":"0001"}
+```
+
+| Key | Type | Meaning |
+|---|---|---|
+| `v` | int | envelope version, always `1` |
+| `t` | int | the current simulation time in raw ticks of the global precision. There is no delta-cycle or region field (§13) |
+| `kind` | string | always `"chg"` |
+| `path` | string | the full dotted net path, the same string `--inst-paths` and the VCD `$scope` structure use; JSON-escaped, so an escaped SystemVerilog identifier survives |
+| `old` | string | the last emitted value string |
+| `new` | string | the new value string |
+
+Value encoding is §3 pin 4: a full-width, unprefixed, MSB-first 4-state binary string, one character
+per bit from `{0, 1, x, z}`. A width-1 net yields one character.
+
+### 8.3 Sampling semantics
+
+- **Transition-only.** A record is emitted from inside the engine's change notification — the same
+  stream the VCD writer consumes — and is then deduplicated against the last emitted formatted
+  string, so a same-value write or a glitch in another word emits nothing.
+- **The comparison baseline is armed before the event loop**, from each probed net's construction
+  value (usually all-`x`). A value first driven at time 0 is therefore logged, with `old` set to the
+  construction default.
+- **Independent of waveform dumping.** A `--probe` run with no `$dumpvars` still traces.
+- **Whole-net only.** The value formatted is the net's full width regardless of which word changed,
+  which is safe because the CLI refuses arrays.
+- **One ordered stream.** All probes share one record vector, so records from different paths
+  interleave in emission order rather than grouping by path.
+- **Backend-invariant.** The native backend cannot reach the sink from inside its store, so its
+  arena captures each `(net, value)` pair at its own store point and hands it to the same emitter,
+  preserving A→B→A round-trips within one slot.
+
+## 9. `$vita_stage` and `stage.jsonl`
+
+### 9.1 The built-in
+
+`$vita_stage` is the only vendor introspection built-in. Signature:
+
+```systemverilog
+$vita_stage("label" [, v0, v1, …]);
+```
+
+At least one argument, the label; the rest are arbitrary runtime expressions evaluated at execution
+time. It lowers to a no-op print node plus a statement-id sidecar, so the frozen system-task
+enumeration gains no variant and `format_version` is unaffected. Zero arguments and use as a
+deferred-assertion action are both `VITA-E3009`.
+
+**It never prints.** With or without the plusarg, no `$vita_stage` text reaches stdout. Capture is
+armed only by a plusarg equal to `STAGE_TRACE` or starting with `STAGE_TRACE=`; a neighbouring
+spelling such as `+STAGE_TRACEX` does not arm it. Without the plusarg the call returns immediately
+and the record index does not advance.
+
+`$vita_stage` does not disqualify the native backend, and its argument reads are threaded through
+the alternate net reader so a native run records the values the design actually wrote. It counts as
+a builtin and gets its own `builtins` row rather than hiding inside `$display`.
+
+vita predefines no macro, so a design that must also compile under another simulator guards the call
+and vita is invoked with the define:
+
+```systemverilog
+`ifdef VITA
+  $vita_stage("decode", pc, opcode);
+`endif
+```
+
+```
+vita design.sv -D VITA --obs-dir out +STAGE_TRACE
+```
+
+### 9.2 The file
+
+`stage.jsonl` is written whenever `+STAGE_TRACE` was given, independently of whether the design
+contains any `$vita_stage` at all: with the plusarg and no call site the file is written empty.
+
+```json
+{"v":1,"t":0,"kind":"stage","label":"init","idx":0,"vals":["0"]}
+{"v":1,"t":35,"kind":"stage","label":"done","idx":1,"vals":["3","3"]}
+```
+
+| Key | Type | Meaning |
+|---|---|---|
+| `v` | int | envelope version, always `1` |
+| `t` | int | simulation time at the call, in raw ticks |
+| `kind` | string | always `"stage"` |
+| `label` | string | the first argument, `%s`-coerced. It may be a runtime string variable, not only a literal |
+| `idx` | int | a monotonic per-run counter starting at `0`, incremented once per captured call. Not per label, not per scope |
+| `vals` | array of string | the remaining arguments, each formatted with `$display("%0d", …)` semantics and emitted as a JSON string so unknown values are representable |
+
+Decimal formatting rules, which are the mirror half of the three-way teeth: a real value rounds
+half-away-from-zero to a 64-bit integer (saturating; NaN becomes 0); a value containing unknown bits
+renders as a single collapsed character (`x`/`X`/`z`/`Z`); anything else is exact decimal at any
+width, with signed values as `-` followed by the two's-complement magnitude. A **string** argument
+renders numerically — as its packed byte value, not as text.
+
+Records go into one ordered vector, so the file is in emission (time) order.
+
+## 10. `--hier-tree` and `--inst-paths`
+
+Both are written immediately after elaboration and before simulation, from the instance table the
+elaborator populates in elaboration order. Both are plain UTF-8 text, one record per line,
+`\n`-terminated, written by overwrite (no atomic rename). A write failure prints
+`error[VITA-E0001]: cannot write --hier-tree '{path}': {e}` and does not change the exit code.
+
+`--hier-tree` is a pre-order walk from every root; children are emitted in ascending elaboration
+order, indented two spaces per level. Each line is `<leaf of the instance path> : <module name>`.
+
+```
+top : top
+  m0 : mid
+    u : leaf
+    u : leaf
+  arr[1] : leaf
+  arr[0] : leaf
+```
+
+Arrayed-instance segments survive because they are part of the leaf segment; note that a `[1:0]`
+range elaborates in descending order. **Generate-scope information is lost in this file**:
+`top.m0.g[0].u` and `top.m0.g[1].u` both render as `u : leaf`, which is why the two `u` lines above
+are identical.
+
+`--inst-paths` writes every instance path verbatim, one per line, in elaboration order. Arrayed and
+generate segments appear in full, consistent with the VCD `$scope` structure — so this is the file
+to copy a scope or force target out of.
+
+Status at HEAD: these two flags are the one accept-and-drop on the rail. On a staged applet they
+parse, reach no writer, and the run exits 0 with no diagnostic and no file; every other obs surface
+is loud there (§4.2).
+
+```
+top
+top.m0
+top.m0.g[0].u
+top.m0.g[1].u
+top.arr[1]
+top.arr[0]
+```
+
+## 11. Determinism, per file
+
+| File | Byte-identical across two runs of the same input | Exceptions |
+|---|---|---|
+| `run.json` | yes | exactly four isolated fields: `utc_unix_s`, `wall_s`, `elab_s`, `sim_s`. Under `--obs-procs-time` also every `time_s` and `obs_overhead_est_s` |
+| `results.jsonl` | yes, fully — the file carries no wall-clock field | none |
+| `coverage.json` | yes | none |
+| `trace.jsonl` | yes | none |
+| `stage.jsonl` | yes | none |
+| `--hier-tree` / `--inst-paths` | yes (elaboration order) | none |
+
+What makes it hold: hand-rolled JSON with a fixed key order; a `BTreeMap` behind every map that is
+iterated (`codegen.reject_reasons`, `native.reject_reasons`, the subroutine route table, the builtin
+rows keyed by static string, the subroutine-call rows keyed by `FuncId`); a total tiebreak on every
+sort; and a count, never a time, as every sort key. `source.name` is a basename so the same design
+run from two directories byte-diffs clean.
+
+Row order, collected:
+
+| Object | Primary | Tiebreak |
+|---|---|---|
+| `processes.items` | `evals` descending | `domain` ascending, then `index` ascending |
+| `builtins.items` | `calls` descending | `name` ascending |
+| `subroutine_calls.items` | `calls` descending | `FuncId` ascending |
+| `subroutines.items` | `(module, name)` ascending | — |
+| `coverage.groups` | elaboration order | — |
+| `coverage.groups[].coverpoints` | tracker order, coverpoints then crosses | — |
+| `trace.jsonl` | emission (time) order, all paths interleaved | — |
+| `stage.jsonl` | emission (time) order | — |
+
+A comparison of two `run.json` files strips exactly the four isolated fields and asserts all four
+are present; that is the determinism golden, and it is the test that R-F1 rests on.
+
+## 12. A worked example
+
+```
+vita d.sv --obs-dir out --obs-procs --probe top.y1 \
+     --hier-tree hier.txt --inst-paths inst.txt +STAGE_TRACE -o d.vcd
+```
+
+on a design with one `always #5 clk`, two instances of a module holding one `always_ff` and one
+`function automatic [3:0] f`, and two `$vita_stage` calls:
+
+```json
+{
+  "schema_ver": 1,
+  "tool": "vita",
+  "version": "0.2.0",
+  "format_version": 31,
+  "seed": null,
+  "plusargs": ["STAGE_TRACE"],
+  "source": {"name": "d.sv", "blake3": "476800d8e8b05f12865dba0227b12bae7f9a83863c4472b431c3809e0d0a3c59"},
+  "finish_reason": "finish",
+  "exit_class": "ok",
+  "exit_code": 0,
+  "sim_time": 35,
+  "counts": {"errors": 0, "warnings": 1, "fatals": 0},
+  "status": "PASS",
+  "backend": "native",
+  "backend_requested": "native",
+  "codegen": {"able": 3, "total": 5, "frame_bodies": 2, "reject_reasons": {"delay": 1, "wait": 1}},
+  "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
+  "subroutines": {"counts": {"total": 1, "frame": 1, "inlined": 0}, "sites_semantics": "…", "uncounted": "class methods and hierarchical calls", "items": [
+    {"module": "sub", "name": "f", "kind": "function", "route": "frame", "sites": 2}
+  ]},
+  "processes": {"timed": false, "counts": {"processes": 5, "assigns": 6, "total_evals": 56},
+  "items": [
+    {"domain": "assign", "index": 0, "kind": "port", "scope": "top.u1", "file": "d.sv", "line": 7, "col": 10, "evals": 9},
+    {"domain": "process", "index": 1, "kind": "always", "scope": "top", "file": "d.sv", "line": 9, "col": 3, "evals": 8},
+    {"domain": "process", "index": 3, "kind": "always_ff", "scope": "top.u1", "file": "d.sv", "line": 3, "col": 3, "evals": 3},
+    {"domain": "process", "index": 0, "kind": "var_init", "scope": "top", "file": "d.sv", "line": 6, "col": 15, "evals": 1}
+  ]},
+  "builtins": {"timed": false, "attribution": "self-plus-arguments", "included_in_processes": true, "time_semantics": "…", "distinct": 3, "total_calls": 4,
+  "items": [
+    {"name": "$vita_stage", "calls": 2},
+    {"name": "$display", "calls": 1},
+    {"name": "$finish", "calls": 1}
+  ]},
+  "subroutine_calls": {"timed": false, "key": "…", "time_semantics": "…", "distinct": 2, "total_calls": 6,
+  "items": [
+    {"func": 0, "name": "top.u1.f", "decl_file": "d.sv", "decl_line": 2, "decl_col": 28, "calls": 3},
+    {"func": 1, "name": "top.u2.f", "decl_file": "d.sv", "decl_line": 2, "decl_col": 28, "calls": 3}
+  ]},
+  "utc_unix_s": 1788921496,
+  "wall_s": 0.012602,
+  "elab_s": 0.011536,
+  "sim_s": 0.001009
+}
+```
+
+`processes.items` is abridged here — the real file lists every row, zero-eval ones included. The
+three `…` strings are the fixed sentences quoted verbatim in §5.5, §5.6 and §5.7.
+
+The sibling files from the same run:
+
+```
+results.jsonl  {"v":1,"t":35,"kind":"result","status":"PASS","finish_reason":"finish","exit_code":0,"sim_time":35,"errors":0,"warnings":1,"fatals":0}
+trace.jsonl    {"v":1,"t":5,"kind":"chg","path":"top.y1","old":"xxxx","new":"0001"}
+               {"v":1,"t":15,"kind":"chg","path":"top.y1","old":"0001","new":"0010"}
+               {"v":1,"t":25,"kind":"chg","path":"top.y1","old":"0010","new":"0011"}
+stage.jsonl    {"v":1,"t":0,"kind":"stage","label":"init","idx":0,"vals":["0"]}
+               {"v":1,"t":35,"kind":"stage","label":"done","idx":1,"vals":["3","3"]}
+hier.txt       top : top
+                 u1 : sub
+                 u2 : sub
+inst.txt       top
+               top.u1
+               top.u2
+```
+
+Read in order: `status` and `finish_reason` say whether and how it ended; `counts` says how loudly;
+`processes` says which body ran the most; `builtins` says which primitive it spent itself on;
+`subroutines` says which routine is a frame call; `trace.jsonl` says what the signal did; and
+`stage.jsonl` aligns the run against a reference implementation's stage log.
+
+## 13. Not implemented at HEAD
+
+Each row is a present fact about this build, not a schedule. The order in which they are taken is
+[ROADMAP §6](../ROADMAP.md).
+
+| Item | State at HEAD |
+|---|---|
+| `run_id` in `run.json` | No such key |
+| `--seed` | No such flag; `"seed": null` is a constant |
+| Full input identity in `source.blake3` | The digest covers the source **text** only, so two runs of one `` `ifdef ``-switched file with and without `-D FOO` behave differently and report the same digest |
+| `-G` / `--param` overrides in `run.json` | No key carries them; two runs differing only in `-G` produce manifests identical outside the four isolated wall-clock fields |
+| `results.jsonl` v2 (per-test-case ledger, `$vita_test_begin`/`$vita_test_end`) | Not parsed, not lowered, not dispatched. v1 is one line per run |
+| `detail_ref` on a FAIL line | The single line carries no such key |
+| R-L2 failure detail (`fail/*.json`) | No producer |
+| R-L3 `stuck_in` / hang detection | No producer |
+| Per-element array probe, real probe, class or event probe | Loud-rejected at the CLI (§4.2) |
+| R-L4 handshake and protocol channel events | No producer |
+| SVA assertion pass/fail and cover-property counts in `coverage.json` | The file carries covergroups only |
+| Per-bin hit detail in `coverage.json` | Only `num_bins` and `covered_bins` |
+| R-L6 `sva.jsonl` (property name plus support cone) | No producer |
+| R-C1 `vrun --control stdio` JSON-RPC (`peek`/`poke`/`step`/`run_until`/`finish`) plus a poke journal | No control surface exists |
+| R-C2 `snapshot` / `restore` / `rewind_to` | No producer |
+| R-C3 region-annotated events | No record carries a region or delta field |
+| R-C4 X-origin (`cause: uninit \| multi-drv \| arith-X`) | No producer |
+| R-C5 dataflow backward slice | No producer |
+| R-I1 config-driven signal introspection | Partial: `--probe` / `--probe-file` is a manual path list, not a config-driven auto-dump |
+| R-I2 semantic transaction log | No producer |
+| §3 pin 4's enum values rendered as **names** | No name path exists: `trace` values are 4-state binary and `stage` values are `%0d` decimal |
+| The obs rail on the staged flow (`vcmp` / `velab` / `vrun`) | Loud-rejected (§4.2) |
+| A compile-fail manifest | A front-end or elaborate failure writes no obs directory |
+| The call tree (`processes` decomposed to task granularity) | `processes.items[].domain` is `"process"` or `"assign"` only. The blocker is structural: an inlined subroutine leaves no call node, so a seam-based profile reports it 0 times, and `0` reads as *free* about the very thing the user is hunting. `subroutines` (§5.6) is the minimum form of the prerequisite — the elaborate-time record of which route each routine took |
+| Per-call-site builtin rows (`{"name":"$sscanf","file":…,"line":…}`) | The table is name-level aggregation. The system-task half could locate today; the system-function half cannot, because the effect carries no statement id and the pure evaluator has no statement context at all, and half a table locating is worse than none |
+| A declaration site on the static `subroutines` rows | Items carry `module`, `name`, `kind`, `route`, `sites` only, so the two subroutine objects cannot be joined (§5.7) |
+| `WPROG-WHY`: a per-`(reason, count)` tally of expression-level compile declines beside `codegen` | Not emitted. `codegen.reject_reasons` is a per-**process** census, so a body can report `able 1/1` while every evaluation of its right-hand side runs the generic path, and the compiled-lane boundary can only be inferred from call counts — an inference that has produced wrong causes twice |
+| `--hier-tree` generate scopes | Collapsed: sibling generate instances render as identical lines (§10). `--inst-paths` carries the full path |
+| `--hier-tree` / `--inst-paths` on a staged applet | Accepted and dropped: the run exits 0, prints no diagnostic and writes no file. This is the one accept-and-drop on the rail; every other obs surface is loud on a staged applet |
+
+## 14. Tests that gate the schemas
+
+| File | What it pins |
+|---|---|
+| `crates/cli/tests/obs.rs` | the `run.json` constants and the exact `results.jsonl` prefix · the determinism golden (strip exactly the four wall-clock fields, assert all four are present) · status versus process exit · plusargs and source digest · no obs output on a compile error · `exit_class` under `-Werror` · staged rejection · empty `--obs-dir` rejection · no output without the flag · the coverage schema against `get_coverage()`, including crosses, zero hits, weighting and determinism · the trace change stream, its three-way match against `$monitor`, probe typo and missing-directory loudness, determinism, the loud array/real rejections and full-width packed values · the stage capture, its three-way match against `$display`, native capture, no-plusarg no-op, determinism, zero-argument loudness and the `STAGE_TRACE=` spelling · the `codegen` claim and reason keys, backend invariance, and the `native` reject families · native-backend probe capture at the store point |
+| `crates/cli/tests/obs_procs.rs` | hand-checkable counts · byte identity across runs · backend invariance · timing adds `time_s` without moving counts · one row per instance · loudness without `--obs-dir` · `null` without the flag · staged rejection · port rows locating their connection · wildcard port rows staying unlocated · array-port elements sharing one connection span |
+| `crates/cli/tests/obs_builtins.rs` | hand-checkable counts · total row order · byte identity · backend invariance · timing without moving counts · `null` without the flag · a `$display` inside a function body counting |
+| `crates/cli/tests/obs_subroutines.rs` | every route reported with its lowered site count · the counts header and semantics strings · emission without `--obs-procs` · the empty table · the 2-state/4-state return-type route split · output-formal calls in both spellings · class declarations not shifting module counts |
+| `crates/cli/tests/obs_subroutine_calls.rs` | per-instance counts and the declaration join · backend invariance · byte identity · `null` without `--obs-procs` · an inlined subroutine having a static row and no runtime row · a suspendable task frame counted and not timed · a synchronous call timed · the object describing itself truthfully |
+| `crates/cli/tests/help_covers_flags.rs` | every literal flag arm in the parser appears in `vita --help` |
+| `crates/sim-engine/tests/native_gate.rs` | the stage sidecar and the probed-net set are both native-backend core — neither disqualifies |
+| `crates/sim-engine/src/profile.rs` unit tests | nested time charged once · counting without timing never reads the clock |
+
+## 15. Schema evolution
+
+- A schema change is made in this document first, and `schema_ver` moves with it.
+- `schema_ver` bumps only when the **record envelope** changes. An additive field keeps
+  `schema_ver` at `1`, because a consumer that ignores unknown keys is unaffected.
+- The record envelope of §3 pin 4 (`v`, `t`, `kind` first, fixed key order) is the freeze line.
+- The rail is out of band with respect to the frozen IR, so no rail change moves
+  `format_version` — see [16-schema-hash-spec.md](16-schema-hash-spec.md) and
+  [17-sim-ir-ir-backbone-freeze.md](17-sim-ir-ir-backbone-freeze.md) for what does.
+- Related specifications: [21-tier3-native-backend.md](21-tier3-native-backend.md) for the backend
+  gate the `native` object reports, [06-simulation-engine.md](06-simulation-engine.md) for the
+  scheduler an activation counts against, [07-vcd-format.md](07-vcd-format.md) for the waveform
+  rail and its scope naming, [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md) and
+  [15-error-code-reference.md](15-error-code-reference.md) for the diagnostic surface, and
+  [../manual/004_cli-reference.md](../manual/004_cli-reference.md) for the user-facing flag
+  reference.

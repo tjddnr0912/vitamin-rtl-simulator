@@ -1,66 +1,66 @@
-# 00 · IEEE HDL 표준 매핑
+# 00 · Map of the IEEE HDL standards
 
-## 빠른 참조 표
+## Quick reference
 
-| 표준 | 버전 | 발표 | 주요 변경 | 상태 |
+| Standard | Edition | Published | Main changes | Status |
 |---|---|---|---|---|
-| IEEE 1364 (Verilog) | 1995 | 1995 | 초판 — 4-state 논리, module/always/assign/initial, $display 등 system tasks | superseded |
-| IEEE 1364 | 2001 | 2001 | generate, signed 네트, `always @*`, 내장 산술 연산자, 명명된 파라미터 오버라이드, 파일 I/O 강화 | superseded |
-| IEEE 1364 | 2005 | 2005 | 마지막 독립 Verilog 표준. 모호한 정의 수정 + 1800-2005와 비호환 해소. `uwire` 추가 | merged into 1800-2009 |
-| IEEE 1800 (SV) | 2005 | 2005 | SV 초판 — 1364와 별도 공존. `logic`, `always_ff/comb/latch`, interface, struct/union/enum, SVA, class, randomization | superseded |
-| IEEE 1800 | 2009 | 2009 | **IEEE 1364-2005 완전 흡수** — SV가 Verilog의 상위 집합이 됨. 단일 문서. 동적 배열·큐 강화, assertion 개선 | superseded |
-| IEEE 1800 | 2012 | 2012 | `unique if / priority if` 정제, 에라타 수정. 일관성·명확성 확보 중심 | superseded |
-| IEEE 1800 | 2017 | 2017-12-06 | 에러 수정 + 소규모 정제. **IEEE GET Program 무료 제공 시작** | active (widely deployed) |
-| IEEE 1800 | 2023 | 2024-02-28 | `ref static` 인수 방향 추가, 언어 확장 + 에라타 수정. **IEEE GET Program 무료 제공** | latest |
-| IEEE 1076 (VHDL) | 1987 | 1987 | 초판 — DoD 요청 개발. 정수·실수·논리·문자·시간 타입, bit_vector, string | superseded |
-| IEEE 1076 | 1993 | 1993 | 문법 일관성 향상, ISO-8859-1 문자 확장, `xnor` 추가, `postponed process` 도입 | superseded |
-| IEEE 1076 | 2000 | 2000 | 소규모 — 보호 타입(protected type, C++ class 유사) 도입 | superseded |
-| IEEE 1076 | 2002 | 2002 | 소규모 — 버퍼 포트 규칙 완화 | superseded |
-| IEEE 1076 | 2008 | 2009-01-26 | **대규모 개정** — IEEE 1164/1076.2/1076.3 흡수, VHPI 통합, PSL 부분집합, 패키지/서브프로그램 generic | active |
-| IEEE 1076 | 2019 | 2019-12-23 | 정수 64비트 확장, 조건부 분석(conditional analysis), 보호 타입 제네릭, PSL 강화, TEXTIO 확장. **IEEE GET Program 무료 제공** | latest |
-| IEEE 1164 (std_logic_1164) | 1993 | 1993 | 독립 표준 — `std_logic` 9-value 논리, `std_logic_vector`, 해상도 함수 | merged into 1076-2008 |
+| IEEE 1364 (Verilog) | 1995 | 1995 | First edition — 4-state logic, module/always/assign/initial, system tasks such as `$display` | superseded |
+| IEEE 1364 | 2001 | 2001 | `generate`, signed nets, `always @*`, built-in arithmetic operators, named parameter overrides, stronger file I/O | superseded |
+| IEEE 1364 | 2005 | 2005 | Last standalone Verilog standard. Ambiguous definitions repaired and the incompatibilities with 1800-2005 resolved. `uwire` added | merged into 1800-2009 |
+| IEEE 1800 (SV) | 2005 | 2005 | First SV edition — published alongside 1364, not merged with it. `logic`, `always_ff/comb/latch`, interfaces, struct/union/enum, SVA, classes, randomization | superseded |
+| IEEE 1800 | 2009 | 2009 | **Absorbs IEEE 1364-2005 in full** — SV becomes a superset of Verilog in a single document. Stronger dynamic arrays and queues, improved assertions | superseded |
+| IEEE 1800 | 2012 | 2012 | `unique if` / `priority if` refined, errata fixed. Mostly a consistency-and-clarity edition | superseded |
+| IEEE 1800 | 2017 | 2017-12-06 | Error fixes plus small refinements. **Free access through the IEEE GET Program begins** | active (widely deployed) |
+| IEEE 1800 | 2023 | 2024-02-28 | `ref static` argument direction added, language extensions plus errata. **Free through the IEEE GET Program** | latest |
+| IEEE 1076 (VHDL) | 1987 | 1987 | First edition — developed at the request of the DoD. Integer, real, logic, character and time types, bit_vector, string | superseded |
+| IEEE 1076 | 1993 | 1993 | More consistent syntax, ISO-8859-1 character set, `xnor` added, `postponed process` introduced | superseded |
+| IEEE 1076 | 2000 | 2000 | Small edition — protected types introduced (comparable to a C++ class) | superseded |
+| IEEE 1076 | 2002 | 2002 | Small edition — buffer-port rules relaxed | superseded |
+| IEEE 1076 | 2008 | 2009-01-26 | **Major revision** — absorbs IEEE 1164/1076.2/1076.3, integrates VHPI, adds a PSL subset and generics on packages and subprograms | active |
+| IEEE 1076 | 2019 | 2019-12-23 | Integers widened to 64 bits, conditional analysis, generics on protected types, stronger PSL, extended TEXTIO. **Free through the IEEE GET Program** | latest |
+| IEEE 1164 (std_logic_1164) | 1993 | 1993 | Standalone standard — the `std_logic` 9-value system, `std_logic_vector`, resolution functions | merged into 1076-2008 |
 
-## 언어 간 관계
+## How the languages relate
 
-**SystemVerilog ⊃ Verilog (2009 이후)**
+**SystemVerilog ⊃ Verilog (from 2009 on)**
 
-IEEE 1800-2009부터 Verilog(IEEE 1364)의 모든 구조가 SystemVerilog 표준 문서 내부에 정의된다. 1364는 더 이상 독립 표준으로 존재하지 않는다. 본 프로젝트는 단일 SV 프론트엔드로 Verilog RTL을 포함해 처리한다.
+From IEEE 1800-2009 on, every Verilog (IEEE 1364) construct is defined inside the SystemVerilog standard itself. 1364 no longer exists as a standalone standard. That is why one SystemVerilog front end covers Verilog RTL as well, rather than two.
 
-**VHDL ⊃ Std_logic_1164 (2008 이후)**
+**VHDL ⊃ std_logic_1164 (from 2008 on)**
 
-IEEE 1076-2008이 IEEE 1164를 흡수했다. `use ieee.std_logic_1164.all;` 선언은 여전히 동작하지만 정의의 원천은 1076이다. IEEE 1164는 superseded 상태로 독립 갱신이 없다.
+IEEE 1076-2008 absorbed IEEE 1164. A `use ieee.std_logic_1164.all;` clause still works, but the definitions now originate in 1076. IEEE 1164 is superseded and receives no separate updates.
 
-**VHDL은 SV와 독립 언어**
+**VHDL is a language of its own, independent of SV**
 
-문법 · 의미론 · 타입 시스템 · 라이브러리 생태계가 완전히 다르다. 두 언어는 공유 IR(sim-ir) 이전 단계에서 완전히 분리된 프론트엔드를 요구한다.
+Its syntax, semantics, type system and library ecosystem are entirely different. The two languages require fully separate front ends up to the point where they meet a shared IR (sim-ir).
 
-## 본 프로젝트의 타겟 버전
+## Which editions these notes are written against
 
-| 언어 | 시작 기준 버전 | 후속 확장 |
+| Language | Baseline edition | Later editions |
 |---|---|---|
-| SystemVerilog | IEEE 1800-2017 | 2023 이슈 후속 검토 |
-| Verilog (SV 내) | 1800에 흡수된 부분 전부 (= 1364-2005 RTL 전체) | — |
-| VHDL | IEEE 1076-2008 | 2019 후속 검토 |
+| SystemVerilog | IEEE 1800-2017 | 1800-2023 consulted for individual issues |
+| Verilog (inside SV) | Everything 1800 absorbed (= all of 1364-2005 RTL) | — |
+| VHDL | IEEE 1076-2008 | 1076-2019 consulted for individual issues |
 
-Phase 1 MVP 범위는 **SV 합성 가능 RTL 서브셋** (Verilog-2005 RTL 전부 포함). 상세는 [01-goals-and-scope.md](../01-goals-and-scope.md) 참조.
+These are the editions the notes in this folder cite; they are not a statement of what the simulator implements. A VHDL front end is conditional and not scheduled — see [01-goals-and-scope.md](../01-goals-and-scope.md) for the scope of the project, and [manual/003_language-reference.md](../../manual/003_language-reference.md) for the construct-by-construct status of what vita supports today.
 
-## 자유 접근 자료 (IEEE GET Program)
+## Freely available texts (IEEE GET Program)
 
-Accellera 후원으로 다음 표준을 무료 다운로드할 수 있다.
+Sponsored by Accellera, the following standards can be downloaded at no cost.
 
-| 표준 | 접근 |
+| Standard | Access |
 |---|---|
 | IEEE 1800-2017 (SystemVerilog) | [IEEE Xplore GET](https://ieeexplore.ieee.org/browse/standards/get-program/page/) |
 | IEEE 1800-2023 (SystemVerilog) | [IEEE Xplore GET](https://ieeexplore.ieee.org/browse/standards/get-program/page/) / [Accellera](https://www.accellera.org/downloads/ieee) |
 | IEEE 1076-2019 (VHDL) | [IEEE Xplore GET](https://ieeexplore.ieee.org/browse/standards/get-program/page/) / [Accellera](https://www.accellera.org/downloads/ieee) |
-| IEEE 1666-2023 (SystemC) | [Accellera](https://www.accellera.org/downloads/ieee) (본 프로젝트 범위 외) |
+| IEEE 1666-2023 (SystemC) | [Accellera](https://www.accellera.org/downloads/ieee) (outside the scope of this project) |
 
-IEEE 1364 (1995/2001/2005)와 IEEE 1164 (1993)는 superseded 상태로 GET Program 대상이 아니며, 구매가 필요하다. 대부분의 내용은 IEEE 1800-2017/2023 LRM에서 확인할 수 있다.
+IEEE 1364 (1995/2001/2005) and IEEE 1164 (1993) are superseded, are not part of the GET Program, and must be purchased. Most of their content can be read in the IEEE 1800-2017/2023 LRM instead.
 
 ## Sources
 
-- 본 spec §10 (구조)
-- research-log: [hdl-standards-versions-2026-05-28.md](../research-log/hdl-standards-versions-2026-05-28.md)
+- This project's spec, §10 (structure)
+- research-log: [hdl-standards-versions-2026-05-28.md](../../history/research-log/hdl-standards-versions-2026-05-28.md)
 - IEEE 1800-2023: https://standards.ieee.org/ieee/1800/7743/
 - IEEE 1364-2005 Xplore abstract: https://ieeexplore.ieee.org/document/1620780
 - IEEE 1076-2019 Xplore abstract: https://ieeexplore.ieee.org/document/8938196

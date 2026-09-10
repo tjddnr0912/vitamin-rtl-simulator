@@ -1,195 +1,203 @@
-# 10 · 용어집
+# 10 · Glossary
 
-본 문서에서 반복적으로 사용되는 용어를 정의한다. 표준 IEEE 1800/1364 용어는
-해당 조항 번호를 병기하며, 본 프로젝트 고유 용어는 별도 표시한다.
+Every term this documentation set uses with a fixed meaning, defined once. Where a term
+comes from the language standards, the IEEE clause is given; where it is this project's own
+vocabulary, the column reads `—`. A term defined here means the same thing in every other
+document in the tree, and a document that needs a different meaning defines it locally
+instead of redefining one of these.
 
----
-
-## 시뮬레이션 핵심
-
-**Compile** — 전처리(preprocess) + 어휘 분석(lex) + 구문 분석(parse) + 문법 검사.
-결과물은 AST(Abstract Syntax Tree). 오류는 이 단계에서 최초 보고된다.
-
-**Elaboration** — AST를 시뮬레이션 가능한 형태로 변환하는 단계.
-파라미터 해소, 모듈 계층 인스턴스화, 타입 검사, 포트 연결성 검사,
-다중 구동(multi-driver) 검사를 포함한다. 결과물은 sim-ir.
-IEEE 1800 §23.10 참조.
-
-**Event-driven simulation** — 신호 값의 변화(이벤트)가 발생할 때만
-관련 프로세스를 실행하는 시뮬레이션 방식.
-클록 주기마다 전체를 평가하는 cycle-accurate 방식과 대비된다.
-IEEE 1800 §4 참조.
-
-**Delta cycle** — 동일한 시뮬레이션 시각(simulation time)에서
-신호들이 안정 상태에 도달할 때까지 반복되는 0-시간 평가 단계.
-`#0` 지연이나 논리 연쇄가 복수의 delta를 유발한다.
-`$time`은 delta 사이에서 증가하지 않는다. IEEE 1800 §4.5 참조.
-
-**Stratified event queue** — IEEE 1800/1364가 정의하는 영역 분리 이벤트 큐.
-같은 시각의 이벤트를 Active / Inactive / NBA / Observed / Reactive /
-Re-Inactive / Re-NBA / Postponed 영역으로 구분하여 실행 순서를 결정적으로 정의한다.
-IEEE 1800 §4.4 참조.
-
-**NBA** — Non-Blocking Assignment(`<=`) 갱신 수집 영역.
-`<=` 우변은 Active 영역에서 평가되고, 좌변 갱신은 NBA 영역에서 일괄 커밋된다.
-이를 통해 클록 에지에서의 레지스터 교환(swap)이 정확하게 동작한다.
-IEEE 1800 §10.4.2 참조.
+Two standards are cited throughout. `IEEE 1364` is IEEE 1364-2005, the Verilog LRM;
+`IEEE 1800` is IEEE 1800-2017, the SystemVerilog LRM, which subsumes it.
 
 ---
 
-## 시간
+## 1. The pipeline
 
-**timescale** — `` `timescale <단위>/<정밀도> `` 디렉티브.
-단위(unit)는 `#1`이 나타내는 실제 시간, 정밀도(precision)는 내부 표현의
-최소 분해능을 결정한다. 예: `` `timescale 1ns/1ps ``.
-IEEE 1364 §19.2 / IEEE 1800 §3.14 참조.
+The stage names below are the whole pipeline, in order:
+`preprocess → lex → parse → elaborate → sim-ir → sim-engine → waveform`. Everything up to
+and including parse is language-dependent; everything after it is language-neutral.
 
-**Time wheel** — 미래 이벤트를 시각별로 보관하는 내부 자료구조.
-각 버킷은 특정 시뮬레이션 시각에 실행될 이벤트 목록을 담는다.
-시간 진행은 다음 이벤트가 존재하는 버킷으로 점프(time advance)하는 방식이다.
-
-**`$time`** — 현재 시뮬레이션 시각을 timescale 단위의 정수로 반환하는 시스템 함수.
-64비트 정수. `$time`은 precision이 아닌 unit 기준이므로 정밀도가 손실될 수 있다.
-IEEE 1800 §20.3 참조.
-
-**`$realtime`** — 현재 시뮬레이션 시각을 timescale 정밀도를 반영한 실수(real)로 반환.
-`$time`과 달리 소수점 이하 시각을 표현한다.
-IEEE 1800 §20.3 참조.
+| Term | Definition | IEEE |
+|---|---|---|
+| **Compile** | Preprocessing, lexing, parsing and syntax checking, taken together. The product is an AST rooted at `hdl_ast::SourceUnit`. Directive and syntax diagnostics are reported here and nowhere later. | 1800 §22 (directives) |
+| **Elaboration** | Turning an AST into a simulatable design: parameter resolution, hierarchy instantiation, type checking, port connectivity, generate expansion and the multi-driver check. The product is `sim_ir::SimIr`. | 1800 §23 |
+| **sim-ir** | The language-neutral simulation IR: the output of elaborate and the only input the engine reads. Nine arenas of `Vec`, indexed by `u32` — `instances`, `nets`, `processes`, `cont_assigns`, `funcs`, `exprs`, `stmts`, `blocks`, `consts`. Abstracting Verilog and SystemVerilog semantics at this boundary is what lets a second execution backend be added without a rewrite. | — |
+| **Design unit** | One elaborable declaration: a `module`, `interface`, `package` or `class`. Units are the granularity a work library records. | 1800 §3 |
+| **Compilation unit** | The set of source files compiled together, sharing one `` `define `` and one file-scope declaration space. | 1800 §3 |
+| **Top / root** | The design unit elaboration starts from. Inferred when one candidate is unambiguous, pinned with `--top`, and required in library mode. | 1800 §23 |
+| **One-shot flow** | `vita design.sv` — compile, elaborate and simulate in one process, streaming through memory, writing no intermediate file. | — |
+| **Staged flow** | `vcmp → velab → vrun` — the same three stages as three processes exchanging files on disk (`.vu`, then `.velab`). It answers the same question as Cadence `xmvlog`/`xmelab`/`xmsim` and Synopsys `vlogan`/`vcs`/`simv`: per-stage rebuild, per-stage debugging, and skipping a stage whose inputs have not changed. Contract: [14-staged-artifacts.md](14-staged-artifacts.md). | — |
 
 ---
 
-## 파형
+## 2. Scheduling and time
 
-**VCD** — Value Change Dump. IEEE 1364 §18에서 정의된 ASCII 기반 파형 덤프 포맷.
-헤더(선언 섹션)와 본문(시각별 값 변화 섹션)으로 구성된다.
-본 프로젝트의 1차 출력 포맷.
-
-**Identifier code** — VCD에서 신호를 참조하는 짧은 ASCII 코드.
-`!`, `"`, `#` 등 가독 ASCII 문자로 구성되며, 헤더의 `$var` 선언에서
-신호명과 매핑된다. 도구마다 생성 방식이 다르므로 VCD 비교 시 정규화가 필요하다.
-IEEE 1364 §18.2 참조.
-
-**FST** — Fast Signal Trace. GTKWave 및 Verilator에서 지원하는 이진 파형 포맷.
-VCD 대비 파일 크기가 훨씬 작고 쓰기 효율이 높다.
-본 프로젝트의 비목표 포맷 (VCD 우선).
-
----
-
-## 언어
-
-**HDL** — Hardware Description Language. 하드웨어 구조와 동작을 기술하는 언어.
-본 프로젝트의 입력 언어는 Verilog(IEEE 1364-2005) 및 SystemVerilog(IEEE 1800)의
-시뮬레이션 서브셋이다.
-
-**System task / function** — `$`로 시작하는 표준 내장 서브루틴.
-`$display`, `$monitor`, `$time`, `$finish`, `$dumpfile`, `$dumpvars` 등.
-task는 값을 반환하지 않으며, function은 값을 반환한다.
-IEEE 1800 §20~21 참조.
-
-**Synthesizability** — RTL 코드가 논리 합성 도구로 게이트 네트리스트로 변환 가능한지
-여부. 본 프로젝트는 합성이 아닌 시뮬레이션을 대상으로 하므로,
-합성 불가 구문(지연, 초기화 블록 등)도 시뮬레이션 범위에서는 지원한다.
-
-**4-state logic** — 신호가 0 / 1 / X(unknown) / Z(high-impedance) 네 가지 값을
-가질 수 있는 표현 모델. IEEE 표준 시뮬레이션의 기본 모델.
-Icarus Verilog와 본 프로젝트가 구현하는 모델.
-
-**2-state logic** — 0과 1만 존재하는 단순화된 표현 모델.
-Verilator의 기본 모델이며, X/Z를 0으로 처리해 성능을 높이지만
-초기화 오류 탐지 능력이 낮아진다.
+| Term | Definition | IEEE |
+|---|---|---|
+| **Event-driven simulation** | Executing a process only when a value it depends on changes, rather than re-evaluating the whole design every clock. The model the engine implements. | 1800 §4 |
+| **Region** | One ordered slot inside a single simulation time, so that events at the same time still have a defined order. IEEE 1800 defines seventeen; the engine implements seven — Preponed, Active, Inactive, NBA, Observed, Reactive, Postponed. Constructs that could observe a Pre-, Post- or Re- variant are refused rather than approximated. | 1800 §4 |
+| **Stratified event queue** | The region set as a whole, viewed as the queue discipline that makes same-time ordering deterministic. IEEE 1364 defines four strata (Active, Inactive, NBA, Monitor); IEEE 1800 extends them to seventeen. The frozen IR's `RegionTag` carries the four-stratum form, and the engine's own loop supplies the rest. | 1800 §4, 1364 §11 |
+| **Delta cycle** | One zero-time iteration of the region cascade within a single simulation time, repeated until values stop moving. A `#0` delay or a chain of combinational logic produces several. `$time` does not advance between them. The standard describes the iteration; "delta cycle" is the industry name for it. | 1800 §4 |
+| **NBA** | Non-blocking assignment, `<=`. The right-hand side is evaluated in the Active region and the left-hand side update is committed in the NBA region, which is what makes a register swap at a clock edge behave as hardware does. Also the name of the region that holds those pending updates. | 1800 §10.4.2 |
+| **Time wheel** | The engine structure holding future events, keyed by simulation time. Three maps participate — the event wheel, delayed continuous-assign writes, and transport-delayed NBA updates — and time advances to the earliest key present in any of them. | — |
+| **Quiescence** | The state in which no event remains in any of the three time-keyed maps. Reaching it ends the run without `$finish`. | — |
+| **Finish reason** | Why a run ended: `Finish` (`$finish` or a fatal severity task), `Stop` (`$stop`), `Quiescent`, `DeltaLimit` (the delta budget was exhausted, or a continuous-assign settle would not converge) or `Error`. Printed as `simulation ended ({reason}) at time {n}`; written to the observability rail in lower snake case (`finish`, `stop`, `quiescent`, `delta_limit`, `error`). | — |
+| **timescale** | The `` `timescale <unit>/<precision> `` directive. The unit is the real time `#1` denotes; the precision is the smallest representable step. Internally, time is counted in precision ticks. | 1364 §19.2, 1800 §22 |
+| **Time unit / time precision** | The two halves of a timescale, tracked per module and folded into a global precision for the run. Contract: [08-timescale-and-timing.md](08-timescale-and-timing.md). | 1800 §3 |
+| **`$time`** | The current simulation time, returned as a 64-bit integer scaled to the calling module's time unit. Because it is scaled to the unit and not the precision, it can round. | 1800 §20.3 |
+| **`$realtime`** | The current simulation time as a `real`, carrying the sub-unit part `$time` rounds away. | 1800 §20.3 |
 
 ---
 
-## 본 프로젝트
+## 3. Values, storage and execution
 
-**Vitamin** — 본 프로젝트 코드네임 (임시). 메모리 안전·이식성·정밀도를 갖춘
-Rust 기반 RTL 시뮬레이터.
+| Term | Definition | IEEE |
+|---|---|---|
+| **4-state logic** | The value set `0`, `1`, `X` (unknown) and `Z` (high impedance). The model IEEE simulation is defined in, the model Icarus Verilog implements, and the model this simulator implements. | 1800 §6.3 |
+| **2-state logic** | The reduced value set `0` and `1`, with `X`/`Z` collapsed to `0`. Verilator's default. Faster, and blind to the initialisation defects `X` exists to expose. Applies here only to the 2-state SystemVerilog types (`int`, `bit`, and their relatives), never to the whole design. | 1800 §6.3 |
+| **Net** | A value with a driver rather than a stored assignment — `wire` and its relatives — and, in this implementation, also the name of the flat storage slot every signal occupies at run time. Each slot holds the current and previous packed values, a width, an array length, and sign and real flags. | 1800 §6.5 |
+| **Variable** | A value that holds what was last assigned to it procedurally — `reg`, `logic`, `int` and their relatives. | 1800 §6.5 |
+| **Process** | One independently schedulable thread of execution: an `initial`, `final` or `always` block, or a `fork` arm. Elaboration classifies each into a sensitivity kind — `Initial`, `Comb`, `Latch`, `Level` or `Edge` — which decides whether it runs at time zero or waits. | 1800 §9 |
+| **Activity** | One runtime instance of a process. Top-level processes map one to one onto the IR's process list; `fork` children are appended. An activity carries its own call stack, its join reference, and the flags that keep an `always` from re-entering itself before it completes. | — |
+| **Frame** | One activation record of a subroutine: its local storage window plus, for a suspendable task, the return block and the output bindings the caller is waiting for. Two mechanisms exist — a synchronous window stack for subroutines that cannot suspend, and a per-activity call stack for those that can, whose window is stashed across a suspend and restored on resume. `Frame` is also a frozen IR type. | 1800 §13 |
+| **fork/join** | Concurrent execution of several statements, with `join`, `join_any` or `join_none` deciding when the parent resumes. A `join_any` or `join_none` survivor can outlive its parent, so frame windows are reference-counted. | 1800 §9.3 |
 
-**vita** — CLI 작업명 (placeholder). compile→elaborate→simulation을 한 번에 수행하는
-원샷 드라이버 진입점. 단계별 실행은 vcmp·velab·vrun으로 분리된다.
+---
 
-**vcmp / velab / vrun** — 단계별 실행 드라이버 (placeholder). 각각 compile · elaborate ·
-simulation 단계만 수행하며, 뒤 단계는 앞 단계의 산출물을 입력으로 받는다
-(vcmp 산출물 → velab, velab 산출물 → vrun). 상용 EDA의 단계 분리
-(Cadence `xmvlog`/`xmelab`/`xmsim`, Synopsys `vlogan`/`vcs`/`simv`)에 대응하며,
-단계별 독립 빌드·디버깅과 변경 없는 단계 스킵을 가능하게 한다.
+## 4. Waveform
 
-**sim-ir** — 언어 비의존 시뮬레이션 IR(Intermediate Representation).
-elaboration 단계의 출력이자 시뮬레이션 엔진의 입력.
-Verilog / SystemVerilog 의미론을 IR 수준에서 추상화하여, 컴파일드/JIT
-백엔드를 재작성 없이 추가할 수 있는 경계를 제공한다.
+| Term | Definition | IEEE |
+|---|---|---|
+| **VCD** | Value Change Dump, the ASCII waveform format: a declaration header followed by time-ordered value changes. The default output format here. | 1364 §18, 1800 §21.7 |
+| **Identifier code** | The short printable-ASCII key a VCD uses to name a signal in the body, bound to a hierarchical name by a `$var` line in the header. Every tool assigns them differently, so comparing two VCDs means normalising them first. | 1364 §18.2 |
+| **FST** | Fast Signal Trace, GTKWave's binary waveform format, read natively by GTKWave and Surfer. Written here when the dump path ends in `.fst`, by transcoding a VCD written to a sidecar. | — |
+| **Dump** | The act of writing a waveform. Nothing is written unless the RTL calls `$dumpvars`; `$dumpfile` alone only names the path, and `$dumpon`, `$dumpoff` and `$dumpall` before any `$dumpvars` do nothing. | 1364 §18.1, 1800 §21.7 |
 
-**hdl-builtins** — `$`로 시작하는 system tasks/functions를 구현하는 크레이트.
-`$display`, `$write`, `$monitor`, `$time`, `$realtime`, `$finish`, `$stop`,
-`$dumpfile`, `$dumpvars`, `$dumpon`, `$dumpoff` 등.
+Contract: [07-vcd-format.md](07-vcd-format.md).
 
-**vcd-writer** — VCD 파형 파일 출력을 담당하는 크레이트.
-RTL의 `$dumpfile`/`$dumpvars` 호출 시에만 활성화되며,
-자동 전체 덤프는 지원하지 않는다.
+---
 
-**diag** — 진단 *하나*를 렌더링하는 크레이트(파일:줄:열 + 시각적 언더라인, Rust 컴파일러
-스타일). `Severity`/`MsgCode`/`Frame`/`Diagnostic`/`LogEvent` 데이터 모델과 `LogSink` trait도 보유하되
-IO·tracing 의존이 없어 leaf로 남는다. 운영 sink는 [[vita-log]]가 담당.
+## 5. Diagnostics
 
-**vita-log** — 운영 로깅/transcript 서브시스템 크레이트. 단일 `LogEvent` 스트림을 터미널 +
-로그파일로 tee하고, severity 라우팅·메시지 코드 레지스트리·suppress/promote 게이트·카운트·
-exit-code 계산·배너/진행/filelist echo·런타임 위치 복원을 소유한다. `diag` 위에 적층하며
-`$info`/`$warning`/`$error`/`$fatal`이 같은 게이트를 지난다. 상세 `13-diagnostics-and-logging.md`.
+| Term | Definition | IEEE |
+|---|---|---|
+| **Diagnostic** | One rendered message: severity, message code, `file:line:col`, a title, and a visual underline of the offending span, in the shape the Rust compiler uses. | — |
+| **Severity** | One of `Note`, `Info`, `Warning`, `Error`, `Fatal`. Error and Fatal are always logged; Info, Note and Warning pass a gate. | 1800 §20.10 |
+| **MsgCode** | The stable identity of a diagnostic: a permanent mnemonic (`E-ELAB-MULTIDRIVER`) plus a printed number (`VITA-E3001`). The enum is exhaustive and holds 68 variants. The mnemonic is the primary key and never changes; the number encodes severity in its letter and stage in its band — `0xxx` general, `1xxx` preprocess, `2xxx` parse, `3xxx` elaborate, `4xxx` runtime, `8xxx` filelist, `9xxx` artifact, with `5xxx`–`7xxx` reserved. Numbers are never reused. | — |
+| **Error code reference** | [15-error-code-reference.md](15-error-code-reference.md): one entry per message code, giving cause, example and remedy. It is the source `vita explain <CODE>` prints, and the test suite holds it to a one-to-one correspondence with the `MsgCode` enum, so a new code and its entry cannot drift apart. | — |
+| **Suppress / promote** | `-Wno-<CODE>` demotes a diagnostic out of the stream; `-Werror=<CODE>` raises it to Error; `-Werror` raises all of them. A code is accepted as its mnemonic, its printed number, or that number without the `VITA-` prefix. | — |
+| **Transcript** | The whole operational output of a run: banner, files read, library resolution, elaboration progress, `$display` output, severity lines and the run summary. Written to the terminal and, with `--log`, tee'd to a file that replays the console faithfully. | — |
+| **Exit class** | The meaning of the process exit code. `0` clean; `1` an RTL or user error, including `$fatal`; `2` a stale artifact, meaning the inputs must be rebuilt rather than the RTL inspected; `3` a command-line or usage error. | — |
 
-**MsgCode / 메시지 코드** — 모든 진단에 부여되는 안정 mnemonic(`VITA-E####`/`W####`/`I####`/
-`F####`, 예: `E-ELAB-MULTIDRIVER`). `diag` 내 exhaustive enum. mnemonic이 1차 안정 키(영구),
-숫자는 카테고리 예약 번호대(0/1/2/3/4/8/9xxx)의 보조. `-Wno-<CODE>`/`-Werror=<CODE>` 억제·승격,
-`vita explain <CODE>` 조회, corpus가 깨지기 쉬운 텍스트 대신 코드로 assert하는 기반.
+Contract: [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md). User-facing view:
+[../manual/007_error-codes.md](../manual/007_error-codes.md).
 
-**에러 코드 레퍼런스** — 모든 메시지 코드의 원인·예시·해결을 정의하는 권위 문서
-(`15-error-code-reference.md`). vitamin 구현의 산출물이자 `vita explain <CODE>`의 소스이며,
-CI가 `MsgCode` enum과의 1:1 동기를 강제한다(에러 추가 시 문서도 같이 갱신).
+---
 
-**transcript** — 시뮬레이터의 운영 출력 전체(배너 · 읽는 파일 · 라이브러리 해소 · elaborate
-진행 · `$display` · severity 줄 · 런 요약). 터미널과 `--log` 파일에 동일하게 tee되며, 파일은
-콘솔의 충실한 replay다.
+## 6. Artifacts and determinism
 
-**filelist (`.f`)** — 대규모 프로젝트의 소스 집계 command-file. `-f`(CWD 상대)/`-F`(파일-
-디렉터리 상대)로 전개되며 `.f` 안에서 다른 `.f`를 임의 depth로 중첩(top-down)할 수 있다.
-전개된 정렬 순서는 결정론적이어야 하며(RULE S 결합), 사이클은 `E-FLIST-CYCLE`로 검출. 상세
-`14-staged-artifacts.md` §3.1.
+| Term | Definition | IEEE |
+|---|---|---|
+| **`.vu`** | The `vcmp` output: one compilation unit's parsed AST, serialised, with a timescale tail and a source-map tail appended. Framed as an eight-byte magic, a self-describing header, then the body. | — |
+| **`.velab`** | The `velab` output: a fully elaborated, language-neutral `sim_ir::SimIr`, serialised as one self-contained file — the golden frame plus append-only trailer segments. It occupies the position `.vvp` does in `iverilog → .vvp → vvp`: `vrun` simulates from it and needs nothing else. | — |
+| **Work library** | A `vcmp` output directory that records compiled units instead of a single file: a machine-written `lib.toml` manifest plus content-addressed unit blobs under `units/`. Units are addressed by a logical `library:unit` key, so several libraries can coexist, as with `cds.lib` and `synopsys_sim.setup`. `velab -L` loads the instantiation closure of the requested tops and never promotes an unrelated library unit to a root. | — |
+| **Filelist (`.f`)** | A command file aggregating sources for a large project. `-f` resolves relative paths against the invocation directory, `-F` against the filelist's own directory, and a filelist may nest others to any depth. Expansion order is deterministic, and a cycle is refused as `E-FLIST-CYCLE`. | — |
+| **Frozen type** | A serialised type whose shape is part of the on-disk contract. Adding, removing or reordering a field flips the golden root hash and invalidates every existing artifact, so a frozen type is changed only deliberately, together with a `format_version` bump. Frozen types stay at their crate root, because moving one to a submodule flips the hash on its own. Catalogue: [17-sim-ir-ir-backbone-freeze.md](17-sim-ir-ir-backbone-freeze.md). | — |
+| **Schema hash** | A structural blake3 digest of a serialised type's shape — its fields, its variants and the serde attributes that affect the wire form — computed at compile time by `#[derive(SchemaHash)]`. It makes a layout change a version error instead of a silent misparse. Contract: [16-schema-hash-spec.md](16-schema-hash-spec.md). | — |
+| **Golden root** | The type whose schema hash gates a whole artifact class: `sim_ir::SimIr` for `.velab`, `hdl_ast::SourceUnit` for `.vu`. | — |
+| **`format_version`** | The monotonic integer stamped into every artifact header, currently `31`. It is bumped when the golden shape changes, and also when a staged trailer segment is added even though the golden frame is unchanged. | — |
+| **Staleness gate** | The ordered check a staged input passes before its body is decoded: magic, then `format_version`, then the tool's semver major, then the schema hash. Each failure has its own code in the `9xxx` band and its own remedy line, and all of them exit `2`. Beyond the header, `vrun` re-hashes the whole upstream chain against the live sources rather than trusting timestamps. | — |
+| **Byte-identical determinism** | The contract that the same inputs produce the same artifact bytes on every supported platform. It is held by ordered containers only, no `usize` or float in a serialised shape, and a span-free IR. | — |
 
-**vita-artifact** — 단계 간 디스크 산출물의 (역)직렬화 · 헤더 · 버전 · staleness · `--dump`를
-담당하는 크레이트. work 라이브러리 매니페스트와 `.vu`/`.velab` 헤더 프레이밍, 전처리-소스
-해시 대조가 여기에 격리된다. 원샷 `vita`는 메모리 스트리밍이라 이 크레이트를 호출하지 않는다.
-상세 `14-staged-artifacts.md`.
+---
 
-**vita-artifact-derive** — `#[derive(SchemaHash)]` proc-macro를 제공하는 빌드그래프 leaf
-크레이트. 직렬화 타입 형상(필드 · variant + serde 속성)의 구조적 `blake3` 해시를 컴파일
-타임에 산출해, 타입 레이아웃이 바뀌면 이전 산출물이 silent misparse 대신 버전 오류로
-거부되게 한다.
+## 7. The observability rail
 
-**work 라이브러리** — `vcmp`(compile) 산출물 디렉터리. 설계단위별 파싱된 AST blob
-(`work/units/<unit>.vu`) + 사람이 읽는 매니페스트(`work/lib.toml`)로 구성된다. 단위는
-논리 `library:unit` 키로 주소화된다(멀티 라이브러리; `cds.lib`/`synopsys_sim.setup` 계열).
+The machine-readable output surface, aimed at a program rather than a person. Nothing on it
+changes the simulation, stdout, the waveform or the exit code. Contract:
+[19-ai-agent-observability.md](19-ai-agent-observability.md).
 
-**.velab 스냅샷** — `velab`(elaborate) 산출물. 완전 elaborate된 언어 중립 sim-ir를 자기완결
-단일 파일로 직렬화한 것(postcard 본문 + 독립 디코드 헤더). Icarus `iverilog → .vvp → vvp`의
-`.vvp` 자리이며, `vrun`이 다른 입력 없이 이 파일만으로 시뮬레이션한다.
+| Term | Definition |
+|---|---|
+| **Observability rail** | The whole surface: `--obs-dir` and the files under it, `--probe`, `$vita_stage`, `--hier-tree` and `--inst-paths`. |
+| **`--obs-dir <DIR>`** | The switch that turns the rail on and the directory it writes into. |
+| **`run.json`** | One object per run: tool identity, versions, the resolved invocation, the finish reason, counts, and the code-generation and backend summaries. Two subroutine objects live here and do not join — `subroutines` is the static route census and is written unconditionally; `subroutine_calls` is the per-instance runtime profile and needs `--obs-procs`. They are keyed differently, so their columns are not additive. |
+| **`results.jsonl`** | The per-record ledger: one JSON object per line. |
+| **`coverage.json`** | Functional coverage, when the design defines any. |
+| **Probe** | A net named with `--probe` (or listed in a `--probe-file`) whose every value change is streamed to `trace.jsonl`. |
+| **`trace.jsonl`** | The probe change stream, one JSON object per change. |
+| **`$vita_stage`** | A vendor system task the RTL calls to mark a labelled point in the run, with optional values. It writes `stage.jsonl`, and needs both the `+STAGE_TRACE` plusarg and `--obs-dir`. |
+| **`--hier-tree` / `--inst-paths`** | Plain-text dumps of the instance tree and of the flat instance-path list. |
 
-**staleness 해시 결합** — "변경 없는 단계 스킵"을 건전하게 만드는 규칙. 플래그를 *어느
-바이너리가 파싱하느냐*가 아니라 *어느 단계의 출력을 교란하느냐*로 분류해, 전처리 교란은
-vcmp 소스 해시에, elaborate 교란은 velab 합성 해시에, 런타임 전용은 어느 해시에도 넣지
-않는다. `vrun`은 상류 체인 전체를 라이브 소스에 대해 재검증한다(mtime 금지). 상세
-`14-staged-artifacts.md` §2.
+Status at HEAD: the rail is one-shot only. `--obs-dir`, `--probe`, `--probe-file`,
+`--obs-procs` and `--obs-procs-time` are refused on `vcmp`, `velab` and `vrun`; a design
+that calls `$vita_stage` is refused by `velab`, the stage that elaborates it.
+`--hier-tree` and `--inst-paths` are the exception: the staged applets accept them,
+exit `0`, and write no file.
 
-**corpus runner** — `tests/corpus/` 전체를 자동으로 실행하여 PASS/FAIL/WARN을
-집계하는 CI 도구. VCD diff 결과를 표준 출력 + JUnit XML 포맷으로 리포트한다.
+---
 
-**vcd-diff** — 두 VCD 파일을 정규화하여 신호값 · 천이 시각 차이를 비교하는
-내부 도구. 식별자 코드 재매핑, Z→0 정규화, 계층명 매핑을 수행한다.
+## 8. Method vocabulary
+
+The words the engineering method uses. Canonical definitions and the rules built on them:
+[../ENGINEERING_RULES.md](../ENGINEERING_RULES.md).
+
+| Term | Definition |
+|---|---|
+| **Accuracy ladder** | The single scale every change is scored against: silent-wrong is worst, honest-loud is always safe, correct support is best. Changes climb it and never descend, and one silent-wrong is never traded for another. |
+| **Silent-wrong** | A wrong answer with no diagnostic and a success exit. The outcome this project exists to prevent. A machine-readable output that misdescribes itself is a silent-wrong of the same kind, because its audience cannot check it. |
+| **Honest-loud** | A refusal or diagnostic that names what the tool cannot do. Always safe, never as good as support. Making a construct that worked loud is a regression, not a tidy-up. |
+| **Correct support** | The construct runs and its value matches the oracle. |
+| **Correct-or-loud** | The design goal the ladder serves: produce the right value, or say plainly that this one cannot be produced. Never a third thing. |
+| **Oracle** | An independent tool or standard text that decides what a case should produce. |
+| **Live oracle** | `iverilog` plus `vvp`, invoked by the differential harnesses. `verilator` is a second opinion, taken by hand on 2-state arithmetic, width and sign. |
+| **hand-IEEE** | An expected value derived by reading the IEEE text, used where no external tool can arbitrate — SystemVerilog assertions, classes, constrained randomisation, parameterised classes and virtual interfaces, none of which the live oracle runs. |
+| **Anchor** | An expected value fixed independently of any implementation, so that changing shared code cannot move it. |
+| **Census** | An enumeration, taken from the source, of every site that can reach a question, with each cell measured rather than argued. The unit of work: a slice opens with one and closes with one. Four kinds recur and none substitutes for another — a producer census asks who writes a value, a routing census where it goes, an ordering census when it arrives, and a consumer census who reads it and what each reader does with it. |
+| **Cell** | One design plus one measured output, inside a census or a sweep. |
+| **Control twin** | A second cell identical to the first except for the axis under test, which is what makes a result attributable to that axis. |
+| **Lens** | One adversarial reviewer with a fixed attack method. Two are mandatory on every design or implementation change, and a design that changes during review is reviewed again. |
+| **Differential lens** | The lens that reproduces behaviour against a live oracle. It reports the oracle's raw output text per divergence, the probe resolution it used, and a four-way classification of each divergence: real gap, no-oracle, vita-ahead, or harness format. |
+| **Soundness lens** | The lens that argues from the source and the standard, with censuses as its premises rather than prose. It is commissioned explicitly, against a task list: all-sites and variant enumeration, disjointness, same-name collision, guard traversal completeness, and an audit of how every consumed map is populated. |
+| **Conflict rule** | When the soundness lens and the differential lens disagree, the differential wins. Measurement outranks argument. |
+| **PRE / POST** | The binary built from the tree before a change, extracted and built separately, and the binary built with the change applied. Performance and regression claims name both. |
+| **Mutation battery** | Deliberately breaking one line of the implementation to check that some test notices. A surviving mutant means the suite is not measuring that line. Run across the whole workspace, because a narrow filter manufactures survivors that are not real. |
+| **Gate** | The command whose verdict decides whether work is green: `cargo nextest run --workspace --locked`. Also, in code, a predicate that admits or refuses a construct. |
+| **Workload corpus** | Ten third-party and first-party designs run end to end, each pinned to an upstream commit and to one accumulated digest that an oracle produced first. The RTL is not redistributed; the runner clones it at the pinned revision. Details: [../study/03-workload-corpus.md](../study/03-workload-corpus.md). |
+| **Grade** | One workload's verdict from the corpus runner. Eight exist — `ok`, `known-gap`, `REGRESSION`, `PROMOTED`, `ruled-split`, `DRIFTED`, `absent`, `ORACLE-DRIFT` — of which exactly three are failures: `REGRESSION`, `DRIFTED` and `ORACLE-DRIFT`. `PROMOTED` is upper case and is not a failure: it means a refused workload now runs and its manifest row must move. |
+
+---
+
+## 9. Names in the tree
+
+| Name | What it is | Status at HEAD |
+|---|---|---|
+| **vitamin** | The project: a memory-safe, portable, precise RTL simulator written in Rust. | — |
+| **vita** | The one-shot driver binary: compile, elaborate and simulate in a single invocation. | — |
+| **vcmp / velab / vrun** | The staged driver applets, one per stage, each consuming the stage before it. The default build is a single multicall binary, so they are reached as `vita vcmp`, `vita velab` and `vita vrun`; the `separate-bins` feature additionally builds them as three standalone binaries. | — |
+| `hdl-preprocess`, `hdl-lexer`, `hdl-parser`, `hdl-ast` | The language-dependent front end and the AST it produces. | — |
+| `elaborate` | AST to `sim_ir::SimIr`. | — |
+| `sim-ir` | The frozen IR and the analyses computed from it at startup. | — |
+| `sim-engine` | The scheduler, the value representation, the execution backends, and the `$` system task and function handlers. | — |
+| `vcd-writer` | Waveform emission, VCD and the FST transcode. Active only once the RTL calls `$dumpvars`; there is no automatic whole-design dump. | — |
+| `diag` | Renders one diagnostic, and owns the `Severity`, `MsgCode`, `Frame`, `Diagnostic` and `LogEvent` data model plus the `LogSink` trait. It has no I/O or tracing dependency, so it stays a leaf. | — |
+| `vita-log` | The operational logging and transcript subsystem: it tees one `LogEvent` stream to terminal and log file, and owns severity routing, the message-code registry, the suppress and promote gates, the counts, the exit-code computation, the banner and progress lines, and runtime location recovery. `$info`, `$warning`, `$error` and `$fatal` pass the same gate. | — |
+| `vita-artifact` | The `.vu` and `.velab` container: header framing, versioning and the staleness gates. The one-shot path streams through memory and never calls it. | — |
+| `vita-artifact-derive` | The `#[derive(SchemaHash)]` proc macro. A build-graph leaf. | — |
+| `vita-schema` | The runtime shape registry and the blake3 hash over it. Depends on nothing but `blake3`. | — |
+| `cli` | Argument parsing, filelist expansion, work libraries, the staged applets and the observability writers. | — |
+| `corpus-runner` | The workload-corpus harness: `list`, `fetch` and `run`. It prints a fixed-width table — parse it by column offset, not by whitespace — and exits `0` clean, `1` on a failing grade, `2` when nothing is present locally, `3` on usage. It has no external dependencies and is not run by CI, because the corpus RTL is not in the repository. | — |
+| `hdl-builtins` | Named for the `$` system tasks and functions. | Empty. The handlers live in `sim-engine`; nothing depends on this crate for behaviour. |
+| `vcd-diff` | Named for comparing two VCD files under normalisation — identifier-code remapping, `Z` handling, hierarchical name mapping. | Empty. No comparison tool ships: the crate exports nothing, has no binary target, and has no callers. |
 
 ---
 
 ## Sources
 
-- 본 spec §13 (용어 요약) + IEEE 1800-2017 / IEEE 1364-2005 표준 용어
-- IEEE 1800 §4 (스케줄링 의미론), §10.4.2 (NBA), §18 (VCD), §20~21 (system tasks)
-- IEEE 1364 §18 (VCD 원형 정의), §19.2 (timescale)
-- Verilator 공식 문서: https://verilator.org/guide/latest/
-- Icarus Verilog 공식 문서: https://steveicarus.github.io/iverilog/
+- IEEE 1800-2017 (SystemVerilog LRM): §3 (building blocks), §4 (scheduling semantics), §6 (data types), §9 (processes), §10.4.2 (non-blocking assignments), §13 (tasks and functions), §20–21 (system tasks and functions), §21.7 (VCD), §22 (compiler directives), §23 (modules and hierarchy).
+- IEEE 1364-2005 (Verilog LRM): §11 (scheduling semantics), §18 (VCD), §19.2 (`` `timescale ``).
+- Icarus Verilog documentation: https://steveicarus.github.io/iverilog/
+- Verilator documentation: https://verilator.org/guide/latest/
+- GTKWave and the FST format: https://gtkwave.sourceforge.net/
+- Project-internal definitions are taken from the source at HEAD; the method vocabulary is canonical in [../ENGINEERING_RULES.md](../ENGINEERING_RULES.md).
+- Citation policy for everything above: [11-sources-and-citations.md](11-sources-and-citations.md).

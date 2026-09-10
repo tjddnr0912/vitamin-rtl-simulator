@@ -1,247 +1,251 @@
 # 11 · Assertion Sampling Functions
 
-## 개요
+## Overview
 
-SVA(SystemVerilog Assertions) concurrent assertion에서 사용되는
-시간적 샘플링 함수 카테고리다.
-`$past`/`$rose`/`$fell`/`$stable`/`$changed`/`$sampled`는 클록 기반 신호 이력을 조회하고,
-`$assertoff`/`$asserton`/`$assertkill`/`$assertcontrol`은 런타임에 assertion의 활성 상태를 제어한다.
+This category covers the temporal sampling functions used by SVA (SystemVerilog Assertions)
+concurrent assertions.
+`$past`, `$rose`, `$fell`, `$stable`, `$changed` and `$sampled` query a signal's history relative
+to a clock, and `$assertoff`, `$asserton`, `$assertkill` and `$assertcontrol` control at run time
+whether assertions are active.
 
-전부 합성 불가 검증 전용이며 IEEE 1800-2017 §16에 정의되어 있다.
+All of them are verification-only and not synthesizable; they are defined in IEEE 1800-2017 §16.
 
-## 구현 상태
+## vita support
 
-- **구현됨 (2026-06-16, hand-IEEE)**: `$past`, `$rose`, `$fell`, `$stable`, `$changed`, `$sampled` —
-  signal당 공유 prev-reg desugar(`rewrite_sampled`)로 합성되며, SVA antecedent 시퀀스 + pass/fail
-  action block 내부에서 사용할 수 있다(`$changed`=`$past(e)!==e`, `$sampled`=action-block prev-reg 조회).
-  ⚠️ iverilog 13.0이 이들을 거부('not defined')해 차분 오라클이 없어 hand-IEEE 핀.
-- **구현됨 (✅ SVA-REST)**: `$assertoff`, `$asserton`, `$assertkill` — 전역 fire-gate 런타임 제어
-  (`$assertoff`/`$assertkill`=후속 fire 억제, `$asserton`=재활성화; scoped `$assertoff(level, scope)` 폼은 loud).
-- **미구현 (참조)**: `$assertcontrol`.
+This note describes the language, not the simulator. What vita accepts today is recorded in
+[docs/manual/003_language-reference.md](../../../manual/003_language-reference.md).
 
 ---
 
-## 클록 기반 샘플링 의미론
+## Clock-based sampling semantics
 
-이 함수들을 이해하려면 시뮬레이션 스케줄러의 리전 구조를 먼저 파악해야 한다.
-전체 스케줄러 모델은 [06-simulation-engine.md](../../06-simulation-engine.md)에서 다루고,
-여기서는 assertion에 직접 관련된 부분만 요약한다.
+Understanding these functions starts with the region structure of the simulation scheduler.
+The full scheduler model is covered in [06-simulation-engine.md](../../06-simulation-engine.md);
+what follows summarises only the part that bears directly on assertions.
 
-한 타임스텝(time slot) 안에서 리전은 다음 순서로 실행된다:
+Within one timestep (one time slot) the regions run in this order:
 
 ```
 Active → Inactive → NBA → ... → Observed → Reactive → ...
 ```
 
-- **Active 리전**: blocking 대입, 연속 대입, 게이트 로직 실행.
-- **NBA 리전**: non-blocking 대입(`<=`) 반영 — 이 단계가 끝나야 신호가 최종값을 갖는다.
-- **Observed 리전**: concurrent assertion 평가. NBA 완료 후 신호가 안정된 상태에서 실행된다.
-- **Reactive 리전**: assertion의 pass/fail action block이 실행되는 곳.
+- **Active region**: blocking assignments, continuous assignments and gate logic run here.
+- **NBA region**: nonblocking assignments (`<=`) take effect — a signal does not hold its final
+  value until this stage completes.
+- **Observed region**: concurrent assertions are evaluated. This runs after the NBA region, with
+  the signals settled.
+- **Reactive region**: where an assertion's pass/fail action block runs.
 
-Observed 리전이 핵심이다. assertion이 신호를 볼 때는 Active/Inactive/NBA에서의 변동이
-모두 반영된 "이미 확정된 값"을 본다. 이 값이 "샘플링된 값(sampled value)"이다.
+The Observed region is the key. When an assertion looks at a signal it sees an
+"already settled value" that reflects every change made in Active, Inactive and NBA.
+That value is the **sampled value**.
 
 ---
 
-## 항목 상세
+## Entries
 
 ### `$past(expr [, n [, enable_expr [, @clocking_event]]])`
 
-- **표준**: IEEE 1800-2017 §16.9.3
-- **의미**: n 클록 사이클 전의 sampled value를 반환한다.
-- `n`: 몇 사이클 전의 값인지. 기본값 = 1. 1 이상의 상수여야 한다.
-- `enable_expr`: 이 조건이 참인 클록 에지만 "1 tick"으로 카운트한다.
-  false인 에지에서는 카운터가 진행되지 않는다.
-- `@clocking_event`: 명시하지 않으면 assertion의 clocking event를 상속한다.
+- **Standard**: IEEE 1800-2017 §16.9.3
+- **Meaning**: returns the sampled value from n clock cycles ago.
+- `n`: how many cycles back. Defaults to 1. It must be a constant of at least 1.
+- `enable_expr`: only a clock edge at which this condition holds counts as "one tick".
+  On an edge where it is false the counter does not advance.
+- `@clocking_event`: when it is not given, the assertion's own clocking event is inherited.
 
 ```sv
-// 기본 — 1 클록 전 값
+// the default — the value one clock ago
 assert property (@(posedge clk)
   req |-> ##1 ack == $past(req));
 
-// 3 클록 전 값
+// the value three clocks ago
 assert property (@(posedge clk)
   out == $past(in, 3));
 
-// enable_expr — valid가 1일 때만 카운트
+// enable_expr — count only while valid is 1
 assert property (@(posedge clk)
   valid |-> out == $past(data, 2, valid));
 
-// 명시적 클록 지정
+// an explicit clock
 assert property (
   out == $past(in, 1, , @(posedge clk)));
 ```
 
-**n=0은 허용하지 않는다**: IEEE 1800-2017은 `n ≥ 1`을 요구한다.
-현재 사이클의 값을 얻으려면 `$sampled(expr)` 또는 expr을 직접 참조한다.
+**n = 0 is not allowed**: IEEE 1800-2017 requires `n ≥ 1`.
+To get the value of the current cycle use `$sampled(expr)`, or reference expr directly.
 
 ---
 
-### `$rose(expr [, @clocking_event])` — LSB 상승 에지 감지
+### `$rose(expr [, @clocking_event])` — a rising edge on the LSB
 
-- **표준**: IEEE 1800-2017 §16.9.2
-- **반환**: bit (true/false)
-- **의미**: 이전 클록 에지의 LSB 샘플값이 (0/x/z)이고 현재 LSB 샘플값이 1이면 true.
+- **Standard**: IEEE 1800-2017 §16.9.2
+- **Returns**: bit (true/false)
+- **Meaning**: true when the LSB's sampled value at the previous clock edge was 0, x or z and its
+  sampled value now is 1.
 
-형식적으로:
+Formally:
 
 ```
 $rose(expr) ≡ ($past(expr[0]) !== 1'b1) && (expr[0] === 1'b1)
 ```
 
-x나 z에서 1로 올라가는 경우도 true를 반환한다는 점에 주의하자.
-1 → 1 유지(stable high)는 false다.
+Note that a transition from x or z up to 1 also returns true.
+Holding at 1 (stable high) is false.
 
 ```sv
-// ack가 posedge clk에서 0→1 전이하면 속성 검사
+// check the property when ack goes 0→1 at posedge clk
 assert property (@(posedge clk)
   $rose(ack) |-> ##1 done);
 
-// 멀티비트 신호에서 LSB만 본다
+// on a multi-bit signal only the LSB is examined
 logic [3:0] bus;
-$rose(bus)  // bus[0]의 (0/x/z)→1 전이만 감지, 상위 비트 무관
+$rose(bus)  // detects only a (0/x/z)→1 transition on bus[0]; the upper bits are irrelevant
 ```
 
 ---
 
-### `$fell(expr [, @clocking_event])` — LSB 하강 에지 감지
+### `$fell(expr [, @clocking_event])` — a falling edge on the LSB
 
-- **표준**: IEEE 1800-2017 §16.9.2
-- **반환**: bit
-- **의미**: 이전 LSB 샘플값이 (1/x/z)이고 현재 LSB 샘플값이 0이면 true.
+- **Standard**: IEEE 1800-2017 §16.9.2
+- **Returns**: bit
+- **Meaning**: true when the LSB's previous sampled value was 1, x or z and its sampled value now
+  is 0.
 
-형식적으로:
+Formally:
 
 ```
 $fell(expr) ≡ ($past(expr[0]) !== 1'b0) && (expr[0] === 1'b0)
 ```
 
 ```sv
-// 리셋 해제 감지 (active-low reset)
+// detecting the release of an active-low reset
 assert property (@(posedge clk)
   $fell(rst_n) |-> ##[1:5] fsm_idle);
 ```
 
 ---
 
-### `$stable(expr [, @clocking_event])` — 값 유지 확인
+### `$stable(expr [, @clocking_event])` — the value held
 
-- **표준**: IEEE 1800-2017 §16.9.2
-- **반환**: bit
-- **의미**: 이전 클록 에지 샘플값 == 현재 클록 에지 샘플값이면 true.
-  4-state 비교이므로 x→x, z→z도 stable로 본다.
+- **Standard**: IEEE 1800-2017 §16.9.2
+- **Returns**: bit
+- **Meaning**: true when the sampled value at the previous clock edge equals the sampled value at
+  the current one. The comparison is 4-state, so x→x and z→z also count as stable.
 
-형식적으로:
+Formally:
 
 ```
 $stable(expr) ≡ ($past(expr) === expr)
 ```
 
 ```sv
-// 핸드셰이크: req가 assert된 동안 addr가 안정적으로 유지되어야 함
+// handshake: addr must hold steady while req is asserted
 assert property (@(posedge clk)
   req && !$rose(req) |-> $stable(addr));
 ```
 
 ---
 
-### `$changed(expr [, @clocking_event])` — 값 변화 감지
+### `$changed(expr [, @clocking_event])` — the value changed
 
-- **표준**: IEEE 1800-2017 §16.9.2
-- **반환**: bit
-- **의미**: 이전 클록 에지 샘플값 != 현재 클록 에지 샘플값이면 true.
-  `$stable`의 논리적 반대.
+- **Standard**: IEEE 1800-2017 §16.9.2
+- **Returns**: bit
+- **Meaning**: true when the sampled value at the previous clock edge differs from the sampled
+  value at the current one. The logical opposite of `$stable`.
 
-형식적으로:
+Formally:
 
 ```
 $changed(expr) ≡ !$stable(expr) ≡ ($past(expr) !== expr)
 ```
 
 ```sv
-// 상태 머신 전이 감지
+// detecting a state-machine transition
 assert property (@(posedge clk)
   $changed(state) |-> valid_transition(state));
 ```
 
 ---
 
-### `$sampled(expr)` — action block 내 안정 샘플값 조회
+### `$sampled(expr)` — the settled sampled value inside an action block
 
-- **표준**: IEEE 1800-2017 §16.9.1
-- **의미**: assertion이 평가된 Observed 리전 시점의 sampled value를 반환한다.
+- **Standard**: IEEE 1800-2017 §16.9.1
+- **Meaning**: returns the sampled value as of the Observed region in which the assertion was
+  evaluated.
 
-**사용 시점**: assertion의 property body 안에서는 신호가 이미 sampled value로 보이므로
-`$sampled`를 쓸 필요가 없다. `$sampled`가 유용한 곳은 **action block**(pass/fail 블록)이다.
+**When to use it**: inside an assertion's property body every signal already reads as its sampled
+value, so `$sampled` adds nothing there. Where `$sampled` earns its keep is the **action block**
+(the pass/fail block).
 
-Action block은 Reactive 리전에서 실행된다. 이 시점에 Active 리전에서 신호가
-다시 변동될 수 있으므로, Reactive에서 `$display("val=%0d", sig)`처럼 신호를 직접 참조하면
-assertion이 평가된 시점의 값과 다른 값이 출력될 수 있다.
+An action block runs in the Reactive region. By then the Active region may have moved the signals
+again, so referencing a signal directly from Reactive — `$display("val=%0d", sig)` — can print a
+value other than the one the assertion was evaluated against.
 
-`$sampled(sig)`는 Observed 리전의 "확정된" 샘플값을 명시적으로 조회해
-이 불일치를 방지한다.
+`$sampled(sig)` asks explicitly for the "settled" sampled value from the Observed region and so
+avoids that mismatch.
 
 ```sv
-// action block에서 정확한 신호값 출력
+// printing the exact signal values from an action block
 assert property (@(posedge clk) req |-> ack)
 else $error("req=%0b ack=%0b at time %0t",
             $sampled(req), $sampled(ack), $time);
 
-// property body 안에서는 $sampled 불필요 (중복)
+// inside a property body $sampled is unnecessary (it is redundant)
 assert property (@(posedge clk)
-  $sampled(req) |-> $sampled(ack));  // 이렇게 쓸 필요 없음
+  $sampled(req) |-> $sampled(ack));  // no need to write it this way
 ```
 
 ---
 
-## Assertion Runtime Control
+## Assertion runtime control
 
 ### `$assertoff` / `$asserton` / `$assertkill`
 
-- **표준**: IEEE 1800-2017 §20.12
-- **용도**: reset 구간, 초기화 시퀀스처럼 assertion 위반이 예상되는 구간에서 노이즈를 억제한다.
+- **Standard**: IEEE 1800-2017 §20.12
+- **Purpose**: suppressing the noise over an interval where assertion violations are expected, such
+  as a reset window or an initialisation sequence.
 
 ```sv
-// 시그니처
+// signatures
 $assertoff  [(levels [, list_of_scopes])];
 $asserton   [(levels [, list_of_scopes])];
 $assertkill [(levels [, list_of_scopes])];
 ```
 
-- `levels`: 0 = 모든 계층 영향. 1 = 지정 scope만. n = n 레벨 하위까지.
-  생략 시 0(전체)으로 동작한다.
-- scope 인자 없으면 전체 설계에 적용.
+- `levels`: 0 = affect the whole hierarchy. 1 = the named scope only. n = down n levels.
+  When omitted it behaves as 0 (everything).
+- With no scope argument the effect applies to the whole design.
 
-| 태스크 | 동작 |
+| Task | Behaviour |
 |--------|------|
-| `$assertoff` | 현재 진행 중인 assertion은 완료될 때까지 두고, 이후 새 assertion을 비활성화 |
-| `$asserton` | 비활성화된 assertion을 재활성화 |
-| `$assertkill` | 진행 중인 assertion 포함 즉시 종료 |
+| `$assertoff` | Lets assertions already in flight run to completion, then disables new ones |
+| `$asserton` | Re-enables disabled assertions |
+| `$assertkill` | Terminates immediately, in-flight assertions included |
 
 ```sv
 initial begin
-  // 리셋 구간에서 assertion 억제
-  $assertoff(0);          // 전체 비활성화
+  // suppress assertions across the reset window
+  $assertoff(0);          // disable everything
 
   rst_n = 0;
   #100;
   rst_n = 1;
   #20;
 
-  $asserton(0);           // 전체 재활성화
+  $asserton(0);           // re-enable everything
 end
 ```
 
 ---
 
-### `$assertcontrol` — 세밀한 런타임 제어
+### `$assertcontrol` — fine-grained runtime control
 
-`$assertoff`/`$asserton`/`$assertkill`로 커버되지 않는 세밀한 제어가 필요할 때 사용한다.
-assertion 종류(concurrent, immediate 등)와 directive 종류(assert, cover, assume)별로
-개별 제어할 수 있다.
+Use it where the control needed is finer than `$assertoff`, `$asserton` and `$assertkill` cover.
+It can act separately on each kind of assertion (concurrent, immediate and so on) and each kind of
+directive (assert, cover, assume).
 
 ```sv
-// 시그니처 (IEEE 1800-2017 §20.12)
+// signature (IEEE 1800-2017 §20.12)
 $assertcontrol(control_type
                [, [assertion_type]
                [, [directive_type]
@@ -249,123 +253,102 @@ $assertcontrol(control_type
                [, list_of_modules_or_assertions]]]]])
 ```
 
-#### control_type 값
+#### control_type values
 
-| 값 | 이름 | 의미 |
+| Value | Name | Meaning |
 |----|------|------|
-| 1 | Lock | assertion 상태를 잠근다 (이후 assertoff/on 무시) |
-| 2 | Unlock | 잠금 해제 |
-| 3 | On | 활성화 (`$asserton`과 동등) |
-| 4 | Off | 비활성화 (`$assertoff`와 동등) |
-| 5 | Kill | 즉시 kill (`$assertkill`과 동등) |
-| 6 | PassOn | pass action block 실행 활성화 |
-| 7 | PassOff | pass action block 실행 비활성화 |
-| 8 | FailOn | fail action block 실행 활성화 |
-| 9 | FailOff | fail action block 실행 비활성화 |
-| 10 | NonvacuousOn | vacuous success를 제외한 pass만 활성화 |
-| 11 | VacuousOff | vacuous pass 비활성화 |
+| 1 | Lock | Locks the assertion state (later assertoff/on calls are ignored) |
+| 2 | Unlock | Releases the lock |
+| 3 | On | Enable (equivalent to `$asserton`) |
+| 4 | Off | Disable (equivalent to `$assertoff`) |
+| 5 | Kill | Kill immediately (equivalent to `$assertkill`) |
+| 6 | PassOn | Enable execution of the pass action block |
+| 7 | PassOff | Disable execution of the pass action block |
+| 8 | FailOn | Enable execution of the fail action block |
+| 9 | FailOff | Disable execution of the fail action block |
+| 10 | NonvacuousOn | Enable only passes that are not vacuous successes |
+| 11 | VacuousOff | Disable vacuous passes |
 
-#### assertion_type 비트마스크 (OR 조합 가능)
+#### assertion_type bitmask (values may be OR-ed)
 
-| 값 | 의미 |
+| Value | Meaning |
 |----|------|
 | 1 | Concurrent assertions |
 | 2 | Simple Immediate assertions |
 | 4 | Observed Deferred Immediate assertions |
 | 8 | Final Deferred Immediate assertions |
-| 16 | `expect` 문 |
-| 32 | `unique` 조건부 |
-| 64 | `unique0` 조건부 |
-| 128 | `priority` 조건부 |
+| 16 | `expect` statements |
+| 32 | `unique` conditionals |
+| 64 | `unique0` conditionals |
+| 128 | `priority` conditionals |
 
-#### directive_type 비트마스크 (OR 조합 가능)
+#### directive_type bitmask (values may be OR-ed)
 
-| 값 | 의미 |
+| Value | Meaning |
 |----|------|
-| 1 | `assert` 디렉티브 |
-| 2 | `cover` 디렉티브 |
-| 4 | `assume` 디렉티브 |
+| 1 | the `assert` directive |
+| 2 | the `cover` directive |
+| 4 | the `assume` directive |
 
 ```sv
-// 예: simple immediate assert 디렉티브만 Off
+// e.g. turn off only the assert directive on simple immediate assertions
 $assertcontrol(4, 2, 1);
 
-// 예: concurrent assertion의 pass action block 비활성화
+// e.g. disable the pass action block of concurrent assertions
 $assertcontrol(7, 1, 1);
 
-// 예: 모든 assertion 타입의 cover 디렉티브 Off
+// e.g. turn off the cover directive on every assertion type
 $assertcontrol(4, 255, 2);
 ```
 
-`$assertoff` / `$asserton` / `$assertkill`은 각각
-`$assertcontrol(4, ...)` / `$assertcontrol(3, ...)` / `$assertcontrol(5, ...)`의 단순 래퍼로
-볼 수 있다.
+`$assertoff`, `$asserton` and `$assertkill` can be read as simple wrappers around
+`$assertcontrol(4, ...)`, `$assertcontrol(3, ...)` and `$assertcontrol(5, ...)` respectively.
 
 ---
 
-## 함수 정리 비교
+## The functions side by side
 
-| 함수 | 적용 영역 | 기반 개념 |
+| Function | Scope | Underlying idea |
 |------|----------|----------|
-| `$rose(e)` | LSB 전이 감지 | `$past(e[0])` 비교 |
-| `$fell(e)` | LSB 하강 감지 | `$past(e[0])` 비교 |
-| `$stable(e)` | 값 유지 확인 | `$past(e) === e` |
-| `$changed(e)` | 값 변화 감지 | `!$stable(e)` |
-| `$past(e, n)` | n 클록 전 값 | sampled value 이력 |
-| `$sampled(e)` | 현재 샘플값 | action block 안전 참조 |
+| `$rose(e)` | LSB rising transition | a comparison against `$past(e[0])` |
+| `$fell(e)` | LSB falling transition | a comparison against `$past(e[0])` |
+| `$stable(e)` | the value held | `$past(e) === e` |
+| `$changed(e)` | the value changed | `!$stable(e)` |
+| `$past(e, n)` | the value n clocks ago | sampled-value history |
+| `$sampled(e)` | the current sampled value | a safe reference inside an action block |
 
 ---
 
-## Icarus / Verilator 지원
+## Icarus / Verilator support
 
-| 함수 | Icarus Verilog | Verilator |
+| Function | Icarus Verilog | Verilator |
 |------|---------------|-----------|
-| `$past`, `$rose`, `$fell`, `$stable`, `$changed` | ❌ 거부 (13.0, 아래 ⚠️) | 지원 (`--assert` 활성화 필요) |
-| `$sampled` | ❌ 거부 (13.0) | 지원 |
-| `$assertoff`, `$asserton`, `$assertkill` | 부분 지원 | 지원 |
-| `$assertcontrol` | 제한적 | 제한적 |
+| `$past`, `$rose`, `$fell`, `$stable`, `$changed` | ❌ rejected (13.0, see ⚠️ below) | supported (needs `--assert`) |
+| `$sampled` | ❌ rejected (13.0) | supported |
+| `$assertoff`, `$asserton`, `$assertkill` | partial | supported |
+| `$assertcontrol` | limited | limited |
 
-> ⚠️ **vitamin 라이브 검증 (iverilog 13.0):** iverilog 13.0은 concurrent assertion과
-> `$past`/`$rose`/`$fell`/`$stable`을 **모두 거부**한다('not supported'/'not defined') —
-> 차분 오라클이 없어 vitamin은 이 함수들을 **hand-IEEE**로 구현한다(검증=합성 prev-reg 등가).
-> Verilator는 `--assert` 플래그 없이는 assertion 자체를 무시한다.
-
----
-
-## 합성 가능성
-
-❌ 전 함수 비합성 — 검증 전용.
-`$past`를 참조하는 assertion은 formal verification 도구(SymbiYosys 등)로
-등가 검증에도 활용 가능하지만, 합성 netlist에 포함되지 않는다.
+> ⚠️ **Measured live against iverilog 13.0:** iverilog 13.0 **rejects** concurrent assertions along
+> with `$past`, `$rose`, `$fell` and `$stable` ("not supported" / "not defined"), so it is not an
+> oracle for these functions.
+> Verilator ignores assertions altogether unless the `--assert` flag is given.
 
 ---
 
-## 본 프로젝트 구현 메모
+## Synthesizability
 
-- **구현 방식 (2026-06-16)**: `$past`/`$rose`/`$fell`/`$stable`은 Observed-region 훅·circular
-  buffer가 아니라 **순수 IR-0 prev-reg desugar**로 구현됐다 — `rewrite_sampled`가 signal당 공유
-  full-width `prev` reg를 합성하고 NBA `prev<=sig`로 1-사이클 지연시킨다(`$past(e,n)`=n-스테이지 시프트,
-  `$rose`=`~prev[0]&e[0]`·`$fell`=`prev[0]&~e[0]`·`$stable`=`prev===e`·`$changed`=`prev!==e`). hand-IEEE 핀(iverilog 13.0 거부).
-  `$sampled`(action-block prev-reg 조회)와 `$assertoff`/`$asserton`/`$assertkill`(전역 fire-gate)도 구현 완료(✅).
-  **아래 항목은 미구현 함수(`$assertcontrol`)의 향후 설계 메모다.**
-- **샘플링 타이밍**: assertion 평가 엔진은 Observed 리전에서 호출되어야 한다.
-  NBA 완료 후 신호 스냅샷을 캡처하는 훅이 필요.
-- **$past 이력 버퍼**: 각 concurrent assertion이 참조하는 신호에 대해
-  `n` 사이클치 sampled value를 원형 버퍼(circular buffer)로 유지.
-- **$rose/$fell/$stable/$changed**: 이전 샘플값 1 사이클분만 있으면 모두 파생 가능.
-  `$past(expr, 1)`의 특수 케이스로 구현.
-- **$sampled**: action block 실행 전에 캡처된 스냅샷에 대한 조회 — Observed 리전 값을
-  Reactive 리전까지 보존하는 별도 snapshot 맵 필요.
-- **$assertoff/$asserton/$assertkill**: assertion 인스턴스별 활성 플래그 + 계층 트리 순회.
-- **$assertcontrol**: control_type/assertion_type/directive_type 비트마스크를 사용한
-  assertion 인스턴스 필터링 후 상태 변경.
+❌ None of these functions is synthesizable — they are verification-only.
+An assertion that references `$past` can still be used for equivalence checking with a formal
+verification tool (SymbiYosys and the like), but it never appears in a synthesized netlist.
+
+---
 
 ## Sources
 
 - IEEE 1800-2017 §16.9 (sampled value functions), §16.12 (assertion control)
 - IEEE 1800-2017 §20.12 ($assertoff/$asserton/$assertkill/$assertcontrol)
-- research-log: [system-tasks-random-assertion-2026-05-28.md](../../research-log/system-tasks-random-assertion-2026-05-28.md)
-- 시뮬레이션 스케줄러 리전 구조: [06-simulation-engine.md](../../06-simulation-engine.md)
+- research-log: [system-tasks-random-assertion-2026-05-28.md](../../../history/research-log/system-tasks-random-assertion-2026-05-28.md)
+- Scheduler region structure: [06-simulation-engine.md](../../06-simulation-engine.md)
 - [circuitcove.com — Assertion Control](https://circuitcove.com/system-tasks-assertion/) (WebFetch ✓)
 - [circuitcove.com — Sampled Value Functions](https://circuitcove.com/system-tasks-sampled/) (WebFetch ✓)
 - [vlsiverify.com — Sample Value Functions](https://vlsiverify.com/system-verilog/assertions/sample-value-functions/) (WebFetch ✓)

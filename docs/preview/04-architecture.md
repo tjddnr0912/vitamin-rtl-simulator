@@ -1,352 +1,568 @@
-# 04 · 시스템 아키텍처
+# 04 — System architecture
 
-> 설계 명세 §5 전체 기반. 크레이트 책임·IR 설계·builtin dispatch 경로를 상세 기술.
+The shape of the simulator: the pipeline and where language dependence ends, the crate
+graph and the dependency rules that hold it, what each crate owns, the one-shot and staged
+execution models, the three executors and how a process body reaches each of them, and the
+mechanisms that make all of it enforceable rather than aspirational.
+
+Companion contracts: the build and feature contract in
+[03-build-and-portability.md](03-build-and-portability.md); the scheduler in
+[06-simulation-engine.md](06-simulation-engine.md); the frozen IR in
+[17-sim-ir-ir-backbone-freeze.md](17-sim-ir-ir-backbone-freeze.md); the native backend in
+[21-tier3-native-backend.md](21-tier3-native-backend.md).
 
 ---
 
-## 파이프라인
+## 1. The pipeline
 
-```
+```text
 source files
   → preprocess   (`define / `ifdef / `include / `timescale)
-  → lex          (토큰 스트림)
-  → parse        (언어별 AST)          ← 문법 검사 수행
-  → elaborate    (파라미터 해소, 계층 평탄화, 타입/포트/연결성 검사)
-  → sim IR       (nets + processes + sensitivity + builtin-call nodes, 언어 중립)
-  → sim engine   (event-driven kernel + timescale time wheel + builtin dispatch)
-  → VCD writer   (IEEE 1364 정규 포맷 · RTL dump 태스크가 호출될 때만 활성)
+  → lex          (token stream)
+  → parse        (AST; grammar checking happens here)
+  → elaborate    (parameters, generate, instances, hierarchy flattening, type and
+                  connectivity checks)
+  → sim-ir       (nets, processes, sensitivity, subroutine bodies, system-call nodes —
+                  language-neutral)
+  → sim-engine   (event-driven kernel, time wheel, system-task dispatch)
+  → VCD / FST    (written only when the design calls a dump task, or -o names a path)
 ```
 
-**언어 의존부는 parse까지, 그 이후는 언어 중립이다.** elaborate, sim IR, sim engine, VCD writer는 Verilog/SystemVerilog/VHDL을 구분하지 않는다. VHDL 프론트엔드(Phase 3)를 공유 IR 위에 얹을 수 있는 근거가 여기에 있다(§9 로드맵).
+| Stage | Crate | Consumes | Produces | Checks it performs |
+|---|---|---|---|---|
+| preprocess | `hdl-preprocess` | source text | preprocessed text plus a source map and the timescale regions | directive syntax, include resolution, macro arity |
+| lex | `hdl-lexer` | preprocessed text | tokens with spans | a structural lexical error carrying its span and reason |
+| parse | `hdl-parser` | tokens | the AST | grammar. Parsing failure stops the run; elaboration is not attempted |
+| elaborate | `elaborate` | the AST | `sim_ir::SimIr` plus out-of-band sidecar tables | parameter override evaluation interleaved with generate, recursive instance resolution and flattening, port and type compatibility, unconnected nets, multiple drivers |
+| simulate | `sim-engine` | `SimIr` plus `SimOpts` | a transcript, a waveform, an exit class | run-time limits, convergence, index range, and every `$` task |
+| waveform | `vcd-writer` | value changes from the engine's write funnel | VCD, or FST by transcode | none; it serializes |
 
-각 단계는 독립 크레이트에 대응하고 내부 검사를 담당한다.
+Diagnostics and operational output cross every stage as one event stream. `diag` owns the
+data model and the shared `$display` field rules; `vita-log` owns severity gating; `cli` is
+the only crate that installs a concrete sink. See
+[13-diagnostics-and-logging.md](13-diagnostics-and-logging.md).
 
-**preprocess:** `` `define / `ifdef / `ifndef / `include / `timescale `` 등 컴파일러 지시어를 처리해 순수 HDL 토큰 스트림의 전처리된 소스를 생성한다. 매크로 전개와 include 파일 추적도 이 단계 책임이다. 이후 단계는 전처리된 소스만 본다.
+### 1.1 Where language dependence ends
 
-**lex:** 전처리된 소스를 언어별 토큰 스트림으로 변환한다. 키워드, 식별자, 리터럴, 연산자를 구분하며 소스 위치(파일/라인/컬럼) 정보를 토큰에 첨부해 이후 진단 메시지에 사용한다.
+Language dependence ends at parse. `elaborate`, `sim-ir`, `sim-engine` and `vcd-writer`
+contain no Verilog, SystemVerilog or VHDL knowledge; they operate on the neutral IR. Apart
+from the driver, `elaborate` is the only crate that depends on both `hdl-ast` and `sim-ir`,
+which makes it the single place where language knowledge is converted into simulation
+knowledge.
 
-**parse:** 언어별 문법 규칙에 따라 토큰 스트림을 AST로 변환한다. **문법 검사는 이 단계 내부에서 수행된다** — parse가 실패하면 elaboration으로 진행하지 않는다. 구문 오류의 소스 위치와 회복(recovery) 힌트는 diag 크레이트를 통해 보고된다.
-
-**elaborate:** parse 결과 AST를 소비해 언어 중립 sim IR을 생성한다. **연결성·타입·다중구동 등 정합성 검사는 이 단계 내부에서 수행된다.** 구체적으로: 파라미터 오버라이드 평가(generate 스킴과 인터리빙), 모듈 인스턴스 재귀 해소와 계층 평탄화, 포트/타입 정합 검증, 미연결 net·다중구동(multiple driver) 감지가 포함된다. 오류는 diag 크레이트로 보고된다.
-
-**sim IR:** elaborate가 출력하는 언어 중립 중간 표현이다. net(폭/4-state), process(트리거 조건/본문), continuous assign, 계층 인스턴스, builtin-call 노드를 담는다. 인터프리터와 컴파일드 백엔드 양쪽이 동일 IR을 소비한다.
-
-**sim engine:** sim IR을 실행하는 이벤트 구동 커널이다. stratified event queue(Active → Inactive(`#0`) → NBA(`<=`) → Monitor), timescale 기반 64비트 정수 시간 모델, delta cycle, builtin dispatch를 담당한다.
-
-**VCD writer:** IEEE 1364 VCD 포맷으로 신호 변화를 직렬화한다. **RTL 코드에서 dump 시스템 태스크(`$dumpfile`, `$dumpvars` 등)가 호출될 때만 활성화된다.** dump 태스크가 한 번도 불리지 않으면 VCD 파일은 생성되지 않는다(no-op). 자동 항상-덤프가 아니다.
-
-**진단·로깅(횡단):** 모든 단계의 운영 출력 — 읽는 파일·라이브러리 해소·elaborate 진행·런 요약, 그리고 error/warning/fatal — 은 단일 이벤트 스트림으로 흐른다. 진단 *렌더링*(file:line:col + caret)은 `diag`, 운영 *transcript·로그파일(tee)·severity·메시지 코드·exit-code·`$error`/`$fatal` 연동*은 `vita-log`가 담당한다. 권위 문서는 [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md).
+That boundary is what would let a second front end reuse the whole back half. No such front
+end exists: vitamin accepts Verilog and SystemVerilog only, and a VHDL front end is a
+conditional roadmap item, not implemented. The reference notes under
+[hdl-reference/vhdl/](hdl-reference/vhdl/) document the standard, not vitamin's support.
 
 ---
 
-## 실행 모델 — 원샷과 단계별 실행
+## 2. The crate graph
 
-파이프라인은 두 가지 방식으로 구동된다.
+Seventeen crates in one workspace. Fourteen are publishable; `hdl-builtins`, `vcd-diff` and
+`corpus-runner` carry `publish = false`.
 
-**원샷 — `vita`**
-preprocess → lex → parse → elaborate → sim → VCD 전 과정을 한 명령으로 실행한다. 중간 산출물을 디스크에 남기지 않고 메모리에서 곧장 다음 단계로 흘려보낸다. 일상적인 시뮬레이션의 기본 진입점이다.
+```text
+        vita-schema ──► vita-artifact-derive (proc-macro)
+             │                    │
+             └──────┬─────────────┘
+                    ▼
+              hdl-ast ────► hdl-parser ◄──── hdl-lexer
+                 │
+                 ▼
+  diag ──►   elaborate ──► sim-ir ──► vcd-writer
+   │  │          │            │            │
+   │  └──────────┴────────────┴────────────┴──► sim-engine
+   │
+   ├──► hdl-preprocess          vita-artifact ──┐
+   └──► vita-log ───────────────────────────────┴──► cli  →  bin `vita`
+```
 
-**단계별 — `vcmp` / `velab` / `vrun`**
-같은 파이프라인을 세 개의 독립 실행 단계로 쪼갠다. 각 단계는 앞 단계가 디스크에 남긴 산출물(artifact)을 읽어 이어받는다.
+Direct dependencies, exactly as the manifests declare them:
 
-| 명령 | 단계 | 담당 크레이트 | 입력 | 출력(artifact) |
+| Crate | Depends on (workspace) | Depends on (external) |
+|---|---|---|
+| `diag` | — | — |
+| `vita-schema` | — | `blake3` |
+| `vita-artifact-derive` | — | `syn`, `quote`, `proc-macro2` |
+| `hdl-preprocess` | `diag` | — |
+| `hdl-lexer` | — | `logos` |
+| `hdl-ast` | `vita-schema`, `vita-artifact-derive` | `serde` |
+| `hdl-parser` | `hdl-lexer`, `hdl-ast` | — |
+| `sim-ir` | `vita-schema`, `vita-artifact-derive` | `serde` |
+| `elaborate` | `hdl-ast`, `sim-ir`, `diag` | `serde` |
+| `vcd-writer` | `sim-ir` | `fst-writer` |
+| `sim-engine` | `sim-ir`, `diag`, `vcd-writer`, `elaborate` | `libm`; `cranelift-*` under `jit` |
+| `vita-artifact` | `sim-ir`, `vita-schema`, `diag` | `serde`, `postcard` |
+| `vita-log` | `diag` | — |
+| `cli` | eleven: `hdl-preprocess`, `hdl-lexer`, `hdl-parser`, `hdl-ast`, `elaborate`, `sim-ir`, `sim-engine`, `diag`, `vita-log`, `vita-artifact`, `vita-schema` (`vcd-writer` and `vita-artifact-derive` arrive transitively) | `postcard`, `blake3`, `serde` |
+| `hdl-builtins`, `vcd-diff`, `corpus-runner` | — | — |
+
+`diag`, `vita-schema` and `vita-artifact-derive` are the leaf crates: nothing in the
+workspace is below them, so each is testable in complete isolation.
+
+### 2.1 The edges that are deliberately absent
+
+An absent edge is a rule. Each of the following is enforced by the manifests and would be
+noticed the moment it changed.
+
+| Non-edge | Rule it encodes |
+|---|---|
+| `diag` depends on nothing | the diagnostic model stays IO-free and allocation-light, so every producer can depend on it. Rendering and sinks live above it |
+| `hdl-lexer` and `hdl-parser` do not depend on `diag` | the front end raises structural errors carrying a span and a reason; mapping those to a `MsgCode` is the driver's job, which keeps the error model separable from rendering |
+| `hdl-lexer` does not depend on `hdl-preprocess` | the lexer consumes text, not a preprocessor. `cli` wires the two together |
+| `sim-engine` does not depend on `hdl-builtins` | the `$` handlers live inside the engine, in its private `builtins` module. `hdl-builtins` is the reserved extraction target |
+| `elaborate` does not depend on `sim-engine` | the one edge between them points the other way, and it exists only so `SimOpts` can name the join-mode sidecar types. There is no cycle |
+| `vita-artifact` does not depend on `hdl-ast` | the artifact crate owns the container — header, versioning, staleness gates — and never the body. Body serialization belongs to `cli`, so the container stays independent of what it carries |
+| The schema trait is in `vita-schema`, not `vita-artifact` | putting it in `vita-artifact` would create `sim-ir` → `vita-artifact` → `sim-ir`. Splitting the runtime trait into its own leaf is what breaks the cycle ([16-schema-hash-spec.md](16-schema-hash-spec.md)) |
+| Nothing depends on `vcd-diff` | it is a one-line stub with no CLI and no caller |
+
+---
+
+## 3. What each crate owns
+
+`hdl-preprocess` isolates everything before language parsing: include search, macro
+expansion, conditional compilation, and the `` `timescale `` regions that determine the
+design-wide precision. Later stages see only preprocessed text and the source map that
+points back into the originals.
+
+`hdl-lexer` owns the token set. Keyword sets differ between the languages, so the variation
+is contained here.
+
+`hdl-parser` is a hand-written recursive-descent parser. Grammar checking happens inside it.
+It is split from `hdl-ast` because the AST types are referenced by both the parser and
+elaborate; keeping the types in their own crate is what prevents a cycle.
+
+`hdl-ast` holds the AST types. They derive `serde` and `SchemaHash`, because the AST is the
+root of the `.vu` artifact.
+
+`elaborate` produces two structurally separate things. One is `sim_ir::SimIr`, the golden
+serialized IR that `format_version` and the staleness gate protect. The other is a set of
+out-of-band sidecar tables — join modes, net names, statement locations, class layouts,
+coverage manifests and about sixty more — which never enter `SimIr`, never affect the
+schema hash, and reach the engine through `SimOpts`. That split is what lets engine-facing
+information be added without touching the frozen golden.
+
+`sim-ir` depends on no HDL and no backend. It also holds the rules that both elaborate and
+the engine must agree on — the self-determined width rule, static real-ness, the multi-word
+limb kernels, the system-task and system-function name tables — as single definitions, so a
+second spelling cannot drift from the first. The narrower its surface, the cheaper an
+executor is to add or replace.
+
+`sim-engine` owns the event-driven kernel: the time model, the region cascade, delta
+cycles, the net store, the heaps, and the three executors. The `$` task and function
+handlers are inlined in its private `builtins` module.
+
+`hdl-builtins` is a one-line stub reserved as the extraction target for those handlers.
+Marker comments in the engine identify the boundary along which they would move.
+
+`vcd-writer` owns serialization only: the VCD header, the `$scope` hierarchy, `$var`
+declarations, value-change records, and the VCD-to-FST transcode, which delegates the FST
+binary encoding to `fst-writer`. It contains no execution logic.
+
+`diag` owns the diagnostic data model — `Diagnostic`, `MsgCode`, `Severity`, `SourceLoc`,
+`Frame`, `LogEvent`, `LogSink` — and the `$display` format-field rules shared by the
+run-time renderer in the engine and the elaboration-task renderer in elaborate. It performs
+no IO.
+
+`vita-artifact` owns the `.vu` and `.velab` container: the magic, the header, the version
+and the three staleness gates. See [14-staged-artifacts.md](14-staged-artifacts.md).
+
+`vita-artifact-derive` provides `#[derive(SchemaHash)]` and nothing else. It runs inside
+rustc, which is how structural hashing obeys the no-build-script rule.
+
+`vita-schema` provides the `SchemaShape` trait, the shape registry, and the blake3
+composition that turns a type closure into one hash.
+
+`vita-log` owns severity policy: `-Wno-<CODE>` suppression and `-Werror[=<CODE>]`
+promotion, applied between the producers and the sink. Errors and fatals are never
+suppressed.
+
+`cli` is the driver. It parses argv and filelists, wires the stages, owns the artifact
+bodies, writes the observability rail, installs the only concrete `LogSink`, and produces
+the `vita` binary. The whole CLI runs on a spawned worker thread with a 256 MiB stack,
+because the parse and elaborate recursion needs far more than an OS default.
+
+---
+
+## 4. Execution model
+
+The pipeline is driven two ways.
+
+One-shot, `vita`: preprocess through waveform in one command, with nothing written to disk
+between stages. This is the default entry point.
+
+Staged, `vcmp` / `velab` / `vrun`: the same pipeline split into three independently
+invocable stages, each reading what the previous one left on disk.
+
+| Command | Stage | Crates | Input | Output |
 |---|---|---|---|---|
-| `vcmp` | compile | hdl-preprocess · hdl-lexer · hdl-parser | HDL 소스 | 분석된 설계 단위 (work 라이브러리) |
-| `velab` | elaborate | elaborate | `vcmp` 산출물 | elaborated sim-ir 스냅샷 |
-| `vrun` | simulation | sim-engine · vcd-writer · hdl-builtins | `velab` 산출물 | 시뮬레이션 실행 + VCD (dump 호출 시) |
+| `vcmp` | compile | `hdl-preprocess`, `hdl-lexer`, `hdl-parser` | HDL sources | `<first-source>.vu`, and a work-library entry when `--work` is given |
+| `velab` | elaborate | `elaborate` | one `.vu`, or libraries bound with `-L` | `<input>.velab` — the golden IR plus non-golden trailers |
+| `vrun` | simulate | `sim-engine`, `vcd-writer` | one `.velab` | transcript, waveform, exit class |
 
-`vita`(원샷)는 이 세 단계를 디스크 왕복 없이 연결한 것과 의미상 동일하다.
-
-**상용 EDA 흐름과의 매핑**
-이 3단계 분리는 상용 시뮬레이터의 표준 흐름과 1:1 대응한다.
+Mapping to the commercial flow, which the three-stage split follows one to one:
 
 | vitamin | Cadence Xcelium | Synopsys VCS |
 |---|---|---|
-| `vcmp` (compile) | `xmvlog` / `xmvhdl` | `vlogan` / `vhdlan` |
-| `velab` (elaborate) | `xmelab` | `vcs` (elab → `simv` 빌드) |
-| `vrun` (simulation) | `xmsim` | `simv` |
-| `vita` (원샷) | `xrun` | — |
+| `vcmp` | `xmvlog` / `xmvhdl` | `vlogan` / `vhdlan` |
+| `velab` | `xmelab` | `vcs` (elaborate, then build `simv`) |
+| `vrun` | `xmsim` | `simv` |
+| `vita` | `xrun` | — |
 
-**단계 분리의 이점**
-- **독립 빌드** — 네 명령은 프로덕션에서 단일 multicall 바이너리(argv[0] 베이스네임 디스패치)로 배포되지만, 단계별 디버깅용 실제 `[[bin]]` 타깃을 dev 전용 `separate-bins` 피처 뒤에 둬 `vcmp`/`velab`/`vrun`을 독립적으로 빌드·호출·디버깅할 수 있다.
-- **단계별 디버깅** — compile·elaborate·simulation 중 어디서 문제가 났는지 단계 경계의 산출물을 `--dump`(RON 뷰)로 직접 들여다보며 좁힐 수 있다.
-- **불필요한 단계 스킵 (건전성 보장)** — 소스가 그대로면 `vcmp`/`velab` 산출물을 재사용해 `vrun`만 반복 실행한다. 단, 이 스킵이 *건전*하려면 `vrun`이 상류 체인 전체를 **라이브 소스에 대해 재검증**해야 한다(내용 해시 대조, mtime 금지). Xcelium `-R`/`-r`의 검사-생략 패스트패스와 의도적으로 다르다.
+What the split buys:
 
-**산출물 포맷 · 해시 결합 · CLI 표면.** 단계 간 산출물의 온디스크 포맷(vcmp work 라이브러리 디렉터리 / velab `<top>.velab` 스냅샷), staleness 해시 결합 규칙, 멀티 라이브러리 주소화, 전체 CLI 플래그 표면은 **[14-staged-artifacts.md](14-staged-artifacts.md)** 에 권위 있게 정의한다. 핵심 법칙: 플래그는 *어느 바이너리가 파싱하느냐*가 아니라 *어느 단계의 출력을 교란하느냐*로 분류되어 staleness 해시에 결합된다 — 전처리 교란(`+define`/`+incdir`/`-y`/`--std`)→vcmp 소스 해시, elaborate 교란(top/파라미터/`--multi-driver`/라이브러리 바인딩)→velab 합성 해시, 런타임 전용(`+plusargs`/`--log`/seed)→해시 무관. `` `timescale ``·`` `default_nettype `` 같은 sticky 디렉티브의 파일 간 캐리오버 때문에, vcmp 단위 해시는 *상속 반영 후* 전처리 바이트 + 정렬된 파일 목록 위에서 계산한다.
+- Stage isolation. A failure can be attributed to compile, elaborate or simulation by
+  looking at which stage refused.
+- Re-running only simulation. Unchanged sources mean the `.vu` and `.velab` are reused and
+  only `vrun` repeats.
+- Independent binaries for debugging. The dev-only `separate-bins` feature emits standalone
+  `vcmp`, `velab` and `vrun` targets over the same code path.
 
-(`vita`·`vcmp`·`velab`·`vrun` 이름은 코드네임 `vitamin`과 함께 현재 placeholder다.)
+Skipping a stage is only sound if staleness is detected rather than assumed. Every artifact
+read checks `format_version`, then `tool_semver_major`, then `schema_hash`, lowest first,
+and all three rejections exit 2 naming the stage to re-run. Content freshness against live
+sources is checked automatically for library-bound units, and for a `.vu` given to `vrun`
+when `--upstream` names it. Timestamps are never used. The authority on all of this,
+including how each flag binds into a staleness hash, is
+[14-staged-artifacts.md](14-staged-artifacts.md); the governing rule is that a flag is
+classified by which stage's output it perturbs, not by which binary parses it.
 
----
+Two differences between the flows are contract, not accident. The observability rail —
+`--obs-dir`, `--obs-procs`, `--probe`, `$vita_stage` — is a one-shot `vita` surface; the
+staged applets refuse those flags loudly rather than accepting them and emitting nothing.
+And each staged applet refuses the arguments belonging to another stage: `vcmp` and `velab`
+refuse `--backend` and runtime plusargs, `velab` and `vrun` refuse preprocessor definitions
+and include paths, `vcmp` and `vrun` refuse `-G` parameter overrides.
 
-## Cargo 워크스페이스 / 크레이트
+### 4.1 One binary, four names
 
-17개 크레이트(프로덕션 15개 + dev/test 전용 2개 — `corpus-runner`[워크로드 코퍼스, study/03]·`vcd-diff`, publish=false)가 단일 cargo workspace를 구성한다. 각 크레이트는 단일 책임 + 명확한 인터페이스를 가져 독립적으로 테스트 가능하다. 아래 표는 프로덕션 15개다.
+The default build emits exactly one binary. `vita` dispatches on the stem of `argv[0]`:
+`vcmp`, `velab` and `vrun` select the staged applets, anything else selects the one-shot
+applet. Each stage is also reachable explicitly as `vita vcmp …`, `vita velab …`,
+`vita vrun …`, where the subcommand must be the first argument.
 
-| 크레이트 | 책임 | 의존 |
-|---|---|---|
-| `hdl-preprocess` | 컴파일러 지시어 처리, 매크로 전개, include | — |
-| `hdl-lexer` | 토큰화 (언어별 토큰 집합) | preprocess |
-| `hdl-parser` | 토큰 → AST (언어별) | lexer, ast |
-| `hdl-ast` | 언어별 AST 타입 정의 | vita-artifact-derive (serde·SchemaHash derive) |
-| `elaborate` | 파라미터 해소·계층 평탄화·타입/연결성 검사 → IR 생성 | ast, sim-ir, diag |
-| `sim-ir` | 언어 중립 시뮬레이션 IR (net/process/sensitivity/builtin-call) | vita-artifact-derive (serde·SchemaHash derive) |
-| `sim-engine` | 이벤트 구동 커널, 스케줄러, 시간 모델 | sim-ir |
-| `hdl-builtins` | 표준 `$`-system tasks/functions 라이브러리 — 디스패치 테이블 + 카테고리별 핸들러 (**post-v1 추출 목표 설계**; 현재는 1줄 stub이고 `$task` 핸들러는 `sim-engine/src/builtins.rs`에 인라인) | sim-ir, sim-engine, vcd-writer |
-| `vcd-writer` | IEEE 1364 VCD 직렬화 + VCD→FST 트랜스코드(`fst.rs`, fst-writer 위임) (dump 태스크가 호출될 때만 활성) | sim-ir |
-| `diag` | 진단 *렌더링* (file:line:col + caret) + `Severity`/`MsgCode`/`Frame`/`Diagnostic`/`LogSink`/`LogEvent` 데이터 모델 (IO 없음 → leaf) | — |
-| `vita-artifact` | 단계 산출물 (역)직렬화 + 헤더(magic/format_version/schema_hash/빌드지문) + staleness 검사(D3 트리플 대조) + `--dump` RON 뷰 | hdl-ast, sim-ir, hdl-preprocess, diag, vita-artifact-derive |
-| `vita-artifact-derive` | `#[derive(SchemaHash)]` proc-macro — 타입별 local shape 문자열을 컴파일 타임 방출 (leaf, syn/quote) | — |
-| `vita-schema` | `SchemaShape` trait + `ShapeRegistry` — 참여 타입 폐포를 정렬 합성해 blake3 `SCHEMA_HASH` 런타임 산출 (leaf; trait를 `vita-artifact`에 두면 순환이라 분리 — 16) | blake3 |
-| `vita-log` | 운영 로깅 — **구현됨(2026-06-10): `-Wno-*`/`-Werror=` suppress/promote 게이트(`GatePolicy`/`GatedSink`)**; transcript·로그파일 tee·배너는 Phase-1.x 잔여 | diag *(tracing은 tee 랜딩 시)* |
-| `cli` | 드라이버 바이너리 — `vita`(원샷) + `vcmp`/`velab`/`vrun`(단계별); 프로덕션은 단일 multicall 바이너리 | 전부 + vita-artifact + vita-log |
+Dispatch is hand-written rather than delegated to a CLI framework's multicall mode, because
+the default applet takes positional source files: a framework that strips `argv[0]` and
+reads the next token as a subcommand name cannot express `vita top.sv`.
 
-크레이트별 책임과 분리 이유:
-
-**`hdl-preprocess`** 는 언어 파싱 이전 단계를 완전히 격리한다. include 파일 탐색, 매크로 전개, conditional compilation이 여기서 끝난다. 이후 크레이트는 "전처리가 완료된" 토큰 스트림만 받는다.
-
-**`hdl-lexer`** 는 언어별 토큰 집합을 담당한다. SystemVerilog/Verilog/VHDL은 키워드 집합이 다르기 때문에 언어별 변형을 이 크레이트 내부에 격리한다. `logos` 크레이트가 후보 구현이다.
-
-**`hdl-parser`** 와 **`hdl-ast`** 를 분리하는 이유는 AST 타입 정의가 parser와 elaborate 양쪽에서 참조되기 때문이다. 순환 의존을 피하려면 AST 타입을 독립 크레이트에 두어야 한다.
-
-**`elaborate`** 는 AST와 sim-ir 양쪽을 알고 있는 유일한 크레이트다. 언어 지식(AST 구조)과 시뮬레이션 지식(IR 구조)의 변환 지점을 한 곳에 모은다. diag 의존은 연결성·타입 오류를 리포팅하기 위해서다.
-
-**`sim-ir`** 는 어떤 HDL도, 어떤 백엔드도 의존하지 않는다. 이 크레이트가 좁은 표면적을 유지할수록 인터프리터와 컴파일드 백엔드 교체가 쉬워진다.
-
-**`sim-engine`** 은 IR을 실행하는 이벤트 루프 코어다. 시간 모델, stratified queue, delta cycle이 모두 여기에 있다. hdl-builtins에 의존하지 않는다 — builtin 실행은 hdl-builtins가 엔진 위에서 동작하는 구조다.
-
-**`hdl-builtins`** 는 표준 `$`-system tasks/functions 전 범주를 담는 라이브러리로 **설계**되었다 — display·I/O·file I/O·sim ctrl·time·변환·비트벡터·수학·random·dump·assertion 샘플링·introspection을 카테고리별 핸들러로 구현하고 디스패치 테이블로 묶어, sim-engine·vcd-writer 양쪽을 의존해 dump 패밀리 호출을 vcd-writer로 라우팅하는 구조다. **단, 이 디스패치-테이블 분리는 post-v1 추출 목표이며, 현 구현에서 이 크레이트는 1줄 stub이다** — `$task` 핸들러 실체는 `sim-engine/src/builtins.rs`에 인라인으로 있고, 코드의 HOOK 주석이 추출 지점을 표시한다. (`hdl-reference/system-tasks/` 참조)
-
-**`vcd-writer`** 는 직렬화 책임만 갖는다. VCD 헤더·$scope 계층·$var 선언·값 변화 기록이 모두 이 크레이트다. 출력 파일 확장자가 `.fst`(대소문자 무관)면 VCD→FST 트랜스코드(`fst.rs`)도 이 크레이트가 담당하며, FST 바이너리 인코딩은 순수-Rust `fst-writer` 크레이트에 위임한다. sim-engine이나 hdl-builtins의 실행 로직과 섞이지 않는다.
-
-**`diag`** 는 소스 위치 정보와 오류/경고 메시지를 일관된 형식으로 생성하는 공유 라이브러리다. 렌더러는 `miette`(`default-features = false`로 leaf 순수성 유지; `codespan-reporting`을 fallback로 교체 가능)다. 어느 단계에서든 같은 방식으로 진단을 보고할 수 있게 한다. (크레이트 결정 근거는 [02-implementation-language.md](02-implementation-language.md))
-
-**`vita-artifact`** 는 단계 간 디스크 산출물의 (역)직렬화·헤더·버전·staleness를 한곳에 격리하는 크레이트다(D1). work 라이브러리 매니페스트와 `<unit>.vu`/`<top>.velab` 헤더 프레이밍, 전처리-소스 해시 대조, `--dump` RON 뷰가 모두 여기에 있다. 직렬화는 이 크레이트의 선택적 경계로만 일어나므로 원샷 `vita` 경로는 이 코드를 호출하지 않는다. `hdl-ast`·`sim-ir`의 루트 타입을 알아야 그 형상 해시를 stamp할 수 있어 둘에 의존하고, 라이브 재해시를 위해 `hdl-preprocess`에, 디코드/staleness 오류 보고를 위해 `diag`에 의존한다. 상세는 [14-staged-artifacts.md](14-staged-artifacts.md).
-
-**`vita-artifact-derive`** 는 `#[derive(SchemaHash)]` proc-macro만 제공하는 빌드그래프 leaf 크레이트다(syn/quote 의존). 직렬화 타입 형상(필드·variant + serde 속성)의 구조적 해시를 컴파일 타임에 산출해, 타입 레이아웃이 바뀌면 이전 산출물이 silent misparse 대신 깨끗한 버전 오류로 거부되게 한다(D2). proc-macro는 rustc 안에서 돌아 cargo-native이므로 03의 "별도 빌드 스크립트/codegen 없음" 원칙을 지킨다. `hdl-ast`·`sim-ir`가 이 derive를 적용하므로 두 크레이트는 더 이상 순수 leaf가 아니다.
-
-**`cli`** 는 드라이버 바이너리의 진입점이다. 원샷 `vita`와 단계별 `vcmp`(compile)·`velab`(elaborate)·`vrun`(simulation)을 제공하되, **프로덕션은 단일 multicall 바이너리**(argv[0] 베이스네임 디스패치; clap `multicall`이 아니라 손수 구현 — positional 기본 applet과 양립 위해)로 빌드하고 dev 전용 `separate-bins` 피처에서만 4개 `[[bin]]`을 따로 낸다. `vita-artifact`를 통해 산출물을 읽고 쓰며, 나머지 크레이트를 조합하는 글루다. 단계별 실행·산출물 흐름·CLI 표면은 위 "실행 모델" 절과 [14-staged-artifacts.md](14-staged-artifacts.md)를 참조한다.
+The installer creates `vcmp`, `velab` and `vrun` as symlinks beside the installed `vita`,
+falling back to copies where the filesystem rejects links. Because the explicit
+`vita <applet>` form exists, a renamed or copied binary still reaches every stage.
 
 ---
 
-## 하이브리드 시뮬레이션 전략
+## 5. The executor architecture
 
-> ⚠️⚠️ **This section records the ORIGINAL 2026-05 strategy, and that strategy has since been executed to completion. Read it as history, not as current behaviour.** Today vitamin has three executors and the default is the compiled one: `native` (a compiled op-stream over a flat arena) runs 100.00% of the corpus byte-exactly and is the only executor in a released build; `interp` and `vm` remain in a development build purely as second implementations to bisect a suspected defect against. Machine-code generation (cranelift) WAS built, wired and measured, then **rejected** — ~38% of a run is shim and the ceiling on op dispatch is 8.9–11.3%. Current structure = §실행 백엔드 아키텍처 below · execution record = [ROADMAP_ARCHIVE_PHASE_A-D](../ROADMAP_ARCHIVE_PHASE_A-D.md) · 해설 = [study/02](../study/02-v1-native-coverage.md).
+Three executors exist. One of them is the product.
 
-**MVP는 인터프리터다.** sim-ir를 직접 walk하는 이벤트 구동 인터프리터 방식으로 시뮬레이터를 구축한다. 이 방식은 Icarus Verilog의 vvp 런타임 접근과 유사하다 — 중간 표현을 생성하고 런타임에 해석한다. 인터프리터로 출발하는 이유는 명확하다: 정확성과 표준 준수를 먼저 확보한 다음 속도를 최적화해야 하기 때문이다.
-
-**sim-ir가 경계 역할을 한다.** sim-ir를 좁고 안정된 표면으로 유지하면, MVP 인터프리터 이후 컴파일드 또는 JIT 백엔드를 재작성 없이 추가할 수 있다. 프론트엔드 전체(preprocess → lex → parse → elaborate)는 그대로 두고 실행 백엔드만 교체하는 구조다. Verilator의 접근(C++ 코드 생성)이 후속 단계의 모델이다.
-
-**왜 컴파일드 방식을 MVP로 선택하지 않는가.** Verilator는 정적 macro-task 스케줄링 방식을 채택하며 동적 macro-dataflow 모델을 명시적으로 거부한다([Verilator internals.rst](https://github.com/verilator/verilator/blob/master/docs/internals.rst)). 그 정적 구조는 IEEE 1800 stratified event scheduling을 완전히 모델링하기 어렵다. 컴파일드 방식은 표준 IEEE 1800 스케줄링 의미론을 정확히 구현하기 어렵다. vitamin은 timescale 정밀도와 VCD 정확성을 1일차부터 확보해야 하므로 인터프리터 방식이 올바른 출발점이다.
-
----
-
-## 실행 백엔드 아키텍처 — 세 실행기와 두 빌드 (2026-08-16 · Phase A/B 완료 시점)
-
-> 위 §하이브리드 시뮬레이션 전략은 **설계 의도**이고, 이 절은 그것이 **실제로 어떻게 착지했는지**다.
-> 셋 다 살아 있고, 그중 하나가 제품이다. 전체 서사·용어 = [study/02](../study/02-v1-native-coverage.md).
-
-### 세 실행기
-
-```
-                          sim-ir (언어 중립 · SchemaHash 동결)
-                                        │
-                                        ▼
-                      ┌─────────────────────────────────────┐
-                      │  문장 의미 — 한 벌뿐                 │
-                      │  exec::{compute_effect, apply_effect}│
-                      │  `Kernel` 트레이트에 대해 제네릭      │
-                      └─────────────────────────────────────┘
-                                        │
-                    ┌───────────────────┴───────────────────┐
-                    ▼                                       ▼
-        impl Kernel for Scheduler                impl Kernel for NativeKernel
-                    │                                       │
-        ┌───────────┴───────────┐                           │
-        ▼                       ▼                           ▼
-  ①  interp                 ②  vm                     ③  native
-  IR 트리를 매번 걸음     CompiledBody(op 열)        평평한 NetArena
-  = 의미의 정본           = 결정을 한 번만            + WProg 특수화 평가기
-                                                     (Value 를 안 만든다)
-        └───────────┬───────────┘                           │
-                    ▼                                       ▼
-            SimState::nets                            NetArena (u64 평면)
-            (Value · 4-state · 72 B)
+```text
+                     sim-ir  (language-neutral, SchemaHash-frozen)
+                                       │
+                                       ▼
+                     ┌──────────────────────────────────────┐
+                     │  statement semantics — one copy       │
+                     │  exec::{compute_effect, apply_effect} │
+                     │  generic over the `Kernel` trait      │
+                     └──────────────────────────────────────┘
+                                       │
+                   ┌───────────────────┴───────────────────┐
+                   ▼                                       ▼
+       impl Kernel for Scheduler                impl Kernel for NativeKernel
+                   │                                       │
+       ┌───────────┴───────────┐                           │
+       ▼                       ▼                           ▼
+   interp                    vm                        native
+   walks the IR tree      compiled op stream       flat arena + a specialised
+   on every activation    per body template        evaluator that builds no
+                                                    boxed value
+       └───────────┬───────────┘                           │
+                   ▼                                       ▼
+           SimState::nets                              NetArena
+           (4-state `Value`)                           (flat word planes)
 ```
 
-⭐ **셋은 세 개의 시뮬레이터가 아니다.** 문장 하나의 의미는 `Kernel` 제네릭 공유 코드에 **한 벌**만
-있고, 실행기는 그 트레이트의 구현이 다를 뿐이다. 그래서 "새 백엔드"가 "IEEE 규칙 재구현"이 아니고,
-동시에 **공유 코드가 틀리면 셋이 똑같이 틀린다**(→ 절대 앵커가 의무인 이유).
+These are not three simulators. The meaning of a statement is written once, in code generic
+over the `Kernel` trait, and an executor is an implementation of that trait. Adding an
+executor therefore does not mean re-implementing IEEE rules — and, symmetrically, an error
+in the shared code is wrong in all three at once, which is why an absolute oracle is
+mandatory and agreement between executors is never sufficient on its own.
 
-### 무엇이 다른가 — 축 셋
+### 5.1 What actually differs
 
-| 축 | interp | vm | native |
+| Axis | `interp` | `vm` | `native` |
 |---|---|---|---|
-| **"무엇을 할지" 결정 시점** | 매 실행 | 템플릿당 한 번 | 템플릿당 한 번(같은 `CompiledBody` 재사용) |
-| **값의 자리와 모양** | `SimState::nets` · `Value`(4-state, 72 B) | 〃 | **평평한 `NetArena`** · 균일 폭 ≤64bit 식은 `Value` 를 **안 만든다** |
-| **평면 수**(D2-a) | 늘 둘(val·unk) | 〃 | **먼저 하나로 시도**하고 미지 leaf 를 만나면 두 평면으로 **다시 돈다** |
-| **폴백 단위** | 바디마다 섞임 | 바디마다 인터프리터로 | **설계 단위 all-or-nothing** |
+| When "what to do" is decided | every activation | once per body template | once per body template, reusing the same compiled body |
+| Where net values live, and in what shape | `SimState::nets`, as 4-state `Value` | the same | a flat `NetArena`; a uniform-width expression of 64 bits or fewer builds no `Value` at all |
+| Bit planes evaluated | always two, value and unknown | two | one first, re-running on two planes on meeting an unknown leaf |
+| Granularity of falling back | per body, mixed within a run | per body, to the interpreter | whole design, all or nothing |
 
-⭐⭐ **속도 차이의 주원인은 축 1이 아니라 축 2다.** tier-3 에 tier-2 의 `CompiledBody` 를 태운
-단계(§4.5.333)는 **완전한 wash** 였고, 실제 이득은 `Value` 마샬링을 없앤 네 슬라이스에서 나왔다
-(§4.5.329~332). ⭐⭐ **그리고 그 위에 D2-a 가 평면 하나를 더 걷어냈다**(§5.1-ay) — 계측이 **벤치 8형태 전부 100%
-definite · picorv32 90.1%** 라고 답했으므로 `wprog` 는 **한 평면짜리 레인을 먼저 시도**하고, 미지
-leaf 를 만나는 순간 **정본 루프를 처음부터** 돌린다. ⚠️ **폴백이 정본 구현 그 자체이므로 정확성
-표면이 0 이다** — 새 의미도, 넷마다의 정적 증명도, X 진입 트랩도 없다.
+The dominant cost difference is the second axis, not the first: giving the native backend
+the VM's compiled bodies is on its own a wash, and the gains come from removing value
+marshalling. The single-plane lane rests on measurement — every benchmark shape is 100%
+definite and picorv32 is 90.1% of runs — and its fallback is the two-plane path itself, so the
+fast lane adds no new semantics and no new correctness surface.
 
-**실측**(picorv32 · release · 번갈아 best-of-5 · 2026-08-17):
+`native_eval` is a fourth thing that is not a backend: a compiler for expressions whose
+every node evaluates to 64 bits or fewer, used by the VM and by continuous assignments. An
+expression outside its subset compiles to nothing and the generic evaluator runs instead.
 
-| interp | vm | **native** | (참고) iverilog 13 |
+### 5.2 How a body reaches an executor
+
+| Executor | Route |
+|---|---|
+| `interp` | `exec::run_process` walks the IR body directly |
+| `vm` | `is_codegen_able` accepts the body, `compile_body` lowers it to an op stream cached per process template, and `vm_exec` runs it. A refused body falls back to `run_process`, body by body |
+| `native` | the design passes all three gate layers, then per body: the same `is_codegen_able` and compiled body, run by `vm_exec` over the arena; otherwise `native::body::run_body` walks the IR. A fork child always takes the walk |
+
+A native run drives the design from its own loop, which mirrors the scheduler region for
+region and shares everything that is not a net value — the output sink, the file table,
+simulation time, the random-number state.
+
+### 5.3 The default is `native`
+
+`Backend::Native` carries `#[default]`, `SimOpts::default()` sets it, and
+`crates/sim-engine/tests/backend_equiv.rs::the_default_backend_is_native` asserts both
+spellings so they cannot disagree. That is the contract. Some rustdoc comments in the
+engine name a different default; they are stale, and the enum, the constructor and the test
+are what govern.
+
+`--backend` is a debugging control, not a product surface, and the help text says so. It is
+accepted by `vita` and `vrun` and refused by `vcmp` and `velab`, because nothing in an
+artifact depends on it.
+
+Measured on picorv32, release builds, interleaved best of five:
+
+| `--backend interp` | `--backend vm` | `--backend native` | Icarus Verilog 13 |
 |---:|---:|---:|---:|
-| 1.393 s | 0.911 s | **0.552 s** | 0.585 s |
+| 1.319 s | 0.838 s | 0.513 s | 0.585 s |
 
-⚠️ **picorv32 하나로는 백엔드를 판단할 수 없다** — Phase D 가 그것을 실측으로 보였다. 형태별
-하네스(`sim-engine/tests/perf_baseline.rs` · 8 형태)가 정본이고, Phase D 종료 시 **여덟 형태 전부
-`native/vm < 1.00`** 이다(착수 때는 셋에서 졌고 최악이 **2.52×**). ⚠️ 그런데 **picorv32 의 비율은
-거의 안 움직였다**(0.61 → 0.60) — 그 설계의 시간은 산술이 아니라 다른 데 있고, **어디인지는 아직
-측정하지 않았다**(ROADMAP §5.2 의 표적 4).
+A single design cannot judge a backend. The shape-by-shape harness in
+`crates/sim-engine/tests/perf_baseline.rs` is the authority, and its method is in
+[study/01](../study/01-interpreted-vs-compiled.md).
 
-⚠️ **축 3 이 이 아키텍처의 가장 비싼 성질이다.** native 는 넷 저장을 **소유**하므로 한 프로세스만
-아레나 밖에서 값을 읽으면 그 값이 t0 상태로 보인다 ⇒ 바디 단위 폴백이 불가능하고, 그래서 **설계
-단위 게이트**가 필요하다(다음 절).
+### 5.4 The gate — three layers, asked independently
 
-### 게이트 — 세 층, 독립적으로 물어야 한다
+Because the native backend owns net storage, a process reading a value from outside the
+arena would see the value as of time zero. Body-level fallback is therefore impossible and
+eligibility has to be decided for the whole design.
 
-```
-   설계 ─► ① design_eligibility ─► ② NetArena::buildable ─► ③ executor_rows ─► native 실행
-             (v1 SCOPE)              (오늘의 STORAGE)         (오늘의 EXECUTOR)
-                 │                        │                        │
-                 └────────────────────────┴────────────────────────┘
-                                     거부 하나라도 → 폴백(기본 빌드) / 치명(제품 빌드)
+```text
+  design ─► ① design_eligibility ─► ② NetArena::buildable ─► ③ executor_rows ─► native run
+              (scope)                  (storage)               (executor)
+                │                          │                       │
+                └──────────────────────────┴───────────────────────┘
+                          any refusal → fall back, or fatal, per build shape
 ```
 
-⚠️ **제품 코드는 첫 거부에서 단락하므로 census 는 셋을 독립으로 묻는다** — D 에 걸린 설계의 S·X 는
-측정되지 않는다(§5.1-a 가 그것을 모르고 첫 census 를 잘못 읽었다).
+| Layer | Question |
+|---|---|
+| `design_eligibility` | do any feature families in this design put it out of scope |
+| `NetArena::buildable` | can the arena hold this design's storage |
+| `executor_rows` | can the executor that exists run every body |
 
-**Phase A 완료 시점(2026-08-16)에 세 층 모두 도달 가능한 행이 0 이다** — 코퍼스 6,470 중 거부 0.
-⚠️ **검사를 지운 것이 아니다**: 세 함수와 소비자는 남아 있고 `_`-free match 가 새 종류를 분류하도록
-강제하며, 핀하는 것은 *"지금 비어 있다"* 다(`is_empty()` 단언).
+Production code short-circuits on the first refusal, so a census that wants all three
+answers must ask them separately; a design refused by the first layer produces no data
+about the other two. The third layer's answer is published in the run result rather than
+merely consumed, so a report can name which layer refused.
 
-### 두 빌드 — `oracle` feature (Phase B)
+No reject family in the first layer is reachable at HEAD: the corpus census is
+6 470 of 6 470 designs eligible, with zero refusals, and the refusal set of the engine's
+system-task classifier is empty. The checks are not removed. The classifying matches carry
+no catch-all arm, so a new statement kind or net kind cannot compile until it is
+classified, and the tests pin emptiness as a present state rather than as an assumption.
 
-```
-  cargo build                      cargo build --no-default-features
-  = feature "oracle" ON            = 제품 형태
-  ┌──────────────────────┐         ┌──────────────────────┐
-  │ interp · vm · native │         │       native         │
-  │        ▲기본          │         │        ▲기본          │
-  └──────────────────────┘         └──────────────────────┘
-   --backend vm   → 동작            --backend vm   → error[E0001] · exit 3
-   게이트 거부    → W4030 경고       게이트 거부    → fatal[F4004] · exit 1
-                  + VM 폴백 · exit 0                (폴백 대상이 없다)
-   테스트 5,470                     테스트 147 (`-p sim-engine --lib`)
-```
+### 5.5 What a refusal costs, per build shape
 
-⭐⭐ **제품에서 없앤 것은 코드가 아니라 선택지이고, 삭제한 줄은 0 이다.** 옛 계획은 *"VM 5,430줄
-삭제 + `exec/` 3,246줄 감싸기"* 였는데 착수 전 측정이 둘 다 뒤집었다(ROADMAP §5.1-b2) — Phase A 를
-지나며 **tier-3 이 사실상 전부를 공유**하게 됐기 때문이다: `backend.rs` 의 컴파일 기계장치는 tier-3 의
-빠른 경로이고, `exec/process.rs` 안에는 **`compute_effect`/`apply_effect`** 가 있다. 그 수렴은 결함이
-아니라 *"의미의 두 번째 철자를 만들지 마라"* 가 겨눈 것이다.
+| | Build with `oracle` | Build without it |
+|---|---|---|
+| A gate refusal | falls back to the VM and emits `W-RUN-BACKEND-FALLBACK` | a graceful fatal naming the refusing layer, exit 1 |
+| Why | a fallback is a slower answer, not a wrong one, so a non-zero exit would be a regression on the accuracy ladder | with no fallback compiled, the only choices left are loud and wrong |
 
-⚠️ **사다리를 양방향으로 지킨 것이 두 빌드가 다른 이유다.** 폴백은 **틀린 답이 아니라 느린 답**
-(correct-support)이므로 기본 빌드에서 `exit≠0` 은 **하강**이다. 폴백 대상이 **컴파일되지 않은**
-빌드에서만 선택지가 `loud` 아니면 `wrong` 이 되고, 거기서만 치명으로 승격한다.
+The fallback warning says what was requested, what ran, and that the result is unaffected
+while the speed is. The run result reports the executor that actually ran, beside the one
+requested.
 
-⚠️ **`--no-default-features` 를 게이트할 때의 함정 둘**(둘 다 실사고):
-- **feature unification** — 의존 크레이트가 `default-features = false` 를 안 쓰면 상위의
-  `--no-default-features` 가 **아무것도 안 한다**(빌드는 초록). `cargo tree -e features` 로 확인하라.
-- **`--lib` 필수** — 통합 테스트 타깃이 dev-dependency 로 `oracle` 을 되살린다.
-- ⚠️ `target/debug/vita` 를 **두 구성이 공유**한다 — 구성을 바꿨으면 **재빌드 후 재측정**.
+### 5.6 Why the slowest executor stays
 
-### 왜 가장 느린 실행기를 남겨 두는가
+`interp` interprets the IR most directly, which makes it the readable statement of what the
+semantics are. The VM and the native backend compute the same meaning by other means, and
+when two of them disagree something has to decide which is wrong.
 
-`interp` 는 IR 을 가장 직접적으로 해석하므로 **의미의 정본 텍스트**다. vm·native 는 같은 의미를 다른
-방법으로 계산하고, 둘이 갈렸을 때 **누가 틀렸는지 판정할 기준**이 필요하다.
+Two rules follow, and both are contract:
 
-✅ **Phase C(2026-08-17)가 그것을 계약으로 확정했다** — 지우는 것이 아니라 **역할을 못박는 일**이었고,
-`oracle` feature 가 이미 그 경계다(제품 빌드엔 `Backend::Interpreter` 가 **존재하지 않는다**):
+- It is a test instrument, not a product surface. In a release-shaped build
+  `Backend::Interpreter` does not exist at all.
+- It is permanently excluded from performance work. Every specialisation is a second
+  spelling of a rule, and a second spelling is this codebase's defect class. When a profile
+  points at the interpreter's body loop, the answer is that the design should not be
+  running there, not that the loop should be optimized.
 
-- **테스트 도구이지 제품 표면이 아니다.** `--backend interp` 는 디버그 노브이고, 도움말이 그렇게
-  말한다.
-- ⚠️⚠️ **성능 최적화 대상에서 영구 제외** — 관찰이 아니라 규칙이다. **레퍼런스를 빠르게 만드는 것이
-  곧 레퍼런스가 읽을 수 없게 되는 길**이다: 모든 특수화가 규칙의 **두 번째 철자**이고, 그것이 이
-  저장소의 결함 클래스다(§4.5.279 — VM 이 인터프리터에서 조용히 네 갈래로 갈렸다). 프로파일이
-  `run_process` 를 지목하면 답은 *"그 설계가 여기서 돌면 안 된다"* 이지 *"여기를 고치자"* 가 아니다.
-- ⚠️ **그래도 `run_process` 는 죽은 코드가 아니다** — 오라클 빌드에서 VM 은 `is_codegen_able` 이
-  거부하는 바디마다 그리로 떨어지고, tier-3 은 프레임 바디를 그리로 위임한다. *"제품 표면이 아니다"*
-  는 **플래그**에 대한 말이다.
+It is not dead code even so: in an oracle build the VM falls back into it per refused body,
+and the native backend delegates subroutine-frame bodies to it. "Not a product surface" is
+a statement about the flag.
+
+Machine-code generation exists behind the off-by-default `jit` feature and is rejected on
+measurement; see [03-build-and-portability.md](03-build-and-portability.md) §3.3 and
+[18-acceleration-analysis.md](18-acceleration-analysis.md).
 
 ---
 
-## IR 설계 원칙
+## 6. IR design principles
 
-**sim-ir는 언어 비의존이다.** Verilog 구문도, SystemVerilog 타입도, VHDL 엔터티도 알지 못한다. net(폭/4-state), process(트리거 조건/본문), continuous assign, 계층 인스턴스, 초기값만 표현한다. 언어별 특성은 elaborate 단계에서 모두 소화된다.
+The IR is language-independent. It knows no Verilog syntax, no SystemVerilog type
+declaration and no VHDL entity. It carries nets with width and 4-state initial values,
+processes with a sensitivity and a body, continuous assignments, hierarchy instances,
+subroutine definitions, and system-call nodes. Everything language-specific is digested
+during elaboration.
 
-**4-state(0/1/x/z)를 1급으로 표현한다.** Icarus의 functor가 0/1/x/z를 각 2비트로 인코딩하듯, sim-ir의 net과 process 값은 4-state를 기본 표현으로 갖는다. 시뮬레이션 초기화 시 x 상태, 멀티드라이버 z 해소, x-propagation이 모두 이 표현에 의존한다. 2-state 최적화(성능)는 후속 개선으로만 검토한다.
+4-state is the primary representation. A value is two bit planes, `val` and `unk`,
+encoding 0, 1, X and Z, and the same encoding is used by the IR, the engine and the
+waveform writer, so a value crosses those boundaries without conversion. Initialization to
+X, multi-driver Z resolution and X propagation all rest on it. Two-state optimization is an
+internal fast path, never a change of representation.
 
-**builtin-call은 IR 노드 타입이다.** `$display(...)`, `$dumpvars` 같은 system task 호출은 AST에서 언어별 builtin call 노드로 표현되고, elaborate 단계에서 IR의 `builtin-call` 노드로 변환된다. 이 노드는 이름(예: `$display`), 타입이 확인된 인자 목록, 반환 타입을 담는다. sim-engine은 이 노드를 실행할 때 hdl-builtins의 디스패치 테이블을 조회한다.
+System calls are IR node kinds. `$display(...)` or `$dumpvars` parses to a language-level
+call node and elaborates to an IR node carrying a closed-enum id, checked arguments and a
+result type. A name the IR has no id for, or an argument mismatch, is a loud
+`E-ELAB-UNSUPPORTED` rejection at elaboration, never a silent no-op.
 
-**dump 태스크는 별도 표식으로 vcd-writer에 라우팅한다.** `$dumpfile`, `$dumpvars`, `$dumpon`/`$dumpoff`, `$dumpall`, `$dumpflush`, `$dumplimit` 는 IR에서 dump-family 표식을 갖는 builtin-call 노드로 표현된다. hdl-builtins의 디스패치 경로가 이 표식을 감지해 vcd-writer로 라우팅한다. 이 연결이 없으면 VCD는 생성되지 않는다.
+The dump family is routed, not special-cased at the leaf. `$dumpfile`, `$dumpvars`,
+`$dumpon`, `$dumpoff`, `$dumpall`, `$dumpflush` and `$dumplimit` reach the waveform writer
+through the engine's dispatch. Without a call on that path, no waveform file is created,
+and that is not an error.
 
-**표면적을 좁게 유지한다.** sim-ir가 노출하는 타입과 trait을 최소화해 인터프리터와 컴파일드 백엔드 양쪽이 동일 IR을 소비할 수 있도록 계약을 단순하게 유지한다. Yosys RTLIL이 "all frontends must transform to RTLIL-compatible representation"을 강제하는 것과 같은 원칙이다.
+The IR surface stays narrow. The fewer types and traits it exposes, the simpler the
+contract every executor has to satisfy, which is the same discipline Yosys applies by
+requiring every front end to produce RTLIL.
 
-**sim-ir는 span-free다(D4).** 소스 위치(파일 경로·바이트 범위)는 프론트엔드 잔재이므로 언어 중립 IR 노드에 넣지 않는다. 런타임 진단이 소스를 가리켜야 할 때는, IR 노드 인덱스로 키잉된 **선택적·독립 버전 사이드테이블**(`node_index → {file_id, byte_range}`)로 위치를 운반하고 `file_id→path` 맵은 work 매니페스트에 둔다(Yosys RTLIL이 `src`를 어트리뷰트로 오버레이하는 선례). 이로써 `SchemaHash` derive가 sim-ir의 중립 코어만 해시하고, 진단 위치가 백엔드 교체 경계를 넓히지 않는다. 상세는 [14-staged-artifacts.md](14-staged-artifacts.md) §7.
+The IR is span-free. Source positions are a front-end concern and do not belong in
+language-neutral nodes. A run-time diagnostic that has to name a source line reads an
+out-of-band table keyed by statement id, holding file, line, column, byte range and the
+instance path the statement was elaborated under — the instance path because a module
+instantiated N times lowers N copies of one statement and `file:line:col` alone cannot tell
+them apart. The table is resolved once during elaboration, which is also what makes
+one-shot and staged diagnostics identical by construction. Keeping spans out of the IR is
+what lets the schema hash cover only the neutral core.
 
----
-
-## Builtin Dispatch (hdl-builtins)
-
-system task 호출 하나가 파이프라인을 어떻게 통과하는지 단계별로 따라간다.
-
-> **현 구현 주의.** 아래 3~5단계의 "hdl-builtins 디스패치 테이블"은 **post-v1 추출 목표 설계**다.
-> 현재 `hdl-builtins`는 1줄 stub이고, `$task` 핸들러는 전부 `sim-engine/src/builtins.rs`에
-> 인라인으로 구현되어 있다(코드의 HOOK 주석이 추출 경계를 표시). 1~2단계와 dump→vcd-writer
-> 라우팅 의미론은 현 구현에서도 동일하다.
-
-**1. parser → AST:** HDL 소스의 `$xxx(arg1, arg2)` 구문을 parser가 인식해 언어별 builtin call AST 노드를 만든다. 이름(`$xxx`)과 파싱된 인자 표현식 목록을 담는다.
-
-**2. elaborate → IR builtin-call:** elaborate 크레이트가 AST builtin call 노드를 소비하고 IR의 `BuiltinCall` 노드를 생성한다. 이 변환 과정에서 이름 검증(알려진 system task인지), 인자 타입 검사(개수·타입 정합), 반환 타입 결정이 수행된다. 알 수 없는 system task나 타입 불일치는 diag 크레이트를 통해 오류로 보고된다.
-
-**3. sim-engine → hdl-builtins dispatch:** sim-engine이 이벤트 실행 중 `BuiltinCall` 노드를 만나면 hdl-builtins의 중앙 디스패치 테이블에 이름을 키로 조회한다. 디스패치 테이블은 이름 → 카테고리별 핸들러 함수 매핑이다.
-
-**4. 카테고리별 핸들러 실행:** 핸들러는 범주별로 구분된다: display/I/O, 파일 I/O, 시뮬레이션 제어(`$finish`/`$stop`), 시간(`$time`/`$realtime`), 변환, 비트벡터, 수학, random, dump 패밀리, assertion 샘플링, introspection. 각 핸들러는 sim-engine에서 현재 시뮬레이션 컨텍스트(시간, net 상태)를 인자로 받는다.
-
-**5. dump 패밀리 → vcd-writer 라우팅:** `$dumpfile`/`$dumpvars`/`$dumpon`/`$dumpoff`/`$dumpall`/`$dumpflush`/`$dumplimit` 핸들러는 vcd-writer를 직접 호출한다. 이 경로가 열려야만 VCD 파일이 생성된다. RTL 코드가 dump 태스크를 한 번도 호출하지 않으면 vcd-writer는 활성화되지 않는다.
-
-system task 전 범주 참조: `hdl-reference/system-tasks/`.
-
----
-
-## 레퍼런스 비교 (research 반영)
-
-### Icarus Verilog — 인터프리터 선례
-
-Icarus Verilog는 `iverilog`(컴파일러) + `vvp`(런타임)의 두 바이너리 구조다. `iverilog` 내부는 flex/bison 기반 lex/parse로 pform(장식된 파스 트리)을 만들고, elaborate 단계에서 netlist form으로 변환한 뒤 ivl_target API를 통해 code generator(tgt-vvp)에 전달한다. tgt-vvp는 텍스트 바이트코드 형식의 vvp 파일을 생성한다.
-
-vvp 런타임은 구조층(functor net)과 행동층(thread)의 이중 구조다. functor는 4-state를 2비트로 인코딩(0→00, 1→01, x→10, z→11)하고 64바이트 진리표로 조합 논리를 표현한다. `.thread` 문이 initial/always 블록에 대응하는 스레드를 만들고, `%set`/`%assign`/`%load`/`%wait` 명령어로 functor net과 상호작용한다. 이벤트 큐는 skip list 기반이며 전파·대입·스레드 스케줄 세 종류 이벤트를 처리한다.
-
-vitamin과의 유사점: 프론트엔드(iverilog)와 런타임(vvp) 분리, 4-state 1급 표현, 이벤트 구동 인터프리터. vitamin의 MVP 접근과 가장 유사한 출발점이다.
-
-### Verilator — 컴파일드 방식과 그 트레이드오프
-
-Verilator는 Verilog/SV를 C++로 변환해 일반 컴파일러가 최적화하게 한다. 파이프라인은 Flex/Bison 파스 → ~20단계 V3 AST pass → V3Order 정적 스케줄 계산 → V3EmitC C++ 출력이다. 결과로 나온 `_eval()` 함수는 Active/NBA 영역을 위에서 아래로 순서대로 실행한다 — 동적 이벤트 큐 없이.
-
-핵심 트레이드오프: Verilator는 정적 macro-task 스케줄링을 채택하며 동적 macro-dataflow 모델을 명시적으로 거부한다 — internals.rst는 "Sarkar describes two options: you can dynamically schedule tasks at runtime... Verilator does not support this... The other option is to statically assign macro-tasks to threads... Verilator takes this static approach"라고 설명한다. 그 정적 구조는 IEEE 1800 stratified event scheduling을 완전히 모델링하기 어렵고, 컴파일드 방식은 속도를 얻지만 표준 IEEE 1800 스케줄링 의미론을 완전히 구현하지 않는다. 멀티스레딩(MTask)은 V3Partition이 의존성 그래프를 거칠게 합쳐 매크로태스크를 생성하고 정적으로 스케줄한다.
-
-vitamin과의 관계: 후속 단계(Phase 3+)에서 컴파일드/JIT 백엔드를 추가할 때 Verilator 방식이 모델이 된다. sim-ir 경계가 프론트엔드 재작성 없이 이 교체를 가능하게 한다.
-
-### vitamin의 위치
-
-⚠️ **Updated 2026-08-17 — the "후속" in the paragraph below has happened.** vitamin sits between the two precedents, and it now occupies BOTH ends: correctness was secured first on an IR-walking interpreter the way Icarus does, and the compiled backend across the `sim-ir` boundary was then built and made the **default** (`native`, 100.00% of the corpus, byte-exact against the interpreter). What was NOT adopted is Verilator's C++/machine-code generation — cranelift was built, wired and measured, then rejected on the numbers. The `sim-ir` boundary is what let the backend be replaced with no frontend rewrite, which is the claim the paragraph below makes and the thing that turned out to be true.
-
-> *(원문 2026-05)* vitamin은 두 선례 사이에 의도적으로 위치한다. MVP는 Icarus처럼 인터프리터 방식으로 표준 준수를 먼저 확보한다. 그러나 sim-ir를 IR 경계로 두어 Verilator처럼 컴파일드 백엔드도 후속에 수용할 수 있다. 이 경계가 둘 다 가능하게 하는 핵심 설계 결정이다.
+Status at HEAD: the frozen root also contains a `SuspendState` per process, with a wake key
+and a region tag. No engine code reads or writes it; elaboration emits one constant value
+and live suspension state is held engine-side. Two of the four region-tag variants are
+never constructed anywhere in the workspace. The shape is part of the frozen root and
+cannot be removed without a `format_version` bump, so it stands as reserved space rather
+than as a description of how scheduling works. The scheduler's real region model is in
+[06-simulation-engine.md](06-simulation-engine.md).
 
 ---
 
-## Sources
+## 7. System-task dispatch
 
-- 설계 명세 §5 전체 (`docs/superpowers/specs/2026-05-26-vitamin-rtl-simulator-design.md`)
-- research-log: [`eda-architectures-2026-05-28.md`](research-log/eda-architectures-2026-05-28.md)
-- Icarus Verilog Developer Guide: https://steveicarus.github.io/iverilog/developer/guide/index.html
-- Icarus VVP Simulation Engine: https://steveicarus.github.io/iverilog/developer/guide/vvp/vvp.html
-- Verilator Internals: https://github.com/verilator/verilator/blob/master/docs/internals.rst
+How one `$` call crosses the pipeline:
+
+1. Parse. `$name(args)` becomes a language-level call node holding the name and the parsed
+   argument expressions.
+2. Elaborate. The node becomes an IR node carrying a `SysTaskId` or `SysFuncId` — closed
+   enums defined in `sim-ir` — with argument count and types checked and the result type
+   fixed. An unknown name is rejected here.
+3. Dispatch. The engine's `builtins` module maps the id to a handler. Handlers are grouped
+   by category: display and stream IO, file IO, simulation control, time, conversion,
+   bit-vector queries, real math, random and distributions, the dump family, assertion
+   sampling, introspection, string and array methods, and the class and constrained-random
+   surface.
+4. Execute. A handler receives the simulation context it needs — current time, net state,
+   the file table, the heaps — through the `Kernel` seam, so a handler behaves identically
+   under every executor.
+5. Route. Dump-family handlers call `vcd-writer`.
+
+Status at HEAD: this dispatch lives inside `sim-engine`. `hdl-builtins` is the crate
+reserved to receive it as a separate dispatch table, and is a one-line stub. Only step 3's
+location changes if that extraction happens; the ids, the checks and the dump routing are
+unaffected.
+
+The standards reference for each family is under
+[hdl-reference/system-tasks/](hdl-reference/system-tasks/); what vitamin actually supports
+is in [../manual/005_system-tasks.md](../manual/005_system-tasks.md).
+
+---
+
+## 8. What keeps the layering enforceable
+
+A layering rule that only exists in prose decays. Each rule below has a mechanism.
+
+| Rule | Mechanism |
+|---|---|
+| The dependency graph is acyclic and the leaves stay leaves | Cargo refuses a cycle; the manifests in §2 are the statement |
+| A frozen IR type cannot change shape unnoticed | the structural `SchemaHash` root is pinned by `crates/sim-ir/tests/schema_hash.rs`; changing a field flips it |
+| A frozen type stays portable | `crates/sim-ir/tests/no_float_usize.rs` bans `usize`, `isize`, `f32`, `f64`; `no_serde_attrs.rs` bans serde attributes; collections are `BTree`-only and types are span-free |
+| Cross-type IR fields keep one spelling | `crates/sim-ir/tests/body_refs.rs` rejects a bare reference; the fully-qualified `sim_ir::Foo` form is required |
+| A `SchemaHash` type does not move between modules | the canonical key embeds `module_path!()`. This one has no test: it is why `hdl-ast`'s and `sim-ir`'s serialized types live at their crate roots |
+| A new sidecar cannot slip past the native gate | the eligibility check destructures `SimOpts` exhaustively with no rest pattern, so an unclassified field fails to compile |
+| A new statement kind or net kind cannot slip past a classifier | the classifying matches carry no catch-all arm |
+| The executors cannot diverge in output | net writes and waveform emission go through one shared choke point, so only body control flow differs between executors; `crates/sim-engine/tests/backend_equiv.rs` asserts byte-identical stdout and waveform |
+| A diagnostic code and its documentation cannot drift | `crates/diag/tests/bijection.rs` gates the `MsgCode` enum against [15-error-code-reference.md](15-error-code-reference.md), 68 variants, one to one |
+| A source file does not grow past readability | the standing limit is about 1000 lines, split by adding a submodule with a `use super::*` prelude and re-exporting from the crate root, keeping the types at the root so a child module can reach private fields, and never splitting a single `trait impl`. Status at HEAD: 46 non-test source files exceed the limit |
+
+---
+
+## 9. Position relative to the reference implementations
+
+### Icarus Verilog
+
+Icarus splits into `iverilog`, which lexes, parses into a decorated parse tree, elaborates
+to a netlist form and emits a text bytecode through a target API, and `vvp`, which runs it.
+The `vvp` runtime is two-layered: a structural layer of functor nets encoding 4-state as
+two bits with truth tables for combinational logic, and a behavioural layer of threads
+corresponding to `initial` and `always` blocks, interacting with the nets through an
+instruction set and a skip-list event queue.
+
+Shared with vitamin: the front end and run time are separable, 4-state is a first-class
+representation, and execution is event-driven. Icarus is also vitamin's live differential
+oracle for every construct it accepts.
+
+### Verilator
+
+Verilator translates to C++ and lets a general compiler optimize the result: parse, roughly
+twenty AST passes, a static ordering pass, then C++ emission. The emitted evaluation
+function executes regions top to bottom with no dynamic event queue, and multithreading
+comes from statically partitioned macro-tasks. Its own internals document states that
+dynamic scheduling is rejected in favour of the static assignment.
+
+That choice buys speed and gives up complete IEEE 1800 stratified event scheduling, which
+is exactly the property vitamin has to hold from the start, together with timescale
+precision and waveform accuracy.
+
+### Where vitamin sits
+
+vitamin is event-driven and 4-state, in the same class as Icarus, and its default executor
+is compiled: the native backend runs the whole corpus byte-exactly against the interpreter
+and is the only executor in a release-shaped build. What is not adopted is the C++ or
+machine-code generation half of Verilator's approach — cranelift was built, wired and
+measured, and rejected on the numbers.
+
+The `sim-ir` boundary is what made replacing the executor possible without touching the
+front end, which is the load-bearing claim of this whole architecture.
+
+---
+
+## Related documents
+
+- [03-build-and-portability.md](03-build-and-portability.md) — the workspace, the features
+  and the CI axes referred to above
+- [06-simulation-engine.md](06-simulation-engine.md) — the scheduler, the regions and the
+  process model
+- [13-diagnostics-and-logging.md](13-diagnostics-and-logging.md) — the diagnostic model and
+  the exit-class contract
+- [14-staged-artifacts.md](14-staged-artifacts.md) — the on-disk artifacts, work libraries
+  and staleness rules
+- [16-schema-hash-spec.md](16-schema-hash-spec.md),
+  [17-sim-ir-ir-backbone-freeze.md](17-sim-ir-ir-backbone-freeze.md) — the structural hash
+  and the frozen types
+- [21-tier3-native-backend.md](21-tier3-native-backend.md) — the native backend's design, its
+  eligibility gates, its refusal and fallback path and its equivalence contract
+- [study/02](../study/02-v1-native-coverage.md) — the coverage terminology and the native
+  backend's measured coverage
+- [../history/research-log/eda-architectures-2026-05-28.md](../history/research-log/eda-architectures-2026-05-28.md)
+  — the source notes behind the comparison above
+- Icarus Verilog developer guide: https://steveicarus.github.io/iverilog/developer/guide/index.html
+- Verilator internals: https://github.com/verilator/verilator/blob/master/docs/internals.rst
 - Yosys RTLIL: https://yosyshq.readthedocs.io/projects/yosys/en/stable/yosys_internals/formats/rtlil_rep.html

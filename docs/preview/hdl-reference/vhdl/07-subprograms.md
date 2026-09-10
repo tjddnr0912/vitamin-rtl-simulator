@@ -1,55 +1,57 @@
 # 07 · VHDL Subprograms — Function & Procedure
 
-IEEE 1076-2008 §4 기준. Subprogram(하위 프로그램)은 **function**과 **procedure** 두 종류다. 반복 로직의 추상화, 연산자 오버로딩, 테스트벤치 유틸리티 작성에 핵심적으로 사용한다.
+Per IEEE 1076-2008 §4. A subprogram is either a **function** or a **procedure**. Subprograms are the
+main tool for abstracting repeated logic, overloading operators and writing testbench utilities.
 
 ---
 
-## Function vs Procedure 비교
+## Function vs procedure
 
-| 항목 | function | procedure |
+| Item | function | procedure |
 |------|---------|-----------|
-| 반환값 | 정확히 1개 (`return TYPE`) | 없음 (`return;`으로 조기 탈출만) |
-| 호출 문맥 | **expression** (값이 필요한 곳) | **statement** (문장 위치) |
-| 파라미터 모드 | `in`만 허용 | `in` / `out` / `inout` 모두 허용 |
-| 파라미터 클래스 | constant, signal, file (`in`) | constant, signal, variable, file |
-| `wait` 문 | 포함 불가 | 포함 가능 (시뮬레이션) |
-| 순수성(purity) | `pure`(기본) / `impure` 선택 | 본질적으로 impure |
-| concurrent 호출 | 불가 (expression이므로) | 가능 (concurrent procedure call) |
+| Return value | exactly one (`return TYPE`) | none (`return;` is an early exit only) |
+| Call context | an **expression** (wherever a value is needed) | a **statement** (in statement position) |
+| Parameter modes | `in` only | `in` / `out` / `inout` |
+| Parameter classes | constant, signal, file (`in`) | constant, signal, variable, file |
+| `wait` statement | not allowed | allowed (simulation) |
+| Purity | `pure` (default) / `impure` | inherently impure |
+| Concurrent call | no (it is an expression) | yes (concurrent procedure call) |
 
 ---
 
 ## Function
 
-### 문법
+### Syntax
 
 ```vhdl
 [pure|impure] function FUNC_NAME (
     param1 : [constant|signal|file] in type_name [:= default_val];
     param2 : in type_name [:= default_val]
 ) return return_type is
-    -- 선언부: 변수, 상수, 중첩 subprogram 등
+    -- declarative part: variables, constants, nested subprograms, ...
 begin
-    -- 순차 문장
+    -- sequential statements
     return expression;
 end [function] [FUNC_NAME];
 ```
 
-- `pure`가 기본값이므로 생략 가능. 불순(impure)임을 명시할 때만 `impure` 키워드를 쓴다.
-- **함수 선언(declaration)** 은 별도 작성 선택적 — body만으로 충분.
-- `return` 문은 반드시 포함해야 한다.
+- `pure` is the default and may be omitted. The `impure` keyword is written only to declare that the
+  function is impure.
+- A separate **function declaration** is optional — the body alone is enough.
+- A `return` statement must be present.
 
 ### pure vs impure
 
-| | `pure` (기본) | `impure` |
+| | `pure` (default) | `impure` |
 |-|--------------|---------|
-| 동일 인자 → 동일 반환 | **보장** | 보장 안 됨 |
-| 스코프 외부 객체 접근 | **불가** (shared variable, file 등) | 가능 |
-| impure function 호출 | **불가** | 가능 |
-| 합성 | 제한 없음 | 외부 상태 의존 시 비합성 |
-| 대표 용례 | 조합 논리, 형 변환, 수학 연산 | 난수 생성, 파일 stimulus 읽기 |
+| Same arguments → same result | **guaranteed** | not guaranteed |
+| Access to objects outside the scope | **not allowed** (shared variables, files, ...) | allowed |
+| Calling an impure function | **not allowed** | allowed |
+| Synthesis | no restriction | not synthesizable when it depends on external state |
+| Typical use | combinational logic, type conversion, arithmetic | random-number generation, reading file stimulus |
 
 ```vhdl
--- pure function: 조합 로직 추상화
+-- pure function: abstracting combinational logic
 pure function parity(v : std_logic_vector) return std_logic is
     variable p : std_logic := '0';
 begin
@@ -59,7 +61,7 @@ begin
     return p;
 end function parity;
 
--- impure function: 공유 상태 접근 (testbench 용)
+-- impure function: reaching shared state (for a testbench)
 shared variable seed1 : integer := 42;
 shared variable seed2 : integer := 17;
 
@@ -71,77 +73,79 @@ begin
 end function rand_int;
 ```
 
-### 파라미터 기본값
+### Parameter defaults
 
 ```vhdl
--- 기본값이 있는 파라미터는 호출 시 생략 가능
+-- a parameter with a default may be omitted at the call site
 function to_slv(
     val   : integer;
-    width : natural := 8         -- 기본값: 8
+    width : natural := 8         -- default: 8
 ) return std_logic_vector is
 begin
     return std_logic_vector(to_unsigned(val, width));
 end function;
 
--- 호출 예시
-signal a : std_logic_vector(7 downto 0) := to_slv(42);       -- width=8 생략
-signal b : std_logic_vector(15 downto 0) := to_slv(42, 16);  -- 명시
+-- calls
+signal a : std_logic_vector(7 downto 0) := to_slv(42);       -- width=8 omitted
+signal b : std_logic_vector(15 downto 0) := to_slv(42, 16);  -- given explicitly
 ```
 
-### 재귀 함수
+### Recursive functions
 
 ```vhdl
--- 컴파일 시간에 깊이가 결정돼야 합성 가능
+-- synthesizable only if the depth is fixed at compile time
 function clog2(n : positive) return natural is
 begin
     if n <= 1 then
         return 0;
     else
-        return 1 + clog2((n + 1) / 2);   -- 재귀 호출
+        return 1 + clog2((n + 1) / 2);   -- recursive call
     end if;
 end function clog2;
 
--- 용례: 주소 버스 폭 계산 (elaboration time 상수로만 사용)
+-- use: computing an address-bus width (used only as an elaboration-time constant)
 constant ADDR_WIDTH : natural := clog2(MEM_DEPTH);
 ```
 
-> **합성 주의:** 재귀 함수는 elaboration 단계에서 정적으로 unroll돼야 한다. 런타임에 깊이가 결정되는 재귀는 비합성.
+> **Synthesis note:** a recursive function has to unroll statically during elaboration. Recursion
+> whose depth is decided at run time is not synthesizable.
 
 ---
 
 ## Procedure
 
-### 문법
+### Syntax
 
 ```vhdl
 procedure PROC_NAME (
     signal   clk   : in    std_logic;
     variable data  : out   integer;
     signal   bus   : inout std_logic_vector(7 downto 0);
-    constant LIMIT : in    integer := 255    -- 기본값 지원
+    constant LIMIT : in    integer := 255    -- defaults are supported
 ) is
-    -- 선언부
+    -- declarative part
 begin
-    -- 순차 문장 (wait 포함 가능)
-    [return;]   -- 선택적, 조기 종료
+    -- sequential statements (wait allowed)
+    [return;]   -- optional, an early exit
 end [procedure] [PROC_NAME];
 ```
 
-- **모드별 기본 클래스**: `in` → constant, `out`/`inout` → variable (signal 명시하면 signal).
-- `out` / `inout` 파라미터를 통해 여러 값을 반환하는 것처럼 사용.
+- **Default class per mode**: `in` → constant, `out` / `inout` → variable (signal if `signal` is
+  written explicitly).
+- `out` / `inout` parameters are how a procedure effectively returns several values.
 
-### 파라미터 모드
+### Parameter modes
 
 ```vhdl
 procedure add_with_carry (
     a, b   : in  unsigned(7 downto 0);
-    result : out unsigned(8 downto 0)   -- 9비트로 올림수 포함
+    result : out unsigned(8 downto 0)   -- 9 bits, so the carry fits
 ) is
 begin
     result := ('0' & a) + ('0' & b);
 end procedure;
 
--- 호출
+-- calling it
 procedure_result : process(a, b)
     variable sum9 : unsigned(8 downto 0);
 begin
@@ -151,10 +155,10 @@ begin
 end process;
 ```
 
-### signal 파라미터 + wait (testbench 용)
+### signal parameters + wait (for testbenches)
 
 ```vhdl
--- testbench에서 SPI write 시퀀스 캡슐화
+-- encapsulating an SPI write sequence in a testbench
 procedure spi_write (
     signal sck   : out std_logic;
     signal mosi  : out std_logic;
@@ -176,59 +180,60 @@ begin
     wait for T;
 end procedure;
 
--- testbench process에서 호출
+-- called from a testbench process
 spi_write(sck, mosi, cs_n, X"A5");
 ```
 
-### Concurrent Procedure Call
+### Concurrent procedure call
 
 ```vhdl
--- 아키텍처 body 레벨(concurrent 영역)에서 직접 호출 가능
--- 내부적으로 자동으로 process로 래핑됨
+-- may be called directly at architecture-body level (the concurrent region)
+-- it is wrapped in a process automatically
 LABEL : PROC_NAME(port_or_signal_list);
 
--- 예시: 동일 아키텍처에서 버스 모니터 연속 실행
+-- example: running a bus monitor continuously in the same architecture
 bus_mon : monitor_bus(clk, addr, data, wr_en);
 ```
 
 ---
 
-## Subprogram Overloading
+## Subprogram overloading
 
-같은 이름으로 다른 타입 시그니처를 가진 subprogram을 여러 개 정의할 수 있다. 컴파일러가 인자 타입을 보고 올바른 버전을 선택한다.
+Several subprograms may share one name as long as their type signatures differ. The compiler picks
+the right version from the argument types.
 
 ```vhdl
--- 타입별 오버로딩
+-- overloaded by type
 function to_slv(val : integer;  width : natural) return std_logic_vector;
 function to_slv(val : unsigned)                  return std_logic_vector;
 function to_slv(val : boolean)                   return std_logic_vector;
 
--- 호출 시 자동 선택
-signal a : std_logic_vector(7 downto 0) := to_slv(42, 8);   -- 첫 번째
-signal b : std_logic_vector(7 downto 0) := to_slv(u_val);   -- 두 번째
-signal c : std_logic_vector(0 downto 0) := to_slv(true);    -- 세 번째
+-- selected automatically at the call site
+signal a : std_logic_vector(7 downto 0) := to_slv(42, 8);   -- the first
+signal b : std_logic_vector(7 downto 0) := to_slv(u_val);   -- the second
+signal c : std_logic_vector(0 downto 0) := to_slv(true);    -- the third
 ```
 
 ---
 
-## 연산자 오버로딩 (Operator Overloading)
+## Operator overloading
 
-함수 이름을 **연산자 문자열**로 지정하면 해당 연산자를 새 타입에 대해 정의할 수 있다.
+Naming a function after an **operator string** defines that operator for a new type.
 
-### 오버로딩 가능 연산자
+### Overloadable operators
 
-| 분류 | 연산자 |
+| Class | Operators |
 |------|--------|
-| 산술 | `+` `-` `*` `/` `**` `mod` `rem` `abs` |
-| 비교 | `=` `/=` `<` `<=` `>` `>=` |
-| 논리 | `and` `or` `nand` `nor` `xor` `xnor` `not` |
-| 시프트 | `sll` `srl` `sla` `sra` `rol` `ror` |
-| 연결 | `&` |
+| Arithmetic | `+` `-` `*` `/` `**` `mod` `rem` `abs` |
+| Relational | `=` `/=` `<` `<=` `>` `>=` |
+| Logical | `and` `or` `nand` `nor` `xor` `xnor` `not` |
+| Shift | `sll` `srl` `sla` `sra` `rol` `ror` |
+| Concatenation | `&` |
 
-### 정의 문법
+### Definition syntax
 
 ```vhdl
--- 연산자 함수: 이름이 큰따옴표로 감싼 연산자 기호
+-- an operator function: the name is the operator symbol in double quotes
 function "+" (L, R : my_vec_t) return my_vec_t is
 begin
     return my_vec_t(unsigned(L) + unsigned(R));
@@ -240,11 +245,11 @@ begin
 end "<";
 ```
 
-### Package에서 정의하는 패턴 (권장)
+### Defining them in a package (recommended)
 
 ```vhdl
 package my_types_pkg is
-    type q16_t is array (15 downto 0) of std_logic;  -- 16비트 고정소수점
+    type q16_t is array (15 downto 0) of std_logic;  -- 16-bit fixed point
 
     function "+" (L, R : q16_t) return q16_t;
     function "-" (L, R : q16_t) return q16_t;
@@ -256,25 +261,26 @@ package body my_types_pkg is
     begin
         return q16_t(signed(L) + signed(R));
     end "+";
-    -- ... 나머지 구현
+    -- ... the rest of the implementations
 end package body;
 ```
 
-연산자 오버로딩은 `ieee.std_logic_1164`, `ieee.numeric_std` 패키지 내부에서도 이 방식으로 std_logic/unsigned/signed 연산을 정의한다.
+This is exactly how `ieee.std_logic_1164` and `ieee.numeric_std` define their std_logic, unsigned
+and signed operations internally.
 
 ---
 
-## Subprogram Declarations vs Bodies
+## Subprogram declarations vs bodies
 
 ```vhdl
 package util_pkg is
-    -- 선언(declaration): 시그니처만
+    -- declaration: the signature only
     function parity(v : std_logic_vector) return std_logic;
     procedure check_range(val, lo, hi : in integer);
 end package;
 
 package body util_pkg is
-    -- 본체(body): 실제 구현
+    -- body: the actual implementation
     function parity(v : std_logic_vector) return std_logic is
         variable p : std_logic := '0';
     begin
@@ -291,34 +297,34 @@ package body util_pkg is
 end package body;
 ```
 
-- **Package spec**에 선언, **package body**에 구현.
-- 단독 entity/architecture 내에서는 body만으로 충분 (선언 선택적).
-- 선언과 body가 분리돼 있으면 전방 참조(forward reference) 가능.
+- Declare in the **package spec**, implement in the **package body**.
+- Inside a single entity/architecture the body alone is enough (the declaration is optional).
+- Splitting the declaration from the body is what makes a forward reference possible.
 
 ---
 
-## 합성 체크리스트
+## Synthesis checklist
 
-| 패턴 | 합성 결과 | 비고 |
+| Pattern | Synthesis result | Note |
 |------|----------|------|
-| pure function, no wait | ✅ 합성 가능 | 조합 논리로 변환 |
-| impure function (외부 상태 없음) | ✅ 합성 가능 | 실질적으로 pure |
-| impure function (shared var 접근) | ❌ 비합성 | 글로벌 상태 = 비합성 |
-| function with wait | ❌ 비합성 | wait = 비합성 |
-| procedure (no wait, no signal param) | ✅ 합성 가능 | |
-| procedure with wait | ❌ 비합성 | testbench 전용 |
-| recursion (정적 깊이) | ✅ 합성 가능 | elaboration 시 unroll |
-| recursion (동적 깊이) | ❌ 비합성 | 런타임 깊이 불가 |
-| operator overloading | ✅ 합성 가능 | 구현 함수가 합성 가능이면 |
-| overloaded operator with file I/O | ❌ 비합성 | file I/O 포함 시 |
+| pure function, no wait | ✅ synthesizable | becomes combinational logic |
+| impure function (no external state) | ✅ synthesizable | effectively pure |
+| impure function (touches a shared variable) | ❌ not synthesizable | global state = not synthesizable |
+| function with wait | ❌ not synthesizable | wait = not synthesizable |
+| procedure (no wait, no signal parameter) | ✅ synthesizable | |
+| procedure with wait | ❌ not synthesizable | testbench only |
+| recursion (static depth) | ✅ synthesizable | unrolled during elaboration |
+| recursion (dynamic depth) | ❌ not synthesizable | a run-time depth is impossible |
+| operator overloading | ✅ synthesizable | provided the implementing function is |
+| overloaded operator with file I/O | ❌ not synthesizable | because of the file I/O |
 
 ---
 
 ## Sources
 
 - IEEE 1076-2008 §4 (Subprograms and packages)
-- Azimuth — VHDL Function vs Procedure (2025-02-23): https://azimuth.tech/2025/02/23/whats-the-difference-between-a-vhdl-function-or-procedure/ ✓ WebFetch 검증
-- VHDL-Online — Subprograms: https://www.vhdl-online.de/courses/system_design/vhdl_language_and_syntax/subprograms ✓ WebFetch 검증
-- HDLworks — Function reference: https://www.hdlworks.com/hdl_corner/vhdl_ref/VHDLContents/Function.htm ✓ WebFetch 검증
+- Azimuth — VHDL Function vs Procedure: https://azimuth.tech/2025/02/23/whats-the-difference-between-a-vhdl-function-or-procedure/ (WebFetch ✓)
+- VHDL-Online — Subprograms: https://www.vhdl-online.de/courses/system_design/vhdl_language_and_syntax/subprograms (WebFetch ✓)
+- HDLworks — Function reference: https://www.hdlworks.com/hdl_corner/vhdl_ref/VHDLContents/Function.htm (WebFetch ✓)
 - HDLworks — Operator Overloading: https://www.hdlworks.com/hdl_corner/vhdl_ref/VHDLContents/OperatorOverloading.htm
-- Research log: [vhdl-subprograms-pkg-synth-2026-05-28.md](../../research-log/vhdl-subprograms-pkg-synth-2026-05-28.md)
+- Research log: [vhdl-subprograms-pkg-synth-2026-05-28.md](../../../history/research-log/vhdl-subprograms-pkg-synth-2026-05-28.md)

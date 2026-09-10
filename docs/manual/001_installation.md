@@ -1,43 +1,72 @@
-# 1. Installation
+# 001 · Installation
 
-vitamin is an open-source RTL simulator written in Rust. It ships as a single
-binary, `vita`, which acts as the one-shot driver and also dispatches the staged
-commands `vcmp` / `velab` / `vrun` by the name it is invoked under.
+This chapter covers the prerequisites and why each version is what it is, building from source,
+what the build produces, installing, reaching the staged commands, `PATH`, and verifying the
+result.
 
-> **Supported platforms: Linux and macOS only.**
-> Windows is **not** currently supported — it is not a build target in
-> `rust-toolchain.toml` and is not exercised in CI. There are no Windows install
-> steps; do not expect a Windows build to work.
-
-The supported targets are:
-
-- `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
-- `x86_64-apple-darwin`, `aarch64-apple-darwin` (Intel + Apple Silicon)
-
-vitamin is **built from source on the target machine** — there is no vendor
-prebuilt binary. `cargo` is the only build entry point: no `cmake`, no `make`, no
-`build.rs` shell-out.
+vitamin is built from source on the target machine. There is no vendor prebuilt binary, and
+`cargo` is the only build entry point — no `cmake`, no `make`, no `build.rs` in any vitamin
+crate.
 
 ---
 
-## 1.1 Prerequisites
+## 1.1 Platforms
 
-You need a Rust toolchain. vitamin pins **Rust 1.85** (the MSRV) via
-`rust-toolchain.toml` at the repository root, so once Rust is installed through
-`rustup`, the correct version is selected **automatically** when you run any
-`cargo` command inside the checkout — you do not need to pick a version by hand.
+| Item | Value |
+|---|---|
+| Operating systems | Linux and macOS |
+| Targets | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin` |
+| Windows | Not supported. It is not a target in `rust-toolchain.toml`, it has no CI runner, and there are no Windows install steps |
 
-Install `rustup` (same command on Linux and macOS):
+CI builds and runs the full suite on `ubuntu-latest`, on `macos-latest`, and inside a
+`redhat/ubi9` container.
+
+---
+
+## 1.2 Prerequisites
+
+### Rust toolchain
+
+A Rust toolchain installed through `rustup`. The exact version is pinned in the repository, so
+once `rustup` is present the correct compiler is selected automatically by any `cargo` command
+run inside the checkout.
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ```
 
-Then restart your shell (or `source "$HOME/.cargo/env"`) so `cargo` is on your
-`PATH`. The first `cargo` invocation in the repo downloads and uses the pinned
-1.85.0 toolchain on its own.
+Restart the shell, or `source "$HOME/.cargo/env"`, so `cargo` is on `PATH`. The first `cargo`
+invocation inside the checkout downloads the pinned toolchain on its own.
 
-On a fresh RHEL/Fedora box you may also need a C linker for the final link step:
+`rust-toolchain.toml` at the repository root is the authority:
+
+```toml
+[toolchain]
+channel = "1.85.0"
+components = ["rustfmt", "clippy", "rust-src"]
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+```
+
+### Why these versions
+
+| Requirement | Version | Reason |
+|---|---|---|
+| **rustc / cargo** | 1.85.0 | The FST writer, `fst-writer 0.3.x`, is edition 2024, which requires rustc 1.85. The workspace declares `rust-version = "1.85"` as a floor with no upper bound — newer toolchains are fine, and vitamin's own crates stay on edition 2021 |
+| **`fst-writer`** | `=0.3.1` | The 0.2.x line writes a malformed FST time table that GTKWave tolerates and wellen — the reader behind Surfer — rejects. 0.3.x fixes it. This pin is what sets the 1.85 floor |
+| **`fst-reader`** | `=0.10.2` | A development dependency only: an independent FST reader used as the oracle for the VCD-to-FST transcode, so an emitted FST is read back and compared |
+| **`blake3`** | `=1.8.2` | Digest for schema hashes and artifact headers. 1.8.3 and later move to edition 2024 |
+| **`libm`** | vendored 0.2.16, `default-features = false` | Hardware float intrinsics are switched off so `f64` transcendentals are bit-identical on every IEEE-754 target. It lives at `third_party/libm` and is excluded from the workspace |
+| **`cranelift-*`** | 0.120 | Only reachable through the `jit` feature, which is off by default. 0.120 is the newest line that builds on rustc 1.85 |
+
+### A C linker
+
+The final link step needs a system C linker. Most desktop installs already have one. On a bare
+RHEL, UBI or Fedora image:
 
 ```sh
 sudo dnf install -y gcc
@@ -45,119 +74,149 @@ sudo dnf install -y gcc
 
 ---
 
-## 1.2 Build from source
-
-Clone the repository and build the whole workspace in release mode. `--locked`
-uses the committed `Cargo.lock` so the build is reproducible across machines:
+## 1.3 Build from source
 
 ```sh
-git clone https://github.com/your-org/vitamin
-cd vitamin
+git clone https://github.com/tjddnr0912/vitamin-rtl-simulator
+cd vitamin-rtl-simulator
 cargo build --release --workspace --locked
 ```
 
-This produces the single multicall binary at `target/release/vita`.
+`--locked` uses the committed `Cargo.lock`, which is what makes the build reproducible across
+machines. Use it for every command.
 
-To run the test suite (the deterministic golden gate is part of it):
+A debug build of just the driver is faster to produce and is what the examples use:
 
 ```sh
-cargo test --workspace --locked
+cargo build -p cli
 ```
-
-`cargo run` from the checkout is a contributor workflow, not the end-user path —
-the intended flow is to **install** the binary (next section) and invoke it as a
-terminal command.
-
-> **If you build repeatedly, sweep `target/`.** Cargo writes a new hashed binary
-> per test target per build and never reclaims the superseded ones, and this
-> workspace has **513 integration-test targets** — so every `cargo test
-> --workspace` leaves another full set on disk. Measured on one development
-> machine: **59 GiB across 357,247 files in two months** (~25 GiB/month).
->
-> ```sh
-> cargo install cargo-sweep
-> cargo sweep --time 2      # add -d for a dry run
-> ```
->
-> A 2-day retention took that tree to **3.5 GiB** while keeping every current
-> artifact — the next `cargo build --workspace --locked` finished in 0.08 s with
-> nothing to recompile. Use this rather than `cargo clean`, which also throws away
-> artifacts that are still current and forces a full rebuild. Do not sweep while a
-> build or test run is in flight. This only affects the build tree; installed
-> binaries and simulation results are untouched.
 
 ---
 
-## 1.3 Install
+## 1.4 What the build produces
 
-Install `vita` into `~/.cargo/bin` (which `rustup` already added to your `PATH`):
+| Artifact | Built by | Notes |
+|---|---|---|
+| `target/release/vita` | `cargo build --release --workspace --locked` | The multicall binary. This is the whole product |
+| `target/debug/vita` | `cargo build -p cli` | Same binary, debug profile. Considerably slower to run |
+| `target/<profile>/{vcmp,velab,vrun}` | `cargo build --features separate-bins --locked` | Standalone per-stage executables, behind the development-only `separate-bins` feature. Each is a shim over the same multicall entry point, for debugging one stage in isolation |
+| `target/<profile>/corpus-runner` | `cargo build -p corpus-runner` | A development tool that fetches, runs and grades the workload corpus. Not part of the product |
+
+The default build emits exactly one executable, `vita`. The three staged names are reached
+either through links to it or through its subcommand form; see §1.6.
+
+---
+
+## 1.5 Install
+
+### With `install.sh`
+
+The bundled [`install.sh`](../../install.sh) does both steps — install the binary, then create
+the staged names next to it:
+
+```sh
+./install.sh
+```
+
+It runs from any working directory, because it resolves the repository root from its own
+location. What it does, in order:
+
+1. `cargo install --path crates/cli --locked`, which places `vita` in `~/.cargo/bin` (or
+   `$CARGO_HOME/bin`).
+2. Locates the installed binary with `command -v vita`, falling back to
+   `${CARGO_HOME:-$HOME/.cargo}/bin/vita`. If neither is executable it prints
+   `error: could not locate the installed 'vita' binary.` and exits 1.
+3. For each of `vcmp`, `velab` and `vrun`, creates a symbolic link to `vita` in the same
+   directory, printing `    linked  <name> -> vita`. If the filesystem rejects links it copies
+   the binary instead and prints `    copied  <name> (link not supported on this filesystem)`.
+   If both fail it prints `error: failed to create '<path>'.` and exits 1.
+4. Prints `Done. Installed: vita, vcmp, velab, vrun  (in <dir>)` and a `PATH` hint.
+
+The result is one real binary plus three names for it:
+
+| Path | What it is |
+|---|---|
+| `~/.cargo/bin/vita` | The executable |
+| `~/.cargo/bin/vcmp` | Link to `vita` |
+| `~/.cargo/bin/velab` | Link to `vita` |
+| `~/.cargo/bin/vrun` | Link to `vita` |
+
+### By hand
+
+Install the binary on its own:
 
 ```sh
 cargo install --path crates/cli --locked
 ```
 
-Only the `cli` crate produces an installable binary, and the default build emits
-exactly one `[[bin]]` (`vita`), so this is unambiguous — no `--bin` selector is
-needed.
+Only the `cli` crate produces an installable binary and the default build emits exactly one
+`[[bin]]`, so no `--bin` selector is needed.
 
-If you install straight from git instead of a local checkout, select the package
-explicitly:
+Straight from git, without a local checkout, name the package explicitly:
 
 ```sh
-cargo install --git https://github.com/your-org/vitamin -p cli --locked
+cargo install --git https://github.com/tjddnr0912/vitamin-rtl-simulator -p cli --locked
 ```
 
-### The multicall link farm — `vcmp` / `velab` / `vrun`
-
-`vita` is a **multicall** binary: it inspects the basename of `argv[0]` and
-dispatches accordingly — invoked as `vcmp`/`velab`/`vrun` it runs that stage;
-invoked as anything else (`vita`) it runs the one-shot pipeline. So the three
-staged commands are just **links to the same `vita` binary** under different
-names. After `cargo install`, create them next to the installed `vita`:
+Then create the staged names yourself:
 
 ```sh
 VITA="$(command -v vita)"
 BIN="$(dirname "$VITA")"
 for s in vcmp velab vrun; do
-  ln -sf "$VITA" "$BIN/$s"   # symlink; falls back to a copy if your FS rejects links
+  ln -sf "$VITA" "$BIN/$s"
 done
 ```
 
-Hardlinks (`ln -f`) are equivalent and let the linked names share one signed
-binary; symlinks are simpler and portable across filesystems. Either works — the
-dispatch is driven purely by the invocation name.
-
-The bundled [`install.sh`](../../install.sh) automates both steps: it runs the
-`cargo install` above, then creates the `vcmp`/`velab`/`vrun` links (symlink
-first, copy as a fallback).
-
-> If the binary is ever renamed or its `argv[0]` is otherwise mangled so the
-> basename is no longer recognized, you can still reach a stage explicitly:
-> `vita vcmp …`, `vita velab …`, `vita vrun …`.
+Symbolic links and hard links both work; dispatch reads the invocation name, not the inode.
 
 ---
 
-## 1.4 PATH
+## 1.6 The staged commands without links
 
-`rustup` puts `~/.cargo/bin` on your `PATH`, so a `cargo install` build needs no
-extra setup. If you installed Rust another way and the command is not found, add
-it yourself:
+`vita` decides which applet runs from the file stem of `argv[0]`, and failing that from the
+first argument. So every stage is reachable from the plain `vita` name:
+
+```sh
+vita vcmp  design.sv      # -> design.vu
+vita velab design.vu      # -> design.velab
+vita vrun  design.velab   # -> waveform + stdout
+```
+
+`vita <stage>` consumes the stage token and forwards the remaining arguments unchanged. The
+token has to be the first argument. This form is the fallback whenever links are unavailable or
+the binary has been renamed.
+
+---
+
+## 1.7 PATH
+
+`rustup` puts `~/.cargo/bin` on `PATH`, so a `cargo install` needs no further setup. If Rust was
+installed another way and the command is not found:
 
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"
 ```
 
-(Put that line in your shell profile to make it permanent.) A system-wide
-`/usr/local/bin` install is not required.
+Put that line in a shell profile to keep it. A system-wide `/usr/local/bin` install is not
+required.
 
 ---
 
-## 1.5 Verify
+## 1.8 Verify
 
-A quick smoke test — write a trivial testbench and run it one-shot:
+Check the binary answers:
+
+```console
+$ vita --version
+vita 0.2.0
+```
+
+Run a design end to end:
 
 ```sh
 cat > hello.sv <<'EOF'
+`timescale 1ns/1ns
 module tb;
   initial begin
     $display("hello from vitamin");
@@ -169,16 +228,77 @@ EOF
 vita hello.sv
 ```
 
-You should see `hello from vitamin` on stdout and a clean exit (code 0). The
-staged flow over the same design:
+stdout carries the transcript and the closing summary line:
+
+```text
+hello from vitamin
+simulation ended (Finish) at time 0
+```
+
+stderr carries the diagnostic counts:
+
+```text
+errors=0 warnings=0 notes=0
+```
+
+The exit code is 0. Dropping the `` `timescale `` line still runs, and adds one warning to
+stderr:
+
+```text
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+```
+
+The same design through the staged flow:
 
 ```sh
-vcmp  hello.sv -o hello.vu        # compile  → .vu
-velab hello.vu -o hello.velab     # elaborate → .velab
-vrun  hello.velab                 # simulate → VCD + stdout
+vita vcmp  hello.sv  -o hello.vu
+vita velab hello.vu  -o hello.velab
+vita vrun  hello.velab
 ```
+
+The staged flow and the one-shot flow produce byte-identical stdout and byte-identical waveform
+bytes for the same design; a test suite gates that equality.
+
+### The test suite
+
+Two runners cover the same tests and are not interchangeable — switching between them in one
+session forces a rebuild, so pick one and stay on it.
+
+| Command | Role | Result at HEAD |
+|---|---|---|
+| `cargo test --workspace --locked` | The suite CI runs | — |
+| `cargo nextest run --workspace --locked` | The local full gate; reads `.config/nextest.toml`, which caps any single test at 60 s with four attempts | 7352 tests run, 7352 passed, 15 skipped, exit 0, 35.8 s |
+
+The lint and format gates, which CI also enforces:
+
+```sh
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo fmt --all -- --check
+```
+
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for the contributor workflow.
 
 ---
 
-Next: see the sibling chapters for usage of the one-shot driver and the staged
-`vcmp → velab → vrun` flow. Back to [Installation](001_installation.md).
+## 1.9 Keeping `target/` small
+
+Cargo writes a fresh hashed executable per test target per build and never reclaims the
+superseded ones. The workspace carries 613 integration-test targets, so a repeated
+`cargo test --workspace` accumulates a full set each time. One development machine measured
+59 GiB across 357,247 files over two months, about 25 GiB per month.
+
+```sh
+cargo install cargo-sweep
+cargo sweep --time 2      # -d for a dry run
+```
+
+A two-day retention keeps every current artifact: after a sweep that took one tree to 3.5 GiB,
+the next `cargo build --workspace --locked` finished in 0.08 s with nothing to recompile.
+
+Prefer this to `cargo clean`, which also discards artifacts that are still current and forces a
+full rebuild. Do not sweep while a build or test run is in flight. Sweeping affects only the
+build tree; installed binaries and simulation results are untouched.
+
+---
+
+Next: [Quickstart](002_quickstart.md) walks one design from source file to waveform.

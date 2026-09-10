@@ -1,36 +1,37 @@
-# 13 · 기타 태스크 (Plusargs · System · Severity · Exit)
+# 13 · Miscellaneous Tasks (Plusargs · System · Severity · Exit)
 
-## 개요
+## Overview
 
-이 카테고리는 테스트 인프라를 구성하는 네 가지 유틸리티 그룹을 다룬다.
+This category covers four groups of utilities that make up the test infrastructure.
 
-- **Plusargs** (`$test$plusargs`, `$value$plusargs`): 커맨드라인 인자를 시뮬레이션 코드로 전달하는 채널
-- **Shell 실행** (`$system`): OS 셸 명령을 시뮬레이션 안에서 호출
-- **심각도 태스크** (`$fatal`, `$error`, `$warning`, `$info`): elaboration/simulation 양쪽에서 사용하는 구조화된 진단 출력
-- **테스트 종료** (`$exit`): program block 기반 테스트벤치의 단계 제어
+- **Plusargs** (`$test$plusargs`, `$value$plusargs`): the channel that carries command-line
+  arguments into simulation code
+- **Shell execution** (`$system`): running an OS shell command from inside the simulation
+- **Severity tasks** (`$fatal`, `$error`, `$warning`, `$info`): structured diagnostic output usable
+  from both elaboration and simulation
+- **Test termination** (`$exit`): phase control for a program-block testbench
 
-## 구현 상태
+## vita support
 
-- ✅ **구현됨**: `$test$plusargs`, `$value$plusargs`(format 코드 파서 + ref-VAR 쓰기 statement-level 인터셉트, format_version 7), `$fatal`, `$error`, `$warning`, `$info`(severity 태스크 — `$fatal`=exit1, elaboration/simulation 양 컨텍스트), `$exit`(v9 — `$finish` 별칭으로 배선: `SysTaskId::Finish`).
-- ⏳ **미구현**: `$system`.
-  - `$system`은 `SysFuncId`/`SysTaskId` 어디에도 미배선이다. **함수 형태**(`ret = $system(...)`)는 expression 경로에서 `E3009 "unsupported system function"`로 loud-reject되고, **태스크 형태**(`$system("...")`)는 unknown-task 경로라 `W-ELAB-FEATURE-LIMIT` 경고 후 스킵된다(no-op, 테스트벤치 생존).
+This note describes the language, not the simulator. What vita accepts today is recorded in
+[docs/manual/003_language-reference.md](../../../manual/003_language-reference.md).
 
 ---
 
-## Plusargs — 커맨드라인에서 값 읽기
+## Plusargs — reading values from the command line
 
-### `$test$plusargs(user_string)` — boolean flag 감지
+### `$test$plusargs(user_string)` — detecting a boolean flag
 
-- **표준**: IEEE 1800-2017 §20.10
-- 커맨드라인에 공급된 plusarg 중 하나라도 `user_string`으로 시작하면
-  non-zero(1)을 반환하고, 없으면 0을 반환한다.
-- **prefix 매칭** 방식이다: `+VERBOSE_MODE`라는 arg는
-  `"V"`, `"VERBOSE"`, `"VERBOSE_MODE"` 모두에 매칭된다.
-- **대소문자 구분(case-sensitive)**.
-- 값이 필요 없는 boolean flag 활성화에 적합하다.
+- **Standard**: IEEE 1800-2017 §20.10
+- Returns non-zero (1) when any plusarg supplied on the command line starts with `user_string`, and
+  0 otherwise.
+- The match is a **prefix match**: an argument `+VERBOSE_MODE` matches
+  `"V"`, `"VERBOSE"` and `"VERBOSE_MODE"` alike.
+- It is **case-sensitive**.
+- It suits boolean flags, where no value is needed.
 
 ```sv
-// 시뮬레이션 코드
+// the simulation code
 initial begin
   if ($test$plusargs("VERBOSE"))
     $display("[DEBUG] verbose logging enabled");
@@ -39,7 +40,7 @@ initial begin
 end
 ```
 
-커맨드라인:
+The command line:
 ```sh
 # Icarus Verilog
 vvp sim.vvp +VERBOSE +WAVE
@@ -50,25 +51,28 @@ vvp sim.vvp +VERBOSE +WAVE
 
 ---
 
-### `$value$plusargs(user_string, variable)` — 값 추출
+### `$value$plusargs(user_string, variable)` — extracting a value
 
-- **표준**: IEEE 1800-2017 §20.10
-- format 지정자를 포함한 문자열로 매칭하고, 매칭되면 값을 `variable`에 저장한다.
-- 매칭·저장 성공이면 non-zero(1), 실패이면 0. **실패 시 variable은 변경되지 않는다.**
-- format 문자열 형식: `"ARGNAME=%fmt"` — 이름, `=`, format code 사이에 공백 없음.
+- **Standard**: IEEE 1800-2017 §20.10
+- Matches against a string that carries a format specifier and, on a match, stores the value into
+  `variable`.
+- Returns non-zero (1) when the match and the store both succeed, 0 otherwise. **On failure the
+  variable is left unchanged.**
+- The format string looks like `"ARGNAME=%fmt"` — no spaces between the name, the `=` and the
+  format code.
 
-#### 지원 format code
+#### The supported format codes
 
-| code | 변환 |
+| Code | Conversion |
 |------|------|
-| `%d` | 10진수 정수 |
-| `%o` | 8진수 정수 |
-| `%h` / `%x` | 16진수 정수 |
-| `%b` | 2진수 정수 |
-| `%e` | 실수 (지수 표기) |
-| `%f` | 실수 (소수 표기) |
-| `%g` | 실수 (소수 또는 지수 — 더 짧은 쪽 선택) |
-| `%s` | 문자열 (변환 없음) |
+| `%d` | decimal integer |
+| `%o` | octal integer |
+| `%h` / `%x` | hexadecimal integer |
+| `%b` | binary integer |
+| `%e` | real (exponential notation) |
+| `%f` | real (decimal notation) |
+| `%g` | real (decimal or exponential — whichever is shorter) |
+| `%s` | string (no conversion) |
 
 ```sv
 int    seed;
@@ -76,7 +80,7 @@ string testname;
 real   timeout_ns;
 logic  [7:0] mask;
 
-// 각 plusarg 독립적으로 조회
+// each plusarg is queried independently
 if ($value$plusargs("SEED=%d",    seed))
   $display("seed=%0d", seed);
 if ($value$plusargs("TEST=%s",    testname))
@@ -87,79 +91,79 @@ if ($value$plusargs("MASK=%h",    mask))
   $display("mask=0x%02h", mask);
 ```
 
-커맨드라인:
+The command line:
 ```sh
 ./sim +SEED=42 +TEST=axi_burst +TIMEOUT=1000.0 +MASK=ff
 ```
 
-**edge case 메모**:
-- `+KEY=` (빈 값): `%s`는 빈 문자열로 수신, 정수 format에서는 구현 정의.
-- format mismatch (예: 정수가 아닌 문자열에 `%d`): 런타임 에러 또는 구현 정의 동작.
-- 같은 plusarg name이 여러 번 공급되면 마지막 값이 사용된다 (구현 정의 포함).
+**Edge cases worth noting**:
+- `+KEY=` (an empty value): `%s` receives the empty string; with an integer format it is
+  implementation defined.
+- A format mismatch (`%d` against something that is not an integer, say): a run-time error, or
+  implementation-defined behaviour.
+- When the same plusarg name is supplied several times the last value is used (including in the
+  implementation-defined cases).
 
-**Icarus / Verilator**: 완전 지원.
+**Icarus / Verilator**: fully supported.
 
 ---
 
-## Shell 실행 — `$system("command")` ⏳ 미구현
+## Shell execution — `$system("command")`
 
-> **vitamin 구현 상태**: `$system`은 `SysFuncId`/`SysTaskId` 어디에도 미배선이다.
-> **함수 형태**(반환값 사용)는 expression 경로에서 `E3009 "unsupported system function"`로
-> loud-reject되고, **태스크 형태**(`$system("...")`)는 unknown-task 경로라
-> `W-ELAB-FEATURE-LIMIT` 경고 후 스킵된다(no-op). 아래는 IEEE 참조 문서다.
-
-- **표준**: IEEE 1800-2017 §21.3
-- 인자 문자열을 OS 셸에 전달해 실행한다.
-- **함수 형태**: 셸 프로세스의 종료 코드(exit status)를 int로 반환한다.
-  POSIX 환경에서 0 = 성공, non-zero = 실패.
-- **태스크 형태**: 반환값을 무시.
+- **Standard**: IEEE 1800-2017 §21.3
+- Passes the argument string to the OS shell and runs it.
+- **Function form**: returns the shell process's exit status as an int.
+  In a POSIX environment 0 = success, non-zero = failure.
+- **Task form**: the return value is discarded.
 
 ```sv
-// 함수 형태 — 반환값 체크
+// the function form — check the return value
 int ret;
 ret = $system("cp golden.mem /tmp/golden.mem");
 if (ret != 0)
   $error("file copy failed with code %0d", ret);
 
-// 태스크 형태
+// the task form
 $system("mkdir -p /tmp/sim_out");
 $system("date > /tmp/sim_out/timestamp.txt");
 ```
 
-**보안·이식성 주의사항**:
+**Security and portability warnings**:
 
-1. **OS 의존성**: `ls`, `cp`, `mkdir` 같은 POSIX 명령은 Windows cmd.exe에서 동작하지 않는다.
-   크로스-플랫폼 테스트 환경을 고려한다면 Makefile이나 쉘 래퍼로 추상화할 것.
+1. **OS dependence**: POSIX commands such as `ls`, `cp` and `mkdir` do not work under Windows
+   cmd.exe. Where a cross-platform test environment matters, abstract the call behind a Makefile or
+   a shell wrapper.
 
-2. **커맨드 인젝션 리스크**: plusargs 등 외부 입력에서 받은 문자열을
-   그대로 `$system`에 전달하면 임의 명령 실행이 가능해진다.
-   항상 리터럴 문자열 또는 충분히 검증된 값만 전달할 것.
+2. **Command-injection risk**: passing a string that came from an external input — a plusarg, for
+   instance — straight into `$system` allows arbitrary command execution.
+   Pass only literal strings, or values that have been validated thoroughly.
 
-3. **파일 디스크립터 상속**: 파생 프로세스가 시뮬레이터의 파일 디스크립터를 상속할 수 있다.
+3. **File-descriptor inheritance**: the spawned process may inherit the simulator's file
+   descriptors.
 
-4. **용도 제한**: `$system`은 테스트 인프라 전용이다.
-   RTL 시뮬레이션 로직이나 assertion에서 사용하는 것은 안티패턴.
+4. **Restricted use**: `$system` belongs to the test infrastructure.
+   Calling it from RTL simulation logic or from an assertion is an anti-pattern.
 
-**Icarus**: 지원.
-**Verilator**: 지원 (Linux/macOS 기준 정상 동작).
+**Icarus**: supported.
+**Verilator**: supported (works correctly on Linux and macOS).
 
 ---
 
-## 심각도 태스크 — `$fatal` / `$error` / `$warning` / `$info`
+## Severity tasks — `$fatal` / `$error` / `$warning` / `$info`
 
-- **표준**: IEEE 1800-2017 §20.11 (elaboration), §20.12 (simulation assertion context)
+- **Standard**: IEEE 1800-2017 §20.11 (elaboration), §20.12 (the simulation assertion context)
 
-이 네 태스크는 **같은 이름으로 두 컨텍스트**에서 다르게 동작한다.
+These four tasks behave differently in **two contexts under the same names**.
 
-| 컨텍스트 | 실행 시점 | 위치 |
+| Context | When it runs | Where it sits |
 |---------|---------|------|
-| **Elaboration** | 모듈 파라미터 검증, generate 블록 | procedural 코드 **외부** |
-| **Simulation** | 런타임 assertion, 테스트 로직 | procedural 코드 **내부** |
+| **Elaboration** | module parameter validation, generate blocks | **outside** procedural code |
+| **Simulation** | run-time assertions, test logic | **inside** procedural code |
 
-코드가 procedural 블록(`initial`/`always`/`task` 등) 안에 있으면
-자동으로 simulation-time 동작을 한다.
+Code inside a procedural block (`initial`, `always`, a `task` and so on) automatically takes the
+simulation-time behaviour.
 
-### 시그니처
+### Signatures
 
 ```sv
 $fatal   [(finish_number [, list_of_arguments])];
@@ -168,31 +172,31 @@ $warning [(list_of_arguments)];
 $info    [(list_of_arguments)];
 ```
 
-- `finish_number` (`$fatal` 전용): Verilog `$finish`의 finish_number와 동일.
-  - `0`: 진단 출력 없음
-  - `1`: 시뮬레이션 시간 출력 (기본값)
-  - `2`: 시뮬레이션 시간 + 메모리 사용량 (구현 정의)
-- `list_of_arguments`: `$display`와 동일한 format string 문법 (`%0d`, `%s`, `%0t` 등).
+- `finish_number` (`$fatal` only): the same finish_number as Verilog's `$finish`.
+  - `0`: no diagnostic output
+  - `1`: print the simulation time (the default)
+  - `2`: print the simulation time and memory usage (implementation defined)
+- `list_of_arguments`: the same format-string syntax as `$display` (`%0d`, `%s`, `%0t` and so on).
 
-### 각 태스크의 동작
+### What each task does
 
-| 태스크 | Elaboration | Simulation |
+| Task | Elaboration | Simulation |
 |--------|-------------|------------|
-| `$fatal` | elaboration 즉시 중단, 시뮬레이션 생성 없음 | 런타임 에러 → 시뮬레이션 강제 종료 |
-| `$error` | 에러 출력 후 elaboration 계속 | 에러 출력 후 시뮬레이션 계속 |
-| `$warning` | 경고 출력, 툴별 억제 가능 | 경고 출력, 툴별 억제 가능 |
-| `$info` | 정보 출력 | 정보 출력 |
+| `$fatal` | aborts elaboration at once; no simulation is built | a run-time error → the simulation is terminated |
+| `$error` | prints the error, elaboration continues | prints the error, the simulation continues |
+| `$warning` | prints a warning, suppressible per tool | prints a warning, suppressible per tool |
+| `$info` | prints information | prints information |
 
-### 자동 추가되는 출력 정보
+### The information the tool adds
 
-모든 심각도 태스크는 툴이 자동으로 다음 정보를 포함한 메시지를 생성한다:
-- 파일명과 줄 번호
-- 호출된 scope의 계층 경로 (예: `tb.dut.alu`)
-- Simulation 컨텍스트이면 시뮬레이션 시간
+Every severity task produces a message into which the tool automatically folds:
+- the file name and line number
+- the hierarchical path of the calling scope (`tb.dut.alu`, say)
+- the simulation time, in the simulation context
 
-### Elaboration 컨텍스트 — 파라미터 유효성 검사
+### The elaboration context — validating parameters
 
-generate 블록이나 모듈 레벨에서 파라미터를 검증하는 것이 대표적 패턴이다:
+Validating parameters at module level or inside a generate block is the representative pattern:
 
 ```sv
 module mac #(
@@ -201,7 +205,7 @@ module mac #(
   parameter int LATENCY = 2
 ) (...);
 
-  // 파라미터 범위 검사 — elaboration time에 실행
+  // parameter range checks — these run at elaboration time
   if (IN_W < 1 || IN_W > 64)
     $fatal(1, "IN_W=%0d out of range [1,64]", IN_W);
   if (OUT_W < IN_W * 2)
@@ -212,17 +216,17 @@ module mac #(
 endmodule
 ```
 
-위 `$fatal`/`$warning`은 procedural 블록 밖에 있으므로 elaboration-time에 실행된다.
-파라미터가 유효하지 않으면 시뮬레이션 실행 파일 자체가 생성되지 않는다.
+The `$fatal` and `$warning` above sit outside any procedural block, so they run at elaboration time.
+When a parameter is invalid, no simulation executable is produced at all.
 
-### Simulation 컨텍스트 — assertion 및 테스트 로직
+### The simulation context — assertions and test logic
 
 ```sv
-// SVA action block
+// an SVA action block
 assert property (@(posedge clk) req |-> ##[1:5] ack)
   else $error("ack missing after req at time %0t, req=%0b", $time, $sampled(req));
 
-// procedural 코드
+// procedural code
 initial begin
   if (dut_result !== expected)
     $fatal(1, "MISMATCH: got=%0h expected=%0h at %0t",
@@ -232,109 +236,93 @@ initial begin
 end
 ```
 
-**Icarus**: `$error`/`$warning`/`$info` 지원.
-Elaboration-time `$fatal`은 부분 지원 — simulation-time으로 fallback 가능.
-**Verilator**: elaboration tasks 공식 지원 (issue #1429 fix 이후).
+**Icarus**: `$error`, `$warning` and `$info` are supported.
+Elaboration-time `$fatal` is partially supported — it may fall back to simulation time.
+**Verilator**: elaboration tasks are officially supported (since the fix for issue #1429).
 
 ---
 
-## 테스트 종료 — `$exit` ✅ 구현 (`$finish` 별칭)
+## Test termination — `$exit`
 
-> **vitamin 구현 상태**: `$exit`은 `$finish`의 별칭으로 배선됐다(v9 — `SysTaskId::Finish`).
-> `program` 블록 자체는 미지원이므로 program-완료-대기 시맨틱은 단순화돼 즉시 `$finish` 동작이다
-> (module-based TB에서 안전; Verilator도 동일하게 `$exit`=`$finish` 별칭).
+- **Standard**: IEEE 1800-2017 §21 (program block phase control)
+- Waits until every **program block** has completed and then calls `$finish`.
 
-- **표준**: IEEE 1800-2017 §21 (program block phase control)
-- 모든 **program block**이 완료될 때까지 기다렸다가 `$finish`를 호출한다.
-
-`$finish`는 즉시 시뮬레이션을 종료한다. 반면 `$exit`은 종료 신호만 발행하고,
-실행 중인 program block들이 자체 정리(cleanup, coverage 집계 등)를 마칠 때까지 기다린다.
-UVM / OVM 또는 클래스 기반 테스트벤치에서 테스트가 자연스럽게 마무리될 수 있도록
-관용적으로 사용된다.
+`$finish` ends the simulation immediately. `$exit`, by contrast, only raises the termination signal
+and waits for the running program blocks to finish their own cleanup — tearing down, aggregating
+coverage and so on.
+It is the idiomatic way to let a UVM/OVM or class-based testbench wind down naturally.
 
 ```sv
 program automatic test;
   initial begin
-    // 테스트 시퀀스
+    // the test sequence
     fork
       run_stimulus();
       check_outputs();
     join
 
-    // 모든 program block 완료 대기 후 $finish 호출
+    // wait for every program block to complete, then call $finish
     $exit;
   end
 endprogram
 ```
 
-`$finish`와의 비교:
+Compared with `$finish`:
 
 | | `$finish` | `$exit` |
 |-|-----------|---------|
-| 종료 시점 | 즉시 | 모든 program block 완료 후 |
-| program block 정리 | 없음 | 있음 |
-| 주요 사용 환경 | module-based TB | program-based TB |
+| When it ends | immediately | after every program block completes |
+| Program-block cleanup | none | yes |
+| Where it is mainly used | a module-based TB | a program-based TB |
 
-**Icarus**: `program` 블록 지원이 제한적 → `$exit` 동작도 제한적.
-**Verilator**: `program` 블록 미지원 → `$exit` 사용 불가.
-Verilator 기반 테스트벤치에서는 `$finish`를 직접 사용한다.
+**Icarus**: `program` block support is limited, so `$exit` behaves in a limited way too.
+**Verilator**: `program` blocks are unsupported, so `$exit` cannot be used.
+A Verilator-based testbench calls `$finish` directly.
 
 ---
 
-## 함수·태스크 정리
+## The tasks and functions side by side
 
-| 이름 | 반환 | 용도 |
+| Name | Returns | Purpose |
 |------|------|------|
-| `$test$plusargs(str)` | int (0/non-0) | boolean flag 커맨드라인 감지 |
-| `$value$plusargs(str, var)` | int (0/non-0) | 값 포함 plusarg 읽기 |
-| `$system(cmd)` | int (exit code) | OS 셸 명령 실행 |
-| `$fatal(n, ...)` | — | 즉시 종료 (elaboration/simulation) |
-| `$error(...)` | — | 에러 출력, 계속 실행 |
-| `$warning(...)` | — | 경고 출력, 억제 가능 |
-| `$info(...)` | — | 정보 출력 |
-| `$exit` | — | program block 완료 후 $finish |
+| `$test$plusargs(str)` | int (0/non-0) | detecting a boolean flag on the command line |
+| `$value$plusargs(str, var)` | int (0/non-0) | reading a plusarg that carries a value |
+| `$system(cmd)` | int (exit code) | running an OS shell command |
+| `$fatal(n, ...)` | — | terminate at once (elaboration or simulation) |
+| `$error(...)` | — | print an error and keep going |
+| `$warning(...)` | — | print a warning, suppressible |
+| `$info(...)` | — | print information |
+| `$exit` | — | $finish once the program blocks complete |
 
 ---
 
-## Icarus / Verilator 지원
+## Icarus / Verilator support
 
-| 태스크 | Icarus Verilog | Verilator |
+| Task | Icarus Verilog | Verilator |
 |--------|---------------|-----------|
-| `$test$plusargs` | 완전 지원 | 완전 지원 |
-| `$value$plusargs` | 완전 지원 | 완전 지원 |
-| `$system` | 지원 | 지원 |
-| `$error`/`$warning`/`$info` | 지원 | 지원 |
-| `$fatal` (simulation) | 지원 | 지원 |
-| `$fatal` (elaboration) | 부분 지원 | 지원 (issue #1429 fix) |
-| `$exit` | 제한적 (program 블록 한계) | 미지원 (`$finish` 사용) |
+| `$test$plusargs` | full | full |
+| `$value$plusargs` | full | full |
+| `$system` | supported | supported |
+| `$error`/`$warning`/`$info` | supported | supported |
+| `$fatal` (simulation) | supported | supported |
+| `$fatal` (elaboration) | partial | supported (issue #1429 fix) |
+| `$exit` | limited (program-block limits) | unsupported (use `$finish`) |
 
 ---
 
-## 합성 가능성
+## Synthesizability
 
-❌ 전 항목 비합성 — 시뮬레이션 및 테스트 인프라 전용.
-심각도 태스크(`$fatal`/`$error` 등)는 `/* synthesis translate_off */` 가드 안에 두는 것이 일반적이다.
+❌ Nothing here is synthesizable — it is all simulation and test infrastructure.
+The severity tasks (`$fatal`, `$error` and the rest) are conventionally placed inside a
+`/* synthesis translate_off */` guard.
 
 ---
-
-## 본 프로젝트 구현 메모
-
-- **$test$plusargs / $value$plusargs**: 시뮬레이터 초기화 시 커맨드라인을 파싱해
-  plusarg 맵(`HashMap<String, Option<String>>`)을 구성.
-  `$test$plusargs`는 prefix 매칭으로 키 존재 확인.
-  `$value$plusargs`는 format code 파서로 값 변환 후 variable에 저장.
-- **$system** ⏳ (미구현): 미배선이라 함수 형태=`E3009` loud-reject, 태스크 형태=`W-ELAB-FEATURE-LIMIT` 경고 후 스킵. 향후 Rust `std::process::Command`로 셸 호출, 반환값=exit status 설계. 시뮬레이션-only 컨텍스트에서만 허용; RTL 내부 호출은 시뮬레이터 에러.
-- **$fatal/$error/$warning/$info**: 공통 진단 포매터 + severity level enum.
-  `$fatal`은 elaboration 컨텍스트에서 `ElaborationError` raise,
-  simulation 컨텍스트에서 `SimFatal` raise.
-  `finish_number`는 출력 상세도(verbosity) 설정에 사용.
-- **$exit** ✅ (구현): `$finish`의 별칭으로 배선(`"$exit" => SysTaskId::Finish`). `program` 블록은 미지원이라 program-완료-대기 시맨틱은 단순화돼 즉시 `$finish` 동작이다(module-based TB에서 안전). 향후 program block 도입 시 완료 이벤트 채널 구독으로 정밀화 가능.
 
 ## Sources
 
 - IEEE 1800-2017 §20.10 ($value$plusargs, $test$plusargs), §20.11 (elaboration severity),
   §20.12 (simulation severity assertion control), §21.3 ($system)
-- research-log: [system-tasks-introspection-misc-2026-05-28.md](../../research-log/system-tasks-introspection-misc-2026-05-28.md)
+- research-log: [system-tasks-introspection-misc-2026-05-28.md](../../../history/research-log/system-tasks-introspection-misc-2026-05-28.md)
 - [chipverify.com — Command Line Input](https://chipverify.com/systemverilog/systemverilog-command-line-input) (WebFetch ✓)
 - [theartofverification.com — Plusargs](https://theartofverification.com/plusargs-in-systemverilog/) (WebFetch ✓)
 - [accellera.org sv-bc — Severity Tasks](https://www.accellera.org/images/eda/sv-bc/att-5678/severity_tasks_3.htm) (WebFetch ✓)

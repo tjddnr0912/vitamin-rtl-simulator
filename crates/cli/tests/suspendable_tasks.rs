@@ -1,5 +1,5 @@
 //! Round-14 V3/V4 — suspendable tasks (`@`/`#`/wait/NBA/$systask in a task body).
-//! Built phase-by-phase per docs/superpowers/plans/2026-07-20-suspendable-tasks-v3v4.md.
+//! Built phase-by-phase per docs/history/plans/2026-07-20-suspendable-tasks-v3v4.md.
 //! iverilog 13.0 goldens (Phase 0): p_at=15, p_delay=10, p_nba=a5, p_sys=7, p_seq=22,
 //! p_recur=25, p_fork=5.
 use std::process::Command;

@@ -1,123 +1,455 @@
-# 7 · Error & Warning Code Reference
+# 007 · Error & Warning Codes
 
-Every diagnostic vitamin prints carries a **stable code** — a number like
-`VITA-E3009` and a mnemonic like `E-ELAB-UNSUPPORTED`. This chapter is the
-user-facing catalogue of the codes you are likely to hit, grouped by the stage
-that emits them, with a one-line "what to do" for each.
+Every diagnostic vitamin prints carries a stable code: a number like `VITA-E3009`
+and a mnemonic like `E-ELAB-UNSUPPORTED`. This chapter defines the rendered
+diagnostic format, the severity levels and how to change them, the process exit
+codes, and the complete catalogue of all 68 registered codes.
 
-For installing and running the tools, see [Installation](001_installation.md)
-and the [CLI Reference](004_cli-reference.md) (which covers `vita` and the staged
-`vcmp` → `velab` → `vrun` flow).
+For installing and running the tools see [Installation](001_installation.md) and
+the [CLI Reference](004_cli-reference.md), which covers `vita` and the staged
+`vcmp` → `velab` → `vrun` flow.
 
-> Platform note: vitamin currently supports **Linux and macOS only**. Windows is
-> not supported, and path/case behaviour described below assumes a POSIX
-> filesystem.
+vitamin runs on Linux and macOS. Path and case behaviour described here assumes a
+POSIX filesystem.
 
 ---
 
-## How a diagnostic looks
+## How a diagnostic is rendered
 
-vitamin writes diagnostics to **stderr** in this shape:
-
-```
-<severity>[<CODE>]: <message>
-```
-
-…optionally prefixed with `file:line:col` when a source location is available:
+Diagnostics go to stderr, one line each, in this shape:
 
 ```
-m.sv:3:1: error[VITA-E2002]: unexpected token 'endmodule', expected expression
+<file>:<line>:<col>: <severity>[<VITA-NUMBER>] <MNEMONIC>: <message> [in <instance>] [at time <ticks>]
+```
+
+Four parts are optional. Each is omitted entirely — no placeholder, no empty
+bracket — when the emitter does not have it. The order never varies: location prefix,
+then the head, then the instance, then the simulation time.
+
+| Part | Present when |
+|---|---|
+| `<file>:<line>:<col>: ` | The emitter resolved a source span. Preprocess, lex, parse and elaborate resolve through the preprocessor's provenance map; runtime diagnostics resolve through the statement-location side table that `velab` writes. |
+| `<severity>[<NUMBER>] <MNEMONIC>: <message>` | Always. This head is the one mandatory part. |
+| ` [in <instance>]` | The emitter knew an instance path. Elaborate supplies the `%m` prefix of the scope it is lowering; the engine supplies the instance that owns the running process. |
+| ` [at time <ticks>]` | The emitter is the simulation engine. Every runtime emitter stamps the current time; front-end and artifact-gate diagnostics do not. |
+
+The instance path matters because a module instantiated N times lowers N copies
+of one statement, and `file:line:col` alone cannot tell those N diagnostics
+apart. The time matters because a design with many indexed arrays or many
+`unique case` sites reports the same line repeatedly, and the time separates the
+reset window from steady state.
+
+### One example of each part
+
+Head only, no location, no instance, no time — a preprocess-stage warning about
+the whole design:
+
+```
+warning[VITA-W1017] W-PP-TIMESCALE-DEFAULT: no `timescale in the design; assuming the 1ns/1ns base
+```
+
+Location plus head — a parse error:
+
+```
+pe.sv:4:1: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected statement, found keyword 'endmodule'
+```
+
+Location, head and instance — an elaborate error:
+
+```
+un.sv:3:17: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: undeclared net/variable `top.nope` [in top]
+```
+
+All four parts — a runtime `$error` inside an instantiated child:
+
+```
+t.sv:6:5: error[VITA-E4003] E-RUN-USER-ERROR: bad [in top.u1] [at time 5]
+```
+
+A `note` carries its parent error's code and points at a different span, so the
+pair reads as one diagnostic and one `-Wno-` covers both:
+
+```
+nt.sv:6:7: error[VITA-E3009] E-ELAB-UNSUPPORTED: block-local `tmp` is referenced outside its `begin…end` block; vita cannot resolve this to the outer `tmp` yet (it would silently read the block-local) — rename the block-local or hoist its declaration to the enclosing scope [in top]
+nt.sv:9:9: note[VITA-E3009] E-ELAB-UNSUPPORTED: `tmp` is referenced here, outside the block that declares it [in top]
+```
+
+### The second format: command-line usage errors
+
+Errors raised before or during argument handling never reach the diagnostic sink.
+They print in a shorter form — no mnemonic, no instance, no time — and are not
+counted in the end-of-stage line:
+
+```
+error[<VITA-NUMBER>]: <message>
 ```
 
 ```
-error[VITA-E3009]: a dynamic-storage handle has no whole-value surface (read elements or call methods)
+$ vita vrun missing.velab
+error[VITA-E8005]: cannot read 'missing.velab': No such file or directory (os error 2)
+errors=0 warnings=0 notes=0
 ```
 
-- **Severity** is one of `note`, `info`, `warning`, `error`, `fatal`.
-- The **code** shown in brackets is the grep-friendly number (`VITA-E3009`).
-  Each number also has an equivalent **mnemonic** (`E-ELAB-UNSUPPORTED`) listed in
-  the tables below. The two are interchangeable identifiers for the same
-  diagnostic.
+Three codes appear this way: `E-CLI-BAD-FLAG`, `E-FLIST-NOT-FOUND` and
+`E-FLIST-WRONG-STAGE`. Because they bypass the sink they are also outside the
+reach of `-Wno-` and `-Werror`.
+
+### Which stream carries what
+
+| Output | Stream | Suppressed by `-q` |
+|---|---|---|
+| Diagnostics | stderr | No |
+| End-of-stage counts | stderr | No |
+| `simulation ended (<reason>) at time <n>` | stdout | Yes |
+| RTL text from `$display` / `$write` | stdout, written verbatim | Yes |
+
+`$display` and `$write` output is not a diagnostic, carries no code, and never
+appears in the counts.
+
+With `-l <FILE>` / `--log <FILE>` every line above — diagnostics, progress, RTL
+text and the counts — is teed to that one file in emission order, regardless of
+verbosity. `--log-append` appends instead of truncating; `--log -` writes to
+stderr. A log that cannot be opened is a usage error:
+`error[VITA-E0001]: cannot open log '<path>': <err>`, exit 3.
+
+Verbosity is `-q` / `--quiet` (0), the default (1), `-v` (2), `-vv` (3), or
+`--verbosity <0..3>`. Level 2 adds the effective-invocation echo; level 3 renders
+the same as level 2 and is reserved surface.
+
+### The end-of-stage counts
+
+Every pipeline run ends with one unsuppressible line on stderr:
+
+```
+errors=<n> warnings=<n> notes=<n>
+```
+
+- `errors` sums the Error and Fatal buckets into one number.
+- `notes` sums the Note and Info buckets into one number.
+- The counts reflect the stream as it stands after severity gating: a diagnostic dropped
+  by `-Wno-` is not counted, and a warning promoted by `-Werror` counts as an
+  error.
+- The line is not printed for `--help`, `--version`, `vita explain`, or an
+  argument-parsing failure.
+
+---
+
+## Severity levels
+
+| Severity | Printed token | Effect on the run |
+|---|---|---|
+| Note | `note` | Follow-on detail for the error above it. Carries that error's code. Never affects the exit code. |
+| Info | `info` | Reports information. Never affects the exit code. |
+| Warning | `warning` | Records and continues. Never affects the exit code on its own; a `-Werror` promotion changes that. |
+| Error | `error` | Records and continues. Sets the run's exit class, so the process exits 1. |
+| Fatal | `fatal` | Records and stops. The engine latches the finish, so the process exits 1. |
+
+Severity is a property of the diagnostic as emitted, not of the code. A code's
+registered default severity is what `vita explain` reports and what the catalogue
+below lists; two codes are emitted at a severity other than their default, and
+both are marked in the catalogue.
+
+---
+
+## Controlling severity
+
+Two flags change how a diagnostic is handled. Both work identically on `vita`,
+`vcmp`, `velab` and `vrun`.
+
+| Flag | Effect |
+|---|---|
+| `-Wno-<CODE>` | Drop every diagnostic carrying `<CODE>` that is emitted at Warning, Info or Note severity. |
+| `-Werror` | Rewrite every Warning-severity diagnostic to Error. |
+| `-Werror=all` | The same as `-Werror`. |
+| `-Werror=<CODE>` | Rewrite Warning-severity diagnostics carrying `<CODE>` to Error. |
+
+### What can and cannot be changed
+
+| Emitted severity | Under `-Wno-<its code>` | Under `-Werror` / `-Werror=<its code>` |
+|---|---|---|
+| Warning | Dropped: never printed, never counted | Rewritten to Error |
+| Info | Dropped | Unchanged |
+| Note | Dropped | Unchanged |
+| Error | Unchanged — passes through | Unchanged |
+| Fatal | Unchanged — passes through | Unchanged |
+
+Error and Fatal are the always-logged spine. `-Wno-E-ELAB-UNRESOLVED-NAME` is
+accepted, because the mnemonic resolves, and has no effect: a suppression flag
+can never hide a real failure.
+
+Of the 68 registered codes, 30 default to Warning and 2 to Info, so those 32 are
+the suppressible set by default. Promotion applies to the 30 Warning-default
+codes. Notes are suppressed through their parent error's code, which drops the
+note while the error itself still prints.
+
+A promoted diagnostic keeps its original number. Only the severity token changes,
+so a promoted warning prints as an `error` on a `W`-lettered number:
+
+```
+$ vita -Werror t.sv
+t.sv:5:5: error[VITA-W4007] W-RUN-USER-WARNING: careful [in top.u1] [at time 5]
+```
+
+Because the counts reflect the post-gate stream, suppression and promotion both
+move them:
+
+```
+$ vita t.sv                                              # errors=1 warnings=2 notes=1
+$ vita -Wno-VITA-W4007 -Wno-I-RUN-USER-INFO t.sv         # errors=1 warnings=1 notes=0
+$ vita -Werror t.sv                                      # errors=3 warnings=0 notes=1
+```
+
+A `-Werror`-promoted warning is enough to turn an otherwise-clean run into exit
+1. On `velab` the promotion aborts before the `.velab` artifact is written.
+
+### Two paths the gate does not cover
+
+Command-line usage errors print before a gate policy exists, so they are never
+suppressed or promoted. Filelist expansion also runs before argument parsing and
+therefore before the policy is built; the one filelist warning that reaches the
+gated path is `W-FLIST-OVERRIDE`, which is recorded during parsing and replayed
+through the gate at pipeline start.
+
+### The three spellings of a code
+
+Both flags, and `vita explain`, accept any of three spellings, case-insensitively
+and with surrounding whitespace trimmed:
+
+| Form | Example |
+|---|---|
+| The mnemonic | `W-ELAB-FEATURE-LIMIT` |
+| The printed number | `VITA-W3056` |
+| That number without the prefix | `W3056` |
+
+All three resolve through one function, so the string a diagnostic printed always
+works in a flag. A spelling that resolves to no code is a hard usage error, not a
+silently ignored typo:
+
+```
+$ vita -Werror=W-RUN-USER-INFO t.sv
+error[VITA-E0001]: unknown diagnostic code 'W-RUN-USER-INFO' in '-Werror=' — a code is its mnemonic (`W-ELAB-FEATURE-LIMIT`), its printed number (`VITA-W3056`), or that number bare (`W3056`); `vita explain <CODE>` describes one
+```
+
+That invocation exits 3.
+
+---
+
+## `vita explain`
+
+`vita explain <CODE>` prints the long-form catalogue entry for one code on
+stdout and exits 0. It is dispatched before any flag parsing and exists on the
+one-shot `vita` applet only; the staged applets have no `explain` subcommand.
+
+```
+$ vita explain W3056
+### VITA-W3056 · `W-ELAB-FEATURE-LIMIT` (Warning)
+…
+```
+
+| Input | Result | Exit |
+|---|---|---|
+| Any of the three spellings of a registered code | That code's entry, verbatim | 0 |
+| No argument | `error[VITA-E0001]: 'explain' needs a diagnostic code (mnemonic or VITA-####)` | 3 |
+| A string that resolves to no code | `error[VITA-E0001]: unknown diagnostic code '<q>' — <the three forms>` | 3 |
+
+The text it prints is the body of
+[`docs/preview/15-error-code-reference.md`](../preview/15-error-code-reference.md),
+embedded into the binary at compile time. That file is the long-form catalogue:
+one entry per code, each with the cause, a worked example, and the fix, with the
+same numbers and default severities as the tables below. Its prose is written in
+Korean.
+
+The registry and that file are kept in step by a test that asserts a 1:1
+correspondence between the 68 enum entries and the 68 document entries, and that
+each entry's number and severity match the registry. Adding a code without a
+document entry, or the reverse, fails the build gate.
 
 ### Codes are stable identifiers
 
-A code's meaning is fixed for the life of the tool (the spec calls this the
-*doc-15 bijection*): a number is never renumbered or reused, and a mnemonic
-never changes meaning. You can safely match on either in scripts, CI greps, or
-issue reports — `VITA-E4002` will always mean "runtime index out of range".
-
-### Exit codes
-
-The numeric process exit code tells CI what kind of failure occurred:
-
-| exit | meaning |
-|------|---------|
-| `0`  | clean — parse + elaborate succeeded, simulation finished with no errors |
-| `1`  | user/design error — lex/parse errors, elaboration failed, runtime `$fatal` |
-| `3`  | CLI/usage error — no source files, file not found, unknown applet/flag |
-
-A single `error`-severity diagnostic anywhere in the run is enough to push the
-exit code to `1`; `fatal` aborts the current stage immediately.
+A code's meaning is fixed for the life of the tool. A number is never renumbered
+and never reused; a mnemonic never changes meaning. Both are safe to match on in
+scripts, CI greps and issue reports.
 
 ---
 
-## Preprocess — `1xxx`
+## Diagnostic caps
 
-Emitted while expanding ``` `define ```/``` `include ```/``` `ifdef ```/
-``` `timescale ``` before lexing.
+Three internal caps limit how many diagnostics one run reports. None of them is
+configurable from the command line.
 
-| Code | Mnemonic | Sev | What triggers it | What to do |
-|------|----------|-----|------------------|------------|
-| `VITA-E1001` | `E-PP-INCLUDE-NOT-FOUND` | error | ``` `include "x.svh" ``` not found in the current dir or any include search path. | Add the header's directory to the search path, or fix the path/filename (paths are case-sensitive). |
-| `VITA-E1002` | `E-PP-MACRO-ARITY` | error | A function-like macro ``` `define M(a,b) ``` called with the wrong number of arguments. | Match the call to the formal arg count, or fix the ``` `define ```. |
-| `VITA-E1004` | `E-PP-RECURSIVE-MACRO` | error | A text macro re-invokes itself during its own expansion (infinite expansion). | Remove the self-reference from the macro body. |
-| `VITA-E1005` | `E-PP-RECURSIVE-INCLUDE` | error | An ``` `include ``` chain is cyclic — a file includes itself directly or transitively. | Break the cycle, or use an include guard (``` `ifndef ``` / ``` `define ``` / ``` `endif ```). |
-| `VITA-E1013` | `E-PP-BAD-DIRECTIVE` | error | A malformed preprocessor directive: unknown directive, use of an undefined macro, stray backtick, or an unbalanced/duplicate conditional. | Check the directive spelling, ``` `define ``` the macro first, or balance the ``` `ifdef ```/``` `endif ``` pair. |
-| `VITA-W1007` | `W-PP-MACRO-REDEFINED` | warning | ``` `define ``` redefines an existing macro with **different** text. The new definition wins. | If unintended, rename the macro or ``` `undef ``` before redefining. (Identical re-definition is silent.) |
-| `VITA-W1008` | `W-PP-UNDEF-UNDEFINED` | warning | ``` `undef ``` targets a name that was never defined. Harmless. | Check the macro name spelling, or only ``` `undef ``` after a ``` `define ```. |
-| `VITA-W1017` | `W-PP-TIMESCALE-DEFAULT` | warning | No module in the design declares a ``` `timescale ```. vitamin locks the global time unit/precision to the base `1ns/1ns`. | Declare an explicit ``` `timescale 1ns/1ps ``` at the top of the file if you need different units. See the [Language Reference](003_language-reference.md). |
+| Cap | Limit | What happens at the limit |
+|---|---|---|
+| Parser errors | 50 | Further parse errors are not recorded. No diagnostic marks the cap. |
+| Elaborate errors | 200 | One `E-ELAB-UNSUPPORTED` at Error severity reads `too many elaborate errors; further diagnostics suppressed (cap 200)`. Every later elaborate error and note is dropped. |
+| Runtime index reports | 8, with separate budgets for known-out-of-range and unknown-index | Report 8 replaces its message with `further out-of-range diagnostics suppressed` or `further unknown-index diagnostics suppressed`. Report 9 onward emits nothing. |
 
 ---
 
-## Parse — `2xxx`
+## Exit codes
 
-Emitted by the lexer/parser, the last language-dependent stage.
+| Exit | Meaning |
+|---|---|
+| `0` | Clean. Parse and elaborate succeeded and the simulation finished with no errors, having reached `$finish`, `$stop`, or quiescence. |
+| `1` | User or design error. Lex or parse errors, elaboration failed, a runtime `$fatal`, or a `-Werror`-promoted warning. |
+| `2` | Stale or rejected artifact. Magic, `format_version`, `schema_hash`, tool semver-major, or a RULE-V upstream digest mismatch. |
+| `3` | Usage error. No source files, an unreadable or unwritable file, an unknown applet or flag, or an unresolvable code in `-Wno-` / `-Werror=`. |
 
-| Code | Mnemonic | Sev | What triggers it | What to do |
-|------|----------|-----|------------------|------------|
-| `VITA-E2002` | `E-PARSE-UNEXPECTED-TOKEN` | error | A token that no grammar rule can continue: a missing `;`, a stray keyword, unbalanced `begin`/`end`, a malformed expression. | Fix the syntax at the caret. A `2005`-vs-SystemVerilog dialect mismatch can also make a valid token "unexpected". |
+Exit 2 is deliberately distinct from exit 1: it says the artifact is out of date,
+so CI should re-run `vcmp` / `velab` rather than start debugging RTL.
 
-A clean Verilog/SystemVerilog RTL subset is accepted; constructs the parser
-does not yet model surface here or, if they parse but cannot be elaborated, as
-`E-ELAB-UNSUPPORTED` below.
+```
+$ vita vrun bad.velab
+error[VITA-E9001] E-ART-FORMAT-MISMATCH: bad or missing velab magic
+errors=1 warnings=0 notes=0
+$ echo $?
+2
+```
+
+A single `error`-severity diagnostic anywhere in a run is enough to push the exit
+code to 1. A `fatal` stops the current stage immediately. A panic exits 101, the
+conventional Rust code, and is not mapped into this table.
 
 ---
 
-## Elaborate — `3xxx`
+## Code bands
 
-Emitted while lowering the parsed design into the simulation IR (flattening,
-connectivity, parameter resolution).
+The number carries both the stage and the default severity: `VITA-` then one
+letter — `E` Error, `W` Warning, `I` Info, `F` Fatal — then a four-digit number
+whose leading digit is the stage.
 
-| Code | Mnemonic | Sev | What triggers it | What to do |
-|------|----------|-----|------------------|------------|
-| `VITA-E3001` | `E-ELAB-MULTIDRIVER` | error | Two drivers on one signal. Either a NET (or bit range) driven by more than one structural driver — multiple `assign`s, output ports, or gates onto the same wire — or a VARIABLE that has a declaration initializer *and* is written by `always_comb` (IEEE §9.2.2.2). `always_ff` / `always_latch` / plain `always` / `initial` are NOT affected: a register's declaration initializer is its power-on value, so `logic [7:0] c = 0; always_ff @(posedge clk) c <= c + 1;` stays legal, as does `logic clk = 0; always #5 clk = ~clk;`. | Reduce to a single driver: drop the initializer or the `always_comb` write, or make the intended wired-logic explicit. |
-| `VITA-E3002` | `E-ELAB-PORT-MISMATCH` | error | An instance port connection is incompatible with the module's declared ports — a `.foo()` that isn't a port, or too many positional connections. | Fix the connection to a declared port (name / positional count / direction). Leave a port unconnected with `.z()`. |
-| `VITA-E3003` | `E-ELAB-UNRESOLVED-INSTANCE` | error | An instantiated module cannot be resolved to a compiled design unit. | Add the missing module's source to the [`vcmp`](004_cli-reference.md) input, or fix a module-name typo. |
-| `VITA-E3010` | `E-ELAB-UNRESOLVED-NAME` | error | A reference to a net/variable that is not declared in scope (in an `assign`, an expression, or an lvalue). | Add the missing `wire`/`reg`/`logic` declaration, or fix the typo. |
-| `VITA-E3009` | `E-ELAB-UNSUPPORTED` | error | A construct the elaborator does not support is encountered; elaboration stops. Most often a **real value where the language requires an integer** — see below. | Make the value integral (declare it `int`, or convert with `$rtoi()`/`int'()`), or rework the construct. |
-| `VITA-W3008` | `W-ELAB-WIDTH-TRUNC` | warning | A width mismatch is resolved by implicit truncation/extension (e.g. assigning an 8-bit value to a 4-bit target loses the top bits). | If the truncation is intended, make it explicit (`wide[3:0]`); otherwise match the widths. |
-| `VITA-W3011` | `W-ELAB-CASEZ-APPROX` | warning | A `casez` label contains an explicit `x` bit. vitamin's v1 matcher treats that `x` as a don't-care like `z`, which is looser than strict `casez`. | If you mean don't-care, write `?`/`z` (no warning). Only `casez` labels with explicit `x` trigger this; `casex` is exact by definition. |
+| Band | Stage |
+|---|---|
+| `0xxx` | General and system |
+| `1xxx` | Preprocess |
+| `2xxx` | Parse |
+| `3xxx` | Elaborate |
+| `4xxx` | Runtime |
+| `5xxx` | Assertion and SVA — reserved, no registered codes |
+| `6xxx` | SystemVerilog type system — reserved, no registered codes |
+| `7xxx` | VHDL — reserved, no registered codes |
+| `8xxx` | Filelist |
+| `9xxx` | Artifact and work library |
 
-### The most common `E3009`: a real value where an integer is required
+In the catalogue below, "Reserved" marks a code that is registered, documented
+and resolvable by `vita explain`, `-Wno-` and `-Werror=`, but that no code path
+in the tool produces. Six of the 68 are in that state.
 
-IEEE 1800 requires an **integral constant** for a select index, a range bound, and
-a replication count (§11.5.1, §11.4.12.2). vitamin will not quietly round such a
-value or reinterpret its bit pattern as an integer, because both produce a wrong
-answer with no error. Instead:
+---
 
-- a real whose value is **exactly an integer** is converted and accepted, so
+## `0xxx` — general and system
+
+| Number | Mnemonic | Default | Meaning |
+|---|---|---|---|
+| `VITA-E0001` | `E-CLI-BAD-FLAG` | Error | An unknown or invalid command-line flag or flag value. Printed in the usage-error form and exits 3. |
+| `VITA-F0002` | `F-LIMIT-ERRORS` | Fatal | Reserved. An error-limit abort. The two live caps behave as described under Diagnostic caps and do not use this code. |
+
+---
+
+## `1xxx` — preprocess
+
+Emitted while expanding `` `define ``, `` `include ``, `` `ifdef `` and
+`` `timescale `` ahead of lexing.
+
+| Number | Mnemonic | Default | Meaning |
+|---|---|---|---|
+| `VITA-E1001` | `E-PP-INCLUDE-NOT-FOUND` | Error | An `` `include `` file is not on the current directory or any search path. Paths are case-sensitive. |
+| `VITA-E1002` | `E-PP-MACRO-ARITY` | Error | A function-like macro is called with the wrong number of arguments. |
+| `VITA-W1003` | `W-LINT-UNCLOSED` | Warning | Reserved. An inline lint-off pragma left open at end of file. No such pragma exists in the tool. |
+| `VITA-E1004` | `E-PP-RECURSIVE-MACRO` | Error | A text macro re-invokes itself during its own expansion. |
+| `VITA-E1005` | `E-PP-RECURSIVE-INCLUDE` | Error | An `` `include `` chain is cyclic: a file includes itself directly or transitively. An include guard breaks it. |
+| `VITA-E1013` | `E-PP-BAD-DIRECTIVE` | Error | A malformed directive: an unknown directive, an undefined macro used, a stray backtick, or an unbalanced or duplicated conditional. |
+| `VITA-W1007` | `W-PP-MACRO-REDEFINED` | Warning | `` `define `` redefines an existing macro with different text; the new text wins. An identical redefinition is silent. |
+| `VITA-W1008` | `W-PP-UNDEF-UNDEFINED` | Warning | `` `undef `` names a macro that was never defined. Harmless. |
+| `VITA-W1017` | `W-PP-TIMESCALE-DEFAULT` | Warning | No module in the design declares a `` `timescale ``; the global unit and precision are the `1ns/1ns` base. See the [Language Reference](003_language-reference.md). |
+| `VITA-W1018` | `W-PP-TIMESCALE-MIXED` | Warning | Some modules carry a `` `timescale `` and others do not, which IEEE 1800 §3.14.2.2 does not allow. Names up to eight modules, then `(and N more)`. |
+
+---
+
+## `2xxx` — parse
+
+Emitted by the lexer and parser, the last language-dependent stage.
+
+| Number | Mnemonic | Default | Meaning |
+|---|---|---|---|
+| `VITA-E2001` | `E-DUP-UNIT` | Error | A design unit — module, package, class or interface — is defined more than once. |
+| `VITA-E2002` | `E-PARSE-UNEXPECTED-TOKEN` | Error | A token no grammar rule can continue: a missing `;`, a stray keyword, an unbalanced `begin`/`end`, a malformed expression. Every lexer error also carries this code. |
+| `VITA-W2003` | `W-PARSE-IMPLICIT-NET` | Warning | An undeclared identifier is inferred as an implicit net under `` `default_nettype wire ``. |
+| `VITA-W2004` | `W-PARSE-SELECT-BASE` | Warning | A bit or part select on an operand IEEE 1800 §11.5.1 does not allow one on. Other tools reject it. Emitted ahead of the parse-error gate, so a syntax error elsewhere cannot swallow it. |
+
+Constructs the parser does not model surface here. Constructs that parse but
+cannot be lowered surface as `E-ELAB-UNSUPPORTED` instead.
+
+---
+
+## `3xxx` — elaborate
+
+Emitted while lowering the parsed design into the simulation IR: flattening,
+connectivity, parameter resolution.
+
+| Number | Mnemonic | Default | Meaning |
+|---|---|---|---|
+| `VITA-E3001` | `E-ELAB-MULTIDRIVER` | Error | Two drivers the engine cannot resolve land on one net or variable. See the detail below. |
+| `VITA-E3002` | `E-ELAB-PORT-MISMATCH` | Error | An instance port connection is incompatible with the module's declared ports: a `.foo()` that is not a port, a wrong direction, or too many positional connections. |
+| `VITA-E3003` | `E-ELAB-UNRESOLVED-INSTANCE` | Error | An instantiated module name resolves to no compiled design unit. Add the missing source, or fix the name. |
+| `VITA-E3004` | `E-ELAB-USER-ERROR` | Error | An elaboration-time `$error`. Records and continues. |
+| `VITA-F3005` | `F-ELAB-USER-FATAL` | Fatal | An elaboration-time `$fatal`. Emitted at `error` severity, not `fatal`, so the printed token differs from the registered default. |
+| `VITA-I3006` | `I-ELAB-USER-INFO` | Info | An elaboration-time `$info`. |
+| `VITA-W3007` | `W-ELAB-USER-WARNING` | Warning | An elaboration-time `$warning`. |
+| `VITA-W3008` | `W-ELAB-WIDTH-TRUNC` | Warning | Reserved. Implicit width truncation or extension. The generic simplification channel is `W-ELAB-FEATURE-LIMIT`. |
+| `VITA-W3011` | `W-ELAB-CASEZ-APPROX` | Warning | Reserved. A `casez` label bit written as an explicit `x` treated as a don't-care. |
+| `VITA-E3009` | `E-ELAB-UNSUPPORTED` | Error | Elaborate cannot lower this construct faithfully, so it refuses rather than approximate. The widest code in the tool: it covers every construct outside the supported subset. See the detail below and [Limitations](006_limitations.md). |
+| `VITA-E3010` | `E-ELAB-UNRESOLVED-NAME` | Error | A reference to a net or variable that is not declared in the enclosing scope, in an `assign`, an expression, or an lvalue. |
+| `VITA-E3018` | `E-ELAB-LVALUE-KIND` | Error | A continuous `assign` targets a variable, or a procedural assignment targets a net. |
+| `VITA-W3056` | `W-ELAB-FEATURE-LIMIT` | Warning | A legal construct is accepted but simplified: an unconnected port, an `inout` approximated as unidirectional, a dropped intra-assignment delay, a skipped system task. The IR is kept. |
+| `VITA-W3057` | `W-ELAB-AUTOTOP-AMBIGUOUS` | Warning | The design has several uninstantiated roots and auto-top picked one. Pin the intended root with `--top`. |
+| `VITA-W3058` | `W-ELAB-STR-TERNARY` | Warning | A ternary whose arms are string literals is an integral value, so `$display` prints it as a number rather than as text. |
+| `VITA-W3059` | `W-ELAB-STR-ESCAPE` | Warning | A string literal uses an escape IEEE 1800 Table 5-1 does not define, and tools read it differently. One line per literal-and-escape pair for the whole run. |
+
+### `E-ELAB-MULTIDRIVER` in detail
+
+Two shapes reach this code.
+
+A **net** driven by more than one continuous assignment is an error only when the
+overlap is one the engine does not model. Whole-net, non-delayed continuous
+assignments overlap legally: four-state wire resolution settles them, so they
+elaborate cleanly. The error fires when the overlapping set contains a delayed
+assignment, a multi-chunk lvalue, an array-element write, or a partial or
+bit-select driver. Dynamic, non-constant selects are not counted at all, because
+a false report on a disjoint dynamic split would reject legal code.
+
+```systemverilog
+module top;
+  wire [3:0] w;
+  assign     w = 4'h0;
+  assign #1  w = 4'h1;     // one delayed driver puts the pair outside wire resolution
+endmodule
+```
+```
+error[VITA-E3001] E-ELAB-MULTIDRIVER: net `top.w` driven by multiple overlapping continuous assignments
+```
+
+A **variable** that has both a declaration initializer and an `always_comb` write
+is two drivers on one variable under IEEE 1800 §9.2.2.2:
+
+```
+md3.sv:3:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `v` has a declaration initializer AND is written by `always_comb`, which is two drivers on one variable (IEEE §9.2.2.2) — drop the initializer or the `always_comb` write [in top]
+```
+
+`always_ff`, `always_latch`, plain `always` and `initial` are unaffected: a
+register's declaration initializer is its power-on value. Both
+`logic [7:0] c = 0; always_ff @(posedge clk) c <= c + 1;` and
+`logic clk = 0; always #5 clk = ~clk;` are legal.
+
+### The most common `E-ELAB-UNSUPPORTED`: a real value where an integer is required
+
+IEEE 1800 requires an integral constant for a select index, a range bound and a
+replication count (§11.5.1, §11.4.12.2). vitamin neither rounds such a value nor
+reinterprets its bit pattern, because both produce a wrong answer with no error.
+Instead:
+
+- a real whose value is exactly an integer is converted and accepted, so
   `parameter real R = 4;` works anywhere an integer works;
-- anything else is rejected with `E3009`.
+- anything else is rejected.
 
 ```systemverilog
 module m;
@@ -127,131 +459,150 @@ module m;
 endmodule
 ```
 ```
-error[VITA-E3009]: a select index / bound / size must be integral, not real (IEEE §11.5.1)
+error[VITA-E3009] E-ELAB-UNSUPPORTED: a select index / bound / size must be integral, not real (IEEE §11.5.1)
 ```
 
-The same code appears for a real value used as: a part-select bound; the offset or
+The same code covers a real value used as a part-select bound; the offset or
 width of an indexed part-select (`v[i +: n]`); an array index; a `new[N]` size; a
 queue or associative-array index, `.exists()` key or `.delete()` key; a string
-method argument; the address argument of `$readmemh`/`$readmemb`/`$writememh`/
-`$writememb`/`$fread`; or a replication count. It also fires when the value comes
-from a **function declared to return `real`**, not just from a `real` parameter.
+method argument; the address argument of `$readmemh`, `$readmemb`, `$writememh`,
+`$writememb` or `$fread`; and a replication count. It fires for a value returned
+by a function declared `real`, not only for a `real` parameter.
 
-A related message names the width case specifically:
-
-```
-error[VITA-E3009]: a real parameter is not an integral constant and cannot be used
-in a width / range bound (assign it to an integer localparam first)
-```
-
-**What to do.** If the quantity is conceptually an integer, declare it as one
-(`parameter int N = 4;`). If it must stay real, convert explicitly at the point of
-use — `v[$rtoi(R)]` or `v[int'(R)]`. Note that an *expression* over a real
-parameter (`v[R+1]`) is rejected even when the result would be integral; convert
-the whole expression instead (`v[int'(R+1)]`).
-
-**Overriding a `real` parameter.** An override that folds to an integer is applied
-normally (`#(.R(3))`, `#(.R(i+2))`). One that does not fold — a real expression, or
-a signal — is rejected rather than silently leaving the child at its declared
-default:
+A second message names the width case:
 
 ```
-error[VITA-E3009]: a parameter override that reads a real parameter is unsupported
-(a real has no integral constant value)
+error[VITA-E3009] E-ELAB-UNSUPPORTED: a real parameter is not an integral constant and cannot be used in a width / range bound (assign it to an integer localparam first)
 ```
 
-### Elaboration-time `$error` / `$fatal` / `$warning` / `$info`
+The fix: if the quantity is conceptually an integer, declare it as one
+(`parameter int N = 4;`). If it must stay real, convert at the point of use —
+`v[$rtoi(R)]` or `v[int'(R)]`. An expression over a real parameter (`v[R+1]`) is
+rejected even when the result would be integral; convert the whole expression
+(`v[int'(R+1)]`).
 
-These codes exist as stable identifiers but are **not yet emitted** in the
-current release (elaboration-time severity tasks are a later milestone). They
-are listed so the identifiers are reserved and recognisable.
+A parameter override that folds to an integer is applied normally (`#(.R(3))`,
+`#(.R(i+2))`). One that does not fold — a real expression, or a signal — is
+rejected rather than leaving the child at its declared default:
 
-| Code | Mnemonic | Sev | Meaning |
-|------|----------|-----|---------|
-| `VITA-E3004` | `E-ELAB-USER-ERROR` | error | An elaboration-time `$error` fired (records and continues). |
-| `VITA-F3005` | `F-ELAB-USER-FATAL` | fatal | An elaboration-time `$fatal` fired (aborts, no snapshot). |
-| `VITA-W3007` | `W-ELAB-USER-WARNING` | warning | An elaboration-time `$warning` fired. |
-| `VITA-I3006` | `I-ELAB-USER-INFO` | info | An elaboration-time `$info` reported information. |
+```
+error[VITA-E3009] E-ELAB-UNSUPPORTED: a parameter override that reads a real parameter is unsupported (a real has no integral constant value)
+```
 
 ---
 
-## Runtime — `4xxx`
+## `4xxx` — runtime
 
-Emitted by the simulation engine while running the design.
+Emitted by the simulation engine while running the design. Every one of these
+carries `[at time <ticks>]`, and most carry `file:line:col` and `[in <instance>]`
+as well.
 
-| Code | Mnemonic | Sev | What triggers it | What to do |
-|------|----------|-----|------------------|------------|
-| `VITA-E4002` | `E-RUN-RANGE` | error | A runtime array index or bit/part-select is out of the declared range. Per IEEE, the read yields `x` and the write is ignored — the simulator does **not** crash — but the corruption is surfaced as this error. | Validate/clamp the index before the select, or size the array correctly. If the location reads `(source location unavailable)`, see `W-RUN-NO-LOCATIONS` below. |
-| `VITA-W4029` | `W-RUN-RANGE-UNKNOWN` | warning | The runtime index was UNKNOWN (x/z) rather than a known value past the end. Same recovery (read `x`, write dropped) — but IEEE 1364 §5.2.1 prescribes exactly that, so it is legal behaviour and not an error. Reading an array with a register that is still X before the first clock edge is the common case. | Nothing, if the reset window is expected. Promote it with `-Werror=W-RUN-RANGE-UNKNOWN`, or suppress with `-Wno-W-RUN-RANGE-UNKNOWN`. |
+| Number | Mnemonic | Default | Meaning |
+|---|---|---|---|
+| `VITA-E4001` | `E-RUN-ASSERT-FAIL` | Error | Reserved. An `assert` with no action block failing as an implicit `$error`. |
+| `VITA-E4002` | `E-RUN-RANGE` | Error | A runtime array index or bit/part-select is a known value outside the declared range. Per IEEE the read yields `x` and the write is dropped — the run does not crash — but the corruption is surfaced. Validate or clamp the index, or size the array correctly. |
+| `VITA-E4003` | `E-RUN-USER-ERROR` | Error | A runtime `$error`. Prints and continues. |
+| `VITA-F4004` | `F-RUN-FATAL` | Fatal | A runtime `$fatal`, which implies `$finish`. Also an engine capability limit reached mid-run: a `$fgets` or `$fscanf` inside a framed subroutine body, or a `$finish` or `$stop` actually reached inside a function or task body, where ending the run is preferred over choosing what the calling expression receives. See [Limitations](006_limitations.md). |
+| `VITA-I4005` | `I-RUN-USER-INFO` | Info | A runtime `$info`. |
+| `VITA-W4006` | `W-RUN-NO-LOCATIONS` | Warning | Reserved. A loaded snapshot carrying no location side table. |
+| `VITA-W4007` | `W-RUN-USER-WARNING` | Warning | A runtime `$warning`. |
+| `VITA-F4016` | `F-RUN-NO-CONVERGE` | Fatal | The delta-cycle limit is reached: a zero-delay loop or a combinational oscillation. |
+| `VITA-W4018` | `W-RUN-VCD-OPEN-FAIL` | Warning | The waveform dump file cannot be opened. |
+| `VITA-W4019` | `W-RUN-VCD-WRITE-FAIL` | Warning | A waveform write or flush failed, including the VCD-to-FST transcode. |
+| `VITA-W4020` | `W-RUN-DYN-DEGRADE` | Warning | A dynamic-storage operation is degraded. |
+| `VITA-W4021` | `W-RUN-DUMP-MULTI` | Warning | An extra `$dumpvars` call is ignored; the first call wins. |
+| `VITA-W4022` | `W-RUN-BAD-FD` | Warning | A file operation names an invalid or closed descriptor and is ignored. |
+| `VITA-W4023` | `W-RUN-READMEM` | Warning | A `$readmemb` or `$readmemh` problem — a missing file, or a word count that does not match the target — leaves the memory partially loaded. |
+| `VITA-F4024` | `F-RUN-CLASS-LIMIT` | Fatal | The class-object budget is exceeded. The class heap is not garbage-collected, so an unbounded `new()` hits this instead of exhausting memory. |
+| `VITA-W4025` | `W-RUN-WIDE-ARITH` | Warning | Multi-word arithmetic exceeds the width cap; the result is poisoned to X rather than silently wrong. |
+| `VITA-W4026` | `W-RUN-VCD-PKGVAR-SKIP` | Warning | A package variable has no waveform surface and is excluded from the dump. |
+| `VITA-F4027` | `F-RUN-BODY-STEP-LIMIT` | Fatal | One process ran past the body-step budget without suspending: an unbounded loop, or a genuinely long computation. |
+| `VITA-W4028` | `W-RUN-PLUSARGS-INVALID` | Warning | A matched plusarg carries a value that will not parse; the target variable is written all-X. |
+| `VITA-W4029` | `W-RUN-RANGE-UNKNOWN` | Warning | A runtime index or select is unknown (`x`/`z`) rather than a known value past the end. The recovery is the same — read `x`, drop the write — but IEEE 1364 §5.2.1 prescribes exactly that, so it is legal behaviour and not an error. Reading an array with a register that is still X before the first clock edge is the common case. |
+| `VITA-W4030` | `W-RUN-BACKEND-FALLBACK` | Warning | The requested execution backend cannot run this design and a different one ran it. The answer is unaffected; the speed is. |
+| `VITA-W4031` | `W-RUN-UNIQUE-VIOLATION` | Warning | A `unique` or `priority` `case` or `if` matched no branch, which IEEE 1800 §12.4.2 and §12.5.3 require to be reported. It has its own code so `-Wno-` and `-Werror=` can separate it from an RTL `$warning`. |
 
-### Runtime severity tasks & assertions (reserved)
-
-The following runtime codes have stable identifiers but are **not yet emitted**
-in the current release. They are reserved for the RTL severity-task and
-assertion work:
-
-| Code | Mnemonic | Sev | Meaning |
-|------|----------|-----|---------|
-| `VITA-E4001` | `E-RUN-ASSERT-FAIL` | error | An `assert` with no action block failed (implicit `$error`). |
-| `VITA-E4003` | `E-RUN-USER-ERROR` | error | A runtime `$error` fired (prints and continues). |
-| `VITA-F4004` | `F-RUN-FATAL` | fatal | A runtime `$fatal` fired — implicit `$finish`, exit `1`. Also an engine capability limit reached while running: a `$fgets`/`$fscanf` inside a framed subroutine body (vitamin stops rather than return a quiet 0), or a `$finish`/`$stop` that was actually **reached** inside a function or task body (vitamin ends the run rather than choose what the calling expression receives — see [Limitations](006_limitations.md)). |
-| `VITA-W4007` | `W-RUN-USER-WARNING` | warning | A runtime `$warning` fired. |
-| `VITA-I4005` | `I-RUN-USER-INFO` | info | A runtime `$info` reported information. |
-| `VITA-W4006` | `W-RUN-NO-LOCATIONS` | warning | The loaded snapshot has no location side-table, so runtime diagnostics omit `file:line`. Re-elaborate with locations to restore them. |
-
-(Plain `$display`/`$write` output is not a diagnostic and carries no code — it
-goes straight to stdout.)
-
----
-
-## Artifact / staleness — `9xxx`
-
-Emitted by the staged pipeline (`vcmp` → `velab` → `vrun`; see the
-[CLI Reference](004_cli-reference.md)) when a `.vu`/`.velab` artifact does not match the tool
-trying to consume it. These are the codes you hit after changing the source and
-re-running a *downstream* stage against a *stale* upstream artifact.
-
-| Code | Mnemonic | Sev | What triggers it | What to do |
-|------|----------|-----|------------------|------------|
-| `VITA-E9001` | `E-ART-FORMAT-MISMATCH` | error | The artifact's magic bytes or `format_version` don't match this build — a foreign, corrupt, or older-format file. | Regenerate it with the current tool (`vcmp` / `velab`). Artifacts are always reproducible; there is no silent migration. |
-| `VITA-E9002` | `E-ART-SCHEMA-MISMATCH` | error | The artifact's structural `schema_hash` differs from this tool's — it was built by an incompatible IR shape. | Re-run the producing stage (`velab`, after `vcmp` if needed) with the current tool. |
-| `VITA-E9004` | `E-ART-VERSION-GATE` | error | The producing tool's semver-major recorded in the artifact is incompatible with the consuming tool. | Rebuild the artifact with a matching tool version. |
-
-> `VITA-E9003` / `E-ART-STALE-UPSTREAM` — the live source re-hash gate (RULE V),
-> which rejects a snapshot whose upstream `.sv` changed on disk — is a reserved
-> identifier and **not yet wired** in the current release. Today, the
-> `schema_hash` + `format_version` gate above (`E-ART-*-MISMATCH`) is what
-> catches the common staleness cases.
+An empty-message `$error`, `$warning`, `$info` or `$fatal` prints the code's
+registered title as its message.
 
 ---
 
-## CLI / system — `0xxx` and filelist — `8xxx`
+## `8xxx` — filelist
 
-These come from the driver and argument handling rather than your RTL.
+Emitted while expanding `-f` and `-F` filelists. See the
+[CLI Reference](004_cli-reference.md) for filelist syntax.
 
-| Code | Mnemonic | Sev | What triggers it | What to do |
-|------|----------|-----|------------------|------------|
-| `VITA-E0001` | `E-CLI-BAD-FLAG` | error | An unknown or invalid command-line flag/value (e.g. a typo'd flag). Exit `3`. | Fix the spelling/value per the CLI chapter for the applet you ran. |
-| `VITA-E8005` | `E-FLIST-NOT-FOUND` | error | A filelist (`-f`) or a path it references does not exist (case-sensitive). Exit `3`. | Fix the path or its base directory; paths are case-sensitive on Linux and macOS. |
+| Number | Mnemonic | Default | Meaning |
+|---|---|---|---|
+| `VITA-E8001` | `E-FLIST-CYCLE` | Error | A filelist includes itself directly or transitively. |
+| `VITA-E8002` | `E-FLIST-DEPTH` | Error | Filelist nesting exceeds the depth cap. |
+| `VITA-E8003` | `E-FLIST-DUP-CTX-CONFLICT` | Error | The same source appears twice under differing sticky context, such as different defines or include paths. |
+| `VITA-E8004` | `E-FLIST-GLOB` | Error | A wildcard appears in a filelist path. Filelists name files, not patterns. |
+| `VITA-E8005` | `E-FLIST-NOT-FOUND` | Error | A filelist, a path it references, or an artifact handed to a staged applet cannot be read. Paths are case-sensitive on Linux and macOS. Exits 3. |
+| `VITA-E8006` | `E-FLIST-UNDEF-ENV` | Error | A filelist references an environment variable that is not set. |
+| `VITA-E8007` | `E-FLIST-WRONG-STAGE` | Error | A filelist directive is not valid for the applet that was invoked. Exits 3. |
+| `VITA-W8008` | `W-FLIST-MIXED-BASE` | Warning | A `-f` inside a `-F` frame re-anchors relative paths to the current working directory rather than to the frame. |
+| `VITA-W8009` | `W-FLIST-OVERRIDE` | Warning | A single-value knob is set more than once; the last setting wins. Recorded during parsing and replayed through the severity gate at pipeline start. |
 
-A broader set of filelist diagnostics (`E-FLIST-CYCLE`, `E-FLIST-GLOB`,
-`E-FLIST-DUP-CTX-CONFLICT`, `E-FLIST-UNDEF-ENV`, `E-FLIST-WRONG-STAGE`,
-`W-FLIST-MIXED-BASE`, `W-FLIST-OVERRIDE`) and the error-limit fatal
-(`F-LIMIT-ERRORS`, `VITA-F0002`) share the `0xxx`/`8xxx` bands. They become
-reachable as the corresponding filelist features land; their identifiers are
-already reserved and stable.
+---
+
+## `9xxx` — artifact and work library
+
+Emitted by the staged pipeline when a `.vu` or `.velab` artifact does not match
+the tool trying to consume it. These are the codes a stale downstream stage hits
+after the source changes. Policy is refuse-and-rebuild; there is no silent
+migration. Every one of them exits 2.
+
+| Number | Mnemonic | Default | Meaning |
+|---|---|---|---|
+| `VITA-E9001` | `E-ART-FORMAT-MISMATCH` | Error | The artifact's magic bytes or `format_version` do not match this build — a foreign, truncated, or older-format file — or its header will not decode. Also covers a `.velab` trailer sidecar the IR requires but the file lacks, where the engine emits it at `fatal` severity rather than the registered `error`. Regenerate with `vcmp` / `velab`. |
+| `VITA-E9002` | `E-ART-SCHEMA-MISMATCH` | Error | The artifact's structural `schema_hash` differs from this tool's: it was built against a different IR shape. Re-run the producing stage. |
+| `VITA-E9003` | `E-ART-STALE-UPSTREAM` | Error | RULE V. An upstream input hashed differently than it did when the snapshot was taken — either the source named by `vrun --upstream`, or a work-library manifest, compilation-unit blob or raw source under the automatic work-library gate. Re-run `velab`, or drop `--upstream`. |
+| `VITA-E9004` | `E-ART-VERSION-GATE` | Error | The producing tool's semver-major recorded in the artifact is incompatible with the consuming tool. Rebuild with a matching version. |
+| `VITA-E9005` | `E-WORK-MANIFEST` | Error | A work-library manifest is invalid or unreadable. |
+
+The header gate checks in order: format, then tool semver-major, then schema
+hash.
+
+---
+
+## Codes with no emitter
+
+Six of the 68 are registered and documented but produced by no code path. They
+resolve in `vita explain`, `-Wno-` and `-Werror=`, and their numbers are
+permanently reserved.
+
+| Number | Mnemonic | Band |
+|---|---|---|
+| `VITA-F0002` | `F-LIMIT-ERRORS` | General |
+| `VITA-W1003` | `W-LINT-UNCLOSED` | Preprocess |
+| `VITA-W3008` | `W-ELAB-WIDTH-TRUNC` | Elaborate |
+| `VITA-W3011` | `W-ELAB-CASEZ-APPROX` | Elaborate |
+| `VITA-E4001` | `E-RUN-ASSERT-FAIL` | Runtime |
+| `VITA-W4006` | `W-RUN-NO-LOCATIONS` | Runtime |
+
+## Codes emitted at a severity other than their default
+
+| Number | Mnemonic | Registered default | Emitted as |
+|---|---|---|---|
+| `VITA-F3005` | `F-ELAB-USER-FATAL` | Fatal | `error` |
+| `VITA-E9001` | `E-ART-FORMAT-MISMATCH` | Error | `error` from the artifact header gate; `fatal` from the engine's missing-sidecar checks |
 
 ---
 
 ## See also
 
-- [Installation](001_installation.md) — getting the tools onto Linux/macOS.
-- [CLI Reference](004_cli-reference.md) — the staged `vcmp` → `velab` → `vrun`
-  pipeline that produces the `9xxx` artifact codes.
-- [Language Reference](003_language-reference.md) — the `` `timescale `` section,
-  context for `W-PP-TIMESCALE-DEFAULT`.
-- [Limitations](006_limitations.md) — fail-safe behaviours behind some warnings.
-- [`docs/preview/15-error-code-reference.md`](../preview/15-error-code-reference.md) — the
-  **complete** catalogue. This chapter covers the codes a user hits in practice; the
-  reference lists all 68, including the ones only a malformed artifact or an internal
-  limit can produce, and is kept in step with the code registry (`crates/diag/src/code.rs`).
+- [Installation](001_installation.md) — getting the tools onto Linux or macOS.
+- [CLI Reference](004_cli-reference.md) — flags, filelists, and the staged
+  `vcmp` → `velab` → `vrun` pipeline that produces the `9xxx` codes.
+- [Language Reference](003_language-reference.md) — the `` `timescale ``
+  section behind `W-PP-TIMESCALE-DEFAULT` and `W-PP-TIMESCALE-MIXED`.
+- [System Tasks & Functions](005_system-tasks.md) — the severity tasks
+  `$info`, `$warning`, `$error` and `$fatal` that raise the `*-USER-*` codes.
+- [Limitations](006_limitations.md) — the fail-safe behaviours behind
+  `E-ELAB-UNSUPPORTED`, `F-RUN-FATAL` and the runtime caps.
+- [`docs/preview/15-error-code-reference.md`](../preview/15-error-code-reference.md)
+  — the long-form catalogue `vita explain` prints: one full entry per code, with
+  a worked example and a fix.
+- [`docs/preview/13-diagnostics-and-logging.md`](../preview/13-diagnostics-and-logging.md)
+  — the diagnostic and logging specification.

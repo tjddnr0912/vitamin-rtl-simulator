@@ -1,1083 +1,672 @@
-# 18 · 병렬/GPU 가속 분석
+# 18 · Acceleration paths — the standing verdict on each
 
-> 2026-06-05 코드 기반 분석. 결론: **이벤트구동 RTL sim 코어는 GPU 비적합**; CPU word化+SIMD와 컴파일드 백엔드가 실질 가속 경로.
+Every acceleration path that has been evaluated for the vita engine, the measurement that
+decides it, the verdict that stands, and the condition that reopens it. A path with no
+measurement behind it has no verdict here. Where a path is shipped, this document also
+carries the contract it had to satisfy to ship: the determinism surface it may not
+re-implement, the sampling moments it may not move, and the equivalence gate that proves it
+did neither.
 
-> **⚠️ 2026-06-07 실측 갱신 (아래 [§실측](#실측-2026-06-07--예측-vs-측정) 참조):** Stage C 바이트코드 VM 구현 후 `/usr/bin/sample`
-> 프로파일링 결과, 본 문서가 지목한 **두 병목(eval 트리워크 디스패치·`Value` 힙할당) 예측이 1차 측정엔 모두 빗나갔다.** 진짜 지배
-> 비용은 **bit-serial bit-by-bit 처리**(net read/write·shift·resize — 인터프리터·VM **공유** 경로)였고, 이를 word化/inline으로
-> 정리해 **누적 ~6x**(eval-heavy 2781→461ms). **다만 2차 재평가(2026-06-07 오후):** "eval = ~2-4%·native-eval
-> 저ROI"는 *eval-light 벤치마크의 산물*이었다 — 연산자수 스윕으로 eval 비중이 식 복잡도에 선형(K=16 **70%**,
-> K=32 **82%**)임을 측정. **native-eval ROI는 워크로드 의존**: 식-바운드 RTL엔 고ROI(설계당 ~2-3x), 스케줄러-
-> 바운드엔 저ROI. 향후 방향: [`../ROADMAP.md`](../ROADMAP.md).
+Companion documents: [study/01](../study/01-interpreted-vs-compiled.md) treats the same axis
+in narrative form and holds the full A/B protocol; [preview/21](21-tier3-native-backend.md)
+surveys the direction a further native backend would take;
+[preview/20](20-cycle-mode-feasibility.md) holds the separate-mode question — cycle-based
+scheduling and 2-state values.
 
-> **⚠️ 2026-07-31 실측 추가 (외부 round-23 §3.2 — 깊이 스케일링은 vita 고유가 아니다):** 리포터가 "같은 총 작업량인데 조합 깊이 1→6 이 4.3× 느리다 · 깊은 조합 cone 을 **levelize 하지 않은** 전형"이라고 진단해 왔다. **총 라운드 수를 고정한 깊이 스윕으로 오라클과 함께 재현**했더니 그 뿌리 가설이 반증됐다 —
-> 조합 단(`always_comb` + 포트 cont-assign)을 인스턴스로 체인하고 총 1200 라운드를 고정, UNROLL 만 바꿔 잰 결과:
->
-> | UNROLL | cycles | iverilog | rel | vita | rel | vita/iv |
-> |---|---|---|---|---|---|---|
-> | 1 | 1200 | 0.137 s | 1.00× | 0.128 s | 1.00× | 0.93× |
-> | 2 | 600 | 0.174 s | 1.27× | 0.157 s | 1.23× | 0.90× |
-> | 3 | 400 | 0.187 s | 1.37× | 0.184 s | 1.44× | 0.99× |
-> | 6 | 200 | 0.281 s | 2.05× | 0.273 s | 2.14× | 0.97× |
-> | 12 | 100 | 0.569 s | **4.15×** | 0.453 s | **3.55×** | 0.80× |
->
-> **iverilog 가 같은(오히려 더 가파른) 스케일링을 보이고, 절대 wall 은 vita 가 0.80–0.99×.** 깊이 비용은 vita 의 결함이 아니라 **인터프리티드 이벤트구동 델타사이클의 성질**이다 — 리포터의 비교 대상(Xcelium, 8,187 벡터 <10분 vs vita ~13시간 추정)은 **컴파일-타임에 levelize 하는 컴파일드 시뮬레이터**이고, 그 격차는 본 문서가 이미 "컴파일드 백엔드" 로 분류해 둔 축이다.
->
-> **원인은 특정됐다.** UNROLL=6 에서 사이클당 프로세스 활성이 `7 6 5 4 3 2 1 1 1 1` = 삼각형(≈D²/2). 각 단이 stale 입력으로 한 번 돌고 다음 델타에 다시 도는 형태다. **배치 정렬은 지렛대가 아니다** — active 배치를 proc id 오름/내림차순으로 정렬해 재보니 4.86 / 4.85 s 로 동일했다(실측 기각). 단 사이 전파가 `settle_cont_assigns` 즉 **델타 경계**를 거치기 때문이며, 고치려면 **rank 순 active 배출 + rank 사이 settle**(levelize)이 필요하다. 이득 상한 ≈ D/2(UNROLL=6 에서 ~3×)이고 대가는 **프로세스 실행 순서 이동**(IEEE §4 는 region 내 순서를 implementation-defined 로 두지만 vita 의 골든은 iverilog 순서에 핀되어 있다) → ROADMAP §5 에 재진입 트리거와 함께 등재.
->
-> **상수항은 별개 축이다.** trivial flop(`always @(posedge clk) c <= c+1`) 200k 사이클: vita **1.03M cyc/s** vs iverilog **1.96M cyc/s** = **1.91×**. `sample` 프로파일이 `Value::resize`+`mask_top` 을 19% 로 지목해 **원워드 fast-path 를 구현했으나 측정 이득 0**(0.190→0.188 s)이라 두 번째 코드 경로를 남기지 않고 폐기했다 — **프로파일의 심볼 귀속은 인라인된 코드까지 그 이름으로 모으므로 "호출 오버헤드"로 읽으면 틀린다**(본 문서 2026-06-07 항의 "예측이 빗나갔다" 와 같은 교훈의 재발).
->
-> **`-j`/`--threads` 는 시뮬레이션 병렬화가 아니다** — 파형 라이터 스레드 예산이라 파형을 안 쓰는 실행에서는 아무 효과가 없다(리포터가 `-j 1/4/16` 을 4.86/4.85/4.88 s 로 측정하고 1 core 고정을 확인했다). `--help` 문구를 그렇게 정정했다(§4.5.278).
+---
 
-> **✅ 2026-07-31 후속 — P9 적중률 실측 + `--backend` 노출.** 위 배속들은 전부 **바디 단위**다. 사용자에게 의미가 있으려면 그 사용자의 바디가 P9 allow-list 를 실제로 통과해야 하는데(밖이면 어느 백엔드든 인터프리터), **그 숫자를 아무도 잰 적이 없었다.** 신규 `sim_engine::codegen_coverage(&ir)` + `perf_baseline::perf_p9_coverage` 로 측정:
->
-> | 설계 | VM 이 먹는 프로세스 | 배속 |
-> |---|---|---|
-> | 식-바운드(`EXPR_HEAVY`) | 1/2 | **1.92×** |
-> | 구조-바운드(`STRUCT_HEAVY`) | 1/2 | **2.04×** |
-> | **SHA-256 compression round** | **2/3** | **1.49×** |
-> | 메모리 인덱스(`MEM_HEAVY`) | 1/2 | 1.36× |
-> | 클럭-바운드(`CODEGEN_HEAVY`) | 1/2 | 1.15× |
-> | `examples/` 4종 | 2/4 · 1/2 · 3/5 · 3/5 | (50–60%) |
->
-> **적중률은 어디서나 50–67%** — 못 먹는 나머지는 `#delay` 를 가진 스티뮬러스 절반이고, 수백만 번 도는 DUT 바디는 VM 이 가져간다. **⭐ 핵심 반증: `function` 으로 쓴다고 적중률이 떨어지지 않는다.** SHA-256 라운드를 인라인/`function` 두 형태로 재보니 **둘 다 2/3 에 0.67x/0.66x** — vita 가 elaborate 에서 인라인하므로 always 바디에 `Expr::Call` 이 남지 않는다(비율이 0.66x 라는 사실 자체가 핫바디가 VM 위에 있다는 증거 — 아니었다면 ~1.0x). "실 RTL 은 함수를 쓰니 적중률 0 일 수 있다"는 우려는 실측으로 기각.
->
-> 이 측정이 `--backend <interp|vm>` 노출의 근거다(`vita`/`vrun` 만 · `vcmp`/`velab` 는 loud reject — 아티팩트가 백엔드에 의존하지 않는다). **VM 은 Stage C 이래 구현·측정돼 있었으나 `SimOpts::backend` 가 라이브러리 전용이라 사용자가 켤 방법이 없었다** — 2-3× 가 잠긴 재고로 있었던 셈. 등가성은 P5 게이트(`backend_equiv.rs`)가 코퍼스 전체로 이미 강제하므로 노출 비용은 플래그 배선뿐이었다.
+## 1. Verdict summary
 
-> **🔴 2026-07-31 G0 — Amdahl 천장 실측: 바디-측 백엔드 축은 클럭드 RTL 에서 거의 소진됐다.** 위 배속들은 전부 per-BODY 다. **어떤** 바디-측 백엔드(더 빠른 VM · JIT · 네이티브)든 같은 P9 allow-list 를 상속하므로 천장이 같은 식으로 묶인다: 적격 바디가 wall-clock 의 `f` 를 차지하면 **상한 = 1/(1−f)**. `f` 를 아무도 잰 적이 없었다 → `run_body` 두 arm 에 스크래치 타이머를 걸어 측정(관측자 효과 ±3%, 측정 후 되돌림):
->
-> | 설계 | total | vm | fallback | engine | **f** | **상한** | vm 활성 |
-> |---|---|---|---|---|---|---|---|
-> | expr-heavy | 588.2 ms | 588.0 | 0.1 | ~0 | ~100% | (무한대) | **100** (+201 fb) |
-> | struct-heavy | 189.0 ms | 188.8 | 0.1 | ~0 | ~100% | (무한대) | **100** (+201 fb) |
-> | mem-heavy | 321.5 ms | 321.4 | 0.1 | ~0 | ~100% | (무한대) | **100** (+201 fb) |
-> | **sha256-round** | 37.7 ms | 20.8 | 8.0 | 8.9 | **55.1%** | **2.23×** | **10001** (+20001 fb) |
-> | **clock-bound** | 32.7 ms | 10.2 | 11.0 | 11.5 | **31.1%** | **1.45×** | **20000** (+40001 fb) |
->
-> **`f≈100%` 세 줄은 벤치마크 형상의 산물이지 RTL 이 아니다** — 활성 100회에 각 활성이 10000-iteration `for` 를 통째로 도는 형태(= 소프트웨어 커널). 클럭 엣지마다 한 번 도는 **진짜 클럭드 RTL 은 아래 두 줄**이고, 거기서 `f` 는 **31–55%** 다.
->
-> **⇒ F(네이티브/JIT)의 잔여 여유는 작다.** sha256-round: 상한 2.23× 인데 **VM 이 이미 1.49× 를 회수** → 잔여 **1.50×**. clock-bound: 상한 1.45× 에 VM 이 1.15× → 잔여 **1.26×**. cranelift 의존성 ~30개 + unsafe 표면 + 다세션 공수를 1.3–1.5× 에 지불하는 구조다. **직전 세션의 "F 스파이크 권고"는 이 측정으로 철회한다.**
->
-> **⇒ C(allow-list 확장)가 F 보다 큰 레버다 — 단 실현치는 별개.** 부적격 바디(`#delay`/`@`/`fork`)를 적격으로 만들면 sha256 `f`: 55.1→**76.4%**(상한 **4.24×**), clock-bound 31.1→**64.8%**(상한 **2.84×**). **다만 그 바디들은 eval-light** 다(`#1 clk=1; #1 clk=0` 은 스케줄러 상호작용이지 식 평가가 아님) — 상한은 *도달 가능 범위*의 상계이지 예측이 아니다.
->
-> **⇒ 남는 24–35% 는 엔진 작업**(settle·propagate·NBA·VCD)이고 **C 도 F 도 손대지 못한다.** 이미 두 라운드를 수확한 스케줄러 축이다(allocator 1.85× · dirty-list+snapshot 제거 19.7×).
->
-> **총평: 78× 요구는 바디를 더 빨리 실행해서 못 낸다 — 스케줄을 바꿔야 한다(D levelize · E flatten).** 그게 정확히 Xcelium/VCS 가 하는 일이고, 이 문서 첫머리의 "컴파일드 ≠ levelized" 구분이 여기서 값을 치른다.
+| Path | Verdict | Deciding measurement | Reopens when |
+|---|---|---|---|
+| Word-parallel 4-state bit operations | shipped | ~6× cumulative on an expression-bound design, with the per-bit formulas kept as a test oracle | — |
+| Bytecode VM (`--backend vm`) | shipped; compiled only in an `oracle` build | expression-bound ~2.2×, structure-bound ~2.8×, wide 100-bit ~1.7×, clock-bound ~1.0× | — |
+| Flat net arena + width-specialised evaluator (`--backend native`) | shipped; the default executor | picorv32 0.513 s against the VM's 0.838 s and the interpreter's 1.319 s | — |
+| Machine-code generation through cranelift (`jit` feature) | rejected; off by default, kept building and measured | 14–47% slower on the default backend; ~38% of a run is boundary shim against a ceiling of 8.9–11.3% | leaf loads and 2-state arithmetic can be inlined into generated code with zero calls back into Rust, and without a second spelling of the expression semantics |
+| Flat storage alone, without the rest of the bundle | rejected | 0.57 s → 0.57 s | — |
+| Widening the suspend-free allow-list | rejected | refused activations are 18.1% of activations but 4.3% of time; a measured ceiling of 2.84–4.24× realised 0.2–0.3% | stimulus bodies become compute-heavy — eight or more statements per activation |
+| Levelization of the Active batch | discarded | 1.00× across combinational depths 1–24; the quadratic term belonged to the continuous-assign settle, and the dirty settle closes it | no standing trigger — real RTL measures inter-process depth 1, and a design at depth ≥ 6 would be the first observation worth re-measuring |
+| Process fusion in the default mode | not adopted | value divergence against Icarus Verilog, on a pinned counterexample | only as a declared mode with a hazard detector — [preview/20](20-cycle-mode-feasibility.md) |
+| Global 2-state values (dropping the `unk` plane) | rejected | removing the work the second plane causes measures ~7% against a 30% bar | never as a default — [preview/20](20-cycle-mode-feasibility.md) |
+| Multicore PDES within a timestep | conditional no-go | the parallelisable share is 78–82%, so the Amdahl ceiling is ≈2.5× at T=4 and ≈3.3× at T=8; the corpus's active batch width is W = 1–8 | a real design sustains batch width W ≥ ~64 with per-activation grain ≥ ~200 ns |
+| GPU for the core engine | not viable | structural (§6), not a tuning gap | — |
+| Stimulus-parallel GPU (Monte-Carlo regression) | a separate product | requires a branch-free cycle-based engine, which is a different engine | — |
 
-> **🔴 2026-07-31 C-GAIN — C(allow-list 확장)도 죽었다. 바디-측 축은 "거의"가 아니라 완전히 소진.** G0 이 "C 의 **상한**은 2.84–4.24× 로 F 보다 크다"고 했으므로 다음 질문은 **실현치**였다: C 가 흡수할 바디는 `#delay` 스티뮬러스 = eval-light 인데, **VM 이 가벼운 바디를 애초에 빠르게 만드는가?** C 를 짓지 않고 답할 수 있다 — 이미 VM 이 먹는 바디에서 **활성당 작업량을 스윕**하면 된다(엣지 100k 고정, `perf_work_per_body_crossover`):
->
-> | 문장/활성 | interp | vm | vm/interp |
-> |---|---|---|---|
-> | **1** | 81.8 ms | 81.3 | **0.99×** |
-> | **2** | 94.9 ms | 93.6 | **0.99×** |
-> | 4 | 117.7 ms | 113.9 | 0.97× |
-> | 8 | 159.7 ms | 145.0 | 0.91× |
-> | 16 | 242.8 ms | 203.8 | 0.84× |
-> | 32 | 408.1 ms | 319.7 | 0.78× |
-> | 64 | 740.4 ms | 554.8 | 0.75× |
->
-> **VM 은 지지 않지만(≤1.00×), 활성당 1–2 문장에서는 아무것도 주지 않는다**(0.99× · 별도 `stimulus-like` 단일점은 1.03× 로 나와 **노이즈권의 무승부**가 정확한 표현이다). 의미 있는 이득은 **8문장 이상**부터다 — 레지스터 파일 리스·프롤로그·디스패치 루프라는 **활성당 고정비**가 그 아래선 상각되지 않는다.
->
-> **스티뮬러스 바디는 1–3 문장이다.** ⇒ C 가 흡수할 바디들은 정확히 곡선의 무승부 구간에 있다. 실현치 환산: sha256-round 의 fallback 8.0 ms → 7.92 ms(총 37.7→37.6, **+0.2%**) · clock-bound 11.0 → 10.9(총 32.7→32.6, **+0.3%**). **상한 2.84–4.24× 대비 실현치 +0.2–0.3%** — 게다가 C 는 resume-PC 상태기계(L)라는 새 silent-wrong 표면까지 지불한다. **C = 기각.**
->
-> **⇒ 바디-측 축 최종 정산: A 출하 · B defer · C 기각(실측) · F 기각(실측).** 남은 레버는 **엔진 축**(24–35%, 이미 두 라운드 수확)과 **스케줄 축**(D levelize · E flatten)뿐이다.
+The live queue that carries these rows, with their identifiers, is
+[ROADMAP §5](../ROADMAP.md) (standing verdicts and open residues) and
+[ROADMAP §7](../ROADMAP.md) (conditional items and their triggers).
 
-> **🔴🔴 2026-08-01 실물 설계 실측 — 지금까지의 배속 주장 두 개를 정정한다.** 이 문서의 모든 수치는 **합성 벤치와 2–5 프로세스 예제**에서 잰 것이었다. 실물 오픈소스 코어(PicoRV32 + 최소 테스트벤치, `bench/` gitignored)를 처음 넣고 재니 답이 달라졌다.
->
-> | | 합성 (instances 48) | **실물 (picorv32+tb)** |
-> |---|---|---|
-> | P9 커버리지 | 50–67% | **88%** (DUT 단독 100%) |
-> | **VM 실배속** | 1.41× | **1.04×** |
-> | `f` (적격 바디 몫) | 33.1% | **59.3%** |
-> | 상한 `1/(1−f)` | 1.49× | **2.46×** |
-> | **JIT 잔여** | 1.06× | **2.37×** |
->
-> **정정 1 — `--backend vm` 의 실설계 배속은 1.4–2.0× 가 아니라 1.04× 다.** 앞선 수치는 전부 합성 벤치였다. best-of-5 재측정으로 확인(60.4 → 58.3 ms).
->
-> **정정 2 — F 기각의 근거였던 "잔여 1.06×" 도 합성 프록시 값이었다.** 실물에서는 **2.37×** 다.
->
-> **왜 f 가 59% 인데 VM 이 1.04× 밖에 못 내나** — 이게 진짜 발견이다. 바디 안의 지배 비용이 **디스패치가 아니라 넷 읽기/쓰기**이고, 그 경로는 **인터프리터와 VM 이 공유**한다. 본 문서 2026-06-07 항이 이미 같은 것을 지목했었다("진짜 지배 비용은 bit-serial 처리 — 인터프리터·VM 공유 경로"). 큰 `always @*` 블록은 산술 사슬이 아니라 **와이드 net I/O·먹싱·case 디코딩**이 대부분이다.
->
-> ⇒ **Amdahl 상한 2.46× 는 "적격 부분이 0 이 된다"는 가정이고, JIT 은 공유 net 경로를 0 으로 못 만든다.** 따라서 잔여 2.37× 는 **JIT 이 실제로 가져갈 수 있는 양이 아니다.** F 판정을 뒤집으려면 `vm_ns` **안에서** 디스패치 대 net I/O 비중을 갈라야 한다 — 그게 미측정 항목이고, 이 축의 다음 질문이다.
->
-> ⇒ **당장의 함의: 실물 RTL 의 레버는 백엔드가 아니라 공유 net-access 경로다.**
+---
 
-> **✅ 2026-08-01 — 분기 조건 native 컴파일. 실물 설계에서 VM 1.065× → 1.160×.**
->
-> 실물 프로파일이 인터프리터/VM **양쪽에서 형상이 같았다**(eval dispatch 60.7% · Value prim 32%). 바디가 시간의 62%이고 assign RHS 는 **97% native 컴파일**되는데도 VM 이 1.04× 였다 ⇒ 바디 안에서 뭔가가 인터프리터로 새고 있었다. 그것이 **분기 조건**이었다: `CompiledTerm::Branch` 가 조건 ExprId 를 그대로 들고 `k_truthy` 로 평가했다.
->
-> **실물 RTL 은 조합 논리를 if/case 트리로 쓴다** — 디코더형 설계의 바디 시간은 거기 있다. 측정: picorv32+tb 의 분기 조건 **316/316 이 native 컴파일 가능한데 전부 인터프리터**였다.
->
-> | | interp | vm | 배속 |
-> |---|---|---|---|
-> | PRE (`cf23f19`) | 1242.8 ms | 1166.7 | 1.065× |
-> | **POST** | 1244.1 ms(불변) | **1072.2** | **1.160×** |
->
-> **VM 자체가 1.088× 빨라졌다.** 인터프리터는 손대지 않았다.
->
-> **의미 보존 방식이 핵심**: truthiness 는 **tri-valued 제어흐름 규칙**이라 `x`/`z` 는 else 로 간다("0 이 아니면 참"이 아니다). 그래서 native 경로는 값만 native 로 계산하고 **판정은 인터프리터와 같은 `truthiness` 로 라우팅**한다(`k_truthy_value`). 규칙을 컴파일 쪽에 재구현하면 X-free 설계는 전부 통과하면서 조용히 갈라진다 — `a_natively_compiled_branch_condition_keeps_the_tri_valued_rule` 이 그 자리를 핀한다.
->
-> 검증 = P5 게이트 · 5024 tests · picorv32 에서 iverilog/interp/vm **3자 일치**(`trap=0 addr=00000014`).
+## 2. Two orthogonal axes, and where vita sits
 
-> **🔴 2026-08-01 — `Value::resize` 원워드 fast-path: 실물에서도 ~1%. 그리고 그것이 이 축의 결론이다.**
->
-> 분기-native 이후 프로파일에서 **`resize` 16.6% + `mask_top` 13.0% = 29.6%** 가 최대 단일 그룹이 됐다. §4.5.278 이 여기서 fast-path 를 시도했다가 이득 0 으로 폐기했는데, 그 측정이 **64비트 합성 벤치**여서 `new_width == self.width` 조기반환에 대부분 걸렸다는 가설로 재시도했다(실물 32비트는 폭 변환이 상시).
->
-> 결과(인터리브·9회, MID `802ca41` vs POST): **interp min 1.0133× · median 1.0067×**. 재현되지만 **~1%**.
->
-> ⇒ **`resize` 의 16.6% 는 걷어낼 수 있는 오버헤드가 아니라 실제 비트 조작 작업이다.** 두 번의 독립 시도(§4.5.278 합성 · 본건 실물)가 같은 답을 냈다. 코드는 유지(단일 early-return · `resize_fast_path_matches_general` 이 2016 조합으로 잠금)하되 **레버가 아님**을 명시한다.
->
-> **⭐ 그래서 이 축의 진짜 결론**: 프로파일이 `eval_ctx` 26.7% · `resize` 16.6% · `netread` 13.1% · `mask_top` 13.0% · `eval_binary` 12.5% 로 **고르게 퍼져 있다.** 단일 레버가 없다는 뜻이고, 그 이유는 이 전부가 **4-state 비트 조작**이기 때문이다 — 정확한 4-state 시뮬레이터가 치러야 하는 비용 그 자체다.
->
-> ⇒ **구조적 레버는 `unk` 평면을 없애는 것**(2-state)뿐이다. `mask_top`·`resize`·net 저장이 전부 절반이 된다. 그게 Verilator 의 10–100× 가 나오는 자리이고, [preview/20](20-cycle-mode-feasibility.md) 의 별도 모드가 **융합이 아니라 이 이유로** 다시 후보가 된다.
+"Compiled simulators are fast" conflates two independent choices, and the verdicts above are
+only readable once they are separated.
 
-> **✅✅ 2026-08-01 — leaf fast path. 실물 설계에서 VM 1.191× · 종합 1.364×. 세션 최대 성과.**
->
-> M1(2-state)이 7% 로 기각된 뒤 남은 가설은 **"비용이 4-state 가 아니라 인터프리테이션 구조"** 였다. 그런데 native-eval 이 **이미 내부 트리워크를 제거한 실험**인데도 `resize`·`netread` 가 뜨거웠다 ⇒ 비용은 내부 노드가 아니라 **leaf** 다. 코드를 보니 정확했다:
->
-> ```rust
-> NOp::LoadScalar { net, w, signed } => {
->     let v = nets.read_net(net, None).resize_keep_sign(w, signed);  // Value 2개 생성
->     stack.push((v.val.first()…, v.unk.first()…));                   // u64 2개만 쓰고 버림
-> }
-> ```
->
-> **모든 native leaf 로드가 full `Value`(두 `Words` 평면, ~56 B) 두 개를 만들고 버렸다.** 프로파일의 `netread` 13.1% + `resize` 16.6% 가 여기였다 — native-eval 이 없앤 트리워크가 아니라, 그것이 **손대지 않은 leaf**.
->
-> 수정 = `NetReader::read_scalar_words(net, w, ctx_signed) -> Option<(u64,u64)>`. **평범한 스칼라 넷**만 워드를 직독하고, class handle·frame local·dyn handle·real·string·배열·>64bit 는 전부 `None` 으로 기존 경로에 남긴다(default `None` 이라 다른 `NetReader` 구현은 무영향).
->
-> | | before(`802ca41`) | after | |
-> |---|---|---|---|
-> | VM | 1078.9 ms | **905.9 ms** | **1.191×** |
-> | interp | 1235.3 ms | 1235.3 ms | (VM 전용 경로) |
-> | **interp → VM** | 1.16× | **1.364×** | |
->
-> 검증 = P5 코퍼스 게이트 · 5026 tests · `leaf_fast_path_matches_read_net`(부호비트 set·**부호비트의 x**·미부호·1/2/8/32/64bit 를 5개 문맥폭으로 읽어 인터프리터와 대조) · picorv32 에서 **iverilog/interp/vm 3자 일치**.
->
-> ⭐ **교훈**: "native-eval 이 이미 최적화했다"가 leaf 까지 최적화했다는 뜻이 아니었다. **최적화된 경로의 가장자리를 보라.**
-
-> **✅✅ 2026-08-01 — cont-assign native. 기본 인터프리터 1.092× · VM 1.142× · 종합 1.423×.**
->
-> leaf 수정 후 런루프 수준 타이머(델타당 1회 호출이라 관측자 효과 작음)로 **스케줄러 리전별 wall-clock** 을 쟀다:
->
-> | region | interp | VM | 백엔드가 건드리나 |
-> |---|---|---|---|
-> | bodies | 3762 ms (60%) | **2171 ms (47%)** | ✅ 1.73× |
-> | **settle** | 1092 ms | **1090 ms (23.4%)** | ❌ **전혀** |
-> | nba | 748 ms | 743 ms (15.9%) | ❌ |
-> | prop | 231 ms | 229 ms | ❌ |
->
-> **VM 은 바디를 이미 1.73× 로 만들었다.** 전체가 1.34× 였던 건 바디가 60% 뿐이어서다. 그리고 **settle(23.4%)이 백엔드가 손대지 않은 최대 블록** — 연속대입은 프로세스 바디가 아니라서 바이트코드 백엔드가 도달한 적이 없다.
->
-> 수정 = 각 cont-assign 의 RHS 를 **`eval_for_lvalue` 와 정확히 같은 문맥**(`lvalue_width(lhs).max(self_width(rhs))`, 부호는 rhs)으로 한 번 `try_compile` 하고, settle 의 세 호출 지점(주 루프·multi-driver 해소·delayed 스케줄링)을 `eval_cont_assign` 하나로 통일. 바디 경로가 이미 P5 게이트로 등가를 증명한 (문맥, 프로그램) 조합 그대로다.
->
-> | | interp | vm |
-> |---|---|---|
-> | PRE (`4abfcda`) | 1234.8 ms | 907.5 ms |
-> | **POST** | **1130.4 ms** | **794.6 ms** |
-> | | **1.092×** | **1.142×** |
->
-> **⭐ 이 경로는 백엔드 무관이라 기본 인터프리터가 빨라진다** — 이 세션에서 기본 경로를 유의미하게 움직인 첫 변경이다. 종합 interp→vm = **1.423×**.
->
-> ⭐ **디버그 기록**: 처음 구현이 **18개 테스트를 깼다**(`pkg_call_*` · `gap_b_function_*` · `cont_assign_originated_runaway_terminates`). 뿌리 = 바디 경로는 `Expr::Call` 을 **`is_codegen_able` 이 바디 수준에서** 배제하는데(B1 frame-call), 나는 `try_compile` 만 재사용하고 **호출자 쪽 전제조건을 재현하지 않았다.** 프레임 평가기는 `&self` 인터프리터 읽기 경로에서만 돈다(재진입 프레임 arena · 정적 재귀가 의존하는 좌→우 피연산자 순서). 같은 `expr_has_call` 가드를 붙여 해결. **공유 헬퍼를 재사용할 때 호출자 쪽 전제조건이 따라오지 않는다.**
->
-> 회귀 핀은 **CLI 수준**에 뒀다 — 라이브러리 테스트 하네스는 사이드카 없이 elaborate 해서 `func_table` 이 없고 함수 호출이 전부 X 로 읽힌다. 거기 뒀으면 **깨진 빌드에서도 공허하게 통과**했을 것이다.
-
-## 요약 판정
-
-| 방향 | 평가 | 이유 |
+| | Interpreted | Compiled |
 |---|---|---|
-| GPU(Metal/CUDA/일반) 코어 엔진 | ❌ 비권장 | 이벤트구동 RTL은 분기발산·희소활성·시간인과·포인터추적으로 GPU-적대적 |
-| CPU word-level + SIMD(NEON/AVX) | ✅ 실질 이득, 저위험 | 4-state 비트연산이 현재 bit-by-bit → word化만으로 ~64×, SIMD 추가. **실측: net I/O·shift·resize·read까지 word化/inline 확장 → 누적 ~6x** |
-| 멀티코어 PDES(timestep 내) | ❎ **조건부 NO-GO (2026-06-11 연구 종결)** | 결정성은 차단 요인 아님(보존 설계 존재) — 진짜 제약은 워크로드 폭(W=1~8)·직렬 잔류 ~20%(Amdahl 상한 T4 ≈2.5x)·공수. [§PDES 타당성 연구](#pdes-타당성-연구-2026-06-11--p4-t4-종결) |
-| 컴파일드 백엔드(코드젠) | ⛔ **2026-08-17 실측으로 기각** (아래 §Phase D 판정) | **2차 재평가:** eval 비중은 식 복잡도에 선형(K=16 70%·K=32 82%). 식-바운드(ALU·crypto·깊은 조합)엔 native-eval ~2-3x; 스케줄러-바운드엔 작음. 고위험·다세션, P5 게이트가 정확성 상쇄. [§실측 native-eval 재평가](#native-eval-재평가-2026-06-07-오후--위-저roi-판정-정정) |
-| stimulus-parallel GPU(Monte-Carlo) | 별개 제품 | branch-free cycle-based 엔진 신규 필요 |
+| Event-driven, full 4-state | Cadence Verilog-XL; vita's reference executor | Synopsys VCS, Cadence Xcelium, Siemens Questa |
+| Cycle-based, usually 2-state | rare | Verilator |
 
-### ⭐⭐⭐ Phase D 판정 — **코드젠은 지어서·배선해서·재서 기각했다** (2026-08-17, ROADMAP §5.1-be)
+VCS — *Verilog Compiled-code Simulator* — is the origin of the compiled line and displaced
+the interpreted reference on speed alone; Cadence made the same move through NC-Verilog to
+Xcelium. A sign-off simulator is compiled **and still** event-driven, 4-state and
+timing-accurate. Verilator is compiled **and** cycle-based: it drops intra-cycle scheduling
+and evaluates once per clock, buying one to two orders of magnitude and giving up fine
+timing, part of 4-state, and sign-off standing with them.
 
-이 문서의 *"식-바운드엔 native-eval ~2-3x"* 판정은 **2026-06 의 것이고, 그 사이에 무대가 바뀌었다.**
-tier-3 native 백엔드가 생겼고(평면 아레나 + 폭 특수화 평가기 + 2-state 레인), 그 결과 **경쟁 상대가
-이미 매우 빠르다** — 컴파일러가 op 루프·표현식 평가·저장을 **한 덩어리로 인라인**한다.
+vita is event-driven and 4-state by design — see [01-goals-and-scope](01-goals-and-scope.md),
+G1. Every path in §1 either stays inside that class or is explicitly a separate mode.
 
-**cranelift 코드젠(`jit` feature)을 tier-3 에 배선하고 잰 결과:**
+### 2.1 The three executors at HEAD
 
-| 형태 | JIT off | JIT on | Δ |
+| `--backend` | Availability | What it is |
+|---|---|---|
+| `native` | always compiled; the default | net values in a flat `u32`-indexed arena; uniform-width expressions on a specialised evaluator |
+| `vm` / `bytecode` | `oracle` feature, on by default in a workspace build | each body compiled once to a bytecode op stream, then an op loop |
+| `interp` / `interpreter` | `oracle` feature | walks `SimIr` on every activation; the readable reference |
+
+In a `--no-default-features` build only `native` exists, and the two oracle spellings are a
+loud rejection rather than a silent downgrade. Backend mechanics in full are in
+[06-simulation-engine](06-simulation-engine.md).
+
+### 2.2 The ceiling, measured
+
+The compiled-versus-cycle distinction is not theoretical here. Keccak-f[1600] on macOS
+arm64, release builds, interleaved samples with the first round discarded, all four tools
+agreeing on the digest and anchored to the published Keccak reference value
+(`bench/keccak/RUN.md`):
+
+| Simulator | Design | Per permutation | Relative to Verilator |
+|---|---|---:|---:|
+| Verilator 5.050, `--binary --timing` | `keccak_f.sv` | 7.0 µs | 1× |
+| vita | `keccak_f_flat.sv` (calls expanded) | 295 µs | 42× slower |
+| vita | `keccak_f.sv` (function/task calls) | 2 035 µs | 291× slower |
+| Icarus Verilog 13 | `keccak_f.sv` | 4 470 µs | 639× slower |
+
+42× is the gap between an event-driven 4-state engine at its best and a compiled 2-state
+cycle engine, measured on one machine and one design. It is an optimistic bound on what a
+compiled backend is worth, because Verilator traded away 4-state and intra-cycle ordering to
+get it, and a compiled 4-state simulator is slower than that. VCS and Xcelium are not
+measured by this project; their advantage over an open-source 4-state simulator is treated as
+a given, and no number here is a measurement of it.
+
+Against the same class of tool — Icarus Verilog on the ten-workload corpus — vita's
+geometric mean is 1.74× over the nine timed rows and 1.93× over the seven third-party rows.
+Full table: [study/03](../study/03-workload-corpus.md).
+
+The two readings do not conflict, and both matter for ranking an acceleration: the gap to a
+cycle-based compiled tool is a **constant factor**, not a complexity class, and the paths
+that would close it are exactly the ones §7 and §11 price.
+
+---
+
+## 3. Shipped: word-parallel 4-state bit operations
+
+The 4-state bitwise operators and the six reductions work on `u64` words of the `val` and
+`unk` planes rather than bit by bit. For AND the word formula is
+
+```text
+known0 = (~av & ~au) | (~bv & ~bu)
+known1 = (~au &  av) & (~bu &  bv)
+rv     = known1
+ru     = ~known0 & ~known1
+```
+
+`or_w`, `xor_w`, `xnor_w` and `not_w` in `crates/sim-engine/src/value.rs` have the same
+shape, and `reduce_word` with `RedKind` in `crates/sim-engine/src/eval/` covers the
+reductions. The final partial word is masked with the low mask, because `not_w` and `xnor_w`
+map the unused high `0 & 0` region to 1.
+
+| Property | Contract |
+|---|---|
+| Oracle | the per-bit formulas stay under `#[cfg(test)]`, and `value.rs::word_vs_bit_parity` compares them bit-exactly against the word forms |
+| Effect | a 64-bit AND is one word operation instead of 64, and the loop is branchless, so LLVM auto-vectorises it (NEON / AVX). Wide buses gain; a narrow design is one word and loses nothing |
+| Out of scope | relational and equality comparison run on the arithmetic lanes (64/128-bit integers), a different path that is not word-ised |
+
+`std::simd` is deliberately not used. `portable_simd` is nightly-only, which conflicts with
+the stable MSRV 1.85 pin and with `--locked` byte-identical output across the supported
+platforms. The stable `u64` word loop is already 64 lanes wide per word and LLVM vectorises
+it, so explicit SIMD buys nothing that would justify either a nightly toolchain or the `wide`
+crate; each breaks a core invariant.
+
+### 3.1 What the word representation is worth
+
+The operators are only part of it: the same move applies to net access, shifts, resizing and
+value storage. Measured against a per-bit baseline on an expression-bound design, each step
+timed against the state before it:
+
+| Step | What became word-parallel | Time | Cumulative |
+|---|---|---:|---:|
+| baseline | evaluation delegated to the kernel, per-bit throughout | 2781 ms | — |
+| net I/O | the net-access funnel — `slice_word`, `write_lvalue`, `write_chunk`: per-bit → `u64` words | 1274 ms | 2.18× |
+| shift and resize | `value.rs` `shr_fill`, `shl_grow`, `Value::resize`: per-bit → multi-word | 948 ms | 2.9× |
+| value storage | `Value.val` / `.unk` from `Vec<u64>` to `Words` — inline up to 128 bits, heap above | 618 ms | 4.5× |
+| read and mask | a length guard on `mask_top`'s resize, and `read_net` reading inline rather than through a transient `BitPacked` | 461 ms | **~6.0×** |
+
+A scheduler-bound design over the same steps goes 196 ms → 61 ms, ~3.2×.
+
+Two properties of that ladder are the reason it is recorded here rather than in a change
+log. First, **every one of these wins is on the path the interpreter and the VM share**, so
+none of them is backend-specific and none of them costs a second spelling. Second, the
+dominant cost was found by measurement and was not the predicted one: the two bottlenecks
+predicted before the first profile — evaluation tree-walk dispatch, and `Value` heap
+allocation — were each *masked* by bit-serial net I/O, and a `Value` inlining experiment
+that measured ~0 before the net-write loop was word-ised measured 1.55× after it. A
+bottleneck is layered; one profile does not finish the job.
+
+---
+
+## 4. Shipped: the bytecode VM, and the substrate rule behind it
+
+### 4.1 Target form
+
+Three target forms were evaluated against the project's hard constraints: cargo-only, no
+`build.rs` in vita's own crates, a pinned MSRV, and `--locked` byte-identical output across
+platforms.
+
+| Target form | Speed | New dependency | Determinism pins | Verdict |
+|---|---|---|---|---|
+| Bytecode VM | ~2–5× | none; pure Rust | all preserved | chosen |
+| Emitted native Rust | 10–100× headline | a runtime `rustc` or `cc`, plus `libloading` | the host LLVM would have to be re-proved | rejected — it puts a runtime host toolchain into a repository that forbids even a `build.rs`, and collides head-on with cargo-only, the hermetic `.velab → VCD` contract and cross-platform byte identity |
+| Typed IR-2 | ~3–8× | none | preserved | second choice; the gain is small for the work |
+
+Determinism is the first goal, so the substrate is the one that removes interpretation
+overhead without touching it.
+
+### 4.2 Compile-and-load mechanism: none
+
+An in-process bytecode interpreter generates no code and loads none. The `.vu` and `.velab`
+artifacts, the `vita` and `vrun` execution paths and the hermetic contract are all unchanged,
+so the "runtime rustc / cdylib+dlopen / static dispatch" question never arises.
+
+The determinism corollary is structural rather than tested-for: a VM opcode **dispatches**
+the same 4-state and f64 primitives the interpreter calls; it does not re-implement them. The
+float format and arithmetic axes therefore agree byte for byte by construction.
+
+### 4.3 Compile-time constants in bytecode
+
+Static widths and signedness, and folded index, width and count values, are encoded as
+**immediate operands or const-pool indices on the op** — not as a separate node type and not
+as an emitted literal. Shallow folds and per-site fallbacks are computed once at
+bytecode-compile time and frozen into the immediate.
+
+### 4.4 Golden impact: none
+
+Bytecode, VM state and the whole backend seam live outside `sim_ir::SimIr` — in `SimOpts`
+sidecars or in separate modules — so `schema_hash::<SimIr>()` is unaffected by any of it, and
+a backend change never needs a `format_version` bump. See
+[16-schema-hash-spec](16-schema-hash-spec.md) and
+[17-sim-ir-ir-backbone-freeze](17-sim-ir-ir-backbone-freeze.md).
+
+### 4.5 What the VM is worth
+
+Release build, best of five, `crates/sim-engine/tests/perf_baseline.rs`:
+
+| Workload shape | VM against the interpreter |
+|---|---|
+| Expression-bound | ~2.2× |
+| Structure-bound (select / concat / replicate) | ~2.8× |
+| Wide, 100-bit | ~1.7× |
+| Clock- or scheduler-bound | ~1.0× — evaluation is not the bottleneck there |
+
+The VM's allow-list is a positive list over terminators (`backend::is_codegen_able`), so a
+body holding `#delay`, `@`, `fork` or a call terminator stays on the walk. Its reject-reason
+keys — `"delay"`, `"wait"`, `"fork"`, `"frame_call"` — are stable and appear in `run.json`'s
+`codegen` histogram.
+
+The interpreter is **excluded from performance work by rule**: making the reference faster is
+how a reference stops being readable, and a second spelling of a rule is this repository's own
+defect class.
+
+---
+
+## 5. Shipped: the flat arena and specialised evaluator
+
+The default backend owns net storage — a single flat `u32`-indexed word buffer,
+`native::arena::NetArena` — so it is all-or-nothing per design rather than per body.
+Measured on picorv32, release, interleaved, best of five:
+
+| Executor | Time | Against native |
+|---|---:|---:|
+| `--backend interp` | 1.319 s | 2.57× slower |
+| `--backend vm` | 0.838 s | 1.63× slower |
+| `--backend native` | **0.513 s** | 1.00× |
+| Icarus Verilog 13 | 0.585 s | 1.14× slower |
+
+Corpus eligibility is 6,470 / 6,470 = 100.00% with zero refusals.
+
+The load-bearing lesson for any future acceleration is that this backend pays because four
+things land **together**: static net allocation, width-specialised operations, erasure of the
+schedule lookup into direct calls or static bits, and a specialised NBA record. None of them
+pays alone, which §7 and §8 measure directly.
+
+---
+
+## 6. Not viable: GPU for the core engine
+
+Event-driven RTL simulation is hostile to a GPU for six independent reasons, and none of them
+is a tuning gap.
+
+1. **Branch divergence.** Every process is data-dependent `if` / `case` / loop, which is SIMT
+   warp divergence, which is a throughput collapse.
+2. **Sparse activity.** Only the nets and processes that changed in a timestep are
+   re-evaluated, and that is a very small fraction. A GPU wants dense, uniform work.
+3. **Temporal causality.** Time T depends on T−1, so there is no parallelism *across*
+   timesteps — only independent processes *within* one, which is exactly the sparse,
+   divergent set above.
+4. **Pointer chasing.** The IR is an index-edge arena and evaluation is a recursive tree
+   walk, so memory access is uncoalesced.
+5. **Fine-grained synchronisation.** NBA, delta cycles and the layered regions are barriers
+   and atomics.
+6. **The industry position agrees.** VCS, Xcelium and Questa are all CPU tools. Published GPU
+   simulation work targets *different* problems — large cycle-based gate netlists, and
+   stimulus-parallel regression farms.
+
+Stimulus-parallel GPU — many independent Monte-Carlo runs — is a coherent product, but it
+requires a branch-free cycle-based engine. That is a different engine, not an acceleration of
+this one.
+
+---
+
+## 7. Rejected: machine-code generation through cranelift
+
+The `jit` Cargo feature is present, builds, is wired into the default backend, is measured
+and is correct. It is off by default and stays off.
+
+### 7.1 Status at HEAD
+
+| | |
+|---|---|
+| Cargo feature | `jit`, OFF by default, declared on `sim-engine` and forwarded by `cli` |
+| Runtime gate | additionally requires the `VITA_JIT` environment variable; `VITA_JIT_STATS` prints per-run codegen statistics |
+| Dependency | cranelift 0.120, the newest line that builds on rustc 1.85 (0.134 requires 1.94); ~29 crates |
+| Unsafe surface | the call boundary — the only `unsafe` in the workspace besides `cli/src/frontend.rs`'s `signal(2)` |
+| Correctness | the CLI and sim-engine suites pass with the JIT enabled |
+| Determinism | not the obstacle it was assumed to be: cranelift IR masks shift counts itself, so `ushr(x, 64) == ushr(x, 0)` on both aarch64 and x86-64. What remains is that cranelift's definition is not Verilog's definition, which is one architecture-independent guard |
+
+### 7.2 Three measurements, all negative and all agreeing
+
+**Per expression.** 0.58 s → 0.67 s, +23.5 ns per call. Isolated with a callback-free
+`Const`-only program — machine code whose entire body returns two constants — the boundary
+alone is +32.6 ns. At 6,509,189 `eval_native` calls, a 33 ns boundary is 215 ms of cost
+against a 130 ms target, so the sign was arithmetically settled before any code-quality work.
+
+**Per body.** Raising the compilation unit to the body calls the boundary 12× less often —
+542,883 times, 18 ms of boundary. Coverage is 16 of 22 templates, 382,877 of 542,883
+activations = 70.5%. Result: 0.57 s → 0.61 s, +104 ns per activation. Cutting the boundary
+count by 12× does not change the sign, because a compiled body turns every kernel call and
+shim op into a non-inlinable `extern "C"` call, where the VM path has them all inlined in
+Rust.
+
+**On the default backend**, with the flat arena and width specialisation already in place:
+
+| Shape | JIT off | JIT on | Δ |
 |---|---:|---:|---|
-| struct-heavy | 55.1 ms | 81.2 ms | **+47.4%** |
-| eval / mem / expr | 62.9 / 81.6 / 116.1 | 87.5 / 107.4 / 148.6 | +39 / +32 / +28% |
-| **picorv32** | 514 ms | 587 ms | **+14.1%** |
+| struct-heavy | 55.1 ms | 81.2 ms | +47.4% |
+| eval-heavy | 62.9 ms | 87.5 ms | +39% |
+| mem-heavy | 81.6 ms | 107.4 ms | +32% |
+| expr-heavy | 116.1 ms | 148.6 ms | +28% |
+| picorv32 | 514 ms | 587 ms | +14.1% |
 
-**원인은 프로파일이 말한다 — 런의 ~38% 가 shim** 이다: `s_load` **13.7%**(leaf 마다 Rust 로 되돌아
-오는 호출) · `jit::mk` **12.4%**(**쓰기마다 72바이트 `Value` 재생성** — tier-3 이 네 슬라이스에 걸쳐
-걷어낸 마샬링이 **경계에서 부활**한다).
+### 7.3 The verdict is arithmetic
 
-**판정 = 산술**: 완벽한 코드젠이 없앨 수 있는 것은 **op 디스패치뿐이고 8.9~11.3%** 인데, 경계가
-**~38%**(`mk` 를 다 없애도 25%) ⇒ **11% 를 벌려고 25% 를 내는 거래**. 그 위에 **표현식 의미의 두 번째
-구현**이라는 대가가 있다(§4.5.279 결함 부류 — 이 엔진에서 두 번째 구현이 첫 번째와 **네 가지로 조용히
-갈린** 전례).
+The profile names the cost: about **38% of the run is shim** — `s_load` at 13.7%, a call back
+into Rust for every leaf, and `jit::mk` at 12.4%, which rebuilds a 72-byte `Value` on every
+write. That marshalling is the exact cost the flat arena exists to remove, and it reappears at
+the boundary.
 
-⇒ **기본 OFF 로 남는다.** 다만 이제 **빌드되고·배선돼 있고·측정돼 있고·정확하다**.
-⭐ **다시 볼 조건은 하나** — leaf 로드와 2-state 산술을 **생성 코드 안에 인라인**할 것(호출 0).
-그 전제조건(leaf = 컴파일 시점 인덱스의 워드 둘 · 산술 = 평범한 정수 연산)은 **Phase D 가 방금
-만들었다**; 없는 것은 그것을 **두 번째 철자 없이** 하는 방법이다.
+What perfect code generation can remove is **op dispatch only**, and that is 8.9–11.3% of the
+run, while the boundary is ~38% — 25% even if `jit::mk` disappeared entirely. It is paying
+25% to win 11%. On top of the arithmetic sits the structural cost: a **second implementation
+of expression semantics** beside the interpreter and the VM, which is this engine's documented
+defect class.
 
-⚠️ **word-level/SIMD 행과 PDES 행은 이 판정과 무관하고 그대로다.**
+An independent census closes it from the other side: 56–86% of executed compiled-lane programs
+are a **single** `Load` or `Const` op. There is no dispatch loop worth compiling away.
+
+### 7.4 The reopening condition, and it is one condition
+
+Generated code must **inline the leaf load and the 2-state arithmetic** so that it makes zero
+calls back into Rust, and it must do so without spelling the expression semantics a second
+time. Two of the three prerequisites exist: a leaf is a pair of words at a compile-time index,
+and the arithmetic is ordinary integer arithmetic. The missing piece is the "without a second
+spelling" half.
+
+### 7.5 What the experiment leaves behind
+
+- `Select`, `Reduce` and `Ternary` are extracted into `native_eval::op_select`, `op_reduce`
+  and `op_ternary`, so the VM arm and any compiled body call one function rather than growing
+  a third spelling of a bit-loop rule.
+- Running the whole suite under `VITA_JIT=1` found a real defect in the compile-time
+  specialisation of `Op::WriteScalar`: the specialised op carries no `ResolveOff`, and a
+  failed RHS inline routed to a shim that consumes an offset.
 
 ---
 
-## 왜 이벤트구동 RTL은 GPU-적대적인가
-1. **분기 발산**: 프로세스마다 데이터의존 if/case/loop → GPU SIMT warp 발산 = 처리량 붕괴.
-2. **희소 활성도**: 매 timestep 변한 net/process만 재평가(극소수). GPU는 조밀·균일 작업을 원함.
-3. **시간 인과성**: 시각 T는 T-1 의존 → timestep *간* 병렬 불가. timestep *내* 독립 프로세스만(곧 희소·발산).
-4. **포인터 추적**: IR이 index-edge arena → 재귀 트리 평가 = uncoalesced 메모리.
-5. **세밀 동기화**: NBA·델타·계층화 리전 = 배리어/atomic.
-6. 상용(VCS/Xcelium/Questa) 전부 CPU. GPU sim 연구는 cycle-based 대규모 게이트넷·stimulus 병렬(회귀팜) 같은 *다른* 문제 대상.
-
-## 코드에서 찾은 병렬화 기회
-
-### ⭐ (1) 4-state 비트연산 word化 + SIMD — 최우선 — ✅ **구현 완료(2026-06-05)**
-- (이전) `eval.rs` `bitwise()`/`BitNot`/6 리덕션이 **bit-by-bit** (`for i in 0..w { f(get_vu(i), …) }`, 64bit AND가 64회).
-- (구현) val/unk 2-plane **word-parallel 공식**으로 교체 — `value.rs`의 `and_w`/`or_w`/`xor_w`/`xnor_w`/`not_w` + `eval.rs`의 `reduce_word`/`RedKind`.
-  AND: known-0 = `(~av&~au)|(~bv&~bu)`, known-1 = `(~au&av)&(~bu&bv)`, rv=known1·ru=`~known0&~known1`.
-  라스트 부분워드는 `low_mask`로 마스킹(not_w/xnor_w가 high 0&0→1). per-bit `*1`은 `#[cfg(test)]` 오라클로 보존(`word_vs_bit_parity`가 4×4 입력×NOT을 bit-exact 대조).
-- 효과: 64비트당 64회→1회 + 브랜치리스 → LLVM 자동벡터화(NEON/AVX). wide 버스 큰 이득, 좁은 설계 무손해(1 word).
-- **`std::simd` 미도입:** portable_simd는 **nightly 전용**이라 MSRV-1.85 stable + `--locked` 3-OS 바이트동일 핀과 충돌. 안정 u64 워드 루프가 이미 SIMD-친화형(64-lane/워드)이며 LLVM이 자동벡터화하므로 명시 SIMD 불요. 도입하려면 nightly 또는 `wide` 크레이트가 필요한데 둘 다 핵심 불변식을 깸 → 의도적 제외.
-- 비교(`eval.rs` relational/eq)는 산술 레인(64/128bit 정수)이라 별개 경로 — 워드化 대상 아님.
-
-### (2) for-loop copy block (사용자 지목)
-- const-bound for/repeat는 elaborate서 UNROLL(straight-line, cap). 펼친 바디는 순차 실행.
-- 일반 병렬화는 iteration 의존성 분석 필요(blocking `=` 시퀀스). 거대 메모리 init/`$readmemh`만 데이터병렬이나 GPU 런치 오버헤드가 패배 → CPU SIMD/threads 적합.
-
-### (3) timestep 내 프로세스 병렬 (PDES)
-- `sched.rs` active `batch`를 `for r in batch` 순차. 공유 net 쓰기 동기화 + `tie`(선언순) 결정성 충돌 → 결정적 merge 필요(큰 엔지니어링).
-- **→ 2026-06-11 타당성 연구로 종결(조건부 NO-GO)** — 측정·설계 스케치·재진입 조건 = [§PDES 타당성 연구](#pdes-타당성-연구-2026-06-11--p4-t4-종결).
-
-### (4) 대용량 메모리/init
-- `state.rs:412` `expand_init`, VCD 대용량 배열 덤프 — 데이터병렬이나 일회성·폭 제한. CPU SIMD 적합.
-
-## 권고 로드맵 (GPU-free 우선)
-1. ✅ **완료(2026-06-05)**: 비트연산/reduction word化 (안정 u64; std::simd는 nightly 충돌로 제외, LLVM 자동벡터화로 흡수).
-2. **중기·진짜 가속**: 컴파일드 백엔드(IR→네이티브 코드젠). 아래 §컴파일드 백엔드 참조 — vitamin은 **2a(컴파일드 이벤트구동)부터**.
-3. **장기·선택**: 멀티코어 PDES(결정성 재설계) 또는 stimulus-parallel GPU(별개 모드).
-4. **GPU 코어 엔진: 권장 안 함**.
-
-## 컴파일드 백엔드 — 두 갈래 ("컴파일드" ≠ "사이클기반")
-
-상용 시뮬레이터 계보로 보면 "컴파일드"와 "사이클기반"은 **직교**한다:
-
-| | 인터프리티드 | 컴파일드 |
-|---|---|---|
-| **이벤트구동 (full 4-state)** | Cadence Verilog-XL, **현재 vitamin** | Synopsys VCS, Cadence Xcelium, Siemens Questa |
-| **사이클기반 (보통 2-state)** | (드묾) | Verilator |
-
-- **VCS**(*Verilog **C**ompiled-code **S**imulator*)가 컴파일드의 원조 — Verilog-XL(인터프리티드 레퍼런스)을 속도로 밀어냄. Cadence도 NC-Verilog(**N**ative **C**ompiled)→Incisive→Xcelium으로 컴파일드 전환. **상용 사인오프 시뮬레이터는 컴파일드이되 이벤트구동·4-state·타이밍을 그대로 유지**(글리치/X/Z 정확).
-- **Verilator**는 컴파일드 **+ 사이클기반(2-state 기본)** — 인트라사이클 스케줄링을 버리고 클럭당 일괄 평가 → 10~100×지만 미세 타이밍/일부 4-state 포기(사인오프 부적합).
-
-### vitamin 경로
-- **2a. 컴파일드 이벤트구동 (VCS/Xcelium 길) — 먼저.** 기존 이벤트 커널·`val`/`unk` 4-state·word化(①)를 **그대로 두고** 프로세스 바디(BB의 Stmt/Expr)만 네이티브(Rust) 코드로 lowering. eval-디스패치/트리워크/Value 힙할당 제거. **의미 100% 보존**(인터프리터가 골든), 중간 가속. vitamin의 이벤트구동 코어와 자연 정합.
-- **2b. 사이클기반 컴파일드 (Verilator 길) — 별도 공격적 모드.** ⚠️ **타당성 스케치 = [20-cycle-mode-feasibility](20-cycle-mode-feasibility.md)**(2026-08-01, 선결 측정 M1–M3 미충족 시 착수 금지). combinational rank 정적 스케줄 + 클럭당 일괄 평가. 최대 가속이나 합성가능 서브셋·사이클 의미 제약. 2a 이후 옵트인 모드로.
-
-## 결정 기록 — 코드젠 substrate (P0a/P0b · 2026-06-06)
-
-> 컴파일드 백엔드 선결 체크리스트(`docs/REMAINING_WORK.md` Stage B)의 P0a/P0b를 확정한다. 출처: 워크플로 `wzeyxgedk` 6-매핑/3-비평 + 사용자 결정(2026-06-06).
-
-### P0a — target form = **바이트코드 VM** (확정)
-
-세 후보를 프로젝트 hard-constraint(cargo-only · `build.rs` 금지 · MSRV-1.85 핀 · `--locked` 3-OS 바이트동일) 기준으로 평가:
-
-| 형식 | 속도 | 신규 의존 | 결정성 핀 | 판정 |
-|---|---|---|---|---|
-| 바이트코드 VM | ~2-5× | 없음(순수 Rust) | ✅ 전부 보존 | **선택** |
-| 네이티브 Rust 방출 | 10-100× | 런타임 rustc/cc + libloading | ⚠️ host LLVM 재증명 필요 | 탈락(핀 충돌) |
-| 타입드 IR-2 | ~3-8× | 없음 | ✅ 보존 | 차선(작업량 대비 이득 작음) |
-
-**근거:** 네이티브 방출은 헤드라인 10-100×지만 런타임 호스트 툴체인 의존을 도입해 cargo-only·헤르메틱 `.velab→VCD`·3-OS 결정성 핀과 정면충돌한다(`build.rs`조차 금지하는 저장소에 런타임 `rustc`는 모순). vitamin의 goal #1은 *결정성*(README)이므로, 그 정체성을 깨지 않으면서 `doc-18:63`의 두 실측 병목 — **eval 트리워크 디스패치**(`run_process`의 `Stmt/Terminator` 재귀 + `EvalCtx::eval_ctx` 재귀)와 **`Value` 힙할당**(`Vec<u64>` per 연산) — 을 제거하는 바이트코드 VM을 선택한다. 인터프리터는 항상-가용 레퍼런스로 잔류, 바이트코드는 opt-in 가속 모드.
-
-**바이트코드에서 "compile-time constant"(P10) 표현:** 정적 width/sign·폴드된 index/width/count는 **상수 풀(immediate operand 또는 const-pool 인덱스)** 로 인코딩 — 별도 노드 타입(IR-2)이나 Rust 리터럴(emit-Rust)이 아니라 op의 즉치 피연산자. P11의 shallow-fold·사이트별 fallback은 바이트코드 *컴파일 시점*에 한 번 계산해 immediate로 굳힌다.
-
-### P0b — compile+load 메커니즘 = **N/A (in-process 바이트코드 인터프리터)**
-
-바이트코드 VM은 런타임 코드 생성·로드가 없다. `.vu`/`.velab` 산출물·`vita`/`vrun` 실행경로·헤르메틱 계약 전부 무변경. P0b의 "런타임 rustc / cdylib+dlopen / static dispatch" 분기는 발생하지 않음(기록상 N/A). **결정성 따름정리:** VM opcode는 `value.rs`/`eval.rs`의 *동일한* 4-state·f64 프리미티브를 디스패치하므로(재구현 아님), float 포맷·산술 축이 인터프리터와 byte-for-byte 일치 — P3의 부담을 구조적으로 축소한다.
-
-### 골든 영향 = 없음
-
-바이트코드·VM·backend seam은 전부 `sim_ir::SimIr` 밖(SimOpts 사이드테이블/별도 크레이트). `schema_hash::<SimIr>()` 루트 불변(이후 2026-06-10 런타임-delay re-freeze로 format_version 4 — doc-17). P15의 kernel-ABI 버전은 `format_version`과 **독립** 필드로 별도 게이트.
-
-## P3 — float/host-toolchain 결정성 계약 (2026-06-06)
-
-> 컴파일드 백엔드의 정당성은 "3-OS 바이트동일 유지"인데, **float 경로가 최대 미고정 축**이다. 바이트코드 substrate(P0a) 덕분에 위험은 구조적으로 축소되지만(VM이 동일 함수 호출), 그 *reuse-only 규칙*을 계약으로 동결한다.
-
-**동결된 float-path 표면 (바이트코드 경로는 재구현 금지 · verbatim 재사용 · no fast-math):**
-
-| 함수 | 파일 | 결정성 근거 |
-|---|---|---|
-| `dec_field_width(n)` | builtins.rs:436 | ≤128은 u128 정수; >128만 `n·LOG10_2` f64 — 유일한 float-multiply(컬럼폭 힌트). 양 경로 동일 함수 |
-| `fmt_dec` (real arm) | builtins.rs:454 | `x.round() as i64` saturating; NaN→0 |
-| `fmt_real`(`%f`) | builtins.rs:480 | Rust `{:.*}` (libm 아님) |
-| `fmt_real_e`(`%e`) | builtins.rs:499 | Rust `{:.p$e}` + 2자리 지수 패딩 |
-| `format_g`(`%g`) | builtins.rs:520 | Rust `{:e}`로 지수 도출(**log10 의도적 회피** — libm transcendental은 3-OS 바이트동일 아님), ±0.0 canon |
-| `Value::{from_f64,to_f64}`·`real_to_int_round` | value.rs:255,269,303 | int↔real `as f64`/round-half-away |
-
-**계약:** 위 함수는 인터프리터와 바이트코드 VM이 *동일 인스턴스*를 호출한다(opcode가 별도 float 로직을 갖지 않음). 따라서 `%f/%e/%g/%t/%d-on-real` 및 >128bit `%d` 폭이 두 경로 byte-for-byte 일치 — 이는 P5(컴파일드==인터프리티드)로 강제되고, **단일-OS 체크인 골든**(`float_format_determinism_golden`, end_to_end.rs)이 cross-OS 재현성을 잠근다(모든 OS가 동일 리터럴 매칭 = cross-OS diff와 등가). CI는 ubuntu+macos에서 같은 골든을 돌려 OS별 발산 시 해당 leg 실패.
-
-**잔여(릴리스 신뢰도, 코드젠 비차단):** CI에 OS-간 산출물 직접 diff 잡(별도 leg 출력 비교)은 골든-리터럴 방식으로 이미 등가 달성 — 추가는 nice-to-have.
-
-## P8 — 커널-콜 순서 / 샘플링-모먼트 계약 (2026-06-06)
-
-> 컴파일드 바디가 인터프리터와 byte-for-byte 일치하려면, "언제 무엇을 읽고/쓰는가"가 **계약**이어야 한다. 아래 7 모먼트를 동결한다 — P5 바이트-diff가 *버그 vs 의도*인지 분류하는 기준이자, Stage C VM이 반드시 재현(또는 위임)해야 할 목록.
->
-> **핵심 구조적 사실:** 이 모먼트 대부분은 **커널측**(`write_lvalue`/`schedule_nba`/`propagate_changes`/`emit_vcd_change`)에 있다. 컴파일드 바디는 `Kernel` trait(P7b)로 *동일* 커널 메서드를 호출하므로 이들을 **공짜로** 재현한다. VM이 보존해야 할 유일한 바디측 불변식은 **문장 실행 순서**(→ `schedule_nba`가 텍스트 순서로 호출되어 `nba_seq`가 같게 부여됨)이다.
-
-| # | 모먼트 | 위치 | 분류 | VM 의무 |
-|---|---|---|---|---|
-| 1 | cont-assign **선언순** fixpoint | sched.rs `settle_cont_assigns`:190 | 인터프리터-only | cont-assign은 프로세스 바디 아님(P13 전까지 항상 인터프리트) → VM 무관 |
-| 2 | NBA: LHS 인덱스 **schedule-time 샘플** + `nba_seq` **정렬 적용** | sched.rs `schedule_nba`:802 / `apply_nba`:554 | 커널측 + **바디순서** | VM은 `k_schedule_nba`를 **문장 텍스트 순서**로 호출만 하면 됨(순서가 nba_seq) |
-| 3 | blocking offset **statement-time 해석** | exec.rs `compute_effect`(P7a) | 바디(READ phase) | VM이 write 전에 `k_resolve_lvalue_offsets` 호출 — 이미 StmtEffect에 캡처 |
-| 4 | in-body `@(sig)` **arm-snapshot**(Level만 arm=Some) | sched.rs `suspend_on`:791 | 인터프리터-only | `@`=Wait=suspend → **non-codegen**(P9 제외) → VM 무관 |
-| 5 | delayed `assign #d` **last_ca 변화 키잉** | sched.rs:218 | 인터프리터-only | delayed cont-assign(P13) → VM 무관 |
-| 6 | `propagate_changes` **prev-refresh-LAST** | sched.rs:658 | 커널측 | 스케줄러 내부 — 양 backend 공통, VM 무관 |
-| 7 | **eager per-write VCD** 방출(글리치 충실) | state.rs `write_chunk`:386 | 커널측 | `k_write_lvalue`→`emit_vcd_change` 공유측(P4) → VM 공짜 재현 |
-
-**결론:** 7 모먼트 중 VM이 *능동적으로* 책임지는 것은 **#2/#3 (NBA 순서·blocking offset)** 뿐이며, 둘 다 "문장을 인터프리터와 같은 순서로 실행"하면 자동 충족된다(StmtEffect가 #3을 캡처, 텍스트순 실행이 #2를 보장). 나머지(#1/#4/#5 인터프리터-only, #6/#7 커널측)는 backend-중립이다. 이 계약이 깨지면 P5가 즉시 red.
-
-**corpus 커버리지(P6):** #2=`nba_sample`(`a[i]<=v; i=i+1`), #3=`mem_oob`/배열 쓰기, #7=`multi_write_glitch`(동일 delta 3회 쓰기), #1/#5=`cont_assign_mixed`(연속할당+클럭 프로세스 혼재). #4(in-body `@`)는 non-codegen이라 코드젠 corpus 비대상(인터프리터 433 테스트가 커버).
-
-## 실측 (2026-06-07) — 예측 vs 측정
-
-> Stage C C1·C2 구현 후 **측정 기반 최적화**. 도구: `/usr/bin/sample`(macOS 내장, sudo 불요) + `tests/perf_baseline.rs`
-> (`#[ignore]`, `--ignored --nocapture`). 워크로드: eval-dominated 설계(`always @(posedge clk)` 내부 heavy `for` 루프).
-> 각 fix는 bit-exact(441 tests + iverilog 차분 11이 스펙). **이 절은 위 §요약판정/§코드기회의 예측을 측정으로 정정한다.**
-
-### 예측이 빗나간 지점
-
-본 문서(§codegen 기회·§요약판정)는 두 병목을 지목했다 — **eval 트리워크 디스패치**와 **`Value` 힙할당**. 첫 프로파일은 둘 다 *지배적이 아님*을 보였다:
-
-| doc-18 예측 | 1차 측정 결과 | 정정 |
-|---|---|---|
-| eval 트리워크 디스패치 = 주 병목 → native-eval(코드젠)이 답 | `eval_ctx` **~1.5%** (eval-light 벤치) | 워크로드 의존 — 식-바운드는 70-82%(아래 재평가). 1차 "저ROI"는 과도 |
-| `Value` 힙할당(`Vec<u64>`/op) = 주 병목 | inline-Value 1차 실험 **~0** | 더 큰 비용에 *가려져* 있었음 |
-| (미지목) | **`write_lvalue`+`set_vu`+`slice_word` = ~50%** | 진짜 #1 = **bit-serial net I/O** |
-
-### 측정 주도 4 라운드 — 누적 ~6x
-
-| R | fix | 무엇을 | eval-heavy | 누적 |
-|---|---|---|---|---|
-| — | C2 baseline | VM이 eval을 커널에 위임(=interp 동률) | 2781 ms | — |
-| 1 | **word化 net I/O** | `state.rs` `slice_word`·`write_lvalue`·`write_chunk` per-bit→u64 워드 | 1274 ms | 2.18x |
-| 2 | **word化 shift/resize** | `value.rs` `shr_fill`/`shl_grow`/`resize` per-bit→multi-word | 948 ms | 2.9x |
-| 3 | **inline-Value** | `Value.val/unk` `Vec<u64>`→`Words`(≤128 inline, >128 heap) | 618 ms | 4.5x |
-| 4 | **read/mask 정리** | `mask_top` resize 길이가드 + `read_net` inline 직접 read(transient `BitPacked` 제거) | 461 ms | **~6.0x** |
-
-codegen-heavy(스케줄러 dominated) 196→61ms(~3.2x). VM eval-heavy 2699→385ms(0.84x interp). **모든 윈이 인터프리터·VM 공유 경로** — backend-전용 아님.
-
-### native-eval 재평가 (2026-06-07 오후) — 위 "저ROI" 판정 정정
-
-위 "eval = ~1.5% → native-eval 저ROI"는 **eval-LIGHT 벤치마크의 산물**이었다(`EVAL_HEAVY`는 문장당
-연산자 ~3개). eval 비용은 *식 복잡도에 선형*이라 단일 벤치 한 점으로 일반화할 수 없다. **연산자수
-스윕**(release, 1M 문장, K = 문장당 `acc` 피연산자):
-
-| K (ops/stmt) | 시간(s) | eval 비중 |
-|---|---|---|
-| 1 | 0.45 | ~13% |
-| 4 | 0.62 | ~37% |
-| 8 | 0.85 | ~55% |
-| 16 | 1.32 | ~70% |
-| 32 | 2.25 | ~82% |
-
-선형 적합 `t ≈ 0.39 s(고정) + 0.058 s × K` (R²≈1). **고정항 0.39 s** = net write + 루프 제어 + 문장
-디스패치(= VM이 제거하는 부분, 그래서 VM은 eval-light에서만 이득). **피연산자당 58 ns** = read_net +
-binop. **net-read ≈ literal**(0.45≈0.44 … 2.24≈2.22)이므로 58 ns는 read_net이 아니라 **binop의 Value
-생성 + `eval_ctx` 디스패치**가 지배 — 환원불가 u64 ALU는 ~1 ns. ⇒ **58 ns 중 ~57 ns가 인터프리테이션
-오버헤드**로 레지스터 기반 native-eval이 제거 가능(4-state 마스킹 감안 보수적 **4-6x on eval**).
-
-**정정된 판정 — native-eval ROI는 워크로드 의존:**
-- **식-바운드 RTL**(넓은 ALU·CRC/crypto 데이터패스·깊은 조합 cone): eval 55-82% → native-eval
-  **고ROI**(설계당 ~2-3x 전망). `EXPR_HEAVY`(K=16) **VM 0.92x** — 문장 컴파일은 식-바운드에 거의
-  무력, native-eval이 유일한 레버.
-- **클럭/스케줄러-바운드 RTL**(`CODEGEN_HEAVY`): eval 작음 → native-eval **저ROI**, 스케줄러 축이 답.
-
-즉 당초 doc-18의 "코드젠이 진짜 가속 경로"는 **식-바운드 한정으로는 옳았다**(1차 "저ROI" 정정은 너무
-강했다). 비용 = 4-state 레지스터 머신(val+unk 평면·width/sign 마스킹·X/Z 전파·>128bit heap fallback)으로
-고위험·다세션 — 단 **P5 차분 게이트(compiled==interp byte동일) + iverilog 오라클이 정확성 리스크를 이미
-대폭 상쇄**한다(native-eval을 안전하게 시도 가능). 영구 회귀: `perf_baseline.rs` `EXPR_HEAVY`.
-
-**✅ C4-lite 구현 (2026-06-08) — 예측 실현.** 위 전략에 따라 native-eval 첫 증분 랜딩(`native_eval.rs`,
-VM 전용). **≤64bit 정수 서브셋**(Const·scalar Signal·Add/Sub/Mul·BitAnd/Or/Xor/Xnor·BitNot/Plus/Minus)을
-codegen-able 바디 assign RHS에서 post-order 레지스터 프로그램으로 컴파일(노드당 `Value` 미생성), 그 외는
-`try_compile`이 `None`→`eval_ctx` fallback. 측정(release, best-of-5):
-
-| 벤치 | C2 VM/interp | **C4-lite VM/interp** |
-|---|---|---|
-| `EXPR_HEAVY` (식-바운드, K=16) | 0.92x | **0.42x (≈2.3x)** |
-| `EVAL_HEAVY` (혼합, ~3 ops/stmt) | ~0.84x | **0.77x** |
-| `CODEGEN_HEAVY` (스케줄러-바운드) | ~0.97x | 0.94x (불변) |
-
-식-바운드 ~2-3x 예측이 실측으로 실현, 클럭-바운드는 eval 비병목이라 불변 — 워크로드-의존 ROI 확정. 정확성:
-인터프리터=오라클(leaf는 `read_net`+`resize_keep_sign` 재사용), 산술은 X/Z poison+u64 wrapping(w≤64 sign-무관),
-bitwise는 `value::*_w` 동일 primitive; native_eval 오라클 대조 단위 8 + backend_equiv native teeth 5 + 72-design
-P5 차분 + iverilog 차분(460 green). frozen sim-ir 0줄 변경. follow-on(비교/시프트/Div·Mod/리덕션/ternary/concat/
->64bit/real)은 `../ROADMAP.md` §C.
-
-### native-eval 구조 증분 (2026-06-10) — select/concat/replicate, 구조-바운드 ≈2.8x
-
-C4-lite follow-on 2탄: **구조 트리오**가 native 서브셋에 합류 — bit/part `Select`(동적 offset,
-X/Z-offset·OOR→X), `Concat`(`(hi<<lo_w)|lo` 좌측 fold = 오라클의 top-down fill), `Replicate`
-(const count). 전부 자연폭 unsigned (`resize_keep_sign(w,false)` = 플레인 zero-extend — 레지스터
-상위비트가 이미 0이라 **공짜**). ⭐함정: 구조 op의 오라클 root 스탬프는 signed ctx에서도
-`signed=false`(`resize_keep_sign(w, false)`) — root_signed를 root 노드 종류로 분기(실사용 ctx에선
-미발화나, 임의 ctx 호출자 대비 오라클 정합). 신규 `STRUCT_HEAVY` 벤치(문장당 select 4 + concat 3 +
-replicate 1): **VM 0.36x interp(≈2.8x)** — 증분 전엔 select/concat 노드 하나가 전체 식을 오라클로
-bail시켜 ~0.9x였던 영역. 검증: 오라클 대조 단위 6(동적 offset X·OOR·합성 select-of-concat 포함) +
-teeth `native_select_concat_repl`(iverilog 라이브 일치 "5c 5c 5c 0 5c5c 5c5c xx") + P5 차분.
-잔여 lane: >64bit·real·array-indexed Signal·sysfunc.
-
-### 스케줄러축 라운드 1 (2026-06-10) — 클럭-바운드 ≈1.85x
-
-`CODEGEN_HEAVY`(클럭-바운드: 20k 사이클 × 5 NBA, native-eval이 못 움직이던 케이스)를
-`/usr/bin/sample`로 프로파일: **top-of-stack의 ~45%가 malloc/free** — 스케줄러-바운드의 실체는
-"스케줄링 알고리즘"이 아니라 **타임스텝당 고정 heap churn**이었다. 제거한 할당원(전부 interp·VM
-공유 경로, 순서/내용 불변이라 byte-identical by construction):
-
-| 할당원 | 빈도 | 수리 |
-|---|---|---|
-| `snapshot_prev`의 derived-Clone(`prev = cur.clone()`) | 매 타임스텝 × 전체 넷 × Vec 2개 | per-field `Vec::clone_from`(capacity 재사용) |
-| `propagate_changes` (c) prev 갱신 `cur.clone()` | 매 델타 × 변경 넷 | 동일 — split-borrow `clone_from` |
-| `propagate_changes` `changed_nets`/`edges` Vec | 매 델타 | take/restore 스크래치 필드 |
-| run-loop `cur.active` take→drop / `apply_nba` take→drop | 매 델타 / 매 NBA flush | drain + capacity 반납 |
-| wheel 버킷 `BTreeMap::remove`가 Vec drop | 시뮬 시각마다 | `bucket_pool` 재활용 |
-| `run_process`의 `stmts.clone()`/`term.clone()`/`Stmt::clone()` | **블록 활성화·문장 실행마다** | `&'ir SimIr` reborrow로 제자리 참조(클론 0) |
-| `StmtEffect` 소유 `Lvalue`/`args` 클론 | 문장 실행마다 | `StmtEffect<'s>` 차용(NBA만 1클론 잔존) |
-| `resolve_lvalue_offsets`의 `Vec<(u32,u32)>` | 대입 실행마다 | `Offsets` 인라인 enum(≤2청크 무할당, 초과만 spill) |
-| `cur_scope` String 클론 | 블록 활성화마다 | 비교 후 `clone_from` |
-
-측정(release, best-of-5): `CODEGEN_HEAVY` interp **61.8→33.4 ms (≈1.85x)** / VM **56.0→30.3 ms (≈1.85x)**;
-부수 효과 `EVAL_HEAVY` interp 497→390 ms(≈1.27x — 루프 내 blocking 대입의 효과/offsets 클론 제거),
-`EXPR_HEAVY` VM 0.42x 유지. 최종 프로파일에서 **malloc/free가 top-of-stack 목록에서 소멸** — 잔여는
-eval축(interp `mask_top`/`resize`/`read_net` 정규화, VM native-eval이 우회)과 per-delta 전체-넷 스캔
-(`cur != prev` memcmp — 넷 수 선형이라 대형 디자인용 다음 구조 단계 = dirty-list, 쓰기 경로 훅 +
-정렬로 byte-identity 유지 필요). 571 green, 골든 byte 불변.
-
-### 스케줄러축 라운드 2 (2026-06-10) — dirty-list + snapshot 제거, 다(多)넷 ≈19.7x
-
-신규 `NETS_HEAVY` 벤치(512 idle reg + 2-net clk/카운터 churn, 20k 사이클): **305 ms** — 같은 churn의
-8-net 디자인(33 ms) 대비 9배, 즉 **idle 넷이 매 델타·매 타임스텝 과세**당하고 있었다. 두 단계 수리:
-
-1. **dirty-list 스윕** — `propagate_changes`의 per-delta 전체-넷 `cur != prev` 스캔을
-   write_chunk 깔때기의 `note_change` 마킹(+ flag dedup)으로 교체. 스윕은 sort 후 `cur != prev`
-   필터(A→B→A 왕복 제거) — 정렬이 구 스캔의 ascending 순서를 복원해 **byte-identical**.
-   건전성: `prev`의 유일한 writer가 step (c)와 생성자(둘 다 prev=cur)이므로 변경 넷은 반드시
-   마킹돼 있다. → 305→**107 ms**.
-2. **`snapshot_prev` 삭제** — 시간 전진마다 전체 넷 cur→prev 복사는 위 불변식에 의해
-   **증명 가능한 no-op**(안정점에서 prev==cur). 그런데 O(nets)/timestep 비용. 삭제 →
-   107→**15.5 ms**. 합계 **≈19.7x**; 8-net 벤치들은 불변(noise 내), 617 green(byte-compare
-   스위트 전부 통과).
-
-⭐교훈: "스케줄러-바운드"의 두 번째 절반은 **idle-넷 세금**이었다 — 라운드1(allocator), 라운드2
-(O(nets) 패스 2개). ~~대형 디자인 스케일링의 다음 후보는 net_to_edge/waiter 쪽 자료구조.~~
-**→ 측정으로 종결(2026-06-10, `perf_nets_scaling` 프로브):** idle-net 수를 512→2048→8192로
-스윕해도 wall-clock **평탄**(~15-17ms, 노이즈권) — R2의 dirty-list+snapshot 제거가 idle-net
-세금을 전부 걷어냈고, net_to_edge/waiter 워크는 변경 넷×waiter 수에 비례(부하 비례 = 세금
-아님)함이 확인됐다. 다넷 자료구조 추가 작업은 **무근거 — 항목 폐기**, 프로브는 영구 회귀
-계기로 잔류(스케일링 퇴행 시 즉시 드러남).
-
-### native-eval C6 lane (2026-06-10) — array-indexed + 65..=128-bit wide, 식-바운드 적용폭 확대
-
-C4-lite의 마지막 큰 lane 2개가 합류 (`native_eval.rs` dual-stack 설계):
-
-1. **array-indexed Signal** (`mem[i]` RHS 읽기) — `LoadIndexed`/`WLoadIndexed` op. 인덱스는
-   self-determined 컴파일(>64-bit 인덱스는 bail), 런타임 변환은 오라클과 동일한
-   `to_u64→u32::try_from→u32::MAX OOR sentinel` 체인(X/Z 인덱스·OOR → all-X 읽기,
-   wrap 없음). `read_net(net, Some(idx)).resize_keep_sign` verbatim.
-2. **wide lane (65..=128bit)** — **별도 u128-pair 스택**(`WIDE_STACK=8`)에 2-word 레지스터.
-   narrow 스택/op은 한 줄도 안 바뀌어 기존 lane 성능 보존(단일 스택 32B-slot화는 narrow에
-   세금). 지원: `WConst`/`WLoad*`/`WArith`(unsigned u128 lane = 오라클 정확 재현)/`WBitwise`
-   (`*_w` 공식이 비트-병렬이라 u128 그대로)/`WNot`/`WNeg`/`WCmp`(i128 부호확장 비교)/
-   `WEqNe`/`WCaseEqNe`/`WShl`/`WShr`(128 가드+MSB pair fill)/`WDivMod`(unsigned)/
-   `WTernary`(cond wide/narrow 양쪽)/`WReduce`/`WLogNot`. narrow 1-bit 생산자가 wide ctx에
-   먹힐 땐 `Promote`(zero-extend 브리지). **bail(오라클 잔류): signed >64 arith/divmod**(오라클이
-   X-poison하는 영역 — 보수적 제외), wide shift-amount,
-   wide LogBin 피연산자, >128bit, real, sysfunc. *(wide 구조 트리오는 v6 ④에서 랜딩 — 아래.)*
-
-### native-eval v6 ④ (2026-06-11) — wide 구조 트리오 + real lane 측정-폐기
-
-**wide 구조 트리오 랜딩**: `WSelect`/`WConcatPair`/`WRepl`이 select/concat/replicate를
-65..=128bit까지 — 혼합-스택 op(narrow offset/part가 wide base/acc와 합성, 결과는 자연폭>64
-iff wide 스택), 오라클 계약 동일(X/Z offset=sel_w X·OOB bit=X·in-range는 2-word shift 1회).
-신규 벤치 `WIDE_STRUCT_HEAVY`(100-bit select/concat/replicate 핫루프): **VM 0.44x interp
-(≈2.3x)** — 트리오 전엔 wide 구조 노드가 전체 식을 bail시켜 ~1x였던 형. >128 bail 핀 유지.
-
-**real lane 측정-폐기**: 신규 `REAL_HEAVY` 프로브(f64 산술 핫루프) — **VM 0.90x**. 식 평가는
-오라클-bound지만 real 산술은 합성가능 RTL 핫패스에 사실상 부재(테스트벤치 영역)라 제3의 f64
-레지스터 파일이 지불하지 않음. 프로브는 영구 계기로 잔류(워크로드가 바뀌면 재평가).
-
-**has_xz/to_u128 검사-폐기**: inline-Value 라운드에서 이미 word-parallel(마스크된 word 로드,
-bit 루프 0) — §A 미세 항목 종결.
-
-신규 벤치(release, best-of-5): **`WIDE_HEAVY`(100-bit EXPR_HEAVY 형) VM 0.59x interp(≈1.7x)** ·
-**`MEM_HEAVY`(문장마다 동적 `mem[p]`/`mem[q]` 읽기) VM 0.72x(≈1.4x)**; 기존 lane 불변
-(`EXPR_HEAVY` 0.45x·`STRUCT_HEAVY` 0.36x·클럭-바운드 0.93x). ⭐함정: wide 스택을 32-slot으로
-잡으면 **run()마다 1KB zero-init**이 narrow 프로그램에도 과세(no-unsafe 정책상 MaybeUninit
-불가) — 8-slot(256B)로 줄이니 전 lane 회복(wide 식 깊이는 post-order 좌fold라 2–3 peak,
-초과는 컴파일 시 오라클 bail). 검증: 오라클 대조 단위 12(2-word carry/wrap·X-word1-poison·
-부호 경계 bit99·OOR/X 인덱스) + bail teeth 7 + backend_equiv teeth 3(100-bit 10-op 정확값
-witness·고워드 X-poison·indexed 3종) + iverilog 차분 2 디자인(`diff_wide_lane_c6`/
-`diff_indexed_expr_reads`). frozen sim-ir 0줄, 골든 불변, 635 green.
-
-### 교훈 (방법론)
-
-1. **병목은 양파.** 표면층(bit-serial) 제거 → 재측정 → 그 밑(alloc) → 또 그 밑(정규화/transient-alloc). 한 번 측정으로 끝나지 않음.
-2. **"실패한" 실험도 선행 최적화 후 재시도 가치.** inline-Value: 1차 ~0(net-write per-bit 루프가 alloc 가리고 Deref 오버헤드 상쇄) → 그 루프 word化 후 3차 1.55x.
-3. **공유 경로 > backend-전용.** interp·VM 둘 다 빨라지고 위험 낮음.
-4. **`std::simd` 여전히 미도입**(§(1)과 동일 이유: nightly/MSRV-1.85/3-OS 충돌). u64 워드 루프를 LLVM이 자동벡터화.
-5. **"스케줄러-바운드"의 절반은 allocator-바운드.** (2026-06-10) 알고리즘 교체 없이 타임스텝당 고정
-   할당만 제거해도 클럭-바운드 1.85x — derived `Clone::clone_from`가 재할당이라는 함정(`Vec::clone_from`은
-   재사용)과 `mem::take` 후 소비가 capacity를 버린다는 함정이 반복 패턴.
-
-## PDES 타당성 연구 (2026-06-11 · P4-T4 종결)
-
-> **결론 먼저: 조건부 NO-GO.** byte-identical 결정성은 차단 요인이 **아니다** — 보존 설계가 존재한다(아래 스케치).
-> 실제 차단 요인 셋: ①워크로드 폭(현 corpus는 활성 배치 W=1~8 — 이득 0~손해) ②엔진 직렬 잔류 몫 ~20%
-> (Amdahl 상한 T=4 ≈2.5x·T=8 ≈3.3x·∞ 5x) ③상당한 엔진 스레딩 공사 대비 측정 상한 2~3x. 재진입 조건은 말미에 핀.
-> 종전 "결정성 invariant와 정면충돌이라 불가" 프레임(본 문서 구판·감사)은 **과했다** — 이 연구로 정정한다.
-
-### 측정 — 프로브 3종 (`perf_baseline.rs` `perf_pdes_*`, 영구 계기 · Apple Silicon 10-core)
-
-1. **τ (per-delta 디스패치 왕복)** — `perf_pdes_sync_cost`
-   - naive `thread::scope` spawn/join: **31µs(T2) ~ 93µs(T8)/delta** → 즉사(델타당 일이 µs 단위인데 디스패치가 수십 µs).
-   - 상주 풀 + spin barrier(generation scatter·countdown gather): **294ns(T2) / 471ns(T4) / 2.0µs(T8)**.
-     T8 급증 = P-core 초과분이 E-core 스핀 — 실설계는 T를 P-core 수로 클램프해야 함.
-2. **g (엔진 활성화 입도)** — `perf_pdes_engine_grain`: W개의 독립 4-NBA flop `always` 블록(이상적 최대 병렬 케이스)
-   - 한계비용 **~700ns/activation**(W=16→1024 수렴 707→686ns; W=1은 1351ns — 고정 슬롯 오버헤드 포함).
-   - `/usr/bin/sample`(release+debuginfo) 자가시간 분류: **병렬화 가능 ~78-82%**(eval_binary_ctx 282·mask_top 244·
-     eval_ctx 242·resize 216·read_net 187·NBA 캡처 k_schedule_nba 54·Value 말록류 ~188 등 — 전부 per-process 작업)
-     vs **직렬 잔류 ~18-22%**(apply_nba 측 write_chunk 95·write_lvalue 83·propagate_changes 105·정렬 등 — 커밋/전파 phase).
-3. **BSP mock (디스패치 측 스피드업 매트릭스)** — `perf_pdes_bsp_mock`: 상주 풀+정적 chunk 소유+직렬 commit pass,
-   설계 스케치와 동일한 결정적 디스패치 형상. 실측 grain 보정 후(T=4 기준):
-
-   | grain(실측) | W=8 | W=64 | W=512 | W=4096 |
-   |---|---|---|---|---|
-   | ~28ns | 0.39x | 1.56x | 2.96x | 3.51x |
-   | ~195ns | 1.59x | 3.09x | 3.61x | 3.69x |
-   | ~890ns | 2.93x | 3.61x | 3.72x | 3.95x |
-
-   T=8은 W×g가 클 때만 우세(최대 5.1x @ g890·W4096) — 저부하에선 E-core 스핀이 역효과(0.11x까지).
-
-**합성 추정(이상적 wide-synchronous, g≈700ns):** 디스패치 측과 Amdahl 상한의 min → **W≥64에서 ≈2~2.5x(T4), ≈3x(T8)**.
-W≤8 소형 바디 ≤1.6x~손해, **W=1(corpus의 테스트벤치형 전부)은 병렬 대상 자체가 없음.**
-
-### byte-identical 보존 설계 스케치 — BSP-per-delta v1 ("가능하나 비싸다"의 근거)
-
-- **적격 클래스**: suspend-free + 쓰기 전부 NBA인 프로세스(= P9 분류 재사용, "pure-eval"). NBA-pure끼리는 같은 델타 내
-  상호 가시성이 원천 차단(쓰기가 NBA 리전에 착지)이라 **read/write set 충돌 분석 없이 병렬 안전**.
-- **run-splitting**: blocking-writer/fork/dyn-heap 터치 프로세스가 배치를 분할 — 경계 사이 pure-eval 구간만 산개,
-  분할자는 배치 순서 그대로 직렬 실행(순차 가시성 보존 by construction).
-- **per-process 로그**: NBA 캡처=(batch_idx, intra_seq) 키 머지(현 전역 seq와 동일 전순서) · `$display`/`$strobe`/`$monitor`
-  등록=프로세스별 버퍼→batch 순 flush(순차 출력은 프로세스별 연속이므로 byte 동일) · `$finish`류=최소 batch_idx 승자
-  +이후 인덱스 로그 폐기(순차의 mid-batch 중단 재현 — pure-eval은 상태 직접 쓰기가 없어 폐기=무료).
-- **dirty-list**: per-thread 수집→머지→기존 정렬(스케줄러 R2가 이미 정렬 기반이라 자연 합류). wheel 스케줄은
-  pure-eval에 없음(suspend-free라 mid-body delay/`@` 부재).
-- **엔진 공사 비용(왜 비싼가)**: `!Send` 해체(`Box<dyn Write>`/`LogSink`/`Cell`/Rc `vm_cache` 9곳→per-worker),
-  EvalCtx/native 스택 per-worker 복제, corpus 전체 `--threads 1` vs N byte-diff 게이트(T1 인프라 재사용 가능).
-  v2(NBA apply 자체를 disjoint-net 병렬화)는 직렬 몫을 ~10%로 낮춰 상한 ~10x까지 열 수 있으나
-  propagate(엣지 검출·웨이커 정렬·리전 제어)는 본질적으로 순서 민감 — v1 범위 밖.
-
-### 판정 + 재진입 조건 (핀)
-
-- **지금 구현하지 않는다(NO-GO).** 측정 상한 2~3x는 "지속적 W≥64 + eval-지배 바디" 워크로드에서만 실현되는데
-  현 corpus/Phase-1 사용자 워크로드에 부재. 기계 비용(스레딩 공사+결정성 머지+게이트 유지)이 조건부 이득을 상회.
-- **재진입 조건**: 실사용 디자인이 (a) 시뮬 시간 대부분에서 활성 배치 폭 **W ≥ ~64**, (b) 활성화당 병렬-phase grain
-  **≥ ~200ns**(eval-지배 바디)를 보일 때 BSP v1 착수 — 기대 2~3x(T=P-core 클램프). 그 미만은 mock이 ≤1.6x,
-  Amdahl+머지 상수가 잠식. 진입 시 위 스케치 + T1식 byte-diff 게이트가 출발점.
-
-향후 과제·전략 결정(VM 동결 vs native-eval vs 인프라)은 [`../ROADMAP.md`](../ROADMAP.md).
+## 8. Rejected: flat storage without the rest of the bundle
+
+A probe placed word 0 of every net into one flat vector and served leaf reads from it, with
+the three write sites synchronised and a `debug_assert` on every read so the debug suite
+proved the synchronisation. Its memory-access profile matches a real arena: one indexed load
+instead of two pointer hops.
+
+| | |
+|---|---|
+| Baseline | 0.57 s |
+| Flat mirror | 0.57 s |
+
+No difference, and the reason generalises: `read_scalar_words` already loads the `NetSlot` to
+read `is_real`, `array_len`, `width` and `signed`, so that cache line is hot and one more
+pointer hop does not register.
+
+**Storage layout alone is worth nothing.** The arena pays only as part of the bundle in §5.
+This measurement is why "flatten the store first, then decide" is the wrong order and "the
+four together, or not at all" is the right one.
 
 ---
 
-## 리전 재측정 (2026-08-01) + 그 위에서 나온 등가성 판정
-
-### ⚠️ 앞선 리전 수치 정정
-
-이 문서의 이전 리전 수치는 **바디마다 `Instant::now()` 두 번**을 찍는 계측으로 얻은 것이라 부풀려져 있다 —
-`bodies = 3762 ms` 라고 적힌 런의 **비계측 wall-clock 은 1234 ms** 였다. 활성화 240만 회에 타임스탬프 480만 개는
-작은 관측자 효과가 아니다. 아래 표가 정본이며 이전 수치를 대체한다(리전 타이머는 델타당 1회 호출 수준으로 옮기고,
-합계는 비계측 런과 대조했다).
-
-picorv32 + testbench, 40000 cycle, release, best-of-7:
-
-| region | interp | vm | 백엔드가 닿나 |
-|---|---|---|---|
-| bodies | 762.8 ms (67%) | 432.7 ms (53%) | ✅ 1.76x |
-| nba    | 112.1 ms | 113.4 ms | ❌ |
-| settle | 105.8 ms | 105.1 ms | ✅ `ca_native`(양쪽 백엔드) |
-| prop   |  33.5 ms |  33.2 ms | ❌ |
-| **총** | **1140 ms** | **810 ms** | |
-
-미계상 ~126 ms = parse + elaborate + 프로세스 시작. 40000 cycle 런의 11% 이고, 짧은 런에서는 지배적이지만
-**시뮬레이션 속도 레버는 아니다**.
-
-### iverilog 대조 (같은 설계) — ⚠️ 정정됨
-
-**앞서 이 표에 적었던 iverilog 0.85 s 는 틀렸다.** 갓 쓴 `.vvp` 의 **cold 첫 실행**을 잰 값이었고,
-그 수치로 "vita+VM 이 iverilog 보다 빠르다"고 썼다(커밋 `fd73726` 메시지와 `Backend` doc 주석에도 들어갔다).
-같은 바이너리를 **번갈아 6회씩** 재면 iverilog 는 일관되게 0.57–0.59 s 다. 둘은 동일 워크로드(399995000 = 40000 cycle)에
-동일 결과(`trap=0 addr=00000014`)를 낸다.
-
-| | compile | run | total |
-|---|---|---|---|
-| iverilog 13 | 0.03 s | 0.58 s | **0.61 s** |
-| vita 기본(= vm) | (in-process) | | **0.78 s** |
-| vita `--backend interp` | (in-process) | | 1.10 s |
-
-**즉 vita+VM 은 이 설계에서 iverilog 보다 약 1.28x 느리다** (0.78 / 0.61). VM 전환은 vita 자신의 1.41x 개선이지
-iverilog 추월이 아니다. vita 의 0.78 s 중 ~0.13 s 는 parse+elaborate 이고 iverilog 의 0.61 s 중 0.03 s 가 compile 이므로,
-**순수 시뮬레이션만 비교해도 0.65 vs 0.58 로 여전히 vita 가 뒤진다.**
-
-측정 교훈: 벤치 대상 바이너리를 **갓 만든 직후 한 번 재지 마라**. 번갈아(interleaved) 반복하고 best-of-N 을 쓴다.
-
-### `apply_nba` 분해 (다음 후보)
-
-117 ms / 2,474,446 update / 39,999 flush:
-
-| | ms | |
-|---|---|---|
-| `write_lvalue` | 77.7 | whole-net 쓰기 1건당 31 ns |
-| **drop** | **25.8** | update 당 1-element `Vec<LvalChunk>` 해제 — **free 쪽만** |
-| sort | 3.4 | 배치는 거의 정렬된 상태로 도착 |
-
-update 의 **99.5%**(2,463,015 / 2,474,446)가 단일 chunk whole-net 쓰기(`word/offset/width` 전부 `None`)이고
-힙 `Value` 는 **0건**. 그런데 전부 push 때 `Vec` 을 할당하고 apply 때 해제한다.
-
-**착수·랜딩(2026-08-02).** NBA 큐는 그것을 넣은 활성화보다 오래 살아야 하므로 목적지는 **소유**여야 하는데,
-`Lvalue` 가 `Vec<LvalChunk>` 를 소유한다는 이유만으로 모든 `<=` 가 malloc 하나, 모든 flush 가 free 하나였다.
-→ `NbaLhs::One(LvalChunk)` / `Many(Lvalue)`. 단일 chunk 는 **값으로** 이동해 할당이 없고,
-`apply_nba` 는 flush 당 하나짜리 scratch `Lvalue` 를 빌려줘 `&Lvalue` 쓰기 퍼널을 그대로 쓴다.
-`{a,b} <= x` 만 여전히 할당한다.
-
-| | before | after |
-|---|---|---|
-| 기본(vm) | 0.78 s | **0.74 s** (1.054x) |
-| `--backend interp` | 1.10 s | 1.08 s (1.019x) |
-
-iverilog(0.61 s) 대비 격차 **1.28x → 1.21x**.
-
-핀: `backend_flag.rs::a_concat_lhs_nonblocking_assign_splits_correctly` — P5 corpus 생성기는 concat LHS 를
-만들지 않으므로 **rare arm 이 한 번도 안 돌고 배포될 수 있었다**. 값은 iverilog 절대값으로 박았다(두 백엔드가
-같은 잘못된 split 을 공유하는 것은 순수 differential 이 못 본다).
-
-### 그 위에서 나온 등가성 판정 — §4.5.279
-
-`bodies` 가 67% 이고 VM 이 그것을 1.76x 로 만든다는 것은, **가장 큰 남은 레버가 새 코드가 아니라 VM 을 기본값으로
-만드는 것**이라는 뜻이다. 그 전제를 실제로 검증하려고 `Backend` 의 `#[default]` 를 뒤집고 전 스위트를 돌렸더니
-**18 타깃 39건**이 실패했다 — P5 게이트(72 디자인)는 그 전부를 초록으로 통과하고 있었다.
-
-뿌리 넷(타입 게이트 부재 · prologue 표류 · StmtId 사이드테이블 · intercept 손복사본)과 수정·핀은
-[ROADMAP_ARCHIVE §4.5.279](../ROADMAP_ARCHIVE.md)에 있다. 수정 후 **39 → 24 → 0**: 전 워크스페이스 스위트가
-`Backend::Bytecode` 를 default 로 두고 통과한다. 실제로 default 를 뒤집을지는 별개의 오너 판정으로 남는다.
-
-**측정 방법론상의 결론**: `--backend` 두 값으로 corpus 를 도는 differential 보다, **default 를 뒤집고 전 스위트를 도는 것**이
-압도적으로 강하다. 비용은 한 줄 + 10분이고, 후자만이 5035개 테스트가 이미 인코딩해 둔 모양 전부를 동원한다.
-
-### `write_lvalue` whole-scalar fast path (2026-08-02)
-
-NBA 랜딩 후 재계측. `write_lvalue` 호출 **4,012,246 회** 중 **4,000,553 (99.7%)** 가 한 모양이다:
-단일 `Bit` chunk · `word/offset/width` 전부 `None` · 목적지가 평범한 flat-store 스칼라 넷.
-
-그 모양에서 진짜 저장(`store_words`)까지 가는 길에 있는 것은 전부 **이미 정해진 결정**이다 —
-서로 다른 `Vec<bool>` 사이드 테이블 6개(캐시라인 6개)를 훑는 분기 11개 · `chunk_width` 호출 ·
-`Offsets` 슬라이스 · `debug_assert`. 결론은 언제나 "넷 폭으로 resize 하고 워드를 저장".
-
-→ `plain_scalar[net]` 하나로 **넷 모양 쪽 절반을 한 번의 lookup 으로** 접었다(런당 1회 계산).
-런 중 변할 수 있는 둘(`forced`, 들어온 값의 `is_real`)은 **일부러 굽지 않고** 호출부에서 live 로 본다.
-
-| | before | after |
-|---|---|---|
-| 기본(vm) | 0.74 s | **0.71 s** |
-| `--backend interp` | 1.08 s | 1.06 s |
-
-**구조**: 워드 병렬 저장 루프를 `store_words` 로 **추출**해 `write_chunk` 와 fast path 가 **같은 한 벌**을 쓴다.
-값이 실제로 바뀌는 지점이라 dirty 채널과 glitch-정확 엣지 포착이 둘 다 여기 매달려 있다 —
-둘 중 하나를 잊은 두 번째 복사본은 **조용하다**(값은 맞고 설계는 멈춘다).
-
-**핀**: `write_parity_tests` 가 넷 폭 15종 × 값 폭/패턴/부호 96종 × edge-target 2종을 두 경로로 돌려
-`changed` · 저장된 **모든** 워드 · dirty 리스트/플래그 · 누적 엣지 마스크를 비교한다(5040 케이스).
-teeth 확인: resize 폭 오프바이원 · net_w 절단 · resize 생략 **3종 전부 잡힌다**.
-
-### 네이티브 코드젠 조사 중 나온 것 — op 인구조사와 per-run 고정비 (2026-08-02)
-
-오너 판정으로 네이티브 코드젠(③)을 향하기 전에, **코드젠이 실제로 걷어낼 수 있는 몫**을 먼저 쟀다.
-
-바디 활성화 542,883 회 (385 ms, 건당 709 ns) 기준:
-
-```
-CompiledBody op   13.3 / 활성화     그중 56% 가 커널 호출(write_lvalue / schedule_nba)
-NativeProg 실행   12.0 / 활성화     실행당 op 4.2  → 활성화당 native op 약 50
-합계             ~63 op / 709 ns  →  op 당 ~11 ns
-```
-
-**두 가지가 나왔다.**
-
-**(1) 커널 호출은 코드젠이 못 걷는다.** 바디 op 의 56% 가 `k_write_lvalue`/`k_schedule_nba` 로 되돌아간다.
-JIT 이 만들어도 그 Rust 함수를 그대로 호출한다. op 당 11 ns 가 타이트한 디스패치(1–3 ns)보다 훨씬 큰 이유가 이것 —
-시간 대부분이 디스패치가 아니라 **op 안의 일**이다.
-
-**(2) `run()` 의 per-run 고정비가 실재했다.** 프로그램 평균이 **op 4.2 개**(깊이 2–3)인데
-`run` 은 `[(u64,u64); 64]` = **1 KiB 를 0으로 채우고** 들어갔다 — 650만 번. wide 버퍼는 이미 deferred-init
-처리를 받았지만(VM-WIDEZERO) narrow 는 아니었다.
-
-| | |
-|---|---|
-| 캡을 8로 낮춰본 프로브 | 0.71 → **0.65 s** |
-| **캡 유지 + 버퍼를 호출자 소유 scratch 로** | 0.71 → **0.66 s** |
-
-캡(`NATIVE_STACK`)은 `try_compile` 이 **어떤 식을 받아들이는지**를 정하는 값이라 낮추면 깊은 식이
-인터프리터로 밀린다. 그래서 캡은 두고 버퍼만 hoist 했다 — VM-REGPOOL 이 레지스터/오프셋 파일에 한 것과 같은 수.
-
-**이것이 ③ 의 상금을 줄인다.** per-run 고정비는 JIT 이 걷어낼 오버헤드의 일부였고, 이미 걷혔다.
-남은 상금은 native op 약 50개의 **스택 트래픽 + 디스패치**뿐이며, 커널 호출 56% 와 실제 연산은 그대로다.
-
-### ⓑ 커널 호출/셋업 축 — 레지스터 파일이 문장 수만큼 커지고 있었다 (2026-08-02)
-
-ⓐ(네이티브 코드젠) 상금을 ablation 으로 확정했다. native eval 프로그램은 **순수**하므로 두 번 돌려도
-제어흐름·출력이 동일하다 → wall-clock 차이가 곧 그 총비용:
-
-```
-1x native eval : 0.67 s
-2x native eval : 0.80 s
-              Δ = 0.13 s / 6,509,189 runs = 20 ns/run (op 당 ~4.8 ns)
-```
-
-**native evaluation 전부 = 런의 130 ms (19.7%)**, 그리고 그 안에는 디스패치·스택뿐 아니라 **리프 넷 읽기와
-실제 4-state 연산**이 들어 있다 — JIT 이 걷는 건 앞의 둘뿐. 즉 **ⓐ 의 절대 상한이 1.25x, 현실은 1.1x 언저리**다.
-(이전에 doc 에 적었던 1.5x 추정은 근거 없이 컸다.)
-
-그 산수가 남긴 잔여가 ⓑ 를 가리켰다: 바디 리전 385 ms 중 native eval 은 ~64 ms 뿐이니 **나머지 320 ms
-(활성화당 590 ns)** 가 op 안팎에 있다. ablation 으로 좁혔다:
-
-```
-1x 레지스터/오프셋 lease : 0.66 s
-2x 레지스터/오프셋 lease : 0.71 s   → 활성화당 92 ns, 런의 7.6%
-```
-
-**뿌리**: `compile_body` 의 `nregs` 가 **대입문마다 1씩 증가**한다. 그런데 값 레지스터의 생존 구간은
-바로 아래 연속으로 방출되는 op 3개(eval → resolve → write)뿐이고, 어떤 arm 도 레지스터를 문장이나 블록을
-가로질러 붙잡지 않는다. 즉 대입문 40개짜리 `always` 블록이 레지스터 40개를 받고 그중 **하나만 살아 있다**.
-그 비용은 컴파일이 아니라 **활성화마다** 나간다 — `vm_run_body` 가 매번 lease 한 파일을 clear+resize 하고,
-슬롯 하나가 `Option<Value>`(~64 B, 비자명 Drop)다.
-
-→ 슬롯 0 재사용. `nregs`/`noffs` 는 바디당 1.
-
-| | |
-|---|---|
-| 0.66 s → **0.60 s** | (1.10x) |
-| iverilog 13 | 0.58 s run + 0.03 compile |
-
-**동률 도달.** 번갈아 6회: iverilog 0.58–0.60, vita 0.59–0.61(vita 쪽은 parse+elaborate 포함).
-
-**핀**: `compiled_bodies_write_every_register_before_reading_it` — 슬롯 하나를 공유하므로, 컴파일러가
-레지스터를 문장 너머로 살리거나 쓰기 전에 읽으면 `take().expect()` 가 **더 이상 잡지 못한다**(직전 문장이나
-직전 활성화가 남긴 값을 조용히 집는다). loud→silent 거래라 불변식을 테스트로 박았다. teeth 확인
-(`val: v + 1` 교란 → 잡힘).
-
-### ⓑ 마무리 — 런타임 결정을 컴파일 타임으로 (2026-08-02)
-
-레지스터 재사용 뒤 남은 것들을 ablation 으로 하나씩 쟀더니 **전부 10 ms 급**이었다:
-
-```
-resolve_lvalue_offsets  10 ms (1.7%)      enter_body  10 ms (1.7%)
-write_lvalue ~57 ms (9.5%)                schedule_nba ~22 ms (3.7%)
-native eval 130 ms (22%)                  startup ~85 ms (14%)
-```
-
-**단일 레버는 더 없다.** 그래서 ⓑ 의 원래 아이디어를 그대로 적용했다 — 컴파일 시점에 lvalue 모양을 알면
-런타임 결정이 사라진다.
-
-`Op::WriteScalar` / `Op::ScheduleNbaScalar`: 목적지가 **평범한 whole-net 스칼라임을 컴파일러가 증명한** 경우
-`ResolveOff` op 자체가 사라지고(스트림에서 op 하나 감소), `Offsets` 는 정적 상수 `Inline{[(0,0)],len:1}` 가 되며,
-`NbaLhs::of` 의 모양 분기와 `write_lvalue` 의 `plain_scalar` 조회가 없어진다. 두 축 모두 런 중 불변이다 —
-lvalue 모양은 elaborate 에서 고정, `plain_scalar` 는 넷의 **저장 형태**(real/frame/handle/2-state/배열/폭)이지 값이 아니다.
-
-**굽지 않은 둘**: `forced`(force/release 가 런 중에 넷을 재타깃) 와 들어온 값의 `is_real`(real→int 반올림 arm 선택).
-둘 다 op 안에서 live 로 검사하고 실패하면 일반 퍼널로 떨어진다.
-
-| | |
-|---|---|
-| 0.60 s → **0.58 s** | |
-| iverilog 13 | 0.58 s run + 0.03 s compile |
-
-번갈아 6회: **iverilog 0.58, vita 0.58** — 실행 시간 동일, 컴파일까지 넣으면 vita 가 앞선다.
-(vita 의 0.58 에는 parse+elaborate ~85 ms 가 포함돼 있다.)
-
-**⭐ 핀을 두 번 썼다.** 첫 번째 force/real 핀은 `force` 와 쓰기를 **한 `initial` 블록**에 넣었는데,
-`is_codegen_able` 이 `Stmt::Force` 를 품은 바디를 통째로 제외하므로 **그 블록이 인터프리터로 돌아
-`Op::WriteScalar` 가 한 번도 실행되지 않았다** — live 검사를 지워도 통과했다. force 를 **다른 프로세스**로
-옮겨야 codegen-able 바디가 특수화 op 를 태운다. teeth 확인 후 통과.
-
-### ⓐ 착수 전 프로브 — 실행된 프로그램 모양 인구조사 (2026-08-02)
-
-JIT 이 걷어낼 수 있는 몫(디스패치+스택 트래픽)의 상한을 재려고, **실제로 실행된** native 프로그램의
-opcode 시퀀스를 세었다. superinstruction 후보를 찾을 생각이었는데 답이 달랐다:
-
-```
-HIST total_runs=6,509,189  distinct_shapes=90
-  27.39%  LoadScalar          ← op 1개
-  18.88%  Const               ← op 1개
-   3.07%  LoadScalar,Const,CaseEqNe
-   2.81%  LoadScalar,Const,EqNe
-   2.81%  LoadScalar,LogNot
-   ...
-```
-
-**실행의 46.3% 가 op 한 개짜리 프로그램이다.** 값 하나를 옮기려고 `FixedStack` 두 개를 세우고, 루프에
-들어가고, push 하고, 나와서 pop 하고, 결과를 조립한다. superinstruction(op 2–3개 융합)이 아니라
-**"루프를 아예 돌지 마라"** 가 답이었다.
-
-→ `NativeProg::fast: FastShape` — 컴파일 시점에 **완성된 op 벡터에서** 결정하므로 루프가 했을 일과
-어긋날 수 없다. `Const{val,unk}` / `LoadScalar{net,w,signed}` / `Vm`.
-
-| | |
-|---|---|
-| 0.58 s → **0.57 s** | (10 ms) |
-
-**작다** — scratch hoist 가 이미 per-run 고정비의 비싼 부분을 걷어냈기 때문이다. 그리고 이것이
-**ⓐ 의 상한을 다시 깎는다**: 46% 의 실행에서 루프를 통째로 제거해 10 ms 라면, 남은 54% 에서 JIT 이
-디스패치만 걷어 얻을 몫은 그보다 크지 않다.
-
-**⭐ 핀이 두 번 공허했다.** ① 처음엔 `assert_matches_oracle_on` 안에 "shortcut 을 탄 경우 루프와 대조"를
-넣었는데, 이 파일의 기존 테스트는 **전부 compound 식**이라 그 조건이 **한 번도 참이 아니었다** — shortcut 을
-고의로 망가뜨려도 통과했다. ② 명시 테스트를 쓴 뒤에도 `unk` 를 0으로 만드는 교란을 놓쳤다 — 상수 스윕이
-전부 `unk = 0` 이었기 때문. X/Z 를 품은 상수를 넣고서야 3종 교란(`unk` 소거 · 폭 절단 · `val` 오염)이 전부 잡혔다.
-
-## ⓐ 네이티브 코드젠 — 실행하고 측정한 결과 (2026-08-02/03)
-
-오너 판정으로 착수. `jit` **feature 뒤**(기본 OFF)이며 기본 빌드·기본 바이너리·5043 테스트 무영향.
-
-### Phase 0 — 타당성
-
-| | |
-|---|---|
-| cranelift **0.120** | rustc 1.85 에서 빌드 (0.134 는 1.94 요구) |
-| 추가 크레이트 | 29개(워크스페이스 80 → 109) · `Cargo.lock` +43 패키지 |
-| clean release 빌드 | 17.8 s |
-| aarch64 JIT | 정상 |
-
-**⚠️ 앞선 분석 정정.** "x86 과 arm 의 시프트 의미가 갈린다"고 썼는데 **cranelift IR 층에서는 안 갈린다** —
-`ushr(x, 64)` = `ushr(x, 0)` 로 카운트를 IR 이 마스킹하며, 이는 타깃 무관하게 **정의된 동작**이다(aarch64 실측).
-남는 건 "cranelift 정의 ≠ Verilog 정의"뿐이고 그건 **아키텍처 무관한 가드 하나**다.
-
-### Phase 1 — 식 단위: −15%
-
-| | |
-|---|---|
-| OFF → ON | 0.58 → 0.67 s |
-| 컴파일 비용 | 7.8 ms (무시 가능) |
-| **호출당** | **+23.5 ns** |
-
-**콜백이 없는 `Const` 전용 프로그램**으로 격리: 기계어 전부가 "상수 두 개 반환"인데 **호출당 +32.6 ns**.
-즉 코드젠 품질이 아니라 **FFI 경계 자체가 ≈33 ns** 이고, 그건 대체 대상보다 크다.
-개선 2회(결과·콜백 모두 레지스터 반환)로 0.69 → 0.67, 부호는 안 바뀜.
-
-**산수상 필연이었다**: `eval_native` 6,509,189 호출 × 33 ns = **215 ms 경계** vs **130 ms 대상**.
-
-### Phase 2 — 바디 단위: −7%
-
-컴파일 단위를 바디로 올렸다(`run_body` 542,883 호출 → 경계 18 ms). 블록·분기·delta 가드·모든 커널 호출 shim,
-식은 인라인. **P9 가 이미 suspend-free 바디만 통과시키므로 suspend/재개는 구현할 필요가 없었다.**
-
-| | |
-|---|---|
-| 커버리지 | 16/22 템플릿, 활성화 **382,877 / 542,883 = 70.5%** |
-| OFF → ON | 0.57 → 0.61 s (**활성화당 +104 ns**) |
-
-**두 단계가 같은 답으로 수렴한다**: 경계 횟수를 12배 줄여도 진다. 컴파일된 바디는 커널 호출과 shim op 하나하나를
-**인라인 불가능한 `extern "C"` 호출**로 하는데, VM 경로에서는 그게 전부 Rust 인라인이기 때문이다.
-
-> **인터프리터의 우위는 디스패치가 아니라 인라이닝이다.** JIT 이 도입하는 모든 경계가 제거하는 디스패치보다 비싸다.
-
-### 얻은 것
-
-- **`Select`/`Reduce`/`Ternary` 를 `native_eval::op_*` 로 추출** — VM 과 JIT 이 같은 한 벌을 쓴다.
-  루프/표 규칙을 cranelift IR 로 다시 쓰지 않았으므로 그만큼 세 번째 구현체가 안 생겼다.
-- **게이트가 실버그를 잡았다**: `Op::WriteScalar` 는 특수화로 `ResolveOff` 가 없는데 RHS 인라인 실패 시
-  `off` 를 소비하는 shim 으로 보내 패닉. 전 스위트를 `VITA_JIT=1` 로 돌려서 나왔다.
-- **정확성**: CLI **4275** + sim-engine **509** 테스트가 JIT 을 켠 채 통과.
-
-### 다음 단계가 cranelift 가 아닌 이유
-
-S1(스칼라 store 인라인)의 상한을 쟀다: **쓰기 4,000,553 건 중 2,851,441(71.3%)이 같은 값**이라
-`note_change` 조차 안 불린다 — 즉 "값을 비교해 같으면 호출 자체를 건너뛴다"로 충분하다.
-
-**그런데 그 비교를 기계어로 할 수 없다.** 넷 값은 `Vec<NetSlot>` → `NetSlot.cur: BitPacked` → `val: Vec<u64>` 인데
-**`Vec` 의 내부 필드 배치는 Rust 가 보장하지 않는다**. 우회(넷별 raw 포인터 테이블 굽기)는 *어디에도 강제되지 않은*
-불변식("평범한 스칼라의 Vec 은 재할당되지 않는다")에 걸리고, 틀리면 잘못된 값이 아니라 **메모리 오염**이다.
-
-→ **진짜 병목은 cranelift 가 아니라 데이터 배치다.** 스칼라 넷 저장을 넷마다 `Vec` 두 개가 아니라
-**평평한 아레나 + (offset, width)** 로 바꾸면 JIT 인라이닝이 안전해지고, **인터프리터도 같이 빨라진다**
-(지금은 넷 하나 읽는 데 포인터 추적 2회 + 캐시라인 2개). 그것이 "엔진을 다시 쓴다"의 실제 첫 단계이고,
-cranelift 없이도 단독으로 이득이 나는 유일한 변경이다.
-
-### 그 아레나도 값이 없었다 — 프로브가 하루 대신 20분에 답했다 (2026-08-03)
-
-바로 위에서 "진짜 병목은 cranelift 가 아니라 데이터 배치"라고 적었다. **그 가설도 틀렸다.**
-
-기계를 짓기 전에 프로브를 만들었다: `SimState.mirror: Vec<(u64,u64)>` — 넷마다 word 0 의 `(val, unk)` 를
-**하나의 평평한 벡터**에 두고, 리프 읽기(`read_scalar_words`)만 거기서 읽게 했다. 진짜 아레나와 **메모리 접근
-프로파일이 같다**(인덱스 로드 1회 vs 포인터 추적 2회). 쓰기 3곳(store_words · bit-serial · clocking commit)에서
-동기화하고, 읽기에 `debug_assert` 를 걸어 **디버그 스위트 5043개가 동기화를 증명**하게 했다.
-
-| | |
-|---|---|
-| baseline | 0.57 s |
-| flat mirror | **0.57 s** |
-
-**차이 없음.** 이유: `read_scalar_words` 는 `is_real`/`array_len`/`width`/`signed` 를 보려고 **이미 `NetSlot` 을
-로드한다**. 그 캐시라인이 뜨거우므로 Vec 데이터 포인터를 한 번 더 따라가는 비용이 측정에 안 잡힌다.
-
-**결론: 저장 계층을 평평하게 만들어도 인터프리터는 안 빨라진다.** 그것을 정당화할 수 있는 유일한 근거는
-"JIT 인라이닝을 건전하게 만든다"인데, 그 JIT 자체가 아레나가 회수할 수 있는 것보다 크게 지는 것이 이미 측정됐다.
-→ **ⓐ 축은 모든 단계가 측정으로 닫혔다.**
-
-### 한계점의 정확한 위치 — 실행기가 아니라 런타임 표현
-
-§9 의 음수 결과를 "③층(네이티브 컴파일드)은 불가능"으로 읽으면 너무 넓다. 실제로 실패한 것은
-**"기존 엔진의 op 열을 기계어로 만들고 기존 엔진의 커널을 계속 호출하는 것"** 이고,
-VCS·Xcelium 은 그걸 하지 않는다 — 되돌아갈 커널이 없다.
-
-논블로킹 대입 하나로 비교하면:
-
-| | vita | VCS 생성 코드 |
-|---|---|---|
-| 값 | `Value` **72 바이트** 구조체 생성 | `unsigned int` 변수 |
-| 목적지 | `Lvalue` → chunks → `Offsets` 해석 | 컴파일 시점 확정 |
-| 쓰기 | 런타임 **분기 11 / 사이드테이블 6** | `a_val = b_val; a_unk = b_unk;` |
-| NBA | `NbaUpdate` ~112 B 큐 push | 전용 레코드 또는 더블버퍼 |
-| 깨우기 | `net_to_edge`/dirty/waiter **런타임 조회** | 생성된 직접 호출 |
-
-**즉 한계점은 실행기가 아니라 런타임 표현이다.** 내 JIT 은 제어흐름만 컴파일하고 표현을 그대로 뒀기 때문에
-기계어 ↔ 범용 런타임 경계를 호출마다 넘어야 했고, 그 값이 33 ns 였다. 실제 컴파일드 시뮬레이터에는
-그 경계가 없다 — **건너편에 범용 런타임이 없기 때문이다.**
-
-진짜 ③층 백엔드가 요구하는 것 = 정적 넷 할당 · 폭별 특수화 연산 · 스케줄 구조 소거 · NBA 전용화.
-**넷 중 하나만 해서는 이득이 없다** — 저장 배치만 평평하게 한 프로브가 0% 였던 것이 그 증거다.
-
-⚠️ **격차 크기는 이 문서가 모른다.** 잰 것은 vita vs iverilog 이고 **둘 다 ②층**이다. VCS/Xcelium 은
-보유하지 않아 측정한 적이 없다.
-> **↑ 2026-08-03 갱신**: 이 문단은 **더 이상 사실이 아니다.** 아래 **round-26** 절이 verilator 5.050 으로
-> 같은 설계·같은 기계에서 3개 층을 나란히 쟀다 — **②→③ 격차 = 76×**(vita 최선 기준, 낙관적 상한). 다만 **알고리즘상 불리하지 않다** — VCS 도 event-driven 이므로 격차는
-복잡도 계층이 아니라 **상수항**이다. 상세 = [study/01 §9.9](../study/01-interpreted-vs-compiled.md).
-
-> 다음에 ③층을 간다면 **첫 줄은 `Value` 를 없애는 것이지 cranelift 를 부르는 것이 아니다.**
-
-> ③층으로 가는 방향의 조사·계획은 **[doc-21](21-tier3-native-backend.md)** 로 분리했다 —
-> 계약 감사(막는 것은 no-unsafe 와 MSRV 둘뿐) · 구조 판정(설계 단위 all-or-nothing, 정지 필수) ·
-> 단계 계획(S0~S6, 각 단계가 중단 판정을 갖는다).
+## 9. Rejected: widening the suspend-free allow-list
+
+The bodies the compiled path refuses are those holding `#delay`, `@` or `fork`, which are
+overwhelmingly stimulus. Sweeping work per activation on bodies that are *already* admitted
+answers the value question without first building the resume-PC state machine that widening
+would require:
+
+| Statements per activation | Interpreter | VM | VM / interpreter |
+|---:|---:|---:|---:|
+| 1 | 81.8 ms | 81.3 ms | 0.99× |
+| 2 | 94.9 ms | 93.6 ms | 0.99× |
+| 4 | 117.7 ms | 113.9 ms | 0.97× |
+| 8 | 159.7 ms | 145.0 ms | 0.91× |
+| 16 | 242.8 ms | 203.8 ms | 0.84× |
+| 32 | 408.1 ms | 319.7 ms | 0.78× |
+| 64 | 740.4 ms | 554.8 ms | 0.75× |
+
+The compiled path never loses, and below about eight statements it gives nothing: the
+per-activation fixed cost — register-file lease, prologue, dispatch loop — is not amortised.
+Stimulus bodies are one to three statements, so the bodies this axis would absorb sit exactly
+in the tie region.
+
+On a real design and testbench the refused activations are 18.1% of activations but only
+**4.3% of wall time**, 257 ns each against 709 ns for a compiled body, and that is this axis's
+ceiling. The Amdahl ceiling computed before the sweep was 2.84–4.24×; the realised value is
+0.2–0.3%. A ceiling bounds the reachable range and does not predict it. Widening also buys a
+resume-PC state machine, which is new silent-wrong surface.
+
+Reopens when stimulus bodies become compute-heavy.
 
 ---
 
-## ⭐ round-26 — ③층을 **처음으로 실제로 측정했다**, 그리고 ②층이 고갈되지 않았음을 알았다 (2026-08-03)
+## 10. Discarded: levelization. Not adopted: process fusion
 
-> **이 절이 doc-18 에서 가장 중요한 절이다.** 앞의 모든 절은 "vita vs iverilog"(둘 다 ②층)만 쟀고,
-> 문서 여러 곳에 *"격차 크기는 이 문서가 모른다"* 라고 적혀 있었다. 이제 **안다** —
-> **verilator 5.050 을 설치해서 같은 설계·같은 기계로 3개 층을 나란히 쟀다.**
+**Levelization** — static combinational ranks, an Active batch drained in rank order, a settle
+between ranks — measures **1.00× across depths 1 through 24** once built. A depth sweep at
+fixed cycle count explains it: a pure combinational chain is linear in depth (3.3 ms at depth
+1, 31.5 ms at depth 24 within one module) and the wake chain carries one process per delta, so
+there is no batch to sort. The quadratic term appeared only when the chain ran through
+continuous assigns (7.8 ms at depth 1, 814.4 ms at depth 24), and its root was that every
+settle pass re-evaluated every continuous assign. Evaluating only the assigns whose
+dependencies moved removes it — 814.4 ms to 57.9 ms at depth 24, 14.1× — and changes no
+process execution order, because a skipped visit recomputes the same value and the write
+funnel discards a same-value write.
 
-### 왜 새 벤치가 필요했나
+Real RTL puts its combinational work inside large `always @*` blocks rather than between
+processes: picorv32 has inter-process depth 1 and four fusion candidates out of 43 processes.
+There is no standing trigger on this row; a real design measuring inter-process combinational
+depth ≥ 6 would be the first observation worth re-measuring against.
 
-리뷰어 round-26 은 "병목이 string 에서 **DUT 로 옮겨갔다**"고 보고했다. 그것은 **위치**이지 **원인**이
-아니다 — round-25 에서 정확히 같은 문장("격차는 RTL 이 아니라 string")이 ③층과 무관한 알고리즘
-결함으로 판명났다. 그래서 판별식을 하나 세웠다:
+**Process fusion** — running a connected chain of combinational processes in a single
+activation — measures 1.7–2.5× and passes the 72-design backend-equivalence gate on stdout,
+VCD bytes and run summary. It is still not adopted, because it diverges on **value**: with a
+`clk = ~clk; #1` stimulus the fused build prints `0000017c` where Icarus Verilog and the
+unfused build print `xxxxxxxx`. Unfused, a depth-D chain propagates across D deltas and a
+process waking in the same batch reads a partially propagated output; fused, it reads a fully
+propagated one. A safety condition on the chain's *interior* nets says nothing about *when its
+output becomes fresh*, and the reader of that output is the flop the cone exists to drive, so
+"no concurrent reader of the output" empties the safe set. Both values are IEEE-legal; what is
+violated is vita's own pin to Icarus Verilog, which puts this on the silent-wrong rung of
+vita's own ladder.
 
-> **realistic RTL 에서 vita 가 ②층 기준선(iverilog)과 나란한가?**
-> 나란하면 남은 격차는 ②→③ 격차다. 뒤지면 vita 고유 결함이 더 있는 것이다.
+Pinned as `sim-engine::backend_equiv::a_comb_chain_output_is_sampled_mid_propagation`. The
+same transform is legitimate as a **declared mode** with a hazard detector, which is
+[preview/20](20-cycle-mode-feasibility.md).
 
-PicoRV32 는 32-bit 스칼라 제어 설계다. 리포터의 DUT(Keccak/SHA3)는 **64-bit 레인 25개의 데이터패스**로
-전혀 다른 경로를 때린다. 그래서 **Keccak-f[1600] 을 직접 썼다**(FIPS 202, 1 라운드/클럭,
-`bench/keccak/`). 오라클은 넷: Python 참조 구현 · vita · iverilog 13 · verilator 5.050 —
-**넷이 모든 N 에서 같은 다이제스트**를 낸다(all-zero state 첫 레인 `f1258f7940e1dde7` = 공표된 참조값).
+---
 
-### ① 3개 층, 같은 설계, 같은 기계 — 순열 1회당 한계비용
+## 11. Conditional no-go: multicore PDES within a timestep
 
-interleaved best-of-3, VCD 없음, release 빌드. `N` 을 두 점에서 재고 기울기를 취해 기동비를 제거했다.
+Byte-identical determinism is **not** the blocker — a preserving design exists and is sketched
+below. The blockers are workload width, the serial residue, and the engineering cost.
 
-| | 서브루틴 **호출 있음** | 서브루틴 **인라인** |
+### 11.1 The three probes
+
+All three live in `crates/sim-engine/tests/perf_baseline.rs` as permanent instruments —
+`perf_pdes_sync_cost`, `perf_pdes_engine_grain`, `perf_pdes_bsp_mock` — measured on a 10-core
+Apple Silicon machine.
+
+**τ, the per-delta dispatch round trip.**
+
+| Dispatch shape | T=2 | T=4 | T=8 |
+|---|---:|---:|---:|
+| naive `thread::scope` spawn/join | 31 µs | — | 93 µs |
+| resident pool + spin barrier (generation scatter, countdown gather) | 294 ns | 471 ns | 2.0 µs |
+
+Naive spawn/join is fatal on its own: a delta's work is measured in microseconds and the
+dispatch costs tens of them. The T=8 surge is the spill past the performance-core count onto
+efficiency cores, so a real design has to clamp T to the P-core count.
+
+**g, the engine activation grain.** W independent four-NBA flop `always` blocks, the ideal
+maximum-parallelism case: marginal cost **~700 ns per activation** (W=16→1024 converges
+707→686 ns; W=1 is 1351 ns and includes fixed slot overhead).
+
+Self-time classification of one such run:
+
+| Class | Share | Where |
 |---|---|---|
-| vita (②층, VM) | 5340 µs | **498 µs** |
-| iverilog 13 (②층, vvp) | 4450 µs | 1398 µs |
-| **verilator 5.050 (③층)** | **6.6 µs** | **6.56 µs** |
+| Parallelisable | ~78–82% | `eval_binary_ctx`, `mask_top`, `eval_ctx`, `resize`, `read_net`, the NBA capture in `k_schedule_nba`, `Value` allocation — all per-process work |
+| Serial residue | ~18–22% | `write_chunk` and `write_lvalue` on the NBA apply side, `propagate_changes`, the sort — the commit and propagate phase |
 
-> **②→③ 격차 = 76×** (vita 최선 기준) — 문헌의 "10–100배"와 같은 자릿수이며, **이 저장소가 처음
-> 자기 손으로 잰 수치다.** verilator 는 2-state·levelize 를 거래했으므로 이 76× 는 ③층의 **낙관적
-> 상한**이다(4-state 인 VCS/Xcelium 은 이보다 느리다). 그래도 상한이 76× 라는 사실은 바뀌지 않는다.
+**BSP mock, the dispatch-side speedup matrix.** Resident pool, static chunk ownership, serial
+commit pass — the same deterministic dispatch shape as the design sketch. At T=4, corrected to
+the measured grain:
 
-### ② ⚠️ 그런데 같은 표가 **②층이 고갈되지 않았음**을 말한다
+| grain | W=8 | W=64 | W=512 | W=4096 |
+|---|---:|---:|---:|---:|
+| ~28 ns | 0.39× | 1.56× | 2.96× | 3.51× |
+| ~195 ns | 1.59× | 3.09× | 3.61× | 3.69× |
+| ~890 ns | 2.93× | 3.61× | 3.72× | 3.95× |
 
-같은 설계·같은 결과인데 열 하나가 **10.7× (5340 → 498 µs)** 다. 차이는 **사용자 함수 호출뿐**이다.
-그리고 그 안에 vita 만의 절벽이 있다 — **`--backend` A/B**:
+T=8 wins only when W×g is large — peak 5.1× at g≈890 ns, W=4096. Under light load the
+efficiency-core spin is counterproductive, down to 0.11×.
 
-| 설계 | `--backend interp` | `--backend bytecode` | VM 기여 |
-|---|---|---|---|
-| PicoRV32 | 1.35 s | 0.86 s | **1.57×** |
-| Keccak (호출 있음) | 1.11 s | 1.11 s | **1.00× = 0%** |
-| Keccak (인라인) | 0.21 s | **0.10 s** | **2.1×** |
+### 11.2 The ceiling
 
-**바이트코드 VM 이 Keccak 에 기여하는 바가 정확히 0 이다.** 원인은 `backend::is_codegen_able` —
-블록의 terminator 가 `Goto`/`Return` 이 아니면 프로세스 전체를 거부하고, `Terminator::Call` 은 그 밖이다.
-게다가 `codegen_coverage` 는 `ir.processes` 만 순회한다 — **함수/태스크 바디는 애초에 컴파일 대상이 아니다.**
-프로파일이 그대로 말한다(unstripped release + `sample`):
+A serial residue of ~20% gives an Amdahl ceiling of **≈2.5× at T=4, ≈3.3× at T=8, 5× at
+T=∞**. Taking the minimum of that and the dispatch-side matrix, an ideal wide-synchronous
+design at g≈700 ns reaches ≈2–2.5× at T=4 and ≈3× at T=8, once W ≥ 64. At W ≤ 8 it is ≤1.6× or
+a loss, and at W = 1 — every testbench-shaped workload in the corpus — there is nothing to
+parallelise at all.
 
-```
-sim_engine::eval::eval_core::…::eval_ctx          956   ← ①층 트리워커
-sim_engine::value::Value::mask_top                909
-sim_engine::value::Value::resize                  724
-sim_engine::value::Value::set_vu                  663
-sim_engine::eval::eval_core::…::eval_binary_ctx   658
-```
+### 11.3 The byte-identical design sketch
 
-> **즉 Keccak 측정 전체가 vita 의 ①층 트리워킹 인터프리터 위에서 난 것이다.**
-> 사용자 함수를 부르는 RTL — 즉 대부분의 실 RTL 과 거의 모든 TB — 에서 vita 는 **②층을 쓰지 않는다.**
+This is the evidence for "possible, but expensive", not a plan.
 
-### ③ 원시 연산 단가 — vita 는 VM 홈그라운드에서 **iverilog 보다 5.5× 빠르다**
+| Element | Design |
+|---|---|
+| Eligible class | suspend-free processes whose writes are all NBA — the `is_codegen_able` classification, reused. NBA-pure processes cannot observe each other within a delta, because their writes land in the NBA region, so they are parallel-safe with no read/write-set analysis |
+| Run splitting | a process that writes with blocking assignment, forks, or touches the dynamic heap splits the batch. Only the pure-eval spans between splitters scatter; splitters run serially in batch order, so sequential visibility is preserved by construction |
+| NBA ordering | capture keyed on `(batch_idx, intra_seq)` merges to exactly the total order the global sequence number gives today |
+| Output ordering | `$display` / `$strobe` / `$monitor` registration goes to a per-process buffer flushed in batch order. Sequential output is per-process contiguous, so the bytes are identical |
+| `$finish` and friends | the lowest `batch_idx` wins and later index logs are discarded, reproducing the sequential mid-batch stop. A pure-eval process writes no state directly, so discarding is free |
+| Dirty list | per-thread collection, then merge, then the existing sort — the settle is already sort-based, so this joins naturally |
+| Time wheel | not involved: pure-eval bodies are suspend-free, so they hold no mid-body delay or `@` |
 
-각 2,000,000 회 반복, 차분법(동일 산술의 호출형 − 인라인형 등).
+The engineering cost is what makes it expensive: dismantling `!Send` — `Box<dyn Write>`,
+`LogSink`, `Cell`, the `Rc` VM cache, nine sites, each becoming per-worker — per-worker
+`EvalCtx` and native evaluation stacks, and a corpus-wide `--threads 1` against N byte-diff
+gate. A v2 that parallelises the NBA apply itself over disjoint nets could lower the serial
+share toward ~10% and open a ceiling near 10×, but propagation — edge detection, waker
+ordering, region control — is order-sensitive by nature and falls outside that scope.
 
-| 연산 | vita | iverilog 13 | |
-|---|---|---|---|
-| 인라인 64-bit 산술 (루프 1회) | **110 ns** | 610 ns | vita **5.5× 빠름** |
-| 사용자 함수 호출 오버헤드 | 650 ns | **375 ns** | vita 1.7× 느림 |
-| 모듈 레벨 배열 원소 쓰기 | **~400 ns** | ~430 ns | 대등 |
-| **함수 지역 배열 원소 쓰기** | **514 ns 추가** | **24 ns 추가** | vita **21× 느림** |
+### 11.4 Verdict and re-entry
 
-마지막 줄은 국소화까지 마쳤다(`probe/arr.sv`, 원소 쓰기 4M 회 고정):
+Not implemented. A ceiling of 2–3× is realised only by a sustained "W ≥ 64 plus
+evaluation-dominated bodies" workload, which is absent from the corpus and from the Phase-1
+user workloads; the machine cost — threading work, deterministic merge, gate maintenance —
+exceeds that conditional gain.
 
-| 배열의 집 | vita | iverilog |
+**Re-entry condition**: a real design shows, over most of its simulated time, (a) an active
+batch width **W ≥ ~64** and (b) a parallel-phase grain of **≥ ~200 ns** per activation. Below
+either, the mock says ≤1.6× and the Amdahl and merge constants eat it. On entry, the sketch
+above plus a byte-diff gate is the starting point.
+
+### 11.5 `--threads` is not this
+
+`--threads` / `-j` is the waveform writer's thread budget, not simulation parallelism. At
+N ≥ 2 the VCD **file writes** move to a dedicated writer thread behind an order-preserving
+bounded FIFO; the simulation thread still performs all deterministic work, including VCD
+encoding and record ordering, and hands over finished byte chunks. Output is byte-identical
+for every thread count, pinned by `crates/sim-engine/tests/threads.rs`. A run that writes no
+waveform is unaffected by the flag.
+
+---
+
+## 12. Contracts an acceleration must satisfy
+
+Any backend, lane or mode added to this engine inherits all four of the following. They are
+not advice; three of them are gates.
+
+### 12.1 The float-path determinism surface
+
+The justification for a second execution path is that cross-platform byte identity survives
+it, and the float path is the least pinned axis. These functions are **reused verbatim** by
+every path — never re-implemented, never compiled with fast-math.
+
+| Function | File | Determinism basis |
 |---|---|---|
-| 모듈 레벨 | 1.63 s | 1.71 s |
-| 함수 지역 | **3.56 s** | 2.24 s |
-| (대조) 함수, 배열 없음 | 1.87 s | 2.30 s |
+| `dec_field_width(n, signed)` | `crates/diag/src/fmt.rs`, forwarded by `builtins/render.rs` | exact `u128` integer arithmetic to 128 bits; only above 128 does it use `n · LOG10_2` in f64, and that result is a column-alignment hint |
+| `fmt_dec`, real arm | `crates/sim-engine/src/builtins/render.rs` | `x.round() as i64`, saturating; NaN → 0 |
+| `fmt_real` (`%f`) | `builtins/render.rs` | Rust `{:.*}`, not libm |
+| `fmt_real_e` (`%e`) | `builtins/render.rs` | Rust `{:.p$e}` plus two-digit exponent padding |
+| `format_g` (`%g`) | `builtins/render.rs` | the exponent comes from Rust `{:e}`; `log10` is deliberately avoided because libm transcendentals are not byte-identical across platforms; ±0.0 canonicalised |
+| `Value::from_f64`, `Value::to_f64`, `real_to_int_round` | `crates/sim-engine/src/value.rs` | int↔real through `as f64` and round-half-away |
 
-**모듈 배열은 정상, 함수 지역 배열만 느리다.** 배열 크기에 비례하는 프레임 진입 비용은 아니다
-(선언 크기 4→1024 스윕에서 vita·iverilog 기울기가 동일). 원소 쓰기 자체의 단가다.
+Because every path calls the *same instance*, `%f`, `%e`, `%g`, `%t`, `%d`-on-real and `%d`
+above 128 bits agree byte for byte. The backend differential gate enforces it, and the
+checked-in golden `sim-engine::end_to_end::float_format_determinism_golden` locks
+reproducibility across platforms: every platform matches the same literal, which is equivalent
+to a cross-platform diff, and CI runs the same golden on each leg so a divergent platform fails
+its own leg.
 
-### 판정 — 두 문장 모두 참이고, 서로 모순되지 않는다
+Real-math (`$ln` … `$atanh`) and the non-uniform `$dist_*` functions run on the vendored
+pure-Rust libm — `third_party/libm`, `default-features = false`, so no hardware intrinsics —
+for the same reason.
 
-1. **③층은 여전히 유일한 ③층 경로다.** vita 최선에서도 verilator 가 **76×** 빠르다. ②층에서
-   10× 를 더 짜내도 ③층 수치에는 도달하지 못한다.
-2. **그러나 ②층은 고갈되지 않았다.** 실 RTL 클래스에서 VM 커버리지가 **0%** 이고, 그 커버리지가
-   측정된 **2.1×** 를, 호출 기구 전체가 **10.7×** 를 쥐고 있다. doc-21 개정 1 의 *"현 표현 위의
-   상수항 여지가 고갈됐다"* 는 **PicoRV32(=VM 이 커버하는 설계)에 대해서만** 참이었다.
+### 12.2 The sampling-moment contract
 
-> **방법론 교훈 (ENGINEERING_RULES 로 승격)**: 성능 결론은 **벤치의 모양에 종속**된다.
-> PicoRV32 하나로 "고갈"을 선언한 것이 두 라운드 연속으로 틀렸다 —
-> round-25 는 string 축에서(172×), round-26 은 호출 축에서(10.7×).
-> **"이 설계에서"를 문장에서 빼면 그 문장은 거짓이 된다.**
+For a second execution path to be byte-identical, "when is what read and written" has to be a
+contract. These seven moments are frozen. Most are **kernel-side** (`write_lvalue`,
+`schedule_nba`, `propagate_changes`, `emit_vcd_change`), and a compiled body calls the *same*
+kernel methods through the `Kernel` trait, so it reproduces them for free. The one body-side
+invariant a compiled path must actively preserve is **statement execution order**.
 
-### 재현
+| # | Moment | Site | Class | Obligation on a compiled body |
+|---|---|---|---|---|
+| 1 | continuous-assign fixpoint in declaration order | `sched::settle_cont_assigns` | kernel-side | a continuous assign is not a process body; none |
+| 2 | NBA: LHS index sampled at schedule time, `nba_seq` applied in order | `sched::propagate::schedule_nba*`, `apply_nba` | kernel-side plus **body order** | call the NBA kernel entry in statement text order; text order *is* `nba_seq` |
+| 3 | blocking-assign offsets resolved at statement time | `exec::compute_effect` | body, read phase | resolve offsets before the write; already captured in `StmtEffect` |
+| 4 | in-body `@(sig)` arm snapshot, Level arms only | `sched::propagate::suspend_on` | kernel-side | `@` suspends, so the body is outside the allow-list; none |
+| 5 | delayed `assign #d` keyed on the last continuous-assign change | `sched` | kernel-side | delayed continuous assigns are not bodies; none |
+| 6 | `propagate_changes` refreshes `prev` last | `sched::propagate::propagate_changes` | kernel-side | none — backend-neutral |
+| 7 | eager per-write VCD emission, for glitch fidelity | `state::write_chunk` → `emit_vcd_change` | kernel-side | none — shared funnel |
 
-`bench/keccak/`(vita 저장소에 포함 — 우리가 쓴 1st-party RTL). verilator 는 `brew install verilator`.
+Of the seven, a compiled body is actively responsible for **#2 and #3 only**, and both are
+satisfied by executing statements in the same order the reference does. Breaking any of the
+seven turns the equivalence gate red immediately.
+
+Corpus coverage of the moments: #2 by `nba_sample` (`a[i] <= v; i = i + 1`), #3 by array and
+out-of-bounds writes, #7 by `multi_write_glitch` (three writes in one delta), #1 and #5 by
+`cont_assign_mixed`. #4 is outside the compiled path by construction and is covered by the
+interpreter suites.
+
+### 12.3 The equivalence gates
+
+| Gate | File | What it compares |
+|---|---|---|
+| Backend differential | `crates/sim-engine/tests/backend_equiv.rs` | 72 generated corpus designs built once into a `SimIr`, then run on the interpreter and the VM concurrently; identical stdout, VCD bytes, `sim_time`, `finish_reason` and `exit_class`, plus hand-written shapes the generator cannot emit. Anti-vacuity: `gate_actually_compares_vcd_bytes` |
+| Tier-3 differential | `crates/sim-engine/src/native/run_tests.rs` | the same IR on the VM and on the default backend, with per-design VCD targets; asserts the native backend actually ran, first, so a fall-back cannot make the gate compare the VM against itself |
+| Design gate | `crates/sim-engine/tests/native_gate.rs` | each reject family actually fires; corpus eligibility is an exact pinned count |
+| iverilog differential | `crates/sim-engine/tests/differential.rs` | vita against `iverilog` + `vvp`; skips gracefully when the tools are absent, and the design still runs through vita, so a vita-side crash is still caught |
+
+The invariant the whole scheme rests on: the shared net-write and VCD choke point
+(`state::write_lvalue`, `emit_vcd_change`) stays on the **shared** side across backends, so
+only process-body control flow differs and VCD or stdout bytes cannot diverge in a
+backend-specific way.
+
+A stronger check than running the corpus on two `--backend` values is **flipping the default
+and running the whole suite**: it costs one line and about ten minutes, and it recruits every
+shape the whole test suite already encodes, rather than only the shapes the corpus generator
+emits.
+
+### 12.4 The A/B protocol
+
+No performance number enters this document without it. The full protocol, with the artifact
+behind each rule, is [study/01 §5](../study/01-interpreted-vs-compiled.md); the rules
+themselves:
+
+| Rule | The artifact it answers |
+|---|---|
+| Release binaries only | a debug binary produced a fake +88% picorv32 regression |
+| Interleave A and B; never block-sequential | 5×PRE then 5×POST gave a fake +12.5% where interleaving gave −0.9% |
+| Run both orders, A→B and B→A | interleaving alone leaves a ±1% position bias that flips the sign |
+| Discard the first round | cache and thermal warm-up |
+| ±3% is "no change" | the standing no-change band |
+| No concurrent load while measuring | a hard rule |
+| The pair must compute the same thing | a drifted pair still yields two timings and still divides them |
+| A digest or golden gate must move under a mutation of its own design | a gate that survives one is measuring nothing and looks exactly like one that is |
+| Freeze the binary under review | a lens measuring a binary that keeps being rebuilt retracts its findings |
+| Prefer ablation to instrumentation | per-body timers reported `bodies = 3762 ms` on a run whose uninstrumented wall clock was 1234 ms |
+
+---
+
+## 13. Reproducing the cross-tool measurements
+
+`bench/keccak/` is first-party RTL carried in this repository. Verilator and Icarus Verilog
+are installed separately.
 
 ```bash
+cargo build --release -p cli --locked
+
 cd bench/keccak
-vita       tb.sv keccak_f.sv      +N=200          # 호출형
-vita       tb.sv keccak_f_flat.sv +N=200          # 인라인형(생성물)
-vita --backend interp tb.sv keccak_f.sv +N=200    # VM 기여 A/B
+vita tb.sv keccak_f.sv      +N=200                 # the call spelling
+vita tb.sv keccak_f_flat.sv +N=200                 # the expanded spelling
+vita --backend interp tb.sv keccak_f.sv +N=200     # executor A/B (oracle build only)
+
 iverilog -g2012 -o k.vvp tb.sv keccak_f.sv && vvp k.vvp +N=200
 verilator --binary --timing -Wno-fatal -o vk tb.sv keccak_f.sv && ./obj_dir/vk +N=200000
 ```
+
+The permanent probes behind §7, §9 and §11 are `#[ignore]`d and are data, not gates:
+
+```bash
+cargo test --release -p sim-engine --test perf_baseline -- --ignored --nocapture
+```
+
+---
+
+## 14. Related documents
+
+- [study/01 — the performance axis](../study/01-interpreted-vs-compiled.md): the same
+  verdicts in narrative form, the value-representation census, the flat profile, and the full
+  A/B protocol.
+- [study/03 — the workload corpus](../study/03-workload-corpus.md): the ten designs and the
+  harness every corpus figure here comes from.
+- [preview/20 — cycle-mode feasibility](20-cycle-mode-feasibility.md): the separate-mode
+  question, both halves of it.
+- [preview/21 — tier-3 native backend](21-tier3-native-backend.md): the direction a further
+  native backend would take.
+- [preview/06 — simulation engine](06-simulation-engine.md): scheduler regions, backend
+  mechanics, the `Kernel` ABI.
+- [ROADMAP §5 and §7](../ROADMAP.md): the live queue, the standing verdicts, and the re-entry
+  triggers.

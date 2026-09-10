@@ -1,420 +1,392 @@
-# 02 — ③층 네이티브 백엔드 커버리지를 0%에서 100%로: 용어부터 해설까지
+# study/02 — Terminology, and the native backend's coverage
 
-> **이 문서의 독자**: 이 저장소를 처음 보는 사람. 용어를 하나도 모른다고 가정하고 시작한다.
-> **다루는 것**: 용어 사전(넷·터미네이터·아레나·커널·게이트·**arm**·**배터리** …) · **세 실행기가
-> 어떻게 다르고 왜 `native` 가 `interp` 보다 빠른지**(실측 포함) · "커버리지" 가 정확히 무엇의
-> 커버리지인지 · **"census" 가 무엇인지** · 2026-08-10 ~ 08-16 사이의 슬라이스들이 그 숫자를 어떻게
-> 올렸는지 · **뮤테이션이 왜 그렇게 많이 나오고 그게 왜 옳은지**.
-> **다루지 않는 것**: 성능 축의 전사(前史)와 ②층 코드젠 실험(= [study/01](01-interpreted-vs-compiled.md)) ·
-> SystemVerilog 언어 자체.
-> **상태**: V1 완주 시점(2026-08-16 · 커버리지 100.00% · 코퍼스 6,470 중 거부 0).
-> **원자료**: 여기서 인용하는 슬라이스(`ROADMAP §5.1-<x>`)의 원문은 2026-08-18 부터
-> **[ROADMAP_ARCHIVE_PHASE_A-D.md](../ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(§번호 보존 · `#### 5.1-` 로 검색).
+Defines the three words this repository uses in a non-standard way — *census*, *coverage*
+and *mutation* — and then states the tier-3 `native` backend's coverage: what it compiles,
+what falls back, how a fallback is reported, and how its equivalence against the other two
+executors is gated.
+
+Companion studies: the performance axis in [study/01](01-interpreted-vs-compiled.md); the
+workload corpus in [study/03](03-workload-corpus.md).
 
 ---
 
-## 0. 세 줄 요약
+## 1. Terminology
 
-1. vitamin 에는 설계를 실행하는 **실행기(backend)가 셋** 있고, 그중 가장 새 것(③층 `native`)은
-   처음에 **전체 실행의 54.7% 만** 받을 수 있었다. 나머지는 조용히 옛 실행기로 넘겨졌다.
-2. 그 54.7% 를 **100%** 로 만드는 일이 "Phase A / V1" 이다. 이 문서가 설명하는 작업 전부가 그것이다.
-   (③층을 굳이 만드는 이유는 속도다 — 실측 **interp 1.319 s / vm 0.838 s / native 0.513 s**, picorv32.
-   왜 그런지는 §2.)
-3. 올리는 방법은 대부분 **기능을 새로 짓는 것이 아니라, 거부하던 이유가 아직 참인지 다시 재는 것**
-   이었다. 실제로 다시 재 보면 대개 거짓이었다.
+### 1.1 The simulator's vocabulary
+
+| Term | Meaning |
+|---|---|
+| **RTL** | Register-Transfer Level: hardware described as which signal changes on which clock. Verilog and SystemVerilog are the languages |
+| **design** | one source bundle that is simulated. "N designs" means N distinct test inputs |
+| **net** | one signal (`reg [7:0] q;` declares the net `q`) |
+| **elaborate** | read the source, expand the module hierarchy, fix parameters, and lower to an executable intermediate representation |
+| **IR** | `sim_ir::SimIr`, the elaborate output. From here on the data structure is language-neutral |
+| **process** | one `initial` or `always` block. In the IR it is a graph of basic blocks |
+| **terminator** | the last instruction of a basic block: `Goto`, `Branch`, `Delay` (`#5`), `Wait` (`@(posedge clk)`), `Fork`, `Call`, `Return` |
+| **scheduler** | advances time and decides which process wakes when, implementing the IEEE region model (Active / Inactive / NBA / Observed / Reactive / Postponed) |
+| **`fork … join`** | splits one process into concurrent branches (IEEE 1800 §9.3) |
+| **arm** | one branch of a `fork`. In `fork begin A end begin B end join`, `begin A end` is an arm |
+| **join modes** | `join` waits for every arm; `join_any` waits for the first; `join_none` waits for none and the parent continues immediately. The three are observably different and each has its own tests |
+| **parent / child** | the process that executed the `fork` is the parent, each arm a child. Internally both are *activities*; a child runs the parent's body with its own program counter |
+| **barrier** | the counter that implements a join. Miscounting produces a wrong order, not a crash |
+| **`wait fork`** | wait until every child this process spawned has finished (IEEE 1800 §9.6.1). It is not a waiter: there is no signal to register on, and child-completion bookkeeping is what wakes it |
+| **`disable fork`** | kill every descendant of the calling process; the caller survives (IEEE 1800 §9.6.3) |
+
+### 1.2 This repository's vocabulary
+
+| Term | Meaning |
+|---|---|
+| **tier-1 / `interp`** | the tree-walking interpreter. Walks the IR directly. The reference statement of what a construct means, and the oracle for the other two |
+| **tier-2 / `vm`** | the bytecode VM. Compiles a body once per process template and runs an op loop |
+| **tier-3 / `native`** | the default executor. Keeps net values in a flat `NetArena` and evaluates uniform-width expressions on a specialised evaluator. It generates no machine code — the name refers to native storage |
+| **arena** | tier-3's flat array of net values. Tiers 1 and 2 keep values in `SimState::nets`; tier-3 keeps them in its own buffer, and that pair of stores is the root of nearly everything in this document |
+| **kernel** | the `Kernel` trait between an executor and a store. Statement meaning lives in shared code generic over `Kernel`; only what differs per store is a kernel method |
+| **gate** | the decision "can tier-3 take this design". It has three layers (§4.1) |
+| **row** | one reject clause inside a gate, identified by a human-readable string such as `"a task frame that FORKS"` |
+| **fallback** | routing a refused design to tier-2. A slower answer, not a wrong one |
+| **sidecar** | a table alongside the IR rather than inside it, for example `fork_modes` (which `fork` is `join`/`join_any`/`join_none`) or `task_calls_proc` (argument-to-formal mapping per call site) |
+| **correct-or-loud** | refuse loudly rather than answer wrongly in silence |
+| **silent-wrong** | exit code 0, no diagnostic, wrong value |
+| **accuracy ladder** | `silent-wrong ≪ loud ≪ correct-support`. Movement is upward only; turning something that worked into a refusal is also a regression |
+
+### 1.3 Verification vocabulary
+
+| Term | Meaning |
+|---|---|
+| **oracle** | an external tool that supplies the expected answer: Icarus Verilog 13.0, with Verilator 5.050 as a second opinion on 2-state arithmetic |
+| **hand-IEEE** | an expected value derived by reading the IEEE 1364/1800 text, used where no external tool can arbitrate because the tool rejects the construct. The value is pinned as a literal and the test header records why there is no tool oracle |
+| **differential** | running two implementations on the same input and comparing output. Here usually tier-3 against tier-2, or vita against Icarus Verilog |
+| **absolute anchor** | a test that pins a concrete expected string rather than comparing two implementations. It catches the case where both implementations are wrong in the same way |
+| **census** | counting what the code actually does over a population, rather than arguing about it. §3 and §4.2 are censuses |
+| **coverage** | the fraction of the test suite's `simulate()` calls that tier-3 actually ran. Not code coverage. §3 |
+| **mutation** | deliberately breaking one place in production code and checking whether the suite notices. §5 |
+| **battery** | several mutations run as one sequence, each restore → substitute → build → run → verdict. §5.1 |
+| **KILLED / SURVIVED** | the suite caught the mutation / it did not. `SURVIVED` is a question, not a failure. §5.3 |
+| **flip run** | running the whole suite with the default backend inverted, to ask whether any result changes. §4.4 |
 
 ---
 
-## 1. 용어 사전
+## 2. The three executors
 
-읽기 전에 이것만 알면 나머지가 다 풀린다.
+### 2.1 One set of semantics
 
-### 1.1 RTL 시뮬레이터가 하는 일
-
-| 용어 | 뜻 |
-|---|---|
-| **RTL** | Register-Transfer Level. 하드웨어를 "어떤 신호가 어떤 클럭에 어떻게 바뀌는가"로 적은 것. Verilog/SystemVerilog 가 그 언어다. |
-| **설계(design)** | 시뮬레이션 대상이 되는 하나의 `.sv` 소스 뭉치. 이 문서에서 "설계 N개"는 "서로 다른 테스트 입력 N개"라는 뜻이다. |
-| **넷(net)** | 설계 안의 신호 하나(`reg [7:0] q;` 의 `q`). 값을 담는 변수라고 생각하면 된다. |
-| **엘라보레이트(elaborate)** | 소스를 읽어 모듈을 펼치고 파라미터를 확정해 **실행 가능한 중간 표현**으로 낮추는 단계. |
-| **IR** | Intermediate Representation. vitamin 의 IR 은 `sim_ir::SimIr` 이고, 여기서부터는 언어와 무관한 자료구조다. |
-| **프로세스(process)** | `initial`/`always` 블록 하나. IR 에서는 기본 블록(basic block)들의 그래프로 표현된다. |
-| **터미네이터(terminator)** | 기본 블록의 마지막 명령. `Goto`(다음 블록으로) · `Branch`(조건 분기) · `Delay`(`#5`) · `Wait`(`@(posedge clk)`) · `Fork`(`fork…join`) · `Call`(태스크 호출) · `Return`. |
-| **스케줄러(scheduler)** | 시각을 진행시키고 어느 프로세스를 언제 깨울지 정하는 것. IEEE 1364-2005 §5 의 리전 모델(Active/Inactive/NBA/Postponed…)을 구현한다. |
-| **`fork … join`** | 프로세스 하나를 **여러 갈래로 쪼개 동시에** 돌리는 SystemVerilog 구문(IEEE §9.3). `fork begin A end begin B end join` 은 A 와 B 를 동시에 시작하고 **둘 다 끝날 때까지** 기다린다. |
-| **⭐ arm (팔)** | `fork` 의 **갈래 하나**. 위 예의 `begin A end` 가 arm 이다. 이 저장소의 로그·주석에 계속 나오는 "arm" 은 전부 이것 — *"첫 arm 이 join 을 뚫고 부모의 continuation 을 실행했다"* 는 **A 가 끝난 척하고 fork 다음 코드로 넘어가 버렸다**는 뜻이다. |
-| **join 모드 셋** | `join` = **모든** arm 을 기다린다 · `join_any` = **첫** arm 하나만 기다리고 나머지는 계속 돈다 · `join_none` = **아무도 안 기다리고** 부모가 즉시 계속된다(arm 은 뒤에서 돈다). 셋은 관측 가능하게 다르므로 각각 테스트가 있다. |
-| **부모(parent) / 자식(child)** | `fork` 를 실행한 프로세스가 부모, 각 arm 이 자식이다. vitamin 내부에서는 **활동(activity)** 이라는 단위로 표현된다 — 자식은 **부모의 바디를 자기 PC 로** 실행하는 별도 활동이다. |
-| **barrier(장벽)** | join 을 구현하는 것. *"자식 N 명이 남았다"* 를 세다가 조건이 차면 부모를 다시 깨운다. 잘못 세면 **크래시가 아니라 틀린 순서**가 나온다. |
-| **`wait fork`** | *"내가 낳은 자식이 전부 끝날 때까지 기다린다"*(IEEE §9.6.1). ⚠️ 이름과 달리 **waiter 가 아니다** — 걸어 둘 신호가 없고 자식 완료 부기가 깨운다(→ §5 모양 1). |
-| **`disable fork`** | *"내 자손을 전부 죽인다"*(IEEE §9.6.3). 호출자 자신은 산다. |
-
-### 1.2 이 저장소 고유 용어
-
-| 용어 | 뜻 |
-|---|---|
-| **①층 / interp** | 인터프리터. IR 트리를 그대로 걸어 실행한다. **의미의 정본**이자 다른 둘의 오라클. |
-| **②층 / vm (bytecode)** | IR 을 바이트코드로 컴파일해 돌린다. 오랫동안 **기본 백엔드**였고, **2026-08-16(Phase B1) 부터 아니다** — 이제 기본은 ③층이다. |
-| **③층 / native** | 이 문서의 주인공. 넷 값을 **평평한 아레나(`NetArena`)** 에 두고 돌린다. `--backend native`. **기계어는 만들지 않는다** — 만들어 봤고 느려서 기각했다(Phase D 완료 · ROADMAP §5.1-be). |
-| **아레나(arena)** | ③층이 넷 값을 담는 평평한 배열. ②층·①층은 값을 `SimState::nets` 에 두는데, ③층은 자기 배열에 둔다 — **이 "두 저장소" 가 이 문서의 거의 모든 이야기의 뿌리다.** |
-| **커널(Kernel)** | 실행기와 저장소 사이의 트레이트. `k_read_net`, `k_write_lvalue`, `k_exec_fork` … 문장 의미는 `Kernel` 에 대해 제네릭한 공유 코드에 있고, 저장소마다 다른 것만 커널 메서드로 갈린다. |
-| **게이트(gate)** | "이 설계를 ③층이 받을 수 있는가"를 판정하는 것. **세 층**이다(→ §3.2). |
-| **행(row)** | 게이트 안의 개별 거부 조항. `"a task frame that FORKS"` 처럼 사람이 읽을 문자열 하나가 한 행이다. |
-| **폴백(fallback)** | ③층이 거부한 설계를 조용히 ②층으로 넘기는 것. **틀린 답이 아니라 느린 답**이므로 안전하지만, 그만큼 눈에 안 띈다. |
-| **사이드카(sidecar)** | IR 본체가 아니라 옆에 딸린 표. 예: `fork_modes`(어느 `fork` 가 `join`/`join_any`/`join_none` 인지), `task_calls_proc`(호출 사이트의 인자↔formal 매핑). |
-| **correct-or-loud** | 이 프로젝트의 최우선 원칙. **틀린 답을 조용히 내느니 시끄럽게 거부하라.** |
-| **silent-wrong** | 조용히 틀린 답. exit code 0, 진단 0, 값만 틀림. **이 저장소가 존재하는 이유가 이것을 없애는 것이다.** |
-| **정확도 사다리** | `silent-wrong ≪ loud ≪ correct-support`. 올라가되 **절대 내려가지 마라**. 되던 것을 거부로 바꾸는 것도 회귀다. |
-
-### 1.3 검증 용어
-
-| 용어 | 뜻 |
-|---|---|
-| **오라클(oracle)** | "정답"을 알려주는 외부 기준. 여기서는 **iverilog 13.0** 과 **verilator 5.050**. |
-| **hand-IEEE** | 오라클이 답을 못 줄 때(그 기능을 지원 안 하거나 크래시할 때) IEEE 표준 문서를 직접 읽어 기대값을 손으로 정하는 것. |
-| **차분(differential)** | 두 구현을 같은 입력에 돌려 출력을 비교하는 것. 여기서는 주로 native ↔ vm. |
-| **절대 앵커(absolute anchor)** | 차분이 아니라 **구체적인 기대 문자열**을 박아 둔 테스트. 두 구현이 **똑같이 틀려도** 잡힌다. |
-| **뮤테이션(mutation)** | 제품 코드를 일부러 **한 군데** 망가뜨리고 테스트가 잡는지 보는 것. → §6 전체 |
-| **⭐ 배터리(battery)** | 그 뮤테이션을 **여러 개 묶어 자동으로 돌리는 스크립트**. 로그에 계속 나오는 "배터리"가 이것이다. 케이스마다 ①치환 ②빌드 ③전체 테스트 ④복원을 반복하고 `KILLED`/`SURVIVED` 를 찍는다. → §6.1 |
-| **KILLED / SURVIVED** | 뮤테이션을 테스트가 **잡았다 / 못 잡았다**. SURVIVED 는 실패가 아니라 **질문**이다(→ §6.3). |
-| **flip 런** | 기본 백엔드를 native 로 **뒤집고** 전체 테스트를 돌리는 것. → §3.3 |
-| **census** | 게이트가 무엇을 왜 거부하는지 **세는 것**. → §4 전체 |
-| **슬라이스(slice)** | 이 저장소의 작업 단위. 하나를 끝까지(선택→그라운딩→구현→적대리뷰→게이트→문서→커밋) 한다. |
-
----
-
-## 2. 세 실행기는 어떻게 다른가 — 그리고 왜 native 가 interp 보다 빠른가
-
-커버리지 이야기를 하기 전에 **무엇이 무엇보다 빠른가, 왜 그런가**를 알아야 한다. 이름이 헷갈리기
-때문이다 — `interp` 는 "인터프리터", `vm` 은 "바이트코드 VM", `native` 는 "네이티브"인데,
-**`native` 는 기계어를 만들지 않는다.** 그러면 왜 빠른가?
-
-### 2.1 실측 (2026-08-16 · picorv32 · release 빌드 · 번갈아 반복 best-of-5)
-
-| 실행기 | 시간 | native 대비 | 무엇을 하는가 |
-|---|---:|---:|---|
-| `--backend interp` | 1.319 s | 2.57× 느림 | IR 트리를 매번 걸으며 해석 |
-| `--backend vm` | 0.838 s | 1.63× 느림 | 바디를 바이트코드로 **한 번** 컴파일해 op 루프로 실행 |
-| **`--backend native`** | **0.513 s** | **1.00×** | 넷 값을 **평평한 아레나**에 두고, 폭이 균일한 식은 **특수화 평가기**로 |
-| (참고) iverilog 13 | 0.585 s | 1.14× 느림 | — |
-
-> 재현: `cargo build --release -p cli --locked` 후 `bench/picorv32` 에서
-> `vita --backend <b> tb.v picorv32.v`. 세 백엔드와 iverilog 의 모의 종료 시각이 모두
-> `399995000` 으로 같다(= 같은 워크로드).
-
-⚠️ **이 표의 숫자는 이 설계의 것이다.** 형태가 다르면 배율이 다르다 — keccak(균일 64비트 산술)에서는
-같은 최적화가 **0%** 였던 적도 있다(§4.5.331). *"공유 함수를 고쳤으니 모든 층이 이득"* 은 측정 전에는
-주장일 뿐이다.
-
-### 2.2 셋의 공통점 — 의미는 한 벌뿐이다
-
-먼저 오해를 없애자. **셋은 세 개의 다른 시뮬레이터가 아니다.**
-
-문장 하나의 의미(예: `q <= d + 1` 이 무슨 뜻인가)는 `compute_effect` / `apply_effect` 라는 **공유
-함수**에 있고, 이 함수들은 `Kernel` 트레이트에 대해 **제네릭**이다. 세 실행기는 그 `Kernel` 의 구현이
-다를 뿐이다.
+The three executors are not three simulators. What a statement means — what `q <= d + 1`
+does — lives in the shared functions `compute_effect` and `apply_effect`, which are generic
+over the `Kernel` trait. The executors differ in the `Kernel` implementation they use.
 
 ```
-        문장 의미 (공유·제네릭)          ← 여기가 한 벌
-   compute_effect / apply_effect
-                 │
-        ┌────────┴────────┐
-   Kernel for Scheduler   Kernel for NativeKernel
-   (interp·vm 가 쓴다)     (native 가 쓴다)
-        │                      │
-   SimState::nets          NetArena (평평한 배열)
+        statement semantics (shared, generic over Kernel)
+             compute_effect / apply_effect
+                          │
+             ┌────────────┴────────────┐
+      Kernel for Scheduler       Kernel for NativeKernel
+        (interp and vm)                (native)
+             │                            │
+       SimState::nets                NetArena (flat buffer)
 ```
 
-⭐ **그래서 "새 백엔드를 만든다"는 것이 "IEEE 규칙을 다시 구현한다"가 아니다.** 이것이 §5 에서
-설명할 "위임" 슬라이스들이 가능했던 구조적 이유이고, 동시에 §6 에서 설명할 "차분이 눈멀어진다"의
-이유이기도 하다 — 공유 코드가 틀리면 **셋이 똑같이 틀린다.**
+Two consequences follow, and they pull in opposite directions. Adding a backend is not
+re-implementing the IEEE rules, which is why most coverage work is delegation rather than
+construction. And a differential between two executors is structurally blind to a defect in
+the shared code: if `compute_effect` is wrong, all three are wrong identically. Anywhere an
+executor delegates, an absolute anchor is mandatory (§4.5).
 
-### 2.3 그러면 무엇이 다른가 — 세 가지 축
+### 2.2 What actually differs
 
-#### 축 1 — **"무엇을 할지"를 언제 정하는가**
+**When the work is decided.** `interp` re-derives "this is an assignment, the lvalue is
+here, the right-hand side is a binary Add" on every activation. `vm` lowers a body once to
+a `CompiledBody` op stream. `native` reuses that same `CompiledBody` where it can, so this
+axis alone does not make tier-3 faster than tier-2.
 
-`x = a + b;` 하나를 실행할 때:
+**Where values live, and in what shape.** This is the difference that shows in a profile.
+Tiers 1 and 2 hold net values in `SimState::nets` as `Value`, a 72-byte structure carrying
+two 4-state bit planes plus width, signedness and type flags. Tier-3 holds them in a flat
+`NetArena` — a single `u32`-indexed word buffer, laid out `words * 2 * max(array_len, 1)`
+per net — and evaluates uniform-width expressions of at most 64 bits on `WProg`, which
+never constructs a `Value` at all. Measured shares of what disappears: `Value` marshalling
+(`one_word_value` 7.3%, `resize` 4.7%, `mask_top` 3.7%); three comparison operators each
+building two 72-byte `Value`s for their result (picorv32 0.781 s against 0.709 s); the last
+`Value` consumers in `!`, the reductions and `&&`/`||` (0.712 s against 0.633 s); the write
+funnel taking the general path for a one-word destination (0.633 s against 0.594 s).
 
-* **interp**: 매번 IR 노드를 보고 *"이건 대입이군"* → *"lhs 는 어디지"* → *"rhs 는 Binary Add 군"* →
-  … 를 **다시** 판단한다. 같은 문장을 백만 번 돌리면 백만 번 판단한다.
-* **vm**: 프로세스 바디를 **한 번** `CompiledBody`(op 열)로 낮춘다. 실행은 op 루프이고, "이건 대입이다"
-  는 이미 op 종류로 굳어 있다.
-* **native**: vm 과 같은 `CompiledBody` 를 쓸 수 있으면 쓴다(§4.5.333). **여기까지는 native 가 vm 을
-  안 이긴다** — 실제로 그 단계에서는 **완전한 wash** 였다.
+**The granularity of fallback.** Tiers 1 and 2 mix per body inside one design: an
+`always_ff` on the VM, a testbench `initial #1 …` on the interpreter. Tier-3 is
+**all-or-nothing per design**, because it owns net storage — one process reading a value
+from outside the arena would see the time-zero state. That single property is why a gate
+exists and why coverage is a subject at all.
 
-⇒ **축 1 만으로는 native 가 interp 보다 빠른 이유가 설명되지 않는다.** 그건 vm 도 하는 일이다.
+### 2.3 Measured
 
-#### 축 2 — **값을 어디에 어떤 모양으로 두는가** ← ⭐ **이것이 진짜 이유다**
+picorv32, release build, interleaved, best of five. Reproduce with
+`cargo build --release -p cli --locked`, then from `bench/picorv32`,
+`vita --backend <b> tb.v picorv32.v`; all three executors and Icarus Verilog end at
+simulated time `399995000`.
 
-* **interp·vm**: 넷 값이 `SimState::nets[…]` 에 있고, 값의 표현은 `Value` 다. `Value` 는 **4-state**
-  (0/1/x/z)를 담기 위해 비트마다 두 벌의 비트를 들고 다니는 **72바이트** 구조체다.
-* **native**: 넷 값이 **평평한 `NetArena`** 에 있다. 그리고 폭이 균일하고 ≤64비트인 식은
-  **`WProg`(특수화 평가기)** 가 처리하는데, **거기서는 `Value` 를 아예 만들지 않는다.**
+| Executor | Time | vs `native` |
+|---|---:|---:|
+| `--backend interp` | 1.319 s | 2.57× slower |
+| `--backend vm` | 0.838 s | 1.63× slower |
+| `--backend native` | **0.513 s** | 1.00× |
+| Icarus Verilog 13 | 0.585 s | 1.14× slower |
 
-이 차이가 어디서 시간을 버는지는 **프로파일이 말했다**:
+These ratios belong to this design. A different shape gives different ratios: an
+optimisation worth 17% on one corpus row is flat on another. "A shared function got faster,
+so every tier gains" is a claim until it is measured.
 
-| 없앤 것 | 측정 |
-|---|---|
-| `Value` 마샬링(`one_word_value` 7.3% + `resize` 4.7% + `mask_top` 3.7%) | §4.5.329 |
-| 비교 3종이 결과를 내려고 **72바이트 `Value` 두 개를 만들던 것** | §4.5.330 — picorv32 0.781 → 0.709 s |
-| `!`·리덕션·`&&`/`||` 의 마지막 `Value` 소비자 | §4.5.331 — 0.712 → 0.633 s |
-| 쓰기 퍼널이 목적지가 한 워드일 때도 일반 경로를 타던 것 | §4.5.332 — 0.633 → 0.594 s |
+### 2.4 Why the interpreter stays
 
-⭐⭐ **핵심은 "컴파일했다"가 아니라 "값이 평평하다"** 이다. 같은 문장을 같은 순서로 실행하더라도,
-`Value` 를 안 만들면 그만큼 빠르다.
-
-⚠️ 그리고 그것이 **왜 `native` 가 아직 기계어를 안 만드는데도 이름이 native 인지**의 답이다 —
-"네이티브 저장(native storage)" 쪽에 가깝다. 기계어 생성은 **Phase D 에서 지어서 기각됐고**(§5.1-be — 런의 ~38% 가 shim 이라 인라인된
-tier-3 루프를 못 이긴다), 그 본체도
-cranelift 가 아니라 **2-state 좁히기**다(§4.5.334 census: 인라인 불가한 30.8% 가 비싼 이유는
-*호출이라서가 아니라 4-state 라서*다).
-
-#### 축 3 — **폴백의 단위**
-
-* **interp·vm**: 한 설계 안에서 **바디마다** 섞을 수 있다. `always_ff` 는 VM 으로, 테스트벤치의
-  `initial #1 …` 은 인터프리터로 — 실제로 흔한 조합이다.
-* **native**: **설계 단위 all-or-nothing.** 넷 저장을 소유하기 때문이다 — 한 프로세스만 아레나
-  밖에서 값을 읽으면 그 값이 t0 상태로 보인다.
-
-⭐⭐ **이 한 줄이 이 문서 전체의 이유다.** 바디 단위 폴백이 가능했다면 커버리지는 문제가 아니었을
-것이다("못 하는 바디만 옛 경로로"). 불가능하기 때문에 **설계 하나에 못 하는 것이 하나라도 있으면
-설계 전체가 떨어지고**, 그래서 "게이트"라는 것이 필요하고, 그래서 이 문서가 있다.
-
-### 2.4 그럼 interp 는 왜 남겨 두는가
-
-가장 느린 것을 지우지 않는 이유는 **그것이 정답의 정의이기 때문**이다.
-
-* interp 는 IR 을 가장 직접적으로 해석한다 = **의미의 정본 텍스트**.
-* vm·native 는 그 의미를 **다른 방법으로** 계산한다. 두 결과가 다르면 **누가 틀렸는지 판정할 기준**이
-  필요하고, 그것이 interp 다.
-* 정본 계획 **Phase C** 는 interp 를 *지우는 것*이 아니라 **제품 표면에서 빼고 테스트 전용 오라클로
-  강등**하는 것이다.
+It is the definition of the answer. It walks the IR most directly, with no compiled form
+and no second store, so when `vm` and `native` disagree there is something to arbitrate
+with. It is a test instrument rather than a product surface: the `oracle` Cargo feature
+makes that structural, and a build without it does not contain the variant. It is
+permanently excluded from performance work, because every specialisation is a second
+spelling of a semantic rule and a second spelling drifts silently. It remains load-bearing
+inside an oracle build — the VM falls back to it body by body for anything
+`is_codegen_able` refuses, and tier-3 delegates frame bodies to it.
 
 ---
 
-## 3. "커버리지"가 정확히 무엇의 커버리지인가
+## 3. Coverage
 
-가장 흔한 오해부터 없애자. **이것은 코드 커버리지가 아니다.** 테스트가 소스 몇 줄을 실행했는지와
-아무 상관이 없다.
+### 3.1 Definition
 
-### 3.1 정의
+> **Coverage** is the fraction of the whole test suite's `simulate()` calls that tier-3
+> `native` actually ran.
 
-> **커버리지 = 전체 테스트 스위트가 `simulate()` 를 부른 횟수 중, ③층 native 가 실제로 돌린 비율.**
+The denominator is `simulate()` invocations, not designs: one test running one design on
+three backends contributes 3. The numerator is the invocations where `native` was requested
+and the gate let it run. This is not code coverage and says nothing about how many source
+lines a test executed.
 
-분모는 "설계 개수"가 아니라 **`simulate()` 호출 횟수**다. 한 테스트가 같은 설계를 세 백엔드로
-돌리면 3 이 더해진다. 2026-08-16 기준 분모는 **6,470** 이다.
+`crates/sim-engine/src/lib.rs` records the census that made `Native` the default:
+**6 470 / 6 470 = 100.00%**, zero refusals. The denominator is the suite size at the time
+that census ran; the suite is 7 352 tests today, so re-running the census re-measures both
+numbers. The generated-corpus half of the same question is a committed gate:
+`sim-engine::native_gate::p6_corpus_eligibility_is_72_of_72`.
 
-분자는 `--backend native` 로 요청했고 **게이트가 통과시켜 실제로 native 가 돈** 횟수다.
+### 3.2 How a census is taken
 
-숫자의 역사:
+The census is a method, not committed code. There is no census hook, no environment
+variable and no script at HEAD; the only environment variables `sim-engine` and `cli` read
+are `VITA_THREADS`, `REGEN_GOLDEN` and — behind the `jit` feature — `VITA_JIT` and
+`VITA_JIT_STATS`.
 
-| 시점 | 커버리지 | 무슨 일이 있었나 |
-|---|---:|---|
-| 2026-08-10 (V0) | **54.66%** | 처음으로 쟀다. 그전엔 아무도 몰랐다. |
-| 2026-08-11 (슬라이스 1) | 66.8% | SVA |
-| 2026-08-12 (슬라이스 2·3) | 78.73% | heap 네 종류 + 호출 흡수 |
-| 2026-08-13~15 (A1~A8) | 98.29% | 20여 슬라이스 |
-| 2026-08-15~16 (A4 fork 가족) | **100.00%** | A4-a/-b/-c/-d |
-
-### 3.2 왜 "받을 수 있는가"가 세 층인가
-
-③층이 설계를 거부하는 이유가 **성격이 다른 셋**이기 때문이다. 하나로 뭉쳤으면 어느 것이 진짜
-막고 있는지 알 수 없다.
-
-| 층 | 함수 | 묻는 것 | 예 |
-|---|---|---|---|
-| **D (design)** | `native::design_eligibility` | 이 기능이 **v1 의 범위 안**인가? | *"`disable fork` 가 들어 있다"* |
-| **S (storage)** | `NetArena::buildable` | 이 설계의 값을 **아레나에 담을 수 있나**? | *"프레임 로컬 넷의 값은 활성화 윈도에 있지 아레나에 없다"* |
-| **X (executor)** | `native::run::executor_rows` | **오늘의 실행기**가 이 몸통을 걸을 수 있나? | *"`wait fork` 는 아무도 못 깨우니 영원히 잠든다"* |
-
-⚠️ **셋을 순서대로 물으면 안 된다.** 제품 코드는 첫 거부에서 단락(short-circuit)하므로, D 에
-걸린 설계의 S·X 는 **측정되지 않는다.** 그래서 census 는 셋을 **독립적으로** 묻는다(→ §4.2).
-
-### 3.3 거부는 왜 위험하지 않은가, 그런데 왜 문제인가
-
-거부하면 ②층으로 폴백한다. 답은 맞다. 그러니 **정확성 부채가 아니다.**
-
-문제는 다른 데 있다:
-
-* **Phase B 가 막힌다.** 정본 계획(Phase A~D)은 A(커버리지) 다음에 **B = ②층 VM 삭제**다. 폴백이
-  남아 있으면 지울 수 없다.
-* **폴백은 조용하다.** `--backend native` 라고 적고 돌렸는데 실제로는 VM 이 돌아도 출력이 같으니
-  아무도 모른다. **이것 때문에 실제로 한 번 속았다** — 슬라이스 A3-ii-a 에서 "native 와 iverilog 가
-  완벽히 일치한다"고 확인했는데 `run.json` 을 보니 `buildable:false` 로 VM 에 떨어져 있었다. 그래서
-  이후 모든 앵커 테스트는 **`"backend": "native"` 를 함께 단언한다.**
-
----
-
-## 4. census — 게이트가 무엇을 왜 거부하는지 세는 법
-
-### 4.1 왜 필요한가
-
-작업 순서를 정하려면 "무엇을 열면 몇 개가 늘어나는가"를 알아야 한다. **추측으로 정하면 틀린다.**
-이 저장소는 그것을 **세 번** 겪었다:
-
-* §5.1-f 가 적어 둔 우선순위 표는 다음 슬라이스 시점에 이미 낡아 있었다.
-* §5.1-o 는 *"다음은 A3-ii-b, +81"* 로 끝났는데, 착수 전에 다시 재니 **단독 이득이 +1** 이었다
-  (81개 중 80개가 다른 행에도 함께 걸려 있었다). 대신 미뤄 뒀던 class 가 **+160** 이었다.
-* §5.1-an(A4-b)은 census 가 24개라고 말한 대로 열었더니 **세 번째 행**이 뒤에서 나타났다 —
-  게이트가 첫 거부만 돌려주기 때문에 census 조차 못 본 것이었다.
-
-⇒ **규칙: 매 슬라이스 착수 전에 census 를 다시 돌린다.**
-
-### 4.2 어떻게 세는가
-
-`crates/sim-engine/src/lib.rs` 의 한 줄(`let native_refusal = …`) 자리에 임시 훅을 심는다. 훅은
-세 층을 **각각 독립적으로** 부르고, 한 줄에 이렇게 적는다:
+The method: plant a temporary hook where `simulate` computes `native_refusal`, call the
+three gate layers **independently**, and append one line per `simulate()` call:
 
 ```
 D:fork\tS:a task frame that FORKS…\tX:a `wait fork`…\n
 ```
 
-빈 줄 = 아무 층도 거부 안 함 = native 가 돈 것.
+An empty line means no layer refused, i.e. tier-3 ran. Asking the three layers
+independently is the point: production code short-circuits on the first refusal, so the
+storage and executor verdicts for a design the design gate rejected are never measured.
 
-실무 함정 둘(둘 다 실제로 당했다):
+Two mechanical hazards, both of which produce a plausible wrong number:
 
-* **버퍼링.** `writeln!` 을 버퍼 없는 `File` 에 쓰면 조각마다 `write(2)` 가 나가서, 프로세스별로
-  도는 테스트 러너에서 **줄이 찢어진다.** 처음 잰 숫자가 1.85배 부풀었다. → 한 줄을 **한 번의
-  `write` 로**, append 모드로.
-* **enum 기본값.** `SimOpts::default()` 가 `#[default]` 를 안 쓰고 `Bytecode` 를 하드코딩하고
-  있어서, enum 만 뒤집었더니 CLI 쪽 절반만 움직였다. → 두 철자를 **둘 다** 뒤집는다.
+- **Buffering.** Writing with `writeln!` to an unbuffered `File` emits one `write(2)` per
+  fragment, and a test runner that forks per test then interleaves them, tearing lines. Emit
+  one line in one `write`, in append mode.
+- **Two spellings of the default.** Inverting the `Backend` enum's `#[default]` moves only
+  the library half if `SimOpts::default()` also hard-codes a variant. Invert both.
 
-### 4.3 flip 런 — census 와 한 번에 도는 짝
+Re-run the census before starting any work that targets a gate row. A row's yield is
+measured against the gate as it is now, and closing one row moves every other row's number:
+a target estimated at +81 designs can measure +1 in isolation because 80 of the 81 are also
+held by another row.
 
-census 를 심을 때 **기본 백엔드도 native 로 뒤집어서** 전체 테스트를 돌린다. 그러면 한 번의 실행이
-두 가지를 준다:
+---
 
-* **census** = 커버리지 숫자
-* **flip 런** = "native 로 다 돌렸을 때 결과가 달라지는가" = **발산(divergence) 검사**
+## 4. What tier-3 accepts, what falls back, and how that is reported
 
-기대값은 언제나 **"실패 3건, 전부 어느 백엔드가 기본인지를 단언하는 테스트"** 다. 그 3건 외의
-실패는 진짜 발산이다.
+### 4.1 The three gate layers
 
-⚠️⚠️ **B1(2026-08-16) 이후 방향이 뒤집혔다.** 기본값이 native 가 됐으므로, 이제 flip 은
-**native → vm** 으로 걸어 *"오라클이 여전히 동의하는가"* 를 묻는다. 안 그러면 스위트가 조용히
-native 전용이 되고 오라클이 더 이상 시험되지 않는다. 실측(양방향, 전 워크스페이스):
+A refusal has three different characters, and merging them would hide which one is
+actually blocking.
 
-| 기본값 | 결과 |
+| Layer | Function | Question | Example row |
+|---|---|---|---|
+| **D — design** | `sim_engine::native::design_eligibility` | is this feature inside v1 scope? | a statement-effect right-hand side outside the wired set |
+| **S — storage** | `NetArena::buildable` | can this design's values live in the arena? | `"arena exceeds u32 words"` |
+| **X — executor** | `sim_engine::native::run::executor_rows` | can today's executor walk every body? | ``a `wait fork`, a `fork`, or a call statement whose callee forks: S3b`` |
+
+`design_eligibility` returns `NativeEligibility { eligible, buildable, refused,
+reject_reasons }`, and it asks `NetArena::buildable` itself, so `refused` is the design
+gate's first reject family or the storage refusal. `native::runtime_gate` is that
+conjunction. The executor layer is asked separately in `simulate` and its answer is written
+back into the published verdict, so `run.json` cannot report `refused: null` on a run that
+fell back.
+
+`SimOpts` is destructured exhaustively inside `design_eligibility`, with no `..` rest
+pattern, and the `NetKind` loop is `_`-free. Adding a sidecar or a net kind without
+classifying it is a compile error rather than a silent over-claim of eligibility.
+Completeness of the classification is therefore not a test — it is the compile-time
+exhaustive destructure.
+
+### 4.2 What the design gate still refuses
+
+**No design-gate reject family is reachable from source a compiler can produce.** One
+family is still counted: `"stmt_effect"`, which fires for a `BlockingAssign` whose
+right-hand side is in the statement-effect family and is not in `stmt_effect_wired`, or for
+a flat-writing `SysTask` that is not `Sformat`, `ReadmemB`, `ReadmemH` or `Cast`. Every
+`NetKind` arm is admitted, including every heap-storage kind — `DynArray`, `Queue`,
+`String`, `Assoc`, `AssocStr` — whose values live in `SimState::dyn_heap` keyed by net id,
+which the tier-3 kernel already borrows.
+
+`stmt_effect_wired` names its members through the canonical `exec::kpred` predicates rather
+than re-listing them: `value_plusargs_rhs`, `queue_pop_rhs`, `random_seeded_rhs`,
+`dist_seeded_rhs`, `cast_rhs`, `assoc_iter_rhs`, `sscanf_rhs`, `fopen_rhs`, `fgetc_rhs`,
+`feof_rhs`, `ungetc_rhs`, `fgets_rhs`, `fscanf_rhs`, `fread_rhs`.
+
+`native::kernel::systask_refusal` returns `None` for every `SysTaskId`: the refused
+system-task set is empty. The function and both consumers — the panic in
+`k_dispatch_systask` and the `body_dispatch_ok` gate row — are kept so a new store-reading
+task has to be classified.
+
+The storage and executor rows that remain are reachable only from a malformed sidecar or a
+construct no source can spell. Verbatim, these are the strings `native.refused` reports:
+
+| String | Layer |
 |---|---|
-| `Native`(현재 배송) | **5,469 통과** |
-| `Bytecode`(역flip) | 5,466 통과 · **실패 3** |
+| `arena exceeds u32 words` / `arena exceeds usize` | S |
+| `malformed frame sidecar (func_table length)` / `(frame window out of range)` / `(return slot out of range)` / `(block id out of range)` | S |
+| `a module body that names a frame-local net` | S |
+| `a call in a delayed continuous assign: S3b` | S |
+| `a system task the tier-3 kernel refuses, inside a task frame` | S |
+| `a nonblocking assign to a frame-local net: S3b` | S |
+| `a nested call with no sidecar entry: S3b` / `a nested call to an unresolved target: S3b` | S |
+| `a subroutine that WRITES a net outside its own frame: S3b` | S |
+| `a subroutine statement the frame executor drops` | S |
+| `a subroutine body that suspends, forks or calls a task` | S |
+| ``a `wait fork`, a `fork`, or a call statement whose callee forks: S3b`` | X |
+| `a system task the tier-3 kernel refuses (VCD, $monitor/$strobe, file)` | X |
 
-**두 방향에서 갈리는 것이 정확히 같은 세 테스트**이고, 나머지 5,466 은 어느 쪽이든 바이트 동일이다.
+An empty gate is not a deleted gate. All three functions and their consumers remain, and a
+new feature that passes through unclassified is still refused. What is pinned today is that
+the sets are empty, asserted with `is_empty()`, so adding a row forces either a design that
+exercises it or a written reason why one cannot be built.
 
-⚠️ 이 짝이 실제로 결함을 잡았다. §5.1-x(clocking)에서 flip 런만이 **엔진의 pre-existing 결함**을
-드러냈다 — 클로킹 커밋이 자기가 일어난 슬롯의 엣지 마스크를 들고 다음 슬롯에 도착하고 있었다. ③층은
-처음부터 옳았고, 고쳐진 것은 엔진 쪽이었다.
+### 4.3 What runs where inside tier-3
 
-⚠️ 그리고 **묶음을 닫을 때 flip 런은 선택이 아니다** — V1 슬라이스 2 에서 `write_routed` 가 lvalue
-*전체*가 한 청크일 때만 라우팅하고 엔진은 *청크마다* 하는 결함이 있었는데, 코퍼스는 **원리적으로**
-그것을 못 본다(그 테스트들이 기본 백엔드로 돌기 때문에).
+Tier-3 owns net storage, so there is no body-level fallback: a design runs wholly on tier-3
+or wholly on another executor. Inside tier-3, the choice is per body.
+
+- For `act == tmpl`, if `compiled_for(tmpl)` yields a `CompiledBody` — the same tier-2
+  `is_codegen_able` plus `compile_body` — the body runs through `crate::backend::vm_exec`
+  over the arena.
+- With the `jit` feature compiled in *and* `VITA_JIT` set in the environment, the entry
+  block may instead run through `crate::jit::run_body_jit`. Both are off by default.
+- Otherwise `native::body::run_body` walks the IR.
+- A fork child always takes the walk.
+
+Expression evaluation has its own lane. `native_eval::try_compile` returns a program only
+when the whole tree is in its subset and every node's context-determined width is at most
+64 bits: constants (non-real), scalar signals, `+ - * / %`, the four bitwise operators, all
+eight comparisons, `<< >> >>>`, `&& ||`, unary `~ + - !`, the six reductions, `?:`,
+`Select` with a dynamic offset (an X/Z or out-of-range offset yields X), `Concat`, and
+`Replicate` with a constant count. Anything else — `**`, a system function, a `Call`, a real
+constant, an array-indexed signal, more than 64 bits — makes the whole expression decline to
+the kernel's tree-walking `eval_ctx`. Continuous assigns get their own pre-compiled programs
+in `ca_native`, compiled in exactly the context `eval_for_lvalue` builds.
+
+Tier-3's run loop mirrors `Scheduler::run` region for region: t0 structural settle, `arm_t0`,
+`snapshot_preponed`, then [settle → Active → Inactive → NBA], Observed, Reactive,
+`propagate` with a re-drain if anything woke, Postponed, and time advance as the minimum
+over the wheel, the delayed NBA queue and the next delayed continuous assign. Everything
+that is not a net value — the output sink, the file table, `now`, the RNG — is still the
+scheduler's, and `NativeKernel` borrows it.
+
+### 4.4 How a fallback is reported
+
+| Build | Behaviour on a gate refusal |
+|---|---|
+| default (`oracle` feature on) | falls back to `Backend::Bytecode`, and emits a **Warning**, `W-RUN-BACKEND-FALLBACK` / `VITA-W4030`: *"requested backend `{req}` cannot run this design ({reason}); ran on `{eff}` instead — the result is unaffected, the speed is"* |
+| `--no-default-features` | there is no fallback target, so `st.fatal_run` reports *"backend `native` cannot run this design ({row}), and this build carries no other executor — the `oracle` backends are compiled out"*, latching `had_fatal`/`finished`, and the run declines to execute |
+
+The warning rather than an error in the default build is an accuracy-ladder decision: the
+fallback is a slower answer, not a wrong one, since byte-identity across executors is a
+gate. Making it non-zero exit would trade correct-support for loud, a rung down. In the
+build where the fallback target is not compiled at all, the choice is loud-or-wrong instead,
+so it is fatal.
+
+The verdict is also published rather than only said. `run.json` carries:
+
+```json
+"backend": "native",
+"backend_requested": "native",
+"codegen": {"able": 4, "total": 4, "frame_bodies": 0, "reject_reasons": {}},
+"native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}}
+```
+
+`backend` is the executor that ran; `backend_requested` is what was asked for; `refused`
+names the layer and is `null` when nothing refuses. `codegen.able`/`total` count process
+bodies the tier-2 gate admits, and `frame_bodies` counts subroutine bodies — `able == total`
+with `frame_bodies > 0` means full process coverage and none of the run time on a compiled
+path, so the two must be read together.
+
+The population of the fallback path is **zero today**: every gate row a compiler can produce
+input for is closed. The path is written fail-closed so a newly added row reports itself,
+and its teeth in the suite are a deliberately corrupted sidecar
+(`sim-engine::native_gate::b4a_a_backend_fall_back_emits_a_warning_naming_the_row`).
+
+A fallback is quiet enough to be missed in a test. An anchor test that does not assert
+`"backend": "native"` cannot distinguish a native run from a fallback that produced the same
+bytes, which is a mistake this project has made and now pins against: 14 `cli` test targets
+assert the field.
+
+### 4.5 How equivalence is gated
+
+Selecting a backend must not change one output byte. The invariant that makes that
+enforceable is stated in `crates/sim-engine/src/lib.rs`: the shared net-write and VCD choke
+point (`state.rs::write_lvalue` / `emit_vcd_change`) stays on the shared side across
+backends, so only process-body control flow differs and VCD or stdout bytes cannot diverge
+in a backend-specific way.
+
+| Gate | Where | What it compares |
+|---|---|---|
+| Backend differential | `crates/sim-engine/tests/backend_equiv.rs` (28 tests, no skip, hard on every CI leg) | `corpus(0x5EED_F00D, 72)` — 72 generated designs built once into a `SimIr`, then run on both oracle backends concurrently via `thread::scope`, asserting byte-identical stdout, byte-identical VCD, and the `SimResult` summary (`sim_time`, `finish_reason`, `exit_class`). Plus hand-written shapes the generator cannot emit, a mixed-backend run, the timescale prologue, runaway-loop fatality, blocking-index sampling, and the native-eval arithmetic, XZ-poison, signed, bitwise, mixed-width, select/concat/replicate, wide-lane and indexed-read paths |
+| Anti-vacuity on that gate | same file | `gate_actually_compares_vcd_bytes` asserts the VCD bytes are non-trivial; `the_default_backend_is_native` pins both spellings of the default |
+| Tier-3 differential | `crates/sim-engine/src/native/run_tests.rs`, `#[cfg(all(test, feature = "oracle"))]` | `agree(src, name)` checks `runnable()` first so a refusal is counted rather than silently passed, runs the same IR on `Bytecode` and `Native` with per-design VCD targets, and merges `RtlOutput` and `Diagnostic` rows through a `MergedSink`. Anti-vacuity first: it asserts `r_nat.backend == Backend::Native`, so a fallback cannot make every later assertion compare the VM with itself |
+| Gate teeth | `crates/sim-engine/tests/native_gate.rs` (23 tests) | every reject family actually fires, `the_runtime_gate_is_exactly_design_and_storage`, `every_stmt_effect_family_member_is_wired`, and the pinned generated-corpus eligibility count |
+| External differential | `crates/sim-engine/tests/differential.rs` (27 tests) | vita against `iverilog -g2012` plus `vvp`, comparing `$display` stdout. Skips gracefully when the tools are absent — the design still runs through vita, so a vita-side crash is still caught. CI has no Icarus Verilog, so this is a developer-machine gate |
+| Thread invariance | `crates/sim-engine/tests/threads.rs` | `--threads N` changes wall clock only; VCD bytes, stdout and the run summary are identical for every N |
+
+**The flip run.** The strongest of these is not in the table, because it is a procedure
+rather than a test: invert the default backend and run the whole workspace suite. The
+generated 72-design corpus is a far weaker instrument than several thousand real tests, and
+the flip run is what has found defects a green corpus differential did not. Run it in both
+directions while two executors exist — `native → vm` asks whether the oracle still agrees,
+without which the suite silently becomes native-only and the oracle stops being tested. The
+expected outcome is that the only tests that change verdict are the ones asserting which
+backend is the default; anything else is a real divergence. Invert both spellings of the
+default (§3.2), or only half the suite moves.
+
+**Absolute anchors are mandatory wherever tier-3 delegates.** A native-versus-VM
+differential is blind to shared code by construction: as tier-3 delegates more, the two move
+together and the differential sees nothing. Measured instances of exactly that: a shared
+comparison rule, a shared dispatch, and a case where both backends produced the same wrong
+value and agreed perfectly.
 
 ---
 
-## 5. 그래서 실제로 무엇을 했나 — 커버리지를 올린 다섯 가지 모양
+## 5. Mutation
 
-30여 슬라이스를 관통하는 패턴은 다섯 개뿐이다. 아래 각각에 실제 사례를 붙였다.
+### 5.1 The procedure
 
-### 모양 1 — **거부 행의 이유가 이미 거짓이다** (가장 흔하다)
-
-행에는 사람이 쓴 이유가 달려 있다. 그 이유가 *"…할 수 없다"* 형태면, 다음 슬라이스가 그것을 참이
-아니게 만들어 놓고도 행은 그대로 남는다.
-
-**실례 — SVA(슬라이스 1, 커널 코드 0줄):** `sva` 행이 SystemVerilog Assertion 을 통째로 거부하고
-있었다. 실제로 재 보니 **SVA 는 런타임 기계장치가 아니다** — elaborate 가
-`assert property(@(clk) a |-> b)` 를 `always @(clk) if (a && !b) $error(…)` 로 desugar 한다.
-③층에 도착하는 것은 평범한 IR + 표 두 개이고 그 표는 공유 코드가 읽는다. **행 하나를 지웠더니
-54.7% → 66.8%.**
-
-**실례 — A3-iv:** 행이 *"deferred 계층 enable 의 `Call.target` 은 finish-phase resolve 전까지
-placeholder 라서 뚫을 수 없다"* 라고 적고 있었다. 참이다 — **elaborate 안에서**. 그런데 이 술어는
-`simulate` 에서, 즉 패치가 끝난 뒤에 돈다. 계측하니 미해결 target **0개**. 커널 코드 0줄로 +20.
-
-⇒ **교훈으로 굳었다: 거부 이유가 "언제"에 관한 주장이면 다음 단계가 그것을 무효화한다.**
-파일 하나(`native/frames.rs`)가 같은 행을 세 번 다르게 적었다 — *"dead"* → *"LIVE, 19 설계"* →
-*"gone"*.
-
-### 모양 2 — **저장소가 아니라 라우팅이다**
-
-"③층은 그 값을 담을 데가 없다"고 적힌 행이, 실제로는 **담을 데가 이미 공유였고 읽는 길만 없었다**.
-
-**실례 — heap(V1 슬라이스 2):** 동적 배열·큐·문자열·연관 배열의 값은 넷 슬롯이 아니라
-`SimState::dyn_heap` 에 **넷 id 로 키잉돼** 있고, ③층 커널은 이미 그 `SimState` 를 빌린다. 그래서
-새 저장소가 아니라 **라우팅** 셋만 지으면 됐다: 쓰기 퍼널 하나 · 복합 리더 · `HeapRouted`.
-54.66% → 72.75%.
-
-**실례 — class(A2-i):** 핸들 넷은 평범한 슬롯(값 = 객체 id)이고 필드는 공유 `class_heap` 이다.
-그런데 **핸들의 슬롯은 반만 죽었다**(핸들 id 는 여기, 필드만 힙) — 그래서 모든 소비자가
-`class[net] ∧ word.is_some()` 로 물어야 하고, 비트맵만 보고 라우팅하면 **맨 핸들 읽기가 빈 힙으로**
-간다. 이걸 놓치면 모든 `obj.f` 가 **핸들 0 = null** 을 역참조하는데, **null 은 정의된 의미이고
-경고도 그럴듯해서 loud 가 아니다.** +128.
-
-⚠️ **라우팅은 한 군데가 아니다.** ③층은 "이 넷이 우리 것인가"를 **네 군데**에서 답한다(읽기 퍼널 ·
-쓰기 퍼널 · `wprog` 컴파일 · `HeapRouted`). 하나만 고치면 **출력의 일부만 맞아서**, 어느 단계에서
-멈춰도 "동작한다"로 보인다. A3-ii-a 가 그 셋을 하나씩 고치며 그것을 실측했다.
-
-### 모양 3 — **위임(delegation) — 재구현이 아니다**
-
-기계장치가 `Scheduler`/`SimState` 에 있고 커널이 이미 그것을 빌린다면, ③층이 할 일은 **한 줄
-위임**이다.
-
-**실례 — A4-a(프로세스 fork):** barrier 등록 · tie 합성 · 윈도 공유 · `JoinMode` 결정이 전부
-`Scheduler` 것이고, 커널이 대는 것은 **자식이 올라갈 큐** 하나였다. 그래서 `exec_fork` 에서
-push 만 떼어내 `exec_fork_into(…, ready: &mut Vec<Ready>)` 로 만들고 엔진은 이전 본체를 그대로
-감싸 호출한다(구조적 불변). **재구현은 한 줄도 없다.** 98.29% → 99.43%.
-
-⚠️ **떼어낸 것이 push 뿐인 이유가 곧 정확성 논거다.** 두 철자가 되면 조용히 틀린다 —
-under-decrement 는 All-barrier 를 **조기 발화**시키고(크래시가 아니라 오답), tie 순서는 형제 arm 의
-결정성이 걸려 있다.
-
-### 모양 4 — **없던 것은 기계장치가 아니라 수명/자리다**
-
-**실례 — A3-ii-b(정지하는 프레임):** 두 행이 거부한 것은 *워크가 못 하는 모양*이 아니라 **수명**
-이었다. 워크가 열린 프레임을 **지역 `Vec`** 에 들고 있어서 `Delay` 가 `Step::Suspended` 를 내는
-순간 스택이 버려졌다. +40.
-
-**실례 — A4-a:** 없던 것은 fork 기계장치가 아니라 **"자식이 어디서 끝나는가"** 였다. 첫 판이 그것을
-빠뜨렸고 증상은 크래시가 아니라 **exit 0 의 틀린 순서**다 — `fork a=1; b=2; join` 이 `a=1 b=0 c=1`
-을 찍었다(첫 arm 이 join 을 뚫고 **부모의 continuation 을 실행**했다). 수정은 판정을 터미네이터가
-아니라 **블록 fetch 직전**에 거는 것 — arm 은 `Goto`·`Branch`·`Delay` 재개 셋 다로 join 에 닿고,
-fetch 가 셋이 지나는 유일한 자리이기 때문이다.
-
-### 모양 5 — **행이 아니라 짝/집합을 닫는다**
-
-한 설계를 얻으려면 **그 설계를 막는 행을 전부** 닫아야 한다. 그래서 "행 하나의 이득"은 그 행이
-발화하는 설계 수가 아니다.
-
-**실례 — A4-b:** 24개 설계가 저장소 행과 실행기 행에 **항상 함께** 걸렸다 — 둘이 **같은 술어**
-(`frame_call::frame_forks`)를 두 군데서 읽기 때문이다. 짝을 빼자 **세 번째 행**
-(`contains_shared_fork`)이 드러났는데, 게이트가 **첫 `Err` 만** 돌려주므로 census 조차 못 봤다.
-그 행이 14/24 를 덮고 있었으므로 **짝만 닫았으면 10개만 배송됐을 것이다.**
-
----
-
-## 6. 뮤테이션 — 왜 이렇게 많고, 왜 그게 옳은가
-
-이 부분이 처음 보는 사람에게 가장 낯설다. "테스트가 다 초록인데 왜 코드를 일부러 망가뜨리나?"
-
-### 6.1 무엇을 하는가 — 그리고 "배터리"가 정확히 무엇인가
-
-한 슬라이스가 끝나면 **제품 코드를 한 군데씩 일부러 망가뜨리고**(뮤테이션) 전체 테스트를 돌린다.
-
-* 테스트가 잡으면 → **KILLED**. 그 줄은 보호되고 있다.
-* 아무도 안 잡으면 → **SURVIVED**. **그 줄에는 이빨이 없다.**
-
-**배터리(battery)** 는 그것을 여러 개 묶어 자동으로 돌리는 스크립트다. 로그에 계속 나오는
-*"배터리를 걸었다"* · *"배터리가 SURVIVED 를 보고했다"* 가 전부 이것이고, 하는 일은 케이스마다
-네 단계다:
+A green suite proves that the tests pass, not that they would notice a defect. Mutation
+measures the difference. Break one place in production code, run the whole suite, and record
+whether anything failed.
 
 ```
-for 케이스 in [A, B, C, …]:
-    1. 복원          git checkout -- <건드릴 파일들>
-    2. 치환          정확한 문자열 하나를 찾아 바꾼다  (개수가 안 맞으면 SUBST-FAIL)
-    3. 빌드 + 실행    cargo build --tests → cargo nextest run --workspace
-    4. 판정          실패한 테스트 이름이 있으면 KILLED, 없으면 SURVIVED
+for case in [A, B, C, …]:
+    1. restore     git checkout -- <files the case touches>
+    2. substitute  replace one exact string, requiring an exact match count
+    3. build+run   cargo build --tests   then   cargo nextest run --workspace
+    4. verdict     a failing test name  => KILLED;  none => SURVIVED
 ```
 
-실제 케이스는 이렇게 생겼다(A4-a 의 케이스 A — 자식 완료 인터셉트를 통째로 지운다):
+A case names the file, the exact text to replace, the replacement, and the number of
+matches required:
 
 ```python
 ("A_no_child_intercept", "crates/sim-engine/src/native/body.rs",
@@ -423,187 +395,157 @@ for 케이스 in [A, B, C, …]:
                 if bb == jbb { k.k_body_done(act, tmpl); return Step::Done; }
             }
         }
-""", "", 1),   # ← 빈 문자열로 치환 = 삭제. 마지막 1 = "정확히 1군데 매치해야 한다"
+""", "", 1),   # replacement "" = deletion; trailing 1 = must match exactly once
 ```
 
-한 슬라이스에 보통 **4~11개** 를 건다. 그래서 "많아 보인다". 케이스당 비용은 **빌드가 지배**하고
-(워크스페이스 재링크 ~8분 + 실제 테스트 30초), 그래서 배터리 한 번이 한 시간 넘게 걸린다.
+There is no committed battery script, no `xtask`, no `scripts/` directory and no
+`cargo-mutants` configuration. The battery is assembled per unit of work, typically four to
+eleven cases, and its cost is dominated by the build: a workspace relink is roughly eight
+minutes against about thirty seconds of test execution.
 
-⚠️ **복원은 반드시 `git checkout --` 이고, 그러려면 슬라이스를 먼저 스냅샷 커밋해야 한다.**
-파일 사본으로 복원하려다 커밋 안 된 편집을 **두 번 잃은 적이 있다**(§4.5.337).
+Rules that make the verdicts trustworthy:
 
-⚠️ **치환·빌드의 종료코드를 반드시 본다.** 치환이 0군데에 매치했는데 그대로 테스트를 돌리면
-**안 바뀐 트리**가 초록으로 나오고 그게 `SURVIVED` 로 기록된다 — 실제로 그렇게 가짜 생존을 만들었다
-(§5.1-l). 그래서 `SUBST-FAIL` / `BUILD-FAIL` 은 **`SURVIVED` 와 다른 판정**이다.
-
-### 6.2 왜 필요한가 — 초록 테스트는 아무것도 증명하지 않는다
-
-이 저장소가 그것을 **반복해서** 실측했다.
-
-**① 게이트가 자기 자신에 눈멀 수 있다.** S1d-4d-1 에서 settle 함수 **최상단에 `panic!`** 을 넣고
-전 스위트를 돌렸는데 **통과했다.** 그 코드가 한 번도 실행되지 않고 있었던 것이다.
-
-**② 차분은 공유 코드에 구조적으로 눈멀다.** ③층이 엔진 코드에 위임할수록 native ↔ vm 차분은
-**둘 다 같이 움직이므로** 아무것도 못 본다. 실측 3회 —
-§4.5.330/331(공유 비교 규칙) · §4.5.337(공유 dispatch) · 슬라이스 3b(**두 백엔드가 똑같이 틀린 값**을
-내며 완벽히 일치). ⇒ **위임 슬라이스에는 절대 앵커가 의무다.**
-
-**③ 그리고 그 의무를 뮤테이션이 강제한다.** A4-a 에서 다섯 케이스의 킬러가 **전부
-`cli::fork_join`(그 슬라이스가 방금 지은 앵커)** 이었고, 5,457개 중 **다른 어떤 테스트도 하나도 안
-잡았다.** 게이트가 fork 를 막고 있었으므로 **fork 를 네이티브로 도는 테스트가 저장소에 0개**였던
-것이다.
-
-### 6.3 SURVIVED 는 실패가 아니다 — **질문**이다
-
-생존한 뮤테이션은 셋 중 하나다. **어느 것인지 반드시 밝힌다.**
-
-| 판정 | 뜻 | 해야 할 일 |
-|---|---|---|
-| **눈먼 축(blind axis)** | 테스트 설계가 그 축을 안 건드렸다 | **판별 설계를 지어 죽인다** |
-| **등가(equivalent)** | 그 변경이 관측 가능한 차이를 안 만든다 | **왜 그런지를 측정해 코드에 적는다** |
-| **도달 불가(unreachable)** | 그 코드에 도달하는 입력이 없다 | `panic!` 프로브로 히트 0 을 **재고** fail-closed 로 남긴다 |
-
-구체적으로:
-
-* **눈먼 축 실례(A4-a 케이스 B).** 형제 arm 정렬 키를 `tie` 에서 **활동 id** 로 바꾸는 뮤테이션이
-  앵커 셋을 전부 통과했다. **한 번 fork 하는 설계로는 원리적으로 못 잰다** — 자식이 선언 순서로
-  할당돼 두 키가 우연히 일치한다. 판별자는 **두 번째 fork** 다: 끝난 자식의 슬롯이
-  `free_activities`(**LIFO**)로 돌아가므로 둘째 fork 의 arm 은 **첫 fork 가 끝난 순서**가 정한 id 를
-  받는다. 실측 — `B1 B2 B3` 이 **`B2 B1 B3`** 가 됐다.
-* **눈먼 축 실례(A4-b 케이스 E).** `forked = true` 마크를 지우면 arm 이 부모의 **프레임 로컬 동적
-  배열**을 `x` 로 읽는다. **소비자의 doc 이 그 설계를 이미 적어 뒀는데**(*"a `fork begin … a[0] … end
-  join` inside a task printed `a0=x`"*) 앵커에 동적 배열이 없어 아무도 안 잡았다.
-* **등가 실례(A4-b 케이스 C).** 깊이 가드를 빼도 통과한다. 엔진의 쌍둥이는 load-bearing 인데
-  (`call_stack.last()` 를 읽으므로) **이 워크는 `frames[0]`(= 항상 arm)을 읽기 때문**이다. 인덱스
-  하나가 이유였다.
-* **도달 불가 실례(A4-a 케이스 F).** `is_codegen_able` 의 `_`-free match 가 구조적으로 막는다 —
-  `act != tmpl` 을 만들 수 있는 터미네이터 `Fork`·`Call` 이 **둘 다 그 거부 집합에 있다.**
-  `panic!` 프로브 5,457 테스트 히트 **0**.
-
-### 6.4 뮤테이션이 실제로 잡은 것들 (전부 실사고)
-
-| 슬라이스 | 뮤테이션이 없었으면 | 실제로 |
-|---|---|---|
-| A2-ii(CRV) | *"실패한 solve 가 성공을 보고한다"* 가 그대로 배송 | 차분은 **원리적으로** 못 본다(공유 코드) → 절대 단언을 지어 사살 |
-| S1d-4c-2c | OOB 배열 인덱스 진단이 사라져 평범한 FIFO 가 **FAIL → PASS** | 게이트의 stdout 비교가 **모든 진단에 구조적으로 눈멀어** 있었다 |
-| §4.5.315 | 단락(short-circuit) 뮤테이션이 native 를 **loud → SILENT** 로 만들며 전 스위트 통과 | 슬라이스의 correctness 논거 자체에 테스트가 0개였다 |
-| A4-d | `cur_aid` 를 안 세팅 | **pre-existing silent-wrong** 발견 — deferred report 가 전부 활동 0 으로 키잉돼 **`$error` 하나가 exit 0 에서 사라지고 있었다** |
-
-### 6.5 뮤테이션 배터리 자체의 함정 (둘 다 실사고, 둘 다 규칙으로 굳었다)
-
-* **필터가 킬러보다 좁으면 SURVIVED 는 정보가 아니라 잡음이다.** 규칙이 *"배터리는
-  `-p sim-engine` 으로 스코프하라"* 였는데 A4-a 의 킬러가 **전부 `cli/tests/`** 였다 — 그대로였으면
-  **7/7 SURVIVED**. 게다가 "고침"인 `-p A -p B --test X` 는 cargo 가 `--test` 를 **모든 패키지에
-  걸어** 5,457 대신 **58개**만 돌린다. ⇒ **`--workspace`.**
-* **결과 파서가 실패 모드보다 좁아도 같은 일이 난다.** A4-c 케이스 D 를 SURVIVED 로 보고했는데,
-  손으로 걸어 보니 **설계가 무한 루프**가 됐다. nextest 는 그것을 `TIMEOUT` 으로 보고하는데 러너는
-  `FAIL` 로 시작하는 줄만 세고 있었다. ⇒ 탐지를 `TIMEOUT`/`ABORT`/`SIGSEGV` 까지 넓혔다.
-
-### 6.6 그리고 뮤테이션은 위험할 수 있다
-
-2026-08-14, `$writemem*` 슬라이스의 뮤테이션 C(내림차순 루프의 step 을 +1 로 고정)가 **센티널에
-도달 못 해 무한 append** 를 만들었다. `vita` 가 **33 GB × 2**(32 GB 머신) → jetsam → **userspace
-watchdog 커널 패닉**. 두 세션이 그렇게 죽으며 **뮤테이션이 트리에 남았다.**
-
-수정은 뮤테이션이 아니라 **제품**이었다: 루프를 카운트 기반(`abs_diff+1`)으로 바꾸자 같은 뮤테이션이
-**0.86초에 값으로** 죽는다. 그리고 `.config/nextest.toml` 에 `terminate-after 4×60 s` 를 신설했다.
-
-⇒ **뮤테이션이 hang/폭주를 만들 수 있으면 배터리에서 빼고 손으로 한 번만 재라.**
-
----
-
-## 7. 이 축이 만든 규칙들 (전부 실사고에서 나왔다)
-
-1. **매 슬라이스 착수 전에 census 를 다시 돌린다** — 앞 슬라이스가 게이트를 움직이면 다음 표적의
-   숫자도 움직인다.
-2. **행이 아니라 짝을 닫는다** — 이득은 행이 발화하는 설계 수가 아니다.
-3. **거부 행은 자기 이유가 언제 거짓이 되는지 모른다** — 이유가 *"…할 수 없다"* / *"…이기 전까지는"*
-   형태면 슬라이스마다 다시 읽어라.
-4. **위임 슬라이스에는 절대 앵커가 의무다** — 차분이 공유 코드에 눈멀기 때문(실측 3회).
-5. **앵커는 `"backend": "native"` 를 함께 단언한다** — 안 그러면 폴백한 실행과 구별이 안 된다.
-6. **하네스 갭을 의심하라** — `build_with_opts` 가 사이드카 하나를 안 심으면 **두 백엔드가 아무도
-   수행하지 않은 일에 완벽히 일치한다.** 이 축에서만 **열세 번** 걸렸다.
-7. **의미의 두 번째 철자를 만들지 마라** — 추출(extraction)해서 공유하고, 정본이 위임하게 하라.
-   두 철자는 조용히 갈린다.
-8. **배터리는 `--workspace`, 탐지는 `TIMEOUT` 까지.**
-
----
-
-## 8. V1 완주 시점의 상태 (2026-08-16)
-
-```
-커버리지   6,470 / 6,470 = 100.00%      거부 0
-게이트     D 행: 도달 가능한 것 0 · S 행: 손상 사이드카만 · X 행: 소스에서 구성 불가만
-flip 런    발산 0 (실패 3건은 전부 "어느 백엔드가 기본인가" 를 단언하는 핀)
-전 스위트  5,468 green · clippy 0 · fmt 0
-```
-
-**게이트의 세 층이 전부 비었다는 것**이 이 상태의 정확한 표현이다:
-
-* `native::kernel` 의 **`gate_refused!` 매크로에 사이트가 하나도 없다** → 매크로를 지웠다(17 → 0).
-* `systask_refusal` **집합이 비었다**(6 → 4 → 2 → 0).
-* `s1d4c2c_each_refusal_row_has_a_design` 의 **거부 표가 비었다**(4 → 5 → 4 → 3 → 1 → 0).
-* CLI 폴백 핀은 **여덟 번 재철자된 끝에** 주제가 사라져 **positive claim 으로 뒤집혔다**.
-
-⚠️ **비었다는 것은 "검사를 지웠다"가 아니다.** 세 함수와 그 소비자는 전부 남아 있고, 새 기능이
-분류되지 않은 채 지나가면 여전히 거부한다. 오늘 핀하는 것은 **"지금 비어 있다"** 이고, 그것을
-`is_empty()` 단언으로 박아 두어 다음 슬라이스가 행을 추가하면 **설계를 짓거나 왜 못 짓는지 적게**
-만든다.
-
-### 다음은 무엇인가
-
-정본 순서(Phase A~D · ROADMAP §5.1):
-
-* **A ✅ 완료** — 이 문서
-* **B ✅ 완료 (2026-08-16 · §5.1-aq·-ar·-as·-at)** — **빌드가 둘이다.**
-  기본(`oracle` ON)은 실행기 셋에 기본이 native, 제품 형태(`--no-default-features`)는 **native 하나**.
-  같은 게이트 거부가 기본 빌드에선 **경고 + VM 폴백**(폴백은 느린 답이지 틀린 답이 아니다),
-  제품 빌드에선 **치명 · exit 1**(폴백 대상이 없어 loud 아니면 wrong)이다.
-  ⚠️ **계획의 B2·B3 표적은 틀렸고 착수 전 측정이 뒤집었다** — *"5,430줄 삭제 + `exec/` 감싸기"* 였는데
-  Phase A 를 지나며 tier-3 이 사실상 전부를 공유하게 됐다(`exec/process.rs` 안에
-  `compute_effect`/`apply_effect` 가 있다) ⇒ **없앤 것은 코드가 아니라 선택지이고 삭제는 0 이다.**
-  구조·그림 = [preview/04 §실행 백엔드 아키텍처](../preview/04-architecture.md)
-* **B ✅(위 참조)** — 빌드 분리. ⚠️ **2026-08-16 재측정으로 계획이 셋 정정됐다**(ROADMAP §5.1 Phase B 표):
-  ① *"VM 삭제 5,430줄"* 은 **틀린 표적**이다 — §4.5.333 이후 tier-3 이 `backend.rs`(`vm_exec`·
-  `is_codegen_able`·`CompiledBody`)와 `native_eval` 을 **재사용**하므로 실제 VM 전용 표면은 **넷**뿐이다
-  (`vm_run_body` · `vm_compiled` · `Backend::Bytecode` arm · enum+CLI 철자).
-  ② `exec/` 는 2,131 → **3,246줄**(A 단계 추출로 커졌다).
-  ③ ⚠️ **"거부를 loud 로" 를 기본 빌드에 걸면 사다리 하강이다** — 폴백은 틀린 답이 아니라 **느린 답**
-  (correct-support)이므로 `exit≠0` 은 하강이다 ⇒ **B4a 경고**(기본 빌드 · 요청한 백엔드가 조용히
-  바뀌는 정직성 갭)와 **B4b 에러**(`--no-default-features` · 폴백 대상이 컴파일 안 된 빌드)로 갈랐다
-* **C ✅ 완료 (2026-08-17 · §5.1-au)** — ①층 interp 를 **테스트 도구**로 명시하고
-  **성능 최적화 대상에서 영구 제외**했다. ⭐ 절반은 B 가 이미 했고(제품 빌드엔 그 변형이 없다), 남은
-  절반은 계약을 적는 일이었다 — 그러다 **`--help` 한 문단이 통째로 거짓**임을 발견했다(*"'vm'
-  (default)"* · native 가 *"no fork, no class …"* 를 거부한다는 목록 = **Phase A 가 전부 닫은 것**).
-  ⚠️ **교훈: 능력을 열거하는 문서는 슬라이스마다 썩는다** — 역할을 적어라
-* **D** — 기계어 코드젠. ⚠️ **본체는 cranelift 가 아니라 2-state 좁히기다** — §4.5.334 census 가
-  *"오늘의 IR + `Value` 위에 cranelift 를 얹으면 이긴다"* 를 반증했고, 인라인 불가한 30.8% 가 비싼
-  이유는 **호출이라서가 아니라 4-state 라서**다.
-
----
-
-## 부록 A — 자주 나오는 기호
-
-| 기호 | 뜻(이 저장소의 문서 관례) |
+| Rule | Reason |
 |---|---|
-| ⭐ / ⭐⭐ | 이 슬라이스의 핵심 발견 / 특히 중요한 발견 |
-| ⚠️ / ⚠️⚠️ | 함정·주의 / 실제로 사고가 났던 함정 |
-| §4.5.x | `docs/ROADMAP_ARCHIVE.md` 의 완료 슬라이스 번호 |
-| §5.1-x | `docs/ROADMAP.md` §5.1 의 Phase A 슬라이스 번호 |
+| Restore with `git checkout --`, which requires a snapshot commit first | restoring from file copies loses uncommitted edits |
+| Check the exit code of the substitution and of the build | a substitution that matched zero places leaves an unmutated tree, which then goes green and is recorded as `SURVIVED` |
+| Keep `SUBST-FAIL` and `BUILD-FAIL` as verdicts distinct from `SURVIVED` | same reason |
+| Run `cargo nextest run --workspace` | a narrow filter manufactures fake `SURVIVED`s and cannot manufacture a fake `KILLED`, so a narrowed run's survivors must be re-checked at `--workspace`. `-p A -p B --test X` is not a fix: cargo applies `--test` to every package and runs a small fraction of the suite |
+| Detect `FAIL`, `TRY 1 FAIL`, `TIMEOUT`, `SIGSEGV`, `SIGABRT`, `ABORT` and `LEAK-FAIL` | a mutation that turns a design into an infinite loop is reported by nextest as `TIMEOUT`, and a parser counting only lines starting with `FAIL` records it as `SURVIVED` |
+| Take a mutation that can hang or run away out of the battery and run it once by hand | §5.4 |
 
-## 부록 B — 실제로 쓰는 명령
+### 5.2 Why it is necessary
+
+Three measured reasons, each of which is a way for a green suite to prove nothing:
+
+- **A gate can be blind to itself.** A `panic!` placed at the top of a settle function let
+  the whole suite pass, because that code never executed.
+- **A differential is blind to shared code.** See §4.5.
+- **Mutation is what enforces the anchor obligation.** In one fork-related unit of work,
+  the killer for five of the cases was a single anchor test written in that same unit, and
+  no other test in the suite caught any of them — because the gate had been refusing `fork`,
+  so no test in the repository ran a `fork` design on tier-3.
+
+### 5.3 `SURVIVED` is a question
+
+A surviving mutation is one of three things, and which one must be established.
+
+| Reading | Meaning | Required action |
+|---|---|---|
+| **blind axis** | the tests do not exercise that axis | build a discriminating design and kill it |
+| **equivalent** | the change makes no observable difference | measure why, and record the reason in the code |
+| **unreachable** | no input reaches that code | re-measure with a `panic!` probe showing zero hits, and leave it fail-closed |
+
+Each reading has a characteristic shape. A *blind axis* often needs a design with two of
+something: changing a sibling-arm ordering key from the tie-break to the activity id passes
+every single-`fork` anchor, because a lone `fork` allocates children in declaration order
+and the two keys coincide; a second `fork` discriminates, since a finished child's slot
+returns to a LIFO free list, so the second `fork`'s arms take ids set by the order the first
+`fork`'s children finished. An *equivalent* mutation usually turns on one index: removing a
+depth guard is equivalent in a walk that reads `frames[0]` and load-bearing in the twin that
+reads `call_stack.last()`. An *unreachable* mutation is usually made unreachable by an
+`_`-free match elsewhere: the terminators that can make `act != tmpl` are `Fork` and `Call`,
+and both are in `is_codegen_able`'s reject set.
+
+### 5.4 Mutation can be dangerous
+
+A mutation that changes a descending loop's step to `+1` never reaches its sentinel and
+appends without bound. Two `vita` test subprocesses reached about 33 GB each on a 32 GB
+machine, and the kernel panicked on the userspace watchdog; the session died with the
+mutation still in the tree.
+
+Two standing consequences. `.config/nextest.toml` sets a per-test hard cap:
+
+```toml
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 4 }
+```
+
+Four minutes, against a whole workspace of about 31 s of run-phase wall clock and a slowest
+single test of about 18 s, so a test that reaches the cap is hung rather than slow. CI runs
+`cargo test`, which does not read this file, so the cap protects local runs — which is where
+batteries run. And the product fix, not the mutation, is what removes the hazard: making the
+loop count-based (`abs_diff + 1`) makes the same mutation die on a value in under a second.
+
+---
+
+## 6. Operating rules this axis produces
+
+1. **Re-run the census before starting work on a gate row.** A row's yield is measured
+   against the gate as it stands, and every closed row moves the other numbers.
+2. **Close the set that blocks a design, not a row.** A row's value is not the number of
+   designs it fires on: two rows can read the same predicate and always fire together, and a
+   gate that returns only its first `Err` hides a third row behind them.
+3. **Re-read a reject row's stated reason.** A reason of the form "cannot do X" or "not
+   until Y" is a claim about a moment; the next stage of the pipeline may already have made
+   it false. A predicate stated over elaborate is not a predicate over `simulate`.
+4. **Absolute anchors are mandatory where an executor delegates**, because the differential
+   is blind there (§4.5).
+5. **An anchor asserts `"backend": "native"`**, or it cannot tell a native run from a
+   fallback.
+6. **Suspect the harness before the engine when two backends agree perfectly.** A test
+   helper that builds `SimOpts` by hand and omits one sidecar makes both backends agree
+   about work neither performed.
+7. **Do not create a second spelling of a semantic rule.** Extract and share it, and let the
+   canonical site delegate. Two spellings drift silently.
+8. **Batteries run `--workspace`; detection includes `TIMEOUT`** (§5.1).
+
+---
+
+## 7. Current state
+
+| | |
+|---|---|
+| Coverage | `6 470 / 6 470 = 100.00%`, zero refusals, as recorded in `crates/sim-engine/src/lib.rs` |
+| Generated-corpus eligibility | 72 / 72, pinned by `native_gate::p6_corpus_eligibility_is_72_of_72` |
+| Design gate | no reject family reachable from compilable source; one counted family, `stmt_effect` |
+| Storage gate | refuses only a malformed sidecar or an arena that exceeds `u32` words |
+| Executor gate | refuses only shapes no source can construct |
+| Refused system tasks | none — `systask_refusal` returns `None` for every `SysTaskId` |
+| Fallback population | zero; the path is fail-closed and its teeth are a corrupted sidecar |
+| Default executor | `Backend::Native`, pinned by `backend_equiv::the_default_backend_is_native` |
+| Suite | 7 352 tests, 7 352 passing, 15 skipped (all `#[ignore]`d perf probes) |
+
+The default build carries three executors with `native` as the default; the product build
+(`--no-default-features`) carries `native` alone, and the oracle spellings of `--backend` are
+rejected loudly there rather than silently ignored — a CI job asserts that rejection.
+
+---
+
+## 8. Commands
 
 ```bash
-# 전체 게이트 (30초)
+# Full local gate
 cargo nextest run --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo fmt --all -- --check
 
-# 한 설계를 세 백엔드로
+# One design on each executor, and what actually ran
 vita --backend interp t.sv
 vita --backend vm     t.sv
 vita --backend native --obs-dir obs t.sv && grep '"backend"' obs/run.json
 
-# 오라클
+# The oracle
 iverilog -g2012 -o t.vvp t.sv && vvp t.vvp
+
+# The equivalence gates
+cargo test -p sim-engine --test backend_equiv
+cargo test -p sim-engine --test native_gate
+cargo test -p sim-engine --test differential      # needs iverilog + vvp on PATH
 ```
+
+---
+
+## 9. Related documents
+
+- [study/01 — the performance axis](01-interpreted-vs-compiled.md) — why tier-3 exists, and
+  the standing verdict on every acceleration evaluated.
+- [study/03 — the workload corpus](03-workload-corpus.md) — third-party RTL, its oracles,
+  and the grading of a refusal.
+- [preview/04 — architecture](../preview/04-architecture.md) — the execution-backend
+  structure.
+- [preview/21 — tier-3 native backend](../preview/21-tier3-native-backend.md) — what a
+  machine-code backend would require.
+- [preview/09 — testing and verification](../preview/09-testing-and-verification.md).
+- [ENGINEERING_RULES](../ENGINEERING_RULES.md) — the accuracy ladder and the review method.
+- [ROADMAP](../ROADMAP.md) — the open queues.

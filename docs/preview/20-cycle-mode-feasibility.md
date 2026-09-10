@@ -1,257 +1,316 @@
-# 20 · 별도 모드 타당성 — **M1 실측 FAIL. 착수하지 않는다.**
+# 20 · A separate cycle mode — feasibility and standing verdict
 
-> ## 🔴 최종 판정 — **M1 = 7% (기준 30%) · M4 = 10.32 (기준 1.84). 두 축 모두 착수 금지.**
-> ## (2026-08-01 값 도메인 · 2026-08-20 스케줄링 — §6 M4 참조)
->
-> 본 문서 §6 이 정한 선결 측정 M1(`unk` 평면이 실제로 차지하는 비용)을 실물 설계에서 쟀다.
-> `and_w`/`or_w`/`xor_w`/`xnor_w`/`not_w` 를 2-state 형태로 단락시키고, `mask_top` 과
-> `resize` 의 `unk` 평면 처리를 제거한 **스크래치 빌드**로 상한을 샀다(측정 후 되돌림).
->
-> **유효성 자가검증**: 스크래치 빌드가 정상 빌드와 **출력이 동일했다**(`trap=0 addr=00000014`).
-> 즉 이 구간이 X-free 라서 제어흐름이 같고, 타이밍 비교가 유효하다.
->
-> | | 4-state | 2-state(스크래치) | 상한 |
-> |---|---|---|---|
-> | interpreter | 1230.7 ms | 1149.6 ms | **1.071×** |
-> | bytecode VM | 1067.0 ms | 1025.8 ms | **1.040×** |
->
-> 패치를 넓혀도(and/or 만 → xor/xnor/not + resize 까지) **1.067→1.071× 로 거의 안 움직였다.**
-> 남은 미패치분은 net 저장(캐시)뿐이고, 이 설계는 238 넷이라 거기서 나올 것도 없다.
->
-> ⇒ **`unk` 평면은 비용의 ~7% 다. 30% 가 아니다. 2-state 는 레버가 아니다.**
-> ⇒ **이 문서가 주장한 "유일한 구조적 레버"는 실측으로 반증됐다. 착수하지 않는다.**
->
-> **⭐ 그런데 이게 이 문서가 제대로 작동한 사례다.** §6 에 "M1 < 30% 면 착수 금지"를 박아둔
-> 덕분에 **4–6 세션 투자를 7% 짜리 천장 위에 짓지 않았다.** 스케치의 존재 이유가 이것이다.
->
-> **그리고 남는 질문**: 4-state 때문이 아니라면 그 비용은 무엇인가? 프로파일이 지목한
-> `eval_ctx` 26.7% · `resize` 16.6% · `netread` 13.1% · `mask_top` 13.0% 는 **평면이 둘이라서가
-> 아니라 인터프리테이션 구조 자체**(노드마다 `Value` 생성·이동, 트리 워크, 간접참조)로 보인다.
-> 미측정 가설이며, 다음에 잰다면 **그것**을 재야 한다.
->
-> 아래는 판정 이전에 쓰인 원문이다 — 논거와 설계는 유효하나 **M1 이 전제를 무너뜨렸다.**
+A cycle-based mode alongside the default event-driven engine is the one acceleration that
+would move vita out of its performance class rather than within it. This document states
+what such a mode is, what it would require, what the two deciding measurements show, the
+verdict that stands, and the condition that reopens each half. It also carries the design
+the mode would have to satisfy if it were ever built, because that design is what makes the
+mode honest rather than merely fast.
+
+Status at HEAD: **not implemented.** There is no mode flag, no second value representation
+and no static schedule. The default engine is event-driven and 4-state on every backend.
+
+Preceding measurement: [preview/18](18-acceleration-analysis.md). Background on the two
+axes: [study/01](../study/01-interpreted-vs-compiled.md). The queue rows are
+[ROADMAP §5.a and §7](../ROADMAP.md).
 
 ---
 
-# (원문) 별도 모드 타당성 스케치 — 2-state 논거
+## 1. The mode is two independent halves
 
-> **2026-08-01 재작성.** 초판(같은 날 오전)은 **조합 프로세스 융합**을 이 모드의 가치 명제로 썼다.
-> 융합은 실물 설계에서 기회가 **43 프로세스 중 4개**로 측정되어 죽었다. 그런데 같은 날 오후의
-> 실물 프로파일링이 **훨씬 강한 논거**를 내놓았다 — `unk` 평면 제거(2-state). 그래서 전면 재작성한다.
->
-> **초판의 결론이 틀렸던 게 아니라, 근거가 약했다.** 융합은 "조합 cone 을 원자 정착"이라는 좁은
-> 이득이었고 실물에 그 형태가 없었다. 2-state 는 **모든 4-state 연산을 동시에** 줄인다.
->
-> 선행 = [18-acceleration-analysis](18-acceleration-analysis.md) · [ROADMAP §5·§7](../ROADMAP.md).
-> **본 문서는 제안이지 결정이 아니다.** 착수 전 §6 선결 측정이 반드시 먼저다.
+"Cycle-based" bundles two changes that are orthogonal, and each has its own measurement and
+its own verdict.
 
-## 0. 요약 판정
+| Half | What it changes | Verdict | Reopens when |
+|---|---|---|---|
+| **Scheduling** | evaluate every combinational block once per cycle in a static level order, instead of running an event queue with delta settling | rejected | a real design evaluates each combinational block at least once per cycle |
+| **Value domain** | drop the `unk` plane and carry two-state values only | rejected | never as a default; as a mode, only with a way that trades no correctness |
 
-| 항목 | 판정 |
-|---|---|
-| 기본 모드의 계약을 쓰는가 | **아니다.** 별도 모드라 기본 모드는 무손상 |
-| 이득의 성격 | **구조적** — 단일 함수가 아니라 **비용의 공통 원인**을 없앤다 |
-| 예상 규모 | 미측정. §6 M1 이 답한다. 상한은 4-state 비트조작 전부(프로파일 ~70%) |
-| 최대 위험 | **X-optimism** — 초기화 버그를 조용히 숨긴다 (§4) |
-| correct-or-loud 유지 가능한가 | **가능하다** — x/z 에 의미가 걸린 구문을 **loud 거부** (§5) |
-| 착수 조건 | **§6 미충족 시 착수 금지** |
+Either half can be taken without the other. Verilator takes both. The rest of this document
+treats them separately, then states what a mode taking either would still owe.
 
 ---
 
-## 1. 왜 초판(융합)을 버리고 이걸 쓰는가
+## 2. The scheduling half
 
-| | 초판 논거 (융합) | **재작성 논거 (2-state)** |
-|---|---|---|
-| 무엇을 바꾸나 | 조합 cone 을 한 활성에 정착 | **`unk` 평면을 없앤다** |
-| 실물 기회 | **4 / 43 프로세스** ❌ | 모든 값 연산 ✅ |
-| 이득의 폭 | 프로세스간 깊이가 있는 설계에만 | **모든 설계** |
-| 실물 검증 | PicoRV32 에서 근거 없음 | 프로파일이 직접 지목 |
+### 2.1 The arithmetic
 
-실물 프로파일(분기-native 이후, `--backend vm`):
+A cycle mode erases the event queue, delta settling, change detection and process wake, and
+replaces them with a single static-level pass over every combinational block, once per
+cycle. Writing `E_act` for the activations an event-driven run actually performs and
+`C_blk` for the block evaluations a cycle pass would perform:
 
-```
-eval_ctx      26.7%
-resize        16.6%      ← 두 평면을 복사·확장
-netread       13.1%      ← 두 평면을 읽음
-mask_top      13.0%      ← 두 평면을 마스킹
-eval_binary   12.5%
+```text
+event = E_act × (eval + sched)
+cycle = C_blk ×  eval
+
+cycle wins  ⟺  C_blk / E_act  <  1 + sched/eval
 ```
 
-**고르게 퍼져 있다 = 단일 레버가 없다.** 그런데 이 다섯이 **같은 원인을 공유한다** — 전부
-4-state 비트 조작이다. 원인을 없애면 다섯이 **동시에** 줄어든다. 그게 레버의 정의다.
+The measured `sched/eval` ratio is ≈ 0.84, so the gate is **1.84**.
 
-> 이 문단이 왜 그런지는 [study/01](../study/01-interpreted-vs-compiled.md) §8.1 에서 배경지식
-> 0 부터 설명한다(완성본 예정).
+### 2.2 The measurement
 
-## 2. 무엇을 버리는가 — `unk` 평면
+An activation census — pure counting, no correctness impact:
 
-vita 의 값은 **두 개의 워드 평면**이다.
+| Design | Combinational blocks | Cycle-mode evaluations | Current evaluations | Ratio | Evaluations per block per cycle | Verdict |
+|---|---:|---:|---:|---:|---:|:--|
+| picorv32, 200k cycles | 230 = 31 processes + 199 assigns | 46,000,000 | 4,457,425 | **10.32** | **0.097** | FAIL |
+| keccak | 7 = 1 + 6 | 18,221 | 11,021 | 1.65 | 0.605 | marginal, 11% |
 
-| `val` | `unk` | 의미 |
+picorv32's combinational blocks are evaluated **0.097 times per cycle**: event-driven
+scheduling is already skipping 90.3% of the combinational work. A cycle mode would do all of
+it in exchange for erasing at most 0.84 of an evaluation's worth of scheduling — ten times
+the work to save 0.84. In a control-dominated CPU-shaped design, event-driven scheduling
+*is* the optimisation. Only a dense datapath (keccak) reaches the gate at all, and its 11%
+margin is inside the model's own error.
+
+### 2.3 Verdict and re-entry
+
+Rejected. The ratio is a function of the design's **activity rate**, not of the engine, so
+the re-entry condition is a workload fact rather than an engineering one: a corpus with real
+demand whose combinational blocks average **at least one evaluation per cycle**. picorv32 is
+at 0.097.
+
+### 2.4 The related transform, and why it is not a shortcut
+
+Process fusion — collapsing a connected chain of combinational processes into one activation
+— is the cheap approximation of a static level order, and it measures 1.7–2.5×. It is not
+adopted in the default mode because it changes **values**, not only speed: unfused, a
+depth-D chain propagates across D deltas and a process waking in the same batch reads a
+partially propagated output; fused, it reads a fully propagated one. With a
+`clk = ~clk; #1` stimulus the fused build prints `0000017c` where Icarus Verilog and the
+unfused build print `xxxxxxxx`. Both values are IEEE-legal, and what is violated is vita's
+own pin to Icarus Verilog, which is exactly the silent-wrong rung of the ladder.
+
+A safety condition on the chain's *interior* nets does not cover *when its output becomes
+fresh*, and the reader of that output is the flop the cone exists to drive, so requiring "no
+concurrent reader of the output" empties the safe set. The counterexample is pinned as
+`sim-engine::backend_equiv::a_comb_chain_output_is_sampled_mid_propagation`.
+
+That is the precise sense in which the transform is legal only as a **declared mode**: a
+mode announces the semantic change, so a value difference is a documented mode property
+rather than a wrong answer. §5 is the design that would have to carry that announcement, and
+a fusion-based cycle mode owes the same hazard detector with the same completeness gate.
+
+Opportunity is also small in real RTL: picorv32 has inter-process combinational depth 1 and
+four fusion candidates out of 43 processes, because real designs put their combinational work
+inside large `always @*` blocks rather than between processes.
+
+---
+
+## 3. The value half — dropping the `unk` plane
+
+### 3.1 What it would remove
+
+A vita value carries two word planes.
+
+| `val` | `unk` | Meaning |
 |---|---|---|
 | 0 | 0 | `0` |
 | 1 | 0 | `1` |
-| 0 | 1 | `x` (미정) |
-| 1 | 1 | `z` (고임피던스) |
+| 0 | 1 | `x`, unknown |
+| 1 | 1 | `z`, high impedance |
 
-2-state 모드는 **`unk` 를 아예 두지 않는다.** 모든 비트가 `0` 아니면 `1` 이다.
+A 2-state mode would carry `val` alone. Storage, copying and masking halve, and the
+operators shrink by much more than half, because a 4-state AND computes known-0 and known-1
+separately (`value.rs::and_w`):
 
-## 3. 무엇이 줄어드는가 — "절반"보다 크다
-
-평면이 둘에서 하나가 되므로 저장·복사·마스킹은 **절반**이다. 그런데 **연산은 절반보다 훨씬**
-줄어든다. 4-state AND 는 known-0 과 known-1 을 따로 계산해야 하기 때문이다
-(`value.rs::and_w`):
-
-```
+```text
 4-state AND :  known0 = (~av & ~au) | (~bv & ~bu)
-               known1 = (~au & av) & (~bu & bv)
-               rv = known1 ;  ru = ~known0 & ~known1        ≈ 10 연산
-2-state AND :  rv = av & bv                                  = 1 연산
+               known1 = (~au &  av) & (~bu &  bv)
+               rv = known1 ;  ru = ~known0 & ~known1     ≈ 10 word operations
+2-state AND :  rv = av & bv                              =  1 word operation
 ```
 
-| 항목 | 4-state | 2-state |
+| Item | 4-state | 2-state |
 |---|---|---|
-| 비트연산 | ~10 워드연산 | **1** |
-| `mask_top` | 두 평면 마스킹 + 두 번의 길이 확인 | 하나 |
-| `resize` | 두 평면 복사·부호확장 | 하나 |
-| net 저장 | `BitPacked{val,unk}` | 절반 메모리 = **절반 캐시 압력** |
-| `from_packed`/`get_vu`/`set_vu` | 두 평면 | 하나 |
+| Bitwise operator | ~10 word operations | 1 |
+| `mask_top` | two planes masked, two length checks | one |
+| `resize` | two planes copied and sign-extended | one |
+| Net storage | `{val, unk}` | half the memory, half the cache pressure |
+| `from_packed` / `get_vu` / `set_vu` | two planes | one |
 
-**메모리 절반이 별도 이득이다.** 대형 설계는 넷 테이블이 캐시를 넘기므로, 저장 절반은
-연산 절감과 곱해진다. Verilator 의 10–100× 중 상당분이 여기서 온다.
+Arithmetic is the exception and is already cheap: a partially known sum is impossible, so any
+`x` in either operand poisons the whole result, which is one branch plus a two-state add.
+Operations are not uniformly expensive.
 
-## 4. 무엇을 잃는가 — 정직하게
+### 3.2 The measurement
 
-**이건 성능 트레이드오프가 아니라 의미론 축소다.**
+An instruction count is not a time measurement. A scratch build short-circuited `and_w`,
+`or_w`, `xor_w`, `xnor_w` and `not_w` to their 2-state forms and removed the `unk` handling
+from `mask_top` and `resize`, buying the upper bound directly and reverting afterwards.
+Self-validation: the scratch build produced **identical output** to the normal build
+(`trap=0 addr=00000014`), so the measured region is x-free, control flow is the same, and the
+timing comparison is valid.
 
-| 잃는 것 | 결과 |
-|---|---|
-| **X 전파** | 미초기화 레지스터가 `x` 가 아니라 `0` 으로 읽힌다 |
-| `===` / `!==` | x/z 를 구별하는 비교가 무의미해진다 |
-| `casez` / `casex` | don't-care 매칭의 근거가 사라진다 |
-| `z` / tri-state | wired-and/or 해소, 버스 다중구동이 표현 불가 |
-| X 검사 어서션 | `assert(!$isunknown(x))` 류가 항상 통과 |
+| Executor | 4-state | 2-state scratch | Ceiling |
+|---|---:|---:|---:|
+| Interpreter | 1230.7 ms | 1149.6 ms | **1.071×** |
+| Bytecode VM | 1067.0 ms | 1025.8 ms | **1.040×** |
 
-### ⚠️ X-optimism — 이 모드의 진짜 위험
+Widening the patch from `and`/`or` alone to `xor`/`xnor`/`not` plus `resize` moved it from
+1.067× to 1.071× — essentially not at all. The only unpatched item left is net storage, and
+the design has 238 nets, so there is nothing there either.
 
-미초기화 신호가 `x` 로 전파되면 **버그가 드러난다.** `0` 으로 읽히면 **조용히 지나간다.**
-그래서 2-state 시뮬레이션은 *통과하는데* 실제 칩은 *틀리는* 일이 일어난다. 업계에서
-X-optimism 이라 부르고, 2-state 도구가 사인오프에 못 쓰이는 이유다.
+**The `unk` plane is about 7% of the cost, against the 30% bar set for taking the trade.**
+The second plane is usually all zeros, stays in cache, and `& 0` retires nearly free on a
+superscalar core.
 
-**이것이 이 모드가 반드시 별도 모드여야 하는 이유다.** 기본 모드로 만들면 vita 의 G1 주장이
-사라진다.
+An execution-weighted census of every evaluated value on the corpus workloads says the same
+thing from the other side: 83.9% to 100% of values are simultaneously definite and at most 64
+bits, geometric mean 95.7%. The 2-state shape the workloads need is already reachable per
+operation, and the compiled lane already carries it — what limits it is how much of a design
+reaches that lane, not the presence of the plane.
 
-## 5. correct-or-loud 를 어떻게 지키는가 — **거부하지, 조용히 다르지 않는다**
+### 3.3 Where the cost actually is
 
-선언만 하고 끝내면 사용자는 자기 설계가 영향권인지 모른다. 융합 초판에서 배운 것과 같은 문제다.
+The profile of a real design is flat, which is what "no single lever" means:
 
-**2-state 모드는 x/z 에 의미가 걸린 구문을 LOUD 거부한다.** 답을 지어내지 않는다.
-
-| 구문 | 2-state 모드 |
-|---|---|
-| `===` / `!==` / `$isunknown` / `casez` / `casex` | **거부** (E-xxxx, 모드 밖에서 실행하라고 안내) |
-| 명시적 `'x` / `'z` 리터럴 | **거부** |
-| tri-state 구동 (`assign y = en ? d : 1'bz`) · wand/wor | **거부** |
-| 미초기화 읽기 | `0` 으로 정의 + **경고**(`--x-assign` 류 명시 옵션) |
-
-이러면 사다리에서 **loud** 자리를 지킨다: 지원하는 것은 정확하고, 못 하는 것은 시끄럽다.
-그리고 거부 목록이 곧 **"이 설계는 2-state 로 돌려도 같다"의 증명**이 된다.
-
-### 등가 게이트
-
-> **거부되지 않은 설계는 두 모드가 바이트 동일해야 한다.**
-
-x/z 가 관여하지 않는 설계라면 4-state 계산과 2-state 계산이 같은 답을 낸다. 이것이
-**거부 목록의 완전성을 검증하는 게이트**이고, 융합 스케치와 같은 구조다 — 거부기와 게이트가
-서로를 검증한다. `backend_equiv.rs` 의 P5 구조를 그대로 재사용한다.
-
-## 6. 선결 측정 — 미충족 시 착수 금지
-
-이번 세션은 **가정한 payoff 위에 기계를 지으면 틀린다**를 여섯 번 확인했고, 이 문서의 초판
-자체가 그 사례다(융합 기회 4/43).
-
-| # | 측정 | 통과 기준 | 방법 |
-|---|---|---|---|
-| **M1** | 실물 설계에서 `unk` 평면이 실제로 차지하는 비용 | **≥ 30%** | `unk` 를 항상 0 으로 두는 **스크래치 패치**로 상한을 잰다(정확성은 깨지지만 **속도 상한**은 정확히 나온다). 측정 후 되돌린다 |
-| **M2** | 실물 설계가 §5 거부 목록에 걸리는가 | 걸리지 않거나 소수 | PicoRV32 등에서 `===`/`casez`/`'x`/tri-state 사용 개수 |
-| **M3** | 넷 테이블 메모리 절감이 캐시에 유의미한가 | 설계 규모 의존 | 넷 저장 바이트 수 |
-| **M4** | **스케줄링 절반** — cycle-mode 가 이벤트 큐를 지우는 대신 치르는 추가 평가 | `C_blk / E_act < 1 + sched/eval` | 활성화 census(순수 카운팅, 정확성 무손상) |
-
-### 🔴 M4 판정 (2026-08-20) — **미달 5.6배. 스케줄링 절반도 닫힌다.**
-
-M1~M3 은 전부 **값 도메인**이고, **스케줄링 절반은 M-측정이 없었다.** M4 가 그것이다.
-
-cycle-mode 는 {이벤트 큐 + 델타 settle + 변화 감지 + wake} 를 지우고 {조합 블록 전부를
-사이클마다 정적 레벨 순서로 1회 평가} 로 바꾼다. 그러므로:
-
-```
-event = E_act × (eval + sched)      cycle = C_blk × eval
-cycle 이 이긴다 ⟺ C_blk / E_act < 1 + sched/eval        (실측 sched/eval ≈ 0.84 ⇒ 게이트 1.84)
+```text
+eval          26.7%
+resize        16.6%
+netread       13.1%
+mask_top      13.0%
+eval_binary   12.5%
 ```
 
-| 설계 | 조합 블록 | cycle 평가 | 현재 평가 | 비율 | 블록당 평가/사이클 | 판정 |
-|---|---:|---:|---:|---:|---:|:--:|
-| **picorv32** (200k 사이클) | 230 = 31 proc + 199 assign | 46,000,000 | 4,457,425 | **10.32** | **0.097** | **FAIL** |
-| keccak | 7 = 1 + 6 | 18,221 | 11,021 | 1.65 | 0.605 | 경계(마진 11%) |
+Every one of these bounds the whole run at 1.14×–1.36× even if it became free, and only part
+of each is removable — a one-word fast path in `resize` measures about 1%, reproducibly, on
+two independent attempts. The five share a cause, but the cause is the interpretation
+structure (a `Value` constructed and moved per node, a tree walk, indirection), not the fact
+that there are two planes; the 7% measurement is what separates those two readings.
 
-⇒ **picorv32 의 조합 블록은 사이클당 0.097 회만 평가된다 — 이벤트 구동이 조합 작업의 90.3% 를
-이미 건너뛰고 있다.** cycle-mode 는 그 전부를 하는 대가로 최대 0.84 배어치 스케줄링을 지운다.
-**10 배 더 일하고 0.84 배 아끼는 거래**다. CPU 형 제어 위주 설계에서 이벤트 구동은 이미 최적화
-그 자체이고, 밀집 데이터패스(keccak)만 경계에 걸리는데 그 마진은 모델 오차 안이다.
+### 3.4 Verdict and re-entry
 
-**곁에서 나온 정정 둘** (같은 세션 실측):
+Rejected. As a **default** it is rejected permanently, because it is a step down the accuracy
+ladder (§4) and G1 is the whole point of the tool. As a **mode** it is rejected on the
+number: a 7% ceiling does not pay for a second value representation threaded through the
+engine.
 
-1. **"스케줄러 29%" 는 12% 다.** 그 버킷의 `dispatch_body` 8.31% 는 **문장 실행기**이고
-   `settle_cont_assigns` 8.29% 는 **cont-assign 평가+쓰기가 인라인된 것**이다. 진짜 스케줄러
-   오버헤드(NBA 스케줄 4.10 · propagate 2.13 · note_change 1.57 · wake 1.46 · 진단 드레인 1.47 · 기타 1.4)
-   ≈ **12%**.
-2. **settle 의 빈 패스는 공짜다.** fixpoint 패스의 **61%** 가 아무것도 평가하지 않고
-   (`ca_always`=0 · `md_groups`=0), 등가가 증명되는 early-out 을 넣어도 **2.39 s → 2.39 s**.
-
-**재진입 조건**: M4 는 설계의 **활동률**의 함수다. 조합 블록이 사이클당 평균 **1 회 이상** 평가되는
-코퍼스가 실수요로 나타나면 그때 다시 잰다. picorv32 는 0.097 이다.
-
-**M1 이 이 문서의 핵심이다.** "2-state 면 빨라진다"는 지금까지 **추론**이고, 스크래치 패치로
-**상한을 먼저 사는** 것이 이 세션이 배운 유일한 올바른 순서다. 반나절이면 된다.
-
-## 7. 공수·위험
-
-| 단계 | 규모 | 비고 |
-|---|---|---|
-| M1–M3 선결 측정 | **XS** (반나절) | 스크래치 패치, 되돌림 |
-| 값 표현 분기 (`unk` 없는 경로) | **L** | `Value`/`BitPacked`/net 저장이 전부 관여 |
-| §5 거부기 | **M** | 이 설계의 정직성 전부 |
-| 모드 배선 + 등가 게이트 | **S** | `--backend` 선례 |
-| 문서 (모드 계약·한계) | **S** | |
-| **합계** | **~4–6 세션** | |
-
-**최대 위험 = 값 표현이 코드베이스 전역에 걸쳐 있다는 것.** `Value` 는 엔진의 모든 곳에 있다.
-2-state 를 별도 타입으로 만들면 중복이, 런타임 분기로 만들면 그 분기 비용이 이득을 갉는다.
-M1 이 그 트레이드오프를 감당할 만한 이득이 있는지부터 답해야 한다.
-
-## 8. 열린 결정 사항 (오너 판정)
-
-1. **만들 것인가** — M1 통과가 전제. 통과해도 값 표현 이원화의 영구 유지비가 남는다.
-2. **거부 vs X-assign** — §5 는 거부를 권한다(correct-or-loud). 산업 관행은 `--x-assign 0` 로
-   조용히 진행하는 쪽이다. **vita 는 거부가 정체성에 맞다.**
-3. **2-state 와 `--backend vm` 이 직교인가** — 직교로 두는 것을 권한다(효과가 곱해진다).
-4. **사이클기반까지 갈 것인가** — 2-state 와 사이클기반은 **직교**다(1장 참조). 2-state 만 해도
-   되고, 그게 위험이 훨씬 작다. 융합/levelize 는 실물에서 이미 기각됐으므로 **사이클기반은
-   따라올 이유가 없다.**
-
-## 9. 재진입 트리거
-
-**M1 ≥ 30% + 오너가 §8.1 승인.** 하나라도 미충족이면 이 문서는 기록으로만 남는다.
-
-## 10. 이 문서가 두 번 쓰인 것 자체가 기록이다
-
-초판은 융합을, 재작성판은 2-state 를 논거로 삼는다. **같은 결론(별도 모드)에 다른 근거가
-붙었고, 근거의 질이 완전히 다르다.** 초판의 근거는 실물에서 4/43 이었고, 재작성판의 근거는
-프로파일이 직접 가리킨다. 결론이 같다고 근거가 같은 게 아니며, **약한 근거 위에 지었으면
-융합을 구현했을 것이다** — 실제로 구현했고, 값이 달라져 되돌렸다(ROADMAP §5).
+Re-entry requires a way to reach the gain with no correctness trade at all — not a better
+argument for taking the trade.
 
 ---
 
-**관련**: [18-acceleration-analysis](18-acceleration-analysis.md) · [ROADMAP §5·§7](../ROADMAP.md) ·
-[study/01 §8.1](../study/01-interpreted-vs-compiled.md)(4-state 비용 구조 해설, 완성본 예정) ·
-[01-goals-and-scope](01-goals-and-scope.md)(G1 정의) · [19-ai-agent-observability](19-ai-agent-observability.md).
+## 4. What a 2-state mode gives up
+
+This is a semantic reduction, not a performance trade-off, and the mode's honesty depends on
+saying so.
+
+| Lost | Consequence |
+|---|---|
+| X propagation | an uninitialised register reads as `0`, not `x` |
+| `===` / `!==` | a comparison that distinguishes x and z becomes meaningless |
+| `casez` / `casex` | don't-care matching loses its basis |
+| `z` and tri-state | wired-and/or resolution and bus multi-driving are inexpressible |
+| X-checking assertions | `assert(!$isunknown(x))` and its family always pass |
+
+### X-optimism is the real hazard
+
+When an uninitialised signal propagates as `x`, a bug becomes visible. When it reads as `0`,
+the bug passes silently. That is how a 2-state simulation passes while the real chip is
+wrong; the industry calls it X-optimism, and it is why 2-state tools are not used for
+sign-off.
+
+This is the reason such a mode can only ever be a **separate, declared mode**. Making it the
+default would remove vita's G1 claim.
+
+---
+
+## 5. How a mode would keep correct-or-loud
+
+Declaring the limitation in documentation is not enough: a user does not know whether their
+design is in the affected set. The rule vita would apply is the same one it applies
+everywhere — **refuse, rather than differ quietly**.
+
+| Construct | 2-state mode |
+|---|---|
+| `===`, `!==`, `$isunknown`, `casez`, `casex` | refuse, with an error code, naming the default mode as where to run it |
+| Explicit `'x` / `'z` literals | refuse |
+| Tri-state driving (`assign y = en ? d : 1'bz`), `wand` / `wor` | refuse |
+| Reading an uninitialised signal | defined as `0`, with a warning, behind an explicit option |
+
+That keeps the mode on the **loud** rung: what it supports is exact, and what it cannot do is
+noisy. The refusal list is also the mode's own proof obligation — it is the statement "this
+design runs identically in either mode".
+
+### The equivalence gate
+
+> A design the mode does not refuse must produce byte-identical output in both modes.
+
+If x and z never participate, the 4-state and 2-state computations agree. That makes the gate
+a completeness check on the refusal list: refusal set and gate verify each other, and a
+missing refusal shows up as a byte difference rather than as a silent wrong answer. The
+structure already exists in `crates/sim-engine/tests/backend_equiv.rs` and would be reused
+directly.
+
+The same shape applies to a fusion- or level-scheduled mode: the hazard detector's
+completeness gate is "zero candidates implies the two modes are byte-identical". Without a
+gate of that shape, a declared mode is just a second engine with unmeasured differences.
+
+---
+
+## 6. The prerequisite measurements, and what they returned
+
+The rule that produced these verdicts is that a payoff is measured before the machine that
+depends on it is built. Each row states the pass bar it was given and what it returned.
+
+| # | Measurement | Pass bar | Method | Result |
+|---|---|---|---|---|
+| M1 | the share of run cost the `unk` plane actually causes | ≥ 30% | a scratch patch pinning `unk` to zero, buying the ceiling directly; correctness breaks but the speed bound is exact; reverted afterwards | **7%** — fail |
+| M2 | whether real designs hit the §5 refusal list | none, or few | count `===`, `casez`, `'x` and tri-state uses in the corpus designs | not reached; M1 closed the axis |
+| M3 | whether halving the net table matters to cache | design-size dependent | net storage bytes | not reached; the measured design has 238 nets |
+| M4 | the scheduling half — the extra evaluations a cycle mode pays to erase the event queue | `C_blk / E_act < 1.84` | activation census, pure counting, no correctness impact | **10.32** on picorv32 — fail; 1.65 on keccak, inside model error |
+
+Both halves are closed by probes costing hours, against the multi-session build priced in §7.
+That ordering is the standing rule for this axis, and it is why this document is a
+specification rather than a mode.
+
+---
+
+## 7. Cost and risk, if a mode were ever built
+
+| Stage | Size | Note |
+|---|---|---|
+| Prerequisite measurements | XS | scratch patch, reverted |
+| A value representation without `unk` | L | `Value`, `BitPacked` and net storage are all involved |
+| The §5 refusal set | M | the whole of the design's honesty |
+| Mode wiring plus the equivalence gate | S | the `--backend` selection and gate structure are the precedent |
+| Mode contract and limits documentation | S | |
+| Total | ~4–6 sessions | |
+
+The largest risk is that the value representation reaches everywhere: `Value` is present
+throughout the engine. A separate 2-state type duplicates code; a runtime branch spends part
+of the gain on the branch. The 7% ceiling does not fund either.
+
+---
+
+## 8. Open decisions, if the verdict is ever revisited
+
+1. **Whether to build it at all.** A passing prerequisite measurement is necessary and not
+   sufficient — a dual value representation carries a permanent maintenance cost after it
+   lands.
+2. **Refuse, or assign a value.** §5 recommends refusing, which is what correct-or-loud
+   requires. Industry practice is to proceed quietly under an `--x-assign 0` style option.
+   Refusing is the choice that matches this tool's identity.
+3. **Whether 2-state and the executor selection stay orthogonal.** Keeping them orthogonal is
+   recommended, since their effects multiply.
+4. **Whether to go on to cycle-based scheduling.** The two halves are orthogonal (§1): the
+   value half can be taken alone, at much lower risk. The scheduling half is separately
+   rejected in §2, and levelization and fusion are separately closed in
+   [preview/18 §10](18-acceleration-analysis.md), so nothing pulls the scheduling half along.
+
+---
+
+## 9. Related documents
+
+- [preview/18 — acceleration paths](18-acceleration-analysis.md): the standing verdict on
+  every acceleration, including levelization and fusion.
+- [study/01 — the performance axis](../study/01-interpreted-vs-compiled.md): the two
+  orthogonal axes, the value-representation census, and the cost of two planes per operation.
+- [preview/01 — goals and scope](01-goals-and-scope.md): G1, the correctness goal a 2-state
+  default would remove.
+- [preview/06 — simulation engine](06-simulation-engine.md): the event regions and the delta
+  settle a cycle mode would replace.
+- [ROADMAP §5.a and §7](../ROADMAP.md): the standing verdict rows and their triggers.
