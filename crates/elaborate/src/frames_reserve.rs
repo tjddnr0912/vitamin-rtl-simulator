@@ -101,7 +101,7 @@ impl Elaborator<'_> {
     pub(crate) fn gather_auto_block_locals(
         s: &ast::Stmt,
         module_names: &std::collections::BTreeSet<String>,
-        out: &mut BTreeMap<String, Vec<(u32, u32, bool)>>,
+        out: &mut BTreeMap<String, Vec<(u32, u32, AdmitReason)>>,
     ) {
         match s {
             ast::Stmt::Block {
@@ -153,18 +153,25 @@ impl Elaborator<'_> {
                                     ast::Dim::Dyn | ast::Dim::Queue(_) | ast::Dim::Assoc(_)
                                 )
                             });
-                        // The third field marks a span admitted by the §4.5.249 WIDENING
-                        // rather than by `automatic`. `compute_scoped_block_locals` needs
-                        // the distinction: a widened span that ENCLOSES another declaring
-                        // span of the same name must not withdraw the scoping the
-                        // automatic-only set already granted (review S3 — it turned a
-                        // working inner/sibling pair loud).
+                        // The third field records WHY the span was admitted.
+                        // `compute_scoped_block_locals` needs the distinction twice over:
+                        // a WIDENED span (§4.5.249, i.e. not `automatic`) that ENCLOSES
+                        // another declaring span of the same name must not withdraw the
+                        // scoping the automatic-only set already granted (review S3 — it
+                        // turned a working inner/sibling pair loud); but a SHADOW span
+                        // must not be dropped for enclosing one either, because its
+                        // flatten target is the shadowed module net, not a fresh one.
+                        // It used to be a single bool carrying only the first of those,
+                        // which is why a static shadow was dropped like a widening.
                         let shadows_module = module_names.contains(&n.name.name);
                         if d.lifetime == Some(true) || dyn_storage || shadows_module {
                             out.entry(n.name.name.clone()).or_default().push((
                                 span.lo,
                                 span.hi,
-                                d.lifetime != Some(true),
+                                AdmitReason {
+                                    widened: d.lifetime != Some(true),
+                                    shadows_module,
+                                },
                             ));
                         }
                     }

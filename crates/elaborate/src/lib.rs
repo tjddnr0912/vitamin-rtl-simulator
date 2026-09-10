@@ -134,6 +134,7 @@ pub use api::*;
 pub(crate) use array_formal::*;
 pub(crate) use ast_query::*;
 pub(crate) use block_local::*;
+pub(crate) use block_local_class::AdmitReason;
 pub(crate) use classes::*;
 pub(crate) use const_array::*;
 pub(crate) use const_eval::*;

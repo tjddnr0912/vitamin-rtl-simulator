@@ -30,6 +30,32 @@ use super::*;
 /// condition is evaluated, so it cannot depend on parameter binding or pass order.
 pub(crate) type BranchPath = Vec<(u32, u32)>;
 
+/// WHY one declaring span of a block-local was admitted by
+/// [`Elaborator::gather_auto_block_locals`], carried alongside the span.
+///
+/// Three independent rules admit a span — `automatic` (per-entry storage),
+/// DYNAMIC storage (§4.5.249: a `Dim::Dyn`/`Dim::Queue`/`Dim::Assoc` dim or a
+/// scalar `string`), and SHADOWING a module-scope port/param/net — and the
+/// candidacy filters below must tell them apart. This used to be ONE bool
+/// (`widened = d.lifetime != Some(true)`), which is true for a static shadow and
+/// for a dynamic-storage widening alike, so filter A could not distinguish them
+/// and dropped both. Dropping a widened dynamic-storage span is harmless (its
+/// flatten target is a fresh net of its own); dropping a SHADOW span routes the
+/// declaration's writes onto the shadowed MODULE net (`block_local/hoist.rs`),
+/// which was 12 measured silent-wrong shapes (§2 Scoping queue row 1).
+///
+/// In-memory only: this rides a `BTreeMap` local to `elaborate`, never a
+/// `SchemaHash` / `sim-ir` / `hdl-ast` type, so it cannot move the golden root.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(crate) struct AdmitReason {
+    /// The declaration is NOT `automatic`, so this span was admitted by the
+    /// §4.5.249 widening or by the shadow rule rather than by a per-entry lifetime.
+    pub(crate) widened: bool,
+    /// The name also names a module-scope port, parameter or net. The flatten
+    /// this span would otherwise take targets THAT net.
+    pub(crate) shadows_module: bool,
+}
+
 /// Can two blocks with these branch paths BOTH be elaborated?
 pub(crate) fn branches_coexist(a: &BranchPath, b: &BranchPath) -> bool {
     !a.iter()
@@ -114,7 +140,7 @@ impl Elaborator<'_> {
         }
         // (1) gather automatic block-locals across all procedural blocks, each carrying
         //     the generate branch it sits under.
-        let mut per_name: BTreeMap<String, Vec<(u32, u32, bool)>> = BTreeMap::new();
+        let mut per_name: BTreeMap<String, Vec<(u32, u32, AdmitReason)>> = BTreeMap::new();
         let mut branch_of: BTreeMap<(u32, u32), BranchPath> = BTreeMap::new();
         for_each_proc(&module.body, &mut |p, path| {
             let before: BTreeMap<String, usize> =
@@ -140,10 +166,34 @@ impl Elaborator<'_> {
             // shadowed and withdraws scoping that already worked — a correct design
             // turned loud. It is only ever dropped from CANDIDACY; its declaration still
             // takes the ordinary flattened path, exactly as before the widening.
+            //
+            // §2 Scoping queue row 1: that drop is WRONG for a span admitted because it
+            // SHADOWS a module-scope name. `widened` conflated the two admission rules
+            // (it is `d.lifetime != Some(true)`, true for a static shadow as well as for
+            // a dynamic-storage widening), and the S3 rationale does not carry over: it
+            // is about not WITHDRAWING scoping a pair already had, and a shadowing name
+            // qualifies on ONE span (the `shadows_module` floor below), so there is
+            // nothing to withdraw. What the drop does instead is send the declaration
+            // down the flatten, whose target for a shadow IS the shadowed module net —
+            // measured as 12 silent-wrong shapes (an enclosing block's write landing on
+            // the module net).
+            //
+            // The exemption is taken only when EVERY declaring span of the name is a
+            // STATIC shadow. A span that is also `automatic` or dynamic-storage carries a
+            // per-entry lifetime requirement of its own, which is what these two filters
+            // were built to protect and which the loud E3009 gate is the authority on;
+            // leaving those names on the pre-existing path keeps every shape with an
+            // `automatic` span exactly as measured (unchanged: loud where a span's use
+            // crosses its block, and the pre-existing flatten otherwise — a static shadow
+            // pair beside a DISJOINT `automatic` span of the same name is still the old
+            // silent route, 1-oracle, recorded in ROADMAP §2).
+            let shadow_static_only = all.iter().all(|&(_, _, r)| r.shadows_module && r.widened);
             let spans: Vec<(u32, u32)> = all
                 .iter()
-                .filter(|&&(lo, hi, widened)| {
-                    !widened || !all.iter().any(|&(l2, h2, _)| contains((lo, hi), (l2, h2)))
+                .filter(|&&(lo, hi, r)| {
+                    shadow_static_only
+                        || !r.widened
+                        || !all.iter().any(|&(l2, h2, _)| contains((lo, hi), (l2, h2)))
                 })
                 .map(|&(lo, hi, _)| (lo, hi))
                 .collect();
@@ -170,13 +220,27 @@ impl Elaborator<'_> {
             //
             // Two declarations in different arms of ONE generate `if`/`case` never both
             // exist, so they do not shadow each other either.
+            //
+            // §2 Scoping queue row 1: `shadow_static_only` is exempt here too, and it has
+            // to be — this filter drops BOTH members of a nesting pair, so with filter A
+            // fixed but this one unchanged an outer/inner static shadow pair loses BOTH
+            // scopes and the INNER write leaks onto the module net as well (measured: c24
+            // of the census, correct today, would regress). The exemption is sound for
+            // the same reason the R16 §3.4 drop at (3) below could go: the Nets-phase
+            // hoist now nests its `$blk$` segments exactly as the Logic-phase lowering
+            // does, so two nested candidates of the SAME name get `…$blk$<outer>.s` and
+            // `…$blk$<outer>.$blk$<inner>.s` and each block body resolves its own. There
+            // is no aliasing left for this filter to prevent between two static shadows —
+            // it only prevented them from being scoped at all. Names with an `automatic`
+            // or dynamic-storage span keep the drop (see filter A's note).
             let spans: Vec<(u32, u32)> = spans
                 .iter()
                 .copied()
                 .filter(|&a| {
-                    !spans
-                        .iter()
-                        .any(|&b| a != b && (contains(a, b) || contains(b, a)) && coexist(a, b))
+                    shadow_static_only
+                        || !spans
+                            .iter()
+                            .any(|&b| a != b && (contains(a, b) || contains(b, a)) && coexist(a, b))
                 })
                 .collect();
             if spans.len() < 2 && !shadows_module {
