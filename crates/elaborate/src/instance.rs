@@ -1096,9 +1096,9 @@ impl Elaborator<'_> {
         // generate's own flush was ranked during VarInit. Only this slot is reset: the
         // instance slot is visited by ONE walk and must keep counting across it.
         self.rank_seq[Self::RANK_MOD_GENERATE as usize] = 0;
-        // IEEE §9.2.2.2 double-driver warning — a pure AST pass, run once here so it
+        // IEEE §9.2.2.x single-driver check — a pure AST pass, run once here so it
         // sees the whole body before any lowering reorders it.
-        self.warn_always_comb_initializers(&module.body);
+        self.check_multidriver_processes(&module.body);
         self.gen_ctr = 0;
         for item in &module.body {
             match item {

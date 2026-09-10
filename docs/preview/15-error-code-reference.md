@@ -389,7 +389,7 @@ with `-Werror=`.
 ## 3xxx · ELABORATE
 
 ### VITA-E3001 · `E-ELAB-MULTIDRIVER` (Error)
-**Two drivers the engine cannot resolve.** Two distinct conditions share this code.
+**Two drivers the engine cannot resolve.** Three distinct conditions share this code.
 
 **Overlapping continuous-assign bit ranges.** Part-select continuous assignments to one net
 overlap and the overlap cannot be resolved. Whole-net multiple drivers
@@ -413,33 +413,98 @@ always_comb rdy = (cnt < 8'd128);    // driver 2
     initializer AND is written by `always_comb`, which is two drivers on one variable
     (IEEE §9.2.2.2) — drop the initializer or the `always_comb` write
 ```
-The rule is scoped to `always_comb` only. Measured against Verilator 5.050 with
+This *initializer* row is scoped to `always_comb` only. Measured against Verilator with
 `--lint-only -Wall`, one file per block kind:
 
-| Declaration initializer plus | Verilator |
-|---|---|
-| `always_comb` | `MULTIDRIVEN`, citing IEEE 1800-2023 §9.2.2.2 |
-| `always_ff` | `PROCASSINIT` only, a style note |
-| `always_latch` | `PROCASSINIT` only |
+| Declaration initializer plus | Verilator | Xcelium |
+|---|---|---|
+| `always_comb` | `MULTIDRIVEN`, citing IEEE 1800-2023 §9.2.2.2 | `*E,MULAXX` |
+| `always_ff` | `PROCASSINIT` only, a style note | `*E,MULAXX` |
+| `always_latch` | `PROCASSINIT` only | `*E,MULAXX` |
 
-iverilog is silent on all three. The split is the purpose of the clause, not a Verilator
-omission: `always_comb` models combinational logic, so its output must always be a function
-of its inputs and any other write destroys that property, whereas `always_ff` models a
-register and the declaration initializer is that register's power-on value —
-`logic [7:0] c = 0; always_ff @(posedge clk) c <= c + 1;` is the standard FPGA idiom.
-A plain `always` is excluded for a different reason: `logic clk = 0; always #5 clk = ~clk;`
-is a testbench idiom every tool accepts and the clause reaches only inferring procedures.
-`initial` and `final` are excluded likewise.
+iverilog is silent on all three. The `always_comb` split is the purpose of the clause, not a
+Verilator omission: `always_comb` models combinational logic, so its output must always be a
+function of its inputs and any other write destroys that property, whereas `always_ff` models
+a register and the declaration initializer is that register's power-on value —
+`logic [7:0] c = 0; always_ff @(posedge clk) c <= c + 1;` is the standard FPGA idiom, which
+one tool rejects and the other implements. That disagreement is why the `always_ff` and
+`always_latch` rows are the warning [`VITA-W3060`](#vita-w3060--w-elab-ff-initializer-warning)
+rather than this error.
 
-The `always_comb` decision procedure over-approximates, so one guard is attached: the
-definite-assignment walk is name-based and treats an unresolved call as a write, which
-false-positives when a block-local shadow redeclares the same name inside the `always_comb`.
-A procedure that declares a local of that name is skipped whole. A write through a task
-`inout` actual is still a driver.
+⚠️ This row alone keeps the CONSERVATIVE write walk, which counts a variable passed to a task
+or function call as written. Verilator agrees on the shape that matters: it reports
+`MULTIDRIVEN` for `int acc = 0; task bump(inout int v); …; always_comb bump(acc);`, an actual
+bound to an `inout` formal. The row below cannot share that walk, because it would also count
+an actual bound to an `input` formal, which Verilator does not.
 
-**Fix:** separate the overlapping part-select ranges or restructure to a single driver; or
-drop either the initializer or the `always_comb` write. Not suppressible; there is no policy
-flag to demote it to a warning.
+**An inferring procedure plus any other module-scope writer.** IEEE 1800-2017 §9.2.2.2
+(`always_comb`), §9.2.2.3 (`always_latch`) and §9.2.2.4 (`always_ff`) each say the variable
+"shall not be written by any other process". The other writer may be an `initial`, a plain
+`always`, another `always_*`, a `final`, or a continuous `assign` whose lvalue root is that
+variable.
+```
+int n;  initial n = 0;                        // driver 1
+always_ff @(posedge clk) n <= n + 1;          // driver 2
+->  m.sv:3:25: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `n` is written by `always_ff`
+    AND by `initial`, which is two drivers on one variable (IEEE §9.2.2.4)
+    — verilator MULTIDRIVEN / xcelium *E,MULAXX
+```
+Verilator reports `MULTIDRIVEN` for every one of those pairs except the `always_latch` ones,
+where it is silent; Xcelium rejects those too, so an `always_latch` pair is demoted to the
+warning [`VITA-W3060`](#vita-w3060--w-elab-multidriver-strict-warning) and only the
+`always_comb` and `always_ff` pairs reach this error. A pair with *no* inferring procedure
+among the writers — `initial` beside a plain `always`, or `logic clk = 0; always #5 clk =
+~clk;` — is accepted by both tools and stays silent.
+
+One diagnostic is emitted per variable, at the inferring procedure, naming the first other
+writer.
+
+Two precision rules keep this from rejecting RTL every tool accepts:
+
+- Only a **direct** write counts: an assignment (blocking, nonblocking, op-assign, `++`/`--`,
+  with or without a delay or intra-assignment event, plus `force` and a procedural `assign`),
+  reached through `begin`/`end`, `if`, `case`, loops and `fork`. A write that reaches the
+  variable through a task or function CALL does not count. The definite-assignment walk used
+  elsewhere treats any name at a call actual as a possible write, because the formal might be
+  an `output`; that is the safe direction for an accept gate and the wrong one for an error.
+  Verilator draws a third line — an actual bound to an `output`/`inout` formal is a write, one
+  bound to an `input` formal and a write inside the callee's own body are not — which needs
+  the formal's direction at this pass and is a queued follow-on.
+- Only a **whole-variable** write counts: the lvalue must be the bare identifier. A struct
+  member (`s.x`), an array element (`mem[a]`), a bit (`bits[0]`) or a part select is a PARTIAL
+  write and does not make a pair. Measured, Verilator is silent on every pair where either
+  side is partial — ten shapes, `always_ff` against `always_ff` and `initial` against
+  `always_ff`, whole-against-partial in both directions:
+
+  | Pair | Verilator |
+  |---|---|
+  | `always_ff s.x <= d;` + `always_ff s.y <= d;` | silent |
+  | `always_ff mem[a] <= 1;` + `always_ff mem[a+1] <= 2;` | silent |
+  | `always_ff bits[0] <= d;` + `always_ff bits[1] <= d;` | silent |
+  | `initial for (i..) m1[i]=0;` + `always_ff m1[a] <= 1;` | silent |
+  | `initial m2 = '{default:0};` + `always_ff m2[a] <= 1;` | silent |
+  | `initial m3[0] = 0;` + `always_ff m3 <= '{default:1};` | silent |
+  | `always_ff w <= 1;` + `initial w[1] = 0;` | silent |
+  | `initial $readmemh(.., rm);` + `always_ff rm[a] <= 1;` | silent |
+  | `always_ff fr <= 1;` + `initial force fr = 4'd2;` | `MULTIDRIVEN` |
+  | `always_ff pca <= 1;` + `initial assign pca = 3;` | `MULTIDRIVEN` |
+
+  **Xcelium on a partial write is UNMEASURED** — zero observations, not "accepts"; the
+  external report covered whole-variable pairs only. vita follows the tool that was actually
+  run and stays silent, and this is the first row to re-measure when an Xcelium run is
+  available.
+- A procedure that DECLARES a block-local of the same name is skipped whole. The walk is
+  name-based and cannot tell a module-scope `n` from a block-local shadow `n`, and iverilog,
+  Verilator and Xcelium all accept the shadow.
+
+Variables and procedures inside a `generate` are out of scope for both variable rows: a
+generate block is its own scope and a `generate for` body is instantiated once per iteration,
+so matching bare names across blocks would report two different variables as one.
+
+**Fix:** separate the overlapping part-select ranges or restructure to a single driver; drop
+either the initializer or the `always_comb` write; or give the variable exactly one writing
+process — seed a register through its reset branch rather than from an `initial`. Not
+suppressible; there is no policy flag to demote it to a warning.
 
 ### VITA-E3002 · `E-ELAB-PORT-MISMATCH` (Error)
 **An instance port binding is incompatible with the module's port declarations.** A named
@@ -808,6 +873,54 @@ literal rather than at the statement, so two escapes on one line are two locatio
 
 **Fix:** write the byte you mean — `"\015"` (octal) or `"\x0D"` (hex) are Table 5-1 escapes
 and read the same everywhere. Suppress with `-Wno-`, promote with `-Werror=`.
+
+### VITA-W3060 · `W-ELAB-MULTIDRIVER-STRICT` (Warning)
+**Two drivers on one variable that Xcelium rejects and Verilator accepts.** Where the two
+oracles agree the shape is the error `VITA-E3001`; where they split, vita warns rather than
+stops. Two shapes reach this code.
+
+**A declaration initializer on a variable written by `always_ff` or `always_latch`.**
+```
+logic [3:0] q = 0;                       // driver 1, per Xcelium
+always_ff @(posedge clk) q <= q + 1;     // driver 2
+->  m.sv:2:3: warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: variable `q` has a declaration
+    initializer AND is written by `always_ff`; xcelium rejects this as two drivers
+    (*E,MULAXX, IEEE §9.2.2.4) while verilator and synthesis accept the initializer as the
+    power-on value — drop the initializer or reset explicitly
+```
+Xcelium stops elaboration with `*E,MULAXX`, reading IEEE 1800 §9.2.2.4 literally: the variable
+is written by the initializer as well as by the procedure. Verilator accepts it (it emits at
+most the `PROCASSINIT` style note), and every FPGA synthesis flow implements the initializer as
+the register's power-on value — it is the standard idiom, and this repository's own
+`obs_procs` fixture is written in it. iverilog says nothing.
+
+**An `always_latch` sharing a variable with another process or a continuous `assign`.**
+```
+logic [31:0] mask;
+always_latch if (en) mask[idx*8 +: 8] = 8'h99;
+initial      mask = '0;
+->  m.sv:3:3: warning[VITA-W3060] W-ELAB-MULTIDRIVER-STRICT: variable `mask` is written by
+    `always_latch` AND by `initial`; xcelium rejects this as two drivers (*E,MULAXX, IEEE
+    §9.2.2.3) while verilator accepts it — give the variable one writing process
+```
+IEEE §9.2.2.3 words the `always_latch` rule exactly as §9.2.2.2 and §9.2.2.4 word theirs, and
+Verilator still reports nothing for any `always_latch` pair measured while reporting
+`MULTIDRIVEN` for the `always_comb` and `always_ff` twins. The severity here follows the tools,
+not the clause, so the `always_comb` and `always_ff` pairs stay `VITA-E3001` and the latch pair
+is this warning.
+
+Making either shape an error was built once and reverted, because it rejected working RTL and a
+test design breaking is evidence against a new rejection rather than for it. Making them silent
+is the expensive kind of quiet: the design is green in the development loop, where the author
+still has the context to fix it, and dies at sign-off.
+
+Only a direct write counts, and a procedure declaring a block-local shadow of the same name is
+skipped — the same two precision rules `VITA-E3001` documents.
+
+**Fix:** give the variable exactly one writing process — drop the initializer and reset the
+register explicitly (`always_ff @(posedge clk) if (rst) q <= 0; else q <= q + 1;`), or seed the
+latch from its own procedure. If the design never targets Xcelium, suppress with
+`-Wno-W-ELAB-MULTIDRIVER-STRICT`; promote with `-Werror=`.
 
 ---
 
@@ -1445,7 +1558,7 @@ an artifact-class failure, not an RTL defect. Not suppressible.
 
 ## Appendix A · Reserved codes (survey inventory)
 
-The body sections above define the 68 codes registered in the `MsgCode` enum. This appendix is
+The body sections above define the 70 codes registered in the `MsgCode` enum. This appendix is
 a separate inventory: 96 additional error and warning conditions defined by IEEE 1800-2017 and
 IEEE 1364-2005, and by the published documentation of Verilator, Icarus iverilog, VCS, Xcelium
 and GHDL. They are collected in advance so that implementing one of those conditions starts

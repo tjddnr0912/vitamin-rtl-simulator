@@ -69,9 +69,14 @@ fn run(src: &str) -> (String, Option<i32>) {
     (s, out.status.code())
 }
 
-/// How many multi-driver diagnostics the run printed.
+/// How many multi-driver ERRORS the run printed.
+///
+/// Counts `VITA-E3001` lines, not a message substring: `VITA-W3060`
+/// (`W-ELAB-MULTIDRIVER-STRICT`) carries the same "declaration initializer AND"
+/// wording for the `always_ff` / `always_latch` shapes that stay accepted, and a
+/// substring count reads those warnings as errors.
 fn drivers(out: &str) -> usize {
-    out.matches("declaration initializer AND").count()
+    out.matches("VITA-E3001").count()
 }
 
 /// The rule itself: elaboration stops, so there is no simulated value to check —
@@ -111,6 +116,9 @@ fn an_always_ff_over_an_initializer_is_accepted() {
     assert_eq!(code, Some(0), "a power-on value is not a driver:\n{out}");
     assert_eq!(drivers(&out), 0, "{out}");
     assert!(out.contains("c=10"), "and it really counts from 0:\n{out}");
+    // …and xcelium's disagreement is still reported, as a warning that does not
+    // stop the run (`VITA-W3060` W-ELAB-MULTIDRIVER-STRICT).
+    assert!(out.contains("VITA-W3060"), "{out}");
 }
 
 /// `always_latch` sits with `always_ff` here, on the same measurement.
@@ -124,6 +132,7 @@ fn an_always_latch_over_an_initializer_is_accepted() {
     assert_eq!(code, Some(0), "{out}");
     assert_eq!(drivers(&out), 0, "{out}");
     assert!(out.contains("lat=1"), "{out}");
+    assert!(out.contains("VITA-W3060"), "{out}");
 }
 
 /// The clock generator every testbench has. If this ever starts firing, the check

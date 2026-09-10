@@ -3,7 +3,7 @@
 Every diagnostic vitamin prints carries a stable code: a number like `VITA-E3009`
 and a mnemonic like `E-ELAB-UNSUPPORTED`. This chapter defines the rendered
 diagnostic format, the severity levels and how to change them, the process exit
-codes, and the complete catalogue of all 68 registered codes.
+codes, and the complete catalogue of all 70 registered codes.
 
 For installing and running the tools see [Installation](001_installation.md) and
 the [CLI Reference](004_cli-reference.md), which covers `vita` and the staged
@@ -177,8 +177,8 @@ Error and Fatal are the always-logged spine. `-Wno-E-ELAB-UNRESOLVED-NAME` is
 accepted, because the mnemonic resolves, and has no effect: a suppression flag
 can never hide a real failure.
 
-Of the 68 registered codes, 30 default to Warning and 2 to Info, so those 32 are
-the suppressible set by default. Promotion applies to the 30 Warning-default
+Of the 70 registered codes, 31 default to Warning and 2 to Info, so those 33 are
+the suppressible set by default. Promotion applies to the 31 Warning-default
 codes. Notes are suppressed through their parent error's code, which drops the
 note while the error itself still prints.
 
@@ -260,7 +260,7 @@ same numbers and default severities as the tables below. Its prose is written in
 Korean.
 
 The registry and that file are kept in step by a test that asserts a 1:1
-correspondence between the 68 enum entries and the 68 document entries, and that
+correspondence between the 69 enum entries and the 69 document entries, and that
 each entry's number and severity match the registry. Adding a code without a
 document entry, or the reverse, fails the build gate.
 
@@ -404,10 +404,11 @@ connectivity, parameter resolution.
 | `VITA-W3057` | `W-ELAB-AUTOTOP-AMBIGUOUS` | Warning | The design has several uninstantiated roots and auto-top picked one. Pin the intended root with `--top`. |
 | `VITA-W3058` | `W-ELAB-STR-TERNARY` | Warning | A ternary whose arms are string literals is an integral value, so `$display` prints it as a number rather than as text. |
 | `VITA-W3059` | `W-ELAB-STR-ESCAPE` | Warning | A string literal uses an escape IEEE 1800 Table 5-1 does not define, and tools read it differently. One line per literal-and-escape pair for the whole run. |
+| `VITA-W3060` | `W-ELAB-MULTIDRIVER-STRICT` | Warning | Two drivers on one variable that Xcelium rejects (`*E,MULAXX`) and Verilator accepts: a declaration initializer on an `always_ff`/`always_latch` variable, or an `always_latch` sharing a variable with another process. |
 
 ### `E-ELAB-MULTIDRIVER` in detail
 
-Two shapes reach this code.
+Three shapes reach this code.
 
 A **net** driven by more than one continuous assignment is an error only when the
 overlap is one the engine does not model. Whole-net, non-delayed continuous
@@ -435,10 +436,42 @@ is two drivers on one variable under IEEE 1800 §9.2.2.2:
 md3.sv:3:3: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `v` has a declaration initializer AND is written by `always_comb`, which is two drivers on one variable (IEEE §9.2.2.2) — drop the initializer or the `always_comb` write [in top]
 ```
 
-`always_ff`, `always_latch`, plain `always` and `initial` are unaffected: a
-register's declaration initializer is its power-on value. Both
-`logic [7:0] c = 0; always_ff @(posedge clk) c <= c + 1;` and
-`logic clk = 0; always #5 clk = ~clk;` are legal.
+A **variable** written by an `always_comb`, `always_ff` or `always_latch`
+procedure and *also* written by any other module-scope process (`initial`,
+`always`, another `always_*`, `final`) or by a continuous `assign` is two drivers
+under IEEE 1800 §9.2.2.2, §9.2.2.3 and §9.2.2.4, which each say the variable
+"shall not be written by any other process":
+
+```
+md4.sv:3:25: error[VITA-E3001] E-ELAB-MULTIDRIVER: variable `n` is written by `always_ff` AND by `initial`, which is two drivers on one variable (IEEE §9.2.2.4) — verilator MULTIDRIVEN / xcelium *E,MULAXX [in top]
+```
+
+Only a *direct*, *whole-variable* write counts. Direct means an assignment
+(including `force` and a procedural `assign`), not a write that reaches the
+variable through a task or function call — `initial wt();` where
+`task wt(); v = 3; endtask` is not a driver here, because a variable merely passed
+to an `input` formal would otherwise be reported too. Whole means the lvalue is the
+bare identifier: a struct member (`s.x`), an array element (`mem[a]`), a bit
+(`bits[0]`) or a part select is a partial write and does not make a pair, which is
+what Verilator does on every partial pair measured. Xcelium's behaviour on a partial
+write has not been measured.
+
+Two shapes are deliberately not errors:
+
+- A declaration initializer with an `always_ff` or `always_latch` write is a
+  register's power-on value. Verilator and synthesis accept it, Xcelium does not,
+  so it is the warning `W-ELAB-MULTIDRIVER-STRICT` rather than an error.
+- An `always_latch` sharing a variable with another process is the same split:
+  Verilator reports nothing for any latch pair measured while reporting
+  `MULTIDRIVEN` for the `always_comb` and `always_ff` twins, so it is that warning
+  too. Only the `always_comb` and `always_ff` pairs are errors.
+- Plain `always` and `initial` writers with no `always_*` procedure among them
+  are not covered by any of the three clauses. `logic clk = 0; always #5 clk =
+  ~clk;` is legal, and so is an `initial` seed beside a plain `always`.
+
+Variables and procedures inside a `generate` are not checked: a generate block is
+its own scope, so matching them by bare name across blocks would report two
+different variables as one.
 
 ### The most common `E-ELAB-UNSUPPORTED`: a real value where an integer is required
 

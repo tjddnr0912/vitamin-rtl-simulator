@@ -223,7 +223,7 @@ The schemas are specified in
 | Platforms | Linux and macOS. CI builds and tests on ubuntu-latest, macos-latest and a RHEL 9 / UBI 9 container. Windows is not a target |
 | Tests | `cargo nextest run --workspace --locked` runs 7388 tests, all passing, with 15 skipped (they are `#[ignore]`d performance probes, not gates), in about 36 s. CI runs `cargo test --workspace --locked` |
 | Artifact format version | 31 |
-| Diagnostics | 68 codes, each with a mnemonic, a `VITA-####` number and a reference entry |
+| Diagnostics | 70 codes, each with a mnemonic, a `VITA-####` number and a reference entry |
 | Licence | MIT or Apache-2.0, at your option |
 
 ## Where to read next
