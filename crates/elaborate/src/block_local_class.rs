@@ -128,6 +128,77 @@ pub(crate) fn for_each_proc(
     walk_items(items, &mut Vec::new(), f);
 }
 
+/// §2 Scoping (subroutine block-locals): every module-scope `task`/`function` BODY,
+/// including the ones declared inside a `generate`, with the same branch path
+/// [`for_each_proc`] carries.
+///
+/// The two classifiers below used to see procedural blocks only, so
+/// `scoped_block_locals` never held a span from a subroutine body and
+/// `block_local_scope_seg` answered `None` for every block inside one. That is the
+/// whole reason two same-named sibling block-locals in a task/function shared one net
+/// while the identical shape in an `initial` was correct (§4.5.475).
+///
+/// PACKAGE / CLASS / INTERFACE subroutines are deliberately NOT here: they reach the
+/// reservers through their own callers with their own name sets, were not measured,
+/// and stay exactly as they are.
+pub(crate) fn for_each_subroutine_body(
+    items: &[ast::ModuleItem],
+    f: &mut impl FnMut(&ast::Stmt, &BranchPath),
+) {
+    fn gen_items(
+        items: &[ast::GenItem],
+        path: &mut BranchPath,
+        f: &mut impl FnMut(&ast::Stmt, &BranchPath),
+    ) {
+        for it in items {
+            match it {
+                ast::GenItem::For { body, .. } | ast::GenItem::Block { items: body, .. } => {
+                    gen_items(body, path, f)
+                }
+                ast::GenItem::If {
+                    then_b,
+                    else_b,
+                    span,
+                    ..
+                } => {
+                    for (arm, b) in [(0u32, then_b), (1, else_b)] {
+                        path.push((span.lo, arm));
+                        gen_items(b, path, f);
+                        path.pop();
+                    }
+                }
+                ast::GenItem::Case { items, span, .. } => {
+                    for (arm, ci) in items.iter().enumerate() {
+                        let body = match ci {
+                            ast::GenCaseItem::Match { body, .. }
+                            | ast::GenCaseItem::Default { body, .. } => body,
+                        };
+                        path.push((span.lo, arm as u32));
+                        gen_items(body, path, f);
+                        path.pop();
+                    }
+                }
+                ast::GenItem::Item(mi) => walk_items(std::slice::from_ref(mi), path, f),
+            }
+        }
+    }
+    fn walk_items(
+        items: &[ast::ModuleItem],
+        path: &mut BranchPath,
+        f: &mut impl FnMut(&ast::Stmt, &BranchPath),
+    ) {
+        for item in items {
+            match item {
+                ast::ModuleItem::Task(t) => f(&t.body, path),
+                ast::ModuleItem::Func(fd) => f(&fd.body, path),
+                ast::ModuleItem::Generate(g) => gen_items(&g.items, path, f),
+                _ => {}
+            }
+        }
+    }
+    walk_items(items, &mut Vec::new(), f);
+}
+
 impl Elaborator<'_> {
     /// DUP (round-5): decide which `automatic` block-locals need a `$blk$<span>`
     /// scope segment. Returns block `span.lo` → the set of local NAMES to scope in
@@ -151,15 +222,31 @@ impl Elaborator<'_> {
         //     the generate branch it sits under.
         let mut per_name: BTreeMap<String, Vec<(u32, u32, AdmitReason)>> = BTreeMap::new();
         let mut branch_of: BTreeMap<(u32, u32), BranchPath> = BTreeMap::new();
-        for_each_proc(&module.body, &mut |p, path| {
+        let gather = |body: &ast::Stmt,
+                      path: &BranchPath,
+                      per_name: &mut BTreeMap<String, Vec<(u32, u32, AdmitReason)>>,
+                      branch_of: &mut BTreeMap<(u32, u32), BranchPath>| {
             let before: BTreeMap<String, usize> =
                 per_name.iter().map(|(k, v)| (k.clone(), v.len())).collect();
-            Self::gather_auto_block_locals(&p.body, module_names, &mut per_name);
+            Self::gather_auto_block_locals(body, module_names, per_name);
             for (name, spans) in per_name.iter() {
                 for &(lo, hi, _) in &spans[before.get(name).copied().unwrap_or(0)..] {
                     branch_of.entry((lo, hi)).or_insert_with(|| path.clone());
                 }
             }
+        };
+        for_each_proc(&module.body, &mut |p, path| {
+            gather(&p.body, path, &mut per_name, &mut branch_of);
+        });
+        // §2 Scoping (subroutine block-locals): the module's task/function bodies feed
+        // the SAME gatherer with the SAME `module_names` set the proc walk passes, so a
+        // block-local inside a subroutine earns a `$blk$<lo>` segment under exactly the
+        // admission rules a module-process one does — no new `AdmitReason`. A subroutine
+        // FORMAL or a body-top local is NOT in `module_names`, so a block-local that
+        // shadows one is not admitted by the shadow rule; that shape is loud today
+        // (E3009 "referenced outside its `begin…end` block") and stays loud.
+        for_each_subroutine_body(&module.body, &mut |body, path| {
+            gather(body, path, &mut per_name, &mut branch_of);
         });
         let coexist = |a: (u32, u32), b: (u32, u32)| match (branch_of.get(&a), branch_of.get(&b)) {
             (Some(pa), Some(pb)) => branches_coexist(pa, pb),
@@ -538,6 +625,20 @@ impl Elaborator<'_> {
     ///   the sharing, so two `automatic` locals that both got scoped are two
     ///   variables, not one. Counting them was a false-loud on a shape that already
     ///   worked (`block_scope_two_level::struct_member_static_branch…`).
+    ///
+    /// ⚠️ §2 Scoping (subroutine block-locals): this one deliberately keeps walking
+    /// `for_each_proc` ONLY, while `compute_scoped_block_locals` above now also walks
+    /// the module's subroutine bodies. The set is a module-wide set of bare NAMES with
+    /// no span, and its only readers are in the module-process hoist
+    /// (`block_local/hoist.rs`), which is not a path any subroutine local takes — so
+    /// adding subroutine names buys that path nothing and can only make it louder.
+    /// Measured (cell R5: a task declaring `v` in two blocks beside an `initial` block
+    /// that declares its own `v` and reads it unassigned): both oracles print
+    /// `p=0 t1=1 t2=2`, and feeding the subroutine bodies in here turns the module
+    /// process's own `v` — a lone block-local with a net of its own — into
+    /// `error[VITA-E3009] … block-local `v` shares one flattened net with a same-named
+    /// block-local in another block but is READ before it is assigned here`. A
+    /// correct → loud regression, so the walk stays as it is.
     pub(crate) fn compute_coalesced_block_locals(
         module: &ast::ModuleDecl,
         module_names: &std::collections::BTreeSet<String>,
@@ -592,5 +693,38 @@ impl Elaborator<'_> {
         } else {
             None
         }
+    }
+
+    /// §2 Scoping (subroutine block-locals): the `$blk$…` prefix a block-local decl
+    /// must be RESERVED under, given the chain of enclosing block spans
+    /// [`crate::block_local::collect_block_local_decls_spanned`] returns.
+    ///
+    /// It has to mirror the Logic-phase `Stmt::Block` arm (`stmt_main.rs:604`) exactly,
+    /// or the write lands on one net and the read on another:
+    /// * an ENCLOSING block contributes a segment whenever it is scoped AT ALL
+    ///   (`scoped_block_locals.contains_key`) — that arm wraps a scoped block's whole
+    ///   body, scoped names or not;
+    /// * the DECLARING block contributes one only when this decl itself is selected by
+    ///   [`Self::block_local_scope_seg`]'s deliberate ANY rule — an unselected decl in a
+    ///   scoped block keeps the outer net, and reads from inside still reach it because
+    ///   `walk_scopes_key` treats `$blk$` as transparent.
+    ///
+    /// `None` ⇒ no wrap, i.e. the pre-existing bare-name reservation, byte for byte.
+    pub(crate) fn block_local_scope_prefix(
+        &self,
+        chain: &[ast::Span],
+        d: &ast::NetVarDecl,
+    ) -> Option<String> {
+        let mut segs: Vec<String> = Vec::new();
+        for (i, sp) in chain.iter().enumerate() {
+            if i + 1 == chain.len() {
+                if let Some(seg) = self.block_local_scope_seg(*sp, d) {
+                    segs.push(seg);
+                }
+            } else if self.scoped_block_locals.contains_key(&sp.lo) {
+                segs.push(format!("$blk${}", sp.lo));
+            }
+        }
+        (!segs.is_empty()).then(|| segs.join("."))
     }
 }

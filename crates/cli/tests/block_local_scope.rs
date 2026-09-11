@@ -8,6 +8,15 @@
 //! leak LOUD (correct-or-loud), while a block-local used only inside its own block
 //! keeps working. Loud cases are pinned to "vita errors"; the working cases are
 //! pinned to iverilog 13.0 values.
+//!
+//! ⚠️ Four of the "is_loud" cells no longer are, and are pinned to the three-tool VALUE
+//! with a note at each: `leak_procedural_block_is_loud` (a MODULE process, §4.5.475) and
+//! the three function-body ones (§2 Scoping, subroutine block-locals). What all four
+//! have in common is a block-local that SHADOWS A MODULE NET — it now earns its own
+//! `$blk$` net, so the outside read resolves outward to the module net instead of
+//! leaking. `leak_ancestor_redeclares_name_is_loud` is the cell that stays loud: no
+//! module name is shadowed there, so no declaring span is admitted and the coalesce
+//! hazard is still refused. The names are kept so the history of each cell is findable.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -34,39 +43,57 @@ fn run(src: &str) -> (String, Option<i32>) {
 
 #[test]
 fn leak_shadow_read_after_block_is_loud() {
-    // Inner block local `x` read at function-body level: should be module `x`=10
-    // (iverilog), vita used to silently read the block-local (5).
-    let (_o, code) = run("module top; int x=10; function int f(); int y; \
+    // ⚠️ NO LONGER LOUD — same move the module-process twin below already made, now on
+    // the SUBROUTINE path. §2 Scoping (subroutine block-locals) feeds the module's
+    // task/function bodies to `compute_scoped_block_locals`, so a block-local that
+    // SHADOWS a module net earns its own `$blk$` net inside a function too; there is no
+    // leak left to be loud about and the outer read resolves to the module net.
+    // Re-measured 3-way at the fix: iverilog 13 `r=10`, verilator 5.052 `r=10`, vita
+    // `r=10`. Pinned to the VALUE.
+    let (o, code) = run("module top; int x=10; function int f(); int y; \
          begin: ib int x; x=5; end y=x; return y; endfunction \
          initial begin $display(\"r=%0d\",f()); #1 $finish; end endmodule\n");
-    assert_ne!(
-        code,
-        Some(0),
-        "block-local read after its block must be loud"
+    assert_eq!(code, Some(0), "the shadow is scoped now:\n{o}");
+    assert!(
+        o.contains("r=10"),
+        "the outer read must see the module net:\n{o}"
     );
 }
 
 #[test]
 fn leak_sibling_blocks_is_loud() {
-    let (_o, code) = run("module top; int x=10; function int f(); int y; \
+    // ⚠️ NO LONGER LOUD (§2 Scoping, subroutine block-locals). Two SIBLING blocks each
+    // shadowing the module `x` are now two `$blk$` nets, and the read after both blocks
+    // is the module net. Re-measured 3-way: iverilog 13 `r=10`, verilator 5.052 `r=10`,
+    // vita `r=10`.
+    let (o, code) = run("module top; int x=10; function int f(); int y; \
          begin: a int x; x=1; end begin: b int x; x=2; end y=x; return y; endfunction \
          initial begin $display(\"r=%0d\",f()); #1 $finish; end endmodule\n");
-    assert_ne!(
-        code,
-        Some(0),
-        "sibling block-locals read outside must be loud"
+    assert_eq!(code, Some(0), "both shadows are scoped now:\n{o}");
+    assert!(
+        o.contains("r=10"),
+        "the outer read must see the module net:\n{o}"
     );
 }
 
 #[test]
 fn leak_nested_block_read_in_outer_is_loud() {
-    let (_o, code) = run("module top; int x=10; function int f(); int y; \
+    // ⚠️ NO LONGER LOUD (§2 Scoping, subroutine block-locals). The NESTED block's `x`
+    // shadows the module `x` and gets its own `$blk$` net, so the read in the enclosing
+    // block `m` — which declares no `x` of its own — resolves outward to the module net.
+    // Re-measured 3-way: iverilog 13 `r=10`, verilator 5.052 `r=10`, vita `r=10`.
+    //
+    // `leak_ancestor_redeclares_name_is_loud` below is the case that STAYS loud, and it
+    // is the reason this one is safe: there the ENCLOSING block declares its own `x`
+    // too, nothing shadows a module name, so no span is admitted and the coalesce
+    // hazard is still refused.
+    let (o, code) = run("module top; int x=10; function int f(); int y; \
          begin: m begin: inner int x; x=3; end y=x; end return y; endfunction \
          initial begin $display(\"r=%0d\",f()); #1 $finish; end endmodule\n");
-    assert_ne!(
-        code,
-        Some(0),
-        "deeper block-local read in outer block must be loud"
+    assert_eq!(code, Some(0), "the nested shadow is scoped now:\n{o}");
+    assert!(
+        o.contains("r=10"),
+        "the outer read must see the module net:\n{o}"
     );
 }
 

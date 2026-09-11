@@ -31,8 +31,9 @@
 //!
 //! Every value pinned here was measured 3-way: vita, iverilog 13 (`-g2012`) and
 //! verilator 5.052 (`--binary --timing`), all three identical. The exceptions are
-//! noted at their test: `c86` is a vita-only residue (both oracles disagree with it),
-//! and `c40`'s loud is vita's own representation, not an oracle verdict.
+//! noted at their test: `c40`'s loud is vita's own representation, not an oracle
+//! verdict. (`c86` used to be a vita-only residue; §2 Scoping (subroutine
+//! block-locals) closed it and it is now pinned to the both-oracle value.)
 //!
 //! ## What stays LOUD, and why
 //!
@@ -645,16 +646,19 @@ endmodule
     );
 }
 
-/// c86 — NOT a pass. Two sibling labelled blocks inside ONE STATIC task body still
-/// coalesce onto one net, so both readers see the LAST initializer: vita prints
-/// `o1=55 o2=55` where both oracles print `o1=44 o2=55`. That is a recorded ROADMAP
-/// §2 residue on a different storage path (`frames_reserve.rs::
-/// reserve_frame_block_locals`, the frame path), which this slice does not touch. It
-/// is pinned at its measured value so the day the frame path is fixed this test fails
-/// and is updated rather than the regression going unnoticed. Two separate static
-/// tasks, a `task automatic`, and a re-entry ladder are all correct today.
+/// c86 — the residue this test used to pin is CLOSED. Two sibling labelled blocks
+/// inside ONE STATIC task body used to coalesce onto one net, so both readers saw the
+/// LAST initializer and vita printed `o1=55 o2=55` where both oracles print
+/// `o1=44 o2=55`. §2 Scoping (subroutine block-locals) fed the module's task/function
+/// bodies to `compute_scoped_block_locals` and taught the two subroutine reservers
+/// (`inline_task.rs::hoist_inline_task_locals` — which is the path this shape takes,
+/// NOT `reserve_frame_block_locals` as this comment used to say — and
+/// `frames_reserve.rs::reserve_frame_block_locals`) to reserve under the declaring
+/// block's `$blk$<lo>` segment. Re-measured 3-way at the fix: iverilog 13 `o1=44
+/// o2=55`, verilator 5.052 `o1=44 o2=55`, vita `o1=44 o2=55`. Two separate static
+/// tasks, a `task automatic`, and a re-entry ladder were and stay correct.
 #[test]
-fn c86_sibling_blocks_in_one_static_task_body_are_a_recorded_residue() {
+fn c86_sibling_blocks_in_one_static_task_body_are_two_variables() {
     lines(
         r#"module t;
   int o1, o2;
@@ -671,6 +675,6 @@ fn c86_sibling_blocks_in_one_static_task_body_are_a_recorded_residue() {
   initial begin tt; #2 $display("o1=%0d o2=%0d", o1, o2); $finish; end
 endmodule
 "#,
-        &["o1=55 o2=55"],
+        &["o1=44 o2=55"],
     );
 }

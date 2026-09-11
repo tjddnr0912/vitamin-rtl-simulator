@@ -81,31 +81,63 @@ pub(crate) fn gather_nested_block_locals(
 /// inside a `begin … end` resolves (previously unresolved → E3010, for frame
 /// functions AND tasks alike).
 pub(crate) fn collect_block_local_decls(s: &ast::Stmt, out: &mut Vec<ast::NetVarDecl>) {
+    let mut spanned = Vec::new();
+    collect_block_local_decls_spanned(s, &mut Vec::new(), &mut spanned);
+    out.extend(spanned.into_iter().map(|(_, d)| d));
+}
+
+/// §2 Scoping (subroutine block-locals): the span-carrying twin of
+/// [`collect_block_local_decls`]. Each decl is returned with the CHAIN of enclosing
+/// `begin…end`/`fork` spans, outermost first, the declaring block last.
+///
+/// The bare-name key is exactly what made two same-named sibling block-locals inside
+/// one subroutine share a net (`hoist_inline_task_locals` / `reserve_frame_block_locals`
+/// both key on `self.fq(&decl.name.name)` under ONE per-subroutine segment). The
+/// reservers need the declaring block to reproduce the `$blk$<lo>` segment the
+/// Logic-phase `Stmt::Block` arm wraps the body in; the CHAIN — not just the declaring
+/// span — because that arm nests its segments, so a decl two levels down sits at
+/// `…$blk$<outer>.$blk$<inner>` and a flat single segment would miss it.
+///
+/// The recursion is the one above, verbatim: the same statement forms, and the
+/// outermost body block's own decls included (the parser leaves them empty, and
+/// `gather_auto_block_locals` treats a process's top block the same way).
+pub(crate) fn collect_block_local_decls_spanned(
+    s: &ast::Stmt,
+    chain: &mut Vec<ast::Span>,
+    out: &mut Vec<(Vec<ast::Span>, ast::NetVarDecl)>,
+) {
     use ast::Stmt::*;
     match s {
-        Block { decls, stmts, .. } | Fork { decls, stmts, .. } => {
-            out.extend(decls.iter().cloned());
+        Block {
+            decls, stmts, span, ..
+        }
+        | Fork {
+            decls, stmts, span, ..
+        } => {
+            chain.push(*span);
+            out.extend(decls.iter().map(|d| (chain.clone(), d.clone())));
             for st in stmts {
-                collect_block_local_decls(st, out);
+                collect_block_local_decls_spanned(st, chain, out);
             }
+            chain.pop();
         }
         If { then_s, else_s, .. } => {
-            collect_block_local_decls(then_s, out);
+            collect_block_local_decls_spanned(then_s, chain, out);
             if let Some(e) = else_s {
-                collect_block_local_decls(e, out);
+                collect_block_local_decls_spanned(e, chain, out);
             }
         }
         Case { items, .. } => {
             for it in items {
                 match it {
                     ast::CaseItem::Match { body, .. } | ast::CaseItem::Default { body, .. } => {
-                        collect_block_local_decls(body, out)
+                        collect_block_local_decls_spanned(body, chain, out)
                     }
                 }
             }
         }
         For { body, .. } | While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
-            collect_block_local_decls(body, out)
+            collect_block_local_decls_spanned(body, chain, out)
         }
         _ => {}
     }

@@ -76,6 +76,7 @@ mod expr_ctx;
 mod expr_main;
 mod expr_size_ctx;
 mod expr_special;
+mod frames_blocal;
 mod frames_body;
 mod frames_call;
 mod frames_classify;

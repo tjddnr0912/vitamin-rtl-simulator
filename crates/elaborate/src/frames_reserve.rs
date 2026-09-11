@@ -642,33 +642,6 @@ impl Elaborator<'_> {
         }
     }
 
-    pub(crate) fn reserve_frame_block_locals(&mut self, body: &ast::Stmt, base_net: u32) -> u64 {
-        let mut decls = Vec::new();
-        collect_block_local_decls(body, &mut decls);
-        let mut auto_override = 0u64;
-        for d in &decls {
-            for decl in &d.names {
-                let fq = self.fq(&decl.name.name);
-                if let Some(&existing) = self.symbols.get(&fq) {
-                    // EXT2-H guard: a block-local UNPACKED ARRAY that shadows a
-                    // same-named outer scalar coalesces onto that (shape-blind) net —
-                    // mark the coalesced net so an element write `y[k]=v` stays loud,
-                    // not a silent scalar bit-write.
-                    if !decl.unpacked.is_empty() {
-                        self.frame_array_local.insert(existing);
-                    }
-                    continue; // coalesce with an already-reserved formal/local
-                }
-                let slot = self.nets.len() as u32 - base_net;
-                self.reserve_frame_local_decl(&decl.name.name, d, &decl.unpacked);
-                if d.lifetime == Some(true) && slot < 64 {
-                    auto_override |= 1u64 << slot;
-                }
-            }
-        }
-        auto_override
-    }
-
     pub(crate) fn reserve_frame_func(&mut self, name: &str, func: &ast::FunctionDef) {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
