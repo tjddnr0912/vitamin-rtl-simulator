@@ -1012,7 +1012,7 @@ impl Elaborator<'_> {
     /// declaration. This bit domain indexes positionally from 0 and carries no
     /// direction, so reading `[7:4]`'s or `[0:31]`'s bits through it would read the
     /// declared range backwards.
-    fn pkg_const_narrow_bits(&self, pkg: &str, name: &str) -> Option<WideBits> {
+    pub(crate) fn pkg_const_narrow_bits(&self, pkg: &str, name: &str) -> Option<WideBits> {
         let (lo, w, ascending) = self.pkg_const_range.get(pkg)?.get(name).copied()?;
         if lo != 0 || ascending {
             return None;

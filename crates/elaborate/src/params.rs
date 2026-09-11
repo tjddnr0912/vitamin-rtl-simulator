@@ -445,7 +445,18 @@ impl Elaborator<'_> {
                 // full `(width, signed)` (MISS → value-inferred, as above).
                 if let ast::ExprKind::PkgScoped { pkg, name } = &e.kind {
                     if declared_only {
-                        return None; // inherited meta — provenance unknown here
+                        // §2 "Index sealing" ⓒ: the provenance IS knowable — it is
+                        // `pkg_const_narrow_bits`, the package twin of
+                        // `narrow_param_bits`, which answers only when
+                        // `pkg_const_range` and `pkg_const_meta` AGREE and declines a
+                        // value-inferred width, a non-zero LSB and an ascending
+                        // declaration exactly as the module resolver does. Before it
+                        // was consulted here `localparam R = pk::PW;` over a
+                        // `parameter logic [35:0]` recorded nothing, so `#(.P(R))`
+                        // bound ONE bit / 0 where both oracles bind 36 / `a`.
+                        return self
+                            .pkg_const_narrow_bits(&pkg.name, &name.name)
+                            .map(|(_, w, s)| (w, s));
                     }
                     return self
                         .pkg_const_meta
@@ -670,6 +681,32 @@ impl Elaborator<'_> {
                                 }
                             }
                         }
+                    }
+                }
+                // An integer-returning SYSTEM function is type-determined for the same
+                // reason the user-function CALL below is: §20.8 fixes `$clog2`'s
+                // result at a 32-bit signed integer whatever its argument was, and
+                // `const_self_width`/`const_signed_env` have said so (32, signed)
+                // since the `**` exponent work. This inference never ASKED — there was
+                // no `SysCall` arm in this function at all — so `localparam A =
+                // $clog2(300);` reached the value-inferred tail, recorded no
+                // `param_range` (`param_decl_range_opt` is built on this answer), and
+                // every consumer that requires DECLARED provenance then declined:
+                // `logic [(~A)[15:8]+8-1:0] v;` declared ONE bit where both oracles
+                // declare 263, and `#(.P(~A))` bound the leaf's own default width.
+                //
+                // Both lanes, unlike the literal arms above: a system function's
+                // return type is not replaced by an override the way an untyped
+                // parameter's initializer literal is — §6.20.2 retypes from the
+                // OVERRIDE's value, and this arm only ever answers for a declaration
+                // whose own initializer is the call. `const_eval_in_scope` must
+                // already fold it (the Call arm's rule, and row 30's "correct a value,
+                // never create one"), and `sys_fn_is_integer` is a NAMED list so a
+                // real-returning call cannot reach the integer width.
+                if let ast::ExprKind::SysCall { name, .. } = &p.value.kind {
+                    if sys_fn_is_integer(&name.name) && self.const_eval_in_scope(&p.value).is_some()
+                    {
+                        return Some((32, true));
                     }
                 }
                 // A constant-function CALL is type-determined too: the parameter

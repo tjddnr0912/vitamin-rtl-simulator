@@ -562,11 +562,28 @@ impl Elaborator<'_> {
     /// declared fact?" — so it stays one resolver rather than a predicate copied into
     /// a second place.
     pub(crate) fn declared_override_widths(&self, e: &ast::Expr) -> Option<ConstWidths> {
-        fn names<'a>(e: &'a ast::Expr, out: &mut Vec<&'a ast::HierPath>) -> bool {
+        // A leaf this gate certifies. Two shapes, because the two resolvers behind
+        // them are different maps (`param_range`/`params` vs
+        // `pkg_const_range`/`pkg_consts`) and the env keys they land under differ
+        // too — see `pkg_envw_key` for why the package key is QUALIFIED.
+        enum Leaf<'a> {
+            Bare(&'a ast::HierPath),
+            Pkg(&'a ast::Ident, &'a ast::Ident),
+        }
+        fn names<'a>(e: &'a ast::Expr, out: &mut Vec<Leaf<'a>>) -> bool {
             use ast::ExprKind as K;
             match &e.kind {
                 K::Ident(p) if p.segments.len() == 1 => {
-                    out.push(p);
+                    out.push(Leaf::Bare(p));
+                    true
+                }
+                // §2 "Index sealing" ⓒ: a package constant is a NAME leaf with a
+                // declared width like any other, and its provenance resolver already
+                // exists (`pkg_const_narrow_bits`). Collecting it here is what puts
+                // the width into `envw`, which is the only channel
+                // `ctx_width_names_are_evident` can read it through.
+                K::PkgScoped { pkg, name } => {
+                    out.push(Leaf::Pkg(pkg, name));
                     true
                 }
                 K::Paren { inner } | K::Unary { operand: inner, .. } => names(inner, out),
@@ -593,16 +610,25 @@ impl Elaborator<'_> {
             return None;
         }
         let mut out = ConstWidths::new();
-        for path in found {
-            // The REAL path node, never a synthesized one: `narrow_param_bits`
-            // resolves the name through the live scope chain, and handing it a
-            // fabricated span would make this resolver answer about a different
-            // occurrence than the one the fold is about to evaluate.
-            let (_, w, signed) = self.narrow_param_bits(path)?;
+        for leaf in found {
+            let (key, w, signed) = match leaf {
+                // The REAL path node, never a synthesized one: `narrow_param_bits`
+                // resolves the name through the live scope chain, and handing it a
+                // fabricated span would make this resolver answer about a different
+                // occurrence than the one the fold is about to evaluate.
+                Leaf::Bare(path) => {
+                    let (_, w, signed) = self.narrow_param_bits(path)?;
+                    (path.segments[0].name.clone(), w, signed)
+                }
+                Leaf::Pkg(pkg, name) => {
+                    let (_, w, signed) = self.pkg_const_narrow_bits(&pkg.name, &name.name)?;
+                    (pkg_envw_key(&pkg.name, &name.name), w, signed)
+                }
+            };
             if w == 0 {
                 return None;
             }
-            out.insert(path.segments[0].name.clone(), (w, signed));
+            out.insert(key, (w, signed));
         }
         Some(out)
     }

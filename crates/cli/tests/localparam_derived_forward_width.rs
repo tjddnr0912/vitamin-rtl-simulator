@@ -277,12 +277,14 @@ fn a_signed_override_forwards_at_four_bits() {
 /// still reads out of range: iverilog's `x` / 1-bit net, which is vita's answer.
 /// verilator reads `52` and a 60-bit net and is not the oracle here.
 ///
-/// `F4` is a RECORDED ROADMAP §2 RESIDUE, not a pass: `W = ~A` over
-/// `localparam A = $clog2(300)` is genuinely 32 bits and both oracles declare a 263-bit
-/// net, where vita declares 1. `A`'s own initializer is a system call that reaches the
-/// value-inferred tail, so `A` has no `param_range` entry, the certification refuses, and
-/// this arm declines exactly as it did PRE. Fixing it needs `A`'s provenance and is a
-/// different row; the line is pinned so that row's move is visible.
+/// ⭐ `F4` was that row's RESIDUE and is CLOSED (§2 "Index sealing" ⓑ). It used to
+/// declare `bitsv=1` where both oracles declare 263, because `localparam A =
+/// $clog2(300)` reached `param_decl_width_opt`'s value-inferred tail and recorded no
+/// `param_range`. `param_decl_width_opt` now has a `SysCall` arm for the three
+/// integer-returning calls the constant domain folds, so `A` records `(0, 32, false)`,
+/// the certification passes, and vita declares the same `263` as iverilog 13 and
+/// verilator 5.052. Everything else on this test is unchanged — `F1`/`G3`/`G4` are the
+/// value-INFERRED operands the fence is actually about and still decline.
 #[test]
 fn the_declared_only_fence_does_not_move() {
     check(
@@ -300,7 +302,7 @@ fn the_declared_only_fence_does_not_move() {
         \x20 logic [(W[15:8])+8-1:0] v;\n\
         \x20 initial begin $display(\"F4 bitsA=%0d bitsW=%0d W=%h sel=%0d bitsv=%0d\", $bits(A), $bits(W), W, W[15:8], $bits(v)); #1 $finish; end\n\
          endmodule\n",
-        &["F4 bitsA=32 bitsW=32 W=fffffff6 sel=255 bitsv=1"],
+        &["F4 bitsA=32 bitsW=32 W=fffffff6 sel=255 bitsv=263"],
     );
     check(
         "module t;\n\
@@ -330,9 +332,11 @@ fn the_declared_only_fence_does_not_move() {
 /// and unchanged: both oracles `72 / fffffffffffffffffe` (verilator clamps the override to
 /// the declared width here and is not the oracle — §6.20.2 width-from-override).
 ///
-/// `W3` — a `$clog2` source, the `F4` refusal on the forwarding lane. vita prints the
-/// leaf's own default (`1 / 0`) where both oracles print `32 / fffffff6`: a RECORDED
-/// ROADMAP §2 residue, unchanged PRE→POST, pinned so its row's move is visible.
+/// ⭐ `W3` — a `$clog2` source, the `F4` refusal on the FORWARDING lane — is CLOSED with
+/// it (§2 "Index sealing" ⓑ). vita used to print the leaf's own default (`1 / 0`); it now
+/// prints the `32 / fffffff6` both oracles print. The `W1` >64-bit source above is
+/// untouched and is the control that says so: it is a `param_meta` absence, not a
+/// `param_range` one, and no arm added here can reach it.
 #[test]
 fn an_unprovable_leaf_still_declines() {
     check(
@@ -367,6 +371,9 @@ fn an_unprovable_leaf_still_declines() {
         \x20 mid #(.Q0(4'd3)) m();\n\
         \x20 initial #1 $finish;\n\
          endmodule\n",
-        &["mid bitsA=32 bitsR=32 R=fffffff6", "leaf bits=1 val=0"],
+        &[
+            "mid bitsA=32 bitsR=32 R=fffffff6",
+            "leaf bits=32 val=fffffff6",
+        ],
     );
 }

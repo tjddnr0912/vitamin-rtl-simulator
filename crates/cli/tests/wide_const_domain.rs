@@ -206,9 +206,14 @@ fn reductions_and_bit_functions_fold() {
 /// same 4 all three tools answer for `$bits(W)`.
 ///
 /// Measured 3-way on all four cells: `^W` is `1` and the bound is `4` in vita, iverilog 13
-/// and verilator 5.052 alike. The DECLINE this pin exists for has moved to the operand
-/// whose width is genuinely value-inferred — a `$clog2` source, whose own initializer
-/// reaches the value-inferred tail and records nothing — and that cell is loud below.
+/// and verilator 5.052 alike.
+///
+/// ⭐ The `$clog2` source is no longer a decline either (§2 "Index sealing" ⓑ):
+/// `param_decl_width_opt` grew a `SysCall` arm for the three integer-returning calls the
+/// constant domain folds, so `localparam A = $clog2(300)` records `(0, 32, false)` and
+/// the reduction over `A | 4'h0` folds to the `0` both oracles print. What this pin
+/// still guards is `param_meta` never being the source: a width INFERRED from a folded
+/// value must not supply a reduction, and the cells above are what say so.
 #[test]
 fn an_inferred_width_never_supplies_a_reduction() {
     folds(
@@ -232,15 +237,16 @@ fn an_inferred_width_never_supplies_a_reduction() {
     );
     assert_eq!(code, Some(0), "{out}");
     assert!(out.contains("4"), "{out}");
-    // ⚠️ THE DECLINE, on the operand whose width no declaration states: `A`'s own
-    // initializer is a system call, so it has no `param_range` entry, the certification
-    // refuses the whole `A | 4'h0` tree, and the reduction is loud. Both oracles answer
-    // `R=0` here — an honest-loud residue (ROADMAP §2), not a pass.
-    loud(
+    // ⭐ PRE this was THE DECLINE: `A`'s initializer is a system call, so it had no
+    // `param_range` entry, the certification refused the whole `A | 4'h0` tree and the
+    // reduction was `error[VITA-E3009] … a reduction of an operand whose width the
+    // constant domain cannot read`. It now folds to the `0` both oracles print.
+    folds(
         "  localparam A = $clog2(300);\n  localparam W = A | 4'h0;\n  \
          localparam logic R = ^W;",
         "%b",
         "R",
+        "0",
     );
     // The same value with the range DECLARED: canonical, and it folds.
     folds(

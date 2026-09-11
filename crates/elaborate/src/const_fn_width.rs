@@ -26,6 +26,36 @@ use super::*;
 /// of its value env, so an assignment can find its target's declared shape.
 pub(crate) type ConstWidths = std::collections::BTreeMap<String, (u32, bool)>;
 
+/// The key `envw` records a `pkg::name` leaf under.
+///
+/// ⚠️ QUALIFIED, and the qualification is load-bearing. `ConstWidths` is keyed by a
+/// plain `String` shared with bare `Ident` leaves, and a module parameter may carry
+/// the same identifier as a package constant: `parameter [7:0] PW = 8'haa;` in the
+/// module beside `pk::PW` at 36 bits, in the one expression `pk::PW + PW`, is a
+/// buildable design (both oracles run it and print `b4`). A bare `PW` key would hand
+/// the module's 8-bit parameter the package constant's 36 bits — a correct→wrong
+/// trade for a silent→value one. One spelling, here, so the writer
+/// (`declared_override_widths`) and the two readers (`ctx_width_names_are_evident`,
+/// `const_self_width`) cannot drift.
+pub(crate) fn pkg_envw_key(pkg: &str, name: &str) -> String {
+    format!("{pkg}::{name}")
+}
+
+/// Does this system function return a 32-bit SIGNED INTEGER *and* fold in the
+/// constant domain?
+///
+/// An explicit list, never a blanket `SysCall`: the width rule below
+/// (`const_self_width`'s `Some(32)` and `const_signed_env`'s `true`) is a claim about
+/// INTEGER-returning calls only, and a real-returning one (`$itor`, `$bitstoreal`,
+/// `$realtime`) would be sized wrong by it the day the const domain learns to fold it.
+/// These three are exactly the ones `const_fn.rs` folds into this domain — `$clog2`
+/// (`:377`), `$rtoi` (`:387`), `$bits` (`:408`). The dimension-query family
+/// (`$size`/`$high`/…) is integer-returning too but is LOUD in every certified
+/// consumer today; admitting it is a loud→value move and belongs to its own row.
+pub(crate) fn sys_fn_is_integer(name: &str) -> bool {
+    matches!(name, "$clog2" | "$bits" | "$rtoi")
+}
+
 /// Does this operator's RESULT take the surrounding context width?
 ///
 /// The context-determined ones widen with their neighbours; the rest — the
@@ -140,11 +170,21 @@ impl Elaborator<'_> {
                         .map_or(32, |(w, _)| w),
                 ),
             },
+            // The CERTIFIED width first, under the qualified key, exactly as the
+            // single-segment `Ident` arm above prefers `envw` over `param_meta`: the
+            // env entry is the one `pkg_const_narrow_bits` proved is a declared fact,
+            // and reading the un-certified map beside it would let the two halves of
+            // one answer come from different declarations.
             K::PkgScoped { pkg, name } => Some(
-                self.pkg_const_meta
-                    .get(&pkg.name)
-                    .and_then(|m| m.get(&name.name))
-                    .map_or(32, |(w, _)| *w),
+                match envw.get(&pkg_envw_key(&pkg.name, &name.name)).copied() {
+                    Some((0, _)) => 32,
+                    Some((w, _)) => w,
+                    None => self
+                        .pkg_const_meta
+                        .get(&pkg.name)
+                        .and_then(|m| m.get(&name.name))
+                        .map_or(32, |(w, _)| *w),
+                },
             ),
             K::Unary { op, operand } => match op {
                 // Context-determined unary: the operand's width.
@@ -782,6 +822,29 @@ impl Elaborator<'_> {
             K::Concat { parts } => parts
                 .iter()
                 .all(|q| Self::ctx_width_names_are_evident(q, envw)),
+            // §2 "Index sealing" ⓑ: an integer-returning system function's width is a
+            // TYPE fact, not an inference — `const_self_width` has answered 32 for it
+            // since the `**` exponent work and `const_signed_env` has answered SIGNED.
+            // This gate simply never asked, so `localparam A = $clog2(300); ~A` and
+            // `#(.P(~$clog2(300)))` fell back to the leaf's own default: ONE bit / 0
+            // where both oracles say 32 / `fffffff6`, and `logic [(W[15:8])+8-1:0] v`
+            // declared 1 bit where both declare 263.
+            //
+            // ⚠️ NAMED list, not a blanket arm — see `sys_fn_is_integer` for why a
+            // real-returning call must not join it, and note that admitting a name
+            // here cannot by itself manufacture a value: the consumers all require
+            // `const_eval_in_scope` to fold the expression first.
+            K::SysCall { name, .. } if sys_fn_is_integer(&name.name) => true,
+            // §2 "Index sealing" ⓒ: a `pkg::` leaf, admitted only when
+            // `declared_override_widths` has already CERTIFIED it under the qualified
+            // key (`pkg_const_narrow_bits` — the package twin of `narrow_param_bits`,
+            // declining a value-inferred width, a non-zero LSB and an ascending
+            // declaration alike). This is an associated fn with no `&self`, so `envw`
+            // is the only channel the certification can arrive through — which is why
+            // the key, not a receiver, is the fix.
+            K::PkgScoped { pkg, name } => {
+                matches!(envw.get(&pkg_envw_key(&pkg.name, &name.name)), Some((w, _)) if *w > 0)
+            }
             _ => false,
         }
     }

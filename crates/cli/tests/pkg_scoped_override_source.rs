@@ -232,11 +232,11 @@ fn the_other_consumers_of_the_predicate() {
         ],
         "{o}"
     );
-    // The bitwise tree over three tops. ⚠️ `pk::PW & ~pk::PZ` is a RECORDED RESIDUE, not
-    // a pass: a `~` inside the tree makes it non-extension-invariant, so the whole
-    // override falls to `override_self_meta`, which is the second rung this slice does
-    // not touch. Both oracles say `bits=36 val=800000001` for BOTH spellings; the bare
-    // twin is right today and the scoped one stays at 32.
+    // The bitwise tree over three tops. ⭐ `pk::PW & ~pk::PZ` WAS the recorded residue
+    // here — a `~` inside the tree makes it non-extension-invariant, so the whole
+    // override falls to `override_self_meta`, the second rung. That rung now certifies a
+    // `PkgScoped` leaf under a qualified key, so `as` prints the `bits=36 val=800000001`
+    // both oracles print, the same as its bare twin `ab`.
     let (o, c) = run(
         "package pk;\n  parameter logic [35:0] PW = 36'h8_0000_0001;\n  parameter logic [35:0] PZ = 36'h0_F0F0_F0F0;\nendpackage\nmodule leaf #(parameter P = 1);\n  initial $display(\"%m bits=%0d val=%h\", $bits(P), P);\nendmodule\nmodule t;\n  import pk::*;\n  leaf #(.P(pk::PW | pk::PZ))   os(); leaf #(.P(PW | PZ))   ob();\n  leaf #(.P(pk::PW & ~pk::PZ))  as(); leaf #(.P(PW & ~PZ))  ab();\n  leaf #(.P(pk::PW ^ 36'h1))    xs(); leaf #(.P(PW ^ 36'h1)) xb();\n  initial #1 $finish;\nendmodule\n",
     );
@@ -246,7 +246,7 @@ fn the_other_consumers_of_the_predicate() {
         [
             "t.os bits=36 val=8f0f0f0f1", // PRE 32/f0f0f0f1
             "t.ob bits=36 val=8f0f0f0f1",
-            "t.as bits=32 val=00000001", // RESIDUE — both oracles 36/800000001
+            "t.as bits=36 val=800000001", // PRE 32/00000001; now = `ab` and both oracles
             "t.ab bits=36 val=800000001",
             "t.xs bits=36 val=800000000", // PRE 32/00000000
             "t.xb bits=36 val=800000000",
@@ -291,27 +291,33 @@ fn the_other_consumers_of_the_predicate() {
 /// RECORDED RESIDUES — these lines are pinned at their UNCHANGED answer so a later slice
 /// sees them move. None of them is a pass.
 ///
-/// - E2 `~pk::PW` and E3 `pk::PW + 1`: an OPERATOR top never reaches `override_bits` and
-///   goes through `override_self_meta`, whose `declared_override_widths::names` and
-///   `ctx_width_names_are_evident` both drop a `PkgScoped` leaf. That is the SECOND rung
-///   and it needs a qualified `ConstWidths` key, not a match arm. Both oracles say
-///   `bits=36 val=7fffffffe` for E2; on E3 verilator says `bits=36 val=800000002` and
-///   iverilog `bits=37` (its documented bound-`+` max+1 self-contradiction, non-evidence).
+/// - ⭐ E2 `~pk::PW` and E3 `pk::PW + 1` are CLOSED (§2 "Index sealing" ⓒ). The second
+///   rung got exactly the qualified `ConstWidths` key this note predicted:
+///   `declared_override_widths::names` now collects a `PkgScoped` leaf, certifies it
+///   through `pkg_const_narrow_bits` under `"{pkg}::{name}"`, and
+///   `ctx_width_names_are_evident` reads it back there. E2 is now `bits=36
+///   val=7fffffffe` — both oracles. E3 is now `bits=36 val=800000002`, verilator's
+///   answer; iverilog says `bits=37` (its documented bound-`+` max+1
+///   self-contradiction, non-evidence).
 /// - L_PA `logic [11:4] PA`: a non-zero declared LSB makes `pkg_const_narrow_bits` and
 ///   `narrow_param_bits` decline, so BOTH spellings print 32 where both oracles print
-///   `bits=8 val=a5`. A pre-existing ROADMAP §2 class, upstream of this predicate.
+///   `bits=8 val=a5`. A pre-existing ROADMAP §2 class, upstream of this predicate — and
+///   the CONTROL for the two closures above: the new qualified key routes a `PkgScoped`
+///   leaf to `pkg_const_narrow_bits`, which still refuses a non-zero LSB, so this line is
+///   byte-identical PRE→POST. Re-measured: vita `t.s bits=32 val=000000a5` /
+///   `t.b bits=32 val=000000a5`, both oracles `bits=8 val=a5`.
 #[test]
 fn the_second_rung_and_the_non_zero_lsb_class_are_unmoved() {
     const PK: &str = "parameter logic [35:0] PW = 36'h8_0000_0001;";
     check(
         PK,
         "  leaf #(.P(~pk::PW)) u1();\n  leaf #(.P(~PW)) u2();\n",
-        &["leaf bits=32 val=fffffffe", "leaf bits=36 val=7fffffffe"],
+        &["leaf bits=36 val=7fffffffe", "leaf bits=36 val=7fffffffe"],
     );
     check(
         PK,
         "  leaf #(.P(pk::PW + 1)) u1();\n  leaf #(.P(PW + 1)) u2();\n",
-        &["leaf bits=32 val=00000002", "leaf bits=36 val=800000002"],
+        &["leaf bits=36 val=800000002", "leaf bits=36 val=800000002"],
     );
     check(
         "parameter logic [11:4] PA = 8'hA5;",

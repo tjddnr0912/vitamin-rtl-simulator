@@ -387,11 +387,18 @@ fn a_constant_function_reduces_its_own_formal() {
 /// ⚠️ `localparam E = 4'hF | 4'h0;` is no longer such an operand. Its leaves are sized
 /// literals, so the operator initializer records its own 4 bits in `param_range` — the same
 /// 4 all three tools answer for `$bits(E)` — and the reduction folds. Measured 3-way: the
-/// bound is `4` and `^E` is `0` in vita, iverilog 13 and verilator 5.052 alike. The
-/// DECLINE this test is about is the operand whose width is genuinely value-inferred, which
-/// is the `$clog2` source below: its own initializer reaches the value-inferred tail, so it
-/// has no `param_range` entry and the certification refuses the whole tree. Both oracles
-/// answer `3` there — an honest-loud residue (ROADMAP §2), not a pass.
+/// bound is `4` and `^E` is `0` in vita, iverilog 13 and verilator 5.052 alike.
+///
+/// ⭐ Neither is the `$clog2` source any more (§2 "Index sealing" ⓑ). It WAS the
+/// honest-loud residue this test named: `localparam A = $clog2(300)` reached the
+/// value-inferred tail and recorded no `param_range`, so the certification refused the
+/// whole `A | 4'h0` tree. `param_decl_width_opt` now has a `SysCall` arm for the three
+/// integer-returning calls the constant domain folds, `A` records `(0, 32, false)`, and
+/// both cells fold to the value both oracles print — the bound `3` and `^E` `0`.
+///
+/// The DECLINE this test is still about is the operand whose width no declaration states
+/// at all: the ASCENDING `[0:3]` and non-zero-LSB `[7:4]` declarations below, which the
+/// positional, direction-free bit domain refuses on purpose. Those are unchanged.
 #[test]
 fn a_value_inferred_operand_width_is_loud_not_one_bit() {
     prints(
@@ -404,15 +411,17 @@ fn a_value_inferred_operand_width_is_loud_not_one_bit() {
         "\"%0d\", R",
         "0",
     );
-    loud(
+    // ⭐ PRE: both of these were `error[VITA-E3009] … a reduction of an operand whose
+    // width the constant domain cannot read`. POST: the value both oracles print.
+    prints(
         "  localparam A = $clog2(300);\n  localparam E = A | 4'h0;\n  wire [(&E)+2:0] x;",
         "\"%0d\", $bits(x)",
-        "a reduction of an operand whose width the constant domain cannot read",
+        "3",
     );
-    loud(
+    prints(
         "  localparam A = $clog2(300);\n  localparam E = A | 4'h0;\n  localparam R = ^E;",
         "\"%0d\", R",
-        "a reduction of an operand whose width the constant domain cannot read",
+        "0",
     );
     // ⚠️ Review F1: an ASCENDING `[0:3]` or non-zero-LSB `[7:4]` declaration IS a
     // declared width, and the wide domain still declines it (positional, direction-

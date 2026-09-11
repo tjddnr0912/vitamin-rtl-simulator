@@ -243,8 +243,29 @@ impl Elaborator<'_> {
                 };
 
                 // Save any prior binding of this name (an outer param/genvar of the
-                // same identifier) and seed the genvar.
+                // same identifier) and seed the genvar. The RANGE has to be read
+                // before the value binder runs, because that binder is the one that
+                // clears it (`bind_param_value`).
+                let saved_range = self.param_range.get(&gv_key).copied();
                 let saved = self.bind_param_value(gv_key.clone(), start);
+                // ⭐ …and the DECLARED-RANGE half of that same shape. `param_meta`
+                // alone answers the sign model; `param_range` is the map that answers
+                // *"is this width a DECLARED fact?"* (`narrow_param_bits`), and a
+                // genvar is the one name whose width IEEE fixes outright, so it is a
+                // declared fact by definition. Without the entry every certified
+                // consumer — the direct override `#(.P(Q << i))`, the derived
+                // `localparam R = Q << i`, the select bound `W[15:8]` — declined and
+                // fell back to the LEAF's own default width: `leaf #(.P(Q8 << i))`
+                // bound ONE bit / 0 where both oracles bind 8 / `a`, and `#(.P(i-1))`
+                // at i = 0 bound 1 bit / 1 where both bind 32 / `ffffffff`.
+                // POLICY (this is the axis the two oracles split on): a genvar is a
+                // SIGNED 32-BIT INTEGER, IEEE 1800 §27.4. Measured, verilator answers
+                // `$bits(i)` = 32 for every spelling of the same genvar (`i`, `i+0`,
+                // `{i}`, `i<<0`, and `integer J = i`) while binding a 1-bit override
+                // from it, so its narrow reading is a self-contradiction and is
+                // disqualified; iverilog's 32-bit override binding is the LRM's answer
+                // and is what vita follows here.
+                self.bind_param_range(&gv_key, Some((0, 32, false)));
                 // A genvar IS a signed 32-bit integer (IEEE 1800 §27.4), and the
                 // const domain's sign model reads `param_meta` — with no entry it
                 // answered UNSIGNED, so `2 ** (g - 1)` at g = 0 masked −1 into
@@ -338,6 +359,9 @@ impl Elaborator<'_> {
                         break;
                     }
                     self.bind_param_value(gv_key.clone(), next);
+                    // The rebind clears the range it just replaced; the genvar's shape
+                    // is the same on every iteration, so put it straight back.
+                    self.bind_param_range(&gv_key, Some((0, 32, false)));
                     idx_count += 1;
                 }
 
@@ -345,6 +369,10 @@ impl Elaborator<'_> {
                 match saved {
                     Some(v) => {
                         self.bind_param_value(gv_key.clone(), v);
+                        // …and the range that binding had, in lockstep with the value
+                        // and the meta. `unbind_param` on the other arm already drops
+                        // both, so only the restore arm has work to do.
+                        self.bind_param_range(&gv_key, saved_range);
                     }
                     None => {
                         self.unbind_param(&gv_key);
