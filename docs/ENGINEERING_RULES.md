@@ -248,6 +248,7 @@ oracle's raw output text and a classification. Its report names the probe resolu
 |---|---|
 | Compare semantic equivalence, never structural | Structurally different but semantically identical output reading as a divergence, and the reverse |
 | Classify every divergence four ways: real gap, no-oracle, vita-ahead, harness format | Undifferentiated divergences all being treated as defects, or all dismissed |
+| Run the module twin of every interface cell the lens files as pre-existing; when the twin is wrong the same way, the row is a shared-model row, not an interface row | An interface row filed for a defect that lives in the shared model |
 
 ### 3.4 The soundness lens
 
@@ -267,6 +268,9 @@ prose. Commission it explicitly.
 | Treat the fix for one round as the finding of the next: a delta round is not optional after a design change, and its brief must name the delta | Each round correcting the previous correction, none found by the author |
 | Read a verify phase that dies wholesale as leaving its findings unverified, not cleared, and rebuild a failing reproduction from the stated mechanism | Sub-verifications dying and the findings being filed as clear |
 | Read a stalled reviewer's partial output before killing it; the point where it stopped marks where something looked wrong | The most valuable finding of a slice sitting in a lens that never filed a report |
+| Re-measure yourself any cell the two lenses report differently; a lens's "both oracles agree" has been a measured split | A split filed as a two-oracle agreement |
+| Measure a lens's proposed stricter or simpler rule against PRE before adopting it; refusing what PRE accepted is a ladder descent | A reviewer's simplification regressing hundreds of cells |
+| Write the quantifier of every property a fix claims (one shape, one rule, every rule); a per-shape fix returns next round through another door, and a generalised floor that erases a loud which was masking another defect is loud→silent-wrong | The same root coming back each round under a different spelling |
 
 ### 3.6 Stopping, reverting and prerequisites
 
@@ -356,6 +360,7 @@ another.
 | Name the mechanism, not the missing input, when collapsing several rows into one infrastructure item, and re-measure the others the day it lands | Rows that share a provenance but not a domain, so closing one closes only one |
 | Measure the end-to-end outcome of the pair when a re-grounding says closing one item moves the refusal | Fixing either half alone producing a worse report than fixing neither |
 | Check the input set before looking for missing machinery when a feature works in one place and not another | The classifier walking a narrower set than the feature reaches |
+| Put the PRODUCER census of any new per-instance carrier (key, parameter) in the review brief; a second producer (alias, pass-through) re-seeds the default after every consumer is routed, and a routed predicate must be checked against the stored value it guards | Every consumer routed and the default still landing |
 
 ### 4.4 Routing, ordering and consumers
 
@@ -392,6 +397,7 @@ another.
 | Build one cell on each side of a domain boundary in any change that moves that boundary | A large sweep containing no cell that reaches the boundary |
 | Write the factorial table and check that every output the mechanism can produce is in the readout before publishing a refutation; a refuting census varies the claim's axis and holds everything else fixed | A one-column readout of a multi-column mechanism refuting nothing |
 | Vary every field of a reported shape, not only the one the report names | The field held constant being the one that matters |
+| Count the loud→value cells separately; multiply position by the five binders (module, instance, package, generate, override), give every cell a keyword/scalar spelling twin as its control, one instance per cell, and open a §2 row with the plain twin of its shape | A census that cannot say which cells descended the ladder |
 
 ### 4.6 Queue rows and incoming reports are claims
 
@@ -428,6 +434,9 @@ another.
 | Split a one-word reject row by what designs do, not by which tables exist; a table nobody reads refuses nothing | Unrelated populations sharing a word and a priority |
 | Re-measure every sentence that cites a kind as its reason when you open that kind's row | A comment claiming a scan refuses something a neighbouring change already opened |
 | Read a function that takes an alternative store as a parameter as using that store only on the paths that name the parameter | Opening a row leaving the other arms silently wrong |
+| Re-measure a queue row's FIX SHAPE with the same suspicion as its symptom and oracle count; when the shape changes one shared key, ask first whether the oracle sets that key per kind — a root returning each round through a different door is one key under several rules | A one-key fix built where the standard has several rules |
+| Ask whether a decline is a decline before "adding only where None": when the existing lane returns a WRONG value rather than declining, the new lane must be routed ahead of it, not behind it as a fallback | A fallback that never runs because the wrong answer is already there |
+| Reject a cited cell that both candidate rules answer identically as evidence; measure a cell where they differ, and size the slice as the whole subclass minus what an existing channel already answers | A slice justified by a cell that cannot distinguish the rules |
 
 ### 4.7 Completeness for a change already under way
 
@@ -1032,6 +1041,7 @@ move, or an anchor no shared code can shift.
 | Pin the wording of a refusal only while the construct has no value, say in the docstring that it is a wording pin, and convert it to a value pin when a value exists | Wording pins breaking in bulk when the refusals they quote are removed |
 | Choose probe inputs where every wrong implementation gives a different answer, and say in the comment why that input | A fixed-point input passing whatever the implementation does |
 | Assert the value in a new battery cell rather than an exit code | Predicting an oracle's answer and pinning the prediction instead of measuring it |
+| Flip both spellings of the default backend for the flip run — the `Backend` derive's `#[default]` and the `backend:` literal in `SimOpts` initialisation; changing one moves half the CLI | A flip run that exercises only one entry point |
 
 ## 8. Performance measurement
 
