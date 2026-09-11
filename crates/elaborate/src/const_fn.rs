@@ -786,6 +786,40 @@ impl Elaborator<'_> {
                 }
                 _ => None,
             },
+            // §3 ⑤ⓕ: the per-instance twin of the arm above — `T'(e)` where `T` is
+            // an overridable `parameter type`, which the parser spells
+            // `signing_param'(T$w'(e))`. Same body with the sign folded from `T$s`
+            // instead of read off the node; `?` DECLINES the whole fold when `T$s`
+            // does not resolve here, which is where this domain was before.
+            ast::CastTarget::SigningParam { shape_param } => {
+                let signed = self.cast_shape_signed(shape_param)?;
+                match &operand.kind {
+                    ast::ExprKind::Cast {
+                        target: inner @ (ast::CastTarget::Size(_) | ast::CastTarget::Named(_)),
+                        expr: inner_e,
+                    } => {
+                        let w = u32::try_from(self.cast_size_bits(inner)?).ok()?;
+                        if !(1..=63).contains(&w) {
+                            return None;
+                        }
+                        let v = self.const_size_cast(
+                            inner,
+                            inner_e,
+                            &BTreeMap::new(),
+                            &ConstWidths::new(),
+                            0,
+                        )?;
+                        let mask = (1i64 << w) - 1;
+                        let u = v & mask;
+                        Some(if signed && (u >> (w - 1)) & 1 == 1 {
+                            u | !mask
+                        } else {
+                            u
+                        })
+                    }
+                    _ => None,
+                }
+            }
         }
     }
 

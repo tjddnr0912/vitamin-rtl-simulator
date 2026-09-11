@@ -16,10 +16,14 @@
 //! the ARITY bits only (`T$s >> 2`), because the declarators are still stamped with the
 //! default's unpacked dim LIST at parse and that list cannot follow an override.
 //!
-//! A use of `T` that lands where nothing can re-fold the shape — a packed struct/union
-//! member, an enum base, a class property, a function RETURN type, a `T'(e)` cast —
-//! keeps the STRICT compare for that `T`, so those designs stay LOUD rather than
-//! silently binding the default's shape. Both wordings are pinned below.
+//! A use of `T` that lands where nothing can re-fold the shape — an enum base, a
+//! class property, a function RETURN type — keeps the STRICT compare for that `T`, so
+//! those designs stay LOUD rather than silently binding the default's shape. §3 ⑤ⓕ's
+//! cast/struct-member slice moved the other two positions (a packed struct/union
+//! member and a `T'(e)` cast) to a PER-AXIS guard: their SIGN rides a
+//! `CastTarget::SigningParam` node naming `T$s`, and only their 2-STATE kind stays
+//! fixed. All three wordings are pinned below; the cast/struct cells themselves live
+//! in `type_param_shape_cast_struct.rs`.
 //!
 //! Oracles: iverilog 13.0 `-g2012` and verilator 5.052 `--binary --timing` agree on
 //! every `%0d` / `>>>` / `<0` column pinned here. Verilator is DISQUALIFIED on the
@@ -432,15 +436,41 @@ fn assert_strict_loud(out: &str, rc: Option<i32>) {
 }
 
 #[test]
-fn a_packed_struct_member_of_type_t_keeps_the_strict_guard() {
-    // `StructMember` has no shape slot and the flat layout is built at parse, so this
-    // stays LOUD. Both oracles run it (`mem=-1`) — an honest-loud gap, not a value.
+fn a_packed_struct_member_of_type_t_follows_the_sign_and_keeps_the_2_state_guard() {
+    // RE-PINNED by §3 ⑤ⓕ (the `T'(e)`-cast + struct-member slice). `StructMember`
+    // still has no shape slot and the flat layout is still built at parse — but the
+    // whole-member READ of a SYMBOLIC layout emits a signing NODE, and a node can
+    // name `T$s` (`CastTarget::SigningParam`) instead of baking the default's bool.
+    // So a SIGN-only override is a VALUE now: both oracles print `mem=-1` and so
+    // does vita (re-measured against iverilog 13 and verilator 5.052; PRE at 155a738
+    // printed the strict F4004 here).
     let (out, rc) = run("`timescale 1ns/1ns\n\
          module m #(parameter type T = logic [7:0]) ();\n  \
          typedef struct packed { T a; } s_t;\n  s_t s;\n  \
          initial begin s.a = -1; $display(\"mem=%0d\", s.a); end\nendmodule\n\
          module top; m #(.T(logic signed [7:0])) u (); initial #10 $finish; endmodule\n");
-    assert_strict_loud(&out, rc);
+    assert_eq!(rc, Some(0), "{out}");
+    assert!(out.contains("mem=-1"), "{out}");
+    // The 2-STATE half of the same position has NO carrier — a part-select has no
+    // kind field, and a packed struct's 4-state-ness belongs to the whole variable,
+    // decided at parse from the member kinds. It keeps a guard, now worded for the
+    // axis that actually stays fixed. (The full strict wording is what an enum base
+    // / class property / function RETURN type keeps; see `assert_strict_loud`.)
+    let (out, rc) = run("`timescale 1ns/1ns\n\
+         module m #(parameter type T = logic [7:0]) ();\n  \
+         typedef struct packed { T a; } s_t;\n  s_t s;\n  \
+         initial begin s.a = -1; $display(\"mem=%0d\", s.a); end\nendmodule\n\
+         module top; m #(.T(bit [7:0])) u (); initial #10 $finish; endmodule\n");
+    assert_eq!(rc, Some(1), "{out}");
+    assert!(out.contains("fatal[VITA-F4004]"), "{out}");
+    assert!(
+        out.contains("the override changes the type's 2-state kind or unpacked dimension COUNT"),
+        "{out}"
+    );
+    assert!(
+        out.contains("carries the signedness but no 2-state kind"),
+        "{out}"
+    );
 }
 
 #[test]

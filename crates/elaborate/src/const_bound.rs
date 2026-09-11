@@ -360,6 +360,10 @@ impl Elaborator<'_> {
                         // These do not fold in this domain at all (see
                         // `const_eval_cast`), so their width never matters.
                         ast::CastTarget::Signing { .. } | ast::CastTarget::Named(_) => false,
+                        // §3 ⑤ⓕ: does not fold in this domain either, and this walk
+                        // runs OUTSIDE the instance scope that owns `T$s`, so it must
+                        // never consult it.
+                        ast::CastTarget::SigningParam { .. } => false,
                     }
             }
             // A constant function is only as exact as its BODY — see

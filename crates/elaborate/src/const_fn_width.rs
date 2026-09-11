@@ -270,7 +270,11 @@ impl Elaborator<'_> {
                 ast::CastTarget::Size(_) | ast::CastTarget::Named(_) => {
                     u32::try_from(self.cast_size_bits(target)?).ok()
                 }
-                ast::CastTarget::Signing { .. } => self.const_self_width(expr, envw),
+                // §3 ⑤ⓕ: a signing cast PRESERVES width whichever way its sign is
+                // decided, so the per-instance twin answers identically.
+                ast::CastTarget::Signing { .. } | ast::CastTarget::SigningParam { .. } => {
+                    self.const_self_width(expr, envw)
+                }
             },
             // A call is as wide as its declared return type.
             K::Call { name, .. } => self
@@ -342,6 +346,11 @@ impl Elaborator<'_> {
             K::Cast { target, expr } => match target {
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).is_some_and(|(_, s, _)| s),
                 ast::CastTarget::Signing { signed } => *signed,
+                // §3 ⑤ⓕ: the per-instance twin; unresolvable declines to unsigned,
+                // the catch-all's answer.
+                ast::CastTarget::SigningParam { shape_param } => {
+                    self.cast_shape_signed(shape_param).unwrap_or(false)
+                }
                 ast::CastTarget::Size(_) => self.const_signed_env(expr, envw),
                 // `RPS'(e)` — the Named spelling of a size cast inherits the
                 // operand's sign exactly like `Size` when the name IS a constant

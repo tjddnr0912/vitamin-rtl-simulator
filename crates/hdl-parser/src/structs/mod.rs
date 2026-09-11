@@ -6,7 +6,12 @@ use super::*;
 
 impl Parser<'_, '_> {
     /// Parse a packed struct/union MEMBER's type into `(kind, signed, range,
-    /// packed_dims, nested)`. A built-in keyword resolves directly (§7.2.1); a
+    /// packed_dims, nested, shape_param)`. §3 ⑤ⓕ: `sign_carried` says whether the
+    /// CALLER lays the member out symbolically (a packed struct does; an unpacked
+    /// record and a union do not). When it does, a member of an overridable
+    /// `parameter type T` returns `T$s` and blocks only the 2-STATE axis of `T`'s
+    /// shape guard; when it does not, the member keeps the default's parse-time
+    /// sign and blocks both axes, exactly as before. A built-in keyword resolves directly (§7.2.1); a
     /// SIMPLE user-defined type name (a vector / enum / atom typedef) resolves to
     /// its `TypeInfo`. §3 ⑤ ⓓ: a NESTED packed struct/union typedef (`perms_t
     /// perms;`) resolves to the flat vector its `TypeInfo` already is (`[total-1:0]`,
@@ -16,7 +21,7 @@ impl Parser<'_, '_> {
     /// is honest-loud. Returns `None` (with the error already emitted) on a
     /// non-type token or an unsupported member type; the caller breaks out of
     /// the member loop.
-    pub(crate) fn parse_struct_member_type(&mut self) -> Option<MemberType> {
+    pub(crate) fn parse_struct_member_type(&mut self, sign_carried: bool) -> Option<MemberType> {
         if let Some(kind) = self.net_var_kind() {
             self.bump(); // kind keyword
             let signed = self.signed_eff(Some(kind));
@@ -34,12 +39,21 @@ impl Parser<'_, '_> {
                     None => break,
                 }
             }
-            return Some((kind, signed, range, packed_dims, None));
+            return Some((kind, signed, range, packed_dims, None, None));
         }
         if let Some(info) = self.peek_typedef_name() {
-            // §3 ⑤ⓕ: `StructMember` has no shape slot and the flat layout is built at
-            // parse, so a type-parameter member keeps `T`'s STRICT guard (loud).
-            self.note_uncarried_shape_use(&info);
+            // §3 ⑤ⓕ: `StructMember` has no shape slot, but the SYMBOLIC layout's
+            // whole-member read emits a signing NODE, which can name `T$s` and be
+            // folded per instance — so a symbolically laid-out member carries the
+            // SIGN and blocks only the 2-state axis (a part-select has no kind).
+            // Every other caller bakes the flat layout at parse and stays strict.
+            let member_shape = sign_carried
+                .then(|| self.carried_shape_param(&info, self.cur_span()))
+                .flatten();
+            match &member_shape {
+                Some(_) => self.note_uncarried_axes(&info, SHAPE_AXIS_TWO_STATE),
+                None => self.note_uncarried_shape_use(&info),
+            }
             let nm = self.type_name_key();
             // §3 ⑤: an UNPACKED-array member is illegal in a PACKED struct and
             // this flat layout table cannot hold one either — the dims would be
@@ -56,7 +70,14 @@ impl Parser<'_, '_> {
                 .then(|| self.stable_type_key(&nm));
             self.eat_scope_qualifier();
             self.bump(); // the typedef-name token
-            return Some((info.kind, info.signed, info.range, Vec::new(), nested));
+            return Some((
+                info.kind,
+                info.signed,
+                info.range,
+                Vec::new(),
+                nested,
+                member_shape,
+            ));
         }
         self.error("a net/var type in a struct/union member");
         None
@@ -104,14 +125,17 @@ impl Parser<'_, '_> {
     /// frozen AST type and cannot carry it.
     pub(crate) fn parse_struct_member_list(
         &mut self,
-    ) -> Option<(Vec<StructMember>, Vec<Option<String>>)> {
+        sign_carried: bool,
+    ) -> Option<StructMemberList> {
         self.expect(TokenKind::LBrace, "'{' for struct body");
         let mut members = Vec::new();
         let mut nested_keys = Vec::new();
+        let mut shape_keys = Vec::new();
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
             let before = self.pos;
             let m_start = self.cur_span();
-            let Some((kind, signed, range, packed_dims, nested)) = self.parse_struct_member_type()
+            let Some((kind, signed, range, packed_dims, nested, shape)) =
+                self.parse_struct_member_type(sign_carried)
             else {
                 break;
             };
@@ -126,6 +150,7 @@ impl Parser<'_, '_> {
                     span: m_start.to(self.prev_span()),
                 });
                 nested_keys.push(nested.clone());
+                shape_keys.push(shape.clone());
                 if !self.eat(TokenKind::Comma) {
                     break;
                 }
@@ -136,7 +161,7 @@ impl Parser<'_, '_> {
             }
         }
         self.expect(TokenKind::RBrace, "'}' to close struct body");
-        Some((members, nested_keys))
+        Some((members, nested_keys, shape_keys))
     }
 
     /// Width of a struct member from its range. `None` ⇒ scalar (1). Constant

@@ -308,7 +308,7 @@ type FieldGeom = (u32, u32, bool, bool, i64, u32);
 /// §3 ⑤ ⓒ: a packed-struct member's geometry when the layout is SYMBOLIC —
 /// `(lsb_offset, width, signed)` as constant EXPRESSIONS (`SymStructLayout`),
 /// folded by elaborate per instance.
-type SymGeom = (Expr, Expr, bool);
+type SymGeom = (Expr, Expr, bool, Option<Ident>);
 /// §3 ⑤ ⓒ (§4.5.431): a packed struct with at least one member whose width names
 /// an OVERRIDABLE parameter — `logic [MemDataWidth-1:0] instr_rdata;` in
 /// ibex_lockstep, `MemDataWidth` a header parameter. Both oracles lay the struct
@@ -322,8 +322,11 @@ type SymGeom = (Expr, Expr, bool);
 /// exactly as before, and only the consumers that take a `SymGeom` see it.
 #[derive(Clone, PartialEq)]
 struct SymStructLayout {
-    /// `(name, lsb_offset, width, signed)`, declaration order.
-    fields: Vec<(String, Expr, Expr, bool)>,
+    /// `(name, lsb_offset, width, signed, shape_param)`, declaration order. §3 ⑤ⓕ:
+    /// `shape_param` is `Some("T$s")` for a member declared with an overridable
+    /// `parameter type T` — the whole-member READ then emits a per-instance
+    /// `CastTarget::SigningParam` and `signed` (the default's) is unused.
+    fields: Vec<(String, Expr, Expr, bool, Option<Ident>)>,
     /// The struct's packed width.
     total: Expr,
 }
@@ -332,12 +335,35 @@ impl SymStructLayout {
         self.fields
             .iter()
             .find(|(n, ..)| n == name)
-            .map(|(_, o, w, s)| (o.clone(), w.clone(), *s))
+            .map(|(_, o, w, s, sp)| (o.clone(), w.clone(), *s, sp.clone()))
     }
 }
-/// A parsed struct/union member TYPE `(kind, signed, range, packed_dims, nested)`
-/// (`parse_struct_member_type`).
-type MemberType = (NetVarKind, bool, Option<Range>, Vec<Range>, Option<String>);
+/// The member list of one packed struct/union body: the members, each member's
+/// NESTED struct/union type key, and — §3 ⑤ⓕ — each member's `T$s` carrier name.
+/// The three vectors are index-parallel by construction (`parse_struct_member_list`
+/// pushes to all three per declarator).
+type StructMemberList = (Vec<StructMember>, Vec<Option<String>>, Vec<Option<Ident>>);
+/// §3 ⑤ⓕ: bit 0 of `T$s` — the type's SIGNEDNESS. Set in `shape_uncarried` by a
+/// use of `T` that cannot follow an override of it.
+pub(crate) const SHAPE_AXIS_SIGN: u8 = 1;
+/// §3 ⑤ⓕ: bit 1 of `T$s` — the type's 2-STATE kind.
+pub(crate) const SHAPE_AXIS_TWO_STATE: u8 = 2;
+/// §3 ⑤ⓕ: both shape axes — a position that can follow neither.
+pub(crate) const SHAPE_AXIS_ALL: u8 = SHAPE_AXIS_SIGN | SHAPE_AXIS_TWO_STATE;
+
+/// A parsed struct/union member TYPE `(kind, signed, range, packed_dims, nested,
+/// shape_param)` (`parse_struct_member_type`). §3 ⑤ⓕ: `shape_param` is the `T$s`
+/// name when the member's type is an OVERRIDABLE `parameter type T` AND the caller
+/// lays the member out symbolically, so the member's SIGN can ride a per-instance
+/// `CastTarget::SigningParam` node instead of the default's parse-time bool.
+type MemberType = (
+    NetVarKind,
+    bool,
+    Option<Range>,
+    Vec<Range>,
+    Option<String>,
+    Option<Ident>,
+);
 #[derive(Clone, PartialEq)]
 struct StructLayout {
     fields: Vec<StructFieldLayout>,
@@ -549,10 +575,15 @@ pub struct Parser<'t, 's> {
     /// §3 ⑤ⓕ: the shape-parameter names (`T$s`) of the current module-like whose
     /// group SYNTHESIZED a guard (i.e. an OVERRIDABLE type parameter).
     shape_carriers: std::collections::HashSet<String>,
-    /// §3 ⑤ⓕ: the subset of [`Self::shape_carriers`] with at least one use that
-    /// landed in a container with no `shape_param` slot. Those keep the STRICT
-    /// guard; the rest are narrowed to the arity bits at module end.
-    shape_uncarried: std::collections::HashSet<String>,
+    /// §3 ⑤ⓕ: for each shape carrier (`T$s`) the OR of the axis bits at least one
+    /// use of `T` could not follow — [`SHAPE_AXIS_SIGN`] and
+    /// [`SHAPE_AXIS_TWO_STATE`]. PER-AXIS, not a name set: a `T'(e)` cast and a
+    /// packed-struct member of type `T` carry the SIGN per instance (a
+    /// `CastTarget::SigningParam` node folded from `T$s`) but have nowhere to put a
+    /// 2-state KIND, while an enum base / class property / function RETURN type
+    /// carry neither. `narrow_shape_guards` keeps exactly the blocked bits in the
+    /// compare; an absent name (0) narrows to the arity bits as before.
+    shape_uncarried: std::collections::HashMap<String, u8>,
     /// §3 ⑤ⓕ: `U$s` → the ROOT carrier its VALUE names, for `parameter type U = T`
     /// (and its chains). An uncarried use of `U` has to mark `T`'s guard: `U` is not
     /// overridable and synthesizes none, so without the alias nothing would keep the
@@ -775,7 +806,7 @@ impl<'t, 's> Parser<'t, 's> {
             type_params: std::collections::HashMap::new(),
             cu_type_params: std::collections::HashMap::new(),
             shape_carriers: std::collections::HashSet::new(),
-            shape_uncarried: std::collections::HashSet::new(),
+            shape_uncarried: std::collections::HashMap::new(),
             shape_alias: std::collections::HashMap::new(),
             overridable_params: std::collections::HashSet::new(),
             unpacked_struct_layouts: std::collections::HashMap::new(),

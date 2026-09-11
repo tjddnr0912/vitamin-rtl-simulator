@@ -585,7 +585,7 @@ impl Parser<'_, '_> {
         } else {
             false
         };
-        let (members, nested_keys) = self.parse_struct_member_list()?;
+        let (members, nested_keys, shape_keys) = self.parse_struct_member_list(packed)?;
         let tname = self.ident()?;
         self.expect(TokenKind::Semi, "';'");
         if !packed {
@@ -625,7 +625,8 @@ impl Parser<'_, '_> {
             .iter()
             .any(|m| !matches!(self.member_flat_dims(m.kind, &m.range, &m.packed_dims), Some((f, _)) if f > 0))
         {
-            return self.register_sym_struct(start, members, nested_keys, tname, struct_signed);
+            return self
+                .register_sym_struct(start, members, nested_keys, shape_keys, tname, struct_signed);
         }
         let mut widths = Vec::with_capacity(members.len()); // (flat_width, elem_stride)
         for m in &members {
@@ -707,6 +708,7 @@ impl Parser<'_, '_> {
         start: Span,
         members: Vec<StructMember>,
         nested_keys: Vec<Option<String>>,
+        shape_keys: Vec<Option<Ident>>,
         tname: Ident,
         struct_signed: bool,
     ) -> Option<ModuleItem> {
@@ -733,9 +735,12 @@ impl Parser<'_, '_> {
         // sum of the widths BELOW it.
         let mut fields = Vec::with_capacity(members.len());
         let mut below: Vec<Expr> = Vec::new();
-        for (m, w) in members.iter().zip(&widths).rev() {
+        for ((m, w), sp) in members.iter().zip(&widths).zip(&shape_keys).rev() {
             let off = Self::sum_of(&below, m.span);
-            fields.push((m.name.name.clone(), off, w.clone(), m.signed));
+            // §3 ⑤ⓕ: `m.signed` is the DEFAULT's sign; when the member names an
+            // overridable `parameter type T` the read emits `SigningParam(T$s)` and
+            // folds the instance's sign instead.
+            fields.push((m.name.name.clone(), off, w.clone(), m.signed, sp.clone()));
             below.push(w.clone());
         }
         fields.reverse();
@@ -953,7 +958,8 @@ impl Parser<'_, '_> {
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
             let before = self.pos;
             let m_start = self.cur_span();
-            let Some((kind, signed, range, packed_dims, nested)) = self.parse_struct_member_type()
+            let Some((kind, signed, range, packed_dims, nested, _shape)) =
+                self.parse_struct_member_type(false)
             else {
                 break;
             };

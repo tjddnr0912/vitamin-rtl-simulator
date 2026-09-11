@@ -380,7 +380,7 @@ impl Parser<'_, '_> {
             },
             span,
         };
-        let msg = Self::shape_guard_msg(tname, false);
+        let msg = Self::shape_guard_msg(tname, SHAPE_AXIS_ALL);
         let call = Stmt::SysTaskCall {
             name: Ident {
                 name: "$fatal".to_string(),

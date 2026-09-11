@@ -48,6 +48,37 @@ impl Elaborator<'_> {
                     args: vec![e],
                 })
             }
+            // §3 ⑤ⓕ: the same cast whose SIGN is this INSTANCE's, not the parse
+            // site's — `T'(e)` / a whole-member read of a `T` struct member. Same
+            // body as the arm above with the folded bit in place of the literal;
+            // an unresolvable `T$s` is loud, never a guessed default.
+            ast::CastTarget::SigningParam { shape_param } => {
+                let Some(signed) = self.cast_shape_signed(shape_param) else {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "a cast to a type parameter whose per-instance shape does not \
+                         resolve in this scope",
+                    );
+                    return self.placeholder_expr();
+                };
+                let e = self.lower_expr(operand);
+                if self.cast_operand_is_real(operand, e) {
+                    self.error(
+                        MsgCode::ElabUnsupported,
+                        "signed'/unsigned' cast is not defined on a real operand",
+                    );
+                    return self.placeholder_expr();
+                }
+                let which = if signed {
+                    ir::SysFuncId::Signed
+                } else {
+                    ir::SysFuncId::Unsigned
+                };
+                self.push_expr(ir::Expr::SysFunc {
+                    which,
+                    args: vec![e],
+                })
+            }
             // N'(e): result is N bits; signedness INHERITED from the operand.
             ast::CastTarget::Size(_) => {
                 // `cast_size_bits` owns the size fold (SELF-determined — the size

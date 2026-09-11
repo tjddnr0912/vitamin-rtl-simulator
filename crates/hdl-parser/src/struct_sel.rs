@@ -68,7 +68,7 @@ impl Parser<'_, '_> {
     /// §3 ⑤ ⓒ: the `[msb:lsb]` of a symbolic member — `off + w - 1` and `off`,
     /// literals folded.
     fn sym_bounds(geom: &SymGeom, span: Span) -> (Expr, Expr) {
-        let (off, w, _) = geom;
+        let (off, w, ..) = geom;
         let hi = Self::sym_sub_one(Self::sum_of(&[off.clone(), w.clone()], span), span);
         (hi, off.clone())
     }
@@ -96,6 +96,21 @@ impl Parser<'_, '_> {
                 "a whole-member read — a sub-select of a packed-struct member whose width \
                  names a header parameter is unsupported in v1",
             );
+        }
+        // §3 ⑤ⓕ: a member declared with an overridable `parameter type T` wraps in
+        // the PER-INSTANCE signing node naming `T$s` — elaborate folds bit 0 of the
+        // override, so `signed`/`unsigned` follows `#(.T(logic signed [15:0]))`
+        // instead of the default's parse-time bool. `geom.2` (the default's sign)
+        // is deliberately not consulted for such a member: `shape_signed` already
+        // answers the DEFAULT when no override is present.
+        if let Some(shape_param) = geom.3 {
+            return Expr {
+                kind: ExprKind::Cast {
+                    target: CastTarget::SigningParam { shape_param },
+                    expr: Box::new(pv),
+                },
+                span,
+            };
         }
         if geom.2 {
             return Expr {

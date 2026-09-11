@@ -448,6 +448,16 @@ impl Elaborator<'_> {
         }
     }
 
+    /// §3 ⑤ⓕ: the instance's SIGN for a `CastTarget::SigningParam` node — bit 0 of
+    /// `T$s` — or `None` when the name does not resolve in this scope. Unlike
+    /// [`Self::shape_signed`] there is no parse-time scalar to fall back to (a cast
+    /// node has no `signed` field), so every reader must DECLINE on `None` exactly
+    /// as it declines an unknown today rather than guess the default's sign.
+    pub(crate) fn cast_shape_signed(&self, shape_param: &ast::Ident) -> Option<bool> {
+        self.shape_bits(&Some(shape_param.clone()))
+            .map(|v| v & 1 != 0)
+    }
+
     /// The declaration's EFFECTIVE kind in this instance. Only the 2-state half
     /// moves: a `logic`/`reg` declaration of `T` becomes `bit` when the override is
     /// 2-state and stays 4-state otherwise, mirroring what the parser stamps for the

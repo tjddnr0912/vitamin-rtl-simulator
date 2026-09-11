@@ -547,6 +547,12 @@ impl Elaborator<'_> {
             ast::ExprKind::Cast { target, expr } => match target {
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).is_some_and(|(_, s, _)| s),
                 ast::CastTarget::Signing { signed } => *signed,
+                // §3 ⑤ⓕ: the per-instance twin. An unresolvable `T$s` declines to
+                // UNSIGNED — the same answer the catch-all below gives an unmodeled
+                // form, and the same answer this domain gave before the carrier.
+                ast::CastTarget::SigningParam { shape_param } => {
+                    self.cast_shape_signed(shape_param).unwrap_or(false)
+                }
                 // `N'(e)` INHERITS the operand's signedness — and so does the
                 // `RPS'(e)` spelling of the same cast (see `cast_size_bits`); a
                 // `Named` that is NOT a constant is a type cast and stays unsigned.

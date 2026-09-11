@@ -752,6 +752,8 @@ impl Elaborator<'_> {
                             // Not folded by `const_eval_cast`, so unreachable with a
                             // Some value — fall through to value-inference anyway.
                             ast::CastTarget::Signing { .. } => {}
+                            // §3 ⑤ⓕ: same — not folded by `const_eval_cast`.
+                            ast::CastTarget::SigningParam { .. } => {}
                         }
                     }
                 }

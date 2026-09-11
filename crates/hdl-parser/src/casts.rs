@@ -52,14 +52,27 @@ impl Parser<'_, '_> {
                     .sym_typedef_cast(key)
                     .or_else(|| self.type_param_cast(key)),
             };
-            // §3 ⑤ⓕ: `T'(e)` desugars to `signing'(T$w'(e))` with the DEFAULT's
-            // signedness baked in as a parse-time bool — no per-instance slot — so a
-            // module that casts to `T` keeps `T`'s STRICT shape guard.
-            if sized.is_some() {
-                if let Some(info) = self.typedefs.get(key).cloned() {
-                    self.note_uncarried_shape_use(&info);
+            // §3 ⑤ⓕ: `T'(e)` desugars to `signing'(T$w'(e))`. The WIDTH always rode
+            // the `T$w` expression; the SIGN used to be the DEFAULT's, baked in as a
+            // parse-time bool, so a module that cast to `T` kept `T`'s STRICT shape
+            // guard. It is now a `SigningParam` node naming `T$s`, which elaborate
+            // folds per instance — so only the 2-STATE axis of this position stays
+            // uncarried (a cast node has no kind field for `shape_kind` to move).
+            let cast_shape: Option<Ident> = if sized.is_some() {
+                match self.typedefs.get(key).cloned() {
+                    Some(info) => {
+                        let sp = self.carried_shape_param(&info, start);
+                        match &sp {
+                            Some(_) => self.note_uncarried_axes(&info, SHAPE_AXIS_TWO_STATE),
+                            None => self.note_uncarried_shape_use(&info),
+                        }
+                        sp
+                    }
+                    None => None,
                 }
-            }
+            } else {
+                None
+            };
             if let Some((width_expr, signed)) = sized {
                 let inner = Expr {
                     kind: ExprKind::Cast {
@@ -68,9 +81,13 @@ impl Parser<'_, '_> {
                     },
                     span: start,
                 };
+                let target = match cast_shape {
+                    Some(shape_param) => CastTarget::SigningParam { shape_param },
+                    None => CastTarget::Signing { signed },
+                };
                 return Expr {
                     kind: ExprKind::Cast {
-                        target: CastTarget::Signing { signed },
+                        target,
                         expr: Box::new(inner),
                     },
                     span: start.to(end),

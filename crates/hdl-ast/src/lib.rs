@@ -1638,6 +1638,16 @@ pub enum CastTarget {
     /// A typedef/class-name cast `name'(e)`. Numeric typedefs are resolved at
     /// elaborate; class casts `Base'(d)` are loud-rejected (no oracle yet).
     Named(HierPath),
+    /// §3 ⑤ⓕ: the signing half of a `T'(e)` cast — or of a whole-member read of a
+    /// packed struct/union member declared `T` — where `T` is an OVERRIDABLE
+    /// `parameter type`. The sign is NOT a parse-time scalar: it is bit 0 of the
+    /// named synthesized `T$s` value parameter, folded per instance by elaborate
+    /// (`Elaborator::shape_signed`), exactly as `T$w` already carries the width.
+    /// Appended LAST so postcard's positional discriminants leave every existing
+    /// `CastTarget` value decoding unchanged. A reader that cannot resolve `T$s`
+    /// in its scope DECLINES exactly as it declines an unknown today — it never
+    /// guesses the default.
+    SigningParam { shape_param: Ident },
 }
 
 /// Primitive casting-type keywords for `CastTarget::Prim`.

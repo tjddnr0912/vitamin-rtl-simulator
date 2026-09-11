@@ -522,7 +522,8 @@ impl Elaborator<'_> {
                         .filter(|n| *n >= 1)
                 }
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).map(|(w, _, _)| w),
-                ast::CastTarget::Signing { .. } => rec(expr),
+                // §3 ⑤ⓕ: a signing cast preserves width either way.
+                ast::CastTarget::Signing { .. } | ast::CastTarget::SigningParam { .. } => rec(expr),
             },
             K::SysCall { name, args }
                 if matches!(name.name.as_str(), "$signed" | "$unsigned") && args.len() == 1 =>

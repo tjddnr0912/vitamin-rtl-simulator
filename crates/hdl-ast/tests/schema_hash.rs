@@ -12,6 +12,21 @@
 use vita_schema::schema_hash;
 
 /// Pinned root hash of `hdl_ast::SourceUnit`'s full type closure.
+/// Re-pinned 2026-09-11 §3 ⑤ⓕ `CastTarget::SigningParam { shape_param: Ident }` —
+/// the signing half of a `T'(e)` cast, and of a whole-member read of a packed-struct
+/// member declared `T`, where `T` is an OVERRIDABLE `parameter type`. Both positions
+/// used to emit `CastTarget::Signing { signed: <the DEFAULT's parse-time bool> }`,
+/// which nothing could re-fold per instance, so an override that changed only the
+/// signedness was refused loudly (F4004). The new variant names the synthesized `T$s`
+/// value parameter instead and elaborate folds bit 0 of it per instance
+/// (`Elaborator::cast_shape_signed`), exactly as `T$w` already carried the width; a
+/// reader that cannot resolve `T$s` in its scope DECLINES as it declines an unknown
+/// today. APPENDED LAST, so postcard's positional discriminants leave every existing
+/// `CastTarget` value decoding unchanged, and every existing `Signing` producer
+/// (`signed'(e)`, the numeric struct-member path) is untouched. The 2-STATE axis of
+/// these two positions stays strict — a cast node has no kind field — so the shape
+/// guard became PER-AXIS rather than per-name. All `.vu` artifacts are stale, no
+/// sim-ir/format_version change (stays 31), pure IR-0.
 /// Re-pinned 2026-09-11 §3 ⑤ⓕ `NetVarDecl`/`AnsiPort`/`PortDecl`/`TfPort`
 /// `shape_param: Option<Ident>` — the name of the synthesized `T$s` value parameter
 /// when the declaration's type is an OVERRIDABLE `parameter type T`. `signed` and the
@@ -254,8 +269,8 @@ use vita_schema::schema_hash;
 /// 29 and the SimIr schema hash / canonical / RON goldens are untouched (verified:
 /// the only test this slice moves is this one). All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    133, 232, 171, 229, 56, 234, 27, 169, 18, 41, 186, 135, 87, 41, 57, 18, 217, 33, 252, 152, 14,
-    8, 92, 174, 95, 172, 69, 71, 75, 30, 57, 155,
+    6, 130, 59, 81, 151, 73, 243, 150, 224, 94, 114, 103, 245, 178, 206, 149, 4, 108, 162, 251,
+    150, 54, 106, 52, 176, 218, 110, 57, 236, 175, 77, 149,
 ];
 
 #[test]

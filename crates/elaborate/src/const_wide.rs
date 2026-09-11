@@ -343,6 +343,15 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             let (b, w, _) = fold_bits_at0(expr, name)?;
             Some((b, w, *signed))
         }
+        // §3 ⑤ⓕ: the per-instance twin (`T'(e)` over an overridable `parameter
+        // type`). This walk is a FREE function with no `Elaborator` and therefore no
+        // scope to resolve `T$s` in, so it DECLINES rather than guess a sign — the
+        // caller falls back to the width-limited domain exactly as it does for any
+        // form this walk does not model.
+        ast::ExprKind::Cast {
+            target: ast::CastTarget::SigningParam { .. },
+            ..
+        } => None,
         // §11.4.12 concatenation: unsigned, leftmost part most significant.
         ast::ExprKind::Concat { parts } => {
             let (b, w) = fold_concat_parts(parts, &cap, name)?;
