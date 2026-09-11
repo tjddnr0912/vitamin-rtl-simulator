@@ -12,8 +12,10 @@
 //! INFERRED from a folded value are recorded beside declared ones — and measured
 //! `localparam W = 4'hF | 4'h0;` reducing 32 bits where both oracles hold 4, picking
 //! the opposite generate branch at exit 0. It reverted. `param_range` records only what
-//! a DECLARATION states, and the value stored beside it is coerced to that width at
-//! binding, so the pair is canonical. The counterexample is pinned below.
+//! a DECLARATION states — including a self-determined initializer every one of whose NAME
+//! leaves has a PROVED declared width — and the value stored beside it is coerced to that
+//! width at binding, so the pair is canonical. The counterexample is pinned below, next to
+//! the operand whose width is genuinely value-inferred and still declines.
 //!
 //! Every value here was measured on iverilog 13.0 AND verilator 5.050 unless a cell
 //! says otherwise.
@@ -192,39 +194,53 @@ fn reductions_and_bit_functions_fold() {
     );
 }
 
-/// ⚠️⚠️ §4.5.373's counterexample, pinned as a DECLINE.
+/// ⚠️⚠️ §4.5.373's counterexample — the width source, measured again at its own boundary.
 ///
-/// An UNTYPED parameter's width is inferred from its folded value, and the inference
-/// disagrees with the language: `localparam W = 4'hF | 4'h0;` is 4 bits in both
-/// oracles and 32 in `param_meta`. A reduction over it would pick the opposite
-/// generate branch at exit 0, which is exactly what that slice measured before
-/// reverting. It stays loud, and the DECLARED twin folds beside it.
+/// What that slice got wrong was reading `param_meta`, which holds widths INFERRED from a
+/// folded value beside declared ones. `param_range` is still the only admissible source,
+/// and a reduction over an operand with no entry there is still loud. What CHANGED is
+/// which operands have one: an OPERATOR initializer whose every NAME leaf has a proved
+/// declared width now records its own width (`declared_override_widths` +
+/// `ctx_width_names_are_evident`, the same proof the override lane uses), so
+/// `localparam W = A | 4'h0;` over `parameter A = 4'h1;` is 4 bits in `param_range`, the
+/// same 4 all three tools answer for `$bits(W)`.
+///
+/// Measured 3-way on all four cells: `^W` is `1` and the bound is `4` in vita, iverilog 13
+/// and verilator 5.052 alike. The DECLINE this pin exists for has moved to the operand
+/// whose width is genuinely value-inferred — a `$clog2` source, whose own initializer
+/// reaches the value-inferred tail and records nothing — and that cell is loud below.
 #[test]
 fn an_inferred_width_never_supplies_a_reduction() {
-    loud(
+    folds(
         "  parameter A = 4'h1;\n  localparam W = A | 4'h0;\n  localparam logic R = ^W;",
         "%b",
         "R",
+        "1",
     );
-    // ⚠️ The UNTYPED spelling and the DECLARATION-BOUND spelling of the same reduction
-    // — the two positions this pin's name claims and, until §3 ⑦ landed, never
-    // covered: both took the module-scope walk, which had no reduction arm at all, so
-    // the untyped one was loud for the wrong reason and the bound was a SILENT 1 bit.
-    // The walk folds reductions now (through the same provenance-filtered resolver),
-    // and both stay loud for the RIGHT reason.
-    loud(
+    // The UNTYPED spelling and the DECLARATION-BOUND spelling of the same reduction —
+    // the two positions this pin's name claims. Both take the module-scope walk, which
+    // folds reductions through the same provenance-filtered resolver.
+    folds(
         "  parameter A = 4'h1;\n  localparam W = A | 4'h0;\n  localparam R = ^W;",
         "%b",
         "R",
+        "1",
     );
     let (out, code) = run(
         "module top;\n  parameter A = 4'h1;\n  localparam W = A | 4'h0;\n  \
          wire [(^W)+2:0] X;\n  initial $display(\"%0d\", $bits(X));\nendmodule\n",
     );
-    assert_ne!(code, Some(0), "{out}");
-    assert!(
-        out.contains("a reduction of an operand whose width the constant domain cannot read"),
-        "{out}"
+    assert_eq!(code, Some(0), "{out}");
+    assert!(out.contains("4"), "{out}");
+    // ⚠️ THE DECLINE, on the operand whose width no declaration states: `A`'s own
+    // initializer is a system call, so it has no `param_range` entry, the certification
+    // refuses the whole `A | 4'h0` tree, and the reduction is loud. Both oracles answer
+    // `R=0` here — an honest-loud residue (ROADMAP §2), not a pass.
+    loud(
+        "  localparam A = $clog2(300);\n  localparam W = A | 4'h0;\n  \
+         localparam logic R = ^W;",
+        "%b",
+        "R",
     );
     // The same value with the range DECLARED: canonical, and it folds.
     folds(

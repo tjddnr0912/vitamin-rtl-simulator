@@ -553,7 +553,15 @@ impl Elaborator<'_> {
     /// Fail-closed as a whole: one unprovable name declines the entire override, so
     /// this can only ever move a name-bearing tree from the value-inferred 32 to a
     /// declared width, never from a declared width to a guess.
-    fn declared_override_widths(&self, e: &ast::Expr) -> Option<ConstWidths> {
+    ///
+    /// ⚠️ SECOND CONSUMER: `param_decl_width_opt`'s bare-alias / concatenation /
+    /// ternary / operator arms call it (paired with
+    /// [`Self::ctx_width_names_are_evident`], exactly as `override_self_meta` does) to
+    /// decide whether a DECLARATION's initializer may answer under `declared_only`.
+    /// The question is the same one on both lanes — "is every NAME leaf's width a
+    /// declared fact?" — so it stays one resolver rather than a predicate copied into
+    /// a second place.
+    pub(crate) fn declared_override_widths(&self, e: &ast::Expr) -> Option<ConstWidths> {
         fn names<'a>(e: &'a ast::Expr, out: &mut Vec<&'a ast::HierPath>) -> bool {
             use ast::ExprKind as K;
             match &e.kind {

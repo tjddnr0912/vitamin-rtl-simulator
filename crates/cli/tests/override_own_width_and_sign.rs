@@ -249,15 +249,16 @@ fn a_declared_width_target_is_untouched() {
 /// The accept set's remaining declines, pinned as the residues they are rather than left
 /// to look like coverage. Both keep their pre-slice answer.
 ///
-/// * a name whose width is VALUE-INFERRED (`localparam W8 = ~8'hCB` — no declared range).
-///   `declared_override_widths` cannot certify it: `param_range` has no entry, so
-///   `narrow_param_bits` declines and the whole override declines with it, fail-closed.
-///   Both oracles bind 8; vita keeps 32. ⚠️ This is NOT "a name leaf declines" any more —
-///   a name with a DECLARED range now binds at that width
-///   (`a_declared_name_leaf_binds_at_its_declared_width`). What is left is exactly the
-///   provenance the parser does not record.
 /// * a >64-bit tree (`~128'd0`) — `const_ctx_within_i64` refuses it, because the value
 ///   re-fold clamps at 64. Both oracles bind 128; vita keeps 32.
+///
+/// ⚠️ `localparam W8 = ~8'hCB` is NO LONGER one of them, and the move is the point: an
+/// OPERATOR initializer whose every NAME leaf has a proved declared width now records its
+/// own width in `param_range`, so `narrow_param_bits` certifies `W8` at 8 and
+/// `#(.P(W8 + 1'b0))` binds at 8 — verilator's answer and a direct `$bits`'s, measured
+/// 3-way (iverilog binds `+` at 9 while its own `$bits` says 8, the §4.5.466
+/// self-contradiction, so it is NON-EVIDENCE here). It stays in this test as the control
+/// that separates "the certification proved it" from "the domain refuses the width".
 #[test]
 fn the_declined_shapes_keep_their_pre_slice_answer() {
     let (o, c) = run("module sub #(parameter P = 1) (); initial $display(\"%m bits=%0d hex=%h\", $bits(P), P); endmodule\n\
@@ -272,7 +273,7 @@ fn the_declined_shapes_keep_their_pre_slice_answer() {
     assert_eq!(
         got,
         [
-            "top.name_leaf bits=32 hex=00000034",
+            "top.name_leaf bits=8 hex=34",
             "top.too_wide bits=32 hex=ffffffff",
         ]
     );

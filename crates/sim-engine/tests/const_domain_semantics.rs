@@ -188,21 +188,30 @@ endmodule
     );
 }
 
-/// P0-6: i64 overflow in a parameter expression is loud, not a wrapped value.
+/// P0-6, re-pinned: a parameter whose initializer's PRODUCT exceeds i64 used to be loud
+/// (`checked_mul` refused it and the i64 fold had no wider lane). The self-determined
+/// width of `64'd a * 64'd b` is max(64, 64) = 64 (IEEE §11.6.1, table 11-21), so the
+/// declared-width certification of an operator initializer (`param_decl_width_opt`'s
+/// operator arm under `declared_only`) now records 64 in `param_range`, and the value
+/// folds in the wide domain and WRAPS at 64 bits. Measured: verilator 5.052 prints
+/// `W=9223372037000250000 $bits=64`, vita prints the same; iverilog 13 prints the same
+/// value with `$bits` 128 (it doubles a parameter-bound `*`, its recorded `+`/`*`
+/// width quirk) and is not the oracle for the width column here.
 #[test]
 fn param_overflow_is_error() {
-    let (_out, diags) = run_with_diags(
+    let (out, diags) = run_with_diags(
         r#"
 module t;
   parameter W = 64'd3037000500 * 64'd3037000500; // ~9.2233720368e18 > i64::MAX
-  initial $display("W=%0d", W);
+  initial $display("W=%0d b=%0d", W, $bits(W));
 endmodule
 "#,
     );
     assert!(
-        diags.iter().any(|d| d.starts_with("Error")),
-        "expected an Error diagnostic for the overflowing parameter, got: {diags:?}"
+        !diags.iter().any(|d| d.starts_with("Error")),
+        "the 64-bit product folds at its self-determined width, got: {diags:?}"
     );
+    assert_eq!(out.trim(), "W=9223372037000250000 b=64");
 }
 
 /// Keep-green: enum label chains still fold (explicit value resets the

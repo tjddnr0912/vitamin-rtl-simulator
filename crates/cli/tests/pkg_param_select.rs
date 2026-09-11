@@ -255,7 +255,7 @@ fn a_package_parameter_may_select_a_sibling() {
 }
 
 /// …and the range must NOT leak out of the package: a module-scope name of the
-/// same spelling with no declared range keeps declining.
+/// same spelling is answered by its OWN declaration, whatever the package says.
 #[test]
 fn the_package_range_does_not_leak_to_a_module_name() {
     let (out, c) = run("package pk;\n\
@@ -267,12 +267,13 @@ fn the_package_range_does_not_leak_to_a_module_name() {
            initial begin $display(\"BITS=%0d\", $bits(v)); $finish; end\n\
          endmodule\n");
     assert_eq!(c, Some(0));
-    // The module's own `W` has a VALUE-inferred width, so the fold declines and
-    // the bound clamps to 1 — the pre-existing §4.5.363 residue, unchanged. What
-    // must never happen is 52: that would be the package's declaration answering
-    // for a different object's value.
+    // The module's own `W = ~8'hAB` is 8 bits — its leaf is a sized literal, so the
+    // operator initializer records its own width in `param_range` — and `W[7:0]` is
+    // `8'h54`, so the net is 84 bits. Measured 3-way: iverilog 13 and verilator 5.052
+    // both answer 84. What must never happen is 52: that would be the package's
+    // `[31:0]` declaration answering for a different object's value.
     assert!(
-        out.contains("BITS=1"),
+        out.contains("BITS=84"),
         "module-scope W is not pk::W:\n{out}"
     );
 }

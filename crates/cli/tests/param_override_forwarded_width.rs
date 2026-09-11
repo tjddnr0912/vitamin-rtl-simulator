@@ -28,12 +28,6 @@
 //!
 //! ## Residues pinned here, deliberately NOT repaired
 //!
-//! - A `localparam` DERIVED from the overridden parameter (`localparam R = ~Q;` then
-//!   `leaf #(.P(R))`) still forwards at 32. Different root: `R` is not overridden, so
-//!   `param_decl_range_opt(p, true)` reaches the operator arm — which declines under
-//!   `declared_only` on purpose, because `const_self_width` sizes a NAME out of
-//!   `param_meta` where value-INFERRED widths live (the §4.5.363 263-bit-net shape).
-//!   `$bits(R)` inside the middle module is already right.
 //! - A parent whose declared range is ASCENDING (`[0:11]`) or has a NON-ZERO LSB
 //!   (`[15:4]`) still forwards at 32: `narrow_param_bits` declines `lo != 0 || ascending`
 //!   outright (ROADMAP §2 🆕 H ⓑ). That decline is upstream of this slice's pair and was
@@ -365,13 +359,11 @@ fn a_wider_than_64_bit_override_forwards_whole() {
 }
 
 /// ⚠️ RESIDUES, pinned at the value vita prints TODAY so the next slice's move is visible.
-/// Both are silent-wrong against both oracles and both are OTHER rows, not this one.
+/// They are silent-wrong against both oracles and they are OTHER rows, not this one.
 ///
-/// `top.l` — a `localparam` derived from the overridden parameter. `$bits(R)` inside the
-/// module is already `4`, so `param_meta[R]` is right; `param_range[R]` is empty because
-/// `param_decl_range_opt`'s operator arm declines under `declared_only` on purpose
-/// (`const_self_width` sizes a NAME out of `param_meta`, where value-INFERRED widths live —
-/// the §4.5.363 263-bit-net shape through a different door). Both oracles: `4 / c`.
+/// `top.l` is no longer one of them: the derived-`localparam` forward is now certified
+/// leaf-by-leaf (see `localparam_derived_forward_width.rs`), so it prints both oracles'
+/// `4 / c`. It stays here as the control that separates the two roots.
 ///
 /// `top.a` / `top.n` — an ASCENDING (`[0:11]`) and a NON-ZERO-LSB (`[15:4]`) declared range
 /// on the parent. `narrow_param_bits` refuses `lo != 0 || ascending` outright, upstream of
@@ -401,7 +393,7 @@ fn neighbouring_rows_are_recorded_not_widened_into() {
         lines(&o),
         [
             "top.l R bits=4 val=c",         // right PRE and POST — `param_meta`
-            "top.l.r bits=32 val=c",        // RESIDUE: both oracles `bits=4 val=c`
+            "top.l.r bits=4 val=c",         // CONTROL — both oracles `bits=4 val=c`
             "top.a.n bits=32 val=fffffffc", // RESIDUE (🆕 H ⓑ): both oracles `12 / ffc`
             "top.a.b bits=32 val=3",        // RESIDUE (🆕 H ⓑ): both oracles `12 / 3`
             "top.n.n bits=32 val=fffffffc", // RESIDUE (🆕 H ⓑ): both oracles `12 / ffc`

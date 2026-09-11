@@ -95,6 +95,66 @@ impl Elaborator<'_> {
         self.param_decl_width_opt(p, false, false)
     }
 
+    /// The width environment a self-determined initializer may be sized in.
+    ///
+    /// `Some(empty)` on the unrestricted lane — every consumer then reads its leaf
+    /// widths out of `param_meta` exactly as it did before, so that lane is unchanged.
+    ///
+    /// Under `declared_only` it is the CERTIFIED environment or nothing:
+    /// [`Elaborator::declared_override_widths`] admits a NAME only when
+    /// `narrow_param_bits` proves its width is declared (a `param_range` entry at LSB 0,
+    /// descending, AGREEING with `param_meta`), and `ctx_width_names_are_evident` then
+    /// requires every name the sizing walk will meet to be one of them. `None` means
+    /// "not provable" and the caller must decline, which is what keeps a value-inferred
+    /// width (§4.5.363's 263-bit net) out of `param_range`.
+    fn declared_env_for(&self, e: &ast::Expr, declared_only: bool) -> Option<ConstWidths> {
+        if !declared_only {
+            return Some(ConstWidths::new());
+        }
+        let envw = self.declared_override_widths(e)?;
+        Self::ctx_width_names_are_evident(e, &envw).then_some(envw)
+    }
+
+    /// The signedness twin of [`Self::declared_env_for`]: the env-aware resolver on the
+    /// certified lane (a name's sign must come from the SAME declaration its width did),
+    /// and the pre-existing scope resolver on the unrestricted lane, which keeps that
+    /// lane byte-identical.
+    fn declared_env_signed(&self, e: &ast::Expr, envw: &ConstWidths, declared_only: bool) -> bool {
+        if declared_only {
+            self.const_signed_env(e, envw)
+        } else {
+            self.const_expr_signed(e)
+        }
+    }
+
+    /// Whether a concatenation's width comes from its operands' OWN stated widths,
+    /// with nothing inferred anywhere in the tree.
+    ///
+    /// A SIZED literal qualifies as a leaf outright. An unsized decimal is sized from
+    /// its value and never qualifies. A NAME qualifies only when `envw` records a
+    /// non-zero width for it — `envw` being `declared_override_widths`' answer, where a
+    /// name is present only if `narrow_param_bits` proved its width is a DECLARED fact.
+    /// A bare `param_meta` read would not do: that map holds inferred widths beside
+    /// declared ones and this predicate cannot see which kind a given name got.
+    /// The replication COUNT is deliberately not examined: it scales the width but
+    /// contributes none of its own bits.
+    fn concat_width_is_declared(e: &ast::Expr, envw: &ConstWidths) -> bool {
+        match &e.kind {
+            ast::ExprKind::IntLit { kind, .. } => matches!(kind, ast::IntLitKind::Sized),
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
+                matches!(envw.get(&p.segments[0].name), Some((w, _)) if *w > 0)
+            }
+            ast::ExprKind::Paren { inner } => Self::concat_width_is_declared(inner, envw),
+            ast::ExprKind::Concat { parts } => parts
+                .iter()
+                .all(|q| Self::concat_width_is_declared(q, envw)),
+            ast::ExprKind::Replicate { value, .. } => value
+                .iter()
+                .all(|q| Self::concat_width_is_declared(q, envw)),
+            _ => false,
+        }
+    }
+
     /// [`Self::param_decl_width`] for a declaration whose DEFAULT is what binds — no
     /// override reached it.
     ///
@@ -105,26 +165,6 @@ impl Elaborator<'_> {
     /// oracles keep 32 bits and `deadbeef`. A DECLARED TYPE legitimately survives an
     /// override; a self-determined initializer expression does not, because the value
     /// it was determined from has been replaced.
-    /// Whether a concatenation's width comes from its operands' OWN stated widths,
-    /// with nothing inferred anywhere in the tree.
-    ///
-    /// Only a SIZED literal qualifies as a leaf. An unsized decimal is sized from its
-    /// value, and a NAME is sized from `param_meta`, which is where inferred widths
-    /// live — this predicate cannot see which kind a given name got, so it declines
-    /// rather than guess. The replication COUNT is deliberately not examined: it
-    /// scales the width but contributes none of its own bits.
-    fn concat_width_is_declared(e: &ast::Expr) -> bool {
-        match &e.kind {
-            ast::ExprKind::IntLit { kind, .. } => matches!(kind, ast::IntLitKind::Sized),
-            ast::ExprKind::Paren { inner } => Self::concat_width_is_declared(inner),
-            ast::ExprKind::Concat { parts } => parts.iter().all(Self::concat_width_is_declared),
-            ast::ExprKind::Replicate { value, .. } => {
-                value.iter().all(Self::concat_width_is_declared)
-            }
-            _ => false,
-        }
-    }
-
     pub(crate) fn param_decl_width_unoverridden(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
         self.param_decl_width_opt(p, false, true)
     }
@@ -135,10 +175,13 @@ impl Elaborator<'_> {
     ///
     /// ⚠️ The unrestricted wrapper is NOT interchangeable here even on the decline path
     /// it is reached from. Three of its value-inferring arms are already fenced off by
-    /// needing a folded value, but the concatenation arm is not: it sizes a leaf NAME
-    /// through `param_meta`, where inferred widths live, so a concatenation could hand
-    /// back a width nothing declared. Truncating a folded value to such a width is the
-    /// §4.5.363 263-bit-net shape with the sign flipped.
+    /// needing a folded value, but its concatenation / ternary / operator / alias arms
+    /// are not: they size a leaf NAME through `param_meta`, where inferred widths live,
+    /// so they could hand back a width nothing declared. Truncating a folded value to
+    /// such a width is the §4.5.363 263-bit-net shape with the sign flipped. Under
+    /// `declared_only` those same arms size the leaf through `narrow_param_bits`
+    /// instead and decline when it cannot prove the width — see
+    /// [`Self::declared_env_for`].
     pub(crate) fn param_decl_width_declared(&self, p: &ast::ParamDecl) -> Option<(u32, bool)> {
         self.param_decl_width_opt(p, true, true)
     }
@@ -211,8 +254,8 @@ impl Elaborator<'_> {
     /// [`Self::param_decl_width`] with an OPT-IN provenance filter.
     ///
     /// `declared_only` = answer only when the width came from a DECLARED RANGE, a
-    /// TYPE, or a LITERAL — never from inference over the folded value. Every
-    /// existing caller passes a literal `false` and is byte-identical.
+    /// TYPE, a LITERAL, or a self-determined operator over leaves whose widths are
+    /// themselves declared facts — never from inference over the folded value.
     ///
     /// ⚠️ The distinction is not cosmetic, and it was measured the hard way. The
     /// final fallthrough sizes an untyped expression initializer as
@@ -224,10 +267,17 @@ impl Elaborator<'_> {
     /// regression, not a residue — which is why the select path opts in here instead
     /// of reading `param_meta` directly.
     ///
-    /// The ALIAS arms (`localparam C = D;`, `localparam C = p::D;`) decline under
-    /// the flag as well: they inherit the source's recorded meta, and this predicate
-    /// cannot see whether THAT width was itself inferred. Fail-closed; the alias of
-    /// a declared param is recorded residue, not a wrong answer.
+    /// ⚠️ What the flag fences off is INFERENCE, not names. The bare-ALIAS, CONCAT,
+    /// TERNARY and OPERATOR arms all answer under it when — and only when — every NAME
+    /// leaf's width is proved declared by `narrow_param_bits`
+    /// (`declared_override_widths` + `ctx_width_names_are_evident`, or
+    /// `concat_width_is_declared` for the concatenation family; see
+    /// [`Self::declared_env_for`]). That proof is what the 263-bit shape above cannot
+    /// pass: `W`'s width there is inferred, so it is not in the environment and the arm
+    /// declines exactly as before. One unprovable leaf declines the whole initializer,
+    /// so this can only move a declaration from "no recorded range" to a range every
+    /// leaf proved. The `pkg::` ALIAS arm still declines outright — its source's
+    /// provenance lives in `pkg_const_meta`, which this proof does not cover.
     fn param_decl_width_opt(
         &self,
         p: &ast::ParamDecl,
@@ -369,10 +419,21 @@ impl Elaborator<'_> {
                 // or an unfoldable-width source), fall to the value-inferred default
                 // (`None`) rather than value-sizing the folded i64 below: a bare
                 // alias must keep the SOURCE's width, not shrink to its value's.
+                //
+                // ⚠️ Under `declared_only` the width may NOT come from `param_meta`,
+                // which is where value-INFERRED widths are recorded. It comes from
+                // `narrow_param_bits`, the resolver that answers only when the source's
+                // `param_range` entry exists, starts at LSB 0, is descending, and AGREES
+                // with `param_meta` — i.e. only when the source's width is a declared
+                // fact. That is the provenance proof this arm used to say it was
+                // missing: with it, `localparam R = Q;` forwards Q's 4 declared bits
+                // instead of recording nothing, and a source with no `param_range` entry
+                // (a `$clog2` initializer) or none in `param_meta` (a >64-bit parent)
+                // still declines.
                 if let ast::ExprKind::Ident(pth) = &e.kind {
                     if pth.segments.len() == 1 {
                         if declared_only {
-                            return None; // inherited meta — provenance unknown here
+                            return self.narrow_param_bits(pth).map(|(_, w, s)| (w, s));
                         }
                         return self
                             .param_meta
@@ -460,7 +521,10 @@ impl Elaborator<'_> {
                 // vector — IS a select over a concatenation, and denying it a width put
                 // the whole design back to loud. A concatenation of SIZED LITERALS
                 // states its width as plainly as a sized literal does; a leaf that is a
-                // name does not, and only that leaf has to decline.
+                // name states it as plainly whenever `declared_override_widths` can
+                // PROVE the name's width is declared (`narrow_param_bits`), and only an
+                // unprovable leaf has to decline. The `{W}` door above stays shut by the
+                // same proof: `W`'s width there is inferred, so it is not in `envw`.
                 // Parens only: the loop above also peels unary `+`/`-`, and whether a
                 // negated concatenation keeps the operand's width is a separate
                 // question that wants its own measurement. Without this, `{2{8'h1}}`
@@ -470,12 +534,30 @@ impl Elaborator<'_> {
                     cat = inner;
                 }
                 if default_binds
-                    && (!declared_only || Self::concat_width_is_declared(cat))
                     && matches!(
                         cat.kind,
                         ast::ExprKind::Concat { .. } | ast::ExprKind::Replicate { .. }
                     )
                 {
+                    // Empty on the unrestricted lane, so that lane is byte-identical:
+                    // `const_placement_wide` reads its leaf widths out of `param_meta`
+                    // exactly as before. Under `declared_only` the certified widths are
+                    // handed in instead, and certification requires `param_range` and
+                    // `param_meta` to AGREE, so the two sources cannot disagree here.
+                    if declared_only {
+                        // Certification only — the map is NOT handed to the folder.
+                        // `const_placement_wide`'s `envw` means "this interpreter's
+                        // LOCALS", and a name it records must come with a VALUE in the
+                        // companion `env`; passing a module parameter through it makes
+                        // the fold decline outright. Reading the width back out of
+                        // `param_meta`, as the empty-env call already does, is exactly
+                        // the certified width: `narrow_param_bits` answers only when
+                        // `param_range` and `param_meta` AGREE.
+                        match self.declared_override_widths(cat) {
+                            Some(m) if Self::concat_width_is_declared(cat, &m) => {}
+                            _ => return None,
+                        }
+                    }
                     if let Some((_, w, _)) = self.const_placement_wide(
                         cat,
                         &std::collections::BTreeMap::new(),
@@ -499,21 +581,30 @@ impl Elaborator<'_> {
                 // was missing is that this inference never ASKED it — the same shape
                 // as the concatenation arm above, one operator over.
                 //
-                // ⚠️ Declines under `declared_only`, for exactly the reason the
-                // value-inferred tail does: `const_self_width` sizes a NAME from
-                // `param_meta`, which is where value-INFERRED widths are recorded, so
-                // answering there would launder the provenance that flag fences off —
-                // the §4.5.363 regression the concatenation arm documents, through a
-                // different door.
-                if default_binds && !declared_only {
+                // ⚠️ Under `declared_only` it answers ONLY through the certified
+                // environment, for the reason the value-inferred tail declines outright:
+                // `const_self_width` sizes a NAME from `param_meta`, which is where
+                // value-INFERRED widths are recorded, so reading it there would launder
+                // the provenance that flag fences off — the §4.5.363 regression the
+                // concatenation arm documents, through a different door. The
+                // `declared_override_widths` + `ctx_width_names_are_evident` pair is the
+                // same proof `override_self_meta` uses on the override lane: every NAME
+                // leaf's width must be a declared fact, and one unprovable leaf declines
+                // the whole initializer.
+                if default_binds {
                     let mut tern = &p.value;
                     while let ast::ExprKind::Paren { inner } = &tern.kind {
                         tern = inner;
                     }
                     if matches!(tern.kind, ast::ExprKind::Ternary { .. }) {
-                        if let Some(w) = self.const_self_width(tern, &ConstWidths::new()) {
-                            if w > 0 {
-                                return Some((w, self.const_expr_signed(tern)));
+                        if let Some(envw) = self.declared_env_for(tern, declared_only) {
+                            if let Some(w) = self.const_self_width(tern, &envw) {
+                                if w > 0 {
+                                    return Some((
+                                        w,
+                                        self.declared_env_signed(tern, &envw, declared_only),
+                                    ));
+                                }
                             }
                         }
                     }
@@ -546,11 +637,17 @@ impl Elaborator<'_> {
                 // catches it — so the accept set is the whole operator table, and it
                 // lands on verilator's answer in all 60 measured cells.
                 //
-                // ⚠️ Declines under `declared_only` for the ternary arm's reason:
-                // `const_self_width` sizes a NAME from `param_meta` — where
-                // value-INFERRED widths are recorded — and guesses 32 when there is
-                // none, which is exactly the provenance that flag fences off.
-                if default_binds && !declared_only {
+                // ⚠️ Under `declared_only` it answers ONLY through the certified
+                // environment, for the ternary arm's reason: `const_self_width` sizes a
+                // NAME from `param_meta` — where value-INFERRED widths are recorded —
+                // and guesses 32 when there is none, which is exactly the provenance
+                // that flag fences off. `declared_env_for` replaces that guess with
+                // widths `narrow_param_bits` proved, and refuses the whole initializer
+                // when any leaf is unprovable, so `localparam W = ~8'hCB` still records
+                // the 8 its literal states while `localparam W = ~A` over a
+                // `$clog2` source (no `param_range` entry) and `~WBIG` over a >64-bit
+                // source (no `param_meta` entry) both still record nothing.
+                if default_binds {
                     let mut opx = &p.value;
                     while let ast::ExprKind::Paren { inner } = &opx.kind {
                         opx = inner;
@@ -563,9 +660,14 @@ impl Elaborator<'_> {
                         } | ast::ExprKind::Binary { .. }
                     );
                     if sized_by_operator {
-                        if let Some(w) = self.const_self_width(opx, &ConstWidths::new()) {
-                            if w > 0 {
-                                return Some((w, self.const_expr_signed(opx)));
+                        if let Some(envw) = self.declared_env_for(opx, declared_only) {
+                            if let Some(w) = self.const_self_width(opx, &envw) {
+                                if w > 0 {
+                                    return Some((
+                                        w,
+                                        self.declared_env_signed(opx, &envw, declared_only),
+                                    ));
+                                }
                             }
                         }
                     }

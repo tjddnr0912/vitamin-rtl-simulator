@@ -380,19 +380,37 @@ fn a_constant_function_reduces_its_own_formal() {
     );
 }
 
-/// An operand whose width was INFERRED from a value — `localparam E = 4'hF | 4'h0;`
-/// is 4 bits in both oracles and 32 in `param_meta` — cannot be reduced soundly
-/// (`&E` depends on it), and the bound used to clamp to a SILENT 1 bit where both
-/// oracles declare 4. It is loud now, and says why.
+/// An operand whose width no DECLARATION states cannot be reduced soundly (`&E` depends on
+/// it), and the bound used to clamp to a SILENT 1 bit where both oracles declare 4. It is
+/// loud now, and says why.
+///
+/// ⚠️ `localparam E = 4'hF | 4'h0;` is no longer such an operand. Its leaves are sized
+/// literals, so the operator initializer records its own 4 bits in `param_range` — the same
+/// 4 all three tools answer for `$bits(E)` — and the reduction folds. Measured 3-way: the
+/// bound is `4` and `^E` is `0` in vita, iverilog 13 and verilator 5.052 alike. The
+/// DECLINE this test is about is the operand whose width is genuinely value-inferred, which
+/// is the `$clog2` source below: its own initializer reaches the value-inferred tail, so it
+/// has no `param_range` entry and the certification refuses the whole tree. Both oracles
+/// answer `3` there — an honest-loud residue (ROADMAP §2), not a pass.
 #[test]
 fn a_value_inferred_operand_width_is_loud_not_one_bit() {
-    loud(
+    prints(
         "  localparam E = 4'hF | 4'h0;\n  wire [(&E)+2:0] x;",
+        "\"%0d\", $bits(x)",
+        "4",
+    );
+    prints(
+        "  localparam E = 4'hF | 4'h0;\n  localparam R = ^E;",
+        "\"%0d\", R",
+        "0",
+    );
+    loud(
+        "  localparam A = $clog2(300);\n  localparam E = A | 4'h0;\n  wire [(&E)+2:0] x;",
         "\"%0d\", $bits(x)",
         "a reduction of an operand whose width the constant domain cannot read",
     );
     loud(
-        "  localparam E = 4'hF | 4'h0;\n  localparam R = ^E;",
+        "  localparam A = $clog2(300);\n  localparam E = A | 4'h0;\n  localparam R = ^E;",
         "\"%0d\", R",
         "a reduction of an operand whose width the constant domain cannot read",
     );
