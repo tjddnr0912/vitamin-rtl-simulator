@@ -578,11 +578,13 @@ impl Elaborator<'_> {
                             exit
                         })
                 });
-                // §4.5.189: inside a FRAME body (automatic task/function), a nested
-                // block's decl-inits run at BLOCK ENTRY (here) — so a decl-init inside a
-                // LOOP re-initializes every iteration (IEEE automatic lifetime, §6.21).
-                // The outermost body block has empty `decls` (parser), so the top-level
-                // body_decls still init once at frame entry (`emit_frame_local_inits`).
+                // §4.5.189: inside a FRAME body, a nested block's decl-inits are handed
+                // to `emit_frame_local_inits` here, at BLOCK ENTRY — which splits them by
+                // the declarator's EFFECTIVE lifetime: an AUTOMATIC one re-initializes on
+                // every block entry (so a decl-init inside a LOOP re-runs each iteration,
+                // §6.21), a STATIC one is deferred to the once-only t0 flush. The
+                // outermost body block has empty `decls` (parser), so the top-level
+                // body_decls go through the frame-entry call instead.
                 // MODULE-process block-locals keep their static (once-at-t0) init.
                 let emit_block_inits = self.in_frame_body;
                 // §4.5.426: a USER label (a synthetic `$break$…` is not a scope) joins
@@ -601,8 +603,7 @@ impl Elaborator<'_> {
                 // per-entry automatic-with-init block-locals here so they RE-INITIALIZE on
                 // each block entry (§6.21); static block-locals keep their once-at-t0 init.
                 let span_lo = span.lo;
-                if self.scoped_block_locals.contains_key(&span.lo) {
-                    let seg = format!("$blk${}", span.lo);
+                if let Some(seg) = self.block_wrap_seg(span.lo) {
                     self.with_scope(&seg, |s| {
                         if emit_block_inits {
                             s.emit_frame_local_inits(b, decls);

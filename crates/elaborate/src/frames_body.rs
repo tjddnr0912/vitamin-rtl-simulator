@@ -289,6 +289,12 @@ impl Elaborator<'_> {
         };
         let saved_ret = self.cur_return.take();
         let saved_frame = std::mem::replace(&mut self.in_frame_body, true);
+        let saved_fauto = std::mem::replace(
+            &mut self.frame_body_auto,
+            self.func_metas[fid as usize].is_automatic,
+        );
+        let saved_hoist = std::mem::take(&mut self.frame_hoisted_decls);
+        let saved_nonh = std::mem::take(&mut self.frame_nonhoistable);
         // v7 P2-C: record `string`-declared formals so a `string` relational compare in
         // the body routes through `StrCmp` (a frame formal is a scoped net, not in
         // `subst`, so `expr_is_string_ast` cannot otherwise see it).
@@ -329,6 +335,7 @@ impl Elaborator<'_> {
             // `Block` arm of `lower_stmt`, gated on `in_frame_body`) so a decl-init
             // inside a LOOP re-initializes each iteration (IEEE automatic lifetime,
             // §6.21). Frame-entry emission was a single-entry-only approximation.
+            s.emit_frame_static_prologue(&mut b, &func.body_decls, &func.body, &func.ports, fid);
             s.emit_frame_local_inits(&mut b, &func.body_decls);
             if has_ret {
                 let exit = b.new_block();
@@ -359,6 +366,9 @@ impl Elaborator<'_> {
         });
         self.cur_return = saved_ret;
         self.in_frame_body = saved_frame;
+        self.frame_body_auto = saved_fauto;
+        self.frame_hoisted_decls = saved_hoist;
+        self.frame_nonhoistable = saved_nonh;
         self.cur_frame_owner = saved_owner;
         self.formal_str.truncate(fs_base);
         // Capture the block base AFTER the body closure: lowering the body may itself
@@ -436,6 +446,12 @@ impl Elaborator<'_> {
         let has_ret = body_has_return(&task.body);
         let saved_ret = self.cur_return.take();
         let saved_frame = std::mem::replace(&mut self.in_frame_body, true);
+        let saved_fauto = std::mem::replace(
+            &mut self.frame_body_auto,
+            self.func_metas[fid as usize].is_automatic,
+        );
+        let saved_hoist = std::mem::take(&mut self.frame_hoisted_decls);
+        let saved_nonh = std::mem::take(&mut self.frame_nonhoistable);
         let (body, entry) = self.with_scope(&scope_seg, |s| {
             // Gap B: body-local enum labels → constants under `$func$<name>` (this
             // scope), mirroring `lower_frame_func_body` — so a task body enum's
@@ -456,6 +472,7 @@ impl Elaborator<'_> {
             // rule (§6.21). Emitting them at frame entry was a single-entry-only
             // approximation that silently ran a loop-body init exactly ONCE (an X that
             // never re-inits ⇒ silent-wrong for `for(..) begin int t = f(k); .. end`).
+            s.emit_frame_static_prologue(&mut b, &task.body_decls, &task.body, &task.ports, fid);
             s.emit_frame_local_inits(&mut b, &task.body_decls);
             if has_ret {
                 let exit = b.new_block();
@@ -480,6 +497,9 @@ impl Elaborator<'_> {
         });
         self.cur_return = saved_ret;
         self.in_frame_body = saved_frame;
+        self.frame_body_auto = saved_fauto;
+        self.frame_hoisted_decls = saved_hoist;
+        self.frame_nonhoistable = saved_nonh;
         self.cur_frame_owner = saved_owner;
         self.formal_str.truncate(fs_base);
         let pending = std::mem::replace(&mut self.pending_task_calls, saved_pending);
@@ -542,10 +562,25 @@ impl Elaborator<'_> {
     /// the name resolves to a convergence exit block all paths flow into. Without
     /// a self-disable the body lowers exactly as before (byte-identical CFG).
     /// Run a frame function/task's body-local declaration initializers (`int x =
-    /// 10;`) at frame ENTRY — they were previously dropped, leaving the local at
-    /// its X/0 default (a §13.4.4 silent-wrong). Emitted in declaration order
-    /// (use-before-init reads the default, per IEEE). vita's frame locals reset per
-    /// call, so per-call initialization is the consistent semantics.
+    /// 10;`), in declaration order (use-before-init reads the default, per IEEE).
+    ///
+    /// WHEN they run is the declarator's EFFECTIVE lifetime, not "am I in a frame
+    /// body". An AUTOMATIC declarator (the subroutine is `automatic`, or the
+    /// declaration carries its own `automatic`) initializes on every activation —
+    /// and, for a declarator inside a nested block, on every block entry (§6.21,
+    /// §4.5.189). A STATIC declarator initializes ONCE, before time 0: measured on
+    /// iverilog 13 and verilator, `function int f; int c = 100; c = c + 1; f = c;`
+    /// called twice returns `101 102`, and a static task's loop-body `int z = 100;`
+    /// over two calls of three iterations prints `100 101 102 103 104 105`.
+    /// The storage already retains (`frame_slot_auto` keeps a static slot in the
+    /// persistent slab); only the emission point was per-activation.
+    ///
+    /// A static declarator's initializer is hoisted to `emit_frame_static_prologue`
+    /// — a once-only guarded region at the top of the body — and skipped here, ONLY
+    /// when `frame_static_init_t0_safe` admits it. An initializer that reads outside
+    /// the frame keeps the per-activation emission, because the oracles SPLIT on that
+    /// ordering: for `int n; initial n = 9; task t; int c = n;`, iverilog prints
+    /// `c=0` (the static init precedes the `initial`) and verilator prints `c=9`.
     pub(crate) fn emit_frame_local_inits(
         &mut self,
         b: &mut ProcessBuilder,
@@ -593,6 +628,17 @@ impl Elaborator<'_> {
                     self.lowering_decl_init = saved;
                 }
                 let Some(init) = &decl.init else { continue };
+                // §6.21/§13.4.1: a STATIC declarator's initializer runs ONCE, before
+                // time 0 — route it to the deferred t0 list under this frame's prefix.
+                // `d.lifetime` is the per-declaration override; `frame_body_auto` the
+                // subroutine default. An AUTOMATIC declarator falls through to the
+                // per-activation emission below, byte-identical to before.
+                // MEMBERSHIP, never a second evaluation of the admission predicate: skip
+                // exactly the declarators `emit_frame_static_prologue` emitted. Anything it
+                // declined — for any reason, under any prefix — is emitted here.
+                if self.frame_hoisted_decls.contains(&decl.name.span.lo) {
+                    continue;
+                }
                 let stmt = ast::Stmt::Blocking {
                     lhs: ast::Lvalue::Ident(ast::HierPath {
                         segments: vec![decl.name.clone()],

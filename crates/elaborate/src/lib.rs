@@ -82,6 +82,7 @@ mod frames_call;
 mod frames_classify;
 mod frames_classify_fork;
 mod frames_reserve;
+mod frames_static_init;
 mod generate;
 mod hier;
 mod hier_defer;
@@ -994,6 +995,38 @@ struct Elaborator<'s> {
     // (warn+skip) path. `false` in a process body AND an INLINE task body (both
     // lowered into the process statement stream, where the sys-read DOES execute).
     in_frame_body: bool,
+    // §6.21/§13.4.1: the DEFAULT lifetime of the frame subroutine currently being
+    // lowered (`FuncMeta.is_automatic`). A body declarator's EFFECTIVE lifetime is
+    // `NetVarDecl.lifetime` when it carries an explicit `automatic`/`static`, else
+    // this. `emit_frame_local_inits` needs it at every nesting depth, including the
+    // nested-block call from the `Stmt::Block` arm, so it is a field and not an
+    // argument. Meaningless (and `false`) outside a frame body.
+    frame_body_auto: bool,
+    /// §6.21: per-frame ONCE flag net, keyed by the frame's `base_net` owner. Present
+    /// only for a frame that owns a static declarator with an initializer
+    /// (`reserve_frame_static_guard`); read by `emit_frame_static_prologue`.
+    frame_static_guard: BTreeMap<u32, u32>,
+    /// The declarators whose initializer `emit_frame_static_prologue` ACTUALLY emitted in
+    /// the current frame body, keyed by the declared name's `span.lo` (unique per source
+    /// declarator). `emit_frame_local_inits` skips exactly this set — a MEMBERSHIP test, not
+    /// a second evaluation of the admission predicate.
+    ///
+    /// It has to be membership. The predicate resolves NAMES, so it answers differently
+    /// under different prefixes, and the prologue and the per-activation emitter do not
+    /// always run under the same one; when they disagreed, a declarator was claimed by
+    /// NEITHER and its initializer was silently never lowered. With a set, whatever the
+    /// prologue did not emit the per-activation emitter emits, by construction.
+    ///
+    /// Empty outside a frame body, and empty on the INLINE task route (whose declarators the
+    /// prologue never walks), so that route keeps its own `first_call` gate.
+    frame_hoisted_decls: BTreeSet<u32>,
+    /// Resolved symbol keys, inside the frame being lowered, that a STATIC initializer
+    /// may NOT read if it is to be hoisted to the once-only prologue: every FORMAL
+    /// argument of this frame, plus (transitively) every frame local whose own
+    /// initializer was declined. A formal has no value until a CALL binds it, so an
+    /// initializer reading one is not a once-only value at all. Empty outside a frame
+    /// body and for a frame with no hoisted initializer.
+    frame_nonhoistable: BTreeSet<String>,
     // §4.5.177: set ONLY while lowering the rhs of a blessed direct-rhs call
     // `x = f(dynarr)` at module-process level — where `lower_stmt` has already emitted the
     // `handle_copy` snapshot marker that fills the callee's dyn-array formal heap slot.

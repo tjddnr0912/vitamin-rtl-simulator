@@ -506,6 +506,58 @@ impl Elaborator<'_> {
     /// in each" is precisely the kind of agreement that drifts silently — the defect
     /// slice 1 of this round fixed between the unroll classifier and the lowering. The
     /// unroll question itself is asked with that same single spelling.
+    /// Reserve ONE frame-local flag net per frame that owns at least one STATIC
+    /// declarator with an initializer, top-level or inside a nested block.
+    ///
+    /// §6.21/§13.4.1: a static declarator's initializer runs once. The frame's static
+    /// slab already retains across calls (`frame_slot_auto`), so the once-ness is a
+    /// guard the body tests on entry — the frame twin of `hoist_inline_task_locals`'s
+    /// `first_call`. The flag is a STATIC slot itself (no `automatic` override bit), so
+    /// it survives between calls, and it starts at the 4-state default X, which the
+    /// prologue's `=== 1` test reads as "not yet run".
+    ///
+    /// ⚠️ Reserved HERE, for the same reason as the repeat counters and case temps: a
+    /// frame's locals are the contiguous range `[base_net, base_net + locals_len)`,
+    /// closed at the end of this pass. Appended LAST so no existing slot index — and so
+    /// no `auto_override` bit — moves.
+    ///
+    /// The admission here is deliberately WIDER than the lowering's: it asks only
+    /// "static declarator with an initializer", while `emit_frame_static_prologue`
+    /// additionally requires the initializer to be t0-safe. An unused reserved flag
+    /// costs one slot; a missing one would have no place to record once-ness.
+    pub(crate) fn reserve_frame_static_guard(
+        &mut self,
+        body_decls: &[ast::NetVarDecl],
+        body: &ast::Stmt,
+        owner: u32,
+        default_auto: bool,
+    ) {
+        let has_static_init = |d: &ast::NetVarDecl| {
+            !d.lifetime.unwrap_or(default_auto) && d.names.iter().any(|n| n.init.is_some())
+        };
+        let mut nested = Vec::new();
+        crate::block_local::collect_block_local_decls_spanned(body, &mut Vec::new(), &mut nested);
+        if !body_decls.iter().any(&has_static_init)
+            && !nested.iter().any(|(_, d)| has_static_init(d))
+        {
+            return;
+        }
+        let name = format!("$sinit${}", self.nets.len());
+        let nv = ir::NetVar {
+            kind: ir::NetKind::Reg,
+            width: 1,
+            msb: 0,
+            lsb: 0,
+            signed: false,
+            array_len: 1,
+            dir: ir::PortDir::Internal,
+            init: default_init(ast::NetVarKind::Reg, 1),
+        };
+        self.add_net(&name, nv);
+        let net = (self.nets.len() - 1) as u32;
+        self.frame_static_guard.insert(owner, net);
+    }
+
     pub(crate) fn reserve_frame_repeat_counters(&mut self, body: &ast::Stmt, owner: u32) {
         let mut spans = Vec::new();
         Self::collect_runtime_repeat_spans(self, body, &mut spans);
@@ -945,6 +997,7 @@ impl Elaborator<'_> {
             auto_override |= s.reserve_frame_block_locals(&func.body, base_net);
             s.reserve_frame_repeat_counters(&func.body, base_net);
             s.reserve_frame_case_tmps(&func.body, base_net);
+            s.reserve_frame_static_guard(&func.body_decls, &func.body, base_net, func.automatic);
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;
@@ -1284,6 +1337,7 @@ impl Elaborator<'_> {
             auto_override |= s.reserve_frame_block_locals(&task.body, base_net);
             s.reserve_frame_repeat_counters(&task.body, base_net);
             s.reserve_frame_case_tmps(&task.body, base_net);
+            s.reserve_frame_static_guard(&task.body_decls, &task.body, base_net, task.automatic);
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;

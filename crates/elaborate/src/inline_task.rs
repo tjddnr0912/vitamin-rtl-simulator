@@ -758,6 +758,10 @@ impl Elaborator<'_> {
         // §13.4.1/§6.21: a static local's initializer runs ONCE (before time 0),
         // not on each call — so emit the inits only at the first call site.
         if first_call {
+            // The inline route owns its own once-gating (`first_call`), and needs no guard
+            // against the frame prologue's skip: that skip is membership in
+            // `frame_hoisted_decls`, keyed by the DECLARATOR's own source offset, and an
+            // inlined task's declarators are never in a frame's set.
             self.emit_inline_local_inits(b, decls);
         }
     }

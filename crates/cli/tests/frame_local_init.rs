@@ -51,10 +51,16 @@ fn class_method_local_init() {
 
 #[test]
 fn local_init_runs_each_call() {
-    // the initializer runs at every frame entry (vita locals reset per call).
+    // CONVERTED (§2 Scoping, ROADMAP §5.2 row 2). `acc` is a STATIC declarator — the
+    // function carries no `automatic` — so IEEE 1800 §6.21/§13.4.1 run its initializer
+    // ONCE, before the first call, and the static slab retains between calls. This
+    // design measures `101 102` on iverilog 13 (`-g2012` + `vvp -n`) and on verilator
+    // 5.052 (`--binary --timing`); the earlier `101 101` pinned vita's per-activation
+    // emission, not either oracle. The name is kept: the case is still "what a repeated
+    // call does to a frame local's initializer".
     let out = run("module t;\n\
            function int f(); int acc = 100; acc = acc + 1; return acc; endfunction\n\
            initial begin $display(\"%0d\", f()); $display(\"%0d\", f()); end\n\
          endmodule\n");
-    assert_eq!(out, "101\n101\n");
+    assert_eq!(out, "101\n102\n");
 }
