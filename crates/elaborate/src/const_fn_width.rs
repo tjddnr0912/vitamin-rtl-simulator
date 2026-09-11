@@ -50,8 +50,13 @@ pub(crate) fn pkg_envw_key(pkg: &str, name: &str) -> String {
 /// `$realtime`) would be sized wrong by it the day the const domain learns to fold it.
 /// These three are exactly the ones `const_fn.rs` folds into this domain — `$clog2`
 /// (`:377`), `$rtoi` (`:387`), `$bits` (`:408`). The dimension-query family
-/// (`$size`/`$high`/…) is integer-returning too but is LOUD in every certified
-/// consumer today; admitting it is a loud→value move and belongs to its own row.
+/// (`$size`/`$high`/…) is integer-returning too but is NOT in this list, so a
+/// consumer that also needs the family must spell `|| is_dim_query_name(..)` —
+/// `const_eval_in_scope` DOES fold the family (`const_fn.rs:393`), which is why
+/// `const_expr_signed` (`const_eval.rs`) asks both lists. Widening this list
+/// itself is a different (loud→value) move for the consumers that gate on it —
+/// `ctx_width_names_are_evident` and `param_decl_width_opt` — and belongs to its
+/// own row.
 pub(crate) fn sys_fn_is_integer(name: &str) -> bool {
     matches!(name, "$clog2" | "$bits" | "$rtoi")
 }

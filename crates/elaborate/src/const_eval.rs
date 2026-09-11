@@ -555,6 +555,28 @@ impl Elaborator<'_> {
                     self.cast_size_bits(target).is_some() && self.const_expr_signed(expr)
                 }
             },
+            // An integer-returning system function is a 32-bit SIGNED int — `$clog2`
+            // (IEEE §20.8.1), `$bits` (§20.6.2), `$rtoi` (§20.4) and the dimension
+            // query family (§20.7). This is the same answer `const_signed_env`
+            // (`const_fn_width.rs:354`) has given the OVERRIDE lane all along, so
+            // `sub #(.P($clog2(300) - 20))` bound −11 while the untyped-param tail at
+            // `params.rs:777` bound the same fold as UNSIGNED and materialized
+            // 4294967285 (proof: `localparam A = $clog2(300); localparam B = A - 20;`
+            // already printed −11 — the STORED meta for `A` is `(32, signed)` via
+            // `params.rs:709`; only this walk was blind).
+            //
+            // ⚠️ NAMED lists, never a blanket `SysCall { .. } => true` (the spelling at
+            // `const_fn_width.rs:257`/`:354`): `$unsigned` must stay UNSIGNED, and
+            // `$itor` / `$realtobits` / `$sformatf` are not in this domain at all.
+            // BOTH lists are required: `sys_fn_is_integer` is `$clog2 | $bits | $rtoi`,
+            // but `const_eval_in_scope` also folds the dim-query family
+            // (`const_fn.rs:393`), so `$size(W8) - 20` reaches `params.rs:777` with a
+            // value and would keep the wrong sign without `is_dim_query_name`.
+            ast::ExprKind::SysCall { name, .. }
+                if sys_fn_is_integer(&name.name) || is_dim_query_name(&name.name) =>
+            {
+                true
+            }
             _ => false, // Call / select / concat / unmodeled: conservatively unsigned
         }
     }

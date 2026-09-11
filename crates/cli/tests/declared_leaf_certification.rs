@@ -44,8 +44,9 @@
 //! requires a top-level operator, a different lane), and `C1_pkq80_not` / `C1_plp80_not`
 //! (the pre-existing >64-bit direct-override decline in `const_ctx_within_i64`; the
 //! second is a PLAIN `parameter [79:0]` twin, which is what proves it is not a `pkg::`
-//! defect). `S_clog_neg` keeps an unsigned fold of a signed `$clog2` result
-//! (`4294967285` where both oracles print `-11`).
+//! defect). `S_clog_neg` (an unsigned fold of a signed `$clog2` result — `4294967285`
+//! where both oracles print `-11`) was closed afterwards by the `SysCall` arm in
+//! `const_expr_signed`; its pins live in `sysfn_integer_const_sign.rs`.
 //!
 //! Values pinned to iverilog 13.0 and verilator 5.052; every design carries an
 //! `initial #1 $finish;` watchdog.
