@@ -25,13 +25,30 @@ need updating. What moved:
 
 ### Added
 
+- **A `parameter type` override's signedness now also follows it through a `T'(e)` cast and a packed
+  struct member.** With `parameter type T = logic [7:0]`, an instance writing
+  `#(.T(logic signed [7:0]))` used to be refused outright as soon as the module spelled `T'(e)` or
+  declared a packed struct member of type `T`; both now bind the override's sign, at every width
+  (8, 40, 80 bits), in a constant expression (`localparam int P = T'(8'hF0)`), and in the other
+  direction too (an unsigned override of a signed default). An override that changes the type's
+  2-state kind, and a `T` used as an enum base, a union member, a function return type or a class
+  property, are still refused — and the refusal now names the axis that actually has to match
+  instead of refusing on all of them.
+
 - **A `parameter type` override's signedness and 2-state kind now follow the override**
   (`#(.T(logic signed [7:0]))` onto a `logic [7:0]` default, `int`→`int unsigned`, `bit`→`logic`,
   a `typedef` or chained-`typedef` override, an ANSI port, a tf-port formal, an interface header,
   a pass-through `#(.T(T))` and an alias `parameter type U = T`). Only the unpacked dimension COUNT
-  still has to match the default, and the refusal now says so; a `T` used as a packed struct member,
-  an enum base, a function return type, a class property or in a `T'(e)` cast keeps the full shape
-  check.
+  still has to match the default, and the refusal now says so; a `T` used as an enum base, a
+  function return type or a class property keeps the full shape check.
+- **A sibling block-local with NO initializer is its own variable too.** In a `task` or `function`
+  body, `begin int x = 44; … end` beside `begin int x; $display(x); end` printed `44` for the second
+  block — it was reading the first block's leftover. It now reads the declared type's default (`0`
+  for `int`/`byte`/`bit`, `x` for `logic`/`reg`/`integer`), as in the reference tools, on the inline
+  route, in an `automatic` task and through a hierarchical call; and two initializer-free siblings of
+  a static routine now retain their values independently across calls. Inside a module `initial` or
+  `always` body the same pair stays an error, unchanged.
+
 - **Two sibling blocks inside a `task` or `function` body may each declare a same-named local**
   (`begin int x = 44; … end` beside `begin int x = 55; … end`, in static and `automatic` bodies,
   `function void`, `if`/`else` arms, nested blocks, and generate-scoped routines). Each declaration
@@ -118,6 +135,15 @@ need updating. What moved:
   resulting dimension order — which is the same refusal a declaration already gives.
 
 ### Fixed
+
+- **An integer-returning system function is signed in a constant expression.**
+  `localparam W = $clog2(300) - 20;` printed `4294967285` where both reference tools print `-11` —
+  the bits were right and only the recorded signedness was wrong, so `$signed(W)` already printed
+  `-11`. `$clog2`, `$bits`, `$rtoi` and the dimension queries (`$size`, `$high`, `$low`, …) now
+  record a signed 32-bit result, which fixes `-`, `*`, `/`, `%` and unary `-` over them at every
+  width, a constant ternary, a comparison against the parameter at runtime, a package constant, a
+  header default, and the BRANCH a `generate if (W < 0)` selects. `$unsigned`, `$signed`,
+  `$countones` and a `signed'(e)` cast in a constant expression are still refused, unchanged.
 
 - **A genvar, an integer-returning system function and a `pkg::`-scoped constant are certified
   declared widths** in an override source and in a derived `localparam`: `leaf #(.P(Q << i))` inside

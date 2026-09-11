@@ -558,3 +558,42 @@ unchanged. Details: ROADMAP_ARCHIVE §4.5.405.
   get their own storage (the row named the wrong reserver, which turned out to be a second instance
   of the same coalesce). Filed: the `$clog2` unsigned fold, the initializer-free sibling, framed
   static retention, package and class subroutines. Details: ROADMAP_ARCHIVE §4.5.478–480.
+
+## 2026-09-11 — it3: `$clog2` sign · plain sibling block-locals · `T'(e)`/struct member sign (§4.5.481–483)
+
+Queue rows 1–3 as one bundle, on branch `it3`: 7670 green with 15 skipped, `format_version`
+31 unchanged, 70 `MsgCode` codes unchanged, corpus 10/10, clippy and fmt clean. All three rows
+reproduced at HEAD against both oracles, and all three had claims that did not survive the
+measurement.
+
+Row 1's "fix = one arm over `sys_fn_is_integer`" was right about the arm and wrong about the
+predicate: that named list excludes the dimension-query family, which `const_eval_in_scope` folds
+anyway, so `$size(x) - 20` sat in the same unsigned tail as `$clog2(300) - 20`. The arm carries TWO
+named lists and never the blanket `SysCall { .. }` spelling that two of its three twins use — those
+are latent on `$unsigned`, `$itor`, `$realtobits` and `$sformatf`, invisible only because all four
+are loud today. 19 cells silent→correct across all three width bands, both at-risk cells re-measured
+rather than argued, and the review filed the genvar seed's own sign bit as the next row.
+
+Row 2's oracle question — what an initializer-free sibling's unassigned read must be — was answered
+by measurement before any code moved: the declared type's default, `0` on the 2-state types with both
+oracles agreeing and `x` on the 4-state ones with iverilog the oracle, and each sibling of a static
+routine retains independently across calls. The fix is a fifth `AdmitReason` field passed as an
+OPT-IN parameter, because the same shared gatherer serves a module path where that pair is LOUD; the
+module flatten and its two diagnostics came out byte-identical, and the downstream nesting filter was
+deliberately left unwidened to keep a loud from becoming a value on an unmeasured shape. Three claims
+refuted, including the brief's own memory that module-level siblings coalesce silently.
+
+Row 3 was priced as one slice per container. Two of the four containers share a NODE — a `T'(e)` cast
+and a packed struct member both emit a signing cast with the sign baked in at parse — so one appended
+`CastTarget::SigningParam` variant carried both and the frozen `StructMember` was never touched. The
+carrier alone would have moved zero cells: the guard was keyed on the type parameter's NAME, so it
+had to become per-AXIS (a blocked-bit mask plus a shift on both sides of the compare) before the sign
+could narrow out while the 2-state bit stayed strict. 8 loud→value, 0 value→loud, 0 correct→wrong.
+The class-property container is now a do-not-start line — it is loud with no override at all, because
+class registration is a whole-design prescan — and the enum base is blocked behind a pre-existing
+`typedef enum bit [7:0]` 4-state-storage silent-wrong, filed as a new §2 row.
+
+Review: two lenses, round 1, no BLOCKING finding. Filed pre-existing: the genvar-unsigned constant
+fold (§2, new queue row 1), a nested packed struct whose inner struct has a `T` member (§3 ⑤ⓕ
+residue), the union member's parse gate, and `fork`-arm sibling declarators as unmeasured. Details:
+ROADMAP_ARCHIVE §4.5.481–483.

@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-7608 tests passing with 15 skipped, artifact `format_version` 31, 70 `MsgCode` diagnostic codes; the
+7670 tests passing with 15 skipped, artifact `format_version` 31, 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
 - G1 = a correct open-source RTL simulator (correct-or-loud) at the level of icarus, verilator,
@@ -31,7 +31,7 @@ canonical table is the fact table in [README.md](../README.md).
 | 3 | §2 silent-wrong | A `pkg::`-scoped override SOURCE loses both columns (`leaf #(.P(pk::PW))` → `32/1`, both oracles `36/800000001`); `wide_name_bits` / `narrow_param_bits` take a single-segment path |
 | 4 | §6 OBS | Give the static `subroutines` rows a declaration site, so the two subroutine objects can be joined |
 | 5 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so a reader infers the boundary from builtin call counts and gets it wrong |
-| 6 | §3 loud → correct-support | ⑤ⓕ residue: the non-arity axis of `shape_flags`' F4004 (signedness, 2-state kind), a multi-dimensional packed type-param default or override, a mixed-caller callee, `m #(8)` / `defparam u.T$w`, the VCD `$scope` spelling, a `genblk<N>` collision (split) |
+| 6 | §3 loud → correct-support | ⑤ⓕ residue: the 2-state axis of a `T'(e)` cast and a packed struct member (the sign follows the override since §4.5.483), the enum base (blocked behind a §2 enum-storage row), the union member's parse gate, a multi-dimensional packed type-param default or override, a mixed-caller callee, `m #(8)` / `defparam u.T$w`, the VCD `$scope` spelling, a `genblk<N>` collision (split) |
 | next | — | §2 🆕 L ⓦ residue, §2 🆕 N residue, a labelled concurrent `assert property` action block's `%m`, the §2 static-task-frame twin of the block-local class |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ an
@@ -70,5 +70,7 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
   not a net.
 - Per-instance declarator arity — blocks §3 ⑤ⓕ's dim-COUNT axis; it needs a symbolic arity marker on
   two SchemaHash root types.
+- Per-instance class registration — blocks §3 ⑤ⓕ's class-property container; `register_classes` is a
+  whole-design prescan, so a property of type `T` is loud with no override at all.
 - One oracle and zero corpus demand — blocks clocking (§2 rows 23, 24, 34).
 - Oracle splits are recorded, never chased.

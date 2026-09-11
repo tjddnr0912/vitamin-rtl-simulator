@@ -15,6 +15,51 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ## 2026-09-11
 
+### A named-list twin can be narrower than the fold it guards (§4.5.481)
+
+The row's fix was "one arm, predicate = `sys_fn_is_integer`", and that list is `$clog2 | $bits |
+$rtoi`. Its own doc comment justified the exclusion — "the dimension-query family is integer-returning
+too but is LOUD in every certified consumer today". It is not: `const_eval_in_scope` folds `$size`,
+`$high`, `$low` and their siblings at `const_fn.rs:393`, so `localparam B = $size(x) - 20;` reached the
+same unsigned tail and printed `4294967284` against both oracles' `-12`. The predicate's list had been
+written from the OTHER twins' accept sets and had never been checked against the fold that actually
+runs in this consumer. Rule: when a new predicate guards a FOLD, census the fold's accept set, not the
+list some neighbouring predicate happens to use — and check the doc comment that explains the
+exclusion, because a stale exclusion reads exactly like a deliberate one. The same measurement found
+two of the three twins spelling the rule as a BLANKET `SysCall { .. }` arm, which is latent on four
+names (`$unsigned`, `$itor`, `$realtobits`, `$sformatf`) that are only invisible because they are
+loud today.
+
+### An OPT-IN admission parameter is how one path closes a silent-wrong while its twin keeps a loud (§4.5.482)
+
+The gatherer that decides which block-local declarators get their own scope is shared by the module
+process path and the subroutine path. On the subroutine path an initializer-free sibling pair is
+SILENT-WRONG (it reads the other block's leftover); on the module path the exact same pair is LOUD
+(the read-before-assign guard). Widening the shared admission predicate globally would have closed the
+silent-wrong and, in the same edit, converted a loud into a value on a shape nobody had measured. The
+fifth admission reason was therefore added as a PARAMETER (`admit_static_plain`) that only the
+subroutine feed passes `true`, and the module-path mirror was not touched at all — which is what let
+the module louds come out byte-identical, full diagnostic text and both note wordings included. Rule:
+when a shared classifier serves one path that is silent and one that is loud, the new rule is opt-in
+per feed; a global widening is two decisions wearing one diff. The same slice kept its own downstream
+NESTING filter unwidened for the same reason, and proved it by measuring the nested cell's diagnostic
+text PRE and POST rather than arguing it.
+
+### Two uncarried positions can share one carrier NODE, and a per-NAME guard must become per-AXIS (§4.5.483)
+
+The row priced the work as "each container needs its own per-instance slot", one slice per container.
+Two of the four containers — a `T'(e)` cast and a packed struct member — turned out to lose the shape
+at the same kind of site: each emits a cast NODE with a literal `signed` bool baked in at parse. One
+appended `CastTarget` variant carried both, and the frozen `StructMember` type was not touched at all,
+because the struct's own carrier is a parser-local layout table. Rule: before pricing per container,
+ask what NODE each container's value flows through; containers that share a node share a carrier. The
+second half is the trap: the guard that keeps the strict compare was keyed on the type parameter's
+NAME, so the moment any use of `T` was uncarried, every axis of `T` stayed strict. Adding the carrier
+alone would have moved ZERO cells. A partial carrier needs a per-AXIS guard (here a bitmask of blocked
+axes plus a shift on both sides of the compare) before a single cell can move — and the axis that
+still has no carrier has to stay blocked, which is what keeps the move loud→value and never
+loud→silent-wrong.
+
 ### A carrier reached through an ALIAS or a PASS-THROUGH is a second producer (§4.5.479)
 
 The reader census of the per-instance shape carrier `T$s` was 97 sites and complete, and the two
