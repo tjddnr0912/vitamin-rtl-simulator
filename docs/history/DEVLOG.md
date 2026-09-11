@@ -549,3 +549,12 @@ unchanged. Details: ROADMAP_ARCHIVE §4.5.405.
   rows closed), and `pk::K` is a primary in the wide fold (one arm, six consumers censused).
   Filed: the genvar / `$clog2` certification seam, the `pkg::` operator-topped rung, ascending
   package constants. Details: ROADMAP_ARCHIVE §4.5.475–477.
+- 2026-09-11 · queue rows 1–3 as §4.5.478–480: a genvar, an integer system function and a `pkg::`
+  leaf become certified declared widths (three row claims refuted, the genvar's range deleted by its
+  own binder, verilator disqualified on the genvar by self-contradiction), a type parameter's sign
+  and 2-state kind follow the override through a `shape_param` carrier on four hdl-ast containers
+  (hash re-pinned, format 31 unchanged; the adversarial review's two BLOCKING roots were an alias
+  producer and an unrouted stored kind), and same-named sibling block-locals in a subroutine body
+  get their own storage (the row named the wrong reserver, which turned out to be a second instance
+  of the same coalesce). Filed: the `$clog2` unsigned fold, the initializer-free sibling, framed
+  static retention, package and class subroutines. Details: ROADMAP_ARCHIVE §4.5.478–480.

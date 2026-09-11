@@ -13,6 +13,9 @@
 
 
 **§4.5.220–280**
+- `4.5.480` **Same-named sibling block-locals in a subroutine body get their own storage** (2026-09-11 · §2 Scoping, queue row 3 · row SITE refuted: the reported shape routes `hoist_inline_task_locals`, the named `reserve_frame_block_locals` is a second instance · a subroutine-body walk + a span-chain scope prefix in both reservers · 24 silent→value + 18 loud→value + 3 split→verilator, 0 regressions)
+- `4.5.479` **A type parameter's sign and 2-state kind follow the override** (2026-09-11 · §3 ⑤ⓕ non-arity axis, queue row 1 · row claim refuted: the axes needed a SHAPE carrier, `T$s` had one reader · `shape_param` on four hdl-ast containers, 97 elaborate readers routed, hash re-pinned, format 31 unchanged · 22 loud→value; review round 1 found two BLOCKING roots, both fixed)
+- `4.5.478` **A genvar, an integer system function and a `pkg::` leaf are certified declared widths** (2026-09-11 · §2 Index sealing, queue row 2 · three row claims refuted, incl. the genvar range deleted by `bind_param_value` and the decline sitting in `ctx_width_names_are_evident` · genvar POLICY = signed 32-bit per §27.4, verilator disqualified by self-contradiction · 32 silent→value + 6 loud→value + 5 split side-moves)
 - `4.5.477` **A `pkg::`-scoped name is a primary in the wide fold's self-determined test** (2026-09-11 · §2 Index sealing, queue row 3 · row root REFUTED: the single-segment guard was dead code; one `K::PkgScoped` arm in `wide_top_is_self_determined` · 19 silent→value + 3 loud→value, six consumers censused)
 - `4.5.476` **A `localparam` sized by an operator over declared-width leaves records a declared range** (2026-09-11 · §2 Index sealing, queue row 2 · the override was irrelevant, class ×2 · certification via `declared_override_widths`, §4.5.363 fence gates unchanged · 23 silent→value, one i64-overflow loud→value, two more §2 rows closed)
 - `4.5.475` **A static block-local with an initializer owns its storage** (2026-09-11 · §3.b `blocal-flatten` ⓐⓑ, queue row 1 · §4.5.467's design rebuilt WITHOUT a per-rule floor after §4.5.468 · `AdmitReason::static_init` + a homogeneous `all()` exemption · 16 loud→value, 0 regressions)
@@ -487,6 +490,225 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.480 Same-named sibling block-locals in a subroutine body get their own storage (2026-09-11, branch queue-478-480) ✅
+
+**ROADMAP row**: §2 "Scoping / imports / block-locals", the static-task frame pair; queue row 3.
+Third slice of the bundle.
+
+**Row claims re-measured.** The symptom held verbatim (`o1=55 o2=55` against both oracles' `44 55`;
+the four-call ladder extended to `56 57 58 59 60 61 62 63` against `45 56 46 57 47 58 48 59`). Two
+claims were refuted. The SITE the row named (`reserve_frame_block_locals`) is not the site of the
+reported shape: every cell of that shape routes `inlined`, i.e. `hoist_inline_task_locals`; the
+frame reserve is a SECOND, independent instance of the same coalesce, reachable only with a
+different probe (an initializer-free sibling), so both reservers had to be fixed. The row's
+controls "an `automatic` task, a function and different names are right" is refuted too: a
+`function void` routes `inlined` and is silent-wrong exactly like the task, and an `automatic` task
+is silent-wrong as soon as one sibling has NO initializer.
+
+**Root.** `compute_scoped_block_locals` and `compute_coalesced_block_locals` are computed only over
+`for_each_proc(&module.body, …)`, whose walker takes `ModuleItem::Proc` and drops task and function
+declarations at `_ => {}`. Both subroutine reservers therefore key a block-local on the BARE NAME
+under one per-subroutine scope segment (`$func$<name>`), with no `$blk$<span>` segment: two
+same-named siblings share one net, and neither §4.5.475's scoping nor its read-before-assign guard
+can see them.
+
+**Fix — three parts, all in `crates/elaborate`, no new `AdmitReason`.** `for_each_subroutine_body`
+walks the module's task and function bodies (including the ones inside a `generate`) and feeds them
+to the SAME `gather_auto_block_locals` with the SAME `module_names` set the proc walk passes;
+`collect_block_local_decls_spanned` returns each declaration with the CHAIN of enclosing block spans
+(the chain, because the Logic-phase `Stmt::Block` arm nests its `$blk$` segments), and
+`block_local_scope_prefix` rebuilds from it the prefix `stmt_main.rs` already wraps a scoped block's
+body in; the two reservers and the inline init emitter then reserve and emit under that prefix.
+`emit_inline_local_inits` wraps the once-only init emission per declaring block — without it the
+write lands on the new slot and the read on the old. The read side needed no change.
+`compute_coalesced_block_locals` deliberately did NOT get the walk, and the code carries the reason:
+that set is a module-wide set of bare NAMES with no span, read only by the module-process hoist, and
+adding subroutine names to it turns a module process's own `v` beside a task's `v` from correct
+into an E3009 — a correct→loud regression, built, measured and reverted, and pinned as a cell.
+
+**Census PRE→POST**: 156 designs, 3 tools, 44 movements. 24 silent→value (the reported pair by body
+kind — static task, `automatic` task, `function void` — `if`/`else` arms, nested blocks, the
+four-call ladder, a module instantiated twice, a cross-block read, `disable`, and `fork` values),
+3 oracle-split→verilator's value (packed-struct initializer siblings, which iverilog rejects),
+18 loud→value (5 nested same-named blocks, 5 shadowing a module net and 5 shadowing a body-top local
+in the census, plus 3 pins in `block_local_scope.rs`), 2 loud→loud with one diagnostic fewer and the
+scope segment now visible, 0 correct→wrong, 0 loud→silent-wrong, 0 value→loud. 111 of the 156
+designs are byte-identical: a lone block-local has one declaring span and never becomes a candidate,
+so the reserve takes the pre-existing bare-name path verbatim. The `disable` defect the grounding
+filed as a second root was a consequence of the first — `if (x == 44) disable OUTER` never fired
+because `x` read 55 off the shared cell. Risk cells measured unmoved: the `frame_array_local`
+marker, the 64-slot `auto_override` bitmask, and a hierarchical call. Three pins in
+`block_local_scope.rs` and one in `block_local_static_init_scope.rs` were re-measured three-way
+before conversion, names kept and prose moved with them; `leak_ancestor_redeclares_name_is_loud`
+stays loud and passes, because nothing there shadows a module name.
+
+**Review**: two lenses, no BLOCKING finding; the probes added for it (a generate-scoped task per
+iteration, a `static`/`automatic` mixed pair, a task writing a module net between the two blocks)
+all matched both oracles. Out-of-scope and filed, all PRE=POST: an initializer-free sibling is
+admitted by NO `AdmitReason` and still shares a net (`A=44 B=44`, both oracles `A=44 B=0`) —
+widening admission carries its own oracle question about a shared net's leftover; a framed STATIC
+task loses static retention across calls, and its different-name control is equally wrong, which is
+what proves it is not the coalesce; a STATIC task in a PACKAGE still coalesces (`package.rs` calls
+the collectors with its own name sets); a class method's siblings are LOUD, not silent; an interface
+subroutine reaches neither reserver.
+
+Files: `crates/elaborate/src/{block_local_class,inline_task,frames_reserve,lib}.rs`,
+`crates/elaborate/src/block_local/mod.rs`, and a new `crates/elaborate/src/frames_blocal.rs` —
+`reserve_frame_block_locals` moved out of `frames_reserve.rs`, which SHRANK from 1,274 to 1,247
+lines. Tests: `subroutine_block_local_scope.rs` +39. format 31 unchanged.
+
+#### 4.5.479 A type parameter's sign and 2-state kind follow the override (2026-09-11, branch queue-478-480) ✅
+
+**ROADMAP row**: §3 ⑤ⓕ's NON-ARITY axis; queue row 1. Second slice of the bundle.
+
+**Row claim refuted.** The row said the sign and 2-state axes "need no arity carrier". True
+literally, and misleading as a cost claim: they need a SHAPE carrier, and at HEAD that carrier was
+as absent as the arity one. `parameter type T` desugars to two value parameters — `T$w` (width) and
+`T$s` (shape: bit 0 signed, bit 1 2-state, bits 2.. the unpacked dim count) — and the WIDTH rides an
+EXPRESSION (`T$w - 1`) that elaborate folds per INSTANCE, while `signed` and the 2-state half of the
+kind are plain scalars stamped once per MODULE from the DEFAULT type at `decls.rs`. A reader census
+found `T$s` had exactly ONE consumer: the parser-synthesized `initial if (T$s != <default>) $fatal`
+that refuses the override. Masking the sign and 2-state bits out of that compare would have moved
+0 cells loud→value and 17 cells loud→SILENT-WRONG, each binding the DEFAULT's shape.
+
+**Fix.** Make the shape per-instance the way the width already is. `hdl-ast` gains
+`shape_param: Option<Ident>` on `NetVarDecl`, `AnsiPort`, `PortDecl` and `TfPort` (`None` on every
+declaration written with an explicit type); the parser sets it at the ten stamping sites when the
+`TypeInfo` came from an overridable type parameter, and `TypeValue.shape_expr` makes
+`parameter type U = T` give `U$s` the EXPRESSION `T$s` rather than a literal snapshot of `T`'s
+default. Elaborate routes every reader through one funnel in `array_geom.rs` — `shape_bits` folds
+`T$s` in the instance's own param scope, `shape_signed` is bit 0 and `shape_kind` is bit 1
+(`Bit` vs `Logic`, every other kind returned unchanged) — 97 reader sites in 21 files, censused by
+funnel. The guard is still EMITTED in place (its `$fatal` must keep its order against the user's own
+`initial` blocks) and `narrow_shape_guards` rewrites its condition to the ARITY bits only, plus the
+arity-only wording, when every use of that `T` reached a carrying container; a `T` with an UNCARRIED
+use keeps the strict compare and a message naming the position (enum base, packed struct or union
+member, class property, function RETURN type, `T'(e)`). **`StructMember` deliberately did not get the
+field**: a packed struct's flat layout is computed at parse and has no per-instance form, so the
+field would have been `None` forever while still flipping the hash. `hdl-ast`'s root schema hash was
+re-pinned (all `.vu` artifacts stale, pure IR-0); no `sim-ir` type moved, so **`format_version` is
+unchanged at 31**.
+
+**Census PRE→POST**: 55 cells, 3 tools. Round 1: 22 loud→value (every sign cell A1–A9 including the
+33..64 and >64 width bands and both directions, the four 2-state cells, sign-and-width together, a
+`typedef` and a chained `typedef` override, plus an ANSI port, a chained alias, an alias type
+parameter, an interface header and a tf-port formal), 1 silent-wrong→loud, 0 correct→wrong,
+0 value→loud. Two of the 2-state cells are iverilog-only on their single moving column: verilator
+prints `0…0` for every 4-state type, including the explicit plain twins, so it is disqualified
+there. All 17 plain twins (the explicit spelling of each override type) were byte-identical to
+iverilog before and after, which is what proved the gap was entirely in the parse-time channel and
+nothing was missing in the engine.
+
+**Review**: two lenses, round 1 returned two BLOCKING roots, both real, both fixed, and the delta
+re-reviewed clean. (A) the ALIAS and PASS-THROUGH carriers — `n #(.T(T))`, `parameter type U = T`
+and `localparam type U = T` — lost the carrier and bound the DEFAULT's shape, three new
+silent-wrongs of exactly the class the slice was closing; the override's `T$s` now hands the outer
+instance's expression on, a non-overridable alias type parameter carries `U$s`, and an uncarried use
+is TRANSITIVE through a new alias map so an enum base of `U` keeps `T`'s guard strict. (B)
+`intro_kind` inserted the RAW kind at two frame-local sites and one inline-task site, so
+`two_state_nets` missed a subroutine local and a 2-state override printed `x…x` inside a task where
+both oracles print `0…0`; all 12 `intro_kind.insert` sites are now listed individually in the census
+(the round-1 table had grouped two of them under a file name). A third defect the slice created and
+closed inside round 1 was the net's DEFAULT INIT: the write-path X→0 coercion hid a wrong
+`default_init`, and only an UNINITIALISED read could see it. Re-running all 55 round-1 cells on the
+round-2 binary gave 0 byte differences, so the counts are additive: **26 loud→value** after the
+round (the 22 above plus the pass-through, the alias type parameter and the 2-state mirror),
+4 silent-wrongs the round itself introduced and removed, 0 correct→wrong, 0 value→loud and
+0 loud→silent-wrong.
+
+Also repaired, because the narrowed guard unmasked it: `m #(.T$s(1))` used to trip the STRICT guard
+by accident and would now have been accepted and bound silently. A named override matching the
+carrier GRAMMAR (`NAME$w` / `NAME$s` / `NAME$d<i>a|b`) is refused where it is written, which also
+moves `m #(.T$w(16))` from silent-wrong to loud; a user parameter that merely contains `$` stays
+overridable, pinned.
+
+**Filed** (§3 ⑤ⓕ, all still loud, both oracles run them): an override that changes the shape is
+refused when the module uses `T` as a packed struct or union member, an enum base, a function
+RETURN type, a class property or a `T'(e)` cast — each needs its own per-instance slot and is its
+own slice.
+
+Files: `crates/hdl-ast/src/lib.rs` (+32) and its `schema_hash` pin,
+`crates/hdl-parser/src/{type_params,decls,functask,instances,typedefs,classes,casts,structs/mod,lib,module_items}.rs`,
+a new `crates/hdl-parser/src/type_param_shape.rs` (178 lines; `type_params.rs` reached 1,010 and was
+split back to 908), `crates/elaborate/src/array_geom.rs` (+51) and the 21 routed reader files.
+Tests: `type_param_shape_override.rs` +26, `type_parameters.rs` SPLIT (never deleted — the two cells
+that became values moved with their prose into a new test, the six non-integral cells kept their
+`is_loud` assertions).
+
+#### 4.5.478 A genvar, an integer system function and a `pkg::` leaf are certified declared widths (2026-09-11, branch queue-478-480) ✅
+
+**ROADMAP row**: §2 "Index sealing" — the genvar leaf, the value-inferred tail's over-decline and
+the operator-topped `pkg::` source; queue row 2. First slice of the bundle. Grounding answered the
+row's own question: the three are ONE seam, not two plus a slot.
+
+**Row claims re-measured.** All three symptoms reproduced verbatim. Three claims were refuted.
+(a) the genvar row says the leaf binds "the leaf default (`1/0`)" — measured, vita binds the leaf's
+DECLARED DEFAULT WIDTH, whatever it is (`1/0` with `parameter P = 1'b0`, `32/a` with `parameter
+P = 1`, where the VALUE is then accidentally right and only the width wrong); a TYPED default is
+correct in all three tools and is not part of the class. Its ROOT is sharper than the row: a genvar
+is bound by `bind_param_value`, whose first act is `param_range.remove(&key)`, and `generate.rs`
+never calls `bind_param_range` — the genvar's declared range is DELETED by its own binder.
+(b) the `$clog2` row is right about the outcome and wrong about the mechanism: `param_decl_width_opt`
+has no `SysCall` ARM AT ALL, so the initializer falls to the value-inferred tail. (c) the `pkg::`
+row's root is half refuted: `declared_override_widths::names` does NOT decline a `PkgScoped` leaf
+(`param_query.rs`'s `_ => true` lets it through and the function returns `Some(empty)`); the single
+decline is `ctx_width_names_are_evident`'s `_ => false`. The row's bare-key hazard on `ConstWidths`
+is real and was measured as a cell.
+
+**Oracle policy for the genvar, decided before anything was built.** The two tools split on
+`$bits(i)`, so one design asked the same genvar five ways: verilator answers 32 for EVERY spelling
+while binding a ONE-BIT override from the same genvar — a self-contradiction, so it is DISQUALIFIED
+on this axis. iverilog is self-contradictory in the other direction (`$bits(i)` = 2 against its own
+32-bit override binding), but its OVERRIDE BINDING agrees with IEEE 1800 §27.4. Policy adopted and
+recorded verbatim in the test header: a genvar is a signed 32-bit integer; vita follows the LRM and
+iverilog. Both oracles print `(i - 1) < 0` as 1 at i=0, confirming the signed half independently.
+
+**Fix.** `generate.rs` binds `param_range = (0, 32, false)` for the genvar key after the seed and
+after each per-iteration rebind, saved and restored in lockstep with the value and the meta.
+`param_decl_width_opt` gains a `SysCall` arm returning `Some((32, true))` under both lanes, gated on
+a NAMED list of integer-returning functions (`$clog2`, `$bits`, `$rtoi`) rather than on "a system
+call"; because `param_decl_range_opt` is built on it, a derived `localparam` becomes certifiable
+with no second edit. `ctx_width_names_are_evident` gains a `SysCall` arm and a `PkgScoped` arm ahead
+of its `_ => false`, the latter reading a QUALIFIED `pkg::name` key so a certified package constant
+cannot answer a same-named module parameter; `declared_override_widths::names` collects a package
+leaf and resolves it through `pkg_const_narrow_bits` under that key, and the bare `pkg::X` alias arm
+resolves through the same function (one edit beyond the plan: without it two of the plan's own cells
+were still `bits=1`).
+
+**Census PRE→POST**: 134 cells (leaf kind × consumer × width band), 3 tools. 32 silent→value
+(genvar 10, system function 15, `pkg::` 7), 6 loud→value (3 from the `wide_name_bits` census — a
+genvar as a NAME leaf in the >64-bit wide domain, where a shift, a select of the genvar and a
+non-commuting `/` at 96 bits were all `E3009 … has no constant-fold arm` and now match both oracles
+— and 3 existing pins), 5 oracle-split side moves, all onto an oracle's answer and none inventing a
+third (2 are the genvar POLICY above; 3 matched NEITHER oracle before at 1 bit and now match
+verilator's 36, iverilog's 37 being its documented bound-`+` max+1 self-contradiction),
+0 correct→wrong, 0 loud→silent-wrong (the 13 `$size`/`$signed` loud cells are the same 13 before and
+after, and a real-returning system call is pinned as still loud). 99 of the 134 designs are
+byte-identical. The plan's prediction that 5 split cells would move was REFUTED: only 2 did — the
+range-bound consumers and the bare derived-alias override do not route through `narrow_param_bits`
+on this path. Six existing pins asserted the exact declines this slice closes; each was re-measured
+three-way BEFORE it was touched, none was deleted, names kept and prose moved with the pin, and the
+two tests whose names say "loud" / "declines" keep their remaining decline cells as the controls
+they exist for.
+
+**Review**: two lenses, no BLOCKING finding; the probes added for it (a `$clog2` leaf under a
+package qualifier, a genvar leaf combined with a system function in one expression, a three-iteration
+generate whose every iteration certifies) all matched both oracles.
+
+**Filed** (§2, PRE=POST): `$clog2`'s result folds UNSIGNED — `localparam W = $clog2(300) - 20;`
+prints `4294967285` against both oracles' `-11`, while `$signed(W)` is `-11`, so the BITS are right
+and only the recorded signedness is wrong; the measured pair `localparam W2 = 9 - 20` and
+`localparam integer W3 = $clog2(300) - 20` both print `-11`, so the leaf is what flips it, and
+`const_expr_signed`'s `_ => false` has no `SysCall` arm where its two twins do. Also filed: a BARE
+`$bits(x)` as the WHOLE override never reaches this gate (it needs `sized_by_operator`, a different
+lane); the >64-bit direct-override tree, whose PLAIN `parameter [79:0]` control twin proves the class
+is not `pkg::`; and the dimension-query family plus `$signed`, integer-returning and foldable but
+loud in every certified consumer.
+
+Files: `crates/elaborate/src/generate.rs` (962→990), `const_fn_width.rs` (888→951),
+`param_query.rs` (778→804), `params.rs` (2,218→2,255), `const_wide.rs` (one visibility token).
+Tests: `declared_leaf_certification.rs` +57. format 31 unchanged.
 
 #### 4.5.477 A `pkg::`-scoped name is a primary in the wide fold's self-determined test (2026-09-11, branch queue-475-477) ✅
 

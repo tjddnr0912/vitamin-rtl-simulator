@@ -15,6 +15,33 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ## 2026-09-11
 
+### A carrier reached through an ALIAS or a PASS-THROUGH is a second producer (§4.5.479)
+
+The reader census of the per-instance shape carrier `T$s` was 97 sites and complete, and the two
+BLOCKING findings were both PRODUCERS: `n #(.T(T))` handed a literal snapshot of the inner module's
+DEFAULT shape instead of the outer instance's `T$s`, and `parameter type U = T` / `localparam
+type U = T` gave `U$s` a literal too. Both silently bound the default's sign — new silent-wrongs of
+exactly the class the slice was closing. Rule: for a per-instance carrier, census the sites that
+WRITE the key as carefully as the sites that read it; an alias and a pass-through each write it.
+
+### A routed predicate with an unrouted value is invisible to every test but an x-write (§4.5.479)
+
+`if two_state(shape_kind(k)) { intro_kind.insert(net, k) }` — the condition took the per-instance
+kind and the VALUE stored the raw declared one, at two frame-local sites and one inline-task site.
+Every downstream consumer of `intro_kind` (`$typename`, the X→0 write coercion, the net's default
+init) then answered with the module's default, and only an UNINITIALISED read or an `= 'x` write in
+a subroutine local could see it. Rule: when routing a kind through a funnel, grep every site that
+STORES the kind, not only the ones that test it — and list the sites individually, because a census
+row that groups them under a file name hides the member that is wrong.
+
+### A row's SITE claim is measured by the route the design takes (§4.5.480)
+
+The queue row named `reserve_frame_block_locals`. Every cell of the shape it described routes
+`inlined`, i.e. `hoist_inline_task_locals`; the named function was a second, independent instance of
+the same coalesce, reachable only with a different probe. `--obs-dir`'s `run.json`
+`subroutines[].route` answers this in one run. Rule: before reading the code a row points at, run
+the row's own design and read which route it took.
+
 ### Rebuild a reverted design from its prerequisite, not from its patch (§4.5.475)
 
 §4.5.467 was reverted after three rounds, each fix adding machinery (a floor, a per-rule floor)

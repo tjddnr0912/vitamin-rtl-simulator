@@ -25,6 +25,18 @@ need updating. What moved:
 
 ### Added
 
+- **A `parameter type` override's signedness and 2-state kind now follow the override**
+  (`#(.T(logic signed [7:0]))` onto a `logic [7:0]` default, `int`→`int unsigned`, `bit`→`logic`,
+  a `typedef` or chained-`typedef` override, an ANSI port, a tf-port formal, an interface header,
+  a pass-through `#(.T(T))` and an alias `parameter type U = T`). Only the unpacked dimension COUNT
+  still has to match the default, and the refusal now says so; a `T` used as a packed struct member,
+  an enum base, a function return type, a class property or in a `T'(e)` cast keeps the full shape
+  check.
+- **Two sibling blocks inside a `task` or `function` body may each declare a same-named local**
+  (`begin int x = 44; … end` beside `begin int x = 55; … end`, in static and `automatic` bodies,
+  `function void`, `if`/`else` arms, nested blocks, and generate-scoped routines). Each declaration
+  owns its storage across re-entry, and a block-local that shadows a module net or a body-top local
+  inside a subroutine is no longer refused.
 - **Two sibling blocks may each declare a same-named static variable with an initializer**
   (`begin int s = 44; … end` beside `begin int s = 55; … end`, in `initial`/`always` bodies,
   `if`/`else` arms, nested blocks, generate-for bodies and interface bodies). Each declaration owns
@@ -107,6 +119,16 @@ need updating. What moved:
 
 ### Fixed
 
+- **A genvar, an integer-returning system function and a `pkg::`-scoped constant are certified
+  declared widths** in an override source and in a derived `localparam`: `leaf #(.P(Q << i))` inside
+  a `generate for`, `localparam A = $clog2(300); localparam W = ~A; logic [(W[15:8])+8-1:0] v;`,
+  `#(.P(~pk::PW))` and `#(.P(pk::PW + 1))` all bind at the width both reference tools bind instead
+  of falling back to the leaf's own default width. A genvar is a signed 32-bit integer
+  (IEEE 1800 §27.4). The same leaves now fold in the >64-bit constant domain, where a shift, a
+  select of the genvar or a division used to be refused as "no constant-fold arm".
+- **A 2-state type parameter coerces a subroutine's LOCAL variables too**: with `T` overridden to
+  `bit [7:0]`, a task, `automatic` task or function local of type `T` reads `00000000` rather than
+  `xxxxxxxx`, as in both reference tools, and `$typename` agrees with the coercion.
 - **A `localparam` derived from a parameter forwards at its own width** (`localparam R = ~Q;
   leaf #(.P(R))`, also `Q + 1`, `Q << 1`, `{Q, Q}`, `-Q`, a ternary, a bare alias, a second
   derivation level, a `generate` scope, and every override channel). It used to bind at the leaf's

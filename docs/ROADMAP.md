@@ -317,26 +317,18 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   itself. Pinned by self-consistency (`packed_select_signed_index.rs`).
 - A >64-bit override tree (`~128'd0`) declines because `const_ctx_within_i64` refuses it — the value
   re-fold clamps at 64. Both oracles 128, vita 32.
-- A GENVAR leaf in an override source or in a derived `localparam` is not certified (2-oracle):
-  inside `generate for (i…) begin : G`, both `leaf #(.P(Q << i))` and `localparam R = Q << i;
-  leaf #(.P(R))` bind the leaf's own default (`1/0`) where both oracles bind `8/0a`, while
-  `localparam R = Q << 1` in the same scope is right since §4.5.476. Root = a genvar has no
-  `param_range` entry, so `narrow_param_bits` cannot prove its width and `declared_override_widths`
-  declines the whole expression. Fix = a genvar is a declared 32-bit `integer` (§27.4); certify it as
-  such at the leaf.
-- The value-inferred tail OVER-declines (2-oracle): `localparam A = $clog2(300); localparam W = ~A;
-  logic [(W[15:8])+8-1:0] v;` declares 1 bit in vita against both oracles' 263. `A`'s width is 32 by
-  the TYPE rule (`$clog2` returns `integer`), not by inference, but `param_decl_width_opt`'s `SysCall`
-  initializer reaches the value-inferred tail and records no `param_range`, so `W`'s certification
-  fails and the bound falls to the 1-bit default. Same certification seam as the genvar row; a
-  system function with an `integer` return type is a declared width.
-- An OPERATOR-topped `pkg::`-scoped override source stays at the leaf default (2-oracle): `~pk::PW`
-  and `pk::PW + 1` bind `32/…` where both oracles bind 36 (`pk::PW + 1` is verilator's 36; iverilog's
-  37 is its `+` max+1), while a bare `pk::PW` and the wildcard-imported `~PW` are right since
-  §4.5.477. Root = `declared_override_widths::names` does not push a `PkgScoped` leaf and
-  `ctx_width_names_are_evident` answers `false` for it, fail-closed; `ConstWidths` is keyed by the
-  BARE name, so a certified `pk::PW` entry keyed `PW` would answer a same-named module parameter in
-  the same expression. Fix = a qualified key for package leaves plus the matching `Ident` lookup.
+- `$clog2`'s result folds UNSIGNED where every other sign predicate says it is signed (2-oracle):
+  `localparam W = $clog2(300) - 20;` prints `4294967285` against both oracles' `-11`, while
+  `$signed(W)` is `-11`, so the BITS are right and only the recorded signedness is wrong. The
+  measured pair `localparam W2 = 9 - 20` and `localparam integer W3 = $clog2(300) - 20` both print
+  `-11`, so the `$clog2` leaf is what flips it. Root = `const_expr_signed`'s `_ => false` has no
+  `SysCall` arm while its two twins do (`const_fn_width.rs` answers `true` for the env-aware sign
+  and `Some(32)` for the width) — the same "three predicates must agree" trap the `Call` and `Cast`
+  arms beside it were added to close. Fix = one arm. The width half is an oracle split (iverilog 33,
+  verilator 32, vita verilator's) and is not part of it.
+- A BARE `$bits(x)` as the WHOLE override binds 1 bit (both oracles `32/8`): unlike the `~$bits(x)`
+  spelling closed by §4.5.478, it never reaches that gate, because `override_self_meta` requires
+  `sized_by_operator`. Its own lane.
 - A package constant declared ascending (`logic [0:35]`) or with a non-zero LSB (`logic [39:4]`) as an
   override source binds the leaf default in BOTH spellings (`pk::PA` and imported `PA`; both oracles
   36). `pkg_const_narrow_bits` declines `lo != 0 || ascending`, the same decline as 🆕 H ⓑ on the
@@ -473,13 +465,24 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `compute_scoped_block_locals`'s per-name exemption; the fix is a per-SPAN exemption that must not
   mix a static and an automatic member inside ONE nesting pair (that mixing was measured to turn
   the loud `outer static / inner automatic` shape into a silent leak).
-- Two same-named sibling block-locals inside a STATIC TASK FRAME body silently become one variable
-  when they are assigned only by declaration initialisers: `o1=55 o2=55` against both oracles'
-  `o1=44 o2=55`. A four-entry re-entry ladder shows the two variables are one counter
-  (`a=56 b=57 c=58 d=59` against the oracles' `45 56 46 57`). Controls behave correctly: an
-  `automatic` task, a function, and different names. The storage path is different
-  (`reserve_frame_block_locals`) — the class §4.5.475 closed on the module procedural
-  path, at a different site.
+- An INITIALIZER-FREE sibling block-local in a subroutine body still shares one net (2-oracle):
+  `begin int x = 44; … end` beside `begin int x; $display(x); end` in a task prints `A=44 B=44`
+  where both oracles print `A=44 B=0`, on the inline and the frame route alike. Root = the
+  no-initializer declarator is admitted by NO `AdmitReason`, so the name has ONE declaring span and
+  falls below the two-span bar in `compute_scoped_block_locals` that §4.5.480 reserves under.
+  Widening admission is its own decision with its own oracle question — what a shared net's leftover
+  should read as.
+- A framed STATIC task loses static retention across calls (2-oracle): calling `u.t()` twice prints
+  `A=45 B=56` both times where both oracles print `A=45 B=56` then `A=46 B=57`, and a function
+  carries the same defect (`f=101 f=101` against `101 102`). Its DIFFERENT-NAME control is equally
+  wrong, which is what proves it is not the block-local coalesce §4.5.480 closed.
+- A STATIC `task` declared in a PACKAGE still coalesces two same-named sibling block-locals
+  (2-oracle: vita `A=55 B=55`, both oracles `A=44 B=55`). `package.rs` calls the two collectors with
+  its own name sets, and §4.5.480's subroutine walk covers `module.body` only; the `task automatic`
+  package twin is correct, so the class is the STATIC package subroutine.
+- A CLASS method's same-named sibling block-locals are LOUD, not silent (E3010 on
+  `$class$C$m.x` plus an E3009 about writing a net outside the function), where both oracles print
+  `A=44 B=55`; `classes.rs` is a separate caller of the reserve.
 - Declaring a parameter and a net with the same name is accepted by vita alone (both oracles reject
   it): vita takes `localparam N = 7; logic [3:0] N;` and reads it as the parameter (`r=7`). This is
   a vita invention, so making it loud is not a step down the ladder; the shadow rule's `!params`
@@ -610,6 +613,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Oracle splits (recorded, not chased)
 
+- A genvar's self-determined width: RESOLVED by self-contradiction, not chased. verilator answers
+  32 for every `$bits` spelling of a genvar while binding a ONE-BIT override from the same genvar;
+  iverilog answers 2 for `$bits(i)` while binding 32. vita follows IEEE 1800 §27.4 and iverilog's
+  binding: a genvar is a signed 32-bit integer (§4.5.478).
 - The init width of an untyped localparam's integer initializer: `localparam L = 4'd15 + 4'd1` is 16
   in vita and iverilog and 0 in verilator.
 - iverilog contradicts itself on 64-bit unsigned `%`: `64'hFFFFFFFFFFFFFFFF % 64'd10` is 5 while
@@ -643,7 +650,7 @@ behind the §2 correctness queue.
 | ⑤ⓐ | multi-packed parameters: `$size` / `$left` / `$dimensions`, `'{…}` as a value, an ARRAY parameter of such a type, and `import p::*; import q::*` where both export `P` | outside `packed_md.rs`'s flat rewrite | one arm per consumer | verilator (iverilog: "packed array parameters are not supported yet") | — |
 | ⑤ⓒ | header array parameters: a NESTED (2-D) override pattern, an element >64 bits or a whole-array default override, `defparam`, an interface-header array parameter, `'{default: v}` as an override, and a BODY `localparam` after the header that names the element width | outside `array_param_twin` / `const_array_override_vals` | widen the channel | verilator-value | — |
 | ⑤ⓔ | element select: a MULTI-PACKED element (`A[1][0]`, a whole-element read and `$size(A,2)` on `logic [1:0][3:0] A[2]`), an ascending or non-zero-LSB element inside a concat or replication count, `p::S[1].b`, runtime `$size`, a select outside the element, and an element-select override of an UNTYPED child parameter | the element capture declines | widen the domain | verilator-value | — |
-| ⑤ⓕ | unpacked-array typedef residue, still loud: a function RETURN type of the typedef (1-oracle; iverilog does not merely refuse it, it SIGABRTs with `Assertion failed: (lwid == ivl_signal_width(lsig))`; it needs an unpacked slot on the FROZEN `hdl_ast::FunctionDef`, i.e. a format bump — the worst evidence-per-cost in the row) · a `string` element (`var_kind` is `None`; the explicit twin is equally loud) · a module-BODY overridable `parameter` of that type (the array gate, same as the explicit twin) · an INTERFACE or program HEADER array parameter (`module_items.rs`'s module-only gate) · `typedef <struct/enum/alias> x_t [dims];`, refused upstream at `typedefs.rs`'s chained-alias gate and unreachable from here (1-oracle) · an override that CHANGES the dim count (DO-NOT-START, see §5.2; both oracles print `bits=256 s1=2 dims=3`) · `T'(…)` (no oracle) · dims on BOTH the typedef and the declarator (`a_t y [0:1]`, a live oracle SPLIT on dimension ORDER — iverilog `$size(y,1)=4 $size(y,2)=2`, verilator `2` / `4`, and iverilog contradicts its own answer for the identical explicit type). Composition order is the trap `$bits` cannot catch: the NAME's dims come first (`localparam a_t P [0:1]` reads `P[0][1]`=2 and `P[1][2]`=6). ARITY is the half that cannot follow an override — declarators are stamped with the default's dim LIST once at parse — so `shape_flags` carries the dim COUNT and a mismatch is loud in both directions (dim-losing ⇒ the group's F4004; dim-ADDING ⇒ E3002 named on `T`, suppressed when `T$w` is equally unknown, because then `T` is simply not overridable here) | each consumer reads `TypeInfo` and has no slot for unpacked dims. The DECLARATION consumers (a variable, a port, a tf-port formal, a type-parameter default) carry the dims through the map; the rest decline on `!info.unpacked.is_empty()` rather than bind the element type | per consumer, each its own slice; the split row is do-not-start | 2-oracle except the function return type (1) and the declarator-dims split (0) | S each |
+| ⑤ⓕ | unpacked-array typedef residue, still loud: a function RETURN type of the typedef (1-oracle; iverilog does not merely refuse it, it SIGABRTs with `Assertion failed: (lwid == ivl_signal_width(lsig))`; it needs an unpacked slot on the FROZEN `hdl_ast::FunctionDef`, i.e. a format bump — the worst evidence-per-cost in the row) · a `string` element (`var_kind` is `None`; the explicit twin is equally loud) · a module-BODY overridable `parameter` of that type (the array gate, same as the explicit twin) · an INTERFACE or program HEADER array parameter (`module_items.rs`'s module-only gate) · `typedef <struct/enum/alias> x_t [dims];`, refused upstream at `typedefs.rs`'s chained-alias gate and unreachable from here (1-oracle) · an override that CHANGES the dim count (DO-NOT-START, see §5.2; both oracles print `bits=256 s1=2 dims=3`) · `T'(…)` (no oracle) · dims on BOTH the typedef and the declarator (`a_t y [0:1]`, a live oracle SPLIT on dimension ORDER — iverilog `$size(y,1)=4 $size(y,2)=2`, verilator `2` / `4`, and iverilog contradicts its own answer for the identical explicit type). Composition order is the trap `$bits` cannot catch: the NAME's dims come first (`localparam a_t P [0:1]` reads `P[0][1]`=2 and `P[1][2]`=6). ARITY is the half that cannot follow an override — declarators are stamped with the default's dim LIST once at parse — so `shape_flags` carries the dim COUNT and a mismatch is loud in both directions (dim-losing ⇒ the group's F4004; dim-ADDING ⇒ E3002 named on `T`, suppressed when `T$w` is equally unknown, because then `T` is simply not overridable here). The SIGN and 2-STATE axes follow an override since §4.5.479 through a `shape_param` carrier on `NetVarDecl` / `AnsiPort` / `PortDecl` / `TfPort`; what is still loud there is the positions that carry no such slot — a packed struct or union member, an enum base, a function RETURN type, a class property and a `T'(e)` cast — one slice per container, and the function return type is on the do-not-start list | each consumer reads `TypeInfo` and has no slot for unpacked dims. The DECLARATION consumers (a variable, a port, a tf-port formal, a type-parameter default) carry the dims through the map; the rest decline on `!info.unpacked.is_empty()` rather than bind the element type | per consumer, each its own slice; the split row is do-not-start | 2-oracle except the function return type (1) and the declarator-dims split (0) | S each |
 | ⑤ⓓ | nested struct members: `default: v` with a non-fill non-zero `v` · `o.i.e.name()` · a packed ARRAY member `in_t [1:0] i` · a packed struct inside an UNPACKED record · `u.c.perms.q` · `o.i[1+:2] = …` · a member width given as `1 << 3`, `8'd5`, a forward-referenced localparam, or a header `parameter` (overridable = correct-loud) | outside the source kinds the parser's flat layout table accepts | widen per consumer | 2-oracle (`default: v`: verilator whole / iverilog rejects) | — |
 | ⑤ | CU scope: a unit-scope VARIABLE or net · a unit enum label in a class body · a forward reference between unit constants · `$unit::t` · an enum-typed output port driven by `assign` (E3018) | outside the parser's unit-scope clone | per item | 2-oracle (the forward reference is split; vita follows iverilog) | — |
 | ⑤ | parser / preprocessor: a multi-dim packed formal that is also an unpacked array (`logic [1:0][3:0] a [2]`) · a based-literal value for a parameter narrower than 32 bits, outside the parse-time table · a non-ANSI `<type> [dims]` port · an atom typedef with dims · a SIGNED typedef element with dims · an unnamed or duplicate `` `define `` formal | the parser's flat rewrite · the `` `define `` argument parser | widen the table and the rewrite | 2-oracle / split (verilator lenient) | — |
@@ -670,6 +677,7 @@ behind the §2 correctness queue.
 | case-inside | `case (x) inside {…}` (§12.5.4) is E2002 | the parser does not accept it | hand-IEEE `==?` plus an internal differential | no oracle | — |
 | based-ws | `64'sh FFFF` is a lexer reject | lexer | accept it | iverilog accepts | minor |
 | tf-localparam | `task automatic t; localparam int K = 3;` gives `E2002 expected statement, found keyword 'localparam'` (IEEE §6.20 allows it) | the parser's statement position | accept the declaration | iverilog | small |
+| blk-automatic | `begin : A automatic int x = 44; … end` inside a task body is E2002 (`static` in the same position is accepted; both oracles run it) | the parser takes a lifetime keyword on a block-local declaration only at the subroutine's own declaration position | accept the keyword in the block-declaration position | 2-oracle | small |
 | R30-1 | a missing package gives 7 lines of E2002 and never names the package | the parser cannot take `IDENT::IDENT` in a tf-port as a type | take it as a type and let elaborate say "unknown package" ⇒ 1 line | — | parser |
 | enum-label | `enum bit[3:0] {A=8'hFF}` never reaches `enum_defs`, so `.first` / `.next` / `.name` are all E3010 / E3009, and the skipped out-of-range check silently truncates | `const_lit` folds unsized decimals only | widen `const_lit` or check at elaborate time | iverilog rejects | — |
 | md-packed-write | multi-dim packed nested part-select WRITE: an ascending or non-zero-lsb leaf · a genvar-indexed `x[g][m:l]` (over-rejected) · a const out-of-bounds packed index is a silent no-op | the current support is limited to a descending zero-lsb leaf | widen the leaf geometry | — | — |
@@ -697,6 +705,8 @@ behind the §2 correctness queue.
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
+| iface-subr | a `function` or `task` declared inside an interface is E3009 "outside the MVP"; both oracles run it, and its block-locals therefore never reach either reserver | `frames_reserve.rs` / the interface body gate | route an interface body's subroutines like a module's | 2-oracle | — |
+| dimquery-width | the dimension-query family (`$size`, `$high`, `$low`, `$left`, `$right`) and `$signed` are LOUD in every certified consumer (7 + 6 cells) although both are integer-returning and already foldable, so the §4.5.478 `SysCall` arm's named list excludes them | the named list in `param_decl_width_opt` / `ctx_width_names_are_evident` | admit them with their own census: `$signed` is NOT 32 bits, it is its operand's width | 2-oracle | small |
 | §3.11 | inlining `function automatic` — "a non-recursive automatic is identical to an inline" is refuted by measurement (15 suite failures, `$random` drawn twice) | the inline expansion names the operand a second time | ⓐ name it once (a callee-purity predicate) · ⓑ open codegen (`is_codegen_able`'s `Terminator::Call` reject, §5 T1/T2) | — | — |
 | static-local | `function integer f(input integer x); integer s; begin s = s + x; f = s; end` gives E3010 `undeclared net/variable top.s` | block-local flatten demands definite assignment; with control flow it becomes a frame and works, so the gap is exactly "straight-line body plus a read-then-write static local" | a read-before-write slot in the flatten | iverilog runs it with X | — |
 | frame-oob | a frame-local array OOB read has no E4002 (a module array gives E4002 and exit 1) | a frame-local array is a packed slot with no array-word concept | elaborate must keep the slot's original geometry | vita is internally inconsistent | — |
@@ -865,13 +875,13 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §3 ⑤ⓕ's NON-ARITY axis: `shape_flags`'s F4004 rejects signedness, 2-state kind and arity through one `!=`. The first two need no arity carrier and are 2-oracle measured (`int`→`logic [31:0]`, `int`→`int unsigned`, `logic [7:0]`→`logic signed [7:0]` all agree in both oracles while vita gives F4004; the width-only control passes three-way) | §3 | ② |
-| 2 | 2 | §2 the certification seam of a declared-width leaf: a GENVAR leaf (no `param_range` entry; §27.4 makes it a 32-bit `integer`) and a `$clog2`-sourced localparam (the `SysCall` initializer reaches the value-inferred tail; `integer` return type) both fall out of `declared_override_widths` — one seam, two leaf kinds, both 2-oracle (`8/0a`; 263 vs 1). Grounding decides whether the `pkg::` operator-topped rung (`ConstWidths` bare key) is the same seam or its own slot | §2 Index sealing | ① |
-| 3 | 3 | §2 a static-initialised block-local pair inside a STATIC task body coalesces (`o1=55 o2=55`, both oracles `44 55`; a four-call re-entry ladder shows one counter). Path = `reserve_frame_block_locals`, the frame twin of the module classifier §4.5.475 closed; first action = census whether the frame reserve can take the same `AdmitReason` or needs its own storage rule | §2 Scoping | ① |
+| 1 | 1 | §2 `$clog2`'s result folds UNSIGNED: `localparam W = $clog2(300) - 20;` is `4294967285` against both oracles' `-11`, while `$signed(W)` is `-11` — the bits are right and only the recorded sign is wrong. Root = `const_expr_signed`'s `_ => false` has no `SysCall` arm where its two `const_fn_width` twins do; one arm. First action = re-measure the pair (`9 - 20`, `integer W3 = $clog2(300) - 20`) and census the other consumers of that predicate before adding it | §2 Index sealing | ① |
+| 2 | 2 | §2 an INITIALIZER-FREE sibling block-local in a subroutine body still shares one net (`A=44 B=44`, both oracles `A=44 B=0`), on the inline and the frame route alike: the declarator is admitted by no `AdmitReason`, so the name has one declaring span and falls below §4.5.480's two-span bar. First action = decide the oracle question (what the second block's unassigned read must be) before widening admission, and measure the widening against the read-before-assign guard's protected class | §2 Scoping | ① |
+| 3 | 3 | §3 ⑤ⓕ's UNCARRIED positions after §4.5.479: an override that changes the shape is still loud when the module uses `T` as a packed struct or union member, an enum base, a class property or a `T'(e)` cast (both oracles run all four; the function RETURN type is do-not-start). Each needs its own per-instance slot on the container, so the slice is one container — grounding picks which, by cells moved per SchemaHash cost | §3 | ② |
 | 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
 | 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
 | 6 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 7 | hygiene | `params.rs` is 2,218 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` is the precedent for the split. NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 7 | hygiene | `params.rs` is 2,255 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` is the precedent for the split, and §4.5.478–480 added two more (hdl-parser `type_params.rs` split into `type_param_shape.rs`; `frames_reserve.rs` shrank to 1,247 via `frames_blocal.rs`). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 
