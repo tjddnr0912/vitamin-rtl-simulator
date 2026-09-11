@@ -13,6 +13,9 @@
 
 
 **§4.5.220–280**
+- `4.5.477` **A `pkg::`-scoped name is a primary in the wide fold's self-determined test** (2026-09-11 · §2 Index sealing, queue row 3 · row root REFUTED: the single-segment guard was dead code; one `K::PkgScoped` arm in `wide_top_is_self_determined` · 19 silent→value + 3 loud→value, six consumers censused)
+- `4.5.476` **A `localparam` sized by an operator over declared-width leaves records a declared range** (2026-09-11 · §2 Index sealing, queue row 2 · the override was irrelevant, class ×2 · certification via `declared_override_widths`, §4.5.363 fence gates unchanged · 23 silent→value, one i64-overflow loud→value, two more §2 rows closed)
+- `4.5.475` **A static block-local with an initializer owns its storage** (2026-09-11 · §3.b `blocal-flatten` ⓐⓑ, queue row 1 · §4.5.467's design rebuilt WITHOUT a per-rule floor after §4.5.468 · `AdmitReason::static_init` + a homogeneous `all()` exemption · 16 loud→value, 0 regressions)
 - `4.5.474` **A singleton generate scope prints as `label` in the per-net name table too** (2026-09-11 · external §3.2 · runtime diagnostics, `--probe`, `trace.jsonl` and VCD `$scope` now spell a singleton `generate if` block as `label`, the `%m`/`[in …]` spelling)
 - `4.5.473` **A `function` / `task` declared inside a generate block elaborates** (2026-09-11 · external R10 · IEEE §27.3, 2-oracle · per-scope `g[0]$f` keys registered in the generate `Nets` arm, innermost-first resolution, genvar replay per iteration · bare call from outside, `u.g.f()`, constant-expression use and `defparam` stay loud)
 - `4.5.472` **The process-multidriver check covers every process kind the two tools reject** (2026-09-11 · external R5 / §3.1(c) · verilator's rule measured per shape: both-whole-variable writes only; `always_latch` pairs and the initializer-on-a-register idiom are the new `W3060` warning, not errors · 6 in-tree fixtures said where the first cut was wrong)
@@ -484,6 +487,160 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.477 A `pkg::`-scoped name is a primary in the wide fold's self-determined test (2026-09-11, branch queue-475-477) ✅
+
+**ROADMAP row**: §2 "Index sealing", the `pkg::`-scoped override SOURCE; queue row 3. Third slice
+of the bundle.
+
+**Row claims re-measured.** The symptom held (`leaf #(.P(pk::PW))` onto an untyped `P` lost both
+columns while the wildcard-imported bare `PW` was right; both oracles `36/800000001`), but the
+printed width is the LEAF DEFAULT's own (`1`/`8`/`32` for `1'b0`/`8'd0`/`32'd0`), not "the
+parent's 32-bit lane". The ROOT was refuted: `narrow_param_bits`' single-segment early return is
+dead code for this shape — `wide_name_bits` already has a `PkgScoped` arm reading the
+provenance-filtered `pkg_wide_bits` / `pkg_const_narrow_bits`, and `#(.P({pk::PW}))` /
+`#(.P(pk::PW[35:0]))` bind 36 and 72 correctly, so nothing downstream of the top node was missing.
+The drop is one line earlier: `wide_top_is_self_determined` (`const_wide.rs`) lists `K::Ident` but
+not `K::PkgScoped`, so `override_bits` declines before calling the fold that answers.
+
+**Fix.** One match arm: `K::PkgScoped { .. }` joins the primary list, with the six consumers of the
+predicate named in its doc. Every consumer already admitted `K::Ident`, and the census gave each a
+scoped/bare twin: the override channel; the size-cast operand widen (`40'(pk::PW)` was 32, both
+oracles 40; a signed negative `40'(pk::PS)` was `fffffffb`, oracles `fffffffffb`); the
+`param_bits_at_declared` and `wide_param_const_in_scope` backstops (spelling-independent before and
+after); `selfdet_bits_i64` in a bound, an index and a replicate count (unchanged, 12/1/`fff`); and
+`wide_ext_invariant_bitwise` (`pk::PW | pk::PZ` was 32, oracles 36; `pk::PW ^ 36'h1` the same;
+`pk::PW & ~pk::PZ` is the second rung and unchanged).
+
+**Census**: 39 designs, 3 tools. 19 silent→value (width bands ≤32 / 33..64, signed, untyped and
+`localparam` package spellings, explicit `import pk::PW`, `defparam`, one forwarding level, an enum
+label `pk::A4`), 3 loud→value (`logic [71:0]` package constants — the >64 band was loud when the
+value did not fit i64 and silent-wrong when it did: one defect, two faces), 0 correct→wrong,
+0 value→loud (an ascending or non-zero-LSB package constant declines in `pkg_const_narrow_bits`
+and both spellings keep their pre-existing answer). Residue, recorded in §2: the operator-topped
+scoped source (`~pk::PW`, `pk::PW + 1`) stays at the leaf default because
+`declared_override_widths::names` does not push a `PkgScoped` leaf and `ConstWidths` is keyed by
+the BARE name, so a certified `pk::PW` entry keyed `PW` would answer a same-named module parameter
+in the same expression; the fix needs a qualified key. A `real` / `string` package constant as an
+override source stays loud (iverilog rejects the string spelling). Class-scoped `C::K` is a parse
+refusal in vita and iverilog.
+
+**Review**: differential beyond the table — enum label (2-oracle, moved), `real`/`string`
+(unchanged loud), ascending / `[39:4]` (unchanged, both spellings), range bound / array size /
+replicate (unchanged). Soundness: the predicate is a NODE property (§11.6 primary), so the arm
+belongs on the shared predicate and not in one consumer; a consumer-local special case would have
+left the two other live silent-wrongs (`40'(pk::PW)`, `pk::PW | pk::PZ`) in place.
+
+Files: `crates/elaborate/src/const_wide.rs` (+12), `crates/cli/tests/override_own_width_and_sign.rs`
+(prose only). Tests: `pkg_scoped_override_source.rs` +6. format 31 unchanged.
+
+#### 4.5.476 A `localparam` sized by an operator over declared-width leaves records a declared range (2026-09-11, branch queue-475-477) ✅
+
+**ROADMAP row**: §2 "Index sealing", the derived `localparam` forward; queue row 2. Second slice of
+the bundle.
+
+**Row claims re-measured.** The symptom held (`localparam R = ~Q; leaf #(.P(R))` bound at the leaf's
+own default width — `32/c` with `parameter P = 1`, `1/0` with `P = 1'b0`, so the VALUE column was
+wrong too for any leaf default narrower than R). The row's framing "R is not overridden, so …" was a
+red herring that under-scoped the class by half: a TYPED `Q` and an UN-overridden `Q` were equally
+wrong, because for a `localparam` `param_decl_range_opt(p, true)` always reaches the operator /
+ternary / bare-alias / concatenation arms and every one of them was gated `!declared_only`, so
+`param_range` recorded nothing while `param_meta` recorded the right width. `narrow_param_bits`'
+`param_range.get(&key)?` is the line that turned the asymmetry into a lost forward.
+
+**Fix.** The four arms answer under `declared_only` when — and only when — every NAME leaf's width is
+certified by `narrow_param_bits`, through the §4.5.463 pair `declared_override_widths` +
+`ctx_width_names_are_evident` that `override_self_meta` already used on the override lane
+(`declared_env_for`); the bare-alias arm asks `narrow_param_bits` directly; the concatenation arm
+certifies and then folds with the empty env as before (its `envw` means interpreter locals, and a
+name recorded there needs a value). Sign on the certified lane comes from `const_signed_env` over
+the same map. The unrestricted lane passes an empty env and is byte-identical. One unprovable leaf
+declines the whole initializer, so a `$clog2` source (no `param_range` entry) and a >64-bit parent
+(no `param_meta` entry) still record nothing.
+
+**§4.5.363 fence, re-measured.** Its own counter-example `localparam W = ~8'hCB; logic
+[(W[15:8])+8-1:0] v;` is `bitsv=1` on HEAD before and after (iverilog 1; verilator 60 and not an
+oracle for an out-of-range constant select), because §4.5.460's operator arm already records
+`param_meta[W] = 8` — the inferred 32 the fence was built against no longer exists for the operator
+family. The five fence gates (`f/F1–F3`, `g/G3`, `g/G4`) are unchanged.
+
+**Census**: 35 designs, 3 tools. 23 silent→value — every derivation shape (`~Q`, `Q`, `Q + 1`,
+`Q << 1`, `{Q, Q}`, `-Q`, ternary), typed and untyped Q, overridden and not, ≤32 and 33..64
+override bands, `#()` / `defparam` / `-G`, a second derivation level, a `generate` scope, a signed
+override, and per-instance widths (`mid #(.Q(4'd3))` beside `mid #(.Q(12'd3))` bind 4 and 12).
+`Q[1:0]` was already right (the select arm never carried the gate). 0 correct→wrong, 0 value→loud.
+Four pre-existing pins that asserted the OLD decline were re-measured 3-way and converted, prose
+moved with them (`wide_const_domain`, `reduction_in_declaration_bound`, `pkg_param_select`,
+`override_own_width_and_sign`): `localparam W = A | 4'h0; localparam R = ^W` with a sized-literal
+`A` is `R=1` in all three tools, and a `$clog2`-sourced `E = A | 4'h0` under `^` stays loud. The
+full gate found one more: `parameter W = 64'd3037000500 * 64'd3037000500` was a loud i64 overflow
+and now folds at its self-determined 64 bits (`9223372037000250000`, verilator identical; iverilog
+prints the value with `$bits` 128 — it doubles a parameter-bound `*`). The §2 row "`64'h8000…0000
+* 64'd2` is 0 in both oracles" was refuted on the way: iverilog prints 2^64 there; verilator and
+vita print 0 at width 64.
+
+Two more §2 rows closed by the same change: the 1-oracle "un-overridden default that is NOT a
+literal" forward (`mid #(parameter Q = 8'd1 + 8'd0)`, `leaf #(.P(~Q))` now `8/fe` = verilator).
+
+**Filed** (§2, both PRE=POST, 2-oracle): a GENVAR leaf in an override source or a derived
+`localparam` inside `generate for` (`leaf #(.P(Q << i))` and `localparam R = Q << i` both bind the
+leaf default; oracles `8/0a`) — a genvar has no `param_range` entry; and the value-inferred tail's
+over-decline, `localparam A = $clog2(300); localparam W = ~A; logic [(W[15:8])+8-1:0] v;` declares
+1 bit against both oracles' 263 — `$clog2` returns `integer`, a type-declared 32.
+
+Files: `crates/elaborate/src/params.rs` (+142; `declared_env_for`, `declared_env_signed`),
+`crates/elaborate/src/param_query.rs` (`declared_override_widths` now `pub(crate)`),
+`crates/sim-engine/tests/const_domain_semantics.rs` (pin converted). Tests:
+`localparam_derived_forward_width.rs` +16. format 31 unchanged.
+
+#### 4.5.475 A static block-local with an initializer owns its storage (2026-09-11, branch queue-475-477) ✅
+
+**ROADMAP row**: §3.b `blocal-flatten` ⓐⓑ; queue row 1. First slice of the bundle; the design
+§4.5.467 built and reverted, rebuilt after its prerequisite (§4.5.468) landed.
+
+**Re-census on HEAD first.** 37 cells. The 13 loud→value cells (sibling pairs and triples by body
+kind and type, `if`/`else` arms, a nested triple) were still loud with the read-before-assign
+guard's text. The §4.5.467 R3 mis-route (`MOD=41`) was measured CLOSED on HEAD in every shape,
+including the archive's own PRE control that renames only the innermost declaration
+(`MOD=0 INNER=9 OUTER=65`, both oracles). The guard's protected class (an init-free pair whose
+second block reads first) was loud and must stay so; the frame-body twin (`reserve_frame_block_locals`,
+`o1=55 o2=55`) is a recorded §2 residue on another path and must not move.
+
+**Root.** `gather_auto_block_locals` admitted a span for three reasons and a plain `int s = 44;` is
+none of them, so two sibling declarations flattened onto one net, the name landed in
+`coalesced_block_locals`, and the guard asked `block_local_definitely_assigned(stmts, …)` — a walk
+over STATEMENTS that cannot see a declaration's initializer. The initializer fact was computed one
+line away and thrown out (`let _ = decl_has_init;`).
+
+**Fix — six edits, three files, no `gate.rs` change.** A fourth admission rule "a STATIC declarator
+carrying an initializer" (decl-ANY, matching `block_local_scope_seg`), carried as
+`AdmitReason::static_init`; the decl-ANY twin in `hoist.rs`; and a `static_init_only` exemption in
+filter A and the §4.5.259 nesting filter, the shape §4.5.468 shipped for `shadows_module`. The
+guard needs no change: a scoped declaration leaves `coalesced_block_locals`, and an init-free pair
+is not admitted, so the protected class keeps its loud. Why no per-rule floor: the exemption is an
+`all()` over a HOMOGENEOUS reason set, evaluated once — a name with even one `automatic`, dynamic
+or shadow span takes the HEAD path byte for byte, so nothing is withheld or re-admitted and R3's
+mechanism (a floor resurrecting a span whose loud masked another) has no site.
+
+**Census PRE→POST**: 16 loud→value (13 predicted 2-oracle + 3 verilator-only where iverilog rejects
+`automatic` lifetime overrides or `int s[int]`), 0 correct→wrong, 0 value→loud; the 16-cell risk
+set (dynamic kinds, shadow nestings, the `6,7,8,9` t0-once ladder) byte-unchanged; c40 stays loud
+with the same text. R3's one-token discriminator (innermost span double- and triple-admitted) is
+`MOD=0` on all three tools, pinned. `block_scope_two_level.rs`'s
+`two_static_initialized_locals_of_one_name_stay_loud` pinned the old refusal on a design both
+oracles run (`R A 7 / R B 9`) and was converted, prose moved.
+
+**Review**: differential beyond the table — generate-for body pairs (`t.G[0]`/`t.G[1]`), an
+interface body (shares the classifier), multi-declarator `int a = 1, b;` (b fresh per block, `0`),
+an initializer reading a module net, a `fork` branch pair, an `always @(k)` pair over three edges
+(`106/206`), a nested same-name pair inside one block beside a sibling — all matched both oracles;
+a read of the name outside its block and a hierarchical `t.b1.s` stay loud (the hierarchical read is
+a pre-existing E3010 on both binaries). Soundness: `block_local_scope_seg` reads the classifier's
+output map only, so the four rules have one home.
+
+Files: `crates/elaborate/src/{block_local_class,frames_reserve}.rs`,
+`crates/elaborate/src/block_local/hoist.rs`. Tests: `block_local_static_init_scope.rs` +25. format
+31 unchanged.
 
 #### 4.5.474 A singleton generate scope prints as `label` in the per-net name table too (2026-09-11, branch reviewer-r5-r9-r10) ✅
 

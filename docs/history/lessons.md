@@ -15,6 +15,30 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ## 2026-09-11
 
+### Rebuild a reverted design from its prerequisite, not from its patch (§4.5.475)
+
+§4.5.467 was reverted after three rounds, each fix adding machinery (a floor, a per-rule floor)
+to stop the new admission rule from SUBTRACTING candidacy. Once the prerequisite (§4.5.468, a reason
+carrier per span) landed, the same feature needed six edits and no floor: an `all()` over a
+homogeneous reason set cannot re-admit anything, so the mechanism the third round found had no site.
+Rule: after a prerequisite closes, re-derive the reverted slice from the row and the code as they
+are now; do not restore the patch and its compensations.
+
+### A row's root is a claim; run the nearest spelling that works before building (§4.5.477)
+
+Two of three rows in one bundle named the wrong site. The `pkg::` row blamed a single-segment early
+return that was dead code for the shape — `#(.P({pk::PW}))` bound correctly one wrapper away, which
+proved every layer below the top node was already right, and the drop was a missing arm in a
+shared predicate one line above. The `localparam` row blamed the override, and a typed or
+un-overridden control was equally wrong. Rule: before pricing a row's machinery, run the wrapped,
+typed and un-overridden twins of its cell; the twin that works is the specification.
+
+### "Both oracles" in a row must have been run on both (§4.5.476)
+
+A §2 row said `64'h8000…0000 * 64'd2` "is 0 in both oracles". iverilog prints 2^64 — it sizes a
+parameter-bound `*` at the doubled width. The row had been written from verilator alone. Rule: a
+row that cites two oracles quotes two outputs.
+
 ### A lint error needs two tools per SHAPE, not per rule (§4.5.472)
 
 The rule "no other process may write an `always_ff` variable" is one sentence in the LRM and one

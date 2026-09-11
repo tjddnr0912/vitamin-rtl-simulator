@@ -25,6 +25,11 @@ need updating. What moved:
 
 ### Added
 
+- **Two sibling blocks may each declare a same-named static variable with an initializer**
+  (`begin int s = 44; … end` beside `begin int s = 55; … end`, in `initial`/`always` bodies,
+  `if`/`else` arms, nested blocks, generate-for bodies and interface bodies). Each declaration owns
+  its storage and its initializer runs once at t0, as in both reference tools; the read-before-assign
+  refusal remains for an initializer-free pair that reads the other block's leftover.
 - **A `function` or `task` declared inside a generate block** (IEEE 1800-2017 §27.3) now elaborates
   and is callable from the block and its nested blocks, shadows a module-scope routine of the same
   name, and is one routine per generate-if branch and per generate-for iteration (a body may read
@@ -102,6 +107,15 @@ need updating. What moved:
 
 ### Fixed
 
+- **A `localparam` derived from a parameter forwards at its own width** (`localparam R = ~Q;
+  leaf #(.P(R))`, also `Q + 1`, `Q << 1`, `{Q, Q}`, `-Q`, a ternary, a bare alias, a second
+  derivation level, a `generate` scope, and every override channel). It used to bind at the leaf's
+  own default width, truncating the value when that default was narrower. A 64-bit product or sum
+  in an untyped parameter that overflows i64 now folds at 64 bits instead of being refused.
+- **A `pkg::`-scoped constant as an override source binds at its declared width and value**
+  (`leaf #(.P(pk::PW))`, `defparam`, a forwarded level, an enum label), as the wildcard-imported bare
+  spelling already did; `40'(pk::PW)` and `pk::PW | pk::PZ` fold at the declared width too, and a
+  >64-bit package constant is no longer refused as "not a constant".
 - **`E3001` now covers every two-process driver shape both reference tools reject**: a variable
   written by `always_comb` or `always_ff` and also by `initial`, `always`, `final`, another
   `always_ff`, a continuous `assign`, `force` or a procedural `assign` (IEEE §9.2.2.2 / §9.2.2.4;

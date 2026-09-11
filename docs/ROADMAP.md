@@ -270,8 +270,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   in opposite ways — `(64'hFFFF…FFFF + 65'd1) > 64'hFFFF…FFFF` wants the signed reading and
   `((65'd1-65'd2) > 65'd0)` wants the unsigned one (each oracle answers 1), so do not guess. Pin =
   `const_unsigned_at_sixty_four.rs::above_sixty_four_bits_keeps_the_pre_slice_answer`.
-- A 64-bit unsigned `*` overflow is loud (`64'h8000…0000 * 64'd2` is 0 in both oracles and refused by
-  vita's `checked_mul`). Wrap only when the context width is exactly 64.
+- A 64-bit `*` or `+` in an UNTYPED parameter folds at its self-determined width and WRAPS
+  (`64'h8000…0000 * 64'd2` is 0 at 64 bits, `64'hFFFF…FFFF + 64'd1` is 0; verilator identical, since
+  §4.5.476). iverilog is not an oracle here: it prints 2^64 for both, sizing a parameter-bound `*` at
+  the doubled width and `+` at max+1 (its recorded self-contradiction). The "both oracles 0" this row
+  used to claim was never measured on iverilog.
 - An untyped `localparam` with a huge `**` hangs iverilog, so there is no oracle:
   `localparam L = 3 ** (64'd0 - 64'd8);` runs 10 minutes at 100% CPU, leaving verilator as sole judge.
 - Placement and cast fold residue (honest-loud): a concat containing a carry operation
@@ -314,25 +317,30 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   itself. Pinned by self-consistency (`packed_select_signed_index.rs`).
 - A >64-bit override tree (`~128'd0`) declines because `const_ctx_within_i64` refuses it — the value
   re-fold clamps at 64. Both oracles 128, vita 32.
-- A `localparam` DERIVED from an overridden untyped parameter forwards at 32 (2-oracle): in
-  `mid #(parameter Q = 8'd1)` overridden `#(.Q(4'd3))`, `localparam R = ~Q; leaf #(.P(R))` binds
-  `32/c` where both oracles bind `4/c`, while `$bits(R)` inside `mid` is already 4 and `#(.P(~Q))`
-  forwards correctly since §4.5.470. Root = `R` is not overridden, so `param_decl_range_opt(p, true)`
-  reaches the operator arm, which declines under `declared_only` on purpose (the §4.5.363 263-bit
-  net-provenance fence); `narrow_param_bits` then has no range to agree with. Width-only, on the
-  localparam lane. Pinned at today's text in `param_override_forwarded_width.rs`.
-- A `pkg::`-scoped name as the override SOURCE loses both columns (2-oracle): with
-  `package pk; parameter logic [35:0] PW = 36'h8_0000_0001;`, `leaf #(.P(pk::PW))` binds
-  `bits=32 val=1` where both oracles bind `36/800000001`; the wildcard-imported bare `PW` spelling
-  is correct. Root = `wide_name_bits` / `narrow_param_bits` take a single-segment path and decline
-  `ExprKind::PkgScoped`, so neither `ovr_bits` nor `ovr_self_meta` is produced and the value folds
-  at the parent's 32-bit lane. §4.5.466 recorded the width half as "the next rung"; the value half
-  is the same decline.
-- Forwarding an UN-overridden untyped parameter whose default is NOT a literal (1-oracle,
-  verilator; iverilog contradicts its own `$bits` on `+`): `mid #(parameter Q = 8'd1 + 8'd0)` with
-  no override, `leaf #(.P(~Q))` binds `32/fffffffe` where verilator binds `8/fe` and iverilog 9.
-  The default lane's literal arm answers only a literal; an operator default has no range entry and
-  the forward falls to the leaf's own default. Recorded, not chased (one oracle).
+- A GENVAR leaf in an override source or in a derived `localparam` is not certified (2-oracle):
+  inside `generate for (i…) begin : G`, both `leaf #(.P(Q << i))` and `localparam R = Q << i;
+  leaf #(.P(R))` bind the leaf's own default (`1/0`) where both oracles bind `8/0a`, while
+  `localparam R = Q << 1` in the same scope is right since §4.5.476. Root = a genvar has no
+  `param_range` entry, so `narrow_param_bits` cannot prove its width and `declared_override_widths`
+  declines the whole expression. Fix = a genvar is a declared 32-bit `integer` (§27.4); certify it as
+  such at the leaf.
+- The value-inferred tail OVER-declines (2-oracle): `localparam A = $clog2(300); localparam W = ~A;
+  logic [(W[15:8])+8-1:0] v;` declares 1 bit in vita against both oracles' 263. `A`'s width is 32 by
+  the TYPE rule (`$clog2` returns `integer`), not by inference, but `param_decl_width_opt`'s `SysCall`
+  initializer reaches the value-inferred tail and records no `param_range`, so `W`'s certification
+  fails and the bound falls to the 1-bit default. Same certification seam as the genvar row; a
+  system function with an `integer` return type is a declared width.
+- An OPERATOR-topped `pkg::`-scoped override source stays at the leaf default (2-oracle): `~pk::PW`
+  and `pk::PW + 1` bind `32/…` where both oracles bind 36 (`pk::PW + 1` is verilator's 36; iverilog's
+  37 is its `+` max+1), while a bare `pk::PW` and the wildcard-imported `~PW` are right since
+  §4.5.477. Root = `declared_override_widths::names` does not push a `PkgScoped` leaf and
+  `ctx_width_names_are_evident` answers `false` for it, fail-closed; `ConstWidths` is keyed by the
+  BARE name, so a certified `pk::PW` entry keyed `PW` would answer a same-named module parameter in
+  the same expression. Fix = a qualified key for package leaves plus the matching `Ident` lookup.
+- A package constant declared ascending (`logic [0:35]`) or with a non-zero LSB (`logic [39:4]`) as an
+  override source binds the leaf default in BOTH spellings (`pk::PA` and imported `PA`; both oracles
+  36). `pkg_const_narrow_bits` declines `lo != 0 || ascending`, the same decline as 🆕 H ⓑ on the
+  module lane; a size cast of the same name (`40'(pk::PA)`) is already right.
 - `const_expr_signed`'s `Ident` arm resolves with `self.fq()` (the current scope) and so diverges
   from `const_self_width` / `const_signed_env`'s `walk_scopes`: reading a module-scope
   `parameter signed [7:0] S8` inside `generate if(1) begin:gb` makes `localparam K = S8>>>1` 255,
@@ -470,7 +478,7 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `o1=44 o2=55`. A four-entry re-entry ladder shows the two variables are one counter
   (`a=56 b=57 c=58 d=59` against the oracles' `45 56 46 57`). Controls behave correctly: an
   `automatic` task, a function, and different names. The storage path is different
-  (`reserve_frame_block_locals`) — the same class as §3.b `blocal-flatten` on the module procedural
+  (`reserve_frame_block_locals`) — the class §4.5.475 closed on the module procedural
   path, at a different site.
 - Declaring a parameter and a net with the same name is accepted by vita alone (both oracles reject
   it): vita takes `localparam N = 7; logic [3:0] N;` and reads it as the parameter (`r=7`). This is
@@ -663,7 +671,6 @@ behind the §2 correctness queue.
 | based-ws | `64'sh FFFF` is a lexer reject | lexer | accept it | iverilog accepts | minor |
 | tf-localparam | `task automatic t; localparam int K = 3;` gives `E2002 expected statement, found keyword 'localparam'` (IEEE §6.20 allows it) | the parser's statement position | accept the declaration | iverilog | small |
 | R30-1 | a missing package gives 7 lines of E2002 and never names the package | the parser cannot take `IDENT::IDENT` in a tf-port as a type | take it as a type and let elaborate say "unknown package" ⇒ 1 line | — | parser |
-| blocal-flatten | ⓐ two sibling blocks using the same name are refused by the read-before-assign guard even when they are assigned only by declaration initialisers (both oracles `o1=44 o2=55`) · ⓑ two mutually exclusive `if`/`else` branches declaring the same name hit the same guard, and it is 2-oracle (both `o1=44`) | `block_local/gate.rs`'s read-before-assign guard is the SYMPTOM site. The real site is the storage classifier `gather_auto_block_locals`: a static initialiser runs once at t0 rather than on block entry (measured `6,7,8,9` across three tools), so counting initialisers in the guard turns the cells into `o1=44 o2=44`, loud→silent-wrong | adding a "static with an initialiser" term to the classifier turns ⓐ, ⓑ and the widened nesting — 19 cells, all agreeing with both oracles — from loud into a value, but the candidacy pass cannot absorb the fourth admission rule: widening REMOVES candidates (an adjacent `automatic` block loses its scope), an `automatic` floor then makes 4 kinds of dynamic storage loud, and a per-rule floor makes the shadow rule's floor erase another span's loud, 18 cells loud→silent-wrong. PREREQUISITE CLOSED by §4.5.468 (the shadow mis-route; `AdmitReason` now carries WHY a span was admitted, which is the carrier the per-rule floor lacked). The per-rule floor itself was still the wrong shape at revert time — re-census the 19 cells and the 18 R3 cells on HEAD before restarting | ⓐ 2-oracle ⓑ 2-oracle | — |
 | enum-label | `enum bit[3:0] {A=8'hFF}` never reaches `enum_defs`, so `.first` / `.next` / `.name` are all E3010 / E3009, and the skipped out-of-range check silently truncates | `const_lit` folds unsized decimals only | widen `const_lit` or check at elaborate time | iverilog rejects | — |
 | md-packed-write | multi-dim packed nested part-select WRITE: an ascending or non-zero-lsb leaf · a genvar-indexed `x[g][m:l]` (over-rejected) · a const out-of-bounds packed index is a silent no-op | the current support is limited to a descending zero-lsb leaf | widen the leaf geometry | — | — |
 | misc-parse | a negative-LSB member sub-select · `import` inside a generate · a package's own-function initializer · a SYS-READ hierarchical-element destination · a hierarchical-write sentinel panic that should be loud · `logic[1:0][7:0] PK` · `'{k:v}` | — | hand-IEEE plus an internal differential | no oracle | — |
@@ -858,13 +865,13 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §3.b `blocal-flatten` ⓐⓑ: prerequisite closed by §4.5.468. Re-census the 19 loud→value cells and §4.5.467's 18 R3 cells on HEAD first; the fourth admission term now has a reason carrier (`AdmitReason`), so the candidacy pass can tell a static-initialiser span from a shadow span without a per-rule floor | §3.b | ② |
-| 2 | 2 | §2 `localparam` derived from an overridden untyped parameter forwards at 32 (`localparam R = ~Q; leaf #(.P(R))` → `32/c`, both oracles `4/c`). Root = the operator arm declining under `declared_only` (§4.5.363 fence) on a lane that has no override to fence. Width-only, pinned | §2 Index sealing | ① |
-| 3 | 3 | §2 `pkg::`-scoped override SOURCE loses both columns (`leaf #(.P(pk::PW))` → `32/1`, both oracles `36/800000001`). Root = `wide_name_bits` / `narrow_param_bits` take a single-segment path. The bare imported spelling is correct, so the fix is the `PkgScoped` arm of that path, not a new channel | §2 Index sealing | ① |
+| 1 | 1 | §3 ⑤ⓕ's NON-ARITY axis: `shape_flags`'s F4004 rejects signedness, 2-state kind and arity through one `!=`. The first two need no arity carrier and are 2-oracle measured (`int`→`logic [31:0]`, `int`→`int unsigned`, `logic [7:0]`→`logic signed [7:0]` all agree in both oracles while vita gives F4004; the width-only control passes three-way) | §3 | ② |
+| 2 | 2 | §2 the certification seam of a declared-width leaf: a GENVAR leaf (no `param_range` entry; §27.4 makes it a 32-bit `integer`) and a `$clog2`-sourced localparam (the `SysCall` initializer reaches the value-inferred tail; `integer` return type) both fall out of `declared_override_widths` — one seam, two leaf kinds, both 2-oracle (`8/0a`; 263 vs 1). Grounding decides whether the `pkg::` operator-topped rung (`ConstWidths` bare key) is the same seam or its own slot | §2 Index sealing | ① |
+| 3 | 3 | §2 a static-initialised block-local pair inside a STATIC task body coalesces (`o1=55 o2=55`, both oracles `44 55`; a four-call re-entry ladder shows one counter). Path = `reserve_frame_block_locals`, the frame twin of the module classifier §4.5.475 closed; first action = census whether the frame reserve can take the same `AdmitReason` or needs its own storage rule | §2 Scoping | ① |
 | 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
 | 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
-| 6 | next | §3 ⑤ⓕ's NON-ARITY axis: `shape_flags`'s F4004 rejects signedness, 2-state kind and arity through one `!=`. The first two need no arity carrier and are 2-oracle measured (`int`→`logic [31:0]`, `int`→`int unsigned`, `logic [7:0]`→`logic signed [7:0]` all agree in both oracles while vita gives F4004; the width-only control passes three-way) · a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 7 | hygiene | `params.rs` is 2,116 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` is the precedent for the split. NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 6 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
+| 7 | hygiene | `params.rs` is 2,218 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` is the precedent for the split. NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 

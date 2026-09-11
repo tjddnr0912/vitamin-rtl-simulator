@@ -543,3 +543,9 @@ unchanged. Details: ROADMAP_ARCHIVE §4.5.405.
   `128'(8'he1) << 120`) fold on both the report's binary and HEAD — a stale comment. R3-elab is
   recorded as demand on the existing `eval_const_env_self` perf item, not started. Details:
   ROADMAP_ARCHIVE §4.5.471–474.
+- 2026-09-11 · queue rows 1–3 as §4.5.475–477: static block-locals with initializers own their
+  storage (the §4.5.467 design rebuilt without a floor), a derived `localparam` records a declared
+  range through leaf certification (two row roots refuted, one i64-overflow loud→value, three §2
+  rows closed), and `pk::K` is a primary in the wide fold (one arm, six consumers censused).
+  Filed: the genvar / `$clog2` certification seam, the `pkg::` operator-topped rung, ascending
+  package constants. Details: ROADMAP_ARCHIVE §4.5.475–477.
