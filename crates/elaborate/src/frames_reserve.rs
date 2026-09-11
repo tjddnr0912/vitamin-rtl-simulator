@@ -87,10 +87,17 @@ impl Elaborator<'_> {
     /// its `decls` are skipped (recursed into only to find nested Blocks). STATIC
     /// (non-`automatic`) block-locals are intentionally OMITTED — they safely
     /// coalesce onto one net when two sequential blocks reuse a temp name (see
-    /// `hoist_block_local_nets`), so they need no separate scope. ⚠️ That is true
-    /// only for an INITIALIZER-FREE one; giving init-bearing statics their own
-    /// scope is ROADMAP §3.b `blocal-flatten` ⓐ, and was built and REVERTED — the
-    /// candidacy pass cannot absorb a fourth admission rule (see that row).
+    /// `hoist_block_local_nets`), so they need no separate scope — but that holds
+    /// only for an INITIALIZER-FREE one. A static declarator carrying an
+    /// INITIALIZER is admitted (ROADMAP §3.b `blocal-flatten`): its write happens
+    /// once at t0, not on block entry, so on a shared flattened net only the LAST
+    /// initializer of the name ever runs and every sharer reads that value. Each
+    /// such declaration owns storage the flatten cannot share, so it earns a
+    /// `$blk$` scope like the three kinds below. The candidacy filters in
+    /// `compute_scoped_block_locals` take the exemption only when EVERY declaring
+    /// span of the name is such a declaration, which is why adding this rule
+    /// cannot SUBTRACT scoping from a name that also has an `automatic`, a
+    /// dynamic-storage or a shadow span.
     /// `module_names` is [`Self::gather_local_decl_names`]'s set — the module's own
     /// ports, params and nets. A block-local of one of those names SHADOWS it, and a
     /// shadow cannot be answered by the flatten at all: the flattened net IS the
@@ -134,7 +141,6 @@ impl Elaborator<'_> {
                         // its initializers under its own prefix and replays them there
                         // (`collect_block_local_decl_inits` + `flush_pending_blk_inits`),
                         // so the reason is gone and with it both exclusions.
-                        let _ = decl_has_init;
                         // §4.5.255: a `string` local of ANY unpacked shape. Review S1 had cut
                         // this back to SCALAR because a scoped `string s[2]` came up length 0
                         // — its element storage is registered under the DECLARING prefix while
@@ -164,13 +170,21 @@ impl Elaborator<'_> {
                         // It used to be a single bool carrying only the first of those,
                         // which is why a static shadow was dropped like a widening.
                         let shadows_module = module_names.contains(&n.name.name);
-                        if d.lifetime == Some(true) || dyn_storage || shadows_module {
+                        // The fourth rule (ROADMAP §3.b `blocal-flatten`): a STATIC
+                        // declarator carrying an initializer. Decl-ANY, not per-name,
+                        // because `block_local_scope_seg` applies scoping per-DECL with a
+                        // deliberate ANY rule — a per-NAME term would put `byte m, n = g;`'s
+                        // two names on different arms (the §4.5.250 F1 trap above).
+                        let static_init = d.lifetime != Some(true) && decl_has_init;
+                        if d.lifetime == Some(true) || dyn_storage || shadows_module || static_init
+                        {
                             out.entry(n.name.name.clone()).or_default().push((
                                 span.lo,
                                 span.hi,
                                 AdmitReason {
                                     widened: d.lifetime != Some(true),
                                     shadows_module,
+                                    static_init,
                                 },
                             ));
                         }

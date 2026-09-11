@@ -288,21 +288,31 @@ fn struct_member_static_branch_message_at_two_levels() {
     );
 }
 
-/// SOUNDNESS PIN. Two STATIC block-locals of the same name, each with an initializer,
-/// wear the same wording as §3.8 but must STAY loud. They share one flattened net and
-/// both initializers run in the pre-arm initialization phase, so the second overwrites
-/// the first and the earlier block would read the later block's value. iverilog prints
-/// `7` then `9`; accepting this would print `9` twice.
+/// Two STATIC block-locals of the same name, each with an initializer. This was a
+/// SOUNDNESS PIN on the loud E3009: the two declarations shared one flattened net and
+/// both initializers ran in the pre-arm initialization phase, so the second overwrote
+/// the first and the earlier block read the later block's value — accepting it on the
+/// SHARED net would have printed `9` twice, which is why the refusal was right.
+///
+/// The sharing is what changed, not that reasoning. `gather_auto_block_locals` now
+/// admits a static declarator carrying an initializer (ROADMAP §3.b `blocal-flatten`),
+/// so each block earns its own `$blk$` net, there is no leftover to observe, and the
+/// guard no longer sees the name at all. Re-measured 3-way: vita `R A 7` / `R B 9`,
+/// iverilog 13 `R A 7` / `R B 9`, verilator 5.052 `R A 7` / `R B 9`. The pin is now on
+/// the value. The protected class the guard still holds is an INITIALIZER-FREE pair
+/// where one block reads the name before assigning it — see
+/// `block_local_static_init_scope.rs`.
 #[test]
-fn two_static_initialized_locals_of_one_name_stay_loud() {
-    let (o, ok) = run(r#"module t;
+fn two_static_initialized_locals_of_one_name_are_two_variables() {
+    runs(
+        r#"module t;
              initial begin
                begin int n = 7; $display("R A %0d", n); end
                begin int n = 9; $display("R B %0d", n); end
              end
-           endmodule"#);
-    assert!(!ok, "expected a diagnostic, got acceptance:\n{o}");
-    assert!(o.contains("E3009"), "expected E3009, got:\n{o}");
+           endmodule"#,
+        &["R A 7", "R B 9"],
+    );
 }
 
 /// SOUNDNESS PIN. A name declared at an outer level AND again at an inner level of the

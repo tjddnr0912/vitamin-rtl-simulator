@@ -33,10 +33,11 @@ pub(crate) type BranchPath = Vec<(u32, u32)>;
 /// WHY one declaring span of a block-local was admitted by
 /// [`Elaborator::gather_auto_block_locals`], carried alongside the span.
 ///
-/// Three independent rules admit a span — `automatic` (per-entry storage),
+/// Four independent rules admit a span — `automatic` (per-entry storage),
 /// DYNAMIC storage (§4.5.249: a `Dim::Dyn`/`Dim::Queue`/`Dim::Assoc` dim or a
-/// scalar `string`), and SHADOWING a module-scope port/param/net — and the
-/// candidacy filters below must tell them apart. This used to be ONE bool
+/// scalar `string`), SHADOWING a module-scope port/param/net, and a STATIC
+/// declarator carrying an INITIALIZER — and the candidacy filters below must
+/// tell them apart. This used to be ONE bool
 /// (`widened = d.lifetime != Some(true)`), which is true for a static shadow and
 /// for a dynamic-storage widening alike, so filter A could not distinguish them
 /// and dropped both. Dropping a widened dynamic-storage span is harmless (its
@@ -54,6 +55,14 @@ pub(crate) struct AdmitReason {
     /// The name also names a module-scope port, parameter or net. The flatten
     /// this span would otherwise take targets THAT net.
     pub(crate) shadows_module: bool,
+    /// A STATIC (non-`automatic`) declarator carrying an initializer. Its write
+    /// happens ONCE at t0, not on block entry — measured three-tool identical:
+    /// `int s = 5; s = s + 1;` in an `always` prints `6,7,8,9`. So when two
+    /// same-named static initialised declarations flatten onto one net, the LAST
+    /// initializer of the name is the only one that ever runs and every sharer
+    /// reads it; each such declaration therefore owns storage a flatten cannot
+    /// share, exactly as `automatic`, dynamic storage and a shadow do.
+    pub(crate) static_init: bool,
 }
 
 /// Can two blocks with these branch paths BOTH be elaborated?
@@ -187,11 +196,28 @@ impl Elaborator<'_> {
             // crosses its block, and the pre-existing flatten otherwise — a static shadow
             // pair beside a DISJOINT `automatic` span of the same name is still the old
             // silent route, 1-oracle, recorded in ROADMAP §2).
+            //
+            // §3.b `blocal-flatten`: the same exemption is taken when EVERY declaring
+            // span of the name is a STATIC declarator carrying an INITIALIZER and
+            // nothing else (not `automatic`, not a module shadow). The S3 rationale
+            // does not carry over there either: a static initializer runs once at t0,
+            // so two same-named initialised declarations on one flattened net leave
+            // only the LAST initializer running and every sharer reads it. The drop
+            // is what sends the outer declaration of a widened NESTING back down the
+            // flatten, which costs the name its candidacy entirely (the lone survivor
+            // then falls below the two-span bar below). Homogeneity is what makes it
+            // safe: a name with even one `automatic`, dynamic-storage or shadow span
+            // has a mixed reason set, `static_init_only` is false, and the whole name
+            // takes the pre-existing path byte for byte.
             let shadow_static_only = all.iter().all(|&(_, _, r)| r.shadows_module && r.widened);
+            let static_init_only = all
+                .iter()
+                .all(|&(_, _, r)| r.static_init && r.widened && !r.shadows_module);
             let spans: Vec<(u32, u32)> = all
                 .iter()
                 .filter(|&&(lo, hi, r)| {
                     shadow_static_only
+                        || static_init_only
                         || !r.widened
                         || !all.iter().any(|&(l2, h2, _)| contains((lo, hi), (l2, h2)))
                 })
@@ -233,11 +259,20 @@ impl Elaborator<'_> {
             // is no aliasing left for this filter to prevent between two static shadows —
             // it only prevented them from being scoped at all. Names with an `automatic`
             // or dynamic-storage span keep the drop (see filter A's note).
+            //
+            // §3.b `blocal-flatten`: `static_init_only` is exempt here for the same
+            // reason and with the same nesting argument — the Nets-phase hoist nests
+            // `$blk$` segments the way the Logic-phase lowering does, so an outer and
+            // an inner static initialised declaration of one name get
+            // `…$blk$<outer>.s` and `…$blk$<outer>.$blk$<inner>.s` and cannot alias.
+            // Without the exemption this filter drops BOTH members of such a nesting
+            // and the pair loses every scope it just earned.
             let spans: Vec<(u32, u32)> = spans
                 .iter()
                 .copied()
                 .filter(|&a| {
                     shadow_static_only
+                        || static_init_only
                         || !spans
                             .iter()
                             .any(|&b| a != b && (contains(a, b) || contains(b, a)) && coexist(a, b))

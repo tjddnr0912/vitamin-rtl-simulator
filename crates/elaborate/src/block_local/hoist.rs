@@ -212,13 +212,18 @@ impl Elaborator<'_> {
             });
         // A block-local SHADOWING a module-scope name earns a scope too, for the
         // reason `gather_auto_block_locals` records: the net it would flatten onto is
-        // the shadowed one. The three terms are the three kinds `gather` marks, and
-        // `block_local_scope_seg` re-checks the marks, so this stays the weaker test.
+        // the shadowed one. A STATIC declarator carrying an INITIALIZER earns one for
+        // the reason recorded there as well: the initializer runs once at t0, so a
+        // shared flattened net keeps only the LAST initializer of the name. The four
+        // terms are the four kinds `gather` marks, and `block_local_scope_seg`
+        // re-checks the marks, so this stays the weaker test.
         let shadows_module = d
             .names
             .iter()
             .any(|n| self.local_decl_names.contains(&n.name.name));
-        if d.lifetime == Some(true) || dyn_storage || shadows_module {
+        // Decl-ANY, matching `gather_auto_block_locals` and `block_local_scope_seg`.
+        let static_init = d.lifetime != Some(true) && d.names.iter().any(|n| n.init.is_some());
+        if d.lifetime == Some(true) || dyn_storage || shadows_module || static_init {
             if let Some(seg) = self.block_local_scope_seg(span, d) {
                 for n in &d.names {
                     let nm = &n.name.name;
