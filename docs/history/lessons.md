@@ -15,6 +15,57 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ## 2026-09-11
 
+### A row's root can be wrong by a tuple position, and its class wider than its construct (§4.5.484)
+
+The queue row said "§4.5.478 seeds the genvar `param_range (0, 32, false)` and the sign bit contradicts
+the POLICY line". `lib.rs::DeclRange` is `(lo, width, ascending)`; the `false` was never a sign. The sign
+model is `param_meta`, already seeded `(32, true)`. The grounding then built the control the row lacked
+— the same `X - 20` with `localparam integer GK = 0` at module scope and no genvar in the design — and
+it was wrong the same way inside the generate block and right at module scope, so the class was "any
+outer-scope signed name read from a nested scope by an untyped `localparam`", and the root was one
+`Ident` arm keying `param_meta` by the CURRENT prefix while its env twin already walked outward. One
+line moved 12 two-oracle cells and closed a second §2 row that had been written as a separate defect.
+
+### A first-activation guard is not t0, and the difference is the formals (§4.5.486)
+
+The prescribed route — emit a static frame-local's initializer through the t0 deferred list — met two
+measured blockers (the frame's static slab is allocated after the t0 process; a module process naming a
+frame-local net demotes the native backend), so the implementer built the frame twin of the inline
+route's `first_call` gate: a `$sinit$` flag and a once-only prologue. The bundle POST then printed a
+THIRD answer on `function int f(int k); int c = k;` — `f=6 f=7` where iverilog says `1 2` (t0, formal
+default) and PRE said `6 8` (per activation) — because between t0 and the first activation the formals
+are written. Declining the formals, and transitively any local whose initializer is declined, restored
+PRE there. The next measurement showed the opposite error: a frame-wide all-or-nothing decline dropped
+the retention of every admitted sibling (`int a = 15; int b = outside;` — both oracles retain `a`), while
+the third answer only ever appeared when a DECLINED initializer READ a hoisted local (`int b = a + k`
+re-run against a retained, mutated `a`). The rule that survived both is per-declarator hoisting with a
+frame-wide decline keyed on that read.
+
+### A predicate asked under two prefixes is two predicates (§4.5.486, review round 2)
+
+The once-only prologue decided admission for a nested declarator under `block_local_scope_prefix`,
+which omits the block's `$blk$` segment for a declaration the ANY rule does not select; the
+per-activation emitter decided its skip with the SAME predicate under the lowering's `$blk$` wrap. For
+`begin int x = 7; int y = x + 1; … end` beside a second block declaring `x`, `y` was declined outward
+(it could not see the scoped `x`) and skipped inward (now it could), so its initializer was lowered
+nowhere — `17099` against PRE's and both oracles' `17107`, a regression the round-1 all-or-nothing
+return had been masking. Two fixes, both structural: the skip became a membership test on the set of
+declarators the prologue actually emitted, so "claimed by neither" cannot be expressed; and admission
+moved to `block_wrap_seg`, the one function that spells the wrap rule, which `stmt_main` now calls
+too. Round 1's soundness lens had written "claimed by neither is structurally impossible" — true of
+the design it read, false of the design the next delta produced; a delta round is not optional.
+
+### A feed computed once over `module.body` misses bodies that arrive later in the same table (§4.5.485)
+
+The row named `package.rs` as "a separate caller of the two collectors with its own name sets". It
+calls none. Package routines are cloned at package elaboration and INJECTED into the caller module's
+`func_table` / `task_table` — by `apply_import_routines` one instance step after `scoped_block_locals`
+was computed, and by `inject_pkg_callees` during body lowering, later still — so the reservers were
+correct and the classification they consulted simply had never seen the bodies. Recomputing the feed
+after the import step with the injected bodies closed 13 cells; the scoped-call spelling that injects
+during lowering is still open, and the census of binders (import, scoped call, interface, class) with
+their injection TIME is what the row should have been.
+
 ### A named-list twin can be narrower than the fold it guards (§4.5.481)
 
 The row's fix was "one arm, predicate = `sys_fn_is_integer`", and that list is `$clog2 | $bits |

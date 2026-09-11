@@ -331,6 +331,7 @@ another.
 | Census the consumers that resolve names later than they are collected, and carry the collection scope with the item, when a block gets a scope of its own | Everything that worked only because the block's names were flattened breaking at once |
 | Treat a gate that exists for one consumer as the gate for every consumer of the same shape, and count the copies | Binders that call none of the copies, and a further copy the docstring already claimed |
 | Census a scope rule at every spelling of the scope it names: module, interface, package, compilation unit | A rule about a declaration written in one scope being applied to a spelling where it does not hold |
+| Census a subroutine-body rule at every binder that can INJECT a body into the table the rule reads — package import, scoped `pkg::` call, interface, class — and ask WHEN each injection runs against the one-shot pass that computed the rule | A feed computed once over `module.body` while package routines arrive in the same table one step later and two steps later |
 | Enumerate the AST forms new keys can appear in that the old keys could not, such as lvalues, iteration and port connections, when a table's key set widens | A read-only rewrite gaining a write side and an element write becoming a bit write |
 | Bisect a diagnostic page per header or per file before pricing the items | A page that reads as several items being one root plus its uses |
 | Probe a queue row's plain twin at three widths — at most 32, 33 to 64, and above 64 — before building for the row's shape; the answer names the lane | The position named in the row being incidental while the plain twin was already wrong |
@@ -437,6 +438,7 @@ another.
 | Re-measure a queue row's FIX SHAPE with the same suspicion as its symptom and oracle count; when the shape changes one shared key, ask first whether the oracle sets that key per kind — a root returning each round through a different door is one key under several rules | A one-key fix built where the standard has several rules |
 | Ask whether a decline is a decline before "adding only where None": when the existing lane returns a WRONG value rather than declining, the new lane must be routed ahead of it, not behind it as a fallback | A fallback that never runs because the wrong answer is already there |
 | Reject a cited cell that both candidate rules answer identically as evidence; measure a cell where they differ, and size the slice as the whole subclass minus what an existing channel already answers | A slice justified by a cell that cannot distinguish the rules |
+| Read the type alias behind any tuple a row cites by POSITION before accepting its root, and build the no-construct control (the same expression with a plain declared name in place of the row's construct) before naming the class after the construct | A row naming a sign bit that was an `ascending` flag, and a genvar row whose class was every outer-scope name read from a nested scope |
 
 ### 4.7 Completeness for a change already under way
 
@@ -602,6 +604,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Give each kind of unreachable case its own assertion and name the layer that refuses; the filter, the gate and the assertion must ask the same question | One refusal claiming a gate row that does not exist, and the misunderstanding leaking into a test's admission filter |
 | Check the early returns of a value-conversion primitive: "already the right width" is not "nothing to do", and a difference between exit paths must be written down as intentional | One path keeping a flag the others clear, so every same-width assignment is silently wrong |
 | Keep a compensating clear in one place and let consumers rely on it | Two spellings in consumers hiding each other, so neither dies under mutation |
+| When one emitter hoists what another must then skip, make the skip a MEMBERSHIP test on the set the hoister actually emitted, never a re-evaluation of the admission predicate; and resolve admission under the prefix the lowering will use, through the lowering's own function | The same predicate answering differently under two scope prefixes, so a declarator is claimed by neither emitter and its initializer is lowered nowhere |
 | Audit an existing helper for latent defects when a new path starts calling it: unchecked arithmetic, shift masks at the width boundary, copied functions inheriting the original's defect | The new traffic inheriting an old defect |
 | Judge name resolution and classification from an AST-gathered pure-function set rather than from mutable elaboration state | A diagnostic that exists only in one phase silently deleting a whole body at a success exit |
 | Put a stand-down in the arm whose hazard it answers, keyed on the statement; a gate that can answer without looking at the statement cannot be used for a statement-level decision | A module-global early return turning off unrelated arms of the same match |
@@ -729,6 +732,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Key a new path positively on the names it is for, never on "did not fold": that predicate is two populations | Deliberate declines being admitted to the new path |
 | Read what the runtime reads for the same decision when a new analysis follows an IR field for control flow; a field only ever patched after the fact is a snapshot, not a fact | A walk missing every target whose placeholder is still in place |
 | Record a stand-down after the enclosing construct's scope snapshot so the restore drops it, and pin both halves | The fix trading one silent width for a permanently loud site |
+| Treat a first-activation guard as a different semantics from a t0 initialization: enumerate every input written between t0 and the first activation (formals, module nets) and decline initializers that read them, and make the decline per-declarator except where a declined initializer READS a hoisted one — that read is the only shape where hoisting half the frame yields a third answer | A static initializer reading a formal binding the first call's argument, and a frame-wide decline dropping the retention of every admitted sibling |
 
 ### 5.6 Domain reference
 
@@ -818,7 +822,7 @@ census has produced it, and the probe itself is a claim to check.
 
 ## 7. Testing
 
-The full local gate is `cargo nextest run --workspace --locked`: 7352 tests, 15 skipped. Named gates
+The full local gate is `cargo nextest run --workspace --locked`: 7746 tests, 15 skipped. Named gates
 that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
 frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
 diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,

@@ -136,6 +136,26 @@ need updating. What moved:
 
 ### Fixed
 
+- **A static local with an initializer inside a task or function now initializes once, not on
+  every call.** `function int f; int c = 100; c = c + 1; return c; endfunction` called twice returned
+  `101 101`; both reference tools return `101 102`, and vita now does too — on a hierarchical call, in
+  every function, in a labelled or loop-body block inside the routine, per instance, and through
+  recursion. An `automatic` routine still re-initializes on every call, as it must. Two shapes keep
+  the previous per-call behaviour on purpose and are recorded: an initializer that reads one of the
+  routine's own arguments (the reference tools disagree with each other or refuse it) and one that
+  reads a module-level net (the reference tools split on the value).
+- **Same-named block-locals in a package task or function are separate variables.** A `task` declared
+  in a `package` with `begin int x = 44; … end begin int x; … end` printed `A=44 B=44`; both reference
+  tools print `A=44 B=0`, and vita now does, for static and `automatic` routines, functions in a
+  continuous assign, and every import spelling except a scoped call with no import (`pk::t()`), which
+  is still recorded as open. A nested outer/inner pair with an initializer-free inner is now refused
+  (E3009) the way the same shape declared in a module already was.
+- **An outer-scope signed name read from inside a generate block keeps its sign in an untyped
+  `localparam`.** `localparam L = g - 20;` inside `generate for (g …)` printed `4294967276` and
+  `localparam K = S8 >>> 1` (with `parameter signed [7:0] S8`) printed `255`; both reference tools print
+  `-20` and `-1`, and vita now does. Typed declarations (`localparam integer`), the same expressions at
+  module scope, range bounds, part-selects and instance overrides were already right and are unchanged.
+
 - **An integer-returning system function is signed in a constant expression.**
   `localparam W = $clog2(300) - 20;` printed `4294967285` where both reference tools print `-11` —
   the bits were right and only the recorded signedness was wrong, so `$signed(W)` already printed

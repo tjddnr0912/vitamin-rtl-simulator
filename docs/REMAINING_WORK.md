@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-7670 tests passing with 15 skipped, artifact `format_version` 31, 70 `MsgCode` diagnostic codes; the
+7746 tests passing with 15 skipped, artifact `format_version` 31, 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
 - G1 = a correct open-source RTL simulator (correct-or-loud) at the level of icarus, verilator,
@@ -26,13 +26,13 @@ canonical table is the fact table in [README.md](../README.md).
 
 | # | track | item |
 |---|---|---|
-| 1 | §3 loud → correct-support | §3.b `blocal-flatten` ⓐⓑ — prerequisite closed by §4.5.468; re-census the 19 loud→value cells and §4.5.467's 18 R3 cells on HEAD before restarting |
-| 2 | §2 silent-wrong | A `localparam` derived from an overridden untyped parameter forwards at 32 (`localparam R = ~Q; leaf #(.P(R))` → `32/c`, both oracles `4/c`); the operator arm declines under `declared_only` on a lane with nothing to fence |
-| 3 | §2 silent-wrong | A `pkg::`-scoped override SOURCE loses both columns (`leaf #(.P(pk::PW))` → `32/1`, both oracles `36/800000001`); `wide_name_bits` / `narrow_param_bits` take a single-segment path |
+| 1 | §2 silent-wrong | A BARE `$bits(x)` as the WHOLE override binds 1 bit (both oracles `32/8`); `override_self_meta` requires `sized_by_operator`, so the bare spelling never reaches §4.5.478's gate |
+| 2 | §2 silent-wrong | A package constant declared ascending or with a non-zero LSB as an override source binds the leaf default (`pk::PA` and imported `PA`, both oracles 36); `pkg_const_narrow_bits` declines `lo != 0 \|\| ascending`, the same decline as 🆕 H ⓑ on the module lane |
+| 3 | §2 silent-wrong | A block-local declaration clobbers an IMPORTED package variable of the same name (both oracles 5, vita 99); the bare-name flatten lands on the import alias's slot |
 | 4 | §6 OBS | Give the static `subroutines` rows a declaration site, so the two subroutine objects can be joined |
 | 5 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so a reader infers the boundary from builtin call counts and gets it wrong |
 | 6 | §3 loud → correct-support | ⑤ⓕ residue: the 2-state axis of a `T'(e)` cast and a packed struct member (the sign follows the override since §4.5.483), the enum base (blocked behind a §2 enum-storage row), the union member's parse gate, a multi-dimensional packed type-param default or override, a mixed-caller callee, `m #(8)` / `defparam u.T$w`, the VCD `$scope` spelling, a `genblk<N>` collision (split) |
-| next | — | §2 🆕 L ⓦ residue, §2 🆕 N residue, a labelled concurrent `assert property` action block's `%m`, the §2 static-task-frame twin of the block-local class |
+| next | — | the `pk::g()` no-import scoped-call spelling (§4.5.485 residue), a package static shared across importing modules, the static initializer that reads a formal (1-oracle), §2 🆕 L ⓦ residue, §2 🆕 N residue, a labelled concurrent `assert property` action block's `%m` |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ an
 honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.
@@ -44,9 +44,9 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §0 promotion queue (T2 residues) | 14 rows | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
 | §2-N verilog-axi census | 2 rows + 5 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and five t0-event residues |
 | §2 start-order table | 27 rows | LOUD 6 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 |
-| §2 recorded defects by mechanism | 96 bullets | inline / frame binds 16 · size cast / signedness 15 · constant domain (i64) 14 · index sealing 10 · performance 7 · scoping / imports / block-locals 6 · delays / events 6 · oracle splits 6 · real 5 · ranges / bounds / selects 4 · diagnostics / artifacts 4 · class fields 3 |
+| §2 recorded defects by mechanism | 102 bullets | size cast / signedness 16 · inline / frame binds 16 · constant domain (i64) 14 · scoping / imports / block-locals 11 · oracle splits 8 · index sealing 8 · performance 7 · delays / events 6 · real 5 · ranges / bounds / selects 4 · diagnostics / artifacts 4 · class fields 3 |
 | §3 numbered items | 24 rows | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, including ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 66 rows | subroutine / frame 17 · constants / parameters 11 · parser accept 9 · system tasks & file I/O 9 · nets / timing 6 · strings / heap 6 · diagnostics quality 5 · VCD / real conversion 3 |
+| §3 small residues | 72 rows | subroutine / frame 20 · constants / parameters 13 · parser accept 10 · system tasks & file I/O 9 · nets / timing 6 · strings / heap 6 · diagnostics quality 5 · VCD / real conversion 3 |
 | §3 intentionally loud | 12 rows | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | mostly no oracle; hand-IEEE when started |
 | §5 performance / hardening residues | 18 rows | frame-body wprog (5c), native scratch pooling (4b-r), array-LHS cliff, inline-fold exponential, memory guard, CI nextest, MSRV ceiling, quiescence / render / eof seams |

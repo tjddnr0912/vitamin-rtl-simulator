@@ -322,12 +322,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   itself. Pinned by self-consistency (`packed_select_signed_index.rs`).
 - A >64-bit override tree (`~128'd0`) declines because `const_ctx_within_i64` refuses it — the value
   re-fold clamps at 64. Both oracles 128, vita 32.
-- A GENVAR inside a constant expression folds UNSIGNED (2-oracle): in a `generate for`,
-  `localparam L = g - 20;` prints `4294967276` where both oracles print `-20`, and `9 - 20 + g` is
-  `4294967285` against both oracles' `-11`. Root = §4.5.478 seeds the genvar `param_range (0, 32,
-  false)` in `generate.rs`, and that sign bit contradicts §4.5.478's own POLICY line that a genvar is
-  a signed 32-bit integer (IEEE §27.4). A one-line candidate, but it needs its own census first — a
-  genvar in a range bound, in a comparison and as a `+:` base all read the same seed.
 - A BARE `$bits(x)` as the WHOLE override binds 1 bit (both oracles `32/8`): unlike the `~$bits(x)`
   spelling closed by §4.5.478, it never reaches that gate, because `override_self_meta` requires
   `sized_by_operator`. Its own lane.
@@ -335,11 +329,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   override source binds the leaf default in BOTH spellings (`pk::PA` and imported `PA`; both oracles
   36). `pkg_const_narrow_bits` declines `lo != 0 || ascending`, the same decline as 🆕 H ⓑ on the
   module lane; a size cast of the same name (`40'(pk::PA)`) is already right.
-- `const_expr_signed`'s `Ident` arm resolves with `self.fq()` (the current scope) and so diverges
-  from `const_self_width` / `const_signed_env`'s `walk_scopes`: reading a module-scope
-  `parameter signed [7:0] S8` inside `generate if(1) begin:gb` makes `localparam K = S8>>>1` 255,
-  where the same text at module scope is −1 and both oracles are −1. The meta sign moved to
-  `const_signed_env` and this arm did not inherit it.
 - `parameter unsigned U = 1` overridden with a SIGNED value (`#(.U(-8'sd91))`) binds `-91` where
   both oracles bind `165`. The width axis is correct; only the sign column is open. Root =
   `ast::ParamDecl.signed` is `false` for both "the `unsigned` keyword" and "no keyword", a direction
@@ -467,14 +456,36 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `compute_scoped_block_locals`'s per-name exemption; the fix is a per-SPAN exemption that must not
   mix a static and an automatic member inside ONE nesting pair (that mixing was measured to turn
   the loud `outer static / inner automatic` shape into a silent leak).
-- A framed STATIC task loses static retention across calls (2-oracle): calling `u.t()` twice prints
-  `A=45 B=56` both times where both oracles print `A=45 B=56` then `A=46 B=57`, and a function
-  carries the same defect (`f=101 f=101` against `101 102`). Its DIFFERENT-NAME control is equally
-  wrong, which is what proves it is not the block-local coalesce §4.5.480 closed.
-- A STATIC `task` declared in a PACKAGE still coalesces two same-named sibling block-locals
-  (2-oracle: vita `A=55 B=55`, both oracles `A=44 B=55`). `package.rs` calls the two collectors with
-  its own name sets, and §4.5.480's subroutine walk covers `module.body` only; the `task automatic`
-  package twin is correct, so the class is the STATIC package subroutine.
+- The constant domain is not shadow-aware (vita invention, both oracles REFUSE): a `logic [7:0] S8`
+  declared inside `generate if (1) begin : g` that shadows a module `parameter signed [7:0] S8 = -8`
+  is folded as the PARAMETER by `localparam K = S8 >>> 1` (vita `-4` at exit 0; iverilog "A reference
+  to a net or variable is not allowed in a constant expression", verilator "variable isn't const").
+  Site = `const_eval.rs` `Ident` → `lookup_scoped` → `walk_scopes(params)`, documented non-shadow-aware
+  at `scope.rs`. Making it loud is not a step down the ladder.
+- A static frame-local initializer that reads a FORMAL argument still runs per activation (1-oracle):
+  `function int f(int k); int c = k; c = c + 1; return c;` on `f(5)`, `f(7)` is `f=6 f=8` in vita where
+  iverilog evaluates the initializer once at t0 with the formal's default (`f=1 f=2`); verilator refuses
+  the shape (`%Error-UNSUPPORTED: Static variable initializer`). Kept at the pre-§4.5.486 answer on
+  purpose: `frame_static_init_t0_safe` declines a formal and, transitively, a local whose own
+  initializer is declined, and a frame in which a declined initializer READS a hoisted local declines
+  whole, because hoisting only the admitted half was measured to produce a third answer (`f=7 f=9`).
+- A static frame-local initializer that reads a MODULE net is evaluated per activation with the LIVE
+  value; both oracles evaluate it before time 0. iverilog always reads the net's default (`int n;
+  initial n = 9; task t; int c = n;` → `c=0` on every call); verilator's answer follows §4.7 initial
+  order (`c=9` on that design, `0` when the writer is the same `initial` that calls: `d3/c2.sv`
+  `17100 27100` on BOTH oracles against vita's `17109 27109`). §4.5.486 declines such an initializer
+  from the once-only prologue, so it keeps the pre-slice per-activation emission and also does not
+  RETAIN across calls (both oracles retain). The retention half is 2-oracle; the value half is an
+  oracle race, so the row is measured per shape before it is picked up.
+- A PACKAGE task's static local is ONE variable for every importing module in both oracles
+  (`int c; c++; $display(c)` called from two modules alternately prints `1 2`); vita gives each
+  importing module its own flattened copy (`1 1`). PRE = POST of §4.5.485; root = package routines
+  are injected per caller module (`apply_import_routines`) and lowered into the caller's nets.
+- A package routine called by its SCOPED spelling with no import (`pk::g()`) still coalesces
+  same-named sibling block-locals (`Z=88` against both oracles' `44`): `inject_pkg_callees` runs
+  during body lowering, after §4.5.485's recomputation of `scoped_block_locals` (instance step 3.6a).
+  Fix = scan `pkg::name` references before the hoist, or extend the scoped map at injection. Pinned
+  as `a_scoped_call_spelling_is_not_covered_yet`.
 - A CLASS method's same-named sibling block-locals are LOUD, not silent (E3010 on
   `$class$C$m.x` plus an E3009 about writing a net outside the function), where both oracles print
   `A=44 B=55`; `classes.rs` is a separate caller of the reserve.
@@ -627,6 +638,8 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - `#(.S("str"))` emits one W3056 before it is applied (the value is right): the parent's numeric
   fold fails first and prints "the override is not a constant; keeping the default", and then the
   string channel applies it.
+- `localparam bit [3:0] K = 4'd5; localparam L = K - 20;` is 33-bit `8589934577` in iverilog and
+  32-bit `4294967281` in verilator; vita = verilator, identical at module and generate scope.
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
@@ -673,6 +686,7 @@ behind the §2 correctness queue.
 | based-ws | `64'sh FFFF` is a lexer reject | lexer | accept it | iverilog accepts | minor |
 | tf-localparam | `task automatic t; localparam int K = 3;` gives `E2002 expected statement, found keyword 'localparam'` (IEEE §6.20 allows it) | the parser's statement position | accept the declaration | iverilog | small |
 | blk-automatic | `begin : A automatic int x = 44; … end` inside a task body is E2002 (`static` in the same position is accepted; both oracles run it) | the parser takes a lifetime keyword on a block-local declaration only at the subroutine's own declaration position | accept the keyword in the block-declaration position | 2-oracle | small |
+| tf-decl-lifetime | a declarator-level lifetime at a subroutine body's declaration position (`static int c = 0;` / `automatic int x = 1;` right after `task t;`) is E2002 `expected '=' or '<=' after lvalue, found keyword 'int'` | the parser takes a lifetime keyword only on the subroutine header | accept it and feed `d.lifetime`, whose consumers (`frame_static_init_once`, `AdmitReason`) already read it — today it is always `None` from source, so the per-declarator half of those predicates is unreachable | unmeasured on the oracles (the block-position twin `blk-automatic` is 2-oracle) | small |
 | R30-1 | a missing package gives 7 lines of E2002 and never names the package | the parser cannot take `IDENT::IDENT` in a tf-port as a type | take it as a type and let elaborate say "unknown package" ⇒ 1 line | — | parser |
 | enum-label | `enum bit[3:0] {A=8'hFF}` never reaches `enum_defs`, so `.first` / `.next` / `.name` are all E3010 / E3009, and the skipped out-of-range check silently truncates | `const_lit` folds unsized decimals only | widen `const_lit` or check at elaborate time | iverilog rejects | — |
 | md-packed-write | multi-dim packed nested part-select WRITE: an ascending or non-zero-lsb leaf · a genvar-indexed `x[g][m:l]` (over-rejected) · a const out-of-bounds packed index is a silent no-op | the current support is limited to a descending zero-lsb leaf | widen the leaf geometry | — | — |
@@ -700,6 +714,7 @@ behind the §2 correctness queue.
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
+| blocal-collector-parity | `collect_block_local_decls_spanned` (`block_local/mod.rs`) omits the `Wait` / `DelayCtrl` / `EventCtrl` recursion its sibling `gather_nested_block_locals` has, so a block-local declared under a timing-controlled statement in a subroutine body reaches neither the scoped feed nor §4.5.486's static-init prologue | latent: the shape is LOUD today (`E3010 undeclared net/variable top.s.$func$t.x`, PRE = POST), which is the only thing standing between the omission and a silent drop | align the collector with its sibling in the same edit that removes the loud; measure the drop channel first | — | small |
 | iface-subr | a `function` or `task` declared inside an interface is E3009 "outside the MVP"; both oracles run it, and its block-locals therefore never reach either reserver | `frames_reserve.rs` / the interface body gate | route an interface body's subroutines like a module's | 2-oracle | — |
 | dimquery-width | the dimension-query family (`$size`, `$high`, `$low`, `$left`, `$right`) and `$signed` are LOUD in every certified consumer (7 + 6 cells) although both are integer-returning and already foldable, so the §4.5.478 `SysCall` arm's named list excludes them | the named list in `param_decl_width_opt` / `ctx_width_names_are_evident` | admit them with their own census: `$signed` is NOT 32 bits, it is its operand's width | 2-oracle | small |
 | §3.11 | inlining `function automatic` — "a non-recursive automatic is identical to an inline" is refuted by measurement (15 suite failures, `$random` drawn twice) | the inline expansion names the operand a second time | ⓐ name it once (a callee-purity predicate) · ⓑ open codegen (`is_codegen_able`'s `Terminator::Call` reject, §5 T1/T2) | — | — |
@@ -870,13 +885,13 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 a GENVAR inside a constant expression folds UNSIGNED: in a `generate for`, `localparam L = g - 20;` is `4294967276` against both oracles' `-20` and `9 - 20 + g` is `4294967285` against `-11`. Root = §4.5.478 seeds the genvar `param_range (0, 32, false)` in `generate.rs`, and the sign bit contradicts that slice's own POLICY line (a genvar is a signed 32-bit integer, IEEE §27.4). First action = census the genvar seed's other readers — a range bound, a comparison, a `+:` base — before flipping the bit, because one seed feeds all of them | §2 Index sealing | ① |
-| 2 | 2 | §2 a framed STATIC task loses static retention across calls (2-oracle): calling `u.t()` twice prints `A=45 B=56` both times where both oracles print `A=45 B=56` then `A=46 B=57`, and a function carries the same defect (`f=101 f=101` against `101 102`). Its DIFFERENT-NAME control is equally wrong, and its already-`$blk$`-scoped initializer-bearing control is equally wrong, which is what proves it is not the block-local coalesce §4.5.480/482 closed. First action = measure where the frame route re-initialises — the frame reserve or the per-call entry — since the inline route retains correctly on the same design | §2 Scoping | ① |
-| 3 | 3 | §2 a STATIC `task` declared in a PACKAGE still coalesces two same-named sibling block-locals (2-oracle: vita `A=44 B=44`, both oracles `A=44 B=0`); the `task automatic` package twin is correct, so the class is the STATIC package subroutine. Root = `package.rs` is a separate caller of the two collectors with its own name sets, and §4.5.480/482's `for_each_subroutine_body` walk covers `module.body` only. First action = census what `package.rs` passes the collectors against what `instance.rs` passes, then decide whether the walk is shared or duplicated | §2 Scoping | ① |
+| 1 | 1 | §2 a BARE `$bits(x)` as the WHOLE override binds 1 bit (both oracles `32/8`): unlike the `~$bits(x)` spelling §4.5.478 closed, it never reaches that gate because `override_self_meta` requires `sized_by_operator`. First action = census the override channel for every bare integer system function as a source (`$bits`, `$clog2`, `$size`, `$high`) beside the operator-wrapped twin, and re-measure the row on HEAD | §2 Index sealing | ① |
+| 2 | 2 | §2 a package constant declared ascending (`logic [0:35]`) or with a non-zero LSB (`logic [39:4]`) as an override source binds the leaf default in both spellings (`pk::PA`, imported `PA`; both oracles 36). `pkg_const_narrow_bits` declines `lo != 0 \|\| ascending`, the same decline as 🆕 H ⓑ on the module lane. First action = measure whether the module-lane twin shares the root; if it does, the two rows are one slot and the order is a measurement | §2 Index sealing | ① |
+| 3 | 3 | §2 a block-local declaration clobbers an IMPORTED package variable of the same name (both oracles 5, vita 99): after `import pk::*`, `begin : blk integer pv; pv = 99; end` lands on the import alias's slot because the v1 flatten keys by bare name. First action = census the three lifetimes of the name (declaration, shadow, export) against the import binder before touching the flatten | §2 Scoping | ① |
 | 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
 | 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
 | 6 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 7 | hygiene | `params.rs` is 2,255 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` is the precedent for the split, and §4.5.478–480 added two more (hdl-parser `type_params.rs` split into `type_param_shape.rs`; `frames_reserve.rs` shrank to 1,247 via `frames_blocal.rs`). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 7 | hygiene | `params.rs` is 2,255 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` is the precedent for the split, and §4.5.478–480 added two more (hdl-parser `type_params.rs` split into `type_param_shape.rs`; `frames_reserve.rs` shrank to 1,247 via `frames_blocal.rs`); §4.5.485–486 grew `instance.rs` to 1,628 and `frames_reserve.rs` to 1,372, and split `frames_body.rs` into `frames_static_init.rs` at the cap. NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 

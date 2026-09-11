@@ -7,12 +7,15 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 382건 (최신순·⚠️ = 미머지 · 번호는 1~387 중 363개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 385건 (최신순·⚠️ = 미머지 · 번호는 1~486 중 366개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.486` **A static frame-local initializer runs once, on the frame's first activation** (2026-09-11 · §2 Scoping, queue row 2 · root = `emit_frame_local_inits` per activation with no lifetime gate; storage already retained · prescribed t0 route refuted by two measured blockers, replaced by a per-frame `$sinit$` guard + once-only prologue · formals, outside-net reads and their transitive readers declined per declarator, frame-wide only when a declined initializer reads a hoisted one · 20 silent→correct, 0 regressions · two review rounds)
+- `4.5.485` **Same-named sibling block-locals in a PACKAGE subroutine body get their own storage** (2026-09-11 · §2 Scoping, queue row 3 · row root refuted: `package.rs` calls NO collector — package routines are injected into the caller module's tables after the one-shot `scoped_block_locals` computation · `compute_scoped_block_locals(module, names, extra_bodies)` + instance step 3.6a · 13 silent→correct 2-oracle + 1 silent→loud, 0 regressions · open: the `pk::g()` no-import spelling)
+- `4.5.484` **`const_expr_signed`'s `Ident` arm resolves with `walk_scopes`** (2026-09-11 · §2 Index sealing, queue row 1 · row root refuted twice: the `param_range` third field is `ascending`, not sign, and the class is not genvar-specific — any outer-scope signed name read by an untyped `localparam` inside a generate scope · one-arm resolver parity with `const_signed_env` · 12 silent→correct 2-oracle, 0 regressions · closes the `S8 >>> 1` row too)
 - `4.5.483` **A type parameter's SIGN follows the override through a `T'(e)` cast and a packed struct member** (2026-09-11 · §3 ⑤ⓕ uncarried positions, queue row 3 · four row claims refuted, incl. "each container needs its own slot" (cast + struct member share ONE appended `CastTarget` variant, `StructMember` untouched) and the class property, which is loud with NO override at all · per-AXIS guard mask, 9 reader arms censused, hash re-pinned, format 31 unchanged · 8 loud→value, 0 regressions)
 - `4.5.482` **An initializer-free same-named sibling block-local in a subroutine body is its own variable** (2026-09-11 · §2 Scoping, queue row 2 · three claims refuted, incl. the read-before-assign guard's protected class and the module-level pair, which is LOUD not silent · fifth `AdmitReason` field `static_plain`, OPT-IN so the module flatten stays byte-identical and its loud is kept · 12 silent→correct 2-oracle + 6 iverilog + 1 1-oracle, 0 regressions)
 - `4.5.481` **An integer-returning system function is SIGNED in `const_expr_signed`** (2026-09-11 · §2 Index sealing, queue row 1 · "fix = one arm over `sys_fn_is_integer`" refuted — the dim-query family is folded by `const_eval_in_scope` and two of the three twins are BLANKET arms · 19 silent→correct across all three width bands, 0 regressions; the genvar-unsigned-in-constant root filed as a new §2 row)
@@ -493,6 +496,217 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.486 A static frame-local initializer runs once, on the frame's first activation (2026-09-11, branch it4) ✅
+
+**ROADMAP row**: §2 "Scoping / imports / block-locals", the framed STATIC task that loses retention;
+queue row 2. Third slice of the bundle; the only one that needed a second review round.
+
+**Row claims re-measured.** The symptom held verbatim: on the frame route (a hierarchical `u.t()`,
+every `function`, `task automatic`) a STATIC local WITH an initializer was re-initialised on every
+activation — `function int f; int c = 100; c = c + 1; return c;` twice gave `101 101` against both
+oracles' `101 102`; the row's task shape `45 45` against `45 46`. The no-initializer twin retained
+correctly, so the storage was already right (`sim-engine` `frame_slot_auto` keeps a static slot in
+the persistent slab); only the emission point was per activation. Two claims moved: "the inline route
+retains correctly on the same design" is true of a TASK only — a same-module `f()` still routes
+`frame`, so a function has no inline twin — and a cell the row did not name, a static task's
+LOOP-BODY block-local `int z = 100;`, was re-initialised on every iteration where both oracles run it
+once (`100 101 102 103 104 105` over two three-iteration calls; §4.5.189's per-entry rule is right
+for `automatic` and was applied to static too). Root = `frames_body.rs`'s two body lowerings calling
+`emit_frame_local_inits` inside the body with no lifetime gate, and `stmt_main.rs` asking "am I in a
+frame body" where IEEE §6.21 asks "is THIS declarator automatic"; the comment "vita's frame locals
+reset per call" stated a premise the engine refutes. The correct reference sites were the inline
+route's `first_call` gate and the module-process side's t0 deferred list.
+
+**Fix — a different route from the one prescribed, and why.** The brief prescribed the t0 deferred
+list (`push_block_local_init`). The implementer built it first and measured two blockers: the frame's
+static slab is allocated after the t0 process runs (`arg bind: no storage slab` panic on every cell),
+and a module process naming a frame-local net trips the native backend's own gate (`W4030 … ran on
+'vm' instead` — a backend demotion on every affected design). The shipped design is the frame twin of
+the inline route's `first_call` gate: `reserve_frame_static_guard` reserves one 1-bit STATIC slot
+`$sinit$<n>` per frame that owns a static declarator with an initializer (appended LAST, so no slot
+index and no `auto_override` bit moves), and `emit_frame_static_prologue`
+(`frames_static_init.rs`, split out of `frames_body.rs` at the size cap) emits
+`if ($sinit === 1) goto body; else { $sinit = 1; <static inits>; }` at the top of the body — the
+frame's own declarators and every nested block's under its own `$blk$` segment. `emit_frame_local_inits`
+skips exactly what the prologue claimed, through ONE shared predicate `frame_static_init_once`, so the
+two emitters cannot disagree and drop an initializer. Effective lifetime is
+`d.lifetime.unwrap_or(FuncMeta.is_automatic)`; an `automatic` declarator keeps the per-activation
+emission byte-identical. `inline_task.rs` clears the hoist flag around `emit_inline_local_inits`,
+because the inline route shares that emitter and does its own gating — without it the inline route
+lost its initializer entirely, caught by PRE/POST on three census controls.
+
+**A first activation is not t0 — two review findings shaped the admission.** Before the review, on
+the bundle POST, `function int f(int k); int c = k;` on `f(5)`, `f(7)` printed a THIRD answer
+(`f=6 f=7`; iverilog `1 2`, the formal's t0 default; PRE `6 8`; verilator refuses
+`Static variable initializer`, so the cell is 1-oracle): between t0 and the first activation the
+FORMALS are written. `frame_static_init_t0_safe` therefore admits an allowlist of operand-only shapes
+over literals, elaboration constants and nets of THIS frame that are not formals, and a fixpoint adds
+every declarator whose own initializer is declined (`int c = k; int d = c + 1;` exists and was
+measured). An initializer that reads a net OUTSIDE the frame is declined too, because the oracles
+SPLIT on its value (`int n; initial n = 9; … int c = n;` is `c=0` on iverilog, `c=9` on verilator).
+The first design declined the whole frame whenever anything was declined; the round-1 differential
+lens measured that as an over-decline — `int a = 15; int b = outside;` lost `a`'s retention where BOTH
+oracles retain it (`16001→17002` / `16051→17052`), and a five-kind frame with one `$bits` reader lost
+all five. The third answer only ever appears when a DECLINED initializer READS a hoisted local
+(`int b = a + k` re-run against a retained, mutated `a` → `7 9`), so the round-2 rule hoists every
+admitted declarator individually and declines the frame only on that read, computed by resolved key
+through a FAIL-CLOSED walker (`expr_reads_admitted`). Every shape from both rounds is pinned with its
+PRE, POST and oracle lines.
+
+**Census PRE→POST**: 33 census designs plus 9 review designs, 3 tools. 20 silent→correct (the
+function and task shapes, hierarchical and `function void`, labelled and unlabelled blocks, a
+different-name pair, the `$blk$`-scoped init-bearing sibling pair called twice, two instances each
+retaining their own, `logic [7:0]` and `integer`, a `#` delay body, a package `function int`, the
+loop-body static, an admitted declarator beside a declined sibling, five admitted kinds beside one
+declined, a retained counter beside an outside-net index), 19 unchanged correct (`automatic` WITH init
+re-inits per call — `45 45 45` / `101 101` — and its loop-body twin, every no-initializer cell, the
+inline route, a module-level `int x = 5;`, the formal-reading family at its PRE value), 2 loud
+unchanged (`int a = f2();` E3009; `pk::t()` as a statement E2002), 0 correct→wrong, 0 value→loud. The
+differential lens found the fix reaches recursion (`fr=4`, both oracles), an `always` + `#` loop
+(1 ns grid), and five of six initializer kinds; `$sinit$` appears in no VCD `$var`, no `run.json`, no
+`--hier-tree` line, and `subroutines` counts are identical PRE and POST. Both backends
+(`--backend native|vm|interp`) print the same on 10 cells; `VITA_BACKEND` is not a knob.
+
+**Review**: two lenses, three rounds. Round 1: no BLOCKING; the differential lens measured the
+over-decline above (fixed). Round 2 (delta): the soundness lens found a BLOCKING regression the delta
+had introduced — admission resolved a nested declarator under `block_local_scope_prefix`, which omits
+the block's `$blk$` segment for a declaration the ANY rule does not select, while the emission skip ran
+under the lowering's `$blk$` wrap; the same predicate answered differently under the two prefixes, so
+`begin int x = 7; int y = x + 1; … end` beside a second block declaring `x` lowered `y`'s initializer
+NOWHERE (`17099 27099` against PRE's `17107 17107` and both oracles' `17107 27107`). Fixed both halves:
+the skip is a MEMBERSHIP test on the set of declarators the prologue actually emitted
+(`frame_hoisted_decls`, keyed by the name's span), so "claimed by neither" is structurally impossible,
+and admission resolves under `block_wrap_seg`, the ONE spelling of the `Stmt::Block` wrap rule that
+`stmt_main.rs` now also calls — after which `y` is admissible and both oracles are matched. Round 3
+re-reviewed that delta. Also from the lenses: the parser REJECTS a declarator-level lifetime in a
+subroutine body (`static int c = 0;` is E2002), so `d.lifetime` is always `None` from source and a
+guard is reserved only in a static-default frame; a mutant deleting the `$sinit$ = 1` write reverts
+every shape to PRE and is killed by the new test file; `collect_block_local_decls_spanned` omits the
+timing-control recursion its sibling has, latent behind a loud E3010 (filed).
+
+**Filed**: the formal-reading family (1-oracle, kept at PRE); the outside-net read (§2 Scoping: iverilog always t0-default, verilator follows initial
+order, vita reads the live value per activation and does not retain — on one shape both oracles agree against vita); the declarator-level lifetime
+parse gap (§3.b); the collector parity omission (§3.b); one over-reserved slot per fully-declined frame
+(cost only); `int a = $random;` declined and unmeasured.
+
+Files: `crates/elaborate/src/{frames_body,frames_reserve,inline_task,stmt_main,lib,driver}.rs`, new
+`crates/elaborate/src/frames_static_init.rs` (409). Tests: a new `frame_static_local_init_once.rs`
+(43 with `frame_local_init.rs`), whose pin `local_init_runs_each_call` was re-measured on both oracles
+and converted (`101/101` → `101/102`, name kept). format 31 unchanged; `FuncDef.locals_len` grows by
+one for an affected frame (a value, not a shape). Filed from round 2: a hierarchical (multi-segment) read inside a DECLINED initializer is not seen by the escape-hatch walker (latent — a hierarchical read of a frame local is E3010 today); the round-1 claim that per-declarator hoisting gave `16066 17066` was re-measured as `16066 17067` = verilator verbatim, so the hatch is recorded as a conservative choice on a split cell, kept because the FORMAL twin (`int b = a + k` → `7 9`) matches no oracle.
+
+#### 4.5.485 Same-named sibling block-locals in a PACKAGE subroutine body get their own storage (2026-09-11, branch it4) ✅
+
+**ROADMAP row**: §2 "Scoping / imports / block-locals", the package static task; queue row 3. Second
+slice of the bundle.
+
+**Row claims re-measured.** The symptom held on every package spelling (plain `task` inlined; `task
+automatic`, `function int`, `function automatic int` framed; a three-sibling ladder; a second calling
+module; two calls; a package function in a continuous assign, `W=89` against both oracles' `45`). Two
+claims were refuted. "The `task automatic` package twin is correct" is half wrong: with init+init it
+is correct, with init+no-init it is silent-wrong — the same `static_plain` asymmetry §4.5.482 found in
+the module. And the ROOT is not "`package.rs` is a separate caller of the two collectors with its
+own name sets": `package.rs` calls NO collector (two prose hits, zero calls). `elaborate_package`
+clones the routine ASTs into `pkg_funcs` / `pkg_tasks`; `apply_import_routines` (instance step 3a,
+AFTER the `:581` computation, not before as the grounding first read it) and `inject_pkg_callees`
+(body lowering, later still) inject them into the CALLER module's `func_table` / `task_table`, so they
+are lowered by the module's own reservers with the module's maps live. The reservers were fine; the
+FEED was short — `scoped_block_locals` is a one-shot pure function of `module.body`, and a package
+body's block spans are unreachable from it, so no `$blk$<lo>` segment existed and both declarators
+flattened onto one bare-name net. A class the row did not name: the NESTED outer/inner same-name
+shape, correct in a module with init+init and LOUD there with an initializer-free inner, was
+SILENT-WRONG in a package in both forms (`O=8` vs `7`; `I=7` vs `0`).
+
+**Fix.** `compute_scoped_block_locals` takes `extra_bodies: &[&ast::Stmt]`; a new instance step 3.6a,
+placed after the import-routine step, recomputes the classification with every `rtn_pkg`-keyed body
+in `func_table` / `task_table` fed through the SAME `for_each_subroutine_body` walk and the SAME
+`gather_auto_block_locals` arguments (`admit_static_plain = true`) the module feed passes. The names
+set is the CALLER module's `local_decl_names`, decided by measurement: a sibling shadowing a
+package-level `int x = 3` prints `A=44 B=0 P=3` with the caller set and matches both oracles, while
+the package set would have excluded the pair and left it flattened; the soundness lens measured the
+reverse direction (module declares `x`, package does not) equally correct. `iface_inst.rs` passes an
+empty slice; the module-process feed is byte-identical. The `for_each_subroutine_body` doc comment,
+whose interface half was already false, was corrected.
+
+**Census PRE→POST**: 28 cells, 3 tools. 13 silent→correct against BOTH oracles (task init+no-init,
+init+init, `automatic` init+no-init, `function int`, `function automatic int`, three siblings, nested
+init+init, a sibling shadowing a package variable, a second module, two calls, a function in a
+continuous assign, explicit `import pk::t;`, init+init called twice), 1 silent→LOUD (the package twin
+of the module's nested inner-no-init pair — same `E3009` code and wording as the module twin, which
+is byte-identical), 12 unchanged (8 correct, 3 loud shapes byte-identical — interface task, class
+method, module nested inner-no-init — and 2 silent: the package FUNCTION with a body-top static
+initializer, which is §4.5.486's class, and the `pk::g()` no-import spelling), 0 correct→wrong,
+0 value→loud. The differential lens found the fix reaches shapes the census did not run: siblings
+called from two different modules, from a generate-scoped instance, with a caller-net name collision,
+in `fork` arms, and combined with a static body-top initializer.
+
+**Review**: two lenses, no BLOCKING finding. Soundness: `per_name` is keyed by NAME across all
+three feeds, so a package body could in principle raise a module name from one span to two — four
+probes found zero movement because the module-PROCESS feed runs `admit_static_plain = false`; and
+`compute_coalesced_block_locals` is the one reader that runs with the pre-3.6a map and is never
+recomputed (latent, measured unmoved). Differential: a package task's static local is ONE variable
+across two importing modules in both oracles and a per-module copy in vita — PRE = POST, filed.
+
+**Filed**: the `pk::g()` scoped-call spelling with no import (`inject_pkg_callees` runs after 3.6a;
+pinned `a_scoped_call_spelling_is_not_covered_yet`); the shared-static-across-importers row; the
+`collect_block_local_decls_spanned` timing-control recursion omission (loud today). `instance.rs` is
+1,628 lines and not on the exception list (already over before this slice).
+
+Files: `crates/elaborate/src/{block_local_class,instance,iface_inst}.rs`. Tests: a new
+`package_subroutine_block_local.rs` (25); `subroutine_block_local_scope.rs`'s residue pin
+`a_static_package_task_is_a_recorded_residue` re-measured on both oracles and converted
+(`A=55 B=55` → `A=44 B=55`, name kept). format 31 unchanged.
+
+#### 4.5.484 `const_expr_signed`'s `Ident` arm resolves with `walk_scopes` (2026-09-11, branch it4) ✅
+
+**ROADMAP row**: §2 "Index sealing", the genvar-folds-UNSIGNED row; queue row 1. First slice of the
+bundle. Also closes the neighbouring §2 row "`const_expr_signed`'s `Ident` arm resolves with
+`self.fq()` … `localparam K = S8 >>> 1` is 255 inside `generate if`" — one root.
+
+**Row claims re-measured.** The symptom held verbatim (`localparam L = g - 20;` → `4294967276`,
+`9 - 20 + g` → `4294967285`, both oracles `-20` / `-11`; the typed `localparam integer LI = g - 20`
+was already `-20`). The root was refuted twice. "§4.5.478 seeds the genvar `param_range (0, 32,
+false)` and the sign bit contradicts the POLICY" is wrong by a type alias: `lib.rs::DeclRange` is
+`(lo, width, ascending)` — the `false` is ASCENDING; the sign model is `param_meta`, and
+`generate.rs` already seeds it `(32, true)` = signed. And the class is not genvar-specific: with NO
+genvar anywhere, `localparam integer GK = 0;` at module scope and `localparam P = GK - 20;` inside a
+generate block is `4294967276` against both oracles' `-20`, while the same text at module scope is
+`-20`. The real root is `const_eval.rs::const_expr_signed`'s single-segment `Ident` arm, which keyed
+`param_meta` by `self.fq(name)` (the CURRENT prefix, `top.blk[0].g`) while the genvar and every outer
+parameter live under the outer prefix (`top.g`); the miss fell to `is_some_and(..) = false` =
+UNSIGNED. The consumer is the value-inferred sign of an untyped `ParamType::Implicit` parameter
+(`params.rs`). The env twin `const_signed_env` already resolves with `walk_scopes` — which is why the
+override, range-bound, part-select and `generate if` lanes were all correct — so the correct site was
+the specification.
+
+**Fix.** The arm resolves with `self.walk_scopes(name, &self.param_meta)`, the resolver its twin
+uses; no new resolver. Every other arm was read in the same sitting: `PkgScoped` (`pkg_const_meta`,
+no prefix), `Call`, and the cast arms share their helpers with the twin and were left alone; the
+`SysCall` named-list-versus-blanket-`true` asymmetry is deliberate and documented (`$unsigned` must
+stay unsigned); multi-segment `Ident`, `Select` and `Concat` answer unsigned via the catch-all in BOTH
+twins (unmeasured, filed as open in the test docstring).
+
+**Census PRE→POST**: 31 cells, 3 tools, no oracle split on any cell. 12 silent→correct against both
+oracles (the two row cells; `-20 + g`; `-g`; `g / 3 - 7`; `g >>> 1`; `g - 32'sd20`; `g - 8'sd20`; the
+no-genvar control; a nested loop's outer and inner genvar; `S8 >>> 1` in `generate if`), 19 unchanged
+correct (typed declarations, `localparam signed [31:0]`, `g - 20'd20` = `4294967276` because the
+literal is unsigned, `g * -1`, module-scope twins, bare genvar, runtime reads, instance overrides,
+range bounds, part-selects, `generate if`), 4 loud unchanged (`$signed` / `$unsigned` in any param
+initializer is E3009 at every scope — a separate row). A shadow cell (outer `localparam integer g =
+7`, block-local `localparam g = 5`) agrees with both oracles PRE and POST, pinning `walk_scopes`'s
+innermost-first order. The differential lens found the fix reaches `S % 3`, `I >>> 1`, three nesting
+levels, a genvar reused across sibling loops, enum labels and a ternary.
+
+**Review**: two lenses, no BLOCKING finding. The soundness lens built the shadow cell where a NET
+declared in the generate block shadows the module `parameter signed [7:0] S8`: both oracles REFUSE a
+net in a constant expression; vita folds the PARAMETER in PRE (`252`) and POST (`-4`) — the
+shadow-blindness lives in the VALUE path (`lookup_scoped` → `walk_scopes(params)`), untouched by the
+slice and already documented at `scope.rs`; filed as a vita-invention row. All five callers of
+`const_expr_signed` feed `param_meta` only.
+
+Files: `crates/elaborate/src/const_eval.rs` (+9/−3). Tests: a new `const_expr_signed_scope.rs` (7).
+No existing test moved. format 31 unchanged.
 
 #### 4.5.483 A type parameter's SIGN follows the override through a `T'(e)` cast and a packed struct member (2026-09-11, branch it3) ✅
 
