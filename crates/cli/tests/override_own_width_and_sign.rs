@@ -327,10 +327,15 @@ fn a_declared_name_leaf_binds_at_its_declared_width() {
 /// The same rule reaches the override through every channel and from every scope a name
 /// can be read in — all four measured identical, all matching BOTH oracles.
 ///
-/// A `pkg::`-scoped name is deliberately NOT here: `narrow_param_bits` takes a
-/// single-segment path, so a `PkgScoped` leaf is not certified and the override declines
-/// fail-closed (`~pk::PA` keeps 32). Its package twin `pkg_const_range`/`pkg_const_meta`
-/// exists and is the next rung, not this slice.
+/// A `pkg::`-scoped name is deliberately NOT here, and for a narrower reason than this
+/// comment once claimed: a BARE `pk::K` override source now binds its declared width
+/// (`pkg_scoped_override_source.rs` — `wide_top_is_self_determined` admits `PkgScoped`,
+/// and `wide_name_bits` answers it from `pkg_wide_bits`/`pkg_const_narrow_bits`, so
+/// `narrow_param_bits`' single-segment guard is not on that path at all). What still
+/// declines fail-closed is the OPERATOR-topped scoped source measured here: `~pk::PA`
+/// keeps 32, because `declared_override_widths::names` and `ctx_width_names_are_evident`
+/// drop a `PkgScoped` leaf and `ConstWidths` is keyed by the bare name. That is the next
+/// rung, not this slice.
 #[test]
 fn every_channel_and_name_position_binds_the_same() {
     const SUB: &str = "module sub #(parameter P = 1) (); initial $display(\"%m bits=%0d dec=%0d hex=%h\", $bits(P), P, P); endmodule\n";

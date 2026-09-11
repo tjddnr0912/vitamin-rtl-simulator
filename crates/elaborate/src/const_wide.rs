@@ -838,12 +838,24 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
 /// every tool, and inside 8 here — the bits `<<` pushes past bit 7 are gone before
 /// the extension can save them. Such a top is admitted only when the fold's own
 /// width already covers the declaration, where extending is a no-op.
+///
+/// A PACKAGE CONSTANT READ, `pk::K`, is a PRIMARY (§11.6) exactly as `K::Ident` is, and
+/// is listed for the same reason: [`Elaborator::wide_name_bits`] answers it from the
+/// provenance-filtered `pkg_wide_bits` / `pkg_const_narrow_bits` arm, so the two
+/// spellings of one declaration — `pk::K` and the wildcard-imported bare `K` — fold at
+/// the same width. It was absent while that arm did not exist and was not revisited
+/// when the arm landed; six live consumers read this predicate and every one of them
+/// already admits `K::Ident`: in this file [`fold_bits_at`]'s size-cast operand widen,
+/// [`Elaborator::param_bits_at_declared`]'s backstop, [`Elaborator::selfdet_bits_i64`] and
+/// [`Elaborator::override_bits`]; plus `const_eval`'s `wide_param_const_in_scope` entry
+/// backstop and `const_wide_num`'s `wide_ext_invariant_bitwise` leaf test.
 pub(crate) fn wide_top_is_self_determined(e: &ast::Expr) -> bool {
     use ast::ExprKind as K;
     match &e.kind {
         K::Paren { inner } => wide_top_is_self_determined(inner),
         K::IntLit { .. }
         | K::Ident(_)
+        | K::PkgScoped { .. }
         | K::Concat { .. }
         | K::Replicate { .. }
         | K::BitSelect { .. }
