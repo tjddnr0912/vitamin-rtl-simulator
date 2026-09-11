@@ -159,6 +159,10 @@ impl Parser<'_, '_> {
                     self.reject_packed_dims_on_nonvector(NetVarKind::Int, true);
                 }
             } else if let Some(info) = self.peek_block_typedef_decl() {
+                // §3 ⑤ⓕ: `FunctionDef` has no shape slot, so a `function T f;` keeps
+                // `T`'s STRICT shape guard (the design stays loud, never silently
+                // returning the DEFAULT type's signedness / 2-state kind).
+                self.note_uncarried_shape_use(&info);
                 // A user-defined type name as the return type: `function b_t f;`
                 // (the `<typedef_name> <function_name>` shape — same disambiguation
                 // as a block-local decl). Map the typedef's resolved type onto the
@@ -322,7 +326,7 @@ impl Parser<'_, '_> {
         // its spelling too — `task t(ref int a, b);` gives `b` the `ref` word as well.
         let mut inherited_spelling = TfDirSpelling::Declared;
         let mut inherited_type: TfPortType =
-            (None, false, None, None, None, Vec::new(), Vec::new());
+            (None, false, None, None, None, Vec::new(), Vec::new(), None);
         loop {
             let before = self.pos;
             let (port, dir, ty, unpacked_struct) =
@@ -437,6 +441,8 @@ impl Parser<'_, '_> {
         // additionally returns its type name so the port var is layout-bound (EXT2-C;
         // class / multi-dim-packed = honest-loud, handled inside the helper).
         let mut typedef_signed: Option<bool> = None;
+        // §3 ⑤ⓕ: the `T$s` name when the formal's type is an overridable type parameter.
+        let mut typedef_shape: Option<String> = None;
         let mut struct_name: Option<String> = None;
         let mut unpacked_struct: Option<String> = None;
         // r18 (E1): an ENUM-typedef formal (`input e_t m`) — bind the port NAME to its
@@ -457,7 +463,9 @@ impl Parser<'_, '_> {
         if net_or_var.is_none() && range.is_none() {
             let tname = self.type_name_key();
             let is_enum = self.enum_defs.contains_key(&tname);
+            let pre_shape = self.peek_typedef_name().and_then(|i| i.shape_param);
             if let Some((k, s, r, sn, usn, pd, tu)) = self.try_tf_port_typedef() {
+                typedef_shape = pre_shape;
                 net_or_var = Some(k);
                 range = r;
                 typedef_signed = Some(s);
@@ -475,22 +483,31 @@ impl Parser<'_, '_> {
         // token is present; otherwise (a bare `, name`) it inherits the previous
         // type (INCLUDING its struct-ness). The resolved type then propagates on.
         let type_present = net_or_var.is_some() || range.is_some() || explicit_signed.is_some();
-        let (net_or_var, signed, range, struct_name, enum_name, dims, typedef_unpacked) =
-            if dir_present || type_present {
-                (
-                    net_or_var,
-                    explicit_signed
-                        .or(typedef_signed)
-                        .unwrap_or_else(|| atom_default_signed(net_or_var)),
-                    range,
-                    struct_name,
-                    enum_name,
-                    dims,
-                    typedef_unpacked,
-                )
-            } else {
-                inherited_type.clone()
-            };
+        let (
+            net_or_var,
+            signed,
+            range,
+            struct_name,
+            enum_name,
+            dims,
+            typedef_unpacked,
+            typedef_shape,
+        ) = if dir_present || type_present {
+            (
+                net_or_var,
+                explicit_signed
+                    .or(typedef_signed)
+                    .unwrap_or_else(|| atom_default_signed(net_or_var)),
+                range,
+                struct_name,
+                enum_name,
+                dims,
+                typedef_unpacked,
+                typedef_shape,
+            )
+        } else {
+            inherited_type.clone()
+        };
         let name = self.ident().unwrap_or_else(|| Ident {
             name: String::new(),
             span: self.cur_span(),
@@ -544,6 +561,10 @@ impl Parser<'_, '_> {
             name,
             unpacked,
             default,
+            shape_param: typedef_shape.as_ref().map(|n| Ident {
+                name: n.clone(),
+                span: start,
+            }),
             span: start.to(self.prev_span()),
         };
         let next_type = (
@@ -554,6 +575,7 @@ impl Parser<'_, '_> {
             enum_name,
             dims,
             typedef_unpacked,
+            typedef_shape,
         );
         (port, dir, next_type, unpacked_struct)
     }
@@ -912,8 +934,11 @@ impl Parser<'_, '_> {
         // the comma list below — `input a_t a, b;` gives both names the array type,
         // exactly as the declaration binder does for `a_t a, b;`.
         let mut typedef_unpacked: Vec<Dim> = Vec::new();
+        let mut typedef_shape: Option<String> = None;
         if net_or_var.is_none() && range.is_none() {
+            let pre_shape = self.peek_typedef_name().and_then(|i| i.shape_param);
             if let Some((k, s, r, sn, usn, pd, tu)) = self.try_tf_port_typedef() {
+                typedef_shape = pre_shape;
                 net_or_var = Some(k);
                 signed = s;
                 range = r;
@@ -956,6 +981,10 @@ impl Parser<'_, '_> {
                 name,
                 unpacked,
                 default: None, // non-ANSI formals have no default (ANSI-only, §13.5.3)
+                shape_param: typedef_shape.as_ref().map(|n| Ident {
+                    name: n.clone(),
+                    span: n_start,
+                }),
                 span: n_start.to(self.prev_span()),
             };
             self.bind_packed_md_formal(&port.name.name, &dims);

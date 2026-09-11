@@ -45,6 +45,14 @@ pub(crate) struct TypeValue {
     /// The resolved type's UNPACKED dimensions — non-empty only where the caller
     /// asked for them (`parse_type_param_value(true)`).
     pub(crate) unpacked: Vec<Dim>,
+    /// §3 ⑤ⓕ: the SHAPE as an EXPRESSION rather than the literal `shape_flags`,
+    /// set only when this type resolved to another shape-carrying type parameter
+    /// (`parameter type U = T`, or `typedef T t2; parameter type U = t2;`). The
+    /// literal would freeze `T`'s DEFAULT shape into `U$s`, so a `#(.T(…))`
+    /// override that changes the shape would reach `U v;` as the default's — the
+    /// exact silent-wrong the carrier exists to prevent. `None` for every concrete
+    /// type, where `shape_flags()` is the answer.
+    pub(crate) shape_expr: Option<Expr>,
 }
 
 impl TypeValue {
@@ -147,18 +155,33 @@ impl Parser<'_, '_> {
                     name: shape_name.clone(),
                     span: name.span,
                 },
-                value: Self::dec_lit(tv.shape_flags(), span),
+                value: tv
+                    .shape_expr
+                    .clone()
+                    .unwrap_or_else(|| Self::dec_lit(tv.shape_flags(), span)),
                 span,
             });
             if overridable {
                 self.overridable_params.insert(width_name.clone());
                 self.overridable_params.insert(shape_name.clone());
-                guards.push(self.type_param_shape_guard(
-                    &name.name,
-                    &shape_name,
-                    tv.shape_flags(),
-                    span,
-                ));
+                // The guard is emitted HERE (its position in the body fixes the
+                // order of its `$fatal` against the user's own `initial` blocks),
+                // with the STRICT compare. Whether the sign / 2-state bits stay in
+                // that compare depends on the uses of `T`, which are parsed after
+                // this group, so `narrow_shape_guards` rewrites the condition and
+                // the message at module END for every `T` whose uses all reached a
+                // container that carries `T$s`.
+                guards.push(
+                    self.type_param_shape_guard(
+                        &name.name,
+                        &shape_name,
+                        tv.shape_expr
+                            .clone()
+                            .unwrap_or_else(|| Self::dec_lit(tv.shape_flags(), span)),
+                        span,
+                    ),
+                );
+                self.shape_carriers.insert(shape_name.clone());
             }
             // §3 ⑤ⓕ: an OVERRIDABLE type parameter's unpacked EXTENTS ride two more
             // synthesized value parameters per dim, so `#(.T(b_t))` carries its own.
@@ -205,8 +228,27 @@ impl Parser<'_, '_> {
                     // OVERRIDABLE one the extents are the synthesized names, so the
                     // same stamp follows an override.
                     unpacked: carried.clone(),
+                    // §3 ⑤ⓕ: a NON-overridable alias type parameter (`localparam type
+                    // U = T`, or a body `parameter type U = T` in a module that has a
+                    // header) still carries a shape: its `U$s` VALUE is the expression
+                    // `T$s`, an ordinary parameter elaborate folds per instance. Only a
+                    // non-overridable parameter of a CONCRETE type (`shape_expr` None)
+                    // has nothing to carry.
+                    shape_param: (overridable || tv.shape_expr.is_some())
+                        .then(|| shape_name.clone()),
                 },
             );
+            // §3 ⑤ⓕ: `U$s = T$s` — record the alias so an UNCARRIED use of `U` marks
+            // `T`'s guard, not a name no guard reads. Resolved transitively at insert,
+            // so a chain `V = U = T` lands on `T$s` in one step.
+            if let Some(root) = tv
+                .shape_expr
+                .as_ref()
+                .and_then(Self::shape_ident_name)
+                .map(|n| self.shape_alias_root(&n))
+            {
+                self.shape_alias.insert(shape_name.clone(), root);
+            }
             self.type_params.insert(
                 name.name.clone(),
                 TypeParam {
@@ -327,20 +369,18 @@ impl Parser<'_, '_> {
         &self,
         tname: &str,
         shape_name: &str,
-        default_flags: u32,
+        default_flags: Expr,
         span: Span,
     ) -> ModuleItem {
         let cond = Expr {
             kind: ExprKind::Binary {
                 op: BinOp::Ne,
                 lhs: Box::new(Self::ident_expr(shape_name, span)),
-                rhs: Box::new(Self::dec_lit(default_flags, span)),
+                rhs: Box::new(default_flags),
             },
             span,
         };
-        let msg = format!(
-            "\"type parameter `{tname}`: the override changes the type's signedness, 2-state kind or unpacked dimensions, which the module's declarations of `{tname}` cannot follow (an override must keep the default type's shape; only its width may differ — v1)\""
-        );
+        let msg = Self::shape_guard_msg(tname, false);
         let call = Stmt::SysTaskCall {
             name: Ident {
                 name: "$fatal".to_string(),
@@ -432,6 +472,7 @@ impl Parser<'_, '_> {
                 signed,
                 two_state,
                 unpacked: Vec::new(),
+                shape_expr: None,
             });
         }
         // A type NAME: another type parameter of this module, or an integral vector
@@ -444,6 +485,11 @@ impl Parser<'_, '_> {
                     return None;
                 }
                 self.bump();
+                let shape_expr = self
+                    .typedefs
+                    .get(&key)
+                    .and_then(|i| i.shape_param.clone())
+                    .map(|n| Self::ident_expr(&n, span));
                 return Some(TypeValue {
                     width: Self::ident_expr(&tp.width_name, span),
                     signed: tp.signed,
@@ -452,6 +498,7 @@ impl Parser<'_, '_> {
                         .get(&key)
                         .is_some_and(|i| i.kind == NetVarKind::Bit),
                     unpacked: tp.unpacked.clone(),
+                    shape_expr,
                 });
             }
             let info = self.peek_typedef_name()?;
@@ -497,6 +544,7 @@ impl Parser<'_, '_> {
                 signed: info.signed,
                 two_state,
                 unpacked: info.unpacked.clone(),
+                shape_expr: info.shape_param.as_ref().map(|n| Self::ident_expr(n, span)),
             });
         }
         None
@@ -804,7 +852,14 @@ impl Parser<'_, '_> {
             };
             dims.push(ab);
         }
-        let flags = Self::dec_lit(tv.shape_flags(), span);
+        // §3 ⑤ⓕ: a PASS-THROUGH override `n #(.T(T))` hands the OUTER instance's own
+        // `T$s` on, exactly as the `parameter type U = T` default does. A literal here
+        // would freeze the outer type parameter's DEFAULT shape into the inner module —
+        // measured silent-wrong (`n m1=255 neg=0` where verilator says `-1 1`).
+        let flags = tv
+            .shape_expr
+            .clone()
+            .unwrap_or_else(|| Self::dec_lit(tv.shape_flags(), span));
         match name {
             Some(n) => {
                 out.push(ParamConn::Named {

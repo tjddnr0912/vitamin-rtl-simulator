@@ -37,6 +37,9 @@ impl Parser<'_, '_> {
             return Some((kind, signed, range, packed_dims, None));
         }
         if let Some(info) = self.peek_typedef_name() {
+            // §3 ⑤ⓕ: `StructMember` has no shape slot and the flat layout is built at
+            // parse, so a type-parameter member keeps `T`'s STRICT guard (loud).
+            self.note_uncarried_shape_use(&info);
             let nm = self.type_name_key();
             // §3 ⑤: an UNPACKED-array member is illegal in a PACKED struct and
             // this flat layout table cannot hold one either — the dims would be
@@ -300,6 +303,7 @@ impl Parser<'_, '_> {
         members
             .iter()
             .map(|m| TfPort {
+                shape_param: None,
                 dir: port.dir,
                 // R6: each expanded member inherits the whole port's spelling, so a
                 // `ref cfg_t c` member still reports itself as `ref`.

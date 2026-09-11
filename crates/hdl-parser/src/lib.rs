@@ -115,6 +115,7 @@ mod struct_sel;
 mod structs;
 mod sva_prop;
 mod sva_seq;
+mod type_param_shape;
 mod type_params;
 mod typedefs;
 mod udp;
@@ -226,6 +227,12 @@ struct TypeInfo {
     /// declaration, which is one parse — this parser-internal map is the whole
     /// carrier, and the declaration it reaches already has `DeclName.unpacked`.
     unpacked: Vec<Dim>,
+    /// §3 ⑤ⓕ: the name of the shape parameter (`T$s`) when this entry came from an
+    /// OVERRIDABLE `parameter type T` (directly, or through a chained alias of one).
+    /// `None` for every ordinary typedef. A declaration stamped from such an entry
+    /// copies the name into its AST container so elaborate can fold the OVERRIDE's
+    /// signedness and 2-state kind per instance instead of the default's literal.
+    shape_param: Option<String>,
 }
 
 /// A parse-time constant (§3 ⑤ ⓓ table): its value, and the WIDTH and sign of the
@@ -253,6 +260,9 @@ pub(crate) struct ConstVal {
 /// The seventh slot is the UNPACKED dimension list an unpacked-array TYPEDEF brought
 /// (§3 ⑤ⓕ). It threads onward for the same reason the struct/enum names do — a bare
 /// continuation `input a_t v, w` must give `w` the array type too, not the element.
+/// The EIGHTH slot is the shape-parameter name (`T$s`) when the formal's type is an
+/// OVERRIDABLE `parameter type T` (§3 ⑤ⓕ). It threads onward for the same reason:
+/// a bare continuation `input T a, b` must give `b` the same per-instance shape.
 type TfPortType = (
     Option<NetVarKind>,
     bool,
@@ -261,6 +271,7 @@ type TfPortType = (
     Option<String>,
     Vec<Range>,
     Vec<Dim>,
+    Option<String>,
 );
 
 /// Flat bit layout of a packed struct: members are placed MSB-first into one
@@ -535,6 +546,18 @@ pub struct Parser<'t, 's> {
     /// §4.5.437: the compilation-unit scope's type parameters (`type_params` is
     /// reset to these at every module-like).
     cu_type_params: std::collections::HashMap<String, type_params::TypeParam>,
+    /// §3 ⑤ⓕ: the shape-parameter names (`T$s`) of the current module-like whose
+    /// group SYNTHESIZED a guard (i.e. an OVERRIDABLE type parameter).
+    shape_carriers: std::collections::HashSet<String>,
+    /// §3 ⑤ⓕ: the subset of [`Self::shape_carriers`] with at least one use that
+    /// landed in a container with no `shape_param` slot. Those keep the STRICT
+    /// guard; the rest are narrowed to the arity bits at module end.
+    shape_uncarried: std::collections::HashSet<String>,
+    /// §3 ⑤ⓕ: `U$s` → the ROOT carrier its VALUE names, for `parameter type U = T`
+    /// (and its chains). An uncarried use of `U` has to mark `T`'s guard: `U` is not
+    /// overridable and synthesizes none, so without the alias nothing would keep the
+    /// strict compare on the parameter the user actually overrides.
+    shape_alias: std::collections::HashMap<String, String>,
     /// §3 ⑤ ⓒ: the OVERRIDABLE parameters of the current module-like — the ANSI
     /// header's `parameter`s and, in a module with no header, its body
     /// `parameter`s (IEEE §6.20.1; everything else the table can hold is a
@@ -751,6 +774,9 @@ impl<'t, 's> Parser<'t, 's> {
             sym_struct_layouts: std::collections::HashMap::new(),
             type_params: std::collections::HashMap::new(),
             cu_type_params: std::collections::HashMap::new(),
+            shape_carriers: std::collections::HashSet::new(),
+            shape_uncarried: std::collections::HashSet::new(),
+            shape_alias: std::collections::HashMap::new(),
             overridable_params: std::collections::HashSet::new(),
             unpacked_struct_layouts: std::collections::HashMap::new(),
             var_unpacked_struct: std::collections::HashMap::new(),

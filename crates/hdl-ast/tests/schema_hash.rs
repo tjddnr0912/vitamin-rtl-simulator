@@ -12,6 +12,15 @@
 use vita_schema::schema_hash;
 
 /// Pinned root hash of `hdl_ast::SourceUnit`'s full type closure.
+/// Re-pinned 2026-09-11 §3 ⑤ⓕ `NetVarDecl`/`AnsiPort`/`PortDecl`/`TfPort`
+/// `shape_param: Option<Ident>` — the name of the synthesized `T$s` value parameter
+/// when the declaration's type is an OVERRIDABLE `parameter type T`. `signed` and the
+/// 2-state half of the kind were parse-time scalars stamped from the DEFAULT type, so
+/// an instance override that changed only the signedness or the 2-state kind could not
+/// be followed and was refused loudly (F4004); elaborate now folds `T$s` per instance
+/// exactly as it already folds `T$w` for the width. `None` on every declaration written
+/// with an explicit type, which is every declaration that predates the carrier. All
+/// `.vu` artifacts are stale, no sim-ir/format_version change, pure IR-0.
 /// Re-pinned 2026-08-26 R6 `TfPort.dir_spelling: TfDirSpelling` — the parser maps
 /// `ref` and `const ref` onto `PortDir::Inout`, which left every diagnostic about
 /// such a formal printing "inout formal" for source that contains no such keyword.
@@ -245,8 +254,8 @@ use vita_schema::schema_hash;
 /// 29 and the SimIr schema hash / canonical / RON goldens are untouched (verified:
 /// the only test this slice moves is this one). All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    13, 232, 81, 64, 26, 92, 92, 2, 89, 14, 127, 239, 98, 187, 188, 150, 168, 75, 123, 113, 149,
-    77, 77, 121, 167, 183, 141, 71, 17, 218, 155, 209,
+    133, 232, 171, 229, 56, 234, 27, 169, 18, 41, 186, 135, 87, 41, 57, 18, 217, 33, 252, 152, 14,
+    8, 92, 174, 95, 172, 69, 71, 75, 30, 57, 155,
 ];
 
 #[test]

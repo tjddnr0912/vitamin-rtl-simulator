@@ -262,7 +262,12 @@ impl Elaborator<'_> {
         ext: Vec<(i64, u32, bool)>,
     ) {
         self.packed_dims.insert(net, ext);
-        let dd = self.compute_dim_desc(d.kind, d.range.as_ref(), &d.packed, unpacked);
+        let dd = self.compute_dim_desc(
+            self.shape_kind(d.kind, &d.shape_param),
+            d.range.as_ref(),
+            &d.packed,
+            unpacked,
+        );
         self.dim_desc.insert(net, dd);
     }
 
@@ -307,7 +312,11 @@ impl Elaborator<'_> {
                 && d.packed.is_empty()
                 && (ast_kind_is_bit_vector(d.kind) || str_elem)
             {
-                let (w, msb, lsb, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                let (w, msb, lsb, signed) = self.range_to_dims(
+                    self.shape_kind(d.kind, &d.shape_param),
+                    d.range.as_ref(),
+                    self.shape_signed(d.signed, &d.shape_param),
+                );
                 let net = self.nets.len() as u32;
                 self.add_net(
                     name,
@@ -322,14 +331,14 @@ impl Elaborator<'_> {
                         signed: signed && !str_elem,
                         array_len: 0, // heap handle — elements live in the engine heap
                         dir: ir::PortDir::Internal,
-                        init: default_init(d.kind, w.max(1)),
+                        init: default_init(self.shape_kind(d.kind, &d.shape_param), w.max(1)),
                     },
                 );
                 if str_elem {
                     self.string_elem_dyn_nets.insert(net);
                 }
                 // IEEE §7.5.2: a 2-state element defaults to 0 (not X) on `new[]` fill.
-                if net_kind_is_two_state(d.kind) {
+                if net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param)) {
                     self.two_state_heap_handles.insert(net);
                 }
                 return net;
@@ -367,8 +376,8 @@ impl Elaborator<'_> {
                 unpacked,
                 d.range.as_ref(),
                 &d.packed,
-                d.signed,
-                d.kind,
+                self.shape_signed(d.signed, &d.shape_param),
+                self.shape_kind(d.kind, &d.shape_param),
             ) {
                 let (count, elem_w) = (af.count, af.elem_w);
                 // §4.5.199: `count` = product of every unpacked dim, and `ext` gets one
@@ -383,24 +392,30 @@ impl Elaborator<'_> {
                     ir::NetVar {
                         // Whole md-packed slot is unsigned (`signed:false`); the element's
                         // signedness lives in `frame_arr_formal_meta` (`$signed` re-stamp).
-                        // A 2-state element defaults to 0 via `default_init(d.kind, w)`
+                        // A 2-state element defaults to 0 via `default_init(self.shape_kind(d.kind, &d.shape_param), w)`
                         // (an unpacked array of `int` inits to 0, of `logic` to X).
-                        kind: frame_local_net_kind(d.kind),
+                        kind: frame_local_net_kind(self.shape_kind(d.kind, &d.shape_param)),
                         width: w,
                         msb: w.saturating_sub(1),
                         lsb: 0,
                         signed: false,
                         array_len: 1,
                         dir: ir::PortDir::Internal,
-                        init: default_init(d.kind, w),
+                        init: default_init(self.shape_kind(d.kind, &d.shape_param), w),
                     },
                 );
                 self.packed_dims.insert(net, ext);
-                let dd = self.compute_dim_desc(d.kind, d.range.as_ref(), &[], unpacked);
+                let dd = self.compute_dim_desc(
+                    self.shape_kind(d.kind, &d.shape_param),
+                    d.range.as_ref(),
+                    &[],
+                    unpacked,
+                );
                 self.dim_desc.insert(net, dd);
                 self.frame_arr_formal_meta.insert(net, af);
-                if net_kind_is_two_state(d.kind) {
-                    self.intro_kind.insert(net, d.kind);
+                if net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param)) {
+                    self.intro_kind
+                        .insert(net, self.shape_kind(d.kind, &d.shape_param));
                 }
                 return net;
             }
@@ -411,8 +426,12 @@ impl Elaborator<'_> {
         // §7.4.2 / §4.5.359: a subprogram LOCAL with a negative bound is sized like any
         // other net. Opt-in and record are one unit (see `record_declared_bounds_for`).
         let odd_bound = self.declared_odd_bound(d.range.as_ref()).is_some();
-        let (mut w, mut msb, lsb, signed) =
-            self.range_to_dims_opt(d.kind, d.range.as_ref(), d.signed, odd_bound);
+        let (mut w, mut msb, lsb, signed) = self.range_to_dims_opt(
+            self.shape_kind(d.kind, &d.shape_param),
+            d.range.as_ref(),
+            self.shape_signed(d.signed, &d.shape_param),
+            odd_bound,
+        );
         if let Some((pw, pmsb, _)) = &pinfo {
             w = *pw;
             msb = *pmsb;
@@ -422,14 +441,14 @@ impl Elaborator<'_> {
         self.add_net(
             name,
             ir::NetVar {
-                kind: frame_local_net_kind(d.kind),
+                kind: frame_local_net_kind(self.shape_kind(d.kind, &d.shape_param)),
                 width: w,
                 msb,
                 lsb,
                 signed,
                 array_len: 1,
                 dir: ir::PortDir::Internal,
-                init: default_init(d.kind, w),
+                init: default_init(self.shape_kind(d.kind, &d.shape_param), w),
             },
         );
         if let Some((_, _, ext)) = pinfo {
@@ -440,8 +459,9 @@ impl Elaborator<'_> {
         if !unpacked.is_empty() {
             self.frame_array_local.insert(net);
         }
-        if net_kind_is_two_state(d.kind) {
-            self.intro_kind.insert(net, d.kind);
+        if net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param)) {
+            self.intro_kind
+                .insert(net, self.shape_kind(d.kind, &d.shape_param));
         }
         net
     }
@@ -673,7 +693,7 @@ impl Elaborator<'_> {
                 matches!(p.dir, ast::PortDir::Input)
                     && p.unpacked.is_empty()
                     && !matches!(
-                        p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                        self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
                         ast::NetVarKind::String
                     )
             })
@@ -691,7 +711,7 @@ impl Elaborator<'_> {
         let mut str_params: u64 = 0;
         for (i, p) in func.ports.iter().enumerate() {
             if matches!(
-                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
                 ast::NetVarKind::String
             ) {
                 if i < 64 {
@@ -733,8 +753,13 @@ impl Elaborator<'_> {
                 // §4.5.176 makes `foreach(c[i])` / `c.first(k)` work inside the body. A
                 // STRAIGHT-LINE dyn-formal function still takes the R2 inline alias path.
                 if s.is_input_dyn_array_formal(p) {
-                    let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-                    let (w, msb, lsb, signed) = s.range_to_dims(kind, p.range.as_ref(), p.signed);
+                    let kind =
+                        s.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+                    let (w, msb, lsb, signed) = s.range_to_dims(
+                        s.shape_kind(kind, &p.shape_param),
+                        p.range.as_ref(),
+                        s.shape_signed(p.signed, &p.shape_param),
+                    );
                     let net = s.nets.len() as u32;
                     s.add_net(
                         &p.name.name,
@@ -785,7 +810,10 @@ impl Elaborator<'_> {
                             );
                             s.packed_dims.insert(net, ext);
                             let dd = s.compute_dim_desc(
-                                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                                s.shape_kind(
+                                    p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                                    &p.shape_param,
+                                ),
                                 p.range.as_ref(),
                                 &[],
                                 &p.unpacked,
@@ -798,14 +826,20 @@ impl Elaborator<'_> {
                             // coercion is whole-value, which is correct for a uniform
                             // 2-state element array; a 4-state `logic`/`reg` element keeps
                             // X/Z (not registered).
-                            let ekind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+                            let ekind = s.shape_kind(
+                                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                                &p.shape_param,
+                            );
                             if net_kind_is_two_state(ekind) {
                                 s.intro_kind.insert(net, ekind);
                             }
                         }
                         Err(_) => {
-                            let (w, msb, lsb, signed) =
-                                s.range_to_dims(ast::NetVarKind::Reg, p.range.as_ref(), p.signed);
+                            let (w, msb, lsb, signed) = s.range_to_dims(
+                                s.shape_kind(ast::NetVarKind::Reg, &p.shape_param),
+                                p.range.as_ref(),
+                                s.shape_signed(p.signed, &p.shape_param),
+                            );
                             s.add_net(
                                 &p.name.name,
                                 ir::NetVar {
@@ -823,11 +857,16 @@ impl Elaborator<'_> {
                     }
                     continue;
                 }
-                let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+                let kind =
+                    s.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
                 // §7.4.2 / §4.5.359, same unit as the local above.
                 let odd_bound = s.declared_odd_bound(p.range.as_ref()).is_some();
-                let (w, msb, lsb, signed) =
-                    s.range_to_dims_opt(kind, p.range.as_ref(), p.signed, odd_bound);
+                let (w, msb, lsb, signed) = s.range_to_dims_opt(
+                    s.shape_kind(kind, &p.shape_param),
+                    p.range.as_ref(),
+                    s.shape_signed(p.signed, &p.shape_param),
+                    odd_bound,
+                );
                 let net = s.nets.len() as u32;
                 s.record_declared_bounds_for(net, p.range.as_ref());
                 s.add_net(
@@ -1071,7 +1110,7 @@ impl Elaborator<'_> {
                 // in/out/inout binds).
                 let scalar_ok = p.unpacked.is_empty()
                     && !matches!(
-                        p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                        self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
                         ast::NetVarKind::String
                     );
                 // §4.5.207 / item 1: a FIXED unpacked-array formal of ANY direction is
@@ -1103,7 +1142,7 @@ impl Elaborator<'_> {
         let mut str_params: u64 = 0;
         for (i, p) in task.ports.iter().enumerate() {
             if matches!(
-                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
                 ast::NetVarKind::String
             ) {
                 if i < 64 {
@@ -1121,8 +1160,13 @@ impl Elaborator<'_> {
         let auto_override = self.with_scope(&scope_seg, |s| {
             // [0..n_params): formals (input AND output, declared order).
             for p in &task.ports {
-                let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-                let (w, msb, lsb, signed) = s.range_to_dims(kind, p.range.as_ref(), p.signed);
+                let kind =
+                    s.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+                let (w, msb, lsb, signed) = s.range_to_dims(
+                    s.shape_kind(kind, &p.shape_param),
+                    p.range.as_ref(),
+                    s.shape_signed(p.signed, &p.shape_param),
+                );
                 let net = s.nets.len() as u32;
                 // V2A-frame (§4.5.173): an `input` DYNAMIC-array formal (`byte b[]`) is a
                 // per-activation `DynArray` heap handle — the caller's array is DEEP-COPIED
@@ -1189,14 +1233,20 @@ impl Elaborator<'_> {
                         );
                         s.packed_dims.insert(net, ext);
                         let dd = s.compute_dim_desc(
-                            p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                            s.shape_kind(
+                                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                                &p.shape_param,
+                            ),
                             p.range.as_ref(),
                             &[],
                             &p.unpacked,
                         );
                         s.dim_desc.insert(net, dd);
                         s.frame_arr_formal_meta.insert(net, af);
-                        let ekind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+                        let ekind = s.shape_kind(
+                            p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                            &p.shape_param,
+                        );
                         if net_kind_is_two_state(ekind) {
                             s.intro_kind.insert(net, ekind);
                         }

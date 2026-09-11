@@ -52,6 +52,14 @@ impl Parser<'_, '_> {
                     .sym_typedef_cast(key)
                     .or_else(|| self.type_param_cast(key)),
             };
+            // §3 ⑤ⓕ: `T'(e)` desugars to `signing'(T$w'(e))` with the DEFAULT's
+            // signedness baked in as a parse-time bool — no per-instance slot — so a
+            // module that casts to `T` keeps `T`'s STRICT shape guard.
+            if sized.is_some() {
+                if let Some(info) = self.typedefs.get(key).cloned() {
+                    self.note_uncarried_shape_use(&info);
+                }
+            }
             if let Some((width_expr, signed)) = sized {
                 let inner = Expr {
                     kind: ExprKind::Cast {

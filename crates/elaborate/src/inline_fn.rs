@@ -391,8 +391,13 @@ impl Elaborator<'_> {
                 actual_ids.push(self.placeholder_expr());
                 continue;
             }
-            let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-            let (w, _, _, _) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+            let kind =
+                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+            let (w, _, _, _) = self.range_to_dims(
+                self.shape_kind(kind, &p.shape_param),
+                p.range.as_ref(),
+                self.shape_signed(p.signed, &p.shape_param),
+            );
             actual_ids.push(self.lower_ctx_or_plain(a, w));
         }
 
@@ -782,15 +787,20 @@ impl Elaborator<'_> {
             if self.is_input_dyn_array_formal(p) {
                 continue;
             }
-            let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-            let (w, _, _, formal_signed) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+            let kind =
+                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+            let (w, _, _, formal_signed) = self.range_to_dims(
+                self.shape_kind(kind, &p.shape_param),
+                p.range.as_ref(),
+                self.shape_signed(p.signed, &p.shape_param),
+            );
             let bound = self.bind_formal_actual(
                 eid,
                 ast_actuals.get(i).copied(),
                 kind,
                 w,
                 formal_signed,
-                p.signed,
+                self.shape_signed(p.signed, &p.shape_param),
             );
             self.subst.push((p.name.name.clone(), bound));
             self.formal_str
@@ -853,7 +863,11 @@ impl Elaborator<'_> {
                 d.kind,
                 ast::NetVarKind::String | ast::NetVarKind::ClassHandle | ast::NetVarKind::Event
             );
-            let (mut w, _, _, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+            let (mut w, _, _, signed) = self.range_to_dims(
+                self.shape_kind(d.kind, &d.shape_param),
+                d.range.as_ref(),
+                self.shape_signed(d.signed, &d.shape_param),
+            );
             // A multi-dim PACKED local (`logic [1:0][7:0] p`) has its FULL flat width
             // = product of all packed dims; `range_to_dims` returns only the OUTER dim
             // (`[1:0]` ⇒ 2), so a whole-value assign (`p = 16'hABCD`) would truncate to

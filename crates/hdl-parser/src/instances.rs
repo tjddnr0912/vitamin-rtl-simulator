@@ -177,6 +177,21 @@ impl Parser<'_, '_> {
             name: String::new(),
             span: self.cur_span(),
         });
+        // §3 ⑤ⓕ: a user-written override that NAMES one of the synthesized type-
+        // parameter carriers (`T$w` / `T$s` / `T$d<i>a` / `T$d<i>b`). Both oracles
+        // reject it ("parameter `T$s` not found in `top.u`"), and it is not a spelling
+        // the type-parameter channel produces (those `ParamConn`s are built, never
+        // parsed), so it is refused HERE rather than reaching the value binder. Before
+        // §3 ⑤ⓕ the shape guard caught `.T$s(…)` as a side effect; the arity-only guard
+        // no longer does, and without this the design would be silently accepted.
+        if Self::names_a_type_param_carrier(&name.name) {
+            self.error_at(
+                start,
+                "a declared parameter name (a `NAME$w` / `NAME$s` / `NAME$d<i>a` / \
+                 `NAME$d<i>b` spelling is an internal type-parameter carrier, not a \
+                 user parameter — override the type parameter itself)",
+            );
+        }
         self.expect(TokenKind::LParen, "'(' after parameter name");
         if self.push_type_param_override(out, Some(&name), start) {
             self.expect(TokenKind::RParen, "')' after parameter value");

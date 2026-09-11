@@ -318,7 +318,11 @@ impl Elaborator<'_> {
             );
             return;
         }
-        let (base_w, _, _, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+        let (base_w, _, _, signed) = self.range_to_dims(
+            self.shape_kind(d.kind, &d.shape_param),
+            d.range.as_ref(),
+            self.shape_signed(d.signed, &d.shape_param),
+        );
         let mut width = base_w;
         for pr in &d.packed {
             let (pw, _, _, _) = self.range_to_dims(ast::NetVarKind::Logic, Some(pr), false);
@@ -568,7 +572,7 @@ impl Elaborator<'_> {
         let mut str_params: u64 = 0;
         for (i, p) in ports.iter().enumerate() {
             if matches!(
-                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
                 ast::NetVarKind::String
             ) {
                 let slot = i + 1; // `this` occupies slot 0
@@ -605,8 +609,13 @@ impl Elaborator<'_> {
             s.net_class.insert(tn, cname_s.clone());
             // slots 1..=nports: declared formals.
             for p in &ports {
-                let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-                let (w, msb, lsb, signed) = s.range_to_dims(kind, p.range.as_ref(), p.signed);
+                let kind =
+                    s.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+                let (w, msb, lsb, signed) = s.range_to_dims(
+                    s.shape_kind(kind, &p.shape_param),
+                    p.range.as_ref(),
+                    s.shape_signed(p.signed, &p.shape_param),
+                );
                 let net = s.nets.len() as u32;
                 s.add_net(
                     &p.name.name,

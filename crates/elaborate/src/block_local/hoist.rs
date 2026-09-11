@@ -245,7 +245,11 @@ impl Elaborator<'_> {
                     // before any process runs, and `stmt_never_assigns_ident` still
                     // guarantees nothing overwrites it afterwards.
                     let const_immune = n.init.as_ref().is_some_and(|init| {
-                        let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                        let (w, ..) = self.range_to_dims(
+                            self.shape_kind(d.kind, &d.shape_param),
+                            d.range.as_ref(),
+                            self.shape_signed(d.signed, &d.shape_param),
+                        );
                         fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
                     }) && stmt_never_assigns_ident(stmts, nm);
                     let elem_bounds = self.fixed_elem_bounds(n);
@@ -455,7 +459,11 @@ impl Elaborator<'_> {
                 // assigned coalesce (common `for`/`tmp` name reuse) is
                 // unaffected. dyn/string collisions were already loud above;
                 // `range_to_dims` is packed-only, so skip them here.
-                let (nw, _, _, nsig) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                let (nw, _, _, nsig) = self.range_to_dims(
+                    self.shape_kind(d.kind, &d.shape_param),
+                    d.range.as_ref(),
+                    self.shape_signed(d.signed, &d.shape_param),
+                );
                 for n in &d.names {
                     let nm = &n.name.name;
                     // A name ALSO declared at MODULE scope is a legitimate
@@ -562,7 +570,11 @@ impl Elaborator<'_> {
                 // shared net). Skip the loud for it; do NOT mark per-entry — a
                 // constant needs no re-init, and the const `net.init` handles t0.
                 let const_immune = n.init.as_ref().is_some_and(|init| {
-                    let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+                    let (w, ..) = self.range_to_dims(
+                        self.shape_kind(d.kind, &d.shape_param),
+                        d.range.as_ref(),
+                        self.shape_signed(d.signed, &d.shape_param),
+                    );
                     fold_init(init, w).is_some() || self.const_eval_in_scope(init).is_some()
                 }) && stmt_never_assigns_ident(stmts, nm);
                 let elem_bounds = self.fixed_elem_bounds(n);

@@ -61,7 +61,11 @@ impl Elaborator<'_> {
         d: &ast::NetVarDecl,
         decl: &ast::DeclName,
     ) -> ArrayConstMeta {
-        let (w, msb, lsb, signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+        let (w, msb, lsb, signed) = self.range_to_dims(
+            self.shape_kind(d.kind, &d.shape_param),
+            d.range.as_ref(),
+            self.shape_signed(d.signed, &d.shape_param),
+        );
         let (elem_w, _) = self.const_array_elem_geom(d);
         let has_range = d.range.is_some()
             || matches!(

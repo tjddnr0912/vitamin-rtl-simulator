@@ -78,6 +78,7 @@ fn netvar(
         span: SP,
     });
     ast::ModuleItem::NetVar(ast::NetVarDecl {
+        shape_param: None,
         kind,
         signed,
         range,
@@ -155,6 +156,7 @@ fn logic_mem(bit_msb: u32, depth_msb: u32, name: &str) -> ast::ModuleItem {
 
 fn reg_mem(bit_msb: u32, depth_msb: u32, name: &str) -> ast::ModuleItem {
     ast::ModuleItem::NetVar(ast::NetVarDecl {
+        shape_param: None,
         kind: ast::NetVarKind::Reg,
         signed: false,
         range: Some(ast::Range {
@@ -352,6 +354,7 @@ fn ev_list(terms: Vec<(ast::Edge, &str)>) -> ast::Sensitivity {
 // ── v3 builders ──
 fn ansi_port(dir: ast::PortDir, range: Option<(&str, &str)>, name: &str) -> ast::AnsiPort {
     ast::AnsiPort {
+        shape_param: None,
         dir,
         net_or_var: None,
         signed: false,
@@ -601,6 +604,7 @@ fn gitem(mi: ast::ModuleItem) -> ast::GenItem {
 /// can appear in the width bound).
 fn wire_range_expr(msb: ast::Expr, names: &[&str]) -> ast::ModuleItem {
     ast::ModuleItem::NetVar(ast::NetVarDecl {
+        shape_param: None,
         kind: ast::NetVarKind::Wire,
         signed: false,
         range: Some(ast::Range {
@@ -662,6 +666,7 @@ fn build_gen_if(cond: u32) -> ast::SourceUnit {
 // builders
 fn tf_port(dir: ast::PortDir, range: Option<(u32, u32)>, name: &str) -> ast::TfPort {
     ast::TfPort {
+        shape_param: None,
         dir,
         dir_spelling: ast::TfDirSpelling::Declared,
         net_or_var: None,
@@ -722,6 +727,7 @@ fn task_def(
 /// `reg [7:0] name;` as a bare NetVarDecl (for function/task body_decls).
 fn netvar_decl_reg(name: &str) -> ast::NetVarDecl {
     ast::NetVarDecl {
+        shape_param: None,
         kind: ast::NetVarKind::Reg,
         signed: false,
         range: Some(ast::Range {

@@ -166,9 +166,9 @@ impl Elaborator<'_> {
                 .declared_asc_lsb(d.range.as_ref())
                 .filter(|_| !dyn_storage);
             let (mut width, mut msb, lsb, signed) = self.range_to_dims_opt(
-                d.kind,
+                self.shape_kind(d.kind, &d.shape_param),
                 d.range.as_ref(),
-                d.signed,
+                self.shape_signed(d.signed, &d.shape_param),
                 neg_lsb.is_some() || asc_lsb.is_some(),
             );
             if !d.packed.is_empty() {
@@ -530,7 +530,7 @@ impl Elaborator<'_> {
                         signed,
                         array_len: 0, // the handle marker — elements live in the engine heap
                         dir,
-                        init: default_init(d.kind, width),
+                        init: default_init(self.shape_kind(d.kind, &d.shape_param), width),
                     },
                 );
                 if self.nets.len() as u32 > next_id {
@@ -540,7 +540,7 @@ impl Elaborator<'_> {
                     // IEEE §7.5.2: a 2-state element type defaults to 0, not X.
                     // The handle skips `record_dim_desc`, so flag it here so the
                     // `two_state_nets` sidecar reaches the engine's `new[]` fill.
-                    if net_kind_is_two_state(d.kind) {
+                    if net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param)) {
                         self.two_state_heap_handles.insert(next_id);
                     }
                     // N3 Phase 2: a `real r[]` element-real dyn array — the engine
@@ -653,11 +653,11 @@ impl Elaborator<'_> {
             // itself depending on whether the initializer happened to fold. The value now
             // always rides the pre-sweep, which the engine runs before arming anything, so
             // it still produces no event and still lands before every user process.
-            let init = default_init(d.kind, width);
+            let init = default_init(self.shape_kind(d.kind, &d.shape_param), width);
             self.add_net(
                 &decl.name.name,
                 ir::NetVar {
-                    kind: map_net_kind_or_wire(d.kind),
+                    kind: map_net_kind_or_wire(self.shape_kind(d.kind, &d.shape_param)),
                     width,
                     msb,
                     lsb,
@@ -766,7 +766,13 @@ impl Elaborator<'_> {
             }
             // SYS-INTRO dimension descriptor for $size/$left/.../$dimensions.
             if let Some(&id) = self.symbols.get(&self.fq(&decl.name.name)) {
-                self.record_dim_desc(id, d.kind, d.range.as_ref(), &d.packed, &decl.unpacked);
+                self.record_dim_desc(
+                    id,
+                    self.shape_kind(d.kind, &d.shape_param),
+                    d.range.as_ref(),
+                    &d.packed,
+                    &decl.unpacked,
+                );
             }
             // Declared array-ness — covers `[0:0]` (1-element) arrays that
             // `array_len > 1` cannot distinguish from scalars.

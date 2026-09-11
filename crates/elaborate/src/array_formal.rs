@@ -254,8 +254,8 @@ impl Elaborator<'_> {
             &p.unpacked,
             p.range.as_ref(),
             &[],
-            p.signed,
-            p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+            self.shape_signed(p.signed, &p.shape_param),
+            self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
         );
         // §4.5.202 (+§4.5.205): a MULTI-DIM unpacked-array FORMAL (`int m[2][2]`,
         // `m[1:0][2:0]`, mixed directions) is supported. Element access `m[i][j]` routes

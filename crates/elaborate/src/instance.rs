@@ -858,9 +858,15 @@ impl Elaborator<'_> {
         // that path merges the port direction itself).
         for item in &module.body {
             if let ast::ModuleItem::PortDecl(pd) = item {
-                let kind = pd.net_or_var.unwrap_or(ast::NetVarKind::Wire);
-                let (width, msb, lsb, signed) =
-                    self.range_to_dims(kind, pd.range.as_ref(), pd.signed);
+                let kind = self.shape_kind(
+                    pd.net_or_var.unwrap_or(ast::NetVarKind::Wire),
+                    &pd.shape_param,
+                );
+                let (width, msb, lsb, signed) = self.range_to_dims(
+                    self.shape_kind(kind, &pd.shape_param),
+                    pd.range.as_ref(),
+                    self.shape_signed(pd.signed, &pd.shape_param),
+                );
                 let dir = map_port_dir(pd.dir);
                 let init = default_init(kind, width);
                 for (ni, name) in pd.names.iter().enumerate() {

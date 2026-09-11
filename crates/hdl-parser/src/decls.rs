@@ -171,6 +171,7 @@ impl Parser<'_, '_> {
                 name,
                 unpacked: Vec::new(),
                 default: None,
+                shape_param: None,
                 iface: Some(IfaceRef {
                     iface,
                     modport,
@@ -211,11 +212,21 @@ impl Parser<'_, '_> {
         // typedef resolves to its (kind, signed, range); the typedef name carries
         // the range, so the normal signed/range/packed reads are SKIPPED for it
         // (they would otherwise consume the port NAME). Built-in path unchanged.
+        let pre_shape = self.peek_typedef_name().and_then(|i| i.shape_param);
         let typedef_ty = if net_or_var.is_none() {
             self.try_port_typedef()
         } else {
             None
         };
+        // §3 ⑤ⓕ: only when the typedef path actually resolved the port's type.
+        let shape_param = typedef_ty
+            .is_some()
+            .then_some(pre_shape.clone())
+            .flatten()
+            .map(|n| Ident {
+                name: n,
+                span: start,
+            });
         // EXT2-E1: a packed-struct typedef port carries a layout name to bind
         // once the port NAME is known (below), so `c.field` desugars.
         let mut port_struct_name: Option<String> = None;
@@ -328,6 +339,7 @@ impl Parser<'_, '_> {
             unpacked,
             default,
             iface: None,
+            shape_param,
             span: start.to(self.prev_span()),
         }
     }
@@ -354,11 +366,21 @@ impl Parser<'_, '_> {
         }
         // `input byte_t a;` — a typedef name as a non-ANSI port type (mirrors the
         // ANSI path; typedef-recognition family §4.5.36 ALL-variants).
+        let pre_shape = self.peek_typedef_name().and_then(|i| i.shape_param);
         let typedef_ty = if net_or_var.is_none() {
             self.try_port_typedef()
         } else {
             None
         };
+        // §3 ⑤ⓕ: the non-ANSI twin of the ANSI port's shape carry.
+        let shape_param = typedef_ty
+            .is_some()
+            .then_some(pre_shape)
+            .flatten()
+            .map(|n| Ident {
+                name: n,
+                span: start,
+            });
         let mut port_struct_name: Option<String> = None;
         // §3 ⑤ⓕ: the typedef's own UNPACKED dims, landed on every NAME below —
         // the non-ANSI binder's twin of the ANSI port carry.
@@ -435,6 +457,7 @@ impl Parser<'_, '_> {
             range,
             names,
             unpacked,
+            shape_param,
             span: start.to(self.prev_span()),
         })
     }
@@ -518,6 +541,7 @@ impl Parser<'_, '_> {
             range,
             packed,
             delay,
+            shape_param: None,
             names,
             lifetime: None,
             class_type: None,
@@ -670,10 +694,15 @@ impl Parser<'_, '_> {
             name: c.clone(),
             span: start,
         });
+        // §3 ⑤ⓕ: a declaration whose type is an OVERRIDABLE `parameter type T`
+        // names `T$s` so elaborate folds the INSTANCE's signedness / 2-state kind
+        // instead of `info.kind` / `info_signed`, which are the DEFAULT type's.
+        let shape_param = self.carried_shape_param(&info, start);
         Some(NetVarDecl {
             kind: info.kind,
             signed: info_signed,
             range: info_range,
+            shape_param,
             packed: info_packed,
             delay: None,
             names,

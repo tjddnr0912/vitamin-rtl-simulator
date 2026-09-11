@@ -182,8 +182,13 @@ impl Elaborator<'_> {
                 }
             };
             let p = &ports[i];
-            let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-            let (fw, _, _, fs) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+            let kind =
+                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+            let (fw, _, _, fs) = self.range_to_dims(
+                self.shape_kind(kind, &p.shape_param),
+                p.range.as_ref(),
+                self.shape_signed(p.signed, &p.shape_param),
+            );
             let tmp = self.fresh_dyn_temp_named(fw, fs);
             let id = ast::Ident {
                 name: tmp,
@@ -358,8 +363,13 @@ impl Elaborator<'_> {
             && matches!(&a.kind,
                 ast::ExprKind::AssignPattern(parts) | ast::ExprKind::Concat { parts } if parts.is_empty())
         {
-            let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-            let (fw, _, _, fs) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+            let kind =
+                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+            let (fw, _, _, fs) = self.range_to_dims(
+                self.shape_kind(kind, &p.shape_param),
+                p.range.as_ref(),
+                self.shape_signed(p.signed, &p.shape_param),
+            );
             return Some(self.fresh_dyn_temp(fw, fs));
         }
         let ast::ExprKind::Ident(path) = &a.kind else {
@@ -384,8 +394,12 @@ impl Elaborator<'_> {
             }
             (nv.width, nv.signed)
         };
-        let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
-        let (fw, _, _, fs) = self.range_to_dims(kind, p.range.as_ref(), p.signed);
+        let kind = self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param);
+        let (fw, _, _, fs) = self.range_to_dims(
+            self.shape_kind(kind, &p.shape_param),
+            p.range.as_ref(),
+            self.shape_signed(p.signed, &p.shape_param),
+        );
         // Element WIDTH *and* SIGNEDNESS must match: the alias reads the caller net's
         // own storage, so `b[i]` takes the CALLER's signedness — if that differs from
         // the formal's (`byte b[]` ← `byte unsigned a[]`), a signed element would read

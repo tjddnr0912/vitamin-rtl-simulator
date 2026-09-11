@@ -310,6 +310,14 @@ pub struct AnsiPort {
     /// is a placeholder (interface ports carry no direction) and elaborate
     /// binds the port by SYMBOL ALIASING instead of cont-assign wiring.
     pub iface: Option<IfaceRef>,
+    /// §3 ⑤ⓕ: when this declaration's type came from an OVERRIDABLE `parameter
+    /// type T`, the name of the synthesized shape parameter (`T$s`). `None` for
+    /// every declaration written with an explicit type, which is every declaration
+    /// that predates the carrier. `signed` / the 2-state half of the kind are
+    /// parse-time scalars stamped from the DEFAULT type; elaborate folds `T$s` per
+    /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
+    /// the same way `range` already names `T$w` so the WIDTH follows.
+    pub shape_param: Option<Ident>,
     pub span: Span,
 }
 
@@ -632,6 +640,14 @@ pub struct PortDecl {
     /// separate vector rather than a declarator type so the frozen `names`
     /// shape is untouched; `parse_port_decl` always pushes one entry per name.
     pub unpacked: Vec<Vec<Dim>>,
+    /// §3 ⑤ⓕ: when this declaration's type came from an OVERRIDABLE `parameter
+    /// type T`, the name of the synthesized shape parameter (`T$s`). `None` for
+    /// every declaration written with an explicit type, which is every declaration
+    /// that predates the carrier. `signed` / the 2-state half of the kind are
+    /// parse-time scalars stamped from the DEFAULT type; elaborate folds `T$s` per
+    /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
+    /// the same way `range` already names `T$w` so the WIDTH follows.
+    pub shape_param: Option<Ident>,
     pub span: Span,
 }
 
@@ -693,6 +709,14 @@ pub struct NetVarDecl {
     /// loud error — a parameter must never be silently mutable. `false` for
     /// every genuine net/variable declaration.
     pub const_param: bool,
+    /// §3 ⑤ⓕ: when this declaration's type came from an OVERRIDABLE `parameter
+    /// type T`, the name of the synthesized shape parameter (`T$s`). `None` for
+    /// every declaration written with an explicit type, which is every declaration
+    /// that predates the carrier. `signed` / the 2-state half of the kind are
+    /// parse-time scalars stamped from the DEFAULT type; elaborate folds `T$s` per
+    /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
+    /// the same way `range` already names `T$w` so the WIDTH follows.
+    pub shape_param: Option<Ident>,
     pub span: Span,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
@@ -1947,6 +1971,14 @@ pub struct TfPort {
     /// IEEE §13.5.3 default argument value (`function f(int a, int b = 10)`). Only
     /// an ANSI tf-port carries one; a call omitting trailing args fills them in.
     pub default: Option<Expr>,
+    /// §3 ⑤ⓕ: when this declaration's type came from an OVERRIDABLE `parameter
+    /// type T`, the name of the synthesized shape parameter (`T$s`). `None` for
+    /// every declaration written with an explicit type, which is every declaration
+    /// that predates the carrier. `signed` / the 2-state half of the kind are
+    /// parse-time scalars stamped from the DEFAULT type; elaborate folds `T$s` per
+    /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
+    /// the same way `range` already names `T$w` so the WIDTH follows.
+    pub shape_param: Option<Ident>,
     pub span: Span,
 }
 

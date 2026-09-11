@@ -246,6 +246,10 @@ impl Parser<'_, '_> {
                 }
             }
         } else if let Some(info) = self.peek_typedef_name() {
+            // §3 ⑤ⓕ: an enum base carries no shape slot (`EnumDecl` stores an
+            // `Option<Range>` and the parse-time `base_signed`), so a type-parameter
+            // base keeps `T`'s STRICT guard.
+            self.note_uncarried_shape_use(&info);
             // `enum b_t {…}` — the base type is an existing typedef name. Support a
             // SIMPLE UNSIGNED vector typedef (`logic`/`bit`/`reg` `[N]`); the enum
             // then stores as that vector (its range). A SIGNED *typedef* base (the
@@ -310,6 +314,7 @@ impl Parser<'_, '_> {
                 packed: Vec::new(),
                 class_name: None,
                 unpacked: Vec::new(),
+                shape_param: None,
             }
         } else {
             match &base {
@@ -321,6 +326,7 @@ impl Parser<'_, '_> {
                     packed: Vec::new(),
                     class_name: None,
                     unpacked: Vec::new(),
+                    shape_param: None,
                 },
                 // Base-less `enum {…}` (and any illegal non-integral base that slipped through):
                 // the default enum base is `int` = 32-bit signed 2-state (§4.5.154 — was the
@@ -335,6 +341,7 @@ impl Parser<'_, '_> {
                     packed: Vec::new(),
                     class_name: None,
                     unpacked: Vec::new(),
+                    shape_param: None,
                 },
             }
         };
@@ -476,6 +483,7 @@ impl Parser<'_, '_> {
                 packed: packed.clone(),
                 class_name: None,
                 unpacked,
+                shape_param: None,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -676,6 +684,7 @@ impl Parser<'_, '_> {
                 packed: Vec::new(),
                 class_name: None,
                 unpacked: Vec::new(),
+                shape_param: None,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -759,6 +768,7 @@ impl Parser<'_, '_> {
                 packed: Vec::new(),
                 class_name: None,
                 unpacked: Vec::new(),
+                shape_param: None,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -1029,6 +1039,7 @@ impl Parser<'_, '_> {
                 packed: Vec::new(),
                 class_name: None,
                 unpacked: Vec::new(),
+                shape_param: None,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {

@@ -290,25 +290,39 @@ fn the_434_residue_bits_and_cast_of_a_symbolic_width_module_typedef() {
 }
 
 #[test]
-fn a_shape_changing_override_and_a_non_integral_type_are_loud() {
-    // signed default, unsigned override (both oracles run it: `156 39`) — refused
-    is_loud(
+fn a_shape_changing_override_now_follows_the_override() {
+    // §3 ⑤ⓕ: these two were `is_loud` (F4004) until the shape carrier landed. The
+    // prose they were written with already named the oracle answer — "both oracles
+    // run it: `156 39`" — so the pin moves from the refusal to that value, on all
+    // three backends. `NetVarDecl.shape_param` names `T$s` and elaborate folds it in
+    // the instance's own parameter scope: bit 0 decides `signed`, bit 1 `bit` vs
+    // `logic`. Re-measured 2026-09-11: iverilog 13.0 `D=156 39`, verilator 5.052
+    // `D=156 39`.
+    // signed default, unsigned override
+    prints_all(
         &design(
             "parameter type T = logic signed [7:0]",
             "  T v;\n  initial begin v = -8'sd100; #1 $display(\"D=%0d %0d\", v, v >>> 2); end",
             "m #(.T(logic [7:0])) u2();",
         ),
-        "the override changes the type's signedness, 2-state kind or unpacked dimensions",
+        &["D=156 39"],
     );
-    // 4-state default, 2-state override
-    is_loud(
+    // 4-state default, 2-state override — the UNINITIALISED read, so this pins the
+    // 2-state DEFAULT-INIT half of the carrier (`default_init` / `map_net_kind_or_wire`
+    // now take the folded kind too, not just the write-path X→0 coercion). Both
+    // oracles `D=00`; the 4-state default reads `D=xx`.
+    prints_all(
         &design(
             "parameter type T = logic [7:0]",
             "  T v;\n  initial begin #1 $display(\"D=%h\", v); end",
             "m #(.T(bit [7:0])) u2();",
         ),
-        "the override changes the type's signedness, 2-state kind or unpacked dimensions",
+        &["D=00"],
     );
+}
+
+#[test]
+fn a_non_integral_type_parameter_is_loud() {
     // a struct / enum / real default, a struct override, a multi-dimensional
     // packed default: outside the integral vector subset (parse errors)
     is_loud(

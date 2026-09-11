@@ -120,6 +120,7 @@ impl Parser<'_, '_> {
                 packed: Vec::new(),
                 class_name: Some(n.clone()),
                 unpacked: Vec::new(),
+                shape_param: None,
             });
         }
     }
@@ -153,6 +154,7 @@ impl Parser<'_, '_> {
         Some(NetVarDecl {
             kind: NetVarKind::VirtualIface,
             signed: false,
+            shape_param: None,
             range: None,
             packed: Vec::new(),
             delay: None,
@@ -316,6 +318,9 @@ impl Parser<'_, '_> {
             let decl = if self.net_var_kind().is_some() {
                 self.parse_net_var(false) // class data member: no net delay
             } else if let Some(info) = self.peek_typedef_name() {
+                // §3 ⑤ⓕ: a class property carries no per-instance shape (the class
+                // field layout is built once), so `T`'s guard keeps the STRICT compare.
+                self.note_uncarried_shape_use(&info);
                 self.parse_typed_decl(info)
             } else {
                 self.error("a data member declaration after `rand`/`randc`");
@@ -356,6 +361,8 @@ impl Parser<'_, '_> {
                 .map(|d| ClassItem::Property(vis, d));
         }
         if let Some(info) = self.peek_typedef_name() {
+            // §3 ⑤ⓕ: see the `rand` twin above — a class property keeps the strict guard.
+            self.note_uncarried_shape_use(&info);
             return self
                 .parse_typed_decl(info)
                 .map(|d| ClassItem::Property(vis, d));

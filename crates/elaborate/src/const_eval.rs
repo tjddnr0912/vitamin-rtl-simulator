@@ -678,7 +678,11 @@ impl Elaborator<'_> {
     /// The ELEMENT width/signedness of an array parameter decl `d` — the flat packed
     /// width when the element is multi-dimensional packed.
     pub(crate) fn const_array_elem_geom(&mut self, d: &ast::NetVarDecl) -> (u32, bool) {
-        let (base_w, _, _, elem_signed) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+        let (base_w, _, _, elem_signed) = self.range_to_dims(
+            self.shape_kind(d.kind, &d.shape_param),
+            d.range.as_ref(),
+            self.shape_signed(d.signed, &d.shape_param),
+        );
         let elem_w = if d.packed.is_empty() {
             base_w
         } else {

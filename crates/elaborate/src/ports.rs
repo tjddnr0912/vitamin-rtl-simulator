@@ -837,13 +837,20 @@ impl Elaborator<'_> {
                     // members alias the connected instance's nets at binding.
                     continue;
                 }
-                let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Wire); // default net type
-                                                                          // §7.4.2 / §4.5.359: a port declared with a negative bound
-                                                                          // (`input logic [-3:0] p`) is sized `|msb-lsb|+1` like any other net.
-                                                                          // The opt-in and `record_declared_bounds` below are one unit.
+                let kind = self.shape_kind(
+                    p.net_or_var.unwrap_or(ast::NetVarKind::Wire),
+                    &p.shape_param,
+                ); // default net type
+                   // §7.4.2 / §4.5.359: a port declared with a negative bound
+                   // (`input logic [-3:0] p`) is sized `|msb-lsb|+1` like any other net.
+                   // The opt-in and `record_declared_bounds` below are one unit.
                 let odd_bound = self.declared_odd_bound(p.range.as_ref()).is_some();
-                let (mut width, mut msb, lsb, signed) =
-                    self.range_to_dims_opt(kind, p.range.as_ref(), p.signed, odd_bound);
+                let (mut width, mut msb, lsb, signed) = self.range_to_dims_opt(
+                    self.shape_kind(kind, &p.shape_param),
+                    p.range.as_ref(),
+                    self.shape_signed(p.signed, &p.shape_param),
+                    odd_bound,
+                );
                 // A packed multi-dim port (`input [1:0][7:0] m`) is a flat vector.
                 let packed_ext = self.packed_extents(p.range.as_ref(), &p.packed);
                 if !p.packed.is_empty() {

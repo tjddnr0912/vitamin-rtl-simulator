@@ -295,7 +295,7 @@ impl Elaborator<'_> {
         let fs_base = self.formal_str.len();
         for p in &func.ports {
             let is_str = matches!(
-                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
                 ast::NetVarKind::String
             );
             self.formal_str.push((p.name.name.clone(), is_str));
@@ -425,7 +425,7 @@ impl Elaborator<'_> {
         let fs_base = self.formal_str.len();
         for p in &task.ports {
             let is_str = matches!(
-                p.net_or_var.unwrap_or(ast::NetVarKind::Reg),
+                self.shape_kind(p.net_or_var.unwrap_or(ast::NetVarKind::Reg), &p.shape_param),
                 ast::NetVarKind::String
             );
             self.formal_str.push((p.name.name.clone(), is_str));

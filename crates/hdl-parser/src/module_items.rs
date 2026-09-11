@@ -662,6 +662,9 @@ impl Parser<'_, '_> {
         self.local_decl_names.clear();
         self.const_locals.clear();
         self.overridable_params.clear();
+        self.shape_carriers.clear();
+        self.shape_uncarried.clear();
+        self.shape_alias.clear();
         // §4.5.437: the unit scope's type parameters are visible to every module.
         self.type_params = self.cu_type_params.clone();
         self.has_param_header = false;
@@ -863,6 +866,11 @@ impl Parser<'_, '_> {
                 self.bump();
             } // B3: never spin on a stuck token
         }
+        // §3 ⑤ⓕ: every use of each type parameter is now parsed, so a `T` whose uses
+        // ALL reached a container carrying `T$s` gets its shape guard narrowed to the
+        // unpacked-dimension COUNT (the sign and the 2-state kind follow the override
+        // per instance) and re-worded. A `T` with an uncarried use keeps the strict one.
+        self.narrow_shape_guards(&mut body);
         // Every queued body-param comma-list continuation must have drained into
         // `body` above; the loop condition keeps it alive for that. The sole
         // exception is a truncated source (EOF before `end_kw`) — where the queued

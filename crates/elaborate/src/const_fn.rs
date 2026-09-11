@@ -1260,7 +1260,12 @@ impl Elaborator<'_> {
         if !netvar_kind_is_int_const(d.kind) {
             return None; // real/string/array local → loud
         }
-        let m = self.const_decl_wsign(d.kind, d.range.as_ref(), &d.packed, d.signed);
+        let m = self.const_decl_wsign(
+            self.shape_kind(d.kind, &d.shape_param),
+            d.range.as_ref(),
+            &d.packed,
+            self.shape_signed(d.signed, &d.shape_param),
+        );
         for n in &d.names {
             envw.insert(n.name.name.clone(), m.unwrap_or((0, false)));
             match &n.init {
@@ -1366,10 +1371,13 @@ impl Elaborator<'_> {
             // when there is none) — `input [3:0] a` is the commonest Verilog-2005
             // spelling and used to get no width at all.
             let tw = self.const_decl_wsign(
-                p.net_or_var.unwrap_or(ast::NetVarKind::Logic),
+                self.shape_kind(
+                    p.net_or_var.unwrap_or(ast::NetVarKind::Logic),
+                    &p.shape_param,
+                ),
                 p.range.as_ref(),
                 &[],
-                p.signed,
+                self.shape_signed(p.signed, &p.shape_param),
             );
             // An explicit ARGUMENT folds at the CALLER's depth: it descends a
             // finite AST (`g(g(g(0)))` is three distinct nodes), so charging it

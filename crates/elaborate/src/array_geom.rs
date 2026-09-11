@@ -423,6 +423,57 @@ impl Elaborator<'_> {
         }
     }
 
+    /// §3 ⑤ⓕ: the folded value of a declaration's `shape_param` (`T$s`) in the
+    /// CURRENT instance scope — `bit 0` = signed, `bit 1` = 2-state, `bits 2..` =
+    /// the unpacked dimension count (the count is not read here; the parser's guard
+    /// still refuses an override that changes it).
+    ///
+    /// `None` when the declaration carries no shape parameter (every declaration
+    /// written with an explicit type), and also when the name does not resolve —
+    /// the caller then keeps the parse-time scalars, which is exactly the
+    /// pre-carrier behaviour, so a lookup that fails is never a silent re-shape.
+    fn shape_bits(&self, shape_param: &Option<ast::Ident>) -> Option<i64> {
+        let sp = shape_param.as_ref()?;
+        let key = self.walk_scopes_key(&sp.name, |k| self.params.contains_key(k))?;
+        self.params.get(&key).copied()
+    }
+
+    /// The declaration's EFFECTIVE signedness in this instance: the override's when
+    /// the declaration's type is an overridable `parameter type T`, else the
+    /// parse-time flag.
+    pub(crate) fn shape_signed(&self, signed: bool, shape_param: &Option<ast::Ident>) -> bool {
+        match self.shape_bits(shape_param) {
+            Some(v) => v & 1 != 0,
+            None => signed,
+        }
+    }
+
+    /// The declaration's EFFECTIVE kind in this instance. Only the 2-state half
+    /// moves: a `logic`/`reg` declaration of `T` becomes `bit` when the override is
+    /// 2-state and stays 4-state otherwise, mirroring what the parser stamps for the
+    /// explicit spelling. Every other kind is returned unchanged — a type parameter
+    /// resolves to `Logic`/`Bit` only, so no atom/real/string/class kind can reach
+    /// here with a `Some` shape parameter.
+    pub(crate) fn shape_kind(
+        &self,
+        kind: ast::NetVarKind,
+        shape_param: &Option<ast::Ident>,
+    ) -> ast::NetVarKind {
+        let Some(v) = self.shape_bits(shape_param) else {
+            return kind;
+        };
+        match kind {
+            ast::NetVarKind::Logic | ast::NetVarKind::Reg | ast::NetVarKind::Bit => {
+                if v & 2 != 0 {
+                    ast::NetVarKind::Bit
+                } else {
+                    ast::NetVarKind::Logic
+                }
+            }
+            other => other,
+        }
+    }
+
     pub(crate) fn range_to_dims(
         &mut self,
         kind: ast::NetVarKind,

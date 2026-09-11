@@ -205,7 +205,11 @@ impl Elaborator<'_> {
         if !n.unpacked.is_empty() {
             return None;
         }
-        let (w, ..) = self.range_to_dims(d.kind, d.range.as_ref(), d.signed);
+        let (w, ..) = self.range_to_dims(
+            self.shape_kind(d.kind, &d.shape_param),
+            d.range.as_ref(),
+            self.shape_signed(d.signed, &d.shape_param),
+        );
         (w > 0 && w <= MAX_COVERED_BITS).then_some(w)
     }
 
