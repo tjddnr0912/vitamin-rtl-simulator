@@ -759,15 +759,22 @@ endmodule
 }
 
 /// An INITIALIZER-FREE sibling — `begin int x = 44; … end` beside `begin int x; … end`
-/// with the second block READING `x` before assigning it — is NOT moved by this slice
-/// and is recorded at its measured value. The no-initializer declarator is admitted by
-/// no `AdmitReason` (not `automatic`, not dynamic storage, not a module shadow, no
-/// initializer), so the name has ONE declaring span, falls below the two-span bar in
-/// `compute_scoped_block_locals`, and both declarations still share one net. Both
-/// oracles print `A=44 B=0`; vita prints `A=44 B=44`. A residue, pinned so the day the
-/// admission rule is widened this test fails and is updated.
+/// with the second block READING `x` before assigning it.
+///
+/// ⚠️ This test was written as a RESIDUE pin: at §4.5.480 the no-initializer
+/// declarator was admitted by no `AdmitReason`, so the name had ONE declaring span,
+/// fell below the two-span bar in `compute_scoped_block_locals`, and both
+/// declarations shared one net — vita printed `A=44 B=44` where both oracles print
+/// `A=44 B=0`. The pin said "the day the admission rule is widened this test fails
+/// and is updated". §2 Scoping row 2 widened it (the fifth `AdmitReason`,
+/// `static_plain`, opt-in for subroutine bodies), so the expectation is updated
+/// here to the value BOTH oracles give.
+///
+/// Re-measured on this exact design, POST: vita `A=44` / `B=0`; iverilog 13
+/// `A=44` / `B=0`; verilator 5.052 `A=44` / `B=0`. The full battery lives in
+/// `subroutine_plain_block_local.rs`.
 #[test]
-fn an_initializer_free_sibling_is_a_recorded_residue() {
+fn an_initializer_free_sibling_is_two_variables() {
     lines(
         r#"module top;
   task t;
@@ -779,7 +786,7 @@ fn an_initializer_free_sibling_is_a_recorded_residue() {
   initial begin t(); #1 $finish; end
 endmodule
 "#,
-        &["A=44", "B=44"],
+        &["A=44", "B=0"],
     );
 }
 

@@ -33,11 +33,12 @@ pub(crate) type BranchPath = Vec<(u32, u32)>;
 /// WHY one declaring span of a block-local was admitted by
 /// [`Elaborator::gather_auto_block_locals`], carried alongside the span.
 ///
-/// Four independent rules admit a span — `automatic` (per-entry storage),
+/// FIVE independent rules admit a span — `automatic` (per-entry storage),
 /// DYNAMIC storage (§4.5.249: a `Dim::Dyn`/`Dim::Queue`/`Dim::Assoc` dim or a
-/// scalar `string`), SHADOWING a module-scope port/param/net, and a STATIC
-/// declarator carrying an INITIALIZER — and the candidacy filters below must
-/// tell them apart. This used to be ONE bool
+/// scalar `string`), SHADOWING a module-scope port/param/net, a STATIC
+/// declarator carrying an INITIALIZER, and (SUBROUTINE BODIES ONLY, opt-in) a
+/// STATIC declarator carrying NO initializer — and the candidacy filters below
+/// must tell them apart. This used to be ONE bool
 /// (`widened = d.lifetime != Some(true)`), which is true for a static shadow and
 /// for a dynamic-storage widening alike, so filter A could not distinguish them
 /// and dropped both. Dropping a widened dynamic-storage span is harmless (its
@@ -63,6 +64,28 @@ pub(crate) struct AdmitReason {
     /// reads it; each such declaration therefore owns storage a flatten cannot
     /// share, exactly as `automatic`, dynamic storage and a shadow do.
     pub(crate) static_init: bool,
+    /// A STATIC (non-`automatic`) declarator carrying NO initializer, admitted
+    /// only inside a SUBROUTINE body (§2 Scoping: the opt-in `admit_static_plain`
+    /// feed of [`Elaborator::gather_auto_block_locals`]).
+    ///
+    /// Measured, 2-oracle: two same-named initializer-free sibling block-locals in
+    /// one `task`/`function` body are TWO variables. `task t; begin int x = 44;
+    /// $display("A=%0d",x); end begin int x; $display("B=%0d",x); end endtask`
+    /// prints `A=44 B=0` on iverilog 13 and verilator 5.052, and `A=44 B=44` at
+    /// HEAD — the second block read the first block's leftover. Each such
+    /// declaration is its OWN static variable and RETAINS independently across
+    /// calls (`P=1 Q=10` then `P=2 Q=20`, both oracles), so the storage a flatten
+    /// would share is not shareable and the span earns a `$blk$` scope for the
+    /// same reason the four rules above do.
+    ///
+    /// It is OPT-IN and subroutine-only because the MODULE-PROCESS path answers
+    /// this shape differently and already answers it LOUDLY: the R18-X1
+    /// read-before-assign guard (`block_local/hoist.rs:606-613`, keyed on
+    /// `coalesced_block_locals`) reports E3009 for the same pair written in an
+    /// `initial` block. Admitting it there would turn a loud into a value on a
+    /// path this slice did not measure, so every module-process feed passes
+    /// `false` and that path is byte-identical.
+    pub(crate) static_plain: bool,
 }
 
 /// Can two blocks with these branch paths BOTH be elaborated?
@@ -224,19 +247,26 @@ impl Elaborator<'_> {
         let mut branch_of: BTreeMap<(u32, u32), BranchPath> = BTreeMap::new();
         let gather = |body: &ast::Stmt,
                       path: &BranchPath,
+                      admit_static_plain: bool,
                       per_name: &mut BTreeMap<String, Vec<(u32, u32, AdmitReason)>>,
                       branch_of: &mut BTreeMap<(u32, u32), BranchPath>| {
             let before: BTreeMap<String, usize> =
                 per_name.iter().map(|(k, v)| (k.clone(), v.len())).collect();
-            Self::gather_auto_block_locals(body, module_names, per_name);
+            Self::gather_auto_block_locals(body, module_names, admit_static_plain, per_name);
             for (name, spans) in per_name.iter() {
                 for &(lo, hi, _) in &spans[before.get(name).copied().unwrap_or(0)..] {
                     branch_of.entry((lo, hi)).or_insert_with(|| path.clone());
                 }
             }
         };
+        // MODULE PROCESS bodies: `admit_static_plain = false`. This path answers an
+        // initializer-free same-named sibling pair with the R18-X1 read-before-assign
+        // LOUD (`block_local/hoist.rs:606-613`), measured at HEAD as two E3009s for
+        // the pair written in an `initial` block. Admitting the fifth rule here would
+        // silently convert that loud into a value on a path this slice did not
+        // measure, so the module-process flatten stays byte-identical.
         for_each_proc(&module.body, &mut |p, path| {
-            gather(&p.body, path, &mut per_name, &mut branch_of);
+            gather(&p.body, path, false, &mut per_name, &mut branch_of);
         });
         // §2 Scoping (subroutine block-locals): the module's task/function bodies feed
         // the SAME gatherer with the SAME `module_names` set the proc walk passes, so a
@@ -245,8 +275,17 @@ impl Elaborator<'_> {
         // FORMAL or a body-top local is NOT in `module_names`, so a block-local that
         // shadows one is not admitted by the shadow rule; that shape is loud today
         // (E3009 "referenced outside its `begin…end` block") and stays loud.
+        //
+        // §2 Scoping row 2 adds ONE admission rule that is exclusive to this feed:
+        // `admit_static_plain = true` (a STATIC, initializer-free declarator). It is
+        // opt-in rather than global because the R18-X1 loud that covers the shape on
+        // the module-process path cannot fire here — `compute_coalesced_block_locals`
+        // below deliberately walks `for_each_proc` ONLY, so no subroutine local is in
+        // `coalesced_block_locals` and `block_local/hoist.rs:606` skips it. The shape
+        // is therefore SILENT on this path and LOUD on that one; only the silent half
+        // is this slice's to close.
         for_each_subroutine_body(&module.body, &mut |body, path| {
-            gather(body, path, &mut per_name, &mut branch_of);
+            gather(body, path, true, &mut per_name, &mut branch_of);
         });
         let coexist = |a: (u32, u32), b: (u32, u32)| match (branch_of.get(&a), branch_of.get(&b)) {
             (Some(pa), Some(pb)) => branches_coexist(pa, pb),
@@ -296,15 +335,28 @@ impl Elaborator<'_> {
             // safe: a name with even one `automatic`, dynamic-storage or shadow span
             // has a mixed reason set, `static_init_only` is false, and the whole name
             // takes the pre-existing path byte for byte.
+            //
+            // §2 Scoping row 2: the exemption must be taken for a MIXED static set as
+            // well — `begin int x = 44; end` beside `begin int x; end` has one
+            // `static_init` span and one `static_plain` span, so a term testing
+            // `static_init` alone is false and the pair takes the pre-existing flatten
+            // that is the bug. The two reasons share the one property this filter
+            // needs: neither span carries a per-entry lifetime (`d.lifetime !=
+            // Some(true)` for both, which is exactly `r.widened`), so there is no
+            // per-entry requirement to protect. Hence `static_only` = every span is
+            // static and non-shadowing, whichever of the two static rules admitted it.
             let shadow_static_only = all.iter().all(|&(_, _, r)| r.shadows_module && r.widened);
             let static_init_only = all
                 .iter()
                 .all(|&(_, _, r)| r.static_init && r.widened && !r.shadows_module);
+            let static_only = all.iter().all(|&(_, _, r)| {
+                (r.static_init || r.static_plain) && r.widened && !r.shadows_module
+            });
             let spans: Vec<(u32, u32)> = all
                 .iter()
                 .filter(|&&(lo, hi, r)| {
                     shadow_static_only
-                        || static_init_only
+                        || static_only
                         || !r.widened
                         || !all.iter().any(|&(l2, h2, _)| contains((lo, hi), (l2, h2)))
                 })
@@ -354,6 +406,23 @@ impl Elaborator<'_> {
             // `…$blk$<outer>.s` and `…$blk$<outer>.$blk$<inner>.s` and cannot alias.
             // Without the exemption this filter drops BOTH members of such a nesting
             // and the pair loses every scope it just earned.
+            //
+            // §2 Scoping row 2: this filter deliberately keeps `static_init_only` and
+            // is NOT widened to `static_only`. The two filters answer different
+            // questions and the §3.b nesting argument does not carry to a
+            // `static_plain` span. Filter A above is about SIBLINGS (disjoint spans,
+            // which this filter never drops), and that is the whole of the measured
+            // row. What widening THIS one would newly admit is a NESTING — an outer
+            // `begin int x = 44; … begin int x; … end end` — and that shape is LOUD
+            // today (E3009 "block-local `x` is referenced outside its `begin…end`
+            // block"), because `block_local/gate.rs:596` skips only names that are in
+            // `scoped_block_locals`. Scoping the nesting would silently convert that
+            // loud into a value, which is a loud → value move on a shape this slice
+            // measured only at HEAD (vita loud; both oracles `OUT=44 IN=0`). Loud is
+            // the higher rung of the ladder, so it stays until that shape is its own
+            // measured row. Keeping `static_init_only` here makes the mixed nesting
+            // drop BOTH spans, fall below the two-span bar, earn no scope, and reach
+            // the same E3009 it reaches today.
             let spans: Vec<(u32, u32)> = spans
                 .iter()
                 .copied()

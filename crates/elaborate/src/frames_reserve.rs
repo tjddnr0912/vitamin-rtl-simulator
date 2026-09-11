@@ -105,9 +105,17 @@ impl Elaborator<'_> {
     /// net's and its writes land on the module net. That was silent-wrong in 22
     /// measured shapes, so a shadow earns a `$blk$` scope for the same reason
     /// `automatic` and dynamic storage do — it owns storage the flatten cannot share.
+    /// `admit_static_plain` is the OPT-IN fifth rule (§2 Scoping): a STATIC
+    /// declarator carrying NO initializer. It is passed `true` ONLY by
+    /// `compute_scoped_block_locals`'s `for_each_subroutine_body` feed and `false`
+    /// by every module-process feed, because the module-process path answers this
+    /// shape with the R18-X1 read-before-assign LOUD (`block_local/hoist.rs:606`)
+    /// and admitting it there would be an unmeasured loud → value move. See
+    /// [`AdmitReason::static_plain`] for the 2-oracle measurement.
     pub(crate) fn gather_auto_block_locals(
         s: &ast::Stmt,
         module_names: &std::collections::BTreeSet<String>,
+        admit_static_plain: bool,
         out: &mut BTreeMap<String, Vec<(u32, u32, AdmitReason)>>,
     ) {
         match s {
@@ -176,7 +184,19 @@ impl Elaborator<'_> {
                         // deliberate ANY rule — a per-NAME term would put `byte m, n = g;`'s
                         // two names on different arms (the §4.5.250 F1 trap above).
                         let static_init = d.lifetime != Some(true) && decl_has_init;
-                        if d.lifetime == Some(true) || dyn_storage || shadows_module || static_init
+                        // The fifth rule (§2 Scoping), OPT-IN via `admit_static_plain`
+                        // and therefore SUBROUTINE-BODY ONLY: a STATIC declarator with
+                        // NO initializer. Decl-ANY for the same §4.5.250 F1 reason as
+                        // `static_init` — it is the exact complement of it under the
+                        // same `d.lifetime != Some(true)` guard, so `int m, n = g;` puts
+                        // both names on the `static_init` arm and never splits.
+                        let static_plain =
+                            admit_static_plain && d.lifetime != Some(true) && !decl_has_init;
+                        if d.lifetime == Some(true)
+                            || dyn_storage
+                            || shadows_module
+                            || static_init
+                            || static_plain
                         {
                             out.entry(n.name.name.clone()).or_default().push((
                                 span.lo,
@@ -185,24 +205,25 @@ impl Elaborator<'_> {
                                     widened: d.lifetime != Some(true),
                                     shadows_module,
                                     static_init,
+                                    static_plain,
                                 },
                             ));
                         }
                     }
                 }
                 for st in stmts {
-                    Self::gather_auto_block_locals(st, module_names, out);
+                    Self::gather_auto_block_locals(st, module_names, admit_static_plain, out);
                 }
             }
             ast::Stmt::Fork { stmts, .. } => {
                 for st in stmts {
-                    Self::gather_auto_block_locals(st, module_names, out);
+                    Self::gather_auto_block_locals(st, module_names, admit_static_plain, out);
                 }
             }
             ast::Stmt::If { then_s, else_s, .. } => {
-                Self::gather_auto_block_locals(then_s, module_names, out);
+                Self::gather_auto_block_locals(then_s, module_names, admit_static_plain, out);
                 if let Some(e) = else_s {
-                    Self::gather_auto_block_locals(e, module_names, out);
+                    Self::gather_auto_block_locals(e, module_names, admit_static_plain, out);
                 }
             }
             ast::Stmt::Case { items, .. } => {
@@ -211,14 +232,14 @@ impl Elaborator<'_> {
                         ast::CaseItem::Match { body: b, .. } => b,
                         ast::CaseItem::Default { body: b, .. } => b,
                     };
-                    Self::gather_auto_block_locals(inner, module_names, out);
+                    Self::gather_auto_block_locals(inner, module_names, admit_static_plain, out);
                 }
             }
             ast::Stmt::For { body: b, .. }
             | ast::Stmt::While { body: b, .. }
             | ast::Stmt::Repeat { body: b, .. }
             | ast::Stmt::Forever { body: b, .. } => {
-                Self::gather_auto_block_locals(b, module_names, out);
+                Self::gather_auto_block_locals(b, module_names, admit_static_plain, out);
             }
             _ => {}
         }
