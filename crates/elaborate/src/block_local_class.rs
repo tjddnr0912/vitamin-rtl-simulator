@@ -161,9 +161,13 @@ pub(crate) fn for_each_proc(
 /// whole reason two same-named sibling block-locals in a task/function shared one net
 /// while the identical shape in an `initial` was correct (§4.5.475).
 ///
-/// PACKAGE / CLASS / INTERFACE subroutines are deliberately NOT here: they reach the
-/// reservers through their own callers with their own name sets, were not measured,
-/// and stay exactly as they are.
+/// This walks the ITEM LIST it is given, so it serves a module body and an interface
+/// body alike (`iface_inst.rs` feeds an interface decl's items through the same
+/// classifier). PACKAGE subroutines are not in any such item list — a package routine
+/// reaches a module by being cloned into that module's `func_table`/`task_table` — so
+/// they are fed to the gatherer separately, as `extra_bodies` of
+/// [`Elaborator::compute_scoped_block_locals`]. CLASS methods are not here and not in
+/// `extra_bodies`: they are loud today (E3009/E3010) and stay loud.
 pub(crate) fn for_each_subroutine_body(
     items: &[ast::ModuleItem],
     f: &mut impl FnMut(&ast::Stmt, &BranchPath),
@@ -232,9 +236,21 @@ impl Elaborator<'_> {
     /// single-level hoist would not match nested segments). Every excluded case
     /// falls through to the pre-existing loud E3009 — correct-or-loud. Pure function
     /// of the AST, so the Nets-phase hoist and the Logic-phase lowering agree.
+    /// `extra_bodies`: subroutine bodies that are lowered under THIS module but are
+    /// not reachable from `module.body` — today, the package `task`/`function` bodies
+    /// an import (or a scoped call) has injected into this instance's
+    /// `func_table`/`task_table`. They are fed to the same gatherer with the same
+    /// `admit_static_plain = true` and the same `module_names` set the module's own
+    /// subroutine feed passes. `module_names` stays the CALLER MODULE's declared
+    /// names, not the package's: a package-level variable is not a net of this module,
+    /// so a sibling block-local shadowing one is admitted and scoped (measured on the
+    /// c10 shape, where both oracles say the package variable keeps its own value and
+    /// the two siblings are distinct). Pass an empty slice for the module-only
+    /// computation, which is then byte-identical to the pre-package behaviour.
     pub(crate) fn compute_scoped_block_locals(
         module: &ast::ModuleDecl,
         module_names: &std::collections::BTreeSet<String>,
+        extra_bodies: &[&ast::Stmt],
     ) -> BTreeMap<u32, std::collections::BTreeSet<String>> {
         // `outer` strictly contains `inner` (properly nested AST blocks never
         // partially overlap, so containment ⇒ nesting).
@@ -287,6 +303,14 @@ impl Elaborator<'_> {
         for_each_subroutine_body(&module.body, &mut |body, path| {
             gather(body, path, true, &mut per_name, &mut branch_of);
         });
+        // PACKAGE subroutine bodies bound to this instance. Same gatherer, same
+        // arguments as the module feed above; they carry no generate branch of their
+        // own (a package is not elaborated under a generate), so the empty path is
+        // the right one and `branches_coexist` treats them as coexisting with
+        // everything — which they do.
+        for body in extra_bodies {
+            gather(body, &Vec::new(), true, &mut per_name, &mut branch_of);
+        }
         let coexist = |a: (u32, u32), b: (u32, u32)| match (branch_of.get(&a), branch_of.get(&b)) {
             (Some(pa), Some(pb)) => branches_coexist(pa, pb),
             _ => true,

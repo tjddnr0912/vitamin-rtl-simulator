@@ -834,9 +834,11 @@ endmodule
 
 // ── (8) the out-of-scope collectors, measured UNCHANGED ─────────────────────
 
-/// A PACKAGE task's sibling block-locals go through `package.rs`'s own collectors,
-/// which this slice does not touch. Measured identical PRE and POST and identical to
-/// both oracles (`A=44 B=55`) — the package path was already correct on this shape.
+/// A PACKAGE `task automatic` with two initialized sibling block-locals. Both oracles
+/// print `A=44 B=55` and vita has matched them throughout: the frame body emits a
+/// block's decl-inits at BLOCK ENTRY, which masked the shared slot even before the
+/// package bodies were classified. (Updated prose only — §2 Scoping row 3 since fed
+/// the package bodies to the same classifier; the value is unchanged.)
 #[test]
 fn a_package_task_is_unchanged() {
     lines(
@@ -855,13 +857,14 @@ endmodule
     );
 }
 
-/// A STATIC package task is a RESIDUE, not a pass. `package.rs` has its own
-/// block-local collectors, which this slice does not touch, so it still coalesces:
-/// vita prints `A=55 B=55` where iverilog 13 and verilator 5.052 both print
-/// `A=44 B=55`. (The `task automatic` package twin above is correct only because a
-/// frame body emits a block's decl-inits at BLOCK ENTRY, which masks the shared slot.)
-/// Pinned at its measured value so the day the package collectors get the same walk
-/// this test fails and is updated.
+/// A STATIC package task was a RESIDUE of the slice that wrote this file: its sibling
+/// block-locals coalesced onto one net and vita printed `A=55 B=55` where iverilog 13
+/// and verilator 5.052 both print `A=44 B=55`. §2 Scoping row 3 closed it by feeding a
+/// package routine's body — injected into the caller module's `func_table`/`task_table`
+/// — to the same `compute_scoped_block_locals` walk the module's own subroutines get
+/// (`instance.rs` step 3.6a). Re-measured on both oracles: `A=44 B=55`. The test name
+/// is kept from the residue era; the full cell set for the row lives in
+/// `package_subroutine_block_local.rs`.
 #[test]
 fn a_static_package_task_is_a_recorded_residue() {
     lines(
@@ -876,7 +879,7 @@ module top;
   initial begin pt(); #1 $finish; end
 endmodule
 "#,
-        &["A=55", "B=55"],
+        &["A=44", "B=55"],
     );
 }
 

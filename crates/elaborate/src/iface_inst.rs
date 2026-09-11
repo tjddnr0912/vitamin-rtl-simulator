@@ -191,7 +191,7 @@ impl Elaborator<'_> {
                 // collision against the parent's names.
                 let dbl = self.gather_block_local_names(&decl);
                 let saved_dbl = std::mem::replace(&mut self.decl_block_locals, dbl);
-                let scoped_blocks = Self::compute_scoped_block_locals(&decl, &local_names);
+                let scoped_blocks = Self::compute_scoped_block_locals(&decl, &local_names, &[]);
                 let saved_scoped_blocks =
                     std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
                 let per_entry_blocks = Self::compute_per_entry_block_locals(&decl, &local_names);

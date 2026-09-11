@@ -578,7 +578,11 @@ impl Elaborator<'_> {
         // own `$blk$<span>` scope (pure AST fn; excludes any name that also collides
         // with a module net via `names`). Computed here so both the hoist below and
         // the later body lowering read the SAME decision. See the field doc.
-        let scoped_blocks = Self::compute_scoped_block_locals(module, &names);
+        // `&[]`: package routine bodies are not bound yet at this point (imports are
+        // applied in step (3.6) below), so this computation covers `module.body` only
+        // and is byte-identical to the pre-package one. It is redone in (3.6a) once
+        // the package bodies are in this instance's tables.
+        let scoped_blocks = Self::compute_scoped_block_locals(module, &names, &[]);
         let saved_scoped_blocks = std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
         // r18 (family D): per-entry automatic-with-init block-locals (same shared-set
         // pattern as `scoped_block_locals` — computed once, read by both phases).
@@ -841,6 +845,52 @@ impl Elaborator<'_> {
             std::collections::BTreeSet::new();
         for imp in &import_list {
             self.apply_import_routines(imp, &mut wc_rtn, &mut explicit_rtn);
+        }
+
+        // (3.6a) §2 Scoping (package subroutine block-locals): a package `task`/
+        // `function` body is lowered by THIS module's reservers, but it is not in
+        // `module.body`, so the (3b) computation above never saw its block spans —
+        // no `$blk$<lo>` segment existed and two same-named sibling block-locals in
+        // a package routine flattened onto ONE net (measured: `A=44 B=44` where both
+        // oracles say `A=44 B=0`). Redo the classification now that the imported
+        // bodies are bound, feeding them to the SAME walk with the SAME arguments.
+        // The module-only part is recomputed identically (the classifier is a pure
+        // function of its inputs), so a design with no package routine is unchanged.
+        //
+        // `rtn_pkg` is the exact key set: it holds the routines that came from a
+        // package, so a module-local routine is never fed twice (a second feed of one
+        // body would count each declaring span twice and make a lone declaration look
+        // like a colliding pair).
+        if !self.rtn_pkg.is_empty() {
+            let extra: Vec<ast::Stmt> = self
+                .rtn_pkg
+                .keys()
+                .filter_map(|k| {
+                    self.func_table
+                        .get(k)
+                        .map(|f| (*f.body).clone())
+                        .or_else(|| self.task_table.get(k).map(|t| (*t.body).clone()))
+                })
+                .collect();
+            if !extra.is_empty() {
+                let refs: Vec<&ast::Stmt> = extra.iter().collect();
+                self.scoped_block_locals = Self::compute_scoped_block_locals(
+                    module,
+                    &self.local_decl_names.clone(),
+                    &refs,
+                );
+                // The scope-leak gate a MODULE-declared routine gets in step (3.5)
+                // above. A package routine never reached it, so the nested shape it
+                // covers (an outer block-local read after an inner same-named,
+                // initializer-free declaration) was SILENT here and LOUD in the module
+                // twin: measured `I=7 O=7` where both oracles say `I=0 O=7`. Run it on
+                // the same bodies, AFTER the map above is installed, so a declaration
+                // that now owns a `$blk$<lo>` net is exempt exactly as it is for a
+                // module routine.
+                for body in &extra {
+                    self.check_block_local_scope_leaks(body);
+                }
+            }
         }
 
         // (4) this instance's nets: ANSI ports, then body NetVarDecls (decl order).
