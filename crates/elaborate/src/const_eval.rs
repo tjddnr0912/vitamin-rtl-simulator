@@ -494,10 +494,16 @@ impl Elaborator<'_> {
             ast::ExprKind::IntLit { kind, raw } => {
                 literal::int_literal_shape(raw, *kind).is_some_and(|(_, s)| s)
             }
+            // Resolve with the OUTWARD scope walk (`walk_scopes`), not `fq` — the same
+            // resolver the env twin `const_signed_env` (`const_fn_width.rs`) already
+            // uses. `fq` keys only the CURRENT prefix, so inside a generate block a
+            // genvar or an outer-scope signed param (both bound under the enclosing
+            // prefix) missed the lookup and this arm answered UNSIGNED, making
+            // `generate for (g…) localparam L = g - 20;` fold 4294967276 and
+            // `generate if (1) localparam K = S8 >>> 1;` fold 255.
             ast::ExprKind::Ident(pth) if pth.segments.len() == 1 => self
-                .param_meta
-                .get(&self.fq(&pth.segments[0].name))
-                .is_some_and(|&(_, s)| s),
+                .walk_scopes(&pth.segments[0].name, &self.param_meta)
+                .is_some_and(|(_, s)| s),
             // a `pkg::X` reference inherits the package constant's signedness.
             ast::ExprKind::PkgScoped { pkg, name } => self
                 .pkg_const_meta
