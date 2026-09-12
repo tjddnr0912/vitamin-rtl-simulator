@@ -247,9 +247,17 @@ impl Elaborator<'_> {
                 // `compute_per_entry_block_locals` below reads `module_names` with the
                 // opposite polarity, and `local_names` itself stays untouched.
                 let shadow_names = self.names_with_pkg_var_aliases(&local_names);
-                let scoped_blocks = Self::compute_scoped_block_locals(&decl, &shadow_names, &[]);
+                // §2 Scoping queue row 1: the gather is kept for the same reason the
+                // module lane keeps it — a `pk::g()` scoped call inside this interface
+                // body reserves its frame on demand and feeds this gather then
+                // (`feed_scoped_block_locals`). Measured: census c17, `Z=88` at HEAD
+                // where both oracles say 44.
+                let (scoped_blocks, scoped_gather) =
+                    Self::compute_scoped_block_locals(&decl, &shadow_names, &[]);
                 let saved_scoped_blocks =
                     std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
+                let saved_scoped_gather = std::mem::replace(&mut self.scoped_gather, scoped_gather);
+                let saved_scoped_fed = std::mem::take(&mut self.scoped_gather_fed);
                 let per_entry_blocks = Self::compute_per_entry_block_locals(&decl, &local_names);
                 let saved_per_entry_blocks =
                     std::mem::replace(&mut self.per_entry_block_locals, per_entry_blocks);
@@ -493,6 +501,8 @@ impl Elaborator<'_> {
                 // that is about POSITION rather than about the maps themselves.
                 self.decl_block_locals = saved_dbl;
                 self.scoped_block_locals = saved_scoped_blocks;
+                self.scoped_gather = saved_scoped_gather;
+                self.scoped_gather_fed = saved_scoped_fed;
                 self.per_entry_block_locals = saved_per_entry_blocks;
                 self.coalesced_block_locals = saved_coalesced;
                 self.local_decl_names = saved_local_names;

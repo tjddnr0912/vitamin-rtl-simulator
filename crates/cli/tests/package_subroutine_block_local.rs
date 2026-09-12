@@ -50,10 +50,12 @@
 //! block-local read after an inner same-named, initializer-free declaration) was
 //! SILENT in a package and LOUD in the module twin.
 //!
-//! An UNCOVERED spelling remains: a scoped call `pk::g()` with no `import` binds its
-//! callee through `inject_pkg_callees` during body lowering, long after step (3.6a),
-//! so it keeps the pre-existing flattened value. It is pinned here as-is
-//! (`a_scoped_call_spelling_is_not_covered_yet`).
+//! The scoped call spelling `pk::g()` with no `import` binds its callee through
+//! `inject_pkg_callees` during body lowering, long after step (3.6a), so it kept the
+//! pre-existing flattened value until §2 Scoping queue row 1 fed that body to the same
+//! joint gather at the injection funnel (`Elaborator::feed_scoped_block_locals`).
+//! `a_scoped_call_spelling_is_covered` here pins the oracle value; the full census of
+//! that spelling is `crates/cli/tests/pkg_scoped_call_block_local.rs`.
 //!
 //! ## Oracles
 //!
@@ -449,18 +451,21 @@ fn class_method_siblings_stay_loud() {
     );
 }
 
-/// OPEN CELL — a SCOPED call `pk::g()` with no `import` binds its callee through
-/// `inject_pkg_callees` during body lowering, after step (3.6a) has run, so the pair is
-/// still flattened. Oracles print `Z=44`; vita prints `Z=88`, byte-identical to the
-/// pre-slice value. Pinned so the gap is visible and so closing it is a deliberate
-/// change, not an accident.
+/// CONVERTED PIN (§2 Scoping queue row 1) — a SCOPED call `pk::g()` with no `import`
+/// binds its callee through `inject_pkg_callees` during body lowering, after step
+/// (3.6a) has run. It used to keep the pre-slice flatten and this test pinned that
+/// wrong value (`Z=88`) under the name `a_scoped_call_spelling_is_not_covered_yet`.
+/// The body is now fed to the SAME joint gather at the injection funnel
+/// (`Elaborator::feed_scoped_block_locals`), so the pin is the oracle value: both
+/// iverilog 13 and verilator 5.052 print `Z=44`. The whole census of this spelling
+/// lives in `crates/cli/tests/pkg_scoped_call_block_local.rs`.
 #[test]
-fn a_scoped_call_spelling_is_not_covered_yet() {
+fn a_scoped_call_spelling_is_covered() {
     lines(
         "package pk;\n  function int g;\n    begin : b1 int x = 44; g = x; end\n\
              begin : b2 int x; g = g + x; end\n  endfunction\nendpackage\n\
          module top; int z;\n  initial begin z = pk::g(); $display(\"Z=%0d\", z); $finish; end\n\
          endmodule\n",
-        &["Z=88"],
+        &["Z=44"],
     );
 }

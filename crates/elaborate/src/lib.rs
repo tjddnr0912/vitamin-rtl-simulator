@@ -50,6 +50,7 @@ mod arrays;
 mod ast_query;
 mod block_local;
 mod block_local_class;
+mod block_local_feed;
 mod class_lower;
 mod classes;
 mod const_array;
@@ -139,6 +140,7 @@ pub(crate) use array_formal::*;
 pub(crate) use ast_query::*;
 pub(crate) use block_local::*;
 pub(crate) use block_local_class::AdmitReason;
+pub(crate) use block_local_feed::ScopedGather;
 pub(crate) use classes::*;
 pub(crate) use const_array::*;
 pub(crate) use const_eval::*;
@@ -337,6 +339,25 @@ struct Elaborator<'s> {
     /// Empty for every design with no such collision → byte-identical. Saved/
     /// restored per module.
     scoped_block_locals: BTreeMap<u32, std::collections::BTreeSet<String>>,
+    /// §2 Scoping queue row 1: the phase-(1) gather `scoped_block_locals` was
+    /// classified from, kept so a package subroutine body bound to this instance
+    /// AFTER the step-(3.6a) recompute can be added to the SAME joint gather and
+    /// re-classified. A `pk::g()` call spelling whose routine is not in `rtn_pkg`
+    /// reserves and lowers its frame on demand (`inline_fn.rs`, pass 7), which is
+    /// the only funnel every uncovered spelling passes (module process, generate,
+    /// continuous assign, `always_comb`, class method, interface body — all six
+    /// measured). Candidacy is a JOINT property of every fed body, so the body is
+    /// added to this gather rather than classified on its own. Saved/restored per
+    /// module and per interface instance, exactly like `scoped_block_locals`.
+    scoped_gather: ScopedGather,
+    /// §2 Scoping queue row 1: the package subroutine bodies already fed to
+    /// `scoped_gather` for THIS instance, by body span, so a routine reachable both
+    /// as a bare import (step 3.6a) and as a `pkg::name` scoped call is never fed
+    /// twice — a second feed counts each declaring span again and makes a lone
+    /// declaration look like a colliding pair (`instance.rs`'s `rtn_pkg`-key note).
+    /// Keyed on the BODY span, not on a table key, because the two spellings reach
+    /// the same body under two different keys. Saved/restored with `scoped_gather`.
+    scoped_gather_fed: std::collections::BTreeSet<(u32, u32)>,
     /// R18-X1: bare block-local names that share ONE flattened net across two or more
     /// disjoint blocks (see `compute_coalesced_block_locals`). Read wherever the
     /// definite-assignment gate needs to know whether THIS block is the only writer of

@@ -549,6 +549,7 @@ impl Elaborator<'_> {
         let fid = match self.frame_idx.get(&key) {
             Some(&fid) => fid,
             None => {
+                self.feed_scoped_block_locals(&func.body);
                 self.reserve_frame_func(&key, &func);
                 let fid = self.frame_idx[&key];
                 self.lower_frame_func_body(&key, &func, fid);

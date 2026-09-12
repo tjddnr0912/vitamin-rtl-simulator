@@ -32,6 +32,8 @@ impl<'s> Elaborator<'s> {
             bits_prescan: BTreeMap::new(),
             local_decl_names: std::collections::BTreeSet::new(),
             scoped_block_locals: BTreeMap::new(),
+            scoped_gather: Default::default(),
+            scoped_gather_fed: std::collections::BTreeSet::new(),
             per_entry_block_locals: BTreeMap::new(),
             coalesced_block_locals: std::collections::BTreeSet::new(),
             pkg_consts: BTreeMap::new(),

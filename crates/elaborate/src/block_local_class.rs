@@ -247,33 +247,41 @@ impl Elaborator<'_> {
     /// c10 shape, where both oracles say the package variable keeps its own value and
     /// the two siblings are distinct). Pass an empty slice for the module-only
     /// computation, which is then byte-identical to the pre-package behaviour.
+    /// Returns the scoping map AND the phase-(1) gather it was classified from. The
+    /// gather is kept by the caller so a package body bound to the instance LATER (a
+    /// `pk::g()` scoped call reserves and lowers its frame on demand, pass 7) can be
+    /// added to the SAME joint gather and re-classified — see
+    /// [`Self::feed_scoped_block_locals`].
     pub(crate) fn compute_scoped_block_locals(
         module: &ast::ModuleDecl,
         module_names: &std::collections::BTreeSet<String>,
         extra_bodies: &[&ast::Stmt],
-    ) -> BTreeMap<u32, std::collections::BTreeSet<String>> {
-        // `outer` strictly contains `inner` (properly nested AST blocks never
-        // partially overlap, so containment ⇒ nesting).
-        fn contains(outer: (u32, u32), inner: (u32, u32)) -> bool {
-            outer.0 <= inner.0 && inner.1 <= outer.1 && outer != inner
-        }
-        // (1) gather automatic block-locals across all procedural blocks, each carrying
-        //     the generate branch it sits under.
-        let mut per_name: BTreeMap<String, Vec<(u32, u32, AdmitReason)>> = BTreeMap::new();
-        let mut branch_of: BTreeMap<(u32, u32), BranchPath> = BTreeMap::new();
+    ) -> (
+        BTreeMap<u32, std::collections::BTreeSet<String>>,
+        ScopedGather,
+    ) {
+        let g = Self::gather_scoped_block_locals(module, module_names, extra_bodies);
+        let map = Self::classify_scoped_block_locals(&g, module_names);
+        (map, g)
+    }
+
+    /// Phase (1) of the computation, split out so a package body bound to this
+    /// instance LATER (a `pk::g()` scoped call reserves and lowers its frame on
+    /// demand at `inline_fn.rs`, long after step (3.6a)) can be added to the SAME
+    /// joint gather and re-classified — candidacy is a joint property of every fed
+    /// body (`spans.len() < 2`, the nesting filters), so a per-body computation is
+    /// not equivalent to feeding the body here.
+    pub(crate) fn gather_scoped_block_locals(
+        module: &ast::ModuleDecl,
+        module_names: &std::collections::BTreeSet<String>,
+        extra_bodies: &[&ast::Stmt],
+    ) -> ScopedGather {
+        let mut g = ScopedGather::default();
         let gather = |body: &ast::Stmt,
                       path: &BranchPath,
                       admit_static_plain: bool,
-                      per_name: &mut BTreeMap<String, Vec<(u32, u32, AdmitReason)>>,
-                      branch_of: &mut BTreeMap<(u32, u32), BranchPath>| {
-            let before: BTreeMap<String, usize> =
-                per_name.iter().map(|(k, v)| (k.clone(), v.len())).collect();
-            Self::gather_auto_block_locals(body, module_names, admit_static_plain, per_name);
-            for (name, spans) in per_name.iter() {
-                for &(lo, hi, _) in &spans[before.get(name).copied().unwrap_or(0)..] {
-                    branch_of.entry((lo, hi)).or_insert_with(|| path.clone());
-                }
-            }
+                      g: &mut ScopedGather| {
+            Self::gather_scoped_one(body, path, admit_static_plain, module_names, g);
         };
         // MODULE PROCESS bodies: `admit_static_plain = false`. This path answers an
         // initializer-free same-named sibling pair with the R18-X1 read-before-assign
@@ -282,7 +290,7 @@ impl Elaborator<'_> {
         // silently convert that loud into a value on a path this slice did not
         // measure, so the module-process flatten stays byte-identical.
         for_each_proc(&module.body, &mut |p, path| {
-            gather(&p.body, path, false, &mut per_name, &mut branch_of);
+            gather(&p.body, path, false, &mut g);
         });
         // §2 Scoping (subroutine block-locals): the module's task/function bodies feed
         // the SAME gatherer with the SAME `module_names` set the proc walk passes, so a
@@ -301,7 +309,7 @@ impl Elaborator<'_> {
         // is therefore SILENT on this path and LOUD on that one; only the silent half
         // is this slice's to close.
         for_each_subroutine_body(&module.body, &mut |body, path| {
-            gather(body, path, true, &mut per_name, &mut branch_of);
+            gather(body, path, true, &mut g);
         });
         // PACKAGE subroutine bodies bound to this instance. Same gatherer, same
         // arguments as the module feed above; they carry no generate branch of their
@@ -309,8 +317,56 @@ impl Elaborator<'_> {
         // the right one and `branches_coexist` treats them as coexisting with
         // everything — which they do.
         for body in extra_bodies {
-            gather(body, &Vec::new(), true, &mut per_name, &mut branch_of);
+            gather(body, &Vec::new(), true, &mut g);
         }
+        g
+    }
+
+    /// Add ONE package subroutine body to an existing gather, with the same
+    /// arguments the `extra_bodies` feed of [`Self::compute_scoped_block_locals`]
+    /// uses (empty branch path, `admit_static_plain = true`).
+    pub(crate) fn gather_scoped_one(
+        body: &ast::Stmt,
+        path: &BranchPath,
+        admit_static_plain: bool,
+        module_names: &std::collections::BTreeSet<String>,
+        g: &mut ScopedGather,
+    ) {
+        let before: BTreeMap<String, usize> = g
+            .per_name
+            .iter()
+            .map(|(k, v)| (k.clone(), v.len()))
+            .collect();
+        Self::gather_auto_block_locals(body, module_names, admit_static_plain, &mut g.per_name);
+        for (name, spans) in g.per_name.iter() {
+            for &(lo, hi, _) in &spans[before.get(name).copied().unwrap_or(0)..] {
+                g.branch_of.entry((lo, hi)).or_insert_with(|| path.clone());
+            }
+        }
+    }
+
+    /// Identity of a subroutine BODY for the scoped-gather feed set — the body's own
+    /// source span. Keyed on the span, not on the `func_table`/`task_table` key,
+    /// because one package body is reachable under both a bare imported name and a
+    /// `pkg::name` scoped key and must be fed exactly once.
+    pub(crate) fn stmt_span_key(body: &ast::Stmt) -> (u32, u32) {
+        let sp = body.span();
+        (sp.lo, sp.hi)
+    }
+
+    /// Phase (2)/(3) of the computation — a pure function of the gather, so feeding
+    /// the same bodies in any order gives the same map.
+    pub(crate) fn classify_scoped_block_locals(
+        g: &ScopedGather,
+        module_names: &std::collections::BTreeSet<String>,
+    ) -> BTreeMap<u32, std::collections::BTreeSet<String>> {
+        // `outer` strictly contains `inner` (properly nested AST blocks never
+        // partially overlap, so containment ⇒ nesting).
+        fn contains(outer: (u32, u32), inner: (u32, u32)) -> bool {
+            outer.0 <= inner.0 && inner.1 <= outer.1 && outer != inner
+        }
+        let per_name = &g.per_name;
+        let branch_of = &g.branch_of;
         let coexist = |a: (u32, u32), b: (u32, u32)| match (branch_of.get(&a), branch_of.get(&b)) {
             (Some(pa), Some(pb)) => branches_coexist(pa, pb),
             _ => true,
@@ -318,7 +374,7 @@ impl Elaborator<'_> {
         // (2) candidate (span, name): declared in ≥2 blocks, no module-net
         //     collision, and no two declaring spans nested (shadowing).
         let mut cand: Vec<(u32, u32, String)> = Vec::new();
-        for (name, all) in &per_name {
+        for (name, all) in per_name {
             // Review S3: a WIDENED span (admitted by the dynamic-storage rule, not by
             // `automatic`) that ENCLOSES another declaring span of this name is dropped
             // rather than counted. Otherwise merely gathering it makes the name look
