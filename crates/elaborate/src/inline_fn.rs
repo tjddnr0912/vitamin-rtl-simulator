@@ -410,9 +410,18 @@ impl Elaborator<'_> {
                 p.range.as_ref(),
                 self.shape_signed(p.signed, &p.shape_param),
             );
-            // A default actual of a PACKAGE routine is lowered in the package's scope
+            // §13.5.3 / §11.6.1: the actual is ASSIGNED to the formal, so the formal's
+            // declared width is the actual's context — the same opt-in a body
+            // assignment takes (§4.5.491), with the same real-target / real-operand
+            // guards. `lower_ctx_or_plain` alone took the context walk only for a
+            // fill, so `idw(u8 * b8)` into `input [31:0]` folded the product at 8 bits
+            // (`00000009` for both oracles' `0000f609`) while the `automatic` twin,
+            // whose formal is a net the engine sizes against, was right. A default
+            // actual of a PACKAGE routine is lowered in the package's scope
             // (§13.5.4, `with_default_arg_scope`).
-            let id = self.with_default_arg_scope(&fname, p, a, |s| s.lower_ctx_or_plain(a, w));
+            let id = self.with_default_arg_scope(&fname, p, a, |s| {
+                s.lower_inline_assign_rhs(a, w, ast_kind_is_bit_vector(kind))
+            });
             actual_ids.push(id);
         }
 
