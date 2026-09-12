@@ -460,23 +460,11 @@ impl Elaborator<'_> {
                 let irop = map_unop(*op);
                 // §6.2: bitwise `~` / reductions on a real are illegal (`+`/`-`/`!`
                 // are legal: unary +/- are real-preserving, `!` is logical).
-                if self.expr_is_real(operand)
-                    && matches!(
-                        irop,
-                        ir::UnOp::BitNot
-                            | ir::UnOp::RedAnd
-                            | ir::UnOp::RedNand
-                            | ir::UnOp::RedOr
-                            | ir::UnOp::RedNor
-                            | ir::UnOp::RedXor
-                            | ir::UnOp::RedXnor
-                    )
-                {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "bitwise/shift/reduction not defined on real operand",
-                    );
-                }
+                // ⭐ ONE spelling, shared with `lower_expr_ctx`'s `Unary` arm — that
+                // twin had no check at all, and the inline-body context opt-in made
+                // it reachable for a fill-free rhs: `function [31:0] f; f = ^r;`
+                // printed 0 at exit 0 where this arm (and iverilog) refuse.
+                self.check_unary_real_operand(irop, operand);
                 self.push_expr(ir::Expr::Unary { op: irop, operand })
             }
             ast::ExprKind::Binary { op, lhs, rhs } => {

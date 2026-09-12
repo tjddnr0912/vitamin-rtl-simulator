@@ -92,6 +92,7 @@ mod hoist;
 mod ident_route;
 pub(crate) use ident_route::BareIdentRoute;
 mod iface_inst;
+mod inline_body_ctx;
 mod inline_fn;
 mod inline_task;
 mod instance;
@@ -1269,6 +1270,17 @@ struct Elaborator<'s> {
     // `subst` carries went through `resize_inline_assign`, whose result's mirror
     // sign is the formal's declared sign by construction.
     verbatim_actuals: BTreeSet<u32>,
+    // §11.6.1 opt-in for the INLINE function body's return/local assignment:
+    // `Some(ext)` = the rhs being lowered is in that context, and `ext` is the
+    // ONE extension sign the whole context-determined region uses (§11.8.1).
+    // While it is set, `lower_ctx_or_plain` takes the context-carrying route for
+    // a fill-FREE expression too and `lower_expr_ctx`'s leaf arm widens the leaf
+    // to the context. Set ONLY by `lower_inline_assign_rhs` (inline_body_ctx.rs)
+    // and cleared on every self-determined descent inside `lower_expr_ctx`, so it
+    // is honoured exactly along one rhs's context-determined spine. The frame
+    // route needs none of it: it writes a real net, and the engine evaluates an
+    // assignment's rhs at `max(lvalue_w, self_w)`.
+    inline_ctx_ext: Option<bool>,
     // FQ keys of constants whose recorded TYPE is a guess rather than a fact: an
     // UNTYPED parameter an override reached (its `param_meta` is the DEFAULT
     // literal's — §6.20.2 says the override's, ROADMAP §2 row 25), and every body

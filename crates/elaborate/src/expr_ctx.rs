@@ -727,7 +727,10 @@ impl Elaborator<'_> {
                 // §11.4.6: wildcard equality is context-INDEPENDENT (a 1-bit
                 // self-determined comparison) — route to the dedicated lowering.
                 if matches!(op, WildEq | WildNe) {
-                    return self.lower_wildcard_eq(lhs, rhs, matches!(op, WildNe));
+                    let saved = self.inline_ctx_ext.take();
+                    let id = self.lower_wildcard_eq(lhs, rhs, matches!(op, WildNe));
+                    self.inline_ctx_ext = saved;
+                    return id;
                 }
                 // ⚠️ NEITHER A STRING COMPARE NOR A HANDLE COMPARE HAS A BIT-WIDTH
                 // CONTEXT TO TAKE (IEEE §6.16 / §8.4) — the same shape as the `real`
@@ -740,7 +743,7 @@ impl Elaborator<'_> {
                 //   • `h == '1` printed a made-up 0 at exit 0, while the twin
                 //     `h == 1'b1` is E3009. That one is loud→silent.
                 if self.binary_stops_ctx(*op, lhs, rhs) {
-                    return self.lower_expr_ungated(e);
+                    return self.lower_ungated_self_det(e);
                 }
                 let irop = map_binop(*op);
                 // logical &&/|| : operands self-determined (1-bit truth) — ctx stops.
@@ -791,12 +794,12 @@ impl Elaborator<'_> {
                     // (`r + '1`). Copying the neighbour's guard verbatim left
                     // `('1+4'h0) ** (r + '1)` reading 64976 where $pow reads 13071.
                     let (l, r) = if matches!(op, Pow) && expr_contains_fill(lhs) {
-                        let r = self.lower_expr(rhs);
+                        let r = self.lower_self_det(rhs);
                         let base_ctx = if self.expr_is_real(r) { 0 } else { ctx };
                         (self.lower_expr_ctx(lhs, base_ctx), r)
                     } else {
                         let l = self.lower_ctx_or_plain(lhs, ctx);
-                        (l, self.lower_expr(rhs))
+                        (l, self.lower_self_det(rhs))
                     };
                     // ⚠️ This is the branch that owns BOTH real rules a fill used to
                     // switch off: the shifts are permanently illegal on a real operand
@@ -819,12 +822,12 @@ impl Elaborator<'_> {
                 let rf = expr_contains_fill(rhs);
                 let (l, r) = if lf && !rf {
                     // lower the NON-fill side first; its width sets the fill side's ctx.
-                    let r = self.lower_expr(rhs);
+                    let r = self.lower_self_det(rhs);
                     let w = self.sibling_ctx(base, r);
                     let l = self.lower_expr_ctx(lhs, w);
                     (l, r)
                 } else if rf && !lf {
-                    let l = self.lower_expr(lhs);
+                    let l = self.lower_self_det(lhs);
                     let w = self.sibling_ctx(base, l);
                     let r = self.lower_expr_ctx(rhs, w);
                     (l, r)
@@ -850,8 +853,17 @@ impl Elaborator<'_> {
                     LogNot | RedAnd | RedNand | RedOr | RedNor | RedXor | RedXnor
                 );
                 let o = self.lower_ctx_or_plain(operand, if self_det { 0 } else { ctx });
+                let irop = map_unop(*op);
+                // ⭐ THE SAME §6.2 CHECK `lower_expr_ungated`'s `Unary` arm makes, in
+                // the one spelling both call. This arm had none: it was only
+                // reachable for a fill-bearing operand (where a real is impossible),
+                // until the inline-body context opt-in (`inline_body_ctx.rs`) started
+                // routing fill-FREE rhs expressions through it — `f = ^r;` on a
+                // `real r` then printed 0 at exit 0 where the twin, and iverilog,
+                // refuse. An arm added to either walk needs this pairing checked.
+                self.check_unary_real_operand(irop, o);
                 self.push_expr(ir::Expr::Unary {
-                    op: map_unop(*op),
+                    op: irop,
                     operand: o,
                 })
             }
@@ -860,20 +872,20 @@ impl Elaborator<'_> {
                 then_e,
                 else_e,
             } => {
-                let c = self.lower_expr(cond); // condition self-determined
-                                               // branches are sized to max(ctx, both branch self-widths) — like a
-                                               // binary op, so a fill branch grows to its sibling's width even in a
-                                               // self-determined outer context (`(c)?'1:32'd7` ⇒ 32-bit).
+                let c = self.lower_self_det(cond); // condition self-determined
+                                                   // branches are sized to max(ctx, both branch self-widths) — like a
+                                                   // binary op, so a fill branch grows to its sibling's width even in a
+                                                   // self-determined outer context (`(c)?'1:32'd7` ⇒ 32-bit).
                 let tf = expr_contains_fill(then_e);
                 let ff = expr_contains_fill(else_e);
                 let (t, f) = if tf && !ff {
-                    let f = self.lower_expr(else_e);
+                    let f = self.lower_self_det(else_e);
                     // Same real rule as the binary arm: `c ? r : '1` read 0 where both
                     // oracles (and `c ? r : 1'b1`) read 1.
                     let w = self.sibling_ctx(ctx, f);
                     (self.lower_expr_ctx(then_e, w), f)
                 } else if ff && !tf {
-                    let t = self.lower_expr(then_e);
+                    let t = self.lower_self_det(then_e);
                     let w = self.sibling_ctx(ctx, t);
                     (t, self.lower_expr_ctx(else_e, w))
                 } else {
@@ -916,7 +928,11 @@ impl Elaborator<'_> {
             // arm above". That was true before the deletion and false after it; the
             // mutation battery is what caught the stale claim — the mutant that
             // restores `lower_expr(e)` fails 8 tests.)
-            _ => self.lower_expr_ungated(e),
+            // ⭐ The LEAF arm is also the inline-body §11.6.1 conversion point: with
+            // `inline_body_ctx` set, the node lowered here is widened to `ctx`
+            // (`lower_leaf_in_ctx`). Without it this is the pre-slice
+            // `lower_expr_ungated(e)`, byte for byte.
+            _ => self.lower_leaf_in_ctx(e, ctx),
         }
     }
 
@@ -977,10 +993,39 @@ impl Elaborator<'_> {
         ) && (self.expr_is_string_ast(lhs) || self.expr_is_string_ast(rhs))
     }
 
+    /// §6.2: a bitwise `~` or a reduction is not defined on a real operand (`+`/`-`
+    /// are real-preserving and `!` is logical, so those three stay legal). THE one
+    /// spelling, called by both lowering walks' `Unary` arms — it was written twice
+    /// only in `lower_expr_ungated`, and the `lower_expr_ctx` twin's silence became
+    /// reachable the moment a fill-free expression could enter that walk.
+    pub(crate) fn check_unary_real_operand(&mut self, irop: ir::UnOp, operand: u32) {
+        if self.expr_is_real(operand)
+            && matches!(
+                irop,
+                ir::UnOp::BitNot
+                    | ir::UnOp::RedAnd
+                    | ir::UnOp::RedNand
+                    | ir::UnOp::RedOr
+                    | ir::UnOp::RedNor
+                    | ir::UnOp::RedXor
+                    | ir::UnOp::RedXnor
+            )
+        {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "bitwise/shift/reduction not defined on real operand",
+            );
+        }
+    }
+
     /// Lower `e` with context width `ctx` if it contains a fill in a context-
     /// propagating position; otherwise the byte-identical plain `lower_expr`.
     pub(crate) fn lower_ctx_or_plain(&mut self, e: &ast::Expr, ctx: u32) -> u32 {
-        if expr_contains_fill(e) {
+        // The second disjunct is the inline-body opt-in (`inline_body_ctx.rs`): a
+        // fill-free rhs needs the SAME walk when the context is an inline function
+        // body's declared return/local width, because that route has no net write
+        // for the engine to size the rhs against.
+        if expr_contains_fill(e) || (self.inline_ctx_ext.is_some() && ctx > 0) {
             self.lower_expr_ctx(e, ctx)
         } else {
             self.lower_expr(e)

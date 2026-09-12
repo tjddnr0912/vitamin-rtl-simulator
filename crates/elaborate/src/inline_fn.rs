@@ -10,6 +10,18 @@ use super::*;
 pub(crate) struct InlineScope<'a> {
     pub dims: &'a BTreeMap<String, (u32, bool)>,
     pub writable: &'a std::collections::BTreeSet<String>,
+    /// Every target this body writes whose declared type is NOT a bit vector — a
+    /// `real`/`realtime` local, and the function's own name when the RETURN is
+    /// `real`/`realtime`. Such a target is not a §11.6.1 width context at all
+    /// (§11.8.1: the integral rhs is self-determined and its RESULT converts), so
+    /// `lower_inline_assign_rhs` must not open one: `function real rmul; rmul =
+    /// a8 * b8;` with `a8 = b8 = 8'hFF` is `1.000000` in both oracles — the
+    /// product folded at 8 bits, THEN converted — and `65025.000000` if the
+    /// declared width is taken as a context. `dims` cannot answer this: a real
+    /// local IS in it (it carries a width for `resize_inline_assign`, which
+    /// stands down on a real rhs of its own accord), and `string`/handle targets
+    /// are the ones `dims` omits.
+    pub non_bv: &'a std::collections::BTreeSet<String>,
     /// Set by the `writable` refusal so the caller's generic "control flow" message
     /// does not overwrite a reason that was already given.
     ///
@@ -912,6 +924,21 @@ impl Elaborator<'_> {
             .collect();
         writable.extend(func.ports.iter().map(|p| p.name.name.clone()));
         writable.insert(func.name.name.clone());
+        // See `InlineScope::non_bv`. `ast_kind_is_bit_vector` is the same predicate
+        // `body_needs_context_width` classifies targets with, and
+        // `ast_func_return_width` already answers `None` for a real/realtime return.
+        let mut non_bv: std::collections::BTreeSet<String> = decls
+            .iter()
+            .filter(|d| !ast_kind_is_bit_vector(d.kind))
+            .flat_map(|d| d.names.iter())
+            .map(|n| n.name.name.clone())
+            .collect();
+        if matches!(
+            func.ret_type,
+            ast::ParamType::Real | ast::ParamType::Realtime
+        ) {
+            non_bv.insert(func.name.name.clone());
+        }
         // (b) walk the straight-line body, recording the return-var assignment.
         let fname = func.name.name.clone();
         let mut ret: Option<u32> = None;
@@ -924,6 +951,7 @@ impl Elaborator<'_> {
         let scope = InlineScope {
             dims: &local_dims,
             writable: &writable,
+            non_bv: &non_bv,
             named_a_reason: std::cell::Cell::new(false),
         };
         let ok = self.fold_straight_line(&func.body, &fname, ret_w, ret_signed, &scope, &mut ret);
@@ -1007,19 +1035,18 @@ impl Elaborator<'_> {
                     scope.named_a_reason.set(true);
                     return false;
                 }
-                // §11.6: a fill rhs is sized to the LHS width — the return-type width
-                // for `fname = …`, the declared width for a body/block local (non-
-                // fill ⇒ byte-identical via lower_expr).
+                // §11.6.1: the rhs is lowered IN the LHS width context — the
+                // return-type width for `fname = …`, the declared width for a
+                // body/block local. See `inline_body_ctx.rs`: this is the width
+                // the frame route gets from the engine's net write, so `fld * x`
+                // in a `[31:0]` body folds at 32 rather than at 8.
                 let (ctx_w, ctx_signed) = if target == fname {
                     (ret_w, ret_signed)
                 } else {
                     scope.dims.get(&target).copied().unwrap_or((0, false))
                 };
-                let rhs_id0 = if ctx_w == 0 {
-                    self.lower_expr(rhs)
-                } else {
-                    self.lower_ctx_or_plain(rhs, ctx_w)
-                };
+                let rhs_id0 =
+                    self.lower_inline_assign_rhs(rhs, ctx_w, !scope.non_bv.contains(&target));
                 // §10.7: apply the LHS-declared width/sign the inline SSA path
                 // otherwise misses (no net write). ctx_w==0 = unknown/implicit
                 // width ⇒ leave untouched (byte-identical). A real-valued rhs —
@@ -1056,11 +1083,8 @@ impl Elaborator<'_> {
             // read-only-dyn carve-out.
             ast::Stmt::Return { value, .. } => {
                 if let Some(e) = value {
-                    let rhs_id0 = if ret_w == 0 {
-                        self.lower_expr(e)
-                    } else {
-                        self.lower_ctx_or_plain(e, ret_w)
-                    };
+                    let rhs_id0 =
+                        self.lower_inline_assign_rhs(e, ret_w, !scope.non_bv.contains(fname));
                     let rhs_id = if ret_w == 0 || self.cast_operand_is_real(e, rhs_id0) {
                         rhs_id0
                     } else {

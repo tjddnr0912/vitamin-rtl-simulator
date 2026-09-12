@@ -192,6 +192,7 @@ impl<'s> Elaborator<'s> {
             in_assert_synth: false,
             subst: Vec::new(),
             verbatim_actuals: BTreeSet::new(),
+            inline_ctx_ext: None,
             param_type_guessed: BTreeSet::new(),
             out_subst: Vec::new(),
             dyn_subst: Vec::new(),
