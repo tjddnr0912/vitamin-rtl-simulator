@@ -219,8 +219,40 @@ impl Elaborator<'_> {
             ast::ExprKind::PkgScoped { pkg, name } if consts => {
                 self.pkg_const_read_signed(&pkg.name, &name.name)
             }
-            // calls / sysfuncs / hierarchical refs / patterns → indeterminate here.
-            // A call is its own slice: `expr_self_signed`'s `_ => false` has 21
+            // The explicit SIGN STAMPS. `$signed(e)` / `$unsigned(e)` are signed /
+            // unsigned by definition (§11.8.1 — the operand's own sign is exactly
+            // what the stamp overrides) and a signing cast is the same stamp in
+            // cast syntax (§6.24.1). A SIZE cast keeps its operand's signedness
+            // (§6.24.1), and a primitive cast carries the type's own
+            // (`cast_prim_wsign`; `real'(e)` is `None` there, and stays a decline).
+            // A typedef / `parameter type` cast can name `real`, so it declines.
+            //
+            // These arms used to sit in the `_ => None` tail below, which made every
+            // stamped leaf stand the WHOLE region down on both consumers of this
+            // walk: `function [31:0] f; f = $unsigned(s8) * q8;` printed `00000020`
+            // where both oracles print `0000d820`, and the size-cast twin
+            // `16'($signed(u8) * q8)` printed `0020` for `0120` — the stamp was
+            // right, the region around it was folded at 8 bits. Gated on `consts`
+            // like the constant arms: under an opaque leaf the pre-slice classifier
+            // must answer verbatim (`size_ctx_route`).
+            ast::ExprKind::SysCall { name, args }
+                if consts && args.len() == 1 && name.name == "$signed" =>
+            {
+                Some(true)
+            }
+            ast::ExprKind::SysCall { name, args }
+                if consts && args.len() == 1 && name.name == "$unsigned" =>
+            {
+                Some(false)
+            }
+            ast::ExprKind::Cast { target, expr } if consts => match target {
+                ast::CastTarget::Signing { signed } => Some(*signed),
+                ast::CastTarget::Size(_) => self.ctx_signed_impl(expr, consts),
+                ast::CastTarget::Prim(p) => cast_prim_wsign(*p).map(|(_, s, _)| s),
+                ast::CastTarget::Named(_) | ast::CastTarget::SigningParam { .. } => None,
+            },
+            // calls / other sysfuncs / hierarchical refs / patterns → indeterminate
+            // here. A call is its own slice: `expr_self_signed`'s `_ => false` has 21
             // callers, so answering it here would widen a 2-site blast radius to 21.
             _ => None,
         }
