@@ -500,19 +500,48 @@ impl Elaborator<'_> {
         while let ast::ExprKind::Paren { inner } = &top.kind {
             top = inner;
         }
-        let sized_by_operator = matches!(
+        let sized_by_type = matches!(
             &top.kind,
             ast::ExprKind::Unary {
                 op: ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot,
                 ..
             } | ast::ExprKind::Binary { .. }
                 | ast::ExprKind::Ternary { .. }
+        ) || matches!(
+            &top.kind,
+            // §2 "Index sealing": a BARE integer-returning system function is
+            // type-determined (32 bits, signed) exactly as the wrapped twin
+            // `~$bits(x)` already is — this is `param_decl_width_opt`'s arm
+            // (`params.rs:706`) one lane over, on the OVERRIDE channel.
+            //
+            // Why the ARGUMENT, not the name, decides which cells move: the WIDE
+            // channel runs FIRST — `self_meta_binds` (`params.rs:1846`) requires
+            // `ovr_bits.is_none()` — and `override_bits`' `$bits` arm
+            // (`const_wide.rs:808`) needs its argument folded in the BIT domain,
+            // which `wide_name_bits` answers only for parameters / package
+            // constants / types. So `#(.P($bits(<param>)))`, `$bits(<type>)`,
+            // `$clog2(<param>)` keep binding through the wide channel and are
+            // byte-identical here; only the calls whose argument is a DATA object
+            // (`$bits(x)`, `$bits({x,x})`, `$clog2($bits(x))`, `$rtoi(2.9)`) fall
+            // through to this rung, where the default literal's width (`parameter
+            // P = 1'b0` → 1, `= 4'd0` → 4) used to answer instead of the call's 32.
+            // Measured over 52 designs: 17 cells move to the two agreeing oracles,
+            // 26 correct cells unchanged, 9 loud cells stay loud (they fail the
+            // VALUE half — `override_self_value` requires `const_eval_in_scope`).
+            //
+            // ⚠️ NAMED list (`sys_fn_is_integer` = `$clog2 | $bits | $rtoi`), never
+            // a blanket `SysCall`: `const_self_width` (`const_fn_width.rs:262`) and
+            // `const_signed_env` (`:368`) both answer 32 / signed for ANY `SysCall`,
+            // so a real-returning call reaching them would be sized wrong. The
+            // `$size`/`$high`/`$low`/`$left`/`$right`/`$increment` family is
+            // deliberately outside the list and stays loud (its own row).
+            ast::ExprKind::SysCall { name, .. } if sys_fn_is_integer(&name.name)
         );
         // §2 "Index sealing" residue ⓐ: a NAME leaf whose DECLARED width this
         // scope can prove. Empty for a literal-only tree, which is every cell
         // §4.5.463's census covered, so that lane is byte-identical.
         let envw = self.declared_override_widths(e)?;
-        if !sized_by_operator
+        if !sized_by_type
             || ast_contains_fill(e)
             || !Self::ctx_width_names_are_evident(e, &envw)
             || !self.const_ctx_within_i64(e)
