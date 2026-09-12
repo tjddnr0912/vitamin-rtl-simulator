@@ -61,7 +61,22 @@ fn expr_call_may_write_ident(e: &ast::Expr, name: &str, out: Option<OutActualWri
                 && !container_method_is_pure(&cn.segments[1].name))
                 || arg_writes(args),
         ),
-        K::SysCall { args, .. } | K::ClassNew { args } => arg_writes(args),
+        // A system FUNCTION writes only its WRITE-dest args (`$sscanf(.., name)`,
+        // `$fgets(name, ..)` in expression position, the SEED of `$random(seed)` /
+        // `$dist_*(seed, …)`) — `syscall_writes_arg`, the write view of the table the
+        // statement-form arm below reads; a READ arg can still host a nested
+        // copy-back call, so every arg is scanned for one. This arm
+        // used to count EVERY argument as a write, and the multidriver Rule A walk
+        // reads that as "written by `always_comb`": `always_comb a = $signed(u8) * q8;`
+        // beside `logic [7:0] u8 = 8'hF7` was a false-loud E3001 where both oracles run
+        // it (and so were `$clog2(u8)`, `$bits(u8)`, `$countones(u8)`), while the
+        // stamp-free `u8 * q8` beside it was fine. For the accept-gate consumers the
+        // change only removes false "may-write" answers on pure-function arguments.
+        K::SysCall { name: sn, args } => args.iter().enumerate().any(|(i, a)| {
+            (syscall_writes_arg(sn.name.as_str(), i) && expr_reads_ident(a, name))
+                || expr_call_may_write_ident(a, name, out)
+        }),
+        K::ClassNew { args } => arg_writes(args),
         K::MethodCall { recv, args, .. } => {
             // `name.method(…)` (a mutating queue/array method) writes `name`, and an
             // arg may bind to an output/inout formal.
@@ -581,13 +596,10 @@ fn stmt_may_write_or_observe(
         // copy-back call too.
         SysTaskCall {
             name: task, args, ..
-        } => {
-            let reads = syscall_read_args(task.name.as_str(), args);
-            args.iter().any(|a| {
-                (!reads.iter().any(|r| std::ptr::eq(r, a)) && expr_reads_ident(a, name))
-                    || expr_call_may_write_ident(a, name, out)
-            })
-        }
+        } => args.iter().enumerate().any(|(i, a)| {
+            (syscall_writes_arg(task.name.as_str(), i) && expr_reads_ident(a, name))
+                || expr_call_may_write_ident(a, name, out)
+        }),
         // Deferred immediate assertion `assert #0 (c) [pass] else fail;` — the pass /
         // fail ACTION blocks can WRITE `name`, and the sampled cond can host a call.
         DeferredAssert {

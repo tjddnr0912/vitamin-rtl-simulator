@@ -8,6 +8,31 @@ use super::*;
 /// `$cast`/`$value$plusargs` and never otherwise read is write-only, so must not trip
 /// the coalesce read-gate). Every other task reads all its args. This must cover EVERY
 /// sysfunc vita supports as a direct-rhs writer, else its write-only dest is misread.
+/// Does system function / task `name` WRITE its `i`-th argument back? The
+/// destination-taking family is the complement of [`syscall_read_args`] (one
+/// table, two views); on top of it `$random(seed)` and every `$dist_*(seed, …)`
+/// write their SEED back (IEEE §20.15.1 / §20.15.2 — the engine's
+/// `StmtEffect::SeededRandom` / `SeededDist`), and the seed is READ as well, which
+/// is why it is not a read-table entry. `$urandom(seed)` takes its seed as an input
+/// (§18.13.1) and writes nothing.
+///
+/// The consumer is the never-writes walk (`da/writes.rs`), whose `SysCall` arm used
+/// to count EVERY argument as a write: narrowing it to the read table alone let an
+/// `automatic integer sd = 7; a = $random(sd);` under a `fork` be proven
+/// "never reassigned" (`const_immune`) and flattened, so both activations drew
+/// from one seed — round-1 soundness, §4.5.498.
+pub(crate) fn syscall_writes_arg(name: &str, i: usize) -> bool {
+    match name {
+        "$sformat" | "$swrite" | "$swriteb" | "$swriteh" | "$swriteo" | "$fgets" | "$fread"
+        | "$cast" => i == 0,
+        "$sscanf" | "$fscanf" => i >= 2,
+        "$value$plusargs" => i == 1,
+        "$random" | "$dist_uniform" | "$dist_normal" | "$dist_exponential" | "$dist_poisson"
+        | "$dist_chi_square" | "$dist_t" | "$dist_erlang" => i == 0,
+        _ => false,
+    }
+}
+
 pub(crate) fn syscall_read_args<'a>(task: &str, args: &'a [ast::Expr]) -> &'a [ast::Expr] {
     match task {
         // dest is arg 0; the remaining args are read inputs (`$cast(dst, src)` writes
