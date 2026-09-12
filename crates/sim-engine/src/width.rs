@@ -229,3 +229,20 @@ pub(crate) fn lvalue_targets_real(ir: &SimIr, lhs: &sim_ir::Lvalue) -> bool {
             .is_some_and(|n| matches!(n.kind, sim_ir::NetKind::Real))
     })
 }
+
+/// The width a FORMAL's slot lends to its actual — the argument-binding twin of
+/// [`lvalue_targets_real`]. `None` for a `real` / `realtime` formal: §11.8.1 makes
+/// the actual self-determined (its RESULT converts), and the slot's 64 is a
+/// storage size. Binding at it made `f(a8 * b8)` into an `input real` read
+/// `65025.000000` where both oracles (and `real r; r = a8 * b8;` here) read
+/// `1.000000`. Four sites ask this question — the `Expr::Call` arm (through
+/// `NetReader::formal_width`), `split_in_binds`, and the nested task-call copy-in
+/// in `run_task_inner` — and every one of them has been missed once (§4.5.194's
+/// sign fix reached two of three), which is why it is a named function.
+pub(crate) fn formal_lends_width(nv: &sim_ir::NetVar) -> Option<u32> {
+    if matches!(nv.kind, sim_ir::NetKind::Real) {
+        None
+    } else {
+        Some(nv.width.max(1))
+    }
+}

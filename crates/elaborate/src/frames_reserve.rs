@@ -778,6 +778,10 @@ impl Elaborator<'_> {
         // §7.4.2 / §4.5.359: the function's RETURN net, same unit as the formals below.
         let ret_odd_bound = self.declared_odd_bound(func.range.as_ref()).is_some();
         let (ret_width, ret_signed) = self.func_return_dims_opt(func, ret_odd_bound);
+        let ret_is_real = matches!(
+            func.ret_type,
+            ast::ParamType::Real | ast::ParamType::Realtime
+        );
         let scope_seg = format!("$func${name}");
         // The return var is named by the FUNCTION's own name, not the frame-table key
         // — the body assigns / reads it by that name (`f = E;` / `return f`). These are
@@ -951,6 +955,18 @@ impl Elaborator<'_> {
                     // (a string bypasses width via `resize_keep_sign`, which keeps is_str).
                     kind: if func.ret_string {
                         ir::NetKind::String
+                    } else if ret_is_real {
+                        // A `real` / `realtime` return is a REAL net, like a `real`
+                        // body local or formal already is (`frame_local_net_kind` /
+                        // `formal_net_kind`). As a `Reg` it lent its 64-bit STORAGE
+                        // width to every `fname = e` / `return e` in the body — the
+                        // engine's real-target guard (`width::lvalue_targets_real`)
+                        // keys on the kind and never saw it — so `function automatic
+                        // real f; f = a8 * b8;` with `a8 = b8 = 8'hFF` printed
+                        // `65025.000000` where both oracles print `1.000000`; and the
+                        // realness table (`func_ret_is_real` reads THIS kind) called
+                        // every such call integral, so `f() / 2` divided as integers.
+                        ir::NetKind::Real
                     } else if ret_width == 32 && ret_signed {
                         ir::NetKind::Integer
                     } else {
@@ -962,7 +978,14 @@ impl Elaborator<'_> {
                     signed: ret_signed,
                     array_len: 1,
                     dir: ir::PortDir::Internal,
-                    init: default_init(ast::NetVarKind::Reg, ret_width),
+                    init: default_init(
+                        if ret_is_real {
+                            ast::NetVarKind::Real
+                        } else {
+                            ast::NetVarKind::Reg
+                        },
+                        ret_width,
+                    ),
                 },
             );
             // A 2-state return type can never hold X/Z — register the return slot

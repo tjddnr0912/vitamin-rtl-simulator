@@ -253,8 +253,10 @@ pub(crate) fn split_in_binds<K: Kernel + ?Sized>(
             //
             // ⭐ The INLINE (non-frame) call path was already correct, so this is the
             // one-branch-of-a-pair shape rather than a new rule.
+            // A `real` formal lends no width at all (`width::formal_lends_width`).
             let (sw, s_signed) = k.k_self_width(e);
-            let v = k.k_eval_ctx(e, nv.width.max(1).max(sw), s_signed);
+            let fw = crate::width::formal_lends_width(nv).unwrap_or(0);
+            let v = k.k_eval_ctx(e, fw.max(sw), s_signed);
             in_v.push((slot, v));
         }
     }

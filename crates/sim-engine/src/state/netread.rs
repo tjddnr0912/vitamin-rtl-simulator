@@ -368,7 +368,9 @@ impl NetReader for SimState<'_> {
             return None;
         }
         let nv = &self.ir.nets[(m.base_net + i as u32) as usize];
-        Some((nv.width.max(1), nv.signed))
+        // A `real` formal lends no width (`width::formal_lends_width`); `None` is
+        // exactly the caller's "evaluate at the actual's own width" fallback.
+        Some((crate::width::formal_lends_width(nv)?, nv.signed))
     }
     fn formal_is_string(&self, func: u32, i: usize) -> bool {
         // A `string` formal lowers to a 1-bit Wire net (a string is a dynamic

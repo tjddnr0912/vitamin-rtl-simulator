@@ -1151,8 +1151,25 @@ impl Elaborator<'_> {
                         // §11.6: the return value is in the context of the return
                         // var's width, so a fill grows to that width (non-fill ⇒
                         // byte-identical via lower_expr).
+                        //
+                        // ⚠️ A REAL return var has no bit width to lend (§6.12 /
+                        // §11.8.1): its 64 is the STORAGE size, and sizing a fill to
+                        // it made `return '1;` in a `real` function read
+                        // 18446744073709551615 → as signed → `-1.000000` where both
+                        // oracles print `1.000000`. The same guard
+                        // `resize_rhs_for_lvalue` applies to `fname = '1;`.
                         let ctx_w = match retvar {
-                            Some(rv) => self.nets.get(rv as usize).map(|n| n.width).unwrap_or(32),
+                            Some(rv) => self
+                                .nets
+                                .get(rv as usize)
+                                .map(|n| {
+                                    if n.kind == ir::NetKind::Real {
+                                        0
+                                    } else {
+                                        n.width
+                                    }
+                                })
+                                .unwrap_or(32),
                             None => 0,
                         };
                         // R16 §3.7: `return f(arr);` where `f` has an `input` dynamic-array

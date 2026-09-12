@@ -264,7 +264,19 @@ impl<'a> SimState<'a> {
             self.cur_block_scope.replace(saved_scope);
             return Value::from_str_bytes(text.as_bytes());
         }
-        let lw = self.lvalue_width(lhs);
+        // §6.12: a real destination lends no width — see `width::lvalue_targets_real`.
+        // ⚠️ THE FOURTH SITE THAT ASKS THIS QUESTION, and the one every FRAME body
+        // assignment takes (`Scheduler::eval_for_lvalue`, `k_eval_for_lvalue` and
+        // `compile_body` are the module-process sites). Without it a `real` local,
+        // an `output real` formal and the `real` return slot all lent their 64-bit
+        // storage width: `function automatic real f; f = a8 * b8;` with
+        // `a8 = b8 = 8'hFF` printed `65025.000000` where both oracles print
+        // `1.000000`, while the identical statement in a module process was right.
+        let lw = if crate::width::lvalue_targets_real(self.ir, lhs) {
+            0
+        } else {
+            self.lvalue_width(lhs)
+        };
         let sw = self.wt.get(rhs);
         self.eval_ctx_with_opt(nets, rhs, lw.max(sw.width), sw.signed)
     }
@@ -423,6 +435,7 @@ impl<'a> SimState<'a> {
         // it applies (val &= !unk; unk = 0) must be repeated here — for the arg
         // copy-IN, body-local assignments, and the return slot alike.
         let v = self.coerce_two_state_frame(func, slot, v);
+        let v = self.coerce_real_frame(func, slot, v);
         if automatic {
             // `v` is already owned (computed before any borrow). Route by the top WindowSlot;
             // a `Shared(h)` writes into the arena. No eval inside either arm (§borrowDiscipline
@@ -470,6 +483,33 @@ impl<'a> SimState<'a> {
             }
         }
         v
+    }
+
+    /// The real↔int assignment coercion (IEEE 1364 §6.2) for a frame slot — the
+    /// `value::coerce_assign` matrix the module write funnel (`write_lvalue`)
+    /// applies, keyed on the slot net's `is_real` exactly as that funnel keys on
+    /// the destination net's. Frame slot writes bypass `write_chunk` (see
+    /// `coerce_two_state_frame` above, the other coercion repeated here for the
+    /// same reason), so a `real` local, formal or return slot used to STORE the
+    /// integral value it was handed, untagged: `function automatic real f; f =
+    /// a8 * b8; f = f / 4;` divided as integers (`0.000000` for both oracles'
+    /// `0.250000`), and `f() / 2` outside the body did the same — while the
+    /// identical statements on a module `real` net converted at the write.
+    pub(crate) fn coerce_real_frame(&self, func: u32, slot: u32, v: Value) -> Value {
+        let Some(net) = self
+            .func_table
+            .get(func as usize)
+            .map(|m| (m.base_net + slot) as usize)
+        else {
+            return v;
+        };
+        let Some(ns) = self.nets.get(net) else {
+            return v;
+        };
+        if !ns.is_real && !v.is_real {
+            return v;
+        }
+        crate::value::coerce_assign(ns.is_real, v, ns.width, ns.signed)
     }
 
     /// Store the fully-evaluated `v` into a whole-net frame-local lvalue. The

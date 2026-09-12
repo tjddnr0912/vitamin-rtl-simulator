@@ -301,12 +301,9 @@ impl SimState<'_> {
                             // callee is non-suspendable, so one `$display` in the callee
                             // routes the call to the already-fixed path instead; that is
                             // why every earlier nested-call probe missed it.
-                            let v = self.eval_ctx_with_opt(
-                                nets,
-                                e,
-                                nv.width.max(1).max(sw.width),
-                                sw.signed,
-                            );
+                            // A `real` formal lends no width (`width::formal_lends_width`).
+                            let fw = crate::width::formal_lends_width(nv).unwrap_or(0);
+                            let v = self.eval_ctx_with_opt(nets, e, fw.max(sw.width), sw.signed);
                             in_v.push((slot, v));
                         }
                     }

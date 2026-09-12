@@ -296,12 +296,13 @@ endmodule
 /// {8 two-state formals} x {5 real actual forms} regressed, and it is the same
 /// symptom §4.5.323 round 2 hit from a different door.
 ///
-/// The guard has to be the AST-aware `cast_operand_is_real`, because a frame
-/// `Expr::Call` is opaque to the IR-level `expr_is_real`: a real-returning
-/// function's return var is a 64-bit `Reg` net holding the payload, not a
-/// `NetKind::Real`. Row `call` is that shape, and it pins the PRE value — a real
-/// actual is not CONVERTED to the formal's integer type (iverilog says 5), and
-/// refusing to trade one silent-wrong for another is all this guard claims.
+/// The guard is the AST-aware `cast_operand_is_real`. Row `call` used to be the
+/// shape the IR-level `expr_is_real` could NOT see — a real-returning frame
+/// function's return var was a 64-bit `Reg` net holding the payload — and it
+/// pinned PRE's `0`. Since §4.5.494 that return slot is a `NetKind::Real`, so the
+/// call IS real to both halves of the guard and the row prints iverilog's 5
+/// (`4.0 + 1`, sealed to the 8-bit return): the value moved silent → correct,
+/// measured on both oracles, and the pin moved with it.
 #[test]
 fn a_real_actual_is_never_bit_coerced_into_a_2_state_formal() {
     let o = run(r#"module t;
@@ -321,9 +322,9 @@ fn a_real_actual_is_never_bit_coerced_into_a_2_state_formal() {
 endmodule
 "#);
     // Rows 1-2 are iverilog's and were iverilog's in PRE too; an ungated build
-    // printed `0 9 0` and `4615514078110652826 154`. Row 3 is PRE's value and
-    // iverilog's is 5 (ROADMAP §2: no real→integer conversion at an inline bind).
-    assert_eq!(o, "9 9 9\n4 4\n0");
+    // printed `0 9 0` and `4615514078110652826 154`. Row 3 is both oracles' 5
+    // (PRE printed 0 — the payload of 4.0, plus one, truncated).
+    assert_eq!(o, "9 9 9\n4 4\n5");
 }
 
 /// The ORDER of the width resize and the 2-state coercion. Coercing FIRST loses
@@ -451,22 +452,27 @@ endmodule
 /// IR-only real test — the same thing as dropping the AST half. Only a
 /// MULTI-ARGUMENT call can see the false-positive direction, where argument 0 reads
 /// argument 1's AST, decides "real", and skips a coercion it owed.
+///
+/// The real actual is read through `$rtoi(b)`, not `b[31:0]`: since §4.5.494 a
+/// real-returning call IS real at the inline bind, which substitutes the actual
+/// VERBATIM (ROADMAP §2: no real→integer conversion at an inline bind), so a
+/// part-select of `b` is the §6.2 loud that a select of a real always was. The
+/// teeth are unchanged — a misaligned index still makes the HIGH half `xxxx00f7`.
 #[test]
 fn the_ast_actual_is_matched_to_its_own_formal() {
     let o = run(r#"module t;
   logic [31:0] xn = 32'hxxxx_00f7;
   function automatic real arf(input d); arf = 4.0; endfunction
-  function [63:0] two(input longint a, input longint b); two = {a[31:0], b[31:0]}; endfunction
+  function [63:0] two(input longint a, input longint b); two = {a[31:0], $rtoi(b)}; endfunction
   initial begin
     $display("%h", two(xn, arf(0)));
     #1 $finish;
   end
 endmodule
 "#);
-    // The high half is iverilog's (x/z→0 in a `longint`); an off-by-one index makes
-    // it `xxxx00f7`, which is PRE's value. The low half is the documented real→
-    // integer gap — iverilog converts 4.0 and prints `00000004`.
-    assert_eq!(o, "000000f700000000");
+    // Both oracles. The high half is x/z→0 in a `longint`; an off-by-one index
+    // makes it `xxxx00f7`. The low half is `$rtoi(4.0)`.
+    assert_eq!(o, "000000f700000004");
 }
 
 /// The coercion names its operand once per DECLARED bit, and a nested call feeds

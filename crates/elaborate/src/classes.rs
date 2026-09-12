@@ -542,6 +542,15 @@ impl Elaborator<'_> {
         // frame-function reserve; `reserve_class_method` previously did this for NONE, so
         // a 2-state class-method local silently kept an X-write (`bit x = 8'hxA` → `xa`).
         let ret_two_state = method.func.as_ref().is_some_and(|f| f.ret_two_state);
+        // A `real` / `realtime` method return is a REAL slot — the twin of the
+        // `reserve_frame_func` arm (round-1 soundness of §4.5.494: this SECOND copy
+        // of the return-slot construction was missed, so the frame write's real
+        // coercion rounded `c.ch()` = 2.5 to 3 through a `Reg` slot, and the
+        // body's `cm = a8 * b8` still took the slot's 64-bit storage width).
+        let ret_is_real = method
+            .func
+            .as_ref()
+            .is_some_and(|f| matches!(f.ret_type, ast::ParamType::Real | ast::ParamType::Realtime));
         let (ports, body_decls): (Vec<ast::TfPort>, Vec<ast::NetVarDecl>) =
             match (&method.func, &method.task) {
                 (Some(f), _) => (f.ports.clone(), f.body_decls.clone()),
@@ -643,7 +652,9 @@ impl Elaborator<'_> {
             s.add_net(
                 &mname,
                 ir::NetVar {
-                    kind: if ret_width == 32 && ret_signed {
+                    kind: if ret_is_real {
+                        ir::NetKind::Real
+                    } else if ret_width == 32 && ret_signed {
                         ir::NetKind::Integer
                     } else {
                         ir::NetKind::Reg
@@ -654,7 +665,14 @@ impl Elaborator<'_> {
                     signed: ret_signed,
                     array_len: 1,
                     dir: ir::PortDir::Internal,
-                    init: default_init(ast::NetVarKind::Reg, ret_width),
+                    init: default_init(
+                        if ret_is_real {
+                            ast::NetVarKind::Real
+                        } else {
+                            ast::NetVarKind::Reg
+                        },
+                        ret_width,
+                    ),
                 },
             );
             // A 2-state return coerces X/Z→0 (§6.11.3); the specific 2-state kind is
