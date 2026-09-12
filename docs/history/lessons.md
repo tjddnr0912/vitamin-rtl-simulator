@@ -15,6 +15,84 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ## 2026-09-12
 
+### Narrow a shared gate on the binding, not on the declaration (§4.5.490)
+
+The scoped-call slice added a scope-leak check on the lane it had just opened, and the check was a
+correct→loud regression on an inner block-local that is declared, never referenced inside its block
+and carries no initializer. The gate is shared, so the same false-loud was already live in the module
+and import lanes; narrowing it looked like a free gain on three lanes at once. Three rounds
+disagreed, each with a new blocking finding and each finding produced by the previous fix.
+
+Round 1 shipped `decl_is_inert` — no initializer, and provably unreferenced by the conservative
+`stmt_no_ref_deep` walker. Round 2 measured that the stand-down let the inline-fold lane's name-keyed
+§11.6.1 context lookup pick the INNER declaration's geometry: `logic [31:0] v` outside,
+`logic [7:0] v` in the inert inner block, and the body printed `V=1` where both oracles print
+`V=fe01` — a silent-wrong the gate had been hiding. Round 2 answered with condition (c), comparing
+the inner declarator's kind class, packed width and signedness with an outer twin resolved in IEEE
+§6.21 order. That alone caused a correct→loud on the package lane (`soundness-r2/d6.sv`, `Z=300` in
+PRE and in both oracles, E3009 with (c) plus the feed's gate), so the feed's gate was dropped. Round 3
+then found that `outer_twin_geometry` cannot see a twin declared in the subroutine body's ROOT block:
+`gather_nested_block_locals(body, …)` yields only blocks nested INSIDE the body, so step (2) answered
+with `rtn.body_decls` — an outer scope, not the one the read binds to — and (c) was satisfied against
+the wrong declaration. Four cells, PRE correctly loud, R1 and R2 silently wrong (`V=1`, `V=fe01`,
+`V=-1`, `V=1` against oracles `fe01`, `1`, `255`, `fe01`), and one of them a static TASK, so the class
+was not even confined to the lane the round-2 fix was written for.
+
+Three blockers on one axis, each the product of the previous fix, is CLAUDE.md D8's stop signal. The
+whole narrowing was reverted — `git diff main --stat` over `block_local/` and `generate.rs` empty —
+and the slice shipped the feed alone, with the scoped lane ungated and PRE byte-identical on that
+axis. What every attempt shares is the prerequisite: all three keyed on a property of a DECLARATION
+that shares the name, and the question the gate has to answer is which declaration the post-block
+reference BINDS to. That is now one §3 row (the false-loud) and one §2 row (the ungated scoped lane),
+with the prerequisite written once.
+
+### A real domain has two sides, and closing one is not closing the class (§4.5.491)
+
+Making an inline function body's return assignment a §11.6.1 width context was measured on the
+bit-vector axis and shipped clean there: 20 cells silent→correct, every self-determined position
+byte-identical. The review then found the same defect twice, on two sides of one class.
+
+Round 1, the differential lens: a `real` or `realtime` TARGET was now treated as a bit-width context.
+`function automatic real f; f = a8*b8;` printed `65025.000000` where PRE and both oracles print
+`1.000000` — 8 cells. The fix needed a new set, not an existing one: a real body-local IS in `dims`
+(it carries a width for `resize_inline_assign`) and `dims` omits string and handle targets instead, so
+`InlineScope::non_bv` was added and the opt-in took a `target_is_bv` argument.
+
+Round 2, the same lens: the OPERAND side was still open. `f = a8*b8 + r;` with a bit-vector target and
+a real anywhere in the rhs widened the region — 15 cells, `65028` against both oracles' `4`, across
+every producer of a real (a literal, a body local, a formal, `$sqrt`, `$itor`, a ternary arm, either
+side and one level deeper). The guard that closed it, `rhs_has_real_domain`, is a `_`-free
+conservative walk whose arms are `sim_ir::realness::expr_is_real_node`'s arm for arm, with a producer
+census of every real-domain name resolved through the lowering's own `bare_ident_route`. Its polarity
+is the point and is stated at the function: this is a GUARD, so `true` costs only the opt-in and
+`false` claims a bit-width domain; every arm it cannot resolve answers `true`. The propagation walk
+beside it, `ast_has_real_call`, has the opposite tail (`_ => false`) and could not be reused.
+
+The guard is not "contains a real anywhere": an integral RESULT keeps the context open, which is what
+preserves the gain on `f = a8*b8 + (r > 1.0)` (65025 in both oracles, 1 in PRE) and on
+`(a8*b8) << $rtoi(r)`. Round 3 measured 28 real-route designs and 7 integral-result designs with no
+divergence.
+
+### A pin measured in a slice's own worktree is a bundle pin (§4.5.490 / §4.5.491)
+
+The scoped-call slice's round-2 review needed an attribution control: a design with no name collision
+at all, to show that the `V=1` a stand-down produced was not the stand-down's value. In that slice's
+worktree the control measured `V=1` in PRE and after, both oracles `V=fe01`, and it was pinned as
+`control_no_name_collision_has_the_same_wrong_width` with the attribution written into the doc
+comment — the residue belongs to the inline-fold lane's own §11.6.1 context width, "a different axis,
+unfixed in THIS worktree".
+
+That axis is the sibling slice. In the bundle, §4.5.491 makes `a8 * b8` in a non-`automatic` function
+fold at the return width, so the control's value is `V=fe01` — both oracles' answer — and the pin, as
+written, asserted a silent-wrong as if it were the measurement. It ships renamed and re-valued as
+`control_no_name_collision_has_the_oracle_width`.
+
+Nothing in a slice-local gate can catch this: each worktree's suite is green on its own binary, and
+the bundle's full gate only fails if the pin is wrong AFTER the merge — which is exactly when it is
+too late to tell whether the number was a measurement or an accident. The cheap form is to re-run
+every pin whose subject expression a sibling slice touches against the bundle binary before the
+bundle is reviewed, and to treat the doc comment's "unfixed in this worktree" as the trigger.
+
 ### A grounding's fix shape is a hypothesis — count the cells it moves (§4.5.488)
 
 The oracle grounding for the ascending/non-zero-LSB override row named the right resolvers and

@@ -136,6 +136,44 @@ need updating. What moved:
 
 ### Fixed
 
+- **A `signed` qualifier written on a `time` declaration is now honoured.** `time signed k = -8;`
+  read as unsigned everywhere, so `k/2` printed 9223372036854775804 and `k < 0` printed 0 where both
+  reference tools print −4 and 1. Every place a `time` can be declared carries the qualifier now — a
+  module variable, a block-local, a function or task formal in either port form, a function return
+  type, a typedef, a package variable, an unpacked-array or queue element, a class property and a
+  static or automatic subroutine local — and every consumer reads it signed, including division,
+  modulus, arithmetic right shift, multiplication, comparison, `%0d` rendering and sign extension
+  into a wider vector. A plain `time`, `time unsigned` and the nine other qualified kinds are
+  unchanged, and so are `$time` and delay expressions: a negative `time signed` used as `#(d)` still
+  waits the unsigned value, exactly as both reference tools do. `parameter time signed T` is still a
+  parse error.
+
+- **A static function's body now computes at the width it returns into.**
+  `function [31:0] f; f = a * b;` with two 8-bit operands returned `00000001` — the product was
+  computed at 8 bits and widened afterwards, losing the carry — where both reference tools return
+  `0000fe01`. The same was true of `+`, `**`, `<<`, unary minus and `~`, of a parenthesised
+  sub-expression, of an assignment to a body-local variable with its own declared width, and at every
+  return width (9, 16, 32, 64 bits). Marking the function `automatic` was the workaround and is no
+  longer needed; those bodies are unchanged. Positions the standard keeps self-determined do not
+  widen — a shift amount, a `**` exponent, comparison and reduction operands, concatenation members
+  and the inside of a size cast — and an expression that mixes in a `real` value keeps the real
+  rules, on the target side and on the operand side: `f = a * b + r;` still converts the integer
+  product at its own width. A `$signed(...)` or `$unsigned(...)` operand, and a call used as an
+  operand, are still computed at their own width.
+
+- **A package function or task called as `pk::g()` no longer merges same-named variables declared in
+  sibling blocks of its body.** Two blocks of one package routine each declaring `int x` shared a
+  single variable when the routine was reached by its package-scoped name, so a body that should
+  print 44 printed 88 (and 132 with three such blocks). Importing the routine first was the
+  workaround. The scoped spelling now behaves like the imported one everywhere it can appear — in a
+  process, a continuous assignment, an `always_comb`, a `generate` branch, a class method and an
+  interface body, per instance and per call site — and a package routine that calls a sibling routine
+  of the same package is covered too, whether it was imported or scoped. A module's own routine of
+  the same name, a routine imported from another package, and a module variable that happens to share
+  the name are unaffected. Two shapes are still open on this spelling: a routine reached this way is
+  not checked for a variable read outside the block that declares it (the imported and module
+  spellings refuse that), and a scoped call whose callee holds a block-local is still refused.
+
 - **A block-local variable no longer overwrites an imported package variable of the same name.**
   After `import pk::*`, a `begin integer pv; pv = 99; end` inside a process wrote the package's own
   `pv`, so `pk::pv` read 99 instead of 5 — and because an imported name is an alias to the package's

@@ -49,6 +49,7 @@ Deliberately loud, not gaps: `new[]` on a fixed array; a multi-dimensional parti
 | ⑤ | `$clog2(4'sd7+4'sd1)` (§20.8.1 = the bit pattern at the argument's own width) | 32 | 3 (verilator also 3) |
 | ⑥ | `$itor(64'h1_0000_0008)` (unsigned and signed `longint` both give 8, so this is not the sign axis) | 8 | 4294967304 (verilator identical) |
 | ⑦ | `s<"ab"`, `s<"aa"`, `s<"zz"` with `s="ab"` | all 1 (they cannot all be true) | `0 0 1` (verilator identical) |
+| ⑧ | an `automatic time signed` local inside a frame function | `Assertion failed: (index < get_max(fun_thr, val)), of_RET_VEC4, vthread.cc:5466` (abort) | `-4`, with verilator as the sole oracle |
 
 ### T2 residues (each its own slice)
 
@@ -335,20 +336,23 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Inline / frame binds
 
-- The inline path does not push the declared width into the body where the frame path does (oracles
-  agree): `function [31:0] fh(input [7:0] x); fh = fld * x;` with `8'hFF` is `00000001` when static
-  and `0000fe01` when `automatic`, which is iverilog's answer. `lower_ctx_or_plain(rhs, ctx_w)`
-  sizes fills only.
-- A frame argument bind does not apply the §11.6.1 extension sign (oracles agree): `8'shf7` becomes
-  `000000f7` against iverilog's `0000fff7`. Three funnels share it (frame function, task, class
-  method), so it is a CLASS — 24 of 1,920 cells. Net assignment and port connection are correct, so
-  the site is the bind.
-- `expr_is_repeatable` rejects an array element, so `f(mem[i])` cannot get the bind (oracles agree):
-  `gs(arr[2])` is `00…f7` against iverilog's `ff…f7`. What is needed is not repeatability but
-  side-effect-free duplication.
-- A hierarchical reference or class-field actual cannot get the declared width: the fabricated 32
-  makes `trusted_self_width` answer `None`, the bind stands down, and the result comes out at the
-  actual's width (`hi.hv` into `gs={x,x}` is 8 bits). A generate-scope name behaves the same.
+- The FRAME route takes a §11.6.1 width context on a REAL target where there is none — the mirror
+  image of §4.5.491 (both oracles agree): `function automatic real armul; armul = a8*b8;` with
+  `a8=b8=8'hFF` is `65025.000000` against `1.000000`, and so are `+` (510 against 254) and a signed
+  product (10000 against 16); a static `return a8*b8;` in a real function is pre-framed onto the same
+  route.
+- A `$signed(...)` / `$unsigned(...)` leaf in an inline body is not widened to the region (both
+  oracles agree): `f = $unsigned(s8) * q8;` with `s8 = -9`, `q8 = -32` is `00000020` against
+  `0000d820`. The `$signed(u8) * q8` twin agrees in all three tools, so the class is the one leaf arm.
+- A user CALL as a leaf makes the region's sign walk decline, so the whole rhs keeps its pre-slice
+  lowering (both oracles agree): `f = id8(a8) * b8;` is `00000001` against `0000fe01`. Widening the
+  sign walk to a call is a change to shared size-cast machinery and needs its own opt-in slice.
+- A time literal inside an inline body's region folds at its 64-bit self width (both oracles agree):
+  `f = a8*b8 + 3ns;` is `65028` against `4`.
+- A bit-vector FORMAL written inside an inline body gets no width context (`P=1` against `fe01`), and
+  a `real` block-local declared in a function body is E3010.
+- `pk::gr()`, a real-returning package function, reads 0 in an inline body's region against both
+  oracles' 4.
 - `cast_operand_is_real`'s AST half sees only a bare single segment (oracles agree): `pa(f(0))` is 4
   (correct) while `pa(p::f(0))` sends an f64 payload into a 2-state formal (and so does `c.cm()`).
   Widening it touches 8 call sites.
@@ -375,9 +379,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - `expr_is_repeatable`'s decline leaves a silent default (2-oracle): a user `Call` (`f(rfn(3))`), a
   real array or queue element, a non-whitelisted SysFunc (`$sqrt`, `$itor`, `$bitstoreal`), and
   `p::rf(...)`. Declining `$random` is correct.
-- An explicit `signed` qualifier on a `time` declaration is discarded (2-oracle): with
-  `input time signed k`, `k/2` is −4 in the oracles and 9223372036854775804 in vita, because
-  `kind_signedness` hard-codes `time` to unsigned.
 - An out-of-range real clamps wrongly on integer conversion: `real rv = 1.0e300; byte'(rv)` is 0 in
   both oracles and −1 in vita (the same for ±inf and NaN).
 - `int'($random*1.0)` draws the wrong number of times (both values wrong, and the value changes):
@@ -397,6 +398,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - The body of a real-returning constant function belongs to §3, not §2:
   `localparam real R = f();` gives `E3009 … not a foldable constant expression` where iverilog gives
   0.000000 — honest-loud.
+- `$signed(<real>)` in a function body is accepted silently (`F=4`, exit 0) where iverilog says "The
+  argument to $signed must be a vector type" and verilator "Expected integral input to SIGNED" — the
+  same family as the position-dependent cast cells above.
+- `real unsigned r;` is accepted by vita alone (both oracles reject the declaration, and vita prints
+  `r=-8.000000`); `kind_signedness`'s `Real | Realtime => true` arm is not what accepts it.
 - `$realtobits` and `$bitstoreal` silently accept a non-64-bit argument (iverilog says "requires a
   64-bit argument"); vita answers with the low 64 bits.
 
@@ -437,6 +443,26 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Scoping / imports / block-locals
 
+- An imported package function's body reads a package VARIABLE through the MODULE scope (both
+  oracles agree): `package pk; logic [15:0] x = 16'h0123; function [31:0] g; g = x; endfunction`
+  called from a module that declares its own `logic [7:0] x = 8'hEE` gives `Z=ee` against both
+  oracles' `Z=123`, and with no module net of that name it is `E3010 … undeclared net/variable
+  't.x'` where both oracles still print 123. A package routine body is injected into the caller's
+  tables and lowered against the caller's nets, so it has no package-scope name resolution at all.
+- The SCOPED spelling `pk::g()` reaches no block-local scope-leak gate, so the nested scope-leak
+  shape keeps the flatten's value there (`Z=14`, `Z=1`, `F2=88`, `R=88`, `ff=88` against the oracles'
+  7, 7, 51, 51, 49) while the module and import twins of the identical body are LOUD — an internal
+  lane split. Gating it with today's name-keyed predicate was measured to be a correct→loud
+  regression (§4.5.490 round 2), so the prerequisite is the same as the §3 false-loud row: the gate
+  must resolve the BINDING a post-block reference takes.
+- The inline-fold lane resolves a body's §11.6.1 assignment context BY NAME over all declarations
+  (`inline_fn.rs`, `scope.dims` / `non_bv`), so a same-named declaration in ANY nested block can
+  supply the width or turn the widening opt-in off: `V=1` against both oracles' `fe01` with an
+  8-bit inner and a 32-bit outer twin. Today it is masked by the gate in the module and import lanes.
+  Needs a binding-resolved geometry — three narrowings that keyed on properties of the declaration
+  were each measured to create a new defect.
+- An inner block-local shadowing a FORMAL, with the formal read after the block, reads the
+  block-local: `ff=88` against both oracles' 49.
 - A static shadow pair beside a DISJOINT `automatic` span of the same name still takes the old
   flatten (1-oracle: verilator `MOD=0`, vita `MOD=41`; iverilog rejects the lifetime override): a
   nested `int s` / `int s` pair in an `initial` plus `automatic int s` in a separate `always` makes
@@ -470,11 +496,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   (`int c; c++; $display(c)` called from two modules alternately prints `1 2`); vita gives each
   importing module its own flattened copy (`1 1`). PRE = POST of §4.5.485; root = package routines
   are injected per caller module (`apply_import_routines`) and lowered into the caller's nets.
-- A package routine called by its SCOPED spelling with no import (`pk::g()`) still coalesces
-  same-named sibling block-locals (`Z=88` against both oracles' `44`): `inject_pkg_callees` runs
-  during body lowering, after §4.5.485's recomputation of `scoped_block_locals` (instance step 3.6a).
-  Fix = scan `pkg::name` references before the hoist, or extend the scoped map at injection. Pinned
-  as `a_scoped_call_spelling_is_not_covered_yet`.
 - A CLASS method's same-named sibling block-locals are LOUD, not silent (E3010 on
   `$class$C$m.x` plus an E3009 about writing a net outside the function), where both oracles print
   `A=44 B=55`; `classes.rs` is a separate caller of the reserve.
@@ -629,6 +650,9 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   string channel applies it.
 - `localparam bit [3:0] K = 4'd5; localparam L = K - 20;` is 33-bit `8589934577` in iverilog and
   32-bit `4294967281` in verilator; vita = verilator, identical at module and generate scope.
+- A real beside a bit-vector region in an inline function body: `a8*b8 % 7 + r` is iverilog 6 and
+  verilator 2; `a8*b8 + (1 ? r : 0.0)` is iverilog 65025 and verilator 1; `(a8*b8) ** r` splits the
+  same way. §4.5.491's test designs were respelled onto shapes where both oracles agree.
 - `#(.P(pk::PA + 0))` over a package constant declared `logic [0:35]`: iverilog binds 37 bits and
   verilator 36, while iverilog answers 36 for the BARE name in the same design. vita binds 36 =
   verilator = §11.6.1's `max(36, 32)`; the cell is pinned against verilator alone
@@ -676,6 +700,8 @@ behind the §2 correctness queue.
 |---|---|---|---|---|---|
 | specify | a `specify … endspecify` block is E2002 (`specparam` is accepted as a module constant) | the parser does not accept it | hoist `specparam` and discard path delays and timing checks. Prerequisite: `hdl_parser::parse` has no warning channel, so discarding silently would turn `$setup` from loud into silent — needs a `ModuleItem` marker plus an elaborate `W3056` | iverilog | — |
 | case-inside | `case (x) inside {…}` (§12.5.4) is E2002 | the parser does not accept it | hand-IEEE `==?` plus an internal differential | no oracle | — |
+| pkg-scoped-task | a scoped TASK call `pk::t()` is `E2002 E-PARSE-UNEXPECTED-TOKEN: expected '=' or '<=' after lvalue, found '::'`; the scoped FUNCTION spelling runs | the statement position does not take a scoped name as a call target | accept it there | verilator (iverilog rejects it too) | small |
+| time-signed-param | `parameter time signed T` and `localparam time signed T` are `E2002 … expected identifier, found keyword 'signed'` (twice each) where both oracles bind `-4`; every other declaration site carries the qualifier since §4.5.492 | the parameter grammar at `hdl-parser/src/params.rs:469`; `elaborate/src/params.rs:302-324` carries a comment whose premise is that refusal | accept the qualifier in the parameter position and hand the same `signed` bit `kind_signedness` now reads | 2-oracle | small |
 | based-ws | `64'sh FFFF` is a lexer reject | lexer | accept it | iverilog accepts | minor |
 | tf-localparam | `task automatic t; localparam int K = 3;` gives `E2002 expected statement, found keyword 'localparam'` (IEEE §6.20 allows it) | the parser's statement position | accept the declaration | iverilog | small |
 | blk-automatic | `begin : A automatic int x = 44; … end` inside a task body is E2002 (`static` in the same position is accepted; both oracles run it) | the parser takes a lifetime keyword on a block-local declaration only at the subroutine's own declaration position | accept the keyword in the block-declaration position | 2-oracle | small |
@@ -710,6 +736,9 @@ behind the §2 correctness queue.
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
+| blocal-inert-falseloud | an inner block-local that is DECLARED, never referenced inside its own block and carries no initializer is refused with ``E3009 block-local `x` is referenced outside its `begin…end` block`` although the flatten is byte-correct; both oracles print a value on every measured cell in the module and the import lane (the scoped lane is silently wrong instead — its own §2 row) | `check_block_local_scope_leaks` keys on the NAME, not on the binding a post-block reference takes | the gate must resolve that binding. Three narrowings that keyed on properties of the DECLARATION — inertness, geometry, an outer-twin lookup — were each measured to create a new defect, and the axis was reverted whole (§4.5.490) | 2-oracle | — |
+| pkg-callee-blocal | a scoped `pk::g()` whose TRANSITIVE package callee holds any block-local is ``E3010 … undeclared net/variable `top.$func$pk::g.x` ``; both oracles print 44 | the callee is injected by `inject_pkg_callees` AFTER the step-6.5 frame barrier, so it is never reserved as a frame and is inline-folded without its block-local reservation | reserve the injected callee as a frame, or inject ahead of the barrier. Distinct from the transitive twin bound at step 3.6, which §4.5.490 fixed | 2-oracle | small |
+| iface-pkg-routine | an INTERFACE body applies no package ROUTINE import: `import pk::g;` plus a bare `g()` inside an interface is ``E3010 call to undeclared function `g` [in top.i]`` where both oracles print 44 | `apply_import_routines` is wired for modules and packages; `iface_inst.rs` never calls it | route an interface body's imports like a module's; sibling of `iface-subr` | 2-oracle | small |
 | blocal-collector-parity | `collect_block_local_decls_spanned` (`block_local/mod.rs`) omits the `Wait` / `DelayCtrl` / `EventCtrl` recursion its sibling `gather_nested_block_locals` has, so a block-local declared under a timing-controlled statement in a subroutine body reaches neither the scoped feed nor §4.5.486's static-init prologue | latent: the shape is LOUD today (`E3010 undeclared net/variable top.s.$func$t.x`, PRE = POST), which is the only thing standing between the omission and a silent drop | align the collector with its sibling in the same edit that removes the loud; measure the drop channel first | — | small |
 | iface-subr | a `function` or `task` declared inside an interface is E3009 "outside the MVP"; both oracles run it, and its block-locals therefore never reach either reserver | `frames_reserve.rs` / the interface body gate | route an interface body's subroutines like a module's | 2-oracle | — |
 | dimquery-width | the dimension-query family (`$size`, `$high`, `$low`, `$left`, `$right`) and `$signed` are LOUD in every certified consumer (7 + 6 cells) although both are integer-returning and already foldable, so the §4.5.478 `SysCall` arm's named list excludes them | the named list in `param_decl_width_opt` / `ctx_width_names_are_evident` | admit them with their own census: `$signed` is NOT 32 bits, it is its operand's width | 2-oracle | small |
@@ -881,13 +910,13 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 a package routine called by its SCOPED spelling with no import (`pk::g()`) still coalesces same-named sibling block-locals (`Z=88` against both oracles' `44`): `inject_pkg_callees` runs during body lowering, AFTER §4.5.485's recomputation of `scoped_block_locals` (instance step 3.6a), so a package body's block spans never reach the classification. Fix shape = scan `pkg::name` references before the hoist, or extend the scoped map at injection. First action = census which call spellings reach step 3.6a and which reach `inject_pkg_callees` only (a bare call after an import, `pk::g()` with and without an import, a package function in a continuous assign, a generate-scoped caller), then place the scan where every spelling passes · pinned `a_scoped_call_spelling_is_not_covered_yet` | §2 Scoping | ① |
-| 2 | 2 | §2 a frame argument bind does not apply the §11.6.1 extension sign (both oracles agree): an `8'shf7` actual into a wider formal becomes `000000f7` against `0000fff7`; 24 of 1,920 cells, and THREE funnels share the bind (frame function, frame task, class method), so it is a CLASS. Net assignment and port connection are already correct, which locates the site at the bind and not at the actual's evaluation. Fix shape = extend by the ACTUAL's declared sign in the one bind funnel. First action = census the three funnels for the sign each uses today and vary the actual's declaration (signed / unsigned, `byte` / `shortint` / `time`, an array element, a hierarchical name) before touching any of them | §2 Inline / frame binds | ① |
-| 3 | 3 | §2 an explicit `signed` qualifier on a `time` declaration is discarded (both oracles agree): with `input time signed k`, `k/2` is −4 in both oracles and 9223372036854775804 in vita, because `kind_signedness` hard-codes `time` unsigned. Fix shape = let an explicit qualifier win over the kind's default inside that one function. First action = census every caller of `kind_signedness` and every other kind whose signedness it hard-codes, since the same default may be answering for a declaration that does carry a qualifier · sign only; the width axis is correct | §2 Inline / frame binds | ① |
+| 1 | 1 | §2 an imported package function's body reads a package VARIABLE through the MODULE scope (both oracles agree): `package pk; logic [15:0] x = 16'h0123; function [31:0] g; g = x; endfunction` called from a module that declares its own `logic [7:0] x = 8'hEE` prints `Z=ee` against both oracles' `Z=123`, and with no module net of that name it is ``E3010 … undeclared net/variable `t.x` `` where both oracles still print 123. Root = a package routine body is injected into the caller module's tables (`apply_import_routines`, `inject_pkg_callees`) and lowered against the caller's nets, so it has no package-scope name resolution at all. Fix shape = resolve a package body's bare name in the package's own scope first and fall back to the caller only for names the package does not declare. First action = census what a package body can read (a package variable, a package constant, a sibling package routine, a module net of the same name) across BOTH lanes (`import pk::g` and `pk::g()`) and measure each spelling before touching the injection · source = §4.5.490's soundness lens | §2 Scoping | ① |
+| 2 | 2 | §2 the FRAME route takes a §11.6.1 width context on a REAL target where there is none (both oracles agree): `function automatic real armul; armul = a8*b8;` with `a8=b8=8'hFF` prints `65025.000000` against `1.000000`, and so do the `+` twin (510 against 254) and the signed product (10000 against 16); a static `return a8*b8;` in a real function is pre-framed onto the same route. It is the mirror image of §4.5.491, which closed the real-target and real-operand sides of the INLINE route (`target_is_bv` / `InlineScope::non_bv` / `rhs_has_real_domain`). Fix shape = ask the same domain question at the frame route's own assign site. First action = census which frame sites carry a declared width into a body (the return, a formal bind, a body-local assign) and measure a `real` and a `realtime` target at each before changing any of them · pinned PRE-identical in `inline_body_width_context.rs` | §2 Inline / frame binds | ① |
+| 3 | 3 | §2 a `$signed(...)` / `$unsigned(...)` leaf in an inline function body is not widened to the §11.6.1 region (both oracles agree): `function [31:0] f; f = $unsigned(s8) * q8;` with `s8 = -9` and `q8 = -32` prints `00000020` against `0000d820`, while the `$signed(u8) * q8` twin agrees in all three tools — so the class is one leaf arm, not the operator. Root = `inline_body_ctx.rs::widen_inline_leaf` converts a plain ident leaf (§4.5.491) and stands down on a `SysCall` leaf. Fix shape = treat `$signed` / `$unsigned` as transparent there, taking the REGION's extension sign per §11.8.1 and the operand's own width. First action = census which leaf kinds `widen_inline_leaf` stands down on and which of them both oracles widen (`$signed`, `$unsigned`, a size cast, a part-select, a concat, a user call), because the CALL leaf beside it declines for a DIFFERENT reason (the region's sign walk) and must not be swept in by the same arm | §2 Inline / frame binds | ① |
 | 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
 | 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
 | 6 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 7 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. §4.5.487–489 grew `instance.rs` to 1,635 and `iface_inst.rs` to 533, and put §4.5.488's width-only twins in a new sibling `const_decl_width.rs` (189) rather than growing `const_wide.rs` (1,368); `frames_reserve.rs` is unchanged at 1,372. NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 7 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. §4.5.490–492 grew `instance.rs` to 1,672, `iface_inst.rs` to 543, `inline_fn.rs` to 1,104 and `expr_ctx.rs` to 1,189 (the last two were already over the cap), and put the two new lanes in sibling modules rather than growing them further — `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290); `block_local_class.rs` is 879. NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 

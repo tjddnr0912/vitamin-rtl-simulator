@@ -7,12 +7,15 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 388건 (최신순·⚠️ = 미머지 · 번호는 1~489 중 369개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 391건 (최신순·⚠️ = 미머지 · 번호는 1~492 중 372개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.492` **An explicit `signed` qualifier on a `time` declaration is honoured** (2026-09-12 · §2 Inline / frame binds, queue row 3 · the row's own cited cell is ACCIDENTALLY CORRECT (a 32-bit sink truncates the wrong quotient), so the defect needs a ≥64-bit sink · `kind_signedness`'s `Time` arm returns the declaration's own bit, one caller and ~25 `range_to_dims*` callers inheriting it; the `const_fn_width.rs` duplicate collapsed and `net_util.rs::formal_bind_may_narrow` deleted after measuring BOTH actual kinds · 25 silent→correct over 14 declaration sites and 7 consumers, controls held, `$time`/`#delay` measured PRE == POST · three review rounds, no finding on this slice)
+- `4.5.491` **An inline function body's return or local assignment is a §11.6.1 width context** (2026-09-12 · §2 Inline / frame binds, REPLACING queue row 2, which the grounding refuted as stale — 0 of 56 frame-bind cells reproduce, fixed at 104de0c and pinned by `formal_bind_signedness.rs`; two neighbouring §2 entries stale too · opt-in `inline_ctx_ext` on the EXISTING context walk, extension sign = the REGION's per §11.8.1 (a per-leaf sign was measured wrong: `fffff709` against `0000f609`) · 20 silent→correct, row-2 guards byte-identical, a PRE const-interpreter/runtime disagreement closed · three review rounds: a real TARGET and then a real OPERAND each opened the context wrongly, closed by `target_is_bv`/`non_bv` and the `_`-free `rhs_has_real_domain`, plus a missing §6.2 diagnostic in the ctx walk's `Unary` arm)
+- `4.5.490` **A package routine reached only by its scoped spelling is classified at the injection funnel** (2026-09-12 · §2 Scoping, queue row 1 · row wording refuted ("no import" is really "not in `rtn_pkg`") and its proposed pre-scan measured insufficient (a class-method and an interface-body caller hold no `pkg::name` reference) · `feed_scoped_block_locals` at the one injection funnel + step 3.6a unioning the `::` keys, deduped on body span · 19 silent→correct (22 values), 12 controls held · THREE review rounds on ONE narrowing axis, each fix producing the next blocker (false-loud → context-width hijack → wrong outer twin at the body's root block) ⇒ D8, the whole axis reverted, the scoped lane ships ungated and PRE-identical, five residues filed)
 - `4.5.489` **A block-local whose bare name matches an IMPORTED package variable is its own variable** (2026-09-12 · §2 Scoping, queue row 3 · the row's filed headline refuted — the after-block read is LOUD; the silent-wrong is the INSIDE-block write landing on the package's shared net and leaking to other importing modules, sibling instances and continuous assigns · `names_with_pkg_var_aliases` fed only to `compute_scoped_block_locals` and the hoist twin, three consumer traps pinned · module lane 17 silent→correct + 5 loud→correct, interface lane 6 more after a round-1 finding that the interface mirror was DEAD CODE (computed before both import passes) · two review rounds)
 - `4.5.488` **An ascending or non-zero-LSB constant as an override source binds its DECLARED width** (2026-09-12 · §2 Index sealing, queue row 2, both lanes one root · two row claims refuted (it binds the value-inferred 32, not the leaf default; the size cast was NOT already right) and the severity upgraded — the VALUE is truncated above 32 bits (`36'hFEDCBA987` → `-305419897`) · the grounding's fix shape moved 2 of 23 cells, so a consumer-side arm at the override boundary was the third piece · width-only twins in a new `const_decl_width.rs` · 23 silent→correct, 25 byte-identical, 8 loud unchanged)
 - `4.5.487` **A bare integer system function as the WHOLE override is type-determined** (2026-09-12 · §2 Index sealing, queue row 1 · all three row wordings refuted — the row's own repro does not reproduce, the trigger is the DEFAULT literal's width, the discriminator is the ARGUMENT not the function, and all four override channels plus a forwarding cascade are affected · one `SysCall` arm over the NAMED `sys_fn_is_integer` list in `override_self_meta` · 18 silent→correct, 26 correct + 9 loud byte-identical)
@@ -499,6 +502,246 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.492 An explicit `signed` qualifier on a `time` declaration is honoured (2026-09-12, branch it6) ✅
+
+**ROADMAP row**: §2 "Inline / frame binds", the discarded `time signed` qualifier; queue row 3. Third
+slice of the bundle.
+
+**Row claims re-measured; the symptom holds and the row's own cell does not show it.** `input time
+signed k` makes `k/2` 9223372036854775804 in vita against both oracles' −4, exactly as filed. But the
+row's cited repro is ACCIDENTALLY CORRECT: its sink is 32 bits, so the wrong quotient truncates to
+`f=-4` in PRE and POST alike. The defect needs a sink at least 64 bits wide, which is why the row read
+as unmeasured. Both claims about the code held verbatim — `kind_signedness` has exactly one caller
+(`array_geom.rs:512 range_to_dims_opt`, with ~25 `range_to_dims*` callers behind it), `const_fn_width.rs`
+duplicates the hard-code, and `net_util.rs`'s `formal_bind_may_narrow` doc comment IS a statement of
+this defect.
+
+**Fix.** Three edits, no new machinery. (1) `kind_signedness`'s `Time` arm returns the declaration's
+own `signed` instead of forcing false; the neighbouring `Event | ClassHandle => false` and
+`Real | Realtime => true` arms are kept with a producer census in the comment that makes them
+unreachable with a qualifier (`hdl-parser/src/classes.rs:117` is the sole `ClassHandle` construction
+site and writes `signed: false`; `event signed` is not legal). Fourteen declaration sites inherited it
+with no per-site edit. (2) `const_fn_width.rs`'s duplicate `match kind { Time => false, _ => signed }`
+collapses to `signed`; its comment's premise had died. (3) `net_util.rs::formal_bind_may_narrow` is
+DELETED with its three call guards (`inline_fn.rs`, `frames_call/emit.rs` twice) and the now-unused
+`declared_signed` parameter of `bind_formal_actual` — measured both ways before deciding: with the
+guard gone a REAL actual (`-3.7`) still gives `-4` on all four call spellings and an INTEGER actual
+(`-4`) moves from 18446744073709551612 to `-4` on all four, so no reals-only remnant is worth keeping.
+
+**Census PRE→POST**: 37 designs, 3 tools. 25 probe cells silent→correct, every one on both agreeing
+oracles — 14 declaration sites (module variable, inline function body, static task, automatic task,
+ANSI and non-ANSI ports, block-local, typedef, package variable, unpacked array, function return type,
+class property, a frame function with an `automatic time signed` local, a queue element) and 7
+consumers (`/`, `>>>`, `<`, `%`, `%0d`, `*`, sign extension, including a 72-bit `%h` where the BITS
+differ: `00fffffffffffffff8` → `fffffffffffffff8`) plus NBA and both boundary cells
+(`64'h8000…` / 2 and `k = -1`). Controls held byte-identical: plain `time`, `time unsigned`, a `time`
+typedef, both packed-struct members (the parser desugar never reaches `kind_signedness`), `U=44` (the
+`f(300.0)` narrowing pin), the const-function fold, and the 10 other qualifier kinds. The surface the
+census left unmeasured was written for this slice: `$time` and `#delay` backed by `time` nets are
+PRE == POST == both oracles on all five designs, including a NEGATIVE `time signed d2 = -8` used as
+`#(d2)`, which is consumed UNSIGNED (18446744073709551608) in all three tools.
+
+**Review**: two lenses, three rounds, no finding on this slice in any of them. The differential lens
+swept the consumer axis outside the census table (10 + 13 cells) and the 20 + 1 cells the deleted
+guard covered; the soundness lens censused the producers of the `signed` bit that `kind_signedness`
+now returns and re-verified the `declared_signed` removal against every remaining caller.
+
+**Filed**: `parameter time signed T` and `localparam time signed T` stay LOUD (`E2002` twice each,
+both oracles `-4`) — the refusal is in the PARSER (`hdl-parser/src/params.rs:469`), upstream of every
+signedness decision, so an elaborate-side fix cannot reach it; §3. vita ACCEPTS `real unsigned r;`
+where both oracles reject the declaration — over-lenient, not silent-wrong, and not the
+`Real | Realtime` arm. iverilog 13 ABORTS (`of_RET_VEC4` assertion) on a frame function with an
+`automatic time signed` local, so that one cell is verilator-only.
+
+Files: `crates/elaborate/src/{array_geom,const_fn_width,net_util,inline_fn,frames_call/emit}.rs`.
+Tests: a new `time_signed_qualifier.rs` (12, every value measured live on both oracles, including the
+row's accidentally-immune cell pinned as a control, the `$time`/`#delay` designs, and the loud
+`parameter time signed` pin so it is not read as support). One converted pin:
+`real_actual_formal_width.rs::a_time_formal_with_an_explicit_signed_qualifier_is_declined` →
+`…_is_signed_and_narrows`, whose whole comment block asserted the decline this slice removes; the
+static-task spelling it admitted was still wrong is now asserted too. format 31 unchanged.
+
+#### 4.5.491 An inline function body's return or local assignment is a §11.6.1 width context (2026-09-12, branch it6) ✅
+
+**ROADMAP row**: §2 "Inline / frame binds", entry 1 (the inline path does not push the declared width
+into the body). Second slice of the bundle; it REPLACED queue row 2, which the grounding refuted.
+
+**Queue row 2 is stale, and so are two of its neighbours.** The filed row — "a frame argument bind
+does not apply the §11.6.1 extension sign", `8'shf7` into a wider formal binding `000000f7` — does not
+reproduce in any of 56 measured bind cells: formal widths 8/9/16/24/32/64, twelve actual shapes, eight
+formal kinds and every funnel the row names all agree with both oracles. It was fixed at `104de0c`
+(155 commits before HEAD) and is pinned by `crates/cli/tests/formal_bind_signedness.rs` across all
+three backends; the ROADMAP text was simply never retired. The two neighbouring §2 entries
+"`expr_is_repeatable` rejects an array element" and "a hierarchical / class-field actual cannot get
+the declared width" re-measured stale as well. What IS live in the same sub-section is entry 1, and
+its stated cause is wrong too: the FORMAL is not involved — a body with no formal at all
+(`function [31:0] nofml; nofml = fld * g8;`) is equally wrong, and a 16-bit formal is right only
+because a wider OPERAND, not the return type, widened the region.
+
+**Root.** An inline (static) function body's return-value assignment is never a width context. Every
+§11.6.1 region inside the body folds at `max(operand self-widths)` and the declared width is applied
+afterwards as a resize, which cannot recover carry or product bits already dropped:
+`inline_fn.rs`'s inline-assign sites route through `expr_ctx.rs::lower_ctx_or_plain`, which takes the
+context-carrying lowering ONLY when the rhs contains a fill. The frame route is immune because it
+writes a real net and the engine resizes on every write.
+
+**Fix.** An OPT-IN on the existing context walk, not a second walk. New module
+`crates/elaborate/src/inline_body_ctx.rs` (290) holds `lower_inline_assign_rhs` (entry plus the
+region-sign decision), the self-determined descents that CLEAR the opt-in, the leaf arm and
+`widen_inline_leaf`; `lower_ctx_or_plain` takes the context route for a fill-free rhs while
+`inline_ctx_ext` is set, and `lower_expr_ctx`'s `_` leaf arm widens. The extension sign is the
+REGION's, decided once at the entry by the same `size_ctx_route` the size cast uses (§11.8.1): the
+first draft extended each LEAF by its own sign and produced a different silent-wrong — `s8 * b8`
+(`s8 = -9`, `b8 = 8'hFF`) printed `fffff709` where both oracles print `0000f609`, now a pinned cell.
+`resize_inline_assign` is untouched and still applies the declared seal; an opaque leaf that
+`size_ctx_route` cannot sign (a hierarchical read, a class field, a verbatim inline actual, a call)
+stands the whole rhs down to its pre-slice lowering.
+
+**Census PRE→POST**: 20 distinct cells silent→correct against both agreeing oracles — `*`, `+`, `**`,
+`<<`, unary `-`, `~` and a parenthesised region at return widths 9, 16, 32 and 64, a body LOCAL's own
+declared width, a body with no formal and a body whose formal is unused, the 4-state `x` carry
+(iverilog sole oracle; verilator is 2-state) and the §11.8.1 zero-extension cell. Controls held: the
+results that already fit (`&`, `-`, signed × signed), the regions a sibling already widened
+(`1 ? a8+b8 : 0`, `(a8+b8)*1`), a wider operand and an explicit size cast, every `automatic` twin
+(frame route byte-identical), and the Table 11-21 self-determined positions — a shift amount, a `**`
+exponent, comparison and reduction operands, concat members — plus the `$random` draw stream, byte
+for byte. All 56 row-2 bind cells are byte-identical to the frozen PRE binary, so `104de0c`'s rule did
+not move. The slice also closed a PRE DISAGREEMENT inside vita: `localparam X = f()` folded 65025 in
+the const-function interpreter against the runtime call's 1; both are 65025 now.
+
+**Review**: two lenses, three rounds, two BLOCKING findings, both on the same class and both fixed.
+Round 1, differential D2: a `real` / `realtime` TARGET was now treated as a bit-width context
+(`function automatic real` bodies and real body locals, 8 cells, `65025.000000` against
+`1.000000`) — fixed by a `target_is_bv` argument fed from a new `InlineScope::non_bv`, because `dims`
+could not serve (a real local IS in `dims`, and `dims` omits string and handle targets instead).
+Round 1, soundness S2-1: the ctx walk's `Unary` arm lacked the §6.2 real-operand diagnostic its
+`lower_expr_ungated` twin carries, so a reduction over a real became silent (`F=0 G=ffffffff`, exit 0)
+where PRE was loud and iverilog refuses the program — fixed by extracting ONE
+`check_unary_real_operand` called from both arms, after an arm-by-arm census that found no other
+missing check. Round 2, differential: the OPERAND side of the same class was still open — a real
+anywhere in the rhs of a BIT-VECTOR target widened the region (15 cells, e.g. `a8*b8 + r` = 65028
+against both oracles' 4). Fixed by `rhs_has_real_domain`, a `_`-free conservative AST walk whose arms
+are `sim_ir::realness::expr_is_real_node`'s, arm for arm, with a producer census of every real-domain
+NAME resolved through the lowering's own `bare_ident_route`; its polarity is stated at the function
+(it is a GUARD — `true` costs only the opt-in, `false` claims a bit-width domain), which is why the
+neighbouring `ast_has_real_call` with its `_ => false` tail could not be reused. The intended gain
+survives the guard: `a8*b8 + (r > 1.0)` and `(a8*b8) << $rtoi(r)` still widen, because an integral
+RESULT keeps the context open. Round 3: CLEAN on both lenses (28 new real-route designs, 18 routes
+detected, 7 integral-result routes still widening, 0 new divergence).
+
+**Filed**: `$signed(u8) * q8` / `$unsigned(s8) * q8` as an inline-body leaf is not widened
+(`0000d820` in both oracles against `00000020`, PRE == POST); the FRAME route's own real-target
+context is wrong in the mirror direction (`function automatic real armul; armul = a8*b8;` is
+`65025.000000` against `1.000000`, in PRE and POST); a user CALL as a leaf makes the sign walk decline
+and stands the whole rhs down (`id8(a8)*b8`); a `real` rhs still skips the §10.7 seal (`f_rmix` 4.5
+against 5.0); a class field's fabricated width still inverts the truncate/extend decision (the
+existing `ir_bits_of` row); a bit-vector FORMAL written inside an inline body gets no context
+(`P=1` against `fe01`); a `real` block-local in a function body is E3010; `pk::gr()`, a real-returning
+package function, reads 0 against both oracles' 4; `a8*b8 + 3ns` folds at the time literal's 64-bit
+self width (65028 against 4); and `$signed(<real>)` is accepted silently where both oracles reject the
+program. Three oracle splits were recorded and not chased: `a8*b8 % 7 + r` (iverilog 6, verilator 2),
+`(a8*b8) ** r`, and `a8*b8 + (1 ? r : 0.0)` (iverilog 65025, verilator 1) — the review's own test
+designs were respelled onto shapes where both oracles agree.
+
+Files: `crates/elaborate/src/{expr_ctx,expr_main,inline_fn,lib,driver}.rs`, new
+`crates/elaborate/src/inline_body_ctx.rs` (290). Tests: a new `inline_body_width_context.rs` (16; test
+① runs all three backends, and the real-target, real-operand and reduction cells are the review
+rounds' own designs). No existing test moved — 6892, then 6895, then 6897 unmodified passes across the
+three rounds. format 31 unchanged.
+
+#### 4.5.490 A package routine reached only by its scoped spelling is classified at the injection funnel (2026-09-12, branch it6) ✅
+
+**ROADMAP row**: §2 "Scoping / imports / block-locals", the `pk::g()` scoped call that still coalesces
+same-named sibling block-locals; queue row 1. First slice of the bundle, and the one the review
+stopped: the D8 three-blocker rule retired a whole narrowing axis out of it.
+
+**Row claims re-measured: the symptom holds, the wording does not, and the scope is wider.** `pk::g()`
+prints `Z=88` against both oracles' 44, byte-identical to the pin. But "with no import" is wrong —
+`pk::g()` beside `import pk::g` or `import pk::*` was already correct, and a DIFFERENT routine of the
+same package being imported (so `rtn_pkg` is non-empty) is still wrong: the condition is per-ROUTINE
+membership in `rtn_pkg`, not emptiness of the map. The row's proposed fix shape — scan `pkg::name`
+references before the hoist — is measured INSUFFICIENT: a class-method caller and an interface-body
+caller hold the call and have no `pkg::name` reference in `module.body` at all. Two more feeds the row
+did not name were found on the same funnel: a TRANSITIVE package callee of an IMPORTED root is
+flattened too (`inject_pkg_callees` binds it under a `pk::h` key at step 3.6, and `rtn_pkg` holds bare
+names only — its four insert sites), and the scope-leak half of step (3.6a) never runs on the scoped
+lane at all.
+
+**Fix.** `compute_scoped_block_locals` is split into its gather phase and its classification;
+the gather is kept on the Elaborator (`scoped_gather` plus `scoped_gather_fed`, the set of body spans
+already fed), saved and restored per module and per interface instance, in a new sibling module
+`crates/elaborate/src/block_local_feed.rs` (105 — `block_local_class.rs` was at 961 lines with the new
+code inline). `Elaborator::feed_scoped_block_locals(body)` runs at the ONE injection funnel every
+uncovered spelling passes (`inline_fn.rs`'s `inline_pkg_function`, on the `frame_idx` MISS branch, one
+line before `reserve_frame_func`): it adds the body to the accumulated gather, re-classifies JOINTLY —
+candidacy is a joint property of every fed body, so a per-body computation is not equivalent — and
+installs the entries whose block `lo` falls inside this body's span. And step (3.6a) unions the
+`::`-containing keys of `func_table` / `task_table` into its `rtn_pkg` key set, deduped on the BODY
+SPAN and not the table key, so a routine reachable both as a bare import and under `pkg::name` is fed
+exactly once (a second feed counts each declaring span twice and makes a lone declaration look like a
+colliding pair; `c04`/`c05`/`c25` are the watchdogs).
+
+**Census PRE→POST**: 41 designs, 3 tools. 19 silent-wrong cells moved to the value both oracles print
+(22 printed values across 21 designs) — the bare scoped call, a different routine imported, a
+continuous assign, `generate if`, `always_comb`, both-initializer-free and both-initialized sibling
+pairs, `function automatic`, a colliding module net, the transitive-callee twin, two instances, a
+class-method caller, an interface-body caller, two call sites in one process, a module routine and an
+imported routine with the same block and local names in the same design, three siblings (where the
+magnitude scales: 132 against 44), and two modules of which one also has a colliding net. 12 control
+cells held, 5 loud cells are byte-identical and 1 oracle split (an x/z sibling read) was excluded.
+
+**Review**: two lenses, three rounds, and the axis the rounds were about was REVERTED. Round 1,
+soundness S1-1: the leak check the feed had gained was a correct→LOUD regression on an INERT inner
+declaration (declared, never referenced inside its block, no initializer) — and the same false-loud
+was already there in the module and import lanes. The answer was a `decl_is_inert` narrowing of the
+SHARED gate. Round 2, soundness S-R2-1: that narrowing let the inline lane's name-keyed §11.6.1
+context pick the INNER geometry, a NEW silent-wrong (`V=1` against both oracles' `fe01`), answered by
+a geometry condition resolving the outer twin in §6.21 order; that condition in turn caused a
+correct→loud on the scoped lane, so the feed's leak check was dropped as the round-1 brief had
+provided for. Round 3, differential D-R3-1: `outer_twin_geometry` cannot see a twin declared in the
+subroutine body's ROOT block, so the condition was compared against `rtn.body_decls` — an outer scope,
+not the one the read binds to — and stood the gate down on a real hazard; 4 cells, PRE correctly loud,
+and one of them a static TASK, so the class was not even confined to the inline-fold lane. Three
+blockers on one axis, each the product of the previous fix ⇒ the narrowing is withdrawn whole
+(CLAUDE.md D8). `block_local/gate.rs`, `block_local/hoist.rs`, `block_local/mod.rs` and `generate.rs`
+are byte-identical to main, verified by an empty `git diff main --stat`, and the scoped lane ships
+UNGATED, which is PRE byte for byte on that axis. What ships is the feed and the step-(3.6a) union
+alone. Both lenses then re-measured the shipped tree: 234 review designs with 218 identical to PRE and
+16 moved by the feed, every one to the oracle value; every module-lane and import-lane twin measured
+in rounds 1-3 byte-identical to PRE; 0 cells where PRE produced a clean value and the shipped tree is
+loud.
+
+**Filed** (five rows, all measured, none built here). §3: the FALSE-LOUD class in the module and
+import lanes — an inert inner block-local is rejected although the flatten is byte-correct, on every
+measured cell — whose prerequisite is that the gate resolve the BINDING a post-block reference takes
+instead of keying on the name; three narrowings that keyed on properties of the DECLARATION were each
+measured to create a new defect. §2: the scoped spelling reaches no scope-leak gate at all, so the
+nested scope-leak shape keeps the flatten's value there (`Z=14`, `Z=1`, `F2=88`, `R=88`, `ff=88`
+against oracles 7, 7, 51, 51, 49) while both twins of the identical body are loud — an internal lane
+split, with the same prerequisite, since gating it with today's predicate was measured to be a
+correct→loud regression. §2: the q12 class — the inline-fold lane resolves a body's §11.6.1 assignment
+context BY NAME over all declarations, so a same-named declaration in any nested block can supply the
+width or turn the widening off. §2: an inner block-local shadowing a FORMAL read after the block
+(`ff=88` against both oracles' 49). §2: a package routine body's read of a package VARIABLE binds to
+the MODULE scope (`Z=ee` against both oracles' `Z=123`; with no module net of that name it is E3010) —
+the soundness lens's F1, pre-existing and identical in PRE. §3 besides: a scoped TASK call `pk::t()`
+is a PARSE error (E2002, 1 oracle); a scoped call whose TRANSITIVE callee holds any block-local is
+E3010 (both oracles 44, a different root from the transitive twin fixed here — that callee is injected
+after the step-6.5 frame barrier); an INTERFACE body applies no package ROUTINE import (E3010, both
+oracles 44).
+
+Files: `crates/elaborate/src/{block_local_class,instance,iface_inst,inline_fn,lib,driver}.rs`, new
+`crates/elaborate/src/block_local_feed.rs` (105). Tests: a new `pkg_scoped_call_block_local.rs` (51);
+every moved cell also asserts the PRE value is ABSENT, every pin that asserts a SILENT value names the
+oracle value and its ROADMAP section in the doc comment, and the narrowing rounds' pins are gone —
+what replaced them pins the module and import lanes' false-louds and the round-3 finding's three
+shapes as LOUD, all PRE-identical. One converted pin:
+`package_subroutine_block_local.rs::a_scoped_call_spelling_is_not_covered_yet` →
+`…_is_covered`, since the old name asserted the gap this slice closes. One pin of this file is a
+BUNDLE pin: the attribution control for the round-2 finding was measured `V=1` in this slice's own
+worktree and is `V=fe01`, both oracles' value, once §4.5.491 is in the tree — it ships as
+`control_no_name_collision_has_the_oracle_width`. format 31 unchanged.
 
 #### 4.5.489 A block-local whose bare name matches an IMPORTED package variable is its own variable (2026-09-12, branch it5) ✅
 

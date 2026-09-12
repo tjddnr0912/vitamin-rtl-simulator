@@ -91,6 +91,7 @@ Vocabulary used throughout:
 | Treat a cast as the operand's context, not a later truncation: `N'(e)` evaluates `e` at `max(self(e), N)`, so a walk that cannot carry a width must decline | Folding at the operand's own width and resizing afterwards, which is a different operation |
 | Fix context misuse by fixing the propagated value (`max(self, N)`), never by discarding context | Discarding context also losing the signedness, which always propagates |
 | Hand the context width to the operator, not to the leaf: a context-determined operand evaluates at `max(context, every self-determined operand's width)` | Freezing the context at the leaf and losing bits the moment a sibling is wider |
+| Exclude a non-bit-vector domain on BOTH sides when opening a width context — the TARGET's declared domain and any operand inside the region — and write the operand test as a conservative `_`-free walk whose unresolved arms decline the context | Closing the target side alone, so a real operand in a bit-vector target's rhs still widens the region |
 | Give a routing gate and a soundness guard different predicates: over-reporting is free for a router and a loud regression for a guard | One predicate for both putting a self-determined position into the hazard set and producing new louds |
 | Walk each caller to the end of its chain and say what is there before writing that a decline is free | A decline being free only where the pre-change fold would also have declined |
 | Count the loud-to-value column on its own and give every axis those new cells touch a control twin without the new construct | Opening a fold's accept set inheriting whatever is already wrong underneath |
@@ -551,6 +552,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Rule | Prevents |
 |---|---|
 | Make a classifier use the same name resolver as the lowering of the expression it classifies | Classifier and lowering diverging silently under shadowing |
+| Narrow a shared gate on the BINDING a reference resolves to, never on a property of a declaration that shares its name; when the binding is not available, leave the gate alone | Each narrowing keyed on the declaration — inertness, geometry, an outer-twin lookup — standing the gate down over a different wrong twin |
 | Extract a lowering's decision into a side-effect-free function and make the lowering match on it too | A docstring saying "mirrors X" being a drift waiting to be measured |
 | Make the shared decision function say which of its answers are facts | A mirror being exact only for nodes it built itself |
 | Make a gate that decides whether a body is safe to process walk the same statement arms as the processor it gates | The gate certifying a set the processor does not act on |
@@ -825,7 +827,7 @@ census has produced it, and the probe itself is a claim to check.
 
 ## 7. Testing
 
-The full local gate is `cargo nextest run --workspace --locked`: 7811 tests, 15 skipped. Named gates
+The full local gate is `cargo nextest run --workspace --locked`: 7890 tests, 15 skipped. Named gates
 that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
 frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
 diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,
@@ -872,6 +874,7 @@ move, or an anchor no shared code can shift.
 | Verify a guard actually fires on its target subset, a direct per-item count being the robust form | A vacuous guard reading as protection |
 | Pin any "this wrapper covers every site" comment with a test | Most of the sites being covered and the rest running away |
 | Ask what the number would be if the feature did nothing; when that equals the expected answer, the cell is decoration | A probe whose answer equals its failure mode certifying itself |
+| Re-measure a slice-local pin inside the bundle before shipping it: a value pinned in one worktree is a BUNDLE pin the moment a sibling slice touches the same expression | A control pinned at a sibling slice's silent value going out as if it were the oracle's |
 | Establish a pin's claimed property a second way | A property that holds only one way measuring a path, not a property |
 | Run the neighbours of the fixed cell, not the fixed cell | The fix being confirmed on the only cell that was ever checked |
 | Build a design with two same-time processes writing the same variable to test an ordering change | A green suite, a green corpus and byte-identical waveforms being no evidence at all about order |
