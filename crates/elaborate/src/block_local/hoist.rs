@@ -217,10 +217,20 @@ impl Elaborator<'_> {
         // shared flattened net keeps only the LAST initializer of the name. The four
         // terms are the four kinds `gather` marks, and `block_local_scope_seg`
         // re-checks the marks, so this stays the weaker test.
-        let shadows_module = d
-            .names
-            .iter()
-            .any(|n| self.local_decl_names.contains(&n.name.name));
+        // §2 Scoping row 3: an imported package VARIABLE's bare name shadows just as a
+        // declared net does — the flatten target it would take IS the package's own
+        // shared net (`package.rs:1288-1291`/`:1406-1408` alias the `$pkg$<pkg>` net
+        // verbatim), so without this the write leaked to every importer and every
+        // instance. Keyed on `pkg_var_aliases`, never on `symbols` (an interface-port
+        // alias lives there too). The outward walk is `walk_scopes_key` for the same
+        // reason every other name lookup here uses it: a generate-scope body's ambient
+        // prefix is not the scope the import bound at.
+        let shadows_module = d.names.iter().any(|n| {
+            self.local_decl_names.contains(&n.name.name)
+                || self
+                    .walk_scopes_key(&n.name.name, |k| self.pkg_var_aliases.contains_key(k))
+                    .is_some()
+        });
         // Decl-ANY, matching `gather_auto_block_locals` and `block_local_scope_seg`.
         let static_init = d.lifetime != Some(true) && d.names.iter().any(|n| n.init.is_some());
         if d.lifetime == Some(true) || dyn_storage || shadows_module || static_init {

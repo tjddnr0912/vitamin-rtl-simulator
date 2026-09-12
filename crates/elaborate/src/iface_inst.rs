@@ -189,9 +189,65 @@ impl Elaborator<'_> {
                 // net, and it reads `self.local_decl_names`; installing four of the five
                 // would admit more bodies to the hoist while still resolving the
                 // collision against the parent's names.
+                let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
+                let mut explicit_imports: std::collections::BTreeSet<String> =
+                    std::collections::BTreeSet::new();
+                let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
+                for (i, imp) in iface_imports.iter().enumerate() {
+                    if Self::import_precedes_header(&decl, n_cu, i, imp) {
+                        self.apply_import_consts(
+                            imp,
+                            &mut saved_params,
+                            &mut wc_origin,
+                            &mut explicit_imports,
+                            &local_names,
+                            i >= n_cu,
+                        );
+                    }
+                }
+                let param_ovr = {
+                    let (sp, ovr) = self.bind_params(&decl, &overrides);
+                    saved_params.extend(sp);
+                    ovr
+                };
+                for (i, imp) in iface_imports.iter().enumerate() {
+                    if !Self::import_precedes_header(&decl, n_cu, i, imp) {
+                        self.apply_import_consts(
+                            imp,
+                            &mut saved_params,
+                            &mut wc_origin,
+                            &mut explicit_imports,
+                            &local_names,
+                            i >= n_cu,
+                        );
+                    }
+                }
+                // §2 Scoping row 3 (round-1 delta): the five block-local classifier maps
+                // are computed HERE, after BOTH `apply_import_consts` passes above
+                // (header at the loop before `bind_params`, body at the loop just above)
+                // and before the body-parameter fold — the module lane's proven order
+                // (`instance.rs`: header imports :511, body imports :541, maps :590-610).
+                // They used to be computed before the imports, which made
+                // `names_with_pkg_var_aliases` a guaranteed no-op here: `pkg_var_aliases`
+                // held no entry for this interface scope yet, so an interface
+                // block-local colliding with an imported package variable still
+                // flattened onto the package net (measured: `pkgv=100` where both
+                // oracles say 7, and the same cross-instance and continuous-assign
+                // leaks the module lane had).
+                //
+                // The WHOLE computation moved, not just the augmentation: between the
+                // old site and here, `compute_coalesced_block_locals` consumes
+                // `self.scoped_block_locals` and the `check_block_local_scope_leaks`
+                // gate reads it too, so splitting them would have fed the gate a map
+                // built from a different name set than the hoist later reads.
                 let dbl = self.gather_block_local_names(&decl);
                 let saved_dbl = std::mem::replace(&mut self.decl_block_locals, dbl);
-                let scoped_blocks = Self::compute_scoped_block_locals(&decl, &local_names, &[]);
+                // §2 Scoping row 3: same augmented SCOPING feed as `instance.rs` (see
+                // `names_with_pkg_var_aliases`). Only the scoped set gets it —
+                // `compute_per_entry_block_locals` below reads `module_names` with the
+                // opposite polarity, and `local_names` itself stays untouched.
+                let shadow_names = self.names_with_pkg_var_aliases(&local_names);
+                let scoped_blocks = Self::compute_scoped_block_locals(&decl, &shadow_names, &[]);
                 let saved_scoped_blocks =
                     std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
                 let per_entry_blocks = Self::compute_per_entry_block_locals(&decl, &local_names);
@@ -228,39 +284,6 @@ impl Elaborator<'_> {
                 for it in &decl.body {
                     if let ast::ModuleItem::Proc(p) = it {
                         self.check_block_local_scope_leaks(&p.body);
-                    }
-                }
-                let mut wc_origin: BTreeMap<String, String> = BTreeMap::new();
-                let mut explicit_imports: std::collections::BTreeSet<String> =
-                    std::collections::BTreeSet::new();
-                let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
-                for (i, imp) in iface_imports.iter().enumerate() {
-                    if Self::import_precedes_header(&decl, n_cu, i, imp) {
-                        self.apply_import_consts(
-                            imp,
-                            &mut saved_params,
-                            &mut wc_origin,
-                            &mut explicit_imports,
-                            &local_names,
-                            i >= n_cu,
-                        );
-                    }
-                }
-                let param_ovr = {
-                    let (sp, ovr) = self.bind_params(&decl, &overrides);
-                    saved_params.extend(sp);
-                    ovr
-                };
-                for (i, imp) in iface_imports.iter().enumerate() {
-                    if !Self::import_precedes_header(&decl, n_cu, i, imp) {
-                        self.apply_import_consts(
-                            imp,
-                            &mut saved_params,
-                            &mut wc_origin,
-                            &mut explicit_imports,
-                            &local_names,
-                            i >= n_cu,
-                        );
                     }
                 }
                 for it in &decl.body {

@@ -582,7 +582,16 @@ impl Elaborator<'_> {
         // applied in step (3.6) below), so this computation covers `module.body` only
         // and is byte-identical to the pre-package one. It is redone in (3.6a) once
         // the package bodies are in this instance's tables.
-        let scoped_blocks = Self::compute_scoped_block_locals(module, &names, &[]);
+        // §2 Scoping row 3: the scoping feed also counts the bare names bound here by
+        // a package VARIABLE import — see `names_with_pkg_var_aliases` for the
+        // three-lifetime census. A SEPARATE set (trap 1: `names` itself is
+        // `apply_import_consts`'s `local_names`, where membership suppresses the
+        // import), handed only to the two scoping computations and never to
+        // `compute_per_entry_block_locals` (trap 2: opposite polarity there). Both
+        // import passes (the header one above and the body one above) have already
+        // run at this point, so the aliases are bound.
+        let shadow_names = self.names_with_pkg_var_aliases(&names);
+        let scoped_blocks = Self::compute_scoped_block_locals(module, &shadow_names, &[]);
         let saved_scoped_blocks = std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
         // r18 (family D): per-entry automatic-with-init block-locals (same shared-set
         // pattern as `scoped_block_locals` — computed once, read by both phases).
@@ -874,11 +883,9 @@ impl Elaborator<'_> {
                 .collect();
             if !extra.is_empty() {
                 let refs: Vec<&ast::Stmt> = extra.iter().collect();
-                self.scoped_block_locals = Self::compute_scoped_block_locals(
-                    module,
-                    &self.local_decl_names.clone(),
-                    &refs,
-                );
+                let shadow_names = self.names_with_pkg_var_aliases(&self.local_decl_names.clone());
+                self.scoped_block_locals =
+                    Self::compute_scoped_block_locals(module, &shadow_names, &refs);
                 // The scope-leak gate a MODULE-declared routine gets in step (3.5)
                 // above. A package routine never reached it, so the nested shape it
                 // covers (an outer block-local read after an inner same-named,
