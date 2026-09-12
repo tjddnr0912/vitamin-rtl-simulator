@@ -54,6 +54,7 @@ mod class_lower;
 mod classes;
 mod const_array;
 mod const_bound;
+mod const_decl_width;
 mod const_eval;
 mod const_fn;
 mod const_fn_width;

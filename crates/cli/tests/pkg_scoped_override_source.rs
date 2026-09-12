@@ -288,8 +288,9 @@ fn the_other_consumers_of_the_predicate() {
     );
 }
 
-/// RECORDED RESIDUES — these lines are pinned at their UNCHANGED answer so a later slice
-/// sees them move. None of them is a pass.
+/// RECORDED RESIDUES — every one of them since CLOSED, by a later slice, at the value both
+/// oracles print. The test NAME is kept so the history of the three cells stays findable;
+/// nothing in it is pinned at a wrong answer any more.
 ///
 /// - ⭐ E2 `~pk::PW` and E3 `pk::PW + 1` are CLOSED (§2 "Index sealing" ⓒ). The second
 ///   rung got exactly the qualified `ConstWidths` key this note predicted:
@@ -299,13 +300,17 @@ fn the_other_consumers_of_the_predicate() {
 ///   val=7fffffffe` — both oracles. E3 is now `bits=36 val=800000002`, verilator's
 ///   answer; iverilog says `bits=37` (its documented bound-`+` max+1
 ///   self-contradiction, non-evidence).
-/// - L_PA `logic [11:4] PA`: a non-zero declared LSB makes `pkg_const_narrow_bits` and
-///   `narrow_param_bits` decline, so BOTH spellings print 32 where both oracles print
-///   `bits=8 val=a5`. A pre-existing ROADMAP §2 class, upstream of this predicate — and
-///   the CONTROL for the two closures above: the new qualified key routes a `PkgScoped`
-///   leaf to `pkg_const_narrow_bits`, which still refuses a non-zero LSB, so this line is
-///   byte-identical PRE→POST. Re-measured: vita `t.s bits=32 val=000000a5` /
-///   `t.b bits=32 val=000000a5`, both oracles `bits=8 val=a5`.
+/// - ⭐ L_PA `logic [11:4] PA` is CLOSED too (§2 "Index sealing", the layout row). It was
+///   recorded here as a pre-existing ROADMAP §2 class: a non-zero declared LSB made
+///   `pkg_const_narrow_bits` and `narrow_param_bits` decline, so BOTH spellings printed
+///   `bits=32 val=000000a5` where both oracles print `bits=8 val=a5`. The decline was
+///   about reading BIT POSITIONS, which no override binding does — it takes a width and a
+///   sign and coerces an already-folded value — while `param_decl_range_opt` records the
+///   width as `|msb − lsb| + 1`, independent of direction and offset. The WIDTH-only twins
+///   (`crates/elaborate/src/const_decl_width.rs`) answer that question with every other
+///   guard of the bits resolvers intact, and `wide_name_bits`' layout-reading arms still
+///   decline. Re-measured 3-way: vita `leaf bits=8 val=a5` twice, iverilog 13 `bits=8
+///   val=a5` twice, verilator 5.052 `bits=8 val=a5` twice.
 #[test]
 fn the_second_rung_and_the_non_zero_lsb_class_are_unmoved() {
     const PK: &str = "parameter logic [35:0] PW = 36'h8_0000_0001;";
@@ -322,6 +327,6 @@ fn the_second_rung_and_the_non_zero_lsb_class_are_unmoved() {
     check(
         "parameter logic [11:4] PA = 8'hA5;",
         "  leaf #(.P(pk::PA)) s(); leaf #(.P(PA)) b();\n",
-        &["leaf bits=32 val=000000a5", "leaf bits=32 val=000000a5"],
+        &["leaf bits=8 val=a5", "leaf bits=8 val=a5"],
     );
 }

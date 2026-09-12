@@ -500,6 +500,17 @@ impl Elaborator<'_> {
         while let ast::ExprKind::Paren { inner } = &top.kind {
             top = inner;
         }
+        // §2 "Index sealing": the whole override is one DECLARED NAME. A separate
+        // resolver with its own soundness argument — see
+        // `Elaborator::override_decl_name_meta`, which reads the provenance-filtered
+        // `param_range` / `pkg_const_range` pair and NOT `const_self_width`, so the
+        // "declines every name" rule of the accept set below is untouched and the
+        // laundering door it guards stays shut. Reached only after the wide channel
+        // (`ovr_bits`) has already declined in `bind_one_param`'s chain, so every
+        // override folding today is byte-identical.
+        if let Some(m) = self.override_decl_name_meta(top) {
+            return Some(m);
+        }
         let sized_by_type = matches!(
             &top.kind,
             ast::ExprKind::Unary {
@@ -645,12 +656,22 @@ impl Elaborator<'_> {
                 // resolves the name through the live scope chain, and handing it a
                 // fabricated span would make this resolver answer about a different
                 // occurrence than the one the fold is about to evaluate.
+                // §2 "Index sealing": the WIDTH-only twin, not the bits resolver. This
+                // gate keeps `(w, signed)` and DROPS the bits (`let (_, w, signed)`
+                // before this slice), so the bits twin's `lo != 0 || ascending` decline
+                // was refusing a width that `param_decl_range_opt` records as
+                // `|msb − lsb| + 1` — direction- and offset-independent. See
+                // `const_decl_width.rs` for the 6-hit call-site census that splits the
+                // three consumers into "needs the layout" (`wide_name_bits`, still on
+                // the bits twins) and "needs only the width" (this site and
+                // `params.rs`'s two). Measured: `#(.P(pk::PA))` over
+                // `localparam logic [0:35] PA` bound 32 where both oracles bind 36.
                 Leaf::Bare(path) => {
-                    let (_, w, signed) = self.narrow_param_bits(path)?;
+                    let (w, signed) = self.narrow_param_decl_width(path)?;
                     (path.segments[0].name.clone(), w, signed)
                 }
                 Leaf::Pkg(pkg, name) => {
-                    let (_, w, signed) = self.pkg_const_narrow_bits(&pkg.name, &name.name)?;
+                    let (w, signed) = self.pkg_const_decl_width(&pkg.name, &name.name)?;
                     (pkg_envw_key(&pkg.name, &name.name), w, signed)
                 }
             };

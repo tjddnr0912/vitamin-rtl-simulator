@@ -433,7 +433,13 @@ impl Elaborator<'_> {
                 if let ast::ExprKind::Ident(pth) = &e.kind {
                     if pth.segments.len() == 1 {
                         if declared_only {
-                            return self.narrow_param_bits(pth).map(|(_, w, s)| (w, s));
+                            // §2 "Index sealing": the WIDTH-only twin. This arm kept
+                            // `(w, s)` and dropped the bits (`.map(|(_, w, s)| (w, s))`
+                            // before this slice), so `narrow_param_bits`' layout decline
+                            // (`lo != 0 || ascending`) was refusing a declared width for
+                            // a question that never reads a bit position. Same guard
+                            // chain otherwise — see `const_decl_width.rs`.
+                            return self.narrow_param_decl_width(pth);
                         }
                         return self
                             .param_meta
@@ -454,9 +460,12 @@ impl Elaborator<'_> {
                         // was consulted here `localparam R = pk::PW;` over a
                         // `parameter logic [35:0]` recorded nothing, so `#(.P(R))`
                         // bound ONE bit / 0 where both oracles bind 36 / `a`.
-                        return self
-                            .pkg_const_narrow_bits(&pkg.name, &name.name)
-                            .map(|(_, w, s)| (w, s));
+                        //
+                        // ⭐ Now the WIDTH-only twin `pkg_const_decl_width`: this arm
+                        // drops the bits, so the bits twin's ascending / non-zero-LSB
+                        // decline was refusing a declared width. `localparam L = pk::PA`
+                        // over `logic [0:35] PA` forwarded 32 where both oracles say 36.
+                        return self.pkg_const_decl_width(&pkg.name, &name.name);
                     }
                     return self
                         .pkg_const_meta

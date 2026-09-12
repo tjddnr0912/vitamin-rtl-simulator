@@ -26,12 +26,15 @@
 //! verilator arbitrates those and vita matches it. Lines that exist to prove a NON-move
 //! say so.
 //!
-//! ## Residues pinned here, deliberately NOT repaired
+//! ## Residue recorded here, since CLOSED
 //!
 //! - A parent whose declared range is ASCENDING (`[0:11]`) or has a NON-ZERO LSB
-//!   (`[15:4]`) still forwards at 32: `narrow_param_bits` declines `lo != 0 || ascending`
-//!   outright (ROADMAP §2 🆕 H ⓑ). That decline is upstream of this slice's pair and was
-//!   left alone.
+//!   (`[15:4]`) used to forward at 32: `narrow_param_bits` declined `lo != 0 || ascending`
+//!   outright, upstream of this slice's pair. §2 "Index sealing" (the layout row) closed
+//!   it — that decline guards POSITIONAL bit reading, which an override binding never
+//!   does, and the width it threw away is `|msb − lsb| + 1`, independent of direction and
+//!   offset. `neighbouring_rows_are_recorded_not_widened_into` now pins both oracles'
+//!   `12 / ffc` and `12 / 3`; see `crates/elaborate/src/const_decl_width.rs`.
 
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -365,12 +368,24 @@ fn a_wider_than_64_bit_override_forwards_whole() {
 /// leaf-by-leaf (see `localparam_derived_forward_width.rs`), so it prints both oracles'
 /// `4 / c`. It stays here as the control that separates the two roots.
 ///
-/// `top.a` / `top.n` — an ASCENDING (`[0:11]`) and a NON-ZERO-LSB (`[15:4]`) declared range
-/// on the parent. `narrow_param_bits` refuses `lo != 0 || ascending` outright, upstream of
-/// the `param_range`/`param_meta` agreement this slice repairs — ROADMAP §2 🆕 H ⓑ. Both
-/// oracles: `12 / ffc` and `12 / 3`. Note the contrast with
-/// `a_declared_parent_parameter_does_not_move`'s `[11:0]` twin, which IS right: direction
-/// and LSB are the whole difference.
+/// ⭐ `top.a` / `top.n` are no longer residues either — an ASCENDING (`[0:11]`) and a
+/// NON-ZERO-LSB (`[15:4]`) declared range on the parent. `narrow_param_bits` refused
+/// `lo != 0 || ascending` outright, upstream of the `param_range`/`param_meta` agreement
+/// this file's slice repairs, so all four lines printed 32 where both oracles print
+/// `12 / ffc` and `12 / 3`. §2 "Index sealing" closed it: that decline answers a question
+/// about BIT POSITIONS, and an override binding reads none — it takes a width and a sign
+/// and coerces an already-folded value, while `param_decl_range_opt` records the width as
+/// `|msb − lsb| + 1`, independent of direction and offset. The WIDTH-only twins
+/// (`crates/elaborate/src/const_decl_width.rs`) answer it with every other guard intact;
+/// `wide_name_bits`' layout-reading arms still decline, which is why the `[11:0]` contrast
+/// below is now a contrast in PROVENANCE only.
+///
+/// Re-measured 3-way, all six lines identical in vita, iverilog 13 and verilator 5.052:
+/// `top.l R bits=4 val=c` · `top.l.r bits=4 val=c` · `top.a.n bits=12 val=ffc` ·
+/// `top.a.b bits=12 val=3` · `top.n.n bits=12 val=ffc` · `top.n.b bits=12 val=3`.
+///
+/// `top.l` stays here as the control that separates the two roots: the derived-`localparam`
+/// forward is certified leaf-by-leaf (see `localparam_derived_forward_width.rs`).
 #[test]
 fn neighbouring_rows_are_recorded_not_widened_into() {
     let (o, c) = run(&format!(
@@ -392,12 +407,12 @@ fn neighbouring_rows_are_recorded_not_widened_into() {
     assert_eq!(
         lines(&o),
         [
-            "top.l R bits=4 val=c",         // right PRE and POST — `param_meta`
-            "top.l.r bits=4 val=c",         // CONTROL — both oracles `bits=4 val=c`
-            "top.a.n bits=32 val=fffffffc", // RESIDUE (🆕 H ⓑ): both oracles `12 / ffc`
-            "top.a.b bits=32 val=3",        // RESIDUE (🆕 H ⓑ): both oracles `12 / 3`
-            "top.n.n bits=32 val=fffffffc", // RESIDUE (🆕 H ⓑ): both oracles `12 / ffc`
-            "top.n.b bits=32 val=3",        // RESIDUE (🆕 H ⓑ): both oracles `12 / 3`
+            "top.l R bits=4 val=c",    // right PRE and POST — `param_meta`
+            "top.l.r bits=4 val=c",    // CONTROL — both oracles `bits=4 val=c`
+            "top.a.n bits=12 val=ffc", // was 32/fffffffc; both oracles, closed by §2 Index sealing
+            "top.a.b bits=12 val=3",   // was 32/3
+            "top.n.n bits=12 val=ffc", // was 32/fffffffc
+            "top.n.b bits=12 val=3",   // was 32/3
         ]
     );
 }
