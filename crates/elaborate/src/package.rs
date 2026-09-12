@@ -1537,11 +1537,18 @@ impl Elaborator<'_> {
         let mut refused: Vec<String> = Vec::new();
         let pkg = pkg.to_string();
         let mut want: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        // A routine's callees live in its BODY and in its formals' DEFAULT values
+        // (`input [31:0] a = h() + 1`): §13.5.4 evaluates a default in the declaring
+        // scope, so a same-package `h` there must be reachable under its scoped key
+        // too, or the default's call binds to a same-named MODULE routine (measured:
+        // `GH2=64` for both oracles' `8`).
         if let Some(f) = funcs.get(root) {
             collect_callee_stmt(&f.body, &mut want);
+            collect_callee_ports(&f.ports, &mut want);
         }
         if let Some(t) = tasks.get(root) {
             collect_callee_stmt(&t.body, &mut want);
+            collect_callee_ports(&t.ports, &mut want);
         }
         let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         seen.insert(root.to_string());
@@ -1558,6 +1565,7 @@ impl Elaborator<'_> {
             let key = format!("{pkg}::{n}");
             if let Some(f) = f {
                 collect_callee_stmt(&f.body, &mut want);
+                collect_callee_ports(&f.ports, &mut want);
                 if pkg_func_self_contained(&f, &const_names, &var_names, &rtn_names) {
                     self.func_table.entry(key.clone()).or_insert(f);
                 } else {
@@ -1566,6 +1574,7 @@ impl Elaborator<'_> {
             }
             if let Some(t) = t {
                 collect_callee_stmt(&t.body, &mut want);
+                collect_callee_ports(&t.ports, &mut want);
                 if pkg_task_self_contained(&t, &const_names, &var_names, &rtn_names) {
                     self.task_table.entry(key).or_insert(t);
                 } else {

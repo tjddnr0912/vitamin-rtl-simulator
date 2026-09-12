@@ -16,6 +16,12 @@ impl Elaborator<'_> {
     ) -> u32 {
         self.note_frame_call(fid); // R2 route census
         let fname = &func.name.name;
+        // The table key (`pk::name` for a scoped call) is what names the callee's
+        // package for a DEFAULT actual (§13.5.4); the bare name is not in `rtn_pkg`.
+        let rtn_key: String = self
+            .frame_key_of(fid)
+            .map(str::to_string)
+            .unwrap_or_else(|| fname.to_string());
         if func
             .ports
             .iter()
@@ -185,7 +191,8 @@ impl Elaborator<'_> {
                 p.range.as_ref(),
                 self.shape_signed(p.signed, &p.shape_param),
             );
-            let eid = self.lower_ctx_or_plain(a, w);
+            // A package routine's DEFAULT actual resolves in the package (§13.5.4).
+            let eid = self.with_default_arg_scope(&rtn_key, p, a, |s| s.lower_ctx_or_plain(a, w));
             // §13.5.3: the call is an ASSIGNMENT to the formal, so a REAL actual
             // bound to an INTEGRAL formal rounds and narrows to the formal's
             // width. This value goes straight into the frame slot, so without it
@@ -495,7 +502,10 @@ impl Elaborator<'_> {
                             ),
                         }
                     } else {
-                        let eid = self.lower_ctx_or_plain(a, fw);
+                        // A package routine's DEFAULT actual resolves in the package
+                        // (§13.5.4, `with_default_arg_scope`).
+                        let eid = self
+                            .with_default_arg_scope(tname, p, a, |s| s.lower_ctx_or_plain(a, fw));
                         // §13.5.3: the call is an ASSIGNMENT to the formal, so a REAL
                         // actual bound to an INTEGRAL formal rounds and narrows to the
                         // formal's width. The slot in-bind hands the raw value straight
@@ -879,7 +889,8 @@ impl Elaborator<'_> {
                 .unwrap_or(32);
             match p.dir {
                 ast::PortDir::Input => {
-                    let eid = self.lower_ctx_or_plain(a, fw);
+                    let eid =
+                        self.with_default_arg_scope(&fname, p, a, |s| s.lower_ctx_or_plain(a, fw));
                     in_binds.push((slot, eid));
                 }
                 ast::PortDir::Output | ast::PortDir::Inout => {

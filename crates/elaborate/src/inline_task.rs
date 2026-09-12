@@ -429,7 +429,10 @@ impl Elaborator<'_> {
                     // §11.6: the actual is in the formal's width context, so a fill
                     // grows to it (non-fill ⇒ byte-identical via lower_expr).
                     let fw = self.nets.get(local as usize).map(|n| n.width).unwrap_or(32);
-                    let actual_eid = self.lower_ctx_or_plain(a, fw); // caller-scope read (pre-bind)
+                    // caller-scope read (pre-bind); a package routine's DEFAULT actual
+                    // resolves in the package (§13.5.4, `with_default_arg_scope`).
+                    let actual_eid =
+                        self.with_default_arg_scope(&tname, p, a, |s| s.lower_ctx_or_plain(a, fw));
                     let cin = self.push_stmt(ir::Stmt::BlockingAssign {
                         lhs: whole_net_lvalue(local),
                         rhs: actual_eid,

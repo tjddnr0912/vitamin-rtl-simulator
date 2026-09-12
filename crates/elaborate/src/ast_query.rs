@@ -208,6 +208,19 @@ pub(crate) fn collect_callee_stmt(s: &ast::Stmt, out: &mut std::collections::BTr
 
 /// B1 frame-call: collect call names reachable from an expression (companion to
 /// [`collect_callee_stmt`]).
+/// [`collect_callee_expr`] over every formal's DEFAULT value — the second place a
+/// routine's declaration can name a callee (§13.5.4).
+pub(crate) fn collect_callee_ports(
+    ports: &[ast::TfPort],
+    out: &mut std::collections::BTreeSet<String>,
+) {
+    for p in ports {
+        if let Some(d) = &p.default {
+            collect_callee_expr(d, out);
+        }
+    }
+}
+
 pub(crate) fn collect_callee_expr(e: &ast::Expr, out: &mut std::collections::BTreeSet<String>) {
     use ast::ExprKind::*;
     match &e.kind {

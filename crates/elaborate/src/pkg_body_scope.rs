@@ -146,6 +146,56 @@ impl Elaborator<'_> {
         })
     }
 
+    /// IEEE 1800 §13.5.4: a formal's DEFAULT value is evaluated in the scope where
+    /// the subroutine is DECLARED. Every lane fills an omitted actual with the
+    /// declaration's default expression and lowers it beside the user's actuals in
+    /// the CALLER's scope (`fill_default_args` / `resolve_named_args`), which for a
+    /// PACKAGE routine bound a default naming a package variable, constant or sibling
+    /// routine to the caller module's same-named object (`gd()` with
+    /// `input [15:0] a = x` read the module's `x`: `D=ef` for both oracles' `124`;
+    /// `a = C` the module's `C`; `a = h()` the module's `h`). Run `f` with the
+    /// package's scope pushed when `a` IS the declared default of `p` (the same AST
+    /// node: `resolve_named_args` clones it, span included, so identity is the span)
+    /// and the routine is a package routine; a user-written actual, a module routine
+    /// and every other call are `f` verbatim. The declared set is empty: a default
+    /// that names another formal is refused before this point.
+    pub(crate) fn with_default_arg_scope<T>(
+        &mut self,
+        rtn_name: &str,
+        p: &ast::TfPort,
+        a: &ast::Expr,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let is_default = p
+            .default
+            .as_ref()
+            .is_some_and(|d| d.span == a.span && (d.span.lo, d.span.hi) != (0, 0));
+        let pkg = if is_default {
+            self.rtn_key_pkg(rtn_name)
+        } else {
+            None
+        };
+        match pkg {
+            Some(pkg) => {
+                self.push_rtn_pkg_scope(pkg, BTreeSet::new());
+                let out = f(self);
+                self.pop_rtn_pkg_scope();
+                out
+            }
+            None => f(self),
+        }
+    }
+
+    /// The `frame_idx` KEY of frame function `fid` — `pk::name` for a scoped call, the
+    /// bare name otherwise — so a call site that only holds the FuncId can ask
+    /// `rtn_key_pkg` the same question the body lowering asks.
+    pub(crate) fn frame_key_of(&self, fid: u32) -> Option<&str> {
+        self.frame_idx
+            .iter()
+            .find(|(_, &v)| v == fid)
+            .map(|(k, _)| k.as_str())
+    }
+
     /// The names a package's routine bodies may read and write without leaving the
     /// package: `(constants, variables)`. The scoped-call gate's admission sets.
     pub(crate) fn pkg_scope_names(&self, pkg: &str) -> (BTreeSet<String>, BTreeSet<String>) {

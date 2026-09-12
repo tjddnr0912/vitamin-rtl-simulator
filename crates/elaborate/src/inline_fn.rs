@@ -410,7 +410,10 @@ impl Elaborator<'_> {
                 p.range.as_ref(),
                 self.shape_signed(p.signed, &p.shape_param),
             );
-            actual_ids.push(self.lower_ctx_or_plain(a, w));
+            // A default actual of a PACKAGE routine is lowered in the package's scope
+            // (§13.5.4, `with_default_arg_scope`).
+            let id = self.with_default_arg_scope(&fname, p, a, |s| s.lower_ctx_or_plain(a, w));
+            actual_ids.push(id);
         }
 
         // (2) Reduce the straight-line body → an ExprId, formals bound to actuals. The
