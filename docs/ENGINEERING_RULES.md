@@ -323,6 +323,7 @@ another.
 | Rule | Prevents |
 |---|---|
 | Give a post-patch or re-spell pass as many sites as the type has containers, and read a sibling spelling that is already correct as the signal that one container was missed | An omission looking like a missing capability |
+| Before keying a coercion or a guard on a slot's KIND, grep every constructor of that slot (`add_net(` twins: a frame function, a class method, a hoist temp) and give each the same arm; a kind fix that reaches one constructor turns the other's slot from silently right into coerced wrong | A class method's `Reg` return slot rounding 2.5 to 3 the moment the frame write learned to convert by kind (§4.5.494) |
 | Enumerate all sites for a shared function or desugar: every scope, caller, parser variant, assign site, reserve path, statement dispatch and declaration-level validation | The most frequently repeated defect class in this repository |
 | Count a type's containers and pin each one when a pass respells or patches expressions held by that type | A per-container omission repeating, with the loud spelling visible and the silent one not |
 | Enumerate the containers of the type a post-hoc patch pass patches, by grepping the type in the frozen IR, not the call sites that build it | A container carrying an unpatched sentinel into the engine |
@@ -447,6 +448,7 @@ another.
 | Rule | Prevents |
 |---|---|
 | Define a name's shadow set as every place a module binds one: ports, import exports, enum labels, instance names, block-local declarations | A census over declarations alone missing most of the binders |
+| Define a ROUTINE's own-name set the same way — formals, body locals, block-locals, body-local enum labels, its return name — build it once and hand that one function to every consumer (a scope hook's stand-down, a gate's write set, a binder's skip set) | A scope hook that stands down on "what the routine declares" shadowing the one binder its hand-built set forgot (a body enum label), so the routine contradicts its own module twin (§4.5.493) |
 | Find the nearest spelling of the same question that already works, and ask what it calls, before accepting a stated wall | A prerequisite being carried through several slices while the machinery already exists |
 | Walk forward after changing a width to every site that re-derives the value from a width, not only the sites that read the width | A read-back that assigns into the variable you already set being invisible to a census of readers |
 | List every call the original's caller makes before copying a call; the twin reads from its own state and most of the contract is invisible at the call site | Copying the maps without the containment gate and making a nested case silent-wrong |
@@ -532,6 +534,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Prefer the funnel that sees the value to the one that sees the syntax | A gate on the AST inheriting every hole in the AST-level predicate |
 | Compare the two phases' resolvers, not their intents, when leaning on an existing gate for a precondition | A check that folds less than you do being unable to cover you |
 | Count the enumeration behind a shared classifier's "sees all of them" comment | An expression position not being seen, leaving a real divergence |
+| Read a classifier's `_ => None` tail as a per-leaf-kind silent-wrong class when `None` stands a whole REGION down: enumerate the kinds it covers, ask which are exact by the standard (a sign stamp, a cast), and measure each on every consumer of the walk | A row naming one leaf kind ("`$signed` is not widened") while the tail covers every cast too, and a second consumer (the size cast) carrying the same class unnoticed (§4.5.495) |
 | List the children instead of smearing "unknown" over a node, and separate nodes that are evaluated from nodes that are not | A node with no effect in it standing the whole statement down and making a working design loud |
 | Widen an analysis lattice until it can distinguish the answers you need; a narrower lattice is itself a misdiagnosis | One boolean being unable to separate two outcomes, so a large share of reported items are that collapse |
 | Special-case only where you have a distinguishable reason, and check whether a user can write the same spelling | A blanket special case dropping a live path from the join |
@@ -827,7 +830,7 @@ census has produced it, and the probe itself is a claim to check.
 
 ## 7. Testing
 
-The full local gate is `cargo nextest run --workspace --locked`: 7890 tests, 15 skipped. Named gates
+The full local gate is `cargo nextest run --workspace --locked`: 7915 tests, 15 skipped. Named gates
 that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
 frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
 diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,

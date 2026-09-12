@@ -4231,3 +4231,33 @@ about execution ORDER, and an order-sensitive probe must be built where mapping 
 order differ (descending, for example) or it is vacuous. And cut a REJECT gate from a hazard set measured
 on a PRE build, never from a proxy: a gate built on "the names collide" false-rejected byte-correct
 designs in bulk, and a reviewer's proposed gate predicate is subject to the same measurement.
+
+### The set a hook stands down on must name every binder (§4.5.493)
+
+A package routine body's new scope hook resolved a bare name to the package's variable or constant
+unless the routine "declared" the name itself, and the declared set was built from formals, body
+locals, block-locals and the return name. The soundness lens built the one binder it missed — a
+body-local `typedef enum` label — and the hook shadowed the routine's own label with a same-named
+package item in all four lanes (`G=7` where the module twin and verilator print 3; iverilog does not
+honour a routine-local label at all, so the module twin is the oracle). The fix was one line in the
+one construction, which is the point: the gate's write set and the constant binder's skip set were
+already hand-built copies of the same set, and a fourth copy would have carried the same omission.
+Recorded: build a routine's own-name set once, from every binder, and hand the function around.
+
+### A kind-keyed coercion reaches every constructor of the kind or none (§4.5.494)
+
+Making a real function's return slot a `NetKind::Real` and teaching the frame write funnel to convert
+by slot kind fixed eight frame sites at once — and rounded a class method's `2.5` to `3`, because
+`reserve_class_method` was a second, untouched copy of the return-slot construction and still built a
+`Reg`; the frame write's new conversion then rounded a real into that integer slot. Before the change
+the second copy was silently right (the untagged store kept the real payload). Recorded: grep every
+`add_net(` twin that constructs the slot before keying a coercion on its kind.
+
+### A `_ => None` tail is a class, not a cell (§4.5.495)
+
+The queue row said "`$signed` is not widened; the `$signed(u8) * q8` twin is right; one leaf arm in
+`widen_inline_leaf`". Measured: the twin was wrong too, the arm named was never reached, and the root
+was the sign walk's `_ => None` tail standing the whole region down — for every `SysCall` and every
+`Cast`, on both consumers of the walk (the inline body and the size cast). Six arms fixed 31 cells;
+the row's fix shape would have fixed none. Recorded: when a classifier's `None` stands a region down,
+the tail is a per-leaf-kind class to enumerate and measure per consumer.

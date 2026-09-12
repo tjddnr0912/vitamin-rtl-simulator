@@ -9,6 +9,31 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — package routine bodies, real frame targets, sign-stamp leaves
+
+- **A package routine's body now resolves its bare names in the package's scope** (IEEE 1800 §26.3).
+  A function or task imported from a package, or called as `pk::g()`, used to bind a bare package
+  VARIABLE to whatever the calling module bound to that name — a same-named module net, a generate
+  block's local, a module `localparam`, or nothing (`undeclared net/variable`) — and the scoped call
+  refused such a body outright; a static routine could not read its own package's constant either.
+  Reads and writes (from a task), element and part-selects, transitive same-package callees and the
+  wildcard import all bind the package's object now; the routine's own formals, locals, block-locals
+  and body-local enum labels still win over a same-named package item, and a name the package does
+  not declare still falls back to the caller. `pk::g()`'s refusal now names only that case.
+- **A `real` or `realtime` destination inside a frame-lowered function or task no longer widens its
+  right-hand side to 64 bits.** `function automatic real f; f = a8 * b8;` with `a8 = b8 = 8'hFF`
+  printed `65025.000000` where both reference tools print `1.000000`; so did a real body local, an
+  `output real` formal, `return a8 * b8`, an `input real` formal bound at the call, and a `realtime`
+  return. The return slot of a real function and of a real class method is a real net now, so the
+  call is real everywhere it is consumed (`f() / 2` is a real division, `f() ** 2` no longer `nan`,
+  `return '1` is 1.0), and a real frame slot holds a real rather than the integer it was handed
+  (`f = f / 4`). A real-returning call passed to an integer formal converts as the tools do.
+- **`$signed(e)`, `$unsigned(e)`, `signed'(e)`, a size cast and a primitive cast inside a width
+  context are widened to that context** instead of standing the whole expression down to its
+  operand width: `function [31:0] f; f = $unsigned(s8) * q8;` (`s8 = -9`, `q8 = -32`) printed
+  `00000020` for `0000d820`, and `16'($signed(u8) * q8)` printed `0020` for `0120`. A user call as
+  such a leaf still keeps the old lowering (ROADMAP §2).
+
 ### Changed — hierarchical names printed by this release
 
 Several fixes below correct the hierarchical name vita prints for a scope. The behaviour is now the

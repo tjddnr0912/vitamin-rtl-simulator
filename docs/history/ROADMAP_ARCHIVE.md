@@ -7,12 +7,15 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 391건 (최신순·⚠️ = 미머지 · 번호는 1~492 중 372개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 394건 (최신순·⚠️ = 미머지 · 번호는 1~495 중 375개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.495` **A `$signed` / `$unsigned` / cast leaf inside a §11.6.1 region is widened to the region** (2026-09-13 · §2 Inline / frame binds, queue row 3 · two row claims refuted: the `$signed` twin is wrong too and the root is `ctx_signed_impl`'s `_ => None` tail, which stands the WHOLE region down on BOTH consumers (inline body AND size cast) · six sign arms gated on `consts` · 31 silent→correct over both consumers, call and opaque leaves pinned as the boundary · two rounds, no finding)
+- `4.5.494` **A `real` target on the FRAME route is not a §11.6.1 width context** (2026-09-13 · §2 Inline / frame binds, queue row 2 · eight frame sites, not "the return": the frame evaluator's unguarded `lvalue_width`, three argument-binding sites at the 64-bit slot width, and a `Reg` return slot · `NetKind::Real` return slot + `lvalue_targets_real` fourth site + `formal_lends_width` + `coerce_real_frame` · 24 silent→correct, closes the `cast_operand_is_real` AST-half row and the `pk::gr()` row · round-1 BLOCKING: `reserve_class_method` was a second copy of the return-slot construction; round 2 CLEAN)
+- `4.5.493` **A package routine's body resolves its bare names in the package's scope** (2026-09-13 · §2 Scoping, queue row 1 · class wider than the row: a module localparam, a generate local, a select, an element, a task read AND write, a wildcard import, a transitive callee, and the inline lane's package CONSTANTS and static tasks · one `RtnPkgScope { pkg, declared }` pushed by four lanes, consulted by `bare_ident_route` and `lookup_net_scoped`/`resolve_net`, `rtn_declared_names` as the one construction · 19 cells moved · round-1 BLOCKING: body enum labels missing from `declared`; round 2 CLEAN)
 - `4.5.492` **An explicit `signed` qualifier on a `time` declaration is honoured** (2026-09-12 · §2 Inline / frame binds, queue row 3 · the row's own cited cell is ACCIDENTALLY CORRECT (a 32-bit sink truncates the wrong quotient), so the defect needs a ≥64-bit sink · `kind_signedness`'s `Time` arm returns the declaration's own bit, one caller and ~25 `range_to_dims*` callers inheriting it; the `const_fn_width.rs` duplicate collapsed and `net_util.rs::formal_bind_may_narrow` deleted after measuring BOTH actual kinds · 25 silent→correct over 14 declaration sites and 7 consumers, controls held, `$time`/`#delay` measured PRE == POST · three review rounds, no finding on this slice)
 - `4.5.491` **An inline function body's return or local assignment is a §11.6.1 width context** (2026-09-12 · §2 Inline / frame binds, REPLACING queue row 2, which the grounding refuted as stale — 0 of 56 frame-bind cells reproduce, fixed at 104de0c and pinned by `formal_bind_signedness.rs`; two neighbouring §2 entries stale too · opt-in `inline_ctx_ext` on the EXISTING context walk, extension sign = the REGION's per §11.8.1 (a per-leaf sign was measured wrong: `fffff709` against `0000f609`) · 20 silent→correct, row-2 guards byte-identical, a PRE const-interpreter/runtime disagreement closed · three review rounds: a real TARGET and then a real OPERAND each opened the context wrongly, closed by `target_is_bv`/`non_bv` and the `_`-free `rhs_has_real_domain`, plus a missing §6.2 diagnostic in the ctx walk's `Unary` arm)
 - `4.5.490` **A package routine reached only by its scoped spelling is classified at the injection funnel** (2026-09-12 · §2 Scoping, queue row 1 · row wording refuted ("no import" is really "not in `rtn_pkg`") and its proposed pre-scan measured insufficient (a class-method and an interface-body caller hold no `pkg::name` reference) · `feed_scoped_block_locals` at the one injection funnel + step 3.6a unioning the `::` keys, deduped on body span · 19 silent→correct (22 values), 12 controls held · THREE review rounds on ONE narrowing axis, each fix producing the next blocker (false-loud → context-width hijack → wrong outer twin at the body's root block) ⇒ D8, the whole axis reverted, the scoped lane ships ungated and PRE-identical, five residues filed)
@@ -502,6 +505,157 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.495 A `$signed` / `$unsigned` / cast leaf inside a §11.6.1 region is widened to the region (2026-09-13, branch it7) ✅
+
+**ROADMAP row**: §2 "Inline / frame binds", the `$signed(...)` / `$unsigned(...)` leaf; queue row 3. Third
+slice of the bundle.
+
+**Row claims re-measured: the symptom holds, the root and the class do not.** `f = $unsigned(s8) * q8;`
+is `00000020` against both oracles' `0000d820` as filed. But the row's "the `$signed(u8) * q8` twin agrees
+in all three tools, so the class is one leaf arm" is false — that twin prints `00000020` for the oracles'
+`00000120` (the row's census cell must have used values that fit), and the stated root
+(`widen_inline_leaf` standing down on a `SysCall`) is not where the walk stops: `widen_inline_leaf` is never
+reached, because `size_ctx_route`'s SIGN walk (`ctx_signed_impl`) answers `None` for every `SysCall` and
+every `Cast` from its `_` tail, and `None` stands the WHOLE region down to its pre-slice lowering. The
+same walk serves the SIZE CAST, so `16'($signed(u8) * q8)` printed `0020` for both oracles' `0120` — one
+root, two consumers, and a cast leaf (`8'(u8) * b8` → `0009` for `f609`, `signed'(u8) * q8`) in the same
+class.
+
+**Fix.** Six arms in `ctx_signed_impl`, gated on `consts` (no opaque leaf in the operand, so under a
+hierarchical/class-field leaf the pre-slice classifier still answers verbatim): `$signed(e)` →
+`Some(true)`, `$unsigned(e)` → `Some(false)` (one argument each; §11.8.1 — the stamp IS the sign),
+`Cast{Signing{signed}}` → `Some(signed)`, `Cast{Size}` → the operand's sign (§6.24.1), `Cast{Prim}` →
+`cast_prim_wsign`'s sign (`real'` stays `None`), `Named` / `SigningParam` → `None` (a typedef can be
+`real`). The width walk (`size_ctx_self_width`) already had these arms. A user CALL leaf is deliberately
+NOT in this slice (ROADMAP §2: its own opt-in) and is pinned at the PRE value as the boundary.
+
+**Census PRE→POST**: 31 cells silent→correct on both agreeing oracles across the two consumers — both
+stamps in signed and unsigned regions, `+`, `<<`, unary `-`, a nested/parenthesised stamp, signed and
+16/32/64-bit returns, a stamp over a part-select and over an overflowing sum, the three cast kinds at
+narrower/equal/wider widths, and ten size-cast twins. Controls byte-identical: every cell whose product
+fits, the 32-bit-sibling positions, `int'`/`byte'` casts, the wider size cast, x/z carry (iverilog),
+the call leaf and the opaque-leaf stand-down.
+
+**Review**: two lenses, two rounds, no finding on this slice. The differential lens's extra cells filed
+(all PRE == POST): a `$signed` leaf INSIDE a call ARGUMENT is not widened in either the inline body or
+the module twin (`idw($signed(u8) * q8)` = `20` for `120`) — the formal bind's context, a different
+funnel; the multidriver census counts the ARGUMENT of `$signed`/`$unsigned` in an `always_comb` rhs as a
+WRITE (false-loud E3001, both oracles run it); `$signed(<string>)` is accepted where both oracles refuse
+(and its region is now 32 bits wide); `$unsigned(a, b)` drops the second argument silently.
+
+Files: `crates/elaborate/src/expr_size_ctx.rs`. Tests: a new `inline_sign_stamp_leaf.rs` (5). format 31
+unchanged.
+
+#### 4.5.494 A `real` target on the FRAME route is not a §11.6.1 width context (2026-09-13, branch it7) ✅
+
+**ROADMAP row**: §2 "Inline / frame binds", the FRAME route on a REAL target — the mirror image of
+§4.5.491; queue row 2. Second slice of the bundle.
+
+**Row claims re-measured: the symptom holds and the site census is wider than "the return".** Every
+frame site that carries a real target reproduces it: return-by-name, `return e`, a `real` body local, an
+`output real` formal, a `realtime` return, an `input real` formal bound at the call (`fi(a8*b8)`,
+`tr(a8*b8)` in a task), and a real-returning call consumed in arithmetic. The module-process twin was
+already right: the engine keys "a real destination lends no width" on `NetKind::Real` in its three
+process evaluators (`width::lvalue_targets_real`) — the FRAME evaluator (`frame_rhs_value_with`) asked
+`lvalue_width` unguarded, the three argument-binding sites bound at the formal's 64-bit slot width, and
+the return slot of a real function was a `Reg`, invisible to any of the guards.
+
+**Fix** (elaborate + engine, five sites, three of them one helper). `reserve_frame_func` gives a
+`real`/`realtime` function a `NetKind::Real` return slot with a real init; a `return <fill>` in such a
+function takes ctx 0 (`stmt_main.rs`, the same guard `resize_rhs_for_lvalue` has); the frame evaluator
+takes `lvalue_targets_real` as its fourth site; `width::formal_lends_width` (new, `None` for a real
+formal) is asked by `NetReader::formal_width` (the `Expr::Call` arm), `split_in_binds` (task-call
+copy-in) and the nested task-call copy-in in `task_frames.rs`; and `frame_slot_write` applies the
+module funnel's real↔int matrix (`value::coerce_assign`, keyed on the slot's `is_real`) as
+`coerce_real_frame`, because a real slot used to STORE the integral value it was handed and `f = f / 4`
+divided as integers. Two consequences: `func_ret_is_real` (elaborate's `expr_is_real` and the engine's
+width table both read the slot kind) is TRUE for such calls, so `f() / 2` is a real division (PRE `0`)
+and `f() ** 2` no longer `nan`; and a real-returning call is real to the INLINE bind, so `pa(rf(0))`,
+`pa(p::f(0))` and `pa(c.cm())` convert (`5 5 5`, PRE `0 0 0`) — which closes the §2 row on
+`cast_operand_is_real`'s AST half and the `pk::gr()` row (`F=6 F2=4`, PRE `0 0`) as well.
+
+**Census PRE→POST**: 3 tools, 3 backends on the headline. 24 cells silent→correct on both agreeing
+oracles (the eight frame sites, `-b8`, `a8 << 4`, `return '1` (was `-1.000000`), a real local in a
+bit-vector function (`fe01` → `0001`), `f()/2`, `f = f/4`, `**`, the three real-call actuals); controls
+byte-identical (a real literal return, a real read-back, a real operand in the rhs, a 64-bit operand, a
+signed product against a 32-bit literal, division, comparison, concat, `int`/`bit` sinks, `$rtoi`,
+ternary, `$sformatf`). Two cells moved silent→LOUD through existing gates: `$display("%h", f())` (PRE
+printed the f64 payload; the `%h`-on-real refusal is pre-existing, both oracles print the rounded
+integer — §3) and a part-select of a real actual at an inline bind (PRE `00000000` for `00000004`; the
+inline bind's missing real→int conversion is the filed §2 row).
+
+**Review**: two lenses, two rounds. Round 1 soundness S2-sound-1 (BLOCKING): `reserve_class_method` is a
+SECOND copy of the return-slot construction and kept a `Reg` slot, so the new frame coercion rounded
+`c.ch()` = 2.5 to 3 — fixed by the same `ret_is_real` arm (which also closed the unswept twin, a real
+method body's `cm = a8 * b8`, 65025 → 1). Round 2: both lenses CLEAN on the delta (method-calls-method,
+`realtime` methods, virtual dispatch to a real override, `return` in nested control flow, real results
+into `int` fields / `%0d` / `input int` actuals, constructor arguments; `native|vm|interp` identical). The
+soundness lens's engine census: 22 context-seeding sites, 4 guarded by `lvalue_targets_real`, 3 by
+`formal_lends_width`, 2 by the native `is_real` bail, the rest classified unreachable or same-answer
+with a design each. Filed: a continuous assign to a `real` variable is loud (E3018) where both oracles
+run it; `real` class members, `static` methods and `for (int i…)` inside a method are loud (§3).
+
+Files: `crates/elaborate/src/{frames_reserve,stmt_main,classes}.rs`,
+`crates/sim-engine/src/{width,exec/frame_call,state/frame_eval,state/netread,state/task_frames}.rs`.
+Tests: a new `frame_real_target_width.rs` (8, headline on all three backends), two converted pins in
+`inline_formal_bind.rs` (the `g(rf(0))` row moved 0 → 5 = iverilog; the AST-alignment pin reads its real
+actual through `$rtoi`). format 31 unchanged (a `NetVar.kind` VALUE change for real return slots only).
+
+#### 4.5.493 A package routine's body resolves its bare names in the package's scope (2026-09-13, branch it7) ✅
+
+**ROADMAP row**: §2 "Scoping / imports / block-locals", entry 1 — an imported package function's body
+reads a package VARIABLE through the MODULE scope; queue row 1. First slice of the bundle.
+
+**Row claims re-measured: the symptom holds and the class is wider than the row.** `Z=ee` against both
+oracles' `123`, and E3010 with no module `x`, as filed. The census over both lanes (33 designs) found the
+same root behind: a module `localparam x` (`aa`), a generate block's `x` (`dd`), a part-select
+(`x[7:4]` → `e`), an unpacked-array ELEMENT (`arr[i]` → the module's 9), an automatic TASK reading
+(`T=100`) and WRITING a package variable (`W=120 pk=7` — both increments landed on the module's `cnt`),
+a wildcard import, a continuous-assign call site, a transitive callee (refused by the scoped gate, E3010
+in the import lane); and the INLINE lane could not read a package CONSTANT either (`gs = C + 1` →
+`undeclared net/variable t.C`), nor could a STATIC task. The scoped spelling `pk::g()` refused every one
+of these bodies at its gate.
+
+**Fix.** One scope entry, not a table copy. `cur_rtn_pkg` (already the stack `resolve_rtn_key` consults
+for sibling CALLS) carries `RtnPkgScope { pkg, declared }`, pushed around the body by all four lanes —
+frame function, frame task, the inline function fold, and the inline task expansion (NEW push) — where
+`declared` = formals ∪ body locals ∪ block-locals ∪ body enum labels ∪ own name (`rtn_declared_names`,
+ONE construction now shared by the scoped-call gate's write set and `push_pkg_consts_scoped`'s skip set,
+which used to build it by hand). The two shared resolvers consult it: `bare_ident_route` at a new step
+3½ (a package CONSTANT → the route the `pkg::C` spelling builds; a VARIABLE → `Other`) and
+`lookup_net_scoped` / `resolve_net` (a VARIABLE → the package net, ahead of the module's import-alias
+and declaration-order checks), so a whole read, a select chain, an lvalue and every classifier bind one
+object. A name the routine declares makes the hook stand down (the frame slot / inline substitution wins
+as before); a FREE name still falls back to the caller (the import lane's pre-existing lenience, both
+oracles refuse). The scoped-call gate admits package variables in its read and write sets (message
+reworded); a write then meets the frame classifier's own rule (function: loud, task: performed). New
+module `pkg_body_scope.rs` (160).
+
+**Census PRE→POST**: 19 cells silent→correct or loud→correct on both agreeing oracles (both lanes,
+functions and tasks, variable and constant, element and part-select, the transitive callee, the write
+from a task); controls byte-identical (a formal of the same name, the explicit `pk::x` spelling, the
+variable imported into the module too, the module-function twin, the block-local flatten class on a
+declared name, the free-name lenience, the function-write loud, the wildcard-import false-loud on an
+uncalled writing function, the inline body's constant RANGE bound (`lookup_scoped`, unhooked)).
+
+**Review**: two lenses, two rounds. Round 1 soundness S1-sound-1 (BLOCKING): `declared` lacked the
+routine's body-local `typedef enum` LABELS (`push_body_enum_labels` binds them innermost), so a
+same-named package constant/variable shadowed the label (`G=7`/`f7` where the module twin and verilator
+print 3; iverilog is disqualified on this axis — it ignores a routine-local label with no package in
+sight) — fixed by adding `body_enums` to the one construction. Round 2: both lenses CLEAN on the delta
+(a package ENUM label vs a body label, the scoped lane, the constant-binder direction, a body writing a
+label's name stays loud in both lanes; 133 pre-existing review designs moved exactly the six round-1
+cells). The soundness lens's reader census: 38 sites — 5 hooked, 14 bypass-same-answer, 9 in the
+CONSTANT domain (`lookup_scoped` and its `params` twins, unhooked: a body-local `logic [C-1:0]` still
+sizes from the MODULE's `C`, same root as the filed range-bound row), 10 unreachable. Filed: a formal's
+DEFAULT-VALUE expression (`input [15:0] a = x`) is lowered outside the scope (`ef` for `124`); a read of
+a shadowed name AFTER the shadowing block falls to the caller for the whole body (`f3` for `128`, the
+flatten class); the constant-function lane folds a package constant at the module twin's width (`23`
+for `123`).
+
+Files: `crates/elaborate/src/{package,scope,ident_route,frames_body,inline_fn,inline_task,lib}.rs`, new
+`crates/elaborate/src/pkg_body_scope.rs`. Tests: a new `pkg_body_scope.rs` (12). format 31 unchanged.
 
 #### 4.5.492 An explicit `signed` qualifier on a `time` declaration is honoured (2026-09-12, branch it6) ✅
 
