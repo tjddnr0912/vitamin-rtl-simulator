@@ -334,6 +334,7 @@ another.
 | Treat a gate that exists for one consumer as the gate for every consumer of the same shape, and count the copies | Binders that call none of the copies, and a further copy the docstring already claimed |
 | Census a scope rule at every spelling of the scope it names: module, interface, package, compilation unit | A rule about a declaration written in one scope being applied to a spelling where it does not hold |
 | Census a subroutine-body rule at every binder that can INJECT a body into the table the rule reads — package import, scoped `pkg::` call, interface, class — and ask WHEN each injection runs against the one-shot pass that computed the rule | A feed computed once over `module.body` while package routines arrive in the same table one step later and two steps later |
+| A routine's DECLARATION has text outside its body — formal default values, return-type bounds — and a scope rule for the body must reach it: census where the declaration's text is lowered (the caller's actual loop) and who collects callees from it | A package scope pushed around the body while a default `a = x` / `a = h()` was lowered beside the caller's actuals in the caller's scope, and the callee collector never reading a default (§4.5.496) |
 | Enumerate the AST forms new keys can appear in that the old keys could not, such as lvalues, iteration and port connections, when a table's key set widens | A read-only rewrite gaining a write side and an element write becoming a bit write |
 | Bisect a diagnostic page per header or per file before pricing the items | A page that reads as several items being one root plus its uses |
 | Probe a queue row's plain twin at three widths — at most 32, 33 to 64, and above 64 — before building for the row's shape; the answer names the lane | The position named in the row being incidental while the plain twin was already wrong |
@@ -535,6 +536,8 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Compare the two phases' resolvers, not their intents, when leaning on an existing gate for a precondition | A check that folds less than you do being unable to cover you |
 | Count the enumeration behind a shared classifier's "sees all of them" comment | An expression position not being seen, leaving a real divergence |
 | Read a classifier's `_ => None` tail as a per-leaf-kind silent-wrong class when `None` stands a whole REGION down: enumerate the kinds it covers, ask which are exact by the standard (a sign stamp, a cast), and measure each on every consumer of the walk | A row naming one leaf kind ("`$signed` is not widened") while the tail covers every cast too, and a second consumer (the size cast) carrying the same class unnoticed (§4.5.495) |
+| Derive "which arguments does this call write" from the ENGINE's write-back handlers, as a write VIEW of the one argument table, never as the complement of the read view; an argument can be both read and written (a seed) | Narrowing a conservative "every argument is a write" to the read table's complement dropping the seed of `$random(seed)`, so a fork local mutated by the seed write was proven never-written and flattened (§4.5.498) |
+| When a fix removes a FALSE loud, run the newly accepted cells through the oracles before shipping and close the class the loud was hiding in the same bundle; a false loud masks nothing on purpose, but it masks something | The six accepted `$sysfunc(u8)` cells exposing the whole `$bits` family's unsigned fold in one shape (§4.5.498 → §4.5.499) |
 | List the children instead of smearing "unknown" over a node, and separate nodes that are evaluated from nodes that are not | A node with no effect in it standing the whole statement down and making a working design loud |
 | Widen an analysis lattice until it can distinguish the answers you need; a narrower lattice is itself a misdiagnosis | One boolean being unable to separate two outcomes, so a large share of reported items are that collapse |
 | Special-case only where you have a distinguishable reason, and check whether a user can write the same spelling | A blanket special case dropping a live path from the join |
@@ -830,7 +833,7 @@ census has produced it, and the probe itself is a claim to check.
 
 ## 7. Testing
 
-The full local gate is `cargo nextest run --workspace --locked`: 7915 tests, 15 skipped. Named gates
+The full local gate is `cargo nextest run --workspace --locked`: 7928 tests, 15 skipped. Named gates
 that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
 frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
 diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,

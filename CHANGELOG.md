@@ -9,6 +9,28 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — formal defaults, call actuals, `always_comb` system-function arguments, `$bits`
+
+- **A package routine's formal default value is evaluated in the package's scope** (IEEE 1800
+  §13.5.4). `function automatic [31:0] gd(input [15:0] a = x)` called as `gd()` used to read the
+  calling module's `x` (or its `localparam`, or its own function of the same name as a default's
+  `h()`); every lane, the named-argument spellings and the scoped `pk::gd()` call now evaluate the
+  default in the package, and a sibling routine named by a default is reachable there.
+- **A call actual takes its formal's declared width as its context on the inline lane**
+  (§13.5.3 / §11.6.1). `idw(u8 * b8)` into `input [31:0]` folded the product at 8 bits
+  (`00000009` where both reference tools print `0000f609`), at module scope and inside function
+  bodies alike; the `automatic` twin was already right.
+- **A system function's argument in an `always_comb` right-hand side is a read.** `always_comb
+  a = $signed(u8) * q8;` beside `logic [7:0] u8 = 8'hF7` was refused as a two-driver conflict on
+  `u8`; so were `$clog2(u8)`, `$bits(u8)`, `$countones(u8)` and a size cast. Write destinations
+  (`$sscanf`'s targets, `$fgets`'s buffer, the seed of `$random(seed)` / `$dist_*(seed, …)`) still
+  count as writes.
+- **`$bits`, `$size`, `$left`, `$right`, `$low`, `$high`, `$increment`, `$dimensions` and
+  `$unpacked_dimensions` return a signed `int`** (§20.6.2 / §20.7). They folded to an unsigned
+  constant, so `$bits(u8) + $signed(q8)` with `q8 = -32` printed `000000e8` for `ffffffe8`,
+  `$bits(u8) / -2` printed 0 for −4, and a loop bound `i < $size(a) - 8` ran five times instead of
+  none.
+
 ### Fixed — package routine bodies, real frame targets, sign-stamp leaves
 
 - **A package routine's body now resolves its bare names in the package's scope** (IEEE 1800 §26.3).

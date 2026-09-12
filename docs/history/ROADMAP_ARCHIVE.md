@@ -7,12 +7,16 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 394건 (최신순·⚠️ = 미머지 · 번호는 1~495 중 375개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 398건 (최신순·⚠️ = 미머지 · 번호는 1~499 중 379개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.499` **`$bits` and the array-query functions return a signed `int`** (2026-09-13 · no queue row — the class the §4.5.498 false-loud had hidden in one shape, closed in the same bundle · one `int_result_expr` at every materialization incl. the deferred hierarchical patch · 18 silent→correct, unsigned-context readers byte-identical · round 2 CLEAN)
+- `4.5.498` **A system function's argument in an `always_comb` rhs is a read** (2026-09-13 · §3.b ac-signed-mdrv, queue row 3 · class = every system function, not the stamps · the never-writes walk's `SysCall` arm mirrors the statement arm through a WRITE view of the table (`syscall_writes_arg`), which round-1 soundness forced to include the seed of `$random`/`$dist_*` (the first draft flattened a seeded fork local) · 6 loud→correct, every write dest still counted · two rounds)
+- `4.5.497` **A call actual takes its formal's width as a §11.6.1 context on the inline lane** (2026-09-13 · §2 Inline / frame binds, queue row 2 · class = the inline function lane's actual lowering, plain products too, module scope included · the §4.5.491 opt-in at the actual loop · 20 silent→correct, 14 controls · two rounds, no finding)
+- `4.5.496` **A package routine's formal default value is evaluated in the package's scope** (2026-09-13 · §2 Scoping, queue row 1 · class wider than the row: constants, sibling calls, named-argument defaults, the scoped spelling, static tasks · `with_default_arg_scope` at the four lanes on span identity + `collect_callee_ports` · 15 silent→correct · two rounds, no finding)
 - `4.5.495` **A `$signed` / `$unsigned` / cast leaf inside a §11.6.1 region is widened to the region** (2026-09-13 · §2 Inline / frame binds, queue row 3 · two row claims refuted: the `$signed` twin is wrong too and the root is `ctx_signed_impl`'s `_ => None` tail, which stands the WHOLE region down on BOTH consumers (inline body AND size cast) · six sign arms gated on `consts` · 31 silent→correct over both consumers, call and opaque leaves pinned as the boundary · two rounds, no finding)
 - `4.5.494` **A `real` target on the FRAME route is not a §11.6.1 width context** (2026-09-13 · §2 Inline / frame binds, queue row 2 · eight frame sites, not "the return": the frame evaluator's unguarded `lvalue_width`, three argument-binding sites at the 64-bit slot width, and a `Reg` return slot · `NetKind::Real` return slot + `lvalue_targets_real` fourth site + `formal_lends_width` + `coerce_real_frame` · 24 silent→correct, closes the `cast_operand_is_real` AST-half row and the `pk::gr()` row · round-1 BLOCKING: `reserve_class_method` was a second copy of the return-slot construction; round 2 CLEAN)
 - `4.5.493` **A package routine's body resolves its bare names in the package's scope** (2026-09-13 · §2 Scoping, queue row 1 · class wider than the row: a module localparam, a generate local, a select, an element, a task read AND write, a wildcard import, a transitive callee, and the inline lane's package CONSTANTS and static tasks · one `RtnPkgScope { pkg, declared }` pushed by four lanes, consulted by `bare_ident_route` and `lookup_net_scoped`/`resolve_net`, `rtn_declared_names` as the one construction · 19 cells moved · round-1 BLOCKING: body enum labels missing from `declared`; round 2 CLEAN)
@@ -505,6 +509,160 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.499 `$bits` and the array-query functions return a signed `int` (2026-09-13, branch it8) ✅
+
+**ROADMAP row**: none — surfaced by the it8 differential lens as what the §4.5.498 false-loud had been
+hiding in one shape (`always_comb a = $bits(u8) + $signed(q8)` beside an initializer), and found
+reachable in an `initial` on PRE already. Closed in the same bundle (ENGINEERING_RULES §2.6: close what a
+removed loud gate exposes).
+
+**Root.** IEEE §20.6.2 / §20.7: `$bits`, `$size`, `$left`, `$right`, `$low`, `$high`, `$increment`,
+`$dimensions`, `$unpacked_dimensions` return `int`. vita folds all of them at elaborate and built the
+constant UNSIGNED (`const_u32_expr` in `lower_bits_fold`, `const_param_expr`'s legacy 32-bit shape in
+`try_introspect_fold`, `make_const_u32` in the deferred hierarchical `$bits(u.x)` patch), so a sum with
+a negative sibling picked the unsigned context: `$bits(u8) + $signed(q8)` with `q8 = -32` was
+`000000e8` for both oracles' `ffffffe8`; `$bits(u8) / -2` was 0 for −4; a loop bound `i < $size(a) - 8`
+tripped 5 times for 0. Twelve cells over the family, all 2-oracle.
+
+**Fix.** One spelling, `const_eval.rs::int_result_expr` (a signed 32-bit const), at every
+materialization: the three `lower_bits_fold` returns, the four `try_introspect_fold` results, and the
+deferred hierarchical placeholder plus its patch in `hier_defer/bits.rs`. The constant-domain twin
+(`const_expr_signed`) already listed the family as signed, so no i64/`int` split exists.
+
+**Census PRE→POST**: 12 + 6 cells silent→correct on both agreeing oracles (the nine functions beside a
+negative sibling, a signed division, a comparison against −1, a subtraction below zero, the
+`always_comb` shape, a `$bits` of a literal / concat / hierarchical net / package net and parameter, the
+loop trip count). Controls byte-identical: an unsigned sibling, a shift amount, a replication count,
+`$unsigned($bits(x))`, a truncating sink, declaration bounds, `$bits` of a real / string / class handle
+/ `parameter type`, and `$countones` / `$clog2`, which were signed already. `native|vm|interp` identical.
+
+**Review**: round 2 of the it8 review (both lenses CLEAN on this delta; the soundness lens censused every
+materialization site and every reader that could have assumed unsigned).
+
+Files: `crates/elaborate/src/{const_eval,expr_special,hier_defer/bits}.rs`. Tests: a new
+`array_query_results_are_signed_int.rs` (2). format 31 unchanged (constant VALUE/sign bytes move for
+designs using the family).
+
+#### 4.5.498 A system function's argument in an `always_comb` right-hand side is a read (2026-09-13, branch it8) ✅
+
+**ROADMAP row**: §3.b `ac-signed-mdrv`; queue row 3. Third slice of the bundle.
+
+**Row claims re-measured: the symptom holds and the class is every system function, not the stamps.**
+`always_comb a1 = $signed(u8) * q8;` beside `logic [7:0] u8 = 8'hF7` was E3001 MULTIDRIVER ("written by
+`always_comb`") where both oracles print `120`, as filed — and so were `$unsigned`, `$clog2(u8)`,
+`$bits(u8)`, `$countones(u8)` and a size cast beside them, while the stamp-free `u8 * q8` was accepted.
+Multidriver Rule A keeps the conservative `stmt_never_writes_ident` walk on purpose (an `inout` actual
+IS a driver in verilator), and that walk's `SysCall` arm counted EVERY argument as a possible write
+(`arg_writes`).
+
+**Fix.** The `SysCall` arm mirrors the statement-form `SysTaskCall` arm: only a WRITE-dest argument
+counts as a write, and every argument is still scanned for a nested copy-back call. The first draft
+took "write-dest" as the complement of `syscall_read_args`, and the round-1 soundness lens found the
+hole: the ENGINE also writes the SEED of `$random(seed)` and every `$dist_*(seed, …)` back
+(`StmtEffect::SeededRandom` / `SeededDist`), which PRE's `arg_writes` had covered by accident — an
+`automatic integer sd = 7; a = $random(sd);` under a `fork` was proven "never reassigned"
+(`const_immune`) and flattened, so both activations drew from one seed (`SAME=0` for verilator's
+`SAME=1`; PRE was loud). So the table got a WRITE view, `systask.rs::syscall_writes_arg(name, i)` —
+the destination-taking family plus the seed of `$random` / `$dist_*` (read AND written; `$urandom(seed)`
+takes an input, §18.13.1) — and both write-walk arms ask it. The `always_ff` / `initial` rules (B, C)
+use the direct-write walk and are untouched.
+
+**Census PRE→POST**: 6 cells loud→correct on both agreeing oracles (the six system functions in an
+`always_comb` rhs); every write destination still counts (`$sscanf` ×3, `$fgets`, `$value$plusargs`,
+`$cast`, a nested copy-back call, the seeded `$random` / `$dist_*` under a fork — all PRE-identical), and
+the five accept-gate consumers of the walk (BL1 fork immunity, R17 never-written locals, the dyn-array
+admission) measured byte-identical. One value→loud cell, kept: the STATEMENT form `$random(sd);` inside
+an `always_comb` beside `integer sd = 7;` is E3001 now (the expression form was E3001 in PRE too, so
+the two forms agree; verilator cannot compile the shape, iverilog does not enforce §9.2.2.2). One
+oracle split recorded: iverilog 13 writes `$urandom(seed)`'s seed back where verilator and §18.13.1 do
+not — not chased.
+
+**Review**: two lenses, two rounds. Round 1 soundness S3-soundness-1 (BLOCKING, above) — fixed; the
+differential lens filed the `$bits`-family class it exposed (closed as §4.5.499). Round 2 CLEAN on both.
+
+**Filed**: `$readmem*`'s memory fill is absent from the write table (PRE's complement answered the same;
+the reject direction is measured harmless, the accept direction unreachable); `$size(q)` / `$size(da)`
+of a queue / dynamic array answers the element width (32) for both oracles' element count; the
+user-call actual in `always_comb` is still counted as a write (§3.b `mdrv-actual`, unchanged).
+
+Files: `crates/elaborate/src/{da/writes,systask}.rs`. Tests: a new
+`always_comb_sysfunc_arg_is_a_read.rs` (3). format 31 unchanged.
+
+#### 4.5.497 A call actual takes its formal's width as a §11.6.1 context on the inline lane (2026-09-13, branch it8) ✅
+
+**ROADMAP row**: §2 "Inline / frame binds", the call ACTUAL's region; queue row 2. Second slice of the
+bundle.
+
+**Row claims re-measured: the symptom holds and the class is not the stamp.** `idw($signed(u8) * q8)`
+into `input [31:0]` is `20` for both oracles' `120`, as filed — and the plain `idw(u8 * b8)` is `09` for
+`f609`, a 16-bit formal the same, a shift, a nested call, two actuals of one call, a call in a sum, all
+at module scope AND inside an inline body. The `automatic` twin (a frame formal is a net the engine
+sizes against) and the inline TASK (copies to a formal-width local) were right, so the class is the
+inline FUNCTION lane's actual lowering: `lower_ctx_or_plain(a, w)` takes the context walk only for a
+fill-bearing actual.
+
+**Fix.** The actual loop of `inline_resolved_func_in_pkg` lowers each actual with the §4.5.491 opt-in
+(`lower_inline_assign_rhs(a, w, ast_kind_is_bit_vector(kind))` — the formal's declared width, with the
+same `size_ctx_route` sign decision, `rhs_has_real_domain` guard and opaque-leaf stand-down); a nested
+call's actuals take THEIR formal's width, and `bind_formal_actual` resizes/seals as before.
+
+**Census PRE→POST**: 20 cells silent→correct on both agreeing oracles (both spellings at module scope
+and in a body; a 16-bit and a signed 16-bit formal in unsigned and signed regions; a 64-bit formal; a
+shift, a nested call, two actuals, a call in a sum, a concat operand, a signed product, a shift by a
+select). Controls byte-identical: the `automatic` twin, a fill actual, a `real` formal, a real operand in
+the actual (`+ r`), a comparison, a ternary, an 8-bit formal (no widening), a `string` formal, the inline
+task, a `$random` actual (drawn once, iverilog's stream), a size-cast / concat-member actual
+(self-determined), a `let`-bound actual and a hierarchical actual (opaque leaf stand-down, pre-existing).
+
+**Review**: two lenses, two rounds, no finding on this slice (the soundness lens measured the
+`inline_ctx_ext` save/restore under the actual loop in five sign/order combinations and the two
+unchanged lanes with a cell each). Filed: a wide NON-repeatable actual (`sgn($random)` into
+`input signed [15:0]`) is handed over unnarrowed (`12153524` for iverilog's `3524`); a `$signed` over an
+opaque leaf, a call leaf (`idw(fa(u8) * b8)`) and a `let`-bound actual still stand the region down.
+
+Files: `crates/elaborate/src/inline_fn.rs`. Tests: a new `inline_actual_width_context.rs` (4). format 31
+unchanged.
+
+#### 4.5.496 A package routine's formal default value is evaluated in the package's scope (2026-09-13, branch it8) ✅
+
+**ROADMAP row**: §2 "Scoping / imports / block-locals", the formal DEFAULT-VALUE expression; queue row 1.
+First slice of the bundle.
+
+**Row claims re-measured: the symptom holds and the class is wider.** `gd()` with `input [15:0] a = x`
+read the module's `x` (`D=ef` for both oracles' `124`), as filed — and a default naming a package
+CONSTANT read the module's `localparam` of that name, a default CALLING a sibling package routine
+(`a = h()`, `a = h() + 1`) called the MODULE's `h`, and so did a static function, an automatic and a
+static task, a named-argument call that leaves one formal to its default (`gn(.b(2))`) and the scoped
+`pk::gn()` spelling. `fill_default_args`'s existing "binds differently at this call site" refusal
+compares the caller's scope with `tf_decl_scope`, which for an injected package routine IS the module,
+so it never fired.
+
+**Fix.** `pkg_body_scope.rs::with_default_arg_scope(rtn_name, p, a, f)` runs the actual lowering with
+`RtnPkgScope { pkg, declared: {} }` (the §4.5.493 hook) pushed iff `a` IS `p.default` (span identity —
+`resolve_named_args` clones the default, span included; a user actual textually equal to the default,
+a macro-expanded actual and a constructed byte-offset collision were all measured not to misroute) and
+`rtn_key_pkg(rtn_name)` names a package; applied at the four lanes' input-actual lowering (inline
+function, inline task, frame function — which recovers its table key through `frame_key_of(fid)`,
+because the scoped lane's key is `pk::name` — frame task and frame out-call). `inject_pkg_callees`
+also collects callees from formal defaults (`ast_query.rs::collect_callee_ports`), so a default's
+`h()` reaches the package's `h` under its scoped key. A user-written actual, a module routine's default
+and the class-method default guard are untouched.
+
+**Census PRE→POST**: 15 cells silent→correct on both agreeing oracles (variable, constant, expression
+and sibling-call defaults across the four lanes, named-argument defaults, the scoped spelling, a
+package enum label / string / real / 96-bit parameter / unpacked-array element as a default, an
+empty `.a()` named argument, `gd() + gd()`); controls byte-identical (the user actual, a module
+routine's default, a module routine shadowing an imported same-named routine, a free-name default —
+both oracles refuse, the import-lane lenience).
+
+**Review**: two lenses, two rounds, no finding on this slice. Filed: a default of a package routine
+called by its BARE name from ANOTHER package's body binds in the CALLING package's scope (the bare key
+carries no package there; the scoped `p1::g1()` spelling is fixed) — `N=eeef` for both oracles' `124`,
+PRE-identical.
+
+Files: `crates/elaborate/src/{pkg_body_scope,package,ast_query,inline_fn,inline_task,frames_call/emit}.rs`.
+Tests: a new `pkg_default_arg_scope.rs` (4). format 31 unchanged.
 
 #### 4.5.495 A `$signed` / `$unsigned` / cast leaf inside a §11.6.1 region is widened to the region (2026-09-13, branch it7) ✅
 

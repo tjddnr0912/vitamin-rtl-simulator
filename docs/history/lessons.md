@@ -4261,3 +4261,34 @@ was the sign walk's `_ => None` tail standing the whole region down — for ever
 `Cast`, on both consumers of the walk (the inline body and the size cast). Six arms fixed 31 cells;
 the row's fix shape would have fixed none. Recorded: when a classifier's `None` stands a region down,
 the tail is a per-leaf-kind class to enumerate and measure per consumer.
+
+### A declaration's text is not only its body (§4.5.496)
+
+§4.5.493 pushed the package scope around a routine's BODY, and the queue's next row was the formal
+default value: `fill_default_args` hands the declaration's default expression to the caller's actual
+loop, which lowers user actuals in the caller's scope on purpose, so `a = x` read the module's `x`, `a =
+C` the module's `localparam`, and `a = h()` the module's `h` — in all four lanes, in the named-argument
+spellings and in the scoped call. The default is identified by span identity (the clone in
+`resolve_named_args` keeps it), and the callee collector had to learn to read defaults too. Recorded:
+a scope rule for a routine covers every piece of the declaration that is lowered somewhere else.
+
+### The write view of a table is not the complement of its read view (§4.5.498)
+
+The never-writes walk's `SysCall` arm counted every argument as a write; the false-loud it caused
+(`$signed(u8)` in an `always_comb` beside an initializer) was fixed by asking the read table which
+arguments are reads and counting the rest. The soundness lens built `automatic integer sd = 7; a =
+$random(sd);` under a `fork`: the engine writes the seed back, the seed is also READ, so the read
+table's complement said "no write", the local was proven never-reassigned, and both fork activations
+drew from one seed where PRE had been loud. The table now has an explicit write view derived from the
+engine's `StmtEffect` writers. Recorded, together with the round-2 differential's follow-up: the
+statement form `$random(sd);` in an `always_comb` beside an initializer is loud now, consistently with
+the expression form, and iverilog 13 writes `$urandom(seed)`'s seed back where verilator and §18.13.1
+do not — an oracle split, not chased.
+
+### A false loud still masks (§4.5.498 → §4.5.499)
+
+Removing the false E3001 accepted six `$sysfunc(u8)` cells, and one of them (`$bits(u8) + $signed(q8)`)
+was wrong: the whole §20.6 family folded to an UNSIGNED constant, in every position, on PRE already.
+The differential lens filed it as pre-existing; the ladder says the accepted shape went loud → wrong,
+so the family was made signed in the same bundle (18 cells to both oracles, one `int_result_expr`).
+Recorded: run the newly accepted cells through the oracles before shipping a false-loud removal.

@@ -19,8 +19,8 @@ and the row is deleted here; a residue survives as its own row.
 
 | order | § | track | open items | oracle | band |
 |---:|---|---|---|---|---|
-| 1 | §2 | silent-wrong (correctness) | 31 rows + the mechanism lists | 2-oracle unless the row says otherwise | ① |
-| 2 | §3 | loud → correct-support | 24 numbered + 72 small + 12 intentional | mostly present | ② |
+| 1 | §2 | silent-wrong (correctness) | 32 rows + the mechanism lists | 2-oracle unless the row says otherwise | ① |
+| 2 | §3 | loud → correct-support | 24 numbered + 73 small + 12 intentional | mostly present | ② |
 | 3 | §6 | G2 observability (OBS) | 6 stages | internal 3-way differential | ④ |
 | 4 | §5 | performance and hardening | 18 residues | measured | below the ladder |
 | — | §0 | correct-support promotion queue | 14 rows | mixed | ③ |
@@ -340,12 +340,13 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   lowering (both oracles agree): `f = id8(a8) * b8;` is `00000001` against `0000fe01`. Widening the
   sign walk to a call is a change to shared size-cast machinery and needs its own opt-in slice
   (`ctx_signed_impl`'s `Call` arm; §4.5.495 took the `$signed`/`$unsigned`/cast arms of the same tail).
-- A call ACTUAL's region is not a §11.6.1 context of the formal's width (both oracles agree, module
-  and inline twins alike): `idw($signed(u8) * q8)` with `input [31:0]` is `20` against `120` — the
-  formal bind lowers a fill-free actual plain (`lower_ctx_or_plain(a, w)`), the §4.5.491 opt-in is
-  cleared under a nested call on purpose, and the module-scope call site has no opt-in at all. Site =
-  `inline_fn.rs` actual lowering / `frames_call/emit.rs`; the fix shape is the §4.5.491 opt-in keyed on
-  the formal's declared width, with the same `target_is_bv` / real-operand guards.
+  The same stand-down reaches a call ACTUAL (§4.5.497): `idw(fa(u8) * b8)` and `idw(fi(u8) * b8)` are
+  `09` for `f609`, a `let`-bound actual the same (verilator only), and `$signed(u.x) * q8` under an
+  opaque leaf stays `20` for `120`.
+- A wide NON-repeatable actual is handed to a narrower signed formal unnarrowed (iverilog):
+  `sgn($random)` with `input signed [15:0] x` prints the full 32-bit draw (`12153524`) where iverilog
+  prints its low 16 bits (`3524`); `bind_formal_actual`'s verbatim tail narrows only a NARROW
+  non-repeatable actual. PRE-identical through §4.5.497.
 - `$signed(<string>)` is accepted (vita invention; both oracles refuse the program): `$signed(sv) * q8`
   folds at 32 bits since §4.5.495 (it folded at 8 before). `$unsigned(a, b)` drops its second argument
   silently (both oracles refuse the arity).
@@ -411,6 +412,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Ranges / bounds / selects
 
+- `$size(q)` / `$size(da)` of a queue or dynamic array answers the ELEMENT width (both oracles agree):
+  `SD=32 SQ=32` for `3` / `2`; `$bits(da.size())` is right in all three. Site =
+  `try_introspect_fold` → `net_dims_desc` on a dyn/queue handle net (the packed element dim is the only
+  dim it sees). Fix shape = a dyn-handle arm that answers the runtime size (`DynSize`) — it is not a
+  constant.
+
 - A parameter PART-SELECT used as a width bound is silently one bit (oracle: iverilog):
   `localparam logic [31:0] W = 32'hdeadbeef; logic [W[7:0]-1:0] v;` gives `$bits(v)=1` against
   iverilog's 239. The whole parameter is correct, so the part-select does not reach the constant
@@ -446,12 +453,13 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Scoping / imports / block-locals
 
-- A package routine's formal DEFAULT-VALUE expression is lowered outside the package scope (both
-  oracles agree): `function automatic [31:0] gd(input [15:0] a = x)` with a package `x = 16'h0123` and
-  a module `x = 8'hEE` gives `D=ef` against `124` (`pk::x` as the default is right). §13.5.3 evaluates
-  the default in the declaring scope; `fill_default_args` hands the default to the CALLER-scope actual
-  lowering in all four lanes, ahead of the §4.5.493 `RtnPkgScope` push. Fix shape = push the scope
-  around the default-filled actuals only (a user actual stays caller-scoped).
+- A package routine called by its BARE name from ANOTHER package's body evaluates its formal default
+  in the CALLING package's scope (both oracles agree): p2's body calls `g1()` (declared in p1, `input
+  [15:0] a = x`), and `x` resolves in p2 then the module (`N=eeef`, `778` when p2 declares an `x`)
+  against `124`; the scoped `p1::g1()` spelling is right since §4.5.496. The bare key inside another
+  package's body carries no package (`rtn_key_pkg` sees the module's import), so
+  `with_default_arg_scope` does not push. Fix shape = resolve the callee's declaring package through
+  the injected table (the `pk::` key `inject_pkg_callees` binds) before asking `rtn_pkg`.
 - A package routine body's read of a name AFTER a block that shadows it falls to the CALLER for the
   whole body (both oracles agree): `begin : bl logic [15:0] x; … end  s = s + x;` gives `SH=f3` against
   `128` — `declared` stands the §4.5.493 hook down per NAME for the whole body, the flatten class above
@@ -813,7 +821,8 @@ behind the §2 correctness queue.
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
-| ac-signed-mdrv | `always_comb a1 = $signed(u8) * q8;` where `u8` has a declaration initializer is E3001 MULTIDRIVER ("written by always_comb") where both oracles print `120`; `u8 * b8` and `8'(u8) * b8` in the same position are fine, so the false write is the ARGUMENT of `$signed`/`$unsigned` | the multidriver census counts a `$signed`/`$unsigned` argument in an `always_comb` rhs as a write to that variable (`multidriver.rs`, the `SysCall` arm of the rhs walk) | do not count a `SysCall` argument as a write | both | small |
+| ac-random-stmt | the STATEMENT form `$random(sd);` inside an `always_comb` beside `integer sd = 7;` is E3001 since §4.5.498 (the seed write is a write now; the EXPRESSION form was E3001 before too); iverilog runs it (`Y=11`), verilator refuses the shape ("Circular logic") | §9.2.2.2 by design — two drivers on `sd`; recorded as the one value→loud cell of §4.5.498 | none unless a two-oracle cell appears | iverilog | — |
+| readmem-write-table | `$readmem*`'s memory fill is not in `syscall_writes_arg`, so the never-writes walk calls a memory only `$readmemh` writes "never written"; the reject-gate direction (multidriver Rule A) is measured harmless and the accept-gate direction (a fork block-local memory filled by `$readmemh`) is unreachable in v1 | the write view of the table lists the engine's `StmtEffect` writers; `$readmem*` fills through a different funnel | add the `$readmem*` arg-1 row when a reaching design exists | — | small |
 | real-cont-assign | `real w; assign w = fr();` is E3018 (continuous assign drives variable) where both oracles print `1.000000`; the `always_comb` twin runs | a `real` variable is not an admitted continuous-assign target | admit a real variable as a continuous-assign destination (the engine's real-target guard is already keyed on the net kind) | both | small |
 | real-fmt-hex | `$display("%h", f())` / `$display("%h", r)` on a real is E3009 where iverilog prints the rounded integer (`3`) and verilator `0000000000000003` — value agreed, width split | the format gate refuses a real for `%b/%h/%o` | round to integer and print at 64 bits (verilator's width; iverilog prints minimal — a format-width split, value is not) | value both | small |
 | pkg-writer-import | `import pk::*` from a package holding a FUNCTION that writes a package variable is loud at the import even when that function is never called (frame classifier: "assignment to a net outside the function"); both oracles run the design | `apply_import_routines` injects every wildcard sibling and the frame classifier validates each injected body at reserve | classify lazily (on first call) or make the write rule per-callsite | both | small |
@@ -945,9 +954,9 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 a package routine's formal DEFAULT-VALUE expression is lowered outside the package scope (both oracles agree): `function automatic [31:0] gd(input [15:0] a = x)` with a package `x = 16'h0123` and a module `x = 8'hEE`, called `gd()`, prints `D=ef` against `124`; the explicit `pk::x` default is right. Root = `fill_default_args` hands the default to the CALLER-scope actual lowering in all four lanes (`inline_resolved_func_in_pkg`, `emit_frame_call`, `inline_task`, `emit_frame_task_call`), which runs before the §4.5.493 `RtnPkgScope` push — §13.5.3 evaluates a default in the DECLARING scope. Fix shape = push the routine's scope around the default-filled actuals only (a user-written actual stays caller-scoped: a module that declares its own `xtime` and writes `gmul(xtime(3))` must keep the module's). First action = census the four lanes' default-fill sites and measure a default reading a package variable, a package constant, a sibling routine, and a caller net of the same name at each · source = §4.5.493's differential lens | §2 Scoping | ① |
-| 2 | 2 | §2 a call ACTUAL's region is not a §11.6.1 context of the FORMAL's width (both oracles agree; module and inline twins alike): `idw($signed(u8) * q8)` with `function [31:0] idw(input [31:0] v)` prints `20` against `120` — the product folds at 8 bits although §13.5.3/§11.6.1 evaluate the actual as an assignment to the formal. Root = `inline_fn.rs`'s actual lowering and `frames_call/emit.rs` use `lower_ctx_or_plain(a, w)`, which takes the context walk only for a FILL-bearing actual; the §4.5.491 opt-in is cleared under a nested call on purpose (`lower_self_det`), and a module-scope call site has no opt-in at all. Fix shape = the §4.5.491 opt-in at the actual-lowering sites, keyed on the formal's declared width with the same `target_is_bv` (a `real` / `string` / handle / dyn-array formal is not a context) and `rhs_has_real_domain` guards. First action = census the nine binding sites (§2 "nine binding sites") for which already carry a width and measure `$signed(u8) * q8`, `u8 * b8`, `u8 + '1` and a real actual at each before opening any of them · source = §4.5.495's differential lens | §2 Inline / frame binds | ① |
-| 3 | 3 | §3 `always_comb a1 = $signed(u8) * q8;` is a false-loud E3001 MULTIDRIVER ("`u8` has a declaration initializer AND is written by `always_comb`") where both oracles print `120`; `u8 * b8` and `8'(u8) * b8` in the same `always_comb` are accepted, so the false WRITE is the ARGUMENT of `$signed`/`$unsigned`. Root = the multidriver census's rhs walk (`multidriver.rs`) counts a `SysCall` argument as a write target. Fix shape = the walk's `SysCall` arm treats arguments as reads (every `$name` in the subset is a pure function of its arguments except the file/scan family, which are statement-level effects already counted elsewhere). First action = census the walk's arms against `collect_writes`'s and measure `$signed`, `$unsigned`, `$clog2`, `$bits`, a size cast and a user call as the rhs of an `always_comb` beside a declaration initializer · source = §4.5.495's differential lens | §3.b ac-signed-mdrv | ② |
+| 1 | 1 | §2 `$size(q)` / `$size(da)` of a queue or dynamic array answers the ELEMENT width (both oracles agree): `int da[] = new[3]; int q[$]; … $size(da)`, `$size(q)` print `32` against `3` / `2`, while `$bits(da.size())` is 32 in all three tools. Root = `try_introspect_fold` resolves the handle net through `net_dims_desc`, which sees only the packed element dim of a dyn/queue net, and folds a CONSTANT where the answer is a runtime size. Fix shape = a dyn/queue-handle arm in `try_introspect_fold` that lowers to the `DynSize` SysFunc (the `.size()` route) instead of a constant, for `$size` (and `$high`/`$right` = size−1, `$low`/`$left` = 0, `$dimensions` = 1 + packed dims) — an unpacked dim of a dynamic array has no constant bound. First action = census which introspection functions the oracles accept on a dyn/queue/assoc handle and what each prints (an assoc array's `$size` is its `num()`), before touching the fold · source = §4.5.498's differential lens | §2 Ranges / bounds / selects | ① |
+| 2 | 2 | §2 a user CALL as a leaf of a §11.6.1 region stands the whole region down (both oracles agree): `function [31:0] f; f = id8(a8) * b8;` prints `00000001` against `0000fe01`, and a call ACTUAL `idw(fa(u8) * b8)` prints `09` for `f609` (§4.5.497 filed it). Root = `ctx_signed_impl`'s `_ => None` tail for `Call` (§4.5.495 took the stamp and cast arms of the same tail): the sign walk cannot sign a call, so `size_ctx_route` declines and the rhs keeps its pre-slice lowering. Fix shape = a `Call` arm that answers a single-segment call resolved by `lookup_func` with the callee's DECLARED return sign (`func_return_dims`) and declines a hierarchical / class-method call; the width side (`size_ctx_self_width`) already declines a call so the leaf's width comes from the lowering (`trusted_self_width`), and `widen_inline_leaf`'s `expr_is_repeatable` guard keeps a frame call from being named twice in a signed fill. First action = census the two consumers (size cast, inline body) with an inline and a frame callee, signed and unsigned returns, and a call whose return width is wider than the region, before adding the arm · source = §2 Inline / frame binds | §2 Inline / frame binds | ① |
+| 3 | 3 | §3.b `mdrv-actual`: a user-call ACTUAL in an `always_comb` rhs beside a declaration initializer is E3001 MULTIDRIVER (`always_comb a6 = id8(u8) * b8;` with `logic [7:0] u8 = 8'hF7` — both oracles print `f609`), because Rule A's conservative walk counts EVERY actual of a user call as a possible write; verilator counts an actual bound to an `output` / `inout` formal only. Root = `stmt_never_writes_ident`'s `Call` arm with `out = None` (the opt-in resolver `OutActualWrites` exists and is not passed by the multidriver census). Fix shape = pass the module's resolver so an actual bound to an `input` formal is a read; keep `inout` / `output` actuals as writes (the measured `always_comb bump(acc)` cell must stay loud). First action = census the four call shapes (function / task, input / output / inout, a nested call in an actual, a hierarchical callee) against verilator before wiring the resolver · source = §3.b | §3.b mdrv-actual | ② |
 | 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
 | 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
 | 6 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
