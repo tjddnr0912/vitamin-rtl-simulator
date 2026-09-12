@@ -194,9 +194,7 @@ impl Elaborator<'_> {
             // keeps its payload (the helper's target is the integral one), and it
             // declines the shapes it may not touch. One spelling with the inline
             // bind and with `emit_frame_task_call`'s.
-            let eid = if ast_kind_is_bit_vector(kind)
-                && formal_bind_may_narrow(kind, self.shape_signed(p.signed, &p.shape_param))
-            {
+            let eid = if ast_kind_is_bit_vector(kind) {
                 self.coerce_real_actual_to_formal(eid, w, formal_signed)
             } else {
                 eid
@@ -520,11 +518,7 @@ impl Elaborator<'_> {
                             .nets
                             .get((base_net + slot) as usize)
                             .is_some_and(|n| n.signed);
-                        let eid = if ast_kind_is_bit_vector(kind)
-                            && formal_bind_may_narrow(
-                                kind,
-                                self.shape_signed(p.signed, &p.shape_param),
-                            ) {
+                        let eid = if ast_kind_is_bit_vector(kind) {
                             self.coerce_real_actual_to_formal(eid, fw, fs)
                         } else {
                             eid

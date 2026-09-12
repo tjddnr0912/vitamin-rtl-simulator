@@ -251,34 +251,60 @@ fn the_round_is_exact_at_a_half_ulp_tie() {
 }
 
 #[test]
-fn a_time_formal_with_an_explicit_signed_qualifier_is_declined() {
-    // ⚠️ A DELIBERATE DECLINE, pinned so it is not read as support. `time` is
-    // 64-bit UNSIGNED (§6.11.2) and vita's shared `kind_signedness` therefore
-    // drops an explicit `signed` qualifier when it shapes the formal NET — so on
-    // the paths where the formal IS a net the body reads it unsigned whatever the
-    // bind computed (the static-task spelling below shows that, and it is
-    // pre-existing). Narrowing the other three would have turned their correct
-    // pre-slice answer into the same wrong one, so `time signed` keeps the
-    // pre-slice value everywhere. The root — a dropped qualifier — is ROADMAP §2's.
+fn a_time_formal_with_an_explicit_signed_qualifier_is_signed_and_narrows() {
+    // ⚠️ THIS TEST USED TO PIN A DECLINE. `kind_signedness` forced `time` unsigned
+    // and so DISCARDED an explicit `signed` qualifier; narrowing a real actual into
+    // such a formal would have made three correct cells wrong, so the bind refused
+    // to narrow `time signed` at all. The qualifier is honoured now (ROADMAP §5.2
+    // row 3), the refusal (`net_util::formal_bind_may_narrow`) and its three call
+    // guards are gone, and all four spellings narrow like any other integral formal.
+    // Both oracles (iverilog 13, verilator 5.052) give -4 on every line below.
     let (out, code) = run(
         "module top;\n  integer d;\n\
          \x20 function integer f(input time signed k); $display(\"FN=%0d\", k); f = 0; endfunction\n\
          \x20 function automatic integer af(input time signed k); $display(\"AF=%0d\", k); af = 0; endfunction\n\
          \x20 task automatic at(input time signed k); $display(\"AT=%0d\", k); endtask\n\
-         \x20 initial begin d = f(-3.7); d = af(-3.7); at(-3.7); $finish; end\nendmodule\n",
+         \x20 task st(input time signed k); $display(\"ST=%0d\", k); endtask\n\
+         \x20 initial begin d = f(-3.7); d = af(-3.7); at(-3.7); st(-3.7); $finish; end\nendmodule\n",
     );
     assert_eq!(code, Some(0), "got:\n{out}");
     assert!(
         out.contains("FN=-4") && out.contains("AF=-4") && out.contains("AT=-4"),
-        "both oracles read a signed `time` formal as -4; the decline keeps it;\n{out}"
+        "a REAL actual rounds to -4 and narrows into the signed `time` formal;\n{out}"
+    );
+    assert!(
+        out.contains("ST=-4"),
+        "the net-backed static-task spelling was 18446744073709551612 before the \
+         qualifier was honoured — the hole this test used to admit;\n{out}"
     );
 
-    // A plain `time` formal DOES narrow — loud (E3009) before this slice, 44 now.
+    // The INTEGER actual is the control that proves the fix is the SIGN, not the
+    // narrowing: all four were 18446744073709551612 before, and no real→int
+    // conversion runs on this path at all.
+    let (out, code) = run(
+        "module top;\n  integer d;\n\
+         \x20 function integer f(input time signed k); $display(\"FN=%0d\", k); f = 0; endfunction\n\
+         \x20 function automatic integer af(input time signed k); $display(\"AF=%0d\", k); af = 0; endfunction\n\
+         \x20 task automatic at(input time signed k); $display(\"AT=%0d\", k); endtask\n\
+         \x20 task st(input time signed k); $display(\"ST=%0d\", k); endtask\n\
+         \x20 initial begin d = f(-4); d = af(-4); at(-4); st(-4); $finish; end\nendmodule\n",
+    );
+    assert_eq!(code, Some(0), "got:\n{out}");
+    assert!(
+        out.contains("FN=-4")
+            && out.contains("AF=-4")
+            && out.contains("AT=-4")
+            && out.contains("ST=-4"),
+        "both oracles read an integer actual in a signed `time` formal as -4;\n{out}"
+    );
+
+    // A plain `time` formal DOES narrow — loud (E3009) two slices ago, 44 now — and
+    // it stays UNSIGNED: this is the control for "only the qualifier moved".
     let (out, code) = run(
         "module top;\n  function integer f(input time k); f = k[7:0]; endfunction\n\
          \x20 initial begin $display(\"U=%0d\", f(300.0)); $finish; end\nendmodule\n",
     );
-    assert_eq!(code, Some(0), "was E3009 before this slice;\n{out}");
+    assert_eq!(code, Some(0), "was E3009 two slices ago;\n{out}");
     assert!(out.contains("U=44"), "plain `time` narrows;\n{out}");
 }
 

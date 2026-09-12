@@ -596,7 +596,6 @@ impl Elaborator<'_> {
         kind: ast::NetVarKind,
         w: u32,
         formal_signed: bool,
-        declared_signed: bool,
     ) -> u32 {
         // A heap-handle (`string`/class/`event`) or `real` formal is not a bit
         // vector: a bit-resize would corrupt the handle or the IEEE-754 payload, so
@@ -639,9 +638,6 @@ impl Elaborator<'_> {
             // shared with the frame bind and declines the shapes it may not touch
             // (> 64 bits, a non-repeatable actual) — those keep the pre-slice
             // answer rather than becoming a new loud or a double draw.
-            if !formal_bind_may_narrow(kind, declared_signed) {
-                return eid;
-            }
             return self.coerce_real_actual_to_formal(eid, w, formal_signed);
         }
         if self.ir_expr_is_string(eid) {
@@ -807,14 +803,8 @@ impl Elaborator<'_> {
                 p.range.as_ref(),
                 self.shape_signed(p.signed, &p.shape_param),
             );
-            let bound = self.bind_formal_actual(
-                eid,
-                ast_actuals.get(i).copied(),
-                kind,
-                w,
-                formal_signed,
-                self.shape_signed(p.signed, &p.shape_param),
-            );
+            let bound =
+                self.bind_formal_actual(eid, ast_actuals.get(i).copied(), kind, w, formal_signed);
             self.subst.push((p.name.name.clone(), bound));
             self.formal_str
                 .push((p.name.name.clone(), matches!(kind, ast::NetVarKind::String)));

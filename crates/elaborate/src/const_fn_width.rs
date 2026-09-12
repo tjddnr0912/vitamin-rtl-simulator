@@ -951,15 +951,13 @@ impl Elaborator<'_> {
             let d = u32::try_from(hi.abs_diff(lo).checked_add(1)?).ok()?;
             w = w.checked_mul(d)?;
         }
-        // `time` is unsigned by definition; every other integral kind carries the
-        // signedness the DECLARATION resolved. Hard-coding the atom keywords signed
-        // was wrong: the parser already applies each atom's default, so `int
-        // unsigned u` arrives as `Int` + `signed = false` and forcing it signed
-        // sign-extended 32'hFFFF_FFFF into −1.
-        let s = match kind {
-            ast::NetVarKind::Time => false,
-            _ => signed,
-        };
-        Some((w, s))
+        // Every integral kind carries the signedness the DECLARATION resolved.
+        // Hard-coding the atom keywords signed was wrong: the parser already applies
+        // each atom's default, so `int unsigned u` arrives as `Int` + `signed =
+        // false` and forcing it signed sign-extended 32'hFFFF_FFFF into −1. `time`
+        // used to be forced unsigned here as well — the same discarded-qualifier
+        // defect `array_geom::kind_signedness` carried; both now honour `signed`, so
+        // the const-expression width/sign container cannot drift from the net one.
+        Some((w, signed))
     }
 }

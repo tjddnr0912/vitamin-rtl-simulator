@@ -53,7 +53,19 @@ impl IndexDomain {
 pub(crate) fn kind_signedness(kind: ast::NetVarKind, signed: bool) -> bool {
     match kind {
         ast::NetVarKind::Real | ast::NetVarKind::Realtime => true,
-        ast::NetVarKind::Time | ast::NetVarKind::Event | ast::NetVarKind::ClassHandle => false,
+        // `time` DEFAULTS unsigned (IEEE §6.11.2) but an explicit qualifier wins:
+        // the parser already resolves default + qualifier into `signed`
+        // (`hdl-parser/src/decls.rs::atom_default_signed(Time) = false`, then
+        // `opt_signed`), so forcing `false` here DISCARDED `time signed k` and read
+        // it unsigned on every consumer (`k/2` gave 9223372036854775804 where both
+        // oracles give -4). Plain `time` and `time unsigned` still arrive
+        // `signed = false` and are unchanged.
+        ast::NetVarKind::Time => signed,
+        // `event`/class-handle are synthesized-storage kinds with no user-writable
+        // qualifier: `event signed` is not legal SystemVerilog, and the only
+        // producer of `ClassHandle` writes `signed: false`
+        // (`hdl-parser/src/classes.rs:117` — sole `ClassHandle` construction site).
+        ast::NetVarKind::Event | ast::NetVarKind::ClassHandle => false,
         _ => signed,
     }
 }
@@ -531,7 +543,8 @@ impl Elaborator<'_> {
         if matches!(kind, ast::NetVarKind::Real | ast::NetVarKind::Realtime) {
             return (64, 63, 0, sgn);
         }
-        // `time` is a dimensionless 64-bit UNSIGNED 4-state variable (IEEE §6.11).
+        // `time` is a dimensionless 64-bit 4-state variable (IEEE §6.11), unsigned
+        // by default and signed under an explicit qualifier (`sgn` carries which).
         if matches!(kind, ast::NetVarKind::Time) {
             return (64, 63, 0, sgn);
         }
