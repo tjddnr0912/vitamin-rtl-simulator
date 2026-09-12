@@ -512,7 +512,7 @@ impl Elaborator<'_> {
         if let ast::ExprKind::Ident(p) = &arg.kind {
             if let Some((_, class, field)) = self.resolve_class_member(p) {
                 if let Some((_, f)) = self.class_field_id(&class, &field) {
-                    return self.const_u32_expr(f.width, 32);
+                    return self.int_result_expr(i64::from(f.width));
                 }
             }
             // §2 🆕 M ⓒ: `$bits(u.X)` of a HIERARCHICAL net or parameter — its width
@@ -528,7 +528,7 @@ impl Elaborator<'_> {
                     .collect::<Vec<_>>()
                     .join(".");
                 if self.lookup_net_scoped(&joined).is_none() {
-                    let eid = self.const_u32_expr(32, 32);
+                    let eid = self.int_result_expr(32);
                     self.deferred_hier_bits.push(DeferredHierBits {
                         eid,
                         prefix: self.cur_prefix.clone(),
@@ -549,7 +549,7 @@ impl Elaborator<'_> {
             })
             .filter(|&n| n > 0);
         match n {
-            Some(n) => self.const_u32_expr(n, 32),
+            Some(n) => self.int_result_expr(i64::from(n)),
             None => {
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -574,7 +574,7 @@ impl Elaborator<'_> {
         // rejects; we const-fold). No unbounded ranges in v1 ⇒ almost always 0.
         if name == "$isunbounded" && args.len() == 1 {
             let v = matches!(args[0].kind, ast::ExprKind::Dollar) as i64;
-            return Some(self.const_param_expr(v));
+            return Some(self.int_result_expr(v));
         }
         // SYS-INTRO잔여: `$typename(net)` const-folds to a packed-ASCII string of
         // vita's canonical type spelling (hand-IEEE — iverilog rejects $typename).
@@ -601,10 +601,10 @@ impl Elaborator<'_> {
         let net = self.resolve_intro_net(&args[0])?;
         let (dims, unpacked) = self.net_dims_desc(net)?;
         if name == "$dimensions" {
-            return Some(self.const_param_expr(dims.len() as i64));
+            return Some(self.int_result_expr(dims.len() as i64));
         }
         if name == "$unpacked_dimensions" {
-            return Some(self.const_param_expr(unpacked as i64));
+            return Some(self.int_result_expr(unpacked as i64));
         }
         // 1-based dimension index, default 1 (the outermost dimension).
         let d = if args.len() >= 2 {
@@ -631,7 +631,7 @@ impl Elaborator<'_> {
             }
             _ => return None,
         };
-        Some(self.const_param_expr(val))
+        Some(self.int_result_expr(val))
     }
 
     /// Width of the shapes `$bits` can take WITHOUT lowering: a static-array

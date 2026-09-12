@@ -6,7 +6,7 @@
 
 use super::*;
 use crate::const_wide_num::bp_from_limbs;
-use crate::literal::{make_const_i64, make_const_u32};
+use crate::literal::make_const_i64;
 use crate::net_util::resize_bits;
 
 impl Elaborator<'_> {
@@ -132,7 +132,8 @@ impl Elaborator<'_> {
             };
             match w {
                 Some(w) => {
-                    let cid = self.intern_const(make_const_u32(w, 32));
+                    // `int` result (§20.6.2), like the placeholder it replaces.
+                    let cid = self.intern_const(make_const_i64(i64::from(w), 32, true));
                     if let Some(slot) = self.exprs.get_mut(d.eid as usize) {
                         *slot = ir::Expr::Const { val: cid };
                     }

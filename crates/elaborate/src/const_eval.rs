@@ -1785,6 +1785,17 @@ impl Elaborator<'_> {
         self.push_expr(ir::Expr::Const { val: cid })
     }
 
+    /// IEEE 1800 §20.6.2 / §20.7: `$bits`, `$size`, `$left`, `$right`, `$low`,
+    /// `$high`, `$increment`, `$dimensions` and `$unpacked_dimensions` return
+    /// `int` — a SIGNED 32-bit value. They used to fold through `const_param_expr`
+    /// / `const_u32_expr`, i.e. UNSIGNED 32, so `$bits(u8) + $signed(q8)` with
+    /// `q8 = -32` zero-extended the negative operand (`000000e8` for both oracles'
+    /// `ffffffe8`; twelve cells over the family, and `$bits(u8) / -2` was 0 for
+    /// −4). One spelling for the whole family.
+    pub(crate) fn int_result_expr(&mut self, v: i64) -> u32 {
+        self.const_s32_expr(v as i32)
+    }
+
     /// Append a SIGNED 32-bit `Const` expr of value `v`; returns its ExprId. Used
     /// where a comparison/arithmetic must be signed (e.g. a descending foreach walk
     /// whose index transiently goes below 0).
