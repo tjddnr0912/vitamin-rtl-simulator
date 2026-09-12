@@ -273,7 +273,14 @@ impl Elaborator<'_> {
         // inherits the right scope too.
         let pushed_pkg = self.rtn_key_pkg(name);
         if let Some(p) = pushed_pkg.clone() {
-            self.cur_rtn_pkg.push(p);
+            let declared = pkg_body_scope::rtn_declared_names(
+                &func.ports,
+                &func.body_decls,
+                &func.body_enums,
+                &func.body,
+                Some(&func.name.name),
+            );
+            self.push_rtn_pkg_scope(p, declared);
         }
         let scope_seg = format!("$func${name}");
         // return-kw: a frame function's `return [expr]` assigns the func-named return
@@ -387,7 +394,7 @@ impl Elaborator<'_> {
         let entry_bb = self.funcs[fid as usize].entry;
         self.validate_frame_body(name, entry_bb, m.base_net, m.locals_len, false);
         if pushed_pkg.is_some() {
-            self.cur_rtn_pkg.pop();
+            self.pop_rtn_pkg_scope();
         }
         self.frame_fn_lowering = saved_ffl;
     }
@@ -418,7 +425,14 @@ impl Elaborator<'_> {
         // constants — the same two defects that were fixed for functions.
         let pushed_pkg = self.rtn_key_pkg(name);
         if let Some(pk) = pushed_pkg.clone() {
-            self.cur_rtn_pkg.push(pk);
+            let declared = pkg_body_scope::rtn_declared_names(
+                &task.ports,
+                &task.body_decls,
+                &task.body_enums,
+                &task.body,
+                None,
+            );
+            self.push_rtn_pkg_scope(pk, declared);
         }
         let scope_seg = format!("$func${name}");
         let saved_owner = self.cur_frame_owner;
@@ -506,7 +520,7 @@ impl Elaborator<'_> {
         let fork_modes_pending = std::mem::replace(&mut self.pending_fork_modes, saved_fork_modes);
         let hier_pending = std::mem::replace(&mut self.pending_hier_task_calls, saved_hier_pending);
         if pushed_pkg.is_some() {
-            self.cur_rtn_pkg.pop();
+            self.pop_rtn_pkg_scope();
         }
         self.frame_task_lowering = saved_ftl;
         // Capture the block base AFTER the body closure (round-7): a `pkg::f()` inside

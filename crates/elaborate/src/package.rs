@@ -1,6 +1,7 @@
 //! packages / imports — split out of the original `elaborate` lib.rs (mechanical move).
 
 use super::*;
+use pkg_body_scope::rtn_declared_names;
 
 /// IEEE §26.3: is `func` FREE-NAME CLOSED — safe to frame-lower for a package-scoped
 /// call `pkg::f(args)`? True iff every bare identifier it reads is one of its own
@@ -21,32 +22,36 @@ use super::*;
 pub(crate) fn pkg_task_self_contained(
     task: &ast::TaskDef,
     pkg_const_names: &std::collections::BTreeSet<String>,
+    pkg_var_names: &std::collections::BTreeSet<String>,
     pkg_rtn_names: &std::collections::BTreeSet<String>,
 ) -> bool {
-    Elaborator::task_self_contained_impl(task, pkg_const_names, pkg_rtn_names)
+    Elaborator::task_self_contained_impl(task, pkg_const_names, pkg_var_names, pkg_rtn_names)
 }
 
 pub(crate) fn pkg_func_self_contained(
     func: &ast::FunctionDef,
     pkg_const_names: &std::collections::BTreeSet<String>,
+    pkg_var_names: &std::collections::BTreeSet<String>,
     pkg_rtn_names: &std::collections::BTreeSet<String>,
 ) -> bool {
     // WRITE set: names a statement may assign to — the function's own
-    // formals / locals plus its return-by-name. A package const / enum label is
-    // NOT writable, so it stays out of this set (writing one is loud).
-    let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for p in &func.ports {
-        names.insert(p.name.name.clone());
-    }
-    let mut decls = func.body_decls.clone();
-    collect_block_local_decls(&func.body, &mut decls);
-    for d in &decls {
-        for n in &d.names {
-            names.insert(n.name.name.clone());
-        }
-    }
-    // A value function may assign its own return value by name (`f = expr;`).
-    names.insert(func.name.name.clone());
+    // formals / locals plus its return-by-name (`rtn_declared_names`, the one
+    // construction of that set), PLUS the package's own VARIABLES: the body
+    // resolves those in the package's scope now (`pkg_body_scope.rs`), and what a
+    // write to one does is the frame lane's own rule (a frame FUNCTION refuses a
+    // write outside its frame, a task performs it), the same rule the bare
+    // imported spelling gets. A package const / enum label is NOT writable, so it
+    // stays out of this set (writing one is loud).
+    let names: std::collections::BTreeSet<String> = rtn_declared_names(
+        &func.ports,
+        &func.body_decls,
+        &func.body_enums,
+        &func.body,
+        Some(&func.name.name),
+    )
+    .union(pkg_var_names)
+    .cloned()
+    .collect();
     // READ set: the write set PLUS same-package constants (enum labels +
     // localparams). Round-9 PKG2: a body may READ a bare `C`/`D` that is an
     // enum label of the SAME package as the function (frame-body lowering
@@ -289,19 +294,14 @@ impl Elaborator<'_> {
         func: &ast::FunctionDef,
     ) -> SavedPkgConsts {
         // Skip-set = formals + body-local decls + the function's own name (return by
-        // name), the same construction `pkg_func_self_contained` uses.
-        let mut skip: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        for p in &func.ports {
-            skip.insert(p.name.name.clone());
-        }
-        let mut decls = func.body_decls.clone();
-        collect_block_local_decls(&func.body, &mut decls);
-        for d in &decls {
-            for n in &d.names {
-                skip.insert(n.name.name.clone());
-            }
-        }
-        skip.insert(func.name.name.clone());
+        // name) — `rtn_declared_names`, the same set `pkg_func_self_contained` uses.
+        let skip = rtn_declared_names(
+            &func.ports,
+            &func.body_decls,
+            &func.body_enums,
+            &func.body,
+            Some(&func.name.name),
+        );
         self.push_pkg_consts_skipping(pkg, &skip)
     }
 
@@ -312,17 +312,13 @@ impl Elaborator<'_> {
         pkg: &str,
         task: &ast::TaskDef,
     ) -> SavedPkgConsts {
-        let mut skip: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        for p in &task.ports {
-            skip.insert(p.name.name.clone());
-        }
-        let mut decls = task.body_decls.clone();
-        collect_block_local_decls(&task.body, &mut decls);
-        for d in &decls {
-            for n in &d.names {
-                skip.insert(n.name.name.clone());
-            }
-        }
+        let skip = rtn_declared_names(
+            &task.ports,
+            &task.body_decls,
+            &task.body_enums,
+            &task.body,
+            None,
+        );
         self.push_pkg_consts_skipping(pkg, &skip)
     }
 
@@ -1452,7 +1448,7 @@ impl Elaborator<'_> {
     /// AFTER the package check (a package routine's body is not inside any generate
     /// scope of the instantiating module) and BEFORE the bare fallback.
     pub(crate) fn resolve_rtn_key(&self, bare: &str) -> String {
-        if let Some(pkg) = self.cur_rtn_pkg.last() {
+        if let Some(pkg) = self.cur_rtn_pkg.last().map(|s| s.pkg.as_str()) {
             let scoped = format!("{pkg}::{bare}");
             if self.func_table.contains_key(&scoped) || self.task_table.contains_key(&scoped) {
                 return scoped;
@@ -1535,11 +1531,7 @@ impl Elaborator<'_> {
         //   module t; int zz; … p::g(1) → 101, iverilog: "Unable to bind zz in p.h"
         // A callee that fails the check is NOT injected and its name is returned, so
         // the caller can say why instead of leaving a bare "undeclared function".
-        let const_names: std::collections::BTreeSet<String> = self
-            .pkg_consts
-            .get(pkg)
-            .map(|m| m.keys().cloned().collect())
-            .unwrap_or_default();
+        let (const_names, var_names) = self.pkg_scope_names(pkg);
         let rtn_names: std::collections::BTreeSet<String> =
             funcs.keys().chain(tasks.keys()).cloned().collect();
         let mut refused: Vec<String> = Vec::new();
@@ -1566,7 +1558,7 @@ impl Elaborator<'_> {
             let key = format!("{pkg}::{n}");
             if let Some(f) = f {
                 collect_callee_stmt(&f.body, &mut want);
-                if pkg_func_self_contained(&f, &const_names, &rtn_names) {
+                if pkg_func_self_contained(&f, &const_names, &var_names, &rtn_names) {
                     self.func_table.entry(key.clone()).or_insert(f);
                 } else {
                     refused.push(n.clone());
@@ -1574,7 +1566,7 @@ impl Elaborator<'_> {
             }
             if let Some(t) = t {
                 collect_callee_stmt(&t.body, &mut want);
-                if pkg_task_self_contained(&t, &const_names, &rtn_names) {
+                if pkg_task_self_contained(&t, &const_names, &var_names, &rtn_names) {
                     self.task_table.entry(key).or_insert(t);
                 } else {
                     refused.push(n.clone());
@@ -1589,19 +1581,19 @@ impl Elaborator<'_> {
     fn task_self_contained_impl(
         task: &ast::TaskDef,
         pkg_const_names: &std::collections::BTreeSet<String>,
+        pkg_var_names: &std::collections::BTreeSet<String>,
         pkg_rtn_names: &std::collections::BTreeSet<String>,
     ) -> bool {
-        let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        for p in &task.ports {
-            names.insert(p.name.name.clone());
-        }
-        let mut decls = task.body_decls.clone();
-        collect_block_local_decls(&task.body, &mut decls);
-        for d in &decls {
-            for n in &d.names {
-                names.insert(n.name.name.clone());
-            }
-        }
+        let names: std::collections::BTreeSet<String> = rtn_declared_names(
+            &task.ports,
+            &task.body_decls,
+            &task.body_enums,
+            &task.body,
+            None,
+        )
+        .union(pkg_var_names)
+        .cloned()
+        .collect();
         let read_names: std::collections::BTreeSet<String> =
             names.union(pkg_const_names).cloned().collect();
         pkg_stmt_pure_with(&task.body, &names, &read_names, pkg_rtn_names)

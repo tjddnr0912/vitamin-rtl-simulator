@@ -674,6 +674,22 @@ impl Elaborator<'_> {
         // §4.5.435: rooted at the DECLARING instance, not the caller's generate scope.
         let decl_root = self.display_of(&self.inst_prefix);
         let saved_root = std::mem::replace(&mut self.block_scope_root, Some(decl_root));
+        // A package task's body resolves in its own package (`pkg_body_scope.rs`) —
+        // the fourth lane to push this scope; without it `import pk::ts;` left a
+        // STATIC task's read of its package's constant `C` as `undeclared
+        // net/variable t.C` (both oracles run it), and its read of a package
+        // variable bound to the caller's same-named net.
+        let pushed_pkg = self.rtn_key_pkg(&tname);
+        if let Some(pk) = pushed_pkg.clone() {
+            let declared = pkg_body_scope::rtn_declared_names(
+                &task.ports,
+                &task.body_decls,
+                &task.body_enums,
+                &task.body,
+                None,
+            );
+            self.push_rtn_pkg_scope(pk, declared);
+        }
         if tlocals.is_empty() {
             self.inline_task_body(b, &task.body);
         } else {
@@ -682,6 +698,9 @@ impl Elaborator<'_> {
                 s.hoist_inline_task_locals(b, &tlocals);
                 s.inline_task_body(b, &task.body);
             });
+        }
+        if pushed_pkg.is_some() {
+            self.pop_rtn_pkg_scope();
         }
         self.block_scope = saved_scope;
         self.block_scope_root = saved_root;

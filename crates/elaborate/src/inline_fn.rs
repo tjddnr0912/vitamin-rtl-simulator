@@ -420,11 +420,18 @@ impl Elaborator<'_> {
         self.inline_stack.push(fname);
         let in_pkg = pkg.is_some();
         if let Some(p) = pkg {
-            self.cur_rtn_pkg.push(p);
+            let declared = pkg_body_scope::rtn_declared_names(
+                &func.ports,
+                &func.body_decls,
+                &func.body_enums,
+                &func.body,
+                Some(&func.name.name),
+            );
+            self.push_rtn_pkg_scope(p, declared);
         }
         let result = self.reduce_function_body(func, &inputs, &actual_ids, &eff_args);
         if in_pkg {
-            self.cur_rtn_pkg.pop();
+            self.pop_rtn_pkg_scope();
         }
         self.inline_stack.pop();
         self.dyn_subst.truncate(self.dyn_subst.len() - n_dyn);
@@ -491,11 +498,7 @@ impl Elaborator<'_> {
         // readable in the body — the frame-body lowering injects them under the
         // `$func$pkg::name` scope. `pkg_consts[pkg]` already holds params +
         // localparams + enum labels (see `elaborate_package`).
-        let pkg_const_names: std::collections::BTreeSet<String> = self
-            .pkg_consts
-            .get(pkg)
-            .map(|m| m.keys().cloned().collect())
-            .unwrap_or_default();
+        let (pkg_const_names, pkg_var_names) = self.pkg_scope_names(pkg);
         // Same-package ROUTINES the body may call. The body is lowered with its own
         // package pushed (`resolve_rtn_key`), so a nested call resolves to the
         // package's sibling — which is why a call is no longer disqualifying.
@@ -513,15 +516,15 @@ impl Elaborator<'_> {
             )
             .cloned()
             .collect();
-        if !pkg_func_self_contained(&func, &pkg_const_names, &pkg_rtn_names) {
+        if !pkg_func_self_contained(&func, &pkg_const_names, &pkg_var_names, &pkg_rtn_names) {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
                     "package-scoped call `{pkg}::{name}(...)` needs a body that references \
-                     only its own formals/locals, same-package constants and same-package \
-                     subroutines — this one names something else (a package VARIABLE, or a \
-                     construct outside the subset); `import {pkg}::*` and call `{name}` by \
-                     its bare name instead",
+                     only its own formals/locals, same-package constants, variables and \
+                     subroutines — this one names something else (a name the package does \
+                     not declare, or a construct outside the subset); `import {pkg}::*` and \
+                     call `{name}` by its bare name instead",
                 ),
             );
             return self.placeholder_expr();
@@ -538,7 +541,7 @@ impl Elaborator<'_> {
                 &format!(
                     "package-scoped call `{pkg}::{name}(...)` reaches `{pkg}::{bad}`, whose \
                      body names something outside its own formals/locals, same-package \
-                     constants and same-package subroutines — lowering it here would \
+                     constants, variables and subroutines — lowering it here would \
                      resolve that name in the CALLING module; `import {pkg}::*` and call \
                      `{name}` by its bare name instead"
                 ),

@@ -113,6 +113,7 @@ mod packed_inner;
 mod packed_lval;
 mod param_query;
 mod params;
+mod pkg_body_scope;
 mod ports;
 mod proc_builder;
 mod proc_ident;
@@ -913,7 +914,10 @@ struct Elaborator<'s> {
     // so a bare callee inside that body finds its own package's sibling (injected as
     // `pkg::name`) before anything the importing module happens to call the same
     // thing. Empty for ordinary module routines, so every other design is unaffected.
-    cur_rtn_pkg: Vec<String>,
+    // Each entry also carries the routine's OWN declared names, so a bare name the
+    // routine does not declare binds to the package's variable or constant before
+    // the caller's scope (`pkg_body_scope.rs`).
+    cur_rtn_pkg: Vec<pkg_body_scope::RtnPkgScope>,
     // Earliest DECLARATION position (byte offset in the expanded buffer) of every
     // bare net/variable name this module declares at module scope; ports and header
     // params get 0 so they are never "later". IEEE 1364-2005 §3.5 / IEEE 1800 §6.10

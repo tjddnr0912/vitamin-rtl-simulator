@@ -55,7 +55,9 @@ impl Elaborator<'_> {
     /// 2. inline substitution (`subst_lookup`, innermost wins) — no IR node,
     ///    exactly like `Paren` unwrapping;
     /// 3. an output/inout task formal (`out_subst_lookup`);
-    /// 4. the INNERMOST key over the COMBINED binding set (string / wide / real /
+    /// 4. (3½) a package routine body's own package constant or variable
+    ///    (`pkg_body_scope.rs`), for a name the routine does not declare;
+    /// 5. the INNERMOST key over the COMBINED binding set (string / wide / real /
     ///    numeric params and symbols): a string, wide or real parameter is
     ///    answered only when that exact key is the parameter (an independent
     ///    `walk_scopes` over one side map would match an OUTER binding even when
@@ -66,7 +68,7 @@ impl Elaborator<'_> {
     ///    block-local under the BARE name, landing on the key the constant
     ///    already occupies; a reader inside the declaring block must see the
     ///    net, one outside must still see the constant);
-    /// 5. a numeric constant in this or an enclosing generate scope
+    /// 6. a numeric constant in this or an enclosing generate scope
     ///    (`lookup_scoped`) — resolved before `resolve_net` so a param never
     ///    errors as an undeclared net.
     pub(crate) fn bare_ident_route(&self, seg: &str, at: ast::Span) -> BareIdentRoute {
@@ -79,6 +81,19 @@ impl Elaborator<'_> {
         }
         if let Some(net) = self.out_subst_lookup(seg) {
             return BareIdentRoute::OutSubst(net);
+        }
+        // 3½. §26.3: inside a PACKAGE ROUTINE's body, a name the routine does not
+        //    declare itself binds to the package's constant or variable before the
+        //    caller module's scope walk below (`pkg_body_scope.rs`). A frame formal
+        //    or local is excluded by the routine's declared set (it is a net under
+        //    the body's own `$func$` scope and must keep winning); an inline formal
+        //    or local returned at step 2. `Other` for a variable sends the lowering
+        //    to `resolve_net`, whose first step is the same hook.
+        if let Some(r) = self.pkg_body_const_route(seg) {
+            return r;
+        }
+        if self.pkg_body_var(seg).is_some() {
+            return BareIdentRoute::Other;
         }
         let mut local_shadows_param = false;
         if let Some(key) = self.walk_scopes_key(seg, |k| {

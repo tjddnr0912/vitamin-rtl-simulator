@@ -612,6 +612,13 @@ impl Elaborator<'_> {
         // in the module body (`top.d`) is visible from inside a generate block
         // (`top.g[0]`); a net declared inside the block (`top.g[0].t`) shadows it.
         let name = &path.segments[0].name;
+        // A package routine body's read/write of its own package's variable: the
+        // package net, ahead of the two checks below, which are about the MODULE's
+        // binding of this name (an import alias shadowed by a module constant; a
+        // module declaration that follows its use) — neither is what is bound here.
+        if let Some(id) = self.pkg_body_var(name) {
+            return id;
+        }
         match self.lookup_net_scoped(name) {
             Some(id) => {
                 // A2b-prereq guard: when the hit is a package-variable IMPORT
@@ -652,6 +659,13 @@ impl Elaborator<'_> {
     /// for params/genvars; STOPS at an instance boundary (per-instance net
     /// isolation). Returns the innermost (most specific) binding.
     pub(crate) fn lookup_net_scoped(&self, name: &str) -> Option<u32> {
+        // §26.3: inside a package routine's body a name the routine does not declare
+        // binds to the PACKAGE's variable before anything the caller module binds
+        // (`pkg_body_scope.rs`). Here, in the one walk every net reader shares, so a
+        // whole read, a select chain, an lvalue and a classifier answer one object.
+        if let Some(net) = self.pkg_body_var(name) {
+            return Some(net);
+        }
         self.walk_scopes(name, &self.symbols)
     }
 
