@@ -13,6 +13,73 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ---
 
+## 2026-09-12
+
+### A grounding's fix shape is a hypothesis — count the cells it moves (§4.5.488)
+
+The oracle grounding for the ascending/non-zero-LSB override row named the right resolvers and
+prescribed the fix: add width-only twins of `narrow_param_bits` / `pkg_const_narrow_bits` and repoint
+four call sites (`params.rs:436/458`, `param_query.rs:620/624`). The implementer built exactly that,
+rebuilt, and re-ran the whole 23-cell census: **2 cells moved**. Everything else was byte-identical.
+
+The reason is a lane, not a resolver. A bare-name override (`#(.P(pk::PA))`) takes the `ovr_bits`
+channel — `override_bits` → `fold_self_bits` → `wide_name_bits` → the BITS twins — which is the
+layout-READING consumer the grounding had correctly decided to keep declining. The four prescribed
+sites are the `localparam L = pk::X` ALIAS lane and `override_self_meta`'s operator-top path; they are
+exactly the two cells that moved. The fix needed a third piece the grounding did not name: a
+consumer-side arm at the override boundary (`override_decl_name_meta`), placed after `ovr_bits` in
+`bind_one_param`'s meta chain so that every override that already folds stays byte-identical. With it,
+23 of 23.
+
+A green scoped suite says nothing here: none of the 23 cells had a test before the slice. Only the
+PRE/POST census over the same designs the grounding measured separates "the prescription worked" from
+"the prescription named a different lane".
+
+### A mirror edit in a sibling lane is dead until its ORDER is verified (§4.5.489)
+
+The slice added `names_with_pkg_var_aliases` and wired it into the module path and, for coupling
+parity, into the interface path at `iface_inst.rs:194`. Both review lenses independently found the
+same thing in round 1: the interface edit was dead code. In `elaborate_iface_instances` the five-map
+computation sat at `:198`, while both `apply_import_consts` passes — the only writers of
+`pkg_var_aliases` for that scope (`package.rs:1290` wildcard, `:1408` explicit) — ran at `:244` and
+`:261`. At `:198` the map held no entry for the interface, so the augmentation was a guaranteed no-op.
+The module lane spells the same three steps in the opposite order (`instance.rs` :511 header imports,
+:541 body imports, :593 the maps).
+
+The differential lens measured the whole interface lane byte-identical PRE and POST across 5 designs
+and 8 readout cells, and fenced the class with an interface that declares the name itself (correct in
+both binaries) and a module at hierarchy depth 2 (fixed), which ruled out a generic `cur_prefix` bug.
+The scoped test run could not have caught it: every interface cell was equally wrong before and after,
+so a dead mirror and a working one produce identical green.
+
+The fix moved the WHOLE five-map computation after the second import pass rather than just the
+augmentation, because `compute_coalesced_block_locals` consumes `scoped_block_locals` between the old
+site and the new one and `check_block_local_scope_leaks` reads it too; splitting them would have fed
+the gate a map built from a different name set than the hoist later reads. Round 2 measured all eight
+cells at both oracles' values, with the round-0 binary still reproducing the defect on the same
+harness.
+
+### A name-keyed admission set must name every binder, and polarity decides who may see it (§4.5.489)
+
+`shadows_module` is the sole admission term deciding whether a plain block-local in a module process
+gets its own `$blk$<lo>` storage, and it was fed `local_decl_names` — the module's OWN declarations.
+An `import pk::*` binds the name through a second binder, `pkg_var_aliases`, which that set never saw,
+so a block-local named after an imported package VARIABLE was never scoped and flattened onto the
+alias's target: the package's shared net. Because an import is an alias and not a copy, the write left
+the module — 99 where both oracles read 5, in another importing module, in a sibling instance, and
+through a continuous assign. 17 silent-wrong readouts from one missing binder.
+
+The augmented set could not simply replace the old one. `names` is also `apply_import_consts`'s
+SUPPRESSION set (`package.rs:1258`), where membership means "do not import this name"; handing it the
+augmented set would have suppressed the very imports it was built from. `compute_per_entry_block_locals`
+reads its name set with the opposite polarity again (`block_local_class.rs:506`). So the augmentation
+is an opt-in parameter handed to exactly two consumers — `compute_scoped_block_locals` and the
+`shadows_module` twin in `hoist.rs` — both of which use it POSITIVELY, with `names` itself never
+mutated and both traps pinned by tests (an import that still binds with no block-local present, and a
+second unshadowed package variable that must keep its value).
+
+---
+
 ## 2026-09-11
 
 ### A row's root can be wrong by a tuple position, and its class wider than its construct (§4.5.484)

@@ -410,6 +410,7 @@ another.
 | Enumerate the resumption kinds, not the code sites, and give each its own two-oracle cell | Two kinds sharing a site, so a site census answers "all converted" twice |
 | Measure the twins a row lists as "kept correct" before using them as the regression baseline | Listed twins turning out to be a split and separate silent-wrongs |
 | Run the row's own cited line and ask which context it is in before building the machinery a row prices; a keyword's meaning is context-dependent | A reject gate keyed on a keyword over-rejecting everywhere the standard neutralises it |
+| Treat a grounding's prescribed fix shape as a hypothesis: build it, re-run the census, and count the cells that MOVED before building anything on top of it | A prescription that names the right resolvers but the wrong lane shipping as the fix, moving 2 of 23 cells with a green suite |
 | Diff a census cell's diagnostic text against its control's before classifying, when a whole position column is loud | Cells reading as still loud for a reason unrelated to the feature |
 | Run the real design after a rule a queue line claims will open it, and write the ladder that follows | The claim being a hypothesis about a second error page nobody has seen |
 | Measure a new loud gate on the designs it will refuse, not on the one that motivated it: enumerate the syntactic shapes that reach the arm and run PRE on each | Ordinary style and non-scope regions going loud |
@@ -520,6 +521,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Spell a gate predicate as an exhaustive match, never as a boolean shorthand; the compiler must catch a new variant | An implicit catch-all letting a new identifier default to the quiet side |
 | Close a syntactic walker's blind spot by opting into an already exhaustive walker with one axis parameterised, not by writing a new walker | A new walker repeating the old one's omissions |
 | Build a scope or safety guard as an allow-list of provably safe forms plus a reject, not as an enumeration of dangers; a recursive allow-list recurses over every value sub-expression | Enumerating dangers repeatedly omitting a category, and one unvisited sub-expression being an escape |
+| Census every BINDER that can introduce a name — own declarations, imports, aliases, injected bodies — before using a name-keyed set as an admission term, and hand the augmented set only to consumers with the SAME polarity | An admission set fed one binder's names admitting nothing for a name another binder introduced, and an augmented set fed back to a suppression consumer inverting its meaning |
 | Choose a walker's polarity from the gate: an accept gate takes a conservative walker, a reject gate takes a positive one | A conservative walker in a reject gate refusing working designs |
 | Read a catch-all answering false in an expression walker as "this node may reference anything", not as "unknown" | A conservative accept gate giving an answer independent of the name asked about |
 | Never skip the classifying recursion in any arm: compile first and discard the result if you must, and count the recursive calls per arm | A shortcut arm skipping admission, so a diagnostic disappears and a draw vanishes |
@@ -674,6 +676,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Record which role an added behaviour belongs to when a function serves two, and split by parameter | A syntactic region behaving like a real scope |
 | Collect in one pass what must interleave in declaration order | Two loops producing two orders that never interleave |
 | Choose an ownership discriminator expressive enough to separate the two nearest candidates, and check that they give different answers | A boolean being unable to separate two nested scopes |
+| Verify a sibling lane's mirror edit against the ORDER of its producer, and measure a cell on that lane; a dead mirror and a working one are indistinguishable in a scoped suite | A mirror computed before the pass that fills the map it reads being shipped as coverage of that lane |
 | Read the qualifiers in a refusal comment and count the cases where the condition is false | A true sentence being silent about a third case, which is harder to see than one that has expired |
 | Answer "what catches this if it is wrong?" before adding an approximation; when the answer is nobody, it is a judgement and must ask the real question | A misrouted expression reaching no evaluator at all |
 | Count side-effect sites, not operations, when designing a re-run fallback, and put the bail before the effect | The canonical path emitting a diagnostic twice |
@@ -822,7 +825,7 @@ census has produced it, and the probe itself is a claim to check.
 
 ## 7. Testing
 
-The full local gate is `cargo nextest run --workspace --locked`: 7746 tests, 15 skipped. Named gates
+The full local gate is `cargo nextest run --workspace --locked`: 7811 tests, 15 skipped. Named gates
 that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
 frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
 diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,

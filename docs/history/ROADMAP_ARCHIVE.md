@@ -7,12 +7,15 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 385건 (최신순·⚠️ = 미머지 · 번호는 1~486 중 366개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 388건 (최신순·⚠️ = 미머지 · 번호는 1~489 중 369개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.489` **A block-local whose bare name matches an IMPORTED package variable is its own variable** (2026-09-12 · §2 Scoping, queue row 3 · the row's filed headline refuted — the after-block read is LOUD; the silent-wrong is the INSIDE-block write landing on the package's shared net and leaking to other importing modules, sibling instances and continuous assigns · `names_with_pkg_var_aliases` fed only to `compute_scoped_block_locals` and the hoist twin, three consumer traps pinned · module lane 17 silent→correct + 5 loud→correct, interface lane 6 more after a round-1 finding that the interface mirror was DEAD CODE (computed before both import passes) · two review rounds)
+- `4.5.488` **An ascending or non-zero-LSB constant as an override source binds its DECLARED width** (2026-09-12 · §2 Index sealing, queue row 2, both lanes one root · two row claims refuted (it binds the value-inferred 32, not the leaf default; the size cast was NOT already right) and the severity upgraded — the VALUE is truncated above 32 bits (`36'hFEDCBA987` → `-305419897`) · the grounding's fix shape moved 2 of 23 cells, so a consumer-side arm at the override boundary was the third piece · width-only twins in a new `const_decl_width.rs` · 23 silent→correct, 25 byte-identical, 8 loud unchanged)
+- `4.5.487` **A bare integer system function as the WHOLE override is type-determined** (2026-09-12 · §2 Index sealing, queue row 1 · all three row wordings refuted — the row's own repro does not reproduce, the trigger is the DEFAULT literal's width, the discriminator is the ARGUMENT not the function, and all four override channels plus a forwarding cascade are affected · one `SysCall` arm over the NAMED `sys_fn_is_integer` list in `override_self_meta` · 18 silent→correct, 26 correct + 9 loud byte-identical)
 - `4.5.486` **A static frame-local initializer runs once, on the frame's first activation** (2026-09-11 · §2 Scoping, queue row 2 · root = `emit_frame_local_inits` per activation with no lifetime gate; storage already retained · prescribed t0 route refuted by two measured blockers, replaced by a per-frame `$sinit$` guard + once-only prologue · formals, outside-net reads and their transitive readers declined per declarator, frame-wide only when a declined initializer reads a hoisted one · 20 silent→correct, 0 regressions · two review rounds)
 - `4.5.485` **Same-named sibling block-locals in a PACKAGE subroutine body get their own storage** (2026-09-11 · §2 Scoping, queue row 3 · row root refuted: `package.rs` calls NO collector — package routines are injected into the caller module's tables after the one-shot `scoped_block_locals` computation · `compute_scoped_block_locals(module, names, extra_bodies)` + instance step 3.6a · 13 silent→correct 2-oracle + 1 silent→loud, 0 regressions · open: the `pk::g()` no-import spelling)
 - `4.5.484` **`const_expr_signed`'s `Ident` arm resolves with `walk_scopes`** (2026-09-11 · §2 Index sealing, queue row 1 · row root refuted twice: the `param_range` third field is `ascending`, not sign, and the class is not genvar-specific — any outer-scope signed name read by an untyped `localparam` inside a generate scope · one-arm resolver parity with `const_signed_env` · 12 silent→correct 2-oracle, 0 regressions · closes the `S8 >>> 1` row too)
@@ -496,6 +499,231 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.489 A block-local whose bare name matches an IMPORTED package variable is its own variable (2026-09-12, branch it5) ✅
+
+**ROADMAP row**: §2 "Scoping / imports / block-locals", the block-local that clobbers an imported
+package variable; queue row 3. Third slice of the bundle; the only one that needed a second review
+round.
+
+**Row claims re-measured, and the filed headline is refuted.** The row said `begin : blk integer pv;
+pv = 99; end` makes a LATER bare `pv` read 99 where both oracles read 5. That cell is LOUD today
+(`E3009 … block-local \`pv\` is referenced outside its \`begin…end\` block`, rc=1, and the WRITE twin
+too) — the after-block lifetime was already honest. The real silent-wrong is the INSIDE-block
+lifetime: the block-local write lands on the package's own shared `$pkg$` net, so `pk::pv` reads 99
+against both oracles' 5, and because the imported name is an ALIAS to that net rather than a
+module-local copy the corruption leaves the module — another importing module reads 99, two
+instances of the writer each overwrite the other and the last one wins for the parent, and a
+continuous `assign w = pv;` carries it out. A package-global write from a block-local declaration.
+
+**Root.** `shadows_module` is the sole admission term for a plain (non-`automatic`, no-initializer)
+block-local in a module PROCESS (`frames_reserve.rs:180`, `block_local_class.rs:398`), and it is fed
+`local_decl_names` — the module's OWN declarations. An import binds the name through a second binder
+(`pkg_var_aliases`, `lib.rs:1188`, written by `apply_import_consts`'s wildcard and explicit arms,
+`package.rs:1290`/`:1408`) that the admission set never sees, so the declaration is not scoped, never
+gets a `$blk$<lo>` segment, and flattens onto the alias's target.
+
+**Fix.** `Elaborator::names_with_pkg_var_aliases` (`block_local/mod.rs`) returns `names` ∪ the bare
+names `pkg_var_aliases` bound at `cur_prefix`, and is handed ONLY to `compute_scoped_block_locals`
+(module body, and step 3.6a's recomputation) and to the `shadows_module` twin in
+`block_local/hoist.rs`. Three traps, each pinned: `names` itself is never mutated, because it is
+also `apply_import_consts`'s SUPPRESSION set (`package.rs:1258`), `compute_coalesced_block_locals`'s
+filter and `const_array.rs:125`'s read; `compute_per_entry_block_locals` keeps the UNAUGMENTED set,
+because `block_local_class.rs:506` reads it with the opposite polarity; and the key is
+`pkg_var_aliases`, never `symbols`, which also holds interface-port aliases. The augmented set can
+only turn `shadows_module` false→true, so a name that is both declared and imported is
+byte-identical.
+
+**Census PRE→POST**: 31 census designs plus the review's, 3 tools. Module lane: 17 silent→correct
+against both oracles (read inside the block, explicit `import pk::pv`, an `int` and a `logic [7:0]`
+package variable, `always_ff`, a block nested two deep, an UNNAMED `begin…end`, a continuous assign,
+a read of `pk::pv` before and inside, two sibling blocks, a second unshadowed package variable
+staying at 6, another importing module, and two instances of the writer), plus 5 loud→correct — the
+after-block READ and WRITE (a1/a3, the row's filed headline), `automatic integer pv` (1-oracle:
+iverilog refuses the lifetime override), and the read-before-assign and width-mismatch guards, whose
+stated collision ("a same-named block-local in another block") was actually the import alias. Those
+two diagnostics are no longer reachable from an import at all, so their wording is accurate for every
+remaining trigger and nothing was re-worded. 7 cells already correct stay byte-identical (a function
+body, a task body, a `generate for` block, a module-level declaration beside the import, the no-import
+control), and 7 out-of-row louds are unchanged verbatim.
+
+**Review**: two lenses, two rounds. Round 1, BOTH lenses independently: finding S3-F1 — the
+`iface_inst.rs` mirror the IMPL claimed was DEAD CODE. In `elaborate_iface_instances` the five-map
+computation sat at `:198`, BEFORE both `apply_import_consts` passes (`:244` header, `:261` body), so
+`pkg_var_aliases` held no entry for the interface scope and the augmentation was a guaranteed no-op;
+the differential lens measured the whole interface lane byte-identical PRE and POST across 5 designs
+and 8 cells, and fenced it with an interface that declares `pv` itself (correct in both binaries) and
+a module at depth 2 (fixed), so the failure was not a generic `cur_prefix` bug. Fixed by moving the
+WHOLE five-map computation after the second import pass, not just the augmentation: between the old
+site and the new one `compute_coalesced_block_locals` consumes `scoped_block_locals` and
+`check_block_local_scope_leaks` reads it, so splitting them would have fed the gate a map built from a
+different name set than the hoist later reads. The new order mirrors `instance.rs` (header imports,
+body imports, then the maps) and `local_names` — the suppression argument — is still gathered before
+the imports and never mutated. Round 2 (delta only): both lenses CLEAN. All eight interface cells now
+match both oracles under the delta while the round-0 binary still reproduces the defect, the module
+lane's 31-design census is byte-identical to round 0, and the reorder's own hazard (import
+suppression direction) is unmoved on an interface that imports `pk::*` AND declares the name itself,
+in the header-import spelling, and on an interface PORT of the same name. The soundness lens also
+censused every reader of the five moved fields and probed the two reachable from the param phase.
+One cell the differential lens classified explicitly: a design with BOTH an interface writer and a
+module writer of the same package variable moved 77 → 99, neither of them 5 — not a regression, one
+of two contributors to the same leak removed, and now correct after the round-2 delta.
+
+**Filed**: `static integer pv;` inside a block is `E2002` at parse where both oracles accept it; a
+package `real` / `string` variable, a `$unit`-level variable and `pk::arr[0]` as an lvalue are loud
+for their own pre-existing reasons; `always @*` with no sensitivity to a written net is an oracle
+split.
+
+Files: `crates/elaborate/src/{block_local/mod,block_local/hoist,instance,iface_inst}.rs`. Tests: a new
+`block_local_vs_import.rs` (33 — 13 module silent→correct pins that also assert the PRE wrong text is
+ABSENT, 5 loud→correct, 7 interface-lane pins from round 2, and 8 controls). No existing test moved;
+`package_subroutine_block_local.rs::a_sibling_pair_shadowing_a_package_variable` is untouched because
+it has no import, so the augmented set equals `names`. format 31 unchanged.
+
+#### 4.5.488 An ascending or non-zero-LSB constant as an override source binds its DECLARED width (2026-09-12, branch it5) ✅
+
+**ROADMAP row**: §2 "Index sealing", the package constant declared `logic [0:35]` or `logic [39:4]`
+used as an override source; queue row 2. Second slice of the bundle. The module-lane twin was
+measured to share the root, so the two rows were one slot.
+
+**Row claims re-measured, two refuted and the severity upgraded.** The symptom held in both spellings
+(`pk::PA` and the wildcard-imported `PA`, both oracles 36). "It binds the leaf DEFAULT" is wrong — it
+binds the value-inferred 32, not the declared default 8. "A size cast `40'(pk::PA)` is already right"
+is wrong — it is 32 in vita and 40 in both oracles, because the cast channel routes through the same
+resolver. And the severity is not `$bits`: the VALUE is silently TRUNCATED once it exceeds 32 bits —
+`logic [0:35] BIG = 36'hFEDCBA987` binds `edcba987`, decimal `-305419897`, against both oracles'
+`fedcba987` = 68414056839. 8 of 12 declaration shapes are wrong, including `logic [7:7]`, i.e. ONE
+bit at a non-zero offset.
+
+**The grounding's fix shape is refuted by measurement.** The census prescribed width-only twins plus
+four repointed call sites (`params.rs:436/458`, `param_query.rs:620/624`). Built exactly that,
+rebuilt, re-ran the whole census: **2 of 23 cells moved**. A BARE-NAME override is the `ovr_bits`
+lane (`override_bits` → `fold_self_bits` → `wide_name_bits` → the BITS twins), which is the
+layout-READING consumer the census correctly said to keep declining; the four repointed sites are the
+`localparam L = pk::X` ALIAS lane and `override_self_meta`'s operator-top path, and they are exactly
+the two cells that moved. The fix needed a third piece at the override boundary.
+
+**Fix.** A new module `crates/elaborate/src/const_decl_width.rs` (189) holds three `impl Elaborator`
+functions: `narrow_param_decl_width` and `pkg_const_decl_width`, the WIDTH-only twins of
+`narrow_param_bits` / `pkg_const_narrow_bits`, carrying every guard verbatim (single segment, the
+`subst_lookup` shadow, the same `walk_scopes_key` set, a `param_range` entry, the value bound at the
+same key, `param_meta`'s width agreeing) EXCEPT `lo != 0 || ascending` — a width is
+layout-independent by construction, since `param_decl_range_opt` records `(min(m,l), |m−l|+1, m<l)` —
+and `override_decl_name_meta`, the consumer-side arm for a whole override that is a bare `Ident` /
+`PkgScoped` or a SIZE CAST of one. Separate functions, not a `layout_needed: bool` on the bits twins:
+the two questions have different soundness arguments and a widening is the CONSUMER's opt-in. The
+four census sites were repointed as well, and `override_self_meta` gained one early return ahead of
+its accept set, placed third in `bind_one_param`'s meta chain (after `ovr_bits`), so every override
+that folds today is byte-identical. A size cast's rule is the OPERAND's declared sign with the cast's
+own width, scoped to a certified-name operand — not a general "a cast's width is its size".
+`narrow_param_bits`, `pkg_const_narrow_bits`, `wide_name_bits` and `fold_self_bits` are untouched, and
+`const_wide.rs` is not in the bundle's changed-file list.
+
+**Census PRE→POST**: 23 silent→correct, every one landing on both agreeing oracles — 11 declaration
+shapes, both package spellings and the module lane's `parameter` and `localparam`, the untyped module
+alias, a nested package, all four override channels plus generate and forwarding, the size casts
+including the signed and unsigned halves, and the VALUE cell. 25 correct controls byte-identical
+(descending layouts, `[0:0]`, `int`, `integer`, the layout-READING consumers — a bit select, a part
+select, a range bound, a concat — declared-type and declared-range targets, and the >64-bit path,
+which never took the narrow rung), 8 loud unchanged. The value was verified parameterised at 6, 36,
+64, 65 and 100 bits, the widest of them `100'h…abc` with both oracles.
+
+**Review**: two lenses, no BLOCKING finding on this slice. The soundness lens censused the single
+filler of `param_range` / `pkg_const_range` (`params.rs:835 param_decl_range_opt`) and all 13 writers,
+establishing that a non-vector kind is either absent or carries a truthful width (genvar 32, an enum
+label the base's width, `int`/`byte` the type's), measured the guard tables of the twins side by side
+to show `lo != 0 || ascending` is the ONLY omission, and tried to make the new arm steal a
+wide-channel cell on nine descending designs — all byte-identical. The differential lens moved 14
+further layout cells the census had not varied, including `[0:63]`, `[71:8]`, `[64:1]` and a signed
+`[0:35]` whose MSB was set, where PRE printed `32 / 0` and the whole value was lost.
+
+**Filed**: §2 🆕 H ⓑ, the `wire [(|pk::PA)+2:0]` reduction bound, stays loud in both lanes (5 cells,
+both oracles 4) and is measurably NOT reachable from the width-only twins — a reduction needs the
+operand's BITS through `wide_name_bits`, so it needs the fold's own accept set (🆕 H ⓐ, do-not-start);
+pinned by a residue test. `{pk::PA}` as an override stays loud (a separate root). `pk::PA + 0` is an
+ORACLE SPLIT (iverilog 37, verilator 36); vita binds 36 = verilator = §11.6.1's `max(36,32)`, and
+iverilog contradicts its own 36 for the bare name in the same design, so the cell is asserted against
+verilator alone with the split named in the test.
+
+Files: `crates/elaborate/src/{lib,param_query,params}.rs`, new
+`crates/elaborate/src/const_decl_width.rs` (189). Tests: a new `pkg_const_layout_override.rs` (10),
+every expectation 3-way measured, including the residue pin and the oracle-split cell. Six pre-existing
+pins of this class asserted the OLD 32-bit binding and were caught only by the FULL gate (the scoped
+`-E test(/…/)` filter keys on test NAMES, which neither `pkg_scoped_override_source.rs` L_PA
+`logic [11:4]` (`bits=32 val=000000a5` → `bits=8 val=a5`, 2 pins) nor `param_override_forwarded_width.rs`
+(`32/fffffffc` → `12/ffc`, `32/3` → `12/3`, 4 pins) matched); each re-measured on both oracles, converted
+with the name kept and the file-level "residues deliberately NOT repaired" prose moved. format 31 unchanged.
+
+#### 4.5.487 A bare integer system function as the WHOLE override is type-determined (2026-09-12, branch it5) ✅
+
+**ROADMAP row**: §2 "Index sealing", the bare `$bits(x)` override; queue row 1. First slice of the
+bundle.
+
+**Row claims re-measured, all three wordings wrong.** (1) The row's own repro does not reproduce:
+with `module child #(parameter P = 8)` vita is byte-correct on every source measured. The defect is
+visible only when the child's UNTYPED, unranged parameter DEFAULT is a literal narrower than 32 —
+"binds 1 bit" is really "binds the DEFAULT literal's width", and `parameter P = 4'd0` binds 4. (2) It
+is not `$bits`'s lane: the failing set is every `sys_fn_is_integer` name (`$bits`, `$clog2`, `$rtoi`)
+whose ARGUMENT the wide bit domain cannot fold. `$clog2(N)` over a parameter is correct and
+`$clog2($bits(x))` over a variable is wrong — the same spelling, opposite verdicts, so the
+discriminator is the ARGUMENT, not the function. (3) "Its own lane" understates it: all FOUR override
+channels are wrong (named, positional, `defparam`, interface instance) and the wrong width CASCADES
+through a forwarding chain to a grandchild. The `$size`/`$high`/`$low`/`$left`/`$right`/`$increment`
+family the row listed is not silent-wrong at all — it is loud, a separate row.
+
+**Root.** `param_query.rs::override_self_meta`'s local `sized_by_operator` admits only a unary
+`+ - ~`, a `Binary` or a `Ternary` top, and it is the ONLY failing conjunct for a bare call:
+`declared_override_widths` certifies no names and refuses nothing, `ctx_width_names_are_evident`
+already has the `SysCall if sys_fn_is_integer` arm, `const_self_width` answers 32 and
+`const_signed_env` answers signed. With `self_meta == None`, `bind_one_param` has no channel and falls
+to `param_decl_width_opt`'s DEFAULT-literal arm. Why the operand decides: the WIDE channel runs first
+(`self_meta_binds` requires `ovr_bits.is_none()`), and `override_bits`' `$bits` arm needs its argument
+folded in the BIT domain, which `wide_name_bits` answers only for parameters, package constants and
+types — so only a call over a DATA object reaches the second rung, and no currently-correct cell can
+move. The DECLARATION lane was already right, through the same arm one file over
+(`params.rs:706`), which is what §4.5.460/§4.5.463 established between the two blocks.
+
+**Fix.** One arm, in one predicate: `sized_by_operator` is renamed `sized_by_type` and gains
+`ast::ExprKind::SysCall { name, .. } if sys_fn_is_integer(&name.name)`. The NAMED list only —
+`const_self_width` and `const_signed_env` are BLANKET `SysCall => 32 / true`, so a real-returning call
+reaching them would be sized wrong, and the named gate is the only thing standing between them and
+that. `sys_fn_is_integer` was NOT widened; `params.rs:666`'s same-named local on the declaration lane
+is untouched.
+
+**Census PRE→POST**: 52 designs, 3 tools. 18 cells silent→correct, every one landing on the value both
+oracles print: all four override channels, the forwarding cascade, `parameter P = 4'd0` (4 → 32), the
+parenthesised spelling `(($bits(x)))` — `override_self_meta` peels `Paren` BEFORE the test, so
+parenthesising does not rescue a bare call — a wire, a typedef'd variable, a packed struct variable,
+`$bits({x,x})`, `$clog2($bits(x))` and `$rtoi(2.9)`, whose re-fold at `(32, true)` reproduces the
+oracles' `2` with no rounded twin (the census's open question, answered). 26 correct cells and 9 loud
+cells byte-identical PRE and POST, same codes and same spans. No loud→correct, no correct→loud, no
+regression.
+
+**Review**: two lenses, no BLOCKING finding. The soundness lens cleared membership (exactly three
+names, all 32-bit signed integer returns; `$size` has its own predicate and is not ORed in),
+containment (all five producers call `override_self_meta` unconditionally and there is ONE consumer,
+where `ovr_bits.is_none()` is enforced once for every channel), the paren peel (`$signed(e)` is a
+`SysCall` outside the list and stays loud; `-$bits(x)` was already admitted), and the blanket
+downstream arms; it also measured six argument spellings the census had not varied, two of which are
+oracle splits vita lands on the defensible side of (`$bits` of a real: vita = verilator; `$rtoi` of a
+value above `INT_MAX`: vita = iverilog). The differential lens moved five further cells (`$bits` of a
+whole unpacked array, of an array element, of a 2-D packed array, `$clog2($bits(a))`, and a
+`1'sb1`-defaulted target) and verified the S1×S2 crossover in both directions: S2's early return
+never fires on a `SysCall` top and S1's rung never fires on a bare name, so neither slice can steal
+the other's cell.
+
+**Filed**: `{$bits(x)}`, `$bits(x[7:0])`, `$bits(x[3])` and the whole `$size` / `$high` / `$low` /
+`$left` / `$right` / `$increment` family stay loud (E3009 + W3056) — they fail the VALUE half, where
+`override_self_value` needs `const_eval_in_scope` to fold first, not the width half; both oracles have
+values, so this is a §3 loud→value row. Both review lenses independently found the S1×S2 seam:
+`$bits(<a package constant declared ascending or with a non-zero LSB>)` as an override is still
+refused after both slices (a class of 4, package lane only, both oracles `32/24`), because §4.5.488
+widened the width/meta channel and not `const_eval_in_scope`; PRE = POST, filed as a §3 row.
+`$unsigned(<variable>)` stays loud and all three tools refuse it — correct-loud, not a residue.
+
+Files: `crates/elaborate/src/param_query.rs` (+31/−2). Tests: a new `sysfn_bare_override.rs` (22 — 19
+silent→correct pins and 3 loud controls pinned on the CODE, not the text). No existing test moved.
+format 31 unchanged.
 
 #### 4.5.486 A static frame-local initializer runs once, on the frame's first activation (2026-09-11, branch it4) ✅
 

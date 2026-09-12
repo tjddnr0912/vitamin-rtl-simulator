@@ -136,6 +136,43 @@ need updating. What moved:
 
 ### Fixed
 
+- **A block-local variable no longer overwrites an imported package variable of the same name.**
+  After `import pk::*`, a `begin integer pv; pv = 99; end` inside a process wrote the package's own
+  `pv`, so `pk::pv` read 99 instead of 5 — and because an imported name is an alias to the package's
+  storage, the damage left the module: another module importing the same package saw 99, two
+  instances of the writer overwrote each other, and a continuous `assign w = pv;` carried the wrong
+  value out. Both reference tools keep the two variables apart, and vita now does, in a module
+  process and in an interface body, for wildcard and explicit imports, in `always_ff` and
+  `always_comb`, in nested, unnamed and generate-scoped blocks, and per instance. Three shapes that
+  used to be refused now run and give the reference tools' answer: reading or writing the bare name
+  AFTER the block (it is the import again), an `automatic` block-local of the name, and the
+  read-before-assign and width-mismatch refusals, whose real collision was the import. `static` in
+  that position is still a parse error, and a package `real` or `string` variable is still refused.
+
+- **An ascending or offset constant used as a module parameter override now keeps its declared
+  width — and its value.** `localparam logic [0:35] PA = 36'hFEDCBA987;` passed as `#(.P(pk::PA))`
+  bound 32 bits and silently truncated the value to `edcba987` (`-305419897` as a signed decimal)
+  where both reference tools bind 36 bits and `68414056839`. Any constant declared ascending
+  (`[0:35]`, `[4:39]`) or with a non-zero low bit (`[39:4]`, `[7:7]`) was affected, in a package or
+  in a module, as a `parameter` or a `localparam`, through the package-scoped name, a wildcard
+  import, an untyped alias, every override channel and a size cast (`40'(pk::PA)`), at every width
+  measured from 6 to 100 bits and for signed as well as unsigned constants. Selects of such a
+  constant (`pk::PA[0:3]`), range bounds and concatenations were already positionally correct and
+  are unchanged. A reduction of such a name in a range bound (`wire [(|pk::PA)+2:0]`) and a
+  concatenation used as a whole override are still refused.
+
+- **A bare `$bits`, `$clog2` or `$rtoi` call used as a whole parameter override now binds a 32-bit
+  result.** `leaf #(.P($bits(x)))` onto `parameter P = 1'b0` bound ONE bit and printed `0` where both
+  reference tools print `bits=32 val=8`; the width it bound was the child default literal's, so a
+  `parameter P = 4'd0` default bound 4. It applies to every call whose argument is a variable, a
+  wire, a typedef'd or packed-struct object, a concatenation or a nested call — `$bits({x,x})`,
+  `$clog2($bits(x))`, `$rtoi(2.9)` — through named, positional, `defparam` and interface-instance
+  overrides, through a forwarding chain to a grandchild, and with the call parenthesised. A
+  parameter declared with a type or a range already took its own width and still does. Calls whose
+  VALUE the constant folder cannot compute (`{$bits(x)}`, `$bits(x[3])`, and the `$size` / `$high` /
+  `$low` / `$left` / `$right` / `$increment` family) are still refused, as is `$signed` / `$unsigned`
+  of a variable.
+
 - **A static local with an initializer inside a task or function now initializes once, not on
   every call.** `function int f; int c = 100; c = c + 1; return c; endfunction` called twice returned
   `101 101`; both reference tools return `101 102`, and vita now does too — on a hierarchical call, in
