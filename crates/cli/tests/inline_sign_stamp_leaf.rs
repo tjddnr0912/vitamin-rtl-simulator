@@ -180,9 +180,10 @@ endmodule
     assert_eq!(o, "0120 d820 ffd7 007b fff7 f609 0120 d820 0060 0060");
 }
 
-/// ⑤ BOUNDARIES, byte-identical to PRE. A user CALL leaf still stands the region
-/// down (`00000009` for both oracles' `0000f609` — ROADMAP §2, its own slice),
-/// and a stamp over an OPAQUE leaf (a hierarchical read) keeps the pre-slice
+/// ⑤ BOUNDARIES. A user CALL leaf stood the region down in this slice
+/// (`00000009` for both oracles' `0000f609`) and was closed by §4.5.501, whose
+/// pin lives in `inline_call_leaf_region.rs`; the oracle value is asserted here.
+/// A stamp over an OPAQUE leaf (a hierarchical read) keeps the pre-slice
 /// lowering on both consumers (`xx20` / `20` for the oracles' `0120` /
 /// `00000120` — PRE-identical, including the placeholder's unknown print width;
 /// the placeholder has no width to widen by, the same stand-down
@@ -207,5 +208,5 @@ module t;
 endmodule
 "#,
     );
-    assert_eq!(o, "00000009 xx20 20");
+    assert_eq!(o, "0000f609 xx20 20");
 }

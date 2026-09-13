@@ -154,10 +154,19 @@ impl Elaborator<'_> {
             },
             K::Call { name, args } => {
                 let _ = args; // a call's ARGS are their own context (§13.5.3)
-                name.segments.len() != 1
-                    || self.lookup_func(&name.segments[0].name).is_none_or(|f| {
-                        matches!(f.ret_type, ast::ParamType::Real | ast::ParamType::Realtime)
-                    })
+                              // The scoped `pk::f(…)` spelling resolves in the package's table, as the
+                              // lowering does; any other multi-segment call is a placeholder here.
+                let f = match self.pkg_call_head(name) {
+                    Some(pkg) => self
+                        .pkg_funcs
+                        .get(pkg)
+                        .and_then(|m| m.get(&name.segments[1].name)),
+                    None if name.segments.len() == 1 => self.lookup_func(&name.segments[0].name),
+                    None => return true,
+                };
+                f.is_none_or(|f| {
+                    matches!(f.ret_type, ast::ParamType::Real | ast::ParamType::Realtime)
+                })
             }
             K::Cast { target, expr } => match target {
                 ast::CastTarget::Prim(ast::CastPrim::Real) => true,
@@ -263,8 +272,9 @@ impl Elaborator<'_> {
     ///  * a SIGNED extension's fill is the operand's own MSB, i.e. a SECOND
     ///    mention of `e`, and the engine walks the DAG as a tree — so an operand
     ///    that cannot be drawn twice (`$random`, a frame call: `expr_is_repeatable`)
-    ///    is left alone. The UNSIGNED fill is a constant, so it names `e` once and
-    ///    needs no such gate.
+    ///    is widened through a context instead (`e | 32'sd0`, one mention; see the
+    ///    body). The UNSIGNED fill is a constant, so it names `e` once and needs no
+    ///    such gate.
     pub(crate) fn widen_inline_leaf(&mut self, e: u32, ctx: u32, ext: bool) -> u32 {
         if ctx == 0 || self.expr_is_real(e) || self.ir_expr_is_string(e) {
             return e;
@@ -278,10 +288,26 @@ impl Elaborator<'_> {
         if !ext {
             return self.extend_to(e, w, ctx, false);
         }
-        if !self.expr_is_repeatable(e) {
-            return e;
-        }
-        let ext_id = self.extend_to(e, w, ctx, true);
+        let ext_id = if self.expr_is_repeatable(e) {
+            self.extend_to(e, w, ctx, true)
+        } else {
+            // A leaf that may be named only once (a frame call, `$random`) cannot take
+            // `extend_to`'s sign fill, but it can take a CONTEXT: `e | 32'sd0` names
+            // `e` once, the engine evaluates the bitwise `|` at the constant's width
+            // and sign-extends `e` there (§11.8.1, both operands signed — a signed
+            // region has only signed leaves, and a frame call's IR sign is the
+            // callee's `ret_signed`), and `|` is per-bit, so an x/z bit survives where
+            // `+ 0` would poison the word. Before this, the leaf stood down and a
+            // region whose EVERY leaf is a frame call folded at the operand width:
+            // `fas8(s8) * fas8(q8)` printed `20` for both oracles' `120`.
+            let cid = self.intern_const(make_const_i64(0, ctx, true));
+            let zero = self.push_expr(ir::Expr::Const { val: cid });
+            self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::BitOr,
+                lhs: e,
+                rhs: zero,
+            })
+        };
         self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::Signed,
             args: vec![ext_id],

@@ -251,9 +251,43 @@ impl Elaborator<'_> {
                 ast::CastTarget::Prim(p) => cast_prim_wsign(*p).map(|(_, s, _)| s),
                 ast::CastTarget::Named(_) | ast::CastTarget::SigningParam { .. } => None,
             },
-            // calls / other sysfuncs / hierarchical refs / patterns → indeterminate
-            // here. A call is its own slice: `expr_self_signed`'s `_ => false` has 21
-            // callers, so answering it here would widen a 2-site blast radius to 21.
+            // A user CALL by its bare name: the callee's DECLARED return sign
+            // (§13.4.1 — the return value is a variable of the declared type), read
+            // from the same table the lowering resolves the call through
+            // (`lookup_func`, generate scopes and package keys included) and by the
+            // same pure rule every declaration takes (`kind_signedness`). A `real`,
+            // `realtime` or `string` return is not a bit vector ⇒ `None`; a
+            // hierarchical / method call stays `None` (a placeholder here). This arm
+            // used to be the `_ => None` tail, which stood the WHOLE region down:
+            // `function [31:0] f; f = id8(a8) * b8;` printed `00000001` for both
+            // oracles' `0000fe01`, and `16'(ids8(s8) * q8)` printed `0020` for `0120`
+            // on the size-cast consumer. The IR-level `expr_self_signed` still answers
+            // `false` for a frame `Expr::Call` (ROADMAP §2, its mirror caveat); the
+            // engine's own width table reads the callee's `ret_signed`, which is why
+            // the sibling leaf's widening is enough to size a signed region right.
+            ast::ExprKind::Call { name, .. }
+                if consts && (name.segments.len() == 1 || self.pkg_call_head(name).is_some()) =>
+            {
+                // The scoped spelling `pk::f(…)` resolves in the package's own table,
+                // exactly as `inline_pkg_function` does for the lowering (round-1
+                // soundness R1: `pk::pfs(s8) * q8` folded at 8 bits while the imported
+                // bare spelling was right).
+                let f = match self.pkg_call_head(name) {
+                    Some(pkg) => self.pkg_funcs.get(pkg)?.get(&name.segments[1].name)?,
+                    None => self.lookup_func(&name.segments[0].name)?,
+                };
+                if f.ret_string {
+                    return None;
+                }
+                let kind = match f.ret_type {
+                    ast::ParamType::Integer => ast::NetVarKind::Integer,
+                    ast::ParamType::Real | ast::ParamType::Realtime => return None,
+                    ast::ParamType::Time => ast::NetVarKind::Time,
+                    ast::ParamType::Implicit => ast::NetVarKind::Reg,
+                };
+                Some(crate::array_geom::kind_signedness(kind, f.signed))
+            }
+            // other sysfuncs / hierarchical refs / patterns → indeterminate here.
             _ => None,
         }
     }
@@ -913,6 +947,14 @@ impl Elaborator<'_> {
     /// opaque leaf wrapped in braces otherwise walks straight past every guard
     /// (round-6 review: `16'(PS16 * {u.hf(-8'sd16), 1'b0})` and a formal bound
     /// to `u.v` both printed `xxxx` where PRE and both oracles say `f640`).
+    /// The package a two-segment call path `pk::f(…)` names in its head — the same
+    /// test `lower_expr` makes before routing to `inline_pkg_function`. `None` for a
+    /// bare call, a hierarchical call and a method call.
+    pub(crate) fn pkg_call_head<'a>(&self, name: &'a ast::HierPath) -> Option<&'a str> {
+        (name.segments.len() == 2 && self.pkg_funcs.contains_key(&name.segments[0].name))
+            .then(|| name.segments[0].name.as_str())
+    }
+
     fn has_opaque_leaf(&self, e: &ast::Expr) -> bool {
         use ast::ExprKind as K;
         let rec = |x: &ast::Expr| self.has_opaque_leaf(x);
@@ -926,7 +968,12 @@ impl Elaborator<'_> {
                     BareIdentRoute::Subst(eid) if self.verbatim_actuals.contains(&eid)
                 )
             }
-            K::Call { name, args } => name.segments.len() > 1 || args.iter().any(rec),
+            // A two-segment call whose head is a PACKAGE is the scoped spelling
+            // `pk::f(…)`, resolved in the package's table — not a hierarchical call.
+            K::Call { name, args } => {
+                (name.segments.len() > 1 && self.pkg_call_head(name).is_none())
+                    || args.iter().any(rec)
+            }
             K::Paren { inner } => rec(inner),
             K::Unary { operand, .. } => rec(operand),
             K::Binary { lhs, rhs, .. } => rec(lhs) || rec(rhs),

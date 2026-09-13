@@ -392,9 +392,13 @@ endmodule
 /// shifting every later draw. Both are ladder violations, so the widening arm
 /// keeps the mirror's answer whenever the operand is not repeatable.
 ///
-/// The cost is stated, not hidden: these three rows are still the PRE values and
-/// iverilog says `fffd` / `fffd` / `fffffffd`. Closing them needs an extension
-/// that names its operand once (or a callee-purity predicate) — ROADMAP §2.
+/// The cost is stated, not hidden: rows 1 and 3 are still the PRE values and
+/// iverilog says `fffd` / `fffffffd`; closing them needs an extension that names
+/// its operand once at the cast's own leaf (or a callee-purity predicate) —
+/// ROADMAP §2. Row 2 moved to iverilog's `fffd` in §4.5.501: the region's sign
+/// walk now signs a CALL leaf by its declared return, so `fs(0) + 4'sd0` is a
+/// signed 16-bit region and the frame call extends through a context (one
+/// mention), which is what "CALL" printed once here keeps proving.
 #[test]
 fn a_widening_cast_never_evaluates_an_impure_operand_twice() {
     let o = run(r#"module t;
@@ -410,7 +414,7 @@ fn a_widening_cast_never_evaluates_an_impure_operand_twice() {
 endmodule
 "#);
     // ONE "CALL" line is the whole point of the test.
-    assert_eq!(o, "CALL\n000d\n000d\n0000000d");
+    assert_eq!(o, "CALL\n000d\nfffd\n0000000d");
 }
 
 /// `$stime` is the ONE id where the mirror said signed and the canonical rule
