@@ -487,7 +487,26 @@ impl Elaborator<'_> {
                         | "$isunbounded"
                         | "$typename"
                 );
-                !is_type_query && args.iter().any(|a| self.count_reads_runtime_net(a))
+                // A TYPE query is a constant — except over a DYNAMIC-STORAGE handle,
+                // where `$size(da)` is the runtime element count (§4.5.500) and a
+                // replication count built from it folded to a silent 0 where both
+                // oracles refuse the design (`{{$size(da){1'b1}}}`, round-1
+                // differential).
+                // Only the queries that ANSWER the runtime size are runtime reads
+                // (`try_introspect_fold`'s dyn arm): `$dimensions`, `$low`, `$left`,
+                // `$increment` fold to constants over a handle too (round-2
+                // soundness: `{$dimensions(da){1'b1}}` is verilator's `{2{1'b1}}`).
+                // `$bits` of a handle has no oracle for its VALUE (iverilog 1,
+                // verilator unsupported; vita folds the element width) and stays
+                // loud as a count.
+                if is_type_query {
+                    return matches!(name.name.as_str(), "$size" | "$high" | "$right" | "$bits")
+                        && args
+                            .first()
+                            .and_then(|a| self.resolve_intro_net(a))
+                            .is_some_and(|n| self.is_dyn_handle_net(n));
+                }
+                args.iter().any(|a| self.count_reads_runtime_net(a))
             }
             _ => false,
         }

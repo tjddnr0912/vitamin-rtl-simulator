@@ -599,6 +599,47 @@ impl Elaborator<'_> {
             return None;
         }
         let net = self.resolve_intro_net(&args[0])?;
+        // A DYNAMIC ARRAY or QUEUE has no constant unpacked bound: `$size` is the
+        // runtime element count (the `.size()` route, `DynSize`), `$high` / `$right`
+        // are one less, `$low` / `$left` are 0 and `$increment` is −1 (the unpacked
+        // dimension is `[0:size-1]`), `$dimensions` is one plus the ELEMENT's packed
+        // dims and `$unpacked_dimensions` is 1. `net_dims_desc` sees only the
+        // element's packed dim on a handle net, so this folded `$size(da)` to the
+        // ELEMENT WIDTH: `SD=32` for both oracles' `3`. An associative array declines
+        // (iverilog refuses the query, verilator answers 0 for a non-empty one), and
+        // so does an explicit dimension argument — the element's packed dim keeps
+        // the constant path below.
+        if self.is_dyn_handle_net(net) && args.len() == 1 {
+            let nv = self.nets.get(net as usize)?;
+            if !matches!(nv.kind, ir::NetKind::DynArray | ir::NetKind::Queue) {
+                return None;
+            }
+            let packed_dims = i64::from(nv.width > 1 || nv.msb != nv.lsb);
+            let size = |me: &mut Self| {
+                let handle = me.push_expr(ir::Expr::Signal { net, word: None });
+                me.push_expr(ir::Expr::SysFunc {
+                    which: ir::SysFuncId::DynSize,
+                    args: vec![handle],
+                })
+            };
+            return Some(match name {
+                "$size" => size(self),
+                "$high" | "$right" => {
+                    let s = size(self);
+                    let one = self.int_result_expr(1);
+                    self.push_expr(ir::Expr::Binary {
+                        op: ir::BinOp::Sub,
+                        lhs: s,
+                        rhs: one,
+                    })
+                }
+                "$low" | "$left" => self.int_result_expr(0),
+                "$increment" => self.int_result_expr(-1),
+                "$dimensions" => self.int_result_expr(1 + packed_dims),
+                "$unpacked_dimensions" => self.int_result_expr(1),
+                _ => return None,
+            });
+        }
         let (dims, unpacked) = self.net_dims_desc(net)?;
         if name == "$dimensions" {
             return Some(self.int_result_expr(dims.len() as i64));

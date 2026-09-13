@@ -1026,7 +1026,16 @@ impl Elaborator<'_> {
                 // did not, including the shape it was added for (a count naming an
                 // inlined function's formal — the substitution rewrites the AST, so
                 // this walk sees the literal).
-                if self.const_bound_signed(e_count).is_some_and(|n| n < 0) {
+                //
+                // The lowered `Const` IS read for one thing the AST walk cannot see:
+                // a SIGNED constant the lowering itself built negative at its own
+                // width (`$increment(da)` of a dynamic array folds to `32'sd-1` in
+                // `try_introspect_fold`'s dyn arm; the AST has no sign for it).
+                // Reading the const's OWN sign flag keeps `{(4'd0-4'd1){1'b1}}`
+                // (an unsigned 4-bit 15) on its correct path.
+                if self.const_bound_signed(e_count).is_some_and(|n| n < 0)
+                    || self.lowered_const_is_negative(count)
+                {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "a replication count may not be negative (IEEE §11.4.12.2)",

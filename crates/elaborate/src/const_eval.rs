@@ -902,6 +902,26 @@ impl Elaborator<'_> {
     /// part-select capture temp at width 1, silently dropping all but the LSB of an
     /// intra-assignment `a[msb:lsb] = / <= [@ev/#d] rhs` — review finding, also
     /// affected the blocking twins.)
+    /// True iff `eid` is a lowered `Const` that is SIGNED and negative at its own
+    /// declared width (its MSB set, no x/z). Reads the const's own sign flag, so an
+    /// unsigned pattern with the top bit set is not negative here.
+    pub(crate) fn lowered_const_is_negative(&self, eid: u32) -> bool {
+        let Some(ir::Expr::Const { val }) = self.exprs.get(eid as usize) else {
+            return false;
+        };
+        let Some(c) = self.consts.get(*val as usize) else {
+            return false;
+        };
+        if !c.signed || c.width == 0 || c.bits.unk.iter().any(|&u| u != 0) {
+            return false;
+        }
+        let msb = c.width - 1;
+        c.bits
+            .val
+            .get((msb / 64) as usize)
+            .is_some_and(|w| (w >> (msb % 64)) & 1 == 1)
+    }
+
     pub(crate) fn const_of_expr_u32(&self, eid: u32) -> Option<u32> {
         match self.exprs.get(eid as usize)? {
             ir::Expr::Const { val } => {
