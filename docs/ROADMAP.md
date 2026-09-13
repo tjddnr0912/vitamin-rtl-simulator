@@ -129,6 +129,7 @@ t0-event residue (pre-existing, held on purpose):
 ## 2-R. Usability residue
 
 - An unused package function is still framed, and one cause is reported once per instance.
+- Multidriver Rule A's `Unknown` verdict for an unresolvable (hierarchical) callee spills an E3001 onto a READ-ONLY net of the same `always_comb` (`t` in `n = u.w.size() + (t ? 1000 : 100)`); the design is loud for the call anyway.
 
 ## 2. Silent-wrong residues
 
@@ -336,13 +337,16 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Inline / frame binds
 
-- A user CALL as a leaf makes the region's sign walk decline, so the whole rhs keeps its pre-slice
-  lowering (both oracles agree): `f = id8(a8) * b8;` is `00000001` against `0000fe01`. Widening the
-  sign walk to a call is a change to shared size-cast machinery and needs its own opt-in slice
-  (`ctx_signed_impl`'s `Call` arm; §4.5.495 took the `$signed`/`$unsigned`/cast arms of the same tail).
-  The same stand-down reaches a call ACTUAL (§4.5.497): `idw(fa(u8) * b8)` and `idw(fi(u8) * b8)` are
-  `09` for `f609`, a `let`-bound actual the same (verilator only), and `$signed(u.x) * q8` under an
-  opaque leaf stays `20` for `120`.
+- The CASE SELECTOR is a §12.5 region (both oracles agree): `case (fa8(a8) * b8)` evaluates the
+  product at its self-determined 8 bits and takes the `32'h00000001` item where both oracles take
+  `32'h0000fe01`; ternary arms and `==` operands are right. Site = the case lowering does not run the
+  §11.6.1 context walk over the selector and the items (`ctx_signed_impl` / `widen_inline_leaf` reach
+  assignments and size casts only). Fix shape = size the selector and every item to their maximum as
+  one region, at the case lowering.
+- A HIERARCHICAL callee or actual as a region leaf (both oracles agree): `u.hf(s8) * q8` prints `20`
+  (self width AND the wrong value) and `fas8(u.hs) * q8` stays `00000020` for `00000120` —
+  `has_opaque_leaf` declines the whole walk on one opaque leaf; §4.5.501's `Call` arm declines a
+  multi-segment path that is not `pk::f`.
 - A wide NON-repeatable actual is handed to a narrower signed formal unnarrowed (iverilog):
   `sgn($random)` with `input signed [15:0] x` prints the full 32-bit draw (`12153524`) where iverilog
   prints its low 16 bits (`3524`); `bind_formal_actual`'s verbatim tail narrows only a NARROW
@@ -412,12 +416,9 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Ranges / bounds / selects
 
-- `$size(q)` / `$size(da)` of a queue or dynamic array answers the ELEMENT width (both oracles agree):
-  `SD=32 SQ=32` for `3` / `2`; `$bits(da.size())` is right in all three. Site =
-  `try_introspect_fold` → `net_dims_desc` on a dyn/queue handle net (the packed element dim is the only
-  dim it sees). Fix shape = a dyn-handle arm that answers the runtime size (`DynSize`) — it is not a
-  constant.
-
+- `$size(da, 1)` with an EXPLICIT dimension argument still answers the element width (`D1=32 H1=31`
+  for verilator's `6` / `5`; iverilog rejects the two-argument form) — §4.5.500's dyn arm takes the
+  one-argument spelling only, the two-argument one keeps `net_dims_desc`'s constant path.
 - A parameter PART-SELECT used as a width bound is silently one bit (oracle: iverilog):
   `localparam logic [31:0] W = 32'hdeadbeef; logic [W[7:0]-1:0] v;` gives `$bits(v)=1` against
   iverilog's 239. The whole parameter is correct, so the part-select does not reach the constant
@@ -453,6 +454,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Scoping / imports / block-locals
 
+- The DOT path `pk.hf(x)` to a module INSTANCE named like a package resolves to the PACKAGE's `hf`
+  (verilator only — iverilog rejects an instance named like a package): `HF=00000200` for
+  `0000d900`. Site = `inline_fn.rs`'s `pkg_funcs.contains_key(segments[0])` never looks at the
+  separator; `expr_size_ctx.rs::pkg_call_head` copies that test on purpose (§4.5.501), so both must
+  learn the separator in one slice.
 - A package routine called by its BARE name from ANOTHER package's body evaluates its formal default
   in the CALLING package's scope (both oracles agree): p2's body calls `g1()` (declared in p1, `input
   [15:0] a = x`), and `x` resolves in p2 then the module (`N=eeef`, `778` when p2 declares an `x`)
@@ -544,6 +550,23 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Delays / events
 
+- An inferred-sensitivity block is not woken by a dynamic-storage MUTATION, and fires at time 0 in
+  declaration order (both oracles agree): `always_comb n = $size(da) + (t ? 1000 : 100);` prints
+  `N1=100 N2=1003 N3=1003 N4=108` for `103 1003 1008 108` (the block fired before the initial's
+  `new[3]`; `new[8]` did not wake it), `always_comb begin s = 0; foreach (w[i]) s = s + w[i]; end`
+  declared BEFORE its initial prints `0 0 0 0` for `6 6 115 0` and after it `6`. Same for a queue
+  (`push_back`), a string (`s = "abcd"`, `.len()`), an element write, `delete()`. Root = the engine's
+  dyn / string heap writes post no dirty channel (`sim-engine/state/changes.rs`, "no net dirty
+  channel (design §4, dyn precedent)"), so the process sensitivity has nothing to wake on; and the t0
+  fire is not §9.2.2.2.2 ("after all initial and always procedures have been started"). Fix shape =
+  post a dirty on the HANDLE net at every heap mutation site (new / resize / delete / push / pop /
+  insert / element write / string assign) so the existing sensitivity wakes; the t0 order is a second,
+  engine-scheduler axis. A static refusal of the block was tried in §4.5.500 and reverted after three
+  BLOCKINGs: whether the handle changes after the block's fire is dynamic (a declaration-initialised
+  handle is final at t0; a second trigger re-runs the block; a loop index in the read set wakes
+  nothing). First action = census the mutation sites in `changes.rs` and the dyn method executors,
+  and whether a `$size`/`.size()` read of a handle net registers the handle in the process's
+  sensitivity at all.
 - A runtime variable delay (2-oracle): `assign #(dv) y = a;` with dv=5 gives 5 in both oracles and 0
   in vita — the engine must evaluate at the suspension point. The partial fold of `#(D, dv)` has the
   same root (the rise folds and the fall takes the rise value). Pin =
@@ -760,7 +783,9 @@ behind the §2 correctness queue.
 | neg-bound-part | a negative-bound net PART select: `q[-3 +: 2]` and `q[-1 -: 2]` are exact and only `[msb:lsb]` is blocked. Writes are asymmetric — `x[-3:-2]=…` is silently exact while `x[-1:0]=…` is loud with an "out of order" diagnostic that names the wrong fact | the bound fold is unsigned | `const_bound_signed` | verilator | — |
 | neg-elem-bound | `logic [-3:0] q[$]` gives a W3056 clamp (verilator `q[0][-3]`=1) | the element net takes `elaborate_netvar_decl_inner`'s early-`continue` path and never reaches the declaration side map | make it reach the side map | verilator | — |
 | mdrv-partial | the process-multidriver check (§4.5.472) is silent when either writer is a PARTIAL write (`mem[a]`, `s.x`, `w[1]`) — verilator is silent too; xcelium on that shape is UNMEASURED (0 observations) | `multidriver.rs` `stmt_writes_whole_ident` | re-measure the partial cells on an xcelium run; if it rejects, the shape joins `W3060`, not `E3001` | verilator silent · xcelium unknown | small |
-| mdrv-actual | rule B does not count a call actual bound to an `output`/`inout` formal as a write (verilator does; it does not count an `input` actual or a write inside the callee body) — rule A keeps the conservative walk so the measured `always_comb bump(acc)` cell holds | the walk is name-based; the formal's direction is not resolved in this AST pass | resolve the callee's formal directions at the pass, count `output`/`inout` actuals as whole writes | verilator | small |
+| mdrv-body-write | a callee BODY that writes the module net by name through an `input` formal is E3001 beside an initializer: `int acc = 0; task automatic t(input int v); acc = v + 1; endtask always_comb t(src);` — both oracles run it (`ACC=8`) | `call_effect`'s body walk answers `Writes` for `acc`, and Rule A counts that as a second driver (§4.5.502 resolved the ACTUAL's direction only) | decide with verilator's MULTIDRIVEN shape table whether a body write through a call is a driver; if not, exclude callee-body writes from Rule A | 2 | small |
+| dyn-size-spellings | `$size(c.da)` (class member) and `$size(u.da)` (hierarchical) are loud where verilator prints 3 (iverilog `x` for the class case — disqualified); `$size(arr)` of a dyn-array FORMAL is E3010 (both oracles 4) | `resolve_intro_net` yields a net for a bare Ident only, so §4.5.500's dyn arm is never entered | route the three spellings to the same `DynSize` node | 1–2 | small |
+| dyn-bits-count | `$bits(da)` of a dynamic array folds the ELEMENT width (32 for `int da[]`) outside a replication count; no oracle for the value (iverilog 1, verilator "UNSUPPORTED: $bits for dynamic array"); as a count it is loud | `try_introspect_fold` has no `$bits` dyn arm; §20.6.2 says the size in bits of the whole array | decide by LRM (`size × element bits`) and pin by hand | 0 | tiny |
 | gen-rtn-edges | after §4.5.473: a bare call of a generate-scoped routine from OUTSIDE its block is E3010 (both oracles reject — keep) · a hierarchical `u.g.f(x)` is E3009 (iverilog runs it, `f0 fe`; no `hier_funcs` entry) · a generate-scope routine in a CONSTANT expression (`localparam W = f(3)` in the block) is E3009 (iverilog `04`; `const_func_table` is filled by the module-body prescan only) · `frames_classify.rs:1069` retains callees by BARE name, so a generate-routine → generate-routine recursion edge is missed (loud-safe by that function's doc; unmeasured) · `tf_decl_scope` stays the module prefix for a generate-scoped routine, so `default_binding_matches_decl_scope` compares a default argument against module scope (traced to a conservative reject, untested) · `%m` inside a generate task is a split (iverilog `t.u.g.show` pinned, verilator `t.u.g.g.show`) | `frames_reserve.rs` hier gate · `instance.rs:496-505` const prescan · `frames_classify.rs:1069` · `scope.rs:379` | hier: compose the hier key from the qualified name · const: register generate routines into `const_func_table` per scope · edges/default-binding: measure first | iverilog | small–medium |
 | aes§2 | the inliner's discriminator is more than `automatic` — plain 3/5, and `automatic` / `for` / `if` / `case` 1/5, `p::f()` 2/5 | the inliner's discriminator | widen the inliner | measured | — |
 
@@ -954,9 +979,9 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 `$size(q)` / `$size(da)` of a queue or dynamic array answers the ELEMENT width (both oracles agree): `int da[] = new[3]; int q[$]; … $size(da)`, `$size(q)` print `32` against `3` / `2`, while `$bits(da.size())` is 32 in all three tools. Root = `try_introspect_fold` resolves the handle net through `net_dims_desc`, which sees only the packed element dim of a dyn/queue net, and folds a CONSTANT where the answer is a runtime size. Fix shape = a dyn/queue-handle arm in `try_introspect_fold` that lowers to the `DynSize` SysFunc (the `.size()` route) instead of a constant, for `$size` (and `$high`/`$right` = size−1, `$low`/`$left` = 0, `$dimensions` = 1 + packed dims) — an unpacked dim of a dynamic array has no constant bound. First action = census which introspection functions the oracles accept on a dyn/queue/assoc handle and what each prints (an assoc array's `$size` is its `num()`), before touching the fold · source = §4.5.498's differential lens | §2 Ranges / bounds / selects | ① |
-| 2 | 2 | §2 a user CALL as a leaf of a §11.6.1 region stands the whole region down (both oracles agree): `function [31:0] f; f = id8(a8) * b8;` prints `00000001` against `0000fe01`, and a call ACTUAL `idw(fa(u8) * b8)` prints `09` for `f609` (§4.5.497 filed it). Root = `ctx_signed_impl`'s `_ => None` tail for `Call` (§4.5.495 took the stamp and cast arms of the same tail): the sign walk cannot sign a call, so `size_ctx_route` declines and the rhs keeps its pre-slice lowering. Fix shape = a `Call` arm that answers a single-segment call resolved by `lookup_func` with the callee's DECLARED return sign (`func_return_dims`) and declines a hierarchical / class-method call; the width side (`size_ctx_self_width`) already declines a call so the leaf's width comes from the lowering (`trusted_self_width`), and `widen_inline_leaf`'s `expr_is_repeatable` guard keeps a frame call from being named twice in a signed fill. First action = census the two consumers (size cast, inline body) with an inline and a frame callee, signed and unsigned returns, and a call whose return width is wider than the region, before adding the arm · source = §2 Inline / frame binds | §2 Inline / frame binds | ① |
-| 3 | 3 | §3.b `mdrv-actual`: a user-call ACTUAL in an `always_comb` rhs beside a declaration initializer is E3001 MULTIDRIVER (`always_comb a6 = id8(u8) * b8;` with `logic [7:0] u8 = 8'hF7` — both oracles print `f609`), because Rule A's conservative walk counts EVERY actual of a user call as a possible write; verilator counts an actual bound to an `output` / `inout` formal only. Root = `stmt_never_writes_ident`'s `Call` arm with `out = None` (the opt-in resolver `OutActualWrites` exists and is not passed by the multidriver census). Fix shape = pass the module's resolver so an actual bound to an `input` formal is a read; keep `inout` / `output` actuals as writes (the measured `always_comb bump(acc)` cell must stay loud). First action = census the four call shapes (function / task, input / output / inout, a nested call in an actual, a hierarchical callee) against verilator before wiring the resolver · source = §3.b | §3.b mdrv-actual | ② |
+| 1 | 1 | §2 an inferred-sensitivity block is not woken by a dynamic-storage MUTATION, and fires at time 0 in declaration order (both oracles agree): `always_comb n = $size(da) + (t ? 1000 : 100);` prints `N1=100 N2=1003 N3=1003 N4=108` for `103 1003 1008 108`; a `foreach` sum over `w[]` declared before its initial prints `0` for `6`; the same for a queue `push_back`, a string `.len()`, an element write and `delete()`. Root = the engine's dyn / string heap writes post no dirty channel (`sim-engine/state/changes.rs`), so the process sensitivity has nothing to wake on, and the t0 fire is declaration order, not §9.2.2.2.2. Fix shape = post a dirty on the HANDLE net at every heap mutation site so the existing sensitivity wakes; the t0 order is a second axis, measured separately. A static refusal was tried in §4.5.500 and reverted after three BLOCKINGs (the discriminator is dynamic: declaration-initialised handles, second triggers, loop indices). First action = census the mutation sites (`changes.rs`, the dyn method executors) and whether a handle read registers the handle net in the process's sensitivity at all · source = §4.5.500's review | §2 Delays / events | ① |
+| 2 | 2 | §2 the CASE SELECTOR is a §12.5 region (both oracles agree): `case (fa8(a8) * b8)` evaluates the product at 8 bits and takes the `32'h00000001` item where both oracles take `32'h0000fe01`; ternary arms and `==` operands are right. Root = the case lowering runs no §11.6.1 context walk over the selector and the items (`ctx_signed_impl` / `widen_inline_leaf` reach assignments and size casts only). Fix shape = size the selector and every item to their maximum width and the region sign as one context at the case lowering, reusing the size-cast machinery. First action = census `case` / `casez` / `casex` / `case inside` with a call, a stamp, a cast and a plain product as the selector, signed and unsigned items, against both oracles · source = §4.5.501's review | §2 Inline / frame binds | ① |
+| 3 | 3 | §3.b `mdrv-body-write`: a callee BODY that writes the module net by name through an `input` formal is E3001 beside an initializer (`int acc = 0; task automatic t(input int v); acc = v + 1; endtask always_comb t(src);` — both oracles run it, `ACC=8`). Root = `call_effect`'s body walk answers `Writes` for `acc` and Rule A counts it as a second driver (§4.5.502 resolved the ACTUAL's direction only). Fix shape = decide with verilator's MULTIDRIVEN shape table whether a body write through a call is a driver at all; if it is not, exclude callee-body writes from Rule A (keep `output` / `inout` actuals). First action = the verilator shape table for a body write through a task / function / nested call, and an `always_ff` twin · source = §4.5.502's review | §3.b mdrv-body-write | ② |
 | 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
 | 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
 | 6 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |

@@ -7,12 +7,15 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 398건 (최신순·⚠️ = 미머지 · 번호는 1~499 중 379개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 401건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.502` **A user-call actual bound to an `input` formal is a read for multidriver Rule A** (2026-09-13 · §3.b mdrv-actual, queue row 3 · Rule A's never-writes walk now threads the block-local gate's `call_effect` resolver under a two-phase borrow · 4 cells loud→correct, `inout`/`output` actuals and an `output` beside an initializer stay E3001 · three rounds, no finding on this slice)
+- `4.5.501` **A user CALL leaf of a §11.6.1 region carries its declared return sign** (2026-09-13 · §2 Inline / frame binds, queue row 2 · `ctx_signed_impl`'s `Call` arm (bare and `pk::f` spellings via `pkg_call_head`) and a context widening `e | 32'sd0` for the non-repeatable frame call · 15 + 4 cells silent→correct on both oracles, x preserved · residues: the case-selector region, the hierarchical callee / actual leaf, the `pk.f()` dot path)
+- `4.5.500` **`$size` and the array-query family of a dynamic array or queue are its runtime geometry** (2026-09-13 · §2 Ranges, queue row 1 · a dyn/queue arm in `try_introspect_fold` (`DynSize`, size−1, 0, −1, 1 + packed) · 18 cells silent→correct on both oracles · a runtime or negative replication count is loud · a refusal of handle-reading inferred-sensitivity blocks was tried and reverted after three BLOCKINGs on that one axis; the handle-mutation wake is filed as the next queue row 1)
 - `4.5.499` **`$bits` and the array-query functions return a signed `int`** (2026-09-13 · no queue row — the class the §4.5.498 false-loud had hidden in one shape, closed in the same bundle · one `int_result_expr` at every materialization incl. the deferred hierarchical patch · 18 silent→correct, unsigned-context readers byte-identical · round 2 CLEAN)
 - `4.5.498` **A system function's argument in an `always_comb` rhs is a read** (2026-09-13 · §3.b ac-signed-mdrv, queue row 3 · class = every system function, not the stamps · the never-writes walk's `SysCall` arm mirrors the statement arm through a WRITE view of the table (`syscall_writes_arg`), which round-1 soundness forced to include the seed of `$random`/`$dist_*` (the first draft flattened a seeded fork local) · 6 loud→correct, every write dest still counted · two rounds)
 - `4.5.497` **A call actual takes its formal's width as a §11.6.1 context on the inline lane** (2026-09-13 · §2 Inline / frame binds, queue row 2 · class = the inline function lane's actual lowering, plain products too, module scope included · the §4.5.491 opt-in at the actual loop · 20 silent→correct, 14 controls · two rounds, no finding)
@@ -509,6 +512,135 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.502 A user-call actual bound to an `input` formal is a read for multidriver Rule A (2026-09-13, branch it9) ✅
+
+**ROADMAP row**: §3.b `mdrv-actual`; queue row 3. Third slice of the bundle.
+
+**Row claims re-measured: all hold.** `always_comb a6 = id8(u8) * b8;` beside `logic [7:0] u8 = 8'hF7`
+was E3001 MULTIDRIVER ("written by `always_comb`") where both oracles print `f609`; the automatic
+callee, a nested call and a task with `input int v, output int r` (`rd(acc, o)`) the same. Root as filed:
+`check_multidriver_processes` handed `stmt_never_writes_ident` no call resolver (`out = None`), so the
+`Call` arm counted every actual as a possible write. The `inout` cell (`always_comb bump(acc)`) is
+MULTIDRIVEN in verilator and iverilog runs it — kept loud.
+
+**Fix.** Rule A's verdicts are computed first, under a shared borrow, with the block-local gate's own
+`call_effect` closure (`Some(&out)`): an actual at an `input` formal is `Reads` / `Inert`, an `output` /
+`inout` actual `Writes`, an unresolvable callee `Unknown` (conservative). The diagnostics loop then
+consults the `rule_a_fires` set. Rules B and C are untouched.
+
+**Census PRE→POST**: 4 cells loud→correct on both agreeing oracles (inline, automatic, nested, task
+`input`+`output`); `inout` and an `output` actual beside an initializer stay E3001, PRE-identical. Three
+review rounds, no finding on this slice. Recorded, not chased: an `Unknown` verdict from an unresolvable
+(hierarchical) callee spills an E3001 onto a READ-ONLY net of the same block (`f1j`: `t` is only read);
+the design is loud for the hierarchical call anyway. Filed to §3.b: a callee BODY that writes the module
+net by name through an `input` formal (`task t(input int v); acc = v + 1;` — both oracles run it,
+`ACC=8`) is still E3001 — `call_effect`'s body walk says `Writes`, and that is the next §3.b row.
+
+Files: `crates/elaborate/src/multidriver.rs`. Tests: a new `always_comb_call_actual_direction.rs` (2);
+converted pins in `always_comb_sysfunc_arg_is_a_read.rs` (the user-call cell is `A6=0000f609` now) and
+`inline_call_leaf_region.rs`'s module twin. format 31 unchanged.
+
+#### 4.5.501 A user CALL leaf of a §11.6.1 region carries its declared return sign (2026-09-13, branch it9) ✅
+
+**ROADMAP row**: §2 Inline / frame binds, entry 1 (a user CALL leaf stands the whole region down); queue
+row 2. Second slice of the bundle.
+
+**Row claims re-measured: all hold.** `function [31:0] f; f = id8(a8) * b8;` printed `00000001` for both
+oracles' `0000fe01`, `16'(ids8(s8) * q8)` printed `0020` for `0120`, the frame twins the same, and a
+region whose EVERY leaf is a frame call (`fas8(s8) * fas8(q8)`) folded at 8 bits — `ctx_signed_impl`'s `_
+=> None` tail declined a `Call`, and `None` stands the whole region down (§4.5.495 took the stamp and cast
+arms of the same tail).
+
+**Fix.** (1) A `Call` arm in `ctx_signed_impl` (consts-gated): the callee's declared return sign via
+`lookup_func` + `kind_signedness` (`Integer` → signed int, `Implicit` → the declaration's `signed`,
+`Time` → its qualifier; a `real` / `realtime` / `string` return and a hierarchical or class-method call
+still decline). The round-1 soundness lens found the scoped spelling `pk::f(…)` still declining beside
+its bare import (`M=120 020 120`), so the arm, `has_opaque_leaf` and `rhs_has_real_domain` resolve a
+two-segment path whose head is a package through `pkg_call_head` — the same
+`pkg_funcs.contains_key(head)` test the lowering uses. (2) `widen_inline_leaf`: a non-repeatable leaf (a
+frame call) in a SIGNED region is widened through a context, `Binary{BitOr, e, Const(0, ctx, signed)}`
+then `$signed(…)` — one mention, per-bit so x survives — instead of standing the region down.
+
+**Census PRE→POST**: 15 + 4 cells silent→correct on both agreeing oracles (inline / frame, unsigned /
+signed, a signed callee in an unsigned region, sums, the three size-cast twins, an `integer` and a
+package callee, a shift over a call product, a three-term frame region, the module `assign` /
+`always_comb` twins, the scoped `pk::pfs` cells); the x-carry cell `fas8(ux) * fas8(q8)` is `xxxxxxxx`
+(iverilog). Controls byte-identical: a wider return, unary minus, a `real` return (declines, 4.5 in all
+four tools), an opaque argument, a class-method call, `$random` as an actual (draw count 1 in all four
+tools), nested `pk::f(pk::g(x))`.
+
+**Review**: three rounds; round 1 soundness R1 (the scoped spelling) closed in round 2, both later
+rounds CLEAN on this slice. **Filed** (all PRE == POST, both oracles unless noted): the CASE SELECTOR is
+a §12.5 region and `case (fa8(a8) * b8)` evaluates at 8 bits and takes the `00000001` item (ternary arms
+and `==` operands are right); a HIERARCHICAL callee `u.hf(s8) * q8` prints `20` (self width, and the
+wrong value) and a hierarchical ACTUAL `fas8(u.hs) * q8` stays `20` for `120` (`has_opaque_leaf` poisons
+the whole walk); the DOT path `pk.hf(x)` to a module INSTANCE named like a package is routed into the
+package (verilator `0000d900`, vita `00000200`; iverilog rejects an instance named like a package) —
+`pkg_call_head` copies the lowering's test, so the two must move together.
+
+Files: `crates/elaborate/src/{expr_size_ctx,inline_body_ctx}.rs`. Tests: a new
+`inline_call_leaf_region.rs` (4); converted pins in `size_cast_seal.rs` (row 2 → `fffd`) and
+`inline_sign_stamp_leaf.rs` (the call leaf → `0000f609`). format 31 unchanged.
+
+#### 4.5.500 `$size` and the array-query family of a dynamic array or queue are its runtime geometry (2026-09-13, branch it9) ✅
+
+**ROADMAP row**: §2 Ranges / bounds / selects, entry 1; queue row 1. First slice of the bundle.
+
+**Row claims re-measured: all hold, and the class is the whole family.** `$size(da)` / `$size(q)` printed
+`32` for both oracles' `3` / `2`; `$high(q)` `31` for `1`, `$dimensions(da)` `1` for `2`, `$increment`
+`1` for `−1`, a `for (i < $size(da))` bound ran 32 times. Root as filed: `try_introspect_fold` resolved
+the handle net and asked `net_dims_desc`, which on a handle net sees only the ELEMENT's packed dim.
+
+**Fix.** A dyn/queue-handle arm (one argument; Assoc / AssocStr decline to the loud "unsupported system
+function" path; an explicit dimension argument keeps the constant path): `$size` → `SysFunc
+DynSize(handle)` (the `.size()` route), `$high` / `$right` → size − 1, `$low` / `$left` → 0, `$increment`
+→ −1, `$dimensions` → 1 + (element has a packed dim), `$unpacked_dimensions` → 1, all through
+`int_result_expr` (§4.5.499). Two consumers that had assumed the family constant were closed in review:
+a REPLICATION COUNT built from `$size(da)` folded to a silent 0 where both oracles refuse the design —
+`count_reads_runtime_net`'s type-query branch now calls `$size` / `$high` / `$right` / `$bits` over a
+dyn handle a runtime read (the constant-folding queries stay counts: `{$dimensions(da){1'b1}}` is
+`00000003` = verilator), and a count the lowering itself built NEGATIVE (`{$increment(da){1'b1}}`,
+`32'sd-1`; PRE replicated the two's-complement pattern) is refused by reading the lowered const's own
+sign — the AST-side negative check cannot see a fold.
+
+**A refusal was tried and reverted (three BLOCKINGs on one axis).** Round 1 measured `$size(w)` in an
+`always_comb` joining a pre-existing stale class once it became a runtime read: a handle has no event
+channel, so an inferred-sensitivity block fires at time 0 and is not woken by a later `new[]` /
+`push_back` / element write / string assign (the `.size()` spelling was stale in PRE the same way). The
+lens's BLOCKING cell was a coincidence — PRE's element-width constant (4) equalled `new[4]`; `new[3]`
+printed 104 for the oracles' 103 in PRE. A refusal of the block was built anyway. Its first cut, "any
+handle in the read set", refused six designs that PRE and both oracles run (a second trigger re-runs the
+block and the handle read is live then: `n = w[0] + e` = 42 in all four tools) — round 2, one BLOCKING
+per lens. The narrowing, "every read is channel-less", refused a declaration-initialised `int w[] =
+new[3]` and a `string s = "hello"` whose single t0 fire IS the final value (both oracles 103 / 5) —
+round 3, one BLOCKING per lens — and let through blocks whose only ordinary net is a loop index, a
+block-local or a self-written accumulator (silent-stale, `0` for `6`). The discriminator ("does the
+handle change after the block's fire") is dynamic; no static predicate on the read set decides it. The
+axis is reverted: no refusal, the class is filed with its engine site as the next queue row 1 (§2
+Delays / events — the dyn / string heap writes in `changes.rs` post no dirty channel; the t0 fire is
+declaration order, not §9.2.2.2.2), and the test pins the observed stale cell beside the correct
+declaration-initialised one.
+
+**Census PRE→POST**: 18 cells silent→correct on both agreeing oracles (the nine queries on a dynamic
+array and a queue, an empty queue's `$high` = −1, a 4-bit element's `$dimensions`, the loop bound, a
+signed comparison and product over the size); `$dimensions` / `$unpacked_dimensions` are pinned to
+verilator + the LRM (iverilog contradicts itself: `$high` 2 but `$dimensions` 0). Controls
+byte-identical: `$bits(da.size())`, a static array, `$size(pk, 1)` / `$size(pk, 2)`, `localparam K =
+$size(da)` (loud), `$size(arr)` of a dyn-array FORMAL (loud, E3010), `always_ff` reading `w.size()`
+(explicit sensitivity), a write-only element in an `always_comb`, `examples/*.sv`. `native|vm|interp`
+identical.
+
+**Review**: three rounds, all on the refusal axis above (round 1 differential BLOCKING → the refusal;
+round 2 both lenses BLOCKING → the narrowing; round 3 both lenses BLOCKING → the revert). The fold
+itself had no finding in any round. **Filed** (PRE == POST): `$size(da, 1)` with an explicit dimension
+still answers the element width (verilator `6`, iverilog rejects the two-argument form); `$size` of a
+class-member or hierarchical dyn array is loud (verilator 3); `$bits(da)` of a handle has no oracle for
+its value (iverilog 1, verilator unsupported) and folds the element width outside a count.
+
+Files: `crates/elaborate/src/{expr_special,ast_query,expr_main,const_eval}.rs`. Tests: a new
+`dyn_array_introspection_is_runtime.rs` (5, incl. the filed stale cell and the loud count pins).
+format 31 unchanged.
 
 #### 4.5.499 `$bits` and the array-query functions return a signed `int` (2026-09-13, branch it8) ✅
 

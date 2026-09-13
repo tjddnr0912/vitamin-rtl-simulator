@@ -9,6 +9,27 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — dynamic-array introspection, call leaves, `always_comb` call actuals
+
+- **`$size`, `$high`, `$right`, `$low`, `$left`, `$increment`, `$dimensions` and
+  `$unpacked_dimensions` of a dynamic array or queue are its runtime geometry.** They folded to
+  the ELEMENT's packed width (`$size(da)` printed `32` for both reference tools' `3`; `$high(q)`
+  `31` for `1`; a `for (i < $size(da))` loop ran 32 times). An associative array's `$size`, a
+  replication count built from `$size(da)` / `$bits(da)` and a negative count (`$increment(da)`)
+  are refused instead of silently answering 32 / 0 / a two's-complement pattern. Known and filed:
+  an `always_comb` / `always @*` block reading a dynamic array, queue or string is not re-run when
+  the handle is resized or written (a handle has no event channel yet), so such a block can hold a
+  stale value until another variable it reads changes.
+- **A user function call as a leaf of an expression carries its declared return sign** (IEEE 1800
+  §11.6.1). `function [31:0] f; f = id8(a8) * b8;` printed `00000001` for both reference tools'
+  `0000fe01`, `16'(ids8(s8) * q8)` printed `0020` for `0120`, and a region made only of
+  `automatic` calls folded at 8 bits; the scoped spelling `pk::f(…)` is resolved like the bare
+  import.
+- **A user-call actual bound to an `input` formal is a read for the two-driver check.**
+  `always_comb a = id8(u8) * b8;` beside `logic [7:0] u8 = 8'hF7` was refused as a two-driver
+  conflict on `u8` (both reference tools print `f609`); `output` and `inout` actuals still count
+  as writes.
+
 ### Fixed — formal defaults, call actuals, `always_comb` system-function arguments, `$bits`
 
 - **A package routine's formal default value is evaluated in the package's scope** (IEEE 1800

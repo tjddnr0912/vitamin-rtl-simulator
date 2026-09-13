@@ -443,6 +443,7 @@ another.
 | Ask whether a decline is a decline before "adding only where None": when the existing lane returns a WRONG value rather than declining, the new lane must be routed ahead of it, not behind it as a fallback | A fallback that never runs because the wrong answer is already there |
 | Reject a cited cell that both candidate rules answer identically as evidence; measure a cell where they differ, and size the slice as the whole subclass minus what an existing channel already answers | A slice justified by a cell that cannot distinguish the rules |
 | Read the type alias behind any tuple a row cites by POSITION before accepting its root, and build the no-construct control (the same expression with a plain declared name in place of the row's construct) before naming the class after the construct | A row naming a sign bit that was an `ascending` flag, and a genvar row whose class was every outer-scope name read from a nested scope |
+| When PRE agrees with the oracle on a cell whose PRE mechanism is a constant, vary the value the constant coincided with before attributing the movement | A coincidence cell being filed as a regression by one lens and as a working design by the next |
 
 ### 4.7 Completeness for a change already under way
 
@@ -593,6 +594,8 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Read every property a gate decides from the same environment it seeded | Two resolvers for one name being a divergence waiting for a scope |
 | State a widening's property — adding a rule can only add candidates — and enforce it, rather than patching the shapes in front of you | Each fix being written for one shape and the property breaking again through another door |
 | Make the baseline of a widening the whole rule set, not one privileged rule | A flag meaning "not the original rule" protecting only the original rule |
+| Do not gate a hazard whose discriminator is a runtime fact (whether a value changes after a block fires) on a static shape of the read set; build the wake or file the class | Every static cut refusing a correct design (a second trigger, a declaration-initialised handle) or admitting a stale one (a loop index) — three BLOCKINGs on one axis |
+| Make a runtime-ness detector ask the arm that lowers the node which spellings produce a runtime node, not which argument kinds appear | A constant-folding query over a runtime-carrying argument being refused as runtime |
 
 ### 5.4 Arms, early returns and escapes
 
@@ -833,7 +836,7 @@ census has produced it, and the probe itself is a claim to check.
 
 ## 7. Testing
 
-The full local gate is `cargo nextest run --workspace --locked`: 7928 tests, 15 skipped. Named gates
+The full local gate is `cargo nextest run --workspace --locked`: 7939 tests, 15 skipped. Named gates
 that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
 frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
 diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,

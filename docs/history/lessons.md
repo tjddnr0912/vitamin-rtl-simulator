@@ -4262,6 +4262,41 @@ was the sign walk's `_ => None` tail standing the whole region down — for ever
 the row's fix shape would have fixed none. Recorded: when a classifier's `None` stands a region down,
 the tail is a per-leaf-kind class to enumerate and measure per consumer.
 
+### A static refusal of a dynamic hazard: three BLOCKINGs, then the revert (§4.5.500)
+
+The round-1 differential lens showed `$size(w)` in an `always_comb` going stale once it became a
+runtime read (a handle has no event channel; the `.size()` spelling was stale in PRE too), so the fix
+refused any inferred-sensitivity block whose read set held a handle. Round 2 measured six designs that
+PRE and both oracles run — a second trigger re-runs the block and the handle read is live on the
+re-run — refused as E3009. The narrowing, "every read is channel-less", then refused a
+declaration-initialised `int w[] = new[3]` and a `string s = "hello"` whose single t0 fire is the final
+value (round 3, both oracles 103 / 5), while a block whose only ordinary net was a loop index or a
+self-written accumulator passed and stayed stale. The hazard's discriminator — does the handle change
+after the block fires — is dynamic; every static predicate on the read set cut a correct design or
+admitted a stale one. Third BLOCKING on one axis: the refusal was reverted, the class filed with its
+engine site (the heap writes post no dirty channel). Recorded: a loud gate over a hazard whose
+discriminator is a runtime fact cannot be keyed on static shape; either build the wake or file, never
+gate.
+
+### A coincidence cell reads as a working design (§4.5.500)
+
+The round-1 BLOCKING cell was `always_comb n = $size(w) + (t ? 1000 : 100)` with `logic [3:0] w[]`
+and `w = new[4]`: PRE printed 104 = both oracles, POST printed the stale 100. PRE's 104 was the
+element-width CONSTANT (4) coinciding with the allocation (4); the same design with `new[3]` prints 104
+in PRE for the oracles' 103. Round 2 then filed POST2's refusal of the same design as correct→loud.
+Recorded: when PRE agrees with the oracle on a cell whose PRE mechanism is a constant, vary the value
+the constant coincided with before attributing the movement; a coincidence cell is neither a
+regression nor a working design, it is the class's pre-existing silent-wrong at one point.
+
+### A runtime-ness detector keyed on the argument, not the query (§4.5.500)
+
+The replication-count detector called every type query over a dyn handle a runtime read, because the
+handle is what made `$size` runtime. `$dimensions`, `$unpacked_dimensions`, `$low`, `$left` and
+`$increment` over the same handle fold to constants in the same arm, so `{$dimensions(da){1'b1}}` was
+refused where POST's own fold gives verilator's `{2{1'b1}}`. Recorded: a detector that decides whether
+a node is runtime asks the arm that LOWERS the node which queries produce a runtime node, not which
+argument kinds appear.
+
 ### A declaration's text is not only its body (§4.5.496)
 
 §4.5.493 pushed the package scope around a routine's BODY, and the queue's next row was the formal
