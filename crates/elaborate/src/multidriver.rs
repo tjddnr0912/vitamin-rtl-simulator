@@ -297,6 +297,36 @@ impl Elaborator<'_> {
                 _ => None,
             })
             .collect();
+        // Rule A's verdicts, computed first under a shared borrow: the conservative
+        // walk is handed the module's call resolver (`call_effect`, the same closure
+        // the block-local gate threads into the definite-assignment walk), so an
+        // actual bound to an `input` formal is a READ and one bound to an
+        // `output`/`inout` formal — or an unresolvable callee — stays a write.
+        // Without the resolver every user-call actual counted: `always_comb a6 =
+        // id8(u8) * b8;` beside `logic [7:0] u8 = 8'hF7` was E3001 where both oracles
+        // print `f609`, while the measured `always_comb bump(acc)` (`inout`) cell must
+        // keep its loud. The diagnostics are emitted in the loop below, which needs
+        // `&mut self`, hence the two phases.
+        let rule_a_fires: std::collections::BTreeSet<String> = {
+            let me: &Self = &*self;
+            let out =
+                |cn: &ast::HierPath, args: &[ast::Expr], nm: &str| me.call_effect(cn, args, nm);
+            vars.iter()
+                .filter(|(name, _, has_init)| {
+                    *has_init
+                        && procs.iter().any(|p| {
+                            p.kind == ast::ProcKind::AlwaysComb
+                                && !declares_local_named(std::slice::from_ref(&*p.body), name)
+                                && !stmt_never_writes_ident(
+                                    std::slice::from_ref(&*p.body),
+                                    name,
+                                    Some(&out),
+                                )
+                        })
+                })
+                .map(|(name, _, _)| name.clone())
+                .collect()
+        };
         let cont_assigns: Vec<&ast::ContinuousAssign> = body
             .iter()
             .filter_map(|it| match it {
@@ -329,12 +359,7 @@ impl Elaborator<'_> {
             // to lvalue roots dropped that cell. Rules B and C cannot take the same
             // walk, because it also counts an actual bound to an `input` formal, which
             // verilator does not.
-            if has_init
-                && procs.iter().copied().filter(visible).any(|p| {
-                    p.kind == ast::ProcKind::AlwaysComb
-                        && !stmt_never_writes_ident(std::slice::from_ref(&*p.body), &name, None)
-                })
-            {
+            if has_init && rule_a_fires.contains(&name) {
                 self.error_at(
                     MsgCode::ElabMultidriver,
                     decl_span,

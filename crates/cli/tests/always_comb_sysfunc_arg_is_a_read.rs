@@ -68,10 +68,11 @@ endmodule
 }
 
 /// ② The WRITE-dest argument of a system function still counts: `$sscanf`'s
-/// destination beside a declaration initializer stays E3001 (PRE-identical), and a
-/// user-call actual keeps the conservative answer (ROADMAP §3.b `mdrv-actual`).
+/// destination beside a declaration initializer stays E3001 (PRE-identical). A
+/// user-call actual bound to an `input` formal is a read since §4.5.502
+/// (`always_comb_call_actual_direction.rs`); the cell is asserted at its value.
 #[test]
-fn a_write_dest_argument_and_a_user_call_actual_still_count_as_writes() {
+fn a_write_dest_argument_still_counts_as_a_write() {
     let (_, e, code) = run(r#"module t;
   logic [31:0] o1 = 32'd1;
   int n; string str = "ab";
@@ -84,19 +85,16 @@ endmodule
         e.contains("variable `o1` has a declaration initializer AND is written by"),
         "{e}"
     );
-    let (_, e, code) = run(r#"module t;
+    let (o, e, code) = run(r#"module t;
   logic [7:0] u8 = 8'hF7, b8 = 8'hFF;
   logic [31:0] a6;
   function [7:0] id8(input [7:0] v); id8 = v; endfunction
   always_comb a6 = id8(u8) * b8;
-  initial begin #1 $finish; end
+  initial begin #1 $display("A6=%h", a6); #1 $finish; end
 endmodule
 "#);
-    assert_ne!(code, Some(0));
-    assert!(
-        e.contains("variable `u8` has a declaration initializer AND is written by"),
-        "{e}"
-    );
+    assert_eq!(code, Some(0), "{e}");
+    assert_eq!(o, "A6=0000f609");
 }
 
 /// ③ ROUND-1 SOUNDNESS FINDING (fixed): the SEED of `$random(seed)` and of every
