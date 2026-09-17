@@ -536,6 +536,15 @@ struct StagedExtraSidecars {
     /// `SimOpts::proc_inst_scopes`).
     #[serde(default)]
     proc_inst_scopes: Vec<String>,
+    /// v32: S1 RUNTIME structural delay — cont-assign index → `(rise_eid,
+    /// fall_eid, toff_eid, time_mult, prec_mult)` (see
+    /// `SimOpts::ca_delay_exprs`). Without it a STAGED `assign #(dv) y = a;`
+    /// silently becomes a ZERO-delay assign while the one-shot run delays it by
+    /// `dv` — the STAGED-DROP hazard class. APPEND-ONLY tail; rides the
+    /// format_version 32 bump. EMPTY ⇒ every structural delay const-folded ⇒
+    /// byte-identical.
+    #[serde(default)]
+    ca_delay_exprs: std::collections::BTreeMap<u32, (u32, u32, Option<u32>, u64, u64)>,
 }
 
 impl StagedExtraSidecars {
@@ -580,6 +589,7 @@ impl StagedExtraSidecars {
             stmt_scopes: sc.stmt_scopes.clone(),
             expr_scopes: sc.expr_scopes.clone(),
             proc_inst_scopes: sc.proc_inst_scopes.clone(),
+            ca_delay_exprs: sc.ca_delay_exprs.clone(),
         }
     }
 }

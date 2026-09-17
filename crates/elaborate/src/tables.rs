@@ -659,4 +659,16 @@ pub struct Sidecars {
     /// frozen `ContAssign.delay` keeps `Some(rise)` so the uniform path is
     /// untouched. EMPTY ⇒ no differing rise/fall/turnoff ⇒ byte-identical.
     pub ca_delays: std::collections::BTreeMap<u32, (u32, u32, u32)>,
+    /// S1 RUNTIME structural delay: cont-assign index → `(rise_eid, fall_eid,
+    /// toff_eid, time_mult, prec_mult)`. Populated ONLY when the delay's FIRST
+    /// value does not const-fold — the cells where `fold_ca_delay` answered
+    /// `None` and the engine silently treated the assign as zero-delay. The
+    /// eids index the SAME expression arena the cont-assign's rhs uses; the
+    /// engine evaluates them at the SCHEDULING point (when the rhs changes).
+    /// `toff_eid` is `None` for a 1- or 2-value spec, whose turnoff is
+    /// `min(rise, fall)` of the runtime values. The multipliers are the
+    /// DECLARING module's — a continuous assign has no process, so the engine
+    /// has no `cur_time_mult` to read for it. EMPTY ⇒ every structural delay
+    /// const-folded ⇒ byte-identical.
+    pub ca_delay_exprs: std::collections::BTreeMap<u32, (u32, u32, Option<u32>, u64, u64)>,
 }

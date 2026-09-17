@@ -54,6 +54,7 @@ impl<'s> Elaborator<'s> {
             clocking_commit: std::collections::BTreeMap::new(),
             clocking_outputs: std::collections::BTreeMap::new(),
             ca_delays: std::collections::BTreeMap::new(),
+            ca_delay_exprs: std::collections::BTreeMap::new(),
             clocking_events: std::collections::BTreeMap::new(),
             default_clocking: None,
             default_disable_iff: None,
@@ -881,6 +882,12 @@ impl<'s> Elaborator<'s> {
             self.recompute_comb_sensitivity_after_hier();
         }
 
+        // S1: hand back the runtime structural-delay lane for any assign that
+        // drives a RESOLVED (multi-driven whole-net) net — the check below, and
+        // the engine's own `multi_driver_groups`, both read `delay.is_none()`,
+        // and the lane's routing flag is not none. Must run BEFORE the check,
+        // which is the predicate it protects.
+        self.demote_runtime_delay_on_resolved_nets();
         // whole-net multidriver check over the WHOLE flat IR (instance-agnostic).
         self.check_whole_net_multidriver();
     }

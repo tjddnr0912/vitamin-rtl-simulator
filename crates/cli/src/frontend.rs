@@ -739,6 +739,9 @@ pub(crate) fn run_vita_str_gated(
         // S1 gate/assign rise·fall·turnoff delay (one-shot path; empty unless a
         // delay has differing rise/fall/turnoff → byte-identical otherwise).
         ca_delays: sc.ca_delays,
+        // S1 runtime (variable) structural delay (one-shot path; empty unless a
+        // delay value is not an elaboration constant → byte-identical otherwise).
+        ca_delay_exprs: sc.ca_delay_exprs,
         defer_marks: sc.defer_marks,
         defer_acts: sc.defer_acts,
         // B1/B2 frame-call: thread the func/task sidecars on the one-shot path

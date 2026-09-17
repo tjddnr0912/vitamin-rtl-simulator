@@ -1569,7 +1569,7 @@ impl Elaborator<'_> {
     }
 
     /// One delay value → ticks: the scope-free fold, then the scope-resolved one.
-    fn ca_delay_value(&self, e: &ast::Expr) -> Option<u32> {
+    pub(crate) fn ca_delay_value(&self, e: &ast::Expr) -> Option<u32> {
         const_delay_ticks(e, self.cur_time_mult, self.cur_prec_mult)
             .or_else(|| self.delay_ticks_in_scope(e))
     }

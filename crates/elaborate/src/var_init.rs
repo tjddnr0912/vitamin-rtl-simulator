@@ -119,9 +119,12 @@ impl Elaborator<'_> {
         // IEEE §6.1.3: an optional net-declaration delay (`wire #3 w = a;`) applies
         // to EVERY net-decl-assignment in this decl, IDENTICAL to a delay on the
         // equivalent `assign #3 w = a;` — fold it the same way (uniform delay +
-        // distinct rise/fall/turnoff `ca_delays` sidecar). `None` (no delay, the
-        // common case) ⇒ `(None, None)` ⇒ byte-identical to before.
-        let (delay, rft) = self.fold_ca_delay(d.delay.as_ref());
+        // distinct rise/fall/turnoff `ca_delays` sidecar + S1 runtime
+        // `ca_delay_exprs`), through the one funnel `elaborate_cont_assign`
+        // calls, so `wire #(dv) w = a;` and `assign #(dv) w = a;` cannot answer
+        // differently. `None` (no delay, the common case) ⇒ `(None, None, None)`
+        // ⇒ byte-identical to before.
+        let (delay, rft, rt) = self.fold_ca_delay_rt(d.delay.as_ref());
         for name in &d.names {
             let Some(init) = &name.init else {
                 continue;
@@ -145,6 +148,9 @@ impl Elaborator<'_> {
             let idx = self.cont_assigns.len() as u32;
             if let Some(rft) = rft {
                 self.ca_delays.insert(idx, rft);
+            }
+            if let Some(rt) = rt {
+                self.ca_delay_exprs.insert(idx, rt);
             }
             // R14: a NET declaration initializer is an implicit continuous
             // assign (see the width note above) — labelled apart from a spelled

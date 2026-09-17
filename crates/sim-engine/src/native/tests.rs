@@ -433,6 +433,11 @@ pub(super) fn build_with_opts(src: &str) -> (SimIr, SimOpts) {
         // transition uses the uniform delay and a test that pins rise/fall is
         // measuring something the design does not say.
         ca_delays: sc.ca_delays,
+        // …and the RUNTIME delay table (S1). `assign #(dv)` lowers as an ordinary
+        // delayed assign PLUS this sidecar, so without it the delay reads as a
+        // uniform 0 and every tier-3 test of a variable delay measures a design
+        // that says something else.
+        ca_delay_exprs: sc.ca_delay_exprs,
         wired_and_nets: sc.wired_and_nets,
         wired_or_nets: sc.wired_or_nets,
         // …and the class-field width sidecar (§4.5.309). `obj.f` lowers to a

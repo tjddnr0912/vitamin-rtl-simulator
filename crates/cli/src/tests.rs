@@ -64,6 +64,10 @@ fn staged_extra_sidecars_wire_shape_is_pinned() {
         std::collections::BTreeMap::from([(5u32, vec![(8u32, 3u32), (9u32, 7u32)])]);
     s.clocking_outputs = std::collections::BTreeMap::from([(6u32, vec![(4u32, 9u32)])]);
     s.ca_delays = std::collections::BTreeMap::from([(0u32, (1u32, 2u32, 3u32))]);
+    s.ca_delay_exprs = std::collections::BTreeMap::from([
+        (0u32, (4u32, 5u32, Some(6u32), 1000u64, 10u64)),
+        (2u32, (7u32, 7u32, None, 1u64, 1u64)),
+    ]);
     s.wired_and_nets = std::collections::BTreeSet::from([11u32, 13u32]);
     s.wired_or_nets = std::collections::BTreeSet::from([17u32]);
     s.timeformat_stmts = std::collections::BTreeSet::from([19u32]);
@@ -91,7 +95,7 @@ fn staged_extra_sidecars_wire_shape_is_pinned() {
         println!("REGEN StagedExtraSidecars wire = {got}");
         return;
     }
-    const EXPECTED: &str = "963b88993730d1294bd666742ae060cf92cefa1dd31eabc8bf05a37fee3ba3d8";
+    const EXPECTED: &str = "f0bffdf4521871045fa3cd6647354b9c2f457d1e58fb8e452df21c06717c6a5f";
     assert_eq!(
         got, EXPECTED,
         "StagedExtraSidecars wire shape changed — a field was added / removed / \

@@ -19,6 +19,7 @@ use crate::value::Value;
 use crate::DeferRegion;
 
 // ---- split parts (mechanical refactor) ----
+mod ca_delay;
 mod kernel;
 mod propagate;
 mod run_loop;

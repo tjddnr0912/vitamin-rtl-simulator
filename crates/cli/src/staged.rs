@@ -724,6 +724,10 @@ pub(crate) fn run_vrun_gated(
         clocking_commit: extra.clocking_commit,
         clocking_outputs: extra.clocking_outputs,
         ca_delays: extra.ca_delays,
+        // v32 (STAGED-DROP parity): the RUNTIME structural-delay table — without
+        // it a staged `assign #(dv) y = a;` fires with no delay at all while
+        // the one-shot run delays it by `dv`.
+        ca_delay_exprs: extra.ca_delay_exprs,
         // wand/wor wired-logic resolution kinds (STAGED-DROP parity: without
         // these a multi-driven wand/wor net silently used wire resolution on the
         // staged path = wrong value while one-shot was correct).

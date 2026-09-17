@@ -381,6 +381,18 @@ pub struct SimOpts {
     /// (so `#5`, `#(3,3)`, no-delay carry no entry → the uniform `ContAssign.delay`
     /// is used). EMPTY ⇒ byte-identical to designs with uniform/no delays.
     pub ca_delays: std::collections::BTreeMap<u32, (u32, u32, u32)>,
+    /// S1 RUNTIME structural delay: cont-assign index → `(rise_eid, fall_eid,
+    /// toff_eid, time_mult, prec_mult)`. Populated ONLY when the delay's first
+    /// value is not an elaboration constant (`assign #(dv) y = a;`), which is
+    /// exactly where the uniform `ContAssign.delay` cannot carry the answer.
+    /// The engine evaluates the ids at the SCHEDULING point (see
+    /// `Scheduler::schedule_delayed_cas`), so a delay variable written later
+    /// does not move an already-scheduled write; the multipliers are the
+    /// DECLARING module's, because a continuous assign has no process whose
+    /// `cur_time_mult` the engine could read. A `toff_eid` of `None` means the
+    /// turnoff is `min(rise, fall)` of the values just read. EMPTY ⇒ every
+    /// structural delay const-folded ⇒ byte-identical.
+    pub ca_delay_exprs: std::collections::BTreeMap<u32, (u32, u32, Option<u32>, u64, u64)>,
     /// Runtime plusargs (v7, `+name[=value]` with the '+' stripped, CLI
     /// order). `$test$plusargs` prefix-probes them; `$value$plusargs`
     /// converts the first match's remainder. Pure runtime input — never
@@ -507,6 +519,7 @@ impl Default for SimOpts {
             clocking_commit: std::collections::BTreeMap::new(),
             clocking_outputs: std::collections::BTreeMap::new(),
             ca_delays: std::collections::BTreeMap::new(),
+            ca_delay_exprs: std::collections::BTreeMap::new(),
             defer_marks: DeferMarkTable::new(),
             defer_acts: DeferActTable::new(),
             func_table: FuncTable::new(),
@@ -856,6 +869,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     st.clocking_commit = opts.clocking_commit.clone();
     st.clocking_outputs = opts.clocking_outputs.clone();
     st.ca_delays = opts.ca_delays.clone();
+    st.ca_delay_exprs = opts.ca_delay_exprs.clone();
     st.defer_marks = opts.defer_marks.clone();
     st.defer_acts = opts.defer_acts.clone();
     // WAND/WOR: per-net multi-driver resolution kind (one-shot only).

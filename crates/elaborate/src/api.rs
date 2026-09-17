@@ -226,6 +226,7 @@ pub fn elaborate_located_params(
         clocking_commit: std::mem::take(&mut el.clocking_commit),
         clocking_outputs: std::mem::take(&mut el.clocking_outputs),
         ca_delays: std::mem::take(&mut el.ca_delays),
+        ca_delay_exprs: std::mem::take(&mut el.ca_delay_exprs),
         net_names: el.net_name_table(), // BEFORE finish() consumes `el`
         instances_info: std::mem::take(&mut el.instances_info),
     };

@@ -498,6 +498,10 @@ pub(crate) struct SimState<'a> {
     /// S1 gate/assign rise·fall·turnoff delay: cont-assign index → (rise, fall,
     /// turnoff). EMPTY ⇒ uniform/no delays ⇒ byte-identical.
     pub ca_delays: std::collections::BTreeMap<u32, (u32, u32, u32)>,
+    /// S1 RUNTIME structural delay: cont-assign index → `(rise_eid, fall_eid,
+    /// toff_eid, time_mult, prec_mult)`, evaluated at the scheduling point.
+    /// EMPTY ⇒ every structural delay const-folded ⇒ byte-identical.
+    pub ca_delay_exprs: std::collections::BTreeMap<u32, (u32, u32, Option<u32>, u64, u64)>,
     /// Preponed snapshot: source NetId → its value at the start of the time slot.
     pub preponed_buf: std::collections::BTreeMap<u32, crate::value::Value>,
     /// SVA-REST: StmtIds of assertion FIRE reports gated by assertion control.

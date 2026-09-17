@@ -109,6 +109,7 @@ impl<'a> SimState<'a> {
             clocking_commit: std::collections::BTreeMap::new(),
             clocking_outputs: std::collections::BTreeMap::new(),
             ca_delays: std::collections::BTreeMap::new(),
+            ca_delay_exprs: std::collections::BTreeMap::new(),
             preponed_buf: std::collections::BTreeMap::new(),
             assert_fire: std::collections::BTreeSet::new(),
             assert_ctl: std::collections::BTreeMap::new(),

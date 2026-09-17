@@ -935,15 +935,17 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 Some(r) => crate::eval::resolve_offsets(&self.st.mk_eval_ctx_with(r), &lhs),
                 None => self.resolve_lvalue_offsets(&lhs),
             };
-            // S1: when this cont-assign has differing rise/fall/turnoff delays,
-            // the net updates atomically at `now + max(per-changed-bit dest
-            // delay)`. Absent a sidecar entry, the uniform `d` is used (byte-
-            // identical to the old behaviour).
-            let eff_d = match self.st.ca_delays.get(&(ci as u32)) {
-                Some(&(rise, fall, toff)) => transition_delay(old.as_ref(), &v, rise, fall, toff),
-                None => d,
+            // The per-transition delay for THIS change — the uniform `d`, the
+            // constant rise/fall/turnoff sidecar, or the runtime lane, decided
+            // in `effective_ca_delay` (sched/ca_delay.rs). `None` = never fires.
+            let Some(eff_d) = self.effective_ca_delay(nets, ci, d, old.as_ref(), &v) else {
+                // The generation bump above still stands, so a write this assign
+                // already had pending is cancelled — the inertial cancel is a
+                // property of the rhs changing, not of the new delay being
+                // finite.
+                continue;
             };
-            let tick = self.st.now + eff_d as u64;
+            let tick = self.st.now.saturating_add(eff_d);
             self.delayed_ca.entry(tick).or_default().push((
                 ci as u32,
                 self.ca_gen[ci],

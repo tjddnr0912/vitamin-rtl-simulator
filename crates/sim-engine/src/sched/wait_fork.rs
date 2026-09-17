@@ -280,15 +280,22 @@ pub(crate) fn resolve_wor_into(acc: &mut Value, d: &Value) {
 /// encoding: (0,0)=0, (1,0)=1, (0,1)=X, (1,1)=Z. This is only reached when the
 /// value actually changed, so at least one bit differs; the `rise` fallback for
 /// the impossible no-change case is harmless.
+///
+/// Ticks are `u64` because the RUNTIME lane (`ca_delay_exprs`) feeds it
+/// `eval::delay_ticks_of`'s output, whose domain is the whole `u64` INCLUDING
+/// the `u64::MAX` never-fires sentinel. The `min` here therefore propagates
+/// "never" only when every changed bit's destination delay is `u64::MAX`, which
+/// is the right rule: a spec that can fire on some transition still fires on
+/// it. The constant lane's `u32` ticks widen losslessly.
 pub(crate) fn transition_delay(
     old: Option<&Value>,
     new: &Value,
-    rise: u32,
-    fall: u32,
-    toff: u32,
-) -> u32 {
+    rise: u64,
+    fall: u64,
+    toff: u64,
+) -> u64 {
     let x_delay = rise.min(fall).min(toff);
-    let mut d: Option<u32> = None;
+    let mut d: Option<u64> = None;
     for i in 0..new.width {
         let (nv, nu) = new.get_vu(i);
         // A bit is "changed" if there is no prior value (first drive) or the old
@@ -308,7 +315,7 @@ pub(crate) fn transition_delay(
         if !changed {
             continue;
         }
-        let bit_d = match (nv, nu) {
+        let bit_d: u64 = match (nv, nu) {
             (1, 0) => rise, // → 1
             (0, 0) => fall, // → 0
             (1, 1) => toff, // → z

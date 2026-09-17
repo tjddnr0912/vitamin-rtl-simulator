@@ -43,7 +43,7 @@ Constants:
 | OBS `schema_ver` | `1` |
 | `tool` | `"vita"` |
 | `version` | `"0.2.0"` (the workspace version) |
-| `format_version` | `31` (the frozen artifact format this build emits) |
+| `format_version` | `32` (the frozen artifact format this build emits) |
 | Exit codes | `0` OK · `1` RTL or user error · `2` stale artifact · `3` CLI misuse |
 | Every OBS flag diagnostic | `VITA-E0001` (`E-CLI-BAD-FLAG`) |
 | `$vita_stage` elaborate errors | `VITA-E3009` (`E-ELAB-UNSUPPORTED`) |

@@ -220,6 +220,7 @@ pub fn design_eligibility(ir: &SimIr, opts: &SimOpts) -> NativeEligibility {
         // the executor must do mid-body; this only adds a `u64` after it.
         proc_profile: _,
         ca_delays: _,
+        ca_delay_exprs: _,
         assign_ranks: _,
         two_state_nets: _,
         wired_and_nets: _,

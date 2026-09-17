@@ -51,6 +51,7 @@ mod ast_query;
 mod block_local;
 mod block_local_class;
 mod block_local_feed;
+mod ca_delay_rt;
 mod class_lower;
 mod classes;
 mod const_array;
@@ -1127,6 +1128,15 @@ struct Elaborator<'s> {
     /// S1 gate/assign rise·fall·turnoff delay: cont-assign index → (rise, fall,
     /// turnoff). Populated only when the folded values are not all equal.
     ca_delays: std::collections::BTreeMap<u32, (u32, u32, u32)>,
+    /// S1 RUNTIME structural delay: cont-assign index → `(rise_eid, fall_eid,
+    /// toff_eid, time_mult, prec_mult)`. Populated ONLY when the delay's FIRST
+    /// value does not const-fold, i.e. exactly where `fold_ca_delay` used to
+    /// hand the engine a silent no-delay. `toff_eid` is `None` for the 1- and
+    /// 2-value specs, where the turnoff is `min(rise, fall)` of the RUNTIME
+    /// values. The multipliers are the DECLARING module's, because a
+    /// continuous assign has no process whose `cur_time_mult` the engine could
+    /// read at the scheduling point.
+    ca_delay_exprs: std::collections::BTreeMap<u32, (u32, u32, Option<u32>, u64, u64)>,
     clocking_events: std::collections::BTreeMap<String, ast::Sensitivity>,
     /// This module's `default clocking` event (IEEE 1800 §14.12), or `None`.
     /// MODULE-LOCAL: `lower_clocking_blocks` clears it alongside `clocking_events`,

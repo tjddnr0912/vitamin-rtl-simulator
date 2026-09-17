@@ -423,11 +423,16 @@ fn a_zero_fall_still_reaches_the_sidecar() {
 }
 
 #[test]
-fn a_runtime_variable_delay_is_still_zero_delay_and_still_quiet() {
-    // ⚠️ THE OTHER HALF, pinned so closing the const gap does not silently start
-    // loud-rejecting it: `assign #(dv) y = a;` over a VARIABLE is not a constant
-    // and keeps the pre-slice zero-delay behavior at exit 0. Both oracles delay
-    // by dv — recorded in ROADMAP §2 as a separate (runtime) axis.
+fn a_runtime_variable_delay_is_evaluated_at_the_scheduling_point() {
+    // ⚠️ THE OTHER HALF, now closed: `assign #(dv) y = a;` over a VARIABLE is not
+    // an elaboration constant, so the delay VALUE expression is lowered into the
+    // assign's own arena and the engine reads it when the rhs changes (the
+    // `ca_delay_exprs` sidecar). It used to fold to `None`, which the caller
+    // consumed as a silent no-delay.
+    //
+    // ORACLES on this exact design: iverilog 13.0 `RISE=6`, verilator 5.052
+    // `RISE=6`. vita printed `RISE=2` before this slice, at exit 0.
+    // The full runtime-delay census is `cont_assign_runtime_delay.rs`.
     let (out, code) = rise(
         "1ns/1ns",
         "  reg [7:0] dv;\n",
@@ -435,5 +440,8 @@ fn a_runtime_variable_delay_is_still_zero_delay_and_still_quiet() {
         60,
     );
     assert_eq!(code, Some(0), "must not become loud; got:\n{out}");
-    assert!(out.contains("RISE=2"), "still zero-delay; got:\n{out}");
+    assert!(
+        out.contains("RISE=6"),
+        "delayed by dv=5 from t=1; got:\n{out}"
+    );
 }

@@ -822,8 +822,10 @@ impl Elaborator<'_> {
         // Delay: hdl-ast Delay values are exprs; sim-ir delay is Option<u32>.
         // The FROZEN `ContAssign.delay` keeps `Some(rise)` (values[0]) so the
         // "has delay" check and the uniform fast-path are untouched. S1: a
-        // distinct rise/fall/turnoff rides the `ca_delays` sidecar.
-        let (delay, rft) = self.fold_ca_delay(ca.delay.as_ref());
+        // distinct rise/fall/turnoff rides the `ca_delays` sidecar, and a
+        // delay that is not an elaboration constant rides `ca_delay_exprs`
+        // (`fold_ca_delay_rt`, which also stamps the `Some(0)` routing flag).
+        let (delay, rft, rt) = self.fold_ca_delay_rt(ca.delay.as_ref());
         for (lv, rhs) in &ca.assigns {
             let lhs = self.lower_lvalue(lv);
             // P1-9 (E3018): a user `assign` may not drive a Reg/Integer/Real
@@ -837,6 +839,9 @@ impl Elaborator<'_> {
             let idx = self.cont_assigns.len() as u32;
             if let Some(rft) = rft {
                 self.ca_delays.insert(idx, rft);
+            }
+            if let Some(rt) = rt {
+                self.ca_delay_exprs.insert(idx, rt);
             }
             // R14: `assign` — the user wrote it, so the identity is the
             // statement's own span.
