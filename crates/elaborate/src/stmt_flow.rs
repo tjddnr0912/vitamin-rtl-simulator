@@ -530,6 +530,60 @@ impl Elaborator<'_> {
         })
     }
 
+    /// Is `e` (already lowered self-determined as `id`) an OPERATOR whose §12.5
+    /// evaluation width is the case's common width `common`, wider than its own?
+    /// A leaf is left alone (the engine sizes each `CaseEq` pair), so is a node the
+    /// context walk cannot route (an opaque leaf, a real-domain operand, a string),
+    /// and so is a fill (the fill pass above owns those).
+    pub(crate) fn case_operand_takes_ctx(&self, e: &ast::Expr, id: u32, common: u32) -> bool {
+        let mut n = e;
+        while let ast::ExprKind::Paren { inner } = &n.kind {
+            n = inner;
+        }
+        let operator = match &n.kind {
+            ast::ExprKind::Binary { op, .. } => !matches!(
+                op,
+                ast::BinOp::Eq
+                    | ast::BinOp::Ne
+                    | ast::BinOp::CaseEq
+                    | ast::BinOp::CaseNe
+                    | ast::BinOp::WildEq
+                    | ast::BinOp::WildNe
+                    | ast::BinOp::Lt
+                    | ast::BinOp::Le
+                    | ast::BinOp::Gt
+                    | ast::BinOp::Ge
+                    | ast::BinOp::LogAnd
+                    | ast::BinOp::LogOr
+            ),
+            ast::ExprKind::Unary { op, .. } => {
+                matches!(op, ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot)
+            }
+            ast::ExprKind::Ternary { .. } => true,
+            _ => false,
+        };
+        if !operator || expr_contains_fill(e) || self.rhs_has_real_domain(e) {
+            return false;
+        }
+        if self.expr_is_real(id) || self.ir_expr_is_string(id) {
+            return false;
+        }
+        let Some((_, w)) = self.size_ctx_route(e) else {
+            return false;
+        };
+        w.or_else(|| self.ir_bits_of(id))
+            .is_some_and(|sw| sw < common)
+    }
+
+    /// Re-lower a case operand in the common width with the COLLECTIVE sign as the
+    /// region's extension (`inline_ctx_ext`), the inline-body route of §4.5.491.
+    pub(crate) fn lower_case_operand_ctx(&mut self, e: &ast::Expr, common: u32, ext: bool) -> u32 {
+        let saved = std::mem::replace(&mut self.inline_ctx_ext, Some(ext));
+        let id = self.lower_expr_ctx(e, common);
+        self.inline_ctx_ext = saved;
+        id
+    }
+
     pub(crate) fn lower_case(
         &mut self,
         b: &mut ProcessBuilder,
@@ -618,6 +672,51 @@ impl Elaborator<'_> {
                         }
                         ti += 1;
                     }
+                }
+            }
+        }
+
+        // §12.5 THE SELECTOR AND EVERY ITEM ARE ONE §11.6.1 REGION: each is sized to
+        // the common maximum and evaluated there, with the COLLECTIVE sign (below).
+        // The first pass lowered every operator SELF-determined, so `case (a8 * b8)
+        // 32'h0000fe01: …` compared the 8-bit product `01` and took the `00000001`
+        // item where both oracles take `fe01`; `case (s8 * q8) 32'sd288:` (all
+        // signed) compared `20`; `case (a8 << 4) 32'hff0:` compared `f0`; `case
+        // (-n4) 32'hfffffff1:` compared `1`. A ternary selector was already right
+        // (its 32-bit arm set the width), a concat is self-determined (§11.6.1) and
+        // a real selector is excluded (§6.12). Only an OPERATOR node is re-lowered —
+        // a leaf (a net, a literal, a select, a concat) is sized by the engine's
+        // per-pair `CaseEq` and stays byte-identical — and only when the common
+        // width is wider than its self width; the route is the size-cast /
+        // inline-body context walk (`size_ctx_route`, `inline_ctx_ext`), with the
+        // extension forced to the collective sign: `case (s8 + q8) 9'h1d7:` (signed
+        // operands, an unsigned item) zero-extends to `1d7` in both oracles, where
+        // the region's own leaves would say sign-extend.
+        if !self.expr_is_real(scrut_id0) {
+            let scrut_w = self.sibling_ctx(0, scrut_id0);
+            let common = tests
+                .iter()
+                .flat_map(|(ids, _)| ids.iter().copied())
+                .filter_map(|i| self.ir_bits_of(i))
+                .fold(scrut_w, u32::max);
+            let collective_signed = self.expr_self_signed(scrut_id0)
+                && tests
+                    .iter()
+                    .all(|(ids, _)| ids.iter().all(|&id| self.expr_self_signed(id)));
+            if common > 0 && self.case_operand_takes_ctx(scrutinee, scrut_id0, common) {
+                scrut_id0 = self.lower_case_operand_ctx(scrutinee, common, collective_signed);
+            }
+            let mut ti = 0usize;
+            for it in items {
+                if let ast::CaseItem::Match { labels, .. } = it {
+                    for (li, l) in labels.iter().enumerate() {
+                        let id = tests[ti].0[li];
+                        if self.case_operand_takes_ctx(l, id, common) {
+                            tests[ti].0[li] =
+                                self.lower_case_operand_ctx(l, common, collective_signed);
+                        }
+                    }
+                    ti += 1;
                 }
             }
         }
