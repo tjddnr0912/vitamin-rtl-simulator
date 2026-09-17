@@ -78,6 +78,7 @@ mod expr_cast;
 mod expr_ctx;
 mod expr_main;
 mod expr_size_ctx;
+mod expr_size_hier;
 mod expr_special;
 mod frames_blocal;
 mod frames_body;
@@ -159,6 +160,7 @@ pub(crate) use dynarr::*;
 pub(crate) use expr_cast::*;
 pub(crate) use expr_ctx::*;
 pub(crate) use expr_size_ctx::*;
+pub(crate) use expr_size_hier::*;
 pub(crate) use frames_classify::*;
 pub(crate) use frames_classify_fork::*;
 pub(crate) use generate::*;
@@ -626,6 +628,14 @@ struct Elaborator<'s> {
     /// subroutine is declared by the module, so `%m` in its body names this
     /// (IEEE §21.2.1), whatever generate scope or frame chain called it.
     inst_prefix: String,
+    /// The NAME of the module whose body is being lowered — the key into
+    /// [`Self::module_facts`]. Saved/restored around each `elaborate_instance`,
+    /// like `cur_prefix`; empty outside a module body (an interface, a package).
+    cur_module: String,
+    /// Per-module static facts for resolving a HIERARCHICAL leaf's declared sign
+    /// and width before the child instance exists (`expr_size_hier`). Built once
+    /// from the AST in `run`, never mutated afterwards.
+    module_facts: BTreeMap<String, ModuleFacts>,
     // §11.4.12.1: a ZERO replication count is legal only as a direct operand of a
     // concatenation. The Concat arm sets this for a part whose AST kind IS
     // `Replicate` (nothing else), and the Replicate arm `mem::take`s it on entry —

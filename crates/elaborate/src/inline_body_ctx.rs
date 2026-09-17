@@ -162,7 +162,11 @@ impl Elaborator<'_> {
                         .get(pkg)
                         .and_then(|m| m.get(&name.segments[1].name)),
                     None if name.segments.len() == 1 => self.lookup_func(&name.segments[0].name),
-                    None => return true,
+                    // A HIERARCHICAL callee whose declaration this walk reaches:
+                    // `hier_leaf_func` admits only a bit-vector return (it declines
+                    // `real`, `realtime` and `string`), so an answer IS the domain
+                    // claim. One it cannot reach stays a placeholder → `true`.
+                    None => return self.hier_leaf_func(name).is_none(),
                 };
                 f.is_none_or(|f| {
                     matches!(f.ret_type, ast::ParamType::Real | ast::ParamType::Realtime)
@@ -179,7 +183,12 @@ impl Elaborator<'_> {
             },
             K::Ident(p) => {
                 if p.segments.len() != 1 {
-                    return true; // hierarchical / class-member: a placeholder here
+                    // A HIERARCHICAL name whose declaration this walk reaches is a
+                    // BIT VECTOR by construction — `hier_leaf_net` is built from
+                    // `ast_kind_range_width`, which declines `real`, `realtime`,
+                    // `string`, `event` and a class handle. One it cannot reach is
+                    // still a placeholder, and a class member always is.
+                    return self.hier_leaf_net(p).is_none();
                 }
                 let name = &p.segments[0].name;
                 match self.bare_ident_route(name, e.span) {
@@ -251,7 +260,26 @@ impl Elaborator<'_> {
         let id = self.lower_expr_ungated(e);
         self.inline_ctx_ext = on;
         match on {
-            Some(ext) => self.widen_inline_leaf(id, ctx, ext),
+            Some(ext) => {
+                // A leaf holding a reachable CROSS-INSTANCE read or call is a
+                // placeholder node here, so it has no width to widen by and the
+                // leaf stood down (`fo = $signed(u.x) * q8` with a `[31:0]`
+                // return printed `20` for both oracles' `00000120`). The child's
+                // DECLARATION answers it, and only where `has_opaque_leaf` agrees
+                // the leaf is reachable — the same fallback, from the same
+                // resolver, that `lower_size_leaf` takes. Offered only where the
+                // lowering itself declined, so a trusted width always wins.
+                let ast_w = self
+                    .ir_bits_of(id)
+                    .is_none()
+                    .then(|| {
+                        (!self.has_opaque_leaf(e))
+                            .then(|| self.size_ctx_self_width(e))
+                            .flatten()
+                    })
+                    .flatten();
+                self.widen_inline_leaf(id, ctx, ext, ast_w)
+            }
             None => id,
         }
     }
@@ -266,7 +294,11 @@ impl Elaborator<'_> {
     ///  * a real or string value has no bit width to extend (§6.12 / §6.16);
     ///  * an UNTRUSTED width is a fabricated one (a class field reads through a
     ///    32-bit handle) — `trusted_self_width` is the one spelling of that guard,
-    ///    and `resize_inline_assign` stands down on the same answer;
+    ///    and `resize_inline_assign` stands down on the same answer. `ast_w` is the
+    ///    caller's fallback for the one case where the LOWERING has no width at all
+    ///    and the DECLARATION does (a reachable cross-instance leaf, still a
+    ///    placeholder node here); it is consulted only after `trusted_self_width`,
+    ///    so a width the lowering knows is never overridden;
     ///  * `w >= ctx` is not a widening — §11.6.1 only grows an operand, and a
     ///    narrower context never truncates one;
     ///  * a SIGNED extension's fill is the operand's own MSB, i.e. a SECOND
@@ -275,11 +307,17 @@ impl Elaborator<'_> {
     ///    is widened through a context instead (`e | 32'sd0`, one mention; see the
     ///    body). The UNSIGNED fill is a constant, so it names `e` once and needs no
     ///    such gate.
-    pub(crate) fn widen_inline_leaf(&mut self, e: u32, ctx: u32, ext: bool) -> u32 {
+    pub(crate) fn widen_inline_leaf(
+        &mut self,
+        e: u32,
+        ctx: u32,
+        ext: bool,
+        ast_w: Option<u32>,
+    ) -> u32 {
         if ctx == 0 || self.expr_is_real(e) || self.ir_expr_is_string(e) {
             return e;
         }
-        let Some(w) = self.trusted_self_width(e) else {
+        let Some(w) = self.trusted_self_width(e).or(ast_w) else {
             return e;
         };
         if w >= ctx {

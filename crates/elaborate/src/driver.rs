@@ -108,6 +108,8 @@ impl<'s> Elaborator<'s> {
             modport_readonly: BTreeSet::new(),
             cur_prefix: String::new(),
             inst_prefix: String::new(),
+            cur_module: String::new(),
+            module_facts: BTreeMap::new(),
             repl_zero_ok: false,
             params: BTreeMap::new(),
             enum_label_types: BTreeMap::new(),
@@ -599,6 +601,10 @@ impl<'s> Elaborator<'s> {
     /// case `top instantiating nothing` (one Instance, parent None).
     pub(crate) fn run(&mut self, unit: &ast::SourceUnit) {
         let (map, order) = build_module_map(unit);
+        // Per-module static facts for the §11.6.1 region walks' hierarchical
+        // leaves (`expr_size_hier`). Built here, from the same declaration order
+        // `build_module_map` uses, and read-only from then on.
+        self.module_facts = build_module_facts(&order);
         // §4.5.200: pre-scan EVERY module's procedural blocks for hierarchical TASK enables
         // (`u1.tk(...)`) and record the target task name, so `build_task_frame_set` can
         // FORCE-FRAME a hier-called STATIC task (otherwise it inlines and has no per-instance

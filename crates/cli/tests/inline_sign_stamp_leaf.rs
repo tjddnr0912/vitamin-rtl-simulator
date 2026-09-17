@@ -183,30 +183,37 @@ endmodule
 /// ⑤ BOUNDARIES. A user CALL leaf stood the region down in this slice
 /// (`00000009` for both oracles' `0000f609`) and was closed by §4.5.501, whose
 /// pin lives in `inline_call_leaf_region.rs`; the oracle value is asserted here.
-/// A stamp over an OPAQUE leaf (a hierarchical read) keeps the pre-slice
-/// lowering on both consumers (`xx20` / `20` for the oracles' `0120` /
-/// `00000120` — PRE-identical, including the placeholder's unknown print width;
-/// the placeholder has no width to widen by, the same stand-down
-/// `size_ctx_route` documents).
+/// A stamp over a HIERARCHICAL leaf stood both consumers down for the same
+/// reason — the leaf is a placeholder with no width to widen by — and is closed
+/// once the child's DECLARATION can be read (`expr_size_hier`, pinned in
+/// `hier_leaf_region_width.rs`): `$signed(u.x)` on `logic [7:0] x` now prints the
+/// oracles' `0120` / `00000120` where PRE printed `xx20` / `20`. The stand-down
+/// itself is still here, on the leaf whose declaration that walk cannot read —
+/// `logic [W-1:0] px`, whose width is a parameter in another module's scope: both
+/// cells keep their PRE value, the placeholder's unknown print width included.
 #[test]
-fn a_call_leaf_and_an_opaque_leaf_still_stand_the_region_down() {
+fn a_call_leaf_is_widened_and_an_unreachable_leaf_stands_the_region_down() {
     let o = run(
-        r#"module sub; logic [7:0] x = 8'hF7; logic signed [7:0] q = -32; endmodule
+        r#"module sub #(parameter W = 8); logic [7:0] x = 8'hF7; logic [W-1:0] px = 8'hF7; endmodule
 module t;
   sub u();
   logic signed [7:0] q8 = -32;
   logic [7:0] u8 = 8'hF7, b8 = 8'hFF;
-  logic [15:0] c1;
+  logic [15:0] c1, c2;
   function [7:0] id8(input [7:0] v); id8 = v; endfunction
   function [31:0] f_call; f_call = id8(u8) * b8; endfunction
   function [31:0] fo; fo = $signed(u.x) * q8; endfunction
+  function [31:0] fp; fp = $signed(u.px) * q8; endfunction
   initial begin
     c1 = 16'($signed(u.x) * q8);
-    $display("%h %h %h", f_call(), c1, fo());
+    c2 = 16'($signed(u.px) * q8);
+    $display("%h %h %h %h %h", f_call(), c1, fo(), c2, fp());
     #1 $finish;
   end
 endmodule
 "#,
     );
-    assert_eq!(o, "0000f609 xx20 20");
+    // PRE: `0000f609 xx20 20 xx20 20`. Both oracles:
+    // `0000f609 0120 00000120 0120 00000120` — the last two are the decline.
+    assert_eq!(o, "0000f609 0120 00000120 xx20 20");
 }

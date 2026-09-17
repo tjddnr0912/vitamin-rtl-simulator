@@ -112,8 +112,10 @@ endmodule
 /// ③ Sign and width of the FORMAL decide the region: a signed 16-bit formal
 /// (unsigned and signed regions), a 64-bit formal, a shift, a comparison, a
 /// ternary, an 8-bit formal (no widening), a `string` formal, a concat and a
-/// signed product — plus a HIERARCHICAL actual, which stays on the pre-slice
-/// lowering (an opaque leaf, PRE-identical `09` for the oracles' `f609`).
+/// signed product — plus a HIERARCHICAL actual (`idw(u.x * b8)`), which stood the
+/// region down at `09` for the oracles' `0000f609` until the child's DECLARATION
+/// could be read for the leaf's width and sign (`expr_size_hier`, pinned in
+/// `hier_leaf_region_width.rs`); it now prints the oracle value.
 #[test]
 fn the_formals_sign_and_width_decide_the_region() {
     let o = run(r#"module sub; logic [7:0] x = 8'hF7; endmodule
@@ -154,7 +156,7 @@ endmodule
     assert_eq!(
         o,
         "000000f6 fffff609 00000120 0000000000000000 00000f70 00000000 0000f609\n\
-         00000009 09 00000002 0000000c 0000f609 00000120 000001ec"
+         00000009 0000f609 00000002 0000000c 0000f609 00000120 000001ec"
     );
 }
 

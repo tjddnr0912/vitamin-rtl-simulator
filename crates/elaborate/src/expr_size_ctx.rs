@@ -185,6 +185,17 @@ impl Elaborator<'_> {
             // builds with. A string or real read is not a bit-vector ⇒ `None`
             // (the real refusal keeps firing). `Other` is the tail the lowering
             // resolves through `resolve_net`: answered as before, by the net.
+            // A HIERARCHICAL name whose declaration this walk can reach through the
+            // instance's module (`hier_leaf_net`): the DECLARED sign, the same rule
+            // every other declaration takes (`kind_signedness`). A whole unpacked
+            // array (`dims != 0`) is not a value here, so it declines and the region
+            // keeps its pre-slice lowering. Gated on `consts` like every other
+            // resolving arm: under a leaf this walk CANNOT reach, the pre-slice
+            // classifier must answer verbatim (`size_ctx_route`).
+            ast::ExprKind::Ident(p) if consts && p.segments.len() > 1 => self
+                .hier_leaf_net(p)
+                .filter(|h| h.dims == 0)
+                .map(|h| h.signed),
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
                 let name = &p.segments[0].name;
                 if !consts {
@@ -287,7 +298,12 @@ impl Elaborator<'_> {
                 };
                 Some(crate::array_geom::kind_signedness(kind, f.signed))
             }
-            // other sysfuncs / hierarchical refs / patterns → indeterminate here.
+            // A HIERARCHICAL call `u.hf(x)` — the callee's DECLARED return sign,
+            // read from the child module's `FunctionDef` by the same rule the
+            // bare-call arm above uses (`hier_leaf_func`).
+            ast::ExprKind::Call { name, .. } if consts => self.hier_leaf_func(name).map(|(_, s)| s),
+            // other sysfuncs / unreachable hierarchical refs / patterns →
+            // indeterminate here.
             _ => None,
         }
     }
@@ -371,6 +387,23 @@ impl Elaborator<'_> {
                     // packed VALUE, so a `[i]` of it is a 1-bit unsigned bit
                     _ => return SelChain::Bit { net: None },
                 }
+            }
+            // …and the HIERARCHICAL twin: a cross-instance name whose declaration
+            // this walk reaches (`hier_leaf_net`) has the same chain rule as a
+            // local one — `k` selects against its declared unpacked-dim count.
+            // A name it cannot reach keeps the `Unknown` of the tail below.
+            ast::ExprKind::Ident(p) if p.segments.len() > 1 => {
+                let Some(h) = self.hier_leaf_net(p) else {
+                    return SelChain::Unknown;
+                };
+                return match k.cmp(&h.dims) {
+                    std::cmp::Ordering::Less => SelChain::NotAValue,
+                    std::cmp::Ordering::Equal => SelChain::Elem {
+                        signed: Some(h.signed),
+                        width: Some(h.width),
+                    },
+                    std::cmp::Ordering::Greater => SelChain::Bit { net: None },
+                };
             }
             // …and the package twin, in the SAME order the `PkgScoped` arms of
             // `ast_ctx_signed` / `size_ctx_self_width` use: a wide package
@@ -462,7 +495,7 @@ impl Elaborator<'_> {
     /// what a logical shift brings in and what a division sees, so an
     /// over-estimate is as wrong as an under-estimate (`8'(s8 >> 2)` on `-16` is
     /// `3c` at 8 bits and `fc` at 32).
-    fn size_ctx_self_width(&self, e: &ast::Expr) -> Option<u32> {
+    pub(crate) fn size_ctx_self_width(&self, e: &ast::Expr) -> Option<u32> {
         use ast::ExprKind as K;
         let rec = |x: &ast::Expr| self.size_ctx_self_width(x);
         match &e.kind {
@@ -523,7 +556,9 @@ impl Elaborator<'_> {
                     return None;
                 };
                 let [seg] = p.segments.as_slice() else {
-                    return None;
+                    // a HIERARCHICAL base: the select's own `[msb:lsb]`, folded in
+                    // the REFERRING scope over a base this walk can reach
+                    return self.hier_part_select_width(base, msb, lsb);
                 };
                 let net = self.lookup_net_scoped(&seg.name)?;
                 if self.net_is_static_array(net)
@@ -550,6 +585,12 @@ impl Elaborator<'_> {
             // matter, and answering it here keeps the operand out of the probe,
             // which would lower a nested cast a second time and report its
             // refusal twice. A whole unpacked array has no value here.
+            // The sign arm's twin: a reachable HIERARCHICAL name reads as the
+            // child's declared width. A whole unpacked array has no value here.
+            K::Ident(p) if p.segments.len() > 1 => self
+                .hier_leaf_net(p)
+                .filter(|h| h.dims == 0)
+                .map(|h| h.width),
             K::Ident(p) if p.segments.len() == 1 => {
                 let name = &p.segments[0].name;
                 match self.bare_ident_route(name, e.span) {
@@ -595,6 +636,13 @@ impl Elaborator<'_> {
                 if matches!(name.name.as_str(), "$signed" | "$unsigned") && args.len() == 1 =>
             {
                 rec(&args[0])
+            }
+            // A HIERARCHICAL call reads as its callee's declared return width —
+            // the one call shape whose lowered node (`Call{func: POISON_FID}`) has
+            // no width at all until the child instance exists. A BARE call's node
+            // does carry one (`func_metas`), so it is still answered by lowering.
+            K::Call { name, .. } if name.segments.len() > 1 => {
+                self.hier_leaf_func(name).map(|(w, _)| w)
             }
             _ => None,
         }
@@ -955,13 +1003,18 @@ impl Elaborator<'_> {
             .then(|| name.segments[0].name.as_str())
     }
 
-    fn has_opaque_leaf(&self, e: &ast::Expr) -> bool {
+    pub(crate) fn has_opaque_leaf(&self, e: &ast::Expr) -> bool {
         use ast::ExprKind as K;
         let rec = |x: &ast::Expr| self.has_opaque_leaf(x);
         match &e.kind {
+            // A hierarchical name is opaque only when this walk cannot reach its
+            // DECLARATION. `hier_leaf_net` answering means both questions the two
+            // region walks ask are answerable — `ctx_signed_impl` has the declared
+            // sign and `size_ctx_self_width` the declared width — which is the
+            // condition `size_ctx_route` requires before routing a leaf at all.
             K::Ident(p) => {
                 if p.segments.len() > 1 {
-                    return true;
+                    return self.hier_leaf_net(p).is_none();
                 }
                 matches!(
                     self.bare_ident_route(&p.segments[0].name, e.span),
@@ -970,8 +1023,12 @@ impl Elaborator<'_> {
             }
             // A two-segment call whose head is a PACKAGE is the scoped spelling
             // `pk::f(…)`, resolved in the package's table — not a hierarchical call.
+            // A hierarchical one is opaque unless the callee's declared return
+            // shape is reachable, the `Ident` arm's rule for a call.
             K::Call { name, args } => {
-                (name.segments.len() > 1 && self.pkg_call_head(name).is_none())
+                (name.segments.len() > 1
+                    && self.pkg_call_head(name).is_none()
+                    && self.hier_leaf_func(name).is_none())
                     || args.iter().any(rec)
             }
             K::Paren { inner } => rec(inner),
@@ -1098,7 +1155,23 @@ impl Elaborator<'_> {
         // answer depends on bits above `n` through the width probe.
         let x = self.lower_ctx_or_plain(e, n);
         let x = self.refuse_real_size_operand(x);
-        let w = self.ir_bits_of(x).unwrap_or(32);
+        // A leaf holding a CROSS-INSTANCE read or call is a placeholder node here
+        // (`Signal{POISON_NET}` / `Call{POISON_FID}`, patched once every instance
+        // exists), so `ir_bits_of` declines and the fabricated 32 made `extend_to`
+        // and `select_low` build the wrong node over what is at run time an 8-bit
+        // net — bits 8..n-1 read as `x`. The AST walk answers from the DECLARATION
+        // instead, and only where `has_opaque_leaf` already agrees this leaf is
+        // reachable, so the width comes from the same resolver that admitted it.
+        // Every other widthless leaf (a `string` net, a leaf this walk cannot
+        // resolve) declines there too and keeps the fabricated 32.
+        let w = self
+            .ir_bits_of(x)
+            .or_else(|| {
+                (!self.has_opaque_leaf(e))
+                    .then(|| self.size_ctx_self_width(e))
+                    .flatten()
+            })
+            .unwrap_or(32);
         let resized = match n.cmp(&w) {
             std::cmp::Ordering::Equal => x,
             std::cmp::Ordering::Greater => self.extend_to(x, w, n, ext),
