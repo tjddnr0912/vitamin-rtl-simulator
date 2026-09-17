@@ -337,10 +337,18 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Inline / frame binds
 
-- A HIERARCHICAL callee or actual as a region leaf (both oracles agree): `u.hf(s8) * q8` prints `20`
-  (self width AND the wrong value) and `fas8(u.hs) * q8` stays `00000020` for `00000120` —
-  `has_opaque_leaf` declines the whole walk on one opaque leaf; §4.5.501's `Call` arm declines a
-  multi-segment path that is not `pk::f`.
+- A hierarchical leaf inside a §11.6.1 region still DECLINES (stays x-loud) when the child's
+  declaration is not a literal range (both oracles `00000120` for every cell): a net whose range
+  names a PARAMETER — with no override (`sub` default `W = 8`), with an override (`#(.W(12))`), a
+  `localparam` range, a param-width PORT — a generate-scoped instance (`g.gu.hs`), a read from inside a
+  generate body, an instance-array element (`ua[1].hs`), an upward reference (`t.s8`), a 2-D packed
+  element (`u.pk2 * m8` is `…xxee` for `…11ee`), a `real` child net. §4.5.507's fact table folds
+  decimal-literal ranges only; the fix is a child parameter environment (defaults + overrides +
+  localparams + `defparam` + `-G`) — the largest residue, since real RTL declares `[W-1:0]` ports.
+- An INTERFACE member as a region leaf is a clean silent-wrong, not an x: `16'(w.hi * sq8)` over
+  `interface` member `hi` prints `ffffffe0` where both oracles print `fffffee0` (the leaf is a known
+  dotted symbol, so `has_opaque_leaf` says false and the walk sizes it wrong). Own row: the fact
+  table excludes interfaces by construction.
 - A wide NON-repeatable actual is handed to a narrower signed formal unnarrowed (iverilog):
   `sgn($random)` with `input signed [15:0] x` prints the full 32-bit draw (`12153524`) where iverilog
   prints its low 16 bits (`3524`); `bind_formal_actual`'s verbatim tail narrows only a NARROW
@@ -544,24 +552,25 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Delays / events
 
-- An inferred-sensitivity block fires at time 0 in DECLARATION order, not after every `initial` /
-  `always` has started (IEEE §9.2.2.2.2; both oracles agree): `initial begin acc = 100; … end` beside
-  `always_comb tw(src);` (the task body writes `acc = v + 1`) prints `ACC=100` then `10` for the
-  oracles' `8 / 10` — the block ran first and the initial overwrote it; the same with a direct
-  `always_comb acc = src + 1;`. Handle-reading blocks were the visible half until §4.5.503 (a mutation
-  now wakes them); what remains is a block whose t0 write is OVERWRITTEN by an initial. Root = the t0
-  ready order in `sched/scan_arm.rs` (`SensKind::Initial | Comb | Latch` armed in declaration order).
-  Fix shape = order the t0 first fire of `Comb` / `Latch` after every `Initial` / `Edge` process has
-  run to its first suspension; VCD bytes move for every design where a comb block's t0 value is
-  rewritten by an initial (measure the corpus digests and `examples/*.sv` first).
 - An in-body `@(*)` over a dynamic-storage handle stays stale (iverilog only; verilator refuses the
   shape): `initial forever begin @(*) n = w.size(); end` prints `0 / 0` for iverilog's `0 / 6` — the
   in-body `Level` waiter compares the handle net's WORD, which never moves, so §4.5.503's dirty mark
   cannot fire it. Fix shape = arm the in-body waiter on the dirty mark for a handle net.
-- A runtime variable delay (2-oracle): `assign #(dv) y = a;` with dv=5 gives 5 in both oracles and 0
-  in vita — the engine must evaluate at the suspension point. The partial fold of `#(D, dv)` has the
-  same root (the rise folds and the fall takes the rise value). Pin =
-  `structural_delay_scope_fold.rs::a_runtime_variable_delay_is_still_zero_delay_and_still_quiet`.
+- A runtime continuous-assign delay that evaluates to ZERO lands after the Postponed region (the same
+  class as the zero-rise trade below): `int dz = 0; assign #(dz) y = a;` read by a same-time-step `#0`
+  chain is iverilog `1 1 1`, verilator `0 0 1`, vita `0 0 0` (the one two-oracle cell agrees; the
+  first is a split). Since §4.5.506 the runtime lane routes through `ContAssign.delay = Some(0)`, so
+  the fix is the zero-tick lag itself. A runtime-delayed assign drives `x` until its first write lands
+  (iverilog drives the t0 rhs for a VARIABLE delay and `x` for a constant one — self-contradiction,
+  not arbitrable). A delay variable changed in the SAME step as the rhs is an oracle split (iverilog
+  uses the pre-write value, verilator the post-write one). A runtime delay whose expression CALLS a
+  subroutine runs on the `vm` backend (tier-3 refuses it, W4030), not natively.
+- A resolved (multi-driven whole-net) `wire` keeps a runtime delay DROPPED (`assign #(dv) y = a;
+  assign #(dv) y = b;` is zero-delay; both oracles delay) — the constant twin is E3001 today; giving
+  the delayed lane a resolved net is one slice for both spellings.
+- The Bytecode backend loses a STATIC task's `string` formal (`task ss(input string s); s.len()`
+  prints `0` for 8; the automatic task and the function print 8) — found by the it11 flip run,
+  pre-existing at the parent; the default `native` backend is right.
 - The zero-rise sidecar trade (the fall of `#(ZERO_PARAM, F)` is discarded; `#(0,F)` is correct): the
   root is the engine — `Some(0)` sends the continuous assign into the delayed lane and the zero-tick
   write lands after the Postponed region (both oracles 1, vita 0). Held, because taking it now trades
@@ -775,7 +784,8 @@ behind the §2 correctness queue.
 | neg-elem-bound | `logic [-3:0] q[$]` gives a W3056 clamp (verilator `q[0][-3]`=1) | the element net takes `elaborate_netvar_decl_inner`'s early-`continue` path and never reaches the declaration side map | make it reach the side map | verilator | — |
 | mdrv-partial | the process-multidriver check (§4.5.472) is silent when either writer is a PARTIAL write (`mem[a]`, `s.x`, `w[1]`) — verilator is silent too; xcelium on that shape is UNMEASURED (0 observations) | `multidriver.rs` `stmt_writes_whole_ident` | re-measure the partial cells on an xcelium run; if it rejects, the shape joins `W3060`, not `E3001` | verilator silent · xcelium unknown | small |
 | mdrv-hier-actual | `always_comb u.ts(src);` (a hierarchical callee) beside `int src = 7` is E3001 on `src` — the conservative `Unknown` verdict for a callee whose formals are not visible here (both oracles run, `H=7 2`) | Rule A's resolver answers `Unknown` for a multi-segment callee; §4.5.505 downgrades only a resolved single-segment one | resolve the hierarchical callee's formal directions through the instance's module | 2 | small |
-| frame-body-outside-write | a FRAME function whose body assigns a module net (`function automatic int fw(input int v); acc2 = v + 2; return v;`) is E3009 "body uses an assignment to a net outside the function, which is outside the frame-call subset" where both oracles run it (`ACC2=9`); the task twin is supported | the frame-function classifier's outside-net write gate | lift the gate for a function the way the task lane does (a `&mut` frame body), or route the function to the task lane | 2 | medium |
+| frame-body-write-sites | after §4.5.508 (a frame function whose body writes a module net is routed to the statement executor) the call SITES that cannot carry a `Terminator::Call` are E3009 naming the position where both oracles run them: a continuous assign / `force` rhs (`assign w = fw(src)` — `w=7 acc2=9`; verilator warns MULTIDRIVEN), a call inside another frame FUNCTION body (`f2 = fw(v) + 1`, `F2 r=8 acc2=9`), a package-scoped call `pk::gw()` (the import spelling `import pk::gw; gw()` runs, `W=8`), a HIERARCHICAL call `u.fw(3)` (`HIER r=3 acc2=5`), a class METHOD body write (E3010 on `$class$C$m.acc2`), the non-framed inline spelling (`function logic [7:0] fw; begin acc = v+1; fw = v; end`, `OLD1 acc=8 r1=7`) | the CA lane has no statement; `frame_fn_lowering` disables the hoist; `inline_fn.rs` reserves the scoped frame at the call site after the carrying statement; `resolve_deferred_hier_call` is neither hoisted nor refused; `fold_straight_line` has no write slot | per site: the pkg lane needs the frame reserved before the statement; the hier call needs the hoist to see a resolved child FuncId; the inline spelling needs framing | 2 each | small–medium |
+| frame-body-write-order | `acc = 0; r1 = acc + fw(5);` — hoisting the call moves its write ahead of an operand READ to its left: vita `r1=12 acc=7` = verilator; iverilog `r1=5`. IEEE §11.4.2 leaves operand evaluation order unspecified — an oracle split, recorded | `hoist_inout_calls` emits the call before the statement | — | split | — |
 | dyn-size-spellings | `$size(c.da)` (class member) and `$size(u.da)` (hierarchical) are loud where verilator prints 3 (iverilog `x` for the class case — disqualified); `$size(arr)` of a dyn-array FORMAL is E3010 (both oracles 4) | `resolve_intro_net` yields a net for a bare Ident only, so §4.5.500's dyn arm is never entered | route the three spellings to the same `DynSize` node | 1–2 | small |
 | dyn-bits-count | `$bits(da)` of a dynamic array folds the ELEMENT width (32 for `int da[]`) outside a replication count; no oracle for the value (iverilog 1, verilator "UNSUPPORTED: $bits for dynamic array"); as a count it is loud | `try_introspect_fold` has no `$bits` dyn arm; §20.6.2 says the size in bits of the whole array | decide by LRM (`size × element bits`) and pin by hand | 0 | tiny |
 | gen-rtn-edges | after §4.5.473: a bare call of a generate-scoped routine from OUTSIDE its block is E3010 (both oracles reject — keep) · a hierarchical `u.g.f(x)` is E3009 (iverilog runs it, `f0 fe`; no `hier_funcs` entry) · a generate-scope routine in a CONSTANT expression (`localparam W = f(3)` in the block) is E3009 (iverilog `04`; `const_func_table` is filled by the module-body prescan only) · `frames_classify.rs:1069` retains callees by BARE name, so a generate-routine → generate-routine recursion edge is missed (loud-safe by that function's doc; unmeasured) · `tf_decl_scope` stays the module prefix for a generate-scoped routine, so `default_binding_matches_decl_scope` compares a default argument against module scope (traced to a conservative reject, untested) · `%m` inside a generate task is a split (iverilog `t.u.g.show` pinned, verilator `t.u.g.g.show`) | `frames_reserve.rs` hier gate · `instance.rs:496-505` const prescan · `frames_classify.rs:1069` · `scope.rs:379` | hier: compose the hier key from the qualified name · const: register generate routines into `const_func_table` per scope · edges/default-binding: measure first | iverilog | small–medium |
@@ -971,9 +981,9 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 an inferred-sensitivity block fires at time 0 in DECLARATION order, not after every `initial` / `always` has started (IEEE §9.2.2.2.2; both oracles agree): `initial begin acc = 100; … end` beside `always_comb tw(src);` prints `ACC=100` then `10` for `8 / 10`. Root = the t0 ready order in `sched/scan_arm.rs`. Fix shape = fire `Comb` / `Latch` for the first time after every `Initial` / `Edge` process has run to its first suspension; the VCD moves wherever a comb block's t0 value is rewritten by an initial, so measure the corpus digests and `examples/*.sv` first and decide the golden policy. First action = census the t0 arming (`scan_arm.rs`) and the two schedulers' t0 loops (engine, tier-3) against `initial`-first designs on both oracles · source = §4.5.505's review | §2 Delays / events | ① |
-| 2 | 2 | §2 a HIERARCHICAL callee or actual as a leaf of a §11.6.1 region (both oracles agree): `u.hf(s8) * q8` prints `20` (self width AND the wrong value) and `fas8(u.hs) * q8` stays `00000020` for `00000120`. Root = `has_opaque_leaf` declines the whole walk on one opaque leaf, and `ctx_signed_impl`'s `Call` arm declines a multi-segment path that is not `pk::f`. Fix shape = resolve a hierarchical callee's declared return sign / width through the instance's module (`hier_defer` already resolves the call), and a hierarchical NET leaf's sign through the same route, so the walk no longer declines. First action = census the hier callee / hier actual / hier net leaf in a size cast, an inline body and a case selector on both oracles · source = §4.5.501's review | §2 Inline / frame binds | ① |
-| 3 | 3 | §3.b `frame-body-outside-write`: a FRAME function whose body assigns a module net is E3009 ("outside the frame-call subset") where both oracles run it (`ACC2=9`); the task twin is supported (§4.5.505). Root = the frame-function classifier's outside-net write gate. Fix shape = lift the gate the way the task lane does, or route such a function to the task lane. First action = census which frame-function shapes the gate refuses (outside write, outside NBA, a call to a writing task) against both oracles · source = §4.5.505's grounding | §3.b frame-body-outside-write | ② |
+| 1 | 1 | §2 a hierarchical leaf inside a §11.6.1 region whose child declaration names a PARAMETER width declines to x (both oracles `00000120`): `16'(u.hw * sq8)` with `logic signed [W-1:0] hw` and the default `W = 8`, the `#(.W(12))` override, a `localparam` range, a param-width port. Root = §4.5.507's `module_facts` fold decimal-literal ranges only (`ast_kind_range_width`). Fix shape = a child parameter environment (the child's defaults, the instance's overrides folded in the parent's scope, the child's localparams; `defparam` / `-G` decline) feeding the same fact table. First action = census the four spellings on both oracles, then measure which override shapes the parent can fold (`sub #(.W(P+1))`, `#(8)`) · source = §4.5.507's residues | §2 Inline / frame binds | ① |
+| 2 | 2 | §2 an INTERFACE member as a §11.6.1 region leaf is a clean silent-wrong (both oracles agree): `16'(w.hi * sq8)` prints `ffffffe0` for `fffffee0`. Root = the member is a known dotted symbol, so `has_opaque_leaf` answers false and the walk sizes it through the flattened net, not the member's declared type. Fix shape = the interface member's declared sign / width through the same fact table §4.5.507 built for instances (`ifaces` already holds the decls). First action = census interface members in a size cast, an inline body and a case selector, signed and unsigned, on both oracles · source = it11 differential lens D5 | §2 Inline / frame binds | ① |
+| 3 | 3 | §3.b `frame-body-write-sites`, the HIERARCHICAL call: `u.fw(3)` to a function whose body writes a module net is E3009 where both oracles run it (`HIER r=3 acc2=5`). Root = `resolve_deferred_hier_call` patches the FuncId after the statement that would carry the copy-out is lowered, so the hoist never sees a routable callee. Fix shape = hoist a hierarchical call to a body-write function the way `hoist_inout_calls` hoists a local one, resolving the child's FuncId early enough (the child's `body_write_fids` set is known once its frames are reserved). First action = census the hier call in an initial, an `always_comb`, a `$display` arg and a CA on both oracles · source = it11 review F2/D1 | §3.b frame-body-write-sites | ② |
 | 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
 | 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
 | 6 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |

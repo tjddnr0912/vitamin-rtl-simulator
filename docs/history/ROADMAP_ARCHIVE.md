@@ -13,6 +13,9 @@
 
 
 **§4.5.220–280**
+- `4.5.508` **A frame function whose body writes a module net runs on the statement-executor lane** (2026-09-17 · §3.b frame-body-outside-write, queue row 3 · AST route predicate + `inout_func_names` join + classifier accept; un-hoistable sites E3009 by name · 22 loud→correct, 5 pins converted · residues: `frame-body-write-sites`, `frame-body-write-order`)
+- `4.5.507` **A hierarchical net or call leaf inside a §11.6.1 region is sized and signed through the instance's module** (2026-09-17 · §2 Inline / frame binds, queue row 2 · `expr_size_hier.rs` per-module fact table from the AST; literal ranges only · 15 cells x→correct on both oracles · residues: parameter-width child nets (new row 1), the interface member leaf (new row 2))
+- `4.5.506` **A runtime continuous-assign delay is evaluated at the scheduling point** (2026-09-17 · §2 Delays / events, replacing the stale t0-order row 1 · `ca_delay_exprs` sidecar + `Some(0)` routing flag + `effective_ca_delay` on both scheduler paths · format 31 → 32 · 13 designs silent→correct · residues: zero-tick lag, initial window, resolved-net drop, same-step delay change)
 - `4.5.505` **A callee body write through an `input` formal is not a multidriver Rule A driver; a frame call's actuals and a frame function's body reads are in the inferred sensitivity** (2026-09-17 · §3.b mdrv-body-write, queue row 3 · Rule A asks the ACTUAL half of `call_only_reads` only; `comb_read_set_in` walks `TaskCallInfo` binds and function bodies; Rule B counts an unconditional body write · 4 loud→correct, 6 stale→correct, 3 value→loud on verilator's MULTIDRIVEN shape · residue: `mdrv-hier-actual`, `frame-body-outside-write`)
 - `4.5.504` **The case selector and every case item are one §12.5 region** (2026-09-17 · §2 Inline / frame binds, queue row 2 · operator selector / items re-lowered in the common width through `inline_ctx_ext` with the collective sign; leaves keep their lowering · 11 cells silent→correct on both oracles, 9 controls PRE-identical · no finding)
 - `4.5.503` **A heap mutation of a dynamic array, queue, associative array or string wakes the inferred-sensitivity blocks that read the handle** (2026-09-17 · §2 Delays / events, queue row 1 · `note_dyn_change` funnel at 25 sites, drained per scheduler; declaration-initializer marks roll back at t0; no VCD / probe bytes · 14 cells stale→correct, iverilog disqualified on element-store / queue-method re-fire · residues: the t0 declaration-order fire (new row 1), an in-body `@(*)` over a handle)
@@ -515,6 +518,143 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.508 A frame function whose body writes a module net runs on the statement-executor lane (2026-09-17, branch it11) ✅
+
+**ROADMAP row**: §3.b `frame-body-outside-write`; queue row 3. Third slice of the bundle.
+
+**Row claims re-measured: all hold.** `function automatic int fw(input int v); acc2 = v + 2; return v;`
+under `always_comb r = fw(src);` was E3009 "an assignment to a net outside the function" where both
+oracles print `ACC2=9 R=7` then `ACC2=11 R=9`; the static twin, a part-select outside write
+(`accp[3:0] = v[3:0]`, both oracles `accp=00000005`), `r5 = fw(1) + fw(2)` (`r5=3 acc2=4`), the
+short-circuit `fw(0) > 0 && fw(5) > 0` (`acc2=2`, fw(5) not called) the same. Root as filed: the
+function was refused at `lower_frame_func_body` before the routing pass; a TASK with the same write is
+suspendable through `compute_suspendable_tasks` (an out-of-frame lhs chunk is a suspend signal) and
+runs on the `&mut` process executor.
+
+**Fix.** The route predicate is on the AST (`frames_classify_write.rs::func_body_writes_outside_name`,
+own-name set = `rtn_declared_names`), filled before any body lowers — an IR predicate computed per
+body was read while OTHER bodies lowered (sorted-name order: `f2` before `fw` emitted a plain
+`Expr::Call` and the engine panicked). Such a function joins `inout_func_names`, so its call is
+hoisted to a `Terminator::Call` with the return slot as the only out-bind (`emit_frame_func_out_call`)
+and `classify_frame_body` accepts the outside write for exactly that set; the IR half survives as a
+veto so a compiler-generated net keeps its "vita bug" wording. `stmt_enables_task` declines the route
+(an inlined task body's formal binding is itself an outside write; both oracles reject a task enable
+in a function). Call sites that cannot carry a statement are E3009 naming the position — measured by
+disabling the refusal: a continuous assign rhs, a `force` rhs, a call inside another frame FUNCTION
+body and a `pkg::f()` call all panicked. A routed function is refused by the tier-3 `frames` gate ("a subroutine that WRITES a net outside
+its own frame"), so such a design runs on `vm` with W4030 — correct first, speed later. Rule B counts an
+unconditional body write through a function
+call (two `always_comb` calling `fw` is E3001, verilator MULTIDRIVEN); Rule A stands down for one.
+
+**Census PRE→POST**: 22 cells loud→correct on both oracles (automatic / static, `$display` arg, `?:`
+arm, case selector, `while` cond, `for` step, `always_ff`, `repeat` count, `fork`, `$sformatf`, an
+unpacked element / struct field / string / read-modify-write body, the reading-block wake, nested
+`fw(fw(1))`); 5 deliberate-loud pins converted to oracle values (`frame_partsel_write`,
+`frame_static_local_init_once`, `func_module_var`, `inline_fn_writes_outside`, `pkg_body_scope`) and
+one sim-engine cut is a live differential; 6 sites loud→loud with the construct named. Review: the
+HIERARCHICAL call `u.fw(3)` had lost its elaborate-time refusal (F4004 at run time after partial
+output, a `debug_assert` in a debug build) — closed in the delta with a per-FuncId elaborate-side
+record and an E3009; the `For` census missed `step` / `cond` — closed. Residues filed to §3.b
+`frame-body-write-sites` (CA / force rhs, frame-function body, `pkg::f()`, hierarchical call, class
+method, the inline spelling) and `frame-body-write-order` (an operand read left of the call is an
+oracle split). An `always @*` site is the pre-existing t0 split.
+
+Files: `crates/elaborate/src/{frames_classify_write (new),frames_classify,frames_body,multidriver,
+class_lower,stmt_main,instance,driver,lib}.rs`, `crates/elaborate/src/frames_call/emit.rs`,
+`crates/elaborate/src/inline_fn.rs`. Tests: a new `frame_function_body_write.rs`; converted pins in
+five cli test files and `sim-engine/tests/frame_call_b.rs`. format unchanged by this slice.
+
+#### 4.5.507 A hierarchical net or call leaf inside a §11.6.1 region is sized and signed through the instance's module (2026-09-17, branch it11) ✅
+
+**ROADMAP row**: §2 Inline / frame binds, the hierarchical region leaf; queue row 2. Second slice of
+the bundle.
+
+**Row claims re-measured: the filed cells were STALE.** `u.hf(s8) * q8` and `fas8(u.hs) * q8` as a
+plain assignment rhs print `00000120` at HEAD (§4.5.501's context widening reached them). The live
+cells are the SIZE CAST and its consumers: `16'(u.hs * q8)` printed `0000xx20` for both oracles'
+`00000120`, `16'($signed(u.hu) * sq8)` `xxxxxx20`, `16'(u.hs[3:0] * sq8)` `0000xxxx` for `00000000`,
+`16'(u.arr[0] * sq8)` `0000xxxx`, `12'(u.hs + sq8)` `00000x22` for `00000022`, a two-level path
+`m.u2.hs` the same, an inline body `fb = 16'(u.hs * a)` the same, and `case (16'(u.hs * sq8))
+16'h0120:` took the default. Root: a multi-segment path lowers to a placeholder `Signal { net:
+POISON_NET }` patched after the instance tree exists; `has_opaque_leaf` stood the walk down, and
+`lower_size_leaf` read `ir_bits_of(placeholder) = None`, took 32, and `select_low(x, 16)` over what is
+an 8-bit net at run time read bits 8..15 as x. `32'(…)` was right by the `Equal` arm.
+
+**Fix.** `expr_size_hier.rs` (new): a per-module fact table built once from the AST (`module_facts`,
+driver-time; `cur_module` saved / restored per instance) answers, for a plain instance path, the
+child net's declared sign and width when its packed range is a decimal literal, an unpacked element's
+type, a port's range and a hierarchical CALL's declared return sign / width (`ast_func_return_width`,
+`kind_signedness`); `has_opaque_leaf` no longer reports a resolvable leaf, `ctx_signed_impl` /
+`size_ctx_self_width` / `select_chain` / `lower_size_leaf` consult it, and `widen_inline_leaf` /
+`lower_leaf_in_ctx` take an AST width fallback. A name the child declares more than once, a
+parameter range, a generate scope, an instance array, an interface member, an upward reference:
+declined by construction (PRE-identical, x).
+
+**Census PRE→POST**: 15 cells silent→correct on both agreeing oracles (the table above plus ANSI
+ports, a named / nested named block, a frame task body, and a declared-type sweep — enum, packed
+struct, `byte`, `int`, `shortint`, `bit`, `integer`, `time`, bare `wire`, `signed`); the inline-body
+region with no cast `fo = $signed(u.x) * q8` (`20` → `00000120`) and a call actual `idw(u.x * b8)`
+(`09` → `0000f609`) flipped two pins whose prose claimed the stand-down. Controls PRE-identical:
+`4'(…)`, `32'(…)`, the no-hier twin, the plain-rhs cells, `examples/*.sv` stdout + VCD. Review: no
+finding on this slice; the differential lens found the interface-member leaf is a clean silent value
+(`ffffffe0` for `fffffee0`) — filed as queue row 2 — and the parameter-width decline is the largest
+residue (queue row 1).
+
+Files: `crates/elaborate/src/{expr_size_hier (new),expr_size_ctx,inline_body_ctx,instance,driver,
+lib}.rs`. Tests: a new `hier_leaf_region_width.rs`; converted pins in `inline_sign_stamp_leaf.rs` and
+`inline_actual_width_context.rs`. format unchanged by this slice.
+
+#### 4.5.506 A runtime continuous-assign delay is evaluated at the scheduling point (2026-09-17, branch it11) ✅
+
+**ROADMAP row**: §2 Delays / events, "a runtime variable delay"; queue row 1 REPLACED — the filed row
+1 (the t0 declaration-order fire) was STALE: `initial acc = 100` beside `always_comb tw(src)` prints
+`A=8 B=10` at HEAD on both oracles and vita, and every finer probe (`initial #0`, an initial reading
+the comb value at t0) is an oracle split (iverilog 100 / 0, verilator 8). The direct twin `initial
+acc = 100; always_comb acc = …` is E3001 in vita and MULTIDRIVEN in verilator. First slice of the
+bundle.
+
+**Row claims re-measured: all hold.** `assign #(dv) y = a;` with `int dv = 5` was zero-delay
+(`RISE=2` for both oracles' `RISE=6`); `#(dv + 1)`, `#(P * dv)`, an 8-bit `reg`, a `real` variable
+(2.5 at 100 ps grain), an x-valued delay (zero, both oracles), a negative one (never fires, both), a
+1ns/1ps design, a `wire #(dv)` net delay and `buf #(dv)` the same. Root as filed: `fold_ca_delay`
+yields `uniform = None` for a non-constant value and `ContAssign.delay` stays `None`.
+
+**Fix.** `ca_delay_rt.rs` (new): when any delay-list value fails the constant fold, each value is
+lowered in module scope and recorded in a new sidecar `ca_delay_exprs: BTreeMap<u32, (rise_eid,
+fall_eid, Option<toff_eid>, mult, prec_mult)>`; the frozen `ContAssign.delay` becomes `Some(0)` as the
+routing flag. `sched/ca_delay.rs::effective_ca_delay` evaluates the eids through the same reader as
+the rhs on both scheduler paths, converts with `delay_ticks_of` (real → round, X/Z → 0, negative →
+never), `transition_delay` widened to u64. The `Some(0)` flag reached `multi_driver_groups` and
+`check_whole_net_multidriver` — a resolved net stopped elaborating (E3001) where PRE ran it —
+`demote_runtime_delay_on_resolved_nets` hands those nets back (the constant twin is E3001, pinned both
+ways). The sidecar rides `SimOpts`, the staged trailer (`StagedExtraSidecars`, format_version 31 →
+32, sim-ir UNCHANGED) and `init_diag`; tier-3 shares `schedule_delayed_cas`. Byte-identity: the
+sidecar is populated only for a non-constant delay list, so every constant-delay design is
+unchanged (VCD `cmp` clean PRE vs POST; the digest moves under a control mutation).
+
+**Brief corrections, measured.** `#(2, dv)` mixed constant / variable is NOT no-oracle: under
+1ns/1ns both oracles implement rise 2 / fall dv (`T9 ym=1`); under 1ns/100ps verilator drops even the
+constant `#(2,5)` control and iverilog contradicts its 1ns/1ns answer — both disqualified there. The
+predicate is "any value non-constant", which also fixes `#(0, dv)` / `#(ZP, dv)`.
+
+**Census PRE→POST**: 13 designs silent→correct on both agreeing oracles; c1's nine-form grid 55/84 →
+65/84 two-oracle cells, every miss in the non-arbitrable initial window; three backends agree on every
+design; seven staged twins byte-equal to one-shot. Review: BLOCKING — a subroutine CALL inside a
+runtime delay panicked on the native backend (`native/arena.rs` bare-store seam; the tier-3 `frames`
+gate walked only the rhs, its comment saying the delay is not an ExprId) — closed in the delta: the
+gate walks the delay eids and the design falls back to `vm` (W4030). Residues filed to §2 Delays /
+events: the zero-tick lag for a runtime zero (`Some(0)` is the routing flag), the initial-window
+x-vs-0 (iverilog self-contradicts between the variable and the constant spelling), a resolved net's
+dropped delay, a delay variable changed in the same step as the rhs (split), a delay-declared-after
+variable is E3010 (iverilog agrees, verilator accepts; PRE ran it zero-delay).
+
+Files: `crates/elaborate/src/{ca_delay_rt (new),lib,driver,tables,api,const_eval,netdecl,var_init}.rs`,
+`crates/sim-engine/src/{lib,state/mod,state/init_diag,sched/mod,sched/ca_delay (new),sched/scan_arm,
+sched/wait_fork,native/mod,native/frames,native/tests}.rs`, `crates/cli/src/{lib,staged,frontend,
+tests}.rs`, `crates/vita-artifact/src/header.rs`. Tests: a new `cont_assign_runtime_delay.rs`; the
+converted pin in `structural_delay_scope_fold.rs`; re-pinned `staged_extra_sidecars_wire_shape` and
+`obs.rs` format_version. format 31 → 32.
 
 #### 4.5.505 A callee body write through an `input` formal is not a multidriver Rule A driver; a frame call's actuals and a frame function's body reads are in the inferred sensitivity (2026-09-17, branch it10) ✅
 

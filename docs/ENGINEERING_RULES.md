@@ -747,6 +747,8 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Read what the runtime reads for the same decision when a new analysis follows an IR field for control flow; a field only ever patched after the fact is a snapshot, not a fact | A walk missing every target whose placeholder is still in place |
 | Record a stand-down after the enclosing construct's scope snapshot so the restore drops it, and pin both halves | The fix trading one silent width for a permanently loud site |
 | Treat a first-activation guard as a different semantics from a t0 initialization: enumerate every input written between t0 and the first activation (formals, module nets) and decline initializers that read them, and make the decline per-declarator except where a declined initializer READS a hoisted one — that read is the only shape where hoisting half the frame yields a third answer | A static initializer reading a formal binding the first call's argument, and a frame-wide decline dropping the retention of every admitted sibling |
+| Fill a set that a sorted lowering pass READS before the pass starts, from the AST, not per body as each body lowers | The callee sorting before its caller seeing an empty set, emitting the plain shape and panicking in the engine |
+| When a sidecar puts ExprIds back into a position a gate's comment says holds none, census every arena walker that enumerates that position (the tier-3 `frames` gate, wprog, probe) in the same slice | A stale "is not an ExprId" comment turning a bare-store seam into a panic |
 
 ### 5.6 Domain reference
 
@@ -802,6 +804,7 @@ census has produced it, and the probe itself is a claim to check.
 | Instrument all layers independently even where production short-circuits | The layers behind the first refusal never being measured |
 | Say so when the attribution unit is contaminated, and check that the weight is not one design repeated | A count of tests being meaningless because most of them are one path |
 | Read the run manifest's backend and refusal fields before claiming two backends agree | A comparison that did not check which backend ran not being a comparison |
+| Declare the timescale precision finer than the smallest probe offset you write (`#0.5` under `1ns/1ns` rounds to a boundary and every cell becomes a race) | Fourteen agreed cells reading as a two-oracle disagreement |
 
 ### 6.3 PRE, POST and sweeps
 
@@ -820,6 +823,7 @@ census has produced it, and the probe itself is a claim to check.
 | Count fixed and regressed separately | A total hiding two directions that nearly cancel |
 | Write the axis list before building a sweep and hand it to the reviewer with a demand for the missing axis | A missing axis not announcing itself, and adding cells not being a defence |
 | Measure the fallback plan too | "The intersection that never regressed" being a hypothesis |
+| Attribute a flip-run failure by running the same test on the PARENT under the same flip before filing it against the bundle | A pre-existing backend divergence being charged to the slice that ran the flip |
 
 ### 6.4 Oracle censuses and their budget
 
@@ -836,7 +840,7 @@ census has produced it, and the probe itself is a claim to check.
 
 ## 7. Testing
 
-The full local gate is `cargo nextest run --workspace --locked`: 7962 tests, 15 skipped. Named gates
+The full local gate is `cargo nextest run --workspace --locked`: 8002 tests, 15 skipped. Named gates
 that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
 frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
 diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,

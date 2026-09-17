@@ -9,6 +9,26 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — runtime continuous-assign delays, hierarchical leaves in a size cast, module-net writes from a function
+
+- **A continuous assign with a VARIABLE delay now delays.** `assign #(dv) y = a;` with `int dv = 5`
+  took effect immediately; both reference tools delay by the value at the moment the right-hand side
+  changes. Expressions (`#(dv + 1)`, `#(P * dv)`), `real` variables, an `x` delay (zero) and a
+  negative one (never fires) follow the same rule, on `assign`, net delays and gate primitives.
+  Constant delays are unchanged byte for byte. The artifact `format_version` is now 32 (a
+  `.velab` / `.vu` from an older build is refused at the header gate).
+- **A hierarchical net or function call inside a size cast is sized by its declaration.**
+  `16'(u.hs * q8)` printed `0000xx20` where both reference tools print `00000120`; part-selects,
+  unpacked elements, `$signed(u.hu)`, a two-level path, an inline function body and a `case`
+  selector the same. A child net whose range names a parameter still declines (x), listed in
+  ROADMAP §2.
+- **A function whose body writes a module variable is accepted** where it was refused as "outside
+  the frame-call subset": `function automatic int fw(input int v); acc2 = v + 2; return v;` under
+  `always_comb r = fw(src);` runs as in both reference tools, including a part-select write, calls
+  in `$display`, `?:`, `case`, loop conditions and `always_ff`. A call from a continuous assign, a
+  `force`, another function body, a package-scoped or hierarchical spelling is refused with a
+  message naming the position.
+
 ### Fixed — dynamic-storage wakes, case selector width, `always_comb` task calls
 
 - **A write to a dynamic array, queue, associative array or string re-runs the `always_comb` /

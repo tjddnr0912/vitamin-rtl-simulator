@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-7962 tests passing with 15 skipped, artifact `format_version` 31, 70 `MsgCode` diagnostic codes; the
+8002 tests passing with 15 skipped, artifact `format_version` 32, 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
 - G1 = a correct open-source RTL simulator (correct-or-loud) at the level of icarus, verilator,
@@ -26,9 +26,9 @@ canonical table is the fact table in [README.md](../README.md).
 
 | # | track | item |
 |---|---|---|
-| 1 | §2 silent-wrong | An inferred-sensitivity block fires at time 0 in declaration order, not after every `initial` has started (§9.2.2.2.2): `initial acc = 100` beside `always_comb tw(src)` prints `100` for both oracles' `8`; the fix moves VCD bytes wherever a comb value is rewritten at t0 |
-| 2 | §2 silent-wrong | A HIERARCHICAL callee or actual as a leaf of a §11.6.1 region stands the walk down: `u.hf(s8) * q8` is `20` for `00000120`; `has_opaque_leaf` declines on one opaque leaf |
-| 3 | §3 loud → correct-support | A frame FUNCTION whose body assigns a module net is E3009 where both oracles run it (`ACC2=9`); the task twin is supported |
+| 1 | §2 silent-wrong | A hierarchical leaf whose child declaration names a PARAMETER width declines to x inside a §11.6.1 region (`16'(u.hw * sq8)` with `[W-1:0]` is `0000xx20` for both oracles' `00000120`); §4.5.507's fact table folds literal ranges only |
+| 2 | §2 silent-wrong | An INTERFACE member as a region leaf is a clean wrong value: `16'(w.hi * sq8)` is `ffffffe0` for `fffffee0` |
+| 3 | §3 loud → correct-support | A HIERARCHICAL call to a function whose body writes a module net is E3009 where both oracles run it (`HIER r=3 acc2=5`); the local call runs since §4.5.508 |
 | 4 | §6 OBS | Give the static `subroutines` rows a declaration site, so the two subroutine objects can be joined |
 | 5 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so a reader infers the boundary from builtin call counts and gets it wrong |
 | 6 | §3 loud → correct-support | ⑤ⓕ residue: the 2-state axis of a `T'(e)` cast and a packed struct member (the sign follows the override since §4.5.483), the enum base (blocked behind a §2 enum-storage row), the union member's parse gate, a multi-dimensional packed type-param default or override, a mixed-caller callee, `m #(8)` / `defparam u.T$w`, the VCD `$scope` spelling, a `genblk<N>` collision (split) |
