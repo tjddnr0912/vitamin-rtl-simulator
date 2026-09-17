@@ -345,7 +345,20 @@ impl Elaborator<'_> {
         self.funcs[fid as usize].entry = base + entry;
         let m = self.func_metas[fid as usize];
         let entry_bb = self.funcs[fid as usize].entry;
-        self.validate_frame_body(&method.name, entry_bb, m.base_net, m.locals_len, false);
+        // §3.b `allow_outside_write = false`: a class METHOD keeps the out-of-frame
+        // reject. Its route is not `inout_func_names` (a method call is not a framed
+        // function call), and a module net is not even resolvable from a method body
+        // today — measured: `class C; function automatic int m(input int v); acc2 = v;`
+        // is E3010 `undeclared net/variable $class$C$m.acc2` before this gate is asked,
+        // where both oracles print `acc2=9`. ROADMAP §2 holds the name-resolution half.
+        self.validate_frame_body(
+            &method.name,
+            entry_bb,
+            m.base_net,
+            m.locals_len,
+            false,
+            false,
+        );
     }
 
     /// Lower every class method (reserve all fids first so mutual/forward method

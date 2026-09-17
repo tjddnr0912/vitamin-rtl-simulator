@@ -644,7 +644,11 @@ impl Elaborator<'_> {
                 // snapshot (§4.5.173). Validate the body as an ordinary subset task — a dyn
                 // formal READ is fine; a WRITE to it still hits the `&self` heap-write fatal.
                 let entry_bb = self.funcs[fid as usize].entry;
-                self.validate_frame_body(&name, entry_bb, base_net, locals_len, true);
+                // §3.b `allow_outside_write = false`: a task that is NOT in the
+                // suspendable set has no out-of-frame write by construction — such a
+                // write is one of `stmt_signal`'s own signals — so this argument can
+                // only ever be a no-op here, and passing `false` keeps it that way.
+                self.validate_frame_body(&name, entry_bb, base_net, locals_len, true, false);
             }
         }
     }
@@ -1080,7 +1084,9 @@ impl Elaborator<'_> {
     /// (`$display`/NBA/force/release), or a blocking-assign lvalue that is not a
     /// WHOLE frame-local net (a module-net write or a part/array select). For
     /// tasks (`allow_call`), a `Terminator::Call` (a nested frame-task call) is
-    /// permitted. One diagnostic per offending function (it fails elaboration).
+    /// permitted. §3.b: for a STATEMENT-EXECUTOR function (`allow_outside_write`, decided
+    /// by [`Self::func_body_writes_outside_name`]) an out-of-frame write is permitted too.
+    /// One diagnostic per offending function (it fails elaboration).
     pub(crate) fn validate_frame_body(
         &mut self,
         name: &str,
@@ -1088,9 +1094,10 @@ impl Elaborator<'_> {
         net_base: u32,
         locals_len: u32,
         allow_call: bool,
+        allow_outside_write: bool,
     ) {
         if let Some((what, detail)) =
-            self.classify_frame_body(entry, net_base, locals_len, allow_call)
+            self.classify_frame_body(entry, net_base, locals_len, allow_call, allow_outside_write)
         {
             // R26 §3: the subset clause must attach to the CONSTRUCT, so the construct
             // (`what`) is a short noun phrase and every explanation (`detail`) is
@@ -1118,7 +1125,7 @@ impl Elaborator<'_> {
     /// ⚠️ Asked only on an ERROR path, so the scan over `symbols` costs nothing
     /// that matters. It exists so a recurrence of the round-35 P0 names vita
     /// instead of the user's code.
-    fn net_is_compiler_internal(&self, net: u32) -> bool {
+    pub(crate) fn net_is_compiler_internal(&self, net: u32) -> bool {
         self.symbols.iter().any(|(fq, &id)| {
             id == net
                 && fq
@@ -1141,6 +1148,7 @@ impl Elaborator<'_> {
         net_base: u32,
         locals_len: u32,
         allow_call: bool,
+        allow_outside_write: bool,
     ) -> Option<(&'static str, &'static str)> {
         let (lo, hi) = (net_base, net_base + locals_len);
         // `(what, detail)` — `what` is a SHORT NOUN PHRASE naming the rejected construct,
@@ -1204,37 +1212,22 @@ impl Elaborator<'_> {
                             why = Some(("a concatenation-target assignment", ""));
                         }
                         for c in &lhs.chunks {
-                            // N7: a class field write (`this.f = v` / `obj.f = v`) is a
-                            // HEAP write through a class handle, not a frame-slot write —
-                            // allowed regardless of word/in-frame (the handle that
-                            // carries it is itself a frame-local or module net).
-                            if self.class_handle_nets.contains(&c.net) && c.word.is_some() {
-                                continue;
-                            }
-                            let whole = c.offset.is_none() && c.word.is_none() && c.width.is_none();
-                            let in_frame = c.net >= lo && c.net < hi;
-                            // V5: an in-frame DYN-ARRAY element write (`loc[i] = v`) routes
-                            // to the HEAP (`dyn_write`), not a frame-slot write — allowed
-                            // (the frame dyn-array net holds the current activation's array).
-                            if in_frame && self.is_dyn_handle_net(c.net) {
-                                continue;
-                            }
-                            // EXT2-H: a bit/part-select write to an IN-FRAME scalar net
-                            // (`r[7:0] = x`, `r[i] = b`, an md-packed `p[0] = ..`) is now
-                            // supported — the engine read-modify-writes the frame slot.
-                            // A WHOLE write must target an in-frame net; a non-whole write
-                            // to a net OUTSIDE the function, an ARRAY-element write
-                            // (`c.word`), or a select of an UNPACKED-array local (a 1-elem
-                            // net — `frame_array_local` — where `mem[k]` mis-lowers to a
-                            // bit-select), stays rejected.
-                            // MEASURED, not assumed: exempting the `$sformatf` hoist's
-                            // `$sfmt_tmp$` scratch nets here (they are written and read
-                            // back within one statement sequence, so they LOOK frame-local)
-                            // makes the engine panic `frame lvalue net is routed` — the
-                            // frame-function executor genuinely cannot write a module net.
-                            // The gate is right; the hoist is what must not run there.
-                            if whole {
-                                if !in_frame {
+                            // The per-chunk rule lives in `frames_classify_write.rs`, where
+                            // the §3.b ROUTE predicate reads it too — gate and route must
+                            // answer identically for every chunk.
+                            match self.frame_chunk_site(c, lo, hi) {
+                                FrameChunkSite::InFrame => {}
+                                FrameChunkSite::InFrameLoud => {
+                                    why = Some(("a part-select / array-element assignment", ""));
+                                }
+                                // §3.b: a STATEMENT-EXECUTOR function
+                                // (`func_body_writes_outside_name`) reaches the engine as a
+                                // `Terminator::Call`, whose `run_process` route performs a
+                                // module-net write like any process statement — the same
+                                // lift `compute_suspendable_tasks` gives a task that writes
+                                // one. Only that set passes `allow_outside_write`.
+                                FrameChunkSite::Outside { .. } if allow_outside_write => {}
+                                FrameChunkSite::Outside { whole: true } => {
                                     // ⚠️ Which HALF of this sentence is true matters. The
                                     // P0 this guard was added for (aes_top round-35) was a
                                     // COMPILER-generated capture net handed to the wrong
@@ -1242,6 +1235,8 @@ impl Elaborator<'_> {
                                     // construct the same sentence lists as supported. The
                                     // reporter spent thirty minutes on the wrong half.
                                     // The source cannot avoid an internal net, so say so.
+                                    // The route predicate declines such a net for the same
+                                    // reason, so this arm stays reachable.
                                     why = Some(if self.net_is_compiler_internal(c.net) {
                                         (
                                             "an assignment to a COMPILER-GENERATED net                                              outside the function",
@@ -1251,11 +1246,9 @@ impl Elaborator<'_> {
                                         ("an assignment to a net outside the function", "")
                                     });
                                 }
-                            } else if c.word.is_some()
-                                || !in_frame
-                                || self.frame_array_local.contains(&c.net)
-                            {
-                                why = Some(("a part-select / array-element assignment", ""));
+                                FrameChunkSite::Outside { whole: false } => {
+                                    why = Some(("a part-select / array-element assignment", ""));
+                                }
                             }
                         }
                     }

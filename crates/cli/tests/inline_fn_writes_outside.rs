@@ -68,15 +68,23 @@ fn a_static_function_writing_a_module_net_is_loud_and_says_why() {
     );
 }
 
-/// The `automatic` twin was already loud and still is. Both spellings of one body now
-/// give one answer.
+/// ⭐ §3.b: the `automatic` twin now PERFORMS the write. That is the direction this row
+/// always pointed at — the header below says so ("this raises the static spelling to LOUD;
+/// it does not implement the write"). A framed function whose body writes a module net is
+/// routed to the `&mut` statement executor, so `seq` ends at 7. Both oracles: `a=3 seq=7`.
+/// PRE (the parent commit) was E3009 "outside the frame-call subset".
+///
+/// The two spellings therefore no longer give one answer, and the loud half is the INLINE
+/// one: `fold_straight_line` reduces the body by substitution and has no statement to emit
+/// the write from. The asymmetry is recorded in `frame_function_body_write.rs` ⑫, which
+/// pins both halves and the message that names the spelling that works.
 #[test]
-fn the_automatic_twin_is_loud_too() {
+fn the_automatic_twin_performs_the_write() {
     let (o, e, ok) = run(&OUTSIDE.replace("function logic", "function automatic logic"));
-    assert!(!ok, "must not run:\n{o}{e}");
+    assert!(ok, "must run:\n{o}{e}");
     assert!(
-        format!("{o}{e}").contains("outside the frame-call subset"),
-        "{o}{e}"
+        o.contains("a=3 seq=7"),
+        "both oracles print a=3 seq=7:\n{o}{e}"
     );
 }
 

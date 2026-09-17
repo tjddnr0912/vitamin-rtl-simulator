@@ -127,13 +127,16 @@ impl Elaborator<'_> {
         // R5-B: record which framed functions have an output/inout formal so their
         // calls route to the copy-out path (`emit_frame_func_out_call`) + the hoist.
         self.inout_func_names.clear();
+        // §3.b: rebuilt below by `lower_frame_func_body`, one entry per framed function
+        // whose own body writes a module net.
+        self.body_write_func_names.clear();
         // §4.5.179: record which FRAMED functions have an `input` dyn-array formal, so a
         // BURIED call to one is hoisted to a `__t = f(a)` temp (re-triggering §4.5.177's
         // marker). Only `frame_set` members — an R2-inlinable (straight-line) dyn-formal
         // function is inline-aliased, never framed, so it is (correctly) excluded here.
         self.dyn_formal_func_names.clear();
         for name in &frame_set {
-            if let Some(f) = self.func_table.get(name) {
+            if let Some(f) = self.func_table.get(name).cloned() {
                 if f.ports
                     .iter()
                     .any(|p| !matches!(p.dir, ast::PortDir::Input))
@@ -142,6 +145,18 @@ impl Elaborator<'_> {
                 }
                 if f.ports.iter().any(|p| self.is_input_dyn_array_formal(p)) {
                     self.dyn_formal_func_names.insert(name.clone());
+                }
+                // §3.b: a body that writes a MODULE net needs the `&mut` statement
+                // executor, and needs the `Terminator::Call` shape to be routed there —
+                // the same two things an output/inout formal buys above. Decided from the
+                // AST, HERE, before any body is lowered, because the set is consulted
+                // WHILE bodies are lowered: a caller whose name sorts first is lowered
+                // before its callee, and a decision derived from the callee's own blocks
+                // would not exist yet (`f2` calling `fw` reached the engine as a plain
+                // `Expr::Call` and panicked `frame write targets a frame-local net`).
+                if self.func_body_writes_outside_name(&f) {
+                    self.body_write_func_names.insert(name.clone());
+                    self.inout_func_names.insert(name.clone());
                 }
             }
         }
@@ -200,6 +215,10 @@ impl Elaborator<'_> {
         // body-local). Rerouting it cost a working design its dyn-array input formal,
         // which only the direct-call path can bind — over-marking is free for the SUSPEND
         // classifier and is not free for anything that changes a call's SHAPE.
+        //
+        // §3.b joins the same set on the second half of the same question — a body that
+        // WRITES A MODULE NET — but from the AST, in the port loop above, because that
+        // half must be known before any body is lowered (see the comment there).
         for name in &frame_set {
             let Some(&fid) = self.frame_idx.get(name) else {
                 continue;
@@ -392,7 +411,20 @@ impl Elaborator<'_> {
         self.funcs[fid as usize].entry = base + entry;
         let m = self.func_metas[fid as usize];
         let entry_bb = self.funcs[fid as usize].entry;
-        self.validate_frame_body(name, entry_bb, m.base_net, m.locals_len, false);
+        // §3.b: the body-write route was decided from the AST in `lower_frame_funcs`
+        // (it has to be known before any body is lowered). The IR half is the VETO: a
+        // net vita minted for itself keeps `classify_frame_body`'s own wording, which
+        // says the case is a vita bug.
+        let allow_outside_write = self.body_write_func_names.contains(name)
+            && self.frame_outside_writes_are_user_nets(entry_bb, m.base_net, m.locals_len);
+        self.validate_frame_body(
+            name,
+            entry_bb,
+            m.base_net,
+            m.locals_len,
+            false,
+            allow_outside_write,
+        );
         if pushed_pkg.is_some() {
             self.pop_rtn_pkg_scope();
         }

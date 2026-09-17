@@ -304,6 +304,58 @@ impl Elaborator<'_> {
                 self.call_body_writes_whole(callee, args, name, 8),
                 crate::da::CallEffect::Writes
             ),
+            // §3.b: a FUNCTION whose body writes `name` reaches it from an expression, not
+            // from an enable, so the arm above cannot see it. Same table, measured with the
+            // same pair of designs: `always_comb r1 = fw(src); always_comb r2 = fw(src2);`
+            // beside `int acc = 0` splits the oracles exactly as the task twin does
+            // (iverilog `acc=8`, verilator `acc=4`) with verilator reporting MULTIDRIVEN,
+            // while ONE such block agrees on `acc=8` with no MULTIDRIVEN — so the pair is
+            // the error and the single block must stay silent. An intra-assignment
+            // delay/event makes the statement's own evaluation time uncertain, so it is not
+            // claimed.
+            ast::Stmt::Blocking {
+                delay: None,
+                event: None,
+                rhs,
+                ..
+            } => self.expr_uncond_call_writes_whole(rhs, name),
+            _ => false,
+        }
+    }
+
+    /// Does evaluating `e` UNCONDITIONALLY call something that provably writes `name`
+    /// whole?
+    ///
+    /// Positive walker, which is the polarity a reject gate needs: an unrecognised node
+    /// answers `false`, so the gate can only under-report. The conditionally-evaluated
+    /// positions are held out by name — a `&&`/`||` right operand and both `?:` arms —
+    /// because verilator does not flag a conditional reach either: `always_comb begin if
+    /// (src > 3) r1 = fw(src); else r1 = 0; end` beside `always_comb r2 = fw(src2);` is
+    /// LATCH, not MULTIDRIVEN.
+    fn expr_uncond_call_writes_whole(&self, e: &ast::Expr, name: &str) -> bool {
+        use ast::ExprKind as K;
+        match &e.kind {
+            K::Call {
+                name: callee, args, ..
+            } => {
+                matches!(
+                    self.call_body_writes_whole(callee, args, name, 8),
+                    crate::da::CallEffect::Writes
+                ) || args
+                    .iter()
+                    .any(|a| self.expr_uncond_call_writes_whole(a, name))
+            }
+            K::Paren { inner } => self.expr_uncond_call_writes_whole(inner, name),
+            K::Unary { operand, .. } => self.expr_uncond_call_writes_whole(operand, name),
+            K::Binary { op, lhs, rhs } => {
+                self.expr_uncond_call_writes_whole(lhs, name)
+                    || (!matches!(op, ast::BinOp::LogAnd | ast::BinOp::LogOr)
+                        && self.expr_uncond_call_writes_whole(rhs, name))
+            }
+            K::Ternary { cond, .. } => self.expr_uncond_call_writes_whole(cond, name),
+            K::Concat { parts } => parts
+                .iter()
+                .any(|p| self.expr_uncond_call_writes_whole(p, name)),
             _ => false,
         }
     }

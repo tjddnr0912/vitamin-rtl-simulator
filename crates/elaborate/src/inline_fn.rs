@@ -578,6 +578,20 @@ impl Elaborator<'_> {
             None => {
                 self.feed_scoped_block_locals(&func.body);
                 self.reserve_frame_func(&key, &func);
+                // §3.b: mark the body-write route BEFORE lowering, so the body is
+                // classified like any other statement-executor function and the ONE
+                // diagnostic the user gets is `emit_frame_call`'s — which names the
+                // scoped call site as the constraint and points at `import pkg::f;`,
+                // the spelling that is MEASURED to work (`pk::cnt` 7 → 8, both
+                // oracles). Without it the subset sentence fires instead and lists
+                // `cnt = cnt + 1;` among the forms it calls supported. The call itself
+                // can never be hoisted — `inout_call_target` is single-segment only —
+                // so this cannot turn the scoped lane into a value; making it one needs
+                // the frame reserved before the statement is lowered, which this
+                // on-demand path is not (ROADMAP §3.b).
+                if self.func_body_writes_outside_name(&func) {
+                    self.body_write_func_names.insert(key.clone());
+                }
                 let fid = self.frame_idx[&key];
                 self.lower_frame_func_body(&key, &func, fid);
                 fid
@@ -1030,11 +1044,17 @@ impl Elaborator<'_> {
                 if !scope.writable.contains(&target) {
                     self.error(
                         MsgCode::ElabUnsupported,
+                        // §3.b: the `automatic` advice used to say it gives "the same
+                        // diagnostic from the frame path". It no longer does — a framed
+                        // function whose body writes a module net is routed to the
+                        // statement executor and RUNS. The inline fold still cannot do it
+                        // (it has no statement to emit the write from), so the honest
+                        // sentence names the spelling that works.
                         &format!(
                             "function `{fname}` assigns `{target}`, which is not one of \
-                             its own formals or locals — an inlined function body can \
-                             only write its own names (declare `{fname}` `automatic` for \
-                             the same diagnostic from the frame path)"
+                             its own formals or locals — an inlined function body has no \
+                             statement to carry the write. Declare `{fname}` `automatic`, \
+                             or give it a `return`: the frame path performs the write"
                         ),
                     );
                     scope.named_a_reason.set(true);

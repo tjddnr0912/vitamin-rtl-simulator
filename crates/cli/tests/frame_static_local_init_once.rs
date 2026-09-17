@@ -97,12 +97,9 @@ fn seq(src: &str, want: &[&str]) {
     assert_eq!(got, want, "display sequence mismatch in:\n{o}");
 }
 
-/// A run that fails elaboration with `code` in its diagnostics.
-fn loud(src: &str, code: &str) {
-    let (o, rc) = run(src);
-    assert_eq!(rc, Some(1), "expected a loud rejection:\n{o}");
-    assert!(o.contains(code), "expected {code:?} in:\n{o}");
-}
+// (The `loud` helper this file used to carry had exactly one caller — the static
+// initializer whose callee writes a module net. §3.b made that cell a value, so the
+// helper went with it; a future loud cell here should bring its own.)
 
 // ─────────────────────────── the row: static, WITH initializer ───────────────────────────
 
@@ -501,11 +498,13 @@ fn a_module_level_variable_initializer_is_unaffected() {
 }
 
 #[test]
-fn a_static_initializer_calling_a_net_writing_function_stays_loud() {
-    // Both oracles run the initializer once (iverilog a=1 n=0, verilator a=1 n=1 — they
-    // split on the readback), and vita keeps the pre-slice E3009: the callee assigns a
-    // net outside its own frame. Hoisting must not turn a loud into a value.
-    loud(
+fn a_static_initializer_calling_a_net_writing_function_runs() {
+    // §3.b: the callee assigns a net outside its own frame, which used to be E3009 here.
+    // It is now a statement-executor function and the initializer's call carries the
+    // write. Re-measured at this commit: BOTH oracles print `#1`, and both leave `n = 1`
+    // (probed with an added `$display("#n=%0d", u.n);` after the enable — iverilog and
+    // verilator 5.052 agree, so the split this comment used to claim is not on this cell).
+    seq(
         "module m;\n\
            int n;\n\
            function int f2; n = 1; f2 = 1; endfunction\n\
@@ -514,7 +513,7 @@ fn a_static_initializer_calling_a_net_writing_function_stays_loud() {
          module top; m u();\n\
            initial begin u.t(); #1 $finish; end\n\
          endmodule\n",
-        "VITA-E3009",
+        &["#1"],
     );
 }
 

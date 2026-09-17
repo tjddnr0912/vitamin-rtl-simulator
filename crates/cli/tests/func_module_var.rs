@@ -97,18 +97,18 @@ fn formal_and_module_var_mixed() {
 }
 
 #[test]
-fn frame_function_writing_module_var_is_loud() {
-    // Writing a module var from a frame function is OUTSIDE the frame-call subset
-    // (writes only its own locals) — must stay a loud error, never silent.
-    let (_o, code) = run(
+fn frame_function_writing_module_var_performs_the_write() {
+    // §3.b: this was the "must stay loud" guard for a module-var write from a frame
+    // function body. It is now a statement-executor function — the call is hoisted to a
+    // copy-out `Terminator::Call` and `run_process` performs the write. Both oracles
+    // print `1` (iverilog 13.0, verilator 5.052); PRE was E3009 "an assignment to a net
+    // outside the function".
+    let (o, code) = run(
         "module top; integer cnt; function int inc; inc=0; cnt=cnt+1; endfunction\n\
          integer x; initial begin cnt=0; x=inc(); $display(\"%0d\",cnt); $finish; end endmodule\n",
     );
-    assert_ne!(
-        code,
-        Some(0),
-        "writing a module var from a frame fn must be loud"
-    );
+    assert_eq!(code, Some(0), "{o}");
+    assert!(o.contains('1'), "both oracles print 1, got:\n{o}");
 }
 
 #[test]

@@ -85,6 +85,7 @@ mod frames_body;
 mod frames_call;
 mod frames_classify;
 mod frames_classify_fork;
+mod frames_classify_write;
 mod frames_reserve;
 mod frames_static_init;
 mod generate;
@@ -163,6 +164,7 @@ pub(crate) use expr_size_ctx::*;
 pub(crate) use expr_size_hier::*;
 pub(crate) use frames_classify::*;
 pub(crate) use frames_classify_fork::*;
+pub(crate) use frames_classify_write::*;
 pub(crate) use generate::*;
 pub(crate) use hier::*;
 pub(crate) use hier_defer::*;
@@ -976,6 +978,14 @@ struct Elaborator<'s> {
     // than a pure `Expr::Call`. EMPTY for any design without such a function, so the
     // hoist pre-pass in `lower_stmt` is skipped and all other code is byte-identical.
     inout_func_names: std::collections::BTreeSet<String>,
+    // §3.b: names of FRAMED functions whose own body writes a MODULE net
+    // (`func_body_writes_outside_name`). Filled from the AST in `lower_frame_funcs` BEFORE
+    // any body is lowered — a caller is lowered before its callee whenever its name sorts
+    // first, so a decision taken from lowered blocks would not exist yet. Read by
+    // `lower_frame_func_body` (to let `classify_frame_body` accept the write) and by
+    // `emit_frame_call` (to refuse a call the hoist could not turn into a statement).
+    // EMPTY for any design without such a function, so every other design is byte-identical.
+    body_write_func_names: std::collections::BTreeSet<String>,
     // §4.5.179: names of FRAMED functions with an `input` dynamic-array formal (the set
     // §4.5.177 blesses on the direct-rhs `x = f(arr)` path). A call to one BURIED in a
     // larger expression (`$display(f(a))`, `r = f(a)+1`, `if (f(a) > 0)`) is hoisted to a

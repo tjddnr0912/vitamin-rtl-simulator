@@ -68,6 +68,10 @@ impl Elaborator<'_> {
             );
             return self.placeholder_expr();
         }
+        // §3.b: nothing here can carry a body write — see `refuse_body_write_call`.
+        if self.body_write_func_names.contains(&rtn_key) {
+            return self.refuse_body_write_call(fname, &rtn_key);
+        }
         // §11.6: each arg is in the context of its FORMAL's width (a fill grows to
         // it; non-fill ⇒ byte-identical via lower_expr). Omitted trailing actuals are
         // filled with their formals' default values (§13.5.3).

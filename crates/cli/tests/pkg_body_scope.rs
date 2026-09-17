@@ -240,22 +240,32 @@ fn controls_a_formal_the_explicit_spelling_and_the_module_twin() {
     assert_eq!(o, "Z=00000123 x=0123");
 }
 
-/// ⑨ A frame FUNCTION writing a package variable stays LOUD in both lanes — the
-/// frame classifier's own rule (a function may not write outside its frame),
-/// which the scoped lane now reaches instead of its old gate. Both oracles print
-/// `W=8 9 cnt=100 pk=9`; ROADMAP §2 carries it.
+/// ⑨ A frame FUNCTION writing a package variable: the IMPORT lane performs the
+/// write, the SCOPED lane is still loud, and the two answer differently on
+/// purpose (§3.b).
+///
+/// Re-measured at this commit. Both oracles run both spellings and print `W=8`,
+/// with the write landing on `pk.cnt` (7 → 8) and NOT on the module's same-named
+/// `cnt`, which stays 100. `import pk::gw;` reaches the ordinary framed-function
+/// path, so §3.b routes it and the value is now the oracles'. `pk::gw()` builds
+/// its frame AT the call site (`inline_fn.rs`, on first use), which is after the
+/// statement that would have to carry the copy-out — so it is refused, by the
+/// message that names the scoped call as the constraint and `import` as the
+/// spelling that works. Making it a value needs the frame reserved before the
+/// statement is lowered: ROADMAP §3.b.
 #[test]
-fn a_function_writing_a_package_variable_stays_loud_in_both_lanes() {
+fn a_package_variable_write_runs_in_the_import_lane_and_is_loud_in_the_scoped_one() {
     let pk = "package pk; int cnt = 7; function int gw; cnt = cnt + 1; gw = cnt; endfunction endpackage\n";
-    let needle = "assignment to a net outside the function";
-    loud(
-        &format!("{pk}module t; import pk::gw; int cnt = 100; initial begin $display(\"W=%0d\", gw()); #1 $finish; end endmodule"),
-        needle,
-    );
-    loud(
+    let o = clean(&format!(
+        "{pk}module t; import pk::gw; int cnt = 100; initial begin $display(\"W=%0d\", gw()); $display(\"PK=%0d MOD=%0d\", pk::cnt, cnt); #1 $finish; end endmodule"
+    ));
+    assert_eq!(o, "W=8\nPK=8 MOD=100");
+    let e = loud(
         &format!("{pk}module t; int cnt = 100; initial begin $display(\"W=%0d\", pk::gw()); #1 $finish; end endmodule"),
-        needle,
+        "assigns a module net from its body",
     );
+    assert!(e.contains("package-SCOPED (`pk::gw(...)`)"), "{e}");
+    assert!(e.contains("`import pk::gw;`"), "names the workaround:\n{e}");
 }
 
 /// ⑩ A FREE name — one the package does not declare — is unchanged: the scoped

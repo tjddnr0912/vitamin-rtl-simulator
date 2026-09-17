@@ -784,6 +784,8 @@ impl Elaborator<'_> {
         // module's `lower_frame_funcs`), so a nested child instance elaborated in the
         // middle of this module must not clobber it — save/restore alongside func_table.
         let saved_inout_funcs = std::mem::take(&mut self.inout_func_names);
+        // §3.b: same rebuild path, same module-local lifetime.
+        let saved_body_write_funcs = std::mem::take(&mut self.body_write_func_names);
         // §4.5.179: dyn-formal-function set is module-local too (same rebuild path).
         let saved_dyn_formal_funcs = std::mem::take(&mut self.dyn_formal_func_names);
         // B1 frame-call: the frame-func name→id map is module-local (a sibling
@@ -1397,6 +1399,7 @@ impl Elaborator<'_> {
         self.decl_pos_range = saved_dpos_range;
         self.decl_block_locals = saved_dbl;
         self.inout_func_names = saved_inout_funcs; // R5-B
+        self.body_write_func_names = saved_body_write_funcs; // §3.b
         self.dyn_formal_func_names = saved_dyn_formal_funcs; // §4.5.179
         self.frame_idx = saved_frame_idx;
         self.task_frame_idx = saved_task_frame_idx;

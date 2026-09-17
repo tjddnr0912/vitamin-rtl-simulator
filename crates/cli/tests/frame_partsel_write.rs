@@ -144,16 +144,23 @@ fn frame_mdpacked_element_write() {
 }
 
 #[test]
-fn out_of_frame_partsel_write_still_loud() {
-    // GUARD: a part-select write to a MODULE net from a frame body is NOT an in-frame
-    // write — it stays loud E3009 (a pre-existing frame limitation), NOT silent.
+fn out_of_frame_partsel_write_performs_it() {
+    // §3.b: this was the GUARD cell for "a part-select write to a MODULE net stays loud".
+    // It no longer does: such a function is a statement-executor function, so the call is
+    // hoisted to a copy-out `Terminator::Call` and `run_process` performs the write.
+    // iverilog 13.0 prints `g=xxab` — the upper byte was never written, so it is still X,
+    // which is exactly what vita prints. (verilator is 2-state and prints `g=ab`.)
     let src = "module m;\n\
          reg [15:0] g;\n\
          function automatic integer f; g[7:0] = 8'hAB; f = 1; endfunction\n\
          integer d;\n\
          initial begin d = f(); $display(\"g=%0h\", g); #1 $finish; end endmodule\n";
     let (out, code) = run(src);
-    assert_eq!(code, Some(1), "expected loud, got code={code:?}\n{out}");
+    assert_eq!(code, Some(0), "{out}");
+    assert!(
+        out.contains("g=xxab"),
+        "iverilog prints g=xxab, got:\n{out}"
+    );
 }
 
 #[test]

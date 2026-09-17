@@ -43,11 +43,15 @@ endmodule
 "#,
         "x\n3",
     );
-    // Writing a MODULE net from a frame function: the &self eval path cannot write
-    // the flat store — loud-reject, never a silent mis-route.
-    assert!(
-        elaborate_rejects(
-            r#"
+    // §3.b: writing a MODULE net from a frame function body used to be the loud cut
+    // here — the `&self` eval path cannot write the flat store. It no longer has to:
+    // such a function is emitted as a `Terminator::Call` and the `&mut` `run_process`
+    // executor performs the write, which is what the TASK twin already did. iverilog
+    // and verilator 5.052 both print `3`, and both leave `g = 3` (probed by adding
+    // `$display("g=%0d", g);` after the call). `check` re-runs the design through
+    // iverilog, so this cell is now a live differential rather than a vita-side cut.
+    check(
+        r#"
 module tb;
   integer g;
   function automatic integer bad(input integer n);
@@ -55,9 +59,8 @@ module tb;
   endfunction
   initial $display("%0d", bad(3));
 endmodule
-"#
-        ),
-        "a module-net write from a frame function body must be loud-rejected"
+"#,
+        "3",
     );
     // A non-blocking assign inside a frame body — also outside the subset.
     assert!(

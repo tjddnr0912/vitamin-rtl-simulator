@@ -392,11 +392,14 @@ impl Elaborator<'_> {
                 // lowered, so a net created now necessarily sits past every frame
                 // window.
                 //
-                // A frame FUNCTION body (and a class method) still takes the old path:
-                // there `classify_frame_body(allow_call = false)` rejects an
-                // out-of-frame write outright, so routing it would only trade the
-                // warning for a confusing E3009 about an assignment the user never
-                // wrote.
+                // A frame FUNCTION body (and a class method) still takes the old path.
+                // §3.b opened an out-of-frame write in a frame function body for the set
+                // `body_write_func_names`, but NOT for a net vita minted: an `$ia_tmp$`
+                // is compiler-internal, so `frame_outside_writes_are_user_nets` vetoes
+                // the route and `classify_frame_body` refuses it by its own name. Routing
+                // here would therefore still only trade the warning for an E3009 about an
+                // assignment the user never wrote — measured, not inherited: this arm is
+                // what stops that net from being created in the first place.
                 if (!self.in_frame_body || self.frame_task_lowering)
                     && matches!(
                         name.name.as_str(),
