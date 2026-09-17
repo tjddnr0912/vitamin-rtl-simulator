@@ -311,6 +311,9 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// is ever pushed, so it never allocates) — it is here so the two callees keep their
     /// signatures rather than because it was costing anything.
     pub(crate) scratch_changed: Vec<crate::native::dirty::ChangedNet>,
+    /// HEAP-WAKE: per-sweep `(handle net, author)` buffer for
+    /// `SimState::drain_dyn_dirty` — the engine's `scratch_dyn_dirty`, on this side.
+    pub(crate) scratch_dyn_dirty: Vec<(u32, u32)>,
     pub(crate) scratch_woken: Vec<u32>,
     pub(crate) scratch_clocked: Vec<u32>,
     /// The `settle_cont_assigns` visit list — a kernel-owned buffer the pass is
@@ -639,6 +642,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             nba: Vec::new(),
             nba_seq: 0,
             scratch_changed: Vec::new(),
+            scratch_dyn_dirty: Vec::new(),
             scratch_woken: Vec::new(),
             scratch_clocked: Vec::new(),
             scratch_ca_pass: Vec::new(),

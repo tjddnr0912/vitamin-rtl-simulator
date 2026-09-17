@@ -395,9 +395,18 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                     // (= re-fire normally), which is what makes `q <= d` wake
                     // `always @(q)`.
                     k.arena.ch.blocking_writer = Some(r.proc);
+                    // HEAP-WAKE: the same tag on the SHARED state, because a heap
+                    // mutation is staged from `SimState` (`note_dyn_change`) and
+                    // cannot see the arena's copy. Without it every heap change
+                    // authored by tier-3 would be tagged `u32::MAX` and a block
+                    // writing its own array would re-fire on itself. The engine sets
+                    // its own copy in `Scheduler::run_body`, one level up; this is
+                    // that same line for the executor that does not go through it.
+                    k.sched.st.blocking_writer = Some(r.proc);
                     let tmpl = k.act_template(r.proc);
                     let step = dispatch_body(k, ir, r.proc, tmpl, r.block);
                     k.arena.ch.blocking_writer = None;
+                    k.sched.st.blocking_writer = None;
                     // The walk drains at every statement boundary; this catches
                     // what happens AFTER the last one — an out-of-range read in a
                     // `Branch` condition or a `#(mem[i])` delay amount. Before
@@ -840,6 +849,12 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
         // absence would be a silent loss the day the walk's drain moves.
         k.drain_range_diags();
     }
+    // HEAP-WAKE: stage the initializer bodies' heap marks into `ch.dirty` HERE,
+    // so `retain_snapshot` below drops them with every other initializer write.
+    // `int w[] = new[3];` must not hand `always_comb n = w.size()` an event, for
+    // the same reason `reg clk = 0;` must not hand `always @clk` an edge. The
+    // engine's twin is in `arm_processes_after_seed`, at the same position.
+    drain_heap_marks(k);
     // COPY-NET REPAIR, before the rollback so its own writes are dropped with
     // the initializers'. A net whose every continuous driver MOVES bits rather
     // than computing them has no state of its own (`crate::alias`), but the
@@ -963,6 +978,11 @@ fn snapshot_preponed(k: &mut NativeKernel) {
 }
 
 fn propagate(k: &mut NativeKernel) {
+    // HEAP-WAKE: fold this delta's heap-content marks into the dirty channel
+    // BEFORE anything reads it — ahead of the force re-eval and ahead of
+    // `take_changed`, which is the wake itself. The engine's `propagate_changes`
+    // opens with the same three lines against its own channel.
+    drain_heap_marks(k);
     // IEEE §9.3.2 continuous force: while a force with an expression RHS is
     // live, re-evaluate it whenever ANYTHING changed this delta and re-pin the
     // target through the force funnel. Over-sensitivity is harmless (a
@@ -1039,6 +1059,26 @@ fn propagate(k: &mut NativeKernel) {
     // exit 0 while the VM exited 1. Same class as the NBA path §4.5.298 fixed;
     // this is the seam that slice did not have yet.
     k.drain_range_diags();
+}
+
+/// HEAP-WAKE apply, tier-3 store: drain `SimState`'s staged heap-content marks
+/// into `arena.ch`.
+///
+/// The twin of `SimState::mark_heap_dirty`, and deliberately the same two
+/// effects: dirty membership (which IS the changed set `take_changed` reads) and
+/// the SELF-RETRIG author tag. Not `slot_edge` (a handle net is never an edge
+/// target), not `ca_dirty` (`ca_deps` never certifies an assign with a heap
+/// dependency, so every one of them is in `ca_always` already), not VCD or probe
+/// bytes (a handle net has neither channel). `SimState::note_dyn_change` is the
+/// single producer both stores drain.
+fn drain_heap_marks(k: &mut NativeKernel) {
+    let mut buf = std::mem::take(&mut k.scratch_dyn_dirty);
+    k.sched.st.drain_dyn_dirty(&mut buf);
+    for &(net, writer) in &buf {
+        k.arena.ch.dirty.insert(net as usize);
+        k.arena.ch.last_blocking_writer[net as usize] = writer;
+    }
+    k.scratch_dyn_dirty = buf;
 }
 
 /// The engine's `propagate_changes` pass (b): in-body waiters.

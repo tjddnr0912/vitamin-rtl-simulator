@@ -323,7 +323,18 @@ pub(crate) fn arr_locator(sched: &mut Scheduler, args: &[u32]) {
         .into_iter()
         .map(|v| v.resize_keep_sign(dw, dsigned))
         .collect();
-    sched.st.dyn_heap.borrow_mut()[dst_net as usize] = Some(crate::state::DynObj::Queue { elems });
+    let moved = {
+        let mut heap = sched.st.dyn_heap.borrow_mut();
+        let fresh = crate::state::DynObj::Queue { elems };
+        // HEAP-WAKE: a missing entry IS the empty queue.
+        let moved = sched.st.dyn_wake_observable(dst_net)
+            && !crate::state::dyn_slot_eq(heap[dst_net as usize].as_ref(), Some(&fresh));
+        heap[dst_net as usize] = Some(fresh);
+        moved
+    };
+    if moved {
+        sched.st.note_dyn_change(dst_net);
+    }
 }
 
 /// One W-RUN-DYN-DEGRADE per handle net (latched in `dyn_warned`) — a degraded

@@ -275,8 +275,22 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
             .borrow()
             .get(src as usize)
             .and_then(|o| o.as_ref().cloned());
-        if let Some(slot) = sched.st.dyn_heap.borrow_mut().get_mut(dst as usize) {
-            *slot = obj;
+        let moved = {
+            let mut heap = sched.st.dyn_heap.borrow_mut();
+            match heap.get_mut(dst as usize) {
+                Some(slot) => {
+                    // HEAP-WAKE: a missing entry IS the empty object on both sides,
+                    // so `dst = src` with both never-touched moved nothing.
+                    let moved = sched.st.dyn_wake_observable(dst)
+                        && !crate::state::dyn_slot_eq(slot.as_ref(), obj.as_ref());
+                    *slot = obj;
+                    moved
+                }
+                None => false,
+            }
+        };
+        if moved {
+            sched.st.note_dyn_change(dst);
         }
         // §7.10.2: a whole-assign into a BOUNDED queue truncates to the bound
         // (+W4020), exactly like the push/insert post-op — without this the
@@ -347,7 +361,12 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
         }
         SysTaskId::DynDelete => {
             if let Some(net) = dyn_handle_net(sched, args.first()) {
-                sched.st.dyn_heap.borrow_mut()[net as usize].take(); // absent entry IS the empty object
+                // absent entry IS the empty object — so HEAP-WAKE: deleting an
+                // absent or already-empty handle moved nothing.
+                let prev = sched.st.dyn_heap.borrow_mut()[net as usize].take();
+                if prev.is_some_and(|o| !o.is_empty()) {
+                    sched.st.note_dyn_change(net);
+                }
             }
             Ctl::Continue
         }
@@ -374,9 +393,16 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                 return Ctl::Continue;
             }
             let mut bad_kind = false;
+            // HEAP-WAKE: an ordering method is IN-PLACE, so the only way to know
+            // whether it moved anything is to keep the previous order. Paid only
+            // for a net some sensitivity names (`dyn_wake_observable`) — sorting an
+            // already-sorted array must not stage a change.
+            let watched = sched.st.dyn_wake_observable(net);
+            let mut moved = false;
             {
                 let mut heap = sched.st.dyn_heap.borrow_mut();
                 if let Some(obj) = heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
+                    let before = watched.then(|| obj.clone());
                     match obj {
                         crate::state::DynObj::DynArray { elems } => {
                             apply_order(elems.as_mut_slice(), which, signed)
@@ -386,7 +412,11 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                         }
                         _ => bad_kind = true,
                     }
+                    moved = before.is_some_and(|b| b != *obj);
                 }
+            }
+            if moved {
+                sched.st.note_dyn_change(net);
             }
             if bad_kind {
                 dyn_warn_once(
@@ -469,21 +499,27 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                 return Ctl::Continue;
             }
             // A missing entry IS the empty queue (lazy, like every dyn object).
-            sched.st.with_dyn_entry(
+            let pushed = sched.st.with_dyn_entry(
                 net,
                 || crate::state::DynObj::Queue {
                     elems: std::collections::VecDeque::new(),
                 },
                 |obj| {
-                    if let crate::state::DynObj::Queue { elems } = obj {
-                        if which == SysTaskId::QPushFront {
-                            elems.push_front(v);
-                        } else {
-                            elems.push_back(v);
-                        }
+                    let crate::state::DynObj::Queue { elems } = obj else {
+                        return false;
+                    };
+                    if which == SysTaskId::QPushFront {
+                        elems.push_front(v);
+                    } else {
+                        elems.push_back(v);
                     }
+                    true
                 },
             );
+            if pushed {
+                // HEAP-WAKE: the queue grew by one — always a content change.
+                sched.st.note_dyn_change(net);
+            }
             sched.st.enforce_queue_bound(net); // v6 ③ (no-op when unbounded)
             Ctl::Continue
         }
@@ -559,17 +595,23 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                     }
                     None => Value::xs(w, false),
                 };
-                sched.st.with_dyn_entry(
+                let inserted = sched.st.with_dyn_entry(
                     net,
                     || crate::state::DynObj::Queue {
                         elems: std::collections::VecDeque::new(),
                     },
                     |obj| {
-                        if let crate::state::DynObj::Queue { elems } = obj {
-                            elems.insert(idx.unwrap_or(0) as usize, v);
-                        }
+                        let crate::state::DynObj::Queue { elems } = obj else {
+                            return false;
+                        };
+                        elems.insert(idx.unwrap_or(0) as usize, v);
+                        true
                     },
                 );
+                if inserted {
+                    // HEAP-WAKE: the queue grew by one — always a content change.
+                    sched.st.note_dyn_change(net);
+                }
                 sched.st.enforce_queue_bound(net); // v6 ③ (no-op when unbounded)
             } else {
                 let ok = matches!(idx, Some(i) if i < len as u64);
@@ -577,14 +619,18 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                     dyn_warn_once(sched, net, "queue delete index out of range or X (skipped)");
                     return Ctl::Continue;
                 }
-                if let Some(crate::state::DynObj::Queue { elems }) = sched
-                    .st
-                    .dyn_heap
-                    .borrow_mut()
-                    .get_mut(net as usize)
-                    .and_then(|o| o.as_mut())
-                {
-                    elems.remove(idx.unwrap_or(0) as usize);
+                let removed = {
+                    let mut heap = sched.st.dyn_heap.borrow_mut();
+                    match heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
+                        Some(crate::state::DynObj::Queue { elems }) => {
+                            elems.remove(idx.unwrap_or(0) as usize).is_some()
+                        }
+                        _ => false,
+                    }
+                };
+                if removed {
+                    // HEAP-WAKE: the index was range-checked above, so this erased one.
+                    sched.st.note_dyn_change(net);
                 }
             }
             Ctl::Continue
@@ -604,14 +650,18 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                     {
                         None => dyn_warn_once(sched, net, "assoc delete key is X/Z (ignored)"),
                         Some(k) => {
-                            if let Some(crate::state::DynObj::AssocStr { map }) = sched
-                                .st
-                                .dyn_heap
-                                .borrow_mut()
-                                .get_mut(net as usize)
-                                .and_then(|o| o.as_mut())
-                            {
-                                map.remove(&k);
+                            let removed = {
+                                let mut heap = sched.st.dyn_heap.borrow_mut();
+                                match heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
+                                    Some(crate::state::DynObj::AssocStr { map }) => {
+                                        map.remove(&k).is_some()
+                                    }
+                                    _ => false,
+                                }
+                            };
+                            // HEAP-WAKE: a MISSING key is a silent no-op (§7.9) — nothing moved.
+                            if removed {
+                                sched.st.note_dyn_change(net);
                             }
                         }
                     }
@@ -627,14 +677,18 @@ fn dispatch_body<N: crate::eval::NetReader + ?Sized>(
                 {
                     None => dyn_warn_once(sched, net, "assoc delete key is X/Z (ignored)"),
                     Some(k) => {
-                        if let Some(crate::state::DynObj::Assoc { map }) = sched
-                            .st
-                            .dyn_heap
-                            .borrow_mut()
-                            .get_mut(net as usize)
-                            .and_then(|o| o.as_mut())
-                        {
-                            map.remove(&k);
+                        let removed = {
+                            let mut heap = sched.st.dyn_heap.borrow_mut();
+                            match heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
+                                Some(crate::state::DynObj::Assoc { map }) => {
+                                    map.remove(&k).is_some()
+                                }
+                                _ => false,
+                            }
+                        };
+                        // HEAP-WAKE: a MISSING key is a silent no-op (§7.9) — nothing moved.
+                        if removed {
+                            sched.st.note_dyn_change(net);
                         }
                     }
                 }

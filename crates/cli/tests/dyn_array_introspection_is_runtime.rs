@@ -107,27 +107,32 @@ endmodule
     assert!(e.contains("unsupported system function"), "{e}");
 }
 
-/// ④ THE FILED RESIDUE (three review rounds, one axis): an inferred-sensitivity
-/// block reading a dynamic-storage handle is NOT woken by a handle mutation, and
-/// fires at time 0 in declaration order — a handle has no event channel yet. Round
-/// 1 measured `$size(w)` joining the class once it became a runtime read (PRE's
-/// element-width constant had coincided with `new[4]`; `new[3]` printed 104 for
-/// 103 in PRE too), so a refusal was tried: "any handle in the read set" refused
-/// six designs that PRE and both oracles run (round 2), "every read is a handle"
-/// refused a declaration-initialised `int w[] = new[3]` and a `string s = "hello"`
-/// whose single t0 fire IS the final value (round 3). Three BLOCKINGs on one axis =
-/// the axis is reverted: the class is pre-existing, filed as ROADMAP §5.2 row 1
-/// with the engine site, and these cells pin the OBSERVED values (`N1` is the stale
-/// one; both oracles `N1=104`).
+/// ④ THE FILED RESIDUE, NOW CLOSED. This cell used to pin the STALE `N1=100`: an
+/// inferred-sensitivity block reading a dynamic-storage handle was not woken by a
+/// handle mutation, because the wake runs off the dirty sweep and no heap write
+/// reached `note_change`. Round 1 measured `$size(w)` joining the class once it
+/// became a runtime read (PRE's element-width constant had coincided with
+/// `new[4]`; `new[3]` printed 104 for 103 in PRE too), and the three refusal
+/// attempts that followed each refused designs PRE and both oracles run — which is
+/// why the axis was reverted and the class filed rather than gated.
+///
+/// It is a WAKE now, not a refusal: `SimState::note_dyn_change` stages every
+/// module-net heap mutation and both schedulers drain it into their dirty channel.
+/// So the cell is CONVERTED to the oracle value rather than deleted — `N1=104`,
+/// which is what iverilog 13.0 and verilator 5.052 both print (raw:
+/// `N1=104` / `N2=1004` from each). The class and its measurements live in
+/// `crates/cli/tests/dyn_handle_mutation_wakes_comb.rs`.
 #[test]
-fn a_dyn_handle_read_in_an_inferred_sensitivity_block_is_accepted_and_filed() {
+fn a_dyn_handle_read_in_an_inferred_sensitivity_block_is_woken() {
     let (o, e, code) = run(
         "module t;\n  logic [3:0] w[]; int n; logic t = 0;\n  always_comb n = $size(w) + (t ? 1000 : 100);\n  initial begin w = new[4]; #1 $display(\"N1=%0d\", n); t = 1; #1 $display(\"N2=%0d\", n); #1 $finish; end\nendmodule\n",
     );
     assert_eq!(code, Some(0), "{e}");
-    assert_eq!(o, "N1=100\nN2=1004");
-    // A declaration-initialised handle is final before the block's t0 fire: correct
-    // in all four tools (the round-3 correct→loud cell).
+    assert_eq!(o, "N1=104\nN2=1004");
+    // A declaration-initialised handle is final before the block's t0 fire, and the
+    // initializer must NOT be an event: correct in all four tools, PRE-identical,
+    // and the cell that says the wake did not swallow the t0 rollback (the round-3
+    // correct→loud cell, now the round-4 correct→correct one).
     let (o, e, code) = run(
         "module t;\n  int w[] = new[3]; string s = \"hello\"; int n, m;\n  always_comb n = w.size() + 100;\n  always_comb m = s.len();\n  initial begin w[0] = 1; #1 $display(\"H=%0d L=%0d\", n, m); #1 $finish; end\nendmodule\n",
     );

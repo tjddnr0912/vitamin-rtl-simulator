@@ -75,8 +75,22 @@ pub(crate) fn run_queue_slice<N: crate::eval::NetReader + ?Sized>(
             std::collections::VecDeque::new()
         }
     };
-    if let Some(slot) = sched.st.dyn_heap.borrow_mut().get_mut(dst as usize) {
-        *slot = Some(crate::state::DynObj::Queue { elems });
+    let moved = {
+        let mut heap = sched.st.dyn_heap.borrow_mut();
+        match heap.get_mut(dst as usize) {
+            Some(slot) => {
+                let fresh = crate::state::DynObj::Queue { elems };
+                // HEAP-WAKE: a missing entry IS the empty queue.
+                let moved = sched.st.dyn_wake_observable(dst)
+                    && !crate::state::dyn_slot_eq(slot.as_ref(), Some(&fresh));
+                *slot = Some(fresh);
+                moved
+            }
+            None => false,
+        }
+    };
+    if moved {
+        sched.st.note_dyn_change(dst);
     }
     sched.st.enforce_queue_bound(dst);
     Ctl::Continue

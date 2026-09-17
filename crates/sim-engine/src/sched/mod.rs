@@ -402,6 +402,10 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// Scratch buffers reused across `propagate_changes` calls (take/restore —
     /// the alternative per-call `Vec::new` allocates on every delta).
     scratch_changed: Vec<u32>,
+    /// HEAP-WAKE: per-sweep `(handle net, author)` buffer for
+    /// `SimState::drain_dyn_dirty`. Taken/restored like every other scratch here
+    /// so a heap-free design pays no allocation.
+    scratch_dyn_dirty: Vec<(u32, u32)>,
     /// GLITCH/SELF-RETRIG: per-changed-net `(net, slot_edge_mask, blocking_writer)`.
     /// `mask` = the net's intra-slot bit0 edge summary (`SimState::slot_edge`), so
     /// both the static edge-wake pass (a) and the in-body `Edge` waiter pass (b)

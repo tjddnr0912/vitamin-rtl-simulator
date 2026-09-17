@@ -180,7 +180,13 @@ impl SimState<'_> {
                     } => {
                         if let Some(&a0) = args.first() {
                             if let sim_ir::Expr::Signal { net, .. } = &self.ir.exprs[a0 as usize] {
-                                self.dyn_heap.borrow_mut()[*net as usize].take();
+                                let prev = self.dyn_heap.borrow_mut()[*net as usize].take();
+                                // HEAP-WAKE: a missing entry IS the empty object, so
+                                // deleting a never-allocated (or already empty) handle
+                                // moved nothing.
+                                if prev.is_some_and(|o| !o.is_empty()) {
+                                    self.note_dyn_change(*net);
+                                }
                             }
                         }
                     }
@@ -854,11 +860,26 @@ impl SimState<'_> {
         if captured.is_empty() {
             return;
         }
-        let mut heap = self.dyn_heap.borrow_mut();
-        for (dst, obj) in captured {
-            if let Some(cell) = heap.get_mut(dst as usize) {
-                *cell = obj;
+        // HEAP-WAKE: this installs into a callee FORMAL slot on the call-in path
+        // (frame-local, no wake) and into a CALLER net on the `output`/`inout`
+        // copy-out path (a module net, which a combinational block may read). The
+        // funnel's `frame_local` test is what separates them, so the site does not
+        // have to; it only answers "did the object move", and pays for that answer
+        // only for a net some sensitivity names.
+        let mut moved: Vec<u32> = Vec::new();
+        {
+            let mut heap = self.dyn_heap.borrow_mut();
+            for (dst, obj) in captured {
+                if let Some(cell) = heap.get_mut(dst as usize) {
+                    if self.dyn_wake_observable(dst) && *cell != obj {
+                        moved.push(dst);
+                    }
+                    *cell = obj;
+                }
             }
+        }
+        for net in moved {
+            self.note_dyn_change(net);
         }
     }
 
@@ -871,8 +892,19 @@ impl SimState<'_> {
             .borrow()
             .get(formal_net as usize)
             .and_then(|o| o.as_ref().cloned());
-        if let Some(cell) = self.dyn_heap.borrow_mut().get_mut(caller_net as usize) {
-            *cell = obj;
+        let moved = {
+            let mut heap = self.dyn_heap.borrow_mut();
+            match heap.get_mut(caller_net as usize) {
+                Some(cell) => {
+                    let moved = self.dyn_wake_observable(caller_net) && *cell != obj;
+                    *cell = obj;
+                    moved
+                }
+                None => false,
+            }
+        };
+        if moved {
+            self.note_dyn_change(caller_net);
         }
     }
 

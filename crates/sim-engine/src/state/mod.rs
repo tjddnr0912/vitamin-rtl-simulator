@@ -15,7 +15,7 @@ use crate::value::{nwords, top_mask, Value, Words};
 
 // ---- split parts (mechanical refactor) ----
 mod changes;
-pub(crate) use changes::edge_target_nets;
+pub(crate) use changes::{dyn_slot_eq, edge_target_nets, heap_wake_nets};
 mod frame_eval;
 mod init_diag;
 mod netread;
@@ -342,6 +342,31 @@ pub(crate) struct SimState<'a> {
     /// W-RUN-DYN-DEGRADE per handle net, never a per-iteration spam. RefCell:
     /// the READ path (`read_net` is `&self`) must latch too.
     pub dyn_warned: std::cell::RefCell<std::collections::BTreeSet<u32>>,
+    /// HEAP-WAKE: handle nets whose heap CONTENT moved since the last sweep,
+    /// paired with the process that authored the mutation (`u32::MAX` = "no
+    /// executing body", i.e. re-fire normally — the `last_blocking_writer`
+    /// encoding).
+    ///
+    /// Staged rather than applied because every mutation site is `&self` (the
+    /// heap is interior-mutable so the frame executors can reach it) while the
+    /// dirty channel is `&mut`. The two schedulers DRAIN it into their own
+    /// channel — `Scheduler`'s `st.dirty`, tier-3's `arena.ch.dirty` — exactly as
+    /// `dyn_heap` itself is one object with two kernels; there is no third store.
+    ///
+    /// ⚠️ Producer contract: [`SimState::note_dyn_change`] is the only writer and
+    /// it is called only for an ACTUAL content change, the same rule
+    /// `note_change` carries. Marking an unchanged object would re-fire a
+    /// combinational reader forever instead of converging.
+    pub dyn_dirty: std::cell::RefCell<Vec<(u32, u32)>>,
+    /// Which nets some process's sensitivity NAMES — a static `Level`/`Comb`/
+    /// `Latch` read set, a static edge list, or an in-body `@(…)` wait.
+    ///
+    /// The early-out of [`SimState::note_dyn_change`]: a heap mutation of a net
+    /// no sensitivity mentions can wake nothing, so a dyn-heavy design that has
+    /// no combinational reader of its arrays pays one `Vec<bool>` load per
+    /// mutation and stages nothing. Built once at construction from the IR by
+    /// [`crate::state::heap_wake_nets`], like `is_edge_target`.
+    pub heap_wake_net: Vec<bool>,
     /// Per-net "is a dyn handle" bitmap (DynArray/Queue/Assoc), precomputed so
     /// the hot read/write funnels pay ONE Vec<bool> load — not an `ir.nets`
     /// kind match — per indexed access.
@@ -855,7 +880,12 @@ pub(crate) const MAX_DYN_ELEMS: usize = 1 << 24;
 
 /// v5 (C): one dynamic-storage object. Engine-internal RUNTIME state — never
 /// serialized, never in the frozen IR (design doc 2026-06-10 §2).
-#[derive(Debug, Clone)]
+///
+/// `PartialEq` is what lets a mutation site answer "did the content ACTUALLY
+/// move" before it calls [`SimState::note_dyn_change`], whose contract (like
+/// `note_change`'s) is that only a real change may be staged. Runtime-only, so
+/// it carries no schema weight.
+#[derive(Debug, Clone, PartialEq)]
 pub enum DynObj {
     /// `int d[]` — element values, length set only by `new[n]`/`delete()`.
     DynArray { elems: Vec<Value> },

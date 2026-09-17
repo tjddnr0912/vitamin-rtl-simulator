@@ -4,6 +4,11 @@ use super::*;
 
 impl Scheduler<'_, '_> {
     pub(crate) fn propagate_changes(&mut self) {
+        // HEAP-WAKE: fold this delta's heap-content marks into the dirty channel
+        // BEFORE anything reads it — ahead of the force re-eval (a heap change is a
+        // change, so a live expression force must see it) and ahead of the sweep
+        // below, which is the wake itself.
+        self.drain_heap_marks();
         // IEEE §9.3.2 continuous force: while a force with an expression RHS is
         // live, re-evaluate it whenever ANYTHING changed this delta and re-pin
         // the target through the force funnel. Over-sensitivity is harmless (a
@@ -227,6 +232,24 @@ impl Scheduler<'_, '_> {
         self.scratch_expr_now = expr_now; // WAITER-POOL: hand the capacity back
         level_fire.clear();
         self.scratch_level_fire = level_fire;
+    }
+
+    /// HEAP-WAKE drain, engine side: move `SimState`'s staged heap-content marks
+    /// (`note_dyn_change`, on the shared state because every mutation site is
+    /// `&self`) onto THIS store's dirty channel.
+    ///
+    /// Called from the two places the engine's dirty list is cut or read: the top
+    /// of [`Scheduler::propagate_changes`], and `arm_processes_after_seed` right
+    /// after the initializer bodies, so their marks land inside the range that
+    /// function rolls back. One body, because two copies of a drain is exactly the
+    /// shape that drifts. Tier-3's twin is `native::run::drain_heap_marks`.
+    pub(crate) fn drain_heap_marks(&mut self) {
+        let mut buf = std::mem::take(&mut self.scratch_dyn_dirty);
+        self.st.drain_dyn_dirty(&mut buf);
+        for &(net, writer) in &buf {
+            self.st.mark_heap_dirty(net, writer);
+        }
+        self.scratch_dyn_dirty = buf;
     }
 
     /// P2-3: every delta-limit overflow path (t0/run-loop settle, the

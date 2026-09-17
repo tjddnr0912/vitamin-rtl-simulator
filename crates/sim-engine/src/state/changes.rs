@@ -41,6 +41,118 @@ impl SimState<'_> {
         self.emit_probe_change(net, word);
     }
 
+    /// HEAP-WAKE funnel: the heap CONTENT of handle net `net` moved.
+    ///
+    /// The twin of [`SimState::note_change`] for storage that has no net word. An
+    /// inferred-sensitivity block (`always_comb`/`always_latch`/`@*`) carries its
+    /// elaborate read set in `sensitivity.edges`, and a handle net IS in it — the
+    /// `comb_read_set` walk inserts the `Signal` under `w.size()`/`w[i]`/`s.len()`
+    /// (measured: `always_comb n = w.size()` arms `Level { nets: [t.w] }`). The
+    /// wake then runs off the DIRTY sweep, whose only producer was `note_change`,
+    /// and no heap mutation reaches that — so every one of them was invisible.
+    ///
+    /// ⚠️ CALLER OBLIGATION, the same one `note_change` carries: call this ONLY
+    /// for an ACTUAL content change. A mark on an unchanged object re-fires its
+    /// combinational readers every delta instead of converging.
+    ///
+    /// NO VCD AND NO PROBE BYTES, and that is a property of the handle rather
+    /// than a choice made here: `$dumpvars` skips every DynArray/Queue/Assoc/
+    /// AssocStr/String net (variable length has no `$var` form), so `vcd_id` is
+    /// `None` and `vcd_word_ids` is empty for one; and `--probe` on one is a LOUD
+    /// CLI refusal (`E0001 … is a dynamic-array/queue/string handle`), so
+    /// `probed[net]` is false for one. Both were measured, not assumed.
+    ///
+    /// `ca_dirty` is likewise NOT marked, for a measured reason: `levelize::ca_deps`
+    /// refuses to certify any assign with a heap-handle dependency, so every
+    /// `assign n = w.size();` is already in `ca_always` and is visited by EVERY
+    /// settle pass. Measured: that design answers `0 / 3 / 7` in PRE, which is
+    /// verilator's answer exactly. A mark here would be dead code.
+    pub(crate) fn note_dyn_change(&self, net: u32) {
+        if !self.dyn_wake_observable(net) {
+            return;
+        }
+        // SELF-RETRIG: record the author, exactly as `note_change` does, because
+        // the staged mark is consumed a whole delta later — by then the
+        // scheduler has cleared `blocking_writer` and the answer would be lost.
+        self.dyn_dirty
+            .borrow_mut()
+            .push((net, self.blocking_writer.unwrap_or(u32::MAX)));
+    }
+
+    /// Would a heap mutation of `net` be recorded at all? ONE home for the two
+    /// questions [`SimState::note_dyn_change`] asks, so a site that must PAY to
+    /// decide "did the content actually change" can decline the cost with the
+    /// same predicate the funnel uses rather than a second spelling of it.
+    pub(crate) fn dyn_wake_observable(&self, net: u32) -> bool {
+        let i = net as usize;
+        // Nobody watches this net: no sensitivity names it, so no wake exists.
+        if !self.heap_wake_net.get(i).copied().unwrap_or(false) {
+            return false;
+        }
+        // A FRAME-LOCAL handle lives in `dyn_heap[net]` too (one slot per
+        // declared local, keyed by net) but is not a module net: no process
+        // sensitivity can name it, its stash/restore at call entry and exit is
+        // bookkeeping rather than a design-visible mutation, and `read_net` asks
+        // exactly this question on the read side.
+        !self.frame_local.get(i).copied().unwrap_or(false)
+    }
+
+    /// Drain the staged heap-content marks into `out`, ascending by net.
+    ///
+    /// The CALLER marks them in its own dirty channel; there is no shared apply,
+    /// because there is no shared channel — the engine has `st.dirty`/
+    /// `st.last_blocking_writer` and tier-3 has `arena.ch`. Same split as
+    /// `dyn_heap` itself, which both kernels borrow.
+    ///
+    /// Ascending + deduplicated so the sweep order does not depend on the order
+    /// the mutations happened in (the engine sorts its own `dirty` for the same
+    /// reason, and every downstream wake order is pinned to that).
+    pub(crate) fn drain_dyn_dirty(&self, out: &mut Vec<(u32, u32)>) {
+        out.clear();
+        let mut staged = self.dyn_dirty.borrow_mut();
+        if staged.is_empty() {
+            return;
+        }
+        out.append(&mut staged);
+        // Ascending NET order (byte-identity of the dirty list), STABLE so two
+        // authors of one net keep their temporal order: a net marked twice in one
+        // delta by the SAME author collapses; marked by two different authors it
+        // keeps both, and the temporally later one wins the `last_blocking_writer`
+        // slot — which is what `note_change` does too (it overwrites the tag on
+        // every change). An unstable sort on `(net, author)` would have let the
+        // higher proc id win instead.
+        out.sort_by_key(|m| m.0);
+        out.dedup();
+    }
+
+    /// HEAP-WAKE apply, engine store: put one drained `(net, author)` mark on
+    /// THIS store's dirty channel.
+    ///
+    /// The half of `note_change` a heap change needs and no more: the dirty
+    /// flag/list (which IS the changed set the sweep reads) and the SELF-RETRIG
+    /// author tag. Deliberately NOT the rest of it —
+    ///
+    /// * `slot_edge`: a handle net is never an `is_edge_target` (no `@(posedge
+    ///   q)` exists; `edge_target_nets` only marks nets an edge sensitivity or an
+    ///   edge wait names), so there is no accumulator to reset.
+    /// * `ca_dirty`: `levelize::ca_deps` refuses to certify ANY assign with a
+    ///   heap-handle dependency, so every one of them is already in `ca_always`
+    ///   and is visited by every settle pass. Measured: `assign n = w.size();`
+    ///   answers 0 / 3 / 7 in PRE, which is verilator's answer exactly.
+    /// * VCD and probe bytes: a handle net has neither channel (see
+    ///   [`SimState::note_dyn_change`]).
+    ///
+    /// Tier-3's twin is the same three lines against `arena.ch`, in
+    /// `native::run::propagate` — one rule, two stores, exactly like `dyn_heap`.
+    pub(crate) fn mark_heap_dirty(&mut self, net: u32, writer: u32) {
+        let i = net as usize;
+        if !self.dirty_flag[i] {
+            self.dirty_flag[i] = true;
+            self.dirty.push(net);
+        }
+        self.last_blocking_writer[i] = writer;
+    }
+
     /// GLITCH: OR this write's bit0 transition (`old_b0 → current bit0`) into the
     /// net's intra-slot edge accumulator. Called AFTER `note_change` (so the
     /// first-dirty reset has already run), only for `is_edge_target` whole-net /
@@ -879,7 +991,24 @@ impl SimState<'_> {
                 }
             }
         }
-        self.dyn_heap.borrow_mut()[net as usize] = Some(DynObj::DynArray { elems });
+        // HEAP-WAKE: `new[n]` REPLACES the object, so whether it moved is a
+        // comparison against what was there. Paid only when some sensitivity
+        // names this net (`dyn_wake_observable`), which is what keeps an
+        // allocation-heavy design with no combinational reader at zero cost; the
+        // compare is O(n) on an operation that is already O(n). A missing entry
+        // IS the empty array (lazy, like every dyn object), so `new[0]` on a
+        // never-touched handle is correctly NOT a change.
+        let watched = self.dyn_wake_observable(net);
+        let moved = {
+            let mut heap = self.dyn_heap.borrow_mut();
+            let fresh = DynObj::DynArray { elems };
+            let moved = watched && !dyn_slot_eq(heap[net as usize].as_ref(), Some(&fresh));
+            heap[net as usize] = Some(fresh);
+            moved
+        };
+        if moved {
+            self.note_dyn_change(net);
+        }
     }
 
     /// R23: byte-set `s[i] = c` on a `string` net (`$sformatf`-free §6.16.2 element
@@ -920,6 +1049,7 @@ impl SimState<'_> {
             );
             return;
         }
+        let mut moved = false;
         if let Some(DynObj::Str { bytes }) = self
             .dyn_heap
             .borrow_mut()
@@ -927,8 +1057,13 @@ impl SimState<'_> {
             .and_then(|o| o.as_mut())
         {
             if let Some(b) = bytes.get_mut(i as usize) {
+                moved = *b != c;
                 *b = c;
             }
+        }
+        // HEAP-WAKE: an out-of-range index is a no-op above and must stay one here.
+        if moved {
+            self.note_dyn_change(net);
         }
     }
 
@@ -954,8 +1089,20 @@ impl SimState<'_> {
             && c.width.is_none()
         {
             let bytes = piece.to_str_bytes();
-            self.dyn_heap.borrow_mut()[net as usize] = Some(DynObj::Str { bytes });
-            return false; // no net dirty channel (design §4, dyn precedent)
+            // HEAP-WAKE: a missing entry IS "" (lazy, like every dyn object), so
+            // `s = ""` on a never-assigned handle is correctly NOT a change.
+            let moved = {
+                let mut heap = self.dyn_heap.borrow_mut();
+                let fresh = DynObj::Str { bytes };
+                let moved = !dyn_slot_eq(heap[net as usize].as_ref(), Some(&fresh));
+                heap[net as usize] = Some(fresh);
+                moved
+            };
+            if moved {
+                self.note_dyn_change(net);
+            }
+            return false; // no NET dirty channel (the word never moves); the heap
+                          // channel is `note_dyn_change` above
         }
         // N3: a part-select WRITE of a packable-record dyn-ARRAY element
         // (`arr[i].field = v`) — deposit `piece` into the element at `[off +: width]`
@@ -1000,7 +1147,7 @@ impl SimState<'_> {
             let i = raw_word as usize;
             // Scope the `borrow_mut` to the store; the miss-warn runs after it
             // releases (§C6 — never hold a heap guard across `dyn_warn_once_at`).
-            let hit = {
+            let (hit, moved) = {
                 let mut heap = self.dyn_heap.borrow_mut();
                 match heap.get_mut(net as usize).and_then(|o| o.as_mut()) {
                     Some(DynObj::DynArray { elems }) if i < elems.len() => {
@@ -1023,14 +1170,19 @@ impl SimState<'_> {
                                 }
                             }
                         }
+                        // HEAP-WAKE: a deposit that changes no bit is not a change.
+                        let moved = elems[i] != cur;
                         elems[i] = cur;
-                        true
+                        (true, moved)
                     }
-                    _ => false,
+                    _ => (false, false),
                 }
             };
             if !hit {
                 self.dyn_warn_once_at(net, "dyn index out of range or X (write ignored)");
+            }
+            if moved {
+                self.note_dyn_change(net);
             }
             return false;
         }
@@ -1059,7 +1211,8 @@ impl SimState<'_> {
             // `borrow_mut` is scoped to `with_dyn_entry`; the bound-enforcement /
             // warn run AFTER it returns (§C6 — no dyn_heap touch in the guard).
             enum QStep {
-                Done,
+                /// In-range store; the payload is HEAP-WAKE's "did it move".
+                Done(bool),
                 Pushed,
                 Cap,
                 Oob,
@@ -1072,13 +1225,16 @@ impl SimState<'_> {
                 },
                 |obj| {
                     let DynObj::Queue { elems } = obj else {
-                        return QStep::Done; // kind-mismatched entry: unreachable by construction
+                        // kind-mismatched entry: unreachable by construction, and
+                        // nothing was stored, so nothing moved.
+                        return QStep::Done(false);
                     };
                     let len = elems.len();
                     match i.cmp(&len) {
                         std::cmp::Ordering::Less => {
+                            let moved = elems[i] != coerced;
                             elems[i] = coerced;
-                            QStep::Done
+                            QStep::Done(moved)
                         }
                         // The u32::MAX X-sentinel can never land in the Equal arm:
                         // len ≤ the cap, far below the sentinel.
@@ -1092,7 +1248,11 @@ impl SimState<'_> {
                 },
             );
             match step {
-                QStep::Pushed => self.enforce_queue_bound(net), // v6 ③ (no-op when unbounded)
+                QStep::Pushed => {
+                    // HEAP-WAKE: `q[size] = v` grew the queue, always a change.
+                    self.note_dyn_change(net);
+                    self.enforce_queue_bound(net) // v6 ③ (no-op when unbounded)
+                }
                 QStep::Cap => self.dyn_warn_once_at(
                     net,
                     "queue exceeds the element cap (1<<24); write-append dropped",
@@ -1100,28 +1260,40 @@ impl SimState<'_> {
                 QStep::Oob => {
                     self.dyn_warn_once_at(net, "queue index beyond size or X (write ignored)")
                 }
-                QStep::Done => {}
+                QStep::Done(moved) => {
+                    if moved {
+                        self.note_dyn_change(net);
+                    }
+                }
             }
             return false;
         }
-        let hit = {
+        let (hit, moved) = {
             let coerced = self.coerce_dyn_elem(net, piece, w);
             let mut heap = self.dyn_heap.borrow_mut();
             if let Some(DynObj::DynArray { elems }) =
                 heap.get_mut(net as usize).and_then(|o| o.as_mut())
             {
                 if i < elems.len() {
+                    // HEAP-WAKE: a same-value element store is not a change — the
+                    // rule `note_change` applies to a net word, applied to the
+                    // element, so a self-writing `always_comb` converges here the
+                    // way it does there.
+                    let moved = elems[i] != coerced;
                     elems[i] = coerced;
-                    true
+                    (true, moved)
                 } else {
-                    false
+                    (false, false)
                 }
             } else {
-                false
+                (false, false)
             }
         };
         if !hit {
             self.dyn_warn_once_at(net, "dyn index out of range or X (write ignored)");
+        }
+        if moved {
+            self.note_dyn_change(net);
         }
         false
     }
@@ -1153,17 +1325,24 @@ impl SimState<'_> {
             return;
         }
         // A missing entry IS the empty assoc (lazy, like every dyn object).
-        self.with_dyn_entry(
+        let moved = self.with_dyn_entry(
             net,
             || DynObj::Assoc {
                 map: std::collections::BTreeMap::new(),
             },
             |obj| {
-                if let DynObj::Assoc { map } = obj {
-                    map.insert(k, value.clone().resize(w));
-                }
+                let DynObj::Assoc { map } = obj else {
+                    return false;
+                };
+                let v = value.clone().resize(w);
+                // HEAP-WAKE: `insert` hands back the previous binding, so
+                // "created or replaced with a different value" is free here.
+                map.insert(k, v.clone()) != Some(v)
             },
         );
+        if moved {
+            self.note_dyn_change(net);
+        }
     }
 
     /// v6: string-keyed assoc WRITE — the `Offsets::AssocStrKey` lane (the
@@ -1187,17 +1366,22 @@ impl SimState<'_> {
             self.dyn_warn_once_at(net, "assoc exceeds the element cap (1<<24); write dropped");
             return;
         }
-        self.with_dyn_entry(
+        let moved = self.with_dyn_entry(
             net,
             || DynObj::AssocStr {
                 map: std::collections::BTreeMap::new(),
             },
             |obj| {
-                if let DynObj::AssocStr { map } = obj {
-                    map.insert(k.clone(), value.clone().resize(w));
-                }
+                let DynObj::AssocStr { map } = obj else {
+                    return false;
+                };
+                let v = value.clone().resize(w);
+                map.insert(k.clone(), v.clone()) != Some(v)
             },
         );
+        if moved {
+            self.note_dyn_change(net);
+        }
     }
 
     /// v6 ③: bounded-queue post-op rule (iverilog live, IEEE §7.10):
@@ -1222,12 +1406,91 @@ impl SimState<'_> {
             }
         }
         if dropped {
+            // HEAP-WAKE: the tail really left the queue.
+            self.note_dyn_change(net);
             self.dyn_warn_once_at(
                 net,
                 "bounded queue exceeded its bound; tail element(s) dropped",
             );
         }
     }
+}
+
+/// Are two heap slots the SAME CONTENT, as a reader would see them?
+///
+/// A missing entry IS the empty object — "lazy, like every dyn object" is the
+/// rule the read side already implements (`dyn_read` on a `None` slot answers
+/// size 0 / "") — so `None` and an empty `Some` must compare equal or every
+/// first allocation of an empty array would stage a change nobody can observe.
+///
+/// ONE home for the question every [`SimState::note_dyn_change`] site asks
+/// before it stages a mark.
+pub(crate) fn dyn_slot_eq(a: Option<&DynObj>, b: Option<&DynObj>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => x == y,
+        (Some(x), None) | (None, Some(x)) => x.is_empty(),
+        (None, None) => true,
+    }
+}
+
+/// Which nets any process SENSITIVITY names — the early-out of
+/// [`SimState::note_dyn_change`].
+///
+/// A SUPERSET on purpose. The wake this table gates is a ROUTER, not a guard:
+/// over-reporting costs one extra staged mark that the sweep then finds nobody
+/// to wake with, while under-reporting is a silent missed wake — the exact
+/// defect this funnel exists to close. So it takes every net named by any
+/// sensitivity list whatever its `SensKind`, plus every net named by an in-body
+/// `@(…)` wait, rather than trying to decide which of them a heap change could
+/// really fire.
+///
+/// Exhaustive over `WaitCause` so a new variant carrying nets is a compile
+/// error here rather than a net silently dropped from the set.
+///
+/// Built once at construction like [`edge_target_nets`], and for the same
+/// reason: the net ids are compile-time fixed, so one scan yields the complete
+/// set and every mutation afterwards pays a single `Vec<bool>` load.
+pub(crate) fn heap_wake_nets(ir: &sim_ir::SimIr) -> Vec<bool> {
+    let nnets = ir.nets.len();
+    let mut watched = vec![false; nnets];
+    let mark = |net: u32, set: &mut Vec<bool>| {
+        if (net as usize) < nnets {
+            set[net as usize] = true;
+        }
+    };
+    let mark_term = |term: &sim_ir::Terminator, set: &mut Vec<bool>| {
+        let sim_ir::Terminator::Wait { cond, .. } = term else {
+            return;
+        };
+        match cond {
+            sim_ir::WaitCause::Edge { net, .. } => mark(*net, set),
+            sim_ir::WaitCause::Level { nets } => {
+                for &n in nets {
+                    mark(n, set);
+                }
+            }
+            // No net list: `wait(expr)` (its nets are the expression's, and a
+            // heap change cannot move an expression's NET words), a named event,
+            // `wait fork`.
+            sim_ir::WaitCause::Expr { .. }
+            | sim_ir::WaitCause::Named { .. }
+            | sim_ir::WaitCause::Fork => {}
+        }
+    };
+    for p in &ir.processes {
+        for et in &p.sensitivity.edges {
+            mark(et.net, &mut watched);
+        }
+        for blk in &p.body {
+            mark_term(&blk.term, &mut watched);
+        }
+    }
+    // …and the global func/task arena, whose bodies carry waits too — the same
+    // second loop `edge_target_nets` needs, for the same reason.
+    for blk in &ir.blocks {
+        mark_term(&blk.term, &mut watched);
+    }
+    watched
 }
 
 /// Which nets are EDGE targets — statically edge-sensitive `always` processes

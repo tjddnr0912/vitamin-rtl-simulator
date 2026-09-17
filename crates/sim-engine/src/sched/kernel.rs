@@ -447,6 +447,10 @@ impl Kernel for Scheduler<'_, '_> {
                         _ => None,
                     }
                 };
+                // HEAP-WAKE: `Some` means an element really left the queue.
+                if popped_opt.is_some() {
+                    self.st.note_dyn_change(n);
+                }
                 match popped_opt {
                     Some(v) => v,
                     _ => {

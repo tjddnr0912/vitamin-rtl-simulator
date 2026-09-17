@@ -1670,7 +1670,11 @@ impl<'a> SimState<'a> {
                     } => {
                         if let Some(&a0) = args.first() {
                             if let sim_ir::Expr::Signal { net, .. } = &self.ir.exprs[a0 as usize] {
-                                self.dyn_heap.borrow_mut()[*net as usize].take();
+                                let prev = self.dyn_heap.borrow_mut()[*net as usize].take();
+                                // HEAP-WAKE: a missing entry IS the empty object.
+                                if prev.is_some_and(|o| !o.is_empty()) {
+                                    self.note_dyn_change(*net);
+                                }
                             }
                         }
                     }

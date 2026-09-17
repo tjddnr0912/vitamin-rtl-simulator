@@ -65,6 +65,8 @@ impl<'a> SimState<'a> {
             latent_assigns: std::collections::BTreeMap::new(),
             dyn_heap: std::cell::RefCell::new((0..nnets).map(|_| None).collect()),
             dyn_warned: std::cell::RefCell::new(std::collections::BTreeSet::new()),
+            dyn_dirty: std::cell::RefCell::new(Vec::new()),
+            heap_wake_net: crate::state::heap_wake_nets(ir),
             dyn_is_handle: ir
                 .nets
                 .iter()

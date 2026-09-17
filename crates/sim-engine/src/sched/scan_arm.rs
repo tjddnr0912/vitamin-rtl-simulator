@@ -703,6 +703,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             max_body_steps,
             time_limit,
             scratch_changed: Vec::new(),
+            scratch_dyn_dirty: Vec::new(),
             scratch_edges: Vec::new(),
             scratch_edge_seen: Vec::new(),
             scratch_edge_marked: Vec::new(),
@@ -1084,6 +1085,14 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             let entry = self.st.ir.processes[*pid as usize].entry;
             let _ = self.run_body(*pid, entry);
         }
+        // HEAP-WAKE: stage the initializer bodies' heap marks into `dirty` HERE, so
+        // they land AFTER `settled` and are dropped by the rollback below with every
+        // other initializer write. `int w[] = new[3];` must not hand `always_comb n =
+        // w.size()` an event, for the same reason `reg clk = 0;` must not hand
+        // `always @clk` an edge (IEEE §6.21: a declaration initializer runs before any
+        // process starts). Anything staged BEFORE this point belongs to the t0
+        // cont-assign settle, which cannot mutate the heap, and is dropped with them.
+        self.drain_heap_marks();
         // COPY-NET REPAIR — the tier-3 twin is `native::run::arm_t0`, and the
         // whole argument lives in `crate::alias`. A net whose every continuous
         // driver MOVES bits rather than computing them has no state of its own,
