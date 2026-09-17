@@ -272,6 +272,96 @@ impl Elaborator<'_> {
     /// blocks read as one — a false error, which is the one outcome this check must
     /// not produce. Covering them needs the per-instance scope the elaborator builds
     /// later, not this pass.
+    /// Does a process body with NO direct write of `name` reach a WHOLE write of
+    /// it through a call (a callee body, transitively)? The direct walk (`Inert`
+    /// for every call) decides the direct cases; this only adds the call-borne
+    /// ones, so every design without such a call is byte-identical.
+    ///
+    /// Only an UNCONDITIONAL call counts — a task enable at the top level of the
+    /// block (through plain nested `begin … end`), not one under an `if` / `case`
+    /// / loop. That is verilator's MULTIDRIVEN table, measured: two blocks each
+    /// enabling a writing task are flagged, but `always_comb begin if (src > 3)
+    /// tw(src); end` beside `always_comb tw(src);` is not (both oracles run it,
+    /// `ACC=8`), while the DIRECT conditional twin (`if (src > 3) acc = 5;`) IS
+    /// flagged — and vita's direct walk already counts that one.
+    fn proc_writes_whole_via_call(&self, body: &[ast::Stmt], name: &str) -> bool {
+        let ignore = |_: &ast::HierPath, _: &[ast::Expr], _: &str| crate::da::CallEffect::Inert;
+        if !stmt_never_writes_ident(body, name, Some(&ignore)) {
+            return false;
+        }
+        body.iter()
+            .any(|st| self.top_level_call_writes_whole(st, name))
+    }
+
+    fn top_level_call_writes_whole(&self, st: &ast::Stmt, name: &str) -> bool {
+        match st {
+            ast::Stmt::Block { stmts, .. } => stmts
+                .iter()
+                .any(|s| self.top_level_call_writes_whole(s, name)),
+            ast::Stmt::UserTaskCall {
+                name: callee, args, ..
+            } => matches!(
+                self.call_body_writes_whole(callee, args, name, 8),
+                crate::da::CallEffect::Writes
+            ),
+            _ => false,
+        }
+    }
+
+    /// `Writes` iff `callee(args)` PROVABLY writes `name` whole: an `output` /
+    /// `inout` actual (`call_out_actual_writes`), or a resolved single-segment
+    /// callee whose body assigns `name` whole, directly or through a further call
+    /// (depth-bounded). A hierarchical or unresolvable callee, a callee that
+    /// declares a formal / local named `name` (a shadow) and a partial write
+    /// answer `Inert` — Rule B is additive, only proofs count.
+    fn call_body_writes_whole(
+        &self,
+        callee: &ast::HierPath,
+        args: &[ast::Expr],
+        name: &str,
+        depth: u32,
+    ) -> crate::da::CallEffect {
+        use crate::da::CallEffect as E;
+        if self.call_out_actual_writes(callee, args, name) {
+            return E::Writes;
+        }
+        if callee.segments.len() != 1 || depth == 0 {
+            return E::Inert;
+        }
+        let nm = callee.segments[0].name.as_str();
+        let (body, decls, ports): (&ast::Stmt, &[ast::NetVarDecl], &[ast::TfPort]) =
+            if let Some(f) = self.lookup_func(nm) {
+                (&f.body, &f.body_decls, &f.ports)
+            } else if let Some(t) = self.lookup_task(nm) {
+                (&t.body, &t.body_decls, &t.ports)
+            } else {
+                return E::Inert;
+            };
+        if decls
+            .iter()
+            .flat_map(|d| d.names.iter())
+            .any(|n| n.name.name == name)
+            || ports.iter().any(|p| p.name.name == name)
+        {
+            return E::Inert;
+        }
+        if stmt_writes_whole_ident(body, name) {
+            return E::Writes;
+        }
+        let ignore = |_: &ast::HierPath, _: &[ast::Expr], _: &str| crate::da::CallEffect::Inert;
+        if !stmt_never_writes_ident(std::slice::from_ref(body), name, Some(&ignore)) {
+            return E::Inert;
+        }
+        let via = |cn: &ast::HierPath, a: &[ast::Expr], n: &str| {
+            self.call_body_writes_whole(cn, a, n, depth - 1)
+        };
+        if !stmt_never_writes_ident(std::slice::from_ref(body), name, Some(&via)) {
+            E::Writes
+        } else {
+            E::Inert
+        }
+    }
+
     pub(crate) fn check_multidriver_processes(&mut self, body: &[ast::ModuleItem]) {
         // Every module-scope VARIABLE declaration, in declaration order: the name,
         // the decl span, and whether it carries an initializer. A `wire` initializer
@@ -307,10 +397,26 @@ impl Elaborator<'_> {
         // print `f609`, while the measured `always_comb bump(acc)` (`inout`) cell must
         // keep its loud. The diagnostics are emitted in the loop below, which needs
         // `&mut self`, hence the two phases.
+        //
+        // A DRIVER is an actual, not a body write. `call_effect` answers `Unknown` for
+        // a resolvable callee whose BODY writes the net by name (`task tw(input int
+        // v); acc = v + 1;`), and Rule A took that as a second driver: `always_comb
+        // tw(src);` beside `int acc = 0` was E3001 where both oracles run (`ACC=8`,
+        // nested callee `ACC=9`) and verilator's MULTIDRIVEN names the `inout` actual
+        // shape only (§3.b `mdrv-body-write`). So an `Unknown` whose ACTUALS are all
+        // input reads (`call_actuals_only_read`: single-segment, resolved, every
+        // mention of the net at an `input` formal) is a READ here; a hierarchical or
+        // unresolvable callee, and any `output` / `inout` actual, stay conservative.
         let rule_a_fires: std::collections::BTreeSet<String> = {
             let me: &Self = &*self;
-            let out =
-                |cn: &ast::HierPath, args: &[ast::Expr], nm: &str| me.call_effect(cn, args, nm);
+            let out = |cn: &ast::HierPath, args: &[ast::Expr], nm: &str| match me
+                .call_effect(cn, args, nm)
+            {
+                crate::da::CallEffect::Unknown if me.call_actuals_only_read(cn, args, nm) => {
+                    crate::da::CallEffect::Reads
+                }
+                v => v,
+            };
             vars.iter()
                 .filter(|(name, _, has_init)| {
                     *has_init
@@ -326,6 +432,30 @@ impl Elaborator<'_> {
                 })
                 .map(|(name, _, _)| name.clone())
                 .collect()
+        };
+        // Rule B's writers through a CALLEE BODY, computed in the same phase. The
+        // whole-variable walk below sees lvalues only, so two `always_comb` blocks
+        // that each reach `acc` through a task body (`always_comb tw(src);` /
+        // `always_comb tw2(src2);`) were two drivers nobody counted — Rule A's
+        // initializer gate had been the only thing catching that shape, and the
+        // review of §4.5.505 measured it going loud → order-resolved (`22` / `8`
+        // by source order; verilator MULTIDRIVEN, the oracles split). A process
+        // with NO direct write of `name` whose calls PROVABLY write it whole
+        // (`call_body_writes_whole`, transitively, bounded) is a whole writer
+        // here; an unresolvable callee proves nothing and adds nothing.
+        let via_call_writers: std::collections::BTreeSet<(String, usize)> = {
+            let me: &Self = &*self;
+            let mut set = std::collections::BTreeSet::new();
+            for (name, _, _) in &vars {
+                for (pi, p) in procs.iter().enumerate() {
+                    if !declares_local_named(std::slice::from_ref(&*p.body), name)
+                        && me.proc_writes_whole_via_call(std::slice::from_ref(&*p.body), name)
+                    {
+                        set.insert((name.clone(), pi));
+                    }
+                }
+            }
+            set
         };
         let cont_assigns: Vec<&ast::ContinuousAssign> = body
             .iter()
@@ -374,9 +504,32 @@ impl Elaborator<'_> {
 
             // The WHOLE-variable writers of `name`, in body order — see
             // `stmt_writes_whole_ident` for why this walk and not the other one.
+            //
+            // A via-call writer joins only the `always_comb` × `always_comb` pair —
+            // verilator's table, measured: two comb blocks enabling a writing task
+            // are MULTIDRIVEN, while a comb enable beside an `always_ff` direct
+            // write, a comb direct write beside an `initial` enable, and two
+            // `always_latch` enables are not flagged (and the `initial wt();` +
+            // `always_ff` pin in `multidriver_process_pairs.rs` is silent).
+            let comb_writers = procs
+                .iter()
+                .enumerate()
+                .filter(|(pi, p)| {
+                    p.kind == ast::ProcKind::AlwaysComb
+                        && visible(p)
+                        && (stmt_writes_whole_ident(&p.body, &name)
+                            || via_call_writers.contains(&(name.clone(), *pi)))
+                })
+                .count();
             let mut writers: Vec<Writer> = Vec::new();
-            for p in procs.iter().copied().filter(visible) {
-                if stmt_writes_whole_ident(&p.body, &name) {
+            for (pi, p) in procs.iter().enumerate() {
+                if !visible(p) {
+                    continue;
+                }
+                let via = p.kind == ast::ProcKind::AlwaysComb
+                    && comb_writers >= 2
+                    && via_call_writers.contains(&(name.clone(), pi));
+                if stmt_writes_whole_ident(&p.body, &name) || via {
                     writers.push(proc_writer(p.kind, p.span));
                 }
             }

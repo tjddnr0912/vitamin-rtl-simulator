@@ -515,50 +515,171 @@ impl Elaborator<'_> {
     /// Read-set of a lowered process body: every net referenced on a RHS or a
     /// branch condition (LHS write targets are NOT reads). Drives implicit
     /// `@*`/`always_comb` sensitivity. Deterministic ascending net order.
-    pub(crate) fn comb_read_set(&self, body: &[ir::BasicBlock]) -> Vec<u32> {
+    pub(crate) fn comb_read_set(&self, body: &[ir::BasicBlock], with_fn_bodies: bool) -> Vec<u32> {
+        self.comb_read_set_in(self.cur_proc, body, 0, with_fn_bodies)
+    }
+
+    /// [`Self::comb_read_set`] over `body`, whose first block is block `base` of
+    /// process `proc` — the key space of `task_calls_proc`. A FRAME TASK CALL's
+    /// actuals are not statements of the body: the copy-in expressions and the
+    /// copy-out lvalues live in `TaskCallInfo` beside the `Terminator::Call`, so
+    /// `always_comb tw(src);` had no read of `src` in its inferred sensitivity
+    /// and ran once (both oracles re-run it: `A=8` then `B=10` after `src = 9`,
+    /// vita `8 / 8`; an `output` actual's task the same). The in-binds are reads
+    /// and the out-bind INDEXES are reads (the written base is not), exactly as
+    /// the assignment arm treats its rhs and lhs.
+    ///
+    /// `with_fn_bodies` (an `always_comb` / `always_latch`, IEEE §9.2.2.2.1 — NOT
+    /// an `always @*` or an in-body `@(*)`, §9.4.2.2, which both oracles leave
+    /// blind to a function's reads): the reads of every frame FUNCTION the body
+    /// calls, transitively, minus the callee's own frame slots. `always_comb n =
+    /// rds();` with `rds = src * 10` ran once (`10 / 10` for both oracles' `10 /
+    /// 40`). A TASK body is not walked: iverilog and the LRM re-run nothing for
+    /// `always_comb tz();` whose body reads `src` (verilator does).
+    pub(crate) fn comb_read_set_in(
+        &self,
+        proc: u32,
+        body: &[ir::BasicBlock],
+        base: u32,
+        with_fn_bodies: bool,
+    ) -> Vec<u32> {
         let mut reads = std::collections::BTreeSet::new();
-        for bb in body {
-            for &sid in &bb.stmts {
-                match &self.stmts[sid as usize] {
-                    ir::Stmt::BlockingAssign { lhs, rhs }
-                    | ir::Stmt::NonblockingAssign { lhs, rhs, .. } => {
-                        // The LHS dynamic INDEX sub-exprs (`mem[sel] = …`,
-                        // `mask[idx*8 +: 8] = …`) are reads: the block must
-                        // re-fire when the index changes, not only when a RHS
-                        // signal does. The written base net is NOT a read.
-                        self.collect_lval_reads(lhs, &mut reads);
-                        self.collect_expr_reads(*rhs, &mut reads);
+        let mut calls: Vec<u32> = Vec::new();
+        for (bi, bb) in body.iter().enumerate() {
+            self.collect_block_reads(bb, &mut reads, &mut calls);
+            if matches!(bb.term, ir::Terminator::Call { .. }) {
+                if let Some(info) = self.task_calls_proc.get(&(proc, base + bi as u32)) {
+                    for &(_, eid) in &info.in_binds {
+                        self.collect_expr_reads_calls(eid, &mut reads, &mut calls);
                     }
-                    ir::Stmt::SysTask { fmt, args, .. } => {
-                        if let Some(f) = fmt {
-                            self.collect_expr_reads(*f, &mut reads);
-                        }
-                        for &a in args {
-                            self.collect_expr_reads(a, &mut reads);
-                        }
-                    }
-                    ir::Stmt::Disable { .. } => {}
-                    // shape-reserved at format_version 4 (never lowered yet); a
-                    // force RHS / LHS-index would be a read when force lands. The
-                    // `Release` LHS index is symmetric (latent — both loud-rejected).
-                    ir::Stmt::Force { lhs, rhs } => {
-                        self.collect_lval_reads(lhs, &mut reads);
-                        self.collect_expr_reads(*rhs, &mut reads);
-                    }
-                    ir::Stmt::Release { lhs } => {
-                        self.collect_lval_reads(lhs, &mut reads);
+                    for (_, lv) in &info.out_binds {
+                        self.collect_lval_reads(lv, &mut reads);
                     }
                 }
             }
-            if let ir::Terminator::Branch { cond, .. } = &bb.term {
-                self.collect_expr_reads(*cond, &mut reads);
+        }
+        if with_fn_bodies {
+            let mut visited = std::collections::BTreeSet::new();
+            while let Some(fid) = calls.pop() {
+                if !visited.insert(fid) {
+                    continue;
+                }
+                let Some(f) = self.funcs.get(fid as usize) else {
+                    continue;
+                };
+                if f.is_task {
+                    continue;
+                }
+                let lo = self.func_metas.get(fid as usize).map_or(0, |m| m.base_net);
+                let hi = lo.saturating_add(f.locals_len);
+                let mut body_reads = std::collections::BTreeSet::new();
+                let mut bbs = vec![f.entry];
+                let mut seen = std::collections::BTreeSet::new();
+                while let Some(b) = bbs.pop() {
+                    if !seen.insert(b) {
+                        continue;
+                    }
+                    let Some(bb) = self.func_blocks.get(b as usize) else {
+                        continue;
+                    };
+                    self.collect_block_reads(bb, &mut body_reads, &mut calls);
+                    match &bb.term {
+                        ir::Terminator::Goto { target } => bbs.push(*target),
+                        ir::Terminator::Branch {
+                            then_bb, else_bb, ..
+                        } => {
+                            bbs.push(*then_bb);
+                            bbs.push(*else_bb);
+                        }
+                        ir::Terminator::Delay { resume, .. }
+                        | ir::Terminator::Wait { resume, .. } => bbs.push(*resume),
+                        ir::Terminator::Fork {
+                            children,
+                            join,
+                            resume_bb,
+                        } => {
+                            bbs.extend(children.iter().copied());
+                            bbs.push(*join);
+                            bbs.push(*resume_bb);
+                        }
+                        // A nested frame call: its target is a callee entry, walked
+                        // through `calls` if it is a function; continue past it.
+                        ir::Terminator::Call { target, ret_bb } => {
+                            if let Some(nf) = self.funcs.iter().position(|g| g.entry == *target) {
+                                calls.push(nf as u32);
+                            }
+                            bbs.push(*ret_bb);
+                        }
+                        ir::Terminator::Return => {}
+                    }
+                }
+                reads.extend(body_reads.into_iter().filter(|&n| n < lo || n >= hi));
             }
         }
         reads.into_iter().collect()
     }
 
+    /// The reads of ONE basic block (statements and a branch condition), with the
+    /// frame functions it calls appended to `calls`.
+    fn collect_block_reads(
+        &self,
+        bb: &ir::BasicBlock,
+        reads: &mut std::collections::BTreeSet<u32>,
+        calls: &mut Vec<u32>,
+    ) {
+        for &sid in &bb.stmts {
+            match &self.stmts[sid as usize] {
+                ir::Stmt::BlockingAssign { lhs, rhs }
+                | ir::Stmt::NonblockingAssign { lhs, rhs, .. } => {
+                    // The LHS dynamic INDEX sub-exprs (`mem[sel] = …`,
+                    // `mask[idx*8 +: 8] = …`) are reads: the block must
+                    // re-fire when the index changes, not only when a RHS
+                    // signal does. The written base net is NOT a read.
+                    self.collect_lval_reads(lhs, reads);
+                    self.collect_expr_reads_calls(*rhs, reads, calls);
+                }
+                ir::Stmt::SysTask { fmt, args, .. } => {
+                    if let Some(f) = fmt {
+                        self.collect_expr_reads_calls(*f, reads, calls);
+                    }
+                    for &a in args {
+                        self.collect_expr_reads_calls(a, reads, calls);
+                    }
+                }
+                ir::Stmt::Disable { .. } => {}
+                // shape-reserved at format_version 4 (never lowered yet); a
+                // force RHS / LHS-index would be a read when force lands. The
+                // `Release` LHS index is symmetric (latent — both loud-rejected).
+                ir::Stmt::Force { lhs, rhs } => {
+                    self.collect_lval_reads(lhs, reads);
+                    self.collect_expr_reads_calls(*rhs, reads, calls);
+                }
+                ir::Stmt::Release { lhs } => {
+                    self.collect_lval_reads(lhs, reads);
+                }
+            }
+        }
+        if let ir::Terminator::Branch { cond, .. } = &bb.term {
+            self.collect_expr_reads_calls(*cond, reads, calls);
+        }
+    }
+
     /// Recursively collect every `Signal` net read by expression `eid`.
     pub(crate) fn collect_expr_reads(&self, eid: u32, reads: &mut std::collections::BTreeSet<u32>) {
+        let mut calls = Vec::new();
+        self.collect_expr_reads_calls(eid, reads, &mut calls);
+    }
+
+    /// [`Self::collect_expr_reads`] that also records every frame FUNCTION called
+    /// (`Expr::Call`'s `func`) in `calls`, for `comb_read_set_in` to walk the
+    /// callee bodies (IEEE 1800 §9.2.2.2.1: an `always_comb` is sensitive to the
+    /// contents of every function it calls).
+    pub(crate) fn collect_expr_reads_calls(
+        &self,
+        eid: u32,
+        reads: &mut std::collections::BTreeSet<u32>,
+        calls: &mut Vec<u32>,
+    ) {
         match &self.exprs[eid as usize] {
             ir::Expr::Const { .. } => {}
             ir::Expr::Signal { net, word } => {
@@ -568,7 +689,7 @@ impl Elaborator<'_> {
                 // `i*ncols+j`) changes, not only when the memory changes. Symmetric
                 // with the `Select` arm recursing into its offset.
                 if let Some(weid) = word {
-                    self.collect_expr_reads(*weid, reads);
+                    self.collect_expr_reads_calls(*weid, reads, calls);
                 }
             }
             ir::Expr::Select {
@@ -577,36 +698,38 @@ impl Elaborator<'_> {
                 width,
                 ..
             } => {
-                self.collect_expr_reads(*base, reads);
-                self.collect_expr_reads(*offset, reads);
-                self.collect_expr_reads(*width, reads);
+                self.collect_expr_reads_calls(*base, reads, calls);
+                self.collect_expr_reads_calls(*offset, reads, calls);
+                self.collect_expr_reads_calls(*width, reads, calls);
             }
             ir::Expr::Concat { parts } => {
                 for &p in parts {
-                    self.collect_expr_reads(p, reads);
+                    self.collect_expr_reads_calls(p, reads, calls);
                 }
             }
             ir::Expr::Replicate { count, value } => {
-                self.collect_expr_reads(*count, reads);
-                self.collect_expr_reads(*value, reads);
+                self.collect_expr_reads_calls(*count, reads, calls);
+                self.collect_expr_reads_calls(*value, reads, calls);
             }
-            ir::Expr::Unary { operand, .. } => self.collect_expr_reads(*operand, reads),
+            ir::Expr::Unary { operand, .. } => {
+                self.collect_expr_reads_calls(*operand, reads, calls)
+            }
             ir::Expr::Binary { lhs, rhs, .. } => {
-                self.collect_expr_reads(*lhs, reads);
-                self.collect_expr_reads(*rhs, reads);
+                self.collect_expr_reads_calls(*lhs, reads, calls);
+                self.collect_expr_reads_calls(*rhs, reads, calls);
             }
             ir::Expr::Ternary {
                 cond,
                 then_e,
                 else_e,
             } => {
-                self.collect_expr_reads(*cond, reads);
-                self.collect_expr_reads(*then_e, reads);
-                self.collect_expr_reads(*else_e, reads);
+                self.collect_expr_reads_calls(*cond, reads, calls);
+                self.collect_expr_reads_calls(*then_e, reads, calls);
+                self.collect_expr_reads_calls(*else_e, reads, calls);
             }
             ir::Expr::SysFunc { args, .. } => {
                 for &a in args {
-                    self.collect_expr_reads(a, reads);
+                    self.collect_expr_reads_calls(a, reads, calls);
                 }
             }
             // A frame function CALL: its argument expressions are evaluated in the
@@ -615,9 +738,10 @@ impl Elaborator<'_> {
             // only reads reach a framed function through its args (`y = f(a, b)`) never
             // re-fires when the args change (silent stale/X). (`func` is a callee index,
             // not an expression.)
-            ir::Expr::Call { args, .. } => {
+            ir::Expr::Call { func, args } => {
+                calls.push(*func);
                 for &a in args {
-                    self.collect_expr_reads(a, reads);
+                    self.collect_expr_reads_calls(a, reads, calls);
                 }
             }
             // ⓑ-breadth (v17): the with-clause iterator reads the engine scratch,

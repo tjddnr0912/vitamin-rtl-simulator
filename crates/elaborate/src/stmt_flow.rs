@@ -411,7 +411,13 @@ impl Elaborator<'_> {
             // its read-set (a bare self-timed `always` is NOT is_comb_inferred, so
             // its intentionally-empty sensitivity is never touched — clocks safe).
             self.comb_inferred_procs.push(self.cur_proc);
-            let nets = self.comb_read_set(&body);
+            let nets = self.comb_read_set(
+                &body,
+                matches!(
+                    p.kind,
+                    ast::ProcKind::AlwaysComb | ast::ProcKind::AlwaysLatch
+                ),
+            );
             ir::Sensitivity {
                 kind: sensitivity.kind,
                 edges: nets

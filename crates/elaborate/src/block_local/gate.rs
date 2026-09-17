@@ -158,7 +158,7 @@ impl Elaborator<'_> {
     /// R20 §3.2 lifts the INOUT clause above, but only on a PROOF (see
     /// [`Self::inout_copy_in_is_dead`]) — the copy-in still reads, it is just no longer
     /// OBSERVABLE when the callee overwrites the whole formal before looking at it.
-    fn call_out_actual_writes(
+    pub(crate) fn call_out_actual_writes(
         &self,
         callee: &ast::HierPath,
         args: &[ast::Expr],
@@ -357,6 +357,24 @@ impl Elaborator<'_> {
             return container_method_is_pure(&callee.segments[1].name)
                 && args.iter().all(|a| expr_no_ref_deep(a, name));
         }
+        self.call_actuals_only_read(callee, args, name)
+            && self.callee_body_cannot_touch(callee, name, Self::CALL_INERT_DEPTH)
+    }
+
+    /// The ACTUAL half of [`Self::call_only_reads`]: a single-segment callee resolved
+    /// in this module's tables whose every actual mentioning `name` sits at an `input`
+    /// formal (a copy-in is a pure read, IEEE 1800 §13.5.1). Says nothing about the
+    /// callee's BODY — that is the other half, and multidriver Rule A deliberately asks
+    /// only this one: a body that writes the module net by name is not a second DRIVER
+    /// in verilator's MULTIDRIVEN table (`task t(input int v); acc = v + 1;` under an
+    /// `always_comb` beside `int acc = 0` runs in both oracles, `ACC=8`), where an
+    /// `output` / `inout` actual is.
+    pub(crate) fn call_actuals_only_read(
+        &self,
+        callee: &ast::HierPath,
+        args: &[ast::Expr],
+        name: &str,
+    ) -> bool {
         if callee.segments.len() != 1 {
             return false;
         }
@@ -374,7 +392,7 @@ impl Elaborator<'_> {
                 return false;
             }
         }
-        self.callee_body_cannot_touch(callee, name, Self::CALL_INERT_DEPTH)
+        true
     }
 
     /// R16 §3.2: can `callee(args)` be proven to touch `name` at no position?

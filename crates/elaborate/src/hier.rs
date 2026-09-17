@@ -921,7 +921,12 @@ impl Elaborator<'_> {
     pub(crate) fn recompute_comb_sensitivity_after_hier(&mut self) {
         let mut updated: Vec<(u32, Vec<u32>)> = Vec::new();
         for &pid in &self.comb_inferred_procs {
-            let nets = self.comb_read_set(&self.processes[pid as usize].body);
+            let pr = &self.processes[pid as usize];
+            let with_fn = matches!(
+                pr.sensitivity.kind,
+                ir::SensKind::Comb | ir::SensKind::Latch
+            );
+            let nets = self.comb_read_set_in(pid, &pr.body, 0, with_fn);
             updated.push((pid, nets));
         }
         for (pid, nets) in updated {

@@ -834,7 +834,12 @@ impl Elaborator<'_> {
                     self.lower_stmt(b, body);
                 }
                 if star {
-                    let nets = self.comb_read_set(&b.body[resume.raw() as usize..]);
+                    let nets = self.comb_read_set_in(
+                        self.cur_proc,
+                        &b.body[resume.raw() as usize..],
+                        resume.raw(),
+                        false,
+                    );
                     if nets.is_empty() {
                         self.warn("in-body @(*) reads no nets; it can never wake");
                     }
