@@ -27,6 +27,12 @@
 //! pre-slice path verbatim — `constant_delay_control_is_byte_identical` asserts
 //! the whole VCD.
 //!
+//! CONSEQUENCE FOR EVERY GATE THAT ENUMERATES A DESIGN'S EXPRESSIONS: a delayed
+//! continuous assign now has some, where it had a folded tick count. Both walks
+//! in `native::frames::frames_admitted` take them — pinned by
+//! `a_call_in_a_runtime_delay_falls_back_instead_of_panicking` and its control,
+//! without which `assign #(dly(dv)) y = a;` aborted the DEFAULT backend.
+//!
 //! ORACLES. iverilog 13.0 (`iverilog -g2012 -o x.vvp x.sv && vvp -n x.vvp`) and
 //! verilator 5.052 (`verilator --binary --timing -Wno-fatal x.sv`). Every
 //! expected line below is the raw output of BOTH unless its test says
@@ -98,6 +104,28 @@ fn run_in(d: &std::path::Path, src: &str) -> (String, Option<i32>) {
 fn run(src: &str) -> (String, Option<i32>) {
     let d = dir_for("r");
     run_in(&d, src)
+}
+
+/// stdout AND stderr, for the two tests whose subject is a DIAGNOSTIC: the backend
+/// fallback warning is a diagnostic, so it goes to the diagnostic stream. Asserting
+/// its presence — or its absence — against `run`'s stdout would be vacuous either way.
+fn run_with_diags(src: &str) -> (String, Option<i32>) {
+    let d = dir_for("rd");
+    let f = d.join("t.sv");
+    std::fs::write(&f, src).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_vita"))
+        .arg(f.to_str().unwrap())
+        .current_dir(&d)
+        .output()
+        .expect("run vita");
+    (
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+        out.status.code(),
+    )
 }
 
 /// Assert every `want` line appears verbatim, reporting the whole output once.
@@ -748,6 +776,94 @@ endmodule\n");
             "T22 00000000x",
         ],
         "the nine-form runtime-delay grid",
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// The delay is an EXPRESSION now, so every gate that enumerates a design's
+// expressions has to walk it
+// ─────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn a_call_in_a_runtime_delay_falls_back_instead_of_panicking() {
+    // ⭐ `assign #(dly(dv)) y = a;` — a SUBROUTINE CALL inside the delay. The
+    // tier-3 (default `native`) gate refuses a call in a delayed continuous
+    // assign, because `schedule_delayed_cas` evaluates through the bare arena
+    // and `NetArena::eval_call` panics rather than X-poisoning. That row walked
+    // the rhs and the lvalue index expressions only — the delay used to be a
+    // folded tick count, and the comment saying so outlived the fact — so on the
+    // DEFAULT backend this design aborted: `thread 'vita-main' panicked at
+    // native/arena.rs:576`, rc 101, no diagnostic, a message naming an internal
+    // seam. `--obs-dir` too. Now the gate sees it and the run falls back to `vm`.
+    //
+    // BOTH ORACLES (iverilog 13.0, verilator 5.052): `T7 y=1` / `T12 y=1`.
+    // T4 is inside the initial window (`initial_window_is_not_arbitrable`), so
+    // it is not asserted. BOTH SPELLINGS of the callee are pinned: `automatic`
+    // (framed) and the plain STATIC one an inline fold could take — the hole was
+    // the walk, not the routine's storage class.
+    for (what, auto) in [("automatic", "automatic "), ("static", "")] {
+        let (out, code) = run_with_diags(&format!(
+            "`timescale 1ns/1ns\n\
+module t;\n\
+\x20 logic a = 0; int dv = 5; wire y;\n\
+\x20 function {auto}int dly(input int k); dly = k + 1; endfunction\n\
+\x20 assign #(dly(dv)) y = a;\n\
+\x20 initial begin\n\
+\x20   #1 a = 1;\n\
+\x20   #6 $display(\"T7 y=%b\", y);\n\
+\x20   #5 $display(\"T12 y=%b\", y);\n\
+\x20   $finish;\n\
+\x20 end\n\
+endmodule\n"
+        ));
+        want_lines(
+            &out,
+            code,
+            &["T7 y=1", "T12 y=1", "a call in a delayed continuous assign"],
+            &format!("a {what} call in a runtime delay must be loud-and-correct, never a panic"),
+        );
+    }
+}
+
+#[test]
+fn a_runtime_delay_beside_a_frame_call_still_runs_natively() {
+    // The CONTROL for the row above, and for the frame-local-net walk beside it:
+    // without one, "the gate refuses that design" and "the gate refuses every
+    // design with a runtime delay" read the same. Both halves are here — a framed
+    // function the design calls, and a runtime structural delay — but the delay
+    // names a MODULE net (`dv`), the only thing it can name: a delay is lowered
+    // in module scope (`elaborate/ca_delay_rt.rs`), so it cannot reach a frame
+    // window. Walking it must leave this design ADMITTED: no W4030, no panic.
+    //
+    // BOTH ORACLES: `C6 y=1 r=5` / `C7 y=1` / `C10 y=0`.
+    // PRE printed `C7 y=0` — the fall was undelayed, the silent-wrong this file
+    // is about.
+    let (out, code) = run_with_diags(
+        "`timescale 1ns/1ns\n\
+module t;\n\
+\x20 logic a = 0; int dv = 3; wire y; int r;\n\
+\x20 function automatic int f(input int k); f = k + 1; endfunction\n\
+\x20 assign #(dv) y = a;\n\
+\x20 initial begin\n\
+\x20   r = f(4);\n\
+\x20   #1 a = 1;\n\
+\x20   #5 $display(\"C6 y=%b r=%0d\", y, r);\n\
+\x20   a = 0;\n\
+\x20   #1 $display(\"C7 y=%b\", y);\n\
+\x20   #3 $display(\"C10 y=%b\", y);\n\
+\x20   $finish;\n\
+\x20 end\n\
+endmodule\n",
+    );
+    want_lines(
+        &out,
+        code,
+        &["C6 y=1 r=5", "C7 y=1", "C10 y=0"],
+        "a runtime delay over module nets keeps its oracle values beside a frame call",
+    );
+    assert!(
+        !out.contains("W4030"),
+        "the delay names no frame-local net, so tier-3 must still take it; got:\n{out}"
     );
 }
 

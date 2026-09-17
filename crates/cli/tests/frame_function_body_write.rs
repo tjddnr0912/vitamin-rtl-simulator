@@ -18,6 +18,12 @@
 //! refuses by name instead of emitting an `Expr::Call` the synchronous executor would run
 //! with the write dropped.
 //!
+//! There are TWO refusal sites, because the hoist and `emit_frame_call` both key on the
+//! callee's NAME in the CALLING module's set, and a HIERARCHICAL call (`u.fw(3)`) has
+//! neither: it is a placeholder until every instance is elaborated. That one is refused by
+//! `resolve_deferred_hier_call`, off a per-FuncId twin of the same set — see ⑮, whose
+//! designs otherwise reached the frame executor mid-run.
+//!
 //! ORACLES: iverilog 13.0 (`-g2012`) and verilator 5.052 (`--binary --timing`); every value
 //! below was measured in both unless the cell says otherwise. PRE values are from a release
 //! binary built at the parent commit.
@@ -246,6 +252,47 @@ fn an_output_formal_and_a_body_write_together() {
 endmodule
 "#),
         "OUT r=7 o=14 acc2=9"
+    );
+}
+
+/// ⑭ The write is in the `for` STEP, and nowhere else. `stmt_writes_outside_name` walked a
+/// `for`'s `init` and `body` and stopped there — the arm's `..` rest pattern is the one
+/// hole a `_`-free match still leaves, and `step` fell in it, so a function whose only
+/// out-of-frame write is its loop step was not routed and kept the pre-slice refusal.
+/// (`cond` is the fourth child and is an `Expr`; `ast::ExprKind` has no assignment variant,
+/// so it cannot carry a write at all.)
+///
+/// PRE: `error[VITA-E3009] … frame function/task `fstep` body uses an assignment to a net
+/// outside the function …` (rc 1). BOTH ORACLES run it: `FORSTEP r=5 acc2=2`.
+#[test]
+fn a_body_write_in_a_for_step_is_routed_like_one_in_the_body() {
+    assert_eq!(
+        run(r#"module t;
+  int acc2 = 0; int r;
+  function automatic int fstep(input int v);
+    int i;
+    for (i = 0; i < 2; acc2 = acc2 + 1) i = i + 1;
+    return v;
+  endfunction
+  initial begin #1; r = fstep(5); $display("FORSTEP r=%0d acc2=%0d", r, acc2); $finish; end
+endmodule
+"#),
+        "FORSTEP r=5 acc2=2"
+    );
+    // The control twin: the SAME loop with the write in the body instead of the step was
+    // routed before this fix, so a green cell above means the step arm and not the walk.
+    assert_eq!(
+        run(r#"module t;
+  int acc2 = 0; int r;
+  function automatic int fbody(input int v);
+    int i;
+    for (i = 0; i < 2; i = i + 1) acc2 = acc2 + 1;
+    return v;
+  endfunction
+  initial begin #1; r = fbody(5); $display("FORBODY r=%0d acc2=%0d", r, acc2); $finish; end
+endmodule
+"#),
+        "FORBODY r=5 acc2=2"
     );
 }
 
@@ -509,5 +556,128 @@ endmodule
     assert!(
         e.contains("undeclared net/variable `$class$C$m.acc2`"),
         "{e}"
+    );
+}
+
+/// ⑮ A HIERARCHICAL call to a body-writing function — `u.fw(3)` — is refused at ELABORATE
+/// time, where its pre-slice refusal was.
+///
+/// The route needs the call emitted as a `Terminator::Call` before the expression that
+/// reads it, and `hoist_inout_calls` builds that statement while the CALLING module is
+/// lowered, from `inout_call_target`, which is single-segment. A hierarchical call is still
+/// an unresolved placeholder then, so it was neither hoisted nor refused: `emit_frame_call`
+/// asks `body_write_func_names`, which holds the CALLEE's module's names, and the callee is
+/// in another module's. Measured, with the refusal removed: the un-hoisted call reached the
+/// synchronous frame executor mid-run — `fatal[VITA-F4004] … tried to write `t.u.acc2``
+/// after partial output in a release build, and a `debug_assert` abort (rc 101, no
+/// `errors=` line) in a debug one, which is the build the suite runs. `resolve_deferred_
+/// hier_call` is the first point the callee is known, so the refusal is there, keyed on a
+/// per-FuncId twin of the per-module name set.
+///
+/// RESIDUE, not a fix: BOTH ORACLES RUN ALL THREE DESIGNS — iverilog 13.0 and verilator
+/// 5.052 print `HIER r=3 acc2=5`, `HIERPS r=6 accp=00000005`, and
+/// `BEFORE u.x=0` / `STILL RUNNING at 5` / `AFTER u.x=5 r=3`. vita is honest-loud, and the
+/// two spellings its message advertises are asserted below to actually perform the write.
+///
+/// PRE: `error[VITA-E3009] … frame function/task `fw` body uses an assignment to a net
+/// outside the function … [in t.u]` (rc 1) — the same rung, attributed to the callee's
+/// declaration rather than to the call.
+#[test]
+fn a_hierarchical_call_to_a_body_writing_function_is_loud_at_elaborate() {
+    const SUB: &str = r#"module sub;
+  int acc2 = 0;
+  function automatic int fw(input int v); acc2 = v + 2; return v; endfunction
+endmodule
+module t;
+  sub u(); int r;
+  initial begin #1; r = u.fw(3); $display("HIER r=%0d acc2=%0d", r, u.acc2); $finish; end
+endmodule
+"#;
+    let e = loud(SUB);
+    assert!(e.contains("hierarchical call `u.fw(...)`"), "{e}");
+    assert!(e.contains("assigns a module net from its BODY"), "{e}");
+    // NOT the frame-subset sentence, which lists `acc2 = v + 2;` among the forms it calls
+    // supported, and not the `emit_frame_call` wording, whose remaining-cases list has no
+    // row a hierarchical call could be read as.
+    assert!(!e.contains("outside the frame-call subset"), "{e}");
+
+    // The PART-SELECT write, whose pre-slice message was the OTHER wording ("a part-select
+    // / array-element assignment"): one refusal for the family, keyed on the route.
+    let e = loud(
+        r#"module sub;
+  logic [31:0] accp = 0;
+  function automatic int fps(input int v); accp[3:0] = v[3:0]; return v + 1; endfunction
+endmodule
+module t;
+  sub u(); int r;
+  initial begin #1; r = u.fps(5); $display("HIERPS r=%0d accp=%h", r, u.accp); $finish; end
+endmodule
+"#,
+    );
+    assert!(e.contains("hierarchical call `u.fps(...)`"), "{e}");
+
+    // ⭐ ELABORATE time, not run time: the design below prints two lines before it reaches
+    // the call, and a refusal that had moved to the executor would let both of them out
+    // first. Neither may appear.
+    let e = loud(
+        r#"module sub;
+  int x = 0;
+  function automatic int fsub(input int v); x = v + 2; return v; endfunction
+endmodule
+module t;
+  sub u(); int r;
+  initial begin
+    $display("BEFORE u.x=%0d", u.x);
+    #5 $display("STILL RUNNING at 5");
+    r = u.fsub(3);
+    $display("AFTER u.x=%0d r=%0d", u.x, r);
+    $finish;
+  end
+endmodule
+"#,
+    );
+    assert!(e.contains("hierarchical call `u.fsub(...)`"), "{e}");
+    assert!(
+        !e.contains("BEFORE"),
+        "no output may precede the refusal:\n{e}"
+    );
+    assert!(
+        !e.contains("F4004"),
+        "the runtime fatal must be unreachable:\n{e}"
+    );
+}
+
+/// ⑯ …and both spellings that refusal advertises DO perform the write. A message naming a
+/// workaround that is itself blocked is the failure mode this asserts against.
+#[test]
+fn the_hierarchical_refusals_two_workarounds_both_run() {
+    // A `task`, enabled hierarchically: a task body's out-of-frame write routes on its own
+    // (`compute_suspendable_tasks`). BOTH ORACLES: `TASK acc2=5`.
+    assert_eq!(
+        run(r#"module sub;
+  int acc2 = 0;
+  task automatic tw(input int v); acc2 = v + 2; endtask
+endmodule
+module t;
+  sub u();
+  initial begin #1; u.tw(3); $display("TASK acc2=%0d", u.acc2); $finish; end
+endmodule
+"#),
+        "TASK acc2=5"
+    );
+    // The same FUNCTION, called by its bare name from a process in its own module — the
+    // module-local lane this slice opened. BOTH ORACLES: `LOCAL loc=3 acc2=5`.
+    assert_eq!(
+        run(r#"module sub;
+  int acc2 = 0; int loc;
+  function automatic int fw(input int v); acc2 = v + 2; return v; endfunction
+  initial begin #1; loc = fw(3); $display("LOCAL loc=%0d acc2=%0d", loc, acc2); end
+endmodule
+module t;
+  sub u();
+  initial begin #2; $finish; end
+endmodule
+"#),
+        "LOCAL loc=3 acc2=5"
     );
 }

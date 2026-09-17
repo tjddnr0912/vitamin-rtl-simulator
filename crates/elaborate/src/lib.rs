@@ -986,6 +986,15 @@ struct Elaborator<'s> {
     // `emit_frame_call` (to refuse a call the hoist could not turn into a statement).
     // EMPTY for any design without such a function, so every other design is byte-identical.
     body_write_func_names: std::collections::BTreeSet<String>,
+    // §3.b, the per-FuncId twin of `body_write_func_names`, and it has to be a SECOND
+    // record rather than a lookup: the name set is per-MODULE (rebuilt by each
+    // `lower_frame_funcs`, saved/restored in `elaborate_instance`), while a HIERARCHICAL
+    // call `u.fw(3)` is resolved by `resolve_deferred_hier_call` after every instance is
+    // gone from the stack — with only a FuncId in hand and the child module's name set
+    // already restored away. FuncIds are global and never reused, so this one is filled
+    // (in `lower_frame_func_body`, where the name and the id are both in scope) and never
+    // cleared. EMPTY for any design without a body-writing frame function.
+    body_write_fids: std::collections::BTreeSet<u32>,
     // §4.5.179: names of FRAMED functions with an `input` dynamic-array formal (the set
     // §4.5.177 blesses on the direct-rhs `x = f(arr)` path). A call to one BURIED in a
     // larger expression (`$display(f(a))`, `r = f(a)+1`, `if (f(a) > 0)`) is hoisted to a

@@ -160,6 +160,7 @@ impl<'s> Elaborator<'s> {
             tf_decl_scope: String::new(),
             inout_func_names: std::collections::BTreeSet::new(),
             body_write_func_names: std::collections::BTreeSet::new(),
+            body_write_fids: std::collections::BTreeSet::new(),
             dyn_formal_func_names: std::collections::BTreeSet::new(),
             seq_table: BTreeMap::new(),
             prop_table: BTreeMap::new(),

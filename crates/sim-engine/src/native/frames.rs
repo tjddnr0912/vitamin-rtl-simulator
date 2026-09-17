@@ -266,17 +266,29 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
             w.block(blk);
         }
     }
-    // ⚠️ `ContAssign.delay` is NOT an ExprId — unlike `Stmt::NonblockingAssign`'s,
-    // which is. Elaborate FOLDS a continuous assign's delay to a tick count
-    // (`fold_ca_delay`), so the two same-named `Option<u32>` fields live in
-    // different spaces. Walking it as an expression read a random node of the
-    // arena; measured, on `assign #1 y = f(a);` that node was the FUNCTION's
-    // `~x`, and this scan refused the design for naming a frame-local net.
-    // Over-refusal rather than a wrong answer — but the next reader of this
-    // loop gets to know why there is no `delay` line here.
-    for ca in &ir.cont_assigns {
+    // ⚠️ A continuous assign's delay lives in TWO places, and only one of them is
+    // an ExprId. `ContAssign.delay` is NOT: it is a folded tick count (plus, on
+    // S1's runtime lane, a `Some(0)` routing flag), so it shares a type with
+    // `Stmt::NonblockingAssign`'s delay and not its meaning — walking it as an
+    // expression read a random node of the arena (measured, on
+    // `assign #1 y = f(a);` that node was the FUNCTION's `~x`, and this scan
+    // refused the design for naming a frame-local net).
+    //
+    // The OTHER place is `SimOpts::ca_delay_exprs` (S1): a delay whose value is
+    // not an elaboration constant (`int dv = 5; assign #(dv) y = a;`) rides that
+    // sidecar as real ExprIds — rise, fall and an optional turn-off — evaluated
+    // at the scheduling point by `sched/ca_delay.rs`, on tier-3 through the bare
+    // arena. Those ARE expressions and are walked here with the rhs. Today a
+    // delay expression is lowered in MODULE scope (`elaborate/ca_delay_rt.rs`),
+    // so it cannot name a frame-local net; this walk is what keeps that a
+    // measured fact rather than an assumption, exactly as the module-body walk
+    // above does.
+    for (ci, ca) in ir.cont_assigns.iter().enumerate() {
         w.lvalue(&ca.lhs);
         w.expr(ca.rhs);
+        for e in ca_delay_eids(opts, ci) {
+            w.expr(e);
+        }
     }
     for m in opts.func_table.iter() {
         if w.nets
@@ -313,23 +325,51 @@ pub(crate) fn frames_admitted(ir: &SimIr, opts: &SimOpts) -> Result<(), &'static
     // enumeration MISSED is loud in the gate rather than a wrong value in a
     // run; these rows are what keep the two known ones from reaching it.
     let mut c = Walk::new(ir);
-    for ca in &ir.cont_assigns {
-        if ca.delay.is_none() {
+    for (ci, ca) in ir.cont_assigns.iter().enumerate() {
+        let dly = ca_delay_eids(opts, ci);
+        if ca.delay.is_none() && dly.is_empty() {
             continue; // the zero-delay settle evaluates through `k_eval_for_lvalue`
         }
-        // The delay itself is a folded tick count (see above), so only the rhs
-        // and the lvalue's index expressions can carry a call.
+        // The rhs, the lvalue's index expressions — and, on S1's runtime lane,
+        // the DELAY's own expressions: `schedule_delayed_cas` evaluates those
+        // through `mk_eval_ctx_with(arena)` too, so `assign #(dly(dv)) y = a;`
+        // reached `NetArena::eval_call` and panicked (rc 101, no diagnostic)
+        // until this row walked them. The membership test is on the sidecar
+        // rather than on `ca.delay`, so a demoted entry
+        // (`demote_runtime_delay_on_resolved_nets` clears both) cannot leave a
+        // half-refused row behind.
         let idx = ca
             .lhs
             .chunks
             .iter()
             .flat_map(|k| [k.word, k.offset, k.width])
             .flatten();
-        if std::iter::once(ca.rhs).chain(idx).any(|e| c.has_call(e)) {
+        if std::iter::once(ca.rhs)
+            .chain(idx)
+            .chain(dly)
+            .any(|e| c.has_call(e))
+        {
             return Err("a call in a delayed continuous assign: S3b");
         }
     }
     Ok(())
+}
+
+/// The ExprIds of cont-assign `ci`'s RUNTIME structural delay — rise, fall and
+/// the optional turn-off — or empty when its delay is a folded constant.
+///
+/// One spelling, because the two loops in `frames_admitted` must walk the same
+/// set: the frame-local-net scan and the call refusal answer different questions
+/// about the SAME expressions, and a row present in one and missing from the
+/// other is exactly the shape that put a call in front of `NetArena::eval_call`.
+fn ca_delay_eids(opts: &SimOpts, ci: usize) -> Vec<u32> {
+    match opts.ca_delay_exprs.get(&(ci as u32)) {
+        Some(&(rise, fall, toff, _mult, _pmult)) => [Some(rise), Some(fall), toff]
+            .into_iter()
+            .flatten()
+            .collect(),
+        None => Vec::new(),
+    }
 }
 
 /// The precondition for a DRIVEN frame body (A3-ii-a) — the one the tier-3 walk

@@ -417,6 +417,17 @@ impl Elaborator<'_> {
         // says the case is a vita bug.
         let allow_outside_write = self.body_write_func_names.contains(name)
             && self.frame_outside_writes_are_user_nets(entry_bb, m.base_net, m.locals_len);
+        // §3.b: …and record the same answer by FuncId, for the one consumer that cannot
+        // have the name — `resolve_deferred_hier_call` runs after every instance is off
+        // the stack, so `u.fw(3)` arrives with a FuncId and a restored (empty) name set.
+        // Keyed on the ROUTED answer (name ∧ veto), not on the name alone: a vetoed
+        // function is refused by the `validate_frame_body` call below with
+        // `classify_frame_body`'s own wording, which says the case is a vita bug, and a
+        // second diagnostic naming the hierarchical call would send its reader to the
+        // wrong construct.
+        if allow_outside_write {
+            self.body_write_fids.insert(fid);
+        }
         self.validate_frame_body(
             name,
             entry_bb,

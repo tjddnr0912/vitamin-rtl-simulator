@@ -226,7 +226,11 @@ impl Elaborator<'_> {
                  works in any position evaluated ONCE per statement, but not here. The \
                  remaining cases are: a CONTINUOUSLY re-evaluated expression (`assign`, \
                  `force`, a `wait` condition) — the write cannot re-fire on every change; an \
-                 intra-assignment delay (`x = #1 {fname}(...)`); {also_scoped}and any \
+                 intra-assignment delay (`x = #1 {fname}(...)`); {also_scoped}a \
+                 HIERARCHICAL call (`u.{fname}(...)`), which is not resolved to its callee \
+                 until every instance is elaborated, long after the statement that would \
+                 have carried the write — it is refused where it resolves, with its own \
+                 message; and any \
                  position inside another FUNCTION body lowered as a call frame (a \
                  function is entered from the expression that calls it, so it has no call \
                  statement of its own to carry the write) — the same call in a `task` body, \
@@ -267,8 +271,20 @@ pub(crate) fn stmt_writes_outside_name(s: &ast::Stmt, own: &BTreeSet<String>) ->
                 stmt_writes_outside_name(body, own)
             }
         }),
-        For { body, init, .. } => {
-            stmt_writes_outside_name(init, own) || stmt_writes_outside_name(body, own)
+        // A `for` holds FOUR children and three of them are statements: `init`, `step`
+        // and `body`. `step` runs once per iteration and is an ordinary blocking assign
+        // (`for (i = 0; i < 2; acc2 = acc2 + 1)`), so a body write that occurs ONLY there
+        // is the same write as one in the body — it was censused out of this arm by a
+        // `..` rest pattern, which is the one hole a `_`-free match still leaves. The
+        // fourth child, `cond`, is an `Expr`: `ast::ExprKind` has no assignment variant
+        // (an increment/decrement is parsed as a `Stmt`), so an expression cannot carry a
+        // blocking assign and there is nothing for this walk to visit there.
+        For {
+            body, init, step, ..
+        } => {
+            stmt_writes_outside_name(init, own)
+                || stmt_writes_outside_name(step, own)
+                || stmt_writes_outside_name(body, own)
         }
         While { body, .. } | Repeat { body, .. } | Forever { body, .. } => {
             stmt_writes_outside_name(body, own)

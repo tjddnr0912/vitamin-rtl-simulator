@@ -283,10 +283,21 @@ pub(crate) fn resolve_wor_into(acc: &mut Value, d: &Value) {
 ///
 /// Ticks are `u64` because the RUNTIME lane (`ca_delay_exprs`) feeds it
 /// `eval::delay_ticks_of`'s output, whose domain is the whole `u64` INCLUDING
-/// the `u64::MAX` never-fires sentinel. The `min` here therefore propagates
-/// "never" only when every changed bit's destination delay is `u64::MAX`, which
-/// is the right rule: a spec that can fire on some transition still fires on
-/// it. The constant lane's `u32` ticks widen losslessly.
+/// the `u64::MAX` never-fires sentinel. That sentinel therefore rides the SAME
+/// fold as an ordinary tick count, and the fold is a **max** over the changed
+/// bits — so "never" propagates as soon as ANY changed bit's destination delay
+/// is `u64::MAX`, not only when all of them are. That follows from the update
+/// being ATOMIC: the net lands once, at the last arrival, and a bit that never
+/// arrives has no last arrival. Measured, `int dn = -1; int df = 5;
+/// assign #(dn, df) y = {8{a}};` on an 8-bit `y`: while `a` is 1 every probe
+/// still reads `xx` — every changed bit goes to 1 and carries the never-fires
+/// `rise` — and the later fall, whose bits all carry `df`, lands normally. The
+/// sentinel is a property of the TRANSITION, not of the assign.
+/// ⚠️ The `min` one line into the body is a different question and keeps its own
+/// rule: `x_delay` is the delay of a bit going to X, which IEEE gives as the
+/// smallest of the three specs — there "never" survives only if all three are.
+/// The constant lane's `u32` ticks widen losslessly and can never be the
+/// sentinel.
 pub(crate) fn transition_delay(
     old: Option<&Value>,
     new: &Value,
