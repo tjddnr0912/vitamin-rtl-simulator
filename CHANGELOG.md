@@ -9,6 +9,23 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — dynamic-storage wakes, case selector width, `always_comb` task calls
+
+- **A write to a dynamic array, queue, associative array or string re-runs the `always_comb` /
+  `always_latch` / `always @*` blocks that read it.** Such blocks ran once at time 0 and kept a stale
+  value: `always_comb n = w.size() + 100;` stayed `100` after `w = new[4]` (both reference tools
+  `104`), a `foreach` sum over a dynamic array stayed 0, `s.len()` stayed at the old length. Every heap
+  mutation now wakes the readers of the handle; no waveform or probe bytes change (handles have
+  neither), and designs without such a reader are byte-identical.
+- **The case selector and every case item are sized together** (IEEE 1800 §12.5). `case (a8 * b8)
+  32'h0000fe01: …` compared the 8-bit product and took the `32'h00000001` item where both reference
+  tools take `fe01`; shifts, unary minus, the signed twins and `casez` / `casex` the same. Operator
+  selectors and items are evaluated at the common width with the collective sign.
+- **A task whose body writes a module variable is not a second driver of it** in the two-driver check:
+  `always_comb tw(src);` with `acc = v + 1` in the body beside `int acc = 0` was refused; both reference
+  tools run it. An `inout` actual and two `always_comb` writers still are. A frame task call's actuals
+  are now part of the block's inferred sensitivity, so the block re-runs when an actual changes.
+
 ### Fixed — dynamic-array introspection, call leaves, `always_comb` call actuals
 
 - **`$size`, `$high`, `$right`, `$low`, `$left`, `$increment`, `$dimensions` and

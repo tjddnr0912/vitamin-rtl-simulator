@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-7939 tests passing with 15 skipped, artifact `format_version` 31, 70 `MsgCode` diagnostic codes; the
+7962 tests passing with 15 skipped, artifact `format_version` 31, 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
 - G1 = a correct open-source RTL simulator (correct-or-loud) at the level of icarus, verilator,
@@ -26,9 +26,9 @@ canonical table is the fact table in [README.md](../README.md).
 
 | # | track | item |
 |---|---|---|
-| 1 | §2 silent-wrong | An inferred-sensitivity block is not woken by a dynamic-storage MUTATION and fires at time 0 in declaration order (`$size(da)` beside a second trigger prints `100 1003 1003 108` for both oracles' `103 1003 1008 108`); the engine's dyn / string heap writes post no dirty channel. §4.5.500 keeps a handle-ONLY block loud until the wake lands |
-| 2 | §2 silent-wrong | The CASE SELECTOR is a §12.5 region: `case (fa8(a8) * b8)` evaluates at 8 bits and takes the `00000001` item where both oracles take `0000fe01`; the case lowering runs no §11.6.1 context walk |
-| 3 | §3 loud → correct-support | A callee BODY that writes the module net through an `input` formal is a false-loud E3001 beside an initializer (`always_comb t(src);` with `acc = v + 1` in the body; both oracles `ACC=8`); Rule A counts the body write as a second driver |
+| 1 | §2 silent-wrong | An inferred-sensitivity block fires at time 0 in declaration order, not after every `initial` has started (§9.2.2.2.2): `initial acc = 100` beside `always_comb tw(src)` prints `100` for both oracles' `8`; the fix moves VCD bytes wherever a comb value is rewritten at t0 |
+| 2 | §2 silent-wrong | A HIERARCHICAL callee or actual as a leaf of a §11.6.1 region stands the walk down: `u.hf(s8) * q8` is `20` for `00000120`; `has_opaque_leaf` declines on one opaque leaf |
+| 3 | §3 loud → correct-support | A frame FUNCTION whose body assigns a module net is E3009 where both oracles run it (`ACC2=9`); the task twin is supported |
 | 4 | §6 OBS | Give the static `subroutines` rows a declaration site, so the two subroutine objects can be joined |
 | 5 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so a reader infers the boundary from builtin call counts and gets it wrong |
 | 6 | §3 loud → correct-support | ⑤ⓕ residue: the 2-state axis of a `T'(e)` cast and a packed struct member (the sign follows the override since §4.5.483), the enum base (blocked behind a §2 enum-storage row), the union member's parse gate, a multi-dimensional packed type-param default or override, a mixed-caller callee, `m #(8)` / `defparam u.T$w`, the VCD `$scope` spelling, a `genblk<N>` collision (split) |

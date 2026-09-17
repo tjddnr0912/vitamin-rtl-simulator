@@ -13,6 +13,9 @@
 
 
 **§4.5.220–280**
+- `4.5.505` **A callee body write through an `input` formal is not a multidriver Rule A driver; a frame call's actuals and a frame function's body reads are in the inferred sensitivity** (2026-09-17 · §3.b mdrv-body-write, queue row 3 · Rule A asks the ACTUAL half of `call_only_reads` only; `comb_read_set_in` walks `TaskCallInfo` binds and function bodies; Rule B counts an unconditional body write · 4 loud→correct, 6 stale→correct, 3 value→loud on verilator's MULTIDRIVEN shape · residue: `mdrv-hier-actual`, `frame-body-outside-write`)
+- `4.5.504` **The case selector and every case item are one §12.5 region** (2026-09-17 · §2 Inline / frame binds, queue row 2 · operator selector / items re-lowered in the common width through `inline_ctx_ext` with the collective sign; leaves keep their lowering · 11 cells silent→correct on both oracles, 9 controls PRE-identical · no finding)
+- `4.5.503` **A heap mutation of a dynamic array, queue, associative array or string wakes the inferred-sensitivity blocks that read the handle** (2026-09-17 · §2 Delays / events, queue row 1 · `note_dyn_change` funnel at 25 sites, drained per scheduler; declaration-initializer marks roll back at t0; no VCD / probe bytes · 14 cells stale→correct, iverilog disqualified on element-store / queue-method re-fire · residues: the t0 declaration-order fire (new row 1), an in-body `@(*)` over a handle)
 - `4.5.502` **A user-call actual bound to an `input` formal is a read for multidriver Rule A** (2026-09-13 · §3.b mdrv-actual, queue row 3 · Rule A's never-writes walk now threads the block-local gate's `call_effect` resolver under a two-phase borrow · 4 cells loud→correct, `inout`/`output` actuals and an `output` beside an initializer stay E3001 · three rounds, no finding on this slice)
 - `4.5.501` **A user CALL leaf of a §11.6.1 region carries its declared return sign** (2026-09-13 · §2 Inline / frame binds, queue row 2 · `ctx_signed_impl`'s `Call` arm (bare and `pk::f` spellings via `pkg_call_head`) and a context widening `e | 32'sd0` for the non-repeatable frame call · 15 + 4 cells silent→correct on both oracles, x preserved · residues: the case-selector region, the hierarchical callee / actual leaf, the `pk.f()` dot path)
 - `4.5.500` **`$size` and the array-query family of a dynamic array or queue are its runtime geometry** (2026-09-13 · §2 Ranges, queue row 1 · a dyn/queue arm in `try_introspect_fold` (`DynSize`, size−1, 0, −1, 1 + packed) · 18 cells silent→correct on both oracles · a runtime or negative replication count is loud · a refusal of handle-reading inferred-sensitivity blocks was tried and reverted after three BLOCKINGs on that one axis; the handle-mutation wake is filed as the next queue row 1)
@@ -512,6 +515,132 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.505 A callee body write through an `input` formal is not a multidriver Rule A driver; a frame call's actuals and a frame function's body reads are in the inferred sensitivity (2026-09-17, branch it10) ✅
+
+**ROADMAP row**: §3.b `mdrv-body-write`; queue row 3. Third slice of the bundle.
+
+**Row claims re-measured: all hold.** `int acc = 0; task automatic tw(input int v); acc = v + 1;
+endtask always_comb tw(src);` was E3001 ("declaration initializer AND is written by `always_comb`")
+where both oracles run it (`ACC=8`); a nested callee, an `always_ff` twin and a call under `if` the
+same. Verilator's MULTIDRIVEN table names the `inout` actual shape and two unconditional
+`always_comb` writers only. Root as filed: `call_effect`'s body walk answers `Unknown` for a resolvable
+callee whose body writes the net, and Rule A took `Unknown` as a driver.
+
+**Fix.** `call_only_reads` is split into its two halves — `call_actuals_only_read` (every actual that
+mentions the net sits at an `input` formal) and `callee_body_cannot_touch` — and Rule A asks the
+ACTUAL half only: a copy-in is a read (§13.5.1). An `output` / `inout` actual is still a driver; a
+hierarchical (multi-segment) callee stays `Unknown`, i.e. loud, filed as §3.b `mdrv-hier-actual`.
+
+**Accepting the shape exposed two pre-existing stale values, both closed in the same slice.** ① The
+copy-in expressions of a frame TASK call live in `TaskCallInfo` beside `Terminator::Call`, not in the
+body's statements, so `comb_read_set` never saw `src`: the block ran once (`8 / 8` for the oracles'
+`8 / 10`; the initializer-free twin was identical in PRE). The read set now walks the call's in-binds
+and out-bind indexes (a select actual's index too). ② A frame FUNCTION's body reads are part of an
+`always_comb`'s sensitivity (§9.2.2.2.1, "the contents of a function"): `always_comb n = rds();` with
+`rds = src * 10` ran once (`10 / 10` for `10 / 40`). `comb_read_set_in` walks callee bodies —
+functions only, transitively, minus frame slots; NOT for `always @*` (§9.4.2.2) and not a TASK body
+(iverilog and the LRM leave `always_comb tz();` blind to `src`; verilator re-runs it — recorded as a
+split). ③ Rule B counted lvalues only, so two `always_comb` blocks each reaching `acc` through a task
+body resolved by source order (`22` / `8`; verilator MULTIDRIVEN, the oracles split 8 / 14): a body
+write reached through an UNCONDITIONAL call now counts for Rule B, a call under `if` does not (verilator
+does not flag it; both oracles run it, `ACC=8`).
+
+**Census PRE→POST**: 4 cells loud→correct (body write, nested, `always_ff`, conditional); 6 stale cells
+value→correct (task actuals: bare, `output` actual's task, named, default-filled, select + index,
+expression; function body reads: module net, `w.size()`); 3 cells value→loud on verilator's MULTIDRIVEN
+shape (two `always_comb` writers via a body; PRE ran the initializer-free one, `ACC=22`, iverilog 8).
+`inout` actual stays E3001, PRE-identical. Recorded: `always_comb u.ts(src);` (hierarchical callee) is
+E3001 on `src` through the conservative `Unknown` — §3.b `mdrv-hier-actual`. Filed as the next §3.b
+row: a frame FUNCTION whose body assigns a module net is E3009 "outside the frame-call subset" where
+both oracles run it (`ACC2=9`), while the task twin is supported here.
+
+Files: `crates/elaborate/src/{multidriver,ast_query,hier,stmt_main}.rs`,
+`crates/elaborate/src/block_local/gate.rs`. Tests: a new `always_comb_call_body_write.rs` (5).
+format 31 unchanged.
+
+#### 4.5.504 The case selector and every case item are one §12.5 region (2026-09-17, branch it10) ✅
+
+**ROADMAP row**: §2 Inline / frame binds, "the CASE SELECTOR is a §12.5 region"; queue row 2. Second
+slice of the bundle.
+
+**Row claims re-measured: all hold.** `case (a8 * b8) 32'h0000fe01: …` compared the 8-bit product
+`01` and took the `32'h00000001` item where both oracles take `fe01`; `case (s8 * q8) 32'sd288:`
+(all signed) compared `20`; `case (a8 << 4) 32'hff0:` compared `f0`; `case (-n4) 32'hfffffff1:`
+compared `1`; the call selector `fa8(a8) * b8` the same; `casez` / `casex` the same. A size-cast
+selector and a ternary selector were already right. Root as filed: `lower_case` lowered the selector
+and every item SELF-determined and left the sizing to the engine's per-pair `CaseEq`, which widens
+the RESULT of an operator, not its operands.
+
+**Fix.** At the case lowering, the selector and the items are measured as one region: the common
+width is the maximum of their self-determined widths and the sign is collective (§11.8.1). An
+OPERATOR selector or item is re-lowered in the common width through the size-cast / inline-body
+context walk (`inline_ctx_ext`), with the extension forced to the collective sign (`case (s8 + q8)
+9'h1d7:` zero-extends: signed operands, an unsigned item). A leaf, a concat, a real or string
+selector, a fill and an opaque leaf keep their lowering — the region is opened for operator nodes only,
+so a design whose selector and items are all leaves is byte-identical.
+
+**Census PRE→POST**: 11 cells silent→correct on both agreeing oracles (plain / call / stamped product,
+signed twins, shift, arithmetic shift, unary minus, operator item, items narrower than the selector,
+`casez`, `casex`, a case inside an `always_comb` and a function body); 9 controls PRE-identical
+(string and real selectors — verilator + LRM, iverilog aborts on that file —, an all-8-bit set, a
+bitwise operator, a parameter operator, an x operand, a 4-bit product, a power). Review: no finding
+on this slice.
+
+Files: `crates/elaborate/src/stmt_flow.rs` (+ `stmt_main.rs`). Tests: a new
+`case_selector_region.rs` (3). format 31 unchanged.
+
+#### 4.5.503 A heap mutation of a dynamic array, queue, associative array or string wakes the inferred-sensitivity blocks that read the handle (2026-09-17, branch it10) ✅
+
+**ROADMAP row**: §2 Delays / events, "not woken by a dynamic-storage MUTATION"; queue row 1. First
+slice of the bundle. The t0 DECLARATION-ORDER half of the row is a second, scheduler axis and is
+re-filed as queue row 1 (below).
+
+**Row claims re-measured: all hold.** `always_comb n = $size(da) + (t ? 1000 : 100);` printed
+`100 1003 1003 108` for both oracles' `103 1003 1008 108`; a `foreach` sum over `w[]` declared before
+its initial `0 0 0 0` for `6 6 115 0`; a queue `push_back`, a string `s = "abcd"` / `.len()`, an
+element write and `delete()` the same. Root as filed: a handle net IS in the armed sensitivity
+(`Level { nets: [t.w] }`, measured by dumping it), but the wake runs off the dirty sweep whose only
+producer was `SimState::note_change`, and no heap mutation reaches it because a handle net's WORD never
+moves. §4.5.500's static refusal of the block was reverted after three BLOCKINGs; the discriminator is
+dynamic, so the fix is a runtime wake, not a gate.
+
+**Fix.** `SimState::note_dyn_change(net)` is the single funnel: every module-net heap mutation site
+(25 — `new` / resize / `delete` / element store / `push_*` / `pop_*` / `insert` / string assign and
+the string builtins / `output`-`inout` copy-out / `$fread`-family and radix readers) stages
+`(net, author)`, and each scheduler drains it into its own dirty channel (`mark_heap_dirty` for the
+engine, `drain_heap_marks` for tier-3). A frame-local slot never stages (`dyn_wake_observable`);
+a store that moves nothing (deleting an empty handle, copying an equal object) does not stage. The
+declaration initializers' marks are drained into the t0 rollback beside every other initializer write
+(§6.21: `int w[] = new[3];` hands `always_comb n = w.size()` no event, as `reg clk = 0` hands
+`always @clk` no edge). No VCD and no probe bytes: a handle net has neither channel (`$dumpvars` skips
+DynArray/Queue/Assoc/AssocStr/String nets; `--probe` on one is E0001), so every design without a
+handle-reading inferred block is byte-identical.
+
+**Oracle split, recorded not averaged.** For an indexed ELEMENT store on a live array and for a queue
+METHOD on a live queue, verilator re-fires the reader and iverilog does not (`w[0] = 10`: iverilog
+`B=6`, verilator `B=15`; `push_front` / `insert` / `delete(i)` / `pop_front`: iverilog `1 1 1 1`,
+verilator `2 3 2 1`). iverilog is disqualified by self-contradiction: in the same designs it re-fires
+for `new[3]`, `new[4](w)`, `w.delete()` and `q.delete()`, and prints its reason at compile time ("A
+for statement must have a constant initial value to be synthesized in an always_comb process").
+§9.2.2.2 makes `w` a variable the block reads. The pinned value is verilator's; `int a[int]` (iverilog
+cannot elaborate it) and `assign n = w.size();` (iverilog's code generator aborts) are verilator-only.
+
+**Census PRE→POST**: 14 mutation cells stale→correct across the four storage kinds, both backends
+(the backend differential applies the wake twice, engine and tier-3, and the values agree); controls
+PRE-identical — a declaration-initialised array, an element read mixed with a plain net, a block that
+writes the array it reads, the explicit-sensitivity `always_ff` twin, a continuous assign
+(`levelize::ca_deps` refuses the handle, still loud), the other two sensitivity kinds. Review: one
+residue filed to §2 Delays / events — an in-body `@(*)` over a handle (`initial forever begin @(*)
+n = w.size(); end`) stays stale (iverilog only; verilator refuses the shape) because the in-body
+`Level` waiter compares the handle net's WORD.
+
+Files: `crates/sim-engine/src/state/{changes,mod,task_frames,frame_eval,init_diag}.rs`,
+`crates/sim-engine/src/builtins/{dispatch,queues_io,radix_arr}.rs`,
+`crates/sim-engine/src/sched/{kernel,mod,propagate,scan_arm}.rs`,
+`crates/sim-engine/src/native/{kernel,run}.rs`. Tests: a new `dyn_handle_mutation_wakes_comb.rs`
+(16); converted pins in `dyn_array_introspection_is_runtime.rs` (the stale values §4.5.500 recorded
+are the oracle values now). format 31 unchanged.
 
 #### 4.5.502 A user-call actual bound to an `input` formal is a read for multidriver Rule A (2026-09-13, branch it9) ✅
 

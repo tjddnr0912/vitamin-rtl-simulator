@@ -836,7 +836,7 @@ census has produced it, and the probe itself is a claim to check.
 
 ## 7. Testing
 
-The full local gate is `cargo nextest run --workspace --locked`: 7939 tests, 15 skipped. Named gates
+The full local gate is `cargo nextest run --workspace --locked`: 7962 tests, 15 skipped. Named gates
 that must be green in the same commit as the change that moves them are the `sim-ir` schema-hash,
 frozen-shape, no-float and body-reference suites, the artifact header and round-trip gates, the
 diagnostic-code bijection, the parser depth and node-budget guards, the live `iverilog` differential,

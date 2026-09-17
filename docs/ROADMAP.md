@@ -337,12 +337,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Inline / frame binds
 
-- The CASE SELECTOR is a §12.5 region (both oracles agree): `case (fa8(a8) * b8)` evaluates the
-  product at its self-determined 8 bits and takes the `32'h00000001` item where both oracles take
-  `32'h0000fe01`; ternary arms and `==` operands are right. Site = the case lowering does not run the
-  §11.6.1 context walk over the selector and the items (`ctx_signed_impl` / `widen_inline_leaf` reach
-  assignments and size casts only). Fix shape = size the selector and every item to their maximum as
-  one region, at the case lowering.
 - A HIERARCHICAL callee or actual as a region leaf (both oracles agree): `u.hf(s8) * q8` prints `20`
   (self width AND the wrong value) and `fas8(u.hs) * q8` stays `00000020` for `00000120` —
   `has_opaque_leaf` declines the whole walk on one opaque leaf; §4.5.501's `Call` arm declines a
@@ -550,23 +544,20 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Delays / events
 
-- An inferred-sensitivity block is not woken by a dynamic-storage MUTATION, and fires at time 0 in
-  declaration order (both oracles agree): `always_comb n = $size(da) + (t ? 1000 : 100);` prints
-  `N1=100 N2=1003 N3=1003 N4=108` for `103 1003 1008 108` (the block fired before the initial's
-  `new[3]`; `new[8]` did not wake it), `always_comb begin s = 0; foreach (w[i]) s = s + w[i]; end`
-  declared BEFORE its initial prints `0 0 0 0` for `6 6 115 0` and after it `6`. Same for a queue
-  (`push_back`), a string (`s = "abcd"`, `.len()`), an element write, `delete()`. Root = the engine's
-  dyn / string heap writes post no dirty channel (`sim-engine/state/changes.rs`, "no net dirty
-  channel (design §4, dyn precedent)"), so the process sensitivity has nothing to wake on; and the t0
-  fire is not §9.2.2.2.2 ("after all initial and always procedures have been started"). Fix shape =
-  post a dirty on the HANDLE net at every heap mutation site (new / resize / delete / push / pop /
-  insert / element write / string assign) so the existing sensitivity wakes; the t0 order is a second,
-  engine-scheduler axis. A static refusal of the block was tried in §4.5.500 and reverted after three
-  BLOCKINGs: whether the handle changes after the block's fire is dynamic (a declaration-initialised
-  handle is final at t0; a second trigger re-runs the block; a loop index in the read set wakes
-  nothing). First action = census the mutation sites in `changes.rs` and the dyn method executors,
-  and whether a `$size`/`.size()` read of a handle net registers the handle in the process's
-  sensitivity at all.
+- An inferred-sensitivity block fires at time 0 in DECLARATION order, not after every `initial` /
+  `always` has started (IEEE §9.2.2.2.2; both oracles agree): `initial begin acc = 100; … end` beside
+  `always_comb tw(src);` (the task body writes `acc = v + 1`) prints `ACC=100` then `10` for the
+  oracles' `8 / 10` — the block ran first and the initial overwrote it; the same with a direct
+  `always_comb acc = src + 1;`. Handle-reading blocks were the visible half until §4.5.503 (a mutation
+  now wakes them); what remains is a block whose t0 write is OVERWRITTEN by an initial. Root = the t0
+  ready order in `sched/scan_arm.rs` (`SensKind::Initial | Comb | Latch` armed in declaration order).
+  Fix shape = order the t0 first fire of `Comb` / `Latch` after every `Initial` / `Edge` process has
+  run to its first suspension; VCD bytes move for every design where a comb block's t0 value is
+  rewritten by an initial (measure the corpus digests and `examples/*.sv` first).
+- An in-body `@(*)` over a dynamic-storage handle stays stale (iverilog only; verilator refuses the
+  shape): `initial forever begin @(*) n = w.size(); end` prints `0 / 0` for iverilog's `0 / 6` — the
+  in-body `Level` waiter compares the handle net's WORD, which never moves, so §4.5.503's dirty mark
+  cannot fire it. Fix shape = arm the in-body waiter on the dirty mark for a handle net.
 - A runtime variable delay (2-oracle): `assign #(dv) y = a;` with dv=5 gives 5 in both oracles and 0
   in vita — the engine must evaluate at the suspension point. The partial fold of `#(D, dv)` has the
   same root (the rise folds and the fall takes the rise value). Pin =
@@ -783,7 +774,8 @@ behind the §2 correctness queue.
 | neg-bound-part | a negative-bound net PART select: `q[-3 +: 2]` and `q[-1 -: 2]` are exact and only `[msb:lsb]` is blocked. Writes are asymmetric — `x[-3:-2]=…` is silently exact while `x[-1:0]=…` is loud with an "out of order" diagnostic that names the wrong fact | the bound fold is unsigned | `const_bound_signed` | verilator | — |
 | neg-elem-bound | `logic [-3:0] q[$]` gives a W3056 clamp (verilator `q[0][-3]`=1) | the element net takes `elaborate_netvar_decl_inner`'s early-`continue` path and never reaches the declaration side map | make it reach the side map | verilator | — |
 | mdrv-partial | the process-multidriver check (§4.5.472) is silent when either writer is a PARTIAL write (`mem[a]`, `s.x`, `w[1]`) — verilator is silent too; xcelium on that shape is UNMEASURED (0 observations) | `multidriver.rs` `stmt_writes_whole_ident` | re-measure the partial cells on an xcelium run; if it rejects, the shape joins `W3060`, not `E3001` | verilator silent · xcelium unknown | small |
-| mdrv-body-write | a callee BODY that writes the module net by name through an `input` formal is E3001 beside an initializer: `int acc = 0; task automatic t(input int v); acc = v + 1; endtask always_comb t(src);` — both oracles run it (`ACC=8`) | `call_effect`'s body walk answers `Writes` for `acc`, and Rule A counts that as a second driver (§4.5.502 resolved the ACTUAL's direction only) | decide with verilator's MULTIDRIVEN shape table whether a body write through a call is a driver; if not, exclude callee-body writes from Rule A | 2 | small |
+| mdrv-hier-actual | `always_comb u.ts(src);` (a hierarchical callee) beside `int src = 7` is E3001 on `src` — the conservative `Unknown` verdict for a callee whose formals are not visible here (both oracles run, `H=7 2`) | Rule A's resolver answers `Unknown` for a multi-segment callee; §4.5.505 downgrades only a resolved single-segment one | resolve the hierarchical callee's formal directions through the instance's module | 2 | small |
+| frame-body-outside-write | a FRAME function whose body assigns a module net (`function automatic int fw(input int v); acc2 = v + 2; return v;`) is E3009 "body uses an assignment to a net outside the function, which is outside the frame-call subset" where both oracles run it (`ACC2=9`); the task twin is supported | the frame-function classifier's outside-net write gate | lift the gate for a function the way the task lane does (a `&mut` frame body), or route the function to the task lane | 2 | medium |
 | dyn-size-spellings | `$size(c.da)` (class member) and `$size(u.da)` (hierarchical) are loud where verilator prints 3 (iverilog `x` for the class case — disqualified); `$size(arr)` of a dyn-array FORMAL is E3010 (both oracles 4) | `resolve_intro_net` yields a net for a bare Ident only, so §4.5.500's dyn arm is never entered | route the three spellings to the same `DynSize` node | 1–2 | small |
 | dyn-bits-count | `$bits(da)` of a dynamic array folds the ELEMENT width (32 for `int da[]`) outside a replication count; no oracle for the value (iverilog 1, verilator "UNSUPPORTED: $bits for dynamic array"); as a count it is loud | `try_introspect_fold` has no `$bits` dyn arm; §20.6.2 says the size in bits of the whole array | decide by LRM (`size × element bits`) and pin by hand | 0 | tiny |
 | gen-rtn-edges | after §4.5.473: a bare call of a generate-scoped routine from OUTSIDE its block is E3010 (both oracles reject — keep) · a hierarchical `u.g.f(x)` is E3009 (iverilog runs it, `f0 fe`; no `hier_funcs` entry) · a generate-scope routine in a CONSTANT expression (`localparam W = f(3)` in the block) is E3009 (iverilog `04`; `const_func_table` is filled by the module-body prescan only) · `frames_classify.rs:1069` retains callees by BARE name, so a generate-routine → generate-routine recursion edge is missed (loud-safe by that function's doc; unmeasured) · `tf_decl_scope` stays the module prefix for a generate-scoped routine, so `default_binding_matches_decl_scope` compares a default argument against module scope (traced to a conservative reject, untested) · `%m` inside a generate task is a split (iverilog `t.u.g.show` pinned, verilator `t.u.g.g.show`) | `frames_reserve.rs` hier gate · `instance.rs:496-505` const prescan · `frames_classify.rs:1069` · `scope.rs:379` | hier: compose the hier key from the qualified name · const: register generate routines into `const_func_table` per scope · edges/default-binding: measure first | iverilog | small–medium |
@@ -979,9 +971,9 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 an inferred-sensitivity block is not woken by a dynamic-storage MUTATION, and fires at time 0 in declaration order (both oracles agree): `always_comb n = $size(da) + (t ? 1000 : 100);` prints `N1=100 N2=1003 N3=1003 N4=108` for `103 1003 1008 108`; a `foreach` sum over `w[]` declared before its initial prints `0` for `6`; the same for a queue `push_back`, a string `.len()`, an element write and `delete()`. Root = the engine's dyn / string heap writes post no dirty channel (`sim-engine/state/changes.rs`), so the process sensitivity has nothing to wake on, and the t0 fire is declaration order, not §9.2.2.2.2. Fix shape = post a dirty on the HANDLE net at every heap mutation site so the existing sensitivity wakes; the t0 order is a second axis, measured separately. A static refusal was tried in §4.5.500 and reverted after three BLOCKINGs (the discriminator is dynamic: declaration-initialised handles, second triggers, loop indices). First action = census the mutation sites (`changes.rs`, the dyn method executors) and whether a handle read registers the handle net in the process's sensitivity at all · source = §4.5.500's review | §2 Delays / events | ① |
-| 2 | 2 | §2 the CASE SELECTOR is a §12.5 region (both oracles agree): `case (fa8(a8) * b8)` evaluates the product at 8 bits and takes the `32'h00000001` item where both oracles take `32'h0000fe01`; ternary arms and `==` operands are right. Root = the case lowering runs no §11.6.1 context walk over the selector and the items (`ctx_signed_impl` / `widen_inline_leaf` reach assignments and size casts only). Fix shape = size the selector and every item to their maximum width and the region sign as one context at the case lowering, reusing the size-cast machinery. First action = census `case` / `casez` / `casex` / `case inside` with a call, a stamp, a cast and a plain product as the selector, signed and unsigned items, against both oracles · source = §4.5.501's review | §2 Inline / frame binds | ① |
-| 3 | 3 | §3.b `mdrv-body-write`: a callee BODY that writes the module net by name through an `input` formal is E3001 beside an initializer (`int acc = 0; task automatic t(input int v); acc = v + 1; endtask always_comb t(src);` — both oracles run it, `ACC=8`). Root = `call_effect`'s body walk answers `Writes` for `acc` and Rule A counts it as a second driver (§4.5.502 resolved the ACTUAL's direction only). Fix shape = decide with verilator's MULTIDRIVEN shape table whether a body write through a call is a driver at all; if it is not, exclude callee-body writes from Rule A (keep `output` / `inout` actuals). First action = the verilator shape table for a body write through a task / function / nested call, and an `always_ff` twin · source = §4.5.502's review | §3.b mdrv-body-write | ② |
+| 1 | 1 | §2 an inferred-sensitivity block fires at time 0 in DECLARATION order, not after every `initial` / `always` has started (IEEE §9.2.2.2.2; both oracles agree): `initial begin acc = 100; … end` beside `always_comb tw(src);` prints `ACC=100` then `10` for `8 / 10`. Root = the t0 ready order in `sched/scan_arm.rs`. Fix shape = fire `Comb` / `Latch` for the first time after every `Initial` / `Edge` process has run to its first suspension; the VCD moves wherever a comb block's t0 value is rewritten by an initial, so measure the corpus digests and `examples/*.sv` first and decide the golden policy. First action = census the t0 arming (`scan_arm.rs`) and the two schedulers' t0 loops (engine, tier-3) against `initial`-first designs on both oracles · source = §4.5.505's review | §2 Delays / events | ① |
+| 2 | 2 | §2 a HIERARCHICAL callee or actual as a leaf of a §11.6.1 region (both oracles agree): `u.hf(s8) * q8` prints `20` (self width AND the wrong value) and `fas8(u.hs) * q8` stays `00000020` for `00000120`. Root = `has_opaque_leaf` declines the whole walk on one opaque leaf, and `ctx_signed_impl`'s `Call` arm declines a multi-segment path that is not `pk::f`. Fix shape = resolve a hierarchical callee's declared return sign / width through the instance's module (`hier_defer` already resolves the call), and a hierarchical NET leaf's sign through the same route, so the walk no longer declines. First action = census the hier callee / hier actual / hier net leaf in a size cast, an inline body and a case selector on both oracles · source = §4.5.501's review | §2 Inline / frame binds | ① |
+| 3 | 3 | §3.b `frame-body-outside-write`: a FRAME function whose body assigns a module net is E3009 ("outside the frame-call subset") where both oracles run it (`ACC2=9`); the task twin is supported (§4.5.505). Root = the frame-function classifier's outside-net write gate. Fix shape = lift the gate the way the task lane does, or route such a function to the task lane. First action = census which frame-function shapes the gate refuses (outside write, outside NBA, a call to a writing task) against both oracles · source = §4.5.505's grounding | §3.b frame-body-outside-write | ② |
 | 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
 | 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
 | 6 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
