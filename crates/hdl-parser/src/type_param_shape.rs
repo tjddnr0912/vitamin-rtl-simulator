@@ -136,6 +136,53 @@ impl Parser<'_, '_> {
     /// uses to the ARITY bits, and re-word it. Walks `body` for the synthesized
     /// `initial if (T$s != <default>) $fatal(…)` — identified by its `T$s` left
     /// operand, a name the lexer cannot produce for user source.
+    /// `initial if (T$s != <default>) $fatal(1, "…");` — the loud refusal of an
+    /// override that changes the type's SHAPE (signedness / 2-state), which the
+    /// module's declarations cannot follow. A process rather than a generate `if`
+    /// so the user's unnamed generate blocks keep their §27.6 `genblk<N>` numbers.
+    pub(crate) fn type_param_shape_guard(
+        &self,
+        tname: &str,
+        shape_name: &str,
+        default_flags: Expr,
+        span: Span,
+    ) -> ModuleItem {
+        let cond = Expr {
+            kind: ExprKind::Binary {
+                op: BinOp::Ne,
+                lhs: Box::new(Self::ident_expr(shape_name, span)),
+                rhs: Box::new(default_flags),
+            },
+            span,
+        };
+        let msg = Self::shape_guard_msg(tname, SHAPE_AXIS_ALL);
+        let call = Stmt::SysTaskCall {
+            name: Ident {
+                name: "$fatal".to_string(),
+                span,
+            },
+            args: vec![
+                Self::dec_lit(1, span),
+                Expr {
+                    kind: ExprKind::StrLit { raw: msg },
+                    span,
+                },
+            ],
+            span,
+        };
+        ModuleItem::Proc(ProceduralBlock {
+            kind: ProcKind::Initial,
+            sensitivity: None,
+            body: Box::new(Stmt::If {
+                cond,
+                then_s: Box::new(call),
+                else_s: None,
+                span,
+            }),
+            span,
+        })
+    }
+
     pub(crate) fn narrow_shape_guards(&mut self, body: &mut [ModuleItem]) {
         let carriers = std::mem::take(&mut self.shape_carriers);
         let uncarried = std::mem::take(&mut self.shape_uncarried);

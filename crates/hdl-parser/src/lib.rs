@@ -107,6 +107,7 @@ mod module_items;
 mod monomorph;
 mod packed_md;
 mod params;
+mod pkg_type_param;
 mod scope;
 mod soa;
 mod stmt;
@@ -573,6 +574,17 @@ pub struct Parser<'t, 's> {
     /// §4.5.437: the compilation-unit scope's type parameters (`type_params` is
     /// reset to these at every module-like).
     cu_type_params: std::collections::HashMap<String, type_params::TypeParam>,
+    /// §3.b: the type parameters the CURRENT container declared while `in_package`,
+    /// by name — the `endpackage` twin pass's positive record of what this body owns.
+    ///
+    /// It cannot be read back off `type_params`, which every container seeds from
+    /// `cu_type_params`: a compilation-unit `parameter type PT` is in `type_params`
+    /// inside every later package, so a user `parameter int PT$w` there would have
+    /// satisfied a `<stem>$w` + `type_params` pair and registered a `p::PT` twin for
+    /// a type the package never declared (both oracles reject that program; vita
+    /// answered a 3-bit type). Cleared at every container start, so a previous
+    /// package's names cannot reach this one either.
+    pkg_type_param_names: std::collections::BTreeSet<String>,
     /// §3 ⑤ⓕ: the shape-parameter names (`T$s`) of the current module-like whose
     /// group SYNTHESIZED a guard (i.e. an OVERRIDABLE type parameter).
     shape_carriers: std::collections::HashSet<String>,
@@ -806,6 +818,7 @@ impl<'t, 's> Parser<'t, 's> {
             sym_struct_layouts: std::collections::HashMap::new(),
             type_params: std::collections::HashMap::new(),
             cu_type_params: std::collections::HashMap::new(),
+            pkg_type_param_names: std::collections::BTreeSet::new(),
             shape_carriers: std::collections::HashSet::new(),
             shape_uncarried: std::collections::HashMap::new(),
             shape_alias: std::collections::HashMap::new(),

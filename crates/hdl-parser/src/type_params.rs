@@ -67,6 +67,20 @@ pub(crate) struct TypeValue {
     /// width consumer (`T$w`, `$bits(T)`, `T'(e)`) reads the one value it always
     /// read and only the per-dimension SHAPE travels here.
     pub(crate) packed: Vec<Range>,
+    /// §3.b: the single DECLARED packed range of a ONE-dimensional type
+    /// (`logic [8:1]` ⇒ `[8:1]`, a vector typedef's own range, an alias's aliased
+    /// range). `None` for an atom, a range-less kind and every type with two or
+    /// more packed dimensions — those ride [`Self::packed`], which stays the only
+    /// carrier of a dimension LIST.
+    ///
+    /// It exists because `[T$w-1:0]` is a WIDTH, not a range: it answers `$bits`
+    /// but loses the declared LSB (`logic [8:1] v` read `v[1]` as bit 0 and `$low`
+    /// as 0 where both oracles read bit 1 and 1) and it defeats every parse-time
+    /// fold that needs a literal extent (a packed-struct member, a package twin's
+    /// `$bits(pkg::T)`). A NON-overridable type parameter of a CONCRETE type has
+    /// nothing to carry, so its typedef is registered with THIS range instead —
+    /// exactly the dims the `typedef` spelling of the same type would register.
+    pub(crate) range: Option<Range>,
 }
 
 impl TypeValue {
@@ -228,8 +242,20 @@ impl Parser<'_, '_> {
             // The typedef every use of `T` resolves through: `[T$w-1:0]` of the
             // default's kind and signedness — or, for a multi-dimensional type, the
             // carried dimension list itself.
+            //
+            // §3.b: unless the parameter is NON-overridable and its default is a
+            // CONCRETE type (`localparam type`, every package type parameter, a body
+            // `parameter type` under a module that has a header) — then it has
+            // nothing to carry and registers the DECLARED dims, exactly as the
+            // `typedef` spelling of the same type does. An ALIAS of another type
+            // parameter (`shape_expr` is `Some`) keeps the symbolic path: it must
+            // follow the overridable parameter it names.
+            let literal = !overridable && tv.shape_expr.is_none();
             let (td_range, td_packed) =
-                Self::type_param_typedef_dims(&carried_packed, &width_name, span);
+                match self.type_param_literal_range(&tv, literal, &carried_packed, span) {
+                    Some(r) => (Some(r), Vec::new()),
+                    None => Self::type_param_typedef_dims(&carried_packed, &width_name, span),
+                };
             self.typedefs.insert(
                 name.name.clone(),
                 TypeInfo {
@@ -281,6 +307,13 @@ impl Parser<'_, '_> {
                 },
             );
             self.local_decl_names.insert(name.name.clone());
+            // §3.b: the positive record the `endpackage` twin pass reads. Only a
+            // PACKAGE body writes it (a module's type parameters have no scoped
+            // twin), and every container clears it, so the set names exactly the
+            // type parameters of the body being parsed.
+            if self.in_package {
+                self.pkg_type_param_names.insert(name.name.clone());
+            }
             // A continuation `, NAME = <type>` stays in this group; `, parameter …`
             // / `, type …` / a port list ends it (the caller eats that comma).
             if self.peek() == Some(TokenKind::Comma)
@@ -384,53 +417,6 @@ impl Parser<'_, '_> {
             && self.text_at(i) == "type"
     }
 
-    /// `initial if (T$s != <default>) $fatal(1, "…");` — the loud refusal of an
-    /// override that changes the type's SHAPE (signedness / 2-state), which the
-    /// module's declarations cannot follow. A process rather than a generate `if`
-    /// so the user's unnamed generate blocks keep their §27.6 `genblk<N>` numbers.
-    fn type_param_shape_guard(
-        &self,
-        tname: &str,
-        shape_name: &str,
-        default_flags: Expr,
-        span: Span,
-    ) -> ModuleItem {
-        let cond = Expr {
-            kind: ExprKind::Binary {
-                op: BinOp::Ne,
-                lhs: Box::new(Self::ident_expr(shape_name, span)),
-                rhs: Box::new(default_flags),
-            },
-            span,
-        };
-        let msg = Self::shape_guard_msg(tname, SHAPE_AXIS_ALL);
-        let call = Stmt::SysTaskCall {
-            name: Ident {
-                name: "$fatal".to_string(),
-                span,
-            },
-            args: vec![
-                Self::dec_lit(1, span),
-                Expr {
-                    kind: ExprKind::StrLit { raw: msg },
-                    span,
-                },
-            ],
-            span,
-        };
-        ModuleItem::Proc(ProceduralBlock {
-            kind: ProcKind::Initial,
-            sensitivity: None,
-            body: Box::new(Stmt::If {
-                cond,
-                then_s: Box::new(call),
-                else_s: None,
-                span,
-            }),
-            span,
-        })
-    }
-
     /// Parse a TYPE in type-parameter position (a default, or an instance
     /// override's value) and resolve it to a width expression and shape. `None`
     /// (nothing consumed) when the cursor is not on a type this desugar carries:
@@ -461,6 +447,7 @@ impl Parser<'_, '_> {
             self.bump(); // the kind keyword
             let s0 = self.opt_signed();
             let mut packed = Vec::new();
+            let mut decl_range: Option<Range> = None;
             let (width, signed) = match atom_w {
                 Some(w) => {
                     let s1 = self.opt_signed();
@@ -479,6 +466,11 @@ impl Parser<'_, '_> {
                         return None;
                     }
                     packed = Self::packed_dim_list(range.as_ref(), &extra);
+                    // §3.b: only a ONE-dimensional type reports a declared range;
+                    // `packed` is the carrier the moment there are two or more.
+                    if packed.is_empty() {
+                        decl_range = range.clone();
+                    }
                     let s1 = self.opt_signed();
                     let w = if !packed.is_empty() {
                         match self.packed_dims_width(&packed, span) {
@@ -513,6 +505,7 @@ impl Parser<'_, '_> {
                 unpacked: Vec::new(),
                 shape_expr: None,
                 packed,
+                range: decl_range,
             });
         }
         // A type NAME: another type parameter of this module, or an integral vector
@@ -530,6 +523,13 @@ impl Parser<'_, '_> {
                     .get(&key)
                     .and_then(|i| i.shape_param.clone())
                     .map(|n| Self::ident_expr(&n, span));
+                // §3.b: an alias inherits the aliased parameter's DECLARED range —
+                // the typedef registered for it holds the same dims this one gets.
+                let decl_range = if tp.packed.is_empty() {
+                    self.typedefs.get(&key).and_then(|i| i.range.clone())
+                } else {
+                    None
+                };
                 return Some(TypeValue {
                     width: Self::ident_expr(&tp.width_name, span),
                     signed: tp.signed,
@@ -543,6 +543,7 @@ impl Parser<'_, '_> {
                     // `.T(T)`) inherits the CARRIED dimension names, so `U` follows
                     // an override of `T` instead of freezing its default extents.
                     packed: tp.packed.clone(),
+                    range: decl_range,
                 });
             }
             let info = self.peek_typedef_name()?;
@@ -597,6 +598,11 @@ impl Parser<'_, '_> {
             };
             self.eat_scope_qualifier();
             self.bump(); // the type name
+            let decl_range = if packed.is_empty() {
+                info.range.clone()
+            } else {
+                None
+            };
             return Some(TypeValue {
                 width,
                 signed: info.signed,
@@ -604,6 +610,7 @@ impl Parser<'_, '_> {
                 unpacked: info.unpacked.clone(),
                 shape_expr: info.shape_param.as_ref().map(|n| Self::ident_expr(n, span)),
                 packed,
+                range: decl_range,
             });
         }
         None

@@ -549,7 +549,22 @@ impl Parser<'_, '_> {
                 // §4.5.434: a unit-scope constant. `parameter` here is a localparam
                 // (§6.20.1: not overridable outside a module header).
                 self.type_params = self.cu_type_params.clone();
-                if let Some(first) = self.parse_param_list_item() {
+                // §6.20.1: a unit-scope `parameter` is a localparam — the arm below
+                // rewrites `kind`, but that is AFTER the item is parsed, so every
+                // predicate the parse itself asks (`parse_type_param_group`'s
+                // `overridable`, `param_item_to_module_item`'s `non_overridable`)
+                // saw an overridable `parameter`. `in_package` is the flag that
+                // already carries this clause (lib.rs `has_param_header` doc), so
+                // the unit scope raises it for the parse and restores it after.
+                // Measured: without it a unit-scope `parameter type PT = logic [8:1]`
+                // registered `[PT$w-1:0]` and read `$low` 0 / `$high` 7 where both
+                // oracles read 1 / 8, while the same declaration after a package was
+                // right only because `in_package` used to leak past `endpackage`.
+                let was_in_package = self.in_package;
+                self.in_package = true;
+                let first_item = self.parse_param_list_item();
+                self.in_package = was_in_package;
+                if let Some(first) = first_item {
                     let mut list = vec![first];
                     list.append(&mut self.pending_module_items);
                     for mut it in list {
@@ -564,6 +579,14 @@ impl Parser<'_, '_> {
                         }
                         self.cu_items.push(it);
                     }
+                }
+                // §4.5.434 / §26.3: a unit-scope TYPE parameter declares a bare type
+                // NAME exactly as a unit-scope `typedef` does, so a wildcard import
+                // of a package that declares the same name replaces it — measured on
+                // a unit `typedef` twin in both oracles. Without the record the
+                // import's `or_insert` left the unit's type in place.
+                for n in self.type_params.keys() {
+                    self.cu_type_names.insert(n.clone());
                 }
                 self.cu_type_params = self.type_params.clone();
             } else if self.at_kw(Kw::Function) {
@@ -648,6 +671,9 @@ impl Parser<'_, '_> {
         // Packages never nest, and every module-like resets this, so a body that
         // fails to parse cannot leak `true` into the next module.
         self.in_package = start_kw == Kw::Package;
+        // §3.b: a container owns its own type-parameter names (the `endpackage`
+        // twin pass reads this set), so a previous package's cannot reach it.
+        self.pkg_type_param_names.clear();
         // Variable→struct bindings are module-scoped (type *names* are not).
         self.var_struct.clear();
         self.var_unpacked_struct.clear();
@@ -914,8 +940,13 @@ impl Parser<'_, '_> {
         // typedef is also visible bare in vita's flat model — pre-existing over-leniency).
         if end_kw == Kw::Endpackage {
             let pkg = name.name.clone();
+            // §3.b: the type parameters THIS body declared (`parameter type PT`).
+            // IEEE §26.3 makes them referable `pkg::PT` exactly like a typedef, and
+            // §6.20.1 makes a package one non-overridable — so the twin below is the
+            // typedef twin, unchanged.
+            let tp_stems = self.pkg_type_param_stems(&body);
             // §4.5.434: what this package exports by name (`inject_cu_items` shadow set).
-            let exported: std::collections::BTreeSet<String> = body
+            let mut exported: std::collections::BTreeSet<String> = body
                 .iter()
                 .flat_map(|it| match it {
                     ModuleItem::Typedef(td) => {
@@ -932,6 +963,10 @@ impl Parser<'_, '_> {
                     _ => Vec::new(),
                 })
                 .collect();
+            // The `Param` arm exports the `PT$w` / `PT$s` carriers; `PT` itself is
+            // a NAME no item carries, so it joins the shadow set here — a wildcard
+            // import must shadow a unit item of that name, as a typedef's does.
+            exported.extend(tp_stems.iter().cloned());
             self.pkg_exports.insert(pkg.clone(), exported);
             for it in &body {
                 if let ModuleItem::Typedef(td) = it {
@@ -939,32 +974,14 @@ impl Parser<'_, '_> {
                     if n.contains("::") {
                         continue; // already-scoped (defensive; package typedefs are bare)
                     }
-                    let scoped = format!("{pkg}::{n}");
-                    if let Some(mut ti) = self.typedefs.get(&n).cloned() {
-                        // §4.5.415 (§2 🆕 L ⓟ): the twin's dims name the package's
-                        // OWN constants as `pkg::W` — the bare `W` is undefined
-                        // wherever the twin is used without importing it (`p::t v;`
-                        // was E3009 on its range, and a header `parameter p::t X`
-                        // silently went value-inferred). Same respell as the
-                        // packed-md parameter dims below; a name the package
-                        // imported is left as written.
-                        if let Some(r) = ti.range.take() {
-                            ti.range = self.respell_pkg_dims(&pkg, &[r]).pop();
-                        }
-                        if !ti.packed.is_empty() {
-                            ti.packed = self.respell_pkg_dims(&pkg, &ti.packed);
-                        }
-                        // …and the UNPACKED dims, the third container of the same
-                        // expression type. `typedef logic [7:0] a_t [0:N-1];` left
-                        // `N` bare, so `$bits(pk::a_t)` outside the package was loud
-                        // where both oracles read 32 — while the packed twin
-                        // `$bits(pk::p_t)` folded, because only two of the three
-                        // containers were respelled.
-                        if !ti.unpacked.is_empty() {
-                            ti.unpacked = self.respell_pkg_unpacked(&pkg, &ti.unpacked);
-                        }
-                        self.typedefs.insert(scoped.clone(), ti);
-                    }
+                    // §4.5.415 (§2 🆕 L ⓟ): the twin's dims name the package's OWN
+                    // constants as `pkg::W` — the bare `W` is undefined wherever the
+                    // twin is used without importing it (`p::t v;` was E3009 on its
+                    // range, and a header `parameter p::t X` silently went
+                    // value-inferred). `register_pkg_typedef_twin` owns that respell
+                    // for all three dimension containers, shared with the §3.b
+                    // type-parameter pass below.
+                    let scoped = self.register_pkg_typedef_twin(&pkg, &n);
                     // Was `n`'s struct/enum layout (re)written by THIS package body?
                     // `Struct`/`Enum` nodes own their map unconditionally; an `Alias`
                     // is fresh only if its aggregate entry differs from the pre-body
@@ -1028,6 +1045,16 @@ impl Parser<'_, '_> {
                         }
                     }
                 }
+            }
+            // §3.b: the same twin per type parameter, so `p::PT` names the type
+            // everywhere a `p::t` typedef does (declaration, port, tf formal, cast,
+            // `$bits`, struct member, queue / array element, `typedef p::PT`). No
+            // aggregate sub-map work: a type parameter is always a vector type
+            // (`parse_type_param_value` refuses a struct / enum / union / class
+            // default), and it is registered with the DECLARED dims
+            // (`type_param_literal_range`), so the twin folds outside the package.
+            for n in &tp_stems {
+                self.register_pkg_typedef_twin(&pkg, n);
             }
             // §3 ⑤: capture this package's struct/enum NAME bindings for `import`.
             // The type is re-spelled as the `pkg::t` twin registered just above when
@@ -1106,6 +1133,11 @@ impl Parser<'_, '_> {
         for (_, f) in std::mem::take(&mut self.pending_enum_name_fns) {
             body.push(ModuleItem::Func(f));
         }
+        // §6.20.1: no container leaks `in_package` to what follows it. It used to
+        // stay true from `endpackage` to the next container's start, which made a
+        // unit-scope `parameter type` after a package accidentally right and the
+        // same declaration before one wrong — the predicate was position-dependent.
+        self.in_package = false;
         Some(ModuleDecl {
             is_macromodule,
             name,

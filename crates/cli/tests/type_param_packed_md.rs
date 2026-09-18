@@ -254,27 +254,30 @@ fn a_localparam_type_carries_its_packed_dimensions() {
 }
 
 #[test]
-fn a_package_type_parameter_read_as_pkg_pt_is_still_loud() {
-    // ⚠️ PRE-EXISTING and NOT a packed-dimension limit: a package `parameter type`
-    // registers no `pkg::PT` twin, so `p::PT w;` is a parse cascade. Measured the
-    // same for a ONE-dimensional `parameter type PT = logic [7:0]` (both oracles
-    // run either spelling), so the gap is the package export, not this slice. The
-    // rc is pinned, not the message — the text is a cascade, not a diagnosis.
-    let (out, rc) = run(
+fn a_package_type_parameter_read_as_pkg_pt_carries_its_packed_dimensions() {
+    // §3.b: `p::PT` was a parse cascade here — the `endpackage` twin pass covered
+    // typedef items only, so the type parameter registered no `pkg::PT`. It now
+    // registers the twin with the DECLARED dimensions (a package one is never
+    // overridable), so a multi-dimensional package type parameter selects exactly
+    // as the explicit spelling does. Both oracles run either spelling; the
+    // ONE-dimensional twin below is the control. Value pins, not rc pins — the
+    // former refusal was a cascade, not a diagnosis. Full census:
+    // `crates/cli/tests/pkg_type_param.rs`.
+    prints(
         "package p; parameter type PT = logic [1:0][3:0]; endpackage\n\
          module m (input logic [7:0] a);\n  p::PT w;\n  always_comb w = a;\n  \
          initial #1 $display(\"L9 w1=%h\", w[1]);\nendmodule\n\
          module top; logic [7:0] a = 8'hA5; m u(.a(a)); initial #5 $finish; endmodule\n",
+        "L9 ",
+        &["L9 w1=a"],
     );
-    assert_ne!(rc, Some(0), "{out}");
-    let (out1, rc1) = run("package p; parameter type PT = logic [7:0]; endpackage\n\
+    prints(
+        "package p; parameter type PT = logic [7:0]; endpackage\n\
          module m (input logic [7:0] a);\n  p::PT w;\n  always_comb w = a;\n  \
          initial #1 $display(\"L9 w=%h\", w);\nendmodule\n\
-         module top; logic [7:0] a = 8'hA5; m u(.a(a)); initial #5 $finish; endmodule\n");
-    assert_ne!(
-        rc1,
-        Some(0),
-        "the ONE-dimensional twin is the control\n{out1}"
+         module top; logic [7:0] a = 8'hA5; m u(.a(a)); initial #5 $finish; endmodule\n",
+        "L9 ",
+        &["L9 w=a5"],
     );
 }
 
