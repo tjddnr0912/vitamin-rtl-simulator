@@ -20,8 +20,10 @@ changed for a user of the simulator.
 - **A hierarchical net or function call inside a size cast is sized by its declaration.**
   `16'(u.hs * q8)` printed `0000xx20` where both reference tools print `00000120`; part-selects,
   unpacked elements, `$signed(u.hu)`, a two-level path, an inline function body and a `case`
-  selector the same. A child net whose range names a parameter still declines (x), listed in
-  ROADMAP §2.
+  selector the same. A child net whose range names a PARAMETER (`logic signed [W-1:0] hw`) is
+  sized too: the child's defaults, the instance's `#()` overrides, its localparams, `$clog2`, a
+  two-level path and a param-width port all fold; a typed parameter, a `defparam` design and
+  arithmetic over sized literals only still decline (x), listed in ROADMAP §2.
 - **A function whose body writes a module variable is accepted** where it was refused as "outside
   the frame-call subset": `function automatic int fw(input int v); acc2 = v + 2; return v;` under
   `always_comb r = fw(src);` runs as in both reference tools, including a part-select write, calls

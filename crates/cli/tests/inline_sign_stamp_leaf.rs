@@ -187,10 +187,9 @@ endmodule
 /// reason — the leaf is a placeholder with no width to widen by — and is closed
 /// once the child's DECLARATION can be read (`expr_size_hier`, pinned in
 /// `hier_leaf_region_width.rs`): `$signed(u.x)` on `logic [7:0] x` now prints the
-/// oracles' `0120` / `00000120` where PRE printed `xx20` / `20`. The stand-down
-/// itself is still here, on the leaf whose declaration that walk cannot read —
-/// `logic [W-1:0] px`, whose width is a parameter in another module's scope: both
-/// cells keep their PRE value, the placeholder's unknown print width included.
+/// oracles' `0120` / `00000120` where PRE printed `xx20` / `20`. The parameter-width
+/// twin `logic [W-1:0] px` declined until §4.5.509 read the child's parameter
+/// environment; it now prints the same oracle values (both were `xx20` / `20`).
 #[test]
 fn a_call_leaf_is_widened_and_an_unreachable_leaf_stands_the_region_down() {
     let o = run(
@@ -214,6 +213,6 @@ endmodule
 "#,
     );
     // PRE: `0000f609 xx20 20 xx20 20`. Both oracles:
-    // `0000f609 0120 00000120 0120 00000120` — the last two are the decline.
-    assert_eq!(o, "0000f609 0120 00000120 xx20 20");
+    // `0000f609 0120 00000120 0120 00000120`; the last two cells landed in §4.5.509.
+    assert_eq!(o, "0000f609 0120 00000120 0120 00000120");
 }

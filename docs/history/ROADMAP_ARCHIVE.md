@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 401건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 402건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.509` **A hierarchical leaf whose child declaration names a PARAMETER width is sized through the child's parameter environment** (2026-09-18 · §2 Inline / frame binds, queue row 1 · per-instance `ParamEnv` with a narrow/wide class · 27 cells x→correct · residues: typed params, `#(.W())`, bits-channel overrides, sized-literal-only arithmetic)
 - `4.5.508` **A frame function whose body writes a module net runs on the statement-executor lane** (2026-09-17 · §3.b frame-body-outside-write, queue row 3 · AST route predicate + `inout_func_names` join + classifier accept; un-hoistable sites E3009 by name · 22 loud→correct, 5 pins converted · residues: `frame-body-write-sites`, `frame-body-write-order`)
 - `4.5.507` **A hierarchical net or call leaf inside a §11.6.1 region is sized and signed through the instance's module** (2026-09-17 · §2 Inline / frame binds, queue row 2 · `expr_size_hier.rs` per-module fact table from the AST; literal ranges only · 15 cells x→correct on both oracles · residues: parameter-width child nets (new row 1), the interface member leaf (new row 2))
 - `4.5.506` **A runtime continuous-assign delay is evaluated at the scheduling point** (2026-09-17 · §2 Delays / events, replacing the stale t0-order row 1 · `ca_delay_exprs` sidecar + `Some(0)` routing flag + `effective_ca_delay` on both scheduler paths · format 31 → 32 · 13 designs silent→correct · residues: zero-tick lag, initial window, resolved-net drop, same-step delay change)
@@ -518,6 +519,55 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.509 A hierarchical leaf whose child declaration names a PARAMETER width is sized through the child's parameter environment (2026-09-18, branch it12) ✅
+
+**ROADMAP row**: §2 Inline / frame binds, the §4.5.507 residue; queue row 1. One slice, one root.
+
+**Row claims re-measured: all hold.** `16'(u.hw * sq8)` with `logic signed [W-1:0] hw = -8`,
+`sq8 = 36`, printed `0000xxe0` where both oracles print `000022e0` (W = 8) and `0000xee0` for
+`00003ee0` (W = 12) — the default `W = 8`, the `#(.W(12))` override, positional `#(12)`, a
+`localparam L = W + 4` range, a param-width ANSI port, a body `parameter` with no header list, a
+default read from `pk::K`, an unsigned `[W-1:0]`, and the twins the row asked to measure: an override
+reading the parent's own parameter (`#(.W(P+1))`, `#(.W(W+4))` where the parent also declares `W`),
+`-G P=12` on the top feeding `#(.W(P))`, a two-level path through a middle module passing its own
+parameter down, `parameter integer` / `int`, `$clog2(DEPTH)`, a default reading an earlier parameter
+(`D = A*3`, then `#(.A(2))` → 6 bits, both oracles `000007e0`), an ascending range with `/`, and a
+function RETURN `[W-1:0]` called hierarchically. 13 of 14 census cells wrong at PRE; the literal
+control was right.
+
+**Fix (`expr_size_hier.rs`).** The per-module fact table keeps the DECLARED range (`WidthFact::Lit`
+for §4.5.507's decimal-literal fold, `WidthFact::Range` otherwise), the instance's `#()` overrides and
+the module's parameters in declaration order (`ParamSlot`: header list, then body `parameter` /
+`localparam`; overridable exactly as `param_ports` says). `hier_leaf_scope` builds one environment per
+instance segment: the first segment's overrides fold in the LIVE scope through `const_eval_in_scope`
+— the same call `elaborate_instance` makes for the binder — every deeper override and every default
+through a strict fold in the previous environment (`env_fold`: literal, paren, name, `pkg::const`,
+unary `+ -`, `+ - *`, non-negative `/ %`, `$clog2`; every node in `i32`; a name not in the environment
+declines instead of reaching the live scope, which is another module's). The environment carries
+`(value, wide)`: a value whose self-determined width is at least 32 bits (unsized literal, `integer`
+slot, any arithmetic result); `+ - * / %` over two NARROW operands declines, because the binder's
+self-determined fold wraps there (`parameter P = 3'd6` then `#(.LW(P + P))` binds 4 where the i64 fold
+says 12). A literal-range leaf never reads the environment, so a design whose environment fails keeps
+every §4.5.507 answer; a `defparam` anywhere in the design (AST pre-scan, generate bodies included)
+sets `params = None` for every module; a typed parameter, a fill override, a repeated or unknown
+named override, a positional override beyond the ports and a duplicated parameter name decline.
+
+**Census PRE→POST**: 30 measured cells (census 14, edge 12, composed 16 in the pin), 27 x→correct on
+both oracles, 3 designed declines unchanged (`parameter [3:0] W = 20`, `integer unsigned`,
+`defparam`). Corpus 10/10, phase split unchanged. Review: differential CLEAN over 24 designs outside
+the table (two parameterizations of one child in one middle module, three-level paths, two instances
+of one child in one expression, the `case` and inline-body twins, `(W-10)+5`, `W%5`, `$clog2` of
+0/1/2/3, sized overrides, a typed `pk::K`, a parent localparam and a parent constant-function call as
+the override, `-G` through two levels); soundness found the fold answering 12 where the binder binds
+4 for sized-literal-only arithmetic (oracle split: iverilog 12, verilator 4; the fully determined
+readout hid it because a declared width larger than the run-time net extends the net — it is visible
+only where the leaf's self width sets the region width). Closed in the delta with the `wide` class; 44
+lens designs re-scored, 8 cells moved from a determined value back to PRE's x, all oracle-split, none
+else. Residues (§2 Inline / frame binds): typed parameters, `#(.W())`, bits-channel overrides
+(`~8'hF0` binds 15), `**` / negative `/`, sized-literal-only arithmetic. Tests: `hier_leaf_region_width`
+④'s two `[W-1:0]` cells and `inline_sign_stamp_leaf` ⑤'s two `px` cells converted to the oracle
+value, ⑤ added (16 cells) plus the decline pin (5 cells). 8004 tests.
 
 #### 4.5.508 A frame function whose body writes a module net runs on the statement-executor lane (2026-09-17, branch it11) ✅
 

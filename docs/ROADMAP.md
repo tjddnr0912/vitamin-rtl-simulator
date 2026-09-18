@@ -348,14 +348,21 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Inline / frame binds
 
-- A hierarchical leaf inside a §11.6.1 region still DECLINES (stays x-loud) when the child's
-  declaration is not a literal range (both oracles `00000120` for every cell): a net whose range
-  names a PARAMETER — with no override (`sub` default `W = 8`), with an override (`#(.W(12))`), a
-  `localparam` range, a param-width PORT — a generate-scoped instance (`g.gu.hs`), a read from inside a
-  generate body, an instance-array element (`ua[1].hs`), an upward reference (`t.s8`), a 2-D packed
-  element (`u.pk2 * m8` is `…xxee` for `…11ee`), a `real` child net. §4.5.507's fact table folds
-  decimal-literal ranges only; the fix is a child parameter environment (defaults + overrides +
-  localparams + `defparam` + `-G`) — the largest residue, since real RTL declares `[W-1:0]` ports.
+- A hierarchical leaf inside a §11.6.1 region still DECLINES (stays x-loud) where the child's
+  parameter environment cannot be built or its range does not fold (§4.5.509 folds `[W-1:0]` from
+  the child's defaults, the instance's `#()` overrides and its localparams): a TYPED parameter
+  (`parameter [3:0] W = 20` binds 4, both oracles `0000021c`; `integer unsigned`; a 1-bit
+  `parameter logic`), a `defparam` anywhere in the design (`defparam u.W = 12`, both oracles
+  `00003ee0`; no environment is built for any module), an override with no value (`#(.W())`, the
+  binder keeps the default), an override the binder binds through its BITS channel
+  (`#(.W(~8'hF0))` binds 15), a `**` or negative `/` in a range, arithmetic whose operands are ALL
+  sized literals narrower than 32 bits (`#(.W(4'd9 + 4'd9))`, `parameter P = 3'd6` then `P + P`:
+  iverilog folds 18 / 12, verilator and vita's binder wrap to 2 / 4 — ORACLE-SPLIT, so the fold
+  declines rather than pick a side) — and, as before, a generate-scoped instance (`g.gu.hs`), a
+  read from inside a generate body, an instance-array element (`ua[1].hs`), an upward reference
+  (`t.s8`), a 2-D packed element (`u.pk2 * m8` is `…xxee` for `…11ee`), a `real` child net. The
+  typed-parameter cells are the largest residue; the fix is a width channel on the environment
+  (the slot's declared range folded in the same environment, then `coerce_int_width`).
 - An INTERFACE member as a region leaf is a clean silent-wrong, not an x: `16'(w.hi * sq8)` over
   `interface` member `hi` prints `ffffffe0` where both oracles print `fffffee0` (the leaf is a known
   dotted symbol, so `has_opaque_leaf` says false and the walk sizes it wrong). Own row: the fact
@@ -992,13 +999,12 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 a hierarchical leaf inside a §11.6.1 region whose child declaration names a PARAMETER width declines to x (both oracles `00000120`): `16'(u.hw * sq8)` with `logic signed [W-1:0] hw` and the default `W = 8`, the `#(.W(12))` override, a `localparam` range, a param-width port. Root = §4.5.507's `module_facts` fold decimal-literal ranges only (`ast_kind_range_width`). Fix shape = a child parameter environment (the child's defaults, the instance's overrides folded in the parent's scope, the child's localparams; `defparam` / `-G` decline) feeding the same fact table. First action = census the four spellings on both oracles, then measure which override shapes the parent can fold (`sub #(.W(P+1))`, `#(8)`) · source = §4.5.507's residues | §2 Inline / frame binds | ① |
-| 2 | 2 | §2 an INTERFACE member as a §11.6.1 region leaf is a clean silent-wrong (both oracles agree): `16'(w.hi * sq8)` prints `ffffffe0` for `fffffee0`. Root = the member is a known dotted symbol, so `has_opaque_leaf` answers false and the walk sizes it through the flattened net, not the member's declared type. Fix shape = the interface member's declared sign / width through the same fact table §4.5.507 built for instances (`ifaces` already holds the decls). First action = census interface members in a size cast, an inline body and a case selector, signed and unsigned, on both oracles · source = it11 differential lens D5 | §2 Inline / frame binds | ① |
-| 3 | 3 | §3.b `frame-body-write-sites`, the HIERARCHICAL call: `u.fw(3)` to a function whose body writes a module net is E3009 where both oracles run it (`HIER r=3 acc2=5`). Root = `resolve_deferred_hier_call` patches the FuncId after the statement that would carry the copy-out is lowered, so the hoist never sees a routable callee. Fix shape = hoist a hierarchical call to a body-write function the way `hoist_inout_calls` hoists a local one, resolving the child's FuncId early enough (the child's `body_write_fids` set is known once its frames are reserved). First action = census the hier call in an initial, an `always_comb`, a `$display` arg and a CA on both oracles · source = it11 review F2/D1 | §3.b frame-body-write-sites | ② |
-| 4 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
-| 5 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
-| 6 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 7 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) and `sim-engine/state/frame_eval.rs` (1,810) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 1 | 1 | §2 an INTERFACE member as a §11.6.1 region leaf is a clean silent-wrong (both oracles agree): `16'(w.hi * sq8)` prints `ffffffe0` for `fffffee0`. Root = the member is a known dotted symbol, so `has_opaque_leaf` answers false and the walk sizes it through the flattened net, not the member's declared type. Fix shape = the interface member's declared sign / width through the same fact table §4.5.507 built for instances (`ifaces` already holds the decls). First action = census interface members in a size cast, an inline body and a case selector, signed and unsigned, on both oracles · source = it11 differential lens D5 | §2 Inline / frame binds | ① |
+| 2 | 2 | §3.b `frame-body-write-sites`, the HIERARCHICAL call: `u.fw(3)` to a function whose body writes a module net is E3009 where both oracles run it (`HIER r=3 acc2=5`). Root = `resolve_deferred_hier_call` patches the FuncId after the statement that would carry the copy-out is lowered, so the hoist never sees a routable callee. Fix shape = hoist a hierarchical call to a body-write function the way `hoist_inout_calls` hoists a local one, resolving the child's FuncId early enough (the child's `body_write_fids` set is known once its frames are reserved). First action = census the hier call in an initial, an `always_comb`, a `$display` arg and a CA on both oracles · source = it11 review F2/D1 | §3.b frame-body-write-sites | ② |
+| 3 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
+| 4 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
+| 5 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
+| 6 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) and `sim-engine/state/frame_eval.rs` (1,810) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 

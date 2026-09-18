@@ -15,10 +15,14 @@
 //! into the region, and `lower_size_leaf` sizes the placeholder from that instead
 //! of from 32.
 //!
-//! What still declines, keeping its pre-slice value (④): a range that is not a
-//! literal (`[W-1:0]`, with or without an instantiation override), an instance
-//! reached through a generate scope, a reference made from inside a generate body,
-//! an upward reference, and an instance array.
+//! A PARAMETER width (`[W-1:0]`) is folded in the child's parameter environment
+//! (⑤): the child's defaults, the instance's `#()` overrides folded in the
+//! referring scope, its localparams, one environment per instance segment.
+//!
+//! What still declines, keeping its pre-slice value (④, ⑤): an instance reached
+//! through a generate scope, a reference made from inside a generate body, an
+//! upward reference, an instance array, a typed parameter (`parameter [3:0] W`,
+//! `integer unsigned`), and any design that uses `defparam`.
 //!
 //! ORACLES: iverilog 13.0 (`-g2012`) and verilator 5.052 (`--binary --timing`);
 //! every value below was measured in both, and they agree on every cell. PRE
@@ -180,12 +184,10 @@ endmodule
 /// ④ THE DECLINES. Each of these keeps its PRE value; the oracles print
 /// `00000120` for all five.
 ///
-///  * `u.hw` / `up.hw` — the net's range is `[W-1:0]`. The width of a parameter
-///    in ANOTHER module's scope is not resolvable from this module's declarations
-///    (`ast_kind_range_width` folds decimal literals only), and an instantiation
-///    override does not change that, so both the default-`W` and the
-///    `#(.W(12))` spelling decline. The overridden one prints one fewer `x`
-///    because its run-time net is 12 bits, not 8.
+///  * `u.hw` / `up.hw` — the net's range is `[W-1:0]`. These two DECLINED until
+///    ⑤ (`0000xx20` / `0000x120`); the parameter environment now answers them,
+///    so they print the oracle value and stay here as the controls the other
+///    three declines are measured against.
 ///  * `g.u.hs` — the instance lives in a generate block; a generate-scoped
 ///    instance is not a body instance of the module.
 ///  * the read inside `generate ... begin : h`, where a generate-local scope could
@@ -222,8 +224,105 @@ module t;
   end
 endmodule
 "#);
-    // PRE (identical to POST — that is the claim): `U=0000xx20`,
-    // `D=0000xx20 0000x120 0000xx20 0000xx20`. Both oracles print `00000120`
-    // for every one of them.
-    assert_eq!(o, "U=0000xx20\nD=0000xx20 0000x120 0000xx20 0000xx20");
+    // PRE: `U=0000xx20`, `D=0000xx20 0000x120 0000xx20 0000xx20`. Both oracles
+    // print `00000120` for every one of them; ⑤ moves the first two `D` cells.
+    assert_eq!(o, "U=0000xx20\nD=00000120 00000120 0000xx20 0000xx20");
+}
+
+/// ⑤ A PARAMETER width folds in the CHILD's environment. `sq8 = 36`, every
+/// child net holds `-8`: at 8 bits the mixed region reads `0xf8 * 36 = 0x22e0`,
+/// at 12 bits `0xff8 * 36 = 0x3ee0`, at 6 bits `0x38 * 36 = 0x07e0`, and the
+/// unsigned 12-bit `0xfff * 36 = 0x3fdc`. PRE printed the upper nibbles as `x`
+/// in every cell (`0000xxe0` / `0000xee0` / `0000xfdc`).
+///
+///  A: the default `W = 8` — a body net, a param-width PORT, a `localparam`
+///     range (`L = W + 4`), a function RETURN `[W-1:0]`.
+///  B: `#(.W(12))`, its port, positional `#(12)`, and `#(.W(W+4))` where `W` is
+///     the PARENT's parameter (the override is folded in the referring scope;
+///     the child's own `W` must not shadow it).
+///  C: `parameter integer`, a default that reads an earlier parameter
+///     (`D = A*3`), `$clog2(DEPTH)`, an ascending range with `/`.
+///  D: the chained default under an override of its INPUT (`#(.A(2))` → 6 bits),
+///     an unsigned net, a TWO-LEVEL path (`m.u2.hw`, `mid` passing its own
+///     parameter down), and the overridden function return.
+#[test]
+fn a_parameter_width_folds_in_the_child_environment() {
+    let o = run(
+        r#"module sub #(parameter W = 8) (input logic signed [W-1:0] pw);
+  localparam L = W + 4;
+  logic signed [W-1:0] hw = -8; logic signed [L-1:0] hl = -8;
+  function logic signed [W-1:0] hf(input logic signed [7:0] a); return a; endfunction
+endmodule
+module subi #(parameter integer W = 8, parameter A = 4, parameter D = A*3, parameter DEPTH = 4096) ();
+  logic signed [W-1:0] hw = -8; logic signed [D-1:0] hd = -8; logic signed [$clog2(DEPTH)-1:0] hc = -8;
+  logic signed [0:D/2-1] ha = -8; logic [W-1:0] hu = 12'hfff;
+endmodule
+module mid #(parameter MW = 8) (); sub #(.W(MW)) u2(.pw(8'sd0)); endmodule
+module t;
+  parameter W = 8;
+  logic signed [7:0] v = -8; logic [7:0] sq8 = 8'd36;
+  sub u(.pw(v)); sub #(.W(12)) uo(.pw(v)); sub #(12) up(.pw(v)); sub #(.W(W+4)) us(.pw(v));
+  subi ui(); subi #(.A(2), .W(12)) ua(); mid #(.MW(12)) m();
+  logic [31:0] o[0:15];
+  initial begin
+    #1;
+    o[0] = 16'(u.hw * sq8);  o[1] = 16'(u.pw * sq8);  o[2] = 16'(u.hl * sq8);   o[3] = 16'(u.hf(v) * sq8);
+    o[4] = 16'(uo.hw * sq8); o[5] = 16'(uo.pw * sq8); o[6] = 16'(up.hw * sq8);  o[7] = 16'(us.hw * sq8);
+    o[8] = 16'(ui.hw * sq8); o[9] = 16'(ui.hd * sq8); o[10] = 16'(ui.hc * sq8); o[11] = 16'(ui.ha * sq8);
+    o[12] = 16'(ua.hd * sq8); o[13] = 16'(ua.hu * sq8); o[14] = 16'(m.u2.hw * sq8); o[15] = 16'(uo.hf(v) * sq8);
+    $display("A=%h %h %h %h", o[0], o[1], o[2], o[3]);
+    $display("B=%h %h %h %h", o[4], o[5], o[6], o[7]);
+    $display("C=%h %h %h %h", o[8], o[9], o[10], o[11]);
+    $display("D=%h %h %h %h", o[12], o[13], o[14], o[15]);
+    $finish;
+  end
+endmodule
+"#,
+    );
+    // Both oracles print exactly this. PRE: `A=0000xxe0 0000xxe0 0000xee0 0000xxe0`,
+    // `B=0000xee0 0000xee0 0000xee0 0000xee0`, `C=0000xxe0 0000xee0 0000xee0 0000xxe0`,
+    // `D=0000xxe0 0000xfdc 0000xee0 0000xee0`.
+    assert_eq!(
+        o,
+        "A=000022e0 000022e0 00003ee0 000022e0\n\
+         B=00003ee0 00003ee0 00003ee0 00003ee0\n\
+         C=000022e0 00003ee0 00003ee0 000007e0\n\
+         D=000007e0 00003fdc 00003ee0 00003ee0"
+    );
+}
+
+/// ⑤ THE DECLINES the environment adds, each keeping its PRE value. A TYPED
+/// parameter (`parameter [3:0] W = 20` is 4, so both oracles print `0000021c`
+/// for the 4-bit `0xf * 36`; `integer unsigned`) is a width channel this fold
+/// does not model, so the slot stays unbound; a `defparam` anywhere in the
+/// design rebinds a child parameter outside the `#()` channel, so no
+/// environment is built for any module of that design — the LITERAL-range
+/// sibling `u.hs` in the same design still answers, as it did before.
+#[test]
+fn a_typed_parameter_and_a_defparam_design_keep_their_pre_slice_value() {
+    let o = run(
+        r#"module subt #(parameter [3:0] W = 20) (); logic [W-1:0] hw = 8'hff; endmodule
+module subu #(parameter integer unsigned W = 8) (); logic signed [W-1:0] hw = -8; endmodule
+module t;
+  logic [7:0] sq8 = 8'd36; logic [31:0] o1, o2, o3;
+  subt ut(); subt #(.W(20)) uv(); subu #(.W(12)) uu();
+  initial begin #1; o1 = 16'(ut.hw * sq8); o2 = 16'(uv.hw * sq8); o3 = 16'(uu.hw * sq8);
+    $display("E=%h %h %h", o1, o2, o3); $finish; end
+endmodule
+"#,
+    );
+    // Both oracles: `E=0000021c 0000021c 00003ee0`. PRE = POST.
+    assert_eq!(o, "E=0000xx1c 0000xx1c 0000xee0");
+
+    let o = run(
+        r#"module sub #(parameter W = 8) (); logic signed [W-1:0] hw = -8; logic signed [7:0] hs = -8; endmodule
+module t;
+  logic [7:0] sq8 = 8'd36; logic [31:0] o1, o2;
+  sub u(); defparam u.W = 12;
+  initial begin #1; o1 = 16'(u.hw * sq8); o2 = 16'(u.hs * sq8); $display("F=%h %h", o1, o2); $finish; end
+endmodule
+"#,
+    );
+    // Both oracles: `F=00003ee0 000022e0`. PRE = POST.
+    assert_eq!(o, "F=0000xee0 000022e0");
 }

@@ -14,9 +14,20 @@
 //! once from the AST, and only for the shapes where the answer cannot be anything
 //! else. Everything else declines and the region keeps its pre-slice lowering.
 //!
+//! A PARAMETER width (`[W-1:0]`) is folded in the CHILD's parameter environment:
+//! the child's defaults, the instance's `#()` overrides folded in the referring
+//! scope (the same fold `elaborate_instance` makes), and the child's localparams,
+//! in declaration order — one environment per instance segment of the path. The
+//! fold is a strict i64 fold over the shapes whose 32-bit self-determined value
+//! is the same number (`+ - *`, non-negative `/ %`, `$clog2`, a package
+//! constant); anything else, a typed parameter, a fill override, a `defparam`
+//! anywhere in the design, an unbound name, or a bound outside `0..=i32::MAX`
+//! declines. A LITERAL range never needs the environment, so a design whose
+//! environment cannot be built keeps every answer §4.5.507 gave.
+//!
 //! What is deliberately NOT resolved (each one keeps the pre-slice behaviour):
-//! a range that does not fold to literals (a parameter width, overridden or not),
-//! a name reached through a generate scope, an instance array, an interface, a
+//! a range beyond the strict fold above (a `-G` override reaches only a root and
+//! is read through the live scope), a name reached through a generate scope, an instance array, an interface, a
 //! class member, an upward reference, a non-ANSI port, a name the child also
 //! declares as a block local (v1 flattens those onto the module net of the same
 //! bare name), and any design that uses `bind` (a bind can inject a scope name
@@ -46,25 +57,107 @@ pub(crate) struct HierNet {
 /// declines rather than answering from the declaration this walk happened to see.
 #[derive(Default)]
 pub(crate) struct ModuleFacts {
-    /// instance name → instantiated module name (plain body instances only)
-    insts: BTreeMap<String, String>,
-    /// net name → its declared shape
-    nets: BTreeMap<String, HierNet>,
-    /// function name → (declared return width, declared return sign)
-    funcs: BTreeMap<String, (u32, bool)>,
+    /// instance name → (instantiated module name, its `#()` overrides) — plain
+    /// body instances only
+    insts: BTreeMap<String, (String, Vec<ast::ParamConn>)>,
+    /// net name → its declared shape, the width still unfolded
+    nets: BTreeMap<String, NetFact>,
+    /// function name → (declared return width unfolded, declared return sign)
+    funcs: BTreeMap<String, (WidthFact, bool)>,
+    /// The module's parameters in declaration order (header, then body), or
+    /// `None` when no environment can be built for it: a parameter name the
+    /// module declares twice, or a `defparam` anywhere in the design (a
+    /// `defparam` rebinds a child parameter from outside the `#()` channel).
+    params: Option<Vec<ParamSlot>>,
+}
+
+/// A declared width before the parameter environment is known.
+#[derive(Clone)]
+enum WidthFact {
+    /// A width the declaration states without a scope (an atom kind, no range, a
+    /// decimal-literal range) — §4.5.507's answer, needing no environment.
+    Lit(u32),
+    /// A vector range that names something; folded per instance by `fold_width`.
+    Range(ast::Range),
+}
+
+#[derive(Clone)]
+struct NetFact {
+    signed: bool,
+    width: WidthFact,
+    dims: u32,
+}
+
+/// One parameter of a module, for building its environment.
+#[derive(Clone)]
+struct ParamSlot {
+    name: String,
+    /// Bindable through `#()` (a header `parameter`; a body `parameter` only when
+    /// there is no header list — `param_ports`' rule).
+    overridable: bool,
+    /// `integer`-typed → the bound value is coerced to 32 signed bits; untyped →
+    /// taken as folded; any other type leaves the name UNBOUND (a range reading
+    /// it then declines).
+    ty: Option<ast::ParamType>,
+    default: ast::Expr,
+}
+
+/// A parameter environment: name → (folded value, `wide`), for one instance of a
+/// module. `wide` = the value's self-determined width is at least 32 bits (an
+/// unsized literal, `integer`, or arithmetic with such an operand). A NARROW
+/// value (`3'd6`, or a name whose width the fold cannot see) wraps in the
+/// binder's self-determined arithmetic — `P + P` with `P = 3'd6` binds 4 — so
+/// arithmetic over narrow operands only is declined, never folded in i64.
+type ParamEnv = BTreeMap<String, (i64, bool)>;
+
+/// Where a fold reads a NAME: the live scope of the module being lowered (the
+/// first instance segment's overrides), or a built environment (everything
+/// deeper, and every default).
+enum FoldScope<'a> {
+    Live,
+    Env(&'a ParamEnv),
 }
 
 /// Build the per-module fact table once, in declaration order. First declaration
 /// wins on a duplicate module name, matching [`crate::build_module_map`].
 pub(crate) fn build_module_facts(order: &[&ast::ModuleDecl]) -> BTreeMap<String, ModuleFacts> {
+    // A `defparam` is collected while the module that CONTAINS it is lowered,
+    // which can be after the region that asks — so it is a property of the
+    // whole design here, read from the AST, not of the elaborator's state.
+    let any_defparam = order.iter().any(|m| {
+        m.body.iter().any(|it| {
+            matches!(it, ast::ModuleItem::Defparam(_))
+                || matches!(it, ast::ModuleItem::Generate(g) if gen_has_defparam(&g.items))
+        })
+    });
     let mut out: BTreeMap<String, ModuleFacts> = BTreeMap::new();
     for m in order {
         if out.contains_key(&m.name.name) {
             continue;
         }
-        out.insert(m.name.name.clone(), module_facts(m));
+        let mut f = module_facts(m);
+        if any_defparam {
+            f.params = None;
+        }
+        out.insert(m.name.name.clone(), f);
     }
     out
+}
+
+fn gen_has_defparam(items: &[ast::GenItem]) -> bool {
+    items.iter().any(|gi| match gi {
+        ast::GenItem::For { body, .. } => gen_has_defparam(body),
+        ast::GenItem::If { then_b, else_b, .. } => {
+            gen_has_defparam(then_b) || gen_has_defparam(else_b)
+        }
+        ast::GenItem::Block { items, .. } => gen_has_defparam(items),
+        ast::GenItem::Case { items, .. } => items.iter().any(|ci| match ci {
+            ast::GenCaseItem::Match { body, .. } | ast::GenCaseItem::Default { body, .. } => {
+                gen_has_defparam(body)
+            }
+        }),
+        ast::GenItem::Item(b) => matches!(&**b, ast::ModuleItem::Defparam(_)),
+    })
 }
 
 fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
@@ -91,6 +184,7 @@ fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
 
     let mut f = ModuleFacts::default();
     let unique = |seen: &BTreeMap<String, u32>, n: &str| seen.get(n) == Some(&1);
+    f.params = param_slots(m, &seen);
     if let ast::PortList::Ansi(ports) = &m.ports {
         for p in ports {
             if p.iface.is_some() || !unique(&seen, &p.name.name) {
@@ -132,8 +226,10 @@ fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
             ast::ModuleItem::Instance(mi) => {
                 for ii in &mi.instances {
                     if ii.unpacked.is_empty() && unique(&seen, &ii.name.name) {
-                        f.insts
-                            .insert(ii.name.name.clone(), mi.module_name.name.clone());
+                        f.insts.insert(
+                            ii.name.name.clone(),
+                            (mi.module_name.name.clone(), mi.param_overrides.clone()),
+                        );
                     }
                 }
             }
@@ -262,11 +358,65 @@ fn census_gen(gi: &ast::GenItem, seen: &mut BTreeMap<String, u32>) {
     }
 }
 
+/// The module's parameters in the order their defaults may reference each other:
+/// the header list, then the body's `parameter`/`localparam` items. `None` when a
+/// parameter name is declared more than once (a generate-local `localparam` of
+/// the same name would make "which one" a scope question this walk cannot ask).
+fn param_slots(m: &ast::ModuleDecl, seen: &BTreeMap<String, u32>) -> Option<Vec<ParamSlot>> {
+    let has_header = !m.params.is_empty();
+    let slot = |p: &ast::ParamDecl, overridable: bool| -> Option<ParamSlot> {
+        if seen.get(&p.name.name) != Some(&1) {
+            return None;
+        }
+        // `integer` / `int` parse as `Integer` + `signed`; `integer unsigned`,
+        // a ranged or `signed` untyped declaration, and every 1-bit vector kind
+        // (the parser gives `parameter logic P` a `[0:0]`) are width channels
+        // this fold does not model, so the slot stays unbound. A bare
+        // `parameter unsigned P` is recorded by the parser as plain untyped
+        // (the keyword is dropped), so it binds exactly as the binder binds it.
+        let ty = match (p.ty, p.range.is_some(), p.signed) {
+            (ast::ParamType::Implicit, false, false) => Some(ast::ParamType::Implicit),
+            (ast::ParamType::Integer, false, true) => Some(ast::ParamType::Integer),
+            _ => None,
+        };
+        Some(ParamSlot {
+            name: p.name.name.clone(),
+            overridable: overridable && matches!(p.kind, ast::ParamKind::Parameter),
+            ty,
+            default: p.value.clone(),
+        })
+    };
+    let mut out = Vec::new();
+    for p in &m.params {
+        out.push(slot(p, true)?);
+    }
+    for it in &m.body {
+        if let ast::ModuleItem::Param(p) = it {
+            out.push(slot(p, !has_header)?);
+        }
+    }
+    Some(out)
+}
+
+/// The declared width of a vector kind + optional range, unfolded: an atom kind
+/// and a decimal-literal range are `Lit` (§4.5.507's `ast_kind_range_width`); any
+/// other range is kept for the per-instance fold.
+fn width_fact(kind: ast::NetVarKind, range: Option<&ast::Range>) -> Option<WidthFact> {
+    match ast_kind_range_width(kind, range) {
+        Some(0) => None,
+        Some(w) => Some(WidthFact::Lit(w)),
+        None => {
+            let r = range?;
+            if !ast_kind_is_bit_vector(kind) || matches!(kind, ast::NetVarKind::Time) {
+                return None;
+            }
+            Some(WidthFact::Range(r.clone()))
+        }
+    }
+}
+
 /// The declared `(sign, element width, unpacked-dim count)` of one net, or `None`
-/// where the answer would be a guess. `ast_kind_range_width` is the repository's
-/// rule for "a width the AST states without a scope": it folds DECIMAL LITERAL
-/// bounds only, so `[W-1:0]` declines whether or not the instantiation overrides
-/// `W` — the parameter environment of another module is not resolvable here.
+/// where the answer would be a guess.
 fn net_shape(
     kind: ast::NetVarKind,
     signed: bool,
@@ -275,17 +425,14 @@ fn net_shape(
     unpacked: &[ast::Dim],
     shape_param: Option<&ast::Ident>,
     class_type: Option<&ast::Ident>,
-) -> Option<HierNet> {
+) -> Option<NetFact> {
     // A `parameter type` carrier and a class handle carry no bit width here; a
     // SECOND packed dimension makes the whole-name read a flattened vector and
     // the select rules a different question, so both decline.
     if shape_param.is_some() || class_type.is_some() || !packed.is_empty() {
         return None;
     }
-    let width = ast_kind_range_width(kind, range)?;
-    if width == 0 {
-        return None;
-    }
+    let width = width_fact(kind, range)?;
     let mut dims = 0u32;
     for d in unpacked {
         match d {
@@ -297,7 +444,7 @@ fn net_shape(
             _ => return None,
         }
     }
-    Some(HierNet {
+    Some(NetFact {
         signed: crate::array_geom::kind_signedness(kind, signed),
         width,
         dims,
@@ -308,7 +455,7 @@ fn net_shape(
 /// bare-call arm of `ctx_signed_impl` applies (`ast_func_return_width` for the
 /// width, `kind_signedness` for the sign). A `real`/`realtime`/`string` return is
 /// not a bit vector and declines.
-fn func_ret_shape(f: &ast::FunctionDef) -> Option<(u32, bool)> {
+fn func_ret_shape(f: &ast::FunctionDef) -> Option<(WidthFact, bool)> {
     if f.ret_string {
         return None;
     }
@@ -318,8 +465,12 @@ fn func_ret_shape(f: &ast::FunctionDef) -> Option<(u32, bool)> {
         ast::ParamType::Time => ast::NetVarKind::Time,
         ast::ParamType::Implicit => ast::NetVarKind::Reg,
     };
-    let w = ast_func_return_width(f)?;
-    (w > 0).then(|| (w, crate::array_geom::kind_signedness(kind, f.signed)))
+    let w = match ast_func_return_width(f) {
+        Some(0) => return None,
+        Some(w) => WidthFact::Lit(w),
+        None => WidthFact::Range(f.range.clone()?),
+    };
+    Some((w, crate::array_geom::kind_signedness(kind, f.signed)))
 }
 
 impl Elaborator<'_> {
@@ -345,7 +496,7 @@ impl Elaborator<'_> {
     /// straight through it to this module's body. A leading segment that names a
     /// net in one of them commits `hier_resolve` to "`.member` on a plain net",
     /// which is loud — never a different silent answer.
-    fn hier_leaf_scope(&self, insts: &[ast::Ident]) -> Option<&ModuleFacts> {
+    fn hier_leaf_scope(&self, insts: &[ast::Ident]) -> Option<(&ModuleFacts, Option<ParamEnv>)> {
         // A `bind` attaches a child to a module without an instantiation in its
         // body, so the fact table's instance map is not the whole scope list.
         if !self.bind_targets.is_empty() || self.in_generate_body {
@@ -361,10 +512,202 @@ impl Elaborator<'_> {
             return None;
         }
         let mut f = self.module_facts.get(&self.cur_module)?;
+        // The environment of the instance the path has reached so far: `None`
+        // for the module being lowered (its parameters are the LIVE scope), then
+        // one built per segment. Building one can fail without failing the walk —
+        // a literal-width leaf never reads it.
+        let mut env: Option<ParamEnv> = None;
+        let mut live = true;
         for seg in insts {
-            f = self.module_facts.get(f.insts.get(&seg.name)?)?;
+            let (module, overrides) = f.insts.get(&seg.name)?;
+            let child = self.module_facts.get(module)?;
+            env = if live || env.is_some() {
+                self.child_env(child, overrides, env.as_ref())
+            } else {
+                None
+            };
+            live = false;
+            f = child;
         }
-        Some(f)
+        Some((f, env))
+    }
+
+    /// The parameter environment of ONE instance of `child`, given its `#()`
+    /// overrides and the environment they are written in (`None` = the live
+    /// scope of the module being lowered, folded exactly as `elaborate_instance`
+    /// folds an override: `const_eval_in_scope`).
+    fn child_env(
+        &self,
+        child: &ModuleFacts,
+        overrides: &[ast::ParamConn],
+        parent: Option<&ParamEnv>,
+    ) -> Option<ParamEnv> {
+        let slots = child.params.as_ref()?;
+        let fold = |e: &ast::Expr| -> Option<(i64, bool)> {
+            // A fill override (`#(.W('1))`) is re-folded at the CHILD's declared
+            // width by the binder; this fold has no width to give it.
+            if expr_as_fill(e).is_some() {
+                return None;
+            }
+            match parent {
+                None => self.env_fold(e, &FoldScope::Live),
+                Some(env) => self.env_fold(e, &FoldScope::Env(env)),
+            }
+        };
+        let positional: Vec<&ParamSlot> = slots.iter().filter(|s| s.overridable).collect();
+        let mut bound: BTreeMap<&str, (i64, bool)> = BTreeMap::new();
+        let mut pos_i = 0usize;
+        for ov in overrides {
+            let (name, value) = match ov {
+                ast::ParamConn::Positional(e) => {
+                    let s = positional.get(pos_i)?;
+                    pos_i += 1;
+                    (s.name.as_str(), fold(e)?)
+                }
+                ast::ParamConn::Named { name, value, .. } => {
+                    let s = slots
+                        .iter()
+                        .find(|s| s.name == name.name)
+                        .filter(|s| s.overridable)?;
+                    (s.name.as_str(), fold(value.as_ref()?)?)
+                }
+            };
+            // The binder's "last override wins" is a rule about a shape the
+            // parser already reports; here a repeat is a decline.
+            if bound.insert(name, value).is_some() {
+                return None;
+            }
+        }
+        let mut env = ParamEnv::new();
+        for s in slots {
+            let v = match bound.get(s.name.as_str()) {
+                Some(v) => Some(*v),
+                None => self.env_fold(&s.default, &FoldScope::Env(&env)),
+            };
+            let v = match (s.ty, v) {
+                (Some(ast::ParamType::Integer), Some((v, _))) => {
+                    (coerce_int_width(v, 32, true), true)
+                }
+                (Some(ast::ParamType::Implicit), Some(v)) => v,
+                // A typed, wide, real or unfoldable parameter stays UNBOUND: a
+                // range that reads it declines, a range that does not is
+                // unaffected.
+                _ => continue,
+            };
+            env.insert(s.name.clone(), v);
+        }
+        Some(env)
+    }
+
+    /// A strict fold of a constant expression: `(value, wide)`, or `None`. The
+    /// value is the number the child's own 32-bit self-determined fold
+    /// (`const_range_bound_fold`) and its binder give; where that is not
+    /// guaranteed the fold declines rather than answering. The rules:
+    ///
+    ///  * every node lands in `i32::MIN..=i32::MAX` (a 32-bit ring op on values
+    ///    that fit is the same number in i64);
+    ///  * `+ - * / %` need at least one WIDE operand — the self-determined width
+    ///    of the result is then ≥ 32 and nothing wraps; `/` and `%` also need
+    ///    non-negative operands (a 32-bit unsigned quotient of a negative
+    ///    pattern is a different number);
+    ///  * a name resolves in `scope` only: in the built environment it is
+    ///    `(value, wide)`; in the live scope it is the binder's own fold
+    ///    (`const_eval_in_scope`) and NARROW, because its declared width is not
+    ///    read here. A shape this fold does not know is treated the same way in
+    ///    the live scope (the binder folds it with the same call) and declines
+    ///    in an environment.
+    fn env_fold(&self, e: &ast::Expr, scope: &FoldScope<'_>) -> Option<(i64, bool)> {
+        let live = |e: &ast::Expr| -> Option<(i64, bool)> {
+            match scope {
+                FoldScope::Live => Some((self.const_eval_in_scope(e)?, false)),
+                FoldScope::Env(_) => None,
+            }
+        };
+        let (v, wide) = match &e.kind {
+            ast::ExprKind::IntLit { kind, raw } => {
+                let v = const_eval_i64_lit(e)?;
+                let wide = match kind {
+                    ast::IntLitKind::Decimal => true,
+                    _ => parse_int_literal(raw, *kind).is_some_and(|cv| cv.width >= 32),
+                };
+                (v, wide)
+            }
+            ast::ExprKind::Paren { inner } => self.env_fold(inner, scope)?,
+            ast::ExprKind::Ident(p) if p.segments.len() == 1 => match scope {
+                FoldScope::Env(env) => *env.get(&p.segments[0].name)?,
+                FoldScope::Live => live(e)?,
+            },
+            // A package constant's declared width is not recorded in `pkg_consts`.
+            ast::ExprKind::PkgScoped { pkg, name } => {
+                (*self.pkg_consts.get(&pkg.name)?.get(&name.name)?, false)
+            }
+            ast::ExprKind::Unary {
+                op: ast::UnOp::Minus,
+                operand,
+            } => {
+                let (v, w) = self.env_fold(operand, scope)?;
+                (v.checked_neg()?, w)
+            }
+            ast::ExprKind::Unary {
+                op: ast::UnOp::Plus,
+                operand,
+            } => self.env_fold(operand, scope)?,
+            ast::ExprKind::Binary {
+                op:
+                    op @ (ast::BinOp::Add
+                    | ast::BinOp::Sub
+                    | ast::BinOp::Mul
+                    | ast::BinOp::Div
+                    | ast::BinOp::Mod),
+                lhs,
+                rhs,
+            } => {
+                let (a, wa) = self.env_fold(lhs, scope)?;
+                let (b, wb) = self.env_fold(rhs, scope)?;
+                if !(wa || wb) {
+                    return None;
+                }
+                if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) && (a < 0 || b < 0) {
+                    return None;
+                }
+                (const_binop(*op, a, b)?, true)
+            }
+            ast::ExprKind::SysCall { name, args } if name.name == "$clog2" && args.len() == 1 => {
+                let (a, _) = self.env_fold(&args[0], scope)?;
+                if a < 0 {
+                    return None;
+                }
+                let v = if a <= 1 {
+                    0
+                } else {
+                    i64::from(64 - (a - 1).leading_zeros())
+                };
+                (v, true)
+            }
+            _ => live(e)?,
+        };
+        (i64::from(i32::MIN)..=i64::from(i32::MAX))
+            .contains(&v)
+            .then_some((v, wide))
+    }
+
+    /// One declared width for one instance: a literal needs nothing; a range is
+    /// folded in that instance's environment, both bounds in `0..=i32::MAX` and
+    /// the width inside the net cap (the child would refuse it loudly otherwise).
+    fn fold_width(&self, w: &WidthFact, env: Option<&ParamEnv>) -> Option<u32> {
+        match w {
+            WidthFact::Lit(n) => Some(*n),
+            WidthFact::Range(r) => {
+                let env = FoldScope::Env(env?);
+                let (m, _) = self.env_fold(&r.msb, &env)?;
+                let (l, _) = self.env_fold(&r.lsb, &env)?;
+                if m < 0 || l < 0 {
+                    return None;
+                }
+                let w = m.abs_diff(l) + 1;
+                (w <= MAX_NET_WIDTH).then_some(w as u32)
+            }
+        }
     }
 
     /// The declaration a hierarchical NAME (`u.hs`, `m.u2.hs`, `u.arr`) resolves
@@ -375,7 +718,13 @@ impl Elaborator<'_> {
         if insts.is_empty() {
             return None;
         }
-        self.hier_leaf_scope(insts)?.nets.get(&leaf.name).copied()
+        let (f, env) = self.hier_leaf_scope(insts)?;
+        let n = f.nets.get(&leaf.name)?;
+        Some(HierNet {
+            signed: n.signed,
+            width: self.fold_width(&n.width, env.as_ref())?,
+            dims: n.dims,
+        })
     }
 
     /// The `(return width, return sign)` a hierarchical CALL (`u.hf(x)`) resolves
@@ -386,7 +735,9 @@ impl Elaborator<'_> {
         if insts.is_empty() {
             return None;
         }
-        self.hier_leaf_scope(insts)?.funcs.get(&leaf.name).copied()
+        let (f, env) = self.hier_leaf_scope(insts)?;
+        let (w, sg) = f.funcs.get(&leaf.name)?;
+        Some((self.fold_width(w, env.as_ref())?, *sg))
     }
 
     /// The Table 11-21 self width of a PART-SELECT whose base is a hierarchical
