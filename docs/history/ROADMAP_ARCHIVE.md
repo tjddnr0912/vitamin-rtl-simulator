@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 405건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 406건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.513` **run.json carries a `wprog` object: why each expression left the native backend's compiled lane** (2026-09-18 · §5.b `WPROG-WHY`, queue row 1 · every `wprog::compile` decline names a key from a closed 22-key vocabulary; the native kernel's three askers tally distinct expression ids, first decline wins; `"wprog": {asked, declined, reasons, unit}` after `codegen`, `null` when the kernel did not run · review 2 lenses (33 + 15 designs) 0 value moves, round 1 relabelled a width-mismatched `Call`/`SysFunc` from `node_kind` to its own key and corrected three SPEC rows · 8027 tests)
 - `4.5.512` **The static `subroutines` rows carry their declaration site and join the runtime rows** (2026-09-18 · §6 OBS, queue row 1 · `SubroutineRoute.decl` from the routine name's span at the seed and at every route seam, written as `decl_file`/`decl_line`/`decl_col` after `sites`; the `key` text instructs a MANY-TO-MANY join on the declaration · review 2 lenses (34 + 10 designs) 0 value defects, round 2 rewrote the join cardinality the round-1 text overstated · 8018 tests)
 - `4.5.511` **A hierarchical call to a function whose body writes a module net runs** (2026-09-18 · §3.b frame-body-write-sites, queue row 1 · the calling module decides the route from the callee's declaration in the fact table and defers the copy-out statement like a hierarchical task enable · 20 cells loud→correct on both oracles, 3 positions stay loud by name, a cross-instance Rule B pair is E3001 · review 2 lenses (48 + 41 designs) 0 value silent-wrongs, round 2 closed the OBS phantom row and the over-wide pair rule · 8015 tests)
 - `4.5.510` **An INTERFACE member inside a §11.6.1 region is sized and signed through the interface declaration** (2026-09-18 · §2 Inline / frame binds, queue row 1 · the fact table now covers `TopItem::Interface`; `defparam` pre-scan modules only · 13 cells wrong→correct, module twin at parity · review 2 lenses PASS, 1 no-oracle control · 8008 tests)
@@ -522,6 +523,62 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.513 run.json carries a `wprog` object: why each expression left the native backend's compiled lane (2026-09-18, branch it16) ✅
+
+**ROADMAP row**: §5.b `WPROG-WHY` (read as a §6 OBS item); queue row 1.
+
+**Row claims re-measured: the shape holds, the site count was low.** `codegen.reject_reasons` is a
+per-PROCESS census: a body reports `able 1/1` while every evaluation of its right-hand sides runs
+the generic tree walk, because the tier-3 compiled lane is entered per EXPRESSION by
+`wprog::compile`, which returned a bare `None` at 39 explicit sites plus every defensive `?` (the
+row said ~20). On the census design (11 clocked RHSs) PRE run.json said `able 2/4` and nothing
+about `a * b`, `a[i +: 4]`, `add1(c)`, `$clog2(a)`, `wide + 80'd2`, `s >>> 1` or `a << i`.
+
+**Fix.** `compile_why` returns `Err(<reason>)` exactly where `compile` returned `None`, in the same
+order, having emitted the same ops; the vocabulary is a closed, byte-lexicographic 22-key list in
+`native/wprog/why.rs` (`width`, `truncation`, `sign`, `node_kind`, `call`, `sysfunc`, `operator`,
+`const_domain`, `net_kind`, `net_width`, `frame_net`, `class_handle`, `array_whole`,
+`index_unknown`, `index_range`, `lazy_index`, `shift_amount`, `select_offset`, `select_range`,
+`concat_width`, `replicate_count`, `malformed`), re-exported as `wprog_decline_reasons()` so a
+consumer can pin it. The native kernel's three askers (the codegen boundary closure in
+`compiled_body`, the runtime cache `wprog_for`, the index cache `ensure_index_kind`) route through
+one counting helper over a `RefCell` accumulator of two per-ExprId bitsets and a `BTreeMap`; the
+unit is DISTINCT expression ids, a declined id is filed under its FIRST decline, so
+`declined == Σ reasons <= asked` structurally. `SimResult.wprog: Option<WprogDeclines>` is taken
+from the kernel after the run loop returns and is `None` when no kernel ran. run.json emits
+`"wprog": {"asked", "declined", "reasons", "unit"}` right after `codegen` (`null` for `--backend
+vm|interp`, a fallback, or a run finished before any executor was built). `wprog::compile` itself is
+now `#[cfg(test)]`, so a fourth bare asker is a compile error. Not serde, not in the golden:
+`format_version` 32 and `schema_ver` 1 stand.
+
+**Census PRE→POST** (c1.sv): `{"asked": 33, "declined": 10, "reasons": {"call": 1, "operator": 3,
+"select_offset": 1, "shift_amount": 1, "sysfunc": 1, "width": 3}}` — the seven predicted RHS keys
+plus three declaration initializers (`80'd1`, `0` at 80 bits, `-8'sd16` whose unary minus has no
+arm). stdout, stderr, `results.jsonl` and the VCD are byte-identical PRE/POST and equal to iverilog
+and verilator; `--backend vm`/`interp` give `null` with `codegen` unchanged; two runs and
+`--obs-procs` on/off give one `wprog` line.
+
+**Review** (2 lenses, Opus): differential 33 designs / soundness 15 designs plus a site census
+(56 labelled sites, no anonymous decline left; three askers, no fourth) — 0 value, order or
+diagnostic moves anywhere, including a 200-cycle ALU design and E4002/W4029 counts. Round 1, both
+lenses: a `Call` or `SysFunc` whose self width differs from the context reaches the width branch's
+`CtxClass::Unknown` arm before the node match and was filed `node_kind`, so a 16-bit LHS fed by an
+8-bit function read as "no user-function declines". Closed by classifying that arm through the
+same `why::no_arm` helper as the final catch-all (label only; the 56 lens designs re-scored on the
+new binary moved exactly the three predicted rows and no value). Three SPEC rows corrected: only an
+index the IR holds as a plain constant node reaches `index_range` (a sized literal `mem[3'd7]`
+takes the runtime-index lane, compiles, and reports E4002 at run time — pre-existing lane, now
+described), `select_range` also covers the width-table disagreement, and the `null` sentence names
+the fatal-before-executor case where `backend` still reads `native`. Recorded in the SPEC: six keys
+have no source producer at HEAD (`array_whole`, `index_unknown`, `truncation`, `net_width`,
+`replicate_count`, `malformed`); kept so no decline site is anonymous. Pre-existing, outside the
+slice: whole-array comparison `(m1 == m2)` is E3009 in vita and iverilog while verilator runs it.
+
+Files: `crates/sim-engine/src/native/{wprog.rs,wprog/why.rs,kernel.rs}`, `crates/sim-engine/src/lib.rs`,
+`crates/cli/src/{obs,frontend}.rs`, `docs/preview/{19-ai-agent-observability,21-tier3-native-backend}.md`,
+`docs/manual/004_cli-reference.md`. Tests: `crates/cli/tests/obs_wprog.rs` (new, 8), `obs.rs` (+2
+pins), `crates/sim-engine/src/native/tests.rs` (+1). format unchanged.
 
 #### 4.5.512 The static `subroutines` rows carry their declaration site and join the runtime rows (2026-09-18, branch it15) ✅
 

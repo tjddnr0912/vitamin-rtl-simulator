@@ -30,15 +30,15 @@ behind it, so the queue and the composition are read from one table.
 | §2 | recorded defects by mechanism | 117 | 76 | 41 | oracle split / pinned / oracle disqualified 17 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 18 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / selects 5 · diagnostics 4 · class fields 3 · oracle splits 10 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 93 | 80 | 13 | named prerequisite 4 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 24 · constants / parameters 20 · parser accept 12 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 6 · diagnostics quality 6 · VCD / real conversion 3 | ② | 2 |
+| §3.b | loud → correct-support, small | 93 | 80 | 13 | named prerequisite 4 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 24 · constants / parameters 20 (the packed type-param row) · parser accept 12 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 6 · diagnostics quality 6 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
-| §6 | G2 observability (OBS) | 6 stages + 9 | 14 | 1 | CALL TREE: two lowering paths (doc-19 §4.9) 1 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / `WPROG-WHY` / a `void` function filed as `kind: task` / a route decided per spelling and five more beside the track | ④ | 1 |
-| §5.b | performance / hardening | 18 | 9 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
+| §6 | G2 observability (OBS) | 6 stages + 8 | 13 | 1 | CALL TREE: two lowering paths (doc-19 §4.9) 1 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / a `void` function filed as `kind: task` / a route decided per spelling and five more beside the track | ④ | |
+| §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 336 | 211 | 125 | | | | |
+| total | | 337 | 211 | 126 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, a per-resumption-kind ordering model, a
@@ -694,8 +694,8 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   4.70 s) while the FRAME CALL is 5× (against 1.03 s with no function at all). Prerequisite for ⓒ:
   the sign gate at `wprog.rs:120` argues from the admitted set ("`Div`/`Mod`/`Mul`/`Pow` are not
   admitted"), so a `Mul` arm must re-argue it. ⓐ and ⓑ stay a census, not a fix, until the decline is
-  located: `compile` is the only honest answer to "will `wprog` take this", which is `WPROG-WHY` in
-  §5.b.
+  located: `compile` is the only honest answer to "will `wprog` take this", and run.json's `wprog`
+  object (§4.5.513, doc-19 §5.2.1) is where that answer is published per expression.
 - Coercing a 4-state actual into a 2-state formal is O(declared width) at runtime (identical on all
   three backends: `byte` 12.8×, `shortint` 23.8×, `int` 46.4×). The real fix is an x/z→0 IR
   primitive (format bump) or engine memoisation; two mitigations are refuted with zero improvement
@@ -993,7 +993,6 @@ resumes only when its own re-entry condition becomes true. The full measurement 
 | MON-RENDER | the tier-3 render path refuses `$monitor` / `$strobe` | rendering lives in `sched/run_loop.rs::flush_postponed` and that path takes no reader | wiring — one slice with S1d-4c | lifts the refusal |
 | FD-EOF + FEOF | the `fd_eof` X-poison hole in `NetArena` (`fd_eof` alone is outside the "no heap/class/frame" argument; the `$feof` over-marking currently hides it) · `$feof` is over-marked in the canonical statement-effect predicate, so `e = $feof(fd);` is refused while `while (!$feof(fd))` passes | `k_feof` is a pure read while `sysfunc_is_stmt_effect` says `true`; fixing one consumer leaves two spellings | one slice · fixing the canonical predicate also widens the tier-2 gate · a byte-identity argument | removes a tier-3 over-refusal |
 | NETSLOT-PREV | nothing in the workspace reads `NetSlot.prev` (only the declaration, the constructor and pass (c)'s write), so pass (c)'s two `clone_from` calls per changed net per delta are dead work | nobody reads it | remove it, plus a separate slice that verifies the obviousness itself | perf |
-| WPROG-WHY | an expression falling out of the compiled lane is INVISIBLE. `codegen.reject_reasons` is a per-PROCESS census, so a body reports `able 1/1` while every evaluation of its RHS runs the generic path, and the compiled-lane boundary can only be inferred from `$signed`/`$unsigned` call counts — an inference that has produced two wrong causes (§2 Performance) | `wprog::compile` returns a bare `None` at ~20 decline sites and nothing counts them | a per-(reason, count) tally on `SimOpts`, folded into `run.json` beside `codegen` — the shape `builtins` already has. Reject reasons are a REPORTING table: never let one panic or change a value | reads as G2/OBS, not perf |
 | ELAB-PHASE-BLIND | the corpus cannot see a front-end regression: EVERY workload is ≥99% simulation (biriscv 1%, the rest 0%), so a 3× elaboration cost moves the median wall time by nothing | corpus workloads are chosen for a long accumulating digest, which is the opposite of front-end weight | `corpus-runner run` prints the phase split per row, which makes the number READABLE; a THRESHOLD needs a front-end-bound row (many declarations, short simulation) with a pinned digest and an oracle | a regression the gate can see |
 | LOW-ROI | FMT-CACHE part b (`render_template` pre-segmentation) · GEN-3X-STR part a (an unroll-plan cache — byte-identity risk exceeds the gain) · QUEUE-MID-ON (O(n) is inherent to the spec, and iverilog is the same) | — | on hold · QUEUE-MID-ON is permanently monitor-only | — |
 
@@ -1016,9 +1015,9 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
-| 2 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 3 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) and `sim-engine/state/frame_eval.rs` (1,810) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 1 | 1 | a multi-dimensional PACKED `parameter type` default or override is E2002 at parse while both oracles run it. §3.a ⑤ files the shape as loud by design under the `T$w` / `T$s` two-value desugar, so the first action is to re-measure that ladder: a packed 2-D type is two ranges, which the desugar cannot carry today | §3 | ② |
+| 2 | next | a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
+| 3 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) `sim-engine/state/frame_eval.rs` (1,810) and `sim-engine/native/wprog.rs` (1,914, its vocabulary already split into `wprog/why.rs`) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 
@@ -1095,8 +1094,11 @@ Open items beside the staged track:
 - R-I1 (config-driven signal introspection: an auto-named JSONL dump with no hand-written bind) is
   partial — `--probe` / `--probe-file` is a manual path list. R-I2 (a semantic transaction log) has
   no producer.
-- `WPROG-WHY` (§5.b) reads as an OBS item: it is the tally that answers why an expression left the
-  compiled lane.
+- run.json's `wprog` object (§4.5.513) is the per-expression tally of why an expression left the
+  compiled lane. Six of its keys (`array_whole`, `index_unknown`, `truncation`, `net_width`,
+  `replicate_count`, `malformed`) have no source producer at HEAD; a sized-literal array index
+  (`mem[3'd7]`) takes the runtime-index lane and is not a decline, so `index_range` counts the
+  plain-constant spelling only.
 
 Non-goals: FSDB/UCDB, an embedded SQLite, a waveform GUI, UVM integration. VCD stays the
 human-facing format.
