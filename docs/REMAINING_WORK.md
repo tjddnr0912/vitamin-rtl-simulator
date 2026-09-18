@@ -38,20 +38,24 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 
 ## C. Open items by section (counted from ROADMAP at HEAD)
 
-| section | open | breakdown |
-|---|---:|---|
-| §0 promotion queue (T2 residues) | 14 rows | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
-| §2-N verilog-axi census | 2 rows + 5 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and five t0-event residues |
-| §2 start-order table | 27 rows | LOUD 6 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 |
-| §2 recorded defects by mechanism | 111 bullets | inline / frame binds 16 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 17 · ranges / bounds / selects 5 · oracle splits 10 · performance 7 · real 7 · index sealing 6 · delays / events 6 · ranges / bounds / selects 4 · diagnostics / artifacts 4 · class fields 3 |
-| §3 numbered items | 24 rows | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, including ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 87 rows | subroutine / frame 23 · constants / parameters 16 · parser accept 12 · system tasks & file I/O 9 · nets / timing 6 · strings / heap 6 · loud shapes surfaced by §4.5.493–495 6 · diagnostics quality 5 · VCD / real conversion 3 |
-| §3 intentionally loud | 12 rows | not gaps; each has its reason |
-| §4 SVA honest-loud | 6 | mostly no oracle; hand-IEEE when started |
-| §5 performance / hardening residues | 18 rows | frame-body wprog (5c), native scratch pooling (4b-r), array-LHS cliff, inline-fold exponential, memory guard, CI nextest, MSRV ceiling, quiescence / render / eof seams |
-| §6 G2 OBS | 6 stages + 8 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 8 items beside the staged track (call tree, subroutine join key, per-call-site builtins, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2, `WPROG-WHY`) |
-| §7 conditional | 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
-| §8 non-goals | 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
+| section | open | startable / blocked | breakdown |
+|---|---:|---|---|
+| §0 promotion queue (T2 residues) | 14 rows | 9 / 5 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
+| §2-N verilog-axi census | 2 rows + 5 | 0 / 7 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and five t0-event residues |
+| §2 start-order table | 27 rows | 6 / 21 | LOUD 6 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 |
+| §2 recorded defects by mechanism | 116 bullets | 76 / 40 | inline / frame binds 17 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 18 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / bounds / selects 5 · diagnostics / artifacts 4 · class fields 3 · oracle splits 10 |
+| §3 numbered items | 24 rows | 19 / 5 | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, including ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
+| §3 small residues | 91 rows | 79 / 12 | subroutine / frame 23 · constants / parameters 20 · parser accept 12 · system tasks & file I/O 9 · loud shapes surfaced by §4.5.493–495 7 · nets / timing 6 · strings / heap 6 · diagnostics quality 5 · VCD / real conversion 3 |
+| §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
+| §4 SVA honest-loud | 6 | 0 / 6 | mostly no oracle; hand-IEEE when started; every row states a prerequisite |
+| §5 performance / hardening residues | 18 rows | 9 / 9 | frame-body wprog (5c), native scratch pooling (4b-r), array-LHS cliff, inline-fold exponential, memory guard, CI nextest, MSRV ceiling, quiescence / render / eof seams |
+| §6 G2 OBS | 6 stages + 8 | 13 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 8 items beside the staged track (call tree, subroutine join key, per-call-site builtins, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2, `WPROG-WHY`) |
+| §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
+| §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
+| total | 335 | 211 / 124 | |
+
+`startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
+prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.
 
 ## D. Prerequisites that block work from starting
 

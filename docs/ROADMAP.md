@@ -18,24 +18,27 @@ and the row is deleted here; a residue survives as its own row.
 ## Summary
 
 Composition of the open work at HEAD (regenerate this table in the docs step of every loop
-iteration; it is what the iteration report shows beside the next slice). The `next` column marks
+iteration; it is what the iteration report shows beside the next slice). `open` is the number of
+rows or bullets in the section, not slices; `startable` counts those with two oracles or a hand-IEEE
+plan and no unmet prerequisite, `blocked` the rest, with the top reasons. The `next` column marks
 where §5.2's start-order rows sit: `1` is the row the next iteration takes, `2`, `3`… the ones
 behind it, so the queue and the composition are read from one table.
 
-| § | track | open | composition | rung | next |
-|---|---|---:|---|---|---|
-| §2 | silent-wrong start-order table | 27 rows | LOUD 6 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 111 bullets | inline / frame binds 16 (the INTERFACE member leaf) · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 17 · ranges / selects 5 · delays / events · real · class fields · diagnostics | ① | 1 |
-| §2-N | verilog-axi census | 2 + 5 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
-| §3.a | loud → correct-support, numbered | 24 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 87 | subroutine / frame 23 (the hierarchical call to a body-write function) · constants / parameters 16 · parser accept 12 · system tasks & file I/O 9 · nets / timing 6 · strings / heap 6 · other | ② | 2, 5 |
-| §3.c | intentionally loud | 12 | not gaps; each row states its reason | — | |
-| §0 | correct-support promotion queue (T2 residues) | 14 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
-| §4 | SVA honest-loud | 6 | mostly no oracle; hand-IEEE when started | ③ | |
-| §6 | G2 observability (OBS) | 6 stages + 8 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / subroutine join key (`subroutines` declaration site) / `WPROG-WHY` and five more beside the track | ④ | 3, 4 |
-| §5.b | performance / hardening | 18 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
-| §7 | conditional / long-term | 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
-| §8 | non-goals | 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
+| § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
+|---|---|---:|---:|---:|---|---|---|---|
+| §2 | silent-wrong start-order table | 27 | 6 | 21 | WALL §11.8.1 region sign / declared-width provenance 8 · named prerequisite 6 · one oracle + zero demand (clocking) 3 · ORACLE-SPLIT 2 · DO-NOT-START 2 | LOUD 6 · BLOCKED 6 · WALL 5 · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 | ① | |
+| §2 | recorded defects by mechanism | 116 | 76 | 40 | oracle split / pinned / oracle disqualified 17 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 | inline / frame binds 17 (the INTERFACE member leaf) · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 18 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / selects 5 · diagnostics 4 · class fields 3 · oracle splits 10 | ① | 1 |
+| §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
+| §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
+| §3.b | loud → correct-support, small | 91 | 79 | 12 | named prerequisite 4 · oracle split / unmeasured 4 · by design or trigger-gated 3 | subroutine / frame 23 (the hierarchical call to a body-write function) · constants / parameters 20 · parser accept 12 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 6 · diagnostics quality 5 · VCD / real conversion 3 | ② | 2, 5 |
+| §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
+| §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
+| §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
+| §6 | G2 observability (OBS) | 6 stages + 8 | 13 | 1 | CALL TREE: two lowering paths (doc-19 §4.9) 1 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / subroutine join key (`subroutines` declaration site) / `WPROG-WHY` and five more beside the track | ④ | 3, 4 |
+| §5.b | performance / hardening | 18 | 9 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
+| §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
+| §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
+| total | | 335 | 211 | 124 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, a per-resumption-kind ordering model, a
@@ -1067,7 +1070,7 @@ Open items beside the staged track:
   `subroutine_calls`; the runtime object's `key` text says so rather than instructing a join it
   cannot serve. Giving `SubroutineRoute` a `DeclLoc` closes it — the elaborator already resolves one
   at reserve and the route census is filed in a different pass, so it is a threading slice, not a new
-  mechanism. This is §5.2 queue item 4.
+  mechanism. This is §5.2 queue row 3.
 - Per-CALL-SITE builtin rows (`{"name":"$sscanf","file":…,"line":…}`) are not emitted; the `builtins`
   table is name-level aggregation.
 - `--hier-tree` and `--inst-paths` are parsed for every applet but reach `VitaOpts` only on the
