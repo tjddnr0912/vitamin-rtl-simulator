@@ -32,9 +32,16 @@ changed for a user of the simulator.
 - **A function whose body writes a module variable is accepted** where it was refused as "outside
   the frame-call subset": `function automatic int fw(input int v); acc2 = v + 2; return v;` under
   `always_comb r = fw(src);` runs as in both reference tools, including a part-select write, calls
-  in `$display`, `?:`, `case`, loop conditions and `always_ff`. A call from a continuous assign, a
-  `force`, another function body, a package-scoped or hierarchical spelling is refused with a
-  message naming the position.
+  in `$display`, `?:`, `case`, loop conditions and `always_ff`. The HIERARCHICAL call runs too:
+  `r = u.fw(3)` printed E3009 where both reference tools print `HIER r=3 acc2=5`; a `$display`
+  argument, an `if` / `case` / loop condition, a `for` step, a `$sformatf` argument, a `?:` arm, a
+  short-circuit operand, a nested call, a two-level path `m.u2.fw(3)`, a call from a task body, an
+  `always_comb` and an `always_ff` caller all run, with the return and formal widths taken from
+  the callee's declaration in the instance's parameter environment (`#(.W(16))`). Two processes
+  of the parent, one of them `always_comb`, calling the same function are refused as two drivers
+  (verilator MULTIDRIVEN). A call from a continuous assign, a `force`, another function body, a
+  package-scoped spelling, or a hierarchical path that walks outward / absolute or through a
+  generate scope or an instance array is refused with a message naming the position.
 
 ### Fixed — dynamic-storage wakes, case selector width, `always_comb` task calls
 

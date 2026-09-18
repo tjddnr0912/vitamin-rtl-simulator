@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 403건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 404건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.511` **A hierarchical call to a function whose body writes a module net runs** (2026-09-18 · §3.b frame-body-write-sites, queue row 1 · the calling module decides the route from the callee's declaration in the fact table and defers the copy-out statement like a hierarchical task enable · 20 cells loud→correct on both oracles, 3 positions stay loud by name, a cross-instance Rule B pair is E3001 · review 2 lenses (48 + 41 designs) 0 value silent-wrongs, round 2 closed the OBS phantom row and the over-wide pair rule · 8015 tests)
 - `4.5.510` **An INTERFACE member inside a §11.6.1 region is sized and signed through the interface declaration** (2026-09-18 · §2 Inline / frame binds, queue row 1 · the fact table now covers `TopItem::Interface`; `defparam` pre-scan modules only · 13 cells wrong→correct, module twin at parity · review 2 lenses PASS, 1 no-oracle control · 8008 tests)
 - `4.5.509` **A hierarchical leaf whose child declaration names a PARAMETER width is sized through the child's parameter environment** (2026-09-18 · §2 Inline / frame binds, queue row 1 · per-instance `ParamEnv` with a narrow/wide class · 27 cells x→correct · residues: typed params, `#(.W())`, bits-channel overrides, sized-literal-only arithmetic)
 - `4.5.508` **A frame function whose body writes a module net runs on the statement-executor lane** (2026-09-17 · §3.b frame-body-outside-write, queue row 3 · AST route predicate + `inout_func_names` join + classifier accept; un-hoistable sites E3009 by name · 22 loud→correct, 5 pins converted · residues: `frame-body-write-sites`, `frame-body-write-order`)
@@ -520,6 +521,77 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.511 A hierarchical call to a function whose body writes a module net runs (2026-09-18, branch it14) ✅
+
+**ROADMAP row**: §3.b `frame-body-write-sites`, the hierarchical call; queue row 1.
+
+**Row claims re-measured: symptom and severity hold, the root as filed was half the story.**
+`function automatic logic [7:0] fw(input logic [7:0] v); acc2 = v + 2; return v;` in a child
+`ch u(...)` and `r = u.fw(3)` in the parent printed `error[VITA-E3009] … hierarchical call
+`u.fw(...)` is unsupported because `fw` assigns a module net from its BODY` where iverilog 13.0 and
+verilator 5.052 both print `HIER r=3 acc2=5`. The filed root ("`resolve_deferred_hier_call` patches
+the FuncId after the hoist ran") is true, but the filed fix shape ("resolve the child's FuncId early
+enough") is not available: the child instance is elaborated AFTER the parent's body, so no FuncId
+exists at any point of the parent's lowering. What IS available is the callee's DECLARATION, and the
+route (§4.5.508) is decided from the declaration alone (`ast_func_body_writes_outside`).
+
+**Fix.** The per-module fact table (`expr_size_hier.rs`, built once from the AST) also records the
+functions whose body writes outside their own names; `hier_body_write_callee` walks the instance path
+DOWNWARD from the module being lowered (the width leaves' walk, so it declines under `bind`, in a
+generate body, outward, absolute, through an instance array or a non-unique name) and answers the
+declaration, the return width / sign and every formal's width folded in the instance's parameter
+environment, declining for any formal that is not an input plain vector, a `real` / `string` return,
+or a width that does not fold. `inout_call_target` — the single funnel every hoist arm consults — has
+a hierarchical arm returning `(POISON_FID, def)` (standing down inside a frame FUNCTION body); the
+four emit sites go through `emit_out_call`, whose hierarchical branch lowers the actuals in the
+caller's scope sized to the declared formals, seals the block with a placeholder `Terminator::Call`,
+and pushes a `DeferredHierTaskCall { ret_lval: Some(temp) }` onto the hierarchical task-enable list
+(nested in a frame TASK body: `pending_hier_task_calls`, rebased, `has_hier_call`).
+`resolve_deferred_hier_task_call` dispatches on `ret_lval` to the function branch: `hier_resolve` on
+`hier_funcs`, the arity guard, the callee must be in `body_write_fids` (the routed answer), Rule B
+across the instance path (an `always_comb` caller plus any other process calling the same callee is
+E3001 once per callee — verilator MULTIDRIVEN, and the oracles then disagree on the value), the OBS
+route census, `TaskCallInfo { in_binds by index, out_binds = [(return_slot, temp)] }`, then the same
+terminator patch as a task enable (`install_deferred_hier_call`, the extracted shared tail). The hoist
+pre-pass gate in `lower_stmt` also opens on `hier_body_write_present` (design-wide, from the fact
+table), and `callee_ports` answers the hierarchical callee's ports so the ordering walk does not
+snapshot reads that need no repair. The remaining refusal in `resolve_deferred_hier_call` names the
+positions that run and the ones that do not.
+
+**Census PRE→POST**: 20 cells loud→correct on both agreeing oracles — a blocking rhs, a `$display`
+argument, an `if` condition, a `case` selector, a `while` condition, a `for` step, a `$sformatf`
+argument and a `?:` arm, a short-circuit right operand, an `always_comb` and an `always @(posedge)`
+caller, a two-level path, a part-select body write, a read left of the call, a nested call, two calls
+in one expression, a call from a frame task body, a `#(.W(16))` return / formal width, a signed
+return in the caller's arithmetic, a narrow signed actual. Loud by name (residues, both oracles run
+them): a continuous assign rhs, an absolute path from a sibling, a call inside another function's
+body. Splits recorded: the read-left-of-call order (`u.acc2 + u.fw(3)`, verilator's value) and the
+two-`always_comb` pair (now E3001). Rule A's conservative walk still refuses `always_comb r =
+u.fw(src)` when `src` carries an initializer (pre-existing, both directions). Control: a pure
+hierarchical call is PRE-identical.
+
+**Review** (2 lenses, Opus): differential 48 designs / soundness 41 designs, 0 value silent-wrongs;
+the corpus twin (a pure hierarchical call with the design-wide gate open) is byte-identical PRE vs
+POST on stdout and `.vcd`; a hierarchical task enable with an output array formal the same. Round 1
+findings, all closed in the delta and re-measured on every lens design with the new binary: the
+resolve-time `note_frame_call` filed a phantom `subroutines` row with an empty module and left the
+real callee at `sites: 0` (dropped — a hierarchical call is uncounted there by the object's own text,
+as the task enable is); the pair rule read `SensKind::Comb`, which a bare self-timed `always` has too,
+and fired for `always_comb` × any process where the local rule is `always_comb` × `always_comb` only
+(verilator silent and both oracles agree on `initial` + `always_comb`, `MD3 r=1 q=2 acc2=3`) — keyed
+on the source kind and narrowed; one message served the named-argument and arity refusals (split).
+Recorded, not chased: the parent's `always_comb` plus the CHILD's own local `always_comb` through the
+same function is verilator MULTIDRIVEN and value-correct in all three tools (the pair crosses two
+modules' scans); an `initial` / `always @(posedge)` / task-body caller beside an `always_comb` caller
+runs with iverilog's value while verilator's late probe re-evaluates the comb (`PAIR late acc2=11` vs
+`3`) — the same split as the local twin.
+
+Files: `crates/elaborate/src/hier_defer/func_call.rs` (new), `crates/elaborate/src/{expr_size_hier,
+frames_classify_write,stmt_main,driver,lib,inline_task}.rs`, `crates/elaborate/src/hoist/{mod,general}.rs`,
+`crates/elaborate/src/hier_defer/{mod,read,task_call}.rs`, `crates/elaborate/src/block_local/gate.rs`.
+Tests: a new `crates/cli/tests/hier_body_write_call.rs` (7 tests); the refusal pin in
+`frame_function_body_write.rs` converted to the oracle values. format unchanged.
 
 #### 4.5.510 An INTERFACE member inside a §11.6.1 region is sized and signed through the interface declaration (2026-09-18, branch it13) ✅
 

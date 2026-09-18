@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8008 tests passing with 15 skipped, artifact `format_version` 32, 70 `MsgCode` diagnostic codes; the
+8015 tests passing with 15 skipped, artifact `format_version` 32, 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
 - G1 = a correct open-source RTL simulator (correct-or-loud) at the level of icarus, verilator,
@@ -26,10 +26,9 @@ canonical table is the fact table in [README.md](../README.md).
 
 | # | track | item |
 |---|---|---|
-| 1 | §3 loud → correct-support | A HIERARCHICAL call to a function whose body writes a module net is E3009 where both oracles run it (`HIER r=3 acc2=5`); the local call runs since §4.5.508 |
-| 2 | §6 OBS | Give the static `subroutines` rows a declaration site, so the two subroutine objects can be joined |
-| 3 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so a reader infers the boundary from builtin call counts and gets it wrong |
-| 4 | §3 loud → correct-support | ⑤ⓕ residue: the 2-state axis of a `T'(e)` cast and a packed struct member (the sign follows the override since §4.5.483), the enum base (blocked behind a §2 enum-storage row), the union member's parse gate, a multi-dimensional packed type-param default or override, a mixed-caller callee, `m #(8)` / `defparam u.T$w`, the VCD `$scope` spelling, a `genblk<N>` collision (split) |
+| 1 | §6 OBS | Give the static `subroutines` rows a declaration site, so the two subroutine objects can be joined |
+| 2 | §6 OBS | `WPROG-WHY`: nothing says why an EXPRESSION left the compiled lane, so a reader infers the boundary from builtin call counts and gets it wrong |
+| 3 | §3 loud → correct-support | ⑤ⓕ residue: the 2-state axis of a `T'(e)` cast and a packed struct member (the sign follows the override since §4.5.483), the enum base (blocked behind a §2 enum-storage row), the union member's parse gate, a multi-dimensional packed type-param default or override, a mixed-caller callee, `m #(8)` / `defparam u.T$w`, the VCD `$scope` spelling, a `genblk<N>` collision (split) |
 | next | — | the scoped lane's ungated scope leak and the name-keyed inline context beneath it (one prerequisite, a binding-resolved geometry), a package static shared across importing modules, the static initializer that reads a formal (1-oracle), §2 🆕 L ⓦ residue, §2 🆕 N residue, a labelled concurrent `assert property` action block's `%m` |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ an
