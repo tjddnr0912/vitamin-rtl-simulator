@@ -142,9 +142,11 @@ impl Elaborator<'_> {
     /// The `Some(0)` routing flag is a delay as far as those two predicates are
     /// concerned, so without this pass
     ///
-    ///     int dv = 2;
-    ///     assign #(dv) y = a;
-    ///     assign #(dv) y = b;
+    /// ```text
+    /// int dv = 2;
+    /// assign #(dv) y = a;
+    /// assign #(dv) y = b;
+    /// ```
     ///
     /// stops elaborating. Measured: iverilog prints `y=x` at t=6 and `y=1` at
     /// t=11 for exactly that design, and so did vita before this slice (through
