@@ -697,6 +697,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Do not treat a statement as unknown because it carries a timing prefix; a timing prefix only adds expressions | One prefixed statement ending the whole walk |
 | Make a reader total before opening a row, and keep it total with a structural pin | A trait's default implementation being a silent capability opt-out that returns plausible values |
 | Check the shape of each routing bitmap: a handle's slot can be half-dead, so the question is membership and a present word | A bare handle read being routed to an empty heap |
+| Store a registered type's bounds as folded literals or as unshadowable carrier names, never as the parsed expression; a bound expression is re-resolved in every consumer's scope | A typedef or type parameter registered as `[W-1:0]` taking an inner generate block's `W` where the declaration's own scope holds (§4.5.515 review, six designs on one root) |
 | Attach a precondition to the executor, not the feature | The delegated path's precondition applied to the driven path refusing every target design |
 | Check whether an existing correction already covers a legitimate difference in two computations' input sizes before adding a conservative signal | Treating a missing entry as a signal and making the two sets diverge |
 | Check what a desugar merged before adding a rule that judges after it, and restore the flag when the merged forms have different oracle answers | A shorthand being silently accepted under a rule written for a different form |
