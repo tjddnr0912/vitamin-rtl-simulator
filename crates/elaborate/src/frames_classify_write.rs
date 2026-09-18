@@ -108,17 +108,7 @@ impl Elaborator<'_> {
     /// * a MULTI-SEGMENT lvalue (`u.x = v`, `pkg::s = v`). The hierarchical write has its
     ///   own routing question and its own queue row; nothing here measured it.
     pub(crate) fn func_body_writes_outside_name(&self, func: &ast::FunctionDef) -> bool {
-        if stmt_enables_task(&func.body) {
-            return false;
-        }
-        let own = pkg_body_scope::rtn_declared_names(
-            &func.ports,
-            &func.body_decls,
-            &func.body_enums,
-            &func.body,
-            Some(&func.name.name),
-        );
-        stmt_writes_outside_name(&func.body, &own)
+        ast_func_body_writes_outside(func)
     }
 
     /// §3.b, IR half: is every out-of-window write in this lowered body one the SOURCE
@@ -253,6 +243,24 @@ impl Elaborator<'_> {
 /// Only a BLOCKING assign counts: an NBA in a function body is refused by both this
 /// elaborator and iverilog, and a `force`/`release`/system task is refused by
 /// `classify_frame_body`, so routing may not depend on them.
+/// The AST predicate behind [`Elaborator::func_body_writes_outside_name`], free of
+/// the elaborator so the per-module fact table (`expr_size_hier`) can ask it before
+/// any instance exists — a HIERARCHICAL call to such a function is hoisted while the
+/// CALLING module is lowered, from the callee's declaration alone.
+pub(crate) fn ast_func_body_writes_outside(func: &ast::FunctionDef) -> bool {
+    if stmt_enables_task(&func.body) {
+        return false;
+    }
+    let own = pkg_body_scope::rtn_declared_names(
+        &func.ports,
+        &func.body_decls,
+        &func.body_enums,
+        &func.body,
+        Some(&func.name.name),
+    );
+    stmt_writes_outside_name(&func.body, &own)
+}
+
 pub(crate) fn stmt_writes_outside_name(s: &ast::Stmt, own: &BTreeSet<String>) -> bool {
     use ast::Stmt::*;
     match s {

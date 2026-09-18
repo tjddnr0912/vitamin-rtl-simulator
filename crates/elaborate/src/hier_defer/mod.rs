@@ -76,6 +76,13 @@ pub(crate) struct DeferredHierTaskCall {
     /// An array formal fed a non-array actual (or vice versa), or an OUTPUT/INOUT array formal,
     /// stays loud there (correct-or-loud).
     pub(crate) arg_arrays: Vec<Option<u32>>,
+    /// §3.b: `Some(lvalue)` when this is a hierarchical FUNCTION call to a function whose
+    /// body writes a module net, hoisted to a statement by the calling module
+    /// (`emit_deferred_hier_func_call`): the callee is looked up in `hier_funcs` rather
+    /// than `hier_tasks`, every formal is an input (the funnel admits nothing else), and
+    /// the return slot is copied out to this lvalue — the temp the expression reads.
+    /// `None` = a task enable.
+    pub(crate) ret_lval: Option<ir::Lvalue>,
 }
 
 /// A hierarchical WRITE target (`tb.dut.x = …`) whose net does not exist when the
@@ -164,6 +171,7 @@ pub(crate) struct DeferredHierBits {
 }
 
 mod bits;
+mod func_call;
 mod read;
 mod task_call;
 mod write;

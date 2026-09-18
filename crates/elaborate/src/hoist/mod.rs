@@ -31,6 +31,19 @@ impl Elaborator<'_> {
                     let func = self.func_table.get(n)?.clone();
                     return Some((fid, func));
                 }
+            } else if !self.frame_fn_lowering {
+                // §3.b: a HIERARCHICAL call `u.fw(x)` to a function whose body writes a
+                // module net. Its route is the same statement-context copy-out, but the
+                // callee has no FuncId yet (the child instance is elaborated after this
+                // module's body), so the id is the `POISON_FID` placeholder and the
+                // emitter (`emit_out_call`) defers the call the way a hierarchical task
+                // enable is deferred. The declaration comes from the per-module fact
+                // table, which is what makes the route decidable here at all. A frame
+                // FUNCTION body stands down exactly as the local arms do (no terminator
+                // of its own to route); the call then keeps its refusal by name.
+                if let Some(c) = self.hier_body_write_callee(name) {
+                    return Some((POISON_FID, c.def.clone()));
+                }
             }
         }
         None
@@ -121,13 +134,12 @@ impl Elaborator<'_> {
                 K::Call { args, .. } => args.clone(),
                 _ => unreachable!(),
             };
-            let (rw, rsig) = self
-                .func_metas
-                .get(fid as usize)
-                .map(|m| (m.ret_width, m.ret_signed))
-                .unwrap_or((32, true));
+            let K::Call { name, .. } = &e.kind else {
+                unreachable!()
+            };
+            let (rw, rsig) = self.out_call_ret_shape(fid, name);
             let (tmp_net, tmp_name) = self.fresh_ret_temp(&func, rw, rsig);
-            self.emit_frame_func_out_call(b, fid, &func, &args, whole_net_lvalue(tmp_net));
+            self.emit_out_call(b, fid, name, &func, &args, whole_net_lvalue(tmp_net));
             return ast::Expr {
                 kind: K::Ident(ast::HierPath {
                     segments: vec![ast::Ident {

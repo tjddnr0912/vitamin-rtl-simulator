@@ -27,6 +27,12 @@ impl Elaborator<'_> {
         let ambient_span = self.cur_span;
         for d in deferred {
             self.cur_span = d.span;
+            // §3.b: a hoisted hierarchical FUNCTION call shares this list (one placeholder
+            // shape, one patch), and resolves against the function table.
+            if d.ret_lval.is_some() {
+                self.resolve_deferred_hier_func_call_one(d);
+                continue;
+            }
             let Some(fid) = self.hier_resolve(&d.prefix, &d.path, &self.hier_tasks) else {
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -250,50 +256,7 @@ impl Elaborator<'_> {
                 in_binds,
                 out_binds,
             };
-            let entry = self.funcs[fid as usize].entry;
-            // §4.5.208: a NESTED-in-frame-body enable's placeholder `Call` lives in
-            // `func_blocks` and is keyed into `task_calls_func`; a top-level process enable
-            // uses `processes[proc]` + `task_calls_proc`. The engine reads the same two tables.
-            // item 1: capture the `ret_bb` while patching the terminator, then PREPEND the
-            // copy-out unpack to that block so it runs AFTER the task's exit (the out-bind wrote
-            // the packed temp) and BEFORE any statement following the enable.
-            if let Some(fb) = d.func_block {
-                self.task_calls_func.insert(fb, info);
-                let mut ret_bb = None;
-                if let Some(blk) = self.func_blocks.get_mut(fb as usize) {
-                    if let ir::Terminator::Call { target, ret_bb: rb } = &mut blk.term {
-                        *target = entry;
-                        ret_bb = Some(*rb);
-                    }
-                }
-                if let (Some(rb), false) = (ret_bb, unpack_sids.is_empty()) {
-                    if let Some(retblk) = self.func_blocks.get_mut(rb as usize) {
-                        retblk.stmts.splice(0..0, unpack_sids);
-                    }
-                }
-            } else {
-                self.task_calls_proc.insert((d.proc, d.call_block), info);
-                let mut ret_bb = None;
-                if let Some(blk) = self
-                    .processes
-                    .get_mut(d.proc as usize)
-                    .and_then(|p| p.body.get_mut(d.call_block as usize))
-                {
-                    if let ir::Terminator::Call { target, ret_bb: rb } = &mut blk.term {
-                        *target = entry;
-                        ret_bb = Some(*rb);
-                    }
-                }
-                if let (Some(rb), false) = (ret_bb, unpack_sids.is_empty()) {
-                    if let Some(retblk) = self
-                        .processes
-                        .get_mut(d.proc as usize)
-                        .and_then(|p| p.body.get_mut(rb as usize))
-                    {
-                        retblk.stmts.splice(0..0, unpack_sids);
-                    }
-                }
-            }
+            self.install_deferred_hier_call(&d, info, unpack_sids);
         }
         self.cur_span = ambient_span;
     }

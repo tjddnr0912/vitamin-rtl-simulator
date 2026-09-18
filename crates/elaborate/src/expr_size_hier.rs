@@ -45,6 +45,16 @@ use super::*;
 /// `width` is the width of ONE element — the whole net when `dims == 0`, the
 /// element when the name is an unpacked array (`dims` selects are a value, fewer
 /// are not, more are a bit; see [`Elaborator::select_chain`]).
+/// What [`Elaborator::hier_body_write_callee`] answers for a hierarchical call
+/// whose callee's body writes a module net.
+pub(crate) struct HierBodyWriteCallee<'a> {
+    pub(crate) def: &'a ast::FunctionDef,
+    pub(crate) ret_width: u32,
+    pub(crate) ret_signed: bool,
+    /// One entry per formal, in port order (all inputs, all plain vectors).
+    pub(crate) formal_widths: Vec<u32>,
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct HierNet {
     pub(crate) signed: bool,
@@ -68,6 +78,11 @@ pub(crate) struct ModuleFacts {
     nets: BTreeMap<String, NetFact>,
     /// function name → (declared return width unfolded, declared return sign)
     funcs: BTreeMap<String, (WidthFact, bool)>,
+    /// function name → its declaration, for the functions whose BODY writes a
+    /// module net (`ast_func_body_writes_outside`): the §3.b route decided
+    /// from the AST, which is the only form of it a CALLING module can see
+    /// while it is lowered (the callee's instance does not exist yet).
+    body_write_funcs: BTreeMap<String, ast::FunctionDef>,
     /// The module's parameters in declaration order (header, then body), or
     /// `None` when no environment can be built for it: a parameter name the
     /// module declares twice, or a `defparam` anywhere in the design (a
@@ -253,6 +268,9 @@ fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
                 }
                 if let Some(ws) = func_ret_shape(fd) {
                     f.funcs.insert(fd.name.name.clone(), ws);
+                }
+                if crate::frames_classify_write::ast_func_body_writes_outside(fd) {
+                    f.body_write_funcs.insert(fd.name.name.clone(), fd.clone());
                 }
             }
             _ => {}
@@ -752,6 +770,72 @@ impl Elaborator<'_> {
         let (f, env) = self.hier_leaf_scope(insts)?;
         let (w, sg) = f.funcs.get(&leaf.name)?;
         Some((self.fold_width(w, env.as_ref())?, *sg))
+    }
+
+    /// §3.b: the callee of a hierarchical call `u.fw(x)` when that callee's BODY
+    /// writes a module net, together with everything the CALLING module needs to
+    /// emit the call as a statement before the child instance exists: the
+    /// declaration (its ports, for the copy-in), the return shape (for the
+    /// temp the expression reads instead), and each formal's width (for sizing
+    /// the actual the way a local call does).
+    ///
+    /// Declines — leaving the call to `resolve_deferred_hier_call`, which
+    /// refuses it by name — whenever an answer could be wrong: a path this
+    /// walk cannot follow (outward, absolute, through a generate scope or an
+    /// instance array, or under `bind`), a formal that is not an input vector
+    /// (an output/inout, an unpacked array, a string, a `parameter type`
+    /// carrier), a `real`/`string` return, or a width the instance's parameter
+    /// environment cannot fold.
+    pub(crate) fn hier_body_write_callee(
+        &self,
+        path: &ast::HierPath,
+    ) -> Option<HierBodyWriteCallee<'_>> {
+        let (leaf, insts) = path.segments.split_last()?;
+        if insts.is_empty() {
+            return None;
+        }
+        let (f, env) = self.hier_leaf_scope(insts)?;
+        let def = f.body_write_funcs.get(&leaf.name)?;
+        let (w, sg) = f.funcs.get(&leaf.name)?;
+        let ret_width = self.fold_width(w, env.as_ref())?;
+        let mut formal_widths = Vec::with_capacity(def.ports.len());
+        for p in &def.ports {
+            if !matches!(p.dir, ast::PortDir::Input) {
+                return None;
+            }
+            let kind = p.net_or_var.unwrap_or(ast::NetVarKind::Reg);
+            if matches!(kind, ast::NetVarKind::String) {
+                return None;
+            }
+            let h = net_shape(
+                kind,
+                p.signed,
+                p.range.as_ref(),
+                &[],
+                &p.unpacked,
+                p.shape_param.as_ref(),
+                None,
+            )?;
+            if h.dims != 0 {
+                return None;
+            }
+            formal_widths.push(self.fold_width(&h.width, env.as_ref())?);
+        }
+        Some(HierBodyWriteCallee {
+            def,
+            ret_width,
+            ret_signed: *sg,
+            formal_widths,
+        })
+    }
+
+    /// Does any module in the design declare a function whose body writes a
+    /// module net? The gate on the hoist pre-pass for a HIERARCHICAL call to
+    /// one: a design without such a function never enters it (byte-identical).
+    pub(crate) fn facts_have_body_write_funcs(&self) -> bool {
+        self.module_facts
+            .values()
+            .any(|f| !f.body_write_funcs.is_empty())
     }
 
     /// The Table 11-21 self width of a PART-SELECT whose base is a hierarchical

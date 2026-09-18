@@ -41,7 +41,12 @@ impl Elaborator<'_> {
     /// leaving the DA walk to treat the reference conservatively as a read.
     fn callee_ports(&self, callee: &ast::HierPath) -> Option<&[ast::TfPort]> {
         if callee.segments.len() != 1 {
-            return None;
+            // §3.b: a hoisted hierarchical call to a body-writing function has a known
+            // declaration (all inputs); without this the ordering walk assumed every
+            // actual might be written and snapshotted reads that need no repair.
+            return self
+                .hier_body_write_callee(callee)
+                .map(|c| c.def.ports.as_slice());
         }
         let nm = callee.segments[0].name.as_str();
         if let Some(f) = self.lookup_func(nm) {

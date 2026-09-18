@@ -434,15 +434,16 @@ impl Elaborator<'_> {
             // §3.b: a function whose own body assigns a MODULE net is routed to the
             // `&mut` statement executor, and that route needs the call emitted as a
             // `Terminator::Call` — a STATEMENT — before the expression that reads its
-            // return value. `hoist_inout_calls` emits that statement while the CALLING
-            // module is lowered, from `inout_call_target`, which is single-segment: a
-            // hierarchical call is still a placeholder at that point, so it is never
-            // hoisted and never refused by `emit_frame_call` either (that gate is keyed
-            // on the callee's NAME in this module's set, and the callee is in another
-            // module's). Left alone it reached the synchronous frame executor mid-run:
-            // F4004 after partial output in a release build, a `debug_assert` abort in a
-            // debug one. Refuse it HERE, at elaborate time, where the pre-slice E3009
-            // was — the fid set is the cross-module spelling of `body_write_func_names`.
+            // return value. The calling module's hoist does that for a hierarchical
+            // call too (`inout_call_target`'s hier arm → `emit_deferred_hier_func_call`),
+            // deciding the route from the callee's DECLARATION in the fact table; a call
+            // that still arrives here was in a position the hoist declines — a continuous
+            // assign, a short-circuit operand, a frame FUNCTION body, a path the fact
+            // table cannot follow (outward / absolute / generate / instance array), a
+            // formal or return the funnel does not admit, or a width its parameter
+            // environment cannot fold. Left alone it would reach the synchronous frame
+            // executor mid-run (F4004 after partial output); refuse it HERE, at elaborate
+            // time — the fid set is the cross-module spelling of `body_write_func_names`.
             if self.body_write_fids.contains(&fid) {
                 let fname = d.path.last().cloned().unwrap_or_default();
                 let inst = d.path[..d.path.len().saturating_sub(1)].join(".");
@@ -450,18 +451,20 @@ impl Elaborator<'_> {
                     MsgCode::ElabUnsupported,
                     d.span,
                     &format!(
-                        "hierarchical call `{}(...)` is unsupported because `{fname}` \
-                         assigns a module net from its BODY: that write has to be emitted \
-                         as a statement before the expression that calls it, and the \
-                         statement is built while the CALLING module is lowered — where a \
-                         hierarchical call is still an unresolved placeholder, so there is \
-                         no statement left to carry the write once `{fname}` is known. Two \
-                         spellings do perform it, both measured against iverilog and \
-                         verilator: make the routine a `task` and enable it \
-                         hierarchically (`{inst}.<task>(...);` — a task body's \
-                         out-of-frame write routes automatically), or call `{fname}` by \
-                         its bare name from a process in `{inst}`'s own module and read \
-                         the result through a net",
+                        "hierarchical call `{}(...)` is unsupported in this position because \
+                         `{fname}` assigns a module net from its BODY: that write has to be \
+                         emitted as a statement before the expression that calls it, which vita \
+                         does for a call written DOWNWARD from a procedural statement (`r = \
+                         {}(...)`, an `if` / `case` / loop condition, a `$display` argument) to \
+                         a function with plain input vector formals — not for a continuous \
+                         assign, a short-circuit operand, a call inside another function's \
+                         body, or a path that walks outward or through a generate scope or an \
+                         instance array. Two spellings that do run everywhere, both measured \
+                         against iverilog and verilator: make the routine a `task` and enable \
+                         it hierarchically (`{inst}.<task>(...);`), or call `{fname}` by its \
+                         bare name from a process in `{inst}`'s own module and read the result \
+                         through a net",
+                        d.path.join("."),
                         d.path.join(".")
                     ),
                 );

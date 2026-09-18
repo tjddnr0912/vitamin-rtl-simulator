@@ -147,6 +147,7 @@ impl Elaborator<'_> {
                     arg_ids,
                     arg_lvals,
                     arg_arrays,
+                    ret_lval: None,
                 };
                 if self.frame_task_lowering {
                     // Collected per-body; rebased + moved to `deferred_hier_task_calls` at the

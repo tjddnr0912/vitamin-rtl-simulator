@@ -139,6 +139,8 @@ impl<'s> Elaborator<'s> {
             hier_tasks: BTreeMap::new(),
             hier_called_task_names: std::collections::BTreeSet::new(),
             hier_task_port_dirs: BTreeMap::new(),
+            hier_body_write_callers: BTreeMap::new(),
+            hier_body_write_refused: std::collections::BTreeSet::new(),
             defparams: BTreeMap::new(),
             inst_stack: Vec::new(),
             cur_inst: 0,
@@ -161,6 +163,7 @@ impl<'s> Elaborator<'s> {
             inout_func_names: std::collections::BTreeSet::new(),
             body_write_func_names: std::collections::BTreeSet::new(),
             body_write_fids: std::collections::BTreeSet::new(),
+            hier_body_write_present: false,
             dyn_formal_func_names: std::collections::BTreeSet::new(),
             seq_table: BTreeMap::new(),
             prop_table: BTreeMap::new(),
@@ -617,6 +620,7 @@ impl<'s> Elaborator<'s> {
             })
             .collect();
         self.module_facts = build_module_facts(&order, &ifaces);
+        self.hier_body_write_present = self.facts_have_body_write_funcs();
         // §4.5.200: pre-scan EVERY module's procedural blocks for hierarchical TASK enables
         // (`u1.tk(...)`) and record the target task name, so `build_task_frame_set` can
         // FORCE-FRAME a hier-called STATIC task (otherwise it inlines and has no per-instance

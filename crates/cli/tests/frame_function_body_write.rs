@@ -18,11 +18,11 @@
 //! refuses by name instead of emitting an `Expr::Call` the synchronous executor would run
 //! with the write dropped.
 //!
-//! There are TWO refusal sites, because the hoist and `emit_frame_call` both key on the
-//! callee's NAME in the CALLING module's set, and a HIERARCHICAL call (`u.fw(3)`) has
-//! neither: it is a placeholder until every instance is elaborated. That one is refused by
-//! `resolve_deferred_hier_call`, off a per-FuncId twin of the same set — see ⑮, whose
-//! designs otherwise reached the frame executor mid-run.
+//! A HIERARCHICAL call (`u.fw(3)`) is a placeholder until every instance is elaborated, so
+//! the calling module decides its route from the callee's DECLARATION (the per-module fact
+//! table) and defers the copy-out statement the way a hierarchical task enable is deferred;
+//! a position that hoist declines is refused by `resolve_deferred_hier_call`, off a
+//! per-FuncId twin of the same set — see ⑮ and `hier_body_write_call.rs`.
 //!
 //! ORACLES: iverilog 13.0 (`-g2012`) and verilator 5.052 (`--binary --timing`); every value
 //! below was measured in both unless the cell says otherwise. PRE values are from a release
@@ -559,32 +559,23 @@ endmodule
     );
 }
 
-/// ⑮ A HIERARCHICAL call to a body-writing function — `u.fw(3)` — is refused at ELABORATE
-/// time, where its pre-slice refusal was.
+/// ⑮ A HIERARCHICAL call to a body-writing function — `u.fw(3)` — RUNS. It was refused at
+/// elaborate time (the hoist that emits the copy-out statement is the CALLING module's, and
+/// a hierarchical callee has no FuncId while that module is lowered); now the calling
+/// module decides the route from the callee's declaration in the per-module fact table and
+/// defers the call the way a hierarchical task enable is deferred
+/// (`emit_deferred_hier_func_call` / `resolve_deferred_hier_task_call`). The full census is
+/// `hier_body_write_call.rs`; these three are the cells the refusal test pinned.
 ///
-/// The route needs the call emitted as a `Terminator::Call` before the expression that
-/// reads it, and `hoist_inout_calls` builds that statement while the CALLING module is
-/// lowered, from `inout_call_target`, which is single-segment. A hierarchical call is still
-/// an unresolved placeholder then, so it was neither hoisted nor refused: `emit_frame_call`
-/// asks `body_write_func_names`, which holds the CALLEE's module's names, and the callee is
-/// in another module's. Measured, with the refusal removed: the un-hoisted call reached the
-/// synchronous frame executor mid-run — `fatal[VITA-F4004] … tried to write `t.u.acc2``
-/// after partial output in a release build, and a `debug_assert` abort (rc 101, no
-/// `errors=` line) in a debug one, which is the build the suite runs. `resolve_deferred_
-/// hier_call` is the first point the callee is known, so the refusal is there, keyed on a
-/// per-FuncId twin of the per-module name set.
+/// BOTH ORACLES (iverilog 13.0, verilator 5.052): `HIER r=3 acc2=5`,
+/// `HIERPS r=6 accp=00000005`, and `BEFORE u.x=0` / `STILL RUNNING at 5` / `AFTER u.x=5 r=3`.
 ///
-/// RESIDUE, not a fix: BOTH ORACLES RUN ALL THREE DESIGNS — iverilog 13.0 and verilator
-/// 5.052 print `HIER r=3 acc2=5`, `HIERPS r=6 accp=00000005`, and
-/// `BEFORE u.x=0` / `STILL RUNNING at 5` / `AFTER u.x=5 r=3`. vita is honest-loud, and the
-/// two spellings its message advertises are asserted below to actually perform the write.
-///
-/// PRE: `error[VITA-E3009] … frame function/task `fw` body uses an assignment to a net
-/// outside the function … [in t.u]` (rc 1) — the same rung, attributed to the callee's
-/// declaration rather than to the call.
+/// PRE: `error[VITA-E3009] … hierarchical call `u.fw(...)` is unsupported because `fw`
+/// assigns a module net from its BODY` (rc 1).
 #[test]
-fn a_hierarchical_call_to_a_body_writing_function_is_loud_at_elaborate() {
-    const SUB: &str = r#"module sub;
+fn a_hierarchical_call_to_a_body_writing_function_runs() {
+    assert_eq!(
+        run(r#"module sub;
   int acc2 = 0;
   function automatic int fw(input int v); acc2 = v + 2; return v; endfunction
 endmodule
@@ -592,19 +583,12 @@ module t;
   sub u(); int r;
   initial begin #1; r = u.fw(3); $display("HIER r=%0d acc2=%0d", r, u.acc2); $finish; end
 endmodule
-"#;
-    let e = loud(SUB);
-    assert!(e.contains("hierarchical call `u.fw(...)`"), "{e}");
-    assert!(e.contains("assigns a module net from its BODY"), "{e}");
-    // NOT the frame-subset sentence, which lists `acc2 = v + 2;` among the forms it calls
-    // supported, and not the `emit_frame_call` wording, whose remaining-cases list has no
-    // row a hierarchical call could be read as.
-    assert!(!e.contains("outside the frame-call subset"), "{e}");
-
-    // The PART-SELECT write, whose pre-slice message was the OTHER wording ("a part-select
-    // / array-element assignment"): one refusal for the family, keyed on the route.
-    let e = loud(
-        r#"module sub;
+"#),
+        "HIER r=3 acc2=5"
+    );
+    // The PART-SELECT write.
+    assert_eq!(
+        run(r#"module sub;
   logic [31:0] accp = 0;
   function automatic int fps(input int v); accp[3:0] = v[3:0]; return v + 1; endfunction
 endmodule
@@ -612,15 +596,12 @@ module t;
   sub u(); int r;
   initial begin #1; r = u.fps(5); $display("HIERPS r=%0d accp=%h", r, u.accp); $finish; end
 endmodule
-"#,
+"#),
+        "HIERPS r=6 accp=00000005"
     );
-    assert!(e.contains("hierarchical call `u.fps(...)`"), "{e}");
-
-    // ⭐ ELABORATE time, not run time: the design below prints two lines before it reaches
-    // the call, and a refusal that had moved to the executor would let both of them out
-    // first. Neither may appear.
-    let e = loud(
-        r#"module sub;
+    // Output before the call, the call, output after it — in source order.
+    assert_eq!(
+        run(r#"module sub;
   int x = 0;
   function automatic int fsub(input int v); x = v + 2; return v; endfunction
 endmodule
@@ -634,21 +615,14 @@ module t;
     $finish;
   end
 endmodule
-"#,
-    );
-    assert!(e.contains("hierarchical call `u.fsub(...)`"), "{e}");
-    assert!(
-        !e.contains("BEFORE"),
-        "no output may precede the refusal:\n{e}"
-    );
-    assert!(
-        !e.contains("F4004"),
-        "the runtime fatal must be unreachable:\n{e}"
+"#),
+        "BEFORE u.x=0\nSTILL RUNNING at 5\nAFTER u.x=5 r=3"
     );
 }
 
-/// ⑯ …and both spellings that refusal advertises DO perform the write. A message naming a
-/// workaround that is itself blocked is the failure mode this asserts against.
+/// ⑯ …and both spellings the remaining refusal (a position the hoist declines) advertises DO
+/// perform the write. A message naming a workaround that is itself blocked is the failure
+/// mode this asserts against.
 #[test]
 fn the_hierarchical_refusals_two_workarounds_both_run() {
     // A `task`, enabled hierarchically: a task body's out-of-frame write routes on its own

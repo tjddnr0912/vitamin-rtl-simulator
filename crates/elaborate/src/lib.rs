@@ -840,6 +840,16 @@ struct Elaborator<'s> {
     // to an in-bind (input/inout copy-in) and/or an out-bind (output/inout copy-out) — the
     // direction is unknown at the call site (the callee instance isn't elaborated yet).
     hier_task_port_dirs: BTreeMap<u32, Vec<ast::PortDir>>,
+    // §3.b: the PROCESSES that reach a body-writing function through a hoisted
+    // hierarchical call, per callee FuncId, `(proc, is always_comb)`. The multidriver
+    // scan is per module and by name, so it cannot see a driver that reaches the
+    // child's net through an instance path; `resolve_deferred_hier_func_call_one`
+    // applies Rule B's `always_comb` × `always_comb` pair here instead (measured:
+    // verilator MULTIDRIVEN, and the two oracles disagree on the value). EMPTY for
+    // any design without such a call.
+    hier_body_write_callers: BTreeMap<u32, Vec<(u32, bool)>>,
+    // …and the callees that pair has already refused (one diagnostic per callee).
+    hier_body_write_refused: std::collections::BTreeSet<u32>,
     // `defparam top.u.N = 7;` overrides, keyed by the FULLY-QUALIFIED target
     // instance path → [(param-name, const value, fill)]. Collected in pass 7 (when
     // the parent's FQ prefix is current) and consumed by the child's `bind_params` in
@@ -995,6 +1005,12 @@ struct Elaborator<'s> {
     // (in `lower_frame_func_body`, where the name and the id are both in scope) and never
     // cleared. EMPTY for any design without a body-writing frame function.
     body_write_fids: std::collections::BTreeSet<u32>,
+    // §3.b: does ANY module in the design declare a function whose body writes a module
+    // net (`facts_have_body_write_funcs`)? The gate that lets the hoist pre-pass in
+    // `lower_stmt` run for a HIERARCHICAL call to one — `inout_func_names` is the
+    // CALLING module's own set and cannot see a callee in a child module. Design-wide
+    // and read-only; false for every design without such a function (byte-identical).
+    hier_body_write_present: bool,
     // §4.5.179: names of FRAMED functions with an `input` dynamic-array formal (the set
     // §4.5.177 blesses on the direct-rhs `x = f(arr)` path). A call to one BURIED in a
     // larger expression (`$display(f(a))`, `r = f(a)+1`, `if (f(a) > 0)`) is hoisted to a

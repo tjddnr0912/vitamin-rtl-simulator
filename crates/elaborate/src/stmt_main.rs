@@ -20,7 +20,10 @@ impl Elaborator<'_> {
         // to a temp (emitting its copy-out `Terminator::Call` first), so the statement
         // below lowers as a plain read of the temp. Gated on `inout_func_names`, so a
         // design with no such function skips this entirely and is byte-identical.
-        if !self.inout_func_names.is_empty() || !self.dyn_formal_func_names.is_empty() {
+        if !self.inout_func_names.is_empty()
+            || !self.dyn_formal_func_names.is_empty()
+            || self.hier_body_write_present
+        {
             if let Some(rewritten) = self.hoist_stmt_top(b, s) {
                 return self.lower_stmt_inner(b, &rewritten);
             }
@@ -151,7 +154,7 @@ impl Elaborator<'_> {
                 // trade a loud for a mis-keyed call site.
                 if self.in_frame_body() && delay.is_none() && event.is_none() {
                     if let Some((fid, func)) = self.inout_call_target(rhs) {
-                        if let ast::ExprKind::Call { args, .. } = &rhs.kind {
+                        if let ast::ExprKind::Call { name, args } = &rhs.kind {
                             let args = args.clone();
                             if self.frame_task_lowering
                                 || self.frame_out_call_dests_are_frame_local(&func, &args)
@@ -161,7 +164,7 @@ impl Elaborator<'_> {
                                     || lv.chunks.iter().all(|c| self.net_is_frame_local(c.net))
                                 {
                                     self.check_lvalue_kind(&lv, true);
-                                    self.emit_frame_func_out_call(b, fid, &func, &args, lv);
+                                    self.emit_out_call(b, fid, name, &func, &args, lv);
                                     return;
                                 }
                             }
@@ -1129,15 +1132,12 @@ impl Elaborator<'_> {
                     // measured shapes for a slice that can name the condition.
                     {
                         if let Some((fid, func)) = self.inout_call_target(&call_expr) {
-                            let (rw, rsig) = self
-                                .func_metas
-                                .get(fid as usize)
-                                .map(|m| (m.ret_width, m.ret_signed))
-                                .unwrap_or((32, true));
+                            let (rw, rsig) = self.out_call_ret_shape(fid, name);
                             let (tmp_net, _) = self.fresh_ret_temp(&func, rw, rsig);
-                            self.emit_frame_func_out_call(
+                            self.emit_out_call(
                                 b,
                                 fid,
+                                name,
                                 &func,
                                 args,
                                 whole_net_lvalue(tmp_net),

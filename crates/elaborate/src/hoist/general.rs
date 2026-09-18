@@ -805,7 +805,7 @@ impl Elaborator<'_> {
             return e.clone();
         }
         if let Some((fid, func)) = self.inout_call_target(e) {
-            let K::Call { args, .. } = &e.kind else {
+            let K::Call { name, args } = &e.kind else {
                 return e.clone();
             };
             // A nested call in an argument is part of THIS call's copy-in, so its
@@ -814,13 +814,9 @@ impl Elaborator<'_> {
                 .iter()
                 .map(|a| self.hoist_inout_general(b, a))
                 .collect();
-            let (rw, rsig) = self
-                .func_metas
-                .get(fid as usize)
-                .map(|m| (m.ret_width, m.ret_signed))
-                .unwrap_or((32, true));
+            let (rw, rsig) = self.out_call_ret_shape(fid, name);
             let (tmp_net, tmp_name) = self.fresh_ret_temp(&func, rw, rsig);
-            self.emit_frame_func_out_call(b, fid, &func, &args2, whole_net_lvalue(tmp_net));
+            self.emit_out_call(b, fid, name, &func, &args2, whole_net_lvalue(tmp_net));
             return ident_expr(tmp_name, e.span);
         }
         match shape(e) {
