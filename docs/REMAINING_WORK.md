@@ -22,7 +22,7 @@ canonical table is the fact table in [README.md](../README.md).
 - `corpus-runner run` prints the elaborate/simulate split per row. Every workload is ≥99%
   simulation, so the corpus cannot GATE a front-end regression (ROADMAP §5.b `ELAB-PHASE-BLIND`).
 
-## B. Queue (canonical = ROADMAP §5.2)
+## B. Queue (canonical = ROADMAP §5.2; one row per loop iteration)
 
 | # | track | item |
 |---|---|---|
