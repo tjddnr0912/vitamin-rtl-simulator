@@ -157,3 +157,4 @@ row is `cargo nextest run --workspace --locked`.
 history — what changed between versions, phrased for someone who runs the simulator rather than
 works on it — and it is the one history document that is appended to as work lands. The archives
 here carry the engineering detail underneath its entries.
+- [SNAPSHOTS.md](SNAPSHOTS.md) — one row per loop iteration: open / startable / blocked per ROADMAP section, for reading the trend across days.
