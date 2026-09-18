@@ -49,31 +49,54 @@ impl Elaborator<'_> {
     /// ⚠️ The route here is read from the SAME two sets `lower_frame_funcs` is
     /// about to reserve from, not from a re-run of the predicates. A row that
     /// disagreed with the lowering would be worse than no row.
+    ///
+    /// The DECLARATION site comes from the routine definition's own `name.span`,
+    /// which is the same span `frame_decl_locs` resolves per FuncId — so a static
+    /// row and every runtime row it folds carry one identical triple. `None`
+    /// (no `SpanResolver`) never overwrites a site already resolved.
     fn seed_subroutine_routes(
         &mut self,
         frame_set: &std::collections::BTreeSet<String>,
         task_set: &std::collections::BTreeSet<String>,
     ) {
         let module = self.inst_stack.last().cloned().unwrap_or_default();
-        let fnames: Vec<String> = self.func_table.keys().cloned().collect();
-        let tnames: Vec<String> = self.task_table.keys().cloned().collect();
-        for name in fnames {
+        // The spans are collected FIRST: `decl_loc` borrows `self`, and the
+        // `entry()` below borrows it mutably.
+        let fnames: Vec<(String, ast::Span)> = self
+            .func_table
+            .iter()
+            .map(|(n, d)| (n.clone(), d.name.span))
+            .collect();
+        let tnames: Vec<(String, ast::Span)> = self
+            .task_table
+            .iter()
+            .map(|(n, d)| (n.clone(), d.name.span))
+            .collect();
+        for (name, sp) in fnames {
             let framed = frame_set.contains(&name);
+            let decl = self.decl_loc(sp);
             let e = self
                 .subroutine_routes
                 .entry((module.clone(), name))
                 .or_default();
             e.is_task = false;
             e.framed = framed;
+            if decl.is_some() {
+                e.decl = decl;
+            }
         }
-        for name in tnames {
+        for (name, sp) in tnames {
             let framed = task_set.contains(&name);
+            let decl = self.decl_loc(sp);
             let e = self
                 .subroutine_routes
                 .entry((module.clone(), name))
                 .or_default();
             e.is_task = true;
             e.framed = framed;
+            if decl.is_some() {
+                e.decl = decl;
+            }
         }
     }
 
@@ -96,7 +119,12 @@ impl Elaborator<'_> {
             return;
         };
         let is_task = self.funcs.get(fid as usize).is_some_and(|f| f.is_task);
-        self.note_subroutine_route(&key, is_task, true);
+        // The FuncId already owns the resolved declaration site the runtime rows
+        // print, so the static row takes THAT value rather than re-resolving a
+        // span — the two objects join on it, and two resolvers are free to
+        // disagree.
+        let decl = self.frame_decl_locs.get(fid as usize).cloned().flatten();
+        self.note_subroutine_route(&key, is_task, true, decl);
     }
 
     /// R2 intermediate: record that ONE call site to `name` was lowered under
@@ -105,7 +133,16 @@ impl Elaborator<'_> {
     /// `inline_task`, which is where a call is decided NOT to be a frame.
     /// `framed` is overwritten here on purpose — the seed only supplies the
     /// never-called case, and the route that ran wins.
-    pub(crate) fn note_subroutine_route(&mut self, name: &str, is_task: bool, framed: bool) {
+    ///
+    /// `decl` is applied only when it is `Some`: a caller without a resolved
+    /// site must not erase one the seam or the seed already resolved.
+    pub(crate) fn note_subroutine_route(
+        &mut self,
+        name: &str,
+        is_task: bool,
+        framed: bool,
+        decl: Option<DeclLoc>,
+    ) {
         let module = self.inst_stack.last().cloned().unwrap_or_default();
         let e = self
             .subroutine_routes
@@ -114,6 +151,9 @@ impl Elaborator<'_> {
         e.is_task = is_task;
         e.framed = framed;
         e.sites += 1;
+        if decl.is_some() {
+            e.decl = decl;
+        }
     }
 
     /// Reserve + lower every frame function of the CURRENT module instance. Runs

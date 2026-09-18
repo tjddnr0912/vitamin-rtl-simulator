@@ -707,8 +707,10 @@ measurement: it is what elaboration decided.
   "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called",
   "uncounted": "class methods and hierarchical calls",
   "items": [
-    {"module": "tb", "name": "hexdig", "kind": "function", "route": "frame",   "sites": 18},
-    {"module": "tb", "name": "mask8",  "kind": "function", "route": "inlined", "sites": 4}
+    {"module": "tb", "name": "hexdig", "kind": "function", "route": "frame",   "sites": 18,
+     "decl_file": "tb.sv", "decl_line": 12, "decl_col": 26},
+    {"module": "tb", "name": "mask8",  "kind": "function", "route": "inlined", "sites": 4,
+     "decl_file": "tb.sv", "decl_line": 18, "decl_col": 18}
   ]}
 ```
 
@@ -721,6 +723,9 @@ measurement: it is what elaboration decided.
   module that calls it and its name carries the scope, as in `p::dbl`.
 * Class methods and hierarchical calls such as `u1.f(x)` are not counted; the object says so in its
   own `uncounted` field.
+* `decl_file`, `decl_line` and `decl_col` point at the routine's own name, written once however many
+  rows or instances it produces. They are `""`, `0` and `0` when no span resolver was installed, and
+  they are the join to `subroutine_calls` below.
 * Rows are sorted by `(module, name)`.
 
 Which route a subroutine takes is not always the guess: `function int f` is framed while its twin
@@ -751,7 +756,8 @@ from a hot expression is usually a bigger cost than anything inside that express
 a frame is counted, and the task may then sit on a delay for the rest of the run, so it is never
 timed. Rows are sorted by `calls` descending, then by function id.
 
-**The two objects do not join.** They count different things under different keys:
+**The two objects join on the declaration site, many-to-many.** They count different things under
+different keys:
 
 | axis | `subroutines` | `subroutine_calls` |
 |---|---|---|
@@ -762,11 +768,18 @@ timed. Rows are sorted by `calls` descending, then by function id.
 | inlined subroutines | included, with `route: "inlined"` | absent — there is no call node to count |
 | several instances | folded into one row | one row per instance |
 | a package routine's name | `p::dbl`, filed under the calling module | `top.dbl`, the instance path, package qualifier gone |
-| declaration site | not carried | `decl_file:decl_line:decl_col` |
+| declaration site | `decl_file:decl_line:decl_col` | `decl_file:decl_line:decl_col` |
 | quantity | `sites`, lowered call sites | `calls`, runtime entries |
 
-The columns must never be added together, and the object states this in its own `key` field. The
-static rows do not carry a declaration site, so the only cross-read is by name and route.
+The columns must never be added together, and the object states this in its own `key` field. Join on
+the declaration site, remembering that the triple names a **source**, not a row: one declaration owns
+one static row per `(module, name)` key that names it (each `for`-generate copy, each module that
+`include`s or imports it, and a second spelling such as `p::f` beside an imported `f`) and one
+runtime row per instance. Never sum `sites` across static rows that share a triple. An `inlined`
+static row can share its triple with a `frame` row in another module; a hierarchical callee has a
+static row with `sites: 0` beside its runtime rows; a class method has runtime rows only. The name is
+not a join key — a package routine is `p::dbl` under `module: "tb"` on the static side and `tb.dbl`
+on the runtime side.
 
 ### 14.5 `--obs-procs` and `--obs-procs-time`
 

@@ -144,6 +144,17 @@ need updating. What moved:
 
 ### Added
 
+- **`run.json`'s static `subroutines` rows now carry a declaration site, so the two subroutine
+  objects join.** Each item gains `decl_file`, `decl_line` and `decl_col` after `sites` — the span of
+  the routine's own name, the same triple the `--obs-procs` `subroutine_calls` rows already print, on
+  the same `""`/`0`/`0` convention when no span resolver is installed. The join is many-to-many and
+  the triple names a source, not a row: one declaration owns one static row per `(module, name)`
+  key that names it (a generate copy, an including or importing module, a second spelling) and one
+  runtime row per instance, so `sites` is never summed across rows sharing a triple; an `inlined`
+  row can share its triple with a `frame` row in another module; a hierarchical callee has a static
+  row with `sites: 0`; a class method has runtime rows only. The object's `key` field says so and
+  instructs the join instead of denying it. `schema_ver` stays `1` (an additive field).
+
 - **A `parameter type` override's signedness now also follows it through a `T'(e)` cast and a packed
   struct member.** With `parameter type T = logic [7:0]`, an instance writing
   `#(.T(logic signed [7:0]))` used to be refused outright as soon as the module spelled `T'(e)` or

@@ -8,9 +8,13 @@
 //! call SITES it lowered under that route, which is knowable without running
 //! anything. It cannot say how often a site ran, and it deliberately files no row
 //! for a class method or a hierarchical call. This object is per-INSTANCE FuncId
-//! and covers both. The two must not be added; `decl_file`/`decl_line` (ⓒ) is the
+//! and covers both. The two must not be added; the DECLARATION SITE (ⓒ) is the
 //! join, because a declaration is written once no matter how many FuncIds it
-//! mints.
+//! mints — and both objects carry the triple, so the join is executable rather
+//! than described. It is many-to-many and the triple names a SOURCE, not a row:
+//! one declaration owns one static row per `(module, name)` key that names it
+//! and one runtime row per instance FuncId, so `sites` is never summed across
+//! static rows sharing a triple; a class method has runtime rows only.
 //!
 //! Every `calls` number below is derived by hand from the design beside it. If a
 //! change moves one, redo the derivation — do not relax the assertion.
@@ -93,6 +97,49 @@ fn row(json: &str, name: &str) -> Option<(u32, u64)> {
         .parse()
         .ok()?;
     Some((line, calls))
+}
+
+/// The `decl_file` / `decl_line` / `decl_col` triple that follows `rest`'s
+/// start. Both subroutine objects spell the three fields identically, which is
+/// what makes ONE parser the right shape here: if either writer drifts, the
+/// join test below stops finding a row rather than comparing two spellings.
+fn triple_at(rest: &str) -> Option<(String, u32, u32)> {
+    let fp = "\"decl_file\": \"";
+    let i = rest.find(fp)? + fp.len();
+    let rest = &rest[i..];
+    let file = rest[..rest.find('"')?].to_string();
+    let lp = "\"decl_line\": ";
+    let j = rest.find(lp)? + lp.len();
+    let rest = &rest[j..];
+    let line: u32 = rest[..rest.find(|c: char| !c.is_ascii_digit())?]
+        .parse()
+        .ok()?;
+    let cp = "\"decl_col\": ";
+    let k = rest.find(cp)? + cp.len();
+    let rest = &rest[k..];
+    let col: u32 = rest[..rest.find(|c: char| !c.is_ascii_digit())?]
+        .parse()
+        .ok()?;
+    Some((file, line, col))
+}
+
+/// The declaration triple of the RUNTIME row labelled `name`.
+fn runtime_decl(o: &str, name: &str) -> Option<(String, u32, u32)> {
+    let pat = format!("\"name\": \"{name}\", \"decl_file\": ");
+    triple_at(&o[o.find(&pat)?..])
+}
+
+/// The declaration triple of the STATIC row keyed `(module, name)`.
+fn static_decl(s: &str, module: &str, name: &str) -> Option<(String, u32, u32)> {
+    let pat = format!("{{\"module\": \"{module}\", \"name\": \"{name}\", \"kind\": \"");
+    triple_at(&s[s.find(&pat)?..])
+}
+
+/// The static `subroutines` object's text alone.
+fn statics(json: &str) -> String {
+    let i = json.find("\"subroutines\": ").expect("no subroutines key");
+    let rest = &json[i..];
+    rest[..rest.find("\"processes\":").unwrap_or(rest.len())].to_string()
 }
 
 /// Two instances of one module, so the per-INSTANCE key and the shared
@@ -303,18 +350,51 @@ fn the_object_describes_itself_truthfully() {
             "row column {f} named by `key` is missing: {o}"
         );
     }
-    // A join it does NOT offer must not be claimed. The static object carries no
-    // decl location, so the text must say so rather than instruct the join.
-    let statics = {
-        let i = json.find("\"subroutines\": ").unwrap();
-        let rest = &json[i..];
-        rest[..rest.find("\"processes\":").unwrap_or(rest.len())].to_string()
-    };
+    // The join it now INSTRUCTS must actually be performable, and the property
+    // is checked rather than the phrasing: every runtime row that is not a class
+    // method must find a static row carrying the IDENTICAL triple. (`aut` and
+    // `tk` are declared in `leaf`; `bump` is `C`'s method, which the static
+    // object files nowhere.)
+    let s = statics(&json);
+    for f in ["\"decl_file\": ", "\"decl_line\": ", "\"decl_col\": "] {
+        assert!(
+            s.contains(f),
+            "the static object lost {f}, which `key` instructs a join on: {s}"
+        );
+    }
+    for (rt, module, name) in [
+        ("top.u1.aut", "leaf", "aut"),
+        ("top.u2.aut", "leaf", "aut"),
+        ("top.u1.tk", "leaf", "tk"),
+        ("top.u2.tk", "leaf", "tk"),
+    ] {
+        let r = runtime_decl(&o, rt);
+        assert!(r.is_some(), "no runtime row {rt}: {o}");
+        assert_eq!(
+            r,
+            static_decl(&s, module, name),
+            "runtime row {rt} does not join static row ({module}, {name})"
+        );
+    }
+    // …and the cardinalities the text states must hold: the class method has a
+    // runtime row and no static one.
+    assert!(runtime_decl(&o, "C.bump").is_some(), "{o}");
+    assert!(static_decl(&s, "C", "bump").is_none(), "{s}");
+    assert!(static_decl(&s, "top", "bump").is_none(), "{s}");
+    // The text must instruct the join rather than deny it.
     assert!(
-        !statics.contains("decl_"),
-        "the static object gained a decl column — update `key`, which says it has none"
+        o.contains("join on the declaration, which is many-to-many"),
+        "{o}"
     );
-    assert!(o.contains("does not carry that yet"), "{o}");
+    assert!(
+        !o.contains("does not carry that yet"),
+        "`key` still denies a join the static object now serves: {o}"
+    );
+    assert!(
+        o.contains("never summed across rows sharing a triple"),
+        "{o}"
+    );
+    assert!(o.contains("a class method has runtime rows only"), "{o}");
     // And the timing column's coverage must be explained.
     assert!(o.contains("SUSPENDABLE task frames"), "{o}");
     assert!(

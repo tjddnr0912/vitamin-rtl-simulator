@@ -492,9 +492,12 @@ reader cannot guess the route from the source.
   "sites_semantics": "call sites LOWERED (after generate/instance expansion), not executions; 0 = declared and never called",
   "uncounted": "class methods and hierarchical calls",
   "items": [
-    {"module": "leaf", "name": "aut", "kind": "function", "route": "frame", "sites": 2},
-    {"module": "leaf", "name": "pure8", "kind": "function", "route": "inlined", "sites": 4},
-    {"module": "top", "name": "p::dbl", "kind": "function", "route": "frame", "sites": 1}
+    {"module": "leaf", "name": "aut", "kind": "function", "route": "frame", "sites": 2,
+     "decl_file": "d.sv", "decl_line": 9, "decl_col": 26},
+    {"module": "leaf", "name": "pure8", "kind": "function", "route": "inlined", "sites": 4,
+     "decl_file": "d.sv", "decl_line": 8, "decl_col": 18},
+    {"module": "top", "name": "p::dbl", "kind": "function", "route": "frame", "sites": 1,
+     "decl_file": "d.sv", "decl_line": 2, "decl_col": 26}
   ]}
 ```
 
@@ -508,6 +511,7 @@ reader cannot guess the route from the source.
 | `items[].kind` | `"function"` or `"task"` |
 | `items[].route` | `"frame"` = a body reached through a call node; `"inlined"` = folded into the caller. Read from the same map the lowering is selected by, never re-derived — a predicate that re-answers "would this be framed?" is free to disagree with the route the design actually took, which is the failure this table exists to make visible |
 | `items[].sites` | call sites **lowered**, after generate and instance expansion: a call written once inside a module instantiated twice is `2`; a call inside a `for` loop body is `1`. Never an execution count. `0` means declared and never called |
+| `items[].decl_file` / `decl_line` / `decl_col` | the declaration site, on §5.7's meaning exactly: the span of the routine **name**'s own identifier, written once however many rows or instances it produces. `""` / `0` / `0` when no span resolver was installed. This is the join to §5.7 |
 
 Rows are seeded for every declared subroutine from the same two sets the frame lowering reserves
 from, so a dead subroutine still reports its route; the call seams then increment `sites`, and the
@@ -539,7 +543,7 @@ Gated by `--obs-procs`; `null` otherwise, on the same convention.
 | Field | Meaning |
 |---|---|
 | `timed` | whether `--obs-procs-time` was given |
-| `key` | the literal sentence ``"per-INSTANCE FuncId. INCLUDES class methods and hierarchical calls, which the static `subroutines` object does not file at all, and EXCLUDES every INLINED subroutine, which has no call node to count — so the two objects share no key and their columns must not be added. A row identifies its source by decl_file:decl_line:decl_col; the static object does not carry that yet, so read it by name and route"`` |
+| `key` | the literal sentence ``"per-INSTANCE FuncId. INCLUDES class methods and hierarchical calls, which the static `subroutines` object does not file at all, and EXCLUDES every INLINED subroutine, which has no call node to count — so the two objects share no key and their columns must not be added. A row identifies its source by decl_file:decl_line:decl_col, and the static object carries the same three fields: join on them. One static row joins every instance's runtime row (instances fold in the static table), an inlined static row joins none, and a class method or hierarchical call has runtime rows only"`` |
 | `time_semantics` | the literal sentence ``"time_s is SELF time over timed_calls only (nested subroutine time subtracted); timed_calls < calls means the rest were SUSPENDABLE task frames, which are counted and never timed. total_calls is entries into FRAMED subroutines only — an inlined one contributes none, and `subroutines[].route` is what says which is which"`` |
 | `distinct` | number of rows |
 | `total_calls` | the sum of `calls` |
@@ -565,7 +569,7 @@ report waiting as work.
 
 **Row order** is `calls` descending, then `FuncId` ascending.
 
-The two subroutine objects answer different questions and do not join today:
+The two subroutine objects answer different questions and join on the declaration site:
 
 | Axis | `subroutines` (static) | `subroutine_calls` (runtime) |
 |---|---|---|
@@ -576,12 +580,21 @@ The two subroutine objects answer different questions and do not join today:
 | Inlined subroutines | included, `route: "inlined"` | absent — no call node exists to count |
 | Multiple instances | folded into one row | one row per instance |
 | Package routine name | `p::dbl` under `module: "top"` | `top.dbl` — the `%m` path, package qualifier gone |
-| Declaration site | not carried | `decl_file:decl_line:decl_col` |
+| Declaration site | `decl_file:decl_line:decl_col` | `decl_file:decl_line:decl_col` |
 | Counted quantity | `sites` = lowered call sites | `calls` = runtime entries |
 
-The stated join key is the declaration site and the static object does not carry it, so the only
-cross-read available is by name and route. The `key` string says exactly that rather than
-instructing a join it cannot serve. Closing it is a ROADMAP §6 item.
+The join key is the declaration site and both objects carry it, so the `key` string instructs the
+join rather than describing one it cannot serve. The join is **many-to-many**, and the triple names
+a SOURCE, never a row: one declaration owns one static row per `(module, name)` key that names it
+(a `for`-generate copy is `g[0]$f` and `g[1]$f`, a routine `include`d into two modules or imported
+by two modules is one row under each, and `p::f(x)` beside an imported `f(x)` in one module is two
+rows) and one runtime row per instance `FuncId`. So a static row's `sites` is never summed across
+rows sharing a triple; an `inlined` static row shares its triple with a `frame` row when another
+module frames the same routine; a hierarchical callee is a declared routine and has a static row
+with `sites: 0` beside its runtime rows (its call SITES are what the static object does not count);
+a class method has runtime rows only. The static `(module, name)` key stays the static object's own
+identity — a package routine is `p::dbl` under `module: "top"` where the runtime row is `top.dbl`,
+which is exactly why the name is not the join.
 
 ## 6. `results.jsonl` — the ledger
 
@@ -959,7 +972,6 @@ Each row is a present fact about this build, not a schedule. The order in which 
 | A compile-fail manifest | A front-end or elaborate failure writes no obs directory |
 | The call tree (`processes` decomposed to task granularity) | `processes.items[].domain` is `"process"` or `"assign"` only. The blocker is structural: an inlined subroutine leaves no call node, so a seam-based profile reports it 0 times, and `0` reads as *free* about the very thing the user is hunting. `subroutines` (§5.6) is the minimum form of the prerequisite — the elaborate-time record of which route each routine took |
 | Per-call-site builtin rows (`{"name":"$sscanf","file":…,"line":…}`) | The table is name-level aggregation. The system-task half could locate today; the system-function half cannot, because the effect carries no statement id and the pure evaluator has no statement context at all, and half a table locating is worse than none |
-| A declaration site on the static `subroutines` rows | Items carry `module`, `name`, `kind`, `route`, `sites` only, so the two subroutine objects cannot be joined (§5.7) |
 | `WPROG-WHY`: a per-`(reason, count)` tally of expression-level compile declines beside `codegen` | Not emitted. `codegen.reject_reasons` is a per-**process** census, so a body can report `able 1/1` while every evaluation of its right-hand side runs the generic path, and the compiled-lane boundary can only be inferred from call counts — an inference that has produced wrong causes twice |
 | `--hier-tree` generate scopes | Collapsed: sibling generate instances render as identical lines (§10). `--inst-paths` carries the full path |
 | `--hier-tree` / `--inst-paths` on a staged applet | Accepted and dropped: the run exits 0, prints no diagnostic and writes no file. This is the one accept-and-drop on the rail; every other obs surface is loud on a staged applet |
@@ -971,7 +983,7 @@ Each row is a present fact about this build, not a schedule. The order in which 
 | `crates/cli/tests/obs.rs` | the `run.json` constants and the exact `results.jsonl` prefix · the determinism golden (strip exactly the four wall-clock fields, assert all four are present) · status versus process exit · plusargs and source digest · no obs output on a compile error · `exit_class` under `-Werror` · staged rejection · empty `--obs-dir` rejection · no output without the flag · the coverage schema against `get_coverage()`, including crosses, zero hits, weighting and determinism · the trace change stream, its three-way match against `$monitor`, probe typo and missing-directory loudness, determinism, the loud array/real rejections and full-width packed values · the stage capture, its three-way match against `$display`, native capture, no-plusarg no-op, determinism, zero-argument loudness and the `STAGE_TRACE=` spelling · the `codegen` claim and reason keys, backend invariance, and the `native` reject families · native-backend probe capture at the store point |
 | `crates/cli/tests/obs_procs.rs` | hand-checkable counts · byte identity across runs · backend invariance · timing adds `time_s` without moving counts · one row per instance · loudness without `--obs-dir` · `null` without the flag · staged rejection · port rows locating their connection · wildcard port rows staying unlocated · array-port elements sharing one connection span |
 | `crates/cli/tests/obs_builtins.rs` | hand-checkable counts · total row order · byte identity · backend invariance · timing without moving counts · `null` without the flag · a `$display` inside a function body counting |
-| `crates/cli/tests/obs_subroutines.rs` | every route reported with its lowered site count · the counts header and semantics strings · emission without `--obs-procs` · the empty table · the 2-state/4-state return-type route split · output-formal calls in both spellings · class declarations not shifting module counts |
+| `crates/cli/tests/obs_subroutines.rs` | every route reported with its lowered site count · the counts header and semantics strings · emission without `--obs-procs` · the empty table · the 2-state/4-state return-type route split · output-formal calls in both spellings · class declarations not shifting module counts · every row carrying its declaration site and joining the runtime rows in all four cardinalities, with the column order and the `(module, name)` sort pinned · the declaration site emitted without `--obs-procs` |
 | `crates/cli/tests/obs_subroutine_calls.rs` | per-instance counts and the declaration join · backend invariance · byte identity · `null` without `--obs-procs` · an inlined subroutine having a static row and no runtime row · a suspendable task frame counted and not timed · a synchronous call timed · the object describing itself truthfully |
 | `crates/cli/tests/help_covers_flags.rs` | every literal flag arm in the parser appears in `vita --help` |
 | `crates/sim-engine/tests/native_gate.rs` | the stage sidecar and the probed-net set are both native-backend core — neither disqualifies |

@@ -379,7 +379,7 @@ pub type FuncTable = Vec<FuncMeta>;
 pub type SubroutineRoutes = std::collections::BTreeMap<(String, String), SubroutineRoute>;
 
 /// One [`SubroutineRoutes`] row.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SubroutineRoute {
     /// `true` ⇒ a task (`task`/`endtask`), `false` ⇒ a function.
     pub is_task: bool,
@@ -389,6 +389,12 @@ pub struct SubroutineRoute {
     /// expansion — a subroutine called once inside a module instantiated four
     /// times counts four. `0` ⇒ declared and never called.
     pub sites: u64,
+    /// The declaration site of the routine's NAME identifier, `None` without a
+    /// `SpanResolver`; the same triple [`Sidecars::func_decl_locs`] carries per
+    /// FuncId, so it is the join between the two subroutine objects. One static
+    /// row may join N runtime rows (instances fold here) and an inlined row
+    /// joins none.
+    pub decl: Option<DeclLoc>,
 }
 
 /// B2 frame-call (tasks): one task-call site's argument↔formal binding. The

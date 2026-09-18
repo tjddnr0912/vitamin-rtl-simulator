@@ -121,7 +121,7 @@ changes the simulation, stdout, the waveform or the exit code. Contract:
 |---|---|
 | **Observability rail** | The whole surface: `--obs-dir` and the files under it, `--probe`, `$vita_stage`, `--hier-tree` and `--inst-paths`. |
 | **`--obs-dir <DIR>`** | The switch that turns the rail on and the directory it writes into. |
-| **`run.json`** | One object per run: tool identity, versions, the resolved invocation, the finish reason, counts, and the code-generation and backend summaries. Two subroutine objects live here and do not join — `subroutines` is the static route census and is written unconditionally; `subroutine_calls` is the per-instance runtime profile and needs `--obs-procs`. They are keyed differently, so their columns are not additive. |
+| **`run.json`** | One object per run: tool identity, versions, the resolved invocation, the finish reason, counts, and the code-generation and backend summaries. Two subroutine objects live here — `subroutines` is the static route census and is written unconditionally; `subroutine_calls` is the per-instance runtime profile and needs `--obs-procs`. They are keyed differently, so their columns are not additive; both carry the declaration site (`decl_file:decl_line:decl_col`), which joins them many-to-many. |
 | **`results.jsonl`** | The per-record ledger: one JSON object per line. |
 | **`coverage.json`** | Functional coverage, when the design defines any. |
 | **Probe** | A net named with `--probe` (or listed in a `--probe-file`) whose every value change is streamed to `trace.jsonl`. |

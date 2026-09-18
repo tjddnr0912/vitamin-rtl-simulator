@@ -324,7 +324,10 @@ impl Elaborator<'_> {
         // the one place that has to say so. A hierarchical `u1.f(x)` returned much
         // earlier and is uncounted by design — its target is not bound until the
         // deferred-hier resolve, after this pass.
-        self.note_subroutine_route(&fname, false, false);
+        // The resolved definition is in hand, so its own name span is the
+        // declaration site — the same span the seed resolves.
+        let decl = self.decl_loc(func.name.span);
+        self.note_subroutine_route(&fname, false, false, decl);
         let pk = self.rtn_key_pkg(fname.as_str());
         self.inline_resolved_func_in_pkg(&func, args, pk)
     }

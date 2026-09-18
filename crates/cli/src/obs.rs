@@ -387,6 +387,16 @@ impl ObsRun<'_> {
             s.push_str(if r.framed { "\"frame\"" } else { "\"inlined\"" });
             s.push_str(", \"sites\": ");
             s.push_str(&r.sites.to_string());
+            // The JOIN to `subroutine_calls`: the same three fields, on the same
+            // `""`/`0`/`0` convention those rows use for "no span resolver was
+            // installed". Written AFTER `sites` so the existing column order is
+            // untouched.
+            s.push_str(", \"decl_file\": ");
+            json_str(&mut s, r.decl.as_ref().map_or("", |d| d.file.as_str()));
+            s.push_str(", \"decl_line\": ");
+            s.push_str(&r.decl.as_ref().map_or(0, |d| d.line).to_string());
+            s.push_str(", \"decl_col\": ");
+            s.push_str(&r.decl.as_ref().map_or(0, |d| d.col).to_string());
             s.push('}');
         }
         s.push_str(if self.subroutines.is_empty() {
@@ -545,18 +555,27 @@ impl ObsRun<'_> {
                 // left to them. (1) These rows and the `subroutines` object
                 // above DO NOT share a key: this one is per-INSTANCE and
                 // includes the class methods and hierarchical calls that one
-                // excludes, so the columns must not be added. `decl_file`/
-                // `decl_line` is the join. (2) `time_s` covers `timed_calls`,
-                // not `calls` — a suspendable task frame is counted and not
-                // timed, because the wall time to its `Return` is mostly time
-                // the task was not running.
+                // excludes, so the columns must not be added. The
+                // DECLARATION SITE is the join, and both objects now carry it —
+                // with the cardinalities spelled out, because the join is not
+                // one-to-one in either direction.
+                // (2) `time_s` covers `timed_calls`, not `calls` — a suspendable
+                // task frame is counted and not timed, because the wall time to
+                // its `Return` is mostly time the task was not running.
                 s.push_str(
-                    ", \"key\": \"per-INSTANCE FuncId. INCLUDES class methods and \
-                     hierarchical calls, which the static `subroutines` object does not file \
-                     at all, and EXCLUDES every INLINED subroutine, which has no call node to \
-                     count — so the two objects share no key and their columns must not be \
-                     added. A row identifies its source by decl_file:decl_line:decl_col; the \
-                     static object does not carry that yet, so read it by name and route\"",
+                    ", \"key\": \"per-INSTANCE FuncId. INCLUDES class methods, which the static `subroutines` \
+                     object does not file at all, and hierarchical calls, whose sites it does not \
+                     count, and EXCLUDES every INLINED subroutine, which has no call node to count \
+                     — so the two objects share no key and their columns must not be added. A row \
+                     identifies its SOURCE by decl_file:decl_line:decl_col, and the static object \
+                     carries the same three fields: join on the declaration, which is many-to-many. \
+                     One declaration owns one static row per (module, name) key that names it (a \
+                     generate copy, an importing or including module and a second spelling each add \
+                     one) and one runtime row per instance FuncId; a static row's sites is never \
+                     summed across rows sharing a triple; an inlined static row shares its triple \
+                     with a framed row when another module frames the same routine; a hierarchical \
+                     callee has a static row with sites 0 beside its runtime rows; a class method \
+                     has runtime rows only\"",
                 );
                 s.push_str(
                     ", \"time_semantics\": \"time_s is SELF time over timed_calls only \

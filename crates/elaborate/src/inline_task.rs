@@ -278,7 +278,10 @@ impl Elaborator<'_> {
         // R2 intermediate: the frame branch above recorded itself inside
         // `emit_frame_task_call`; reaching here is the INLINE decision. Placed after
         // the recursion guard so a loud reject is not filed as a lowered call site.
-        self.note_subroutine_route(&tname, true, false);
+        // The resolved definition is in hand, so its own name span is the
+        // declaration site — the same span the seed resolves.
+        let decl = self.decl_loc(task.name.span);
+        self.note_subroutine_route(&tname, true, false, decl);
         // v7: the INLINE (static-lifetime) task path binds each input formal via a
         // formal-WIDTH local net + copy-in assign. A `string` formal lowers to a
         // 1-bit `Wire` net, so that copy-in TRUNCATES the actual (and no `formal_str`
