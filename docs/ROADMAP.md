@@ -27,10 +27,10 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 6 | 21 | WALL §11.8.1 region sign / declared-width provenance 8 · named prerequisite 6 · one oracle + zero demand (clocking) 3 · ORACLE-SPLIT 2 · DO-NOT-START 2 | LOUD 6 · BLOCKED 6 · WALL 5 · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 118 | 76 | 42 | oracle split / pinned / oracle disqualified 18 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 18 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / selects 5 · diagnostics 4 · class fields 3 · oracle splits 11 | ① | |
+| §2 | recorded defects by mechanism | 120 | 78 | 42 | oracle split / pinned / oracle disqualified 18 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 19 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / selects 6 · diagnostics 4 · class fields 3 · oracle splits 11 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 96 | 82 | 14 | named prerequisite 5 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 24 · constants / parameters 21 (the package type-param row) · parser accept 13 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 7 · diagnostics quality 6 · VCD / real conversion 3 | ② | 1 |
+| §3.b | loud → correct-support, small | 97 | 83 | 14 | named prerequisite 5 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 24 (the pkg-callee-blocal row) · constants / parameters 21 · parser accept 13 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 7 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 341 | 213 | 128 | | | | |
+| total | | 344 | 216 | 128 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, a per-resumption-kind ordering model, a
@@ -467,6 +467,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `wide_param_bits` and not in the i64 `params`); a header parameter whose default is a select of
   another header parameter; a `#(.N(W[7:0]))` override; `defparam`; a struct member width (a parser
   gap); a class property.
+- An OVERRIDABLE 1-D `parameter type T = logic [8:1]` registers its typedef as `[T$w-1:0]`, so `v[1]`
+  reads bit 0 and `$low(v)` is 0 where both oracles read bit 1 and 1 (X3, §4.5.515); the same for a
+  `localparam type L = logic [HI:LO]` whose bounds name overridable header parameters (`lo=0 hi=15`
+  for the oracles' `1`/`16` under `#(.HI(16),.LO(1))`). A non-overridable one with foldable bounds
+  is correct since §4.5.515. Fix shape = the 1-D twin of the §4.5.514 `T$p0a/b` carrier (the
+  registered range becomes `[T$p0a:T$p0b]` with `T$w` still the width).
 - A self-referential return range overflows the stack (no oracle — iverilog aborts too):
   `function [f():0] f();` — `const_fn_ret_wsign` does not carry call depth. Prescription = one line,
   `depth + 1`.
@@ -580,6 +586,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - A part-select WRITE into a queue or associative element vanishes silently (oracle: verilator;
   iverilog rejects the syntax): `q[0][15:8]=8'h0F;` gives verilator `ffff0fff` against vita's
   `ffffffff`; the dynamic (`q[]`) spelling is correct — a write-twin gap.
+- A typedef whose dims NAME a constant is re-resolved where it is used: `localparam W = 8; typedef
+  logic [W-1:0] t;` plus a generate block declaring its own `localparam W = 4` gives `$bits(t)` 4
+  and a 4-bit `t v;` inside that block where both oracles keep 8 (the typedef's own scope); the
+  unpacked-dim and 2-D packed spellings the same (§4.5.515 review, PRE-identical). A type
+  parameter is immune when its bounds fold (literal dims) or are carried (`T$w`); the typedef
+  registry stores the bound EXPRESSION and every consumer folds it in its own scope.
 - A width-0 indexed part-select is accepted silently: `parameter P = 0; t[i +: P] = …` is rejected by
   iverilog and exits 0 in vita (§3 in character).
 
@@ -826,9 +838,9 @@ behind the §2 correctness queue.
 | frame-body-write-order | `acc = 0; r1 = acc + fw(5);` — hoisting the call moves its write ahead of an operand READ to its left: vita `r1=12 acc=7` = verilator; iverilog `r1=5`. IEEE §11.4.2 leaves operand evaluation order unspecified — an oracle split, recorded. The hierarchical twin `r = u.acc2 + u.fw(3)` is the same split (vita `ORD r=8` = verilator; iverilog `r=0`), and so is an `initial` / `always @(posedge)` / task-body caller beside an `always_comb` caller of the same hierarchical callee: both tools print the same values in the time step, and at a later probe verilator has re-evaluated the comb (`PAIR late acc2=3`) while iverilog and vita keep `11` | `hoist_inout_calls` emits the call before the statement | — | split | — |
 | dyn-size-spellings | `$size(c.da)` (class member) and `$size(u.da)` (hierarchical) are loud where verilator prints 3 (iverilog `x` for the class case — disqualified); `$size(arr)` of a dyn-array FORMAL is E3010 (both oracles 4) | `resolve_intro_net` yields a net for a bare Ident only, so §4.5.500's dyn arm is never entered | route the three spellings to the same `DynSize` node | 1–2 | small |
 | dyn-bits-count | `$bits(da)` of a dynamic array folds the ELEMENT width (32 for `int da[]`) outside a replication count; no oracle for the value (iverilog 1, verilator "UNSUPPORTED: $bits for dynamic array"); as a count it is loud | `try_introspect_fold` has no `$bits` dyn arm; §20.6.2 says the size in bits of the whole array | decide by LRM (`size × element bits`) and pin by hand | 0 | tiny |
+| pkg-type-param-import | an EXPLICIT `import p::PT;` of a package `parameter type PT` is E3009 ``package `p` has no symbol `PT` `` where both oracles run it (`N23 b=8 lo=1 v1=1`); the wildcard `import p::*`, every `p::PT` spelling and the `typedef` twin of the explicit import run since §4.5.515 | the explicit-import binding is a third package-export registry beside the `pkg::t` typedef map and the wildcard export set; §4.5.515 extended the latter two | teach the explicit-import name check the type-parameter names a package declared | 2-oracle | small |
 | gen-rtn-edges | after §4.5.473: a bare call of a generate-scoped routine from OUTSIDE its block is E3010 (both oracles reject — keep) · a hierarchical `u.g.f(x)` is E3009 (iverilog runs it, `f0 fe`; no `hier_funcs` entry) · a generate-scope routine in a CONSTANT expression (`localparam W = f(3)` in the block) is E3009 (iverilog `04`; `const_func_table` is filled by the module-body prescan only) · `frames_classify.rs:1069` retains callees by BARE name, so a generate-routine → generate-routine recursion edge is missed (loud-safe by that function's doc; unmeasured) · `tf_decl_scope` stays the module prefix for a generate-scoped routine, so `default_binding_matches_decl_scope` compares a default argument against module scope (traced to a conservative reject, untested) · `%m` inside a generate task is a split (iverilog `t.u.g.show` pinned, verilator `t.u.g.g.show`) | `frames_reserve.rs` hier gate · `instance.rs:496-505` const prescan · `frames_classify.rs:1069` · `scope.rs:379` | hier: compose the hier key from the qualified name · const: register generate routines into `const_func_table` per scope · edges/default-binding: measure first | iverilog | small–medium |
 | aes§2 | the inliner's discriminator is more than `automatic` — plain 3/5, and `automatic` / `for` / `if` / `case` 1/5, `p::f()` 2/5 | the inliner's discriminator | widen the inliner | measured | — |
-| pkg-type-param | a package `parameter type PT = logic [7:0]` (ANY dimension count) is E2002 `expected identifier, found '::'` at every `p::PT` use (`p::PT w;`, `$bits(p::PT)`) while both oracles run it (`L9 v3=2 v0=1 w1=a bits=8 8`); measured on §4.5.514's census, independent of packed dims | the package-end twin loop in `module_items.rs` registers a `pkg::t` twin only for `ModuleItem::Typedef`; a type-parameter group emits `ModuleItem::Param`s, so no `pkg::PT` typedef is ever registered | register the twin (kind, signedness, literal dims — a package type parameter is not overridable) in the same loop, respelling its dims like a typedef's | 2-oracle | S |
 
 **Subroutine / frame**
 
@@ -905,6 +917,7 @@ behind the §2 correctness queue.
 | error_at | the anchor and the `found` token differ — `g[w].u.q` anchors at `w` and the message says `found '.'` | `error_at` takes an earlier node while `found` takes the cursor token | they are separate fields, so this is correct-but-confusing; 10 sites | — | — |
 | #9 | the `velab -L` (worklib merge) path has no locations | each compilation unit's spans index its own expansion buffer from 0, so the coordinate spaces overlap; a wrong CU map would give a wrong file:line, so `None` is kept | rewrite span offsets at merge time (a whole-AST walk) | — | — |
 | cli-lib | `cargo test -p cli --no-default-features --lib` dies with E0004 (pre-existing) | the lib test target revives sim-engine's `oracle` through a dev-dependency link while the cli feature stays off, so two `#[cfg(feature="oracle")]` arms of `backend_name` are cut | set the cli dev-dependency to `default-features = false`, or merge the two crates' `oracle` into one. CI cannot see it, so do not add `-p cli` to that command | — | — |
+| carrier-namespace | the `T$w` / `T$s` / `T$d…` / `T$p…` carrier names a type parameter desugars into are not reserved at DECLARATION sites: a user `parameter int PT$w = 3` beside a type parameter `PT` in another scope is accepted (illegal in both oracles; the one LEGAL spelling that read a wrong type, `import p::*` over a unit-scope `parameter type PT`, is closed since §4.5.515 because a non-overridable parameter registers literal dims that name no carrier) | `names_a_type_param_carrier` is consulted only at instance-override names (`instances.rs`) | refuse a `$`-carrier spelling at every declaration site | both oracles reject | small |
 | EXT2-DOC | stale documents (CLI reference, language reference, system tasks, explain) | — | — | — | — |
 
 **Strings / heap**
@@ -1022,7 +1035,7 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | a package `parameter type PT = …` is E2002 at every `p::PT` use while both oracles run it, at any dimension count — the package-end twin loop registers `pkg::t` only for `ModuleItem::Typedef`, and a type-parameter group emits `ModuleItem::Param`s (§3.b `pkg-type-param`, measured on §4.5.514's census). First action: census the twin loop's inputs and the non-overridable literal-dims registration `parse_type_param_group` already does for a package group | §3 | ② |
+| 1 | 1 | a scoped `pk::g()` whose TRANSITIVE package callee holds any block-local is ``E3010 … undeclared net/variable `top.$func$pk::g.x` `` while both oracles print 44 — the callee is injected by `inject_pkg_callees` AFTER the step-6.5 frame barrier, so it is never reserved as a frame and is inline-folded without its block-local reservation (§3.b `pkg-callee-blocal`; distinct from the step-3.6 transitive twin §4.5.490 fixed). First action: census the injection order against the barrier with the scoped and the import spellings on HEAD, and the block-local shapes (declared, initialized, under a timing control) | §3 | ② |
 | 2 | next | a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
 | 3 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) `sim-engine/state/frame_eval.rs` (1,810), `hdl-parser/typedefs.rs` (1,389) and `sim-engine/native/wprog.rs` (1,914, its vocabulary already split into `wprog/why.rs`) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 

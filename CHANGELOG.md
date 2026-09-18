@@ -144,6 +144,14 @@ need updating. What moved:
 
 ### Added
 
+- **A package `parameter type` is usable as `pkg::PT`.** `package p; parameter type PT = logic [7:0];
+  endpackage` followed by `p::PT w;`, `$bits(p::PT)`, `p::PT'(x)`, a packed-struct member, an ANSI
+  port, a subroutine formal or return, `typedef p::PT t;`, a module type-parameter default `= p::PT`,
+  a queue or array element, `import p::*`, a chained package alias and a two-package name collision
+  all bind the package's type (1-D or multi-dimensional, signed, `bit`, `int`, `localparam type`,
+  dims naming a package constant). Every spelling was a parse error before. The explicit
+  `import p::PT;` is still refused (ROADMAP §3.b).
+
 - **A multi-dimensional PACKED `parameter type` is carried.** `parameter type T = logic [1:0][3:0]`
   (any packed dimension count, inline or through a vector typedef, also beside unpacked dims) declares
   variables, ANSI ports and subroutine formals, casts with `T'(e)`, answers `$bits(T)` and follows an
@@ -284,6 +292,14 @@ need updating. What moved:
   resulting dimension order — which is the same refusal a declaration already gives.
 
 ### Fixed
+
+- **A non-overridable type parameter keeps its declared range.** `localparam type L = logic [8:1];
+  L u;` read `u[1]` as bit 0 and `$low(u)` as 0 where both reference tools read bit 1 and 1; a
+  `localparam type` as a packed-struct member was a parse error; a compilation-unit-scope
+  `parameter type` was right only when a package preceded it. A non-overridable type parameter of a
+  concrete type whose bounds fold now registers those literal dims. The overridable `parameter type
+  T = logic [8:1]` and a `localparam type` over overridable header parameters still register
+  `[T$w-1:0]` (ROADMAP §2).
 
 - A select INTO an element of a queue / dynamic / associative array whose element has two or more
   packed dimensions (`t q[$]; q[0][1]`, `q[0][5:2]`) was a silent bit-select of the flat element; it is

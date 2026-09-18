@@ -22,3 +22,4 @@ a section restructure, a residue split).
   Summary said 111 and 87; the bullets were 116 and 91). §4.5.509 closed one §2 mechanism bullet and
   re-filed its residues as one bullet, so 2M is unchanged by the slice itself.
 | 2026-09-18 | d407854 | §4.5.514 | 8068 | 32 | 27 / 6 / 21 | 118 / 76 / 42 | 7 / 0 / 7 | 24 / 19 / 5 | 96 / 82 / 14 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 341 / 213 / 128 |
+| 2026-09-19 | e6713aa | §4.5.515 | 8078 | 32 | 27 / 6 / 21 | 120 / 78 / 42 | 7 / 0 / 7 | 24 / 19 / 5 | 97 / 83 / 14 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 344 / 216 / 128 |

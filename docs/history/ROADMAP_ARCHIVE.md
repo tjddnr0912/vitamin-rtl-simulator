@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 407건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 408건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.515` **a package `parameter type` is referable as `pkg::PT`, and a non-overridable type parameter registers its declared range** (2026-09-19 · §3.b `pkg-type-param`, queue row 1 · `pkg::PT` twin registered at `endpackage` for every type parameter the body declared; a non-overridable concrete type parameter registers folded literal dims instead of `[T$w-1:0]`; the compilation-unit parameter arm is non-overridable by construction · 2 lenses 54 + 40 designs, round 2 closed a shadow-class routing, a false-accept and a CU position dependence)
 - `4.5.514` **a multi-dimensional PACKED `parameter type` is carried through per-dimension value parameters** (2026-09-18 · §3.a ⑤ "multi-dimensional", queue row 1 · `T$p<i>a/b` per packed dim mirrors the unpacked carrier, `T$w` stays the total width, `T$s` records the packed count so a count change is loud both ways; an ANSI port of a multi-dim packed typedef runs · review 2 lenses (45 + 26 designs) 0 new silent-wrong, round 2 added three loud guards on pre-existing classes (dyn element select, `defparam` onto a carrier, packed dims over an unpacked typedef in a port) · 8068 tests)
 - `4.5.513` **run.json carries a `wprog` object: why each expression left the native backend's compiled lane** (2026-09-18 · §5.b `WPROG-WHY`, queue row 1 · every `wprog::compile` decline names a key from a closed 22-key vocabulary; the native kernel's three askers tally distinct expression ids, first decline wins; `"wprog": {asked, declined, reasons, unit}` after `codegen`, `null` when the kernel did not run · review 2 lenses (33 + 15 designs) 0 value moves, round 1 relabelled a width-mismatched `Call`/`SysFunc` from `node_kind` to its own key and corrected three SPEC rows · 8027 tests)
 - `4.5.512` **The static `subroutines` rows carry their declaration site and join the runtime rows** (2026-09-18 · §6 OBS, queue row 1 · `SubroutineRoute.decl` from the routine name's span at the seed and at every route seam, written as `decl_file`/`decl_line`/`decl_col` after `sites`; the `key` text instructs a MANY-TO-MANY join on the declaration · review 2 lenses (34 + 10 designs) 0 value defects, round 2 rewrote the join cardinality the round-1 text overstated · 8018 tests)
@@ -524,6 +525,62 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.515 a package `parameter type` is referable as `pkg::PT`, and a non-overridable type parameter registers its declared range (2026-09-19, branch it18) ✅
+
+**ROADMAP row**: §3.b `pkg-type-param`; queue row 1.
+
+**Row claim re-measured: the gap is one missing twin, and the register site beneath it had a second
+defect.** Twenty-three census designs (1-D, `localparam type`, signed, `bit`, `int`, a 2-D packed
+default, an alias `PT2 = PT`, dims naming a package constant, two packages with the same name,
+`import p::*`, a module type-parameter default `= p::PT`, a tf formal and return, `typedef p::PT`,
+`p::PT'(x)`, a packed-struct member, an ANSI port, a chained package alias, an in-package typed
+`localparam` and function, a queue and an array element, a `[8:1]` default) run identically in
+iverilog and verilator; vita was E2002 on every one at the first `p::PT`, and the same twenty-three
+written with `typedef … PT;` in the package were already 3-way identical on the frozen PRE — every
+container already follows a package TYPEDEF twin. The `endpackage` pass registers a `pkg::t` twin
+only for `ModuleItem::Typedef`; `parse_type_param_group` emits `ModuleItem::Param`s (`PT$w`, `PT$s`)
+and a BARE typedef `PT = [PT$w-1:0]` that `restore_scope_unit` drops. The `[T$w-1:0]` form is the
+second defect: it is a width, not a range, so a NON-overridable `localparam type L = logic [8:1]`
+read `u[1]` as bit 0 and `$low(u)` as 0 where both oracles read bit 1 and 1 (X3), and a `localparam
+type` as a packed-struct member was loud because `member_width` cannot fold `L$w` (M1).
+
+**Fix (parser only).** `TypeValue.range` carries the single declared packed range of a 1-D type
+(`packed` stays the only carrier of a dimension LIST). A NON-overridable type parameter of a
+CONCRETE type (`localparam type`, every package type parameter, a body `parameter type` under a
+module header, a compilation-unit-scope one) registers its typedef with the declared range when
+BOTH bounds fold to integer literals at the declaration (`[8:1]` stays `[8:1]`, `[W-1:0]` over a
+package or module constant folds to `[11:0]`), else keeps `[T$w-1:0]`; an alias of another type
+parameter (`shape_expr` present) keeps the symbolic path so it follows the parameter it names. The
+`endpackage` pass registers a `pkg::PT` twin for every type parameter THIS package body declared
+(a positive `pkg_type_param_names` set filled by the group, cleared per container) through the
+same helper the typedef arm now uses (`register_pkg_typedef_twin`, all three dimension containers
+respelled `pkg::W`), and the names join the wildcard-import export set. The compilation-unit
+parameter arm sets `in_package` around its parse (§6.20.1: a unit-scope parameter is a localparam)
+and `parse_module_like` clears the flag on exit, so a CU `parameter type PT = logic [8:1]` is
+`[8:1]` wherever it appears (it was right only after a package, by the leaked flag). New module
+`hdl-parser/src/pkg_type_param.rs`; `type_param_shape_guard` moved verbatim to
+`type_param_shape.rs` for the file cap.
+
+**Review (2 lenses, 54 + 40 designs).** Round 1: differential FAIL on one root class — the declared
+range as PARSED (`[W-1:0]`) was re-resolved inside an inner generate scope that declares its own
+`W` (six designs; PRE's `$`-carrier cannot be shadowed), which is the pre-existing typedef shadow
+class (`typedef logic [W-1:0] t` diverges identically on PRE, recorded in §2) that change B newly
+routed a 1-D `localparam type` onto; soundness PASS with a false-accept on ILLEGAL code (a package
+`parameter int PT$w` beside a CU-scope `parameter type PT` registered a bogus twin) and the CU-scope
+position dependence above. Round 2 closed all three: the literal range is taken only when it folds
+(the six designs print PRE's oracle values again; every loud→value and silent→value cell of round 1
+kept its value), the stems are recorded positively, and the CU arm is non-overridable by
+construction. Recorded, not chased: `import p::PT;` (explicit) is still E3009 "package has no symbol"
+on PRE and POST while both oracles run it — the explicit-import binding is a third registry the
+slice did not extend (§3.b `pkg-type-param-import`); the `$w`/`$s` carrier namespace is not reserved
+against user identifiers (`import p::*` of a package `parameter int PT$w` beside a CU `parameter type
+PT` reads a 3-bit type on PRE and POST, §2); the OVERRIDABLE `parameter type T = logic [8:1]` still
+registers `[T$w-1:0]` (`v[1]`=0, `$low`=0 vs 1/1 in both oracles) — a 1-D `T$p0a/b` carrier is the
+fix shape (§2); a `localparam type L = logic [HI:LO]` over overridable header parameters keeps
+`[L$w-1:0]` (pre-existing, `$low` 0).
+
+**Gate**: 8078 tests (+10: `pkg_type_param.rs` 10 new; one loud pin in `type_param_packed_md.rs` converted to a value pin) · clippy / fmt / doctest rc 0 · corpus 10/10 · format_version 32 unchanged.
 
 #### 4.5.514 a multi-dimensional PACKED `parameter type` is carried through per-dimension value parameters (2026-09-18, branch it17) ✅
 
