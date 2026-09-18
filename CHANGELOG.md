@@ -144,6 +144,15 @@ need updating. What moved:
 
 ### Added
 
+- **A multi-dimensional PACKED `parameter type` is carried.** `parameter type T = logic [1:0][3:0]`
+  (any packed dimension count, inline or through a vector typedef, also beside unpacked dims) declares
+  variables, ANSI ports and subroutine formals, casts with `T'(e)`, answers `$bits(T)` and follows an
+  instance override (`.T(logic [3:0][1:0])`, positional, a typedef, `.T(T)`) per instance, including
+  its `$size` / `$left` / `$right` per dimension. An override that changes the number of packed or
+  unpacked dimensions is refused (F4004 / E3002 naming `T`), as an unpacked-count change already was.
+  An ANSI port of a multi-dim packed typedef (`typedef logic [1:0][3:0] t; input t x`) runs too.
+  A 2-D `T` as a packed struct/union member, an enum base, a function return type or a non-ANSI port
+  stays loud.
 - **`run.json` now carries a `wprog` object: why each expression left the native backend's compiled
   lane.** `codegen` beside it counts process bodies, so a body can read `able 1/1` while every
   evaluation of its right-hand sides runs the generic tree walk. `wprog` counts distinct expressions
@@ -276,6 +285,11 @@ need updating. What moved:
 
 ### Fixed
 
+- A select INTO an element of a queue / dynamic / associative array whose element has two or more
+  packed dimensions (`t q[$]; q[0][1]`, `q[0][5:2]`) was a silent bit-select of the flat element; it is
+  E3009 now. `defparam u.T$w = …` (and the `T$s` / `T$d…` / `T$p…` carriers) silently reshaped a type
+  parameter; the target is refused. Packed dims written before the name of an unpacked-array typedef in
+  an ANSI port (`input u_t [2:0] a`) are refused (IEEE §7.4.1; both oracles reject the design).
 - **A `signed` qualifier written on a `time` declaration is now honoured.** `time signed k = -8;`
   read as unsigned everywhere, so `k/2` printed 9223372036854775804 and `k < 0` printed 0 where both
   reference tools print −4 and 1. Every place a `time` can be declared carries the qualifier now — a

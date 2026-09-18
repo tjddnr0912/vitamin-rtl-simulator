@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 406건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 407건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.514` **a multi-dimensional PACKED `parameter type` is carried through per-dimension value parameters** (2026-09-18 · §3.a ⑤ "multi-dimensional", queue row 1 · `T$p<i>a/b` per packed dim mirrors the unpacked carrier, `T$w` stays the total width, `T$s` records the packed count so a count change is loud both ways; an ANSI port of a multi-dim packed typedef runs · review 2 lenses (45 + 26 designs) 0 new silent-wrong, round 2 added three loud guards on pre-existing classes (dyn element select, `defparam` onto a carrier, packed dims over an unpacked typedef in a port) · 8068 tests)
 - `4.5.513` **run.json carries a `wprog` object: why each expression left the native backend's compiled lane** (2026-09-18 · §5.b `WPROG-WHY`, queue row 1 · every `wprog::compile` decline names a key from a closed 22-key vocabulary; the native kernel's three askers tally distinct expression ids, first decline wins; `"wprog": {asked, declined, reasons, unit}` after `codegen`, `null` when the kernel did not run · review 2 lenses (33 + 15 designs) 0 value moves, round 1 relabelled a width-mismatched `Call`/`SysFunc` from `node_kind` to its own key and corrected three SPEC rows · 8027 tests)
 - `4.5.512` **The static `subroutines` rows carry their declaration site and join the runtime rows** (2026-09-18 · §6 OBS, queue row 1 · `SubroutineRoute.decl` from the routine name's span at the seed and at every route seam, written as `decl_file`/`decl_line`/`decl_col` after `sites`; the `key` text instructs a MANY-TO-MANY join on the declaration · review 2 lenses (34 + 10 designs) 0 value defects, round 2 rewrote the join cardinality the round-1 text overstated · 8018 tests)
 - `4.5.511` **A hierarchical call to a function whose body writes a module net runs** (2026-09-18 · §3.b frame-body-write-sites, queue row 1 · the calling module decides the route from the callee's declaration in the fact table and defers the copy-out statement like a hierarchical task enable · 20 cells loud→correct on both oracles, 3 positions stay loud by name, a cross-instance Rule B pair is E3001 · review 2 lenses (48 + 41 designs) 0 value silent-wrongs, round 2 closed the OBS phantom row and the over-wide pair rule · 8015 tests)
@@ -523,6 +524,62 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.514 a multi-dimensional PACKED `parameter type` is carried through per-dimension value parameters (2026-09-18, branch it17) ✅
+
+**ROADMAP row**: §3.a ⑤'s "multi-dimensional" clause; queue row 1.
+
+**Row claim re-measured: the ladder is entirely a carrier gap.** Thirteen census designs plus three
+explicit-spelling controls: every shape (`logic [1:0][3:0]`, a 3-D type, ascending / signed / `bit`,
+a typedef default, an override that changes the shape or the total width, a port and a tf-port
+formal, `T'(e)` and `$bits(T)`, `localparam type`, a packed+unpacked typedef, element and part
+writes, `[N-1:0][3:0]` dims from a value parameter, a positional override) runs identically in
+iverilog and verilator, and the SAME shapes written as explicit `logic [N-1:0][M-1:0]` were already
+3-way identical on the frozen PRE — the engine, the declaration binders, `$size`/`$left`/`$right`
+and the per-instance fold of symbolic packed dims were all in place. vita was E2002 on all thirteen
+at `parse_type_param_value`'s two decline sites (a second `[` after the range; a typedef whose
+`packed` is non-empty).
+
+**Fix.** The mirror of §4.5.459's unpacked-extents carrier: `TypeValue.packed` holds ALL packed dims
+in source order when there are two or more (empty otherwise, which is the byte-identity guarantee
+for every design that parsed before); `T$w` stays the TOTAL packed width, so `$bits(T)`, `T'(e)` =
+`signing'(T$w'(e))` and every width consumer keep the one value they already read; an OVERRIDABLE `T`
+synthesizes `T$p<i>a` / `T$p<i>b` per packed dim (declared after the `T$d<i>a/b` pairs, pushed in the
+same order by a named or positional override) and its registered typedef is `range=[T$p0a:T$p0b]`,
+`packed=[[T$p1a:T$p1b], …]` instead of `[T$w-1:0]`; a non-overridable one keeps literal dims. `T$s`
+gains the ADDITIONAL packed-dim count in bits 18.. (bits 2..17 = unpacked count, both clamped), so a
+count-losing override fires the existing `$fatal` shape guard and a count-adding one lands on the
+undeclared `T$p…` carrier, reported once per `T` as E3002 naming `T` (the `$d` arm generalized).
+`names_a_type_param_carrier` accepts the `$p` family. `try_port_typedef` no longer refuses a
+multi-dim packed VECTOR typedef: it hands the typedef's inner packed dims to the ANSI caller, which
+appends them after `typedef_dims_layout`'s result exactly as the declaration binder does, so
+`input t_t x` is byte-identical to `input logic [1:0][3:0] x` (a pre-existing gap that also hit the
+explicit spelling); the non-ANSI `PortDecl` has one `range` and stays loud with its own message. New
+module `hdl-parser/src/type_param_packed.rs` (202 lines) holds the carrier; `type_params.rs` is 971.
+
+**Review (2 lenses, 45 + 26 designs, round 1 PASS both, 0 NEW silent-wrong).** Three loud guards
+followed, all pre-existing classes the slice newly routed traffic onto (round 2; each measured on PRE
+first, none moves a value): F1 a select INTO a queue / dynamic / associative-array element whose
+element has ≥2 packed dims silently bit-selected the flat element (`q[0][1]` = `0` where verilator
+reads `a`; the explicit-typedef twin identical on PRE) — E3009 now through a `dyn_md_elem` handle set
+recorded in `netdecl.rs`'s dyn branch and checked at the top of the three read-select arms (the
+element WRITE was already the `nested lvalue select` refusal; a whole-element read, `push_back` and a
+static array of the same element type are untouched, measured). S-1 `defparam u.T$w = 16` (and every
+carrier family) silently reshaped a type parameter on PRE while both oracles say "parameter not
+found" — `parse_defparam` refuses a carrier target. S-2 packed dims before the name of an
+unpacked-array typedef in an ANSI port (`input u_t [2:0] a`) ran on PRE and POST while both oracles
+refuse the design (IEEE §7.4.1 / §7.6) — refused at `try_port_typedef`; the DECLARATION position of
+the same shape is an oracle SPLIT (verilator runs it with vita's value, iverilog refuses the type) and
+was deliberately left running, recorded under §2 "Oracle splits". Also measured and recorded, not
+built: a package `parameter type` is unregistered at ANY dimension count (§3.b `pkg-type-param`,
+queue row 1); the non-ANSI port (§3.b `non-ansi-md-port`, format bump); the value support behind F1
+(§3.b `dyn-md-elem-select`). PRE ≡ POST on the 16 census + 3 control designs, the corpus (10/10),
+and 87 of the 98 review designs; the 10 that changed are exactly F1 (5), S-1 (3) and S-2 (2). One
+brief claim was refuted by the soundness lens: "`defparam u.T$w` is loud pre-slice" was false (S-1).
+
+**Tests**: 8068 tests (+41): `type_param_packed_md.rs` (26), `dyn_md_elem_select.rs` (10),
+`unpacked_array_typedef.rs` +5, `type_parameters.rs` +1 (the loud pin became a value pin),
+`type_param_shape_override.rs` 3 wording pins. `format_version` 32.
 
 #### 4.5.513 run.json carries a `wprog` object: why each expression left the native backend's compiled lane (2026-09-18, branch it16) ✅
 
