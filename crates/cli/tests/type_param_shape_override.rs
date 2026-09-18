@@ -307,7 +307,7 @@ fn a_dim_losing_override_is_still_loud_with_an_arity_only_message() {
     assert_eq!(rc, Some(1), "{out}");
     assert!(out.contains("fatal[VITA-F4004]"), "{out}");
     assert!(
-        out.contains("the override changes the type's unpacked dimension COUNT"),
+        out.contains("the override changes the type's dimension COUNT (packed or unpacked)"),
         "{out}"
     );
     assert!(
@@ -424,8 +424,8 @@ fn assert_strict_loud(out: &str, rc: Option<i32>) {
     assert!(out.contains("fatal[VITA-F4004]"), "{out}");
     assert!(
         out.contains(
-            "the override changes the type's signedness, 2-state kind or unpacked \
-                      dimensions"
+            "the override changes the type's signedness, 2-state kind or dimensions \
+                      (packed or unpacked)"
         ),
         "{out}"
     );
@@ -464,7 +464,9 @@ fn a_packed_struct_member_of_type_t_follows_the_sign_and_keeps_the_2_state_guard
     assert_eq!(rc, Some(1), "{out}");
     assert!(out.contains("fatal[VITA-F4004]"), "{out}");
     assert!(
-        out.contains("the override changes the type's 2-state kind or unpacked dimension COUNT"),
+        out.contains(
+            "the override changes the type's 2-state kind or dimension COUNT (packed or unpacked)"
+        ),
         "{out}"
     );
     assert!(

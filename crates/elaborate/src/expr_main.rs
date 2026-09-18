@@ -555,6 +555,13 @@ impl Elaborator<'_> {
 
             // ── selects → Select{base,offset,width,kind} (all ExprIds) ──
             ast::ExprKind::BitSelect { base, index } => {
+                // A second index into a dynamic-storage element whose element type
+                // has >1 packed dimension is a flat bit-select here, not the outer
+                // packed element — loud (`dyn_md_elem.rs`).
+                if self.reject_dyn_md_elem_select(base) {
+                    let _ = index;
+                    return self.placeholder_expr();
+                }
                 // N3.4 follow-on: a RANGE select cannot be further indexed —
                 // `x[3:2][0]` / `x[c+:w][0]`. iverilog rejects this universally
                 // ("All but the final index in a chain of indices must be a single
@@ -662,6 +669,12 @@ impl Elaborator<'_> {
                 })
             }
             ast::ExprKind::PartSelect { base, msb, lsb } => {
+                // Loud twin of the BitSelect guard: `q[0][5:2]` on a >1-packed-dim
+                // element is a flat bit range, not a run of packed elements.
+                if self.reject_dyn_md_elem_select(base) {
+                    let _ = (msb, lsb);
+                    return self.placeholder_expr();
+                }
                 // §13.3 UARR: `arr[hi:lo]` on a whole unpacked-array formal is an
                 // unpacked SLICE, not a packed value — the md-packed rep would
                 // silently return `{arr[hi],…,arr[lo]}`. Loud (index an element).
@@ -759,6 +772,11 @@ impl Elaborator<'_> {
                 width,
                 dir,
             } => {
+                // Loud twin of the BitSelect guard (`q[0][2+:4]`).
+                if self.reject_dyn_md_elem_select(base) {
+                    let _ = (offset, width, dir);
+                    return self.placeholder_expr();
+                }
                 // §13.3 UARR: `arr[b+:w]` on a whole unpacked-array formal is an
                 // unpacked slice, not a value — loud (see the PartSelect twin).
                 if self.is_array_formal_whole(base) {

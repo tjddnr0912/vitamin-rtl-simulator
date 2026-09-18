@@ -18,9 +18,11 @@
 //! fixed in the AST), so an override whose shape differs from the default's is
 //! refused LOUDLY by a synthesized `initial if (T$s != <default>) $fatal` — never
 //! a silently unsigned `T`. The integral vector subset is the delivered scope
-//! (`logic`/`reg`/`bit` with one packed range, the 2-state atoms, `time`, an
-//! integral vector typedef, another type parameter); a struct / enum / real /
-//! string / class / multi-dimensional default or override is a parse error.
+//! (`logic`/`reg`/`bit` with one or more packed ranges, the 2-state atoms, `time`,
+//! an integral vector typedef, another type parameter); a struct / enum / real /
+//! string / class default or override is a parse error. A type with two or more
+//! packed dimensions rides one more carrier per dimension — see
+//! `type_param_packed.rs`.
 use super::*;
 
 /// A type parameter's parse-time record.
@@ -34,6 +36,12 @@ pub(crate) struct TypeParam {
     /// keeps the consumers that cannot compose a dim (`T'(e)`, an instance
     /// OVERRIDE) declining positively rather than answering the element's width.
     pub(crate) unpacked: Vec<Dim>,
+    /// §3.a ⑤: the CARRIED packed dimensions of a multi-dimensional type parameter
+    /// (`parameter type T = logic [1:0][3:0]`), in source order — the `T$p<i>a` /
+    /// `T$p<i>b` names for an overridable one, the literal ranges otherwise. Empty
+    /// for every one-dimensional / atom type parameter, so an override of one
+    /// pushes exactly the connections it always pushed.
+    pub(crate) packed: Vec<Range>,
 }
 
 /// One resolved integral type: its width EXPRESSION (a literal when it folds) and
@@ -53,11 +61,18 @@ pub(crate) struct TypeValue {
     /// exact silent-wrong the carrier exists to prevent. `None` for every concrete
     /// type, where `shape_flags()` is the answer.
     pub(crate) shape_expr: Option<Expr>,
+    /// §3.a ⑤: ALL packed dimensions IN SOURCE ORDER when the type has two or more
+    /// (`logic [1:0][3:0]` ⇒ `[[1:0],[3:0]]`); EMPTY for every one-dimensional or
+    /// atom type. [`Self::width`] stays the TOTAL packed width either way, so every
+    /// width consumer (`T$w`, `$bits(T)`, `T'(e)`) reads the one value it always
+    /// read and only the per-dimension SHAPE travels here.
+    pub(crate) packed: Vec<Range>,
 }
 
 impl TypeValue {
-    /// `T$s`: bit 0 = signed, bit 1 = 2-state, bits 2.. = the number of UNPACKED
-    /// dimensions.
+    /// `T$s`: bit 0 = signed, bit 1 = 2-state, bits 2..17 = the number of UNPACKED
+    /// dimensions, bits 18.. = the number of EXTRA packed dimensions (one less than
+    /// the packed list's length, so a one-dimensional type contributes 0).
     ///
     /// The dim COUNT is what refuses an override whose ARITY differs from the
     /// default's (§3 ⑤ⓕ) — a dim-losing `#(.T(logic [15:0]))` on an unpacked
@@ -72,10 +87,18 @@ impl TypeValue {
     /// Byte-identical for every design that predates the extents carrier: a count
     /// of 0 and 1 are the `0` and `4` the boolean spelled, and a ≥2-dim default is
     /// the only value that moves (every override of one was refused at the parse).
+    ///
+    /// The PACKED count joins it on the same terms and in a field of its own: a
+    /// type with one packed range contributes `0`, which is every design that
+    /// parsed before §3.a ⑤ (a multi-dimensional default was a parse error), so no
+    /// existing `T$s` value moves. The two counts are separate fields rather than a
+    /// sum so [`Parser::narrow_shape_guards`]' right shift keeps BOTH in the
+    /// compare and a mismatch on either axis is still the `$fatal` it was.
     pub(crate) fn shape_flags(&self) -> u32 {
         (self.signed as u32)
             | ((self.two_state as u32) << 1)
-            | ((self.unpacked.len().min((u32::MAX >> 2) as usize) as u32) << 2)
+            | ((self.unpacked.len().min(0xFFFF) as u32) << 2)
+            | ((self.packed.len().saturating_sub(1).min(0x3FFF) as u32) << 18)
     }
 }
 
@@ -124,7 +147,7 @@ impl Parser<'_, '_> {
             }
             let Some(tv) = self.parse_type_param_value(true) else {
                 self.error(
-                    "an integral type as the type parameter's default (`logic [N:0]` / `bit` / `int` / a vector typedef / another type parameter — a struct, enum, real, string, class or multi-dimensional type is unsupported in v1)",
+                    "an integral type as the type parameter's default (`logic [N:0]` / `logic [N:0][M:0]` / `bit` / `int` / a vector typedef / another type parameter — a struct, enum, real, string or class type is unsupported in v1)",
                 );
                 break;
             };
@@ -197,13 +220,16 @@ impl Parser<'_, '_> {
                 }
                 _ => tv.unpacked.clone(),
             };
+            // §3.a ⑤: and the PACKED extents of a multi-dimensional one, declared
+            // AFTER the `T$d…` pairs so the positional override channel pushes them
+            // in the same order the group declares them (see `type_param_packed.rs`).
+            let carried_packed =
+                self.declare_packed_carriers(&name.name, &tv, kind, overridable, span, &mut decls);
             // The typedef every use of `T` resolves through: `[T$w-1:0]` of the
-            // default's kind and signedness.
-            let msb = Self::sub(
-                Self::ident_expr(&width_name, span),
-                Self::dec_lit(1, span),
-                span,
-            );
+            // default's kind and signedness — or, for a multi-dimensional type, the
+            // carried dimension list itself.
+            let (td_range, td_packed) =
+                Self::type_param_typedef_dims(&carried_packed, &width_name, span);
             self.typedefs.insert(
                 name.name.clone(),
                 TypeInfo {
@@ -213,12 +239,8 @@ impl Parser<'_, '_> {
                         NetVarKind::Logic
                     },
                     signed: tv.signed,
-                    range: Some(Range {
-                        msb,
-                        lsb: Self::dec_lit(0, span),
-                        span,
-                    }),
-                    packed: Vec::new(),
+                    range: td_range,
+                    packed: td_packed,
                     class_name: None,
                     // §3 ⑤ⓕ: the dims of an unpacked-array default ride the typedef,
                     // which is what every DECLARATION binder already reads
@@ -255,6 +277,7 @@ impl Parser<'_, '_> {
                     width_name,
                     signed: tv.signed,
                     unpacked: carried,
+                    packed: carried_packed,
                 },
             );
             self.local_decl_names.insert(name.name.clone());
@@ -437,6 +460,7 @@ impl Parser<'_, '_> {
             };
             self.bump(); // the kind keyword
             let s0 = self.opt_signed();
+            let mut packed = Vec::new();
             let (width, signed) = match atom_w {
                 Some(w) => {
                     let s1 = self.opt_signed();
@@ -444,25 +468,40 @@ impl Parser<'_, '_> {
                 }
                 None => {
                     let range = self.opt_range();
-                    if self.peek() == Some(TokenKind::LBracket) {
-                        // a second packed dimension: the flat width would lose the
-                        // element shape a select on `T v` needs
+                    // §3.a ⑤: every FURTHER packed dimension. `T$w` stays the total
+                    // width (the product) and the per-dimension shape rides the
+                    // `T$p<i>a/b` carrier, so a select on `T v` reads the same
+                    // dimensions the explicit spelling would have given it.
+                    let extra = self.opt_packed_dims();
+                    if range.is_none() && !extra.is_empty() {
+                        // a range-less kind cannot carry further dimensions
                         self.pos = save;
                         return None;
                     }
+                    packed = Self::packed_dim_list(range.as_ref(), &extra);
                     let s1 = self.opt_signed();
-                    let w = match &range {
-                        None => Self::dec_lit(1, span),
-                        Some(r) => match self.member_width(&Some(r.clone())) {
-                            Some(w) => Self::dec_lit(w, span),
-                            None => match self.sym_range_width(r) {
-                                Some(e) => e,
-                                None => {
-                                    self.pos = save;
-                                    return None;
-                                }
+                    let w = if !packed.is_empty() {
+                        match self.packed_dims_width(&packed, span) {
+                            Some(e) => e,
+                            None => {
+                                self.pos = save;
+                                return None;
+                            }
+                        }
+                    } else {
+                        match &range {
+                            None => Self::dec_lit(1, span),
+                            Some(r) => match self.member_width(&Some(r.clone())) {
+                                Some(w) => Self::dec_lit(w, span),
+                                None => match self.sym_range_width(r) {
+                                    Some(e) => e,
+                                    None => {
+                                        self.pos = save;
+                                        return None;
+                                    }
+                                },
                             },
-                        },
+                        }
                     };
                     (w, s0.or(s1).unwrap_or(false))
                 }
@@ -473,6 +512,7 @@ impl Parser<'_, '_> {
                 two_state,
                 unpacked: Vec::new(),
                 shape_expr: None,
+                packed,
             });
         }
         // A type NAME: another type parameter of this module, or an integral vector
@@ -499,6 +539,10 @@ impl Parser<'_, '_> {
                         .is_some_and(|i| i.kind == NetVarKind::Bit),
                     unpacked: tp.unpacked.clone(),
                     shape_expr,
+                    // §3.a ⑤: an ALIAS (`parameter type U = T`, a pass-through
+                    // `.T(T)`) inherits the CARRIED dimension names, so `U` follows
+                    // an override of `T` instead of freezing its default extents.
+                    packed: tp.packed.clone(),
                 });
             }
             let info = self.peek_typedef_name()?;
@@ -507,7 +551,6 @@ impl Parser<'_, '_> {
                 || self.enum_defs.contains_key(&key)
                 || self.union_type_names.contains(&key)
                 || info.class_name.is_some()
-                || !info.packed.is_empty()
                 // §3 ⑤ⓕ: the `T$w`/`T$s` value-parameter desugar has no dim slot, so
                 // the dims travel beside it — through the typedef this group
                 // registers for `T`, which is where `T v;` reads them. Only the
@@ -527,15 +570,30 @@ impl Parser<'_, '_> {
                 | NetVarKind::Longint => true,
                 _ => return None,
             };
-            let width = match Self::atom_member_width(info.kind) {
-                Some(w) => Self::dec_lit(w, span),
-                None => match &info.range {
-                    None => Self::dec_lit(1, span),
-                    Some(r) => match self.member_width(&Some(r.clone())) {
-                        Some(w) => Self::dec_lit(w, span),
-                        None => self.sym_range_width(r)?,
+            // §3.a ⑤: a MULTI-DIMENSIONAL vector typedef (`typedef logic [1:0][3:0]
+            // a_t;`). `TypeInfo` splits the dimensions the way a declaration does —
+            // `range` is the outermost and `packed` every one after it — so the
+            // source-order list is `range` ahead of `packed`. An ATOM typedef
+            // cannot reach here with dimensions (`typedef_dims_layout` refuses
+            // packed dimensions on a range-less typedef at its declaration), and a
+            // declined `range` here would silently drop the outer dimension.
+            let packed = Self::packed_dim_list(info.range.as_ref(), &info.packed);
+            if !info.packed.is_empty() && packed.is_empty() {
+                return None;
+            }
+            let width = if !packed.is_empty() {
+                self.packed_dims_width(&packed, span)?
+            } else {
+                match Self::atom_member_width(info.kind) {
+                    Some(w) => Self::dec_lit(w, span),
+                    None => match &info.range {
+                        None => Self::dec_lit(1, span),
+                        Some(r) => match self.member_width(&Some(r.clone())) {
+                            Some(w) => Self::dec_lit(w, span),
+                            None => self.sym_range_width(r)?,
+                        },
                     },
-                },
+                }
             };
             self.eat_scope_qualifier();
             self.bump(); // the type name
@@ -545,6 +603,7 @@ impl Parser<'_, '_> {
                 two_state,
                 unpacked: info.unpacked.clone(),
                 shape_expr: info.shape_param.as_ref().map(|n| Self::ident_expr(n, span)),
+                packed,
             });
         }
         None
@@ -830,7 +889,7 @@ impl Parser<'_, '_> {
         let Some(tv) = self.parse_type_param_value(true) else {
             self.pos = save;
             self.error(
-                "an integral type as the type parameter override (a struct, enum, real, string, class or multi-dimensional type is unsupported in v1)",
+                "an integral type as the type parameter override (a struct, enum, real, string or class type is unsupported in v1)",
             );
             return false;
         };
@@ -846,7 +905,7 @@ impl Parser<'_, '_> {
             let Some(ab) = Self::dim_endpoints(d, span) else {
                 self.pos = save;
                 self.error(
-                    "an integral type as the type parameter override (a struct, enum, real, string, class or multi-dimensional type is unsupported in v1)",
+                    "an integral type as the type parameter override (a struct, enum, real, string or class type is unsupported in v1)",
                 );
                 return false;
             };
@@ -890,6 +949,9 @@ impl Parser<'_, '_> {
                         });
                     }
                 }
+                // §3.a ⑤: the PACKED extents, after the unpacked ones — the order
+                // the group declares them in.
+                Self::push_packed_override_conns(out, Some(n), &tv.packed, span);
             }
             None => {
                 out.push(ParamConn::Positional(tv.width));
@@ -901,6 +963,7 @@ impl Parser<'_, '_> {
                     out.push(ParamConn::Positional(a));
                     out.push(ParamConn::Positional(b));
                 }
+                Self::push_packed_override_conns(out, None, &tv.packed, span);
             }
         }
         true

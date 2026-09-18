@@ -513,3 +513,117 @@ fn the_formal_carry_keeps_the_split_and_the_class_refusal() {
         "a class typedef type for a tf-port",
     );
 }
+
+// ───────── packed dims BEFORE the name of an unpacked-array typedef (IEEE §7.4.1) ─────────
+
+/// `typedef logic [3:0] u_t [0:1]; input u_t [2:0] a` makes an UNPACKED array the
+/// ELEMENT of a packed array, which IEEE 1800 §7.4.1 forbids (a packed array's
+/// element must itself be a packed type). iverilog says so by name ("Packed array
+/// base-type `u_t` is not packed"); verilator refuses the port connection
+/// ("mismatch between port which is not an array, and expression which is an
+/// array", IEEE 1800 §7.6).
+///
+/// This gate is the PORT position ONLY, where both oracles refuse the design. The
+/// 2-D-element spelling was refused on PRE by `try_port_typedef`'s
+/// multi-dim-packed error and started running when that error was lifted; the
+/// 1-D-element spelling ran on PRE too, so both port spellings are closed here.
+/// The DECLARATION position is an oracle split and is left running — its own test
+/// is below.
+#[test]
+fn packed_dims_before_the_name_of_an_unpacked_array_typedef_are_refused() {
+    const NEEDLE: &str = "no packed dimensions before the name of an unpacked-array typedef";
+    // port position, 1-D element (ran on PRE: `SUB bits=24 dims=3`)
+    loud(
+        "typedef logic [3:0] u_t [0:1];\n\
+         module sub(input u_t [2:0] a, output logic [31:0] o);\n\
+           initial #1 $display(\"SUB bits=%0d dims=%0d\", $bits(a), $dimensions(a));\n\
+           assign o = 0;\n\
+         endmodule\n\
+         module top;\n\
+           logic [2:0][3:0] src [0:1];\n\
+           logic [31:0] o1;\n\
+           sub u1(.a(src), .o(o1));\n\
+           initial #5 $finish;\n\
+         endmodule\n",
+        NEEDLE,
+    );
+    // port position, 2-D element (loud on PRE for a different reason, ran after
+    // the multi-dim packed carrier landed: `SUB bits=48 dims=4 s1=2 s2=3 s3=2 s4=4`)
+    loud(
+        "typedef logic [1:0][3:0] u_t [0:1];\n\
+         module sub(input u_t [2:0] a, output logic [31:0] o);\n\
+           initial #1 $display(\"SUB bits=%0d dims=%0d\", $bits(a), $dimensions(a));\n\
+           assign o = 0;\n\
+         endmodule\n\
+         module top;\n\
+           logic [2:0][1:0][3:0] src [0:1];\n\
+           logic [31:0] o1;\n\
+           sub u1(.a(src), .o(o1));\n\
+           initial #5 $finish;\n\
+         endmodule\n",
+        NEEDLE,
+    );
+    // The DECLARATION position is deliberately NOT gated — see
+    // `the_declaration_position_of_the_same_shape_is_an_oracle_split` below.
+}
+
+/// The tf-port twin of the shape above. `try_tf_port_typedef` never consumed dims
+/// after the type name, so this was ALREADY refused before this slice (as a
+/// spelling error, "expected identifier, found '['", plus the declarator-dims
+/// message) and no gate was added there. Pinned as loud only — the wording is the
+/// parser's recovery cascade and is not the contract.
+#[test]
+fn packed_dims_before_a_tf_port_unpacked_array_typedef_stay_refused() {
+    let (out, ok) = vita(
+        "typedef logic [3:0] u_t [0:1];\n\
+         module top;\n\
+           function automatic int f(input u_t [2:0] a);\n\
+             return $bits(a);\n\
+           endfunction\n\
+           logic [2:0][3:0] src [0:1];\n\
+           initial #1 $display(\"F f=%0d\", f(src));\n\
+           initial #5 $finish;\n\
+         endmodule\n",
+    );
+    assert!(!ok, "expected a loud reject, got exit 0:\n{out}");
+    assert!(
+        !out.contains("F f="),
+        "the run must not print a value:\n{out}"
+    );
+}
+
+/// The control the two gates must not touch: the typedef used WITHOUT dims before
+/// the name. 3-way identical (vita, iverilog 13.0, verilator 5.052).
+#[test]
+fn an_unpacked_array_typedef_without_leading_dims_still_runs() {
+    let out = run("typedef logic [3:0] u_t [0:1];\n\
+         module top;\n\
+           u_t v;\n\
+           initial #1 $display(\"V bits=%0d dims=%0d s1=%0d\", $bits(v), $dimensions(v), $size(v,1));\n\
+           initial #5 $finish;\n\
+         endmodule\n");
+    assert!(out.contains("V bits=8 dims=2 s1=2"), "{out}");
+}
+
+/// `u_t [2:0] v;` — the DECLARATION twin of the port shape above, deliberately
+/// left RUNNING.
+///
+/// It is an ORACLE SPLIT, so the value is verilator-pinned:
+///   verilator 5.052 `--binary --timing`: `V bits=24 dims=3` — identical to this
+///     line and to what vita printed before the multi-dim packed type-parameter
+///     slice (the shape is read as `logic [2:0][3:0] v [0:1]`).
+///   iverilog 13.0 `-g2012`: `error: Packed array base-type `u_t` is not packed.`
+///     rc=1 — it refuses the type outright (IEEE 1800 §7.4.1).
+/// The port position is not split (both oracles refuse it) and IS loud, one test
+/// up. A working, oracle-agreeing cell is never louded, so this one keeps its
+/// value and the disagreement is carried as a row in ROADMAP §2 "Oracle splits".
+#[test]
+fn the_declaration_position_of_the_same_shape_is_an_oracle_split() {
+    let out = run("typedef logic [3:0] u_t [0:1];\n\
+         module top;\n\
+           u_t [2:0] v;\n\
+           initial #1 $display(\"V bits=%0d dims=%0d\", $bits(v), $dimensions(v));\n\
+           initial #5 $finish;\n\
+         endmodule\n");
+    assert!(out.contains("V bits=24 dims=3"), "{out}");
+}

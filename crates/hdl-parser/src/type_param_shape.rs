@@ -17,8 +17,9 @@
 use super::*;
 
 impl Parser<'_, '_> {
-    /// `T$w` / `T$s` / `T$d<i>a` / `T$d<i>b` — the value parameters a `parameter
-    /// type T` desugars to. A user cannot legitimately name one: the desugar builds
+    /// `T$w` / `T$s` / `T$d<i>a` / `T$d<i>b` / `T$p<i>a` / `T$p<i>b` — the value
+    /// parameters a `parameter type T` desugars to (`$d` = an unpacked extent,
+    /// `$p` = a packed one). A user cannot legitimately name one: the desugar builds
     /// those `ParamConn`s directly, and both oracles reject the spelling because no
     /// such parameter exists in their elaborated module.
     pub(crate) fn names_a_type_param_carrier(name: &str) -> bool {
@@ -31,7 +32,7 @@ impl Parser<'_, '_> {
         if tail == "w" || tail == "s" {
             return true;
         }
-        let Some(rest) = tail.strip_prefix('d') else {
+        let Some(rest) = tail.strip_prefix(['d', 'p']) else {
             return false;
         };
         let Some(digits) = rest.strip_suffix(['a', 'b']) else {
@@ -42,11 +43,12 @@ impl Parser<'_, '_> {
 
     /// The F4004 text for the compare the module ended up with. `blocked` is the OR
     /// of the axis bits no use of `T` could follow ([`SHAPE_AXIS_SIGN`] /
-    /// [`SHAPE_AXIS_TWO_STATE`]); the unpacked dimension COUNT is always in the
-    /// compare (the declarators are stamped with the default's dim LIST at parse).
+    /// [`SHAPE_AXIS_TWO_STATE`]); the dimension COUNT — packed and unpacked alike —
+    /// is always in the compare (the declarators are stamped with the default's dim
+    /// LIST at parse).
     ///
     /// - `0` — every use reached a container that carries both axes: dimension
-    ///   count only.
+    ///   count only (both halves).
     /// - `SHAPE_AXIS_TWO_STATE` — a `T'(e)` cast / a packed struct/union member of
     ///   type `T`: the SIGN rides a per-instance `CastTarget::SigningParam` node,
     ///   but a cast node has no kind field, so the 2-state axis stays fixed.
@@ -55,15 +57,15 @@ impl Parser<'_, '_> {
     pub(crate) fn shape_guard_msg(tname: &str, blocked: u8) -> String {
         if blocked == 0 {
             format!(
-                "\"type parameter `{tname}`: the override changes the type's unpacked dimension COUNT, which the module's declarations of `{tname}` cannot follow (an override may change the width, the unpacked extents, the signedness and the 2-state kind; only the dimension count is fixed — v1)\""
+                "\"type parameter `{tname}`: the override changes the type's dimension COUNT (packed or unpacked), which the module's declarations of `{tname}` cannot follow (an override may change the width, the unpacked extents, the signedness and the 2-state kind; only the dimension count is fixed — v1)\""
             )
         } else if blocked & SHAPE_AXIS_SIGN == 0 {
             format!(
-                "\"type parameter `{tname}`: the override changes the type's 2-state kind or unpacked dimension COUNT, which the module's declarations of `{tname}` cannot follow, because `{tname}` is used here in a position that carries the signedness but no 2-state kind (a packed struct/union member or a `{tname}'(e)` cast) (an override may change the width, the unpacked extents and the signedness; the 2-state kind and the dimension count are fixed — v1)\""
+                "\"type parameter `{tname}`: the override changes the type's 2-state kind or dimension COUNT (packed or unpacked), which the module's declarations of `{tname}` cannot follow, because `{tname}` is used here in a position that carries the signedness but no 2-state kind (a packed struct/union member or a `{tname}'(e)` cast) (an override may change the width, the unpacked extents and the signedness; the 2-state kind and the dimension count are fixed — v1)\""
             )
         } else {
             format!(
-                "\"type parameter `{tname}`: the override changes the type's signedness, 2-state kind or unpacked dimensions, which the module's declarations of `{tname}` cannot follow, because `{tname}` is used here in a position that carries no shape (an enum base, a class property, a function RETURN type, or — for the 2-state kind only — a packed struct/union member or a `{tname}'(e)` cast) (an override must keep the default type's shape; only its width and unpacked extents may differ — v1)\""
+                "\"type parameter `{tname}`: the override changes the type's signedness, 2-state kind or dimensions (packed or unpacked), which the module's declarations of `{tname}` cannot follow, because `{tname}` is used here in a position that carries no shape (an enum base, a class property, a function RETURN type, or — for the 2-state kind only — a packed struct/union member or a `{tname}'(e)` cast) (an override must keep the default type's shape; only its width and unpacked extents may differ — v1)\""
             )
         }
     }
@@ -165,11 +167,13 @@ impl Parser<'_, '_> {
                 continue;
             }
             // PER-AXIS: drop from the compare exactly the low bits every use of `T`
-            // can follow. `T$s` is `bit0 = signed`, `bit1 = 2-state`, `bits 2.. =
-            // unpacked dim count`, so the bits that stay are a SUFFIX and the mask is
-            // a right shift: 2 when both axes are carried, 1 when only the sign is
-            // (a cast / a packed struct member), 0 when the sign is not — which is
-            // the original strict compare, left byte-identical by skipping.
+            // can follow. `T$s` is `bit0 = signed`, `bit1 = 2-state`, `bits 2..17 =
+            // unpacked dim count`, `bits 18.. = extra packed dim count`, so the bits
+            // that stay are a SUFFIX and the mask is a right shift: 2 when both axes
+            // are carried, 1 when only the sign is (a cast / a packed struct
+            // member), 0 when the sign is not — which is the original strict
+            // compare, left byte-identical by skipping. Both dim counts sit above
+            // bit 1, so every shift keeps both of them in the compare.
             let blocked = uncarried.get(&sname).copied().unwrap_or(0);
             let shift: u32 = if blocked & SHAPE_AXIS_SIGN != 0 {
                 0

@@ -1073,6 +1073,13 @@ impl Parser<'_, '_> {
     /// (`typedef logic [7:0] a_t [0:3]; module m(input a_t i, …)`), which the ANSI
     /// caller lands on the port's `unpacked` list — the field it already fills
     /// from dims written after the name. Empty for every other typedef.
+    ///
+    /// §3.a ⑤: the SEVENTH slot is the typedef's own INNER PACKED dims
+    /// (`typedef logic [1:0][3:0] t_t;` ⇒ `[[3:0]]`, the outermost riding the third
+    /// slot). The ANSI caller appends them AFTER whatever `typedef_dims_layout`
+    /// built from dims written before the port name, exactly as the declaration
+    /// binder does. Empty for every other typedef, and for the shapes that stay
+    /// loud (a class handle, a struct or non-vector typedef with packed dims).
     #[allow(clippy::type_complexity)]
     pub(crate) fn try_port_typedef(
         &mut self,
@@ -1083,6 +1090,7 @@ impl Parser<'_, '_> {
         Option<String>,
         Vec<Range>,
         Vec<Dim>,
+        Vec<Range>,
     )> {
         let info = self.peek_typedef_name()?;
         let q = self.scope_qualifier_len(); // 0 (bare) or 2 (`pkg::`)
@@ -1099,7 +1107,19 @@ impl Parser<'_, '_> {
         let nm = self.type_name_key();
         let is_struct =
             self.struct_layouts.contains_key(&nm) || self.sym_struct_layouts.contains_key(&nm);
-        if info.class_name.is_some() || !info.packed.is_empty() {
+        // §3.a ⑤: a MULTI-DIMENSIONAL packed VECTOR typedef is now carried — the
+        // seventh slot hands its inner dims to the caller, which composes them
+        // exactly as the declaration binder does (`decls.rs::parse_typed_decl`), so
+        // `input t_t x` is byte-identical to `input logic [1:0][3:0] x`. A class
+        // handle, and a STRUCT or non-vector typedef carrying packed dims, still
+        // need per-port machinery the `AnsiPort`/`PortDecl` shape has no slot for.
+        let carried_packed = !info.packed.is_empty()
+            && !is_struct
+            && matches!(
+                info.kind,
+                NetVarKind::Logic | NetVarKind::Reg | NetVarKind::Bit
+            );
+        if info.class_name.is_some() || (!info.packed.is_empty() && !carried_packed) {
             self.error(
                 "a class or multi-dim-packed typedef as a module port type is unsupported in v1 (a simple vector / enum / packed-struct typedef port is supported)",
             );
@@ -1111,7 +1131,24 @@ impl Parser<'_, '_> {
                      // packed array whose element is the typedef; the caller folds them ahead of
                      // the typedef's own range.
         let extra = self.opt_packed_dims();
+        // IEEE 1800 §7.4.1: the ELEMENT of a packed array must itself be packed, so
+        // `typedef logic [3:0] u_t [0:1]; input u_t [2:0] a` is illegal — iverilog
+        // says so by name ("Packed array base-type `u_t` is not packed"), verilator
+        // by refusing the port connection (§7.6). Composing the dims anyway builds a
+        // shape no legal source can name.
+        if !extra.is_empty() && !info.unpacked.is_empty() {
+            self.error(
+                "no packed dimensions before the name of an unpacked-array typedef \
+                     (IEEE 1800 §7.4.1: a packed array's element must be a packed \
+                     type; write the dims on the element type)",
+            );
+        }
         let struct_name = if is_struct { Some(nm) } else { None };
+        let inner_packed = if carried_packed {
+            info.packed
+        } else {
+            Vec::new()
+        };
         Some((
             info.kind,
             info.signed,
@@ -1119,6 +1156,7 @@ impl Parser<'_, '_> {
             struct_name,
             extra,
             info.unpacked,
+            inner_packed,
         ))
     }
 

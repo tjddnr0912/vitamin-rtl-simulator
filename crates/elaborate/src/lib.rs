@@ -71,6 +71,7 @@ mod cover_synth;
 mod crv;
 mod da;
 mod driver;
+mod dyn_md_elem;
 mod dynarr;
 mod dynarr_method;
 mod events;
@@ -586,6 +587,15 @@ struct Elaborator<'s> {
     // (N3.3 — mirrors `norm_offset_for_net` for plain vectors). elaborate-LOCAL —
     // NEVER in the frozen sim-ir.
     packed_dims: BTreeMap<u32, Vec<(i64, u32, bool)>>,
+    // Dynamic-storage HANDLE nets (`q[$]` / `d[]` / `a[int]`) whose ELEMENT type
+    // carries an inner packed-dim list, i.e. two or more packed dimensions
+    // (`typedef logic [1:0][3:0] t_ex; t_ex q [$]`). The handle is a flat
+    // `product(width)`-bit element, so a second index (`q[0][1]`) lowers to a
+    // BIT-select of that flat element where the language wants the outer packed
+    // ELEMENT — `dyn_md_elem_select.rs` refuses it instead. Only the SELECT is
+    // refused; a whole-element read/write (`q[0]`, `push_back`) is correct and
+    // keeps working. elaborate-LOCAL — never in the frozen sim-ir.
+    dyn_md_elem: BTreeSet<u32>,
     // v5 ⑥: the active `$` substitution while lowering a QUEUE element index —
     // the ExprId of `size(handle)-1`. Save/restore around each queue index so
     // nested selects (`q[$ - r[$]]`) bind each `$` to ITS OWN queue. `None`

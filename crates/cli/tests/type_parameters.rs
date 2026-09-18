@@ -323,8 +323,9 @@ fn a_shape_changing_override_now_follows_the_override() {
 
 #[test]
 fn a_non_integral_type_parameter_is_loud() {
-    // a struct / enum / real default, a struct override, a multi-dimensional
-    // packed default: outside the integral vector subset (parse errors)
+    // a struct / enum / real default, a struct override: outside the integral
+    // vector subset (parse errors). A MULTI-DIMENSIONAL packed default is no
+    // longer one of them — see `a_multi_dim_packed_default_reads_its_elements`.
     is_loud(
         "`timescale 1ns/1ns\ntypedef struct packed { logic [3:0] a; logic [3:0] b; } st_t;\nmodule m #(parameter type T = st_t);\n  T v;\nendmodule\nmodule top; m u(); endmodule\n",
         "an integral type as the type parameter's default",
@@ -341,8 +342,18 @@ fn a_non_integral_type_parameter_is_loud() {
         "`timescale 1ns/1ns\ntypedef struct packed { logic [3:0] a; logic [3:0] b; } st_t;\nmodule m #(parameter type T = logic [7:0]);\n  T v;\nendmodule\nmodule top; m #(.T(st_t)) u(); endmodule\n",
         "an integral type as the type parameter override",
     );
-    is_loud(
-        "`timescale 1ns/1ns\nmodule m #(parameter type T = logic [3:0][7:0]);\n  T v;\nendmodule\nmodule top; m u(); endmodule\n",
-        "an integral type as the type parameter's default",
+}
+
+#[test]
+fn a_multi_dim_packed_default_reads_its_elements() {
+    // §3.a ⑤: what used to be the loud cell of `a_non_integral_type_parameter_is_loud`.
+    // `logic [3:0][7:0]` is now carried, so the same source is a VALUE — measured
+    // identical on iverilog 13.0 and verilator 5.052.
+    prints_all(
+        "`timescale 1ns/1ns\nmodule m #(parameter type T = logic [3:0][7:0]);\n  T v;\n  \
+         initial begin v = 32'hDEADBEEF; #1 $display(\"D=%h %h %0d %0d %0d\", v[3], v[0], \
+         $bits(T), $size(v,1), $size(v,2)); end\nendmodule\n\
+         module top; m u(); initial #5 $finish; endmodule\n",
+        &["D=de ef 32 4 8"],
     );
 }

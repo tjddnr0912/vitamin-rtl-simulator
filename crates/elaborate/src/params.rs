@@ -1424,9 +1424,9 @@ impl Elaborator<'_> {
                         // `.W()` with no value ⇒ keep default (no insert).
                     }
                     None => {
-                        // §3 ⑤ⓕ: `T$d<i>a/b` are the extents a type parameter's
-                        // unpacked dims ride. Missing means the module's `T` has
-                        // FEWER dims than the override does — an arity the
+                        // §3 ⑤ⓕ: `T$d<i>a/b` (unpacked) and `T$p<i>a/b` (packed) are
+                        // the extents a type parameter's dims ride. Missing means the
+                        // module's `T` has FEWER dims than the override does — an arity the
                         // declarators, stamped once at parse, cannot follow. Name
                         // `T`, not the synthesized carrier, and say which half is
                         // wrong; the reverse mismatch is the shape guard's `$fatal`.
@@ -1437,13 +1437,21 @@ impl Elaborator<'_> {
                             // about its dims; this report is the whole story.
                             dim_arity_reported.insert(t.to_string());
                         }
-                        match n.split_once("$d") {
-                            Some((t, _)) if !t.is_empty() => {
+                        // §3.a ⑤: `T$p<i>a/b` is the PACKED twin of the same story —
+                        // the override has MORE packed dimensions than the default.
+                        // One report per `T` whichever half is missing (the set is
+                        // shared): the two halves are one arity failure, not two.
+                        let dim_half = n
+                            .split_once("$d")
+                            .map(|(t, _)| (t, "unpacked"))
+                            .or_else(|| n.split_once("$p").map(|(t, _)| (t, "packed")));
+                        match dim_half {
+                            Some((t, half)) if !t.is_empty() => {
                                 if dim_arity_reported.insert(t.to_string()) {
                                     self.error(
                                         MsgCode::ElabPortMismatch,
                                         &format!(
-                                            "type parameter `{t}`: the override has more unpacked dimensions than the default, which the module's declarations of `{t}` cannot follow (an override must keep the default type's dimension COUNT; its extents and element width may differ — v1)"
+                                            "type parameter `{t}`: the override has more {half} dimensions than the default, which the module's declarations of `{t}` cannot follow (an override must keep the default type's dimension COUNT; its extents and element width may differ — v1)"
                                         ),
                                     );
                                 }

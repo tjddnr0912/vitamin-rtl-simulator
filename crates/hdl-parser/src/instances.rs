@@ -15,6 +15,25 @@ impl Parser<'_, '_> {
                 self.error("a hierarchical parameter path after `defparam`");
                 break;
             };
+            // §3 ⑤ⓕ twin of the named-override guard (`parse_named_param_conn_into`):
+            // a `defparam` whose LAST segment names one of the synthesized
+            // type-parameter carriers. `defparam` binds by NAME in elaborate, so
+            // without this the carriers are live defparam targets and an override of
+            // `T$w` / `T$p<i>a` silently RESHAPES the type parameter — both oracles
+            // report "parameter `T$w` not found in `top.u`" instead.
+            if let Some(last) = path.segments.last() {
+                if Self::names_a_type_param_carrier(&last.name) {
+                    let at = last.span;
+                    self.error_at(
+                        at,
+                        "a declared parameter name as the defparam target (a `NAME$w` / \
+                         `NAME$s` / `NAME$d<i>a` / `NAME$d<i>b` / `NAME$p<i>a` / \
+                         `NAME$p<i>b` spelling is an internal type-parameter carrier, \
+                         not a user parameter — override the type parameter on the \
+                         instance)",
+                    );
+                }
+            }
             self.expect(TokenKind::Eq, "'=' in defparam");
             let value = self.expr(0);
             assigns.push((path, value));
@@ -178,7 +197,8 @@ impl Parser<'_, '_> {
             span: self.cur_span(),
         });
         // §3 ⑤ⓕ: a user-written override that NAMES one of the synthesized type-
-        // parameter carriers (`T$w` / `T$s` / `T$d<i>a` / `T$d<i>b`). Both oracles
+        // parameter carriers (`T$w` / `T$s` / `T$d<i>a` / `T$d<i>b` / `T$p<i>a` /
+        // `T$p<i>b`). Both oracles
         // reject it ("parameter `T$s` not found in `top.u`"), and it is not a spelling
         // the type-parameter channel produces (those `ParamConn`s are built, never
         // parsed), so it is refused HERE rather than reaching the value binder. Before
@@ -188,8 +208,9 @@ impl Parser<'_, '_> {
             self.error_at(
                 start,
                 "a declared parameter name (a `NAME$w` / `NAME$s` / `NAME$d<i>a` / \
-                 `NAME$d<i>b` spelling is an internal type-parameter carrier, not a \
-                 user parameter — override the type parameter itself)",
+                 `NAME$d<i>b` / `NAME$p<i>a` / `NAME$p<i>b` spelling is an internal \
+                 type-parameter carrier, not a user parameter — override the type \
+                 parameter itself)",
             );
         }
         self.expect(TokenKind::LParen, "'(' after parameter name");

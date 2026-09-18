@@ -98,6 +98,7 @@ impl<'s> Elaborator<'s> {
             size_cast_real_reported: false,
             unpacked_array_nets: BTreeSet::new(),
             packed_dims: BTreeMap::new(),
+            dyn_md_elem: BTreeSet::new(),
             dollar_subst: None,
             array_iter: None,
             array_iter_elem: None,

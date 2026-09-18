@@ -548,6 +548,15 @@ impl Elaborator<'_> {
                     if is_real_dyn {
                         self.real_elem_dyn_nets.insert(next_id);
                     }
+                    // An ELEMENT type with an inner packed-dim list (`typedef logic
+                    // [1:0][3:0] t_ex; t_ex q [$]`) is stored flat, so a second index
+                    // `q[0][1]` would bit-select that flat element instead of naming
+                    // the outer packed element. Record the handle so the select arms
+                    // refuse it (`dyn_md_elem_select`); `packed_dims` is NOT touched —
+                    // other consumers key on it and the handle has no static extents.
+                    if !d.packed.is_empty() {
+                        self.dyn_md_elem.insert(next_id);
+                    }
                 }
                 continue;
             }

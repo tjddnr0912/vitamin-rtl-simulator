@@ -239,12 +239,17 @@ impl Parser<'_, '_> {
         // (after its NAME, where a port's dims are read).
         let mut typedef_unpacked: Vec<Dim> = Vec::new();
         let (mut signed, mut range, mut packed) =
-            if let Some((k, s, r, sn, extra, unp)) = typedef_ty {
+            if let Some((k, s, r, sn, extra, unp, inner_packed)) = typedef_ty {
                 net_or_var = Some(k);
                 port_struct_name = sn;
                 typedef_one_dim = extra.len() == 1;
                 typedef_unpacked = unp;
-                self.typedef_dims_layout(s, r, extra)
+                // §3.a ⑤: the typedef's own INNER packed dims come after whatever
+                // the dims written before the port name produced — the same
+                // composition `parse_typed_decl` does for `t_t [1:0] v;`.
+                let (sg, rg, mut pk) = self.typedef_dims_layout(s, r, extra);
+                pk.extend(inner_packed);
+                (sg, rg, pk)
             } else {
                 (
                     self.signed_eff(net_or_var),
@@ -385,13 +390,23 @@ impl Parser<'_, '_> {
         // §3 ⑤ⓕ: the typedef's own UNPACKED dims, landed on every NAME below —
         // the non-ANSI binder's twin of the ANSI port carry.
         let mut typedef_unpacked: Vec<Dim> = Vec::new();
-        let (signed, range) = if let Some((k, s, r, sn, extra, unp)) = typedef_ty {
+        let (signed, range) = if let Some((k, s, r, sn, extra, unp, inner_packed)) = typedef_ty {
             net_or_var = Some(k);
             port_struct_name = sn;
             if !extra.is_empty() {
                 self.error(
                     "packed dimensions after a typedef name on a non-ANSI port are unsupported \
                      in v1 (write the port ANSI-style)",
+                );
+            }
+            // §3.a ⑤: `PortDecl` has ONE range and no packed list, so a
+            // multi-dimensional packed typedef cannot be carried here — the port
+            // would silently flatten to its outermost dimension. The ANSI twin
+            // carries it; this spelling stays loud, as it was before the slice.
+            if !inner_packed.is_empty() {
+                self.error(
+                    "a multi-dim-packed typedef as a non-ANSI port type is unsupported in v1 \
+                     (write the port ANSI-style)",
                 );
             }
             typedef_unpacked = unp;

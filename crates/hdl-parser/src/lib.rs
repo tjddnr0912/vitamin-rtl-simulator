@@ -115,6 +115,7 @@ mod struct_sel;
 mod structs;
 mod sva_prop;
 mod sva_seq;
+mod type_param_packed;
 mod type_param_shape;
 mod type_params;
 mod typedefs;
