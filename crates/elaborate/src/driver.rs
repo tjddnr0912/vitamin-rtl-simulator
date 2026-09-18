@@ -605,8 +605,18 @@ impl<'s> Elaborator<'s> {
         let (map, order) = build_module_map(unit);
         // Per-module static facts for the §11.6.1 region walks' hierarchical
         // leaves (`expr_size_hier`). Built here, from the same declaration order
-        // `build_module_map` uses, and read-only from then on.
-        self.module_facts = build_module_facts(&order);
+        // `build_module_map` uses plus the INTERFACES in theirs (an interface
+        // instance `ifc w();` is the same leaf shape as a module instance), and
+        // read-only from then on.
+        let ifaces: Vec<&ast::ModuleDecl> = unit
+            .items
+            .iter()
+            .filter_map(|it| match it {
+                ast::TopItem::Interface(m) => Some(m),
+                _ => None,
+            })
+            .collect();
+        self.module_facts = build_module_facts(&order, &ifaces);
         // §4.5.200: pre-scan EVERY module's procedural blocks for hierarchical TASK enables
         // (`u1.tk(...)`) and record the target task name, so `build_task_frame_set` can
         // FORCE-FRAME a hier-called STATIC task (otherwise it inlines and has no per-instance

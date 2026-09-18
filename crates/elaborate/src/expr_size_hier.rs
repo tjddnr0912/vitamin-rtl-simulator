@@ -8,8 +8,10 @@
 //! every such leaf as OPAQUE and either declined the region or sized the leaf from
 //! a fabricated 32.
 //!
-//! The DECLARATION is available, though: the instance names a module, the module
-//! declares the net or function, and the declared sign and width are what §11.8.1
+//! The DECLARATION is available, though: the instance names a module (or an
+//! interface — `ifc w();` is the same shape, and its members `w.hi` are the same
+//! kind of leaf), the module declares the net or function, and the declared sign
+//! and width are what §11.8.1
 //! asks for. This module answers exactly that, from a per-module fact table built
 //! once from the AST, and only for the shapes where the answer cannot be anything
 //! else. Everything else declines and the region keeps its pre-slice lowering.
@@ -27,7 +29,9 @@
 //!
 //! What is deliberately NOT resolved (each one keeps the pre-slice behaviour):
 //! a range beyond the strict fold above (a `-G` override reaches only a root and
-//! is read through the live scope), a name reached through a generate scope, an instance array, an interface, a
+//! is read through the live scope), a name reached through a generate scope, an
+//! instance array, an interface reached through a PORT or a modport (`p.hi`,
+//! `w.mp.hi` — only a body instance `ifc w();` is in the instance map), a
 //! class member, an upward reference, a non-ANSI port, a name the child also
 //! declares as a block local (v1 flattens those onto the module net of the same
 //! bare name), and any design that uses `bind` (a bind can inject a scope name
@@ -118,20 +122,30 @@ enum FoldScope<'a> {
     Env(&'a ParamEnv),
 }
 
-/// Build the per-module fact table once, in declaration order. First declaration
-/// wins on a duplicate module name, matching [`crate::build_module_map`].
-pub(crate) fn build_module_facts(order: &[&ast::ModuleDecl]) -> BTreeMap<String, ModuleFacts> {
+/// Build the per-module fact table once, in declaration order: `modules` first,
+/// then `ifaces` (an interface instance `ifc w();` names its declaration exactly
+/// as a module instance does, and its parameters are bound by the same
+/// `bind_params`). First declaration wins on a duplicate name, matching
+/// [`crate::build_module_map`]; a module and an interface of one name is E2001.
+pub(crate) fn build_module_facts(
+    modules: &[&ast::ModuleDecl],
+    ifaces: &[&ast::ModuleDecl],
+) -> BTreeMap<String, ModuleFacts> {
     // A `defparam` is collected while the module that CONTAINS it is lowered,
     // which can be after the region that asks — so it is a property of the
     // whole design here, read from the AST, not of the elaborator's state.
-    let any_defparam = order.iter().any(|m| {
+    // MODULES only: a `defparam` inside an interface body is E3009 the moment
+    // the interface is instantiated, and an uninstantiated interface binds
+    // nothing, so scanning it would only drop every module's environment for a
+    // design in which no parameter moves.
+    let any_defparam = modules.iter().any(|m| {
         m.body.iter().any(|it| {
             matches!(it, ast::ModuleItem::Defparam(_))
                 || matches!(it, ast::ModuleItem::Generate(g) if gen_has_defparam(&g.items))
         })
     });
     let mut out: BTreeMap<String, ModuleFacts> = BTreeMap::new();
-    for m in order {
+    for m in modules.iter().chain(ifaces) {
         if out.contains_key(&m.name.name) {
             continue;
         }
