@@ -69,6 +69,10 @@ pub struct ObsRun<'a> {
     /// walk the VM's compile gate runs (single source), serialized as the
     /// `codegen` object. Deterministic (a static property of the design).
     pub codegen: &'a sim_engine::CodegenReport,
+    /// §4.5.513 (`WPROG-WHY`): the per-EXPRESSION compile-decline tally,
+    /// serialized as the `wprog` object right after `codegen`. `None` ⇒ the
+    /// native kernel did not run, and the object is `null`.
+    pub wprog: Option<&'a sim_engine::WprogDeclines>,
     /// S0 (doc-21 §7.3): the ③층 design-level eligibility verdict, serialized
     /// as the `native` object. Deterministic; static per (design, run options)
     /// — a `--probe`/stage-instrumented run is ineligible by design (§4.3).
@@ -310,6 +314,44 @@ impl ObsRun<'_> {
             s.push_str(&n.to_string());
         }
         s.push_str("}}");
+        // §4.5.513: the EXPRESSION-level counterpart of `codegen`, which is the
+        // object directly above and counts process BODIES. A body can report
+        // `able 1/1` while every evaluation of its right-hand sides runs the
+        // generic walk, because the tier-3 compiled lane is entered per
+        // EXPRESSION — `reasons` is where that boundary is.
+        //
+        // The two things it is NOT: not an EVALUATION count (a program compiles
+        // once per cache slot and then runs for the rest of the simulation), and
+        // not a partition by SITE (several decline sites share one key). The
+        // `unit` string below says both to a reader who has only the file.
+        //
+        // BTreeMap iteration ⇒ key order is stable, same as `codegen` above.
+        s.push_str(",\n  \"wprog\": ");
+        match self.wprog {
+            None => s.push_str("null"),
+            Some(wp) => {
+                s.push_str("{\"asked\": ");
+                s.push_str(&wp.asked.to_string());
+                s.push_str(", \"declined\": ");
+                s.push_str(&wp.declined.to_string());
+                s.push_str(", \"reasons\": {");
+                for (i, (k, n)) in wp.reasons.iter().enumerate() {
+                    if i > 0 {
+                        s.push_str(", ");
+                    }
+                    json_str(&mut s, k);
+                    s.push_str(": ");
+                    s.push_str(&n.to_string());
+                }
+                s.push_str(
+                    "}, \"unit\": \"distinct expression ids compile was asked about; \
+                    a declined id is filed under its FIRST decline reason and counted once \
+                    however many contexts or sites ask, so declined equals the sum of reasons \
+                    and never exceeds asked; null when the native kernel did not run, because \
+                    wprog is not the lane there\"}",
+                );
+            }
+        }
         // S0: the ③층 design-level verdict (doc-21 §7.3) — same stable-order
         // BTreeMap serialization as `codegen`.
         s.push_str(",\n  \"native\": {\"eligible\": ");

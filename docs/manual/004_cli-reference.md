@@ -642,6 +642,7 @@ Hand-written JSON with a fixed key order, one top-level field per line. `schema_
 | `backend` | string | the executor that actually ran process bodies |
 | `backend_requested` | string | what `--backend` asked for |
 | `codegen` | object | the bytecode VM's static capability census (§14.2) |
+| `wprog` | object or null | the native backend's per-expression compile-decline tally; null means that backend did not run (§14.2.1) |
 | `native` | object | the native backend's eligibility verdict (§14.3) |
 | `subroutines` | object | the static frame/inline route census, written unconditionally (§14.4) |
 | `processes` | object or null | per-body activation profile; null means not measured (§14.5) |
@@ -678,6 +679,38 @@ The reject vocabulary is closed: `class_new`, `delay`, `disable`, `force_release
 `frame_call`, `nba_transport_delay`, `sformatf`, `stmt_effect_rhs`, `wait`. `sformatf` means the
 body reaches a string-formatting IR node, which elaboration also produces for string concatenation,
 not that the source spells `$sformatf`.
+
+### 14.2.1 `wprog`
+
+```json
+"wprog": {"asked": 33, "declined": 10, "reasons": {"call": 1, "operator": 3, "select_offset": 1, "shift_amount": 1, "sysfunc": 1, "width": 3}, "unit": "…"}
+```
+
+`codegen` above counts process **bodies**. This object counts **expressions**: the native backend
+compiles each right-hand side into a width-specialised program, and an expression it cannot compile
+is evaluated by the generic tree walk instead. A body can therefore show `able` equal to `total`
+while every evaluation inside it takes the generic path, and `reasons` is where that boundary is.
+
+| key | meaning |
+|---|---|
+| `asked` | distinct expressions the compiler was asked about |
+| `declined` | how many it refused. Always the sum of `reasons`, never more than `asked` |
+| `reasons` | reason to number of distinct expressions whose **first** decline was that reason |
+| `unit` | the same sentence, in the file, for a reader who has only the file |
+
+The reason vocabulary is closed: `array_whole`, `call`, `class_handle`, `concat_width`,
+`const_domain`, `frame_net`, `index_range`, `index_unknown`, `lazy_index`, `malformed`, `net_kind`,
+`net_width`, `node_kind`, `operator`, `replicate_count`, `select_offset`, `select_range`,
+`shift_amount`, `sign`, `sysfunc`, `truncation`, `width`. The common ones in ordinary RTL are
+`width` (something in the tree is wider than 64 bits), `operator` (`*`, `/`, `%`, `**` and a signed
+`>>>` have no compiled form), `call` and `sysfunc` (a user function or a system function inside an
+expression), `select_offset` (`x[i +: 4]`) and `shift_amount` (a shift by a non-constant).
+
+Two things it is not. It is **per expression, not per evaluation**: a program compiles once and
+then runs for the rest of the simulation, so `declined` says how many expressions left the compiled
+lane, never what they cost. And it is `null` — not an empty object — whenever the native backend
+did not run: on `--backend vm`, on `--backend interp`, after a fallback, and on a run that ended
+before any executor was built (a fatal during run setup, where `backend` still reads `native`).
 
 ### 14.3 `native`
 

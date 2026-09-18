@@ -144,6 +144,16 @@ need updating. What moved:
 
 ### Added
 
+- **`run.json` now carries a `wprog` object: why each expression left the native backend's compiled
+  lane.** `codegen` beside it counts process bodies, so a body can read `able 1/1` while every
+  evaluation of its right-hand sides runs the generic tree walk. `wprog` counts distinct expressions
+  — `asked`, `declined`, and a `reasons` map over a closed vocabulary (`width`, `operator`, `call`,
+  `sysfunc`, `select_offset`, `shift_amount` and sixteen more) — filing each declined expression
+  under its first decline reason, so `declined` is the sum of `reasons` and never exceeds `asked`.
+  It is per expression, not per evaluation, and it is `null` on `--backend vm`/`interp` or after a
+  fallback, where that backend is not the lane. Values, VCD and `results.jsonl` are byte-identical
+  with and without it.
+
 - **`run.json`'s static `subroutines` rows now carry a declaration site, so the two subroutine
   objects join.** Each item gains `decl_file`, `decl_line` and `decl_col` after `sites` — the span of
   the routine's own name, the same triple the `--obs-procs` `subroutine_calls` rows already print, on

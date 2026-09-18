@@ -156,6 +156,20 @@ use crate::native::arena::NetArena;
 use crate::value::Value;
 use crate::width::WidthTable;
 
+/// Every decline's REASON, and the per-expression tally run.json publishes.
+/// A reporting table only — see the module docs there.
+pub(crate) mod why;
+
+pub use why::WprogDeclines;
+pub(crate) use why::WprogWhy;
+
+/// The CLOSED decline vocabulary, in byte-lexicographic order — re-exported at
+/// the crate root as `wprog_decline_reasons` so a run.json consumer's test can
+/// pin it.
+pub(crate) fn decline_reasons() -> &'static [&'static str] {
+    why::ALL
+}
+
 /// One ≤64-bit 4-state value: the arena's two planes, one word each.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct W {
@@ -391,6 +405,10 @@ pub(crate) fn width_admits(w: u32) -> bool {
     w != 0 && w <= 64
 }
 
+/// `compile_why`, with the reason dropped. Test-only since §4.5.513: the three
+/// kernel call sites go through `NativeKernel::compile_counted`, which files the
+/// reason, and a fourth bare caller is what that slice removed.
+#[cfg(test)]
 pub(crate) fn compile(
     ir: &SimIr,
     wt: &WidthTable,
@@ -399,8 +417,25 @@ pub(crate) fn compile(
     w: u32,
     signed: bool,
 ) -> Option<WProg> {
+    compile_why(ir, wt, arena, eid, w, signed).ok()
+}
+
+/// `compile`, plus the REASON for a decline (`why::*`, a closed vocabulary).
+///
+/// ⚠️ The reason is a REPORTING table. Every `Err` here is exactly where the
+/// pre-§4.5.513 `compile` returned `None`, reached in the same order, after
+/// emitting the same ops — no check was added, removed or reordered, so no value
+/// and no lane choice moves with it.
+pub(crate) fn compile_why(
+    ir: &SimIr,
+    wt: &WidthTable,
+    arena: &NetArena,
+    eid: u32,
+    w: u32,
+    signed: bool,
+) -> Result<WProg, &'static str> {
     if !width_admits(w) {
-        return None;
+        return Err(why::WIDTH);
     }
     let mut ops = Vec::new();
     let mut depth = 0usize;
@@ -427,7 +462,7 @@ pub(crate) fn compile(
         },
         _ => WFast::Prog,
     };
-    Some(WProg {
+    Ok(WProg {
         ops,
         width: w,
         signed,
@@ -457,7 +492,7 @@ fn compile_node(
     ops: &mut Vec<WOp>,
     depth: &mut usize,
     max_depth: &mut usize,
-) -> Option<()> {
+) -> Result<(), &'static str> {
     // UNIFORM SIGN inside one node's subtree, and uniform WIDTH except where the
     // branch below converts. Signedness was excluded outright until S2 slice 2; at
     // uniform width it is inert for every op admitted below (two's complement makes
@@ -506,8 +541,14 @@ fn compile_node(
     if sw.width != w {
         match node_ctx_class(ir, eid) {
             CtxClass::SelfDetermined => {
-                if sw.width == 0 || sw.width > w || !width_admits(sw.width) {
-                    return None;
+                // Split so the reason is the one that actually fired: a node
+                // WIDER than its context is the truncation this module never
+                // emits; anything else here is a width outside `1..=64`.
+                if sw.width > w {
+                    return Err(why::TRUNCATION);
+                }
+                if sw.width == 0 || !width_admits(sw.width) {
+                    return Err(why::WIDTH);
                 }
                 compile_node(
                     ir, wt, arena, eid, sw.width, sw.signed, ops, depth, max_depth,
@@ -518,14 +559,20 @@ fn compile_node(
                         to: w,
                     });
                 }
-                return Some(());
+                return Ok(());
             }
             // Performed at `w`; fall through to the arms, which mask to `w`.
             CtxClass::ContextDetermined => {}
             // Anything this module has no arm for declines here exactly as the
             // blanket width gate used to — the catch-all is the status quo, so a
             // new `Expr` variant cannot be silently mis-sized by this branch.
-            CtxClass::Unknown => return None,
+            // The REASON is the node's, not this gate's: a `Call` or `SysFunc`
+            // reaches this branch whenever its self width differs from the
+            // context (a 16-bit LHS fed by an 8-bit function), and filing that
+            // as `node_kind` made `call: 0` read as "no user-function declines"
+            // (measured by both review lenses). Same classification as the
+            // final catch-all, through one helper, so the two cannot drift.
+            CtxClass::Unknown => return Err(why::no_arm(ir.exprs.get(eid as usize))),
         }
     }
     // ⚠️⚠️ The SIGN half of this gate applies to every node EXCEPT a `Const` leaf.
@@ -580,11 +627,11 @@ fn compile_node(
     // relaxation is reinstated.
     if sw.signed != signed
         && !matches!(
-            ir.exprs.get(eid as usize)?,
+            ir.exprs.get(eid as usize).ok_or(why::MALFORMED)?,
             sim_ir::Expr::Const { .. } | sim_ir::Expr::Signal { .. }
         )
     {
-        return None;
+        return Err(why::SIGN);
     }
     let mask = mask_of(w);
     let push = |ops: &mut Vec<WOp>, depth: &mut usize, max_depth: &mut usize, op: WOp| {
@@ -592,9 +639,9 @@ fn compile_node(
         *depth += 1;
         *max_depth = (*max_depth).max(*depth);
     };
-    match ir.exprs.get(eid as usize)? {
+    match ir.exprs.get(eid as usize).ok_or(why::MALFORMED)? {
         sim_ir::Expr::Const { val } => {
-            let (cv, cu) = const_planes(ir, *val, w)?;
+            let (cv, cu) = const_planes(ir, *val, w).ok_or(why::CONST_DOMAIN)?;
             push(
                 ops,
                 depth,
@@ -604,7 +651,7 @@ fn compile_node(
                     unk: cu & mask,
                 },
             );
-            Some(())
+            Ok(())
         }
         sim_ir::Expr::Signal { net, word } => {
             // §2 row 33: the same read-through the interpreter applies, resolved
@@ -615,7 +662,7 @@ fn compile_node(
                 // slot carries the SOURCE's sign, the interpreter re-stamps the copy's.
                 Some((n, w)) => {
                     if ir.nets[n as usize].signed != ir.nets[*net as usize].signed {
-                        return None;
+                        return Err(why::SIGN);
                     }
                     (n, w)
                 }
@@ -631,7 +678,7 @@ fn compile_node(
             // integer path, where `truthiness` reads a set sign bit as TRUE —
             // the exact trap that function's own doc names. The guard is one
             // `matches!`; the precondition it replaces was three files away.
-            let kind = ir.nets.get(*net as usize)?.kind;
+            let kind = ir.nets.get(*net as usize).ok_or(why::MALFORMED)?.kind;
             if !matches!(
                 kind,
                 sim_ir::NetKind::Wire
@@ -639,7 +686,7 @@ fn compile_node(
                     | sim_ir::NetKind::Logic
                     | sim_ir::NetKind::Integer
             ) {
-                return None;
+                return Err(why::NET_KIND);
             }
             // A3-ii-a: DECLINE a frame slot. This arm resolves the net to an
             // arena slot at COMPILE time, and a frame-local net's slot is dead —
@@ -649,7 +696,7 @@ fn compile_node(
             // through. (Measured: without this, every formal read `x` while the
             // module net beside it was right.)
             if arena.frame.get(*net as usize).copied().unwrap_or(false) {
-                return None;
+                return Err(why::FRAME_NET);
             }
             // A2-i: DECLINE a class handle, and unconditionally rather than only
             // for a field select. A field read (`word = Some(field_id)`) has to
@@ -661,12 +708,12 @@ fn compile_node(
             // spelling. (Measured cost: a design that only copies handles loses
             // the fast path, which is not a correctness surface.)
             if arena.class.get(*net as usize).copied().unwrap_or(false) {
-                return None;
+                return Err(why::CLASS_HANDLE);
             }
             arena.assert_owns(*net, "wprog::compile Expr::Signal");
-            let slot = arena.slots.get(*net as usize)?;
+            let slot = arena.slots.get(*net as usize).ok_or(why::MALFORMED)?;
             if slot.width != w || slot.words != 1 {
-                return None;
+                return Err(why::NET_WIDTH);
             }
             // `word` is the INDEX EXPRESSION's id, not an element number. A
             // 2-state Numeric constant in bounds folds at compile time; anything
@@ -675,19 +722,19 @@ fn compile_node(
             let e = match word {
                 None => {
                     if slot.elems != 1 {
-                        return None;
+                        return Err(why::ARRAY_WHOLE);
                     }
                     0u64
                 }
                 Some(weid) => {
-                    match ir.exprs.get(*weid as usize)? {
+                    match ir.exprs.get(*weid as usize).ok_or(why::MALFORMED)? {
                         sim_ir::Expr::Const { val } => {
-                            let (iv, iu) = const_planes(ir, *val, 64)?;
+                            let (iv, iu) = const_planes(ir, *val, 64).ok_or(why::CONST_DOMAIN)?;
                             if iu != 0 {
-                                return None;
+                                return Err(why::INDEX_UNKNOWN);
                             }
                             if iv >= u64::from(slot.elems) {
-                                return None;
+                                return Err(why::INDEX_RANGE);
                             }
                             iv
                         }
@@ -724,7 +771,7 @@ fn compile_node(
                             // whether they may.
                             let iw = wt.get(*weid);
                             if iw.width == 0 || iw.width > 64 {
-                                return None;
+                                return Err(why::WIDTH);
                             }
                             compile_node(
                                 ir, wt, arena, *weid, iw.width, iw.signed, ops, depth, max_depth,
@@ -735,14 +782,14 @@ fn compile_node(
                                 elems: slot.elems,
                                 m: mask,
                             });
-                            return Some(());
+                            return Ok(());
                         }
                     }
                 }
             };
             let vi = slot.off + (e as u32) * 2; // words == 1: [val, unk] adjacent
             push(ops, depth, max_depth, WOp::Load { vi });
-            Some(())
+            Ok(())
         }
         sim_ir::Expr::Unary { op, operand } => {
             // `!` and the six reductions: SELF-determined operand, one unsigned
@@ -769,11 +816,11 @@ fn compile_node(
                 // future width rule says, and that is cheaper to keep than to
                 // re-derive.
                 if w != 1 || signed {
-                    return None; // the result IS one unsigned bit
+                    return Err(why::WIDTH); // the result IS one unsigned bit
                 }
                 let ow = wt.get(*operand);
                 if ow.width == 0 || ow.width > 64 {
-                    return None;
+                    return Err(why::WIDTH);
                 }
                 compile_node(
                     ir, wt, arena, *operand, ow.width, ow.signed, ops, depth, max_depth,
@@ -783,14 +830,14 @@ fn compile_node(
                     ow: ow.width,
                     os: ow.signed,
                 });
-                return Some(());
+                return Ok(());
             }
             if !matches!(op, sim_ir::UnOp::BitNot) {
-                return None;
+                return Err(why::OPERATOR);
             }
             compile_node(ir, wt, arena, *operand, w, signed, ops, depth, max_depth)?;
             ops.push(WOp::Not { m: mask });
-            Some(())
+            Ok(())
         }
         sim_ir::Expr::Binary { op, lhs, rhs } => {
             use sim_ir::BinOp as B;
@@ -806,7 +853,7 @@ fn compile_node(
                         B::Add => WOp::Add { m: mask },
                         _ => WOp::Sub { m: mask },
                     });
-                    Some(())
+                    Ok(())
                 }
                 // ORDERED / EQUALITY comparisons (S2 slice 2). The result is
                 // ONE bit while the operands are `ow` bits — one of the two nodes
@@ -821,7 +868,7 @@ fn compile_node(
                 // `eval_binary_ctx` answers it.
                 B::Lt | B::Le | B::Gt | B::Ge | B::Eq | B::Ne | B::CaseEq | B::CaseNe => {
                     if w != 1 || signed {
-                        return None; // a comparison's own self-width IS 1, unsigned
+                        return Err(why::WIDTH); // a comparison's own self-width IS 1, unsigned
                     }
                     // §11.8.1: the two operands are MUTUALLY context-determined —
                     // each is sized to max(self-width) with their PAIR signedness.
@@ -839,7 +886,7 @@ fn compile_node(
                     let ow = lw.width.max(rw.width);
                     let os = lw.signed && rw.signed;
                     if ow == 0 || ow > 64 {
-                        return None;
+                        return Err(why::WIDTH);
                     }
                     compile_node(ir, wt, arena, *lhs, ow, os, ops, depth, max_depth)?;
                     compile_node(ir, wt, arena, *rhs, ow, os, ops, depth, max_depth)?;
@@ -849,7 +896,7 @@ fn compile_node(
                         ow,
                         osigned: os,
                     });
-                    Some(())
+                    Ok(())
                 }
                 // `&&` / `||` — SELF-determined operands, each reduced to a
                 // truth value independently, one unsigned result bit. Each operand
@@ -883,12 +930,12 @@ fn compile_node(
                     // Insurance, not a live check — see the identical note on the
                     // unary arm above.
                     if w != 1 || signed {
-                        return None; // the result IS one unsigned bit
+                        return Err(why::WIDTH); // the result IS one unsigned bit
                     }
                     let lw = wt.get(*lhs);
                     let rw = wt.get(*rhs);
                     if lw.width == 0 || lw.width > 64 || rw.width == 0 || rw.width > 64 {
-                        return None;
+                        return Err(why::WIDTH);
                     }
                     compile_node(
                         ir, wt, arena, *lhs, lw.width, lw.signed, ops, depth, max_depth,
@@ -901,7 +948,7 @@ fn compile_node(
                         .iter()
                         .any(|o| matches!(o, WOp::LoadIdx { .. }))
                     {
-                        return None;
+                        return Err(why::LAZY_INDEX);
                     }
                     *depth -= 1;
                     ops.push(WOp::LogBin {
@@ -911,7 +958,7 @@ fn compile_node(
                         rw: rw.width,
                         rs: rw.signed,
                     });
-                    Some(())
+                    Ok(())
                 }
                 B::Shl | B::Shr | B::AShr => {
                     // An ARITHMETIC right shift fills with the left operand's
@@ -921,19 +968,19 @@ fn compile_node(
                     // restate the fill (`Shr` is logical for both signs, and
                     // `Shl` moves bits the same way either way).
                     if signed && matches!(op, B::AShr) {
-                        return None;
+                        return Err(why::OPERATOR);
                     }
                     // Amount: self-determined 2-state CONSTANT only.
-                    let k = match ir.exprs.get(*rhs as usize)? {
+                    let k = match ir.exprs.get(*rhs as usize).ok_or(why::MALFORMED)? {
                         sim_ir::Expr::Const { val } => {
                             let aw = wt.get(*rhs).width.min(64);
-                            let (av, au) = const_planes(ir, *val, aw)?;
+                            let (av, au) = const_planes(ir, *val, aw).ok_or(why::CONST_DOMAIN)?;
                             if au != 0 {
-                                return None;
+                                return Err(why::SHIFT_AMOUNT);
                             }
                             av
                         }
-                        _ => return None,
+                        _ => return Err(why::SHIFT_AMOUNT),
                     };
                     // The LHS is compiled FIRST in every case — including
                     // `k >= w`. The first spelling short-circuited that case to
@@ -954,7 +1001,7 @@ fn compile_node(
                         push(ops, depth, max_depth, WOp::Const { val: 0, unk: 0 });
                         *depth -= 1;
                         ops.push(WOp::And { m: mask });
-                        return Some(());
+                        return Ok(());
                     }
                     ops.push(match op {
                         B::Shl => WOp::Shl {
@@ -963,9 +1010,11 @@ fn compile_node(
                         },
                         _ => WOp::Shr { k: k as u32 },
                     });
-                    Some(())
+                    Ok(())
                 }
-                _ => None,
+                // `Mul`/`Div`/`Mod`/`Pow`/`BitXnor`/`AShl`/`CasezEq`/`CasexEq` —
+                // every `BinOp` with no arm above.
+                _ => Err(why::OPERATOR),
             }
         }
         // ── CONCATENATION / REPLICATION (S2 slice 5) ───────────────────────
@@ -1027,7 +1076,7 @@ fn compile_node(
         } => {
             let cw = wt.get(*cond);
             if cw.width == 0 || cw.width > 64 {
-                return None;
+                return Err(why::WIDTH);
             }
             compile_node(
                 ir, wt, arena, *cond, cw.width, cw.signed, ops, depth, max_depth,
@@ -1039,7 +1088,7 @@ fn compile_node(
                 .iter()
                 .any(|o| matches!(o, WOp::LoadIdx { .. }))
             {
-                return None;
+                return Err(why::LAZY_INDEX);
             }
             *depth -= 2; // three on the stack, one left
             ops.push(WOp::Tern {
@@ -1047,7 +1096,7 @@ fn compile_node(
                 cs: cw.signed,
                 m: mask,
             });
-            Some(())
+            Ok(())
         }
         // ── BIT / PART SELECT (S2 slice 6) ─────────────────────────────────
         //
@@ -1079,15 +1128,15 @@ fn compile_node(
             // the same helper `eval_select` and the self-width table both use.
             let sel_w = crate::width::const_u32_of_expr(ir, *width).unwrap_or(1);
             let os = wt.get(*offset);
-            let off = match ir.exprs.get(*offset as usize)? {
+            let off = match ir.exprs.get(*offset as usize).ok_or(why::MALFORMED)? {
                 sim_ir::Expr::Const { val } => {
                     if os.width == 0 || os.width > 64 {
-                        return None;
+                        return Err(why::WIDTH);
                     }
-                    let (ov, ou) = const_planes(ir, *val, os.width)?;
+                    let (ov, ou) = const_planes(ir, *val, os.width).ok_or(why::CONST_DOMAIN)?;
                     // An x/z offset is the generic path's all-X arm.
                     if ou != 0 {
-                        return None;
+                        return Err(why::SELECT_RANGE);
                     }
                     // The SAME two calls the generic makes, over the same value —
                     // `to_u64` deliberately ignores signedness, so a negative
@@ -1095,24 +1144,25 @@ fn compile_node(
                     // in-range test below, exactly as it does there.
                     one_word_value(ov, ou, os.width, os.signed)
                         .to_u64()
-                        .and_then(|o| i64::try_from(o).ok())?
+                        .and_then(|o| i64::try_from(o).ok())
+                        .ok_or(why::SELECT_RANGE)?
                 }
-                _ => return None,
+                _ => return Err(why::SELECT_OFFSET),
             };
             let (lsb, bits) = crate::eval::binops::select_lsb_width(*kind, off, sel_w);
             // The folded width and the width table must agree; they are two
             // readings of the same const-expr edge and this module must not pick
             // one when they differ.
             if bits != w {
-                return None;
+                return Err(why::SELECT_RANGE);
             }
             let bs = wt.get(*base);
             if bs.width == 0 || bs.width > 64 {
-                return None;
+                return Err(why::WIDTH);
             }
             // `eval_select`'s own fully-in-range condition, verbatim.
             if !(lsb >= 0 && (lsb as u64) + (w as u64) <= bs.width as u64) {
-                return None;
+                return Err(why::SELECT_RANGE);
             }
             compile_node(
                 ir, wt, arena, *base, bs.width, bs.signed, ops, depth, max_depth,
@@ -1122,7 +1172,7 @@ fn compile_node(
                 k: lsb as u32,
                 m: mask,
             });
-            Some(())
+            Ok(())
         }
         // ⭐ THE SIGN SEAL (`$signed`/`$unsigned`). Not a computation — a stamp.
         //
@@ -1156,8 +1206,13 @@ fn compile_node(
             args,
         } if args.len() == 1 => {
             let xw = wt.get(args[0]);
-            if !width_admits(xw.width) || xw.width > w {
-                return None;
+            // Same split as the self-determined branch above: an operand WIDER
+            // than the seal's context is the truncation this module never emits.
+            if xw.width > w {
+                return Err(why::TRUNCATION);
+            }
+            if !width_admits(xw.width) {
+                return Err(why::WIDTH);
             }
             compile_node(
                 ir, wt, arena, args[0], xw.width, xw.signed, ops, depth, max_depth,
@@ -1172,7 +1227,7 @@ fn compile_node(
                     to: w,
                 });
             }
-            Some(())
+            Ok(())
         }
         sim_ir::Expr::Concat { parts } => {
             // `Σ pw == w` is the tiling proof AND the agreement check between
@@ -1187,12 +1242,12 @@ fn compile_node(
                 // declined rather than skipped: `eval_concat` still EVALUATES it,
                 // so skipping could drop an E4002 the generic path reports.
                 if pw == 0 {
-                    return None;
+                    return Err(why::CONCAT_WIDTH);
                 }
                 total += u64::from(pw);
             }
             if total != u64::from(w) {
-                return None;
+                return Err(why::CONCAT_WIDTH);
             }
             push(ops, depth, max_depth, WOp::Const { val: 0, unk: 0 });
             let mut pos = w;
@@ -1208,12 +1263,12 @@ fn compile_node(
                 });
                 *depth -= 1; // splice: two on the stack, one left
             }
-            Some(())
+            Ok(())
         }
         sim_ir::Expr::Replicate { count, value } => {
             // `count` is a const-expr EDGE, not a literal — folded by the same
             // function `eval_replicate` and the self-width table both use.
-            let n = crate::width::const_u32_of_expr(ir, *count)?;
+            let n = crate::width::const_u32_of_expr(ir, *count).ok_or(why::REPLICATE_COUNT)?;
             let vs = wt.get(*value);
             // `{0{x}}` has width 0 and would make this node's own width 0, which
             // `compile`'s entry already refuses at the root; declining here too
@@ -1221,10 +1276,10 @@ fn compile_node(
             // zero-width concat part above (the operand is still evaluated by
             // `eval_replicate`, so skipping is not equivalent).
             if n == 0 || vs.width == 0 {
-                return None;
+                return Err(why::CONCAT_WIDTH);
             }
             if u64::from(n) * u64::from(vs.width) != u64::from(w) {
-                return None;
+                return Err(why::CONCAT_WIDTH);
             }
             push(ops, depth, max_depth, WOp::Const { val: 0, unk: 0 });
             // ONE compile, `count` splices — `eval_replicate` evaluates the
@@ -1240,9 +1295,13 @@ fn compile_node(
                 m: mask,
             });
             *depth -= 1;
-            Some(())
+            Ok(())
         }
-        _ => None,
+        // The catch-all names WHICH node it refused. A user function in an
+        // expression and a system function other than the seal above are the two
+        // shapes a reader can act on; everything else (`ArrayItem`, and the
+        // string / heap / dynamic shapes) is the node kind.
+        other => Err(why::no_arm(Some(other))),
     }
 }
 

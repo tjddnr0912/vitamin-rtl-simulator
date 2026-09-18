@@ -856,6 +856,12 @@ fn run_json_codegen_is_backend_invariant_and_backend_is_recorded() {
     );
     assert_eq!(field(&m3, "native"), field(&m4, "native"), "verdict moved");
     assert_eq!(field(&m3, "codegen"), field(&m4, "codegen"), "census moved");
+    // §4.5.513: `wprog` is the one object here that is NOT backend-invariant, and
+    // deliberately — it is the tier-3 compiled lane's own boundary, so it exists
+    // exactly when that kernel ran. Pinned beside `codegen` so the pair cannot be
+    // read as one census. (Details = `tests/obs_wprog.rs`.)
+    assert_eq!(field(&m4, "wprog"), "null", "{m4}");
+    assert_ne!(field(&m3, "wprog"), "null", "{m3}");
     assert_eq!(
         field(&m1, "codegen"),
         field(&m2, "codegen"),

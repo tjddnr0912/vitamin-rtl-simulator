@@ -393,6 +393,15 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// `&self`; the scratch stack is reused across calls for the same reason.
     /// Pure function of the static IR ⇒ no invalidation exists.
     pub(crate) wcache: std::cell::RefCell<WCache>,
+    /// §4.5.513 (`WPROG-WHY`): the per-EXPRESSION tally behind run.json's
+    /// `wprog` object — which distinct expression ids `wprog::compile` was asked
+    /// about, and the reason each declined id first fell out of the compiled
+    /// lane. `RefCell` for the same reason `wcache` is: the eval funnels that
+    /// ask are `&self`.
+    ///
+    /// A REPORTING table. Nothing reads it back during the run, so it cannot
+    /// change a value, a lane or a diagnostic.
+    pub(crate) wprog_why: std::cell::RefCell<crate::native::wprog::WprogWhy>,
     /// S2 slice 3: the INDEX cache — one slot per ExprId for the offset an
     /// lvalue index expression names. `k_resolve_lvalue_offsets` runs once per
     /// assignment (71.9k times on the tier-3 hot design, measured, every one of
@@ -654,6 +663,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             wheel: BTreeMap::new(),
             waiters: Vec::new(),
             wcache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
+            wprog_why: std::cell::RefCell::new(crate::native::wprog::WprogWhy::new(ir.exprs.len())),
             icache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
             wscratch: std::cell::RefCell::new(Default::default()),
             nscratch: std::cell::RefCell::new(Default::default()),
@@ -727,8 +737,12 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         // build per RHS per template; the runtime cache builds its own anyway.
         let wt = &self.sched.st.wt;
         let arena = &self.arena;
+        // §4.5.513: this boundary probe is one of the three real askers, so it
+        // is counted like the other two. Taken as a local because `wt`/`arena`
+        // are already borrowed out of `self` here.
+        let why = &self.wprog_why;
         let declines = |rhs: u32, w: u32, signed: bool| {
-            crate::native::wprog::compile(ir, wt, arena, rhs, w, signed).is_none()
+            Self::compile_counted_in(why, ir, wt, arena, rhs, w, signed).is_none()
         };
         let compiled = std::rc::Rc::new(crate::backend::compile_body(
             &ir.stmts,
@@ -955,6 +969,65 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         self.write_routed(lhs, value, &offs)
     }
 
+    /// §4.5.513: the ONE place this kernel asks `wprog::compile`. Compiles, and
+    /// files the ask — and any decline's reason — in `wprog_why`, which run.json
+    /// publishes as its `wprog` object.
+    ///
+    /// Returns exactly what `compile` returned. The tally is a reporting table:
+    /// it is written and never read back during the run, so no value, no lane
+    /// choice and no diagnostic can move with it.
+    ///
+    /// The three real askers — the codegen boundary in `compiled_body`,
+    /// `wprog_for`, and `ensure_index_kind` — all route here, so a fourth bare
+    /// caller would be a hole in the census rather than a second opinion.
+    fn compile_counted(
+        &self,
+        eid: u32,
+        w: u32,
+        signed: bool,
+    ) -> Option<crate::native::wprog::WProg> {
+        Self::compile_counted_in(
+            &self.wprog_why,
+            self.ir,
+            &self.sched.st.wt,
+            &self.arena,
+            eid,
+            w,
+            signed,
+        )
+    }
+
+    /// `compile_counted` over borrowed parts rather than `&self`, for the
+    /// `compiled_body` closure — which already holds `ir`/`wt`/`arena` out of
+    /// `self` so `plain_scalar` can be taken across it.
+    #[allow(clippy::too_many_arguments)]
+    fn compile_counted_in(
+        acc: &std::cell::RefCell<crate::native::wprog::WprogWhy>,
+        ir: &SimIr,
+        wt: &crate::width::WidthTable,
+        arena: &NetArena,
+        eid: u32,
+        w: u32,
+        signed: bool,
+    ) -> Option<crate::native::wprog::WProg> {
+        let r = crate::native::wprog::compile_why(ir, wt, arena, eid, w, signed);
+        let mut acc = acc.borrow_mut();
+        acc.ask(eid);
+        match r {
+            Ok(p) => Some(p),
+            Err(reason) => {
+                acc.decline(eid, reason);
+                None
+            }
+        }
+    }
+
+    /// Hand the run's decline tally out (`SimResult::wprog`). Taken, not
+    /// borrowed: the run loop has returned, so nothing will compile again.
+    pub(crate) fn take_wprog_why(&self) -> crate::native::wprog::WprogDeclines {
+        self.wprog_why.take().finish()
+    }
+
     /// The cached width-specialized program for `(eid, w, signed)`, compiling
     /// (or caching the decline) on first sight.
     #[inline]
@@ -972,9 +1045,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
                 }
             }
         }
-        let compiled =
-            crate::native::wprog::compile(self.ir, &self.sched.st.wt, &self.arena, eid, w, signed)
-                .map(std::rc::Rc::new);
+        let compiled = self.compile_counted(eid, w, signed).map(std::rc::Rc::new);
         let mut c = self.wcache.borrow_mut();
         if let Some(slot) = c.get_mut(eid as usize) {
             *slot = Some(WCacheSlot {
@@ -1087,14 +1158,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
                 let v = self.ctx().eval(eid);
                 IdxKind::Const(crate::eval::offset_of_index_value(&v))
             }
-            _ => match crate::native::wprog::compile(
-                self.ir,
-                &self.sched.st.wt,
-                &self.arena,
-                eid,
-                sw.width,
-                sw.signed,
-            ) {
+            _ => match self.compile_counted(eid, sw.width, sw.signed) {
                 Some(p) => IdxKind::Prog(std::rc::Rc::new(p)),
                 None => IdxKind::Generic,
             },

@@ -64,6 +64,17 @@ pub use backend::{
     codegen_coverage, codegen_report, native_eval_coverage, native_eval_coverage_split,
     CodegenCoverage, CodegenReport,
 };
+/// §4.5.513: run.json's `wprog` object. See [`wprog_decline_reasons`] for the
+/// closed set of keys its `reasons` map can carry.
+pub use native::wprog::WprogDeclines;
+
+/// Every key `WprogDeclines::reasons` can carry, in byte-lexicographic order.
+///
+/// The vocabulary is CLOSED and the spellings are STABLE — a run.json consumer
+/// may pin them — so this exists to be pinned rather than re-spelled.
+pub fn wprog_decline_reasons() -> &'static [&'static str] {
+    native::wprog::decline_reasons()
+}
 /// Re-exported from `elaborate` so callers thread the join-mode side table into
 /// `SimOpts.fork_modes` without naming the `elaborate` crate directly.
 pub use elaborate::{
@@ -572,6 +583,17 @@ pub struct SimResult {
     /// executor did. A static property of the design: always present, one
     /// allow-list walk per process template.
     pub codegen: CodegenReport,
+    /// §4.5.513 (`WPROG-WHY`): the per-EXPRESSION compile-decline tally behind
+    /// run.json's `wprog` object — the boundary between the tier-3 compiled lane
+    /// and the generic walk, named. `codegen` above is per BODY and can read
+    /// `able 1/1` while every evaluation inside that body walks generically;
+    /// this is the object that says why.
+    ///
+    /// `Some` iff the NATIVE kernel ran. `None` for `vm`/`interp`, for a
+    /// fallback, and for a run that finished before any executor was built (a
+    /// fatal latched during run setup) — there `backend` still names the
+    /// effective executor while no kernel ever asked `wprog::compile`.
+    pub wprog: Option<WprogDeclines>,
     /// S0 (doc-21 §7.3): the ③층 eligibility verdict — serialized as run.json's
     /// `native` object. Always present; static per (design, run options) — NOT
     /// per design alone: an instrumented run (`--probe`, stage capture) is
@@ -1032,6 +1054,10 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
     // not skipping — measured, the run still walked into `NetArena::build`'s
     // `expect` and PANICKED. A graceful fatal has to also decline to execute, so
     // the executor selection asks whether the design is still runnable at all.
+    // §4.5.513: the tier-3 expression-compile tally. `None` unless the NATIVE
+    // arm below actually runs — `wprog` is not the lane anywhere else, and an
+    // empty object there would read as "nothing declined".
+    let mut wprog: Option<WprogDeclines> = None;
     let reason = if st.finished {
         crate::sched::FinishReason::Finish
     } else if effective_backend == Backend::Native {
@@ -1063,6 +1089,9 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
             opts.max_body_steps,
         );
         let reason = native::run::run(&mut nk, ir);
+        // …taken while `nk` is alive. The run loop has returned, so nothing will
+        // ask `wprog::compile` again and the tally is complete.
+        wprog = Some(nk.take_wprog_why());
         // D4: the same coverage dump the engine path has. It lived only in the
         // `else` arm below, so `VITA_JIT_STATS` printed nothing on the backend
         // that is now the default — a coverage instrument that answers for one
@@ -1254,6 +1283,9 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         // T0: `st.class_new_sites` (not `opts.`) — the copy the VM compile gate
         // itself reads, so this is the real gate's verdict, not a re-derivation.
         codegen: backend::codegen_report(ir, &st.class_new_sites),
+        // §4.5.513: taken from the kernel that ran, never re-derived — the same
+        // single-source rule `codegen` follows above.
+        wprog,
         native: native_eligibility,
         backend: effective_backend,
         // R14: taken from the state the executors actually bumped, never

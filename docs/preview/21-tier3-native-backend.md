@@ -543,6 +543,10 @@ compiler declines ≤64-bit trees for other reasons, a runtime-offset part-selec
 one, and each of those would route to neither evaluator. The cost is one extra compile per RHS
 per template; the runtime cache builds its own regardless.
 
+Those declines are tallied per distinct expression — first reason wins — and published as
+`run.json`'s `wprog` object (doc-19 §5.2.1), so the boundary between this lane and the generic walk
+is readable without a profiler.
+
 The `native_eval` stacks are leased from the kernel behind a `RefCell`, not built per call.
 `NativeScratch` is two fixed arrays totalling 1,280 bytes, so constructing one per call is a
 memset on the hot path. Reuse is sound for the reason the engine's copy is: the run drives a

@@ -201,15 +201,16 @@ included. The JSON is hand-rolled with a fixed key order and one top-level field
 | 14 | `backend` | string | the executor that actually ran process bodies: `"native"` · `"vm"` · `"interp"` |
 | 15 | `backend_requested` | string | what `--backend` asked for; the default request is `native` |
 | 16 | `codegen` | object | the bytecode-VM static capability census (§5.2) |
-| 17 | `native` | object | the native-backend eligibility verdict (§5.3) |
-| 18 | `subroutines` | object | the static frame/inline route census (§5.6). Unconditional |
-| 19 | `processes` | object or `null` | per-body activation profile (§5.4) |
-| 20 | `builtins` | object or `null` | per-builtin call profile (§5.5) |
-| 21 | `subroutine_calls` | object or `null` | runtime per-`FuncId` subroutine profile (§5.7) |
-| 22 | `utc_unix_s` | int | wall-clock epoch seconds. Isolated non-deterministic field |
-| 23 | `wall_s` | number | total wall seconds. Isolated |
-| 24 | `elab_s` | number | wall seconds before simulation (preprocess, lex, parse, elaborate). Isolated |
-| 25 | `sim_s` | number | wall seconds inside simulation — the only part `--backend` can move. Isolated |
+| 17 | `wprog` | object or `null` | the expression-level compile-decline tally (§5.2.1) |
+| 18 | `native` | object | the native-backend eligibility verdict (§5.3) |
+| 19 | `subroutines` | object | the static frame/inline route census (§5.6). Unconditional |
+| 20 | `processes` | object or `null` | per-body activation profile (§5.4) |
+| 21 | `builtins` | object or `null` | per-builtin call profile (§5.5) |
+| 22 | `subroutine_calls` | object or `null` | runtime per-`FuncId` subroutine profile (§5.7) |
+| 23 | `utc_unix_s` | int | wall-clock epoch seconds. Isolated non-deterministic field |
+| 24 | `wall_s` | number | total wall seconds. Isolated |
+| 25 | `elab_s` | number | wall seconds before simulation (preprocess, lex, parse, elaborate). Isolated |
+| 26 | `sim_s` | number | wall seconds inside simulation — the only part `--backend` can move. Isolated |
 
 Every seconds field, and every `time_s` anywhere in the file, is formatted to six decimals; a
 non-finite value renders as `0.0`.
@@ -239,6 +240,72 @@ The closed key vocabulary: `class_new` · `delay` · `disable` · `force_release
 desugars string concatenation onto that node. The census comes from the same walk the compile gate
 runs, which is property 3 of §1 applied to a capability claim; the map is a `BTreeMap`, so key
 order is stable.
+
+### 5.2.1 `wprog`
+
+```json
+"wprog": {"asked": 33, "declined": 10, "reasons": {"call": 1, "operator": 3, "select_offset": 1, "shift_amount": 1, "sysfunc": 1, "width": 3}, "unit": "distinct expression ids compile was asked about; a declined id is filed under its FIRST decline reason and counted once however many contexts or sites ask, so declined equals the sum of reasons and never exceeds asked; null when the native kernel did not run, because wprog is not the lane there"}
+```
+
+`codegen` above counts process BODIES. This object counts EXPRESSIONS, and the pair exists because
+a body can report `able 1/1` while every evaluation of its right-hand sides runs the generic tree
+walk: the native backend's width-specialised compiler is entered per expression, and `reasons` is
+where that lane ends.
+
+| Key | Meaning |
+|---|---|
+| `asked` | distinct expression ids the compiler was asked about |
+| `declined` | how many of those it refused. Always equal to the sum of `reasons`, and never greater than `asked` |
+| `reasons` | reason → number of DISTINCT expression ids whose FIRST decline was that reason. `BTreeMap`, so key order is stable |
+| `unit` | the sentence above, verbatim, so a consumer that has only the file knows what the two numbers count |
+
+The closed key vocabulary, in the order the map emits them:
+
+| Key | The shape that lands here |
+|---|---|
+| `array_whole` | a whole unpacked array read with no element index |
+| `call` | a user function called inside an expression, whatever the context width |
+| `class_handle` | a read of a class-handle net |
+| `concat_width` | a concatenation or replication whose parts do not tile the result exactly |
+| `const_domain` | a literal outside the one-word numeric domain: a string, a real, or wider than 64 bits |
+| `frame_net` | a subroutine-local net, whose value lives in the activation window rather than in a net slot |
+| `index_range` | an array index the IR holds as a plain constant node (an unsized literal or a folded parameter) at or beyond the element count. A sized literal such as `mem[3'd7]` takes the runtime-index lane instead: it compiles, and the out-of-range read is reported at run time, so it is not a decline |
+| `index_unknown` | a constant array index carrying an x or z bit |
+| `lazy_index` | an array element read the generic path may never perform: inside the right operand of `&&`/`\|\|`, or inside a `?:` branch |
+| `malformed` | an out-of-range table id. Unreachable from the CLI; the key exists so no decline is anonymous |
+| `net_kind` | a net that is not a `wire`/`reg`/`logic`/`integer` |
+| `net_width` | a net whose storage is not exactly the context's width in one word |
+| `node_kind` | an expression kind the compiler has no arm for, such as an array-method iterator value. Never a user function or a system function: those file `call` / `sysfunc` from every decline site |
+| `operator` | an operator with no arm: `*`, `/`, `%`, `**`, `~^`, `<<<`, `casez`/`casex` equality, unary `+`/`-`, and a SIGNED `>>>` |
+| `replicate_count` | a replication count that does not fold to a constant |
+| `select_offset` | a part-select with a runtime offset, such as `x[i +: 4]` |
+| `select_range` | a constant part-select whose offset is unknown, negative, whose folded width disagrees with the width table, or whose window leaves the base |
+| `shift_amount` | a shift amount that is not a 2-state constant |
+| `sign` | an inner node whose signedness differs from the context it is evaluated in |
+| `sysfunc` | a system function other than the `$signed`/`$unsigned` seal, whatever the context width |
+| `truncation` | a value wider than the context it lands in. This compiler emits no truncation anywhere |
+| `width` | a width outside `1..=64` somewhere in the tree — the root context, an operand, a condition, a base, an index or an offset |
+
+Six keys have no source shape that reaches them at HEAD, measured by the review that shipped the
+object: `array_whole` (array assignment never asks this compiler and every other whole-array
+context is refused at elaboration), `index_unknown` (an x/z index is either a sized literal, which
+takes the runtime lane, or a parameter elaboration refuses to fold), `truncation` (every root is
+asked at the wider of the destination and its own width, and every recursion passes the parent's
+context or the child's own width), `net_width`, `replicate_count` (a non-constant count is refused
+at elaboration) and `malformed`. They stay in the vocabulary so that no decline site is anonymous;
+a consumer should expect them at zero.
+
+Two caveats, both of which the `unit` sentence states:
+
+- It is per EXPRESSION, not per EVALUATION. A program compiles once per cache slot and then runs
+  for the rest of the simulation, so `declined: 10` says ten distinct expressions left the compiled
+  lane, never how much time they cost. It is also not a partition by SITE: several decline sites
+  share one key.
+- `null` means the native kernel did not run — `wprog` is not the lane on `--backend vm` or
+  `--backend interp`, nor after a fallback, nor on a run that finished before any executor was
+  built (a fatal latched during run setup — `backend` then still reads `native`). `backend` (key
+  14) says which executor was selected; `codegen`
+  beside it is a static property of the design and does not move with the flag.
 
 ### 5.3 `native`
 
@@ -837,7 +904,7 @@ top.arr[0]
 | `--hier-tree` / `--inst-paths` | yes (elaboration order) | none |
 
 What makes it hold: hand-rolled JSON with a fixed key order; a `BTreeMap` behind every map that is
-iterated (`codegen.reject_reasons`, `native.reject_reasons`, the subroutine route table, the builtin
+iterated (`codegen.reject_reasons`, `wprog.reasons`, `native.reject_reasons`, the subroutine route table, the builtin
 rows keyed by static string, the subroutine-call rows keyed by `FuncId`); a total tiebreak on every
 sort; and a count, never a time, as every sort key. `source.name` is a basename so the same design
 run from two directories byte-diffs clean.
@@ -873,7 +940,7 @@ on a design with one `always #5 clk`, two instances of a module holding one `alw
   "schema_ver": 1,
   "tool": "vita",
   "version": "0.2.0",
-  "format_version": 31,
+  "format_version": 32,
   "seed": null,
   "plusargs": ["STAGE_TRACE"],
   "source": {"name": "d.sv", "blake3": "476800d8e8b05f12865dba0227b12bae7f9a83863c4472b431c3809e0d0a3c59"},
@@ -886,6 +953,7 @@ on a design with one `always #5 clk`, two instances of a module holding one `alw
   "backend": "native",
   "backend_requested": "native",
   "codegen": {"able": 3, "total": 5, "frame_bodies": 2, "reject_reasons": {"delay": 1, "wait": 1}},
+  "wprog": {"asked": 24, "declined": 5, "reasons": {"call": 1, "operator": 2, "width": 2}, "unit": "…"},
   "native": {"eligible": true, "buildable": true, "refused": null, "reject_reasons": {}},
   "subroutines": {"counts": {"total": 1, "frame": 1, "inlined": 0}, "sites_semantics": "…", "uncounted": "class methods and hierarchical calls", "items": [
     {"module": "sub", "name": "f", "kind": "function", "route": "frame", "sites": 2}
@@ -972,7 +1040,6 @@ Each row is a present fact about this build, not a schedule. The order in which 
 | A compile-fail manifest | A front-end or elaborate failure writes no obs directory |
 | The call tree (`processes` decomposed to task granularity) | `processes.items[].domain` is `"process"` or `"assign"` only. The blocker is structural: an inlined subroutine leaves no call node, so a seam-based profile reports it 0 times, and `0` reads as *free* about the very thing the user is hunting. `subroutines` (§5.6) is the minimum form of the prerequisite — the elaborate-time record of which route each routine took |
 | Per-call-site builtin rows (`{"name":"$sscanf","file":…,"line":…}`) | The table is name-level aggregation. The system-task half could locate today; the system-function half cannot, because the effect carries no statement id and the pure evaluator has no statement context at all, and half a table locating is worse than none |
-| `WPROG-WHY`: a per-`(reason, count)` tally of expression-level compile declines beside `codegen` | Not emitted. `codegen.reject_reasons` is a per-**process** census, so a body can report `able 1/1` while every evaluation of its right-hand side runs the generic path, and the compiled-lane boundary can only be inferred from call counts — an inference that has produced wrong causes twice |
 | `--hier-tree` generate scopes | Collapsed: sibling generate instances render as identical lines (§10). `--inst-paths` carries the full path |
 | `--hier-tree` / `--inst-paths` on a staged applet | Accepted and dropped: the run exits 0, prints no diagnostic and writes no file. This is the one accept-and-drop on the rail; every other obs surface is loud on a staged applet |
 
@@ -981,6 +1048,7 @@ Each row is a present fact about this build, not a schedule. The order in which 
 | File | What it pins |
 |---|---|
 | `crates/cli/tests/obs.rs` | the `run.json` constants and the exact `results.jsonl` prefix · the determinism golden (strip exactly the four wall-clock fields, assert all four are present) · status versus process exit · plusargs and source digest · no obs output on a compile error · `exit_class` under `-Werror` · staged rejection · empty `--obs-dir` rejection · no output without the flag · the coverage schema against `get_coverage()`, including crosses, zero hits, weighting and determinism · the trace change stream, its three-way match against `$monitor`, probe typo and missing-directory loudness, determinism, the loud array/real rejections and full-width packed values · the stage capture, its three-way match against `$display`, native capture, no-plusarg no-op, determinism, zero-argument loudness and the `STAGE_TRACE=` spelling · the `codegen` claim and reason keys, backend invariance, and the `native` reject families · native-backend probe capture at the store point |
+| `crates/cli/tests/obs_wprog.rs` | every decline in one census design named, with the whole map hand-derived and each key confirmed against the shape isolated on its own · `declined` equal to the sum of `reasons` and never above `asked` · `null` on `--backend vm` and `--backend interp` while `codegen` stays byte-identical · byte identity across runs and under `--obs-procs` · the closed vocabulary pinned as a literal · the object sitting between `codegen` and `native` · the census design's stdout pinned against iverilog and verilator on all three backends |
 | `crates/cli/tests/obs_procs.rs` | hand-checkable counts · byte identity across runs · backend invariance · timing adds `time_s` without moving counts · one row per instance · loudness without `--obs-dir` · `null` without the flag · staged rejection · port rows locating their connection · wildcard port rows staying unlocated · array-port elements sharing one connection span |
 | `crates/cli/tests/obs_builtins.rs` | hand-checkable counts · total row order · byte identity · backend invariance · timing without moving counts · `null` without the flag · a `$display` inside a function body counting |
 | `crates/cli/tests/obs_subroutines.rs` | every route reported with its lowered site count · the counts header and semantics strings · emission without `--obs-procs` · the empty table · the 2-state/4-state return-type route split · output-formal calls in both spellings · class declarations not shifting module counts · every row carrying its declaration site and joining the runtime rows in all four cardinalities, with the column order and the `(module, name)` sort pinned · the declaration site emitted without `--obs-procs` |

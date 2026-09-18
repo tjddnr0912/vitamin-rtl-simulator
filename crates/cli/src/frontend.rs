@@ -915,6 +915,7 @@ pub(crate) fn emit_obs(
         backend,
         backend_requested,
         codegen: &result.codegen,
+        wprog: result.wprog.as_ref(),
         native: &result.native,
         procs,
         subroutines,

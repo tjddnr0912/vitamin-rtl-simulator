@@ -3131,3 +3131,55 @@ fn a_size_casts_sign_seal_compiles_to_the_same_program_as_its_operand() {
         "the seal is a stamp, not a computation — it must add no ops"
     );
 }
+
+/// §4.5.513 (`WPROG-WHY`): `compile_why` names the reason, and the `Err` STRING
+/// is asserted rather than `is_err()`.
+///
+/// The CLI census (`crates/cli/tests/obs_wprog.rs`) pins the keys ordinary RTL
+/// produces from a whole run. This pins the ones that need a context the design
+/// itself does not supply — in particular the two conditions §4.5.513 SPLIT so
+/// that the reported reason is the one that fired: a node WIDER than its context
+/// is `truncation`, not `width`.
+#[test]
+fn s2_compile_why_names_the_reason_that_fired() {
+    let src = "module top;\n\
+         logic [7:0] a = 8'd3, b = 8'd5;\n\
+         logic [7:0] t; assign t = a + b;\n\
+         logic [7:0] m; assign m = a * b;\n\
+         logic [7:0] os; assign os = a[9:2];\n\
+         logic [7:0] pass; assign pass = a;\n\
+         endmodule\n";
+    let ir = build(src);
+    let wt = WidthTable::build(&ir, &crate::FuncTable::new());
+    let arena = NetArena::build(&ir, &SimOpts::default()).expect("flat");
+    let rhs = |i: usize| ir.cont_assigns[i].rhs;
+    let at = |eid: u32, w: u32, signed: bool| {
+        crate::native::wprog::compile_why(&ir, &wt, &arena, eid, w, signed).map(|_| ())
+    };
+    use crate::native::wprog::why;
+
+    // The ROOT width gate: a context this evaluator cannot represent at all.
+    assert_eq!(at(rhs(3), 65, false), Err(why::WIDTH));
+    assert_eq!(at(rhs(3), 0, false), Err(why::WIDTH));
+    // …and the same leaf at its own width is admitted, so the rows above are
+    // about the context and not about the expression.
+    assert_eq!(at(rhs(3), 8, false), Ok(()));
+
+    // TRUNCATION, the split: an 8-bit self-determined leaf in a 4-bit context.
+    // Before §4.5.513 this and the two rows above shared one `None`.
+    assert_eq!(at(rhs(3), 4, false), Err(why::TRUNCATION));
+
+    // SIGN: the uniform-sign gate, which exempts `Const` and `Signal` — so it
+    // has to be asked of an operator node.
+    assert_eq!(at(rhs(0), 8, true), Err(why::SIGN));
+    assert_eq!(at(rhs(0), 8, false), Ok(()));
+    // The exemption, measured rather than assumed: the same sign mismatch over a
+    // `Signal` leaf does NOT decline.
+    assert_eq!(at(rhs(3), 8, true), Ok(()));
+
+    // OPERATOR: `Mul` has no compile arm.
+    assert_eq!(at(rhs(1), 8, false), Err(why::OPERATOR));
+
+    // SELECT_RANGE: a constant window that leaves the base (`a` is 8 bits).
+    assert_eq!(at(rhs(2), 8, false), Err(why::SELECT_RANGE));
+}
