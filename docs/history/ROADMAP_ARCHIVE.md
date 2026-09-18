@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 402건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 403건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.510` **An INTERFACE member inside a §11.6.1 region is sized and signed through the interface declaration** (2026-09-18 · §2 Inline / frame binds, queue row 1 · the fact table now covers `TopItem::Interface`; `defparam` pre-scan modules only · 13 cells wrong→correct, module twin at parity · review 2 lenses PASS, 1 no-oracle control · 8008 tests)
 - `4.5.509` **A hierarchical leaf whose child declaration names a PARAMETER width is sized through the child's parameter environment** (2026-09-18 · §2 Inline / frame binds, queue row 1 · per-instance `ParamEnv` with a narrow/wide class · 27 cells x→correct · residues: typed params, `#(.W())`, bits-channel overrides, sized-literal-only arithmetic)
 - `4.5.508` **A frame function whose body writes a module net runs on the statement-executor lane** (2026-09-17 · §3.b frame-body-outside-write, queue row 3 · AST route predicate + `inout_func_names` join + classifier accept; un-hoistable sites E3009 by name · 22 loud→correct, 5 pins converted · residues: `frame-body-write-sites`, `frame-body-write-order`)
 - `4.5.507` **A hierarchical net or call leaf inside a §11.6.1 region is sized and signed through the instance's module** (2026-09-17 · §2 Inline / frame binds, queue row 2 · `expr_size_hier.rs` per-module fact table from the AST; literal ranges only · 15 cells x→correct on both oracles · residues: parameter-width child nets (new row 1), the interface member leaf (new row 2))
@@ -519,6 +520,60 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.510 An INTERFACE member inside a §11.6.1 region is sized and signed through the interface declaration (2026-09-18, branch it13) ✅
+
+**ROADMAP row**: §2 Inline / frame binds, the interface residue of §4.5.507; queue row 1. One slice, one root.
+
+**Row claims re-measured.** The row's own cell (`16'(w.hi * sq8)` over a 16-bit signed member) is
+RIGHT at HEAD with the census operands — the member's own width filled the region by accident —
+but the class is live: `16'(w.uh * sq8)` over `logic [7:0] uh` printed `00000080` where both oracles
+print `0000bb80`, the signed 8-bit twin `ffffff90` for `00000090`, a cast inside an inline body
+`00000080` for `ffffbb80`, and `case (w.s8 * sq8) 16'sd144:` / `case (w.uh * sq8) 16'hbb80:` both
+missed their arm. The row's stated mechanism was wrong in one detail: `has_opaque_leaf` answered
+TRUE (not false) — `hier_leaf_net` declined because the fact table was built from `TopItem::Module`
+only — so the region kept its PRE-SLICE evaluation width, which is the other operand's width. Plain
+assignment and an inline-body plain assignment were already right (the LHS sizes those).
+
+**Fix (`driver.rs`, `expr_size_hier.rs`).** `build_module_facts` takes the modules and the
+interfaces (declaration order each, modules first; first declaration wins, and a module and an
+interface of one name is E2001 anyway). `ifc w();` is an `Instance` item like `m u();`, so
+`hier_leaf_scope` reaches the interface's facts with no other change; an interface's parameters
+are bound by the same `bind_params` as a module's, so `child_env` / `env_fold` are the same fold.
+The `defparam` pre-scan reads MODULES only: a `defparam` inside an instantiated interface is E3009,
+and an uninstantiated one binds nothing (the round-1 binary scanned both and dropped every module's
+environment for a design no oracle accepts — `0000bb80` → `0000xx80`; a review control pins it).
+
+**Census PRE→POST**: 25 measured cells in the pin, 13 wrong→correct on both oracles (the size
+cast ×3, the inline-body cast, the two case selectors, the parameter default / named / positional
+/ `int` widths, signed and unsigned), 1 designed decline unchanged (`#(.W(P+P))` over `parameter P
+= 3'd6`, ORACLE-SPLIT: iverilog 12 bits, verilator and vita's binder 4), the rest controls. Corpus
+10/10. Review round 1: differential 30 designs, soundness 33, both PASS — the interface spelling
+moved onto both oracles for typedef / packed-struct / enum / atom members, unpacked and 2-D
+elements, every select shape, interface ANSI ports, `assign` / `always_comb` / NBA / inline
+function and task bodies, `casez` / `casex`, `$signed` / nested casts, reversed and non-zero-based
+ranges, the parameter fold through a middle module (`u.w.d` with `#(.W(MW*2))`), one module
+instantiated three times with different `MW` feeding `pifc #(.W(MW))`, `localparam` / `$clog2` /
+`pk::PW` ranges, and the module twin at parity (s19: 5 regions, both spellings equal both oracles).
+Round 2 (the `defparam` scan): 63 lens designs rerun on the delta binary, only the control moved.
+
+**Residues (pre-existing, POST = PRE)**: a member reached through a module's interface PORT
+(`module m(ifc p)`; ONE oracle — iverilog rejects the port) and through `virtual ifc v = w`
+(verilator only); a member shadowed by a same-named block-local inside the interface (the census
+counts it twice and declines, `00000080` for `0000bb80`); an interface instance inside a generate
+block and an upward reference (`0000xx80`, x-leak); a width from a BARE imported package constant
+(`import pk::*; logic [PW-1:0] q`); a `parameter type` member; any `bind` design; narrow+narrow
+parameter arithmetic in the range (`parameter W = 4'd6; logic [W+W-1:0]` — all four tools say 12
+bits, the decline is conservative there); a modport path, an interface array, a nested interface
+instance, an interface function, a generate block or a `real` member in an interface are loud.
+Also measured: a function-local shadowing the instance name is accepted by vita where both
+oracles reject (no-oracle; the value now follows the member the lowering reads). The module twins
+of several interface cells are wrong in a way the interface spelling no longer is (`case (m0.X *
+sq8) 8'h80:` = 0, `16'({m0.uh, 4'h5})` = `0000xc85`, `16'(m0.p2[0] * sq8)` and
+`16'(16'(m0.uh) * sq8)` = `0000xxxx`) — §4.5.507's residue list, untouched.
+
+**Tests**: `iface_member_region_width.rs` (4 tests, 26 cells). Suite 8004 → 8008. `format_version`
+32 unchanged.
 
 #### 4.5.509 A hierarchical leaf whose child declaration names a PARAMETER width is sized through the child's parameter environment (2026-09-18, branch it12) ✅
 

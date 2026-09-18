@@ -10,6 +10,7 @@ beside-track items, counted together), 5b = performance / hardening, 7 / 8 = con
 | date | HEAD | slice | tests | fmt | 2T | 2M | 2N | 3a | 3b | 3c | 0 | 4 | 6 | 5b | 7 | 8 | total (open / startable / blocked) |
 |---|---|---|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2026-09-18 | 772afe6 | §4.5.509 | 8004 | 32 | 27 / 6 / 21 | 116 / 76 / 40 | 7 / 0 / 7 | 24 / 19 / 5 | 91 / 79 / 12 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 18 / 9 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 335 / 211 / 124 |
+| 2026-09-18 | ed702c4 | §4.5.510 | 8008 | 32 | 27/6/21 | 117/76/41 | 7/0/7 | 24/19/5 | 91/79/12 | 12/0/12 | 14/9/5 | 6/0/6 | 14/13/1 | 18/9/9 | 4/0/4 | 2/0/2 | 336/211/125 |
 
 Notes per row go below, dated, only when a count moved for a reason the row cannot show (a recount,
 a section restructure, a residue split).

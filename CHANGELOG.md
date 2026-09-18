@@ -23,7 +23,12 @@ changed for a user of the simulator.
   selector the same. A child net whose range names a PARAMETER (`logic signed [W-1:0] hw`) is
   sized too: the child's defaults, the instance's `#()` overrides, its localparams, `$clog2`, a
   two-level path and a param-width port all fold; a typed parameter, a `defparam` design and
-  arithmetic over sized literals only still decline (x), listed in ROADMAP §2.
+  arithmetic over sized literals only still decline (x), listed in ROADMAP §2. An INTERFACE member
+  is sized the same way: `16'(w.uh * sq8)` over `interface ifc; logic [7:0] uh;` and `ifc w();`
+  printed `00000080` for both reference tools' `0000bb80` (the signed twin `ffffff90` for
+  `00000090`, and a `case (w.s8 * sq8)` selector missed its arm); a parameterised interface
+  (`ifc #(.W(16)) w();`) folds its width in the instance's environment. A member reached through a
+  module's interface PORT still takes the old width (one reference tool).
 - **A function whose body writes a module variable is accepted** where it was refused as "outside
   the frame-call subset": `function automatic int fw(input int v); acc2 = v + 2; return v;` under
   `always_comb r = fw(src);` runs as in both reference tools, including a part-select write, calls

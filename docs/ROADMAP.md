@@ -27,18 +27,18 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 6 | 21 | WALL §11.8.1 region sign / declared-width provenance 8 · named prerequisite 6 · one oracle + zero demand (clocking) 3 · ORACLE-SPLIT 2 · DO-NOT-START 2 | LOUD 6 · BLOCKED 6 · WALL 5 · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 116 | 76 | 40 | oracle split / pinned / oracle disqualified 17 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 | inline / frame binds 17 (the INTERFACE member leaf) · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 18 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / selects 5 · diagnostics 4 · class fields 3 · oracle splits 10 | ① | 1 |
+| §2 | recorded defects by mechanism | 117 | 76 | 41 | oracle split / pinned / oracle disqualified 17 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 18 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / selects 5 · diagnostics 4 · class fields 3 · oracle splits 10 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 91 | 79 | 12 | named prerequisite 4 · oracle split / unmeasured 4 · by design or trigger-gated 3 | subroutine / frame 23 (the hierarchical call to a body-write function) · constants / parameters 20 · parser accept 12 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 6 · diagnostics quality 5 · VCD / real conversion 3 | ② | 2, 5 |
+| §3.b | loud → correct-support, small | 91 | 79 | 12 | named prerequisite 4 · oracle split / unmeasured 4 · by design or trigger-gated 3 | subroutine / frame 23 (the hierarchical call to a body-write function) · constants / parameters 20 · parser accept 12 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 6 · diagnostics quality 5 · VCD / real conversion 3 | ② | 1, 4 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
-| §6 | G2 observability (OBS) | 6 stages + 8 | 13 | 1 | CALL TREE: two lowering paths (doc-19 §4.9) 1 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / subroutine join key (`subroutines` declaration site) / `WPROG-WHY` and five more beside the track | ④ | 3, 4 |
+| §6 | G2 observability (OBS) | 6 stages + 8 | 13 | 1 | CALL TREE: two lowering paths (doc-19 §4.9) 1 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / subroutine join key (`subroutines` declaration site) / `WPROG-WHY` and five more beside the track | ④ | 2, 3 |
 | §5.b | performance / hardening | 18 | 9 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 335 | 211 | 124 | | | | |
+| total | | 336 | 211 | 125 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, a per-resumption-kind ordering model, a
@@ -368,10 +368,20 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   (`t.s8`), a 2-D packed element (`u.pk2 * m8` is `…xxee` for `…11ee`), a `real` child net. The
   typed-parameter cells are the largest residue; the fix is a width channel on the environment
   (the slot's declared range folded in the same environment, then `coerce_int_width`).
-- An INTERFACE member as a region leaf is a clean silent-wrong, not an x: `16'(w.hi * sq8)` over
-  `interface` member `hi` prints `ffffffe0` where both oracles print `fffffee0` (the leaf is a known
-  dotted symbol, so `has_opaque_leaf` says false and the walk sizes it wrong). Own row: the fact
-  table excludes interfaces by construction.
+- An interface member reached through a module PORT keeps the pre-slice evaluation width (ONE
+  oracle: iverilog rejects `module m(ifc p)`): `16'(p.uh * sq8)` over `logic [7:0] uh` prints
+  `00000080` where verilator prints `0000bb80`. §4.5.510 sized a member of a BODY instance
+  (`ifc w();` then `w.uh`) through the fact table; a port formal is not in the instance map, and a
+  modport path (`w.mp.uh`), an interface array and a nested interface instance are loud (E3009 /
+  E3010) — not gaps of this row.
+- Interface members the §4.5.510 fact table still declines (both oracles agree on each): a member
+  shadowed by a same-named block-local inside the interface (`logic [7:0] sh; initial begin logic
+  [3:0] sh; …` — the census counts the name twice; `16'(w.sh * sq8)` prints `00000080` for
+  `0000bb80`), a range over a BARE imported package constant (`import pk::*; logic [PW-1:0] q`,
+  same cell), an interface instance inside a generate block (`g.w.uh` prints `0000xx80`), a
+  `parameter type` member, and `virtual ifc v = w; v.uh` (verilator only). Narrow+narrow parameter
+  arithmetic in a range (`parameter W = 4'd6; logic [W+W-1:0]`) declines by the ORACLE-SPLIT rule
+  although no wrap occurs there (all four tools say 12 bits) — conservative, not wrong.
 - A wide NON-repeatable actual is handed to a narrower signed formal unnarrowed (iverilog):
   `sgn($random)` with `input signed [15:0] x` prints the full 32-bit draw (`12153524`) where iverilog
   prints its low 16 bits (`3524`); `bind_formal_actual`'s verbatim tail narrows only a NARROW
@@ -1004,12 +1014,11 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §2 an INTERFACE member as a §11.6.1 region leaf is a clean silent-wrong (both oracles agree): `16'(w.hi * sq8)` prints `ffffffe0` for `fffffee0`. Root = the member is a known dotted symbol, so `has_opaque_leaf` answers false and the walk sizes it through the flattened net, not the member's declared type. Fix shape = the interface member's declared sign / width through the same fact table §4.5.507 built for instances (`ifaces` already holds the decls). First action = census interface members in a size cast, an inline body and a case selector, signed and unsigned, on both oracles · source = it11 differential lens D5 | §2 Inline / frame binds | ① |
-| 2 | 2 | §3.b `frame-body-write-sites`, the HIERARCHICAL call: `u.fw(3)` to a function whose body writes a module net is E3009 where both oracles run it (`HIER r=3 acc2=5`). Root = `resolve_deferred_hier_call` patches the FuncId after the statement that would carry the copy-out is lowered, so the hoist never sees a routable callee. Fix shape = hoist a hierarchical call to a body-write function the way `hoist_inout_calls` hoists a local one, resolving the child's FuncId early enough (the child's `body_write_fids` set is known once its frames are reserved). First action = census the hier call in an initial, an `always_comb`, a `$display` arg and a CA on both oracles · source = it11 review F2/D1 | §3.b frame-body-write-sites | ② |
-| 3 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
-| 4 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
-| 5 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 6 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) and `sim-engine/state/frame_eval.rs` (1,810) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 1 | 1 | §3.b `frame-body-write-sites`, the HIERARCHICAL call: `u.fw(3)` to a function whose body writes a module net is E3009 where both oracles run it (`HIER r=3 acc2=5`). Root = `resolve_deferred_hier_call` patches the FuncId after the statement that would carry the copy-out is lowered, so the hoist never sees a routable callee. Fix shape = hoist a hierarchical call to a body-write function the way `hoist_inout_calls` hoists a local one, resolving the child's FuncId early enough (the child's `body_write_fids` set is known once its frames are reserved). First action = census the hier call in an initial, an `always_comb`, a `$display` arg and a CA on both oracles · source = it11 review F2/D1 | §3.b frame-body-write-sites | ② |
+| 2 | OBS | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
+| 3 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
+| 4 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
+| 5 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) and `sim-engine/state/frame_eval.rs` (1,810) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 
@@ -1070,7 +1079,7 @@ Open items beside the staged track:
   `subroutine_calls`; the runtime object's `key` text says so rather than instructing a join it
   cannot serve. Giving `SubroutineRoute` a `DeclLoc` closes it — the elaborator already resolves one
   at reserve and the route census is filed in a different pass, so it is a threading slice, not a new
-  mechanism. This is §5.2 queue row 3.
+  mechanism. This is §5.2 queue row 2.
 - Per-CALL-SITE builtin rows (`{"name":"$sscanf","file":…,"line":…}`) are not emitted; the `builtins`
   table is name-level aggregation.
 - `--hier-tree` and `--inst-paths` are parsed for every applet but reach `VitaOpts` only on the
