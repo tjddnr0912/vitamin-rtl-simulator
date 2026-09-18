@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 404건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 405건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.512` **The static `subroutines` rows carry their declaration site and join the runtime rows** (2026-09-18 · §6 OBS, queue row 1 · `SubroutineRoute.decl` from the routine name's span at the seed and at every route seam, written as `decl_file`/`decl_line`/`decl_col` after `sites`; the `key` text instructs a MANY-TO-MANY join on the declaration · review 2 lenses (34 + 10 designs) 0 value defects, round 2 rewrote the join cardinality the round-1 text overstated · 8018 tests)
 - `4.5.511` **A hierarchical call to a function whose body writes a module net runs** (2026-09-18 · §3.b frame-body-write-sites, queue row 1 · the calling module decides the route from the callee's declaration in the fact table and defers the copy-out statement like a hierarchical task enable · 20 cells loud→correct on both oracles, 3 positions stay loud by name, a cross-instance Rule B pair is E3001 · review 2 lenses (48 + 41 designs) 0 value silent-wrongs, round 2 closed the OBS phantom row and the over-wide pair rule · 8015 tests)
 - `4.5.510` **An INTERFACE member inside a §11.6.1 region is sized and signed through the interface declaration** (2026-09-18 · §2 Inline / frame binds, queue row 1 · the fact table now covers `TopItem::Interface`; `defparam` pre-scan modules only · 13 cells wrong→correct, module twin at parity · review 2 lenses PASS, 1 no-oracle control · 8008 tests)
 - `4.5.509` **A hierarchical leaf whose child declaration names a PARAMETER width is sized through the child's parameter environment** (2026-09-18 · §2 Inline / frame binds, queue row 1 · per-instance `ParamEnv` with a narrow/wide class · 27 cells x→correct · residues: typed params, `#(.W())`, bits-channel overrides, sized-literal-only arithmetic)
@@ -521,6 +522,64 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.512 The static `subroutines` rows carry their declaration site and join the runtime rows (2026-09-18, branch it15) ✅
+
+**ROADMAP row**: §6 OBS beside-track item "subroutine join key"; queue row 1.
+
+**Row claims re-measured: the shape holds.** `run.json`'s static `subroutines` rows carried
+`module`, `name`, `kind`, `route`, `sites` only, and the runtime `subroutine_calls` object's `key`
+sentence said "the static object does not carry that yet, so read it by name and route". The name is
+not a join: a package routine is `p::dbl` under `module: "top"` on one side and `top.dbl` on the
+other, a generate-scoped routine is `gb[0]$gf` against `top.gb[0].gf`, and the declaration is the one
+thing both rows can name. The declaration span was already resolved per FuncId at reserve
+(`frame_decl_locs`, R2 ⓒ); the static census is filed in a different pass from the same
+definitions, so this was a threading slice.
+
+**Fix.** `SubroutineRoute` gains `decl: Option<DeclLoc>`. `seed_subroutine_routes` resolves every
+`func_table` / `task_table` definition's `name.span` through `decl_loc` (the same resolver the
+FuncId tables use); `note_frame_call` copies the FuncId's own `frame_decl_locs` entry (one
+resolver, never two); the inline fall-throughs in `inline_fn.rs` / `inline_task.rs` pass the
+resolved definition's span. `None` never overwrites a resolved site. The writer appends
+`decl_file` / `decl_line` / `decl_col` after `sites` on the `""`/`0`/`0` convention the runtime rows
+use (unreachable from the CLI, which always installs a resolver). `SubroutineRoute` is not serde and
+never reaches the golden or the `.velab` trailer, so `format_version` and `schema_ver` stand.
+
+**Census PRE→POST** (one design, 11 static rows, 13 runtime rows): every static row carries the
+triple its runtime rows print — two instances of one module fold onto one static row and both
+runtime rows join it; a routine imported from a package and one spelled `p::dbl` under the calling
+module both point into the package; two `for`-generate copies share one triple; a never-called
+routine (`sites: 0`) and an inlined one carry theirs with no runtime row; the class method keeps its
+runtime-only row. `decl_file` is the declaring file in multi-file, `include`, subdirectory,
+same-basename and filelist invocations, byte-identical between the two objects. Row set, route,
+`sites`, stdout and the staged `--obs-dir` rejection are PRE-identical everywhere; the static
+object is byte-identical across repeat runs and across `--obs-procs` on/off.
+
+**Review** (2 lenses, Opus): differential 34 designs / soundness 10 designs plus a producer census
+(three writers, one resolver), 0 value defects. Round 1, both lenses: the new `key` sentence (and the
+SPEC / manual prose) enumerated three join cardinalities as if they were the set — "one static row
+joins every instance's runtime row, an inlined row joins none, a class method or hierarchical call
+has runtime rows only" — and the same run.json falsified two of them and omitted a fourth: one
+declaration owns SEVERAL static rows (a `for`-generate copy per index, an `include`d or imported
+routine under each module, `p::f` beside an imported `f` in one module), an `inlined` row shares its
+triple with a `frame` row when another module frames the same routine, and a hierarchical callee is
+a declared routine with a static row at `sites: 0` beside its runtime row. A consumer following the
+instruction would have summed `sites` across rows sharing a triple — the very over-count the `key`
+field exists to prevent. Closed in the delta: the text now says the triple names a SOURCE, the join
+is many-to-many, and `sites` is never summed across rows sharing a triple (writer, doc-19 §5.6/§5.7,
+manual 004 §14.4, glossary, the test comment); a new test pins the mixed inlined/framed pair, the
+hierarchical callee and the class method on one design. Re-scored on the new binary: the seven
+lens designs that exhibit the shapes are stdout-identical PRE / POST / POST2 and their row sets and
+duplicate-triple sets unchanged. Recorded, not chased (pre-existing, PRE == POST): `function void`
+is filed as `kind: task`; the route is decided per spelling (`import p::mix` inlined, `p::mix`
+framed); `p::pt(z);` as a statement is a parse error (iverilog agrees, verilator runs); `` `line ``
+is ignored by every location the rail reports; a hierarchical call into a generate scope and a
+function inside an `interface` stay loud.
+
+Files: `crates/elaborate/src/{tables,frames_body,inline_fn,inline_task}.rs`, `crates/cli/src/obs.rs`,
+`docs/preview/{19-ai-agent-observability,10-glossary}.md`, `docs/manual/004_cli-reference.md`.
+Tests: `crates/cli/tests/obs_subroutines.rs` (+3), `obs_subroutine_calls.rs` (the self-description
+test pins the join property). format unchanged.
 
 #### 4.5.511 A hierarchical call to a function whose body writes a module net runs (2026-09-18, branch it14) ✅
 

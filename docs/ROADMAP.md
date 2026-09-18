@@ -30,11 +30,11 @@ behind it, so the queue and the composition are read from one table.
 | §2 | recorded defects by mechanism | 117 | 76 | 41 | oracle split / pinned / oracle disqualified 17 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 18 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / selects 5 · diagnostics 4 · class fields 3 · oracle splits 10 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 91 | 79 | 12 | named prerequisite 4 · oracle split / unmeasured 4 · by design or trigger-gated 3 | subroutine / frame 23 · constants / parameters 20 · parser accept 12 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 6 · diagnostics quality 5 · VCD / real conversion 3 | ② | 3 |
+| §3.b | loud → correct-support, small | 93 | 80 | 13 | named prerequisite 4 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 24 · constants / parameters 20 · parser accept 12 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 6 · diagnostics quality 6 · VCD / real conversion 3 | ② | 2 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
-| §6 | G2 observability (OBS) | 6 stages + 8 | 13 | 1 | CALL TREE: two lowering paths (doc-19 §4.9) 1 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / subroutine join key (`subroutines` declaration site) / `WPROG-WHY` and five more beside the track | ④ | 1, 2 |
+| §6 | G2 observability (OBS) | 6 stages + 9 | 14 | 1 | CALL TREE: two lowering paths (doc-19 §4.9) 1 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / `WPROG-WHY` / a `void` function filed as `kind: task` / a route decided per spelling and five more beside the track | ④ | 1 |
 | §5.b | performance / hardening | 18 | 9 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
@@ -777,7 +777,7 @@ behind the §2 correctness queue.
 | ⑬ | an array access inside a subroutine body is attributed to the CALL statement | the tier-3 arena only RECORDS and drains at the caller's statement boundary, so it does not know the callee StmtId | a second `cur_stmt` source or a shared `Rc<Cell>`. Trap: adding a publish makes interp report `d.sv:6` and native report no location, so backend agreement was chosen | — | — |
 | ⑬ | a terminator condition (`if (mem[i])`), a continuous-assign settle, a t0 arm and a delayed-CA apply drain have no location | they are evaluated after the block's last statement, which clears `cur_stmt` to NO_STMT | no location is better than a wrong line (deliberate) | — | — |
 | ⑬ | W4022, W4028, the delta limit, RunRange, W4020 and the W4029/W4007 instance path all report `location: None` | the sid-less diagnostic family has no access-statement key in the engine | `cur_stmt` plus `stmt_diag_meta` (the plumbing exists) · a `SpanResolver` plus a StmtId→span sidecar | — | — |
-| ⑭ | the call tree to task granularity is not shipped: an inlined subroutine reports 0 calls and reads as "free" | calls are lowered two ways — a call-seam frame body and an elaborate-time INLINE splice (`inline_task.rs` / `inline_fn.rs`; 14.39 s inlined against 0.35 s framed) | prerequisite = an elaborate-time record of inline site → caller (`Sidecars::func_names` exists; only the declaration `file:line:col` twin is missing) | — | — |
+| ⑭ | the call tree to task granularity is not shipped: an inlined subroutine reports 0 calls and reads as "free" | calls are lowered two ways — a call-seam frame body and an elaborate-time INLINE splice (`inline_task.rs` / `inline_fn.rs`; 14.39 s inlined against 0.35 s framed) | prerequisite = an elaborate-time record of inline site → caller (`Sidecars::func_names` and the declaration `file:line:col` exist on both subroutine objects since §4.5.512; the inline-site record is what is missing) | — | — |
 | ⑭ | a reporter wants ~440 cycles/s and measures 20.4 — a 21× scheduler/executor gap | not an observability item | Phase D codegen plus arena — tracked in §5 | — | — |
 
 ### 3.b Small residues
@@ -828,6 +828,7 @@ behind the §2 correctness queue.
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
+| pkg-task-stmt | a package task enabled by its scoped spelling as a STATEMENT (`p::pt(z);`) is E2002 `expected '=' or '<=' after lvalue, found '::'`; the import spelling (`import p::pt; pt(z);`) runs. iverilog rejects the same line (`Malformed statement`), verilator runs it | the statement parser takes `::` only inside an expression, not on a statement head | accept a scoped call on a statement head and route it like the imported spelling | 1 (verilator; iverilog rejects) | small |
 | blocal-inert-falseloud | an inner block-local that is DECLARED, never referenced inside its own block and carries no initializer is refused with ``E3009 block-local `x` is referenced outside its `begin…end` block`` although the flatten is byte-correct; both oracles print a value on every measured cell in the module and the import lane (the scoped lane is silently wrong instead — its own §2 row) | `check_block_local_scope_leaks` keys on the NAME, not on the binding a post-block reference takes | the gate must resolve that binding. Three narrowings that keyed on properties of the DECLARATION — inertness, geometry, an outer-twin lookup — were each measured to create a new defect, and the axis was reverted whole (§4.5.490) | 2-oracle | — |
 | pkg-callee-blocal | a scoped `pk::g()` whose TRANSITIVE package callee holds any block-local is ``E3010 … undeclared net/variable `top.$func$pk::g.x` ``; both oracles print 44 | the callee is injected by `inject_pkg_callees` AFTER the step-6.5 frame barrier, so it is never reserved as a frame and is inline-folded without its block-local reservation | reserve the injected callee as a frame, or inject ahead of the barrier. Distinct from the transitive twin bound at step 3.6, which §4.5.490 fixed | 2-oracle | small |
 | iface-pkg-routine | an INTERFACE body applies no package ROUTINE import: `import pk::g;` plus a bare `g()` inside an interface is ``E3010 call to undeclared function `g` [in top.i]`` where both oracles print 44 | `apply_import_routines` is wired for modules and packages; `iface_inst.rs` never calls it | route an interface body's imports like a module's; sibling of `iface-subr` | 2-oracle | small |
@@ -893,6 +894,7 @@ behind the §2 correctness queue.
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
+| line-directive | a `` `line 500 "phantom.sv" `` directive above a declaration is ignored: every location the rail reports (`subroutines[].decl_*`, `subroutine_calls[].decl_*`, diagnostics) names the physical file and line. Both objects agree with each other | the preprocessor does not consume `` `line ``; the span resolver maps byte offsets to the physical file only | a `` `line `` table in the preprocessor consulted by the span resolver | — (not a value; convention) | small |
 | E3009-anchor | `E3010` / `E3009` file:line is inconsistent — some sites attach it (`d_trunc.v:3:20`) and some print only the hierarchical path | the anchor is not passed through | `diag::SpanResolver` exists, so the scope is every call site that does not pass an anchor | — | — |
 | error_at | the anchor and the `found` token differ — `g[w].u.q` anchors at `w` and the message says `found '.'` | `error_at` takes an earlier node while `found` takes the cursor token | they are separate fields, so this is correct-but-confusing; 10 sites | — | — |
 | #9 | the `velab -L` (worklib merge) path has no locations | each compilation unit's spans index its own expansion buffer from 0, so the coordinate spaces overlap; a wrong CU map would give a wrong file:line, so `None` is kept | rewrite span offsets at merge time (a whole-AST walk) | — | — |
@@ -1014,10 +1016,9 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | §6 follow-on: give the static `subroutines` rows a declaration site so the two subroutine objects can be joined (`subroutine_calls`'s `key` text currently says they cannot be) | §6 | ④ |
-| 2 | OBS | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
-| 3 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 4 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) and `sim-engine/state/frame_eval.rs` (1,810) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 1 | 1 | `WPROG-WHY`: a per-(reason, count) tally of `wprog::compile`'s decline sites, folded into `run.json` beside `codegen` (the shape `builtins` already has) | §5.b | ④ |
+| 2 | next | a multi-dimensional PACKED type-param default or override is E2002 at parse (both oracles run it) · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
+| 3 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) and `sim-engine/state/frame_eval.rs` (1,810) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 
@@ -1074,11 +1075,14 @@ Open items beside the staged track:
   vita lowers a subroutine TWO ways (a frame body behind `Terminator::Call` / `Expr::Call`, and an
   elaborate-time INLINE splice), so a profile built on the runtime seams reports 0 calls for every
   inlined subroutine, and "0 calls" reads as "free" about the very thing the user is hunting.
-- The static `subroutines` rows carry no declaration site, so a consumer cannot join them to
-  `subroutine_calls`; the runtime object's `key` text says so rather than instructing a join it
-  cannot serve. Giving `SubroutineRoute` a `DeclLoc` closes it — the elaborator already resolves one
-  at reserve and the route census is filed in a different pass, so it is a threading slice, not a new
-  mechanism. This is §5.2 queue row 1.
+- The static `subroutines` object files `function void vf(...)` as `"kind": "task"`; the row set and
+  the route are otherwise right, and the runtime object has no `kind` to disagree with. Pre-existing
+  before §4.5.512, measured on its review.
+- The frame/inline ROUTE is decided per `(module, name)` key, so one package function is `inlined`
+  in the module that imports it (`import p::mix; mix(x)`) and `frame` in the module that spells it
+  `p::mix(x)` — value-correct in all three tools, and since §4.5.512 visible as two static rows that
+  share one declaration triple with different routes. Whether the scoped spelling should inline like
+  the imported one is unmeasured (the inline eligibility is read from a different table per spelling).
 - Per-CALL-SITE builtin rows (`{"name":"$sscanf","file":…,"line":…}`) are not emitted; the `builtins`
   table is name-level aggregation.
 - `--hier-tree` and `--inst-paths` are parsed for every applet but reach `VitaOpts` only on the
