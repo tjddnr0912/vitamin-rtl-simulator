@@ -805,6 +805,7 @@ census has produced it, and the probe itself is a claim to check.
 | Say so when the attribution unit is contaminated, and check that the weight is not one design repeated | A count of tests being meaningless because most of them are one path |
 | Read the run manifest's backend and refusal fields before claiming two backends agree | A comparison that did not check which backend ran not being a comparison |
 | Declare the timescale precision finer than the smallest probe offset you write (`#0.5` under `1ns/1ns` rounds to a boundary and every cell becomes a race) | Fourteen agreed cells reading as a two-oracle disagreement |
+| Read a computed width from a direct readout (`$bits`, the child's own localparam), never infer it from a fully determined output: a declared width LARGER than the run-time net extends the net, so it is invisible in a size cast and shows only where the leaf's self width sets the region (a narrower destination, a shift) | A width fold answering 12 where the binder bound 4 reading as CLEAN on every size-cast cell |
 
 ### 6.3 PRE, POST and sweeps
 
