@@ -18,22 +18,24 @@ and the row is deleted here; a residue survives as its own row.
 ## Summary
 
 Composition of the open work at HEAD (regenerate this table in the docs step of every loop
-iteration; it is what the iteration report shows beside the next slice).
+iteration; it is what the iteration report shows beside the next slice). The `next` column marks
+where §5.2's start-order rows sit: `1` is the row the next iteration takes, `2`, `3`… the ones
+behind it, so the queue and the composition are read from one table.
 
-| § | track | open | composition | rung |
-|---|---|---:|---|---|
-| §2 | silent-wrong start-order table | 27 rows | LOUD 6 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 | ① |
-| §2 | recorded defects by mechanism | 111 bullets | inline / frame binds 16 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 17 · ranges / selects 5 · delays / events · real · class fields · diagnostics | ① |
-| §2-N | verilog-axi census | 2 + 5 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① |
-| §3.a | loud → correct-support, numbered | 24 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② |
-| §3.b | loud → correct-support, small | 87 | subroutine / frame 23 · constants / parameters 16 · parser accept 12 · system tasks & file I/O 9 · nets / timing 6 · strings / heap 6 · other | ② |
-| §3.c | intentionally loud | 12 | not gaps; each row states its reason | — |
-| §0 | correct-support promotion queue (T2 residues) | 14 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ |
-| §4 | SVA honest-loud | 6 | mostly no oracle; hand-IEEE when started | ③ |
-| §6 | G2 observability (OBS) | 6 stages + 8 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / subroutine join key and six more beside the track | ④ |
-| §5.b | performance / hardening | 18 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder |
-| §7 | conditional / long-term | 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated |
-| §8 | non-goals | 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent |
+| § | track | open | composition | rung | next |
+|---|---|---:|---|---|---|
+| §2 | silent-wrong start-order table | 27 rows | LOUD 6 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 | ① | |
+| §2 | recorded defects by mechanism | 111 bullets | inline / frame binds 16 (the INTERFACE member leaf) · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 17 · ranges / selects 5 · delays / events · real · class fields · diagnostics | ① | 1 |
+| §2-N | verilog-axi census | 2 + 5 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
+| §3.a | loud → correct-support, numbered | 24 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
+| §3.b | loud → correct-support, small | 87 | subroutine / frame 23 (the hierarchical call to a body-write function) · constants / parameters 16 · parser accept 12 · system tasks & file I/O 9 · nets / timing 6 · strings / heap 6 · other | ② | 2, 5 |
+| §3.c | intentionally loud | 12 | not gaps; each row states its reason | — | |
+| §0 | correct-support promotion queue (T2 residues) | 14 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
+| §4 | SVA honest-loud | 6 | mostly no oracle; hand-IEEE when started | ③ | |
+| §6 | G2 observability (OBS) | 6 stages + 8 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / subroutine join key (`subroutines` declaration site) / `WPROG-WHY` and five more beside the track | ④ | 3, 4 |
+| §5.b | performance / hardening | 18 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
+| §7 | conditional / long-term | 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
+| §8 | non-goals | 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, a per-resumption-kind ordering model, a
