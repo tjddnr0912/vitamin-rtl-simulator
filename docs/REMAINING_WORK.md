@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8078 tests passing with 15 skipped, artifact `format_version` 32, 70 `MsgCode` diagnostic codes; the
+8111 tests passing with 15 skipped, artifact `format_version` 32, 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
 - G1 = a correct open-source RTL simulator (correct-or-loud) at the level of icarus, verilator,
@@ -26,7 +26,7 @@ canonical table is the fact table in [README.md](../README.md).
 
 | # | track | item |
 |---|---|---|
-| 1 | §3 loud → correct-support | a scoped `pk::g()` whose TRANSITIVE package callee holds any block-local is E3010 on `top.$func$pk::g.x` while both oracles print 44: the callee is injected after the step-6.5 frame barrier, so it is never reserved as a frame and is inline-folded without its block-local reservation (§3.b `pkg-callee-blocal`) |
+| 1 | §3 loud → correct-support | an INTERFACE body applies no package ROUTINE import: `import pk::g;` plus a bare `g()` inside an interface is E3010 `call to undeclared function` where both oracles print 44; `apply_import_routines` is wired for modules and packages and `iface_inst.rs` never calls it (§3.b `iface-pkg-routine`) |
 | 2 | §3 loud → correct-support | ⑤ⓕ residue: the 2-state axis of a `T'(e)` cast and a packed struct member (the sign follows the override since §4.5.483), the enum base (blocked behind a §2 enum-storage row), the union member's parse gate, a mixed-caller callee, `m #(8)` / `defparam u.T$w`, the VCD `$scope` spelling, a `genblk<N>` collision (split) |
 | next | — | the scoped lane's ungated scope leak and the name-keyed inline context beneath it (one prerequisite, a binding-resolved geometry), a package static shared across importing modules, the static initializer that reads a formal (1-oracle), §2 🆕 L ⓦ residue, §2 🆕 N residue, a labelled concurrent `assert property` action block's `%m` |
 
@@ -40,7 +40,7 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §0 promotion queue (T2 residues) | 14 rows | 9 / 5 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
 | §2-N verilog-axi census | 2 rows + 5 | 0 / 7 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and five t0-event residues |
 | §2 start-order table | 27 rows | 6 / 21 | LOUD 6 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 |
-| §2 recorded defects by mechanism | 120 bullets | 78 / 42 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 19 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / bounds / selects 6 · diagnostics / artifacts 4 · class fields 3 · oracle splits 10 |
+| §2 recorded defects by mechanism | 121 bullets | 79 / 42 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 20 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / bounds / selects 6 · diagnostics / artifacts 4 · class fields 3 · oracle splits 10 |
 | §3 numbered items | 24 rows | 19 / 5 | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, including ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
 | §3 small residues | 97 rows | 83 / 14 | subroutine / frame 24 · constants / parameters 21 · parser accept 13 · system tasks & file I/O 9 · loud shapes surfaced by §4.5.493–495 7 · nets / timing 6 · strings / heap 7 · diagnostics quality 7 · VCD / real conversion 3 |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
@@ -49,7 +49,7 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §6 G2 OBS | 6 stages + 8 | 13 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 8 items beside the staged track (call tree, a `void` function filed as `kind: task`, a route decided per spelling, per-call-site builtins, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2) |
 | §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
-| total | 344 | 216 / 128 | |
+| total | 345 | 217 / 128 | |
 
 `startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
 prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.

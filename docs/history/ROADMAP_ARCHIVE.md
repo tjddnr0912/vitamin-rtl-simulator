@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.516` **the transitive package callees of a scoped `pk::g()` call are framed with the step-6.5 predicate, and callee walkers see declaration initializers** (2026-09-19 · §3.b `pkg-callee-blocal`, queue row 1 · the `frame_idx` MISS arm runs the step-6.5 predicate over the just-injected callees, reserves them and the root before lowering, and never narrows: static-persistent and return-variable-reading routines keep their inline loud · `collect_callee_decls` / `collect_callee_func` / `collect_callee_task` see declaration initializers on every lane (a decl-init call bound to the calling module's routine, PRE-silent, fixed) · 2 lenses × 3 rounds, 235 designs: 159 identical, 57 loud→value, 13 silent→value, 0 down; three call-site guard shapes each regressed a working design and the axis was reverted under the three-blocker rule)
 - `4.5.515` **a package `parameter type` is referable as `pkg::PT`, and a non-overridable type parameter registers its declared range** (2026-09-19 · §3.b `pkg-type-param`, queue row 1 · `pkg::PT` twin registered at `endpackage` for every type parameter the body declared; a non-overridable concrete type parameter registers folded literal dims instead of `[T$w-1:0]`; the compilation-unit parameter arm is non-overridable by construction · 2 lenses 54 + 40 designs, round 2 closed a shadow-class routing, a false-accept and a CU position dependence)
 - `4.5.514` **a multi-dimensional PACKED `parameter type` is carried through per-dimension value parameters** (2026-09-18 · §3.a ⑤ "multi-dimensional", queue row 1 · `T$p<i>a/b` per packed dim mirrors the unpacked carrier, `T$w` stays the total width, `T$s` records the packed count so a count change is loud both ways; an ANSI port of a multi-dim packed typedef runs · review 2 lenses (45 + 26 designs) 0 new silent-wrong, round 2 added three loud guards on pre-existing classes (dyn element select, `defparam` onto a carrier, packed dims over an unpacked typedef in a port) · 8068 tests)
 - `4.5.513` **run.json carries a `wprog` object: why each expression left the native backend's compiled lane** (2026-09-18 · §5.b `WPROG-WHY`, queue row 1 · every `wprog::compile` decline names a key from a closed 22-key vocabulary; the native kernel's three askers tally distinct expression ids, first decline wins; `"wprog": {asked, declined, reasons, unit}` after `codegen`, `null` when the kernel did not run · review 2 lenses (33 + 15 designs) 0 value moves, round 1 relabelled a width-mismatched `Call`/`SysFunc` from `node_kind` to its own key and corrected three SPEC rows · 8027 tests)
@@ -525,6 +526,75 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.516 the transitive package callees of a scoped `pk::g()` call are framed with the step-6.5 predicate, and callee walkers see declaration initializers (2026-09-19, branch it19) ✅
+
+**ROADMAP row**: §3.b `pkg-callee-blocal`; queue row 1.
+
+**Row claim re-measured: "any block-local" is too wide, the mechanism is exact.** Sixteen census
+designs on HEAD: a callee whose local is declared and then assigned (`int x; x = a*2;`) already
+printed 44 on the scoped spelling — the inline fold's SSA substitution carries it — and so did a
+named-block local, a two-level chain, two roots sharing one callee, an import beside a scoped call
+and an 8-bit packed local. What was loud was every shape the straight-line fold cannot carry: a
+declaration initializer (`int x = a*2;` → E3010 undeclared `top.$func$pk::g.x`), a static local
+read before it is written (E3010), control flow, a `for` loop, an unpacked local (E3009 "not
+reducible"), the same call under a generate-for or from two instances, and a mutual recursion. The
+cause is the row's: `inject_pkg_callees` registers the transitive callees at step 7, after
+`lower_frame_funcs` (step 6.5) has classified `func_table` and reserved its frames, so `pk::h` is
+never a frame and the root's frame body inline-folds it. The import twin injects at step (3.6) and
+was correct on every shape.
+
+**Fix.** New `crates/elaborate/src/pkg_scoped_frames.rs` (377) replaces the `frame_idx` MISS arm of
+`inline_pkg_function`: it runs `build_frame_set` (the step-6.5 predicate) over the table as it
+stands after injection, takes the members REACHABLE from this root (a transitive walk with the
+callee walkers) that have no `frame_idx` entry, feeds their block-locals, reserves every one AND the
+root before any body is lowered (so a mutual recursion resolves), lowers the callee bodies, mirrors
+the R22 §3.1 statement-executor marking for them, then lowers the root. The root itself is entered
+under its `pkg::name` key first — `inject_pkg_callees` walks outward and never registers the root,
+so a callee's call back to it reported "undeclared function `g`". The per-function flag
+bookkeeping of `lower_frame_funcs` is extracted to `note_frame_func_flags` and shared.
+
+The callee walkers now see declaration initializers: `collect_callee_decls` over `Block`/`Fork`
+decls, and `collect_callee_func` / `collect_callee_task` (ports + `body_decls` + body) at every
+routine-level site — `inject_pkg_callees`, both frame-set edge builders — and the free-name
+closure (`pkg_func_self_contained`, `pkg_stmt_pure_orig`) reads initializers as expressions. This
+is what a review found: `int y = k(a) + 2;` in a package callee bound `k` to the CALLING module's
+`k` (V=1002 for both oracles' 44), on the import lane and the scoped root too (PRE-silent).
+
+**The arm widens; it never narrows.** A static routine with a local the per-block
+definite-assignment walk cannot prove written before read, and a body reading its own return
+variable before assigning it (any lifetime), are left on the inline fold with the loud it already
+had; an excluded root excludes its callees too. Both shapes are wrong on the frame lane — one copy
+of a static package local per scope where IEEE §6.21 keeps one for the design (the §2 row, both
+lanes), and a return slot starting at 0 (module lane too, new §2 bullet) — so framing them would
+move loud onto silent. Three guard shapes were built and each regressed a working design (a
+scoped-lane count needed a design-wide map whose key was wrong for some pair of lanes; a guard on
+the shared step-6.5 lane refused a pure-import design both oracles run and moved a `W3056` onto
+import designs; a root carve-out keyed on "has a framed callee" refused a one-scope root that
+printed the value), so the axis was reverted under the three-blocker rule and the prerequisite is
+a design-wide frame for a static package routine.
+
+**Review.** Two lenses, three rounds plus a final direct sweep: round 1 differential 62 designs
+(4 NEW silent, each a PRE-existing mechanism newly reached: the decl-init walker gap, the import
+lane not counted by the guard, the root not guarded, one oracle split) and soundness 26 (the
+return variable invisible to the guard, stale entries after a refusal, the same walker gap); round
+2 22 + 21 (a value→loud regression on the import lane; the sibling-pair exemption exempting the
+guard's own hazard; W3056 surfaced by the guard's width folds); round 3 12 + 12 (the root
+carve-out regressing a one-scope root; a `$clog2` and a package-variable initializer cleared as
+constant). Final sweep of all 235 review + census designs on PRE vs POST: 159 byte-identical, 57
+loud → the value both oracles print, 13 PRE-silent → the oracle value (the walker fix and a
+md-packed local element select), 5 loud → loud with one fewer diagnostic, 0 down the ladder.
+Corpus 10/10 every round.
+
+**Residues recorded.** §2: a static function reading its own return variable before assigning it
+returns 0 on every lane (`h = h + a` from two calls prints `S1=0 S2=0`, both oracles `S1=1 S2=2`);
+the static-local §2 row now names functions and the design-wide-frame fix shape. §3.b: a scoped
+call inside `always_comb` whose actual carries a declaration initializer is a false E3001 (no
+block-local involved); a package callee with a static decl-init local from a formal is an oracle
+split (iverilog once at t0, verilator refuses, vita per call).
+
+**Gate**: 8111 tests (+33: `pkg_callee_frame.rs`), doctest / clippy `--workspace` / fmt green, corpus
+10/10, format_version 32 unchanged.
 
 #### 4.5.515 a package `parameter type` is referable as `pkg::PT`, and a non-overridable type parameter registers its declared range (2026-09-19, branch it18) ✅
 

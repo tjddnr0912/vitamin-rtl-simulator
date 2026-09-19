@@ -11,6 +11,17 @@ changed for a user of the simulator.
 
 ### Fixed — runtime continuous-assign delays, hierarchical leaves in a size cast, module-net writes from a function
 
+- **A package-scoped call reaches every same-package callee the way an import does.** `pk::g()`
+  whose callee `h` declared a local with an initializer (`int x = a*2;`), read a static local
+  before writing it, used `if`/`for`/`case`, an unpacked local, or called `g` back was
+  `VITA-E3010 undeclared net/variable top.$func$pk::g.x` or `VITA-E3009 … not reducible` while
+  `import pk::g;` ran; both spellings now print the reference tools' value, also under a
+  generate-for and from several instances. A call inside a declaration initializer
+  (`int y = k(a) + 2;`) now binds to the package's own `k` on every spelling; it used to bind to
+  a same-named function of the CALLING module (1002 for the reference tools' 44). A static package
+  function whose local keeps its value across calls, and a body that reads its own return variable
+  before assigning it, stay loud on the scoped spelling (ROADMAP §2 records the per-scope copy the
+  other spellings print).
 - **A continuous assign with a VARIABLE delay now delays.** `assign #(dv) y = a;` with `int dv = 5`
   took effect immediately; both reference tools delay by the value at the moment the right-hand side
   changes. Expressions (`#(dv + 1)`, `#(P * dv)`), `real` variables, an `x` delay (zero) and a

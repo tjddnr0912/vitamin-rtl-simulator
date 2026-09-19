@@ -573,6 +573,13 @@ a real value (`#(.R(2.5))`); a real value in an untyped parameter later used as 
 integer (`localparam M = R/2.0;` — an untyped parameter takes its type from its value, so
 that one is a real parameter); and `1.0/0.0`.
 
+A static package function's local that is read before it is written is ONE variable for the
+whole design in both reference tools, and one copy per instance (or generate iteration) in vita
+when reached by `import pk::f;` or by `pk::f()` on the routine's own body; a scoped call whose
+CALLEE holds such a local stays loud rather than printing the per-copy value. Declare the routine
+`automatic`, or assign the local before reading it; the same holds for a body that reads its own
+return variable before assigning it.
+
 A `real` or `string` package parameter folds and keeps its domain through the scope
 operator (`pk::R`, `pk::S`) and through a direct import of the name. Reaching one through
 a wildcard import (`import pk::*;` then a bare `R`) is refused: the package fold succeeds
