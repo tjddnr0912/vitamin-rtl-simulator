@@ -156,6 +156,43 @@ impl Elaborator<'_> {
         }
     }
 
+    /// Record the per-function CALL-SHAPE flags one framed function needs, from its
+    /// AST alone. Every one of them is consulted WHILE bodies are lowered, so all of
+    /// them must be recorded for every framed function BEFORE any body is lowered.
+    ///
+    /// Called from the step-6.5 loop below over `build_frame_set`, and from
+    /// [`Self::frame_scoped_pkg_routines`] (`pkg_scoped_frames.rs`) for the callees a
+    /// scoped `pk::g()` call injects AFTER that barrier — the same predicate decides
+    /// both, so a late-framed callee reaches the engine in the same call shape its
+    /// early-framed import twin does.
+    pub(crate) fn note_frame_func_flags(&mut self, name: &str, f: &ast::FunctionDef) {
+        // R5-B: an output/inout formal routes the call to the copy-out path
+        // (`emit_frame_func_out_call`) + the hoist.
+        if f.ports
+            .iter()
+            .any(|p| !matches!(p.dir, ast::PortDir::Input))
+        {
+            self.inout_func_names.insert(name.to_string());
+        }
+        // §4.5.179: an `input` dyn-array formal makes a BURIED call hoist to a
+        // `__t = f(a)` temp (re-triggering §4.5.177's marker).
+        if f.ports.iter().any(|p| self.is_input_dyn_array_formal(p)) {
+            self.dyn_formal_func_names.insert(name.to_string());
+        }
+        // §3.b: a body that writes a MODULE net needs the `&mut` statement
+        // executor, and needs the `Terminator::Call` shape to be routed there —
+        // the same two things an output/inout formal buys above. Decided from the
+        // AST, HERE, before any body is lowered, because the set is consulted
+        // WHILE bodies are lowered: a caller whose name sorts first is lowered
+        // before its callee, and a decision derived from the callee's own blocks
+        // would not exist yet (`f2` calling `fw` reached the engine as a plain
+        // `Expr::Call` and panicked `frame write targets a frame-local net`).
+        if self.func_body_writes_outside_name(f) {
+            self.body_write_func_names.insert(name.to_string());
+            self.inout_func_names.insert(name.to_string());
+        }
+    }
+
     /// Reserve + lower every frame function of the CURRENT module instance. Runs
     /// at step 6.5: RESERVE all (sorted) so a call to a not-yet-lowered frame func
     /// resolves (breaks self + mutual recursion), then lower each body. No-op when
@@ -177,27 +214,7 @@ impl Elaborator<'_> {
         self.dyn_formal_func_names.clear();
         for name in &frame_set {
             if let Some(f) = self.func_table.get(name).cloned() {
-                if f.ports
-                    .iter()
-                    .any(|p| !matches!(p.dir, ast::PortDir::Input))
-                {
-                    self.inout_func_names.insert(name.clone());
-                }
-                if f.ports.iter().any(|p| self.is_input_dyn_array_formal(p)) {
-                    self.dyn_formal_func_names.insert(name.clone());
-                }
-                // §3.b: a body that writes a MODULE net needs the `&mut` statement
-                // executor, and needs the `Terminator::Call` shape to be routed there —
-                // the same two things an output/inout formal buys above. Decided from the
-                // AST, HERE, before any body is lowered, because the set is consulted
-                // WHILE bodies are lowered: a caller whose name sorts first is lowered
-                // before its callee, and a decision derived from the callee's own blocks
-                // would not exist yet (`f2` calling `fw` reached the engine as a plain
-                // `Expr::Call` and panicked `frame write targets a frame-local net`).
-                if self.func_body_writes_outside_name(&f) {
-                    self.body_write_func_names.insert(name.clone());
-                    self.inout_func_names.insert(name.clone());
-                }
+                self.note_frame_func_flags(name, &f);
             }
         }
         if frame_set.is_empty() && task_set.is_empty() {

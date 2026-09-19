@@ -60,7 +60,29 @@ pub(crate) fn pkg_func_self_contained(
     // that shadows a same-name pkg const still wins (it is in `names`).
     let read_names: std::collections::BTreeSet<String> =
         names.union(pkg_const_names).cloned().collect();
-    pkg_stmt_pure_with(&func.body, &names, &read_names, pkg_rtn_names)
+    pkg_decls_pure(&func.body_decls, &read_names, pkg_rtn_names)
+        && pkg_stmt_pure_with(&func.body, &names, &read_names, pkg_rtn_names)
+}
+
+/// Free-name-closed check over a DECLARATION LIST's initializers — a `begin` block's
+/// `decls` and a routine's own `body_decls`.
+///
+/// An initializer is an ordinary READ expression: `int y = zz + 1;` names `zz` exactly
+/// as `y = zz + 1;` does, and admitting the first while refusing the second is how a
+/// free name reaches the frame body and binds to the CALLING module's net. The
+/// statement walk never saw a declaration, so this is the half that was missing.
+pub(crate) fn pkg_decls_pure(
+    decls: &[ast::NetVarDecl],
+    read: &std::collections::BTreeSet<String>,
+    rtns: &std::collections::BTreeSet<String>,
+) -> bool {
+    decls.iter().all(|d| {
+        d.names.iter().all(|n| {
+            n.init
+                .as_ref()
+                .is_none_or(|e| pkg_expr_pure_with(e, read, rtns))
+        })
+    })
 }
 
 /// Free-name-closed check for one statement (see `pkg_func_self_contained`).
@@ -133,7 +155,12 @@ fn pkg_stmt_pure_orig(
          r: &std::collections::BTreeSet<String>| { pkg_stmt_pure_with(st, w, r, rtns) };
     use ast::Stmt::*;
     match s {
-        Block { stmts, .. } => stmts.iter().all(|st| pkg_stmt_pure(st, write, read)),
+        // The block's own `decls` initializers are READ expressions under the same
+        // sets — see [`pkg_decls_pure`].
+        Block { decls, stmts, .. } => {
+            pkg_decls_pure(decls, read, rtns)
+                && stmts.iter().all(|st| pkg_stmt_pure(st, write, read))
+        }
         Return { value: Some(e), .. } => pkg_expr_pure(e, read),
         Return { value: None, .. } => true,
         // Only a BLOCKING `=` (a local / function-name assignment) is foldable; a
@@ -1543,12 +1570,10 @@ impl Elaborator<'_> {
         // too, or the default's call binds to a same-named MODULE routine (measured:
         // `GH2=64` for both oracles' `8`).
         if let Some(f) = funcs.get(root) {
-            collect_callee_stmt(&f.body, &mut want);
-            collect_callee_ports(&f.ports, &mut want);
+            collect_callee_func(f, &mut want);
         }
         if let Some(t) = tasks.get(root) {
-            collect_callee_stmt(&t.body, &mut want);
-            collect_callee_ports(&t.ports, &mut want);
+            collect_callee_task(t, &mut want);
         }
         let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         seen.insert(root.to_string());
@@ -1564,8 +1589,7 @@ impl Elaborator<'_> {
             }
             let key = format!("{pkg}::{n}");
             if let Some(f) = f {
-                collect_callee_stmt(&f.body, &mut want);
-                collect_callee_ports(&f.ports, &mut want);
+                collect_callee_func(&f, &mut want);
                 if pkg_func_self_contained(&f, &const_names, &var_names, &rtn_names) {
                     self.func_table.entry(key.clone()).or_insert(f);
                 } else {
@@ -1573,8 +1597,7 @@ impl Elaborator<'_> {
                 }
             }
             if let Some(t) = t {
-                collect_callee_stmt(&t.body, &mut want);
-                collect_callee_ports(&t.ports, &mut want);
+                collect_callee_task(&t, &mut want);
                 if pkg_task_self_contained(&t, &const_names, &var_names, &rtn_names) {
                     self.task_table.entry(key).or_insert(t);
                 } else {
@@ -1605,7 +1628,8 @@ impl Elaborator<'_> {
         .collect();
         let read_names: std::collections::BTreeSet<String> =
             names.union(pkg_const_names).cloned().collect();
-        pkg_stmt_pure_with(&task.body, &names, &read_names, pkg_rtn_names)
+        pkg_decls_pure(&task.body_decls, &read_names, pkg_rtn_names)
+            && pkg_stmt_pure_with(&task.body, &names, &read_names, pkg_rtn_names)
     }
 
     /// §2 🆕 L ⓦ: the constant-interpreter half of [`Self::apply_import_routines`] —

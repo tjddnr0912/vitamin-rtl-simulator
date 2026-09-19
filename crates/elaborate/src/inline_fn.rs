@@ -572,33 +572,17 @@ impl Elaborator<'_> {
         // IEEE §11.6.1 assignment-context width — identical to calling the same function
         // by its bare imported name, which `build_frame_set` already frames. Reserve +
         // lower the frame on first use, keyed as `pkg::name` (distinct from any
-        // module-local bare name), then divert the call to it. A self-contained function
-        // makes no other user call, so there is no mutual recursion → reserving AND
-        // lowering it on demand (rather than at the step-6.5 barrier) is safe.
+        // module-local bare name), then divert the call to it. The root is not alone:
+        // `inject_pkg_callees` above put its TRANSITIVE same-package callees into
+        // `func_table` too, after the step-6.5 barrier that would have framed them, so
+        // `frame_scoped_pkg_routines` classifies them with that barrier's own predicate
+        // (`build_frame_set`) and reserves every one of them — callees and root —
+        // before any body is lowered. That ordering is what makes a mutual recursion
+        // among them resolve.
         let key = format!("{pkg}::{name}");
         let fid = match self.frame_idx.get(&key) {
             Some(&fid) => fid,
-            None => {
-                self.feed_scoped_block_locals(&func.body);
-                self.reserve_frame_func(&key, &func);
-                // §3.b: mark the body-write route BEFORE lowering, so the body is
-                // classified like any other statement-executor function and the ONE
-                // diagnostic the user gets is `emit_frame_call`'s — which names the
-                // scoped call site as the constraint and points at `import pkg::f;`,
-                // the spelling that is MEASURED to work (`pk::cnt` 7 → 8, both
-                // oracles). Without it the subset sentence fires instead and lists
-                // `cnt = cnt + 1;` among the forms it calls supported. The call itself
-                // can never be hoisted — `inout_call_target` is single-segment only —
-                // so this cannot turn the scoped lane into a value; making it one needs
-                // the frame reserved before the statement is lowered, which this
-                // on-demand path is not (ROADMAP §3.b).
-                if self.func_body_writes_outside_name(&func) {
-                    self.body_write_func_names.insert(key.clone());
-                }
-                let fid = self.frame_idx[&key];
-                self.lower_frame_func_body(&key, &func, fid);
-                fid
-            }
+            None => self.frame_scoped_pkg_routines(pkg, &key, &func),
         };
         self.emit_frame_call(fid, &func, args)
     }

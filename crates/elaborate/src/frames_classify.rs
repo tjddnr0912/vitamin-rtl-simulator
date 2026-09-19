@@ -939,7 +939,7 @@ impl Elaborator<'_> {
         let mut edges: BTreeMap<String, std::collections::BTreeSet<String>> = BTreeMap::new();
         for (name, t) in &self.task_table {
             let mut callees = std::collections::BTreeSet::new();
-            collect_callee_stmt(&t.body, &mut callees);
+            collect_callee_task(t, &mut callees);
             callees.retain(|c| self.task_table.contains_key(c));
             edges.insert(name.clone(), callees);
         }
@@ -1066,7 +1066,7 @@ impl Elaborator<'_> {
         let mut edges: BTreeMap<String, std::collections::BTreeSet<String>> = BTreeMap::new();
         for (name, f) in &self.func_table {
             let mut callees = std::collections::BTreeSet::new();
-            collect_callee_stmt(&f.body, &mut callees);
+            collect_callee_func(f, &mut callees);
             callees.retain(|c| self.func_table.contains_key(c));
             edges.insert(name.clone(), callees);
         }

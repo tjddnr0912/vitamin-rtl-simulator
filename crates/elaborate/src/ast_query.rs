@@ -175,7 +175,15 @@ pub(crate) fn collect_callee_stmt(s: &ast::Stmt, out: &mut std::collections::BTr
             collect_callee_stmt(body, out);
         }
         Forever { body, .. } => collect_callee_stmt(body, out),
-        Block { stmts, .. } | Fork { stmts, .. } => {
+        // ⚠️ The DECLS half is not decoration. A block-local declared WITH an
+        // initializer (`int y = k(a) + 2;`) is the only place its call appears, and
+        // both consumers of this walk decide from it: `inject_pkg_callees` would not
+        // inject `pk::k`, so the frame body's bare `k` resolved in the CALLING module
+        // (measured: `V=1002` for a module-local `k` returning 1000, and the same
+        // through an `import pq::k;` of another package, where both oracles say 44),
+        // and `build_frame_set`'s edge builder would not see the recursion edge.
+        Block { decls, stmts, .. } | Fork { decls, stmts, .. } => {
+            collect_callee_decls(decls, out);
             for st in stmts {
                 collect_callee_stmt(st, out);
             }
@@ -219,6 +227,42 @@ pub(crate) fn collect_callee_ports(
             collect_callee_expr(d, out);
         }
     }
+}
+
+/// [`collect_callee_expr`] over every DECLARATION INITIALIZER — the third place a
+/// routine can name a callee, after its statements and its formals' defaults. Used
+/// for a routine's own `body_decls` and for a `begin`/`fork` block's `decls`.
+pub(crate) fn collect_callee_decls(
+    decls: &[ast::NetVarDecl],
+    out: &mut std::collections::BTreeSet<String>,
+) {
+    for d in decls {
+        for n in &d.names {
+            if let Some(init) = &n.init {
+                collect_callee_expr(init, out);
+            }
+        }
+    }
+}
+
+/// Every callee name ONE function declaration can reach: its formals' defaults
+/// (§13.5.4), its top-level body declarations' initializers, and its body (whose
+/// `Block`/`Fork` arms carry their own block-local initializers). This is the whole
+/// declaration, so no consumer has to remember which of the three to ask for.
+pub(crate) fn collect_callee_func(
+    f: &ast::FunctionDef,
+    out: &mut std::collections::BTreeSet<String>,
+) {
+    collect_callee_ports(&f.ports, out);
+    collect_callee_decls(&f.body_decls, out);
+    collect_callee_stmt(&f.body, out);
+}
+
+/// [`collect_callee_func`] for a TASK declaration.
+pub(crate) fn collect_callee_task(t: &ast::TaskDef, out: &mut std::collections::BTreeSet<String>) {
+    collect_callee_ports(&t.ports, out);
+    collect_callee_decls(&t.body_decls, out);
+    collect_callee_stmt(&t.body, out);
 }
 
 pub(crate) fn collect_callee_expr(e: &ast::Expr, out: &mut std::collections::BTreeSet<String>) {

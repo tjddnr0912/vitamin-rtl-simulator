@@ -118,6 +118,7 @@ mod packed_lval;
 mod param_query;
 mod params;
 mod pkg_body_scope;
+mod pkg_scoped_frames;
 mod ports;
 mod proc_builder;
 mod proc_ident;

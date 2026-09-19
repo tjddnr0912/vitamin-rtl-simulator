@@ -58,10 +58,6 @@
 //!
 //! - a scoped TASK call `pk::t()` is a PARSE error `VITA-E2002` (iverilog also rejects
 //!   it; verilator accepts). Loud, one oracle — ROADMAP §3.
-//! - a scoped call whose TRANSITIVE package callee holds any block-local is LOUD
-//!   `VITA-E3010 undeclared net/variable top.$func$pk::g.x` (the callee is injected
-//!   after the step-6.5 frame barrier, so it is never reserved as a frame). Both
-//!   oracles print 44 — ROADMAP §3.
 //! - an INTERFACE body applies no package ROUTINE import, so `import pk::g;` + `g()`
 //!   inside an interface is `VITA-E3010 call to undeclared function` — ROADMAP §3.
 //! - the nested scope-leak shape itself stays LOUD on every spelling (both oracles
