@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 408건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 409건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.517` **an interface body binds its package ROUTINE imports in its own routine scope; static scoped frames are carried between sibling interface instances** (2026-09-20 · §3.b `iface-pkg-routine`, queue row 1 · `iface_rtn_scope.rs` takes the module-local `RoutineScope` at the interface window entry and restores it verbatim at exit, so the window applies `apply_import_const_funcs` in both import passes and `apply_import_routines` after the body pass, feeds the imported bodies to the block-local classifier through the shared `imported_routine_bodies` the module lane's step 3.6a calls, and runs `lower_frame_funcs()` before the interface's Logic loop: a bare call in an interface body is no longer `E3010` and an imported constant function no longer `E3009` · three pre-existing silent-wrongs closed — a bare `g()` in an interface resolved to the PARENT's `g` (`I=1040` and `I=39` for the oracles' `I=44`) · the STATIC `::`-keyed frames of the seven routine tables are carried to the next sibling interface instance of the SAME parent instance, keyed on the parent's `inst_prefix` and adopted insert-if-absent, the parent's own tables never written (the design-wide frame for a static package routine stays the recorded §2 prerequisite, not built) · 2 lenses × 3 rounds, 80 + 91 + 12 designs; round 1 added `inst_prefix` to the scope (a `%m` under the module lane's prefix) and round 2 `cur_module`, round 2 turned the sibling adopt insert-if-absent after an overwrite gave one instance two copies of a static local, round 3's third finding on the declaration-order axis was recorded in §2 under the three-blocker rule · 8146 tests)
 - `4.5.516` **the transitive package callees of a scoped `pk::g()` call are framed with the step-6.5 predicate, and callee walkers see declaration initializers** (2026-09-19 · §3.b `pkg-callee-blocal`, queue row 1 · the `frame_idx` MISS arm runs the step-6.5 predicate over the just-injected callees, reserves them and the root before lowering, and never narrows: static-persistent and return-variable-reading routines keep their inline loud · `collect_callee_decls` / `collect_callee_func` / `collect_callee_task` see declaration initializers on every lane (a decl-init call bound to the calling module's routine, PRE-silent, fixed) · 2 lenses × 3 rounds, 235 designs: 159 identical, 57 loud→value, 13 silent→value, 0 down; three call-site guard shapes each regressed a working design and the axis was reverted under the three-blocker rule)
 - `4.5.515` **a package `parameter type` is referable as `pkg::PT`, and a non-overridable type parameter registers its declared range** (2026-09-19 · §3.b `pkg-type-param`, queue row 1 · `pkg::PT` twin registered at `endpackage` for every type parameter the body declared; a non-overridable concrete type parameter registers folded literal dims instead of `[T$w-1:0]`; the compilation-unit parameter arm is non-overridable by construction · 2 lenses 54 + 40 designs, round 2 closed a shadow-class routing, a false-accept and a CU position dependence)
 - `4.5.514` **a multi-dimensional PACKED `parameter type` is carried through per-dimension value parameters** (2026-09-18 · §3.a ⑤ "multi-dimensional", queue row 1 · `T$p<i>a/b` per packed dim mirrors the unpacked carrier, `T$w` stays the total width, `T$s` records the packed count so a count change is loud both ways; an ANSI port of a multi-dim packed typedef runs · review 2 lenses (45 + 26 designs) 0 new silent-wrong, round 2 added three loud guards on pre-existing classes (dyn element select, `defparam` onto a carrier, packed dims over an unpacked typedef in a port) · 8068 tests)
@@ -526,6 +527,84 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.517 an interface body binds its package ROUTINE imports in its own routine scope; static scoped frames are carried between sibling interface instances (2026-09-20, branch it20) ✅
+
+**ROADMAP row**: §3.b `iface-pkg-routine`; queue row 1.
+
+**Defect (PRE, both oracles agree unless marked)**. An interface instance is flattened inside its
+parent module's Nets phase (`instance.rs` pass 4c; pass 8 for a generate-nested one) with the
+PARENT's routine tables live. `elaborate_iface_instances` (`iface_inst.rs`) applied the interface's
+imports through `apply_import_consts` only, so (a) every bare routine call in an interface body was
+`E3010 call to undeclared function/task` (explicit and wildcard imports, header import, task,
+block-local, loop, delay, output formal, generate-nested, `always_comb`, a member read from the
+parent — 14 census cells, both oracles print a value) and a `localparam` through an imported constant
+function was `E3009` (m21 twin folds); (b) SILENTLY, a bare `g()` in an interface resolved to the
+PARENT's `g`: a parent-local `function int g` (+1000) printed `I=1040` for the oracles' `I=44`
+(explicit and wildcard), and a parent importing a different package's `g` printed `I=39`.
+
+**Fix**. `iface_rtn_scope.rs` (new): `RoutineScope` takes the module-local routine scope at the
+interface window entry (`func_table`, `task_table`, `rtn_pkg`, `rtn_decl_scope`, `rtn_decl_genvars`,
+`tf_decl_scope`, `inst_prefix`, the three call-shape sets, `frame_idx`, `task_frame_idx`,
+`const_func_table`, `const_fn_pkg`, `scope_imports`) and restores it verbatim at exit;
+`inst_stack` carries the interface name so the OBS `subroutines[]` row files under the interface.
+Inside the window `iface_inst.rs` applies `apply_import_const_funcs` in both import passes and
+`apply_import_routines` after the body pass, feeds the imported bodies to the block-local classifier
+through the shared `imported_routine_bodies` (`pkg_body_scope.rs`; the module lane's step 3.6a
+calls the same one, byte-identical), runs the scope-leak gate over them, and calls
+`lower_frame_funcs()` after the interface's nets and before its Logic loop. `wire_ports` stays
+outside the window. A routine DECLARED in an interface is still refused (`iface-subr`).
+
+**Review** (2 lenses × 3 rounds; PRE frozen; 80 + 20 designs in round 1, 91 + 12 in round 2, 12 in round 3, delta only after round 1).
+- Round 1 soundness S-1: `inst_prefix` was not swapped, so `%m` inside an imported routine printed
+  `top.g` (the module lane prints `top.w.g`) and the OBS runtime row dropped the instance segment.
+  Fixed by adding the field to `RoutineScope` (parity pin `top.u.g`; the `%m` value of a package
+  routine itself is the recorded §2 oracle split).
+- Round 1 differential F1, REGRESSION: a NON-automatic package routine called by its scoped spelling
+  from two interface instances of one parent shared ONE frame on PRE by accident (the parent's
+  `frame_idx` was live), which is what both oracles print (`L1=10 L2=20`); per-instance tables gave
+  `L2=10`. The real fix — ONE design-wide frame per static package routine, both lanes — is the
+  recorded §2 prerequisite. The separable half shipped: `StaticScopedCarry` moves the STATIC
+  (`!automatic`) `::`-keyed entries of the seven routine tables from an interface instance to the
+  next sibling of the SAME parent instance (key = the parent's `inst_prefix`), adopted after
+  `lower_frame_funcs` and released before the restore; the parent's own tables are never touched
+  (depositing there was measured wrong twice: it stranded a static root's automatic callee, `E3010`
+  where both oracles print 44, and handed a parent's later scoped call an interface-lowered frame,
+  loud → silent `V=2` for `V=3`). Automatic `::` keys stay per instance, which is what makes two
+  instances' concurrent activations of an automatic delayed task correct. Round 2: 116 round-1
+  designs byte-identical to round-1 POST except the three F1 cells, now = PRE = oracles; a
+  generate-nested pair plus a plain instance, PRE silent-wrong (`L2=4 L3=10`), prints the oracles'
+  `6 12` (the carry key has no generate segment).
+- Round 2, both lenses (G1 = S2-3), NEW: the adopt overwrote a `::` key the window's OWN import lane
+  had bound and lowered a root against, so one instance held TWO copies of a static local (`M2=201`
+  where round 1, the module twin and the oracles' per-scope value say `102`). Fixed: the move retains
+  only keys the destination does not define, decided once per key for all seven tables, and the
+  leftover goes back into the carry. Round 2 soundness S2-4: the `inst_prefix` swap made
+  `hier_leaf_scope` (`expr_size_hier.rs`) read the interface body as the PARENT module's body and
+  resolve hierarchical leaves against the parent's facts (one cell loud → 2-oracle value, breadth
+  unmeasured); `cur_module` joined the swap (an interface has no `module_facts` row), restoring PRE's
+  loud. Round 3: 140 reviewed designs byte-identical to round 2 except those four; the swap's
+  stated mechanism was refuted (interfaces DO have a `module_facts` row; parity comes from their
+  empty instance map while nested instances are refused) and the comment now says so.
+- Round 3 S3-1, the third finding on the same axis: with an import-lane instance declared between
+  two scoped-call instances, which copy of the static local a scoped call joins follows the
+  declaration order (three orders, three answers, one of them the oracles'). Every cell is the
+  recorded §2 per-scope class and no PRE-correct cell moved, so under the three-blocker rule the
+  axis is not patched further: recorded in §2 beside its fix shape (the design-wide frame).
+- Recorded, not chased: the interface lane's IMPORT of a static routine is per instance (the module
+  lane's §2 row; `L1=1 L2=2` for `1 3`); an interface calling a routine only the PARENT imported is
+  now E3010 (iverilog accepts, verilator rejects, IEEE §26.3 — vita now sides with verilator); a
+  hierarchical call `u.g()` to a routine the interface only imported is accepted (verilator runs it,
+  iverilog rejects); a routine DECLARED in the interface beside a wildcard import no longer gets the
+  extra E3010 (the E3009 refusal still fires) — when `iface-subr` lifts, the declared routine must be
+  in `func_table` before `apply_import_routines` so it wins the wildcard (both oracles `R=1040`).
+- Round 1 also converted `header_import_param::edge_f39` from a loud pin to `DIGEST=6` (both
+  oracles), the exact limitation this row lifts.
+
+**Gates**: 8146 tests (+35: `iface_pkg_routine.rs` 35 including the parity and one-copy pins;
+`edge_f39` converted), doctest, clippy `--workspace`, fmt, corpus 10/10 on every round;
+`format_version` 32 unchanged. `iface_inst.rs` stays under the file cap by moving the routine-scope
+machinery to `iface_rtn_scope.rs`.
 
 #### 4.5.516 the transitive package callees of a scoped `pk::g()` call are framed with the step-6.5 predicate, and callee walkers see declaration initializers (2026-09-19, branch it19) ✅
 

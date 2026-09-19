@@ -11,6 +11,18 @@ changed for a user of the simulator.
 
 ### Fixed — runtime continuous-assign delays, hierarchical leaves in a size cast, module-net writes from a function
 
+- **An interface body applies its package ROUTINE imports.** `import pk::g;` (or `import pk::*;`,
+  or the same import in the interface header) followed by a bare `g()` inside an `interface` was
+  `VITA-E3010 call to undeclared function`, and a `localparam` computed by an imported constant
+  function was `VITA-E3009`; both now print the reference tools' value — functions, tasks, an
+  output formal, a block-local, a loop, a delay, an `always_comb`, a member read from the parent
+  and a generate-nested instance. A bare call inside an interface also used to resolve to the
+  ENCLOSING module's routine of the same name and print its value silently (`I=1040` where both
+  reference tools print `I=44`); it now resolves in the interface's own scope, and a call to a
+  routine only the parent imported is refused. A static package routine called by its scoped
+  spelling (`pk::f()`) from sibling interface instances of one parent instance keeps sharing one
+  set of locals, as before and as both reference tools do. A `function` or `task` DECLARED inside
+  an interface stays loud.
 - **A package-scoped call reaches every same-package callee the way an import does.** `pk::g()`
   whose callee `h` declared a local with an initializer (`int x = a*2;`), read a static local
   before writing it, used `if`/`for`/`case`, an unpacked local, or called `g` back was

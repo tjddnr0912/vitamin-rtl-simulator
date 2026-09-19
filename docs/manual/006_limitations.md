@@ -578,7 +578,9 @@ whole design in both reference tools, and one copy per instance (or generate ite
 when reached by `import pk::f;` or by `pk::f()` on the routine's own body; a scoped call whose
 CALLEE holds such a local stays loud rather than printing the per-copy value. Declare the routine
 `automatic`, or assign the local before reading it; the same holds for a body that reads its own
-return variable before assigning it.
+return variable before assigning it. Inside an interface, a scoped `pk::f()` call shares its
+static locals with sibling interface instances of the same parent instance; the import spelling
+keeps one copy per interface instance.
 
 A `real` or `string` package parameter folds and keeps its domain through the scope
 operator (`pk::R`, `pk::S`) and through a direct import of the name. Reaching one through
