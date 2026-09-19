@@ -105,6 +105,7 @@ impl<'s> Elaborator<'s> {
             array_iter_index_base: 0,
             ifaces: BTreeMap::new(),
             iface_insts: BTreeMap::new(),
+            iface_static_scoped: BTreeMap::new(),
             vif_handles: std::collections::BTreeSet::new(),
             modport_readonly: BTreeSet::new(),
             cur_prefix: String::new(),

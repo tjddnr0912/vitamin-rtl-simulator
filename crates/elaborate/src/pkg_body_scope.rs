@@ -88,6 +88,61 @@ pub(crate) fn rtn_declared_names(
 }
 
 impl Elaborator<'_> {
+    /// Every package routine BODY currently bound in this scope's routine tables,
+    /// deduped by body span, in table order.
+    ///
+    /// The block-local classifier has to see these bodies: a package `task`/
+    /// `function` is lowered by the CURRENT scope's reservers, but it is not in the
+    /// scope's own `body`, so a classification computed from the declaration alone
+    /// never saw its block spans — no `$blk$<lo>` segment existed and two same-named
+    /// sibling block-locals in a package routine flattened onto ONE net.
+    ///
+    /// The key set is `rtn_pkg` UNION every `::`-spelled `func_table`/`task_table`
+    /// key. `rtn_pkg` holds bare names only (all four of its `insert` sites in
+    /// `package.rs` insert bare), so the TRANSITIVE same-package callees
+    /// `inject_pkg_callees` binds under their `pkg::name` keys would otherwise be
+    /// missed. Every `::` key in those two tables was put there by a package
+    /// injection, so the union adds package bodies only.
+    ///
+    /// Dedupe is on the BODY SPAN, not on the table key: a routine reachable both as
+    /// a bare import and under its `pkg::name` key is ONE body, and a second feed
+    /// counts each declaring span twice — exactly what makes a lone declaration look
+    /// like a colliding pair.
+    ///
+    /// ONE construction, shared by both scopes that bind package routines: the
+    /// module lane's step (3.6a) in `instance.rs` and the interface-instance lane in
+    /// `iface_inst.rs`. A second copy is how the two would drift.
+    pub(crate) fn imported_routine_bodies(&self) -> Vec<ast::Stmt> {
+        let mut extra: Vec<ast::Stmt> = Vec::new();
+        let mut seen: BTreeSet<(u32, u32)> = BTreeSet::new();
+        let keys: Vec<String> = self
+            .rtn_pkg
+            .keys()
+            .cloned()
+            .chain(
+                self.func_table
+                    .keys()
+                    .chain(self.task_table.keys())
+                    .filter(|k| k.contains("::"))
+                    .cloned(),
+            )
+            .collect();
+        for k in keys {
+            let body = self
+                .func_table
+                .get(&k)
+                .map(|f| (*f.body).clone())
+                .or_else(|| self.task_table.get(&k).map(|t| (*t.body).clone()));
+            if let Some(b) = body {
+                let sp = Self::stmt_span_key(&b);
+                if seen.insert(sp) {
+                    extra.push(b);
+                }
+            }
+        }
+        extra
+    }
+
     /// Enter a package routine's body scope. Paired with [`Self::pop_rtn_pkg_scope`].
     pub(crate) fn push_rtn_pkg_scope(&mut self, pkg: String, declared: BTreeSet<String>) {
         self.cur_rtn_pkg.push(RtnPkgScope { pkg, declared });

@@ -560,14 +560,24 @@ module tb; i u(); initial begin u.d = 4'hb; #1 $display("DIGEST=%h", u.d); $fini
 
 #[test]
 fn edge_f39() {
-    // f39_iface_func_import: both oracles — an interface body has no functions, so a routine an import brings in has no caller — a call stays loud (correct-or-loud), the constants bind
-    loud(
+    // f39_iface_func_import: both oracles — an interface HEADER import binds the
+    // package's routines as well as its constants, so the body's `dbl(3)` resolves
+    // and the header default still folds `W`. §3.b `iface-pkg-routine`: this pin used
+    // to assert the E3010 the call got, on the premise that "an interface body has no
+    // functions, so a routine an import brings in has no caller". The premise was
+    // about DECLARATIONS (an interface body still may not declare a routine) and said
+    // nothing about CALLS. Measured on the PRE binary of that slice this design was
+    // `call to undeclared function `dbl`` at exit 1, while iverilog 13.0 and
+    // verilator 5.052 both print `DIGEST=6` — loud where both oracles have a value,
+    // so the pin was a limitation's wording, not an oracle line. The slice's own
+    // census lives in `iface_pkg_routine.rs`.
+    digest(
         "f39_iface_func_import",
         r#"package p; function automatic int dbl(int a); return a*2; endfunction parameter int W = 4; endpackage
 interface i import p::*; #(parameter int N = W) (); logic [N-1:0] d; initial begin d = dbl(3); end endinterface
 module tb; i u(); initial begin #1 $display("DIGEST=%h", u.d); $finish; end endmodule
 "#,
-        "call to undeclared function `dbl`",
+        "6",
     );
 }
 

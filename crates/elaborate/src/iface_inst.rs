@@ -156,12 +156,18 @@ impl Elaborator<'_> {
                 let saved_prefix = std::mem::replace(&mut self.cur_prefix, path.clone());
                 // params (header `#(...)` then body localparams) BEFORE nets
                 // so `[W-1:0]` folds — mirroring module passes (3)/(3b).
-                // §3 ⑤ ⓕ: the interface's imports, CONST symbols only (an interface
-                // body has no functions/tasks, so a routine brought in by an import
-                // has no caller to resolve — a call stays loud). Two passes around
-                // `bind_params`, exactly as the module scope does: a compilation-unit
-                // or HEADER import (`interface i import p::*; #(parameter N = W)`) is
-                // visible to the header's own defaults, a body import only after.
+                // §3 ⑤ ⓕ: the interface's imports. Two passes around `bind_params`,
+                // exactly as the module scope does: a compilation-unit or HEADER
+                // import (`interface i import p::*; #(parameter N = W)`) is visible to
+                // the header's own defaults, a body import only after.
+                //
+                // §3.b `iface-pkg-routine`: CONSTANTS were once the only thing bound
+                // here, on the reasoning that "an interface body has no
+                // functions/tasks, so a routine brought in by an import has no caller
+                // to resolve". The premise was about DECLARATIONS (an interface body
+                // may still not declare a routine — row `iface-subr` owns that) and
+                // said nothing about CALLS, which an interface body writes freely and
+                // both oracles run. Routines and constant functions bind below too.
                 let iface_imports: Vec<ast::ImportDecl> = self
                     .cu_imports
                     .clone()
@@ -172,6 +178,20 @@ impl Elaborator<'_> {
                     }))
                     .collect();
                 let n_cu = self.cu_imports.len();
+                // §3.b: from here to the window exit the ROUTINE scope is this
+                // interface instance's own, not the parent module's — see
+                // [`RoutineScope`] for the two measured defects the parent's tables
+                // being live caused. `inst_stack` is pushed with it because
+                // `seed_subroutine_routes` / `note_subroutine_route`
+                // (`frames_body.rs`) key the OBS `subroutines[]` rows on
+                // `inst_stack.last()`: without the push an interface's routines would
+                // be filed under the parent module's name.
+                let saved_rtn = self.take_routine_scope(
+                    path.clone(),
+                    iface_name.clone(),
+                    iface_imports.clone(),
+                );
+                self.inst_stack.push(iface_name.clone());
                 let local_names = self.gather_local_decl_names(&decl);
                 // The five block-local classifier maps, computed from THIS INTERFACE and
                 // held across both the Nets pass and the Logic loop below — the module
@@ -193,6 +213,17 @@ impl Elaborator<'_> {
                 let mut explicit_imports: std::collections::BTreeSet<String> =
                     std::collections::BTreeSet::new();
                 let mut saved_params: Vec<(String, Option<i64>)> = Vec::new();
+                // §3.b: the constant-interpreter half of the routine import, mirroring
+                // `instance.rs`'s (3a.5). `local_const_funcs` is EMPTY and stays empty:
+                // an interface body may not declare a function at all (the Logic loop
+                // below still refuses one, row `iface-subr`), so there is no local
+                // definition for a wildcard import to lose to. Without this a
+                // `localparam W = g(40)` in an interface body was
+                // `E3009 … has no constant-fold arm` where both oracles fold it
+                // (census c21; the module twin m21 already folded).
+                let local_const_funcs: BTreeSet<String> = BTreeSet::new();
+                let mut wc_const_fn: BTreeMap<String, String> = BTreeMap::new();
+                let mut explicit_const_fn: BTreeSet<String> = BTreeSet::new();
                 for (i, imp) in iface_imports.iter().enumerate() {
                     if Self::import_precedes_header(&decl, n_cu, i, imp) {
                         self.apply_import_consts(
@@ -202,6 +233,12 @@ impl Elaborator<'_> {
                             &mut explicit_imports,
                             &local_names,
                             i >= n_cu,
+                        );
+                        self.apply_import_const_funcs(
+                            imp,
+                            &local_const_funcs,
+                            &mut wc_const_fn,
+                            &mut explicit_const_fn,
                         );
                     }
                 }
@@ -220,7 +257,24 @@ impl Elaborator<'_> {
                             &local_names,
                             i >= n_cu,
                         );
+                        self.apply_import_const_funcs(
+                            imp,
+                            &local_const_funcs,
+                            &mut wc_const_fn,
+                            &mut explicit_const_fn,
+                        );
                     }
+                }
+                // §3.b: the RUNTIME half — imported functions/tasks join this
+                // interface's own (empty) tables under the same §26.3 rules the
+                // module lane's (3.6) applies: an explicit import always wins, a
+                // local definition wins a wildcard (vacuous here — an interface may
+                // declare neither), and one name from two different wildcard imports
+                // is ambiguous, hence unbound and loud at the use site.
+                let mut wc_rtn: BTreeMap<String, String> = BTreeMap::new();
+                let mut explicit_rtn: BTreeSet<String> = BTreeSet::new();
+                for imp in &iface_imports {
+                    self.apply_import_routines(imp, &mut wc_rtn, &mut explicit_rtn);
                 }
                 // §2 Scoping row 3 (round-1 delta): the five block-local classifier maps
                 // are computed HERE, after BOTH `apply_import_consts` passes above
@@ -252,12 +306,26 @@ impl Elaborator<'_> {
                 // body reserves its frame on demand and feeds this gather then
                 // (`feed_scoped_block_locals`). Measured: census c17, `Z=88` at HEAD
                 // where both oracles say 44.
+                //
+                // §3.b: the bodies the routine import above just bound are fed here
+                // too, the module lane's step (3.6a) with the same shared collector.
+                // They are not in `decl.body`, so without the feed a package routine's
+                // two same-named sibling block-locals flatten onto ONE net. Computed
+                // in one call rather than the module lane's compute-then-redo, because
+                // the imports are already applied at this point in this lane. With no
+                // package routine bound, `refs` is empty and this is the previous
+                // `&[]` call, `scoped_gather_fed` included.
+                let extra = self.imported_routine_bodies();
+                let refs: Vec<&ast::Stmt> = extra.iter().collect();
                 let (scoped_blocks, scoped_gather) =
-                    Self::compute_scoped_block_locals(&decl, &shadow_names, &[]);
+                    Self::compute_scoped_block_locals(&decl, &shadow_names, &refs);
                 let saved_scoped_blocks =
                     std::mem::replace(&mut self.scoped_block_locals, scoped_blocks);
                 let saved_scoped_gather = std::mem::replace(&mut self.scoped_gather, scoped_gather);
-                let saved_scoped_fed = std::mem::take(&mut self.scoped_gather_fed);
+                let saved_scoped_fed = std::mem::replace(
+                    &mut self.scoped_gather_fed,
+                    refs.iter().map(|b| Self::stmt_span_key(b)).collect(),
+                );
                 let per_entry_blocks = Self::compute_per_entry_block_locals(&decl, &local_names);
                 let saved_per_entry_blocks =
                     std::mem::replace(&mut self.per_entry_block_locals, per_entry_blocks);
@@ -293,6 +361,13 @@ impl Elaborator<'_> {
                     if let ast::ModuleItem::Proc(p) = it {
                         self.check_block_local_scope_leaks(&p.body);
                     }
+                }
+                // §3.b: the same gate on the imported routine bodies, AFTER the maps
+                // above are installed, so a declaration that now owns a `$blk$<lo>`
+                // net is exempt exactly as it is for a scope-declared routine. The
+                // module lane runs it in (3.6a) for the same reason.
+                for body in &extra {
+                    self.check_block_local_scope_leaks(body);
                 }
                 for it in &decl.body {
                     if let ast::ModuleItem::Param(pp) = it {
@@ -459,6 +534,27 @@ impl Elaborator<'_> {
                     sc.flush_block_local_inits();
                     sc.pending_var_inits = saved_pending;
                 });
+                // §3.b: step (6.5)'s function, at the same position relative to this
+                // scope's nets as the module lane runs it — after the nets exist, so a
+                // frame net lands outside them, and BEFORE the Logic loop, so a call
+                // site there can divert to a reserved FuncId. It classifies the tables
+                // the routine import filled (`build_frame_set` / `build_task_frame_set`)
+                // and reserves + lowers what needs a frame: a loop body (c14), a task
+                // with a delay (c15), an output formal (c3, c20). No-op when both sets
+                // are empty, which is every interface that imports no routine.
+                //
+                // The frame nets land inside the PARENT Instance's
+                // `[first_net, net_count)` slice. That is not a new property of this
+                // call: `net_count` has no consumer outside elaborate's own tests, and
+                // the scoped `pk::g()` lane (census c18, correct before this slice)
+                // already reserves frames from inside this same window.
+                self.lower_frame_funcs();
+                // §3.b, round-2 delta: the static scoped frames join the window HERE,
+                // between step 6.5 and the Logic loop that makes the scoped calls —
+                // see [`Self::adopt_static_scoped_frames`] for why neither side of that
+                // boundary works.
+                let parent_inst = saved_rtn.inst_prefix.clone();
+                self.adopt_static_scoped_frames(&parent_inst);
                 for it in &decl.body {
                     match it {
                         ast::ModuleItem::ContAssign(ca) => self.elaborate_cont_assign(ca),
@@ -507,6 +603,15 @@ impl Elaborator<'_> {
                 self.coalesced_block_locals = saved_coalesced;
                 self.local_decl_names = saved_local_names;
                 self.restore_params(saved_params);
+                // §3.b: below the Logic loop for the same reason the maps are — the
+                // routine tables have to answer the same way in the Nets pass, the
+                // frame lowering and the Logic pass.
+                self.inst_stack.pop();
+                // §3.b, round-2 delta: hand this window's static scoped frames to the
+                // next sibling instance of the same parent BEFORE the parent's own
+                // tables come back — see [`StaticScopedCarry`].
+                self.release_static_scoped_frames(&parent_inst);
+                self.restore_routine_scope(saved_rtn);
                 self.cur_prefix = saved_prefix;
             }
             // v6 ②: header-port connections wire LATE (all parent nets exist

@@ -874,52 +874,11 @@ impl Elaborator<'_> {
         // The module-only part is recomputed identically (the classifier is a pure
         // function of its inputs), so a design with no package routine is unchanged.
         //
-        // The key set holds the routines that came from a package, so a module-local
-        // routine is never fed twice (a second feed of one body would count each
-        // declaring span twice and make a lone declaration look like a colliding pair).
-        // §2 Scoping queue row 1 (secondary): `rtn_pkg` is not the whole key set.
-        // `inject_pkg_callees` (`package.rs`) reaches the TRANSITIVE same-package
-        // callees of an imported root and binds each under its `pkg::name` key in
-        // `func_table`/`task_table`; `rtn_pkg` holds bare names only (its four
-        // `insert` sites, `package.rs:1711/1742/1754/1758`, all insert bare), so a
-        // callee holding a same-named sibling pair was never fed here — measured
-        // `Z=88` where both oracles say 44 (census c14c, `import pk::g;` where `g`
-        // calls `h` and `h` holds the pair). Every `::` key in those two tables was
-        // put there by a package injection, so unioning them adds package bodies
-        // only. Dedupe is on the BODY SPAN, not on the table key: a routine reachable
-        // both as a bare import and under its `pkg::name` key is ONE body, and a
-        // second feed counts each declaring span twice — exactly what makes a lone
-        // declaration look like a colliding pair.
-        let mut extra: Vec<ast::Stmt> = Vec::new();
-        {
-            let mut seen: std::collections::BTreeSet<(u32, u32)> =
-                std::collections::BTreeSet::new();
-            let keys: Vec<String> = self
-                .rtn_pkg
-                .keys()
-                .cloned()
-                .chain(
-                    self.func_table
-                        .keys()
-                        .chain(self.task_table.keys())
-                        .filter(|k| k.contains("::"))
-                        .cloned(),
-                )
-                .collect();
-            for k in keys {
-                let body = self
-                    .func_table
-                    .get(&k)
-                    .map(|f| (*f.body).clone())
-                    .or_else(|| self.task_table.get(&k).map(|t| (*t.body).clone()));
-                if let Some(b) = body {
-                    let sp = Self::stmt_span_key(&b);
-                    if seen.insert(sp) {
-                        extra.push(b);
-                    }
-                }
-            }
-        }
+        // The key set and the span dedupe live in `imported_routine_bodies`
+        // (`pkg_body_scope.rs`), which the INTERFACE-instance lane
+        // (`iface_inst.rs`) calls for the same reason — the two scopes bind package
+        // routines the same way, so they classify from one construction.
+        let extra = self.imported_routine_bodies();
         if !extra.is_empty() {
             let refs: Vec<&ast::Stmt> = extra.iter().collect();
             let shadow_names = self.names_with_pkg_var_aliases(&self.local_decl_names.clone());

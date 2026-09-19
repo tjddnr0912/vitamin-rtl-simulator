@@ -96,6 +96,7 @@ mod hoist;
 mod ident_route;
 pub(crate) use ident_route::BareIdentRoute;
 mod iface_inst;
+mod iface_rtn_scope;
 mod inline_body_ctx;
 mod inline_fn;
 mod inline_task;
@@ -621,6 +622,10 @@ struct Elaborator<'s> {
     // (FQ path → interface name) consulted by interface-port binding.
     ifaces: BTreeMap<String, ast::ModuleDecl>,
     iface_insts: BTreeMap<String, String>,
+    /// §3.b: the STATIC package routines framed inside an interface instance's
+    /// window, carried from one instance to the next sibling of the SAME parent
+    /// (key = the parent's instance path). See `iface_rtn_scope::StaticScopedCarry`.
+    iface_static_scoped: BTreeMap<String, iface_rtn_scope::StaticScopedCarry>,
     /// ⓑ-breadth (§25.9): fully-qualified names of `virtual interface` handles, so
     /// the static binding assignment `vif = inst;` is skipped at statement lowering
     /// (the binding is resolved to a member alias at net-elaboration time).
