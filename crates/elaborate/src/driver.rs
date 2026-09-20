@@ -70,6 +70,7 @@ impl<'s> Elaborator<'s> {
             gen_ctr: 0,
             genvar_decls: std::collections::BTreeSet::new(),
             reported_bad_bounds: std::collections::BTreeSet::new(),
+            reported_dup_params: std::collections::BTreeSet::new(),
             all_clocking_names: std::collections::BTreeSet::new(),
             anon_clocking_count: 0,
             func_metas: Vec::new(),

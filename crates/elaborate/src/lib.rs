@@ -116,6 +116,7 @@ mod package;
 pub mod packed;
 mod packed_inner;
 mod packed_lval;
+mod param_dup;
 mod param_query;
 mod params;
 mod pkg_body_scope;
@@ -1321,6 +1322,12 @@ struct Elaborator<'s> {
     /// declaration's range is folded by more than one pass, so without this the same
     /// bound is reported once per pass.
     reported_bad_bounds: std::collections::BTreeSet<(u32, u32)>,
+    /// §2 🆕 L ⓢ: NAME-token spans already reported by
+    /// [`Elaborator::check_duplicate_param_decls`]. The gate runs from
+    /// `bind_params`, i.e. once per INSTANCE, and the defect is a property of
+    /// the source declaration — without this, `m #(…) a(); m #(…) b();` printed
+    /// one module's duplicate twice.
+    reported_dup_params: std::collections::BTreeSet<(u32, u32)>,
     /// Every clocking-block name in the whole design (never cleared) — diagnostic
     /// only: lets a cross-hierarchy `@(inst.cb)` event control emit an accurate
     /// "unsupported clocking-event" message instead of a generic hier-name error.
