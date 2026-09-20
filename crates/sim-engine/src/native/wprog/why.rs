@@ -40,7 +40,10 @@ pub const WIDTH: &str = "width";
 /// operand is wider than `w` — declines instead.
 pub const TRUNCATION: &str = "truncation";
 /// The uniform-sign gate on a node that is neither `Const` nor `Signal`, and a
-/// read alias whose source net carries the other signedness.
+/// read alias the compiled load cannot re-stamp — the copy's declared sign or
+/// (a sign-extending copy) its declared width is not the source slot's. One key
+/// for one boundary: the vocabulary is closed, and both halves are the same
+/// `alias::alias_read_needs_restamp` decline at the same site.
 pub const SIGN: &str = "sign";
 /// An `Expr` variant this module has no arm for (`ArrayItem`, and the string /
 /// heap / dynamic shapes). A `Call` or `SysFunc` never lands here — [`no_arm`]

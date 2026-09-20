@@ -277,13 +277,14 @@ pub(crate) fn lower(
             // at compile time from the same table (net and, for a copy of a
             // constant array word, the word's index expression).
             let (net, word) = match wt.read_alias(eid) {
-                // §4.5.441 (§2 🆕 I ⓖ): a copy whose declared sign differs from its
+                // §4.5.441 (§2 🆕 I ⓖ): a copy whose declared sign — or, for a
+                // width-changing copy, whose declared WIDTH — differs from its
                 // source's reads through on the interpreter, which re-stamps the
-                // COPY's sign; a compiled load takes the sign from the SLOT (the
+                // COPY's pair; a compiled load takes both from the SLOT (the
                 // source's), so it declines — "evaluate on the interpreter", never
-                // a different value.
+                // a different value. Same predicate as tier-3's, one home.
                 Some((n, w)) => {
-                    if ir.nets[n as usize].signed != ir.nets[*net as usize].signed {
+                    if crate::alias::alias_read_needs_restamp(ir, *net, n) {
                         return None;
                     }
                     (n, w)

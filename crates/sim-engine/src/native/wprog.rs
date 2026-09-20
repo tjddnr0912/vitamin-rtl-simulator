@@ -658,10 +658,12 @@ fn compile_node(
             // at compile time from the same table (net and, for a copy of a
             // constant array word, the word's index expression).
             let (net, word) = match wt.read_alias(eid) {
-                // §4.5.441 (§2 🆕 I ⓖ): a sign-mismatched copy declines here — the
-                // slot carries the SOURCE's sign, the interpreter re-stamps the copy's.
+                // §4.5.441 (§2 🆕 I ⓖ): a copy whose declared sign OR width differs
+                // from its source's declines here — the slot carries the SOURCE's
+                // pair, the interpreter re-stamps the copy's. One predicate, whose
+                // home is beside the alias that admits such a read.
                 Some((n, w)) => {
-                    if ir.nets[n as usize].signed != ir.nets[*net as usize].signed {
+                    if crate::alias::alias_read_needs_restamp(ir, *net, n) {
                         return Err(why::SIGN);
                     }
                     (n, w)

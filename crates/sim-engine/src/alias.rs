@@ -746,6 +746,103 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
     ordered
 }
 
+/// The WIDTH-CHANGING drivers the READ alias admits, as `(dst, src)`: a whole-net
+/// continuous assign that SIGN-EXTENDS its source (`logic signed [7:0] v;
+/// logic [15:0] c; assign c = v;`).
+///
+/// These are NOT copy nets. A copy net is a bit MOVE, which is what lets the
+/// settle repair one by writing the source's bits into it; an extension computes,
+/// and [`copy_nets`] must keep refusing it or the runtime rename set would move
+/// eight bits into a sixteen-bit net. The read alias asks a different question —
+/// what does a procedural read of `c` after the writer's own `v = 8'hA5;` see —
+/// and there both oracles read `ffa5` where vita kept the settle's `xxxx`
+/// (§2 🆕 I ⓖ residue, measured in the process body, in a called task or
+/// function, in a call's in-bind actual, and through a nested callee).
+///
+/// ⚠️ ONLY the sign-extending shape, and that boundary is measured, not derived.
+/// iverilog builds this driver as an `.extend/s` functor, which propagates on the
+/// store, and it reads `ffa5` for every spelling of the read (a direct
+/// `$display(c)`, an assignment to a local, two reads, a later re-write). It
+/// builds the ZERO-extending one (`logic [7:0] v`) as a `.concat` with a constant
+/// and the TRUNCATING one as a select, neither of which propagates there, and it
+/// reads the stale value for both — so vita keeps its own stale value for both
+/// too, and they stay outside this set. verilator is NOT an oracle for this cell:
+/// it answers the SAME read `ffa5` with one read of `c` in the design and `0000`
+/// with two (`y = c; $display(c);` — a later read changing what an earlier one
+/// returned), so where the two tools split here the ruling is iverilog's.
+///
+/// A full-range part-select rhs (`assign c = v[7:0]` into 16 bits) is deliberately
+/// NOT admitted: a part-select is unsigned, so the driver zero-extends, which is
+/// the shape above that stays computed.
+fn sign_extending_copies(ir: &SimIr) -> Vec<(u32, u32)> {
+    if ir.cont_assigns.is_empty() {
+        return Vec::new();
+    }
+    // Every continuous driver that TOUCHES a net, whatever it does to it: the
+    // alias may rename `c` only when this driver is the whole story about `c`.
+    // (`copy_nets` says the same thing with `multi_driver_groups` plus its
+    // "every driver on this net is a move" flag; here one driver is the whole
+    // admission, so the count is the same rule at its own site.)
+    let mut drivers: BTreeMap<u32, u32> = BTreeMap::new();
+    for ca in &ir.cont_assigns {
+        for c in &ca.lhs.chunks {
+            *drivers.entry(c.net).or_insert(0) += 1;
+        }
+    }
+    let mut out = Vec::new();
+    for ca in &ir.cont_assigns {
+        // `assign #d c = v;` has its own inertial register (`copy_nets` refuses a
+        // delay for the same reason); a multi-chunk or partial lvalue is not a
+        // whole-net copy at all.
+        if ca.delay.is_some() || ca.lhs.chunks.len() != 1 {
+            continue;
+        }
+        let c = &ca.lhs.chunks[0];
+        if c.word.is_some() || c.offset.is_some() || c.width.is_some() {
+            continue;
+        }
+        if drivers.get(&c.net).copied().unwrap_or(0) != 1 || !flat(ir, c.net) {
+            continue;
+        }
+        let Some(sim_ir::Expr::Signal {
+            net: src,
+            word: None,
+        }) = ir.exprs.get(ca.rhs as usize)
+        else {
+            continue;
+        };
+        if *src == c.net || !flat(ir, *src) {
+            continue;
+        }
+        let (sv, dv) = (&ir.nets[*src as usize], &ir.nets[c.net as usize]);
+        if !sv.signed || sv.width == 0 || dv.width <= sv.width {
+            continue;
+        }
+        out.push((c.net, *src));
+    }
+    out
+}
+
+/// Does an aliased read need the interpreter? `true` when the COPY differs from
+/// the net the alias substitutes in declared width or declared sign.
+///
+/// The one home of that question. `eval_core`'s `Signal` arm re-stamps both (it
+/// resizes the source's value to the copy's width with the SOURCE's sign, then
+/// carries it at the copy's); a compiled load — `native_eval::compile` and the
+/// tier-3 `wprog` — takes width and sign from the SOURCE's slot and has nowhere
+/// to put the re-stamp, so it declines and the expression evaluates on the
+/// interpreter. Declining is never a diagnostic and never a different value; the
+/// hazard this guards is the opposite one, two lanes answering one read
+/// differently (§4.5.442 found exactly that for the sign half).
+///
+/// Fails CLOSED: an out-of-range net id declines.
+pub(crate) fn alias_read_needs_restamp(ir: &SimIr, copy: u32, root: u32) -> bool {
+    match (ir.nets.get(copy as usize), ir.nets.get(root as usize)) {
+        (Some(c), Some(r)) => c.signed != r.signed || c.width != r.width,
+        _ => true,
+    }
+}
+
 /// `net → the net it is a WHOLE-NET copy of` (its root source), identity elsewhere —
 /// the runtime half of the rename set (ROADMAP §2 row 33) — and, beside it, `net →
 /// the index expression of the array WORD it copies` (`u32::MAX` = a whole net),
@@ -779,6 +876,12 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
 /// word index. The two arms of the select (here and in `copied_source`) must be
 /// opened together: this one supplies `alias_word`, that one supplies membership
 /// in `copy_nets`, and a net in one without the other is a value/event split.
+///
+/// §2 🆕 I ⓖ (this slice): a SIGN-EXTENDING driver `logic signed [7:0] v;
+/// logic [15:0] c; assign c = v;` joins the READ alias through
+/// [`sign_extending_copies`] — it is not a bit move, so it is not in
+/// [`copy_nets`] and the runtime rename set is untouched; only a procedural read
+/// that follows the writer's own write of `v` is redirected.
 pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> (Vec<u32>, Vec<u32>) {
     let mut alias: Vec<u32> = (0..ir.nets.len() as u32).collect();
     let mut alias_word: Vec<u32> = vec![u32::MAX; ir.nets.len()];
@@ -791,6 +894,19 @@ pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> (Vec<u32>, Vec<u32>)
         })
         .flat_map(|lv| lv.chunks.iter().map(|c| c.net))
         .collect();
+    // BEFORE the `copy_nets` loop, and that order is the rule, not a preference:
+    // a same-width copy OF a sign-extending copy (`assign c = v; assign d = c;`)
+    // chains through `alias[src]` below, and the collapse `d → v` is exact only
+    // because `d` and `c` have the SAME width — so the extension `v → d` is the
+    // one `c` already performed. Run this arm after, and `d` would name `c`,
+    // whose net the writer never writes, and the tail would stay stale (both
+    // oracles read it through).
+    for (dst, src) in sign_extending_copies(ir) {
+        if two_state.get(dst as usize).copied().unwrap_or(false) || forced.contains(&dst) {
+            continue;
+        }
+        alias[dst as usize] = src;
+    }
     for cn in copy_nets(ir) {
         let [ci] = cn.cas.as_slice() else { continue };
         let [src] = cn.srcs.as_slice() else { continue };
@@ -1192,5 +1308,80 @@ mod tests {
             delay: None,
         });
         assert!(copy_nets(&ir).is_empty());
+    }
+
+    /// `assign dst = src;` alone: `src` is net 0 (`sw` bits, `ssigned`), `dst` is
+    /// net 1 (`dw` bits, unsigned), and `exprs[0]` is the whole-net read of `src`.
+    fn ir_widen(sw: u32, ssigned: bool, dw: u32) -> SimIr {
+        let mut ir = empty_ir();
+        let mut s = net(sim_ir::NetKind::Logic, sw);
+        s.signed = ssigned;
+        ir.nets.push(s);
+        ir.nets.push(net(sim_ir::NetKind::Wire, dw));
+        ir.exprs.push(sim_ir::Expr::Signal { net: 0, word: None });
+        ir.cont_assigns.push(sim_ir::ContAssign {
+            lhs: whole(1),
+            rhs: 0,
+            delay: None,
+        });
+        ir
+    }
+
+    /// The READ alias admits the sign-EXTENDING driver and nothing else on that
+    /// axis — the zero-extending and truncating shapes are oracle splits and keep
+    /// the settle's value. ⭐ None of them is a copy net: the runtime rename set
+    /// would otherwise move 8 bits into a 16-bit net.
+    #[test]
+    fn only_a_signed_source_widening_joins_the_read_alias() {
+        assert_eq!(sign_extending_copies(&ir_widen(8, true, 16)), vec![(1, 0)]);
+        assert!(copy_nets(&ir_widen(8, true, 16)).is_empty());
+        for ir in [
+            ir_widen(8, false, 16), // zero-extending
+            ir_widen(16, true, 8),  // truncating
+            ir_widen(8, true, 8),   // same width — `copy_nets`'s own arm
+        ] {
+            assert!(sign_extending_copies(&ir).is_empty());
+        }
+        // A second driver: this one is not the whole story about the destination.
+        let mut two = ir_widen(8, true, 16);
+        two.cont_assigns.push(sim_ir::ContAssign {
+            lhs: whole(1),
+            rhs: 0,
+            delay: None,
+        });
+        assert!(sign_extending_copies(&two).is_empty());
+        // `assign #d c = v;` has its own inertial register.
+        let mut dly = ir_widen(8, true, 16);
+        dly.cont_assigns[0].delay = Some(0);
+        assert!(sign_extending_copies(&dly).is_empty());
+    }
+
+    /// The admitted pair reaches the alias table as a WHOLE-net rename (no array
+    /// word), and a 2-state destination still declines (the settle's write coerces
+    /// x/z to 0 and a read-through would not).
+    #[test]
+    fn a_sign_extending_copy_lands_in_the_alias_table() {
+        let ir = ir_widen(8, true, 16);
+        let (alias, word) = copy_alias(&ir, &[false, false]);
+        assert_eq!(alias, vec![0, 0]);
+        assert_eq!(word, vec![u32::MAX, u32::MAX]);
+        let (alias, _) = copy_alias(&ir, &[false, true]);
+        assert_eq!(alias, vec![0, 1]);
+    }
+
+    /// The compiled lanes' decline predicate: both halves of the re-stamp, and
+    /// out-of-range fails CLOSED.
+    #[test]
+    fn a_compiled_alias_read_declines_on_either_half_of_the_restamp() {
+        let mut ir = empty_ir();
+        ir.nets.push(net(sim_ir::NetKind::Logic, 8)); // 0: 8-bit unsigned
+        ir.nets.push(net(sim_ir::NetKind::Wire, 16)); // 1: 16-bit unsigned
+        let mut s = net(sim_ir::NetKind::Logic, 8);
+        s.signed = true;
+        ir.nets.push(s); // 2: 8-bit signed
+        assert!(alias_read_needs_restamp(&ir, 1, 0)); // width
+        assert!(alias_read_needs_restamp(&ir, 2, 0)); // sign
+        assert!(!alias_read_needs_restamp(&ir, 0, 0)); // neither
+        assert!(alias_read_needs_restamp(&ir, 9, 0)); // out of range
     }
 }

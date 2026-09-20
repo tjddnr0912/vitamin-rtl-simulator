@@ -568,8 +568,14 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 // §4.5.441 (§2 🆕 I ⓖ): the copy may differ from its source in
                 // declared SIGN; the read is of the COPY, so its extension takes
                 // the copy's sign (both oracles 4294967295 / 255), re-stamped below.
-                let (net, word, copy_sign) = match self.wt.read_alias(eid) {
-                    Some((n, w)) => (n, w, Some(self.ir.nets[*net as usize].signed)),
+                // It may differ in declared WIDTH too (`logic signed [7:0] v;
+                // logic [15:0] c; assign c = v;`, iverilog `ffa5`) — one
+                // re-stamp of the pair, below.
+                let (net, word, copy_shape) = match self.wt.read_alias(eid) {
+                    Some((n, w)) => {
+                        let cv = &self.ir.nets[*net as usize];
+                        (n, w, Some((cv.width, cv.signed)))
+                    }
                     None => (*net, *word, None),
                 };
                 let (net, word) = (&net, &word);
@@ -596,9 +602,32 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 // the write side (`resolve_lvalue_offsets`).
                 let widx = word.map(|weid| crate::eval::word_index_of(self.eval(weid).to_u64()));
                 let mut base = self.nets.read_net(*net, widx);
-                if let Some(s) = copy_sign {
+                // TWO steps, in the order the design performs them, and they are
+                // two different decisions — the copy's WIDTH is reached by the
+                // continuous assign, its SIGN is what the read then carries.
+                //
+                // 1. `resize` extends to the copy's declared width by the value's
+                //    OWN sign, which `read_net` stamps from the SOURCE net — the
+                //    assignment's rhs is self-determined in sign (IEEE §11.8.1),
+                //    so `logic signed [7:0] v` reaches a `logic [15:0] c` as
+                //    `ffa5`, never `00a5`. ⚠️ NOT `resize_keep_sign(cw, cs)`:
+                //    that one ANDs the two signs, so the copy's unsigned
+                //    declaration would zero-extend the source — measured `00a5`
+                //    against both oracles' `ffa5`, and it also re-answered the
+                //    SETTLED read (`#1` later) `00a5` where PRE and the oracles
+                //    agree on `ffa5`.
+                // 2. the read is of the COPY, so the value carries the copy's
+                //    declared sign into this expression's context (§4.5.442).
+                //
+                // At equal width step 1 is skipped and this is that slice's
+                // re-stamp verbatim, which is what keeps every existing alias
+                // entry byte-identical.
+                if let Some((cw, cs)) = copy_shape {
                     if !base.is_real && !base.is_str {
-                        base.signed = s;
+                        if cw != base.width {
+                            base = base.resize(cw);
+                        }
+                        base.signed = cs;
                     }
                 }
                 base.resize_keep_sign(w, eff_signed)
