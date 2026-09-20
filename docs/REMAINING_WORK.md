@@ -2,7 +2,8 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8194 tests passing with 15 skipped, artifact `format_version` 32, 70 `MsgCode` diagnostic codes; the
+8306 tests passing with 15 skipped, artifact `format_version` 33 (a `.velab` / `.vu` written by an
+older build is refused at the header gate with `E9001`), 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
 - G1 = a correct open-source RTL simulator (correct-or-loud) at the level of icarus, verilator,
@@ -39,17 +40,17 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 |---|---:|---|---|
 | §0 promotion queue (T2 residues) | 14 rows | 9 / 5 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
 | §2-N verilog-axi census | 2 rows + 5 | 0 / 7 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and five t0-event residues |
-| §2 start-order table | 27 rows | 6 / 21 | LOUD 6 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 |
-| §2 recorded defects by mechanism | 127 bullets | 83 / 44 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 23 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / bounds / selects 6 · diagnostics / artifacts 5 · class fields 3 · oracle splits 13 |
+| §2 start-order table | 26 rows | 0 / 26 | LOUD 4 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT |
+| §2 recorded defects by mechanism | 140 bullets | 92 / 48 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 26 · delays / events 13 · real 7 · performance 7 · index sealing 6 · ranges / bounds / selects 6 · diagnostics / artifacts 7 · class fields 3 · oracle splits 17 |
 | §3 numbered items | 24 rows | 19 / 5 | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, including ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 95 rows | 81 / 14 | subroutine / frame 22 · constants / parameters 21 · parser accept 13 · system tasks & file I/O 9 · loud shapes surfaced by §4.5.493–495 7 · nets / timing 6 · strings / heap 7 · diagnostics quality 7 · VCD / real conversion 3 |
+| §3 small residues | 98 rows | 84 / 14 | subroutine / frame 23 · constants / parameters 21 · parser accept 13 · system tasks & file I/O 9 · nets / timing 8 · loud shapes surfaced by §4.5.493–495 7 · strings / heap 7 · diagnostics quality 7 · VCD / real conversion 3 |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | 0 / 6 | mostly no oracle; hand-IEEE when started; every row states a prerequisite |
 | §5 performance / hardening residues | 17 rows | 8 / 9 | frame-body wprog (5c), native scratch pooling (4b-r), array-LHS cliff, inline-fold exponential, memory guard, CI nextest, MSRV ceiling, quiescence / render / eof seams |
 | §6 G2 OBS | 6 stages + 8 | 13 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 8 items beside the staged track (call tree, a `void` function filed as `kind: task`, a route decided per spelling, per-call-site builtins, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2) |
 | §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
-| total | 349 | 219 / 130 | |
+| total | 364 | 225 / 139 | |
 
 `startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
 prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.
@@ -73,4 +74,7 @@ prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated o
 - Per-instance class registration — blocks §3 ⑤ⓕ's class-property container; `register_classes` is a
   whole-design prescan, so a property of type `T` is loud with no override at all.
 - One oracle and zero corpus demand — blocks clocking (§2 rows 23, 24, 34).
+- An oracle split on the boundary itself — blocks §2 row 32 (`$finish` / `$fatal` reached inside a
+  function body: iverilog stops where verilator runs on, and neither side can be taken without
+  contradicting the other on the sibling spelling).
 - Oracle splits are recorded, never chased.

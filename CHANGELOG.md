@@ -9,6 +9,80 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Changed — artifact `format_version` is now 33
+
+The `string'(e)` cast below needed a new entry in the frozen simulation IR, so the artifact
+`format_version` moved from 32 to 33. A `.velab` or `.vu` written by an older build is refused at
+the header gate with `VITA-E9001` instead of being read; rebuild the artifact (`vcmp` / `velab`, or
+just re-run `vita`). Nothing else about the staged flow changed: `vcmp → velab → vrun` is
+byte-identical to the one-shot run on every design measured.
+
+### Fixed — string casts and `string` conversions, duplicate parameters, copy-net read-through, generate-scope names, constant shadows
+
+- **`string'(e)` casts an integral to a string, and every integral-to-string conversion now follows
+  IEEE 1800 §6.16.** `s = string'(24'h610062);` was a parse error (`VITA-E2002 expected expression,
+  found keyword 'string'`) where both reference tools print `len=2 s=ab`; it now runs on every
+  operand width (7, 8, 16, 24, 64, 72 bits), on a `reg`, a concatenation, an enum and a packed
+  struct, nested inside itself, as a `string` argument, and inside `==`, `inside`, `.compare()` and
+  a `case` scrutinee. Beside it, the IMPLICIT conversion vitamin already performed on a
+  `string`-typed assignment kept NUL bytes and read an unknown bit as 1: `string s = 24'h610062;`
+  printed `a\0b` with length 3 where both reference tools print `ab` with length 2, and
+  `16'h61zz` with an `x` nibble produced a `0xF0` byte instead of dropping it. NUL bytes are now
+  removed and unknown bits read as 0 — at a module string assign, a dynamic-array or queue element
+  store, a frame-local write, a formal bind, a string formal's actual, a string concatenation's
+  parts and both operands of a string comparison. The PACKED-ASCII surface is deliberately
+  unchanged: `$display("%s", 24'h610062)`, `$sformatf`, `$fopen`, `$sscanf` and `putc` still see the
+  packed bytes, as they do in both reference tools. `string'(real)`, `string'(x).len()` and
+  `localparam string S = string'(…)` stay loud — no two reference tools agree on any of them.
+- **A parameter name declared twice in one module or interface scope is refused.**
+  `module top #(parameter int P = 3); parameter int P = 7;` printed `P=7` at exit 0 where both
+  reference tools reject the design (IEEE 1800 §6.20.1 / §23.2.3). The refusal is `VITA-E3009` on
+  the second declaration with a note at the first, and it covers the ANSI header plus body, two
+  declarations inside one header, the non-ANSI form, `parameter` against `localparam`, a
+  `parameter type`, a labelled generate block (§27.3), a package body (§26.2) and a transparent
+  `generate … endgenerate` region (§27.2). A module instantiated twice reports once, not twice.
+  Legal shapes are untouched: one `localparam` per generate-loop ITERATION, a generate block
+  shadowing a header parameter, an imported or `$unit` name shadowed by a local declaration, and
+  overrides.
+- **A copy net that sign-extends is read through with the writing process's own value.**
+  `logic signed [7:0] v; logic [15:0] c; assign c = v;` — after that process's own `v = 8'hA5`, a
+  read of `c` printed `xxxx` where both reference tools print `ffa5`. It now reads through in a
+  called task or function, in a nested callee, in a static task, in an in-bind actual, inside an
+  operator, in a wider context and in the writing process's own body; a chain through a same-width
+  copy follows. Equal-width copies, settled reads and designs that never write the source are
+  byte-identical to before, and zero-extending, truncating and part-select right-hand sides keep
+  their previous value — the two reference tools contradict each other there.
+- **A generate block is spelled the way IEEE 1800 §27.4/§27.5 spells it, and an instance array of a
+  portless module runs.** `gi[0].x` on a conditional or `case` generate block printed a value at
+  exit 0 where both reference tools refuse it — only a generate-`for` iteration has an index — and
+  the reverse mistake `gl.x` on a loop scope was accepted the same way. Both are now
+  `VITA-E3010` with a hint that names the block and the spelling that works, at every depth, for
+  reads, writes, array elements, part-selects, event controls, nested and unnamed (`genblk1`)
+  blocks and cross-instance paths. Separately, `module ch; … endmodule` instantiated as
+  `ch w[1:0]();` was refused with ``instance array `w`: child `ch` has non-ANSI ports`` — an empty
+  port list read as a non-ANSI one — where both reference tools print the design's output; a
+  portless child now runs as an array, with parameter overrides, hierarchical writes, `.*`, `%m`,
+  generate nesting and the observability rail all matching the ported equivalent. A child with a
+  NON-EMPTY non-ANSI header is still refused.
+- **A bare name that a constant shadows is no longer read as the net.** With `logic [15:8] V;`
+  beside a generate block declaring `localparam int V = 99;`, `V[15:12]` read the net (`6` where
+  both reference tools print `0`), a `string` constant's `.len()` read the net's length, and
+  `V.push_back`, `V = '{…}`, `V.size()`, `V.sum()`, a class-handle member, an array port connection
+  and an instance-array port connection all took the net silently where both reference tools reject
+  the design. Eleven such readers now ask the same resolver the rest of the elaborator uses: a name
+  that resolves to a constant either folds, or is refused by name. Three false refusals disappeared
+  with it — a hierarchical task call whose actual is an ordinary constant (`top.sh(V[7:0])`, both
+  reference tools print `A=63`) and a method on an unshadowed `localparam string`.
+- **An event control on a name that cannot change no longer fires, and no longer refuses the
+  process.** `always @(posedge K)` on a `localparam`, in a process header, a task body or a frame
+  body, was `VITA-E3010 undeclared net/variable` where both reference tools simply run the design
+  and never wake — the term is now dropped and the process never wakes, matching them. The same
+  applies to the in-body `@(…)` form, including a mixed wait (`@(posedge K or posedge clk)`), which
+  now arms on the live term. A LEVEL term on a constant in a process HEADER is still refused, but
+  only when no live term remains — `always @(V or W)` keeps running on `W` — and the message is now
+  true about the program (``a constant cannot wake a process``) instead of calling a declared
+  `localparam` undeclared.
+
 ### Fixed — runtime continuous-assign delays, hierarchical leaves in a size cast, module-net writes from a function
 
 - **A `function` or `task` declared inside an interface body runs.** Declaring a routine in an

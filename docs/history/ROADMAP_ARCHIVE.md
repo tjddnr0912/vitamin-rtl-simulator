@@ -7,12 +7,18 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 410건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 416건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.524` **batch review fixes: a positive singleton-scope key, constant event terms that never wake, string concat parts and string-case items through the §6.16 funnel, duplicate parameters in generate regions and packages** (2026-09-21 · the one adversarial review of §4.5.519–523, run over the five slices as a batch per owner directive · 2 lenses × 3 rounds, 84+79 → 25+31 → 7+7 designs plus an 8,604-design suite sweep whose 49 movers are all inside the four new test files · round 1 BLOCKING A: `singleton_scope_key` decided "singleton generate scope" NEGATIVELY, so a one-element INSTANCE ARRAY label passed and `ch u [0:0](); u.q` printed `A=7` where both oracles reject — keyed positively on `gen_singleton_labels`, which closes the ported and `module ch();` twins with it · round 1 BLOCKING B: `@(posedge V[0])` under a `localparam` shadow regressed to loud, closed on the ladder by `event_term_never_wakes` dropping a never-changing term (in-body always, header EDGE terms), which also closes the pre-existing false louds on the unshadowed twins, both oracles `DONE` · C: a MIXED `{string, integral}` concat bypassed the §6.16 funnel while the pure packed concat went through it, and a string-scrutinee `case` compared its integral items packed while `==` compared §6.16 · D/E: duplicate parameters in a generate scope (§27.3), a package body (§26.2) and a TRANSPARENT `generate … endgenerate` region flattened into the enclosing scope (§27.2) · F: a header LEVEL term on a constant, shadowed or not, takes one true refusal · T1 (round 3, the round's single patch): that refusal reported per TERM and swallowed a live sibling — `@(V or W)` now drops the constant and arms on `W` · 3-backend flips 0 splits, determinism byte-identical, a `Bytecode`-default flip run's 10 failures identical on the parent · 8306 tests)
+- `4.5.523` **every bare-name reader asks `bare_ident_route` before taking a net; a hierarchical task call lowers only a constant-shadowing actual as an lvalue** (2026-09-21 · §2 🆕 O, startable row 5 of 6 · `lookup_net_scoped` had 92 call sites and 11 resolved a bare name to a NET without asking whether an enclosing scope's constant shadows it: `V[15:12]` read `6` for the oracles' `0`, a string localparam's `.len()` read `5` for `2`, and `V.push_back`, `V = '{…}`, `V.size()`, a class member, an array port actual and an instance-array actual all took the net where both oracles reject · one funnel `ident_route.rs` (`lookup_net_unshadowed` / `lvalue_binds_constant` / `bare_const_shadows_net` / `error_const_shadows_net`) taken by all eleven readers; a read with a constant path takes it, a site with none refuses by name; the speculative hierarchical-call lvalue is skipped exactly when `lvalue_binds_constant` · 45 designs, 18 moved (7 silent-wrong→value, 3 false-loud→value, 8 silent→loud), 16 no-shadow controls and 16 enum-label twins byte-identical, release vs debug 0 differences · the additive `inline_fn` `Str` arm also closes the pre-existing false loud on an unshadowed `localparam string S; S.len()`)
+- `4.5.522` **an index on a non-loop generate scope is refused, a loop scope needs one, and an instance array of a portless module runs** (2026-09-21 · §2 🆕 N, two cells, startable row 4 of 6 · `gi[0].x` on a conditional generate block printed `X=3` at exit 0 where both oracles refuse (IEEE §27.5 gives it no index; only a loop iteration has one, §27.4), and the reverse `gl.x` on a loop scope was accepted where both refuse — the `label[0]` spelling came in with §4.5.474 and no resolver asked which KIND of scope the label named · `ch w[1:0]()` on a PORTLESS child was refused as "child has non-ANSI ports" where both oracles print `Q=4 4` — an EMPTY port list read as non-ANSI · one home for the rule, `gen_scope_name.rs`, so the four existing E3010 sites report with a hint naming the block and the spelling that works; `instance_array.rs` admits `PortList::None` and an empty non-ANSI list and lets `.*` through · 40 cells: 12 silent→loud, 8 value cells on the portless lane, 2 splits followed to iverilog + §27.5 (`gi[0].P`, `$bits(gi[0].x)` — verilator contradicts itself inside one construct), every control byte-identical, OBS hier-tree / inst-paths at ported-twin parity)
+- `4.5.521` **a sign-extending copy net is read through with the caller's own write, in a callee body and in the process body alike** (2026-09-21 · §2 🆕 I ⓖ, startable row 3 of 6 · `logic signed [7:0] v; logic [15:0] c; assign c = v;` — after the process's own `v = 8'hA5`, a read of `c` in a task, a function, an in-bind actual, a nested callee, a static task OR THE PROCESS BODY printed `xxxx` for both oracles' `ffa5`; `copied_source` admits equal widths only, so a sign-extending driver was never a copy net, and the row's premise that the process-body twin was already right was false · `alias::sign_extending_copies` admits such a driver to the READ alias only (`copy_nets` untouched — an extension is not a bit move), `eval_core` resizes by the SOURCE's sign then stamps the copy's, one shared `alias_read_needs_restamp` replaces the sign-only decline in both compiled lanes · verilator DISQUALIFIED for the class by self-contradiction: the same first read answers `ffa5` alone and `0000` beside a later read · 37 designs, 19 moved (14 two-oracle, 5 iverilog-consistent splits), 0 regressions, examples' stdout and VCD byte-identical, mutation-pinned)
+- `4.5.520` **a parameter name declared twice in one module or interface scope is refused** (2026-09-21 · §2 🆕 L ⓢ, startable row 2 of 6 · `module top #(parameter int P = 3); parameter int P = 7;` printed `P=7` at exit 0 where both oracles reject the design (IEEE 1800-2017 §6.20.1 / §23.2.3) · one new funnel `param_dup.rs` called at the top of `bind_params`, the entry the module lane and the interface window share; the rule is "declared twice in this scope" over the ordered walk header-list ++ body `Param`s, so two declarations in one ANSI header and the non-ANSI form are covered too; E3009 on the second with a note at the first, deduped on the NAME SPAN so an instantiated-twice module reports once and a `parameter type` reports under the user's name · 25 cells: 14 silent→loud, 10 controls byte-identical · residue = the package body, closed in the review round with the generate-scope and transparent-region regions)
+- `4.5.519` **`string'(e)` casts an integral to a string, and every §6.16 integral-to-string conversion drops NUL bytes and reads unknown bits as 0** (2026-09-21 · §2 row 5, startable row 1 of 6, row DELETED · the cast was `E2002 expected expression, found keyword 'string'` where both oracles print `len=2 s=ab`, and the IMPLICIT conversion kept the NUL byte and read a z/x bit as 1 (`a\0b` length 3 for `ab` 2) · the cast rides `CastTarget::Named` under the reserved keyword segment `string`, so hdl-ast and every `.vu` are untouched; the result's length is data-dependent, so `SysFuncId::StrCast` is appended to the frozen sim-ir enum — **format_version 32 → 33**, schema hash / canonical / RON goldens and the OBS pin re-pinned · one engine funnel `Value::to_sv_string_bytes` answers the cast and the five §6.16 crossings plus `StrCmp`'s operands; the PACKED-ASCII surface (`%s`, `$sformatf`, `$fopen`, `$sscanf`, `str_putc`) is deliberately unchanged and negatively pinned · 50 cells: 42 match, 4 splits (`%s` / bare `$display` of an unstored cast — iverilog formats the packed operand), 4 loud with no agreeing oracle (`string'(real)`, `string'(x).len()`); staged byte-identical to one-shot, a format-32 `.velab` under the new binary is loud E9001)
 - `4.5.518` **a `function` or `task` DECLARED in an interface body runs, and the interface window installs the module lane's declaration-order and import-collision gates** (2026-09-20 · §3.b `iface-subr`, queue row 1 · new `rtn_decl.rs` = one `register_declared_routine` shared by `instance.rs` step (3.5) and the interface window: declared functions enter `const_func_table`/`local_const_funcs` before the header fold and `func_table`/`task_table` BEFORE `apply_import_routines` (a declared `g` beats `import pk::*`, both oracles `R=1040`), the block-local containment gate runs over routine bodies, and `lower_frame_funcs` moved into the rank-scope nets closure so a net decl-initializer calling a framed routine runs (`int r = lp(5)` → 10; the import and scoped `pk::lp()` lanes too) · 21 loud→value cells (`F=44 T=103 B=41`, hierarchical `u1.bump(3)`, per-instance static locals, `%m`, recursion, void, continuous assign, `always_comb`, packed return), OBS/VCD/probe at module-twin parity · three gate defects closed in review: the SHARED explicit-import arm inserted a package routine over a scope-local declaration of either namespace (silent `R=44`, a value no oracle prints; module lane too), that guard and the constant lane's fired for a `$unit` import where §26.4 says the local SHADOWS it (`is_cu` threaded through six call sites), and the interface window never installed the §6.10 `decl_pos` tables so `check_decl_precedes_use` was vacuous (`R=3 L=100` at exit 0) · a modport named like a declared routine is now loud · the §6.10 install also reaches interface PROC bodies, kept as an oracle split (verilator alone answers) · 2 lenses × 3 rounds, 3428-design sweep with zero PRE-exit-0 cells changed outside that split · 8194 tests)
 - `4.5.517` **an interface body binds its package ROUTINE imports in its own routine scope; static scoped frames are carried between sibling interface instances** (2026-09-20 · §3.b `iface-pkg-routine`, queue row 1 · `iface_rtn_scope.rs` takes the module-local `RoutineScope` at the interface window entry and restores it verbatim at exit, so the window applies `apply_import_const_funcs` in both import passes and `apply_import_routines` after the body pass, feeds the imported bodies to the block-local classifier through the shared `imported_routine_bodies` the module lane's step 3.6a calls, and runs `lower_frame_funcs()` before the interface's Logic loop: a bare call in an interface body is no longer `E3010` and an imported constant function no longer `E3009` · three pre-existing silent-wrongs closed — a bare `g()` in an interface resolved to the PARENT's `g` (`I=1040` and `I=39` for the oracles' `I=44`) · the STATIC `::`-keyed frames of the seven routine tables are carried to the next sibling interface instance of the SAME parent instance, keyed on the parent's `inst_prefix` and adopted insert-if-absent, the parent's own tables never written (the design-wide frame for a static package routine stays the recorded §2 prerequisite, not built) · 2 lenses × 3 rounds, 80 + 91 + 12 designs; round 1 added `inst_prefix` to the scope (a `%m` under the module lane's prefix) and round 2 `cur_module`, round 2 turned the sibling adopt insert-if-absent after an overwrite gave one instance two copies of a static local, round 3's third finding on the declaration-order axis was recorded in §2 under the three-blocker rule · 8146 tests)
 - `4.5.516` **the transitive package callees of a scoped `pk::g()` call are framed with the step-6.5 predicate, and callee walkers see declaration initializers** (2026-09-19 · §3.b `pkg-callee-blocal`, queue row 1 · the `frame_idx` MISS arm runs the step-6.5 predicate over the just-injected callees, reserves them and the root before lowering, and never narrows: static-persistent and return-variable-reading routines keep their inline loud · `collect_callee_decls` / `collect_callee_func` / `collect_callee_task` see declaration initializers on every lane (a decl-init call bound to the calling module's routine, PRE-silent, fixed) · 2 lenses × 3 rounds, 235 designs: 159 identical, 57 loud→value, 13 silent→value, 0 down; three call-site guard shapes each regressed a working design and the axis was reverted under the three-blocker rule)
@@ -528,6 +534,401 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.524 batch review fixes: a positive singleton-scope key, constant event terms that never wake, string concat parts and string-case items through the §6.16 funnel, duplicate parameters in generate regions and packages (2026-09-21, branch it22) ✅
+
+**ROADMAP row**: none of its own — the adversarial review of §4.5.519–523, run once over the five
+slices as one batch (owner directive 2026-09-20: fix the six startable rows of §2's start-order
+table sequentially with scoped gates, one review at the end).
+
+**Rounds** (2 lenses × 3; PRE frozen at `a1714a4a…` = 38ef535, POST `b3e935e9…` = 0d606f4,
+POST2 `857f6384…`, POST3 `8c7738f2…`, POST4 `ea25320c…`; oracles iverilog 13.0 `-g2012` and
+verilator 5.052 `--binary --timing`).
+
+- Round 1: 84 differential + 79 soundness designs, plus an 8,604-design sweep of the cli suite's
+  literal designs. 2 BLOCKING (A, B below), 4 MAJOR, the rest notes. The sweep's 49 movers are all
+  inside the four test files the slices added; 0 movers elsewhere. Detector self-tested with a
+  positive and a negative control.
+- Round 2: 25 + 31 delta designs, 0 BLOCKING; MAJORs E and F. A no-oracle POST→POST2 sweep over all
+  round-1 designs moved exactly 9, all intended.
+- Round 3: 7 + 7 delta designs; one MAJOR (T1) fixed as the round's single patch. The POST2→POST3
+  sweeps moved 6 (soundness, 117 designs) and 2 (differential, 191 designs) — every one inside the
+  declared delta.
+- 3-backend flips (`interp` / `vm` / `native`) over every hand design: 0 splits. Double-run
+  determinism: byte-identical. A `Bytecode`-default flip run of the whole suite gives 10 failures
+  that are IDENTICAL on the parent 38ef535 — 8 "backend = native" pins and 2 pre-existing VM
+  divergences — so none is attributable to the batch.
+
+**A (S4 / §4.5.522, round 1 soundness, BLOCKING)**. `gen_scope_name.rs::singleton_scope_key` decided
+"is `label` a singleton generate scope" NEGATIVELY (`!gen_loop_labels.contains(label)` then
+`is_hier_scope("label[0]") && !is_hier_scope("label[1]")`). An INSTANCE-ARRAY label is in NEITHER
+label set, so a one-element array satisfied both tests and `hier.rs` committed `u` → `u[0]`:
+
+```
+module ch; logic [7:0] q = 8'h7; endmodule
+module g408; ch u [0:0] (); initial $display("A=%0d", u.q); endmodule
+
+PRE       g408.sv:2:8: error[VITA-E3009] instance array `u`: child `ch` has non-ANSI ports …
+          g408.sv:4:17: error[VITA-E3010] undeclared hierarchical name `u.q`            rc=1
+POST      A=7                                                                          rc=0
+POST2     g408.sv:4:17: error[VITA-E3010] undeclared hierarchical name `u.q`            rc=1
+iverilog  g408.sv:4: error: Unable to bind wire/reg/memory `u.q' in `g408'
+verilator %Error: g408.sv:4:37: Can't find definition of 'u'
+```
+
+S4's portless admission made the third spelling of a PRE-EXISTING root class reachable; the ported
+twin (`ch u [0:0] (.p(w));`) and the `module ch();` twin printed `A=7` on PRE already. Fixed by
+keying positively on `gen_singleton_labels` — the set `generate.rs` already documents for exactly
+this hazard, with one producer and four consumers — which closes all three spellings together. The
+flip's own risk is the opposite (a singleton missing from the set, i.e. a false loud) and was not
+reproduced on seven probe shapes: an unlabelled `genblk1`, a read written BEFORE the generate that
+declares the scope, a cross-instance read, an instance array inside a generate loop, `u[0].q` on a
+`[0:0]` array, a generate singleton named `u` beside a sibling instance array `u`, and a
+generate-`case` block.
+
+**B (S5 / §4.5.523, round 1 soundness, BLOCKING regression)**. `@(posedge V[0])` under a
+`localparam` shadow ran on PRE and was loud after S5, because `lsb_bitselect_net` now takes
+`lookup_net_unshadowed` and the caller's edge-bit-select refusal fires:
+
+```
+PRE       DONE                                                                          rc=0
+POST      e509.sv:1:8: error[VITA-E3009] edge event-control bit-select must select the net's
+          LSB with a constant index …                                                   rc=1
+iverilog  DONE        verilator  DONE
+```
+
+The underlying defect is a PRE-EXISTING FALSE LOUD on the UNSHADOWED twin (`localparam int K = 99;
+always @(posedge K[0])` — loud on PRE and POST, `DONE` on both oracles), so the ladder-correct close
+is the constant path, not a revert of the S5 guard. `events.rs::event_term_never_wakes` (over
+`ident_route.rs::expr_head_binds_constant`) drops a never-changing term — always in the in-body
+`@(…)` lane, and for EDGE terms in the process-header lane — leaving the engine's empty-sensitivity
+never-wake shape, which does not spin. That closes the shadowed cell, its silent-wrong twin
+(`EDGE at 1` on PRE), and the pre-existing false louds on `@(posedge K)`, `@(posedge K[0])` and
+`@(negedge K)` in a header, a task body and a frame body — both oracles `DONE` on every one. A
+mixed in-body wait `@(posedge K or posedge clk)` now arms on the live term, which also retires the
+"multi-term in-body edge wait" refusal for that shape.
+
+**C (S1 / §4.5.519, round 1 differential MAJOR + soundness MAJOR)**. A MIXED string concat
+`{<string>, <integral>}` bypassed `to_sv_string_bytes` while the PURE packed concat went through it,
+so POST contradicted itself in one design (`pure [xab] 3 | mixed [xa b] 4`; both oracles `[xab] 3`
+for both spellings). `strings.rs::lower_string_concat_parts` wraps every non-string part in
+`StrCast` at all three concat callers (`string_concat_special`, the general concat, the replicate
+flatten); nested concat, replicate, a task actual, a function return, an all-NUL part and an x/z
+part all match both oracles afterwards. Separately, a string-scrutinee `case` compared its integral
+items PACKED while `==` compared through §6.16, so one process answered `EQ=1` and `CASE=miss`:
+`case_cmp` routes a string scrutinee through `StrCmp` (verilator-judged; iverilog asserts on the
+shape), and the reverse cell — an integral scrutinee with a string item — is unchanged on all three
+tools. Two no-oracle pins in `ctx_lowering_domain_routes.rs` moved with it: `{s,'0}` is `[x] 1` on
+POST2, iverilog and verilator alike, so that pin is 2-oracle backed, not no-oracle.
+
+**D (S2 / §4.5.520, round 1 differential MINOR)**. `check_duplicate_param_decls_in` also walks each
+generate scope (§27.3) and a package body (§26.2). Both were `P=2` / `g Q=1 g Q=2` at exit 0 where
+both oracles reject.
+
+**E (round 2 soundness MAJOR, same root class as D)**. A TRANSPARENT `generate … endgenerate` region
+— no `begin`, no label — is a fourth declarative region that no call site walked, and
+`generate.rs`'s own comment claimed its items "belong to the enclosing scope and are judged there"
+while `scope_param_decls` filtered `module.body` for `ModuleItem::Param` and never saw inside
+`ModuleItem::Generate`:
+
+```
+module r243; generate localparam int Q = 1; localparam int Q = 2; endgenerate
+  initial begin $display("Q=%0d", Q); #1 $finish; end endmodule
+
+PRE / POST / POST2   Q=2                                                              rc=0
+POST3     r243.sv:4:20: error[VITA-E3009] duplicate declaration of parameter `Q` … (§6.20.1)
+          + a note at the first declaration                                            rc=1
+iverilog  r243.sv:4: error: 'Q' has already been declared in this scope.
+verilator %Error: r243.sv:4:20: Duplicate declaration of signal: 'Q'
+```
+
+`scope_param_decls` now FLATTENS a transparent region (and a nested one) into the enclosing scope's
+ordered sequence, so `module m #(parameter P=1); generate localparam P=2; endgenerate` is refused
+too. The flatten's transparency rule was censused against `elaborate_gen_item`'s and matches it
+arm for arm; per-iteration localparams, a region beside a labelled block, and a labelled `if` block
+inside a region all stay accepted on all three tools.
+
+**F (round 2, both lenses, MAJOR)**. A generate `localparam V` shadowing a module net, read as a
+process-HEADER LEVEL term `always @(V)`, armed the OUTER NET and fired again when the net changed;
+both oracles treat `V` as the constant and fire once at t0. The unshadowed twin was already loud, so
+POST2 answered one spelling loud and its shadow twin silently wrong. Both take the refusal now, with
+parallel messages, and the header lane's older text was false about the program (it called a
+declared localparam undeclared); it is now ``a level event control `@(K)` must name a net or
+variable: `K` is a constant … a constant cannot wake a process (an event control waits for a
+CHANGE). `posedge`/`negedge` on a constant is accepted and simply never fires``.
+
+**T1 (round 3, both lenses, MAJOR regression — the round's single patch)**. The header LEVEL refusal
+reported per TERM and was not conditioned on whether any live term remained, so one constant term
+refused the whole process:
+
+```
+logic [7:0] V, W; generate if (1) begin : g localparam int V = 99;
+  always @(V or W) $display("HDR at %0t", $time); end endgenerate   … #1 W = 8'h1;
+
+PRE / POST / POST2   HDR at 1 / DONE                                                   rc=0
+POST3     r304.sv:1:8: error[VITA-E3009] `V` here resolves to a constant … a constant cannot
+          wake a process, so the level event control `@(V)` has nothing to sense here   rc=1
+POST4     HDR at 1 / DONE                                                              rc=0
+iverilog  HDR at 0 / HDR at 1 / DONE       verilator  HDR at 0 / HDR at 1 / DONE
+```
+
+The EDGE lane already had the right rule and its comment stated it ("one constant term must not
+silence its siblings"). A header LEVEL term on a constant is now refused only when NO live term
+remains; a constant level term beside a live net is dropped and the process arms on the rest. The
+single-term cells keep their refusal unchanged. Both oracles also fire the constant term ONCE at
+t0 — vita has no shape for that and PRE never produced it either; recorded.
+
+**Recorded, not fixed** (each is one ROADMAP §2 or §3.b line):
+
+- A string-keyed associative array converts an INTEGRAL index to its key without §6.16, so the
+  NUL-bearing key is a different key (`int m[string]; m["ab"]=7; m[24'h610062]=9;` → `n=2` for
+  verilator's `n=1`; iverilog cannot declare the type, so this is verilator-only).
+- A duplicate parameter in a module instantiated only under `generate if (0)` is never refused —
+  `check_duplicate_param_decls` runs from `bind_params`, i.e. once per INSTANCE. Same class: a
+  `genvar` and a region `localparam` of one name in one flattened scope, since the flatten collects
+  `ParamDecl`s only.
+- A duplicate VARIABLE declaration in a named block is accepted silently.
+- `@(K[0] or clk)` — a single-bit LEVEL term beside a live net — keeps its pre-existing
+  "single-bit level (non-edge) event control is not supported" refusal, which silences the live
+  sibling; both oracles run the design. `@(pkg::CONST)` keeps its own refusal where both oracles
+  print `DONE`.
+- `always @*` whose body reads only a constant is an oracle split (vita and iverilog `y=x` with
+  iverilog warning "@* found no sensitivities", verilator `y=7`); an enum-label shadow on
+  `@(posedge V)` is the mirror split (vita and iverilog fire, verilator does not). No side pinned.
+- A free-standing unlabelled `begin…end` inside a generate region flattens, so its `localparam`
+  collides with the region's — iverilog agrees, verilator treats the block as a §27.6 scope and
+  runs. A NEW refusal of a program verilator accepts, consistent with the reading §4.5.264 pinned
+  for this construct.
+- The duplicate reported inside a transparent region cites §6.20.1's "parameter port list and the
+  module body" wording, which names something that did not happen, and says "module" inside an
+  interface.
+- The 2 VM divergences the `Bytecode` flip run shows, both pre-existing at 38ef535: a call in a
+  runtime delay falls back and runs SILENTLY on `vm` where `native` is loud, and a `string` formal
+  receiving a `real` actual on a STATIC task prints `STATIC=0` on `vm` against `8`.
+
+**Gates**: 8306 tests, 15 skipped; `cargo nextest run --workspace --locked`, doctest, `cargo clippy
+--workspace --all-targets --locked -- -D warnings` and `cargo fmt --all -- --check` rc 0; corpus
+10/10 on every round; `format_version` 33 (set by §4.5.519, unchanged here).
+
+#### 4.5.523 every bare-name reader asks `bare_ident_route` before taking a net, and a hierarchical task call lowers only a constant-shadowing actual as an lvalue (2026-09-21, branch it22) ✅
+
+**ROADMAP row**: §2 🆕 O (the row's stated class is closed; the row survives for its recorded
+splits and the hand-rolled partial guards).
+
+**Defect (PRE, both oracles agree unless marked)**. `lookup_net_scoped` — the `symbols`-only walk —
+had 92 call sites and 11 of them resolved a bare name to a NET without asking whether a constant of
+an enclosing scope shadows it. With `logic [15:8] V = 8'hA5;` beside `generate if (1) begin : g
+localparam int V = 99; … end`, `V[15:12]` read the net (`P=6`; both oracles `P=0`), `V[12+:4]` the
+same, `@(posedge V[0])` fired on the net, a string localparam's `.len()` read the net's (`L=5`;
+oracles `L=2`), and `V.push_back(5)`, `V = '{9,9,9,9}`, `V.size()`, `V.sum()`, a class-handle member
+`V.x`, an array port actual `ch u (.p(V))` and an instance-array actual `ch u[1:0] (.p(V))` all took
+the net silently where both oracles reject the program. The ONE guarded write site over-reported:
+`top.sh(V[7:0])` with an INPUT formal was E3009 because `inline_task.rs` lowered every actual as an
+lvalue.
+
+**Fix**. One funnel, `ident_route.rs` — `lookup_net_unshadowed`, `lvalue_binds_constant`,
+`bare_const_shadows_net`, `error_const_shadows_net` (the existing "resolves to a constant … shadows
+the net" text from one place; `lval_write_net` routes through it unchanged). The eleven readers take
+it: `packed.rs` `norm_offset_if_net` / `lsb_bitselect_net`, `arrays.rs` `lval_array_view`,
+`ports.rs` `wire_array_port`, `instance_array.rs`, `inline_task.rs` + `array_formal.rs`,
+`class_lower.rs` ×5, `classes.rs` ×2, `static_array_method.rs`, `dynarr.rs` `dyn_handle`,
+`strings.rs` `string_handle`. A read with a constant path takes it — a select folds the constant, a
+string localparam's method dispatches on the `StrUtf8` constant handle through one additive
+`inline_fn` arm — and a site with none refuses by name. The hierarchical-call lvalue is speculative
+at pass 7 (port directions are per instance and resolve later), so it is skipped EXACTLY when
+`lvalue_binds_constant`, this row's class, and every other actual is byte-identical.
+
+**Census** 45 designs, 18 moved: 7 silent-wrong → value, 3 false-loud → value (`top.sh(V[7:0])`,
+`top.bump(z,V)`, a repeated call `A=11 A=63`, all matching both oracles), 8 silent → loud where both
+oracles reject. The additive `inline_fn` `Str` arm also converts the pre-existing false loud on an
+UNSHADOWED `localparam string S; S.len()` to `L=2 S=ab C=1` on all three tools, while `K.sum()` and
+`K.size()` on a non-string constant stay byte-identical loud. 16 no-shadow controls and 16
+enum-label twins are byte-identical (the enum axis is a recorded split, untouched); 27 further
+census designs byte-identical; release versus debug 0 differences.
+
+**Recorded, not fixed**: an event control on a constant is loud in both spellings where the oracles
+never wake the process (closed in §4.5.524); `V.x` on a shadowed name reports the generic
+hierarchical text rather than the shadow sentence; the hand-rolled partial guards the census marked
+CLEAN or SPLIT (`arrays.rs whole_name_net`, `packed_elem_resid`, `array_geom`'s ascending arm,
+`foreach`) are unchanged.
+
+**Gates**: cli 7286, elaborate 65, clippy, fmt; `format_version` 33 unchanged. The batch review and
+the workspace gate are §4.5.524.
+
+#### 4.5.522 an index on a non-loop generate scope is refused, a loop scope needs one, and an instance array of a portless module runs (2026-09-21, branch it22) ✅
+
+**ROADMAP row**: §2 🆕 N, two cells (the row survives for its VCD `$scope`, `%m` and class-scope
+naming items).
+
+**Defect (PRE, both oracles agree unless marked)**. (a) `generate if (1) begin : gi int x = 3; end`
+read as `gi[0].x` printed `X=3` at exit 0 where iverilog and verilator both refuse — IEEE §27.5
+gives a conditional or `case` generate block no index, only a loop iteration has one (§27.4) — and
+the reverse spelling `gl.x` on a loop scope was accepted where both refuse. The `label[0]` spelling
+was introduced for loop iterations (§4.5.474) and the resolvers never asked which KIND of scope the
+label named. (b) `module ch; int q = 4; endmodule … ch w[1:0]();` was refused with ``instance array
+`w`: child `ch` has non-ANSI ports`` where both oracles print `Q=4 4` — an EMPTY port list was read
+as "non-ANSI".
+
+**Fix**. One home for the §27.4/§27.5 spelling rule, `gen_scope_name.rs` (`gen_seg_label`,
+`indexed_gen_singleton`, `singleton_scope_key`, `key_spells_indexed_singleton`, `gen_spelling_hint`,
+`error_hier_unresolved`): `lookup_net_scoped` declines a source-written `label[0]` on a singleton and
+`hier_resolve` gains the indexed-singleton arm and asks the shared key at every depth, so the four
+existing E3010 sites report with a hint naming the block and the spelling that works.
+`instance_array.rs` admits an empty port list (`PortList::None` and an empty non-ANSI list) and lets
+`.*` through on a portless child; per-element nets, overrides, hierarchical writes, `%m`, generate
+nesting and the OBS hier-tree / inst-paths match the ported twin byte for byte.
+
+**Census** 40 cells. 12 silent→loud on the spelling axis — read, write, nested singletons,
+`case`-generate, event control, array element, part-select, the unnamed `genblk1[0]`,
+cross-instance — each with both oracles refusing. 8 value cells on the portless lane (bare read,
+param override, hierarchical write, a scope-nested array, an array beside a scalar instance, `.*`).
+2 splits followed to iverilog + §27.5: `gi[0].P` (a localparam read; verilator answers `P=11`) and
+`$bits(gi[0].x)` (verilator `B=8` — it contradicts itself inside one construct, refusing `gi[0]` as
+a name and sizing it here). Every control byte-identical, including the bare `gi.x`, `gc.x`,
+`genblk1.x`, `gl[0].x` and `gl[1].x = 40` spellings and the one-trip loop.
+
+**Recorded, not fixed**: an instance array whose child has a NON-EMPTY non-ANSI header is still a
+false loud (its fix reads the port widths from the body `PortDecl`s, a separate slice; pinned by
+`nonempty_nonansi_child_array_stays_loud`); instance-array ELEMENT ORDER (vita elaborates the
+declared range left to right, so `w[1:0]` runs `w[1]` first — PRE-identical on the ANSI-ported twin,
+and the oracles do not agree with each other either); `--inst-paths` prints a singleton generate
+scope with its storage index where `%m` prints the bare label (PRE-identical); `gi.f()`, a
+hierarchical CALL into a generate scope, is a pre-existing false loud (`F=21` on both oracles); only
+the LEADING path segment gets the §27.4/§27.5 message, a deeper offender keeps the generic text
+(deliberate — `gen_spelling_hint` is pure and refuses to name a scope it would have to re-derive the
+committed walk to find); `gi[0].f()` reports the call lane's own text, not the spelling reason.
+
+**Gates**: cli 7268, elaborate+sim-engine 773, clippy, fmt; `format_version` 33 unchanged. The batch
+review and the workspace gate are §4.5.524.
+
+#### 4.5.521 a sign-extending copy net is read through with the caller's own write, in a callee body and in the process body alike (2026-09-21, branch it22) ✅
+
+**ROADMAP row**: §2 🆕 I ⓖ (the row survives for ⓐ, the same-delta read from another process, and
+its recorded splits).
+
+**Defect (PRE, both oracles agree unless marked)**. `logic signed [7:0] v; logic [15:0] c; assign
+c = v;` — after the process's own `v = 8'hA5`, a read of `c` inside a called task or function, in an
+in-bind actual, in a nested callee, in a static task, or IN THE PROCESS BODY ITSELF printed `xxxx`
+where iverilog and verilator print `ffa5`. `copied_source` admits equal widths only, so a
+sign-extending driver was never a copy net and no read of it was ever marked. The row's premise that
+the process-body twin was already right was false: PRE is `xxxx` there too.
+
+**Fix**. `alias::sign_extending_copies` admits a sign-extending driver to the READ alias only —
+`copy_nets`, the runtime rename set, is untouched, because an extension is not a bit move — and runs
+before the `copy_nets` loop so a same-width tail chains onto the root. `eval_core`'s `Signal` arm
+resizes to the copy's width by the SOURCE's sign and then stamps the copy's sign; at equal width
+this is §4.5.442's re-stamp verbatim. One shared predicate `alias::alias_read_needs_restamp`
+replaces the sign-only decline in both compiled lanes (`wprog` and `native_eval` decline only; no
+codegen change).
+
+**Oracle standing, measured not assumed**. iverilog is CONSISTENT for this class: it answers `ffa5`
+for every spelling of the same-delta read — a direct `$display(c)`, an assignment to a local, inside
+a task, a function, a nested task, a static task, an in-bind actual, and with two reads or a re-write
+between them. Its vvp netlist says why (`L .extend/s 16, v`, a functor that propagates on the
+store), and for the zero-extending copy it builds `.concat` and for the truncating one a select,
+neither of which propagates. verilator SELF-CONTRADICTS here and is not an oracle: the SAME first
+read of `c` answers `ffa5` when the design reads `c` once and `0000` when a second read exists later
+— a later read changing what an earlier one returns. Where they split the ruling is iverilog's; the
+14 two-oracle cells agree with it anyway.
+
+**Census** 37 designs (32 targeted + 5 controls): 19 moved — 14 two-oracle silent→value and 5
+iverilog-consistent splits including the row's own recorded t0 read — and 0 regressions. Controls
+hold: the same-width copy, the `#1`-settled read, and a design with no write at all. Zero-extending,
+truncating and part-select-rhs copies stay on PRE's value (iverilog `zzxx` / `xx`, verilator values)
+and a mixed-caller population keeps §4.5.438's pin. Examples' stdout and VCD are byte-identical
+PRE vs POST; a 109-design regression sweep over the earlier batteries moves exactly the two row I ⓖ
+cells. Mutation check: dropping the width half of the decline makes the compiled lanes answer
+`000000a5` where the interpreter answers `0000ffa5` — pinned.
+
+**Recorded, not fixed**: another process's read in the same delta (row I ⓐ, held on purpose — a
+store-side forward breaks picorv32, UDP and keccak parity); a `force`d copy is not forwarded
+(`copy_alias` excludes a forced net); a 2-state destination is E3018 at elaborate, so row I ⓔ's
+guard is dead.
+
+**Gates**: sim-engine 708, cli 7231, clippy, fmt; `format_version` 33 unchanged. A backend flip run
+was owed at the batch end because the native decline predicate moved, and is recorded in §4.5.524.
+
+#### 4.5.520 a parameter name declared twice in one module or interface scope is refused (2026-09-21, branch it22) ✅
+
+**ROADMAP row**: §2 🆕 L ⓢ (closed; the ⓢ clause is removed from the row).
+
+**Defect (PRE, both oracles agree)**. `module top #(parameter int P = 3); parameter int P = 7;`
+printed `P=7` at exit 0 where iverilog (`'P' has already been declared in this scope`) and verilator
+(`Duplicate declaration of signal: 'P'`) both reject the design (IEEE 1800-2017 §6.20.1 / §23.2.3).
+
+**Fix**. One new funnel, `param_dup.rs` (`scope_param_decls` + `check_duplicate_param_decls`),
+called at the top of `bind_params` — the entry the module lane and the interface window already
+share. The rule is "declared twice in THIS scope" over the ordered walk header-list ++ body
+`Param`s, which also covers two declarations inside one ANSI header and the non-ANSI form
+(`module top(a); parameter P = 3; parameter P = 7;`), both rejected by both oracles. E3009 on the
+second declaration with a note at the first, deduped on the NAME SPAN so an instantiated-twice
+module reports once and a duplicated `parameter type` reports under the user's name, not per `T$w` /
+`T$s` carrier.
+
+**Census** 25 cells: 14 silent→loud (parameter, localparam, interface, a different type, non-ANSI,
+with an override, two declarations in one header, a type parameter, two duplicated names in one
+module, a module instantiated twice — one report, not two) and 10 controls byte-identical
+(generate-block localparam §27.3, another module's header name, `import pk::*` and `$unit` shadows,
+overrides, array parameters, a non-duplicated `parameter type`). Parameter-versus-net is already
+loud through a different funnel and untouched.
+
+**Residue**: a PACKAGE body declaring one parameter twice was still accepted — `bind_params` never
+runs for a package — and was closed in the review round (§4.5.524 D) along with the generate-scope
+and transparent-region regions.
+
+**Gates**: cli 7226, elaborate 65, clippy, fmt; `format_version` 33 unchanged. The batch review and
+the workspace gate are §4.5.524.
+
+#### 4.5.519 `string'(e)` casts an integral to a string, and every §6.16 integral-to-string conversion drops NUL bytes and reads unknown bits as 0 (format_version 33) (2026-09-21, branch it22) ✅
+
+**ROADMAP row**: §2 row 5 (closed; the row is deleted from the start-order table).
+
+**Defect (PRE, both oracles agree unless marked)**. `s = string'(24'h610062);` was a parse error —
+``E2002 expected expression, found keyword 'string'``, three diagnostics per occurrence — where both
+oracles print `len=2 s=ab`. Beside it, the IMPLICIT conversion vita already performed on a
+string-typed assignment kept the NUL byte and read a z or x bit as 1: `s = 24'h610062` printed
+`a\0b` with length 3 (both oracles `ab`, 2), `24'h616200` printed `ab\0`, and an all-unknown low
+byte became `0xF0` instead of being dropped.
+
+**Fix**. The cast rides `CastTarget::Named` under the reserved keyword segment `string`
+(`STRING_CAST_NAME`; a keyword cannot collide with a user type), so the hdl-ast schema and every
+`.vu` are untouched, and one predicate `CastTarget::is_string_cast` serves the four consumers. The
+result's length is data-dependent, so no IR-0 composition expresses it: `SysFuncId::StrCast` is
+appended to the frozen sim-ir enum — `format_version` 32 → 33, with the `header.rs` comment, the
+SimIr schema hash, the canonical string, the RON goldens and the OBS pin re-pinned. One engine
+funnel, `Value::to_sv_string_bytes` (bytes MSB-first, `val & !unk`, NUL bytes removed, identity on a
+string), now answers the cast AND the five §6.16 crossings — module string assign, string dyn/queue
+element store, frame-local string write, `bind_formal`, the `&self` string-formal actual — plus
+`StrCmp`'s operands. The PACKED-ASCII surface (`%s`, `$sformatf`, `$fopen`, `$sscanf`, `str_putc`)
+is deliberately unchanged and negatively pinned: `$display("%s", 24'h610062)` still prints `a b` on
+all three tools.
+
+**Census** 50 cells: 42 match, 4 recorded splits, 4 loud. The implicit half moves the interior-NUL,
+trailing-NUL, unknown-bit, queue `push_back`, string-formal and `==` cells from `[a\0b] 3` to
+`[ab] 2` — iverilog and verilator alike where iverilog can run the cell, verilator alone where the
+spelling needs `getc` or `==` on a string. The cast half is loud→value across widths (7, 8, 16, 24,
+64, 72 bits), leading / trailing / interior / all-NUL operands, x and z operands, a `reg` operand, a
+concat operand, an enum and a packed-struct operand, identity on a string and on a literal, a nested
+cast, a concat containing the cast, a string formal, `==`, `inside`, `.compare()` and a `case`
+scrutinee. Sites the census did not list and the review measured clean: an unpacked-array element
+store, a function return slot, a ternary rhs, a task output-formal write, a dynamic-array element
+and a string formal with a default. Staged `vcmp → velab → vrun` is byte-identical to one-shot, and
+a format-32 `.velab` under the new binary is loud `E9001`.
+
+**Recorded splits** (vita follows verilator and §6.16): `%s` and a bare `$display` of an UNSTORED
+`string'(e)` — iverilog formats the packed operand (`[a b]`, `fmt < abc> l=6`) where verilator and
+vita format the string. **Loud, no agreeing oracle**: `string'(real)` (iverilog "sorry: This cast
+operation is not yet supported", verilator renders raw bytes); `string'(x).len()` (both oracles
+refuse the syntax); `localparam string S = string'(…)` (`const_fn.rs` declines `is_string_cast`
+explicitly — verilator folds it, iverilog does not, so correct-or-loud is honoured).
+
+**Residues** closed in the review round: the MIXED `{string, integral}` concat and the
+string-scrutinee `case` with an integral item (§4.5.524 C). Still open and recorded in §2: the
+STRING KEY of an associative array from an integral index is not §6.16-converted (verilator-only
+oracle).
+
+**Gates**: hdl-parser 74, cli 7214, sim-engine/elaborate/sim-ir/artifact/hdl-ast 808, clippy, fmt.
+The batch review and the workspace gate are §4.5.524 (owner directive: six §2 slices, one review).
 
 #### 4.5.518 a `function` or `task` DECLARED in an interface body runs, and the interface window installs the module lane's declaration-order and import-collision gates (2026-09-20, branch it21) ✅
 

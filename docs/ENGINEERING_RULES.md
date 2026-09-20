@@ -753,6 +753,8 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Treat a first-activation guard as a different semantics from a t0 initialization: enumerate every input written between t0 and the first activation (formals, module nets) and decline initializers that read them, and make the decline per-declarator except where a declined initializer READS a hoisted one — that read is the only shape where hoisting half the frame yields a third answer | A static initializer reading a formal binding the first call's argument, and a frame-wide decline dropping the retention of every admitted sibling |
 | Fill a set that a sorted lowering pass READS before the pass starts, from the AST, not per body as each body lowers | The callee sorting before its caller seeing an empty set, emitting the plain shape and panicking in the engine |
 | When a sidecar puts ExprIds back into a position a gate's comment says holds none, census every arena walker that enumerates that position (the tier-3 `frames` gate, wprog, probe) in the same slice | A stale "is not an ExprId" comment turning a bare-store seam into a panic |
+| A membership predicate keys on the POSITIVE set it means, never on absence from a sibling set: an item in NEITHER set passes a negative test. When the positive set already exists for that hazard, use it — the sibling that documents the hazard is the evidence | `singleton_scope_key` deciding "singleton generate scope" as `!gen_loop_labels.contains`, so a one-element INSTANCE ARRAY label — in neither label set — was committed `u` → `u[0]` and `u.q` printed a value both oracles reject (§4.5.524 A) |
+| Decide a LIST-level rule on the list after sorting its terms, never per term: a per-term refusal fires before the list knows whether a live term remains. Drop the dead term and keep the rest, and refuse only when nothing live is left | `@(V or W)` with a constant `V` and a live net `W` refusing the whole process, where the sibling EDGE lane already had the rule and its comment stated it (§4.5.524 T1) |
 
 ### 5.6 Domain reference
 
@@ -988,6 +990,7 @@ move, or an anchor no shared code can shift.
 | Ask whether another lane of the tool already answers the question before reaching for an external oracle; a self-contradiction proves a defect and needs no third party | A defect that one binary demonstrates against itself going unmeasured |
 | Name the missing capability in a loud pin's docstring, with the measured expected values from both oracles | A pin that says only "this is loud" telling a future reader nothing about whether loud is still right |
 | Open and read the cited text when a comment calls another implementation buggy | The standard and the other tool being on the same side, with vita the outlier |
+| Disqualify an oracle that answers the SAME first read differently depending on whether a LATER read exists; ask it once with the second read present and once without, in two designs with identical bits, before recording an axis as a split | verilator answering a same-delta copy-net read `ffa5` alone and `0000` beside a second read, which would have parked 5 iverilog-consistent cells as unarbitrable (§4.5.521) |
 
 ### 7.4 The mutation battery
 

@@ -44,7 +44,7 @@ diagnostic code carries three interchangeable spellings — the mnemonic
 | A framed subroutine body cannot perform a statement-level side effect | loud refusal | §2.2 |
 | `$finish` / `$stop` reached inside a subroutine body | loud refusal | §2.3 |
 | A default argument whose names bind differently at the call site | loud refusal | §2.4 |
-| The bare label of a `for`-generate block | loud refusal | §2.5 |
+| The bare label of a `for`-generate block, and an INDEX on any other generate block | loud refusal | §2.5 |
 | A subroutine declared inside a generate block, called from outside it | loud refusal | §2.5 |
 | A real value where the language requires an integral constant | loud refusal | §2.6 |
 | Side-effecting system functions in re-evaluated expression positions | loud refusal | §2.7 |
@@ -505,10 +505,21 @@ u.gl[0].x       // correct
 u.gl.x          // VITA-E3010, as in Icarus Verilog
 ```
 
-vitamin also accepts the redundant `u.g[0].x` on a singleton block. That spelling is a
-vitamin extension — Icarus Verilog and Verilator both reject it — so write the bare label
-if the design has to build elsewhere. A missing leaf inside a resolved scope, and a scope
-that does not exist, both stay loud.
+The rule runs both ways. An index on a block that is NOT a generate-`for` — a
+conditional, a `case` or a bare labelled block — is refused with the same code, because
+§27.5 gives it no index:
+
+```systemverilog
+u.gi[0].x       // VITA-E3010, as in Icarus Verilog and Verilator
+u.gi.x          // correct
+```
+
+Both refusals carry a hint naming the block and the spelling that works, and they apply at
+every depth, to reads and writes, to array elements and part-selects, inside an event
+control, and to an unnamed block under its `genblk<N>` name. A missing leaf inside a
+resolved scope, and a scope that does not exist, both stay loud. Two spellings are a
+reference-tool split that vitamin refuses with Icarus Verilog: a `localparam` read
+(`gi[0].P`) and `$bits(gi[0].x)`, both of which Verilator answers.
 
 A `function` or `task` declared inside a generate block (IEEE 1800 §27.3) is supported,
 and it belongs to that block's scope. Only the taken branch of a generate-`if` declares
@@ -710,9 +721,9 @@ to expect them.
 | Strings | a string as a port or with dimensions; a block-scope declaration initializer; a runtime index into a string array; a non-blocking write to a string element; a string inside a concatenation lvalue; a non-constant replication count; an unknown method or a chained call on a non-string result |
 | Hierarchical references | element and part-select writes; reads and writes of a named event, a dynamic handle, or a whole unpacked array; multi-dimensional packed part-selects; ascending indexed part-selects; a parameter select needing a declared width; a hierarchical name in an event control; a hierarchical `force` / `release` of a select; a hierarchical call with named arguments |
 | Packages | anything but parameters, typedefs, functions, tasks and plain variables in a package body; net declarations; dynamic storage; an `import` inside a `generate`; an import that collides with a local declaration; a part-select of a package array element |
-| Parameters and overrides | a real, non-constant, or x/z-bearing override; an array-element-select override of an untyped parameter; array-parameter element-count and width mismatches; `parameter type` defaults that are not integral (a multi-dimensional packed vector is integral and supported); an explicit `import p::PT;` of a package `parameter type`; a select into a queue / dynamic / associative-array element whose type has two or more packed dimensions; `defparam` onto a type parameter; a class-handle parameter; an overridable array `parameter` in a module body; an override expression whose top operator takes its width from the context |
-| Statements and events | single-bit level event control; a non-LSB edge bit-select; a complex event term; an `iff` guard on a multi-term event control; a multi-term in-body edge wait; reading or assigning a named event; a `disable` that is not a lexically enclosing named block; timing controls inside a `final` block; `assign` / `deassign` / `force` / `release` on a select; a runtime `repeat(n)` in an intra-assignment control; a constant shadowing a net as an lvalue; a duplicate declaration |
-| Instances | `.*` on an instance array; an instance array without exactly one `[msb:lsb]` range, or with a non-constant range; a non-ANSI child; a non-identifier port connection; a width mismatch; recursive module instantiation; no top module, or an unknown `--top` |
+| Parameters and overrides | the same parameter name declared twice in one scope (the parameter port list plus the body, a labelled generate block, a package body, or a transparent `generate … endgenerate` region); a real, non-constant, or x/z-bearing override; an array-element-select override of an untyped parameter; array-parameter element-count and width mismatches; `parameter type` defaults that are not integral (a multi-dimensional packed vector is integral and supported); an explicit `import p::PT;` of a package `parameter type`; a select into a queue / dynamic / associative-array element whose type has two or more packed dimensions; `defparam` onto a type parameter; a class-handle parameter; an overridable array `parameter` in a module body; an override expression whose top operator takes its width from the context |
+| Statements and events | single-bit level event control (even beside a live term); a non-LSB edge bit-select; a complex event term; an `iff` guard on a multi-term event control; a multi-term in-body edge wait; reading or assigning a named event; a `disable` that is not a lexically enclosing named block; timing controls inside a `final` block; `assign` / `deassign` / `force` / `release` on a select; a runtime `repeat(n)` in an intra-assignment control; a constant shadowing a net as an lvalue, or standing alone as a process-header LEVEL event term; `@(pkg::CONST)`; a duplicate declaration |
+| Instances | an instance array without exactly one `[msb:lsb]` range, or with a non-constant range; a child with a non-empty NON-ANSI header (a PORTLESS child is supported, `.*` included); a non-identifier port connection; a width mismatch; recursive module instantiation; no top module, or an unknown `--top` |
 
 ---
 
@@ -734,9 +745,13 @@ matches the reference tools or refuses loudly.
 | `$random` or `$time` inside a function body reached from a continuous assign: `wire [7:0] m = f(8'd5);` where `f` adds `$random` | re-draws on every settle pass, so `m` changes across passes | both tools freeze the value | Assign it once in an `initial` or `always` block rather than a continuous assign |
 | `%p` of an associative array with a negative integer key | signed-order iteration at 64-bit key width: `K='{'hffffffffffffffff:'h7, 'h2:'h8}` | Verilator sorts the rendered hex and prints the declared `int` width | Use non-negative keys; every workload-corpus design does, and they agree exactly |
 | A signal declared as a `clocking` output (`clocking cb; output q; endclocking`) | driven to `x`, or frozen | Verilator: the expected sequence | Avoid `clocking` output declarations. Icarus Verilog 13 cannot parse `clocking`, so only one reference tool can be consulted here |
-| VCD `$scope` naming of generate blocks | `gi[0]` / `genblk1[0]` | Icarus Verilog: `begin gi` / `begin genblk1` | Cosmetic in the waveform tree; name the generate block explicitly |
+| VCD `$scope` typing of generate blocks | `module gi` / `module gl[0]` | Icarus Verilog: `begin gi` / `begin gl[0]` | Cosmetic in the waveform tree; the NAMES agree (a singleton is `gi`, a loop iteration `gl[0]`), only the scope type differs |
 | `%m` inside a concurrent `assert property` action block | omits the assertion label (`top.nb`) | Verilator: `top.nb.ap` | Print the label yourself |
 | An enum label that shadows an outer array name | reads the array; a `foreach` over the shadowed name yields `i=0` | Verilator reads the label and yields `i=31`; Icarus Verilog agrees with vitamin | Rename to disambiguate |
+| A string-KEYED associative array indexed by an INTEGRAL (`int m[string]; m[24'h610062] = 9;`) | keeps the NUL byte, so the key differs from `"ab"` and the array has two entries | Verilator: one entry (Icarus Verilog cannot declare the type) | Index with a `string'(…)` cast, which converts per §6.16 |
+| A process HEADER level event term on a name that cannot change (`always @(K)` on a `localparam`) | refused when it stands alone, dropped when a live term sits beside it — it never fires | both tools fire such a process once at time 0 | Nothing depends on the t0 fire in practice; drive a real net if it does |
+| An instance array's element ORDER (`ch w[1:0]();`) | elaborates the declared range left to right, so `w[1]` runs first | Icarus Verilog and Verilator both run `w[0]` first for `[1:0]`, and disagree with each other on `[0:1]` | Do not depend on element order for same-time-step side effects |
+| A duplicate parameter, or a duplicate variable, that no elaborated scope reaches | accepted: a module instantiated only under `generate if (0)`, a `genvar` against a region `localparam`, and a duplicate variable in a named block | both tools reject the design | — |
 
 One construct answers differently depending on a detail that should not matter: a
 `$finish` reached inside a subroutine body is a fatal at exit 1 when the enclosing
@@ -761,6 +776,10 @@ follows one and says which.
 | A non-standard string escape such as `"\r"` | `0x0D`, with `W-ELAB-STR-ESCAPE` / `VITA-W3059` naming both readings and suggesting `\015` or `\x0D` | `0x0D` in Verilator; the letter `r` in Icarus Verilog and Xcelium |
 | `%m` inside a subroutine declared in a generate block | `t.u.g.show` — the block scope once, matching Icarus Verilog | Verilator repeats the label: `t.u.g.g.show` |
 | A bit or part select on a base §11.5.1 disallows | accepted, with `W-PARSE-SELECT-BASE` / `VITA-W2004` | Icarus Verilog rejects all four forms; Verilator rejects two and accepts two |
+| `%s` or a bare `$display` of an UNSTORED `string'(e)` | formats the STRING (`[ab]`), matching Verilator and §6.16 | Icarus Verilog formats the packed operand (`[a b]`). Storing the cast first makes all three agree |
+| `gi[0].P` and `$bits(gi[0].x)` on a singleton generate block | refused, with Icarus Verilog and §27.5 | Verilator answers both — and refuses `gi[0]` as a name elsewhere in the same construct |
+| A free-standing unlabelled `begin … end` inside a `generate` region | its declarations belong to the region, so a duplicate `localparam` is refused, with Icarus Verilog | Verilator treats the block as a §27.6 scope and runs it |
+| `always @*` whose body reads only a constant | never triggers, with Icarus Verilog (which also warns) | Verilator executes it once |
 
 ---
 

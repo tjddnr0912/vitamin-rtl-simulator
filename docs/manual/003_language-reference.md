@@ -108,8 +108,8 @@ it ANSI, a bare identifier makes it non-ANSI, and `Ident Ident` or
 | Empty named connection `.p()` | Supported | Treated as unconnected. |
 | `.name` shorthand | Supported | Expands to `.name(name)`. The same-named signal must be declared: a missing one is a hard error, never an implicit net. |
 | `.*` wildcard | Supported | Every unlisted port connects to the same-named signal in the instantiating scope. A same-named constant, or a missing name, is Loud. |
-| Instance array `dff u[3:0] (…)` | Partial | The child must have ANSI ports and exactly one constant `[msb:lsb]` range; the cap is 4096 elements. A connection must be a plain identifier of the port width or of the whole array width. Interface-typed ports on the child are Loud. |
-| `.*` on an instance array | Loud | `VITA-E3009` |
+| Instance array `dff u[3:0] (…)` | Partial | The child must have ANSI ports — or NO ports at all, `module ch;` and `module ch();` alike — and exactly one constant `[msb:lsb]` range; the cap is 4096 elements. A connection must be a plain identifier of the port width or of the whole array width. A child with a non-empty NON-ANSI header, and interface-typed ports on the child, are Loud. |
+| `.*` on an instance array | Partial | Supported when the child is portless; otherwise `VITA-E3009`. |
 | Recursive module instantiation | Loud | `VITA-E3009`, naming the cycle. |
 | Unresolvable module | Loud | `E-ELAB-UNRESOLVED-INSTANCE` / `VITA-E3003` |
 | Incompatible port binding | Loud | `E-ELAB-PORT-MISMATCH` / `VITA-E3002` |
@@ -136,6 +136,7 @@ it ANSI, a bare identifier makes it non-ANSI, and `Ident Ident` or
 |---|---|---|
 | `parameter` in a body or an ANSI `#( … )` header | Supported | |
 | `localparam` | Supported | |
+| The same parameter name declared twice in one scope | Loud | `VITA-E3009` with a note at the first declaration (IEEE 1800 §6.20.1 / §23.2.3). One scope means the parameter port list plus the module or interface body, a labelled generate block (§27.3), a package body (§26.2), or a transparent `generate … endgenerate` region, whose items belong to the enclosing scope (§27.2). One `localparam` per generate-loop ITERATION is legal and unaffected, and so is a block that shadows an outer name. |
 | `specparam` | Partial | Parsed as a `localparam`, and not restricted to a `specify` block. |
 | Comma list sharing one type prefix (`localparam [3:0] A = 1, B = 2;`) | Supported | |
 | Positional override `#(8)` | Supported | |
@@ -166,7 +167,7 @@ width wins, and so does an override's.
 | `genvar i, j;` | Supported | |
 | `for (genvar i = 0; i < 4; i++)` header declaration | Supported | IEEE 1800 §27.4. |
 | Generate `if` / `case` / `for`, labelled `begin : name` | Supported | |
-| Hierarchical reference into a generate scope (`g[0].z`, `cg.c`) | Supported | |
+| Hierarchical reference into a generate scope (`g[0].z`, `cg.c`) | Supported | The spelling follows the block kind. A generate-`for` block is an ARRAY (IEEE 1800 §27.4), so an index is required: `gl[0].x`, and the bare `gl.x` is Loud. A conditional, `case` or bare labelled block is a SINGLETON (§27.5), so it has no index: `gi.x`, and `gi[0].x` is Loud. Both refusals are `VITA-E3010` with a hint naming the block and the spelling that works, and both reference tools agree with them. An unnamed block follows the same rule under its `genblk<N>` name. |
 | `function` / `task` inside `generate` | Supported | IEEE 1800 §27.3. The routine belongs to the block's scope: only the taken branch of a generate-`if` declares one, a generate-`for` body declares one per iteration (its own genvar value), a bare call resolves innermost-first (so it shadows a same-named module routine) and `%m` names the declaring block (`t.u.g.show`). |
 | Calling a generate-scoped routine from OUTSIDE its block | Loud | Not visible by bare name (`VITA-E3010` `call to undeclared function`/`task`); a hierarchical `u.g.f(x)` is `VITA-E3009` `unsupported hierarchical function call`. |
 | Generate-scoped routine in a constant expression | Loud | `localparam W = f(N)` inside the block is `VITA-E3009` `… value is not a constant` — the elaborate-time const-function interpreter reads module-body declarations only. |
@@ -404,13 +405,24 @@ The `ato*` scan takes only leading digits and underscores per IEEE 1800 §6.16.9
 no whitespace skipping, no sign, and `_` is skipped rather than terminating, so
 `" 3".atoi()` and `"-7".atoi()` are both `0` and `"1_0".atoi()` is `10`.
 
+An integral value crossing into the `string` domain — by the `string'(e)` cast,
+by assignment to a `string` variable or element, by a `string` formal's actual,
+as a part of a `string` concatenation, or as an operand of a string comparison —
+is converted per IEEE 1800 §6.16: bytes most-significant first, unknown bits read
+as 0, and NUL bytes dropped. `string'(24'h610062)` and `s = 24'h610062;` are both
+`"ab"` with length 2, and `string'(0)` is the empty string. The PACKED-ASCII
+surface is separate and unchanged: `$display("%s", …)`, `$sformatf`, `$fopen`,
+`$sscanf` and `putc` see the packed bytes, so `$display("%s", 24'h610062)` still
+prints `a b`.
+
 Loud on strings (`VITA-E3009` unless noted): a `string` port, a `string`
 variable with packed or unpacked dimensions, a declaration initializer inside a
 block (assign it in an `initial` block), a runtime index into a string array, a
 non-blocking or delayed write to a string element, a string inside a
 concatenation lvalue, a non-constant replication count, a real value as a
-concatenation element, an unknown method or arity, and the `string'(24'h610062)`
-cast (`VITA-E2002`).
+concatenation element, an unknown method or arity, `string'(real)`,
+`string'(e).len()` on an unstored cast, and `localparam string S = string'(…)`
+(the cast has no constant-fold arm).
 
 ### 5.5 Type and array query functions
 
@@ -672,6 +684,7 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | `signed'(e)` / `unsigned'(e)` | Supported | The width is preserved; only the sign interpretation flips. Loud on a real operand. |
 | `N'(e)` / `(W+1)'(e)` size cast | Supported | The result is N bits and inherits the operand's signedness. The width must be a positive constant expression. |
 | `name'(e)` typedef cast | Supported | Numeric typedefs and packed struct or union types. |
+| `string'(e)` | Supported | Converts an integral to a string per IEEE 1800 §6.16 (see §5.4): bytes most-significant first, unknown bits as 0, NUL bytes dropped. Identity on a value that is already a string. A `real` operand is Loud, and the cast has no constant-fold arm, so it cannot initialise a `localparam`. |
 | `Base'(derived)` class up-cast | Supported | Identity on the handle; only the static type narrows, and virtual dispatch reads the dynamic class. A down-cast and an unrelated cast are Loud. |
 | Real to integer wider than 64 bits | Loud | `VITA-E3009` |
 | `$cast(dest, source)` | Partial | Supported as the direct right side of a blocking assignment; elsewhere Loud. The destination must be a plain integral variable. |
@@ -701,7 +714,10 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 | `edge` event control | Absent | `VITA-E2002` |
 | In-body `@(*)` | Supported | Infers the read set of the statement it controls. An empty read set warns that it can never wake. |
 | In-body multi-term edge wait | Loud | `VITA-E3009` — move it to a block header or split the wait. |
-| Single-bit level (non-edge) event control | Loud | `VITA-E3009` — use `posedge`/`negedge`, or the whole signal. |
+| Single-bit level (non-edge) event control | Loud | `VITA-E3009` — use `posedge`/`negedge`, or the whole signal. The refusal fires even when a live term sits beside it in the same list. |
+| Edge term on a name that cannot change (a parameter, `localparam`, genvar or enum label) | Supported | The term is dropped: it can never fire. A process whose every term is dropped simply never wakes, which is what both reference tools do. In a mixed list the live terms still arm. |
+| Level term on a constant, in a process HEADER | Loud | `VITA-E3009` ``a constant cannot wake a process`` — but only when no live term remains. `always @(V or W)` with a constant `V` and a net `W` drops `V` and arms on `W`. Both reference tools instead fire such a process ONCE at time 0; that shape has no representation here. |
+| Level term on a constant, IN-BODY (`@(V);`) | Supported | Never wakes, matching both reference tools. |
 | Edge event control on a non-LSB bit select | Loud | `VITA-E3009` — a constant LSB bit select is the supported shape. |
 
 ## 9. Statements
