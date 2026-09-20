@@ -449,13 +449,51 @@ impl Elaborator<'_> {
             }
         };
         let any_edge = force_edge || list.iter().any(|ev| !matches!(ev.edge, ast::Edge::NoEdge));
-        let edges = list
-            .iter()
-            .map(|ev| ir::EdgeTerm {
-                net: self.sens_event_net(&ev.expr, any_edge),
-                kind: map_edge(ev.edge),
-            })
-            .collect();
+        // §9.4.2, in two passes because the LEVEL rule is a property of the LIST, not
+        // of a term (see below).
+        //
+        // Pass 1 sorts the terms. An EDGE term on a CONSTANT is dropped outright —
+        // [`Self::event_term_never_wakes`], `armed_before_t0 = true` because this is
+        // the process-header lane. A NON-EDGE term on a constant is held aside
+        // ([`Self::header_level_term_is_const`]); everything else is LIVE.
+        let mut live: Vec<&ast::EventExpr> = Vec::new();
+        let mut const_level: Vec<(&ast::EventExpr, &str, ast::Span)> = Vec::new();
+        for ev in list {
+            if self.event_term_never_wakes(ev, /* armed_before_t0 = */ true) {
+                continue;
+            }
+            match self.header_level_term_is_const(ev) {
+                Some((name, at)) => const_level.push((ev, name, at)),
+                None => live.push(ev),
+            }
+        }
+        // Pass 2. A constant LEVEL term is only a problem when it is the WHOLE
+        // sensitivity: alone it decides that the process fires once at t0 and never
+        // again, a shape this subset cannot build, so it is refused. Beside a LIVE
+        // term it decides nothing the live term does not already decide — drop it and
+        // arm the rest, exactly as the EDGE lane does, or the refusal swallows the
+        // live sibling (MEASURED: `generate … localparam int V = 99; always @(V or W)`
+        // with `W` a real net was refused whole where both oracles print `HDR at 0` /
+        // `HDR at 1` / `DONE`; the t0 line is the recorded level-constant gap, the
+        // `HDR at 1` one is this defect).
+        let mut edges = Vec::new();
+        if live.is_empty() {
+            for (ev, name, at) in const_level {
+                self.error_header_level_const(name, at);
+                edges.push(ir::EdgeTerm {
+                    net: POISON_NET,
+                    kind: map_edge(ev.edge),
+                });
+            }
+        } else {
+            for ev in live {
+                let net = self.sens_event_net(&ev.expr, any_edge);
+                edges.push(ir::EdgeTerm {
+                    net,
+                    kind: map_edge(ev.edge),
+                });
+            }
+        }
         ir::Sensitivity {
             kind: if any_edge {
                 ir::SensKind::Edge
@@ -464,6 +502,137 @@ impl Elaborator<'_> {
             },
             edges,
         }
+    }
+
+    /// Is this a PROCESS-HEADER NON-EDGE term whose BARE head binds a constant?
+    /// `Some((name, span))` when it is — the two facts
+    /// [`Self::error_header_level_const`] needs. PURE: the caller decides whether to
+    /// refuse, because that is a property of the whole LIST (a constant level term
+    /// beside a live one is dropped, not refused).
+    ///
+    /// ⚠️ BARE HEAD ONLY, parentheses pierced, no select. `@(K[0] or clk)` keeps the
+    /// pre-existing "single-bit level (non-edge) event control is not supported"
+    /// refusal, which is a different (recorded) gap — both oracles run it.
+    fn header_level_term_is_const<'a>(
+        &self,
+        ev: &'a ast::EventExpr,
+    ) -> Option<(&'a str, ast::Span)> {
+        if !matches!(ev.edge, ast::Edge::NoEdge) {
+            return None;
+        }
+        let (name, at) = Self::event_bare_head(&ev.expr)?;
+        self.bare_name_binds_constant(name, at)
+            .then_some((name, at))
+    }
+
+    /// Refuse a header LEVEL term that binds a constant and has no live sibling,
+    /// saying which of the two constants it is.
+    ///
+    /// `event_term_never_wakes` deliberately answers `false` here — a header level
+    /// term on a constant fires ONCE at time 0 in both oracles, which this subset
+    /// has no shape for — and the UNSHADOWED spelling was already loud through
+    /// `resolve_net`. The SHADOWED one was not: `lookup_net_scoped` walks `symbols`
+    /// alone, so `generate if (1) begin : g localparam int V = 2; always @(V) …`
+    /// armed the OUTER net and fired again when it changed (MEASURED `HDR fired at
+    /// 0` + `HDR fired at 1`, where iverilog 13.0 and verilator 5.052 both print
+    /// `HDR fired at 0` then `DONE`). One IEEE question was answered loud in one
+    /// spelling and silently wrong in its shadow twin; this is the parity.
+    ///
+    /// The two messages are the §2 🆕 O pair: `error_const_shadows_net` when a net
+    /// of the same name is in scope (the reader must know WHICH object vita took),
+    /// and the `@(pkg::CONST)` arm's "a constant cannot wake a process" sentence
+    /// otherwise — replacing `resolve_net`'s `E3010 undeclared net/variable`, which
+    /// was a false statement about the program (`localparam int K = 99;` IS a
+    /// declaration).
+    ///
+    /// ⚠️ ONLY when the term is the WHOLE sensitivity — see the two-pass loop in
+    /// `classify_event_list`. Beside a LIVE term the constant is dropped instead,
+    /// or the refusal swallows a sibling that does wake the process.
+    fn error_header_level_const(&mut self, name: &str, at: ast::Span) {
+        if self.bare_const_shadows_net(name, at) {
+            self.error_const_shadows_net(
+                name,
+                &format!(
+                    "a constant cannot wake a process, so the level event control \
+                     `@({name})` has nothing to sense here"
+                ),
+            );
+        } else {
+            self.error(
+                MsgCode::ElabUnsupported,
+                &format!(
+                    "a level event control `@({name})` must name a net or variable: `{name}` \
+                     is a constant (parameter / localparam / genvar / enum label) and a \
+                     constant cannot wake a process (an event control waits for a CHANGE). \
+                     `posedge`/`negedge` on a constant is accepted and simply never fires"
+                ),
+            );
+        }
+    }
+
+    /// The BARE single-segment name at an event term's head, with its span —
+    /// parentheses pierced, a select NOT (see `header_level_term_is_const`).
+    fn event_bare_head(e: &ast::Expr) -> Option<(&str, ast::Span)> {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => Self::event_bare_head(inner),
+            ast::ExprKind::Ident(path) => match path.segments.as_slice() {
+                [seg] => Some((seg.name.as_str(), path.span)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Can this event-control term NEVER wake its process, because the value it
+    /// names can never change? That is "its head binds a CONSTANT" — a parameter /
+    /// localparam / genvar / enum label, selected or not — with ONE measured
+    /// exception, `armed_before_t0`.
+    ///
+    /// IEEE 1800 §9.4.2: an event control waits for a CHANGE in the expression. A
+    /// constant has none, so an EDGE term on one fires never: MEASURED, iverilog
+    /// 13.0 and verilator 5.052 both print only `DONE` for `always @(posedge K[0])`,
+    /// `always @(posedge K)`, `always @(negedge K)` and for the in-body
+    /// `initial begin @(posedge K); $display("NEVER"); end`. vita had no constant
+    /// path here at all: the bit-select arm below refused `@(posedge K[0])` as a
+    /// non-LSB select (E3009, because `lsb_bitselect_net` declines a name that is
+    /// not a net) and the bare-ident arm sent `@(posedge K)` to `resolve_net` as an
+    /// undeclared net (E3010). Routing the SHADOWED spelling through
+    /// `lookup_net_unshadowed` turned that pre-existing FALSE LOUD into a REGRESSION
+    /// on a design that had run (`generate … localparam int V = 99;` shadowing
+    /// `logic [7:0] V`), so the close is the constant path itself, which retires the
+    /// shadowed cell and both unshadowed twins at once.
+    ///
+    /// ⚠️ `armed_before_t0` — a PROCESS-HEADER sensitivity (`always @(…)`) is armed
+    /// before the time-zero settle, and a NON-EDGE term there fires ONCE at time 0
+    /// even on a constant: MEASURED `always @(K) $display("EDGE at %0t", $time)` →
+    /// `EDGE at 0` in BOTH oracles, and `always @(K or clk)` → `EDGE at 0` then
+    /// `EDGE at 1`. The IN-BODY `@(K)` is reached after that settle and fires never
+    /// (both oracles print `DONE` alone), which is why the flag is a parameter and
+    /// not a property of the expression. A header non-edge constant term therefore
+    /// keeps whatever it does today (loud) — vita has no "fire once at t0, then
+    /// never" shape for an explicit list, and inventing one by re-kinding the
+    /// process to `Comb` would move every levelize / native classification that
+    /// reads `SensKind::Comb`. Recorded, both oracles' text above.
+    ///
+    /// The term is DROPPED from the sensitivity rather than refused, so a mixed list
+    /// (`@(posedge K or posedge clk)`) still arms on the live term — one constant
+    /// term must not silence its siblings (MEASURED: `EDGE at 1` + `DONE`, all three
+    /// tools).
+    ///
+    /// ⚠️ Constant-ness is asked of the HEAD through [`Self::expr_head_binds_constant`],
+    /// the one funnel the lowering itself uses, so classifier and lowering cannot
+    /// disagree under shadowing. A shape whose head is not a bare name (an operator,
+    /// a call, `pkg::K`) answers `false` and keeps whatever diagnostic it had — the
+    /// conservative side, since `true` stands a rule down.
+    pub(crate) fn event_term_never_wakes(
+        &self,
+        ev: &ast::EventExpr,
+        armed_before_t0: bool,
+    ) -> bool {
+        if armed_before_t0 && matches!(ev.edge, ast::Edge::NoEdge) {
+            return false;
+        }
+        self.expr_head_binds_constant(&ev.expr)
     }
 
     /// Resolve an event-control expr to the net it senses. Supported: a bare
@@ -618,12 +787,26 @@ impl Elaborator<'_> {
                 unreachable!("in-body @(*) is lowered by the EventCtrl arm")
             }
             ast::Sensitivity::List(list) => {
-                let n_edges = list
+                // Same rule as the process-header lane (`classify_event_list`), with
+                // `armed_before_t0 = false`: this wait is reached AFTER the time-zero
+                // settle, so a non-edge constant term fires never here too (measured,
+                // both oracles). A term that can never wake is dropped before anything
+                // else is decided, so an all-constant `@(…)` becomes `Level { nets: [] }`
+                // — the shape an in-body `@(*)` with an empty read set already takes,
+                // which the engine never wakes. Dropping FIRST also keeps a constant
+                // term from counting toward the multi-term edge refusal below.
+                let live: Vec<&ast::EventExpr> = list
+                    .iter()
+                    .filter(|ev| {
+                        !self.event_term_never_wakes(ev, /* armed_before_t0 = */ false)
+                    })
+                    .collect();
+                let n_edges = live
                     .iter()
                     .filter(|ev| !matches!(ev.edge, ast::Edge::NoEdge))
                     .count();
                 if n_edges > 0 {
-                    if list.len() > 1 {
+                    if live.len() > 1 {
                         self.error(
                             MsgCode::ElabUnsupported,
                             "multi-term in-body edge wait is unsupported in v1 \
@@ -631,7 +814,7 @@ impl Elaborator<'_> {
                              block-header sensitivity or split the wait)",
                         );
                     }
-                    let ev = list
+                    let ev = live
                         .iter()
                         .find(|ev| !matches!(ev.edge, ast::Edge::NoEdge))
                         .expect("n_edges>0 ⇒ at least one edge term");
@@ -640,7 +823,7 @@ impl Elaborator<'_> {
                         kind: map_edge(ev.edge),
                     }
                 } else {
-                    let nets = list
+                    let nets = live
                         .iter()
                         .map(|ev| self.sens_event_net(&ev.expr, false))
                         .collect();

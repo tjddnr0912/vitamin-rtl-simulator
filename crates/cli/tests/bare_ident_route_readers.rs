@@ -122,13 +122,12 @@ fn the_unshadowed_non_zero_lsb_select_is_unchanged() {
 /// woke at 2 when that net changed. Both oracles leave it blocked forever (only
 /// `DONE` prints) — the bit came from a constant, which cannot change.
 ///
-/// vita has no constant event path at all, so it refuses, exactly as the UNSHADOWED
-/// spelling already does (`localparam int K = 99; @(posedge K[0])` — see
-/// `a_constant_event_control_is_loud_with_or_without_a_shadow`). Silent-wrong → loud.
+/// The CONSTANT EVENT PATH now exists (`events.rs::event_term_never_wakes`), so this
+/// is no longer the refusal this slice first shipped: the term is dropped and the
+/// process waits forever, which is what both oracles do. `DONE` alone, exit 0.
 #[test]
 fn an_edge_bit_select_through_a_constant_binding_no_longer_arms_the_outer_net() {
-    loud(
-        "module top;\n\
+    let out = run("module top;\n\
            logic [7:0] V;\n\
            initial begin V = 8'h00; #2 V = 8'hFF; end\n\
            generate if (1) begin : g\n\
@@ -136,9 +135,8 @@ fn an_edge_bit_select_through_a_constant_binding_no_longer_arms_the_outer_net() 
              initial begin @(posedge V[0]); $display(\"EDGE at %0t\", $time); end\n\
            end endgenerate\n\
            initial #5 begin $display(\"DONE\"); $finish; end\n\
-         endmodule\n",
-        "edge event-control bit-select",
-    );
+         endmodule\n");
+    assert_eq!(out, "DONE\n");
 }
 
 /// The control: the same event control with no shadow still arms the net and fires.
@@ -155,17 +153,266 @@ fn an_unshadowed_lsb_edge_bit_select_still_arms_the_net() {
     assert_eq!(out, "EDGE at 2\nDONE\n");
 }
 
-/// Recorded, not fixed here: vita refuses an event control on a constant whether or
-/// not a net shadows it, while both oracles accept the program and simply never wake
-/// the process. That is ONE pre-existing false loud on the constant-event lane, and
-/// the shadowed cell above now joins it instead of silently arming another object.
+/// The UNSHADOWED twin, which was the pre-existing FALSE LOUD this slice first
+/// recorded: vita refused an event control on a constant whether or not a net
+/// shadowed it, while both oracles accept the program and simply never wake the
+/// process. Closing it is what closes the shadowed cell above — one constant event
+/// path serves both — so the two are pinned together, `DONE` alone in all three
+/// tools.
 #[test]
-fn a_constant_event_control_is_loud_with_or_without_a_shadow() {
-    loud(
-        "module top;\n\
+fn a_constant_event_control_never_wakes_with_or_without_a_shadow() {
+    let out = run("module top;\n\
            localparam int K = 99;\n\
            initial begin @(posedge K[0]); $display(\"EDGE\"); end\n\
            initial #5 begin $display(\"DONE\"); $finish; end\n\
+         endmodule\n");
+    assert_eq!(out, "DONE\n");
+}
+
+/// The PROCESS-HEADER twin of the two cells above, shadowed and unshadowed. This
+/// is the spelling the slice REGRESSED (it ran on the baseline and printed `DONE`,
+/// then refused), so it is pinned in both shapes. All three tools: `DONE` alone.
+#[test]
+fn a_header_edge_bit_select_on_a_constant_never_wakes() {
+    let shadowed = run("module top;\n\
+           logic [7:0] V = 8'hA5;\n\
+           generate if (1) begin : g\n\
+             localparam int V = 99;\n\
+             initial begin #2; $display(\"DONE\"); $finish; end\n\
+             always @(posedge V[0]) $display(\"EDGE at %0t\", $time);\n\
+           end endgenerate\n\
+           initial #1 V = 8'hA6;\n\
+         endmodule\n");
+    assert_eq!(shadowed, "DONE\n");
+    // The same design with the write CROSSING bit 0 (`A4` → `A5`): on the baseline
+    // this printed `EDGE at 1` first — the silent-wrong half of the same cell.
+    let crossing = run("module top;\n\
+           logic [7:0] V = 8'hA4;\n\
+           generate if (1) begin : g\n\
+             localparam int V = 99;\n\
+             initial begin #2; $display(\"DONE\"); $finish; end\n\
+             always @(posedge V[0]) $display(\"EDGE at %0t\", $time);\n\
+           end endgenerate\n\
+           initial #1 V = 8'hA5;\n\
+         endmodule\n");
+    assert_eq!(crossing, "DONE\n");
+    let unshadowed = run("module top;\n\
+           localparam int K = 99;\n\
+           initial begin #2; $display(\"DONE\"); $finish; end\n\
+           always @(posedge K[0]) $display(\"EDGE\");\n\
+         endmodule\n");
+    assert_eq!(unshadowed, "DONE\n");
+}
+
+/// The WHOLE-name edge spellings, which never reached the bit-select arm at all —
+/// they went to `resolve_net` and came back E3010 "undeclared net/variable". Both
+/// oracles print `DONE` alone for each.
+#[test]
+fn a_header_edge_on_a_bare_constant_never_wakes() {
+    for edge in ["posedge", "negedge"] {
+        let out = run(&format!(
+            "module top;\n\
+               localparam int K = 99;\n\
+               initial begin #2; $display(\"DONE\"); $finish; end\n\
+               always @({edge} K) $display(\"EDGE\");\n\
+             endmodule\n"
+        ));
+        assert_eq!(out, "DONE\n", "@({edge} K)");
+    }
+    // `always_ff` takes the same lane through `force_edge`; the block never runs, so
+    // `q` keeps its power-on value. iverilog `DONE q=x` (vita's answer); verilator
+    // `DONE q=0`, its own x-initialisation, not this lane.
+    let ff = run("module top;\n\
+           localparam int K = 99;\n\
+           logic q;\n\
+           initial begin #2; $display(\"DONE q=%0d\", q); $finish; end\n\
+           always_ff @(posedge K) q <= 1;\n\
+         endmodule\n");
+    assert_eq!(ff, "DONE q=x\n");
+}
+
+/// A constant term is DROPPED, not fatal to its siblings: the live term still arms.
+/// All three tools print `EDGE at 1` then `DONE`.
+#[test]
+fn a_constant_term_beside_a_live_edge_term_leaves_the_live_one_armed() {
+    let out = run("module top;\n\
+           localparam int K = 99;\n\
+           logic clk = 0;\n\
+           initial begin #1 clk = 1; #2; $display(\"DONE\"); $finish; end\n\
+           always @(posedge K or posedge clk) $display(\"EDGE at %0t\", $time);\n\
+         endmodule\n");
+    assert_eq!(out, "EDGE at 1\nDONE\n");
+}
+
+/// An IN-BODY wait is reached after the time-zero settle, so a NON-EDGE constant
+/// term never wakes it either — both oracles print `DONE` alone, with no `NEVER`.
+#[test]
+fn an_in_body_level_wait_on_a_constant_never_wakes() {
+    let out = run("module top;\n\
+           localparam int K = 99;\n\
+           initial begin @(K); $display(\"NEVER\"); end\n\
+           initial begin #2; $display(\"DONE\"); $finish; end\n\
+         endmodule\n");
+    assert_eq!(out, "DONE\n");
+}
+
+/// RECORDED, deliberately NOT closed: a PROCESS-HEADER non-edge term on a constant
+/// fires ONCE at time zero in both oracles (`always @(K) $display("EDGE at %0t",
+/// $time)` → `EDGE at 0` in iverilog 13.0 and verilator 5.052; `always @(K or clk)`
+/// → `EDGE at 0` then `EDGE at 1`), because the header sensitivity is armed before
+/// the time-zero settle. vita has no "fire once at t0, then never" shape for an
+/// explicit list, so this term is REFUSED rather than dropped — dropping it would
+/// answer `DONE` alone, a silent divergence from both oracles.
+///
+/// The refusal is `events.rs::error_header_level_const`, not `resolve_net`'s
+/// `E3010 undeclared net/variable` (a false sentence: `K` IS declared). Pinned on
+/// the sentence that is true of the program, so the edge rule cannot widen onto
+/// this cell and the diagnostic cannot slide back. It fires only when the term is
+/// the WHOLE sensitivity — see
+/// `a_constant_level_term_beside_a_live_one_is_dropped_not_refused`.
+#[test]
+fn a_header_level_term_on_a_constant_stays_loud() {
+    loud(
+        "module top;\n\
+           localparam int K = 99;\n\
+           initial begin #2; $display(\"DONE\"); $finish; end\n\
+           always @(K) $display(\"EDGE at %0t\", $time);\n\
+         endmodule\n",
+        "a constant cannot wake a process",
+    );
+}
+
+/// The SHADOW twin of the cell above, and the parity this slice exists for: a
+/// generate `localparam V` shadowing a module net, read as a header LEVEL term.
+/// `lookup_net_scoped` walks `symbols` alone, so vita armed the OUTER NET and fired
+/// AGAIN when that net changed — `HDR fired at 0` + `HDR fired at 1`, where iverilog
+/// 13.0 and verilator 5.052 both print `HDR fired at 0` then `DONE`. One IEEE
+/// question answered loud in one spelling and silently wrong in its shadow twin.
+///
+/// Now the §2 🆕 O refusal, which names the object vita took; the unshadowed twin
+/// gets the plain "constant cannot wake a process" sentence.
+#[test]
+fn a_header_level_term_on_a_shadowing_constant_is_loud() {
+    let src = "module top;\n\
+           logic V;\n\
+           initial begin V = 0; #1 V = 1; end\n\
+           generate if (1) begin : g\n\
+             localparam int V = 2;\n\
+             always @(V) $display(\"HDR fired at %0t\", $time);\n\
+           end endgenerate\n\
+           initial #3 begin $display(\"DONE\"); $finish; end\n\
+         endmodule\n";
+    loud(src, SHADOW);
+    let (out, _ok) = vita(src);
+    assert!(
+        !out.contains("HDR fired at 1"),
+        "must not arm the shadowed net:\n{out}"
+    );
+    // The CONTROL: the same design with the constant renamed arms the net and fires
+    // at 0 and at 1 — all three tools.
+    let out = run("module top;\n\
+           logic V;\n\
+           initial begin V = 0; #1 V = 1; end\n\
+           generate if (1) begin : g\n\
+             localparam int W = 2;\n\
+             always @(V) $display(\"HDR fired at %0t\", $time);\n\
+           end endgenerate\n\
+           initial #3 begin $display(\"DONE\"); $finish; end\n\
+         endmodule\n");
+    assert_eq!(out, "HDR fired at 0\nHDR fired at 1\nDONE\n");
+}
+
+/// A constant LEVEL term beside a LIVE one is DROPPED, not refused — the rule the
+/// edge lane already applied. The refusal is a property of the whole list: alone,
+/// the term decides the process fires once at t0 and never again (no shape for it
+/// here, so loud); beside a live sibling it decides nothing the sibling does not.
+///
+/// Refusing it swallowed the sibling: `generate … localparam int V = 99;
+/// always @(V or W)` with `W` a real net was refused whole where all three tools
+/// run the design. Both oracles print `HDR at 0` / `HDR at 1` / `DONE`; vita prints
+/// `HDR at 1` / `DONE` — the missing t0 line is the recorded level-constant gap
+/// (the same one the single-term cell above is loud about), NOT this rule.
+#[test]
+fn a_constant_level_term_beside_a_live_one_is_dropped_not_refused() {
+    let out = run("module top;\n\
+           logic [7:0] V = 8'h0;\n\
+           logic [7:0] W = 8'h0;\n\
+           generate if (1) begin : g\n\
+             localparam int V = 99;\n\
+             always @(V or W) $display(\"HDR at %0t\", $time);\n\
+           end endgenerate\n\
+           initial begin #1 W = 8'h1; #1 $display(\"DONE\"); $finish; end\n\
+         endmodule\n");
+    assert_eq!(out, "HDR at 1\nDONE\n");
+    // The UNSHADOWED twin takes the same lane (the rule is keyed on the LIST, not on
+    // shadowing): `localparam int K = 99; always @(K or clk)`. Same three-tool split.
+    let out = run("module top;\n\
+           localparam int K = 99;\n\
+           reg clk = 0;\n\
+           always @(K or clk) $display(\"HDR at %0t\", $time);\n\
+           initial begin #1 clk = 1; #1 $display(\"DONE\"); $finish; end\n\
+         endmodule\n");
+    assert_eq!(out, "HDR at 1\nDONE\n");
+    // When the live sibling is written at time zero the t0 line appears too, and all
+    // THREE tools then agree exactly — iverilog and verilator print these same lines.
+    let out = run("module top;\n\
+           logic V, W;\n\
+           initial begin V = 0; W = 0; #1 W = 1; #1 V = 1; end\n\
+           generate if (1) begin : g\n\
+             localparam int V = 2;\n\
+             always @(V or W) $display(\"HDR fired at %0t\", $time);\n\
+           end endgenerate\n\
+           initial #3 begin $display(\"DONE\"); $finish; end\n\
+         endmodule\n");
+    assert_eq!(out, "HDR fired at 0\nHDR fired at 1\nDONE\n");
+}
+
+/// The two shapes the level refusal must NOT reach, both measured unchanged.
+#[test]
+fn the_level_constant_refusal_stops_at_a_bare_head() {
+    // A single-bit LEVEL term keeps its own (recorded, pre-existing) refusal — both
+    // oracles run `always @(K[0] or clk)` and print `HDR at 0` / `HDR at 1` / `DONE`.
+    loud(
+        "module top;\n\
+           localparam logic [3:0] K = 4'h1;\n\
+           reg clk = 0;\n\
+           always @(K[0] or clk) $display(\"HDR at %0t\", $time);\n\
+           initial begin #1 clk = 1; #1 $display(\"DONE\"); $finish; end\n\
+         endmodule\n",
+        "single-bit level (non-edge) event control",
+    );
+    // A `$unit` ENUM LABEL with a module net of the same name: innermost-wins gives
+    // the NET, nothing binds a constant, and the EDGE term arms. All three tools:
+    // `EDGE at 1` then `DONE`. (The refusal is keyed on the BINDING, not on "a
+    // constant of this name exists somewhere".)
+    let out = run("typedef enum logic [7:0] { V = 8'h1 } e_t;\n\
+         module top;\n\
+           logic [7:0] V = 8'h0;\n\
+           generate if (1) begin : g\n\
+             always @(posedge V) $display(\"EDGE at %0t\", $time);\n\
+           end endgenerate\n\
+           initial begin #1 V = 8'h1; #1 $display(\"DONE\"); $finish; end\n\
+         endmodule\n");
+    assert_eq!(out, "EDGE at 1\nDONE\n");
+}
+
+/// The CONTROLS the constant path must not take with it: a real net still arms
+/// (`EDGE at 1`), and a NON-LSB bit of a real net keeps its existing refusal.
+#[test]
+fn a_net_edge_bit_select_is_untouched_by_the_constant_path() {
+    let fires = run("module top;\n\
+           logic [7:0] V = 8'hA4;\n\
+           initial begin #2; $display(\"DONE\"); $finish; end\n\
+           always @(posedge V[0]) $display(\"EDGE at %0t\", $time);\n\
+           initial #1 V = 8'hA5;\n\
+         endmodule\n");
+    assert_eq!(fires, "EDGE at 1\nDONE\n");
+    loud(
+        "module top;\n\
+           logic [7:0] V = 8'hA4;\n\
+           initial begin #2; $display(\"DONE\"); $finish; end\n\
+           always @(posedge V[3]) $display(\"EDGE at %0t\", $time);\n\
+           initial #1 V = 8'hAC;\n\
          endmodule\n",
         "edge event-control bit-select",
     );

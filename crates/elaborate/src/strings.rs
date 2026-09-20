@@ -816,9 +816,8 @@ impl Elaborator<'_> {
     /// node cannot carry a dynamic-width string result). Only the direct-rhs-of-a-
     /// blocking-assign placement is handled (the dominant string-building pattern);
     /// a string concat in any other context stays loud (the `lower_expr` reject).
-    /// Each part renders through `%s` — string vars/literals and integral byte
-    /// values alike (IEEE §6.16: an integral concat element is its character
-    /// bytes), matching iverilog. A `real` part is loud (no string segment).
+    /// A `real` part is loud (no string segment); an integral part crosses §6.16 —
+    /// see [`Self::lower_string_concat_parts`], which both placements share.
     pub(crate) fn string_concat_special(
         &mut self,
         b: &mut ProcessBuilder,
@@ -921,6 +920,17 @@ impl Elaborator<'_> {
     /// A real part stays LOUD (correct-or-loud): the loud diagnostic is emitted
     /// and the remaining parts still lower (so the dead `$sformatf` node is
     /// well-formed), but the surrounding elaboration is already poisoned.
+    ///
+    /// ⚠️ An INTEGRAL part crosses §6.16 here and is wrapped in `StrCast`, the funnel
+    /// `string'(e)` / the implicit `string s = <integral>` assignment / `StrCmp` share
+    /// (`Value::to_sv_string_bytes`). A bare `%s` is the PACKED-ASCII surface (NULs
+    /// kept, unknown bits read on the value plane), so the mixed concat contradicted
+    /// its own pure-packed sibling: `string x = "x"; b = {x, 24'h610062}` printed
+    /// `[xa b]` 4 where both oracles print `[xab]` 3, while `a = {8'h78, 24'h610062}`
+    /// (no string part ⇒ the assignment funnel) printed `[xab]` 3. Every cell and its
+    /// two-oracle text: `cli/tests/string_cast.rs`
+    /// `::an_integral_part_of_a_string_concat_crosses_6_16`. A string-domain part is
+    /// left unwrapped so its node is unchanged (the wrap is an identity on it).
     pub(crate) fn lower_string_concat_parts(&mut self, part_exprs: &[&ast::Expr]) -> u32 {
         // fmt = "%s"×N (the parts pass as %s args, so a `%` in any part value is
         // rendered literally, not as a conversion).
@@ -929,14 +939,23 @@ impl Elaborator<'_> {
         let fmt_eid = self.push_expr(ir::Expr::Const { val: fmt_cid });
         let mut args = vec![fmt_eid];
         for p in part_exprs {
+            let is_str = self.expr_is_string_ast(p);
             let pid = self.lower_expr(p);
-            if self.expr_is_real(pid) {
+            let real = self.expr_is_real(pid);
+            if real {
                 self.error(
                     MsgCode::ElabUnsupported,
                     "a real value may not be a string-concatenation element",
                 );
             }
-            args.push(pid);
+            args.push(if is_str || real || self.ir_expr_is_string(pid) {
+                pid
+            } else {
+                self.push_expr(ir::Expr::SysFunc {
+                    which: ir::SysFuncId::StrCast,
+                    args: vec![pid],
+                })
+            });
         }
         self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::Sformatf,

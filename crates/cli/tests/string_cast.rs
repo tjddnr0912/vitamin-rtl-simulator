@@ -346,6 +346,91 @@ fn the_reserved_spelling_does_not_widen_the_named_cast_arm() {
     loud("  int x;", "    x = string;");
 }
 
+// ───────────────── the two crossings the first cut of this rule missed ─────────────────
+
+/// A MIXED concat `{<string>, <integral>}` lowers to `$sformatf("%s%s", …)`, so its
+/// integral part was rendered by the packed-ASCII surface while its PURE-packed
+/// sibling (no string operand ⇒ the assignment funnel) took §6.16 — one design
+/// contradicting itself. The integral parts now cross through `StrCast`.
+///
+/// Both oracles, every cell: `pure [xab] 3 | mixed [xab] 3`, and the four further
+/// spellings below.
+#[test]
+fn an_integral_part_of_a_string_concat_crosses_6_16() {
+    // the two spellings side by side — this is the self-contradiction cell.
+    line_mod(
+        "  string a; string b; string x = \"x\";",
+        "    a = {8'h78, 24'h610062};\n    b = {x, 24'h610062};\n\
+         \x20   $display(\"pure [%0s] %0d | mixed [%0s] %0d\", a, a.len(), b, b.len());",
+        "pure [xab] 3 | mixed [xab] 3",
+    );
+    // integral on either side, a trailing NUL, and a partial-byte operand.
+    line_mod(
+        "  string s = \"x\"; string t1,t2,t3,t4;",
+        "    t1 = {s, 24'h616263};\n    t2 = {24'h610062, s};\n\
+         \x20   t3 = {s, 8'h00};\n    t4 = {s, 16'h6100};\n\
+         \x20   $display(\"%0s %0d %0s %0d %0s %0d %0s %0d\",\n\
+         \x20            t1, t1.len(), t2, t2.len(), t3, t3.len(), t4, t4.len());",
+        "xabc 4 abx 3 x 1 xa 2",
+    );
+    // an UNKNOWN-bearing net part: `16'h61zz` with `[3:0] = 4'bxxxx` → `xa` len 2.
+    line_mod(
+        "  string s = \"x\"; string t; reg [15:0] w;",
+        "    w = 16'h61zz; w[3:0] = 4'bxxxx;\n    t = {s, w};\n\
+         \x20   $display(\"[%0s] %0d\", t, t.len());",
+        "[xa] 2",
+    );
+    // a SELF-concat (the accumulator spelling every testbench has).
+    line_mod(
+        "  string s = \"x\";",
+        "    s = {s, 24'h610062};\n    $display(\"[%0s] %0d\", s, s.len());",
+        "[xab] 3",
+    );
+}
+
+/// A `case` ITEM against a STRING scrutinee compared the packed operand while `==`,
+/// `inside` and `.compare()` had already been routed through the §6.16 funnel — so
+/// `s == 24'h610062` answered 1 and `case (s) 24'h610062:` MISSED in one process.
+///
+/// ⚠️ VERILATOR-JUDGED ONLY: iverilog 13.0 cannot compile a `case` on a string
+/// scrutinee at all (it aborts with `Assertion failed: … draw_eval_vec4`). verilator
+/// 5.052 prints `EQ=1 CASE=hit INSIDE=hit CMP=0`.
+#[test]
+fn a_case_item_against_a_string_scrutinee_crosses_6_16() {
+    line_mod(
+        "  string s;",
+        "    s = \"ab\";\n\
+         \x20   case (s) 24'h610062: $display(\"CASE=hit\"); default: $display(\"CASE=miss\"); endcase",
+        "CASE=hit",
+    );
+    // the whole self-consistency row, one process, verilator's exact text.
+    line_mod(
+        "  string s;",
+        "    s = \"ab\";\n\
+         \x20   $write(\"EQ=%0d \", s == 24'h610062);\n\
+         \x20   case (s) 24'h610062: $write(\"CASE=hit \"); default: $write(\"CASE=miss \"); endcase\n\
+         \x20   if (s inside {24'h610062}) $write(\"INSIDE=hit \"); else $write(\"INSIDE=miss \");\n\
+         \x20   $display(\"CMP=%0d\", s.compare(24'h610062));",
+        "EQ=1 CASE=hit INSIDE=hit CMP=0",
+    );
+    // the STRING-domain item and the string-domain scrutinee were already right and
+    // must stay so (verilator: `C1=hit` / `C2=hit`).
+    line_mod(
+        "  string s; int x;",
+        "    x = 24'h610062;\n    s = \"ab\";\n\
+         \x20   case (string'(x)) \"ab\": $display(\"C1=hit\"); default: $display(\"C1=miss\"); endcase\n\
+         \x20   case (s) string'(x): $display(\"C2=hit\"); default: $display(\"C2=miss\"); endcase",
+        "C1=hit",
+    );
+    // a PACKED scrutinee is untouched by the string route: `case (24'h610062)` still
+    // compares packed, and its own literal item hits (all three tools).
+    line_mod(
+        "",
+        "    case (24'h610062) 24'h610062: $display(\"P=hit\"); default: $display(\"P=miss\"); endcase",
+        "P=hit",
+    );
+}
+
 // ───────────────────── negative controls: `%s` is a DIFFERENT rule ─────────────────────
 
 /// `%s` on a packed integral is NOT §6.16 and must not move: the NUL renders as a

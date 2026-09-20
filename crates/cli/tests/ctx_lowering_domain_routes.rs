@@ -177,13 +177,28 @@ fn a_fill_on_either_side_of_the_string_terminates() {
          wire [11:0] c = {s, 1'b0};\n\
          initial begin #1 $display(\"%b %b %b\", a, b, c); $finish; end endmodule\n");
     // `'0` and `1'b0` render identically — the fill is 1 bit, exactly like its twin.
-    assert_eq!(o, "000101100010 001000100000 001000100000\n");
+    // That twin-consistency is what this cell pins; the ABSOLUTE value moved once the
+    // integral parts of a string concat started crossing §6.16 (`StrCast`), because a
+    // ZERO integral part contributes NO bytes. No oracle judges this shape — both
+    // iverilog 13.0 ("internal error: 14vvp_fun_concat: recv_string(ab) not
+    // implemented") and verilator 5.052 ("Internal Error: Number operation called with
+    // non-logic (double or string) argument") crash on a packed wire fed by a string
+    // concat — but the §6.16 half IS two-oracle pinned one shape over:
+    // `string s = "x"; t = {s, 8'h00}` prints `[x] 1` in iverilog AND verilator, i.e.
+    // the zero byte disappears. Dropping it here is the same rule, not a new one.
+    assert_eq!(o, "000101100010 000101100010 000101100010\n");
 }
 
 #[test]
 fn a_fill_nested_under_paren_replicate_or_binary_inside_a_string_concat() {
     // Each of these reaches the `Concat` node through a DIFFERENT ctx arm, and every
     // one of them used to bounce.
+    //
+    // `c` is the one that moved with the §6.16 routing of integral concat parts:
+    // `1'b1 + '1` is a ONE-BIT sum that wraps to 0, and a zero integral part now
+    // contributes no bytes (same rule, same reason, as the `'0` cell above — see its
+    // comment for the two-oracle pin that backs it). `a` (`'1` ⇒ 0x01) and `b`
+    // (`{2{'1}}` ⇒ 0x03) are non-zero and unchanged.
     let o = ok("module t; string s = \"ab\";\n\
          wire [11:0] a = {s, ('1)};\n\
          wire [11:0] b = {s, {2{'1}}};\n\
@@ -192,7 +207,7 @@ fn a_fill_nested_under_paren_replicate_or_binary_inside_a_string_concat() {
          initial begin #1 $display(\"%b %b %b %b\", a, b, c, d); $finish; end endmodule\n");
     assert_eq!(
         o,
-        "001000000001 001000000011 001000100000 0010000000010000\n"
+        "001000000001 001000000011 000101100010 0010000000010000\n"
     );
 }
 

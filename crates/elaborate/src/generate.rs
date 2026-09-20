@@ -195,6 +195,16 @@ impl Elaborator<'_> {
             }
             return;
         }
+        // ROADMAP §2 🆕 L ⓢ, generate half: this level IS one declarative region
+        // (IEEE §27.3), so a parameter name is declared in it once — `param_dup.rs`'s
+        // walk over this level's own `Param` items. `is_scope` path only: a transparent
+        // REGION's items belong to the enclosing scope and are judged there. Re-walked
+        // per GenPhase and per loop iteration; the NAME-span dedupe makes that one.
+        self.check_duplicate_param_decls_in(
+            &Self::gen_param_decls(items),
+            "a generate block is ONE declarative scope (IEEE 1800-2017 §27.3), so a name \
+             is declared there once",
+        );
         let slot = self.rank_slot_for_generate();
         let saved_in_gen = std::mem::replace(&mut self.in_generate_body, true);
         let saved_pending =

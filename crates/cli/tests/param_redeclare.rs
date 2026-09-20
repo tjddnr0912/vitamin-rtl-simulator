@@ -259,6 +259,264 @@ fn two_duplicated_names_report_twice() {
 }
 
 #[test]
+fn a_duplicate_inside_one_generate_block_is_refused() {
+    // The GENERATE half of the same rule (IEEE §27.3: the block is ONE declarative
+    // scope). vita bound the second declaration and printed `g Q=1 / g Q=2` at exit 0;
+    // iverilog 13.0 "e09.sv:7: error: 'Q' has already been declared in this scope. :
+    // It was declared here as a parameter." and verilator 5.052 "%Error: e09.sv:7:18:
+    // Duplicate declaration of signal: 'Q'".
+    assert_refused(
+        "generate-for block",
+        "module top;\n\
+         \x20 genvar i;\n\
+         \x20 generate for (i = 0; i < 2; i = i + 1) begin : g\n\
+         \x20   localparam Q = i;\n\
+         \x20   localparam Q = i + 1;\n\
+         \x20   initial $display(\"g Q=%0d\", Q);\n\
+         \x20 end endgenerate\n\
+         \x20 initial begin #1 $finish; end\n\
+         endmodule\n",
+        "Q",
+    );
+    // The two unrolled iterations re-walk the same item list, and each GenPhase walks
+    // it again; the NAME-span dedupe must make that exactly one report.
+    let (_rc, out) = run("module top;\n\
+         \x20 genvar i;\n\
+         \x20 generate for (i = 0; i < 2; i = i + 1) begin : g\n\
+         \x20   localparam Q = i;\n\
+         \x20   localparam Q = i + 1;\n\
+         \x20 end endgenerate\n\
+         \x20 initial begin #1 $finish; end\n\
+         endmodule\n");
+    assert_eq!(
+        out.matches("duplicate declaration of").count(),
+        1,
+        "one source defect, one report — not one per iteration or per phase:\n{out}"
+    );
+    // A conditional generate block is the same declarative region.
+    assert_refused(
+        "generate-if block",
+        "module top;\n\
+         \x20 generate if (1) begin : g\n\
+         \x20   localparam int R = 1;\n\
+         \x20   localparam int R = 2;\n\
+         \x20 end endgenerate\n\
+         \x20 initial begin #1 $finish; end\n\
+         endmodule\n",
+        "R",
+    );
+}
+
+#[test]
+fn a_duplicate_in_a_transparent_generate_region_is_refused() {
+    // The FOURTH declarative region that holds `ParamDecl`s, and the one no walk
+    // reached: an UNLABELLED `generate … endgenerate` has no scope of its own (IEEE
+    // §27.2), so its names ARE the module's — but they sit inside
+    // `ModuleItem::Generate`, which the module-body filter skipped, while the §27.3
+    // per-scope walk runs on the labelled path only. vita printed `Q=2` at exit 0.
+    // iverilog 13.0 "r243.sv:4: error: 'Q' has already been declared in this scope. :
+    // It was declared here as a parameter."; verilator 5.052 "%Error: r243.sv:4:20:
+    // Duplicate declaration of signal: 'Q'".
+    assert_refused(
+        "transparent region, two declarations",
+        "module top;\n\
+         \x20 generate\n\
+         \x20   localparam int Q = 1;\n\
+         \x20   localparam int Q = 2;\n\
+         \x20 endgenerate\n\
+         \x20 initial begin $display(\"Q=%0d\", Q); #1 $finish; end\n\
+         endmodule\n",
+        "Q",
+    );
+    // FLATTENING the region into the module's own sequence (rather than adding a
+    // fourth call site) is what makes the CROSS-REGION pairs refusable, and both
+    // oracles reject both of them. Header parameter + region `localparam`: iverilog
+    // points its note at line 1, the header — so does vita.
+    assert_refused(
+        "header parameter + region localparam",
+        "module top #(parameter int P = 1);\n\
+         \x20 generate\n\
+         \x20   localparam int P = 2;\n\
+         \x20 endgenerate\n\
+         \x20 initial begin $display(\"P=%0d\", P); #1 $finish; end\n\
+         endmodule\n",
+        "P",
+    );
+    // Body `localparam` + region `localparam`.
+    assert_refused(
+        "body localparam + region localparam",
+        "module top;\n\
+         \x20 localparam int P = 1;\n\
+         \x20 generate\n\
+         \x20   localparam int P = 2;\n\
+         \x20 endgenerate\n\
+         \x20 initial begin $display(\"P=%0d\", P); #1 $finish; end\n\
+         endmodule\n",
+        "P",
+    );
+}
+
+#[test]
+fn a_transparent_region_beside_a_labelled_block_still_runs() {
+    // THE control for the flatten: a LABELLED block is a scope of its own (§27.3),
+    // so the same name in it is shadowing, not a duplicate — the flatten must not
+    // pull it in. Both oracles run this and print `gQ=2` then `Q=1`.
+    assert_runs(
+        "region + labelled block, same name",
+        "module top;\n\
+         \x20 generate\n\
+         \x20   localparam int Q = 1;\n\
+         \x20 endgenerate\n\
+         \x20 generate if (1) begin : g\n\
+         \x20   localparam int Q = 2;\n\
+         \x20   initial $display(\"gQ=%0d\", Q);\n\
+         \x20 end endgenerate\n\
+         \x20 initial begin $display(\"Q=%0d\", Q); #1 $finish; end\n\
+         endmodule\n",
+        &["gQ=2", "Q=1"],
+    );
+    // Distinct names in one region: legal, all three tools `A=1 B=2`.
+    assert_runs(
+        "region, distinct names",
+        "module top;\n\
+         \x20 generate\n\
+         \x20   localparam int A = 1;\n\
+         \x20   localparam int B = 2;\n\
+         \x20 endgenerate\n\
+         \x20 initial begin $display(\"A=%0d B=%0d\", A, B); #1 $finish; end\n\
+         endmodule\n",
+        &["A=1 B=2"],
+    );
+}
+
+#[test]
+fn a_duplicate_in_a_package_body_is_refused() {
+    // The PACKAGE half (IEEE §26.2). A package has no parameter port list, so
+    // `bind_params` never runs for one and its own loop guarded parameter-vs-VARIABLE
+    // only: vita printed `P=2` at exit 0. iverilog 13.0 "e08.sv:4: error: 'P' has
+    // already been declared in this scope."; verilator 5.052 "%Error: e08.sv:4:13:
+    // Duplicate declaration of signal: 'P'".
+    assert_refused(
+        "package body",
+        "package pk;\n\
+         \x20 parameter P = 1;\n\
+         \x20 parameter P = 2;\n\
+         endpackage\n\
+         module top; initial begin $display(\"P=%0d\", pk::P); #1 $finish; end endmodule\n",
+        "P",
+    );
+    // …and through the IMPORT spelling, which is how the census found it.
+    assert_refused(
+        "package body, imported",
+        "package pk;\n\
+         \x20 parameter int P = 3;\n\
+         \x20 parameter int P = 7;\n\
+         endpackage\n\
+         module top; import pk::*;\n\
+         \x20 initial begin $display(\"P=%0d\", P); #1 $finish; end\n\
+         endmodule\n",
+        "P",
+    );
+    // CONTROL: distinct names, and a `parameter` beside a `localparam` and a variable,
+    // all legal. All three tools: `P=3 Q=4`.
+    assert_runs(
+        "package body, no collision",
+        "package pk;\n\
+         \x20 parameter int P = 3;\n\
+         \x20 localparam int Q = 4;\n\
+         \x20 int v;\n\
+         endpackage\n\
+         module top;\n\
+         \x20 initial begin $display(\"P=%0d Q=%0d\", pk::P, pk::Q); #1 $finish; end\n\
+         endmodule\n",
+        &["P=3 Q=4"],
+    );
+}
+
+#[test]
+fn one_localparam_per_generate_iteration_still_runs() {
+    // THE control for the generate half: a loop body declaring ONE `localparam` is the
+    // normal idiom, and each iteration is its own scope instance — not a duplicate.
+    // A nested block may re-use the name (a deeper scope), and the two arms of a
+    // generate-if may each declare it. All three tools: `g Q=1 / g Q=2 / a R=5 / c R=7`.
+    assert_runs(
+        "one per iteration",
+        "module top;\n\
+         \x20 genvar i;\n\
+         \x20 generate for (i = 0; i < 2; i = i + 1) begin : g\n\
+         \x20   localparam Q = i + 1;\n\
+         \x20   initial $display(\"g Q=%0d\", Q);\n\
+         \x20 end endgenerate\n\
+         \x20 generate if (1) begin : a\n\
+         \x20   localparam R = 5;\n\
+         \x20   initial $display(\"a R=%0d\", R);\n\
+         \x20 end else begin : b\n\
+         \x20   localparam R = 6;\n\
+         \x20 end endgenerate\n\
+         \x20 generate if (1) begin : c\n\
+         \x20   localparam R = 7;\n\
+         \x20   initial $display(\"c R=%0d\", R);\n\
+         \x20 end endgenerate\n\
+         \x20 initial #1 $finish;\n\
+         endmodule\n",
+        &["g Q=1", "g Q=2", "a R=5", "c R=7"],
+    );
+    // A NESTED generate block re-declaring the enclosing block's name is §27.3
+    // shadowing, exactly as it is against a module header. All three tools print the
+    // inner `9` and the outer `0` / `1`.
+    assert_runs(
+        "nested block shadow",
+        "module top;\n\
+         \x20 genvar i;\n\
+         \x20 generate for (i = 0; i < 2; i = i + 1) begin : g\n\
+         \x20   localparam Q = i;\n\
+         \x20   if (1) begin : h\n\
+         \x20     localparam Q = 9;\n\
+         \x20     initial $display(\"h Q=%0d\", Q);\n\
+         \x20   end\n\
+         \x20   initial $display(\"g Q=%0d\", Q);\n\
+         \x20 end endgenerate\n\
+         \x20 initial #1 $finish;\n\
+         endmodule\n",
+        &["h Q=9", "g Q=0", "g Q=1"],
+    );
+}
+
+#[test]
+fn the_two_shapes_this_rule_still_does_not_see() {
+    // RECORDED, measured, both oracles reject both — left alone deliberately.
+    //
+    // (1) A module instantiated ONLY under `generate if (0)` is never elaborated, so
+    // no walk ever reaches its declarations. iverilog "p209.sv:2: error: 'P' has
+    // already been declared in this scope."; verilator "%Error: p209.sv:2:17:
+    // Duplicate declaration of signal: 'P'".
+    let (rc, out) = run("module dead #(parameter int P = 3);\n\
+         \x20 parameter int P = 7;\n\
+         \x20 initial $display(\"D=%0d\", P);\n\
+         endmodule\n\
+         module top;\n\
+         \x20 generate if (0) begin : g dead d(); end endgenerate\n\
+         \x20 initial begin $display(\"TOP=ok\"); #1 $finish; end\n\
+         endmodule\n");
+    assert_eq!(rc, 0, "unchanged by this fix (never elaborated):\n{out}");
+    assert!(out.contains("TOP=ok"), "{out}");
+    // (2) A duplicate VARIABLE in a named block is a different name space with its own
+    // binder. iverilog "m04.sv:5: error: 'x' has already been declared in this scope.";
+    // verilator "%Error: m04.sv:5:13: Duplicate declaration of signal: 'x'".
+    let (rc, out) = run("module top;\n\
+         \x20 initial begin : blk\n\
+         \x20   integer x;\n\
+         \x20   integer x;\n\
+         \x20   x = 3;\n\
+         \x20   $display(\"x=%0d\", x);\n\
+         \x20 end\n\
+         \x20 initial #1 $finish;\n\
+         endmodule\n");
+    assert_eq!(rc, 0, "unchanged by this fix (a different binder):\n{out}");
+    assert!(out.contains("x=3"), "{out}");
+}
+
+#[test]
 fn a_generate_block_localparam_of_the_same_name_still_runs() {
     // §27.3: a generate block is a nested scope, so this is shadowing, not
     // redeclaration. Measured in both oracles: `gP=7` inside and `P=3` outside, one

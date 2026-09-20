@@ -991,7 +991,35 @@ impl Elaborator<'_> {
     /// Per-label 4-state equality node from a PRE-LOWERED label id. Plain `case`
     /// is the exact 4-state `scrut === label`; casez/casex map to the dedicated
     /// v7 wildcard match ops.
+    ///
+    /// ⚠️ A STRING SCRUTINEE compares in the STRING domain, through the same
+    /// `StrCmp` the `==` / `<` operators and `.compare()` take, so the §6.16
+    /// conversion is applied to the item exactly as it is to an `==` rhs. Without
+    /// this, one design contradicted itself: `string s = "ab";` answered `1` for
+    /// `s == 24'h610062` and `0` for `s.compare(24'h610062)` while `case (s)
+    /// 24'h610062:` MISSED, because the packed `CaseEq` compared the item against
+    /// the string handle. verilator 5.052 (the only oracle — iverilog 13.0 aborts
+    /// the compile of a string `case` with a `draw_eval_vec4` assertion) prints
+    /// `EQ=1 CASE=hit INSIDE=hit CMP=0`.
+    ///
+    /// Plain `case` ONLY: casez/casex wildcard masking is a packed-bit rule with no
+    /// string meaning, and a PACKED scrutinee is untouched whatever its items are.
     pub(crate) fn case_cmp(&mut self, scrut_id: u32, lbl_id: u32, kind: ast::CaseKind) -> u32 {
+        if matches!(kind, ast::CaseKind::Case) && self.ir_expr_is_string(scrut_id) {
+            let cmp = self.push_expr(ir::Expr::SysFunc {
+                which: ir::SysFuncId::StrCmp,
+                args: vec![scrut_id, lbl_id],
+            });
+            let zero = {
+                let cid = self.intern_const(make_const_i64(0, 32, true));
+                self.push_expr(ir::Expr::Const { val: cid })
+            };
+            return self.push_expr(ir::Expr::Binary {
+                op: ir::BinOp::Eq,
+                lhs: cmp,
+                rhs: zero,
+            });
+        }
         let op = match kind {
             ast::CaseKind::Case => ir::BinOp::CaseEq,
             ast::CaseKind::Casez => ir::BinOp::CasezEq,

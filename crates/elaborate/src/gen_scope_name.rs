@@ -50,23 +50,34 @@ impl Elaborator<'_> {
     /// The `[0]` STORAGE key of the SINGLETON generate scope a BARE label names in
     /// source text (`g.x` ⇒ `g[0].x`), or `None` when `level.seg` is not one.
     ///
-    /// TWO tests, because neither alone is the property: `gen_loop_labels` says the
-    /// LRM made this name an array (a `for` block, at ANY trip count — the syntactic
-    /// fact storage cannot recover), and the absent `[1]` says nothing else unrolled
-    /// into it. The loop test has to come first: a one-trip loop passes the `[1]` test
-    /// and must still be refused.
+    /// Keyed POSITIVELY on `gen_singleton_labels`, the same set `display_prefix`
+    /// (`generate.rs`) and [`Self::indexed_gen_singleton`] ask, because only the
+    /// ELABORATOR knows which construct minted a `label[0]` key — storage cannot
+    /// recover it. The first draft asked the question negatively (`label` is not in
+    /// `gen_loop_labels`, `label[0]` is a scope and `label[1]` is not), which is a
+    /// different question: an INSTANCE-ARRAY label is in neither label set, so a
+    /// one-element array `ch u [0:0] ();` satisfied both halves and the bare `u.q`
+    /// resolved to element 0 (MEASURED: `A=7` at exit 0, where iverilog says
+    /// "error: Unable to bind wire/reg/memory `u.q' in `g408'" and verilator says
+    /// "%Error: Can't find definition of 'u'" — an element must be spelled `u[0].q`;
+    /// the same three-tool split on the ANSI-ported `ch u [0:0] (.p(w));` and on a
+    /// `module ch();` child). `generate.rs:51-58` had already recorded this exact
+    /// hazard for the `%m` twin.
+    ///
+    /// The `[0]` scope test stays: `hier_key_within` documents the fallback as
+    /// "only when the `[0]` spelling is a REAL scope", so an empty labelled block
+    /// keeps handing back the plain spelling.
     pub(crate) fn singleton_scope_key(&self, level: &str, seg: &str) -> Option<String> {
         let label = if level.is_empty() {
             seg.to_string()
         } else {
             format!("{level}.{seg}")
         };
-        if self.gen_loop_labels.contains(&label) {
+        if !self.gen_singleton_labels.contains(&label) {
             return None;
         }
         let g0 = format!("{label}[0]");
-        let is_singleton = self.is_hier_scope(&g0) && !self.is_hier_scope(&format!("{label}[1]"));
-        is_singleton.then_some(g0)
+        self.is_hier_scope(&g0).then_some(g0)
     }
 
     /// The first segment of an already-resolved storage `key` that the SOURCE spelled

@@ -462,6 +462,70 @@ fn portless_array_wildcard_connects_nothing() {
     assert!(out.contains("Q=4 4"), "out:\n{out}err:\n{err}");
 }
 
+// ════════════════════════════════════════════════════════════════════
+//  C. a BARE instance-array label is never an element's name
+//
+//  `singleton_scope_key` decided "is this a singleton generate scope" NEGATIVELY
+//  (`label` not in `gen_loop_labels`, `label[0]` a scope, `label[1]` not), and an
+//  INSTANCE-ARRAY label is in neither label set — so a ONE-ELEMENT array passed
+//  both halves and the bare `u.q` reached element 0 at exit 0. It is now keyed
+//  POSITIVELY on `gen_singleton_labels`, the set `display_prefix` already used for
+//  the `%m` twin. Three spellings of the same array, all three refused by both
+//  oracles; an element must be written `u[0].q`.
+// ════════════════════════════════════════════════════════════════════
+
+#[test]
+fn bare_label_on_a_one_element_portless_array_is_loud() {
+    // iverilog:  "g408.sv:4: error: Unable to bind wire/reg/memory `u.q' in `g408'"
+    // verilator: "%Error: g408.sv:4:37: Can't find definition of 'u'"
+    let (out, err, c) = run("module ch; logic [7:0] q = 8'h7; endmodule\n\
+         module top; ch u [0:0] ();\n\
+           initial begin $display(\"A=%0d\", u.q); #1 $finish; end\n\
+         endmodule\n");
+    assert!(is_loud(&out, &err, c), "{out}{err}");
+    assert!(!out.contains("A=7"), "{out}");
+}
+
+#[test]
+fn bare_label_on_a_one_element_ansi_ported_array_is_loud() {
+    // The PRE-EXISTING twin of the cell above (loud on neither PRE nor POST).
+    // iverilog:  "g409.sv:5: error: Unable to bind wire/reg/memory `u.q' in `g409'"
+    // verilator: "%Error: g409.sv:5:41: Can't find definition of 'u'"
+    let (out, err, c) = run(
+        "module ch(input logic [7:0] p); logic [7:0] q; assign q = p; endmodule\n\
+         module top; logic [7:0] w = 8'h7; ch u [0:0] (.p(w));\n\
+           initial begin #1; $display(\"A=%0d\", u.q); #1 $finish; end\n\
+         endmodule\n",
+    );
+    assert!(is_loud(&out, &err, c), "{out}{err}");
+    assert!(!out.contains("A=7"), "{out}");
+}
+
+#[test]
+fn bare_label_on_a_one_element_empty_ansi_array_is_loud() {
+    // The third spelling of the same module header (`module ch();`), also
+    // PRE-EXISTING. iverilog: "g411.sv:4: error: Unable to bind wire/reg/memory
+    // `u.q' in `g411'"; verilator: "%Error: g411.sv:4:37: Can't find definition
+    // of 'u'".
+    let (out, err, c) = run("module ch(); logic [7:0] q = 8'h7; endmodule\n\
+         module top; ch u [0:0] ();\n\
+           initial begin $display(\"A=%0d\", u.q); #1 $finish; end\n\
+         endmodule\n");
+    assert!(is_loud(&out, &err, c), "{out}{err}");
+    assert!(!out.contains("A=7"), "{out}");
+}
+
+#[test]
+fn indexed_element_of_a_one_element_array_still_works() {
+    // The control the refusal above must not take with it: the LEGAL spelling of
+    // the same net. Both oracles: A=7.
+    let (out, err, _c) = run("module ch; logic [7:0] q = 8'h7; endmodule\n\
+         module top; ch u [0:0] ();\n\
+           initial begin $display(\"A=%0d\", u[0].q); #1 $finish; end\n\
+         endmodule\n");
+    assert!(out.contains("A=7"), "out:\n{out}err:\n{err}");
+}
+
 #[test]
 fn connection_to_a_portless_child_array_is_loud() {
     // iverilog: "Wrong number of ports. Expecting at most 0, got 1."

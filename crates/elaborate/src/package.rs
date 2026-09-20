@@ -555,6 +555,16 @@ impl Elaborator<'_> {
                 _ => Vec::new(),
             })
             .collect();
+        // ROADMAP §2 🆕 L ⓢ, package half: the package body is ONE declarative
+        // region, so a parameter name is declared in it once — the same walk the
+        // module/interface scope uses (`param_dup.rs`). The loop's own guard below
+        // is parameter-vs-VARIABLE only; two `parameter P` declarations bound the
+        // second and answered it at exit 0 where both oracles reject the file.
+        self.check_duplicate_param_decls_in(
+            &Self::item_param_decls(&pm.body),
+            "a package body is ONE declarative scope (IEEE 1800-2017 §26.2), so a name \
+             is declared there once",
+        );
         for item in &pm.body {
             match item {
                 ast::ModuleItem::Param(p) => {

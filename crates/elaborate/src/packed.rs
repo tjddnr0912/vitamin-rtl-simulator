@@ -2323,12 +2323,12 @@ impl Elaborator<'_> {
             // armed, whatever net `lookup_net_scoped` would sail out to. Without this
             // `@(posedge V[0])` under `generate begin : g localparam int V = 99;` armed
             // on the OUTER `logic [7:0] V` and fired at 2 where both oracles run the
-            // program with that process blocked forever. Declining reports through the
-            // caller's own edge-bit-select refusal — the same diagnostic the
-            // UNSHADOWED spelling `localparam int K = 99; @(posedge K[0])` already
-            // gets, and the twin of the `PkgScoped` arm's "a constant cannot wake a
-            // process". (That refusal is itself a false loud against both oracles; it
-            // is one gap, not two, and it is recorded rather than widened here.)
+            // program with that process blocked forever. The decline no longer reaches
+            // the caller's edge-bit-select refusal: `events.rs::event_term_never_wakes`
+            // drops a constant EDGE term before this is asked, so the shadowed cell and
+            // the unshadowed `localparam int K = 99; @(posedge K[0])` both run with the
+            // process blocked forever — what both oracles do. This arm still matters
+            // for every OTHER caller of the helper, which have no event lane.
             ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
                 self.lookup_net_unshadowed(&path.segments[0].name, path.span)?
             }

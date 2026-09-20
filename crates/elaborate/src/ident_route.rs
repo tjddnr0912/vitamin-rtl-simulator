@@ -216,6 +216,31 @@ impl Elaborator<'_> {
         }
     }
 
+    /// Does the bare single-segment name at the HEAD of the READ expression `e` bind
+    /// to a constant — under parentheses and through any chain of bit / part /
+    /// indexed-part selects, because a select of a constant is still a constant?
+    /// The read twin of [`Self::lvalue_binds_constant`], asking the same question of
+    /// the same funnel.
+    ///
+    /// ⚠️ Polarity: the tail answers `false`, i.e. "not provably a constant". Every
+    /// caller uses `true` to STAND A RULE DOWN (an event term that can never wake),
+    /// so `false` is the conservative side — it leaves the site on whatever path it
+    /// already had. A caller that would use `true` to admit something must not use
+    /// this predicate.
+    pub(crate) fn expr_head_binds_constant(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => self.expr_head_binds_constant(inner),
+            ast::ExprKind::BitSelect { base, .. }
+            | ast::ExprKind::PartSelect { base, .. }
+            | ast::ExprKind::IndexedPart { base, .. } => self.expr_head_binds_constant(base),
+            ast::ExprKind::Ident(path) => match path.segments.as_slice() {
+                [seg] => self.bare_name_binds_constant(&seg.name, path.span),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
     /// Is `name`, read at `at`, the §2 🆕 O SHADOW shape — a bare name that binds a
     /// constant WHILE a net of the same name is in scope? The extra term is what
     /// makes [`Self::error_const_shadows_net`]'s sentence true: a constant with no
