@@ -838,6 +838,13 @@ impl Elaborator<'_> {
             // outer width context — so `(4'd9+4'd8)'(2)` names a 1-bit cast (the
             // 4-bit sum wraps), not a 17-bit one. The unlimited fold answered 17.
             ast::CastTarget::Size(w) => self.const_int_selfdet(w),
+            // §6.16 `string'(e)` rides `Named` under a reserved KEYWORD spelling
+            // (`ast::STRING_CAST_NAME`). It is not a size cast and has no integral
+            // constant value, so it declines EXPLICITLY here rather than by
+            // accident: the walk below would decline too (nothing in any scope can
+            // be named `string`), and an accidental immunity is one scope-lookup
+            // change away from folding a string cast as a width.
+            t if t.is_string_cast() => None,
             ast::CastTarget::Named(path) if path.segments.len() == 1 => {
                 let id = ast::Expr {
                     kind: ast::ExprKind::Ident(path.clone()),

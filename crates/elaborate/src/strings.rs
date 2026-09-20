@@ -579,6 +579,12 @@ impl Elaborator<'_> {
             // string part) fell to the PACKED concat and rendered the wrong bytes wherever
             // the statement-level hoist could not rewrite it first.
             ast::ExprKind::SysCall { name, .. } => name.name == "$sformatf",
+            // §6.16: `string'(e)` RETURNS a string, for the same reason and with the
+            // same failure mode as `$sformatf` above. Measured without this arm:
+            // `{string'(x), "!"}` on `int x = 24'h616263` took the PACKED concat and
+            // rendered "c!" (the cast node's 8-bit static placeholder width) where
+            // both oracles print "abc!".
+            ast::ExprKind::Cast { target, .. } => target.is_string_cast(),
             // r19: a string-ARRAY ELEMENT (`sa[i]`) is itself a string-domain value.
             // Without this arm an element fell through to the PACKED lowering in every
             // context that gates on this classifier — concatenation, replication and the
@@ -639,6 +645,9 @@ impl Elaborator<'_> {
                     | ir::SysFuncId::StrToUpper
                     | ir::SysFuncId::StrToLower
                     | ir::SysFuncId::Sformatf
+                    // v33: `string'(e)` denotes a string VALUE, so `{string'(x), "!"}`,
+                    // `%s`, a string formal and a `case` scrutinee all see it as one.
+                    | ir::SysFuncId::StrCast
             ),
             _ => false,
         }

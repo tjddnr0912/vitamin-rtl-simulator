@@ -125,6 +125,7 @@ pub fn sysfunc_name(which: SysFuncId) -> &'static str {
         F::StrToUpper => ".toupper()",
         F::StrToLower => ".tolower()",
         F::StrCmp => ".compare()",
+        F::StrCast => "string'()",
         F::Fgets => "$fgets",
         F::Fscanf => "$fscanf",
         F::Sscanf => "$sscanf",

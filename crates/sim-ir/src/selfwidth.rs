@@ -537,7 +537,9 @@ pub fn self_width_of(
             SysFuncId::Sformatf
             | SysFuncId::StrSubstr
             | SysFuncId::StrToUpper
-            | SysFuncId::StrToLower => SelfWidth {
+            | SysFuncId::StrToLower
+            // v33: `string'(e)` is the same family — its width is 8×len at eval.
+            | SysFuncId::StrCast => SelfWidth {
                 width: 8,
                 signed: false,
             },

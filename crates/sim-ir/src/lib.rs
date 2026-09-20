@@ -392,6 +392,25 @@ pub enum SysFuncId {
     DistT,
     /// `$dist_erlang(seed, k_stage, mean)` — Erlang-k.
     DistErlang,
+    // ── v33 (2026-09-20): the `string'(e)` static cast (IEEE §6.16 / §6.24.1).
+    //    args = [the integral operand]. PURE. ──
+    /// `string'(e)` — the §6.16 integral→string conversion as a VALUE: the
+    /// operand's packed bytes MSB-first, every unknown bit read as 0 and every
+    /// 0x00 byte dropped, delivered as a string-domain value (dynamic width
+    /// 8×len, like `Sformatf` / `StrSubstr`).
+    ///
+    /// It is its own id and not a re-spelling of `Sformatf` because `%s` is a
+    /// DIFFERENT rule: `$display("%s", 24'h610062)` prints `a b` (NUL renders as a
+    /// space) on iverilog 13, verilator 5.052 and vita alike, while
+    /// `string'(24'h610062)` is "ab" (len 2) on both oracles. One engine funnel —
+    /// `Value::to_sv_string_bytes` — serves this and every implicit
+    /// integral→string assignment, so the two spellings cannot drift.
+    ///
+    /// Elaborate emits it ONLY for an integral operand: a `real` operand is loud
+    /// (iverilog: "sorry: This cast operation is not yet supported"; verilator
+    /// renders the raw f64 bytes — no oracle) and a string operand is the identity
+    /// (the cast lowers to the operand itself, no node).
+    StrCast,
 }
 
 /// Expression arena node (§1).

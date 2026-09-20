@@ -929,7 +929,10 @@ impl SimState<'_> {
             .copied()
             .unwrap_or(false)
         {
-            Value::from_str_bytes(&v.to_str_bytes())
+            // §6.16: an INTEGRAL element value crossing into a string element is
+            // converted (every 0x00 dropped, unknown bits 0); a string value is kept
+            // verbatim. `q.push_back(24'h610062)` is "ab"/2 on both oracles.
+            Value::from_str_bytes(&v.to_sv_string_bytes())
         } else {
             v.clone().resize(w)
         }
@@ -1088,7 +1091,7 @@ impl SimState<'_> {
             && c.offset.is_none()
             && c.width.is_none()
         {
-            let bytes = piece.to_str_bytes();
+            let bytes = piece.to_sv_string_bytes();
             // HEAP-WAKE: a missing entry IS "" (lazy, like every dyn object), so
             // `s = ""` on a never-assigned handle is correctly NOT a change.
             let moved = {

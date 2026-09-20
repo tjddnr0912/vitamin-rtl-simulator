@@ -733,7 +733,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                         if self.nets.formal_is_string(*func, i) {
                             let s = self.wt.get(a);
                             let v = self.eval_ctx(a, s.width.max(1), s.signed);
-                            Value::from_str_bytes(&v.to_str_bytes())
+                            Value::from_str_bytes(&v.to_sv_string_bytes())
                         } else {
                             // §11.8.3: an assignment-like context lends the actual its
                             // WIDTH, not its SIGN — the right-hand expression's type is

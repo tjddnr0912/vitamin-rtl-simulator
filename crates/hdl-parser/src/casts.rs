@@ -130,6 +130,27 @@ impl Parser<'_, '_> {
         })
     }
 
+    /// The casting type of `string'(e)` (IEEE §6.16 / §6.24.1), with the cursor
+    /// still ON the `string` keyword so the reserved segment carries its span.
+    ///
+    /// `string` is a keyword, so it cannot be returned by [`Self::cast_type_kw`]
+    /// (which is span-free and maps to the `Prim`/`Signing` targets) and it cannot
+    /// reach `parse_size_or_named_cast` (which needs the casting type to have
+    /// parsed as a PRIMARY). It rides `CastTarget::Named` under the reserved
+    /// spelling `hdl_ast::STRING_CAST_NAME` rather than a new `CastTarget` variant: a
+    /// variant flips the frozen hdl-ast schema hash and invalidates every `.vu`,
+    /// while the keyword guarantees no user name can collide with the reserved one.
+    pub(crate) fn string_cast_target(&self) -> CastTarget {
+        let span = self.cur_span();
+        CastTarget::Named(HierPath {
+            segments: vec![Ident {
+                name: STRING_CAST_NAME.to_string(),
+                span,
+            }],
+            span,
+        })
+    }
+
     /// Finish a keyword cast `int'(e)` / `signed'(e)` whose cursor is at the type
     /// keyword and where `'(` is already confirmed to follow. (SV §6.24.)
     pub(crate) fn parse_keyword_cast(&mut self, target: CastTarget) -> Expr {

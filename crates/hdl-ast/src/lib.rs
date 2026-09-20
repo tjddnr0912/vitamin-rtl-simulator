@@ -1623,6 +1623,19 @@ pub enum AssignPatternKey {
     Member(String),
 }
 
+/// The single segment a `string'(e)` cast (IEEE §6.16 / §6.24.1) is spelled with
+/// inside [`CastTarget::Named`].
+///
+/// `string` is a KEYWORD, so no user typedef, class, net or parameter can carry
+/// this name and the reserved spelling cannot collide with a real `Named` cast —
+/// which is why the cast needs no new `CastTarget` variant (a variant would flip
+/// the frozen hdl-ast schema hash and invalidate every `.vu`). Every consumer of
+/// `Named` that resolves the path through a scope lookup already declines here,
+/// because there is nothing in any scope to find; the consumers that must ACT on
+/// it (the elaborate lowering, and the two constant folds that must not mistake it
+/// for a size cast) test this constant by name.
+pub const STRING_CAST_NAME: &str = "string";
+
 /// The casting type in `casting_type'(expr)` (IEEE 1800 §6.24).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum CastTarget {
@@ -1648,6 +1661,20 @@ pub enum CastTarget {
     /// in its scope DECLINES exactly as it declines an unknown today — it never
     /// guesses the default.
     SigningParam { shape_param: Ident },
+}
+
+impl CastTarget {
+    /// Is this the reserved `string'(e)` spelling (IEEE §6.16 / §6.24.1)?
+    ///
+    /// THE home of the question — the parser writes the spelling
+    /// (`Parser::string_cast_target`) and four consumers read it (the elaborate
+    /// lowering, the AST string-domain classifier, and the two constant folds that
+    /// must not mistake it for a size cast). A second `matches!` would be a second
+    /// rule about one construct.
+    pub fn is_string_cast(&self) -> bool {
+        matches!(self, CastTarget::Named(p)
+            if p.segments.len() == 1 && p.segments[0].name == STRING_CAST_NAME)
+    }
 }
 
 /// Primitive casting-type keywords for `CastTarget::Prim`.

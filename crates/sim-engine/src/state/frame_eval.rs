@@ -628,7 +628,7 @@ impl<'a> SimState<'a> {
             // at `run_task` and the module `dyn_write` string path). A width resize here
             // would truncate the string to the 1-bit slot width (silently emptying it).
             let val = if nv.kind == NetKind::String {
-                Value::from_str_bytes(&v.to_str_bytes())
+                Value::from_str_bytes(&v.to_sv_string_bytes())
             } else {
                 v.resize_keep_sign(net_w, nv.signed)
             };
@@ -900,7 +900,7 @@ impl<'a> SimState<'a> {
     /// flag is cleared BEFORE the resize so the sign gets stamped too.
     pub(crate) fn bind_formal(&self, callee: u32, slot: u32, base: u32, v: Value) -> Value {
         if self.formal_is_string(callee, slot as usize) {
-            return Value::from_str_bytes(&v.to_str_bytes());
+            return Value::from_str_bytes(&v.to_sv_string_bytes());
         }
         let nv = &self.ir.nets[(base + slot) as usize];
         let mut src = v;

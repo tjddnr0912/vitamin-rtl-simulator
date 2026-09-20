@@ -23,9 +23,11 @@ pub(crate) fn cast_prim_wsign(p: ast::CastPrim) -> Option<(u32, bool, bool)> {
 
 impl Elaborator<'_> {
     // ── SV static cast `casting_type'(expr)` (IEEE 1800 §6.24) ──────────────
-    // Lowered entirely to EXISTING IR (IR-0; format_version unchanged). Numeric,
-    // size, and signing casts are iverilog-pinned; class/typedef-name casts have
-    // no oracle yet → loud-reject (correct-or-loud, never silent-wrong).
+    // Numeric, size, and signing casts are iverilog-pinned and lower entirely to
+    // EXISTING IR (IR-0); class/typedef-name casts have no oracle yet → loud-reject
+    // (correct-or-loud, never silent-wrong). `string'(e)` is the one arm that is NOT
+    // IR-0: it emits `SysFuncId::StrCast` (format_version 33) — see
+    // `lower_string_cast` for why no composition of existing nodes expresses it.
     pub(crate) fn lower_cast(&mut self, target: &ast::CastTarget, operand: &ast::Expr) -> u32 {
         match target {
             // signed'(e) / unsigned'(e): PRESERVE width, flip the sign attribute.
@@ -126,6 +128,15 @@ impl Elaborator<'_> {
             // constants (a net/typedef/class name yields None), so correct-or-loud
             // is preserved.
             ast::CastTarget::Named(path) => {
+                // §6.16/§6.24.1 `string'(e)` — the reserved spelling the parser
+                // gives the `string` KEYWORD (`ast::STRING_CAST_NAME`). Checked
+                // FIRST because every arm below resolves the path through a scope,
+                // and a keyword resolves to nothing there: without this the cast
+                // would fall out of the chain as "typedef/class cast … outside the
+                // v1 cast scope", which is what it did before this slice.
+                if target.is_string_cast() {
+                    return self.lower_string_cast(operand);
+                }
                 if path.segments.len() == 1 {
                     let id_expr = ast::Expr {
                         kind: ast::ExprKind::Ident(path.clone()),
@@ -207,6 +218,54 @@ impl Elaborator<'_> {
                 self.placeholder_expr()
             }
         }
+    }
+
+    /// `string'(e)` (IEEE §6.16 / §6.24.1) — the integral→string conversion as an
+    /// expression.
+    ///
+    /// Three routes, in this order:
+    /// * A `real` operand is LOUD. iverilog 13 refuses it ("sorry: This cast
+    ///   operation is not yet supported") and verilator 5.052 renders the raw f64
+    ///   bytes (`3.5` -> `@\x0c`), so there is no oracle for a value — correct-or-loud.
+    /// * A STRING operand is the IDENTITY (§6.16 converts an INTEGRAL operand; a
+    ///   string one is already the result). `string'(s)` on `string s = "hi"` is
+    ///   `hi`/2 on verilator; iverilog is no oracle for the probe (it has no
+    ///   `.getc` method, so the design does not elaborate).
+    /// * Everything else becomes `SysFuncId::StrCast` over the operand at its OWN
+    ///   self-determined width — the cast names a type with no width of its own, so
+    ///   there is no context to lend and `lower_expr` is the whole rule. The engine
+    ///   then applies `Value::to_sv_string_bytes`, the one funnel the implicit
+    ///   `string s = <integral>` assignment also uses.
+    ///
+    /// The result is a string-domain VALUE, so `ir_expr_is_string` claims `StrCast`
+    /// and `{string'(x), "!"}`, `%s`, a string formal, a `case` scrutinee and a
+    /// string compare all see it as a string. A METHOD on the cast
+    /// (`string'(x).len()`) is NOT supported and must stay loud: both oracles refuse
+    /// it (verilator "Not expecting CVTPACKSTRING under a DOT in dotted expression";
+    /// iverilog "syntax error"), and the parser's `'(`-guarded arm never produces a
+    /// method receiver, so the shape is refused where it is written.
+    fn lower_string_cast(&mut self, operand: &ast::Expr) -> u32 {
+        // A string LITERAL operand is the identity at the AST level — its lowered
+        // form is a packed `Const`, which `ir_expr_is_string` cannot claim.
+        if matches!(operand.kind, ast::ExprKind::StrLit { .. }) {
+            return self.lower_expr(operand);
+        }
+        let e = self.lower_expr(operand);
+        if self.cast_operand_is_real(operand, e) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "`string'(expr)` is not defined on a real operand (IEEE §6.16 converts \
+                 an INTEGRAL value); iverilog rejects it too",
+            );
+            return self.placeholder_expr();
+        }
+        if self.ir_expr_is_string(e) {
+            return e;
+        }
+        self.push_expr(ir::Expr::SysFunc {
+            which: ir::SysFuncId::StrCast,
+            args: vec![e],
+        })
     }
 
     /// The signedness a cast INHERITS from its operand (§6.24.1) — the

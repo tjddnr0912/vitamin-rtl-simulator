@@ -767,9 +767,58 @@ impl Value {
         out
     }
 
-    /// v7 P2-C: the byte string a value DENOTES (§6.16 conversion): the
-    /// packed bytes MSB-first with LEADING NULs stripped (interior NULs
-    /// kept). X/Z bits read through the value plane (2-state collapse).
+    /// IEEE 1800-2017 §6.16 integral -> string CONVERSION — the ONE rule every
+    /// integral-to-string crossing shares: the implicit `string s = <integral>`
+    /// assignment, a string formal bound to an integral actual, a string queue /
+    /// dynamic-array element store, a string-vs-integral compare, and the explicit
+    /// `string'(e)` cast (`SysFuncId::StrCast`).
+    ///
+    /// Two differences from [`Value::to_str_bytes`], which is the PACKED-ASCII
+    /// SURFACE rule (`%s` rendering, `$fopen` names, `$sscanf` sources) and must
+    /// keep answering as it does:
+    /// * EVERY 0x00 byte is dropped, not only the leading width padding.
+    /// * An UNKNOWN bit reads 0. vita packs `z` as val=1/unk=1 and `x` as
+    ///   val=0/unk=1, so `val & !unk` is the only reading that answers 0 for both.
+    ///
+    /// A value that is ALREADY a string (`is_str`) is returned unconverted: §6.16
+    /// converts an INTEGRAL operand, and a string's own bytes (which `$fgets` can
+    /// fill from a file) are content, not packing.
+    ///
+    /// Measured on iverilog 13 + verilator 5.052, both agreeing (designs
+    /// `c01`/`c11`/`c13`/`c15`):
+    /// `24'h610062` -> "ab" len 2, `24'h616200` -> "ab" len 2,
+    /// `24'h006162` -> "ab" len 2, `0` -> "" len 0, `7'h61` -> "a" len 1,
+    /// `64'h6162636465666768` -> "abcdefgh" len 8,
+    /// `72'h616263646566676869` -> "abcdefghi" len 9, `-8'sd1` -> one 0xFF byte,
+    /// and `16'h61zz` with `[3:0] = 4'bxxxx` -> "a" len 1. Before this, vita kept
+    /// the interior/trailing NULs (len 3) and read the all-unknown byte as 0xF0
+    /// (len 2) — a two-oracle silent-wrong on the whole funnel.
+    pub fn to_sv_string_bytes(&self) -> Vec<u8> {
+        if self.is_str {
+            return self.to_str_bytes();
+        }
+        let nbytes = (self.width as usize).div_ceil(8);
+        let mut out = Vec::with_capacity(nbytes);
+        for bi in (0..nbytes).rev() {
+            let bit = bi * 8;
+            let v = self.val.get(bit / 64).copied().unwrap_or(0) >> (bit % 64);
+            let u = self.unk.get(bit / 64).copied().unwrap_or(0) >> (bit % 64);
+            let byte = (v & !u) as u8;
+            if byte != 0 {
+                out.push(byte);
+            }
+        }
+        out
+    }
+
+    /// v7 P2-C: the byte string a value DENOTES as PACKED ASCII: the packed bytes
+    /// MSB-first with LEADING NULs stripped (interior NULs kept). X/Z bits read
+    /// through the value plane (2-state collapse).
+    ///
+    /// NOT the §6.16 conversion — see [`Value::to_sv_string_bytes`] for that, and
+    /// do not merge the two: `$display("%s", 24'h610062)` prints `a b` (the NUL
+    /// renders as a space) on iverilog, verilator AND vita, while
+    /// `string s = 24'h610062; s.len()` is 2 on both oracles.
     pub fn to_str_bytes(&self) -> Vec<u8> {
         let nbytes = (self.width as usize).div_ceil(8);
         let mut out = Vec::with_capacity(nbytes);

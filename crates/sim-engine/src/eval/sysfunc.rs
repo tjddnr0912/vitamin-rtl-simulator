@@ -544,6 +544,22 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                     _ => Value::from_str_bytes(&[]),
                 }
             }
+            // v33: `string'(e)` — the §6.16 integral→string conversion as a VALUE.
+            // It goes through `to_sv_string_bytes`, the SAME funnel the implicit
+            // `string s = <integral>` assignment, the string formal bind and the
+            // string-element store use, so the explicit and implicit spellings of
+            // one conversion cannot answer differently. The operand is evaluated
+            // at its own self-determined width (elaborate lowers it plainly), so a
+            // 7-bit operand contributes one partial byte and an unsized `0` is 32
+            // bits of padding that drops to "".
+            //
+            // Measured, both oracles agreeing: `string'(24'h610062)` -> "ab" (2),
+            // `string'(0)` -> "" (0), `string'(7'h61)` -> "a" (1),
+            // `string'(72'h616263646566676869)` -> "abcdefghi" (9).
+            SysFuncId::StrCast => match args.first() {
+                Some(&a) => Value::from_str_bytes(&self.eval(a).to_sv_string_bytes()),
+                None => Value::from_str_bytes(&[]),
+            },
             SysFuncId::StrToUpper | SysFuncId::StrToLower => {
                 let b = self.handle_str_bytes(args.first());
                 match b {
@@ -558,12 +574,20 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                     None => Value::from_str_bytes(&[]),
                 }
             }
-            // lexicographic compare of the two args' DENOTED byte strings
-            // (§6.16 conversion: leading NULs strip) — backs both the
-            // `.compare()` method and every string relational operator.
+            // lexicographic compare of the two args' DENOTED byte strings —
+            // backs both the `.compare()` method and every string relational
+            // operator.
+            //
+            // The operands cross the §6.16 boundary here exactly as an assignment
+            // does, so they take the §6.16 rule (`to_sv_string_bytes`): a string
+            // operand is unchanged, an INTEGRAL one drops every 0x00 byte. Measured
+            // `string s = "ab"; s == 24'h610062` -> 1 on verilator 5.052; vita
+            // answered 0 while it kept the interior NUL. iverilog 13 is NOT an
+            // oracle for this cell — it aborts the compile
+            // (`draw_eval_vec4` assertion), so this is a ONE-oracle pin.
             SysFuncId::StrCmp => {
-                let a = args.first().map(|&a| self.eval(a).to_str_bytes());
-                let b = args.get(1).map(|&a| self.eval(a).to_str_bytes());
+                let a = args.first().map(|&a| self.eval(a).to_sv_string_bytes());
+                let b = args.get(1).map(|&a| self.eval(a).to_sv_string_bytes());
                 match (a, b) {
                     (Some(a), Some(b)) => {
                         let r = match a.cmp(&b) {

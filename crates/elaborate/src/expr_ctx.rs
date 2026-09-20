@@ -1174,6 +1174,7 @@ impl Elaborator<'_> {
                     | F::StrSubstr
                     | F::StrToUpper
                     | F::StrToLower
+                    | F::StrCast
                     | F::ArrSum
                     | F::ArrProduct
                     | F::ArrAnd

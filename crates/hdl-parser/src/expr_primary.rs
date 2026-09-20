@@ -144,6 +144,16 @@ impl Parser<'_, '_> {
             {
                 self.parse_keyword_cast(Self::cast_type_kw(kw).unwrap())
             }
+            // SV §6.16/§6.24.1 `string'(e)`. Its own arm because `string` is a
+            // KEYWORD: `cast_type_kw` is span-free and the reserved `Named` segment
+            // this builds needs the keyword's span. Same `'(`-lookahead guard as the
+            // arm above, so a bare `string` type keyword still falls through.
+            Some(T::Word(WordKind::Keyword(Kw::String)))
+                if self.peek_at(1) == Some(T::Apostrophe) && self.peek_at(2) == Some(T::LParen) =>
+            {
+                let target = self.string_cast_target();
+                self.parse_keyword_cast(target)
+            }
             // numeric / string literals (G11: a decimal/real literal may be a time
             // literal `1ns` when a time-unit ident touches it — `maybe_time_literal`).
             Some(T::IntDecimal) => {
