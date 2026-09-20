@@ -193,7 +193,23 @@ impl Elaborator<'_> {
             // slice must be a part-select of a declared net).
             let net_id = match &expr.kind {
                 ast::ExprKind::Ident(hp) if hp.segments.len() == 1 => {
-                    match self.lookup_net_scoped(&hp.segments[0].name) {
+                    // §2 🆕 O: a bare actual whose name binds a CONSTANT is not the
+                    // outer net. `ch u [1:0] (.p(V))` under `generate begin : g
+                    // localparam int V = 3;` sliced the OUTER `logic [1:0] V` and
+                    // printed `O=11`, where both oracles read the 32-bit CONSTANT and
+                    // reject on width ("Port expression width 32 does not match
+                    // expected width 2 or 1"). Named here rather than reported as an
+                    // undeclared name, which it is not.
+                    if self.bare_const_shadows_net(&hp.segments[0].name, hp.span) {
+                        let name = hp.segments[0].name.clone();
+                        self.error_const_shadows_net(
+                            &name,
+                            "a constant is not a net an instance-array port can be \
+                             wired to or sliced from",
+                        );
+                        return;
+                    }
+                    match self.lookup_net_unshadowed(&hp.segments[0].name, hp.span) {
                         Some(id) => id,
                         None => {
                             self.error(

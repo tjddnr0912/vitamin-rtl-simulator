@@ -170,7 +170,7 @@ impl Elaborator<'_> {
         }
         matches!(&base.kind, ast::ExprKind::Ident(p) if p.segments.len() == 1
             && self
-                .dyn_handle_read(&p.segments[0].name)
+                .dyn_handle_read(&p.segments[0].name, p.span)
                 .is_some_and(|(n, _)| self.string_elem_dyn_nets.contains(&n)))
     }
 
@@ -400,9 +400,15 @@ impl Elaborator<'_> {
         name
     }
 
-    /// v7 P2-C: `name` (single segment, current scope) as a STRING net.
-    pub(crate) fn string_handle(&self, name: &str) -> Option<u32> {
-        let n = self.lookup_net_scoped(name)?;
+    /// v7 P2-C: `name` (single segment, read at `at`) as a STRING net.
+    ///
+    /// §2 🆕 O: the net walk is [`Self::lookup_net_unshadowed`], so a name whose
+    /// innermost binding is a CONSTANT is not a string net. Without it `V.len()` under
+    /// `generate begin : g localparam string V = "ab";` answered the OUTER `string V`'s
+    /// 5 where both oracles answer the constant's 2 — in the same `$display` whose
+    /// `%s` already printed `ab`.
+    pub(crate) fn string_handle(&self, name: &str, at: ast::Span) -> Option<u32> {
+        let n = self.lookup_net_unshadowed(name, at)?;
         (self.nets.get(n as usize)?.kind == ir::NetKind::String).then_some(n)
     }
 
@@ -413,7 +419,7 @@ impl Elaborator<'_> {
     pub(crate) fn string_base_expr_net(&self, base: &ast::Expr) -> Option<u32> {
         match &base.kind {
             ast::ExprKind::Ident(p) => match p.segments.as_slice() {
-                [seg] => self.string_handle(&seg.name),
+                [seg] => self.string_handle(&seg.name, p.span),
                 _ => None,
             },
             _ => None,
@@ -551,7 +557,7 @@ impl Elaborator<'_> {
                         return self.is_string_net(net);
                     }
                     self.lookup_scoped(&seg.name).is_none()
-                        && self.string_handle(&seg.name).is_some()
+                        && self.string_handle(&seg.name, p.span).is_some()
                 }
                 _ => false,
             },
@@ -566,7 +572,9 @@ impl Elaborator<'_> {
                     }
                 }
                 name.segments.len() == 2
-                    && self.string_handle(&name.segments[0].name).is_some()
+                    && self
+                        .string_handle(&name.segments[0].name, name.span)
+                        .is_some()
                     && matches!(
                         name.segments[1].name.as_str(),
                         "substr" | "toupper" | "tolower"
@@ -764,7 +772,7 @@ impl Elaborator<'_> {
             return None;
         };
         match p.segments.as_slice() {
-            [seg] => self.string_handle(&seg.name),
+            [seg] => self.string_handle(&seg.name, p.span),
             _ => None,
         }
     }

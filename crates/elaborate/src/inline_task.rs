@@ -26,7 +26,7 @@ impl Elaborator<'_> {
                 );
                 return;
             }
-            if let Some((net, kind)) = self.dyn_handle(&name.segments[0].name) {
+            if let Some((net, kind)) = self.dyn_handle(&name.segments[0].name, name.span) {
                 self.lower_dyn_method_stmt(b, net, kind, &name.segments[1].name, args);
                 return;
             }
@@ -35,7 +35,7 @@ impl Elaborator<'_> {
             // the pre-slice diagnostic was "unsupported hierarchical task call
             // `a.sort`", which names an instance path that does not exist.
             if matches!(name.segments[1].name.as_str(), "sort" | "rsort" | "reverse") {
-                match self.static_array_recv(&name.segments[0].name) {
+                match self.static_array_recv(&name.segments[0].name, name.span) {
                     StaticArrayRecv::Integral(net, _) => {
                         self.lower_static_array_order(b, net, &name.segments[1].name, args);
                         return;
@@ -60,11 +60,31 @@ impl Elaborator<'_> {
             // `s.substr()` worked in the same body that `s.itoa()` refused;
             // this is the WRITE twin of that lookup. Filtered on `is_string_net`, so
             // a non-string out formal still falls through unchanged.
-            if let Some(net) = self.string_handle(&name.segments[0].name).or_else(|| {
-                self.out_subst_lookup(&name.segments[0].name)
-                    .filter(|&n| self.is_string_net(n))
-            }) {
+            if let Some(net) = self
+                .string_handle(&name.segments[0].name, name.span)
+                .or_else(|| {
+                    self.out_subst_lookup(&name.segments[0].name)
+                        .filter(|&n| self.is_string_net(n))
+                })
+            {
                 self.lower_string_method_stmt(b, net, &name.segments[1].name, args);
+                return;
+            }
+            // §2 🆕 O: every method receiver above declined, and the head binds a
+            // CONSTANT that shadows a net of the same name — so the enable is a method
+            // on a constant, which has no statement surface (a constant cannot be
+            // mutated). Named here instead of falling through to "unsupported
+            // hierarchical task call `V.push_back`", which describes an instance path
+            // that does not exist. Both oracles reject the same program ("Enable of
+            // unknown task V.push_back" / "Member call on object 'VARREF 'V''").
+            // Gated on the SHADOW (a constant with no same-named net keeps its old
+            // diagnostic byte-identically).
+            if self.bare_const_shadows_net(&name.segments[0].name, name.span) {
+                let recv = name.segments[0].name.clone();
+                self.error_const_shadows_net(
+                    &recv,
+                    "a constant has no method to enable as a statement",
+                );
                 return;
             }
         }
@@ -103,13 +123,20 @@ impl Elaborator<'_> {
                     // formal is `a[]`) is an md-packed frame net (not a static array); accept it
                     // too — its whole net value forwards to the callee slot at resolution. A
                     // scalar / expression actual lowers as before (value + optional caller lvalue).
+                    // §2 🆕 O: `lookup_net_unshadowed` — a bare actual whose name binds
+                    // a CONSTANT is not the outer array. `top.show(V)` under `generate
+                    // begin : g localparam int V = 99;` forwarded the OUTER `int
+                    // V[0:3]` and printed its elements; verilator rejects the same
+                    // program ("Function Argument expects 'int$[0:3]', got 'int'").
+                    // Declining lowers the constant as a value, which the resolver
+                    // refuses against an array formal.
                     let arr_net = match &a.kind {
-                        ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                            self.lookup_net_scoped(&p.segments[0].name).filter(|&n| {
+                        ast::ExprKind::Ident(p) if p.segments.len() == 1 => self
+                            .lookup_net_unshadowed(&p.segments[0].name, p.span)
+                            .filter(|&n| {
                                 self.net_is_static_array(n)
                                     || self.frame_arr_formal_meta.contains_key(&n)
-                            })
-                        }
+                            }),
                         _ => None,
                     };
                     if let Some(net) = arr_net {
@@ -119,7 +146,23 @@ impl Elaborator<'_> {
                     } else {
                         arg_arrays.push(None);
                         arg_ids.push(self.lower_expr(a));
-                        let lv = expr_to_lvalue(a).map(|lv_ast| self.lower_lvalue(&lv_ast));
+                        // §2 🆕 O (the opposite direction — a LOUD over-report): this
+                        // site builds a SPECULATIVE copy-OUT target for every actual,
+                        // because the callee's port directions do not exist yet
+                        // (`hier_task_port_dirs` is filled per instance at resolve
+                        // time). `lower_lvalue` reaches `lval_write_net`, whose
+                        // constant-shadow refusal then fired on a READ actual:
+                        // `top.sh(V[7:0])` with an INPUT-only formal, under `generate
+                        // begin : g localparam int V = 99;`, was a hard E3009 where
+                        // both oracles print the value — while the LOCAL-call and
+                        // NO-shadow spellings of the same line ran. Skipping the
+                        // speculative lvalue leaves `None`, which is exactly what the
+                        // resolver already reports against an OUTPUT/INOUT formal ("an
+                        // output/inout argument must be a writable net or select"), so
+                        // the WRITE twin stays loud and only the read stops speaking.
+                        let lv = expr_to_lvalue(a)
+                            .filter(|lv_ast| !self.lvalue_binds_constant(lv_ast))
+                            .map(|lv_ast| self.lower_lvalue(&lv_ast));
                         arg_lvals.push(lv);
                     }
                 }

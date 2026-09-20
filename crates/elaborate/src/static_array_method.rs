@@ -68,13 +68,21 @@ impl Elaborator<'_> {
     ///    all (verilator refuses it). `net_is_static_array` is false for a net
     ///    with no declared unpacked dims, so this returns `No` and the caller's
     ///    own diagnostic stands.
-    pub(crate) fn static_array_recv(&self, name: &str) -> StaticArrayRecv {
+    pub(crate) fn static_array_recv(&self, name: &str, at: ast::Span) -> StaticArrayRecv {
         // Resolution priority mirrors `expr_array_view`: an inline-subst formal,
         // an out-formal or a constant shadows a net of the same name, and a
         // shadowed import alias must never silently reach the package storage.
+        //
+        // §2 🆕 O: the constant half is `bare_name_binds_constant`, not the hand-rolled
+        // `lookup_scoped` it replaces — `lookup_scoped` sees the NUMERIC `params` map
+        // alone, so a `real` / `string` / >64-bit localparam shadow sailed past it and
+        // `V.sum()` under `generate begin : g localparam real V = 2.5;` folded the
+        // OUTER `int V[0:3]` to `10`, where both oracles reject the method on a real
+        // constant. The same function the lowering asks also gets the hoisted
+        // block-local NET tie-break right, which a `params` membership test cannot.
         if self.subst_lookup(name).is_some()
             || self.out_subst_lookup(name).is_some()
-            || self.lookup_scoped(name).is_some()
+            || self.bare_name_binds_constant(name, at)
             || self.bare_hit_is_shadowed_pkg_alias(name)
         {
             return StaticArrayRecv::No;

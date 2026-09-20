@@ -407,9 +407,29 @@ impl Elaborator<'_> {
         parent_prefix: &str,
     ) {
         let saved = std::mem::replace(&mut self.cur_prefix, parent_prefix.to_string());
+        // §2 🆕 O: `lookup_net_unshadowed` — a bare actual whose name binds a CONSTANT
+        // is not the outer array, whatever `lookup_net_scoped` sails out to. Without
+        // this `ch u (.p(V))` under `generate begin : g localparam int V = 99;` wired
+        // the OUTER `int V[0:1]` element by element and printed its values, where both
+        // oracles reject the connection (iverilog "Net V is not defined in this context
+        // … Found a parameter with this name here"; verilator "Illegal input port
+        // connection 'p', mismatch between port which is an array, and expression which
+        // is not"). A constant has no unpacked-array surface to connect, so the shadow
+        // is named rather than left to the generic "an expression has no array value".
+        if let ast::ExprKind::Ident(p) = &conn.expr.kind {
+            if p.segments.len() == 1 && self.bare_const_shadows_net(&p.segments[0].name, p.span) {
+                let name = p.segments[0].name.clone();
+                self.cur_prefix = saved;
+                self.error_const_shadows_net(
+                    &name,
+                    "a constant has no unpacked-array value to connect to an array port",
+                );
+                return;
+            }
+        }
         let actual = match &conn.expr.kind {
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                self.lookup_net_scoped(&p.segments[0].name)
+                self.lookup_net_unshadowed(&p.segments[0].name, p.span)
             }
             _ => None,
         };

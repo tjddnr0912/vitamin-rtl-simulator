@@ -169,6 +169,76 @@ impl Elaborator<'_> {
         )
     }
 
+    /// [`Self::lookup_net_scoped`] for a reader that must honour IEEE §6.21
+    /// innermost-wins: `None` when the bare single-segment `name`, read at `at`,
+    /// binds to a CONSTANT, whatever net that walk would otherwise find.
+    ///
+    /// ROADMAP §2 🆕 O. `lookup_net_scoped` walks `symbols` ALONE, so a
+    /// generate-scope `localparam` / `parameter` / genvar / enum label shadowing an
+    /// outer NET does not stop it and every reader built on it answered for the
+    /// outer object while the whole-name read (which routes through
+    /// [`Self::bare_ident_route`]) answered for the constant — one name, two objects,
+    /// in one design. This is the ONE funnel those readers share; a site that has a
+    /// constant path takes it below the decline, and a site that has none refuses
+    /// through [`Self::error_const_shadows_net`].
+    ///
+    /// ⚠️ Not for the net RESOLVER itself (`resolve_net`, `lookup_net_scoped`): those
+    /// also serve positions where a constant is a legal operand, where over-reporting
+    /// would be a loud regression rather than a refusal.
+    pub(crate) fn lookup_net_unshadowed(&self, name: &str, at: ast::Span) -> Option<u32> {
+        if self.bare_name_binds_constant(name, at) {
+            return None;
+        }
+        self.lookup_net_scoped(name)
+    }
+
+    /// Does the bare single-segment name at the ROOT of `lv` bind to a constant —
+    /// i.e. would lowering `lv` as a write target raise the
+    /// [`Self::error_const_shadows_net`] refusal? A `Concat` answers for any part.
+    ///
+    /// Used where an lvalue is built SPECULATIVELY, before the site knows whether the
+    /// value is written at all (`inline_task`'s deferred hierarchical enable lowers
+    /// every actual as a candidate copy-OUT target). `_`-free so a new `Lvalue`
+    /// variant is a compile error rather than a silent `false`.
+    pub(crate) fn lvalue_binds_constant(&self, lv: &ast::Lvalue) -> bool {
+        match lv {
+            ast::Lvalue::Ident(p) => match p.segments.as_slice() {
+                [seg] => self.bare_name_binds_constant(&seg.name, p.span),
+                _ => false,
+            },
+            ast::Lvalue::BitSelect { base, .. }
+            | ast::Lvalue::PartSelect { base, .. }
+            | ast::Lvalue::IndexedPart { base, .. } => self.lvalue_binds_constant(base),
+            ast::Lvalue::Concat { parts, .. } => {
+                parts.iter().any(|p| self.lvalue_binds_constant(p))
+            }
+            ast::Lvalue::Error(_) => false,
+        }
+    }
+
+    /// Is `name`, read at `at`, the §2 🆕 O SHADOW shape — a bare name that binds a
+    /// constant WHILE a net of the same name is in scope? The extra term is what
+    /// makes [`Self::error_const_shadows_net`]'s sentence true: a constant with no
+    /// same-named net is an ordinary constant, and a site that cannot use one there
+    /// keeps whatever diagnostic it already had.
+    pub(crate) fn bare_const_shadows_net(&self, name: &str, at: ast::Span) -> bool {
+        self.bare_name_binds_constant(name, at) && self.lookup_net_scoped(name).is_some()
+    }
+
+    /// The ONE §2 🆕 O refusal. `why` completes the sentence for the site: every
+    /// caller is a position that has no constant path, so the reference cannot be
+    /// lowered as either object.
+    pub(crate) fn error_const_shadows_net(&mut self, name: &str, why: &str) {
+        self.error(
+            MsgCode::ElabUnsupported,
+            &format!(
+                "`{name}` here resolves to a constant (parameter / localparam / \
+                 genvar / enum label), which shadows the net of the same name \
+                 — {why} (rename one of them to disambiguate)"
+            ),
+        );
+    }
+
     /// Does `e` read (by bare name, anywhere in its tree) a constant whose type is
     /// a guess? A body parameter / localparam initialized from one inherits the
     /// guess: its value was folded from the guessed binding and its own meta is

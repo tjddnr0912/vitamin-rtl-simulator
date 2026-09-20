@@ -256,8 +256,15 @@ impl Elaborator<'_> {
         })
     }
 
-    /// `name` (single segment, current scope) as a dyn HANDLE net + its kind.
-    pub(crate) fn dyn_handle(&self, name: &str) -> Option<(u32, ir::NetKind)> {
+    /// `name` (single segment, read at `at`) as a dyn HANDLE net + its kind.
+    ///
+    /// §2 🆕 O: the net walk is [`Self::lookup_net_unshadowed`], so a name whose
+    /// innermost binding is a CONSTANT is not a handle. Without the span-carrying
+    /// walk, `V.size()` / `V.push_back(5)` under `generate begin : g localparam int V
+    /// = 99;` read and MUTATED the outer `int V[$]` at exit 0, where both oracles
+    /// reject ("Object top.g.V has no method size(...)" / "Enable of unknown task
+    /// V.push_back").
+    pub(crate) fn dyn_handle(&self, name: &str, at: ast::Span) -> Option<(u32, ir::NetKind)> {
         // T1: a ROUTED fixed string array is registered under a MANGLED net name, so it
         // resolves through its side map, and that map is consulted with the SAME
         // shadow-aware walk (`walk_scopes_key_shadowed`) and in the SAME order as the
@@ -279,7 +286,7 @@ impl Elaborator<'_> {
             .and_then(|k| self.fixed_string_dyn_key.get(&k))
         {
             Some(&n) => n,
-            None => self.lookup_net_scoped(name)?,
+            None => self.lookup_net_unshadowed(name, at)?,
         };
         let k = self.nets.get(n as usize)?.kind;
         matches!(
@@ -293,7 +300,7 @@ impl Elaborator<'_> {
     /// alias (a read-only `input` dyn-array formal → caller net). WRITE paths call
     /// the plain `dyn_handle` (no alias) so a write to such a formal misses `symbols`
     /// and stays loud — the read-only asymmetry is exactly this call-site choice.
-    pub(crate) fn dyn_handle_read(&self, name: &str) -> Option<(u32, ir::NetKind)> {
+    pub(crate) fn dyn_handle_read(&self, name: &str, at: ast::Span) -> Option<(u32, ir::NetKind)> {
         // The `dyn_subst` ALIAS is checked FIRST: while an R2 body is being lowered, a
         // dyn-array formal must SHADOW any outer same-named net (a module-level `int
         // b[]`/`b[$]` sharing the formal's name must NOT win — that would read the
@@ -304,7 +311,7 @@ impl Elaborator<'_> {
                 return Some((net, nv.kind));
             }
         }
-        self.dyn_handle(name)
+        self.dyn_handle(name, at)
     }
 
     /// V2A: allocate a fresh `DynArray` temp net MIRRORING the element type of
@@ -491,7 +498,7 @@ impl Elaborator<'_> {
         }
         // R2: `dyn_handle_read` so `b[i]` on a read-only aliased input dyn-array formal
         // reads the caller's `dyn_heap[a]`.
-        let (net, kind) = self.dyn_handle_read(&p.segments[0].name)?;
+        let (net, kind) = self.dyn_handle_read(&p.segments[0].name, p.span)?;
         // A single index on a routed MULTI-dim array is a partial index; the flat
         // container would read the row number as an element number.
         self.reject_partial_md_string_index(net);
@@ -539,7 +546,7 @@ impl Elaborator<'_> {
                     return false;
                 }
                 let Some((net_of, kind @ (ir::NetKind::Queue | ir::NetKind::DynArray))) =
-                    self.dyn_handle(&p.segments[0].name)
+                    self.dyn_handle(&p.segments[0].name, p.span)
                 else {
                     return false; // not a dyn handle → the plain (packed/array) path
                 };
@@ -629,12 +636,12 @@ impl Elaborator<'_> {
             // marker (the timeformat pattern) — the engine deep-clones the
             // src heap object into dst.
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                let Some((src_net, src_kind)) = self.dyn_handle(&p.segments[0].name) else {
+                let Some((src_net, src_kind)) = self.dyn_handle(&p.segments[0].name, p.span) else {
                     return false; // rhs is not a handle → the plain path
                 };
                 let dst = match lhs {
                     ast::Lvalue::Ident(dp) if dp.segments.len() == 1 => {
-                        self.dyn_handle(&dp.segments[0].name)
+                        self.dyn_handle(&dp.segments[0].name, dp.span)
                     }
                     _ => None,
                 };
@@ -710,7 +717,7 @@ impl Elaborator<'_> {
             ast::ExprKind::PartSelect { base, msb, lsb } => {
                 let src = match &base.kind {
                     ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                        self.dyn_handle(&p.segments[0].name)
+                        self.dyn_handle(&p.segments[0].name, p.span)
                     }
                     _ => None,
                 };
@@ -719,7 +726,7 @@ impl Elaborator<'_> {
                 };
                 let dst = match lhs {
                     ast::Lvalue::Ident(dp) if dp.segments.len() == 1 => {
-                        self.dyn_handle(&dp.segments[0].name)
+                        self.dyn_handle(&dp.segments[0].name, dp.span)
                     }
                     _ => None,
                 };
@@ -785,7 +792,7 @@ impl Elaborator<'_> {
                 }
                 let handle = match lhs {
                     ast::Lvalue::Ident(p) if p.segments.len() == 1 => {
-                        self.dyn_handle(&p.segments[0].name)
+                        self.dyn_handle(&p.segments[0].name, p.span)
                     }
                     _ => None,
                 };
@@ -827,7 +834,7 @@ impl Elaborator<'_> {
                 if let Some(s) = src {
                     let src_handle = match &s.kind {
                         ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                            self.dyn_handle(&p.segments[0].name)
+                            self.dyn_handle(&p.segments[0].name, p.span)
                         }
                         _ => None,
                     };
@@ -869,7 +876,8 @@ impl Elaborator<'_> {
                 if amw.recv.segments.len() != 1 {
                     return false;
                 }
-                let Some((net, kind)) = self.dyn_handle(&amw.recv.segments[0].name) else {
+                let Some((net, kind)) = self.dyn_handle(&amw.recv.segments[0].name, amw.recv.span)
+                else {
                     return false;
                 };
                 let method = amw.method.name.clone();
@@ -913,7 +921,7 @@ impl Elaborator<'_> {
                     // on it (it is a `DynArray` net) and `lookup_net_scoped` does not
                     // (it lives under a mangled name).
                     let routed = self
-                        .dyn_handle_read(&name.segments[0].name)
+                        .dyn_handle_read(&name.segments[0].name, name.span)
                         .map(|(n, _)| n)
                         .filter(|&n| self.is_fixed_string_dyn(n));
                     if let Some(arr) = routed {
@@ -939,7 +947,11 @@ impl Elaborator<'_> {
                         );
                         return true;
                     }
-                    if args.len() == 1 && self.dyn_handle_read(&name.segments[0].name).is_none() {
+                    if args.len() == 1
+                        && self
+                            .dyn_handle_read(&name.segments[0].name, name.span)
+                            .is_none()
+                    {
                         if let Some(arr) = self.lookup_net_scoped(&name.segments[0].name) {
                             if self.net_is_static_array(arr) {
                                 return self.lower_fixed_foreach_step(b, lhs, arr, m, &args[0], 1);
@@ -954,7 +966,8 @@ impl Elaborator<'_> {
                 // fell through to the generic method path → E3009 (inline static-task gap,
                 // §4.5.170; the frame/automatic path already worked). `dyn_subst` is empty
                 // outside an inline dyn-formal body ⇒ byte-identical for every other array.
-                let Some((net, kind)) = self.dyn_handle_read(&name.segments[0].name) else {
+                let Some((net, kind)) = self.dyn_handle_read(&name.segments[0].name, name.span)
+                else {
                     return false;
                 };
                 // v6: iteration methods — `st = h.first(k);` (ref key arg).

@@ -43,9 +43,14 @@ impl Elaborator<'_> {
     /// layout (element 0 at the LSB).
     pub(crate) fn lower_array_actual_packed(&mut self, a: &ast::Expr, af: &ArrayFormal) -> u32 {
         let (count, elem_w) = (af.count, af.elem_w);
+        // §2 🆕 O: `lookup_net_unshadowed` — a bare actual whose name binds a CONSTANT
+        // is not the outer array, so it must not be packed into the array formal's
+        // slot. Declining sends it to the loud shape-mismatch reject below, which is
+        // where both oracles put the same program (verilator "Function Argument
+        // expects 'int$[0:3]', got 'int'").
         let net_opt = match &a.kind {
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                self.lookup_net_scoped(&p.segments[0].name)
+                self.lookup_net_unshadowed(&p.segments[0].name, p.span)
             }
             _ => None,
         };

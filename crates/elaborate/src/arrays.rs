@@ -334,6 +334,14 @@ impl Elaborator<'_> {
                         if self.bare_hit_is_shadowed_pkg_alias(&seg.name) {
                             return None;
                         }
+                        // §2 🆕 O, the whole-array write twin of `lval_array_chain`'s
+                        // guard: `V = '{9,9,9,9}` under `generate begin : g localparam
+                        // int V = 99;` stored into the OUTER `int V[0:3]` at exit 0
+                        // where both oracles reject the program. Declining sends it to
+                        // the scalar funnel, whose `lval_write_net` guard is loud.
+                        if self.bare_name_binds_constant(&seg.name, p.span) {
+                            return None;
+                        }
                         seg.name.clone()
                     }
                     segs => {

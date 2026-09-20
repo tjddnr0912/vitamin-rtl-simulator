@@ -159,10 +159,10 @@ impl Elaborator<'_> {
     /// output — rather than each re-deciding the shape — is what keeps the two scopes
     /// from drifting apart, which is exactly how a block-local `string s[] = '{…}`
     /// once ended up silently EMPTY while the identical module-scope decl worked.
-    pub(crate) fn has_fixed_string_array_storage(&self, name: &str) -> bool {
+    pub(crate) fn has_fixed_string_array_storage(&self, name: &str, at: ast::Span) -> bool {
         self.string_array_elems.contains_key(&self.fq(name))
             || self
-                .dyn_handle(name)
+                .dyn_handle(name, at)
                 .is_some_and(|(n, _)| self.fixed_string_dyn.contains_key(&n))
     }
 
@@ -590,7 +590,7 @@ impl Elaborator<'_> {
                     cur = b;
                 }
                 ast::Lvalue::Ident(p) if p.segments.len() == 1 => {
-                    let (net, _) = self.dyn_handle(&p.segments[0].name)?;
+                    let (net, _) = self.dyn_handle(&p.segments[0].name, p.span)?;
                     let word = self.routed_string_word(net, idxs)?;
                     return Some((net, word));
                 }
@@ -616,7 +616,7 @@ impl Elaborator<'_> {
                     cur = b;
                 }
                 ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
-                    let (net, _) = self.dyn_handle_read(&p.segments[0].name)?;
+                    let (net, _) = self.dyn_handle_read(&p.segments[0].name, p.span)?;
                     let word = self.routed_string_word(net, idxs)?;
                     return Some((net, word));
                 }

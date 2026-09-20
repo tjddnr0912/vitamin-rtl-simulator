@@ -1657,7 +1657,16 @@ impl Elaborator<'_> {
     pub(crate) fn norm_offset_if_net(&mut self, base: &ast::Expr, raw_off: u32) -> u32 {
         if let ast::ExprKind::Ident(path) = &base.kind {
             if path.segments.len() == 1 {
-                if let Some(net) = self.lookup_net_scoped(&path.segments[0].name) {
+                // §2 🆕 O: `lookup_net_unshadowed`, not `lookup_net_scoped` — when the
+                // name binds a CONSTANT the VALUE being selected is that constant
+                // (`bare_ident_route`), so normalizing the offset against the shadowed
+                // net's declared range subtracted the wrong LSB from the right value:
+                // `logic [15:8] V` + `generate begin : g localparam int V = 99;` made
+                // `V[15:12]` read `99 >> (12-8)` = `6` where both oracles read bits
+                // 15:12 of 99 = `0`. Declining here sends the select to the param arm
+                // below (a non-zero-LSB constant) or to the raw offset (a zero-LSB one)
+                // — the two answers the UNSHADOWED spelling of the same select gets.
+                if let Some(net) = self.lookup_net_unshadowed(&path.segments[0].name, path.span) {
                     return self.norm_offset_for_net(net, raw_off);
                 }
                 // A NON-zero-LSB param/localparam (`localparam [15:8] P; P[15:12]`) —
@@ -2310,8 +2319,18 @@ impl Elaborator<'_> {
     /// `lsb`). Returns the net id when supported, else `None` (→ caller rejects loud).
     pub(crate) fn lsb_bitselect_net(&self, base: &ast::Expr, index: &ast::Expr) -> Option<u32> {
         let net = match &base.kind {
+            // §2 🆕 O: a name that binds a CONSTANT is not a net whose bit 0 can be
+            // armed, whatever net `lookup_net_scoped` would sail out to. Without this
+            // `@(posedge V[0])` under `generate begin : g localparam int V = 99;` armed
+            // on the OUTER `logic [7:0] V` and fired at 2 where both oracles run the
+            // program with that process blocked forever. Declining reports through the
+            // caller's own edge-bit-select refusal — the same diagnostic the
+            // UNSHADOWED spelling `localparam int K = 99; @(posedge K[0])` already
+            // gets, and the twin of the `PkgScoped` arm's "a constant cannot wake a
+            // process". (That refusal is itself a false loud against both oracles; it
+            // is one gap, not two, and it is recorded rather than widened here.)
             ast::ExprKind::Ident(path) if path.segments.len() == 1 => {
-                self.lookup_net_scoped(&path.segments[0].name)?
+                self.lookup_net_unshadowed(&path.segments[0].name, path.span)?
             }
             // `@(posedge p::vec[lsb])` — a scoped package vector's LSB bit-select,
             // the same net (and LSB rule) the imported bare `@(posedge vec[lsb])`

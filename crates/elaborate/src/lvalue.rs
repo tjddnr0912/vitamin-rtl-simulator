@@ -340,7 +340,7 @@ impl Elaborator<'_> {
                 // `a[k] = v`) — handles never take the static chunk paths.
                 if let ast::Lvalue::Ident(p) = &**base {
                     if p.segments.len() == 1 {
-                        if let Some((net, kind)) = self.dyn_handle(&p.segments[0].name) {
+                        if let Some((net, kind)) = self.dyn_handle(&p.segments[0].name, p.span) {
                             // Write twin of the read funnel's partial-index reject.
                             self.reject_partial_md_string_index(net);
                             let word = self.lower_dyn_index(net, kind, index);
@@ -555,16 +555,8 @@ impl Elaborator<'_> {
     fn lval_write_net(&mut self, path: &ast::HierPath) -> u32 {
         if let [seg] = path.segments.as_slice() {
             if self.bare_name_binds_constant(&seg.name, path.span) {
-                self.error(
-                    MsgCode::ElabUnsupported,
-                    &format!(
-                        "`{}` here resolves to a constant (parameter / localparam / \
-                         genvar / enum label), which shadows the net of the same name \
-                         — a constant is not assignable (rename one of them to \
-                         disambiguate)",
-                        seg.name
-                    ),
-                );
+                let name = seg.name.clone();
+                self.error_const_shadows_net(&name, "a constant is not assignable");
                 return POISON_NET;
             }
         }
@@ -601,7 +593,7 @@ impl Elaborator<'_> {
             // BitSelect whole-element write).
             if let ast::Lvalue::Ident(p) = b.as_ref() {
                 if p.segments.len() == 1 {
-                    if let Some((net, kind)) = self.dyn_handle(&p.segments[0].name) {
+                    if let Some((net, kind)) = self.dyn_handle(&p.segments[0].name, p.span) {
                         // r19: a STRING element has no bit-addressable storage — the
                         // engine's element write re-derives the whole element from
                         // `to_str_bytes()`, discarding this offset/width, so the

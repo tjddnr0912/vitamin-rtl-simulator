@@ -38,7 +38,7 @@ impl Elaborator<'_> {
         if path.segments.len() != 1 {
             return false;
         }
-        let Some((net, _)) = self.dyn_handle_read(&path.segments[0].name) else {
+        let Some((net, _)) = self.dyn_handle_read(&path.segments[0].name, path.span) else {
             return false;
         };
         if !self.dyn_md_elem.contains(&net) {

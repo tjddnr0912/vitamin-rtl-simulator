@@ -99,8 +99,13 @@ impl Elaborator<'_> {
             // innermost-wins, §8.10/§13.4): then it is the net, not the property.
             if let Some((net, cls)) = self.cur_this.clone() {
                 let f = &segs[0].name;
-                if self.lookup_net_scoped(f).is_some() {
-                    return None; // a shadowing local/formal net wins
+                // §2 🆕 O: a shadowing CONSTANT wins for the same §6.21 reason a
+                // shadowing net does — the innermost binding decides, and the
+                // lowering's own route (`bare_ident_route`) takes the constant.
+                if self.lookup_net_scoped(f).is_some()
+                    || self.bare_name_binds_constant(f, path.span)
+                {
+                    return None; // a shadowing local/formal net or constant wins
                 }
                 if self.class_field_id(&cls, f).is_some() {
                     return Some((net, cls, f.clone()));
@@ -116,7 +121,13 @@ impl Elaborator<'_> {
                     return Some((*net, cls.clone(), field));
                 }
             }
-            if let Some(net) = self.lookup_net_scoped(obj) {
+            // §2 🆕 O: `obj` must be the object the lowering binds. Without the
+            // unshadowed walk `V.x` under `generate begin : g localparam int V = 99;`
+            // read field `x` out of the OUTER class handle `C V` and printed `X=42`,
+            // where both oracles reject (iverilog "Parameter name V can't have member
+            // names (x)"; verilator "Member call on object 'VARREF 'V'' which is a
+            // 'BASICDTYPE 'int''").
+            if let Some(net) = self.lookup_net_unshadowed(obj, path.span) {
                 if let Some(cls) = self.net_class.get(&net) {
                     return Some((net, cls.clone(), field));
                 }
@@ -132,7 +143,8 @@ impl Elaborator<'_> {
             return None;
         };
         if path.segments.len() == 1 {
-            if let Some(net) = self.lookup_net_scoped(&path.segments[0].name) {
+            // §2 🆕 O: the same unshadowed walk every class-handle reader uses.
+            if let Some(net) = self.lookup_net_unshadowed(&path.segments[0].name, path.span) {
                 if let Some(c) = self.net_class.get(&net) {
                     return Some(c.clone());
                 }
@@ -162,7 +174,8 @@ impl Elaborator<'_> {
                     if n == "this" {
                         return self.cur_this.as_ref().map(|(_, c)| c.clone());
                     }
-                    if let Some(net) = self.lookup_net_scoped(n) {
+                    // §2 🆕 O: the same unshadowed walk every class-handle reader uses.
+                    if let Some(net) = self.lookup_net_unshadowed(n, p.span) {
                         return self.net_class.get(&net).cloned();
                     }
                 }
@@ -453,7 +466,8 @@ impl Elaborator<'_> {
             });
             (this_e, cls, false)
         } else {
-            let net = self.lookup_net_scoped(recv)?;
+            // §2 🆕 O: the same unshadowed walk every class-handle reader uses.
+            let net = self.lookup_net_unshadowed(recv, name.span)?;
             let cls = self.net_class.get(&net)?.clone();
             let this_e = self.push_expr(ir::Expr::Signal { net, word: None });
             (this_e, cls, false)

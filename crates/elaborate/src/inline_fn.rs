@@ -133,7 +133,7 @@ impl Elaborator<'_> {
             }
             // R2: `dyn_handle_read` so a read-only `input` dyn-array formal (aliased
             // to the caller net via `dyn_subst`) resolves `b.size()` / `b.num()`.
-            if let Some((net, kind)) = self.dyn_handle_read(&name.segments[0].name) {
+            if let Some((net, kind)) = self.dyn_handle_read(&name.segments[0].name, name.span) {
                 return self.lower_dyn_method_expr(net, kind, &name.segments[1].name, args);
             }
             // V34-4: the BARE (`with`-less) §7.12.3 reductions on a fixed-size
@@ -146,7 +146,7 @@ impl Elaborator<'_> {
                 name.segments[1].name.as_str(),
                 "sum" | "product" | "and" | "or" | "xor"
             ) {
-                match self.static_array_recv(&name.segments[0].name) {
+                match self.static_array_recv(&name.segments[0].name, name.span) {
                     StaticArrayRecv::Integral(net, _) => {
                         return self.lower_static_array_reduction(
                             net,
@@ -165,8 +165,34 @@ impl Elaborator<'_> {
             // `NetKind::String` net now (round-14 V1); its receiver handle reads via
             // the engine's frame-aware `str_bytes` (mirrors `read_net`), so this
             // dispatch is correct for both module-scope and frame-local strings.
-            if let Some(net) = self.string_handle(&name.segments[0].name) {
+            if let Some(net) = self.string_handle(&name.segments[0].name, name.span) {
                 return self.lower_string_method_expr(net, &name.segments[1].name, args);
+            }
+            // §2 🆕 O: the receiver binds a `string` CONSTANT (`bare_ident_route`'s
+            // `Str` route) — `localparam string V = "ab"`, whether or not it shadows a
+            // `string V` net. `lower_string_method_expr_handle` already documents "or a
+            // literal string `Const`" as one of its handle shapes, so the method reads
+            // the constant the whole-name `%s` in the same `$display` already prints.
+            // Strictly additive: the only names this arm answers for are the ones the
+            // `string_handle` walk above cannot reach, and they were a silent-wrong
+            // (the shadowed spelling answered the OUTER net's `L=5` for `L=2`) or a
+            // false loud (the unshadowed one reported an "unsupported hierarchical
+            // function call `S.len`" where both oracles print 2).
+            if matches!(
+                self.bare_ident_route(&name.segments[0].name, name.span),
+                BareIdentRoute::Str(_)
+            ) {
+                let base = ast::Expr {
+                    kind: ast::ExprKind::Ident(ast::HierPath {
+                        segments: vec![name.segments[0].clone()],
+                        span: name.segments[0].span,
+                    }),
+                    span: name.segments[0].span,
+                };
+                let h = self.lower_expr(&base);
+                if self.handle_is_str_readable(h) {
+                    return self.lower_string_method_expr_handle(h, &name.segments[1].name, args);
+                }
             }
             // G1: a string method on a string-domain FORMAL / inline LOCAL. A frame
             // string formal is a 1-bit wire slot and an inline string local is a subst
@@ -204,6 +230,19 @@ impl Elaborator<'_> {
                 let pkg = name.segments[0].name.clone();
                 let fname = name.segments[1].name.clone();
                 return self.inline_pkg_function(&pkg, &fname, args);
+            }
+            // §2 🆕 O: every method receiver above declined, and the head binds a
+            // CONSTANT that shadows a net of the same name — the call is a method on a
+            // constant, which neither oracle accepts (iverilog "Object top.g.V has no
+            // method size(...)", verilator "Member call on object 'VARREF 'V''").
+            // Named here instead of falling through to "unsupported hierarchical
+            // function call `V.size`", which describes an instance path that does not
+            // exist. Gated on the SHADOW, so a constant with no same-named net keeps
+            // its old diagnostic byte-identically.
+            if self.bare_const_shadows_net(&name.segments[0].name, name.span) {
+                let recv = name.segments[0].name.clone();
+                self.error_const_shadows_net(&recv, "a constant has no method of that name");
+                return self.placeholder_expr();
             }
         }
         if name.segments.len() >= 2 {

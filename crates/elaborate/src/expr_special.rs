@@ -180,7 +180,7 @@ impl Elaborator<'_> {
         // `idx_base` is the array's DECLARED low index. The engine iterates FLAT
         // slots, so `item.index` over `int a[-1:1]` would read 0,1,2 where §7.12.3
         // says -1,0,1; `lower_with_expr` rebases it. A handle is always 0-based.
-        let (net, idx_base) = match self.dyn_handle(&amw.recv.segments[0].name) {
+        let (net, idx_base) = match self.dyn_handle(&amw.recv.segments[0].name, amw.recv.span) {
             Some((net, kind)) => {
                 if !matches!(
                     kind,
@@ -197,7 +197,7 @@ impl Elaborator<'_> {
                 }
                 (net, 0i64)
             }
-            None => match self.static_array_recv(&amw.recv.segments[0].name) {
+            None => match self.static_array_recv(&amw.recv.segments[0].name, amw.recv.span) {
                 StaticArrayRecv::Integral(net, lo) => (net, lo),
                 StaticArrayRecv::Unsupported(msg) => {
                     self.error(MsgCode::ElabUnsupported, msg);
@@ -268,7 +268,9 @@ impl Elaborator<'_> {
             return true;
         }
         let dst = match lhs {
-            ast::Lvalue::Ident(p) if p.segments.len() == 1 => self.dyn_handle(&p.segments[0].name),
+            ast::Lvalue::Ident(p) if p.segments.len() == 1 => {
+                self.dyn_handle(&p.segments[0].name, p.span)
+            }
             _ => None,
         };
         let Some((dst_net, ir::NetKind::Queue)) = dst else {

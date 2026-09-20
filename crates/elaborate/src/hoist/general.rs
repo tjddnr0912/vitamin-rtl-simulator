@@ -326,7 +326,7 @@ impl Elaborator<'_> {
             // `dyn_handle` covers the heap-backed containers INCLUDING the routed fixed string
             // array; it does not report a scalar `string`, whose methods (`len`, `substr`, …)
             // are equally body-less, so that one is resolved plainly.
-            let recv_is_container = self.dyn_handle(&recv.name).is_some()
+            let recv_is_container = self.dyn_handle(&recv.name, recv.span).is_some()
                 || self
                     .lookup_net_scoped(&recv.name)
                     .and_then(|id| self.nets.get(id as usize))

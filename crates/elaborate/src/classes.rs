@@ -444,7 +444,10 @@ impl Elaborator<'_> {
                     if n == "this" || n == "super" {
                         return HKind::Handle;
                     }
-                    if let Some(net) = self.lookup_net_scoped(n) {
+                    // §2 🆕 O: the same unshadowed walk every class-handle reader
+                    // uses — a name that binds a constant is an integral value here,
+                    // not the outer handle net.
+                    if let Some(net) = self.lookup_net_unshadowed(n, p.span) {
                         return if self.net_class.contains_key(&net) {
                             HKind::Handle
                         } else {
@@ -832,7 +835,8 @@ impl Elaborator<'_> {
     pub(crate) fn ctor_this_expr(&mut self, lhs: &ast::Lvalue) -> u32 {
         if let ast::Lvalue::Ident(path) = lhs {
             if path.segments.len() == 1 {
-                if let Some(net) = self.lookup_net_scoped(&path.segments[0].name) {
+                // §2 🆕 O: the same unshadowed walk every class-handle reader uses.
+                if let Some(net) = self.lookup_net_unshadowed(&path.segments[0].name, path.span) {
                     return self.push_expr(ir::Expr::Signal { net, word: None });
                 }
             }

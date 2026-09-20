@@ -815,7 +815,7 @@ impl Elaborator<'_> {
                 // `q.push_back(e)` sequence (queue — CLEARED first, since push_back appends).
                 // A plain SCALAR per-entry local (family D — `dyn_handle` is None) falls
                 // through to the raw `x = init` blocking below, unchanged.
-                if let Some((_, kind)) = self.dyn_handle(&decl.name.name) {
+                if let Some((_, kind)) = self.dyn_handle(&decl.name.name, decl.name.span) {
                     if let Some(elems) = dyn_pattern_elems(init) {
                         if kind == ir::NetKind::Queue {
                             // Reset the queue before re-pushing so a loop / repeated block

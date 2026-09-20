@@ -69,7 +69,7 @@ impl Elaborator<'_> {
                         // level (2 rows, 2 elements) and emitted `s[0] = '{"a","b"}` —
                         // an assignment-pattern into a string element — which rendered
                         // four empty strings at exit 0.
-                        if self.has_fixed_string_array_storage(&name.name.name) {
+                        if self.has_fixed_string_array_storage(&name.name.name, name.name.span) {
                             if let Some(pairs) =
                                 self.string_array_init_pairs(&name.name, &name.unpacked, init)
                             {
@@ -520,7 +520,7 @@ impl Elaborator<'_> {
                 if let Some(elems) = dyn_pattern_elems(&rhs) {
                     if p.segments.len() == 1 {
                         if let Some((_, kind @ (ir::NetKind::Queue | ir::NetKind::DynArray))) =
-                            self.dyn_handle(&p.segments[0].name)
+                            self.dyn_handle(&p.segments[0].name, p.span)
                         {
                             stmts.extend(self.dyn_decl_init_stmts(&p.segments[0], kind, elems));
                             continue;

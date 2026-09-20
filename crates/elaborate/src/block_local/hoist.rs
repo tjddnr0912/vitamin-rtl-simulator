@@ -94,7 +94,7 @@ impl Elaborator<'_> {
                     );
                 } else if scalar_string
                     && !name.unpacked.is_empty()
-                    && self.has_fixed_string_array_storage(&name.name.name)
+                    && self.has_fixed_string_array_storage(&name.name.name, name.name.span)
                 {
                     // r19: a block-local FIXED string array (`string s[2] =
                     // '{…}`) — `push` is false for it (the gate above admits
@@ -331,7 +331,7 @@ impl Elaborator<'_> {
         let shadowed_string_array = if matches!(d.kind, ast::NetVarKind::String) {
             d.names
                 .iter()
-                .find(|n| self.has_fixed_string_array_storage(&n.name.name))
+                .find(|n| self.has_fixed_string_array_storage(&n.name.name, n.name.span))
                 .map(|n| n.name.name.clone())
         } else {
             None
