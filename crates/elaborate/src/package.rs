@@ -1639,12 +1639,19 @@ impl Elaborator<'_> {
     /// an explicit import wins, a local definition wins a wildcard, two wildcards of
     /// one name are ambiguous (unbound — the use site stays loud). `const_fn_pkg`
     /// records the package so the body folds in ITS constant scope.
+    /// `is_cu`: this import came from the COMPILATION UNIT (`$unit`), not from the
+    /// scope's own text. Both lanes chain `cu_imports` in front of the scope's own
+    /// imports, so the index against `cu_imports.len()` is the only thing that tells
+    /// the two apart — and §26.3's "an explicit import of a name the scope declares
+    /// itself is an error" is about an import IN THAT SCOPE. A `$unit` import is an
+    /// OUTER scope, which §26.4 simply lets the local declaration shadow.
     pub(crate) fn apply_import_const_funcs(
         &mut self,
         imp: &ast::ImportDecl,
         local_funcs: &std::collections::BTreeSet<String>,
         wc_fn: &mut BTreeMap<String, String>,
         explicit_fn: &mut std::collections::BTreeSet<String>,
+        is_cu: bool,
     ) {
         let pkg = imp.pkg.name.to_string();
         let Some(funcs) = self.pkg_funcs.get(&pkg).cloned() else {
@@ -1682,13 +1689,22 @@ impl Elaborator<'_> {
                 // `r=40`, a value no oracle prints) — one loud funnel, like the
                 // constant collision in `apply_import_consts`.
                 if local_funcs.contains(&n) {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        &format!(
-                            "explicit import of `{n}` from package `{pkg}` conflicts with a \
-                             local declaration of the same name"
-                        ),
-                    );
+                    // Round-3 R2-1: …but only when the import is in the SAME scope.
+                    // A `$unit` import is an outer scope the local declaration
+                    // shadows (§26.4), which is what both oracles do: `import pk::g;`
+                    // at file scope beside a module's own `function g` prints 1040 in
+                    // iverilog AND verilator, where this arm refused the design (d2/r02
+                    // — false-loud on a legal design, here since `iface-pkg-routine`).
+                    // Either way the local WINS, so the insert is skipped in both.
+                    if !is_cu {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "explicit import of `{n}` from package `{pkg}` conflicts with a \
+                                 local declaration of the same name"
+                            ),
+                        );
+                    }
                     return;
                 }
                 self.const_func_table.insert(n.clone(), f.clone());
@@ -1698,11 +1714,14 @@ impl Elaborator<'_> {
         }
     }
 
+    /// `is_cu`: see [`Self::apply_import_const_funcs`] — a COMPILATION-UNIT import,
+    /// which a scope-local declaration shadows rather than collides with.
     pub(crate) fn apply_import_routines(
         &mut self,
         imp: &ast::ImportDecl,
         wc_rtn: &mut BTreeMap<String, String>,
         explicit_rtn: &mut std::collections::BTreeSet<String>,
+        is_cu: bool,
     ) {
         // Same-package siblings a WILDCARD-imported routine needs; injected after the
         // loop below (the borrow of `funcs` ends there).
@@ -1772,6 +1791,71 @@ impl Elaborator<'_> {
                 }
             }
             Some(sym) => {
+                // IEEE §26.3: an explicit import of a name the importing scope DECLARES
+                // itself is an error (iverilog refuses the design; verilator answers the
+                // local). The constant-function lane above has always said so; this arm
+                // inserted unconditionally, so `import pk::t;` beside a declared
+                // `task t` silently displaced the declaration and answered the
+                // PACKAGE's body — `R=44`, a value neither oracle prints (verilator
+                // `R=1040`, iverilog rejects). The module lane carried the same
+                // silent-wrong before row `iface-subr` made the shape reachable in an
+                // interface; one guard closes both.
+                //
+                // BOTH namespaces in ONE test: IEEE §3.13 puts tasks and functions in a
+                // single name space, so a declared `task g` collides with an imported
+                // FUNCTION `g` too (and vice versa). Those two spellings used to reach
+                // the frame reserver as two routines of one name and report an internal
+                // `top.i.$func$g.a redeclared` instead of the conflict the user wrote.
+                //
+                // `rtn_pkg` is what separates a LOCAL declaration from a name an earlier
+                // import bound: every import arm records the package there, and only
+                // step (3.5) / the interface window's `register_declared_routine` writes
+                // a table row without one. So a repeated `import pk::t;` and a
+                // wildcard-then-explicit sequence stay idempotent, as before.
+                //
+                // Gated on the package actually HAVING a routine of that name, mirroring
+                // the constant lane's `let Some(f) = … else { return }`: an
+                // `import pk::X` of a CONSTANT is `apply_import_consts`'s collision to
+                // report, not this one's.
+                let n = &sym.name;
+                if (funcs.contains_key(n) || tasks.contains_key(n))
+                    && (self.func_table.contains_key(n) || self.task_table.contains_key(n))
+                    && !self.rtn_pkg.contains_key(n)
+                {
+                    // Round-3 R2-1 (`is_cu`) and differential R2-2 (the duplicate):
+                    // the local declaration wins in every branch below, so the insert
+                    // is always skipped; the only question is who SAYS so.
+                    //
+                    // * `is_cu` — nobody. A `$unit` import is an outer scope the local
+                    //   shadows (§26.4); both oracles run d2/r01 and print `R=1040`.
+                    // * the local is a FUNCTION and the package has a FUNCTION of that
+                    //   name — the CONSTANT lane, which has already reported it by the
+                    //   time this runs. Both lanes fill `local_const_funcs` from every
+                    //   `ModuleItem::Func` of the scope, and both tables start empty
+                    //   per scope, so "a scope-local function is in `func_table`
+                    //   without an `rtn_pkg` entry" and "it is in `local_const_funcs`"
+                    //   are the same set; the extra `funcs.contains_key` term is what
+                    //   the constant lane's own early return (`funcs.get(&n) else
+                    //   return`) adds. Without this the line printed TWICE and
+                    //   `errors=1` became `errors=2` in BOTH lanes (d2/m03, d2/a09).
+                    // * otherwise — here. That is every cross-namespace spelling the
+                    //   constant lane structurally cannot see: a declared TASK (s26),
+                    //   an imported FUNCTION onto a declared TASK (s28), and an
+                    //   imported TASK onto a declared FUNCTION (s30, where the package
+                    //   has no function of the name at all).
+                    let const_lane_reported =
+                        funcs.contains_key(n) && self.func_table.contains_key(n);
+                    if !is_cu && !const_lane_reported {
+                        self.error(
+                            MsgCode::ElabUnsupported,
+                            &format!(
+                                "explicit import of `{n}` from package `{pkg}` conflicts with a \
+                                 local declaration of the same name"
+                            ),
+                        );
+                    }
+                    return;
+                }
                 // explicit import always wins (override + protect from wildcards).
                 explicit_rtn.insert(sym.name.clone());
                 if let Some(f) = funcs.get(&sym.name) {

@@ -123,6 +123,7 @@ mod pkg_scoped_frames;
 mod ports;
 mod proc_builder;
 mod proc_ident;
+mod rtn_decl;
 mod scope;
 mod static_array_method;
 mod stmt_flow;

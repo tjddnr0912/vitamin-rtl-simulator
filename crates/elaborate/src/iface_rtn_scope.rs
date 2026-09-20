@@ -64,6 +64,11 @@ use super::*;
 ///   — and its static-local answer is the module lane's pre-existing row verbatim
 ///   (module twin: two instances of a module importing `pk::stat` print `S1=10
 ///   S2=10` before and after this slice where both oracles print `S1=10 S2=20`).
+///   Row `iface-subr` puts the interface's OWN `function`/`task` declarations in the
+///   same bare-name space, and they want exactly that treatment: a static routine
+///   DECLARED in an interface has one local per interface INSTANCE in both oracles
+///   (census d05 `L1=10 L2=10`, module twin m05 identical), which is what a
+///   bare-name key uncarried gives.
 /// * the PARENT's own tables never receive the carry. See [`StaticScopedCarry`] for
 ///   the two designs that measured.
 pub(crate) struct RoutineScope {

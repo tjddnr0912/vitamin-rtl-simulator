@@ -427,15 +427,19 @@ fn an_automatic_package_task_body_top_local_stays_correct() {
     assert_eq!(o.matches("f=101").count(), 2, "expected 101 twice:\n{o}");
 }
 
-/// Sibling block-locals in an INTERFACE task are LOUD (tasks in an interface are
-/// outside the MVP) and stay loud — never silent.
+/// The INTERFACE twin of `a_package_task_init_then_plain_sibling`. It was LOUD when
+/// this file was written (`VITA-E3009`, tasks declared in an interface were outside
+/// the MVP); §3.b row `iface-subr` lifted that, and the body then rides the same
+/// classifier this file is about. Both oracles `A=44 B=0` — the initializer-free
+/// sibling is its OWN variable, which is the cell this file exists for.
 #[test]
-fn interface_task_siblings_stay_loud() {
-    loud(
+fn interface_task_siblings_are_two_variables() {
+    lines_without(
         "interface ib;\n  task t;\n    begin : b1 int x = 44; $display(\"A=%0d\", x); end\n\
              begin : b2 int x; $display(\"B=%0d\", x); end\n  endtask\nendinterface\n\
          module top; ib u(); initial begin u.t(); $finish; end endmodule\n",
-        "VITA-E3009",
+        &["A=44", "B=0"],
+        &["B=44"],
     );
 }
 

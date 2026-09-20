@@ -258,20 +258,18 @@ fn the_module_twin_of_the_collision_is_correct() {
     }
 }
 
-/// ⚠️ The neighbouring loud that this slice does NOT lift, pinned so the next reader
-/// does not read the fixed hoist as covering it: a task or function declared inside an
-/// interface is still honest-loud by design. Both oracles run it; ROADMAP §3 owns it.
+/// The neighbouring loud this slice did NOT lift, and row `iface-subr` did: a task
+/// DECLARED inside an interface was `E3009 functions/tasks inside an interface are
+/// outside the MVP`. It now runs, and its own block-local rides the same hoist this
+/// file is about. Both oracles print `F t=9`.
 #[test]
-fn a_task_in_an_interface_is_still_loud() {
+fn a_task_declared_in_an_interface_runs_with_its_block_local() {
     let (out, code) = run("interface ifc;\n\
         \x20 task automatic tk(); begin int t = 9; $display(\"F t=%0d\", t); end endtask\n\
         \x20 initial #1 tk();\nendinterface\n\
          module top;\n  ifc u();\n  initial begin #10; $finish; end\nendmodule\n");
-    assert_ne!(code, Some(0), "still refused:\n{out}");
-    assert!(
-        out.contains("functions/tasks inside an interface are outside the MVP"),
-        "{out}"
-    );
+    assert_eq!(code, Some(0), "expected a clean run:\n{out}");
+    assert!(out.contains("F t=9"), "{out}");
 }
 
 /// Review round 1, differential lens, BLOCKING: admitting the interface body to the hoist

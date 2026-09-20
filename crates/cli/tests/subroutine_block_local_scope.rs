@@ -883,12 +883,17 @@ endmodule
     );
 }
 
-/// An INTERFACE subroutine is refused outright (`functions/tasks inside an interface
-/// are outside the MVP`) on both PRE and POST — the shape never reaches either
-/// reserver, so this slice cannot move it. Both oracles run it and print `A=44 B=55`.
+/// The INTERFACE twin of the row, reached HIERARCHICALLY (`i.it()` from the parent).
+/// It used to be refused outright (`functions/tasks inside an interface are outside
+/// the MVP`) — the shape never reached either reserver, so the slice that fixed the
+/// module lane could not move it. Row `iface-subr` puts a declared interface routine
+/// into `func_table`/`task_table`, so the hierarchical task call now frames it and
+/// this walk reaches it: both oracles print `A=44 B=55` (iverilog also warns "Static
+/// variable initialization requires explicit lifetime in this context" twice, which
+/// is about the `static` lifetime, not the values), and so does vita.
 #[test]
-fn an_interface_task_is_unchanged_and_loud() {
-    loud(
+fn an_interface_task_gets_the_same_sibling_block_locals() {
+    lines(
         r#"interface ifc;
   task it;
     begin : BA int x = 44; $display("A=%0d", x); end
@@ -900,7 +905,7 @@ module top;
   initial begin i.it(); #1 $finish; end
 endmodule
 "#,
-        &["functions/tasks inside an interface are outside the MVP"],
+        &["A=44", "B=55"],
     );
 }
 

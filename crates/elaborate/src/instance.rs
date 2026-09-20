@@ -524,6 +524,7 @@ impl Elaborator<'_> {
                     &local_const_funcs,
                     &mut wc_const_fn,
                     &mut explicit_const_fn,
+                    i < n_cu,
                 );
             }
         }
@@ -554,6 +555,7 @@ impl Elaborator<'_> {
                     &local_const_funcs,
                     &mut wc_const_fn,
                     &mut explicit_const_fn,
+                    i < n_cu,
                 );
             }
         }
@@ -801,31 +803,19 @@ impl Elaborator<'_> {
         let saved_lets = std::mem::take(&mut self.let_table);
         for item in &module.body {
             match item {
+                // §3.b `iface-subr`: the registration itself is
+                // `register_declared_routine` (`rtn_decl.rs`), shared verbatim with
+                // the interface-instance window, which binds a declared routine
+                // under the same §26.3 rule. The containment gate stays HERE: the
+                // five block-local maps are live from step (3b) above in this lane
+                // and only later in that one — see the file's ⚠️.
                 ast::ModuleItem::Func(f) => {
                     self.check_block_local_scope_leaks(&f.body);
-                    if self
-                        .func_table
-                        .insert(f.name.name.clone(), f.clone())
-                        .is_some()
-                    {
-                        self.warn(&format!(
-                            "function `{}` redeclared; first declaration used",
-                            f.name.name
-                        ));
-                    }
+                    self.register_declared_routine(item);
                 }
                 ast::ModuleItem::Task(t) => {
                     self.check_block_local_scope_leaks(&t.body);
-                    if self
-                        .task_table
-                        .insert(t.name.name.clone(), t.clone())
-                        .is_some()
-                    {
-                        self.warn(&format!(
-                            "task `{}` redeclared; first declaration used",
-                            t.name.name
-                        ));
-                    }
+                    self.register_declared_routine(item);
                 }
                 ast::ModuleItem::Proc(p) => {
                     self.check_block_local_scope_leaks(&p.body);
@@ -860,8 +850,12 @@ impl Elaborator<'_> {
         let mut wc_rtn: BTreeMap<String, String> = BTreeMap::new();
         let mut explicit_rtn: std::collections::BTreeSet<String> =
             std::collections::BTreeSet::new();
-        for imp in &import_list {
-            self.apply_import_routines(imp, &mut wc_rtn, &mut explicit_rtn);
+        // Round-3 R2-1: `i < n_cu` is the COMPILATION-UNIT discriminator — the same
+        // index `import_precedes_header` reads above, and the same one the constant
+        // lane already takes. `import_list` is `cu_imports` chained in front of this
+        // module's own imports, so a `$unit` import is exactly a `i < n_cu` one.
+        for (i, imp) in import_list.iter().enumerate() {
+            self.apply_import_routines(imp, &mut wc_rtn, &mut explicit_rtn, i < n_cu);
         }
 
         // (3.6a) §2 Scoping (package subroutine block-locals): a package `task`/

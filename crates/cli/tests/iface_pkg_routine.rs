@@ -33,8 +33,10 @@
 //! one); runs step (6.5)'s `lower_frame_funcs()` after the interface's nets exist and
 //! before its Logic loop; and restores the module's scope at the window exit.
 //! `wire_ports` stays outside that window — a header-port connection's actual is a
-//! PARENT expression. A `function`/`task` DECLARED in an interface body is still
-//! refused (row `iface-subr`).
+//! PARENT expression. A `function`/`task` DECLARED in an interface body joined the
+//! same tables one row later (`iface-subr`, `crates/cli/tests/iface_subr.rs`); the
+//! two lanes share `func_table`/`task_table`, so the boundary cell below is pinned
+//! here too.
 //!
 //! ## Oracles
 //!
@@ -546,20 +548,22 @@ fn module_twin_localparam_const_function() {
     );
 }
 
-// ------------------------------------------------------- the refusal that stays put
+// ------------------------------------------------- the refusal row `iface-subr` lifted
 
-/// Row `iface-subr` is NOT this row: a `function` DECLARED in an interface body is
-/// still refused. Pinned by CODE plus the one phrase that carries the reason, so the
-/// refusal cannot quietly become a value here.
+/// The neighbouring row: a `function` DECLARED in an interface body. It was
+/// `VITA-E3009 functions/tasks inside an interface are outside the MVP` plus a
+/// `VITA-E3010` at the call when this file was written; row `iface-subr` registers a
+/// declared routine in this window's own `func_table` and both oracles' `V=44` runs.
+/// Kept here as the boundary pin of THIS row — the import lane and the declaration
+/// lane share one table, so a change to either must keep this cell at 44.
 #[test]
-fn iface_declared_function_still_refused() {
-    loud(
+fn iface_declared_function_runs() {
+    lines(
         "interface ifc; int r; function int f(input int a); return a + 4; endfunction\n\
          initial begin r = f(40); $display(\"V=%0d\", r); end endinterface\n\
          module top; ifc i(); initial #2 $finish; endmodule\n",
-        "VITA-E3009",
-        &["inside an interface are outside the MVP"],
         &["V=44"],
+        &["VITA-E3009", "VITA-E3010"],
     );
 }
 
