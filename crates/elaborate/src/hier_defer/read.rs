@@ -84,9 +84,10 @@ impl Elaborator<'_> {
                     }
                     continue;
                 }
-                self.error(
-                    MsgCode::ElabUnresolvedName,
-                    &format!(
+                self.error_hier_unresolved(
+                    &d.prefix,
+                    &d.path,
+                    format!(
                         "undeclared hierarchical name `{}` (no such cross-instance net)",
                         d.path.join(".")
                     ),
@@ -213,9 +214,10 @@ impl Elaborator<'_> {
                         *slot = ir::Expr::Const { val: cid };
                     }
                 } else {
-                    self.error(
-                        MsgCode::ElabUnresolvedName,
-                        &format!(
+                    self.error_hier_unresolved(
+                        &d.prefix,
+                        &d.path,
+                        format!(
                             "undeclared hierarchical name `{}` (no such cross-instance \
                              net or parameter)",
                             d.path.join(".")

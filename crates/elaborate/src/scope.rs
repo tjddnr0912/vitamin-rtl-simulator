@@ -666,7 +666,25 @@ impl Elaborator<'_> {
         if let Some(net) = self.pkg_body_var(name) {
             return Some(net);
         }
-        self.walk_scopes(name, &self.symbols)
+        let key = self.walk_scopes_key(name, |k| self.symbols.contains_key(k))?;
+        // IEEE 1800 §27.5 (`indexed_gen_singleton`), in the one walk every net reader
+        // shares: a net inside a conditional / `case` / bare labelled generate block is
+        // STORED under `label[0].…`, and this flat walk reached it from source text
+        // that spelled the index out (`gi[0].x`, `u.gi[0].x`) — a name neither oracle
+        // binds. Only the segments the SOURCE wrote are judged; the prefix segments are
+        // vita's own spelling. Declining routes the reference to the deferred
+        // hierarchical lane (`expr_main`'s dotted arm, `defer_hier_write`), which
+        // declines it again in `hier_resolve` and reports — this walk has no `&mut
+        // self` and must never be the site that speaks.
+        if name.as_bytes().contains(&b'.')
+            && name.as_bytes().contains(&b'[')
+            && self
+                .key_spells_indexed_singleton(&key, name.split('.').count())
+                .is_some()
+        {
+            return None;
+        }
+        self.symbols.get(&key).copied()
     }
 
     // ── user function/task inlining (SD2 inline path) ──────────────

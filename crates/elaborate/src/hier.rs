@@ -589,6 +589,14 @@ impl Elaborator<'_> {
             } else {
                 format!("{level}.{first}")
             };
+            // (a0) IEEE 1800 §27.5 (`indexed_gen_singleton`): `gi[0]` is how vita
+            // STORES a conditional / `case` / bare labelled generate block, never how
+            // a design may name it — both oracles refuse to bind `gi[0].x`. Committed-
+            // unresolved, ahead of every arm below, so the reader stays loud instead
+            // of reaching the scope through its storage spelling.
+            if self.indexed_gen_singleton(&level, first).is_some() {
+                return None;
+            }
             // (a) leading segment names a child SCOPE (module/genblock instance) here.
             if self.is_hier_scope(&base) {
                 let Some(full) = self.hier_key_within(&base, &path[1..]) else {
@@ -609,6 +617,14 @@ impl Elaborator<'_> {
             // part of the name).
             let base0 = format!("{base}[0]");
             if self.is_hier_scope(&base0) {
+                // §27.4: a generate-FOR label is an ARRAY of scopes at ANY trip count,
+                // so the bare spelling is not its name either — `singleton_scope_key`
+                // is the same test `hier_key_within` applies one dot further in, and
+                // this leading position was the one place that did not ask it
+                // (MEASURED: `gl.x` on a two-trip loop read iteration 0's `5` at exit 0
+                // where both oracles refuse). The label IS bound at this level, so a
+                // failure commits rather than walking outward.
+                let base0 = self.singleton_scope_key(&level, first)?;
                 let full = if rest.is_empty() {
                     base0
                 } else {
@@ -664,27 +680,17 @@ impl Elaborator<'_> {
     /// iteration 0's net (`u.g.x` → `a5`, exit 0), turning a correct loud refusal
     /// into a silent pick — the one trade the accuracy ladder forbids outright.
     /// `seg[1]` existing is the whole discriminator: a conditional/`case`/bare
-    /// block is a singleton by construction, an unrolled loop is not.
+    /// block is a singleton by construction, an unrolled loop is not. That test now
+    /// lives in [`Self::singleton_scope_key`] so `hier_resolve`'s leading-segment arm
+    /// asks it too, and its `[0]`-spelled mirror in [`Self::indexed_gen_singleton`].
     fn hier_key_within(&self, base: &str, rest: &[String]) -> Option<String> {
-        // The `g` ⇒ `g[0]` spelling, but ONLY for a genuine singleton scope.
-        //
-        // TWO tests, because neither alone is the property: `gen_loop_labels` says
-        // the LRM made this name an array (a `for` block, at ANY trip count — the
-        // syntactic fact storage cannot recover), and the absent `[1]` says nothing
-        // else unrolled into it. The loop test has to come first: a one-trip loop
-        // passes the `[1]` test and must still be refused.
-        let singleton0 = |cur: &str, seg: &str| -> Option<String> {
-            let label = format!("{cur}.{seg}");
-            if self.gen_loop_labels.contains(&label) {
-                return None;
-            }
-            let g0 = format!("{label}[0]");
-            let is_singleton =
-                self.is_hier_scope(&g0) && !self.is_hier_scope(&format!("{label}[1]"));
-            is_singleton.then_some(g0)
-        };
         let mut cur = base.to_string();
         for (i, seg) in rest.iter().enumerate() {
+            // §27.5, at every depth: a singleton generate scope named with its `[0]`
+            // storage index (`u.gi[0].x`) is not a name the design may write.
+            if self.indexed_gen_singleton(&cur, seg).is_some() {
+                return None;
+            }
             let plain = format!("{cur}.{seg}");
             if i + 1 == rest.len() {
                 // LEAF: the caller's `table` decides whether this is a hit, so hand
@@ -696,13 +702,13 @@ impl Elaborator<'_> {
                 {
                     return Some(plain);
                 }
-                return Some(singleton0(&cur, seg).unwrap_or(plain));
+                return Some(self.singleton_scope_key(&cur, seg).unwrap_or(plain));
             }
             if self.is_hier_scope(&plain) {
                 cur = plain;
                 continue;
             }
-            cur = singleton0(&cur, seg)?;
+            cur = self.singleton_scope_key(&cur, seg)?;
         }
         Some(cur)
     }

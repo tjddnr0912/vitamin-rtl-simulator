@@ -11,8 +11,8 @@ impl Elaborator<'_> {
     /// index taking the MOST significant chunk (both `[3:0]` and `[0:3]`);
     /// any other width is a loud error.
     ///
-    /// v1 cuts (all loud E3009): exactly one constant range; ANSI-port child
-    /// (port widths must fold under the instance's param overrides);
+    /// v1 cuts (all loud E3009): exactly one constant range; ANSI-port or PORTLESS
+    /// child (port widths must fold under the instance's param overrides);
     /// non-interface ports; sliced/shared conns must be plain identifiers
     /// (part-select synthesis needs the parent net's declared [msb:lsb]).
     pub(crate) fn elaborate_instance_array(
@@ -57,15 +57,29 @@ impl Elaborator<'_> {
         let n = n64 as u32;
 
         // ── child port widths, folded in the CHILD param scope (Fix-1 recipe) ──
-        let ast::PortList::Ansi(ports) = &child.ports else {
-            self.error(
-                MsgCode::ElabUnsupported,
-                &format!(
-                    "instance array `{iname}`: child `{}` has non-ANSI ports (v1: ANSI only)",
-                    child.name.name
-                ),
-            );
-            return;
+        // An EMPTY port list is trivially ANSI, whichever way it was written: the
+        // v1 cut is "the header must state each port's width inline", and a child
+        // with no ports states nothing either way. `module ch;` parses as
+        // `PortList::None` and `module ch();` as `PortList::Ansi([])` — the same
+        // module — so reading "no ANSI list" as "non-ANSI" refused the first and
+        // admitted the second (both oracles run both). The refusal belongs to a
+        // NON-EMPTY non-ANSI header alone, whose port widths live in body
+        // `PortDecl`s this lane does not read.
+        const NO_PORTS: &[ast::AnsiPort] = &[];
+        let ports: &[ast::AnsiPort] = match &child.ports {
+            ast::PortList::Ansi(v) => v,
+            ast::PortList::None => NO_PORTS,
+            ast::PortList::NonAnsi(v) if v.is_empty() => NO_PORTS,
+            ast::PortList::NonAnsi(_) => {
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "instance array `{iname}`: child `{}` has non-ANSI ports (v1: ANSI only)",
+                        child.name.name
+                    ),
+                );
+                return;
+            }
         };
         if ports.iter().any(|p| p.iface.is_some()) {
             self.error(
@@ -131,9 +145,13 @@ impl Elaborator<'_> {
         }
         let conns: Vec<(ast::Ident, Option<&ast::Expr>, ast::Span)> = match &item.conns {
             ast::PortConnList::Named(v, wc) => {
-                if *wc {
-                    // v1: `.*` across an instance array would need per-element
-                    // same-name resolution (and possibly slicing) — keep loud.
+                // v1: `.*` across an instance array would need per-element
+                // same-name resolution (and possibly slicing) — keep loud. On a
+                // PORTLESS child there is nothing for the wildcard to match, so it
+                // connects nothing and there is no per-element resolution to do
+                // (the same reading `iface_inst.rs` already takes: "`.*` alone
+                // matches zero ports on a port-less module").
+                if *wc && !ports.is_empty() {
                     self.error(
                         MsgCode::ElabUnsupported,
                         "`.*` wildcard on an instance array is not yet supported",

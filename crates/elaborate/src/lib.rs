@@ -89,6 +89,7 @@ mod frames_classify_fork;
 mod frames_classify_write;
 mod frames_reserve;
 mod frames_static_init;
+mod gen_scope_name;
 mod generate;
 mod hier;
 mod hier_defer;

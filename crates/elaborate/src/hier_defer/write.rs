@@ -60,9 +60,10 @@ impl Elaborator<'_> {
             let sentinel = HIER_WRITE_SENTINEL_BASE + i as u32;
             let real = match self.hier_lookup(&d.prefix, &d.path) {
                 None => {
-                    self.error(
-                        MsgCode::ElabUnresolvedName,
-                        &format!(
+                    self.error_hier_unresolved(
+                        &d.prefix,
+                        &d.path,
+                        format!(
                             "undeclared hierarchical write target `{}` (no such cross-instance net)",
                             d.path.join(".")
                         ),
@@ -228,9 +229,10 @@ impl Elaborator<'_> {
                 .or_else(|| self.hier_resolve(&d.prefix, &d.path, &self.fixed_string_dyn_key));
             let chunk = match resolved {
                 None => {
-                    self.error(
-                        MsgCode::ElabUnresolvedName,
-                        &format!(
+                    self.error_hier_unresolved(
+                        &d.prefix,
+                        &d.path,
+                        format!(
                             "undeclared hierarchical write target `{path}` (no such cross-instance net)"
                         ),
                     );
