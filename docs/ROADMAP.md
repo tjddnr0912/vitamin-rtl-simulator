@@ -27,10 +27,10 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 6 | 21 | WALL §11.8.1 region sign / declared-width provenance 8 · named prerequisite 6 · one oracle + zero demand (clocking) 3 · ORACLE-SPLIT 2 · DO-NOT-START 2 | LOUD 6 · BLOCKED 6 · WALL 5 · OPEN 4 · PERF 2 · ORACLE-SPLIT 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 121 | 79 | 42 | oracle split / pinned / oracle disqualified 18 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 20 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / selects 6 · diagnostics 4 · class fields 3 · oracle splits 11 | ① | |
+| §2 | recorded defects by mechanism | 127 | 83 | 44 | oracle split / pinned / oracle disqualified 20 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 23 · delays / events 9 · real 7 · performance 7 · index sealing 6 · ranges / selects 6 · diagnostics 5 · class fields 3 · oracle splits 13 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 96 | 82 | 14 | named prerequisite 5 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 23 (the iface-subr row) · constants / parameters 21 · parser accept 13 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 7 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
+| §3.b | loud → correct-support, small | 95 | 81 | 14 | named prerequisite 5 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 22 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 13 · system tasks & file I/O 9 · loud shapes from §4.5.493–495 7 · nets / timing 6 · strings / heap 7 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 344 | 216 | 128 | | | | |
+| total | | 349 | 219 | 130 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, a per-resumption-kind ordering model, a
@@ -589,7 +589,9 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   design-wide frame is still the fix shape. With an import-lane instance declared between two
   scoped-call instances, which copy a scoped call joins follows the declaration order (§4.5.517
   round 3: `SC10 v=10 IM20 v=1020 SC30 v=40` for the oracles' `10 1030 60`; the other two orders
-  give two other answers) — a third symptom of the same row, not a rule to add.
+  give two other answers) — a third symptom of the same row, not a rule to add. §4.5.518 measured the interface IMPORT lane on the
+  same axis: a bare `import pk::ds;` reached by two SIBLING interface instances gives each its own
+  copy (`P1=10 P2=10` where both oracles print `P2=20`), the same per-scope class.
 - A static function that READS its own return variable before assigning it (`function int h(input
   int a); h = h + a; endfunction`, two calls) returns 0 on every lane — module, import and scoped —
   where both oracles print `S1=1 S2=2`: the frame return slot starts at 0 on each call instead of
@@ -613,6 +615,22 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   unpacked-dim and 2-D packed spellings the same (§4.5.515 review, PRE-identical). A type
   parameter is immune when its bounds fold (literal dims) or are carried (`T$w`); the typedef
   registry stores the bound EXPRESSION and every consumer folds it in its own scope.
+- A DUPLICATE routine declaration in one scope warns and then uses the wrong body (both oracles
+  REJECT the design): `register_declared_routine` prints ``W3056 function `f` redeclared; first
+  declaration used`` while `BTreeMap::insert` keeps the LAST, so two `function int f` bodies print
+  `RD=49` (the second) at exit 0. Both lanes, identical text and value; only the diagnostic column
+  differs (§4.5.518). Fix shape = refuse the second declaration, or make the insert first-wins and
+  say so.
+- A routine DECLARED with the name of a NET or a PARAMETER of the same scope is accepted (`O=44`)
+  where both oracles reject (iverilog "'f' has already been declared in this scope", verilator
+  "Function has the same name as variable/parameter"). Module lane and interface lane alike, and
+  vita's resolution is at least self-consistent (the call takes the function, a hierarchical read
+  takes the net). §4.5.518 closed the modport twin of this class for DECLARED routines only.
+- A `modport` named like an IMPORTED routine (`import pk::mp;` or `import pk::*;` beside
+  `modport mp`) is accepted (`R=44` / `O=44`) where both oracles reject. §4.5.518's modport check
+  keys on routines DECLARED in the interface (`!rtn_pkg.contains_key(n)`), which is the right
+  routing decision — an import-versus-declaration collision is `apply_import_routines`' question —
+  but nobody asks the modport question for an imported name.
 - A width-0 indexed part-select is accepted silently: `parameter P = 0; t[i +: P] = …` is rejected by
   iverilog and exits 0 in vita (§3 in character).
 
@@ -670,6 +688,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - `run.json` under `--obs-dir` does not carry `-G`: the run.json for `-G W=9` and for `-G W=100` are
   identical outside the timestamps, so the OBS rail is blind to the one flag that changes the
   design's meaning (see §6 OBS-1).
+- A user function called from a CONTINUOUS ASSIGN is evaluated more than once per event: a routine
+  with a `%m` side effect prints two lines per instance (`M=top.u.f / M=top.v.f` twice) where both
+  oracles print one, and 12 against verilator's 7 and iverilog's 2 on a longer chain. Every VALUE
+  agrees (`W=7`, `W=13`) and the module and interface lanes are byte-identical, so the defect is
+  the evaluation COUNT, not the result; same root as the re-evaluation bullet under Performance.
 - `%h` prints a 1-bit unknown EXPRESSION result as `x` where iverilog prints `X`
   (`$display("%h", ^a)`); the 1-bit NET of the same value is `x` in both, so iverilog is
   inconsistent and IEEE §21.2.1.3 is on vita's side. 17 of 215 designs.
@@ -778,6 +801,15 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - A real beside a bit-vector region in an inline function body: `a8*b8 % 7 + r` is iverilog 6 and
   verilator 2; `a8*b8 + (1 ? r : 0.0)` is iverilog 65025 and verilator 1; `(a8*b8) ** r` splits the
   same way. §4.5.491's test designs were respelled onto shapes where both oracles agree.
+- Two EXPLICIT imports of one name from two packages (`import pa::g; import pb::g;`): vita binds
+  the LAST (`R=42`), verilator the FIRST (`R=41`), iverilog rejects the design.
+- A name used before its declaration INSIDE an interface body (IEEE §6.10): vita refuses it with
+  the module lane's `E3010 … is used before it is declared` since §4.5.518, which installs the
+  `decl_pos` tables in the interface window; iverilog refuses it too (`Unable to bind wire/reg/
+  memory 'n' in 'top.i'`), verilator alone runs it (`interface ifc; initial #1 $display(n); int n
+  = 7; endinterface` prints `N=7`, and the declaration-initializer chain `int a = b; int b = 1;`
+  prints `A=1 B=1`). vita's module lane has always refused the identical text, so the strictness is
+  deliberate and the loud is kept; no test-suite design is affected.
 - `#(.P(pk::PA + 0))` over a package constant declared `logic [0:35]`: iverilog binds 37 bits and
   verilator 36, while iverilog answers 36 for the BARE name in the same design. vita binds 36 =
   verilator = §11.6.1's `max(36, 32)`; the cell is pinned against verilator alone
@@ -859,7 +891,7 @@ behind the §2 correctness queue.
 | frame-body-write-order | `acc = 0; r1 = acc + fw(5);` — hoisting the call moves its write ahead of an operand READ to its left: vita `r1=12 acc=7` = verilator; iverilog `r1=5`. IEEE §11.4.2 leaves operand evaluation order unspecified — an oracle split, recorded. The hierarchical twin `r = u.acc2 + u.fw(3)` is the same split (vita `ORD r=8` = verilator; iverilog `r=0`), and so is an `initial` / `always @(posedge)` / task-body caller beside an `always_comb` caller of the same hierarchical callee: both tools print the same values in the time step, and at a later probe verilator has re-evaluated the comb (`PAIR late acc2=3`) while iverilog and vita keep `11` | `hoist_inout_calls` emits the call before the statement | — | split | — |
 | dyn-size-spellings | `$size(c.da)` (class member) and `$size(u.da)` (hierarchical) are loud where verilator prints 3 (iverilog `x` for the class case — disqualified); `$size(arr)` of a dyn-array FORMAL is E3010 (both oracles 4) | `resolve_intro_net` yields a net for a bare Ident only, so §4.5.500's dyn arm is never entered | route the three spellings to the same `DynSize` node | 1–2 | small |
 | dyn-bits-count | `$bits(da)` of a dynamic array folds the ELEMENT width (32 for `int da[]`) outside a replication count; no oracle for the value (iverilog 1, verilator "UNSUPPORTED: $bits for dynamic array"); as a count it is loud | `try_introspect_fold` has no `$bits` dyn arm; §20.6.2 says the size in bits of the whole array | decide by LRM (`size × element bits`) and pin by hand | 0 | tiny |
-| pkg-type-param-import | an EXPLICIT `import p::PT;` of a package `parameter type PT` is E3009 ``package `p` has no symbol `PT` `` where both oracles run it (`N23 b=8 lo=1 v1=1`); the wildcard `import p::*`, every `p::PT` spelling and the `typedef` twin of the explicit import run since §4.5.515 | the explicit-import binding is a third package-export registry beside the `pkg::t` typedef map and the wildcard export set; §4.5.515 extended the latter two | teach the explicit-import name check the type-parameter names a package declared | 2-oracle | small |
+| pkg-type-param-import | an EXPLICIT `import p::PT;` of a package `parameter type PT` is E3009 ``package `p` has no symbol `PT` `` where both oracles run it (`N35 b=8 lo=0 v1=1`); the wildcard `import p::*`, every `p::PT` spelling and the `typedef` twin of the explicit import run since §4.5.515 | the explicit-import binding is a third package-export registry beside the `pkg::t` typedef map and the wildcard export set; §4.5.515 extended the latter two | teach the explicit-import name check the type-parameter names a package declared | 2-oracle | small |
 | gen-rtn-edges | after §4.5.473: a bare call of a generate-scoped routine from OUTSIDE its block is E3010 (both oracles reject — keep) · a hierarchical `u.g.f(x)` is E3009 (iverilog runs it, `f0 fe`; no `hier_funcs` entry) · a generate-scope routine in a CONSTANT expression (`localparam W = f(3)` in the block) is E3009 (iverilog `04`; `const_func_table` is filled by the module-body prescan only) · `frames_classify.rs:1069` retains callees by BARE name, so a generate-routine → generate-routine recursion edge is missed (loud-safe by that function's doc; unmeasured) · `tf_decl_scope` stays the module prefix for a generate-scoped routine, so `default_binding_matches_decl_scope` compares a default argument against module scope (traced to a conservative reject, untested) · `%m` inside a generate task is a split (iverilog `t.u.g.show` pinned, verilator `t.u.g.g.show`) | `frames_reserve.rs` hier gate · `instance.rs:496-505` const prescan · `frames_classify.rs:1069` · `scope.rs:379` | hier: compose the hier key from the qualified name · const: register generate routines into `const_func_table` per scope · edges/default-binding: measure first | iverilog | small–medium |
 | aes§2 | the inliner's discriminator is more than `automatic` — plain 3/5, and `automatic` / `for` / `if` / `case` 1/5, `p::f()` 2/5 | the inliner's discriminator | widen the inliner | measured | — |
 
@@ -871,7 +903,6 @@ behind the §2 correctness queue.
 | blocal-inert-falseloud | an inner block-local that is DECLARED, never referenced inside its own block and carries no initializer is refused with ``E3009 block-local `x` is referenced outside its `begin…end` block`` although the flatten is byte-correct; both oracles print a value on every measured cell in the module and the import lane (the scoped lane is silently wrong instead — its own §2 row) | `check_block_local_scope_leaks` keys on the NAME, not on the binding a post-block reference takes | the gate must resolve that binding. Three narrowings that keyed on properties of the DECLARATION — inertness, geometry, an outer-twin lookup — were each measured to create a new defect, and the axis was reverted whole (§4.5.490) | 2-oracle | — |
 | scoped-call-comb-arg | a scoped package call inside `always_comb` whose actual is a variable WITH a declaration initializer (`int i = 21; always_comb r = pk::g(i);`) is a false E3001 ``variable `i` has a declaration initializer AND is written by `always_comb` `` where both oracles print 44; the import spelling and the module-local twin run, and no block-local is involved | Rule A's driver walk counts the scoped call's actual as a write (the same conservative walk the `frame-body-write-sites` row records for a hierarchical callee) | resolve the scoped callee's ports before the walk, as the local twin does | 2-oracle | small |
 | blocal-collector-parity | `collect_block_local_decls_spanned` (`block_local/mod.rs`) omits the `Wait` / `DelayCtrl` / `EventCtrl` recursion its sibling `gather_nested_block_locals` has, so a block-local declared under a timing-controlled statement in a subroutine body reaches neither the scoped feed nor §4.5.486's static-init prologue | latent: the shape is LOUD today (`E3010 undeclared net/variable top.s.$func$t.x`, PRE = POST), which is the only thing standing between the omission and a silent drop | align the collector with its sibling in the same edit that removes the loud; measure the drop channel first | — | small |
-| iface-subr | a `function` or `task` declared inside an interface is E3009 "outside the MVP"; both oracles run it, and its block-locals therefore never reach either reserver; a routine DECLARED beside a wildcard import must enter `func_table`/`task_table` BEFORE `apply_import_routines` so it wins the wildcard (both oracles `R=1040`; today the E3009 refusal fires and the call binds the package routine behind it); the modport `import f` and the hierarchical `i.f()` spellings are 1-oracle (iverilog rejects both) and stay out of the row | `frames_reserve.rs` / the interface body gate | route an interface body's subroutines like a module's | 2-oracle | — |
 | dimquery-width | the dimension-query family (`$size`, `$high`, `$low`, `$left`, `$right`) and `$signed` are LOUD in every certified consumer (7 + 6 cells) although both are integer-returning and already foldable, so the §4.5.478 `SysCall` arm's named list excludes them | the named list in `param_decl_width_opt` / `ctx_width_names_are_evident` | admit them with their own census: `$signed` is NOT 32 bits, it is its operand's width | 2-oracle | small |
 | §3.11 | inlining `function automatic` — "a non-recursive automatic is identical to an inline" is refuted by measurement (15 suite failures, `$random` drawn twice) | the inline expansion names the operand a second time | ⓐ name it once (a callee-purity predicate) · ⓑ open codegen (`is_codegen_able`'s `Terminator::Call` reject, §5 T1/T2) | — | — |
 | static-local | `function integer f(input integer x); integer s; begin s = s + x; f = s; end` gives E3010 `undeclared net/variable top.s` | block-local flatten demands definite assignment; with control flow it becomes a frame and works, so the gap is exactly "straight-line body plus a read-then-write static local" | a read-before-write slot in the flatten | iverilog runs it with X | — |
@@ -1055,8 +1086,8 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 
 | # | slot | item | source | rank |
 |---|---|---|---|---|
-| 1 | 1 | a `function` or `task` DECLARED inside an interface body is ``E3009 functions/tasks inside an interface are outside the MVP`` plus an E3010 at every call, where both oracles print `F=44 T=103 B=41` (a function, a task with an output formal, a function with a block-local) — the Logic loop's catch-all in `iface_inst.rs` refuses `ModuleItem::Func`/`Task`, so neither reserver sees them (§3.b `iface-subr`; sibling of `iface-pkg-routine`, §4.5.517). First action: census the module lane's step (3.5) collection and its (3.6a)/(6.5) feeds against the interface window on HEAD, and put the declared routines into `func_table`/`task_table` BEFORE `apply_import_routines` so a declared `g` beside `import pk::*` wins the wildcard (both oracles `R=1040`); the modport `import f` and the hierarchical `i.f()` spellings are 1-oracle and stay out | §3 | ② |
-| 2 | next | a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
+| 1 | 1 | an EXPLICIT `import p::PT;` of a package `parameter type PT` is ``E3009 package `p` has no symbol `PT` `` where both oracles run it (`N35 b=8 lo=0 v1=1` for `PT v; v = 8'h23; $display("N%0d b=%0d lo=%0d v1=%0d", v, $bits(v), $low(v), v[0])`); the wildcard `import p::*`, every `p::PT` spelling and the `typedef` twin run since §4.5.515 — the explicit-import binding is a third package-export registry beside the `pkg::t` typedef map and the wildcard export set (§3.b `pkg-type-param-import`). First action: census the three registries' producers in `package.rs` on HEAD and teach the explicit-import name check the type-parameter names a package declared | §3 | ② |
+| 2 | next | `scoped-call-comb-arg` · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
 | 3 | hygiene | `params.rs` is 2,266 lines against the 1,000-line policy and is not on the exception list; `param_query.rs` (854) is the precedent for the split. `package.rs` (1,780), `frames_reserve.rs` (1,395), `instance.rs` (1,672), `inline_fn.rs` (1,100+), `expr_ctx.rs` (1,189), `expr_size_ctx.rs` (1,075) `sim-engine/state/frame_eval.rs` (1,810), `hdl-parser/typedefs.rs` (1,389) and `sim-engine/native/wprog.rs` (1,914, its vocabulary already split into `wprog/why.rs`) are over the cap too; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs` further, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:

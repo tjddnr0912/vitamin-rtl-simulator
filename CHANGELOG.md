@@ -11,6 +11,22 @@ changed for a user of the simulator.
 
 ### Fixed — runtime continuous-assign delays, hierarchical leaves in a size cast, module-net writes from a function
 
+- **A `function` or `task` declared inside an interface body runs.** Declaring a routine in an
+  `interface` was `VITA-E3009 functions/tasks inside an interface are outside the MVP`, with a
+  `VITA-E3010` at every call; the routine now elaborates exactly as the same text in a module does.
+  Its static locals are one set per interface instance, `%m` names that instance (`top.u.sc`), and
+  recursion, loops, delays, output formals, void functions, packed returns, generate-nested
+  instances, continuous assigns, `always_comb`, hierarchical calls from the parent (`u1.bump(3)`)
+  and constant folding in a `localparam` or a header parameter default all print the reference
+  tools' values; `--obs-dir`, `--probe` and the VCD match the module twin. A routine declared beside
+  `import pk::*` now wins the wildcard, as both reference tools do. Three name-resolution defects
+  were fixed with it, in the interface lane AND in modules: an explicit `import pk::t;` beside a
+  locally declared `t` silently ran the package routine and is now refused (IEEE 1800 §26.3); the
+  same refusal used to fire for an import at COMPILATION-UNIT scope, which is legal — the local
+  declaration simply shadows it (§26.4) — and now runs; and a name used before it is declared inside
+  an interface body is now caught by the same `VITA-E3010` the module lane has always raised (IEEE
+  1800 §6.10), where it used to run and print a value no reference tool produces. A `modport` sharing
+  the name of a routine declared in the same interface is refused.
 - **An interface body applies its package ROUTINE imports.** `import pk::g;` (or `import pk::*;`,
   or the same import in the interface header) followed by a bare `g()` inside an `interface` was
   `VITA-E3010 call to undeclared function`, and a `localparam` computed by an imported constant
@@ -22,7 +38,7 @@ changed for a user of the simulator.
   routine only the parent imported is refused. A static package routine called by its scoped
   spelling (`pk::f()`) from sibling interface instances of one parent instance keeps sharing one
   set of locals, as before and as both reference tools do. A `function` or `task` DECLARED inside
-  an interface stays loud.
+  an interface was still loud at that point; it runs as of the entry above.
 - **A package-scoped call reaches every same-package callee the way an import does.** `pk::g()`
   whose callee `h` declared a local with an initializer (`int x = a*2;`), read a static local
   before writing it, used `if`/`for`/`case`, an unpacked local, or called `g` back was

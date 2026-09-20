@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 409건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 410건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.518` **a `function` or `task` DECLARED in an interface body runs, and the interface window installs the module lane's declaration-order and import-collision gates** (2026-09-20 · §3.b `iface-subr`, queue row 1 · new `rtn_decl.rs` = one `register_declared_routine` shared by `instance.rs` step (3.5) and the interface window: declared functions enter `const_func_table`/`local_const_funcs` before the header fold and `func_table`/`task_table` BEFORE `apply_import_routines` (a declared `g` beats `import pk::*`, both oracles `R=1040`), the block-local containment gate runs over routine bodies, and `lower_frame_funcs` moved into the rank-scope nets closure so a net decl-initializer calling a framed routine runs (`int r = lp(5)` → 10; the import and scoped `pk::lp()` lanes too) · 21 loud→value cells (`F=44 T=103 B=41`, hierarchical `u1.bump(3)`, per-instance static locals, `%m`, recursion, void, continuous assign, `always_comb`, packed return), OBS/VCD/probe at module-twin parity · three gate defects closed in review: the SHARED explicit-import arm inserted a package routine over a scope-local declaration of either namespace (silent `R=44`, a value no oracle prints; module lane too), that guard and the constant lane's fired for a `$unit` import where §26.4 says the local SHADOWS it (`is_cu` threaded through six call sites), and the interface window never installed the §6.10 `decl_pos` tables so `check_decl_precedes_use` was vacuous (`R=3 L=100` at exit 0) · a modport named like a declared routine is now loud · the §6.10 install also reaches interface PROC bodies, kept as an oracle split (verilator alone answers) · 2 lenses × 3 rounds, 3428-design sweep with zero PRE-exit-0 cells changed outside that split · 8194 tests)
 - `4.5.517` **an interface body binds its package ROUTINE imports in its own routine scope; static scoped frames are carried between sibling interface instances** (2026-09-20 · §3.b `iface-pkg-routine`, queue row 1 · `iface_rtn_scope.rs` takes the module-local `RoutineScope` at the interface window entry and restores it verbatim at exit, so the window applies `apply_import_const_funcs` in both import passes and `apply_import_routines` after the body pass, feeds the imported bodies to the block-local classifier through the shared `imported_routine_bodies` the module lane's step 3.6a calls, and runs `lower_frame_funcs()` before the interface's Logic loop: a bare call in an interface body is no longer `E3010` and an imported constant function no longer `E3009` · three pre-existing silent-wrongs closed — a bare `g()` in an interface resolved to the PARENT's `g` (`I=1040` and `I=39` for the oracles' `I=44`) · the STATIC `::`-keyed frames of the seven routine tables are carried to the next sibling interface instance of the SAME parent instance, keyed on the parent's `inst_prefix` and adopted insert-if-absent, the parent's own tables never written (the design-wide frame for a static package routine stays the recorded §2 prerequisite, not built) · 2 lenses × 3 rounds, 80 + 91 + 12 designs; round 1 added `inst_prefix` to the scope (a `%m` under the module lane's prefix) and round 2 `cur_module`, round 2 turned the sibling adopt insert-if-absent after an overwrite gave one instance two copies of a static local, round 3's third finding on the declaration-order axis was recorded in §2 under the three-blocker rule · 8146 tests)
 - `4.5.516` **the transitive package callees of a scoped `pk::g()` call are framed with the step-6.5 predicate, and callee walkers see declaration initializers** (2026-09-19 · §3.b `pkg-callee-blocal`, queue row 1 · the `frame_idx` MISS arm runs the step-6.5 predicate over the just-injected callees, reserves them and the root before lowering, and never narrows: static-persistent and return-variable-reading routines keep their inline loud · `collect_callee_decls` / `collect_callee_func` / `collect_callee_task` see declaration initializers on every lane (a decl-init call bound to the calling module's routine, PRE-silent, fixed) · 2 lenses × 3 rounds, 235 designs: 159 identical, 57 loud→value, 13 silent→value, 0 down; three call-site guard shapes each regressed a working design and the axis was reverted under the three-blocker rule)
 - `4.5.515` **a package `parameter type` is referable as `pkg::PT`, and a non-overridable type parameter registers its declared range** (2026-09-19 · §3.b `pkg-type-param`, queue row 1 · `pkg::PT` twin registered at `endpackage` for every type parameter the body declared; a non-overridable concrete type parameter registers folded literal dims instead of `[T$w-1:0]`; the compilation-unit parameter arm is non-overridable by construction · 2 lenses 54 + 40 designs, round 2 closed a shadow-class routing, a false-accept and a CU position dependence)
@@ -527,6 +528,173 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.518 a `function` or `task` DECLARED in an interface body runs, and the interface window installs the module lane's declaration-order and import-collision gates (2026-09-20, branch it21) ✅
+
+**ROADMAP row**: §3.b `iface-subr`; queue row 1.
+
+**Defect (PRE, both oracles agree unless marked)**. The Logic loop's catch-all in `iface_inst.rs`
+refused `ModuleItem::Func` / `ModuleItem::Task` with `E3009 functions/tasks inside an interface are
+outside the MVP`, and every call to such a routine was `E3010`, while both oracles print a value —
+21 census cells. A declared routine therefore reached neither reserver, neither constant-function
+table, and neither gate.
+
+**Fix**. New `crates/elaborate/src/rtn_decl.rs`: ONE `register_declared_routine` shared by the
+module lane's `instance.rs` step (3.5) and the interface window (`iface_inst.rs`), so the two lanes
+cannot drift. Inside the interface window, in the module lane's order:
+
+- declared functions are collected into `const_func_table` / `local_const_funcs` BEFORE the header
+  fold, so a header default `#(parameter int X = cf(4))` and a body `localparam W = cf(4)` both fold
+  (both oracles 44);
+- declared functions and tasks are registered into `func_table` / `task_table` BEFORE
+  `apply_import_routines`, so a declared `g` beside `import pk::*` wins the wildcard (both oracles
+  `R=1040`);
+- the block-local containment gate runs over routine bodies after the maps are installed, so the
+  nested-shadow shape stays loud with the module twin's message;
+- `lower_frame_funcs` moved INTO the rank-scope nets closure — after the net and hoist loops and
+  before `collect_var_init_drivers`, which is the module lane's order — so a net declaration
+  initializer that calls a framed routine runs (`int r = lp(5)` → 10, module parity). The move also
+  fixed the import lane and the scoped `pk::lp()` lane in declaration initializers, which printed
+  garbage `E3009` (`$func$pk::lp.n redeclared`) before;
+- the Logic loop treats `Func` / `Task` as definitions instead of falling into the catch-all.
+
+21 loud→value cells: d01 `F=44 T=103 B=41`; d02 `R=1040` (declared beats the wildcard); d04 a
+hierarchical `u1.bump(3)` from the parent resolves through `hier_funcs` (`C1=3 C2=5`); d04b
+per-instance net writes `O1=6 O2=10`; d05 a static local of a DECLARED routine is per instance
+(`L1=10 L2=10`, identical to the module twin — unlike a package routine); d06 a task with a delay
+and an output formal `D=21 @1`; d07 a loop `LP=10`; d08 recursion `FACT=120`; d09 `%m` =
+`top.u.sc` / `top.w.sc`; d10 / d10b constant fold 44; d12 a declared routine calling an imported one
+`R=48`; d13 interface `g` versus parent `g` `I=1040 P=44`; d14 generate-nested `G=44`; d15 / d16
+per-instance parameter reads; d20 a void function; d21 a continuous assign; d22 `always_comb`; d23 a
+declared constant function winning the wildcard inside a `localparam`; d25 a packed return `5a`.
+OBS parity: `subroutines[]` rows file under `module:"ifc"` and `subroutine_calls[]` is per instance;
+VCD and `--probe` output are identical to the module twin.
+
+**Review** (2 lenses × 3 rounds; PRE frozen at `b324c239…`, POST `0b4739…`, POST2 `02b96761…`,
+POST3 `a1714a4a…`; oracles iverilog 13.0 `-g2012` and verilator 5.052).
+
+- Round 2 soundness S-1, BLOCKING: the explicit arm of `apply_import_routines` — SHARED code —
+  inserted a package routine over a scope-local declaration of the same name with no check, so
+  `import pk::t;` beside a declared `task t` silently ran the package task. The module twin was
+  silent-wrong the same way on PRE.
+
+  ```
+  PRE  : error[VITA-E3009] functions/tasks inside an interface are outside the MVP [in top.i]  rc=1
+  POST : R=44                                                                                   rc=0
+  IV   : s26.sv:3: error: 't' has already been imported into this scope from package 'pk'.
+  VL   : R=1040
+  ```
+
+  44 is a value neither oracle prints. Fix: the runtime arm refuses an explicit import whose name is
+  a scope-local routine of EITHER namespace (a `func_table` / `task_table` key with no `rtn_pkg`
+  entry) and reuses the constant lane's text, ``explicit import of `x` from package `pk` conflicts
+  with a local declaration of the same name``; the module lane moved silent→loud there too. The
+  six-writer census of `func_table` / `task_table` showed `register_declared_routine` is the only
+  bare-name, no-`rtn_pkg` writer that precedes the import loop in either lane, so the predicate is
+  exact for "declared in this scope". Round 2 also took S-4 (a modport named like a DECLARED routine
+  is now ``E3009 modport `mp` has the same name as a function/task declared in this interface``;
+  both oracles reject) and S-5 (the framed declaration initializer above).
+
+- Round 3 soundness R2-1, BLOCKING: that guard, and the constant lane's older one, fired for a
+  COMPILATION-UNIT (`$unit`) import beside a scope-local routine — a legal design, since §26.4 makes
+  the local declaration SHADOW an outer-scope import, and both oracles print 1040. PRE answered it
+  silently wrong for tasks (`R=44`) and loud for functions since `iface-pkg-routine`.
+
+  ```
+  PRE  : R=44                                                                                   rc=0
+  POST2: r01.sv:3:8: error[VITA-E3009] explicit import of `t` from package `pk` conflicts with a
+         local declaration of the same name [in top]                                            rc=1
+  POST3: R=1040        IV: R=1040        VL: R=1040
+  ```
+
+  Fix: `is_cu` threaded into both `apply_import_routines` and `apply_import_const_funcs` at all six
+  call sites (`i < n_cu`; the sibling `apply_import_consts` already passed the exact complement
+  `i >= n_cu`). A `$unit` collision is skipped SILENTLY — the local wins — while a same-scope one
+  stays the E3009. A `$unit` explicit import used by a module that does NOT declare the name still
+  binds (`U=44 W=1040` across two modules), and the header-parameter lane agrees with the runtime
+  lane (`X=1002 R=1040`). The runtime guard emits only when the constant lane structurally could not
+  have (`funcs.contains_key(n) && func_table.contains_key(n)` = already reported), so the line
+  prints once; round-2 differential R2-2 had found it doubled in the module lane too.
+
+- Round 3 soundness R2-2, BLOCKING: the interface window never installed the §6.10
+  use-before-declaration tables (`decl_pos`, `decl_pos_scope`, `decl_pos_range`), so
+  `check_decl_precedes_use` was VACUOUS — not conservative — for every body lowered in that window.
+  A declared routine reading a net declared later ran to exit 0 with a value no oracle prints:
+
+  ```
+  POST2 (r17): R=3 L=100                                                                        rc=0
+  IV    : r17.sv:2: error: Unable to bind wire/reg/memory `later' in `top.i.lp.$ivl_for_loop0'
+          r17.sv:4:      : A symbol with that name was declared here. Check for declaration after use.
+  VL    : R=303 L=100
+  MODULE twin (r17m), PRE and POST2 alike:
+          error[VITA-E3010] `later` is used before it is declared. IEEE 1800 §6.10 … [in top.i.$func$lp]
+  ```
+
+  With the declaration moved above its use every tool agrees on 303, so `R=3` is not an ordering
+  opinion. Fix: install the three tables from the interface body right before the block-local maps
+  (the module lane's (3b) position) and restore them below the Logic loop. The interface lane's
+  message, its `[in top.i.$func$…]` scope and its firing set now equal the twin's, generate-nested
+  interfaces (pass 8) included; `wire_ports` stays outside the window, so a parent actual declared
+  after the instance still reports in the PARENT's scope exactly as on PRE.
+
+- Round 3 differential R3-1, a filed REGRESSION, KEPT deliberately. The §6.10 install also gates
+  interface PROC bodies, which were vacuous before for the same reason:
+
+  ```
+  interface ifc;
+    initial #1 $display("N=%0d", n);
+    int n = 7;
+  endinterface
+  module top; ifc i(); initial #3 $finish; endmodule
+
+  PRE / POST2 : N=7 / simulation ended (Finish) at time 3 / errors=0 warnings=1 notes=0   rc=0
+  POST3       : n11.sv:2:14: error[VITA-E3010] E-ELAB-UNRESOLVED-NAME: `n` is used before it is
+                declared. IEEE 1800 §6.10 … [in top.i]                                    rc=1
+  IV          : n11.sv:2: error: Unable to bind wire/reg/memory `n' in `top.i'
+  VL          : N=7
+  MODULE twin (n12): the identical E3010 in PRE, POST2 and POST3
+  ```
+
+  The lens filed it as a regression by the ladder rule (PRE ran to exit 0 against the only oracle
+  that runs the design). It is kept: iverilog rejects the text, IEEE §6.10 forbids it, vita's own
+  module lane has always refused it, and verilator alone answers — so this is an oracle split, now
+  recorded in ROADMAP §2 "Oracle splits". No design in the 3428-design test-suite sweep is affected.
+  The declaration-initializer chain `int a = b; int b = 1;` inside an interface is the same split
+  (PRE `A=0 B=1`, POST3 the module twin's §6.10 message, iverilog rejects, verilator `A=1 B=1`).
+
+- Round 1 soundness also filed S-2 (a cross-namespace collision reported the synthesized frame net
+  `$func$t.a redeclared`; the conflict text replaced it) and S-3 (the continuous-assign double
+  evaluation, module-lane parity, recorded). Round 1 differential filed D1 MAJOR (the package static
+  local across sibling interface instances — the recorded §2 class), D2 (the `$unit` import, closed
+  in round 3) and D3 (name collisions against a net / parameter / modport, recorded). Sweeps: round 1
+  2672 designs, 0 regressions; round 3 3428 designs, PRE vs POST3 — 28 differ, ZERO cells that PRE
+  ran to exit 0 changed except the split cell class above. Round 3 soundness CLEAN.
+
+**Recorded, not fixed** (each is one ROADMAP §2 line):
+
+- `register_declared_routine` warns ``function `f` redeclared; first declaration used`` on both
+  lanes while `BTreeMap::insert` keeps the LAST, so a duplicate declaration prints `RD=49` (the
+  second body) at exit 0 where both oracles REJECT the design.
+- A declared routine whose name collides with a NET or a PARAMETER of the same scope is accepted
+  (`O=44`) where both oracles reject — module lane and interface lane alike.
+- A modport named like an IMPORTED routine (`import pk::mp;` + `modport mp`) is accepted
+  (`R=44` / `O=44`) where both oracles reject; the new modport check keys on DECLARED routines only,
+  which is the correct routing decision — nobody asks the modport question for an imported name.
+- `import pa::g; import pb::g;` (two explicit imports of one name) — vita takes the LAST (`R=42`),
+  verilator the FIRST (`R=41`), iverilog rejects. Oracle split.
+- A function called from a continuous assign is evaluated twice per event (two `%m` lines per
+  instance where both oracles print one); the module lane is identical and every value agrees.
+- A PACKAGE routine's static local reached through the bare `import pk::ds;` lane by two sibling
+  interface instances is per instance (`P1=10 P2=10`, oracles `P2=20`) — the import-lane clause of
+  the existing static-local §2 bullet, not a second row.
+
+**Gates**: 8194 tests (+48: `iface_subr.rs` 693 lines of value cells, `iface_subr_scope.rs` 403
+lines of name resolution — §26.3 import-versus-declaration over both namespaces, §26.4 `$unit`
+shadowing, the modport name space, §6.10), 15 skipped; four existing refusal pins converted to
+values (`iface_pkg_routine.rs`, `interface_block_local_hoist.rs`,
+`package_subroutine_block_local.rs` → `A=44 B=0`, `subroutine_block_local_scope.rs` → `A=44 B=55`).
+`cargo nextest run --workspace --locked --no-fail-fast`, doctest, `cargo clippy --workspace
+--all-targets -D warnings` and fmt rc 0; corpus 10/10 on every round; `format_version` 32 unchanged.
 
 #### 4.5.517 an interface body binds its package ROUTINE imports in its own routine scope; static scoped frames are carried between sibling interface instances (2026-09-20, branch it20) ✅
 
