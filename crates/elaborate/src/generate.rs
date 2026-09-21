@@ -195,15 +195,18 @@ impl Elaborator<'_> {
             }
             return;
         }
-        // ROADMAP §2 🆕 L ⓢ, generate half: this level IS one declarative region
-        // (IEEE §27.3), so a parameter name is declared in it once — `param_dup.rs`'s
-        // walk over this level's own `Param` items. `is_scope` path only: a transparent
-        // REGION's items belong to the enclosing scope and are judged there. Re-walked
-        // per GenPhase and per loop iteration; the NAME-span dedupe makes that one.
+        // ROADMAP §2 🆕 L ⓢ, generate half: this level IS one declarative region (IEEE
+        // §27.3), so a parameter name is declared in it once — `param_dup.rs`'s walk over
+        // this level's own `Param` items. `is_scope` path only; re-walked per GenPhase and
+        // per loop iteration, and the NAME-span dedupe makes that one report.
         self.check_duplicate_param_decls_in(
             &Self::gen_param_decls(items),
             "a generate block is ONE declarative scope (IEEE 1800-2017 §27.3), so a name \
              is declared there once",
+            // A transparent region nested INSIDE this block contributes its names to
+            // this block, not to the module — so the enclosing scope this sentence
+            // names is the generate block.
+            &Self::transparent_region_rule("generate block"),
         );
         let slot = self.rank_slot_for_generate();
         let saved_in_gen = std::mem::replace(&mut self.in_generate_body, true);
@@ -892,27 +895,24 @@ impl Elaborator<'_> {
     /// IEEE 1800-2017 §27.3: register a `function` declared inside a generate block
     /// under this block instance's scope (see `rtn_decl_scope` for the key grammar).
     ///
-    /// A redeclaration inside the SAME block scope keeps the first, exactly as the
-    /// module-scope collection does. Two sibling scopes declaring the same name are
-    /// two different keys and never collide, so no warning is possible there.
+    /// Two SIBLING scopes declaring one name are two different keys and never collide.
+    /// Two declarations inside ONE block scope keep the LAST, which is what the warning
+    /// below now says. A duplicate in a transparent REGION is a MODULE-scope duplicate,
+    /// refused per definition by `decl_collide.rs`, so the bare-key arm is silent.
     pub(crate) fn register_gen_func(&mut self, f: &ast::FunctionDef) {
         let Some(key) = self.cur_gen_rtn_key(&f.name.name) else {
             // Directly inside `generate … endgenerate` with no enclosing block: a
             // generate REGION is transparent (§27.3), so this IS a module routine
             // and belongs on the bare key — the same rule the region's nets follow.
-            let name = f.name.name.clone();
             self.check_block_local_scope_leaks(&f.body);
-            if self.func_table.insert(name.clone(), f.clone()).is_some() {
-                self.warn(&format!(
-                    "function `{name}` redeclared; first declaration used"
-                ));
-            }
+            self.func_table.insert(f.name.name.clone(), f.clone());
             return;
         };
         self.check_block_local_scope_leaks(&f.body);
         if self.func_table.insert(key.clone(), f.clone()).is_some() {
             self.warn(&format!(
-                "function `{}` redeclared; first declaration used",
+                "function `{}` redeclared in this generate block; the LAST declaration \
+                 is used (both iverilog and verilator reject the design)",
                 f.name.name
             ));
         }
@@ -921,20 +921,17 @@ impl Elaborator<'_> {
         self.rtn_decl_scope.insert(key, self.cur_prefix.clone());
     }
 
-    /// [`Self::register_gen_func`] for a `task`.
     pub(crate) fn register_gen_task(&mut self, t: &ast::TaskDef) {
         let Some(key) = self.cur_gen_rtn_key(&t.name.name) else {
-            let name = t.name.name.clone();
             self.check_block_local_scope_leaks(&t.body);
-            if self.task_table.insert(name.clone(), t.clone()).is_some() {
-                self.warn(&format!("task `{name}` redeclared; first declaration used"));
-            }
+            self.task_table.insert(t.name.name.clone(), t.clone());
             return;
         };
         self.check_block_local_scope_leaks(&t.body);
         if self.task_table.insert(key.clone(), t.clone()).is_some() {
             self.warn(&format!(
-                "task `{}` redeclared; first declaration used",
+                "task `{}` redeclared in this generate block; the LAST declaration is \
+                 used (both iverilog and verilator reject the design)",
                 t.name.name
             ));
         }

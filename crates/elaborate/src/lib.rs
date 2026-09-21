@@ -70,6 +70,7 @@ mod cover_bins;
 mod cover_synth;
 mod crv;
 mod da;
+mod decl_collide;
 mod driver;
 mod dyn_md_elem;
 mod dynarr;
@@ -101,6 +102,7 @@ mod iface_rtn_scope;
 mod inline_body_ctx;
 mod inline_fn;
 mod inline_task;
+mod inline_task_locals;
 mod instance;
 mod instance_array;
 mod limits;
@@ -163,6 +165,7 @@ pub(crate) use cover::*;
 pub(crate) use cover_synth::*;
 pub(crate) use crv::*;
 pub(crate) use da::*;
+pub(crate) use decl_collide::UnitKind;
 pub(crate) use dynarr::*;
 pub(crate) use expr_cast::*;
 pub(crate) use expr_ctx::*;
@@ -1329,6 +1332,12 @@ struct Elaborator<'s> {
     /// the source declaration — without this, `m #(…) a(); m #(…) b();` printed
     /// one module's duplicate twice.
     reported_dup_params: std::collections::BTreeSet<(u32, u32)>,
+    /// §3.13 twin of [`Elaborator::reported_dup_params`]: NAME-token spans already
+    /// reported by [`Elaborator::check_decl_name_collisions`]. That walk runs once
+    /// per DEFINITION, so this is insurance rather than a live dedupe — but the two
+    /// rules must never collapse into one set, because one keys on a `ParamDecl`
+    /// name and the other on whichever binder took the name second.
+    reported_decl_collisions: std::collections::BTreeSet<(u32, u32)>,
     /// Every clocking-block name in the whole design (never cleared) — diagnostic
     /// only: lets a cross-hierarchy `@(inst.cb)` event control emit an accurate
     /// "unsupported clocking-event" message instead of a generic hier-name error.

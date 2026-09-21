@@ -649,15 +649,15 @@ fn a_decl_initializer_calling_a_straight_line_declared_function() {
 
 /// d17 / m17: a DUPLICATE declaration. BOTH oracles REJECT it (iverilog "'f' has
 /// already been declared in this scope."; verilator "Duplicate declaration of
-/// function: 'f'"), and vita's module lane accepts it with
-/// `W3056 function 'f' redeclared; first declaration used` while actually using the
-/// SECOND declaration — a pre-existing module-lane defect (`BTreeMap::insert` keeps the
-/// last), recorded and NOT fixed by this row.
+/// function: 'f'").
 ///
-/// So the pin is PARITY, never a value: the interface twin must answer exactly as the
-/// module twin does, which is what sharing one `register_declared_routine` buys. Both
-/// halves run here and their `RD=` lines are compared to each other rather than to a
-/// constant, so the day that defect is fixed this test moves with it in one place.
+/// CONVERTED, same designs, flipped expectation. The pin used to be PARITY over a
+/// shared DEFECT: both lanes warned `W3056 function 'f' redeclared; first declaration
+/// used` and then used the SECOND declaration (`BTreeMap::insert` keeps the last), and
+/// the two `RD=` lines were compared to each other rather than to a value because
+/// neither was right. `decl_collide.rs` refuses the pair per definition now, so the
+/// parity claim is the same and the shared answer is a refusal: same exit code, same
+/// E3009, no `RD=` line in either lane, and the only difference is the unit word.
 #[test]
 fn a_duplicate_declaration_answers_like_the_module_twin() {
     let body = "\x20 function automatic int f(input int a); return a + 4; endfunction\n\
@@ -672,22 +672,21 @@ fn a_duplicate_declaration_answers_like_the_module_twin() {
          module top; ifc i(); initial #2 $finish; endmodule\n"
     ));
     assert_eq!(icode, mcode, "interface:\n{iout}\nmodule:\n{mout}");
-    for (tag, o) in [("interface", &iout), ("module", &mout)] {
+    assert_eq!(icode, Some(1), "both lanes refuse:\n{iout}");
+    for (tag, unit, o) in [
+        ("interface", "interface", &iout),
+        ("module", "module", &mout),
+    ] {
+        // Same-kind pairs take the "both times as …" sentence.
+        let want = format!("`f` is declared twice in this {unit}, both times as a function");
         assert!(
-            o.contains("function `f` redeclared; first declaration used"),
-            "{tag} lane missing the redeclare warning:\n{o}"
+            o.contains("VITA-E3009") && o.contains(&want),
+            "{tag} lane missing the §3.13 refusal:\n{o}"
         );
+        assert!(
+            !o.contains("redeclared; first declaration used"),
+            "{tag} lane must not also warn — one defect, one report:\n{o}"
+        );
+        assert!(!o.contains("RD="), "{tag} lane must not run the call:\n{o}");
     }
-    let rd = |o: &str| {
-        o.lines()
-            .find(|l| l.starts_with("RD="))
-            .map(str::to_string)
-            .unwrap_or_default()
-    };
-    assert_eq!(
-        rd(&iout),
-        rd(&mout),
-        "the two lanes must answer identically:\ninterface:\n{iout}\nmodule:\n{mout}"
-    );
-    assert!(!rd(&iout).is_empty(), "no RD= line:\n{iout}");
 }

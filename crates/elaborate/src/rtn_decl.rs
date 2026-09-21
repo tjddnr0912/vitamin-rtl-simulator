@@ -17,44 +17,41 @@
 //! same loop that gates its `Proc` bodies. Folding the gate in here would have run
 //! it against the PARENT module's maps in the interface lane.
 //!
-//! ⚠️ `insert` keeps the LAST definition while the warning says "first declaration
-//! used" — a pre-existing MODULE-lane defect, measured: `m17.sv` (two
-//! `function automatic int f`, returning `a+4` then `a+9`) warns and prints
-//! `RD=49`, where iverilog and verilator both REJECT the design. It is mirrored
-//! rather than fixed here so the interface twin behaves identically; the fix is one
-//! edit to this function, which is why it is a function.
+//! ⚠️ A REDECLARATION no longer reaches this function's own diagnostic, and there
+//! is none here any more. `insert` used to warn `W3056 function \`f\` redeclared;
+//! first declaration used` while `BTreeMap::insert` kept the LAST definition — a
+//! false sentence on top of a silent-wrong, since both oracles REJECT the design
+//! (`m17.sv` / census p20_a, p20_b, p20_d, p20_e printed `RD=49`, the second
+//! body). `decl_collide.rs` now refuses the pair per DEFINITION, and a WRITER
+//! CENSUS says that refusal covers every duplicate this function can see:
+//!
+//! * both callers empty the tables first — `instance.rs` does
+//!   `std::mem::take(&mut self.func_table)` immediately before its step-(3.5) loop,
+//!   and the interface window takes the whole `RoutineScope` at window entry — so
+//!   `insert` can only return `Some` for a name declared twice in the BODY this
+//!   loop is walking;
+//! * that loop walks `module.body` / `decl.body` top-level items, and
+//!   `check_decl_name_collisions` collects exactly those `Func`/`Task` items (plus
+//!   the transparent-generate ones, which `generate.rs` registers), per definition,
+//!   for modules and interfaces alike.
+//!
+//! So a second diagnostic here would be a second report of one defect. A routine
+//! declared twice inside a LABELLED generate block is the one shape outside that
+//! census, and it keeps its warning — in `generate.rs`, with the text corrected to
+//! what the table actually does.
 
 use super::*;
 
 impl Elaborator<'_> {
-    /// Register `item` if it is a scope-declared routine, warning on a redeclaration.
-    /// Returns whether it was one.
+    /// Register `item` if it is a scope-declared routine. Returns whether it was one.
     pub(crate) fn register_declared_routine(&mut self, item: &ast::ModuleItem) -> bool {
         match item {
             ast::ModuleItem::Func(f) => {
-                if self
-                    .func_table
-                    .insert(f.name.name.clone(), f.clone())
-                    .is_some()
-                {
-                    self.warn(&format!(
-                        "function `{}` redeclared; first declaration used",
-                        f.name.name
-                    ));
-                }
+                self.func_table.insert(f.name.name.clone(), f.clone());
                 true
             }
             ast::ModuleItem::Task(t) => {
-                if self
-                    .task_table
-                    .insert(t.name.name.clone(), t.clone())
-                    .is_some()
-                {
-                    self.warn(&format!(
-                        "task `{}` redeclared; first declaration used",
-                        t.name.name
-                    ));
-                }
+                self.task_table.insert(t.name.name.clone(), t.clone());
                 true
             }
             _ => false,

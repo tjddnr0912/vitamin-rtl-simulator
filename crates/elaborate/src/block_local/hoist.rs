@@ -133,6 +133,9 @@ impl Elaborator<'_> {
 
     /// One block-local declaration's Nets-phase hoist (extracted so the caller can
     /// wrap it in a `cur_span` anchor).
+    ///
+    /// `seen` is THIS block's own flatten keys — see the §3.13 guard on the flatten
+    /// path below. One set per `begin…end` / `fork…join`, built by the caller.
     #[allow(clippy::too_many_arguments)]
     fn hoist_one_block_local(
         &mut self,
@@ -142,6 +145,7 @@ impl Elaborator<'_> {
         span: ast::Span,
         ports: &ast::PortList,
         body: &[ast::ModuleItem],
+        seen: &mut BTreeSet<String>,
     ) {
         // DUP (round-5): a colliding `automatic` block-local that the
         // pure pre-scan marked (disjoint blocks, no module-net collision,
@@ -197,7 +201,7 @@ impl Elaborator<'_> {
                         names: vec![n.clone()],
                         ..d.clone()
                     };
-                    self.hoist_one_block_local(&one, decls, stmts, span, ports, body);
+                    self.hoist_one_block_local(&one, decls, stmts, span, ports, body, seen);
                 }
                 return;
             }
@@ -296,6 +300,60 @@ impl Elaborator<'_> {
                 return;
             }
         }
+        // §3.13: the name was already flattened by an EARLIER DECLARATOR OF THIS
+        // BLOCK, which is a second declaration in one declarative region and not the
+        // reuse the skip below exists for. The skip cannot tell the two apart — it
+        // asks `symbols`, and by the time the second declarator arrives the first has
+        // already written it — so `begin : blk integer x; integer x; x = 3; end` ran
+        // and printed `x=3` where iverilog says "'x' has already been declared in
+        // this scope. : It was declared here as a variable." and verilator
+        // "Duplicate declaration of signal: 'x'" (measured, named and unnamed blocks
+        // alike). `seen` is per BLOCK, so a SIBLING block's same-named local (p26_k)
+        // and a module-scope shadow (p26_m) are untouched — both are legal in both
+        // oracles. The scoped `$blk$` path above keeps reporting its own duplicates
+        // through `add_net`, which is why this guard sits below it and not at the
+        // top: one duplicate, one report, and the key each reports is the key its
+        // own lane created.
+        //
+        // ⚠️ The duplicate DECLARATOR is dropped and the rest of the declaration goes
+        // on: refusing the whole declaration made `int x, x;` report the redeclare AND
+        // then two `E3010 undeclared net/variable top.x` for the uses below it — one
+        // page asserting that `top.x` is both redeclared and undeclared, where the
+        // oracles and PRE print one error. The first declarator still binds the name,
+        // so nothing downstream is undeclared.
+        let deduped;
+        let d = {
+            let mut dup: Option<(String, ast::Span)> = None;
+            let mut kept: Vec<ast::DeclName> = Vec::new();
+            for n in &d.names {
+                let key = self.fq(&n.name.name);
+                if seen.insert(key.clone()) {
+                    kept.push(n.clone());
+                } else if dup.is_none() {
+                    dup = Some((key, n.name.span));
+                }
+            }
+            match dup {
+                None => d,
+                Some((key, sp)) => {
+                    if self.reported_decl_collisions.insert((sp.lo, sp.hi)) {
+                        let m = format!("net/variable `{key}` redeclared (duplicate declaration)");
+                        self.error_at(MsgCode::ElabUnsupported, sp, &m);
+                    }
+                    if kept.is_empty() {
+                        // Every declarator was a duplicate — the name is already bound
+                        // by the declaration that won it, so there is nothing to create
+                        // and nothing below can read as undeclared.
+                        return;
+                    }
+                    deduped = ast::NetVarDecl {
+                        names: kept,
+                        ..d.clone()
+                    };
+                    &deduped
+                }
+            }
+        };
         // v1 flattens block-locals into the module namespace (no
         // per-block scope). If a local name was already created by an
         // EARLIER block, skip re-creating it rather than erroring
@@ -686,13 +744,18 @@ impl Elaborator<'_> {
                 decls, stmts, span, ..
             } => {
                 self.deny_static_init_reading_per_entry(decls, *span);
+                // §3.13: THIS block's flatten keys. One set per `begin…end` /
+                // `fork…join`, so it separates "a second declarator of this block"
+                // (illegal) from "the same name in another block" (the flatten's
+                // deliberate coalesce) — see the guard in `hoist_one_block_local`.
+                let mut seen: BTreeSet<String> = BTreeSet::new();
                 for d in decls {
                     // §4.5.249: the Nets-phase hoist never passes through `lower_stmt`,
                     // so anchor each declaration's diagnostics here. This is exactly the
                     // family the report could not narrow — 81 identical messages with no
                     // position and, for the same-name class, no identifier either.
                     let saved_span = self.cur_span.replace(d.span);
-                    self.hoist_one_block_local(d, decls, stmts, *span, ports, body);
+                    self.hoist_one_block_local(d, decls, stmts, *span, ports, body, &mut seen);
                     self.cur_span = saved_span;
                 }
                 // This block's per-entry locals are in scope for every NESTED block's

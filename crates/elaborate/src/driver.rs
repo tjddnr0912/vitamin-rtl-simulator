@@ -71,6 +71,7 @@ impl<'s> Elaborator<'s> {
             genvar_decls: std::collections::BTreeSet::new(),
             reported_bad_bounds: std::collections::BTreeSet::new(),
             reported_dup_params: std::collections::BTreeSet::new(),
+            reported_decl_collisions: std::collections::BTreeSet::new(),
             all_clocking_names: std::collections::BTreeSet::new(),
             anon_clocking_count: 0,
             func_metas: Vec::new(),
@@ -397,7 +398,20 @@ impl<'s> Elaborator<'s> {
         // §4.5.429: the spelling `%m` prints — a singleton generate scope without
         // its storage `[0]`.
         vec![diag::Frame {
-            label: self.display_prefix(),
+            // `$pkg$<pkg>` is the RESERVED storage prefix for something the design
+            // writes as `package pk;`, so a diagnostic inside it says `[in pk]`.
+            // Stripped HERE and not in `display_of`, which also names VCD scopes and
+            // OBS paths: the package net scope is `$pkg$p` in the waveform and must
+            // stay that way (`pkg_var.rs` pins that a package var is excluded by that
+            // very prefix). Every other `$` segment names a construct the reader can
+            // point at in the source, so only this one is translated.
+            label: {
+                let p = self.display_prefix();
+                match p.strip_prefix("$pkg$") {
+                    Some(rest) => rest.to_string(),
+                    None => p,
+                }
+            },
             location: None,
         }]
     }
@@ -624,6 +638,30 @@ impl<'s> Elaborator<'s> {
             .collect();
         self.module_facts = build_module_facts(&order, &ifaces);
         self.hier_body_write_present = self.facts_have_body_write_funcs();
+        // §3.13 / §6.20.1: the two DECLARATION-name refusals, once per DEFINITION.
+        //
+        // Here, and not at a binder, because both are properties of the SOURCE and
+        // both were blind to whatever the design never elaborates: a module named
+        // only under `generate if (0)`, and a module or interface with no instance
+        // at all, each declared a parameter twice at exit 0 where both oracles
+        // reject the file (census p25_a1 / p25_a2 / p25_a4). `order` is every
+        // module declaration and `ifaces` every interface declaration, instantiated
+        // or not, so this point sees all of them — and each exactly once, which is
+        // also what stops a module instantiated N times reporting N times.
+        //
+        // `cur_prefix` names the DEFINITION while they run: there is no instance
+        // path to report, and `[in dead]` is the honest context for a defect in a
+        // module nothing instantiates.
+        let defs = order
+            .iter()
+            .map(|m| (*m, UnitKind::Module))
+            .chain(ifaces.iter().map(|m| (*m, UnitKind::Interface)));
+        for (m, kind) in defs {
+            let saved = std::mem::replace(&mut self.cur_prefix, m.name.name.clone());
+            self.check_duplicate_param_decls(m, kind);
+            self.check_decl_name_collisions(m, kind);
+            self.cur_prefix = saved;
+        }
         // §4.5.200: pre-scan EVERY module's procedural blocks for hierarchical TASK enables
         // (`u1.tk(...)`) and record the target task name, so `build_task_frame_set` can
         // FORCE-FRAME a hier-called STATIC task (otherwise it inlines and has no per-instance
@@ -664,6 +702,15 @@ impl<'s> Elaborator<'s> {
                         &format!("design unit `{}` declared more than once", pm.name.name),
                     );
                 } else {
+                    // §3.13, package half: two `function int f` / two `task t` in one
+                    // package body printed the LAST one at exit 0 with no diagnostic
+                    // at all (census p20_c `RD=49`, p20_i `RD=9`), where both oracles
+                    // reject. The parameter half of the rule lives inside
+                    // `elaborate_package`, which already walks per DEFINITION.
+                    let saved =
+                        std::mem::replace(&mut self.cur_prefix, format!("$pkg${}", pm.name.name));
+                    self.check_decl_name_collisions(pm, UnitKind::Package);
+                    self.cur_prefix = saved;
                     self.elaborate_package(pm);
                 }
             }

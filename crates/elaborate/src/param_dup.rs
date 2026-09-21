@@ -15,9 +15,17 @@
 //! declarations of a module with no ANSI header (IEEE 1364-2005 §12.2 makes the
 //! FIRST of those the parameter port list — see [`Elaborator::param_ports`]),
 //! and every one of those again in an `interface`. One pure walk over the
-//! declaration sequence answers all four, and [`Elaborator::bind_params`] is
-//! the single call site both the module lane (`instance.rs`) and the interface
-//! window (`iface_inst.rs`) already share.
+//! declaration sequence answers all four.
+//!
+//! ⚠️ It runs per DEFINITION, from `driver.rs::run`, beside
+//! [`Elaborator::check_decl_name_collisions`]. It used to run from
+//! [`Elaborator::bind_params`], i.e. once per INSTANCE, which made it blind to
+//! every scope the design never elaborates — measured: a module named only under
+//! `generate if (0)` (census p25_a1, `TOP=ok` at exit 0), a module with no
+//! instance at all under `--top` (p25_a2 staged, silent), and an INTERFACE with no
+//! instance, which is never elaborated at all (p25_a4). Both oracles reject the
+//! first; iverilog rejects all three. Declaration legality is not a property of
+//! instantiation, so the definition is the right cadence.
 //!
 //! ⚠️ Scope, measured — this refuses a SECOND DECLARATION, never a shadow and
 //! never an override:
@@ -51,26 +59,30 @@
 //! sequence — which is also what makes the cross-region pairs (header + region,
 //! body + region) refusable, as both oracles say they must be.
 //!
-//! ⚠️ Still NOT covered, measured, recorded: a module instantiated ONLY under
-//! `generate if (0)` is never elaborated, so nothing walks its declarations
-//! (`module dead #(parameter int P = 3); parameter int P = 7;` under a false
-//! generate leaves vita at exit 0 while both oracles reject the file); and a
-//! duplicate VARIABLE in a named block is a different name space with its own
-//! binder (`integer x; integer x;` in one `begin : blk` runs, both oracles
-//! reject).
+//! ⚠️ Both shapes that used to stand here are covered now, by SIBLING rules rather
+//! than by this walk: the `generate if (0)` module is reached by the
+//! per-DEFINITION cadence above, and a duplicate VARIABLE in a block is refused by
+//! its own binder (`block_local/hoist.rs`'s per-block flatten-key set, and
+//! `inline_task.rs`'s per-inlining one for a static task body). This walk is still
+//! `ModuleItem::Param` only.
 
 use super::*;
 
 /// The display name of a parameter declaration, and what to call it.
 ///
-/// A `parameter type T` is lowered by the parser into the synthesized carriers
-/// `T$w` / `T$s` (plus `T$d…` / `T$p…` extents), so a duplicated type parameter
-/// arrives here under a name the user never wrote. Reporting `T$w` would send
-/// the reader hunting a declaration that is not in the source, so the text
-/// before the first `$` is what gets named.
-fn display_name(raw: &str) -> (&str, &str) {
-    match raw.split_once('$') {
-        Some((base, _)) if !base.is_empty() => (base, "type parameter"),
+/// A `parameter type T` is lowered by the parser into the carriers `T$w` / `T$s`
+/// (plus `T$d…` / `T$p…` extents), so a duplicated type parameter arrives here
+/// under a name the user never wrote. Reporting `T$w` would send the reader
+/// hunting a declaration that is not in the source, so the stem gets named.
+///
+/// ⚠️ `stems` is the IDENTITY test, and it is the whole rule: it holds exactly the
+/// stems THIS declaration list proves are type parameters (both `<stem>$w` and
+/// `<stem>$s` present — what the producer always and only mints for one). A name
+/// SHAPE test reported two user `localparam int Q$d0a` as "type parameter `Q`",
+/// a declaration and a keyword the file does not contain.
+fn display_name<'a>(raw: &'a str, stems: &BTreeSet<&str>) -> (&'a str, &'static str) {
+    match decl_collide::carrier_stem(raw) {
+        Some(stem) if stems.contains(stem) => (stem, "type parameter"),
         _ => (raw, "parameter"),
     }
 }
@@ -107,17 +119,25 @@ impl Elaborator<'_> {
     /// refusable, and both oracles reject both of them: a header parameter plus a
     /// region `localparam` of that name, and a body `localparam` plus a region
     /// one.
-    pub(crate) fn scope_param_decls(module: &ast::ModuleDecl) -> Vec<&ast::ParamDecl> {
-        let mut out: Vec<&ast::ParamDecl> = module.params.iter().collect();
-        Self::push_item_param_decls(&module.body, &mut out);
+    ///
+    /// Each declaration carries whether it was reached THROUGH a transparent
+    /// `generate … endgenerate` region, because that decides which scope rule the
+    /// refusal may quote: the §6.20.1 sentence about a parameter port list is
+    /// false for a pair the region contributed (`generate localparam int Q = 1;
+    /// localparam int Q = 2; endgenerate` has no parameter port list in it at
+    /// all).
+    pub(crate) fn scope_param_decls(module: &ast::ModuleDecl) -> Vec<(&ast::ParamDecl, bool)> {
+        let mut out: Vec<(&ast::ParamDecl, bool)> =
+            module.params.iter().map(|p| (p, false)).collect();
+        Self::push_item_param_decls(&module.body, false, &mut out);
         out
     }
 
     /// The parameter declarations of a MODULE-ITEM sequence, in source order —
     /// a package body's declarative region.
-    pub(crate) fn item_param_decls(items: &[ast::ModuleItem]) -> Vec<&ast::ParamDecl> {
+    pub(crate) fn item_param_decls(items: &[ast::ModuleItem]) -> Vec<(&ast::ParamDecl, bool)> {
         let mut out = Vec::new();
-        Self::push_item_param_decls(items, &mut out);
+        Self::push_item_param_decls(items, false, &mut out);
         out
     }
 
@@ -126,20 +146,26 @@ impl Elaborator<'_> {
     /// region (§27.3), is walked by its own call, and legitimately shadows an
     /// outer name — those are skipped; a TRANSPARENT nested region is flattened
     /// in, exactly as at module scope.
-    pub(crate) fn gen_param_decls(items: &[ast::GenItem]) -> Vec<&ast::ParamDecl> {
+    pub(crate) fn gen_param_decls(items: &[ast::GenItem]) -> Vec<(&ast::ParamDecl, bool)> {
         let mut out = Vec::new();
-        Self::push_gen_param_decls(items, &mut out);
+        Self::push_gen_param_decls(items, false, &mut out);
         out
     }
 
     /// Append the parameter declarations a MODULE-ITEM sequence contributes to
     /// ITS OWN declarative region, in source order: its own `Param`s, plus every
     /// transparent `generate` region's.
-    fn push_item_param_decls<'a>(items: &'a [ast::ModuleItem], out: &mut Vec<&'a ast::ParamDecl>) {
+    fn push_item_param_decls<'a>(
+        items: &'a [ast::ModuleItem],
+        in_region: bool,
+        out: &mut Vec<(&'a ast::ParamDecl, bool)>,
+    ) {
         for it in items {
             match it {
-                ast::ModuleItem::Param(p) => out.push(p),
-                ast::ModuleItem::Generate(g) => Self::push_gen_param_decls(&g.items, out),
+                ast::ModuleItem::Param(p) => out.push((p, in_region)),
+                // Everything below a `generate … endgenerate` is IN a transparent
+                // region, however deeply nested — the flag never clears.
+                ast::ModuleItem::Generate(g) => Self::push_gen_param_decls(&g.items, true, out),
                 _ => {}
             }
         }
@@ -152,40 +178,69 @@ impl Elaborator<'_> {
     /// list is the anachronistic surround (`elaborate_gen_scoped(None, …)`, no
     /// scope minted). Everything else — `for`, `if`, `case`, a LABELLED block —
     /// mints a scope and is judged by its own walk.
-    fn push_gen_param_decls<'a>(items: &'a [ast::GenItem], out: &mut Vec<&'a ast::ParamDecl>) {
+    fn push_gen_param_decls<'a>(
+        items: &'a [ast::GenItem],
+        in_region: bool,
+        out: &mut Vec<(&'a ast::ParamDecl, bool)>,
+    ) {
         for it in items {
             match it {
                 ast::GenItem::Item(b) => match b.as_ref() {
-                    ast::ModuleItem::Param(p) => out.push(p),
-                    ast::ModuleItem::Generate(g) => Self::push_gen_param_decls(&g.items, out),
+                    ast::ModuleItem::Param(p) => out.push((p, in_region)),
+                    ast::ModuleItem::Generate(g) => Self::push_gen_param_decls(&g.items, true, out),
                     _ => {}
                 },
                 ast::GenItem::Block {
                     label: None, items, ..
-                } => Self::push_gen_param_decls(items, out),
+                } => Self::push_gen_param_decls(items, in_region, out),
                 _ => {}
             }
         }
     }
 
     /// Refuse every parameter declaration whose name a previous declaration in
-    /// the SAME scope already took. Called once from `bind_params`, i.e. once
-    /// per instance — the report is keyed on the offending declaration's NAME
-    /// span so a module instantiated N times says it once, and so the several
-    /// carriers of one duplicated `parameter type` (`T$w`, `T$s`, `T$d0a`, …),
-    /// which all carry the name token's span, say it once as well.
-    pub(crate) fn check_duplicate_param_decls(&mut self, module: &ast::ModuleDecl) {
+    /// the SAME scope already took. Called once per DEFINITION from
+    /// `driver.rs::run` — the report is still keyed on the offending
+    /// declaration's NAME span, which is what makes the several carriers of one
+    /// duplicated `parameter type` (`T$w`, `T$s`, `T$d0a`, …), all carrying the
+    /// name token's span, say it once rather than once each.
+    pub(crate) fn check_duplicate_param_decls(&mut self, module: &ast::ModuleDecl, unit: UnitKind) {
+        let w = unit.word();
         self.check_duplicate_param_decls_in(
             &Self::scope_param_decls(module),
-            "a parameter port list and the module body are ONE declarative scope, so a \
-             name is declared there once (IEEE 1800-2017 §6.20.1)",
+            &format!(
+                "a parameter port list and the {w} body are ONE declarative scope, so a \
+                 name is declared there once (IEEE 1800-2017 §6.20.1)"
+            ),
+            &Self::transparent_region_rule(w),
         );
+    }
+
+    /// The scope sentence for a pair a TRANSPARENT `generate … endgenerate`
+    /// region contributed. `enclosing` is what the region's names actually belong
+    /// to — the module, the interface, or the generate block the region sits in.
+    ///
+    /// Its own sentence because the §6.20.1 one names a parameter port list, and
+    /// `generate localparam int Q = 1; localparam int Q = 2; endgenerate` in a
+    /// module with no header at all was told its parameter port list collided
+    /// with the module body (measured cell x7_a), which sends the reader to a
+    /// construct the file does not contain.
+    pub(crate) fn transparent_region_rule(enclosing: &str) -> String {
+        format!(
+            "a `generate … endgenerate` region with no block label is TRANSPARENT — its \
+             declarations belong to the enclosing {enclosing} scope (IEEE 1800-2017 \
+             §27.2/§27.3), so a name is declared there once"
+        )
     }
 
     /// The walk itself, over any declaration sequence that forms ONE declarative
     /// region. `scope_rule` completes the diagnostic's sentence with the rule of
     /// the region the caller is walking, because the §6.20.1 sentence about a
     /// parameter port list is false for a generate block and for a package.
+    ///
+    /// `transparent_rule` is the sentence for a pair a TRANSPARENT
+    /// `generate … endgenerate` region contributed — see
+    /// [`Elaborator::transparent_region_rule`].
     ///
     /// The span dedupe (`reported_dup_params`) is the shared part and is what
     /// makes the extra call sites free: a generate scope is re-walked once per
@@ -194,25 +249,39 @@ impl Elaborator<'_> {
     /// first survives.
     pub(crate) fn check_duplicate_param_decls_in(
         &mut self,
-        decls: &[&ast::ParamDecl],
+        decls: &[(&ast::ParamDecl, bool)],
         scope_rule: &str,
+        transparent_rule: &str,
     ) {
         use std::collections::btree_map::Entry;
         // name → the FIRST declaration of it. Source order, and never replaced,
         // so a third declaration of one name points back at the first — which is
         // where both oracles point ("It was declared here as a parameter").
-        let mut first: std::collections::BTreeMap<&str, &ast::ParamDecl> =
+        let mut first: std::collections::BTreeMap<&str, (&ast::ParamDecl, bool)> =
             std::collections::BTreeMap::new();
         let mut reports: Vec<(ast::Span, ast::Span, String)> = Vec::new();
-        for p in decls.iter().copied() {
-            let prev = match first.entry(p.name.name.as_str()) {
+        // The stems this list proves are `parameter type` declarations — see
+        // [`display_name`]. Built from the same declarations the walk judges, so a
+        // carrier is named by its stem exactly where the parser minted one.
+        let stems = decl_collide::carrier_stems(decls.iter().map(|(p, _)| p.name.name.as_str()));
+        for (p, in_region) in decls.iter().copied() {
+            let (prev, prev_region) = match first.entry(p.name.name.as_str()) {
                 Entry::Vacant(v) => {
-                    v.insert(p);
+                    v.insert((p, in_region));
                     continue;
                 }
                 Entry::Occupied(o) => *o.get(),
             };
-            let (disp, what) = display_name(&p.name.name);
+            let (disp, what) = display_name(&p.name.name, &stems);
+            // EITHER side reached through a transparent region makes the §6.20.1
+            // "parameter port list" sentence false for this pair — the flatten is
+            // what put the two declarations in one region, so the flatten's own
+            // rule is the one that explains the refusal.
+            let rule = if in_region || prev_region {
+                transparent_rule
+            } else {
+                scope_rule
+            };
             reports.push((
                 p.name.span,
                 prev.name.span,
@@ -222,7 +291,7 @@ impl Elaborator<'_> {
                 // scope" would be a false sentence on the type-parameter cell.
                 format!(
                     "duplicate declaration of {what} `{disp}`: this `{}` repeats the `{}` \
-                     already declared in this scope — {scope_rule}. Rename one of them",
+                     already declared in this scope — {rule}. Rename one of them",
                     keyword_of(p),
                     keyword_of(prev)
                 ),

@@ -126,6 +126,13 @@ impl Elaborator<'_> {
         // v5 ⑥: `handle.method(args)` — a 2-segment call whose head is a dyn
         // handle is a METHOD, not a hierarchical call.
         if name.segments.len() == 2 {
+            // §25.5/§3.13: `w.mp(…)` where `mp` is a MODPORT of the interface `w`
+            // instantiates. Detection first, ahead of every receiver arm below: an
+            // interface instance is none of them, and the name must not reach the
+            // imported-routine table that answered it with a value (census p22_b).
+            if self.modport_call_refused(name) {
+                return self.placeholder_expr();
+            }
             // N5: covergroup method in expression position (`c.get_coverage()`).
             if self.cover_inst(&name.segments[0].name).is_some() {
                 return self

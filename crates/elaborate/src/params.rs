@@ -1518,13 +1518,12 @@ impl Elaborator<'_> {
         module: &ast::ModuleDecl,
         overrides: &[ResolvedOverride],
     ) -> (Vec<(String, Option<i64>)>, ParamOverrides) {
-        // §2 🆕 L ⓢ: the ONE duplicate-declaration refusal for this scope, run
-        // before any binding so the caret lands on the declaration and not on
-        // whatever the second one made the module do. Here because this function
-        // is the single entry both the module lane (`instance.rs`) and the
-        // interface window (`iface_inst.rs`) already share — see `param_dup.rs`
-        // for the four shapes it covers and the three it deliberately does not.
-        self.check_duplicate_param_decls(module);
+        // §2 🆕 L ⓢ: the duplicate-declaration refusal for this scope is NOT here
+        // any more. It ran per INSTANCE, which made it blind to exactly the scopes
+        // the P25(a) census found — a module named only under `generate if (0)`,
+        // and a module or interface that is never instantiated, neither of which
+        // is ever elaborated. It now runs once per DEFINITION from
+        // `driver.rs::run`, beside `check_decl_name_collisions`; see `param_dup.rs`.
         let ovr = self.resolve_param_overrides(module, overrides);
         let mut saved = Vec::new();
         for p in &module.params {

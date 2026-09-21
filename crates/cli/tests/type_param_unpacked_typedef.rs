@@ -267,13 +267,27 @@ fn a_dim_free_type_parameter_and_a_shadowed_typedef_keep_their_answers() {
     );
     assert_eq!(rc, Some(0), "{out}");
     assert!(out.contains("pk=8"), "{out}");
-    // The TYPEDEF route keeps its `local_decl_names` stand-down: a same-named
-    // variable shadows the type and the fold must not claim the name. Only the
-    // ROUTE changed, not that guard — so this still answers the variable's 12
-    // (verilator's answer; iverilog rejects the source).
+    // CONVERTED, same design, flipped expectation. This pinned `bt=12` and called it
+    // "verilator's answer; iverilog rejects the source" — re-measured, verilator
+    // rejects it too ("Unsupported in C: Variable has same name as TYPEDEF 'b_t':
+    // 'b_t'"), and iverilog's refusal is a parse error on the same line. Both oracles
+    // reject, so the typedef-vs-variable pair is refused by `decl_collide.rs`'s §3.13
+    // walk now (see `decl_collide_matrix.rs` for the measured pair matrix).
     let (out, rc) = run("`timescale 1ns/1ns\nmodule m #(parameter N = 3) ();\n  \
          typedef logic [7:0] b_t [0:N-1];\n  logic [11:0] b_t;\n  \
          initial $display(\"bt=%0d\", $bits(b_t));\nendmodule\n\
+         module top; m u(); initial #10 $finish; endmodule\n");
+    assert_eq!(rc, Some(1), "{out}");
+    assert!(
+        out.contains("`b_t` is declared twice in this module: as a typedef and as a variable"),
+        "{out}"
+    );
+    // …and the STAND-DOWN this cell was written for keeps its own control: a
+    // same-named-by-accident fold must not claim a variable's name, so the variable's
+    // own `$bits` still answers 12 when the two names are distinct. All three tools.
+    let (out, rc) = run("`timescale 1ns/1ns\nmodule m #(parameter N = 3) ();\n  \
+         typedef logic [7:0] b_t [0:N-1];\n  logic [11:0] c_t;\n  \
+         initial $display(\"bt=%0d\", $bits(c_t));\nendmodule\n\
          module top; m u(); initial #10 $finish; endmodule\n");
     assert_eq!(rc, Some(0), "{out}");
     assert!(out.contains("bt=12"), "{out}");

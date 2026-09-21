@@ -483,13 +483,15 @@ fn one_localparam_per_generate_iteration_still_runs() {
 }
 
 #[test]
-fn the_two_shapes_this_rule_still_does_not_see() {
-    // RECORDED, measured, both oracles reject both — left alone deliberately.
-    //
-    // (1) A module instantiated ONLY under `generate if (0)` is never elaborated, so
-    // no walk ever reaches its declarations. iverilog "p209.sv:2: error: 'P' has
-    // already been declared in this scope."; verilator "%Error: p209.sv:2:17:
-    // Duplicate declaration of signal: 'P'".
+fn the_two_shapes_this_rule_does_not_see_are_refused_by_its_siblings() {
+    // (1) CONVERTED, same design, flipped expectation. A module instantiated ONLY under
+    // `generate if (0)` is never elaborated, and this walk ran from `bind_params` — i.e.
+    // once per INSTANCE — so nothing reached its declarations and vita printed `TOP=ok`
+    // at exit 0. iverilog "p209.sv:2: error: 'P' has already been declared in this
+    // scope."; verilator "%Error: p209.sv:2:17: Duplicate declaration of signal: 'P'".
+    // The walk is per DEFINITION now (`driver.rs::run`), so root selection — auto-top,
+    // `--top`, or a false generate — cannot decide whether a declaration is legal.
+    // `decl_name_collisions_kinds.rs` carries the `--top` twins.
     let (rc, out) = run("module dead #(parameter int P = 3);\n\
          \x20 parameter int P = 7;\n\
          \x20 initial $display(\"D=%0d\", P);\n\
@@ -498,11 +500,28 @@ fn the_two_shapes_this_rule_still_does_not_see() {
          \x20 generate if (0) begin : g dead d(); end endgenerate\n\
          \x20 initial begin $display(\"TOP=ok\"); #1 $finish; end\n\
          endmodule\n");
-    assert_eq!(rc, 0, "unchanged by this fix (never elaborated):\n{out}");
-    assert!(out.contains("TOP=ok"), "{out}");
-    // (2) A duplicate VARIABLE in a named block is a different name space with its own
-    // binder. iverilog "m04.sv:5: error: 'x' has already been declared in this scope.";
-    // verilator "%Error: m04.sv:5:13: Duplicate declaration of signal: 'x'".
+    assert_eq!(
+        rc, 1,
+        "the definition is checked even with no instance:\n{out}"
+    );
+    assert!(
+        out.contains("duplicate declaration of parameter `P`"),
+        "{out}"
+    );
+    assert!(
+        !out.contains("TOP=ok"),
+        "and the design does not run:\n{out}"
+    );
+    // (2) CONVERTED, same design, flipped expectation. A duplicate VARIABLE in a named
+    // block is a different name space with its own binder, and it printed `x=3` at exit
+    // 0 — iverilog "m04.sv:5: error: 'x' has already been declared in this scope. : It
+    // was declared here as a variable."; verilator "%Error: m04.sv:5:13: Duplicate
+    // declaration of signal: 'x'". That binder is `hoist.rs`'s flatten, whose
+    // skip-if-present could not tell a second declarator of ONE block from the same
+    // name in ANOTHER block; a per-block set of flatten keys separates them, and this
+    // file's own rule is still `ModuleItem::Param` only.
+    // `decl_name_collisions_kinds.rs` carries the unnamed-block and comma twins and the
+    // sibling-block / module-shadow controls.
     let (rc, out) = run("module top;\n\
          \x20 initial begin : blk\n\
          \x20   integer x;\n\
@@ -512,8 +531,16 @@ fn the_two_shapes_this_rule_still_does_not_see() {
          \x20 end\n\
          \x20 initial #1 $finish;\n\
          endmodule\n");
-    assert_eq!(rc, 0, "unchanged by this fix (a different binder):\n{out}");
-    assert!(out.contains("x=3"), "{out}");
+    assert_eq!(rc, 1, "the sibling rule refuses it:\n{out}");
+    assert!(
+        out.contains("net/variable `top.x` redeclared (duplicate declaration)"),
+        "…with `add_net`'s sentence, not this file's:\n{out}"
+    );
+    assert!(
+        !out.contains("duplicate declaration of parameter"),
+        "the parameter rule must not claim a variable:\n{out}"
+    );
+    assert!(!out.contains("x=3"), "and the block does not run:\n{out}");
 }
 
 #[test]
@@ -617,20 +644,24 @@ fn the_parsers_own_param_desugars_are_not_duplicates() {
 }
 
 #[test]
-fn a_parameter_and_a_net_of_one_name_are_not_this_rule() {
-    // Neighbouring class, deliberately untouched: `localparam N = 7; logic [3:0] N;` is
-    // equally illegal and both oracles reject it, but it is a parameter-vs-NET
-    // collision — a different binder and a different funnel (`add_net`). Pinned so the
-    // next reader can see that this slice's gate is `ModuleItem::Param` only, and so a
-    // future widening of it is a deliberate, measured edit rather than a side effect.
-    // Today vita resolves the name to the parameter; `block_local_shadows_param.rs`
-    // pins the same cell from the shadow-rule side.
+fn a_parameter_and_a_net_of_one_name_are_a_sibling_rule() {
+    // CONVERTED, same design, flipped expectation. This pinned `r=7` and said the
+    // parameter-vs-NET collision was a neighbouring class left alone on purpose —
+    // a different binder (`add_net`) and a different funnel. That class is closed now:
+    // `decl_collide.rs` owns every pair of DIFFERENT binders (IEEE §3.13) and refuses
+    // this one per definition. THIS file's gate is still `ModuleItem::Param` only, and
+    // its own sentence still names the §6.20.1 / §27.2 / §26.2 scope rule — the pin
+    // below is what keeps the two rules from merging into one message.
     let (rc, out) = run("module tb; localparam N = 7; logic [3:0] N;\n\
          \x20 initial $display(\"r=%0d\", N);\n\
          endmodule\n");
-    assert_eq!(rc, 0, "unchanged by this slice:\n{out}");
+    assert_eq!(rc, 1, "the sibling rule refuses it:\n{out}");
     assert!(
-        out.contains("r=7"),
-        "unchanged: the parameter still wins:\n{out}"
+        out.contains("`N` is declared twice in this module: as a localparam and as a variable"),
+        "…and it is the §3.13 sentence, not this file's:\n{out}"
+    );
+    assert!(
+        !out.contains("duplicate declaration of parameter"),
+        "the parameter-vs-parameter sentence must not claim this pair:\n{out}"
     );
 }

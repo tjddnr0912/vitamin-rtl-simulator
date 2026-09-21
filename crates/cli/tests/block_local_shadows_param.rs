@@ -174,22 +174,26 @@ fn a_function_or_task_local_is_unchanged() {
 }
 
 #[test]
-fn a_duplicate_param_and_net_declaration_is_unchanged_by_this_slice() {
-    // NOT a correctness claim — `localparam N = 7; logic [3:0] N;` is ILLEGAL, and both
-    // oracles say so ("'N' has already been declared in this scope" / "Duplicate
-    // declaration of signal"). vita accepts it and resolves the name to the parameter,
-    // before this slice and after.
+fn a_duplicate_param_and_net_declaration_is_now_refused() {
+    // CONVERTED, same design, flipped expectation. This used to pin `r=7` — the answer
+    // vita gave to the ILLEGAL `localparam N = 7; logic [3:0] N;`, which both oracles
+    // reject ("'N' has already been declared in this scope" / "Duplicate declaration of
+    // signal: 'N'"). The recorded "real fix" landed: `decl_collide.rs` refuses the
+    // parameter-vs-net pair per definition, so the design no longer runs at all.
     //
-    // It is pinned because it is the ONE reachable design where the shadow rule's
-    // `!params` clause changes the answer: without it the net would win and this would
-    // print x. So the clause is load-bearing, this slice must not move the answer, and
-    // the real fix — refusing the duplicate declaration, which is a separate
-    // vita-accepts-what-every-oracle-rejects item — is recorded in ROADMAP §3.
+    // Kept rather than deleted because the design was pinned for a second reason: it is
+    // the one place where the shadow rule's `!params` clause decided the answer. With
+    // the pair refused, that clause has no reachable probe of its own any more — which
+    // is recorded here so the next reader does not read its silence as coverage.
     let out = run(
         "module tb; localparam N = 7; logic [3:0] N;\n         \x20 initial $display(\"r=%0d\", N);\n         endmodule\n",
     );
     assert!(
-        out.contains("r=7"),
-        "unchanged: the parameter still wins for a duplicate declaration:\n{out}"
+        out.contains("VITA-E3009")
+            && out.contains(
+                "`N` is declared twice in this module: as a localparam and as a variable"
+            ),
+        "the duplicate declaration is refused:\n{out}"
     );
+    assert!(!out.contains("r=7"), "…and the design does not run:\n{out}");
 }

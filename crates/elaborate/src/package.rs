@@ -564,6 +564,7 @@ impl Elaborator<'_> {
             &Self::item_param_decls(&pm.body),
             "a package body is ONE declarative scope (IEEE 1800-2017 §26.2), so a name \
              is declared there once",
+            &Self::transparent_region_rule("package"),
         );
         for item in &pm.body {
             match item {
