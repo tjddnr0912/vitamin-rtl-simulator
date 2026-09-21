@@ -17,7 +17,23 @@ the header gate with `VITA-E9001` instead of being read; rebuild the artifact (`
 just re-run `vita`). Nothing else about the staged flow changed: `vcmp → velab → vrun` is
 byte-identical to the one-shot run on every design measured.
 
-### Fixed — string casts and `string` conversions, duplicate parameters, copy-net read-through, generate-scope names, constant shadows
+### Changed — diagnostic text for duplicate declarations and package frames
+
+- A duplicate parameter reported inside a transparent `generate … endgenerate` region used to cite
+  IEEE 1800 §6.20.1 and say "a parameter port list and the <unit> body are ONE declarative scope",
+  naming a construct the file need not contain, and said "module" even inside an `interface`. It now
+  names the unit it is really talking about, and a pair that a transparent region contributed gets
+  its own sentence: ``a `generate … endgenerate` region with no block label is TRANSPARENT — its
+  declarations belong to the enclosing <unit> scope (IEEE 1800-2017 §27.2/§27.3)``.
+- A diagnostic raised inside a `package` body now reads `[in pk]` instead of `[in $pkg$pk]`.
+  `$pkg$` is vitamin's internal storage prefix for a package; the waveform and observability scope
+  names are unchanged.
+- `VITA-W3056 … redeclared; first declaration used` is gone for a duplicate routine: the sentence
+  was false (the second body was the one that ran) and the design is refused now. The warning
+  survives, with corrected wording, for a duplicate inside a labelled generate block, which vitamin
+  cannot yet call into.
+
+### Fixed — string casts and `string` conversions, colliding declarations, duplicate parameters, copy-net read-through, generate-scope names, constant shadows
 
 - **`string'(e)` casts an integral to a string, and every integral-to-string conversion now follows
   IEEE 1800 §6.16.** `s = string'(24'h610062);` was a parse error (`VITA-E2002 expected expression,
@@ -82,6 +98,38 @@ byte-identical to the one-shot run on every design measured.
   only when no live term remains — `always @(V or W)` keeps running on `W` — and the message is now
   true about the program (``a constant cannot wake a process``) instead of calling a declared
   `localparam` undeclared.
+- **Two declarations of one name in a module, interface or package body are refused.** IEEE 1800
+  §3.13 makes such a body one name space, and vitamin had a duplicate check inside each binder
+  separately and none across two. Two `function int f` in one module warned ``VITA-W3056 function
+  `f` redeclared; first declaration used`` and then ran the SECOND body (`RD=49` where the first
+  answers 44) — the warning was false — while the same pair in a package body said nothing at all;
+  and a function declared beside a `wire`, `logic`, `parameter`, `localparam`, port, `genvar`,
+  instance, named block, `fork` label, generate-block label, `typedef`, `class` or enum label of
+  that name printed a value at exit 0 where both reference tools reject the design. All of these are
+  now `VITA-E3009` on the second declaration with a note at the first: ``` `f` is declared twice in
+  this module: as a function and as a net — a module body is ONE name space (IEEE 1800-2017 §3.13),
+  so a name is declared there once ```. The refusable combinations are not a hand-written list: every
+  unordered pair of the fourteen declaration kinds (105 pairs) was measured against both reference
+  tools, and the two combinations they accept — a non-ANSI port and its own `wire` or `logic`
+  declaration — are untouched, as are the three they disagree about (a port beside a `parameter`, a
+  `localparam` or a `genvar`). A module instantiated many times reports once. Names the parser itself
+  synthesizes are never reported; a `$unit` declaration shadowed by a local one of the same name
+  stays legal (§26.4), and a labelled generate block's CONTENTS are its own scope (§27.3), so they
+  do not collide with the enclosing module.
+- **A duplicate parameter is refused in a module or interface that is never elaborated.** The check
+  used to run once per INSTANCE, so `module dead #(parameter int P = 3); parameter int P = 7;`
+  instantiated only under `generate if (0)` — or not instantiated at all — exited 0 where both
+  reference tools reject the file; it now runs once per definition, with or without `--top`. A
+  `genvar` colliding with a `parameter` or `localparam` of the same name is refused with it.
+- **A block that declares one local twice is refused.** `begin : b int x = 1; int x = 3; end`
+  printed `x=3`, and the same duplicate inside a static `task` body printed `x=43`, where both
+  reference tools reject the design; both are now `VITA-E3009`. A nested block that redeclares an
+  enclosing block's name is still legal and still runs.
+- **A call to a modport is refused.** `w.mp(40)`, where `mp` is a `modport` of the interface
+  instance `w` and an imported routine of the same name exists, silently called the routine
+  (`R=44`); both reference tools resolve the dotted name to the modport and refuse the call, and so
+  does vitamin now, in the function and task-enable spellings alike. Declaring a `modport` beside an
+  import of that name is unchanged — the reference tools disagree about it.
 
 ### Fixed — runtime continuous-assign delays, hierarchical leaves in a size cast, module-net writes from a function
 

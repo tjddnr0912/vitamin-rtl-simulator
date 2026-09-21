@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.525` **two declarations of one name in a module, interface or package body are refused from a measured 105-pair kind matrix, and the duplicate-parameter check moves to the definition** (2026-09-21 · §2 P20/P21/P22/P25/P26 + X7, six rows deleted · new `decl_collide.rs` = one AST-only per-DEFINITION walk run from `driver.rs::run` over every module, interface and package declaration, instantiated or not, collecting `(name, kind, span)` for 14 kinds and reporting in source order with a span-keyed dedupe · the refusable pairs are a MATRIX, not a hand-cut list: 105 unordered kind pairs measured once under both oracles — 100 `R` · 2 `L` (net/variable vs a non-ANSI port) · 3 `S` (parameter/localparam/genvar vs port) · 0 undecidable — and `collides` refuses the `R` cells MINUS the two another guard already owns (storage×storage → `add_net`, parameter×parameter → `param_dup`) · one E3009 sentence (``` `f` is declared twice in this module: as a function and as a net — a module body is ONE name space (IEEE 1800-2017 §3.13) ```) with a note at the first declaration, a same-kind form, and a §27.2/§27.3 transparency clause · a `$unit` item prepended into the body is dropped by the `unit.span` filter (§26.4 shadow stays legal) and the parser's own desugars are skipped BY IDENTITY — a `$`-PREFIXED internal, and a `parameter type` carrier only when this unit declares both `<stem>$w` and `<stem>$s` · the §6.20.1 duplicate-parameter check moved from `bind_params` (once per INSTANCE) to the same per-definition point, so a module instantiated only under `generate if (0)`, or never instantiated, is refused with or without `--top` · false W3056 ``redeclared; first declaration used`` deleted (the insert kept the LAST), kept with corrected text in the labelled-generate scoped-key arms · static-task and flatten-path duplicate locals E3009 · `w.mp(args)` on an interface instance refused in both call lanes · package frame `[in pk]` · 115 grounding cells: 33 accept→loud, 0 loud→accept, 0 regressions, 1466-file corpus sweep 3 diffs all frame text · 2 lenses × 3 rounds — r1 BLOCKING: a per-inlining local set false-louded a legal nested shadow, and a blanket `$` skip turned the deleted W3056 into silence; r2 BLOCKING: the same axis as a suffix GRAMMAR still exempted the legal user identifier `f$w`, closed by identity, and four unmeasured pair columns were closed as a class, which is what produced the matrix; r3 0 BLOCKING, 2 wording MAJORs fixed · 8376 tests)
 - `4.5.524` **batch review fixes: a positive singleton-scope key, constant event terms that never wake, string concat parts and string-case items through the §6.16 funnel, duplicate parameters in generate regions and packages** (2026-09-21 · the one adversarial review of §4.5.519–523, run over the five slices as a batch per owner directive · 2 lenses × 3 rounds, 84+79 → 25+31 → 7+7 designs plus an 8,604-design suite sweep whose 49 movers are all inside the four new test files · round 1 BLOCKING A: `singleton_scope_key` decided "singleton generate scope" NEGATIVELY, so a one-element INSTANCE ARRAY label passed and `ch u [0:0](); u.q` printed `A=7` where both oracles reject — keyed positively on `gen_singleton_labels`, which closes the ported and `module ch();` twins with it · round 1 BLOCKING B: `@(posedge V[0])` under a `localparam` shadow regressed to loud, closed on the ladder by `event_term_never_wakes` dropping a never-changing term (in-body always, header EDGE terms), which also closes the pre-existing false louds on the unshadowed twins, both oracles `DONE` · C: a MIXED `{string, integral}` concat bypassed the §6.16 funnel while the pure packed concat went through it, and a string-scrutinee `case` compared its integral items packed while `==` compared §6.16 · D/E: duplicate parameters in a generate scope (§27.3), a package body (§26.2) and a TRANSPARENT `generate … endgenerate` region flattened into the enclosing scope (§27.2) · F: a header LEVEL term on a constant, shadowed or not, takes one true refusal · T1 (round 3, the round's single patch): that refusal reported per TERM and swallowed a live sibling — `@(V or W)` now drops the constant and arms on `W` · 3-backend flips 0 splits, determinism byte-identical, a `Bytecode`-default flip run's 10 failures identical on the parent · 8306 tests)
 - `4.5.523` **every bare-name reader asks `bare_ident_route` before taking a net; a hierarchical task call lowers only a constant-shadowing actual as an lvalue** (2026-09-21 · §2 🆕 O, startable row 5 of 6 · `lookup_net_scoped` had 92 call sites and 11 resolved a bare name to a NET without asking whether an enclosing scope's constant shadows it: `V[15:12]` read `6` for the oracles' `0`, a string localparam's `.len()` read `5` for `2`, and `V.push_back`, `V = '{…}`, `V.size()`, a class member, an array port actual and an instance-array actual all took the net where both oracles reject · one funnel `ident_route.rs` (`lookup_net_unshadowed` / `lvalue_binds_constant` / `bare_const_shadows_net` / `error_const_shadows_net`) taken by all eleven readers; a read with a constant path takes it, a site with none refuses by name; the speculative hierarchical-call lvalue is skipped exactly when `lvalue_binds_constant` · 45 designs, 18 moved (7 silent-wrong→value, 3 false-loud→value, 8 silent→loud), 16 no-shadow controls and 16 enum-label twins byte-identical, release vs debug 0 differences · the additive `inline_fn` `Str` arm also closes the pre-existing false loud on an unshadowed `localparam string S; S.len()`)
 - `4.5.522` **an index on a non-loop generate scope is refused, a loop scope needs one, and an instance array of a portless module runs** (2026-09-21 · §2 🆕 N, two cells, startable row 4 of 6 · `gi[0].x` on a conditional generate block printed `X=3` at exit 0 where both oracles refuse (IEEE §27.5 gives it no index; only a loop iteration has one, §27.4), and the reverse `gl.x` on a loop scope was accepted where both refuse — the `label[0]` spelling came in with §4.5.474 and no resolver asked which KIND of scope the label named · `ch w[1:0]()` on a PORTLESS child was refused as "child has non-ANSI ports" where both oracles print `Q=4 4` — an EMPTY port list read as non-ANSI · one home for the rule, `gen_scope_name.rs`, so the four existing E3010 sites report with a hint naming the block and the spelling that works; `instance_array.rs` admits `PortList::None` and an empty non-ANSI list and lets `.*` through · 40 cells: 12 silent→loud, 8 value cells on the portless lane, 2 splits followed to iverilog + §27.5 (`gi[0].P`, `$bits(gi[0].x)` — verilator contradicts itself inside one construct), every control byte-identical, OBS hier-tree / inst-paths at ported-twin parity)
@@ -534,6 +535,163 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.525 two declarations of one name in a module, interface or package body are refused from a measured 105-pair kind matrix, and the duplicate-parameter check moves to the definition (2026-09-21, branch main) ✅
+
+**ROADMAP rows**: §2 "Scoping / imports / block-locals" P20 (duplicate routine), P21 (routine
+against a net or a parameter), P22 (modport against an import — the CALL half; the declaration half
+survives as an ORACLE-SPLIT line), P25 (duplicate parameter no call site reaches, plus the genvar
+kinds), P26 (duplicate variable in a named block) and §2 "Diagnostics / artifacts" X7 (the
+transparent-region sentence). All six deleted.
+
+**Defect (PRE, both oracles reject unless marked)**. IEEE 1800-2017 §3.13 makes a module, interface
+or package body ONE declarative region with ONE name space; vita had a duplicate guard per BINDER
+(`add_net` for net-vs-net, `param_dup.rs` for parameter-vs-parameter) and nothing that compared two
+binders.
+
+```
+two `function int f` in one module / interface / package / transparent generate region
+          PRE  W3056 function `f` redeclared; first declaration used   RD=49   rc=0
+          (the warning is false — `BTreeMap::insert` keeps the LAST body; the package lane
+           printed RD=49 and RD=9 with no diagnostic at all)
+`function int f` beside a wire / logic / parameter / localparam / port / genvar /
+instance / named-block / fork-label / generate-label / typedef / class / enum-label `f`
+          PRE  O=44   rc=0     (the call always took the function, the other declaration
+                                silently kept its own storage: `call=44 net=z`)
+`genvar Q` beside a parameter / localparam / wire / second `genvar` Q
+          PRE  Q=3 / Q=z / TOP=ok   rc=0
+`module top #(parameter int P = 3); parameter int P = 7;` in a module instantiated only
+under `generate if (0)`, or never instantiated at all
+          PRE  TOP=ok   rc=0   (even with `--top`)
+`task tk; begin int x = 1; int x = 3; end endtask` (static, inlined)
+          PRE  x=43   rc=0
+`w.mp(40)` where `mp` is a modport of interface instance `w`
+          PRE  R=44   rc=0   (vita resolved the dotted name to an imported routine;
+                              both oracles resolve it to the MODPORT)
+```
+
+**Fix**. One new AST-only pass, `decl_collide.rs`, run per DEFINITION from `driver.rs::run` right
+after `build_module_facts` — over `order` (every module declaration) and `ifaces` (every interface
+declaration), instantiated or not, and from the package arm for a package body. It collects
+`(name, kind, span)` for FOURTEEN kinds — function, task, net, variable, parameter, localparam,
+port, genvar, instance, named block (fork labels included), generate-block label, typedef, class,
+enum label — and reports in source order with a span-keyed dedupe, so a module instantiated N times
+reports once and a `parameter type`'s several carriers report under the user's stem.
+
+The refusable pairs are not a hand-cut list: they are a MATRIX, measured once over every unordered
+pair of the fourteen kinds (105 pairs, same-kind included), each pair one minimal design plus a
+two-name control, under both oracles. 100 `R` (both reject) · 2 `L` (net/variable against a
+non-ANSI port — one declaration spelled in two items, all three tools run it) · 3 `S` (parameter,
+localparam or genvar against a port), 0 undecidable. `collides` refuses the `R` cells MINUS the two
+another guard already reports (storage×storage → `add_net`, parameter×parameter → `param_dup`),
+because one defect gets one report; the `S` cells stay on the route they had. The sentence is one
+E3009: ``` `f` is declared twice in this <module|interface|package>: as a function and as a net — a
+<unit> body is ONE name space (IEEE 1800-2017 §3.13), so a name is declared there once. Rename one
+of them ``` with a note at the first declaration, the same-kind form reading "both times as a
+port", and a §27.2/§27.3 transparency clause when either side came through a transparent
+`generate … endgenerate` region.
+
+Two neighbours are outside the walk by construction. A `$unit`-scope declaration beside a
+same-named one here is a §26.4 SHADOW and both oracles run it — the parser prepends every `$unit`
+item the unit does not itself declare to the front of `body`, and its own filter cannot see a block,
+generate or enum label, so every site whose span lies outside `unit.span` is dropped. A routine's
+formals and body locals are its own region and are never collected. Two of the parser's own desugars
+are skipped BY IDENTITY, never by name shape: a `$`-PREFIXED internal (exact — §5.6 lets no legal
+identifier start with `$`) and a `parameter type` carrier, skipped only when THIS unit's own
+parameter declarations contain both `<stem>$w` and `<stem>$s`, which is what the producer always and
+only mints for a type parameter.
+
+The §6.20.1 duplicate-PARAMETER check moved with it, from `bind_params` (once per INSTANCE) to the
+same per-definition point, so the module refused above is refused with or without `--top`. Its
+sentence now names the unit kind, and a pair a transparent region contributed gets
+`transparent_region_rule` instead of the §6.20.1 "parameter port list and the module body" wording,
+which named a construct the file does not contain (X7).
+
+W3056 ``function `f` redeclared; first declaration used`` is deleted in `rtn_decl.rs` and in
+`generate.rs`'s bare-key arms — it was false (the insert kept the LAST) and the pair is now refused;
+it is kept, with corrected text, in the labelled-generate SCOPED-key arms, whose contents are their
+own region (§27.3) and which vita cannot call into yet.
+
+Three lanes beside the walk. A static (inlined) task body declaring one local twice is E3009 (new
+`inline_task_locals.rs`, keyed per SV scope on the declaring block chain, so a nested-block shadow
+stays legal). A block declaring one local twice on the block-local FLATTEN path is E3009
+(`block_local/hoist.rs`), with the duplicate declarator dropped so no `E3010 undeclared` cascade
+follows. `w.mp(args)` where `mp` is a modport of interface instance `w` is refused in the function
+lane and the task-enable lane alike — the declaration pair is NOT refused, because verilator runs it
+and the wildcard spelling runs in both oracles. And a package diagnostic frame prints `[in pk]`
+instead of `[in $pkg$pk]` (the frame only; VCD scopes and OBS paths keep `$pkg$`).
+
+**Census** 115 three-tool grounding cells; PRE versus POST over all of them: 33 moved accept → loud
+(32 both-reject, 1 iverilog-only — a duplicate parameter in a never-instantiated INTERFACE, shipped
+as IEEE declaration legality), 0 loud → accept, 10 text-only, 72 unchanged, 0 regressions. A corpus
+sweep of 1466 `bench/` + `examples/` files gives 3 differing files, all of them the `[in pk]` frame
+text. Positive controls by asymmetric mutation move on every new kind.
+
+**Rounds** (2 lenses × 3; PRE frozen at `ea25320c…` = 35fe9c9, POST `8884f961…`, POST2
+`fbea6c74…`, POST3 `aa618e41…`; oracles iverilog 13.0 `-g2012` and verilator 5.052
+`--binary --timing`).
+
+- Round 1: 43 + 40 designs plus a 1450-file sweep. 2 BLOCKING, 10 MAJOR. **BLOCKING F1**: the
+  inlined-task local set was keyed per INLINING, not per BLOCK, so `task tk; integer x; begin
+  integer x; … end endtask` — a LEGAL nested shadow both oracles run — became loud; fixed by keying
+  on the declaring block chain. **BLOCKING F2**: the `$` skip was a blanket "name contains `$`", so
+  two `function int f$1()` lost the W3056 the slice deleted and said nothing at all on a wrong
+  answer — loud → silent. MAJORs: the typedef, class, fork-label, generate-label, enum-label and
+  instance-vs-net pairs the closed list did not model; the package lane being routine-vs-routine
+  only while the MODULE twins of the same two pairs were refused; and `int x, x;` emitting the
+  redeclare plus two `E3010 undeclared` where PRE and both oracles emit one. All fixed.
+- Round 2: 25 + 25 delta designs plus a 1466-file corpus sweep. 1 BLOCKING, 6 MAJOR. The BLOCKING is
+  the same `$` axis one narrowing later: the exemption had become a suffix GRAMMAR, and `f$w`,
+  `f$s`, `f$d0a`, `f$p1b` are legal user identifiers that both oracles refuse when declared twice —
+  the file's own doc named `f$w` as the case the test exists to catch. Fixed by IDENTITY (the
+  `<stem>$w` + `<stem>$s` pair this unit actually declares), with the producer read at source:
+  `type_params.rs` builds both names before any branch and pushes them consecutively and
+  unconditionally on the one success path, so no producer can mint a dim carrier, or a `$w`, without
+  the `$s` twin. MAJORs: four unmeasured pair columns (typedef×variable, class×variable,
+  generate-label×variable, block×block), package enum labels, and the nested-block key naming a key
+  that does not exist. Closing the columns as a CLASS is what produced the matrix; two unseen
+  changes surfaced with it — the non-ANSI port de-dup and the `$unit` span filter.
+- Round 3: 12 + 12 delta designs, 136 + 6 prior designs re-run POST2→POST3, and 6 matrix cells
+  re-measured by hand with their controls. 0 BLOCKING; 2 MAJOR, both wording, both fixed: the
+  §27.2/§27.3 transparency clause fired on a bare `if (1) begin : fn` with no `generate` keyword
+  anywhere in the design (one flag carried two facts — "reached THROUGH a transparent region" and
+  "IS a generate-block label"), and the two-kind sentence stuttered when both sides were one kind
+  ("as a port and as a port"). 3 MINOR are doc-only and recorded below. Every one of the 29 POST3
+  movements maps to a claimed fix; 0 designs moved refuse → run outside the two §26.4 shadow cells
+  the span filter restored, and 0 moved run → refuse without an oracle pair behind it.
+
+**Recorded, not fixed** (each is one ROADMAP §2 or §3.b line):
+
+- A CALL that resolves to a NESTED named-block LABEL which is also a module routine is silent
+  (`F04 44 1`); both oracles resolve it to the block. The resolution sibling of the modport call.
+- A net declared in an UNLABELLED `generate … endgenerate` region beside a module `function` of that
+  name is now refused (iverilog agrees); verilator scopes the block and RUNS it. vita's flatten model,
+  already enforced on the storage×storage twin before the slice — recorded as a split, not hidden.
+- `parameter type T` beside `wire T` — one oracle (verilator refuses, iverilog cannot parse it).
+- A modport EXPRESSION as a port actual (`module sub(ifc.mp p); … sub u(w.mp);`) is a pre-existing
+  E3002 + E3010 where verilator runs it; §3.b.
+- `w.mp(…)` on an interface PORT FORMAL stays loud for the pre-existing hierarchical-call reason,
+  not the new §25.5 sentence — `modport_call_refused` walks interface INSTANCES only; §3.b.
+- An explicit `import pk::X;` beside `modport X` (routine, parameter or typedef) is an ORACLE SPLIT
+  (iverilog rejects, verilator runs it, and the wildcard spelling runs in both).
+- A duplicate FIELD in a class body is accepted, last wins (`x=3`) — verilator alone refuses, vita
+  matches iverilog; a class body is outside this walk.
+- `module dut(a, a); input a;` — a repeated NON-ANSI HEADER port name — runs: a header name is
+  pushed only when the body declares no `PortDecl` for it, so one `input a;` drops both repeats and
+  the pair never forms. iverilog runs it too (with a different value on the `T9` cell), verilator
+  refuses. The BODY spelling `input a; input a;` IS refused.
+- vita cannot call a function declared in a labelled generate block (`gb.f`), so that lane's
+  duplicate keeps a warning rather than a refusal; §3.b.
+- A `generate` region inside an interface is a pre-existing loud where both oracles run the design;
+  §3.b.
+- The package lane's typedef / class / enum-label pairs against a NON-routine declaration are a
+  matrix hole, not a decision — the package guard drops them.
+- The `typedef` × enum-label and `class` × enum-label cells are `R` on verilator's diagnosis alone:
+  iverilog refuses both designs with a parse error on the line rather than a name-space judgement.
+
+**Gates**: 8376 tests, 15 skipped; `cargo nextest run --workspace --locked`, doctest, `cargo clippy
+--workspace --all-targets --locked -- -D warnings` and `cargo fmt --all -- --check` rc 0; corpus
+10/10 on every round; `format_version` 33 (set by §4.5.519, unchanged here).
 
 #### 4.5.524 batch review fixes: a positive singleton-scope key, constant event terms that never wake, string concat parts and string-case items through the §6.16 funnel, duplicate parameters in generate regions and packages (2026-09-21, branch it22) ✅
 

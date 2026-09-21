@@ -27,10 +27,10 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 26 | 0 | 26 | WALL §11.8.1 region sign / declared-width provenance 8 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 5 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 140 | 92 | 48 | oracle split / pinned / oracle disqualified 24 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 26 · delays / events 13 · real 7 · performance 7 · index sealing 6 · ranges / selects 6 · diagnostics 7 · class fields 3 · oracle splits 17 | ① | |
+| §2 | recorded defects by mechanism | 142 | 87 | 55 | oracle split / pinned / oracle disqualified 28 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 26 · delays / events 13 · real 7 · performance 7 · index sealing 6 · ranges / selects 6 · diagnostics 6 · class fields 4 · oracle splits 19 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 98 | 84 | 14 | named prerequisite 5 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 23 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 13 · system tasks & file I/O 9 · nets / timing 8 · loud shapes from §4.5.493–495 7 · strings / heap 7 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
+| §3.b | loud → correct-support, small | 102 | 87 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 13 · system tasks & file I/O 9 · nets / timing 10 · loud shapes from §4.5.493–495 7 · strings / heap 7 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 364 | 225 | 139 | | | | |
+| total | | 370 | 223 | 147 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, a per-resumption-kind ordering model, a
@@ -491,6 +491,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `logic [-3:0][1:0] x; x[-3]` — `dim_coord`'s ascending arm does not build the signed subtraction
   of the correct coordinate `(lo+size-1) - idx` (loud on both builds). The whole value and `$bits`
   are correct.
+- ORACLE-SPLIT. A duplicate FIELD in a class body (`class C; int x = 1; int x = 3; … endclass`)
+  is accepted and the last declaration wins (`x=3`): iverilog accepts it and prints `x=3` too,
+  verilator refuses (`Duplicate declaration of signal: 'x'`). vita matches iverilog; a class body is
+  outside the §3.13 declaration walk §4.5.525 added, which judges module / interface / package
+  bodies only (§4.5.525 census p26_j).
 
 ### Scoping / imports / block-locals
 
@@ -614,22 +619,30 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   unpacked-dim and 2-D packed spellings the same (§4.5.515 review, PRE-identical). A type
   parameter is immune when its bounds fold (literal dims) or are carried (`T$w`); the typedef
   registry stores the bound EXPRESSION and every consumer folds it in its own scope.
-- A DUPLICATE routine declaration in one scope warns and then uses the wrong body (both oracles
-  REJECT the design): `register_declared_routine` prints ``W3056 function `f` redeclared; first
-  declaration used`` while `BTreeMap::insert` keeps the LAST, so two `function int f` bodies print
-  `RD=49` (the second) at exit 0. Both lanes, identical text and value; only the diagnostic column
-  differs (§4.5.518). Fix shape = refuse the second declaration, or make the insert first-wins and
-  say so.
-- A routine DECLARED with the name of a NET or a PARAMETER of the same scope is accepted (`O=44`)
-  where both oracles reject (iverilog "'f' has already been declared in this scope", verilator
-  "Function has the same name as variable/parameter"). Module lane and interface lane alike, and
-  vita's resolution is at least self-consistent (the call takes the function, a hierarchical read
-  takes the net). §4.5.518 closed the modport twin of this class for DECLARED routines only.
-- A `modport` named like an IMPORTED routine (`import pk::mp;` or `import pk::*;` beside
-  `modport mp`) is accepted (`R=44` / `O=44`) where both oracles reject. §4.5.518's modport check
-  keys on routines DECLARED in the interface (`!rtn_pkg.contains_key(n)`), which is the right
-  routing decision — an import-versus-declaration collision is `apply_import_routines`' question —
-  but nobody asks the modport question for an imported name.
+- ORACLE-SPLIT. A `modport` named like an IMPORTED symbol (`import pk::mp;` beside `modport mp`,
+  for a routine, a parameter or a typedef) is accepted (`R=44` / `O=44`); iverilog rejects the
+  declaration, verilator RUNS it, and the wildcard spelling `import pk::*;` is accepted by both
+  (§4.5.525 census p22_a2 / p22_b2 / p22_d / p22_e). The CALL half of the row is closed: `w.mp(…)`
+  on an interface INSTANCE is refused, which is where both oracles agree. Refusing the declaration
+  would be a false loud on verilator's reading, so the split is recorded and not chased.
+- A CALL that resolves to a NESTED named-block LABEL which is also the name of a module routine is
+  silent: `function int f` beside `initial begin : outer begin : f … end end` prints `F04 44 1` at
+  exit 0 where iverilog says "No function named 'f' found in this context (top.outer)" and
+  verilator "Found definition of 'f' as a BEGIN but expected a task/function". A resolution class,
+  the sibling of the modport call §4.5.525 closed — the §3.13 declaration walk does not descend
+  into a named block, and nobody asks the enclosing-block question at the call site.
+- A `parameter type T` declared beside a `wire T` in one module is accepted (`G05 1`): one oracle
+  only — verilator "Variable has same name as type parameter: 'T'", iverilog cannot parse the
+  declaration at all. §4.5.525's pair matrix leaves the cell on the route it had rather than
+  refusing on a single diagnosis.
+- Not measured: the PACKAGE lane's `typedef` / `class` / enum-label pairs against a non-routine
+  declaration. §4.5.525's package walk collects those kinds and refuses them against a routine
+  (measured), but the package guard drops a non-routine pair, so the columns are a matrix hole,
+  not a decision.
+- The `typedef` × enum-label and `class` × enum-label cells of §4.5.525's pair matrix are `R` on
+  VERILATOR's diagnosis alone: iverilog refuses both designs with a parse error on the line
+  ("Syntax error in typedef clause.") rather than a name-space judgement, while its control
+  compiles. Both tools do reject the file, so the refusal stands; the FOOTING is one oracle.
 - A width-0 indexed part-select is accepted silently: `parameter P = 0; t[i +: P] = …` is rejected by
   iverilog and exits 0 in vita (§3 in character).
 
@@ -639,16 +652,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   One oracle — iverilog cannot declare `int m[string]` ("Type names are not valid expressions here").
   The key store is the one integral→string crossing `Value::to_sv_string_bytes` does not serve
   (§4.5.519 census; `git grep to_sv_string_bytes` lists the six that do).
-- A duplicate parameter declaration in a scope no `check_duplicate_param_decls_in` call site can
-  reach is still accepted (both oracles reject): a module instantiated ONLY under `generate if (0)`
-  is never elaborated, so the check — which runs from `bind_params`, i.e. once per INSTANCE — never
-  fires (`TOP=ok` rc=0, even with `--top`). Same family on the declaration KIND rather than the
-  region: a `genvar Q;` beside a `localparam int Q` in a transparent generate region is accepted
-  because `scope_param_decls` collects `ParamDecl`s only (iverilog "'Q' has already been declared in
-  this scope. … It was declared here as a genvar."; verilator "Duplicate declaration of signal").
-- A duplicate VARIABLE declaration in a NAMED block is accepted silently, last declaration wins
-  (`begin : b int x = 1; int x = 3; end` prints `x=3` where both oracles reject the design). Same
-  class as the parameter rows above, one namespace over.
 
 ### Delays / events
 
@@ -735,11 +738,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   shadows a class-handle net) reports the generic `E3010 undeclared hierarchical name `V.x`` instead
   of the shadow sentence the other ten readers now share (§4.5.523). Loud either way, both oracles
   reject; the site is the hierarchical-name lane, which never asks `bare_const_shadows_net`.
-- The duplicate-parameter refusal for a TRANSPARENT `generate … endgenerate` region cites §6.20.1
-  with "a parameter port list and the module body are ONE declarative scope" — a sentence that names
-  something the design did not do, and that says "module" when the region is inside an INTERFACE. The
-  labelled-block (§27.3) and package (§26.2) spellings §4.5.524 added have their own correct
-  sentences; the transparent region has no counterpart.
 
 ### Performance (open, recorded)
 
@@ -878,6 +876,18 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   vita refuses — iverilog agrees (and warns "Anachronistic use of begin/end to surround generate
   schemes"), verilator treats the block as a §27.6 scope and runs it. vita follows iverilog, which is
   the reading §4.5.264 already pinned for this construct; a NEW refusal of a program verilator accepts.
+- The same flatten one namespace wider: a net declared in an UNLABELLED `generate … endgenerate`
+  region beside a module `function` of that name (`generate begin wire f; end` + `function int f`)
+  is refused by vita since §4.5.525 and by iverilog ("'f' has already been declared in this scope"),
+  while verilator scopes the unlabelled block and RUNS it (`F06 44`). vita already enforced the
+  flatten on the storage×storage twin before the slice (`add_net` refuses two such regions each
+  declaring `wire f`), so this is vita's existing model, not a second one.
+- A repeated port name in a NON-ANSI HEADER list (`module dut(a, a); input a;`): vita runs it and
+  prints `A=z`, iverilog compiles and runs it too — with a DIFFERENT value on the `T9` cell (`T9 x`
+  against vita's `T9 1`) — and verilator refuses (`Duplicate declaration of port: 'a'`). §4.5.525
+  pushes a non-ANSI header name into the §3.13 walk only when the body declares no `PortDecl` for
+  it, so one `input a;` drops BOTH repeats and the pair never forms; the BODY spelling
+  (`module dut(a); input a; input a;`) is both-reject and IS refused.
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
@@ -985,6 +995,8 @@ behind the §2 correctness queue.
 | array-formal | a non-zero-base descending array formal · hierarchical-task OUTPUT/INOUT array formals · forwarding a frame-formal array into a nested hierarchical call · re-forwarding · a non-zero-LSB element · 2-D, signed and task array formals | — | — | iverilog | hard |
 | blk-automatic | block-local `automatic` lifetime (`automatic int j=k*10`) | per-activation storage = deep block-local flatten | — | iverilog rejects it too | deep |
 | hier-default-arg | a HIERARCHICAL call does not honour the callee's formal DEFAULT values: `top.sh()` on `task sh(input logic [7:0] a = 8'hA5);` is loud / wrong where both oracles print `A=a5` | the hierarchical-enable lowering binds actuals positionally and never consults `collect_callee_ports`' defaults, which the inline and frame lanes both read | thread the callee's default list into the hierarchical bind, the way `with_default_arg_scope` already does for the other three lanes | 2-oracle | small |
+| iface-modport-formal | `w.mp(40)` where `w` is an interface PORT FORMAL (`module sub(bus w); import pk::*; …`) and `mp` a modport of that interface is ``E3009 unsupported hierarchical function call `w.mp` (the callee must be a framed function …)`` — a pre-existing hier-call gate, not the §25.5 sentence §4.5.525 added, because `modport_call_refused` walks `iface_insts` only. Verilator refuses it as a modport; iverilog cannot parse `module sub(bus w)` and its control fails the same way, so it cannot judge the cell | `modport_call_refused` keys on interface INSTANCES; an interface port formal is not one | give the hierarchical-call route the interface-port-formal receiver, then the §25.5 refusal follows. Prerequisite: the hierarchical-call framing gate | verilator | small |
+| genblk-fn-call | a function DECLARED inside a LABELLED generate block cannot be called by its scoped spelling: `gb.f(…)` is ``E3009 unsupported hierarchical function call `gb.f` (the callee must be a framed function with input-only scalar formals…)`` where both oracles run it (`RD=44`). One consequence beyond the call: §4.5.525's §3.13 walk does not descend into a labelled generate block (its contents are their own region, §27.3), so a DUPLICATE routine declared inside one keeps the pre-existing warning instead of a refusal, and the cell cannot be closed until the lane runs | the hierarchical-call route has no generate-scope callee | admit a generate-scope callee to the frame route | 2-oracle | small |
 | misc-sub | `q.min()[0]` · `x.name().len()` · a package TASK statement call · a method or constructor NAME default at class scope · a G4 string-returning frame call | — | — | no oracle | — |
 
 **System tasks & file I/O**
@@ -1012,6 +1024,8 @@ behind the §2 correctness queue.
 | timescale | partial-timescale diagnostics (`W-PARSE-TIMESCALE-PARTIAL` / `E-PP-TIMESCALE-PARTIAL`): when only some modules declare one, there is no diagnostic and 1ns/1ns is assumed (only the none-at-all case gives W1017) | not wired | the design is in doc-08 §15 and `rt.default_used` exists — wiring only | — | small |
 | nonansi-child-array | an instance array whose child declares a NON-EMPTY non-ANSI header (`module ch(a); input a;` + `ch w[1:0]();`) is ``E3009 instance array `w`: child `ch` has non-ANSI ports (v1: ANSI only)`` plus one E3010 per element, where both oracles print `Q=4 4`. The PORTLESS child (`module ch;` and `module ch();`) runs since §4.5.522 | `instance_array.rs` reads per-port widths from the ANSI header only, so a body `PortDecl` list has nowhere to come from | read the port widths from the body `PortDecl`s the way the scalar-instance lane already does; pinned meanwhile by `nonempty_nonansi_child_array_stays_loud` | 2-oracle | small |
 | implicit-net-generate | an undeclared name on the LEFT of a continuous assign INSIDE a generate block is `E3010` where both oracles infer the 1-bit wire and print `I=0`; at module scope vita infers it with `W2003` as IEEE 1364 §3.5 requires | the implicit-net inference is a module-body phase and the generate lowering does not re-enter it | run the same inference over a generate block's items (this is a POSITION gap in vita's own §3.5 policy, not the §8 IMPLICIT-NET non-goal) | 2-oracle | small |
+| modport-port-actual | a modport EXPRESSION as a port actual — `module sub(ifc.mp p); … ifc w(); sub u(w.mp);` — is ``E3002 interface port `p` must be connected to an interface instance name`` plus an `E3010` on `p.d`, where verilator runs it (`G12 43`); iverilog cannot parse the `ifc.mp p` port declaration | the interface-port binder takes an interface INSTANCE name only | take a `<instance>.<modport>` actual and bind the modport's view | verilator | small |
+| iface-generate | a `generate … endgenerate` region inside an interface body is ``E3009 generate blocks inside an interface are outside the MVP`` where both oracles run the design (`TOP=ok`) | `iface_inst.rs`'s MVP gate for interface body items | run the region through the interface window the way the module lane runs it; the routine and import lanes were opened by §4.5.517–518 | 2-oracle | small |
 | deep | a t0 race · an `@(*)` decl-init wake · a runtime `==?` pattern · a NON-fill context width in an inline body · modport direction enforcement · a force on a part-select · an associative key or clocking array output word0 · a PART select of a negative range bound (§2) | — | — | — | deep |
 
 **Loud shapes surfaced by §4.5.493–495 (all 2-oracle unless noted; each PRE == POST)**

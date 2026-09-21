@@ -27,6 +27,7 @@ a section restructure, a residue split).
 | 2026-09-20 | 92d3be7 | §4.5.517 | 8146 | 32 | 27 / 6 / 21 | 121 / 79 / 42 | 7 / 0 / 7 | 24 / 19 / 5 | 96 / 82 / 14 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 344 / 216 / 128 |
 | 2026-09-20 | d0ff5a2 | §4.5.518 | 8194 | 32 | 27 / 6 / 21 | 127 / 83 / 44 | 7 / 0 / 7 | 24 / 19 / 5 | 95 / 81 / 14 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 349 / 219 / 130 |
 | 2026-09-21 | b32cf00 | §4.5.519–524 | 8306 | 33 | 26 / 0 / 26 | 140 / 92 / 48 | 7 / 0 / 7 | 24 / 19 / 5 | 98 / 84 / 14 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 364 / 225 / 139 |
+| 2026-09-21 | c026a81 | §4.5.525 | 8376 | 33 | 26 / 0 / 26 | 142 / 87 / 55 | 7 / 0 / 7 | 24 / 19 / 5 | 102 / 87 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 370 / 223 / 147 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -34,3 +35,8 @@ a section restructure, a residue split).
   🆕 O's eleven-reader class are closed inside their rows, and row 32 was re-measured and
   reclassified ORACLE-SPLIT. 2M and 3b rise because the batch RECORDED its residues (+13 mechanism
   bullets, +3 §3.b rows), which is the intended direction. `format_version` 32 → 33.
+- 2026-09-21 (§4.5.525): 2M rises although SIX rows were deleted — the slice recorded eleven
+  residues (four of them oracle splits, two one-oracle, one an unmeasured matrix column), so 2M is
+  140 − 5 + 7 and its startable column drops twice: five deleted rows were startable, and the
+  surviving modport row was re-measured as ORACLE-SPLIT. 3b rises by the four §3.b rows the same
+  residues opened. `format_version` 33 unchanged. HEAD `c026a81`.

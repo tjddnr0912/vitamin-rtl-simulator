@@ -402,6 +402,7 @@ another.
 | Write the factorial table and check that every output the mechanism can produce is in the readout before publishing a refutation; a refuting census varies the claim's axis and holds everything else fixed | A one-column readout of a multi-column mechanism refuting nothing |
 | Vary every field of a reported shape, not only the one the report names | The field held constant being the one that matters |
 | Count the loud→value cells separately; multiply position by the five binders (module, instance, package, generate, override), give every cell a keyword/scalar spelling twin as its control, one instance per cell, and open a §2 row with the plain twin of its shape | A census that cannot say which cells descended the ladder |
+| Refuse from a measured pair MATRIX, not one pair at a time: when a rule judges two declarations, two operands or two kinds together, enumerate every unordered pair of the kinds once under both oracles, give each pair a two-name control, and derive the accept set from the result | Every kind added to a closed pair list arriving with unmeasured columns, so each review round finds the next one (§4.5.525: three rounds, four columns, until the 105-pair matrix replaced the list) |
 
 ### 4.6 Queue rows and incoming reports are claims
 
@@ -553,6 +554,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Confirm that a canonical predicate answers your question before calling it, and state the delta explicitly when it does not | "Is it pure" not being "may it be evaluated twice", and closing everything losing the genuinely pure cases |
 | Make every query used for a decision three-state; folding "not yet known" into "no" is a silent-wrong | A placeholder answering with a fabricated fact that the caller reads as a fact |
 | Ask whether a caller uses the answer for a decision before adding a fallback, not whether it is visible in the engine | A fallback that looks harmless in one lane demoting correct support to loud-wrong in another |
+| Exempt a synthesized name by producer IDENTITY — the registry or the pair the producer actually mints, read at the producer's source — never by name shape | A `$` suffix grammar also matching legal user identifiers, so the guard was silent on real duplicates: two review rounds died on it, the first as a blanket "contains `$`", the second as the narrowed suffix list (§4.5.525) |
 
 ### 5.3 The predicate must match what it gates
 
