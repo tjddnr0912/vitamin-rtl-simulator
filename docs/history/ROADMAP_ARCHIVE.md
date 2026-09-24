@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.528` **a hierarchical net, call or select read carries its declared width, sign and realness from creation, recorded only where the declared width folds exactly and verified at resolution** (2026-09-24 · §2 "Inline / frame binds" HIERARCHICAL-leaf bullet deleted, plus the stale "Real" R1 / R2 / R3 after 3-tool grounding · `HierLeafShape` sidecar filled by the declaration walk (`hier_leaf_net` / new `hier_leaf_real` / `hier_leaf_func` / `hier_leaf_net_names`), consumed by `ir_bits_of`, `expr_self_signed` (Signal arm), `canonical_self_width` and `expr_is_real`, E3009 on a resolve-time mismatch (0 of 308) · exactness predicate `expr_size_hier_exact.rs`, `env_fold` untouched · inline lane, index seal, casts, `$bits`, `==?`, fill literals and module / frame streams move to the oracles; a hierarchical stream stored into a different width in an inline body is a new E3009 · no format bump · 2 lenses × 3 rounds + one direct re-grade — r1 BLOCKING stream loud → wrong and MAJOR `-4'd1` correct → loud, r2 BLOCKING value-aware minus rule → D8: D1 reverted, structural exactness, stream gate moved to the inline store on differing widths · 8440 tests)
 - `4.5.527` **a parameter override whose top is an operator and whose self-determined width is past 64 bits folds in the wide domain at that width, for PLAIN trees only** (2026-09-24 · §2 "Index sealing" `~128'd0` bullet deleted, plus three stale rows deleted after 3-tool grounding: constant-domain C2 / C3 and §3.b `wide-override` · `override_bits` admits an operator top (`~ - +`, arithmetic / bitwise / shift / `**` binary, ternary) when `wide_operator_tree_is_plain` holds (every self-determined position a plain leaf, every context-determined node of the top's sign, no fill), its self width is past 64 (pass 1), folding AT that width (pass 2) and declining on any x/z bit; ≤64-bit operator tops keep the i64 channel; every override channel (`#()`, `defparam`, interface) · no format bump · 49 grounding cells: 17 silent → 2-oracle, 12 loud → value, `~pk::PW80` 1 → 80 bits; typed narrower cells land on verilator's side of row 16's split · 2 lenses × 4 rounds — r1 BLOCKING ctx-0 fold of nested operands (→ two passes) and x/z plane dropped; r2 BLOCKING ctx 0 inside self-determined positions; r3 BLOCKING the sign rule blind inside positions → D8 stop: both value-aware exclusion walks deleted for one structural rule, the shared walk's two defects filed as §2 🆕 R; r4 0 BLOCKING · 8427 tests)
 - `4.5.526` **the inline function lane applies the store rules a net would: a real actual or rhs converts through a single-mention `RealToInt`, a 2-state body-local squashes x/z through `TwoState`, a class field is sized by its field width, and a non-repeatable actual narrows once** (2026-09-24 · §2 "Inline / frame binds" F7/F8/F9/F11 plus five neighbours retired after re-measurement, nine bullets deleted · `format_version` 33 → 34: `SysFuncId::RealToInt` (§6.12.2 round half away from zero into 128-bit signed, exact below 2^127) and `SysFuncId::TwoState` (x/z → 0, operand width and sign) · F8 = `real_to_int_store` in `inline_bind.rs::bind_formal_actual` for a NON-repeatable real actual (a w > 128 target sign-extends through a single-mention `Add` with a signed zero); F11 = the same helper in `inline_fold.rs::fold_straight_line`'s Blocking and Return arms; F9 = `InlineScope.two_state` from `net_kind_is_two_state` plus `TwoState` after the resize; F7 = `ir_bits_of` / `expr_self_signed` read `class_field_widths`, and `class_field_leaf` makes the four §11.6.1 context walks see a class-field leaf (the mirror fix alone regressed two tests) · review fix X2: a trusted-width non-repeatable actual narrows with `select_low` + sign stamp + `TwoState` when it is at least as wide as the formal or unsigned · `inline_fn.rs` 1,172 → 895 (`inline_bind.rs` 268, `inline_fold.rs` 165) · 22 grounding cells · 2 lenses × 2 rounds — r1 BLOCKING: a 2-state formal bound to an x-bearing class field squashed but did not narrow (root: the pre-existing missing narrowing tail), and `RealToInt` capped at 64 bits turned 18 loud cells into wrong values; r2 0 BLOCKING, about 66 cells moved, all onto the oracle value, 0 PRE-right → POST-wrong · 8411 tests)
 - `4.5.525` **two declarations of one name in a module, interface or package body are refused from a measured 105-pair kind matrix, and the duplicate-parameter check moves to the definition** (2026-09-21 · §2 P20/P21/P22/P25/P26 + X7, six rows deleted · new `decl_collide.rs` = one AST-only per-DEFINITION walk run from `driver.rs::run` over every module, interface and package declaration, instantiated or not, collecting `(name, kind, span)` for 14 kinds and reporting in source order with a span-keyed dedupe · the refusable pairs are a MATRIX, not a hand-cut list: 105 unordered kind pairs measured once under both oracles — 100 `R` · 2 `L` (net/variable vs a non-ANSI port) · 3 `S` (parameter/localparam/genvar vs port) · 0 undecidable — and `collides` refuses the `R` cells MINUS the two another guard already owns (storage×storage → `add_net`, parameter×parameter → `param_dup`) · one E3009 sentence (``` `f` is declared twice in this module: as a function and as a net — a module body is ONE name space (IEEE 1800-2017 §3.13) ```) with a note at the first declaration, a same-kind form, and a §27.2/§27.3 transparency clause · a `$unit` item prepended into the body is dropped by the `unit.span` filter (§26.4 shadow stays legal) and the parser's own desugars are skipped BY IDENTITY — a `$`-PREFIXED internal, and a `parameter type` carrier only when this unit declares both `<stem>$w` and `<stem>$s` · the §6.20.1 duplicate-parameter check moved from `bind_params` (once per INSTANCE) to the same per-definition point, so a module instantiated only under `generate if (0)`, or never instantiated, is refused with or without `--top` · false W3056 ``redeclared; first declaration used`` deleted (the insert kept the LAST), kept with corrected text in the labelled-generate scoped-key arms · static-task and flatten-path duplicate locals E3009 · `w.mp(args)` on an interface instance refused in both call lanes · package frame `[in pk]` · 115 grounding cells: 33 accept→loud, 0 loud→accept, 0 regressions, 1466-file corpus sweep 3 diffs all frame text · 2 lenses × 3 rounds — r1 BLOCKING: a per-inlining local set false-louded a legal nested shadow, and a blanket `$` skip turned the deleted W3056 into silence; r2 BLOCKING: the same axis as a suffix GRAMMAR still exempted the legal user identifier `f$w`, closed by identity, and four unmeasured pair columns were closed as a class, which is what produced the matrix; r3 0 BLOCKING, 2 wording MAJORs fixed · 8376 tests)
@@ -537,6 +538,159 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.528 a hierarchical net, call or select read carries its declared width, sign and realness from creation, recorded only where the declared width folds exactly and verified at resolution; the inline lane, the index seal, casts, `$bits` and streams use it (2026-09-24, branch main) ✅
+
+**ROADMAP rows**: §2 "Inline / frame binds" — the HIERARCHICAL-leaf bullet (a real `u.r` / `u.hr`
+substituted as raw bits in an inline body, and `bit [7:0] b; b = u.lv; f = b;` answering at 8
+bits), deleted. Deleted as STALE after grounding (3-tool identical at HEAD, cells `g/r1_auto`,
+`g/r2_pkg`, `g/r3_assign`): §2 "Real" R1 (`fa(1) + (-s)` is −7 everywhere), R2 (`p::one() + (-s)`,
+`c.getr() + (-s)` −7) and R3 (`r = (-s)` −8.0, `r = (s+s)` 0.0). CL-08 re-scoped.
+
+**Defect (PRE, both oracles unless marked)**. A cross-instance read `u.x` pushes
+`Signal{POISON_NET}` (`expr_main.rs`), a cross-instance call `u.f(a)` pushes `Call{POISON_FID}`
+(`inline_fn.rs`), and a hierarchical select pushes the same net placeholder, all with no shape.
+`ir_bits_of` answers `None`, `expr_self_signed` false, `canonical_self_width` declines on any
+placeholder in the subtree and `expr_is_real` false, so every store or bind rule that needs a
+trustworthy width took its verbatim tail inside a static (inline) function body, the index seal
+zero-extended a signed hierarchical index, and a cast took a fabricated width.
+
+```
+matrix g/m_<kind>.sv (u8 `logic [7:0] lv = 8'hf0`), static function positions
+f2  bit [7:0] b; b = u.lv; f2 = b;   ([15:0] return)   both 00f0        PRE f0
+f3  f3 = u.lv + 1;                                    both 00f1        PRE 000000f1
+f4  function [3:0] f4; f4 = u.lv;                     both 0           PRE f0
+f7  f7(u.lv) into input [3:0]                         both 0           PRE f0
+real u.r = 45.6 in any inline position                both 002e        PRE 4046cccccccccccd
+mg[u.k]  (signed [2:0] k = -1, mg[-3:2])              both 9f          PRE E4002 + xx
+16'(u.sv) (signed [7:0] sv = -3)                      both fffd        PRE xxfd
+$bits(u.x), u.lv ==? 8'hf?                            both 8 / 1       PRE E3009
+```
+
+**Fix** (no frozen type, no `format_version` bump; the record is elaborate-transient).
+
+1. New `hier_leaf_shape.rs`: `HierLeafShape { width, signed, real }` in a sidecar keyed by the
+   placeholder's expression id, filled at creation by the declaration walk of
+   `expr_size_hier.rs` — `hier_leaf_net` for a net, the new `hier_leaf_real` for a `real` /
+   `realtime` scalar (`ModuleFacts.real_nets`), `hier_leaf_func` for a bit-vector function return,
+   and `hier_leaf_net_names` for a select (one index on a vector → 1 bit unsigned; one index on a
+   one-dimensional array → the element's shape; a part or indexed part → its folded width,
+   unsigned).
+2. Record only when the declared width's fold is EXACT by construction (new
+   `expr_size_hier_exact.rs`, a child module of `expr_size_hier`): a decimal literal or an unsigned
+   sized literal of at least 32 bits, parentheses, a name in the per-instance exact set, a
+   live-scope name, `pkg::name`, `+ - *` over exact operands and `$clog2` of an exact operand. Every
+   unary operator, `/ %`, shifts, relational and ternary nodes, narrow or signed sized literals and
+   an `integer` / `int` typed slot are inexact: no record, the PRE route. The size-cast lane's
+   `env_fold` is byte-identical to HEAD (md5 `1bff7f1469ca5a1f38cc9f86cda37244` both sides).
+3. Consumers: `ir_bits_of` (Signal and Call arms), `expr_self_signed` (Signal arm only — a Call
+   answered signed would reach `extend_to`'s sign fill, which names the call twice),
+   `canonical_self_width` (the `fill` closure, and a recorded placeholder no longer counts as
+   unknown in the index-seal scan), and `expr_is_real` (the elaborate driver's hook; the shared
+   sim-ir rule is unchanged).
+4. Verify at resolution: `resolve_deferred_hier`, `resolve_deferred_hier_call` and
+   `resolve_deferred_hier_sel` compare the record with the resolved net / function / built select
+   (width, sign, real vs bit-vector); a mismatch, or a record on a name that resolves to no net, is
+   E3009 naming both shapes. Instrumented `-p cli` run: 308 verifications (258 net, 50 call), 0
+   mismatches (`impl/shape.log`).
+5. `release_hier_call_for_widening_cast` withdraws a signed hierarchical call's record under a
+   widening size cast (the cache is truncated below the node): with the record,
+   `32'(u.hs(3))` went `fffffffd` (right) → `000000fd`.
+6. A whole-rhs stream of a hierarchical leaf stored into a target of a DIFFERENT width inside
+   `fold_straight_line` (the inline store: Blocking and Return arms) is E3009 "a streaming
+   concatenation of a hierarchical reference stored into a target of a different width inside a
+   non-`automatic` function is unsupported: §11.4.14.3 left-justifies it, which the inlined body
+   does not do (declare the function `automatic`, or store the stream into a variable of its own
+   width)". `lower_stream_fwd` / `lower_stream_rev` are HEAD text.
+
+**Moved cells** (PRE → POST, = both oracles unless marked; iverilog 13.0 `-g2012`, verilator
+5.052 `--binary --timing`):
+
+- Inline lane, u8 / s8 / u16 / 1-bit / hierarchical-call / signed-index leaves: f2 `f0` → `00f0`,
+  f3 `000000f1` → `00f1`, f4 and f7 `f0` → `0`, f9 `000001e0` → `01e0`, c2 `f01` → `00f01` (u16:
+  `beef` → `00ef`, f4 / f7 → `f`; s8: f4 / f7 `fd` → `d`).
+- Real hierarchical leaf in every inline position: `4046cccccccccccd` → `002e` (negative `ffd2`);
+  `{u.r, 4'h1}` and `16'(u.r*q8)` silent → E3009 (both oracles reject); `$display("%h", u.r)`
+  silent → E3009 like the local twin; `{2{u.r}}` silent → E3009 (both reject); `output real` port
+  leaves raw bits → value.
+- Signed hierarchical index `mg[u.k]` and its inline twin: E4002 + `xx` → `9f`; `v8[u.k]` out of
+  range `0` → `x` (= iverilog; verilator is 2-state).
+- Casts: `16'(u.sv)` `xxfd` → `fffd`, `int'(u.r)` `-858993459` → `46`, `8'(u.hs(3))` into 32 bits
+  `000000fd` → `fffffffd`, `16'(u.hu(3))` `0000xx83` → `00000083`; suite pin
+  `two_state_cast_fanout` A `longint'(u1.s)` `000000000000fffd` → `fffffffffffffffd`.
+- Hierarchical selects in the inline lane: `p4 = u.a[7:0]` into `[3:0]` `ff` → `f`, `p6` `3f` →
+  `000f`, `q4` `f0` → `0`; `u.ia[0]` of `integer ia[0:1]` `fffffffe` → `e` / `00fe`.
+- Loud → value: `$bits` of a hierarchical leaf, select or an inline function reading one (9 cells,
+  E3009 → `8`, `16`, `12` …); `u.lv ==? 8'hf?` E3009 → `1`; `case (u.sv) -8'sd3:` and six fill
+  literal cells (`'1` / `'0` against a hierarchical leaf) → both oracles.
+- Streams (1 oracle: verilator; iverilog "sorry: Streaming concatenation not supported"): a
+  hierarchical stream in a MODULE, `automatic` or task position E3009 → verilator's value
+  (`3600 86c0`, `1100011000000000`, `{<<{u.s4}}` `b000`); equal-width inline streams E3009 →
+  `36 1234 6c 3412 163`.
+- Silent → loud: an inline stream stored into a different width (`fh = {>>{u.lv}}` into `[15:0]`
+  printed `11000110`); the refusal also fires for an UNCALLED `automatic` function whose body
+  calls such an inline function (r6c_m4 / r6c_m5 / r6g, whose observable cells PRE printed right).
+
+Unchanged controls: f1 f5 f6 f8, the frame twins g1–g3, the module stores m1–m3, c1 c3 sc t d on
+every kind; the frame lane, module stores and the size-cast lane print PRE's bytes.
+
+**Rounds** (2 lenses × 3, then one direct re-grade; POST1 `fd9072c0…`, POST2 `65661a62…`, POST3
+`22110ae7…`, POST4 `fd1fde32…`; PRE `607c2356…`).
+
+- Round 1: differential PASS (32 designs; MAJOR F1 hierarchical selects unshaped at their three
+  producers, MAJOR F2 the function-local block label, both pre-existing). Soundness (34 designs)
+  BLOCKING F2: the record opened a hierarchical stream onto the inline lane's right-justify
+  (`fh = {<<4{u.lv}}` E3009 → `0000000001101100`, verilator `0110110000000000`); MAJOR F1:
+  `env_fold`'s i64 `-4'd1` made the record 1 bit where the net is 17, so the resolve-time check
+  refused right reads (`m3 = u.z` `0001ffff 131071` → E3009 ×2). Fixed: D1 (a minus rule in
+  `env_fold`), D2 (a stream exclusion in the stream lowering), D3 (select records), D4 filed.
+- Round 2: differential BLOCKING F3: D1's "any other narrow operand declines" dropped
+  `-(-4'd1)`, `-(-4'sd3)`, `-(-4'd2)` and, by voiding the instance's whole environment, the
+  unrelated `v` / `y` nets (`fg = wg.a + 1` `0000000000000002` → `00000002`, correct → silent).
+  Soundness MAJOR R2-F1: a TYPED binder (`localparam integer L = -4'd1`) folded self-determined,
+  correct → loud; MAJOR R2-F4: the exclusion in `pad_stream_rhs` un-fixed module and frame streams.
+- D8: two rounds of blockers on the `env_fold` axis, each fix value-aware. D1 reverted
+  (`env_fold` byte-identical to HEAD), the record condition made structural (exactness), the
+  stream exclusion confined to the inline lane. Lost moves recorded as residues (`parameter int V`
+  `3ff`, `leaf #(.W(4'd8))` `ff`).
+- Round 3: both lenses 0 BLOCKING. Differential MAJOR F4: the inline-lane refusal in
+  `lower_stream_fwd` refused equal-width inline streams PRE had right (`se = {>>{u.lv}}` `36`,
+  `sw` `1234`). Soundness MINOR R3-N1: the gate reached the static-task lane
+  (`task tk(output [15:0] o); o = {>>{u.lv}};` POST `1100011000000000` → E3009).
+- Round 4 (narrowing only, re-graded directly): the gate moved to the inline store and keys on
+  differing widths; equal widths keep their route, tasks are not gated (`r15_task` / `r16_task` =
+  verilator, rc 0); every other review design byte-identical to POST3 or a message-only move.
+
+**Tests**: new `crates/cli/tests/hier_leaf_inline_shape.rs`, 13 tests, every pin both oracles or
+verilator for streams (local-then-return, tree, narrowing return and formal, widening controls,
+hierarchical call, real leaf, signed index, `%h` of a real refused, `$bits`, casts, the widening
+cast of a signed call keeping its route, the stream refusal plus module / automatic / equal-width
+pins, selects). `two_state_cast_fanout.rs`: cell A converted to `fffffffffffffffd` (both oracles),
+and a generate-scope twin added that still reaches the fabricated-width path the test guards.
+
+**Recorded, not fixed** (one ROADMAP bullet or row per mechanism; a new cell of an existing row
+goes into that row):
+
+- §2 "Inline / frame binds", five bullets: the inexact-fold PREREQUISITE row (`env_fold`'s i64
+  narrow-literal negation; `20'(u.x)` `xxxxxxxx` and an inline `[31:0]` return `00000001ffff`
+  against `0001ffff`); a real-returning hierarchical call (`fr = u.hr(8'd3)` `4012000000000000`
+  against `0005`); a multi-dimensional select (`u.m2[0][1]` `beef` / `u.pm[1]` `f0` against `f` /
+  `00f0`); the walk's declines (`[7:-2]` `3ff` against `f`, generate / array / upward / `defparam`
+  / typed slot / duplicate name / hierarchical parameter); the inline-lane stream (the local twin
+  `fl = {<<4{loc}}` `0000000001101100` against verilator `0110110000000000`, pre-existing).
+- §2 "Scoping": a function-local `begin : u` beside instance `u` binds the instance (iverilog
+  `0008`, verilator self-contradicting `00f1` / `0000`, vita `00f1`).
+- §2 "Oracle splits": `u.w[u.P*2-1:0]` (iverilog rejects, verilator `00ef`, vita `0001`) and
+  `$bits(u.r)` (iverilog 1, verilator and vita 64).
+- Into existing rows: the size-cast impure-operand row (`16'(u.hs(3))` `xxfd`, `40'(u.hs(3))`
+  `0000000000fd` against `fffd` / `fffffffffffd`), the index-sealing function-call row
+  (`mg[u.hs(1)]` E4002 + `xx` against `9f`).
+- REMAINING_WORK §D: an exact declared-width fold for hierarchical placeholders.
+
+**Gates**: nextest 8440 run, 8440 passed, 15 skipped (+13; `cargo nextest run --workspace --locked --no-fail-fast`); doctest, `cargo
+clippy --workspace --all-targets --locked -- -D warnings` and `cargo fmt --all -- --check`
+all rc 0; corpus 10/10 on POST1–POST3 (`corpus1`–`corpus3.log`), final run 10/10 (`corpus4.log`);
+`format_version` 34.
 
 #### 4.5.527 a parameter override whose top is an operator and whose self-determined width is past 64 bits folds in the wide domain at that width, for PLAIN trees only (2026-09-24, branch main) ✅
 

@@ -30,6 +30,7 @@ a section restructure, a residue split).
 | 2026-09-21 | c026a81 | §4.5.525 | 8376 | 33 | 26 / 0 / 26 | 142 / 87 / 55 | 7 / 0 / 7 | 24 / 19 / 5 | 102 / 87 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 370 / 223 / 147 |
 | 2026-09-24 | 596f756 | §4.5.526 | 8411 | 34 | 26 / 0 / 26 | 137 / 82 / 55 | 7 / 0 / 7 | 24 / 19 / 5 | 104 / 89 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 369 / 222 / 147 |
 | 2026-09-24 | 67a91a5 | §4.5.527 | 8427 | 34 | 27 / 0 / 27 | 140 / 80 / 60 | 7 / 0 / 7 | 24 / 19 / 5 | 103 / 88 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 372 / 219 / 153 |
+| 2026-09-24 | 72c07cf | §4.5.528 | 8440 | 34 | 27 / 0 / 27 | 144 / 80 / 64 | 7 / 0 / 7 | 24 / 19 / 5 | 103 / 88 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 376 / 219 / 157 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -58,3 +59,15 @@ a section restructure, a residue split).
   🆕 R, the fill bullet on row 30, the oracle bullet is a disqualification). Residues that are new
   cells of existing rows (rows 15 and 16, the `parameter unsigned` bullet, the iverilog-hang bullet,
   §3.b `defparam-iface`) add no count. 3b falls by the stale `wide-override` row.
+- 2026-09-24 (§4.5.528): 2M is 140 − 4 + 8. Deleted: the "Inline / frame binds" HIERARCHICAL-leaf
+  bullet (closed) and the three stale "Real" bullets R1 / R2 / R3 (`fa(1) + (-s)`,
+  `p::one() + (-s)` / `c.getr() + (-s)`, `r = (-s)` / `r = (s+s)`; 3-tool identical at HEAD).
+  Added: five "Inline / frame binds" bullets (the inexact-fold prerequisite row, the real-returning
+  hierarchical call, the multi-dimensional select, the declined declarations, the inline stream),
+  one "Scoping" bullet (a function-local block label beside an instance) and two "Oracle splits"
+  bullets (`u.w[u.P*2-1:0]`, `$bits(u.r)`). Startable 80 − 4 + 4 (the four deleted bullets were
+  startable; the real call, the select, the declined declarations and the stream have two oracles
+  or a hand-IEEE plan; the inexact-fold bullet waits on its prerequisite, the block-label bullet
+  and the two oracle-split bullets are splits). Two residues are new cells of existing rows (the
+  widening cast of a signed hierarchical call into the size-cast impure-operand row, `mg[u.hs(1)]`
+  into the index-sealing function-call row) and add no count.

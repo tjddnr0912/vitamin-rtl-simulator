@@ -9,6 +9,42 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — hierarchical references inside inlined function bodies and beside them
+
+- **A hierarchical read inside a plain (non-`automatic`) function body is sized by its declaration.**
+  `function [15:0] f; bit [7:0] b; b = u.lv; f = b;` printed `f0` where both reference tools print
+  `00f0`; `f = u.lv + 1` printed `000000f1` for `00f1`; a narrowing return or input
+  (`function [3:0] f4; f4 = u.lv;`) kept all eight bits (`f0` for `0`). The same holds for a
+  hierarchical function call `u.f(x)` and for a hierarchical select (`u.a[7:0]`, `u.v[i]`,
+  `u.v[i +: 4]`, `u.ia[0]`): each now carries its declared width, sign and `real`-ness (IEEE 1800
+  §11.6.1 context widths, §10.7 assignment truncation).
+- **A hierarchical `real` in a function body converts like a local one.** `u.r = 45.6` stored into an
+  integral result printed its raw IEEE-754 bits (`4046cccccccccccd`) and now rounds to `002e`
+  (negative values: `ffd2`). `{u.r, 4'h1}`, `16'(u.r * q8)`, `{2{u.r}}` and `$display("%h", u.r)`
+  ran silently and are now `VITA-E3009`, as they already were for a local `real` (both tools reject
+  the first three).
+- **A signed hierarchical index selects its negative element.** `mg[u.k]` with `u.k = -1` on
+  `mg[-3:2]` gave `VITA-E4002` and `xx`; it now reads `9f`.
+- **Casts, `$bits`, `==?`, `case` and fill literals over a hierarchical reference.** `16'(u.sv)` of a
+  signed `-3` printed `xxfd` and now `fffd`; `int'(u.r)` printed `-858993459` and now `46`;
+  `$bits(u.x)`, `$bits` of a function that reads one, and `u.lv ==? 8'hf?` were refused with
+  `VITA-E3009` and now answer; `case (u.sv) -8'sd3:` and `'1` / `'0` compared against a
+  hierarchical reference now match both tools.
+- **Streaming concatenation of a hierarchical reference** in a module statement, an `automatic`
+  function or a task (`m = {>>{u.lv}}`, `{<<{u.lv, 4'h1}}`) was refused and now prints verilator's
+  value (`1100011000000000`, `3600`, `86c0`; iverilog does not support streaming). The same stream
+  stored into a target of its own width inside a plain function also runs.
+- **New refusal.** Inside a plain (non-`automatic`) function, a stream of a hierarchical reference
+  stored into a target of a DIFFERENT width is now `VITA-E3009` ("… §11.4.14.3 left-justifies it,
+  which the inlined body does not do (declare the function `automatic`, or store the stream into a
+  variable of its own width)"), where it used to print a right-justified wrong value. A file with an
+  uncalled `automatic` function that calls such a function is refused too.
+- Still open (recorded in the roadmap): a hierarchical width whose declaration folds through a
+  unary operator, `/`, `%`, a narrow or signed sized literal or an `int` / `integer` parameter keeps
+  its old behaviour; so do a `real`-returning hierarchical call, a two-dimensional hierarchical
+  select, a net with a negative low bound, generate-scoped / instance-array / upward references,
+  and the local (non-hierarchical) stream inside a plain function, which is still right-justified.
+
 ### Fixed — a parameter override that is an operator expression wider than 64 bits
 
 - **An override such as `#(.P(~128'd0))`, `-128'sd1`, `~65'd0` or `128'd3 * 128'd5` binds at its

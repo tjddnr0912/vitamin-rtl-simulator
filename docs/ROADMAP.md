@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 6 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 140 | 80 | 60 | oracle split / pinned / oracle disqualified 30 · named prerequisite 15 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 13 · size cast / signedness 15 · constant domain (i64) 12 · scoping / imports / block-locals 26 · delays / events 13 · real 8 · performance 7 · index sealing 10 · ranges / selects 6 · diagnostics 6 · class fields 3 · oracle splits 21 | ① | |
+| §2 | recorded defects by mechanism | 144 | 80 | 64 | oracle split / pinned / oracle disqualified 33 · named prerequisite 16 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 17 · size cast / signedness 15 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 13 · real 5 · performance 7 · index sealing 10 · ranges / selects 6 · diagnostics 6 · class fields 3 · oracle splits 23 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 103 | 88 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 14 · system tasks & file I/O 9 · nets / timing 10 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,11 +38,11 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 372 | 219 | 153 | | | | |
+| total | | 376 | 219 | 157 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
-a wide SELECT resolver, a tree-wide AST self-width pass, a per-resumption-kind ordering model, a
-block-scoped constant binding, per-instance arity / class registration, one-oracle clocking).
+a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
+hierarchical placeholders, a per-resumption-kind ordering model, a block-scoped constant binding, per-instance arity / class registration, one-oracle clocking).
 
 Priority principle (time-invariant): ① a CRITICAL silent-wrong with an oracle, then ② loud→supported
 with an oracle, then ③ an honest-loud promotion whose prerequisite holds, then ④ G2 OBS. Performance
@@ -247,6 +247,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - A widening cast cannot take an impure operand's sign correction: `extend_to`'s sign fill names the
   operand twice, so `16'(f())` and `int'(f())` keep the unsigned answer (oracles `fffd` /
   `fffffffd`). Fix = a 4-state-preserving extension that names it once, or a callee-purity predicate.
+  The hierarchical twin keeps it too: §4.5.528 withdraws a signed hierarchical call's recorded shape
+  under a widening cast (`release_hier_call_for_widening_cast`), so `16'(u.hs(3))` prints `xxfd`,
+  `40'(u.hs(3))` `0000000000fd` and an inline `j1` `fd` where both oracles print `fffd`,
+  `fffffffffffd` and `fffffffd` (the recorded width alone turned the right `32'(u.hs(3))` into
+  `000000fd`).
 - Spellings where a cast cannot claim an element's sign: `unpacked_elem_signed` claims it only when
   the base is a single-segment ident, so `40'(x[0]*1)` is vita `00000000fd` against iverilog's
   `fffffffffd` for a multi-dimensional `g[i][j]`, `pk::pm[0]`, a frame-local array, a dynamic or
@@ -326,7 +331,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   read and write are asymmetric, and `dynarr.rs` never calls `seal_index_unsigned`. verilator is not
   an oracle here — it masks at power-of-two sizes.
 - A function-call index reaches no seal (oracles agree): `arr[fneg(0)]` with `-8'sd1` silently reads
-  element 255 against iverilog's `xx`, because the seal rejects a `Call` as not repeatable.
+  element 255 against iverilog's `xx`, because the seal rejects a `Call` as not repeatable. The
+  hierarchical call is the same: `mg[u.hs(1)]` on `logic [7:0] mg [-3:2]` is E4002 plus `xx` (and
+  `xx` through an inline function) where both oracles read `9f`; the signed hierarchical NET index
+  `mg[u.k]` seals since §4.5.528.
 - ORACLE-SPLIT, do not chase: on a packed ELEMENT's `+:` overhang iverilog contradicts itself — in
   one design `pv[-2'sd1 +: 2]` is `1x` and `pm[1][-2'sd1 +: 2]`, holding the same bits, is `10`.
   verilator has no `x` for an out-of-range select at all (everything is `01`). vita is uniform `1x`
@@ -437,14 +445,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - `int'($random*1.0)` draws the wrong number of times (both values wrong, and the value changes):
   `lower_prim_cast` has no `expr_is_repeatable` gate, so it draws 4 times per cast against
   iverilog's 1.
-- A HIERARCHICAL leaf reaches the inline lane with its placeholder's type and width (2-oracle,
-  pre-existing, one class): a real `u.r` / `u.hr` bound to an integral formal or used in an inline
-  body's rhs is substituted verbatim — `pb(u.r)` into `input byte` prints `012d` (`%h` of the raw
-  bits `4072cb3333333333`) where both oracles print `002d`, and `g3 = u.hr + d` the same; and
-  `function [15:0] f; bit [7:0] b; b = u.lv; f = b;` answers at 8 bits (`h=f0 cat=f01`, both
-  oracles `h=00f0 cat=00f01`). The frame twin of each is right. The placeholder net answers
-  `expr_is_real` false and its own width; fix = the realness and width of a placeholder from the
-  resolved net at resolve time (§4.5.526 D1 / D2 / S2).
 - A SIGNED non-repeatable actual WIDENED into a formal is zero-filled (iverilog; verilator draws
   its own `$random` stream): `flong($random)` with `input longint` prints `000000000000b2c28465`
   where iverilog prints `ffffffffffffb2c28465`, and `fb72($random)` into a 72-bit formal is
@@ -454,17 +454,50 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   tail reads `$random` as unsigned. A signed frame CALL widened into a formal is right. Fix = a
   single-mention sign extension (the same primitive the size-cast row "A widening cast cannot take
   an impure operand's sign correction" needs).
+- A hierarchical placeholder whose declared width folds INEXACTLY keeps the PRE route in the inline
+  lane (2-oracle; PREREQUISITE row). §4.5.528 records a placeholder's shape only when
+  `expr_size_hier_exact.rs` proves the declared range's fold exact by construction, so a range or a
+  `#()` override that holds a unary operator (`-`, `~`), `/` or `%`, a narrow or signed sized
+  literal, or an `integer` / `int` typed slot is unrecorded: `parameter int V` read through a `[3:0]`
+  return prints `3ff` where both oracles print `f`, and `leaf #(.W(4'd8)) c;` read through a `[2:0]`
+  return prints `ff` against `7`. The prerequisite is the size-cast lane's shared fold `env_fold`
+  (`expr_size_hier.rs`), which negates a narrow literal in i64 (`-4'd1` gives −1 where the binder
+  gives 15): with `child #(.W(-4'd1)) u;` over `logic [W+1:0] x = '1`, `m3 = 20'(u.x) + 0` prints
+  `xxxxxxxx` and an inline `[31:0]` return of `u.x` prints `00000001ffff`, both oracles `0001ffff`.
+  Two review rounds of blockers on this axis: a record from that fold refused right reads (E3009),
+  and a value-aware minus rule turned `-(-4'd1)` from right to wrong and, by voiding the instance's
+  parameter environment, its unrelated nets too. Fix = an exact declared-width fold for
+  hierarchical placeholders, then widen the record to it.
+- A REAL-returning hierarchical call in the inline lane stays raw bits (2-oracle): `fr = u.hr(8'd3)`
+  into `[15:0]` prints `4012000000000000` where both oracles print `0005`, and `u.hr(1.25)` in an
+  inline position prints `4004000000000000` against `0003`. §4.5.528 records a call's shape for
+  bit-vector returns only.
+- A multi-dimensional hierarchical select is unrecorded in the inline lane (2-oracle): `sm = u.m2[0][1]`
+  prints `beef` where both oracles print `f`, and `u.pm[1]` on `logic [1:0][7:0] pm` prints `f0`
+  against `00f0`. §4.5.528 records a select only for one index on a vector or on a one-dimensional
+  array, and a part or indexed part of a vector or of such an array's element.
+- The declaration walk declines, so the inline lane keeps the leaf's own width (2-oracle): a net
+  declared with a negative LSB (`logic [7:-2] n` read through a `[3:0]` return prints `3ff`, both
+  oracles `f`), a generate-scoped instance (`g.u.lv`: `f0 f0 000000f1` against `0 00f0 00f1`), an
+  instance-array element (`ua[0].lv`), an upward reference (`top.u.lv`), a `defparam`-set width
+  (`fff fff 00001000` against `f 0fff 1000`), a `parameter [3:0] W` typed slot, a `bind` instance
+  (verilator only), a name declared twice in the child (port + reg, generate-local, block-local:
+  `a4=f0` against `0`), and a hierarchical PARAMETER `u.P` (`p4=f0 p3=000000f1` against `0 00f1`).
+- A hierarchical stream stored into a target of a DIFFERENT width inside a non-`automatic` function
+  is refused with E3009 since §4.5.528 (the message names `automatic` and a same-width target as
+  the working spellings), and the LOCAL twin is silently wrong (1 oracle, verilator; iverilog has no
+  streaming; hand-IEEE §11.4.14.3 left-justifies a stream into a wider target): the inlined body
+  right-justifies, so `function [15:0] fl; fl = {<<4{loc}};` over an 8-bit `loc = 8'b1100_0110`
+  prints `0000000001101100` where verilator prints `0110110000000000`, `{>>{loc}}` prints
+  `0000000011000110` against `1100011000000000`, and `l1 = {>>{loc}}` / `l2 = {<<{loc, 4'h1}}`
+  print `0036 086c` against `3600 86c0`. The
+  refusal also fires for an UNCALLED `automatic` function whose body calls such an inline function,
+  so a file whose observable cells were right on PRE is refused (`m4 = fi({>>{u.lv}})` `0036` = verilator),
+  and a `$display("%h", {>>{u.lv}})` inside an inline body printed `36` on PRE where verilator
+  rejects the construct. Fix = §11.4.14.3's left-justify in the inline store, then drop the refusal.
 
 ### Real
 
-- Using an `automatic` (framed) real function directly as an operand widens it (2-oracle):
-  `fa(1) + (-s)` is −7 in both oracles and 9 in vita; beside it `{fa(1), 1'b0}` passes silently. The
-  shared rule's `Call` arm does not reach that shape.
-- Package and class functions have the same hole: `p::one() + (-s)` and `c.getr() + (-s)` are −7 in
-  both oracles and 9 in vita.
-- The remaining conversion boundaries are context-determined: `real r; r = (-s);` is −8.0 against
-  8.0 and `r = (s+s)` is 0.0 against −16.0, so `Binary` and `Ternary` are closed and plain
-  assignment is open.
 - The body of a real-returning constant function belongs to §3, not §2:
   `localparam real R = f();` gives `E3009 … not a foldable constant expression` where iverilog gives
   0.000000 — honest-loud.
@@ -680,6 +713,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   One oracle — iverilog cannot declare `int m[string]` ("Type names are not valid expressions here").
   The key store is the one integral→string crossing `Value::to_sv_string_bytes` does not serve
   (§4.5.519 census; `git grep to_sv_string_bytes` lists the six that do).
+- A function-local named block `begin : u … end` beside an instance `u` of the module: `census_item`
+  does not count function-local block labels, so the declaration walk and `hier_resolve` both bind
+  `u.lv` to the INSTANCE. iverilog binds the block (§23.8 upward search: `k3 = u.lv + 1` is `0008`,
+  `k4 = {u.lv, 4'h0}` is `0070`); verilator contradicts itself (`k3=00f1`, `k4=0000`, neither the
+  instance's `0f00` nor the block's `0070`); vita prints `k3=00f1 k4=0f00` (`000000f1` before
+  §4.5.528). ORACLE-SPLIT on the verilator side; iverilog + §23.8 is the plan.
 
 ### Delays / events
 
@@ -930,6 +969,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   text and its `localparam` twin are 128 (iverilog 128); `1 ? 128'd1 : 8'd2`, `128'd1 ** 8'd3` and
   `128'sd1 + 128'd1` onto a default of equal value do the same. verilator is not an oracle for a cell
   whose override equals the default — give the child a default that differs (§4.5.527 harness).
+- A hierarchical PARAMETER in a constant part-select bound, `m = u.w[u.P*2-1:0]` with `w = 16'hbeef`,
+  `P = 4`: iverilog rejects it ("A hierarchical reference (`u.P') is not allowed in a constant
+  expression"), verilator prints `00ef`, and vita prints `0001` — identical before and after §4.5.528,
+  whose select record copies the width vita already computes.
+- `$bits(u.r)` of a hierarchical `real` is 1 in iverilog and 64 in verilator and vita; unchanged by
+  §4.5.528.
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
