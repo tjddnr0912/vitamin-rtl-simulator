@@ -378,12 +378,22 @@ impl Elaborator<'_> {
                         || (matches!(c.repr, ir::ConstRepr::Numeric) && c.signed)
                 })
                 .unwrap_or(false),
+            // A class-field read carries the FIELD's sign in `class_field_widths`
+            // (the handle net is unsigned) — the same sidecar `ir_bits_of` reads.
+            Some(ir::Expr::Signal { .. }) if self.class_field_widths.contains_key(&eid) => {
+                self.class_field_widths[&eid].1
+            }
             Some(ir::Expr::Signal { net, .. }) => self
                 .nets
                 .get(*net as usize)
                 .map(|n| n.signed)
                 .unwrap_or(false),
             Some(ir::Expr::ArrayItem { signed, .. }) => *signed,
+            // v34: `TwoState` keeps its operand's sign.
+            Some(ir::Expr::SysFunc {
+                which: ir::SysFuncId::TwoState,
+                args,
+            }) => args.first().is_some_and(|&a| self.expr_self_signed(a)),
             // bit/part-select, concat, replicate are ALWAYS unsigned (§5.4.1).
             Some(ir::Expr::Select { .. })
             | Some(ir::Expr::Concat { .. })
@@ -426,6 +436,7 @@ impl Elaborator<'_> {
                     | ir::SysFuncId::AssocLast
                     | ir::SysFuncId::AssocPrev
                     | ir::SysFuncId::Rtoi
+                    | ir::SysFuncId::RealToInt
                     | ir::SysFuncId::Stime
             ),
             _ => false, // Call / unhandled: conservatively unsigned
@@ -461,10 +472,14 @@ impl Elaborator<'_> {
     ///
     /// ⚠️ Sealing needs a TRUSTWORTHY rhs width: `ir_bits_of` answers `None` for a
     /// placeholder / string-producing / array-reduction rhs (and `rw` is then the
-    /// declared `w`, forcing the same-width arm), and answers a FABRICATED `Some`
-    /// for a class field (the 32-bit handle net). Sealing on either is a rung down
-    /// — measured both directions in §4.5.320 — so the pre-slice tail is kept
-    /// verbatim there.
+    /// declared `w`, forcing the same-width arm), and `trusted_self_width` declines
+    /// wherever the canonical rule disagrees with it. Sealing on either is a rung
+    /// down — measured both directions in §4.5.320 — so the pre-slice tail is kept
+    /// verbatim there. A class-field read is no longer such a shape: `ir_bits_of`
+    /// reads the FIELD width from `class_field_widths`, the sidecar the canonical
+    /// rule reads, so the two agree and the field is sized and sealed by its own
+    /// width (`i16(c.bu)` with `bit [7:0] bu = 8'hC3` is `00c3` on both oracles;
+    /// it was `xxc3`).
     pub(crate) fn resize_inline_assign(&mut self, e: u32, w: u32, target_signed: bool) -> u32 {
         // real values are not bit-resizable — leave them untouched.
         if self.expr_is_real(e) {
@@ -479,15 +494,16 @@ impl Elaborator<'_> {
         let rw = trusted.or_else(|| self.ir_bits_of(e)).unwrap_or(w);
         let trusted_w = trusted.is_some();
         // The extension direction still comes from the old mirror — deliberately,
-        // and NOT because the canonical rule is unreachable here. Two shapes reach
-        // the widening arm with a canonical-vs-mirror sign disagreement, and they
-        // want opposite things: a frame `Expr::Call` is impure, so `extend_to`'s
-        // sign fill (a SECOND mention of the operand) would evaluate it twice;
-        // a signed CLASS FIELD is a pure repeatable net read and would simply be
-        // fixed (`function signed [63:0] fw; fw = c.sf;` with `sf = 8'hAB` is
-        // `00…ab` for hand-IEEE's `ff…ab`). Adopting the canonical sign is
-        // therefore a real fix gated on a repeatability predicate, i.e. its own
-        // slice — ROADMAP §2 carries both shapes.
+        // and NOT because the canonical rule is unreachable here. A frame
+        // `Expr::Call` reaches the widening arm with a canonical-vs-mirror sign
+        // disagreement (the mirror calls it unsigned), and it is impure, so
+        // `extend_to`'s sign fill (a SECOND mention of the operand) would evaluate
+        // it twice; adopting the canonical sign there is its own slice (ROADMAP §2).
+        // The signed CLASS FIELD that used to be the other such shape no longer
+        // disagrees: `expr_self_signed` reads the field's sign from
+        // `class_field_widths`, so `function signed [63:0] fw; fw = c.sf;` with
+        // `byte sf = -3` is `fffffffffffffffd`, as on both oracles (it was
+        // `00000000fd`).
         let rhs_signed = self.expr_self_signed(e);
         let resized = match w.cmp(&rw) {
             std::cmp::Ordering::Equal => e,
@@ -532,8 +548,10 @@ impl Elaborator<'_> {
     /// §4.5.320/321 guard. Elaborate's own mirror (`ir_bits_of`) is the answer, and
     /// the canonical rule is the check on it: `None` from the mirror means the width
     /// is unknown here (a placeholder / string-producing / array-reduction rhs), and
-    /// a canonical answer that DISAGREES means the mirror fabricated one (a class
-    /// field lowers to a 32-bit handle net whose real width lives only in a sidecar).
+    /// a canonical answer that DISAGREES means the mirror fabricated one. (A class
+    /// field used to be the measured instance — it lowers to a 32-bit handle net —
+    /// until `ir_bits_of` began reading the same `class_field_widths` sidecar the
+    /// canonical rule reads; the check stays for any other disagreement.)
     /// Resizing or sealing on either is a rung down the ladder — measured in both
     /// directions in §4.5.320 — so a caller that gets `None` must keep its pre-slice
     /// behavior rather than guess.
@@ -1045,6 +1063,14 @@ impl Elaborator<'_> {
         Some(match e {
             ir::Expr::Const { val } => self.consts.get(*val as usize)?.width.max(1),
             ir::Expr::Signal { net, .. } => {
+                // A CLASS-FIELD read is `Signal{net: <32-bit HANDLE>, word: Some(fid)}`;
+                // its own width is in the `class_field_widths` sidecar, which is what
+                // the engine's width table and `canonical_self_width` read. Answering
+                // the handle's 32 here made `trusted_self_width` see a disagreement and
+                // decline for every class-field read (ROADMAP §2 F7).
+                if let Some(&(w, _)) = self.class_field_widths.get(&eid) {
+                    return Some(w.max(1));
+                }
                 let nv = self.nets.get(*net as usize)?;
                 // review F1: a String handle's table width is 0 — `.max(1)`
                 // made `$bits(s)` a silent 1. Dynamic length ⇒ loud at site.
@@ -1120,10 +1146,13 @@ impl Elaborator<'_> {
                     | F::Asinh
                     | F::Acosh
                     | F::Atanh => 64,
-                    F::Signed | F::Unsigned => {
+                    // v34: `TwoState` keeps its operand's width.
+                    F::Signed | F::Unsigned | F::TwoState => {
                         let a = *args.first()?;
                         self.ir_bits_of(a)?
                     }
+                    // v34: the real→int conversion is a 128-bit signed integer.
+                    F::RealToInt => 128,
                     F::Clog2
                     | F::Rtoi
                     | F::DynSize

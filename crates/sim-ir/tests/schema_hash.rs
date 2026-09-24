@@ -3,6 +3,10 @@
 use vita_schema::{schema_hash, SchemaShape, ShapeRegistry};
 
 /// blake3 of the full SimIr-closure canonical string. Locked at
+/// format_version 34 (2026-09-24: `SysFuncId::RealToInt` and `SysFuncId::TwoState`,
+/// single-mention real→int and 2-state store conversions for the inline function
+/// lane — reached via the Expr arena, so the root hash flips; the Process cluster's
+/// sub-pin is UNCHANGED). Earlier:
 /// format_version 33 (2026-09-20: `SysFuncId::StrCast`, the `string'(e)` §6.16
 /// integral→string cast as a VALUE — reached from SimIr via the Expr arena, so the
 /// root hash flips; the Process cluster reaches Expr only via arena INDICES (u32),
@@ -28,7 +32,7 @@ use vita_schema::{schema_hash, SchemaShape, ShapeRegistry};
 /// 2026-06-18 v9: 13 SysFuncId and 5 SysTaskId for the file-read/$dist_*/$cast/
 /// $writemem*/$monitoron-off family.)
 const EXPECTED_SIMIR_HASH: &str =
-    "f5be1564f7ba2596a113c85aa2ada2c29933c0627511ac0fd84cf6b3e4740721";
+    "01c1c9fba595a03c1aaefaa383caaf9edac99dc0b03e7fc96430c5fcaf25b053";
 /// Sub-pin: the runtime Process cluster (cheap regression signal; NOT the gate).
 const EXPECTED_PROCESS_HASH: &str =
     "61db2e207ed69c2ff1dbf3fc0473b7ed9906fbeb6c42128ef9edf382b081f277";

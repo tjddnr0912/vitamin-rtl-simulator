@@ -88,6 +88,13 @@ pub fn expr_is_real_node(cx: &RealnessCtx, child: &dyn Fn(u32) -> bool, eid: u32
             which: SysFuncId::Signed | SysFuncId::Unsigned,
             args,
         }) => args.iter().any(|a| child(*a)),
+        // v34: `TwoState` keeps its operand's domain (elaborate never wraps a
+        // real in it); `RealToInt` is integral by definition and falls to the
+        // catch-all below, which answers false for it.
+        Some(Expr::SysFunc {
+            which: SysFuncId::TwoState,
+            args,
+        }) => args.iter().any(|a| child(*a)),
         Some(Expr::SysFunc { which, args }) => {
             matches!(
                 which,

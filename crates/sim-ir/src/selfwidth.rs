@@ -434,6 +434,20 @@ pub fn self_width_of(
                     signed: false,
                 }
             }
+            // v34: the real→int assignment conversion delivers a 128-bit signed
+            // integer; the consumer resizes it.
+            SysFuncId::RealToInt => SelfWidth {
+                width: 128,
+                signed: true,
+            },
+            // v34: the 2-state store keeps the operand's width AND sign.
+            SysFuncId::TwoState => args
+                .first()
+                .map(|&a| child(sw, i, a))
+                .unwrap_or(SelfWidth {
+                    width: 1,
+                    signed: false,
+                }),
             // $clog2: integer return → 32-bit signed `integer` convention.
             SysFuncId::Clog2 => SelfWidth {
                 width: 32,

@@ -192,11 +192,14 @@ fn a_formal_wider_than_the_cast_scope_does_not_become_loud() {
 }
 
 #[test]
-fn a_non_repeatable_real_actual_keeps_the_pre_slice_answer() {
-    // ⚠️ THE DELIBERATE DECLINE. The real→int cast names its operand about six
-    // times, so applying it to a `$random`-bearing actual would DRAW MORE THAN
-    // ONCE — a different wrong answer, not a right one. Such an actual keeps the
-    // pre-slice (un-narrowed) value; the residue is ROADMAP §2's.
+fn a_non_repeatable_real_actual_narrows_with_one_draw() {
+    // The IR-0 real→int cast names its operand about six times, so a
+    // `$random`-bearing actual would DRAW MORE THAN ONCE through it. The inline
+    // bind converts such an actual with `SysFuncId::RealToInt`, which names it
+    // once, and narrows the result to the `byte` formal: iverilog 13 prints
+    // R=36 / R=-127 (the low bytes of its first two draws, 303379748 and
+    // -1064739199 — the pre-slice un-narrowed answer). verilator's `$random`
+    // stream differs, so it is not an oracle for the values.
     let (out, code) = run(
         "module top;\n  function integer f(input byte k); f = k; endfunction\n\
          \x20 integer i;\n\
@@ -205,8 +208,8 @@ fn a_non_repeatable_real_actual_keeps_the_pre_slice_answer() {
     );
     assert_eq!(code, Some(0), "must stay quiet;\n{out}");
     assert!(
-        out.contains("R=303379748") && out.contains("R=-1064739199"),
-        "one draw per call, un-narrowed (pre-slice);\n{out}"
+        out.contains("R=36\n") && out.contains("R=-127\n"),
+        "one draw per call, narrowed to the byte formal;\n{out}"
     );
 }
 

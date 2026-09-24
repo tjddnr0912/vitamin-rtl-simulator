@@ -280,11 +280,10 @@ fn a_real_or_string_body_is_untouched() {
   end
 endmodule
 "#);
-    // ⚠️ `f_rmix` = 4.50 is NOT the oracles' answer (both print 5.00: they apply
-    // the declared `[31:0]`, so 4.5 rounds to 5). A real rhs skips the §10.7 seal
-    // — a PRE-EXISTING gap (ROADMAP §2, "A `real` rhs skips §10.7"), byte-identical
-    // before and after this slice, pinned here so the slice owns no part of it.
-    assert_eq!(o, "2.75 4.50 abx");
+    // iverilog 13 and verilator 5.052 both print this: `f_rmix` applies the
+    // declared `[31:0]` to the real rhs, so 4.5 rounds to 5 (the inline body's
+    // real→integral store, `SysFuncId::RealToInt`; it printed 4.50 before).
+    assert_eq!(o, "2.75 5.00 abx");
 }
 
 /// ⑩ DUPLICATE DRAW. A signed widening's fill bit is a SECOND mention of the

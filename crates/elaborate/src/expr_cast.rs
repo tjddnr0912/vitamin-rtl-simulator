@@ -273,9 +273,10 @@ impl Elaborator<'_> {
     /// table will give the very node being wrapped. `None` = NOT YET KNOWABLE.
     ///
     /// It cannot be `expr_self_signed`: that is elaborate's own hand-written
-    /// mirror, and it disagrees with the canonical rule at every leaf whose sign
-    /// is a SIDECAR rather than a net flag. It reads UNSIGNED where the rule says
-    /// signed at a user function's declared return, a class field, and the whole
+    /// mirror, and it disagrees with the canonical rule at leaves whose sign is a
+    /// SIDECAR rather than a net flag (the class-field sidecar is the one it
+    /// reads). It reads UNSIGNED where the rule says
+    /// signed at a user function's declared return and the whole
     /// int-returning system-function family it simply does not list (`$clog2`,
     /// `$countones`, `$random`, `$fopen`, the file-read family, `$dist_*`, the
     /// string→int methods). The cast then extended by the wrong sign, silently:

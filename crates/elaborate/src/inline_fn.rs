@@ -22,6 +22,13 @@ pub(crate) struct InlineScope<'a> {
     /// stands down on a real rhs of its own accord), and `string`/handle targets
     /// are the ones `dims` omits.
     pub non_bv: &'a std::collections::BTreeSet<String>,
+    /// Every body/block local in `dims` whose declared kind is 2-state (`bit`,
+    /// `byte`, `shortint`, `int`, `longint`, IEEE §6.11.1). The frame path's local
+    /// is a net whose store drops x/z; the inline fold has no net, so
+    /// `fold_straight_line` applies the store rule itself for these targets.
+    /// Measured: `bit [7:0] b; b = x; f = b;` with `x = 8'bx0000111` returned `X7`
+    /// where both oracles give `07`.
+    pub two_state: &'a std::collections::BTreeSet<String>,
     /// Set by the `writable` refusal so the caller's generic "control flow" message
     /// does not overwrite a reason that was already given.
     ///
@@ -633,181 +640,6 @@ impl Elaborator<'_> {
         self.emit_frame_call(fid, &func, args)
     }
 
-    /// Bind ONE inline (SSA-fold) actual to its formal.
-    ///
-    /// The inline path substitutes the actual's ExprId for the formal's NAME, so
-    /// nothing about the formal's declared type reaches the body unless it is
-    /// applied here. But §13.4.3 makes the formal a VARIABLE OF ITS DECLARED TYPE
-    /// and §13.5.3 makes the call an ASSIGNMENT to it, and that assignment carries
-    /// three properties at once: the declared WIDTH (§11.6.2 — a wide actual
-    /// truncates, a narrow one extends by the ACTUAL's own sign, §11.6.1), the
-    /// declared SIGNEDNESS (which the body's arithmetic then reads — it is what
-    /// makes `x/3` a signed divide), and 2-state-ness (§6.11.1 — x/z store as 0).
-    /// The frame path receives all three for free because its formal IS a net.
-    ///
-    /// ⚠️ The three are each other's preconditions, and applying a SUBSET is worse
-    /// than applying none — §4.5.323 measured that three separate ways (the sign
-    /// alone lets the body read un-truncated high bits under the new sign; the
-    /// width alone leaves the body reading a truncated value with the actual's
-    /// sign). So this is one gate for all three: a TRUSTWORTHY actual width. Every
-    /// shape without one keeps the pre-slice tail verbatim rather than guess.
-    fn bind_formal_actual(
-        &mut self,
-        eid: u32,
-        ast_actual: Option<&ast::Expr>,
-        kind: ast::NetVarKind,
-        w: u32,
-        formal_signed: bool,
-    ) -> u32 {
-        // A heap-handle (`string`/class/`event`) or `real` formal is not a bit
-        // vector: a bit-resize would corrupt the handle or the IEEE-754 payload, so
-        // the kind discriminator must precede any width-based work. A width-0 type
-        // has nothing to resize.
-        if w == 0 || !ast_kind_is_bit_vector(kind) {
-            return eid;
-        }
-        // ⚠️ And the same question on the ACTUAL side, HERE rather than inside
-        // `resize_inline_assign`: step (3) below is OUTSIDE that function, so its
-        // real/string guards do not cover the coercion. Leaving it there shredded a
-        // `real` actual bound to a 2-state formal — `fint(9.0)` printed 0, and a
-        // `longint` formal printed the raw IEEE-754 bits — which is §4.5.323 round
-        // 2's exact symptom arriving through a different door.
-        //
-        // `expr_is_real` alone is not enough: it reads the IR value shape, and a
-        // frame `Expr::Call` is opaque to it (the frame's return var is a 64-bit
-        // `Reg` net holding the f64 payload, not a `NetKind::Real`). `cast_operand_
-        // is_real` is the spelling the sibling bind two hundred lines below already
-        // uses for exactly this. ⚠️ Its AST half resolves a BARE single-segment name
-        // in `func_table` — so `p::f(0)` and `c.cm()` still reach the coercion while
-        // the same callee called bare does not, which is the "recognized by spelling,
-        // not by value" shape §4.5.310 named. Widening it touches eight call sites
-        // and is its own slice (ROADMAP §2). Converting a real actual to the formal's
-        // integer type is a separate gap too — this only refuses to make it a
-        // DIFFERENT wrong answer.
-        let is_real = match ast_actual {
-            Some(a) => self.cast_operand_is_real(a, eid),
-            None => self.expr_is_real(eid),
-        };
-        if is_real {
-            // §13.5.3 makes this an ASSIGNMENT to a variable of the formal's
-            // declared type, so a real actual ROUNDS and then NARROWS to `w` —
-            // the gap the note above named ("Converting a real actual to the
-            // formal's integer type is a separate gap too"). It is closed here
-            // and NOWHERE ELSE on this path, because the inline path substitutes
-            // the actual's ExprId for the formal's NAME: with no formal net, the
-            // body would otherwise round at ITS OWN width (`f(300.0)` into an
-            // `input byte` gave 300 where both oracles give 44). The helper is
-            // shared with the frame bind and declines the shapes it may not touch
-            // (> 64 bits, a non-repeatable actual) — those keep the pre-slice
-            // answer rather than becoming a new loud or a double draw.
-            return self.coerce_real_actual_to_formal(eid, w, formal_signed);
-        }
-        if self.ir_expr_is_string(eid) {
-            return eid;
-        }
-        // ⚠️ A SIGNED result is safe to build and unsafe to CONSUME: it tells every
-        // downstream widening resize to sign-FILL, and `extend_to` builds that fill
-        // as `Select{Bit, base: e}` — a SECOND mention of the operand (§4.5.320 S1).
-        // The 2-state coercion is the same hazard w-fold: it names its operand once
-        // per bit. So an actual that cannot be repeated may not become either one.
-        // Measured: `function [31:0] sgn(input signed [7:0] x); sgn = x;` called with
-        // `$random` drew TWICE (the value came from the second draw and the stream
-        // ran one ahead of iverilog's) — the widening happened at the RETURN resize,
-        // not at the bind, so gating `extend_to` here would not have caught it.
-        let duplicated_downstream = formal_signed || net_kind_is_two_state(kind);
-        if self.trusted_self_width(eid).is_none()
-            || (duplicated_downstream && !self.expr_is_repeatable(eid))
-        {
-            // ㊀ pre-slice tail, verbatim: without a trustworthy actual width — or
-            // with an actual that may only be named once — the assignment cannot be
-            // applied at all, so only the NARROW-actual extension survives (its high
-            // bits were X before that fix), and by the actual's own sign.
-            // `resize_inline_assign` re-derives the same width internally and takes
-            // its own un-sealed branch when it is untrustworthy.
-            let rw = self.ir_bits_of(eid).unwrap_or(w);
-            if rw >= w {
-                self.verbatim_actuals.insert(eid);
-                return eid;
-            }
-            let actual_signed = self.expr_self_signed(eid);
-            let out = self.resize_inline_assign(eid, w, actual_signed);
-            self.verbatim_actuals.insert(out);
-            return out;
-        }
-        // (2.5) COST — the same target-vs-operand-width asymmetry `lower_prim_cast`
-        // carries, and the same answer. The 2-state coercion in (3) below names its
-        // operand once per bit it covers and the engine walks that DAG as a TREE, so
-        // binding a NARROW actual to a WIDER 2-state formal pays `w` evaluations for
-        // `rw` bits of actual. For a widening bind the extra terms are provably
-        // no-ops — the extension bits are a literal 0 (unsigned actual) or copies of
-        // the actual's sign bit, and `CaseEq` is a per-bit function, so mapping the
-        // sign bit and then replicating it equals replicating it and then mapping
-        // each copy. Coerce at `rw`, extend the coerced value, and let
-        // `resize_inline_assign` below apply the SEAL at the now-equal width.
-        //
-        // ⚠️ Two things are taken from `eid` and not from the coerced value, both
-        // load-bearing: the extension SIGN (a coercion is a `Concat`, which is
-        // unsigned — asking it would zero-extend every signed narrow actual), and the
-        // sign FILL BIT (deriving the fill from the coerced value would name the whole
-        // `rw`-term coercion a second time, 2·rw instead of rw+1). `expr_self_signed`
-        // is the very spelling `resize_inline_assign` uses internally, so the
-        // extension direction is unchanged, mirror caveat (ROADMAP §2) included.
-        //
-        // ⚠️ `trusted_self_width` is `Some` here — the guard immediately above
-        // returns when it is not — so `rw` is a DECLARED width and not a fabricated
-        // 32. Measured demand across the whole `cli` suite (5,220 tests, logged at
-        // this line): 21 binds reach the coercion, 5 of them widening (16←4 ×3,
-        // 64←32, 8←1). Small, but it is the same defect and it is one call away.
-        let rw = self.trusted_self_width(eid).unwrap_or(w);
-        if net_kind_is_two_state(kind) && rw > 0 && w > rw && self.expr_may_be_unknown(eid) {
-            let actual_signed = self.expr_self_signed(eid);
-            let low = self.coerce_two_state(eid, rw);
-            let fill_bit = if actual_signed {
-                let sign = self.sign_bit_of(eid, rw);
-                self.coerce_two_state(sign, 1)
-            } else {
-                self.const_u32_expr(0, 1)
-            };
-            let ext = self.extend_with_fill(low, fill_bit, w - rw);
-            return self.resize_inline_assign(ext, w, formal_signed);
-        }
-        // (1) WIDTH and (2) SIGN, in ONE primitive. Using a separate primitive per
-        // direction is what let §4.5.323 round 2 truncate a `real` actual's f64 bits:
-        // `resize_inline_assign` owns the real/string guards, both resize directions
-        // and the `$signed`/`$unsigned` tail, and that tail is also the SEAL — a bare
-        // `Binary`/`Unary`/`Ternary` actual is context-determined to the engine, so
-        // without it the body's own width would propagate back out into the actual.
-        let sized = self.resize_inline_assign(eid, w, formal_signed);
-        // (3) 2-STATE (§6.11.1). Nothing else on this path drops x/z: the frame
-        // path's formal net does it on the store.
-        if !net_kind_is_two_state(kind) {
-            return sized;
-        }
-        // ⚠️ `coerce_two_state` names its operand ONCE PER DECLARED BIT. The arena is
-        // a DAG so elaborate stays O(w), but the engine walks it as a TREE and
-        // re-evaluates the whole actual per bit: measured 15.7x on an `int` formal,
-        // 42.7x on a `longint` one, 23x `.velab` growth, and nesting multiplies it
-        // (four levels of `longint` calls went from 0.06 s to past a 120 s cap). So
-        // build it only where the actual can actually CARRY an x or z. The predicate
-        // is conservative in the safe direction — an unproven shape is coerced — and
-        // its `CaseEq` arm is what stops a NESTED coercion from being coerced again.
-        if !self.expr_may_be_unknown(eid) {
-            return sized;
-        }
-        let coerced = self.coerce_two_state(sized, w);
-        // A `Concat` is self-determined and unsigned, so it re-seals itself but drops
-        // the sign — re-stamp a signed formal. (An unsigned one needs no `$unsigned`:
-        // the Concat already is one.)
-        if formal_signed {
-            self.push_expr(ir::Expr::SysFunc {
-                which: ir::SysFuncId::Signed,
-                args: vec![coerced],
-            })
-        } else {
-            coerced
-        }
-    }
-
     pub(crate) fn reduce_function_body(
         &mut self,
         func: &ast::FunctionDef,
@@ -916,6 +748,7 @@ impl Elaborator<'_> {
             }
         }
         let mut local_dims: BTreeMap<String, (u32, bool)> = BTreeMap::new();
+        let mut two_state: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         let mut decls = func.body_decls.clone();
         collect_block_local_decls(&func.body, &mut decls);
         for d in &decls {
@@ -941,9 +774,19 @@ impl Elaborator<'_> {
             if let Some((pw, _, _)) = self.frame_packed_width(d) {
                 w = pw;
             }
+            // The RESOLVED kind (a type parameter names its kind through
+            // `shape_param`), the same one `range_to_dims` sized the local with.
+            let local_two_state = net_kind_is_two_state(self.shape_kind(d.kind, &d.shape_param));
             for n in &d.names {
                 if !is_handle {
                     local_dims.insert(n.name.name.clone(), (w, signed));
+                    // Innermost-wins, like `local_dims`: a later same-named 4-state
+                    // declaration must clear an earlier 2-state entry.
+                    if local_two_state {
+                        two_state.insert(n.name.name.clone());
+                    } else {
+                        two_state.remove(&n.name.name);
+                    }
                 }
                 // Record each local's declared `string`-ness (innermost-wins, so a local
                 // shadowing a formal resolves to the local) so a `string` relational
@@ -1004,6 +847,7 @@ impl Elaborator<'_> {
             dims: &local_dims,
             writable: &writable,
             non_bv: &non_bv,
+            two_state: &two_state,
             named_a_reason: std::cell::Cell::new(false),
         };
         let ok = self.fold_straight_line(&func.body, &fname, ret_w, ret_signed, &scope, &mut ret);
@@ -1033,127 +877,6 @@ impl Elaborator<'_> {
                 ));
                 self.placeholder_expr()
             }
-        }
-    }
-
-    /// Fold a straight-line function body. Returns false (caller emits the error)
-    /// on the first non-foldable construct. Each `local = expr;` pushes a
-    /// substitution binding (SSA-by-substitution); `fname = expr;` records the
-    /// return ExprId. Lowering happens with the CURRENT substitution scope active.
-    pub(crate) fn fold_straight_line(
-        &mut self,
-        s: &ast::Stmt,
-        fname: &str,
-        ret_w: u32,
-        ret_signed: bool,
-        scope: &InlineScope<'_>,
-        ret: &mut Option<u32>,
-    ) -> bool {
-        match s {
-            ast::Stmt::Null(_) => true,
-            ast::Stmt::Block { stmts, .. } => {
-                // begin-end local decls need NO nets: each local lives only as a
-                // substitution binding (combinational). Fold each stmt in order.
-                stmts
-                    .iter()
-                    .all(|st| self.fold_straight_line(st, fname, ret_w, ret_signed, scope, ret))
-            }
-            ast::Stmt::Blocking {
-                lhs, delay, rhs, ..
-            } => {
-                if delay.is_some() {
-                    self.warn("intra-assignment delay in inlined function dropped");
-                }
-                // LHS must be a bare single-segment Ident (a local var or func name).
-                let ast::Lvalue::Ident(p) = lhs else {
-                    return false;
-                };
-                if p.segments.len() != 1 {
-                    return false;
-                }
-                let target = p.segments[0].name.clone();
-                // …and it must be a name this body OWNS. Anything else is a write the
-                // inline fold cannot perform — see `writable`.
-                if !scope.writable.contains(&target) {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        // §3.b: the `automatic` advice used to say it gives "the same
-                        // diagnostic from the frame path". It no longer does — a framed
-                        // function whose body writes a module net is routed to the
-                        // statement executor and RUNS. The inline fold still cannot do it
-                        // (it has no statement to emit the write from), so the honest
-                        // sentence names the spelling that works.
-                        &format!(
-                            "function `{fname}` assigns `{target}`, which is not one of \
-                             its own formals or locals — an inlined function body has no \
-                             statement to carry the write. Declare `{fname}` `automatic`, \
-                             or give it a `return`: the frame path performs the write"
-                        ),
-                    );
-                    scope.named_a_reason.set(true);
-                    return false;
-                }
-                // §11.6.1: the rhs is lowered IN the LHS width context — the
-                // return-type width for `fname = …`, the declared width for a
-                // body/block local. See `inline_body_ctx.rs`: this is the width
-                // the frame route gets from the engine's net write, so `fld * x`
-                // in a `[31:0]` body folds at 32 rather than at 8.
-                let (ctx_w, ctx_signed) = if target == fname {
-                    (ret_w, ret_signed)
-                } else {
-                    scope.dims.get(&target).copied().unwrap_or((0, false))
-                };
-                let rhs_id0 =
-                    self.lower_inline_assign_rhs(rhs, ctx_w, !scope.non_bv.contains(&target));
-                // §10.7: apply the LHS-declared width/sign the inline SSA path
-                // otherwise misses (no net write). ctx_w==0 = unknown/implicit
-                // width ⇒ leave untouched (byte-identical). A real-valued rhs —
-                // including a call to a real-returning FRAME function, whose
-                // `Expr::Call` node carries no real flag so the helper's IR-level
-                // `expr_is_real` cannot see it — must NOT be bit-resized/sign-
-                // stamped; guard with the AST-aware check `lower_prim_cast` uses.
-                let rhs_id = if ctx_w == 0 || self.cast_operand_is_real(rhs, rhs_id0) {
-                    self.verbatim_actuals.insert(rhs_id0);
-                    rhs_id0
-                } else {
-                    let out = self.resize_inline_assign(rhs_id0, ctx_w, ctx_signed);
-                    // A resize over an UNTRUSTED width (a hierarchical placeholder, a
-                    // class-field handle) is a new node whose width the mirror still
-                    // cannot read — record it like a verbatim actual, or the cast
-                    // classifier fabricates 32 for it (`16'(y + 0)` printed `xxxx`).
-                    if self.trusted_self_width(rhs_id0).is_none() {
-                        self.verbatim_actuals.insert(out);
-                    }
-                    out
-                };
-                if target == fname {
-                    *ret = Some(rhs_id); // return assignment
-                } else {
-                    self.subst.push((target, rhs_id)); // local: innermost-wins binding
-                }
-                true
-            }
-            // R2: an explicit `return e;` in a straight-line inline body — same as the
-            // `fname = e` return assignment (size the value to the return width/sign).
-            // Behavior-preserving for existing code: every Return-bodied function is
-            // pre-framed by `body_needs_frame`, so no function reaching the inline fold
-            // today contains a `Return` — this arm is exercised only by the new R2
-            // read-only-dyn carve-out.
-            ast::Stmt::Return { value, .. } => {
-                if let Some(e) = value {
-                    let rhs_id0 =
-                        self.lower_inline_assign_rhs(e, ret_w, !scope.non_bv.contains(fname));
-                    let rhs_id = if ret_w == 0 || self.cast_operand_is_real(e, rhs_id0) {
-                        rhs_id0
-                    } else {
-                        self.resize_inline_assign(rhs_id0, ret_w, ret_signed)
-                    };
-                    *ret = Some(rhs_id);
-                }
-                true
-            }
-            // if/case/loop/nonblocking/task-call/etc. ⇒ not reducible to one expr.
-            _ => false,
         }
     }
 

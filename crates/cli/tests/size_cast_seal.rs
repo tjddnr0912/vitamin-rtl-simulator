@@ -275,16 +275,17 @@ endmodule
     assert_eq!(o, "fffffffffffffffd"); // iverilog; PRE identical
 }
 
-/// A class field lowers to `Signal{net: 32-bit HANDLE net}` with its real width
-/// in a sidecar, so `ir_bits_of` answers a FABRICATED `Some(32)` — a `Some`, which
-/// is why "decline when `ir_bits_of` is `None`" was not enough. At cast width
-/// exactly 32 that put the operand on the same-width arm and the seal then
-/// evaluated it at the FIELD's width, truncating the context-widened operation:
-/// `0000` for `0100`, and the signed row even flipped sign to `ffc8`.
-/// (No iverilog oracle for classes. Hand-IEEE: `c.u8 + ua` is unsigned, its
-/// context is `max(8, 32) = 32`, so 253 + 3 = 256; the signed row is 100 + 100.)
+/// A class field lowers to `Signal{net: 32-bit HANDLE net}` with its own width
+/// in the `class_field_widths` sidecar. `ir_bits_of` reads that sidecar, so the
+/// cast's width is trusted at the FIELD's 8 bits, and the cast's context walk
+/// (`class_field_leaf`) widens the field to the cast width before the add. Sealing
+/// the 8-bit add without that widening printed `0000` for `0100`, and the signed
+/// row `ffc8` (measured while the mirror answered the field but the walk still
+/// treated it as opaque). iverilog 13 and verilator 5.052 both print the pinned
+/// values: `c.u8 + ua` is unsigned, its context is `max(8, 32) = 32`, so
+/// 253 + 3 = 256; the signed row is 100 + 100.
 #[test]
-fn a_class_field_operand_never_seals_on_the_handle_width() {
+fn a_class_field_operand_is_widened_to_the_cast_width() {
     let o = run(r#"module t;
   class C; logic [7:0] u8; logic signed [7:0] s8; endclass
   C c; logic [3:0] ua = 4'd3; logic signed [7:0] sp = 8'sd100;
@@ -298,7 +299,7 @@ fn a_class_field_operand_never_seals_on_the_handle_width() {
   end
 endmodule
 "#);
-    assert_eq!(o, "0000000000000100\n00000000000000c8"); // PRE identical
+    assert_eq!(o, "0000000000000100\n00000000000000c8"); // iverilog; PRE identical
 }
 
 /// An UNPACKED ARRAY ELEMENT read is spelled `BitSelect` in the AST, exactly like

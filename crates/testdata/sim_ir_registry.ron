@@ -886,6 +886,12 @@
         82: {
             "StrCast": UNIT,
         },
+        83: {
+            "RealToInt": UNIT,
+        },
+        84: {
+            "TwoState": UNIT,
+        },
     }),
     "SysTaskId": ENUM({
         0: {

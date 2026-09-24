@@ -1224,6 +1224,12 @@ impl Elaborator<'_> {
                     || self.expr_may_be_unknown(*then_e)
                     || self.expr_may_be_unknown(*else_e)
             }
+            // v34: both are known by construction — `TwoState` maps x/z to 0 and
+            // `RealToInt` reads an unknown operand as 0 (see the engine arms).
+            ir::Expr::SysFunc {
+                which: ir::SysFuncId::TwoState | ir::SysFuncId::RealToInt,
+                ..
+            } => false,
             // The seal is a re-interpretation, not a value change.
             ir::Expr::SysFunc { which, args } => {
                 !matches!(which, ir::SysFuncId::Signed | ir::SysFuncId::Unsigned)
@@ -1309,7 +1315,10 @@ impl Elaborator<'_> {
                     | ir::SysFuncId::CountOnes
                     | ir::SysFuncId::OneHot
                     | ir::SysFuncId::OneHot0
-                    | ir::SysFuncId::IsUnknown,
+                    | ir::SysFuncId::IsUnknown
+                    // v34: pure conversions of their one operand.
+                    | ir::SysFuncId::RealToInt
+                    | ir::SysFuncId::TwoState,
                 args,
             }) => args.clone(),
             // `Call` runs a user body; the remaining `SysFunc`s draw or have an

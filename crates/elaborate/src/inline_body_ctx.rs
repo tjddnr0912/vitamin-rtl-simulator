@@ -33,7 +33,7 @@ impl Elaborator<'_> {
     /// (§4.5.212's measurement, re-measured here: `function [31:0] f; f = s8*b8;`
     /// with `s8 = -9`, `b8 = 8'hFF` is `0000f609` in both oracles — the
     /// sign-extended reading is `fffff709`). `None` from that route is an opaque
-    /// leaf (a hierarchical read, a class field, a verbatim inline actual) whose
+    /// leaf (an unreachable hierarchical read, a verbatim inline actual) whose
     /// width is a placeholder here; the rhs then keeps its pre-slice lowering.
     ///
     /// `target_is_bv` = the target's declared type is a BIT VECTOR. A
@@ -96,8 +96,9 @@ impl Elaborator<'_> {
     /// tail ⇒ `lookup_net_scoped` ⇒ `NetKind::Real`), a real DynArray element
     /// (`real_elem_dyn_nets`, reached through the same net test), a real-returning
     /// user function (`lookup_func`), a `real'(…)` cast, and a real literal. A
-    /// hierarchical / package-scoped / class-member name is a placeholder here,
-    /// so it answers `true` rather than guessing.
+    /// hierarchical / package-scoped name this walk cannot reach is a placeholder
+    /// here, so it answers `true` rather than guessing; a class FIELD read
+    /// (`class_field_leaf`) is a bit vector and answers `false`.
     pub(crate) fn rhs_has_real_domain(&self, e: &ast::Expr) -> bool {
         use ast::ExprKind as K;
         let any = |xs: &[ast::Expr]| xs.iter().any(|x| self.rhs_has_real_domain(x));
@@ -187,7 +188,12 @@ impl Elaborator<'_> {
                     // BIT VECTOR by construction — `hier_leaf_net` is built from
                     // `ast_kind_range_width`, which declines `real`, `realtime`,
                     // `string`, `event` and a class handle. One it cannot reach is
-                    // still a placeholder, and a class member always is.
+                    // still a placeholder. A class FIELD is a bit vector too — real
+                    // and string members are refused at the class declaration — and
+                    // `class_field_leaf` answers only for a non-handle field.
+                    if self.class_field_leaf(p).is_some() {
+                        return false;
+                    }
                     return self.hier_leaf_net(p).is_none();
                 }
                 let name = &p.segments[0].name;

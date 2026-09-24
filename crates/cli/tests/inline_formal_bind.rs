@@ -25,9 +25,8 @@
 //!
 //! ORACLE: iverilog 13.0 — every value below was run through it, and the PRE
 //! value in each comment was measured on a binary built from the parent commit.
-//! Three rows deliberately assert something OTHER than iverilog's answer, and
-//! each says so at the assert: the impure-actual value, the real-returning-call
-//! value, and the class-field value are documented gaps carried by ROADMAP §2.
+//! Every row pins iverilog's value; the impure-actual (`fb($random)`),
+//! real-returning-call and class-field rows used to assert documented gaps.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -235,9 +234,10 @@ endmodule
 /// RETURN resize draw TWICE: the value came from the second draw and the whole
 /// stream ran one ahead of iverilog's.
 ///
-/// So an actual that cannot be repeated keeps the pre-slice bind. Row 2 is the
-/// gap that buys (iverilog truncates to `ffffff81`); rows 1 and 3 are the property
-/// — the stream position is iverilog's, exactly one draw per call.
+/// So an actual that cannot be repeated is bound only with operations that name it
+/// once: row 2 narrows `$random` to the `byte` formal and stamps its sign (iverilog
+/// `ffffff81`; this row pinned the unsized `c0895e81` before), and rows 1 and 3
+/// are the property — the stream position is iverilog's, exactly one draw per call.
 #[test]
 fn an_impure_actual_is_never_named_twice() {
     let o = run(r#"module t;
@@ -258,7 +258,7 @@ endmodule
     // stream, and vita's raw stream was checked to match it for four draws. Row 4
     // is the other half: a REPEATABLE 2-state actual IS still coerced, so a gate
     // widened to reject everything makes it `xxxxxx07`.
-    assert_eq!(o, "12153524 c0895e81 8484d609\n00000007");
+    assert_eq!(o, "12153524 ffffff81 8484d609\n00000007");
 }
 
 /// The same hazard through the other impure leaf — a frame `Expr::Call`, whose
@@ -453,10 +453,10 @@ endmodule
 /// MULTI-ARGUMENT call can see the false-positive direction, where argument 0 reads
 /// argument 1's AST, decides "real", and skips a coercion it owed.
 ///
-/// The real actual is read through `$rtoi(b)`, not `b[31:0]`: since §4.5.494 a
-/// real-returning call IS real at the inline bind, which substitutes the actual
-/// VERBATIM (ROADMAP §2: no real→integer conversion at an inline bind), so a
-/// part-select of `b` is the §6.2 loud that a select of a real always was. The
+/// The real actual is read through `$rtoi(b)`, which was written when the inline
+/// bind substituted a real-returning call VERBATIM and a part-select of `b` was
+/// the §6.2 loud. The bind now converts such an actual to the formal's integer
+/// type (`SysFuncId::RealToInt`), so `b` is a `longint` holding 4 either way. The
 /// teeth are unchanged — a misaligned index still makes the HIGH half `xxxx00f7`.
 #[test]
 fn the_ast_actual_is_matched_to_its_own_formal() {
@@ -498,14 +498,13 @@ endmodule
     assert_eq!(o, "0000000000000000");
 }
 
-/// A class-field actual is a DOCUMENTED GAP and this row pins it, so that a
-/// mutation removing the trustworthy-width gate is visible. `ir_bits_of`
-/// fabricates 32 for a class field (its real width lives in a sidecar next to a
-/// 32-bit handle net), and resizing on a fabricated width is a rung down —
-/// §4.5.323 round 3 shipped exactly that and turned `xxc3` loose. PRE and POST
-/// print the same thing; ROADMAP §2 carries the gap.
+/// A class-field actual is sized by its FIELD width: `ir_bits_of` and
+/// `expr_self_signed` read the `class_field_widths` sidecar the canonical rule
+/// reads, so the trustworthy-width gate agrees and the bind applies the formal's
+/// width and sign. It printed `xxc3 xxab` while the mirror answered the 32-bit
+/// handle net.
 #[test]
-fn a_class_field_actual_keeps_the_pre_slice_behavior() {
+fn a_class_field_actual_is_sized_by_the_field_width() {
     let o = run(r#"module t;
   class C; byte unsigned bu = 8'hc3; byte sf = 8'hab; endclass
   C c;
@@ -517,9 +516,8 @@ fn a_class_field_actual_keeps_the_pre_slice_behavior() {
   end
 endmodule
 "#);
-    // iverilog: `00c3 ffab`. Both PRE and POST print the below — the gate is what
-    // keeps this from moving to a DIFFERENT wrong value.
-    assert_eq!(o, "xxc3 xxab");
+    // iverilog 13 and verilator 5.052 both print `00c3 ffab`.
+    assert_eq!(o, "00c3 ffab");
 }
 
 /// ⭐ THE OTHER PATH, AND IT IS NOW CLOSED. This cell was written as a known gap — "a

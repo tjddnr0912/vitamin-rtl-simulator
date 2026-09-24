@@ -269,7 +269,7 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 // Three reasons, each measured: an elaborate gate has to ask "is this
                 // expression real?" from the AST, and the IR-level predicate is blind to
                 // a real-returning FRAME function and to a hierarchical real net (this
-                // crate's own comment in `inline_fn.rs` says so); a fixed-width integer
+                // crate's own comment in `inline_bind.rs` says so); a fixed-width integer
                 // intermediate FLIPS THE SIGN past 2^63, where iverilog keeps the
                 // magnitude (`$itor(1e30)` is 1e30, so its model is not a round-trip
                 // through any integer width); and the cast desugars into `$floor`/
@@ -323,6 +323,37 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 v.val.resize(1, 0);
                 v.unk.resize(1, 0);
                 v
+            }
+            // v34: the real→int ASSIGNMENT conversion as a value (IEEE §6.12.2):
+            // round half away from zero into a 128-bit signed integer, the same
+            // `real_to_int_round` the net store uses, so a converted operand
+            // matches what a store of it would hold. Elaborate emits it only over a
+            // real operand; an integral one converts through `to_f64`, and an
+            // operand with any unknown bit reads as 0.0 (`to_f64` is `None`), so
+            // the result is never unknown (elaborate's
+            // `expr_may_be_unknown` answers false for this id on that premise).
+            SysFuncId::RealToInt => {
+                let x = args
+                    .first()
+                    .and_then(|&a| self.eval(a).to_f64())
+                    .unwrap_or(0.0);
+                crate::value::real_to_int_round(x, 128, true)
+            }
+            // v34: 2-state store (IEEE §6.11.1) — every x/z bit reads as 0; width
+            // and sign are the operand's own. A real or string operand has no
+            // unknown bits and passes through unchanged.
+            SysFuncId::TwoState => {
+                let Some(&a0) = args.first() else {
+                    return Value::zeros(1, false);
+                };
+                let mut a = self.eval(a0);
+                if !a.is_real {
+                    for (v, u) in a.val.iter_mut().zip(a.unk.iter_mut()) {
+                        *v &= !*u;
+                        *u = 0;
+                    }
+                }
+                a
             }
             SysFuncId::Signed => {
                 let mut a = self.eval(args[0]);

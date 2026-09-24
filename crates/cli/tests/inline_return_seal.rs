@@ -264,18 +264,18 @@ endmodule
     assert_eq!(run_args(src, &["--backend", "native"]), want);
 }
 
-/// The `trusted_w` guard's ONLY teeth. A class field lowers to a `Signal` on the
-/// 32-bit HANDLE net with its real width in a sidecar, so `ir_bits_of` answers a
-/// FABRICATED `Some(32)` that happens to equal the declared return width — the
-/// same-width arm. Sealing there would evaluate the body at the field's canonical
-/// 8 bits and truncate the 32-bit product. The value must not depend on the
-/// destination width.
+/// A class-field operand under the declared return's §11.6.1 context. The field
+/// lowers to a `Signal` on the 32-bit HANDLE net with its own width in the
+/// `class_field_widths` sidecar; `ir_bits_of` reads that sidecar, so the seal is
+/// trusted at the field's 8 bits — and the context walk (`class_field_leaf`)
+/// widens the field to 32 BEFORE the multiply, so the product is not truncated.
+/// The value must not depend on the destination width.
 ///
-/// No iverilog oracle (no classes). Hand-IEEE: the declared return is the body's
-/// assignment context, so `c.fld * x` runs at 32 bits — 255 * 255 = `fe01`.
-/// Dropping the canonical cross-check, or sealing unconditionally, gives `0001`.
+/// iverilog 13 and verilator 5.052 both print this: the declared return is the
+/// body's assignment context, so `c.fld * x` runs at 32 bits — 255 * 255 =
+/// `fe01`. Sealing the 8-bit operation without the widening gives `0001`.
 #[test]
-fn a_fabricated_rhs_width_declines_the_seal() {
+fn a_class_field_rhs_is_widened_before_the_seal() {
     let o = run(r#"module t;
   class C; bit [7:0] fld; endclass
   C c;
@@ -290,17 +290,17 @@ fn a_fabricated_rhs_width_declines_the_seal() {
   end
 endmodule
 "#);
-    assert_eq!(o, "0000fe01\n000000000000fe01"); // PRE identical
+    assert_eq!(o, "0000fe01\n000000000000fe01"); // iverilog; PRE identical
 }
 
-/// ⚠️ The sign half of this function is NOT fixed and this row says so. The
-/// extension direction still comes from `expr_self_signed`, which calls a frame
-/// function's declared return unsigned; the canonical rule would say signed, but
-/// `extend_to`'s sign fill names the operand a second time and the only leaf that
-/// can reach a WIDENING resize here is exactly that (impure) call. iverilog says
-/// `fc` / `fffc`. ROADMAP §2.
+/// A frame-function actual bound to a SIGNED formal narrower than the return. The
+/// bind now narrows the call's value to the formal and stamps the formal's sign
+/// with operations that name the call once, so the return's widening
+/// sign-extends it (it printed `0c` / `000c` while the bind kept the call's
+/// unsigned mirror sign). `fs` is evaluated once per call on vita as on
+/// iverilog (measured with a `$display` in its body).
 #[test]
-fn the_extension_sign_of_a_function_actual_is_a_documented_gap() {
+fn the_extension_sign_of_a_function_actual_follows_the_formal() {
     let o = run(r#"module t;
   function automatic signed [3:0] fs(input d); fs = -4'sd4; endfunction
   function        [7:0] inl(input signed [3:0] x); inl = x; endfunction
@@ -315,8 +315,6 @@ fn the_extension_sign_of_a_function_actual_is_a_documented_gap() {
   end
 endmodule
 "#);
-    // Rows 1-2 are the gap (iverilog: 00000000000000fc / 000000000000fffc);
-    // row 3 shows a LITERAL actual is already right, i.e. the leaf is the whole
-    // discriminator.
-    assert_eq!(o, "000000000000000c\n000000000000000c\n00000000000000fc");
+    // iverilog 13 and verilator 5.052 (row 3, a LITERAL actual, was already right).
+    assert_eq!(o, "00000000000000fc\n000000000000fffc\n00000000000000fc");
 }

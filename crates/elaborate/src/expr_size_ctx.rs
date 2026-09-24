@@ -76,8 +76,8 @@ impl Elaborator<'_> {
     /// operator rules.
     /// §4.5.212: the OVERALL self-signedness of a size-cast operand's tree.
     ///
-    /// An OPAQUE leaf — a hierarchical or class-member read, a hierarchical call,
-    /// an inline formal bound to one — is a PLACEHOLDER at this point (resolved
+    /// An OPAQUE leaf — a hierarchical read this walk cannot reach, a hierarchical
+    /// call, an inline formal bound to one — is a PLACEHOLDER at this point (resolved
     /// only after the instance tree exists) with no width for `lower_size_leaf`
     /// to resize by, so a cast over one is right on neither path; when the
     /// operand holds one ANYWHERE, every leaf rule falls back to the pre-slice
@@ -192,10 +192,15 @@ impl Elaborator<'_> {
             // keeps its pre-slice lowering. Gated on `consts` like every other
             // resolving arm: under a leaf this walk CANNOT reach, the pre-slice
             // classifier must answer verbatim (`size_ctx_route`).
-            ast::ExprKind::Ident(p) if consts && p.segments.len() > 1 => self
-                .hier_leaf_net(p)
-                .filter(|h| h.dims == 0)
-                .map(|h| h.signed),
+            ast::ExprKind::Ident(p) if consts && p.segments.len() > 1 => {
+                match self.class_field_leaf(p) {
+                    Some((_, signed)) => Some(signed),
+                    None => self
+                        .hier_leaf_net(p)
+                        .filter(|h| h.dims == 0)
+                        .map(|h| h.signed),
+                }
+            }
             ast::ExprKind::Ident(p) if p.segments.len() == 1 => {
                 let name = &p.segments[0].name;
                 if !consts {
@@ -587,10 +592,13 @@ impl Elaborator<'_> {
             // refusal twice. A whole unpacked array has no value here.
             // The sign arm's twin: a reachable HIERARCHICAL name reads as the
             // child's declared width. A whole unpacked array has no value here.
-            K::Ident(p) if p.segments.len() > 1 => self
-                .hier_leaf_net(p)
-                .filter(|h| h.dims == 0)
-                .map(|h| h.width),
+            K::Ident(p) if p.segments.len() > 1 => match self.class_field_leaf(p) {
+                Some((w, _)) => Some(w),
+                None => self
+                    .hier_leaf_net(p)
+                    .filter(|h| h.dims == 0)
+                    .map(|h| h.width),
+            },
             K::Ident(p) if p.segments.len() == 1 => {
                 let name = &p.segments[0].name;
                 match self.bare_ident_route(name, e.span) {
@@ -940,7 +948,7 @@ impl Elaborator<'_> {
     /// May a size cast take the CONTEXT path over `e`, and with what
     /// `(sign, self width)`? BOTH have to be known: routing an operand whose
     /// width the walk cannot measure hands `lower_size_leaf` a node it resizes
-    /// from a fabricated 32 — a hierarchical read, a class field, a verbatim
+    /// from a fabricated 32 — an unreachable hierarchical read, a verbatim
     /// inline actual and a hierarchical CALL NAME are all placeholders here, and
     /// each one produced `x` where the fill-only path was right (round-6 review:
     /// `16'(PS16 * {u.hf(-8'sd16), 1'b0})` printed `xxxx` for both oracles'
@@ -986,8 +994,10 @@ impl Elaborator<'_> {
     }
 
     /// Does `e` read anything this walk cannot give a width to — a hierarchical
-    /// or class-member name, a hierarchical CALL (the callee's own name is a
-    /// path, and the args walk alone missed it), or a bare name bound to an
+    /// name it cannot reach (a class FIELD read has its declared shape through
+    /// `class_field_leaf`, so it is not opaque), a hierarchical CALL (the
+    /// callee's own name is a path, and the args walk alone missed it), or a
+    /// bare name bound to an
     /// inline actual handed over VERBATIM (`verbatim_actuals`: a frame call, a
     /// class field, a hierarchical net — the actual is a placeholder and the
     /// operand carries no hierarchical spelling at all)? The `Concat` and
@@ -1014,7 +1024,10 @@ impl Elaborator<'_> {
             // condition `size_ctx_route` requires before routing a leaf at all.
             K::Ident(p) => {
                 if p.segments.len() > 1 {
-                    return self.hier_leaf_net(p).is_none();
+                    // A class-field read has a declared width and sign
+                    // (`class_field_leaf`, the lowering's own resolver, asked first
+                    // as `lower_expr` does).
+                    return self.class_field_leaf(p).is_none() && self.hier_leaf_net(p).is_none();
                 }
                 matches!(
                     self.bare_ident_route(&p.segments[0].name, e.span),

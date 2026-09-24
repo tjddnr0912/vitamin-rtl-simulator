@@ -745,6 +745,30 @@ impl Elaborator<'_> {
     /// The declaration a hierarchical NAME (`u.hs`, `m.u2.hs`, `u.arr`) resolves
     /// to, or `None` to keep the pre-slice behaviour. A single-segment path is not
     /// hierarchical and is answered by the ordinary name routes.
+    /// The declared `(width, sign)` of a CLASS-FIELD read `obj.field` /
+    /// `this.field`, resolved by `resolve_class_member` — the resolver
+    /// `try_class_field_read` uses, and which `lower_expr` asks BEFORE the
+    /// hierarchical route, so every walk that consults this does so first too.
+    /// The read lowers to `Signal{net: <handle>, word: Some(fid)}` with the field's
+    /// shape in `class_field_widths`, which `ir_bits_of` / `expr_self_signed` read,
+    /// so `lower_size_leaf` resizes it by the same width this answers. `None` for a
+    /// path that is not a class member, and for a handle-typed member.
+    pub(crate) fn class_field_leaf(&self, path: &ast::HierPath) -> Option<(u32, bool)> {
+        // A bare member inside a method body reaches these walks through
+        // `bare_ident_route`, which does not resolve it; only the dotted spelling
+        // is answered here.
+        if path.segments.len() < 2 {
+            return None;
+        }
+        let (_, class, field) = self.resolve_class_member(path)?;
+        let (_, f) = self.class_field_id(&class, &field)?;
+        // A handle member is an object id, not a bit-vector value.
+        if f.class_type.is_some() {
+            return None;
+        }
+        Some((f.width.max(1), f.signed))
+    }
+
     pub(crate) fn hier_leaf_net(&self, path: &ast::HierPath) -> Option<HierNet> {
         let (leaf, insts) = path.segments.split_last()?;
         if insts.is_empty() {

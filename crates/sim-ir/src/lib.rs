@@ -411,6 +411,27 @@ pub enum SysFuncId {
     /// renders the raw f64 bytes — no oracle) and a string operand is the identity
     /// (the cast lowers to the operand itself, no node).
     StrCast,
+    // ── v34 (2026-09-24): single-mention store conversions for the inline function
+    //    lane (ROADMAP §2 rows F8 F9 F11). args = [operand]. PURE. ──
+    /// real → integral ASSIGNMENT conversion (IEEE 1800 §6.12.2 / 1364 §6.2):
+    /// round half away from zero, delivered as a 128-bit SIGNED integer (two's
+    /// complement) — the engine's `real_to_int_round(x, 128, true)`, the rule the
+    /// net store applies. Exact for |x| < 2^127; beyond that it saturates to the
+    /// i128 extremes; NaN is 0. The consumer narrows or extends it to its own
+    /// width, so every integral target up to 128 bits holds the exact value.
+    ///
+    /// It exists because it names its operand ONCE. The IR-0 composition
+    /// elaborate builds for `int'(r)` names the operand 2 to 5 times, so an
+    /// operand that may not be evaluated twice (a user call, `$random`) could not
+    /// be converted with it. Elaborate emits it only for a real operand; a
+    /// non-real one converts as `to_f64` would, and an operand whose value has any
+    /// unknown bit reads as 0.0 (`to_f64` is `None`), so the result is never
+    /// unknown.
+    RealToInt,
+    /// 2-state store: every x/z bit of the operand reads as 0 (IEEE §6.11.1).
+    /// Width and sign are the operand's own. The single-mention twin of the
+    /// per-bit `CaseEq` fan-out elaborate builds for a 2-state formal.
+    TwoState,
 }
 
 /// Expression arena node (§1).

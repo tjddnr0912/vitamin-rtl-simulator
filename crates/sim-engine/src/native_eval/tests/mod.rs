@@ -3,6 +3,7 @@ use sim_ir::SimIr;
 
 mod arith_bits;
 mod cmp_select;
+mod v34_conversions;
 
 /// A `NetReader` returning a fixed `Value` per NetId (and all-X for any other).
 struct FakeNets(Vec<Value>);
