@@ -144,7 +144,11 @@ pub fn expr_provably_unsigned(
 /// one. Delete this arm and nothing observable moves — until the unsigned half
 /// is unfrozen (ROADMAP §2), at which point it is the only thing between a
 /// hierarchical call and a seal built on a one-bit lie.
-fn is_expr_placeholder(e: &ir::Expr) -> bool {
+///
+/// The width rule's callers ask [`Elaborator::is_unshaped_placeholder`]: a
+/// placeholder whose declared shape was recorded at creation is answered from
+/// that record, not fabricated.
+pub(crate) fn is_expr_placeholder(e: &ir::Expr) -> bool {
     matches!(
         e,
         ir::Expr::Signal {
@@ -410,7 +414,10 @@ impl Elaborator<'_> {
         // index that is about to become signed −1: `mg[u.k]` on
         // `reg [7:0] mg[-3:2]` went from the oracle's `aa` to `x` plus an E4002
         // (correct-support → loud-wrong, a rung DOWN the ladder). So say
-        // `None` and let the seal decline, exactly as it did before §4.5.309.
+        // `None` and let the seal decline, exactly as it did before §4.5.309 —
+        // unless the placeholder's declared shape was recorded when it was
+        // created (`hier_leaf_shape.rs`): then `fill` answers from the record,
+        // and `mg[u.k]` selects `9f` as both oracles do (s15 m_idx2).
         //
         // The question is about THIS index's subtree, so it is asked of the
         // subtree. An earlier version scanned the whole arena prefix `0..=eid`,
@@ -430,7 +437,7 @@ impl Elaborator<'_> {
         let last = eid as usize;
         let mut prefix_final = true;
         while i <= last {
-            if is_expr_placeholder(&self.exprs[i]) {
+            if self.is_unshaped_placeholder(i as u32, &self.exprs[i]) {
                 self.selfw_scan = i as u32;
                 // Defensive, and measured to be a no-op: nothing at or above a
                 // live placeholder can have been cached, because a placeholder
@@ -477,6 +484,14 @@ impl Elaborator<'_> {
                 sim_ir::selfwidth::SelfWidth {
                     width: w.max(1),
                     signed: sg,
+                }
+            } else if let Some(h) = self.hier_placeholder_shape.get(&i) {
+                // A hierarchical placeholder with a recorded shape answers it; the
+                // resolution pass refuses a net/function that differs, so the
+                // cached entry stays the answer after the patch.
+                sim_ir::selfwidth::SelfWidth {
+                    width: h.width,
+                    signed: h.signed,
                 }
             } else {
                 sim_ir::selfwidth::self_width_of(ctx, &call_ret, sw, i)
@@ -1048,7 +1063,7 @@ impl Elaborator<'_> {
     /// One node of [`Self::index_has_placeholder`]: `true` = stop, it has one.
     fn index_has_placeholder_step(&self, eid: u32, stack: &mut Vec<u32>) -> bool {
         let kids: Vec<u32> = match self.exprs.get(eid as usize) {
-            Some(e) if is_expr_placeholder(e) => return true,
+            Some(e) if self.is_unshaped_placeholder(eid, e) => return true,
             Some(ir::Expr::Const { .. }) => vec![],
             Some(ir::Expr::Signal { word, .. }) => word.iter().copied().collect(),
             Some(ir::Expr::Select {

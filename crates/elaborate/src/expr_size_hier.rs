@@ -39,6 +39,9 @@
 
 use super::*;
 
+#[path = "expr_size_hier_exact.rs"]
+mod exact;
+
 /// What a child module's declaration says about one net, for the two questions
 /// the region walks ask: §11.8.1's extension sign, and Table 11-21's self width.
 ///
@@ -76,6 +79,9 @@ pub(crate) struct ModuleFacts {
     insts: BTreeMap<String, (String, Vec<ast::ParamConn>)>,
     /// net name → its declared shape, the width still unfolded
     nets: BTreeMap<String, NetFact>,
+    /// `real` / `realtime` scalar variables (no unpacked dimension), under the
+    /// same unambiguity rule as `nets`
+    real_nets: BTreeSet<String>,
     /// function name → (declared return width unfolded, declared return sign)
     funcs: BTreeMap<String, (WidthFact, bool)>,
     /// function name → its declaration, for the functions whose BODY writes a
@@ -229,6 +235,12 @@ fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
                 None,
             ) {
                 f.nets.insert(p.name.name.clone(), h);
+            } else if is_real_scalar(
+                p.net_or_var.unwrap_or(ast::NetVarKind::Wire),
+                &p.packed,
+                &p.unpacked,
+            ) {
+                f.real_nets.insert(p.name.name.clone());
             }
         }
     }
@@ -249,6 +261,11 @@ fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
                         d.class_type.as_ref(),
                     ) {
                         f.nets.insert(n.name.name.clone(), h);
+                    } else if d.shape_param.is_none()
+                        && d.class_type.is_none()
+                        && is_real_scalar(d.kind, &d.packed, &n.unpacked)
+                    {
+                        f.real_nets.insert(n.name.name.clone());
                     }
                 }
             }
@@ -277,6 +294,14 @@ fn module_facts(m: &ast::ModuleDecl) -> ModuleFacts {
         }
     }
     f
+}
+
+/// A `real` / `realtime` declaration with no packed and no unpacked dimension:
+/// one 64-bit real value, the only real shape `hier_leaf_real` answers.
+fn is_real_scalar(kind: ast::NetVarKind, packed: &[ast::Range], unpacked: &[ast::Dim]) -> bool {
+    matches!(kind, ast::NetVarKind::Real | ast::NetVarKind::Realtime)
+        && packed.is_empty()
+        && unpacked.is_empty()
 }
 
 fn note(seen: &mut BTreeMap<String, u32>, n: &str) {
@@ -528,7 +553,10 @@ impl Elaborator<'_> {
     /// straight through it to this module's body. A leading segment that names a
     /// net in one of them commits `hier_resolve` to "`.member` on a plain net",
     /// which is loud — never a different silent answer.
-    fn hier_leaf_scope(&self, insts: &[ast::Ident]) -> Option<(&ModuleFacts, Option<ParamEnv>)> {
+    fn hier_leaf_scope<'s>(
+        &self,
+        insts: impl IntoIterator<Item = &'s str>,
+    ) -> Option<(&ModuleFacts, Option<ParamEnv>)> {
         // A `bind` attaches a child to a module without an instantiation in its
         // body, so the fact table's instance map is not the whole scope list.
         if !self.bind_targets.is_empty() || self.in_generate_body {
@@ -551,7 +579,7 @@ impl Elaborator<'_> {
         let mut env: Option<ParamEnv> = None;
         let mut live = true;
         for seg in insts {
-            let (module, overrides) = f.insts.get(&seg.name)?;
+            let (module, overrides) = f.insts.get(seg)?;
             let child = self.module_facts.get(module)?;
             env = if live || env.is_some() {
                 self.child_env(child, overrides, env.as_ref())
@@ -769,18 +797,48 @@ impl Elaborator<'_> {
         Some((f.width.max(1), f.signed))
     }
 
+    /// [`Self::hier_leaf_net`] for a path already split into segment names (the
+    /// hierarchical select producers hold it in that form).
+    pub(crate) fn hier_leaf_net_names(&self, path: &[String]) -> Option<HierNet> {
+        let (leaf, insts) = path.split_last()?;
+        if insts.is_empty() {
+            return None;
+        }
+        let (f, env) = self.hier_leaf_scope(insts.iter().map(String::as_str))?;
+        let n = f.nets.get(leaf)?;
+        Some(HierNet {
+            signed: n.signed,
+            width: self.fold_width(&n.width, env.as_ref())?,
+            dims: n.dims,
+        })
+    }
+
     pub(crate) fn hier_leaf_net(&self, path: &ast::HierPath) -> Option<HierNet> {
         let (leaf, insts) = path.segments.split_last()?;
         if insts.is_empty() {
             return None;
         }
-        let (f, env) = self.hier_leaf_scope(insts)?;
+        let (f, env) = self.hier_leaf_scope(insts.iter().map(|s| s.name.as_str()))?;
         let n = f.nets.get(&leaf.name)?;
         Some(HierNet {
             signed: n.signed,
             width: self.fold_width(&n.width, env.as_ref())?,
             dims: n.dims,
         })
+    }
+
+    /// Does a hierarchical NAME (`u.r`) resolve to a `real` / `realtime` scalar
+    /// variable, by the same downward walk and unambiguity rule `hier_leaf_net`
+    /// uses? `false` wherever that walk declines.
+    pub(crate) fn hier_leaf_real(&self, path: &ast::HierPath) -> bool {
+        let Some((leaf, insts)) = path.segments.split_last() else {
+            return false;
+        };
+        if insts.is_empty() {
+            return false;
+        }
+        self.hier_leaf_scope(insts.iter().map(|s| s.name.as_str()))
+            .is_some_and(|(f, _)| f.real_nets.contains(&leaf.name))
     }
 
     /// The `(return width, return sign)` a hierarchical CALL (`u.hf(x)`) resolves
@@ -791,7 +849,7 @@ impl Elaborator<'_> {
         if insts.is_empty() {
             return None;
         }
-        let (f, env) = self.hier_leaf_scope(insts)?;
+        let (f, env) = self.hier_leaf_scope(insts.iter().map(|s| s.name.as_str()))?;
         let (w, sg) = f.funcs.get(&leaf.name)?;
         Some((self.fold_width(w, env.as_ref())?, *sg))
     }
@@ -818,7 +876,7 @@ impl Elaborator<'_> {
         if insts.is_empty() {
             return None;
         }
-        let (f, env) = self.hier_leaf_scope(insts)?;
+        let (f, env) = self.hier_leaf_scope(insts.iter().map(|s| s.name.as_str()))?;
         let def = f.body_write_funcs.get(&leaf.name)?;
         let (w, sg) = f.funcs.get(&leaf.name)?;
         let ret_width = self.fold_width(w, env.as_ref())?;

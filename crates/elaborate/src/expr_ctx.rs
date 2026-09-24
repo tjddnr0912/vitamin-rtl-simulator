@@ -383,6 +383,11 @@ impl Elaborator<'_> {
             Some(ir::Expr::Signal { .. }) if self.class_field_widths.contains_key(&eid) => {
                 self.class_field_widths[&eid].1
             }
+            // A hierarchical placeholder carries the sign its declaration walk
+            // recorded (`hier_leaf_shape.rs`), verified at resolution.
+            Some(ir::Expr::Signal { .. }) if self.hier_placeholder_shape.contains_key(&eid) => {
+                self.hier_placeholder_shape[&eid].signed
+            }
             Some(ir::Expr::Signal { net, .. }) => self
                 .nets
                 .get(*net as usize)
@@ -1071,6 +1076,11 @@ impl Elaborator<'_> {
                 if let Some(&(w, _)) = self.class_field_widths.get(&eid) {
                     return Some(w.max(1));
                 }
+                // A hierarchical placeholder: the width its declaration walk
+                // recorded (`hier_leaf_shape.rs`), verified at resolution.
+                if let Some(h) = self.hier_placeholder_shape.get(&eid) {
+                    return Some(h.width);
+                }
                 let nv = self.nets.get(*net as usize)?;
                 // review F1: a String handle's table width is 0 — `.max(1)`
                 // made `$bits(s)` a silent 1. Dynamic length ⇒ loud at site.
@@ -1213,7 +1223,11 @@ impl Elaborator<'_> {
             }
             // A user function call's width is its declared return width (so a fill
             // sibling — `case(f8()) '1:`, `x == f16()` — sizes to it, not 32).
-            ir::Expr::Call { func, .. } => self.func_metas.get(*func as usize)?.ret_width.max(1),
+            // A hierarchical call placeholder reads its recorded return width.
+            ir::Expr::Call { func, .. } => match self.hier_placeholder_shape.get(&eid) {
+                Some(h) => h.width,
+                None => self.func_metas.get(*func as usize)?.ret_width.max(1),
+            },
         })
     }
 }

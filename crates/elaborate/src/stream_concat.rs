@@ -64,6 +64,43 @@ impl Elaborator<'_> {
         }
     }
 
+    /// The inline function lane's store of a WHOLE-rhs stream whose operand holds
+    /// a hierarchical placeholder, into a target of a DIFFERENT width: refused,
+    /// the refusal the stream had before the placeholder's width was recorded.
+    /// The inline store right-justifies where §11.4.14.3 left-justifies a stream
+    /// in a wider target (the LOCAL twin `fl = {<<4{loc}}` too, s15 review p27,
+    /// r02_fwd), and a narrower target is a §11.4.14.3 error. Equal widths need
+    /// no padding and keep their route: `se = {>>{u.lv}}` into `[7:0]` is `36`
+    /// as on PRE and verilator (s15 review r6h). Asked by `fold_straight_line`
+    /// at the store, where the target width `ctx_w` is known; module and
+    /// automatic-function stores pad through `pad_stream_rhs`. A leaf recorded
+    /// as `real` is left to the real-in-concatenation refusal (s15 review p28);
+    /// an operand whose width is unknown keeps its route (the reverse stream
+    /// already refused it, the forward one is verbatim as before).
+    pub(crate) fn inline_stream_store_declines(
+        &self,
+        rhs: &ast::Expr,
+        rhs_id: u32,
+        ctx_w: u32,
+    ) -> bool {
+        is_stream_rhs(rhs)
+            && self.subtree_hier_leaves(rhs_id) == (true, false)
+            && self.ir_bits_of(rhs_id).is_some_and(|w| w != ctx_w)
+    }
+
+    pub(crate) fn error_stream_inline_store(&mut self) {
+        self.error(
+            MsgCode::ElabUnsupported,
+            &format!(
+                "a streaming concatenation of a hierarchical reference stored into a \
+                 target of a different width inside a non-`automatic` function is \
+                 unsupported: §11.4.14.3 left-justifies it, which the inlined body does \
+                 not do (declare the function `automatic`, or store the stream into a \
+                 variable of its own width). {STREAM_LIMIT_HINT}"
+            ),
+        );
+    }
+
     /// Expand `$__vita_stream_rev(slice_size, operand)`.
     pub(crate) fn lower_stream_rev(&mut self, args: &[ast::Expr]) -> u32 {
         // The parser builds exactly two args; a hand-written `$__vita_stream_rev` is

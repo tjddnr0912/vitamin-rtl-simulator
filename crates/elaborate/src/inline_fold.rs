@@ -73,6 +73,13 @@ impl Elaborator<'_> {
                 };
                 let rhs_id0 =
                     self.lower_inline_assign_rhs(rhs, ctx_w, !scope.non_bv.contains(&target));
+                // A whole-rhs stream of a hierarchical leaf into a target of another
+                // width: refused (see `inline_stream_store_declines`).
+                if ctx_w > 0 && self.inline_stream_store_declines(rhs, rhs_id0, ctx_w) {
+                    self.error_stream_inline_store();
+                    scope.named_a_reason.set(true);
+                    return false;
+                }
                 // §10.7: apply the LHS-declared width/sign the inline SSA path
                 // otherwise misses (no net write). ctx_w==0 = unknown/implicit
                 // width ⇒ leave untouched (byte-identical). A real-valued rhs —
@@ -144,6 +151,11 @@ impl Elaborator<'_> {
                 if let Some(e) = value {
                     let rhs_id0 =
                         self.lower_inline_assign_rhs(e, ret_w, !scope.non_bv.contains(fname));
+                    if ret_w > 0 && self.inline_stream_store_declines(e, rhs_id0, ret_w) {
+                        self.error_stream_inline_store();
+                        scope.named_a_reason.set(true);
+                        return false;
+                    }
                     let rhs_id =
                         if ret_w > 0 && !scope.non_bv.contains(fname) && self.expr_is_real(rhs_id0)
                         {

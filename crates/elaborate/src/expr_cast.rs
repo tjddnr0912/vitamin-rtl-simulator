@@ -382,6 +382,7 @@ impl Elaborator<'_> {
     /// With the width known, this function returns a self-determined N-bit node;
     /// with it fabricated it returns exactly what it returned before the seal.
     pub(crate) fn lower_size_cast(&mut self, e: u32, n: u32) -> u32 {
+        self.release_hier_call_for_widening_cast(e, n);
         let known_w = self.ir_bits_of(e);
         let canon_w = self.canonical_self_width(e).map(|s| s.width);
         let w = known_w.unwrap_or(32);
@@ -876,6 +877,9 @@ impl Elaborator<'_> {
     /// the two crates drift. This is the elaborate-side driver: it recurses,
     /// because its arena is still growing while it lowers.
     pub(crate) fn expr_is_real(&self, eid: u32) -> bool {
+        if self.hier_shape(eid).is_some_and(|h| h.real) {
+            return true;
+        }
         let cx = ir::realness::RealnessCtx {
             exprs: &self.exprs,
             consts: &self.consts,

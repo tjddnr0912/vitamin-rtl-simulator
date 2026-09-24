@@ -79,6 +79,7 @@ impl Elaborator<'_> {
                     || self.hier_lookup_wide_param(&d.prefix, &d.path).is_some()
                 {
                     if let Some(built) = self.build_hier_param_select(&d) {
+                        self.verify_hier_sel_shape(d.eid, built, &d.path);
                         let e = self.exprs[built as usize].clone();
                         self.exprs[d.eid as usize] = e;
                     }
@@ -101,6 +102,8 @@ impl Elaborator<'_> {
             // the WRITE twin calls the SAME function.
             if d.part.is_none() {
                 if let Some(word) = self.hier_dyn_container_word(net, &d.idx_eids) {
+                    // A recorded shape never names a dynamic container.
+                    self.verify_hier_shape_not_net(d.eid, &d.path, "a dynamic container element");
                     self.exprs[d.eid as usize] = ir::Expr::Signal {
                         net,
                         word: Some(word),
@@ -128,6 +131,7 @@ impl Elaborator<'_> {
             // branch. Handled first; the bit/whole lanes below run only when absent.
             if let Some(p) = d.part {
                 if let Some(e) = self.build_hier_read_part(net, &d.idx_eids, p, &path) {
+                    self.verify_hier_sel_shape(d.eid, e, &d.path);
                     let ex = self.exprs[e as usize].clone();
                     self.exprs[d.eid as usize] = ex;
                 }
@@ -171,6 +175,7 @@ impl Elaborator<'_> {
                     kind: ir::SelKind::Bit,
                 })
             };
+            self.verify_hier_sel_shape(d.eid, built, &d.path);
             let e = self.exprs[built as usize].clone();
             self.exprs[d.eid as usize] = e;
         }
@@ -203,6 +208,8 @@ impl Elaborator<'_> {
                 // conversion trap, it is pre-existing for a hierarchical real VARIABLE
                 // (`a.rv`, identical in PRE), and trading the loud below for it would
                 // swap one silent-wrong for another. ROADMAP §2 owns the axis.
+                // A recorded net shape that resolves to no net is loud.
+                self.verify_hier_shape_not_net(d.eid, &d.path, "not a variable or net");
                 if let Some(v) = self.hier_lookup_param(&d.prefix, &d.path) {
                     let meta = self.hier_lookup_param_meta(&d.prefix, &d.path);
                     self.patch_expr_param_const_w(d.eid, v, meta);
@@ -311,6 +318,9 @@ impl Elaborator<'_> {
                 );
                 continue;
             }
+            // The shape recorded when the placeholder was created
+            // (`hier_leaf_shape.rs`) must be this net's; a mismatch is loud.
+            self.verify_hier_net_shape(d.eid, net, &d.path);
             if let Some(ir::Expr::Signal { net: slot, .. }) = self.exprs.get_mut(d.eid as usize) {
                 *slot = net;
             }
@@ -472,6 +482,12 @@ impl Elaborator<'_> {
                 );
                 continue;
             }
+            // The return shape recorded when the placeholder was created
+            // (`hier_leaf_shape.rs`) must be this callee's; a mismatch is loud.
+            let ambient = self.cur_span;
+            self.cur_span = Some(d.span);
+            self.verify_hier_call_shape(d.eid, fid, &d.path);
+            self.cur_span = ambient;
             if let Some(ir::Expr::Call { func, .. }) = self.exprs.get_mut(d.eid as usize) {
                 *func = fid;
             }

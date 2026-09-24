@@ -193,6 +193,7 @@ impl<'s> Elaborator<'s> {
             class_vtable: Vec::new(),
             class_calls: std::collections::BTreeMap::new(),
             class_field_widths: std::collections::BTreeMap::new(),
+            hier_placeholder_shape: std::collections::BTreeMap::new(),
             selfw_scan: 0,
             selfw_scratch: Vec::new(),
             selfw_seen: Vec::new(),

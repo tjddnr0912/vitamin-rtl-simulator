@@ -94,6 +94,8 @@ mod gen_scope_name;
 mod generate;
 mod hier;
 mod hier_defer;
+mod hier_leaf_shape;
+pub(crate) use hier_leaf_shape::HierLeafShape;
 mod hoist;
 mod ident_route;
 pub(crate) use ident_route::BareIdentRoute;
@@ -1153,6 +1155,11 @@ struct Elaborator<'s> {
     class_vtable: Vec<Vec<u32>>,
     class_calls: std::collections::BTreeMap<u32, (Option<u32>, u32)>,
     class_field_widths: std::collections::BTreeMap<u32, (u32, bool)>,
+    /// Hierarchical placeholder ExprId → the declared shape the downward
+    /// declaration walk answered when it was created (`hier_leaf_shape.rs`).
+    /// Elaborate-transient: every entry is verified against the resolved net /
+    /// function by the deferred-hierarchy passes.
+    hier_placeholder_shape: std::collections::BTreeMap<u32, HierLeafShape>,
     /// How far `canonical_self_width`'s placeholder scan has got. Everything below
     /// it is known placeholder-free FOREVER: a resolved node is never turned
     /// back into a `POISON_*` placeholder (the deferred-hierarchy passes only

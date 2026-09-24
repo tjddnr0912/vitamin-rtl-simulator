@@ -401,6 +401,7 @@ impl Elaborator<'_> {
                             net: POISON_NET,
                             word: None,
                         });
+                        self.record_hier_net_shape(eid, path);
                         self.deferred_hier.push(DeferredHier {
                             span: self.cur_span,
                             eid,
@@ -642,6 +643,7 @@ impl Elaborator<'_> {
                         net: POISON_NET,
                         word: None,
                     });
+                    self.record_hier_sel_shape(eid, &path, idx_eids.len(), None);
                     self.deferred_hier_sel.push(DeferredHierSelect {
                         eid,
                         prefix: self.cur_prefix.clone(),
@@ -724,6 +726,7 @@ impl Elaborator<'_> {
                         net: POISON_NET,
                         word: None,
                     });
+                    self.record_hier_sel_shape(eid, &path, idx_eids.len(), Some(width));
                     self.deferred_hier_sel.push(DeferredHierSelect {
                         eid,
                         prefix: self.cur_prefix.clone(),
@@ -822,6 +825,7 @@ impl Elaborator<'_> {
                         net: POISON_NET,
                         word: None,
                     });
+                    self.record_hier_sel_shape(eid, &path, idx_eids.len(), Some(w));
                     self.deferred_hier_sel.push(DeferredHierSelect {
                         eid,
                         prefix: self.cur_prefix.clone(),

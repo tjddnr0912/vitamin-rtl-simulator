@@ -339,12 +339,25 @@ fn a_width_unknown_operand_keeps_the_resize_then_coerce_order() {
                endmodule\n";
     let (out, code) = run(src);
     assert_eq!(code, Some(0), "{out}");
-    // ⚠️ `B` is iverilog 13.0's own answer and the load-bearing cell. `A` is NOT:
-    // iverilog gives `fffffffffffffffd`, and vita's `000000000000fffd` is the
-    // pre-existing hierarchical-placeholder sign gap that `cast_extend_signed`'s doc
-    // records (ROADMAP §2) — pinned as vita's value, measured identical pre-36 and
-    // POST, so that closing THAT gap is a deliberate change. `E` is the same operand
-    // at the fabricated width itself, where no resize happens at all.
+    // ⚠️ `B` is iverilog 13.0's own answer and the load-bearing cell. `A` is the
+    // oracle value too since the placeholder's declared shape is recorded when it
+    // is created (`hier_leaf_shape.rs`): iverilog 13.0 and verilator 5.052 both
+    // print `fffffffffffffffd`; it was `000000000000fffd`, the hierarchical-
+    // placeholder sign gap `cast_extend_signed`'s doc describes. `E` is the same
+    // operand at the fabricated width itself, where no resize happens at all.
+    assert!(
+        out.contains("A=fffffffffffffffd B=0000001234567800 E=34567800"),
+        "a fabricated width must not be frozen into the low half:\n{out}"
+    );
+    // The declared width of `u1.w40` is now known, so the FABRICATED-width order
+    // is kept reachable through an instance inside a generate scope, a path the
+    // declaration walk declines: `B` and `E` are iverilog 13.0's and verilator
+    // 5.052's values; `A` there is still the placeholder sign gap (both oracles
+    // print `fffffffffffffffd`), pinned as vita's value.
+    let (out, code) = run(&src
+        .replace("sub u1();", "if (1) begin : g sub u1(); end")
+        .replace("u1.", "g.u1."));
+    assert_eq!(code, Some(0), "{out}");
     assert!(
         out.contains("A=000000000000fffd B=0000001234567800 E=34567800"),
         "a fabricated width must not be frozen into the low half:\n{out}"

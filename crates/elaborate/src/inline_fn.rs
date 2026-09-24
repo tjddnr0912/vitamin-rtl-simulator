@@ -280,6 +280,7 @@ impl Elaborator<'_> {
                     func: POISON_FID,
                     args: arg_ids,
                 });
+                self.record_hier_call_shape(eid, name);
                 self.deferred_hier_calls.push(DeferredHierCall {
                     eid,
                     prefix: self.cur_prefix.clone(),
