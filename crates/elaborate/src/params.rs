@@ -1956,7 +1956,8 @@ impl Elaborator<'_> {
                 {
                     // §6.20.2 (§2 row 25, the OPERATOR half): same rule as the arm
                     // above, for the tops the wide channel declines. `override_bits`
-                    // folds only a SELF-DETERMINED top, so `~`, unary `-`/`+` and every
+                    // folds a SELF-DETERMINED top (and an operator top only when its
+                    // self-determined width is past 64 bits), so `~`, unary `-`/`+` and every ≤64-bit
                     // arithmetic binary arrived with no type and the `else` below
                     // answered the DEFAULT declaration's — `#(.P(~8'h5A))` onto
                     // `parameter P = 1` bound `ffffffa5` at 32 SIGNED bits where both

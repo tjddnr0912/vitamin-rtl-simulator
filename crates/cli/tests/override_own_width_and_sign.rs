@@ -246,11 +246,14 @@ fn a_declared_width_target_is_untouched() {
     );
 }
 
-/// The accept set's remaining declines, pinned as the residues they are rather than left
-/// to look like coverage. Both keep their pre-slice answer.
+/// The accept set's declines, and where each one now binds.
 ///
-/// * a >64-bit tree (`~128'd0`) — `const_ctx_within_i64` refuses it, because the value
-///   re-fold clamps at 64. Both oracles bind 128; vita keeps 32.
+/// * a >64-bit tree (`~128'd0`) — `const_ctx_within_i64` still refuses it on THIS
+///   channel, because the value re-fold clamps at 64. It no longer keeps the default's
+///   32 bits: the wide channel (`override_bits`) folds exactly the operator tops this
+///   one refuses for a known width past 64, so it binds 128 ones — what both oracles
+///   bind (iverilog 13.0, verilator 5.052). The class is pinned cell by cell in
+///   `override_wide_operator_top.rs`.
 ///
 /// ⚠️ `localparam W8 = ~8'hCB` is NO LONGER one of them, and the move is the point: an
 /// OPERATOR initializer whose every NAME leaf has a proved declared width now records its
@@ -260,7 +263,7 @@ fn a_declared_width_target_is_untouched() {
 /// self-contradiction, so it is NON-EVIDENCE here). It stays in this test as the control
 /// that separates "the certification proved it" from "the domain refuses the width".
 #[test]
-fn the_declined_shapes_keep_their_pre_slice_answer() {
+fn the_operator_channel_declines_bind_where_the_other_channels_answer() {
     let (o, c) = run("module sub #(parameter P = 1) (); initial $display(\"%m bits=%0d hex=%h\", $bits(P), P); endmodule\n\
          module top;\n\
         \x20 localparam W8 = ~8'hCB;\n\
@@ -274,7 +277,7 @@ fn the_declined_shapes_keep_their_pre_slice_answer() {
         got,
         [
             "top.name_leaf bits=8 hex=34",
-            "top.too_wide bits=32 hex=ffffffff",
+            "top.too_wide bits=128 hex=ffffffffffffffffffffffffffffffff",
         ]
     );
 }

@@ -127,10 +127,11 @@ fn placement_and_cast_initializers_fold() {
 /// CLEAR, still fold.
 ///
 /// ⚠️ The declined cells are honest-loud, not correct — iverilog has a value for
-/// each. The same shape is a PRE-EXISTING silent-wrong for a 64-bit LITERAL and a
-/// 64-bit PARAM (`(64'hFFFFFFFF00000000 > 0)` answers 222 where iverilog answers
-/// 111, before and after this slice), tracked in ROADMAP §2 — which is why
-/// folding these would have EXTENDED that class to new syntax, not matched it.
+/// each. The same shape WAS a silent-wrong for a 64-bit LITERAL and a 64-bit PARAM
+/// (`(64'hFFFFFFFF00000000 > 0)` answered 222 where iverilog answers 111) when this
+/// test was written — which is why folding these would have EXTENDED that class to
+/// new syntax, not matched it. That cell is 111 on all three tools at HEAD (§4.5.527
+/// retired the row); the two module-scope cells below pin it.
 #[test]
 fn a_placement_that_does_not_fit_the_i64_domain_declines() {
     // 64 bits, top bit SET — every consumer shape the review measured.

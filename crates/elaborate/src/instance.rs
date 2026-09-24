@@ -1260,8 +1260,8 @@ impl Elaborator<'_> {
                         // all: `defparam e.P = 33'h1_0000_0003` onto `parameter P = 1`
                         // read `bits=32 val=3` where `#(.P(33'h1_0000_0003))` at least
                         // reported 33. `override_bits` declines a unary or arithmetic top
-                        // (it folds only bitwise `& | ^` trees), so `~8'h5A` keeps the
-                        // `smeta` route it already took.
+                        // whose self-determined width is at most 64 bits (§2 "Index
+                        // sealing" I4), so `~8'h5A` keeps the `smeta` route it already took.
                         let obits = self.override_bits(value);
                         // Last write wins (IEEE §23.10.1) — drop a prior same-param entry.
                         let entry = self.defparams.entry(fq).or_default();

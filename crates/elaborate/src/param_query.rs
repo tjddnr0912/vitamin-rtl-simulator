@@ -438,7 +438,8 @@ impl Elaborator<'_> {
     /// value. vita had no channel carrying that type for an operator-topped override:
     /// `override_bits` only folds a SELF-DETERMINED top (`wide_top_is_self_determined`
     /// admits the reductions, the comparisons and the selects, not `~`, unary `-`, or
-    /// the arithmetic binaries), so the meta chain in `bind_one_param` fell through to
+    /// the arithmetic binaries — those only when their self-determined width is past
+    /// 64 bits), so the meta chain in `bind_one_param` fell through to
     /// `param_decl_width_opt`'s literal arm — which answers the DEFAULT's type even
     /// when `default_binds == false`. Measured on `module sub #(parameter P = 1)`:
     /// `#(.P(-(|4'b1010)))` bound `ffffffff` at 32 signed bits, `#(.P(~8'h5A))` bound

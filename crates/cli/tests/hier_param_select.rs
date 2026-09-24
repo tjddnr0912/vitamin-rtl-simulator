@@ -67,11 +67,23 @@ fn bitwise_expression_override_of_a_wide_parameter() {
     );
 }
 
+/// A carrying top (`~`, `+`) past 64 bits onto a WIDER declared target. It was E3009
+/// (the i64 operator channel cannot hold 128 bits). The wide channel now folds it at the
+/// expression's own 128 bits and zero-extends to the declared 256 — verilator 5.052's
+/// answer for `~`. iverilog 13.0 folds `~` in the TARGET's context and prints
+/// `ffff…ffff21524110…` — the recorded ROADMAP §2 row 16 split, not two-oracle support.
+/// The `+` twin has no carry out of 128 bits here, and both oracles print its value.
 #[test]
-fn a_carrying_wide_override_stays_loud() {
-    // `~` and `+` carry past the operands' top bit; folding them in the parent at the
-    // operands' width would be a different value at the child's — loud, as before.
-    let (out, rc) = run("module m #(parameter logic [255:0] W = 256'h1) (); endmodule\nmodule top;\n  m #(.W(~128'hdead_beef_0000_1111_2222_3333_4444_5555)) u();\n  initial begin $display(\"%h\", u.W); #1 $finish; end\nendmodule\n");
-    assert_eq!(rc, Some(1), "{out}");
-    assert!(out.contains("E3009"), "{out}");
+fn a_carrying_wide_override_onto_a_wider_target() {
+    let (out, rc) = run("module m #(parameter logic [255:0] W = 256'h1) (); endmodule\nmodule top;\n  m #(.W(~128'hdead_beef_0000_1111_2222_3333_4444_5555)) u();\n  m #(.W(128'hdead_beef_0000_1111_2222_3333_4444_5555 + 128'd1)) v();\n  initial begin $display(\"D=%h\", u.W); $display(\"D=%h\", v.W); #1 $finish; end\nendmodule\n");
+    assert_eq!(rc, Some(0), "{out}");
+    let got: Vec<&str> = out.lines().filter(|l| l.starts_with("D=")).collect();
+    assert_eq!(
+        got,
+        vec![
+            "D=0000000000000000000000000000000021524110ffffeeeeddddccccbbbbaaaa",
+            "D=00000000000000000000000000000000deadbeef000011112222333344445556"
+        ],
+        "{out}"
+    );
 }

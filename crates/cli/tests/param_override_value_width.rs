@@ -92,8 +92,9 @@ fn an_untyped_targets_override_value_keeps_the_overrides_own_width() {
     );
 }
 
-/// The >64-bit cell. PRE this was `bits=65 val=3` at exit 0 — silent-wrong, which refutes
-/// the row's own claim that "§3.b wide-override records >64 as loud". POST, passing the
+/// The >64-bit cell. PRE this was `bits=65 val=3` at exit 0 — silent-wrong, which refuted
+/// the claim of the (since retired, §4.5.527) §3.b `wide-override` row that >64 bits is
+/// loud. POST, passing the
 /// override's own width to `override_at_declared_width` makes `params.rs`'s
 /// `(64..cv.width).any(bp_get)` test REACHABLE, so the value installs in `wide_param_bits`
 /// where a >64-bit parameter already lives, and reads back whole. Both oracles agree.
@@ -229,7 +230,7 @@ fn a_declared_width_target_does_not_move() {
 /// all and lost the `$bits` column too (`bits=32 val=3` PRE, where `#()` at least reported
 /// 33). POST both columns are the value both oracles print.
 ///
-/// `g` is the CONTROL: `override_bits` declines every operator top, so `~8'h5A` still takes
+/// `g` is the CONTROL: `override_bits` declines every operator top of at most 64 bits, so `~8'h5A` still takes
 /// the `self_meta` route §4.5.463 gave it and was ok PRE.
 #[test]
 fn a_defparam_override_carries_its_own_width_too() {

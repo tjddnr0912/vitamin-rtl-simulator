@@ -426,11 +426,13 @@ fn an_override_with_no_recorded_signedness_stays_on_its_old_route() {
 }
 
 #[test]
-fn a_context_determined_override_expression_is_still_honestly_loud() {
-    // `128'h1 << 100` has a context-determined top, so `override_bits` declines it —
-    // the rule that keeps a shift from being folded at the wrong width. iverilog
-    // prints `00000010000000000000000000000000`; vita refuses and says so. This is a
-    // recorded residue, pinned so that closing it is a deliberate act.
+fn a_context_determined_override_expression_past_64_bits_folds() {
+    // `128'h1 << 100` has a context-determined top. It used to be a recorded loud
+    // residue (E3009): `override_bits` declined every operator top and the i64
+    // operator channel cannot carry 128 bits. The wide channel now folds an operator
+    // top exactly where that channel refuses it (a known width past 64), at the
+    // expression's own width — here equal to the target's, so no context question
+    // arises. iverilog 13.0 and verilator 5.052 both print this value.
     let (out, c) = run(&format!(
         "{LEAF}\
          module tb; logic [127:0] o;\n\
@@ -438,5 +440,6 @@ fn a_context_determined_override_expression_is_still_honestly_loud() {
            initial begin #1 $display(\"o=%032h\", o); $finish; end\n\
          endmodule\n"
     ));
-    assert_ne!(c, Some(0), "must stay loud:\n{out}");
+    assert_eq!(c, Some(0), "{out}");
+    assert!(out.contains("o=00000010000000000000000000000000"), "{out}");
 }

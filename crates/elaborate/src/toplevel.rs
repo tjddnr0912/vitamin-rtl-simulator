@@ -87,7 +87,9 @@ pub(crate) struct ResolvedOverride {
     /// `64'hFFFF_FFFF_FFFF_FFFF + 64'd0`, `-(64'sd1)` and `32'd0 - 32'd1` fold to the
     /// SAME i64, and both oracles extend the first with zeros and the other two with
     /// ones. Only the expression's signedness separates them, and `bits` cannot carry
-    /// it because `override_bits` declines every context-determined top.
+    /// it because `override_bits` declines every context-determined top whose
+    /// self-determined width is at most 64 bits (the only widths the i64 in `value`
+    /// can hold).
     ///
     /// Consumed by `bind_one_param` and ONLY for an extension past the i64 lane —
     /// `None` there means "stay on the route you took before".

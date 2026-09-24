@@ -41,10 +41,11 @@
 //!
 //! **Not closed by this slice**, still silent-wrong and listed so a partial fix cannot
 //! hide: `C1_bitsx_bare` (a BARE `$bits(x)` as the whole override — `override_self_meta`
-//! requires a top-level operator, a different lane), and `C1_pkq80_not` / `C1_plp80_not`
-//! (the pre-existing >64-bit direct-override decline in `const_ctx_within_i64`; the
-//! second is a PLAIN `parameter [79:0]` twin, which is what proves it is not a `pkg::`
-//! defect). `S_clog_neg` (an unsigned fold of a signed `$clog2` result — `4294967285`
+//! requires a top-level operator, a different lane). `C1_pkq80_not` / `C1_plp80_not`
+//! (the >64-bit direct-override decline in `const_ctx_within_i64`; the second is a
+//! PLAIN `parameter [79:0]` twin, which is what proves it is not a `pkg::` defect) were
+//! closed afterwards by the wide channel's operator admission in `override_bits`; their
+//! pins live in `override_wide_operator_top.rs`. `S_clog_neg` (an unsigned fold of a signed `$clog2` result — `4294967285`
 //! where both oracles print `-11`) was closed afterwards by the `SysCall` arm in
 //! `const_expr_signed`; its pins live in `sysfn_integer_const_sign.rs`.
 //!
