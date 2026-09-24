@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.526` **the inline function lane applies the store rules a net would: a real actual or rhs converts through a single-mention `RealToInt`, a 2-state body-local squashes x/z through `TwoState`, a class field is sized by its field width, and a non-repeatable actual narrows once** (2026-09-24 · §2 "Inline / frame binds" F7/F8/F9/F11 plus five neighbours retired after re-measurement, nine bullets deleted · `format_version` 33 → 34: `SysFuncId::RealToInt` (§6.12.2 round half away from zero into 128-bit signed, exact below 2^127) and `SysFuncId::TwoState` (x/z → 0, operand width and sign) · F8 = `real_to_int_store` in `inline_bind.rs::bind_formal_actual` for a NON-repeatable real actual (a w > 128 target sign-extends through a single-mention `Add` with a signed zero); F11 = the same helper in `inline_fold.rs::fold_straight_line`'s Blocking and Return arms; F9 = `InlineScope.two_state` from `net_kind_is_two_state` plus `TwoState` after the resize; F7 = `ir_bits_of` / `expr_self_signed` read `class_field_widths`, and `class_field_leaf` makes the four §11.6.1 context walks see a class-field leaf (the mirror fix alone regressed two tests) · review fix X2: a trusted-width non-repeatable actual narrows with `select_low` + sign stamp + `TwoState` when it is at least as wide as the formal or unsigned · `inline_fn.rs` 1,172 → 895 (`inline_bind.rs` 268, `inline_fold.rs` 165) · 22 grounding cells · 2 lenses × 2 rounds — r1 BLOCKING: a 2-state formal bound to an x-bearing class field squashed but did not narrow (root: the pre-existing missing narrowing tail), and `RealToInt` capped at 64 bits turned 18 loud cells into wrong values; r2 0 BLOCKING, about 66 cells moved, all onto the oracle value, 0 PRE-right → POST-wrong · 8411 tests)
 - `4.5.525` **two declarations of one name in a module, interface or package body are refused from a measured 105-pair kind matrix, and the duplicate-parameter check moves to the definition** (2026-09-21 · §2 P20/P21/P22/P25/P26 + X7, six rows deleted · new `decl_collide.rs` = one AST-only per-DEFINITION walk run from `driver.rs::run` over every module, interface and package declaration, instantiated or not, collecting `(name, kind, span)` for 14 kinds and reporting in source order with a span-keyed dedupe · the refusable pairs are a MATRIX, not a hand-cut list: 105 unordered kind pairs measured once under both oracles — 100 `R` · 2 `L` (net/variable vs a non-ANSI port) · 3 `S` (parameter/localparam/genvar vs port) · 0 undecidable — and `collides` refuses the `R` cells MINUS the two another guard already owns (storage×storage → `add_net`, parameter×parameter → `param_dup`) · one E3009 sentence (``` `f` is declared twice in this module: as a function and as a net — a module body is ONE name space (IEEE 1800-2017 §3.13) ```) with a note at the first declaration, a same-kind form, and a §27.2/§27.3 transparency clause · a `$unit` item prepended into the body is dropped by the `unit.span` filter (§26.4 shadow stays legal) and the parser's own desugars are skipped BY IDENTITY — a `$`-PREFIXED internal, and a `parameter type` carrier only when this unit declares both `<stem>$w` and `<stem>$s` · the §6.20.1 duplicate-parameter check moved from `bind_params` (once per INSTANCE) to the same per-definition point, so a module instantiated only under `generate if (0)`, or never instantiated, is refused with or without `--top` · false W3056 ``redeclared; first declaration used`` deleted (the insert kept the LAST), kept with corrected text in the labelled-generate scoped-key arms · static-task and flatten-path duplicate locals E3009 · `w.mp(args)` on an interface instance refused in both call lanes · package frame `[in pk]` · 115 grounding cells: 33 accept→loud, 0 loud→accept, 0 regressions, 1466-file corpus sweep 3 diffs all frame text · 2 lenses × 3 rounds — r1 BLOCKING: a per-inlining local set false-louded a legal nested shadow, and a blanket `$` skip turned the deleted W3056 into silence; r2 BLOCKING: the same axis as a suffix GRAMMAR still exempted the legal user identifier `f$w`, closed by identity, and four unmeasured pair columns were closed as a class, which is what produced the matrix; r3 0 BLOCKING, 2 wording MAJORs fixed · 8376 tests)
 - `4.5.524` **batch review fixes: a positive singleton-scope key, constant event terms that never wake, string concat parts and string-case items through the §6.16 funnel, duplicate parameters in generate regions and packages** (2026-09-21 · the one adversarial review of §4.5.519–523, run over the five slices as a batch per owner directive · 2 lenses × 3 rounds, 84+79 → 25+31 → 7+7 designs plus an 8,604-design suite sweep whose 49 movers are all inside the four new test files · round 1 BLOCKING A: `singleton_scope_key` decided "singleton generate scope" NEGATIVELY, so a one-element INSTANCE ARRAY label passed and `ch u [0:0](); u.q` printed `A=7` where both oracles reject — keyed positively on `gen_singleton_labels`, which closes the ported and `module ch();` twins with it · round 1 BLOCKING B: `@(posedge V[0])` under a `localparam` shadow regressed to loud, closed on the ladder by `event_term_never_wakes` dropping a never-changing term (in-body always, header EDGE terms), which also closes the pre-existing false louds on the unshadowed twins, both oracles `DONE` · C: a MIXED `{string, integral}` concat bypassed the §6.16 funnel while the pure packed concat went through it, and a string-scrutinee `case` compared its integral items packed while `==` compared §6.16 · D/E: duplicate parameters in a generate scope (§27.3), a package body (§26.2) and a TRANSPARENT `generate … endgenerate` region flattened into the enclosing scope (§27.2) · F: a header LEVEL term on a constant, shadowed or not, takes one true refusal · T1 (round 3, the round's single patch): that refusal reported per TERM and swallowed a live sibling — `@(V or W)` now drops the constant and arms on `W` · 3-backend flips 0 splits, determinism byte-identical, a `Bytecode`-default flip run's 10 failures identical on the parent · 8306 tests)
 - `4.5.523` **every bare-name reader asks `bare_ident_route` before taking a net; a hierarchical task call lowers only a constant-shadowing actual as an lvalue** (2026-09-21 · §2 🆕 O, startable row 5 of 6 · `lookup_net_scoped` had 92 call sites and 11 resolved a bare name to a NET without asking whether an enclosing scope's constant shadows it: `V[15:12]` read `6` for the oracles' `0`, a string localparam's `.len()` read `5` for `2`, and `V.push_back`, `V = '{…}`, `V.size()`, a class member, an array port actual and an instance-array actual all took the net where both oracles reject · one funnel `ident_route.rs` (`lookup_net_unshadowed` / `lvalue_binds_constant` / `bare_const_shadows_net` / `error_const_shadows_net`) taken by all eleven readers; a read with a constant path takes it, a site with none refuses by name; the speculative hierarchical-call lvalue is skipped exactly when `lvalue_binds_constant` · 45 designs, 18 moved (7 silent-wrong→value, 3 false-loud→value, 8 silent→loud), 16 no-shadow controls and 16 enum-label twins byte-identical, release vs debug 0 differences · the additive `inline_fn` `Str` arm also closes the pre-existing false loud on an unshadowed `localparam string S; S.len()`)
@@ -535,6 +536,168 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.526 the inline function lane applies the store rules a net would: a real actual or rhs converts through a single-mention `RealToInt`, a 2-state body-local squashes x/z through `TwoState`, a class field is sized by its field width, and a non-repeatable actual narrows once (2026-09-24, branch main) ✅
+
+**ROADMAP rows**: §2 "Inline / frame binds" — the four the slice names F8 (a `real` actual
+substituted VERBATIM, `two(xn, arf(0))`), F9 (an inline body-local's 2-state declaration keeps x/z,
+`bit [7:0] b; b = x;`), F7 (the bind trusts `ir_bits_of`'s fabricated class-field width,
+`i16(c.bu)`) and F11 (a `real` rhs skips §10.7, `f = r + x*x`). (The §2 cluster census labels the
+class-field row F10 and uses F7 for "A bit-vector FORMAL written inside an inline body gets no width
+context", which this slice did not touch and which stays open; test files and source comments cite
+the slice's labels.) Retired beside them after re-measurement on the frozen binaries: the
+`!trusted_w` carve-out row (`fh = c.big + 1'b1`), the frame-call mirror-sign row
+(`fs16_add(g(-16))`), the wide non-repeatable actual row (`sgn($random)`), the "Size cast /
+signedness" row on a class field's extension sign (`fw = c.sf`) and the "Class fields" row on
+`ir_bits_of` reading the handle net. Nine §2 bullets deleted in all.
+
+**Defect (PRE, both oracles unless marked)**. The inline function lane substitutes the actual's
+ExprId for the formal's name and lowers `lhs = rhs;` to a pure ExprId. There is no net, so no store
+applies the assignment rules, and four of them were missing or partial.
+
+```
+F8  o2 = pb(rf(0))       byte formal, rf returns 300.7, o2 16-bit
+          iverilog 002d   verilator 002d   PRE 012d   (the frame twin pf(rf(0)) was right: 002d)
+    pb(rf(0)) under %h / two(1, arf(0)) with body b[31:0]
+          both oracles 2c / 00000004       PRE E3009 (hex format / select on a real)
+F11 f = r + x            [7:0] return, x = 254, r = 1.5, read into 16 bits
+          both oracles 0000                PRE 0100
+    r = 0.6: f = r + x (x = 255) / fn = -r - x (x = 1)
+          both oracles 0000 00fe           PRE 0100 fffe
+F9  bit [7:0] b; b = x; f = b;             x = 8'bx000_0111
+          both oracles 07 (int / byte locals 07 too)   PRE X7 X7 X7
+    bit signed [7:0] b read into [15:0] / bit [7:0] b with z input
+          iverilog 0007 0047               PRE xxX7 00Z7
+F7  i16(c.bu)  s16(c.sf)  fw = c.sf into signed [63:0]    bit [7:0] bu = 8'hC3, byte sf = -3
+          both oracles 00c3 fffd fffffffffffffffd
+          PRE          xxc3 xxfd 00000000fd   (10 hex digits: a fabricated 40-bit width)
+```
+
+The F7 mechanism: a class-field read lowers to `Signal{net: <32-bit handle net>, word: Some(fid)}`,
+and the width mirror `ir_bits_of` (with its sign twin `expr_self_signed`) answered the HANDLE's
+32/unsigned while `canonical_self_width` answered the field's width from the `class_field_widths`
+sidecar; `trusted_self_width` saw the disagreement and returned `None`, and the bind fell to its
+verbatim tail. The F8 mechanism: `coerce_real_actual_to_formal` declined any actual that is not
+repeatable (a real-returning call, or any expression containing one), because the IR-0 real→int
+composition `lower_real_to_int_cast` names its operand two to five times.
+
+**Fix**. Two new frozen IR primitives, `format_version` 33 → 34 (FROZEN-ROOT: `SysFuncId` is in
+`SimIr`; schema hash, canonical text and registry RON re-pinned; `obs.rs` pins 34):
+
+- `SysFuncId::RealToInt` — the §6.12.2 real→integral assignment conversion as ONE node that names
+  its operand once: round half away from zero into a 128-bit signed integer (the engine's
+  `real_to_int_round(x, 128, true)`), exact for |x| < 2^127, saturating above. Self width 128,
+  signed.
+- `SysFuncId::TwoState` — x/z → 0 per bit, the operand's own width and sign.
+
+Both are pure, `expr_may_be_unknown` answers false for both, and `wprog` declines both (interpreted).
+
+- F8 (`inline_bind.rs::bind_formal_actual`): a real actual that is NOT repeatable becomes
+  `real_to_int_store(eid, w, signed)` — `RealToInt` then `resize_inline_assign` for w ≤ 128; for
+  w > 128, `RealToInt + <w-bit signed 0>`, whose `Add` sign-extends while naming the operand once. A
+  repeatable real actual keeps `coerce_real_actual_to_formal` (byte-identical). The frame lane is
+  untouched; it was already right through the engine's `coerce_real_frame` at the slot store.
+- F11 (`inline_fold.rs::fold_straight_line`, the Blocking and Return arms): a real-valued rhs into
+  an integral target goes through the same `real_to_int_store`. A real target is unchanged.
+- F9: `InlineScope.two_state`, filled from `net_kind_is_two_state` in the `local_dims` producer;
+  after the resize, `TwoState` wraps the value when `expr_may_be_unknown`. A 2-state RETURN type
+  measured already right (it routes to a frame). The bind's non-repeatable tail squashes a 2-state
+  formal with `TwoState` too.
+- F7: `ir_bits_of` and `expr_self_signed` read the field's width and sign from
+  `class_field_widths`, so `trusted_self_width` is `Some` for a class field. That alone regressed
+  two tests — `fh = c.fld*x` `0000fe01` → `00000001` and `32'(c.u8 + ua)` `0100` → `0000` — because
+  the §11.6.1 context walks treated a class-field leaf as opaque, and sealing at the now-honest
+  8-bit width truncated what the opaque walk had widened. A new helper, `class_field_leaf`
+  (`expr_size_hier.rs`), is consulted by `has_opaque_leaf`, `ctx_signed_impl`,
+  `size_ctx_self_width` and `rhs_has_real_domain`, which restored both.
+- The review round added X2: when the width is TRUSTED and only repeatability fails, the bind's
+  tail applies the assignment with single-mention operations when the actual is at least as wide
+  as the formal or is unsigned — `select_low`, the formal's sign stamp, then `TwoState` for a
+  2-state formal. A signed actual WIDENED into the formal keeps the pre-slice tail, because the fill
+  of a sign extension is a second mention.
+- `inline_fn.rs` split (1,172 → 895 lines): the bind moves to `inline_bind.rs` (268), the
+  straight-line fold to `inline_fold.rs` (165).
+
+**Census**. 22 grounding cells (PRE frozen at `540dc582…` = HEAD 4eef38e; iverilog 13.0 `-g2012`,
+verilator 5.052 `--binary --timing`); every cell equals iverilog on POST, including the 4-state
+control `logic [7:0] b` = `X7`. The grounding table's "right by cancellation" note on `f = r + x*x`
+(`0022` on every tool) was contradicted by the implementer: `x*x` is self-determined at 8 bits on
+the oracles too. A 24-cell class-field census matched iverilog on POST where PRE had 14 wrong.
+
+**Rounds** (2 lenses × 2; POST `624b0ced…`, POST2 `737e7810…`).
+
+- Round 1: differential 21 designs 4-way plus 11 iverilog-only bisects; soundness 19 designs.
+  PRE-right → POST-wrong 0 (the 684-cell class-field matrix scored). Differential BLOCKING D4: a
+  2-state formal bound to a 4-state class field with an x bit (`ib4(c.l8)`, `ibyte(c.lx)`) printed
+  `..83` where both oracles print `..03` / `ff…ff83` — the new `TwoState` landed but the narrowing
+  and sign step to the formal did not; its root D3 was pre-existing (a class field, an
+  unpacked-array element or `$random` into a SIGNED formal, or a 2-state formal narrower than the
+  actual, was neither narrowed nor sign-extended: `E1 u7 in4s` `0…055` against `0…05`). Soundness
+  BLOCKING S1: `RealToInt` was first capped at 64 bits, so a > 64-bit target with |x| ≥ 2^63 got
+  the low 64 bits sign-extended (a `[99:0]` return, row `i=0`: POST `0000000000000000000000000`
+  against both oracles' `0000000400000000000000000`) where PRE had been loud — 18 cells, both oracles agreeing. MAJORs: the hierarchical real leaf (D1 / S2),
+  a hierarchical bit local's self width (D2), the x/z→real whole-value rule (D5); a doc sentence
+  about saturation was false (S3). Fixed: X1 (`RealToInt` to 128 bits plus the w > 128 `Add`
+  extension) and X2 (the single-mention narrowing tail); S3's comments corrected. D1 / D2 / D5
+  recorded.
+- Round 2: both lenses re-ran their round-1 harness on POST2 and added 3 + 3 delta designs.
+  Differential: 6 designs moved, about 45 cells, every one onto the oracle value (the 684-cell
+  matrix went from 27 to 13 cells ≠ iverilog, all 13 `$countones` of a class field, where iverilog
+  contradicts itself); POST1-right → POST2-wrong 0; POST1 drew `$random` twice on the w > 128 path,
+  POST2 once. Soundness: 21 cells moved, all to the oracle value; S1 closed on all 18 cells;
+  `RealToInt`'s 128-bit width consistent at every consumer. 0 BLOCKING, 0 new; two MAJORs, both
+  pre-existing and recorded: saturation at |x| ≥ 2^127 (R2-D6 / R5) and the zero-filled widening of
+  a signed `$random` (R2-D7). Single-draw is proven for `$random` and a side-effecting real
+  function on every new arm (draw sequences identical to iverilog's).
+
+**Moved tests** (all to the oracle value): `inline_body_width_context` `f_rmix` `4.50` → `5.00`;
+`inline_formal_bind` class-field row `xxc3 xxab` → `00c3 ffab` and `fb($random)` `c0895e81` →
+`ffffff81`; `real_actual_formal_width` `R=303379748 / R=-1064739199` → `R=36 / R=-127` (one draw
+per call, narrowed to the `byte` formal); `inline_return_seal` extension sign of a function actual
+`000000000000000c / 000000000000000c` → `00000000000000fc / 000000000000fffc`; the class-field
+seal tests in `inline_return_seal` and `size_cast_seal` keep their values and now cite both oracles.
+New: `inline_bind_real_call.rs` 9, `inline_body_real_rhs.rs` 7, `inline_local_two_state.rs` 5,
+`inline_bind_class_field_width.rs` 5, `inline_bind_narrow_once.rs` 4, sim-engine
+`native_eval/tests/v34_conversions.rs` 5 — 35.
+
+**Re-measured beside the slice** (the frozen PRE and POST2 binaries, both oracles): the
+`!trusted_w` row's own shape with `bit [39:0] big = 40'hFF_FFFF_FFFF` — returns `[15:0]`, `[39:0]`,
+`[40:0]`, `[47:0]`, `[63:0]` into 16- and 64-bit destinations and a `[63:0]` formal bound to
+`c.big + 1'b1` — is equal to both oracles on POST2 in all 9 cells (`0000010000000000` where the
+carry is kept) and wrong on PRE in 4; `16'(c.sb)` is `fffd` (PRE `xxfd`) and `fw = c.sf` with
+`8'hAB` is `ffffffffffffffab` (PRE `00000000000000ab`); `sgn($random)` into `input signed [15:0]`
+is `00003524` (PRE `12153524`, iverilog `00003524`). The `fs16_add(g(-16))` spelling measured
+`fff0` on PRE and POST2 alike; that row's mechanism was the case the converted
+`inline_return_seal` test pins. `32'(c.s8)` and `32'(c.s8 + ua[0])` were already right on PRE.
+
+**Recorded, not fixed** (each is one ROADMAP line):
+
+- A hierarchical leaf reaches the inline lane with its placeholder's type and width: a real `u.r`
+  into an integral formal or an inline rhs stays verbatim (`012d` against `002d`), and a bit local
+  copied from `u.lv` answers at 8 bits (`h=f0` against `00f0`). One class (D1 / D2 / S2); §2.
+- A signed non-repeatable actual widened into a formal is zero-filled (`flong($random)`
+  `000000000000b2c28465` against iverilog `ffffffffffffb2c28465`); `expr_self_signed` has no
+  `Random` arm. §2.
+- An integral with x/z bits converted to real drops the whole value to 0 (`pb(rf2(8'bx000_0001))`
+  `0001` against iverilog `0002`; verilator refuses z); four inline cells now reach this rule as a
+  value. Added to §3.b `x→real`.
+- A real with |x| ≥ 2^127 into a > 128-bit target saturates, on the module store, the frame bind and
+  the inline lane alike (both oracles exact). §2 "Real".
+- An enum with a `bit` base keeps x as a variable on every lane (`00X7` against both oracles'
+  `0087`). Added to the existing §2 enum-storage row.
+- `longint'(inf)` is `ffffffff00000000` while the store gives `ffffffffffffffff` — iverilog `x`,
+  verilator `0`. §2 "Oracle splits".
+- `c.u8[3:0]` on a class field is `E3010`; verilator `010c`, iverilog `01cc` (the select ignored).
+  §3.b `class-field-select`.
+- A class-typed tf-port `input C k` is `E2002`; both oracles run it. §3.b `class-tf-port`.
+- The `--obs-procs` `builtins` table lists `real->int` and `2-state` rows the source never wrote.
+  §6.
+- The bind lane's per-bit `coerce_two_state` is not migrated to `TwoState`; the §2 performance rows
+  on it now name the migration alone.
+
+**Gates**: 8411 tests, 15 skipped (`cargo nextest run --workspace --locked --no-fail-fast`, rc 0);
+doctest, `cargo clippy --workspace --all-targets --locked -- -D warnings` and
+`cargo fmt --all -- --check` rc 0; corpus 10/10 on POST1 and POST2; `format_version` 34.
 
 #### 4.5.525 two declarations of one name in a module, interface or package body are refused from a measured 105-pair kind matrix, and the duplicate-parameter check moves to the definition (2026-09-21, branch main) ✅
 

@@ -28,6 +28,7 @@ a section restructure, a residue split).
 | 2026-09-20 | d0ff5a2 | §4.5.518 | 8194 | 32 | 27 / 6 / 21 | 127 / 83 / 44 | 7 / 0 / 7 | 24 / 19 / 5 | 95 / 81 / 14 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 349 / 219 / 130 |
 | 2026-09-21 | b32cf00 | §4.5.519–524 | 8306 | 33 | 26 / 0 / 26 | 140 / 92 / 48 | 7 / 0 / 7 | 24 / 19 / 5 | 98 / 84 / 14 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 364 / 225 / 139 |
 | 2026-09-21 | c026a81 | §4.5.525 | 8376 | 33 | 26 / 0 / 26 | 142 / 87 / 55 | 7 / 0 / 7 | 24 / 19 / 5 | 102 / 87 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 370 / 223 / 147 |
+| 2026-09-24 | 596f756 | §4.5.526 | 8411 | 34 | 26 / 0 / 26 | 137 / 82 / 55 | 7 / 0 / 7 | 24 / 19 / 5 | 104 / 89 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 369 / 222 / 147 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -40,3 +41,11 @@ a section restructure, a residue split).
   140 − 5 + 7 and its startable column drops twice: five deleted rows were startable, and the
   surviving modport row was re-measured as ORACLE-SPLIT. 3b rises by the four §3.b rows the same
   residues opened. `format_version` 33 unchanged. HEAD `c026a81`.
+- 2026-09-24 (§4.5.526): 2M falls by five — nine bullets deleted (the four slice rows plus five
+  neighbours re-measured as closed on the frozen POST2 binary: the `!trusted_w` carve-out, the
+  frame-call mirror sign, the wide `$random` actual, a class field's extension sign in "Size cast",
+  and the "Class fields" `ir_bits_of` row) against four residues recorded (two inline-lane rows,
+  one "Real" row, one oracle split); two more residues went into existing rows (the enum-storage
+  row, §3.b `x→real`), so they add no count. 3b rises by two §3.b rows. 6 is a RECOUNT plus one: the
+  beside-track list held nine bullets where the Summary said eight, and the slice added the
+  `builtins` lowering-rows bullet. `format_version` 33 → 34.

@@ -27,18 +27,18 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 26 | 0 | 26 | WALL §11.8.1 region sign / declared-width provenance 8 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 5 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 142 | 87 | 55 | oracle split / pinned / oracle disqualified 28 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 18 · size cast / signedness 16 · constant domain (i64) 14 · scoping / imports / block-locals 26 · delays / events 13 · real 7 · performance 7 · index sealing 6 · ranges / selects 6 · diagnostics 6 · class fields 4 · oracle splits 19 | ① | |
+| §2 | recorded defects by mechanism | 137 | 82 | 55 | oracle split / pinned / oracle disqualified 29 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 13 · size cast / signedness 15 · constant domain (i64) 14 · scoping / imports / block-locals 26 · delays / events 13 · real 8 · performance 7 · index sealing 6 · ranges / selects 6 · diagnostics 6 · class fields 3 · oracle splits 20 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 102 | 87 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 13 · system tasks & file I/O 9 · nets / timing 10 · loud shapes from §4.5.493–495 7 · strings / heap 7 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
+| §3.b | loud → correct-support, small | 104 | 89 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 14 · system tasks & file I/O 9 · nets / timing 10 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
-| §6 | G2 observability (OBS) | 6 stages + 8 | 13 | 1 | CALL TREE: two lowering paths (doc-19 §4.9) 1 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / a `void` function filed as `kind: task` / a route decided per spelling and five more beside the track | ④ | |
+| §6 | G2 observability (OBS) | 6 stages + 10 | 15 | 1 | CALL TREE: two lowering paths (doc-19 §4.9) 1 | OBS-2 → OBS-1 → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus call tree / a `void` function filed as `kind: task` / a route decided per spelling and seven more beside the track | ④ | |
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 370 | 223 | 147 | | | | |
+| total | | 369 | 222 | 147 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, a per-resumption-kind ordering model, a
@@ -212,7 +212,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   type reads `u=xxxxxxxx` where iverilog reads `u=00000000` (verilator prints `0` for every 4-state
   type too, so it is not an oracle here). The enum base's 2-state kind never reaches the net's
   storage kind. This is the PREREQUISITE for §3 ⑤ⓕ's enum-base container: until it is fixed, the
-  2-state axis of a type-parameter override on an enum base cannot be certified.
+  2-state axis of a type-parameter override on an enum base cannot be certified. The ASSIGNMENT
+  twin has two oracles: `e_t v; v = 8'b1x00_0111;` reads `00X7` in vita on the module variable, the
+  frame local and the inline body-local alike, where iverilog and verilator both read `0087`
+  (§4.5.526 R1; the inline body-local's new 2-state step leaves an enum-typed local 4-state too).
 - A 4-state narrowing drops x: with `a=8'bxxxx_0011`, `2'(a+1)`, `2'(a*2)`, `2'(-a)` and `2'(a-1)`
   are all known where iverilog answers `xx` (`<<` and `&` are closed even in 4-state; 4,116 cells,
   0 divergent).
@@ -243,9 +246,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - A widening cast cannot take an impure operand's sign correction: `extend_to`'s sign fill names the
   operand twice, so `16'(f())` and `int'(f())` keep the unsigned answer (oracles `fffd` /
   `fffffffd`). Fix = a 4-state-preserving extension that names it once, or a callee-purity predicate.
-- The extension sign of a cast or inline comes from the mirror, so a signed class field cannot
-  supply it even though it is pure and repeatable: `function signed [63:0] fw; fw = c.sf;` with
-  `8'hAB` gives `00…ab` against hand-IEEE `ff…ab`.
 - Spellings where a cast cannot claim an element's sign: `unpacked_elem_signed` claims it only when
   the base is a single-segment ident, so `40'(x[0]*1)` is vita `00000000fd` against iverilog's
   `fffffffffd` for a multi-dimensional `g[i][j]`, `pk::pm[0]`, a frame-local array, a dynamic or
@@ -381,10 +381,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `parameter type` member, and `virtual ifc v = w; v.uh` (verilator only). Narrow+narrow parameter
   arithmetic in a range (`parameter W = 4'd6; logic [W+W-1:0]`) declines by the ORACLE-SPLIT rule
   although no wrap occurs there (all four tools say 12 bits) — conservative, not wrong.
-- A wide NON-repeatable actual is handed to a narrower signed formal unnarrowed (iverilog):
-  `sgn($random)` with `input signed [15:0] x` prints the full 32-bit draw (`12153524`) where iverilog
-  prints its low 16 bits (`3524`); `bind_formal_actual`'s verbatim tail narrows only a NARROW
-  non-repeatable actual. PRE-identical through §4.5.497.
 - `$signed(<string>)` is accepted (vita invention; both oracles refuse the program): `$signed(sv) * q8`
   folds at 32 bits since §4.5.495 (it folded at 8 before). `$unsigned(a, b)` drops its second argument
   silently (both oracles refuse the arity).
@@ -392,27 +388,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `f = a8*b8 + 3ns;` is `65028` against `4`.
 - A bit-vector FORMAL written inside an inline body gets no width context (`P=1` against `fe01`), and
   a `real` block-local declared in a function body is E3010.
-- The inline bind substitutes a `real` actual VERBATIM — no real→integer conversion (oracles agree,
-  2-oracle): `two(xn, arf(0))` with `input longint b` and a body `b[31:0]` is loud (§6.2 select on a
-  real) where both oracles print `00000004`; `pa(rf(0))` into `input byte` is right only because the
-  body's `x + 1` is a real add sealed by the return. Site = `resize_inline_assign`'s `expr_is_real` early
-  return (the same one the `f = r + x*x` row below names); the frame bind converts
-  (`coerce_real_actual_to_formal`), the inline bind must convert at the same point.
-- An inline body-local's 2-state declaration does not drop x/z (oracles agree): `bit [7:0] b; b = x;`
-  is `x7` against iverilog's `07` — `fold_straight_line` has no 2-state step. Fix it with the bind,
-  in one place.
-- The inline bind's width decision trusts `ir_bits_of`'s fabricated width: a class field answers 32
-  and inverts the truncate/extend decision — `i16(c.bu)` on an 8-bit field is `xxc3`. The window is
-  `field width < formal width < 32`; the canonical answer is `canonical_self_width`.
-- A `real` rhs skips §10.7 — `resize_inline_assign` has an `expr_is_real` early return
-  (`f = r + x*x` is `013b` against iverilog's `3b`).
-- Below the `!trusted_w` carve-out the bind still leaks (a deliberate trade): `fh = c.big + 1'b1;`
-  on a 40-bit field is `00000000` or `0000010000000000` depending on the destination width.
-- Beside it, deliberate: an actual wider than the formal is not truncated — `f(8'hFF)` is `ff`
-  against iverilog's `0f`, and `{f(8'h02){1'b1}}` is 0 against `f`.
-- The verbatim inline actual's mirror is wrong on its own path: an 8-bit signed frame-call actual
-  into a 16-bit signed formal (`fs16_add(g(-16))` → `00f0`, oracles `fff0`), because
-  `bind_formal_actual` widens by the actual's MIRROR sign (`Call ⇒ false`).
+- Deliberate: an actual wider than the formal is not truncated — `f(8'hFF)` is `ff` against
+  iverilog's `0f`, and `{f(8'h02){1'b1}}` is 0 against `f`. The plain spelling (`f(8'hFF)` into
+  `input [3:0]`, a `[7:0]` return; `{g(4'h2){1'b1}}` into `input [1:0]`) measured `0f` / `3` on the
+  §4.5.525 and §4.5.526 binaries alike, equal to both oracles — re-measure the row's own shape
+  before keeping it.
 - There are nine binding sites, not four, and five are open (2-oracle; `f(300.0)` into an
   `input byte` gives 300 where the oracles give 44): ⓐ a frame function with an output formal;
   ⓑ a hierarchical task call (the argument is pre-lowered in `inline_task.rs` without the formal
@@ -420,12 +400,32 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   are structurally different.
 - `expr_is_repeatable`'s decline leaves a silent default (2-oracle): a user `Call` (`f(rfn(3))`), a
   real array or queue element, a non-whitelisted SysFunc (`$sqrt`, `$itor`, `$bitstoreal`), and
-  `p::rf(...)`. Declining `$random` is correct.
+  `p::rf(...)`. Declining `$random` is correct. Since §4.5.526 a non-repeatable REAL actual in the
+  inline bind converts through the single-mention `RealToInt` instead: `$itor(…)*1.5`, `$sqrt`,
+  `$pow`, `ra[0]`, `ra[k]`, `$bitstoreal`, `pk::rf` and a nested user call into an integral formal
+  all match both oracles on that binary. Re-measure the row's other consumers before starting it.
 - An out-of-range real clamps wrongly on integer conversion: `real rv = 1.0e300; byte'(rv)` is 0 in
   both oracles and −1 in vita (the same for ±inf and NaN).
 - `int'($random*1.0)` draws the wrong number of times (both values wrong, and the value changes):
   `lower_prim_cast` has no `expr_is_repeatable` gate, so it draws 4 times per cast against
   iverilog's 1.
+- A HIERARCHICAL leaf reaches the inline lane with its placeholder's type and width (2-oracle,
+  pre-existing, one class): a real `u.r` / `u.hr` bound to an integral formal or used in an inline
+  body's rhs is substituted verbatim — `pb(u.r)` into `input byte` prints `012d` (`%h` of the raw
+  bits `4072cb3333333333`) where both oracles print `002d`, and `g3 = u.hr + d` the same; and
+  `function [15:0] f; bit [7:0] b; b = u.lv; f = b;` answers at 8 bits (`h=f0 cat=f01`, both
+  oracles `h=00f0 cat=00f01`). The frame twin of each is right. The placeholder net answers
+  `expr_is_real` false and its own width; fix = the realness and width of a placeholder from the
+  resolved net at resolve time (§4.5.526 D1 / D2 / S2).
+- A SIGNED non-repeatable actual WIDENED into a formal is zero-filled (iverilog; verilator draws
+  its own `$random` stream): `flong($random)` with `input longint` prints `000000000000b2c28465`
+  where iverilog prints `ffffffffffffb2c28465`, and `fb72($random)` into a 72-bit formal is
+  `000000000000e2f784c5` against `00ffffffffffe2f784c5` (the draw count is right). The fill of a
+  sign extension names the actual a second time, so §4.5.526's single-mention tail covers only the
+  narrowing and same-width cases; `expr_self_signed` also has no `Random` arm (`_ => false`), so the
+  tail reads `$random` as unsigned. A signed frame CALL widened into a formal is right. Fix = a
+  single-mention sign extension (the same primitive the size-cast row "A widening cast cannot take
+  an impure operand's sign correction" needs).
 
 ### Real
 
@@ -447,6 +447,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `r=-8.000000`); `kind_signedness`'s `Real | Realtime => true` arm is not what accepts it.
 - `$realtobits` and `$bitstoreal` silently accept a non-64-bit argument (iverilog says "requires a
   64-bit argument"); vita answers with the low 64 bits.
+- A real with |x| ≥ 2^127 stored into an integral target wider than 128 bits saturates at
+  ±(2^127 − 1) where both oracles store the exact rounded integer: `3e38` into `[129:0]` is
+  `…007fffffffffffffffffffffffffffffff` against `…0e1b1e5f90f9450000000000000000000`, and `-3e38`
+  saturates to −2^127. Identical on the module store (`s = R`), the frame bind and, since §4.5.526,
+  the inline `RealToInt` — one engine limit, `real_to_int_round`'s i128 domain.
 
 ### Ranges / bounds / selects
 
@@ -478,11 +483,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Class fields
 
-- `ir_bits_of` reads a class field's width from the handle net, where the real width is only in the
-  `class_field_widths` sidecar, so it answers a wrong `Some(32)` (`16'(c.sb)` is `xxxd` against
-  hand-IEEE `fffd`). CLASS; the canonical answer is `canonical_self_width`. Second symptom: when the
-  cast width equals the fabricated 32, `Ordering::Equal` skips the resize and the cast disappears —
-  `32'(c.s8)` is `fd` (should be `fffffffd`) and `32'(c.s8 + ua[0])` is `fa` (should be `000001fa`).
 - An ascending negative bound is clamped only on a class property (one oracle — verilator 4 bits;
   iverilog dies on an assertion): `class C; logic [-3:0] q;` gives W3056 and exit 0 with a wrong
   value (row 3b). The cheaper half: an un-normalised class-field select is broken on `logic [7:1] q`
@@ -759,7 +759,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   is 2-state-ness, not width (`integer'` and `int'` differ by 27×). The `expr_may_be_unknown` guard
   in `lower_prim_cast` takes 1024 down to 32. Still wrong: `int'(f())` names `f` 32 times because a
   `Call` is conservatively unknown, and a WIDENING cast over a call fans out to the wider width, so
-  it needs the `expr_is_repeatable` gate.
+  it needs the `expr_is_repeatable` gate. Since §4.5.526 (format 34) the single-mention primitive
+  exists — `SysFuncId::TwoState` (x/z → 0, the operand's width and sign) — and only the new inline
+  body-local lane and the bind lane's non-repeatable tail use it; migrating `coerce_two_state`'s
+  callers to it is the remaining work (size S, byte-identity on every value, draw counts on calls).
 - Coercing at the OPERAND's width instead of the TARGET's takes the repro from 69.6 s to 6.7 s
   (10.4×) and the ping count from 32 to 4 (the hand-written `{28'd0, nb}` control is 2.76 s). Open:
   the residue is the 4 surviving terms plus the frame call, now the LARGER half. Not shipped: a
@@ -796,7 +799,9 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   object (§4.5.513, doc-19 §5.2.1) is where that answer is published per expression.
 - Coercing a 4-state actual into a 2-state formal is O(declared width) at runtime (identical on all
   three backends: `byte` 12.8×, `shortint` 23.8×, `int` 46.4×). The real fix is an x/z→0 IR
-  primitive (format bump) or engine memoisation; two mitigations are refuted with zero improvement
+  primitive or engine memoisation; the primitive exists since §4.5.526 (`SysFuncId::TwoState`,
+  format 34) and the bind lane's per-bit `coerce_two_state` is not yet migrated to it, so this row
+  is now the migration alone (size S). Two mitigations are refuted with zero improvement
   (a per-query memo and a node budget), because the cost is in the number of binds and a persistent
   cache conflicts with in-place patching.
 - Constant-domain width and sign resolution walks the tree three times: `eval_const_env_self` runs
@@ -888,6 +893,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   pushes a non-ANSI header name into the §3.13 walk only when the body declares no `PortDecl` for
   it, so one `input a;` drops BOTH repeats and the pair never forms; the BODY spelling
   (`module dut(a); input a; input a;`) is both-reject and IS refused.
+- A non-finite real into a 64-bit integral: `longint'(R)` with `R = inf` is `ffffffff00000000` while
+  the assignment `L = R` (and §4.5.526's `RealToInt`) gives `ffffffffffffffff`; iverilog answers `x`
+  for INF, −INF and NaN and verilator `0`, so neither side can be pinned. vita's cast and store
+  disagree with each other, which proves a defect but not a direction.
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
@@ -938,6 +947,7 @@ behind the §2 correctness queue.
 | tf-localparam | `task automatic t; localparam int K = 3;` gives `E2002 expected statement, found keyword 'localparam'` (IEEE §6.20 allows it) | the parser's statement position | accept the declaration | iverilog | small |
 | blk-automatic | `begin : A automatic int x = 44; … end` inside a task body is E2002 (`static` in the same position is accepted; both oracles run it) | the parser takes a lifetime keyword on a block-local declaration only at the subroutine's own declaration position | accept the keyword in the block-declaration position | 2-oracle | small |
 | tf-decl-lifetime | a declarator-level lifetime at a subroutine body's declaration position (`static int c = 0;` / `automatic int x = 1;` right after `task t;`) is E2002 `expected '=' or '<=' after lvalue, found keyword 'int'` | the parser takes a lifetime keyword only on the subroutine header | accept it and feed `d.lifetime`, whose consumers (`frame_static_init_once`, `AdmitReason`) already read it — today it is always `None` from source, so the per-declarator half of those predicates is unreachable | unmeasured on the oracles (the block-position twin `blk-automatic` is 2-oracle) | small |
+| class-tf-port | a class-typed tf-port (`function signed [63:0] fw(input C k); fw = k.sf;`) is `E2002 expected a class typedef type for a tf-port … found identifier 'C'` where both oracles run the design (`fw=fffffffffffffffd g=00c3`) | the tf-port type position does not take a class name (the parser's own message lists the typedef kinds it takes) | accept a class name as a tf-port type | 2-oracle | small |
 | R30-1 | a missing package gives 7 lines of E2002 and never names the package | the parser cannot take `IDENT::IDENT` in a tf-port as a type | take it as a type and let elaborate say "unknown package" ⇒ 1 line | — | parser |
 | enum-label | `enum bit[3:0] {A=8'hFF}` never reaches `enum_defs`, so `.first` / `.next` / `.name` are all E3010 / E3009, and the skipped out-of-range check silently truncates | `const_lit` folds unsized decimals only | widen `const_lit` or check at elaborate time | iverilog rejects | — |
 | md-packed-write | multi-dim packed nested part-select WRITE: an ascending or non-zero-lsb leaf · a genvar-indexed `x[g][m:l]` (over-rejected) · a const out-of-bounds packed index is a silent no-op | the current support is limited to a descending zero-lsb leaf | widen the leaf geometry | — | — |
@@ -1063,13 +1073,14 @@ behind the §2 correctness queue.
 | inline-string | a static task's inline string local (`hoist_inline_task_locals`) becomes a Wire and gives E3018 | the inline path is not a frame slot, and a naive String conversion does not get the `str_bytes` twin | its own inline-string-storage slice | — | — |
 | string-misc | a substr actual `s[i]` · `s[i:j]` · `s[i].len()` · a whole-element read (`x=arr[i]`) · an array of records inside a record · string and real elements of a queue or associative array · a string queue · a block-local queue declaration · a hierarchical `u.q[0]` read | — | — | — | — |
 | dyn-md-elem-select | a select INTO an element of a queue / dynamic / associative array whose element type has two or more packed dims (`typedef logic [1:0][3:0] t; t q[$]; q[0][1]`, `q[0][5:2]`, `q[0][2+:4]`, and `T q[$]` with a 2-D type parameter) is E3009 since §4.5.514; before it the trailing index silently bit-selected the flat element (verilator `a`, vita `0`). A whole-element read / `push_back` / a static array of the same element type are correct | the element read is a flat word and no packed-dim table exists for a dyn handle (`packed_dims` is recorded only in the static branch of `netdecl.rs`) | record the element's packed extents for the handle net and route the trailing chain through `lower_packed_read` on the element word; the element WRITE `q[0][1] = …` is the pre-existing `nested lvalue select` refusal | verilator (iverilog rejects the two-index form) + hand-IEEE §7.4.5 | S |
+| class-field-select | a part-select of a class field (`c.u8[3:0] + 16'h109` with `bit [7:0] u8 = 8'hC3`) is `E3010 undeclared hierarchical name \`c.u8\`` | the select's base is not recognised as a class-field read and falls to the hierarchical-name resolver (the message) | route the select's base through the class-field read | verilator `010c`; iverilog prints `01cc` — the select ignored, so not an oracle here | small |
 
 **VCD / real conversion**
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
 | vcd | cosmetic encoding differences (decoding identical): ① vita writes full width (`bxxxxxxxx`) where iverilog strips (`bx`, `b0`) ② the t=0 initial dump is a `$dumpvars` pre-assign X plus a `#0` change against a settled value ③ a procedurally driven `logic` is `wire` in vita and `reg` in iverilog, and `int` is `reg` against `integer` ④ a real's size is 64 against 1 ⑤ `parameter` is not dumped | elaborate's packed-md `NetVar.lsb` is stale (the VCD helper routes around it with a flat fallback) | — | iverilog | large golden churn |
-| x→real | an X-bearing integral converted to real: vita takes the whole value to `0.0` where iverilog converts per bit (`4'bxx01` → 1). Shared by `$itor`, `$sqrt`, `$pow` and real `**` | `real_arg` is `to_i128_signed().unwrap_or(0)` | convert per bit | iverilog | not silent |
+| x→real | an X-bearing integral converted to real: vita takes the whole value to `0.0` where iverilog converts per bit (`4'bxx01` → 1). Shared by `$itor`, `$sqrt`, `$pow` and real `**` | `real_arg` is `to_i128_signed().unwrap_or(0)` | convert per bit. The same whole-value rule answers an integral with x/z bits inside a real expression at every store: `m = R + X` with `R = -3.5`, `X = 8'b0000_00x1` is `fffc` / `Y=-3.500000` in vita against iverilog `fffd` / `-2.500000`, uniform on the module, frame and inline lanes; `pb(rf2(8'bx000_0001))` with `rf2 = k + 0.5` prints `0001` against `0002`. Since §4.5.526 four inline cells that were loud reach this rule as a value (IEEE 1800-2017 §6.12.2 zeroes each x/z bit, not the value) | iverilog (verilator refuses z) | not silent |
 | wide→real | an integer wider than 128 bits converts to `0.0` (65..=128 is exact) | `to_i128_signed` reaches 128 bits | a word-grid f64 approximation | — | very rare |
 
 ### 3.c Intentionally loud (not gaps)
@@ -1169,7 +1180,7 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 |---|---|---|---|---|
 | 1 | 1 | an EXPLICIT `import p::PT;` of a package `parameter type PT` is ``E3009 package `p` has no symbol `PT` `` where both oracles run it (`N35 b=8 lo=0 v1=1` for `PT v; v = 8'h23; $display("N%0d b=%0d lo=%0d v1=%0d", v, $bits(v), $low(v), v[0])`); the wildcard `import p::*`, every `p::PT` spelling and the `typedef` twin run since §4.5.515 — the explicit-import binding is a third package-export registry beside the `pkg::t` typedef map and the wildcard export set (§3.b `pkg-type-param-import`). First action: census the three registries' producers in `package.rs` on HEAD and teach the explicit-import name check the type-parameter names a package declared | §3 | ② |
 | 2 | next | `scoped-call-comb-arg` · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 3 | hygiene | measured with `wc -l` at HEAD, production files only. Over the 1,000-line policy and NOT on the exception list: `elaborate/packed.rs` (2,384), `elaborate/params.rs` (2,281), `sim-engine/native/kernel.rs` (2,963), `sim-engine/backend.rs` (1,994), `sim-engine/native/wprog.rs` (1,918, its vocabulary already split into `wprog/why.rs`), `elaborate/const_eval.rs` (1,916), `elaborate/package.rs` (1,907), `sim-engine/state/frame_eval.rs` (1,814), `elaborate/lib.rs` (1,717), `elaborate/const_fn.rs` (1,685), `sim-engine/value.rs` (1,669), `elaborate/instance.rs` (1,632), `sim-engine/state/changes.rs` (1,543), `hdl-parser/module_items.rs` (1,536), `sim-engine/sched/scan_arm.rs` (1,513), `elaborate/frames_classify.rs` (1,397), `elaborate/frames_reserve.rs` (1,395), `hdl-parser/typedefs.rs` (1,389), `sim-engine/alias.rs` (1,387), `elaborate/const_wide.rs` (1,368), `sim-engine/lib.rs` (1,331), `sim-engine/jit.rs` (1,305), `sim-engine/native/run.rs` (1,280), `elaborate/stmt_flow.rs` (1,250), `sim-engine/eval/eval_core.rs` (1,241), `sim-engine/state/init_diag.rs` (1,227), `sim-engine/state/task_frames.rs` (1,217), `elaborate/expr_size_ctx.rs` (1,195), `elaborate/expr_ctx.rs` (1,190), `hdl-parser/lib.rs` (1,189), `elaborate/inline_fn.rs` (1,165), `sim-engine/builtins/dispatch.rs` (1,158), `sim-engine/state/mod.rs` (1,149), `sim-engine/builtins/queues_io.rs` (1,140), `hdl-lexer/lib.rs` (1,113), `elaborate/ports.rs` (1,094), `cli/src/frontend.rs` (1,087), `sim-engine/native/frames.rs` (1,059), `hdl-parser/functask.rs` (1,038), `cli/src/stage_args.rs` (1,037), `hdl-parser/params.rs` (1,035), `elaborate/expr_special.rs` (1,034), `elaborate/net_util.rs` (1,033), `elaborate/arrays.rs` (1,023), `elaborate/dynarr.rs` (1,021), `elaborate/strings.rs` (1,014). `param_query.rs` (854) is the precedent for the `params.rs` split; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs`, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290), and §4.5.520/522/523 added `param_dup.rs`, `gen_scope_name.rs` and `ident_route.rs` the same way. NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 3 | hygiene | measured with `wc -l` at HEAD, production files only. Over the 1,000-line policy and NOT on the exception list: `elaborate/packed.rs` (2,393), `elaborate/params.rs` (2,281), `sim-engine/native/kernel.rs` (2,963), `sim-engine/backend.rs` (1,994), `sim-engine/native/wprog.rs` (1,918, its vocabulary already split into `wprog/why.rs`), `elaborate/const_eval.rs` (1,916), `elaborate/package.rs` (1,907), `sim-engine/state/frame_eval.rs` (1,814), `elaborate/lib.rs` (1,728), `elaborate/const_fn.rs` (1,685), `sim-engine/value.rs` (1,669), `elaborate/instance.rs` (1,632), `sim-engine/state/changes.rs` (1,543), `hdl-parser/module_items.rs` (1,536), `sim-engine/sched/scan_arm.rs` (1,513), `elaborate/frames_classify.rs` (1,397), `elaborate/frames_reserve.rs` (1,395), `hdl-parser/typedefs.rs` (1,389), `sim-engine/alias.rs` (1,387), `elaborate/const_wide.rs` (1,368), `sim-engine/lib.rs` (1,331), `sim-engine/jit.rs` (1,305), `sim-engine/native/run.rs` (1,280), `elaborate/stmt_flow.rs` (1,250), `sim-engine/eval/eval_core.rs` (1,241), `sim-engine/state/init_diag.rs` (1,227), `sim-engine/state/task_frames.rs` (1,217), `elaborate/expr_size_ctx.rs` (1,208), `elaborate/expr_ctx.rs` (1,219), `hdl-parser/lib.rs` (1,189), `sim-engine/builtins/dispatch.rs` (1,158), `sim-engine/state/mod.rs` (1,149), `sim-engine/builtins/queues_io.rs` (1,140), `hdl-lexer/lib.rs` (1,113), `elaborate/ports.rs` (1,094), `cli/src/frontend.rs` (1,087), `sim-engine/native/frames.rs` (1,059), `hdl-parser/functask.rs` (1,038), `cli/src/stage_args.rs` (1,037), `hdl-parser/params.rs` (1,035), `elaborate/expr_special.rs` (1,034), `elaborate/net_util.rs` (1,033), `elaborate/arrays.rs` (1,023), `elaborate/dynarr.rs` (1,021), `elaborate/strings.rs` (1,014). `param_query.rs` (854) is the precedent for the `params.rs` split; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs`, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290), and §4.5.520/522/523 added `param_dup.rs`, `gen_scope_name.rs` and `ident_route.rs` the same way; §4.5.526 took `elaborate/inline_fn.rs` from 1,172 to 895 lines by moving the bind into `inline_bind.rs` (268) and the straight-line body fold into `inline_fold.rs` (165). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 
@@ -1249,6 +1260,12 @@ Open items beside the staged track:
 - R-I1 (config-driven signal introspection: an auto-named JSONL dump with no hand-written bind) is
   partial — `--probe` / `--probe-file` is a manual path list. R-I2 (a semantic transaction log) has
   no producer.
+- The `--obs-procs` `builtins` table counts primitives the source never wrote: an inline bind of a
+  real call into an integral formal adds a `real->int` row and a 2-state body-local a `2-state` row
+  (§4.5.526), beside the existing `$unsigned` / `$signed` / `$floor` / `$rtoi` rows that inline
+  seals and real conversions desugar into — one row set that mixes user calls with lowering
+  artifacts (measured: a design calling only `$display`, `$finish` and `$rtoi` reports `$unsigned`
+  4, `$signed` 1, `2-state` 1, `real->int` 1).
 - run.json's `wprog` object (§4.5.513) is the per-expression tally of why an expression left the
   compiled lane. Six of its keys (`array_whole`, `index_unknown`, `truncation`, `net_width`,
   `replicate_count`, `malformed`) have no source producer at HEAD; a sized-literal array index

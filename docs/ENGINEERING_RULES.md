@@ -130,6 +130,8 @@ Vocabulary used throughout:
 | Look for a second, independent sufficient condition when a sound gate kills the feature; weakening trades soundness for coverage and a disjunct does not | Every weakening either re-admitting the counter-example or still refusing the target |
 | Enumerate the writers when a change's soundness rests on "this can only happen once, here, or never" | A premise about the engine's own behaviour that the engine refutes |
 | Freeze one half at the old decision and write the reason when no axis separates two groups; a freeze is an admission that they are different questions | Forcing one rule over both halves and breaking the half it does not fit |
+| Give a store rule a single-mention primitive when its operand may be evaluated only once — a user call, `$random`, anything containing one; gate a multi-mention lowering on repeatability and never apply it to a call | A composition that names its operand several times drawing `$random` or calling the function again, a different wrong answer rather than a right one (§4.5.526: the IR-0 real→int cast names its operand two to five times, so the inline bind declined every real call until `RealToInt` named it once) |
+| Spell a review fix that narrows or extends a tail in single-mention operations — a select, a sign stamp, a primitive — and treat the fill of a sign extension as a second mention | A narrowing fix that re-evaluates its operand, so a draw count or a side effect changes while the value looks fixed (§4.5.526: the narrowing tail was built from `select_low` + stamp + `TwoState`, and the WIDENING of a signed `$random` stayed a recorded residue because its fill names the actual again) |
 
 ### 2.6 Guards, gates and what removing one promises
 
@@ -598,6 +600,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Make the baseline of a widening the whole rule set, not one privileged rule | A flag meaning "not the original rule" protecting only the original rule |
 | Do not gate a hazard whose discriminator is a runtime fact (whether a value changes after a block fires) on a static shape of the read set; build the wake or file the class | Every static cut refusing a correct design (a second trigger, a declaration-initialised handle) or admitting a stale one (a loop index) — three BLOCKINGs on one axis |
 | Make a runtime-ness detector ask the arm that lowers the node which spellings produce a runtime node, not which argument kinds appear | A constant-folding query over a runtime-carrying argument being refused as runtime |
+| Make a width or sign mirror consult the same sidecar the canonical rule consults; where the two disagree the mirror is fabricating, so fix the mirror, then census every context walk that treated the leaf as opaque — sealing at the honest width truncates what the opaque walk widened | A mirror answering a container's width for a member, and a mirror fix alone regressing the cells the opaque walk had been widening (§4.5.526: `ir_bits_of` answered a class handle's 32 bits for an 8-bit field; reading `class_field_widths` moved `fh = c.fld*x` from `0000fe01` to `00000001` until `class_field_leaf` joined four context walks) |
 
 ### 5.4 Arms, early returns and escapes
 

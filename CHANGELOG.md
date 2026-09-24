@@ -9,6 +9,47 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Changed — artifact `format_version` is now 34
+
+The inline-function fixes below needed two new entries in the frozen simulation IR — a real→integer
+assignment conversion and an x/z→0 conversion, each naming its operand once — so the artifact
+`format_version` moved from 33 to 34. A `.velab` or `.vu` written by an older build is refused at
+the header gate with `VITA-E9001` instead of being read; rebuild the artifact (`vcmp` / `velab`, or
+just re-run `vita`). `run.json`'s `format_version` field reads 34.
+
+### Fixed — inline function calls: real actuals and right-hand sides, 2-state locals, class-field widths, one-draw narrowing
+
+- **A real actual that is a function call, or contains one, is converted to an integral formal.**
+  With `rf` returning 300.7, `o = pb(rf(0))` into `input byte` printed `012d` where both reference
+  tools print `002d`, and `%h` of the same call, or a select of a `longint` formal bound to one, was
+  refused with `VITA-E3009`. The value is now rounded and narrowed the way the assignment would do it
+  (IEEE 1800 §6.12.2), for every formal width including more than 128 bits (a magnitude of 2^127 or
+  more saturates, as a module-level assignment already does), and the call is evaluated exactly
+  once — a `$random` inside the actual draws once, as in iverilog. A real variable or literal actual
+  was already converted.
+- **A real right-hand side assigned to an integral return or local inside a function body is
+  converted.** `f = r + x;` with a `[7:0]` return, `x = 254` and `r = 1.5` printed `0100` where
+  both reference tools print `0000`; with `r = 0.6`, `fn = -r - x` printed `fffe` for `00fe`. The
+  rhs is now rounded, narrowed and sign-stamped to the target; a `real` local or return is
+  unchanged.
+- **A 2-state local inside a function body drops x and z.** `bit [7:0] b; b = x; f = b;` with
+  `x = 8'bx000_0111` printed `X7` where both reference tools print `07`, and the same for `int`,
+  `byte`, a signed `bit`, a `z` input and a chain `b = x; b = b + 1;`. A `logic` local still keeps
+  the `x`, as it should.
+- **A class field passed to a function or read in its body is sized by the field.** With
+  `bit [7:0] bu = 8'hC3` and `byte sf = -3`, `i16(c.bu)` into a 16-bit formal printed `xxc3` and
+  `s16(c.sf)` printed `xxfd` where both reference tools print `00c3` and `fffd`; `fw = c.sf` into a
+  `signed [63:0]` return printed `00000000fd` for `fffffffffffffffd`. A size cast of a signed field
+  (`16'(c.sb)`) was `xxfd` and is `fffd`.
+- **A call, class field, array element or `$random` bound to a narrower or signed formal is
+  narrowed once.** `sgn($random)` into `input signed [15:0]` passed the full 32-bit draw
+  (`12153524`) where iverilog passes `3524`; `in4s(c.u7)` with `u7 = 7'h55` into
+  `input signed [3:0]` gave `55` for `05`; a 4-state class field with an `x` bit into a 2-state
+  4-bit formal gave `X3` for `03`. The value is now narrowed, sign-stamped to the formal and, for a 2-state formal, cleared of x/z,
+  with the actual evaluated once. A SIGNED `$random` widened into a wider formal is still
+  zero-filled (`flong($random)` `000000000000b2c28465` against iverilog's
+  `ffffffffffffb2c28465`); that case is recorded as open.
+
 ### Changed — artifact `format_version` is now 33
 
 The `string'(e)` cast below needed a new entry in the frozen simulation IR, so the artifact

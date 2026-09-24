@@ -629,7 +629,7 @@ Hand-written JSON with a fixed key order, one top-level field per line. `schema_
 | `schema_ver` | int | `1`. Bumped only for a record-envelope change, never for an added field |
 | `tool` | string | `"vita"` |
 | `version` | string | the tool version, `"0.2.0"` |
-| `format_version` | int | the artifact format this build emits, `33` |
+| `format_version` | int | the artifact format this build emits, `34` |
 | `seed` | null | always null; there is no `--seed` flag |
 | `plusargs` | array of string | runtime plusargs in command order, leading `+` stripped |
 | `source` | object | `name` is the **basename of the first source file only**, so the same design run from two directories compares clean; `blake3` is the digest of the concatenated source text of every command-line file |
@@ -1238,7 +1238,7 @@ running tool was built with, before a single body byte is deserialized:
 
 | stamp | what it means |
 |---|---|
-| **`format_version`** | the on-disk container layout, including everything in the out-of-band trailers that the schema hash cannot see. The value in this build is `33` |
+| **`format_version`** | the on-disk container layout, including everything in the out-of-band trailers that the schema hash cannot see. The value in this build is `34` |
 | **`tool_semver_major`** | the major version of the tool that wrote the artifact. The workspace version is `0.2.0`, so this is `0` |
 | **`schema_hash`** | a structural hash of the **shape** of the serialized types: the front-end source unit for a `.vu`, the sim-IR for a `.velab`. Adding, removing, reordering or retyping a field flips it. It is computed identically on Linux and macOS, so the same source yields byte-identical artifacts on both |
 
