@@ -29,6 +29,7 @@ a section restructure, a residue split).
 | 2026-09-21 | b32cf00 | §4.5.519–524 | 8306 | 33 | 26 / 0 / 26 | 140 / 92 / 48 | 7 / 0 / 7 | 24 / 19 / 5 | 98 / 84 / 14 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 364 / 225 / 139 |
 | 2026-09-21 | c026a81 | §4.5.525 | 8376 | 33 | 26 / 0 / 26 | 142 / 87 / 55 | 7 / 0 / 7 | 24 / 19 / 5 | 102 / 87 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 370 / 223 / 147 |
 | 2026-09-24 | 596f756 | §4.5.526 | 8411 | 34 | 26 / 0 / 26 | 137 / 82 / 55 | 7 / 0 / 7 | 24 / 19 / 5 | 104 / 89 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 369 / 222 / 147 |
+| 2026-09-24 | 67a91a5 | §4.5.527 | 8427 | 34 | 27 / 0 / 27 | 140 / 80 / 60 | 7 / 0 / 7 | 24 / 19 / 5 | 103 / 88 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 372 / 219 / 153 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -49,3 +50,11 @@ a section restructure, a residue split).
   row, §3.b `x→real`), so they add no count. 3b rises by two §3.b rows. 6 is a RECOUNT plus one: the
   beside-track list held nine bullets where the Summary said eight, and the slice added the
   `builtins` lowering-rows bullet. `format_version` 33 → 34.
+- 2026-09-24 (§4.5.527): 2T rises by one — 🆕 R (the shared wide walk inside self-determined
+  positions and on the §11.8.2 sign, WALL) is the prerequisite the slice's D8 stop filed. 2M is
+  137 − 3 + 6: deleted the "Index sealing" `~128'd0` bullet and the stale constant-domain C2 / C3
+  (3-tool identical at HEAD); added five "Index sealing" residue bullets and one "Oracle splits"
+  bullet. Startable 82 − 3 + 1 (only the declining-fold bullet has no prerequisite; three wait on
+  🆕 R, the fill bullet on row 30, the oracle bullet is a disqualification). Residues that are new
+  cells of existing rows (rows 15 and 16, the `parameter unsigned` bullet, the iverilog-hang bullet,
+  §3.b `defparam-iface`) add no count. 3b falls by the stale `wide-override` row.

@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8411 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
+8427 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
 older build is refused at the header gate with `E9001`), 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
@@ -40,25 +40,26 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 |---|---:|---|---|
 | §0 promotion queue (T2 residues) | 14 rows | 9 / 5 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
 | §2-N verilog-axi census | 2 rows + 5 | 0 / 7 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and five t0-event residues |
-| §2 start-order table | 26 rows | 0 / 26 | LOUD 4 · BLOCKED 6 · WALL 5 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table |
-| §2 recorded defects by mechanism | 137 bullets | 82 / 55 | inline / frame binds 13 · size cast / signedness 15 · constant domain (i64) 14 · scoping / imports / block-locals 26 · delays / events 13 · real 8 · performance 7 · index sealing 6 · ranges / bounds / selects 6 · diagnostics / artifacts 6 · class fields 3 · oracle splits 20 |
+| §2 start-order table | 27 rows | 0 / 27 | LOUD 4 · BLOCKED 6 · WALL 6 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
+| §2 recorded defects by mechanism | 140 bullets | 80 / 60 | inline / frame binds 13 · size cast / signedness 15 · constant domain (i64) 12 · scoping / imports / block-locals 26 · delays / events 13 · real 8 · performance 7 · index sealing 10 · ranges / bounds / selects 6 · diagnostics / artifacts 6 · class fields 3 · oracle splits 21 |
 | §3 numbered items | 24 rows | 19 / 5 | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, including ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 104 rows | 89 / 15 | subroutine / frame 25 · constants / parameters 21 · parser accept 14 · system tasks & file I/O 9 · nets / timing 10 · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 |
+| §3 small residues | 103 rows | 88 / 15 | subroutine / frame 25 · constants / parameters 20 · parser accept 14 · system tasks & file I/O 9 · nets / timing 10 · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | 0 / 6 | mostly no oracle; hand-IEEE when started; every row states a prerequisite |
 | §5 performance / hardening residues | 17 rows | 8 / 9 | frame-body wprog (5c), native scratch pooling (4b-r), array-LHS cliff, inline-fold exponential, memory guard, CI nextest, MSRV ceiling, quiescence / render / eof seams |
 | §6 G2 OBS | 6 stages + 10 | 15 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 10 items beside the staged track (call tree, a `void` function filed as `kind: task`, a route decided per spelling, per-call-site builtins, `builtins` rows for primitives the source never wrote, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2, `wprog` keys with no producer) |
 | §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
-| total | 369 | 222 / 147 | |
+| total | 372 | 219 / 153 | |
 
 `startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
 prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.
 
 ## D. Prerequisites that block work from starting
 
-- §11.8.1 region sign in the wide constant fold — blocks §2 rows 14, 15, 16, 25, 26, 30, 🆕 F and
-  every widening of the fold's accept set, which includes 🆕 H ⓐ (a bound whose operator is DEFINITE
+- §11.8.1 region sign in the wide constant fold — blocks §2 rows 14, 15, 16, 25, 26, 30, 🆕 F, 🆕 R and
+  every widening of the fold's accept set (§4.5.527's mixed-sign and operator-in-position override
+  trees wait on 🆕 R), which includes 🆕 H ⓐ (a bound whose operator is DEFINITE
   despite an x operand clamps to one bit, and the fix site is that accept set).
 - A wide resolver that reads a SELECT — blocks §2 row 10's surviving half; an unguarded bound
   fallback moves 0 of 18 cells.

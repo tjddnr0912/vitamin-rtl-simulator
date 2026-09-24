@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.527` **a parameter override whose top is an operator and whose self-determined width is past 64 bits folds in the wide domain at that width, for PLAIN trees only** (2026-09-24 · §2 "Index sealing" `~128'd0` bullet deleted, plus three stale rows deleted after 3-tool grounding: constant-domain C2 / C3 and §3.b `wide-override` · `override_bits` admits an operator top (`~ - +`, arithmetic / bitwise / shift / `**` binary, ternary) when `wide_operator_tree_is_plain` holds (every self-determined position a plain leaf, every context-determined node of the top's sign, no fill), its self width is past 64 (pass 1), folding AT that width (pass 2) and declining on any x/z bit; ≤64-bit operator tops keep the i64 channel; every override channel (`#()`, `defparam`, interface) · no format bump · 49 grounding cells: 17 silent → 2-oracle, 12 loud → value, `~pk::PW80` 1 → 80 bits; typed narrower cells land on verilator's side of row 16's split · 2 lenses × 4 rounds — r1 BLOCKING ctx-0 fold of nested operands (→ two passes) and x/z plane dropped; r2 BLOCKING ctx 0 inside self-determined positions; r3 BLOCKING the sign rule blind inside positions → D8 stop: both value-aware exclusion walks deleted for one structural rule, the shared walk's two defects filed as §2 🆕 R; r4 0 BLOCKING · 8427 tests)
 - `4.5.526` **the inline function lane applies the store rules a net would: a real actual or rhs converts through a single-mention `RealToInt`, a 2-state body-local squashes x/z through `TwoState`, a class field is sized by its field width, and a non-repeatable actual narrows once** (2026-09-24 · §2 "Inline / frame binds" F7/F8/F9/F11 plus five neighbours retired after re-measurement, nine bullets deleted · `format_version` 33 → 34: `SysFuncId::RealToInt` (§6.12.2 round half away from zero into 128-bit signed, exact below 2^127) and `SysFuncId::TwoState` (x/z → 0, operand width and sign) · F8 = `real_to_int_store` in `inline_bind.rs::bind_formal_actual` for a NON-repeatable real actual (a w > 128 target sign-extends through a single-mention `Add` with a signed zero); F11 = the same helper in `inline_fold.rs::fold_straight_line`'s Blocking and Return arms; F9 = `InlineScope.two_state` from `net_kind_is_two_state` plus `TwoState` after the resize; F7 = `ir_bits_of` / `expr_self_signed` read `class_field_widths`, and `class_field_leaf` makes the four §11.6.1 context walks see a class-field leaf (the mirror fix alone regressed two tests) · review fix X2: a trusted-width non-repeatable actual narrows with `select_low` + sign stamp + `TwoState` when it is at least as wide as the formal or unsigned · `inline_fn.rs` 1,172 → 895 (`inline_bind.rs` 268, `inline_fold.rs` 165) · 22 grounding cells · 2 lenses × 2 rounds — r1 BLOCKING: a 2-state formal bound to an x-bearing class field squashed but did not narrow (root: the pre-existing missing narrowing tail), and `RealToInt` capped at 64 bits turned 18 loud cells into wrong values; r2 0 BLOCKING, about 66 cells moved, all onto the oracle value, 0 PRE-right → POST-wrong · 8411 tests)
 - `4.5.525` **two declarations of one name in a module, interface or package body are refused from a measured 105-pair kind matrix, and the duplicate-parameter check moves to the definition** (2026-09-21 · §2 P20/P21/P22/P25/P26 + X7, six rows deleted · new `decl_collide.rs` = one AST-only per-DEFINITION walk run from `driver.rs::run` over every module, interface and package declaration, instantiated or not, collecting `(name, kind, span)` for 14 kinds and reporting in source order with a span-keyed dedupe · the refusable pairs are a MATRIX, not a hand-cut list: 105 unordered kind pairs measured once under both oracles — 100 `R` · 2 `L` (net/variable vs a non-ANSI port) · 3 `S` (parameter/localparam/genvar vs port) · 0 undecidable — and `collides` refuses the `R` cells MINUS the two another guard already owns (storage×storage → `add_net`, parameter×parameter → `param_dup`) · one E3009 sentence (``` `f` is declared twice in this module: as a function and as a net — a module body is ONE name space (IEEE 1800-2017 §3.13) ```) with a note at the first declaration, a same-kind form, and a §27.2/§27.3 transparency clause · a `$unit` item prepended into the body is dropped by the `unit.span` filter (§26.4 shadow stays legal) and the parser's own desugars are skipped BY IDENTITY — a `$`-PREFIXED internal, and a `parameter type` carrier only when this unit declares both `<stem>$w` and `<stem>$s` · the §6.20.1 duplicate-parameter check moved from `bind_params` (once per INSTANCE) to the same per-definition point, so a module instantiated only under `generate if (0)`, or never instantiated, is refused with or without `--top` · false W3056 ``redeclared; first declaration used`` deleted (the insert kept the LAST), kept with corrected text in the labelled-generate scoped-key arms · static-task and flatten-path duplicate locals E3009 · `w.mp(args)` on an interface instance refused in both call lanes · package frame `[in pk]` · 115 grounding cells: 33 accept→loud, 0 loud→accept, 0 regressions, 1466-file corpus sweep 3 diffs all frame text · 2 lenses × 3 rounds — r1 BLOCKING: a per-inlining local set false-louded a legal nested shadow, and a blanket `$` skip turned the deleted W3056 into silence; r2 BLOCKING: the same axis as a suffix GRAMMAR still exempted the legal user identifier `f$w`, closed by identity, and four unmeasured pair columns were closed as a class, which is what produced the matrix; r3 0 BLOCKING, 2 wording MAJORs fixed · 8376 tests)
 - `4.5.524` **batch review fixes: a positive singleton-scope key, constant event terms that never wake, string concat parts and string-case items through the §6.16 funnel, duplicate parameters in generate regions and packages** (2026-09-21 · the one adversarial review of §4.5.519–523, run over the five slices as a batch per owner directive · 2 lenses × 3 rounds, 84+79 → 25+31 → 7+7 designs plus an 8,604-design suite sweep whose 49 movers are all inside the four new test files · round 1 BLOCKING A: `singleton_scope_key` decided "singleton generate scope" NEGATIVELY, so a one-element INSTANCE ARRAY label passed and `ch u [0:0](); u.q` printed `A=7` where both oracles reject — keyed positively on `gen_singleton_labels`, which closes the ported and `module ch();` twins with it · round 1 BLOCKING B: `@(posedge V[0])` under a `localparam` shadow regressed to loud, closed on the ladder by `event_term_never_wakes` dropping a never-changing term (in-body always, header EDGE terms), which also closes the pre-existing false louds on the unshadowed twins, both oracles `DONE` · C: a MIXED `{string, integral}` concat bypassed the §6.16 funnel while the pure packed concat went through it, and a string-scrutinee `case` compared its integral items packed while `==` compared §6.16 · D/E: duplicate parameters in a generate scope (§27.3), a package body (§26.2) and a TRANSPARENT `generate … endgenerate` region flattened into the enclosing scope (§27.2) · F: a header LEVEL term on a constant, shadowed or not, takes one true refusal · T1 (round 3, the round's single patch): that refusal reported per TERM and swallowed a live sibling — `@(V or W)` now drops the constant and arms on `W` · 3-backend flips 0 splits, determinism byte-identical, a `Bytecode`-default flip run's 10 failures identical on the parent · 8306 tests)
@@ -536,6 +537,148 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.527 a parameter override whose top is an operator and whose self-determined width is past 64 bits folds in the wide domain at that width, for PLAIN trees only (2026-09-24, branch main) ✅
+
+**ROADMAP rows**: §2 "Index sealing" — the `~128'd0` bullet (a >64-bit override tree declines
+because `const_ctx_within_i64` refuses it; both oracles 128, vita 32), deleted. Deleted as STALE
+after grounding (3-tool identical at HEAD, vita right): §2 "Constant domain (i64)" C2
+`localparam L = (64'hFFFFFFFF00000000 > 0) ? 111 : 222;` (111 everywhere, cells c2a–c2d) and C3
+`((64'd1 - 64'd2) > 64'd0)` (1 everywhere, cell c3) — both already pinned by
+`const_unsigned_at_sixty_four.rs`; §3.b `wide-override` (`#(.K(128'h…))` binds 128 bits on every
+tool, untyped u02 / v12 and typed v17). Row 16's "only 2-oracle sub-case" (`#(.K(~128'd0))` onto
+`parameter logic [127:0]`) closed with it.
+
+**Defect (PRE, both oracles unless marked)**. `const_wide.rs::override_bits` admitted only a
+self-determined top or a `& | ^` tree of self-determined leaves. Every other operator top fell to
+the i64 operator channel (`override_self_meta` / `override_self_value`), whose accept set requires
+`const_ctx_within_i64` — false past 64 bits — so the override bound through the bare i64 with the
+DEFAULT literal's meta (32 bits), and a shift or division the i64 could not fold was E3009. The
+typed lane resized the truncated i64 (`override_at_declared_width`'s third arm), hence
+`0000000000000000ffffffffffffffff`.
+
+```
+harness  module sub #(parameter P = 1) (); $display("%m bits=%0d hex=%h", $bits(P), P)
+u01 ~128'd0            both 128 ff…ff                 PRE 32 ffffffff
+u03 ~65'd0             both 65 1ffffffffffffffff      PRE 32 ffffffff
+u05 -128'sd1           both 128 ff…ff                 PRE 32 ffffffff
+v13 128'd3 * 128'd5    verilator 128 …0f (iverilog 256)  PRE 32 0000000f
+v15 ~128'd0 % 128'd7   both 128 …03                   PRE 32 ffffffff  (value wrong too)
+u04 128'hFF << 64      both 128 00000000000000ff0000000000000000   PRE E3009
+v04 ~W  (parameter [127:0] W)   both 128 fffffffffffffffeffffffffffffff0f   PRE E3009
+tu01 ~128'd0 onto parameter logic [127:0]   both ff…ff   PRE 0000000000000000ffffffffffffffff
+```
+
+49 grounding cells (PRE `737e7810…` = HEAD d9760e6; iverilog 13.0 `-g2012`, verilator 5.052
+`--binary --timing`): 14 untyped silent → 2-oracle (three more typed), 9 untyped loud → value (three more typed),
+`~pk::PW80` / `~Q[79:0]` / `-PW80` 1 bit → 80 bits, 16 controls. For `+ - *` iverilog binds max+1
+(or the sum) while its own `$bits` of the text says the operand width — the §4.5.466
+self-contradiction — so verilator's width is the reference there.
+
+**Fix** (no frozen type, no `format_version` bump). `override_bits`, after the unchanged
+self-determined / bitwise admission:
+
+1. shape `const_wide_num::wide_operator_top(e)` (unary `~ - +`; binary `& | ^ ~^ + - * / % << <<<
+   >> >>> **`; ternary) and no fill (`ast_contains_fill`);
+2. `const_wide_num::wide_operator_tree_is_plain(e, shape)` — a structural walk with no catch-all
+   over `ExprKind` / `BinOp` / `UnOp` / `CastTarget` and no value reads: every self-determined
+   position (size / signing cast operand, concat and replicate parts and count, comparison /
+   case-equality / logical operands, shift and `**` right operand, ternary condition, reduction and
+   `!` operand, select base and indices, system-function arguments) holds a PLAIN LEAF (non-fill
+   `IntLit`, `Ident`, `PkgScoped`), and every node reached through the context-determined arms has
+   the top's sign; a position's leaf is exempt from the sign rule (it is folded self-determined and
+   keeps its own type, §11.8.1, so the push-down never reaches it — without the exemption nine
+   grounding cells with an unsized shift count or ternary condition went back to PRE);
+3. pass 1 `fold_self_bits(e)` → self width `w`; `w <= 64` → `None` (the ≤64 operator channel keeps
+   its route byte for byte);
+4. pass 2 `fold_bits_at(e, w, …)` = the value, because §11.6.1 pushes the tree's width into every
+   context-determined operand (`~8'd1 + 128'd0` complements at 128);
+5. any x/z bit → `None`.
+
+Names are sized from DECLARED provenance (`wide_name_bits`), so `~W` over `parameter [127:0] W`
+is 128. One helper serves every channel: `#()` named and positional (`instance.rs`), `defparam`
+(the collector) and the interface window (`iface_inst.rs`). Comment-only refreshes in
+`instance.rs`, `param_query.rs`, `params.rs` and `toplevel.rs`, whose text said `override_bits`
+declines every operator top.
+
+**Rounds** (2 lenses × 4; POST1 `8b8c483c…`, POST2 `0ad2f05b…`, POST3 `1680698c…`, POST4
+`607c2356…`).
+
+- Round 1 (soundness 31 designs, differential 29): BLOCKING F4 / F3 — `fold_self_bits` is
+  `fold_bits_at(e, 0)`, so every operand was folded at its OWN width and only the result resized:
+  `(8'hFF + 8'd1) + 128'h1_0…0` lost the carry, `~8'd1 + 128'd0` gave `0…0fe` for `ff…fe`, and a
+  typed `int` / `longint` target that PRE had right went wrong (`128'd0 + (8'd200 + 8'd100)`
+  `0000002c` for `0000012c`, also through `defparam` and an interface). BLOCKING F2: the shift,
+  unary `+` and ternary arms carry the unknown plane, and the binder dropped it whenever the value
+  bits fit i64 (`128'hx0 >> 4` bound zeros; six loud → silent cells). MAJOR F1: the first
+  admission (`!const_ctx_within_i64 || w > 64`) let ≤64-bit tops with a wide self-determined
+  sub-node in, which moved typed row-16 split cells from iverilog's side to verilator's while their
+  text twins stayed. Fixed: two passes (X1), a blanket x/z decline (X2), `w > 64` only (X3).
+- Round 2: the two-pass fold imported the SIGN defect — pass 2 does not push §11.8.2's expression
+  sign into operands, so `~S8 + 128'd0` and four siblings would be wrong; the implementer found
+  their `localparam` twins wrong on PRE and added a value-aware exclusion (R2-1: decline an
+  unsigned tree where a narrower leaf with its top bit set would be sign-extended). Soundness
+  BLOCKING R2-F6: pass 2 does not reach INSIDE a self-determined position — `$signed(~8'd1 +
+  128'd0) + 128'sd0` and `{~8'd1 + 120'd0} + 128'd0` went E3009 → `0…0fe` (verilator `ff…fe` /
+  `00ff…fe`). Fixed by X4, a second walk flagging any operator narrower than its position.
+  Differential PASS.
+- Round 3: soundness BLOCKING R2-F8 — X4 tested width only and R2-1 treated every position as a
+  leaf, so the sign defect survived inside a position: `128'd0 + {(S8n + 128'sd0) | 128'd0}` went
+  E3009 → `ff…fd` (both `0…0fd`). Differential PASS.
+- D8 stop. Three BLOCKINGs in three rounds on ONE axis (the shared walk's context and sign inside
+  the tree), each exposed by the previous round's fix, each exclusion a value-aware mirror of
+  `fold_bits_at`'s arms that missed one more. The rule shape was wrong, not its constants: both
+  walks were deleted and replaced by the structural `wide_operator_tree_is_plain` (leaf-only
+  positions, sign-homogeneous tree), which the walk is already right on. The walk's two defects are
+  recorded as the prerequisite row §2 🆕 R.
+- Round 4: both PASS, 0 BLOCKING. Soundness: 9 new position-leaf cells = both oracles' value
+  (`128'd1 << S8n` = 0, `(S8n > 8'd0) + 128'd0` unsigned compare = 1), 20 re-run cells and 17
+  designs, no PRE-right → POST-wrong and no PRE-loud → POST-wrong; open only F3 (the pre-existing
+  `parameter unsigned` sign column). Differential: 25 new cells split one per design plus 46
+  earlier designs; every moved cell = both oracles or = verilator with iverilog at +1 / doubled
+  width. POST3 → POST4 moved 128 instances, every one back to PRE (the cells POST3 had right and
+  the plain rule gives up — recorded as residues, not regressions). All 49 grounding cells
+  identical POST3 = POST4.
+
+**Moved tests**: `override_own_width_and_sign.rs` `too_wide` → 128 `ff…ff`, renamed
+`the_operator_channel_declines_bind_where_the_other_channels_answer`;
+`hier_param_select.rs::a_carrying_wide_override_stays_loud` →
+`a_carrying_wide_override_onto_a_wider_target` (typed `[255:0]`, `~128'h…` = verilator's
+zero-extended value, the row-16 split, plus a `+` twin both oracles agree on);
+`wide_count_and_override.rs` context-determined override → `…_past_64_bits_folds`
+(`128'h1 << 100` onto `[127:0]`, both oracles); prose in `declared_leaf_certification.rs` and
+`param_override_value_width.rs`. New: `override_wide_operator_top.rs`, 16 tests (silent and loud
+cells, wide name leaves, further arms and the `signed` keyword, typed two-oracle and typed split,
+`defparam` and interface twins, ≤64 controls with exact PRE strings, and the exclusions pinned at
+PRE: x/z, ≤64 with a wide self-determined operand, mixed sign, operator inside a position).
+
+**Recorded, not fixed** (counting rule for the Summary: one ROADMAP bullet or row per mechanism;
+a residue that is a new cell of an existing row goes into that row and adds no count):
+
+- §2 🆕 R (new start-order row, WALL): the shared wide walk folds a self-determined position at
+  ctx 0 and does not push §11.8.2's sign into operands — localparam-lane cells wrong on PRE and
+  POST (`$signed(~8'd1 + 128'd0)` `0…0fe` against `ff…fe`, `~S8 + 128'd0` `0…02` against `ff…f02`,
+  `int'(S8n) + 128'd0` extended at 64). The prerequisite for widening the plain rule.
+- §2 "Index sealing", five bullets: the ≤64-bit operator top over a wide self-determined operand
+  (17 cells, 32 bits); mixed-sign >64 trees; an operator inside a position; a >64 tree the wide fold
+  declines (a zero divisor in the unchosen ternary arm, an `int'(2.5)` leaf) still binding 32 bits
+  silently; a fill inside a >64 tree.
+- Into existing rows: row 15 (`~128'bx`, `128'h1x << 120` stay E3009 where both oracles keep the
+  unknown bits), row 16 (the >64 split cells sit on verilator's side; verilator's own `localparam`
+  twin is all ones, so it contradicts itself — adjudicate before calling these pins support), the
+  `parameter unsigned` bullet (`-128'sd1` now 128 bits, still `dec=-1`), §3.b `defparam-iface`
+  (re-measured; verilator applies it too), and the constant-domain iverilog-hang bullet
+  (`-128'sd1 ** 128'd3`).
+- §2 "Oracle splits": verilator binds an override at the default's width when the override VALUE
+  equals the default (`#(.P(128'd1))` on `parameter P = 1` is 32 while its `$bits` of the text is
+  128) — not an oracle for such a cell.
+- Designs that were loud on PRE because of ONE >64 operator cell now run at exit 0 and expose their
+  pre-existing 32-bit sibling cells ("removing a loud gate exposes what it masked"); per cell no
+  value moved.
+
+**Gates**: 8427 tests, 15 skipped (`cargo nextest run --workspace --locked --no-fail-fast`,
+rc 0); doctest rc 0, `cargo clippy --workspace --all-targets --locked -- -D warnings` rc
+0, `cargo fmt --all -- --check` rc 0; corpus 10/10 on POST4; `format_version` 34.
 
 #### 4.5.526 the inline function lane applies the store rules a net would: a real actual or rhs converts through a single-mention `RealToInt`, a 2-state body-local squashes x/z through `TwoState`, a class field is sized by its field width, and a non-repeatable actual narrows once (2026-09-24, branch main) ✅
 

@@ -9,6 +9,27 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a parameter override that is an operator expression wider than 64 bits
+
+- **An override such as `#(.P(~128'd0))`, `-128'sd1`, `~65'd0` or `128'd3 * 128'd5` binds at its
+  own width.** Onto an untyped `parameter P = 1` these bound 32 bits (`ffffffff`, `0000000f`) where
+  both reference tools bind 128 or 65 bits; `~128'd0 % 128'd7` was wrong in value too. Onto a
+  `parameter logic [127:0]` the same overrides were zero-extended from 64 bits
+  (`0000000000000000ffffffffffffffff`). The override is now folded at its self-determined width
+  (IEEE 1800 §11.6.1) through every override channel: named and positional `#()`, `defparam`, and
+  an interface instance.
+- **Shifts, division, modulus, `**` and wide declared names in such an override no longer fail.**
+  `#(.P(128'hFF << 64))`, `~128'd0 >> 1`, `128'hFF…FF / 128'd3`, `~W` over a `parameter [127:0] W`
+  and `~pk::PW80` over an 80-bit package parameter were refused with `VITA-E3009` (or bound one bit);
+  they now bind the value both tools print.
+- The widening applies to "plain" trees only: every operand of a comparison, cast, concatenation,
+  shift count, exponent or select index is a literal or a name, and every other operand has the
+  sign of the whole expression. A tree with a signed and an unsigned operand mixed, an operator
+  inside one of those positions, a `'1`-style fill, or an `x`/`z` bit keeps its previous binding
+  (32 bits, or `VITA-E3009`). The shared constant fold is wrong in exactly those shapes on the
+  `localparam` side too (recorded in the roadmap), so widening them would have turned loud cells
+  into wrong values. An operator override of at most 64 bits is unchanged.
+
 ### Changed — artifact `format_version` is now 34
 
 The inline-function fixes below needed two new entries in the frozen simulation IR — a real→integer
