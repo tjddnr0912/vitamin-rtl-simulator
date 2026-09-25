@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.530` **a cast and a formal bind evaluate an impure operand once: 2-state coercion through `TwoState` and a signed widening through a single-mention ternary, where the operand's width is declared** (2026-09-25 · §2 "Size cast / signedness" impure-operand bullet, "Inline / frame binds" `expr_is_repeatable`-decline, `int'($random*1.0)` and stale widened-actual bullets, two "Performance" `coerce_two_state` bullets deleted (CL-12 / CL-14) · new `single_mention.rs`: `extend_signed_once` = `$signed(1'b1 ? $signed(e) : n'sd0)` (no format bump, measured by hand on PRE) and `two_state_once` = `TwoState`, used where `ir_bits_of` answers and the operand is not repeatable, in `lower_prim_cast`, `lower_size_cast` and bind arms (2.5) / (3); a non-repeatable real into ≤32 bits converts through `RealToInt` · `int'(f())` 8 calls / `000000fd` → 1 / `fffffffd`, `int'($random)` 32 draws → 1 · 2 lenses × 2 rounds; round 1 BLOCKING: `TwoState` over a fabricated width (`$bits(int'(q.sum()))` 32 → E3009) and `RealToInt` saturation past 2^127 — both excluded, PRE shape kept)
 - `4.5.529` **a process-header level list naming a constant beside a live term runs once at time 0 and then on its live terms; `p::C` is a constant in every event lane; a select of a constant is a constant only when its index provably is** (2026-09-25 · §2 "Delays / events" D10 / D11 / D12 bullets deleted (CL-09) · new `const_level_header.rs`: a USER-written `always @(L)` with no edge term and no `iff`, at least one constant and one live term and a body that cannot suspend (an `_`-free allow-list) keeps its header `Level` process, its constant terms replaced by one `AnyEdge` term on a design-wide time-0 pulse net (`$ia_tmp$<n>`, z → 1 at the time-0 settle, hidden from every rail) · `expr_head_binds_constant` gains a `PkgScoped` arm; index constness is leaf-structural through the lowering's name funnel (`index_provably_constant` / `index_provably_live`) and a provably live index is refused · no format bump · 401 cells: 58 silent → 2-oracle, 22 loud → 2-oracle, 6 silent → loud, none right → wrong or right → loud · 2 lenses × 3 rounds + one direct re-grade — r1 BLOCKING index ignored and the `#0` prologue's region → D8 pulse net; r2 BLOCKING a fold-based index test through a generate-net shadow and `$finish` at time 0 → leaf rule + scan; r3 BLOCKING scan holes and fork + disable → all-constant lists stay refused, every fork excluded · 8466 tests)
 - `4.5.528` **a hierarchical net, call or select read carries its declared width, sign and realness from creation, recorded only where the declared width folds exactly and verified at resolution** (2026-09-24 · §2 "Inline / frame binds" HIERARCHICAL-leaf bullet deleted, plus the stale "Real" R1 / R2 / R3 after 3-tool grounding · `HierLeafShape` sidecar filled by the declaration walk (`hier_leaf_net` / new `hier_leaf_real` / `hier_leaf_func` / `hier_leaf_net_names`), consumed by `ir_bits_of`, `expr_self_signed` (Signal arm), `canonical_self_width` and `expr_is_real`, E3009 on a resolve-time mismatch (0 of 308) · exactness predicate `expr_size_hier_exact.rs`, `env_fold` untouched · inline lane, index seal, casts, `$bits`, `==?`, fill literals and module / frame streams move to the oracles; a hierarchical stream stored into a different width in an inline body is a new E3009 · no format bump · 2 lenses × 3 rounds + one direct re-grade — r1 BLOCKING stream loud → wrong and MAJOR `-4'd1` correct → loud, r2 BLOCKING value-aware minus rule → D8: D1 reverted, structural exactness, stream gate moved to the inline store on differing widths · 8440 tests)
 - `4.5.527` **a parameter override whose top is an operator and whose self-determined width is past 64 bits folds in the wide domain at that width, for PLAIN trees only** (2026-09-24 · §2 "Index sealing" `~128'd0` bullet deleted, plus three stale rows deleted after 3-tool grounding: constant-domain C2 / C3 and §3.b `wide-override` · `override_bits` admits an operator top (`~ - +`, arithmetic / bitwise / shift / `**` binary, ternary) when `wide_operator_tree_is_plain` holds (every self-determined position a plain leaf, every context-determined node of the top's sign, no fill), its self width is past 64 (pass 1), folding AT that width (pass 2) and declining on any x/z bit; ≤64-bit operator tops keep the i64 channel; every override channel (`#()`, `defparam`, interface) · no format bump · 49 grounding cells: 17 silent → 2-oracle, 12 loud → value, `~pk::PW80` 1 → 80 bits; typed narrower cells land on verilator's side of row 16's split · 2 lenses × 4 rounds — r1 BLOCKING ctx-0 fold of nested operands (→ two passes) and x/z plane dropped; r2 BLOCKING ctx 0 inside self-determined positions; r3 BLOCKING the sign rule blind inside positions → D8 stop: both value-aware exclusion walks deleted for one structural rule, the shared walk's two defects filed as §2 🆕 R; r4 0 BLOCKING · 8427 tests)
@@ -539,6 +540,132 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.530 a cast and a formal bind evaluate an impure operand once: 2-state coercion through `TwoState` and a signed widening through a single-mention ternary, where the operand's width is declared (2026-09-25, branch main) ✅
+
+**ROADMAP rows**: §2 "Size cast / signedness" and "Inline / frame binds" (clusters CL-12 / CL-14) —
+the size-cast bullet "A widening cast cannot take an impure operand's sign correction", the bind
+bullets "`expr_is_repeatable`'s decline leaves a silent default" (its cells `16'(f(rfn(3)))`,
+`int'(pk::rf(3))`, `int'(ra[1])`, `int'($sqrt)`, `m[f(1)]` print both oracles' text on PRE, cell c06)
+and "`int'($random*1.0)` draws the wrong number of times", the stale bind bullet "A SIGNED
+non-repeatable actual WIDENED into a formal is zero-filled" (`flong($random)` = `ffffffff8484d609`
+and a negative `fb72($random)` = `ffffffffffc0895e81` = iverilog on PRE, cells c14 / n03), and the
+two "Performance" bullets on the per-bit `coerce_two_state` (cast lane and bind lane), all deleted.
+The fabricated-width half and every residue below are recorded as new rows.
+
+**Defect (PRE, both oracles unless marked; iverilog is the oracle for the `$random` stream, verilator
+draws its own)**. `coerce_two_state(e, tw)` builds `Concat[CaseEq(Select(e, i), 1'b1)]` and names `e`
+once per target bit; the engine walks the expression DAG as a tree, so a call ran its body and
+`$random` drew once per bit. A widening of a signed non-repeatable operand fell to the mirror's
+unsigned answer, because `extend_to`'s sign fill names the operand a second time.
+
+```
+grounding cells g/c01..c18, g/h01, g/n01..n11 (f = logic signed [7:0], returns -3, prints "f")
+int'(f())                    both 1 call  fffffffd           PRE 8 calls  000000fd
+longint'(f())                both 1 call  ff…fffd            PRE 8 calls  00…00fd
+16'(f())                     both fffd                       PRE 00fd
+64'(fi())  (function int)    both fffffffffffffffd           PRE 00000000fffffffd
+int'($random) (3rd draw)     iverilog 8484d609, 1 draw       PRE 800fde20, 32 draws
+longint'($random)            iverilog ffffffff8484d609       PRE 00000000800fde20
+int'($random*1.0)            iverilog 12153524, 1 draw       PRE c0895e81, 4 draws
+m[int'(pd8())]  (int m[-8:7]) both 97, 1 call                PRE 0 + E4002, 8 calls
+$signed(1'b1 ? $signed(f()) : 32'sd0)   (h01, hand spelling on PRE)   PRE = iverilog: 1 call,
+   fffffffd; over $random ffffffff8484d609 and the next draw b1f05663; an x MSB extends as x
+```
+
+**Fix** (no frozen type, no `format_version` bump (34), no sim-engine change).
+
+1. New `single_mention.rs`: `extend_signed_once(e, n)` = `$signed(1'b1 ? $signed(e) : n'sd0)`. The
+   engine's `Ternary` arm evaluates the taken branch at the wider arm's width, signed iff both arms
+   are signed, so `e` is sign-extended to `n` in one mention with 4-state bits kept (an x or z MSB
+   extends as x or z). Measured on PRE by hand first (h01). `two_state_once(e)` = `SysFunc
+   TwoState` (§4.5.526, format 34): x/z → 0, `e`'s own width and sign.
+2. Both are used only where the operand's width is a DECLARED fact (`ir_bits_of` answers) and the
+   operand is not repeatable (`expr_is_repeatable` false; a repeatable operand keeps the old
+   byte-identical IR): `lower_prim_cast` Equal / Less / Greater arms (`TwoState` replaces the per-bit
+   coercion; a signed widening uses the ternary), `lower_size_cast`'s Greater arm, and the bind lane
+   `inline_bind.rs` arms (2.5) and (3).
+3. `cast_extend_signed`: the "non-repeatable widening → mirror sign" arm applies only to a FABRICATED
+   width; a declared-width call or `$random` is extended by its canonical sign.
+4. `lower_real_to_int_cast`: a non-repeatable real operand into a target of at most 32 bits converts
+   through `RealToInt` then `select_low` and the target-sign stamp; wider targets keep the composition
+   (the engine's `real_to_int_round` saturates at |x| ≥ 2^127).
+5. Fabricated widths (`ir_bits_of` None: `q.sum()`, a string, a deferred hierarchical placeholder)
+   build the PRE shape in every arm: per-bit coercion, `extend_to`, mirror sign.
+
+**Byte identity**: every repeatable operand keeps the old IR. Differential rp1 (320 cells: `s8+s8`,
+`$signed(u8)`, `$time`, `-s8`, `s8>>>1`, `sx8+1`, selects, ternaries, array reads × 10 casts ×
+{plain, concat}): 0 moved. Matrix groups over nets, hierarchical nets, class fields and queue
+elements: 0 moved. Continuous assigns and `always_comb` over nets (200 cells) print the same on
+interp, vm and native; soundness x/z through every changed arm = iverilog on all three backends
+(135 rows).
+
+**Moved cells** (PRE `c4b47325…` → POST2 `e3ba7ead…`; iverilog 13 `-g2012`, verilator 5.052
+`--binary --timing`). Differential matrix 5476 cells + 687 focused: 3663 AGREE same-correct, 210
+AGREE moved PRE-wrong → both oracles, 60 SPLIT moved → iverilog, no regression on a two-oracle value
+cell (6 "AGREE moved away" rows are sign-of-`$urandom` / `$random` comparisons downstream of a stream
+shift that the excluded >32-bit real path causes, not oracle cells). Soundness 22 cells ≈ 530 rows.
+
+- calls / draws → one: `int'(f())` 8 → 1, `longint'(f())` 8 → 1, `int'(int'(f()))` 8 → 1,
+  `byte'(f())` 8 → 1, `shortint'(f4())` 4 → 1, `int'($random)` 32 → 1, `byte'($random)` 8 → 1,
+  `int'($random*1.0)` and `byte'($random*1.0)` 4 → 1, `int'(rf())` over a real-returning call 8 → 1,
+  `m[int'(pd8())]` 8 → 1; fan-out pings (`two_state_cast_fanout.rs`) 32, 64, 16, 8 and 4 → 1 (the 1024 of `int'(int'(x))` was cut to 32 before this slice).
+- values → oracles: `int'(f())` and `integer'(f())` `000000fd` → `fffffffd`, `longint'(f())`
+  `00000000000000fd` → `fffffffffffffffd`, `16'(f())` `00fd` → `fffd`, `64'(fi())`
+  `00000000fffffffd` → `fffffffffffffffd`, `int'($random)` `800fde20` → `8484d609` (and the next
+  draw), `longint'($random)` `00000000800fde20` → `ffffffff8484d609`, `int'($random*1.0)` `c0895e81`
+  → `12153524`, `m[int'(pd8())]` `0` → `97`.
+
+**Rounds** (2 lenses × 2; PRE `c4b47325…`, POST(r1) `3030f343…`, POST2 `e3ba7ead…`).
+
+- Round 1: differential FAIL — BLOCKING F1 / F2 and soundness BLOCKING F0 converged: `TwoState` over a
+  FABRICATED width lost the 32 bits the per-bit `Concat` carried (`ir_bits_of(TwoState(e))` forwards
+  `e`'s `None`): `$bits(int'(q.sum()))` 32 → E3009 (correct → loud), `int'(qu8.sum())` `000000fd` →
+  `fffffffd` (verilator `000000fd`), `48'(int'(s))` `0000000061626364` → `0000000000006364`,
+  `16'(int'(q.sum()))` → `xx…fd`; soundness F2b: the ternary over a fabricated width never cuts to
+  `n` (`40'(q48.sum())` `0000800000000001` → `ffff800000000001`, verilator `0000000000000001`);
+  differential F3 / soundness F1: `RealToInt` saturates at |x| ≥ 2^127, so `longint'(fr(1e40))`
+  moved 0 → `ffffffffffffffff` while the repeatable spelling stayed 0 (both oracles 0). MAJOR,
+  PRE-identical: the per-bit fallback over a non-repeatable with-clause (F2), the operator-over-call
+  size leaf (F3), the hierarchical call leaf (F4), the fabricated Equal / Less arms (F5), the
+  x-bearing queue element bind (P3), array index by a signed non-net value (P2); MINOR: call counts in
+  operators (P4), the pin that freezes a two-draw value (F6), the `wprog` label shift (F7).
+- Fix = exclusion (the widening arm excludes, never refuses): every fabricated-width arm builds the
+  PRE shape; the `RealToInt` path is limited to targets of at most 32 bits.
+- Round 2: re-graded directly by the session on both lens harnesses (`cmp2.py`, `run2.sh`): every
+  round-1 cell back to PRE or to the oracle, 0 new moves.
+
+**Tests**: new `crates/cli/tests/single_mention_cast.rs` (19 tests; call and `$random` operands
+through every cast, nested and signed casts, real operands at ≤32 and >32 bits, x/z operands and
+actuals, the hand-spelled ternary, wide-formal `$random` binds, fabricated widths kept on the PRE
+shape, context-determined operands pinned unchanged, net casts on every backend, out-of-range
+reals). Pins converted to oracle values: `two_state_cast_fanout.rs` (32 → 1 etc., `int'(sn())` 13 →
+−3), `size_cast_seal.rs` (`CALL 000d fffd 0000000d` → `CALL fffd fffd fffffffd`),
+`array_word_index_domain.rs` (`A 12` → `A 11`, `N 1055226000` → `N 1853398634`, `NEXT 2099872348`
+→ `NEXT 113532184`, the last a two-draw residue).
+
+**Recorded, not fixed** (ROADMAP):
+
+- §2 "Size cast / signedness": the fabricated-width operand keeps the mirror sign and the
+  two-mention `extend_to` (`40'(u1.f(0))`, `longint'(q.sum())`, `16'(q8.sum())`,
+  `longint'("ABCDEFGH")`; PREREQUISITE row); the operator-over-call size leaf calls twice
+  (`lower_size_leaf`, soundness F3); the prim-cast context census (13 of 19 lines, c17 / c18) folded
+  into its existing bullet.
+- §2 "Inline / frame binds": the out-of-range real bullet absorbs the `real_to_int_round`
+  saturation and the >32-bit `RealToInt` limit (PREREQUISITE row, cell n11); the x-bearing signed
+  queue element bind (`b16(qx8[0])` `008d` against `ff8d`).
+- §2 "Index sealing": `gp[0][$urandom]` draws twice with no cast (iverilog once).
+- §2 "Diagnostics / artifacts": operator call counts outside the cast lanes (`p8() >>> 1` 2, a
+  continuous assign 14 where both oracles 2); run.json `wprog` decline labels shift (`call` 7 →
+  `sysfunc` 7 + `sign` 1, counts unchanged).
+- §2 "Performance": the three surviving per-bit `coerce_two_state` sites (`inline_fn.rs` R2, the
+  fabricated-width prim-cast arms).
+- REMAINING_WORK §D: a declared width for array-reduction / string / placeholder cast operands;
+  out-of-range real→integer conversion in the engine.
+
+**Gates**: nextest 8485 (`cargo nextest run --workspace --locked --no-fail-fast`);
+`cargo test --workspace --doc`, `cargo clippy --workspace --all-targets --locked -- -D warnings`
+and `cargo fmt --all -- --check` all rc 0; corpus 10/10 in each run (4 runs); `format_version` 34.
 
 #### 4.5.529 a process-header level list naming a constant beside a live term runs once at time 0 and then on its live terms; a package constant is a constant in every event lane; a select of a constant is a constant only when its index provably is (2026-09-25, branch main) ✅
 

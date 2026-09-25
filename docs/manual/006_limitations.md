@@ -38,7 +38,7 @@ diagnostic code carries three interchangeable spellings — the mnemonic
 | `casez` reads an explicit `x` in a label as a don't-care | deliberate simplification | §1.6 |
 | A null-handle dereference degrades instead of erroring | deliberate simplification | §1.7 |
 | Implicit nets are inferred only in IEEE 1364 §3.5 positions | deliberate simplification | §1.8 |
-| A 2-state cast evaluates its operand once per coerced bit | deliberate simplification | §1.9 |
+| A 2-state cast of an operand of unknown width evaluates it once per coerced bit | deliberate simplification | §1.9 |
 | `$dumpvars` selects, and delays are inertial | deliberate simplification | §1.10 |
 | `automatic` block-locals flatten to one static net per name | loud refusal | §2.1 |
 | A framed subroutine body cannot perform a statement-level side effect | loud refusal | §2.2 |
@@ -214,44 +214,47 @@ An undeclared name becomes an implicit 1-bit `wire` only in the positions IEEE 1
 Inference can be turned into a project-wide hard error with
 `-Werror=W-PARSE-IMPLICIT-NET`.
 
-### 1.9 A 2-state cast evaluates its operand once per coerced bit
+### 1.9 A 2-state cast of an operand of unknown width evaluates it once per coerced bit
 
 A cast to a 2-state type — `int'(e)`, `byte'(e)`, `shortint'(e)`, `longint'(e)`,
-`bit'(e)` — has to force any `x`/`z` in `e` to `0`, and that check is built one bit at a
-time. When the operand cannot be shown free of `x`/`z` at elaboration, the operand is
-named once per bit of the coercion: the operand's own width for a same-width or widening
-cast, the target width for a narrowing one.
+`bit'(e)` — forces any `x`/`z` in `e` to `0`, and a widening cast of a signed operand
+sign-extends it. When `e`'s width is known at elaboration (a net, a function call, `$random`,
+any expression over them), both steps name `e` once: `int'(f())` calls `f` once and
+`int'($random)` draws once, as in Icarus Verilog and Verilator.
 
-| Cast over a 32-bit operand | Operand evaluations | Icarus Verilog |
+When `e`'s width is NOT known at elaboration — a queue or array reduction such as `q.sum()`,
+a `string`, a hierarchical reference whose declaration could not be sized — the coercion is
+built one bit at a time and names `e` once per bit of the target, and a widening cast of
+such a signed operand fills with zeros instead of the sign:
+
+| Cast | Operand evaluations | Icarus Verilog / Verilator |
 |---|---|---|
-| `byte'(e)` (narrowing to 8) | 8 | 1 |
-| `int'(e)` (same width) | 32 | 1 |
-| `longint'(e)` (widening to 64) | 32 | 1 |
-| `int'(int'(e))` | 32 | 1 |
-| `int'(e)` over a 4-bit operand | 4 | 1 |
+| `int'(e)`, `e` of known width | 1 | 1 |
+| `longint'(q.sum() with (item + pk(k)))` | `pk` called 128 times | Verilator 2 |
+| `longint'(q.sum())`, `q` a signed byte queue holding −3 | 1, value `00000000000000fd` | Verilator `fffffffffffffffd` |
 
-For a pure expression this costs time and nothing else — the value is identical. It
-matters when the operand has a side effect:
+Two other spellings still evaluate a call more than once: a cast to a type wider than 32
+bits of a real-valued call (`longint'(rf())` calls `rf` 24 times; a 32-bit or narrower
+target calls it once), and a size cast of an operator over a signed call
+(`40'(sf(1) + 8'sd0)` calls `sf` twice). For a pure operand this costs time and nothing
+else. It matters when the operand has a side effect:
 
 ```systemverilog
-int r;
-initial r = int'($random);   // vitamin draws 32 times and keeps the last;
-                             // Icarus Verilog draws once
+byte q[$] = '{-3, 1};
+longint r;
+initial r = longint'(q.sum() with (item + 8'($random & 1)));
+        // vitamin evaluates the reduction once per bit, and each high bit is the
+        // sign of a different evaluation; Verilator evaluates it once
 ```
 
-Affected operands are the ones vitamin cannot prove known: a call to a user function, a
-seeded `$random` / `$dist_*`, a file read that advances a descriptor. A 4-state cast of
-the same width is unaffected (`integer'(e)` evaluates `e` once), as are size casts
-(`24'(e)`), signing casts (`signed'(e)`), and any operand provably already 2-state.
-Nesting does not multiply.
-
-The workaround is to assign to a temporary first, which also makes the intent explicit:
+The workaround is to assign the operand to a variable of its own type first, which also
+makes the intent explicit:
 
 ```systemverilog
-int unsigned t;
+byte t;
 initial begin
-  t = $random;      // drawn exactly once
-  r = int'(t);
+  t = q.sum() with (item + 8'($random & 1));   // evaluated exactly once
+  r = longint'(t);                              // sign-extended from a known width
 end
 ```
 

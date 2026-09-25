@@ -9,6 +9,32 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — casts and formal binds evaluate an impure operand once
+
+- **A cast evaluates a function call or `$random` once, and keeps its sign.** A cast to a 2-state
+  type or a widening size cast named its operand once per bit: `int'(f())` over a
+  `logic signed [7:0]` function that prints a line printed it 8 times and gave `000000fd`, where
+  both reference tools print it once and give `fffffffd`. vitamin now calls it once and
+  sign-extends: `int'(f())`, `longint'(f())`, `integer'(f())`, `int'(int'(f()))`, `16'(f())`
+  (`fffd`, was `00fd`) and `64'(fi())` over an `int` function (`fffffffffffffffd`, was
+  `00000000fffffffd`).
+- **`$random` inside a cast draws once.** `int'($random)` drew 32 times and kept the last draw;
+  `longint'($random)` was zero-extended; `byte'($random)` drew 8 times; `int'($random*1.0)` drew
+  4 times. Each now draws once, so the value and every later draw match Icarus Verilog's stream
+  (`int'($random)` on the third draw is `8484d609`; `longint'` of it is `ffffffff8484d609`).
+- **A real-valued call converted to a 32-bit or narrower integer is called once** (`int'(rf())`,
+  `byte'(rf())`, `integer'(rf())`), and an array index `m[int'(f())]` calls `f` once and reads the
+  element both tools read.
+- **A call argument bound to a 2-state formal** (`bit`, `byte`, `int`, …) is coerced once instead
+  of once per bit; its value is unchanged. Continuous assigns and `always_comb` blocks over nets
+  give the same values on every backend.
+- Still open (recorded in the roadmap): a cast over an operand whose width vitamin does not know at
+  elaboration — `q.sum()` on a queue, a `string`, a hierarchical call — keeps the old per-bit shape
+  and the unsigned widening (`longint'(q.sum())` gives `00…fd` where Verilator gives `ff…fd`);
+  `longint'` of a real-valued call still calls it 24 times; a size cast of an operator over a signed
+  call (`40'(sf(1) + 8'sd0)`) calls it twice; `gp[0][$urandom] = 1'b1;` draws twice; and a
+  function called from a continuous assign still runs more often than in the reference tools.
+
 ### Fixed — constants in event controls
 
 - **An `always` whose event list names a constant beside a signal runs once at time 0.**

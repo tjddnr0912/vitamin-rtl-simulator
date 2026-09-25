@@ -32,6 +32,7 @@ a section restructure, a residue split).
 | 2026-09-24 | 67a91a5 | §4.5.527 | 8427 | 34 | 27 / 0 / 27 | 140 / 80 / 60 | 7 / 0 / 7 | 24 / 19 / 5 | 103 / 88 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 372 / 219 / 153 |
 | 2026-09-24 | 72c07cf | §4.5.528 | 8440 | 34 | 27 / 0 / 27 | 144 / 80 / 64 | 7 / 0 / 7 | 24 / 19 / 5 | 103 / 88 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 376 / 219 / 157 |
 | 2026-09-25 | b7df5e5 | §4.5.529 | 8466 | 34 | 27 / 0 / 27 | 154 / 81 / 73 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 388 / 222 / 166 |
+| 2026-09-25 | f929412 | §4.5.530 | 8485 | 34 | 27 / 0 / 27 | 155 / 79 / 76 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 389 / 220 / 169 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -81,3 +82,15 @@ a section restructure, a residue split).
   bullet waits on the drain and the eight splits are splits). 3b is 103 + 2, both startable
   (`level-select-event`, 2-oracle after time 0; `edge-event`, 2-oracle). The x/z override cell went
   into §2 row 15 and adds no count.
+- 2026-09-25 (§4.5.530): 2M is 154 − 6 + 7. Deleted, all startable: "Size cast / signedness" the
+  impure-operand widening bullet; "Inline / frame binds" the `expr_is_repeatable` decline bullet
+  (PRE = both oracles on its cells), `int'($random*1.0)` draw count and the widened signed
+  non-repeatable actual (stale: PRE = iverilog); "Performance" the per-bit `coerce_two_state` bullet
+  and the bind-lane O(declared width) bullet. Added: "Size cast / signedness" the fabricated-width
+  bullet (blocked, prerequisite) and the operator-over-call size leaf (startable); "Inline / frame
+  binds" the x-bearing queue element bind (startable); "Index sealing" the `gp[0][$urandom]` double
+  draw (startable); "Diagnostics / artifacts" operator call counts (startable) and the `wprog` label
+  shift (blocked, observation only); "Performance" the three surviving `coerce_two_state` sites
+  (startable: the R2 site is open). The out-of-range real bullet absorbed the saturation residue and
+  became a prerequisite row (startable → blocked). Startable 81 − 6 + 5 − 1 = 79; blocked 73 + 2 + 1 = 76.
+  The prim-cast context census was folded into its existing bullet and adds no count.

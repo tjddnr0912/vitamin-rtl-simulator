@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 6 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 154 | 81 | 73 | oracle split / pinned / oracle disqualified 41 · named prerequisite 17 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 17 · size cast / signedness 15 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 15 · real 5 · performance 7 · index sealing 10 · ranges / selects 6 · diagnostics 6 · class fields 3 · oracle splits 31 | ① | |
+| §2 | recorded defects by mechanism | 155 | 79 | 76 | oracle split / pinned / oracle disqualified 41 · named prerequisite 19 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 15 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 31 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,11 +38,12 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 388 | 222 | 166 | | | | |
+| total | | 389 | 220 | 169 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
-hierarchical placeholders, a `$finish` that runs the processes already woken in its time step, a per-resumption-kind ordering model, a block-scoped constant binding, per-instance arity / class registration, one-oracle clocking).
+hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
+out-of-range real→integer conversion in the engine, a `$finish` that runs the processes already woken in its time step, a per-resumption-kind ordering model, a block-scoped constant binding, per-instance arity / class registration, one-oracle clocking).
 
 Priority principle (time-invariant): ① a CRITICAL silent-wrong with an oracle, then ② loud→supported
 with an oracle, then ③ an honest-loud promotion whose prerequisite holds, then ④ G2 OBS. Performance
@@ -239,19 +240,42 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - A prim cast does not push the target width down to a context-determined operand (oracles agree):
   with `a=8'hFF`, `int'(a*a)` is `00000001` against iverilog's `0000fe01`, and `shortint'(a*a)` is
   `00000001` against `fffffe01`. `lower_prim_cast` uses `lower_ctx_or_plain` (fill only); wiring it
-  directly makes `refuse_real_size_operand` turn `int'(r)` loud. WALL(AST self-width).
+  directly makes `refuse_real_size_operand` turn `int'(r)` loud. WALL(AST self-width). Census on
+  §4.5.530's cells c17 / c18 (`u4 = 4'b1010`, `u8 = 8'hf0`, both oracles agree, PRE = POST): `int'(-u4)`
+  is `00000006` against `fffffff6`, `int'(~u4)` `00000005` against `fffffff5`, `int'(u4 - 4'd11)`
+  `0000000f` against `ffffffff`, `int'(u8 << 4)` `00000000` against `00000f00`, `int'(u4*u4)`
+  `00000004` against `00000064`, `longint'(u8*u8*u8*u8*u8)` `0000000000000000` against
+  `000000b964f00000`, `shortint'(u4+u4+u4+u4+u4)` `0002` against `0032`, `integer'(-u4)` `00000006`
+  against `fffffff6`, `int'({u4,u4} + 8'd255)` `000000a9` against `000001a9`, and
+  `int'(u4 ? u4 + 4'd8 : 4'd0)` `00000002` against `00000012` — 13 of 19 lines wrong. The size-cast
+  twins `16'(-u4)` `fff6`, `16'(u4*u4)` `0064`, `16'(u8 << 4)` `0f00` and the signed `int'(-s8)`,
+  `int'(s8*s8)`, `int'(-s4)` are right.
 - A cast's context width stops at an inner self-determined node (both oracles agree):
   `64'(-16'(u16))` is `000000000000fffb` against `fffffffffffffffb`, `8'(s4 * 4'(s8))` is `…f9`
   against `…09`, `16'(s8 + 4'(u8))` is `000c` against `010c`; un-nested `64'(-u16)` is correct, so
   the trigger is a nested cast or a `$signed`/`$unsigned` node. 143 of 10,368 cells.
-- A widening cast cannot take an impure operand's sign correction: `extend_to`'s sign fill names the
-  operand twice, so `16'(f())` and `int'(f())` keep the unsigned answer (oracles `fffd` /
-  `fffffffd`). Fix = a 4-state-preserving extension that names it once, or a callee-purity predicate.
-  The hierarchical twin keeps it too: §4.5.528 withdraws a signed hierarchical call's recorded shape
-  under a widening cast (`release_hier_call_for_widening_cast`), so `16'(u.hs(3))` prints `xxfd`,
-  `40'(u.hs(3))` `0000000000fd` and an inline `j1` `fd` where both oracles print `fffd`,
-  `fffffffffffd` and `fffffffd` (the recorded width alone turned the right `32'(u.hs(3))` into
-  `000000fd`).
+- A signed non-repeatable operand whose width `ir_bits_of` does not know keeps the mirror sign and
+  the two-mention `extend_to` (PREREQUISITE row). §4.5.530's single-mention shapes (`TwoState`, the
+  `extend_signed_once` ternary) carry the operand's own width, so over a FABRICATED width they drop
+  the width the cast asserts (`$bits(int'(q.sum()))` went 32 → E3009 in its first cut); those
+  operands are excluded and keep the PRE shape. Cells: `40'(u1.f(0))` (a hierarchical call
+  placeholder) is `00000000000000fb` against both oracles' `fffffffffffffffb`, and `16'(u1.f(0)) * 2`
+  is `xxxxxxxxxxxxxxxx` against iverilog's `fffffffffffffff6`; `longint'(q.sum())` is `00…fd` against
+  verilator's `ff…fd` and `16'(q8.sum())` / `shortint'(q8.sum())` are `xxfd` / `00fd` against
+  verilator's `fffd` (1 oracle: iverilog rejects `sum()` on a queue); `longint'("ABCDEFGH")` is
+  `0000000045464748` against the LRM's `4142434445464748` (no oracle: iverilog refuses the cast of a
+  string, verilator aborts). The §4.5.528 hierarchical twin is the same class
+  (`release_hier_call_for_widening_cast` withdraws the recorded shape under a widening cast:
+  `16'(u.hs(3))` `xxfd`, `40'(u.hs(3))` `0000000000fd` where both oracles print `fffd`,
+  `fffffffffffd`). Prerequisite = a declared width for array-reduction, string and placeholder cast
+  operands.
+- A size cast whose operand is an OPERATOR over a signed call leaf evaluates the call twice (both
+  oracles once; values right; PRE = POST): `40'(sf(1) + 8'sd0)`, `20'(sf(3) + 8'sd0)`,
+  `64'(sf(4) + 8'sd0)`, `40'(sf(5) + 16'sd0)`, `40'(sf(6) - 16'sd1)`, `40'(-sf(7))` and
+  `40'(sf(8) * 16'sd2)` print the `sf` line twice. `lower_size_leaf` (`expr_size_ctx.rs`) calls
+  `extend_to` with no repeatability gate; a `$random` leaf is not affected (`40'($random + 8'sd0)`
+  and the next draw match iverilog). Fix = `extend_signed_once` there, behind the same declared-width
+  test the cast arms use.
 - Spellings where a cast cannot claim an element's sign: `unpacked_elem_signed` claims it only when
   the base is a single-segment ident, so `40'(x[0]*1)` is vita `00000000fd` against iverilog's
   `fffffffffd` for a multi-dimensional `g[i][j]`, `pk::pm[0]`, a frame-local array, a dynamic or
@@ -335,6 +359,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   hierarchical call is the same: `mg[u.hs(1)]` on `logic [7:0] mg [-3:2]` is E4002 plus `xx` (and
   `xx` through an inline function) where both oracles read `9f`; the signed hierarchical NET index
   `mg[u.k]` seals since §4.5.528.
+- A packed LVALUE write through an index that draws names the index twice, no cast involved:
+  `gp[0][$urandom] = 1'b1;` draws two `$urandom` values where iverilog draws one (PRE = POST), so
+  every later draw is shifted. `array_word_index_domain.rs` pins vita's two-draw `NEXT 113532184`
+  as this residue (vita's `$urandom` stream is not iverilog's, so the pin is a draw-count pin).
 - ORACLE-SPLIT, do not chase: on a packed ELEMENT's `+:` overhang iverilog contradicts itself — in
   one design `pv[-2'sd1 +: 2]` is `1x` and `pm[1][-2'sd1 +: 2]`, holding the same bits, is `10`.
   verilator has no `x` for an out-of-range select at all (everything is `01`). vita is uniform `1x`
@@ -434,26 +462,23 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   ⓑ a hierarchical task call (the argument is pre-lowered in `inline_task.rs` without the formal
   width); ⓒ a hierarchical function call; ⓓ a class method or task; ⓔ a class constructor. ⓑ and ⓒ
   are structurally different.
-- `expr_is_repeatable`'s decline leaves a silent default (2-oracle): a user `Call` (`f(rfn(3))`), a
-  real array or queue element, a non-whitelisted SysFunc (`$sqrt`, `$itor`, `$bitstoreal`), and
-  `p::rf(...)`. Declining `$random` is correct. Since §4.5.526 a non-repeatable REAL actual in the
-  inline bind converts through the single-mention `RealToInt` instead: `$itor(…)*1.5`, `$sqrt`,
-  `$pow`, `ra[0]`, `ra[k]`, `$bitstoreal`, `pk::rf` and a nested user call into an integral formal
-  all match both oracles on that binary. Re-measure the row's other consumers before starting it.
-- An out-of-range real clamps wrongly on integer conversion: `real rv = 1.0e300; byte'(rv)` is 0 in
-  both oracles and −1 in vita (the same for ±inf and NaN).
-- `int'($random*1.0)` draws the wrong number of times (both values wrong, and the value changes):
-  `lower_prim_cast` has no `expr_is_repeatable` gate, so it draws 4 times per cast against
-  iverilog's 1.
-- A SIGNED non-repeatable actual WIDENED into a formal is zero-filled (iverilog; verilator draws
-  its own `$random` stream): `flong($random)` with `input longint` prints `000000000000b2c28465`
-  where iverilog prints `ffffffffffffb2c28465`, and `fb72($random)` into a 72-bit formal is
-  `000000000000e2f784c5` against `00ffffffffffe2f784c5` (the draw count is right). The fill of a
-  sign extension names the actual a second time, so §4.5.526's single-mention tail covers only the
-  narrowing and same-width cases; `expr_self_signed` also has no `Random` arm (`_ => false`), so the
-  tail reads `$random` as unsigned. A signed frame CALL widened into a formal is right. Fix = a
-  single-mention sign extension (the same primitive the size-cast row "A widening cast cannot take
-  an impure operand's sign correction" needs).
+- An out-of-range real converts wrongly to an integer (PREREQUISITE row): `real rv = 1.0e300;
+  byte'(rv)` is 0 in both oracles and −1 in vita (the same for ±inf and NaN). The engine's
+  `real_to_int_round` saturates at |x| ≥ 2^127 (`r as i128`): with `r = 1.0e40`, `l = r`, `i = r`
+  and `b = r` store `ffffffffffffffff ffffffff ff` and the bind `pl(rf(r))` gives `ffffffffffffffff`
+  where both oracles give 0, the cast lanes `longint'(r)` / `longint'(rf(r))` give 0, and `int'(r)`
+  is `ffffffff` against `00000000`, repeatable operand or not. §4.5.530's single-mention `RealToInt`
+  cast path is therefore limited to targets of at most 32 bits (its first cut moved
+  `longint'(rf(1e40))` from 0 to `ffffffffffffffff`), and a wider cast of a non-repeatable real
+  keeps the multi-mention composition: `longint'(rf())` calls `rf` 24 times (both oracles once) and
+  `longint'($random*1.0)` prints `ffffffff06d7cd0d next=47ecdb8f` against iverilog's
+  `0000000012153524 next=c0895e81` (PRE-identical; cell n11). Prerequisite = out-of-range
+  real→integer conversion in the engine.
+- A signed queue element holding x/z bits, bound to a formal, is zero-extended in the inline and the
+  frame lanes (both oracles agree; PRE = POST): with `logic signed [7:0] qx8[$] = '{8'b1x001101}`,
+  `b16(qx8[0])` prints `008d` where both oracles print `ff8d`, and an `l16` formal prints
+  `000000000000000000Xd` against iverilog's `ffffffffffffffffffXd`. The same element read by a cast,
+  and a class field holding x bits bound to the same formals, are right.
 - A hierarchical placeholder whose declared width folds INEXACTLY keeps the PRE route in the inline
   lane (2-oracle; PREREQUISITE row). §4.5.528 records a placeholder's shape only when
   `expr_size_hier_exact.rs` proves the declared range's fold exact by construction, so a range or a
@@ -832,6 +857,16 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   oracles print one, and 12 against verilator's 7 and iverilog's 2 on a longer chain. Every VALUE
   agrees (`W=7`, `W=13`) and the module and interface lanes are byte-identical, so the defect is
   the evaluation COUNT, not the result; same root as the re-evaluation bullet under Performance.
+- An operator over a user call names the call more than once outside the cast lanes (values right,
+  PRE = POST): `p8() >>> 1`, `16'(p8() >>> 1)`, `16'(p8() <<< 1)` and `16'(p8() / 2)` call `p8` twice
+  where both oracles call it once, and `p8() ? p8() : p8()` three times against two. A continuous
+  assign pair `w1 = 16'(p8()); w2 = int'(p8());` calls it 14 times since §4.5.530 (63 before; both
+  oracles 2). Same root as the bullet above and the re-evaluation bullet under Performance.
+- `run.json`'s `wprog` decline reasons are relabelled by §4.5.530's shapes, counts unchanged: a
+  design with cast and bind coercions over calls moves from `{"call":7,"operator":3,"sysfunc":1}`
+  to `{"operator":3,"sign":1,"sysfunc":7}` (asked 17, declined 11 on both binaries) — a coerced call
+  now files under its `TwoState` node and one extension ternary under `sign`. Observation only; a
+  consumer keyed on the `call` count moves.
 - `%h` prints a 1-bit unknown EXPRESSION result as `x` where iverilog prints `X`
   (`$display("%h", ^a)`); the 1-bit NET of the same value is `x` in both, so iverilog is
   inconsistent and IEEE §21.2.1.3 is on vita's side. 17 of 215 designs.
@@ -856,15 +891,17 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   body cost (2.33× ceiling). Certification moves the DIAGNOSTIC stream (a pure RHS gives
   `errors=5`, the same RHS inside a no-op `$unsigned` gives `errors=9`) and must be adjudicated
   first. There is no `pure` flag on `FuncDef`/`SimIr` (frozen); it is computable out-of-band.
-- `coerce_two_state` names its operand once per TARGET BIT and the engine walks that DAG as a tree:
-  `byte'` 8, `int'` 32, `longint'` 64, `int'(int'(x))` 1024 against iverilog's 1. The discriminator
-  is 2-state-ness, not width (`integer'` and `int'` differ by 27×). The `expr_may_be_unknown` guard
-  in `lower_prim_cast` takes 1024 down to 32. Still wrong: `int'(f())` names `f` 32 times because a
-  `Call` is conservatively unknown, and a WIDENING cast over a call fans out to the wider width, so
-  it needs the `expr_is_repeatable` gate. Since §4.5.526 (format 34) the single-mention primitive
-  exists — `SysFuncId::TwoState` (x/z → 0, the operand's width and sign) — and only the new inline
-  body-local lane and the bind lane's non-repeatable tail use it; migrating `coerce_two_state`'s
-  callers to it is the remaining work (size S, byte-identity on every value, draw counts on calls).
+- `coerce_two_state` (per-bit: it names its operand once per target bit, and the engine walks that
+  DAG as a tree) survives at three sites since §4.5.530 moved the declared-width cast arms and the
+  bind lane's arms (2.5) and (3) to `SysFuncId::TwoState`: the `inline_fn.rs` R2 return coercion
+  (no resize in front of it), and the FABRICATED-width Equal / Less / Greater arms of
+  `lower_prim_cast` (a string, `q.sum()`, a deferred hierarchical placeholder — `TwoState` there
+  drops the width the per-bit `Concat` asserts). Measured: `longint'(q.sum() with (item +
+  8'($random & 1)))` over `q = {-3, 1}` prints `2f7bcbfcd6b4bcaa` (PRE `00000000000000aa`; any right
+  answer is a sign extension), each high bit the sign of a different evaluation, and
+  `longint'(q.sum() with (item + pk(k)))` calls `pk` 128 times against verilator's 2 (iverilog
+  rejects `with` here). The fabricated arms wait on the Size cast prerequisite (a declared width for
+  those operands); the R2 site is open.
 - Coercing at the OPERAND's width instead of the TARGET's takes the repro from 69.6 s to 6.7 s
   (10.4×) and the ping count from 32 to 4 (the hand-written `{28'd0, nb}` control is 2.76 s). Open:
   the residue is the 4 surviving terms plus the frame call, now the LARGER half. Not shipped: a
@@ -899,13 +936,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   admitted"), so a `Mul` arm must re-argue it. ⓐ and ⓑ stay a census, not a fix, until the decline is
   located: `compile` is the only honest answer to "will `wprog` take this", and run.json's `wprog`
   object (§4.5.513, doc-19 §5.2.1) is where that answer is published per expression.
-- Coercing a 4-state actual into a 2-state formal is O(declared width) at runtime (identical on all
-  three backends: `byte` 12.8×, `shortint` 23.8×, `int` 46.4×). The real fix is an x/z→0 IR
-  primitive or engine memoisation; the primitive exists since §4.5.526 (`SysFuncId::TwoState`,
-  format 34) and the bind lane's per-bit `coerce_two_state` is not yet migrated to it, so this row
-  is now the migration alone (size S). Two mitigations are refuted with zero improvement
-  (a per-query memo and a node budget), because the cost is in the number of binds and a persistent
-  cache conflicts with in-place patching.
 - Constant-domain width and sign resolution walks the tree three times: `eval_const_env_self` runs
   `const_self_width`, `const_signed_env` and then the evaluation where the i64 walk needs one. A
   `[W-1:0]` bound costs 2 extra `walk_scopes` — 20,000 declarations are 0.079 s without the bound
