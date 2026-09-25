@@ -27,6 +27,7 @@ fn vita(src: &str) -> (String, bool) {
         !l.starts_with("simulation ended")
             && !l.starts_with("errors=")
             && !l.contains("W-PP-TIMESCALE-DEFAULT")
+            && !l.contains("W-RUN-BACKEND-FALLBACK")
     }) {
         s.push_str(l);
         s.push('\n');
@@ -46,18 +47,9 @@ fn loud(src: &str, needle: &str) {
     assert!(s.contains(needle), "expected `{needle}` in:\n{s}");
 }
 
-/// The expected value of a cell BACK ON vita_pre's ROUTE: a header list with no live
-/// term is refused (`const_level_header.rs`: vita's `$finish` can end time 0 before
-/// its one run). Both oracles' text for such a cell is in the comment beside it.
-const REFUSED: &str = "<refused: no live term>";
-const NO_LIVE: &str = "a process sensitive only to constants runs once at time 0 in both \
-                       reference tools, and vita does not run it";
-
 fn check(cells: &[(&str, &str)]) {
     for (src, want) in cells {
-        if *want == REFUSED {
-            loud(src, NO_LIVE);
-        } else {
+        {
             assert_eq!(run(src), *want, "design:\n{src}");
         }
     }
@@ -212,8 +204,7 @@ fn index_constness_is_asked_of_the_leaves() {
 /// 0 and again at 1 and 2 (clk), the edge list at 1, and the in-body waits never
 /// wake. iverilog and verilator print the same line set in a different order
 /// (compared sorted). dS14's ALL-CONSTANT lists (`@(K[2])`, `@(K[p::I])`,
-/// `@(p::C[P])`: both oracles `K2` / `KI` / `CP at 0`) are BACK ON vita_pre's ROUTE:
-/// refused (the `$finish` drain limitation).
+/// `@(p::C[P])`) run once at time 0 (both oracles `A at 0` / `DONE`).
 #[test]
 fn a_provably_constant_index_keeps_the_time_zero_run() {
     check_sorted(
@@ -246,44 +237,83 @@ fn a_provably_constant_index_keeps_the_time_zero_run() {
         )
     };
     for sens in ["K[2]", "K[p::I]", "p::C[P]"] {
-        check(&[(alone(sens).as_str(), REFUSED)]); // both oracles: A at 0 / DONE
+        check(&[(alone(sens).as_str(), "A at 0\nDONE\n")]);
     }
 }
 
-/// vita ends a time step at `$finish` without running the processes already woken
-/// in it (pre-existing; both oracles run them), and a `$finish` reaches time 0
-/// through any process, task or event (a first static scan of `initial` bodies missed
-/// tasks, `->` wakes, `always` / `always_comb` bodies and `$exit`). So every header
-/// list with NO live term is BACK ON vita_pre's ROUTE: refused, naming that
-/// limitation, whatever the design's `$finish` does:
-/// - n18 `$finish` in an `initial`'s first batch: both `I at 0` / `A at 0`;
-/// - f02 in a child module's `initial`: both `C at 0` / `A at 0`;
-/// - f01 after `#1`: both `I at 0` / `A at 0`.
+/// A `$finish` ends the run at the END of its time step (ROADMAP_ARCHIVE §4.5.531), so
+/// the time-0 run of a header list with NO live term survives a `$finish` reaching
+/// time 0 through any channel — the reason the list was refused before. Both oracles
+/// and vita, in this order:
+/// - n18 `$finish` in an `initial`'s first batch, the `always` written above or
+///   below it: `I at 0` / `A at 0`;
+/// - f02 in a child module's `initial`: `C at 0` / `A at 0`;
+/// - f01 after `#1`: `I at 0` / `A at 0`;
+/// - after a `#0`: `A at 0` / `Z at 0`;
+/// - in a task the `initial` enables: `I at 0` / `T at 0` / `A at 0`;
+/// - inside a SIBLING `always @(K)` body: `A1 at 0` / `A2 at 0`;
+/// - a blocking or non-blocking write of the run, read by a `final` block under
+///   `initial $finish;`: `F y=7`, and through a continuous assign `F z=8`.
 #[test]
-fn an_all_constant_list_stays_refused_whatever_finish_does() {
+fn an_all_constant_list_runs_at_time_zero_whatever_finish_does() {
     check(&[
         (
             "module top;\n  localparam int K = 1;\n  always @(K) $display(\"A at %0t\", $time);\n\
                initial begin $display(\"I at %0t\", $time); $finish; end\nendmodule\n",
-            REFUSED,
+            "I at 0\nA at 0\n",
+        ),
+        (
+            "module top;\n  localparam int K = 1;\n\
+               initial begin $display(\"I at %0t\", $time); $finish; end\n\
+               always @(K) $display(\"A at %0t\", $time);\nendmodule\n",
+            "I at 0\nA at 0\n",
         ),
         (
             "module child;\n  initial begin $display(\"C at %0t\", $time); $finish; end\nendmodule\n\
              module top;\n  localparam int K = 99;\n  child u();\n  always @(K) $display(\"A at %0t\", $time);\nendmodule\n",
-            REFUSED,
+            "C at 0\nA at 0\n",
         ),
         (
             "module top;\n  localparam int K = 99;\n\
                initial begin $display(\"I at %0t\", $time); #1 $finish; end\n\
                always @(K) $display(\"A at %0t\", $time);\nendmodule\n",
-            REFUSED,
+            "I at 0\nA at 0\n",
+        ),
+        (
+            "module top;\n  localparam int K = 1;\n\
+               initial begin #0 $display(\"Z at %0t\", $time); $finish; end\n\
+               always @(K) $display(\"A at %0t\", $time);\nendmodule\n",
+            "A at 0\nZ at 0\n",
+        ),
+        (
+            "module top;\n  localparam int K = 99;\n\
+               task t; begin $display(\"T at %0t\", $time); $finish; end endtask\n\
+               initial begin $display(\"I at %0t\", $time); t(); end\n\
+               always @(K) $display(\"A at %0t\", $time);\nendmodule\n",
+            "I at 0\nT at 0\nA at 0\n",
+        ),
+        (
+            "module top;\n  localparam int K = 1;\n\
+               always @(K) begin $display(\"A1 at %0t\", $time); $finish; end\n\
+               always @(K) $display(\"A2 at %0t\", $time);\n  initial #3 $display(\"NEVER\");\nendmodule\n",
+            "A1 at 0\nA2 at 0\n",
+        ),
+        (
+            "module top;\n  localparam int K = 1;\n  reg [3:0] y = 0;\n  always @(K) y = 7;\n\
+               initial $finish;\n  final $display(\"F y=%0d\", y);\nendmodule\n",
+            "F y=7\n",
+        ),
+        (
+            "module top;\n  localparam int K = 1;\n  reg [3:0] y = 0;\n  always @(K) y <= 7;\n\
+               initial $finish;\n  final $display(\"F y=%0d\", y);\nendmodule\n",
+            "F y=7\n",
+        ),
+        (
+            "module top;\n  localparam int K = 1;\n  reg [3:0] y = 0;\n  wire [3:0] z = y + 1;\n\
+               always @(K) y = 7;\n  initial $finish;\n  final $display(\"F z=%0d\", z);\nendmodule\n",
+            "F z=8\n",
         ),
     ]);
-    loud(
-        "module top;\n  localparam int K = 1;\n  always @(K) $display(\"A at %0t\", $time);\n\
-           initial begin $display(\"I at %0t\", $time); $finish; end\nendmodule\n",
-        "vita's `$finish` can end time 0 before that run (a vita limitation)",
-    );
 }
 
 /// Every `fork` keeps the header lane. dS13's F (`always @(K or clk)` forking a `#2`
@@ -320,8 +350,8 @@ fn a_fork_keeps_the_header_lane() {
 /// - dR02 A1 `initial #0 c1 = 1;` before `always @(K or c1)`: two runs at 0 in both
 ///   (`c1=x` then `c1=1`; verilator `c1=0` first), lines in a different order.
 ///
-/// sR02, sR35 and dR03 are `always @(K)` with no live term: BACK ON vita_pre's ROUTE
-/// (refused — the `$finish` drain limitation); their oracle text stays quoted above.
+/// sR02, sR35 and dR03 are `always @(K)` with no live term: they run once at time 0,
+/// ordered as quoted above.
 #[test]
 fn the_time_zero_run_precedes_every_zero_delay_continuation() {
     check(&[
@@ -335,19 +365,19 @@ fn the_time_zero_run_precedes_every_zero_delay_continuation() {
             "module top;\n  localparam int K = 1;\n  reg [3:0] y;\n\
                initial begin #0 $display(\"I y=%0d at %0t\", y, $time); end\n  always @(K) y = 7;\n\
                initial begin #3 $display(\"DONE y=%0d\", y); $finish; end\nendmodule\n",
-            REFUSED, // both oracles: I y=7 at 0 / DONE y=7
+            "I y=7 at 0\nDONE y=7\n",
         ),
         (
             "module top;\n  localparam int K = 1;\n  reg [3:0] y;\n\
                initial begin #0 @(y) $display(\"SAW y=%0d at %0t\", y, $time); end\n  always @(K) y = 7;\n\
                initial begin #3 $display(\"DONE y=%0d\", y); $finish; end\nendmodule\n",
-            REFUSED, // both oracles: DONE y=7
+            "DONE y=7\n",
         ),
         (
             "module top;\n  int v1 = 0, v2 = 0;\n  localparam int K = 3;\n  initial #0 v1 = 5;\n\
                always @(K) $display(\"A at %0t v1=%0d v2=%0d\", $time, v1, v2);\n  initial #0 v2 = 7;\n\
                initial #5 begin $display(\"DONE v1=%0d v2=%0d\", v1, v2); $finish; end\nendmodule\n",
-            REFUSED, // both oracles: A at 0 v1=0 v2=0 / DONE v1=5 v2=7
+            "A at 0 v1=0 v2=0\nDONE v1=5 v2=7\n",
         ),
     ]);
     check_sorted(
@@ -390,8 +420,7 @@ fn a_live_term_keeps_the_header_waiter() {
 /// both oracles print `REC at 0` / `REC at 1`, vita `REC at 1` (recorded).
 ///
 /// sR16 (`always @(K) begin : b … disable b; end`, both `D at 0`) and sR17
-/// (`always @(K) void'(f(1));`, both `n=1`) have no live term: BACK ON vita_pre's
-/// ROUTE, refused (the `$finish` drain limitation).
+/// (`always @(K) void'(f(1));`, both `n=1`) have no live term and run once at time 0.
 #[test]
 fn a_disable_return_or_function_statement_body_runs_at_time_zero() {
     check(&[
@@ -412,7 +441,7 @@ fn a_disable_return_or_function_statement_body_runs_at_time_zero() {
             "module top;\n  localparam int K = 1;\n\
                always @(K) begin : b $display(\"D at %0t\", $time); disable b; end\n\
                initial begin #3 $display(\"DONE\"); $finish; end\nendmodule\n",
-            REFUSED, // both oracles: D at 0 / DONE
+            "D at 0\nDONE\n",
         ),
         (
             "module top;\n  localparam int K = 99;\n  reg clk;\n\
@@ -441,7 +470,7 @@ fn a_disable_return_or_function_statement_body_runs_at_time_zero() {
         "module top;\n  localparam int K = 1;\n  int n = 0;\n\
            function int f(input int a); n = n + a; return n; endfunction\n\
            always @(K) void'(f(1));\n  initial begin #3 $display(\"n=%0d\", n); $finish; end\nendmodule\n",
-        REFUSED,
+        "n=1\n",
     )]);
 }
 
@@ -493,7 +522,7 @@ fn a_dotted_index_is_live_only_when_it_resolves_to_a_net() {
     );
 }
 
-/// Round-3 shapes, each BACK ON vita_pre's ROUTE:
+/// Round-3 shapes on vita_pre's route, and one now admitted:
 /// - dT20 a `join_none` child with `#2` against `disable me` of the block: iverilog
 ///   runs F and G at 0 and prints `GCH from clk=1 done at 2`, verilator neither; the
 ///   time-0 run no longer happens (every fork keeps the header lane), and vita
@@ -503,9 +532,10 @@ fn a_dotted_index_is_live_only_when_it_resolves_to_a_net() {
 ///   r=1` (iverilog rejects unpacked array parameters); the index names a constant
 ///   parameter net, which is not live, so the wait never wakes, as on vita_pre;
 /// - p01 `$finish` in a task an `initial` enables at time 0, beside `always @(K)`:
-///   both oracles `I at 0` / `T at 0` / `A at 0`; refused (no live term).
+///   both oracles `I at 0` / `T at 0` / `A at 0`, and vita since the all-constant
+///   list is admitted.
 #[test]
-fn round_three_shapes_are_back_on_the_pre_route() {
+fn round_three_shapes_keep_their_route() {
     check(&[
         (
             "module top;\n  localparam int K = 3;\n  reg clk = 0;\n\
@@ -532,7 +562,7 @@ fn round_three_shapes_are_back_on_the_pre_route() {
                task t; begin $display(\"T at %0t\", $time); $finish; end endtask\n\
                initial begin $display(\"I at %0t\", $time); t(); end\n\
                always @(K) $display(\"A at %0t\", $time);\nendmodule\n",
-            REFUSED,
+            "I at 0\nT at 0\nA at 0\n",
         ),
     ]);
 }

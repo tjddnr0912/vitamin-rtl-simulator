@@ -7,7 +7,9 @@
 //! 0) and then on every change of its live terms. vita refused the all-constant list
 //! (E3009) and, beside a live term, DROPPED the constant together with its time-0 run
 //! — at exit 0. `const_level_header.rs` now keeps the header process and replaces
-//! the constant terms with one edge on an internal time-0 pulse net.
+//! the constant terms with one edge on an internal time-0 pulse net; an all-constant
+//! list is the pulse alone (admitted since a `$finish` ends the run at the end of its
+//! time step, so the one run survives a `$finish` reaching time 0).
 //!
 //! Every expected text below is iverilog 13.0 (`-g2012`) and verilator 5.052
 //! (`--binary --timing`) printing the same lines, unless a test says otherwise. The
@@ -56,20 +58,8 @@ fn loud(src: &str, needle: &str) {
     assert!(s.contains(needle), "expected `{needle}` in:\n{s}");
 }
 
-/// The expected value of a cell that is back on vita_pre's route: an all-constant
-/// header list is refused (`const_level_header.rs`: vita's `$finish` can end time 0
-/// before its one run, so it is never admitted). Both oracles' text for such a cell
-/// is in the comment above it.
-const REFUSED: &str = "<refused: no live term>";
-const NO_LIVE: &str = "a process sensitive only to constants runs once at time 0 in both \
-                       reference tools, and vita does not run it";
-
 fn expect(src: &str, want: &str) {
-    if want == REFUSED {
-        loud(src, NO_LIVE);
-    } else {
-        assert_eq!(run(src), want, "design:\n{src}");
-    }
+    assert_eq!(run(src), want, "design:\n{src}");
 }
 
 fn check(cells: &[(&str, &str)]) {
@@ -119,33 +109,33 @@ fn pkg_cell(pkg: &str, body: &str) -> String {
 // ── every constant kind, alone ──────────────────────────────────────────────────
 
 /// A list of constants only. Both oracles run the process once at time 0 and never
-/// again (text per cell below). BACK ON vita_pre's ROUTE: the list is refused, as it
-/// was, now naming the reason — vita's `$finish` ends a time step without running
-/// the processes already woken in it, and a `$finish` can reach time 0 through any
-/// process, task or event, so the one run could vanish at exit 0.
+/// again (text per cell below), and so does vita: the list's sensitivity is the
+/// time-0 pulse alone. Admitted since a `$finish` ends the run at the END of its time
+/// step, so a `$finish` reaching time 0 no longer erases the run
+/// (`const_level_event_order.rs` measures the channels).
 #[test]
-fn a_constant_alone_stays_refused() {
+fn a_constant_alone_runs_once_at_time_zero() {
     let k = "  localparam int K = 99;\n";
     let cells = [
         // g1 a01: `LVL at 0 K=99` / `DONE`
         (
             alone("", &format!("{k}  always @(K) $display(\"LVL at %0t K=%0d\", $time, K);")),
-            REFUSED, // both oracles: LVL at 0 K=99 / DONE / 
+            "LVL at 0 K=99\nDONE\n",
         ),
         // g1 a02: a constant whose value is 0 still runs
         (
             alone("", "  localparam int Z = 0;\n  always @(Z) $display(\"LVL at %0t Z=%0d\", $time, Z);"),
-            REFUSED, // both oracles: LVL at 0 Z=0 / DONE / 
+            "LVL at 0 Z=0\nDONE\n",
         ),
         // g1 a03: `bit`
         (
             alone("", "  localparam bit B = 1'b1;\n  always @(B) $display(\"LVL at %0t B=%0d\", $time, B);"),
-            REFUSED, // both oracles: LVL at 0 B=1 / DONE / 
+            "LVL at 0 B=1\nDONE\n",
         ),
         // g1 a04: `parameter`
         (
             alone("", "  parameter int P = 7;\n  always @(P) $display(\"LVL at %0t P=%0d\", $time, P);"),
-            REFUSED, // both oracles: LVL at 0 P=7 / DONE / 
+            "LVL at 0 P=7\nDONE\n",
         ),
         // g1 a06: enum label
         (
@@ -153,7 +143,7 @@ fn a_constant_alone_stays_refused() {
                 "",
                 "  typedef enum int {EA = 0, EB = 5} e_t;\n  always @(EB) $display(\"LVL at %0t EB=%0d\", $time, EB);",
             ),
-            REFUSED, // both oracles: LVL at 0 EB=5 / DONE / 
+            "LVL at 0 EB=5\nDONE\n",
         ),
         // g1 a08: generate-block localparam
         (
@@ -161,7 +151,7 @@ fn a_constant_alone_stays_refused() {
                 "",
                 "  if (1) begin : gb\n    localparam int L = 5;\n    always @(L) $display(\"GB %m at %0t L=%0d\", $time, L);\n  end",
             ),
-            REFUSED, // both oracles: GB top.gb at 0 L=5 / DONE / 
+            "GB top.gb at 0 L=5\nDONE\n",
         ),
         // g1 a09: `$unit` localparam
         (
@@ -169,17 +159,17 @@ fn a_constant_alone_stays_refused() {
                 "localparam int CU = 4;\n",
                 "  always @(CU) $display(\"LVL at %0t CU=%0d\", $time, CU);",
             ),
-            REFUSED, // both oracles: LVL at 0 CU=4 / DONE / 
+            "LVL at 0 CU=4\nDONE\n",
         ),
         // g1 a10: real
         (
             alone("", "  localparam real R = 1.5;\n  always @(R) $display(\"LVL at %0t R=%0.2f\", $time, R);"),
-            REFUSED, // both oracles: LVL at 0 R=1.50 / DONE / 
+            "LVL at 0 R=1.50\nDONE\n",
         ),
         // g1 a11: string
         (
             alone("", "  parameter string S = \"hi\";\n  always @(S) $display(\"LVL at %0t S=%s\", $time, S);"),
-            REFUSED, // both oracles: LVL at 0 S=hi / DONE / 
+            "LVL at 0 S=hi\nDONE\n",
         ),
         // g1 b07: two constants, no live term: `MIX at 0 clk=x` (verilator `clk=0`) / `DONE`
         (
@@ -187,7 +177,7 @@ fn a_constant_alone_stays_refused() {
                 "",
                 "  localparam int K = 99;\n  localparam int K2 = 3;\n  always @(K or K2) $display(\"MIX at %0t clk=%b\", $time, clk);",
             ),
-            REFUSED, // both oracles: MIX at 0 clk=x / DONE / 
+            "MIX at 0 clk=x\nDONE\n",
         ),
     ];
     let cells: Vec<(&str, &str)> = cells.iter().map(|(s, w)| (s.as_str(), *w)).collect();
@@ -195,25 +185,24 @@ fn a_constant_alone_stays_refused() {
 }
 
 /// g1 a05 / a07: an all-constant list in each instance / generate copy. Both oracles
-/// run each copy once at time 0 (`C top.u0 at 0 P=3` / `C top.u1 at 0 P=1`; `G
-/// top.gl[0] at 0 g=0` / `G top.gl[1] at 0 g=1`). BACK ON vita_pre's ROUTE: refused
-/// (the `$finish` drain limitation above).
+/// run each copy once at time 0 (`C top.u0 at 0 P=3` / `C top.u1 at 0 P=1`, verilator
+/// in the other order; `G top.gl[0] at 0 g=0` / `G top.gl[1] at 0 g=1`).
 #[test]
-fn a_constant_alone_in_each_copy_stays_refused() {
+fn a_constant_alone_in_each_copy_runs_each_copy_once() {
     expect(
         "module child #(parameter int P = 1);\n\
            always @(P) $display(\"C %m at %0t P=%0d\", $time, P);\n\
          endmodule\n\
          module top;\n  child #(.P(3)) u0();\n  child u1();\n\
            initial begin #5 $display(\"DONE\"); $finish; end\nendmodule\n",
-        REFUSED,
+        "C top.u0 at 0 P=3\nC top.u1 at 0 P=1\nDONE\n",
     );
     expect(
         &alone(
             "",
             "  for (genvar g = 0; g < 2; g++) begin : gl\n    always @(g) $display(\"G %m at %0t g=%0d\", $time, g);\n  end",
         ),
-        REFUSED,
+        "G top.gl[0] at 0 g=0\nG top.gl[1] at 0 g=1\nDONE\n",
     );
 }
 
@@ -297,17 +286,17 @@ fn a_genvar_or_override_beside_a_live_term_runs_each_copy() {
 // ── constant selects (a constant head) ───────────────────────────────────────
 
 /// A select of a constant is still a constant. Was E3009 ("single-bit level" or
-/// "bare signal name") in every cell. Beside a live term it runs at time 0; alone
-/// it is BACK ON vita_pre's ROUTE (refused: the `$finish` drain limitation).
+/// "bare signal name") in every cell. Beside a live term it runs at time 0, and alone
+/// it runs once at time 0 (the pulse is its whole sensitivity).
 #[test]
 fn a_select_of_a_constant_runs_once_at_time_zero() {
     let k = "  localparam int K = 99;\n";
     let cells = [
         // g2 a01 `K[0]`, a02 `K[2]` (bit value 0), a03 `K[3:0]`, a04 `K[0+:2]`
-        (alone("", &format!("{k}  always @(K[0]) $display(\"A01 at %0t\", $time);")), REFUSED), // both oracles: A01 at 0 / DONE / 
-        (alone("", &format!("{k}  always @(K[2]) $display(\"A02 at %0t\", $time);")), REFUSED), // both oracles: A02 at 0 / DONE / 
-        (alone("", &format!("{k}  always @(K[3:0]) $display(\"A03 at %0t\", $time);")), REFUSED), // both oracles: A03 at 0 / DONE / 
-        (alone("", &format!("{k}  always @(K[0+:2]) $display(\"A04 at %0t\", $time);")), REFUSED), // both oracles: A04 at 0 / DONE / 
+        (alone("", &format!("{k}  always @(K[0]) $display(\"A01 at %0t\", $time);")), "A01 at 0\nDONE\n"),
+        (alone("", &format!("{k}  always @(K[2]) $display(\"A02 at %0t\", $time);")), "A02 at 0\nDONE\n"),
+        (alone("", &format!("{k}  always @(K[3:0]) $display(\"A03 at %0t\", $time);")), "A03 at 0\nDONE\n"),
+        (alone("", &format!("{k}  always @(K[0+:2]) $display(\"A04 at %0t\", $time);")), "A04 at 0\nDONE\n"),
         // g2 a08: `K[g]` under a generate loop
         (
             alone(
@@ -316,7 +305,7 @@ fn a_select_of_a_constant_runs_once_at_time_zero() {
                     "{k}  genvar g;\n  for (g = 0; g < 3; g = g + 1) begin : G\n    always @(K[g]) $display(\"A08 g=%0d at %0t\", g, $time);\n  end"
                 ),
             ),
-            REFUSED, // both oracles: A08 g=0 / 1 / 2 at 0 / DONE
+            "A08 g=0 at 0\nA08 g=1 at 0\nA08 g=2 at 0\nDONE\n",
         ),
         // g2 a05 `@(K[0] or clk)` and a06 `@(clk or K[2])` (verilator `clk=0` at 0)
         (
@@ -346,20 +335,19 @@ fn a_select_of_a_constant_runs_once_at_time_zero() {
 // ── package constants ─────────────────────────────────────────────────────
 
 /// `p::C` / `p::E1` / a package `parameter` in every lane. Was E3009 "must name a
-/// package variable" in every cell; both oracles treat it like a local constant. A
-/// header list of package constants alone is BACK ON vita_pre's ROUTE (refused: the
-/// `$finish` drain limitation).
+/// package variable" in every cell; both oracles treat it like a local constant, alone
+/// and beside a live term.
 #[test]
 fn a_package_constant_is_a_constant_in_every_lane() {
     let pp = "package p; parameter int C = 5; endpackage\n";
     let cells = [
         // g3 a01 header level alone, a12 enum label, a16 package `parameter`
         // both oracles: LVL at 0 / DONE at 5
-        (pkg_cell(PKG, "  always @(p::C) $display(\"LVL at %0t\", $time);"), REFUSED),
+        (pkg_cell(PKG, "  always @(p::C) $display(\"LVL at %0t\", $time);"), "LVL at 0\nDONE at 5\n"),
         // both oracles: EN at 0 / DONE at 5
-        (pkg_cell(PKG, "  always @(p::E1) $display(\"EN at %0t\", $time);"), REFUSED),
+        (pkg_cell(PKG, "  always @(p::E1) $display(\"EN at %0t\", $time);"), "EN at 0\nDONE at 5\n"),
         // both oracles: PP at 0 / DONE at 5
-        (pkg_cell(pp, "  always @(p::C) $display(\"PP at %0t\", $time);"), REFUSED),
+        (pkg_cell(pp, "  always @(p::C) $display(\"PP at %0t\", $time);"), "PP at 0\nDONE at 5\n"),
         // g3 a02 / a16b header level beside a live term
         (
             pkg_cell(PKG, "  always @(p::C or clk) $display(\"MIX at %0t clk=%b\", $time, clk);"),
@@ -434,8 +422,7 @@ fn a_package_constant_is_a_constant_in_every_lane() {
 
 /// g3 a13 / a13b / a13f / a14 / a14b: an imported constant. The live cells lost `at
 /// 0` at exit 0 and now run it; the alone cells (both oracles `IS at 0` / `IN at 0`,
-/// then `DONE at 5`) are BACK ON vita_pre's ROUTE: refused (the `$finish` drain
-/// limitation).
+/// then `DONE at 5`) run once at time 0.
 #[test]
 fn an_imported_constant_runs_once_at_time_zero() {
     let live = "at 0 clk=0\n{} at 1 clk=1\n{} at 2 clk=0\n{} at 3 clk=1\nDONE at 5\n";
@@ -446,7 +433,7 @@ fn an_imported_constant_runs_once_at_time_zero() {
                 PKG,
                 "  import p::*; always @(C) $display(\"IS at %0t\", $time);",
             ),
-            REFUSED.to_string(), // both oracles: IS at 0 / DONE at 5
+            "IS at 0\nDONE at 5\n".to_string(),
         ),
         (
             pkg_cell(
@@ -467,7 +454,7 @@ fn an_imported_constant_runs_once_at_time_zero() {
                 PKG,
                 "  import p::C; always @(C) $display(\"IN at %0t\", $time);",
             ),
-            REFUSED.to_string(), // both oracles: IN at 0 / DONE at 5
+            "IN at 0\nDONE at 5\n".to_string(),
         ),
         (
             pkg_cell(
@@ -485,8 +472,7 @@ fn an_imported_constant_runs_once_at_time_zero() {
 /// g3 b08 / b09 / b09b: a generate-scope `localparam K` shadowing a module net `K`.
 /// The constant wins (IEEE §6.21), so a change of the NET never wakes the process —
 /// b09b moves the net's only change to 4, and neither oracle prints `at 4`. b08
-/// (`@(K)` alone; both oracles `GK at 0` / `DONE at 5`) is BACK ON vita_pre's ROUTE:
-/// refused (the `$finish` drain limitation).
+/// (`@(K)` alone; both oracles `GK at 0` / `DONE at 5`) runs once at time 0.
 #[test]
 fn a_shadowing_generate_constant_runs_once_at_time_zero() {
     let net = "  logic [7:0] K = 8'd0;\n";
@@ -499,7 +485,7 @@ fn a_shadowing_generate_constant_runs_once_at_time_zero() {
                 ),
             )
             .as_str(),
-            REFUSED, // both oracles: GK at 0 / DONE at 5
+            "GK at 0\nDONE at 5\n",
         ),
         (
             pkg_cell(
@@ -527,8 +513,7 @@ fn a_shadowing_generate_constant_runs_once_at_time_zero() {
 /// before). g1 d04s: it runs after every `initial` statement of time 0. x1: an
 /// `initial` written BELOW the `always` that changes the live term at time 0 does
 /// not add a second run. The all-constant twins d02 / d03 / d04 (both oracles
-/// `x=100 at 1`, `x=101 at 1`, `I1` / `I2` / `A at 0`) are BACK ON vita_pre's
-/// ROUTE: refused (the `$finish` drain limitation).
+/// `x=100 at 1`, `x=101 at 1`, `I1` / `I2` / `A at 0`) write and order the same.
 #[test]
 fn the_time_zero_run_writes_and_orders_like_the_oracles() {
     let w = |sens: &str, stmt: &str| {
@@ -546,11 +531,11 @@ fn the_time_zero_run_writes_and_orders_like_the_oracles() {
         )
     };
     let cells = [
-        (w("K", "x = K + 1;"), REFUSED), // both oracles: x=100 at 1 / DONE
+        (w("K", "x = K + 1;"), "x=100 at 1\nDONE\n"),
         (w("K or clk", "x = K + 1;"), "x=100 at 1\nDONE\n"),
-        (w("K", "x <= K + 2;"), REFUSED), // both oracles: x=101 at 1 / DONE
+        (w("K", "x <= K + 2;"), "x=101 at 1\nDONE\n"),
         (w("K or clk", "x <= K + 2;"), "x=101 at 1\nDONE\n"),
-        (o("K"), REFUSED), // both oracles: I1 at 0 / I2 at 0 / A at 0 / DONE
+        (o("K"), "I1 at 0\nI2 at 0\nA at 0\nDONE\n"),
         (o("K or clk"), "I1 at 0\nI2 at 0\nA at 0\nA at 5\nA at 9\nDONE\n"),
         (
             "module top;\n  localparam int K = 99;\n  reg clk;\n\

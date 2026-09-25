@@ -113,15 +113,15 @@ fn scoped_nonlsb_bitselect_is_loud_like_bare() {
 }
 
 #[test]
-fn scoped_constant_alone_in_a_header_level_list_is_loud() {
+fn scoped_constant_alone_in_a_header_level_list_runs_once_at_time_zero() {
     // A package CONSTANT in a process-header level list is a constant like a local
     // one: both oracles (iverilog 13.0, verilator 5.052) run the process ONCE at time
-    // 0 and print `x=1` with a `$display` at 1. vita refuses a list with no live term
-    // — BACK ON vita_pre's ROUTE after a slice that ran it (vita's `$finish` can end
-    // time 0 before that run); beside a live term it runs (const_level_event_t0.rs).
-    let (_, code) = run("package p; localparam int K = 3; endpackage\n\
+    // 0 and print `x=1` with a `$display` at 1, and so does vita
+    // (const_level_event_t0.rs: the list's sensitivity is the time-0 pulse alone).
+    let (out, code) = run("package p; localparam int K = 3; endpackage\n\
          module top; int x; always @(p::K) x = x + 1; initial begin #1 $display(\"x=%0d\", x); $finish; end endmodule\n");
-    assert_ne!(code, Some(0), "an all-constant header list must stay loud");
+    assert_eq!(code, Some(0), "an all-constant header list runs:\n{out}");
+    assert!(out.contains("x=1\n"), "expected `x=1` in:\n{out}");
 }
 
 #[test]

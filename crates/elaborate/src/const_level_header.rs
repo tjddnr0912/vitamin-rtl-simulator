@@ -41,11 +41,16 @@
 //! lane — a constant term beside a live one is dropped, and an all-constant list is
 //! refused (`error_header_level_const`) with the reason ([`T0Decline`]).
 //!
-//! ⚠️ A list with NO live term (`always @(K)`) is never admitted, though both
-//! oracles run it once at time 0: vita's `$finish` ends a time step without running
-//! the processes already woken in it, and a `$finish` reaches time 0 through any
-//! process, task or event, so the one run could vanish at exit 0. Beside a live term
-//! vita's output under such a `$finish` equals the header lane's.
+//! A list with NO live term (`always @(K)`, `@(K[0])`, `@(p::C)`, `@(K or K2)`) is
+//! admitted the same way: its sensitivity is the pulse alone, so the process runs
+//! once at time 0 and never again, as both oracles do. A `$finish` reaching time 0
+//! through any channel no longer erases that run: a `$finish` ends the run at the
+//! END of its time step (`sched/run_loop.rs`), so the process the pulse woke still
+//! runs. MEASURED: `initial $finish;` in the first batch, in a child module, after
+//! `#0`, in a task, behind `-> ev`, and inside a sibling `always @(K)` body — the
+//! time-0 run prints in vita and in both oracles wherever iverilog does not halt it
+//! at its first system-task call (vvp halts every OTHER thread there once a
+//! `$finish` is pending; a self-contradiction that disqualifies it on those cells).
 //!
 //! ⚠️ Only a USER-written block: `lower_proc_block`'s `user_written` is set by
 //! `lower_user_proc` alone. A block vita synthesizes (an SVA checker, a covergroup
@@ -75,9 +80,6 @@ pub(crate) enum T0Decline {
     /// The body holds `what`. `split`: MEASURED, iverilog runs such a body at time 0
     /// and verilator does not; otherwise the construct is simply not admitted.
     Body { what: String, split: bool },
-    /// A list with no live term, otherwise admissible: never admitted, because
-    /// vita's `$finish` can end time 0 before its one run.
-    NoLiveTerm,
 }
 
 impl T0Decline {
@@ -100,11 +102,6 @@ impl T0Decline {
             T0Decline::Body { what, split: false } => {
                 format!("the body holds {what}, which vita does not admit")
             }
-            T0Decline::NoLiveTerm => "a process sensitive only to constants runs once at \
-                                      time 0 in both reference tools, and vita does not run it: \
-                                      vita's `$finish` can end time 0 before that run (a vita \
-                                      limitation)"
-                .into(),
         }
     }
 }
@@ -112,8 +109,8 @@ impl T0Decline {
 impl Elaborator<'_> {
     /// Does `p` take the time-0 lane? `Ok` for an `always` the user wrote whose
     /// header is an explicit list of NON-EDGE, `iff`-free terms, not a clocking-block
-    /// event, with at least one term whose head binds a constant, and whose body
-    /// cannot suspend; otherwise the reason. `iff_desugared`: `p` is the rewrite of
+    /// event, with at least one term whose head binds a constant (every term may),
+    /// and whose body cannot suspend; otherwise the reason. `iff_desugared`: `p` is the rewrite of
     /// a single-term `@(… iff g)` (`desugar_event_iff`).
     pub(crate) fn header_const_level_t0(
         &self,
@@ -147,18 +144,6 @@ impl Elaborator<'_> {
         if let Some(why) = self.body_suspend_blocker(&p.body, &mut Vec::new()) {
             return Err(why);
         }
-        // A list with NO live term stays on the header lane's refusal. vita ends a
-        // time step at `$finish` without running the processes already woken in it
-        // (pre-existing; both oracles run them), and a `$finish` can reach time 0
-        // through any process, task or event — no static scan was complete. Beside a
-        // live term the output under such a `$finish` equals the header lane's, so
-        // the lane only ever runs there.
-        if list
-            .iter()
-            .all(|ev| self.expr_head_binds_constant_strict(&ev.expr))
-        {
-            return Err(T0Decline::NoLiveTerm);
-        }
         Ok(())
     }
 
@@ -184,8 +169,8 @@ impl Elaborator<'_> {
 
     /// The sensitivity of a [`Self::header_const_level_t0`] process: the header
     /// lane's `Level` over the LIVE terms (the constant ones held aside by the same
-    /// `header_level_term_is_const`) plus the time-0 pulse. At least one live term
-    /// is present: an all-constant list is never admitted.
+    /// `header_level_term_is_const`) plus the time-0 pulse. An all-constant list
+    /// leaves no live term, so its sensitivity is the pulse alone.
     pub(crate) fn header_const_level_sensitivity(
         &mut self,
         p: &ast::ProceduralBlock,

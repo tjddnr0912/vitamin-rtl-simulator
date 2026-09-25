@@ -259,33 +259,31 @@ fn an_in_body_level_wait_on_a_constant_never_wakes() {
 /// A PROCESS-HEADER non-edge term on a constant fires ONCE at time zero in both
 /// oracles, because the header sensitivity is armed before the time-zero settle:
 /// iverilog 13.0 and verilator 5.052 both print `EDGE at 0` then `DONE` for this
-/// cell. vita REFUSES it (`error_header_level_const`) — BACK ON vita_pre's ROUTE after
-/// a slice that ran it: vita's `$finish` ends a time step without running the
-/// processes already woken in it, and a `$finish` can reach time 0 through any
-/// process, so a list with no live term is never admitted. Beside a live term the
-/// time-0 run happens (`const_level_event_t0.rs`). Pinned on the sentence that
-/// names that reason, and on the constant, not `E3010 undeclared net/variable` (a
-/// false sentence: `K` IS declared).
+/// cell, and so does vita (`const_level_header.rs`: the list's sensitivity is the
+/// time-0 pulse alone; admitted since a `$finish` ends the run at the end of its
+/// time step, so the one run survives a `$finish` reaching time 0). It was refused
+/// while that prerequisite was open, with a sentence naming the constant, never
+/// `E3010 undeclared net/variable` (a false sentence: `K` IS declared).
 #[test]
-fn a_header_level_term_on_a_constant_stays_loud() {
-    loud(
-        "module top;\n\
+fn a_header_level_term_on_a_constant_runs_once_at_time_zero() {
+    let out = run("module top;\n\
            localparam int K = 99;\n\
            initial begin #2; $display(\"DONE\"); $finish; end\n\
            always @(K) $display(\"EDGE at %0t\", $time);\n\
-         endmodule\n",
-        "a level event control on the constant `K`",
-    );
+         endmodule\n");
+    assert_eq!(out, "EDGE at 0\nDONE\n");
 }
 
 /// The SHADOW twin of the cell above: a generate `localparam V` shadowing a module
 /// net, read as a header LEVEL term. `lookup_net_scoped` walks `symbols` alone, so
 /// vita once armed the OUTER NET and fired AGAIN when that net changed — `HDR fired
 /// at 0` + `HDR fired at 1`, where iverilog 13.0 and verilator 5.052 both print `HDR
-/// fired at 0` then `DONE`. It is refused with the §2 🆕 O sentence, which names the
-/// object vita took — BACK ON vita_pre's ROUTE for the reason above (no live term).
+/// fired at 0` then `DONE`, and so does vita now: the constant is the term, so the
+/// process runs once at time 0 on the pulse and never on the net (it was refused
+/// with the §2 🆕 O sentence naming the object vita took while the all-constant list
+/// waited on the `$finish` prerequisite).
 #[test]
-fn a_header_level_term_on_a_shadowing_constant_is_loud() {
+fn a_header_level_term_on_a_shadowing_constant_runs_once_at_time_zero() {
     let src = "module top;\n\
            logic V;\n\
            initial begin V = 0; #1 V = 1; end\n\
@@ -295,11 +293,10 @@ fn a_header_level_term_on_a_shadowing_constant_is_loud() {
            end endgenerate\n\
            initial #3 begin $display(\"DONE\"); $finish; end\n\
          endmodule\n";
-    loud(src, SHADOW);
-    let (out, _ok) = vita(src);
-    assert!(
-        !out.contains("HDR fired at 1"),
-        "must not arm the shadowed net:\n{out}"
+    let out = run(src);
+    assert_eq!(
+        out, "HDR fired at 0\nDONE\n",
+        "must not arm the shadowed net"
     );
     // The CONTROL: the same design with the constant renamed arms the net and fires
     // at 0 and at 1 — all three tools.
