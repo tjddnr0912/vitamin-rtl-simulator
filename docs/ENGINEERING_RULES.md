@@ -368,6 +368,7 @@ another.
 | Enumerate the resource — every argument the engine writes back — not the sites you edited, and treat a guard that cites another guard as its model as a census of two | The cited model never having called the funnel either |
 | Search for a data structure that already records a property before building the mechanism a reverted slice named as its prerequisite | Building what an existing map already answers |
 | Open the code that populates a list your check reads | A check over a list that is always empty being dead code shaped like a guard |
+| Read a per-net predicate through the store's element loop, not through `read_net(net, None)`: an unpacked array is ONE net and the word-less read answers element 0 | A filter that decides for a whole array from one element (§4.5.533: `assign a[1] = 4'd5;` with `a[0]` undriven lost the array's time-0 wake) |
 | Audit the population path of any set a check consumes, and check that the population does not zip formals positionally | The candidate set being empty, so the check never runs, and named arguments being invisible |
 | Count everything the site you are moving sets, not only the field that motivated the move; two fields set by one function are usually one fact | Moving half a fact and making the other half's consumers silently wrong |
 | Search the text of an approximation you are replacing; the places that depend on it are the places that say so in a comment | One consumer being left on the approximation |

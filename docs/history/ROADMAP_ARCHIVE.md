@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 416건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 417건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.533` **a continuous driver whose time-0 settle lands on a value with no definite bit wakes no level waiter; one with a definite bit anywhere, in any element, keeps its time-0 wake** (2026-09-25 · §2 "Delays / events" the t0 false-event bullet deleted, §2-N t0-event residues 5 → 3 · `alias::settled_has_definite_bit` applied to the settle's surviving dirt in `arm_processes` and `arm_t0`, computed nets only, before the copy-net suppression · 92 grounding cells, 3 backends; 2 lenses × 1 round + direct re-grade — r1 BLOCKING (soundness) an unpacked array read at element 0 → every element asked · 8512 tests)
 - `4.5.532` **a process-header level list whose every term is a constant runs once at time 0: the list's sensitivity is the time-0 pulse alone, admitted once a `$finish` ends the run at the end of its time step** (2026-09-25 · §2 "Delays / events", startable row · `always @(K)`, `@(K[0])`, `@(p::C)`, `@(K or K2)` over every constant kind, instance and generate copy; 40 pins converted from their quoted oracle text; 2 lenses, both pre-existing t0 false-event class only)
 - `4.5.531` **a `$finish` ends the run at the end of its time step: the processes already woken in the step, its `#0` and NBA regions and everything they wake run, a `#0` cont-assign due in the step is delivered, the finishing process is never re-entered** (2026-09-25 · §2 "Delays / events" the `$finish` drain bullet deleted, the all-constant header list row unblocked · `Scheduler::finish_pending` latched by the `Step::Finish` arm of both kernels, consumed at the loop's stable point (`st.finished`, deferred drain, postponed flush, `Finish`); the arm parks the finishing activity (`busy`); `tick_due_now` keeps the step open while a `#0` cont-assign / gate update or transport `<= #0` is due at `now` · no format bump · 2 lenses × 1 round + direct re-grade: r1 BLOCKING (soundness) the finishing body re-entered on a second edge of the same step → `busy`; (differential) a `#0` cont-assign never delivered → `tick_due_now`; 264-cell matrix 107 = both oracles · 104 = iverilog · 13 = verilator · 40 recorded splits / no-oracle, 0 moved away · 8505 tests)
 - `4.5.530` **a cast and a formal bind evaluate an impure operand once: 2-state coercion through `TwoState` and a signed widening through a single-mention ternary, where the operand's width is declared** (2026-09-25 · §2 "Size cast / signedness" impure-operand bullet, "Inline / frame binds" `expr_is_repeatable`-decline, `int'($random*1.0)` and stale widened-actual bullets, two "Performance" `coerce_two_state` bullets deleted (CL-12 / CL-14) · new `single_mention.rs`: `extend_signed_once` = `$signed(1'b1 ? $signed(e) : n'sd0)` (no format bump, measured by hand on PRE) and `two_state_once` = `TwoState`, used where `ir_bits_of` answers and the operand is not repeatable, in `lower_prim_cast`, `lower_size_cast` and bind arms (2.5) / (3); a non-repeatable real into ≤32 bits converts through `RealToInt` · `int'(f())` 8 calls / `000000fd` → 1 / `fffffffd`, `int'($random)` 32 draws → 1 · 2 lenses × 2 rounds; round 1 BLOCKING: `TwoState` over a fabricated width (`$bits(int'(q.sum()))` 32 → E3009) and `RealToInt` saturation past 2^127 — both excluded, PRE shape kept)
@@ -542,6 +543,88 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.533 a continuous driver whose time-0 settle lands on a value with no definite bit wakes no level waiter; one with a definite bit anywhere, in any element, keeps its time-0 wake (2026-09-25, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — the t0 false-event bullet ("a wire driven only by a
+continuous assign raises a false event at t=0", deleted); §2-N t0-event residues `assign w =
+1'bx;`, `assign #1 w = r;`, the multi-driver / `wand` / `wor` x and the per-bit `bus[0]` reader
+(deleted: three wake nothing now, the fourth is E3009); two new bullets (the time-0 EDGE on a
+definite settle, 2 oracles, startable; the copy-net value gap, one oracle) and one oracle-split
+bullet (iverilog's operator-decided wake).
+
+**Defect (PRE, iverilog; verilator is 2-state and not an oracle for the hop)**. A net starts at
+its declared default (`z` for a `wire`, `x` for a `logic`) and the time-0 settle writes every
+continuous driver before any process is armed. Its writes stay on the dirty list on purpose —
+`always @(w)` on `assign w = 1'b1;` runs once at time 0 in both oracles — but the list also
+carried the `z → x` hop of a driver whose operands were all still x: `wire w = r + 1;` before any
+`initial` wrote `r` (`#0 r = 2`, `#1`, an NBA, an `always @(K)` body, never), `~r`, `^r`, `r == 2`,
+`{1'bz, r}`, `1'bx`, a gate `and (w, a, b)`, a multi-driver / `wand` x, `logic d; assign d =
+1'bz;`, a delayed `assign #5 b = a` / `assign #5 b = 1'b1` / `buf #2` holding its x, a
+decl-initialised `reg r = 4'bxx01` through `r + 1`, a two-hop chain, a child module's computed
+output. vita ran `always @(w)` (and `@(w or c)`, `@*`) once at time 0 with `w = x`: an extra
+`W 0 w=x` line at exit 0, or a wrong VALUE — `always @(w) q = w;` turned a `reg q = 9` into x at
+`#0`, `always @(w) n = n + 1;` counted 2 for 1. 92 cells (32 + 20 + 35 + 5), every one iverilog's
+text on POST, on interp / vm / native alike.
+
+**The measured rule**. iverilog always wakes on a settled value with a definite bit ANYWHERE — `1'b1`,
+`1'b0`, `4'd5`, `K`, `r & 4'b0011` (= `00xx`), `{r, 3'b101}` (= `x101`), `{4'd0, r}`,
+`{1'bz, 1'b0}` (= `z0`), `2'b1x`, `a | 1'b1`, `reg r = 1` through `r + 1`, a constant through a
+port — and on a no-definite value only where it contradicts itself on equal values (`2'bxz`
+wakes, `{r, 1'bz}` = `xz` does not; `{r, 1'bx}` wakes, `{r, r}` and `2'bxx` do not; the mux
+`r ? 1'b1 : 1'b0` wakes, `~r` does not). IEEE 1800-2017 §4.9.1 evaluates a continuous
+assign at time 0 as an ordinary update event, §9.4.2 makes z→x a value change, and §4.7 leaves
+open whether the `always` reaches its event control before or after it, so the standard allows
+both; the rule is a fit to the single 4-state oracle, stated on the VALUE, and where iverilog
+contradicts itself (above, and a decl-init through `r + 1` wakes while through `not (g, r)` or a
+copy it does not) vita keeps the value rule — recorded as the oracle-split bullet.
+
+**Fix**. `Value::any_definite` (value.rs) and `alias::settled_has_definite_bit` (every element of
+an unpacked array asked, `array_len.max(1)`). `sched/scan_arm.rs::arm_processes`, after the
+initializer rollback (`split_off(settled)`) and BEFORE the copy-net suppression: every net still
+on the time-0 dirty list that is not a copy-net destination and whose settled value has no
+definite bit is dropped (flag cleared, list compacted); `native/run.rs::arm_t0` the same rule at
+the same position over the bitmap set (`retain_snapshot` → x-drop → suppression). Copy nets are
+exempt on purpose — they take their sources' status in the suppression, which now reads a
+dropped source as "did not move" (`wire s = 1'bz; logic d = s;` wakes nothing, iverilog-pinned)
+while a copy of a moved source keeps the iverilog answer it had (`2'b1z` → `vv[0]` → `d`, the
+copy-net suite byte-identical). Nothing else is touched: the write stands (VCD md5 identical,
+`trace.jsonl` identical, `run.json` one process eval fewer), `ca_dirty` stands, the edge
+accumulator is untouched (z→x is neither edge), and a definite value written later in time 0 is a
+fresh change. No format bump. New `t0_settle_no_definite_bit.rs` (7 tests, 61 cells, 3 backends
+on the headline cells); 8505 → 8512.
+
+**Byte identity**. The 87 grounding cells match iverilog on POST except the documented residues
+(loud `@(w[0])`, `always_comb` order, the `I0` pre-evaluation read, the mux, the time-0 posedge on
+a constant), and the 5 copy-net cells are PRE = POST. The soundness lens's 40 cells: 35 PRE = POST
+(the 49 §4.5.532 pulse-net cells too, interp and native); the 5 that moved are the round-1 fix.
+Corpus 10/10 (verilog-axi's ruled digest unchanged, so its 29 x-cycles are not this class — its
+computed wires settle to definite values).
+
+**Review** — 2 lenses × 1 round + a direct re-grade. Soundness BLOCKING (40 cells): the filter read
+`read_net(n, None)` = element 0 of an unpacked array, so `assign a[1] = 4'd5;` with `a[0]`
+undriven lost the whole array's time-0 wake (`always @* q = a[1];` never ran; iverilog, verilator
+and PRE `END q=0101`, POST `q=1001`; 4 cells + a generate lookup table) — one root, fixed by asking
+every element; every soundness cell re-run on the fixed binary, the 5 moved to the oracle text,
+35 unchanged. Its census: nothing but the settle's cont-assign targets survives the rollback
+(heap handles, frame-locals, class fields, clocking, force, NBA are not on the list); VCD /
+`--probe` bytes are written before the filter; `prev` is written and never read; the settle
+glitch z→0→x cell (PRE `P 0` / `N 0`, POST nothing) matches iverilog. Differential BLOCKING (84 cells + the 49 §4.5.532 cells on 3 backends + 5 workloads: both 41 ·
+real gap new 5 · pre-existing 7 · no-oracle 18 · harness / order 13): the same array root (a copy
+`wire b1 = a[1]` of a definite element and an `always @*` reader lost their time-0 wake; e17 /
+e20 / e22 on the fixed binary = iverilog, e13 / e21 = PRE); its M2 falsified the brief's sentence
+"every shape iverilog wakes has a definite bit" — an x/z LITERAL piece wakes iverilog (`2'bxz`,
+`{r, 1'bx}`) where an equal value from a net does not (`{r, 1'bz}`, `{r, r}`), so the sentence
+was corrected in the code, the test header and the split bullet and the value rule kept; M1 (a
+copy of an all-x element of an array whose element 0 is definite wakes with `xxxx`, PRE = POST)
+recorded as the per-net array bullet. VCD: 198 PRE/POST pairs with `$dumpvars`, net traces
+identical, the 15 that differ differ in process-written registers only; `trace.jsonl` identical;
+the five workloads' stdout and VCD md5 PRE = POST. Both lenses' cells re-graded directly on the
+fixed binary: 10 moved, all to the oracle text or to PRE, 109 unchanged.
+
+**Out of scope**: the time-0 EDGE on a definite settle (its own bullet); the copy-net value gap
+(one oracle); iverilog's operator-decided wake (split); `assign` to a `real` variable (E3018,
+§3); `@(w[0])` (§3.b `level-select-event`); the `always_comb` / `initial` time-0 order split.
 
 #### 4.5.532 a process-header level list whose every term is a constant runs once at time 0: the list's sensitivity is the time-0 pulse alone, admitted once a `$finish` ends the run at the end of its time step (2026-09-25, branch main) ✅
 

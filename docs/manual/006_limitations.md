@@ -745,6 +745,7 @@ matches the reference tools or refuses loudly.
 
 | Construct | vitamin answers | Reference answers | Workaround |
 |---|---|---|---|
+| An edge waiter on a net whose time-0 value is a definite constant: `wire w = 1'b1; always @(posedge w) …` | fires once at time 0 (`P 0`; z→1 is a posedge in IEEE §9.4.2) | neither tool fires at time 0 (both fire the LEVEL waiter `always @(w)` once, as vitamin does) | Wait on a variable the design drives, or gate the body on `$time > 0` |
 | A module-scope `localparam` mixing a signed narrow name into a wider unsigned expression: `localparam logic signed [7:0] NM = -8'sd2; localparam logic [63:0] XM = NM ^ 64'h0;` | `fffffffffffffffe` | Icarus Verilog and Verilator: `00000000000000fe` (§11.8.2 converts at the operand's own width) | Compute it in a `function automatic` local; the same expression over a function local folds `00000000000000fe` |
 | A parameter override carrying `x` or `z` onto a 4-state parameter: `leaf #(.K(8'b1010_010x))` | `10100100`, unknown plane dropped, no diagnostic | both tools keep the `x` | Do not carry `x`/`z` through an override; drive the value from RTL |
 | A parent `initial` reading a child net at time 0: child has `initial s = 8'hEE;`, parent does `r = u1.s;` in its own `initial` | `xx` | both tools: `ee` | Read the child value after a `#0` or `#1`, or through a port bind or continuous assign — all three read `ee` correctly |

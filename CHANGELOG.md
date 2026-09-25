@@ -9,6 +9,18 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a net that settles to x at time 0 no longer wakes its readers
+
+- **A continuous driver whose time-0 value has no definite bit hands no event to `always @(w)`,
+  `always @(w or c)`, `always @*`, `wait` or an in-line `@(w)`**, as Icarus Verilog does: `wire w =
+  r + 1;` before any `initial` writes `r`, `~r`, a gate, a delayed `assign #5` (x until its first
+  write lands), a multi-driver / `wand` x and `assign w = 1'bx;` printed an extra `W 0 w=x` line,
+  or stored x through `always @(w) q = w;` over a `reg q = 9`, or counted one wake too many. A
+  settled value with a definite bit anywhere (`1'b1`, `4'd5`, `r & 4'b0011` = `00xx`, `{1'bz,
+  1'b0}`, any element of an unpacked array) keeps its time-0 wake; a definite value written later
+  in time 0 wakes as before; edge waiters, VCD and `$display` reads are unchanged. All three
+  backends.
+
 ### Fixed — an `always` sensitive only to constants runs once at time 0
 
 - **`always @(K)`, `@(K[0])`, `@(K[3:0])`, `@(p::C)`, `@(K or K2)` and every other header level

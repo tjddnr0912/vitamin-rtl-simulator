@@ -27,8 +27,8 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 6 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 158 | 81 | 77 | oracle split / pinned / oracle disqualified 43 · named prerequisite 17 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · held on purpose 1 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 16 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 33 | ① | |
-| §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
+| §2 | recorded defects by mechanism | 161 | 81 | 80 | oracle split / pinned / oracle disqualified 44 · named prerequisite 17 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 1 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 18 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 34 | ① | |
+| §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 392 | 222 | 170 | | | | |
+| total | | 393 | 222 | 171 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
@@ -124,19 +124,17 @@ T4 (opportunistic): a function-local array element write costs 514 ns against iv
 
 | id | symptom · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle |
 |---|---|---|---|---|
-| 2-N-1 | verilog-axi is not promoted: `m_axi_awvalid` / `m_axi_wvalid` / `m_axi_arvalid` are x in iverilog and 0 in vita just after reset — 29 of 123,166 cycles (`XC=29` against `XC=0`; invariant at N=200, digest unchanged). Function matches (same completion cycle); vita is the optimistic side, which hides x-propagation bugs | the crossbar reaches a register slice through a computed wire (`int_s_axi_wready[m] = int_axi_wready[w_select_reg*S_COUNT+m] \|\| w_drop_reg`), and only vita raises a t0 event. vita's rule: a driver that COMPUTES has an initial state, a driver that MOVES bits does not (`sim_engine::alias::copy_nets`) | do not chase without a second oracle; promotion requires either a digest that does not count x-cycles or an oracle-split ruling | oracle-split: `assign w = a \| b` gives iverilog c=1 but `a & b` gives c=0 with identical operands and values; `pr & 1'b1`, `~(~pr)`, `{pr}`, `1'b1 ? pr : 1'b0` fold while `pr \| 1'b0` and `pr ^ 1'b0` do not — that is where the elaborator stops. verilator is not the tiebreak either: `a=10 b=11` against iverilog's and vita's `a=x b=x` |
+| 2-N-1 | verilog-axi is not promoted: `m_axi_awvalid` / `m_axi_wvalid` / `m_axi_arvalid` are x in iverilog and 0 in vita just after reset — 29 of 123,166 cycles (`XC=29` against `XC=0`; invariant at N=200, digest unchanged). Function matches (same completion cycle); vita is the optimistic side, which hides x-propagation bugs | the crossbar reaches a register slice through a computed wire (`int_s_axi_wready[m] = int_axi_wready[w_select_reg*S_COUNT+m] \|\| w_drop_reg`), and only vita raises a t0 event. vita's rule: a driver that COMPUTES has an initial state when its settled value has a definite bit (§4.5.533; an all-x settle wakes nothing), a driver that MOVES bits does not (`sim_engine::alias::copy_nets`) | do not chase without a second oracle; promotion requires either a digest that does not count x-cycles or an oracle-split ruling | oracle-split: `assign w = a \| b` gives iverilog c=1 but `a & b` gives c=0 with identical operands and values; `pr & 1'b1`, `~(~pr)`, `{pr}`, `1'b1 ? pr : 1'b0` fold while `pr \| 1'b0` and `pr ^ 1'b0` do not — that is where the elaborator stops. verilator is not the tiebreak either: `a=10 b=11` against iverilog's and vita's `a=x b=x` |
 | 2-N-2 | FST loses the `$dumpvars` snapshot: two designs differing only in initialization produce byte-identical 473-byte `.fst` files (every signal `x`, exit 0); 24 designs with differing VCD produce identical FST, so a waveform differential oracle is impossible | not a missing time step — opening time 0 lazily (the arm fires once) leaves `xxxxxxxx` unchanged | the value is absorbed into fst-writer's per-variable INITIAL value, so the next step is that library's initial-value API | n/a |
 
-t0-event residue (pre-existing, held on purpose):
+t0-event residue (pre-existing, held on purpose; `assign w = 1'bx;`, `assign #1 w = r;`, a
+multi-driver / `wand` / `wor` x and a reader of `bus[0]` beside a constant driver on `bus[1]` left
+this list with §4.5.533 — the first three wake nothing now, as iverilog, and the last is E3009):
 
-- `assign w = 1'bx;` — a computed driver whose value is `x` also raises a vita t0 event where
-  iverilog does not; vita's driven-net default is `z`, iverilog's is effectively `x`.
-- A truncating copy `wire [3:0] w; assign w = r8;` — iverilog collapses it, vita treats it as
-  computed (widening fires on both sides). `assign #1 w = r;` — iverilog 0, vita 2. Multi-driver and
-  two-driver `wand`/`wor` — iverilog 0, vita 1 (a single driver is resolved by the copy rule). A
-  concat lvalue `assign {x,y} = …` is excluded by the single-chunk gate.
-- vita's dirty channel is per NET where iverilog's collapse is per BIT, so a constant driver on
-  `bus[1]` wakes a reader of `bus[0]`.
+- A truncating copy `wire [3:0] w; assign w = r8;` of a decl-initialised `reg [7:0] r8 = 8'h12` —
+  iverilog collapses it (no time-0 wake), vita treats it as computed and its definite settled value
+  wakes `always @(w)` once (widening fires on both sides). A concat lvalue `assign {x,y} = …` is
+  excluded by the single-chunk gate.
 - Oracle split `wire w; assign w = 1'b1; reg r = w;` — iverilog `z`, verilator and vita `1` (§6.8
   fixes only what precedes a procedure, and a continuous assignment is not a procedure). Pinned only.
 - `buf b1(o1, zin)` is vita `x` and iverilog `z` (the neighbouring `assign o2 = zin;` is `z` in
@@ -783,15 +781,28 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - ⓔ ORACLE-SPLIT: in a MULTI-timescale design `global_prec_exp` becomes finer and the `e < 0` case
   never triggers — iverilog rounds at the module's OWN precision and verilator at the design's GLOBAL
   precision. With a single timescale the two coincide and it does not bite.
-- A wire driven only by a continuous assign raises a false event at t=0 (2 oracles since
-  §4.5.532's review): with `wire b; assign #5 b = a;`, b starts at z and the t=0 settle's z→x wakes
-  `always @(b)` where neither oracle has a t=0 event; `assign d = c ^ 1'b0;` behaves the same, and
-  a two-hop chain `wire n1 = r + 1; wire n2 = n1 + 1; always @(n2)` prints `N2 at 0 n2=x` before
-  the real `n2=4` (both oracles print the real line only). An initial-value domain problem: the
-  settle delivers the z→x hop as a change. STARTABLE. The §4.5.532 admission of `always @(K)` opens
-  a loud→value column onto this class — a design PRE refused now prints the extra `w=x` line — but
-  the same line is printed on PRE by the `@(K or clk)` twin, by `initial #0 r = 2;` and by
-  `always @(lv)` with no constant at all (soundness s02 / differential e20 controls).
+- An edge waiter on a net whose time-0 settle lands on a definite value fires at time 0:
+  `wire w = 1'b1; always @(posedge w)` prints `P 0` and `wire v = 1'b0; always @(negedge v)` prints
+  `N 0` where neither oracle prints a line (2 oracles; IEEE §9.4.2 makes z→1 a posedge, and the
+  settle's `z0` twin `N 0 z0` is the same class). The level waiter on the same net fires in both
+  oracles, so the two waiters read the one settle write differently. Site: the settle's dirt
+  carries `slot_edge` through `note_change` / `accumulate_edge` into the first delta's edge scan
+  (§4.5.533 dropped only the x-valued dirt). STARTABLE.
+- A copy net of a source that moved at time 0 takes only its OWN storage move (`alias::copy_nets`
+  suppression is "own dirt AND source moved"), where iverilog fires on the copied VALUE: with
+  `wire [1:0] vv = 2'b1z; wire s = vv[0];`, `always @(s)` counts 0 in vita and 1 in iverilog, the
+  `2'b1x` twin counts 1 in vita and 0 in iverilog, and `wire d = s;` (a wire, whose z default equals
+  the copied z) counts 0 against iverilog's 1 — while the `logic d = s;` cells of
+  `copy_net_no_t0_transition.rs` match. One oracle (verilator is 2-state and runs every level
+  waiter once at time 0). Pre-existing, unchanged by §4.5.533 (copy nets are exempt from its drop).
+- An unpacked net array is ONE net on the dirty channel, so a copy of an all-x element wakes at
+  time 0 when another element settled to a definite value: `wire [3:0] a [0:1]; assign a[0] =
+  4'd3; assign a[1] = r + 1; wire [3:0] b1 = a[1]; always @(b1)` prints `B1 0 b1=xxxx` before
+  `B1 1 b1=0011` (iverilog: the second line only; a[1]'s x is the §4.5.533 class, kept because the
+  array's dirt is decided per net and its element 0 is definite). One oracle (verilator 2-state).
+  Pre-existing, PRE = POST; the per-bit sibling (`bus[0]` beside a constant `bus[1]`) is E3009
+  since `level-select-event` went loud, an element copy is legal. Fix shape = per-element dirt on
+  the channel (`array_len` words), read by the copy suppression and the x-drop alike.
 
 - A `#0` continuous-assign or gate update (`assign #0 r = u`, `wire #0 r = u`, `buf #0`) is
   delivered only after the WHOLE procedural `#0` cascade of its tick (pre-existing, 2 oracles from
@@ -801,8 +812,8 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   Site: `delayed_ca` is keyed by absolute tick and drained by `take_due_delayed_ca` on the advance
   path, which re-enters `now` only once every Inactive round is empty. Fix shape = deliver a
   zero-delay cont-assign write as an Inactive-region event of its tick (between two `#0` hops), as
-  a procedural `<= #0` already is. The `always @(r)` on such a net also fires twice at time 0
-  (`R 0 r=x` / `R 0 r=0`; the t0 false-event row above).
+  a procedural `<= #0` already is. (The `always @(r)` on such a net fired twice at time 0,
+  `R 0 r=x` / `R 0 r=0`, until §4.5.533; it now fires once, as both oracles do.)
 - A deferred-assertion action block that holds a `$finish` or `$stop` (`assert #0 (0) else
   $finish;`, or an `else begin $display(…); $finish; end`) prints an empty line at maturation and
   the run continues to its next `$finish` (pre-existing; verilator ends the run at the maturation
@@ -961,6 +972,17 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Oracle splits (recorded, not chased)
 
+- iverilog's time-0 wake on a continuous driver whose settled value has no definite bit is decided
+  by the driver's operator, not its value (§4.5.533): `wire w = r ? 1'b1 : 1'b0;` of an unwritten
+  `r` wakes `always @(w)` with `W 0 w=x`, while `~r`, `^r`, `r == 2`, `r + 1`, `{1'bz, r}`, a gate,
+  a delayed driver and a multi-driver x wake nothing — and a decl-initialised `reg r = 1` wakes a
+  reader of `r + 1` but not of `not (g, r)` or of a plain copy; an x/z LITERAL piece wakes it
+  where an equal value from a net does not (`2'bxz`, `4'bxzxz`, `{r, 1'bx}`, `{r, 64'bx}` wake;
+  `{r, 1'bz}` = `xz`, `{r, r}` = `xx`, `2'bxx` do not — `always @(e) q = e;` on `{r, 1'bx}`
+  stores `xx` there, vita keeps `q`). verilator is 2-state and runs every level `always` once at
+  time 0. vita wakes on the value: no definite bit anywhere, no wake. A first-batch
+  `initial $display(w)` of `r & 4'b0011` also reads iverilog's pre-evaluation `xxxx` where vita
+  and verilator read the settled `00xx` / `0000`.
 - The ORDER of distinct processes in the time-0 Active region around an all-constant
   `always @(K)` (§4.5.532; IEEE leaves it open): with `initial -> ev;` waking an `initial @(ev)`,
   iverilog prints the `always @(K)` line first and the woken `initial` second, vita the reverse,
@@ -1101,8 +1123,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - A net-only header level list at time 0: verilator runs every header level `always` at time 0
   (`reg clk; always @(clk)`: `MIX at 0`, `MIX at 1`, `MIX at 2`; `reg clk = 0;` and a net bit select
   `@(n[0])` likewise), iverilog does not (`MIX at 1`, `MIX at 2`). vita = iverilog for a variable; a
-  net driven by a gate or a computing continuous assign raises vita's own time-0 event (the §2-N
-  t0-event class), and there vita = verilator (dS01 `@(w or g)` with `not (g, a)`, dR64).
+  net driven by a gate or a computing continuous assign whose settled value has a definite bit
+  raises vita's own time-0 event (the §2-N t0-event class), and there vita = verilator (dS01
+  `@(w or g)` with `not (g, a)` and `reg a = 0`, dR64); one that settles to x raises none since
+  §4.5.533, and there vita = iverilog (the same cell with `a` unwritten).
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 

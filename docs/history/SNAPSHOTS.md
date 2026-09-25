@@ -35,6 +35,7 @@ a section restructure, a residue split).
 | 2026-09-25 | f929412 | §4.5.530 | 8485 | 34 | 27 / 0 / 27 | 155 / 79 / 76 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 389 / 220 / 169 |
 | 2026-09-25 | b70759a | §4.5.531 | 8505 | 34 | 27 / 0 / 27 | 158 / 81 / 77 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 392 / 222 / 170 |
 | 2026-09-25 | 8cb7eef | §4.5.532 | 8505 | 34 | 27 / 0 / 27 | 158 / 81 / 77 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 392 / 222 / 170 |
+| 2026-09-25 | 581e26a | §4.5.533 | 8512 | 34 | 27 / 0 / 27 | 161 / 81 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 393 / 222 / 171 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -106,3 +107,11 @@ a section restructure, a residue split).
   oracles now, re-measured by both lenses). Added: one oracle-split bullet (time-0 process order
   around `always @(K)`). Startable 81 − 1 + 1 = 81; blocked 77 − 1 + 1 = 77. Test count unchanged
   (40 pins converted in place). `format_version` 34 unchanged.
+- 2026-09-25 (§4.5.533): 2M is 158 − 1 + 4. Deleted (startable): "Delays / events" the t0 false
+  event of a cont-assign-only wire. Added: the time-0 edge on a definite settle (startable, 2
+  oracles), the copy-net value gap (one oracle, blocked), the per-net dirt of an unpacked array
+  (one oracle, blocked) and one oracle-split bullet (iverilog's operator- and literal-decided
+  time-0 wake). §2-N's t0-event residues 5 → 3 (`1'bx`, `assign #1`, multi-driver and the per-bit
+  reader left: three wake nothing now, the fourth is loud). Startable 81 − 1 + 1 = 81; blocked
+  77 + 3 = 80; §2-N blocked 7 − 2 = 5; total 392 + 1 = 393. Tests 8505 → 8512. `format_version` 34
+  unchanged.
