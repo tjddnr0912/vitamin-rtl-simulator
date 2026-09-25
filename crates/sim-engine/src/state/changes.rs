@@ -160,17 +160,7 @@ impl SimState<'_> {
     /// write.
     pub(crate) fn accumulate_edge(&mut self, net: usize, old_b0: sim_ir::FourState) {
         let new_b0 = scalar_bit0(&self.nets[net].cur);
-        let mut m = 0u8;
-        if fs_is_posedge(old_b0, new_b0) {
-            m |= 1;
-        }
-        if fs_is_negedge(old_b0, new_b0) {
-            m |= 2;
-        }
-        if old_b0 != new_b0 {
-            m |= 4;
-        }
-        self.slot_edge[net] |= m;
+        self.slot_edge[net] |= edge_mask(old_b0, new_b0);
     }
 
     /// Emit a VCD value_change for the net word that changed. Arrays carry one

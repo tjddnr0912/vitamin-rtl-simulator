@@ -327,11 +327,18 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
     // t0 STRUCTURAL SETTLE, before anything is armed — `simulate` does this for
     // the engine outside `run()`. A design that cannot converge here has a
     // divergent t0 and is stopped rather than run on it.
+    // The bit each edge-target net holds BEFORE the settle — `arm_t0` rebuilds
+    // the time-0 edge masks from it (`crate::t0_edge`); the engine's twin is
+    // `Scheduler::settle_t0`.
+    let t0_b0 =
+        crate::t0_edge::edge_b0_snapshot(&k.arena.ch.is_edge_target, |n| k.arena.scalar_bit0(n));
     let mut t0_deltas: u64 = 0;
     if settle_cont_assigns(k, ir, &mut t0_deltas).is_none() {
         return FinishReason::DeltaLimit;
     }
-    arm_t0(k, ir);
+    if !arm_t0(k, ir, &t0_b0) {
+        return FinishReason::DeltaLimit;
+    }
     if k.sched.st.finished {
         // The ONE live `finished` poll: `arm_t0`'s missing-init-proc guard latches
         // it. NOT for a `$finish` in an initializer — an initializer body is
@@ -348,6 +355,8 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
     // preponed values include the declaration initializers, as they do there.
     // No-op without clocking blocks ⇒ byte-identical.
     snapshot_preponed(k);
+    let mut t0_woken = take_t0_wakes(k);
+    let mut t0_first_batch_done = false;
     let max_deltas = k.k_delta_budget();
     let time_limit = k.k_time_limit();
     loop {
@@ -372,12 +381,24 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 Some(true) => propagate(k),
                 Some(false) => {}
             }
-            if !k.active.is_empty() {
+            if !k.active.is_empty() || (t0_first_batch_done && t0_woken.is_some()) {
                 // Take the batch so wakes triggered DURING it land in a fresh
                 // `active` — the engine's shape, and it is semantic rather than
                 // an allocation trick: a process woken by the batch belongs to
                 // the NEXT delta, not to the middle of this one.
-                let batch = std::mem::take(&mut k.active);
+                // T0 DELIVERY, second half (`take_t0_wakes`): the settle's
+                // wakes lead the first batch taken after the first one.
+                let batch = match (t0_first_batch_done, t0_woken.take()) {
+                    (true, Some(mut held)) => {
+                        held.append(&mut k.active);
+                        held
+                    }
+                    (_, held) => {
+                        t0_woken = held;
+                        std::mem::take(&mut k.active)
+                    }
+                };
+                t0_first_batch_done = true;
                 for r in batch {
                     if k.sched.st.finished {
                         let fk = finish_kind(k);
@@ -815,7 +836,10 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
 /// declaration initializer "before any initial or always block starts", and
 /// measurement says that is literal — `reg clk = 0;` must not hand
 /// `always @clk` an x→0 edge. Keeping the dirt would hand it exactly that.
-fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
+/// `false` when the re-settle after the initializers did not converge — the
+/// engine's `arm_processes` contract: the fatal is emitted, nothing is armed,
+/// and `run` reports `DeltaLimit` as it does for the first settle.
+fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool {
     // A4: the activity arena, seeded exactly as `arm_processes` seeds it — one
     // base activity per process declaration, `tie == template == index`. Tier-3
     // does not call `arm_processes` (it has this function instead), so before
@@ -840,7 +864,7 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
         // is a worse answer to the same input.
         if (pid as usize) >= ir.processes.len() {
             k.sched.fatal_init_proc_missing(pid);
-            return;
+            return true;
         }
         let entry = ir.processes[pid as usize].entry;
         // The Step is DISCARDED, and so is the engine's (`arm_processes` writes
@@ -860,11 +884,43 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
         k.drain_range_diags();
     }
     // HEAP-WAKE: stage the initializer bodies' heap marks into `ch.dirty` HERE,
-    // so `retain_snapshot` below drops them with every other initializer write.
+    // so the rollback below drops them with every other initializer write.
     // `int w[] = new[3];` must not hand `always_comb n = w.size()` an event, for
     // the same reason `reg clk = 0;` must not hand `always @clk` an edge. The
     // engine's twin is in `arm_processes_after_seed`, at the same position.
     drain_heap_marks(k);
+    // INITIALIZER RE-SETTLE — the engine twin (`arm_processes_after_seed`)
+    // and `crate::t0_edge` carry the argument: the settle above evaluated every
+    // driver of an initialised variable against the variable's DEFAULT, and the
+    // phantom value it landed on made events (`reg r = 1; wire w = (r !==
+    // 1'b1);` printed `P 0` and `N 0` where both oracles print `W 0 w=0`). The
+    // initializers' writes marked those drivers in `ca_dirty` through the
+    // funnel, so this settles exactly them and what they feed. The
+    // initializers' own set is copied out FIRST: a net the re-settle moves for
+    // the first time is not on it and survives the rollback below.
+    let init_nets: Vec<u32> = k
+        .arena
+        .ch
+        .dirty
+        .collect()
+        .into_iter()
+        .filter(|&n| (settled.get(n as usize / 64).copied().unwrap_or(0) >> (n % 64)) & 1 == 0)
+        .collect();
+    // Only when the design HAS declaration initializers: without any, the
+    // pass would visit `ca_always` alone (system-function, delayed,
+    // multi-driver and heap drivers) and add an evaluation to their published
+    // `--obs-procs` counts for nothing. The test is on the initializer LIST,
+    // not on `init_nets`: a heap initializer (`int q[] = new[3];`) leaves no
+    // net dirt behind, and its reader `wire n = q.size();` is exactly a
+    // `ca_always` driver that only this pass brings to the initialised value
+    // (measured: `P 0 | N 0 | W 0 n=3` with the dirt-keyed guard, verilator
+    // `P 0 n=3 | W 0 n=3`).
+    if !inits.is_empty() {
+        let mut resettle_deltas: u64 = 0;
+        if settle_cont_assigns(k, ir, &mut resettle_deltas).is_none() {
+            return false;
+        }
+    }
     // COPY-NET REPAIR, before the rollback so its own writes are dropped with
     // the initializers'. A net whose every continuous driver MOVES bits rather
     // than computing them has no state of its own (`crate::alias`), but the
@@ -877,7 +933,7 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
     //
     // Order matters twice: sources come first (`copy_nets` returns dependency
     // order) so a chain repairs in one pass, and the suppression runs AFTER
-    // `retain_snapshot` so each source's dirt is the settle's answer alone.
+    // the rollback so each source's dirt is the settle's answer alone.
     let copies = crate::alias::copy_nets(ir);
     for cn in &copies {
         for &ci in &cn.cas {
@@ -901,11 +957,26 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
     // Measured: 49 of 270 generated cont-assign designs diverged, silently, at
     // exit 0. The mark is what makes the split possible, so it is taken BEFORE
     // the initializer loop above rather than derived afterwards.
-    // ⚠️ The mark is a BITMAP snapshot, not a length: membership is a bit now,
-    // so "everything added after this point" is `set & ~snapshot` and the undo
-    // is `set &= snapshot`. Same result as the old `split_off`, and it no longer
-    // depends on the list being append-only to be correct.
-    k.arena.ch.dirty.retain_snapshot(&settled);
+    // ⚠️ The mark is a BITMAP snapshot, not a length: membership is a bit, so
+    // the initializers' set is `after_init & ~snapshot` — `init_nets` above,
+    // read off BEFORE the re-settle appended its own first-time nets, which
+    // stay. (`retain_snapshot` would drop those too.)
+    for &n in &init_nets {
+        k.arena.ch.dirty.remove(n as usize);
+    }
+    // T0 EDGE REBUILD — the engine twin (`arm_processes`) carries the
+    // argument: the mask is ASSIGNED from the bit the net held before the
+    // settle (`t0_b0`) to the bit it holds now, by the funnel's own rule
+    // (`edge_mask`), so the phantom's hop is gone and a single hop reads as
+    // the funnel wrote it.
+    for n in k.arena.ch.dirty.collect() {
+        let i = n as usize;
+        if k.arena.ch.is_edge_target[i] {
+            let old = t0_b0.get(i).copied().unwrap_or(sim_ir::FourState::Z);
+            let new = k.arena.scalar_bit0(n);
+            k.arena.ch.slot_edge[i] = crate::state::edge_mask(old, new);
+        }
+    }
     // T0 EDGE-CLEAR — the engine twin (`arm_processes`) and `crate::t0_edge`
     // carry the argument: the settle's membership stays (a level waiter fires
     // on it), and on a SETTLE-CONSTANT net its `declared default → settled
@@ -987,6 +1058,7 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
             sim_ir::SensKind::Edge | sim_ir::SensKind::Level => {}
         }
     }
+    true
 }
 
 /// The engine's `propagate_changes`, for the class the gate admits: take the
@@ -1023,6 +1095,32 @@ fn snapshot_preponed(k: &mut NativeKernel) {
 fn tick_due_now(k: &NativeKernel) -> bool {
     let now = k.sched.st.now;
     k.delayed_nba.keys().next().copied() == Some(now) || k.sched.next_delayed_ca() == Some(now)
+}
+
+/// T0 DELIVERY — the engine twin is `Scheduler::take_t0_wakes` and carries
+/// the argument; the measurement is in `crate::t0_edge`. The settle's record
+/// (what `arm_t0` left on the dirty list) is delivered before the first Active
+/// batch runs, so a wait armed inside the batch does not see it; the processes
+/// it wakes are held (`Some`) and lead the next batch taken after the first
+/// one — after the batch's writes and what the following settle made of them
+/// have propagated — the `initial` bodies, then the settle's wakes, then the
+/// batch-write wakes, which is what both oracles print. With no batch to wait
+/// for, the wakes are the batch.
+fn take_t0_wakes(k: &mut NativeKernel) -> Option<Vec<NativeReady>> {
+    if k.arena.ch.dirty.is_empty() {
+        return None;
+    }
+    let batch = std::mem::take(&mut k.active);
+    propagate(k);
+    let woken = std::mem::replace(&mut k.active, batch);
+    if woken.is_empty() {
+        None
+    } else if k.active.is_empty() {
+        k.active = woken;
+        None
+    } else {
+        Some(woken)
+    }
 }
 
 fn propagate(k: &mut NativeKernel) {

@@ -35,9 +35,77 @@
 //!
 //! Computed once per run, in `arm_processes` / `arm_t0`, after the initializer
 //! rollback and before the x-drop and the copy-net suppression.
+//!
+//! THE PHANTOM HOP. The settle runs before the declaration initializers, so a
+//! driver that reads an initialised variable settles on the value of the
+//! variable's DEFAULT first: `reg r = 1; wire w = (r !== 1'b1);` settled `w`
+//! to 1 (`x !== 1`) and the first delta brought it to 0, and the funnel had
+//! folded both hops into the mask — `always @(posedge w)` printed `P 0` and
+//! `always @(negedge w)` `N 0`, `always_ff @(posedge w) c <= c + 1` counted
+//! one, `initial @(posedge w)` fell through, a child's `always @(posedge i)`
+//! on that port and a copy `wire c = w;` did the same — where both oracles
+//! print only the level line `W 0 w=0` (also for `$isunknown(r)`, `int r =
+//! 1; (r !== 1)`, `logic w; assign w = (r !== 1'b1);`, `(r === 1'b0)` of
+//! `reg r = 0`, and `v = w ? 1'b0 : 1'b1` chained on it). IEEE 1800 §6.21
+//! puts the initializer before any process starts, so both kernels
+//! RE-SETTLE after the initializer bodies (the dirty-settle of exactly the
+//! drivers those writes marked) and then ASSIGN each dirty edge-target net's
+//! mask from the bit it held before the first settle (`edge_b0_snapshot`) to
+//! the bit it holds after the re-settle. What that pair yields is the
+//! funnel's own rule (`edge_mask`), unchanged: `z → 1` is a posedge, `z → 0`
+//! a negedge. The level wake is unchanged too — membership is a union, and a
+//! `bit`-typed net driven back to its default still wakes `always @(w)` once
+//! (both oracles: `W 0 w=0`, count 1).
+//!
+//! THE DELIVERY. With the phantom gone the run loop's first settle finds nothing
+//! marked, so the settle's record would be delivered by the propagate AFTER the
+//! first Active batch, sorted with the batch-write wakes by declaration order,
+//! and an in-body wait armed in the batch would see it. Both kernels instead
+//! deliver it at the start of the run (`Scheduler::take_t0_wakes`,
+//! `native::run::take_t0_wakes`): the arming's dirty list is propagated once
+//! before the first batch and the woken processes are held, then queued after
+//! the batch and its writes have propagated, ahead of the batch-write wakes —
+//! the `initial` bodies, the settle's wakes, the batch-write wakes, which is
+//! what both oracles print (`always @(w) x = 5;` runs before an `always @(s)`
+//! woken by `initial s = 1;`, which reads `x=5`; `initial begin @(negedge w);
+//! … end` armed at time 0 waits). A process the settle and the batch both wake
+//! runs once, with the value the batch left; an `always_comb` reading a settled
+//! net runs once at time 0 (verilator once, iverilog twice).
+//!
+//! Left where it was, as one oracle split (ROADMAP §2): whether the settle of
+//! a variable-reading driver is an edge AT ALL. On `z → 0` iverilog fires
+//! `N 0 w=10` for `{r, 1'b0}` and nothing for `(r !== 1'b1)`, `~r`, `r + 1`
+//! (functor-decided) and verilator holds no z; on `z → 1` iverilog fires for
+//! a concat, an xor and `~` of a NET and not for `~` of a variable, `r + 1`
+//! or a case-equality, verilator fires for `wire w = ~r;` beside an `always
+//! @(w)` and not for the same `~clk` beside an `always #5` toggler. vita
+//! keeps the value rule for both.
 
 use sim_ir::SimIr;
 use std::collections::BTreeSet;
+
+/// Bit 0 of every edge-target net as it stands NOW, dense by net id (`Z`
+/// where the net is not an edge target). Taken before the time-0 settle by
+/// both kernels (`Scheduler::settle_t0`, `native::run`), so the rebuild in
+/// `arm_processes` / `arm_t0` has the bit the net held before any driver
+/// wrote it — the declared default, whatever the net kind — rather than a
+/// re-derivation of it.
+pub(crate) fn edge_b0_snapshot(
+    is_edge_target: &[bool],
+    b0: impl Fn(u32) -> sim_ir::FourState,
+) -> Vec<sim_ir::FourState> {
+    is_edge_target
+        .iter()
+        .enumerate()
+        .map(|(i, &t)| {
+            if t {
+                b0(i as u32)
+            } else {
+                sim_ir::FourState::Z
+            }
+        })
+        .collect()
+}
 
 /// Collect the nets `eid` reads into `out`; `false` when the expression holds a
 /// node whose value is not a function of literals and nets alone (a call, a

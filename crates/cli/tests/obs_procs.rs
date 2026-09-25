@@ -190,8 +190,9 @@ fn obs_procs_counts_are_hand_checkable() {
         "clock generator: {rows:?}"
     );
     // `assign d = c + 1` (line 6): the t0 settle runs TWICE (once before
-    // arming, once at the top of the run loop) and then once per `c` change =
-    // 10 posedges ⇒ 12.
+    // arming, once more inside arming after the initializer `c = 0` has
+    // landed — the run loop's own settle then finds nothing marked) and then
+    // once per `c` change = 10 posedges ⇒ 12.
     assert_eq!(
         rows[1],
         Row {
@@ -203,7 +204,11 @@ fn obs_procs_counts_are_hand_checkable() {
         },
         "continuous assign: {rows:?}"
     );
-    // `always_comb e = d ^ 8'hA5` (line 9): once at t=0 plus once per `d`
+    // `always_comb e = d ^ 8'hA5` (line 9): once at t=0 — the settle's change
+    // of `d` (`z → 1`) is delivered before the first batch, and the block arms
+    // its sensitivity only after that first run (verilator runs it once at
+    // time 0 too, iverilog twice — ROADMAP §2 Oracle splits; before §4.5.535
+    // the count was 2 on a constant driver and 1 here) — plus once per `d`
     // change (10) ⇒ 11.
     assert_eq!(
         rows[2],

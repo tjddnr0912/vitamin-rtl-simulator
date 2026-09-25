@@ -3,11 +3,49 @@
 use super::*;
 
 impl Scheduler<'_, '_> {
+    /// T0 DELIVERY — the tier-3 twin is `native::run::take_t0_wakes`, the
+    /// measurement in `crate::t0_edge`. What `arm_processes` left on the dirty
+    /// list is the time-0 settle's record. It is delivered NOW, before the first
+    /// Active batch runs — so a wait armed inside that batch does not see it
+    /// (both oracles: `initial begin @(negedge w); … end` on a settled `w` waits)
+    /// — and the processes it wakes are held back and put at the FRONT of the
+    /// next batch taken after the first one, i.e. after the first batch has
+    /// run, its writes have propagated and the next delta's settle has
+    /// propagated what those writes reach through a continuous assign or a
+    /// port. Both oracles print the `initial` bodies first, then the settle's
+    /// wakes, then whatever the batch's writes woke — `always @(w) x = 5;`
+    /// before an `always @(s)` that `initial s = 1;` woke, which reads `x=5`,
+    /// and before an `always @(u)` on `wire u = ~s;` too — and a process the
+    /// settle and the batch both wake runs once, with the value the batch left
+    /// (`reg r; wire w = (r === 1'bx); initial r = 0;` prints `W 0 w=0` once).
+    /// Queued at the end of the first delta instead, a lower-tie process the
+    /// next settle woke sorted in ahead of them. With no batch to wait for, the
+    /// wakes are the batch. `Some` = hold. A design whose settle moved nothing
+    /// is untouched.
+    fn take_t0_wakes(&mut self) -> Option<Vec<Ready>> {
+        if self.st.dirty.is_empty() {
+            return None;
+        }
+        let batch = std::mem::take(&mut self.cur.active);
+        self.propagate_changes();
+        let woken = std::mem::replace(&mut self.cur.active, batch);
+        if woken.is_empty() {
+            None
+        } else if self.cur.active.is_empty() {
+            self.cur.active = woken;
+            None
+        } else {
+            Some(woken)
+        }
+    }
+
     pub fn run(&mut self) -> FinishReason {
         // N4 clocking: seed the preponed snapshot for the FIRST time slot (t=0) —
         // a clocking edge at t=0 then samples the init values. No-op without
         // clocking blocks ⇒ byte-identical.
         self.st.snapshot_preponed();
+        let mut t0_woken = self.take_t0_wakes();
+        let mut t0_first_batch_done = false;
         loop {
             if self.st.finished {
                 return self.finish_kind();
@@ -37,12 +75,24 @@ impl Scheduler<'_, '_> {
                 if self.check_call_fatal() {
                     return FinishReason::Error;
                 }
-                if !self.cur.active.is_empty() {
+                if !self.cur.active.is_empty() || (t0_first_batch_done && t0_woken.is_some()) {
                     // Take the batch so wakes triggered DURING it land in a fresh
                     // `cur.active`; iterate borrowed (`Ready: Copy`) so the Vec can
                     // be handed back below — consuming it dropped one allocation
                     // per delta.
-                    let mut batch = std::mem::take(&mut self.cur.active);
+                    // T0 DELIVERY, second half (`take_t0_wakes`): the settle's
+                    // wakes lead the first batch taken after the first one.
+                    let mut batch = match (t0_first_batch_done, t0_woken.take()) {
+                        (true, Some(mut held)) => {
+                            held.append(&mut self.cur.active);
+                            held
+                        }
+                        (_, held) => {
+                            t0_woken = held;
+                            std::mem::take(&mut self.cur.active)
+                        }
+                    };
+                    t0_first_batch_done = true;
                     for &r in &batch {
                         if self.st.finished {
                             return self.finish_kind();

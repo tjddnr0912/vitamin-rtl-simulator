@@ -366,6 +366,11 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// is a deliberate E3001 blind spot). Non-sole delayed nets keep the pre-fix
     /// undriven-z during the window (safe: byte-identical to before this fix).
     delayed_sole: Vec<bool>,
+    /// Bit 0 of every edge-target net before the time-0 settle (dense, indexed
+    /// by net; `Z` where the net is not an edge target). Taken by `settle_t0`,
+    /// read once by `arm_processes` to rebuild the time-0 edge masks
+    /// (`crate::t0_edge`). Empty until then.
+    t0_b0: Vec<sim_ir::FourState>,
     /// The ascending cont-assign indices that carry a `#d` delay — i.e. exactly
     /// the set `schedule_delayed_cas` acts on.
     ///

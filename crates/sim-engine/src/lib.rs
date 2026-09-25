@@ -1129,8 +1129,7 @@ pub fn simulate(ir: &SimIr, sink: &dyn LogSink, opts: SimOpts) -> SimResult {
         );
         // t0 structural settle. If it can't converge (cont-assign oscillator),
         // stop immediately with DeltaLimit rather than running on a divergent t0.
-        if sched.settle_cont_assigns().is_some() {
-            sched.arm_processes();
+        if sched.settle_t0().is_some() && sched.arm_processes() {
             let reason = sched.run();
             #[cfg(feature = "jit")]
             if std::env::var_os("VITA_JIT_STATS").is_some() {

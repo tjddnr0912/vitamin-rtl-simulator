@@ -1215,3 +1215,22 @@ pub(crate) fn fs_is_negedge(prev: sim_ir::FourState, new: sim_ir::FourState) -> 
     use sim_ir::FourState::{One, Zero};
     (prev == One && new != One) || (new == Zero && prev != Zero)
 }
+
+/// The `slot_edge` contribution of ONE bit-0 transition: bit 0 = posedge,
+/// bit 1 = negedge, bit 2 = any change. The one spelling both stores'
+/// `accumulate_edge` OR into the mask, and the one the time-0 rebuild
+/// (`t0_edge`) assigns from the pre-settle bit to the post-initializer bit.
+#[inline]
+pub(crate) fn edge_mask(prev: sim_ir::FourState, new: sim_ir::FourState) -> u8 {
+    let mut m = 0u8;
+    if fs_is_posedge(prev, new) {
+        m |= 1;
+    }
+    if fs_is_negedge(prev, new) {
+        m |= 2;
+    }
+    if prev != new {
+        m |= 4;
+    }
+    m
+}

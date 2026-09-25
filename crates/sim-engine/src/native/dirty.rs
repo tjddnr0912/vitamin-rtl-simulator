@@ -477,17 +477,7 @@ impl NetArena {
     /// twelve 4-state transitions.
     pub(crate) fn accumulate_edge(&mut self, net: u32, old_b0: FourState) {
         let new_b0 = self.scalar_bit0(net);
-        let mut m = 0u8;
-        if crate::state::fs_is_posedge(old_b0, new_b0) {
-            m |= 1;
-        }
-        if crate::state::fs_is_negedge(old_b0, new_b0) {
-            m |= 2;
-        }
-        if old_b0 != new_b0 {
-            m |= 4;
-        }
-        self.ch.slot_edge[net as usize] |= m;
+        self.ch.slot_edge[net as usize] |= crate::state::edge_mask(old_b0, new_b0);
     }
 
     /// The arena's twin of `SimState::commit_clocking_sample` — commit a

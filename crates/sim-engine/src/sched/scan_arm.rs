@@ -696,6 +696,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             ca_md,
             delayed_sole,
             delayed_ca_idx,
+            t0_b0: Vec::new(),
             delayed_ca: BTreeMap::new(),
             delayed_nba: BTreeMap::new(),
             delta_count: 0,
@@ -720,6 +721,17 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     }
 
     // ── t0 init ──────────────────────────────────────────────────────────
+
+    /// The time-0 structural settle, with the bit each edge-target net holds
+    /// BEFORE it recorded first (`t0_b0`): `arm_processes` rebuilds the
+    /// time-0 edge masks from that bit to the post-initializer value
+    /// (`crate::t0_edge`). Same contract as `settle_cont_assigns`.
+    pub fn settle_t0(&mut self) -> Option<bool> {
+        self.t0_b0 = crate::t0_edge::edge_b0_snapshot(&self.st.is_edge_target, |n| {
+            crate::state::scalar_bit0(&self.st.nets[n as usize].cur)
+        });
+        self.settle_cont_assigns()
+    }
 
     /// Settle continuous assigns to a fixpoint, re-evaluating every cont-assign in
     /// declaration order until no net changes. `None` ⇒ could not converge within
@@ -995,7 +1007,13 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     }
 
     /// Arm processes at t0 per Verilog initial/always semantics.
-    pub fn arm_processes(&mut self) {
+    /// `false` when the time-0 re-settle after the declaration initializers
+    /// did not converge (a cont-assign oscillator that only closes once an
+    /// initializer has landed): the fatal is already emitted and nothing is
+    /// armed, and the caller reports `DeltaLimit` exactly as it does for the
+    /// first settle. Every other early exit latches `finished` and returns
+    /// `true`, so `run()` ends the run the way its own guards do.
+    pub fn arm_processes(&mut self) -> bool {
         // Pre-seed top-level activities 1:1 with process declarations. `tie ==
         // template == declaration index` so existing single-process ordering is
         // byte-identical to before the activity-id refactor.
@@ -1003,7 +1021,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         self.free_activities.clear();
         self.free_barriers.clear();
         self.seed_base_activities();
-        self.arm_processes_after_seed();
+        self.arm_processes_after_seed()
     }
 
     /// The base activities, 1:1 with process declarations — `tie == template ==
@@ -1033,7 +1051,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     }
 
     /// The rest of t0 arming, after the activity arena exists.
-    pub(crate) fn arm_processes_after_seed(&mut self) {
+    pub(crate) fn arm_processes_after_seed(&mut self) -> bool {
         // TOTAL-OR-FATAL mode gate: every `Terminator::Fork` in every body MUST
         // have a matching `(template, join_bb)` entry in `fork_modes`. A miss means
         // a keying mismatch / lost sidecar (the trailer rides outside the schema
@@ -1053,7 +1071,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         }
         if let Some((tmpl, join)) = missing {
             self.fatal_fork_mode_missing(tmpl, join);
-            return; // nothing armed; run() sees `finished` and ends immediately
+            return true; // nothing armed; run() sees `finished` and ends immediately
         }
 
         // §4.5.256: STATIC INITIALIZATION, before anything is armed. IEEE 1800 §6.21 puts
@@ -1070,12 +1088,15 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // it to completion the same way `run_finals` does.
         let inits = std::mem::take(&mut self.st.init_procs);
         // Only what the INIT PHASE itself made dirty is un-dirtied below, so the mark is
-        // taken first. `settle_cont_assigns` already ran (lib.rs, before arming) and its
+        // taken first. `settle_t0` already ran (lib.rs, before arming) and its
         // t0 writes are on this same list; clearing the list wholesale threw those away
         // too, and they are not recoverable — the settle inside `run()` writes the same
         // value, and `note_change` only records an ACTUAL change, so an
         // `always @(w)` on `assign w = 1'b1;` simply never fired. Design-wide, since one
         // unrelated `reg r = 1'b0;` anywhere is enough to enter this branch.
+        // The mark is a LENGTH, and the initializers' entries are copied out of
+        // the list before the re-settle below appends its own, so the rollback
+        // removes exactly the initializers' set and nothing after it.
         let settled = self.st.dirty.len();
         for pid in &inits {
             // An out-of-range ProcId means a truncated / mismatched sidecar, exactly like
@@ -1083,7 +1104,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             // initializers with no diagnostic. The IR is unusable either way, so say so.
             if (*pid as usize) >= self.activities.len() {
                 self.fatal_init_proc_missing(*pid);
-                return;
+                return true;
             }
             let entry = self.st.ir.processes[*pid as usize].entry;
             let _ = self.run_body(*pid, entry);
@@ -1096,6 +1117,36 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // process starts). Anything staged BEFORE this point belongs to the t0
         // cont-assign settle, which cannot mutate the heap, and is dropped with them.
         self.drain_heap_marks();
+        // INITIALIZER RE-SETTLE — the tier-3 twin is in `arm_t0`, the
+        // measurement in `crate::t0_edge`. The settle above ran with every
+        // variable at its declared default, so a driver that reads an
+        // initialised variable settled on a PHANTOM value: `reg r = 1; wire w =
+        // (r !== 1'b1);` settled `w` to 1 (`x !== 1`), and the first delta's
+        // settle brought it to 0 — `always @(posedge w)` printed `P 0` and the
+        // negedge waiter `N 0`, where both oracles print only the level line
+        // `W 0 w=0`. IEEE 1800 §6.21 puts the initializer before any process
+        // starts, so the value a process can first observe is the one settled
+        // AFTER it. The initializers' writes marked every driver reading them
+        // (`ca_dirty`, through the funnel), so this is the dirty-settle of
+        // exactly those drivers and whatever they feed, to a fixpoint; a net it
+        // moves for the first time joins the list here (past the mark, and
+        // kept: `init_nets` is what the rollback removes), and a net the first
+        // settle already moved keeps its membership. The edge mask each of
+        // them carries is rebuilt below from the pre-settle bit to the value
+        // that stands now, which is what erases the phantom's hop.
+        let init_nets: Vec<u32> = self.st.dirty[settled..].to_vec();
+        // Only when the design has declaration initializers (the tier-3 twin
+        // says why the test is on the LIST and not on `init_nets`: a heap
+        // initializer leaves no net dirt, and `ca_always` alone would be
+        // visited for nothing on a design with no initializer). The delta
+        // budget is the run loop's: it resets the counter before the first
+        // delta's settle, where this work ran before.
+        if !inits.is_empty() {
+            self.delta_count = 0;
+            if self.settle_cont_assigns().is_none() {
+                return false;
+            }
+        }
         // COPY-NET REPAIR — the tier-3 twin is `native::run::arm_t0`, and the
         // whole argument lives in `crate::alias`. A net whose every continuous
         // driver MOVES bits rather than computing them has no state of its own,
@@ -1127,8 +1178,34 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // `always @nc` either (both measured against iverilog, both wrong before). The
         // t0 continuous-assign settle re-evaluates every assign from scratch rather than
         // from this list, so clearing it costs nothing there.
-        for n in self.st.dirty.split_off(settled) {
-            self.st.dirty_flag[n as usize] = false;
+        if !init_nets.is_empty() {
+            for &n in &init_nets {
+                self.st.dirty_flag[n as usize] = false;
+            }
+            let mut v = std::mem::take(&mut self.st.dirty);
+            v.retain(|n| self.st.dirty_flag[*n as usize]);
+            self.st.dirty = v;
+        }
+        // T0 EDGE REBUILD, the tier-3 twin is in `arm_t0`. The funnel folded
+        // every time-0 hop into `slot_edge` — `declared default → phantom →
+        // settled value` for a driver the re-settle above moved twice — and
+        // the first delta's edge scan reads that mask. The time-0 transition a
+        // process can observe is the one from the bit the net held before the
+        // settle (`t0_b0`, taken in `settle_t0`) to the bit it holds now, so
+        // the mask is ASSIGNED from that pair; a net whose bit 0 never moved
+        // gets 0, one that moved once gets what the funnel gave it. The rule
+        // for the pair is the funnel's own (`edge_mask`): `z → 1` is a posedge
+        // (both oracles fire `P 0 w=01` on `reg r = 0; wire [1:0] w = {r,
+        // 1'b1};`), `z → 0` a negedge (IEEE 1800 §9.4.2; iverilog fires `N 0
+        // w=10` on `{r, 1'b0}` and is silent on `(r !== 1'b1)`, verilator holds
+        // no z — ROADMAP §2 Oracle splits).
+        for &n in &self.st.dirty {
+            let i = n as usize;
+            if self.st.is_edge_target[i] {
+                let old = self.t0_b0.get(i).copied().unwrap_or(sim_ir::FourState::Z);
+                let new = crate::state::scalar_bit0(&self.st.nets[i].cur);
+                self.st.slot_edge[i] = crate::state::edge_mask(old, new);
+            }
         }
         // T0 EDGE-CLEAR, the tier-3 twin is in `arm_t0`; the rule and its
         // measurement live in `crate::t0_edge`. The settle's record stays on
@@ -1243,6 +1320,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 SensKind::Edge | SensKind::Level => self.arm_sensitivity(aid),
             }
         }
+        true
     }
 
     /// Register an always block's static sensitivity as waiters / edge map. `pi`
