@@ -69,16 +69,33 @@ impl Scheduler<'_, '_> {
                             return FinishReason::Error;
                         }
                         match step {
+                            // `$finish` ends the run at the END of this time step:
+                            // the rest of this batch, the `#0` and NBA regions and
+                            // every process they wake still run (both oracles do;
+                            // measured on `initial begin #1 u = 7; $finish; end`
+                            // beside `always @(u) m++` — both print `m=1`, the
+                            // old arm printed `m=0`). Latched here, consumed at the
+                            // loop's stable point below. `st.finished` is NOT set
+                            // here: the batch-top poll would end the drain early.
+                            // The body stopped at the statement and is never
+                            // re-entered: an edge registration is permanent, so
+                            // without `busy` a second edge in the SAME step (an
+                            // NBA on the other term of `@(posedge a or posedge
+                            // b)`) ran the body again from the top (review r1
+                            // F1: `n=2` where iverilog ends the thread, `n=1`).
+                            Step::Finish => {
+                                self.finish_pending = true;
+                                if let Some(a) = self.activities.get_mut(r.proc as usize) {
+                                    a.busy = true;
+                                }
+                            }
                             // P1-6 (IEEE 1364-2005 §5.4/§17): drain the CURRENT
                             // timestep's postponed region ($strobe/$monitor) before
-                            // terminating — Icarus/VCS parity. $fatal/$stop are
-                            // $finish-class terminations and drain identically.
-                            Step::Finish => {
-                                self.st.finished = true;
-                                self.drain_deferred_on_finish();
-                                self.flush_postponed();
-                                return FinishReason::Finish;
-                            }
+                            // terminating — Icarus/VCS parity. `$stop` and `$fatal`
+                            // end the run at the statement (a `$fatal` is an error
+                            // and nothing after it should print; a `$stop` hands
+                            // control back at that point), so they keep the
+                            // immediate arms.
                             Step::Stop => {
                                 self.st.finished = true;
                                 self.drain_deferred_on_finish();
@@ -231,6 +248,22 @@ impl Scheduler<'_, '_> {
                 break; // time-step stable
             }
 
+            // A `$finish` reached in this time step: every region is drained and
+            // the cont-assigns are at fixpoint, so this is where it takes
+            // effect — the postponed region still runs (`$strobe` / `$monitor`
+            // parity with the old arm), and time never advances.
+            // A `#0` cont-assign / gate update (`assign #0 r = u`) and a
+            // transport `<= #0` are delivered on the advance path below with
+            // `next == now` (review r1 differential F1): while one is due at
+            // `now` the step is not over, so the finish waits one more pass and
+            // takes effect at the next stable point.
+            if self.finish_pending && !self.tick_due_now() {
+                self.st.finished = true;
+                self.drain_deferred_on_finish();
+                self.flush_postponed();
+                return FinishReason::Finish;
+            }
+
             // POSTPONED REGION (IEEE 1364-2005 §5.4): now == settled time, all
             // region buckets (Active/Inactive/NBA) empty, cont-assigns at
             // fixpoint, time NOT yet advanced. Reads settled `cur` net values.
@@ -306,6 +339,15 @@ impl Scheduler<'_, '_> {
             self.bucket_pool.push(events);
             // a fresh time may also need cont-assign settle before draining (loop top).
         }
+    }
+
+    /// True while a delayed cont-assign write or a transport NBA is due at the
+    /// CURRENT time (`assign #0`, `<= #0`): the advance path re-enters `now`
+    /// to deliver it, so the time step is not over yet.
+    pub(crate) fn tick_due_now(&self) -> bool {
+        let now = self.st.now;
+        self.delayed_ca.keys().next().copied() == Some(now)
+            || self.delayed_nba.keys().next().copied() == Some(now)
     }
 
     pub(crate) fn finish_kind(&self) -> FinishReason {

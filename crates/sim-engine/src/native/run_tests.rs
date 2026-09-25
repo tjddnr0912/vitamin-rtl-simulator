@@ -3737,6 +3737,10 @@ endmodule
 ///   their own regions rather than one draining twice.
 /// * the `$display` at `#7` lands AFTER the matured report — Active before
 ///   Observed.
+/// * the `$finish` at `#7` coincides with a posedge: the assertions reached in
+///   that step mature in their regions before the run ends (`O q=3` / `R q=3`
+///   after `done q=3`), because a `$finish` ends the run at the stable point of
+///   its time step, not at the statement.
 #[test]
 fn deferred_assertions_mature_in_their_regions_on_tier_3() {
     let src = r#"
@@ -3776,6 +3780,8 @@ endmodule
             "diag|Error|VITA-E4003|O q=2 tag=20".to_string(),
             "diag|Error|VITA-E4003|R q=2 tag=20".to_string(),
             "out|done q=3\n".to_string(),
+            "diag|Error|VITA-E4003|O q=3 tag=30".to_string(),
+            "diag|Error|VITA-E4003|R q=3 tag=30".to_string(),
         ],
         "deferred assertions (hand-IEEE §16.4; iverilog refuses them)"
     );

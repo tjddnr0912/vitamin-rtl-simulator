@@ -268,13 +268,15 @@ fn a_concurrent_assertion_inside_a_generate_block_sees_the_blocks_nets() {
     assert_eq!(code, Some(0), "{out}");
     assert!(!out.contains("FAILCONC"), "{out}");
     assert!(out.lines().any(|l| l == "D=tick top.nb w=9"), "{out}");
-    // a cover property inside an unnamed block counts the block's own net
+    // a cover property inside an unnamed block counts the block's own net; the
+    // `#5 $finish` coincides with the third posedge and that edge is sampled (a
+    // `$finish` ends the run at the end of its time step)
     let (out, code) = run(&top(
         "  logic clk = 0; always #1 clk = ~clk;\n  generate if (1) begin\n    logic [3:0] v = 4'h3;\n    \
          cp: cover property (@(posedge clk) v == 4'h3);\n  end endgenerate",
     ));
     assert_eq!(code, Some(0), "{out}");
-    assert!(out.contains("Cover property hits: 2"), "{out}");
+    assert!(out.contains("Cover property hits: 3"), "{out}");
 }
 
 #[test]

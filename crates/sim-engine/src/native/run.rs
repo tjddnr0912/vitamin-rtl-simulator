@@ -414,17 +414,17 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                     // still reports it.
                     k.drain_range_diags();
                     match step {
+                        // `$finish` ends the run at the END of this time step —
+                        // the engine's arm, same latch, consumed at this loop's
+                        // stable point below. `st.finished` stays false so the
+                        // batch-top poll does not cut the drain short.
+                        // The body is never re-entered (parked like a suspended
+                        // one; the engine's arm does the same — review r1 F1).
                         Step::Finish => {
-                            k.sched.st.finished = true;
-                            // IEEE §5.4 / §16.4 / §17: drain THIS timestep's
-                            // deferred queues and then its postponed region
-                            // before terminating — the engine does both at the
-                            // same three arms, so a `$strobe` or a matured
-                            // `assert #0` in the same slot as a `$finish` is not
-                            // lost.
-                            k.sched.drain_deferred_on_finish();
-                            flush_postponed(k);
-                            return done(k, FinishReason::Finish);
+                            k.sched.finish_pending = true;
+                            if r.proc == tmpl {
+                                k.wake.busy[r.proc as usize] = true;
+                            }
                         }
                         Step::Stop => {
                             k.sched.st.finished = true;
@@ -542,6 +542,16 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 return done(k, FinishReason::DeltaLimit);
             }
             continue;
+        }
+
+        // A `$finish` reached in this time step takes effect here, after every
+        // region drained — the engine's position; the postponed region still
+        // runs and time never advances.
+        if k.sched.finish_pending && !tick_due_now(k) {
+            k.sched.st.finished = true;
+            k.sched.drain_deferred_on_finish();
+            flush_postponed(k);
+            return done(k, FinishReason::Finish);
         }
 
         // POSTPONED (IEEE 1364-2005 §5.4): `now` is the settled time, every
@@ -975,6 +985,14 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
 fn snapshot_preponed(k: &mut NativeKernel) {
     let (sched, arena) = (&mut *k.sched, &k.arena);
     sched.st.snapshot_preponed_with(Some(arena));
+}
+
+/// The engine's `Scheduler::tick_due_now` over this kernel's wheels: a `#0`
+/// delayed cont-assign or transport NBA due at `now` re-enters the tick on the
+/// advance path, so the step is not over.
+fn tick_due_now(k: &NativeKernel) -> bool {
+    let now = k.sched.st.now;
+    k.delayed_nba.keys().next().copied() == Some(now) || k.sched.next_delayed_ca() == Some(now)
 }
 
 fn propagate(k: &mut NativeKernel) {

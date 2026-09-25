@@ -700,6 +700,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             delayed_nba: BTreeMap::new(),
             delta_count: 0,
             max_deltas,
+            finish_pending: false,
             max_body_steps,
             time_limit,
             scratch_changed: Vec::new(),
@@ -1322,17 +1323,10 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// ending — IEEE end-of-sim re-entry must not recurse).
     pub(crate) fn run_finals(&mut self) {
         let finals: Vec<u32> = self.st.final_procs.iter().copied().collect();
-        // KNOWN LIMITATION (SVA-REST liveness, documented — not silent): a `$finish`
-        // reached in the Active region terminates the timestep WITHOUT draining its
-        // pending edge-triggered processes (the `Step::Finish` arm returns before
-        // `propagate_changes`). So when `$finish` coincides EXACTLY with the assertion
-        // clock edge — `initial #N $finish` with N landing on a sampling posedge — the
-        // clocked liveness checker does not sample that final edge (the same pre-existing
-        // behavior that makes a clocked `cnt<=cnt+1` miss a finish-coincident edge), and
-        // the end-of-sim `final` obligation check reads the prior edge's pend. A
-        // correct fix needs `$finish`/timestep-drain ordering changes (broad golden-VCD
-        // impact) — deferred to a dedicated scheduler slice. Workaround: offset `$finish`
-        // from the sampling edge (e.g. a non-edge finish time, or `#1 $finish`).
+        // A `$finish` reached in the Active region ends the run at the stable
+        // point of its time step (`finish_pending`), so a clocked checker or a
+        // `cnt <= cnt + 1` on a finish-coincident edge has already sampled that
+        // edge by the time the `final` blocks run.
         for pid in finals {
             if (pid as usize) >= self.activities.len() {
                 continue; // defensive: stale side table

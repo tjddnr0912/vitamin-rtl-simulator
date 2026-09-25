@@ -395,6 +395,15 @@ pub(crate) struct Scheduler<'a, 'ir> {
     delayed_nba: BTreeMap<u64, Vec<NbaUpdate>>,
     delta_count: u64,
     max_deltas: u64,
+    /// A `$finish` reached in the Active region ends the run at the END of its
+    /// time step, not at the statement: the processes already woken in the
+    /// step, the pending `#0` and NBA updates and everything they wake still run
+    /// (iverilog and verilator both do; verilator runs the whole `eval`, iverilog
+    /// keeps draining the slot's events). The `Step::Finish` arm latches this and
+    /// the loop's stable point consumes it; `st.finished` stays false until
+    /// then so the batch-top poll does not cut the drain short. Read by both
+    /// kernels (`sched/run_loop.rs`, `native/run.rs`).
+    pub(crate) finish_pending: bool,
     /// Body-step budget — see `SimOpts::max_body_steps`. Separate from `max_deltas`
     /// because it answers a different question: not "did the scheduler reach a
     /// fixpoint" but "has ONE activation run this long without suspending".

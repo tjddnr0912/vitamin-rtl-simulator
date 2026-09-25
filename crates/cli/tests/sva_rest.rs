@@ -11,12 +11,10 @@
 //! (`[*0:n]`/`[*0:$]`/bare `[*]`), multi-term cross-clock segments, sequence local
 //! variables (N2c), and the advanced outer-`|=>` prop-ref skew — see docs/ROADMAP.md.
 //!
-//! Documented liveness caveat (pre-existing scheduler behavior, NOT a regression):
-//! a `$finish` that coincides EXACTLY with the assertion clock's sampling posedge
-//! is not observed by the clocked checker (the same reason a clocked `cnt<=cnt+1`
-//! misses a finish-coincident edge), so the end-of-sim `final` obligation reads the
-//! prior edge's state. The tests below finish at NON-edge times; offset `$finish`
-//! from the sampling edge in practice. See `run_finals` + docs/history/DEVLOG.md (49탄).
+//! A `$finish` ends the run at the end of its time step, so a finish that coincides
+//! with the assertion clock's sampling posedge is observed by the clocked checker
+//! (the old caveat that it was not is gone). The tests below still finish at
+//! NON-edge times, which is the shape they were pinned on.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
