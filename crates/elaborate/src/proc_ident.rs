@@ -74,7 +74,9 @@ impl Elaborator<'_> {
         pb: &ast::ProceduralBlock,
         kind: &'static str,
     ) -> ir::Process {
-        let proc = self.lower_proc_block(pb);
+        // `user_written = false`: a synthesized block keeps the header lane byte for
+        // byte (`const_level_header.rs` admits only what a user wrote).
+        let proc = self.lower_proc_block(pb, false);
         if let Some(id) = self.pending_proc_ident.as_mut() {
             id.kind = kind;
         }
@@ -102,7 +104,7 @@ impl Elaborator<'_> {
         if wrapped {
             return self.lower_synth_proc(p, "sva");
         }
-        self.lower_proc_block(p)
+        self.lower_proc_block(p, true)
     }
 
     /// R14: [`Self::lower_synth_proc`] with the arguments the other way round,

@@ -221,10 +221,17 @@ impl ObsProcs<'_> {
             });
         }
         for (i, &n) in p.ca_evals.iter().enumerate() {
+            let ident = self.ca_idents.get(i).unwrap_or(unknown);
+            // The time-0 pulse vita adds for a header level list naming a constant
+            // (`elaborate::const_level_header`) is not a construct the user wrote or
+            // can act on; its one evaluation would read as a phantom `assign`.
+            if ident.kind == elaborate::T0_PULSE_KIND {
+                continue;
+            }
             out.push(ProcRow {
                 domain: "assign",
                 index: i,
-                ident: self.ca_idents.get(i).unwrap_or(unknown),
+                ident,
                 evals: n,
                 nanos: p.ca_nanos.get(i).copied().unwrap_or(0),
             });
@@ -463,7 +470,10 @@ impl ObsRun<'_> {
                 s.push_str(", \"counts\": {\"processes\": ");
                 s.push_str(&pp.profile.evals.len().to_string());
                 s.push_str(", \"assigns\": ");
-                s.push_str(&pp.profile.ca_evals.len().to_string());
+                // Counted from the rows, so the time-0 pulse `rows` skips is not a
+                // phantom `assign` here either (every other assign has a row).
+                let n_assigns = rows.iter().filter(|r| r.domain == "assign").count();
+                s.push_str(&n_assigns.to_string());
                 s.push_str(", \"total_evals\": ");
                 let total: u64 = rows.iter().map(|r| r.evals).sum();
                 s.push_str(&total.to_string());

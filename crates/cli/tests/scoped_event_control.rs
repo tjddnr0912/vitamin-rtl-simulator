@@ -6,8 +6,9 @@
 //! the SAME net the imported bare `@(sig)` arms on — `@(p::sig)` is therefore
 //! byte-for-byte equivalent to `@(sig)` (the cardinal property, mirrored from
 //! `bare_event_ctrl.rs`). Fixed by a `PkgScoped` arm in `sens_event_net` that
-//! resolves via the existing `pkg_scoped_var_net` (§4.5.102); a package CONSTANT
-//! / enum-label or unknown symbol stays loud (a constant cannot wake a process).
+//! resolves via the existing `pkg_scoped_var_net` (§4.5.102). A package CONSTANT /
+//! enum label is a constant like a local one (`const_level_event_t0.rs`): beside a
+//! live term it runs at time 0, alone it stays loud; an unknown symbol stays loud.
 //!
 //! Supported (whole-signal level + edge) cases are pinned to iverilog 13.0; the
 //! scoped≡bare equivalence is an internal diff (both share the package net, so
@@ -112,15 +113,15 @@ fn scoped_nonlsb_bitselect_is_loud_like_bare() {
 }
 
 #[test]
-fn scoped_constant_in_event_is_loud() {
-    // A package CONSTANT cannot wake a process — loud, not a silent no-op.
+fn scoped_constant_alone_in_a_header_level_list_is_loud() {
+    // A package CONSTANT in a process-header level list is a constant like a local
+    // one: both oracles (iverilog 13.0, verilator 5.052) run the process ONCE at time
+    // 0 and print `x=1` with a `$display` at 1. vita refuses a list with no live term
+    // — BACK ON vita_pre's ROUTE after a slice that ran it (vita's `$finish` can end
+    // time 0 before that run); beside a live term it runs (const_level_event_t0.rs).
     let (_, code) = run("package p; localparam int K = 3; endpackage\n\
-         module top; int x; always @(p::K) x = x + 1; initial begin #1 $finish; end endmodule\n");
-    assert_ne!(
-        code,
-        Some(0),
-        "package constant in event control must be loud"
-    );
+         module top; int x; always @(p::K) x = x + 1; initial begin #1 $display(\"x=%0d\", x); $finish; end endmodule\n");
+    assert_ne!(code, Some(0), "an all-constant header list must stay loud");
 }
 
 #[test]

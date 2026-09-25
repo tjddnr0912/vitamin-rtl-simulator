@@ -49,6 +49,8 @@ impl<'s> Elaborator<'s> {
             cu_imports: Vec::new(),
             scope_imports: Vec::new(),
             final_procs: std::collections::BTreeSet::new(),
+            t0_pulse: None,
+            t0_decline: None,
             comb_inferred_procs: Vec::new(),
             clocking_inputs: std::collections::BTreeSet::new(),
             clocking_commit: std::collections::BTreeMap::new(),

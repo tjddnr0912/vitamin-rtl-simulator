@@ -216,28 +216,155 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Does the bare single-segment name at the HEAD of the READ expression `e` bind
-    /// to a constant — under parentheses and through any chain of bit / part /
-    /// indexed-part selects, because a select of a constant is still a constant?
-    /// The read twin of [`Self::lvalue_binds_constant`], asking the same question of
-    /// the same funnel.
+    /// Does the READ expression `e` never change because its HEAD binds a constant —
+    /// under parentheses and through a chain of bit / part / indexed-part selects —
+    /// with NO index that is provably live ([`Self::index_provably_live`])? The read
+    /// twin of [`Self::lvalue_binds_constant`], asking the same question of the same
+    /// funnel. An index that is neither provably live nor provably constant
+    /// (`K[$size(arr)-1]`) keeps the answer this predicate gave before indices were
+    /// asked about at all: `true`.
     ///
-    /// ⚠️ Polarity: the tail answers `false`, i.e. "not provably a constant". Every
-    /// caller uses `true` to STAND A RULE DOWN (an event term that can never wake),
-    /// so `false` is the conservative side — it leaves the site on whatever path it
-    /// already had. A caller that would use `true` to admit something must not use
-    /// this predicate.
+    /// A `pkg::name` head binds a constant when `name` is in any of the package's
+    /// four constant value maps — real, string, wide, numeric (parameter /
+    /// localparam / enum label) — the maps `lower_expr`'s `PkgScoped` arm answers
+    /// as a constant before it looks for a package variable. A package ARRAY
+    /// parameter is a net in `pkg_vars` and answers `false`, like a bare array
+    /// parameter does (`BareIdentRoute` has no array variant).
+    ///
+    /// ⚠️ Polarity: STAND-DOWN only. `event_term_never_wakes` reads `true` to drop a
+    /// term that can never wake (the in-body lane and the header EDGE lane), so a
+    /// false `false` leaves the term live, on the net path. A caller that ADMITS on
+    /// `true` uses [`Self::expr_head_binds_constant_strict`].
     pub(crate) fn expr_head_binds_constant(&self, e: &ast::Expr) -> bool {
+        self.expr_head_is_constant(e)
+            && !Self::select_indices_any(e, &|x| self.index_provably_live(x))
+    }
+
+    /// [`Self::expr_head_binds_constant`] for a caller that ADMITS on `true` — the
+    /// time-0 lane (`header_const_level_t0`) and the header level lane's hold-aside
+    /// (`header_level_term_is_const`): the head binds a constant AND every index is
+    /// provably constant ([`Self::index_provably_constant`]). An unknown index answers
+    /// `false`, which keeps the term on the header lane's net path (loud for a level
+    /// select, as before).
+    pub(crate) fn expr_head_binds_constant_strict(&self, e: &ast::Expr) -> bool {
+        self.expr_head_is_constant(e)
+            && !Self::select_indices_any(e, &|x| !self.index_provably_constant(x))
+    }
+
+    /// Is `e` a select of a constant head with an index that is provably live — the
+    /// term `sens_event_net` refuses (`K[i]` changes when `i` does)?
+    pub(crate) fn const_select_with_live_index(&self, e: &ast::Expr) -> bool {
+        self.expr_head_is_constant(e)
+            && Self::select_indices_any(e, &|x| self.index_provably_live(x))
+    }
+
+    /// The head of `e`, under parentheses and selects, binds a constant.
+    fn expr_head_is_constant(&self, e: &ast::Expr) -> bool {
         match &e.kind {
-            ast::ExprKind::Paren { inner } => self.expr_head_binds_constant(inner),
+            ast::ExprKind::Paren { inner } => self.expr_head_is_constant(inner),
             ast::ExprKind::BitSelect { base, .. }
             | ast::ExprKind::PartSelect { base, .. }
-            | ast::ExprKind::IndexedPart { base, .. } => self.expr_head_binds_constant(base),
+            | ast::ExprKind::IndexedPart { base, .. } => self.expr_head_is_constant(base),
             ast::ExprKind::Ident(path) => match path.segments.as_slice() {
                 [seg] => self.bare_name_binds_constant(&seg.name, path.span),
                 _ => false,
             },
+            ast::ExprKind::PkgScoped { .. } => self.pkg_scoped_binds_constant(e),
             _ => false,
+        }
+    }
+
+    /// Does any index / msb / lsb / offset / width of the select chain at `e`'s head
+    /// satisfy `f`?
+    fn select_indices_any(e: &ast::Expr, f: &dyn Fn(&ast::Expr) -> bool) -> bool {
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => Self::select_indices_any(inner, f),
+            ast::ExprKind::BitSelect { base, index } => {
+                f(index) || Self::select_indices_any(base, f)
+            }
+            ast::ExprKind::PartSelect { base, msb, lsb } => {
+                f(msb) || f(lsb) || Self::select_indices_any(base, f)
+            }
+            ast::ExprKind::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => f(offset) || f(width) || Self::select_indices_any(base, f),
+            _ => false,
+        }
+    }
+
+    /// `pkg::name` names one of the package's constants (the four value maps
+    /// `lower_expr`'s `PkgScoped` arm answers before a package variable).
+    fn pkg_scoped_binds_constant(&self, e: &ast::Expr) -> bool {
+        let ast::ExprKind::PkgScoped { pkg, name } = &e.kind else {
+            return false;
+        };
+        let (p, n) = (pkg.name.as_str(), name.name.as_str());
+        self.pkg_real_val.get(p).is_some_and(|m| m.contains_key(n))
+            || self.pkg_str_raw.get(p).is_some_and(|m| m.contains_key(n))
+            || self.pkg_wide_bits.get(p).is_some_and(|m| m.contains_key(n))
+            || self.pkg_consts.get(p).is_some_and(|m| m.contains_key(n))
+    }
+
+    /// Is the index expression `e` PROVABLY constant, by its leaves alone: literals,
+    /// and names that bind a constant through the lowering's own funnel
+    /// ([`Self::bare_name_binds_constant`], the package constant maps), combined by
+    /// unary / binary / ternary operators and parentheses. Nothing else — no call,
+    /// no system function, no concatenation — so a leaf this cannot see answers
+    /// `false`. No constant FOLD is asked: a fold resolves names through the
+    /// parameter walk alone, which a generate-scope net of the same name does not
+    /// stop (`localparam int i` outside, `reg i` inside, `K[i]` reads the net).
+    pub(crate) fn index_provably_constant(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::IntLit { .. } => true,
+            ast::ExprKind::Paren { inner } => self.index_provably_constant(inner),
+            ast::ExprKind::Unary { operand, .. } => self.index_provably_constant(operand),
+            ast::ExprKind::Binary { lhs, rhs, .. } => {
+                self.index_provably_constant(lhs) && self.index_provably_constant(rhs)
+            }
+            ast::ExprKind::Ternary {
+                cond,
+                then_e,
+                else_e,
+            } => {
+                self.index_provably_constant(cond)
+                    && self.index_provably_constant(then_e)
+                    && self.index_provably_constant(else_e)
+            }
+            ast::ExprKind::Ident(path) => match path.segments.as_slice() {
+                [seg] => self.bare_name_binds_constant(&seg.name, path.span),
+                _ => false,
+            },
+            ast::ExprKind::PkgScoped { .. } => self.pkg_scoped_binds_constant(e),
+            _ => false,
+        }
+    }
+
+    /// Is some LEAF of the index expression `e` a name that can change: a name that
+    /// resolves to a NET which is not a constant parameter (`const_param_nets`, an
+    /// unpacked array parameter) — a bare name through `lookup_net_unshadowed` (no
+    /// net when it binds a constant), a dotted one through the event-control
+    /// resolver's own `lookup_dotted_net` — or a `pkg::name` that is not a package
+    /// constant? A name that resolves to no such net is UNKNOWN, neither live nor
+    /// constant, so the stand-down keeps its drop. The walk descends every
+    /// operand and a user function's arguments, but NOT a system function's
+    /// (`$size(arr)` names a net and is still a constant).
+    pub(crate) fn index_provably_live(&self, e: &ast::Expr) -> bool {
+        match &e.kind {
+            ast::ExprKind::Ident(path) => {
+                let net = match path.segments.as_slice() {
+                    [seg] => self.lookup_net_unshadowed(&seg.name, path.span),
+                    _ => self.lookup_dotted_net(path),
+                };
+                net.is_some_and(|n| !self.const_param_nets.contains_key(&n))
+            }
+            ast::ExprKind::PkgScoped { .. } => !self.pkg_scoped_binds_constant(e),
+            ast::ExprKind::SysCall { .. } => false,
+            _ => Self::const_fold_children(e)
+                .into_iter()
+                .any(|c| self.index_provably_live(c)),
         }
     }
 

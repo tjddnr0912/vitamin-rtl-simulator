@@ -256,20 +256,16 @@ fn an_in_body_level_wait_on_a_constant_never_wakes() {
     assert_eq!(out, "DONE\n");
 }
 
-/// RECORDED, deliberately NOT closed: a PROCESS-HEADER non-edge term on a constant
-/// fires ONCE at time zero in both oracles (`always @(K) $display("EDGE at %0t",
-/// $time)` → `EDGE at 0` in iverilog 13.0 and verilator 5.052; `always @(K or clk)`
-/// → `EDGE at 0` then `EDGE at 1`), because the header sensitivity is armed before
-/// the time-zero settle. vita has no "fire once at t0, then never" shape for an
-/// explicit list, so this term is REFUSED rather than dropped — dropping it would
-/// answer `DONE` alone, a silent divergence from both oracles.
-///
-/// The refusal is `events.rs::error_header_level_const`, not `resolve_net`'s
-/// `E3010 undeclared net/variable` (a false sentence: `K` IS declared). Pinned on
-/// the sentence that is true of the program, so the edge rule cannot widen onto
-/// this cell and the diagnostic cannot slide back. It fires only when the term is
-/// the WHOLE sensitivity — see
-/// `a_constant_level_term_beside_a_live_one_is_dropped_not_refused`.
+/// A PROCESS-HEADER non-edge term on a constant fires ONCE at time zero in both
+/// oracles, because the header sensitivity is armed before the time-zero settle:
+/// iverilog 13.0 and verilator 5.052 both print `EDGE at 0` then `DONE` for this
+/// cell. vita REFUSES it (`error_header_level_const`) — BACK ON vita_pre's ROUTE after
+/// a slice that ran it: vita's `$finish` ends a time step without running the
+/// processes already woken in it, and a `$finish` can reach time 0 through any
+/// process, so a list with no live term is never admitted. Beside a live term the
+/// time-0 run happens (`const_level_event_t0.rs`). Pinned on the sentence that
+/// names that reason, and on the constant, not `E3010 undeclared net/variable` (a
+/// false sentence: `K` IS declared).
 #[test]
 fn a_header_level_term_on_a_constant_stays_loud() {
     loud(
@@ -278,19 +274,16 @@ fn a_header_level_term_on_a_constant_stays_loud() {
            initial begin #2; $display(\"DONE\"); $finish; end\n\
            always @(K) $display(\"EDGE at %0t\", $time);\n\
          endmodule\n",
-        "a constant cannot wake a process",
+        "a level event control on the constant `K`",
     );
 }
 
-/// The SHADOW twin of the cell above, and the parity this slice exists for: a
-/// generate `localparam V` shadowing a module net, read as a header LEVEL term.
-/// `lookup_net_scoped` walks `symbols` alone, so vita armed the OUTER NET and fired
-/// AGAIN when that net changed — `HDR fired at 0` + `HDR fired at 1`, where iverilog
-/// 13.0 and verilator 5.052 both print `HDR fired at 0` then `DONE`. One IEEE
-/// question answered loud in one spelling and silently wrong in its shadow twin.
-///
-/// Now the §2 🆕 O refusal, which names the object vita took; the unshadowed twin
-/// gets the plain "constant cannot wake a process" sentence.
+/// The SHADOW twin of the cell above: a generate `localparam V` shadowing a module
+/// net, read as a header LEVEL term. `lookup_net_scoped` walks `symbols` alone, so
+/// vita once armed the OUTER NET and fired AGAIN when that net changed — `HDR fired
+/// at 0` + `HDR fired at 1`, where iverilog 13.0 and verilator 5.052 both print `HDR
+/// fired at 0` then `DONE`. It is refused with the §2 🆕 O sentence, which names the
+/// object vita took — BACK ON vita_pre's ROUTE for the reason above (no live term).
 #[test]
 fn a_header_level_term_on_a_shadowing_constant_is_loud() {
     let src = "module top;\n\
@@ -322,16 +315,12 @@ fn a_header_level_term_on_a_shadowing_constant_is_loud() {
     assert_eq!(out, "HDR fired at 0\nHDR fired at 1\nDONE\n");
 }
 
-/// A constant LEVEL term beside a LIVE one is DROPPED, not refused — the rule the
-/// edge lane already applied. The refusal is a property of the whole list: alone,
-/// the term decides the process fires once at t0 and never again (no shape for it
-/// here, so loud); beside a live sibling it decides nothing the sibling does not.
-///
-/// Refusing it swallowed the sibling: `generate … localparam int V = 99;
-/// always @(V or W)` with `W` a real net was refused whole where all three tools
-/// run the design. Both oracles print `HDR at 0` / `HDR at 1` / `DONE`; vita prints
-/// `HDR at 1` / `DONE` — the missing t0 line is the recorded level-constant gap
-/// (the same one the single-term cell above is loud about), NOT this rule.
+/// A constant LEVEL term beside a LIVE one is not refused — refusing it swallowed
+/// the sibling: `generate … localparam int V = 99; always @(V or W)` with `W` a real
+/// net was refused whole where all three tools run the design. Both oracles print
+/// `HDR at 0` / `HDR at 1` / `DONE`. vita then DROPPED the term (the edge lane's
+/// rule) and printed `HDR at 1` / `DONE`, the time-0 line lost at exit 0; the
+/// time-0 lane (`const_level_header.rs`) adds it, so vita prints the oracles' text.
 #[test]
 fn a_constant_level_term_beside_a_live_one_is_dropped_not_refused() {
     let out = run("module top;\n\
@@ -343,18 +332,20 @@ fn a_constant_level_term_beside_a_live_one_is_dropped_not_refused() {
            end endgenerate\n\
            initial begin #1 W = 8'h1; #1 $display(\"DONE\"); $finish; end\n\
          endmodule\n");
-    assert_eq!(out, "HDR at 1\nDONE\n");
+    assert_eq!(out, "HDR at 0\nHDR at 1\nDONE\n");
     // The UNSHADOWED twin takes the same lane (the rule is keyed on the LIST, not on
-    // shadowing): `localparam int K = 99; always @(K or clk)`. Same three-tool split.
+    // shadowing): `localparam int K = 99; always @(K or clk)`. Both oracles print
+    // `HDR at 0` / `HDR at 1` / `DONE`.
     let out = run("module top;\n\
            localparam int K = 99;\n\
            reg clk = 0;\n\
            always @(K or clk) $display(\"HDR at %0t\", $time);\n\
            initial begin #1 clk = 1; #1 $display(\"DONE\"); $finish; end\n\
          endmodule\n");
-    assert_eq!(out, "HDR at 1\nDONE\n");
-    // When the live sibling is written at time zero the t0 line appears too, and all
-    // THREE tools then agree exactly — iverilog and verilator print these same lines.
+    assert_eq!(out, "HDR at 0\nHDR at 1\nDONE\n");
+    // When the live sibling is written at time zero the t0 line appeared before the
+    // time-0 lane too (the write woke the process), and it still appears once —
+    // iverilog and verilator print these same lines.
     let out = run("module top;\n\
            logic V, W;\n\
            initial begin V = 0; W = 0; #1 W = 1; #1 V = 1; end\n\
@@ -367,20 +358,20 @@ fn a_constant_level_term_beside_a_live_one_is_dropped_not_refused() {
     assert_eq!(out, "HDR fired at 0\nHDR fired at 1\nDONE\n");
 }
 
-/// The two shapes the level refusal must NOT reach, both measured unchanged.
+/// The two shapes the level refusal must NOT reach.
 #[test]
 fn the_level_constant_refusal_stops_at_a_bare_head() {
-    // A single-bit LEVEL term keeps its own (recorded, pre-existing) refusal — both
-    // oracles run `always @(K[0] or clk)` and print `HDR at 0` / `HDR at 1` / `DONE`.
-    loud(
-        "module top;\n\
+    // A select of a constant as a LEVEL term was refused as a "single-bit level"
+    // event control; both oracles run `always @(K[0] or clk)` and print `HDR at 0` /
+    // `HDR at 1` / `DONE`. A select of a constant is a constant, so the time-0 lane
+    // takes it and vita prints the same.
+    let out = run("module top;\n\
            localparam logic [3:0] K = 4'h1;\n\
            reg clk = 0;\n\
            always @(K[0] or clk) $display(\"HDR at %0t\", $time);\n\
            initial begin #1 clk = 1; #1 $display(\"DONE\"); $finish; end\n\
-         endmodule\n",
-        "single-bit level (non-edge) event control",
-    );
+         endmodule\n");
+    assert_eq!(out, "HDR at 0\nHDR at 1\nDONE\n");
     // A `$unit` ENUM LABEL with a module net of the same name: innermost-wins gives
     // the NET, nothing binds a constant, and the EDGE term arms. All three tools:
     // `EDGE at 1` then `DONE`. (The refusal is keyed on the BINDING, not on "a

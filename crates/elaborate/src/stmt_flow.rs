@@ -318,7 +318,11 @@ impl Elaborator<'_> {
         true
     }
 
-    pub(crate) fn lower_proc_block(&mut self, p: &ast::ProceduralBlock) -> ir::Process {
+    pub(crate) fn lower_proc_block(
+        &mut self,
+        p: &ast::ProceduralBlock,
+        user_written: bool,
+    ) -> ir::Process {
         // G7: desugar a single-term `iff` event guard into a body `if` (the IR
         // sensitivity carries no guard). Shadow `p` with the rewritten block; the rest
         // of the function is unchanged.
@@ -383,7 +387,8 @@ impl Elaborator<'_> {
         let bare_always_self_timed =
             matches!(p.kind, ast::ProcKind::Always) && p.sensitivity.is_none();
 
-        let sensitivity = self.lower_sensitivity(p.kind, p.sensitivity.as_ref(), &p.body);
+        // `const_level_header.rs`: a header level list naming a constant also runs at t0.
+        let sensitivity = self.proc_sensitivity(p, user_written, desugared.is_some());
         let mut b = ProcessBuilder::new(); // entry block #0 open
         if bare_always_self_timed && stmt_has_timing(&p.body) {
             // Implicit `forever { body }` so the process re-arms on its own #/@.

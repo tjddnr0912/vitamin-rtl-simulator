@@ -181,6 +181,9 @@ pub struct ProcIdent {
     /// would send a reader hunting for a block that does not exist, which is the
     /// exact misdirection the profile exists to prevent.
     ///
+    /// `t0_pulse` — the continuous assign of the time-0 pulse net
+    /// (`const_level_header.rs`) — is never shown: the profile skips its row.
+    ///
     /// `synth` is the fail-safe for a future producer that appends a process
     /// without going through `lower_proc_block`/`lower_synth_proc`. **No
     /// producer reaches it today** (every one of the append sites is

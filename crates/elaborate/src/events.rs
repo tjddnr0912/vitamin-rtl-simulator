@@ -1,6 +1,7 @@
 //! timing controls / sensitivity — split out of the original `elaborate` lib.rs (mechanical move).
 
 use super::*;
+use crate::const_level_header::event_term_text;
 
 /// hdl-ast `Edge` → sim-ir `EdgeKind`. A bare signal (`NoEdge`) in an
 /// edge-classified or level list arms on `AnyEdge`.
@@ -457,42 +458,37 @@ impl Elaborator<'_> {
         // the process-header lane. A NON-EDGE term on a constant is held aside
         // ([`Self::header_level_term_is_const`]); everything else is LIVE.
         let mut live: Vec<&ast::EventExpr> = Vec::new();
-        let mut const_level: Vec<(&ast::EventExpr, &str, ast::Span)> = Vec::new();
+        let mut const_level: Vec<&ast::EventExpr> = Vec::new();
         for ev in list {
             if self.event_term_never_wakes(ev, /* armed_before_t0 = */ true) {
                 continue;
             }
-            match self.header_level_term_is_const(ev) {
-                Some((name, at)) => const_level.push((ev, name, at)),
-                None => live.push(ev),
+            if self.header_level_term_is_const(ev) {
+                const_level.push(ev);
+            } else {
+                live.push(ev);
             }
         }
-        // Pass 2. A constant LEVEL term is only a problem when it is the WHOLE
-        // sensitivity: alone it decides that the process fires once at t0 and never
-        // again, a shape this subset cannot build, so it is refused. Beside a LIVE
-        // term it decides nothing the live term does not already decide — drop it and
-        // arm the rest, exactly as the EDGE lane does, or the refusal swallows the
-        // live sibling (MEASURED: `generate … localparam int V = 99; always @(V or W)`
-        // with `W` a real net was refused whole where both oracles print `HDR at 0` /
-        // `HDR at 1` / `DONE`; the t0 line is the recorded level-constant gap, the
-        // `HDR at 1` one is this defect).
+        // Pass 2. A level list naming a constant reaches here only when the time-0
+        // lane (`const_level_header.rs`) declined it: an edge term beside it (the
+        // oracles split at time 0), a body that can suspend (split), an `iff` guard,
+        // `always_ff`, a synthesized process. ALONE, the constant term is refused. Beside a LIVE term it is
+        // dropped and the rest armed, exactly as the EDGE lane does, or the refusal
+        // swallows the live sibling (MEASURED: `generate … localparam int V = 99;
+        // always @(V or W)` with `W` a real net was refused whole where all three
+        // tools run it). The dropped term's time-0 run is the answer of the oracle
+        // that does not run it: verilator for a suspending body, iverilog for an edge.
         let mut edges = Vec::new();
         if live.is_empty() {
-            for (ev, name, at) in const_level {
-                self.error_header_level_const(name, at);
+            for ev in const_level {
+                self.error_header_level_const(ev);
                 edges.push(ir::EdgeTerm {
                     net: POISON_NET,
                     kind: map_edge(ev.edge),
                 });
             }
         } else {
-            for ev in live {
-                let net = self.sens_event_net(&ev.expr, any_edge);
-                edges.push(ir::EdgeTerm {
-                    net,
-                    kind: map_edge(ev.edge),
-                });
-            }
+            edges = self.header_live_edges(&live, any_edge);
         }
         ir::Sensitivity {
             kind: if any_edge {
@@ -504,75 +500,45 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Is this a PROCESS-HEADER NON-EDGE term whose BARE head binds a constant?
-    /// `Some((name, span))` when it is — the two facts
-    /// [`Self::error_header_level_const`] needs. PURE: the caller decides whether to
-    /// refuse, because that is a property of the whole LIST (a constant level term
-    /// beside a live one is dropped, not refused).
+    /// Is this a PROCESS-HEADER NON-EDGE term whose head binds a constant — bare,
+    /// selected with provably constant indices (`K[0]`, `K[3:0]`) or package-scoped
+    /// (`p::C`)? Asked through [`Self::expr_head_binds_constant_strict`], the twin
+    /// the time-0 lane admits with, so the two cannot disagree about which term is a
+    /// constant; a term it does not prove stays live (loud for a level select).
+    /// PURE: the caller decides whether to refuse, because that is a property of the
+    /// whole LIST (a constant level term beside a live one is dropped, not refused).
     ///
-    /// ⚠️ BARE HEAD ONLY, parentheses pierced, no select. `@(K[0] or clk)` keeps the
-    /// pre-existing "single-bit level (non-edge) event control is not supported"
-    /// refusal, which is a different (recorded) gap — both oracles run it.
-    fn header_level_term_is_const<'a>(
-        &self,
-        ev: &'a ast::EventExpr,
-    ) -> Option<(&'a str, ast::Span)> {
-        if !matches!(ev.edge, ast::Edge::NoEdge) {
-            return None;
-        }
-        let (name, at) = Self::event_bare_head(&ev.expr)?;
-        self.bare_name_binds_constant(name, at)
-            .then_some((name, at))
+    /// MEASURED on the lists the time-0 lane declines, where selects and `p::C` were
+    /// refused as nets: beside a live term with a `#1` body (`@(K[0] or clk)`,
+    /// `@(K[3:0] or clk)`, `@(p::C or clk)`) iverilog also runs at time 0 and
+    /// verilator does not — dropping lands on verilator, like the bare `K`; beside an
+    /// edge term (`@(K[0] or posedge clk)`, `@(p::C or posedge clk)`) verilator also
+    /// runs at time 0 and iverilog does not — dropping lands on iverilog.
+    pub(crate) fn header_level_term_is_const(&self, ev: &ast::EventExpr) -> bool {
+        matches!(ev.edge, ast::Edge::NoEdge) && self.expr_head_binds_constant_strict(&ev.expr)
     }
 
-    /// Refuse a header LEVEL term that binds a constant and has no live sibling,
-    /// saying which of the two constants it is.
-    ///
-    /// `event_term_never_wakes` deliberately answers `false` here — a header level
-    /// term on a constant fires ONCE at time 0 in both oracles, which this subset
-    /// has no shape for — and the UNSHADOWED spelling was already loud through
-    /// `resolve_net`. The SHADOWED one was not: `lookup_net_scoped` walks `symbols`
-    /// alone, so `generate if (1) begin : g localparam int V = 2; always @(V) …`
-    /// armed the OUTER net and fired again when it changed (MEASURED `HDR fired at
-    /// 0` + `HDR fired at 1`, where iverilog 13.0 and verilator 5.052 both print
-    /// `HDR fired at 0` then `DONE`). One IEEE question was answered loud in one
-    /// spelling and silently wrong in its shadow twin; this is the parity.
-    ///
-    /// The two messages are the §2 🆕 O pair: `error_const_shadows_net` when a net
-    /// of the same name is in scope (the reader must know WHICH object vita took),
-    /// and the `@(pkg::CONST)` arm's "a constant cannot wake a process" sentence
-    /// otherwise — replacing `resolve_net`'s `E3010 undeclared net/variable`, which
-    /// was a false statement about the program (`localparam int K = 99;` IS a
-    /// declaration).
-    ///
-    /// ⚠️ ONLY when the term is the WHOLE sensitivity — see the two-pass loop in
-    /// `classify_event_list`. Beside a LIVE term the constant is dropped instead,
-    /// or the refusal swallows a sibling that does wake the process.
-    fn error_header_level_const(&mut self, name: &str, at: ast::Span) {
-        if self.bare_const_shadows_net(name, at) {
-            self.error_const_shadows_net(
-                name,
-                &format!(
-                    "a constant cannot wake a process, so the level event control \
-                     `@({name})` has nothing to sense here"
-                ),
-            );
-        } else {
-            self.error(
-                MsgCode::ElabUnsupported,
-                &format!(
-                    "a level event control `@({name})` must name a net or variable: `{name}` \
-                     is a constant (parameter / localparam / genvar / enum label) and a \
-                     constant cannot wake a process (an event control waits for a CHANGE). \
-                     `posedge`/`negedge` on a constant is accepted and simply never fires"
-                ),
-            );
+    /// Arm the LIVE terms of a process-header list — the one spelling
+    /// `classify_event_list` and the time-0 lane (`const_level_header.rs`) share.
+    pub(crate) fn header_live_edges(
+        &mut self,
+        live: &[&ast::EventExpr],
+        any_edge: bool,
+    ) -> Vec<ir::EdgeTerm> {
+        let mut edges = Vec::with_capacity(live.len() + 1);
+        for ev in live {
+            let net = self.sens_event_net(&ev.expr, any_edge);
+            edges.push(ir::EdgeTerm {
+                net,
+                kind: map_edge(ev.edge),
+            });
         }
+        edges
     }
 
     /// The BARE single-segment name at an event term's head, with its span —
     /// parentheses pierced, a select NOT (see `header_level_term_is_const`).
-    fn event_bare_head(e: &ast::Expr) -> Option<(&str, ast::Span)> {
+    pub(crate) fn event_bare_head(e: &ast::Expr) -> Option<(&str, ast::Span)> {
         match &e.kind {
             ast::ExprKind::Paren { inner } => Self::event_bare_head(inner),
             ast::ExprKind::Ident(path) => match path.segments.as_slice() {
@@ -608,11 +574,9 @@ impl Elaborator<'_> {
     /// `EDGE at 0` in BOTH oracles, and `always @(K or clk)` → `EDGE at 0` then
     /// `EDGE at 1`. The IN-BODY `@(K)` is reached after that settle and fires never
     /// (both oracles print `DONE` alone), which is why the flag is a parameter and
-    /// not a property of the expression. A header non-edge constant term therefore
-    /// keeps whatever it does today (loud) — vita has no "fire once at t0, then
-    /// never" shape for an explicit list, and inventing one by re-kinding the
-    /// process to `Comb` would move every levelize / native classification that
-    /// reads `SensKind::Comb`. Recorded, both oracles' text above.
+    /// not a property of the expression. The header list's "once at time 0, then
+    /// never" run is `const_level_header.rs`, which keeps the header process and
+    /// replaces its constant terms with an edge on an internal time-0 pulse net.
     ///
     /// The term is DROPPED from the sensitivity rather than refused, so a mixed list
     /// (`@(posedge K or posedge clk)`) still arms on the live term — one constant
@@ -621,9 +585,10 @@ impl Elaborator<'_> {
     ///
     /// ⚠️ Constant-ness is asked of the HEAD through [`Self::expr_head_binds_constant`],
     /// the one funnel the lowering itself uses, so classifier and lowering cannot
-    /// disagree under shadowing. A shape whose head is not a bare name (an operator,
-    /// a call, `pkg::K`) answers `false` and keeps whatever diagnostic it had — the
-    /// conservative side, since `true` stands a rule down.
+    /// disagree under shadowing. `pkg::K` answers from the package's constant maps.
+    /// A head that is neither (an operator, a call) answers `false` and keeps
+    /// whatever diagnostic it had — the conservative side, since `true` stands a
+    /// rule down.
     pub(crate) fn event_term_never_wakes(
         &self,
         ev: &ast::EventExpr,
@@ -720,8 +685,9 @@ impl Elaborator<'_> {
             // `@(pkg::sig)` — an explicitly scoped package variable in an event
             // control. A package variable is ONE shared net per elaboration, so
             // `pkg::sig` resolves to the SAME net the imported bare `@(sig)` arms
-            // on (iverilog-pinned). A package CONSTANT (param/enum-label) or an
-            // unknown symbol yields None → loud (a constant cannot wake a process).
+            // on (iverilog-pinned). A package CONSTANT never reaches here (the header
+            // lane holds it aside, the in-body lane drops it), so `None` is an unknown
+            // symbol → loud.
             ast::ExprKind::PkgScoped { .. } => match self.pkg_scoped_var_net(e) {
                 Some(n) => {
                     if self.is_dyn_handle_net(n) || self.is_string_net(n) {
@@ -735,13 +701,33 @@ impl Elaborator<'_> {
                 None => {
                     self.error(
                         MsgCode::ElabUnsupported,
-                        "an event control `@(pkg::name)` must name a package variable \
-                         (not a constant / enum-label or an unknown symbol)",
+                        "an event control `@(pkg::name)` must name a package variable or \
+                         constant, and this name is neither",
                     );
                     POISON_NET
                 }
             },
             ast::ExprKind::Paren { inner } => self.sens_event_net(inner, edge_ctx),
+            // A select of a constant whose index is provably LIVE (`K[i]` with a net
+            // `i` that is not a constant parameter, `ident_route.rs::
+            // index_provably_live`): no lane drops it, it changes when `i` does, and
+            // no waiter here tracks an index.
+            ast::ExprKind::BitSelect { .. }
+            | ast::ExprKind::PartSelect { .. }
+            | ast::ExprKind::IndexedPart { .. }
+                if self.const_select_with_live_index(e) =>
+            {
+                let term = event_term_text(e);
+                self.error(
+                    MsgCode::ElabUnsupported,
+                    &format!(
+                        "an event control on `{term}`, a select of a constant indexed by a \
+                         net that can change, is not supported: its value changes when the \
+                         index changes, and vita's event waits track nets, not an index"
+                    ),
+                );
+                POISON_NET
+            }
             ast::ExprKind::BitSelect { base, index } => {
                 if edge_ctx {
                     if let Some(net) = self.lsb_bitselect_net(base, index) {
@@ -756,8 +742,10 @@ impl Elaborator<'_> {
                 } else {
                     self.error(
                         MsgCode::ElabUnsupported,
-                        "single-bit level (non-edge) event control is not supported; use \
-                         posedge/negedge or the whole signal (level fires on any whole-net change)",
+                        "a level (non-edge) event control on a bit or element select is not \
+                         supported: vita's level wait fires on any change of the whole variable, \
+                         including changes outside the selection; wait on the whole variable, \
+                         or use posedge/negedge on a vector's bit 0",
                     );
                 }
                 POISON_NET

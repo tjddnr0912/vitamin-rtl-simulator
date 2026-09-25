@@ -60,6 +60,8 @@ mod const_decl_width;
 mod const_eval;
 mod const_fn;
 mod const_fn_width;
+mod const_level_header;
+pub use const_level_header::T0_PULSE_KIND;
 mod const_real;
 mod const_select;
 mod const_str;
@@ -464,6 +466,11 @@ struct Elaborator<'s> {
     /// P2-E: ProcIds of `final` blocks — engine side table (never the IR):
     /// skipped at arming, run once at end of simulation.
     pub final_procs: std::collections::BTreeSet<u32>,
+    /// `const_level_header.rs`: the design's time-0 pulse net, minted on first use.
+    t0_pulse: Option<u32>,
+    /// `const_level_header.rs`: why the block being lowered declined the time-0
+    /// lane, read by the header lane's constant refusal (`None` outside it).
+    t0_decline: Option<const_level_header::T0Decline>,
     /// §4.5.166 HIER twin: ProcIds whose implicit `@(*)`/`always_comb`/
     /// `always_latch` read-set was inferred by `comb_read_set` (NOT a bare
     /// self-timed `always`). Recomputed after the deferred hierarchical
