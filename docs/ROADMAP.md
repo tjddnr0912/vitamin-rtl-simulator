@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 6 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 158 | 81 | 77 | oracle split / pinned / oracle disqualified 42 · named prerequisite 18 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · held on purpose 1 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 17 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 32 | ① | |
+| §2 | recorded defects by mechanism | 158 | 81 | 77 | oracle split / pinned / oracle disqualified 43 · named prerequisite 17 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · held on purpose 1 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 16 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 33 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -783,19 +783,16 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - ⓔ ORACLE-SPLIT: in a MULTI-timescale design `global_prec_exp` becomes finer and the `e < 0` case
   never triggers — iverilog rounds at the module's OWN precision and verilator at the design's GLOBAL
   precision. With a single timescale the two coincide and it does not bite.
-- A wire driven only by a continuous assign raises a false event at t=0 (1 oracle: iverilog;
-  verilator not consulted, so a 3-oracle census is required): with `wire b; assign #5 b = a;`, b
-  starts at z and the t=0 settle's z→x wakes `always @(b)` where iverilog has no t=0 event.
-  `assign d = c ^ 1'b0;` behaves the same — an initial-value domain problem.
+- A wire driven only by a continuous assign raises a false event at t=0 (2 oracles since
+  §4.5.532's review): with `wire b; assign #5 b = a;`, b starts at z and the t=0 settle's z→x wakes
+  `always @(b)` where neither oracle has a t=0 event; `assign d = c ^ 1'b0;` behaves the same, and
+  a two-hop chain `wire n1 = r + 1; wire n2 = n1 + 1; always @(n2)` prints `N2 at 0 n2=x` before
+  the real `n2=4` (both oracles print the real line only). An initial-value domain problem: the
+  settle delivers the z→x hop as a change. STARTABLE. The §4.5.532 admission of `always @(K)` opens
+  a loud→value column onto this class — a design PRE refused now prints the extra `w=x` line — but
+  the same line is printed on PRE by the `@(K or clk)` twin, by `initial #0 r = 2;` and by
+  `always @(lv)` with no constant at all (soundness s02 / differential e20 controls).
 
-- A process-header level list with NO live term — `always @(K)`, `@(K[0])`, `@(K[3:0])`, `@(p::C)`,
-  `@(K or K2)`, over every constant kind — stays E3009 although both oracles run it once at time 0
-  (`LVL at 0`). Its prerequisite closed in §4.5.531: a `$finish` now ends the run at the end of its
-  time step, so the one time-0 run survives a `$finish` reaching time 0 through any channel (the
-  static scan §4.5.529 tried and reverted is no longer needed). STARTABLE. Fix shape = admit the
-  all-constant list in `const_level_header.rs` on the existing time-0 pulse net (`$ia_tmp$<n>`),
-  drop the "vita's `$finish` can end time 0 before that run" clause from the refusal and the manual
-  003 row, and re-measure the `@(K or K2)` and `@(p::C)` spellings on all three backends.
 - A `#0` continuous-assign or gate update (`assign #0 r = u`, `wire #0 r = u`, `buf #0`) is
   delivered only after the WHOLE procedural `#0` cascade of its tick (pre-existing, 2 oracles from
   the first hop): `always @(u) begin $display("h0 r=%0d", r); #0 $display("h1 …"); #0 …; #0 …; end`
@@ -964,6 +961,14 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Oracle splits (recorded, not chased)
 
+- The ORDER of distinct processes in the time-0 Active region around an all-constant
+  `always @(K)` (§4.5.532; IEEE leaves it open): with `initial -> ev;` waking an `initial @(ev)`,
+  iverilog prints the `always @(K)` line first and the woken `initial` second, vita the reverse,
+  and verilator never wakes the `initial` at all; with `always @(K)`, `always @(K2)`,
+  `always @(K or K2)` in that order iverilog prints `A` / `AB` / `B`, vita and verilator
+  `A` / `B` / `AB`; with an `always_comb` beside it iverilog runs the `always @(K)` first, vita and
+  verilator the `always_comb`. The `@(K or clk)` twins order the same on PRE (the pulse fires after
+  the first batch of `initial` statements, the §4.5.529 placement).
 - What runs after a `$finish` in its own time step, beyond what both oracles agree on (the
   processes already woken, the pending `#0` and NBA regions, their cascades — §4.5.531 runs all of
   it): iverilog halts every OTHER thread at its first system-task call once a `$finish` is pending

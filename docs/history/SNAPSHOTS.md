@@ -34,6 +34,7 @@ a section restructure, a residue split).
 | 2026-09-25 | b7df5e5 | §4.5.529 | 8466 | 34 | 27 / 0 / 27 | 154 / 81 / 73 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 388 / 222 / 166 |
 | 2026-09-25 | f929412 | §4.5.530 | 8485 | 34 | 27 / 0 / 27 | 155 / 79 / 76 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 389 / 220 / 169 |
 | 2026-09-25 | b70759a | §4.5.531 | 8505 | 34 | 27 / 0 / 27 | 158 / 81 / 77 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 392 / 222 / 170 |
+| 2026-09-25 | 8cb7eef | §4.5.532 | 8505 | 34 | 27 / 0 / 27 | 158 / 81 / 77 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 392 / 222 / 170 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -100,3 +101,8 @@ a section restructure, a residue split).
   Added: the `#0` cont-assign delivery order (startable), the deferred-action `$finish` text capture
   (startable, verilator + hand-IEEE), the `$fatal` immediate arm (held on purpose) and one oracle-split
   bullet. Startable 79 − 1 + 1 + 2 = 81; blocked 76 − 1 + 1 + 1 = 77. `format_version` 34 unchanged.
+- 2026-09-25 (§4.5.532): 2M is 158 − 1 + 1. Deleted (startable): "Delays / events" the all-constant
+  header list bullet. Moved blocked → startable: the t0 false event of a cont-assign-only wire (2
+  oracles now, re-measured by both lenses). Added: one oracle-split bullet (time-0 process order
+  around `always @(K)`). Startable 81 − 1 + 1 = 81; blocked 77 − 1 + 1 = 77. Test count unchanged
+  (40 pins converted in place). `format_version` 34 unchanged.

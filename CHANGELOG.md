@@ -9,6 +9,19 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — an `always` sensitive only to constants runs once at time 0
+
+- **`always @(K)`, `@(K[0])`, `@(K[3:0])`, `@(p::C)`, `@(K or K2)` and every other header level
+  list whose terms are all constants now run once at time 0 and never again**, as Icarus Verilog
+  and Verilator do — for every constant kind (parameter with a per-instance override, `localparam`,
+  genvar, enum label, `$unit`, real, string, generate-scope and imported constants, a select of one)
+  and in every instance and generate copy. Such a list was `VITA-E3009` while a `$finish` reaching
+  time 0 could erase the run; that closed in the previous entry, so a `$finish` in the first
+  `initial`, in a child module, after `#0`, in a task, behind an event or inside a sibling
+  `always @(K)` leaves the run and its writes in place (`final` sees them). The other refusals of
+  the lane (a body that can suspend, `iff`, `always_ff`, an edge sibling) are unchanged and their
+  message ends with that reason.
+
 ### Fixed — `$finish` ends the run at the end of its time step
 
 - **The processes already woken in the `$finish` time step run.** `$finish` used to end the run at

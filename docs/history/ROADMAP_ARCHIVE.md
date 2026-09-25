@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.532` **a process-header level list whose every term is a constant runs once at time 0: the list's sensitivity is the time-0 pulse alone, admitted once a `$finish` ends the run at the end of its time step** (2026-09-25 · §2 "Delays / events", startable row · `always @(K)`, `@(K[0])`, `@(p::C)`, `@(K or K2)` over every constant kind, instance and generate copy; 40 pins converted from their quoted oracle text; 2 lenses, both pre-existing t0 false-event class only)
 - `4.5.531` **a `$finish` ends the run at the end of its time step: the processes already woken in the step, its `#0` and NBA regions and everything they wake run, a `#0` cont-assign due in the step is delivered, the finishing process is never re-entered** (2026-09-25 · §2 "Delays / events" the `$finish` drain bullet deleted, the all-constant header list row unblocked · `Scheduler::finish_pending` latched by the `Step::Finish` arm of both kernels, consumed at the loop's stable point (`st.finished`, deferred drain, postponed flush, `Finish`); the arm parks the finishing activity (`busy`); `tick_due_now` keeps the step open while a `#0` cont-assign / gate update or transport `<= #0` is due at `now` · no format bump · 2 lenses × 1 round + direct re-grade: r1 BLOCKING (soundness) the finishing body re-entered on a second edge of the same step → `busy`; (differential) a `#0` cont-assign never delivered → `tick_due_now`; 264-cell matrix 107 = both oracles · 104 = iverilog · 13 = verilator · 40 recorded splits / no-oracle, 0 moved away · 8505 tests)
 - `4.5.530` **a cast and a formal bind evaluate an impure operand once: 2-state coercion through `TwoState` and a signed widening through a single-mention ternary, where the operand's width is declared** (2026-09-25 · §2 "Size cast / signedness" impure-operand bullet, "Inline / frame binds" `expr_is_repeatable`-decline, `int'($random*1.0)` and stale widened-actual bullets, two "Performance" `coerce_two_state` bullets deleted (CL-12 / CL-14) · new `single_mention.rs`: `extend_signed_once` = `$signed(1'b1 ? $signed(e) : n'sd0)` (no format bump, measured by hand on PRE) and `two_state_once` = `TwoState`, used where `ir_bits_of` answers and the operand is not repeatable, in `lower_prim_cast`, `lower_size_cast` and bind arms (2.5) / (3); a non-repeatable real into ≤32 bits converts through `RealToInt` · `int'(f())` 8 calls / `000000fd` → 1 / `fffffffd`, `int'($random)` 32 draws → 1 · 2 lenses × 2 rounds; round 1 BLOCKING: `TwoState` over a fabricated width (`$bits(int'(q.sum()))` 32 → E3009) and `RealToInt` saturation past 2^127 — both excluded, PRE shape kept)
 - `4.5.529` **a process-header level list naming a constant beside a live term runs once at time 0 and then on its live terms; `p::C` is a constant in every event lane; a select of a constant is a constant only when its index provably is** (2026-09-25 · §2 "Delays / events" D10 / D11 / D12 bullets deleted (CL-09) · new `const_level_header.rs`: a USER-written `always @(L)` with no edge term and no `iff`, at least one constant and one live term and a body that cannot suspend (an `_`-free allow-list) keeps its header `Level` process, its constant terms replaced by one `AnyEdge` term on a design-wide time-0 pulse net (`$ia_tmp$<n>`, z → 1 at the time-0 settle, hidden from every rail) · `expr_head_binds_constant` gains a `PkgScoped` arm; index constness is leaf-structural through the lowering's name funnel (`index_provably_constant` / `index_provably_live`) and a provably live index is refused · no format bump · 401 cells: 58 silent → 2-oracle, 22 loud → 2-oracle, 6 silent → loud, none right → wrong or right → loud · 2 lenses × 3 rounds + one direct re-grade — r1 BLOCKING index ignored and the `#0` prologue's region → D8 pulse net; r2 BLOCKING a fold-based index test through a generate-net shadow and `$finish` at time 0 → leaf rule + scan; r3 BLOCKING scan holes and fork + disable → all-constant lists stay refused, every fork excluded · 8466 tests)
@@ -541,6 +542,57 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.532 a process-header level list whose every term is a constant runs once at time 0: the list's sensitivity is the time-0 pulse alone, admitted once a `$finish` ends the run at the end of its time step (2026-09-25, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — the all-constant header list bullet (deleted); the t0
+false-event bullet re-measured (1 oracle → 2, STARTABLE, with the loud→value column this admission
+opens onto it); one new oracle-split bullet (time-0 process order around `always @(K)`).
+
+**Defect (PRE, both oracles)**. `always @(K)`, `@(K[0])`, `@(K[2])`, `@(K[3:0])`, `@(K[0+:2])`,
+`@(K[g])`, `@(K[p::I])`, `@(p::C[P])`, `@(p::C)`, `@(p::E1)`, `@(K or K2)`, an imported `C`, a
+generate-scope constant shadowing a net, a per-instance override, genvar copies, enum label,
+`$unit`, real and string constants — 49 cells — were `E3009` ("a process sensitive only to constants
+runs once at time 0 in both reference tools, and vita does not run it: vita's `$finish` can end
+time 0 before that run"), where both oracles print the one time-0 line (`LVL at 0 K=99` / `DONE`,
+`C top.u0 at 0 P=3` / `C top.u1 at 0 P=1`, `A08 g=0 at 0` / `1` / `2`, `x=100 at 1`, `I1` / `I2` /
+`A at 0`, `I y=7 at 0`). §4.5.529 built the lane and kept this half on its refusal because a
+`$finish` reaching time 0 through any channel erased the run; §4.5.531 closed that.
+
+**Fix**. `const_level_header.rs`: the `T0Decline::NoLiveTerm` arm, its clause and the all-constant
+check at the end of `header_const_level_t0` are deleted, so a list whose every term binds a constant
+is admitted by the same predicate chain (user-written `always`, no edge term, no `iff`, no
+clocking-block event, at least one constant head, a body that cannot suspend), and
+`header_const_level_sensitivity` — unchanged — emits `Level` with the pulse `AnyEdge` edge alone
+(`level_armed` is true: the edge list is non-empty). No engine change; interp, vm and native agree on
+every cell (`void'(f(1))` falls back to vm with the PRE twin's W4030). Measured `$finish` channels:
+first `initial` batch above or below the `always`, a child module, after `#1`, after `#0`, a task,
+`-> ev`, a sibling `always @(K)` body — the run prints and its blocking / non-blocking write and a
+cont-assign of it reach `final` (`F y=7`, `F z=8`); a second `always @(K)` beside a finishing one
+still runs. Every other decline prints its own clause (a suspending body, `wait (c)`, `fork`, an
+imported or recursive task, `iff`, `always_ff`, an edge sibling, a synthesized clock); `posedge K`
+alone is still accepted and never fires. 40 pins in `const_level_event_t0.rs`,
+`const_level_event_order.rs`, `bare_ident_route_readers.rs` and `scoped_event_control.rs` converted
+from their quoted oracle text (+10 channel cells in one test); the test count is unchanged (8505).
+
+**Byte identity**. A list with a live term takes the same predicate chain minus the deleted final
+test and the same sensitivity builder: 43 + 11 `@(K or clk)` twins byte-identical PRE = POST (both
+lenses). `$ia_tmp$` appears in no VCD, `trace.jsonl`, `run.json`, `--hier-tree` or `--inst-paths`
+output. Corpus 10/10.
+
+**Review** — 2 lenses × 1 round. Soundness MAJOR-ONLY (54 cells), differential BLOCKING by the
+brief's rule (99 cells + 43 twins: both 41 · iverilog 16 · verilator 5 · split 5 · pre-existing 30 ·
+NEW 2), both on ONE root: the pre-existing t0 false event of a wire driven only by a cont-assign
+(`assign w = r + 1; always @(w) …; always @(K) r = K;` prints `W 0 w=x` before `R 0 r=3` / `W 0 w=4`;
+a two-hop chain prints `N2 at 0 n2=x`; both oracles print the real lines only). The line is
+printed on PRE by the `@(K or clk)` twin, by `initial #0 r = 2;` and by `always @(lv)` with no
+constant (re-measured directly), so it is the §2 class, now 2-oracle and STARTABLE, not this slice's;
+recorded with the loud→value column. Order-only splits (`-> ev` wake, three constant lists, an
+`always_comb` beside the list) recorded as one oracle-split bullet; c31 (`$stop`/`$finish` text
+around a system task) is the §4.5.531 iverilog halt-at-syscall split.
+
+**Out of scope**: the t0 false event itself (its own slice); net selects in a level control
+(§3.b `level-select-event`); the `edge` keyword (§3.b `edge-event`).
 
 #### 4.5.531 a `$finish` ends the run at the end of its time step: the processes already woken in the step, its `#0` and NBA regions and everything they wake run, a `#0` cont-assign due in the step is delivered, and the finishing process is never re-entered (2026-09-25, branch main) ✅
 
