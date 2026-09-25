@@ -1,8 +1,8 @@
 //! Round-35/36 — a 2-state cast named its operand once per bit of the WRONG WIDTH.
 //!
-//! `int'(e)` is lowered by `coerce_two_state` into a `Concat` of one
+//! `int'(e)` was lowered by `coerce_two_state` into a `Concat` of one
 //! `CaseEq(Select(e, i), 1'b1)` per bit it covers, and the engine walks that DAG as a
-//! TREE. So a 2-state prim cast multiplies the operand's evaluation cost by the width
+//! TREE. So a 2-state prim cast multiplied the operand's evaluation cost by the width
 //! the coercion is applied at. Two separate defects lived on that sentence:
 //!
 //! * **Round 35 — it was applied at all.** No guard, so an operand that provably
@@ -17,15 +17,22 @@
 //! Counted by putting a `$display` inside the operand — the numbers are exact, not
 //! approximate:
 //!
-//! | cast | operand evals, pre-35 | pre-36 | POST | iverilog 13 |
-//! |---|---|---|---|---|
-//! | none | 1 | 1 | 1 | 1 |
-//! | `byte'` (32-bit operand, narrowing) | 8 | 8 | 8 | 1 |
-//! | `int'` (32-bit operand, same width) | 32 | 32 | 32 | 1 |
-//! | `longint'` (32-bit operand, widening) | 64 | 64 | **32** | 1 |
-//! | `int'(int'(x))` | **1024** | 32 | 32 | 1 |
-//! | `int'` of a 4-bit operand | 32 | 32 | **4** | 1 |
-//! | `longint'` of a 4-bit operand | 64 | 64 | **4** | 1 |
+//! | cast | operand evals, pre-35 | pre-36 | round 36 | single-mention | iverilog 13 |
+//! |---|---|---|---|---|---|
+//! | none | 1 | 1 | 1 | 1 | 1 |
+//! | `byte'` (32-bit operand, narrowing) | 8 | 8 | 8 | **1** | 1 |
+//! | `int'` (32-bit operand, same width) | 32 | 32 | 32 | **1** | 1 |
+//! | `longint'` (32-bit operand, widening) | 64 | 64 | 32 | **1** | 1 |
+//! | `int'(int'(x))` | 1024 | 32 | 32 | **1** | 1 |
+//! | `int'` of a 4-bit operand | 32 | 32 | 4 | **1** | 1 |
+//! | `longint'` of a 4-bit operand | 64 | 64 | 4 | **1** | 1 |
+//!
+//! The single-mention column: the coercion is now `SysFunc TwoState` (x/z→0, the
+//! operand's own width and sign) and a signed widening is the single-mention
+//! ternary `$signed(1'b1 ? $signed(e) : <n-bit signed 0>)`, so every cell names
+//! its operand once, as iverilog 13 and verilator 5 do. The pins below that
+//! asserted the old per-bit counts were CONVERTED to the oracle count (1); none
+//! was deleted.
 //!
 //! ⭐ The discriminator for building a coercion at all is 2-state-ness, not width:
 //! `integer'` and `int'` are both 32-bit and signed, and differed by 27× in wall
@@ -39,14 +46,8 @@
 //! same file at 25× of the frame-call gap, which is what identified the cast rather
 //! than the frame call or the 128-bit part-select as the cost.
 //!
-//! ⚠️ **This still does NOT make the evaluation count correct.** A single
-//! `int'(f())` names `f()` 32 times against iverilog's 1, because a `Call` is
-//! conservatively "may be unknown" and an `int` is 32 bits wide. What round 35
-//! removed is the MULTIPLICATION under nesting; what round 36 removed is paying for
-//! bits the operand does not have. Both are moves up the ladder on a count that was
-//! already wrong, never a regression — the residue is recorded in ROADMAP §2 rather
-//! than left implicit. Values are unaffected: 64 cast cells over x/z-carrying
-//! operands print byte-identically pre-35, pre-36, POST and under live iverilog 13.
+//! Values over x/z-carrying operands are pinned against live iverilog 13 below and
+//! are unchanged by the single-mention spelling.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -122,16 +123,14 @@ fn narrow_pings(expr: &str) -> usize {
 #[test]
 fn a_nested_two_state_cast_does_not_multiply_the_operand() {
     assert_eq!(pings("g(1)"), 1, "an uncast call is evaluated once");
-    // A single SAME-WIDTH cast still fans out to that width: a `Call` is
-    // conservatively "may be unknown", so its coercion is still built, and `int` is
-    // exactly as wide as `g`'s return. Round 36 does not touch this cell — there is
-    // no resize in front of the coercion to reorder. This is the residue, pinned so
-    // that closing it is a deliberate change and not a surprise.
-    assert_eq!(pings("int'(g(1))"), 32);
-    // …but the OUTER cast of a nested pair sees a `Concat` of `CaseEq`, which is
-    // known by construction, so it does not rebuild. 32, not 32×32.
-    assert_eq!(pings("int'(int'(g(1)))"), 32);
-    assert_eq!(pings("int'(int'(int'(g(1))))"), 32);
+    // A `Call` is conservatively "may be unknown", so the coercion is still built,
+    // but `TwoState` names it once. Converted pin: was 32 (one mention per bit),
+    // iverilog 13 and verilator 5 print one `ping`.
+    assert_eq!(pings("int'(g(1))"), 1);
+    // The OUTER cast of a nested pair sees `TwoState`, which is known by
+    // construction, so it does not rebuild. Converted pins: were 32.
+    assert_eq!(pings("int'(int'(g(1)))"), 1);
+    assert_eq!(pings("int'(int'(int'(g(1))))"), 1);
 }
 
 /// The other half of the discriminator: a 4-state cast of the same width and sign
@@ -184,71 +183,47 @@ fn an_unknown_operand_is_still_coerced_through_every_two_state_cast() {
     );
 }
 
-/// ROUND 36, the headline: a widening 2-state cast costs the OPERAND's width.
+/// A widening, narrowing or nested 2-state cast names its operand ONCE.
 ///
-/// ⚠️ `longint'(g(1))` moved **64 → 32** and that is the point of the change, not a
-/// loosened bound. `g` returns 32 bits; the 32 extension bits `longint'` adds are a
-/// zero- or sign-fill, and coercing a fill bit is the identity, so paying 64 terms
-/// for them was pure waste. `int'(g(1))` (same width) and `byte'(g(1))`
-/// (narrowing, already at the smaller width) are unmoved, which is what shows the
-/// change is the WIDENING arm and nothing else.
-///
-/// ⚠️ `longint'(int'(g(1)))` is still **64**, and it is worth saying why it did not
-/// move with its neighbour: the inner cast leaves a `Concat` of `CaseEq`, which is
-/// known by construction, so NO coercion is built for the outer cast — it takes the
-/// plain `extend_to` path, and `extend_to` derives its sign fill from the value it is
-/// extending, naming that 32-term inner concat a second time. That doubling is a
-/// property of sign extension in this IR, not of the coercion, so it is out of this
-/// change's scope and pinned here rather than glossed.
+/// Converted pins (old → new, new = iverilog 13 and verilator 5): `longint'(g(1))`
+/// 32 → 1, `byte'(g(1))` 8 → 1, `shortint'(g(1))` 16 → 1, `longint'(int'(g(1)))`
+/// 64 → 1, `longint'(byte'(g(1)))` 16 → 1. The last two used to double because the
+/// outer cast built `extend_to`'s `Select{Bit}` sign fill over the inner coercion;
+/// a signed operand that may not be repeated is now extended by the single-mention
+/// ternary instead.
 #[test]
 fn a_widening_two_state_cast_costs_the_operands_width() {
-    assert_eq!(
-        pings("longint'(g(1))"),
-        32,
-        "was 64: 32 fill bits were paid for"
-    );
-    assert_eq!(
-        pings("byte'(g(1))"),
-        8,
-        "narrowing is already the smaller width"
-    );
-    assert_eq!(pings("shortint'(g(1))"), 16, "narrowing, unmoved");
-    assert_eq!(
-        pings("longint'(int'(g(1)))"),
-        64,
-        "no coercion is built; `extend_to`'s sign fill names the inner concat twice"
-    );
-    assert_eq!(
-        pings("longint'(byte'(g(1)))"),
-        16,
-        "same shape one width down: 8-term inner concat, named twice"
-    );
+    assert_eq!(pings("longint'(g(1))"), 1, "was 32");
+    assert_eq!(pings("byte'(g(1))"), 1, "was 8");
+    assert_eq!(pings("shortint'(g(1))"), 1, "was 16");
+    assert_eq!(pings("longint'(int'(g(1)))"), 1, "was 64");
+    assert_eq!(pings("longint'(byte'(g(1)))"), 1, "was 16");
 }
 
-/// ROUND 36 on the reporting shape: a NARROW 4-state operand, which is where the
-/// target-vs-operand asymmetry is largest. The reporter's `int'(nb)` with `nb` 4 bits
-/// wide is exactly `int'(n())` here.
+/// The reporting shape: a NARROW 4-state operand. The reporter's `int'(nb)` with
+/// `nb` 4 bits wide is exactly `int'(n())` here.
 ///
-/// ⚠️ The signed operand costs the same 4 and not 5 (4 value bits + 1 coerced sign
-/// bit). That is not the reordering being clever — it is the PRE-EXISTING sign
-/// decision showing through: `cast_extend_signed` falls back to the mirror for an
-/// operand it may not name twice, and the mirror calls a `Call`-rooted operand
-/// unsigned, so the fill is a literal `1'b0` and there is no sign bit to coerce. The
-/// value that follows from that (`int'(sn())` = `0000000d` where iverilog 13 gives
-/// `fffffffd`) is a pre-existing gap recorded in ROADMAP §2, measured identical
-/// before and after this change — the cell is here so a future fix to the SIGN moves
-/// this count to 5 loudly rather than silently.
+/// Converted pins (old → new, new = iverilog 13 and verilator 5): every count
+/// 4 → 1. The signed operand is now extended by its canonical sign through the
+/// single-mention ternary, so its value moved too: `int'(sn())` printed `13`
+/// (zero-extended −3) and now prints `-3`, both oracles' value.
 #[test]
 fn a_narrow_operand_no_longer_pays_the_targets_width() {
-    assert_eq!(narrow_pings("int'(n())"), 4, "was 32");
-    assert_eq!(narrow_pings("longint'(n())"), 4, "was 64");
-    assert_eq!(narrow_pings("shortint'(n())"), 4, "was 16");
-    assert_eq!(
-        narrow_pings("int'(sn())"),
-        4,
-        "was 32; fill is 1'b0, see above"
-    );
-    assert_eq!(narrow_pings("longint'(sn())"), 4, "was 64");
+    assert_eq!(narrow_pings("int'(n())"), 1, "was 4");
+    assert_eq!(narrow_pings("longint'(n())"), 1, "was 4");
+    assert_eq!(narrow_pings("shortint'(n())"), 1, "was 4");
+    assert_eq!(narrow_pings("int'(sn())"), 1, "was 4");
+    assert_eq!(narrow_pings("longint'(sn())"), 1, "was 4");
+    for (expr, want) in [
+        ("int'(n())", "done 9"),
+        ("longint'(n())", "done 9"),
+        ("int'(sn())", "done -3"),
+        ("longint'(sn())", "done -3"),
+    ] {
+        let (out, code) = run(&narrow_ping_source(expr));
+        assert_eq!(code, Some(0), "{out}");
+        assert!(out.contains(want), "`{expr}` expected `{want}`:\n{out}");
+    }
 }
 
 /// The value half of the round-36 equivalence argument, both signednesses, every

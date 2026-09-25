@@ -123,8 +123,7 @@ impl Elaborator<'_> {
         // ⚠️ A SIGNED result is safe to build and unsafe to CONSUME: it tells every
         // downstream widening resize to sign-FILL, and `extend_to` builds that fill
         // as `Select{Bit, base: e}` — a SECOND mention of the operand (§4.5.320 S1).
-        // The 2-state coercion is the same hazard w-fold: it names its operand once
-        // per bit. So an actual that cannot be repeated may not become either one.
+        // So an actual that cannot be repeated may not become one.
         // Measured: `function [31:0] sgn(input signed [7:0] x); sgn = x;` called with
         // `$random` drew TWICE (the value came from the second draw and the stream
         // ran one ahead of iverilog's) — the widening happened at the RETURN resize,
@@ -176,9 +175,8 @@ impl Elaborator<'_> {
                 self.resize_inline_assign(eid, w, actual_signed)
             };
             self.verbatim_actuals.insert(out);
-            // (3) 2-STATE still holds on this tail: the per-bit coercion below may
-            // not be built over an operand that cannot be repeated, but `TwoState`
-            // names it ONCE and keeps its width and sign, so nothing above changes.
+            // (3) 2-STATE still holds on this tail: `TwoState` names the operand
+            // ONCE and keeps its width and sign, so nothing above changes.
             // (`b16(c.lu)` — a `bit [15:0]` formal bound to a 4-state class field
             // holding `8'bx0000111` — read back `00X7` for iverilog's `0007` before
             // either arm existed; it now takes ㊁.)
@@ -192,41 +190,31 @@ impl Elaborator<'_> {
             }
             return out;
         }
-        // (2.5) COST — the same target-vs-operand-width asymmetry `lower_prim_cast`
-        // carries, and the same answer. The 2-state coercion in (3) below names its
-        // operand once per bit it covers and the engine walks that DAG as a TREE, so
-        // binding a NARROW actual to a WIDER 2-state formal pays `w` evaluations for
-        // `rw` bits of actual. For a widening bind the extra terms are provably
-        // no-ops — the extension bits are a literal 0 (unsigned actual) or copies of
-        // the actual's sign bit, and `CaseEq` is a per-bit function, so mapping the
-        // sign bit and then replicating it equals replicating it and then mapping
-        // each copy. Coerce at `rw`, extend the coerced value, and let
-        // `resize_inline_assign` below apply the SEAL at the now-equal width.
+        // (2.5) A NARROW actual bound to a WIDER 2-state formal: coerce at the
+        // actual's width, extend the coerced value, and let `resize_inline_assign`
+        // below apply the SEAL at the now-equal width. Both steps name the actual
+        // ONCE — `TwoState`, then either a constant zero fill (unsigned actual) or
+        // `extend_signed_once` (signed actual). Coercing first and extending after
+        // equals extending first and coercing after: the extension bits are a
+        // literal 0 or copies of the sign bit, and x/z→0 is a per-bit map.
         //
-        // ⚠️ Two things are taken from `eid` and not from the coerced value, both
-        // load-bearing: the extension SIGN (a coercion is a `Concat`, which is
-        // unsigned — asking it would zero-extend every signed narrow actual), and the
-        // sign FILL BIT (deriving the fill from the coerced value would name the whole
-        // `rw`-term coercion a second time, 2·rw instead of rw+1). `expr_self_signed`
-        // is the very spelling `resize_inline_assign` uses internally, so the
-        // extension direction is unchanged, mirror caveat (ROADMAP §2) included.
+        // ⚠️ The extension SIGN is taken from `eid`: `expr_self_signed` is the very
+        // spelling `resize_inline_assign` uses internally, so the extension
+        // direction is unchanged, mirror caveat (ROADMAP §2) included.
         //
         // ⚠️ `trusted_self_width` is `Some` here — the guard immediately above
         // returns when it is not — so `rw` is a DECLARED width and not a fabricated
-        // 32. Measured demand across the whole `cli` suite (5,220 tests, logged at
-        // this line): 21 binds reach the coercion, 5 of them widening (16←4 ×3,
-        // 64←32, 8←1). Small, but it is the same defect and it is one call away.
+        // 32.
         let rw = self.trusted_self_width(eid).unwrap_or(w);
         if net_kind_is_two_state(kind) && rw > 0 && w > rw && self.expr_may_be_unknown(eid) {
             let actual_signed = self.expr_self_signed(eid);
-            let low = self.coerce_two_state(eid, rw);
-            let fill_bit = if actual_signed {
-                let sign = self.sign_bit_of(eid, rw);
-                self.coerce_two_state(sign, 1)
+            let low = self.two_state_once(eid);
+            let ext = if actual_signed {
+                self.extend_signed_once(low, w)
             } else {
-                self.const_u32_expr(0, 1)
+                let zero = self.const_u32_expr(0, 1);
+                self.extend_with_fill(low, zero, w - rw)
             };
-            let ext = self.extend_with_fill(low, fill_bit, w - rw);
             return self.resize_inline_assign(ext, w, formal_signed);
         }
         // (1) WIDTH and (2) SIGN, in ONE primitive. Using a separate primitive per
@@ -241,21 +229,16 @@ impl Elaborator<'_> {
         if !net_kind_is_two_state(kind) {
             return sized;
         }
-        // ⚠️ `coerce_two_state` names its operand ONCE PER DECLARED BIT. The arena is
-        // a DAG so elaborate stays O(w), but the engine walks it as a TREE and
-        // re-evaluates the whole actual per bit: measured 15.7x on an `int` formal,
-        // 42.7x on a `longint` one, 23x `.velab` growth, and nesting multiplies it
-        // (four levels of `longint` calls went from 0.06 s to past a 120 s cap). So
-        // build it only where the actual can actually CARRY an x or z. The predicate
-        // is conservative in the safe direction — an unproven shape is coerced — and
-        // its `CaseEq` arm is what stops a NESTED coercion from being coerced again.
+        // `TwoState` names the actual once. It is built only where the actual can
+        // CARRY an x or z: the predicate is conservative in the safe direction — an
+        // unproven shape is coerced — and it answers false for `TwoState`, so a
+        // NESTED coercion is not coerced again.
         if !self.expr_may_be_unknown(eid) {
             return sized;
         }
-        let coerced = self.coerce_two_state(sized, w);
-        // A `Concat` is self-determined and unsigned, so it re-seals itself but drops
-        // the sign — re-stamp a signed formal. (An unsigned one needs no `$unsigned`:
-        // the Concat already is one.)
+        let coerced = self.two_state_once(sized);
+        // `TwoState` keeps `sized`'s width and sign; a signed formal is re-stamped
+        // so the node the body reads is the same seal as before.
         if formal_signed {
             self.push_expr(ir::Expr::SysFunc {
                 which: ir::SysFuncId::Signed,

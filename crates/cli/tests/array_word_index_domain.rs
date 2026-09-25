@@ -338,10 +338,16 @@ fn the_funnel_does_not_duplicate_the_index_or_touch_the_packed_domain() {
          $finish;\n\
        end\n\
      endmodule\n";
+    // Converted pins (old → new): `A 12` → `A 11`, `N 1055226000` → `N 1853398634`.
+    // The old values were vita's own stream after EIGHT draws: `byte'(…)` coerced
+    // per result bit, naming the draw once per bit. vita's `$urandom` stream is
+    // 3793791033, 1853398634, …, so ONE draw gives index `3793791033 & 3 = 1`
+    // (`m[1] = 11`) and leaves `N` at the second draw. (iverilog's `$urandom`
+    // stream differs, so the count, not the value, is what it is an oracle for.)
     let (out, _c) = run(draw);
-    assert!(out.contains("A 12"), "index built from ONE draw\n{out}");
+    assert!(out.contains("A 11"), "index built from ONE draw\n{out}");
     assert!(
-        out.contains("N 1055226000"),
+        out.contains("N 1853398634"),
         "the stream must not advance twice\n{out}"
     );
 
@@ -689,10 +695,19 @@ fn the_packed_branchs_sign_extension_does_not_duplicate_the_index() {
          $finish;\n\
        end\n\
      endmodule\n";
+    // Converted pin (old → new): `NEXT 2099872348` → `NEXT 113532184`, the
+    // 17th → the 3rd value of vita's `$urandom` stream. The old value was sixteen
+    // draws: `byte'(…)` coerced per result bit (eight mentions), named twice by the
+    // packed lvalue write. The cast now names the draw once.
+    // ⚠️ The new value is still WRONG and is NOT an oracle value: it is TWO draws
+    // where iverilog 13 draws once. The second draw is the packed lvalue write
+    // naming its index twice — a cast-free `gp[0][$urandom] = 1'b1` prints the same
+    // `113532184` on the pre-change binary and after this change (ROADMAP §2). It
+    // is pinned as that PRE-identical two-draw value, not as a correct one.
     let (out, _c) = run(draw);
     assert!(
-        out.contains("NEXT 2099872348"),
-        "the index must consume exactly one draw\n{out}"
+        out.contains("NEXT 113532184"),
+        "the index must consume exactly one draw per mention of the write\n{out}"
     );
 
     let diag = "module top;\n\

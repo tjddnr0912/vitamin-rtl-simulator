@@ -383,23 +383,18 @@ endmodule
     assert_eq!(o, "fffffffffffffffd"); // PRE: 00000000000000fd
 }
 
-/// ⚠️ THE WIDENING ARM CANNOT TAKE THE SIGN FIX FOR AN IMPURE OPERAND, and this
-/// test exists to keep it that way. `extend_to`'s sign fill is
-/// `Select{Bit, base: e}` — it names the operand a SECOND time; the zero fill is
-/// a constant and does not. So adopting a canonical "signed" the mirror called
-/// unsigned makes an impure operand run twice. Measured on the first cut of this
-/// slice: `fp` was called TWICE, and `16'(fur(0))` (a `$urandom` wrapper) built
-/// its value out of the sign bit of one draw and the low bits of the NEXT,
-/// shifting every later draw. Both are ladder violations, so the widening arm
-/// keeps the mirror's answer whenever the operand is not repeatable.
+/// A widening cast of an IMPURE signed operand must name it ONCE. `extend_to`'s
+/// sign fill is `Select{Bit, base: e}` — a SECOND mention — so a first cut that
+/// adopted the canonical "signed" through it called `fp` twice, and `16'(fur(0))`
+/// (a `$urandom` wrapper) built its value out of the sign bit of one draw and the
+/// low bits of the NEXT. A non-repeatable signed operand is now extended by the
+/// single-mention ternary `$signed(1'b1 ? $signed(e) : <n-bit signed 0>)`, so it
+/// takes its canonical sign with one evaluation.
 ///
-/// The cost is stated, not hidden: rows 1 and 3 are still the PRE values and
-/// iverilog says `fffd` / `fffffffd`; closing them needs an extension that names
-/// its operand once at the cast's own leaf (or a callee-purity predicate) —
-/// ROADMAP §2. Row 2 moved to iverilog's `fffd` in §4.5.501: the region's sign
-/// walk now signs a CALL leaf by its declared return, so `fs(0) + 4'sd0` is a
-/// signed 16-bit region and the frame call extends through a context (one
-/// mention), which is what "CALL" printed once here keeps proving.
+/// Converted pins (old → new): rows 1 and 3 moved `000d` → `fffd` and
+/// `0000000d` → `fffffffd`, iverilog 13 and verilator 5.052's values; "CALL" is
+/// still printed once. Row 2 is unchanged (`fffd` since §4.5.501: the region's
+/// sign walk signs a CALL leaf by its declared return).
 #[test]
 fn a_widening_cast_never_evaluates_an_impure_operand_twice() {
     let o = run(r#"module t;
@@ -415,7 +410,7 @@ fn a_widening_cast_never_evaluates_an_impure_operand_twice() {
 endmodule
 "#);
     // ONE "CALL" line is the whole point of the test.
-    assert_eq!(o, "CALL\n000d\nfffd\n0000000d");
+    assert_eq!(o, "CALL\nfffd\nfffd\nfffffffd");
 }
 
 /// `$stime` is the ONE id where the mirror said signed and the canonical rule

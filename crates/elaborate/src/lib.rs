@@ -135,6 +135,7 @@ mod proc_builder;
 mod proc_ident;
 mod rtn_decl;
 mod scope;
+mod single_mention;
 mod static_array_method;
 mod stmt_flow;
 mod stmt_main;

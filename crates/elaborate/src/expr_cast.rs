@@ -295,29 +295,28 @@ impl Elaborator<'_> {
     }
 
     /// The sign to EXTEND a cast operand by, and the sign the cast INHERITS.
-    /// `widening` says whether `extend_to` is about to build the sign-fill.
     ///
-    /// ⚠️ `extend_to`'s sign fill is `Select{Bit, base: e}` — it names the operand
-    /// a SECOND time, and the zero fill does not. So adopting a canonical "signed"
-    /// that the mirror called unsigned would, for an IMPURE operand, evaluate it
-    /// twice: `16'(fp(0))` called `fp` twice, and `16'(fur(0))` (a `$urandom`
-    /// wrapper) assembled its value from the sign bit of one draw and the low bits
-    /// of the NEXT, shifting the whole stream. PRE could not reach that because the
-    /// mirror called every `Call`-rooted operand unsigned. The repeatability
-    /// predicate is the one the index seal already uses for this exact hazard
-    /// (its doc even names `byte'($urandom)`), and where it says no we keep the
-    /// mirror's answer — the pre-slice behaviour, so nothing moves down a rung.
-    /// ⚠️ The fallback must be the MIRROR and not `false`: `16'($signed(f()))` is
-    /// signed to the mirror too, and hard-wiring `false` there takes it BELOW PRE
-    /// (`fffffffffffffffd` → `000000000000000d`).
-    /// An operand the mirror ALREADY called signed was duplicated before this
-    /// slice too and this guard deliberately does not change that —
-    /// `16'($signed(f()))` calls `f` twice in PRE and in POST. (`16'(sa ** f())`
-    /// is NOT such a witness: it routes through `lower_size_ctx_entry` to the
-    /// same-width arm and calls `f` once in PRE, POST and iverilog alike.)
-    fn cast_extend_signed(&mut self, e: u32, widening: bool) -> bool {
+    /// The canonical rule answers wherever it can. A widening of a signed operand
+    /// that may not be repeated (`16'(fp(0))`, `16'(fur(0))` over a `$urandom`
+    /// wrapper, `int'(f())`) goes through `extend_signed_once`, which names the
+    /// operand once, so adopting the canonical "signed" there costs no second
+    /// evaluation. `extend_to`'s `Select{Bit}` sign fill is a second mention and
+    /// is only built over a repeatable operand.
+    ///
+    /// ⚠️ `fabricated_widening`: the cast widens and the operand's width is NOT a
+    /// declared fact (`ir_bits_of` answered `None`, and the caller fabricated 32).
+    /// The ternary may not be used there — it evaluates at max(runtime width, n)
+    /// and never cuts to `n` (`40'(q48.sum())` gave `ffff800000000001` for
+    /// `0000800000000001`) — so the extension is `extend_to`, whose sign fill
+    /// names the operand twice. A non-repeatable operand therefore keeps the
+    /// MIRROR's sign there, the pre-existing answer: `longint'(q.sum())` on a
+    /// `byte signed q[$]` stays `00000000000000fd` (verilator `fffffffffffffffd`,
+    /// ROADMAP §2) rather than drawing twice.
+    fn cast_extend_signed(&mut self, e: u32, fabricated_widening: bool) -> bool {
         match self.cast_operand_signed(e) {
-            Some(true) if widening && !self.expr_is_repeatable(e) => self.expr_self_signed(e),
+            Some(true) if fabricated_widening && !self.expr_is_repeatable(e) => {
+                self.expr_self_signed(e)
+            }
             Some(s) => s,
             // NOT YET KNOWABLE (a deferred hierarchical reference is still a
             // placeholder): fall back to the mirror, which is what those
@@ -401,13 +400,21 @@ impl Elaborator<'_> {
         // walk while the width stays sound. `8'(ua ** u1.k)` is the measured
         // witness; declining on the sign as well cost that cell its fix once.
         let trusted_w = known_w.is_some() && canon_w.is_none_or(|c| c == w);
-        let signed_op = self.cast_extend_signed(e, n > w);
+        let signed_op = self.cast_extend_signed(e, n > w && known_w.is_none());
         let resized = match n.cmp(&w) {
             // Same width: no resize node — the seal below is the whole job.
             std::cmp::Ordering::Equal => e,
             // Extend: sign-extend iff the operand is signed (§6.24.1), 4-state-
-            // preserving (a bitwise `| 0` would corrupt Z→X).
-            std::cmp::Ordering::Greater => self.extend_to(e, w, n, signed_op),
+            // preserving (a bitwise `| 0` would corrupt Z→X). An operand that may
+            // not be repeated is sign-extended by the single-mention ternary, but
+            // only over a DECLARED width (see `cast_extend_signed`).
+            std::cmp::Ordering::Greater => {
+                if signed_op && known_w.is_some() && !self.expr_is_repeatable(e) {
+                    self.extend_signed_once(e, n)
+                } else {
+                    self.extend_to(e, w, n, signed_op)
+                }
+            }
             // Truncate to the low N bits (Select is unsigned).
             std::cmp::Ordering::Less => self.select_low(e, n),
         };
@@ -467,107 +474,75 @@ impl Elaborator<'_> {
         // OPERAND's sign), coerce X/Z for 2-state, then stamp the target sign.
         let w_known = self.ir_bits_of(e);
         let w = w_known.unwrap_or(32);
-        // ⚠️ `coerce_two_state` names its operand ONCE PER BIT IT COVERS (it builds a
-        // `Concat` of `CaseEq(Select(e, i), 1'b1)`), and the engine walks that DAG as
-        // a TREE. So an unguarded 2-state cast multiplies the operand's evaluation
-        // cost by the width it is applied at, and nesting multiplies again. Measured
-        // by counting `$display`s inside the operand: `byte'` 8x, `int'` 32x,
-        // `longint'` 64x, `int'(int'(x))` 1024x — against iverilog's 1. The timing
-        // ladder tracks it exactly (`int'` 1.08 s vs the 4-state same-width
-        // `integer'` 0.04 s = 27x on one triple-nested `always_comb`), and at ~5
-        // nesting levels `velab` ALONE ran past 60 s on a 20-character expression.
+        // The 2-state coercion is `TwoState` (x/z→0, the operand's width and sign),
+        // which names its operand ONCE — the engine walks the DAG as a TREE, so a
+        // per-bit coercion re-evaluated the operand per result bit (`int'(f())`
+        // called `f` 32 times, `int'($random)` drew 32 times). It is built only
+        // where the operand can CARRY an x or z: `expr_may_be_unknown` is
+        // conservative in the safe direction, and it answers false for `TwoState`,
+        // so a nested coercion is not coerced again. It is asked about `e`, not the
+        // resized value: every resize node below forwards the question to `e`.
         //
-        // Two things hold that cost down, and they are independent:
+        // A WIDENING cast coerces the operand first and then extends it. The two
+        // orders agree: an unsigned extension adds literal zeros, and a signed one
+        // replicates the sign bit, so coercing that bit and then replicating it
+        // equals replicating it and coercing each copy (an x or z sign bit becomes
+        // zeros either way — the `X=-3 Y=3` / `A=ffffffffffffff8a` lines pinned in
+        // `cli/tests/two_state_cast_fanout.rs`). The signed extension is
+        // `extend_signed_once`, one mention; `extend_to`'s `Select{Bit}` fill would
+        // be a second one. NARROWING selects first and coerces at the target width.
         //
-        // (1) The GUARD (round 35) — build the coercion only where the operand can
-        //     actually CARRY an x or z. `expr_may_be_unknown` is conservative in the
-        //     safe direction (an unproven shape is still coerced), so no value moves;
-        //     its `CaseEq` arm is what stops a nested coercion being coerced again.
-        //     ⚠️ It is asked about `e`, the operand, NOT about the resized value, and
-        //     that is not a shortcut: the resize adds a `Select` (narrowing, always
-        //     statically in range here), or a `Concat` of a `Replicate` of either a
-        //     literal 0 or a `Select` of `e`'s MSB (widening). Every one of those
-        //     arms of `expr_may_be_unknown` forwards to `e`, so the two questions
-        //     have the SAME answer — and asking `e` lets the widening arm below
-        //     coerce before it extends.
-        //
-        // (2) The WIDTH it is applied at (round 36). Coercing the RESIZED value costs
-        //     `tw` terms; coercing the OPERAND costs `w`. For a WIDENING cast those
-        //     are provably the same value, so pay the smaller one — the report's
-        //     `int'(nb)` over a 4-bit `nb` was paying 32 terms for 4 bits of operand,
-        //     and that single cast was 25x of a 633x gap (2.76 s vs 69.62 s when the
-        //     cast is replaced by a hand-written `{28'd0, nb}`).
-        //
-        //     The equivalence, both signednesses (each RUN against live iverilog 13,
-        //     see `cli/tests/two_state_cast_fanout.rs`):
-        //       - UNSIGNED: the extension bits are literal `1'b0`. `0 === 1'b1` is 0,
-        //         so coercing them is the identity — coerce-first and coerce-after
-        //         both leave `tw-w` zeros above `coerce(e)`.
-        //       - SIGNED: the extension replicates `e[w-1]`. Coerce-after replicates
-        //         the RAW sign bit and then maps each copy through `=== 1'b1`;
-        //         coerce-first maps the sign bit through `=== 1'b1` and replicates
-        //         the result. `CaseEq` is a per-bit function, so mapping-then-
-        //         replicating and replicating-then-mapping agree on every copy. An x
-        //         or z sign bit becomes `tw-w` zeros either way, which is exactly the
-        //         `X=-3 Y=3` / `A=ffffffffffffff8a` line the pinned tests assert.
-        //
-        //     ⚠️ The sign fill is coerced SEPARATELY from the value rather than taken
-        //     as `coerce(e)[w-1]`: `extend_to` derives its fill from the value it is
-        //     extending, and against a tree-walking engine that would name the whole
-        //     `w`-term coercion a second time (2w, not w+1). `coerce(e)[w-1]` and
-        //     `coerce(e[w-1])` are the same bit for the reason above.
-        //
-        //     NARROWING is already at the smaller width (`tw < w`) and stays as it
-        //     was — coercing the operand first would cost `w` to throw `w - tw` of
-        //     the terms away.
+        // ⚠️ Every arm builds the per-bit `coerce_two_state` (and `extend_to`) when
+        // `w` is FABRICATED (`ir_bits_of` answered `None`, or 0): that `Concat` has
+        // the declared width `tw`, while `TwoState` passes the operand's unknown
+        // width through — `$bits(int'(q.sum()))` became E3009, `int'(qu8.sum())`
+        // `000000fd` → `fffffffd`, and `48'(int'(s))` over a string lost its top
+        // half. The operand is then named once per bit, as before (ROADMAP §2).
+        let width_known = w_known.is_some() && w > 0;
         let needs_coerce = t2state && self.expr_may_be_unknown(e);
         let coerced = match tw.cmp(&w) {
             std::cmp::Ordering::Equal => {
-                if needs_coerce {
-                    self.coerce_two_state(e, tw)
-                } else {
+                if !needs_coerce {
                     e
+                } else if width_known {
+                    self.two_state_once(e)
+                } else {
+                    self.coerce_two_state(e, tw)
                 }
             }
             // Sign-extend iff the operand is signed (§6.24/§11.6.1); 4-state-
-            // preserving Concat (a `| 0` would zero-extend a signed operand AND
-            // corrupt Z→X — the two extend-path silent-wrongs the hunt found).
-            // The OPERAND's sign comes from the canonical rule for the same
-            // reason the size cast's does (`cast_extend_signed`, which also owns
-            // the operand-repeat guard) — the mirror called a signed function
-            // return unsigned and `int'(f())` then zero-extended −3 to
-            // `0000000d`. This arm always widens, hence the literal `true`.
-            // ⚠️ It is asked about `e` and not about the coerced value: a coercion
-            // is a `Concat`, which is unsigned, so asking it would silently make
-            // every widening 2-state cast zero-extend.
+            // preserving (a `| 0` would zero-extend a signed operand AND corrupt
+            // Z→X). The OPERAND's sign comes from the canonical rule for the same
+            // reason the size cast's does (`cast_extend_signed`) — the mirror called
+            // a signed function return unsigned and `int'(f())` zero-extended −3.
+            // ⚠️ It is asked about `e` and not about the coerced value, so the
+            // answer does not depend on how the coercion is spelled.
             std::cmp::Ordering::Greater => {
-                let signed_op = self.cast_extend_signed(e, true);
-                // ⚠️ Two shapes fall back to the resize-then-coerce order, and
-                // the second is a VALUE guard, not a tidiness one:
-                //   - `w == 0` would make `coerce_two_state` build an EMPTY concat.
+                let signed_op = self.cast_extend_signed(e, !width_known);
+                // ⚠️ Two shapes keep the resize-then-coerce order, and the second
+                // is a VALUE guard, not a tidiness one:
+                //   - `w == 0` (no operand bits to coerce first).
                 //   - `ir_bits_of` answered `None` and `w` is a FABRICATED 32
                 //     (a deferred hierarchical placeholder, a `string` net, the
                 //     string-producing system functions, the element-typed
                 //     `pop`/array-reduction family — the list `lower_size_cast`'s doc
-                //     enumerates). Both orders are built on that same guess, but they
-                //     do not degrade the same way: coerce-after takes the low `tw`
-                //     bits of a concat whose real width is unknown, coerce-first
-                //     freezes the guess into the low half. Same guess, different
-                //     wrong answer, so keep the PRE shape where the width is not a
-                //     declared fact. The equivalence argument above rests on
-                //     `w` being the operand's ACTUAL width; where it is not, the
-                //     argument does not apply and neither does the reorder.
-                if needs_coerce && w > 0 && w_known.is_some() {
-                    let low = self.coerce_two_state(e, w);
-                    let fill_bit = if signed_op {
-                        let sign = self.sign_bit_of(e, w);
-                        self.coerce_two_state(sign, 1)
+                //     enumerates). Coerce-first would freeze that guess into the low
+                //     half; the equivalence above rests on `w` being the operand's
+                //     ACTUAL width, so keep the old order where it is not.
+                if needs_coerce && width_known {
+                    let low = self.two_state_once(e);
+                    if signed_op {
+                        self.extend_signed_once(low, tw)
                     } else {
-                        self.const_u32_expr(0, 1)
-                    };
-                    self.extend_with_fill(low, fill_bit, tw - w)
+                        let zero = self.const_u32_expr(0, 1);
+                        self.extend_with_fill(low, zero, tw - w)
+                    }
                 } else {
-                    let resized = self.extend_to(e, w, tw, signed_op);
+                    let resized = if signed_op && width_known && !self.expr_is_repeatable(e) {
+                        self.extend_signed_once(e, tw)
+                    } else {
+                        self.extend_to(e, w, tw, signed_op)
+                    };
                     if needs_coerce {
                         self.coerce_two_state(resized, tw)
                     } else {
@@ -577,10 +552,12 @@ impl Elaborator<'_> {
             }
             std::cmp::Ordering::Less => {
                 let resized = self.select_low(e, tw);
-                if needs_coerce {
-                    self.coerce_two_state(resized, tw)
-                } else {
+                if !needs_coerce {
                     resized
+                } else if width_known {
+                    self.two_state_once(resized)
+                } else {
+                    self.coerce_two_state(resized, tw)
                 }
             }
         };
@@ -619,14 +596,8 @@ impl Elaborator<'_> {
     ///   * a width outside the cast's own scope (0, or > 64 where
     ///     `lower_real_to_int_cast` reports; converting there would trade a wrong
     ///     value for a NEW loud), and
-    ///   * ⚠️ an actual that may not be REPEATED: `lower_real_to_int_cast` names its
-    ///     operand FOUR times for a ≤32-bit target (`>= 0`, floor, ceil, the
-    ///     subtraction) and five for a wider one, so a `$random`-bearing actual
-    ///     would draw more than once — the §4.5.320 hazard the sibling bind already
-    ///     guards. Such an actual keeps the pre-slice answer. ⚠️ The OTHER caller of
-    ///     that fn (`lower_prim_cast`, i.e. `int'(e)`) has never had this gate, so
-    ///     `int'($random * 1.0)` draws a count that depends on the lowering — a
-    ///     pre-existing wrong answer either way, recorded in ROADMAP §2.
+    ///   * an actual that may not be REPEATED keeps the pre-slice answer here (the
+    ///     inline bind routes it to `real_to_int_store` before calling this).
     pub(crate) fn coerce_real_actual_to_formal(
         &mut self,
         eid: u32,
@@ -656,9 +627,7 @@ impl Elaborator<'_> {
         if !self.expr_is_real(eid) {
             return eid;
         }
-        // ⚠️ `lower_real_to_int_cast` names its operand 2 (≤32-bit target) to 5
-        // (33..=64) times, so an actual that may only be evaluated once keeps the
-        // pre-slice answer rather than drawing twice (§4.5.320).
+        // An actual that may only be evaluated once keeps the pre-slice answer.
         if !self.expr_is_repeatable(eid) {
             return eid;
         }
@@ -744,6 +713,32 @@ impl Elaborator<'_> {
                 "real→integer cast wider than 64 bits is outside the cast scope",
             );
             return self.placeholder_expr();
+        }
+        // An operand that may not be repeated (a real-returning call, `$random *
+        // 1.0`) is converted by `RealToInt`, which names it ONCE: the composition
+        // below names it 2 (≤32-bit target) to 5 (33..=64) times. Same rounding
+        // (half away from zero), then the low `tw` bits under the target sign.
+        // ⚠️ Only for a ≤32-bit target. `RealToInt` SATURATES at |x| ≥ 2^127, so
+        // `longint'(fr(1e40))` would print `ffffffffffffffff` where both oracles
+        // and the composition below print 0; at ≤32 bits both spellings already
+        // answer all-ones there. A wider non-repeatable operand keeps the
+        // multi-mention composition until the engine's out-of-range conversion is
+        // fixed (ROADMAP §2 Real row).
+        if tw <= 32 && !self.expr_is_repeatable(e) {
+            let rti = self.push_expr(ir::Expr::SysFunc {
+                which: ir::SysFuncId::RealToInt,
+                args: vec![e],
+            });
+            let low = self.select_low(rti, tw);
+            let which = if tsigned {
+                ir::SysFuncId::Signed
+            } else {
+                ir::SysFuncId::Unsigned
+            };
+            return self.push_expr(ir::Expr::SysFunc {
+                which,
+                args: vec![low],
+            });
         }
         let zero_r = self.real_const_expr("0.0");
         let ge = self.push_expr(ir::Expr::Binary {

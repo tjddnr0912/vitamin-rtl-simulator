@@ -230,10 +230,10 @@ impl Elaborator<'_> {
         self.extend_with_fill(e, fill_bit, n - w)
     }
 
-    /// The MSB of `e` (self-width `w`) as a 1-bit `Select` — the fill an extension
-    /// replicates. Split out of [`Self::extend_to`] so a caller that has to coerce
-    /// the fill bit SEPARATELY from the value can build the same node
-    /// (`expr_cast::lower_prim_cast`'s 2-state widening path).
+    /// The MSB of `e` (self-width `w`) as a 1-bit `Select` — the fill
+    /// [`Self::extend_to`] replicates. It names `e` a second time, so it is only
+    /// built over an operand that may be repeated; a non-repeatable signed operand
+    /// is extended by `extend_signed_once`.
     pub(crate) fn sign_bit_of(&mut self, e: u32, w: u32) -> u32 {
         let off = self.const_u32_expr(w.saturating_sub(1), 32);
         let wid = self.const_u32_expr(1, 32);
@@ -247,11 +247,8 @@ impl Elaborator<'_> {
 
     /// `Concat[Replicate(n_fill, fill_bit), low]` — the assembly half of
     /// [`Self::extend_to`], with the fill bit supplied rather than derived from
-    /// `low`. ⚠️ The split is a COST decision, not a style one: the engine walks the
-    /// expression DAG as a TREE, so deriving the fill from `low` names `low` a
-    /// SECOND time and doubles its evaluation cost. Where `low` is expensive (a
-    /// per-bit 2-state coercion) the caller derives the fill from the cheap operand
-    /// underneath it instead. `n_fill == 0` is not expected (callers widen), but a
+    /// `low`. With a constant fill (the zero-extension of an unsigned operand) it
+    /// names `low` once. `n_fill == 0` is not expected (callers widen), but a
     /// zero-count `Replicate` would be an empty value, so it returns `low` unchanged.
     pub(crate) fn extend_with_fill(&mut self, low: u32, fill_bit: u32, n_fill: u32) -> u32 {
         if n_fill == 0 {
@@ -872,9 +869,7 @@ impl Elaborator<'_> {
         // appears TWICE and vita evaluates each occurrence: `m[byte'($urandom)]`
         // drew two different random numbers and built the index out of one
         // draw's sign bit and another draw's low bits.
-        // ⚠️ `byte'(…)` also passes through `systask::coerce_two_state`, which
-        // names its operand once per result bit — so that example still draws
-        // eight times, from a funnel this guard does not reach (ROADMAP §2). Hence the
+        // (`byte'(…)` itself coerces through the single-mention `TwoState`.) Hence the
         // `index_is_repeatable` gate above — asking the CONTEXT to sign-extend
         // instead was tried and does NOT work (§5.5.1 decides signedness for the
         // whole expression and propagates it DOWN, so the enclosing unsigned
@@ -1105,10 +1100,7 @@ impl Elaborator<'_> {
     ///
     /// - VALUE. `m[byte'($urandom)]` built its index out of one draw's sign bit
     ///   and a different draw's low bits, and shifted every later draw.
-    ///   ⚠️ That example is NOT fully fixed by this guard: `byte'(…)` is
-    ///   lowered by `systask::coerce_two_state`, which names its operand once
-    ///   per RESULT BIT, so the cast alone draws eight times (ROADMAP §2).
-    ///   The guard stops THIS funnel from adding to that.
+    ///   (`byte'(…)` itself coerces through the single-mention `TwoState`.)
     /// - DIAGNOSTICS. An out-of-range array read inside the index calls
     ///   `warn_run_range`, which is an ERROR and rate-limited at eight per run,
     ///   so a duplicated `m[ix[k]]` reports twice and can exhaust the budget
@@ -1155,10 +1147,9 @@ impl Elaborator<'_> {
     /// `true` unless the shape PROVES otherwise, so a caller that skips work on
     /// `false` is skipping it only where the work was a no-op.
     ///
-    /// The `CaseEq` family is known by construction (its own IR doc says the
-    /// result is always 1'b0/1'b1), which matters because a 2-state coercion IS a
-    /// concat of `CaseEq`s — without that arm a nested coercion would be coerced
-    /// again at every level.
+    /// The `CaseEq` family and `TwoState` are known by construction, which
+    /// matters because a 2-state coercion is built from one of them — without
+    /// those arms a nested coercion would be coerced again at every level.
     pub(crate) fn expr_may_be_unknown(&self, e: u32) -> bool {
         let Some(x) = self.exprs.get(e as usize) else {
             return true;
