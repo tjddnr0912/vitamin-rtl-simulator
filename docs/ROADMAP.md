@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 6 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 161 | 81 | 80 | oracle split / pinned / oracle disqualified 44 · named prerequisite 17 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 1 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 18 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 34 | ① | |
+| §2 | recorded defects by mechanism | 162 | 82 | 80 | oracle split / pinned / oracle disqualified 44 · named prerequisite 17 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 1 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 19 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 34 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 393 | 222 | 171 | | | | |
+| total | | 394 | 223 | 171 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
@@ -781,22 +781,30 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - ⓔ ORACLE-SPLIT: in a MULTI-timescale design `global_prec_exp` becomes finer and the `e < 0` case
   never triggers — iverilog rounds at the module's OWN precision and verilator at the design's GLOBAL
   precision. With a single timescale the two coincide and it does not bite.
-- The time-0 settle evaluates a driver that reads a variable BEFORE that variable's declaration
-  initializer or first-batch write lands, and the phantom intermediate value makes events:
-  `reg r = 1; wire w = (r !== 1'b1); always @(posedge w) … always @(negedge w) …` prints `P 0` and
-  `N 0` (settle `x !== 1` = 1, recomputed to 0 in the first delta) where both oracles print only
-  the level line `W 0 w=0`; `reg r; wire w = (r === 1'bx); initial r = 0;` the same; `reg clk = 0;
-  assign nc = ~clk; always @(posedge nc)` prints `Pnc 0` before the real `Pcw 5`; a multi-driver
-  `assign w = 1'b1; assign w = r1;` with `reg r1 = 1` prints `P 0`. 2 oracles on the "no `P 0`"
-  half (12 lens cells); the `~r` posedge half is a split (verilator fires on `reg r = 0; wire w =
-  ~r`, iverilog does not). Site: `settle_cont_assigns` runs before `arm_processes` /
-  `arm_t0` run the initializers (§4.5.256) and before the first Active batch, and the copy-net
-  repair (`alias::copy_nets`) re-settles only bit MOVES. Fix shape = order the settle after
-  initialization (IEEE §6.21) — re-settle the computed drivers of initialised variables after the
-  initializer bodies, with their dirt and edge mask rebuilt from the post-initializer value — and
-  measure the first-batch half separately (iverilog runs the `initial` before the functor's first
-  propagation; vita's first delta after the batch is the same order only for level waiters).
-  STARTABLE (M).
+- A wait ARMED in an Active batch sees the writes made EARLIER in that batch: `initial #5 r = 1;`
+  declared before `initial begin #5 @(posedge r); $display("late"); end` prints `late 5` (both
+  oracles: nothing — the thread arms after the write has propagated); `reg clk; initial clk = 1;`
+  before `initial begin @(posedge clk); … end` prints `saw 0` (both oracles: nothing; the reverse
+  declaration order prints it in iverilog and not in verilator, a §4.7 race); and a static level
+  waiter that RAN in the batch and re-armed sees a write made earlier in the same batch: `always
+  @(a) s = 1;` beside `always @(s) n++` in one batch at `#1` prints `S 1 s=1 n=1 | S 1 s=1 n=2`
+  where both oracles print the first line only (at time 0 the same on `wire w = 1'b0; always
+  @(w) s = 1; always @(s) …; initial s = 0;`, and on the initializer-read twin since §4.5.535 —
+  PRE printed one line there with `s=0`). 2 oracles. Site:
+  `propagate_changes` / `WakeTable::wake` run after the WHOLE batch, and a `WaitCause::Edge` or
+  `Level` registration made (or re-armed) during the batch is matched against the batch's dirt
+  like one made before it. (The time-0 settle's own events no longer reach a wait armed in the
+  first batch — §4.5.535 delivers them before the batch.) Fix shape = stamp each in-body registration with the
+  change sequence at arm time and match only dirt recorded after it, or drain the dirty list
+  between bodies when a body registered a wait. STARTABLE (M).
+- A `fork … join_none` child spawned in the first Active batch runs BEFORE a process the time-0
+  settle woke in both oracles (`initial begin $display("I"); fork $display("F1"); join_none end`
+  beside `always @(w) $display("W")` on a settled `w`: `I | F1 | W`); vita runs the settle's wakes
+  first (`I | W | F1`, PRE = POST on a constant driver). Order only, no value. Site: the held
+  time-0 wakes lead the batch taken after the first one (`take_t0_wakes`), and a child spawned by
+  `exec_fork` is in that batch's tail; a `-> ev` wake made in the same batch is a split (iverilog
+  runs the settle's wake first, verilator the event's), so a fix must separate spawned children
+  from event wakes by tie shape. 2 oracles. STARTABLE (S).
 - A copy net of a source that moved at time 0 takes only its OWN storage move (`alias::copy_nets`
   suppression is "own dirt AND source moved"), where iverilog fires on the copied VALUE: with
   `wire [1:0] vv = 2'b1z; wire s = vv[0];`, `always @(s)` counts 0 in vita and 1 in iverilog, the
@@ -1005,6 +1013,29 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `b` fires, `reg r = 0; ~r` fires, `always @(posedge w)` fires where `always_ff @(posedge w[0])`
   on the same `{r, 1'b1}` does not, a 4-bit `{b, 3'b001}` counter counts 0 where the 2-bit twin
   counts). vita: a settle-constant net is silent, a driver reading a variable keeps its edge.
+  After §4.5.535 removed the phantom hop, the edge that REMAINS on a variable-reading driver is
+  the settle's single transition and the oracles split on it by the same rules: on `z → 0`
+  iverilog fires `N 0 w=10` for `reg r = 1; {r, 1'b0}` and nothing for `(r !== 1'b1)`,
+  `$isunknown(r)`, `~r`, `r + 1` or `logic w; assign w = …`, verilator holds no z; on `z → 1`
+  iverilog fires for a concat, an xor and `~` of a NET (`wire b = ~a`) and not for `~` of a
+  variable, `r + 1` or `(r === 1'b0)`, and verilator fires on `reg r = 0; wire w = ~r;` beside an
+  `always @(w)` and not on the same `~clk` beside an `always #5` toggler. vita keeps the value
+  rule (`z → 0` negedge, `z → 1` posedge, IEEE §9.4.2): `always_ff @(negedge w) d <= d + 1` on
+  `(r !== 1'b1)` counts 1 where both oracles count 0. An `always_comb` reading a net the settle
+  moved runs TWICE at time 0 in iverilog (the time-0 run and the wake) and once in verilator, on a
+  constant driver and on `r + 1` of an initialised `r` alike; vita runs it once (the settle's
+  events are delivered before the block's first run arms it — before §4.5.535 it ran twice on
+  the constant driver and once on the initializer-read shape). An in-body wait armed in the first
+  batch: iverilog lets `initial begin @(posedge w); … end` see the settle of `r | 1'b1` and
+  `{r, 1'b1}` (functor) and not of `(r !== 1'b1)`; verilator never; vita never. A settle that
+  LANDS on x after passing a definite value on the variable's default — `reg r = 1; reg u; wire
+  w = (r === 1'b1) ? u : 1'b1;` (`1 → x`), `(r === 1'b1) ? (r / 1'b0) : 1'b1`, `? v[k] :` with
+  `k` out of range, `? 1'bx : 1'b1` — wakes `always @(w)` once in iverilog (`W 0 w=x`, its
+  initializer-thread hop: `r ? u : 1'b0` and `r / 2'd0`, x throughout, wake nothing) and once
+  in verilator (2-state, which wakes every level `always` at time 0 whatever the driver); vita
+  wakes on no definite bit (§4.5.533) and the initializer precedes the settle (§6.21): silent,
+  where PRE printed the phantom's `W 0 w=x`. `-> ev` in the first batch: iverilog runs the
+  settle-woken `always @(w)` before the `always @(ev)` it woke, verilator after (vita: before).
 - The ORDER of distinct processes in the time-0 Active region around an all-constant
   `always @(K)` (§4.5.532; IEEE leaves it open): with `initial -> ev;` waking an `initial @(ev)`,
   iverilog prints the `always @(K)` line first and the woken `initial` second, vita the reverse,

@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.535` **the time-0 settle no longer makes events out of the phantom value a variable-reading driver held before the initializer landed** (2026-09-25 · §2 "Delays / events" the phantom-intermediate bullet deleted, one bullet added (a wait armed in an Active batch sees the batch's earlier writes, 2 oracles, startable M; a first-batch `fork … join_none` child runs before a settle-woken process in both oracles, order only, startable S), the oracle-split bullet extended · both kernels RE-SETTLE after the declaration initializers (`settle_cont_assigns` again, keyed on the initializer list) and ASSIGN each dirty edge-target net's mask from the pre-settle bit (`t0_edge::edge_b0_snapshot`, taken in `Scheduler::settle_t0` / `native::run`) to the post-initializer bit through the funnel's `edge_mask`; the rollback removes exactly the initializers' set; `arm_processes` / `arm_t0` return `false` on a non-converging re-settle; the settle's record is DELIVERED before the first Active batch (`take_t0_wakes`, both kernels) with the woken processes held until the batch and its writes have propagated, ahead of the batch-write wakes · 60 grounding cells, 3 backends; 2 lenses × 3 rounds + direct re-grade of every lens cell per round (324 in round 3) — r1 differential BLOCKING (the settle's wakes sorted in with the batch-write wakes) → `take_t0_wakes`; r2 soundness BLOCKING (a wake the batch's write reached one settle later sorted ahead of the held ones) → the held wakes lead the next batch taken; r3 clean · 8530 tests)
 - `4.5.534` **the time-0 settle of a settle-constant net is not an edge; a driver that reads a variable keeps its edge** (2026-09-25 · §2 "Delays / events" the time-0 edge bullet deleted, one phantom-intermediate bullet added, the `#0` and oracle-split bullets extended · `t0_edge::settle_constant_nets` (a worklist fixpoint over `cont_assigns`: undelayed, pure, reading only settle-constant nets) zeroes `slot_edge` on those settle nets in `arm_processes` and `arm_t0`, membership untouched · 48 grounding cells, 3 backends; 2 lenses × 2 rounds + direct re-grade — r1 BLOCKING on one root (both oracles fire the edge when the driver reads a variable) → the fixpoint; r2 MAJOR-ONLY (pure casts refused → allow-list) · 8520 tests)
 - `4.5.533` **a continuous driver whose time-0 settle lands on a value with no definite bit wakes no level waiter; one with a definite bit anywhere, in any element, keeps its time-0 wake** (2026-09-25 · §2 "Delays / events" the t0 false-event bullet deleted, §2-N t0-event residues 5 → 3 · `alias::settled_has_definite_bit` applied to the settle's surviving dirt in `arm_processes` and `arm_t0`, computed nets only, before the copy-net suppression · 92 grounding cells, 3 backends; 2 lenses × 1 round + direct re-grade — r1 BLOCKING (soundness) an unpacked array read at element 0 → every element asked · 8512 tests)
 - `4.5.532` **a process-header level list whose every term is a constant runs once at time 0: the list's sensitivity is the time-0 pulse alone, admitted once a `$finish` ends the run at the end of its time step** (2026-09-25 · §2 "Delays / events", startable row · `always @(K)`, `@(K[0])`, `@(p::C)`, `@(K or K2)` over every constant kind, instance and generate copy; 40 pins converted from their quoted oracle text; 2 lenses, both pre-existing t0 false-event class only)
@@ -544,6 +545,163 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.535 the time-0 settle no longer makes events out of the phantom value a variable-reading driver held before the initializer landed (2026-09-25, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — the phantom-intermediate bullet ("the time-0 settle
+evaluates a driver that reads a variable BEFORE that variable's declaration initializer or
+first-batch write lands, and the phantom intermediate value makes events", deleted); two new
+bullets (a wait ARMED in an Active batch sees the writes made earlier in that batch — 2 oracles on
+the `#5` and `initial clk = 1` shapes, STARTABLE, M, its time-0 face closed here; a first-batch
+`fork … join_none` child runs before a settle-woken process in both oracles — order only,
+STARTABLE, S); the oracle-split bullet on the time-0 wake extended (the single transition that
+remains on a variable-reading driver, the x-landing wake, the `always_comb` run count and the
+`-> ev` order at time 0).
+
+**Defect (PRE, both oracles)**. The time-0 settle runs before the declaration initializers, so a
+driver that reads an initialised variable settled on the value of the variable's DEFAULT first:
+`reg r = 1; wire w = (r !== 1'b1);` settled `w` to 1 (`x !== 1`), and the first delta's settle
+(`ca_dirty` still held the driver: the initializer's write marked it through the funnel, and the
+rollback removed only the variable's dirt) brought it to 0. The funnel folded both hops into the
+edge mask, and the first delta's edge scan read them: `always @(posedge w)` printed `P 0` and
+`always @(negedge w)` `N 0` where both oracles print only the level line `W 0 w=0`;
+`always_ff @(posedge w) c <= c + 1` counted one (both oracles 0); `always @(posedge w or negedge
+q)` ran once at 0 (`E 0 w=0 q=1`, both oracles only `E 2` after the real write); a child's
+`always @(posedge i)` on that port (`cP 0`), a copy `wire c = w;`, `logic w; assign w = (r !==
+1'b1);`, `$isunknown(r)` of `reg [3:0] r = 5`, `int r = 1; (r !== 1)`, `(r === 1'b0)` of `reg r
+= 0` (`P 0 | N 0` where the settled `z → 1` alone is `P 0`), a chain `wire a = (r !== 1'b1); wire
+b = ~a;` (`Pb 0 | Nb 0 | Pa 0 | Na 0`) and `wire v = w ? 1'b0 : 1'b1;` (`Pv 0 | Nv 0`) all the
+same. On these designs the phantom also decided the ORDER of time 0: the first delta's settle
+moved a net, so `propagate_changes` ran before the first Active batch and `always @(w)
+$display("W")` printed before `initial $display("I")` (both oracles `I` then `W`; the constant
+driver `wire w = 1'b1` already printed `I` then `W` in PRE).
+
+**The measured rule (60 grounding cells, 3 backends, both oracles; `s22/g h i j`)**. IEEE 1800
+§6.21 puts a declaration initializer before any process starts, so the value a process can first
+observe on a continuous net is the one settled AFTER the initializers: both oracles print the level
+line once with the settled value and no edge line for every phantom-definite shape above. What the
+settle's single transition IS (an edge or not) stays the §4.5.534 axis and is not chased here: `z →
+1` posedges in both oracles on `reg r = 0; wire [1:0] w = {r, 1'b1};` (`P 0 w=01`); `z → 0` is a
+negedge in iverilog on `{r, 1'b0}` (`N 0 w=10`) and nothing on `(r !== 1'b1)`, `~r`, `r + 1`
+(functor-decided), and verilator holds no z. vita keeps the funnel's value rule (`edge_mask`, IEEE
+§9.4.2), so the row's cell prints `N 0 | W 0 w=0` after the fix: the `N 0` is `z → 0`, not the
+phantom, and `always_ff @(negedge w) d <= d + 1` counts 1 where both oracles count 0 (recorded under
+§2 Oracle splits). Measured separately, as the row asked: the FIRST-BATCH half (`reg r; wire w = (r
+=== 1'bx); initial r = 0;`) is the §2 start-order table (iverilog runs the `initial` before the
+functor's first propagation) and is PRE = POST (`P 0 | N 0 | W 0 w=0`; iverilog prints `N 0` too
+when the `initial` is declared after the waiters); `reg clk = 0; assign nc = ~clk;` posedges at 0
+in PRE and POST (`z → 1`; iverilog never fires on `~` of a variable, verilator fires on `wire w =
+~r` beside an `always @(w)` and not beside an `always #5` toggler — split); a multi-driver `assign
+w = 1'b1; assign w = r1;` with `reg r1 = 1` posedges at 0 in both (`z → x → 1` in PRE, `z → 1` in
+POST; iverilog prints nothing at all, verilator `W 0 w=1`). An initializer reading a net is a §4.7
+race and unchanged: `wire a = 1'b1; reg r = a;` reads 1 (verilator 1, iverilog z); `reg r1 = a` of
+a phantom net reads 1 (iverilog 1, verilator 0).
+
+**Fix**. Both kernels, at the same position (`arm_processes_after_seed` in `sched/scan_arm.rs`,
+`arm_t0` in `native/run.rs`), after the initializer bodies and `drain_heap_marks`: copy out the
+initializers' dirty set (`init_nets`: interp `dirty[settled..]`, native `dirty.collect()` minus the
+`settled` bitmap), RE-SETTLE when the design has declaration initializers at all
+(`settle_cont_assigns` — the dirty-settle of exactly the drivers the initializer writes marked in
+`ca_dirty`, plus `ca_always`, to a fixpoint; keyed on the initializer LIST because a heap
+initializer `int q[] = new[3];` leaves no net dirt and its reader `wire n = q.size();` is a
+`ca_always` driver; `schedule_delayed_cas` runs again and its `ca_gen` bump cancels the first
+settle's pending write; the interp resets `delta_count` first, the run loop's own rule), run the
+copy-net repair as before, remove exactly `init_nets` (a net the re-settle moved for the first
+time — `logic [3:0] w; assign w = r + 1;` with `reg [3:0] r = 3`, `x → 0100` — stays, which the
+old `split_off` / `retain_snapshot` would have dropped), then ASSIGN every dirty edge-target net's
+`slot_edge` from the bit it held before the first settle to the bit it holds now. That pre-settle
+bit is a SNAPSHOT (`t0_edge::edge_b0_snapshot`, dense by net, taken in the new
+`Scheduler::settle_t0` that `simulate` calls in place of `settle_cont_assigns`, and in
+`native::run` before its settle) rather than a re-derivation of the declared default. The mask rule
+is the funnel's own, now one spelling: `state::edge_mask(prev, new)` (bit 0 posedge, bit 1 negedge,
+bit 2 any), used by both stores' `accumulate_edge` and by the rebuild; it also collapses a
+settle-internal glitch on a net no initializer touched (`wire a = (b !== 2'b01) | (r === 1'b1);
+wire [1:0] b = {1'b0, 1'b1};` evaluated a-first, `z → 1 → 0`: `N 0 | W 0` = iverilog, PRE `P 0 |
+N 0 | W 0`). The settle-constant clear, the x-drop and the copy suppression run after it unchanged.
+`arm_processes` and `arm_t0` return `bool`: `false` when the re-settle does not converge (an
+oscillator that only closes once an initializer has landed — `reg r = 1; assign a = r ? ~b :
+1'b0; assign b = (a === 1'b1);` settles on x with `r = x` and oscillates with `r = 1`), and
+`simulate` / `run` report `DeltaLimit` with the same `F-RUN-NO-CONVERGE` text and exit code as the
+first settle (byte-identical to PRE, where the run loop's first delta hit it; a `final` block is not
+run, the first-settle rule).
+
+T0 DELIVERY (round 2). With the phantom gone the run loop's first settle finds nothing marked
+(`Some(false)`), so the settle's wakes were delivered by the propagate AFTER the first batch, sorted
+with the batch-write wakes by declaration order — `always @(s) $display(x)` woken by `initial s =
+1;` ran before `always @(w) x = 5;` (`SW 0 x=5` in both oracles and in PRE through the phantom,
+`x=0` in round 1; PRE printed `x=0` on a constant `wire w = 1'b0;`), and an in-body wait armed in
+the batch saw the settle's edge (`initial begin @(negedge w); … end` printed `gotN 0`, both
+oracles nothing; PRE let `reg r = 0; wire w = r | 1'b1; initial @(posedge w)` fall through the
+same way). Both kernels now deliver the settle's record at the start of `run()`
+(`Scheduler::take_t0_wakes` in `sched/run_loop.rs`, `native::run::take_t0_wakes`): the arming's
+dirty list is propagated once before the first Active batch — static level and edge waiters are
+woken, in-body waiters cannot exist yet — and the woken entries are HELD and lead the next batch
+taken after the first one, i.e. after the first batch has run, its writes have propagated and
+the following settle has propagated what those writes reach through a continuous assign or a
+port (round 2 queued them at the end of the first delta, and a lower-tie `always @(u)` on `wire
+u = ~s;` woken by that settle sorted in ahead of them: `U 0 u=1 x=x` where both oracles and PRE
+read `x=5` — the soundness lens's G1; PRE was wrong the same way on a constant driver). Order at
+time 0 is then the `initial` / `always_comb` bodies in declaration order, the settle's wakes,
+the batch-write wakes (both oracles: `I1 | W | SW`, `SW 0 x=5`, `U 0 u=1 x=5`; the
+constant-driver twins `wire w = 1'b0`, `wire [1:0] w = 2'b01` fixed with it); a process the
+settle and the batch both wake runs once with the value the batch left (`reg r; wire w = (r ===
+1'bx); initial r = 0;` prints PRE's lines `P 0 | W 0 w=0 | N 0`); an `always_comb` /
+`always_latch` reading a settled net runs once at time 0 (it arms after its first run —
+verilator once, iverilog twice, on the constant and the initialised shape alike; PRE ran it
+twice on the constant shape) so `obs_procs.rs` keeps its hand-derived 11 / 57 with the
+derivation rewritten; with no batch to wait for the wakes are the batch. `$finish` in the first
+batch ends the step at its end, so the held wakes still run (both oracles); `$stop` and `$fatal`
+end it at the statement and drop them (verilator; iverilog runs the held level waiter after
+`$fatal`). The time-0 face of the same-batch race is closed by this; the race itself (a wait
+armed after a write in the same batch, at any time) is recorded in §2.
+
+**Review**. Two lenses, three rounds, direct re-grade of every lens cell on each new binary (148
++ 31 round-1 cells, 207 + 30 round-2, 324 in round 3, all three backends identical throughout).
+Round 1: differential BLOCKING D1 — with the phantom gone the run loop's first settle changed
+nothing, so the settle's wakes were delivered after the first batch, sorted by declaration order
+with the batch-write wakes: `always @(s) $display(x)` woken by `initial s = 1;` ran before the
+settle-woken `always @(w) x = 5;` (`SW 0 x=0`, both oracles `x=5`; PRE right through the phantom,
+wrong on the constant driver) → `take_t0_wakes`; D3 (x-landing wake, below) and D2 (`--probe`
+records the phantom hop, MINOR, PRE = POST); soundness PASS with F1 (`final` not run after a
+re-settle oscillation — the first-settle rule, kept), F2 (the assigned mask collapses a
+settle-internal glitch, = iverilog), F3 (a first-batch `force` ORs into the time-0 mask, PRE =
+POST class), F4 (+1 `ca_always` evaluation on a design with no initializer → the initializer-list
+guard), F5 (`delta_count` reset), F6 (stale comments). Round 2: soundness BLOCKING G1 — the held
+wakes were queued at the end of the first delta, and a lower-tie process the NEXT settle woke
+(`always @(u)` on `wire u = ~s;` after `initial s = 0;`) sorted in ahead of them (`U 0 u=1 x=x`,
+both oracles and PRE `x=5`; PRE wrong on the constant-driver twins) → the held wakes lead the
+next batch taken; G2 (a clocking commit now runs at the delivery, before the first batch: `cb.d`
+reads 1 where PRE read x, no oracle — verilator never fires the `z → 1` clock); G3 (`$fatal` in
+the first batch drops the held wakes: verilator; iverilog runs the held level waiter after
+FATAL). Differential round 2: D1 closed and the constant-driver twins fixed (`v2`, `h1`, `h9`,
+`d6`), no held wake lost on `$finish` / `$stop` / `#0` / NBA / `-> ev` / fork, no double run of
+a held level or edge waiter (`force`, `a = 1; a = 0;`, `{r, 1'b1}` with `r = 0; r = 1;`), corpus
+10/10 and examples byte-identical to PRE; D3 kept open by the lens: a settle that LANDS on x
+after passing a definite value on the default (`reg r = 1; reg u; wire w = (r === 1'b1) ? u :
+1'b1;`, `? (r / 1'b0) :`, `? v[k] :`) wakes `always @(w)` in iverilog (`W 0 w=x`, n=1) and not
+when the driver is x throughout (`r ? u : 1'b0`, `r / 2'd0`), PRE = iverilog through the phantom,
+POST silent. The lens's own discriminator is the phantom hop: iverilog's initializer-thread
+evaluates the driver on the default first, and IEEE §6.21 forbids observing that; both oracles
+are not oracles for an x event (verilator wakes every level `always` at time 0, x4/x5 controls),
+so it is recorded under §2 Oracle splits with the texts and not chased. R2-N1 (a first-batch
+`fork … join_none` child runs before the settle's wake in both oracles, order only, PRE = POST on
+a constant driver) → a §2 line. Round 3: both lenses PASS (11 + 12 designs, ≤14 calls each) —
+no regression against PRE or round 2; H1 NOTE: a static level waiter that ran in the batch and
+re-armed is woken again by an earlier write of that batch (`always @(w) s = 1;` beside `always
+@(s) n++` prints `n=1 | n=2`, both oracles `n=1`), the same-batch race class at time 0 (PRE has
+it on a constant driver and at `#1`), added to that §2 line.
+
+**Tests**: `crates/cli/tests/t0_phantom_settle.rs` (10 tests: the row's design and its `logic`,
+`$isunknown`, `int` and `(r === 1'b0)` twins; the chain, the copy and the port; the `always_ff`
+counters, the mixed edge list, the stored level read and the first-batch `$display`; the time-0
+order `I` then `W` / `I` then `P`; the §4.5.534 two-oracle cells, a delayed driver, `r + 1`, an
+initializer chain; the settle-woken-before-batch-write-woken order on the phantom, the constant
+and the `r + 1` shapes and the `q = ~q` read; an in-body wait armed in the first batch; the
+`always_comb` count, the heap-size driver and the first-batch half; the oscillator fatal; every
+backend). `obs_procs.rs` keeps 11 / 57 with the `always_comb` and `assign` derivations rewritten.
+`edge_mask` shared by both funnels (no behaviour change). Gate: 8530 tests (8520 → +10 +1 file),
+doctest, clippy, fmt, flip run (documented backend pins only), corpus 10/10, `format_version` 34
+unchanged.
 
 #### 4.5.534 the time-0 settle of a settle-constant net is not an edge; a driver that reads a variable keeps its edge (2026-09-25, branch main) ✅
 

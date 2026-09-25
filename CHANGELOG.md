@@ -9,6 +9,30 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a net driven from an initialised variable no longer edges on the value it held before the initializer
+
+- **A continuous driver that reads a declaration-initialised variable no longer makes events out
+  of the value it computed before that initializer landed**: `reg r = 1; wire w = (r !== 1'b1);`
+  settled `w` to 1 on the variable's default `x` and re-evaluated it to 0 once `r = 1` had landed,
+  and both hops reached the waiters — `always @(posedge w)` printed `P 0`, `always_ff @(posedge
+  w) c <= c + 1` counted one, `always @(posedge w or negedge q)` ran at time 0, a child's edge
+  waiter on that port, a copy `wire c = w`, `$isunknown(r)`, `int r = 1; (r !== 1)` and a chain
+  through such a net did the same — where both Icarus Verilog and Verilator print only the level
+  line `W 0 w=0`. Both kernels now settle those drivers again after the initializers and take the
+  net's time-0 transition from its declared default to the settled value (IEEE 1800 §6.21). The
+  single time-0 transition that remains keeps vitamin's rule (`z → 1` posedge, `z → 0` negedge);
+  the tools split on it and it is recorded in ROADMAP §2. All three backends.
+- **The time-0 settle's events are delivered before the first `initial` batch, and the processes
+  they wake run after that batch and before the processes the batch's own writes wake**, as in
+  both tools: `initial $display("I")` prints before `always @(w) $display("W")`; `always @(w) x =
+  5;` runs before an `always @(s)` woken by `initial s = 1;`, which now reads `x=5` (it read `0`
+  on a constant `wire w = 1'b0` before, and both tools print `5`); an `initial begin @(posedge w);
+  … end` armed at time 0 no longer falls through on the settle's own edge (`reg r = 0; wire w = r
+  | 1'b1;` printed `got 0`); a process the batch's write reaches through a continuous assign
+  (`always @(u)` on `wire u = ~s;` after `initial s = 0;`) also runs after the settle-woken one;
+  an `always_comb` reading a settled net runs once at time 0 (it ran twice on a constant driver;
+  Verilator runs it once, Icarus Verilog twice).
+
 ### Fixed — a constant-driven net no longer posedges at time 0
 
 - **The time-0 settle of a net whose every continuous driver is built from literals alone is

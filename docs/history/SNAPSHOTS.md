@@ -37,6 +37,7 @@ a section restructure, a residue split).
 | 2026-09-25 | 8cb7eef | §4.5.532 | 8505 | 34 | 27 / 0 / 27 | 158 / 81 / 77 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 392 / 222 / 170 |
 | 2026-09-25 | 581e26a | §4.5.533 | 8512 | 34 | 27 / 0 / 27 | 161 / 81 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 393 / 222 / 171 |
 | 2026-09-25 | 5a54c76 | §4.5.534 | 8520 | 34 | 27 / 0 / 27 | 161 / 81 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 393 / 222 / 171 |
+| 2026-09-25 | 4ad24a8 | §4.5.535 | 8530 | 34 | 27 / 0 / 27 | 162 / 82 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 394 / 223 / 171 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -120,3 +121,7 @@ a section restructure, a residue split).
   intermediate value of a variable-reading driver settled before its initializer (startable, M)
   added; the `#0` cont-assign and the oracle-split bullets extended. Startable 81 − 1 + 1 = 81;
   blocked 80; total 393. Tests 8512 → 8520. `format_version` 34 unchanged.
+- §4.5.535: §2 "Delays / events" the phantom-intermediate bullet (startable) deleted; the
+  wait-armed-in-a-batch bullet (startable, M) and the fork-child-before-settle-wake order bullet
+  (startable, S) added; the oracle-split bullet extended. Startable 81 − 1 + 2 = 82; blocked 80;
+  total 394. Tests 8520 → 8530. `format_version` 34 unchanged.
