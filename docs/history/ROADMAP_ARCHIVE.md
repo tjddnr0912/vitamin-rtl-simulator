@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 417건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 418건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.534` **the time-0 settle of a settle-constant net is not an edge; a driver that reads a variable keeps its edge** (2026-09-25 · §2 "Delays / events" the time-0 edge bullet deleted, one phantom-intermediate bullet added, the `#0` and oracle-split bullets extended · `t0_edge::settle_constant_nets` (a worklist fixpoint over `cont_assigns`: undelayed, pure, reading only settle-constant nets) zeroes `slot_edge` on those settle nets in `arm_processes` and `arm_t0`, membership untouched · 48 grounding cells, 3 backends; 2 lenses × 2 rounds + direct re-grade — r1 BLOCKING on one root (both oracles fire the edge when the driver reads a variable) → the fixpoint; r2 MAJOR-ONLY (pure casts refused → allow-list) · 8520 tests)
 - `4.5.533` **a continuous driver whose time-0 settle lands on a value with no definite bit wakes no level waiter; one with a definite bit anywhere, in any element, keeps its time-0 wake** (2026-09-25 · §2 "Delays / events" the t0 false-event bullet deleted, §2-N t0-event residues 5 → 3 · `alias::settled_has_definite_bit` applied to the settle's surviving dirt in `arm_processes` and `arm_t0`, computed nets only, before the copy-net suppression · 92 grounding cells, 3 backends; 2 lenses × 1 round + direct re-grade — r1 BLOCKING (soundness) an unpacked array read at element 0 → every element asked · 8512 tests)
 - `4.5.532` **a process-header level list whose every term is a constant runs once at time 0: the list's sensitivity is the time-0 pulse alone, admitted once a `$finish` ends the run at the end of its time step** (2026-09-25 · §2 "Delays / events", startable row · `always @(K)`, `@(K[0])`, `@(p::C)`, `@(K or K2)` over every constant kind, instance and generate copy; 40 pins converted from their quoted oracle text; 2 lenses, both pre-existing t0 false-event class only)
 - `4.5.531` **a `$finish` ends the run at the end of its time step: the processes already woken in the step, its `#0` and NBA regions and everything they wake run, a `#0` cont-assign due in the step is delivered, the finishing process is never re-entered** (2026-09-25 · §2 "Delays / events" the `$finish` drain bullet deleted, the all-constant header list row unblocked · `Scheduler::finish_pending` latched by the `Step::Finish` arm of both kernels, consumed at the loop's stable point (`st.finished`, deferred drain, postponed flush, `Finish`); the arm parks the finishing activity (`busy`); `tick_due_now` keeps the step open while a `#0` cont-assign / gate update or transport `<= #0` is due at `now` · no format bump · 2 lenses × 1 round + direct re-grade: r1 BLOCKING (soundness) the finishing body re-entered on a second edge of the same step → `busy`; (differential) a `#0` cont-assign never delivered → `tick_due_now`; 264-cell matrix 107 = both oracles · 104 = iverilog · 13 = verilator · 40 recorded splits / no-oracle, 0 moved away · 8505 tests)
@@ -543,6 +544,92 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.534 the time-0 settle of a settle-constant net is not an edge; a driver that reads a variable keeps its edge (2026-09-25, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — the time-0 edge bullet ("an edge waiter on a net whose
+time-0 settle lands on a definite value fires at time 0", deleted); one new bullet (the settle
+evaluates a variable-reading driver before its initializer / first-batch write lands and the
+phantom intermediate value makes events — 2 oracles on the no-posedge half, STARTABLE, M); the
+`#0` continuous-assign bullet extended (`assign #0 w = 1'b1` posedges at 0); the oracle-split
+bullet on iverilog's functor-decided wake extended with the edge side (iverilog's functor,
+verilator's constant folder).
+
+**Defect (PRE, both oracles)**. A net starts at its declared default (`z` for a `wire`, `x` for a
+`logic`) and the time-0 settle writes every continuous driver before any process is armed. Its
+record stays on the dirty list on purpose — the level waiter `always @(w)` on `wire w = 1'b1;`
+runs once at time 0 in both oracles — but the write funnel (`note_change` + `accumulate_edge`) had
+also folded the `z → 1` hop into the net's intra-slot edge mask, and the first delta's edge scan
+(`propagate_changes` / `take_changed` + `WakeTable::wake`) read it as a posedge. `wire w = 1'b1;
+always @(posedge w)` printed `P 0`; `wire v = 1'b0; always @(negedge v)` printed `N 0`;
+`posedge w, negedge w` printed `E 0`; `always_ff @(posedge w) q <= ~q;` flipped a `logic q = 0`
+once (`q=1` at `#3`, both oracles `q=0`); `always @(posedge w) q <= 1;` the same; `initial
+@(posedge w)` fell through at time 0; `always @(posedge w or posedge clk)` printed an extra
+`P 0 clk=0`; a copy `wire c = w`, a multi-driver `assign w = 1'b1; assign w = 1'b1;`, a
+hierarchical port copy, `logic d; assign d = 1'b1;`, `{1'b0, k}` and a three-hop copy chain of a
+constant, a generate-for of constant wires, an interface signal, a tie-off async reset, a clocking
+block and an SVA sampling clock on a constant wire — 120 counters on constant-driven wires counted
+120 where both oracles count 0. Neither oracle prints an edge line on any of them.
+
+**The measured rule (48 grounding cells + 146 lens cells, both oracles)**. Both oracles are silent
+on the settle of a net with NO variable behind it, and both FIRE the edge when the driver reads a
+variable and bit 0 settles definite: `reg r = 0; wire [1:0] w = {r, 1'b1}; always @(posedge w)`
+prints `P 0 w=01` in both (`P 0 w=x1` / `P 0 w=01` for an unwritten `r`), as do `r | 2'b01`,
+`{cnt[7:1], 1'b1}`, `b ? 2'b01 : 2'b11` of a `bit b`, `{r, k}` of a constant `k`, `{r, y}` of a
+port copy `y`, the same shape through a port, and 20 counters (`tot=20`). Between the two the
+oracles contradict each other and themselves (recorded under §2 Oracle splits): iverilog decides by
+the functor (`and g(w, 1'b1, 1'b1)`, `~w` of a constant `w`, `reg a = 0; a | 1'b1` fire; `~r`,
+`r !== 1'b1`, `r == 2'b01` of an initialised `r`, `reg [3:0] r = 4'd3; r | 4'd1` do not),
+verilator by whether its constant folder ran (`~b` / `i == 0` of an unwritten 2-state variable
+silent, `{b, 1'b1}` of the same `b` fires; `reg r = 0; ~r` fires; `always @(posedge w)` fires
+where `always_ff @(posedge w[0])` on the same net does not). So the rule is on the driver's
+leaves: a net is SETTLE-CONSTANT when every continuous driver of it is undelayed, holds no call
+and no impure system function, and reads only settle-constant nets — a worklist fixpoint over
+`ir.cont_assigns` (`t0_edge::settle_constant_nets`) that carries copies, port binds, concatenations
+and chains of constants without a copy-net special case, and leaves a reg, an undriven wire, a
+delayed driver, a driver cycle and a multi-driver group with one variable member non-constant. The
+pure system functions are a positive list (`$signed`, `$unsigned`, `$clog2`, `$rtoi`, `$itor`,
+`$realtobits`, `$bitstoreal`, `$countones`, `$onehot`, `$onehot0`, `$isunknown`); `$clog2(2)`,
+`$signed(1'b1)`, `1'(2'b01)`, `4'(1)` are silent in both oracles.
+
+**Fix**. Both kernels zero `slot_edge[n]` for every settle net `n` that is settle-constant, right
+after the initializer rollback (`split_off(settled)` / `retain_snapshot`) and before the §4.5.533
+x-drop and the copy-net suppression; dirty membership is untouched, so the level waiter still
+fires. Every other settle net keeps the mask the funnel built. A value written to the net later in
+time 0 is a fresh change: the net is no longer dirty once the first delta drains, so `note_change`
+resets the mask on its next dirtying (`initial r = 1;` on `wire w = r;` still prints `P 0 w=1`,
+`#5 r = 1` prints `P 5`, `assign #2 w = 1'b1` prints `P 2`, a `force`/`release` at 1/2 prints
+`P 2`; all three tools). New module `crates/sim-engine/src/t0_edge.rs`. Byte-identity after time
+0: the mask is per slot and reset on the first dirtying of a slot; VCD md5 identical PRE/POST on
+the lens's waveform cells and all 10 corpus workloads' stdout identical.
+
+**Review**. Two lenses, two rounds, direct re-grade of every lens cell on each new binary.
+Round 1 (soundness 41 cells, differential 117 incl. 10 workloads): both BLOCKING on ONE root — the
+round-1 rule cleared the mask on every settle net, and both oracles fire when the driver reads a
+variable (8 + 15 cells; 20 counters `tot=20` → `tot=0`). Fixed with the fixpoint; re-grade on
+POST2: soundness 41 → 2-oracle 6 · iv-text 16 · vl-text 5 · PRE-identical 13 · neither 1
+(verilator-only SVA on `c[0]`, verilator self-contradicts with its clocking twin) · backend-diff 0;
+differential 105 → 2-oracle 30 · iv 27 · vl 17 · PRE-identical 31 · neither 0. Round 2 (delta,
+the classifier): differential MAJOR-ONLY (28 checks: 20 both-oracle, 6 split, 2 PRE-identical, 0
+regressions — copy chains of 2/3/10, three module levels in and out, `{k0, k1}`, a constant `?:`,
+a reduction, generate ×4, a mixed `posedge w or negedge k` list all on oracle text); soundness
+MAJOR-ONLY (33 nets: the writer census — both settles iterate only `ir.cont_assigns`; gates, ports,
+interface signals, generate, struct fields and array elements all arrive there; a runtime delay is
+`Some(0)` and refused; cost linear; nothing else reads the mask before the first delta) with one
+new instance — pure casts and conversions refused by the `SysFunc` arm kept PRE's false edge
+(`$clog2(2)`, `$signed(1'b1)`, `4'(1)`; both oracles silent) → the positive allow-list above,
+re-graded directly (round 3). Pre-existing residues, PRE = POST, recorded: the phantom
+intermediate value of a variable-reading driver settled before its initializer / first-batch write
+(`reg r = 1; wire w = (r !== 1'b1)` → `P 0 | N 0`, both oracles `W 0 w=0`; 12 cells; §2 bullet);
+`assign #0 w = 1'b1` posedges at 0 (§2 `#0` bullet); a 2-state unwritten variable through an
+operator (`bit b; ~b`, `int i; i == 0`) fires where both oracles are silent but each contradicts
+itself on a sibling (split); `initial begin r = 0; r = 1; r = 0; end` on `wire w = r` posedges in
+iverilog alone (split); `always @(posedge ar[0])` on an unpacked element is E3009 (loud).
+
+**Tests**: `crates/cli/tests/t0_settle_no_edge.rs` (8 tests, 46 cells, both-oracle text; the
+x-valued cells iverilog's). Gate: full nextest, doctest, clippy, fmt, the backend-flip run (the
+documented 10 backend-pin failures, identical to the parent), corpus 10/10 (verilog-axi
+ruled-split, digest unchanged). `format_version` 34 unchanged.
 
 #### 4.5.533 a continuous driver whose time-0 settle lands on a value with no definite bit wakes no level waiter; one with a definite bit anywhere, in any element, keeps its time-0 wake (2026-09-25, branch main) ✅
 

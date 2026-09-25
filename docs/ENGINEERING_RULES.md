@@ -262,6 +262,7 @@ oracle's raw output text and a classification. Its report names the probe resolu
 |---|---|
 | Compare semantic equivalence, never structural | Structurally different but semantically identical output reading as a divergence, and the reverse |
 | Classify every divergence four ways: real gap, no-oracle, vita-ahead, harness format | Undifferentiated divergences all being treated as defects, or all dismissed |
+| Ground a suppression on the FIRING side of its predicate as well as the silent side: before shipping "X never produces an event", run the sibling that varies the operand kind (a literal against a variable, a constant wire against a reg) on both oracles | A rule fitted to the silent cells alone (§4.5.534: every settle edge cleared, where both oracles fire the edge for `{r, 1'b1}` of a variable `r`) reading as CLEAN until a lens varies the axis |
 | Run the module twin of every interface cell the lens files as pre-existing; when the twin is wrong the same way, the row is a shared-model row, not an interface row | An interface row filed for a defect that lives in the shared model |
 
 ### 3.4 The soundness lens

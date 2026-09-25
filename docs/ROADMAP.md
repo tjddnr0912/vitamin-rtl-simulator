@@ -781,13 +781,22 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - ⓔ ORACLE-SPLIT: in a MULTI-timescale design `global_prec_exp` becomes finer and the `e < 0` case
   never triggers — iverilog rounds at the module's OWN precision and verilator at the design's GLOBAL
   precision. With a single timescale the two coincide and it does not bite.
-- An edge waiter on a net whose time-0 settle lands on a definite value fires at time 0:
-  `wire w = 1'b1; always @(posedge w)` prints `P 0` and `wire v = 1'b0; always @(negedge v)` prints
-  `N 0` where neither oracle prints a line (2 oracles; IEEE §9.4.2 makes z→1 a posedge, and the
-  settle's `z0` twin `N 0 z0` is the same class). The level waiter on the same net fires in both
-  oracles, so the two waiters read the one settle write differently. Site: the settle's dirt
-  carries `slot_edge` through `note_change` / `accumulate_edge` into the first delta's edge scan
-  (§4.5.533 dropped only the x-valued dirt). STARTABLE.
+- The time-0 settle evaluates a driver that reads a variable BEFORE that variable's declaration
+  initializer or first-batch write lands, and the phantom intermediate value makes events:
+  `reg r = 1; wire w = (r !== 1'b1); always @(posedge w) … always @(negedge w) …` prints `P 0` and
+  `N 0` (settle `x !== 1` = 1, recomputed to 0 in the first delta) where both oracles print only
+  the level line `W 0 w=0`; `reg r; wire w = (r === 1'bx); initial r = 0;` the same; `reg clk = 0;
+  assign nc = ~clk; always @(posedge nc)` prints `Pnc 0` before the real `Pcw 5`; a multi-driver
+  `assign w = 1'b1; assign w = r1;` with `reg r1 = 1` prints `P 0`. 2 oracles on the "no `P 0`"
+  half (12 lens cells); the `~r` posedge half is a split (verilator fires on `reg r = 0; wire w =
+  ~r`, iverilog does not). Site: `settle_cont_assigns` runs before `arm_processes` /
+  `arm_t0` run the initializers (§4.5.256) and before the first Active batch, and the copy-net
+  repair (`alias::copy_nets`) re-settles only bit MOVES. Fix shape = order the settle after
+  initialization (IEEE §6.21) — re-settle the computed drivers of initialised variables after the
+  initializer bodies, with their dirt and edge mask rebuilt from the post-initializer value — and
+  measure the first-batch half separately (iverilog runs the `initial` before the functor's first
+  propagation; vita's first delta after the batch is the same order only for level waiters).
+  STARTABLE (M).
 - A copy net of a source that moved at time 0 takes only its OWN storage move (`alias::copy_nets`
   suppression is "own dirt AND source moved"), where iverilog fires on the copied VALUE: with
   `wire [1:0] vv = 2'b1z; wire s = vv[0];`, `always @(s)` counts 0 in vita and 1 in iverilog, the
@@ -813,7 +822,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   path, which re-enters `now` only once every Inactive round is empty. Fix shape = deliver a
   zero-delay cont-assign write as an Inactive-region event of its tick (between two `#0` hops), as
   a procedural `<= #0` already is. (The `always @(r)` on such a net fired twice at time 0,
-  `R 0 r=x` / `R 0 r=0`, until §4.5.533; it now fires once, as both oracles do.)
+  `R 0 r=x` / `R 0 r=0`, until §4.5.533; it now fires once, as both oracles do.) The same delivery
+  also gives `assign #0 w = 1'b1;` a time-0 POSEDGE (`P 0 w=1` beside the level line, both oracles
+  print the level line only): the landing is a fresh change through `note_change`, not the settle,
+  so §4.5.534's settle-constant clear does not reach it; the undelayed `assign w = 1'b1;` is silent.
 - A deferred-assertion action block that holds a `$finish` or `$stop` (`assert #0 (0) else
   $finish;`, or an `else begin $display(…); $finish; end`) prints an empty line at maturation and
   the run continues to its next `$finish` (pre-existing; verilator ends the run at the maturation
@@ -982,7 +994,17 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   stores `xx` there, vita keeps `q`). verilator is 2-state and runs every level `always` once at
   time 0. vita wakes on the value: no definite bit anywhere, no wake. A first-batch
   `initial $display(w)` of `r & 4'b0011` also reads iverilog's pre-evaluation `xxxx` where vita
-  and verilator read the settled `00xx` / `0000`.
+  and verilator read the settled `00xx` / `0000`. The time-0 EDGE of the settle (§4.5.534) splits
+  the same way: both oracles are silent on a settle-constant net (a literal, a copy or concat of
+  constant wires, a port copy) and both fire when the driver reads a variable and bit 0 settles
+  definite (`{r, 1'b1}`, `r | 2'b01`, `b ? 2'b01 : 2'b11`), but between the two iverilog decides
+  by the functor — `and g(w, 1'b1, 1'b1)`, `wire n = ~w` of a constant `w` and `reg a = 0; wire
+  w = a | 1'b1` fire, `~r` / `r !== 1'b1` / `r == 2'b01` of an initialised `r`, `reg [3:0] r =
+  4'd3; r | 4'd1` and `{1'b1, b}` of a `bit b` do not — and verilator by whether its constant
+  folder ran (`~b` and `i == 0` of an unwritten 2-state variable silent, `{b, 1'b1}` of the same
+  `b` fires, `reg r = 0; ~r` fires, `always @(posedge w)` fires where `always_ff @(posedge w[0])`
+  on the same `{r, 1'b1}` does not, a 4-bit `{b, 3'b001}` counter counts 0 where the 2-bit twin
+  counts). vita: a settle-constant net is silent, a driver reading a variable keeps its edge.
 - The ORDER of distinct processes in the time-0 Active region around an all-constant
   `always @(K)` (§4.5.532; IEEE leaves it open): with `initial -> ev;` waking an `initial @(ev)`,
   iverilog prints the `always @(K)` line first and the woken `initial` second, vita the reverse,

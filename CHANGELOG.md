@@ -9,6 +9,19 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a constant-driven net no longer posedges at time 0
+
+- **The time-0 settle of a net whose every continuous driver is built from literals alone is
+  not an edge**, as in both Icarus Verilog and Verilator: `wire w = 1'b1; always @(posedge w)`
+  printed `P 0`, `wire v = 1'b0; always @(negedge v)` printed `N 0`, `always_ff @(posedge w)
+  q <= ~q;` flipped `q` once, `initial @(posedge w)` fell through at time 0, and a copy, a
+  multi-driver constant, a hierarchical port copy, a concat of constant wires, `$clog2(2)` or
+  `4'(1)` did the same — 120 counters on constant-driven wires counted 120 where both tools count
+  0. The level waiter on the same net still runs once at time 0, as both tools do. A driver that
+  reads a variable keeps its time-0 edge (`reg r = 0; wire [1:0] w = {r, 1'b1}` prints `P 0 w=01`
+  in both tools and in vitamin), and a value written to the net later in time 0 or at any later
+  time edges as before. All three backends.
+
 ### Fixed — a net that settles to x at time 0 no longer wakes its readers
 
 - **A continuous driver whose time-0 value has no definite bit hands no event to `always @(w)`,
