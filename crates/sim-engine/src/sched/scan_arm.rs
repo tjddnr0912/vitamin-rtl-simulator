@@ -1130,13 +1130,52 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         for n in self.st.dirty.split_off(settled) {
             self.st.dirty_flag[n as usize] = false;
         }
+        // T0 X-DROP, the tier-3 twin is in `arm_t0`. What survives above is the
+        // settle's own record of every net it moved off its declared default,
+        // and a level waiter armed below fires on it — that is how `always
+        // @(w)` on `assign w = 1'b1;` gets its time-0 run (the paragraph above
+        // `settled`). The same record also carried `z → x`: a driver whose
+        // every operand was still x (`wire w = r + 1;` before any `initial`
+        // wrote `r`, a delayed `assign #5` holding its x until the first write
+        // lands, a multi-driver x, `logic d; assign d = 1'bz;`), and
+        // `always @(w)` ran once at time 0 with `w = x` — one extra line, or a
+        // value (`always @(w) q = w;` turned a `reg q = 9` into x). iverilog
+        // gives that hop NO event, and a settled value with a definite bit
+        // somewhere always gets one (`1'b1`, `00xx`, `x101`, `z0`); where it
+        // wakes on a no-definite value it contradicts itself on equal values
+        // (`Value::any_definite`), so the drop is on the VALUE, not the driver
+        // shape, and it is applied to COMPUTED nets
+        // only: a copy net (`crate::alias`) has no event of its own and takes
+        // its sources' status in the suppression below, which is why the drop
+        // runs first — a dropped source then reads as "did not move" there
+        // (`wire s; assign s = 1'bz; logic d; assign d = s;` wakes nothing,
+        // iverilog-pinned), while a copy of a net that did move keeps the
+        // iverilog answer it already had (`2'b1z` → `vv[0]` → `d`, the
+        // copy-net suite). Nothing else is touched: the write stands (VCD,
+        // `$display` reads), the edge accumulator is untouched (`z → x` is
+        // neither edge, IEEE 1800 §9.4.2), and a definite value written to the
+        // net later in time 0 is a fresh change that wakes as before.
+        let copy_dst: std::collections::BTreeSet<u32> = copies.iter().map(|cn| cn.dst).collect();
+        let undefined: Vec<u32> = self
+            .st
+            .dirty
+            .iter()
+            .copied()
+            .filter(|n| {
+                !copy_dst.contains(n)
+                    && !crate::alias::settled_has_definite_bit(self.st, self.st.ir, *n)
+            })
+            .collect();
+        for &n in &undefined {
+            self.st.dirty_flag[n as usize] = false;
+        }
+        let mut dropped_any = !undefined.is_empty();
         // SUPPRESSION ONLY, and TRANSITIVE — the tier-3 twin says why: a copy net
         // cannot carry an event nothing in its source CHAIN had, but it CAN
         // legitimately stay put while a source moves, because the two nets have
         // their own storage defaults. `moved` forwards a source's movement past a
         // copy whose own default masked it.
         let mut moved: std::collections::BTreeMap<u32, bool> = std::collections::BTreeMap::new();
-        let mut dropped_any = false;
         for cn in &copies {
             let d = cn.dst as usize;
             let m = cn.srcs.iter().any(|&s| {

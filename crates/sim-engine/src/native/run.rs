@@ -906,6 +906,23 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
     // is `set &= snapshot`. Same result as the old `split_off`, and it no longer
     // depends on the list being append-only to be correct.
     k.arena.ch.dirty.retain_snapshot(&settled);
+    // T0 X-DROP — the engine twin (`arm_processes`) carries the argument: a
+    // settle that lands on a value with no definite bit is not a change in
+    // iverilog's network, so the level waiter it would wake here at time 0
+    // (`W 0 w=x` before the real line) has no oracle; every element of an
+    // unpacked array is asked (`alias::settled_has_definite_bit`). COMPUTED nets only, and
+    // BEFORE the copy suppression, so a copy of a dropped source reads its
+    // source as "did not move". The value is read through the composite so a
+    // heap-routed or frame-local slot answers from its owner, the same way the
+    // end-of-run coverage read does.
+    {
+        let copy_dst: std::collections::BTreeSet<u32> = copies.iter().map(|cn| cn.dst).collect();
+        for n in k.arena.ch.dirty.collect() {
+            if !copy_dst.contains(&n) && !crate::alias::settled_has_definite_bit(&*k, ir, n) {
+                k.arena.ch.dirty.remove(n as usize);
+            }
+        }
+    }
     // SUPPRESSION ONLY, and TRANSITIVE. A copy net cannot carry an event nothing in
     // its source CHAIN had, so if nothing moved its dirt is dropped; if something
     // did, the settle's own record of whether the DESTINATION moved stands.

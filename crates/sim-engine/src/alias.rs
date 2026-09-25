@@ -622,6 +622,25 @@ fn null_driver(ir: &SimIr, ca: &sim_ir::ContAssign) -> bool {
 /// found it by swapping two `wire` declarations and watching the same cell go
 /// from fixed to not fixed. Only the members from the back-edge target upwards
 /// are the cycle.
+/// T0 X-DROP predicate, shared by `arm_processes` and `arm_t0`: does the net's
+/// settled value hold a definite (0/1) bit in ANY element?
+///
+/// An unpacked array is ONE net with `array_len` element words, and
+/// `read_net(net, None)` answers element 0 alone — a review cell with
+/// `assign a[1] = 4'd5;` and `a[0]` undriven lost the whole array's time-0 wake
+/// that way (`always @* q = a[1];` never ran, both oracles ran it once). So the
+/// question is asked of every element and the wake is kept if any one answers.
+/// A handle net (`array_len` 0) cannot be on the settle's list; `max(1)` keeps
+/// the scalar reading for it anyway.
+pub(crate) fn settled_has_definite_bit<N: crate::eval::NetReader + ?Sized>(
+    nets: &N,
+    ir: &SimIr,
+    net: u32,
+) -> bool {
+    let elems = ir.nets.get(net as usize).map_or(1, |n| n.array_len.max(1));
+    (0..elems).any(|w| nets.read_net(net, Some(w)).any_definite())
+}
+
 pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
     if ir.cont_assigns.is_empty() {
         return Vec::new();

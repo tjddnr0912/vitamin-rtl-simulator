@@ -405,6 +405,39 @@ impl Value {
         false
     }
 
+    /// Does at least one bit within width hold 0 or 1? The complement of
+    /// "every bit is X or Z", which is NOT `!has_xz()` — a value can carry both
+    /// (`00xx`). A real is 2-state, so it always answers `true`.
+    ///
+    /// One consumer: the time-0 settle's wake filter (`arm_processes` /
+    /// `arm_t0`). Measured against iverilog: a continuous driver whose settled
+    /// value has NO definite bit (`r + 1` of an unwritten `r`, `~r`, `^r`,
+    /// `{1'bz, r}`, `1'bx`, a gate, a delayed `assign #5` still holding its x,
+    /// a multi-driver x) wakes no `always @(w)` at time 0, while one with a
+    /// definite bit anywhere (`1'b1`, `4'd5`, `r & 4'b0011` = `00xx`,
+    /// `{r, 3'b101}`, `{1'bz, 1'b0}`) does. Where iverilog wakes on a
+    /// no-definite value it contradicts itself on equal values at the same
+    /// time (`2'bxz` wakes, `{r, 1'bz}` = `xz` does not; `{r, 1'bx}` wakes,
+    /// `{r, r}` and `2'bxx` do not; `r ? 1'b1 : 1'b0` wakes, `~r` does not),
+    /// so there the rule is on the value and iverilog is not the oracle.
+    pub fn any_definite(&self) -> bool {
+        if self.is_real {
+            return true;
+        }
+        let n = nwords(self.width);
+        for w in 0..n {
+            let mask = if w == n - 1 {
+                top_mask(self.width)
+            } else {
+                u64::MAX
+            };
+            if !self.unk.get(w).copied().unwrap_or(0) & mask != 0 {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Clean integer value IF IT FITS in u64; `None` on any X/Z (caller
     /// poisons) or when set bits exist above bit 63. Returning the truncated
     /// low word for a wider value let relational/shift/index sites silently
