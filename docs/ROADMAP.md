@@ -27,10 +27,10 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 6 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 144 | 80 | 64 | oracle split / pinned / oracle disqualified 33 · named prerequisite 16 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 17 · size cast / signedness 15 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 13 · real 5 · performance 7 · index sealing 10 · ranges / selects 6 · diagnostics 6 · class fields 3 · oracle splits 23 | ① | |
+| §2 | recorded defects by mechanism | 154 | 81 | 73 | oracle split / pinned / oracle disqualified 41 · named prerequisite 17 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 17 · size cast / signedness 15 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 15 · real 5 · performance 7 · index sealing 10 · ranges / selects 6 · diagnostics 6 · class fields 3 · oracle splits 31 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 103 | 88 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 14 · system tasks & file I/O 9 · nets / timing 10 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
+| §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
@@ -38,11 +38,11 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 376 | 219 | 157 | | | | |
+| total | | 388 | 222 | 166 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
-hierarchical placeholders, a per-resumption-kind ordering model, a block-scoped constant binding, per-instance arity / class registration, one-oracle clocking).
+hierarchical placeholders, a `$finish` that runs the processes already woken in its time step, a per-resumption-kind ordering model, a block-scoped constant binding, per-instance arity / class registration, one-oracle clocking).
 
 Priority principle (time-invariant): ① a CRITICAL silent-wrong with an oracle, then ② loud→supported
 with an oracle, then ③ an honest-loud promotion whose prerequisite holds, then ④ G2 OBS. Performance
@@ -173,7 +173,7 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 | 7 | BLOCKED (one ordering key) | a parent `initial` READING a child net at t0 sees X: `initial s = 8'hEE` in a child, read as `r = u1.s;` → oracles `ee`, vita `xx` (2-oracle). A fork arm in the child is a 3-way SPLIT (iverilog `ee` / verilator `00` / vita `xx`). An output PORT bind `child u1(.o(w))` and `assign w = u1.s;` both read `ee` at the parent's t0 immediate read, as do a constant driver, a parameter driver and a two-level chain — the only diverging spelling is the one whose value comes from the child's `initial`, i.e. process order; verilator answers `ee` there only because it constant-hoists a SINGLE-statement `initial s = <const>;`, and a second statement in that initial moves verilator to vita's answer, so that cell is an ORACLE SPLIT on order. `final` blocks run in ProcId order (`final_procs` is a `BTreeSet<ProcId>`), so any process reordering leaves vita disagreeing with itself | the rank machinery is complete (`with_rank_scope`, `init_ranks`, `RANK_MOD_INSTANCE(1) < RANK_MOD_OWN(2)`) and is applied only to declaration-initialiser processes. The root is that vita has ONE ordering key (`Activity.tie`) where the oracles use a DIFFERENT order per RESUMPTION KIND | BLOCKED BY: a per-resumption-kind ordering model. A single `proc_order` permutation seeded into the ordering key cannot express it — iverilog answers the kinds differently in ONE run of ONE design (`initial` child-first, `always_comb` t0 PARENT-first, edge PARENT-first, `#d` delay child-first, `wait` PARENT-first, fork-arm wake PARENT-first): keying only the t0 arm breaks the delay wheel, keying `Activity.tie` breaks the edge and `wait` wakes (`aa` for `cc`, a VALUE), and re-keying those two breaks `always_comb`'s t0 arm and the fork-arm wake, with both oracles against vita every time. Closes the headline plus 5 more 2-oracle cells. Costs a format bump (`proc_order` on the `StagedExtraSidecars` tail; `sim_ir::Process` is untouched) · corpus demand zero |
 | 10 | OPEN | the RANGE BOUND consumer: `wire [K[31:24]-1:0] n;` on a `parameter [135:8] K` 128 bits wide is ONE BIT at exit 0 where both oracles declare 221, and the ≤64-bit twin of the same text is correct. Bare `K[31:24]`, `pk::K[31:24]`, `K[31 -: 8]`, `K[24]` and a `$bits`-sized net are all three-way identical | `const_range_bound_fold` has no wide-bit-domain fallback — the i64 select fold declines a >64-bit base (`select_base_at_declared` returns `None` for `dwidth > 64`) and both of the bound's fallbacks are i64. `$clog2` of the SAME text answers 8, so the value exists one funnel over | BLOCKED BY: `selfdet_bits_unsigned` declines the select too (only `selfdet_clog2_wide` answers it), so routing the bound at the wide domain buys nothing until that resolver reads it — an unguarded fallback moves 0 of 18 cells |
 | 14 | WALL (provenance) | `localparam logic signed [7:0] NM = -8'sd2; localparam logic [63:0] X = NM ^ 64'h0;` is `fffffffffffffffe` against the oracles' `00000000000000fe`; the same expression over a FUNCTION LOCAL folds `00…fe`. The same routing also fixes `localparam logic [7:0] M = (P + 8'd100) % 8'd7` (P=200: 6 against 2), `pk::PA ^ 64'h0`, `int S = (D - C) / 2` (2147483641), the generate-scope `time NM` shadow (2c for 12c), and the 65-bit-leaf `/` and `%` | a module-scope initializer folds through the width-UNLIMITED `const_eval_in_scope` | route a DECLARED-width/sign target through `eval_const_assign`; the gate must demand provenance of every LEAF (`param_meta` is a DEFAULT for an untyped parameter and ABSENT for a `time` one), decline above the i64 lane, refuse an unsized FILL operand, answer THREE-valued in the scope walk, and NOT route the PACKAGE binder (row 26). BLOCKED BY: a width-aware walk correct on its own terms — the §11.4.10 shift count (`16'hFF01 << 3'b101` is 0; 30 correct→wrong plus 36 loud→wrong, reachable through a constant FUNCTION, so it is its own row and closes first) and an i64 bound that is not on the TARGET only (83 cells) |
-| 15 | BLOCKED (2-state field) | an OVERRIDE carrying a sized x/z literal loses the unknown plane: `#(.K(8'b1010_010x))` onto `parameter logic [7:0] K` binds `10100100` at exit 0 where the oracles keep the x; `8'bzzzzz1z0` binds `11111110`. Five cells, every channel | `params.rs`'s i64-lane test reads only VALUE bits (`bp_get(..).0`); the sibling `fill` arm declines with `fill_is_unknown` | a `bp_any_unknown` test alone turns 76 CORRECT cells loud, because a 2-STATE declaration converts x and z to 0. BLOCKED BY: recording the parameter's 2-state-ness (`hdl-parser/src/params.rs` computes `var_kind` and drops it; an `hdl-ast` field plus a SchemaHash re-pin, parser-only), which also closes z→0 (1 cell today) · the separate headline (an unknown plane in the narrow store, 22 loud cells, ~40 sites, demand 0) stacks on row 14; above bit 64 what survives is z, not x · the >64-bit operator lane (§4.5.527) declines on any x/z bit, so `#(.P(~128'bx))`, `128'h1x << 120` and `128'hz5 >>> 2` stay E3009 where both oracles bind 128 bits with the x/z kept; a build that let the plane through lost it whenever the value bits fit i64 (`128'hx0 >> 4`, `+128'hx0` bound zeros, six loud→silent cells), so this lane waits on the same unknown-plane binder |
+| 15 | BLOCKED (2-state field) | an OVERRIDE carrying a sized x/z literal loses the unknown plane: `#(.K(8'b1010_010x))` onto `parameter logic [7:0] K` binds `10100100` at exit 0 where the oracles keep the x; `8'bzzzzz1z0` binds `11111110`. Five cells, every channel | `params.rs`'s i64-lane test reads only VALUE bits (`bp_get(..).0`); the sibling `fill` arm declines with `fill_is_unknown` | a `bp_any_unknown` test alone turns 76 CORRECT cells loud, because a 2-STATE declaration converts x and z to 0. BLOCKED BY: recording the parameter's 2-state-ness (`hdl-parser/src/params.rs` computes `var_kind` and drops it; an `hdl-ast` field plus a SchemaHash re-pin, parser-only), which also closes z→0 (1 cell today) · the separate headline (an unknown plane in the narrow store, 22 loud cells, ~40 sites, demand 0) stacks on row 14; above bit 64 what survives is z, not x · the >64-bit operator lane (§4.5.527) declines on any x/z bit, so `#(.P(~128'bx))`, `128'h1x << 120` and `128'hz5 >>> 2` stay E3009 where both oracles bind 128 bits with the x/z kept; a build that let the plane through lost it whenever the value bits fit i64 (`128'hx0 >> 4`, `+128'hx0` bound zeros, six loud→silent cells), so this lane waits on the same unknown-plane binder · an overridden parameter used as a constant EVENT term inherits the lost plane through §4.5.529's time-0 run: `child #(.P(4'bx))` with `always @(P or clk)` runs at time 0 printing `P=0000` (`4'bzzzz` → `P=1111`, `4'b1z0x` → `P=1100`), where iverilog prints `P=xxxx` / `P=zzzz` / `P=1z0x` and does not run an all-x or all-z constant at time 0 (it runs `4'b1z0x` there); verilator cannot compile the design (`Unsupported tristate construct: SENITEM`) (dS10c) |
 | 16 | ORACLE-SPLIT | 12 override cells: 5 diverge from iverilog, but verilator sides with VITA on 4 (`-64'd1`, `<ones> + 64'd1`, `<ones> << 4`) and `~32'd0` is a 3-way split | that is row 17 | a fix would "correct" one side of a live split, so the context is not threaded through `override_bits` · the 2-oracle sub-case (operands already ≥ the target width, `#(.K(~128'd0))`) is closed by §4.5.527 · the >64-bit operator tops narrower than a typed target now land on VERILATOR's side, recorded here, not support: onto `parameter logic [127:0]`, `~65'd0` and `65'd1 - 65'd2` are `0000000000000001ffff…ff`, `~96'd0` is `00000000ffff…ff`, `~65'd0 >> 1` is `0000000000000000ffff…ff` (iverilog all ones / `7ff…ff`); onto `logic signed [127:0]`, `~96'd0` / `~72'd0` are `00000000ff…ff` / `00000000000000ff…ff` (iverilog all ones; PRE matched iverilog by an i64 sign-extension coincidence); onto `[255:0]`, `~128'h…` is zero-extended (`hier_param_select.rs`). verilator's OWN `localparam [255:0] L = ~128'd0` is all ones (= iverilog), so verilator contradicts itself between the override and the localparam twin; adjudicate before calling these pins support |
 | 17 | ORACLE-SPLIT | `leaf #(.K(32'd0 - 32'd1))` on `parameter logic [127:0] K`: iverilog `ffff…ffff`, verilator `0000…0000ffffffff`, vita `0000000000000000ffffffff_ffffffff` (zero-extending from 64, the i64 lane's width) | — | do not chase: vita matches NEITHER and §6.20.2 does not settle it · the neighbours are not split (`64'hFFFF_FFFF_FFFF_FFFF + 64'd0` zero-extends in all three, `-(64'sd1)` sign-extends in all three) |
 | 19 | PERF | a 2-D, 3-D or packed element as a continuous-assign LHS costs ~10× on BOTH backends; against 50.0 ns for a 1-D unpacked element: 2-D `arr[0:15][0:3]` 546.7 ns native / 675.8 vm, 3-D 829.2 / 967.5, packed `logic [63:0][31:0]` 410.8 / 441.7 | not located; the native/vm ratio is 0.81–0.93, so it is SHARED PLUMBING | needs its own census; the diagnoses offered so far were refuted on the 1-D axis |
@@ -763,19 +763,54 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   starts at z and the t=0 settle's z→x wakes `always @(b)` where iverilog has no t=0 event.
   `assign d = c ^ 1'b0;` behaves the same — an initial-value domain problem.
 
-- A process-HEADER LEVEL event term on a CONSTANT fires ONCE at t0 in both oracles
-  (`localparam int K = 99; always @(K) …` prints `LVL at 0` then `DONE`); vita refuses the single-term
-  spelling and, since §4.5.524, DROPS the term when a live sibling remains, so it never fires at all.
-  The refusal is honest (`a constant cannot wake a process`) but the t0 fire is a shape vita has no
-  representation for — an inferred-sensitivity process with one always-ready term.
-- `@(K[0] or clk)` — a single-bit LEVEL term beside a live net — is `E3009 single-bit level (non-edge)
-  event control is not supported`, and that refusal SILENCES the live sibling: both oracles print
-  `MIX at 0 / MIX at 1 / DONE`. The net-only twin `@(n[0] or clk)` is the same loud line, so the
-  single-bit rule, not the constant, is the root. §4.5.524 gave the whole-name level lane the
-  "drop the dead term, arm the rest" rule; the bit-select lane has no term to drop into.
-- `@(pkg::CONST)` stays `E3009 an event control @(pkg::name) must name a package variable` where both
-  oracles print `DONE` (the term simply never fires). `expr_head_binds_constant` answers `false` for a
-  multi-segment head by design, so the §4.5.524 never-wake path does not reach it.
+- `$finish` ends its time step without running the processes already woken in it (pre-existing, 2
+  oracles; the process half of §5.b BYTE-GATE-6 ①, which records the pending NBA / transport half):
+  `initial begin $display("I"); $finish; end` beside `wire w; assign w = 1'b1; always @(w)
+  $display("A");` prints `I` / `A` in both oracles and `I` alone in vita, and the same holds after
+  time 0 (`initial begin #1 u = 7; $display(…); $finish; end` + `always @(u) m++;`: both oracles run
+  the `always` at 1, vita's `final` prints `m=0`). The `$finish` can reach the step through an
+  `initial`, a task it enables, an event-woken `initial`, an `always` or `always_comb` body, another
+  process's body, and `$exit` (verilator; iverilog has no `$exit`). Site: the `Step::Finish` arms of
+  `sched/run_loop.rs` and `native/run.rs` drain the deferred queues and the Postponed region and
+  return with the Active queue unrun. Fix shape = run the step's already-woken processes before
+  stopping, as both oracles do. PREREQUISITE of the all-constant header list below.
+- A process-header level list with NO live term — `always @(K)`, `@(K[0])`, `@(K[3:0])`, `@(p::C)`,
+  `@(K or K2)`, over every constant kind — stays E3009 (the clause "vita's `$finish` can end time 0
+  before that run") although both oracles run it once at time 0 (`LVL at 0`). BLOCKED BY the
+  `$finish` drain above: the one run vanishes at exit 0 whenever a `$finish` reaches time 0. §4.5.529
+  tried a static design scan for such a `$finish` and it leaked in review round 3 through a task
+  enabled by an `initial`, an `initial` woken by `-> e`, an `always` with no event control, an
+  `always_comb`, another admitted all-constant list and `$exit` — every channel into the step is a
+  hole. Beside a live term the lane runs, because there vita's output under such a `$finish` equals
+  the header lane's.
+- A select of a constant whose index reaches a changing net only through a concatenation, a
+  replication, a system-function argument or a hierarchical name still never wakes (pre-existing, =
+  PRE, 2 oracles): in-body `@(K[{a,b}])` (both `IB at 1/2/3`, vita `DONE` only), header
+  `@(posedge K[$unsigned(i)] or posedge clk)` (both `KE at 1/3/4`, vita `KE at 4`), `K[{1{i}}]`,
+  `K[$signed(i)]`, and `@(K[u.x])` / `@(K[g.x])` on a child or generate net (both `IB at 1/2/3`,
+  vita `DONE`). `index_provably_live` answers `false` for `SysCall` and for every kind
+  `const_fold_children` does not descend (Concat, Replicate, MethodCall, …), and `lookup_dotted_net`
+  does not resolve the dotted name when the in-body wait is lowered, so the leaf is unknown and the
+  never-wake drop stands. Fix shape = descend those operands and resolve the dotted leaf, so a live
+  index takes the `K[i]` refusal (cells p07 p08 dT01 q03 q04).
+- Bodies the time-0 lane does not admit keep the header lane's drop of the constant's time-0 run at
+  exit 0 although both oracles run it (= PRE): a task enable of an IMPORTED package task
+  (`import p::t;`, k08), a recursive automatic task chain (dR54b, `REC at 0` missing), `wait (c)`
+  (i10: both oracles `W at 0` for `wait (1)`), and `fork … join_none` (i08, i14: `P at 0` missing).
+  Every fork is excluded because a `disable` beside a forked child splits the oracles at time 0
+  (dS13 `disable fork` with a `#2` child: iverilog `F at 0`, verilator no time-0 run) and the admitted
+  `disable <label>` twin printed a child line neither oracle prints (dT20 `FCH from clk=1 done at
+  2`). Fix shape = widen `body_suspend_blocker` one construct at a time, each measured beside its
+  `disable` twins.
+- The header `Level` waiter runs a process a SECOND time in one step when a sibling term changes
+  after the process was triggered and before it ran (pre-existing, every backend, 2 oracles after
+  time 0): `always @(go) p = p + 1;` beside `always @(go or p) nq++;` with `go` rising at 1 prints
+  `Q at 1 p=1 nq=1` / `Q at 1 p=1 nq=2` in vita where both oracles print `Q at 1 p=1 nq=1` once
+  (dS05c; the same at 2). The time-0 lane reaches it because every admitted process is pending at
+  once at time 0: two lanes feeding each other (`always @(K or q) p = q + 1;` and `always @(K or p)
+  if (p < 3) q = p;`) print an extra `B at 0 p=3 q=2` (dR12; verilator prints it too, iverilog does
+  not). Site: the Level waiter's dirty-list re-fire. Fix shape = do not re-queue a process that is
+  already pending in the step.
 - Two Bytecode-backend divergences, both pre-existing at 38ef535 and found by the batch flip run
   (§4.5.524): a runtime-delay expression that CALLS a subroutine falls back and runs SILENTLY on `vm`
   where the default `native` backend is loud, and a `string` formal receiving a `real` actual on a
@@ -975,6 +1010,42 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   whose select record copies the width vita already computes.
 - `$bits(u.r)` of a hierarchical `real` is 1 in iverilog and 64 in verilator and vita; unchanged by
   §4.5.528.
+- A constant level term beside a live one when the body can SUSPEND (`always @(K or clk) begin #2
+  $display(…); end`; likewise `@(e)`, `wait fork`, an intra-assignment `#` / `@`, `fork … join` /
+  `join_any`, a task holding a delay): iverilog runs the body at time 0 (`D at 2`, `D at 7`,
+  `D at 11`), verilator does not (`D at 7`, `D at 11`). vita keeps the header lane's drop of the
+  constant, = verilator; the all-constant spelling (`always @(K) #2 …`) is refused with the reason
+  "the body can suspend at …" (§4.5.529).
+- A constant level term beside an EDGE term (`@(K or posedge clk)`, `@(posedge clk or K)`,
+  `@(K[0] or posedge clk)`, `@(p::C or posedge clk)`): iverilog makes no time-0 run (`MIX at 1`),
+  verilator makes one (`MIX at 0`, `MIX at 1`). vita = iverilog (the constant is dropped).
+- An IN-BODY level wait on a constant inside an `always` (`always begin @(K) … end`, `@(K[0])`,
+  `@(p::C)`, and `@(K or clk)` / `@(K[3:0] or clk)` in the body): iverilog runs the body once at time
+  0 (`AB at 0`), verilator does not. vita = verilator (an in-body constant never wakes).
+- A named event beside a constant (`always @(K or e)`, `@(K or e or clk)`, `-> e` at 1 and 3):
+  verilator runs the time-0 pass (`E at 0`, `E at 1`, `E at 3`), iverilog does not (`E at 1`,
+  `E at 3`) — while iverilog does run `@(K or clk)` at time 0, so adding `or e` removes a run it
+  otherwise makes. iverilog contradicts itself on this axis; vita = verilator (dR07b, sR09).
+- A constant whose value equals a variable's default: iverilog never runs `@(R0)` or `@(R0 or clk)`
+  at time 0 for `localparam real R0 = 0.0`, nor an all-x or all-z constant (`1'bx`, `4'bzzzz`, an
+  override `4'bx`), while it runs `int` 0, `bit` 0, string `""` and `4'bx10z` there; verilator runs
+  the real at time 0 and cannot compile an x / z event term (`Unsupported tristate construct:
+  SENITEM`). vita runs `@(R0 or clk)` at time 0 (= verilator); an x / z `localparam` is refused at
+  its declaration, and the override half is §2 row 15 (dR04, dR04b, dS10c).
+- An NBA or `#0` write of a live term at time 0 (`initial clk <= 0;` or `initial #0 clk = 0;`
+  beside `always @(K or clk)` on an uninitialised `reg clk`): iverilog runs the process twice at
+  time 0 (`MIX at 0 clk=x`, `MIX at 0 clk=0`), verilator once (`clk=0`) — it is 2-state and the x→0
+  change is invisible to it. vita = iverilog (x2, x3); verilator is not an oracle for an x
+  transition.
+- A same-step glitch under an IN-BODY level wait (`always begin @(a or b) $display(…); end`, a
+  blocking `a = 0; a = 1;` at 2, an NBA `b <= 0; b <= 1;` at 3): iverilog wakes at 1, 2 and 3,
+  verilator and vita at 1 only. The header twin `always @(a or b)` wakes at 1, 2 and 3 in iverilog and vita and at
+  0 and 1 in verilator (dR11).
+- A net-only header level list at time 0: verilator runs every header level `always` at time 0
+  (`reg clk; always @(clk)`: `MIX at 0`, `MIX at 1`, `MIX at 2`; `reg clk = 0;` and a net bit select
+  `@(n[0])` likewise), iverilog does not (`MIX at 1`, `MIX at 2`). vita = iverilog for a variable; a
+  net driven by a gate or a computing continuous assign raises vita's own time-0 event (the §2-N
+  t0-event class), and there vita = verilator (dS01 `@(w or g)` with `not (g, a)`, dR64).
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
@@ -1030,6 +1101,7 @@ behind the §2 correctness queue.
 | enum-label | `enum bit[3:0] {A=8'hFF}` never reaches `enum_defs`, so `.first` / `.next` / `.name` are all E3010 / E3009, and the skipped out-of-range check silently truncates | `const_lit` folds unsized decimals only | widen `const_lit` or check at elaborate time | iverilog rejects | — |
 | md-packed-write | multi-dim packed nested part-select WRITE: an ascending or non-zero-lsb leaf · a genvar-indexed `x[g][m:l]` (over-rejected) · a const out-of-bounds packed index is a silent no-op | the current support is limited to a descending zero-lsb leaf | widen the leaf geometry | — | — |
 | misc-parse | a negative-LSB member sub-select · `import` inside a generate · a package's own-function initializer · a SYS-READ hierarchical-element destination · a hierarchical-write sentinel panic that should be loud · `logic[1:0][7:0] PK` · `'{k:v}` | — | hand-IEEE plus an internal differential | no oracle | — |
+| edge-event | `@(edge clk)` is `E2002 expected expression, found keyword 'edge'` where both oracles print `MIX at 1` / `MIX at 2` for a clock rising at 1 and falling at 2; `@(edge K or clk)` is the same parse error | the event-expression parser does not take the `edge` keyword (IEEE 1800 §9.4.2: `edge` is `posedge` or `negedge`) | accept it as the union of the two edge terms | 2-oracle | small |
 
 **Constants / parameters**
 
@@ -1113,6 +1185,7 @@ behind the §2 correctness queue.
 | implicit-net-generate | an undeclared name on the LEFT of a continuous assign INSIDE a generate block is `E3010` where both oracles infer the 1-bit wire and print `I=0`; at module scope vita infers it with `W2003` as IEEE 1364 §3.5 requires | the implicit-net inference is a module-body phase and the generate lowering does not re-enter it | run the same inference over a generate block's items (this is a POSITION gap in vita's own §3.5 policy, not the §8 IMPLICIT-NET non-goal) | 2-oracle | small |
 | modport-port-actual | a modport EXPRESSION as a port actual — `module sub(ifc.mp p); … ifc w(); sub u(w.mp);` — is ``E3002 interface port `p` must be connected to an interface instance name`` plus an `E3010` on `p.d`, where verilator runs it (`G12 43`); iverilog cannot parse the `ifc.mp p` port declaration | the interface-port binder takes an interface INSTANCE name only | take a `<instance>.<modport>` actual and bind the modport's view | verilator | small |
 | iface-generate | a `generate … endgenerate` region inside an interface body is ``E3009 generate blocks inside an interface are outside the MVP`` where both oracles run the design (`TOP=ok`) | `iface_inst.rs`'s MVP gate for interface body items | run the region through the interface window the way the module lane runs it; the routine and import lanes were opened by §4.5.517–518 | 2-oracle | small |
+| level-select-event | a LEVEL event control on a NET select — `@(n[0])`, `@(n[1:0])`, `@(n[I+:2])`, `@(a[1])` (an unpacked element), `@(a[1][0])`, `@(n[i])`, `@(a[j])`, in the header and the in-body lanes, alone or beside a live term — is E3009 (a bit or element select: "a level (non-edge) event control on a bit or element select is not supported"; a part or indexed part: "event control must be a bare signal name or a constant LSB bit-select"). After time 0 both oracles agree on every non-x cell: the process wakes only when the selected bits change (other bits, other elements and same-value writes do not wake it); a variable index follows the index, and an index change wakes it only when the selected value changes; a wire, a 2-state `bit` and a non-zero-LSB range behave the same. verilator additionally runs every header level `always` at time 0 (see "Oracle splits") and misses x transitions (2-state) | the frozen `EdgeTerm { net, kind }` and `WaitCause::Level { nets }` carry no bit field, and the level wait fires on any change of the whole net | a derived 1-bit or element net per constant select, or a per-bit level waiter (a bit field on the frozen types = format bump); a variable index also needs the selected value re-read on every index change | 2-oracle after time 0; iverilog alone for x transitions | M (bump) |
 | deep | a t0 race · an `@(*)` decl-init wake · a runtime `==?` pattern · a NON-fill context width in an inline body · modport direction enforcement · a force on a part-select · an associative key or clocking array output word0 · a PART select of a negative range bound (§2) | — | — | — | deep |
 
 **Loud shapes surfaced by §4.5.493–495 (all 2-oracle unless noted; each PRE == POST)**

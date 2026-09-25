@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.529` **a process-header level list naming a constant beside a live term runs once at time 0 and then on its live terms; `p::C` is a constant in every event lane; a select of a constant is a constant only when its index provably is** (2026-09-25 · §2 "Delays / events" D10 / D11 / D12 bullets deleted (CL-09) · new `const_level_header.rs`: a USER-written `always @(L)` with no edge term and no `iff`, at least one constant and one live term and a body that cannot suspend (an `_`-free allow-list) keeps its header `Level` process, its constant terms replaced by one `AnyEdge` term on a design-wide time-0 pulse net (`$ia_tmp$<n>`, z → 1 at the time-0 settle, hidden from every rail) · `expr_head_binds_constant` gains a `PkgScoped` arm; index constness is leaf-structural through the lowering's name funnel (`index_provably_constant` / `index_provably_live`) and a provably live index is refused · no format bump · 401 cells: 58 silent → 2-oracle, 22 loud → 2-oracle, 6 silent → loud, none right → wrong or right → loud · 2 lenses × 3 rounds + one direct re-grade — r1 BLOCKING index ignored and the `#0` prologue's region → D8 pulse net; r2 BLOCKING a fold-based index test through a generate-net shadow and `$finish` at time 0 → leaf rule + scan; r3 BLOCKING scan holes and fork + disable → all-constant lists stay refused, every fork excluded · 8466 tests)
 - `4.5.528` **a hierarchical net, call or select read carries its declared width, sign and realness from creation, recorded only where the declared width folds exactly and verified at resolution** (2026-09-24 · §2 "Inline / frame binds" HIERARCHICAL-leaf bullet deleted, plus the stale "Real" R1 / R2 / R3 after 3-tool grounding · `HierLeafShape` sidecar filled by the declaration walk (`hier_leaf_net` / new `hier_leaf_real` / `hier_leaf_func` / `hier_leaf_net_names`), consumed by `ir_bits_of`, `expr_self_signed` (Signal arm), `canonical_self_width` and `expr_is_real`, E3009 on a resolve-time mismatch (0 of 308) · exactness predicate `expr_size_hier_exact.rs`, `env_fold` untouched · inline lane, index seal, casts, `$bits`, `==?`, fill literals and module / frame streams move to the oracles; a hierarchical stream stored into a different width in an inline body is a new E3009 · no format bump · 2 lenses × 3 rounds + one direct re-grade — r1 BLOCKING stream loud → wrong and MAJOR `-4'd1` correct → loud, r2 BLOCKING value-aware minus rule → D8: D1 reverted, structural exactness, stream gate moved to the inline store on differing widths · 8440 tests)
 - `4.5.527` **a parameter override whose top is an operator and whose self-determined width is past 64 bits folds in the wide domain at that width, for PLAIN trees only** (2026-09-24 · §2 "Index sealing" `~128'd0` bullet deleted, plus three stale rows deleted after 3-tool grounding: constant-domain C2 / C3 and §3.b `wide-override` · `override_bits` admits an operator top (`~ - +`, arithmetic / bitwise / shift / `**` binary, ternary) when `wide_operator_tree_is_plain` holds (every self-determined position a plain leaf, every context-determined node of the top's sign, no fill), its self width is past 64 (pass 1), folding AT that width (pass 2) and declining on any x/z bit; ≤64-bit operator tops keep the i64 channel; every override channel (`#()`, `defparam`, interface) · no format bump · 49 grounding cells: 17 silent → 2-oracle, 12 loud → value, `~pk::PW80` 1 → 80 bits; typed narrower cells land on verilator's side of row 16's split · 2 lenses × 4 rounds — r1 BLOCKING ctx-0 fold of nested operands (→ two passes) and x/z plane dropped; r2 BLOCKING ctx 0 inside self-determined positions; r3 BLOCKING the sign rule blind inside positions → D8 stop: both value-aware exclusion walks deleted for one structural rule, the shared walk's two defects filed as §2 🆕 R; r4 0 BLOCKING · 8427 tests)
 - `4.5.526` **the inline function lane applies the store rules a net would: a real actual or rhs converts through a single-mention `RealToInt`, a 2-state body-local squashes x/z through `TwoState`, a class field is sized by its field width, and a non-repeatable actual narrows once** (2026-09-24 · §2 "Inline / frame binds" F7/F8/F9/F11 plus five neighbours retired after re-measurement, nine bullets deleted · `format_version` 33 → 34: `SysFuncId::RealToInt` (§6.12.2 round half away from zero into 128-bit signed, exact below 2^127) and `SysFuncId::TwoState` (x/z → 0, operand width and sign) · F8 = `real_to_int_store` in `inline_bind.rs::bind_formal_actual` for a NON-repeatable real actual (a w > 128 target sign-extends through a single-mention `Add` with a signed zero); F11 = the same helper in `inline_fold.rs::fold_straight_line`'s Blocking and Return arms; F9 = `InlineScope.two_state` from `net_kind_is_two_state` plus `TwoState` after the resize; F7 = `ir_bits_of` / `expr_self_signed` read `class_field_widths`, and `class_field_leaf` makes the four §11.6.1 context walks see a class-field leaf (the mirror fix alone regressed two tests) · review fix X2: a trusted-width non-repeatable actual narrows with `select_low` + sign stamp + `TwoState` when it is at least as wide as the formal or unsigned · `inline_fn.rs` 1,172 → 895 (`inline_bind.rs` 268, `inline_fold.rs` 165) · 22 grounding cells · 2 lenses × 2 rounds — r1 BLOCKING: a 2-state formal bound to an x-bearing class field squashed but did not narrow (root: the pre-existing missing narrowing tail), and `RealToInt` capped at 64 bits turned 18 loud cells into wrong values; r2 0 BLOCKING, about 66 cells moved, all onto the oracle value, 0 PRE-right → POST-wrong · 8411 tests)
@@ -538,6 +539,189 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.529 a process-header level list naming a constant beside a live term runs once at time 0 and then on its live terms; a package constant is a constant in every event lane; a select of a constant is a constant only when its index provably is (2026-09-25, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" (cluster CL-09) — the D10 bullet (a process-HEADER level
+term on a constant fires once at time 0 in both oracles; vita refused it alone and dropped it beside
+a live term), the D11 bullet (`@(K[0] or clk)` was the single-bit E3009) and the D12 bullet
+(`@(pkg::CONST)` was E3009 in every lane), all three deleted. D10's all-constant half and every
+residue below are recorded as new rows.
+
+**Defect (PRE, both oracles unless marked)**. Since §4.5.524 the header level lane dropped a
+constant term beside a live one, and the process lost its time-0 run at exit 0; an all-constant list
+was E3009 "a constant cannot wake a process". `@(p::C)` was E3009 "an event control `@(pkg::name)`
+must name a package variable" in every lane (`expr_head_binds_constant` answered `false` for a
+multi-segment head), and a constant select was the single-bit or bare-name E3009 in the header lane.
+
+```
+grounding cells g/g1_* g/g2_* g/g3_* (K = 99; clk rises at 1 and falls at 2 unless noted)
+always @(K or clk)                               both MIX at 0 / 1 / 2       PRE MIX at 1 / 2
+always @(K or clk) x = K + 1;  (clk at 5, read #1)   both x=100 at 1        PRE x=x at 1
+always @(K or clk) x <= K + 2; (clk at 5, read #1)   both x=101 at 1        PRE x=x at 1
+initial I1; always @(K or clk) A; initial I2     both I1 I2 A at 0, A 5, A 9 PRE no A at 0
+child always @(P or clk), u0 P=3 / u1 P=1        both u0 u1 at 0 / 1 / 2     PRE from 1
+import p::*; always @(C or clk)                  both at 0 / 1 / 2 / 3       PRE from 1
+generate localparam K over net K; @(K or clk)    both at 0 / 1 / 2 / 3       PRE from 1
+always @(p::C or clk)                            both at 0 / 1 / 2 / 3       PRE E3009 @(pkg::name)
+initial @(p::C) / always @(posedge p::C)         both never wake             PRE E3009 @(pkg::name)
+always @(K[0] or clk)                            both at 0 / 1 / 2           PRE E3009 single-bit
+always @(K)                                      both LVL at 0               PRE E3009 (stays refused)
+```
+
+**Fix** (no frozen type, no `format_version` bump (34), no sim-engine change).
+
+1. New `const_level_header.rs`: `header_const_level_t0` admits an `always` the user WROTE
+   (`lower_proc_block`'s `user_written`, set by `lower_user_proc` alone, so an SVA checker, a
+   covergroup sampler, a clocking commit and a declaration-initializer flush keep the header lane)
+   whose header is an explicit list with no edge term and no `iff` (an `iff`-desugared single term
+   included), not `always_ff`, not a clocking-block event, with at least one term whose head binds a
+   constant (`expr_head_binds_constant_strict`), at least one live term, and a body
+   `body_suspend_blocker` admits. Otherwise `T0Decline` records why, for the refusal.
+2. Representation: the process stays the header `Level` process over the live terms
+   (`header_live_edges`, the header lane's own `sens_event_net`); its constant terms become ONE
+   `AnyEdge` term on a design-wide internal pulse net `$ia_tmp$<n>` (1-bit wire, z at start) driven
+   by `assign … = 1'b1` (continuous-assign `ProcIdent` kind `t0_pulse`), minted once per design. The
+   time-0 settle moves it z→1 before arming, and the armed waiter fires once at the first propagate of
+   time 0 — after the initials' first active batch, before any `#0`, where both oracles run the body.
+   Measured on PRE first with the hand spelling `wire kw; assign kw = 1'b1;` (18 cells).
+3. `body_suspend_blocker` is an `_`-free allow-list over `ast::Stmt`: assignments without an
+   intra-assignment timing control, `if` / `case` / `for` / `while` / `repeat`, system tasks,
+   `-> e`, `disable <label>` (a loop's `break` included), `return` inside a task, a statement
+   function call, and a task enable of a MODULE-LOCAL task that transitively cannot suspend
+   (`task_enable_blocker`, with a recursion guard). Suspending, measured split: `#`, `@`, `wait fork`,
+   intra-assignment `#` / `@`, `fork … join` / `join_any`. Not admitted: every `fork … join_none`,
+   `disable fork`, `x <= #1 y`, `x <= @(e) y`, `wait (c)`, `forever`, and the unmeasured kinds.
+4. D12: `expr_head_binds_constant` gains a `PkgScoped` arm over the package's four constant maps
+   (real, string, wide, numeric — parameter / localparam / enum label), so `p::C` is a constant in
+   every event lane: header edge and in-body terms never wake, and a header level term beside a live
+   term takes the time-0 lane. A package array parameter (a `pkg_vars` net) is not a constant. An
+   unknown `p::x` now reads "must name a package variable or constant, and this name is neither".
+5. D11: index constness is decided LEAF-STRUCTURALLY through the lowering's own name funnel
+   (`ident_route.rs`), three-valued. `index_provably_constant` (literals, parentheses, unary / binary
+   / ternary operators, names `bare_name_binds_constant` accepts, package constants) feeds
+   `expr_head_binds_constant_strict`, used for admission and for the header lane's hold-aside
+   (`header_level_term_is_const`). `index_provably_live` (a leaf resolving through
+   `lookup_net_unshadowed` / `lookup_dotted_net` to a net outside `const_param_nets`, or a `p::x` that
+   is not a package constant; no descent into a system function's arguments) feeds the never-wake
+   stand-down and the new refusal. An index that is neither keeps the PRE drop.
+6. Refusals: a select of a constant whose index is provably live (`K[i]`, `K[i+1]`, a generate net
+   shadowing the index name) is E3009 "an event control on `K[i]`, a select of a constant indexed by
+   a net that can change, is not supported" in every lane. The header-constant refusal prints the
+   term as written (`K[0]`, `p::C`) and ends with THIS block's reason (`T0Decline::clause`: a
+   synthesized clock, `iff`, `always_ff`, an edge sibling, the suspending construct named, or no live
+   term). The net-select refusal covers element selects ("a level (non-edge) event control on a bit
+   or element select is not supported"; "single-bit" is no longer claimed for `@(a[1])`).
+7. Header-lane parity for lists that stay on the old lane (a suspending body, an edge sibling,
+   `iff`, a synthesized clock): a constant select or a `p::C` level term beside a live term is
+   dropped like a bare `K`; an all-constant list gets the header-constant refusal.
+8. Rails: the pulse is absent from VCD / FST / `$dumpvars` (the `$ia_tmp$` leaf filter in
+   `queues_io.rs`), `--hier-tree`, `--inst-paths` and coverage; in run.json
+   `processes.counts.assigns` is counted from the rows and `obs.rs` skips the `t0_pulse` row.
+
+**Byte identity**: a design without a constant level term takes the old path. 92 suite designs with
+a level list (56 from nine event-control test files, 36 from the rest), PRE against POST in rounds
+1 and 2: 74 byte-identical, 18 differ, each naming a constant level term or hitting a reworded
+message. native, vm and interp print identical stdout on 20 admitted cells (implementation) and 22
+(soundness round 2).
+
+**Moved cells** (PRE → POST6 over 401 cells; iverilog 13.0 `-g2012`, verilator 5.052 `--binary
+--timing`; buckets in the session's `final_buckets.txt`):
+
+- silent-wrong → both oracles, 58: header lists with a live sibling over every constant kind
+  (parameter with per-instance overrides, localparam, genvar, enum label, `$unit`, real, string,
+  generate scope, `import p::*`, `import p::C`), the value cells `x=100 at 1` / `x=101 at 1`, the
+  NBA and order cells, the §4.5.524 generate-shadow twin, bodies that enable non-suspending tasks,
+  `disable`, `break`, `return`, statement function calls, `force`, an interface instance.
+- loud → both oracles, 22: the `p::C` lanes (header level beside a live term, header edge, in-body
+  level and edge, static and automatic task, fork branch, `p::C[0]`, a package enum label and
+  parameter, `wait (p::C)`, `x = @(p::C) 7`) and `@(K[0] or clk)`, `@(clk or K[2])`, generate
+  `@(K[g] or clk)`.
+- silent → loud, 6: a select of a constant with a live index — in-body `@(K[i])`, header
+  `@(posedge K[i] or posedge clk)`, a generate-net-shadowed index, an enum-method index — never woke
+  at exit 0 and is now the `K[i]` refusal.
+- loud → one oracle, 7 (split cells): in-body `always begin @(p::C) … end` and three suspending
+  bodies beside a live term = verilator; two edge-sibling lists and a design verilator rejects =
+  iverilog.
+- run → run on split cells, 22: 12 now = iverilog (x2, x3 and the other time-0 writes of a live
+  term, where verilator is 2-state), 4 = verilator (`@(K or e)` / `@(K or ev)` by iverilog's
+  self-contradiction, dR12 through the pre-existing header-waiter re-run, dR21 where iverilog
+  rejects the design), 6 = neither (per-process splits, or one tool rejecting or defective).
+- unchanged 134; loud → loud with new wording 152 (the all-constant lists, the net selects, the
+  declined-body refusals).
+
+**Rounds** (2 lenses × 3, the budget, then one revert-direction narrowing re-graded directly; PRE
+`fd1fde32…`, POST(r1) `b15f6f93…`, POST3 `f69a2d20…`, POST5 `5803ad43…`, POST6 `c4b47325…`).
+
+- Round 1: differential FAIL (45 designs) — BLOCKING F1: `K[i]`, `K[i +: 2]` and `p::C[i]` classed
+  constant, because `expr_head_binds_constant` recursed to the head and ignored the index (dR01
+  `A at 0` where both oracles `0 / 1 / 3`); BLOCKING F2: the first representation `#0; forever { S;
+  @(L) }` ran the body after the `#0` continuation of an `initial` declared before it (dR03 `v1=5`
+  where both `v1=0`); MAJOR F3: its in-body wait was blind to a same-step glitch (dR05, dR11); MAJOR
+  F4: `disable`, `break` and a recursive task kept the drop. Soundness FAIL (37 designs) — BLOCKING
+  F1 / F1b (sR02 `y=x` where both `y=7`; sR35 an extra wake), F2 / F3 / F3b (the ignored index in
+  admission and in header parity); MAJOR F4 (sR01 one time-0 run where both run twice); MINOR F5 (OBS
+  `evals` +1, codegen reason `delay`), F6 (a false refusal tail), F7 (stale manual pages). D8 shape
+  change: the pulse net, measured on PRE with the hand spelling first; the select arms asked the
+  index; `disable`, `return` in a task and statement function calls admitted; the refusal names the
+  block's reason.
+- Round 2: differential PASS with four MAJOR (F7 `disable fork` admitted — dS13 split, vita =
+  iverilog; F5 the pre-existing header-waiter re-run, dS05c; F6 §2 row 15 through the lane, dS10c; F8
+  `$finish` at time 0 drops the woken processes, dS18). Soundness FAIL — BLOCKING R2-F1: the
+  fold-based index test (`const_eval_in_scope` → `lookup_scoped`, the parameter map alone) answered a
+  generate-NET-shadowed index constant (n01 `KI at 0` only where both `0 / 1 / 2 / 3`); BLOCKING
+  R2-F3: `$finish` in an `initial` at time 0 ended the step before the lane's run (n18, root
+  pre-existing: controls n19 n20 on PRE); MAJOR R2-F2: a constant index the fold declines
+  (`K[$size(arr)-1]`) went correct → loud. Second blocker on the index axis → the leaf-structural rule
+  (no fold); a design scan declined an all-constant list when an `initial` reaches `$finish` at time 0;
+  `disable fork` declined; a dotted index leaf live only when `lookup_dotted_net` resolves it (q03 q04
+  back to PRE).
+- Round 3: differential FAIL — BLOCKING G1: the scan missed `$finish` through a task enable, an
+  event-woken `initial`, an `always_comb` and another admitted lane (dT10 dT13 dT14 dT15); BLOCKING
+  G2: `disable me` over a `fork … join_none` child split the oracles at time 0 and printed a child line
+  neither prints (dT20 `FCH from clk=1 done at 2`); MAJOR G3: a concatenation or system-function index
+  hidden from the stand-down (dT01, = PRE). Soundness FAIL — BLOCKING R3-F1 / R3-F1b (a task, an
+  `always` with no event control, another lane, `always_comb`: p01 p04 p05 p06); MAJOR R3-F2 (`$exit`,
+  p03, verilator only), R3-F3 (p07 p08, = PRE), R3-F4 (`K[ARR[1]]` over an array parameter answered
+  live: PRE `DONE r=1` → loud).
+- D8 after the budget, revert direction: the whole `$finish` scan deleted and an all-constant list
+  never admitted (`T0Decline::NoLiveTerm`, loud = PRE); every `fork` excluded; a leaf is live only
+  when it resolves to a net outside `const_param_nets`. POST6 re-graded directly over all 401 cells:
+  no cell went from right to wrong or from right to loud.
+- Lateral moves on split cells, each resolved by disqualifying one oracle: `@(K or e)` — iverilog
+  runs `@(K or clk)` at time 0 but skips the run beside a named event, a self-contradiction, so vita
+  = verilator; an NBA or `#0` write of a live term at time 0 (x2, x3) — verilator is 2-state and the
+  x→0 change is invisible to it, so vita = iverilog's two runs.
+
+**Tests**: new `crates/cli/tests/const_level_event_t0.rs` (16 tests) and
+`crates/cli/tests/const_level_event_order.rs` (10 tests), every pin both oracles' text in comments
+(each constant kind alone and beside a live term, per-instance copies, selects, `p::C` in every
+lane, imports, the generate shadow, values and order at time 0, admitted and declined bodies, task
+enables, `K[i]` and the leaf rule, dotted indices, the all-constant list under every `$finish`
+channel, forks, and the round-3 shapes back on PRE's route). Pins converted in
+`bare_ident_route_readers.rs` and `scoped_event_control.rs`.
+
+**Recorded, not fixed** (ROADMAP):
+
+- §2 "Delays / events", five bullets: the `$finish` drain (processes already woken in the `$finish`
+  step never run; pre-existing, 2 oracles, the PREREQUISITE of the next); the all-constant header
+  list (BLOCKED by it: a static scan was tried and leaked); index liveness hidden behind a
+  concatenation, a system function or a hierarchical name (p07 p08 dT01 q03 q04, = PRE); bodies not
+  admitted keep the drop (k08 dR54b i10 i08 i14); the header `Level` waiter's same-step re-run (dS05c,
+  new row).
+- §2 row 15: an overridden x/z parameter used as a constant event term runs at time 0 with the plane
+  lost (dS10c).
+- §2 "Oracle splits", eight bullets: a suspending body, an edge sibling, the in-body `always` wait, a
+  named event, real 0.0 and x/z constants, a time-0 NBA / `#0` write, the in-body glitch, net-only
+  lists at time 0.
+- §3.b: `level-select-event` (a level event control on a net select; frozen `EdgeTerm` /
+  `WaitCause::Level` carry no bit field) and `edge-event` (`@(edge clk)` is E2002).
+- REMAINING_WORK §D: a `$finish` that runs the processes already woken in its time step.
+
+**Gates**: nextest 8466 run, 8466 passed, 15 skipped (+26; `cargo nextest run --workspace --locked
+--no-fail-fast`); `cargo test --workspace --doc`, `cargo clippy --workspace --all-targets --locked
+-- -D warnings` and `cargo fmt --all -- --check` all rc 0; corpus 10/10 in each review round
+(`corpus_r1`–`corpus_r3.log`), final run 10/10 (`corpus_final.log`); `format_version` 34.
 
 #### 4.5.528 a hierarchical net, call or select read carries its declared width, sign and realness from creation, recorded only where the declared width folds exactly and verified at resolution; the inline lane, the index seal, casts, `$bits` and streams use it (2026-09-24, branch main) ✅
 

@@ -31,6 +31,7 @@ a section restructure, a residue split).
 | 2026-09-24 | 596f756 | §4.5.526 | 8411 | 34 | 26 / 0 / 26 | 137 / 82 / 55 | 7 / 0 / 7 | 24 / 19 / 5 | 104 / 89 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 369 / 222 / 147 |
 | 2026-09-24 | 67a91a5 | §4.5.527 | 8427 | 34 | 27 / 0 / 27 | 140 / 80 / 60 | 7 / 0 / 7 | 24 / 19 / 5 | 103 / 88 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 372 / 219 / 153 |
 | 2026-09-24 | 72c07cf | §4.5.528 | 8440 | 34 | 27 / 0 / 27 | 144 / 80 / 64 | 7 / 0 / 7 | 24 / 19 / 5 | 103 / 88 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 376 / 219 / 157 |
+| 2026-09-25 | b7df5e5 | §4.5.529 | 8466 | 34 | 27 / 0 / 27 | 154 / 81 / 73 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 388 / 222 / 166 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -71,3 +72,12 @@ a section restructure, a residue split).
   and the two oracle-split bullets are splits). Two residues are new cells of existing rows (the
   widening cast of a signed hierarchical call into the size-cast impure-operand row, `mg[u.hs(1)]`
   into the index-sealing function-call row) and add no count.
+- 2026-09-25 (§4.5.529): 2M is 144 − 3 + 13. Deleted: the "Delays / events" D10, D11 and D12
+  bullets (CL-09, taken by the slice). Added: five "Delays / events" bullets (the `$finish` drain
+  prerequisite, the all-constant header list it blocks, index liveness behind a concatenation / system
+  function / hierarchical name, the non-admitted bodies, the header waiter's same-step re-run) and
+  eight "Oracle splits" bullets. Startable 80 − 3 + 4 (the three deleted bullets were startable; the
+  drain, the index-liveness, the body and the re-run bullets have two oracles; the all-constant
+  bullet waits on the drain and the eight splits are splits). 3b is 103 + 2, both startable
+  (`level-select-event`, 2-oracle after time 0; `edge-event`, 2-oracle). The x/z override cell went
+  into §2 row 15 and adds no count.

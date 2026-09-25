@@ -9,6 +9,35 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — constants in event controls
+
+- **An `always` whose event list names a constant beside a signal runs once at time 0.**
+  `localparam int K = 99; always @(K or clk) $display(…);` printed only on the `clk` changes, where
+  both reference tools also run it once at time 0. vitamin now does, for every constant kind — a
+  parameter (per-instance overrides included), `localparam`, genvar, enum label, a `$unit` or
+  imported constant, a package constant `p::C`, and a constant select such as `K[0]` — so
+  `x = K + 1;` in such a block reads `x=100` at time 1 instead of `x`. This covers an `always`
+  written in the source whose list has no edge term and no `iff`, and whose body cannot suspend.
+- **A package constant is a constant in every event control.** `@(p::C)`, `@(posedge p::C)`,
+  `@(p::C[0])` and `x = @(p::C) 7;` were refused with `VITA-E3009` ("must name a package
+  variable"); an edge or in-body term on one now simply never wakes, as in both tools, and a header
+  level term beside a live one runs once at time 0.
+- **A constant select beside a live term.** `always @(K[0] or clk)`, `@(clk or K[2])` and a generate
+  `@(K[g] or clk)` were refused as single-bit level controls; they now run as both tools do.
+- **New refusal.** An event control on a select of a constant whose index is a changing net —
+  `@(K[i])`, `@(posedge K[i] or posedge clk)`, in every lane — never woke, at exit 0; it is now
+  `VITA-E3009` ("… a select of a constant indexed by a net that can change, is not supported").
+- **Messages.** The refusal of a level control on a net select now covers element selects and no
+  longer says "single-bit" for a whole `a[1]`; the refusal of a header list with no live term prints
+  the constant as written and says why this block could not run at time 0.
+- Still open (recorded in the roadmap): a header list whose every term is a constant
+  (`always @(K)`) stays refused, because vitamin's `$finish` ends a time step without running the
+  processes already woken in it; a level control on a net select stays refused; an index that
+  reaches a changing net only through a concatenation, a system function or a hierarchical name
+  still never wakes; a body holding `wait (c)`, a `fork … join_none`, an imported package task or a
+  recursive task keeps the old behaviour (no time-0 run); and a process can run twice in one step
+  when a second term changes after it was triggered.
+
 ### Fixed — hierarchical references inside inlined function bodies and beside them
 
 - **A hierarchical read inside a plain (non-`automatic`) function body is sized by its declaration.**
