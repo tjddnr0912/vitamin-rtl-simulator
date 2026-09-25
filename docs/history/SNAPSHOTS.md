@@ -33,6 +33,7 @@ a section restructure, a residue split).
 | 2026-09-24 | 72c07cf | §4.5.528 | 8440 | 34 | 27 / 0 / 27 | 144 / 80 / 64 | 7 / 0 / 7 | 24 / 19 / 5 | 103 / 88 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 376 / 219 / 157 |
 | 2026-09-25 | b7df5e5 | §4.5.529 | 8466 | 34 | 27 / 0 / 27 | 154 / 81 / 73 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 388 / 222 / 166 |
 | 2026-09-25 | f929412 | §4.5.530 | 8485 | 34 | 27 / 0 / 27 | 155 / 79 / 76 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 389 / 220 / 169 |
+| 2026-09-25 | b70759a | §4.5.531 | 8505 | 34 | 27 / 0 / 27 | 158 / 81 / 77 | 7 / 0 / 7 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 392 / 222 / 170 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -94,3 +95,8 @@ a section restructure, a residue split).
   (startable: the R2 site is open). The out-of-range real bullet absorbed the saturation residue and
   became a prerequisite row (startable → blocked). Startable 81 − 6 + 5 − 1 = 79; blocked 73 + 2 + 1 = 76.
   The prim-cast context census was folded into its existing bullet and adds no count.
+- 2026-09-25 (§4.5.531): 2M is 155 − 1 + 4. Deleted (startable): "Delays / events" the `$finish` drain
+  bullet. Unblocked: the all-constant header list row (its prerequisite closed; blocked → startable).
+  Added: the `#0` cont-assign delivery order (startable), the deferred-action `$finish` text capture
+  (startable, verilator + hand-IEEE), the `$fatal` immediate arm (held on purpose) and one oracle-split
+  bullet. Startable 79 − 1 + 1 + 2 = 81; blocked 76 − 1 + 1 + 1 = 77. `format_version` 34 unchanged.

@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8485 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
+8505 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
 older build is refused at the header gate with `E9001`), 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
@@ -41,7 +41,7 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §0 promotion queue (T2 residues) | 14 rows | 9 / 5 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
 | §2-N verilog-axi census | 2 rows + 5 | 0 / 7 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and five t0-event residues |
 | §2 start-order table | 27 rows | 0 / 27 | LOUD 4 · BLOCKED 6 · WALL 6 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
-| §2 recorded defects by mechanism | 155 bullets | 79 / 76 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 15 · real 5 · performance 6 · index sealing 11 · ranges / bounds / selects 6 · diagnostics / artifacts 8 · class fields 3 · oracle splits 31 |
+| §2 recorded defects by mechanism | 158 bullets | 81 / 77 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 17 · real 5 · performance 6 · index sealing 11 · ranges / bounds / selects 6 · diagnostics / artifacts 8 · class fields 3 · oracle splits 32 |
 | §3 numbered items | 24 rows | 19 / 5 | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, including ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
 | §3 small residues | 105 rows | 90 / 15 | subroutine / frame 25 · constants / parameters 20 · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
@@ -77,10 +77,6 @@ prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated o
   where both oracles answer 0) — blocks §2 "Inline / frame binds" out-of-range bullet and the
   single-mention `RealToInt` cast path for targets wider than 32 bits (`longint'(rf())` still calls
   `rf` 24 times).
-- A `$finish` that runs the processes already woken in its time step (both oracles do; vita's
-  `Step::Finish` arms return with the Active queue unrun) — blocks the all-constant header level
-  list (`always @(K)`, §2 "Delays / events"), which both oracles run once at time 0 and which stays
-  refused because any `$finish` reaching time 0 would erase that run at exit 0.
 - A per-resumption-kind ordering model — blocks §2 row 7; one ordering key cannot express what the
   oracles do in a single run of a single design.
 - A block-scoped CONSTANT binding — blocks §2 🆕 Q; a bare-name hoist makes 6 cells correct and 5

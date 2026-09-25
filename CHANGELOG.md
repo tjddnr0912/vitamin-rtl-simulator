@@ -9,6 +9,21 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — `$finish` ends the run at the end of its time step
+
+- **The processes already woken in the `$finish` time step run.** `$finish` used to end the run at
+  the statement: an `always @(u)` woken by a write the finishing block had just made, a later
+  `initial` at the same tick, a time-0 `always @(w)` woken by the settle, an `always_comb`, a
+  cont-assign chain, an event-woken `initial` and a `#0` fork child were all dropped. `initial
+  begin #1 u = 7; $finish; end` beside `always @(u) m++;` now prints `m=1` in `final`, as Icarus
+  Verilog and Verilator do (was `m=0`).
+- **A pending non-blocking update at the `$finish` tick applies.** A clocked `cnt <= cnt + 1` on the
+  posedge that reaches `$finish` lands (`cnt=3`, was `cnt=2`), `$strobe` / `$monitor` from a woken
+  process print, a `#0` continuous assign due in that step is delivered, and a `cover property`
+  sampled on that edge counts it. Time never advances past the `$finish` tick; `$stop` and `$fatal`
+  still end the run at the statement, and a `$fatal` reached while the step drains ends the run as
+  an error.
+
 ### Fixed — casts and formal binds evaluate an impure operand once
 
 - **A cast evaluates a function call or `$random` once, and keeps its sign.** A cast to a 2-state

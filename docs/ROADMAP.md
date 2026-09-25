@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 6 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 155 | 79 | 76 | oracle split / pinned / oracle disqualified 41 · named prerequisite 19 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 15 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 31 | ① | |
+| §2 | recorded defects by mechanism | 158 | 81 | 77 | oracle split / pinned / oracle disqualified 42 · named prerequisite 18 · WALL (AST self-width) size-cast cluster 6 · one oracle 3 · held on purpose 1 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 17 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 32 | ① | |
 | §2-N | verilog-axi census | 2 + 5 | 0 | 7 | t0-event residues held on purpose 5 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · five t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,12 +38,12 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 389 | 220 | 169 | | | | |
+| total | | 392 | 222 | 170 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
-out-of-range real→integer conversion in the engine, a `$finish` that runs the processes already woken in its time step, a per-resumption-kind ordering model, a block-scoped constant binding, per-instance arity / class registration, one-oracle clocking).
+out-of-range real→integer conversion in the engine, a per-resumption-kind ordering model, a block-scoped constant binding, per-instance arity / class registration, one-oracle clocking).
 
 Priority principle (time-invariant): ① a CRITICAL silent-wrong with an oracle, then ② loud→supported
 with an oracle, then ③ an honest-loud promotion whose prerequisite holds, then ④ G2 OBS. Performance
@@ -788,26 +788,38 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   starts at z and the t=0 settle's z→x wakes `always @(b)` where iverilog has no t=0 event.
   `assign d = c ^ 1'b0;` behaves the same — an initial-value domain problem.
 
-- `$finish` ends its time step without running the processes already woken in it (pre-existing, 2
-  oracles; the process half of §5.b BYTE-GATE-6 ①, which records the pending NBA / transport half):
-  `initial begin $display("I"); $finish; end` beside `wire w; assign w = 1'b1; always @(w)
-  $display("A");` prints `I` / `A` in both oracles and `I` alone in vita, and the same holds after
-  time 0 (`initial begin #1 u = 7; $display(…); $finish; end` + `always @(u) m++;`: both oracles run
-  the `always` at 1, vita's `final` prints `m=0`). The `$finish` can reach the step through an
-  `initial`, a task it enables, an event-woken `initial`, an `always` or `always_comb` body, another
-  process's body, and `$exit` (verilator; iverilog has no `$exit`). Site: the `Step::Finish` arms of
-  `sched/run_loop.rs` and `native/run.rs` drain the deferred queues and the Postponed region and
-  return with the Active queue unrun. Fix shape = run the step's already-woken processes before
-  stopping, as both oracles do. PREREQUISITE of the all-constant header list below.
 - A process-header level list with NO live term — `always @(K)`, `@(K[0])`, `@(K[3:0])`, `@(p::C)`,
-  `@(K or K2)`, over every constant kind — stays E3009 (the clause "vita's `$finish` can end time 0
-  before that run") although both oracles run it once at time 0 (`LVL at 0`). BLOCKED BY the
-  `$finish` drain above: the one run vanishes at exit 0 whenever a `$finish` reaches time 0. §4.5.529
-  tried a static design scan for such a `$finish` and it leaked in review round 3 through a task
-  enabled by an `initial`, an `initial` woken by `-> e`, an `always` with no event control, an
-  `always_comb`, another admitted all-constant list and `$exit` — every channel into the step is a
-  hole. Beside a live term the lane runs, because there vita's output under such a `$finish` equals
-  the header lane's.
+  `@(K or K2)`, over every constant kind — stays E3009 although both oracles run it once at time 0
+  (`LVL at 0`). Its prerequisite closed in §4.5.531: a `$finish` now ends the run at the end of its
+  time step, so the one time-0 run survives a `$finish` reaching time 0 through any channel (the
+  static scan §4.5.529 tried and reverted is no longer needed). STARTABLE. Fix shape = admit the
+  all-constant list in `const_level_header.rs` on the existing time-0 pulse net (`$ia_tmp$<n>`),
+  drop the "vita's `$finish` can end time 0 before that run" clause from the refusal and the manual
+  003 row, and re-measure the `@(K or K2)` and `@(p::C)` spellings on all three backends.
+- A `#0` continuous-assign or gate update (`assign #0 r = u`, `wire #0 r = u`, `buf #0`) is
+  delivered only after the WHOLE procedural `#0` cascade of its tick (pre-existing, 2 oracles from
+  the first hop): `always @(u) begin $display("h0 r=%0d", r); #0 $display("h1 …"); #0 …; #0 …; end`
+  with `u = 7` at 5 prints `h0..h3 r=0` in vita where iverilog reads `r=7` from `h0` and verilator
+  from `h1`; `always @(u) begin #0; #0; #0; s = r; end` leaves `s=0` against both oracles' `s=7`.
+  Site: `delayed_ca` is keyed by absolute tick and drained by `take_due_delayed_ca` on the advance
+  path, which re-enters `now` only once every Inactive round is empty. Fix shape = deliver a
+  zero-delay cont-assign write as an Inactive-region event of its tick (between two `#0` hops), as
+  a procedural `<= #0` already is. The `always @(r)` on such a net also fires twice at time 0
+  (`R 0 r=x` / `R 0 r=0`; the t0 false-event row above).
+- A deferred-assertion action block that holds a `$finish` or `$stop` (`assert #0 (0) else
+  $finish;`, or an `else begin $display(…); $finish; end`) prints an empty line at maturation and
+  the run continues to its next `$finish` (pre-existing; verilator ends the run at the maturation
+  time with the line printed; iverilog refuses deferred assertions; hand-IEEE §16.4.3: the action
+  block's statements execute in the Observed region). Site: `elaborate/stmt_main.rs` ~722 captures
+  every system task of a deferred action as a rendered STRING, so the Observed / Reactive
+  `Step::Finish` / `Step::Stop` arms of both kernels are unreachable for a user `$finish` and only
+  `$fatal` reaches them. Fix shape = carry the terminating task as a control, not as text.
+- `$fatal` ends the run at the statement, so a pending NBA of the `$fatal` step is not applied and
+  a process it woke does not run (`c2 <= c2 + 1` pending on the fatal's posedge: vita `c2=1`,
+  both oracles `c2=2`; `always @(u) m++` beside `u = 7; $fatal(…)`: vita `m=0`, iverilog `m=1`).
+  HELD ON PURPOSE: a fatal is an error, and vita prints nothing after it (§4.5.372); the `final`
+  values of an error run are not a correctness surface. `$stop` keeps the same arm (iverilog parks
+  in its interactive prompt, verilator aborts rc 1 — no oracle).
 - A select of a constant whose index reaches a changing net only through a concatenation, a
   replication, a system-function argument or a hierarchical name still never wakes (pre-existing, =
   PRE, 2 oracles): in-body `@(K[{a,b}])` (both `IB at 1/2/3`, vita `DONE` only), header
@@ -952,6 +964,16 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 
 ### Oracle splits (recorded, not chased)
 
+- What runs after a `$finish` in its own time step, beyond what both oracles agree on (the
+  processes already woken, the pending `#0` and NBA regions, their cascades — §4.5.531 runs all of
+  it): iverilog halts every OTHER thread at its first system-task call once a `$finish` is pending
+  (`always @(u) begin $display("V"); v = u + 1; end` runs the display only, while the same body
+  without the display runs `v = u + 1` — disqualified there by self-contradiction; vita runs the
+  body = verilator); verilator drops a woken process whose body holds a timing control (`$display;
+  #0 …` prints nothing) and a `#0` fork child (vita runs them to their suspension = iverilog), runs
+  the statement AFTER a reached `$finish` and re-enters the body on a second edge of the same step
+  (vita and iverilog end the thread), and wakes `always @(v)` once at time 0 on a declaration
+  initializer (its counters read +1).
 - A genvar's self-determined width: RESOLVED by self-contradiction, not chased. verilator answers
   32 for every `$bits` spelling of a genvar while binding a ONE-BIT override from the same genvar;
   iverilog answers 2 for `$bits(i)` while binding 32. vita follows IEEE 1800 §27.4 and iverilog's
@@ -1332,7 +1354,7 @@ resumes only when its own re-entry condition becomes true. The full measurement 
 | DELAY-CLAMP | a `#delay` above u32::MAX is CLAMPED — wrong only in a run that actually reaches 4.29e9 ticks | the IR field is u32 (a frozen type) | representing it needs a format bump; announcing it needs a new W-code | completes correct-or-loud |
 | KPRED-3RD | the tier-3 decision has no "can today's kernel run it" layer — `$sformatf`, `$display`, transport-delay NBA and re-arm are eligible and buildable with no kernel | run.json carries only `eligible` / `buildable`, and `kpred::rhs_routes_to_worker` is not on the gate | add the third layer when dispatch is wired | removes a misreading |
 | QUIESCE-NBA | tier-3 quiescence does not consult the kernel's `delayed_nba` — if a transport is the only pending work the run reports quiescent and the update disappears | the engine's `next` is the minimum of the `Scheduler`'s `wheel` / `delayed_ca` / `delayed_nba`, and in a native run those maps are empty | S1d-4c-2 | the only remaining step down the ladder |
-| BYTE-GATE-6 | the S1d-4d byte-identity gate will meet 6 pre-existing oracle differences: ① pending NBA/transport at the `$finish` tick ② VCD intra-tick granularity ③ t=0 `initial` order ④ t0 arm order ⑤ an `always @(*)` with an empty read set runs at t0 in vita only ⑥ a `.velab` is not reproducible across `vcmp` runs (RULEV-MTIME) | half deliberate design, half LRM-undefined | decide which way each of the six is pinned, first | — |
+| BYTE-GATE-6 | the S1d-4d byte-identity gate will meet 6 pre-existing oracle differences: ① the iverilog thread halt at a system call after `$finish` (the pending NBA at the finish tick applies since §4.5.531; the split is recorded under §2 Oracle splits) ② VCD intra-tick granularity ③ t=0 `initial` order ④ t0 arm order ⑤ an `always @(*)` with an empty read set runs at t0 in vita only ⑥ a `.velab` is not reproducible across `vcmp` runs (RULEV-MTIME) | half deliberate design, half LRM-undefined | decide which way each of the six is pinned, first | — |
 | MON-RENDER | the tier-3 render path refuses `$monitor` / `$strobe` | rendering lives in `sched/run_loop.rs::flush_postponed` and that path takes no reader | wiring — one slice with S1d-4c | lifts the refusal |
 | FD-EOF + FEOF | the `fd_eof` X-poison hole in `NetArena` (`fd_eof` alone is outside the "no heap/class/frame" argument; the `$feof` over-marking currently hides it) · `$feof` is over-marked in the canonical statement-effect predicate, so `e = $feof(fd);` is refused while `while (!$feof(fd))` passes | `k_feof` is a pure read while `sysfunc_is_stmt_effect` says `true`; fixing one consumer leaves two spellings | one slice · fixing the canonical predicate also widens the tier-2 gate · a byte-identity argument | removes a tier-3 over-refusal |
 | NETSLOT-PREV | nothing in the workspace reads `NetSlot.prev` (only the declaration, the constructor and pass (c)'s write), so pass (c)'s two `clone_from` calls per changed net per delta are dead work | nobody reads it | remove it, plus a separate slice that verifies the obviousness itself | perf |

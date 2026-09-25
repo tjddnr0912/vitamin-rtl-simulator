@@ -126,9 +126,12 @@ the last row says which.
 These regions are engine-side structures. The frozen IR's `RegionTag` enum rides
 `SuspendState.wake_key`, which no engine code reads; the only scheduling-region field in
 the IR that the engine consumes is a delay terminator's own two-valued region
-(active or inactive). A terminating `$finish`, `$stop` or `$fatal` drains the deferred
-lists and then flushes the postponed region before returning, so a `$strobe` or a
-matured `assert #0` in the same slot is not lost.
+(active or inactive). A `$finish` ends the run at the end of its time step: the
+processes already woken in that step, its `#0` and NBA regions, the deferred lists and
+everything they wake still run, then the postponed region flushes and the run returns
+without advancing time (a `$finish` on a clock edge therefore lets `q <= q + 1` on the
+same edge land, as the reference simulators do). `$stop` and `$fatal` end the run at
+the statement, draining the deferred lists and flushing the postponed region.
 
 Concurrent SVA is implemented, not deferred: `assert property`, `cover property`,
 sequences with `##N`, `|->` and `|=>` all run and report, and a property wrapped whole in

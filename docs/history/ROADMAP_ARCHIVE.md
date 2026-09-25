@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.531` **a `$finish` ends the run at the end of its time step: the processes already woken in the step, its `#0` and NBA regions and everything they wake run, a `#0` cont-assign due in the step is delivered, the finishing process is never re-entered** (2026-09-25 · §2 "Delays / events" the `$finish` drain bullet deleted, the all-constant header list row unblocked · `Scheduler::finish_pending` latched by the `Step::Finish` arm of both kernels, consumed at the loop's stable point (`st.finished`, deferred drain, postponed flush, `Finish`); the arm parks the finishing activity (`busy`); `tick_due_now` keeps the step open while a `#0` cont-assign / gate update or transport `<= #0` is due at `now` · no format bump · 2 lenses × 1 round + direct re-grade: r1 BLOCKING (soundness) the finishing body re-entered on a second edge of the same step → `busy`; (differential) a `#0` cont-assign never delivered → `tick_due_now`; 264-cell matrix 107 = both oracles · 104 = iverilog · 13 = verilator · 40 recorded splits / no-oracle, 0 moved away · 8505 tests)
 - `4.5.530` **a cast and a formal bind evaluate an impure operand once: 2-state coercion through `TwoState` and a signed widening through a single-mention ternary, where the operand's width is declared** (2026-09-25 · §2 "Size cast / signedness" impure-operand bullet, "Inline / frame binds" `expr_is_repeatable`-decline, `int'($random*1.0)` and stale widened-actual bullets, two "Performance" `coerce_two_state` bullets deleted (CL-12 / CL-14) · new `single_mention.rs`: `extend_signed_once` = `$signed(1'b1 ? $signed(e) : n'sd0)` (no format bump, measured by hand on PRE) and `two_state_once` = `TwoState`, used where `ir_bits_of` answers and the operand is not repeatable, in `lower_prim_cast`, `lower_size_cast` and bind arms (2.5) / (3); a non-repeatable real into ≤32 bits converts through `RealToInt` · `int'(f())` 8 calls / `000000fd` → 1 / `fffffffd`, `int'($random)` 32 draws → 1 · 2 lenses × 2 rounds; round 1 BLOCKING: `TwoState` over a fabricated width (`$bits(int'(q.sum()))` 32 → E3009) and `RealToInt` saturation past 2^127 — both excluded, PRE shape kept)
 - `4.5.529` **a process-header level list naming a constant beside a live term runs once at time 0 and then on its live terms; `p::C` is a constant in every event lane; a select of a constant is a constant only when its index provably is** (2026-09-25 · §2 "Delays / events" D10 / D11 / D12 bullets deleted (CL-09) · new `const_level_header.rs`: a USER-written `always @(L)` with no edge term and no `iff`, at least one constant and one live term and a body that cannot suspend (an `_`-free allow-list) keeps its header `Level` process, its constant terms replaced by one `AnyEdge` term on a design-wide time-0 pulse net (`$ia_tmp$<n>`, z → 1 at the time-0 settle, hidden from every rail) · `expr_head_binds_constant` gains a `PkgScoped` arm; index constness is leaf-structural through the lowering's name funnel (`index_provably_constant` / `index_provably_live`) and a provably live index is refused · no format bump · 401 cells: 58 silent → 2-oracle, 22 loud → 2-oracle, 6 silent → loud, none right → wrong or right → loud · 2 lenses × 3 rounds + one direct re-grade — r1 BLOCKING index ignored and the `#0` prologue's region → D8 pulse net; r2 BLOCKING a fold-based index test through a generate-net shadow and `$finish` at time 0 → leaf rule + scan; r3 BLOCKING scan holes and fork + disable → all-constant lists stay refused, every fork excluded · 8466 tests)
 - `4.5.528` **a hierarchical net, call or select read carries its declared width, sign and realness from creation, recorded only where the declared width folds exactly and verified at resolution** (2026-09-24 · §2 "Inline / frame binds" HIERARCHICAL-leaf bullet deleted, plus the stale "Real" R1 / R2 / R3 after 3-tool grounding · `HierLeafShape` sidecar filled by the declaration walk (`hier_leaf_net` / new `hier_leaf_real` / `hier_leaf_func` / `hier_leaf_net_names`), consumed by `ir_bits_of`, `expr_self_signed` (Signal arm), `canonical_self_width` and `expr_is_real`, E3009 on a resolve-time mismatch (0 of 308) · exactness predicate `expr_size_hier_exact.rs`, `env_fold` untouched · inline lane, index seal, casts, `$bits`, `==?`, fill literals and module / frame streams move to the oracles; a hierarchical stream stored into a different width in an inline body is a new E3009 · no format bump · 2 lenses × 3 rounds + one direct re-grade — r1 BLOCKING stream loud → wrong and MAJOR `-4'd1` correct → loud, r2 BLOCKING value-aware minus rule → D8: D1 reverted, structural exactness, stream gate moved to the inline store on differing widths · 8440 tests)
@@ -540,6 +541,80 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.531 a `$finish` ends the run at the end of its time step: the processes already woken in the step, its `#0` and NBA regions and everything they wake run, a `#0` cont-assign due in the step is delivered, and the finishing process is never re-entered (2026-09-25, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — the bullet "`$finish` ends its time step without running the
+processes already woken in it" (deleted) and the prerequisite clause of the all-constant header list
+row (`always @(K)`, now STARTABLE); REMAINING_WORK §D's `$finish` prerequisite (deleted); §5.b
+BYTE-GATE-6 ① re-pointed at the iverilog thread halt.
+
+**Defect (PRE, both oracles)**. The `Step::Finish` arms of `sched/run_loop.rs` and `native/run.rs`
+set `st.finished`, drained the deferred lists, flushed the postponed region and returned with the
+Active queue unrun and every wake of the step undelivered. Measured on PRE: `initial begin #1 u = 7;
+$finish; end` + `always @(u) m++;` → `m=0` (both oracles `m=1`); `initial begin $display("I");
+$finish; end` + `always @(w)` on `assign w = 1'b1` → `I` alone (both `I` / `A`); `initial #1 $finish;
+initial #1 $display("S");` → nothing (both `S`, both orders); a clocked `cnt <= cnt + 1` on the
+posedge that reaches `$finish` → `cnt=2` (both `cnt=3`); `q <= 5; $finish` → `final q=0` (both
+`q=5`, and the `always @(q)` runs); an `always_comb`, a cont-assign chain, an event-woken `initial`,
+a `#0` fork child, a `$strobe` / `$monitor` from a woken process, a `$finish` through a task enable
+or a fork arm — all dropped. 24 grounding cells + 8 probes (`$S/s18/g`).
+
+**Oracle model (grounded, not assumed)**. Both oracles keep running the `$finish` time step:
+verilator finishes its whole `eval` (every region, cascades, NBAs), iverilog keeps draining the
+slot's events but halts every OTHER thread at its first system-task call (`of_VPI_CALL` returns
+false once `schedule_finished`), so `$display; v = u + 1` runs the display only while the same body
+without the display runs `v = u + 1` — a self-contradiction that disqualifies iverilog for the
+statements after a system call; vita runs the body (= verilator). Verilator drops a woken process
+holding a timing control and `#0` work after `$finish` (vita runs them to their suspension =
+iverilog), runs the statement after a reached `$finish` and re-enters the body on a second edge
+(vita = iverilog: the thread ends), and wakes `always @(v)` once at time 0 on a declaration
+initializer (+1 on its counters). Recorded as one §2 oracle-split bullet.
+
+**Fix**. `Scheduler::finish_pending` (new field, `sched/mod.rs`). The `Step::Finish` arm sets it and
+parks the finishing activity (`busy = true`; native: `k.wake.busy[r.proc]` when `r.proc == tmpl`) and
+does NOT set `st.finished` (the batch-top poll would cut the drain short). The inner loop keeps
+draining — the rest of the batch, propagate, Inactive, NBA, Observed, Reactive, cascades — and at the
+stable point, when `!tick_due_now()` (no `delayed_ca` / `delayed_nba` key equal to `now`), the
+consumer sets `st.finished`, calls `drain_deferred_on_finish` (a no-op by then) and
+`flush_postponed`, and returns `Finish`. While a `#0` cont-assign / gate update or transport `<= #0`
+is due at `now`, the PRE advance path re-enters the same tick, delivers it, and the next stable point
+finishes. `$stop` and `$fatal` keep their immediate arms; `check_call_fatal`, the delta limit and the
+body-step budget end the drain as before (Error / DeltaLimit). Both kernels carry the same lines;
+interp, vm and native agree on every cell (no native fallback).
+
+**Byte identity**. No `$finish` in the Active region → unchanged. A `$finish` step with nothing
+else pending → byte-identical stdout, VCD, `coverage.json`, `results.jsonl` (soundness lens, 16
+cells + 4 repo examples; differential lens: 783 / 792 no-`$finish` comparisons identical, the 9
+others elaboration errors with no VCD and identical text). The full suite moved two pins, both
+finish-coincident edges: `deferred_assertions_mature_in_their_regions_on_tier_3` gains the edge-7
+reports (`O q=3` / `R q=3` after `done q=3`: Active before Observed, the assertion reached in the
+finish step matures), and the `cover property` under `#5 $finish` counts its third posedge.
+
+**Review** — 2 lenses × 1 round, both FAIL on one root each, both fixed and re-graded directly on
+the fixed binary (no new agents). Soundness F1 BLOCKING: the arm no longer touched `busy`, so an
+edge registration (permanent) re-entered a body that had stopped at `$finish` on a second edge of
+the same step — `always @(posedge a or posedge b) begin n = n + 1; $finish; m = m + 1; end` with
+`a = 1; b <= 1` gave `n=2` (iverilog `n=1`; verilator `n=2 m=2`, the statement-after-finish split);
+an async-reset flop with `$finish` at `q == 2` gave `n=4 q=0` against both oracles' `n=3 q=3`. Fix
+= park the activity. Differential F1 BLOCKING (root pre-existing, half new): `assign #0 r = u` due
+in the finish step was never delivered (`r=0`, iverilog `r=7`), because `delayed_ca` is drained on
+the advance path with `next == now`; fix = `tick_due_now`. The pre-existing half — a `#0`
+cont-assign lands only after the WHOLE procedural `#0` cascade of its tick (`h0..h3 r=0`, both
+oracles `r=7` from the first hop) — is a new §2 row. Re-grade: 264-cell matrix (12 channels × 22
+pending shapes, all three tools, three backends) unchanged by the fixes — 107 = both oracles, 104 =
+iverilog (verilator disqualified: time-0 wake, dropped `#0`, `always_comb` twice), 13 = verilator
+(no `$exit` in iverilog, or the halt), 40 recorded splits / no-oracle, 0 moved away; 8 soundness
+cells and 9 supplementary cells moved to iverilog. MAJOR (pre-existing, recorded): `$fatal`'s
+immediate arm leaves the step's pending NBA unapplied (held on purpose). Pre-existing found by both
+lenses: a deferred-assertion action holding `$finish` prints an empty line and does not end the run
+(`stmt_main.rs` ~722 captures the action's tasks as text) — §2 row. MINOR: 14 designs PRE ended
+cleanly and POST ends loud (delta oscillators, `forever #0`, a runaway recursion beside `$finish`) —
+verilator errors too, iverilog hangs; the loud answer is the right one.
+
+**Tests**: new `crates/cli/tests/finish_drains_timestep.rs` (20 tests, three backends each,
+iverilog-pinned, verilator noted per test); two converted pins. 8505 tests (+20), format_version 34,
+corpus 10/10 × 4. Commits: code `b70759a`, docs (this entry).
 
 #### 4.5.530 a cast and a formal bind evaluate an impure operand once: 2-state coercion through `TwoState` and a signed widening through a single-mention ternary, where the operand's width is declared (2026-09-25, branch main) ✅
 
