@@ -906,6 +906,19 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr) {
     // is `set &= snapshot`. Same result as the old `split_off`, and it no longer
     // depends on the list being append-only to be correct.
     k.arena.ch.dirty.retain_snapshot(&settled);
+    // T0 EDGE-CLEAR — the engine twin (`arm_processes`) and `crate::t0_edge`
+    // carry the argument: the settle's membership stays (a level waiter fires
+    // on it), and on a SETTLE-CONSTANT net its `declared default → settled
+    // value` hop is not an edge (`wire w = 1'b1; always @(posedge w)` printed
+    // `P 0` where neither oracle does), so the mask the write funnel folded it
+    // into is zeroed before the first delta's `take_changed` reads it. A driver
+    // reading a variable keeps its mask (both oracles fire on `{r, 1'b1}`).
+    let settle_const = crate::t0_edge::settle_constant_nets(ir);
+    for n in k.arena.ch.dirty.collect() {
+        if settle_const.get(n as usize).copied().unwrap_or(false) {
+            k.arena.ch.slot_edge[n as usize] = 0;
+        }
+    }
     // T0 X-DROP — the engine twin (`arm_processes`) carries the argument: a
     // settle that lands on a value with no definite bit is not a change in
     // iverilog's network, so the level waiter it would wake here at time 0

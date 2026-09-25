@@ -46,6 +46,7 @@ pub mod profile;
 mod rng;
 mod sched;
 mod state;
+mod t0_edge;
 mod value;
 mod vcd_thread;
 mod width;

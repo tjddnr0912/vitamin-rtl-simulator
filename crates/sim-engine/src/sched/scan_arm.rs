@@ -1130,6 +1130,25 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         for n in self.st.dirty.split_off(settled) {
             self.st.dirty_flag[n as usize] = false;
         }
+        // T0 EDGE-CLEAR, the tier-3 twin is in `arm_t0`; the rule and its
+        // measurement live in `crate::t0_edge`. The settle's record stays on
+        // the list so a LEVEL waiter fires on it (below), but the write funnel
+        // also folded each net's `declared default → settled value` hop into
+        // its `slot_edge` mask, and the first delta's edge scan read `z → 1`
+        // as a posedge: `wire w = 1'b1; always @(posedge w)` printed `P 0`
+        // where neither oracle prints a line. Only a SETTLE-CONSTANT net — one
+        // whose every driver reads literals and other settle-constant nets —
+        // loses that mask; a driver reading a variable keeps it, because both
+        // oracles fire `P 0` for `reg r = 0; wire [1:0] w = {r, 1'b1};`.
+        // Membership is untouched. A value written to the net later in time 0
+        // is a fresh change: the net is no longer dirty once the first delta
+        // drains, so `note_change` resets the mask on its next dirtying.
+        let settle_const = crate::t0_edge::settle_constant_nets(self.st.ir);
+        for &n in &self.st.dirty {
+            if settle_const.get(n as usize).copied().unwrap_or(false) {
+                self.st.slot_edge[n as usize] = 0;
+            }
+        }
         // T0 X-DROP, the tier-3 twin is in `arm_t0`. What survives above is the
         // settle's own record of every net it moved off its declared default,
         // and a level waiter armed below fires on it — that is how `always
