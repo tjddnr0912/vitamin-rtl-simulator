@@ -26,8 +26,8 @@ behind it, so the queue and the composition are read from one table.
 
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
-| §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 6 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 165 | 82 | 83 | oracle split / pinned / oracle disqualified 46 · named prerequisite 18 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 20 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 35 | ① | |
+| §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 6 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 5 · WALL 6 · OPEN 4 · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
+| §2 | recorded defects by mechanism | 167 | 84 | 83 | oracle split / pinned / oracle disqualified 48 · named prerequisite 16 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 21 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 36 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 397 | 223 | 174 | | | | |
+| total | | 399 | 225 | 174 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
@@ -169,7 +169,7 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 |---|---|---|---|---|
 | 🆕 B | BLOCKED (sign provenance) | ⓐ `localparam [31:0] L1=(B>>>2)+8'd0` is 4294967276 where the runtime twin and both oracles are 44; net size is polluted too (`logic [((B>>>2)+8'd0)-1:0] bus` is 22 bits against 44) · ⓑ `case (b>>>2)` with an unsigned label: vita `eq236`, oracles `eq44` | ⓐ `const_fn.rs:162` `AShr => Some(a >> b)` carries no sign in its signature; the wide twin `const_wide.rs:308` uses the left-operand rule · ⓑ `stmt_flow.rs:~605` wraps the lowered scrutinee in an outer `$unsigned`, whose argument is self-determined | ⓐ the right rule is one file over at `const_fn_width.rs:427`; WALL(provenance) · ⓑ re-lower with `lower_size_ctx_entry(scrutinee, w, ext=false)` keeping the wrapper as a FALLBACK (6 `case`/`casez`/`casex` cells; `case (b/c)` 1 → 3, `b%c` 2 → 1). BLOCKED BY: sign provenance told apart from a default — `expr_self_signed`'s catch-all is not a fact for calls, non-whitelisted system functions, or constants folded from them |
 | 3b | BLOCKED (field-key map) | class-property ascending/negative bound normalisation has nowhere to be recorded | class fields are not nets (`ClassField` → heap slot) and the map is keyed by NetId | BLOCKED BY: a field-key normalisation map · 1 oracle (iverilog dies on an assertion) and the minimal repro is loud for another reason (`C c = new();`) |
-| 7 | BLOCKED (one ordering key) | a parent `initial` READING a child net at t0 sees X: `initial s = 8'hEE` in a child, read as `r = u1.s;` → oracles `ee`, vita `xx` (2-oracle). A fork arm in the child is a 3-way SPLIT (iverilog `ee` / verilator `00` / vita `xx`). An output PORT bind `child u1(.o(w))` and `assign w = u1.s;` both read `ee` at the parent's t0 immediate read, as do a constant driver, a parameter driver and a two-level chain — the only diverging spelling is the one whose value comes from the child's `initial`, i.e. process order; verilator answers `ee` there only because it constant-hoists a SINGLE-statement `initial s = <const>;`, and a second statement in that initial moves verilator to vita's answer, so that cell is an ORACLE SPLIT on order. `final` blocks run in ProcId order (`final_procs` is a `BTreeSet<ProcId>`), so any process reordering leaves vita disagreeing with itself | the rank machinery is complete (`with_rank_scope`, `init_ranks`, `RANK_MOD_INSTANCE(1) < RANK_MOD_OWN(2)`) and is applied only to declaration-initialiser processes. The root is that vita has ONE ordering key (`Activity.tie`) where the oracles use a DIFFERENT order per RESUMPTION KIND | BLOCKED BY: a per-resumption-kind ordering model. A single `proc_order` permutation seeded into the ordering key cannot express it — iverilog answers the kinds differently in ONE run of ONE design (`initial` child-first, `always_comb` t0 PARENT-first, edge PARENT-first, `#d` delay child-first, `wait` PARENT-first, fork-arm wake PARENT-first): keying only the t0 arm breaks the delay wheel, keying `Activity.tie` breaks the edge and `wait` wakes (`aa` for `cc`, a VALUE), and re-keying those two breaks `always_comb`'s t0 arm and the fork-arm wake, with both oracles against vita every time. Closes the headline plus 5 more 2-oracle cells; the delay-wheel kind measured again in §4.5.537 — same-time resumes run in SCHEDULING order in both oracles (`initial begin #5; #5 A end` declared before `initial #10 B` prints `B | A`), in declaration order in vita — and it blocks the in-body edge-wait half of the §2 "Delays / events" after-the-arm row and the continuous-assign hop row (§4.5.539: with the hop settled at the writer's yield, a DUT posedge block and a tb `initial` resumed by one edge read the port-bound reset in vita's declaration order — verilator's order, not iverilog's FIFO — and the picorv32 / serv corpus digests move). Costs a format bump (`proc_order` on the `StagedExtraSidecars` tail; `sim_ir::Process` is untouched) · corpus demand zero |
+| 7 | ORACLE-SPLIT (order) | a parent `initial` READING a child net at t0 sees X: `initial s = 8'hEE` in a child, read as `r = u1.s;` → oracles `ee`, vita `xx`. Both oracles read `ee` for two different reasons — iverilog starts a child instance's `initial`s before the parent's (deepest first, `s28/g` k3c `G C_pre C_post P1`), verilator starts the parent first and constant-hoists the single-statement `initial s = <const>;` (a child initial that also prints reads `00` there, k3j / k3l) — so the cell is a split on order, and `final` blocks run in ProcId order (`final_procs` is a `BTreeSet<ProcId>`), so a hierarchy reorder would leave vita disagreeing with itself | the same-time resume order landed in §4.5.541: a `#d` / `#0` / fork-arm / join resume runs in the order it was SCHEDULED (`Ready::seq`), a wake group shares one number and keeps declaration order inside it. What is left is answered differently by the two oracles in one run of one design: the time-0 start order across the hierarchy (iverilog child-first, `always_comb` after the initials; verilator parent-first, `always_comb` before the initials in one cell and after in another) and the order INSIDE a wake group (iverilog reverse arm order for edge, `wait` and fork-arm waiters; verilator arm order with the static `always @(posedge)` blocks after the coroutine waiters; equal-time fork arms reverse vs arm order) — 26 split cells in `s28/g/REPORT.md` | not chased: no oracle for either axis. vita keeps declaration order inside a wake group (= verilator on the clock-generator-first testbench with the tb `initial` declared before the DUT block, = iverilog with the DUT block declared first) · no format bump needed (the `proc_order` sidecar claim withdrawn) · corpus demand zero |
 | 10 | OPEN | the RANGE BOUND consumer: `wire [K[31:24]-1:0] n;` on a `parameter [135:8] K` 128 bits wide is ONE BIT at exit 0 where both oracles declare 221, and the ≤64-bit twin of the same text is correct. Bare `K[31:24]`, `pk::K[31:24]`, `K[31 -: 8]`, `K[24]` and a `$bits`-sized net are all three-way identical | `const_range_bound_fold` has no wide-bit-domain fallback — the i64 select fold declines a >64-bit base (`select_base_at_declared` returns `None` for `dwidth > 64`) and both of the bound's fallbacks are i64. `$clog2` of the SAME text answers 8, so the value exists one funnel over | BLOCKED BY: `selfdet_bits_unsigned` declines the select too (only `selfdet_clog2_wide` answers it), so routing the bound at the wide domain buys nothing until that resolver reads it — an unguarded fallback moves 0 of 18 cells |
 | 14 | WALL (provenance) | `localparam logic signed [7:0] NM = -8'sd2; localparam logic [63:0] X = NM ^ 64'h0;` is `fffffffffffffffe` against the oracles' `00000000000000fe`; the same expression over a FUNCTION LOCAL folds `00…fe`. The same routing also fixes `localparam logic [7:0] M = (P + 8'd100) % 8'd7` (P=200: 6 against 2), `pk::PA ^ 64'h0`, `int S = (D - C) / 2` (2147483641), the generate-scope `time NM` shadow (2c for 12c), and the 65-bit-leaf `/` and `%` | a module-scope initializer folds through the width-UNLIMITED `const_eval_in_scope` | route a DECLARED-width/sign target through `eval_const_assign`; the gate must demand provenance of every LEAF (`param_meta` is a DEFAULT for an untyped parameter and ABSENT for a `time` one), decline above the i64 lane, refuse an unsized FILL operand, answer THREE-valued in the scope walk, and NOT route the PACKAGE binder (row 26). BLOCKED BY: a width-aware walk correct on its own terms — the §11.4.10 shift count (`16'hFF01 << 3'b101` is 0; 30 correct→wrong plus 36 loud→wrong, reachable through a constant FUNCTION, so it is its own row and closes first) and an i64 bound that is not on the TARGET only (83 cells) |
 | 15 | BLOCKED (2-state field) | an OVERRIDE carrying a sized x/z literal loses the unknown plane: `#(.K(8'b1010_010x))` onto `parameter logic [7:0] K` binds `10100100` at exit 0 where the oracles keep the x; `8'bzzzzz1z0` binds `11111110`. Five cells, every channel | `params.rs`'s i64-lane test reads only VALUE bits (`bp_get(..).0`); the sibling `fill` arm declines with `fill_is_unknown` | a `bp_any_unknown` test alone turns 76 CORRECT cells loud, because a 2-STATE declaration converts x and z to 0. BLOCKED BY: recording the parameter's 2-state-ness (`hdl-parser/src/params.rs` computes `var_kind` and drops it; an `hdl-ast` field plus a SchemaHash re-pin, parser-only), which also closes z→0 (1 cell today) · the separate headline (an unknown plane in the narrow store, 22 loud cells, ~40 sites, demand 0) stacks on row 14; above bit 64 what survives is z, not x · the >64-bit operator lane (§4.5.527) declines on any x/z bit, so `#(.P(~128'bx))`, `128'h1x << 120` and `128'hz5 >>> 2` stay E3009 where both oracles bind 128 bits with the x/z kept; a build that let the plane through lost it whenever the value bits fit i64 (`128'hx0 >> 4`, `+128'hx0` bound zeros, six loud→silent cells), so this lane waits on the same unknown-plane binder · an overridden parameter used as a constant EVENT term inherits the lost plane through §4.5.529's time-0 run: `child #(.P(4'bx))` with `always @(P or clk)` runs at time 0 printing `P=0000` (`4'bzzzz` → `P=1111`, `4'b1z0x` → `P=1100`), where iverilog prints `P=xxxx` / `P=zzzz` / `P=1z0x` and does not run an all-x or all-z constant at time 0 (it runs `4'b1z0x` there); verilator cannot compile the design (`Unsupported tristate construct: SENITEM`) (dS10c) |
@@ -883,8 +883,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   before `initial #1 $display(w)` prints 1, both 0; a child's `always_comb o = pin.sum()` reads
   a port array before the initial's writes reach it), and a glitch across an arm (`r = 1` before
   the arm, `r = 0` after, by two processes) makes no event where both oracles fire `L 1 w=0`.
-  Both oracles propagate the continuous assign before the next process runs. BLOCKED BY the
-  same-time resume order (start-order table row 7), measured in §4.5.539: settling the dirtied
+  Both oracles propagate the continuous assign before the next process runs. BLOCKED BY an
+  oracle split on the order inside a wake group (§4.5.541 landed the same-time resume order and
+  re-measured §4.5.539's corpus split as that order: the DUT's static `always @(posedge clk)` and
+  the testbench's in-body `@(posedge clk)` woken by one edge resume in reverse arm order in
+  iverilog and coroutine-first in verilator, `s28/g` k2i / k2j), first measured in §4.5.539: settling the dirtied
   assigns at the writing body's yield (both run loops) answers every same-order cell as both
   oracles do (16 of 19 cells 2-oracle, `s26/g`), but on the common testbench shape — a DUT's
   `always @(posedge clk)` and a testbench `initial` resumed by the SAME edge, the reset arriving
@@ -898,9 +901,9 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   its output as an update event (nonblocking) once the hop is immediate (the second `dff`
   read the first's new output — vvp schedules a UDP output the same way); a heap-reading driver
   (`q.size()`) is marked after the batch and is unchanged either way; a port hop into a child
-  fires the level wait in iverilog only. The `@(posedge w)` twin is the EDGE half below. Once
-  row 7 lands (the resume order), the yield settle + the UDP nonblocking output is the slice
-  (S–M; the diff is in `s26/review/DIFF.patch`). (§4.5.537 review cell soundness/cells/c07.)
+  fires the level wait in iverilog only. The `@(posedge w)` twin is the EDGE half below. The
+  yield settle + the UDP nonblocking output is the slice (S–M; the diff is in
+  `s26/review/DIFF.patch`) once the wake-group order has an oracle; it has none. (§4.5.537 review cell soundness/cells/c07.)
 - An in-body EDGE wait armed in an Active batch sees an edge made earlier in that batch (the
   edge half of the row §4.5.537 closed for LEVEL waits): `initial #5 r = 1;` declared before
   `initial begin #5 @(posedge r); $display("late"); end` prints `late 5`; `reg clk; initial clk
@@ -922,9 +925,15 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   clocking block's `@(cb)` needs the mask rule anyway (the clocking event is delivered in the
   Observed region of the edge's step, IEEE §14.13; verilator `CB 5 d=0` for `always #5 clk =
   ~clk;` beside `initial begin #5; @(cb); … end`) and the engine cannot tell it from a literal
-  `@(posedge clk)` after the N4 substitution. 2 oracles. BLOCKED BY: the same-time resume
-  order (start-order table row 7, the `#d` delay kind of the per-resumption-kind ordering
-  model); then a sidecar marking the `@(cb)` waits.
+  `@(posedge clk)` after the N4 substitution. 2 oracles. STARTABLE (M): the same-time resume
+  order landed in §4.5.541 (the stimulus resuming from `#15` now runs before the clock
+  generator's `#5` resume, as in both oracles, so the after-the-arm rule no longer shifts that
+  testbench); then a sidecar marking the `@(cb)` waits.
+- `$monitor` prints AFTER a `$strobe` of the same time step: `initial $monitor("%0t M v=%0d",
+  $time, v);` beside `initial begin #10 v = 3; $strobe("%0t S v=%0d", $time, v); end` prints
+  `10 S v=3 | 10 M v=3`, both oracles `10 M v=3 | 10 S v=3` whichever initial is declared
+  first. Site: `flush_postponed_with` drains the strobe FIFO, then the monitor. 2 oracles.
+  STARTABLE (S). (§4.5.541 differential cell d09.)
 
 ### Diagnostics / artifacts
 
@@ -1260,6 +1269,20 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   raises vita's own time-0 event (the §2-N t0-event class), and there vita = verilator (dS01
   `@(w or g)` with `not (g, a)` and `reg a = 0`, dR64); one that settles to x raises none since
   §4.5.533, and there vita = iverilog (the same cell with `a` unwritten).
+- Same-time resume order, the halves the two oracles answer differently (§4.5.541, 26 cells in
+  `s28/g/REPORT.md`; the `#d`, `#0`, fork-arm and join kinds are 2-oracle and landed): the order
+  INSIDE a wake group — iverilog resumes edge, `wait` and fork-arm waiters in REVERSE arm order
+  (`#3;@(posedge clk) A`, `@(posedge clk) B`, `#1;@(posedge clk) C` print `A C B`; three static
+  `always @(posedge clk)` print `C B A` on the first edge), verilator in arm order with the static
+  `always @(posedge)` blocks after the coroutine waiters (`B C A`, `A B C`), both with the anyedge
+  waiters before the posedge waiters; equal-time fork arms (`fork #10 A1; #10 A2; join`: iverilog
+  `A2 A1`, verilator `A1 A2`); the time-0 start order across the hierarchy (iverilog child
+  `initial`s first, deepest first, `always_comb` after the initials; verilator parent first,
+  `always_comb` before the initials when the child has an initial and after when it has none); a
+  `wire #0` landing beside promoted `#0` resumes (iverilog delivers the landing's wake at the
+  landing's queue position, `Q W P Q0`; verilator after the promoted resumes, `Q P Q0 W`). vita:
+  declaration order inside a wake group (= verilator on 12 of the split cells), parent-first at
+  time 0 (= verilator), iverilog's landing position (§4.5.538's pins).
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
@@ -1560,8 +1583,8 @@ Do not start:
 - Any widening of the wide fold's accept set before §11.8.1 region sign stands, which includes
   §2 🆕 H ⓐ (the fix site is `fold_self_bits`'s reduction arm, i.e. the accept set itself).
 - §2 row 10's surviving bound half, whose prerequisite is a wide resolver that reads a SELECT.
-- ALL of §2 row 7: one ordering key cannot express what the oracles do, and the settle-reached half
-  is already correct, so the remaining cell is an oracle split on order.
+- What is left of §2 row 7 (the time-0 hierarchy start order and the order inside a wake group):
+  the two oracles answer each differently, and the headline cell is a split on order.
 - §3 ⑤ⓕ's ARITY (dim COUNT) axis: the prerequisite is measurably absent. The declarator dim list is
   stamped once per module at parse (`decls.rs:606`) and `ast::DeclName.unpacked` has no per-instance
   slot; `monomorph` cannot supply it (`hdl-parser/src/monomorph.rs`, 0 references to `ModuleDecl`,

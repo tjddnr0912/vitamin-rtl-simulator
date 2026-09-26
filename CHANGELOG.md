@@ -9,6 +9,20 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — processes due at one time resume in the order they were scheduled
+
+- **Several processes that become runnable at the same simulation time now resume in the order
+  their delays, `#0`s and fork arms were scheduled, as Icarus Verilog and Verilator do**, instead
+  of in declaration order: `initial begin #5; #5 $display("A"); end` declared before
+  `initial #10 $display("B");` prints `B` then `A` (was `A` then `B`); `#0` resumes run in the
+  order the `#0` statements executed; a fork's arms run right after the forking body yields, so an
+  arm's `#10` is scheduled before a sibling process's, and a parent resumed by `join` runs before the
+  wake its last child's write caused (`fork #1 clk=1; #2 clk=0; #3 clk=1; join $display(ticks)`
+  prints `ticks=1`, was 2). The common testbench — a clock generator declared first, stimulus
+  resuming from `#15` in the edge's own time step — now runs the stimulus first. Processes woken by
+  one event still run in declaration order among themselves, after every delay resume already due
+  at that time. Both backends; no artifact format change.
+
 ### Fixed — a real stored into a class field or a container element converts at the destination's width
 
 - **A real assigned to a class field, a queue, dynamic-array or associative-array element, or

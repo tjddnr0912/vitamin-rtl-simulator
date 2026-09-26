@@ -150,3 +150,8 @@ a section restructure, a residue split).
 - §4.5.540: §2 "Real" the class-field / container-element conversion bullet (startable, M)
   deleted; the string-variable-from-real bullet (startable, S) added. Startable 82 − 1 + 1 =
   82; blocked 83; total 397. Tests 8555 → 8557. `format_version` 34 unchanged.
+- §4.5.541: §2 start-order row 7 BLOCKED → ORACLE-SPLIT (BLOCKED 6 → 5, ORACLE-SPLIT 3 → 4);
+  §2 "Delays / events" the edge-wait half BLOCKED → STARTABLE (M), the hop row stays BLOCKED
+  (prerequisite → oracle split), the `$monitor`-after-`$strobe` bullet (startable, S) and one
+  oracle-split bullet added. Startable 82 + 1 + 1 = 84; blocked 83 − 1 + 1 = 83; total 399.
+  Tests 8557 → 8561. `format_version` 34 unchanged.
