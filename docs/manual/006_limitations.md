@@ -274,7 +274,14 @@ Package variables have no VCD surface. A bare dump skips them silently; an expli
 
 `assign #d` is inertial, matching Icarus Verilog: a pulse narrower than the delay is
 absorbed. Distinct rise, fall and turn-off delays (`#(2,4)`) are honoured on gates and on
-continuous assigns.
+continuous assigns. A zero delay (`assign #0`, `wire #0`, `buf #0`, `#(ZP)` of a zero
+parameter, the zero side of `#(0,F)`, a runtime `#(dz)` evaluating to 0) delivers its update
+as an Inactive-region event of its time step: a process resumed by its own `#0` reads the new
+value, `$strobe` and `$monitor` see it, and at time 0 it is settled before any process runs (a
+`#0` driver of a literal makes no time-0 posedge). Icarus Verilog delivers it immediately and
+Verilator two `#0` hops after the writer; the two agree from the second hop, which is where
+vitamin's answer is pinned. A `#0` driver whose rhs reads a queue, string or dynamic array is
+x on the native backend (use `--backend interp`; ROADMAP §2).
 
 ---
 

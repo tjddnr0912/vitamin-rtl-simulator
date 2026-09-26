@@ -138,3 +138,8 @@ a section restructure, a residue split).
   continuous-assign hop of an earlier write (startable, S–M) added; the always_comb time-0
   count clause added to the oracle-split bullet. Startable 84 − 1 + 1 = 84; blocked 79 + 1 =
   80; total 396. Tests 8539 → 8548. `format_version` 34 unchanged.
+- §4.5.538: §2 "Delays / events" the runtime-zero bullet rewritten as a split record (startable →
+  blocked), the zero-rise sidecar trade (held) and the `#0` delivery bullet (startable) deleted;
+  the native delayed-assign heap rhs (startable, S) and the `#0`-visibility oracle split (blocked)
+  added; the resolved-net bullet gains the `#(ZP)` demotion clause. Startable 84 − 2 + 1 = 83;
+  blocked 80 − 1 + 1 + 2 = 82; total 397. Tests 8548 → 8555. `format_version` 34 unchanged.

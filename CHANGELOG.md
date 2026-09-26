@@ -9,6 +9,29 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a zero-delay continuous assign delivers its update in its own time step
+
+- **A `#0` continuous assign, net-declaration delay or gate delay no longer lands after the
+  Postponed region of its time step**: `always @(u) begin $display(r); #0 $display(r); … end`
+  on `assign #0 r = u` printed the old value at every `#0` hop and `$strobe` printed it too,
+  where Icarus Verilog and Verilator both read the new value from the first or second hop; a
+  runtime delay evaluating to 0 (`int dz = 0; assign #(dz) y = a;`), the zero side of
+  `#(0, 9)`, `wire #0 r = u` and `buf #0` lagged the same way. The update is now an
+  Inactive-region event (IEEE 1800 §4.4.2.3): it lands at the next `#0` promotion, before the
+  promoted processes run, and everything it wakes runs in that batch. A zero-delay oscillator
+  (`assign #0 a = ~a` once enabled) now stops at the delta limit instead of spinning forever.
+- **At time 0 a zero-delay driver is settled before any process runs**: `assign #0 w = 1'b1;`
+  read `x` in a first-batch `$display` and posedged at 0 (both tools read 1 and print only the
+  level line); it now lands inside the time-0 settle like an undelayed driver, and a `#0` copy of
+  an initialised variable makes no time-0 event, as its undelayed twin does.
+- **A zero rise given by a parameter keeps its distinct fall**: `assign #(ZP, 9) y = a;` with
+  `parameter ZP = 0` fell immediately (both tools and the literal `#(0, 9)` fall at +9); it now
+  carries the fall. On a net with two drivers the parameter spelling keeps its old no-delay
+  shape (ROADMAP §2). All three backends.
+- Recorded in ROADMAP §2: a delayed assign whose rhs reads a queue, string or dynamic array is
+  x on the native backend (pre-existing); a runtime delay whose delay net is itself driven by a
+  `#0` assign lands at time 0.
+
 ### Fixed — a level wait sees only the changes made after it armed
 
 - **A static level block that ran in an Active batch and re-armed no longer fires again on a

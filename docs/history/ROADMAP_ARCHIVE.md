@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 418건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 419건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.538` **a zero-delay continuous-assign write is an Inactive-region event of its time step, and lands inside the time-0 settle** (2026-09-26 · §2 "Delays / events" the runtime-zero, zero-rise-trade and `#0`-delivery bullets retired; the `#0` visibility split, the native heap-rhs delayed assign and the `#0`-driven delay net recorded · `#(ZP)` is `Some(0)`, demoted on a resolved net · both loops deliver a due-now delayed write at the `#0` promotion, merged with the promoted resumes; the time-0 landing decided after the settle converges, deferred past the initializers · review: differential PASS, soundness BLOCKING → redesign → delta re-review direct PASS · 8548 → 8555)
 - `4.5.537` **a level wait sees only the changes made after it armed; the edge half is recorded with its prerequisite** (2026-09-26 · §2 "Delays / events" the wait-armed-in-a-batch bullet deleted, its EDGE half re-recorded BLOCKED BY the same-time resume order (start-order row 7), the continuous-assign hop of an earlier write (2 oracles, startable S–M) added, the `always_comb` time-0 count clause added to the oracle-split bullet · a CHANGE SEQUENCE stamped on every value change (`SimState::stamp_change` / `DirtyChannel::stamp_change` over ONE shared `Rc<Cell<u64>>`, from `note_change`; a heap change takes its number when it is made, `note_dyn_change`) and recorded by every LEVEL waiter at arm time (`arm_seq`): a static level waiter re-armed after its run and an in-body `@(sig)` / `@*` fire on a change stamped after their arm (O(1) per net; the changed-set scan only at time 0); the time-0 arming carries 0 and the rollback resets the initializers' nets; the arm-time value snapshot is deleted (a glitch back to the arm value and a heap change now wake the wait) · in-body EDGE waits keep the slot's accumulated mask: the after-the-arm edge rule was built, reviewed for two rounds and REVERTED because both oracles resume same-time processes in scheduling order and vita in declaration order, which shifted the clock-generator-first testbench by a cycle under the rule · 24 grounding cells, 3 backends; 2 lenses × 3 rounds — r1 differential BLOCKING (`@(cb)` waited a cycle) and soundness BLOCKING (heap changes stamped at the drain); r2 differential PASS, soundness BLOCKING (the same-time resume order); r3 both PASS (every level cell that depends on the same-time order is PRE = POST3, the recorded prerequisite) · 8548 tests)
 - `4.5.536` **a real converts to an integral target exactly at every width; a same-width copy of a written real is not read-aliased** (2026-09-26 · §2 "Inline / frame binds" the out-of-range PREREQUISITE row deleted and replaced by the narrower inline >128-bit residue (2 oracles, startable S), §2 "Real" the |x| ≥ 2^127 wide-target row deleted, the class-field / container-element conversion class (startable M) and the `$realtime` cont-assign re-evaluation (startable S) added, the non-finite oracle-split bullet rewritten with three more splits; the REMAINING_WORK §D prerequisite retired · `value::real_to_int_round` is exact for every finite f64 (|r| < 2^127 the i128 image as before; beyond it `m · 2^e` placed at bit `e` and two's-complement negated at the target width; ±inf / NaN 0), `expr_cast::lower_real_to_int_cast` is `Signed/Unsigned(select_low(RealToInt(e), tw))` for every operand (the `$floor`/`$ceil`/`$rtoi` composition and its 24-call wide lane deleted), `alias::copy_alias` skips a `NetKind::Real` root · 23 grounding cells, 3 backends; 2 lenses × 1 round — differential PASS (39 cells; 3 pre-existing classes recorded), soundness PASS (20 cells + a 420-pair Python-exact sweep, 0 mismatches; 2 notes recorded) · 8539 tests)
 - `4.5.535` **the time-0 settle no longer makes events out of the phantom value a variable-reading driver held before the initializer landed** (2026-09-25 · §2 "Delays / events" the phantom-intermediate bullet deleted, one bullet added (a wait armed in an Active batch sees the batch's earlier writes, 2 oracles, startable M; a first-batch `fork … join_none` child runs before a settle-woken process in both oracles, order only, startable S), the oracle-split bullet extended · both kernels RE-SETTLE after the declaration initializers (`settle_cont_assigns` again, keyed on the initializer list) and ASSIGN each dirty edge-target net's mask from the pre-settle bit (`t0_edge::edge_b0_snapshot`, taken in `Scheduler::settle_t0` / `native::run`) to the post-initializer bit through the funnel's `edge_mask`; the rollback removes exactly the initializers' set; `arm_processes` / `arm_t0` return `false` on a non-converging re-settle; the settle's record is DELIVERED before the first Active batch (`take_t0_wakes`, both kernels) with the woken processes held until the batch and its writes have propagated, ahead of the batch-write wakes · 60 grounding cells, 3 backends; 2 lenses × 3 rounds + direct re-grade of every lens cell per round (324 in round 3) — r1 differential BLOCKING (the settle's wakes sorted in with the batch-write wakes) → `take_t0_wakes`; r2 soundness BLOCKING (a wake the batch's write reached one settle later sorted ahead of the held ones) → the held wakes lead the next batch taken; r3 clean · 8530 tests)
@@ -547,6 +548,145 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.538 a zero-delay continuous-assign write is an Inactive-region event of its time step, and lands inside the time-0 settle (2026-09-26, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — three bullets of one root deleted: the runtime delay
+that evaluates to ZERO ("lands after the Postponed region … `int dz = 0; assign #(dz) y = a;`
+… iverilog `1 1 1`, verilator `0 0 1`, vita `0 0 0`"), the zero-rise sidecar trade ("the fall
+of `#(ZERO_PARAM, F)` is discarded … Held, because taking it now trades one silent-wrong for
+another; fixing the zero-tick lag opens both"), and the `#0` delivery bullet ("delivered only
+after the WHOLE procedural `#0` cascade of its tick … `s=0` against both oracles' `s=7` … also
+gives `assign #0 w = 1'b1;` a time-0 POSEDGE"). The resolved-net bullet gains the `#(ZP)`
+demotion clause. Two residues and one oracle-split bullet recorded (below); the runtime-lane bullet rewritten as a split record. §2 count 164 → 165 (startable 83, blocked 82).
+
+**Defect (PRE, both oracles)**. `Scheduler::delayed_ca` is keyed by absolute tick and drained
+by `take_due_delayed_ca` on the ADVANCE path of both run loops, which re-entered `now` only
+after the region cascade was empty and the Postponed region had run. Every zero-delay
+spelling therefore landed after everything of its time step: `always @(u) begin $display(r);
+#0 …; #0 …; #0 …; end` on `assign #0 r = u` with `u = 7` read `r=0` at every hop (iverilog
+`r=7` from `h0`, verilator from `h1`), `always @(u) begin #0; #0; #0; s = r; end` left `s=0`
+against both oracles' `s=7`, `$strobe` printed the old value and `$monitor` printed two lines
+at time 0 (`M 0 r=x`, `M 0 r=0`), the runtime `#(dz)` with `dz = 0` read `0 0 0` (both
+oracles 1 at the writer's second hop), the zero side of `#(0, 9)` read x at both hops (both
+oracles 1 by the second), `wire #0 r = u` and `buf #0` lagged alike, and a `#0` oscillator
+(`assign #0 a = s ? ~a : 1'b0` once `s` is 1) spun the advance path forever (iverilog too).
+Elaborate kept a SCOPE-folded zero rise off the delayed lane to dodge that lag
+(`fold_ca_delay` filtered `t != 0`), so `#(ZP, 9)` had no sidecar and fell immediately
+(`10 f0=0`; both oracles and the literal `#(0, 9)` fall at +9). At time 0 the lane drove its
+x first and landed 1 after the Postponed region: `assign #0 w = 1'b1; always @(posedge w)`
+printed `P 0 w=1` and `h0 w=x` where both oracles print `h0 w=1` and only the level line.
+
+**The measured rule (42 grounding cells `s25/g`, 3 backends, both oracles)**. iverilog
+delivers a `#0` update IMMEDIATELY — the writer's own next statement reads it, and a process
+it wakes runs before the writer's `#0` continuation (a woken thread is pushed to the front of
+vvp's active list); verilator delivers it two zero-delay hops after the writer and one after a
+process the change woke. The two agree from the writer's second hop and from a woken
+process's first — where every mid-run pin sits — and split on the writer's `h0`/`h1`, which
+is recorded. IEEE 1800 §4.4.2.3 / §10.3.3: a `#0` update event goes into the Inactive region
+of the current time step. Time 0, both oracles: `h0 w=1`, one level line and no posedge for
+`assign #0 w = 1'b1`, `#(ZP) w`, `#(0, 9) w` and `#(ZP, 9) w` of a literal; `P 0 w=01` for
+`assign #0 w = {r, 1'b1}` with `reg r = 0` (as the undelayed twin); `h0 z=0` for `assign #(9,
+0) z = a` with `a = 0` while `#(0, 9) y = a` keeps its x to 9 (iverilog; verilator is
+2-state); `reg r = 0; assign #0 w = r` reads `h0 w=0` with no edge (iverilog no level line
+either, verilator one — a split). The runtime lane at time 0: `int dz = 0; assign #(dz) y =
+a` reads 1 at `h0` (iverilog; verilator's second hop); `int dv = 5; assign #(dv) z = 1'b1` is
+x to 5 in iverilog and 1 from 0 in verilator (split; PRE landed a phantom-zero write at time 0
+after the hops, `4 z=1`, a third answer); `assign #(dv) z = a` with `reg a = 1` is not 1
+until 5 in both, `PZ 5`. Recorded, not chased: verilator's second delayed assign in a chain
+never following (`assign #0 b = a` behind `assign #0 a = u` stays 0; iverilog reads both at
+once; vita lands `b` one promotion after `a`, the LRM's next Inactive round), its `B 0 b=0`
+alone for a `#0 → #3` chain (iverilog and vita `B 3 b=0`, `B 8 b=1`), iverilog's `Y 5 y=0` on
+a pulse the inertial cancel absorbs, and the `$finish` step (iverilog lands and wakes before
+the finish, verilator drops the work).
+
+**Fix (both kernels)**. `sched/run_loop.rs` and `native/run.rs`: at the INACTIVE step of the
+region cascade the edge-seen marks reset, the delayed writes due at `now` are taken (the shared
+generation filter `take_due_delayed_ca`), written and propagated, and the Inactive bucket is
+MERGED into Active (`push_sorted` by tie = declaration order) — the processes the landing woke
+and the promoted `#0` resumes are one Active batch, as IEEE 1800 §4.4.2.3 moves both kinds of
+Inactive event to Active together (running the wakes alone first starved a promoted `#0 s = 0`
+behind an oscillating `#0` driver, review r1 soundness q5d); a write the landing's propagate
+schedules for `now` waits for the next promotion (the LRM's next Inactive round). The advance
+path still delivers future ticks; `tick_due_now`'s cont-assign half is now an invariant. Time 0
+(`Scheduler::armed` false until `arm_processes_after_seed` / `arm_t0` returns): the fixpoint
+pass of both settles is byte-identical to PRE (x-drive for an owed delayed sole driver); the
+landing is decided AFTER the fixpoint has converged, in `schedule_delayed_cas` — the one place
+that evaluates a delayed rhs, once per settle — which now returns the writes of every delayed
+driver whose effective delay for the transition is zero (`effective_ca_delay`: uniform, sidecar
+or runtime lane, read through the store the rhs was read through) instead of enqueueing them,
+recording `last_ca` and `last_ca_drv` and bumping the generation; both settles gained an outer
+loop that writes the landings through the funnel and settles again until no landing moves
+anything, under the delta budget. Deciding inside the fixpoint was measured wrong (review r1
+soundness F1/F2/F3): an unconverged pass committed the transition baseline to a transient rhs
+(`assign #(0, 9) y = (w === 1'bz)` above `assign w = 1'b0` landed `y=1` for nine units where
+both oracles read x/0), a runtime delay read mid-pass from an unsettled net was 0 by
+declaration order, and the extra rhs evaluation per pass moved `assign #5 y = $random` and the
+E4002 count of a design with no zero-delay driver. In the settle that runs BEFORE the
+declaration initializers (`pre_init`, only when the design has some) every zero-delay decision
+is DEFERRED — a runtime-lane assign (its delay is a phantom: `int dv = 5;` still holds its
+default) and a constant-lane assign whose effective delay is zero (its rhs is a phantom: `reg
+[1:0] s = 2'b01; wire b = (s === 2'bxx); assign #(0, 9) y = b;` would land 1 and then measure
+the initializer's 0 as a fall of nine, both oracles x/0) record nothing, the x-drive stands, and
+the initializer re-settle's pass, which visits every delayed assign, decides from the real
+values; a non-zero constant delay schedules in the first settle as before. `delayed_landed_in_settle`
+(per assign: the value last computed IS the value last driven — `#(0, 9)` with its x landed and
+the initializer's 0 scheduled for 9 is not landed) feeds `t0_edge::settle_constant_nets(ir,
+landed)` (a landed `#0` driver of literals is settle-constant: no time-0 posedge) and
+`alias::copy_nets_landed(ir, landed)` (a landed `#0` copy of a variable gets the time-0 copy
+repair and event suppression its undelayed twin gets); `copy_alias` (the runtime read alias)
+admits no delayed driver. Elaborate: `fold_ca_delay` returns a scope-folded zero as `Some(0)` —
+a `#0` assign — and flags it (`ca_zero_scope`), so `#(ZP, F)` carries its sidecar;
+`demote_runtime_delay_on_resolved_nets` demotes such an assign on a RESOLVED net to the
+pre-slice no-delay shape (no sidecar either), where the literal `#0` stays E3001 (the
+resolved-net row is its own slice). Byte-identity for every design without a delayed driver:
+the Inactive step's new arms are behind `next_delayed_ca() == Some(now)`, the settle's outer
+loop breaks on an empty landing list, `landed` is all-false, and `fold_ca_delay` is unchanged
+for every non-zero and literal value; for a design with a non-zero delayed driver the fixpoint
+and the schedule pass are PRE-identical (q5a/q5b/q7a: same draws, same diagnostics, same
+`ca_evals`).
+
+**Review**: two lenses, three rounds of measurement. Round 1 (frozen release PRE 8ea75e6e /
+POST d15b9abe): differential PASS (53 designs: 0 regressions, 0 backend divergence, 6
+pre-existing, 9 splits); soundness BLOCKING — F1 a runtime delay read mid-fixpoint from an
+unsettled net (declaration-order dependent), F2 the in-fixpoint landing committing the
+transition baseline to a transient or pre-initializer phantom rhs, F3 the extra rhs evaluation
+per pass breaking byte-identity on designs with no zero-delay driver (`$random` draws, E4002
+counts, `ca_evals`), and q5d the landing-wake `continue` starving a promoted `#0` resume. Fix =
+the design above (landing after convergence in `schedule_delayed_cas`, the pre-initializer
+deferral, the merged promotion) — a new design, so every round-1 cell was re-graded on the new
+binary (`review/REGRADE2.md`, POST2 be34ba8f) and the delta reviewed: the Opus lenses were cut
+by the session limit before their first measurement, so the round-2 delta review was performed
+directly (`review/r2/REPORT2.md`, 18 cells): F1/F2/F3/q5d closed (q2c/q2f/q3b = iverilog,
+q5a/q5b/q7a = PRE), the deferral loses no write, a `$finish` in the merged batch still drains,
+a fork child of a promoted process beside a landing-woken process = iverilog, no zero-delay
+driver = PRE-identical; one new residue (the `#0`-driven delay net) and one pre-existing
+native class (heap rhs of a delayed assign) recorded.
+
+**Tests**: `crates/cli/tests/zero_delay_cont_assign.rs` (new, 7 tests: the next-hop read,
+every spelling at the promotion, what the landing wakes, the time-0 landing, the runtime
+lane after the initializers, the loud oscillator, the resolved-net residues — every cell on
+three backends); `structural_delay_scope_fold.rs` (two residue pins converted:
+`a_scope_folded_zero_rise_is_the_literal_zero` `S y0=1 yz=1 yn=1`,
+`a_zero_rise_with_a_distinct_fall_keeps_the_fall` `B yl=1 yp=1`);
+`cont_assign_runtime_delay.rs` (`a_zero_runtime_delay_lands_at_the_promotion` `P0 1 1 P00 1
+1`); `t0_settle_no_edge.rs` and `finish_drains_timestep.rs` doc text. Full gate 8548 →
+8555, doctest / clippy / fmt 0, flip run = the documented 10 pins, corpus 10/10,
+`format_version` 34 unchanged.
+
+**Residues (§2 "Delays / events")**: a delayed assign whose rhs reads heap content is x on the
+native backend (`assign #0 n = q.size();`; PRE = POST; `schedule_delayed_cas` reads through the
+bare arena — S, startable); a runtime delay whose delay NET is driven by a zero-delay assign
+(`assign #0 dw = dv; assign #(dw) y = a;`) is read before `dw`'s landing (iverilog `Y 4`,
+verilator `Y 0`, vita silent at 0 — S, folded into the runtime-lane split bullet); the
+`#0`-visibility oracle split (writer's h0/h1, same-batch order, chains, the `$finish` step, the
+oscillator, the time-0 level line of a `#0` copy) in "Oracle splits". Held as recorded: the
+resolved-net delayed lane (`#(ZP)` demoted there, `#0` E3001), `$fatal` ending at the statement
+(a landing-woken process declared after the fatal's process does not run).
+
+**Out of scope**: the resolved-net delayed lane (its own row; `#(ZP)` there keeps PRE's
+no-delay shape, the literal `#0` E3001); the writer's-own-hop split; the x phase of a nonzero
+constant delay (iverilog-pinned, unchanged).
 
 #### 4.5.537 a level wait sees only the changes made after it armed; the edge half is recorded with its prerequisite (2026-09-26, branch main) ✅
 

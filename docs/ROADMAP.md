@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 7 · one oracle + zero demand (clocking) 3 · oracle split, never chased 3 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 6 · WALL 6 · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 164 | 84 | 80 | oracle split / pinned / oracle disqualified 44 · named prerequisite 17 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 1 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 21 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 34 | ① | |
+| §2 | recorded defects by mechanism | 165 | 83 | 82 | oracle split / pinned / oracle disqualified 46 · named prerequisite 17 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 20 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 35 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 396 | 225 | 171 | | | | |
+| total | | 397 | 224 | 173 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
@@ -761,25 +761,28 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   shape): `initial forever begin @(*) n = w.size(); end` prints `0 / 0` for iverilog's `0 / 6` — the
   in-body `Level` waiter compares the handle net's WORD, which never moves, so §4.5.503's dirty mark
   cannot fire it. Fix shape = arm the in-body waiter on the dirty mark for a handle net.
-- A runtime continuous-assign delay that evaluates to ZERO lands after the Postponed region (the same
-  class as the zero-rise trade below): `int dz = 0; assign #(dz) y = a;` read by a same-time-step `#0`
-  chain is iverilog `1 1 1`, verilator `0 0 1`, vita `0 0 0` (the one two-oracle cell agrees; the
-  first is a split). Since §4.5.506 the runtime lane routes through `ContAssign.delay = Some(0)`, so
-  the fix is the zero-tick lag itself. A runtime-delayed assign drives `x` until its first write lands
-  (iverilog drives the t0 rhs for a VARIABLE delay and `x` for a constant one — self-contradiction,
-  not arbitrable). A delay variable changed in the SAME step as the rhs is an oracle split (iverilog
-  uses the pre-write value, verilator the post-write one). A runtime delay whose expression CALLS a
-  subroutine runs on the `vm` backend (tier-3 refuses it, W4030), not natively.
+- Recorded on the runtime structural-delay lane (ORACLE-SPLIT, not chased): a runtime-delayed
+  assign drives `x` until its first write lands (iverilog drives the t0 rhs for a VARIABLE delay
+  and `x` for a constant one — self-contradiction, not arbitrable; `int dv = 5; assign #(dv) z =
+  1'b1;` is x to 5 in iverilog and 1 from time 0 in verilator, vita x to 5 since §4.5.538). A
+  delay variable changed in the SAME step as the rhs is a split (iverilog uses the pre-write
+  value, verilator the post-write one). A runtime delay whose expression CALLS a subroutine runs
+  on the `vm` backend (tier-3 refuses it, W4030), not natively. A runtime delay whose delay NET is
+  itself driven by a zero-delay continuous assign (`reg [7:0] dv = 4; assign #0 dw = dv; assign
+  #(dw) y = a;`) is read in the time-0 landing pass before `dw`'s own landing is written, so `y`
+  lands at time 0 with no level event where iverilog fires `Y 4 y=0` and verilator `Y 0 y=0`
+  (PRE `Y 0 y=0`; the undelayed delay-net twin is right in all three). Fix shape = decide a
+  runtime-lane landing only after every landing its delay expression reads has been written
+  (`Scheduler::schedule_delayed_cas`, re-run for the runtime lane after a landing). S.
 - A resolved (multi-driven whole-net) `wire` keeps a runtime delay DROPPED (`assign #(dv) y = a;
   assign #(dv) y = b;` is zero-delay; both oracles delay) — the constant twin is E3001 today; giving
-  the delayed lane a resolved net is one slice for both spellings.
+  the delayed lane a resolved net is one slice for both spellings. Since §4.5.538 a SCOPE-folded
+  zero rise (`#(ZP)`, `#(ZP, 9)`) on such a net is demoted the same way (`ca_zero_scope`: no
+  delay, no sidecar — its pre-slice shape; `#(ZP, 9)` there still falls immediately, iverilog
+  `N 14`), while the literal `#0` there stays E3001.
 - The Bytecode backend loses a STATIC task's `string` formal (`task ss(input string s); s.len()`
   prints `0` for 8; the automatic task and the function print 8) — found by the it11 flip run,
   pre-existing at the parent; the default `native` backend is right.
-- The zero-rise sidecar trade (the fall of `#(ZERO_PARAM, F)` is discarded; `#(0,F)` is correct): the
-  root is the engine — `Some(0)` sends the continuous assign into the delayed lane and the zero-tick
-  write lands after the Postponed region (both oracles 1, vita 0). Held, because taking it now trades
-  one silent-wrong for another; fixing the zero-tick lag opens both.
 - ⓐ Rounding is an ORACLE SPLIT (do not chase). The discriminator is "the leaf is not an integer
   multiple of the module precision", and the axis splits by two rules: a REAL leaf keeps its
   fraction to the end (`2.5ns+2.5ns` is 5 in both oracles) and a sub-precision-UNIT leaf rounds at
@@ -817,19 +820,14 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   since `level-select-event` went loud, an element copy is legal. Fix shape = per-element dirt on
   the channel (`array_len` words), read by the copy suppression and the x-drop alike.
 
-- A `#0` continuous-assign or gate update (`assign #0 r = u`, `wire #0 r = u`, `buf #0`) is
-  delivered only after the WHOLE procedural `#0` cascade of its tick (pre-existing, 2 oracles from
-  the first hop): `always @(u) begin $display("h0 r=%0d", r); #0 $display("h1 …"); #0 …; #0 …; end`
-  with `u = 7` at 5 prints `h0..h3 r=0` in vita where iverilog reads `r=7` from `h0` and verilator
-  from `h1`; `always @(u) begin #0; #0; #0; s = r; end` leaves `s=0` against both oracles' `s=7`.
-  Site: `delayed_ca` is keyed by absolute tick and drained by `take_due_delayed_ca` on the advance
-  path, which re-enters `now` only once every Inactive round is empty. Fix shape = deliver a
-  zero-delay cont-assign write as an Inactive-region event of its tick (between two `#0` hops), as
-  a procedural `<= #0` already is. (The `always @(r)` on such a net fired twice at time 0,
-  `R 0 r=x` / `R 0 r=0`, until §4.5.533; it now fires once, as both oracles do.) The same delivery
-  also gives `assign #0 w = 1'b1;` a time-0 POSEDGE (`P 0 w=1` beside the level line, both oracles
-  print the level line only): the landing is a fresh change through `note_change`, not the settle,
-  so §4.5.534's settle-constant clear does not reach it; the undelayed `assign w = 1'b1;` is silent.
+- A DELAYED continuous assign whose rhs reads heap content reads x on the native backend
+  (`int q[$]; wire [31:0] n; assign #0 n = q.size();` prints `n=x` at every hop where interp / vm
+  print 0 then 1 and verilator 1 by the second hop; the undelayed `assign m = q.size();` beside it
+  is right on every backend): `Scheduler::schedule_delayed_cas` evaluates a delayed rhs through
+  the reader it is given — on tier-3 the bare arena, which does not route heap nets
+  (`native/frames.rs` records the seam). Pre-existing, PRE = POST at §4.5.538. One oracle
+  (iverilog aborts on the design) + the interp answer; fix shape = evaluate the delayed rhs
+  through the composite reader (`eval_expr_with` / `HeapRouted`) as the settle does. S.
 - A deferred-assertion action block that holds a `$finish` or `$stop` (`assert #0 (0) else
   $finish;`, or an `else begin $display(…); $finish; end`) prints an empty line at maturation and
   the run continues to its next `$finish` (pre-existing; verilator ends the run at the maturation
@@ -1078,6 +1076,25 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   wakes on no definite bit (§4.5.533) and the initializer precedes the settle (§6.21): silent,
   where PRE printed the phantom's `W 0 w=x`. `-> ev` in the first batch: iverilog runs the
   settle-woken `always @(w)` before the `always @(ev)` it woke, verilator after (vita: before).
+- WHEN a zero-delay continuous-assign update is visible (§4.5.538; IEEE 1800 §4.4.2.3 puts it in
+  the Inactive region, the order among the events of one region is open): iverilog delivers it
+  IMMEDIATELY — the writer's own next statement reads it (`u = 7; $display(r)` prints 7) and a
+  process it wakes runs before the writer's `#0` continuation — verilator two zero-delay hops
+  after the writer and one after a process the change woke, and both agree from the writer's
+  second hop and a woken process's first. vita lands it at the first `#0` promotion, as an Inactive
+  event: the writer's `h0` reads the old value (verilator), its `h1` the new (iverilog), the
+  processes the landing wakes and the promoted `#0` resumes run as one batch in declaration
+  order (a level waiter declared before the writer prints before the writer's `B`, iverilog's
+  order; declared after, after it, neither oracle's). A chain `assign #0 b = a` behind `assign #0
+  a = u` lands `b` one promotion after `a` (iverilog both at once, verilator's second delayed
+  assign never follows; the same for `assign #3 b = a` behind a `#0`, where verilator prints only
+  its time-0 line). iverilog fires `Y 5 y=0` on a pulse the inertial cancel absorbs (`a = 1; a =
+  0;` in one batch), verilator and vita nothing. A `#0` update due in the `$finish` step lands
+  and wakes in iverilog and vita, verilator drops it. A mid-run `#0` oscillator (`assign #0 a = s
+  ? ~a : 1'b0` once `s` is 1) hangs iverilog and hits verilator's converge limit; vita stops at
+  the delta limit (`F-RUN-NO-CONVERGE`; PRE spun the advance path forever). At time 0 iverilog
+  prints no level line for a `#0` copy of an initialised variable (`reg r = 0; assign #0 w = r;`)
+  and verilator one (it runs every level `always` once); vita none (the copy suppression).
 - The ORDER of distinct processes in the time-0 Active region around an all-constant
   `always @(K)` (§4.5.532; IEEE leaves it open): with `initial -> ev;` waking an `initial @(ev)`,
   iverilog prints the `always @(K)` line first and the woken `initial` second, vita the reverse,
