@@ -82,8 +82,11 @@ impl Scheduler<'_, '_> {
         mult: u64,
         prec_mult: u64,
     ) -> u64 {
+        // `eval_expr_with` wraps a heap-routing reader in `HeapRouted`, as the rhs
+        // evaluation beside it does: `assign #(q.size()) n = a;` read the queue size
+        // as x on native and fired with no delay (verilator and the interpreter: 3).
         let v = match nets {
-            Some(r) => self.st.mk_eval_ctx_with(r).eval(eid),
+            Some(r) => self.st.eval_expr_with(r, eid),
             None => self.st.mk_eval_ctx().eval(eid),
         };
         crate::eval::delay_ticks_of(&v, mult, prec_mult)

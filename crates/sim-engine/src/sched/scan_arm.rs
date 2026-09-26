@@ -961,12 +961,18 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 // Same assignment rule as `eval_for_lvalue`: width is
                 // max(lhs, self(rhs)), sign is the rhs's own. `lvalue_width`
                 // reads IR-derived widths, identical for both stores.
+                // …and through `eval_ctx_with_reader`, which wraps a reader that
+                // routes heap nets back to this state in `HeapRouted`, exactly as the
+                // settle's own evaluation does. The bare `mk_eval_ctx_with(r)` handed
+                // tier-3's arena a queue / dynamic-array / string / associative-array
+                // handle it does not own: `assign #0 n = q.size();` read x at every hop
+                // on native where the interpreter and the VM read 0, then 1 (verilator
+                // the same), and `s.len()` read 0.
                 Some(r) => {
                     let lw = self.st.lvalue_width(&lhs);
                     let sw = self.st.wt.get(ca_rhs);
                     self.st
-                        .mk_eval_ctx_with(r)
-                        .eval_ctx(ca_rhs, lw.max(sw.width), sw.signed)
+                        .eval_ctx_with_reader(r, ca_rhs, lw.max(sw.width), sw.signed)
                 }
                 None => self.eval_cont_assign(ci, &lhs, ca_rhs),
             };
@@ -1013,7 +1019,16 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             // stores — and the X-drive half in `native/run.rs` was already
             // using the arena, which is what made the survivor visible as an
             // `x` at the right bit position.
+            // A dynamic index that reads a heap net goes through `HeapRouted` like the
+            // rhs above; the bare arena answers x for a handle it does not own.
             let offs = match nets {
+                Some(r) if r.routes_heap_to_state() => {
+                    let hr = crate::state::HeapRouted {
+                        st: self.st,
+                        nets: r,
+                    };
+                    crate::eval::resolve_offsets(&self.st.mk_eval_ctx_with(&hr), &lhs)
+                }
                 Some(r) => crate::eval::resolve_offsets(&self.st.mk_eval_ctx_with(r), &lhs),
                 None => self.resolve_lvalue_offsets(&lhs),
             };
