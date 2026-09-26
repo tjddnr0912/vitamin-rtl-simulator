@@ -9,6 +9,15 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — a level event control on a constant select of a net
+
+- `always @(n[0])`, `@(n[3:2])`, `@(n[I+:2])`, `@(a[1])`, `@(a[1][0])` and a packed struct member
+  (`@(s.f)`) were `VITA-E3009`. They now run, in the header and in-body lanes, beside other terms,
+  in task bodies and generate blocks, and on a hierarchical or interface-port base: the process
+  wakes only when the selected bits change, as in both reference tools. A variable index
+  (`@(n[i])`) and a select of an automatic local or a dynamic-storage element stay `VITA-E3009`,
+  with a message that says why.
+
 ### Fixed — a primitive cast is the context of its operand
 
 - `int'(u4 * u4)` with `u4 = 10` was the 4-bit product `00000004`; it is now 100 (`00000064`), as

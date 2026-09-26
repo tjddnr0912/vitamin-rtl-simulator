@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 24 | 4 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 8 (rows 14, 25, 30 and 🆕 H startable since §4.5.542 took the §11.8.1 wall down; row 26 absorbed by row 14 in §4.5.546) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 162 | 79 | 83 | oracle split / pinned / oracle disqualified 51 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 5 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 13 · size cast / signedness 15 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 18 · real 4 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 39 | ① | |
+| §2 | recorded defects by mechanism | 164 | 80 | 84 | oracle split / pinned / oracle disqualified 52 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 5 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 13 · size cast / signedness 15 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 19 · real 4 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 40 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 109 | 93 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 395 | 227 | 168 | | | | |
+| total | | 397 | 228 | 169 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
@@ -758,16 +758,26 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `wire [1:0] vv = 2'b1z; wire s = vv[0];`, `always @(s)` counts 0 in vita and 1 in iverilog, the
   `2'b1x` twin counts 1 in vita and 0 in iverilog, and `wire d = s;` (a wire, whose z default equals
   the copied z) counts 0 against iverilog's 1 — while the `logic d = s;` cells of
-  `copy_net_no_t0_transition.rs` match. One oracle (verilator is 2-state and runs every level
-  waiter once at time 0). Pre-existing, unchanged by §4.5.533 (copy nets are exempt from its drop).
+  `copy_net_no_t0_transition.rs` match; the event-control spelling `@(vv[0])` counts 1 on `2'b1z`
+  and 0 on `2'b1x`, as iverilog (§4.5.554: its derived holder is a `logic`, which starts at `x`). One
+  oracle (verilator is 2-state and runs every level waiter once at time 0). Pre-existing, unchanged by
+  §4.5.533 (copy nets are exempt from its drop).
 - An unpacked net array is ONE net on the dirty channel, so a copy of an all-x element wakes at
   time 0 when another element settled to a definite value: `wire [3:0] a [0:1]; assign a[0] =
   4'd3; assign a[1] = r + 1; wire [3:0] b1 = a[1]; always @(b1)` prints `B1 0 b1=xxxx` before
   `B1 1 b1=0011` (iverilog: the second line only; a[1]'s x is the §4.5.533 class, kept because the
   array's dirt is decided per net and its element 0 is definite). One oracle (verilator 2-state).
-  Pre-existing, PRE = POST; the per-bit sibling (`bus[0]` beside a constant `bus[1]`) is E3009
-  since `level-select-event` went loud, an element copy is legal. Fix shape = per-element dirt on
+  Pre-existing, PRE = POST; for the per-bit sibling (`bus[0]` beside a constant `bus[1]`)
+  since §4.5.554 the event-control spelling `@(bus[0])` runs and matches iverilog (its derived holder
+  starts at `x`), while the `wire b0 = bus[0]` copy keeps the class. Fix shape = per-element dirt on
   the channel (`array_len` words), read by the copy suppression and the x-drop alike.
+- A level term wider than one bit beside an EDGE term wakes only when its bit 0 changes (pre-existing,
+  2 oracles): `always @(posedge clk or n)` and `always @(negedge clk, n)` with `n` going 01 → 03 → 02 →
+  f2 print at 1 and 3, where both oracles print at 1, 2, 3 and 4. An edge list is an edge sensitivity, a
+  level term in it is an `AnyEdge` term, and the edge mask's any-change bit is bit 0's
+  (`state::edge_mask`, fed by the four `accumulate_edge` / time-0 rebuild sites). A non-LSB bit or a
+  part select there is E3009. Fix shape = arm a level term of an edge list on a change of its whole
+  value (derived 1-bit nets per bit, or a mask bit that compares the whole value in both kernels).
 
 - A continuous assign with a NON-CONSTANT left-side index is accepted silently. On a NET array
   (`wire [7:0] y [0:3]; assign y[i] = v;`) that is illegal — IEEE 1800 `net_lvalue` takes a
@@ -992,6 +1002,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   correct.
 
 ### Oracle splits (recorded, not chased)
+
+- A level waiter on a SELECT and a whole-net waiter woken by the same change: iverilog 13.0 resumes the
+  select's waiter second whatever the declaration order (`T 1 WHOLE`, `T 1 BIT` for both orders);
+  verilator 5.052 resumes them in declaration order, and so does vita (§4.5.554).
 
 - A deferred assertion has no oracle for when its report matures: iverilog 13.0 refuses deferred
   assertions, and verilator 5.052 runs the action at reach as an immediate assertion. Its report
@@ -1385,14 +1399,14 @@ behind the §2 correctness queue.
 |---|---|---|---|---|---|
 | E3001-delayed | `assign #(D) bus = en ? d : 1'bz;` — two or more overlapping tri-state drivers exit 1 with E3001 | `check_whole_net_multidriver` mirrors `md_nets` on the rule "if any driver is delayed it is not a 4-state wire resolution target" | let the engine's `md_nets` resolve delayed drivers. Trap: a probe at 10 ns resolution cannot see a discarded 2 ns delay | 2-oracle (at 1 ns: `t=11 bus=1` against iverilog's `bus=z`) | — |
 | E3001-overlap | iverilog resolves same-range part-select pairs (`assign z8[3:0]=…` twice) and delayed+plain overlap bit by bit (`zzzz0xx1`) where vita gives E3001 | there is no per-bit driver map | a per-bit driver map is the prerequisite | iverilog | — |
-| hier-event | ``always @(`TOP.a_uVDC.RTRIM_I)`` — the read already works, so only sensitivity registration is missing | the patch target is `Process.sensitivity.edges[i].net` and that process is not pushed yet | a new lane that reserves `(proc_idx, edge_idx)` and patches when the instance is fixed | iverilog | — |
+| hier-event | ``always @(`TOP.a_uVDC.RTRIM_I)`` — the read already works, so only sensitivity registration is missing | the patch target is `Process.sensitivity.edges[i].net` and that process is not pushed yet | a derived net (`Elaborator::level_select_net`, §4.5.554): its continuous assign reads the hierarchical name through the placeholder every assign uses, and `@(u.v[0])` / `@(u.v[3:2])` already run that way; route a whole hierarchical name (level, and an edge term on its bit 0) to a copy of it | iverilog | — |
 | xproc-disable | a cross-process `disable` | unsupported | "a `disable` of a target that is not suspended is a no-op" alone passes that library. Boundary: ignoring a suspended target too would be silent-wrong — if it is active, be loud | iverilog | — |
 | timescale | partial-timescale diagnostics (`W-PARSE-TIMESCALE-PARTIAL` / `E-PP-TIMESCALE-PARTIAL`): when only some modules declare one, there is no diagnostic and 1ns/1ns is assumed (only the none-at-all case gives W1017) | not wired | the design is in doc-08 §15 and `rt.default_used` exists — wiring only | — | small |
 | nonansi-child-array | an instance array whose child declares a NON-EMPTY non-ANSI header (`module ch(a); input a;` + `ch w[1:0]();`) is ``E3009 instance array `w`: child `ch` has non-ANSI ports (v1: ANSI only)`` plus one E3010 per element, where both oracles print `Q=4 4`. The PORTLESS child (`module ch;` and `module ch();`) runs since §4.5.522 | `instance_array.rs` reads per-port widths from the ANSI header only, so a body `PortDecl` list has nowhere to come from | read the port widths from the body `PortDecl`s the way the scalar-instance lane already does; pinned meanwhile by `nonempty_nonansi_child_array_stays_loud` | 2-oracle | small |
 | implicit-net-generate | an undeclared name on the LEFT of a continuous assign INSIDE a generate block is `E3010` where both oracles infer the 1-bit wire and print `I=0`; at module scope vita infers it with `W2003` as IEEE 1364 §3.5 requires | the implicit-net inference is a module-body phase and the generate lowering does not re-enter it | run the same inference over a generate block's items (this is a POSITION gap in vita's own §3.5 policy, not the §8 IMPLICIT-NET non-goal) | 2-oracle | small |
 | modport-port-actual | a modport EXPRESSION as a port actual — `module sub(ifc.mp p); … ifc w(); sub u(w.mp);` — is ``E3002 interface port `p` must be connected to an interface instance name`` plus an `E3010` on `p.d`, where verilator runs it (`G12 43`); iverilog cannot parse the `ifc.mp p` port declaration | the interface-port binder takes an interface INSTANCE name only | take a `<instance>.<modport>` actual and bind the modport's view | verilator | small |
 | iface-generate | a `generate … endgenerate` region inside an interface body is ``E3009 generate blocks inside an interface are outside the MVP`` where both oracles run the design (`TOP=ok`) | `iface_inst.rs`'s MVP gate for interface body items | run the region through the interface window the way the module lane runs it; the routine and import lanes were opened by §4.5.517–518 | 2-oracle | small |
-| level-select-event | a LEVEL event control on a NET select — `@(n[0])`, `@(n[1:0])`, `@(n[I+:2])`, `@(a[1])` (an unpacked element), `@(a[1][0])`, `@(n[i])`, `@(a[j])`, in the header and the in-body lanes, alone or beside a live term — is E3009 (a bit or element select: "a level (non-edge) event control on a bit or element select is not supported"; a part or indexed part: "event control must be a bare signal name or a constant LSB bit-select"). After time 0 both oracles agree on every non-x cell: the process wakes only when the selected bits change (other bits, other elements and same-value writes do not wake it); a variable index follows the index, and an index change wakes it only when the selected value changes; a wire, a 2-state `bit` and a non-zero-LSB range behave the same. verilator additionally runs every header level `always` at time 0 (see "Oracle splits") and misses x transitions (2-state) | the frozen `EdgeTerm { net, kind }` and `WaitCause::Level { nets }` carry no bit field, and the level wait fires on any change of the whole net | a derived 1-bit or element net per constant select, or a per-bit level waiter (a bit field on the frozen types = format bump); a variable index also needs the selected value re-read on every index change | 2-oracle after time 0; iverilog alone for x transitions | M (bump) |
+| level-select-var-index | a LEVEL event control on a select with a VARIABLE index — `@(n[i])`, `@(a[j])`, `@(n[i])` in-body — is E3009 ("a level (non-edge) event control on a select with a variable index") where both oracles run it after time 0: the process wakes only when the selected value changes, including an index change that lands on a different value (`n = 01`, then `i = 1` → wake at 2; then `i = 2` over an equal bit → none). Constant selects run since §4.5.554 | the derived net `$ia_tmp$` = `n[i]` computes rather than moves bits, so it is not a copy net (`sim_engine::alias::copied_source`: "a runtime index computes"), and the time-0 settle moves it off its default to the select's value — a wake at time 0 (`T 0 W n=00`) where §9.4.2 and iverilog wake nothing; vita's own `wire w = n[i]; always @(w)` twin wakes at 0 today | extend the copy-net time-0 rule to a variable-offset select or word (it moves bits; its sources are the base and the index nets), in both kernels' time-0 arming, then route the variable index through `level_select_net` | 2-oracle after time 0; iverilog alone for time 0 | M |
 | deep | a t0 race · an `@(*)` decl-init wake · a runtime `==?` pattern · a NON-fill context width in an inline body · modport direction enforcement · a force on a part-select · an associative key or clocking array output word0 · a PART select of a negative range bound (§2) | — | — | — | deep |
 
 **Loud shapes surfaced by §4.5.493–495 (all 2-oracle unless noted; each PRE == POST)**

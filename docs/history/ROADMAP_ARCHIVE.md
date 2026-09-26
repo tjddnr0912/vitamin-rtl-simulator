@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 434건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 435건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.554` **a level event control on a constant select of a net** (2026-09-27 · a derived `logic` net per select, no format bump · loud → iverilog on every admitted cell of 86 · variable index recorded as `level-select-var-index` · tests 8660 → 8671)
 - `4.5.553` **a primitive cast is the context of its operand** (2026-09-27 · the size cast's route guarded by the real-domain walk · 38 cells wrong → both oracles, 0 regressed · the WALL was one existing guard · tests 8654 → 8660)
 - `4.5.552` **a deferred assertion's action matures by its kind** (2026-09-27 · `$finish` / `$stop` controls, file prints to their descriptor, every task of the arm, other actions run when reached with W3056 · 35 PRE-wrong cells right on 3 backends · tests 8639 → 8654)
 - `4.5.551` **the "nine binding sites" row re-measured stale** (2026-09-27 · 180 cells, 140 two-oracle / 30 one-oracle right, 10 an honest refusal recorded as §3.b `hier-fn-inline-callee` · no code change · tests 8632 → 8639)
@@ -563,6 +564,68 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.554 a level event control on a constant select of a net waits on a derived net: `@(n[0])`, `@(n[3:2])`, `@(a[1])` wake only when the selected bits change (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §3.b `level-select-event` closed for constant selects; its variable-index half is
+the new §3.b `level-select-var-index` (M). §3.b `hier-event` re-priced: the derived net already
+reads a hierarchical base. Added: a §2 "Delays / events" bullet (a level term wider than one bit
+beside an edge term wakes on bit 0 only — pre-existing, 2 oracles) and an "Oracle splits" bullet
+(the resume order of a select's waiter against a whole-net waiter). The array-copy and copy-net
+bullets note the event-control spelling. Summary mechanism 162 / 79 / 83 → 164 / 80 / 84, §3.b
+unchanged (109 / 93 / 16), total 395 / 227 / 168 → 397 / 228 / 169. Tests 8660 → 8671.
+
+**Defect (PRE 5ecaae3, loud).** Every level event control on a select was E3009 — `@(n[0])`,
+`@(n[1:0])`, `@(n[I+:2])`, `@(a[1])`, `@(a[1][0])`, in the header and in-body lanes, alone or beside
+a live term. The frozen `EdgeTerm { net, kind }` and `WaitCause::Level { nets }` carry no bit field,
+and the level wait fires on any change of the whole net. Both oracles run all of them.
+
+**Fix (no format bump).** `Elaborator::level_select_net` derives a net per select: `$ia_tmp$<n>`
+(a `logic`, dropped from the VCD/FST like the other `$ia_tmp$` scratch nets) driven by `assign … =
+<select>;`, and the waiter watches it. The continuous assign moves the net only when the selected
+bits change. A constant slice or word of flat storage is a copy net (`sim_engine::alias`), so time 0
+invents no transition, and the holder starts at `x`: a copy of all-x bits beside a bit that moved is
+no move (`@(bus[0])`, iverilog: no wake) and a copy of `z` is one (`@(vv[0])` on `2'b1z`, iverilog:
+one wake). A wire holder (`z`) inverted both — the recorded `wire s = vv[0]` class, measured first
+and then avoided by the choice of holder. The OBS profile keeps the assign's row under the kind
+`event_select`.
+
+Refused, with a message that names the reason: a VARIABLE index (the derived net computes, is not a
+copy net, and the time-0 settle woke the process where §9.4.2 and iverilog do not — vita's own
+`wire w = n[i]` twin does the same; recorded as `level-select-var-index`), a select of a frame-local,
+of a dynamic-storage element or a string, an index through a frame function call, and a select of a
+CONSTANT whose index the header lane cannot prove constant (`K[$clog2(P)]`, `K[SP.a]`: a derived net
+would run a suspending body at time 0, iverilog's side of the split the time-0 lane refuses for a
+bare constant). An edge list is unchanged (a non-LSB bit or part there stays E3009).
+
+**Grounding.** 86 cells, iverilog 13.0 and verilator 5.052, three backends: bits, parts, indexed
+parts, non-zero LSB, `bit`, `int`, `longint`, a wire, a port-driven net, a constant-driven wire, a
+struct member, unpacked elements (4-state, 2-state, initialized), header / in-body / task (static
+and automatic) / generate / fork / comma list / `or` of selects / beside a live term / `iff`, a
+hierarchical base, an interface port, x transitions, a time-0 write, a same-process glitch and one
+split by `#0`, NBA-driven changes, a waiter writing other bits of its base. Every admitted cell
+prints what iverilog prints (verilator agrees after time 0; it runs every header level `always` at
+time 0 and is 2-state), native = interp = vm. Order: a select's waiter and a whole-net waiter of the
+same change resume in declaration order — verilator's; iverilog resumes the select's second (split
+recorded). Found and recorded, not fixed: `@(posedge clk or n)` with a multi-bit `n` wakes on bit 0
+only (pre-existing, both oracles wake on every change).
+
+**Review (both lenses, direct).** Differential: the table above; a first cut with a wire holder
+put a time-0 wake on `@(bus[0])` (the copy-net class), and a first cut routing constant-headed
+selects took iverilog's side of a recorded split — both measured and closed before the pins. An
+attempt to close the class in the engine (the all-x time-0 drop on copy nets) regressed a
+`logic d = s` copy of `z` and was reverted. Soundness: `level_select_net` is the only producer of
+the derived net; its admission reads the lowered select's read set (`collect_expr_reads_calls`)
+against `net_is_frame_local`, dynamic handles, strings and calls; an edge list never reaches it;
+the continuous assign is ordinary IR on both kernels and the staged flow. PASS.
+
+**Gate.** nextest 8671 / 8671, doctests, clippy `-D warnings`, fmt, product-shape clippy; corpus
+10/10 ×2.
+
+**Pins.** `level_select_event.rs` (11 tests, native = interp = vm each). Converted: `event_control.rs`
+`level_bitselect_rejected` → `level_bitselect_wakes_on_its_bit_only` (cnt=1, both oracles),
+`bare_event_ctrl.rs` (bare = paren, both run, `x=1`), `const_level_event_t0.rs` (`@(a[1])` → `B at
+1`), `const_level_event_order.rs` (the three constant-headed selects keep a refusal, new text).
 
 #### 4.5.553 a primitive cast is the context of its operand: `int'(u4 * u4)` multiplies at 32 bits, through the size cast's route guarded by the real-domain walk (2026-09-27, branch main) ✅
 
