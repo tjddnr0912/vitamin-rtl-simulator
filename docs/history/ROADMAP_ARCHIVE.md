@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 420건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 421건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.540` **a real stored into a class field or a container element converts at the destination's width and sign** (2026-09-26 · §2 "Real" the class-field / container-element conversion bullet deleted · `coerce_dyn_elem` (every element store, push, insert, both assoc lanes) and `class_field_write_with` convert a real at the element's / field's width and sign, the engine pre-coercion leaves a class-field store to its funnel · 8555 → 8557)
 - `4.5.539` ⚠️ **the continuous-assign hop settled at the writing body's yield — measured and reverted: BLOCKED BY the same-time resume order** (2026-09-26 · §2 "Delays / events" the hop bullet → BLOCKED BY start-order row 7 · 16 of 19 cells two-oracle-right at the yield, but the picorv32 / serv corpus digests move: a DUT posedge block and a tb `initial` resumed by one edge read the port-bound reset in vita's declaration order = verilator, not iverilog's FIFO · diff kept in `s26/review/DIFF.patch` · no code, 8555 unchanged)
 - `4.5.538` **a zero-delay continuous-assign write is an Inactive-region event of its time step, and lands inside the time-0 settle** (2026-09-26 · §2 "Delays / events" the runtime-zero, zero-rise-trade and `#0`-delivery bullets retired; the `#0` visibility split, the native heap-rhs delayed assign and the `#0`-driven delay net recorded · `#(ZP)` is `Some(0)`, demoted on a resolved net · both loops deliver a due-now delayed write at the `#0` promotion, merged with the promoted resumes; the time-0 landing decided after the settle converges, deferred past the initializers · review: differential PASS, soundness BLOCKING → redesign → delta re-review direct PASS · 8548 → 8555)
 - `4.5.537` **a level wait sees only the changes made after it armed; the edge half is recorded with its prerequisite** (2026-09-26 · §2 "Delays / events" the wait-armed-in-a-batch bullet deleted, its EDGE half re-recorded BLOCKED BY the same-time resume order (start-order row 7), the continuous-assign hop of an earlier write (2 oracles, startable S–M) added, the `always_comb` time-0 count clause added to the oracle-split bullet · a CHANGE SEQUENCE stamped on every value change (`SimState::stamp_change` / `DirtyChannel::stamp_change` over ONE shared `Rc<Cell<u64>>`, from `note_change`; a heap change takes its number when it is made, `note_dyn_change`) and recorded by every LEVEL waiter at arm time (`arm_seq`): a static level waiter re-armed after its run and an in-body `@(sig)` / `@*` fire on a change stamped after their arm (O(1) per net; the changed-set scan only at time 0); the time-0 arming carries 0 and the rollback resets the initializers' nets; the arm-time value snapshot is deleted (a glitch back to the arm value and a heap change now wake the wait) · in-body EDGE waits keep the slot's accumulated mask: the after-the-arm edge rule was built, reviewed for two rounds and REVERTED because both oracles resume same-time processes in scheduling order and vita in declaration order, which shifted the clock-generator-first testbench by a cycle under the rule · 24 grounding cells, 3 backends; 2 lenses × 3 rounds — r1 differential BLOCKING (`@(cb)` waited a cycle) and soundness BLOCKING (heap changes stamped at the drain); r2 differential PASS, soundness BLOCKING (the same-time resume order); r3 both PASS (every level cell that depends on the same-time order is PRE = POST3, the recorded prerequisite) · 8548 tests)
@@ -549,6 +550,83 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.540 a real stored into a class field or a container element converts at the destination's width and sign (2026-09-26, branch main) ✅
+
+**ROADMAP rows**: §2 "Real" — the class-field / container-element conversion bullet ("A real
+stored into a CLASS FIELD or a CONTAINER ELEMENT does not take the assignment conversion
+(§6.12.2), on lanes outside `coerce_assign` … STARTABLE (M)", deleted). §2 count 165 → 164
+(startable 81, blocked 83).
+
+**Defect (PRE, both oracles; 10 grounding cells `s27/g`, 3 backends)**. Three store lanes
+outside the net funnel's `coerce_assign`: the engine / vm class-field store converted a real
+at the HANDLE net's width (32) in `write_lvalue_general` and the field funnel zero-extended it
+(`longint f; c.f = -2.5` → `00000000fffffffd`, a `[129:0]` field `…0fffffffd`; both oracles
+`fffffffffffffffd` / `3fff…fffd`; `int` and `byte` fields right by the accident of width); the
+tier-3 class-field store converted nothing (the IEEE-754 word at every width, `c004000000000000`
+for −2.5, `483d6329f1c35ca5` for 1e40); every tier-3 container element store did the same
+(queue index, dynamic array, assoc int / string key); and a queue `push_back` / `push_front` /
+`insert` stored the IEEE word on every backend (`int q[$]; q.push_back(300.5)` →
+`4072c80000000000`, both oracles `0000012d`) because the builtin evaluates its argument real
+and `coerce_dyn_elem`'s `resize` is a no-op on a real. The engine's `q[0] = rv`, `dy[0] = rv`,
+`aa[k] = rv` were right (its pre-coercion at the handle width, which for a container IS the
+element width).
+
+**Fix (both backends, three funnels)**. `SimState::coerce_dyn_elem(net, v, w)` — the one
+funnel every dyn-array / queue element store, every push / insert, and now both assoc write
+lanes (`assoc_write`, `assoc_str_write`, which resized privately) go through — converts a real
+value whose element is not real with `coerce_assign(false, v, w, ir.nets[net].signed)` (the
+exact `real_to_int_round` at the element width, §4.5.536; a real-element handle, slot
+`is_real`, keeps the value). `SimState::class_field_write_with` converts a real piece at the
+FIELD's width and sign (`class_field_width`) before its resize and 2-state coercion — the
+funnel both backends and the frame lane (`frame_eval.rs`, a class method's `f = x`) reach.
+`write_lvalue_general`'s pre-coercion is skipped for a class-field destination
+(`class_is_handle[net] && chunk.word.is_some()`) so the field funnel sees the real value; a
+container destination keeps the pre-coercion (its handle width is the element width; a second
+conversion is a no-op on an already-integral value). Byte-identity: every new arm is behind
+`v.is_real` / `piece.is_real`, and the skip changes only what a real value sees.
+
+**The measured rule**. Class fields of 8 / 16 / 32 / 64 / 130 bits, signed and unsigned, 2-
+and 4-state, with −2.5, 300.5, 1e40 — both oracles (`fd fffffffd fffffffffffffffd 3fff…fffd fd
+fffd`, `2d 0000012d …012d …012d 2d 012d`, `0 16329f1c35ca50000…`); inside a method (the frame
+lane) and by a nonblocking store (iverilog's lines; it aborts internally on the real actual);
+every container lane at 8 / 16 / 32 / 64 / 130 bits incl. an unsigned element of a negative
+real (`fd`), a `shortint` of 70000.4 (`1170`, verilator; iverilog aborts on `longint aa[int]`),
+a string-keyed assoc, a `'{…}` queue pattern, `foreach`, and ±inf / NaN → 0 (verilator; the
+§4.5.536 rule). Loud and unchanged: a chained handle write `c.d.w = …` (E3010), a real class
+member or a real-element container (E3009, the N7 MVP).
+
+**Review**: two lenses, two rounds (frozen release PRE be34ba8f / POST 3a1c49e1 / POST2
+2301ca9d). Round 1: differential BLOCKING on a NEW backend divergence that was already on PRE
+— the PART-SELECT deposit lane of a dynamic-array element (`dy[0][15:0] = -70000.4`,
+`ld[0][63:32]`, `bd[0][3:0]`, `+:`, in a function body, a 130-bit element) sliced the IEEE-754
+word on tier-3 (`00006666` for verilator's / the engine's `0000ee90`; the lane bypasses
+`coerce_dyn_elem`); soundness BLOCKING on a NEW defect — a real into a STRING element
+(`string sq[$]; sq.push_back(2.5); sq[1] = 97.2`) took the new integral arm before the
+`dyn_str_elem` arm at the string handle's width of 1 (`1 1 0 / 1 1 0`; verilator `1 1 1 / 3 97
+98`; PRE the IEEE bytes / a one-bit value on the engine's index lane). Fix = the string arm
+first with a 64-bit signed integral conversion before §6.16, the part-select lane converted at
+the element's width and sign at the head of `dyn_write`, and the engine's pre-coercion skip
+extended to a string-element destination; every round-1 cell re-graded on POST2
+(`review/REGRADE2.md`). Round 2, delta only: both PASS — the string lanes at every method with
+−1.5, 1e19, 16706.0, −0.4, 4294967393.0, −70000.4 match verilator's folded bytes, part-selects
+at widths 1–130 with ±0.5, ±1.5, 1e19, −9.3e18, 3.5e38, 1e20, ±inf, NaN and the `+:` / `-:`
+forms in an automatic function match verilator on all 32 lines, `int unsigned` / `bit signed`
+/ `logic signed [39:0]` / `byte unsigned` elements match, a clocked string-queue / dyn-array
+design without a real store is byte-identical PRE vs POST2 (stdout, VCD, results.jsonl) on
+every backend. Recorded, pre-existing: a queue or assoc element part-select store is dropped
+with W4020 for any value (loud); a plain `string s = <real>` variable stores the IEEE bytes on
+tier-3 and "" on the engine (a §2 line, below); `string aa[int]` and a character write into a
+string element are E3009; `$bitstoreal` of x prints `nan`.
+
+**Residue (§2 "Real")**: a plain `string` VARIABLE assigned a real (`string s; s = 65.4;`)
+stores the IEEE-754 bytes on tier-3 and "" on the engine (no oracle: verilator's generated C++
+does not compile the shape, iverilog aborts; hand-IEEE = the element rule, §6.12.2 then §6.16).
+S.
+
+**Tests**: `crates/cli/tests/real_store_class_container.rs` (new, 2 tests, 10 cells, every
+cell on three backends). Full gate 8555 → 8557, doctest / clippy / fmt 0, flip run = the
+documented 10 pins, corpus 10/10, `format_version` 34 unchanged.
 
 #### 4.5.539 the continuous-assign hop settled at the writing body's yield — measured, reverted, BLOCKED BY the same-time resume order (2026-09-26, branch main) ⚠️
 

@@ -147,3 +147,6 @@ a section restructure, a residue split).
   rewritten from startable (S–M) to BLOCKED BY the same-time resume order (start-order row 7),
   row 7 extended, REMAINING_WORK §D prerequisite added. Startable 83 − 1 = 82; blocked 82 + 1 =
   83; total 397. Tests 8555 unchanged. `format_version` 34 unchanged.
+- §4.5.540: §2 "Real" the class-field / container-element conversion bullet (startable, M)
+  deleted. Startable 82 − 1 = 81; blocked 83; total 396. Tests 8555 → 8557. `format_version`
+  34 unchanged.

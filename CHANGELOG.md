@@ -9,6 +9,18 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a real stored into a class field or a container element converts at the destination's width
+
+- **A real assigned to a class field, a queue, dynamic-array or associative-array element, or
+  pushed / inserted into a queue takes the IEEE 1800 §6.12.2 conversion at the destination's own
+  width and sign**: `longint f; c.f = -2.5` read `00000000fffffffd` on the interpreter (converted
+  at 32 bits and zero-extended) and the IEEE-754 word `c004000000000000` on the native backend,
+  `int q[$]; q.push_back(300.5)` stored `4072c80000000000` on every backend, and every element
+  store did on the native backend, where Icarus Verilog and Verilator store `fffffffffffffffd`
+  and `0000012d`. A `[129:0]` field or element of `1.0e40` is the exact low bits
+  (`16329f1c35ca50000…`), `±inf` and NaN store 0, an unsigned element of a negative real wraps,
+  as for a plain variable since the previous release. All three backends.
+
 ### Fixed — a zero-delay continuous assign delivers its update in its own time step
 
 - **A `#0` continuous assign, net-declaration delay or gate delay no longer lands after the
