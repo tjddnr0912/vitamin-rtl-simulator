@@ -826,6 +826,29 @@ impl Value {
     /// and `16'h61zz` with `[3:0] = 4'bxxxx` -> "a" len 1. Before this, vita kept
     /// the interior/trailing NULs (len 3) and read the all-unknown byte as 0xF0
     /// (len 2) — a two-oracle silent-wrong on the whole funnel.
+    /// The bytes a STRING DESTINATION stores for this value — the one rule every string
+    /// store shares: a whole `string` variable, a string container element, a string
+    /// frame slot (a task's `output string`, a string function's return), and a string
+    /// formal bound to an actual. An integral or string value is [`Self::to_sv_string_bytes`];
+    /// a REAL is first an integer (§6.12.2 — rounded, at 64 signed bits) and then those
+    /// bytes, so `16706.0` stores "AB" and `-1.5` the eight bytes of −2.
+    ///
+    /// ⚠️ Five stores used to spell this, and only the container-element one converted a
+    /// real: the others took the bytes of the IEEE-754 word (`s = 65.4` was
+    /// `405059999999999a` on native; a string function's `f = 16706.0`, a string formal
+    /// bound to `16706.0` and a task's string output were `40d05080` on every backend)
+    /// or, on the engine's module store, a value already squeezed to the string net's one
+    /// bit (`01`). verilator's element lane agrees with this rule; its whole-variable lane
+    /// keeps only the low byte (`"B"` for 16706.0) and so contradicts itself.
+    ///
+    /// Not the `string'(…)` cast's rule: that spelling is loud on a real (ROADMAP §2).
+    pub fn string_store_bytes(&self) -> Vec<u8> {
+        if self.is_real {
+            return coerce_assign(false, self.clone(), 64, true).to_sv_string_bytes();
+        }
+        self.to_sv_string_bytes()
+    }
+
     pub fn to_sv_string_bytes(&self) -> Vec<u8> {
         if self.is_str {
             return self.to_str_bytes();

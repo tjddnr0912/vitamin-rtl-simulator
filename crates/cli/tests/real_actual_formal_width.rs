@@ -317,18 +317,30 @@ fn a_string_formal_is_never_bit_resized() {
     // two binds spell it. Gating on the formal NET's kind instead is strictly
     // weaker — `String` maps to a `Wire` net — and a `string` INPUT formal was
     // then destroyed by a 1-bit real→int cast (`range_to_dims(String, None)` = 1).
-    // iverilog aborts on this shape; verilator is the oracle and agrees with the
-    // pre-slice length.
+    //
+    // The VALUE a real actual binds is the one rule every string store shares
+    // (`Value::string_store_bytes`, §4.5.549): §6.12.2 to a 64-bit signed integer,
+    // then §6.16's bytes — 3.7 is one byte `04`, 16706.0 is "AB". Until §4.5.549 this
+    // pin said 8 bytes (the IEEE-754 word, `400d99999999999a`), which is what
+    // verilator 5.052 binds on THIS lane; but verilator binds the same value three
+    // ways — `sq.push_back(16706.0)` is "AB", a string formal is the raw word
+    // `40d05080`, and `s = 16706.0` is one byte "B" in one design and an internal
+    // compiler error (`V3Number … non-string argument`) in another — so it is not an
+    // oracle for this conversion, and iverilog aborts on the shape.
     let (out, code) = run(
         "module top;\n\
-         \x20 task automatic ats(input string s); $display(\"AUTO=%0d\", s.len()); endtask\n\
-         \x20 task ss(input string s); $display(\"STATIC=%0d\", s.len()); endtask\n\
+         \x20 task automatic ats(input string s); $display(\"AUTO=%0d %h\", s.len(), s); endtask\n\
+         \x20 task ss(input string s); $display(\"STATIC=%0d %h\", s.len(), s); endtask\n\
          \x20 function automatic int fs(input string s); return s.len(); endfunction\n\
-         \x20 initial begin ats(3.7); ss(3.7); $display(\"FN=%0d\", fs(3.7)); $finish; end\nendmodule\n",
+         \x20 initial begin ats(3.7); ss(3.7); $display(\"FN=%0d\", fs(3.7)); ats(16706.0); ss(16706.0); $finish; end\nendmodule\n",
     );
     assert_eq!(code, Some(0), "got:\n{out}");
     assert!(
-        out.contains("AUTO=8") && out.contains("STATIC=8") && out.contains("FN=8"),
-        "all three keep the heap payload;\n{out}"
+        out.contains("AUTO=1 04")
+            && out.contains("STATIC=1 04")
+            && out.contains("FN=1")
+            && out.contains("AUTO=2 4142")
+            && out.contains("STATIC=2 4142"),
+        "all three binds keep the heap payload and convert the real once;\n{out}"
     );
 }

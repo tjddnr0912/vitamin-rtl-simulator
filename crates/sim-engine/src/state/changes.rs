@@ -962,14 +962,7 @@ impl SimState<'_> {
             // is "a" in verilator; iverilog aborts on the shape) — this arm comes
             // FIRST because the integral conversion below would size a string
             // element's value to the handle's width of 1 (review r1 soundness F1).
-            let integral;
-            let src = if v.is_real {
-                integral = crate::value::coerce_assign(false, v.clone(), 64, true);
-                &integral
-            } else {
-                v
-            };
-            return Value::from_str_bytes(&src.to_sv_string_bytes());
+            return Value::from_str_bytes(&v.string_store_bytes());
         }
         // §6.12.2: a REAL value stored into an integral element takes the
         // assignment conversion at the ELEMENT's width and sign — the one rule
@@ -1175,7 +1168,9 @@ impl SimState<'_> {
             && c.offset.is_none()
             && c.width.is_none()
         {
-            let bytes = piece.to_sv_string_bytes();
+            // `string_store_bytes`: a REAL is first a 64-bit integer (§6.12.2), then
+            // §6.16's bytes — the rule every string store shares.
+            let bytes = piece.string_store_bytes();
             // HEAP-WAKE: a missing entry IS "" (lazy, like every dyn object), so
             // `s = ""` on a never-assigned handle is correctly NOT a change.
             let moved = {

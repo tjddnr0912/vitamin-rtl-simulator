@@ -756,18 +756,28 @@ impl<'a> SimState<'a> {
         // (`string sq[$]; sq[1] = 97.2`) converts in `coerce_dyn_elem` too: the
         // handle's width is 0 here, and a real converted to one bit reached the
         // string arm as "\x01" (review r1 soundness F1).
-        let funnel_dest = lhs.chunks.len() == 1
-            && lhs.chunks[0].word.is_some()
-            && (self
-                .class_is_handle
-                .get(lhs.chunks[0].net as usize)
-                .copied()
-                .unwrap_or(false)
-                || self
-                    .dyn_str_elem
+        // …and a WHOLE string variable, whose real conversion is `dyn_write`'s (64
+        // signed bits, then §6.16) rather than the net's one-bit width.
+        let whole_string = lhs.chunks.len() == 1 && {
+            let c = &lhs.chunks[0];
+            c.word.is_none()
+                && c.offset.is_none()
+                && c.width.is_none()
+                && self.ir.nets[c.net as usize].kind == sim_ir::NetKind::String
+        };
+        let funnel_dest = whole_string
+            || lhs.chunks.len() == 1
+                && lhs.chunks[0].word.is_some()
+                && (self
+                    .class_is_handle
                     .get(lhs.chunks[0].net as usize)
                     .copied()
-                    .unwrap_or(false));
+                    .unwrap_or(false)
+                    || self
+                        .dyn_str_elem
+                        .get(lhs.chunks[0].net as usize)
+                        .copied()
+                        .unwrap_or(false));
         let value = if (dest_is_real || value.is_real) && !funnel_dest {
             let (int_w, int_signed) = if lhs.chunks.len() == 1 {
                 let n = lhs.chunks[0].net as usize;
