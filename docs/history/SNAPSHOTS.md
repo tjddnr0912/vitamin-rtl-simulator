@@ -158,3 +158,6 @@ a section restructure, a residue split).
 - §4.5.541 follow-up: §2 "Delays / events" the `$monitor`-after-`$strobe` bullet (startable, S)
   closed in the same iteration; the strobe-before-change split bullet added. Startable 84 − 1 = 83; blocked 83 + 1 = 84; total 399. Tests 8561 → 8563.
   `format_version` 34 unchanged.
+- §4.5.541 stale sweep: §2 "Delays / events" the `fork … join_none` child-before-the-settle-wake
+  bullet (startable, S) deleted — closed by the slice. Startable 83 − 1 = 82; blocked 84; total
+  398. Tests 8563 → 8564. `format_version` 34 unchanged.

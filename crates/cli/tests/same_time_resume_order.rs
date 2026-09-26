@@ -294,3 +294,16 @@ endmodule
         ),
     ]);
 }
+
+#[test]
+fn a_join_none_child_of_the_first_batch_runs_before_the_settles_wake() {
+    // ROADMAP §2 "Delays / events" (closed by §4.5.541): the child spawned by `fork … join_none`
+    // in the first Active batch runs right after its parent yields, before the process the
+    // time-0 settle woke. Both oracles `I | I2 | F1 | W`; vita printed `I | I2 | W | F1`.
+    let s = run(r#"module t; reg r = 0; wire w = r;
+always @(w) $display("W");
+initial begin $display("I"); fork $display("F1"); join_none r = 1; $display("I2"); end
+initial #5 $finish; endmodule
+"#);
+    assert_eq!(s, "I\nI2\nF1\nW\n");
+}
