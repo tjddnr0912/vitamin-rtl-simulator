@@ -145,8 +145,9 @@ fn a_select_of_a_constant_with_a_variable_index_is_loud() {
 ///
 /// An index that is neither provably live nor provably constant keeps the answer
 /// the lanes gave before: n10 in-body `@(K[$size(arr)-1])` never wakes (all four
-/// tools print `DONE`); in a header LEVEL list it stays on the net path (dS14
-/// `always @(K[$clog2(P)])`, dS16 `always @(K[f1(1)])`: loud, as in vita_pre).
+/// tools print `DONE`); in a header LEVEL list it stays loud (dS14
+/// `always @(K[$clog2(P)])`, dS16 `always @(K[f1(1)])`, as in vita_pre; both oracles run it
+/// once at time 0, and with a suspending body they split — the refusal says so).
 #[test]
 fn index_constness_is_asked_of_the_leaves() {
     let shadow = |sens: &str, body: &str| {
@@ -194,7 +195,7 @@ fn index_constness_is_asked_of_the_leaves() {
     for sens in ["K[$clog2(P)]", "K[f1(1)]"] {
         loud(
             &hdr(sens),
-            "a level (non-edge) event control on a bit or element select is not supported",
+            "a level (non-edge) event control on a select of a constant whose index",
         );
     }
 }
@@ -518,7 +519,7 @@ fn a_dotted_index_is_live_only_when_it_resolves_to_a_net() {
             "module top;\n{st}  reg clk = 0;\n  always @(K[SP.a] or clk) $display(\"H at %0t\", $time);\n\
                initial begin #1 clk = 1; #1 clk = 0; #1 $display(\"DONE\"); $finish; end\nendmodule\n"
         ),
-        "a level (non-edge) event control on a bit or element select is not supported",
+        "a level (non-edge) event control on a select of a constant whose index",
     );
 }
 

@@ -259,7 +259,7 @@ impl Elaborator<'_> {
     }
 
     /// The head of `e`, under parentheses and selects, binds a constant.
-    fn expr_head_is_constant(&self, e: &ast::Expr) -> bool {
+    pub(crate) fn expr_head_is_constant(&self, e: &ast::Expr) -> bool {
         match &e.kind {
             ast::ExprKind::Paren { inner } => self.expr_head_is_constant(inner),
             ast::ExprKind::BitSelect { base, .. }

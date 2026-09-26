@@ -854,8 +854,8 @@ fn a_list_outside_the_lane_is_unchanged() {
 /// - m02 `assert property (@(K) a)`: iverilog rejects, verilator `P at 0`.
 ///
 /// Its shadow twin keeps the §2 O sentence, and the term prints as written (j06
-/// `@(K[0])`, j07 `@(p::C)`). A net-headed bit or element select keeps its own
-/// refusal (per-bit level tracking is a separate feature).
+/// `@(K[0])`, j07 `@(p::C)`). A net-headed bit or element select is no longer
+/// refused (g2 b12 below).
 #[test]
 fn the_remaining_refusals_name_their_cause() {
     let one = |decls: &str, always: &str| {
@@ -949,10 +949,12 @@ fn the_remaining_refusals_name_their_cause() {
         ),
         "must name a package variable or constant, and this name is neither",
     );
-    // g2 b12 `reg [3:0] a [0:1]; always @(a[1])` — a whole 4-bit element.
-    loud(
+    // g2 b12 `reg [3:0] a [0:1]; always @(a[1])` — a whole 4-bit element. No longer a
+    // refusal: a net-headed select waits on a derived net (`level_select_event.rs`);
+    // iverilog `B at 1` (verilator also runs it at time 0, the recorded split).
+    expect(
         "module top;\n  reg [3:0] a [0:1];\n  always @(a[1]) $display(\"B at %0t\", $time);\n\
            initial begin #1 a[1] = 4'd5; #1 $finish; end\nendmodule\n",
-        "a level (non-edge) event control on a bit or element select is not supported",
+        "B at 1\n",
     );
 }

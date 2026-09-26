@@ -118,9 +118,10 @@ fn bare_binary_event_stays_loud() {
 
 #[test]
 fn bare_bitsel_event_equals_paren_bitsel() {
-    // A single-bit level event `@a[2]` is a pre-existing unsupported feature (vita
-    // loud-rejects it in BOTH forms). The bare form must route to the SAME loud
-    // reject as the paren form — bare never diverges from paren.
+    // A single-bit level event `@a[2]`: the bare form routes to the SAME event
+    // control as the paren form — bare never diverges from paren. Both wake when
+    // `a[2]` rises at 1 (both oracles `x=1`); both were E3009 until elaborate
+    // derived a net per select.
     let prog = |sens: &str| {
         format!(
             "module top; reg [3:0] a=0; reg x=0; initial begin #1 a[2]=1; #1 $finish; end\n\
@@ -129,15 +130,9 @@ fn bare_bitsel_event_equals_paren_bitsel() {
     };
     let bare = run(&prog("@a[2]"));
     let paren = run(&prog("@(a[2])"));
-    assert_eq!(
-        bare, paren,
-        "bare @a[2] must equal paren @(a[2]) (both loud)"
-    );
-    assert_ne!(
-        bare.1,
-        Some(0),
-        "single-bit level event is loud in both forms"
-    );
+    assert_eq!(bare, paren, "bare @a[2] must equal paren @(a[2])");
+    assert_eq!(bare.1, Some(0), "the single-bit level event runs");
+    assert!(bare.0.contains("x=1"), "both oracles x=1, got:\n{}", bare.0);
 }
 
 #[test]

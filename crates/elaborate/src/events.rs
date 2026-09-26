@@ -13,6 +13,11 @@ pub(crate) fn map_edge(e: ast::Edge) -> ir::EdgeKind {
     }
 }
 
+/// `ProcIdent::kind` of the continuous assign that derives a level event control's
+/// select (`Elaborator::level_select_net`). Its evaluations are the cost of that
+/// event control, so the OBS profile keeps the row under this label.
+pub const LEVEL_SELECT_KIND: &str = "event_select";
+
 impl Elaborator<'_> {
     /// Lower a blocking intra-assignment EVENT control `lhs = [repeat(n)] @(ev) rhs`
     /// (IEEE 1800 §9.4.5) as capture-now / wait / write:
@@ -739,16 +744,12 @@ impl Elaborator<'_> {
                          index (non-LSB / part-select / variable index / array / packed need \
                          per-bit edge tracking)",
                     );
-                } else {
-                    self.error(
-                        MsgCode::ElabUnsupported,
-                        "a level (non-edge) event control on a bit or element select is not \
-                         supported: vita's level wait fires on any change of the whole variable, \
-                         including changes outside the selection; wait on the whole variable, \
-                         or use posedge/negedge on a vector's bit 0",
-                    );
+                    return POISON_NET;
                 }
-                POISON_NET
+                self.level_select_or_refuse(e)
+            }
+            ast::ExprKind::PartSelect { .. } | ast::ExprKind::IndexedPart { .. } if !edge_ctx => {
+                self.level_select_or_refuse(e)
             }
             _ => {
                 self.error(
@@ -758,6 +759,149 @@ impl Elaborator<'_> {
                 POISON_NET
             }
         }
+    }
+
+    /// A level event control on a select: the derived net, or the refusal that says
+    /// which part of the select vita cannot watch.
+    fn level_select_or_refuse(&mut self, e: &ast::Expr) -> u32 {
+        // A select of a CONSTANT reaches here only when the header lane could not
+        // prove its index constant (`K[$clog2(P)]`, `K[f1(1)]`, `K[SP.a]`). A derived
+        // net would run the process once at time 0 — iverilog's side of the split
+        // the time-0 lane refuses for a bare constant with a suspending body
+        // (`always @(K) begin #1 … end`: iverilog runs it at 0, verilator does not).
+        if self.expr_head_is_constant(e) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a level (non-edge) event control on a select of a constant whose index \
+                 vita cannot prove constant is not supported: whether it runs once at time 0 \
+                 depends on the body, and the oracles split",
+            );
+            return POISON_NET;
+        }
+        if !self.event_select_indices_constant(e) {
+            self.error(
+                MsgCode::ElabUnsupported,
+                "a level (non-edge) event control on a select with a variable index is not \
+                 supported: vita would wake the process at time 0 where the selected value \
+                 did not change; wait on the whole variable, or copy the select into a \
+                 variable in an `always @*` block and wait on that",
+            );
+            return POISON_NET;
+        }
+        if let Some(net) = self.level_select_net(e) {
+            return net;
+        }
+        self.error(
+            MsgCode::ElabUnsupported,
+            "a level (non-edge) event control on a select of a dynamic-storage handle, a \
+             string, a subroutine's automatic local or through a function call is not \
+             supported: vita watches a select through a net it derives at module scope",
+        );
+        POISON_NET
+    }
+
+    /// Is every index of this select chain a constant — `n[0]`, `n[3:2]`, `n[I+:2]`
+    /// over a localparam `I`, `a[1]`, `a[1][0]` — so the derived net is a copy of
+    /// fixed bits? Asked of the AST through the constant folder the lowering uses,
+    /// before anything is lowered.
+    fn event_select_indices_constant(&self, e: &ast::Expr) -> bool {
+        let c = |x: &ast::Expr| self.const_eval_in_scope(x).is_some();
+        match &e.kind {
+            ast::ExprKind::Paren { inner } => self.event_select_indices_constant(inner),
+            ast::ExprKind::Ident(_) | ast::ExprKind::PkgScoped { .. } => true,
+            ast::ExprKind::BitSelect { base, index } => {
+                c(index) && self.event_select_indices_constant(base)
+            }
+            ast::ExprKind::PartSelect { base, msb, lsb } => {
+                c(msb) && c(lsb) && self.event_select_indices_constant(base)
+            }
+            ast::ExprKind::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => c(offset) && c(width) && self.event_select_indices_constant(base),
+            _ => false,
+        }
+    }
+
+    /// IEEE 1800 §9.4.2: a LEVEL event control waits for a change in the VALUE of its
+    /// expression. For a select (`@(n[0])`, `@(n[3:2])`, `@(n[I+:2])`, `@(a[1])`,
+    /// `@(a[1][0])`, `@(n[i])`) that value is not any net's, and the level wait fires
+    /// on any change of the nets it names — the whole variable, including bits
+    /// outside the selection. So vita derives one: `$ia_tmp$<n>` (a `logic` the
+    /// VCD/FST writer drops) driven by `assign $ia_tmp$<n> = <select>;`, and the
+    /// waiter watches that net. The continuous assign re-evaluates when the base or
+    /// a variable index changes and moves the net only when the selected value does,
+    /// which is both oracles' rule after time 0: other bits, other elements and a
+    /// same-value write wake nothing, and a same-process glitch (`n = 1; n = 0;`)
+    /// is invisible because the derived value settles after the writer yields. A
+    /// constant slice or word of flat storage is a copy net (`sim_engine::alias`),
+    /// so time 0 invents no transition (iverilog; verilator runs every header level
+    /// `always` at time 0). A select's waiter and a whole-net waiter of the same
+    /// change resume in declaration order, verilator's order; iverilog resumes the
+    /// select's waiter second (ROADMAP "Oracle splits"). A hierarchical base reads
+    /// through the deferred-hierarchy placeholder every continuous assign uses.
+    ///
+    /// `None` when the select cannot be copied at module scope: a read of a
+    /// dynamic-storage handle or a string (no dirty channel), of a frame-local
+    /// (an automatic subroutine's slot), or through a frame function call in an
+    /// index. The caller keeps those loud.
+    ///
+    /// ⚠️ A VARIABLE index (`@(n[i])`, `@(a[j])`) is refused by the caller before
+    /// this runs. Its derived net computes rather than moves bits, so it is not a
+    /// copy net, and the time-0 settle moves it off `z` to the select's value —
+    /// a transition that woke the process at time 0 where §9.4.2 and iverilog do
+    /// not (the expression had that value before the process started waiting;
+    /// MEASURED on `n[i]` / `a[j]` over declaration-initialized and 2-state
+    /// sources). ROADMAP §3.b `level-select-var-index`.
+    pub(crate) fn level_select_net(&mut self, e: &ast::Expr) -> Option<u32> {
+        let rhs = self.lower_expr(e);
+        let w = self.ir_bits_of(rhs).filter(|&w| w > 0)?;
+        let mut reads = std::collections::BTreeSet::new();
+        let mut calls = Vec::new();
+        self.collect_expr_reads_calls(rhs, &mut reads, &mut calls);
+        if !calls.is_empty()
+            || reads.iter().any(|&n| {
+                self.net_is_frame_local(n) || self.is_dyn_handle_net(n) || self.is_string_net(n)
+            })
+        {
+            return None;
+        }
+        // A `logic` holder, not a wire: the copy-net rule gives a copy its sources'
+        // movement only where its OWN storage moved, and the time-0 answer then
+        // depends on the default it starts from. From `x`, copying the all-x bits of
+        // a source that moved elsewhere is no move (`@(bus[0])` beside a constant
+        // `bus[1]`: iverilog wakes nothing) and copying a `z` is one (`@(vv[0])` on
+        // `2'b1z`: iverilog wakes once) — MEASURED; a wire's `z` default inverted
+        // both, the recorded `wire s = vv[0]` class.
+        let net = self.nets.len() as u32;
+        self.add_net(
+            &format!("$ia_tmp${net}"),
+            ir::NetVar {
+                kind: ir::NetKind::Logic,
+                width: w,
+                msb: w - 1,
+                lsb: 0,
+                signed: false,
+                array_len: 1,
+                dir: ir::PortDir::Internal,
+                init: default_init(ast::NetVarKind::Logic, w),
+            },
+        );
+        if self.nets.len() as u32 == net {
+            return Some(POISON_NET); // the net arena cap refused it (already loud)
+        }
+        self.push_cont_assign(
+            ir::ContAssign {
+                lhs: whole_net_lvalue(net),
+                rhs,
+                delay: None,
+            },
+            LEVEL_SELECT_KIND,
+            Some(e.span),
+        );
+        Some(net)
     }
 
     // ── in-body @(...) / wait → WaitCause; #delay → (amount, region) ─

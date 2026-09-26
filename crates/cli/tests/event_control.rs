@@ -209,19 +209,22 @@ fn computed_base_event_control_rejected() {
 }
 
 #[test]
-fn level_bitselect_rejected() {
-    // LEVEL sensitivity `@(clk[0])` (no posedge/negedge): the engine's LEVEL
-    // detection is WHOLE-NET (fires on any bit change), so mapping the bit-select
-    // to the net would over-trigger — iverilog fires only on clk[0] changes
-    // (discriminating stimulus: bit0 constant, bit1 toggles → iverilog cnt=1,
-    // whole-net would give cnt=4). Single-bit level sensitivity is unrepresentable
-    // → reject loud rather than silent-wrong.
-    let (_, err, code) = run("module t;\n\
+fn level_bitselect_wakes_on_its_bit_only() {
+    // LEVEL sensitivity `@(clk[0])` (no posedge/negedge) fires only on clk[0]
+    // changes, not on the whole net (discriminating stimulus: bit0 settles at 0 at
+    // time 0 and then stays, bit1 toggles → both oracles cnt=1; a whole-net wait
+    // would give cnt=4). It was E3009 until elaborate derived a net per select
+    // (`level_select_event.rs` holds the census).
+    let (out, err, code) = run("module t;\n\
          reg [1:0] clk; integer cnt=0;\n\
          always @(clk[0]) cnt=cnt+1;\n\
-         initial begin clk=0; #1 clk=2'b10; #1 clk=2'b00; #1 clk=2'b10; #1 $finish; end\n\
+         initial begin clk=0; #1 clk=2'b10; #1 clk=2'b00; #1 clk=2'b10; #1 $display(\"cnt=%0d\", cnt); $finish; end\n\
          endmodule\n");
-    assert_rejected(&err, code);
+    assert_eq!(code, Some(0), "stderr:\n{err}");
+    assert!(
+        out.contains("cnt=1"),
+        "iverilog/verilator: cnt=1, got:\n{out}"
+    );
 }
 
 #[test]
