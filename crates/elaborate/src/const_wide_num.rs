@@ -39,8 +39,10 @@ pub(crate) fn bp_mask_to(p: &mut [u64], w: u32) {
 }
 
 /// The two operands of a binary operator brought to their COMMON width (§11.6.1:
-/// the max of the two self widths, each extended in its OWN signedness), with the
-/// result's signedness (§11.8.1: signed only if both are).
+/// the max of the two self widths), each extended with the RESULT's signedness
+/// (§11.8.1 / §11.8.3 step 4: signed only if both are, and an operand is sign-extended
+/// only if that propagated type is signed). Extending each side in its own sign made
+/// `S8 > 16'd255` compare `fffd` against `00ff` where both oracles compare `00fd`.
 ///
 /// Declines when either side carries an unknown bit — every caller here READS bit
 /// values, and a 4-state carry chain belongs in the engine, not in a second copy.
@@ -51,9 +53,10 @@ pub(crate) fn bp_operands(l: &WideBits, r: &WideBits) -> Option<(Vec<u64>, Vec<u
         return None;
     }
     let w = (*lw).max(*rw);
-    let a = resize_bits(lb, *lw, w, *ls);
-    let b = resize_bits(rb, *rw, w, *rs);
-    Some((a.val, b.val, w, *ls && *rs))
+    let sg = *ls && *rs;
+    let a = resize_bits(lb, *lw, w, sg);
+    let b = resize_bits(rb, *rw, w, sg);
+    Some((a.val, b.val, w, sg))
 }
 
 /// Wrap a 2-state limb vector back into a `BitPacked` of width `w`.

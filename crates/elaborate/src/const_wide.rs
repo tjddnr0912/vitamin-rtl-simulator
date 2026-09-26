@@ -252,10 +252,15 @@ fn widen_to(v: WideBits, ctx: u32, sg: bool) -> Option<WideBits> {
 
 /// [`bp_operands`] with a floor on the common width — §11.6.1's context.
 ///
-/// The common SIGN is computed first (`ls && rs`, §11.8.2) and both operands are
-/// extended with it.
-fn bp_operands_at(l: &WideBits, r: &WideBits, ctx: u32) -> Option<(Vec<u64>, Vec<u64>, u32, bool)> {
-    let sg = l.2 && r.2;
+/// The extension sign is the REGION's (`psg`, §11.8.2) when the caller is the second
+/// pass of [`fold_bits_at`], and the node's own (`ls && rs`) in the first.
+fn bp_operands_at(
+    l: &WideBits,
+    r: &WideBits,
+    ctx: u32,
+    psg: Option<bool>,
+) -> Option<(Vec<u64>, Vec<u64>, u32, bool)> {
+    let sg = psg.unwrap_or(l.2 && r.2);
     bp_operands(
         &widen_to(l.clone(), ctx, sg)?,
         &widen_to(r.clone(), ctx, sg)?,
@@ -276,7 +281,48 @@ fn fold_selfdet_operand(e: &ast::Expr, name: WideNameFn) -> Option<WideBits> {
     }
 }
 
+/// Fold `e` at context width `ctx` (`0` = none) the way §11.6.1 and §11.8.2 evaluate a
+/// region: the expression's width and sign are decided FIRST, over the whole tree, and
+/// then pushed down into every context-determined operand.
+///
+/// Pass 1 folds the tree with each node's own width and sign (`fold_region` with
+/// `psg = None`), which yields the region's self width `w` (§11.6.1, Table 11-21) and
+/// its sign (§11.8.1: unsigned if ANY context-determined operand is unsigned; the
+/// `ls && rs` the arms compute bottom-up). Pass 2 refolds the tree at `w` with that
+/// sign pushed into every extension (`psg = Some(sign)`), which is §11.8.3 step 4: an
+/// operand that must be extended is sign-extended only if the PROPAGATED type is
+/// signed. A self-determined top (`wide_top_is_self_determined`) needs no second pass —
+/// every region beneath it re-enters here — and neither does a tree whose first pass
+/// already ran at `w` with a signed sign, since every extension it made was the one
+/// the push-down would make.
+///
+/// Both halves of ROADMAP §2 🆕 R are this entry. A self-determined POSITION folds its
+/// inner through it with `ctx = 0`, so `$signed(~8'd1 + 128'd0)` learns the region's
+/// width (128) in pass 1 and complements at 128 in pass 2 (`ff…fe`, was `0…0fe`); and a
+/// signed operand of an unsigned region is zero-extended before its operator runs, so
+/// `~S8 + 128'd0` over a signed 8-bit −3 is `ff…f02` (was `0…02`), `(S8 >>> 1) +
+/// 128'd0` shifts in zeros (`0…07e`) and `8'hFF - (-1'sb1)` at 8 bits is `00` (§2 🆕 F).
+/// The node-local rule the arms used to apply — extend each operand with the sign of
+/// the node it feeds — agreed with the oracles only on sign-homogeneous trees, which is
+/// what `wide_operator_tree_is_plain` was cut to.
 pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<WideBits> {
+    let pass1 = fold_region(e, ctx, None, name)?;
+    if wide_top_is_self_determined(e) {
+        return Some(pass1);
+    }
+    let (_, w, sg) = pass1;
+    if w == ctx && sg {
+        return Some(pass1);
+    }
+    fold_region(e, w, Some(sg), name)
+}
+
+/// One pass of [`fold_bits_at`]. `psg` is the region's sign to extend with (pass 2), or
+/// `None` to extend each operand with the sign of the node it feeds (pass 1, which
+/// discovers the region's width and sign). Every self-determined position starts a
+/// new region through [`fold_bits_at`] / [`fold_bits_at0`] / [`fold_self_bits`]; only
+/// the context-determined operands recurse here.
+fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> Option<WideBits> {
     // A width this domain will not build. `MAX_NET_WIDTH` is the declared-width cap
     // a net already lives under, so an intermediate wider than that cannot land
     // anywhere legal — and it keeps `{1000000{8'hAB}}` from allocating before the
@@ -289,7 +335,7 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
         }
     };
     match &e.kind {
-        ast::ExprKind::Paren { inner } => fold_bits_at(inner, ctx, name),
+        ast::ExprKind::Paren { inner } => fold_region(inner, ctx, psg, name),
         // A fill literal is context-determined (§5.7.1) and therefore has NO self
         // width: with no context (`ctx == 0`) it declines — only `fold_init`, which
         // knows the target, folds a lone one — and inside a context it is the fill
@@ -389,9 +435,9 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
         {
             let k = fold_shift_count(rhs, name)?;
             // §11.4.10: the LEFT operand takes the context, the count does not.
-            let (b0, w0, sg) = fold_bits_at(lhs, ctx, name)?;
+            let (b0, w0, sg) = fold_region(lhs, ctx, psg, name)?;
             let w = w0.max(ctx);
-            let (b, _, _) = widen_to((b0, w0, sg), w, sg)?;
+            let (b, _, _) = widen_to((b0, w0, sg), w, psg.unwrap_or(sg))?;
             let mut out = bp_zero(w);
             for i in 0..w as usize {
                 // source index for result bit i
@@ -414,14 +460,15 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
                 ast::BinOp::BitAnd | ast::BinOp::BitOr | ast::BinOp::BitXor | ast::BinOp::BitXnor
             ) =>
         {
-            let (lb, lw, ls) = fold_bits_at(lhs, ctx, name)?;
-            let (rb, rw, rs) = fold_bits_at(rhs, ctx, name)?;
+            let (lb, lw, ls) = fold_region(lhs, ctx, psg, name)?;
+            let (rb, rw, rs) = fold_region(rhs, ctx, psg, name)?;
             if bp_any_unknown(&lb, lw) || bp_any_unknown(&rb, rw) {
                 return None;
             }
             let w = lw.max(rw).max(ctx);
-            // §11.8.2: the expression's sign decides the fill for BOTH operands.
-            let cs = ls && rs;
+            // §11.8.2: the REGION's sign decides the fill for BOTH operands (pass 2);
+            // pass 1 uses the node's own, which is the region's only at the top.
+            let cs = psg.unwrap_or(ls && rs);
             let (la, ra) = (resize_bits(&lb, lw, w, cs), resize_bits(&rb, rw, w, cs));
             let mut out = bp_zero(w);
             for i in 0..w as usize {
@@ -441,7 +488,7 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             op: ast::UnOp::BitNot,
             operand,
         } => {
-            let (b0, w0, sg) = fold_bits_at(operand, ctx, name)?;
+            let (b0, w0, sg) = fold_region(operand, ctx, psg, name)?;
             if bp_any_unknown(&b0, w0) {
                 return None;
             }
@@ -449,7 +496,7 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             // 128, not at 32 and then extends — the extension cannot put back bits the
             // complement never computed.
             let w = w0.max(ctx);
-            let (b, _, _) = widen_to((b0, w0, sg), w, sg)?;
+            let (b, _, _) = widen_to((b0, w0, sg), w, psg.unwrap_or(sg))?;
             let mut out = bp_zero(w);
             for i in 0..w as usize {
                 bp_set(&mut out, i, !bp_get(&b, i).0, false);
@@ -467,11 +514,15 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             rhs,
         } => {
             let k = fold_shift_count(rhs, name)?;
-            let (b0, w0, sg) = fold_bits_at(lhs, ctx, name)?;
+            let (b0, w0, sg) = fold_region(lhs, ctx, psg, name)?;
             let w = w0.max(ctx);
-            let (b, _, _) = widen_to((b0, w0, sg), w, sg)?;
+            // The sign that fills is the REGION's: `(S8 >>> 1) + 128'd0` is an unsigned
+            // region, so the signed 8-bit operand is zero-extended and the shift vacates
+            // with zeros (`0…07e` in both oracles), where a signed region keeps the copy.
+            let ext = psg.unwrap_or(sg);
+            let (b, _, _) = widen_to((b0, w0, sg), w, ext)?;
             let hi = w as usize - 1;
-            let (fill_v, fill_u) = if sg { bp_get(&b, hi) } else { (false, false) };
+            let (fill_v, fill_u) = if ext { bp_get(&b, hi) } else { (false, false) };
             let mut out = bp_zero(w);
             for i in 0..w as usize {
                 let (v, u) = match i.checked_add(k).filter(|s| *s < w as usize) {
@@ -535,9 +586,9 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
         ast::ExprKind::Binary { op, lhs, rhs }
             if matches!(op, ast::BinOp::Add | ast::BinOp::Sub | ast::BinOp::Mul) =>
         {
-            let l = fold_bits_at(lhs, ctx, name)?;
-            let r = fold_bits_at(rhs, ctx, name)?;
-            let (a, b, w, sg) = bp_operands_at(&l, &r, ctx)?;
+            let l = fold_region(lhs, ctx, psg, name)?;
+            let r = fold_region(rhs, ctx, psg, name)?;
+            let (a, b, w, sg) = bp_operands_at(&l, &r, ctx, psg)?;
             let v = match op {
                 ast::BinOp::Add => limbs_add(&a, &b, w),
                 ast::BinOp::Sub => limbs_add(&a, &limbs_neg(&b, w), w),
@@ -553,12 +604,15 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
         ast::ExprKind::Binary { op, lhs, rhs }
             if matches!(op, ast::BinOp::Div | ast::BinOp::Mod) =>
         {
-            let l0 = fold_bits_at(lhs, ctx, name)?;
-            let r0 = fold_bits_at(rhs, ctx, name)?;
-            let sg = l0.2 && r0.2;
-            let l = widen_to(l0, ctx, sg)?;
-            let r = widen_to(r0, ctx, sg)?;
-            wide_divmod(matches!(op, ast::BinOp::Div), &l, &r)
+            let l0 = fold_region(lhs, ctx, psg, name)?;
+            let r0 = fold_region(rhs, ctx, psg, name)?;
+            // The region's sign is also the sign the division RUNS with: in an unsigned
+            // region a signed operand is a zero-extended magnitude (`(-8'sd8) / 8'sd2 +
+            // 128'd0` divides `ff…f8` by 2 unsigned).
+            let sg = psg.unwrap_or(l0.2 && r0.2);
+            let (lb, lw, _) = widen_to(l0, ctx, sg)?;
+            let (rb, rw, _) = widen_to(r0, ctx, sg)?;
+            wide_divmod(matches!(op, ast::BinOp::Div), &(lb, lw, sg), &(rb, rw, sg))
         }
         // §11.4.10 power. ⚠️ NOT folded through `bp_operands` like its arithmetic
         // siblings: Table 11-21 makes the exponent SELF-determined while the base
@@ -572,29 +626,29 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
             // Table 11-21: the BASE takes the context, the exponent is
             // self-determined — the same carve-out §2 row 27 made for a shift count.
             // The result's sign is the BASE's, so the base extends in its own.
-            let l0 = fold_bits_at(lhs, ctx, name)?;
-            let ls = l0.2;
-            let l = widen_to(l0, ctx, ls)?;
+            let l0 = fold_region(lhs, ctx, psg, name)?;
+            let ls = psg.unwrap_or(l0.2);
+            let (lb, lw, _) = widen_to(l0, ctx, ls)?;
             let r = fold_selfdet_operand(rhs, name)?;
-            wide_pow(&l, &r)
+            wide_pow(&(lb, lw, ls), &r)
         }
         // §11.4.5 unary minus: the two's complement at the operand's own width.
         ast::ExprKind::Unary {
             op: ast::UnOp::Minus,
             operand,
         } => {
-            let (b0, w0, sg) = fold_bits_at(operand, ctx, name)?;
+            let (b0, w0, sg) = fold_region(operand, ctx, psg, name)?;
             if bp_any_unknown(&b0, w0) {
                 return None;
             }
             let w = w0.max(ctx);
-            let (b, _, _) = widen_to((b0, w0, sg), w, sg)?;
+            let (b, _, _) = widen_to((b0, w0, sg), w, psg.unwrap_or(sg))?;
             Some((bp_from_limbs(limbs_neg(&b.val, w), w), w, sg))
         }
         ast::ExprKind::Unary {
             op: ast::UnOp::Plus,
             operand,
-        } => fold_bits_at(operand, ctx, name),
+        } => fold_region(operand, ctx, psg, name),
         // §11.4.4 / §11.4.5: relational and equality operators deliver ONE UNSIGNED
         // BIT and size their operands against EACH OTHER. That makes the whole node
         // self-determined, which is what lets a caller extend the result to a wider
@@ -612,24 +666,30 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
                     | ast::BinOp::CaseNe
             ) =>
         {
-            // §11.6.1: a comparison's operands size each other, so a fill on one side
-            // takes the OTHER side's width (`'1 == 8'hff` is true, `'1 != 40'hff_ffff_ffff`
-            // is false in both oracles); two fills are one bit each.
-            let (l, r) = match (fill_literal_ast(lhs), fill_literal_ast(rhs)) {
-                (Some(_), None) => {
-                    let r = fold_bits_at0(rhs, name)?;
-                    (fold_bits_at(lhs, r.1, name)?, r)
+            // §11.8.3: a comparison's operands are "neither fully self-determined nor
+            // fully context-determined" — they form a region of their own, sized to
+            // the larger operand (§11.6.1) and signed only if both are (§11.8.1), and
+            // that region is pushed into each operand as a context. Pass 1 learns the
+            // two self widths and signs (a lone fill is one bit there, §5.7.1); pass 2
+            // refolds the narrower side at the common width with the region's sign, so
+            // a fill on one side takes the OTHER side's width (`'1 == 8'hff` is true,
+            // `'1 != 40'hff_ffff_ffff` is false in both oracles; two fills are one bit
+            // each) and a context-determined operator on one side computes at that
+            // width: `(~8'd1 == 16'hFFFE)` complements at 16 and is 1, not `00fe` vs
+            // `fffe`. A side already at the common width keeps its pass-1 bits: it was
+            // folded through `fold_bits_at`, which ran its own second pass.
+            let l0 = fold_selfdet_operand(lhs, name)?;
+            let r0 = fold_selfdet_operand(rhs, name)?;
+            let w = l0.1.max(r0.1);
+            let sg = l0.2 && r0.2;
+            let at = |x: &ast::Expr, v: WideBits| -> Option<WideBits> {
+                if v.1 < w {
+                    fold_region(x, w, Some(sg), name)
+                } else {
+                    Some(v)
                 }
-                (None, Some(_)) => {
-                    let l = fold_bits_at0(lhs, name)?;
-                    let r = fold_bits_at(rhs, l.1, name)?;
-                    (l, r)
-                }
-                _ => (
-                    fold_selfdet_operand(lhs, name)?,
-                    fold_selfdet_operand(rhs, name)?,
-                ),
             };
+            let (l, r) = (at(lhs, l0)?, at(rhs, r0)?);
             let (a, b, w, sg) = bp_operands(&l, &r)?;
             let ord = limbs_cmp(&a, &b, w, sg);
             use std::cmp::Ordering::*;
@@ -675,13 +735,13 @@ pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<
                 return None;
             }
             let c = (0..cw as usize).any(|i| bp_get(&cb, i).0);
-            let (tb, tw, ts) = fold_bits_at(then_e, ctx, name)?;
-            let (eb, ew, es) = fold_bits_at(else_e, ctx, name)?;
+            let (tb, tw, ts) = fold_region(then_e, ctx, psg, name)?;
+            let (eb, ew, es) = fold_region(else_e, ctx, psg, name)?;
             let w = tw.max(ew).max(ctx);
             let sg = ts && es;
             let (b, from, _) = if c { (tb, tw, ts) } else { (eb, ew, es) };
-            // §11.8.2 again: the chosen arm extends with the EXPRESSION's sign.
-            let (b, _, _) = widen_to((b, from, sg), w, sg)?;
+            // §11.8.2 again: the chosen arm extends with the REGION's sign.
+            let (b, _, _) = widen_to((b, from, sg), w, psg.unwrap_or(sg))?;
             Some((b, w, sg))
         }
         // §11.5.1 / §11.5.2 BIT and PART select: PLACEMENT, like the concat above —
@@ -1382,12 +1442,13 @@ impl Elaborator<'_> {
         // Admitted only when `wide_operator_tree_is_plain` holds: every self-determined
         // position holds a plain leaf and the tree has one sign throughout — the trees
         // on which this domain's fold is §11.6.1 / §11.8.2 (see the predicate for the
-        // two shared-walk defects it steps around). Then pass 1 (ctx 0) learns the
-        // tree's self width `w` (Table 11-21), and pass 2 folds AT `w`, so a narrower
+        // two shared-walk defects it steps around). `fold_self_bits` learns the tree's
+        // self width `w` (Table 11-21) and folds AT `w`, so a narrower
         // context-determined operand is computed at the tree's width (`~8'd1 + 128'd0`
         // is `ff…fe`, not `0…0fe`). A ≤64-bit tree keeps the i64 route whatever its
         // sub-nodes. The width is past 64 only by DECLARED provenance
         // (`wide_name_bits`), which is what moves `~W` over a `parameter [127:0] W`.
+        // The two passes live in `fold_bits_at` itself now.
         if crate::param_query::ast_contains_fill(e) {
             return None;
         }
@@ -1397,11 +1458,10 @@ impl Elaborator<'_> {
         if !crate::const_wide_num::wide_operator_tree_is_plain(e, &shape) {
             return None;
         }
-        let (_, w, _) = fold_self_bits(e, &name)?;
+        let (b, w, sg) = fold_self_bits(e, &name)?;
         if w <= 64 {
             return None;
         }
-        let (b, w, sg) = fold_bits_at(e, w, &name)?;
         // An x/z bit would reach a binder that drops the unknown plane when the value
         // bits fit the i64 lane (§2 row 15) — loud → silent. Exclude it; the pre-slice
         // route stays loud.
