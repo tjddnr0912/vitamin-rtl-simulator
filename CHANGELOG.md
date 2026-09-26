@@ -9,6 +9,22 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a definite operator over an x/z operand folds in a constant context
+
+- A reduction, `!`, `&&` / `||`, `===` / `!==`, an unambiguous `==` / `!=` and a ternary
+  condition with one x or z bit in an operand declined in the wide constant fold, so a range
+  bound `wire [(&4'b110x)+2:0]` was ONE bit at exit 0 (both oracles 3) and a `localparam`, an
+  override and a `generate if` holding the same text were E3009 where both oracles print the
+  value. IEEE decides them regardless of the unknown bits (a known 0 decides `&`, a known 1
+  decides `|` and a truth, `===` compares the four states, `==` is x only when the relation is
+  ambiguous); 119 two-oracle cells fold now. An answer that IS x is carried as an x bit so a
+  definite operator above it still folds, and stays loud at every binder that has no unknown
+  plane (a `localparam`, an override); the override lane declines an x bit out of an operator
+  rather than bind it as 0.
+- An unsigned value with an unknown top bit is zero-extended to a wider declaration or cast
+  (`localparam logic [127:0] Z = 4'bz001;` is `0…0z` in both oracles; the extension replicated
+  the z).
+
 ### Fixed — the product-shape build (`--no-default-features`) compiles again
 
 - `sim-engine`: the `std::rc::Rc` import of `state/mod.rs` was gated on the `oracle` feature while `SimState::change_seq` (added with the change-sequence work) is `Rc<Cell<u64>>` unconditionally; the no-oracle CI job failed at `cargo build -p cli -p sim-engine --no-default-features` (E0412). The import is now unconditional.

@@ -618,6 +618,13 @@ the super-linear division kernels are budgeted at elaboration: a constant `/` or
 about 65536 bits folds, and a wider one is refused in milliseconds instead of running for
 minutes. The runtime lane answers that same shape with `X` above its own cap (§4.5).
 
+An operator that is definite over an x/z operand folds — `&4'b110x`, `|4'b101x`, `!`, `&&` and
+`||` with a deciding operand, `===` / `!==`, an unambiguous `==` / `!=`, a ternary whose condition
+has a known 1 — in a range bound, a parameter, an override and a generate condition. One whose
+answer is x stays loud in a parameter and an override, and sizes a range bound at one bit as
+iverilog does (verilator refuses a non-two-state bound). A bitwise operator over an x/z operand
+declines (ROADMAP §2 🆕 H ⓕ).
+
 ### 2.7 Side-effecting system functions in re-evaluated positions
 
 Any system function that advances a file position, or writes through an argument, is

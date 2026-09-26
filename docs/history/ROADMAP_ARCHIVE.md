@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 423건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 424건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.543` **a definite operator over an x/z operand folds: the wide constant fold's accept set is the operator's rule, an answer that is x is carried as an x bit, and the binders that have no unknown plane keep their loud** (2026-09-26 · §2 🆕 H ⓐ closed, ⓕ added · 119 two-oracle cells, a range bound silently one bit · two BLOCKING fixes: the override lane's operator guard, the unsigned zero-extension of an unknown top bit · tests 8571 → 8579)
 - `4.5.542` **the wide constant fold evaluates a region the way §11.8.1 / §11.8.2 do: width and sign decided over the whole tree, then pushed into every context-determined operand; a self-determined position is a region of its own** (2026-09-26 · §2 🆕 R and 🆕 F deleted, the §11.8.1 wall of REMAINING_WORK §D deleted, rows 14, 25, 26, 30 and 🆕 H re-recorded OPEN, the WALL(provenance) paragraph rewritten, two §5.2 do-not-start lines deleted; follow-up: the override lane's plain-tree rule deleted, two §2 "Index sealing" bullets closed and one re-recorded startable · `fold_bits_at` = two passes over `fold_region` (pass 1 learns the region's width and sign, pass 2 refolds at that width with that sign pushed into every extension: shifts, bitwise, `~`, `>>>` fill, `+ - *`, `/ %`, `**` base, unary `-`, ternary arms), a comparison's operands a region sized to the larger side, `bp_operands` extending with the result's sign · 206 grounding cells, 57 FIXED / 0 regression / 0 new loud; lenses direct (differential PASS, soundness PASS); corpus 10/10; no format bump · 8571 tests)
 - `4.5.541` **same-time resumes run in scheduling order: a resume event is numbered when it is scheduled, a wake group shares one number, and a fork's arms and a joined parent run right after the body that made them runnable** (2026-09-26 · §2 start-order row 7 re-recorded ORACLE-SPLIT (the `#d`, `#0`, fork-arm and join kinds closed; the time-0 hierarchy start order and the wake-group order are splits), the in-body edge-wait half of §2 "Delays / events" unblocked (STARTABLE M), the continuous-assign hop row re-recorded BLOCKED by the wake-group split, one oracle-split bullet added, both REMAINING_WORK §D row-7 prerequisites deleted; follow-up: `$monitor` prints before the `$strobe`s of its step (2 oracles, `flush_postponed_with`), 8563 tests · `Ready` / `NativeReady` carry `seq`, `push_sorted` / `push_sorted_native` order by `(seq, tie)`; a `#d` / `#0` / fork-arm / join resume takes its number when it is scheduled (`schedule_resume`, `exec_fork_into`, `on_child_complete_into`), a wake group shares `Scheduler::wake_seq` refreshed after the time-0 seeding, at every batch take and at time advance before the delayed-assign landing; fork arms and a joined parent go to `spawned` and both index-based batch loops splice them in right after the body that made them runnable · 63 grounding cells (36 2-oracle, 26 split, 5 runs each) + 12 adversarial cells, 3 backends; 5 pins converted, both oracles on each; lenses direct (differential PASS, soundness PASS); corpus 10/10 on iverilog's digests; flip run the 10 documented pins; no format bump · 8561 tests)
 - `4.5.540` **a real stored into a class field or a container element converts at the destination's width and sign** (2026-09-26 · §2 "Real" the class-field / container-element conversion bullet deleted · `coerce_dyn_elem` (every element store, push, insert, both assoc lanes) and `class_field_write_with` convert a real at the element's / field's width and sign, the engine pre-coercion leaves a class-field and a string-element store to their funnels, the dyn-element part-select lane converts before it slices · review r1 two BLOCKINGs (string element arm order, native part-select) → fixed → r2 PASS · 8555 → 8557)
@@ -552,6 +553,68 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.543 a definite operator over an x/z operand folds: the wide constant fold's accept set is the operator's rule, an answer that is x is carried as an x bit, and the binders that have no unknown plane keep their loud (2026-09-26, branch main) ✅
+
+**ROADMAP rows**: §2 start-order 🆕 H ⓐ closed (the row stays OPEN on ⓑ–ⓔ; ⓕ added — the bitwise
+arms over an x/z operand); row 15 re-recorded with the override lane's operator guard and the
+x-bearing DECLARATION value. Summary unchanged (394 / 229 / 165). Tests 8571 → 8579.
+
+**Defect (PRE 7177d77, both oracles).** `const_wide.rs`'s reduction, `!`, `&&` / `||`,
+comparison and ternary arms declined on ONE unknown bit (`bp_any_unknown`). IEEE decides most of
+those regardless: a known 0 decides `&` / `~&`, a known 1 decides `|` / `~|` and a truth (`!`,
+`&&`, `||`, `?:`), `===` / `!==` compare the four states, and `==` / `!=` are x only "if, due to
+unknown or high-impedance bits in the operands, the relation is ambiguous" (§11.4.5). Measured,
+`E` = each of `(&4'b110x)`, `(|4'b101x)`, `(~&4'b110x)`, `(~|4'b101x)`, `(!4'b101x)`,
+`(4'b1x1x && 1'b0)`, `(4'b101x && 1'b1)`, `(4'b000x || 1'b1)`, `(4'b1x10 === 4'b1x10)`,
+`(4'b1x10 !== 4'b1x11)`, `(4'b110x == 4'b0000)`, `(4'b110x != 4'b0000)`, `(&{61'd0, 4'b110x})`,
+`(&4'b110z)`, `(4'b110x ? 1'b1 : 1'b0)`:
+
+```
+wire [E+2:0] w; $bits(w)              both 3 / 4     PRE 1 (exit 0, no diagnostic)
+localparam L = E + 2                  both 2 / 3     PRE E3009 "4'b110x has no constant-fold arm"
+localparam logic [3:0] L = E + 2      both 2 / 3     PRE E3009
+sub #(.P(E)) u()                      both 0 / 1     PRE E3009
+generate if (E == 0)                  both a branch  PRE E3010
+```
+
+The bound consumers read a declined fold as width 1 with no diagnostic (`packed_extents`'s
+`unwrap_or(0)`), which is why the range-bound lane was silent where every other lane was loud.
+
+**Mechanism.** `bp_truth(b, w)`: `Some(true)` on a known 1, `Some(false)` when every bit is a
+known 0, `None` otherwise. The reduction arm asks it of the value (`|`) or of the complement
+(`&`, "a known 0"), `^` still declines on any unknown; `!`, the logical operators (a deciding
+operand short-circuits an x on the other side) and the ternary condition ask it of the operand;
+`wide_eq_with_unknowns` answers `===` / `!==` literally and `==` / `!=` on a known bit that
+differs, bringing the narrower side to the common width through `widen_to`. An answer that is x
+is a one-bit x VALUE (`bp_xbit`), not a decline, so an operator above it that is definite
+regardless still folds (`(4'bxxxx || 1'b0) || 1'b1` is 1); every value-reading consumer declines
+on the unknown bit exactly as it declined on the `None` (census of the 30 `fold_self_bits` /
+`fold_bits_at` / `fold_init` / `wide_param_const_in_scope` sites). The i64 walks reach the arms
+through `selfdet_bits_i64` (reductions, already) and three fallbacks keyed on what the i64 lane
+cannot hold: `selfdet_truth` for `!` and a ternary condition (also closes `!W` / `W ? :` over a
+128-bit name), and the comparison arm's `ast_holds_unknown_literal` route for the equalities and
+logical operators; a constant-function local name is excluded so the interpreter lane is
+untouched. `extend_bits` zero-extends an UNSIGNED value with an unknown top bit
+(`resize_bits` replicates the MSB's state) at the size cast, the literal initializer and the
+declared-width binders; `widen_to` uses it and declines only a signed operand whose MSB is x.
+
+**Review (lenses direct, s30/review/REPORT.md, 209 cells in s30/g).** 119 FIXED, 0 regression,
+0 new loud, 0 correct→silent. Two BLOCKING findings, both fixed and re-measured: (1) the override
+lane's self-determined branch bound `#(.P(|4'b000x))` as 0 (both oracles x, PRE loud) — it now
+declines an x out of an OPERATOR while a sized x/z literal keeps row 15's route; (2)
+`128'((|4'b000x))` was `xx…x` (both `0…0x`) — the cast arm's x-extension, closed by
+`extend_bits`, which also moved `localparam logic [127:0] Z = 4'bz001;` from `zz…z` to the
+oracles' `0…0z` (same funnel, S, follow-up in the same commit). Honest loud kept: an answer that
+is x in a `localparam` / override (both oracles print x; the binders have no unknown plane), an
+x-bearing parameter VALUE (`parameter logic [3:0] X = 4'b110x;` is E3009 at the declaration —
+row 15's narrow-store plane), a bitwise `~` over x (🆕 H ⓕ), a constant-function x argument,
+`$isunknown` over the x bit (the i64 walk has no arm), an ambiguous ternary condition. Splits,
+not chased: x in a range bound (iverilog one bit, verilator §6.9.1 error; vita = iverilog), a
+generate-if on x, a 2-state `bit` target of an x result, `$countones`, a signed x-MSB literal's
+extension (iverilog x-extends, verilator zero-extends; vita = iverilog). Gate 8571 → 8579,
+doctest / clippy / fmt 0, corpus 10/10 on all four runs, perf both orders within noise,
+`format_version` 34 unchanged. Pins: `definite_operator_over_unknown_operand.rs` (8 tests).
 
 #### 4.5.542 the wide constant fold evaluates a region the way §11.8.1 / §11.8.2 do — width and sign decided over the whole tree, then pushed into every context-determined operand; a self-determined position is a region of its own (2026-09-26, branch main) ✅
 
