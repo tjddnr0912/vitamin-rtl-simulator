@@ -3,7 +3,6 @@
 
 use std::cell::Cell;
 use std::io::Write;
-#[cfg(feature = "oracle")]
 use std::rc::Rc;
 
 use diag::{Diagnostic, LogEvent, LogSink, MsgCode, Severity, TimeStamp};

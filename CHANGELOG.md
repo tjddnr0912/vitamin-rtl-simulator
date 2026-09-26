@@ -9,6 +9,10 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — the product-shape build (`--no-default-features`) compiles again
+
+- `sim-engine`: the `std::rc::Rc` import of `state/mod.rs` was gated on the `oracle` feature while `SimState::change_seq` (added with the change-sequence work) is `Rc<Cell<u64>>` unconditionally; the no-oracle CI job failed at `cargo build -p cli -p sim-engine --no-default-features` (E0412). The import is now unconditional.
+
 ### Fixed — a wide constant expression is evaluated at one sign, the region's
 
 - **A `localparam` or `parameter` initializer of 65 bits or more now applies IEEE 1800 §11.8.2 the
