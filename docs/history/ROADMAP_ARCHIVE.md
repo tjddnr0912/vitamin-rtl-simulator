@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 432건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 433건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.552` **a deferred assertion's action matures by its kind** (2026-09-27 · `$finish` / `$stop` controls, file prints to their descriptor, every task of the arm, other actions run when reached with W3056 · 35 PRE-wrong cells right on 3 backends · tests 8639 → 8654)
 - `4.5.551` **the "nine binding sites" row re-measured stale** (2026-09-27 · 180 cells, 140 two-oracle / 30 one-oracle right, 10 an honest refusal recorded as §3.b `hier-fn-inline-callee` · no code change · tests 8632 → 8639)
 - `4.5.550` **a real bound to an inline formal wider than 128 bits converts at the formal's width** (2026-09-27 · §2 "Inline / frame binds" >128-bit bullet closed · `RealToInt` converts at a context wider than 128 · 15 two-oracle cells · tests 8626 → 8632)
 - `4.5.549` **a real stored into a string converts by one rule on every store and every backend** (2026-09-27 · §2 "Real" string-variable bullet and the second bytecode divergence closed · `Value::string_store_bytes` at five stores · verilator disqualified (three conversions by lane) · tests 8623 → 8626)
@@ -561,6 +562,75 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.552 a deferred assertion's action matures by its kind: `$finish` ends the run in its time step, `$stop` stops it, a file print writes to its descriptor, every task of the arm matures, and any other action runs when reached (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — the deferred `$finish` / `$stop` bullet closed. §3.b
+`fmonitor` deleted as stale (plain `$fmonitor` / `$fstrobe` write their file since 1d683ec, format
+25; measured). Added: §3.b `deferred-inline-action` (hand-IEEE, M), §3.b `immediate-cover`
+(ORACLE-SPLIT), and an "Oracle splits" bullet (a deferred assertion has no maturation oracle).
+Summary mechanism 163 / 80 / 83 → 163 / 79 / 84, §3.b 107 / 92 / 15 → 108 / 92 / 16, total
+394 / 227 / 167 → 395 / 226 / 169. Tests 8639 → 8654.
+
+**Defect (PRE 44f21c3, all three backends alike).** Elaborate recorded every system task of a
+deferred assertion's arms in `defer_acts`, and `Scheduler::try_defer_with` rendered each one as a
+display line and stored ONE report per `(marker, activity, generation)`. At maturation the text was
+printed. That is the report for a print and nothing else:
+
+```
+action (at #5, a process that prints "after at 5" next)   verilator 5.052 / iverilog imm.   PRE
+else $finish(0);                                        ends at 5                          prints "0", runs to 20
+else $stop;  (assert #0 and assert final)               stops at 5                         empty line, runs to 20
+always @(posedge clk) assert #0 (n != 2) else $finish;  ends at 25                         empty line, runs to 100
+else $fdisplay(fd, "F at %0t", $time);                  file "F at 5"                      stdout "F at -2147483645 5", file empty
+else q.push_back(7);  / $sformat / new[4] / insert      q=1 / s=X5 / 4 / 9,3               "x 7" printed, q=0 / "" / 0 / 1,2
+else $readmemh("f", mem);                               mem 5a a5                          prints the file name, mem x
+else begin $display("A"); $display("B"); end            A, B                               B
+else tk(7);  (static task: k = a; $display; push_back)  TK line, q=1                       TK lost, "x 7", q=0
+```
+
+**Fix.** Elaborate keeps in `defer_acts` only what a report can carry
+(`stmt_flow.rs::prune_deferred_actions`, run after both arms): a print (`$display` / `$write`
+families, `$strobe`, a severity task), a file print (`$fdisplay`, `$fwrite`, `$fstrobe`) and
+`$finish` / `$stop`. A no-op `Display` of a side table is not a print. A user task call clears
+`cur_defer` for its lowering, so an inlined body runs as a whole when reached, as a framed one
+already did. W3056 now fires when a system task or a task call of the action runs when reached,
+not only when the action holds no report. The engine's pending report reads a file print's descriptor at reach with the text
+(`DeferredReport::fd`), keeps every action of the arm (`Vec` per key, reach order), and at
+maturation turns `$finish` into `finish_pending` (the run ends at the step's stable point, where
+every `$finish` ends it, so the step's other reports still mature) and `$stop` into `Step::Stop`
+after draining the rest of the queue and, from Observed, the Reactive queue — what an inline
+`$stop` does.
+
+**Grounding.** 54 cells, verilator 5.052, iverilog 13.0 on the same design spelled as an immediate
+`assert` (it refuses deferred assertions), three backends. PRE: 35 wrong, 12 right, 7 loud. POST:
+the 35 are right on every backend and the 12 and the 7 are unchanged, native = interp = vm on every
+cell. "Right" is the oracles' content except where they split from each other or from §16.4:
+`$monitoroff` as the action (verilator suppresses the change print, iverilog prints it; vita runs
+it when reached, as verilator does) and the two items below. Where the oracles run the action at reach, the matured print's POSITION (after
+the reaching process's later statements) is hand-IEEE §16.4, and a `$strobe` / `$fstrobe` action
+prints the reach value (`v=1`, oracles `v=2`, §16.4.2); both recorded under oracle splits. A
+re-reach in the same step cancels a pending `$finish` (hand-IEEE §16.4.1; verilator ends).
+Unchanged and honest: a deferred assertion inside a function body (E3009 frame subset), `$timeformat`
+/ `$vita_stage` / a whole-handle copy / a queue slice as the action (E3009), `$error` with a
+`$sformatf` argument (E3009), and `cover (c) stmt;` in all three forms (E2002, now §3.b
+`immediate-cover`: both oracles accept it and never run the statement).
+
+**Review (both lenses, direct).** Differential: the 54-cell table above, 3 tools × 3 backends.
+Soundness: producer census of `defer_acts` — `push_stmt` is the only writer, the prune the only
+remover; consumer census — `try_defer_with` (both kernels via `dispatch_body`) is the only reader,
+the frame executors' `Finish` / `Stop` arms are `frame_end_is_loud` and a function body with a
+deferred assertion is refused at elaborate. `mature_deferred` is shared by both kernels, and both
+consume `finish_pending` after the Observed / Reactive regions. PASS.
+
+**Gate.** nextest 8654 / 8654, doctests, clippy `-D warnings`, fmt; product shape
+(`--no-default-features` build, clippy, 177 lib tests, CI smoke); corpus 10/10 ×2.
+
+**Pins.** `deferred_action_kinds.rs` (native = interp = vm each): `$finish` ends in its
+step, `$stop` (both regions), a clocked checker, a task-body assertion, a flushed `$finish`, a
+two-task arm, a control followed by other reports, `$fdisplay` / `$fwrite` / STDOUT / `$fstrobe`,
+nine non-report tasks, `$readmemh`, `$monitor`, an inlined task, a task call beside a print (15
+tests).
 
 #### 4.5.551 the "nine binding sites" row re-measured stale: a real actual binds to a narrower formal by the assignment conversion at every site; the ten cells that refuse are a hierarchical call to an inline-lowered callee (2026-09-27, branch main) ✅
 

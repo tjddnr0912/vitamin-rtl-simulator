@@ -899,6 +899,8 @@ supported platform.
 | `assume (c);` | Supported | Parsed and checked exactly as `assert`. |
 | `assert #0 (c)` | Supported | Matures in the Observed region, flushing when the statement is re-reached. |
 | `assert final (c)` | Supported | Matures in the Reactive region. |
+| Deferred action | Supported | A print, a file print (`$fdisplay`, `$fwrite`, `$fstrobe`), `$finish` and `$stop` wait for the assertion to mature; their arguments are sampled when the assertion is reached, and every such task of the taken arm runs, in order. `$finish` ends the run in that time step. Any other action (a user task call, a queue method, `$sformat`, `$readmem*`, `$monitor`, …) runs when reached, with `VITA-W3056`; `$timeformat`, `$vita_stage`, a whole-handle copy and a queue slice are refused (`VITA-E3009`). |
+| `cover (c) stmt;`, `cover #0`, `cover final` | Loud | `VITA-E2002` |
 | `assert #N (c)`, N ≠ 0 | Loud | `VITA-E2002` — `#0` is the accepted deferred form. |
 | `expect`, `restrict` | Absent | `VITA-E2002` |
 | `$assertoff` / `$asserton` / `$assertkill` / `$assertcontrol` | Partial | A global fire gate. A levels or scope argument is Loud, because a scoped control would silently over-disable. |

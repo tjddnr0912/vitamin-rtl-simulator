@@ -9,6 +9,21 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a deferred assertion's action does what its task does
+
+- `assert #0 (c) else $finish;` printed an empty line when it matured and the run went on to its
+  next `$finish`; `$stop` did the same, and `$finish(0)` printed `0`. A matured `$finish` now ends
+  the run in that time step (after the step's other reports) and a matured `$stop` stops it.
+- `$fdisplay` / `$fwrite` / `$fstrobe` as the action printed the descriptor as a number on stdout
+  and wrote nothing to the file. They now write to their descriptor, read with the text when the
+  assertion is reached.
+- An action of two or more tasks (`else begin $display("A"); $display("B"); end`) kept only the
+  last one. Every task of the taken arm now matures, in order.
+- Any other action — `q.push_back(7)`, `$sformat`, `$readmemh`, `new[]`, `$cast`, a string or
+  array method, `$monitor`, or a static task whose body did any of these — printed its arguments
+  and dropped its effect. It now runs when the assertion is reached, as a user task call already
+  did, and `VITA-W3056` says so.
+
 ### Fixed — a real bound to an inline formal wider than 128 bits keeps its high bits
 
 - A static function's `input reg [191:0] x` bound to `1e40` held only the low 128 bits of the
