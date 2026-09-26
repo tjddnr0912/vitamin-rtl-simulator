@@ -313,7 +313,7 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     pub(crate) scratch_changed: Vec<crate::native::dirty::ChangedNet>,
     /// HEAP-WAKE: per-sweep `(handle net, author)` buffer for
     /// `SimState::drain_dyn_dirty` — the engine's `scratch_dyn_dirty`, on this side.
-    pub(crate) scratch_dyn_dirty: Vec<(u32, u32)>,
+    pub(crate) scratch_dyn_dirty: Vec<(u32, u32, u64)>,
     pub(crate) scratch_woken: Vec<u32>,
     pub(crate) scratch_clocked: Vec<u32>,
     /// The `settle_cont_assigns` visit list — a kernel-owned buffer the pass is
@@ -500,7 +500,10 @@ pub(crate) struct NativeWaiter {
     pub(crate) cause: sim_ir::WaitCause,
     pub(crate) proc: u32,
     pub(crate) block: u32,
-    pub(crate) arm: Option<Vec<Vec<u64>>>,
+    /// CHANGE SEQUENCE at arm time — the engine's `Waiter::arm_seq`: a level
+    /// wait fires only on a change stamped after it (an edge wait keeps the
+    /// slot's accumulated mask; the engine field's doc says why).
+    pub(crate) arm_seq: u64,
 }
 
 /// A queued activation: which process, and which block it resumes at.
@@ -637,6 +640,10 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         arena
             .ch
             .install_ca_deps(&sched.st.ca_of_net, ir.cont_assigns.len());
+        // ONE change sequence for both stores: the heap's marks are staged by
+        // the engine state (`note_dyn_change`) and drained onto this store, so
+        // a number taken there must order against the numbers taken here.
+        arena.ch.change_seq = std::rc::Rc::clone(&sched.st.change_seq);
         let has_frames = !sched.st.func_table.is_empty();
         // Built BEFORE the struct literal moves `sched`: the wake table's clocking
         // diversion is keyed on the state's own two tables (see its field doc).
@@ -2239,24 +2246,14 @@ impl Kernel for NativeKernel<'_, '_, '_> {
     }
 
     fn k_suspend_on(&mut self, proc: u32, block: u32, cause: &sim_ir::WaitCause) {
-        // `Scheduler::suspend_on`, restated over this store. The one thing that
-        // is not a transcription is the arm snapshot: the engine clones
-        // `nets[n].cur` (a `BitPacked`), this copies the slot's raw words. Both
-        // are "the whole net as it stands now", which is what the fire test
-        // compares against.
-        let arm = match cause {
-            sim_ir::WaitCause::Level { nets } => Some(
-                nets.iter()
-                    .map(|&n| self.arena.net_words(n).to_vec())
-                    .collect(),
-            ),
-            _ => None,
-        };
+        // `Scheduler::suspend_on`, restated over this store: the arm is the
+        // change sequence as it stands now, read off the shared cell.
+        let arm_seq = self.arena.ch.change_seq.get();
         self.waiters.push(NativeWaiter {
             cause: cause.clone(),
             proc,
             block,
-            arm,
+            arm_seq,
         });
     }
 
@@ -2319,7 +2316,7 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         match self.ir.processes[tmpl].sensitivity.kind {
             sim_ir::SensKind::Edge | sim_ir::SensKind::Initial => {}
             sim_ir::SensKind::Comb | sim_ir::SensKind::Latch | sim_ir::SensKind::Level => {
-                self.wake.rearm_level(proc)
+                self.wake.rearm_level(proc, self.arena.ch.change_seq.get())
             }
         }
     }

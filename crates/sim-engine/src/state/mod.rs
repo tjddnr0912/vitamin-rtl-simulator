@@ -301,6 +301,22 @@ pub(crate) struct SimState<'a> {
     /// `propagate_changes` suppresses firing a process on a net it itself
     /// blocking-wrote. `u32::MAX` (no real activity id) means "re-fire normally".
     pub last_blocking_writer: Vec<u32>,
+    /// CHANGE SEQUENCE: a run-wide counter of value changes, stamped per net as
+    /// the sequence of its LAST change (`last_change_seq`). A level waiter
+    /// records the sequence at ARM time and fires only on a change recorded
+    /// after it, so a write made earlier in the same Active batch — before a
+    /// static level waiter ran and re-armed, or before an in-body `@(sig)`
+    /// armed — is not an event for it (both oracles print one line for `always
+    /// @(a) s = 0;` beside `always @(s) …` when one batch writes `a` and `s`).
+    /// The time-0 rollback resets the initializers' nets to 0: an initializer
+    /// is not an event (IEEE §6.21). (An in-body EDGE wait keeps the slot's
+    /// accumulated mask — `Waiter::arm_seq` says why.)
+    /// SHARED with the native store's `DirtyChannel::change_seq` (one `Rc`,
+    /// installed at `NativeKernel::new`): a heap mark is staged by this state and
+    /// stamped for whichever store drains it, so the two stores' changes and the
+    /// heap's must be one sequence.
+    pub change_seq: Rc<Cell<u64>>,
+    pub last_change_seq: Vec<u64>,
     /// IEEE §9.3.2 continuous-force registry: net → (whole-net lvalue, rhs
     /// ExprId, forcing module's time multiplier). BTreeMap ⇒ deterministic
     /// re-evaluation order; empty unless a force is live (zero steady cost).
@@ -357,7 +373,7 @@ pub(crate) struct SimState<'a> {
     /// it is called only for an ACTUAL content change, the same rule
     /// `note_change` carries. Marking an unchanged object would re-fire a
     /// combinational reader forever instead of converging.
-    pub dyn_dirty: std::cell::RefCell<Vec<(u32, u32)>>,
+    pub dyn_dirty: std::cell::RefCell<Vec<(u32, u32, u64)>>,
     /// Which nets some process's sensitivity NAMES — a static `Level`/`Comb`/
     /// `Latch` read set, a static edge list, or an in-body `@(…)` wait.
     ///

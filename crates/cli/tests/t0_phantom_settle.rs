@@ -38,11 +38,11 @@
 //! as it was (ROADMAP §2 Oracle splits). Those lines are pinned as vita's value, marked.
 //!
 //! Not pinned, measured and left as they are (PRE = POST unless said):
-//! - A wait ARMED in an Active batch sees the writes made EARLIER in that batch, at any
-//!   time: `initial #5 r = 1;` before `initial begin #5 @(posedge r); $display("late"); end`
-//!   prints `late 5`, `reg clk; initial clk = 1;` before `initial begin @(posedge clk); …
-//!   end` prints `saw 0`, and both oracles print nothing. ROADMAP §2 (a wait armed after a
-//!   write in the same batch); its time-0 face — the settle's own events — is closed above.
+//! - A LEVEL wait armed in an Active batch after a write made earlier in that batch no longer
+//!   sees it (§4.5.537, `same_batch_wait.rs`); an EDGE wait still does — `initial #5 r = 1;`
+//!   before `initial begin #5 @(posedge r); $display("late"); end` prints `late 5`, both
+//!   oracles nothing — recorded in ROADMAP §2 with its prerequisite (the same-time resume
+//!   order).
 //! - An `always_comb` reading a settled net runs ONCE at time 0 (it arms its sensitivity
 //!   after that run, which follows the delivery): verilator once, iverilog twice, on a
 //!   constant driver and on `r + 1` of an initialised `r` alike (PRE: twice on the

@@ -1181,6 +1181,10 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         if !init_nets.is_empty() {
             for &n in &init_nets {
                 self.st.dirty_flag[n as usize] = false;
+                // An initializer is not an event (IEEE §6.21): the net's change
+                // sequence goes back to 0 so a static waiter armed below (at 0)
+                // does not read the initializer's write as a change after its arm.
+                self.st.last_change_seq[n as usize] = 0;
             }
             let mut v = std::mem::take(&mut self.st.dirty);
             v.retain(|n| self.st.dirty_flag[*n as usize]);
@@ -1317,7 +1321,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                     push_sorted(&mut self.cur.active, ready);
                 }
                 // edge / level blocks wait for the first event (no t0 run).
-                SensKind::Edge | SensKind::Level => self.arm_sensitivity(aid),
+                SensKind::Edge | SensKind::Level => self.arm_sensitivity(aid, 0),
             }
         }
         true
@@ -1335,7 +1339,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     pub(crate) fn has_static_level_waiter(&self, pi: u32) -> bool {
         self.waiters.iter().any(|w| {
             w.ready.proc == pi
-                && w.arm.is_none()
+                && !w.in_body
                 && matches!(w.cause, crate::sched::WaitCause::Level { .. })
         })
     }
@@ -1410,13 +1414,17 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         let before = self.waiters.len();
         self.waiters.retain(|w| {
             !(w.ready.proc == pi
-                && w.arm.is_none()
+                && !w.in_body
                 && matches!(w.cause, crate::sched::WaitCause::Level { .. }))
         });
         self.n_level_waiters -= before - self.waiters.len();
     }
 
-    pub(crate) fn arm_sensitivity(&mut self, pi: u32) {
+    /// `arm_seq` = the change sequence this arming is AFTER: 0 at time 0 (the
+    /// settle's changes, stamped before any arming, are the first events and must
+    /// reach the waiter), the current sequence on a re-arm (`rearm`), so a write
+    /// made earlier in the batch the process just ran in is not its event.
+    pub(crate) fn arm_sensitivity(&mut self, pi: u32, arm_seq: u64) {
         let tmpl = self.activities[pi as usize].template as usize;
         let tie = self.activities[pi as usize].tie;
         let p = &self.st.ir.processes[tmpl];
@@ -1443,7 +1451,8 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                     self.waiters.push(Waiter {
                         cause: WaitCause::Level { nets },
                         ready,
-                        arm: None, // static sensitivity: re-fire on any change
+                        in_body: false, // static sensitivity: re-fire on any change after the arm
+                        arm_seq,
                     });
                     self.n_level_waiters += 1; // WAITER-POOL p2
                 }

@@ -295,6 +295,13 @@ pub struct DirtyChannel {
     /// store uses (`state::changes::edge_target_nets`), not a second one.
     pub is_edge_target: Vec<bool>,
     pub last_blocking_writer: Vec<u32>,
+    /// CHANGE SEQUENCE — the engine's `SimState::{change_seq, last_change_seq}`
+    /// over this store: a run-wide counter of value changes (ONE cell shared
+    /// with the engine state, installed at `NativeKernel::new`), stamped per net
+    /// as the sequence of its last change. A level waiter fires only on a
+    /// change stamped after its arm.
+    pub change_seq: std::rc::Rc<std::cell::Cell<u64>>,
+    pub last_change_seq: Vec<u64>,
     /// The activity currently executing a body, when the write is a BLOCKING
     /// procedural one. `None` for NBA / continuous-assign / clocking writers.
     pub blocking_writer: Option<u32>,
@@ -356,6 +363,25 @@ pub struct DirtyChannel {
 }
 
 impl DirtyChannel {
+    /// CHANGE SEQUENCE: record one value change of net `i` — the engine's
+    /// `SimState::stamp_change`, called from `note_change` and the heap-mark
+    /// drain alike.
+    #[inline]
+    pub(crate) fn stamp_change(&mut self, i: usize) {
+        let s = self.change_seq.get() + 1;
+        self.change_seq.set(s);
+        self.last_change_seq[i] = s;
+    }
+
+    /// CHANGE SEQUENCE: a heap mark staged by `SimState::note_dyn_change` with
+    /// the sequence it took THEN — stamped here at the drain, on this store's
+    /// per-net tables, without a new number (a fresh one would put every heap
+    /// change after every arm of the batch).
+    #[inline]
+    pub(crate) fn stamp_staged(&mut self, i: usize, seq: u64) {
+        self.last_change_seq[i] = seq;
+    }
+
     pub fn new(ir: &SimIr) -> DirtyChannel {
         let n = ir.nets.len();
         DirtyChannel {
@@ -363,6 +389,8 @@ impl DirtyChannel {
             slot_edge: vec![0; n],
             is_edge_target: crate::state::edge_target_nets(ir),
             last_blocking_writer: vec![u32::MAX; n],
+            change_seq: std::rc::Rc::new(std::cell::Cell::new(0)),
+            last_change_seq: vec![0; n],
             blocking_writer: None,
             ca_of_net: Vec::new(),
             ca_dirty: DirtyBits::default(),
@@ -384,19 +412,6 @@ impl DirtyChannel {
 }
 
 impl NetArena {
-    /// The WHOLE net's raw words — every element, both planes.
-    ///
-    /// The arm snapshot an in-body `@(sig)` needs. It is the whole net rather
-    /// than element 0 because that is what the engine snapshots
-    /// (`SimState.nets[n].cur` is the packed array), so `@(mem)` on an array
-    /// compares the same thing on both sides.
-    pub(crate) fn net_words(&self, net: u32) -> &[u64] {
-        let s = self.slots[net as usize];
-        let lo = s.off as usize;
-        let n = 2 * s.words as usize * s.elems as usize;
-        &self.buf[lo..lo + n]
-    }
-
     /// Bit 0 of element 0 — the scalar the edge predicates read.
     pub(crate) fn scalar_bit0(&self, net: u32) -> FourState {
         let s = self.slots[net as usize];
@@ -426,6 +441,7 @@ impl NetArena {
             self.ch.slot_edge[i] = 0;
         }
         self.ch.last_blocking_writer[i] = self.ch.blocking_writer.unwrap_or(u32::MAX);
+        self.ch.stamp_change(i);
         // DIRTY-SETTLE: this net moved, so every continuous assign that reads it
         // must be re-evaluated by the next settle pass. The engine's third store
         // effect, at the same point.

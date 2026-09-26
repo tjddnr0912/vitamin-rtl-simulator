@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 #[cfg(feature = "oracle")]
 use std::rc::Rc;
 
-use sim_ir::{BitPacked, EdgeKind, EdgeTerm, Lvalue, RegionTag, SensKind, Terminator, WaitCause};
+use sim_ir::{EdgeKind, EdgeTerm, Lvalue, RegionTag, SensKind, Terminator, WaitCause};
 
 use elaborate::{ForkModeTable, JoinMode};
 
@@ -232,13 +232,38 @@ struct SlotQueues {
 struct Waiter {
     cause: WaitCause,
     ready: Ready,
-    /// For an IN-BODY `@(sig)`/`@(*)` (a `WaitCause::Level` from `suspend_on`):
-    /// the net values snapshot AT ARM TIME, one per `Level.nets`. The waiter fires
-    /// only when a net differs from this snapshot — so a change that completed
-    /// BEFORE the wait armed (e.g. the t0 `X→init` settle done by another initial
-    /// block before `@(sig)` suspended) does NOT spuriously trigger it. `None` for
-    /// a STATIC always/comb sensitivity (those re-fire on any change, by design).
-    arm: Option<Vec<BitPacked>>,
+    /// `true` for an IN-BODY `@(sig)`/`@(*)`/`@(posedge x)`/`wait(e)` registered by
+    /// `suspend_on`; `false` for a STATIC always/comb sensitivity registered by
+    /// `arm_sensitivity`. (The static waiter is what `consume_static_level_waiter`
+    /// looks for; nothing in the run reads it.)
+    #[cfg_attr(not(test), allow(dead_code))]
+    in_body: bool,
+    /// CHANGE SEQUENCE at ARM time (`SimState::change_seq`): a LEVEL waiter
+    /// fires only on a change stamped AFTER it, so a write that landed before
+    /// the wait armed — the t0 settle before an in-body `@(sig)` suspended, or a
+    /// write made earlier in the same Active batch before a static level waiter
+    /// ran and re-armed — is not its event. A static waiter armed at time 0
+    /// carries 0, so the settle's changes (stamped before any arming) reach it;
+    /// the initializers' nets are reset to 0 by the rollback, so they do not.
+    /// Both oracles print one line for `always @(a) s = 0;` beside `always @(s)
+    /// …` when one batch writes `a` and `s`. (Before: an in-body level wait
+    /// compared the net with its arm-time VALUE — blind to a glitch back to that
+    /// value and to heap content — and a static level waiter read the whole
+    /// batch's dirt.)
+    ///
+    /// An in-body EDGE wait does NOT use it: it fires from the slot's
+    /// accumulated mask, as it always did, so an edge made earlier in the same
+    /// batch by a process declared before the waiter still wakes it. That is
+    /// wrong for `initial #5 r = 1;` declared before `initial begin #5 @(posedge
+    /// r); … end` (both oracles: nothing) and right by accident for the common
+    /// testbench — a clock generator declared FIRST and stimulus resuming from
+    /// `#15` in the same time step: both oracles resume same-time processes in
+    /// the order their delays were SCHEDULED (the stimulus first, so its wait
+    /// arms before the edge), vita in declaration order (the clock first) — and
+    /// the after-the-arm rule then shifted every such wait by a cycle (review
+    /// §4.5.537, `R 25 rst=0` for the oracles' `R 15`). The edge half waits for
+    /// the same-time resume order (ROADMAP §2 "Delays / events").
+    arm_seq: u64,
 }
 
 /// One INERTIAL-delay continuous-assign write: `(cont-assign index,
@@ -291,6 +316,7 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// nothing for those scans. Byte-identical: the skipped buffer was unused.
     n_expr_waiters: usize,
     n_level_waiters: usize,
+
     /// Activity id currently executing a body (set by `run_body`, the single
     /// dispatch choke) — `disable fork` kills THIS activity's descendants.
     cur_aid: u32,
@@ -420,7 +446,7 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// HEAP-WAKE: per-sweep `(handle net, author)` buffer for
     /// `SimState::drain_dyn_dirty`. Taken/restored like every other scratch here
     /// so a heap-free design pays no allocation.
-    scratch_dyn_dirty: Vec<(u32, u32)>,
+    scratch_dyn_dirty: Vec<(u32, u32, u64)>,
     /// GLITCH/SELF-RETRIG: per-changed-net `(net, slot_edge_mask, blocking_writer)`.
     /// `mask` = the net's intra-slot bit0 edge summary (`SimState::slot_edge`), so
     /// both the static edge-wake pass (a) and the in-body `Edge` waiter pass (b)

@@ -144,38 +144,33 @@ impl Scheduler<'_, '_> {
                 _ => false,
             }));
         }
-        // Pre-compute Level firing (the retain closure cannot also borrow `&self`):
-        // an in-body `@(sig)` (arm=Some) fires when a net differs from its ARM-TIME
-        // value; a static sensitivity (arm=None) fires on any net change.
+        // Pre-compute Level firing (the retain closure cannot also borrow
+        // `&self`). CHANGE SEQUENCE: a level waiter fires on a change of a
+        // watched net that was stamped after the waiter armed (`arm_seq`) — one
+        // rule for the in-body `@(sig)`/`@(*)` (which used to compare the net
+        // with its arm-time VALUE, blind to a glitch back to it and to heap
+        // content) and the static sensitivity (which used to read the whole
+        // batch's dirt, so a static level waiter that ran in a batch and
+        // re-armed fired again on a write made earlier in that batch).
+        // SELF-RETRIG: a watched net the waiter's OWN process blocking-wrote
+        // does not wake it (it saw the value pre-rearm).
         // p2: same zero-skip guard — no `Level` waiter ⇒ `level_fire` is unused.
         let mut level_fire = std::mem::take(&mut self.scratch_level_fire); // WAITER-POOL
         level_fire.clear();
         if self.n_level_waiters > 0 {
-            level_fire.extend(self.waiters.iter().map(|w| {
-                match (&w.cause, &w.arm) {
-                    // An in-body `@(sig)`/`@(*)` (arm=Some) fires when a watched net
-                    // differs from its ARM-TIME value. NOTE: this intentionally does
-                    // NOT consult `changed_nets` — a same-slot change that happened
-                    // BEFORE the arm (e.g. `@(*)` arming at t0 right after its inputs
-                    // were initialized) is already reflected in `arm`, so firing on
-                    // dirtiness would spuriously re-run it in the arming slot. The
-                    // cost is one narrow miss: an in-body `@(a)` waiting through a
-                    // glitch that RETURNS to the arm value (ROADMAP §4.5.4) — a far
-                    // rarer corner than the `@(*)` t0 behavior this preserves.
-                    // SELF-RETRIG: a watched net the waiter's OWN process
-                    // blocking-wrote does not wake it (it saw the value pre-rearm).
-                    (WaitCause::Level { nets }, Some(arm)) => {
-                        nets.iter().zip(arm).any(|(&n, av)| {
-                            self.st.nets[n as usize].cur != *av
-                                && self.st.last_blocking_writer[n as usize] != w.ready.proc
-                        })
-                    }
-                    (WaitCause::Level { nets }, None) => nets.iter().any(|&n| {
-                        changed_nets.contains(&n)
-                            && self.st.last_blocking_writer[n as usize] != w.ready.proc
-                    }),
-                    _ => false,
-                }
+            level_fire.extend(self.waiters.iter().map(|w| match &w.cause {
+                // The changed-set scan is needed only for a waiter armed at
+                // time 0 (`arm_seq == 0`): a net the x-drop or the rollback took
+                // off the list is no event whatever its sequence. A waiter armed
+                // later fires on its first sweep after a change (or was consumed
+                // then), so the sequence alone decides — O(1) per net, where the
+                // scan was quadratic in waiters × changed nets.
+                WaitCause::Level { nets } => nets.iter().any(|&n| {
+                    (w.arm_seq > 0 || changed_nets.contains(&n))
+                        && self.st.last_change_seq[n as usize] > w.arm_seq
+                        && self.st.last_blocking_writer[n as usize] != w.ready.proc
+                }),
+                _ => false,
             }));
         }
         let mut woken: Vec<Ready> = Vec::new();
@@ -189,11 +184,12 @@ impl Scheduler<'_, '_> {
         let mut removed_level = 0usize;
         self.waiters.retain(|w| {
             let keep = match &w.cause {
-                // Level + inferred-comb: fire per the pre-computed arm/any-change test.
+                // Level + inferred-comb: fire per the pre-computed after-the-arm test.
                 WaitCause::Level { .. } => !level_fire[wi],
                 // GLITCH: an in-body `@(posedge x)` fires from the intra-slot
                 // mask, so a clock pulse that glitches back wakes the waiter.
                 // SELF-RETRIG: but not on a net this waiter's own process wrote.
+                // (Not the change sequence — see `Waiter::arm_seq`.)
                 WaitCause::Edge { net, kind } => !edges.iter().any(|&(en, mask, writer)| {
                     en == *net && edge_fires_slot(mask, *kind) && writer != w.ready.proc
                 }),
@@ -246,8 +242,8 @@ impl Scheduler<'_, '_> {
     pub(crate) fn drain_heap_marks(&mut self) {
         let mut buf = std::mem::take(&mut self.scratch_dyn_dirty);
         self.st.drain_dyn_dirty(&mut buf);
-        for &(net, writer) in &buf {
-            self.st.mark_heap_dirty(net, writer);
+        for &(net, writer, seq) in &buf {
+            self.st.mark_heap_dirty(net, writer, seq);
         }
         self.scratch_dyn_dirty = buf;
     }
@@ -554,23 +550,21 @@ impl Scheduler<'_, '_> {
         // on the same event are distinguishable (neither lost nor double-counted).
         let tie = self.activities[proc as usize].tie;
         let ready = Ready { tie, proc, block };
-        // Snapshot the watched nets so an in-body `@(sig)` fires on the next change
-        // AFTER this point, not on one already applied this delta before it armed.
-        let arm = match &cause {
-            WaitCause::Level { nets } => Some(
-                nets.iter()
-                    .map(|&n| self.st.nets[n as usize].cur.clone())
-                    .collect(),
-            ),
-            _ => None,
-        };
+        // CHANGE SEQUENCE: a level wait fires on a change stamped after this
+        // point, not on one already applied this delta before it armed.
+        let arm_seq = self.st.change_seq.get();
         // WAITER-POOL p2: keep the running counts exact at this push site.
         match &cause {
             WaitCause::Expr { .. } => self.n_expr_waiters += 1,
             WaitCause::Level { .. } => self.n_level_waiters += 1,
             _ => {}
         }
-        self.waiters.push(Waiter { cause, ready, arm });
+        self.waiters.push(Waiter {
+            cause,
+            ready,
+            in_body: true,
+            arm_seq,
+        });
     }
 
     /// v5 increment (A): a transport NBA — index + value sampled NOW, update
@@ -654,7 +648,10 @@ impl Scheduler<'_, '_> {
             // permanent net_to_edge entry / one-shot: do NOT re-register.
             SensKind::Edge | SensKind::Initial => {}
             // consumed waiter: must re-register to wake on the next change.
-            SensKind::Comb | SensKind::Latch | SensKind::Level => self.arm_sensitivity(proc),
+            SensKind::Comb | SensKind::Latch | SensKind::Level => {
+                let seq = self.st.change_seq.get();
+                self.arm_sensitivity(proc, seq)
+            }
         }
     }
 

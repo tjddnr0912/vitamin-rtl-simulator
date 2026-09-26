@@ -26,6 +26,7 @@ impl SimState<'_> {
         // clocking/force, `blocking_writer = None`) tags `u32::MAX` = re-fire
         // normally. Overwritten each change, so it is fresh for the next sweep.
         self.last_blocking_writer[i] = self.blocking_writer.unwrap_or(u32::MAX);
+        self.stamp_change(i);
         // DIRTY-SETTLE: this net moved, so every continuous assign whose value reads it
         // must be re-evaluated by the next settle pass. Indexed re-borrow because the
         // flag write below aliases `self`. Nets no assign depends on (almost all of
@@ -74,9 +75,16 @@ impl SimState<'_> {
         // SELF-RETRIG: record the author, exactly as `note_change` does, because
         // the staged mark is consumed a whole delta later — by then the
         // scheduler has cleared `blocking_writer` and the answer would be lost.
+        // CHANGE SEQUENCE: the number is taken NOW, for the same reason — a
+        // waiter that arms after this push must not read it as its event, and
+        // stamping at the drain (after the whole batch) put every heap change
+        // after every arm of the batch (review §4.5.537: `q.push_back(1)` before
+        // `@* n = q.size();` in one batch woke the wait; iverilog does not).
+        let s = self.change_seq.get() + 1;
+        self.change_seq.set(s);
         self.dyn_dirty
             .borrow_mut()
-            .push((net, self.blocking_writer.unwrap_or(u32::MAX)));
+            .push((net, self.blocking_writer.unwrap_or(u32::MAX), s));
     }
 
     /// Would a heap mutation of `net` be recorded at all? ONE home for the two
@@ -107,7 +115,7 @@ impl SimState<'_> {
     /// Ascending + deduplicated so the sweep order does not depend on the order
     /// the mutations happened in (the engine sorts its own `dirty` for the same
     /// reason, and every downstream wake order is pinned to that).
-    pub(crate) fn drain_dyn_dirty(&self, out: &mut Vec<(u32, u32)>) {
+    pub(crate) fn drain_dyn_dirty(&self, out: &mut Vec<(u32, u32, u64)>) {
         out.clear();
         let mut staged = self.dyn_dirty.borrow_mut();
         if staged.is_empty() {
@@ -144,13 +152,27 @@ impl SimState<'_> {
     ///
     /// Tier-3's twin is the same three lines against `arena.ch`, in
     /// `native::run::propagate` — one rule, two stores, exactly like `dyn_heap`.
-    pub(crate) fn mark_heap_dirty(&mut self, net: u32, writer: u32) {
+    pub(crate) fn mark_heap_dirty(&mut self, net: u32, writer: u32, seq: u64) {
         let i = net as usize;
         if !self.dirty_flag[i] {
             self.dirty_flag[i] = true;
             self.dirty.push(net);
         }
         self.last_blocking_writer[i] = writer;
+        // The sequence the mark was staged with (see `note_dyn_change`), not a
+        // fresh one.
+        self.last_change_seq[i] = seq;
+    }
+
+    /// CHANGE SEQUENCE: record one value change of net `i` — the run-wide
+    /// sequence it lands at and the net's running count. The one producer both
+    /// `note_change` and the heap mark call; a waiter's "after my arm" test reads
+    /// what this wrote.
+    #[inline]
+    pub(crate) fn stamp_change(&mut self, i: usize) {
+        let s = self.change_seq.get() + 1;
+        self.change_seq.set(s);
+        self.last_change_seq[i] = s;
     }
 
     /// GLITCH: OR this write's bit0 transition (`old_b0 → current bit0`) into the

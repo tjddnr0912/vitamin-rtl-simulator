@@ -963,6 +963,9 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
     // stay. (`retain_snapshot` would drop those too.)
     for &n in &init_nets {
         k.arena.ch.dirty.remove(n as usize);
+        // An initializer is not an event (IEEE §6.21) — the engine twin resets
+        // the sequence too, so a static waiter armed at 0 does not read it.
+        k.arena.ch.last_change_seq[n as usize] = 0;
     }
     // T0 EDGE REBUILD — the engine twin (`arm_processes`) carries the
     // argument: the mask is ASSIGNED from the bit the net held before the
@@ -1156,7 +1159,12 @@ fn propagate(k: &mut NativeKernel) {
     }
     let mut woken = std::mem::take(&mut k.scratch_woken);
     let mut clocked = std::mem::take(&mut k.scratch_clocked);
-    k.wake.wake(&changed, &mut woken, &mut clocked);
+    k.wake.wake(
+        &changed,
+        &k.arena.ch.last_change_seq,
+        &mut woken,
+        &mut clocked,
+    );
     // N4 clocking: apply each fired handler's commit HERE — at edge detection,
     // before the Active batch drains — so every same-slot reader of `cb.sig` sees
     // the committed sample independent of process order. The engine does it at
@@ -1220,9 +1228,10 @@ fn propagate(k: &mut NativeKernel) {
 fn drain_heap_marks(k: &mut NativeKernel) {
     let mut buf = std::mem::take(&mut k.scratch_dyn_dirty);
     k.sched.st.drain_dyn_dirty(&mut buf);
-    for &(net, writer) in &buf {
+    for &(net, writer, seq) in &buf {
         k.arena.ch.dirty.insert(net as usize);
         k.arena.ch.last_blocking_writer[net as usize] = writer;
+        k.arena.ch.stamp_staged(net as usize, seq);
     }
     k.scratch_dyn_dirty = buf;
 }
@@ -1249,48 +1258,34 @@ fn fire_waiters(k: &mut NativeKernel, changed: &[crate::native::dirty::ChangedNe
     let fires: Vec<bool> = k
         .waiters
         .iter()
-        .map(|w| match (&w.cause, &w.arm) {
-            // IN-BODY `@(sig)`: fires when a watched net differs from its
-            // ARM-TIME value — deliberately NOT "is it in the changed set". A
-            // change that landed before the arm is already in the snapshot, so
-            // a dirtiness test would re-fire the wait in its own arming slot.
-            //
-            // SELF-RETRIG: the author guard is the engine's spelling, kept for
-            // fidelity — but it CANNOT fire on this arm, and saying so beats a
-            // teeth claim no design can back (measured: removing it leaves the
-            // gate green). A suspended process cannot write, so `cur != arm`
-            // already implies somebody else wrote the net after the arm, which
-            // is what `last_blocking_writer` then holds. The guard earns its
-            // keep on the STATIC arm (`arm = None`), which lives in the wake
-            // table, and on `Edge` below — where the process CAN have made the
-            // edge itself, in the same slot, before the wait armed.
-            (sim_ir::WaitCause::Level { nets }, Some(arm)) => {
-                nets.iter().zip(arm).any(|(&n, av)| {
-                    k.arena.net_words(n) != av.as_slice()
-                        && k.arena.ch.last_blocking_writer[n as usize] != w.proc
-                })
-            }
+        .map(|w| match &w.cause {
+            // IN-BODY `@(sig)`: the engine's rule — a watched net in this
+            // sweep's changed set whose last change was stamped AFTER the arm
+            // (CHANGE SEQUENCE), not written by the waiter's own process. A
+            // change that landed before the arm is below `arm_seq`, so it does
+            // not re-fire the wait in its own arming slot; a glitch back to the
+            // arm-time value after the arm is a change and does.
+            // No changed-set scan: an in-body waiter arms after time 0, so the
+            // sequence alone decides (the engine's `arm_seq > 0` arm) — O(1)
+            // per net, where a scan of `changed` was quadratic (review §4.5.537
+            // measured 2.0× on 800 waiters × 200 nets).
+            sim_ir::WaitCause::Level { nets } => nets.iter().any(|&n| {
+                k.arena.ch.last_change_seq[n as usize] > w.arm_seq
+                    && k.arena.ch.last_blocking_writer[n as usize] != w.proc
+            }),
             // GLITCH: an in-body `@(posedge x)` fires from the intra-slot MASK,
             // so a pulse that returns to its old value still wakes the waiter.
             // SELF-RETRIG here is REACHABLE, unlike on the `Level` arm above:
             // `clk = ~clk; @(posedge clk);` leaves the mask set by the waiter's
             // own write, and without the guard the wait resumes on the edge it
             // just caused (measured — the design is in the adversarial set).
-            (sim_ir::WaitCause::Edge { net, kind }, _) => changed.iter().any(|&(n, mask, wr)| {
+            // Not the change sequence: `Waiter::arm_seq` says why.
+            sim_ir::WaitCause::Edge { net, kind } => changed.iter().any(|&(n, mask, wr)| {
                 n == *net && crate::sched::edge_fires_slot(mask, *kind) && wr != w.proc
             }),
-            // `wait(e)`: re-check the predicate against the POST-change values.
-            //
-            // Through `k_truthy`, NOT `ctx().truthy` — one `wait(e)` predicate,
-            // one spelling. The body walk's already-true entry check
-            // (`body.rs`) has always used `k_truthy`, and when S2 slice 2 gave
-            // that method a width-specialized fast path this line became the
-            // SECOND way to answer the same question. They agree today (the
-            // differential measured six wait predicates, comparisons included),
-            // which is exactly when a divergence surface is cheapest to close.
-            (sim_ir::WaitCause::Expr { expr }, _) => crate::exec::Kernel::k_truthy(k, *expr),
-            // A static `Level` (arm=None) cannot be here — those live in the
-            // wake table — and `Named`/`Fork` are refused by `body_is_walkable`.
+            sim_ir::WaitCause::Expr { expr } => crate::exec::Kernel::k_truthy(k, *expr),
+            // A static `Level` cannot be here — those live in the wake table —
+            // and `Named`/`Fork` are refused by `body_is_walkable`.
             _ => false,
         })
         .collect();

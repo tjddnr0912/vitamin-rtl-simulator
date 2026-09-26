@@ -72,6 +72,12 @@ pub struct WakeTable {
     /// Until bodies can run (S1d-4) nothing re-arms, so this only ever falls;
     /// modelling it anyway is what keeps the decision comparable.
     level_armed: Vec<bool>,
+    /// CHANGE SEQUENCE at the static level waiter's arm — the engine's
+    /// `Waiter::arm_seq` for the waiter `arm_sensitivity` pushes: 0 at time 0,
+    /// the sequence at the completion that re-armed it. A net changed at or
+    /// below it is not this waiter's event (a write made earlier in the batch
+    /// the process ran in).
+    level_arm_seq: Vec<u64>,
     /// Does this process have a NON-EMPTY sensitivity read set?
     ///
     /// `arm_sensitivity` builds its waiter only `if !nets.is_empty()`, so a
@@ -159,6 +165,7 @@ impl WakeTable {
                 .iter()
                 .map(|p| p.sensitivity.kind == SensKind::Level && !p.sensitivity.edges.is_empty())
                 .collect(),
+            level_arm_seq: vec![0; ir.processes.len()],
             has_level_nets,
             busy: vec![false; ir.processes.len()],
             seen: vec![false; ir.processes.len()],
@@ -197,7 +204,13 @@ impl WakeTable {
     /// sort makes the input order irrelevant. (An earlier version of this
     /// comment claimed the two orders "agree by construction"; a mutation that
     /// reversed the input and still passed showed that was not the reason.)
-    pub fn wake(&mut self, changed: &[ChangedNet], out: &mut Vec<u32>, clocked: &mut Vec<u32>) {
+    pub fn wake(
+        &mut self,
+        changed: &[ChangedNet],
+        last_change_seq: &[u64],
+        out: &mut Vec<u32>,
+        clocked: &mut Vec<u32>,
+    ) {
         out.clear();
         clocked.clear();
         for &(net, mask, writer) in changed {
@@ -228,14 +241,18 @@ impl WakeTable {
                 out.push(proc);
             }
         }
-        // Static LEVEL sensitivity (the engine's pass (b), `arm = None` arm):
-        // fires when ANY watched net changed and the waiter's own process did
-        // not blocking-write it. No timestep dedup — the waiter is CONSUMED
-        // instead, which is a stronger condition and the one the engine uses.
+        // Static LEVEL sensitivity (the engine's pass (b), static arm): fires
+        // when ANY watched net changed AFTER the arm (CHANGE SEQUENCE) and the
+        // waiter's own process did not blocking-write it. No timestep dedup —
+        // the waiter is CONSUMED instead, which is a stronger condition and the
+        // one the engine uses.
         for &(net, _, writer) in changed {
             for k in 0..self.net_to_level[net as usize].len() {
                 let proc = self.net_to_level[net as usize][k];
-                if !self.level_armed[proc as usize] || writer == proc {
+                if !self.level_armed[proc as usize]
+                    || writer == proc
+                    || last_change_seq[net as usize] <= self.level_arm_seq[proc as usize]
+                {
                     continue;
                 }
                 self.level_armed[proc as usize] = false;
@@ -266,11 +283,12 @@ impl WakeTable {
     /// engine's multiplicity. `n_level_waiters` is likewise absent here; it is a
     /// fast-path counter guarding whether the engine runs its level pass at all,
     /// and this table always runs its own.
-    pub fn rearm_level(&mut self, proc: u32) {
+    pub fn rearm_level(&mut self, proc: u32, arm_seq: u64) {
         if !self.has_level_nets[proc as usize] {
             return;
         }
         self.level_armed[proc as usize] = true;
+        self.level_arm_seq[proc as usize] = arm_seq;
     }
 
     /// The kernel-side twin of `Scheduler::edge_registration_count`.

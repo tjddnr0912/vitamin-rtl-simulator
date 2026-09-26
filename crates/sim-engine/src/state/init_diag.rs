@@ -59,6 +59,8 @@ impl<'a> SimState<'a> {
             is_edge_target,
             blocking_writer: None,
             last_blocking_writer: vec![u32::MAX; nnets],
+            change_seq: std::rc::Rc::new(std::cell::Cell::new(0)),
+            last_change_seq: vec![0; nnets],
             active_forces: std::collections::BTreeMap::new(),
             force_net_to_forces: std::collections::BTreeMap::new(),
             force_always_reeval: std::collections::BTreeSet::new(),

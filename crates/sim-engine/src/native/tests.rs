@@ -1818,8 +1818,8 @@ fn s1d3_wake_decision_matches_engine() {
                         ir.processes[p as usize].sensitivity.kind,
                         sim_ir::SensKind::Comb | sim_ir::SensKind::Latch
                     ) {
-                        sched.arm_sensitivity(p);
-                        wake.rearm_level(p);
+                        sched.arm_sensitivity(p, 0);
+                        wake.rearm_level(p, 0);
                         saw_comb += 1;
                     }
                 }
@@ -1896,7 +1896,12 @@ fn compare_wake(
     // dropped: a diversion that started firing here would silently REMOVE
     // processes from the compared list and the comparison would still pass.
     let mut native_clocked = Vec::new();
-    wake.wake(&changed, &mut native_woken, &mut native_clocked);
+    wake.wake(
+        &changed,
+        &arena.ch.last_change_seq,
+        &mut native_woken,
+        &mut native_clocked,
+    );
     assert!(
         native_clocked.is_empty(),
         "{name}/pass{pass}: a clocking handler was diverted in a corpus with no clocking block"
@@ -1910,8 +1915,8 @@ fn compare_wake(
     // (level index < edge index) is never reached again.
     for &p in &engine_woken {
         if ir.processes[p as usize].sensitivity.kind == sim_ir::SensKind::Level {
-            sched.arm_sensitivity(p);
-            wake.rearm_level(p);
+            sched.arm_sensitivity(p, 0);
+            wake.rearm_level(p, 0);
         }
     }
     *comparisons += 1;
