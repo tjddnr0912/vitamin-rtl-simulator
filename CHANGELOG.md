@@ -9,6 +9,18 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a ≤64-bit operator-topped override over a wide self-determined sub-node binds its own width
+
+- `#(.P(8'd1 << 128'd2))`, `#(.P(~(128'd1 != 128'd0)))`, `#(.P((-8'sd8) >>> 128'sd1))`,
+  `#(.P(8'd2 ** 128'd3))`, `#(.P(128'd0 ? 8'd1 : 8'd2))` onto an untyped `parameter P = 1`
+  bound 32 bits (the default literal's) where both oracles bind the expression's own 8 / 1
+  bits: the operator channel's i64 fence refused a >64-bit node anywhere in the tree, even in
+  a self-determined position whose width never enters the context. The fence now walks the
+  context-determined operands only; `defparam`, positional and interface overrides take the
+  same helper. A comparison whose operand the i64 lane cannot hold folds through the wide
+  domain from the plain walk (`8'd3 + (128'h1_0000_0000_0000_0000 > 128'd1)` is 4 as an
+  override, was E3009), and a shift count past 64 bits is read unsigned from the wide domain.
+
 ### Fixed — a definite operator over an x/z operand folds in a constant context
 
 - A reduction, `!`, `&&` / `||`, `===` / `!==`, an unambiguous `==` / `!=` and a ternary

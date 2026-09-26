@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 25 | 5 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 9 (rows 14, 25, 26, 30 and 🆕 H startable since §4.5.542 took the §11.8.1 wall down) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 164 | 83 | 81 | oracle split / pinned / oracle disqualified 49 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 19 · real 5 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 37 | ① | |
+| §2 | recorded defects by mechanism | 164 | 82 | 82 | oracle split / pinned / oracle disqualified 49 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 19 · real 5 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 37 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 394 | 229 | 165 | | | | |
+| total | | 394 | 228 | 166 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
@@ -366,16 +366,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   verilator has no `x` for an out-of-range select at all (everything is `01`). vita is uniform `1x`
   across all four spellings and agrees with iverilog on the two spellings where iverilog agrees with
   itself. Pinned by self-consistency (`packed_select_signed_index.rs`).
-- A ≤64-bit OPERATOR-topped override over a wide SELF-determined sub-node binds at the default
-  literal's 32 bits (17 cells, PRE route kept on purpose by §4.5.527): `8'hFF + (128'd1 > 128'd0)`
-  is `32 00000100` against verilator `8 00` (iverilog `9 100`); `~(128'd1 != 128'd0)` is
-  `32 fffffffe` against both `1 0`; `8'd1 << 128'd2` is `32 00000004` against both `8 04`;
-  `(8'hFF + 8'd1) + 16'd0 + (128'd1 > 128'd0)` is `32 00000101` against verilator `16 0101`;
-  `(-8'sd8) >>> 128'sd1` is `32 fffffffc` against both `8 fc`; `32'd1 << 128'd70` is E3009
-  against both `32 00000000`. Folding these through the wide walk at their self width imported
-  the walk's sign defect (three typed `logic [15:0]` cells went PRE-right → wrong) and moved typed ≤64
-  cells across row 16's split. The walk carries the sign since §4.5.542; startable — measure the typed
-  ≤64 cells that cross row 16's split before routing.
+- An override whose shift COUNT is past 63 on a non-zero value stays E3009 on every target
+  (`#(.P(32'd1 << 128'd70))`, `8'd1 << 128'h1_0000_0000_0000_0000`; both oracles 0): the
+  width-unlimited lane declines `1 << 70` and the operator channel's value must come from it
+  (row 30's "correct a value, never create one"). The `localparam` twins fold to 0 through the
+  width-aware walk. The ≤64-bit operator-top bullet that stood here closed in §4.5.544.
 - A >64-bit operator tree that the wide fold itself DECLINES still binds 32 bits silently through the
   i64 route (both oracles 128): `1 ? ~128'd0 : 128'd1 / 128'd0` and `… % 128'd0` are `32 ffffffff`
   against `128 ff…ff`; `~128'd0 & (1 ? 128'd7 : 128'd1 / 128'd0)` is `32 00000007` against

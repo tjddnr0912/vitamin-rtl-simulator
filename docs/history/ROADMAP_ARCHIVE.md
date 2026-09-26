@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 424건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 425건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.544` **a ≤64-bit operator-topped override over a wide self-determined sub-node binds its own width: the operator channel's i64 fence walks the context-determined operands only** (2026-09-26 · §2 "Index sealing" operator-top bullet closed · 7 two-oracle cells + 3 loud→value on four channels · typed targets unchanged (row 16's split not crossed) · tests 8579 → 8583)
 - `4.5.543` **a definite operator over an x/z operand folds: the wide constant fold's accept set is the operator's rule, an answer that is x is carried as an x bit, and the binders that have no unknown plane keep their loud** (2026-09-26 · §2 🆕 H ⓐ closed, ⓕ added · 119 two-oracle cells, a range bound silently one bit · two BLOCKING fixes: the override lane's operator guard, the unsigned zero-extension of an unknown top bit · tests 8571 → 8579)
 - `4.5.542` **the wide constant fold evaluates a region the way §11.8.1 / §11.8.2 do: width and sign decided over the whole tree, then pushed into every context-determined operand; a self-determined position is a region of its own** (2026-09-26 · §2 🆕 R and 🆕 F deleted, the §11.8.1 wall of REMAINING_WORK §D deleted, rows 14, 25, 26, 30 and 🆕 H re-recorded OPEN, the WALL(provenance) paragraph rewritten, two §5.2 do-not-start lines deleted; follow-up: the override lane's plain-tree rule deleted, two §2 "Index sealing" bullets closed and one re-recorded startable · `fold_bits_at` = two passes over `fold_region` (pass 1 learns the region's width and sign, pass 2 refolds at that width with that sign pushed into every extension: shifts, bitwise, `~`, `>>>` fill, `+ - *`, `/ %`, `**` base, unary `-`, ternary arms), a comparison's operands a region sized to the larger side, `bp_operands` extending with the result's sign · 206 grounding cells, 57 FIXED / 0 regression / 0 new loud; lenses direct (differential PASS, soundness PASS); corpus 10/10; no format bump · 8571 tests)
 - `4.5.541` **same-time resumes run in scheduling order: a resume event is numbered when it is scheduled, a wake group shares one number, and a fork's arms and a joined parent run right after the body that made them runnable** (2026-09-26 · §2 start-order row 7 re-recorded ORACLE-SPLIT (the `#d`, `#0`, fork-arm and join kinds closed; the time-0 hierarchy start order and the wake-group order are splits), the in-body edge-wait half of §2 "Delays / events" unblocked (STARTABLE M), the continuous-assign hop row re-recorded BLOCKED by the wake-group split, one oracle-split bullet added, both REMAINING_WORK §D row-7 prerequisites deleted; follow-up: `$monitor` prints before the `$strobe`s of its step (2 oracles, `flush_postponed_with`), 8563 tests · `Ready` / `NativeReady` carry `seq`, `push_sorted` / `push_sorted_native` order by `(seq, tie)`; a `#d` / `#0` / fork-arm / join resume takes its number when it is scheduled (`schedule_resume`, `exec_fork_into`, `on_child_complete_into`), a wake group shares `Scheduler::wake_seq` refreshed after the time-0 seeding, at every batch take and at time advance before the delayed-assign landing; fork arms and a joined parent go to `spawned` and both index-based batch loops splice them in right after the body that made them runnable · 63 grounding cells (36 2-oracle, 26 split, 5 runs each) + 12 adversarial cells, 3 backends; 5 pins converted, both oracles on each; lenses direct (differential PASS, soundness PASS); corpus 10/10 on iverilog's digests; flip run the 10 documented pins; no format bump · 8561 tests)
@@ -553,6 +554,56 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.544 a ≤64-bit operator-topped override over a wide self-determined sub-node binds its own width: the operator channel's i64 fence walks the context-determined operands only (2026-09-26, branch main) ✅
+
+**ROADMAP rows**: the §2 "Index sealing" ≤64-bit operator-top bullet closed; one residue bullet
+added in its place (a shift count past 63 declines in the unlimited lane). Summary mechanism
+164 / 83 / 81 → 164 / 82 / 82, total 394 / 229 / 165 → 394 / 228 / 166. Tests 8579 → 8583.
+
+**Defect (PRE = §4.5.543's binary, both oracles).** `param_query.rs::override_self_meta` — the
+i64 operator channel's `(width, sign)` for an untyped target (§6.20.2) — fenced the whole tree
+with `const_ctx_within_i64`, which refuses ANY node wider than 64 bits. A 128-bit literal in a
+SELF-DETERMINED position (a shift count, a `**` exponent, a comparison's operands, a ternary
+condition, a reduction's operand) never enters the context, and the value walks already read
+those positions through the wide domain's bridges — so the value was right and the width was the
+default literal's:
+
+```
+#(.P(8'd1 << 128'd2))              both 8 / 04     PRE 32 / 00000004
+#(.P(~(128'd1 != 128'd0)))         both 1 / 0      PRE 32 / fffffffe
+#(.P((-8'sd8) >>> 128'sd1))        both 8 / fc     PRE 32 / fffffffc
+#(.P(8'd2 ** 128'd3))              both 8 / 08     PRE 32 / 00000008
+#(.P(128'd0 ? 8'd1 : 8'd2))        both 8 / 02     PRE 32 / 00000002
+#(.P(8'd1 << W))  W = [127:0]      both 8 / 04     PRE 32 / 00000004
+#(.P(8'd3 + (128'h1_0000_0000_0000_0000 > 128'd1)))   VL 8 / 04 (iv 9 / 004)   PRE E3009
+```
+
+**Mechanism.** `const_ctx_within_i64_context`: the top's own width is still checked (a wide
+concat, cast or arithmetic tree still declines), and the walk descends only into
+context-determined operands — arithmetic and bitwise operands, a shift's LEFT operand, the
+ternary ARMS, concat / replicate parts, a cast's inner. Used by `override_self_meta` alone; the
+two other callers of `const_ctx_within_i64` (the width-aware initializer gate) are untouched.
+Two same-funnel follow-ups in the value lane: the plain walk's comparison arm falls back to
+`selfdet_bits_i64` when the width-aware walk cannot hold an operand, and `eval_const_shift_count`
+reads a literal count the i64 lane cannot hold through `selfdet_bits_unsigned` (saturating past
+u64). A shift count past 63 on a non-zero value still declines in the unlimited lane
+(`1 << 70`), and `override_self_value` requires that lane's answer, so `32'd1 << 128'd70` stays
+E3009 as an override (both oracles 0; the `localparam` twin folds to 0) — recorded as the
+residue bullet.
+
+**Review (lenses direct, s31/review/REPORT.md, 91 cells).** Untyped target: 7 cells FIXED
+(two oracles) and 3 loud→value; 9 `+` / reduction cells moved from 32 bits to verilator's width
+(iverilog one bit wider — its §4.5.466 self-contradiction; vita's own `localparam` lane already
+gives verilator's on the same text); `128'h1_… ? 8'd1 : 8'd2` to iverilog's 8 (verilator 32 on
+the override and 8 on its own localparam). Typed `logic [15:0]` target: every PRE cell kept —
+the `+`-over-a-comparison cells stay on iverilog's (IEEE assignment-context) side of row 16's
+split, which the bullet asked to measure before routing — and its three comparison cells
+loud→value (both oracles). `defparam`, positional and interface channels and a `$bits(P)`-sized
+net in the child all move alike. 0 regression, 0 new loud. One old-behaviour pin converted
+(`override_wide_operator_top.rs` X3); `override_operator_top_wide_selfdet_operand.rs` (4 tests).
+Gate 8579 → 8583, doctest / clippy / fmt 0, corpus 10/10 ×4, perf both orders within noise,
+`format_version` 34 unchanged.
 
 #### 4.5.543 a definite operator over an x/z operand folds: the wide constant fold's accept set is the operator's rule, an answer that is x is carried as an x bit, and the binders that have no unknown plane keep their loud (2026-09-26, branch main) ✅
 
