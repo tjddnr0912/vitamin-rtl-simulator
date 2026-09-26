@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 27 | 0 | 27 | WALL §11.8.1 region sign / declared-width provenance 9 · named prerequisite 6 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 3 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 5 · WALL 6 · OPEN 4 · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 167 | 84 | 83 | oracle split / pinned / oracle disqualified 48 · named prerequisite 16 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 21 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 36 | ① | |
+| §2 | recorded defects by mechanism | 167 | 83 | 84 | oracle split / pinned / oracle disqualified 49 · named prerequisite 16 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 20 · real 5 · performance 6 · index sealing 11 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 37 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 105 | 90 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 20 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 399 | 225 | 174 | | | | |
+| total | | 399 | 224 | 175 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (§11.8.1 region sign,
 a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
@@ -929,11 +929,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   order landed in §4.5.541 (the stimulus resuming from `#15` now runs before the clock
   generator's `#5` resume, as in both oracles, so the after-the-arm rule no longer shifts that
   testbench); then a sidecar marking the `@(cb)` waits.
-- `$monitor` prints AFTER a `$strobe` of the same time step: `initial $monitor("%0t M v=%0d",
-  $time, v);` beside `initial begin #10 v = 3; $strobe("%0t S v=%0d", $time, v); end` prints
-  `10 S v=3 | 10 M v=3`, both oracles `10 M v=3 | 10 S v=3` whichever initial is declared
-  first. Site: `flush_postponed_with` drains the strobe FIFO, then the monitor. 2 oracles.
-  STARTABLE (S). (§4.5.541 differential cell d09.)
 
 ### Diagnostics / artifacts
 
@@ -1283,6 +1278,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   landing's queue position, `Q W P Q0`; verilator after the promoted resumes, `Q P Q0 W`). vita:
   declaration order inside a wake group (= verilator on 12 of the split cells), parent-first at
   time 0 (= verilator), iverilog's landing position (§4.5.538's pins).
+- A `$strobe` registered BEFORE the step's first monitored change (`always #1 clk = ~clk;
+  always @(posedge clk) a = a + 1;` with `initial begin $monitor(…a); #3 $strobe(…a); end`: the
+  `#3` resume strobes, then the posedge block changes `a`): iverilog prints the strobe first
+  (`S t=3 a=2 | M t=3 a=2`, the Postponed FIFO in scheduling order), verilator the monitor line
+  first; when the change precedes the strobe both print the monitor line first (§4.5.541
+  follow-up, `s28/review/d` m1–m4, q1–q3). vita prints the monitor line first (= verilator).
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 

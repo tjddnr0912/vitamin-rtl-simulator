@@ -22,6 +22,9 @@ changed for a user of the simulator.
   resuming from `#15` in the edge's own time step — now runs the stimulus first. Processes woken by
   one event still run in declaration order among themselves, after every delay resume already due
   at that time. Both backends; no artifact format change.
+- **`$monitor` prints before the `$strobe`s of the same time step**, on stdout and on the
+  `$fmonitor` / `$fstrobe` file lane, as both tools do (`10 M v=3` then `10 S v=3`; the strobes
+  printed first before).
 
 ### Fixed — a real stored into a class field or a container element converts at the destination's width
 

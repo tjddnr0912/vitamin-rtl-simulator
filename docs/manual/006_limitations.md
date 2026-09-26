@@ -120,7 +120,7 @@ the last row says which.
 | NBA | the scheduler's non-blocking update list plus a delayed-update map |
 | Observed | the deferred-observed list, where `assert #0` matures (§16.4) |
 | Reactive | the deferred-reactive list, where `assert final` matures |
-| Postponed | the postponed flush — `$strobe`/`$fstrobe` first, then `$monitor`/`$fmonitor` |
+| Postponed | the postponed flush — `$monitor`/`$fmonitor` first, then `$strobe`/`$fstrobe` in call order (both tools) |
 | the Pre-, Post- and Re- variants | not modelled. A clocking skew other than `#1step` would need one, and is refused loudly. A `program` block runs, but its processes are scheduled in Active rather than in the Reactive stratum IEEE 1800 §24 gives them |
 
 These regions are engine-side structures. The frozen IR's `RegionTag` enum rides

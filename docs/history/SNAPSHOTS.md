@@ -155,3 +155,6 @@ a section restructure, a residue split).
   (prerequisite → oracle split), the `$monitor`-after-`$strobe` bullet (startable, S) and one
   oracle-split bullet added. Startable 82 + 1 + 1 = 84; blocked 83 − 1 + 1 = 83; total 399.
   Tests 8557 → 8561. `format_version` 34 unchanged.
+- §4.5.541 follow-up: §2 "Delays / events" the `$monitor`-after-`$strobe` bullet (startable, S)
+  closed in the same iteration; the strobe-before-change split bullet added. Startable 84 − 1 = 83; blocked 83 + 1 = 84; total 399. Tests 8561 → 8563.
+  `format_version` 34 unchanged.
