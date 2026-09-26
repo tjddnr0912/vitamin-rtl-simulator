@@ -680,10 +680,10 @@ Measured values: `$bits(42)` is 32, `$bits('hFF)` is 32, `$bits('h1FFFFFFFF)` is
 
 | Cast | Status | Notes |
 |---|---|---|
-| `int'(e)` `integer'(e)` `byte'(e)` `shortint'(e)` `longint'(e)` `bit'(e)` `logic'(e)` `reg'(e)` `time'(e)` `real'(e)` `realtime'(e)` | Supported | The complete primitive set. |
+| `int'(e)` `integer'(e)` `byte'(e)` `shortint'(e)` `longint'(e)` `bit'(e)` `logic'(e)` `reg'(e)` `time'(e)` `real'(e)` `realtime'(e)` | Supported | The complete primitive set. The type's width is the context of a context-determined operand, as an assignment to a variable of that type is (`int'(u4 * u4)` with `u4 = 10` is 100). A real operand converts, rounding half away from zero. |
 | `signed'(e)` / `unsigned'(e)` | Supported | The width is preserved; only the sign interpretation flips. Loud on a real operand. |
 | `N'(e)` / `(W+1)'(e)` size cast | Supported | The result is N bits and inherits the operand's signedness. The width must be a positive constant expression. |
-| `name'(e)` typedef cast | Supported | Numeric typedefs and packed struct or union types. |
+| `name'(e)` typedef cast | Supported | A typedef of a 4-state packed vector, a packed struct or union, or an enum. A typedef of an atom type (`int`, `shortint`, `byte`, …) or of a `bit` vector is Loud (`VITA-E3009`). |
 | `string'(e)` | Supported | Converts an integral to a string per IEEE 1800 §6.16 (see §5.4): bytes most-significant first, unknown bits as 0, NUL bytes dropped. Identity on a value that is already a string. A `real` operand is Loud, and the cast has no constant-fold arm, so it cannot initialise a `localparam`. |
 | `Base'(derived)` class up-cast | Supported | Identity on the handle; only the static type narrows, and virtual dispatch reads the dynamic class. A down-cast and an unrelated cast are Loud. |
 | Real to integer wider than 64 bits | Loud | `VITA-E3009` |

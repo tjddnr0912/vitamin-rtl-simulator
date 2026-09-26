@@ -9,6 +9,15 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a primitive cast is the context of its operand
+
+- `int'(u4 * u4)` with `u4 = 10` was the 4-bit product `00000004`; it is now 100 (`00000064`), as
+  in both oracles. A cast to `int`, `shortint`, `byte`, `longint`, `integer` or `time` returns what
+  a variable of that type holds after being assigned the operand, so a context-determined
+  operation inside it (`+ - * / % ** << >>`, bitwise, unary `-` and `~`, `?:`) runs at the type's
+  width: `int'(-u4)` is `fffffff6`, `longint'(u8*u8*u8*u8*u8)` keeps its high bits. A real-domain
+  operand still converts (`int'(r * 2)`, `int'(u4 * 2.0)`).
+
 ### Fixed — a deferred assertion's action does what its task does
 
 - `assert #0 (c) else $finish;` printed an empty line when it matured and the run went on to its

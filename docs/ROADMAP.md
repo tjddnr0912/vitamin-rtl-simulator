@@ -27,10 +27,10 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 24 | 4 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 8 (rows 14, 25, 30 and 🆕 H startable since §4.5.542 took the §11.8.1 wall down; row 26 absorbed by row 14 in §4.5.546) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 163 | 79 | 84 | oracle split / pinned / oracle disqualified 51 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 13 · size cast / signedness 16 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 18 · real 4 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 39 | ① | |
+| §2 | recorded defects by mechanism | 162 | 79 | 83 | oracle split / pinned / oracle disqualified 51 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 5 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 13 · size cast / signedness 15 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 18 · real 4 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 39 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 108 | 92 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 16 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
+| §3.b | loud → correct-support, small | 109 | 93 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 395 | 226 | 169 | | | | |
+| total | | 395 | 227 | 168 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
@@ -164,7 +164,7 @@ pins the current state and the cells a fix must not move; `region_sign_wide_fold
 the ≤64-bit cells known-wrong.
 
 WALL(AST self-width) — the size-cast cluster below (the width probe, the `ir_bits_of` fallbacks,
-real × fill, the prim cast) needs a tree-wide AST pass that answers a node's self width WITHOUT
+real × fill) needs a tree-wide AST pass that answers a node's self width WITHOUT
 lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const_signed_env`).
 
 | row | status | symptom · repro · oracle values | root cause · code site | fix shape · prerequisite / wall |
@@ -222,7 +222,8 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `None` for a call, so `64'(f(1) - 40)` is `00000000ffffffd0` against the oracles'
   `ffffffffffffffd0`, 16 of 720 cells. Fix = give `expr_self_signed`'s `_ => false` (21 callers) the
   declared return type. Residue: a dynamic, queue or associative element's sign is invisible to the
-  classifier; a HIERARCHICAL or class-member operand keeps the older classifier; a `time` constant
+  classifier (a prim cast takes the same route since §4.5.553: `int'(dq[0] * dq[0])` over a
+  `logic [3:0] dq[$]` is `00000004` against both oracles' `00000064`); a HIERARCHICAL or class-member operand keeps the older classifier; a `time` constant
   from a guessed parameter declines.
 - A real inside a size cast is silent when it meets a fill (oracles agree): if the other side is a
   fill, the real source is not a plain real net (`parameter real`, a real literal, a real return,
@@ -234,19 +235,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - `$signed(real)` and `$unsigned(real)` are position-dependent: 15 positions inside a cast are
   refused and 7 exit 0 (`$signed(r)*2` → 15, `%0d`/`%0f`, int and real assignment); iverilog refuses
   all of them. Beside it, two-argument `$signed(r, u)` is accepted silently.
-- A prim cast does not push the target width down to a context-determined operand (oracles agree):
-  with `a=8'hFF`, `int'(a*a)` is `00000001` against iverilog's `0000fe01`, and `shortint'(a*a)` is
-  `00000001` against `fffffe01`. `lower_prim_cast` uses `lower_ctx_or_plain` (fill only); wiring it
-  directly makes `refuse_real_size_operand` turn `int'(r)` loud. WALL(AST self-width). Census on
-  §4.5.530's cells c17 / c18 (`u4 = 4'b1010`, `u8 = 8'hf0`, both oracles agree, PRE = POST): `int'(-u4)`
-  is `00000006` against `fffffff6`, `int'(~u4)` `00000005` against `fffffff5`, `int'(u4 - 4'd11)`
-  `0000000f` against `ffffffff`, `int'(u8 << 4)` `00000000` against `00000f00`, `int'(u4*u4)`
-  `00000004` against `00000064`, `longint'(u8*u8*u8*u8*u8)` `0000000000000000` against
-  `000000b964f00000`, `shortint'(u4+u4+u4+u4+u4)` `0002` against `0032`, `integer'(-u4)` `00000006`
-  against `fffffff6`, `int'({u4,u4} + 8'd255)` `000000a9` against `000001a9`, and
-  `int'(u4 ? u4 + 4'd8 : 4'd0)` `00000002` against `00000012` — 13 of 19 lines wrong. The size-cast
-  twins `16'(-u4)` `fff6`, `16'(u4*u4)` `0064`, `16'(u8 << 4)` `0f00` and the signed `int'(-s8)`,
-  `int'(s8*s8)`, `int'(-s4)` are right.
 - A cast's context width stops at an inner self-determined node (both oracles agree):
   `64'(-16'(u16))` is `000000000000fffb` against `fffffffffffffffb`, `8'(s4 * 4'(s8))` is `…f9`
   against `…09`, `16'(s8 + 4'(u8))` is `000c` against `010c`; un-nested `64'(-u16)` is correct, so
@@ -322,7 +310,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   8323074 bits").
 - Placement and cast fold residue (honest-loud): a concat containing a carry operation
   (`{4'd2,(4'd1+4'd1)}`, iverilog 34); x/z inside a concat; a prim or signing cast (`int'(7)`,
-  iverilog 7); a replication count taken from a local variable. Do not widen the carry-free folder —
+  iverilog 7); a replication count taken from a local variable; a `longint'` constant whose value needs bit 63
+  or overflows the i64 walk (`longint'(U8 << 56)` over `localparam logic [7:0] U8 = 8'hf0` is
+  E3009 "the cast has no constant-fold arm" where both oracles fold `f000000000000000`;
+  `longint'(U8) << 60` both 0). Do not widen the carry-free folder —
   route to the interpreter's own width-aware walk.
 - A const-domain cell whose SIZE wraps declines (loud E3009 against iverilog's 1): `const_eval_cast`'s
   truncating fold is unsound on top of an unlimited operand fold (`4'((4'd8+4'd8)/4'd3)` is SV 0
@@ -1381,6 +1372,7 @@ behind the §2 correctness queue.
 | filepos | `$ftell` and `$sscanf` give E3009 "unsupported system function in expression"; `$fseek` gives a W3056 warn-and-skip | a side-effecting system function in expression context | widen the statement-form desugar | iverilog works (`A=6 B=0 C=6 D=0`, `$sscanf` → `2 12 34`) | — |
 | deferred-inline-action | a deferred assertion's action that is not a print, a file print, `$finish` or `$stop` — a user task or void function call, a queue / array / string method, `$sformat`, `$readmem*`, `$writemem*`, `$cast`, `new[]`, `$monitor` — runs when REACHED with W3056 (§4.5.552); IEEE §16.4.2 runs it when the report matures, with its input arguments' reach-time values, so a re-reach in the same step does not cancel it and a reader later in the same step sees its effect early. The values are what verilator 5.052 prints and what iverilog 13.0 prints for the same design spelled as an immediate `assert`. A plain assignment inside a `begin … end` action (an extension of §16.4's single call) also runs when reached, without the warning | `Scheduler::try_defer_with` captures a report as rendered TEXT; a non-print task needs its arguments as values and its own dispatch arm at maturation (`elaborate/stmt_flow.rs::prune_deferred_actions` keeps it out of `defer_acts` today) | evaluate the call's input arguments at reach into a pending report and dispatch the task at maturation against those values; a user task call pends its whole frame | hand-IEEE (verilator runs every deferred action at reach; iverilog refuses deferred assertions) | M |
 | immediate-cover | an immediate or deferred `cover (c) stmt;` / `cover #0 (c) stmt;` / `cover final (c) stmt;` is E2002 (`expected ';'` / `expected '=' or '<=' after lvalue`). iverilog 13.0 and verilator 5.052 accept all three and never run the statement (`#5 cover (1) $display("T cov")` prints nothing on either); IEEE §16.3 / §16.4 runs it when the cover succeeds | the statement parser has no `cover` arm (only `cover property` / `cover sequence`) | parse the three forms onto the assert lowering with a pass arm only (the deferred forms reuse the §16.4 report) | ORACLE-SPLIT: both oracles drop the statement — hand-IEEE only | S |
+| typedef-atom-cast | a cast to a typedef of an atom type or of a 2-state `bit` vector is E3009 "typedef/class cast `name'(expr)` is outside the v1 cast scope" where both oracles run it: `typedef int ti; ti'(u4*u4)` (`00000064`), `typedef shortint tsh; tsh'(u4*u4)` (`0064`), `typedef byte tb; tb'(u4*u4)` (`64`), `typedef bit signed [15:0] ts16; ts16'(-u4)` (`fff6`). A 4-state vector, struct, enum and chained typedef cast are right | `hdl-parser/typedefs.rs::simple_typedef_cast` answers only a 4-state `logic`/`reg` kind: the size+sign desugar has no 2-state coercion and an atom has no range | desugar an atom typedef to `CastTarget::Prim` (with a signing cast for `int unsigned`); a `bit` vector needs a size cast plus the 2-state coercion `lower_prim_cast` builds | 2-oracle | S |
 | $typename | an enum or packed struct renders as its base type (`logic[1:0]`; IEEE §20.6.1 says `enum{...}`) | rendering only | widen the renderer · pin `typename_pins.rs` | no oracle | no value effect |
 | %p-ⓐ | an UNPACKED STRUCT and `string sa[2]` are E3010 at DECLARATION, so there is no net to render | a declaration gap | re-file under that feature | verilator | — |
 | %p-ⓒ | two recorded divergences: a NEGATIVE associative key (vita follows IEEE §7.9.4 SIGNED key order, verilator sorts hex; `-1` is 64 bits) · a `real` unpacked array (verilator prints element 0 only while rendering a QUEUE of the same shape correctly, so it self-contradicts and vita follows verilator's own recursive rule) | — | keep the pins | verilator only | — |

@@ -446,6 +446,7 @@ another.
 | Count how many rows of a manifest already contain a state combination you believe cannot occur | A believed-impossible combination being present and unhandled |
 | Re-measure with the oracle any assumption written as a degenerate special case | A diagnostic pointing at a phenomenon that does not exist |
 | Count a resolver's callers when you meet "this capability does not exist"; a resolver with one consumer has grown to fit that one question | Several binding sites using a literal-only twin while a general resolver sits unused |
+| Before accepting a WALL, look for a sibling consumer of the same route that already carries the guard the wall says is missing | A row held behind a tree-wide pass that one guard closes: the prim cast's wall was the real-domain walk the inline-assignment consumer of the size-cast route already used (§4.5.553) |
 | Grep every place that enumerates a subset before widening it | One layer accepting, another refusing, and the fallback message asserting something false |
 | Check a demand claim with the same suspicion as a correctness claim | A revert's justification resting on usage nobody verified |
 | Enumerate the spellings of a feature a report names and measure each | A passing test being evidence about its own spelling and nothing else |

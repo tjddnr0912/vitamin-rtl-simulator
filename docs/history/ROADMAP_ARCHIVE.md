@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 433건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 434건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.553` **a primitive cast is the context of its operand** (2026-09-27 · the size cast's route guarded by the real-domain walk · 38 cells wrong → both oracles, 0 regressed · the WALL was one existing guard · tests 8654 → 8660)
 - `4.5.552` **a deferred assertion's action matures by its kind** (2026-09-27 · `$finish` / `$stop` controls, file prints to their descriptor, every task of the arm, other actions run when reached with W3056 · 35 PRE-wrong cells right on 3 backends · tests 8639 → 8654)
 - `4.5.551` **the "nine binding sites" row re-measured stale** (2026-09-27 · 180 cells, 140 two-oracle / 30 one-oracle right, 10 an honest refusal recorded as §3.b `hier-fn-inline-callee` · no code change · tests 8632 → 8639)
 - `4.5.550` **a real bound to an inline formal wider than 128 bits converts at the formal's width** (2026-09-27 · §2 "Inline / frame binds" >128-bit bullet closed · `RealToInt` converts at a context wider than 128 · 15 two-oracle cells · tests 8626 → 8632)
@@ -562,6 +563,73 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.553 a primitive cast is the context of its operand: `int'(u4 * u4)` multiplies at 32 bits, through the size cast's route guarded by the real-domain walk (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 "Size cast / signedness" — the prim-cast bullet closed, and "the prim cast"
+removed from the WALL(AST self-width) list. The function-call bullet's residue gains the prim-cast
+twin of the queue-element cell; the "Placement and cast fold residue" bullet gains the `longint'`
+constant-overflow cells; §3.b `typedef-atom-cast` added (2-oracle, S). Summary mechanism
+163 / 79 / 84 → 162 / 79 / 83, §3.b 108 / 92 / 16 → 109 / 93 / 16, total 395 / 226 / 169 →
+395 / 227 / 168. Tests 8654 → 8660.
+
+**Defect (PRE b40c396, both oracles, all three backends alike).** `lower_prim_cast` lowered the
+operand at its own width (`lower_ctx_or_plain`, which widens a fill only) and resized the result,
+so a context-determined operation ran at the operand's width. IEEE §6.24.1: a cast to a type
+returns what a variable of that type holds after being assigned the operand, so the type's width
+is the operand's context — which the size cast already implemented (`16'(u4*u4)` was right).
+
+```
+u4 = 4'b1010, u8 = 8'hf0, a = 8'hff      iverilog 13.0 / verilator 5.052   PRE
+int'(u4 * u4)                            00000064                         00000004
+int'(-u4)                                fffffff6                         00000006
+longint'(u8*u8*u8*u8*u8)                 000000b964f00000                 0000000000000000
+shortint'(a * a)                         fe01                             0001
+int'(u4 * u4 + (r > 1.0))                00000065                         00000005
+integer'(u4 + 4'bx)                      xxxxxxxx (verilator: 2-state)    0000000x
+```
+
+**The WALL, measured.** The row said wiring the prim cast into the size cast's route makes the real
+refusal fire. It does: the route alone (`is_size_ctx_operation` + `size_ctx_route`) turned 10
+right cells into E3009 — `int'(r * 2)`, `int'(u4 * 2.0)`, `int'(-r)`, `int'(u4 ** 0.5)`,
+`integer'(r + u4)`, a real array element, a `realtime` — because the sign walk answers a real
+VARIABLE by its net's sign. The guard it needed already existed: `rhs_has_real_domain`, the AST
+walk the inline-assignment consumer of the same route uses (built on `bare_ident_route`, answering
+`true` for anything it cannot resolve). With it the 10 are right again. No tree-wide pass was
+needed.
+
+**Fix.** `lower_prim_cast` routes a context-determined operand through `lower_size_ctx_entry` at the
+target width when `size_ctx_route` answers and `rhs_has_real_domain` is false; otherwise the
+pre-slice path (fill widening, the real→int conversion). The narrowing / 2-state coercion / sign
+stamp after it are unchanged.
+
+**Grounding.** 134 cells, iverilog 13.0, verilator 5.052, three backends: the 41 integral shapes
+of the census (every context-determined operator, every primitive width, mixed signs, a nested
+cast, `$signed` / `$unsigned` leaves, a comparison inside), 20 real-domain shapes, named leaves (a
+constant, a function return, an array element, a child instance's net, a class field, a struct
+member), illegal real operands (`u4 & r`, `u4 << r`, `u4 % r`), typedef and `parameter type` casts,
+and the constant domain. 38 cells move, every one from wrong to what both oracles print (verilator
+excepted for the x cell); 0 move the other way; native = interp = vm on every cell. Unchanged:
+the constant domain was already right for prim casts (`localparam int P = int'(U4*U4)` is 100),
+except the loud cells now recorded; a queue element operand keeps the PRE width (the recorded
+element-sign residue); the loud shapes stay loud (a class real field, a real queue element, a
+`shortreal`, the illegal real operands, a typedef of an atom type or a `bit` vector — now §3.b
+`typedef-atom-cast`).
+
+**Review (both lenses, direct).** Differential: the table above. Soundness: the new arm's two
+predicates are the size cast's and the inline-assignment consumer's, unchanged; a real leaf the
+guard misses would reach `refuse_real_size_operand` and be LOUD, not silent (the guard's polarity
+is decline-on-unknown); no loud cell became a value (loud→value column empty); the downstream
+narrowing reads `ir_bits_of` of the routed node, which is the routed width. PASS.
+
+**Gate.** nextest 8660 / 8660 (one known-wrong pin converted: `single_mention_cast.rs`'s
+`context_determined_operands_are_unchanged`, which pinned the PRE values of this defect, is now
+`context_determined_operands_take_the_type_width` at the oracles' values), doctests, clippy
+`-D warnings`, fmt, product-shape clippy; corpus 10/10 ×2.
+
+**Pins.** `prim_cast_context_width.rs` (6 tests, native = interp = vm each): the operators, every
+primitive width, the 4-state unknown, the named leaves, the real-domain operands kept on the
+conversion, and the unchanged twins.
 
 #### 4.5.552 a deferred assertion's action matures by its kind: `$finish` ends the run in its time step, `$stop` stops it, a file print writes to its descriptor, every task of the arm matures, and any other action runs when reached (2026-09-27, branch main) ✅
 
