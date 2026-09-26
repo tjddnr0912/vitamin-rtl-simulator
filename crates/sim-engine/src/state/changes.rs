@@ -844,6 +844,20 @@ impl SimState<'_> {
             return false;
         };
         let fw = self.class_field_width(id, field);
+        // §6.12.2: a REAL value stored into an integral field converts at the
+        // FIELD's width and sign (`coerce_assign`, the net rule). The engine's
+        // funnel used to convert it at the HANDLE net's width and zero-extend
+        // (`longint f; c.f = -2.5` read `00000000fffffffd`, a `[129:0]` field
+        // `…0fffffffd`; both oracles sign-complete) and the tier-3 funnel not
+        // at all (the IEEE-754 word at every width) — `write_lvalue_general`
+        // now leaves a class-field store's real value to this line.
+        let converted;
+        let piece = if piece.is_real {
+            converted = crate::value::coerce_assign(false, piece.clone(), fw.0.max(1), fw.1);
+            &converted
+        } else {
+            piece
+        };
         // ⚠️ **EQUIVALENT TODAY, and A2-i measured it rather than assuming.** A
         // mutation that drops this resize survives the whole suite INCLUDING an
         // anchor line written to kill it (`p.x = 64'h1234_5678_9ABC_DEF0` really
@@ -943,11 +957,44 @@ impl SimState<'_> {
         {
             // §6.16: an INTEGRAL element value crossing into a string element is
             // converted (every 0x00 dropped, unknown bits 0); a string value is kept
-            // verbatim. `q.push_back(24'h610062)` is "ab"/2 on both oracles.
-            Value::from_str_bytes(&v.to_sv_string_bytes())
-        } else {
-            v.clone().resize(w)
+            // verbatim. `q.push_back(24'h610062)` is "ab"/2 on both oracles. A REAL
+            // value is first an integer (§6.12.2, at 64 bits: `sq.push_back(97.2)`
+            // is "a" in verilator; iverilog aborts on the shape) — this arm comes
+            // FIRST because the integral conversion below would size a string
+            // element's value to the handle's width of 1 (review r1 soundness F1).
+            let integral;
+            let src = if v.is_real {
+                integral = crate::value::coerce_assign(false, v.clone(), 64, true);
+                &integral
+            } else {
+                v
+            };
+            return Value::from_str_bytes(&src.to_sv_string_bytes());
         }
+        // §6.12.2: a REAL value stored into an integral element takes the
+        // assignment conversion at the ELEMENT's width and sign — the one rule
+        // `write_lvalue_general` applies to a net (`coerce_assign`), applied
+        // here because a queue push / insert and the native element store reach
+        // this funnel with the value still real: `int q[$]; q.push_back(300.5)`
+        // stored the IEEE-754 word `4072c80000000000` (both oracles `0000012d`),
+        // and every element store did on the native backend. A real ELEMENT
+        // (`real r[]`, the handle slot re-flagged `is_real`) keeps the value.
+        if v.is_real && !self.nets.get(net as usize).is_some_and(|n| n.is_real) {
+            return crate::value::coerce_assign(
+                false,
+                v.clone(),
+                w.max(1),
+                self.dyn_elem_signed(net),
+            );
+        }
+        v.clone().resize(w)
+    }
+
+    /// The signedness of a container's ELEMENT type — the handle net's own
+    /// `signed` (elaborate records the element type on the handle).
+    #[inline]
+    pub(crate) fn dyn_elem_signed(&self, net: u32) -> bool {
+        self.ir.nets.get(net as usize).is_some_and(|nv| nv.signed)
     }
 
     pub(crate) fn with_dyn_entry<R>(
@@ -1095,6 +1142,31 @@ impl SimState<'_> {
     ) -> bool {
         let net = c.net;
         let w = self.ir.nets[net as usize].width.max(1);
+        // §6.12.2 for the PART-SELECT lane below (`dy[0][15:0] = -70000.4`): the
+        // whole-element lanes convert a real in `coerce_dyn_elem`, but the
+        // part-select deposit slices the piece's bits directly, and on tier-3
+        // (no engine pre-coercion) those were the IEEE-754 word's (review r1
+        // differential F1: `00006666` for verilator's `0000ee90`). Converted at
+        // the ELEMENT's width and sign, then sliced, as the engine's
+        // pre-coercion does. A string or real element is left to its own lane.
+        let converted;
+        let piece = if piece.is_real
+            && self.ir.nets[net as usize].kind == NetKind::DynArray
+            && c.word.is_some()
+            && (c.offset.is_some() || c.width.is_some())
+            && !self.nets.get(net as usize).is_some_and(|n| n.is_real)
+            && !self
+                .dyn_str_elem
+                .get(net as usize)
+                .copied()
+                .unwrap_or(false)
+        {
+            converted =
+                crate::value::coerce_assign(false, piece.clone(), w, self.dyn_elem_signed(net));
+            &converted
+        } else {
+            piece
+        };
         // v7 P2-C: STRING whole-handle assignment — strip leading NULs from
         // the packed value (§6.16) and store the bytes. The only legal
         // string lvalue shape; anything narrower falls to the loud arm.
@@ -1349,7 +1421,9 @@ impl SimState<'_> {
                 let DynObj::Assoc { map } = obj else {
                     return false;
                 };
-                let v = value.clone().resize(w);
+                // The element conversion — a real value converts at the element's
+                // width and sign (`coerce_dyn_elem`), as every other dyn store.
+                let v = self.coerce_dyn_elem(net, value, w);
                 // HEAP-WAKE: `insert` hands back the previous binding, so
                 // "created or replaced with a different value" is free here.
                 map.insert(k, v.clone()) != Some(v)
@@ -1390,7 +1464,9 @@ impl SimState<'_> {
                 let DynObj::AssocStr { map } = obj else {
                     return false;
                 };
-                let v = value.clone().resize(w);
+                // The element conversion — a real value converts at the element's
+                // width and sign (`coerce_dyn_elem`), as every other dyn store.
+                let v = self.coerce_dyn_elem(net, value, w);
                 map.insert(k.clone(), v.clone()) != Some(v)
             },
         );

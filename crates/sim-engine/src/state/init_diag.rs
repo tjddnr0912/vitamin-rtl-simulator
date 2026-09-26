@@ -749,7 +749,26 @@ impl<'a> SimState<'a> {
         // chunk — the original computed it inside the round arm alone, so
         // hoisting it unconditionally would put an IR walk on every concat
         // write that has nothing to do with reals.
-        let value = if dest_is_real || value.is_real {
+        // A CLASS-FIELD destination (a handle net with a word) converts in its
+        // own funnel (`class_field_write_with`) at the field's width — the
+        // handle net's width here is not the field's (a `longint` field
+        // converted at 32 bits and zero-extended). A STRING-element container
+        // (`string sq[$]; sq[1] = 97.2`) converts in `coerce_dyn_elem` too: the
+        // handle's width is 0 here, and a real converted to one bit reached the
+        // string arm as "\x01" (review r1 soundness F1).
+        let funnel_dest = lhs.chunks.len() == 1
+            && lhs.chunks[0].word.is_some()
+            && (self
+                .class_is_handle
+                .get(lhs.chunks[0].net as usize)
+                .copied()
+                .unwrap_or(false)
+                || self
+                    .dyn_str_elem
+                    .get(lhs.chunks[0].net as usize)
+                    .copied()
+                    .unwrap_or(false));
+        let value = if (dest_is_real || value.is_real) && !funnel_dest {
             let (int_w, int_signed) = if lhs.chunks.len() == 1 {
                 let n = lhs.chunks[0].net as usize;
                 (self.nets[n].width, self.nets[n].signed)
