@@ -4513,15 +4513,20 @@ endmodule
         vec![
             "out|MON t=0 q=0 s=0\n".to_string(),
             "out|MON t=1 q=1 s=2\n".to_string(),
-            "out|STB1 q=2 s=4\n".to_string(),
+            // The monitor line of a step precedes its strobes (verilator; the
+            // 2-oracle shapes in `cli/tests/monitor_before_strobe.rs`). Here the
+            // strobe is registered by the `#3` resume BEFORE the posedge block
+            // changes `q`, and iverilog prints `STB1` first: an oracle split
+            // (ROADMAP §2 "Oracle splits", §4.5.541).
             "out|MON t=3 q=2 s=4\n".to_string(),
+            "out|STB1 q=2 s=4\n".to_string(),
             "out|MON t=5 q=3 s=6\n".to_string(),
             "out|MON t=9 q=5 s=10\n".to_string(),
             "out|MON t=11 q=6 s=12\n".to_string(),
             "out|DISP q=6\n".to_string(),
             "out|MON t=13 q=7 s=14\n".to_string(),
         ],
-        "postponed region (iverilog 13 pinned)"
+        "postponed region (iverilog 13 pinned, except the monitor-before-strobe order = verilator)"
     );
 }
 

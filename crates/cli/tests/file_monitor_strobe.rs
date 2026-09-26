@@ -243,7 +243,12 @@ fn fmonitor_and_fstrobe_on_tier_3_write_the_same_file() {
     );
     assert_eq!(
         file_of(&d, "fm.txt"),
-        "M t=0 a=0\nM t=1 a=1\nS t=3 a=2\nM t=3 a=2\nM t=5 a=3\n",
-        "tier-3 $fmonitor/$fstrobe (iverilog-pinned); stdout was:\n{txt}"
+        // The `$fmonitor` line of a step precedes its `$fstrobe`s (verilator, and
+        // both oracles when the change precedes the strobe's registration —
+        // `cli/tests/monitor_before_strobe.rs`); iverilog prints this strobe,
+        // registered before the step's change, first: an oracle split
+        // (ROADMAP §2 "Oracle splits", §4.5.541).
+        "M t=0 a=0\nM t=1 a=1\nM t=3 a=2\nS t=3 a=2\nM t=5 a=3\n",
+        "tier-3 $fmonitor/$fstrobe (iverilog-pinned, monitor-before-strobe = verilator); stdout was:\n{txt}"
     );
 }

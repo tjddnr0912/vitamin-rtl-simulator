@@ -115,13 +115,14 @@ fn a_zero_delay_update_is_read_by_the_next_zero_delay_hop() {
             "h0 0\nh1 1\nh2 1\n",
         ),
         // `$strobe` and `$monitor` are the Postponed region — both oracles read the landed value
-        // (`S 5 r=1`, `M 5 r=1` once); vita printed `S 5 r=0` and two monitor lines at time 0
-        // (`M 0 r=x`, `M 0 r=0`).
+        // (`M 5 r=1`, `S 5 r=1` once, the monitor line first); vita printed `S 5 r=0` and two
+        // monitor lines at time 0 (`M 0 r=x`, `M 0 r=0`), and the strobe before the monitor
+        // until §4.5.541.
         (
             "module t; reg u = 0; wire r; assign #0 r = u;\n\
              initial $monitor(\"M %0t r=%0d\", $time, r);\n\
              initial begin #5 u = 7; $strobe(\"S %0t r=%0d\", $time, r); #2 $finish; end endmodule\n",
-            "M 0 r=0\nS 5 r=1\nM 5 r=1\n",
+            "M 0 r=0\nM 5 r=1\nS 5 r=1\n",
         ),
     ]);
 }

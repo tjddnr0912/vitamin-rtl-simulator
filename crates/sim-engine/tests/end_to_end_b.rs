@@ -29,8 +29,8 @@ fn second_monitor_replaces_first() {
 
 #[test]
 fn strobe_then_monitor_ordering_in_one_step() {
-    // In a single timestep both a $strobe fires and the monitor changes. Frozen
-    // tie-break: strobe line FIRST, then the monitor line.
+    // In a single timestep both a $strobe fires and the monitor changes. The
+    // monitor line comes FIRST, then the strobe line (both oracles, §4.5.541).
     let src = "module m; reg clk; reg [3:0] a; \
                always @(posedge clk) $strobe(\"S=%0d\", a); \
                initial begin clk=0; a=4'd0; \
@@ -40,9 +40,9 @@ fn strobe_then_monitor_ordering_in_one_step() {
     let ir = build(src);
     let (_res, out) = simulate_capture(&ir, SimOpts::default());
     // t=0 postponed: monitor establish prints M=0 (no strobe yet).
-    // t=5 postponed: a changed 0→5 AND a strobe fired this step → strobe first
-    // (S=5), then monitor (M=5).
-    assert_eq!(out, "M=0\nS=5\nM=5\n");
+    // t=5 postponed: a changed 0→5 AND a strobe fired this step → monitor first
+    // (M=5), then the strobe (S=5).
+    assert_eq!(out, "M=0\nM=5\nS=5\n");
 }
 
 #[test]

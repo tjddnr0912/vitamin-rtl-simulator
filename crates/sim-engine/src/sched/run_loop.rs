@@ -662,7 +662,32 @@ impl Scheduler<'_, '_> {
         // the entering value on exit so nothing downstream (e.g. a cont-assign
         // `$time` at the next loop-top settle) observes a render's multiplier.
         let saved_mult = self.st.cur_time_mult;
-        // (a) STROBES — drain the FIFO in call order, render NOW (settled values),
+        // (a) MONITOR, before the strobes: both oracles print the monitor line
+        //     of a time step before every `$strobe` of that step, whichever
+        //     statement registered first (`10 M v=3 | 10 S v=3`; §4.5.541 d09).
+        //     IEEE 1364-2005 §17.1: reprint whenever any monitored
+        //     expression VALUE changes (4-state-aware), NOT when the rendered
+        //     string changes. We therefore evaluate the arg ExprIds to a
+        //     `Vec<Value>` and compare against the stored baseline with
+        //     `Value`'s derived `PartialEq` (exact `(val, unk)` bit-plane
+        //     equality). Only when the value list differs (or was never seeded:
+        //     establishment / replace) do we render + print and re-seed.
+        //
+        //     Borrow shape: hoist EVERYTHING out of the `&self.st.postponed`
+        //     borrow into locals (copy `enabled`, copy `fmt`, clone `args`,
+        //     `take` the previous `last_vals`) and DROP that borrow before any
+        //     `&self`-eval / `&mut self.st`-write. No NLL dependence on a binding
+        //     surviving across the render — render-then-record, zero overlap.
+        //     `Option::take` is used so the old baseline is moved out (not
+        //     cloned) and the slot is rewritten unconditionally below.
+        // One monitor per DESTINATION. stdout first (so a design with no `$fmonitor` is
+        // byte-identical), then each descriptor in ascending fd for determinism.
+        let mut keys: Vec<Option<u32>> = vec![None];
+        keys.extend(self.st.postponed.file_monitors.keys().map(|&d| Some(d)));
+        for mkey in keys {
+            self.flush_one_monitor(mkey, nets);
+        }
+        // (b) STROBES — drain the FIFO in call order, render NOW (settled values),
         //     print, then CLEAR (one-shot per call: a strobe never repeats next
         //     step unless its statement re-executes and re-registers).
         if !self.st.postponed.strobes.is_empty() {
@@ -689,28 +714,6 @@ impl Scheduler<'_, '_> {
             // `batch` dropped here; `self.st.postponed.strobes` is now empty.
         }
 
-        // (b) MONITOR — IEEE 1364-2005 §17.1: reprint whenever any monitored
-        //     expression VALUE changes (4-state-aware), NOT when the rendered
-        //     string changes. We therefore evaluate the arg ExprIds to a
-        //     `Vec<Value>` and compare against the stored baseline with
-        //     `Value`'s derived `PartialEq` (exact `(val, unk)` bit-plane
-        //     equality). Only when the value list differs (or was never seeded:
-        //     establishment / replace) do we render + print and re-seed.
-        //
-        //     Borrow shape: hoist EVERYTHING out of the `&self.st.postponed`
-        //     borrow into locals (copy `enabled`, copy `fmt`, clone `args`,
-        //     `take` the previous `last_vals`) and DROP that borrow before any
-        //     `&self`-eval / `&mut self.st`-write. No NLL dependence on a binding
-        //     surviving across the render — render-then-record, zero overlap.
-        //     `Option::take` is used so the old baseline is moved out (not
-        //     cloned) and the slot is rewritten unconditionally below.
-        // One monitor per DESTINATION. stdout first (so a design with no `$fmonitor` is
-        // byte-identical), then each descriptor in ascending fd for determinism.
-        let mut keys: Vec<Option<u32>> = vec![None];
-        keys.extend(self.st.postponed.file_monitors.keys().map(|&d| Some(d)));
-        for mkey in keys {
-            self.flush_one_monitor(mkey, nets);
-        }
         // Restore the entering multiplier (see the save at the top of this fn).
         self.st.cur_time_mult = saved_mult;
     }
@@ -727,7 +730,7 @@ impl Scheduler<'_, '_> {
             Some(m) => {
                 let fmt = m.cap.fmt;
                 let args = m.cap.args.clone();
-                let tmult = m.cap.time_mult; // monitoring module's M (see (a) above)
+                let tmult = m.cap.time_mult; // monitoring module's M (see the strobe arm)
                 let radix = m.cap.radix;
                 let scope = m.cap.scope.clone();
                 let inst_scope = m.cap.inst_scope.clone();
