@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 427건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 428건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.547` **a continuous assign that reads the time is re-evaluated when an operand changes, not as time advances** (2026-09-27 · §2 "Delays / events" `$realtime` bullet closed, the cross-time-unit residue recorded · time reads and one-operand conversions certified in `levelize::ca_deps` and the callee walk · tests 8604 → 8614)
 - `4.5.546` **§2 row 26 re-measured stale and absorbed into row 14: the package lane answers what the module lane answers** (2026-09-27 · 48 cells in four lanes identical at HEAD, 21 provenance-consumer cells identical over local / imported / `pk::` names · four-lane agreement pinned · no code change · tests 8592 → 8604)
 - `4.5.545` **an override binds its own type on every channel and operand shape: the defparam record carries the wide and string channels, a select of a declared name certifies, and only an override no channel typed is a guessed type** (2026-09-27 · §2 row 25 re-recorded to its element residue (headline stale) · 27 defparam + 3 select + 14 cast two-oracle cells, 12 element-select E3009 → verilator · two BLOCKING fixed (x/z defparam, unsigned-keyword swap) · tests 8583 → 8592)
 - `4.5.544` **a ≤64-bit operator-topped override over a wide self-determined sub-node binds its own width: the operator channel's i64 fence walks the context-determined operands only** (2026-09-26 · §2 "Index sealing" operator-top bullet closed · 7 two-oracle cells + 3 loud→value on four channels · typed targets unchanged (row 16's split not crossed) · tests 8579 → 8583)
@@ -556,6 +557,55 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.547 a continuous assign that reads the time is re-evaluated when an operand changes, not as time advances: time reads and one-operand conversions contribute no dependency to the settle's certifier (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — the `$realtime` continuous-assign bullet closed; one bullet
+added in its place (a continuous assign in a module with a different time UNIT reads the time at
+the wrong scale — no per-assign multiplier exists, M, a format bump) with the force/release
+oracle split beside it. Summary unchanged (165 / 83 / 82 mechanism). Tests 8604 → 8614.
+
+**Defect (PRE 4c33a51, iverilog 13.0 / verilator 5.052).** `levelize::ca_deps` certifies which
+continuous assigns may be skipped when their dependency nets did not move; `expr_is_pure_of_nets`
+answered `false` for every system function, so an assign reading `$time` / `$stime` / `$realtime`
+sat in `ca_always` and re-ran on every settle, reading the time of whatever step settled:
+
+```
+wire [31:0] w1 = int'($realtime * 1.5);        both 0 at 1,3,5,7,9,12   PRE 2, 5, 8, b, e, 12
+wire [63:0] w  = $time + a;   (a: 0→1 at 4, →2 at 7)
+                                               iverilog 0,0,5,5,9,9     PRE 1,3,6,8,b,e
+wire t = ($time > 5) & a;                      both 0,0,0,0,0,1         PRE 0,0,0,1,0,1
+wire [63:0] w = f(a);   (f returns $time + x)  iverilog 0,0,5,5,5,5     PRE 1,3,6,8,a,d
+```
+
+IEEE 1800 §10.3.2 evaluates a continuous assignment when an OPERAND changes value; the time a
+`$time` call reads is not an operand and advancing it is no event. verilator re-evaluates these
+assigns at points of its own (`$time + a` reads 0, 1, 5, 6, 9, b) and agrees with iverilog on the
+time-only cells; the rule is iverilog's.
+
+**Mechanism.** `sysfunc_is_eval_count_free(which, nargs)` names the system functions that leave no
+state another evaluation could read: the three time reads (no arguments) and the one-operand
+conversions (`$signed`, `$unsigned`, `$rtoi`, `$itor`, `$realtobits`, `$bitstoreal`, `RealToInt`,
+`TwoState` — `int'(r)` lowers to `RealToInt`, so without them the time rule never reached the row's
+cells). `expr_is_pure_of_nets` and the callee walk `call_deps::expr_func_reads` admit them when their
+arguments pass; random, file and heap-query functions stay refused. For the time reads this is the
+language rule rather than the certifier's usual "recomputes its previous value" argument: the
+assign runs at the settle seed and when a real operand moves, reading that moment's time. One
+certifier feeds both backends (the native kernel installs the scheduler's tables).
+
+**Review (lenses direct).** Ten grounding cells over six time points on three tools: eight equal
+iverilog after the change (the row's two cast cells are both oracles'); a forced then released
+time-driven wire reads the release time (verilator's `6`, iverilog `0` — split, pinned on vita's
+side); a cross-unit child is wrong before and after (`1 1`, both oracles `5 41` — the new bullet).
+The conversions' certification changes evaluation COUNTS only for a pure operand, which the write
+funnel's same-value drop makes invisible; corpus digests unchanged. And it is the largest
+performance move in a while, measured in both orders (release, three reps, POST / PRE / PRE /
+POST): darkriscv 6.62 s / 6.53 s → 3.82 s / 3.81 s (−42 %), because its ALU result assign wraps a
+shift in `$signed(…)` and so re-ran on every settle; every other workload within ±0.7 %. Backend flip run: the same ten
+tests fail with the bytecode default on HEAD and on this change (the two recorded bytecode
+divergences, native-only `wprog` telemetry, the default-backend pin). Gate 8604 → 8614,
+product-shape build 0, doctest / clippy / fmt 0, corpus 10/10 ×4, `format_version` 34 unchanged.
+Pins: `cont_assign_time_read.rs` (10 tests).
 
 #### 4.5.546 §2 row 26 re-measured stale and absorbed into row 14: the package lane answers what the module lane answers (2026-09-27, branch main) ✅
 

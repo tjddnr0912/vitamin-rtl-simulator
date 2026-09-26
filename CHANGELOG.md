@@ -9,6 +9,17 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a continuous assign that reads the time is re-evaluated only when an operand changes
+
+- `wire [31:0] w1 = int'($realtime * 1.5);` was re-evaluated at every time step (`00000002` at 1,
+  `0000000f` at 10) where both oracles keep the time-0 value, and `wire [63:0] w = $time + a;`
+  read the time of every step instead of the time `a` changed (IEEE 1800 §10.3.2: the assign
+  is evaluated when an operand changes, and time advancing is no event). A `$time` /
+  `$stime` / `$realtime` read no longer marks the assign for re-evaluation on every settle,
+  and neither do the one-operand conversions (`$signed`, `$rtoi`, `int'(real)`, …), in the
+  assign itself or in a function it calls. The same change makes darkriscv's simulation 42 %
+  faster: its ALU result assign wraps a shift in `$signed(…)` and re-ran on every settle.
+
 ### Fixed — an override binds its own type on every channel and operand shape
 
 - A `defparam` refused every value the 64-bit fold declines — a literal wider than 64 bits,

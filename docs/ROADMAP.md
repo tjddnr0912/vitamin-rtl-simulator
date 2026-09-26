@@ -861,12 +861,15 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   (§4.5.524): a runtime-delay expression that CALLS a subroutine falls back and runs SILENTLY on `vm`
   where the default `native` backend is loud, and a `string` formal receiving a `real` actual on a
   STATIC task prints `STATIC=0` on `vm` against `8`. The `native` answer is the right one in both.
-- A continuous assign that reads `$realtime` (or `$time`) is re-evaluated as time advances:
-  `wire [31:0] w1 = int'($realtime * 1.5); wire [63:0] w2 = longint'(-$realtime * 1.0e18);` read
-  `00000002 f21f494c589c0000` at 1, `00000005 …` at 3 and `0000000f …` at 10 where both oracles
-  keep the time-0 evaluation `00000000 0000000000000000` at every time (a system function is not a
-  net; no event re-evaluates the driver). Site: the settle's driver dependency set treats the time
-  read as a changing operand. 2 oracles. STARTABLE (S). (§4.5.536 differential cell c32.)
+- A continuous assign in a module whose time UNIT differs from the process that moved its
+  operand reads `$time` / `$realtime` at the wrong scale: `assign o = $time + a;` and `assign r =
+  int'($realtime * 10.0) + a;` in a `1ns/1ps` child, `a` written at 4 ns from a `1us/1ns` top,
+  print `1 1` where both oracles print `5 41` (`cont_assign_time_read.rs` pins it). A continuous
+  assign carries no module time multiplier; `eval_cont_assign` runs under whatever process context
+  last set `cur_time_mult`. Fix: a per-assign multiplier, which is a staged sidecar and so a format
+  bump. 2 oracles. STARTABLE (M). Beside it, ORACLE-SPLIT, not chased: a forced then released
+  time-driven wire (`wire [63:0] w = $time + a;`, force at 3, release at 6) reads `6` after the
+  release in vita and verilator (the driver re-evaluates) and `0` in iverilog.
 - A continuous-assign hop of a write made earlier in the batch is delivered after the WHOLE
   batch: a wait armed later in the batch takes it as its event (`wire w = r;` with `initial #1
   r = 1;` declared before `initial begin #1 @(w); … end` prints `L 1 w=1`, both oracles
