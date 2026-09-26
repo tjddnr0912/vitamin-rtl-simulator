@@ -389,10 +389,10 @@ impl Elaborator<'_> {
             .remove(inst_path)
             .map(|dps| {
                 dps.into_iter()
-                    .map(
-                        |(param, v, fill, sg, smeta, sval, obits)| ResolvedOverride {
+                    .map(|(param, v, fill, sg, smeta, sval, obits, text, text_lit)| {
+                        ResolvedOverride {
                             name: Some(param),
-                            value: Some(v),
+                            value: v,
                             is_named: true,
                             had_value: true,
                             // Carried verbatim so `bind_one_param` re-folds it at the
@@ -413,17 +413,19 @@ impl Elaborator<'_> {
                             // be unconditionally `None` ("stay on the old route"), which
                             // stopped a negative override's sign at bit 63.
                             signed: sg,
-                            // A defparam carries no text at all, so the flag is never
-                            // read here — `false` is the honest value for "not a literal".
-                            str_is_literal: false,
-                            str: None,
+                            // The string channel, computed at the collector exactly as the
+                            // `#()` collector computes it: `defparam u.P = "str";` onto an
+                            // untyped `P` binds 24 bits `737472` like `#(.P("str"))` does
+                            // (both oracles), where a hard-coded `None` left it E3009.
+                            str_is_literal: text_lit,
+                            str: text,
                             // Table 11-21, from the same collector and for the same reason
                             // as `signed` above: `defparam u.P = ~8'h5A` and
                             // `#(.P(~8'h5A))` must bind ONE type.
                             self_meta: smeta,
                             self_val: sval,
-                        },
-                    )
+                        }
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -1206,13 +1208,13 @@ impl Elaborator<'_> {
                             );
                             continue;
                         }
-                        let Some(v) = self.const_eval_in_scope(value) else {
-                            self.error(
-                                MsgCode::ElabUnsupported,
-                                "defparam: a non-constant override value is unsupported",
-                            );
-                            continue;
-                        };
+                        // The i64 fold is ONE channel of four, as it is for `#()`: a
+                        // `$signed(8'hFF)` / `$unsigned(-8'sd1)` rhs declines here and
+                        // binds through the wide channel (`override_bits`, below), so
+                        // the refusal waits until every channel has declined —
+                        // `defparam u.P = $signed(8'hFF);` was E3009 where `#(.P(…))`
+                        // on the same target binds 8 signed bits (both oracles).
+                        let v = self.const_eval_in_scope(value);
                         let fq = format!("{}.{}", self.cur_prefix, path.segments[0].name);
                         let param = path.segments[1].name.clone();
                         // A fill literal is carried verbatim ALONGSIDE the fold above:
@@ -1262,11 +1264,33 @@ impl Elaborator<'_> {
                         // reported 33. `override_bits` declines a unary or arithmetic top
                         // whose self-determined width is at most 64 bits (§2 "Index
                         // sealing" I4), so `~8'h5A` keeps the `smeta` route it already took.
-                        let obits = self.override_bits(value);
+                        // …minus a value carrying an x/z bit. The `#()` twin binds one
+                        // with the unknown plane dropped (`#(.P(8'b1010_010x))` is `a4`
+                        // where both oracles keep `aX` — ROADMAP §2 row 15, BLOCKED on
+                        // the parameter's 2-state-ness), and a defparam of it was refused
+                        // outright; widening this channel must not carry it into that
+                        // silent-wrong, so it keeps the refusal below.
+                        let obits = self
+                            .override_bits(value)
+                            .filter(|c| !c.bits.unk.iter().any(|&u| u != 0));
+                        let text = self.const_str_in_scope(value);
+                        let text_lit = Self::param_str_literal(value).is_some();
+                        if v.is_none()
+                            && fill.is_none()
+                            && sval.is_none()
+                            && obits.is_none()
+                            && text.is_none()
+                        {
+                            self.error(
+                                MsgCode::ElabUnsupported,
+                                "defparam: a non-constant override value is unsupported",
+                            );
+                            continue;
+                        }
                         // Last write wins (IEEE §23.10.1) — drop a prior same-param entry.
                         let entry = self.defparams.entry(fq).or_default();
-                        entry.retain(|(p, _, _, _, _, _, _)| p != &param);
-                        entry.push((param, v, fill, sg, smeta, sval, obits));
+                        entry.retain(|(p, _, _, _, _, _, _, _, _)| p != &param);
+                        entry.push((param, v, fill, sg, smeta, sval, obits, text, text_lit));
                     }
                 }
                 // A NET declaration initializer (`wire x = expr;`) is an implicit

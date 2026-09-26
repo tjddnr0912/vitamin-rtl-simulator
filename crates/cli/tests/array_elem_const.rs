@@ -773,8 +773,11 @@ endmodule
 /// constant array shadows it for every consumer (the wide domain and the `$size`
 /// family included — and the value arm's GAP-G root, which read the outer element:
 /// `L` was 20). F1: an UNTYPED, unranged child parameter overridden by a SELECT of an
-/// element stays loud (its meta would come from the default literal, §2 row 25 — the
-/// scalar spelling `.P(W[3:0])` is that pre-existing silent 32). Oracle: verilator.
+/// element binds the select's own width and value — the wide override channel reads the
+/// element (`const_array_elem_bits`) and types the select, and the refusal that stood
+/// here (its meta would have come from the default literal) now fires only for an
+/// override that channel declines (§4.5.545; it was E3009 on the `#()` channel while a
+/// `defparam` of the same text already bound it). Oracle: verilator.
 #[test]
 fn review_pins() {
     digest(
@@ -809,7 +812,7 @@ endmodule
 "#,
         "8 c/4 2/2",
     );
-    loud(
+    digest(
         "f1_untyped_override_by_element_select",
         r#"module c #(parameter P = 0) (); initial $display("DIGEST=bits=%0d cat=%h", $bits(P), {P,P}); endmodule
 module tb;
@@ -818,7 +821,7 @@ c #(.P(A[0][3:0])) u1();
 initial begin #1 $finish; end
 endmodule
 "#,
-        "is a select of an array-parameter element",
+        "bits=4 cat=55",
     );
     // the TYPED target takes the select (control: verilator `bits=4 cat=55`)
     digest(

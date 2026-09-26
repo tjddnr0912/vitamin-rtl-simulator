@@ -908,8 +908,46 @@ impl Elaborator<'_> {
             K::PkgScoped { pkg, name } => {
                 matches!(envw.get(&pkg_envw_key(&pkg.name, &name.name)), Some((w, _)) if *w > 0)
             }
+            // A SELECT of a CERTIFIED name: its width is structural (§11.5.1) and it is
+            // unsigned, so it is evident whenever its base is a name `envw` certifies
+            // and its bounds / index are themselves evident. Opt-in through `envw`: a
+            // consumer that passes an empty map (the parameter-initializer gate, a
+            // module-scope shift count) certifies no base and is unchanged. Measured on
+            // the override lane (`override_self_meta`), where the select used to refuse
+            // the whole tree back to the DEFAULT literal's type: `#(.P(~W8[3:0]))` onto
+            // an untyped `parameter P = 5` bound 32 signed bits `fffffffa` where both
+            // oracles bind 4 bits `a`.
+            K::PartSelect { base, msb, lsb } => {
+                Self::select_base_is_certified(base, envw)
+                    && Self::ctx_width_names_are_evident(msb, envw)
+                    && Self::ctx_width_names_are_evident(lsb, envw)
+            }
+            K::IndexedPart {
+                base,
+                offset,
+                width,
+                ..
+            } => {
+                Self::select_base_is_certified(base, envw)
+                    && Self::ctx_width_names_are_evident(offset, envw)
+                    && Self::ctx_width_names_are_evident(width, envw)
+            }
+            K::BitSelect { base, index } => {
+                Self::select_base_is_certified(base, envw)
+                    && Self::ctx_width_names_are_evident(index, envw)
+            }
             _ => false,
         }
+    }
+
+    /// A select's BASE for [`Self::ctx_width_names_are_evident`]: a bare or `pkg::` name
+    /// the certified map records, and nothing else (a select of an expression is not a
+    /// declared-width vector this gate can vouch for).
+    fn select_base_is_certified(base: &ast::Expr, envw: &ConstWidths) -> bool {
+        matches!(
+            base.kind,
+            ast::ExprKind::Ident(_) | ast::ExprKind::PkgScoped { .. }
+        ) && Self::ctx_width_names_are_evident(base, envw)
     }
 
     /// Evaluate `rhs` for an assignment whose target is `(w, signed)`: the RHS runs

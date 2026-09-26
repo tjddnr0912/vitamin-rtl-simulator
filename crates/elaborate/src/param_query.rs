@@ -651,6 +651,23 @@ impl Elaborator<'_> {
                     else_e,
                 } => names(cond, out) && names(then_e, out) && names(else_e, out),
                 K::Concat { parts } => parts.iter().all(|q| names(q, out)),
+                // A SELECT's width is structural (§11.5.1: one bit, `|msb-lsb|+1`, the
+                // indexed width) and its result unsigned, so what needs certifying is
+                // its BASE — that it is a declared-width vector parameter and not an
+                // unpacked-array element or an inferred width — and its bound / index
+                // expressions. `narrow_param_decl_width` answers only for a name with a
+                // declared range AND a bound scalar value, so an array parameter base
+                // declines the whole override here, as it did before.
+                K::PartSelect { base, msb, lsb } => {
+                    names(base, out) && names(msb, out) && names(lsb, out)
+                }
+                K::IndexedPart {
+                    base,
+                    offset,
+                    width,
+                    ..
+                } => names(base, out) && names(offset, out) && names(width, out),
+                K::BitSelect { base, index } => names(base, out) && names(index, out),
                 // Not a name and not a container this gate descends into — leave it
                 // to `ctx_width_names_are_evident`, which is the authority on the
                 // accept set. Returning `true` here keeps the two in step: this

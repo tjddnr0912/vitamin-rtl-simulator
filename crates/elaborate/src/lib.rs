@@ -229,12 +229,16 @@ pub(crate) type BlockLocalInit = (u32, Vec<u32>, ast::Lvalue, ast::Expr);
 /// spelling had at least the width. Two channels, one expression, one binding.
 pub(crate) type DefparamOverride = (
     String,
-    i64,
+    Option<i64>,
     Option<(ast::IntLitKind, String)>,
     Option<bool>,
     Option<(u32, bool)>,
     Option<i64>,
     Option<ir::ConstVal>,
+    // The string channel (`ResolvedOverride::str` and `str_is_literal`): the text
+    // and whether it was written as a literal, computed as the `#()` collector does.
+    Option<String>,
+    bool,
 );
 
 /// A parameter's DECLARED packed range: `(lo, width, ascending)` — the tuple the

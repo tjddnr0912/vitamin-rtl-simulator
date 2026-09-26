@@ -186,10 +186,13 @@ endmodule
 /// is pinned `(32, signed)` by the generate lowering; the classifier reads that
 /// entry, not a guess. PRE: `00000000fffffffe` / `07` / `01` for the genvar rows.
 ///
-/// The parameter is `int` on purpose. An UNTYPED `parameter P = 5` overridden
-/// with `-3` binds with the DEFAULT literal's type (ROADMAP §2 row 25), which is
-/// a guess the classifier declines (`param_type_guessed`) — such a cast stays on
-/// the pre-slice path, right or wrong as it was, and is not pinned here.
+/// The parameter is `int` on purpose. The UNTYPED twin (`parameter P = 5`
+/// overridden with `-3`) is a guessed type (`param_type_guessed`): a SIGNED override
+/// onto a declaration with no `signed` keyword cannot be told apart from one onto a
+/// `parameter unsigned P` (ROADMAP §2 "Index sealing"), so its casts keep the
+/// pre-slice route, which computes `64'(~(P + 32'd1))` at 32 bits
+/// (`0000000000000001`, both oracles `ffffffff00000001`). Pinned as measured in
+/// `override_channel_types_the_parameter.rs`, beside the overrides a channel types.
 #[test]
 fn an_override_and_a_generate_scope_constant_resolve_the_same_way() {
     let o = run_sorted(
@@ -458,12 +461,13 @@ endmodule
     );
 }
 
-/// A header-list SIBLING derived from an overridden untyped parameter inherits
-/// the guess (`parameter Q = P + 1` — its value was folded from the wrongly
-/// typed `P`, §2 row 25) and declines to the pre-slice path, where this cell is
-/// right by accident; a TYPED sibling (`parameter int QI = P + 1`) carries a
-/// declared type, is not guessed, and is fixed. The un-overridden instance is
-/// fixed on all three. Lines sorted.
+/// A header-list SIBLING derived from an overridden untyped parameter
+/// (`parameter Q = P + 1`) inherits the parameter's guessed type when it has one.
+/// Since §4.5.545 an override the wide channel types (the literal `32'hF0F0F0F0`
+/// here) is not a guess, so `Q` is classified like any other constant; its cell
+/// was right on the pre-slice path by accident and stays right. A TYPED sibling
+/// (`parameter int QI = P + 1`) carries a declared type and is fixed. The
+/// un-overridden instance is fixed on all three. Lines sorted.
 #[test]
 fn a_header_sibling_derived_from_a_guessed_parameter_declines() {
     let o = run_sorted(
@@ -619,23 +623,27 @@ endmodule
     assert_eq!(o, "A 4d20 0 e\nB ffb0 ffffffb0 00\nC b1 0fb1");
 }
 
-/// A `time` parameter has no declared-width arm in the meta producer, so a
-/// `time` constant derived from a guessed parameter is a guess too and declines
-/// (round-5 review: `localparam time LT = P` on `#(.P(32'hF0F0F0F0))` routed
-/// with a 32-bit signed meta and printed `7ffffffff8787878` for the oracles'
-/// `0000000078787878`, which the pre-slice path gives). Only this cell is
-/// pinned: the VALUE of `LT` itself is bound wrongly in every build (§2 row 25),
-/// so its other casts are pre-existing wrong and not the oracles' numbers.
+/// A `time` constant derived from an overridden untyped parameter (round-5
+/// review: `localparam time LT = P` on `#(.P(32'hF0F0F0F0))` once routed with a
+/// 32-bit signed meta and printed `7ffffffff8787878` for the oracles'
+/// `0000000078787878`). The override's own type now binds `P` (32 bits,
+/// unsigned), so `LT` is `00000000f0f0f0f0` and every cast below is both
+/// oracles' — iverilog 13.0 and verilator 5.052 print this exact line. Until
+/// §4.5.545 only the first cast was pinned, because `LT` itself was bound with
+/// the default literal's type.
 #[test]
 fn a_time_constant_derived_from_a_guessed_parameter_declines() {
     let o = run(r#"module c #(parameter P = 5) ();
   localparam time LT = P;
-  initial $display("%h", 64'(LT >> 1));
+  initial $display("%h %h %0d %h %h", 64'(LT >> 1), LT, $bits(LT), 64'(-LT), 64'(LT + 1));
 endmodule
 module t;
   c #(.P(32'hF0F0F0F0)) a();
   initial #1 $finish;
 endmodule
 "#);
-    assert_eq!(o, "0000000078787878");
+    assert_eq!(
+        o,
+        "0000000078787878 00000000f0f0f0f0 64 ffffffff0f0f0f10 00000000f0f0f0f1"
+    );
 }

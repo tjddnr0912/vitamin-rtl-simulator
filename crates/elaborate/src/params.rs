@@ -1880,15 +1880,18 @@ impl Elaborator<'_> {
                 && !ovr_fill.contains_key(p.name.name.as_str())
                 && ovr_bits.is_some();
             // §3 ⑤ ⓔ (review A F1): an UNTYPED, unranged target overridden by a SELECT of
-            // an array-parameter element. Its meta below comes from the DEFAULT literal
-            // (§2 row 25), not from the select's own width, so the value would bind at
-            // the wrong width — 32 where both oracles have 4. The scalar spelling is that
-            // pre-existing silent-wrong; this spelling was loud before the element fold
-            // existed and stays loud until row 25 lands.
+            // an array-parameter element that no override channel typed. Its meta below
+            // would come from the DEFAULT literal, not from the select's own width, so
+            // the value would bind at the wrong width — 32 where the oracle has 4. The
+            // WIDE channel types the select when it can read the element
+            // (`override_bits` → `const_array_elem_bits`: `#(.P(A[0][3:0]))` binds 4
+            // bits `5`, verilator's answer), and only an override it declines keeps
+            // this refusal.
             if !default_binds
                 && matches!(p.ty, ast::ParamType::Implicit)
                 && p.range.is_none()
                 && ovr.elem_select.contains(p.name.name.as_str())
+                && ovr_bits.is_none()
             {
                 self.error(
                     MsgCode::ElabUnsupported,
@@ -2229,16 +2232,44 @@ impl Elaborator<'_> {
                 });
             let prev = self.bind_param_value(key.clone(), v);
             self.bind_param_range(&key, range);
-            // An override reached an UNTYPED declaration: the meta recorded above is
-            // the default literal's, not the override's (§2 row 25) — mark the type a
-            // guess so a consumer that must not extend by a guessed sign declines.
-            // …and a header-list SIBLING that is untyped and derives from one
+            // An override reached an UNTYPED declaration and no override channel typed
+            // it: the meta recorded above is the default literal's, not the override's
+            // (§6.20.2) — mark the type a guess so a consumer that must not extend by a
+            // guessed sign declines. An override the WIDE channel (`ovr_bits`, the
+            // self-determined width) or the OPERATOR channel (`override_self_meta`,
+            // Table 11-21, with its value re-folded at that type) typed is not a guess:
+            // marking it one sent `64'(-P)` over `#(.P(32'hF0F0F0F0))` onto an untyped
+            // `parameter P = 5` down the pre-slice route, which computes at 32 bits and
+            // zero-extends (`000000000f0f0f10`, both oracles `ffffffff0f0f0f10`).
+            //
+            // ⚠️ Except a SIGNED override onto a declaration with no `signed` keyword.
+            // `p.signed` is false both for "no keyword" (the override's sign binds) and
+            // for the `unsigned` keyword (§12.2.1: the keyword survives the override),
+            // and the AST cannot tell them apart (ROADMAP §2 records the missing field),
+            // so the recorded sign may be wrong there. Un-guessing that combination
+            // fixed `64'(~(P + 32'd1))` over `#(.P(-3))` (`0000000000000001`, both
+            // oracles `ffffffff00000001`) and, on `parameter unsigned P = 1` +
+            // `#(.P(-8'sd91))`, turned the right `64'(P >> 1)` = `0000000000000052`
+            // into `7fffffffffffffd2` — trading one silent-wrong for another. It stays
+            // a guess until the declaration's own keyword is visible here.
+            // …and a header-list SIBLING that is untyped and derives from a guessed one
             // (`#(parameter P = 5, parameter Q = P + 1)`) inherits the guess: its
             // value was folded from the guessed binding and its meta inferred from
             // that value. Typed declarations carry a declared type and are facts.
-            if matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time)
-                && (!default_binds || self.ast_reads_guessed_param(&p.value))
-            {
+            let typed_sign = if ovr_bits_binds {
+                ovr_bits.map(|c| c.signed)
+            } else if self_meta_binds && ovr_self_val.is_some() {
+                ovr_self_meta.map(|(_, s)| s)
+            } else {
+                None
+            };
+            let override_typed = typed_sign.is_some_and(|s| !s || p.signed);
+            let guessed = if default_binds {
+                self.ast_reads_guessed_param(&p.value)
+            } else {
+                !override_typed
+            };
+            if matches!(p.ty, ast::ParamType::Implicit | ast::ParamType::Time) && guessed {
                 self.param_type_guessed.insert(key.clone());
             }
             saved.push((key, prev));
