@@ -143,3 +143,7 @@ a section restructure, a residue split).
   the native delayed-assign heap rhs (startable, S) and the `#0`-visibility oracle split (blocked)
   added; the resolved-net bullet gains the `#(ZP)` demotion clause. Startable 84 − 2 + 1 = 83;
   blocked 80 − 1 + 1 + 2 = 82; total 397. Tests 8548 → 8555. `format_version` 34 unchanged.
+- §4.5.539 (measured, reverted): §2 "Delays / events" the continuous-assign hop bullet
+  rewritten from startable (S–M) to BLOCKED BY the same-time resume order (start-order row 7),
+  row 7 extended, REMAINING_WORK §D prerequisite added. Startable 83 − 1 = 82; blocked 82 + 1 =
+  83; total 397. Tests 8555 unchanged. `format_version` 34 unchanged.

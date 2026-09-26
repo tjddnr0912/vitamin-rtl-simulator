@@ -41,7 +41,7 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §0 promotion queue (T2 residues) | 14 rows | 9 / 5 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
 | §2-N verilog-axi census | 2 rows + 3 | 0 / 5 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and three t0-event residues (§4.5.533 closed the x-valued ones) |
 | §2 start-order table | 27 rows | 0 / 27 | LOUD 4 · BLOCKED 6 · WALL 6 (declared-width provenance / §11.8.1 region sign) · OPEN 4 · ORACLE-SPLIT 3 · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
-| §2 recorded defects by mechanism | 165 bullets | 83 / 82 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 20 · real 5 · performance 6 · index sealing 11 · ranges / bounds / selects 6 · diagnostics / artifacts 8 · class fields 3 · oracle splits 35 |
+| §2 recorded defects by mechanism | 165 bullets | 82 / 83 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 12 · scoping / imports / block-locals 27 · delays / events 20 · real 5 · performance 6 · index sealing 11 · ranges / bounds / selects 6 · diagnostics / artifacts 8 · class fields 3 · oracle splits 35 |
 | §3 numbered items | 24 rows | 19 / 5 | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, including ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
 | §3 small residues | 105 rows | 90 / 15 | subroutine / frame 25 · constants / parameters 20 · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
@@ -50,7 +50,7 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §6 G2 OBS | 6 stages + 10 | 15 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 10 items beside the staged track (call tree, a `void` function filed as `kind: task`, a route decided per spelling, per-call-site builtins, `builtins` rows for primitives the source never wrote, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2, `wprog` keys with no producer) |
 | §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
-| total | 397 | 224 / 173 | |
+| total | 397 | 223 / 174 | |
 
 `startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
 prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.
@@ -63,6 +63,10 @@ prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated o
   despite an x operand clamps to one bit, and the fix site is that accept set).
 - A wide resolver that reads a SELECT — blocks §2 row 10's surviving half; an unguarded bound
   fallback moves 0 of 18 cells.
+- A per-resumption-kind ordering model (start-order row 7) — blocks the in-body edge-wait half
+  and the continuous-assign hop row of §2 "Delays / events": both were built and measured
+  (§4.5.537, §4.5.539) and both move the common testbench shape onto verilator's resume order
+  where the corpus digests are iverilog's.
 - A tree-wide AST self-width pass — blocks the size-cast cluster in §2 "Size cast / signedness".
 - An exact declared-width fold for hierarchical placeholders (`env_fold` negates a narrow literal in
   i64, `-4'd1` → −1 where the binder gives 15) — blocks widening §4.5.528's placeholder record past

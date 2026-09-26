@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 419건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 420건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.539` ⚠️ **the continuous-assign hop settled at the writing body's yield — measured and reverted: BLOCKED BY the same-time resume order** (2026-09-26 · §2 "Delays / events" the hop bullet → BLOCKED BY start-order row 7 · 16 of 19 cells two-oracle-right at the yield, but the picorv32 / serv corpus digests move: a DUT posedge block and a tb `initial` resumed by one edge read the port-bound reset in vita's declaration order = verilator, not iverilog's FIFO · diff kept in `s26/review/DIFF.patch` · no code, 8555 unchanged)
 - `4.5.538` **a zero-delay continuous-assign write is an Inactive-region event of its time step, and lands inside the time-0 settle** (2026-09-26 · §2 "Delays / events" the runtime-zero, zero-rise-trade and `#0`-delivery bullets retired; the `#0` visibility split, the native heap-rhs delayed assign and the `#0`-driven delay net recorded · `#(ZP)` is `Some(0)`, demoted on a resolved net · both loops deliver a due-now delayed write at the `#0` promotion, merged with the promoted resumes; the time-0 landing decided after the settle converges, deferred past the initializers · review: differential PASS, soundness BLOCKING → redesign → delta re-review direct PASS · 8548 → 8555)
 - `4.5.537` **a level wait sees only the changes made after it armed; the edge half is recorded with its prerequisite** (2026-09-26 · §2 "Delays / events" the wait-armed-in-a-batch bullet deleted, its EDGE half re-recorded BLOCKED BY the same-time resume order (start-order row 7), the continuous-assign hop of an earlier write (2 oracles, startable S–M) added, the `always_comb` time-0 count clause added to the oracle-split bullet · a CHANGE SEQUENCE stamped on every value change (`SimState::stamp_change` / `DirtyChannel::stamp_change` over ONE shared `Rc<Cell<u64>>`, from `note_change`; a heap change takes its number when it is made, `note_dyn_change`) and recorded by every LEVEL waiter at arm time (`arm_seq`): a static level waiter re-armed after its run and an in-body `@(sig)` / `@*` fire on a change stamped after their arm (O(1) per net; the changed-set scan only at time 0); the time-0 arming carries 0 and the rollback resets the initializers' nets; the arm-time value snapshot is deleted (a glitch back to the arm value and a heap change now wake the wait) · in-body EDGE waits keep the slot's accumulated mask: the after-the-arm edge rule was built, reviewed for two rounds and REVERTED because both oracles resume same-time processes in scheduling order and vita in declaration order, which shifted the clock-generator-first testbench by a cycle under the rule · 24 grounding cells, 3 backends; 2 lenses × 3 rounds — r1 differential BLOCKING (`@(cb)` waited a cycle) and soundness BLOCKING (heap changes stamped at the drain); r2 differential PASS, soundness BLOCKING (the same-time resume order); r3 both PASS (every level cell that depends on the same-time order is PRE = POST3, the recorded prerequisite) · 8548 tests)
 - `4.5.536` **a real converts to an integral target exactly at every width; a same-width copy of a written real is not read-aliased** (2026-09-26 · §2 "Inline / frame binds" the out-of-range PREREQUISITE row deleted and replaced by the narrower inline >128-bit residue (2 oracles, startable S), §2 "Real" the |x| ≥ 2^127 wide-target row deleted, the class-field / container-element conversion class (startable M) and the `$realtime` cont-assign re-evaluation (startable S) added, the non-finite oracle-split bullet rewritten with three more splits; the REMAINING_WORK §D prerequisite retired · `value::real_to_int_round` is exact for every finite f64 (|r| < 2^127 the i128 image as before; beyond it `m · 2^e` placed at bit `e` and two's-complement negated at the target width; ±inf / NaN 0), `expr_cast::lower_real_to_int_cast` is `Signed/Unsigned(select_low(RealToInt(e), tw))` for every operand (the `$floor`/`$ceil`/`$rtoi` composition and its 24-call wide lane deleted), `alias::copy_alias` skips a `NetKind::Real` root · 23 grounding cells, 3 backends; 2 lenses × 1 round — differential PASS (39 cells; 3 pre-existing classes recorded), soundness PASS (20 cells + a 420-pair Python-exact sweep, 0 mismatches; 2 notes recorded) · 8539 tests)
@@ -548,6 +549,51 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.539 the continuous-assign hop settled at the writing body's yield — measured, reverted, BLOCKED BY the same-time resume order (2026-09-26, branch main) ⚠️
+
+**ROADMAP rows**: §2 "Delays / events" — the continuous-assign hop bullet rewritten from
+STARTABLE (S–M) to BLOCKED BY start-order row 7; row 7 extended; REMAINING_WORK §D gains the
+prerequisite. §2 count 165 unchanged (startable 82, blocked 83). No code shipped.
+
+**Defect (PRE, both oracles, 16 of 19 grounding cells `s26/g`)**. The continuous-assign settle
+runs after a WHOLE Active batch, so a hop of a write made earlier in the batch is delivered
+after every process of the batch: a wait armed later takes it as its event (`wire w = r;`,
+`initial #1 r = 1;` before `initial begin #1 @(w) … end` prints `L 1 w=1`, both oracles
+nothing — also in a task, through a chain, on a multi-driver resolution, at time 0), a later
+process READS the old value (`reg r = 1; wire w = r; initial #1 r = 0;` before `initial #1
+$display(w)` prints 1, both 0; a child's `always_comb o = pin.sum()` reads a port array before
+the initial's writes reach it), a glitch across an arm (`r = 1` by one process before the arm,
+`r = 0` by another after it) makes no event where both oracles fire `L 1 w=0`, and a `release`
+before the arm wakes the wait where both oracles are silent. Both oracles propagate a continuous
+assign before the next process runs (iverilog at the write, verilator at its per-process eval).
+
+**What was built**. Both run loops settle the dirtied assigns (`ca_dirty`) when a body yields
+(`Scheduler::run_body` after `blocking_writer = None`; the tier-3 batch loop after
+`dispatch_body`), with the wakes still delivered after the batch; a multi-driver member's inputs
+registered in `ca_of_net` as triggers; the UDP desugar's OUTPUT written nonblocking (a `dff`
+shift register's second stage read the first's NEW output once the port hop was immediate —
+vvp schedules a UDP output the same way). Every grounding cell then answered as both oracles
+(16 two-oracle cells; a heap-reading driver and a port hop into a child stay one-oracle). A
+first design — a cause sequence stamped on the hop, no settle — fixed the wake alone and left
+the stale read (12 gate failures: UDP outputs x, `PORTSUM=0`).
+
+**Why it is reverted (the prerequisite)**. The full gate passed (8559) but the corpus moved:
+picorv32 and serv print a different `DIGEST` (pinned to iverilog). Per-cycle trace of picorv32:
+POST sees the reset release one cycle early. Reduced: a DUT `always @(posedge clk)` reading a
+port-bound `rst` and a testbench `initial` (`repeat (2) @(posedge clk); rst = 1;`) resumed by
+the same edge — iverilog runs the DUT block first (FIFO: `C 15 rst=0 | T 15`), verilator the
+initial first (`T 15 | C 15 rst=1`), vita the initial first (declaration order) and, with the
+hop immediate, reads `rst=1` = verilator; PRE reads iverilog's `rst=0` only because the
+after-batch settle delays the hop past the batch (the same-module twin without the port reads
+`rst=0` in vita and iverilog: the always is declared first). The same-time resume order is the
+start-order table's row 7 (§4.5.537 hit it on the edge half); the hop rule is oracle-equal
+only under the oracles' order, and picorv32's oracle is iverilog alone (verilator is 2-state
+on it). Reverted whole (working tree = HEAD); the diff is kept in `s26/review/DIFF.patch` for
+the day row 7 lands. Perf of the reverted build on the corpus (release, 4 samples each, both
+orders): −12.5% (aes) … +7.8% (darkriscv), the yield settles being extra fixpoint passes.
+
+**Tests**: none shipped (8555 unchanged). **Review**: not reached (blocked before review).
 
 #### 4.5.538 a zero-delay continuous-assign write is an Inactive-region event of its time step, and lands inside the time-0 settle (2026-09-26, branch main) ✅
 
