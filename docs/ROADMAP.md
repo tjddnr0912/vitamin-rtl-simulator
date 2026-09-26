@@ -807,13 +807,17 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   since `level-select-event` went loud, an element copy is legal. Fix shape = per-element dirt on
   the channel (`array_len` words), read by the copy suppression and the x-drop alike.
 
-- A delayed continuous assign whose DYNAMIC left-side index moves while its rhs does not keeps
-  the target it was first scheduled at, on every backend: `int q[$]; assign #1 y[q.size()] = v;`
-  with `q.push_back(1)` at 0 writes `y[0]` (the size at the time-0 settle) where verilator writes
-  `y[1]` (iverilog refuses the non-constant index). `schedule_delayed_cas`'s "rhs unchanged → no
-  new scheduled write" shortcut compares the value only; the index is resolved after it. One
-  oracle + hand-IEEE. S (compare the resolved offsets too). `delayed_cont_assign_heap_read.rs`
-  pins it on both backends.
+- A continuous assign with a NON-CONSTANT left-side index is accepted silently. On a NET array
+  (`wire [7:0] y [0:3]; assign y[i] = v;`) that is illegal — IEEE 1800 `net_lvalue` takes a
+  `constant_select` — and iverilog refuses it; on a VARIABLE array it is legal, iverilog refuses it
+  anyway ("not allowed in a constant expression") and verilator is the only oracle. vita disagrees
+  with verilator in both forms: the index read at the time-0 settle is written before the
+  initializer-order `initial` moves it (`y[0]` = `a5` where verilator never writes `y[0]`), and a
+  DELAYED assign whose index moves while its rhs does not keeps its first target
+  (`schedule_delayed_cas`'s "rhs unchanged → no new write" compares the value only). Fix shape:
+  loud on a net array; on a variable array, compare the resolved target too and measure the
+  time-0 order against verilator. `delayed_cont_assign_heap_read.rs` pins the delayed cell on both
+  backends.
 - A deferred-assertion action block that holds a `$finish` or `$stop` (`assert #0 (0) else
   $finish;`, or an `else begin $display(…); $finish; end`) prints an empty line at maturation and
   the run continues to its next `$finish` (pre-existing; verilator ends the run at the maturation
