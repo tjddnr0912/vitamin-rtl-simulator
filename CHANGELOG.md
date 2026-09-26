@@ -9,6 +9,25 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a wide constant expression is evaluated at one sign, the region's
+
+- **A `localparam` or `parameter` initializer of 65 bits or more now applies IEEE 1800 §11.8.2 the
+  way Icarus Verilog and Verilator do: the expression's width and sign are decided over the whole
+  expression first, and every operand is extended at that sign before its operator runs.** A signed
+  narrow operand inside an unsigned expression is zero-extended: with `localparam logic signed [7:0]
+  S8 = -8'sd3;`, `localparam logic [127:0] L = ~S8 + 128'd0;` is `ff…f02` (was `0…02`), `(S8 >>> 1)
+  + 128'd0` is `0…07e` (was `ff…fe`), `(8'sh80 * 8'sd1) + 128'd0` is `0…080`, `(-8'sd8) / 8'sd2 +
+  128'd0` divides unsigned (`7ff…fc`). An operator inside a cast, a concatenation part or a
+  `$signed` / `$unsigned` argument is computed at that inner expression's width:
+  `$signed(~8'd1 + 128'd0)` is `ff…fe` (was `0…0fe`), `{~8'd1 + 120'd0} + 128'd0` is `00ff…fe`.
+  The operands of `== != < <= > >=` are sized to the larger side and signed only if both are:
+  `(~8'd1 == 16'hFFFE)` is true. A declaration of 64 bits or less still folds through the integer
+  walk (ROADMAP §2 rows 14 / 30).
+- **A parameter override whose value is an operator expression wider than 64 bits binds at its own
+  width whatever the signs and positions inside it**: `sub #(.P(S8 + 128'd0))` binds 128 bits
+  `0…0fd` (was 32 bits `fffffffd`), `#(.P($signed(128'd1 + 128'd2) + 128'sd0))` binds `0…03` (was
+  `E3009`), `#(.P(W + 1))` over a 128-bit `W` binds 128 bits (was `E3009`).
+
 ### Fixed — processes due at one time resume in the order they were scheduled
 
 - **Several processes that become runnable at the same simulation time now resume in the order

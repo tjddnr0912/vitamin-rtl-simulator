@@ -161,3 +161,4 @@ a section restructure, a residue split).
 - §4.5.541 stale sweep: §2 "Delays / events" the `fork … join_none` child-before-the-settle-wake
   bullet (startable, S) deleted — closed by the slice. Startable 83 − 1 = 82; blocked 84; total
   398. Tests 8563 → 8564. `format_version` 34 unchanged.
+| 2026-09-26 | 9266dc5 | §4.5.542 | 8571 | 34 | 25 / 5 / 20 | 164 / 83 / 81 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 394 / 229 / 165 |

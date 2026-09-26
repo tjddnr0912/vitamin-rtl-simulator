@@ -42,6 +42,11 @@
 //! a different slice with a different blast radius (it is shared with the constant-function
 //! interpreter). Reverted rather than fixed forward a fourth time.
 //!
+//! §4.5.542 made the WIDE walk (`const_wide::fold_bits_at`) that walk: it evaluates a region
+//! the way §11.8.2 does at 65 bits and wider (`region_sign_wide_fold.rs`). The routing of a
+//! ≤64-bit declared target through it is the open half of this row; the cells below are
+//! unchanged by that slice and still pin the reverted state.
+//!
 //! The cells below are the reverted state. Every "vita" value here is KNOWN-WRONG against
 //! the oracle named beside it; they are asserted so the next attempt can see instantly
 //! what it moved, and so a partial fix cannot land unnoticed.

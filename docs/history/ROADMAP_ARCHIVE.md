@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 422건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 423건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.542` **the wide constant fold evaluates a region the way §11.8.1 / §11.8.2 do: width and sign decided over the whole tree, then pushed into every context-determined operand; a self-determined position is a region of its own** (2026-09-26 · §2 🆕 R and 🆕 F deleted, the §11.8.1 wall of REMAINING_WORK §D deleted, rows 14, 25, 26, 30 and 🆕 H re-recorded OPEN, the WALL(provenance) paragraph rewritten, two §5.2 do-not-start lines deleted; follow-up: the override lane's plain-tree rule deleted, two §2 "Index sealing" bullets closed and one re-recorded startable · `fold_bits_at` = two passes over `fold_region` (pass 1 learns the region's width and sign, pass 2 refolds at that width with that sign pushed into every extension: shifts, bitwise, `~`, `>>>` fill, `+ - *`, `/ %`, `**` base, unary `-`, ternary arms), a comparison's operands a region sized to the larger side, `bp_operands` extending with the result's sign · 206 grounding cells, 57 FIXED / 0 regression / 0 new loud; lenses direct (differential PASS, soundness PASS); corpus 10/10; no format bump · 8571 tests)
 - `4.5.541` **same-time resumes run in scheduling order: a resume event is numbered when it is scheduled, a wake group shares one number, and a fork's arms and a joined parent run right after the body that made them runnable** (2026-09-26 · §2 start-order row 7 re-recorded ORACLE-SPLIT (the `#d`, `#0`, fork-arm and join kinds closed; the time-0 hierarchy start order and the wake-group order are splits), the in-body edge-wait half of §2 "Delays / events" unblocked (STARTABLE M), the continuous-assign hop row re-recorded BLOCKED by the wake-group split, one oracle-split bullet added, both REMAINING_WORK §D row-7 prerequisites deleted; follow-up: `$monitor` prints before the `$strobe`s of its step (2 oracles, `flush_postponed_with`), 8563 tests · `Ready` / `NativeReady` carry `seq`, `push_sorted` / `push_sorted_native` order by `(seq, tie)`; a `#d` / `#0` / fork-arm / join resume takes its number when it is scheduled (`schedule_resume`, `exec_fork_into`, `on_child_complete_into`), a wake group shares `Scheduler::wake_seq` refreshed after the time-0 seeding, at every batch take and at time advance before the delayed-assign landing; fork arms and a joined parent go to `spawned` and both index-based batch loops splice them in right after the body that made them runnable · 63 grounding cells (36 2-oracle, 26 split, 5 runs each) + 12 adversarial cells, 3 backends; 5 pins converted, both oracles on each; lenses direct (differential PASS, soundness PASS); corpus 10/10 on iverilog's digests; flip run the 10 documented pins; no format bump · 8561 tests)
 - `4.5.540` **a real stored into a class field or a container element converts at the destination's width and sign** (2026-09-26 · §2 "Real" the class-field / container-element conversion bullet deleted · `coerce_dyn_elem` (every element store, push, insert, both assoc lanes) and `class_field_write_with` convert a real at the element's / field's width and sign, the engine pre-coercion leaves a class-field and a string-element store to their funnels, the dyn-element part-select lane converts before it slices · review r1 two BLOCKINGs (string element arm order, native part-select) → fixed → r2 PASS · 8555 → 8557)
 - `4.5.539` ⚠️ **the continuous-assign hop settled at the writing body's yield — measured and reverted: BLOCKED BY the same-time resume order** (2026-09-26 · §2 "Delays / events" the hop bullet → BLOCKED BY start-order row 7 · 16 of 19 cells two-oracle-right at the yield, but the picorv32 / serv corpus digests move: a DUT posedge block and a tb `initial` resumed by one edge read the port-bound reset in vita's declaration order = verilator, not iverilog's FIFO · diff kept in `s26/review/DIFF.patch` · no code, 8555 unchanged)
@@ -551,6 +552,95 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.542 the wide constant fold evaluates a region the way §11.8.1 / §11.8.2 do — width and sign decided over the whole tree, then pushed into every context-determined operand; a self-determined position is a region of its own (2026-09-26, branch main) ✅
+
+**ROADMAP rows**: §2 🆕 R (both halves) and 🆕 F deleted; the §11.8.1 wall of REMAINING_WORK §D
+deleted; rows 14, 25, 26, 30 re-recorded OPEN (their declared-width routing is their own work), 🆕 H
+re-recorded OPEN (ⓐ's accept set startable); the WALL(provenance) paragraph rewritten; the §5.2
+do-not-start lines for the wall and for widening the fold's accept set deleted. Follow-up (same
+iteration, LOOPROMPT §4): the override lane's plain-tree rule deleted — two §2 "Index sealing"
+bullets (the mixed-sign tree and the operator-inside-a-position residues) closed, the ≤64-bit
+operator-top bullet re-recorded startable. Summary §2 start-order 27/0/27 → 25/5/20, mechanism
+166/82/84 → 164/83/81, total 398/223/175 → 394/229/165.
+
+**Defect (PRE 46d2731b = HEAD 91e5769, both oracles).** `const_wide.rs::fold_bits_at` decided a
+node's sign NODE-LOCALLY (`sg = ls && rs`) and extended each operand with the sign of the node it
+fed, and it folded the inner of a self-determined position with no context (`fold_bits_at0`).
+§11.8.2 evaluates a REGION: the width (§11.6.1) and the sign (§11.8.1, unsigned if ANY
+context-determined operand is unsigned) are decided over the whole tree first and pushed down; an
+operand that must be extended is sign-extended only if the PROPAGATED type is signed (§11.8.3 step
+4). Measured on the localparam lane at 128 bits (`S8` = `logic signed [7:0]` −3):
+
+```
+a01 ~S8 + 128'd0                       both ff…f02   PRE 0…02
+a02 -(8'sh80) + 128'd0                 both ff…f80   PRE 0…080
+a03 (S8 >>> 1) + 128'd0                both 0…07e    PRE ff…fe     (the >>> fill follows the REGION's sign)
+a04 (8'sh80 * 8'sd1) + 128'd0          both 0…080    PRE ff…f80
+a05 (-8'sd1 >>> 1) ^ 128'h1_0…0        both 7ff…feff…ff   PRE fff…feff…ff
+d05 (S8 + 128'sd0) + 128'd0            both 0…0fd    PRE ff…fd     (a signed sub-node inside an unsigned region)
+d10 (-8'sd8) / 8'sd2 + 128'd0          both 7ff…fc   PRE ff…fc     (division runs unsigned in an unsigned region)
+d31 (S8 * S8) + 128'd0                 both 0…fa09   PRE 0…09
+b01 $signed(~8'd1 + 128'd0)            both ff…fe    PRE 0…0fe     (a position's inner folds at ITS region's width)
+b02 {~8'd1 + 120'd0} + 128'd0          both 00ff…fe  PRE 0…0fe
+c03 [7:0] ($signed(4'hF)+1) | 8'h00    both 10       PRE 00        (row 30's sign-axis cell; the i64 walk declines $signed)
+c10 [64:0] 65'hFF - (-1'sb1)           both 0…0100   PRE 0…0fe     (🆕 F's wide twin)
+k01 (~8'd1 == 16'hFFFE) + 128'd0       both 1        PRE 0         (a comparison's operands are a region sized to 16)
+```
+
+206 grounding cells in s29/g (iverilog 13.0 `-g2012`, verilator 5.052 `--binary --timing`):
+128-/256-/65-bit localparams, an 🆕 F sweep at widths 2..65 × sign × operator, comparison regions,
+bounds / replicate counts / cast widths / generate conditions, the package lane, a signed target,
+nesting depth 12, runtime `assign` twins. 57 FIXED, 0 regression, 0 new loud, 0 loud→value. 🆕 F's
+headline cells at 2..64 bits (`8'hFF - (-1'sb1)` = `00`, `8'hF0 | (-1'sb1)` = `ff`) were already
+the oracles' on PRE — the row was stale on that lane; its 65-bit twins were the wide lane's. Still
+elsewhere: a ≤64-bit declaration folds through the width-unlimited i64 walk (rows 14 / 30: `S8 +
+16'd0` is `fffd`, both oracles `00fd`; a generate condition `if ((~S8 + 128'd0) > 128'd255)` picks
+the else branch), `int'(…)` is the prim-cast lane, an x/z operand stays loud where the oracles
+print x (PRE the same). Split: `(-8'sd2) ** 2 + 128'd0` (iverilog 4, verilator `fc04`; vita 4).
+
+**Fix** (elaborate-only; no frozen type, `format_version` 34 unchanged):
+
+1. `fold_bits_at` is a two-pass entry. Pass 1 (`fold_region`, `psg = None`) folds at `ctx` with
+   each node's own sign and yields the region's self width `w` and sign; a self-determined top
+   (`wide_top_is_self_determined`) returns pass 1 — every region beneath re-enters the entry — and
+   so does a tree whose first pass ran at `w` with a signed sign (`w == ctx && sg`: every
+   context-determined node signed ⇒ every extension already the push-down's). Otherwise pass 2
+   refolds at `w` with `Some(sign)`.
+2. Every context-determined arm extends with `psg.unwrap_or(own)`: `<< <<< >>`, the bitwise
+   operators (`cs`), `~`, `>>>` (the fill bit too), `+ - *` (`bp_operands_at(.., psg)`), `/ %`
+   (the operands' sign flags become the region's, so `wide_divmod` divides magnitudes only in a
+   signed region), `**`'s base, unary `-`, `+`, the ternary arms. Self-determined positions are
+   untouched and still re-enter the entry: fill and shift counts, cast operands, concat and
+   replicate parts, reductions, `!`, `&& ||`, the ternary condition, selects, system-function
+   arguments, `**`'s exponent.
+3. A comparison's operands form a region of their own (§11.8.3 "neither fully self-determined nor
+   fully context-determined"): pass 1 `fold_selfdet_operand` each (a lone fill is one bit), pass 2
+   `fold_region(x, w, Some(sg))` for the narrower side (subsuming the old one-fill special case);
+   `const_wide_num::bp_operands` extends both sides with `ls && rs` (was each with its own sign:
+   `S8 > 16'd255` compared `fffd` against `00ff`).
+4. `override_bits` uses the entry's passes; the follow-up commit deletes
+   `wide_operator_tree_is_plain` / `NodeShape` / `position_is_plain` / `tree_is_plain` /
+   `same_sign` and admits every `wide_operator_top` tree (no fill, self width past 64, no x/z):
+   `#(.P(S8 + 128'd0))` binds `0…0fd` (was 32 bits `fffffffd`), `#(.P($signed(128'd1 + 128'd2) +
+   128'sd0))` `0…03` (was E3009), `#(.P(~W + S8))`, `#(.P(W + 1))`, `#(.P((~8'd1 == 16'hFFFE) +
+   128'd0))` (its width a three-way split: iverilog 129, verilator 32, vita 128) — 13 cells,
+   verilator's width.
+
+Cost: pass 2 doubles a context-determined region; nested self-determined positions multiply
+(depth 12 `$signed` / depth 10 casts: instant). Corpus wall time within noise (below).
+
+**Review** (lenses direct, D1; s29/review/REPORT.md): differential PASS — 4-way on every
+divergence (real gap / harness-format = iverilog's `+` width); soundness PASS — producer census of
+`fold_bits_at` / `fold_region` callers (every position re-enters the entry, every widening site
+takes `psg`), the skip proof, pass-1 ⊆ pass-2 declines measured on x/z cells, sign flags returned
+unchanged (§11.8.4: the RHS type extends). Gate 8564 → 8571 (`region_sign_wide_fold.rs`, 7 tests,
+plus two pins converted in `override_wide_operator_top.rs`), doctest / clippy / fmt 0; corpus 10/10
+on both orders.
+
+**Out of scope**: routing ≤64-bit declared targets through the walk (rows 14 / 30, now
+startable), the prim-cast lane, 🆕 H ⓐ's accept set (startable), the ≤64-bit operator-top override
+bullet (startable), a tree the fold declines still binding 32 bits on the override lane.
 
 #### 4.5.541 same-time resumes run in scheduling order: a resume event is numbered when it is scheduled, a wake group shares one number, and a fork's arms and a joined parent run right after the body that made them runnable (2026-09-26, branch main) ✅
 
