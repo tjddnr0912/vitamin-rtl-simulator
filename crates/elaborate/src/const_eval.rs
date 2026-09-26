@@ -450,7 +450,7 @@ impl Elaborator<'_> {
             width,
             signed,
             repr: ir::ConstRepr::Numeric,
-            bits: resize_bits(&b, w, width, sg),
+            bits: crate::const_wide::extend_bits(&b, w, width, sg),
         })
     }
 }

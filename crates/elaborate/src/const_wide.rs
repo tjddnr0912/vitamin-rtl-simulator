@@ -64,6 +64,101 @@ pub(crate) fn bp_any_unknown(bp: &ir::BitPacked, width: u32) -> bool {
     (0..width as usize).any(|i| bp_get(bp, i).1)
 }
 
+/// The TRUTH of a value that may carry x/z bits — `Some(true)` when a bit is a known
+/// 1, `Some(false)` when every bit is a known 0, `None` when the answer depends on
+/// an unknown bit.
+///
+/// §11.4.7 / §11.4.11 / §11.4.14: an operator that reads its operand as a truth value,
+/// or as "all ones" / "any one", is DEFINITE the moment one known bit decides it —
+/// `|4'b101x` is 1, `&4'b110x` is 0, `4'b110x ? a : b` takes `a`, `4'b1x1x && 1'b0` is
+/// 0 — and both oracles fold every one of them; only an operand whose known bits leave
+/// the question open (`|4'b000x`, `&4'b111x`) is x. Declining on ANY unknown made all
+/// of them decline, so a range bound `[(&4'b110x)+2:0]` silently became one bit and a
+/// `localparam`, an override and a `generate if` holding the same text went loud
+/// (ROADMAP §2 start-order 🆕 H ⓐ).
+pub(crate) fn bp_truth(bp: &ir::BitPacked, width: u32) -> Option<bool> {
+    let mut unknown = false;
+    for i in 0..width as usize {
+        let (v, u) = bp_get(bp, i);
+        if u {
+            unknown = true;
+        } else if v {
+            return Some(true);
+        }
+    }
+    (!unknown).then_some(false)
+}
+
+/// The one-bit UNKNOWN result of a definite-or-x operator (`|4'b000x`, `!4'b000x`,
+/// `4'b110x == 4'b1100`) — returned as a VALUE rather than a decline so that an
+/// operator above it which is definite regardless (`(4'bxxxx || 1'b0) || 1'b1` is 1 in
+/// both oracles) still folds. Every value-reading consumer declines on the unknown bit
+/// as it did on the decline, so nothing that was loud becomes a number here.
+fn bp_xbit() -> WideBits {
+    let mut b = bp_zero(1);
+    bp_set(&mut b, 0, false, true);
+    (b, 1, false)
+}
+
+/// A truth that may be unknown, as the one-bit value an operator delivers.
+fn bp_truth_bit(t: Option<bool>) -> WideBits {
+    match t {
+        Some(v) => bp_bit(v),
+        None => bp_xbit(),
+    }
+}
+
+/// The bitwise complement of the VALUE plane, unknown plane kept — so that "a known 0
+/// among the bits" can be asked as `bp_truth` of the complement.
+fn bp_not(bp: &ir::BitPacked, width: u32) -> ir::BitPacked {
+    let mut out = bp_zero(width);
+    for i in 0..width as usize {
+        let (v, u) = bp_get(bp, i);
+        bp_set(&mut out, i, !v && !u, u);
+    }
+    out
+}
+
+/// An EQUALITY over operands one of which carries x/z bits — the arm
+/// [`bp_operands`] declines. `None` = not this helper's case (no unknown bit, an
+/// ordering, or two widths, which is left to the caller and so stays declined).
+///
+/// §11.4.5: `===` / `!==` compare the four states literally and are always definite;
+/// `==` / `!=` are x only "if, due to unknown or high-impedance bits in the operands,
+/// the relation is ambiguous" — a known bit that differs decides them
+/// (`4'b110x == 4'b0000` is 0 and `4'b110x != 4'b0000` is 1 in both oracles), and
+/// only the all-known-bits-equal case is x. The narrower side is brought to the
+/// common width by [`widen_to`], which declines the one ambiguous extension (a signed
+/// operand whose MSB is itself x/z).
+fn wide_eq_with_unknowns(op: ast::BinOp, l: &WideBits, r: &WideBits) -> Option<WideBits> {
+    if !(bp_any_unknown(&l.0, l.1) || bp_any_unknown(&r.0, r.1)) {
+        return None;
+    }
+    let w = l.1.max(r.1);
+    let sg = l.2 && r.2;
+    let (lb, _, _) = widen_to(l.clone(), w, sg)?;
+    let (rb, _, _) = widen_to(r.clone(), w, sg)?;
+    let (lb, rb) = (&lb, &rb);
+    let w = w as usize;
+    let eq = match op {
+        ast::BinOp::CaseEq | ast::BinOp::CaseNe => (0..w).all(|i| bp_get(lb, i) == bp_get(rb, i)),
+        ast::BinOp::Eq | ast::BinOp::Ne => {
+            let differs = (0..w).any(|i| {
+                let ((a, au), (b, bu)) = (bp_get(lb, i), bp_get(rb, i));
+                !au && !bu && a != b
+            });
+            if !differs {
+                return Some(bp_xbit()); // every known bit agrees and an unknown remains
+            }
+            false
+        }
+        _ => return None,
+    };
+    Some(bp_bit(
+        matches!(op, ast::BinOp::CaseEq | ast::BinOp::Eq) == eq,
+    ))
+}
+
 /// Fold an expression at its OWN (self-determined) width in the WIDE bit domain.
 /// Returns `(bits, width, signed)`.
 ///
@@ -234,20 +329,39 @@ fn fold_bits_at0(e: &ast::Expr, name: WideNameFn) -> Option<WideBits> {
 /// **vita's own runtime already gave the oracles' answer**, so the constant domain was
 /// contradicting the runtime. Both review lenses found it independently; 72 cells.
 ///
-/// ⚠️ An UNKNOWN value is not widened at all. `resize_bits` replicates the top bit, so
-/// an x in the MSB became an x in every added bit — `8'bxxxx_0000 << 2` at 128 bits
-/// printed 120 x's where both oracles print zeros above bit 7. That `resize_bits`
-/// behaviour is pre-existing and visible without this slice (a concat shows it), so the
-/// fix here is to decline rather than to widen, which restores the pre-slice loud.
+/// ⚠️ An UNKNOWN value is widened only where the added bits are certain. `resize_bits`
+/// replicates the top bit's STATE, so an x in the MSB became an x in every added bit —
+/// `8'bxxxx_0000 << 2` at 128 bits printed 120 x's where both oracles print zeros above
+/// bit 7 (§11.6.1: an unsigned operand is ZERO-extended whatever its MSB holds). An
+/// unsigned extension therefore fills zeros here, a signed one with a KNOWN MSB
+/// sign-extends as usual, and a signed one whose MSB is itself x/z declines — the one
+/// case where the added bits are the ambiguity. Before, every unknown declined, which
+/// kept `4'b110x == 8'h00` (0 in both oracles) loud and its range-bound twin one bit.
 fn widen_to(v: WideBits, ctx: u32, sg: bool) -> Option<WideBits> {
     let (b, w, own) = v;
     if w >= ctx {
         return Some((b, w, own));
     }
-    if bp_any_unknown(&b, w) {
+    if sg && bp_get(&b, w as usize - 1).1 {
         return None;
     }
-    Some((resize_bits(&b, w, ctx, sg), ctx, own))
+    Some((extend_bits(&b, w, ctx, sg), ctx, own))
+}
+
+/// [`resize_bits`] with §11.6.1's extension rule for an UNKNOWN top bit: an unsigned
+/// value is zero-extended whatever its MSB holds (`resize_bits` replicates the MSB's
+/// STATE, so `4'b000x` widened to 128 bits came out all x where both oracles print
+/// `0…0x`); a signed one still copies the MSB, x included. Narrowing is unchanged.
+pub(crate) fn extend_bits(b: &ir::BitPacked, from: u32, to: u32, sg: bool) -> ir::BitPacked {
+    if to > from && !sg && bp_get(b, from as usize - 1).1 {
+        let mut out = bp_zero(to);
+        for i in 0..from as usize {
+            let (v, u) = bp_get(b, i);
+            bp_set(&mut out, i, v, u);
+        }
+        return out;
+    }
+    resize_bits(b, from, to, sg)
 }
 
 /// [`bp_operands`] with a floor on the common width — §11.6.1's context.
@@ -373,7 +487,7 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
             if bw < n && !wide_top_is_self_determined(expr) {
                 return None;
             }
-            Some((resize_bits(&b, bw, n, sg), n, sg))
+            Some((extend_bits(&b, bw, n, sg), n, sg))
         }
         // §6.24.1 signing cast: the operand's bits and width, re-read with the named
         // sign (§3 ⑤ ⓓ — the typedef cast `cap_t'(e)` desugars to `unsigned'(W'(e))`;
@@ -552,21 +666,19 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
             ) =>
         {
             let (b, w, _) = fold_bits_at0(operand, name)?;
-            if bp_any_unknown(&b, w) {
-                return None;
-            }
-            let bits = (0..w as usize).map(|i| bp_get(&b, i).0);
-            let mut bits = bits;
-            let r = match op {
-                ast::UnOp::RedAnd | ast::UnOp::RedNand => bits.all(|x| x),
-                ast::UnOp::RedOr | ast::UnOp::RedNor => bits.any(|x| x),
-                _ => bits.fold(false, |a, x| a ^ x),
-            };
+            // A known 0 decides `&` and a known 1 decides `|` whatever the other bits
+            // are (`bp_truth`); `^` reads every bit, so one unknown is its answer.
             let inv = matches!(
                 op,
                 ast::UnOp::RedNand | ast::UnOp::RedNor | ast::UnOp::RedXnor
             );
-            Some(bp_bit(r != inv))
+            let r = match op {
+                ast::UnOp::RedAnd | ast::UnOp::RedNand => bp_truth(&bp_not(&b, w), w).map(|z| !z),
+                ast::UnOp::RedOr | ast::UnOp::RedNor => bp_truth(&b, w),
+                _ => (!bp_any_unknown(&b, w))
+                    .then(|| (0..w as usize).fold(false, |a, i| a ^ bp_get(&b, i).0)),
+            };
+            Some(bp_truth_bit(r.map(|v| v != inv)))
         }
         // §11.4.7 logical negation — one bit, self-determined, and it reads the whole
         // operand rather than a bit position, so it belongs with the reductions.
@@ -575,10 +687,7 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
             operand,
         } => {
             let (b, w, _) = fold_bits_at0(operand, name)?;
-            if bp_any_unknown(&b, w) {
-                return None;
-            }
-            Some(bp_bit(!(0..w as usize).any(|i| bp_get(&b, i).0)))
+            Some(bp_truth_bit(bp_truth(&b, w).map(|t| !t)))
         }
         // §11.4.3 arithmetic. Truncating to the common width is not a shortcut — it
         // IS the rule: `8'hFF + 8'h2` is 1 in every tool, because the carry out of
@@ -690,6 +799,9 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
                 }
             };
             let (l, r) = (at(lhs, l0)?, at(rhs, r0)?);
+            if let Some(v) = wide_eq_with_unknowns(*op, &l, &r) {
+                return Some(v);
+            }
             let (a, b, w, sg) = bp_operands(&l, &r)?;
             let ord = limbs_cmp(&a, &b, w, sg);
             use std::cmp::Ordering::*;
@@ -707,19 +819,27 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
         ast::ExprKind::Binary { op, lhs, rhs }
             if matches!(op, ast::BinOp::LogAnd | ast::BinOp::LogOr) =>
         {
-            let truth = |e: &ast::Expr| -> Option<bool> {
+            // §11.4.7 Table 11-8: a 0 operand decides `&&` and a 1 operand decides
+            // `||` even when the OTHER operand is x — both oracles fold
+            // `4'b1x1x && 1'b0` to 0 and `4'b000x || 1'b1` to 1. An operand the fold
+            // cannot read at all (not merely an x-bearing one) still declines.
+            let truth = |e: &ast::Expr| -> Option<Option<bool>> {
                 let (b, w, _) = fold_selfdet_operand(e, name)?;
-                if bp_any_unknown(&b, w) {
-                    return None;
-                }
-                Some((0..w as usize).any(|i| bp_get(&b, i).0))
+                Some(bp_truth(&b, w))
             };
             let (a, b) = (truth(lhs)?, truth(rhs)?);
-            Some(bp_bit(if matches!(op, ast::BinOp::LogAnd) {
-                a && b
+            let r = if matches!(op, ast::BinOp::LogAnd) {
+                if a == Some(false) || b == Some(false) {
+                    Some(false)
+                } else {
+                    a.zip(b).map(|(x, y)| x && y)
+                }
+            } else if a == Some(true) || b == Some(true) {
+                Some(true)
             } else {
-                a || b
-            }))
+                a.zip(b).map(|(x, y)| x || y)
+            };
+            Some(bp_truth_bit(r))
         }
         // §11.4.11 conditional: the CONDITION is self-determined; the two arms size
         // against each other, so the node's own width is the max of theirs. Both arms
@@ -730,11 +850,11 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
             else_e,
         } => {
             // §11.4.11: the CONDITION is self-determined; both arms take the context.
+            // A condition with a known 1 bit is true whatever its other bits are
+            // (`bp_truth`); only an ambiguous one (§11.4.11's merge of both arms)
+            // declines.
             let (cb, cw, _) = fold_selfdet_operand(cond, name)?;
-            if bp_any_unknown(&cb, cw) {
-                return None;
-            }
-            let c = (0..cw as usize).any(|i| bp_get(&cb, i).0);
+            let c = bp_truth(&cb, cw)?;
             let (tb, tw, ts) = fold_region(then_e, ctx, psg, name)?;
             let (eb, ew, es) = fold_region(else_e, ctx, psg, name)?;
             let w = tw.max(ew).max(ctx);
@@ -997,7 +1117,7 @@ pub(crate) fn fold_init(e: &ast::Expr, width: u32) -> Option<ir::BitPacked> {
         }
         ast::ExprKind::IntLit { kind, raw } => {
             let cv = parse_int_literal(raw, *kind)?;
-            Some(resize_bits(&cv.bits, cv.width, width, cv.signed))
+            Some(extend_bits(&cv.bits, cv.width, width, cv.signed))
         }
         ast::ExprKind::Paren { inner } => fold_init(inner, width),
         // Everything the CARRY-FREE wide folder admits: fold at the expression's own
@@ -1006,7 +1126,7 @@ pub(crate) fn fold_init(e: &ast::Expr, width: u32) -> Option<ir::BitPacked> {
         // declines still returns None, so the caller's loud reject is unchanged.
         _ => {
             let (b, w, sg) = fold_self_bits(e, &|_, _| None)?;
-            Some(resize_bits(&b, w, width, sg))
+            Some(extend_bits(&b, w, width, sg))
         }
     }
 }
@@ -1208,7 +1328,7 @@ impl Elaborator<'_> {
             width,
             signed,
             repr: ir::ConstRepr::Numeric,
-            bits: resize_bits(&b, w, width, sg),
+            bits: extend_bits(&b, w, width, sg),
         })
     }
 
@@ -1376,6 +1496,15 @@ impl Elaborator<'_> {
         wide_clog2(&b, w).map(|n| n as i64)
     }
 
+    /// The TRUTH of a self-determined operand read through the wide bit domain —
+    /// what `!`, a ternary condition and a logical operand ask of a value the i64
+    /// walks cannot hold because it carries x/z bits (`4'b110x` is true, `4'b000x`
+    /// is unknown and declines). See [`bp_truth`].
+    pub(crate) fn selfdet_truth(&self, e: &ast::Expr) -> Option<bool> {
+        let (b, w, _) = fold_self_bits(e, &|n, _| self.wide_name_bits(n))?;
+        bp_truth(&b, w)
+    }
+
     pub(crate) fn selfdet_bits_i64(&self, e: &ast::Expr) -> Option<i64> {
         if !wide_top_is_self_determined(e) {
             return None;
@@ -1429,6 +1558,15 @@ impl Elaborator<'_> {
             && !crate::param_query::ast_contains_fill(e);
         if wide_top_is_self_determined(e) || bitwise_tree {
             let (b, w, sg) = fold_self_bits(e, &name)?;
+            // An x/z bit out of an OPERATOR (`#(.P(|4'b000x))`, x in both oracles)
+            // would reach a binder that drops the unknown plane (§2 row 15: the
+            // same binder binds a sized x/z LITERAL override as 0, which is that
+            // row's cell and keeps its route). Decline it: the pre-slice loud stays.
+            if bp_any_unknown(&b, w)
+                && !matches!(Self::peel_parens(e).kind, ast::ExprKind::IntLit { .. })
+            {
+                return None;
+            }
             return Some(ir::ConstVal {
                 width: w,
                 signed: sg,

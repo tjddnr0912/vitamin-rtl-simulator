@@ -537,6 +537,16 @@ impl Elaborator<'_> {
                             if let Some(v) = self.const_compare_special(*op, lhs, rhs) {
                                 return Some(v);
                             }
+                            // An operand carrying x/z bits has no i64 reading; the
+                            // wide domain answers the equalities and logical operators
+                            // that are definite regardless (`4'b1x10 === 4'b1x10`,
+                            // `4'b110x == 4'b0000`, `4'b1x1x && 1'b0`) and declines
+                            // the rest, so the loud stays where the answer is x.
+                            if crate::param_query::ast_holds_unknown_literal(lhs)
+                                || crate::param_query::ast_holds_unknown_literal(rhs)
+                            {
+                                return self.selfdet_bits_i64(e);
+                            }
                         }
                         // An UNKNOWN operand width means the pair cannot be sized,
                         // so nothing is masked (`w = 0`) rather than guessing 32.
@@ -575,8 +585,20 @@ impl Elaborator<'_> {
                 then_e,
                 else_e,
             } => {
-                // The condition is self-determined; the arms take the context.
-                if self.eval_const_env_self(cond, env, envw, depth)? != 0 {
+                // The condition is self-determined; the arms take the context. One
+                // carrying x/z bits is read for its truth in the wide domain (as the
+                // `!` arm does), unless it names a constant-function local.
+                let c = match self.eval_const_env_self(cond, env, envw, depth) {
+                    Some(v) => v != 0,
+                    None => {
+                        let local = |n: &str| env.contains_key(n) || envw.contains_key(n);
+                        if ast_names_any(cond, &local) {
+                            return None;
+                        }
+                        self.selfdet_truth(cond)?
+                    }
+                };
+                if c {
                     self.eval_const_env_at(then_e, env, envw, depth, ctx_w, ctx_signed)
                 } else {
                     self.eval_const_env_at(else_e, env, envw, depth, ctx_w, ctx_signed)
@@ -589,9 +611,20 @@ impl Elaborator<'_> {
                 op: op @ ast::UnOp::LogNot,
                 operand,
             } => {
-                let v = self.eval_const_env_self(operand, env, envw, depth)?;
                 let _ = op;
-                Some((v == 0) as i64)
+                match self.eval_const_env_self(operand, env, envw, depth) {
+                    Some(v) => Some((v == 0) as i64),
+                    // An operand carrying x/z bits: its TRUTH, through the wide
+                    // domain, unless it names a constant-function local (whose
+                    // value lives only in `env`).
+                    None => {
+                        let local = |n: &str| env.contains_key(n) || envw.contains_key(n);
+                        if ast_names_any(operand, &local) {
+                            return None;
+                        }
+                        Some(!self.selfdet_truth(operand)? as i64)
+                    }
+                }
             }
             // §11.4.14 REDUCTION — the arm this walk never had. It is what a declared
             // range bound holding a parameter SELECT reaches (`const_range_bound_fold`

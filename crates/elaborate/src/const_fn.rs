@@ -279,10 +279,15 @@ impl Elaborator<'_> {
             // `!e` yields ONE bit from a SELF-DETERMINED operand (Table 11-21) —
             // `!(4'd15 + 4'd1)` must see the 4-bit 0, not the unlimited 16. The three
             // context-determined unaries keep this walk.
+            // An operand the i64 walk cannot hold because it carries x/z bits is
+            // read for its TRUTH in the wide domain (`!4'b101x` is 0 in both oracles).
             ast::ExprKind::Unary {
                 op: ast::UnOp::LogNot,
                 operand,
-            } => Some((self.const_int_selfdet(operand)? == 0) as i64),
+            } => match self.const_int_selfdet(operand) {
+                Some(v) => Some((v == 0) as i64),
+                None => Some(!self.selfdet_truth(operand)? as i64),
+            },
             // §11.4.14 REDUCTION: one bit out of a SELF-DETERMINED operand. The value
             // domain folded these (§4.5.382) through `param_i64_at_declared`, which only
             // a declaration with a width reaches — so in every position that asks THIS
@@ -367,8 +372,14 @@ impl Elaborator<'_> {
                 // the arms or from the surrounding context. The real-domain twin
                 // (`const_eval_real_in_scope`) already folded it that way; this one
                 // did not, so one source line had two answers.
-                let c = self.const_int_selfdet(cond)?;
-                if c != 0 {
+                // A condition carrying x/z bits is read for its TRUTH in the wide
+                // domain (`4'b110x ? a : b` takes `a` in both oracles; an ambiguous
+                // one declines).
+                let c = match self.const_int_selfdet(cond) {
+                    Some(v) => v != 0,
+                    None => self.selfdet_truth(cond)?,
+                };
+                if c {
                     self.const_eval_in_scope(then_e)
                 } else {
                     self.const_eval_in_scope(else_e)

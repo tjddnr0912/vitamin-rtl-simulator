@@ -392,6 +392,18 @@ pub(crate) fn ast_contains_fill(e: &ast::Expr) -> bool {
     ast_any(e, &|x| crate::const_eval::fill_literal_ast(x).is_some())
 }
 
+/// True iff the expression holds a sized/based literal with an x or z digit
+/// (`4'b110x`, `8'hzz`) — a leaf the i64 walks have no reading for, and the one
+/// shape that sends an equality or a logical operator to the wide domain's truth
+/// arms (`const_fn_width.rs`).
+pub(crate) fn ast_holds_unknown_literal(e: &ast::Expr) -> bool {
+    ast_any(e, &|x| match &x.kind {
+        ast::ExprKind::IntLit { kind, raw } => literal::parse_int_literal(raw, *kind)
+            .is_some_and(|cv| cv.bits.unk.iter().any(|&u| u != 0)),
+        _ => false,
+    })
+}
+
 impl Elaborator<'_> {
     /// Does the width-aware assignment walk own this parameter initializer?
     ///
