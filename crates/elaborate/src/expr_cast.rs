@@ -461,11 +461,28 @@ impl Elaborator<'_> {
         }
         let (tw, tsigned, t2state) = cast_prim_wsign(p)
             .expect("`Real` is handled above; every other prim has a table entry");
-        // The target width `tw` is the operand's context, so a fill literal grows
-        // to `tw` bits (a bare `lower_expr` sizes it to 1 bit, then the resize below
-        // zero-extends it = silent-wrong: `int'('1)` gave `00000001`, not all-ones).
-        // Byte-identical for a non-fill operand.
-        let e = self.lower_ctx_or_plain(operand, tw);
+        // §6.24.1: a cast to a type returns what a variable of that type holds after
+        // being assigned the operand, so the target width `tw` is the operand's
+        // CONTEXT. A context-determined operation runs at `tw` bits — `int'(u4 * u4)`
+        // is 100, not the 4-bit product 4 — by the route the size cast takes
+        // (`size_ctx_route` + `lower_size_ctx_entry`). That route answers only for
+        // an operand whose every context-determined leaf is a bit vector it can
+        // measure, and a REAL-domain operand is not a bit-width context at all
+        // (§11.8.1): `rhs_has_real_domain`, the guard the inline-assignment
+        // consumer of the same route uses, keeps `int'(r * 2)`, `int'(u4 * 2.0)`
+        // and `int'(u4 ** 0.5)` on the real→int path below — the size-cast route
+        // alone answers a real VARIABLE by its net's sign and would refuse them.
+        // Otherwise a fill literal still grows to `tw` bits (a bare `lower_expr`
+        // sizes it to 1 bit: `int'('1)` gave `00000001`).
+        let e = match (
+            Self::is_size_ctx_operation(operand),
+            self.size_ctx_route(operand),
+        ) {
+            (true, Some((ext, w))) if !self.rhs_has_real_domain(operand) => {
+                self.lower_size_ctx_entry(operand, tw, ext, w)
+            }
+            _ => self.lower_ctx_or_plain(operand, tw),
+        };
         // real operand → integral target: round half away from zero, then narrow.
         if self.cast_operand_is_real(operand, e) {
             return self.lower_real_to_int_cast(e, tw, tsigned, t2state);

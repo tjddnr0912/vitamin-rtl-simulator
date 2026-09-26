@@ -528,13 +528,13 @@ endmodule
     );
 }
 
-/// A different defect, NOT closed here (ROADMAP §2): a context-determined operand
-/// of a prim cast is evaluated self-determined. Pinned at the pre-change values so
-/// this change is seen not to move it. Oracles (iverilog 13 and verilator 5.052):
-/// `int'(-u4)=fffffff6`, `int'(-f4)=fffffff6`, `int'(~u4)=fffffff5`,
-/// `int'(u4+8)=00000012`, `int'(f4+8)=00000012`.
+/// A context-determined operand of a prim cast runs at the type's width (§6.24.1),
+/// the value both oracles print (iverilog 13 and verilator 5.052). Until §4.5.553 it
+/// was evaluated self-determined and this test pinned that: `int'(-u4)` was
+/// `00000006`, `int'(~u4)` `00000005`, `int'(u4+8)` `00000002`. `prim_cast_context_width.rs`
+/// holds the census.
 #[test]
-fn context_determined_operands_are_unchanged() {
+fn context_determined_operands_take_the_type_width() {
     check(
         r#"module top;
   logic [3:0] u4 = 4'b1010; logic signed [3:0] s4 = 4'sb1010;
@@ -553,13 +553,13 @@ fn context_determined_operands_are_unchanged() {
 endmodule
 "#,
         &[
-            "int'(-u4)=00000006",
-            "int'(-f4)=00000006",
+            "int'(-u4)=fffffff6",
+            "int'(-f4)=fffffff6",
             "int'(-s4)=00000006",
             "16'(-u4)=fff6",
-            "int'(~u4)=00000005",
-            "int'(u4+8)=00000002",
-            "int'(f4+8)=00000002",
+            "int'(~u4)=fffffff5",
+            "int'(u4+8)=00000012",
+            "int'(f4+8)=00000012",
         ],
     );
 }
