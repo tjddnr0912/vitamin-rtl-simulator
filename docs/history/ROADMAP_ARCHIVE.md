@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 429건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 430건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.549` **a real stored into a string converts by one rule on every store and every backend** (2026-09-27 · §2 "Real" string-variable bullet and the second bytecode divergence closed · `Value::string_store_bytes` at five stores · verilator disqualified (three conversions by lane) · tests 8623 → 8626)
 - `4.5.548` **a delayed continuous assign that reads heap content is evaluated through the heap router on the native backend** (2026-09-27 · §2 "Delays / events" bullet closed, the moving-dynamic-index residue recorded · rhs, runtime delay and left-side offsets through `HeapRouted` · tests 8614 → 8623)
 - `4.5.547` **a continuous assign that reads the time is re-evaluated when an operand changes, not as time advances** (2026-09-27 · §2 "Delays / events" `$realtime` bullet closed, the cross-time-unit residue recorded · time reads and one-operand conversions certified in `levelize::ca_deps` and the callee walk · tests 8604 → 8614)
 - `4.5.546` **§2 row 26 re-measured stale and absorbed into row 14: the package lane answers what the module lane answers** (2026-09-27 · 48 cells in four lanes identical at HEAD, 21 provenance-consumer cells identical over local / imported / `pk::` names · four-lane agreement pinned · no code change · tests 8592 → 8604)
@@ -558,6 +559,50 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.549 a real stored into a string converts by one rule on every store and every backend: §6.12.2 to a 64-bit signed integer, then §6.16's bytes (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 "Real" — the string-variable-from-real bullet closed; the §2 "Bytecode-backend
+divergences" bullet loses its second half (a static task's string formal bound to a real, closed by
+the same rule); one "Oracle splits" line added (verilator converts real → string three ways). Summary
+mechanism 165 / 83 / 82 → 165 / 82 / 83, total 395 / 229 / 166 → 395 / 228 / 167. Tests 8623 →
+8626.
+
+**Defect (PRE d7b6a49, three backends).** Five stores wrote a string, and only the container-element
+arm (`coerce_dyn_elem`, §4.5.540) converted a real: `dyn_write`'s whole-string arm took the bytes of
+whatever arrived, which on native was the IEEE-754 word and on the engine a value
+`write_lvalue_general` had already squeezed to the string net's one bit; the frame slot write, the
+frame-call string formal bind (`bind_formal`) and the evaluator's string-formal bind took the IEEE
+word on every backend.
+
+```
+string s; s = 16706.0;       native 40d05080 (4)   interp/vm 00 (0)      now 4142 "AB"
+s = 65.4;                    native 405059999999999a                     now 41 "A"
+function string f(); f = 66.0;        every backend 405080               now 42 "B"
+task ss(input string x); ss(3.7);     native 8 bytes, interp/vm 00       now 04
+```
+
+**Mechanism.** `Value::string_store_bytes` — a real is first `coerce_assign(false, v, 64, true)`,
+then `to_sv_string_bytes` — used by all five stores (`coerce_dyn_elem`'s string arm keeps its rule
+and now spells it through the helper); `write_lvalue_general` exempts a whole string net from its
+real pre-conversion as it already exempted string elements and class fields. `to_sv_string_bytes`
+itself (the `string'(…)` cast and compare surface) is unchanged; `string'(real)` stays loud.
+
+**Oracle.** None: iverilog aborts on every shape (`Assertion failed: ivl_expr_value…`), and verilator
+5.052 converts one value three ways — a queue element by this rule (`16706.0` → "AB"), a string
+formal as the raw IEEE word (`40d05080`), a whole variable as one low byte ("B") in one design and an
+internal compiler error in another — so it is disqualified on this conversion; it agrees with the
+rule on every single-byte value (65.4, 97.2, 66.0, 65.6). The rule is the hand-IEEE one §4.5.540
+chose for elements. The pin `real_actual_formal_width.rs::a_string_formal_is_never_bit_resized`
+asserted verilator's formal-lane 8 bytes and is converted, with the three-way measurement in its
+comment.
+
+**Review (lenses direct).** 18 cells (nine whole-variable stores across blocking / nonblocking /
+initializer / variable / expression sources, seven subroutine lanes, the element lane beside the
+whole variable, the formal lanes), all three backends identical after. Backend flip run: the failing
+set drops from 10 to 9 (the static-task string formal now passes on `vm`), nothing new. Gate 8623 →
+8626, product-shape build 0, doctest / clippy / fmt 0, corpus 10/10 (POST and PRE within ±1 %).
+Pins: `real_into_string_store.rs` (3 tests, each asserting native = interp = vm).
 
 #### 4.5.548 a delayed continuous assign that reads heap content is evaluated through the heap router on the native backend: the delayed rhs, the runtime delay and the dynamic left-side index (2026-09-27, branch main) ✅
 

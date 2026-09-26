@@ -9,6 +9,15 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a real stored into a string converts by one rule on every store and backend
+
+- `string s; s = 16706.0;` stored the IEEE-754 bytes on the native backend and a one-bit value on
+  the others; a string function's return, a task's `output string` and a string formal bound to a
+  real stored the IEEE bytes everywhere (a static task's formal was empty on the engine and the
+  VM). Every string store now converts a real to a 64-bit signed integer (§6.12.2, rounded) and then
+  takes §6.16's bytes — the rule a string queue element already used: 16706.0 is "AB", 65.4 is "A",
+  −1.5 is the eight bytes of −2.
+
 ### Fixed — a delayed continuous assign reads a queue, dynamic array, string or associative array on the native backend
 
 - `assign #0 n = q.size();` read x at every hop on the default (native) backend where the

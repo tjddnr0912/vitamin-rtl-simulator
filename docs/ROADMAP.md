@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 24 | 4 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 8 (rows 14, 25, 30 and 🆕 H startable since §4.5.542 took the §11.8.1 wall down; row 26 absorbed by row 14 in §4.5.546) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 165 | 83 | 82 | oracle split / pinned / oracle disqualified 49 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 19 · real 5 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 37 | ① | |
+| §2 | recorded defects by mechanism | 165 | 82 | 83 | oracle split / pinned / oracle disqualified 50 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 19 · real 4 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 38 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 106 | 91 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 395 | 229 | 166 | | | | |
+| total | | 395 | 228 | 167 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
@@ -537,12 +537,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - `$realtobits` and `$bitstoreal` silently accept a non-64-bit argument (iverilog says "requires a
   64-bit argument"); vita answers with the low 64 bits.
 
-- A plain `string` VARIABLE assigned a real (`string s; s = 65.4;`) stores the IEEE-754 bytes on
-  the native backend and "" on the engine (a backend divergence; no oracle: verilator's generated
-  C++ does not compile the shape, iverilog aborts). Hand-IEEE = the container-element rule of
-  §4.5.540: §6.12.2 to a 64-bit integer, then §6.16. Site: the string whole-handle arm of
-  `SimState::dyn_write` and the tier-3 string store, neither of which converts a real. STARTABLE
-  (S). (§4.5.540 review differential cell c15.)
 
 ### Ranges / bounds / selects
 
@@ -860,10 +854,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   if (p < 3) q = p;`) print an extra `B at 0 p=3 q=2` (dR12; verilator prints it too, iverilog does
   not). Site: the Level waiter's dirty-list re-fire. Fix shape = do not re-queue a process that is
   already pending in the step.
-- Two Bytecode-backend divergences, both pre-existing at 38ef535 and found by the batch flip run
+- A Bytecode-backend divergence, pre-existing at 38ef535 and found by the batch flip run
   (§4.5.524): a runtime-delay expression that CALLS a subroutine falls back and runs SILENTLY on `vm`
-  where the default `native` backend is loud, and a `string` formal receiving a `real` actual on a
-  STATIC task prints `STATIC=0` on `vm` against `8`. The `native` answer is the right one in both.
+  where the default `native` backend is loud. The `native` answer is the right one. (The second
+  divergence of that run — a `string` formal of a STATIC task bound to a real, `STATIC=0` on `vm` —
+  closed with §4.5.549's one string-store rule.)
 - A continuous assign in a module whose time UNIT differs from the process that moved its
   operand reads `$time` / `$realtime` at the wrong scale: `assign o = $time + a;` and `assign r =
   int'($realtime * 10.0) + a;` in a `1ns/1ps` child, `a` written at 4 ns from a `1us/1ns` top,
@@ -1037,6 +1032,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   correct.
 
 ### Oracle splits (recorded, not chased)
+
+- A REAL stored into a string has no oracle: iverilog aborts on every spelling, and verilator
+  5.052 converts the same value three ways by lane — a queue element by §6.12.2 then §6.16
+  (`16706.0` → "AB"), a string formal as the raw IEEE-754 word (`40d05080`), a whole variable as one
+  low byte ("B") in one design and an internal compiler error (`V3Number … non-string argument`)
+  in another. vita applies the element rule on every store (§4.5.549).
 
 - iverilog's time-0 wake on a continuous driver whose settled value has no definite bit is decided
   by the driver's operator, not its value (§4.5.533): `wire w = r ? 1'b1 : 1'b0;` of an unwritten
