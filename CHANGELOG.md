@@ -19,7 +19,10 @@ changed for a user of the simulator.
   store did on the native backend, where Icarus Verilog and Verilator store `fffffffffffffffd`
   and `0000012d`. A `[129:0]` field or element of `1.0e40` is the exact low bits
   (`16329f1c35ca50000…`), `±inf` and NaN store 0, an unsigned element of a negative real wraps,
-  as for a plain variable since the previous release. All three backends.
+  as for a plain variable since the previous release. A part-select of a dynamic-array element
+  (`dy[0][15:0] = -70000.4`) converts before it slices (the native backend sliced the IEEE-754
+  word), and a real stored into a `string` element is an integer first and then its bytes
+  (`sq.push_back(97.2)` is `"a"`, as Verilator folds it). All three backends.
 
 ### Fixed — a zero-delay continuous assign delivers its update in its own time step
 
