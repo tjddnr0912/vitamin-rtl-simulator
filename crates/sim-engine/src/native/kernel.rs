@@ -379,6 +379,11 @@ pub(crate) struct NativeKernel<'i, 'a, 'b> {
     /// the resume is filed.
     pub(crate) active: Vec<NativeReady>,
     pub(crate) inactive: Vec<NativeReady>,
+    /// Fork arms spawned at `now` by the running body, in arm order, and a
+    /// parent resumed by its join — the engine's `Scheduler::spawned`, kept on
+    /// this kernel in its own ready type. The run loop splices them in right
+    /// after the body yields.
+    pub(crate) spawned: Vec<NativeReady>,
     pub(crate) wheel: BTreeMap<u64, Vec<(bool, NativeReady)>>,
     /// IN-BODY waiters (S1d-4c-2d) — `Scheduler::waiters`, restated.
     ///
@@ -515,6 +520,11 @@ pub(crate) struct NativeWaiter {
 /// the two could differ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct NativeReady {
+    /// The scheduling-order key, the engine's `Ready::seq`, drawn from the SAME
+    /// counter (`Scheduler::take_seq` through `sched`): a resume event takes its
+    /// own number when it is scheduled, a wake group (the time-0 seeds; every
+    /// wake between two batch takes, `Scheduler::wake_seq`) shares one. `push_sorted_native` orders by `(seq, tie)`.
+    pub(crate) seq: u64,
     /// ⚠️ A4 BROUGHT THIS FIELD BACK, and its own doc predicted that: the field
     /// was absent because "`fork_modes` non-empty is an S0 reject, so here
     /// `tie == proc` and the field would be a second name for the same number".
@@ -574,20 +584,16 @@ pub(crate) fn systask_refusal(which: SysTaskId) -> Option<SysTaskRefusal> {
     None
 }
 
-/// `sched::push_sorted` over the collapsed ready: insert keeping `proc`
+/// `sched::push_sorted` over the collapsed ready: insert keeping `(seq, tie)`
 /// ascending, AFTER every equal entry.
 ///
-/// ⚠️ The `<=` is written to match the engine, NOT because it can be observed
-/// here — an earlier version of this doc claimed it was load-bearing and that
-/// claim did not survive review. Two entries can never share a `proc` in the
-/// accepted class: `WakeTable::wake` dedups per process (`seen` for Edge,
-/// waiter CONSUMPTION for Level, and the two maps are kind-disjoint), `arm_t0`
-/// visits each process once, and a process has at most one pending resume. So
-/// `<=` → `<` is an EQUIVALENT mutation, and saying so is better than a teeth
-/// claim no design can back. It stays `<=` because the collapse is a property
-/// of today's gate, not of the ordering rule.
+/// The `<=` is written to match the engine. An equal `(seq, tie)` pair needs one
+/// wake group holding two entries with one tie; `WakeTable::wake` dedups per
+/// process, `arm_t0` visits each process once, and every resume event has a
+/// `seq` of its own. This slice did not measure whether `<=` → `<` is
+/// observable.
 pub(crate) fn push_sorted_native(q: &mut Vec<NativeReady>, r: NativeReady) {
-    let pos = q.partition_point(|x| x.tie <= r.tie);
+    let pos = q.partition_point(|x| (x.seq, x.tie) <= (r.seq, r.tie));
     q.insert(pos, r);
 }
 
@@ -667,6 +673,7 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
             wake,
             active: Vec::new(),
             inactive: Vec::new(),
+            spawned: Vec::new(),
             wheel: BTreeMap::new(),
             waiters: Vec::new(),
             wcache: std::cell::RefCell::new((0..ir.exprs.len()).map(|_| None).collect()),
@@ -1456,6 +1463,9 @@ impl<'i, 'a, 'b> NativeKernel<'i, 'a, 'b> {
         }
         for r in &self.inactive {
             v.push((now, true, r.proc, r.block));
+        }
+        for r in &self.spawned {
+            v.push((now, false, r.proc, r.block));
         }
         for (&t, evs) in &self.wheel {
             for (inactive, r) in evs {
@@ -2263,7 +2273,10 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // zero ticks) into THIS timestep's Inactive region rather than onto the
         // wheel — the wheel is keyed by time, so a same-time entry there would be
         // drained only after the timestep it belongs to had already ended.
+        // The `seq` is taken HERE, at scheduling time — the engine's rule — so a
+        // wheel bucket and the Inactive queue drain in scheduling order.
         let r = NativeReady {
+            seq: self.sched.take_seq(),
             tie: self.act_tie(proc),
             proc,
             block,
@@ -2375,20 +2388,15 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         let cont = self
             .sched
             .exec_fork_into(act, children, join, resume_bb, &mut ready);
-        // …and the queue is ours. The children land in the FRESH `active` the
-        // run loop's `mem::take` just left behind, which is where the engine's
-        // `cur.active` puts them too — so an arm runs in the next delta of this
-        // same instant, not in the middle of the batch that forked it.
-        for r in ready {
-            push_sorted_native(
-                &mut self.active,
-                NativeReady {
-                    tie: r.tie,
-                    proc: r.proc,
-                    block: r.block,
-                },
-            );
-        }
+        // …and the queue is ours. The arms go to `spawned`, in arm order, as the
+        // engine's `exec_fork` does: the run loop runs them right after the
+        // forking body yields, ahead of the rest of the batch.
+        self.spawned.extend(ready.into_iter().map(|r| NativeReady {
+            seq: r.seq,
+            tie: r.tie,
+            proc: r.proc,
+            block: r.block,
+        }));
         cont
     }
 
@@ -2430,16 +2438,14 @@ impl Kernel for NativeKernel<'_, '_, '_> {
         // bookkeeping, with only the queue supplied here.
         let mut ready = Vec::new();
         self.sched.on_child_complete_into(jr, act, &mut ready);
-        for r in ready {
-            push_sorted_native(
-                &mut self.active,
-                NativeReady {
-                    tie: r.tie,
-                    proc: r.proc,
-                    block: r.block,
-                },
-            );
-        }
+        // The resumed parent runs right after the completing child yields — into
+        // `spawned`, as the engine's `on_child_complete` does.
+        self.spawned.extend(ready.into_iter().map(|r| NativeReady {
+            seq: r.seq,
+            tie: r.tie,
+            proc: r.proc,
+            block: r.block,
+        }));
     }
 
     fn k_park_frames(&mut self, proc: u32, mut frames: Vec<crate::sched::FrameRec>) {

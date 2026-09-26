@@ -15,7 +15,8 @@
 //! in an eligible design activities are 1:1 with `ir.processes`,
 //! `tie == proc == template`, and the resume block is always the process entry.
 //! A ready entry collapses to the process id, and `push_sorted`'s tie ordering
-//! collapses to ascending process id.
+//! collapses to ascending process id inside one wake group (`NativeReady::seq`
+//! orders the groups and the resume events).
 //!
 //! ⚠️ Clocking USED to be rejected too, and this file said the engine's
 //! `commit_clocking` intercept — which consumes an edge and returns before the

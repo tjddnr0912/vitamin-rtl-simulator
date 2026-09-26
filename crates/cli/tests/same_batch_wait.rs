@@ -187,8 +187,10 @@ initial #4 $finish; endmodule
 ",
             "NBA 1\nZ 2\n",
         ),
-        // A wait inside a task and a forked wait armed after the write: EDGE-HALF, `T 5`
-        // (both oracles nothing; the forked wait's `F` is not printed in any tool).
+        // A wait inside a task and a forked wait armed after the write: EDGE-HALF, `T 5` and
+        // `F 5` (both oracles print nothing). The fork arm used to arm a delta later and miss
+        // the slot (`T 5` alone); it now runs right after the body that forked it, arms in the
+        // same batch as the task's wait, and shows the same residue.
         (
             "module t; reg r = 0;
 task automatic w; @(posedge r); $display(\"T %0t\", $time); endtask
@@ -197,7 +199,7 @@ initial begin #5 w(); end
 initial begin #5 fork @(posedge r); join $display(\"F %0t\", $time); end
 initial #9 $finish; endmodule
 ",
-            "T 5\n",
+            "T 5\nF 5\n",
         ),
         // The waiter's own write before its arm (the self-retrigger guard, PRE = POST).
         (
@@ -458,13 +460,13 @@ endmodule
 #[test]
 fn the_common_testbench_shape_and_the_same_time_resume_order_are_unchanged() {
     // Round-2 review B2: a clock generator declared FIRST and stimulus resuming from `#15` in
-    // the same step, arming `@(posedge clk)` in the edge's own batch. Both oracles resume the
-    // stimulus first (its delay was scheduled first) and the wait catches the edge; vita
-    // resumes the clock first and the slot's mask catches it — `R 15 rst=0 | N 20 | R2 25 |
-    // n=5` in all three tools (an after-the-arm edge rule printed `R 25 … n=4`). The mechanism
-    // cell pins vita's declaration order (both oracles `B 10` before `A 10`; a §4.7 order the
-    // recorded prerequisite names), and the negedge twin its PRE value (`N 10 clk=0`, both
-    // oracles the same).
+    // the same step, arming `@(posedge clk)` in the edge's own batch. Both oracles and vita
+    // resume the stimulus first (its delay was scheduled first) and the wait catches the edge
+    // — `R 15 rst=0 | N 20 | R2 25 | n=5` in all three tools (an after-the-arm edge rule
+    // printed `R 25 … n=4` while vita resumed in declaration order). The mechanism cell pins
+    // the scheduling order (`B 10` before `A 10`: iverilog 13 and verilator 5.052 both; vita
+    // printed `A 10` first before same-time resumes ran in scheduling order), and the negedge
+    // twin its PRE value (`N 10 clk=0`, both oracles the same).
     check(&[
         (
             "module t; reg clk; reg rst; int n = 0;
@@ -482,7 +484,7 @@ initial begin #5; #5 $display(\"A %0t\", $time); end
 initial begin #10 $display(\"B %0t\", $time); end
 initial #30 $finish; endmodule
 ",
-            "A 10\nB 10\n",
+            "B 10\nA 10\n",
         ),
         (
             "module t; reg clk = 0;

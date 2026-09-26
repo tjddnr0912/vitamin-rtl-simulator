@@ -672,6 +672,9 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 chunks: Vec::with_capacity(1),
             },
             nba_seq: 0,
+            next_seq: 0,
+            wake_seq: 0,
+            spawned: Vec::new(),
             native_scratch: std::cell::RefCell::new(Default::default()),
             #[cfg(feature = "jit")]
             jit: std::cell::RefCell::new(
@@ -1404,6 +1407,8 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         }
         let init_set: std::collections::BTreeSet<u32> = inits.iter().copied().collect();
 
+        // The time-0 seeds are one wake group: one `seq`, declaration order by `tie`.
+        let seq = self.take_seq();
         for aid in 0..self.activities.len() as u32 {
             let tmpl = self.activities[aid as usize].template as usize;
             // P2-E: `final` blocks are Initial-shaped in the IR but never
@@ -1418,6 +1423,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             let tie = self.activities[aid as usize].tie;
             let entry = self.st.ir.processes[tmpl].entry;
             let ready = Ready {
+                seq,
                 tie,
                 proc: aid,
                 block: entry,
@@ -1431,6 +1437,8 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 SensKind::Edge | SensKind::Level => self.arm_sensitivity(aid, 0),
             }
         }
+        // Wake-group refresh point (1): after the time-0 seeding.
+        self.refresh_wake_seq();
         // From here a zero-delay continuous-assign write is an Inactive-region
         // event of its time step (`Scheduler::armed`).
         self.armed = true;
@@ -1509,6 +1517,9 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         for r in &self.cur.inactive {
             v.push((self.st.now, true, r.proc, r.block));
         }
+        for r in &self.spawned {
+            v.push((self.st.now, false, r.proc, r.block));
+        }
         for (&t, evs) in &self.wheel {
             for (region, r) in evs {
                 v.push((t, matches!(region, RegionTag::Inactive), r.proc, r.block));
@@ -1539,7 +1550,9 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         let tie = self.activities[pi as usize].tie;
         let p = &self.st.ir.processes[tmpl];
         let entry = p.entry;
+        // Stored by value: `seq` is overwritten when the registration fires.
         let ready = Ready {
+            seq: 0,
             tie,
             proc: pi,
             block: entry,

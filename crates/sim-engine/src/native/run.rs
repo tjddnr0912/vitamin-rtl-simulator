@@ -372,6 +372,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
         let mut delta_count: u64 = 0;
         // ── drain the current time to a stable point ──────────────────────
         loop {
+            // Fork arms spawned outside a batch join `active` by their own `seq`
+            // (the engine's loop-top line).
+            for r in std::mem::take(&mut k.spawned) {
+                push_sorted_native(&mut k.active, r);
+            }
             // ACTIVE: continuous assigns settle FIRST, then processes drain —
             // the engine's order. A settle that moved nets may have produced an
             // edge on a cont-assign-driven net (a port-bound clock), so change
@@ -388,7 +393,7 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                 // the NEXT delta, not to the middle of this one.
                 // T0 DELIVERY, second half (`take_t0_wakes`): the settle's
                 // wakes lead the first batch taken after the first one.
-                let batch = match (t0_first_batch_done, t0_woken.take()) {
+                let mut batch = match (t0_first_batch_done, t0_woken.take()) {
                     (true, Some(mut held)) => {
                         held.append(&mut k.active);
                         held
@@ -399,7 +404,13 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                     }
                 };
                 t0_first_batch_done = true;
-                for r in batch {
+                // Wake-group refresh point (2): every batch take.
+                k.sched.refresh_wake_seq();
+                // Index-based: the fork arms a body spawns at `now` are spliced in
+                // right after it (`NativeKernel::spawned`), as in the engine.
+                let mut i = 0;
+                while i < batch.len() {
+                    let r = batch[i];
                     if k.sched.st.finished {
                         let fk = finish_kind(k);
                         return done(k, fk);
@@ -489,6 +500,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
                             }
                         }
                     }
+                    if !k.spawned.is_empty() {
+                        let arms = std::mem::take(&mut k.spawned);
+                        batch.splice(i + 1..i + 1, arms);
+                    }
+                    i += 1;
                 }
                 propagate(k);
                 delta_count += 1;
@@ -577,7 +593,11 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
             }
         }
         propagate(k);
-        if !k.active.is_empty() || !k.inactive.is_empty() || !k.nba.is_empty() {
+        if !k.active.is_empty()
+            || !k.spawned.is_empty()
+            || !k.inactive.is_empty()
+            || !k.nba.is_empty()
+        {
             // A matured action woke something; drain this time step again rather
             // than advancing. The engine `continue`s its cascade for the same
             // reason.
@@ -631,6 +651,9 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
             }
         }
         k.sched.st.now = next;
+        // Wake-group refresh point (3): time advance, before the delayed-assign
+        // landing, so what it wakes sorts after this tick's wheel resumes.
+        k.sched.refresh_wake_seq();
         k.wake.reset_edge_seen();
         // N4 clocking: the PREPONED snapshot of every clocking input, taken at
         // the start of the new slot — before any slot activity, so each source
@@ -653,6 +676,8 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
             }
         }
         k.take_due_delayed(next);
+        // Scheduling order (FIFO) through each entry's `seq` — the engine's
+        // wheel drain.
         let events = k.wheel.remove(&next).unwrap_or_default();
         for (inactive, ready) in events {
             if inactive {
@@ -1082,6 +1107,8 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
         }
     }
     let init_set: std::collections::BTreeSet<u32> = inits.iter().copied().collect();
+    // The time-0 seeds are one wake group: one `seq`, declaration order by `tie`.
+    let seq = k.sched.take_seq();
     for pi in 0..ir.processes.len() as u32 {
         if init_set.contains(&pi) {
             continue;
@@ -1099,6 +1126,7 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
                 push_sorted_native(
                     &mut k.active,
                     NativeReady {
+                        seq,
                         // A base activity's tie IS its process id (the seeding
                         // sets `tie == template == index`), so this is the value
                         // the collapsed field carried before A4 restored it.
@@ -1115,6 +1143,8 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
             sim_ir::SensKind::Edge | sim_ir::SensKind::Level => {}
         }
     }
+    // Wake-group refresh point (1): after the time-0 seeding.
+    k.sched.refresh_wake_seq();
     // From here a zero-delay continuous-assign write is an Inactive-region
     // event of its time step (`Scheduler::armed`).
     k.sched.armed = true;
@@ -1215,6 +1245,10 @@ fn propagate(k: &mut NativeKernel) {
         k.scratch_changed = changed;
         return;
     }
+    // The current batch's wake group `seq` (`Scheduler::wake_seq`, the one the
+    // engine's `propagate_changes` uses): the static wakes and the in-body
+    // waiters this pass fires carry it.
+    let gseq = k.sched.wake_seq;
     let mut woken = std::mem::take(&mut k.scratch_woken);
     let mut clocked = std::mem::take(&mut k.scratch_clocked);
     k.wake.wake(
@@ -1249,13 +1283,14 @@ fn propagate(k: &mut NativeKernel) {
         push_sorted_native(
             &mut k.active,
             NativeReady {
+                seq: gseq,
                 tie: p,
                 proc: p,
                 block: k.ir.processes[p as usize].entry,
             },
         );
     }
-    fire_waiters(k, &changed);
+    fire_waiters(k, &changed, gseq);
     // Hand all three back BEFORE the drain below, which can re-enter nothing but is the
     // last statement — a `?`/early return added here later would leak them, so they go
     // back at the first point where every use is finished.
@@ -1305,7 +1340,7 @@ fn drain_heap_marks(k: &mut NativeKernel) {
 /// when the resumed body reaches the wait a second time; `Edge` is one-shot by
 /// nature. That is why there is no re-registration here — the engine has none
 /// either, and adding one would fire a waiter the body never re-armed.
-fn fire_waiters(k: &mut NativeKernel, changed: &[crate::native::dirty::ChangedNet]) {
+fn fire_waiters(k: &mut NativeKernel, changed: &[crate::native::dirty::ChangedNet], gseq: u64) {
     if k.waiters.is_empty() {
         return;
     }
@@ -1357,6 +1392,7 @@ fn fire_waiters(k: &mut NativeKernel, changed: &[crate::native::dirty::ChangedNe
         idx += 1;
         if fired {
             woken.push(NativeReady {
+                seq: gseq,
                 // The wake table's waiters are per PROCESS — a child activity has
                 // no static sensitivity — so the woken activity is always the
                 // base one and its tie is its process id.

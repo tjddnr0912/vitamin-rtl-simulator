@@ -49,9 +49,9 @@ impl Scheduler<'_, '_> {
     pub(crate) fn on_child_complete(&mut self, join_ref: u32, child_aid: u32) {
         let mut ready = Vec::new();
         self.on_child_complete_into(join_ref, child_aid, &mut ready);
-        for r in ready {
-            push_sorted(&mut self.cur.active, r);
-        }
+        // A parent resumed by its join or `wait fork` runs right after the
+        // completing child yields, as a spawned arm does (`Scheduler::spawned`).
+        self.spawned.append(&mut ready);
     }
 
     /// A4: [`Scheduler::on_child_complete`] with the READY entries handed back
@@ -120,7 +120,10 @@ impl Scheduler<'_, '_> {
             // Re-enqueue the parent at resume_bb THIS instant (Active region).
             // Surplus children (join_any) stay live and run to completion; their
             // later on_child_complete sees `fired == true` → no-op.
+            // A resume event: its own scheduling-order number.
+            let seq = self.take_seq();
             ready.push(Ready {
+                seq,
                 tie,
                 proc: parent,
                 block: resume_bb,
@@ -147,7 +150,9 @@ impl Scheduler<'_, '_> {
         if let Some(resume_bb) = wf_resume {
             self.activities[parent_aid as usize].wait_fork = None;
             let tie = self.activities[parent_aid as usize].tie;
+            let seq = self.take_seq();
             ready.push(Ready {
+                seq,
                 tie,
                 proc: parent_aid,
                 block: resume_bb,
@@ -157,9 +162,11 @@ impl Scheduler<'_, '_> {
 }
 // ── helpers ──────────────────────────────────────────────────────────────
 
-/// Insert keeping sorted by `tie` (stable; equal ties keep insertion order).
+/// Insert keeping sorted by `(seq, tie)` — scheduling order first, then
+/// declaration order inside one wake group (`Ready::seq`). Stable: an entry
+/// with an equal key goes after the ones already queued.
 pub(crate) fn push_sorted(q: &mut Vec<Ready>, r: Ready) {
-    let pos = q.partition_point(|x| x.tie <= r.tie);
+    let pos = q.partition_point(|x| (x.seq, x.tie) <= (r.seq, r.tie));
     q.insert(pos, r);
 }
 

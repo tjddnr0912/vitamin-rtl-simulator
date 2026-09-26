@@ -9,8 +9,9 @@
 //! `#(0, F)` rise, `wire #0` and `buf #0` all lagged the same way. Both run loops now deliver
 //! the writes due at `now` at the `#0` promotion (`sched/run_loop.rs`, `native/run.rs`): before
 //! the promoted processes run, so a process resumed by its own `#0` reads the landed value;
-//! what the landing wakes and the promoted `#0` resumes are one Active batch in declaration
-//! order (IEEE 1800 §4.4.2.3 moves both kinds of Inactive event to Active together); a write
+//! what the landing wakes and the promoted `#0` resumes are one Active batch — the batch's
+//! wakes first, in declaration order, then the promoted `#0` resumes in the order the `#0`s
+//! were executed (IEEE 1800 §4.4.2.3 moves both kinds of Inactive event to Active together); a write
 //! the landing schedules for `now` waits for the next promotion (the next Inactive round).
 //!
 //! Time 0: before any process is armed a delayed write whose effective delay is zero lands
@@ -182,10 +183,11 @@ fn every_zero_delay_spelling_lands_at_the_promotion() {
 #[test]
 fn what_the_landing_wakes_runs_before_the_promotion() {
     check(&[
-        // The woken level waiter and the writer's `#0` continuation are one Active batch, in
-        // declaration order: the waiter declared first prints first (iverilog's order), the
-        // writer declared first reads the landed value before the waiter prints (iverilog prints
-        // the waiter first, verilator `B r=0` first — its second hop; a split). No `R 0 r=0`:
+        // The woken level waiter and the writer's `#0` continuation are one Active batch: the
+        // landing's wakes first, in declaration order, then the promoted `#0` resumes in the
+        // order their `#0` executed — so the waiter prints before `B` whichever is declared
+        // first (iverilog's order; verilator prints `B r=0` first — its second hop, the `#0`
+        // visibility split). No `R 0 r=0`:
         // `r` is a `#0` copy of an initialised `u` (iverilog; verilator runs every level waiter
         // once at time 0).
         (
@@ -201,7 +203,7 @@ fn what_the_landing_wakes_runs_before_the_promotion() {
              #1 $finish; end\n\
              always @(r) $display(\"R %0t r=%0d\", $time, r);\n\
              endmodule\n",
-            "A\nB r=1\nR 5 r=1\nC\n",
+            "A\nR 5 r=1\nB r=1\nC\n",
         ),
         // A posedge waiter and an NBA sampled before the landing (both oracles `h2 s=0 r=1`).
         (
@@ -329,13 +331,16 @@ fn the_runtime_lane_is_decided_after_the_initializers() {
         // `int dz = 0; assign #(dz) y = a;` with `reg a = 1`: `h0 y=1` (iverilog; verilator's
         // second hop), no posedge (iverilog; it is a copy of `a`). `int dv = 5; assign #(dv) z`
         // keeps its x phase to 5 and posedges there (iverilog `PZ 5`, both oracles `5 z=1`).
+        // Both oracles print the `#5` resume's `5 y=1 z=1` before `PZ 5`: the landing's wake
+        // runs behind the delay resume already due at 5 (verilator's time-0 lines differ on
+        // the value axis above).
         (
             "module t; int dz = 0; int dv = 5; reg a = 1; wire y, z; assign #(dz) y = a; assign #(dv) z = a;\n\
              always @(posedge y) $display(\"PY %0t\", $time);\n\
              always @(posedge z) $display(\"PZ %0t\", $time);\n\
              initial begin $display(\"h0 y=%b z=%b\", y, z); #0 $display(\"h1 y=%b z=%b\", y, z);\n\
              #0 $display(\"h2 y=%b z=%b\", y, z); #5 $display(\"5 y=%b z=%b\", y, z); #1 $finish; end endmodule\n",
-            "h0 y=1 z=x\nh1 y=1 z=x\nh2 y=1 z=x\nPZ 5\n5 y=1 z=1\n",
+            "h0 y=1 z=x\nh1 y=1 z=x\nh2 y=1 z=x\n5 y=1 z=1\nPZ 5\n",
         ),
         // A constant rhs under a variable delay: the delay is read AFTER `int dv = 5;` has run
         // (iverilog `z=x` to 5, then 1; verilator folds the constant to 1 from time 0 — a split;

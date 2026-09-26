@@ -34,8 +34,21 @@ pub(crate) use wait_fork::*;
 /// `tie` is the deterministic intra-region order key (doc-06 tie-break); for a
 /// top-level activity it equals the declaration index, for a fork child it is the
 /// composite of `(parent_tie, child_idx)` from [`compose_child_tie`].
+///
+/// `seq` is the SCHEDULING-ORDER key, and it sorts before `tie` ([`push_sorted`]
+/// orders by `(seq, tie)`). A resume event — a `#d` / `#0` resume
+/// (`schedule_resume`), a fork arm spawned now, a parent re-enqueued by its join
+/// or `wait fork` — takes its own number from [`Scheduler::take_seq`] when it is
+/// scheduled, so same-time resumes run in the order they were scheduled (both
+/// oracles, `cli/tests/same_time_resume_order.rs`). A wake group shares ONE
+/// number, so within the group `tie` (declaration order) decides: the time-0
+/// seeds, and every process woken between two batch takes (all propagate
+/// passes of one delta, including a continuous-assign hop and a `#0` landing)
+/// carry `Scheduler::wake_seq`. A `Ready` stored by value in `net_to_edge` or a
+/// `Waiter` carries a stale `seq`; the wake overwrites it and never reads it.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Ready {
+    pub seq: u64,
     pub tie: u32,
     pub proc: u32,
     pub block: u32,
@@ -259,10 +272,11 @@ struct Waiter {
     /// testbench — a clock generator declared FIRST and stimulus resuming from
     /// `#15` in the same time step: both oracles resume same-time processes in
     /// the order their delays were SCHEDULED (the stimulus first, so its wait
-    /// arms before the edge), vita in declaration order (the clock first) — and
-    /// the after-the-arm rule then shifted every such wait by a cycle (review
-    /// §4.5.537, `R 25 rst=0` for the oracles' `R 15`). The edge half waits for
-    /// the same-time resume order (ROADMAP §2 "Delays / events").
+    /// arms before the edge). vita resumed them in declaration order (the clock
+    /// first) when the after-the-arm rule was tried, and it shifted every such
+    /// wait by a cycle (review §4.5.537, `R 25 rst=0` for the oracles' `R 15`).
+    /// Same-time resumes now run in scheduling order (`Ready::seq`); the edge
+    /// half of the after-the-arm rule is not applied here.
     arm_seq: u64,
 }
 
@@ -290,6 +304,29 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// one-element allocation is made once and reused for the whole run.
     nba_scratch_lhs: Lvalue,
     nba_seq: u64,
+    /// The next scheduling-order number (`Ready::seq`), handed out by
+    /// [`Scheduler::take_seq`]. The tier-3 kernel draws from this same counter
+    /// through its `sched`, so both loops number one run's events alike.
+    next_seq: u64,
+    /// The current wake group's `seq`: every wake push (both propagate passes,
+    /// the tier-3 `propagate` / `fire_waiters`) carries it. Refreshed from
+    /// `take_seq` at three points only — after the time-0 seeding, at every
+    /// batch take, and at time advance right after `now` moves (before the
+    /// delayed-assign landing and the wheel drain) — so a `#0` resume promoted
+    /// in the same delta (its `seq` taken when the `#0` ran) sorts after that
+    /// delta's wakes, and a wake the advance-path landing causes sorts after
+    /// the tick's wheel resumes (scheduled earlier). Tier-3 reads it through
+    /// `sched`.
+    pub(crate) wake_seq: u64,
+    /// Resume events made runnable at `now` by the body that is running: fork
+    /// arms in arm order (`exec_fork`), and a parent resumed by its join or
+    /// `wait fork` (`on_child_complete`). The batch loop splices them in right
+    /// after that body yields, ahead of the rest of the batch and of the
+    /// post-batch wakes (both oracles: a parent runs past `join_none` first,
+    /// then its arms, then the next queued process; a joined parent runs before
+    /// the wake its last child's write caused). Made outside a batch, they move
+    /// into `cur.active` at the region cascade's top.
+    spawned: Vec<Ready>,
     /// The native-eval evaluation stacks, allocated once and reused for every program
     /// run (`NativeScratch`). Interior-mutable because `eval_native` is on the `&self`
     /// read path.
@@ -503,6 +540,21 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// set alongside `cur_aid`. Keys §16.4 deferred reports so a recycled `aid`
     /// cannot flush a completed prior instance's pending report.
     cur_gen: u32,
+}
+
+impl Scheduler<'_, '_> {
+    /// Hand out the next scheduling-order number (`Ready::seq`), post-increment.
+    /// Only the order of the numbers is observable, never their values.
+    pub(crate) fn take_seq(&mut self) -> u64 {
+        let s = self.next_seq;
+        self.next_seq += 1;
+        s
+    }
+
+    /// Start a new wake group (`wake_seq`).
+    pub(crate) fn refresh_wake_seq(&mut self) {
+        self.wake_seq = self.take_seq();
+    }
 }
 
 /// TEST-ONLY windows into scheduler state, for the tier-3 decision differential:

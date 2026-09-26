@@ -364,9 +364,12 @@ fn fork_does_not_disturb_toplevel_edge_process() {
     let (res, out) = simulate_capture(&ir, opts);
     assert_eq!(res.finish_reason, FinishReason::Finish);
     // The always-block (a top-level EDGE activity armed at t0 into net_to_edge)
-    // still fires on each posedge driven by the fork CHILDREN (clk 0→1 at t=1, 0→1
-    // at t=3) AFTER the fork appended child activities. Two posedges → ticks=2.
-    assert_eq!(out, "ticks=2\n");
+    // still fires on the posedge the fork CHILDREN drive at t=1 AFTER the fork
+    // appended child activities. At t=3 the last child's `clk=1` completes the join,
+    // and the parent runs right after that child yields — before the wake the write
+    // caused — so it prints ticks=1 (iverilog 13 and verilator 5.052 both print
+    // `ticks=1`).
+    assert_eq!(out, "ticks=1\n");
 }
 
 // ── FORK 15. background join_none child loops forever; parent $finish halts. ──

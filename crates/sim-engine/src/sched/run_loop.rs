@@ -53,6 +53,10 @@ impl Scheduler<'_, '_> {
             // Drain the current time to a stable point.
             self.delta_count = 0;
             loop {
+                // Fork arms spawned outside a batch join Active by their `seq`.
+                for r in std::mem::take(&mut self.spawned) {
+                    push_sorted(&mut self.cur.active, r);
+                }
                 // B1: a frame-call runaway latched during a prior region's eval
                 // (or the settle just below) surfaces here — every region action
                 // `continue`s back to this loop top, so one check covers them all.
@@ -93,7 +97,11 @@ impl Scheduler<'_, '_> {
                         }
                     };
                     t0_first_batch_done = true;
-                    for &r in &batch {
+                    self.refresh_wake_seq(); // wake-group refresh point (2): batch take
+                                             // Index-based: a body's `spawned` arms are spliced in after it.
+                    let mut i = 0;
+                    while i < batch.len() {
+                        let r = batch[i];
                         if self.st.finished {
                             return self.finish_kind();
                         }
@@ -173,6 +181,11 @@ impl Scheduler<'_, '_> {
                                 }
                             }
                         }
+                        if !self.spawned.is_empty() {
+                            let arms = std::mem::take(&mut self.spawned);
+                            batch.splice(i + 1..i + 1, arms);
+                        }
+                        i += 1;
                     }
                     // Recycle the drained batch Vec when no process was woken
                     // mid-batch (the overwhelmingly common case).
@@ -198,7 +211,10 @@ impl Scheduler<'_, '_> {
                 // saw it, `$strobe` read the old value, a runtime delay of 0
                 // and the zero side of `#(0, F)` lagged the same way. What the
                 // landing wakes and the promoted `#0` resumes are ONE Active
-                // batch, in declaration order (the LRM moves both kinds of
+                // batch, in scheduling order (`Ready::seq`): the landing's wakes
+                // carry the delta's `wake_seq`, taken at the batch take, so they
+                // run first, then the `#0` resumes in the order their `#0`
+                // executed (the LRM moves both kinds of
                 // Inactive event to Active together; running the wakes alone
                 // first starved a `#0 s = 0` behind an oscillating `#0`
                 // driver, review r1 soundness q5d). A write the landing's
@@ -375,7 +391,8 @@ impl Scheduler<'_, '_> {
                 }
             }
             self.st.now = next;
-            // GATED-CLOCK: a new timestep is a fresh edge-collapse cluster.
+            self.refresh_wake_seq(); // wake-group refresh point (3): time advance
+                                     // GATED-CLOCK: a new timestep is a fresh edge-collapse cluster.
             self.reset_edge_seen_marks();
             // N4 clocking: take the PREPONED snapshot of clocking inputs at the
             // START of the new time slot (before any slot activity — the true
@@ -413,6 +430,8 @@ impl Scheduler<'_, '_> {
             // seq sort in `apply_nba` interleaves them with NBAs scheduled
             // during the tick in original statement order.
             self.take_due_delayed(next);
+            // Each entry carries the `seq` taken when it was scheduled: the
+            // bucket drains in scheduling order (FIFO), as in both oracles.
             let mut events = self.wheel.remove(&next).unwrap_or_default();
             for (region, ready) in events.drain(..) {
                 match region {

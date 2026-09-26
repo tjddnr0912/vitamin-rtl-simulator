@@ -47,6 +47,9 @@ impl Scheduler<'_, '_> {
             self.scratch_changed = changed_nets;
             return;
         }
+        // Every process this pass wakes (static edge pass (a), waiter pass (b))
+        // carries the current batch's wake group `seq` (`Scheduler::wake_seq`).
+        let gseq = self.wake_seq;
 
         // Precompute the per-net intra-slot edge mask for each changed net. The
         // mask (`slot_edge`) is maintained by the write funnel for every
@@ -80,7 +83,7 @@ impl Scheduler<'_, '_> {
             // delta — the body only pushes into `cur.active`, never mutates
             // `net_to_edge`, so the indexed re-borrow is sound.
             for k in 0..self.net_to_edge[net as usize].len() {
-                let (kind, ready) = self.net_to_edge[net as usize][k];
+                let (kind, mut ready) = self.net_to_edge[net as usize][k];
                 // Skip a process that is still SUSPENDED MID-BODY: its static
                 // edge entry is permanent (never deregistered), but IEEE does
                 // not re-enter an `always` until it completes and re-arms. Its
@@ -112,6 +115,7 @@ impl Scheduler<'_, '_> {
                     }
                     edge_seen[p] = true;
                     edge_marked.push(ready.proc);
+                    ready.seq = gseq;
                     push_sorted(&mut self.cur.active, ready);
                 }
             }
@@ -210,7 +214,8 @@ impl Scheduler<'_, '_> {
         });
         self.n_expr_waiters -= removed_expr;
         self.n_level_waiters -= removed_level;
-        for r in woken {
+        for mut r in woken {
+            r.seq = gseq;
             push_sorted(&mut self.cur.active, r);
         }
 
@@ -508,10 +513,17 @@ impl Scheduler<'_, '_> {
     }
 
     pub(crate) fn schedule_resume(&mut self, proc: u32, block: u32, tick: u64, inactive: bool) {
-        // `proc` is an activity id; read its deterministic tie (NOT the id) so two
-        // sibling children land in distinct-tie wheel slots in declaration order.
+        // `proc` is an activity id; read its deterministic tie (NOT the id). The
+        // `seq` is taken HERE, when the resume is scheduled, so a wheel bucket and
+        // the Inactive queue drain in scheduling order (FIFO) through `push_sorted`.
         let tie = self.activities[proc as usize].tie;
-        let ready = Ready { tie, proc, block };
+        let seq = self.take_seq();
+        let ready = Ready {
+            seq,
+            tie,
+            proc,
+            block,
+        };
         if tick == self.st.now {
             if inactive {
                 push_sorted(&mut self.cur.inactive, ready);
@@ -549,7 +561,13 @@ impl Scheduler<'_, '_> {
         // `proc` is an activity id; carry its distinct tie so two siblings waiting
         // on the same event are distinguishable (neither lost nor double-counted).
         let tie = self.activities[proc as usize].tie;
-        let ready = Ready { tie, proc, block };
+        // Stored by value: `seq` is overwritten when the waiter fires.
+        let ready = Ready {
+            seq: 0,
+            tie,
+            proc,
+            block,
+        };
         // CHANGE SEQUENCE: a level wait fires on a change stamped after this
         // point, not on one already applied this delta before it armed.
         let arm_seq = self.st.change_seq.get();
@@ -747,7 +765,8 @@ impl Scheduler<'_, '_> {
     /// and either suspend the parent (All/Any with ≥1 child) or fall through to
     /// `resume_bb` (None, or zero children). Returns `Some(resume_bb)` when the
     /// parent continues THIS activation (the executor sets `bb = resume_bb`), or
-    /// `None` when the parent suspends on the barrier.
+    /// `None` when the parent suspends on the barrier. The arms go to `spawned`, in
+    /// arm order: the run loop runs them right after the forking body yields.
     pub(crate) fn exec_fork(
         &mut self,
         parent_aid: u32,
@@ -757,9 +776,7 @@ impl Scheduler<'_, '_> {
     ) -> Option<u32> {
         let mut ready = Vec::new();
         let r = self.exec_fork_into(parent_aid, children, join, resume_bb, &mut ready);
-        for e in ready {
-            crate::sched::push_sorted(&mut self.cur.active, e);
-        }
+        self.spawned.append(&mut ready);
         r
     }
 
@@ -942,9 +959,11 @@ impl Scheduler<'_, '_> {
                     (self.activities.len() - 1) as u32
                 }
             };
-            // Make the child runnable NOW (same instant, Active region); push_sorted
-            // by the composed tie keeps siblings in declaration order.
+            // Make the child runnable NOW (same instant, Active region). Each arm
+            // is a resume event with its own `seq`, taken in arm order.
+            let seq = self.take_seq();
             ready.push(Ready {
+                seq,
                 tie: child_tie,
                 proc: child_aid,
                 block: child_entry,
