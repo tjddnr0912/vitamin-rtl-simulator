@@ -71,13 +71,22 @@ fn real_to_int_rounds_half_away_from_zero_into_a_signed_128_bit_integer() {
 
 #[test]
 fn real_to_int_out_of_range_matches_the_net_store() {
-    // At and beyond 2^127 the conversion saturates to the i128 extremes, exactly
-    // as `real_to_int_round` does at a 128-bit net store — so a converted operand
-    // and a stored one cannot disagree.
-    for x in [1e40, -1e40, f64::INFINITY, f64::NEG_INFINITY] {
+    // At and beyond 2^127 the conversion is the LOW 128 BITS of the exact rounded
+    // integer (it used to saturate to the i128 extremes), exactly as
+    // `real_to_int_round` stores at a 128-bit net — so a converted operand and a
+    // stored one cannot disagree. ±inf and NaN are 0.
+    for (x, want) in [
+        (1e40, 0x6329f1c35ca500000000000000000000u128 as i128),
+        (-1e40, 0x9cd60e3ca35b00000000000000000000u128 as i128),
+        (3e38, 0xe1b1e5f90f9450000000000000000000u128 as i128),
+        (170141183460469231731687303715884105728.0, i128::MIN),
+        (f64::INFINITY, 0),
+        (f64::NEG_INFINITY, 0),
+        (f64::NAN, 0),
+    ] {
         let v = rti(x);
         assert_eq!(v, crate::value::real_to_int_round(x, 128, true), "{x}");
-        let want = if x > 0.0 { i128::MAX } else { i128::MIN };
+        assert!(!v.has_xz(), "{x}: never unknown");
         assert_eq!(v.to_i128_signed(), Some(want), "{x}");
     }
 }

@@ -416,9 +416,11 @@ pub enum SysFuncId {
     /// real → integral ASSIGNMENT conversion (IEEE 1800 §6.12.2 / 1364 §6.2):
     /// round half away from zero, delivered as a 128-bit SIGNED integer (two's
     /// complement) — the engine's `real_to_int_round(x, 128, true)`, the rule the
-    /// net store applies. Exact for |x| < 2^127; beyond that it saturates to the
-    /// i128 extremes; NaN is 0. The consumer narrows or extends it to its own
-    /// width, so every integral target up to 128 bits holds the exact value.
+    /// net store applies: the LOW 128 BITS of the exact rounded integer (a
+    /// finite f64 is an integer `m · 2^e` once rounded); ±inf and NaN are 0. The
+    /// consumer narrows or extends it to its own width, so every integral target
+    /// up to 128 bits holds the exact value; a wider target sign-extends the
+    /// 128-bit image, which is exact only for |x| < 2^127.
     ///
     /// It exists because it names its operand ONCE. The IR-0 composition
     /// elaborate builds for `int'(r)` names the operand 2 to 5 times, so an

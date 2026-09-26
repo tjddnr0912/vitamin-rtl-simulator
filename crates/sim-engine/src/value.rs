@@ -944,13 +944,58 @@ impl Value {
     }
 }
 
-/// real → int assignment coercion: ROUND half-away-from-zero, then build an
-/// integer Value masked to the target width. Saturation/NaN handling: large |x|
-/// saturates to i128 extremes; NaN.round() as i128 == 0.
+/// real → int assignment coercion (IEEE 1800 §6.12.2): ROUND half-away-from-zero,
+/// then the low `width` bits of the rounded integer's two's-complement image —
+/// EXACT for every finite f64, at every width.
+///
+/// It used to be `r as i128`, which SATURATES at |x| ≥ 2^127: `real rv = 1.0e40;
+/// byte b = rv;` stored `ff` (both oracles `00` — the low 8 bits of 10^40 are
+/// zero), `int'(rv)` was `ffffffff` against `00000000`, and a `[191:0]` target
+/// held `…7fff…` where both oracles hold the exact `…1d6329f1c35ca5000…`. A
+/// rounded f64 that large is an integer `m · 2^e` with a 53-bit `m`, so its bit
+/// image is one shifted word pair, negated in two's complement for a negative
+/// value (`-1.0e40` into `[191:0]` is `ffff…e29cd60e3ca35b000…` in both oracles).
+///
+/// ±inf and NaN have no integer. verilator stores 0 and iverilog stores all-x
+/// (an oracle split, ROADMAP §2); this stores 0, which keeps the `RealToInt`
+/// node's "never unknown" premise that elaborate's `expr_may_be_unknown` rests
+/// on.
 pub(crate) fn real_to_int_round(x: f64, width: u32, signed: bool) -> Value {
+    let width = width.max(1);
+    if !x.is_finite() {
+        return Value::zeros(width, signed);
+    }
     let r = x.round(); // Rust f64::round = round-half-away-from-zero
-    let i = r as i128; // large |x| SATURATES to i128 extremes; NaN → 0
-    Value::from_i128(i, width, signed)
+    if r.abs() < 170141183460469231731687303715884105728.0 {
+        // |r| < 2^127: the i128 image is exact.
+        return Value::from_i128(r as i128, width, signed);
+    }
+    // |r| ≥ 2^127: `r = ±m · 2^e` with the hidden bit in `m` and `e ≥ 75`, so the
+    // magnitude is `m` placed at bit `e` — no fraction, no rounding left to do.
+    let bits = r.to_bits();
+    let neg = (bits >> 63) == 1;
+    let e = ((bits >> 52) & 0x7ff) as u32 - 1075;
+    let m = (bits & ((1u64 << 52) - 1)) | (1u64 << 52);
+    let mut v = Value::zeros(width, signed);
+    let words = v.val.len();
+    let (wi, sh) = ((e / 64) as usize, e % 64);
+    if wi < words {
+        v.val[wi] |= m << sh;
+    }
+    if sh != 0 && wi + 1 < words {
+        v.val[wi + 1] |= m >> (64 - sh);
+    }
+    if neg {
+        // Two's complement at `width`: invert every word and add one with carry.
+        let mut carry = true;
+        for w in 0..words {
+            let (s, c) = (!v.val[w]).overflowing_add(carry as u64);
+            v.val[w] = s;
+            carry = c;
+        }
+    }
+    v.mask_top();
+    v
 }
 
 /// The net a WHOLE-NET lvalue names, or `None` when the destination is a

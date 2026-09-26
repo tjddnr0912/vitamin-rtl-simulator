@@ -11,7 +11,10 @@ impl Elaborator<'_> {
     /// wider than 128 bits is reached through `RealToInt + <w-bit signed 0>`: the
     /// add is context-determined at `w` with both operands signed, so the engine
     /// sign-extends the converted value with a single evaluation, where
-    /// `extend_to`'s fill bit would name it a second time.
+    /// `extend_to`'s fill bit would name it a second time. That extension is
+    /// exact for |x| < 2^127 only — the node is the LOW 128 bits of the rounded
+    /// integer, and a wider formal bound to a larger non-repeatable real keeps
+    /// the sign-extended low image (ROADMAP §2).
     pub(crate) fn real_to_int_store(&mut self, e: u32, w: u32, signed: bool) -> u32 {
         let rti = self.push_expr(ir::Expr::SysFunc {
             which: ir::SysFuncId::RealToInt,

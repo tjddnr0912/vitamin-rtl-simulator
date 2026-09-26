@@ -992,6 +992,17 @@ pub(crate) fn copy_alias(ir: &SimIr, two_state: &[bool]) -> (Vec<u32>, Vec<u32>)
             continue;
         }
         let root = alias[*src as usize];
+        // A REAL root is not a second name for an integral copy: the store
+        // converts (`coerce_assign`'s round arm), so a read redirected to the
+        // root would hand back the IEEE-754 word. Measured: `real rv = 300.0;
+        // wire [63:0] cw = rv;` with a later `rv = -2.5;` in the design read
+        // `cw` as `4072c00000000000` where both oracles read `12c` (the
+        // width-changing `[31:0]` twin, not a copy, was right; without the
+        // procedural write the repair lane answered and it was right too). The
+        // copy stays in `copy_nets` and rides the repair, as its doc says.
+        if matches!(ir.nets[root as usize].kind, sim_ir::NetKind::Real) {
+            continue;
+        }
         alias[cn.dst as usize] = root;
         // An array word's index is validated by `copied_source` (constant, in
         // range); an array net is never itself a copy, so the chain's word is

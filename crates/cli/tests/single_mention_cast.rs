@@ -227,18 +227,19 @@ endmodule
     );
 }
 
-/// ⚠️ PRE-identical and WRONG (ROADMAP §2 Real row): a >32-bit target of a
-/// non-repeatable real keeps the multi-mention composition, because `RealToInt`
-/// saturates at |x| ≥ 2^127 where the composition answers 0 like both oracles.
-/// Both oracles call `rf` once and print `longint'($random*1.0)=0000000012153524
-/// next=c0895e81` (iverilog; verilator's stream differs). The values below are
-/// vita's, unchanged by this change: 24 calls, and a value built from several
-/// draws.
+/// A >32-bit target of a non-repeatable real takes `RealToInt` too, since the
+/// engine's conversion is the exact low 128 bits of the rounded integer (it used
+/// to saturate at |x| ≥ 2^127, so this width kept a multi-mention composition:
+/// 24 `rf` calls, and `longint'($random*1.0)=ffffffff06d7cd0d next=47ecdb8f`
+/// built from several draws). Both oracles call `rf` once; the `$random` line is
+/// iverilog's stream (verilator's differs).
 #[test]
-fn a_wide_real_cast_of_a_call_keeps_the_composition() {
-    let mut want: Vec<&str> = vec!["rf"; 24];
-    want.push("longint'(rf)=fffffffffffffed3");
-    want.push("longint'($random*1.0)=ffffffff06d7cd0d next=47ecdb8f");
+fn a_wide_real_cast_of_a_call_is_named_once() {
+    let want: Vec<&str> = vec![
+        "rf",
+        "longint'(rf)=fffffffffffffed3",
+        "longint'($random*1.0)=0000000012153524 next=c0895e81",
+    ];
     check(
         r#"module top;
   function real rf(); $display("rf"); return -300.7; endfunction
@@ -637,12 +638,12 @@ endmodule
     );
 }
 
-/// Real → integral casts out of range. `longint'(fr(1e40))` is 0 for both
-/// oracles; `RealToInt` saturates at |x| ≥ 2^127 and printed `ffffffffffffffff`
-/// in a first cut, so a wider-than-32-bit target of a non-repeatable real keeps
-/// the multi-mention composition. ⚠️ The `int'` lines are PRE-identical and
-/// WRONG: both oracles print `00000000`, vita `ffffffff`, repeatable operand or
-/// not (ROADMAP §2 Real row).
+/// Real → integral casts out of range: every lane is the exact low bits of the
+/// rounded integer, like both oracles (`int'(1e40)` is `00000000`). The `int'`
+/// lines were `ffffffff` — `RealToInt` saturated at |x| ≥ 2^127 and the
+/// repeatable spelling's composition rounded through `$rtoi`, which saturates
+/// the same way — and the wide non-repeatable target kept a multi-mention
+/// composition for it (ROADMAP §2 Real row, closed).
 #[test]
 fn an_out_of_range_real_converts_like_the_repeatable_spelling() {
     check(
@@ -662,9 +663,9 @@ endmodule
 "#,
         &[
             "longint'(fr(1e40))=0000000000000000",
-            "int'(fr(1e40))=ffffffff",
+            "int'(fr(1e40))=00000000",
             "longint'(r)=0000000000000000",
-            "int'(r)=ffffffff",
+            "int'(r)=00000000",
             "longint'(fr(-300.7))=fffffffffffffed3",
         ],
     );
