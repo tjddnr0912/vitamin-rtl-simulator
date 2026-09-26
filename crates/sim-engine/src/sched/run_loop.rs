@@ -529,33 +529,62 @@ impl Scheduler<'_, '_> {
             return true; // marker is a no-op (suppressed empty $display)
         }
         if let Some(&(marker, region)) = self.st.defer_acts.get(&sid) {
-            // §16.4.3: render the action text NOW, at reach (sampling reach-time
-            // arg values / `$time` / `%m`). A severity task renders with no
-            // default radix (matching `run_severity_with`); a plain print uses its
-            // b/o/h radix.
-            let radix = if self.st.severities.contains_key(&sid) {
-                None
-            } else {
-                self.st.radixes.get(&sid).copied()
-            };
-            let message = match nets {
-                Some(n) => crate::builtins::format_args_str_with(&*self.st, n, fmt, args, radix),
-                None => crate::builtins::format_args_str(&*self.st, fmt, args, radix),
-            };
+            // Elaborate records only the tasks a report can carry (a print, a
+            // file print, `$finish`, `$stop`); every other action runs when
+            // reached. A terminating task is a CONTROL at maturation and renders
+            // no text — its argument is a diagnostic level, not a value to print.
+            let (fd, message) =
+                if matches!(which, sim_ir::SysTaskId::Finish | sim_ir::SysTaskId::Stop) {
+                    (None, String::new())
+                } else {
+                    // A file-directed print consumes `args[0]` as its descriptor,
+                    // read NOW like the text (the inline arms read it the same way).
+                    let file_directed = matches!(
+                        which,
+                        sim_ir::SysTaskId::Fdisplay | sim_ir::SysTaskId::Fwrite
+                    ) || self.st.file_directed_stmts.contains(&sid);
+                    let (fd, args) = if file_directed {
+                        let fd = args
+                            .first()
+                            .map(|&a| crate::builtins::eval_task_arg(&*self, nets, a))
+                            .filter(|v| !v.has_xz())
+                            .and_then(|v| v.to_u64())
+                            .map(|v| v as u32);
+                        (Some(fd.unwrap_or(u32::MAX)), args.get(1..).unwrap_or(&[]))
+                    } else {
+                        (None, args)
+                    };
+                    // §16.4.3: render the action text NOW, at reach (sampling
+                    // reach-time arg values / `$time` / `%m`). A severity task
+                    // renders with no default radix (matching `run_severity_with`); a
+                    // plain print uses its b/o/h radix.
+                    let radix = if self.st.severities.contains_key(&sid) {
+                        None
+                    } else {
+                        self.st.radixes.get(&sid).copied()
+                    };
+                    let message = match nets {
+                        Some(n) => {
+                            crate::builtins::format_args_str_with(&*self.st, n, fmt, args, radix)
+                        }
+                        None => crate::builtins::format_args_str(&*self.st, fmt, args, radix),
+                    };
+                    (fd, message)
+                };
             let report = crate::state::DeferredReport {
                 action_sid: sid,
                 which,
                 message,
+                fd,
             };
+            // Every action the taken arm reaches joins the one pending entry, in
+            // reach order; the marker cleared it when the assertion was reached.
             let key = (marker, self.cur_aid, self.cur_gen);
-            match region {
-                DeferRegion::Observed => {
-                    self.st.postponed.deferred_observed.insert(key, report);
-                }
-                DeferRegion::Reactive => {
-                    self.st.postponed.deferred_reactive.insert(key, report);
-                }
-            }
+            let queue = match region {
+                DeferRegion::Observed => &mut self.st.postponed.deferred_observed,
+                DeferRegion::Reactive => &mut self.st.postponed.deferred_reactive,
+            };
+            queue.entry(key).or_default().push(report);
             return true;
         }
         false
@@ -564,8 +593,16 @@ impl Scheduler<'_, '_> {
     /// §16.4: drain ONE deferred-assert maturation queue, emitting each surviving
     /// pending report (text already rendered at reach). A severity action routes
     /// to the diagnostic stream + exit class ($fatal aborts); a plain print goes
-    /// to stdout. Deterministic `(marker, aid, gen)` BTreeMap order. Returns
-    /// `Some(step)` if a deferred `$fatal` matured.
+    /// to stdout, a file print to its descriptor. Deterministic `(marker, aid,
+    /// gen)` BTreeMap order, reach order within one entry.
+    ///
+    /// A matured `$finish` is a `$finish` reached in this time step: it latches
+    /// `finish_pending` and the run ends at the step's stable point, where the
+    /// engine ends every `$finish` (the rest of this queue and the Reactive one
+    /// still mature). A matured `$stop` ends the run like an inline `$stop`, which
+    /// first matures the step's pending reports — so this queue keeps draining
+    /// and an Observed `$stop` also drains the Reactive queue. Returns
+    /// `Some(step)` when a deferred `$fatal` or `$stop` matured.
     pub(crate) fn mature_deferred(&mut self, region: DeferRegion) -> Option<Step> {
         let map = match region {
             DeferRegion::Observed => std::mem::take(&mut self.st.postponed.deferred_observed),
@@ -575,33 +612,53 @@ impl Scheduler<'_, '_> {
             return None;
         }
         let mut term: Option<Step> = None;
-        for (_key, rpt) in map {
+        'reports: for rpt in map.into_values().flatten() {
             if let Some(sev) = self.st.severities.get(&rpt.action_sid).copied() {
-                match crate::builtins::emit_severity_message(self, sev, rpt.message, rpt.action_sid)
-                {
+                let ctl =
+                    crate::builtins::emit_severity_message(self, sev, rpt.message, rpt.action_sid);
+                if term.is_some() {
+                    continue; // already stopping: the drain ignores a later control
+                }
+                match ctl {
                     crate::builtins::Ctl::Fatal => {
                         term = Some(Step::Fatal);
-                        break;
+                        break 'reports;
                     }
                     crate::builtins::Ctl::Finish => {
                         term = Some(Step::Finish);
-                        break;
+                        break 'reports;
                     }
                     crate::builtins::Ctl::Stop => {
                         term = Some(Step::Stop);
-                        break;
+                        break 'reports;
                     }
                     crate::builtins::Ctl::Continue => {}
                 }
-            } else {
-                // Plain $display/$write deferred action: stdout, newline for the
-                // Display family ($write keeps none).
-                let mut line = rpt.message;
-                if !matches!(rpt.which, sim_ir::SysTaskId::Write) {
-                    line.push('\n');
-                }
-                write_out(self.st, &line);
+                continue;
             }
+            match rpt.which {
+                sim_ir::SysTaskId::Finish => self.finish_pending = true,
+                sim_ir::SysTaskId::Stop => {
+                    if term.is_none() {
+                        term = Some(Step::Stop);
+                    }
+                }
+                which => {
+                    // A print: newline for the display family and `$strobe`
+                    // (`$write`/`$fwrite` keep none), to stdout or the descriptor.
+                    let mut line = rpt.message;
+                    if !matches!(which, sim_ir::SysTaskId::Write | sim_ir::SysTaskId::Fwrite) {
+                        line.push('\n');
+                    }
+                    match rpt.fd {
+                        Some(fd) => crate::builtins::file_write(self, fd, &line),
+                        None => write_out(self.st, &line),
+                    }
+                }
+            }
+        }
+        if matches!(term, Some(Step::Stop)) && matches!(region, DeferRegion::Observed) {
+            let _ = self.mature_deferred(DeferRegion::Reactive);
         }
         term
     }

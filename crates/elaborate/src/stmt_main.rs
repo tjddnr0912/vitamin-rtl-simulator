@@ -11,7 +11,21 @@ impl Elaborator<'_> {
         // any expression inside it) to the statement's own source position. Restored on
         // the way out, so the enclosing construct keeps its own anchor.
         let saved_span = self.cur_span.replace(s.span());
+        // §16.4: a user task (or void function) called as a deferred assertion's
+        // action runs when reached, as a whole; the statements of its body are not
+        // the assertion's report. Without this an INLINED body's system tasks were
+        // captured one by one and its assignments ran at once.
+        let saved_defer = match s {
+            ast::Stmt::UserTaskCall { .. } => self.cur_defer.take(),
+            _ => None,
+        };
+        if saved_defer.is_some() {
+            self.warn_deferred_inline();
+        }
         self.lower_stmt_inner(b, s);
+        if saved_defer.is_some() {
+            self.cur_defer = saved_defer;
+        }
         self.cur_span = saved_span;
     }
 
@@ -728,15 +742,13 @@ impl Elaborator<'_> {
                 self.lower_stmt(b, else_s);
                 b.goto(merge);
                 self.cur_defer = outer;
+                let ran_inline = self.prune_deferred_actions(marker);
                 b.start_block(merge);
-                // (3) Neither arm produced a deferrable action ⇒ it ran inline
-                //     (evaluate-when-reached): a documented hand-IEEE corner.
-                if self.defer_acts.len() == n_before && !self.defer_inline_warned {
-                    self.defer_inline_warned = true;
-                    self.warn(
-                        "a deferred assertion's action contains no $display/$error-class \
-                         statement; it executes inline (evaluate-when-reached), not deferred",
-                    );
+                // (3) An action that is not a report — a user task call, a queue
+                //     method, `$sformat`, … — or an arm with no report at all runs
+                //     inline (evaluate-when-reached): a documented hand-IEEE corner.
+                if ran_inline > 0 || self.defer_acts.len() == n_before {
+                    self.warn_deferred_inline();
                 }
             }
 

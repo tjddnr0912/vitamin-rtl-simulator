@@ -129,15 +129,21 @@ pub(crate) struct MonitorState {
 /// deferred assert matures in the SAME time slot, and the registering scope for
 /// `%m`.) `action_sid` re-keys the `severities` table at maturation so the text
 /// routes correctly — `$error`→diagnostic stream + exit class, `$fatal`→abort, a
-/// plain `$display`→stdout.
+/// plain `$display`→stdout, a `$fdisplay`/`$fwrite`/`$fstrobe`→its descriptor.
+/// A `$finish`/`$stop` carries no text: it is a CONTROL at maturation.
 #[derive(Clone)]
 pub(crate) struct DeferredReport {
     /// StmtId of the action SysTask — re-keys `severities` at maturation.
     pub action_sid: u32,
-    /// The action's `SysTaskId` (governs the stdout newline for non-severity tasks).
+    /// The action's `SysTaskId`: the newline for a print, the control for
+    /// `$finish`/`$stop`.
     pub which: sim_ir::SysTaskId,
     /// The action text, fully rendered at REACH (reach-time arg values).
     pub message: String,
+    /// The descriptor of a file-directed print, read at REACH like the text
+    /// (`u32::MAX` = unusable, warned at maturation as the inline arm warns).
+    /// `None` = stdout.
+    pub fd: Option<u32>,
 }
 
 /// Per-timestep postponed-region queue + the global monitor singleton + the
@@ -176,12 +182,13 @@ pub(crate) struct Postponed {
     pub monitor_disabled: bool,
     /// `assert #0` pending reports, keyed by `(marker StmtId, activity id,
     /// generation)` so a re-reach of the SAME assertion instance REPLACES its
-    /// prior report (flush-on-re-reach). Drained at the Observed region each
+    /// prior reports (flush-on-re-reach). One entry holds every action task the
+    /// taken arm reached, in reach order. Drained at the Observed region each
     /// settled timestep.
-    pub deferred_observed: std::collections::BTreeMap<(u32, u32, u32), DeferredReport>,
+    pub deferred_observed: std::collections::BTreeMap<(u32, u32, u32), Vec<DeferredReport>>,
     /// `assert final` pending reports — same keying; drained at the Reactive
     /// region, after Observed and before Postponed (IEEE 1800 §4.4 order).
-    pub deferred_reactive: std::collections::BTreeMap<(u32, u32, u32), DeferredReport>,
+    pub deferred_reactive: std::collections::BTreeMap<(u32, u32, u32), Vec<DeferredReport>>,
 }
 
 /// Per-fd read bookkeeping (v9 SYS-READ): the lazy end-of-file flag and the

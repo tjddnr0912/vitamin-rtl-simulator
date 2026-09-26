@@ -72,6 +72,64 @@ impl Elaborator<'_> {
         );
     }
 
+    /// §16.4: after a deferred assertion's arms are lowered, keep in `defer_acts`
+    /// only the actions a pending report can carry — a print (the `$display` /
+    /// `$write` families, `$strobe`, a severity task), a file print (`$fdisplay`,
+    /// `$fwrite`, `$fstrobe`: descriptor and text read at reach) and `$finish` /
+    /// `$stop` (a control at maturation). Every other system task — a queue or
+    /// array method, `$sformat`, `$readmem*`, `$cast`, `new[]`, `$monitor`, the
+    /// no-op `Display` of a side table — runs when reached, as a user task call
+    /// does: a report would print its arguments and drop its effect.
+    /// Returns how many captured actions were dropped (they run when reached).
+    pub(crate) fn prune_deferred_actions(&mut self, marker: u32) -> usize {
+        let drop: Vec<u32> = self
+            .defer_acts
+            .iter()
+            .filter(|&(_, &(m, _))| m == marker)
+            .map(|(&sid, _)| sid)
+            .filter(|&sid| !self.is_reportable_action(sid))
+            .collect();
+        for sid in &drop {
+            self.defer_acts.remove(sid);
+        }
+        drop.len()
+    }
+
+    /// W3056, once per design: part of a deferred assertion's action runs when
+    /// reached instead of when the report matures.
+    pub(crate) fn warn_deferred_inline(&mut self) {
+        if !self.defer_inline_warned {
+            self.defer_inline_warned = true;
+            self.warn(
+                "a deferred assertion's action holds a statement other than a print, \
+                 a file print, $finish or $stop; it executes inline \
+                 (evaluate-when-reached), not deferred",
+            );
+        }
+    }
+
+    fn is_reportable_action(&self, sid: u32) -> bool {
+        let Some(ir::Stmt::SysTask { which, .. }) = self.stmts.get(sid as usize) else {
+            return false;
+        };
+        match which {
+            ir::SysTaskId::Display => {
+                !(self.assert_ctl.contains_key(&sid)
+                    || self.handle_copy_stmts.contains_key(&sid)
+                    || self.queue_slice_stmts.contains(&sid)
+                    || self.timeformat_stmts.contains(&sid)
+                    || self.stage_stmts.contains(&sid))
+            }
+            ir::SysTaskId::Write
+            | ir::SysTaskId::Strobe
+            | ir::SysTaskId::Fdisplay
+            | ir::SysTaskId::Fwrite
+            | ir::SysTaskId::Finish
+            | ir::SysTaskId::Stop => true,
+            _ => false,
+        }
+    }
+
     /// THE deterministic stmt append point (mirror of [`Self::push_expr`]).
     #[inline]
     pub(crate) fn push_stmt(&mut self, s: ir::Stmt) -> u32 {
