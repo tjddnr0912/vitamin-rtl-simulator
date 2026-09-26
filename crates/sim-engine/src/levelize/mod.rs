@@ -389,7 +389,47 @@ fn expr_is_pure_of_nets(ir: &SimIr, eid: u32, fdeps: &[Option<BTreeSet<u32>>]) -
             fdeps.get(*func as usize).is_some_and(Option::is_some)
                 && args.iter().all(|&a| expr_is_pure_of_nets(ir, a))
         }
-        E::SysFunc { .. } | E::ArrayItem { .. } => false,
+        E::SysFunc { which, args } => {
+            sysfunc_is_eval_count_free(*which, args.len())
+                && args.iter().all(|&a| expr_is_pure_of_nets(ir, a))
+        }
+        E::ArrayItem { .. } => false,
+    }
+}
+
+/// A system function that contributes NO dependency of its own to a continuous assign:
+/// evaluating it more or fewer times leaves no state another evaluation could read.
+///
+/// * `$time` / `$stime` / `$realtime` (no arguments). §10.3.2 re-evaluates a continuous
+///   assignment when an OPERAND changes value; the time these read is not an operand and
+///   advancing it is no event. So certifying them is not the "recomputes its previous
+///   value" argument the rest of [`ca_deps`] rests on — it is the language rule: the
+///   assign runs at the settle seed and again when a real operand moves, reading the time
+///   of THAT moment. Refusing them put the assign in `ca_always`, re-run on every settle:
+///   `wire [31:0] w1 = int'($realtime * 1.5);` read `00000002` at 1 and `0000000f` at 10
+///   where both oracles keep the time-0 `00000000`, and `wire [63:0] w = $time + a;` with
+///   `a` changing once at 4 read the time at every step where iverilog reads 0, then 5.
+/// * the one-operand conversions (`$signed`, `$unsigned`, `$rtoi`, `$itor`,
+///   `$realtobits`, `$bitstoreal`, and the `RealToInt` / `TwoState` store conversions):
+///   deterministic in their operand, so the usual argument holds. They are here because
+///   `int'(r)` lowers to `RealToInt`, and without them the time rule above never reached
+///   the row's own cells.
+///
+/// Everything else stays refused: `$random` / `$urandom` advance a seed, the file readers
+/// a position, the heap queries read contents no `note_change` reports.
+pub(crate) fn sysfunc_is_eval_count_free(which: sim_ir::SysFuncId, nargs: usize) -> bool {
+    use sim_ir::SysFuncId as F;
+    match which {
+        F::Time | F::Stime | F::Realtime => nargs == 0,
+        F::Signed
+        | F::Unsigned
+        | F::Rtoi
+        | F::Itor
+        | F::RealToBits
+        | F::BitsToReal
+        | F::RealToInt
+        | F::TwoState => nargs == 1,
+        _ => false,
     }
 }
 

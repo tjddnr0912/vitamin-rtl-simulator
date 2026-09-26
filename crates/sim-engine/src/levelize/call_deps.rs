@@ -44,7 +44,8 @@ use std::collections::BTreeMap;
 ///   `goto`/branch/return;
 /// * a `SysFunc` anywhere in the body — `$random` advances a seed other readers draw
 ///   from and `$fgetc` advances a file position, neither of which is a net, so changing
-///   how many times the body runs changes values this set cannot mention;
+///   how many times the body runs changes values this set cannot mention — except the
+///   time reads and operand conversions `super::sysfunc_is_eval_count_free` admits;
 /// * a read of a HEAP handle net, whose contents move while the handle does not — the
 ///   condition `ca_deps` already applies to its own directly-read nets;
 /// * a read or a write of a net in ANOTHER function's frame window, whose lifetime is a
@@ -563,7 +564,14 @@ fn expr_func_reads(
             callees.insert(*func);
             args.iter().all(|&a| go(a, reads, callees))
         }
-        E::SysFunc { .. } | E::ArrayItem { .. } => false,
+        // A time read or an operand conversion leaves no state behind — the carve-out
+        // `super::sysfunc_is_eval_count_free` names; every other system function still
+        // declines the callee (see this module's list).
+        E::SysFunc { which, args } => {
+            super::sysfunc_is_eval_count_free(*which, args.len())
+                && args.iter().all(|&a| go(a, reads, callees))
+        }
+        E::ArrayItem { .. } => false,
     }
 }
 
