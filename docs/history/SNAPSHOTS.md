@@ -39,6 +39,7 @@ a section restructure, a residue split).
 | 2026-09-25 | 5a54c76 | §4.5.534 | 8520 | 34 | 27 / 0 / 27 | 161 / 81 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 393 / 222 / 171 |
 | 2026-09-25 | 4ad24a8 | §4.5.535 | 8530 | 34 | 27 / 0 / 27 | 162 / 82 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 394 / 223 / 171 |
 | 2026-09-26 | a8c5ba2 | §4.5.536 | 8539 | 34 | 27 / 0 / 27 | 163 / 84 / 79 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 395 / 225 / 170 |
+| 2026-09-26 | 03c8226 | §4.5.537 | 8548 | 34 | 27 / 0 / 27 | 164 / 84 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 396 / 225 / 171 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -132,3 +133,8 @@ a section restructure, a residue split).
   added; §2 "Delays / events" the `$realtime` cont-assign re-evaluation (startable, S) added; the
   non-finite oracle-split bullet rewritten. Startable 82 − 1 + 3 = 84; blocked 80 − 1 = 79; total
   395. Tests 8530 → 8539. `format_version` 34 unchanged.
+- §4.5.537: §2 "Delays / events" the wait-armed-in-a-batch bullet (startable, M) deleted;
+  its EDGE half re-recorded BLOCKED BY the same-time resume order (start-order row 7) and the
+  continuous-assign hop of an earlier write (startable, S–M) added; the always_comb time-0
+  count clause added to the oracle-split bullet. Startable 84 − 1 + 1 = 84; blocked 79 + 1 =
+  80; total 396. Tests 8539 → 8548. `format_version` 34 unchanged.

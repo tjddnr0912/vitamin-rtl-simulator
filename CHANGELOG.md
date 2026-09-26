@@ -9,6 +9,27 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a level wait sees only the changes made after it armed
+
+- **A static level block that ran in an Active batch and re-armed no longer fires again on a
+  write an earlier process of the same batch made**: `always @(a) s = 0;` beside `always @(s)
+  …` with one batch writing `a` and `s` printed two lines where Icarus Verilog and Verilator
+  print one. Every value change now carries a sequence number, a level waiter records it when
+  it arms, and only a later change wakes it. An in-body `@(sig)` / `@*` follows the same rule
+  instead of comparing the net with its arm-time value, so a glitch back to that value (`a = 1;
+  a = 0;`) now wakes it (Icarus Verilog does), and a queue, string or dynamic-array change
+  counts from the moment it is made: `q.push_back(1)` before an `@* n = q.size();` in the same
+  batch is not its event, one after it is (it woke nothing before). Time-0 rules are unchanged:
+  the settle's changes reach a waiter armed at 0, an initializer is no event. All three
+  backends.
+- Not changed, recorded in ROADMAP §2 with its prerequisite: an in-body `@(posedge x)` armed in
+  a batch still fires on an edge made earlier in that batch (`initial #5 r = 1;` before
+  `initial begin #5 @(posedge r); $display("late"); end` prints `late 5`; both tools nothing).
+  The after-the-arm rule was built and reviewed for it and reverted: both tools resume the
+  processes due at one time in the order their delays were scheduled, vitamin in declaration
+  order, and under the rule the common testbench (a clock generator declared first, stimulus
+  arming `@(posedge clk)` after `#15`) shifted by a cycle.
+
 ### Fixed — a real converts to an integer exactly at every width
 
 - **An out-of-range real no longer saturates when it is stored, cast or bound into an integral

@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.537` **a level wait sees only the changes made after it armed; the edge half is recorded with its prerequisite** (2026-09-26 · §2 "Delays / events" the wait-armed-in-a-batch bullet deleted, its EDGE half re-recorded BLOCKED BY the same-time resume order (start-order row 7), the continuous-assign hop of an earlier write (2 oracles, startable S–M) added, the `always_comb` time-0 count clause added to the oracle-split bullet · a CHANGE SEQUENCE stamped on every value change (`SimState::stamp_change` / `DirtyChannel::stamp_change` over ONE shared `Rc<Cell<u64>>`, from `note_change`; a heap change takes its number when it is made, `note_dyn_change`) and recorded by every LEVEL waiter at arm time (`arm_seq`): a static level waiter re-armed after its run and an in-body `@(sig)` / `@*` fire on a change stamped after their arm (O(1) per net; the changed-set scan only at time 0); the time-0 arming carries 0 and the rollback resets the initializers' nets; the arm-time value snapshot is deleted (a glitch back to the arm value and a heap change now wake the wait) · in-body EDGE waits keep the slot's accumulated mask: the after-the-arm edge rule was built, reviewed for two rounds and REVERTED because both oracles resume same-time processes in scheduling order and vita in declaration order, which shifted the clock-generator-first testbench by a cycle under the rule · 24 grounding cells, 3 backends; 2 lenses × 3 rounds — r1 differential BLOCKING (`@(cb)` waited a cycle) and soundness BLOCKING (heap changes stamped at the drain); r2 differential PASS, soundness BLOCKING (the same-time resume order); r3 both PASS (every level cell that depends on the same-time order is PRE = POST3, the recorded prerequisite) · 8548 tests)
 - `4.5.536` **a real converts to an integral target exactly at every width; a same-width copy of a written real is not read-aliased** (2026-09-26 · §2 "Inline / frame binds" the out-of-range PREREQUISITE row deleted and replaced by the narrower inline >128-bit residue (2 oracles, startable S), §2 "Real" the |x| ≥ 2^127 wide-target row deleted, the class-field / container-element conversion class (startable M) and the `$realtime` cont-assign re-evaluation (startable S) added, the non-finite oracle-split bullet rewritten with three more splits; the REMAINING_WORK §D prerequisite retired · `value::real_to_int_round` is exact for every finite f64 (|r| < 2^127 the i128 image as before; beyond it `m · 2^e` placed at bit `e` and two's-complement negated at the target width; ±inf / NaN 0), `expr_cast::lower_real_to_int_cast` is `Signed/Unsigned(select_low(RealToInt(e), tw))` for every operand (the `$floor`/`$ceil`/`$rtoi` composition and its 24-call wide lane deleted), `alias::copy_alias` skips a `NetKind::Real` root · 23 grounding cells, 3 backends; 2 lenses × 1 round — differential PASS (39 cells; 3 pre-existing classes recorded), soundness PASS (20 cells + a 420-pair Python-exact sweep, 0 mismatches; 2 notes recorded) · 8539 tests)
 - `4.5.535` **the time-0 settle no longer makes events out of the phantom value a variable-reading driver held before the initializer landed** (2026-09-25 · §2 "Delays / events" the phantom-intermediate bullet deleted, one bullet added (a wait armed in an Active batch sees the batch's earlier writes, 2 oracles, startable M; a first-batch `fork … join_none` child runs before a settle-woken process in both oracles, order only, startable S), the oracle-split bullet extended · both kernels RE-SETTLE after the declaration initializers (`settle_cont_assigns` again, keyed on the initializer list) and ASSIGN each dirty edge-target net's mask from the pre-settle bit (`t0_edge::edge_b0_snapshot`, taken in `Scheduler::settle_t0` / `native::run`) to the post-initializer bit through the funnel's `edge_mask`; the rollback removes exactly the initializers' set; `arm_processes` / `arm_t0` return `false` on a non-converging re-settle; the settle's record is DELIVERED before the first Active batch (`take_t0_wakes`, both kernels) with the woken processes held until the batch and its writes have propagated, ahead of the batch-write wakes · 60 grounding cells, 3 backends; 2 lenses × 3 rounds + direct re-grade of every lens cell per round (324 in round 3) — r1 differential BLOCKING (the settle's wakes sorted in with the batch-write wakes) → `take_t0_wakes`; r2 soundness BLOCKING (a wake the batch's write reached one settle later sorted ahead of the held ones) → the held wakes lead the next batch taken; r3 clean · 8530 tests)
 - `4.5.534` **the time-0 settle of a settle-constant net is not an edge; a driver that reads a variable keeps its edge** (2026-09-25 · §2 "Delays / events" the time-0 edge bullet deleted, one phantom-intermediate bullet added, the `#0` and oracle-split bullets extended · `t0_edge::settle_constant_nets` (a worklist fixpoint over `cont_assigns`: undelayed, pure, reading only settle-constant nets) zeroes `slot_edge` on those settle nets in `arm_processes` and `arm_t0`, membership untouched · 48 grounding cells, 3 backends; 2 lenses × 2 rounds + direct re-grade — r1 BLOCKING on one root (both oracles fire the edge when the driver reads a variable) → the fixpoint; r2 MAJOR-ONLY (pure casts refused → allow-list) · 8520 tests)
@@ -546,6 +547,114 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.537 a level wait sees only the changes made after it armed; the edge half is recorded with its prerequisite (2026-09-26, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — the wait-armed-in-a-batch bullet ("A wait ARMED in an
+Active batch sees the writes made EARLIER in that batch … a static level waiter that RAN in the
+batch and re-armed sees a write made earlier in the same batch … STARTABLE (M)", deleted); its
+EDGE half re-recorded as one bullet BLOCKED BY the same-time resume order (start-order table
+row 7, whose `#d` delay kind is measured again there); one new bullet, the continuous-assign
+hop of a write made earlier in the batch (2 oracles, STARTABLE, S–M); the `always_comb`
+time-0 run count beside an `initial` writing its input added to the oracle-split bullet. §2
+count 163 → 164 (startable 84, blocked 80).
+
+**Defect (PRE, both oracles)**. `propagate_changes` / `WakeTable::wake` ran after a WHOLE
+Active batch and matched a static level waiter against the batch's dirt, so one that ran in
+the batch and re-armed fired again on a write an earlier process of the same batch had made:
+`always @(a) s = 0;` beside `always @(s) begin n++; … end` with `#1 a = 1; s = 1;` printed `S
+1 s=0 n=1 | S 1 s=0 n=2` (both oracles one line; at time 0 and through nonblocking writes
+alike). An in-body `@(sig)` / `@*` had its own rule — a compare with an arm-time VALUE
+snapshot — blind to a glitch back to that value (`a = 1; a = 0;` after an in-body `@(a)`
+armed in the same batch woke it at 2; iverilog at 1) and to heap content altogether
+(`q.push_back(1)` after an `@* n = q.size();` armed in the same batch never woke it; iverilog
+`W 1 n=1`; a `d[0] = 7` three units later never reached an `@* n = d[0]`).
+
+**The measured rule (24 grounding cells `s24/g`, 3 backends, both oracles)**. IEEE §9.4: an
+event control resumes on a change that occurs AFTER the process reaches it; a process already
+triggered is not re-triggered by a change made before it runs and re-arms. Both oracles print
+one line on the re-armed static waiter (time 0, `#1`, NBA); a `#0` write after the arm (a new
+batch), an NBA landing after the arm and a later process's write all fire, in all tools; the
+waiter's own write before its arm never fires (self-retrigger guard, unchanged); the time-0
+settle's changes still reach a static waiter armed at 0 (`reg r = 1; wire w = ~r; always @(w)`
+prints `W 0 w=1 n=1`), an initializer is no event, `always @*` re-arms after its own run
+(`n=2`). Order-dependent and left as vita's order (§4.7): `always @(b) …` declared before
+`always @(a) b = 0;`, both woken by one write of `a` and `b` — vita runs `@(b)` first, it
+re-arms, `@(a)` then writes `b` AFTER the re-arm, so the second line (`b=0 n=2`) is that
+order's correct answer; iverilog runs `@(a)` first (one line, `b=0`), verilator one line with
+`b=1`.
+
+**Fix (both kernels)**. `SimState` and `DirtyChannel` gain `change_seq` (ONE run-wide counter
+of value changes, an `Rc<Cell<u64>>` shared by the two stores, installed at
+`NativeKernel::new`) and `last_change_seq[net]`, stamped by `stamp_change` from
+`note_change`; a heap change takes its number when it is MADE — `note_dyn_change` stages
+`(net, writer, seq)` and the drains (`mark_heap_dirty`, native `stamp_staged`) write that
+number. Every level waiter records `arm_seq` at arm time (`Scheduler::suspend_on`,
+`arm_sensitivity(pi, arm_seq)`, `NativeKernel::k_suspend_on`, `WakeTable::level_arm_seq` via
+`rearm_level(proc, seq)`) and fires on a watched net whose last change was stamped after its
+arm and not by its own process — the changed-set scan only for a waiter armed at time 0,
+where the x-drop and the rollback matter (O(1) per net otherwise). The static arming at time
+0 carries 0, so the settle's changes (stamped before any arming) are the first events
+(§4.5.535's delivery unchanged); the re-arm at completion carries the current sequence; the
+time-0 rollback resets `last_change_seq` for the initializers' nets (IEEE §6.21: no event).
+The arm-time value snapshot (`Waiter::arm`, `NativeWaiter::arm`, `NetArena::net_words`) is
+deleted. In-body EDGE waits, static edge processes (`net_to_edge`, `busy`, the timestep
+`edge_seen` dedup), `wait(expr)` and named events are untouched. `format_version` 34
+unchanged.
+
+**The edge half, built and reverted**. Rounds 1 and 2 shipped the same rule for an in-body
+`@(posedge x)`: a bit-0 transition count and bit 0 recorded at arm time, one transition after
+the arm judged on `edge_mask(arm_b0, now)`, more on the slot's mask — which closed `initial #5
+r = 1;` before `initial begin #5 @(posedge r); … end` (`late 5` → nothing), `reg clk; initial
+clk = 1;` before `@(posedge clk)` (`saw 0` → nothing), the four-process `P 1 | N 1` cell, a
+task's wait (`T 5`), `c = 3; c = 2;` after a pre-arm `c = 1` (`P 1 c=2` → `P 5 c=3`) and
+`w[100] = 1;` after the arm (`P 1 w0=0` → nothing), all to both oracles' text. Round 2's
+soundness lens then measured the SAME-TIME RESUME ORDER: both oracles resume the processes
+due at one time in the order their delays were SCHEDULED (`initial begin #5; #5 $display("A");
+end` declared before `initial #10 $display("B");` prints `B 10 | A 10`), vita in declaration
+order (`A 10 | B 10`, `push_sorted` by tie at the wheel promotion), and under the rule the
+common testbench — a clock generator declared first, stimulus resuming from `#15` and arming
+`@(posedge clk)` in the edge's own batch — shifted by a whole cycle (`R 25 rst=0 | N 30 | R2
+35 | n=4` for the oracles' and PRE's `R 15 rst=0 | N 20 | R2 25 | n=5`; PRE right by the
+accumulated mask). The order is a scheduler axis outside this slice (start-order row 7, the
+per-resumption-kind ordering model, a format bump), so per the prerequisite rule the edge
+half is REVERTED to PRE's code (both Edge arms byte-identical to HEAD) and recorded with the
+prerequisite; a clocking block's `@(cb)` (lowered to `@(posedge clk)`) needs the mask rule
+anyway, since the clocking event is delivered in the Observed region of the edge's step (IEEE
+§14.13; verilator `CB 5 d=0` for `always #5 clk = ~clk;` beside `initial begin #5; @(cb); …
+end`), which round 1's differential lens found first.
+
+**Review (2 lenses × 3 rounds, frozen PRE `32f1cf16` / POST `14a2a72f` / POST2 `d7a82fd4` /
+POST3 `8ea75e6e`)**. Round 1 — differential FAIL (45 cells): B1 an in-body `@(cb)` armed in
+the time step of its clock edge waited a cycle (verilator + IEEE §14.13); soundness FAIL (26
+cells + a code census): B1 heap and string changes stamped at the drain, after every arm of
+the batch (`q.push_back(1)` before `@* n = q.size();` in one batch woke it; iverilog nothing);
+P1 a non-bit-0 write counted as an edge transition; P2 the continuous-assign hop (recorded);
+N1 the quadratic in-body level scan (2.0× on 800 waiters × 200 nets) → the O(1) test; N2 the
+`always_comb` time-0 count (recorded split). Round 2 (the shared counter, staged stamps, bit-0
+counting, the clocking-clock mask rule, the O(1) test; every round-1 cell re-graded on POST2,
+eleven moved to the oracle or PRE) — differential PASS (20 cells; the round-1 B1 closed on
+every clocking cell; the `@(negedge clk)` on a posedge clocking clock a pre-existing widening
+of the residue); soundness FAIL: B2 the same-time resume order above (present since round 1,
+outside the slice), perf N1 closed (−14…−21% on p2/p3, picorv32 and keccak unchanged with
+identical digests). Round 3 (the edge half reverted; every round-1 and round-2 cell re-graded
+on POST3: the edge cells back to PRE, the level / heap / static cells at their round-2
+values, three backends identical) — differential PASS (12 cells: the level rule under the
+same-time resume order — every cell whose outcome depends on that order is PRE = POST3, the
+recorded prerequisite; a static `always @(a or g)` with a `#5` body no longer re-runs on a
+write made before its re-arm, `E 15 | R 20` gone, both oracles; two in-body level cells moved
+from PRE's miss to iverilog where verilator is unsupported or holds no glitch) and soundness
+PASS (12 designs: no reader of the deleted fields survives and both Edge arms are byte-identical
+to HEAD's; every level twin of B2 is PRE = POST3; p2/p3 faster on native and interp in both
+orders; one heap cell moves toward iverilog).
+
+**Tests**: `crates/cli/tests/same_batch_wait.rs` (9: the re-armed static waiter at `#5`,
+time 0 and through NBAs plus an in-body level wait after the write; the heap change stamped
+when it is made; the glitch after the arm; the time-0 rules and the races; every backend; and,
+pinned at PRE's value and marked EDGE-HALF, the edge cells, the clocking-event wait in its
+edge's batch, the bit-0 cells and the common testbench shape with the same-time order cell).
+`t0_phantom_settle.rs`'s module doc updated. Gate: nextest 8539 → 8548, doctest / clippy /
+fmt clean, flip run = the documented backend pins, corpus 10/10.
 
 #### 4.5.536 a real converts to an integral target exactly at every width; a same-width copy of a written real is not read-aliased (2026-09-26, branch main) ✅
 
