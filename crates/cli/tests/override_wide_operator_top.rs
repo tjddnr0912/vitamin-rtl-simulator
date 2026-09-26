@@ -15,30 +15,22 @@
 //!
 //! ## The rule
 //!
-//! `override_bits` now also folds an operator top the domain has an arm for, when the
-//! tree is PLAIN (`wide_operator_tree_is_plain`) and its SELF-determined width
-//! (Table 11-21; names answered from DECLARED provenance only, so `~W` over a
-//! `parameter [127:0] W` counts as 128) is past 64 bits. PLAIN means:
-//!
-//! * every self-determined position (cast operand, concat part, comparison / logical
-//!   operand, shift count, `**` exponent, ternary condition, reduction operand, select
-//!   base / index, system-function argument) holds a plain leaf — a sized literal or a
-//!   name — never an operator, cast, concatenation, select or call;
-//! * the tree is sign-homogeneous: every node reached through the context-determined
-//!   arms has the top's sign (a position's leaf is exempt: it keeps its own type).
-//!
-//! No fill anywhere, and the folded value has no x/z bit. The width comes from a first
-//! fold at no context; the value from a second fold AT that width, because §11.6.1 pushes
+//! `override_bits` also folds an operator top the domain has an arm for
+//! (`wide_operator_top`) when its SELF-determined width (Table 11-21; names answered
+//! from DECLARED provenance only, so `~W` over a `parameter [127:0] W` counts as 128) is
+//! past 64 bits, no fill is anywhere in the tree, and the folded value has no x/z bit.
+//! The width comes from a first fold at no context; the value from a second fold AT
+//! that width with the tree's sign pushed into every extension, because §11.6.1 pushes
 //! the tree's width into every context-determined operand (`~8'd1 + 128'd0` complements
-//! at 128, not at 8). Every other tree keeps the pre-slice route, byte for byte.
+//! at 128, not at 8) and §11.8.2 its sign (`~S8 + 128'd0` zero-extends the signed
+//! 8-bit operand before complementing, `ff…f02`). Every other tree keeps the pre-slice
+//! route, byte for byte.
 //!
-//! WHY the plain rule and not more: the shared wide walk (`fold_bits_at`) folds a
-//! self-determined position with no context (`{~8'd1 + 120'd0} + 128'd0` gives `0…0fe`,
-//! both oracles `00ff…fe`) and does not push §11.8.2's expression sign into the operands
-//! (`~S8 + 128'd0` gives `0…02`, both oracles `ff…f02`). Both defects are pre-existing on
-//! the localparam lane; repairing that walk is a prerequisite slice. Three review rounds
-//! patched exclusions over it and each round found the next hole on the same axis, so
-//! this slice ships only the trees on which the walk is already right.
+//! The slice that opened this route shipped a narrower "plain tree" rule — leaf-only
+//! self-determined positions, one sign throughout — because the shared wide walk
+//! folded a position with no context and never pushed the sign down; the region-sign
+//! slice (`region_sign_wide_fold.rs`) repaired the walk and the rule went with it. The
+//! two tests below that used to pin the rule's residues now pin the oracles' values.
 //!
 //! The width is verilator's for `+ - *`; iverilog binds those at max+1 (or the sum for
 //! `*`) while its own `$bits` of the same text says the operand width — the §4.5.466
@@ -499,15 +491,15 @@ fn a_narrow_top_with_a_wide_self_determined_operand_keeps_its_route() {
     );
 }
 
-/// A MIXED-sign tree keeps its pre-slice route: the exact PRE strings. The wide walk
-/// does not push §11.8.2's expression sign into the operands, so these are the trees
-/// where folding could import that defect (`o2 o3 o5 o6` would; the localparam lane
-/// gives `localparam logic [127:0] L = ~S8 + 128'd0;` as `0…02`, both oracles `ff…f02`
-/// — ROADMAP §2 residue). `o4 o7 x07` would fold right today and are over-excluded by
-/// the structural rule: their PRE answers (32 bits, or E3009 for `x07`) are the
-/// pre-existing residue, both oracles giving 128 bits `0…0fd` / `ff…ff` / `0…10…03`.
+/// A MIXED-sign tree binds the value both oracles bind, at verilator's width (iverilog
+/// 129 on `+`, its own `$bits` saying 128 — the §4.5.466 self-contradiction). §11.8.2:
+/// the region is unsigned, so the signed 8-bit operand is ZERO-extended to 128 before
+/// its operator runs — `~S8` complements `0…0fd`, `-(8'sh80)` negates `0…080`, `S8 >>>
+/// 1` vacates with zeros. The plain-tree rule used to keep every one of these on the
+/// i64 route (32 bits: `00000002 00000080 fffffffd fffffffe ffffff80 ffffffff`) and
+/// the two `x` shapes E3009.
 #[test]
-fn a_mixed_sign_tree_keeps_its_route() {
+fn a_mixed_sign_tree_binds_the_region_sign() {
     let src = format!(
         "{SUB}module top;\n\
          \x20 parameter signed [7:0] S8 = -8'sd3;\n\
@@ -517,57 +509,57 @@ fn a_mixed_sign_tree_keeps_its_route() {
          \x20 sub #(.P((S8 >>> 1) + 128'd0)) o5();\n\
          \x20 sub #(.P((8'sh80 * 8'sd1) + 128'd0)) o6();\n\
          \x20 sub #(.P(-8'sd1 + 128'd0)) o7();\n\
+         \x20 sub #(.P((-8'sd1 >>> 1) ^ 128'h1_0000_0000_0000_0000)) x07();\n\
+         \x20 sub #(.P({{64'd1, 64'd2}} + 1)) x08();\n\
          \x20 initial #10 $finish;\nendmodule\n"
     );
     check(
         &src,
         &[
-            "top.o2 bits=32 hex=00000002",
-            "top.o3 bits=32 hex=00000080",
-            "top.o4 bits=32 hex=fffffffd",
-            "top.o5 bits=32 hex=fffffffe",
-            "top.o6 bits=32 hex=ffffff80",
-            "top.o7 bits=32 hex=ffffffff",
+            "top.o2 bits=128 hex=ffffffffffffffffffffffffffffff02",
+            "top.o3 bits=128 hex=ffffffffffffffffffffffffffffff80",
+            "top.o4 bits=128 hex=000000000000000000000000000000fd",
+            "top.o5 bits=128 hex=0000000000000000000000000000007e",
+            "top.o6 bits=128 hex=00000000000000000000000000000080",
+            "top.o7 bits=128 hex=ffffffffffffffffffffffffffffffff",
+            "top.x07 bits=128 hex=7ffffffffffffffeffffffffffffffff",
+            "top.x08 bits=128 hex=00000000000000010000000000000003",
         ],
     );
-    for ov in [
-        "(-8'sd1 >>> 1) ^ 128'h1_0000_0000_0000_0000",
-        "{64'd1, 64'd2} + 1",
-    ] {
-        let (o, c) = run(&format!(
-            "{SUB}module top;\n  sub #(.P({ov})) a();\n  initial #10 $finish;\nendmodule\n"
-        ));
-        assert_eq!(c, Some(1), "{ov}\n{o}");
-        assert!(o.contains("VITA-E3009"), "{ov}\n{o}");
-    }
 }
 
-/// A self-determined position whose inner is an OPERATOR keeps its pre-slice route:
-/// the walk folds a position with no context, so an operator inside it narrower than
-/// the position computes at its own width (`e19 e20 c2 c1` would, both oracles giving
-/// `ff…fe` / `00ff…fe` / `0` / `1`; the localparam lane has the same defect — ROADMAP §2
-/// residue). `f1 f4` (E3009) and `f5` (32 bits) would fold right today and are
-/// over-excluded by the structural rule. Exact PRE strings / E3009, one design each.
+/// A self-determined position whose inner is an OPERATOR folds its inner as a region of
+/// its own, at that region's width: `$signed(~8'd1 + 128'd0)` complements at 128
+/// (`ff…fe`), the concatenation part `~8'd1 + 120'd0` at 120 (`00ff…fe` once extended),
+/// the shift count `~4'd0 + 8'd0` is 255 (so the shift vacates everything), and the
+/// comparison `~8'd1 == 16'hFFFE` complements at the operands' common 16 bits and is
+/// true. Both oracles on every value; the width of `c1` is a three-way split (iverilog
+/// 129, verilator 32, vita 128 — verilator's own `f5` says 128 for the same shape). The
+/// first five used to be E3009 and the last two 32 bits, under the plain-tree rule.
 #[test]
-fn a_position_whose_inner_is_an_operator_keeps_its_route() {
-    for ov in [
-        "$signed(~8'd1 + 128'd0) + 128'sd0",
-        "{~8'd1 + 120'd0} + 128'd0",
-        "128'd1 << (~4'd0 + 8'd0)",
-        "$signed(128'd1 + 128'd2) + 128'sd0",
-        "~128'd0 >> (8'd2 + 8'd2)",
-    ] {
-        let (o, c) = run(&format!(
-            "{SUB}module top;\n  sub #(.P({ov})) a();\n  initial #10 $finish;\nendmodule\n"
-        ));
-        assert_eq!(c, Some(1), "{ov}\n{o}");
-        assert!(o.contains("VITA-E3009"), "{ov}\n{o}");
-    }
+fn a_position_whose_inner_is_an_operator_folds_at_the_region_width() {
+    let src = format!(
+        "{SUB}module top;\n\
+         \x20 sub #(.P($signed(~8'd1 + 128'd0) + 128'sd0)) e19();\n\
+         \x20 sub #(.P({{~8'd1 + 120'd0}} + 128'd0)) e20();\n\
+         \x20 sub #(.P(128'd1 << (~4'd0 + 8'd0))) c2();\n\
+         \x20 sub #(.P($signed(128'd1 + 128'd2) + 128'sd0)) f1();\n\
+         \x20 sub #(.P(~128'd0 >> (8'd2 + 8'd2))) f4();\n\
+         \x20 sub #(.P((~8'd1 == 16'hFFFE) + 128'd0)) c1();\n\
+         \x20 sub #(.P((~128'd0 == ~128'd0) + 128'd8)) f5();\n\
+         \x20 initial #10 $finish;\nendmodule\n"
+    );
     check(
-        &format!(
-            "{SUB}module top;\n  sub #(.P((~8'd1 == 16'hFFFE) + 128'd0)) c1();\n  sub #(.P((~128'd0 == ~128'd0) + 128'd8)) f5();\n  initial #10 $finish;\nendmodule\n"
-        ),
-        &["top.c1 bits=32 hex=00000001", "top.f5 bits=32 hex=00000009"],
+        &src,
+        &[
+            "top.e19 bits=128 hex=fffffffffffffffffffffffffffffffe",
+            "top.e20 bits=128 hex=00fffffffffffffffffffffffffffffe",
+            "top.c2 bits=128 hex=00000000000000000000000000000000",
+            "top.f1 bits=128 hex=00000000000000000000000000000003",
+            "top.f4 bits=128 hex=0fffffffffffffffffffffffffffffff",
+            "top.c1 bits=128 hex=00000000000000000000000000000001",
+            "top.f5 bits=128 hex=00000000000000000000000000000009",
+        ],
     );
 }
 

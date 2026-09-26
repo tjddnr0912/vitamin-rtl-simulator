@@ -304,7 +304,7 @@ fn fold_selfdet_operand(e: &ast::Expr, name: WideNameFn) -> Option<WideBits> {
 /// 128'd0` shifts in zeros (`0…07e`) and `8'hFF - (-1'sb1)` at 8 bits is `00` (§2 🆕 F).
 /// The node-local rule the arms used to apply — extend each operand with the sign of
 /// the node it feeds — agreed with the oracles only on sign-homogeneous trees, which is
-/// what `wide_operator_tree_is_plain` was cut to.
+/// what the override lane's "plain tree" rule was cut to before this entry existed.
 pub(crate) fn fold_bits_at(e: &ast::Expr, ctx: u32, name: WideNameFn) -> Option<WideBits> {
     let pass1 = fold_region(e, ctx, None, name)?;
     if wide_top_is_self_determined(e) {
@@ -1406,18 +1406,20 @@ impl Elaborator<'_> {
     ///
     /// A SELF-DETERMINED top folds: an override expression is evaluated in the parent
     /// with no context from the child (the child's declared width is not known yet,
-    /// and for an untyped child there is none). A context-determined top folds here
-    /// only when the tree is plain (`wide_operator_tree_is_plain`: leaf-only
-    /// self-determined positions, one sign throughout), its self-determined width is
-    /// past 64 bits and its value has no x/z bit; every other operator top keeps the
-    /// i64 operator channel.
+    /// and for an untyped child there is none). A context-determined top
+    /// (`wide_operator_top`) folds here when its self-determined width is past 64
+    /// bits and its value has no x/z bit; every other operator top keeps the i64
+    /// operator channel. The "plain tree" rule that used to sit between the two
+    /// (leaf-only self-determined positions, one sign throughout) stepped around two
+    /// defects of the shared walk — a position folded with no context and a sign
+    /// never pushed down — and went with them: `fold_bits_at` now evaluates a region
+    /// the way §11.6.1 / §11.8.2 do, so `S8 + 128'd0` binds `0…0fd`, `~S8 + 128'd0`
+    /// `ff…f02` and `$signed(128'd1 + 128'd2) + 128'sd0` `0…03`, all 128 bits, where
+    /// the rule kept 32 bits or E3009.
     ///
-    /// Residues on that route (ROADMAP §2): a mixed-sign tree or a position holding an
-    /// operator (`S8 + 128'd0`, `$signed(128'd1 + 128'd2) + 128'sd0`) keeps the
-    /// default literal's 32 bits or E3009 until the shared walk carries §11.8.2's sign
-    /// and a position's own context; a tree the fold declines (a zero divisor, a real
-    /// operand) and a fill in a wide tree bind 32 bits; an x/z value stays E3009; a
-    /// ≤64-bit tree keeps the i64 route's width.
+    /// Residues on that route (ROADMAP §2): a tree the fold declines (a zero divisor,
+    /// a real operand) and a fill in a wide tree bind 32 bits; an x/z value stays
+    /// E3009; a ≤64-bit tree keeps the i64 route's width.
     pub(crate) fn override_bits(&self, e: &ast::Expr) -> Option<ir::ConstVal> {
         let name = |n: &ast::Expr, _| self.wide_name_bits(n);
         // §2 🆕 M ⓓ: a bitwise `& | ^` tree over self-determined leaves folds here too
@@ -1439,23 +1441,15 @@ impl Elaborator<'_> {
         // width, so `#(.P(~128'd0))` bound the default literal's 32 bits through the
         // truncated i64 where both oracles bind 128 ones.
         //
-        // Admitted only when `wide_operator_tree_is_plain` holds: every self-determined
-        // position holds a plain leaf and the tree has one sign throughout — the trees
-        // on which this domain's fold is §11.6.1 / §11.8.2 (see the predicate for the
-        // two shared-walk defects it steps around). `fold_self_bits` learns the tree's
-        // self width `w` (Table 11-21) and folds AT `w`, so a narrower
-        // context-determined operand is computed at the tree's width (`~8'd1 + 128'd0`
-        // is `ff…fe`, not `0…0fe`). A ≤64-bit tree keeps the i64 route whatever its
-        // sub-nodes. The width is past 64 only by DECLARED provenance
-        // (`wide_name_bits`), which is what moves `~W` over a `parameter [127:0] W`.
-        // The two passes live in `fold_bits_at` itself now.
-        if crate::param_query::ast_contains_fill(e) {
-            return None;
-        }
-        let shape = |n: &ast::Expr| {
-            fold_self_bits(n, &name).map(|(b, nw, s)| (nw, s, bp_get(&b, nw as usize - 1).0))
-        };
-        if !crate::const_wide_num::wide_operator_tree_is_plain(e, &shape) {
+        // `fold_self_bits` learns the tree's self width `w` (Table 11-21) and folds AT
+        // `w` with the region's sign pushed down, so a narrower context-determined
+        // operand is computed at the tree's width and extended with the tree's sign
+        // (`~8'd1 + 128'd0` is `ff…fe`, not `0…0fe`; `~S8 + 128'd0` is `ff…f02`). A
+        // ≤64-bit tree keeps the i64 route whatever its sub-nodes. The width is past
+        // 64 only by DECLARED provenance (`wide_name_bits`), which is what moves `~W`
+        // over a `parameter [127:0] W`.
+        if crate::param_query::ast_contains_fill(e) || !crate::const_wide_num::wide_operator_top(e)
+        {
             return None;
         }
         let (b, w, sg) = fold_self_bits(e, &name)?;
