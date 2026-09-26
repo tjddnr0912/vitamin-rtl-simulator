@@ -9,6 +9,23 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — an override binds its own type on every channel and operand shape
+
+- A `defparam` refused every value the 64-bit fold declines — a literal wider than 64 bits,
+  `$signed(…)` / `$unsigned(…)`, a string — while the `#()` spelling of the same value bound
+  it. The defparam record now carries the wide and string channels too; a value carrying an
+  x or z bit is still refused.
+- An operator-topped override over a SELECT of a declared-width parameter took the default
+  literal's type: `#(.P(~W8[3:0]))` onto an untyped `parameter P = 5` bound 32 signed bits
+  `fffffffa` where both oracles bind 4 bits `a`.
+- Every overridden untyped parameter was treated as a guessed type, so its size casts took a
+  path that computes at 32 bits: `64'(-P)` over `#(.P(32'hF0F0F0F0))` was `000000000f0f0f10`
+  (both oracles `ffffffff0f0f0f10`). An override a channel typed is no longer a guess, except a
+  signed one onto a declaration without a `signed` keyword (the `unsigned` keyword is not
+  visible to the binder yet).
+- `#(.P(A[0][3:0]))` (a select of an array-parameter element) onto an untyped parameter was
+  E3009 while the `defparam` spelling bound it; it binds 4 bits now (verilator's answer).
+
 ### Fixed — a ≤64-bit operator-topped override over a wide self-determined sub-node binds its own width
 
 - `#(.P(8'd1 << 128'd2))`, `#(.P(~(128'd1 != 128'd0)))`, `#(.P((-8'sd8) >>> 128'sd1))`,

@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 425건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 426건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.545` **an override binds its own type on every channel and operand shape: the defparam record carries the wide and string channels, a select of a declared name certifies, and only an override no channel typed is a guessed type** (2026-09-27 · §2 row 25 re-recorded to its element residue (headline stale) · 27 defparam + 3 select + 14 cast two-oracle cells, 12 element-select E3009 → verilator · two BLOCKING fixed (x/z defparam, unsigned-keyword swap) · tests 8583 → 8592)
 - `4.5.544` **a ≤64-bit operator-topped override over a wide self-determined sub-node binds its own width: the operator channel's i64 fence walks the context-determined operands only** (2026-09-26 · §2 "Index sealing" operator-top bullet closed · 7 two-oracle cells + 3 loud→value on four channels · typed targets unchanged (row 16's split not crossed) · tests 8579 → 8583)
 - `4.5.543` **a definite operator over an x/z operand folds: the wide constant fold's accept set is the operator's rule, an answer that is x is carried as an x bit, and the binders that have no unknown plane keep their loud** (2026-09-26 · §2 🆕 H ⓐ closed, ⓕ added · 119 two-oracle cells, a range bound silently one bit · two BLOCKING fixes: the override lane's operator guard, the unsigned zero-extension of an unknown top bit · tests 8571 → 8579)
 - `4.5.542` **the wide constant fold evaluates a region the way §11.8.1 / §11.8.2 do: width and sign decided over the whole tree, then pushed into every context-determined operand; a self-determined position is a region of its own** (2026-09-26 · §2 🆕 R and 🆕 F deleted, the §11.8.1 wall of REMAINING_WORK §D deleted, rows 14, 25, 26, 30 and 🆕 H re-recorded OPEN, the WALL(provenance) paragraph rewritten, two §5.2 do-not-start lines deleted; follow-up: the override lane's plain-tree rule deleted, two §2 "Index sealing" bullets closed and one re-recorded startable · `fold_bits_at` = two passes over `fold_region` (pass 1 learns the region's width and sign, pass 2 refolds at that width with that sign pushed into every extension: shifts, bitwise, `~`, `>>>` fill, `+ - *`, `/ %`, `**` base, unary `-`, ternary arms), a comparison's operands a region sized to the larger side, `bp_operands` extending with the result's sign · 206 grounding cells, 57 FIXED / 0 regression / 0 new loud; lenses direct (differential PASS, soundness PASS); corpus 10/10; no format bump · 8571 tests)
@@ -554,6 +555,61 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.545 an override binds its own type on every channel and operand shape: the defparam record carries the wide and string channels, a select of a declared name certifies, and only an override no channel typed is a guessed type (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 start-order row 25 re-recorded to its live residue (an operator over an
+ELEMENT of an unpacked array parameter, verilator-only) — its headline cells were already the
+oracles' at HEAD; row 10 gains the width consumer of its root; the "Index sealing" `parameter
+unsigned` bullet gains the signed-override cast lane as its payoff; new §2 "Constant domain" bullet
+(string literals take the literal's width, not the declaration's; `""` is 1 bit) and new §3.b row
+`str-override-ranged`. Summary mechanism 164 / 82 / 82 → 165 / 83 / 82, §3.b 105 / 90 / 15 → 106 /
+91 / 15, total 394 / 228 / 166 → 396 / 230 / 166. Tests 8583 → 8592.
+
+**Re-census (LOOPROMPT §1: the row is a claim).** 576 cells — nine untyped, sign-keyword and ranged
+defaults × sixteen override shapes × `#()` named / positional / `defparam` / interface: the row's
+headline (`#(.P(32'hF0F0F0F0))` onto `parameter P = 5`, `#(.Q(32'hDEADBEEF))` onto `parameter Q =
+8'sd1`, `#(.HE(~4'h5))`) was three-way identical at HEAD. What was still open sat in the same binder
+(`params.rs::bind_one_param`) and the channels feeding it:
+
+```
+defparam u.P = 65'h1_0000_0000_0000_0003;   both 65 bits      PRE E3009 (27 cells: >64-bit literals, $signed/$unsigned)
+defparam u.P = "str";                       both 24 bits      PRE E3009 (the record had no string channel)
+#(.P(~W8[3:0]))    onto untyped P           both 4 / a        PRE 32 / fffffffa   (select operand, operator channel)
+#(.P(W8[3:0] >> 1))                         both 4 / 2        PRE 32 / 2
+64'(-P) over #(.P(32'hF0F0F0F0))            both ffffffff0f0f0f10   PRE 000000000f0f0f10  (guessed type → pre-slice cast route)
+64'(P >> 1) on `parameter signed P` + 8'hA5 both 7fffffffffffffd2   PRE 0000000000000052
+#(.P(A[0][3:0]))   onto untyped P           verilator 4 / 5   PRE E3009 on #(), defparam already bound it
+```
+
+**Mechanism.** (1) `DefparamOverride` carries `Option<i64>` and the string channel; the collector
+refuses only when the i64, fill, operator, wide and string channels all decline, and drops a wide
+value carrying an x/z bit (the `#()` twin binds one with the plane dropped — row 15). (2)
+`declared_override_widths` descends into a select (base, bounds, index) and
+`ctx_width_names_are_evident` admits a select whose BASE is a certified name
+(`select_base_is_certified`) — a select's width is structural and it is unsigned; an array-parameter
+base fails `narrow_param_decl_width` (no scalar `params` entry) and declines as before. Opt-in
+through `envw`: the consumers passing an empty map certify no base. (3) `param_type_guessed` is set
+on an overridden untyped parameter only when no channel typed the override — except a SIGNED
+override onto a declaration without a `signed` keyword, which stays a guess because
+`ast::ParamDecl.signed` cannot tell "no keyword" from `unsigned`. (4) The element-select refusal fires
+only when the wide channel declined (`ovr_bits.is_none()`).
+
+**Review (lenses direct, s32/review/REPORT.md).** Two BLOCKING in round 1, both fixed and the whole
+design re-measured: the first defparam cut bound x/z literals with the plane dropped (20 cells
+E3009 → wrong value; `8'b1010_010x` → `a4`, both oracles `aX`) — filtered; and fully un-guessing
+typed overrides swapped a right cell for a wrong one on `parameter unsigned P = 1` + `#(.P(-8'sd91))`
+(`64'(P >> 1)` `0000000000000052` → `7fffffffffffffd2`) while fixing 26 signed-override cast cells —
+the ambiguous combination stays a guess and those 26 are recorded as the unsigned bullet's payoff.
+Final counts: census 457 MATCH / 27 FIXED / 92 SPLIT unchanged; select operands 3 two-oracle FIXED
+and 8 moved from 32 bits (neither oracle) to verilator's width, vita's own `localparam` answer;
+declared-width lane 4 improved; cast class 14 FIXED / 104 MATCH / 26 as PRE; element selects 12
+E3009 → verilator's value; 0 regression, 0 new loud. Found and recorded, not fixed (M): a typed
+parameter with a string-literal default keeps the string's width (`localparam logic [15:0] A = "a"`
+8 bits, both oracles 16) and `""` is 1 bit (both 8). Gate 8583 → 8592, doctest / clippy / fmt 0,
+corpus 10/10 ×4, `format_version` 34 unchanged. Pins: `override_channel_types_the_parameter.rs` (9
+tests); `array_elem_const.rs` F1 converted to the measured value; `size_cast_const_leaf.rs` two
+comments re-measured and the `time` cell pinned on all five columns.
 
 #### 4.5.544 a ≤64-bit operator-topped override over a wide self-determined sub-node binds its own width: the operator channel's i64 fence walks the context-determined operands only (2026-09-26, branch main) ✅
 
