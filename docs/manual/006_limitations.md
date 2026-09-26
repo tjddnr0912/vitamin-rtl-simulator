@@ -236,10 +236,9 @@ such a signed operand fills with zeros instead of the sign:
 | `longint'(q.sum() with (item + pk(k)))` | `pk` called 128 times | Verilator 2 |
 | `longint'(q.sum())`, `q` a signed byte queue holding −3 | 1, value `00000000000000fd` | Verilator `fffffffffffffffd` |
 
-Two other spellings still evaluate a call more than once: a cast to a type wider than 32
-bits of a real-valued call (`longint'(rf())` calls `rf` 24 times; a 32-bit or narrower
-target calls it once), and a size cast of an operator over a signed call
-(`40'(sf(1) + 8'sd0)` calls `sf` twice). For a pure operand this costs time and nothing
+One other spelling still evaluates a call more than once: a size cast of an operator over
+a signed call (`40'(sf(1) + 8'sd0)` calls `sf` twice). (A primitive cast of a real-valued
+call names it once at every width: `longint'(rf())` calls `rf` once.) For a pure operand this costs time and nothing
 else. It matters when the operand has a side effect:
 
 ```systemverilog

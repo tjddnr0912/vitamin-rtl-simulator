@@ -13,6 +13,7 @@
 
 
 **§4.5.220–280**
+- `4.5.536` **a real converts to an integral target exactly at every width; a same-width copy of a written real is not read-aliased** (2026-09-26 · §2 "Inline / frame binds" the out-of-range PREREQUISITE row deleted and replaced by the narrower inline >128-bit residue (2 oracles, startable S), §2 "Real" the |x| ≥ 2^127 wide-target row deleted, the class-field / container-element conversion class (startable M) and the `$realtime` cont-assign re-evaluation (startable S) added, the non-finite oracle-split bullet rewritten with three more splits; the REMAINING_WORK §D prerequisite retired · `value::real_to_int_round` is exact for every finite f64 (|r| < 2^127 the i128 image as before; beyond it `m · 2^e` placed at bit `e` and two's-complement negated at the target width; ±inf / NaN 0), `expr_cast::lower_real_to_int_cast` is `Signed/Unsigned(select_low(RealToInt(e), tw))` for every operand (the `$floor`/`$ceil`/`$rtoi` composition and its 24-call wide lane deleted), `alias::copy_alias` skips a `NetKind::Real` root · 23 grounding cells, 3 backends; 2 lenses × 1 round — differential PASS (39 cells; 3 pre-existing classes recorded), soundness PASS (20 cells + a 420-pair Python-exact sweep, 0 mismatches; 2 notes recorded) · 8539 tests)
 - `4.5.535` **the time-0 settle no longer makes events out of the phantom value a variable-reading driver held before the initializer landed** (2026-09-25 · §2 "Delays / events" the phantom-intermediate bullet deleted, one bullet added (a wait armed in an Active batch sees the batch's earlier writes, 2 oracles, startable M; a first-batch `fork … join_none` child runs before a settle-woken process in both oracles, order only, startable S), the oracle-split bullet extended · both kernels RE-SETTLE after the declaration initializers (`settle_cont_assigns` again, keyed on the initializer list) and ASSIGN each dirty edge-target net's mask from the pre-settle bit (`t0_edge::edge_b0_snapshot`, taken in `Scheduler::settle_t0` / `native::run`) to the post-initializer bit through the funnel's `edge_mask`; the rollback removes exactly the initializers' set; `arm_processes` / `arm_t0` return `false` on a non-converging re-settle; the settle's record is DELIVERED before the first Active batch (`take_t0_wakes`, both kernels) with the woken processes held until the batch and its writes have propagated, ahead of the batch-write wakes · 60 grounding cells, 3 backends; 2 lenses × 3 rounds + direct re-grade of every lens cell per round (324 in round 3) — r1 differential BLOCKING (the settle's wakes sorted in with the batch-write wakes) → `take_t0_wakes`; r2 soundness BLOCKING (a wake the batch's write reached one settle later sorted ahead of the held ones) → the held wakes lead the next batch taken; r3 clean · 8530 tests)
 - `4.5.534` **the time-0 settle of a settle-constant net is not an edge; a driver that reads a variable keeps its edge** (2026-09-25 · §2 "Delays / events" the time-0 edge bullet deleted, one phantom-intermediate bullet added, the `#0` and oracle-split bullets extended · `t0_edge::settle_constant_nets` (a worklist fixpoint over `cont_assigns`: undelayed, pure, reading only settle-constant nets) zeroes `slot_edge` on those settle nets in `arm_processes` and `arm_t0`, membership untouched · 48 grounding cells, 3 backends; 2 lenses × 2 rounds + direct re-grade — r1 BLOCKING on one root (both oracles fire the edge when the driver reads a variable) → the fixpoint; r2 MAJOR-ONLY (pure casts refused → allow-list) · 8520 tests)
 - `4.5.533` **a continuous driver whose time-0 settle lands on a value with no definite bit wakes no level waiter; one with a definite bit anywhere, in any element, keeps its time-0 wake** (2026-09-25 · §2 "Delays / events" the t0 false-event bullet deleted, §2-N t0-event residues 5 → 3 · `alias::settled_has_definite_bit` applied to the settle's surviving dirt in `arm_processes` and `arm_t0`, computed nets only, before the copy-net suppression · 92 grounding cells, 3 backends; 2 lenses × 1 round + direct re-grade — r1 BLOCKING (soundness) an unpacked array read at element 0 → every element asked · 8512 tests)
@@ -545,6 +546,101 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.536 a real converts to an integral target exactly at every width; a same-width copy of a written real is not read-aliased (2026-09-26, branch main) ✅
+
+**ROADMAP rows**: §2 "Inline / frame binds" — the out-of-range real→integer PREREQUISITE row
+("`real rv = 1.0e300; byte'(rv)` is 0 in both oracles and −1 in vita … §4.5.530's single-mention
+`RealToInt` cast path is therefore limited to targets of at most 32 bits … `longint'($random*1.0)`
+prints `ffffffff06d7cd0d next=47ecdb8f` (cell n11)", deleted) and in its place the narrower
+residue an INLINE formal wider than 128 bits bound to a real actual with |x| ≥ 2^127 (2 oracles,
+STARTABLE, S); §2 "Real" — the |x| ≥ 2^127 into a target wider than 128 bits row (deleted) and one
+new class (a real stored into a class field or a container element is not converted by the
+assignment rule, 2 oracles, STARTABLE, M); §2 "Delays / events" — a continuous assign reading
+`$realtime` is re-evaluated as time advances (2 oracles, STARTABLE, S); §2 "Oracle splits" — the
+non-finite real bullet rewritten (vita stores 0 in every lane) with `$rtoi` out of range, `%d` of
+a real beyond 64 bits and iverilog's `-0.4` upper word beside it. REMAINING_WORK §D: the
+"out-of-range real→integer conversion in the engine" prerequisite retired; the §2 count moves
+162 → 163 (−2 +3).
+
+**Defect (PRE, both oracles)**. `value::real_to_int_round` was `x.round() as i128`, which
+SATURATES at |x| ≥ 2^127 (NaN → 0, ±inf → the extremes), and every assignment lane reached it
+through `coerce_assign`: `real rv = 1.0e40; byte b = rv;` stored `ff` where both oracles store `00`
+(the low 8 bits of 10^40 are zero), `int i = rv` `ffffffff` against `00000000`, `longint`
+`ffffffffffffffff` against 0, `reg [127:0]` `7fff…` against `6329f1c35ca500000000000000000000`,
+`reg [191:0]` `…7fff…` against `000000000000001d6329f1c35ca500000000000000000000`, the negatives
+`0` / `8000…` against the exact two's complement (`-1e40` into `[191:0]` is
+`ffffffffffffffe29cd60e3ca35b00000000000000000000`), and 2^127 exactly into `[127:0]` `7fff…`
+against `8000…`. The cast lane was wrong by a second spelling: `lower_real_to_int_cast` built an
+IR-0 composition (`$floor`/`$ceil` trunc, a ±1 bump through two ternaries, `$rtoi`, and for a
+33..=64-bit target a hi/lo 32-bit word split — 2 to 5 mentions of the operand) whose `$rtoi` is
+`trunc as i128`, the same saturation: `int'(rv)` was `ffffffff`, `longint'(rv)`
+`ffffffff00000000`, `pl(rv)` into a `longint` formal the same, `pi`/`pb` `ffffffff`/`ff`; a
+real-returning FRAME call in the operand took the composition too (`int'(rf(1e40))`
+`ffffffff`). §4.5.530's single-mention `RealToInt` node existed for the non-repeatable ≤32-bit
+operand only, so `longint'(rf())` called `rf` 24 times and `longint'($random * 1.0)` drew several
+times (`ffffffff06d7cd0d next=47ecdb8f`; iverilog `0000000012153524 next=c0895e81`).
+
+**The measured rule (23 grounding cells `s23/g`, 3 backends, both oracles)**. IEEE 1800 §6.12.2 /
+§6.24.1: round half away from zero, then the assignment stores the low N bits of the integer's
+two's-complement image — both oracles agree on every finite cell at every width up to 1031 bits
+(`1e300` into `[1023:0]` is `00000017e43c8800759c000…`, `1.7976931348623157e308` into `[1030:0]`
+`00fffffffffffff8000…`, its negation `7f00000000000008000…`), on 2^127 ± the boundary (`2^127`
+into `[129:0]` `0800…`, `-2^127` `3800…`, `2^128` `1000…`), on the unsigned targets, the
+nonblocking, continuous-assign, `always_comb`, port, frame-bind and every prim-cast lane. Splits
+(recorded, not chased): ±inf / NaN (iverilog all-x, verilator 0; vita 0 keeps the `RealToInt`
+node's "never unknown" premise), `-0.4` into a target wider than 64 bits (iverilog `ffff…0000…`
+against its own 0 at 64 bits — a self-contradiction; verilator 0), `$rtoi` out of range
+(unchanged: `trunc as i128`, §20.5 is a different rule) and `%d` of a real beyond 64 bits
+(unchanged, `fmt_dec`).
+
+**Fix**. `crates/sim-engine/src/value.rs::real_to_int_round`: non-finite → zeros; |r| < 2^127 →
+`from_i128` as before; else `r = ±m · 2^e` (the hidden bit in `m`, `e = exponent − 1075 ≥ 75`),
+`m` placed at bit `e` of a `width`-bit `Value` (two words), two's-complement negated across every
+word for a negative, `mask_top`. `crates/elaborate/src/expr_cast.rs::lower_real_to_int_cast`:
+`Signed/Unsigned(select_low(RealToInt(e), tw))` for EVERY operand (repeatable or not) at every
+width the cast admits (≤ 64; wider stays E3009); the composition and `real_round_half_away` are
+deleted, so a call or `$random` in the operand is named once at every width and the cast, the
+store and the bind are one conversion. `inline_bind.rs::real_to_int_store` unchanged (its >128-bit
+sign-extension is the recorded residue). The sim-ir `RealToInt` doc says the low 128 bits.
+`format_version` 34 unchanged (no frozen-type change; the node existed since v34).
+
+**The alias defect (found by the grounding, second mechanism)**. `real rv = 300.0; wire [63:0] cw
+= rv;` read `cw` as the IEEE-754 word `4072c00000000000` (both oracles `12c`) whenever a process
+wrote `rv` anywhere in the design: `alias::copy_alias` admitted the same-width copy to the READ
+alias (its root `rv`), and a read redirected to a real root hands back the real. The
+width-changing `[31:0]` twin was never aliased, and without a procedural write the settle's repair
+(which converts through `coerce_assign`) answered. Fix: `copy_alias` skips a `NetKind::Real` root;
+the copy stays in `copy_nets` and rides the repair, as its doc already said. Pinned with the
+sign-extending `[65:0]` twin, a `[129:0]` sibling, a signed copy, a copy of the copy, the port
+twin, an `always @(cw)` and the NaN row.
+
+**Review (2 lenses × 1 round, frozen PRE `fd5632ba` / POST `32f1cf16`)**. Differential PASS: 39
+cells (2^127 ± ulp, 2^1023, max f64, subnormals, −0.0, ties, widths 1..1025 with every boundary
+±1, every lane incl. NBA, `always_ff`, `assign #1`, ports, `force`, hierarchical write, packed
+struct and unpacked element, declaration initializers, typedef targets, the copy-alias chains,
+ports, `force`/`release`, VCD times, `$monitor`); 0 BLOCKING; three PRE-EXISTING classes recorded
+above (class-field / container-element stores outside `coerce_assign`; the `$realtime`
+cont-assign); the >128-bit inline residue confirmed with its static-function and 2^127 shapes.
+Soundness PASS: a producer census of every real→integer spelling (the §6.12.2 lanes all reach
+`coerce_assign`; `$rtoi`, `%d`, delays, `$clog2`, `$itor` and the const-real folds are other
+rules), a 420-pair sweep (30 values × 14 widths, expected values computed exactly in Python) with
+0 mismatches on the three backends and iverilog (PRE 248), the cast node's shape consumers
+(`ir_bits_of`, `expr_self_signed`, `expr_may_be_unknown`, the OBS builtins census now naming
+`real->int` where PRE named `$floor`/`$rtoi` calls the source never wrote, the `wprog` decline
+reason inside the closed vocabulary), the alias exclusion's consumers (one engine caller;
+`copy_nets` never admits a real destination; `flat` excludes `Real` on every select arm; only the
+whole-net `Signal` arm reached a real source), and the "never unknown" premise; 0 BLOCKING; two
+notes recorded (`t0_edge::pure_sysfunc` omits `RealToInt`, PRE = POST; the >128-bit residue also
+reached by a real formal stored in an inline body).
+
+**Tests**: `crates/cli/tests/real_to_int_exact.rs` (9: the seven-width store cell out of range
+and at the i128 boundary, every cast and bind lane, targets to 1031 bits, the continuous /
+`always_comb` / NBA lanes, the read-alias copy with its port twin, a frame call and `$random` in
+the operand named once, the cast lane's rounding and in-range boundaries, every backend); the
+three saturation pins in `single_mention_cast.rs` and the engine pin in
+`native_eval/tests/v34_conversions.rs` converted to the exact value. Gate: nextest 8530 → 8539,
+doctest / clippy / fmt clean, flip run = the documented backend pins, corpus 10/10.
 
 #### 4.5.535 the time-0 settle no longer makes events out of the phantom value a variable-reading driver held before the initializer landed (2026-09-25, branch main) ✅
 

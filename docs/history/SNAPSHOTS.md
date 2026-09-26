@@ -38,6 +38,7 @@ a section restructure, a residue split).
 | 2026-09-25 | 581e26a | §4.5.533 | 8512 | 34 | 27 / 0 / 27 | 161 / 81 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 393 / 222 / 171 |
 | 2026-09-25 | 5a54c76 | §4.5.534 | 8520 | 34 | 27 / 0 / 27 | 161 / 81 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 393 / 222 / 171 |
 | 2026-09-25 | 4ad24a8 | §4.5.535 | 8530 | 34 | 27 / 0 / 27 | 162 / 82 / 80 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 394 / 223 / 171 |
+| 2026-09-26 | a8c5ba2 | §4.5.536 | 8539 | 34 | 27 / 0 / 27 | 163 / 84 / 79 | 5 / 0 / 5 | 24 / 19 / 5 | 105 / 90 / 15 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 395 / 225 / 170 |
 
 - 2026-09-21: one row for SIX slices (§4.5.519–524), an owner directive that took all six startable
   rows of the §2 start-order table sequentially with scoped gates and one adversarial review at the
@@ -125,3 +126,9 @@ a section restructure, a residue split).
   wait-armed-in-a-batch bullet (startable, M) and the fork-child-before-settle-wake order bullet
   (startable, S) added; the oracle-split bullet extended. Startable 81 − 1 + 2 = 82; blocked 80;
   total 394. Tests 8520 → 8530. `format_version` 34 unchanged.
+- §4.5.536: §2 "Inline / frame binds" the out-of-range real PREREQUISITE row (blocked) deleted
+  and the >128-bit inline residue (startable, S) added; §2 "Real" the |x| ≥ 2^127 wide-target
+  row (startable) deleted and the class-field / container-element conversion class (startable, M)
+  added; §2 "Delays / events" the `$realtime` cont-assign re-evaluation (startable, S) added; the
+  non-finite oracle-split bullet rewritten. Startable 82 − 1 + 3 = 84; blocked 80 − 1 = 79; total
+  395. Tests 8530 → 8539. `format_version` 34 unchanged.

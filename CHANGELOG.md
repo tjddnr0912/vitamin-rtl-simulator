@@ -9,6 +9,24 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a real converts to an integer exactly at every width
+
+- **An out-of-range real no longer saturates when it is stored, cast or bound into an integral
+  target**: `real rv = 1.0e40; byte b = rv;` stored `ff`, `int'(rv)` printed `ffffffff`,
+  `longint'(rv)` `ffffffff00000000`, a `[191:0]` target held `…7fff…` and a negative value the
+  mirror image, where Icarus Verilog and Verilator store the low bits of the exact rounded integer
+  (`00`, `00000000`, `0000000000000000`, `…1d6329f1c35ca5000…`, and the exact two's complement
+  for a negative) — IEEE 1800 §6.12.2. Every lane (blocking and nonblocking stores, continuous
+  assigns, ports, `always_comb`, function-formal binds, every primitive cast) now takes one exact
+  conversion at every width, including targets wider than 128 bits. `±inf` and NaN store 0
+  (Verilator; Icarus stores all-x — recorded in ROADMAP §2).
+- **A primitive cast of a real-valued call or of `$random * 1.0` names its operand once at every
+  width**: `longint'(rf())` called `rf` 24 times and `longint'($random * 1.0)` drew several
+  times; both now evaluate once, like both oracles.
+- **A same-width copy of a real (`wire [63:0] cw = rv;`) reads the converted value** when a
+  process writes the real: it read the IEEE-754 word (`4072c00000000000` for 300.0, both oracles
+  `12c`).
+
 ### Fixed — a net driven from an initialised variable no longer edges on the value it held before the initializer
 
 - **A continuous driver that reads a declaration-initialised variable no longer makes events out
