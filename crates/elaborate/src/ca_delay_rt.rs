@@ -32,7 +32,12 @@ pub(crate) type CaDelayExprs = (u32, u32, Option<u32>, u64, u64);
 /// ticks, the constant `(rise, fall, turnoff)` sidecar triple, and the runtime
 /// sidecar tuple. At most one of the last two is ever `Some` — a value that did
 /// not fold kills the triple and is exactly what makes the tuple exist.
-pub(crate) type FoldedCaDelay = (Option<u32>, Option<(u32, u32, u32)>, Option<CaDelayExprs>);
+pub(crate) type FoldedCaDelay = (
+    Option<u32>,
+    Option<(u32, u32, u32)>,
+    Option<CaDelayExprs>,
+    bool,
+);
 
 impl Elaborator<'_> {
     /// Does this structural delay need the RUNTIME lane?
@@ -54,13 +59,8 @@ impl Elaborator<'_> {
     /// The same holds when the RISE is a constant ZERO and a later value is
     /// runtime (`#(0, dv)`, and `#(ZP, dv)` for a `parameter ZP = 0`): both
     /// oracles keep the fall, vita collapsed it. Such a spec goes on the
-    /// runtime lane too, which puts its zero rise on the pre-existing
-    /// zero-tick lag (ROADMAP §2's `#0` row, observable only through a
-    /// same-time-step `#0` chain) and gets the fall right. That is not the
-    /// zero-rise suppression `fold_ca_delay` applies: that rule is about a
-    /// WHOLLY constant delay, where staying off the delayed lane is a free
-    /// choice. Here it is not a choice — a runtime value can only be delivered
-    /// by the delayed lane.
+    /// runtime lane too; its zero rise is an Inactive-region write of its
+    /// time step like every other zero-delay write, and the fall is right.
     ///
     /// `ca_delay_value` is the same `const_delay_ticks`-then-scope pair
     /// `fold_ca_delay` folds through, so "does not fold" means the same thing
@@ -113,9 +113,9 @@ impl Elaborator<'_> {
     /// `assign #(dv) w = a;` cannot answer differently — they are one construct
     /// (IEEE §6.1.3) and the gate primitives desugar to the second.
     pub(crate) fn fold_ca_delay_rt(&mut self, delay: Option<&ast::Delay>) -> FoldedCaDelay {
-        let (uniform, rft) = self.fold_ca_delay(delay);
+        let (uniform, rft, zero_scope) = self.fold_ca_delay(delay);
         if !self.ca_delay_is_runtime(delay) {
-            return (uniform, rft, None);
+            return (uniform, rft, None, zero_scope);
         }
         // `ca_delay_is_runtime` is true only for `Some(d)` with a non-empty
         // value list, so this cannot panic.
@@ -128,7 +128,7 @@ impl Elaborator<'_> {
         // future change to either is visible as a disagreement rather than
         // silently masked. The engine consults `ca_delay_exprs` FIRST in any
         // case.
-        (Some(0), rft, Some(rt))
+        (Some(0), rft, Some(rt), false)
     }
 
     /// Take the runtime lane back off every assign that drives a net the engine
@@ -170,14 +170,16 @@ impl Elaborator<'_> {
     /// driver count is not known until every module is elaborated, by which
     /// point the scope the expression must resolve in is gone.
     pub(crate) fn demote_runtime_delay_on_resolved_nets(&mut self) {
-        if self.ca_delay_exprs.is_empty() {
+        if self.ca_delay_exprs.is_empty() && self.ca_zero_scope.is_empty() {
             return;
         }
         let mut whole: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
         let mut excluded: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
         for (ci, ca) in self.cont_assigns.iter().enumerate() {
             let ci = ci as u32;
-            let undelayed_pre = ca.delay.is_none() || self.ca_delay_exprs.contains_key(&ci);
+            let undelayed_pre = ca.delay.is_none()
+                || self.ca_delay_exprs.contains_key(&ci)
+                || self.ca_zero_scope.contains(&ci);
             let is_whole = undelayed_pre && ca.lhs.chunks.len() == 1 && {
                 let c = &ca.lhs.chunks[0];
                 c.word.is_none() && c.offset.is_none() && c.width.is_none()
@@ -195,13 +197,18 @@ impl Elaborator<'_> {
             if cis.len() < 2 || excluded.contains(&net) {
                 continue;
             }
-            demote.extend(
-                cis.into_iter()
-                    .filter(|ci| self.ca_delay_exprs.contains_key(ci)),
-            );
+            demote.extend(cis.into_iter().filter(|ci| {
+                self.ca_delay_exprs.contains_key(ci) || self.ca_zero_scope.contains(ci)
+            }));
         }
         for ci in demote {
             self.ca_delay_exprs.remove(&ci);
+            // A scope-folded zero rise on a resolved net keeps its pre-slice
+            // shape too: no delay, no sidecar (`#(ZP, 9)` on such a net fell
+            // immediately before, and still does — the literal `#0` there is
+            // E3001, and the delayed lane on a resolved net is its own row).
+            self.ca_zero_scope.remove(&ci);
+            self.ca_delays.remove(&ci);
             self.cont_assigns[ci as usize].delay = None;
         }
     }

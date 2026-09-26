@@ -185,9 +185,12 @@ fn pure_sysfunc(which: sim_ir::SysFuncId) -> bool {
 
 /// Per net: is its time-0 settle value decided by literals alone? (See the
 /// module doc.) Indexed by net id; a net with no continuous driver, a driver
-/// with a delay, a call or a system function, a driver reading a variable or an
-/// undriven net, and every member of a driver cycle answer `false`.
-pub(crate) fn settle_constant_nets(ir: &SimIr) -> Vec<bool> {
+/// with a delay whose time-0 write did not land inside the settle (`landed`,
+/// indexed by cont-assign: `assign #0 w = 1'b1;` lands there and is as
+/// constant as `assign w = 1'b1;`, `assign #3 w = 1'b1;` is not), a call or a
+/// system function, a driver reading a variable or an undriven net, and every
+/// member of a driver cycle answer `false`.
+pub(crate) fn settle_constant_nets(ir: &SimIr, landed: &[bool]) -> Vec<bool> {
     let nnets = ir.nets.len();
     let ncas = ir.cont_assigns.len();
     let mut is_const = vec![false; nnets];
@@ -207,7 +210,7 @@ pub(crate) fn settle_constant_nets(ir: &SimIr) -> Vec<bool> {
                 *p += 1;
             }
         }
-        if ca.delay.is_some() {
+        if ca.delay.is_some() && !landed.get(ci).copied().unwrap_or(false) {
             continue;
         }
         let mut r = BTreeSet::new();

@@ -43,9 +43,10 @@
 //!   `reg r = 1; wire w = (r !== 1'b1);` settles to 1 and is recomputed to 0 in the first
 //!   delta, so vita prints `P 0` and `N 0` where both oracles print only `W 0 w=0`.
 //!   Pre-existing (PRE = POST), ROADMAP §2.
-//! - `assign #0 w = 1'b1;` lands in the inactive region as a fresh change and posedges
-//!   at 0 in vita; both oracles print only the level line. Pre-existing, ROADMAP §2
-//!   (the `#0` continuous-assign delivery bullet).
+//! - `assign #0 w = 1'b1;` posedged at 0 (its write landed as a fresh change after the
+//!   settle); both oracles print only the level line. Closed: a zero-delay driver lands its
+//!   time-0 value inside the settle and is settle-constant like its undelayed twin
+//!   (`zero_delay_cont_assign.rs`).
 //! - `initial begin r = 0; r = 1; r = 0; end` on `wire w = r;`: iverilog propagates each
 //!   blocking write and posedges at 0, verilator and vita see only the batch's end
 //!   value. PRE = POST.

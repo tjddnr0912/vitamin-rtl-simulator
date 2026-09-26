@@ -124,7 +124,7 @@ impl Elaborator<'_> {
         // calls, so `wire #(dv) w = a;` and `assign #(dv) w = a;` cannot answer
         // differently. `None` (no delay, the common case) ⇒ `(None, None, None)`
         // ⇒ byte-identical to before.
-        let (delay, rft, rt) = self.fold_ca_delay_rt(d.delay.as_ref());
+        let (delay, rft, rt, zero_scope) = self.fold_ca_delay_rt(d.delay.as_ref());
         for name in &d.names {
             let Some(init) = &name.init else {
                 continue;
@@ -151,6 +151,9 @@ impl Elaborator<'_> {
             }
             if let Some(rt) = rt {
                 self.ca_delay_exprs.insert(idx, rt);
+            }
+            if zero_scope {
+                self.ca_zero_scope.insert(idx);
             }
             // R14: a NET declaration initializer is an implicit continuous
             // assign (see the width note above) — labelled apart from a spelled

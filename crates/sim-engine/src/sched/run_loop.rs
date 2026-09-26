@@ -188,13 +188,47 @@ impl Scheduler<'_, '_> {
                     }
                     continue;
                 }
-                // INACTIVE (#0): promote to Active.
-                if !self.cur.inactive.is_empty() {
-                    self.cur.active = std::mem::take(&mut self.cur.inactive);
+                // INACTIVE (#0): promote to Active. A `#0` continuous-assign or
+                // gate update due at `now` is an Inactive-region event of this
+                // time step (IEEE 1800 §4.4.2.3, §10.3.3) and is delivered
+                // HERE, ahead of the promoted processes — so a process resumed
+                // by its own `#0` reads the landed value (both oracles, from
+                // the first hop) — and not on the advance path after the
+                // Postponed region, where it used to land: a `#0` cascade never
+                // saw it, `$strobe` read the old value, a runtime delay of 0
+                // and the zero side of `#(0, F)` lagged the same way. What the
+                // landing wakes and the promoted `#0` resumes are ONE Active
+                // batch, in declaration order (the LRM moves both kinds of
+                // Inactive event to Active together; running the wakes alone
+                // first starved a `#0 s = 0` behind an oscillating `#0`
+                // driver, review r1 soundness q5d). A write the landing's
+                // propagate schedules for `now` (`assign #0 b = a` behind
+                // `assign #0 a = u`) waits for the next promotion, as the LRM's
+                // next Inactive round. The tier-3 loop is the twin.
+                let ca_due = self.next_delayed_ca() == Some(self.st.now);
+                if !self.cur.inactive.is_empty() || ca_due {
                     // GATED-CLOCK: a #0 batch is a NEW event cluster — an edge it
                     // produces (e.g. an independent `negedge rst` scheduled via #0)
                     // must be able to re-fire a process already woken this timestep.
                     self.reset_edge_seen_marks();
+                    if ca_due {
+                        let due = self.take_due_delayed_ca(self.st.now);
+                        let mut moved = false;
+                        for (lhs, v, offs) in due {
+                            moved |= self.st.write_lvalue(&lhs, v, &offs);
+                        }
+                        if moved {
+                            self.propagate_changes();
+                        }
+                    }
+                    if self.cur.active.is_empty() {
+                        self.cur.active = std::mem::take(&mut self.cur.inactive);
+                    } else {
+                        let promoted = std::mem::take(&mut self.cur.inactive);
+                        for ready in promoted {
+                            push_sorted(&mut self.cur.active, ready);
+                        }
+                    }
                     self.delta_count += 1;
                     if self.delta_count > self.max_deltas {
                         self.fatal_delta_limit();
@@ -302,11 +336,12 @@ impl Scheduler<'_, '_> {
             // the cont-assigns are at fixpoint, so this is where it takes
             // effect — the postponed region still runs (`$strobe` / `$monitor`
             // parity with the old arm), and time never advances.
-            // A `#0` cont-assign / gate update (`assign #0 r = u`) and a
-            // transport `<= #0` are delivered on the advance path below with
+            // A transport `<= #0` is delivered on the advance path below with
             // `next == now` (review r1 differential F1): while one is due at
             // `now` the step is not over, so the finish waits one more pass and
-            // takes effect at the next stable point.
+            // takes effect at the next stable point. (A `#0` cont-assign due at
+            // `now` is delivered at the Inactive step above and is never due
+            // here; the predicate keeps asking, as an invariant.)
             if self.finish_pending && !self.tick_due_now() {
                 self.st.finished = true;
                 self.drain_deferred_on_finish();
@@ -391,9 +426,11 @@ impl Scheduler<'_, '_> {
         }
     }
 
-    /// True while a delayed cont-assign write or a transport NBA is due at the
-    /// CURRENT time (`assign #0`, `<= #0`): the advance path re-enters `now`
-    /// to deliver it, so the time step is not over yet.
+    /// True while a transport NBA (`<= #0`) is due at the CURRENT time: the
+    /// advance path re-enters `now` to deliver it, so the time step is not over
+    /// yet. A delayed cont-assign write due at `now` is delivered at the
+    /// Inactive step of the region cascade, so its half of this predicate is
+    /// an invariant rather than a case.
     pub(crate) fn tick_due_now(&self) -> bool {
         let now = self.st.now;
         self.delayed_ca.keys().next().copied() == Some(now)

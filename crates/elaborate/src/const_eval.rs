@@ -1584,47 +1584,48 @@ impl Elaborator<'_> {
     pub(crate) fn fold_ca_delay(
         &self,
         delay: Option<&ast::Delay>,
-    ) -> (Option<u32>, Option<(u32, u32, u32)>) {
+    ) -> (Option<u32>, Option<(u32, u32, u32)>, bool) {
+        // `zero_scope`: the uniform is `Some(0)` because a SCOPE-resolved rise
+        // (`#(ZERO_PARAM)`, `#(P - P)`) folded to zero. Such an assign is a
+        // `#0` assign — `Some(0)` routes it onto the delayed lane, where the
+        // engine lands a zero-delay write in the Inactive region of its time
+        // step (and inside the time-0 settle), the same as the literal `#0`.
+        // This rule used to keep a scope-folded zero OFF that lane (`None`),
+        // because the lane landed a zero-tick write after the Postponed region
+        // — a lag both oracles contradicted — and the sidecar comment below
+        // records what that trade cost. The one place the pre-slice shape is
+        // kept is a RESOLVED net, where the delayed lane cannot drive at all
+        // (`demote_zero_scope_delay_on_resolved_nets`); the literal `#0` there
+        // is E3001, as it was.
+        let mut zero_scope = false;
         let uniform = delay.and_then(|d| {
             let e = d.values.first()?;
-            // ⚠️ A SCOPE-resolved RISE of 0 keeps the pre-slice shape (`None` = no
-            // delay) instead of becoming `Some(0)`. This is the one value where the
-            // silent default was already BOTH oracles' answer, and `Some(0)` is not
-            // the same thing in this engine: it routes the assign onto the delayed
-            // path, where a zero-tick write lands a delta LATER than either oracle
-            // (measured: `assign #0 y = a;` still reads 0 after two `#0` hops where
-            // iverilog and verilator both read 1). Turning `#(ZERO_PARAM)` into
-            // `Some(0)` would therefore trade a correct answer for that pre-existing
-            // lag — a rung DOWN the ladder. The lag itself (and the resulting
-            // `#0` vs `#(ZERO_PARAM)` split) is the literal spelling's, untouched
-            // here and recorded in ROADMAP §2.
             match const_delay_ticks(e, self.cur_time_mult, self.cur_prec_mult) {
                 Some(t) => Some(t),
-                None => self.delay_ticks_in_scope(e).filter(|&t| t != 0),
+                None => {
+                    let t = self.delay_ticks_in_scope(e)?;
+                    zero_scope = t == 0;
+                    Some(t)
+                }
             }
         });
         // The sidecar is only ever CONSULTED on the delayed path, which the engine
         // enters on `delay.is_some()` — so an rft triple under a `None` uniform is
         // dead weight, and computing it would be the only way this fn could emit
-        // one. Pre-slice this was implicit (both used the same fold, so values[0]
-        // failing meant the `folded?` below failed too); the zero-rise rule above
-        // makes the two able to disagree, so it is now spelled out.
+        // one; the `and` keeps the two lanes from disagreeing.
         let rft = uniform.and(delay).and_then(|d| {
             // Only 2- or 3-value specs can carry a distinct fall/turnoff.
             if d.values.len() < 2 {
                 return None;
             }
-            // NOT the zero-suppressing form: a FALL or TURNOFF of 0 is a real,
-            // distinct edge delay (`#(5,0)` — both oracles fall immediately) and
-            // reaches the engine through the sidecar, not through `ContAssign.delay`.
-            // ⚠️ The converse does NOT hold: a scope-folded RISE of 0 suppresses the
-            // uniform above, which kills this whole triple — so `#(ZERO_PARAM, 9)`
-            // keeps the pre-slice no-delay and its fall stays wrong, while the
-            // literal twin `#(0, 9)` is correct. Both review lenses found it; it is
-            // PRE-identical (no regression) and it is a TRADE, not an oversight —
-            // emitting `Some(0)` + sidecar fixes the fall and breaks the rise on the
-            // `#0` lag above, and both halves are 2-oracle-agreed. ROADMAP §2 owns
-            // it, with the lag named as the root that unblocks both.
+            // A FALL or TURNOFF of 0 is a real, distinct edge delay (`#(5,0)` —
+            // both oracles fall immediately) and reaches the engine through the
+            // sidecar, not through `ContAssign.delay`. A scope-folded RISE of 0
+            // beside a distinct fall (`#(ZERO_PARAM, 9)`) reaches it the same
+            // way now that the uniform above is `Some(0)`: while the zero rise
+            // was kept off the delayed lane this whole triple died with it, and
+            // the fall of `#(ZERO_PARAM, 9)` was immediate where both oracles
+            // and the literal twin `#(0, 9)` fall at +9.
             let folded: Option<Vec<u32>> =
                 d.values.iter().map(|e| self.ca_delay_value(e)).collect();
             let folded = folded?;
@@ -1643,7 +1644,7 @@ impl Elaborator<'_> {
                 Some((rise, fall, turnoff))
             }
         });
-        (uniform, rft)
+        (uniform, rft, zero_scope)
     }
 
     /// A2a: loud-reject a WRITE targeting a desugared array parameter (a

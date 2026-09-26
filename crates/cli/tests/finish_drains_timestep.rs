@@ -469,9 +469,11 @@ fn a_process_that_reached_finish_is_not_re_entered_in_the_same_step() {
 
 #[test]
 fn a_zero_delay_cont_assign_due_in_the_finish_step_is_delivered() {
-    // review round 1 differential F1(b): a `#0` cont-assign / gate update is
-    // delivered on the advance path that re-enters the same tick, which the first
-    // drain skipped (`r=0`); iverilog `r=7` / `r=1` / `r=8`. verilator is not an
+    // review round 1 differential F1(b): a `#0` cont-assign / gate update due in
+    // the finishing step is delivered before the finish takes effect (it is an
+    // Inactive-region event of the step, `zero_delay_cont_assign.rs`; it used to
+    // land on the advance path that re-entered the tick), where the first drain
+    // skipped it (`r=0`); iverilog `r=7` / `r=1` / `r=8`. verilator is not an
     // oracle here (it drops `#0` work after `$finish`).
     check(
         "module top;

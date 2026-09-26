@@ -435,6 +435,27 @@ pub(crate) struct Scheduler<'a, 'ir> {
     /// then so the batch-top poll does not cut the drain short. Read by both
     /// kernels (`sched/run_loop.rs`, `native/run.rs`).
     pub(crate) finish_pending: bool,
+    /// TIME-0 PHASES of the delayed continuous-assign lane (the measurement is
+    /// in `crate::t0_edge` and `cli/tests/zero_delay_cont_assign.rs`).
+    ///
+    /// `pre_init` is true while the first structural settle runs BEFORE the
+    /// declaration initializers, and only in a design that has some: a
+    /// RUNTIME delay (`ca_delay_exprs`) read there is a phantom — `int dv = 5;`
+    /// still holds its default — so such an assign is neither scheduled nor
+    /// landed until the initializer re-settle, whose `schedule_delayed_cas`
+    /// visits every delayed assign with the real values.
+    ///
+    /// `armed` turns true once `arm_processes` / `arm_t0` has queued the first
+    /// Active batch. Until then a delayed write whose EFFECTIVE delay is zero
+    /// (`#0`, `#(ZP)`, the zero side of a rise/fall pair, a runtime value of 0)
+    /// lands inside the settle like an undelayed driver (the landings
+    /// `schedule_delayed_cas` hands back once the fixpoint has converged):
+    /// both oracles read `assign #0 w = 1'b1;` as 1 before any process runs,
+    /// give it no time-0 posedge, and print the level line once. Afterwards a
+    /// zero-delay write is an Inactive-region event of its time step, delivered
+    /// at the `#0` promotion of both run loops.
+    pub(crate) pre_init: bool,
+    pub(crate) armed: bool,
     /// Body-step budget — see `SimOpts::max_body_steps`. Separate from `max_deltas`
     /// because it answers a different question: not "did the scheduler reach a
     /// fixpoint" but "has ONE activation run this long without suspending".

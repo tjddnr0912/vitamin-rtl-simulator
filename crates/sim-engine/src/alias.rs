@@ -642,6 +642,18 @@ pub(crate) fn settled_has_definite_bit<N: crate::eval::NetReader + ?Sized>(
 }
 
 pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
+    copy_nets_landed(ir, &[])
+}
+
+/// `copy_nets` for the TIME-0 phase: a delayed driver whose time-0 write
+/// landed inside the settle (`landed`, indexed by cont-assign — see
+/// `Scheduler::delayed_landed_in_settle`) is a bit move there like an undelayed one,
+/// so `assign #0 w = r;` gets the copy repair and the event suppression its
+/// undelayed twin gets (`reg r = 0;` gave it `L 0` and `N 0` where the twin
+/// prints nothing, both oracles silent on the edge). Only the two t0 callers
+/// pass a set; the read alias (`copy_alias`) never admits a delayed driver,
+/// because past time 0 that driver's write is an Inactive-region event.
+pub(crate) fn copy_nets_landed(ir: &SimIr, landed: &[bool]) -> Vec<CopyNet> {
     if ir.cont_assigns.is_empty() {
         return Vec::new();
     }
@@ -672,7 +684,8 @@ pub(crate) fn copy_nets(ir: &SimIr) -> Vec<CopyNet> {
         // `Some(src)` ⇒ this whole driver is one bit move from `src`. Only a
         // single-chunk lvalue can be, so the multi-chunk case falls to the loop
         // below and disqualifies every net it touches.
-        let moved = (ca.delay.is_none() && ca.lhs.chunks.len() == 1)
+        let undelayed = ca.delay.is_none() || landed.get(ci).copied().unwrap_or(false);
+        let moved = (undelayed && ca.lhs.chunks.len() == 1)
             .then(|| {
                 let c = &ca.lhs.chunks[0];
                 if c.word.is_some() || !flat(ir, c.net) {

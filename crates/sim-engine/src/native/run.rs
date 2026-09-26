@@ -500,10 +500,34 @@ pub(crate) fn run(k: &mut NativeKernel, ir: &SimIr) -> FinishReason {
             }
             // INACTIVE (#0): promote to Active. A `#0` batch is a NEW event
             // cluster, so the edge-dedup marks reset — an edge it produces must
-            // be able to re-fire a process already woken this timestep.
-            if !k.inactive.is_empty() {
-                k.active = std::mem::take(&mut k.inactive);
+            // be able to re-fire a process already woken this timestep. A `#0`
+            // continuous-assign / gate update due at `now` is delivered here,
+            // ahead of the promotion, as an Inactive-region event of this time
+            // step — the engine's `run_loop.rs` carries the argument; the
+            // generation filter is the shared `take_due_delayed_ca`, only the
+            // write is per-store.
+            let ca_due = k.sched.next_delayed_ca() == Some(k.sched.st.now);
+            if !k.inactive.is_empty() || ca_due {
                 k.wake.reset_edge_seen();
+                if ca_due {
+                    let due = k.sched.take_due_delayed_ca(k.sched.st.now);
+                    let mut moved = false;
+                    for (lhs, v, offs) in due {
+                        moved |= k.write_routed(&lhs, v, &offs);
+                    }
+                    k.drain_range_diags();
+                    if moved {
+                        propagate(k);
+                    }
+                }
+                if k.active.is_empty() {
+                    k.active = std::mem::take(&mut k.inactive);
+                } else {
+                    let promoted = std::mem::take(&mut k.inactive);
+                    for ready in promoted {
+                        push_sorted_native(&mut k.active, ready);
+                    }
+                }
                 delta_count += 1;
                 if delta_count > max_deltas {
                     k.sched.fatal_delta_limit();
@@ -687,131 +711,161 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
     // Hoisted out of the fixpoint: both are scratch, and a fixpoint runs this
     // body once per delta.
     let mut md_members: Vec<usize> = Vec::new();
+    // TIME-0 ZERO-DELAY LANDING, outer loop — the engine twin
+    // (`Scheduler::settle_cont_assigns`) carries the argument: the landings
+    // are decided after the fixpoint has converged, by the shared
+    // `schedule_delayed_cas`, written through the funnel and settled again.
     loop {
-        let mut changed = false;
-        // The engine's visit set, not a superset of it: the assigns whose
-        // dependency nets moved (`ca_dirty`, maintained by the write funnel from
-        // `ca_of_net`) UNION the ones `levelize::ca_deps` refused to certify
-        // (`ca_always`). Ascending index = declaration order, which several
-        // goldens depend on.
-        // ⚠️ The hazard this used to warn about — taking `ca_dirty`'s `Vec` and
-        // dropping it, which left it at capacity ZERO for the next delta's
-        // pushes — CANNOT OCCUR any more and the warning was deleted rather
-        // than left standing: `ca_dirty` is a fixed-size bitmap, so it has no
-        // capacity to lose and `note_change` has no push to regrow. The
-        // kernel-owned `pass` buffer stays, for the different reason that the
-        // loop below takes `&mut k` while iterating.
-        let mut pass = std::mem::take(&mut k.scratch_ca_pass);
-        pass.clear();
-        // ⭐ `ca_always` is unioned INTO the worklist before the drain rather
-        // than appended after it. That is what removes the `sort_unstable();
-        // dedup()` this loop used to run every fixpoint pass: membership is a
-        // bit, so the union is idempotent and the drain is ascending by
-        // construction — the "ascending index = declaration order" the goldens
-        // depend on is now a property of the traversal instead of a cost paid
-        // to recover it.
-        for &ci in k.sched.ca_always() {
-            k.arena.ch.ca_dirty.insert(ci as usize);
-        }
-        k.arena.ch.ca_dirty.drain_with(|ci| pass.push(ci));
-        for ci in pass.iter().map(|&c| c as usize) {
-            // BORROWED from `ir`, not cloned out of it. This used to be
-            // `.lhs.clone()` — an `Lvalue` owns a `Vec<LvalChunk>`, so that was
-            // a heap allocation per continuous assign per fixpoint pass, on the
-            // hottest loop this backend has. Nothing forced it: `ir` is a
-            // parameter of this function and is borrowed independently of `k`,
-            // so the immutable read survives across the `&mut k` write below.
-            let lhs = &ir.cont_assigns[ci].lhs;
-            let rhs = ir.cont_assigns[ci].rhs;
-            if ir.cont_assigns[ci].delay.is_some() {
-                // A DELAYED driver's output holds x until its first delayed
-                // write lands — `assign #3 o = a & b` reads `o == x` during
-                // `[0, d)`, iverilog-pinned. Driven INSIDE the fixpoint so it
-                // propagates to downstream assigns, and only while it is owed
-                // (see `delayed_owes_initial_x`). The value itself is scheduled
-                // after the fixpoint, not here.
-                if k.sched.delayed_owes_initial_x(ci) {
-                    let w = k.k_eval_for_lvalue(lhs, rhs).width;
-                    let offs = k.k_resolve_lvalue_offsets(lhs);
-                    // Through the FUNNEL, not the arena directly. ⚠️ This line
-                    // was `k.arena.write_lvalue(…)` — a second spelling of the
-                    // routing decision — and the source scan that forbids
-                    // exactly that MISSED it, because rustfmt had split
-                    // `k.arena` and `.write_lvalue(` across two lines and the
-                    // scan matches per line. Found when slice #2's extra
-                    // argument re-joined them.
-                    changed |= k.write_routed(lhs, crate::value::Value::xs(w, false), &offs);
-                }
-                continue;
+        loop {
+            let mut changed = false;
+            // The engine's visit set, not a superset of it: the assigns whose
+            // dependency nets moved (`ca_dirty`, maintained by the write funnel from
+            // `ca_of_net`) UNION the ones `levelize::ca_deps` refused to certify
+            // (`ca_always`). Ascending index = declaration order, which several
+            // goldens depend on.
+            // ⚠️ The hazard this used to warn about — taking `ca_dirty`'s `Vec` and
+            // dropping it, which left it at capacity ZERO for the next delta's
+            // pushes — CANNOT OCCUR any more and the warning was deleted rather
+            // than left standing: `ca_dirty` is a fixed-size bitmap, so it has no
+            // capacity to lose and `note_change` has no push to regrow. The
+            // kernel-owned `pass` buffer stays, for the different reason that the
+            // loop below takes `&mut k` while iterating.
+            let mut pass = std::mem::take(&mut k.scratch_ca_pass);
+            pass.clear();
+            // ⭐ `ca_always` is unioned INTO the worklist before the drain rather
+            // than appended after it. That is what removes the `sort_unstable();
+            // dedup()` this loop used to run every fixpoint pass: membership is a
+            // bit, so the union is idempotent and the drain is ascending by
+            // construction — the "ascending index = declaration order" the goldens
+            // depend on is now a property of the traversal instead of a cost paid
+            // to recover it.
+            for &ci in k.sched.ca_always() {
+                k.arena.ch.ca_dirty.insert(ci as usize);
             }
-            if k.sched.ca_is_md(ci) {
-                continue; // MULTI-DRIVER member: written once by resolution below
-            }
-            // R14 (ROADMAP §3 ⑭): the tier-3 spelling of the settle counter.
-            // Same event as the engine's `eval_cont_assign_prof` — one RHS
-            // evaluation of assign `ci` — so the two backends produce the SAME
-            // `ca_evals`, which is what makes the profile comparable across
-            // `--backend`.
-            let ca_t0 = prof_timed.then(std::time::Instant::now);
-            let v = k.k_eval_for_lvalue(lhs, rhs);
-            if profiling {
-                k.sched.charge_ca(ci, ca_t0);
-            }
-            // The offsets are resolved INSIDE, only on the arm that needs them:
-            // a proven plain whole-net scalar has nothing to resolve, and this
-            // line is reached ~3.3M times on picorv32/200k.
-            changed |= k.write_settled(lhs, v);
-        }
-        // MULTI-DRIVER: resolve each multi-driven net from ALL its whole-net
-        // drivers and write the net once — the engine's own loop, run EVERY
-        // pass exactly as the engine runs it (part of the same fixpoint: a
-        // driver's RHS can depend on another resolved net). The groups are the
-        // SCHEDULER's `md_groups` (one classification) and the fold is the
-        // shared `resolve_md_group` (one spelling of identity + kind table);
-        // only the store reads and the write are this backend's. Re-evaluating
-        // every driver each pass also re-emits any E4002 the driver's RHS earns
-        // — that matches the engine, which never worklists this loop.
-        for mi in 0..k.sched.md_groups().len() {
-            let (net, kind) = {
-                let g = &k.sched.md_groups()[mi];
-                (g.0, g.2)
-            };
-            // The member list is READ, not cloned: `md_groups` is scheduler
-            // state that this loop never writes, and the `&mut k` it needs is
-            // only for the eval/write below — so the ids are copied into a
-            // reusable buffer instead of a fresh `Vec` per group per pass.
-            md_members.clear();
-            md_members.extend_from_slice(&k.sched.md_groups()[mi].1);
-            let first = md_members[0];
-            let net_w = ir.nets[net as usize].width;
-            let mut vals = Vec::with_capacity(md_members.len());
-            for &ci in &md_members {
-                // Borrowed, for the same reason as the ordinary arm above.
+            k.arena.ch.ca_dirty.drain_with(|ci| pass.push(ci));
+            for ci in pass.iter().map(|&c| c as usize) {
+                // BORROWED from `ir`, not cloned out of it. This used to be
+                // `.lhs.clone()` — an `Lvalue` owns a `Vec<LvalChunk>`, so that was
+                // a heap allocation per continuous assign per fixpoint pass, on the
+                // hottest loop this backend has. Nothing forced it: `ir` is a
+                // parameter of this function and is borrowed independently of `k`,
+                // so the immutable read survives across the `&mut k` write below.
                 let lhs = &ir.cont_assigns[ci].lhs;
                 let rhs = ir.cont_assigns[ci].rhs;
+                if ir.cont_assigns[ci].delay.is_some() {
+                    // A DELAYED driver's output holds x until its first delayed
+                    // write lands — `assign #3 o = a & b` reads `o == x` during
+                    // `[0, d)`, iverilog-pinned. Driven INSIDE the fixpoint so it
+                    // propagates to downstream assigns, and only while it is owed
+                    // (see `delayed_owes_initial_x`). The value itself is scheduled
+                    // after the fixpoint, not here.
+                    if k.sched.delayed_owes_initial_x(ci) {
+                        let w = k.k_eval_for_lvalue(lhs, rhs).width;
+                        let offs = k.k_resolve_lvalue_offsets(lhs);
+                        // Through the FUNNEL, not the arena directly. ⚠️ This line
+                        // was `k.arena.write_lvalue(…)` — a second spelling of the
+                        // routing decision — and the source scan that forbids
+                        // exactly that MISSED it, because rustfmt had split
+                        // `k.arena` and `.write_lvalue(` across two lines and the
+                        // scan matches per line. Found when slice #2's extra
+                        // argument re-joined them.
+                        changed |= k.write_routed(lhs, crate::value::Value::xs(w, false), &offs);
+                    }
+                    continue;
+                }
+                if k.sched.ca_is_md(ci) {
+                    continue; // MULTI-DRIVER member: written once by resolution below
+                }
+                // R14 (ROADMAP §3 ⑭): the tier-3 spelling of the settle counter.
+                // Same event as the engine's `eval_cont_assign_prof` — one RHS
+                // evaluation of assign `ci` — so the two backends produce the SAME
+                // `ca_evals`, which is what makes the profile comparable across
+                // `--backend`.
                 let ca_t0 = prof_timed.then(std::time::Instant::now);
-                vals.push(k.k_eval_for_lvalue(lhs, rhs));
+                let v = k.k_eval_for_lvalue(lhs, rhs);
                 if profiling {
                     k.sched.charge_ca(ci, ca_t0);
                 }
+                // The offsets are resolved INSIDE, only on the arm that needs them:
+                // a proven plain whole-net scalar has nothing to resolve, and this
+                // line is reached ~3.3M times on picorv32/200k.
+                changed |= k.write_settled(lhs, v);
             }
-            let acc = crate::sched::resolve_md_group(kind, net_w, vals);
-            let lhs = &ir.cont_assigns[first].lhs;
-            let offs = k.k_resolve_lvalue_offsets(lhs);
-            changed |= k.write_routed(lhs, acc, &offs);
+            // MULTI-DRIVER: resolve each multi-driven net from ALL its whole-net
+            // drivers and write the net once — the engine's own loop, run EVERY
+            // pass exactly as the engine runs it (part of the same fixpoint: a
+            // driver's RHS can depend on another resolved net). The groups are the
+            // SCHEDULER's `md_groups` (one classification) and the fold is the
+            // shared `resolve_md_group` (one spelling of identity + kind table);
+            // only the store reads and the write are this backend's. Re-evaluating
+            // every driver each pass also re-emits any E4002 the driver's RHS earns
+            // — that matches the engine, which never worklists this loop.
+            for mi in 0..k.sched.md_groups().len() {
+                let (net, kind) = {
+                    let g = &k.sched.md_groups()[mi];
+                    (g.0, g.2)
+                };
+                // The member list is READ, not cloned: `md_groups` is scheduler
+                // state that this loop never writes, and the `&mut k` it needs is
+                // only for the eval/write below — so the ids are copied into a
+                // reusable buffer instead of a fresh `Vec` per group per pass.
+                md_members.clear();
+                md_members.extend_from_slice(&k.sched.md_groups()[mi].1);
+                let first = md_members[0];
+                let net_w = ir.nets[net as usize].width;
+                let mut vals = Vec::with_capacity(md_members.len());
+                for &ci in &md_members {
+                    // Borrowed, for the same reason as the ordinary arm above.
+                    let lhs = &ir.cont_assigns[ci].lhs;
+                    let rhs = ir.cont_assigns[ci].rhs;
+                    let ca_t0 = prof_timed.then(std::time::Instant::now);
+                    vals.push(k.k_eval_for_lvalue(lhs, rhs));
+                    if profiling {
+                        k.sched.charge_ca(ci, ca_t0);
+                    }
+                }
+                let acc = crate::sched::resolve_md_group(kind, net_w, vals);
+                let lhs = &ir.cont_assigns[first].lhs;
+                let offs = k.k_resolve_lvalue_offsets(lhs);
+                changed |= k.write_routed(lhs, acc, &offs);
+            }
+            // A cont-assign RHS can read an out-of-range array element, and the
+            // arena can only COUNT that — same third-producer problem the waiter
+            // predicate had. Drained here rather than left to the next body,
+            // because the t0 settle runs before any body exists.
+            k.drain_range_diags();
+            // Hand the visit buffer back BEFORE every exit from this iteration, including
+            // the two that leave the function. A `return` that skipped this would drop the
+            // capacity and reinstate exactly the regrowth this replaced — silently, since
+            // the only symptom is a slower run.
+            pass.clear();
+            k.scratch_ca_pass = std::mem::take(&mut pass);
+            if !changed {
+                break;
+            }
+            any = true;
+            *delta_count += 1;
+            if *delta_count > max_deltas {
+                k.sched.fatal_delta_limit();
+                return None;
+            }
         }
-        // A cont-assign RHS can read an out-of-range array element, and the
-        // arena can only COUNT that — same third-producer problem the waiter
-        // predicate had. Drained here rather than left to the next body,
-        // because the t0 settle runs before any body exists.
+        // The fixpoint has settled, so every delayed assign's RHS is stable — the
+        // point at which the engine schedules its inertial writes. Shared with the
+        // engine (`schedule_delayed_cas`); only the RHS evaluation reads the arena.
+        let landings = {
+            let (sched, arena) = (&mut *k.sched, &k.arena);
+            sched.schedule_delayed_cas(Some(arena))
+        };
+        if landings.is_empty() {
+            break;
+        }
+        let mut moved = false;
+        for (lhs, v, offs) in landings {
+            moved |= k.write_routed(&lhs, v, &offs);
+        }
         k.drain_range_diags();
-        // Hand the visit buffer back BEFORE every exit from this iteration, including
-        // the two that leave the function. A `return` that skipped this would drop the
-        // capacity and reinstate exactly the regrowth this replaced — silently, since
-        // the only symptom is a slower run.
-        pass.clear();
-        k.scratch_ca_pass = std::mem::take(&mut pass);
-        if !changed {
+        if !moved {
             break;
         }
         any = true;
@@ -821,11 +875,6 @@ fn settle_cont_assigns(k: &mut NativeKernel, ir: &SimIr, delta_count: &mut u64) 
             return None;
         }
     }
-    // The fixpoint has settled, so every delayed assign's RHS is stable — the
-    // point at which the engine schedules its inertial writes. Shared with the
-    // engine (`schedule_delayed_cas`); only the RHS evaluation reads the arena.
-    let (sched, arena) = (&mut *k.sched, &k.arena);
-    sched.schedule_delayed_cas(Some(arena));
     Some(any)
 }
 
@@ -916,6 +965,10 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
     // (measured: `P 0 | N 0 | W 0 n=3` with the dirt-keyed guard, verilator
     // `P 0 n=3 | W 0 n=3`).
     if !inits.is_empty() {
+        // The runtime structural-delay lane is decided here, with the
+        // initializers landed (`Scheduler::pre_init`); the re-settle's
+        // `schedule_delayed_cas` visits every delayed assign.
+        k.sched.pre_init = false;
         let mut resettle_deltas: u64 = 0;
         if settle_cont_assigns(k, ir, &mut resettle_deltas).is_none() {
             return false;
@@ -934,7 +987,8 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
     // Order matters twice: sources come first (`copy_nets` returns dependency
     // order) so a chain repairs in one pass, and the suppression runs AFTER
     // the rollback so each source's dirt is the settle's answer alone.
-    let copies = crate::alias::copy_nets(ir);
+    let landed = k.sched.delayed_landed_in_settle();
+    let copies = crate::alias::copy_nets_landed(ir, &landed);
     for cn in &copies {
         for &ci in &cn.cas {
             let lhs = &ir.cont_assigns[ci].lhs;
@@ -987,7 +1041,7 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
     // `P 0` where neither oracle does), so the mask the write funnel folded it
     // into is zeroed before the first delta's `take_changed` reads it. A driver
     // reading a variable keeps its mask (both oracles fire on `{r, 1'b1}`).
-    let settle_const = crate::t0_edge::settle_constant_nets(ir);
+    let settle_const = crate::t0_edge::settle_constant_nets(ir, &landed);
     for n in k.arena.ch.dirty.collect() {
         if settle_const.get(n as usize).copied().unwrap_or(false) {
             k.arena.ch.slot_edge[n as usize] = 0;
@@ -1061,6 +1115,9 @@ fn arm_t0(k: &mut NativeKernel, ir: &SimIr, t0_b0: &[sim_ir::FourState]) -> bool
             sim_ir::SensKind::Edge | sim_ir::SensKind::Level => {}
         }
     }
+    // From here a zero-delay continuous-assign write is an Inactive-region
+    // event of its time step (`Scheduler::armed`).
+    k.sched.armed = true;
     true
 }
 
@@ -1092,9 +1149,10 @@ fn snapshot_preponed(k: &mut NativeKernel) {
     sched.st.snapshot_preponed_with(Some(arena));
 }
 
-/// The engine's `Scheduler::tick_due_now` over this kernel's wheels: a `#0`
-/// delayed cont-assign or transport NBA due at `now` re-enters the tick on the
-/// advance path, so the step is not over.
+/// The engine's `Scheduler::tick_due_now` over this kernel's wheels: a
+/// transport NBA (`<= #0`) due at `now` re-enters the tick on the advance
+/// path, so the step is not over. (A `#0` cont-assign due at `now` is
+/// delivered at the Inactive step; its half here is an invariant.)
 fn tick_due_now(k: &NativeKernel) -> bool {
     let now = k.sched.st.now;
     k.delayed_nba.keys().next().copied() == Some(now) || k.sched.next_delayed_ca() == Some(now)

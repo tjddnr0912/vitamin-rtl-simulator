@@ -834,7 +834,7 @@ impl Elaborator<'_> {
         // distinct rise/fall/turnoff rides the `ca_delays` sidecar, and a
         // delay that is not an elaboration constant rides `ca_delay_exprs`
         // (`fold_ca_delay_rt`, which also stamps the `Some(0)` routing flag).
-        let (delay, rft, rt) = self.fold_ca_delay_rt(ca.delay.as_ref());
+        let (delay, rft, rt, zero_scope) = self.fold_ca_delay_rt(ca.delay.as_ref());
         for (lv, rhs) in &ca.assigns {
             let lhs = self.lower_lvalue(lv);
             // P1-9 (E3018): a user `assign` may not drive a Reg/Integer/Real
@@ -851,6 +851,9 @@ impl Elaborator<'_> {
             }
             if let Some(rt) = rt {
                 self.ca_delay_exprs.insert(idx, rt);
+            }
+            if zero_scope {
+                self.ca_zero_scope.insert(idx);
             }
             // R14: `assign` — the user wrote it, so the identity is the
             // statement's own span.

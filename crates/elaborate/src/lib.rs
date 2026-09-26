@@ -1221,6 +1221,12 @@ struct Elaborator<'s> {
     /// continuous assign has no process whose `cur_time_mult` the engine could
     /// read at the scheduling point.
     ca_delay_exprs: std::collections::BTreeMap<u32, (u32, u32, Option<u32>, u64, u64)>,
+    /// The cont-assigns whose uniform delay is `Some(0)` because a
+    /// SCOPE-resolved rise folded to zero (`#(ZERO_PARAM)`). Read by
+    /// `demote_runtime_delay_on_resolved_nets` alone: on a resolved net such an
+    /// assign keeps its pre-slice no-delay shape (the delayed lane cannot drive
+    /// one), everywhere else it is a `#0` assign. Elaboration-local.
+    ca_zero_scope: std::collections::BTreeSet<u32>,
     clocking_events: std::collections::BTreeMap<String, ast::Sensitivity>,
     /// This module's `default clocking` event (IEEE 1800 §14.12), or `None`.
     /// MODULE-LOCAL: `lower_clocking_blocks` clears it alongside `clocking_events`,

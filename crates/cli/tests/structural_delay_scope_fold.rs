@@ -12,8 +12,10 @@
 //! and verilator 5.050), and they agree on all of them EXCEPT the two named at
 //! their own test: the `bufif1` row (verilator refuses to compile a tristate
 //! primitive here — iverilog-only), and the `#0`-vs-no-delay ORDERING, where the
-//! oracles split by one inactive hop. The zero-rise test is therefore pinned in
-//! the postponed region (`$strobe`), where they do agree.
+//! oracles split by one inactive hop. The zero-rise tests are therefore pinned in
+//! the postponed region (`$strobe`) and one time step later, where they do agree
+//! (a zero-delay write is an Inactive-region event of its time step — see
+//! `zero_delay_cont_assign.rs`).
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -350,16 +352,13 @@ fn distinct_rise_fall_from_parameters_reaches_the_sidecar() {
 }
 
 #[test]
-fn a_zero_rise_keeps_the_pre_slice_shape() {
-    // ⚠️ ANTI-TRUNCATION PIN, not a claim that this is IEEE-correct. A
-    // scope-folded rise of 0 stays `None` (no delay) rather than `Some(0)`,
-    // because `Some(0)` routes the assign onto the delayed path where a
-    // zero-tick write lands only AFTER the Postponed region of its own time
-    // step. Pinned with `$strobe` (which IS the postponed region) because that
-    // is where both oracles agree: they read all three of these as 1, and a
-    // `Some(0)` reads 0. `y0` — the LITERAL `#0` — is that pre-existing lag,
-    // pinned here so it cannot spread; ROADMAP §2 owns it and it is the root
-    // that would unblock `#(ZERO_PARAM, F)` below.
+fn a_scope_folded_zero_rise_is_the_literal_zero() {
+    // A scope-folded rise of 0 is `Some(0)` — the literal `#0`'s shape — and a
+    // zero-delay write is an Inactive-region event of its time step, so the
+    // postponed region reads it. Both oracles read all three of these as 1.
+    // (This pin used to hold `S y0=0 yz=1 yn=1`: the literal `#0` landed after
+    // the Postponed region, and the scope-folded zero was kept OFF the delayed
+    // lane to dodge that lag — the trade `zero_delay_cont_assign.rs` retires.)
     let (out, code) = run("`timescale 1ns/1ns\nmodule top;\n  parameter Z = 0;\n\
          reg a; wire y0, yz, yn;\n\
          assign #0   y0 = a;\n  assign #(Z) yz = a;\n  assign      yn = a;\n\
@@ -368,22 +367,17 @@ fn a_zero_rise_keeps_the_pre_slice_shape() {
          #2 $finish; end endmodule\n");
     assert_eq!(code, Some(0), "got:\n{out}");
     assert!(
-        out.contains("S y0=0 yz=1 yn=1"),
-        "`#(Z)` must stay on the no-delay shape (both oracles read 1 here) while \
-         the literal `#0` keeps its pre-existing postponed-region lag; got:\n{out}"
+        out.contains("S y0=1 yz=1 yn=1"),
+        "every spelling of a zero delay is read by the postponed region (both oracles); got:\n{out}"
     );
 }
 
 #[test]
-fn a_zero_rise_with_a_distinct_fall_is_a_recorded_residue() {
-    // ⚠️ THE LOSING HALF OF THAT TRADE, pinned so it is not mistaken for support.
-    // The zero-rise rule suppresses the uniform, and the engine only consults the
-    // rise/fall sidecar on `delay.is_some()` — so `#(Z,F)` keeps the pre-slice NO
-    // delay and its fall is wrong, while the literal twin `#(0,F)` is right. Both
-    // oracles fall at +9 on BOTH spellings. Emitting `Some(0)` + sidecar would fix
-    // this fall and break the rise on the lag above, and both halves are
-    // 2-oracle-agreed — a silent-wrong traded for a silent-wrong, which the
-    // accuracy ladder forbids. ROADMAP §2 owns it; the fix is the lag, not here.
+fn a_zero_rise_with_a_distinct_fall_keeps_the_fall() {
+    // `#(Z,F)` carries its rise/fall sidecar like the literal `#(0,F)`: both
+    // oracles fall at +9 on BOTH spellings. (While the scope-folded zero rise was
+    // kept off the delayed lane the sidecar died with it and `yp` fell at once —
+    // `B yl=1 yp=0`, the recorded residue this pin held.)
     let (out, code) = run(
         "`timescale 1ns/1ns\nmodule top;\n  parameter Z = 0; parameter F = 9;\n\
          reg a; wire yl, yp;\n  assign #(0,9) yl = a;\n  assign #(Z,F) yp = a;\n\
@@ -394,9 +388,8 @@ fn a_zero_rise_with_a_distinct_fall_is_a_recorded_residue() {
     assert_eq!(code, Some(0), "got:\n{out}");
     assert!(out.contains("A yl=1 yp=1"), "both risen; got:\n{out}");
     assert!(
-        out.contains("B yl=1 yp=0"),
-        "literal `#(0,9)` holds for fall(9) — both oracles; the param spelling \
-         falls immediately = the recorded residue; got:\n{out}"
+        out.contains("B yl=1 yp=1"),
+        "both spellings hold for fall(9) — both oracles; got:\n{out}"
     );
     assert!(out.contains("C yl=0 yp=0"), "both fallen; got:\n{out}");
 }

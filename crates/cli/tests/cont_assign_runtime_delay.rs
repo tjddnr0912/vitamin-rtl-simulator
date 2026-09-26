@@ -567,11 +567,9 @@ endmodule\n");
 
 #[test]
 fn a_zero_rise_with_a_runtime_fall_keeps_the_fall() {
-    // The sharp edge of the ANY rule. `fold_ca_delay` deliberately suppresses a
-    // SCOPE-FOLDED rise of zero (it keeps such an assign off the delayed lane to
-    // avoid the `#0` lag, a documented trade) — but that choice only exists for
-    // a WHOLLY constant delay. With a runtime fall the delayed lane is the only
-    // way to deliver the fall at all, so `#(ZP, dv)` and `#(0, dv)` take it.
+    // The sharp edge of the ANY rule: a spec whose rise folds (to zero, here)
+    // and whose fall does not still needs the runtime lane for the fall, so
+    // `#(ZP, dv)` and `#(0, dv)` take it.
     //
     // `a` rises at 1 (rise = 0), falls at 6 → all three fall at 11.
     // BOTH ORACLES: `T3 yp=1 yl=1 yc=1`, `T9 yp=1 yl=1 yc=1`,
@@ -911,23 +909,18 @@ endmodule\n");
 }
 
 #[test]
-fn a_zero_runtime_delay_inherits_the_zero_tick_lag() {
-    // ⚠️ A RESIDUE PIN. A runtime delay that evaluates to 0 lands after the
-    // Postponed region of its own time value — ROADMAP §2's `#0` row, which the
-    // constant `#0` spelling has had all along. Only a same-time-step `#0`
-    // observer can see it; the `NEXT` probe, one time step later, is right.
+fn a_zero_runtime_delay_lands_at_the_promotion() {
+    // A runtime delay that evaluates to 0 is a zero-delay write: an
+    // Inactive-region event of its time step, landed at the first `#0`
+    // promotion (`zero_delay_cont_assign.rs`), the same as the constant `#0`.
     //
     //   iverilog 13.0   SAME 1 1   P0 1 1   P00 1 1   NEXT 1 1
     //   verilator 5.052 SAME 0 0   P0 0 0   P00 1 1   NEXT 1 1
-    //   vita            SAME 0 0   P0 0 0   P00 0 0   NEXT 1 1
-    //   PRE             SAME 1 0   P0 1 0   P00 1 0   NEXT 1 1
+    //   vita            SAME 0 0   P0 1 1   P00 1 1   NEXT 1 1
     //
-    // The two oracles agree only at P00 and NEXT. P00 is therefore the one cell
-    // this slice MOVED the wrong way: PRE read the runtime `#(dz)` there as 1
-    // because it had no delay at all, and it now reads 0 like its constant `#0`
-    // twin — which PRE also read as 0. The slice does not close that lag (its
-    // fix is the constant `#0` row's, whose blast radius is every delayed
-    // assign), it makes the runtime spelling share it.
+    // The two oracles agree at P00 and NEXT (SAME and P0 are their split: the
+    // writer's own hops). Both spellings used to read 0 at P00 — the write
+    // landed after the Postponed region of its time step.
     let (out, code) = run("`timescale 1ns/1ns\n\
 module t;\n\
 \x20 logic a = 0; int dz = 0; wire yv, yc;\n\
@@ -945,8 +938,8 @@ endmodule\n");
     want_lines(
         &out,
         code,
-        &["SAME 0 0", "P0 0 0", "P00 0 0", "NEXT 1 1"],
-        "a zero runtime delay shares the constant #0 lag",
+        &["SAME 0 0", "P0 1 1", "P00 1 1", "NEXT 1 1"],
+        "a zero runtime delay lands at the first promotion",
     );
 }
 

@@ -515,6 +515,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // before any scheduler exists. An inline copy lived here and the shared
         // function's own doc claimed it did not — the two were character-
         // identical, so nothing differed, but the invariant was not enforced.
+        let pre_init = !st.init_procs.is_empty();
         let whole = multi_driver_groups(st.ir);
         let mut md_nets: Vec<(u32, Vec<usize>, u8)> = Vec::new();
         let mut ca_md = vec![false; nca];
@@ -702,6 +703,8 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             delta_count: 0,
             max_deltas,
             finish_pending: false,
+            pre_init,
+            armed: false,
             max_body_steps,
             time_limit,
             scratch_changed: Vec::new(),
@@ -769,91 +772,124 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // whole fixpoint is exactly equivalent — that part is free either way.
         let profiling = self.st.proc_prof.is_some();
         let prof_timed = self.st.proc_prof.as_ref().is_some_and(|p| p.timed);
+        // TIME-0 ZERO-DELAY LANDING, outer loop (the tier-3 twin is
+        // `native::run::settle_cont_assigns`; the rule is on
+        // `Scheduler::armed`): once the fixpoint has CONVERGED,
+        // `schedule_delayed_cas` hands back the writes of every delayed driver
+        // whose effective delay is zero and which may land before arming; they
+        // are written here and the fixpoint re-runs on what they moved, until
+        // no landing moves anything. Deciding inside the fixpoint was measured
+        // wrong (review r1 soundness F1/F2): a pass that has not converged
+        // commits the transition baseline to a transient value (`assign #(0,9)
+        // y = (w === 1'bz)` above `assign w = 1'b0` landed `y=1` for nine
+        // units, both oracles x/0), and a runtime delay read mid-pass from an
+        // unsettled net is 0 by declaration order. Deciding after convergence
+        // also keeps the rhs evaluation count of every delayed assign what it
+        // was (one per settle), so `assign #5 y = $random;` draws as before.
         loop {
-            let mut changed = false;
-            // DIRTY-SETTLE: visit the assigns that must be re-evaluated, not all of
-            // them. `ca_always` holds every assign `levelize::ca_deps` refused to
-            // certify (delayed, multi-driver member, impure RHS, heap-handle
-            // dependency); `st.ca_dirty` holds the certified ones whose dependency
-            // nets moved since the last pass. The union is visited in ASCENDING index
-            // = declaration order, which is the order the fixpoint has always used and
-            // which several goldens depend on.
-            //
-            // Skipping is sound precisely because a certified assign whose inputs did
-            // not move recomputes its previous value, and the write funnel drops a
-            // same-value write without noting a change — so the visit it replaces was
-            // observationally a no-op. The teeth are in `ca_deps` being COMPLETE.
-            let pass: Vec<u32> = {
-                let mut v = std::mem::take(&mut self.st.ca_dirty);
-                for &ci in &v {
-                    self.st.ca_dirty_flag[ci as usize] = false;
-                }
-                v.extend_from_slice(&self.ca_always);
-                v.sort_unstable();
-                v.dedup();
-                v
-            };
-            for ci in pass.into_iter().map(|c| c as usize) {
-                if self.st.ir.cont_assigns[ci].delay.is_some() {
-                    // A delayed driver's output register holds x until its FIRST
-                    // delayed write lands — iverilog-pinned: `assign #3 o = a&b`
-                    // and `and #3 (o,a,b)` read `o == x` (NOT the undriven-z net
-                    // default) during [0, d). Drive that initial x INSIDE the
-                    // fixpoint (not just below) so it propagates to downstream
-                    // cont-assigns; the computed value is scheduled at now+d below.
-                    // Skipped once the first write has landed (`last_ca_drv` Some),
-                    // and unless this delayed driver is the SOLE driver of its net
-                    // (`delayed_sole`) — a shared net's every-delta x-drive would
-                    // oscillate against the concurrent driver (see the field doc).
-                    if self.last_ca_drv[ci].is_none() && self.delayed_sole[ci] {
-                        let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
-                        let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
-                        let w = self.eval_for_lvalue(&lhs, ca_rhs).width;
-                        let offs = self.resolve_lvalue_offsets(&lhs);
-                        changed |= self.st.write_lvalue(&lhs, Value::xs(w, false), &offs);
+            loop {
+                let mut changed = false;
+                // DIRTY-SETTLE: visit the assigns that must be re-evaluated, not all of
+                // them. `ca_always` holds every assign `levelize::ca_deps` refused to
+                // certify (delayed, multi-driver member, impure RHS, heap-handle
+                // dependency); `st.ca_dirty` holds the certified ones whose dependency
+                // nets moved since the last pass. The union is visited in ASCENDING index
+                // = declaration order, which is the order the fixpoint has always used and
+                // which several goldens depend on.
+                //
+                // Skipping is sound precisely because a certified assign whose inputs did
+                // not move recomputes its previous value, and the write funnel drops a
+                // same-value write without noting a change — so the visit it replaces was
+                // observationally a no-op. The teeth are in `ca_deps` being COMPLETE.
+                let pass: Vec<u32> = {
+                    let mut v = std::mem::take(&mut self.st.ca_dirty);
+                    for &ci in &v {
+                        self.st.ca_dirty_flag[ci as usize] = false;
                     }
-                    continue; // a delayed `assign #d` is scheduled below, not now
-                }
-                if self.ca_md[ci] {
-                    continue; // MULTI-DRIVER member: written once by resolution below
-                }
-                let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
-                let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
-                let ca_t0 = prof_timed.then(std::time::Instant::now);
-                let v = self.eval_cont_assign(ci, &lhs, ca_rhs); // CONTEXT-SIZED to lhs width
-                if profiling {
-                    self.charge_ca(ci, ca_t0);
-                }
-                let offs = self.resolve_lvalue_offsets(&lhs); // dynamic index NOW (settle time)
-                changed |= self.st.write_lvalue(&lhs, v, &offs);
-            }
-            // MULTI-DRIVER: resolve each multi-driven net from ALL its whole-net
-            // drivers by 4-state wire resolution, then write the net once. Part of
-            // the same fixpoint (a driver's RHS can depend on another resolved net).
-            for mi in 0..self.md_nets.len() {
-                let net = self.md_nets[mi].0;
-                let net_w = self.st.nets[net as usize].width;
-                let cis = self.md_nets[mi].1.clone();
-                let kind = self.md_nets[mi].2;
-                // Evaluate every driver first, fold second — the fold is the
-                // shared `resolve_md_group` and emits nothing, so the
-                // diagnostic stream is the interleaved loop's.
-                let mut vals = Vec::with_capacity(cis.len());
-                for ci in cis {
+                    v.extend_from_slice(&self.ca_always);
+                    v.sort_unstable();
+                    v.dedup();
+                    v
+                };
+                for ci in pass.into_iter().map(|c| c as usize) {
+                    if self.st.ir.cont_assigns[ci].delay.is_some() {
+                        // A delayed driver's output register holds x until its FIRST
+                        // delayed write lands — iverilog-pinned: `assign #3 o = a&b`
+                        // and `and #3 (o,a,b)` read `o == x` (NOT the undriven-z net
+                        // default) during [0, d). Drive that initial x INSIDE the
+                        // fixpoint (not just below) so it propagates to downstream
+                        // cont-assigns; the computed value is scheduled at now+d below.
+                        // Skipped once the first write has landed (`last_ca_drv` Some),
+                        // and unless this delayed driver is the SOLE driver of its net
+                        // (`delayed_sole`) — a shared net's every-delta x-drive would
+                        // oscillate against the concurrent driver (see the field doc).
+                        if self.last_ca_drv[ci].is_none() && self.delayed_sole[ci] {
+                            let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
+                            let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
+                            let w = self.eval_for_lvalue(&lhs, ca_rhs).width;
+                            let offs = self.resolve_lvalue_offsets(&lhs);
+                            changed |= self.st.write_lvalue(&lhs, Value::xs(w, false), &offs);
+                        }
+                        continue; // a delayed `assign #d` is scheduled below, not now
+                    }
+                    if self.ca_md[ci] {
+                        continue; // MULTI-DRIVER member: written once by resolution below
+                    }
                     let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
                     let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
                     let ca_t0 = prof_timed.then(std::time::Instant::now);
-                    vals.push(self.eval_cont_assign(ci, &lhs, ca_rhs));
+                    let v = self.eval_cont_assign(ci, &lhs, ca_rhs); // CONTEXT-SIZED to lhs width
                     if profiling {
                         self.charge_ca(ci, ca_t0);
                     }
+                    let offs = self.resolve_lvalue_offsets(&lhs); // dynamic index NOW (settle time)
+                    changed |= self.st.write_lvalue(&lhs, v, &offs);
                 }
-                let acc = resolve_md_group(kind, net_w, vals);
-                let lhs = self.st.ir.cont_assigns[self.md_nets[mi].1[0]].lhs.clone();
-                let offs = self.resolve_lvalue_offsets(&lhs);
-                changed |= self.st.write_lvalue(&lhs, acc, &offs);
+                // MULTI-DRIVER: resolve each multi-driven net from ALL its whole-net
+                // drivers by 4-state wire resolution, then write the net once. Part of
+                // the same fixpoint (a driver's RHS can depend on another resolved net).
+                for mi in 0..self.md_nets.len() {
+                    let net = self.md_nets[mi].0;
+                    let net_w = self.st.nets[net as usize].width;
+                    let cis = self.md_nets[mi].1.clone();
+                    let kind = self.md_nets[mi].2;
+                    // Evaluate every driver first, fold second — the fold is the
+                    // shared `resolve_md_group` and emits nothing, so the
+                    // diagnostic stream is the interleaved loop's.
+                    let mut vals = Vec::with_capacity(cis.len());
+                    for ci in cis {
+                        let ca_rhs = self.st.ir.cont_assigns[ci].rhs;
+                        let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
+                        let ca_t0 = prof_timed.then(std::time::Instant::now);
+                        vals.push(self.eval_cont_assign(ci, &lhs, ca_rhs));
+                        if profiling {
+                            self.charge_ca(ci, ca_t0);
+                        }
+                    }
+                    let acc = resolve_md_group(kind, net_w, vals);
+                    let lhs = self.st.ir.cont_assigns[self.md_nets[mi].1[0]].lhs.clone();
+                    let offs = self.resolve_lvalue_offsets(&lhs);
+                    changed |= self.st.write_lvalue(&lhs, acc, &offs);
+                }
+                if !changed {
+                    break;
+                }
+                any = true;
+                self.delta_count += 1;
+                if self.delta_count > self.max_deltas {
+                    self.fatal_delta_limit();
+                    return None;
+                }
             }
-            if !changed {
+            let landings = self.schedule_delayed_cas::<SimState>(None);
+            if landings.is_empty() {
+                break;
+            }
+            let mut moved = false;
+            for (lhs, v, offs) in landings {
+                moved |= self.st.write_lvalue(&lhs, v, &offs);
+            }
+            if !moved {
                 break;
             }
             any = true;
@@ -863,7 +899,6 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 return None;
             }
         }
-        self.schedule_delayed_cas::<SimState>(None);
         Some(any)
     }
 
@@ -880,10 +915,21 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// crosses — the generation bookkeeping, the transition-delay selection and
     /// the wheel are scheduler state either way, which is why this is one
     /// function rather than two.
+    ///
+    /// Returns the TIME-0 LANDINGS: before arming (`Scheduler::armed`), a
+    /// driver whose effective delay for this transition is zero does not go
+    /// on the wheel — its write is handed back for the caller to apply inside
+    /// the settle, like an undelayed driver's (`assign #0 w = 1'b1;` reads 1
+    /// before any process runs, wakes `always @(w)` once and posedges nothing,
+    /// both oracles). It is recorded as the value last computed AND last
+    /// driven, so the next settle finds nothing to do and the x-drive is never
+    /// owed again; the generation bump above supersedes a write an earlier
+    /// settle scheduled. Empty once armed.
     pub(crate) fn schedule_delayed_cas<N: crate::eval::NetReader + ?Sized>(
         &mut self,
         nets: Option<&N>,
-    ) {
+    ) -> Vec<(Lvalue, Value, Offsets)> {
+        let mut landings: Vec<(Lvalue, Value, Offsets)> = Vec::new();
         // The iteration set is `delayed_ca_idx`, not `0..cont_assigns.len()` —
         // the same indices in the same order, minus the ones whose only effect
         // was to reach the `continue` below. The `let Some(d) = ... else` is
@@ -932,6 +978,26 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
             // delayed write lands): the pending write never updated `last_ca_drv`,
             // so the baseline correctly stays the net's present output.
             let old = self.last_ca_drv[ci].clone();
+            // DEFERRED before the declaration initializers (`Scheduler::pre_init`,
+            // the first settle of a design that has some): a runtime delay read
+            // here is a phantom (`int dv = 5; assign #(dv) z = 1'b1;` would go
+            // on the wheel for `now + 0`), and a zero-delay LANDING here would
+            // commit the transition baseline to a phantom rhs (`reg [1:0] s =
+            // 2'b01; wire b = (s === 2'bxx); assign #(0, 9) y = b;` landed 1
+            // and then measured the initializer's 0 as a fall of 9, both
+            // oracles x/0 — review r1 soundness F2). Nothing is recorded, so
+            // the initializer re-settle's pass decides from the real values;
+            // the x-drive stands meanwhile. A non-zero constant delay still
+            // schedules here as it always has (the re-settle's generation bump
+            // supersedes it when the rhs moves).
+            if self.pre_init {
+                let runtime = self.ca_is_runtime_delay(ci);
+                let zero =
+                    !runtime && self.effective_ca_delay(nets, ci, d, old.as_ref(), &v) == Some(0);
+                if runtime || zero {
+                    continue;
+                }
+            }
             self.last_ca[ci] = Some(v.clone());
             self.ca_gen[ci] += 1;
             // THE LHS OFFSETS MUST COME FROM THE SAME STORE AS THE RHS. This
@@ -958,6 +1024,11 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 // finite.
                 continue;
             };
+            if eff_d == 0 && self.settle_may_land() {
+                self.last_ca_drv[ci] = Some(v.clone());
+                landings.push((lhs, v, offs));
+                continue;
+            }
             let tick = self.st.now.saturating_add(eff_d);
             self.delayed_ca.entry(tick).or_default().push((
                 ci as u32,
@@ -967,6 +1038,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 offs,
             ));
         }
+        landings
     }
 
     /// The delayed cont-assign writes due at `tick`, generation-filtered — the
@@ -1004,6 +1076,35 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
     /// x-drive would oscillate against the concurrent driver).
     pub(crate) fn delayed_owes_initial_x(&self, ci: usize) -> bool {
         self.last_ca_drv[ci].is_none() && self.delayed_sole[ci]
+    }
+
+    /// Is cont-assign `ci` on S1's RUNTIME structural-delay lane?
+    pub(crate) fn ca_is_runtime_delay(&self, ci: usize) -> bool {
+        self.st.ca_delay_exprs.contains_key(&(ci as u32))
+    }
+
+    /// May a delayed assign land its value inside the CURRENT settle? Only
+    /// before arming, and not in the pre-initializer settle
+    /// (`Scheduler::pre_init`), where `schedule_delayed_cas` defers every
+    /// zero-delay decision to the re-settle. Whether it then lands is that
+    /// function's (the effective delay).
+    pub(crate) fn settle_may_land(&self) -> bool {
+        !self.armed && !self.pre_init
+    }
+
+    /// Which delayed assigns landed their time-0 value inside the settle —
+    /// indexed by cont-assign, read by `t0_edge::settle_constant_nets` (so a
+    /// `#0` driver of a literal loses the settle's edge like an undelayed one)
+    /// and `alias::copy_nets_landed` (so a `#0` copy gets the copy repair and
+    /// suppression; the landing itself is `schedule_delayed_cas`'s). "Landed"
+    /// is: the value the assign last computed IS the
+    /// value it drove — a driver with a write still pending (`#(0, 9)` landed
+    /// its x at the first settle and then scheduled the initializer's 0 for
+    /// tick 9) is not, whatever it drove earlier.
+    pub(crate) fn delayed_landed_in_settle(&self) -> Vec<bool> {
+        (0..self.last_ca.len())
+            .map(|ci| self.last_ca_drv[ci].is_some() && self.last_ca[ci] == self.last_ca_drv[ci])
+            .collect()
     }
 
     /// Arm processes at t0 per Verilog initial/always semantics.
@@ -1142,6 +1243,11 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // budget is the run loop's: it resets the counter before the first
         // delta's settle, where this work ran before.
         if !inits.is_empty() {
+            // The runtime structural-delay lane is decided HERE, with the
+            // initializers landed (`Scheduler::pre_init`): the re-settle's
+            // `schedule_delayed_cas` visits every delayed assign, whether or
+            // not an initializer wrote its rhs.
+            self.pre_init = false;
             self.delta_count = 0;
             if self.settle_cont_assigns().is_none() {
                 return false;
@@ -1161,7 +1267,8 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // the settle's answer alone. `copy_nets` is in dependency order, so one
         // pass repairs a chain and every source's flag is final when its reader
         // asks.
-        let copies = crate::alias::copy_nets(self.st.ir);
+        let landed = self.delayed_landed_in_settle();
+        let copies = crate::alias::copy_nets_landed(self.st.ir, &landed);
         for cn in &copies {
             for &ci in &cn.cas {
                 let lhs = self.st.ir.cont_assigns[ci].lhs.clone();
@@ -1224,7 +1331,7 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
         // Membership is untouched. A value written to the net later in time 0
         // is a fresh change: the net is no longer dirty once the first delta
         // drains, so `note_change` resets the mask on its next dirtying.
-        let settle_const = crate::t0_edge::settle_constant_nets(self.st.ir);
+        let settle_const = crate::t0_edge::settle_constant_nets(self.st.ir, &landed);
         for &n in &self.st.dirty {
             if settle_const.get(n as usize).copied().unwrap_or(false) {
                 self.st.slot_edge[n as usize] = 0;
@@ -1324,6 +1431,9 @@ impl<'a, 'ir> Scheduler<'a, 'ir> {
                 SensKind::Edge | SensKind::Level => self.arm_sensitivity(aid, 0),
             }
         }
+        // From here a zero-delay continuous-assign write is an Inactive-region
+        // event of its time step (`Scheduler::armed`).
+        self.armed = true;
         true
     }
 
