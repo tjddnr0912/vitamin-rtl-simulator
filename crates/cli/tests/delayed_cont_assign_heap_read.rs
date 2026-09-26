@@ -259,7 +259,12 @@ endmodule
     );
 }
 
-/// NOT this slice, pinned as measured on both backends (ROADMAP §2 "Delays / events"): a delayed assign whose DYNAMIC left-side index moves while its rhs does not keeps the target it was first scheduled at — `assign #1 y[q.size()] = v;` writes `y[0]` (the size at the time-0 settle) where verilator writes `y[1]`; iverilog refuses the non-constant index. The "rhs unchanged, no new write" shortcut in `schedule_delayed_cas` compares the value only.
+/// NOT this slice, pinned as measured on both backends (ROADMAP §2 "Delays / events"): a
+/// continuous assign with a NON-CONSTANT left-side index. On this NET array the target is
+/// illegal — IEEE 1800 `net_lvalue` takes a `constant_select`, and iverilog refuses it — and
+/// vita accepts it silently; on a variable array (legal, iverilog refuses anyway) verilator is
+/// the only oracle. vita writes `y[0]` (the index at the time-0 settle) and, the assign being
+/// delayed, never re-targets when the index moves with an unchanged rhs; verilator writes `y[1]`.
 #[test]
 fn a_moving_dynamic_index_is_the_recorded_residue() {
     check(

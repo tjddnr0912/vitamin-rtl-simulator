@@ -846,6 +846,23 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 a.signed = false;
                 a.resize_keep_sign(w, false) // unsigned cast → zero-extend
             }
+            // §6.12.2 in a context WIDER than the node's own 128 bits: the assignment
+            // conversion's destination is the context, so convert at its width —
+            // `real_to_int_round` is exact at any width. Extending the 128-bit image
+            // instead kept only the low 128 bits of a real with |x| ≥ 2^127: the inline
+            // lane's `RealToInt(e) + <w-bit signed 0>` bound `g(1e40)` into a 192-bit
+            // formal as `00000000000000006329f1c35ca5…` where both oracles hold
+            // `000000000000001d6329f1c35ca5…`. At 128 bits or less the node's value
+            // truncated to the context is the same number, so that arm is unchanged.
+            SysFuncId::RealToInt if w > 128 => {
+                let x = args
+                    .first()
+                    .and_then(|&a| self.eval(a).to_f64())
+                    .unwrap_or(0.0);
+                let mut v = crate::value::real_to_int_round(x, w, true);
+                v.signed = eff_signed;
+                v
+            }
             // $time/$realtime (64-bit) and $clog2 (32-bit): natural value, then
             // resize to context (zero/sign per eff_signed).
             _ => self
