@@ -451,7 +451,13 @@ impl Elaborator<'_> {
                 // `const_compare_special` from inside it, so the string / wildcard
                 // whole-node folds still fire).
                 if !binop_result_is_context_determined(*op) {
-                    return self.const_int_selfdet(e);
+                    // …and when the width-aware walk cannot hold an operand (a
+                    // 128-bit literal: `8'd3 + (128'h1_0000_0000_0000_0000 > 128'd1)`
+                    // is 4 in both oracles and was E3009 as an override), the wide
+                    // domain answers the one-bit node at its own width.
+                    return self
+                        .const_int_selfdet(e)
+                        .or_else(|| self.selfdet_bits_i64(e));
                 }
                 let a = self.const_eval_in_scope(lhs)?;
                 // The RIGHT operand of `**` and of every shift is a self-determined

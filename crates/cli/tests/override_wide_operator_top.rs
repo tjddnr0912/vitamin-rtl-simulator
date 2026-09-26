@@ -460,14 +460,18 @@ fn an_unknown_bit_keeps_the_override_loud() {
     }
 }
 
-/// X3: a tree whose self-determined width is at most 64 keeps the i64 operator route
+/// X3: a tree whose self-determined width is at most 64 keeps the i64 OPERATOR route
 /// even when a SELF-determined sub-node (comparison operand, shift count) is 128 bits —
-/// the exact PRE strings. The typed `logic [15:0]` cells are a live oracle split
-/// (iverilog `0100` / `01fe`, verilator `0000` / `00fe`) and stay beside their text twin
-/// `8'hFF + 8'd1`; the untyped cells are the i64 route's pre-existing 32-bit answer
-/// (both oracles: `shcnt` 8/04, `add_mix` 8/fd (VL), `not1` 1/0).
+/// and that route now sizes it (§4.5.544): `override_self_meta`'s i64 fence walks the
+/// context-determined operands only, so the wide count / operand no longer refuses the
+/// whole tree back to the default literal's 32 bits. Untyped cells: both oracles
+/// (`shcnt` 8/04, `not1` 1/0; `add_mix` 8/fd is verilator's, iverilog 9/1fd — its `+`
+/// one-bit-wider self-contradiction, §4.5.466). The typed `logic [15:0]` cells are a live
+/// oracle split (iverilog `0100` / `01fe`, verilator `0000` / `00fe`; ROADMAP §2 row 16)
+/// and stay on the PRE strings beside their text twin `8'hFF + 8'd1`.
+/// PRE: `add_mix` 32/fffffffd, `not1` 32/fffffffe, `shcnt` 32/00000004.
 #[test]
-fn a_narrow_top_with_a_wide_self_determined_operand_keeps_its_route() {
+fn a_narrow_top_with_a_wide_self_determined_operand_binds_its_own_width() {
     let src = "module su #(parameter P = 1) (); initial $display(\"%m bits=%0d hex=%h\", $bits(P), P); endmodule\n\
          module st #(parameter logic [15:0] P = 1) (); initial $display(\"%m bits=%0d hex=%h\", $bits(P), P); endmodule\n\
          module top;\n\
@@ -481,10 +485,10 @@ fn a_narrow_top_with_a_wide_self_determined_operand_keeps_its_route() {
     check(
         src,
         &[
-            "top.add_mix bits=32 hex=fffffffd",
+            "top.add_mix bits=8 hex=fd",
             "top.k2 bits=16 hex=0101",
-            "top.not1 bits=32 hex=fffffffe",
-            "top.shcnt bits=32 hex=00000004",
+            "top.not1 bits=1 hex=0",
+            "top.shcnt bits=8 hex=04",
             "top.t_add bits=16 hex=0100",
             "top.t_shl bits=16 hex=01fe",
         ],

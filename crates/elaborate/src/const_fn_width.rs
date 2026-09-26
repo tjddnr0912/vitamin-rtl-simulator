@@ -779,7 +779,23 @@ impl Elaborator<'_> {
         envw: &ConstWidths,
         depth: u32,
     ) -> Option<i64> {
-        let v = self.eval_const_env_self(e, env, envw, depth)?;
+        let v = match self.eval_const_env_self(e, env, envw, depth) {
+            Some(v) => v,
+            // A count the i64 lane cannot hold — a >64-bit literal tree (`32'd1 <<
+            // 128'd70`, both oracles 0; `8'd1 << 128'h1_0000_0000_0000_0000`, both 0).
+            // §11.4.10 reads it unsigned; one whose magnitude passes u64 shifts every
+            // bit out, which a saturated count expresses. Literal trees only (the
+            // evident-width rule below), and only what the wide domain folds.
+            None => {
+                if !Self::ctx_width_names_are_evident(e, envw) || !self.wide_domain_folds(e) {
+                    return None;
+                }
+                return Some(
+                    self.selfdet_bits_unsigned(e)
+                        .map_or(i64::MAX, |u| i64::try_from(u).unwrap_or(i64::MAX)),
+                );
+            }
+        };
         // ⚠️⚠️ THE WIDTH HAS TO BE A FACT. `const_self_width`'s name arm reads
         // `param_meta`, and for an untyped `parameter C = 3'sd1;` that records the
         // DEFAULT literal's 3 bits — which §6.20.2 replaces with the final override's

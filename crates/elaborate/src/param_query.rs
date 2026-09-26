@@ -568,7 +568,7 @@ impl Elaborator<'_> {
         if !sized_by_type
             || ast_contains_fill(e)
             || !Self::ctx_width_names_are_evident(e, &envw)
-            || !self.const_ctx_within_i64(e)
+            || !self.const_ctx_within_i64_context(e)
         {
             return None;
         }
@@ -732,6 +732,58 @@ impl Elaborator<'_> {
     /// `None`, and neither is the hazard. The hazard is a leaf whose width the
     /// evaluation context would have to CLAMP, because a clamp is a silent value
     /// change ([[widen-a-domain-count-what-it-cannot-carry]]).
+    /// [`Self::const_ctx_within_i64`] for a walk whose CONTEXT is the question: a node
+    /// in a SELF-DETERMINED position (a shift count, a `**` exponent, a comparison's or
+    /// a logical operator's operands, a reduction's or `!`'s operand, a ternary
+    /// condition, a select index, a system function's argument, a size cast's width)
+    /// never enters the surrounding context — its width is not clamped by the i64
+    /// lane, and the value walks read those positions through the wide domain's
+    /// bridges (`selfdet_bits_i64`, `eval_const_shift_count`, `selfdet_truth`). So a
+    /// 128-bit literal THERE is no hazard to the operator channel's `(width, sign)`:
+    /// `#(.P(8'd1 << 128'd2))` onto `parameter P = 1` is 8 bits `04` in both
+    /// oracles and bound 32 bits (the default literal's) because the whole tree was
+    /// refused for its count. The context-determined operands are still walked.
+    pub(crate) fn const_ctx_within_i64_context(&self, e: &ast::Expr) -> bool {
+        use ast::ExprKind as K;
+        if self
+            .const_self_width(e, &ConstWidths::new())
+            .is_some_and(|w| w > 64)
+        {
+            return false;
+        }
+        let ctx_children: Vec<&ast::Expr> = match &e.kind {
+            K::Paren { inner } => vec![inner],
+            K::Concat { parts } => parts.iter().collect(),
+            K::Replicate { value, .. } => value.iter().collect(),
+            K::Unary {
+                op: ast::UnOp::Plus | ast::UnOp::Minus | ast::UnOp::BitNot,
+                operand,
+            } => vec![operand],
+            K::Binary { op, lhs, rhs } => {
+                if !crate::const_fn_width::binop_result_is_context_determined(*op) {
+                    vec![]
+                } else if matches!(
+                    op,
+                    ast::BinOp::Shl
+                        | ast::BinOp::Shr
+                        | ast::BinOp::AShl
+                        | ast::BinOp::AShr
+                        | ast::BinOp::Pow
+                ) {
+                    vec![lhs]
+                } else {
+                    vec![lhs, rhs]
+                }
+            }
+            K::Ternary { then_e, else_e, .. } => vec![then_e, else_e],
+            K::Cast { expr, .. } => vec![expr],
+            _ => vec![],
+        };
+        ctx_children
+            .into_iter()
+            .all(|c| self.const_ctx_within_i64_context(c))
+    }
+
     pub(crate) fn const_ctx_within_i64(&self, e: &ast::Expr) -> bool {
         if self
             .const_self_width(e, &ConstWidths::new())
