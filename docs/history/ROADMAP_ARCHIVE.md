@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 428건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 429건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.548` **a delayed continuous assign that reads heap content is evaluated through the heap router on the native backend** (2026-09-27 · §2 "Delays / events" bullet closed, the moving-dynamic-index residue recorded · rhs, runtime delay and left-side offsets through `HeapRouted` · tests 8614 → 8623)
 - `4.5.547` **a continuous assign that reads the time is re-evaluated when an operand changes, not as time advances** (2026-09-27 · §2 "Delays / events" `$realtime` bullet closed, the cross-time-unit residue recorded · time reads and one-operand conversions certified in `levelize::ca_deps` and the callee walk · tests 8604 → 8614)
 - `4.5.546` **§2 row 26 re-measured stale and absorbed into row 14: the package lane answers what the module lane answers** (2026-09-27 · 48 cells in four lanes identical at HEAD, 21 provenance-consumer cells identical over local / imported / `pk::` names · four-lane agreement pinned · no code change · tests 8592 → 8604)
 - `4.5.545` **an override binds its own type on every channel and operand shape: the defparam record carries the wide and string channels, a select of a declared name certifies, and only an override no channel typed is a guessed type** (2026-09-27 · §2 row 25 re-recorded to its element residue (headline stale) · 27 defparam + 3 select + 14 cast two-oracle cells, 12 element-select E3009 → verilator · two BLOCKING fixed (x/z defparam, unsigned-keyword swap) · tests 8583 → 8592)
@@ -557,6 +558,38 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.548 a delayed continuous assign that reads heap content is evaluated through the heap router on the native backend: the delayed rhs, the runtime delay and the dynamic left-side index (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 "Delays / events" — the delayed-assign heap-rhs bullet closed; one bullet added
+in its place (a moving dynamic left-side index keeps its first target on every backend). Summary
+unchanged. Tests 8614 → 8623.
+
+**Defect (PRE e359eb9).** `Scheduler::schedule_delayed_cas` is shared by both kernels. On tier-3 it
+is handed the bare `NetArena`, and it evaluated the delayed rhs with `mk_eval_ctx_with(r)` — which
+does not route a queue / dynamic-array / associative-array / string handle back to the state that
+owns its contents — while the settle's own evaluation goes through `eval_ctx_with_reader`, which
+wraps such a reader in `HeapRouted`. Measured (native vs `--backend interp`, verilator 5.052;
+iverilog refuses most of these designs):
+
+```
+assign #0 n = q.size();          native x x x x x    interp 0 1 1 2 0    (verilator the same values)
+assign #0 n = s.len();           native 0 0 0 0 0    interp 0 2 2 4 4
+assign #0 n = aa.num();          native x x x x x    interp 0 1 1 2 2
+assign #(q.size()) n = a;        native 11 at 2      interp 00 at 2 (delay 3; verilator the same)
+```
+
+**Mechanism.** The rhs goes through `eval_ctx_with_reader`, the runtime delay (`ca_delay_ticks`)
+through `eval_expr_with`, and the left-side offsets through `resolve_offsets` over a `HeapRouted`
+reader — all three the wrappers the settle and the formatter already use. The engine arm (`None`)
+is untouched, and a reader that does not route heap nets gets the same bare context as before.
+
+**Review (lenses direct).** Nine cells: native equals the interpreter on every one (seven rhs
+shapes, the runtime delay, the dynamic index). The dynamic index cell is wrong on BOTH backends —
+`assign #1 y[q.size()] = v;` writes `y[0]` where verilator writes `y[1]`, because the "rhs
+unchanged" shortcut compares the value and not the resolved target — recorded as the new bullet.
+Gate 8614 → 8623, product-shape build 0, doctest / clippy / fmt 0, corpus 10/10 (POST and PRE,
+within ±0.5 %). Pins: `delayed_cont_assign_heap_read.rs` (9 tests, each asserting native = interp).
 
 #### 4.5.547 a continuous assign that reads the time is re-evaluated when an operand changes, not as time advances: time reads and one-operand conversions contribute no dependency to the settle's certifier (2026-09-27, branch main) ✅
 

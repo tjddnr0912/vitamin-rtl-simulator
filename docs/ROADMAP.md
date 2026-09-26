@@ -807,14 +807,13 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   since `level-select-event` went loud, an element copy is legal. Fix shape = per-element dirt on
   the channel (`array_len` words), read by the copy suppression and the x-drop alike.
 
-- A DELAYED continuous assign whose rhs reads heap content reads x on the native backend
-  (`int q[$]; wire [31:0] n; assign #0 n = q.size();` prints `n=x` at every hop where interp / vm
-  print 0 then 1 and verilator 1 by the second hop; the undelayed `assign m = q.size();` beside it
-  is right on every backend): `Scheduler::schedule_delayed_cas` evaluates a delayed rhs through
-  the reader it is given — on tier-3 the bare arena, which does not route heap nets
-  (`native/frames.rs` records the seam). Pre-existing, PRE = POST at §4.5.538. One oracle
-  (iverilog aborts on the design) + the interp answer; fix shape = evaluate the delayed rhs
-  through the composite reader (`eval_expr_with` / `HeapRouted`) as the settle does. S.
+- A delayed continuous assign whose DYNAMIC left-side index moves while its rhs does not keeps
+  the target it was first scheduled at, on every backend: `int q[$]; assign #1 y[q.size()] = v;`
+  with `q.push_back(1)` at 0 writes `y[0]` (the size at the time-0 settle) where verilator writes
+  `y[1]` (iverilog refuses the non-constant index). `schedule_delayed_cas`'s "rhs unchanged → no
+  new scheduled write" shortcut compares the value only; the index is resolved after it. One
+  oracle + hand-IEEE. S (compare the resolved offsets too). `delayed_cont_assign_heap_read.rs`
+  pins it on both backends.
 - A deferred-assertion action block that holds a `$finish` or `$stop` (`assert #0 (0) else
   $finish;`, or an `else begin $display(…); $finish; end`) prints an empty line at maturation and
   the run continues to its next `$finish` (pre-existing; verilator ends the run at the maturation

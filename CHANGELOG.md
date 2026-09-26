@@ -9,6 +9,13 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a delayed continuous assign reads a queue, dynamic array, string or associative array on the native backend
+
+- `assign #0 n = q.size();` read x at every hop on the default (native) backend where the
+  interpreter and verilator read the size, `s.len()` read 0, and `assign #(q.size()) n = a;`
+  fired with no delay. The delayed right side, a runtime delay and a dynamic left-side index are
+  now read through the same heap routing the undelayed settle uses.
+
 ### Fixed — a continuous assign that reads the time is re-evaluated only when an operand changes
 
 - `wire [31:0] w1 = int'($realtime * 1.5);` was re-evaluated at every time step (`00000002` at 1,
