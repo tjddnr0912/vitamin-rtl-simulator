@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 431건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 432건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.551` **the "nine binding sites" row re-measured stale** (2026-09-27 · 180 cells, 140 two-oracle / 30 one-oracle right, 10 an honest refusal recorded as §3.b `hier-fn-inline-callee` · no code change · tests 8632 → 8639)
 - `4.5.550` **a real bound to an inline formal wider than 128 bits converts at the formal's width** (2026-09-27 · §2 "Inline / frame binds" >128-bit bullet closed · `RealToInt` converts at a context wider than 128 · 15 two-oracle cells · tests 8626 → 8632)
 - `4.5.549` **a real stored into a string converts by one rule on every store and every backend** (2026-09-27 · §2 "Real" string-variable bullet and the second bytecode divergence closed · `Value::string_store_bytes` at five stores · verilator disqualified (three conversions by lane) · tests 8623 → 8626)
 - `4.5.548` **a delayed continuous assign that reads heap content is evaluated through the heap router on the native backend** (2026-09-27 · §2 "Delays / events" bullet closed, the moving-dynamic-index residue recorded · rhs, runtime delay and left-side offsets through `HeapRouted` · tests 8614 → 8623)
@@ -560,6 +561,28 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.551 the "nine binding sites" row re-measured stale: a real actual binds to a narrower formal by the assignment conversion at every site; the ten cells that refuse are a hierarchical call to an inline-lowered callee (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 "Inline / frame binds" — the "nine binding sites, five open" bullet deleted
+(stale); §3.b row `hier-fn-inline-callee` added. Summary mechanism 164 / 81 / 83 → 163 / 80 / 83,
+§3.b 106 / 91 / 15 → 107 / 92 / 15, total unchanged (394 / 227 / 167). Tests 8632 → 8639. No code
+change.
+
+**Re-census (LOOPROMPT §1).** The bullet said `f(300.0)` into an `input byte` gives 300 (both oracles
+44) at a frame function with an output formal, a hierarchical task call, a hierarchical function
+call, a class method or task and a class constructor. At HEAD all of them give 44 on every backend.
+The class, not just the cell: six formal types (`byte`, `bit [7:0]`, `shortint unsigned`,
+`longint`, `logic [128:0]`, `logic signed [11:0]`) × the five sites and a class task × five actual
+shapes (`300.0`, `-2.5`, `rv * 1.0`, `1e20`, `rv`) — 180 cells, iverilog 13.0 / verilator 5.052 /
+three backends: 140 match both oracles, 30 match the one that runs them, and 10 are E3009. Those ten
+are not about the real: a hierarchical function call is refused for any callee the inline lane
+lowered (`u.fn(3)` with a `logic [11:0]` function is refused too; both oracles print `003`), because
+`hier_defer/func_call.rs` resolves through `hier_funcs`, which holds framed functions only —
+recorded as `hier-fn-inline-callee` (2 oracles, M).
+
+**Pins.** `real_actual_binding_sites.rs` (7 tests): the six sites with `byte`, `longint` and
+`bit [7:0]` formals, each asserting native = interp = vm, and the refusal.
 
 #### 4.5.550 a real bound to an inline formal wider than 128 bits converts at the formal's width: `RealToInt` in a context wider than 128 bits converts at that width (2026-09-27, branch main) ✅
 
