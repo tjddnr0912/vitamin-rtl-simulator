@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 430건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 431건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.550` **a real bound to an inline formal wider than 128 bits converts at the formal's width** (2026-09-27 · §2 "Inline / frame binds" >128-bit bullet closed · `RealToInt` converts at a context wider than 128 · 15 two-oracle cells · tests 8626 → 8632)
 - `4.5.549` **a real stored into a string converts by one rule on every store and every backend** (2026-09-27 · §2 "Real" string-variable bullet and the second bytecode divergence closed · `Value::string_store_bytes` at five stores · verilator disqualified (three conversions by lane) · tests 8623 → 8626)
 - `4.5.548` **a delayed continuous assign that reads heap content is evaluated through the heap router on the native backend** (2026-09-27 · §2 "Delays / events" bullet closed, the moving-dynamic-index residue recorded · rhs, runtime delay and left-side offsets through `HeapRouted` · tests 8614 → 8623)
 - `4.5.547` **a continuous assign that reads the time is re-evaluated when an operand changes, not as time advances** (2026-09-27 · §2 "Delays / events" `$realtime` bullet closed, the cross-time-unit residue recorded · time reads and one-operand conversions certified in `levelize::ca_deps` and the callee walk · tests 8604 → 8614)
@@ -559,6 +560,40 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.550 a real bound to an inline formal wider than 128 bits converts at the formal's width: `RealToInt` in a context wider than 128 bits converts at that width (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 "Inline / frame binds" — the >128-bit inline real bullet closed. Summary
+mechanism 165 / 82 / 83 → 164 / 81 / 83, total 395 / 228 / 167 → 394 / 227 / 167. Tests 8626 →
+8632.
+
+**Defect (PRE 40776f0, both oracles, all three backends alike).** The inline function lane stores a
+real into an integral formal or return as `RealToInt(e) + <w-bit signed 0>` (`real_to_int_store`).
+`RealToInt` is a 128-bit node (`real_to_int_round(x, 128, true)`), and `eval_sysfunc_ctx` extended
+its 128-bit image to the context, so a real with |x| ≥ 2^127 kept only its low 128 bits:
+
+```
+g(rv*1.0) into input reg [191:0], rv = 1e40   both 000000000000001d6329f1c35ca5…   PRE 00000000000000006329f1c35ca5…
+g2(rv) : real formal stored into a [191:0] return          (same)                   (same)
+gs(rv*1.0) into a signed [191:0] formal, rv = -1e40   both ffffffffffffffe29cd6…   PRE ffffffffffffffff9cd6…
+h(rv*1.0) into input reg [128:0], rv = 2^127          both 0800…                   PRE 1800…
+```
+
+**Mechanism.** `eval_sysfunc_ctx_inner` gains a `RealToInt if w > 128` arm that converts at the
+context width with `real_to_int_round(x, w, true)`, which is exact at any width (the store lanes
+already use it). At 128 bits or less the 128-bit value truncated to the context is the same
+number, so that path is unchanged. The native lane declines `RealToInt` (v34), so the interpreter
+arm serves all three backends. No IR change: the width-carrying node the row proposed is not
+needed, because the conversion's destination IS the evaluation context.
+
+**Review (lenses direct).** 42 cells (six values × seven lanes: a static function's wide formal, a
+real formal into a wide return, a signed wide formal, a 129-bit formal, and the automatic frame
+lane, `return x` and the module store as controls): 15 FIXED, 27 unchanged and right, 0 regression,
+native = interp = vm on every cell. Prim casts of wide reals (`longint'(r) + 192'd0`, `int'`,
+`shortint'`, `$rtoi`) byte-identical PRE and POST and equal to iverilog. Gate 8626 → 8632,
+product-shape build 0, doctest / clippy / fmt 0, corpus 10/10 (POST and PRE within ±1.3 %). Pins:
+`wide_real_inline_formal.rs` (6 tests, native = interp = vm). The same commit corrects the
+`delayed_cont_assign_heap_read.rs` residue comment (a non-constant net-array index is illegal).
 
 #### 4.5.549 a real stored into a string converts by one rule on every store and every backend: §6.12.2 to a 64-bit signed integer, then §6.16's bytes (2026-09-27, branch main) ✅
 

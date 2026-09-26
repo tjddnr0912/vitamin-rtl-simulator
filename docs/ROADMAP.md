@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 24 | 4 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 8 (rows 14, 25, 30 and 🆕 H startable since §4.5.542 took the §11.8.1 wall down; row 26 absorbed by row 14 in §4.5.546) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 165 | 82 | 83 | oracle split / pinned / oracle disqualified 50 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 15 · size cast / signedness 16 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 19 · real 4 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 38 | ① | |
+| §2 | recorded defects by mechanism | 164 | 81 | 83 | oracle split / pinned / oracle disqualified 50 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 6 · one oracle 5 · held on purpose 0 · pair columns not measured 1 | inline / frame binds 14 · size cast / signedness 16 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 19 · real 4 · performance 6 · index sealing 9 · ranges / selects 6 · diagnostics 8 · class fields 3 · oracle splits 38 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 106 | 91 | 15 | named prerequisite 6 · oracle split / unmeasured 5 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 21 (the pkg-type-param-import row) · parser accept 15 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 395 | 228 | 167 | | | | |
+| total | | 394 | 227 | 167 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
@@ -459,24 +459,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   ⓑ a hierarchical task call (the argument is pre-lowered in `inline_task.rs` without the formal
   width); ⓒ a hierarchical function call; ⓓ a class method or task; ⓔ a class constructor. ⓑ and ⓒ
   are structurally different.
-- An INLINE formal wider than 128 bits bound to a real actual with |x| ≥ 2^127 holds the
-  sign-extended LOW 128 bits of the rounded integer where both oracles hold the exact value:
-  `real_to_int_store` is `RealToInt` (a 128-bit node, exact since §4.5.536) plus a `w`-bit signed
-  0, and the add extends the low image; the repeatable actual reaches it through
-  `coerce_real_actual_to_formal`'s `w > 64` decline. A static `function reg [191:0] g(input reg
-  [191:0] x)` with `g(rv * 1.0)`, `g(rf(rv))`, `h(-rv)` at `rv = 1e40` prints
-  `00000000000000006329f1c35ca500000000000000000000` (both oracles
-  `000000000000001d6329f1c35ca500000000000000000000`; PRE `…7fff…`), and at exactly 2^127 a
-  129-bit formal prints `1800…` (both oracles `0800…`; PRE `07ff…`). The same functions declared
-  `automatic` (the frame lane) are exact; the same node is reached by a REAL formal stored or
-  returned in an inline body (`function [191:0] g(input real x); g = x;`, `inline_fold.rs`'s
-  Blocking and Return arms) — at `-1e40` `ffffffffffffffff9cd60e3ca35b00000000000000000000`
-  against `ffffffffffffffe29cd60e3ca35b00000000000000000000`. Every other lane (module store,
-  NBA, continuous assign, port, `always_comb`, frame bind, every prim cast) is exact at every
-  width since §4.5.536. Fix
-  shape = a width-carrying conversion node (a second `RealToInt` argument or a new id — a
-  frozen-IR change, format bump) or a store of the actual into a `w`-bit temporary. 2 oracles.
-  STARTABLE (S). (§4.5.536 differential cells c38, c39.)
 - A signed queue element holding x/z bits, bound to a formal, is zero-extended in the inline and the
   frame lanes (both oracles agree; PRE = POST): with `logic signed [7:0] qx8[$] = '{8'b1x001101}`,
   `b16(qx8[0])` prints `008d` where both oracles print `ff8d`, and an `l16` formal prints

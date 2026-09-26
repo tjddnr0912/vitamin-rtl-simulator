@@ -9,6 +9,13 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a real bound to an inline formal wider than 128 bits keeps its high bits
+
+- A static function's `input reg [191:0] x` bound to `1e40` held only the low 128 bits of the
+  rounded integer (`00000000000000006329f1c35ca5…`, both oracles `000000000000001d6329f1c35ca5…`),
+  and a 129-bit formal bound to exactly 2^127 was `1800…` (both `0800…`). The real-to-integer
+  conversion node now converts at its context's width when that is wider than 128 bits.
+
 ### Fixed — a real stored into a string converts by one rule on every store and backend
 
 - `string s; s = 16706.0;` stored the IEEE-754 bytes on the native backend and a one-bit value on
