@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 426건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 427건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.546` **§2 row 26 re-measured stale and absorbed into row 14: the package lane answers what the module lane answers** (2026-09-27 · 48 cells in four lanes identical at HEAD, 21 provenance-consumer cells identical over local / imported / `pk::` names · four-lane agreement pinned · no code change · tests 8592 → 8604)
 - `4.5.545` **an override binds its own type on every channel and operand shape: the defparam record carries the wide and string channels, a select of a declared name certifies, and only an override no channel typed is a guessed type** (2026-09-27 · §2 row 25 re-recorded to its element residue (headline stale) · 27 defparam + 3 select + 14 cast two-oracle cells, 12 element-select E3009 → verilator · two BLOCKING fixed (x/z defparam, unsigned-keyword swap) · tests 8583 → 8592)
 - `4.5.544` **a ≤64-bit operator-topped override over a wide self-determined sub-node binds its own width: the operator channel's i64 fence walks the context-determined operands only** (2026-09-26 · §2 "Index sealing" operator-top bullet closed · 7 two-oracle cells + 3 loud→value on four channels · typed targets unchanged (row 16's split not crossed) · tests 8579 → 8583)
 - `4.5.543` **a definite operator over an x/z operand folds: the wide constant fold's accept set is the operator's rule, an answer that is x is carried as an x bit, and the binders that have no unknown plane keep their loud** (2026-09-26 · §2 🆕 H ⓐ closed, ⓕ added · 119 two-oracle cells, a range bound silently one bit · two BLOCKING fixes: the override lane's operator guard, the unsigned zero-extension of an unknown top bit · tests 8571 → 8579)
@@ -555,6 +556,32 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.546 §2 row 26 re-measured stale and absorbed into row 14: the package lane answers what the module lane answers (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 start-order row 26 deleted; row 14's gate text records the package binder as a
+lane of the same routing. Summary §2 start-order 25 / 5 / 20 → 24 / 4 / 20, total 396 / 230 / 166 →
+395 / 229 / 166. Tests 8592 → 8604. No code change.
+
+**Re-census.** Row 26 said routing the PACKAGE binder through the width-aware fold is a net loss
+(1,233 correct→silent against 714 fixed) because every consumer still folded through the
+width-unlimited walk, that `every_name_has_a_declared_width` did not enumerate `PkgScoped`, that an
+imported constant was in no provenance set, and that "the identical text answers `00…fe` in a
+module and `ff…fe` in a package". Measured at HEAD (iverilog 13.0, verilator 5.052): twelve
+declared-width `localparam`s over a signed 8-bit `PA = 8'hFE` in four lanes — module, package read
+as `pk::X`, a module `localparam` over an imported `PA`, one over `pk::PA` — answer identically cell
+for cell: 24 right in every lane, 24 wrong in every lane, the wrong ones being row 14's
+(`PA ^ 64'h0` = `ff…fe`, both oracles `00…fe`). The consumer side is met: the predicate became
+`ctx_width_names_are_evident` / `declared_override_widths`, which certify a `pk::` leaf (§2 "Index
+sealing" ⓒ) and an imported one — an override `#(.P(~PA))`, a `localparam L = ~PA`, a concat, a
+ternary and a range bound `[PA[3:0]:0]` answer the same over a local, an imported and a `pk::` `PA`
+(21 cells, all the oracles' except iverilog's one-bit-wider `+`). So the row's divergence is gone and
+what remains is row 14's routing, which must carry the package binder with the module lane; row 26's
+net-loss measurement stays in row 14's gate text as the reason.
+
+**Pin.** `package_lane_matches_module_lane.rs` (12 tests, four lanes each) asserts the four lanes
+agree on every cell, known-wrong ones included, so a routing that moves one lane without the others
+fails before it reaches a design.
 
 #### 4.5.545 an override binds its own type on every channel and operand shape: the defparam record carries the wide and string channels, a select of a declared name certifies, and only an override no channel typed is a guessed type (2026-09-27, branch main) ✅
 

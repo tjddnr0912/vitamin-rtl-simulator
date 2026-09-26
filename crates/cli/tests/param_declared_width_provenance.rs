@@ -26,7 +26,9 @@
 //! was the only thing keeping that honest); the provenance set must answer THREE-valued
 //! or an inner declaration that records nothing lets the scope walk vouch for an
 //! ancestor's width; and the PACKAGE binder must not be routed, because a package's
-//! stored value cannot go canonical while its consumers still fold unlimited (§2 row 26).
+//! stored value cannot go canonical while its consumers still fold unlimited (§2 row 26, absorbed
+//! into row 14 by §4.5.546: the lanes agree at HEAD and move together — see
+//! `package_lane_matches_module_lane.rs`).
 //!
 //! ⚠️⚠️ **Round 3 found two more, both in the shared walk and both there since round 1:**
 //!
