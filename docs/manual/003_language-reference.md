@@ -136,6 +136,7 @@ it ANSI, a bare identifier makes it non-ANSI, and `Ident Ident` or
 |---|---|---|
 | `parameter` in a body or an ANSI `#( … )` header | Supported | |
 | `localparam` | Supported | |
+| A declared type or range on a parameter | Supported | The value converts into it (IEEE 1800 §6.20.2): a string default or override is its bytes at the declared width (`logic [15:0] A = "a"` is `16'h0061`), a real default rounds (`int X = 2.6` is 3), and a `real` parameter reads a string as its integral value. Only an untyped parameter (no type keyword and no range; `string` counts as untyped) takes the type of its value. |
 | The same parameter name declared twice in one scope | Loud | `VITA-E3009` with a note at the first declaration (IEEE 1800 §6.20.1 / §23.2.3). One scope means the parameter port list plus the module or interface body, a labelled generate block (§27.3), a package body (§26.2), or a transparent `generate … endgenerate` region, whose items belong to the enclosing scope (§27.2). One `localparam` per generate-loop ITERATION is legal and unaffected, and so is a block that shadows an outer name. |
 | `specparam` | Partial | Parsed as a `localparam`, and not restricted to a `specify` block. |
 | Comma list sharing one type prefix (`localparam [3:0] A = 1, B = 2;`) | Supported | |

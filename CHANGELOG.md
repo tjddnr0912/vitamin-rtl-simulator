@@ -9,6 +9,29 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a parameter's declared type is the context its value converts into
+
+- A typed or ranged parameter with a string-literal default kept the string's own width:
+  `localparam logic [15:0] A = "a";` was 8 bits `61` and `logic [7:0] D = "ab"` 16 bits `6162`.
+  It is now the string's bytes at the declared width (`0061`, `62`), as in both reference tools,
+  in every scope (module header and body, generate block, package, interface). A string override
+  of such a parameter converts the same way, on every channel (`#()`, positional, `defparam`,
+  `-G`), including a forwarded string parameter, which positionally used to bind the declared
+  default instead. A string operand in a declared-width initializer (`"a" + 1`) now folds.
+- A typed parameter with a real-literal default was bound as a `real`: `localparam int X = 2.6;`
+  read 2.6 in real contexts with `$bits` 64, and `logic [7:0] X = 1e3` was 1000. It now converts at
+  the declaration (3 at 32 bits, 232 at 8 bits). An untyped `parameter R = 2.5` given a sized or
+  literal integral override becomes integral, and an untyped parameter whose initializer has a real
+  result (`X = R0 * 2`) is refused rather than rounded.
+- A `real` or `realtime` parameter reads a fill override as one bit (`#(.R('1))` is 1.0, was
+  4294967295.0) and a string as its integral value (`"a"` is 97.0).
+- A typed parameter holding a file name (`parameter [8*16-1:0] F = "k.hex"`) opens `k.hex` in
+  `$readmemh`, `$writememh` and `$fopen`; the padding NUL bytes are dropped.
+- A generate `case` compares its scrutinee and labels as case equality: a string label matches the
+  scrutinee's value (`"ab"` matches `16'h6162`), a signed `-1` matches `16'hffff`, and a 32-bit
+  `-1` no longer matches a 64-bit all-ones label.
+- An interface's real parameter read hierarchically (`i.R`) shows its override, not its default.
+
 ### Added — a level event control on a constant select of a net
 
 - `always @(n[0])`, `@(n[3:2])`, `@(n[I+:2])`, `@(a[1])`, `@(a[1][0])` and a packed struct member
