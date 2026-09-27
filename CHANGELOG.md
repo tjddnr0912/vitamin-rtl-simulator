@@ -9,6 +9,16 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a package function's own constant keeps its declared type in a constant
+
+- `localparam [31:0] K = g();` where the package function `g` returns the package's
+  `localparam [15:0] C = 16'h0123` folded `K` to `23` when the calling module also declared a
+  `localparam [7:0] C`; the package constant's width and sign came from the module's parameter. It
+  now folds `123`, as both reference tools do, and a signed package constant keeps its sign
+  (`return S;` over `signed [7:0] S = -3` is `fffffffd`, was `0000000d`).
+- Still open: a select or a concatenation of the package constant in the same function, and the
+  run-time lanes' selects of it next to a same-named parameter of the caller (ROADMAP §2).
+
 ### Fixed — selects of a parameter wider than 64 bits through a package or a hierarchical path
 
 - `pk::P[15:8]` over a package `localparam logic [79:8] P = 72'h616263646566676869` in a constant

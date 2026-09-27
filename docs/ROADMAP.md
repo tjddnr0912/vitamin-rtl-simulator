@@ -27,10 +27,10 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 21 | 1 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 5 (🆕 H startable; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 182 | 98 | 84 | oracle split / pinned / oracle disqualified / no oracle 58 · named prerequisite 14 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 13 · size cast / signedness 12 · constant domain (i64) 14 · scoping / imports / block-locals 30 · delays / events 19 · real 9 · performance 6 · index sealing 15 · ranges / selects 8 · diagnostics 10 · class fields 3 · oracle splits 43 | ① | |
+| §2 | recorded defects by mechanism | 187 | 101 | 86 | oracle split / pinned / oracle disqualified / no oracle 59 · named prerequisite 15 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 14 · size cast / signedness 12 · constant domain (i64) 16 · scoping / imports / block-locals 31 · delays / events 19 · real 9 · performance 6 · index sealing 15 · ranges / selects 8 · diagnostics 10 · class fields 3 · oracle splits 44 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 115 | 99 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 26 · constants / parameters 26 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
+| §3.b | loud → correct-support, small | 116 | 99 | 17 | named prerequisite 7 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 27 · constants / parameters 26 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 418 | 249 | 169 | | | | |
+| total | | 424 | 252 | 172 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a declaring-scope fold, a generate-scope alias's recorded type, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
@@ -338,6 +338,19 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   return range that names a constant is folded where the call is, so `function [W-1:0] f` declared
   under a module `W = 6` and called under a generate block's `W = 3` truncates `f(100)` to 4 where
   both oracles return 36. S (the sign) / M (the scope — the same declaring-scope fold §D names).
+- A select of a constant function's FORMAL or local that shadows a module parameter reads the
+  PARAMETER in the i64 select arm (both oracles agree): `function automatic [15:0] f(input logic
+  [15:0] P); f = P[11:4];` beside a module `localparam logic [15:0] P = 16'hABCD` folds `f(16'h5678)`
+  to `00bc` where both oracles and vita's own run-time call give `0067` (module and package
+  functions alike). `const_param_select_env` resolves the base through `const_select_base`, which
+  never looks in `env` / `envw`; the concatenation lane declines the same shape since its round-1
+  review (the placement resolver's `select_root_name` check). Fix = the same check in the i64 arm
+  (decline, or read the local's bits). S.
+- A body-local declared with a non-zero LSB, selected inside a concatenation, is read by POSITION in
+  the constant interpreter (both oracles agree): `logic [11:4] Q; Q = 8'h5a; return {Q[7:4], 4'h5};`
+  folds to `55` where both oracles give `a5` (vita's run-time call is right), in a module function
+  and a package function alike. The placement resolver's structural arm selects the local's stored
+  bits without its declared range (`envw` carries a width, not an LSB). S.
 
 ### Index sealing
 
@@ -549,6 +562,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   so a file whose observable cells were right on PRE is refused (`m4 = fi({>>{u.lv}})` `0036` = verilator),
   and a `$display("%h", {>>{u.lv}})` inside an inline body printed `36` on PRE where verilator
   rejects the construct. Fix = §11.4.14.3's left-justify in the inline store, then drop the refusal.
+- An inline expansion's FORMAL shadows a module parameter of its name inside a NESTED inlined callee
+  (both oracles agree): `function [15:0] h(input [7:0] x); h = g(8'd0) + x;` calling `g`, whose body
+  reads the module's `localparam logic [15:8] x` in `vv[0 +: x[15:12]]`, gives a 1-bit part (`T 1 7`
+  against `T 7 7`; `g` called directly is right). `param_sel_range` declines on any `subst` binding of
+  the name, and the outer expansion's frame is still on the stack while the callee lowers. Fix =
+  consult only the substitution frames of the body being lowered (the callee's `frame_base`). M.
 
 ### Real
 
@@ -680,17 +699,18 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   against `124`; the scoped `p1::g1()` spelling is right since §4.5.496. The bare key inside another
   package's body carries no package (`rtn_key_pkg` sees the module's import), so
   `with_default_arg_scope` does not push. Fix shape = resolve the callee's declaring package through
-  the injected table (the `pk::` key `inject_pkg_callees` binds) before asking `rtn_pkg`.
+  the injected table (the `pk::` key `inject_pkg_callees` binds) before asking `rtn_pkg`. The same
+  root (an imported routine's clone is filed under the IMPORTING package, `pkg_funcs` merge and
+  `const_fn_def`) reaches the body: `import p1::g1;` into a p2 that declares its own `Y` reads p2's
+  `Y` in g1 (`A=0c` constant, `r=0c` run time, both oracles `0b`), and a bare callee inside g1
+  resolves to p2's own routine of that name (`3c` for `5a`). Every rule that reads the package's own
+  declarations must wait for this: §4.5.561's interpreter select read p2's `K[7:4]` through that
+  callee (E3009 → `0c`, both oracles `0a`) and was reverted.
 - A package routine body's read of a name AFTER a block that shadows it falls to the CALLER for the
   whole body (both oracles agree): `begin : bl logic [15:0] x; … end  s = s + x;` gives `SH=f3` against
   `128` — `declared` stands the §4.5.493 hook down per NAME for the whole body, the flatten class above
   supplies the rest; a sibling local of another name is unaffected. Same prerequisite as the flatten
   rows (a binding-resolved scope).
-- The constant-function lane folds a package constant read from a package function body at the module
-  twin's WIDTH (both oracles agree): `localparam [31:0] K = g();` where `g` returns the package's
-  `localparam [15:0] C = 16'h0123` beside a module `localparam [7:0] C = 8'hEE` gives `K=23` against
-  `123` — neither value; without the module twin it is 123. Site = `const_fn_pkg` / the const
-  interpreter's width lookup.
 - The CONSTANT domain inside a package routine body is unhooked (both oracles agree): a body-local
   `logic [C-1:0] t` with a package `C = 12` and a module `C = 4` sizes from the MODULE's `C`
   (`G=f` for `fff`), and is E3009 with no module twin; `lookup_scoped` and its nine `params` twins
@@ -698,10 +718,33 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `param_query`, `array_geom`, `$bits`' param half) resolve `params` first and `reserve_frame_func`
   runs before the §4.5.493 push. A body-local enum LABEL in a constant range bound is the same class
   (module twin too). So is a SELECT in the body: `P[3:0]` over a caller's `logic [15:8] P` reads the
-  package's `P` through the caller's range (`x x`, both oracles `5 5`), and a package variable's
-  `v[15:8]` over a caller's ascending `v` is loud; §4.5.560 built the package-scope answer for the
-  select resolvers (106 review cells right) and reverted it with the >64-bit select axis, whose
-  prerequisite this is too.
+  package's `P` through the caller's range (`x x`, both oracles `5 5`), a package variable's
+  `v[15:8]` over a caller's ascending `v` is loud, a constant position in a frame body reads the
+  package's value positionally (`{P[7:4]{1'b1}}` over `[11:4] P = 8'h5a` `0000`, `v[0 +: X[4:1]]`
+  `0001`, both oracles `03ff` / `01ff`), and a concatenation in the interpreter reads the caller's
+  same-named value (`{Q, Q}` `0000000c` for `000000cc`; at the package constant's width since
+  §4.5.561, before it at the caller's). §4.5.560 built the package-scope answer for the select
+  resolvers and §4.5.561 a package-range rule for the run-time select, the interpreter's select and
+  concatenation reads and a range bound at the frame scope; each was reverted after three review
+  rounds, each round meeting one more lane that folds another scope's code here: an imported
+  routine's callee (see the bullet above), a callee's default folded under the caller's package
+  (`$clog2(K[7:4] + 4'd15)` `05` for `04`), another package's function folded in this frame
+  (`repeat (pk2::g())` read pk1's `P[11:8]`, E3009 → `1a` for `19`), and a caller's ascending
+  same-named parameter whose run-time rejection (E3009 out of order) was all that stopped a default's
+  constant position from folding the pre-existing wrong value (`0001` for `03ff`). BLOCKED BY the
+  declaring-scope fold (REMAINING_WORK §D).
+- `$bits` of a package constant in a package routine's body reads the CALLER's same-named parameter
+  at run time (both oracles agree): `$bits(X)` over a package `logic [15:0] X` beside a module
+  `[7:0] X` is 8 in the static (inline) body (`00000008` for `00000010`), and 8 in both bodies when
+  the routine is imported into another package. The automatic body is right. Same class as the
+  bullet above — the inline lane binds none of the package's constants. BLOCKED BY the
+  declaring-scope fold.
+- The constant interpreter accepts a whole-name WRITE to a package constant inside the package's
+  function (vita invention; both oracles refuse the program: `Could not find variable P` /
+  `Storing to parameter variable 'P'`): `P = 16'h0005; return P;` gives `A=0005`, and the written
+  value is read at the constant's declared width (`P = 9'h1ff; return P + 16'h0` over `[7:0] P`
+  gives `00ff` since §4.5.561, `01ff` before). Refuse the write where the interpreter binds a
+  name that is not a formal, local or the return variable. S.
 - A FREE name in an imported package routine body (one the package does not declare) binds to the
   caller's same-named net at exit 0 (vita invention; BOTH oracles refuse the program: `Unable to bind
   wire/reg/memory y in pk.gy`): `Y=ee`. The scoped spelling refuses it at its gate. Making the import
@@ -851,7 +894,15 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   (one oracle — iverilog cannot parse `with`): `q.find(x) with (x[15:8] == 8'h56)` beside a module
   `logic [79:8] x` counts 0 where verilator counts 1; `param_sel_range` does not take
   `bare_ident_route`'s iterator step, and inside a function inlined from the `with` expression the
-  iterator also shadows the function's own names (`f(item)` reads the iterator). S.
+  iterator also shadows the function's own names (`f(item)` reads the iterator; a callee's default
+  and a package function's body too: `pa.sum(item) with (int'(item) + pk::cf())` `3` for `13`).
+  §4.5.561 declined the shared resolver on the iterator's name and was reverted: `array_iter` is
+  lowering state, set while the constant interpreter folds a function called from the `with`
+  expression, whose `x[15:12]` then lost its range (`v[0 +: cw()]` 1 bit, `T 1 7` for `T 7 7`), and
+  the iterator has no element RANGE, so a `[11:4]` or `[0:7]` element read positionally was wrong
+  where the same-named parameter's range had matched it by accident (`T 9 0 1 9` for `T 12 9 2 12`).
+  Fix shape = the run-time select lowering's own iterator step with the element's declared range,
+  and callee bodies lowered without the iterator. M.
 
 ### Delays / events
 
@@ -1429,6 +1480,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   top three 32-bit words (`…0000`); a NEGATIVE signed value with an x/z bit is -0.0 in iverilog and
   the value with x read as 0 in verilator (`8'sb1xxx_0000` → `c060000000000000`, -128.0). vita follows
   iverilog on the first and verilator on the second (`Value::integral_to_f64`, §4.5.558).
+- An enum label declared in a package function's body under the name of a package constant: the
+  label shadows it for verilator at run time (`L[7:4]` of the label `8'h5a` `05`), iverilog reads the
+  package's `logic [11:4] L` (`0a`), and verilator refuses the constant call. vita follows verilator
+  at run time and is E3009 in the constant lane (§4.5.561's select arm answered iverilog's `0a`
+  there, one text with two lanes' answers, and was reverted with it).
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
@@ -1522,6 +1578,7 @@ behind the §2 correctness queue.
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
 | scoped-call-wide-const | a scoped package call whose body reads a select of the package's >64-bit constant is E3009 ``package-scoped call `pk::f(...)` needs a body that references only its own formals/locals, same-package constants, …`` where both oracles run it (`f = P[23:16]` over `logic [79:8] P`: `68`; `f2(8)` over `P[i +: 8]`: `69`) | the scoped-call self-containment gate does not count a `pkg_wide_bits` constant as a same-package constant | count it, then measure the body's select (the bare name in a package body keeps the §2 >64-bit select residue) | 2 oracles | S |
+| pkg-string-const-select-dir | a select of a package STRING constant inside the package's routine takes its direction from the caller's same-named ASCENDING net and is E3009 ``part-select bounds [msb:lsb] descend but the net is ascending`` where both oracles run it (`S = "ab"`, `S[15:8]` / `S[7:0]` beside a caller's `logic [0:15] S`: `61 62`) | the run-time select lowering's range resolver walks the caller's scope for a name the package routine's value route reads from the package | the package's route for the run-time select (§4.5.561 built it for numeric constants and reverted it: fixing the caller's rejection exposed the constant positions, §2 "Scoping"). BLOCKED BY the declaring-scope fold | 2 oracles | S |
 | pkg-task-stmt | a package task enabled by its scoped spelling as a STATEMENT (`p::pt(z);`) is E2002 `expected '=' or '<=' after lvalue, found '::'`; the import spelling (`import p::pt; pt(z);`) runs. iverilog rejects the same line (`Malformed statement`), verilator runs it | the statement parser takes `::` only inside an expression, not on a statement head | accept a scoped call on a statement head and route it like the imported spelling | 1 (verilator; iverilog rejects) | small |
 | blocal-inert-falseloud | an inner block-local that is DECLARED, never referenced inside its own block and carries no initializer is refused with ``E3009 block-local `x` is referenced outside its `begin…end` block`` although the flatten is byte-correct; both oracles print a value on every measured cell in the module and the import lane (the scoped lane is silently wrong instead — its own §2 row) | `check_block_local_scope_leaks` keys on the NAME, not on the binding a post-block reference takes | the gate must resolve that binding. Three narrowings that keyed on properties of the DECLARATION — inertness, geometry, an outer-twin lookup — were each measured to create a new defect, and the axis was reverted whole (§4.5.490) | 2-oracle | — |
 | scoped-call-comb-arg | a scoped package call inside `always_comb` whose actual is a variable WITH a declaration initializer (`int i = 21; always_comb r = pk::g(i);`) is a false E3001 ``variable `i` has a declaration initializer AND is written by `always_comb` `` where both oracles print 44; the import spelling and the module-local twin run, and no block-local is involved | Rule A's driver walk counts the scoped call's actual as a write (the same conservative walk the `frame-body-write-sites` row records for a hierarchical callee) | resolve the scoped callee's ports before the walk, as the local twin does | 2-oracle | small |
