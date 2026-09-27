@@ -786,8 +786,7 @@ impl Elaborator<'_> {
                         // wide value is installed instead. Same check as the module-body
                         // and header twins.
                         if let Some(cv) = self.wide_disagreeing_value(&p.value, meta, Some(v)) {
-                            let key = self.fq(&p.name.name);
-                            self.wide_param_bits.insert(key, cv);
+                            self.bind_wide_param_decl(p, true, cv);
                             return;
                         }
                         // The width the caller just resolved, not a re-derivation:
@@ -824,8 +823,7 @@ impl Elaborator<'_> {
                         // value fits keeps its integer identity.
                         let wide = self.wide_disagreeing_value(&p.value, meta, None);
                         if let Some(cv) = wide {
-                            let key = self.fq(&p.name.name);
-                            self.wide_param_bits.insert(key, cv);
+                            self.bind_wide_param_decl(p, true, cv);
                             return;
                         }
                         if phase == GenPhase::Nets {

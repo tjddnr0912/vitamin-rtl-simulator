@@ -93,6 +93,24 @@ impl Elaborator<'_> {
         // parameters per element (`elaborate_instance`), so a port width that depends
         // on one does not fold here — `widths_ok` catches that and is loud, which is
         // where that shape already was.
+        //
+        // ⚠️ This binds the CHILD's header parameters at the PARENT's prefix, and
+        // `restore_params` unwinds only the i64 values: every other table
+        // `bind_one_param` writes kept the child's entry on the parent's key. A child's
+        // `logic [23:16] P` left its value and range under the parent's `logic [15:8]
+        // P`, so `dut.P` read `c3` and `dut.P[15:8]` `xx` (both oracles `5a`, `5a`), and a
+        // child's >64-bit `P` shadowed the parent's own value in every later read.
+        // Everything the prepass binds is scratch; the tables are put back.
+        let side = (
+            self.wide_param_bits.clone(),
+            self.param_range.clone(),
+            self.hier_param_range.clone(),
+            self.str_param_raw.clone(),
+            self.real_param_val.clone(),
+            self.param_meta.clone(),
+            self.hier_params.clone(),
+            self.param_type_guessed.clone(),
+        );
         let (saved, _) = self.bind_params(child, overrides);
         let mut port_widths: Vec<(String, u32)> = Vec::with_capacity(ports.len());
         let mut widths_ok = true;
@@ -124,6 +142,16 @@ impl Elaborator<'_> {
             port_widths.push((p.name.name.clone(), w.min(u32::MAX as u64) as u32));
         }
         self.restore_params(saved);
+        (
+            self.wide_param_bits,
+            self.param_range,
+            self.hier_param_range,
+            self.str_param_raw,
+            self.real_param_val,
+            self.param_meta,
+            self.hier_params,
+            self.param_type_guessed,
+        ) = side;
         if !widths_ok {
             self.error(
                 MsgCode::ElabUnsupported,

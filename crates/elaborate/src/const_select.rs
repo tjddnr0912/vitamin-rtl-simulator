@@ -55,6 +55,24 @@ pub(crate) enum SelParts<'a> {
     Indexed(&'a ast::Expr, &'a ast::Expr, ast::PartDir),
 }
 
+/// The value a constant select reads, in the domain its binding lives in: an i64-lane
+/// constant already narrowed to its declared width (2-state), or the two bit planes of a
+/// parameter wider than 64 bits (`wide_param_bits`), which may carry x/z.
+pub(crate) enum SelBase {
+    Narrow(u64),
+    Wide(ir::BitPacked),
+}
+
+impl SelBase {
+    /// Internal bit `p` as `(value, unknown)`; `p` lies inside the declared width.
+    fn bit(&self, p: u32) -> (bool, bool) {
+        match self {
+            SelBase::Narrow(v) => (p < 64 && (v >> p) & 1 == 1, false),
+            SelBase::Wide(b) => bp_get(b, p as usize),
+        }
+    }
+}
+
 impl Elaborator<'_> {
     /// `(hi, lo, directed)` — the bit span a select names. `directed` is true
     /// only for an explicit `[msb:lsb]`, whose endpoints may be given in either
@@ -166,13 +184,33 @@ impl Elaborator<'_> {
             // boundary `const_placement_env` spells out. Declining keeps the loud.
             return None;
         }
+        let v = match &val {
+            SelBase::Narrow(v) => *v,
+            // A >64-bit base: the selected bits one at a time, from the lower
+            // normalized endpoint (in range — `const_select_resolved` checked). An
+            // unknown bit has no value in this domain, so the select declines and the
+            // bit domain behind it keeps the x.
+            SelBase::Wide(_) => {
+                let base = Self::sel_norm(lo_n, dlo, dwidth, asc)
+                    .min(Self::sel_norm(hi_n, dlo, dwidth, asc));
+                let mut out = 0i64;
+                for i in 0..n {
+                    let (v, u) = val.bit(u32::try_from(base + i64::from(i)).ok()?);
+                    if u {
+                        return None;
+                    }
+                    out |= i64::from(v) << i;
+                }
+                return Some(out);
+            }
+        };
         // Normalize BOTH endpoints into internal bit positions and take the lower:
         // ascending flips the order, so the numerically-low DECLARED index is the
         // numerically-HIGH internal one.
         let shift = Self::const_norm_bit(lo_n, dlo, dwidth, asc)
             .min(Self::const_norm_bit(hi_n, dlo, dwidth, asc));
         let mask = if n == 63 { i64::MAX } else { (1i64 << n) - 1 };
-        Some(((val >> shift) as i64) & mask)
+        Some(((v >> shift) as i64) & mask)
     }
 
     /// The WIDE-domain twin of [`Self::const_param_select_env`]: the bits a select
@@ -216,9 +254,14 @@ impl Elaborator<'_> {
             return None;
         }
         let n = u32::try_from(hi_n.checked_sub(lo_n)?.checked_add(1)?).ok()?;
-        // One word is exactly `bp_zero(n)`'s allocation for n in 1..=64, and the two
-        // planes must stay the same length (`bp_set` indexes both with one word).
-        if n == 0 || n > 64 {
+        // A narrow base names at most 64 bits inside its declaration, so a longer
+        // select is an overhang the integer lane never answered; a wide base's select
+        // is as long as its declaration allows (`bp_zero` sizes both planes).
+        let cap = match val {
+            SelBase::Narrow(_) => 64,
+            SelBase::Wide(_) => dwidth.max(64),
+        };
+        if n == 0 || n > cap {
             return None;
         }
         // Result bit `i` is internal bit `base + i`, where `base` is the lower of the
@@ -227,14 +270,8 @@ impl Elaborator<'_> {
         // `const_norm_bit` clamps to 0..63 for the integer lane, which would fold an
         // out-of-range index onto a bit that exists, the exact confusion this arm
         // reports as `x`.
-        let norm = |idx: i64| -> i64 {
-            if asc {
-                dlo + i64::from(dwidth) - 1 - idx
-            } else {
-                idx - dlo
-            }
-        };
-        let base = norm(lo_n).min(norm(hi_n));
+        let base =
+            Self::sel_norm(lo_n, dlo, dwidth, asc).min(Self::sel_norm(hi_n, dlo, dwidth, asc));
         let mut out = bp_zero(n);
         for i in 0..n {
             let p = base + i64::from(i);
@@ -244,7 +281,8 @@ impl Elaborator<'_> {
                 bp_set(&mut out, i as usize, false, true);
                 continue;
             }
-            bp_set(&mut out, i as usize, (val >> p) & 1 == 1, false);
+            let (v, u) = val.bit(p as u32);
+            bp_set(&mut out, i as usize, v, u);
         }
         // §11.5.1: the result of a select is UNSIGNED whatever the base is.
         Some((out, n, false))
@@ -296,6 +334,16 @@ impl Elaborator<'_> {
         )
     }
 
+    /// One declared-domain index → its internal bit position, UNCLAMPED (it may lie
+    /// outside `0..dwidth` for an overhanging select).
+    fn sel_norm(idx: i64, dlo: i64, dwidth: u32, asc: bool) -> i64 {
+        if asc {
+            dlo + i64::from(dwidth) - 1 - idx
+        } else {
+            idx - dlo
+        }
+    }
+
     /// One declared-domain index → its internal bit position. The i64 twin of
     /// `norm_offset_for_range`, which the ENGINE side uses for the same job.
     fn const_norm_bit(idx: i64, dlo: i64, dwidth: u32, asc: bool) -> u32 {
@@ -323,9 +371,9 @@ impl Elaborator<'_> {
         env: &std::collections::BTreeMap<String, i64>,
         envw: &crate::const_fn_width::ConstWidths,
         depth: u32,
-    ) -> Option<(u64, i64, i64, i64, u32, bool)> {
+    ) -> Option<(SelBase, i64, i64, i64, u32, bool)> {
         let r = self.const_select_resolved_raw(e, env, envw, depth)?;
-        let (_, lo_n, hi_n, dlo, dwidth, _) = r;
+        let (lo_n, hi_n, dlo, dwidth) = (r.1, r.2, r.3, r.4);
         if !Self::select_idx_in_declared_range(lo_n, dlo, dwidth)
             || !Self::select_idx_in_declared_range(hi_n, dlo, dwidth)
         {
@@ -345,7 +393,7 @@ impl Elaborator<'_> {
         env: &std::collections::BTreeMap<String, i64>,
         envw: &crate::const_fn_width::ConstWidths,
         depth: u32,
-    ) -> Option<(u64, i64, i64, i64, u32, bool)> {
+    ) -> Option<(SelBase, i64, i64, i64, u32, bool)> {
         let (base, a, b, directed) = self.const_select_bounds(e, env, envw, depth)?;
         let (val, dlo, dwidth, asc) = self.const_select_base(base)?;
         // ⚠️ `[m:l]` is written LEFT:RIGHT in the base's own declared direction, so
@@ -415,7 +463,7 @@ impl Elaborator<'_> {
     /// ascending)`. Restricted to a BARE single-segment parameter whose declared
     /// width is RECORDED — see the module doc for why each restriction is a
     /// decline and not a guess.
-    fn const_select_base(&self, base: &ast::Expr) -> Option<(u64, i64, u32, bool)> {
+    fn const_select_base(&self, base: &ast::Expr) -> Option<(SelBase, i64, u32, bool)> {
         // §3 ⑤ ⓔ: an ELEMENT of a constant array parameter — `A[1][4:0]`, and the
         // struct member `S[1].b` the parser spelled as a part-select of `S[1]`. The
         // value is what the element read folds to and the range is the element's
@@ -427,7 +475,13 @@ impl Elaborator<'_> {
             if m.packed_dims != 1 {
                 return None;
             }
-            return Self::select_base_at_declared(v, i64::from(m.elem_lo), m.elem_w, m.elem_asc);
+            return Self::select_base_at_declared(
+                v,
+                i64::from(m.elem_lo),
+                m.elem_w,
+                m.elem_asc,
+                None,
+            );
         }
         // `pkg::W` — the same declaration, in the scope that exists to share it. The
         // value comes from `pkg_consts` and the range from `pkg_const_range`, which
@@ -440,12 +494,7 @@ impl Elaborator<'_> {
         // `pkg_consts` at all (they live in their own side maps), so it declines here
         // and stays loud, as it does at module scope.
         if let ast::ExprKind::PkgScoped { pkg, name } = &base.kind {
-            if self.const_array_vals_of_base(base).is_some() {
-                return None;
-            }
-            let v = *self.pkg_consts.get(&pkg.name)?.get(&name.name)?;
-            let (dlo, dwidth, asc) = self.param_sel_range(base)?;
-            return Self::select_base_at_declared(v, dlo, dwidth, asc);
+            return self.pkg_const_select_base(&pkg.name, &name.name);
         }
         let ast::ExprKind::Ident(path) = &base.kind else {
             return None; // a hierarchical / element base is not this arm
@@ -500,7 +549,39 @@ impl Elaborator<'_> {
         // `param_decl_range` answers only for a DECLARED range or a TYPE/LITERAL
         // width, so a value-inferred one has no entry and this declines.
         let (dlo, dwidth, asc) = self.param_sel_range(base)?;
-        Self::select_base_at_declared(v, dlo, dwidth, asc)
+        // No sign: a declaration past 64 bits keeps declining here. Extending its i64 by
+        // the declaration's sign is sound only for the declaring scope's own reads, and
+        // this walk also answers for a function, typedef or range of ANOTHER scope folded
+        // at this prefix (§4.5.560's reverted axis; `wide_param_range.rs`).
+        Self::select_base_at_declared(v, dlo, dwidth, asc, None)
+    }
+
+    /// The base of a select of package `pkg`'s constant `name`, `pkg::name[…]`: its
+    /// declared range from `pkg_const_range`, its value from the wide or the i64 map,
+    /// and the sign that extends a fitting value from `pkg_const_meta`. A constant
+    /// ARRAY declines (an element read, `const_array_vals_of_base`'s), as does a string
+    /// or a real. The scope is named, so no walk can land on another scope's binding:
+    /// `localparam X = pk::P[15:8];` over a package `logic [79:8] P` read the stored
+    /// bits positionally (`68`, both oracles `69`).
+    fn pkg_const_select_base(&self, pkg: &str, name: &str) -> Option<(SelBase, i64, u32, bool)> {
+        if self
+            .pkg_array_const_vals
+            .get(pkg)
+            .is_some_and(|m| m.contains_key(name))
+        {
+            return None;
+        }
+        let (dlo, dwidth, asc) = self.pkg_const_range.get(pkg)?.get(name).copied()?;
+        if let Some(cv) = self.pkg_wide_bits.get(pkg).and_then(|m| m.get(name)) {
+            return Self::select_base_wide(cv, dlo, dwidth, asc);
+        }
+        let v = *self.pkg_consts.get(pkg)?.get(name)?;
+        let sg = self
+            .pkg_const_meta
+            .get(pkg)
+            .and_then(|m| m.get(name))
+            .and_then(|&(w, sg)| (w == dwidth).then_some(sg));
+        Self::select_base_at_declared(v, dlo, dwidth, asc, sg)
     }
 
     /// A resolved base value narrowed to its DECLARED width. One spelling for the
@@ -511,21 +592,48 @@ impl Elaborator<'_> {
     /// i64 container, and those are not part of the value: `localparam signed [31:0]
     /// W = -32'sd52; W[15:8]` is 255 in both oracles, which is the masked byte, not
     /// a sign extension.
+    ///
+    /// A declaration WIDER than 64 bits whose value fits the i64 lane (`localparam
+    /// [135:8] K = 128'hDD_0000;` in a package — `wide_disagreeing_value` found the two
+    /// folds agree) stands for the i64 extended to the declared width by the
+    /// declaration's sign, which is how that agreement was tested; `signed` is that
+    /// sign, `None` where the caller cannot vouch for the declaration, and then the
+    /// select declines as it always did.
     fn select_base_at_declared(
         v: i64,
         dlo: i64,
         dwidth: u32,
         asc: bool,
-    ) -> Option<(u64, i64, u32, bool)> {
-        if dwidth == 0 || dwidth > 64 {
+        signed: Option<bool>,
+    ) -> Option<(SelBase, i64, u32, bool)> {
+        if dwidth == 0 {
             return None;
+        }
+        if dwidth > 64 {
+            let raw = ir::BitPacked {
+                val: vec![v as u64],
+                unk: vec![0],
+            };
+            let bits = resize_bits(&raw, 64, dwidth, signed?);
+            return Some((SelBase::Wide(bits), dlo, dwidth, asc));
         }
         let keep = if dwidth >= 64 {
             u64::MAX
         } else {
             (1u64 << dwidth) - 1
         };
-        Some((v as u64 & keep, dlo, dwidth, asc))
+        Some((SelBase::Narrow(v as u64 & keep), dlo, dwidth, asc))
+    }
+
+    /// The wide twin of [`Self::select_base_at_declared`]: a >64-bit value's planes,
+    /// when the recorded range describes exactly its bits.
+    fn select_base_wide(
+        cv: &ir::ConstVal,
+        dlo: i64,
+        dwidth: u32,
+        asc: bool,
+    ) -> Option<(SelBase, i64, u32, bool)> {
+        (dwidth == cv.width).then(|| (SelBase::Wide(cv.bits.clone()), dlo, dwidth, asc))
     }
 
     /// Fold a DECLARED RANGE bound (`logic [<e>:0]`).

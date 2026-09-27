@@ -700,8 +700,7 @@ impl Elaborator<'_> {
                         // whose value fits keeps its integer identity.
                         {
                             if let Some(cv) = self.wide_disagreeing_value(&p.value, meta, folded) {
-                                let key = self.fq(&p.name.name);
-                                self.wide_param_bits.insert(key, cv);
+                                self.bind_wide_param_decl(p, true, cv);
                                 continue;
                             }
                         }

@@ -2331,9 +2331,44 @@ impl Elaborator<'_> {
                     // either: on a 2-state declaration z must also become 0, and today it
                     // becomes 1.
                     if (64..cv.width as usize).any(|i| bp_get(&cv.bits, i).0) {
-                        let key = self.fq(&p.name.name);
-                        self.wide_param_bits.insert(key, cv);
+                        self.bind_wide_param_decl(p, default_binds, cv);
                         return;
+                    }
+                    // Past 64 bits the i64 lane stands for its value EXTENDED by the
+                    // declared sign — the rule `wide_disagreeing_value` tests on the
+                    // default lane, and the one a read materializes by. A value that
+                    // extension does not reproduce is not the override: bit 63 set in
+                    // a POSITIVE value of a signed declaration (`#(.K(128'h8000_0000_
+                    // 0000_0000))` onto `parameter signed [127:0] K`) bound
+                    // `ffffffffffffffff8000000000000000` where both oracles bind the
+                    // zero-extended value — it lives in the wide map.
+                    //
+                    // For a `[w-1:0]` declaration only: the wide map's selects read the
+                    // stored bits positionally, which is the declared reading there and
+                    // not for `[135:8]`, where moving the value would trade its i64
+                    // twin's range-normalized selects for positional ones (ROADMAP §2,
+                    // the >64-bit select bullet).
+                    let zero_lsb = matches!(
+                        self.wide_param_decl_range(p, default_binds, cv.width),
+                        Some((0, _, false))
+                    );
+                    if cv.width > 64 && zero_lsb {
+                        let low = cv.bits.val.first().copied().unwrap_or(0);
+                        let back = resize_bits(
+                            &ir::BitPacked {
+                                val: vec![low],
+                                unk: vec![0],
+                            },
+                            64,
+                            cv.width,
+                            cv.signed,
+                        );
+                        if (0..cv.width as usize)
+                            .any(|i| bp_get(&back, i).0 != bp_get(&cv.bits, i).0)
+                        {
+                            self.bind_wide_param_decl(p, default_binds, cv);
+                            return;
+                        }
                     }
                     // ⚠️⚠️ It fits the i64 lane — but `chosen_val` may not HOLD it.
                     // `#(.K({64'h0, 64'h5}))` folds to a 128-bit constant whose value
@@ -2370,8 +2405,7 @@ impl Elaborator<'_> {
                     None
                 };
                 if let Some(cv) = wide {
-                    let key = self.fq(&p.name.name);
-                    self.wide_param_bits.insert(key, cv);
+                    self.bind_wide_param_decl(p, default_binds, cv);
                     return;
                 }
             }
