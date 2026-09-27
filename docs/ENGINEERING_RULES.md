@@ -83,6 +83,7 @@ Vocabulary used throughout:
 | Feed the input to the existing callers before adding another call to a shared helper; when they are wrong too, the fix belongs inside the helper | Guarding the call sites and fixing only your own regression |
 | Measure the premise of a theorem used to narrow a change, especially a data-structure invariant such as "the stored representation is canonical" | A narrowing resting on a premise nobody measured |
 | Draw a boundary and keep pre-slice behaviour when two readings are wrong in opposite directions; a guess means out of domain | Either reading breaking a different shape |
+| Census the aliases that copy a value's type before correcting the type its source reports: an alias that records no type of its own was right only where the wrong type happened to agree, and each correction of the source turns those contexts wrong | A sign keyword carried onto an untyped parameter made a generate-scope `localparam C = A;` `fffa` for `000a`; walking the alias to its source then copied a guessed override's width, directly and through forwarding — three rounds, reverted (§4.5.559) |
 | Treat an IR construction that places one expression twice as a semantic change, and gate on observability (side effects, draws, diagnostic counts) before duplicating | One operand being evaluated twice and the two draws mixing |
 
 ### 2.4 Width, context and provenance

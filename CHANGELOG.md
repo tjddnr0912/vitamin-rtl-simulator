@@ -9,6 +9,12 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a fill override types an untyped parameter
+
+- `#(.P('1))` (or `-G P='1`) onto an untyped `parameter P = 5` bound one bit, but a size cast read the
+  parameter as if the override had no type: `64'(-P)` was `0000000000000001`; it is now all ones, as
+  both reference tools give.
+
 ### Fixed — an override's own type types an untyped parameter
 
 - `#(.P(X))` with `localparam real X = 5` onto an untyped `parameter P = 3` bound the integer 5

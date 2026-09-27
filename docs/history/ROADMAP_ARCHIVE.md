@@ -7,12 +7,13 @@
 > - ⚠️ **`ROADMAP §5.1-<x>` 참조는 이 파일이 아니라 [ROADMAP_ARCHIVE_PHASE_A-D.md](ROADMAP_ARCHIVE_PHASE_A-D.md)** 에 있다(2026-08-18 이관 · ③층 Phase A~D 실행 기록 3,074 줄 · 무삭제·§번호 보존). 이 파일은 **§4.5.x 슬라이스**를 담는다.
 > - **운용 규칙**: 신규 완료 슬라이스 로그는 아래 "완료 슬라이스 로그(이관 이후)" 섹션에 `#### 4.5.<N> <제목> (<날짜>, branch <slug>) ✅` 양식으로 **최신이 위**로 추가한다(기존 §4.5.x 양식 유지·기존 항목 삭제 금지).
 
-## 인덱스 — 완료 슬라이스 439건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
+## 인덱스 — 완료 슬라이스 440건 (최신순·⚠️ = 미머지 · 번호는 1~502 중 382개가 실재 — 결번은 병합·취소분)
 
 > 본문은 `#### 4.5.<N>` 로 검색하면 바로 찾을 수 있다. ⚠️ = 미머지/보류.
 
 
 **§4.5.220–280**
+- `4.5.559` **a fill override types an untyped parameter** (2026-09-27 · a `'0` / `'1` / `'x` / `'z` override of an untyped, keyword-less, unranged parameter is one unsigned bit to the size-cast classifier, not a guess · 65 lens columns wrong → oracle, 0 regressed · the sign-keyword axis (§2 "Index sealing") built and reverted after three BLOCKING rounds on one axis, its prerequisite recorded · tests 8720 → 8721)
 - `4.5.558` **an override's own type types an untyped parameter** (2026-09-27 · a real result makes the target real with its real value, a prim cast / comparison / logical / reduction top states its type, a `-G` decimal is 32-bit signed, the real fold reads the innermost binding, `$realtobits` converts an integral argument · §2 "Real" override bullet and the `-G` decimal bullet closed · 87 lens cells wrong → oracle, 0 regressed · 3 review rounds, the call arm reverted after three BLOCKINGs on one root · tests 8706 → 8720)
 - `4.5.557` **an operator override over an array-parameter element types an untyped target** (2026-09-27 · the operator channel's element arm folds the tree in the wide walk at its self width, and a name-free fill tree wider than 64 bits folds at its other operands' width · §2 row 25 and the wide-tree fill bullet closed · 25 grounding cells wrong → oracle, 0 regressed · 2 review rounds, the round-1 BLOCKING a value branch keyed wider than its type arm · tests 8701 → 8706)
 - `4.5.556` **a narrow declared parameter folds at its declared width** (2026-09-27 · a declaration of 64 bits or less whose initializer names a constant or has a >64-bit operand takes the §4.5.542 region walk in every binder; the comparison arm refolds a signed side of an unsigned region · §2 row 14 and the `/ % >>>` bullet closed, row 30 / C1 / 🆕 H ⓒ re-measured stale · 1,607 cells wrong → both oracles, 0 regressed · tests 8693 → 8701)
@@ -568,6 +569,22 @@
 - `4.5.1` Medium 묶음 게이트 플랜
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
+
+#### 4.5.559 a fill override types an untyped parameter; the sign-keyword axis is reverted behind a generate-scope alias prerequisite (2026-09-27, branch main) ✅
+
+**ROADMAP rows**: §2 "Size cast / signedness": the `time` decimal-default bullet (S13) deleted as stale (re-measured at HEAD: `$bits` 64 and the value match both oracles since §4.5.555). §2 "Index sealing": the sign-keyword bullet (I9) rewritten with the reverted attempt and BLOCKED by a new REMAINING_WORK §D prerequisite (a generate-scope alias's recorded type); new bullets for the generate-scope alias that records no width (F6), a `signed` keyword dropped on a string default, and a fill onto a >64-bit default binding at the default's width. §2 "Ranges / bounds / selects": a generate-scope localparam wider than 64 bits is invisible to the `params` walks. Summary: mechanism 176 / 95 / 81 → 179 / 97 / 82, total 411 / 245 / 166 → 414 / 247 / 167. Tests 8720 → 8721.
+
+**Defect (PRE 5425f91).** A fill override (`#(.P('1))`) of an untyped parameter binds one unsigned bit — the meta chain's fill arm records it — but `bind_one_param` did not count a fill as a typing channel, so the target was marked `param_type_guessed` and the size-cast classifier took its pre-slice route: `64'(-P)` over `#(.P('1))` read `0000000000000001` where both oracles give all ones, and `-G P='1` the same. The sign-keyword row (I9, `parameter signed A = 4'd10` read as the unsigned 4-bit literal) was the slice's main target.
+
+**Fix (no format bump).** `bind_one_param`: a fill override of an untyped, keyword-less, unranged parameter types it (`typed_sign = Some(false)`), so it is not a guess. Not onto a `signed` keyword, whose fill the meta chain still records unsigned where both oracles bind the signed −1 (the I9 residue).
+
+**Reverted axis (I9).** Built across three rounds: the keyword on every default-lane answer of `param_decl_width_opt` and on the fill arm (146 cells wrong → oracle on the POST5 binary). Round 1: both lenses BLOCKING — the keyword also reached the override fallback (restricted to the default lane), and a generate-scope alias `localparam C = A;` held A's unsigned 10 at 32 bits, right by accident in an unsigned context, which the carried sign made `C + 4'd0` `fffa` for `000a` (the alias arm reads `param_meta` at the current scope's key only). Round 2 (the alias arm walks the scopes): BLOCKING — the walk copied a GUESSED source's width (an override no channel typed binds its default literal's width) into aliases right at 32 bits by accident (`#(.A(fi(12)))`: 4 bits for 32). Round 3 (guessed sources filtered, fills typed): BLOCKING on the same root through forwarding — `m #(.B(fi(12)))` → `s #(.U(B))` types `U` from B's guessed meta without marking it a guess, and the walk copied it (16 lines right → wrong). Third consecutive BLOCKING on the alias axis: the keyword, the walk and the filter were reverted (shared files byte-identical to 5425f91 but for the fill arm), and the prerequisite recorded: an alias records its source's type, with a guess followed through forwarding.
+
+**Review (both lenses, 3 rounds).** The shipped half re-measured on the final binary (POST6) against every lens cell of the three rounds (304 cells, both oracles; `-G` cells re-run with their overrides): 65 columns wrong → oracle (12 lines fully right, 6 to the verilator reference where iverilog prints the self width), 0 right → wrong, 0 loud moved. Recorded from the lenses: F6 (the alias records no width), the >64-bit fill width, the string-default keyword, the wide generate localparam shadow. Corpus 10/10 in every round.
+
+**Gate.** nextest 8721 / 8721 (15 skipped), doctests, clippy `-D warnings`, fmt, product-shape build / clippy / `sim-engine --lib` / smoke; corpus 10/10.
+
+**Pins.** `fill_override_types_its_parameter.rs` (`64'(P)`, `64'(-P)`, `64'(~P)`, `8'(P + 1)` and `$bits(P)` over `'1` named and by `defparam` and over `'0`, each line agreed by both oracles).
 
 #### 4.5.558 an override's own type types an untyped parameter: a real result makes it real with its real value, a prim cast, a comparison, a logical or a reduction top states its type, and a `-G` decimal is 32-bit signed (2026-09-27, branch main) ✅
 

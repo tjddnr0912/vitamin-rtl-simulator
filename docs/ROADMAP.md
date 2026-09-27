@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 21 | 1 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 5 (🆕 H startable; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 176 | 95 | 81 | oracle split / pinned / oracle disqualified / no oracle 57 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 13 · size cast / signedness 13 · constant domain (i64) 14 · scoping / imports / block-locals 27 · delays / events 19 · real 9 · performance 6 · index sealing 12 · ranges / selects 7 · diagnostics 10 · class fields 3 · oracle splits 43 | ① | |
+| §2 | recorded defects by mechanism | 179 | 97 | 82 | oracle split / pinned / oracle disqualified / no oracle 57 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 13 · size cast / signedness 12 · constant domain (i64) 14 · scoping / imports / block-locals 27 · delays / events 19 · real 9 · performance 6 · index sealing 15 · ranges / selects 8 · diagnostics 10 · class fields 3 · oracle splits 43 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 114 | 98 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 26 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,9 +38,9 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 411 | 245 | 166 | | | | |
+| total | | 414 | 247 | 167 | | | | |
 
-Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a declaring-scope fold of a function's return range, a tree-wide AST self-width pass, an exact declared-width fold for
+Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a declaring-scope fold of a function's return range, a generate-scope alias's recorded type, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
 a block-scoped constant binding, a field-key normalisation map, per-instance arity / class registration,
 a binding-resolved scope, the purity-certification adjudication, one-oracle clocking, the `$finish`-in-a-function oracle split).
@@ -260,10 +260,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   already has a `pkg::arr[i]` arm, so the classifier disagrees with its own lowering resolver and one
   design answers `pm[0]` correctly and `pk::pm[0]` wrongly. Beside it, `16'(u1.sarr[0])` is
   `000000000000fff9` against iverilog's `fffffffffffffff9`.
-- A `time` parameter with a DECIMAL default forwards as 32-bit unsigned: `parameter time T = 1 << 40`
-  has no `param_meta`, so `#(.P(T))` types it `(32, unsigned)` through `const_self_width`'s
-  `map_or(32)` and truncates 2^40 to 0 where the oracles bind 64 bits. Fix = a typed (`time`,
-  `integer`, `int`) declaration records its type as meta even for a non-literal default.
 
 ### Constant domain (i64)
 
@@ -412,8 +408,31 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   name. M.
 - `parameter signed A = 4'd10` (a sign keyword and no range) reads as the unsigned 4-bit literal: a
   declared `logic [15:0] Y = A` is `000a` where both oracles give `fffa` — §6.20.2 keeps the sign
-  specification and takes only the range from the value. `param_decl_width_opt`'s untyped literal arm
-  answers the literal's own sign. S.
+  specification and takes only the range from the value; every untyped answer of
+  `param_decl_width_opt` reports the VALUE's sign, and so does the fill arm (`#(.A('1))` 1 for −1).
+  Built in §4.5.559 (the keyword on every default-lane answer and on the fill arm; 146 review cells
+  wrong → oracle) and reverted after three review rounds on one axis: a generate-scope alias of the
+  parameter records no width (the next bullet), so `localparam C = A;` held the unsigned 10 at 32
+  bits and was right by accident in an unsigned context — carrying the sign made `C + 4'd0` `fffa`
+  for `000a` — and recording the alias's width copied the guessed width of an override no channel
+  typed, directly and through a forwarded parameter. BLOCKED BY: the alias bullet below
+  (REMAINING_WORK §D). S once it holds.
+- A generate-scope alias of an outer parameter records no width: `localparam C = A;` under `if (1)
+  begin : g` binds 32 bits where both oracles give A's own (`$bits(C)` 4 over a 4-bit A) —
+  `param_decl_width_opt`'s alias arm reads `param_meta` at the CURRENT scope's key only (its
+  declared-only twin walks the scopes). Walking the scopes (built in §4.5.559) copies a GUESSED
+  source's width — an override no channel typed binds its default literal's width (the "Real"
+  residue bullet) — into aliases that are right at 32 bits today by accident: directly
+  (`#(.A(fi(12)))`: 4 bits for 32) and through forwarding (`m #(.B(fi(12)))` → `s #(.U(B))`, whose
+  `U` is typed from B's guessed meta and not marked a guess). Fix shape = the walk, with a guess
+  followed through forwarding (a child typed from a guessed name is a guess). M.
+- A `signed` keyword on a STRING default is dropped: `parameter signed A = "\377"; A < 0` is 0 where
+  both oracles read the signed −1, and `parameter signed A = "ab"; A < -1` 1 for 0 — the string route
+  (`str_param_raw`) carries no sign. S.
+- A fill override onto a parameter whose default is wider than 64 bits binds at the default's width:
+  `#(.A('1))` onto `parameter signed A = 72'h0` is 72 ones where both oracles bind one bit (`$bits`
+  1) — `override_at_declared_width` sizes the fill to the default's width and the early wide install
+  skips the fill's meta. S.
 - `parameter unsigned U = 1` overridden with a SIGNED value (`#(.U(-8'sd91))`) binds `-91` where
   both oracles bind `165`. The width axis is correct; only the sign column is open. Root =
   `ast::ParamDecl.signed` is `false` for both "the `unsigned` keyword" and "no keyword", a direction
@@ -617,6 +636,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - A self-referential return range overflows the stack (no oracle — iverilog aborts too):
   `function [f():0] f();` — `const_fn_ret_wsign` does not carry call depth. Prescription = one line,
   `depth + 1`.
+- A generate-scope localparam wider than 64 bits is invisible to the `params` walks: under `if (1)
+  begin : g localparam A = 72'hF0_0000_0000_0000_00AC;` shadowing the module's `parameter A = 4'd10`,
+  `localparam C = A;` reads the inner value at the OUTER declaration's width (`C & 16'hFFFF` 12 where
+  both oracles give 172, `C > 16` 0 for 1) — the `wide_param_bits` blind spot of the select bullet
+  above (`param_sel_range` walks `params` only). Measured in §4.5.559's review. M.
 
 ### Class fields
 
