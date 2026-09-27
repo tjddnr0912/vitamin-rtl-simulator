@@ -9,6 +9,20 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a narrow declared parameter folds at its declared width
+
+- A parameter declared 64 bits or narrower folded its initializer in an unlimited integer walk,
+  which kept a narrow signed operand sign-extended and never wrapped at the expression's width:
+  `localparam logic signed [7:0] NM = -8'sd2; localparam logic [63:0] X = NM ^ 64'h0;` was
+  `ff…fe` (both reference tools `0…0fe`), `(P + 8'd100) % 8'd7` over `P = 200` was 6 (2), and
+  `N % 64'd10` over a signed 64-bit `-5` was 18446744073709551611 (1). An initializer that names
+  another constant, or has an operand wider than 64 bits, now folds with its expression width and
+  sign decided over the whole tree, in a module, a header, a generate block, a package and an
+  interface alike.
+- A comparison of a signed operand against an unsigned one in a constant (`(P >>> 60) > 64'd100`
+  over a signed `P = -100`) treats the signed side as unsigned before its operators run, as the
+  language requires; at 128 bits it answered the signed reading.
+
 ### Fixed — a parameter's declared type is the context its value converts into
 
 - A typed or ranged parameter with a string-literal default kept the string's own width:
