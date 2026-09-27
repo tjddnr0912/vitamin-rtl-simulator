@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 21 | 1 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 5 (🆕 H startable; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 170 | 95 | 75 | oracle split / pinned / oracle disqualified / no oracle 54 · named prerequisite 9 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 13 · size cast / signedness 13 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 19 · real 7 · performance 6 · index sealing 12 · ranges / selects 7 · diagnostics 10 · class fields 3 · oracle splits 40 | ① | |
+| §2 | recorded defects by mechanism | 170 | 93 | 77 | oracle split / pinned / oracle disqualified / no oracle 54 · named prerequisite 11 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 13 · size cast / signedness 13 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 19 · real 7 · performance 6 · index sealing 12 · ranges / selects 7 · diagnostics 10 · class fields 3 · oracle splits 40 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 113 | 97 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 25 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,11 +38,12 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 404 | 244 | 160 | | | | |
+| total | | 404 | 242 | 162 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
-a per-resumption-kind ordering model, a block-scoped constant binding, per-instance arity / class registration, one-oracle clocking).
+a block-scoped constant binding, a field-key normalisation map, per-instance arity / class registration,
+a binding-resolved scope, the purity-certification adjudication, one-oracle clocking, the `$finish`-in-a-function oracle split).
 
 Priority principle (time-invariant): ① a CRITICAL silent-wrong with an oracle, then ② loud→supported
 with an oracle, then ③ an honest-loud promotion whose prerequisite holds, then ④ G2 OBS. Performance
