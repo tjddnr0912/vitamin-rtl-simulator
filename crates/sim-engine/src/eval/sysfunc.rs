@@ -290,6 +290,15 @@ impl<N: NetReader + ?Sized> EvalCtx<'_, N> {
                 // real → 64-bit vector (raw IEEE bits). val[0] already holds
                 // to_bits(); clear is_real so it reads as a plain 64-bit vector.
                 let mut v = self.eval(args[0]);
+                // §20.5: the argument is a REAL, so an integral one converts first —
+                // `$realtobits(5)` is the bits of 5.0, `4014000000000000`, in both
+                // oracles, where reading the integer's own bits gave `…0005`. The
+                // conversion is sign-aware (an unsigned 8'd200 is 200.0), reads each x/z
+                // bit as 0, and rounds a wide argument as iverilog does
+                // (`Value::integral_to_f64`).
+                if !v.is_real {
+                    v = Value::from_f64(v.integral_to_f64().unwrap_or(0.0));
+                }
                 v.is_real = false;
                 v.signed = false;
                 v.width = 64;

@@ -17,6 +17,7 @@ impl Elaborator<'_> {
             match ov {
                 ast::ParamConn::Positional(e) => {
                     let value = self.const_eval_in_scope(e);
+                    let (self_meta, self_val) = self.override_operator_channel(e);
                     // Build the record BEFORE deciding what to say about it: the
                     // other two channels are computed from the same `e`, and the
                     // warning below is a statement about the record.
@@ -29,12 +30,11 @@ impl Elaborator<'_> {
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
                         signed: Some(self.const_signed_env(e, &ConstWidths::new())),
-                        self_meta: self.override_self_meta(e),
-                        self_val: self
-                            .override_self_meta(e)
-                            .and_then(|m| self.override_self_value(e, m)),
+                        self_meta,
+                        self_val,
                         array: None,
                         elem_select: false,
+                        real: self.override_real(e),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -105,6 +105,9 @@ impl Elaborator<'_> {
                         }
                         r
                     });
+                    let (self_meta, self_val) = value
+                        .as_ref()
+                        .map_or((None, None), |e| self.override_operator_channel(e));
                     overrides.push(ResolvedOverride {
                         name: Some(name.name.clone()),
                         value: v,
@@ -116,13 +119,11 @@ impl Elaborator<'_> {
                         signed: value
                             .as_ref()
                             .map(|e| self.const_signed_env(e, &ConstWidths::new())),
-                        self_meta: value.as_ref().and_then(|e| self.override_self_meta(e)),
-                        self_val: value.as_ref().and_then(|e| {
-                            self.override_self_meta(e)
-                                .and_then(|m| self.override_self_value(e, m))
-                        }),
+                        self_meta,
+                        self_val,
                         array: None,
                         elem_select: false,
+                        real: value.as_ref().and_then(|e| self.override_real(e)),
                     });
                 }
             }

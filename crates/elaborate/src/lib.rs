@@ -121,6 +121,7 @@ pub(crate) use limits::*;
 pub(crate) use hoist::is_deferred_print_task;
 mod elab_task;
 mod netdecl;
+mod override_type;
 mod package;
 pub mod packed;
 mod packed_inner;
@@ -238,6 +239,8 @@ pub(crate) type DefparamOverride = (
     // The string channel (`ResolvedOverride::str`), computed as the `#()` collector
     // does.
     Option<String>,
+    // The real channel (`ResolvedOverride::real`), likewise.
+    Option<f64>,
 );
 
 /// A parameter's DECLARED packed range: `(lo, width, ascending)` — the tuple the

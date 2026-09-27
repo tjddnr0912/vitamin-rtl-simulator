@@ -389,7 +389,7 @@ impl Elaborator<'_> {
             .remove(inst_path)
             .map(|dps| {
                 dps.into_iter()
-                    .map(|(param, v, fill, sg, smeta, sval, obits, text)| {
+                    .map(|(param, v, fill, sg, smeta, sval, obits, text, real)| {
                         ResolvedOverride {
                             name: Some(param),
                             value: v,
@@ -423,6 +423,9 @@ impl Elaborator<'_> {
                             // `#(.P(~8'h5A))` must bind ONE type.
                             self_meta: smeta,
                             self_val: sval,
+                            // The real channel, from the same collector for the same
+                            // reason: `defparam u.P = X;` and `#(.P(X))` bind one type.
+                            real,
                         }
                     })
                     .collect()
@@ -1254,8 +1257,7 @@ impl Elaborator<'_> {
                         // only place the expression still exists; `override_self_meta`
                         // declines every name-bearing tree, so this cannot launder a
                         // `param_meta` width any more than `sg` above can.
-                        let smeta = self.override_self_meta(value);
-                        let sval = smeta.and_then(|m| self.override_self_value(value, m));
+                        let (smeta, sval) = self.override_operator_channel(value);
                         // …and the WIDE channel, from the same helper the `#()` collector
                         // calls twenty lines below. Hard-coding it absent made a defparam
                         // of a wide literal the ONLY override channel with no width at
@@ -1274,6 +1276,7 @@ impl Elaborator<'_> {
                             .override_bits(value)
                             .filter(|c| !c.bits.unk.iter().any(|&u| u != 0));
                         let text = self.const_str_in_scope(value);
+                        let real = self.override_real(value);
                         if v.is_none()
                             && fill.is_none()
                             && sval.is_none()
@@ -1288,8 +1291,8 @@ impl Elaborator<'_> {
                         }
                         // Last write wins (IEEE §23.10.1) — drop a prior same-param entry.
                         let entry = self.defparams.entry(fq).or_default();
-                        entry.retain(|(p, _, _, _, _, _, _, _)| p != &param);
-                        entry.push((param, v, fill, sg, smeta, sval, obits, text));
+                        entry.retain(|(p, _, _, _, _, _, _, _, _)| p != &param);
+                        entry.push((param, v, fill, sg, smeta, sval, obits, text, real));
                     }
                 }
                 // A NET declaration initializer (`wire x = expr;`) is an implicit
@@ -1446,6 +1449,7 @@ impl Elaborator<'_> {
             match ov {
                 ast::ParamConn::Positional(e) => {
                     let value = self.const_eval_in_scope(e);
+                    let (self_meta, self_val) = self.override_operator_channel(e);
                     // Build the record BEFORE deciding what to say about it: the
                     // other two channels are computed from the same `e`, and the
                     // warning below is a statement about the record.
@@ -1458,12 +1462,11 @@ impl Elaborator<'_> {
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
                         signed: Some(self.const_signed_env(e, &ConstWidths::new())),
-                        self_meta: self.override_self_meta(e),
-                        self_val: self
-                            .override_self_meta(e)
-                            .and_then(|m| self.override_self_value(e, m)),
+                        self_meta,
+                        self_val,
                         array: self.const_array_override_vals(e),
                         elem_select: self.override_is_elem_select(e),
+                        real: self.override_real(e),
                     };
                     if value.is_none() {
                         if Self::expr_is_real_literal(e) {
@@ -1599,6 +1602,9 @@ impl Elaborator<'_> {
                         }
                         r
                     });
+                    let (self_meta, self_val) = value
+                        .as_ref()
+                        .map_or((None, None), |e| self.override_operator_channel(e));
                     overrides.push(ResolvedOverride {
                         name: Some(name.name.clone()),
                         value: v,
@@ -1610,15 +1616,13 @@ impl Elaborator<'_> {
                         signed: value
                             .as_ref()
                             .map(|e| self.const_signed_env(e, &ConstWidths::new())),
-                        self_meta: value.as_ref().and_then(|e| self.override_self_meta(e)),
-                        self_val: value.as_ref().and_then(|e| {
-                            self.override_self_meta(e)
-                                .and_then(|m| self.override_self_value(e, m))
-                        }),
+                        self_meta,
+                        self_val,
                         array,
                         elem_select: value
                             .as_ref()
                             .is_some_and(|e| self.override_is_elem_select(e)),
+                        real: value.as_ref().and_then(|e| self.override_real(e)),
                     });
                 }
             }

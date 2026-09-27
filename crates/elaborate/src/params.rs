@@ -42,6 +42,9 @@ pub(crate) struct ParamOverrides {
     /// §3 ⑤ ⓔ: names whose override is a select of an array-parameter element — see
     /// `ResolvedOverride::elem_select`.
     pub(crate) elem_select: std::collections::BTreeSet<String>,
+    /// The real channel — see `ResolvedOverride::real`. Read by `bind_one_param`'s real
+    /// route: it makes an UNTYPED target real, and it is the override's value there.
+    pub(crate) real: BTreeMap<String, f64>,
 }
 
 impl ParamOverrides {
@@ -87,6 +90,7 @@ impl ParamOverrides {
         self.self_meta.remove(name);
         self.self_val.remove(name);
         self.elem_select.remove(name);
+        self.real.remove(name);
     }
 }
 
@@ -1310,6 +1314,7 @@ impl Elaborator<'_> {
                     self_val: None,
                     array: None,
                     elem_select: false,
+                    real: None,
                 });
                 continue;
             }
@@ -1343,6 +1348,19 @@ impl Elaborator<'_> {
                 );
                 continue;
             };
+            // A bare DECIMAL states its type too (§5.7.1): a signed integer of 32 bits,
+            // which is what an UNTYPED target takes (§6.20.2). No channel carried it,
+            // so the target bound at its DEFAULT's type — `-G U=100` onto `parameter U
+            // = 4'd3` was 4 bits `4` where both oracles bind 32 bits `100`, and onto
+            // `parameter R = 2.5` stayed real. It rides the operator channel, whose
+            // meta and value `bind_one_param` reads as one answer on the untyped lane
+            // only. Past the 32-bit signed range the oracles split (iverilog widens the
+            // decimal, verilator truncates it to 32 bits), so such a decimal states
+            // nothing and keeps the route it had (ROADMAP §2 Oracle splits).
+            let decimal_i32 = (text.is_none() && wide.is_none())
+                .then_some(value)
+                .flatten()
+                .filter(|&v| i32::try_from(v).is_ok());
             out.push(ResolvedOverride {
                 name: Some(name),
                 value,
@@ -1356,11 +1374,14 @@ impl Elaborator<'_> {
                 // A bare decimal on the command line is a SIGNED integer; a sized
                 // literal carries its own `s`, which `wide` above already holds.
                 signed: Some(sized_signed),
-                // As above: the `-G` grammar has no operator form to size.
-                self_meta: None,
-                self_val: None,
+                // As above: the `-G` grammar has no operator form to size — only the
+                // decimal's own type rides here.
+                self_meta: decimal_i32.map(|_| (32, true)),
+                self_val: decimal_i32,
                 array: None,
                 elem_select: false,
+                // `-G` has no real form: a decimal, a sized literal or a string.
+                real: None,
             });
         }
         out
@@ -1476,6 +1497,9 @@ impl Elaborator<'_> {
                         if ov.elem_select {
                             o.elem_select.insert(p.name.name.clone());
                         }
+                        if let Some(r) = ov.real {
+                            o.real.insert(p.name.name.clone(), r);
+                        }
                         // `.W()` with no value ⇒ keep default (no insert).
                     }
                     None => {
@@ -1546,6 +1570,9 @@ impl Elaborator<'_> {
                         }
                         if ov.elem_select {
                             o.elem_select.insert(p.name.name.clone());
+                        }
+                        if let Some(r) = ov.real {
+                            o.real.insert(p.name.name.clone(), r);
                         }
                         if ov.value.is_none()
                             && ov.fill.is_none()
@@ -1670,6 +1697,51 @@ impl Elaborator<'_> {
                 self.check_const_range_bound(&r.lsb, l);
             }
         }
+    }
+
+    /// The real route's override arm: `rv` is the override's value, `ov` the integer
+    /// domain's fold of the same expression.
+    ///
+    /// `real_param_val` is the real view; it serves the BARE read (`lower_expr` prefers
+    /// it over `params`). A hierarchical read is not served at all — it is honestly
+    /// loud, because neither available representation survives the trip: publishing the
+    /// i64 to `hier_params` makes `a.P/2` divide in the INTEGER domain, and patching the
+    /// resolved placeholder with a real constant lands after `lower_cast` has already
+    /// committed `int'(a.P)` to the integral path. Both were built and measured; each
+    /// swaps one silent-wrong for another. ROADMAP §2.
+    ///
+    /// The LOCAL i64 view is `ov` when the two folds agree — the view every such
+    /// override had before — and otherwise the real value when it is exactly integral,
+    /// or none: the integer fold of `X / 2` is 2, which is not a reading of 2.5. ⚠️ Its
+    /// necessity is NOT established: removing it leaves the packed range, unpacked dim,
+    /// `$bits`, genvar bound, case label, array index, `repeat`, delay and cast
+    /// contexts still correct — `real_param_val` serves them. It is kept because "no
+    /// discriminator" is not "dead"; do not cite it as the mechanism that makes an
+    /// exact-integer real usable as a width. (It is also what answers a derived
+    /// `localparam L = R/4` and `generate if (R/4 > 1)` in the INTEGER domain — ROADMAP
+    /// §2 "Real".)
+    ///
+    /// Returns the integer a hierarchical twin would carry: the view, or `ov` where
+    /// there is none (the value the integer route published).
+    fn bind_real_override(
+        &mut self,
+        key: String,
+        rv: f64,
+        ov: i64,
+        saved: &mut Vec<(String, Option<i64>)>,
+    ) -> i64 {
+        self.real_param_val.insert(key.clone(), rv);
+        let view = if rv == ov as f64 {
+            Some(ov)
+        } else {
+            (rv.fract() == 0.0)
+                .then(|| crate::const_real::real_round_to_i64(rv))
+                .flatten()
+        };
+        if let Some(i) = view {
+            saved.push((key.clone(), self.bind_param_value(key, i)));
+        }
+        view.unwrap_or(ov)
     }
 
     pub(crate) fn bind_one_param(
@@ -1854,17 +1926,39 @@ impl Elaborator<'_> {
             // both oracles bind `#(.R(3))` as 32 bits with `R/2` 1, and `#(.R('1))` as one
             // bit — and it binds on the numeric route below. "Integral" is the override's
             // TYPE, read off the channels that carry one (a fill, the wide channel's
-            // declared width, the operator channel's Table 11-21 meta), never off `by_name`:
-            // a real parameter with an exact value (`real X = 5`) folds to an i64 too, and
-            // `#(.R(X))` keeps R real (both oracles `R/2` 2.5).
+            // declared width, the operator channel's Table 11-21 meta — which also types
+            // a call, a prim cast and a comparison, `override_top_meta`), never off
+            // `by_name`: a real parameter with an exact value (`real X = 5`) folds to an
+            // i64 too, and `#(.R(X))` keeps R real (both oracles `R/2` 2.5).
             let untyped_integral_override = untyped
                 && (ovr_fill.contains_key(p.name.name.as_str())
                     || ovr.bits.contains_key(p.name.name.as_str())
                     || ovr.self_meta.contains_key(p.name.name.as_str()));
-            if let Some((v, exact)) = self
+            let ovr_real = ovr.real.get(p.name.name.as_str()).copied();
+            let real_default = self
                 .param_real_value(p)
-                .filter(|_| !untyped_integral_override)
-            {
+                .filter(|_| !untyped_integral_override);
+            // …and the converse: an override whose RESULT is real makes an untyped
+            // target real whatever its default was — `#(.P(X))` with `localparam real X =
+            // 5` onto `parameter P = 3` is real 5.0 in both oracles (`P/4` 1.25), where
+            // the i64 twin in `by_name` bound it as the integer 5 (`P/4` 1). It binds
+            // exactly as the same override binds onto `parameter P = 2.5`, through the
+            // real route's override arm below, and keeps the hierarchical twin the integer
+            // route published (`u.P`), which the real route does not serve. A SIGN keyword
+            // (`parameter signed P`) is left alone: the oracles split on it (iverilog
+            // binds the integer, verilator the real). Only an override that also folded to
+            // an i64 is taken: one that did not is already loud at the collector.
+            if real_default.is_none() && untyped && !p.signed {
+                if let (Some(rv), Some(Some(ov))) =
+                    (ovr_real, ovr_by_name.get(p.name.name.as_str()).copied())
+                {
+                    let key = self.fq(&p.name.name);
+                    let hier = self.bind_real_override(key.clone(), rv, ov, saved);
+                    self.hier_params.insert(key, hier);
+                    return;
+                }
+            }
+            if let Some((v, exact)) = real_default {
                 let key = self.fq(&p.name.name);
                 // A string override of a DECLARED real (an untyped target took the
                 // string route above): the string's integral value (§5.9) converted to
@@ -1898,25 +1992,11 @@ impl Elaborator<'_> {
                 // exit 0.
                 match ovr_by_name.get(p.name.name.as_str()).copied() {
                     Some(Some(ov)) => {
-                        // `real_param_val` is the real view; it serves the BARE read
-                        // (`lower_expr` prefers it over `params`). A hierarchical read
-                        // is not served at all — it is honestly loud, because neither
-                        // available representation survives the trip: publishing the
-                        // i64 to `hier_params` makes `a.P/2` divide in the INTEGER
-                        // domain, and patching the resolved placeholder with a real
-                        // constant lands after `lower_cast` has already committed
-                        // `int'(a.P)` to the integral path. Both were built and
-                        // measured; each swaps one silent-wrong for another. ROADMAP §2.
-                        self.real_param_val.insert(key.clone(), ov as f64);
-                        // The LOCAL i64 view. ⚠️ Its necessity is NOT established:
-                        // removing this insert entirely leaves every integral context
-                        // measured (packed range, unpacked dim, `$bits`, genvar bound,
-                        // `generate if`, case label, array index, `repeat`, delay, cast,
-                        // derived localparam) still correct — `real_param_val` serves
-                        // them — and no discriminator was found. It is kept because
-                        // "no discriminator" is not "dead"; do not cite it as the
-                        // mechanism that makes an exact-integer real usable as a width.
-                        saved.push((key.clone(), self.bind_param_value(key, ov)));
+                        // The override's REAL value when its result is real — the i64
+                        // is the integer domain's fold of the same expression, which
+                        // truncates a real sub-result: `#(.R(X / 2))` with `real X = 5`
+                        // bound 2.0 where both oracles bind 2.5.
+                        self.bind_real_override(key, ovr_real.unwrap_or(ov as f64), ov, saved);
                         return;
                     }
                     Some(None) => self.error(

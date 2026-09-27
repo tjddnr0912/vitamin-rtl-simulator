@@ -103,6 +103,13 @@ pub(crate) struct ResolvedOverride {
     /// [`Elaborator::override_self_value`] for why the width cannot travel alone.
     /// Always `None` when `self_meta` is `None`, and read on exactly the same lane.
     pub(crate) self_val: Option<i64>,
+    /// The override's value in the REAL domain, when its RESULT is real by construction
+    /// (§11.8.1) — see [`Elaborator::override_real`]. An untyped target takes that type
+    /// from its final value (§6.20.2), and `by_name` cannot say so: a real parameter
+    /// with an exactly integral value (`localparam real X = 5`) folds to an i64 too, so
+    /// `#(.P(X))` bound `parameter P = 3` as the INTEGER 5 (`P/4` 1 where both oracles
+    /// say 1.25). Nor is the i64 this value: `X / 2` folds to the integer 2 there.
+    pub(crate) real: Option<f64>,
 }
 
 impl ResolvedOverride {

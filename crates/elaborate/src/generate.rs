@@ -290,6 +290,12 @@ impl Elaborator<'_> {
                 // same bits, so only an expression whose intermediate goes negative
                 // can move at all.
                 let saved_meta = self.param_meta.insert(gv_key.clone(), (32, true));
+                // …and a genvar HIDES an outer REAL constant of its name, which shares
+                // this key: the name walk (`bare_ident_route`) and the real fold read the
+                // real map before `params`, so `localparam real N = 2.5; for (genvar N =
+                // 0; …) sub #(.P(N))` bound the outer 2.5 where both oracles bind the
+                // genvar. Suspended for the loop and restored with the rest.
+                let saved_real = self.real_param_val.remove(&gv_key);
 
                 let mut idx_count: u32 = 0;
                 loop {
@@ -390,6 +396,9 @@ impl Elaborator<'_> {
                     None => {
                         self.unbind_param(&gv_key);
                     }
+                }
+                if let Some(r) = saved_real {
+                    self.real_param_val.insert(gv_key.clone(), r);
                 }
                 match saved_meta {
                     Some(m) => {

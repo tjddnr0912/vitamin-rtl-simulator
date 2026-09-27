@@ -10,10 +10,13 @@
 //! build ran correctly. The producer now re-canonicalises, and this pins the shape
 //! so the suite actually covers it.
 //!
-//! ⚠️ iverilog REJECTS a non-64-bit argument outright ("$bitstoreal requires a
-//! 64-bit argument"), so these values are vita's own contract — the low 64 bits,
-//! which is what it has always returned. That gap (accepting the call at all) is
-//! ROADMAP §3's, and it is exactly why this path is reachable.
+//! The VALUES are the oracles' since §4.5.558: `$realtobits` takes a REAL (§20.5), so an
+//! integral argument of any width converts to real first — iverilog 13.0 and verilator
+//! 5.052 both print the bits of the converted value (`$realtobits(8'hA5)` is the bits of
+//! 165.0, a 128-bit argument the bits of its correctly rounded real). vita read the
+//! argument's own low 64 bits until then, and these pins held that as its contract.
+//! iverilog rejects a non-64-bit `$bitstoreal` argument ("requires a 64-bit argument"),
+//! so the `$bitstoreal` half is verilator's alone; that acceptance is ROADMAP §3's.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -56,8 +59,9 @@ fn realtobits_of_an_argument_wider_than_sixty_four_bits() {
         "a non-canonical Value reached `resize`;\n{out}"
     );
     assert!(
-        out.contains("B=8899aabbccddeeff B2=5566778899aabbcc"),
-        "the low 64 bits, unchanged from before the slice;\n{out}"
+        out.contains("B=4731223344556678 B2=4bb1223344556678"),
+        "the bits of each argument's real value (both oracles; PRE the low 64 bits \
+         8899aabbccddeeff / 5566778899aabbcc);\n{out}"
     );
 }
 
@@ -74,8 +78,9 @@ fn realtobits_of_a_narrower_argument_and_the_round_trip() {
     assert_eq!(code, Some(0), "got:\n{out}");
     assert!(!out.contains("panicked"), "got:\n{out}");
     assert!(
-        out.contains("B=00000000000000a5") && out.contains("R=1.000000"),
-        "narrow argument zero-extends; a 96-bit pattern reads its low 64 as 1.0;\n{out}"
+        out.contains("B=4064a00000000000") && out.contains("R=1.000000"),
+        "a narrow argument is the bits of 165.0 (verilator; PRE 00000000000000a5); a 96-bit \
+         pattern reads its low 64 as 1.0;\n{out}"
     );
 }
 
@@ -94,7 +99,8 @@ fn a_wide_realtobits_result_survives_being_used() {
     assert_eq!(code, Some(0), "got:\n{out}");
     assert!(!out.contains("panicked"), "got:\n{out}");
     assert!(
-        out.contains("EQ=1 HI=8899aabb SUM=8899aabbccddef00"),
-        "equality, part-select and arithmetic on the result;\n{out}"
+        out.contains("EQ=0 HI=47312233 SUM=4731223344556679"),
+        "equality, part-select and arithmetic on the result (both oracles; PRE \
+         EQ=1 HI=8899aabb SUM=8899aabbccddef00);\n{out}"
     );
 }

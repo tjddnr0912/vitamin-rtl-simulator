@@ -916,6 +916,53 @@ impl Value {
         }
     }
 
+    /// The REAL value of an INTEGRAL `Value` of any width, honoring signedness, with
+    /// each x/z bit read as 0 (§6.12.2; both oracles: `8'b0000_001x` is 2.0).
+    /// [`Self::to_f64`] answers only up to 128 bits and declines any x/z.
+    ///
+    /// The magnitude's set bits are added LSB first in double precision, each addition
+    /// rounding — iverilog's conversion, measured bit for bit on seven wide cells. It is
+    /// NOT the correctly rounded value: `2^180 + 2^127 + 1` is `2^180` here and in both
+    /// oracles (the `1` is absorbed before the tie at `2^127` is decided), where a
+    /// sticky-bit conversion gives `2^180 + 2^128`. verilator drops the words below its
+    /// top three instead, and where the two methods differ the oracles split
+    /// (`2^100 + 2^47 + 1`: iverilog rounds up, verilator down).
+    pub fn integral_to_f64(&self) -> Option<f64> {
+        if self.width == 0 {
+            return None;
+        }
+        let n = nwords(self.width);
+        let mut limbs: Vec<u64> = (0..n)
+            .map(|w| self.val.get(w).copied().unwrap_or(0) & !self.unk.get(w).copied().unwrap_or(0))
+            .collect();
+        limbs[n - 1] &= top_mask(self.width);
+        let top = self.width - 1;
+        let neg = self.signed && (limbs[(top / 64) as usize] >> (top % 64)) & 1 == 1;
+        if neg {
+            // Two's-complement magnitude within the width.
+            let mut carry = true;
+            for l in limbs.iter_mut() {
+                let (v, c) = (!*l).overflowing_add(carry as u64);
+                *l = v;
+                carry = c;
+            }
+            limbs[n - 1] &= top_mask(self.width);
+        }
+        let bitlen = match limbs.iter().rposition(|&l| l != 0) {
+            Some(i) => i as u32 * 64 + (64 - limbs[i].leading_zeros()),
+            None => return Some(0.0),
+        };
+        let mut mag = 0.0f64;
+        let mut base = 1.0f64;
+        for i in 0..bitlen {
+            if (limbs[(i / 64) as usize] >> (i % 64)) & 1 == 1 {
+                mag += base;
+            }
+            base *= 2.0;
+        }
+        Some(if neg { -mag } else { mag })
+    }
+
     /// Decode to f64. If already real, reinterpret val[0]. Otherwise coerce the
     /// 4-state integer value to f64 (IEEE 1364 §4.3 int→real promotion), honoring
     /// signedness. Returns None only if an integer operand is X/Z (caller decides

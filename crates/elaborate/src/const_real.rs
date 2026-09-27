@@ -78,8 +78,12 @@ impl Elaborator<'_> {
         // into f64. Declining integral shapes stay loud here (falling back to the
         // f64 re-walk would revive exactly the widening this gate closes).
         // `expr_mentions_real` is the same conservative discriminator
-        // `param_real_value` orders the two domains with.
-        if !self.expr_mentions_real(e) {
+        // `param_real_value` orders the two domains with — on the SHADOW-CORRECT
+        // resolver, which is the one the name arm below reads: an integral
+        // `localparam N = 3` in a generate block over a module-scope `real N = 2.5`
+        // is the integer 3, so `N / 2` beside a real folds 1 (integer division), where
+        // the blind walk saw the outer real and folded 1.5.
+        if !self.expr_mentions_real_opt(e, true) {
             return self.const_int_selfdet(e).map(|v| v as f64);
         }
         match &e.kind {
@@ -100,13 +104,18 @@ impl Elaborator<'_> {
                     _ => None,
                 }
             }
-            // A single-segment name: the real parameter map first, then an integer
-            // parameter promoted to f64 — the same precedence the lowering uses, so
-            // the fold and the lowered value cannot pick different bindings.
+            // A single-segment name: its INNERMOST binding, real or integral — the
+            // binding the lowering reads (`bare_ident_route`) and the override's domain
+            // was classified by (`override_domain`). Walking the real map alone first
+            // read an outer `real N = 2.5` through an inner `localparam N = 3`: `N + X`
+            // with `real X = 5` folded 7.5 where both oracles give 8.0.
             K::Ident(p) if p.segments.len() == 1 => {
                 let n = &p.segments[0].name;
-                self.walk_scopes(n, &self.real_param_val)
-                    .or_else(|| self.lookup_scoped(n).map(|v| v as f64))
+                if self.real_param_lowers_real(n) {
+                    self.walk_scopes(n, &self.real_param_val)
+                } else {
+                    self.lookup_scoped(n).map(|v| v as f64)
+                }
             }
             // The package twin, in the same precedence order (real map first, then the
             // integer one promoted). Its absence is what made a MODULE-LOCAL
