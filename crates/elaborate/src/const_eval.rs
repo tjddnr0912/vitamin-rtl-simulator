@@ -412,7 +412,7 @@ impl Elaborator<'_> {
         // narrow case — see its doc for why `param_range`, not `param_meta`, is the
         // width source, and why a multi-segment path still declines there.
         let resolve =
-            |n: &ast::Expr, _is_count: bool| -> Option<WideBits> { self.wide_name_bits(n) };
+            |n: &ast::Expr, _is_count: bool| -> Option<WideBits> { self.param_leaf_bits(n) };
         // The same extension rule `param_bits_at_declared` states: a fold at the
         // expression's SELF width may only be widened to the declaration when the top
         // node is self-determined. Without it `localparam logic [127:0] Q = B << 4;`
@@ -424,7 +424,7 @@ impl Elaborator<'_> {
         // a context-determined top now computes at `width`, so this fires for the node
         // kinds the threading does not reach, where refusing is still right.
         if !wide_top_is_self_determined(e) {
-            if let Some((_, w, _)) = fold_bits_at(e, width, &|n, _| self.wide_name_bits(n)) {
+            if let Some((_, w, _)) = fold_bits_at(e, width, &|n, _| self.param_leaf_bits(n)) {
                 if w < width {
                     return None;
                 }

@@ -618,16 +618,16 @@ fn an_x_fill_as_a_declared_default_is_not_folded_to_zero() {
 /// What this pins is that the flag has an EFFECT and that the string target is loud,
 /// which is where PRE was.
 ///
-/// The two numeric targets no longer share one answer, and the difference is the point:
+/// Both numeric targets bind what the oracles bind:
 ///  * `time` is a DECLARED 64-bit unsigned type (§6.11.2), so the fill re-folds at 64 and
 ///    `T='1` is `18446744073709551615` — measured identical in verilator's `-GT='1` and,
 ///    for the source-level twin `#(.T('1))`, in BOTH oracles. It read `4294967295` until
 ///    `param_decl_width_opt` grew its `Time` arm; the 32 was the untyped tail's, not a
 ///    width `time` ever had.
-///  * `real` still folds at 32 (`R='1` is `4.29497e+09` where verilator binds `1`). That
-///    is a separate pre-existing residue on the real-parameter arm — ROADMAP §2 — and is
-///    deliberately left here as the control that this test measures the CHANNEL, not the
-///    fold: one target moved to the oracles and the other did not, through the same flag.
+///  * `real` reads the fill as one unsigned bit (§5.7.1), so `R='1` is `1` — verilator's
+///    `-GR='1` and both oracles' `#(.R('1))`. It read the parent-side 32-bit fold,
+///    `4.29497e+09`, until the real-parameter arm took the fill first
+///    (`param_default_takes_declared_type.rs`).
 #[test]
 fn a_cli_fill_override_is_not_silently_dropped_on_a_width_less_target() {
     let src = "module tb;
@@ -641,9 +641,9 @@ fn a_cli_fill_override_is_not_silently_dropped_on_a_width_less_target() {
     assert_ne!(c, Some(0), "-G S='1 was dropped silently");
     assert!(e.contains("is a string"), "got: {e}");
     // real and time targets APPLY it — dropping it is the regression under test. `time`
-    // folds at its declared 64 (= both oracles); `real` is still vita's 32-bit fold.
+    // folds at its declared 64 and `real` reads one bit (= both oracles).
     for (g, want) in [
-        ("R='1", "S=abc R=4.29497e+09 T=5"),
+        ("R='1", "S=abc R=1 T=5"),
         ("T='1", "S=abc R=1.5 T=18446744073709551615"),
     ] {
         let (o, e, c) = run_args(src, &["-G", g]);

@@ -436,7 +436,18 @@ impl Elaborator<'_> {
                     match ci {
                         ast::GenCaseItem::Match { labels, body, .. } => {
                             for lab in labels {
-                                if self.const_eval_in_scope(lab) == Some(scrut) {
+                                // A string label (a literal or a string parameter) is
+                                // its bytes (§5.9), which the i64 fold has no arm for:
+                                // `case (P) "ab": …` over `P = 16'h6162` took the
+                                // default in vita and the `"ab"` arm in both oracles.
+                                // It compares like a numeric label: as an i64, which
+                                // is right where the scrutinee's own value is (the
+                                // sized §12.5 compare is ROADMAP §2 "Constant domain").
+                                let lv = self.const_eval_in_scope(lab).or_else(|| {
+                                    self.const_str_in_scope(lab)
+                                        .and_then(|t| crate::const_wide::str_raw_i64(&t))
+                                });
+                                if lv == Some(scrut) {
                                     chosen = Some(body);
                                     break 'scan;
                                 }
@@ -720,7 +731,7 @@ impl Elaborator<'_> {
                 // initializer was wholly integral, which is what keeps
                 // `localparam real R = 4;` usable in integral contexts here too.
                 // Idempotent across generate phases, like the integer arm.
-                if let Some((rv, exact)) = self.param_real_value(&p.ty, &p.value) {
+                if let Some((rv, exact)) = self.param_real_value(p) {
                     let key = self.fq(&p.name.name);
                     self.real_param_val.insert(key.clone(), rv);
                     if let Some(i) = exact {
@@ -754,7 +765,7 @@ impl Elaborator<'_> {
                     // `const_eval_in_scope` and answered `00ffffffff` one
                     // `generate` deeper than the module scope's `ffffffffff`).
                     .or_else(|| self.eval_param_init(&p.value, meta))
-                    .or_else(|| self.param_value_via_real(meta, &p.value))
+                    .or_else(|| self.param_value_via_real(p, meta))
                     .or_else(|| {
                         let dm = self.param_decl_width_declared(p);
                         self.param_i64_at_declared(&p.value, dm)

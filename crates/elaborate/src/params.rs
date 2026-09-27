@@ -196,42 +196,46 @@ impl Elaborator<'_> {
         self.param_decl_width_opt(p, true, false)
     }
 
-    /// The string value of a parameter's declared default: its LITERAL first, and only
-    /// then the widened constant-domain fold.
+    /// The override text to apply to `p`: every string override, LITERAL or folded.
     ///
-    /// The order and the gate are both load-bearing.
+    /// Where it lands is `bind_one_param`'s decision and it is made on the TARGET's
+    /// declaration: an untyped one (§6.20.2 — the type follows the value) takes the
+    /// width-free string map; a typed or ranged one takes the string's bytes at its
+    /// declared width (§5.9), which is what both oracles bind — `#(.P("a"))` onto
+    /// `parameter logic [15:0] P` is `0061`, a forwarded `localparam S = "ab"` is
+    /// `6162`. The string map carries no width, so a typed target in it lost its
+    /// declared one (`61`, 8 bits) and a folded string was refused or, positionally,
+    /// dropped for the declared default.
+    pub(crate) fn override_text_for(ov: &crate::toplevel::ResolvedOverride) -> Option<String> {
+        ov.str.clone()
+    }
+
+    /// An UNTYPED declaration: no range and no type keyword (`string` parses as this
+    /// too). Only such a parameter takes the type of its VALUE (§6.20.2) — a real
+    /// literal makes it `real`, a string literal a string. A declared type or range
+    /// is a context the value is converted into (§6.24.1, §5.9).
+    pub(crate) fn param_is_untyped(p: &ast::ParamDecl) -> bool {
+        p.range.is_none() && matches!(p.ty, ast::ParamType::Implicit)
+    }
+
+    /// The string value of an UNTYPED parameter's declared default: its LITERAL first,
+    /// and only then the widened constant-domain fold.
     ///
     /// The literal question comes first so that every shape which bound a string
-    /// before this existed still takes byte-identically the same route.
+    /// before the fold existed still takes byte-identically the same route.
     ///
     /// The gate exists because `str_param_raw` carries **no width**, and the string
     /// route runs BEFORE the width-carrying numeric and wide paths at every consumer.
-    /// A declaration that states a width or an integral type therefore loses it:
-    /// `localparam [95:0] X = {"A","B"};` came out as 16 bits where both oracles say
-    /// 96, and `localparam [95:0] Z = 1 ? "AB" : "CD";` came out 16706 where iverilog
-    /// says 0. Those shapes were LOUD before the widening, so folding them into the
-    /// width-free side map is loud → silent-wrong — the one move the ladder forbids.
-    /// Declining keeps them exactly as loud as they were.
+    /// A declaration that states a width or an integral type would lose it — for a
+    /// literal as much as for a fold: `localparam logic [15:0] A = "a";` came out 8
+    /// bits `61` and `logic [7:0] D = "ab"` 16 bits `6162`, where both oracles give
+    /// `0061` and `62` (§5.9 — the string's bytes at the declared width). Such a
+    /// declaration declines here and the numeric fold converts it
+    /// (`param_leaf_bits`).
     ///
     /// An untyped, unranged declaration has no width to lose: `localparam Q =
     /// {"A","B"}` measures 16706 at 16 bits on vita *and* on both oracles.
-    /// The override text to apply to `p`, or None to leave the declared default.
     ///
-    /// A LITERAL override applies as it always has. A FOLDED one applies only when the
-    /// child's declaration has no width to lose — see [`Self::param_str_or_folded`]
-    /// for why, and `ResolvedOverride::str_is_literal` for what the flag records.
-    pub(crate) fn override_text_for(
-        p: &ast::ParamDecl,
-        ov: &crate::toplevel::ResolvedOverride,
-    ) -> Option<String> {
-        let t = ov.str.as_ref()?;
-        if ov.str_is_literal || (p.range.is_none() && matches!(p.ty, ast::ParamType::Implicit)) {
-            Some(t.clone())
-        } else {
-            None
-        }
-    }
-
     /// `overridden` = a NUMERIC override targets this parameter, so the declared
     /// default is not what binds. The folded fallback must stand down then: an untyped
     /// `parameter W = {"A","B"}` is an ordinary numeric parameter whose default happens
@@ -244,8 +248,11 @@ impl Elaborator<'_> {
         p: &ast::ParamDecl,
         overridden: bool,
     ) -> Option<String> {
+        if !Self::param_is_untyped(p) {
+            return None;
+        }
         Self::param_str_literal(&p.value).or_else(|| {
-            (!overridden && p.range.is_none() && matches!(p.ty, ast::ParamType::Implicit))
+            (!overridden)
                 .then(|| self.const_str_in_scope(&p.value))
                 .flatten()
         })
@@ -1071,21 +1078,27 @@ impl Elaborator<'_> {
     /// `param_real_value` has declined, which is what keeps a genuinely real
     /// parameter in the real domain.
     ///
-    /// ⚠️ `meta` is the gate, and it is the right one for a REASON, not by luck. An
-    /// UNTYPED parameter takes its type from its value (§6.20.2), so `localparam M =
-    /// R*2.0;` is a REAL parameter and rounding it here would be a silent-wrong of
-    /// the exact family §4.5.232 withdrew over — and `param_decl_width_unoverridden`
-    /// answers None for precisely that shape, because a non-literal initializer gives
-    /// it no width to infer. So `meta.is_some()` on a real-mentioning initializer
-    /// means the declaration STATED a range or an integral type. (That untyped
-    /// spelling stays loud; ROADMAP §2 owns it.)
+    /// ⚠️ The gate is the declaration AND the result's domain, not `meta`. An UNTYPED
+    /// parameter takes its type from its value (§6.20.2), so `localparam M = R*2.0;` is
+    /// a REAL parameter and rounding it here is a silent-wrong of the exact family
+    /// §4.5.232 withdrew over. `meta` was the gate once, on the claim that it is None
+    /// for that shape; it is not — the value-inferred width answers `Some((32, _))` for
+    /// `R0 * 2` — and a header `parameter X = R0 * 2` over `real R0 = 2.5` bound 5 with
+    /// `X/2` = 2 where both oracles keep the real 5.0 and 2.5. So an untyped
+    /// declaration whose RESULT is real declines here and stays loud (ROADMAP §2 owns
+    /// binding it real). One whose result is integral — a comparison of reals, a
+    /// ternary choosing integers, `$rtoi` — is an integral parameter, and the real fold
+    /// computes it exactly (`localparam X = R > 1.0;` is 1 in both oracles).
     pub(crate) fn param_value_via_real(
         &self,
+        p: &ast::ParamDecl,
         meta: Option<(u32, bool)>,
-        value: &ast::Expr,
     ) -> Option<i64> {
+        if Self::param_is_untyped(p) && self.rhs_has_real_domain(&p.value) {
+            return None;
+        }
         meta?;
-        self.const_int_via_real(value)
+        self.const_int_via_real(&p.value)
     }
 
     /// The module's OVERRIDABLE parameter list — IEEE 1364-2005 §12.2 / IEEE
@@ -1238,7 +1251,6 @@ impl Elaborator<'_> {
                     had_value: true,
                     // A `-G` fill override carries no text at all, so the flag is
                     // never read — `false` is the honest value.
-                    str_is_literal: false,
                     str: None,
                     // A fill has no width of its own — it takes the target's, which is
                     // exactly what the `fill` channel above exists to do.
@@ -1295,7 +1307,6 @@ impl Elaborator<'_> {
                 had_value: true,
                 // `-G NAME="text"` is a literal by construction — the CLI parses the
                 // quotes itself, there is no expression to fold.
-                str_is_literal: true,
                 str: text,
                 bits: wide,
                 // A bare decimal on the command line is a SIGNED integer; a sized
@@ -1412,7 +1423,7 @@ impl Elaborator<'_> {
                         if let Some(v) = ov.self_val {
                             o.self_val.insert(p.name.name.clone(), v);
                         }
-                        if let Some(t) = Self::override_text_for(p, ov) {
+                        if let Some(t) = Self::override_text_for(ov) {
                             o.text.insert(p.name.name.clone(), t);
                         }
                         if let Some(a) = &ov.array {
@@ -1483,7 +1494,7 @@ impl Elaborator<'_> {
                         if let Some(v) = ov.self_val {
                             o.self_val.insert(p.name.name.clone(), v);
                         }
-                        if let Some(t) = Self::override_text_for(p, ov) {
+                        if let Some(t) = Self::override_text_for(ov) {
                             o.text.insert(p.name.name.clone(), t);
                         }
                         if let Some(a) = &ov.array {
@@ -1734,8 +1745,12 @@ impl Elaborator<'_> {
             // same here, and apply a string OVERRIDE while we are at it: it is carried
             // in `ResolvedOverride::str` because `value` is i64-only and dropping it
             // ran the child with its default at exit 0.
+            let untyped = Self::param_is_untyped(p);
             let str_val = match ovr_str.get(p.name.name.as_str()) {
-                Some(t) => Some(t.to_string()),
+                Some(t) if untyped => Some(t.to_string()),
+                // A typed or ranged target takes the string's BYTES at its declared
+                // width (§5.9) — below, through the wide channel (`ovr_text_bits`).
+                Some(_) => None,
                 None => {
                     // A `string` parameter overridden with a NUMBER: the override
                     // folded, so `ovr_by_name` has it and the escalation above stays
@@ -1755,7 +1770,11 @@ impl Elaborator<'_> {
                     // false-loud is pre-existing and recorded in ROADMAP §3; growing it
                     // is what this slice must not do. Same distinction that keeps
                     // `systask.rs` on this helper.)
-                    if Self::param_str_literal(&p.value).is_some()
+                    // Untyped only: a TYPED declaration whose default is a string
+                    // literal is an integral parameter (§5.9), and both oracles apply
+                    // `#(.P(5))` to `parameter logic [15:0] P = "xy"` (`0005`).
+                    if untyped
+                        && Self::param_str_literal(&p.value).is_some()
                         && ovr_by_name.contains_key(p.name.name.as_str())
                     {
                         self.error(
@@ -1786,8 +1805,46 @@ impl Elaborator<'_> {
             // wrong value with exit 0, where before this slice the whole design was
             // loud. Reject explicitly instead (correct-or-loud): a parameter bound to
             // the wrong value poisons everything downstream with no trace.
-            if let Some((v, exact)) = self.param_real_value(&p.ty, &p.value) {
+            // §6.20.2: an UNTYPED parameter takes the type of its FINAL value, so an
+            // integral override of `parameter R = 2.5` makes it an integral parameter —
+            // both oracles bind `#(.R(3))` as 32 bits with `R/2` 1, and `#(.R('1))` as one
+            // bit — and it binds on the numeric route below. "Integral" is the override's
+            // TYPE, read off the channels that carry one (a fill, the wide channel's
+            // declared width, the operator channel's Table 11-21 meta), never off `by_name`:
+            // a real parameter with an exact value (`real X = 5`) folds to an i64 too, and
+            // `#(.R(X))` keeps R real (both oracles `R/2` 2.5).
+            let untyped_integral_override = untyped
+                && (ovr_fill.contains_key(p.name.name.as_str())
+                    || ovr.bits.contains_key(p.name.name.as_str())
+                    || ovr.self_meta.contains_key(p.name.name.as_str()));
+            if let Some((v, exact)) = self
+                .param_real_value(p)
+                .filter(|_| !untyped_integral_override)
+            {
                 let key = self.fq(&p.name.name);
+                // A string override of a DECLARED real (an untyped target took the
+                // string route above): the string's integral value (§5.9) converted to
+                // real — both oracles bind `#(.R("a"))` onto `real R` as 97.0.
+                if let Some(rv) = ovr_str
+                    .get(p.name.name.as_str())
+                    .and_then(|t| crate::const_wide::str_raw_real(t))
+                {
+                    self.real_param_val.insert(key.clone(), rv);
+                    return;
+                }
+                // A FILL override is one unsigned bit in this self-determined position
+                // (§5.7.1), so a DECLARED real reads 1.0 or 0.0 — both oracles, on every
+                // channel. It arrives with a parent-side i64 beside it folded at 32
+                // bits, which bound `#(.R('1))` as 4294967295.0. (x and z were refused
+                // above.)
+                if let Some(fv) = ovr_fill
+                    .get(p.name.name.as_str())
+                    .and_then(|(k, raw)| fill_to_i64(*k, raw, 1))
+                {
+                    self.real_param_val.insert(key.clone(), fv as f64);
+                    saved.push((key.clone(), self.bind_param_value(key, fv)));
+                    return;
+                }
                 // An override that FOLDED to an i64 applies exactly — `#(.R(i+2))` on a
                 // real formal is legal and iverilog answers it. Rejecting it took a
                 // byte-correct design loud. Only an override that was WRITTEN and did
@@ -1857,7 +1914,16 @@ impl Elaborator<'_> {
                 && !ovr_fill.contains_key(p.name.name.as_str())
                 && !ovr_str.contains_key(p.name.name.as_str())
                 && !ovr_unfoldable.contains(p.name.name.as_str());
-            let ovr_bits = ovr.bits.get(p.name.name.as_str());
+            // A string override of a TYPED target (the untyped one returned above):
+            // its bytes, §5.9, as a wide-channel value the declared width resizes. A
+            // literal also arrives in `ovr.bits`; a forwarded string parameter only here.
+            let ovr_text_bits = ovr_str
+                .get(p.name.name.as_str())
+                .and_then(|t| crate::const_wide::str_raw_const(t));
+            let ovr_bits = ovr
+                .bits
+                .get(p.name.name.as_str())
+                .or(ovr_text_bits.as_ref());
             let ovr_self_meta = ovr.self_meta.get(p.name.name.as_str()).copied();
             let ovr_self_val = ovr.self_val.get(p.name.name.as_str()).copied();
             // Did the meta come from the OPERATOR channel? Then its value must come
@@ -2019,6 +2085,11 @@ impl Elaborator<'_> {
                     }
                     self.eval_param_init(&p.value, meta)
                 })
+                // Branch parity with the module-body, generate and package twins: a
+                // declared-integral parameter whose initializer mentions a real
+                // converts at the declaration (§6.24.1). Without it the same text was
+                // `04` in a module body and E3009 in a header or an interface.
+                .or_else(|| self.param_value_via_real(p, meta))
                 // The WIDE bit domain, read back as an i64 because the declaration
                 // fits one. Last in the chain: it fires only where every integer arm
                 // declined, so a reduction (`^A`), a select (`A[7:4]`) or a wide

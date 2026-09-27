@@ -26,7 +26,6 @@ impl Elaborator<'_> {
                         is_named: false,
                         had_value: true,
                         fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
-                        str_is_literal: Self::param_str_literal(e).is_some(),
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
                         signed: Some(self.const_signed_env(e, &ConstWidths::new())),
@@ -72,8 +71,6 @@ impl Elaborator<'_> {
                     let fill = value
                         .as_ref()
                         .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string())));
-                    let text_is_literal =
-                        value.as_ref().and_then(Self::param_str_literal).is_some();
                     let text = value.as_ref().and_then(|e| self.const_str_in_scope(e));
                     let v = value.as_ref().and_then(|e| {
                         let r = self.const_eval_in_scope(e);
@@ -114,7 +111,6 @@ impl Elaborator<'_> {
                         is_named: true,
                         had_value: value.is_some(),
                         fill,
-                        str_is_literal: text_is_literal,
                         str: text,
                         bits: value.as_ref().and_then(|e| self.override_bits(e)),
                         signed: value
@@ -532,9 +528,16 @@ impl Elaborator<'_> {
                         // placeholder with a real constant instead breaks strictly more
                         // cells (every integral consumer reads the IEEE-754 bits).
                         // ROADMAP §2 owns it.
-                        if let Some((_, Some(i))) = self.param_real_value(&pp.ty, &pp.value) {
+                        //
+                        // The value republished is the one `bind_one_param` BOUND — an
+                        // override's, when one applied — not the declared default's:
+                        // `ifc #(.R(7)) i();` over `parameter real R = 4` read `i.R` as
+                        // 4 where both oracles read 7.
+                        if self.param_real_value(pp).is_some() {
                             let key = self.fq(&pp.name.name);
-                            self.hier_params.insert(key, i);
+                            if let Some(&i) = self.params.get(&key) {
+                                self.hier_params.insert(key, i);
+                            }
                         }
                     }
                 }

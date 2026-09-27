@@ -389,7 +389,7 @@ impl Elaborator<'_> {
             .remove(inst_path)
             .map(|dps| {
                 dps.into_iter()
-                    .map(|(param, v, fill, sg, smeta, sval, obits, text, text_lit)| {
+                    .map(|(param, v, fill, sg, smeta, sval, obits, text)| {
                         ResolvedOverride {
                             name: Some(param),
                             value: v,
@@ -417,7 +417,6 @@ impl Elaborator<'_> {
                             // `#()` collector computes it: `defparam u.P = "str";` onto an
                             // untyped `P` binds 24 bits `737472` like `#(.P("str"))` does
                             // (both oracles), where a hard-coded `None` left it E3009.
-                            str_is_literal: text_lit,
                             str: text,
                             // Table 11-21, from the same collector and for the same reason
                             // as `signed` above: `defparam u.P = ~8'h5A` and
@@ -656,7 +655,7 @@ impl Elaborator<'_> {
                     if let Some(raw) = self.param_str_or_folded(p, false) {
                         let key = self.fq(&p.name.name);
                         self.str_param_raw.insert(key, raw);
-                    } else if let Some((v, exact)) = self.param_real_value(&p.ty, &p.value) {
+                    } else if let Some((v, exact)) = self.param_real_value(p) {
                         // r19: a REAL-valued parameter has no i64 value — same shape as
                         // the string case above, so it rides the same side map and skips
                         // the numeric fold that would otherwise loud-reject it. When the
@@ -687,7 +686,7 @@ impl Elaborator<'_> {
                             .untyped_fill_init(p)
                             .map(|(v, _)| v)
                             .or_else(|| self.eval_param_init(&p.value, meta))
-                            .or_else(|| self.param_value_via_real(meta, &p.value))
+                            .or_else(|| self.param_value_via_real(p, meta))
                             .or_else(|| {
                                 let dm = self.param_decl_width_declared(p);
                                 self.param_i64_at_declared(&p.value, dm)
@@ -1274,7 +1273,6 @@ impl Elaborator<'_> {
                             .override_bits(value)
                             .filter(|c| !c.bits.unk.iter().any(|&u| u != 0));
                         let text = self.const_str_in_scope(value);
-                        let text_lit = Self::param_str_literal(value).is_some();
                         if v.is_none()
                             && fill.is_none()
                             && sval.is_none()
@@ -1289,8 +1287,8 @@ impl Elaborator<'_> {
                         }
                         // Last write wins (IEEE §23.10.1) — drop a prior same-param entry.
                         let entry = self.defparams.entry(fq).or_default();
-                        entry.retain(|(p, _, _, _, _, _, _, _, _)| p != &param);
-                        entry.push((param, v, fill, sg, smeta, sval, obits, text, text_lit));
+                        entry.retain(|(p, _, _, _, _, _, _, _)| p != &param);
+                        entry.push((param, v, fill, sg, smeta, sval, obits, text));
                     }
                 }
                 // A NET declaration initializer (`wire x = expr;`) is an implicit
@@ -1456,7 +1454,6 @@ impl Elaborator<'_> {
                         is_named: false,
                         had_value: true,
                         fill: expr_as_fill(e).map(|(k, r)| (k, r.to_string())),
-                        str_is_literal: Self::param_str_literal(e).is_some(),
                         str: self.const_str_in_scope(e),
                         bits: self.override_bits(e),
                         signed: Some(self.const_signed_env(e, &ConstWidths::new())),
@@ -1512,8 +1509,6 @@ impl Elaborator<'_> {
                     let fill = value
                         .as_ref()
                         .and_then(|e| expr_as_fill(e).map(|(k, r)| (k, r.to_string())));
-                    let text_is_literal =
-                        value.as_ref().and_then(Self::param_str_literal).is_some();
                     let text = value.as_ref().and_then(|e| self.const_str_in_scope(e));
                     // §3 ⑤ ⓒ: the whole-array channel, folded here in the PARENT
                     // scope like every other one.
@@ -1609,7 +1604,6 @@ impl Elaborator<'_> {
                         is_named: true,
                         had_value: value.is_some(),
                         fill,
-                        str_is_literal: text_is_literal,
                         str: text,
                         bits: value.as_ref().and_then(|e| self.override_bits(e)),
                         signed: value

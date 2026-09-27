@@ -235,10 +235,9 @@ pub(crate) type DefparamOverride = (
     Option<(u32, bool)>,
     Option<i64>,
     Option<ir::ConstVal>,
-    // The string channel (`ResolvedOverride::str` and `str_is_literal`): the text
-    // and whether it was written as a literal, computed as the `#()` collector does.
+    // The string channel (`ResolvedOverride::str`), computed as the `#()` collector
+    // does.
     Option<String>,
-    bool,
 );
 
 /// A parameter's DECLARED packed range: `(lo, width, ascending)` — the tuple the

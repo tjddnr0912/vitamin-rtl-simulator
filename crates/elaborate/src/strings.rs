@@ -200,13 +200,15 @@ impl Elaborator<'_> {
     /// LITERAL forms only (through parens and unary `+`/`-`). Real ARITHMETIC has no
     /// const-fold path, so it returns None and the caller stays loud — a wrong
     /// parameter value poisons everything downstream with no trace.
-    pub(crate) fn param_real_value(
-        &self,
-        ty: &ast::ParamType,
-        value: &ast::Expr,
-    ) -> Option<(f64, Option<i64>)> {
-        let declared_real = matches!(ty, ast::ParamType::Real | ast::ParamType::Realtime);
-        if !declared_real && !Self::mentions_real_literal(value) {
+    pub(crate) fn param_real_value(&self, p: &ast::ParamDecl) -> Option<(f64, Option<i64>)> {
+        let value = &p.value;
+        let declared_real = matches!(p.ty, ast::ParamType::Real | ast::ParamType::Realtime);
+        // A real LITERAL makes only an UNTYPED parameter real (§6.20.2). A declared
+        // integral type or range is a context the value converts into (§6.24.1):
+        // `localparam int X = 2.6;` is 3 at 32 bits and `logic [7:0] X = 1e3` is 232 in
+        // both oracles, where binding them real kept 2.6 and 1000 (`$bits` 64) for every
+        // real-context read. `param_value_via_real` rounds them on the numeric route.
+        if !(declared_real || Self::param_is_untyped(p) && Self::mentions_real_literal(value)) {
             return None;
         }
         // A real LITERAL (through parens / unary sign) folds here. Otherwise, when the
@@ -254,10 +256,22 @@ impl Elaborator<'_> {
         // 4-bit sum wraps; iverilog agrees), not 16.0. The i64 twin registers the
         // SAME self-determined value, so the parameter's integral capabilities
         // cannot disagree with its real reading.
+        //
+        // A STRING-literal default is an integral value too (§5.9): `localparam real R =
+        // "a";` is 97.0 in both oracles, and the i64 fold has no string arm. It binds NO
+        // i64 twin, like a real literal: a wildcard import binds a real parameter's twin
+        // (ROADMAP §2), and `import pk::*` of this one then divided `R/2` as an integer.
         declared_real
-            .then(|| self.const_int_selfdet(value))
+            .then(|| {
+                self.const_int_selfdet(value)
+                    .map(|v| (v as f64, Some(v)))
+                    .or_else(|| {
+                        Self::param_str_literal(value)
+                            .and_then(|raw| crate::const_wide::str_raw_real(&raw))
+                            .map(|f| (f, None))
+                    })
+            })
             .flatten()
-            .map(|v| (v as f64, Some(v)))
     }
 
     /// Does `e` mention a real value — a real literal, or a name bound in the real

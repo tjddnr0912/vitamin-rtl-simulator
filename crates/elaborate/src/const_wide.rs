@@ -30,6 +30,62 @@ pub(crate) type WideBits = (ir::BitPacked, u32, bool);
 /// slice's ⓷, which installed 43690 in place of 170).
 pub(crate) type WideNameFn<'a> = &'a dyn Fn(&ast::Expr, bool) -> Option<WideBits>;
 
+/// §5.9: a string literal in an integral position is an unsigned constant of eight bits
+/// per character, the first character most significant — self-determined, like a sized
+/// literal. The empty literal is one NUL byte (both oracles: `$bits("")` is 8 and
+/// `logic [15:0] A = ""` binds `0000`). `None` for anything else, and for a literal
+/// wider than a net may be.
+pub(crate) fn str_lit_bits(e: &ast::Expr) -> Option<WideBits> {
+    let ast::ExprKind::StrLit { raw } = &e.kind else {
+        return None;
+    };
+    str_raw_bits(raw)
+}
+
+/// [`str_lit_bits`] of a string in the string domain's representation — the raw
+/// literal, quotes included (`const_str_in_scope`, `str_param_raw`).
+pub(crate) fn str_raw_bits(raw: &str) -> Option<WideBits> {
+    let bytes = literal::unescape_str_literal_bytes(raw);
+    if bytes.is_empty() {
+        return Some((bp_zero(8), 8, false));
+    }
+    if bytes.len() as u64 * 8 > MAX_NET_WIDTH {
+        return None;
+    }
+    let cv = literal::str_const_from_bytes(&bytes);
+    Some((cv.bits, cv.width, false))
+}
+
+/// [`str_raw_bits`] converted to real (§6.12.1: the unsigned integral value) — what a
+/// declared-real parameter binds for a string.
+pub(crate) fn str_raw_real(raw: &str) -> Option<f64> {
+    let (bits, _, _) = str_raw_bits(raw)?;
+    Some(bits.val.iter().rev().fold(0.0f64, |acc, &w| {
+        acc * 18_446_744_073_709_551_616.0 + w as f64
+    }))
+}
+
+/// [`str_raw_bits`] as an i64 — the reading a generate-case label compares against a
+/// folded scrutinee. Declines a value the i64 cannot hold as the same unsigned number: a
+/// 64-bit string whose top bit is set would read back as a negative i64 and match a
+/// `-1` scrutinee, where both oracles compare unsigned at 64 bits and miss.
+pub(crate) fn str_raw_i64(raw: &str) -> Option<i64> {
+    let (bits, width, _) = str_raw_bits(raw)?;
+    let v = bits.val.first().copied().unwrap_or(0);
+    (width < 64 || (width == 64 && v >> 63 == 0)).then_some(v as i64)
+}
+
+/// [`str_raw_bits`] as an unsigned numeric constant.
+pub(crate) fn str_raw_const(raw: &str) -> Option<ir::ConstVal> {
+    let (bits, width, signed) = str_raw_bits(raw)?;
+    Some(ir::ConstVal {
+        width,
+        signed,
+        repr: ir::ConstRepr::Numeric,
+        bits,
+    })
+}
+
 /// A zeroed bit vector wide enough for `width` bits.
 pub(crate) fn bp_zero(width: u32) -> ir::BitPacked {
     let n = ((width as usize).div_ceil(64)).max(1);
@@ -468,6 +524,11 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
             let cv = parse_int_literal(raw, *kind)?;
             Some((cv.bits, cv.width, cv.signed))
         }
+        // A string literal is answered by the NAME hook, so its integral reading
+        // (`str_lit_bits`) is opt-in per caller: the parameter binder's resolver
+        // (`Elaborator::param_leaf_bits`) answers it, and every other walk declines it
+        // exactly as it did before this arm existed.
+        ast::ExprKind::StrLit { .. } => name(e, false),
         // §6.24.1 size cast: the result is `n` bits; signedness is INHERITED.
         ast::ExprKind::Cast {
             target: ast::CastTarget::Size(w),
@@ -1043,6 +1104,7 @@ pub(crate) fn wide_top_is_self_determined(e: &ast::Expr) -> bool {
     match &e.kind {
         K::Paren { inner } => wide_top_is_self_determined(inner),
         K::IntLit { .. }
+        | K::StrLit { .. }
         | K::Ident(_)
         | K::PkgScoped { .. }
         | K::Concat { .. }
@@ -1225,6 +1287,15 @@ impl Elaborator<'_> {
         Some((resize_bits(&cv.bits, 64, w, signed), w, signed))
     }
 
+    /// [`Self::wide_name_bits`] plus the §5.9 integral reading of a string literal
+    /// ([`str_lit_bits`]) — the resolver of the parameter binder's walks, and only of
+    /// those: a declaration or an override with a declared type is a context that takes
+    /// the literal's bits (`localparam logic [15:0] A = "a";` is `0061`, `"a" + 1` is
+    /// `0062`, both oracles).
+    pub(crate) fn param_leaf_bits(&self, e: &ast::Expr) -> Option<WideBits> {
+        str_lit_bits(e).or_else(|| self.wide_name_bits(e))
+    }
+
     /// The wide domain's NAME resolver: an already-wide parameter first, then a narrow
     /// one at its declared width.
     pub(crate) fn wide_name_bits(&self, e: &ast::Expr) -> Option<WideBits> {
@@ -1316,7 +1387,7 @@ impl Elaborator<'_> {
         width: u32,
         signed: bool,
     ) -> Option<ir::ConstVal> {
-        let (b, w, sg) = fold_bits_at(e, width, &|n, _| self.wide_name_bits(n))?;
+        let (b, w, sg) = fold_bits_at(e, width, &|n, _| self.param_leaf_bits(n))?;
         // ⚠️ Kept as a backstop, not as the mechanism. With the context threaded, a
         // context-determined top already returns `w >= width`; what can still land here
         // is a node kind the threading does not reach, and for those the pre-slice
@@ -1550,7 +1621,7 @@ impl Elaborator<'_> {
     /// a real operand) and a fill in a wide tree bind 32 bits; an x/z value stays
     /// E3009; a ≤64-bit tree keeps the i64 route's width.
     pub(crate) fn override_bits(&self, e: &ast::Expr) -> Option<ir::ConstVal> {
-        let name = |n: &ast::Expr, _| self.wide_name_bits(n);
+        let name = |n: &ast::Expr, _| self.param_leaf_bits(n);
         // §2 🆕 M ⓓ: a bitwise `& | ^` tree over self-determined leaves folds here too
         // (`#(.K(128'h… ^ 128'd3))` was `W3056 … not a constant` + E3009, where both
         // oracles bind it) — see `wide_ext_invariant_bitwise` for why only those.

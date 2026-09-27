@@ -255,7 +255,7 @@ endmodule
     );
 }
 
-/// The string channel: a `defparam` of `"str"`, `{"a","b"}`, `""` and a ten-character string onto an untyped parameter binds what `#()` binds (both oracles, except `""`, which both oracles bind at 8 bits — ROADMAP §2 "Constant domain", the string-literal width bullet). PRE: E3009. A string onto a RANGED parameter stays E3009 on both channels (both oracles bind the truncated bits; pre-existing, ROADMAP §3.b `str-override-ranged`).
+/// The string channel: a `defparam` of `"str"`, `{"a","b"}`, `""` and a ten-character string onto an untyped parameter binds what `#()` binds (both oracles, except `""`, which both oracles bind at 8 bits — ROADMAP §2 "Constant domain", the empty-string bullet). PRE: E3009. Onto a RANGED parameter it binds the string's bytes at the declared width, zero-extended or truncated (§5.9, both oracles; it was E3009 — `param_default_takes_declared_type.rs`).
 #[test]
 fn a_string_defparam_binds_like_the_named_override() {
     check(
@@ -304,7 +304,7 @@ endmodule
             r#"top.u03 bits=80 hex=6162636465666768696a s=abcdefghij"#,
         ],
     );
-    loud(
+    check(
         r#"module su #(parameter [23:0] P = 0) ();
   initial begin #1; $display("%m bits=%0d hex=%h s=%s", $bits(P), P, P); end
 endmodule
@@ -320,7 +320,12 @@ module top;
   initial begin #2 $finish; end
 endmodule
 "#,
-        "VITA-E3009",
+        &[
+            r#"top.u00 bits=24 hex=737472 s=str"#,
+            r#"top.u01 bits=24 hex=006162 s= ab"#,
+            r#"top.u02 bits=24 hex=000000 s="#,
+            r#"top.u03 bits=24 hex=68696a s=hij"#,
+        ],
     );
 }
 

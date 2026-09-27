@@ -837,7 +837,18 @@ pub(crate) fn const_string(ir: &sim_ir::SimIr, cid: u32) -> String {
     while bytes.last() == Some(&0) {
         bytes.pop();
     }
-    String::from_utf8_lossy(&bytes).into_owned()
+    // …and, for a NUMERIC constant, the leading ones: the padding of a value wider than
+    // its text (§6.16 — NUL characters are ignored when an integral value is used as a
+    // string), the rule `value_str_bytes` already applies to a non-constant argument. A
+    // `parameter [8*16-1:0] F = "k.hex"` used as a file name opened `"\0…\0k.hex"`
+    // where both oracles open `k.hex`. A string LITERAL keeps its bytes: `%s` of
+    // `"\000a"` renders the NUL (both oracles print it as a space), and its length counts.
+    let lead = if c.repr == sim_ir::ConstRepr::Numeric {
+        bytes.iter().take_while(|&&b| b == 0).count()
+    } else {
+        0
+    };
+    String::from_utf8_lossy(&bytes[lead..]).into_owned()
 }
 
 // ── $display format engine (4-state aware) ─────────────────────────────────

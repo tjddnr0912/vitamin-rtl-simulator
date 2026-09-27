@@ -207,7 +207,7 @@ fn concatenating_string_literals_does_not_smuggle_their_quotes_through() {
 
 /// The same defect's integer face: iverilog and verilator both read `{"A","B"}` as
 /// 16706 (0x4142). The quote-smuggling version read 1092756034. Untyped, because a
-/// declaration that states a width takes the gate below instead.
+/// declaration that states a width takes the numeric route below instead.
 #[test]
 fn a_string_concatenation_read_as_an_integer_is_two_bytes_not_four() {
     let (out, code) = run("module tb; localparam Q = {\"A\",\"B\"};\n  \
@@ -219,41 +219,37 @@ fn a_string_concatenation_read_as_an_integer_is_two_bytes_not_four() {
     );
 }
 
-/// ⚠️ The string side map carries NO WIDTH, and the string route runs before the
-/// width-carrying numeric and wide paths at every consumer. So a declaration that
-/// STATES a width silently loses it: `localparam [95:0] X = {"A","B"}` came out 16
-/// bits where both oracles say 96, and `localparam [95:0] Z = 1 ? "AB" : "CD"` came
-/// out 16706 where iverilog says 0. Those shapes were LOUD before the widening, so
-/// folding them would be loud → silent-wrong. Declining keeps them as loud as they
-/// were — and the untyped twin above still folds, because it has no width to lose.
+/// The string side map carries NO WIDTH, so a declaration that STATES a width or a type
+/// must not land in it: `localparam [95:0] X = {"A","B"}` would come out 16 bits where both
+/// oracles say 96. Such a declaration takes the numeric route instead, which converts the
+/// string's bytes at the declared width (§5.9) — the untyped twin above still folds as a
+/// string, because it has no width to lose. (These were E3009 before the numeric fold
+/// learned a string operand; `param_default_takes_declared_type.rs`.)
+///
+/// `[95:0] X = 1 ? "AB" : "CD"` is verilator's 16706: iverilog prints 0, but only through
+/// `%d` on a wide constant string ("only looks at first 4 bytes!", its own warning) — the
+/// same design assigning the ternary to a variable prints 16706 there too.
 #[test]
-fn a_declaration_that_states_a_width_declines_rather_than_lose_it() {
-    for decl in [
-        "localparam [95:0] X = {\"A\",\"B\"};",
-        "localparam [95:0] X = 1 ? \"AB\" : \"CD\";",
-        "localparam integer X = {\"A\",\"B\"};",
-        "localparam integer X = 1 ? \"A\" : \"B\";",
-        // ⚠️ These three cost a second review round. `logic`/`reg`/`bit` with no
-        // explicit range are ONE bit, but the parser recorded that only in a
-        // `var_kind` it then dropped — `ParamDecl` has no such field, so they were
-        // indistinguishable from a genuinely untyped `parameter P` and sailed through
-        // a gate spelled `p.range.is_none() && p.ty == Implicit`. Both oracles say 1
-        // bit; this folded 16. The parser now supplies the range.
-        "localparam bit X = {\"A\",\"B\"};",
-        "localparam logic X = 1 ? \"AB\" : \"CD\";",
-        "localparam reg X = {\"A\",\"B\"};",
-        "localparam byte X = {\"A\",\"B\"};",
-        "localparam shortint X = {\"A\",\"B\"};",
-        "localparam longint X = {\"A\",\"B\"};",
+fn a_declaration_that_states_a_width_converts_at_that_width() {
+    for (decl, want) in [
+        ("localparam [95:0] X = {\"A\",\"B\"};", "VAL=16706/96"),
+        ("localparam [95:0] X = 1 ? \"AB\" : \"CD\";", "VAL=16706/96"),
+        ("localparam integer X = {\"A\",\"B\"};", "VAL=16706/32"),
+        ("localparam integer X = 1 ? \"A\" : \"B\";", "VAL=65/32"),
+        // `logic`/`reg`/`bit` with no explicit range are ONE bit — the parser supplies
+        // the range (`ParamDecl` has no var-kind field), so they are not untyped.
+        ("localparam bit X = {\"A\",\"B\"};", "VAL=0/1"),
+        ("localparam logic X = 1 ? \"AB\" : \"CD\";", "VAL=0/1"),
+        ("localparam reg X = {\"A\",\"B\"};", "VAL=0/1"),
+        ("localparam byte X = {\"A\",\"B\"};", "VAL=66/8"),
+        ("localparam shortint X = {\"A\",\"B\"};", "VAL=16706/16"),
+        ("localparam longint X = {\"A\",\"B\"};", "VAL=16706/64"),
     ] {
         let (out, code) = run(&format!(
-            "module tb;\n  {decl}\n  initial $display(\"VAL=%0d\", X);\nendmodule\n"
+            "module tb;\n  {decl}\n  initial $display(\"VAL=%0d/%0d\", X, $bits(X));\nendmodule\n"
         ));
-        assert_ne!(
-            code,
-            Some(0),
-            "must stay loud rather than drop the width: {decl}\n{out}"
-        );
+        assert_eq!(code, Some(0), "{decl}\n{out}");
+        assert!(out.contains(want), "{decl}: want {want}\n{out}");
     }
 }
 
@@ -305,24 +301,22 @@ fn a_numeric_override_of_a_string_expression_default_still_applies() {
 }
 
 /// The override channel has the same width hazard as the declaration, and the same
-/// answer: a FOLDED override applies only when the child has no declared width. (A
-/// LITERAL override on a widthed child already lost the width before this slice, so
-/// that pre-existing behaviour is left exactly as it was.)
+/// answer: a string override of a child that declares a width binds the string's bytes at
+/// that width, folded (`1 ? "AB" : "CD"`, verilator 16706 — iverilog's `%d` reads four
+/// bytes of the wide constant string, as above) or forwarded by name (both oracles).
+/// PRE: E3009 on both.
 #[test]
-fn a_folded_override_declines_on_a_child_that_declares_a_width() {
-    let (out, code) = run(r#"module leaf #(parameter [95:0] RS = "NONE") ();
-  initial $display("VAL=%0d", RS);
-endmodule
-module mid #(parameter S = "AB") ();
-  leaf #(.RS(1 ? "AB" : "CD")) a ();
-endmodule
-module tb; mid u(); endmodule
-"#);
-    assert_ne!(
-        code,
-        Some(0),
-        "must stay loud rather than drop the 96-bit width\n{out}"
-    );
+fn a_folded_override_converts_at_the_childs_declared_width() {
+    for ov in ["1 ? \"AB\" : \"CD\"", "S"] {
+        let (out, code) = run(&format!(
+            "module leaf #(parameter [95:0] RS = \"NONE\") ();\n  \
+             initial $display(\"VAL=%0d/%0d\", RS, $bits(RS));\nendmodule\n\
+             module mid #(parameter S = \"AB\") ();\n  leaf #(.RS({ov})) a ();\nendmodule\n\
+             module tb; mid u(); endmodule\n"
+        ));
+        assert_eq!(code, Some(0), "{ov}\n{out}");
+        assert!(out.contains("VAL=16706/96"), "{ov}\n{out}");
+    }
 }
 
 /// Fail-closed: BOTH arms must resolve as strings, not just the taken one. Requiring
