@@ -27,10 +27,10 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 21 | 1 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 5 (🆕 H startable; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 179 | 97 | 82 | oracle split / pinned / oracle disqualified / no oracle 57 · named prerequisite 13 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 13 · size cast / signedness 12 · constant domain (i64) 14 · scoping / imports / block-locals 27 · delays / events 19 · real 9 · performance 6 · index sealing 15 · ranges / selects 8 · diagnostics 10 · class fields 3 · oracle splits 43 | ① | |
+| §2 | recorded defects by mechanism | 182 | 98 | 84 | oracle split / pinned / oracle disqualified / no oracle 58 · named prerequisite 14 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 13 · size cast / signedness 12 · constant domain (i64) 14 · scoping / imports / block-locals 30 · delays / events 19 · real 9 · performance 6 · index sealing 15 · ranges / selects 8 · diagnostics 10 · class fields 3 · oracle splits 43 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 114 | 98 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 26 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
+| §3.b | loud → correct-support, small | 115 | 99 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 26 · constants / parameters 26 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
@@ -38,9 +38,9 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 414 | 247 | 167 | | | | |
+| total | | 418 | 249 | 169 | | | | |
 
-Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a declaring-scope fold of a function's return range, a generate-scope alias's recorded type, a tree-wide AST self-width pass, an exact declared-width fold for
+Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a declaring-scope fold, a generate-scope alias's recorded type, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
 a block-scoped constant binding, a field-key normalisation map, per-instance arity / class registration,
 a binding-resolved scope, the purity-certification adjudication, one-oracle clocking, the `$finish`-in-a-function oracle split).
@@ -167,7 +167,7 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 | 🆕 B | BLOCKED (sign provenance) | ⓐ closed by §4.5.556 (`localparam [31:0] L1=(B>>>2)+8'd0` is 44 = both oracles; the net-size twin was already 44) · ⓑ `case (b>>>2)` with an unsigned label: vita `eq236`, oracles `eq44` | ⓑ `stmt_flow.rs:~605` wraps the lowered scrutinee in an outer `$unsigned`, whose argument is self-determined | ⓑ re-lower with `lower_size_ctx_entry(scrutinee, w, ext=false)` keeping the wrapper as a FALLBACK (6 `case`/`casez`/`casex` cells; `case (b/c)` 1 → 3, `b%c` 2 → 1). BLOCKED BY: sign provenance told apart from a default — `expr_self_signed`'s catch-all is not a fact for calls, non-whitelisted system functions, or constants folded from them |
 | 3b | BLOCKED (field-key map) | class-property ascending/negative bound normalisation has nowhere to be recorded | class fields are not nets (`ClassField` → heap slot) and the map is keyed by NetId | BLOCKED BY: a field-key normalisation map · 1 oracle (iverilog dies on an assertion) and the minimal repro is loud for another reason (`C c = new();`) |
 | 7 | ORACLE-SPLIT (order) | a parent `initial` READING a child net at t0 sees X: `initial s = 8'hEE` in a child, read as `r = u1.s;` → oracles `ee`, vita `xx`. Both oracles read `ee` for two different reasons — iverilog starts a child instance's `initial`s before the parent's (deepest first, `s28/g` k3c `G C_pre C_post P1`), verilator starts the parent first and constant-hoists the single-statement `initial s = <const>;` (a child initial that also prints reads `00` there, k3j / k3l) — so the cell is a split on order, and `final` blocks run in ProcId order (`final_procs` is a `BTreeSet<ProcId>`), so a hierarchy reorder would leave vita disagreeing with itself | the same-time resume order landed in §4.5.541: a `#d` / `#0` / fork-arm / join resume runs in the order it was SCHEDULED (`Ready::seq`), a wake group shares one number and keeps declaration order inside it. What is left is answered differently by the two oracles in one run of one design: the time-0 start order across the hierarchy (iverilog child-first, `always_comb` after the initials; verilator parent-first, `always_comb` before the initials in one cell and after in another) and the order INSIDE a wake group (iverilog reverse arm order for edge, `wait` and fork-arm waiters; verilator arm order with the static `always @(posedge)` blocks after the coroutine waiters; equal-time fork arms reverse vs arm order) — 26 split cells in `s28/g/REPORT.md` | not chased: no oracle for either axis. vita keeps declaration order inside a wake group (= verilator on the clock-generator-first testbench with the tb `initial` declared before the DUT block, = iverilog with the DUT block declared first) · no format bump needed (the `proc_order` sidecar claim withdrawn) · corpus demand zero |
-| 10 | OPEN | the RANGE BOUND consumer: `wire [K[31:24]-1:0] n;` on a `parameter [135:8] K` 128 bits wide is ONE BIT at exit 0 where both oracles declare 221, and the ≤64-bit twin of the same text is correct. Bare `K[31:24]`, `pk::K[31:24]`, `K[31 -: 8]`, `K[24]` and a `$bits`-sized net are all three-way identical · the WIDTH consumer of the same root: `localparam L = ~WW[3:0];` over a 128-bit `WW` records 32 bits `fffffffa` where both oracles record 4 bits `a` (`const_select_self_width` declines a >64-bit base the same way) | `const_range_bound_fold` has no wide-bit-domain fallback — the i64 select fold declines a >64-bit base (`select_base_at_declared` returns `None` for `dwidth > 64`) and both of the bound's fallbacks are i64. `$clog2` of the SAME text answers 8, so the value exists one funnel over | BLOCKED BY: `selfdet_bits_unsigned` declines the select too (only `selfdet_clog2_wide` answers it), so routing the bound at the wide domain buys nothing until that resolver reads it — an unguarded fallback moves 0 of 18 cells |
+| 10 | OPEN | the RANGE BOUND consumer: `wire [K[31:24]-1:0] n;` on a `parameter [135:8] K` 128 bits wide is ONE BIT at exit 0 where both oracles declare 221, and the ≤64-bit twin of the same text is correct. Bare `K[31:24]`, `pk::K[31:24]`, `K[31 -: 8]`, `K[24]` and a `$bits`-sized net are all three-way identical · the WIDTH consumer of the same root: `localparam L = ~WW[3:0];` over a 128-bit `WW` records 32 bits `fffffffa` where both oracles record 4 bits `a` (`const_select_self_width` declines a >64-bit base the same way) | `const_range_bound_fold` has no wide-bit-domain fallback — the i64 select fold declines a >64-bit base (`select_base_at_declared` returns `None` for `dwidth > 64`) and both of the bound's fallbacks are i64. `$clog2` of the SAME text answers 8, so the value exists one funnel over | BLOCKED BY: a declaring-scope fold (REMAINING_WORK §D) — §4.5.560 built this constant select (a fitting value extended by its declaration's sign; the row's cells right) and reverted it with the >64-bit select axis: a module function or typedef folded at a generate call site read that block's same-named fitting parameter where PRE declined. Before that: `selfdet_bits_unsigned` declines the select too (only `selfdet_clog2_wide` answers it), so routing the bound at the wide domain buys nothing until that resolver reads it — an unguarded fallback moves 0 of 18 cells |
 | 15 | BLOCKED (2-state field) | an OVERRIDE carrying a sized x/z literal loses the unknown plane: `#(.K(8'b1010_010x))` onto `parameter logic [7:0] K` binds `10100100` at exit 0 where the oracles keep the x; `8'bzzzzz1z0` binds `11111110`. Five cells, every channel | `params.rs`'s i64-lane test reads only VALUE bits (`bp_get(..).0`); the sibling `fill` arm declines with `fill_is_unknown` | a `bp_any_unknown` test alone turns 76 CORRECT cells loud, because a 2-STATE declaration converts x and z to 0. BLOCKED BY: recording the parameter's 2-state-ness (`hdl-parser/src/params.rs` computes `var_kind` and drops it; an `hdl-ast` field plus a SchemaHash re-pin, parser-only), which also closes z→0 (1 cell today) · the separate headline (an unknown plane in the narrow store, 22 loud cells, ~40 sites, demand 0) stacks on row 14; above bit 64 what survives is z, not x · the override lane declines an x/z bit out of an OPERATOR whatever the width (§4.5.543: `#(.P(\|4'b000x))` is x in both oracles and would bind 0) while a sized x/z LITERAL keeps this row's route; a DECLARATION whose own value carries x (`parameter logic [3:0] X = 4'b110x;`, both oracles fold `&X` to 0) is E3009 at the declaration — the narrow store's missing unknown plane — so a definite operator over the NAME never folds · the >64-bit operator lane (§4.5.527) declines on any x/z bit, so `#(.P(~128'bx))`, `128'h1x << 120` and `128'hz5 >>> 2` stay E3009 where both oracles bind 128 bits with the x/z kept; a build that let the plane through lost it whenever the value bits fit i64 (`128'hx0 >> 4`, `+128'hx0` bound zeros, six loud→silent cells), so this lane waits on the same unknown-plane binder · an overridden parameter used as a constant EVENT term inherits the lost plane through §4.5.529's time-0 run: `child #(.P(4'bx))` with `always @(P or clk)` runs at time 0 printing `P=0000` (`4'bzzzz` → `P=1111`, `4'b1z0x` → `P=1100`), where iverilog prints `P=xxxx` / `P=zzzz` / `P=1z0x` and does not run an all-x or all-z constant at time 0 (it runs `4'b1z0x` there); verilator cannot compile the design (`Unsupported tristate construct: SENITEM`) (dS10c) |
 | 16 | ORACLE-SPLIT | 12 override cells: 5 diverge from iverilog, but verilator sides with VITA on 4 (`-64'd1`, `<ones> + 64'd1`, `<ones> << 4`) and `~32'd0` is a 3-way split | that is row 17 | a fix would "correct" one side of a live split, so the context is not threaded through `override_bits` · the 2-oracle sub-case (operands already ≥ the target width, `#(.K(~128'd0))`) is closed by §4.5.527 · the >64-bit operator tops narrower than a typed target now land on VERILATOR's side, recorded here, not support: onto `parameter logic [127:0]`, `~65'd0` and `65'd1 - 65'd2` are `0000000000000001ffff…ff`, `~96'd0` is `00000000ffff…ff`, `~65'd0 >> 1` is `0000000000000000ffff…ff` (iverilog all ones / `7ff…ff`); onto `logic signed [127:0]`, `~96'd0` / `~72'd0` are `00000000ff…ff` / `00000000000000ff…ff` (iverilog all ones; PRE matched iverilog by an i64 sign-extension coincidence); onto `[255:0]`, `~128'h…` is zero-extended (`hier_param_select.rs`). verilator's OWN `localparam [255:0] L = ~128'd0` is all ones (= iverilog), so verilator contradicts itself between the override and the localparam twin; adjudicate before calling these pins support |
 | 17 | ORACLE-SPLIT | `leaf #(.K(32'd0 - 32'd1))` on `parameter logic [127:0] K`: iverilog `ffff…ffff`, verilator `0000…0000ffffffff`, vita `0000000000000000ffffffff_ffffffff` (zero-extending from 64, the i64 lane's width) | — | do not chase: vita matches NEITHER and §6.20.2 does not settle it · the neighbours are not split (`64'hFFFF_FFFF_FFFF_FFFF + 64'd0` zero-extends in all three, `-(64'sd1)` sign-extends in all three) |
@@ -606,27 +606,36 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - `$size(da, 1)` with an EXPLICIT dimension argument still answers the element width (`D1=32 H1=31`
   for verilator's `6` / `5`; iverilog rejects the two-argument form) — §4.5.500's dyn arm takes the
   one-argument spelling only, the two-argument one keeps `net_dims_desc`'s constant path.
-- A parameter PART-SELECT used as a width bound is silently one bit (oracle: iverilog):
-  `localparam logic [31:0] W = 32'hdeadbeef; logic [W[7:0]-1:0] v;` gives `$bits(v)=1` against
-  iverilog's 239. The whole parameter is correct, so the part-select does not reach the constant
-  bound domain.
 - An inner scalar shadowing a const array: the GAP-G shadow check is missing on the first branch (one
   oracle, verilator). Inside a generate, `localparam int ROT = 99;` shadowing
   `localparam int ROT [0:3]` makes `logic [ROT[1]:0] v` give vita `$bits=21` against verilator's 2,
   because `const_array_vals_of_base`'s first branch returns immediately on a `walk_scopes_key` hit
   and skips the second branch's inner-wins check. The module-scope spelling is correct.
-- A select of a parameter WIDER than 64 bits with a non-zero LSB reads the stored bits positionally:
-  `localparam logic [79:8] P = 72'h616263646566676869;` gives `P[79:72]` `xx` and `P[15:8]` `68`
-  where both oracles give `61` and `69`, on every channel that binds it (a numeric override, the
-  default, a typed string default or override). A value that fits 64 bits is right (`"ab"` into the
-  same declaration reads `00` / `62`), as is a zero-LSB twin: the wide install (`wide_param_bits`)
-  records no declared range, and `param_sel_range` walks `params` only. Fix shape = record the
-  declared range at every wide install and let the select walk find a wide key, clearing it wherever
-  a wide key is rebound (the staleness `bind_param_value` guards for `params`). M.
-- Loud residue where the oracles answer: a >64-bit parameter select (the bits are in
-  `wide_param_bits` and not in the i64 `params`); a header parameter whose default is a select of
-  another header parameter; a `#(.N(W[7:0]))` override; `defparam`; a struct member width (a parser
-  gap); a class property.
+- A BARE-NAME select of a parameter WIDER than 64 bits with a non-zero LSB reads the stored bits
+  positionally: `localparam logic [79:8] P = 72'h616263646566676869;` gives `P[79:72]` `xx` and
+  `P[15:8]` `68` where both oracles give `61` and `69`, on every channel that binds it (the default,
+  a numeric or `-G` override, `defparam`, a typed string, a generate scope, an import, a type
+  parameter's type) and in every lane: `localparam X = P[15:8]` `68`, a range bound
+  `logic [P[15:8]-1:0]` 104 bits for 105, `if (P[15:8] == 8'h69)` takes the other branch, a header
+  default `N = W[15:8]`, `#(.N(W[15:8]))` and `defparam u.N = W[15:8]` bind `68`; an ascending
+  declaration is loud. A declaration past 64 bits whose value fits the i64 lane has no constant
+  select at all (`wire [K[31:24]-1:0] n;` over `parameter [135:8] K = 128'hDD_0000` is one bit for
+  221 — row 10), and a signed `[135:8]` declaration overridden with bit 63 set binds the
+  sign-extended i64 (`ffff…` for `0000…ffff…`). `pkg::P[…]` and a hierarchical `u.P[…]` read the
+  declared range since §4.5.560. The bare-name half was built there (the select resolvers walk
+  every binding kind, a fitting value extends by its declaration's sign) and reverted after three
+  review rounds: each lane that folds one scope's code at another scope's prefix — a package or
+  `$unit` routine, a module function at a generate call site, a typedef, formal, return or default
+  range, a size cast in another package's body — then read the calling scope's same-named >64-bit
+  binding, where the pre-slice walk, blind to it, had declined or read the declaring scope's. BLOCKED
+  BY: a declaring-scope fold (REMAINING_WORK §D). M.
+- Loud residue where both oracles answer: a parameter select as a struct member width (`typedef
+  struct packed { logic [W[7:0]-1:0] a; }` is E2002, a parser gap) and as a class property width
+  (`logic [W[7:0]-1:0] p;` in a class is E3009 ``undefined name `W` ``).
+- A hierarchical select of an ASCENDING parameter wider than 64 bits reads the stored bits
+  positionally (`u.A[12:19]` on `parameter logic [12:83] A`, both oracles read the declared bits; a
+  narrow ascending one is loud): `build_hier_param_select` refuses an ascending range, so §4.5.560
+  records a >64-bit parameter's hierarchical range for a descending declaration only. S.
 - An OVERRIDABLE 1-D `parameter type T = logic [8:1]` registers its typedef as `[T$w-1:0]`, so `v[1]`
   reads bit 0 and `$low(v)` is 0 where both oracles read bit 1 and 1 (X3, §4.5.515); the same for a
   `localparam type L = logic [HI:LO]` whose bounds name overridable header parameters (`lo=0 hi=15`
@@ -688,7 +697,11 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   (`const_eval`, `const_array`, `const_wide`, `const_str`, `const_decl_width`, `params`,
   `param_query`, `array_geom`, `$bits`' param half) resolve `params` first and `reserve_frame_func`
   runs before the §4.5.493 push. A body-local enum LABEL in a constant range bound is the same class
-  (module twin too).
+  (module twin too). So is a SELECT in the body: `P[3:0]` over a caller's `logic [15:8] P` reads the
+  package's `P` through the caller's range (`x x`, both oracles `5 5`), and a package variable's
+  `v[15:8]` over a caller's ascending `v` is loud; §4.5.560 built the package-scope answer for the
+  select resolvers (106 review cells right) and reverted it with the >64-bit select axis, whose
+  prerequisite this is too.
 - A FREE name in an imported package routine body (one the package does not declare) binds to the
   caller's same-named net at exit 0 (vita invention; BOTH oracles refuse the program: `Unable to bind
   wire/reg/memory y in pk.gy`): `Y=ee`. The scoped spelling refuses it at its gate. Making the import
@@ -825,6 +838,20 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `k4 = {u.lv, 4'h0}` is `0070`); verilator contradicts itself (`k3=00f1`, `k4=0000`, neither the
   instance's `0f00` nor the block's `0070`); vita prints `k3=00f1 k4=0f00` (`000000f1` before
   §4.5.528). ORACLE-SPLIT on the verilator side; iverilog + §23.8 is the plan.
+
+- An enum label or a genvar that rebinds a wildcard-imported >64-bit constant's name leaves the
+  constant's value visible (both oracles agree): `import pk::*` over `logic [79:8] W`, then `typedef
+  enum logic [7:0] {W = 8'h5a, …}` — `W` reads `616263646566676869` and `W[7:4]` `6` where both
+  oracles read the label (`5a`, `5`); the label binds `params` and the value route asks the wide map
+  first. S.
+- Two wildcard imports that each export a >64-bit constant of one name bind the first silently
+  (iverilog refuses the ambiguous use, verilator answers the second): the wildcard collision arm
+  removes the wide value only when the names collide in the order it checks. S.
+- An array-method iterator named like a ranged parameter is read through that parameter's range
+  (one oracle — iverilog cannot parse `with`): `q.find(x) with (x[15:8] == 8'h56)` beside a module
+  `logic [79:8] x` counts 0 where verilator counts 1; `param_sel_range` does not take
+  `bare_ident_route`'s iterator step, and inside a function inlined from the `with` expression the
+  iterator also shadows the function's own names (`f(item)` reads the iterator). S.
 
 ### Delays / events
 
@@ -1494,6 +1521,7 @@ behind the §2 correctness queue.
 
 | id | gap · repro · oracle values | root cause · code site | fix shape · prerequisite | oracle | size |
 |---|---|---|---|---|---|
+| scoped-call-wide-const | a scoped package call whose body reads a select of the package's >64-bit constant is E3009 ``package-scoped call `pk::f(...)` needs a body that references only its own formals/locals, same-package constants, …`` where both oracles run it (`f = P[23:16]` over `logic [79:8] P`: `68`; `f2(8)` over `P[i +: 8]`: `69`) | the scoped-call self-containment gate does not count a `pkg_wide_bits` constant as a same-package constant | count it, then measure the body's select (the bare name in a package body keeps the §2 >64-bit select residue) | 2 oracles | S |
 | pkg-task-stmt | a package task enabled by its scoped spelling as a STATEMENT (`p::pt(z);`) is E2002 `expected '=' or '<=' after lvalue, found '::'`; the import spelling (`import p::pt; pt(z);`) runs. iverilog rejects the same line (`Malformed statement`), verilator runs it | the statement parser takes `::` only inside an expression, not on a statement head | accept a scoped call on a statement head and route it like the imported spelling | 1 (verilator; iverilog rejects) | small |
 | blocal-inert-falseloud | an inner block-local that is DECLARED, never referenced inside its own block and carries no initializer is refused with ``E3009 block-local `x` is referenced outside its `begin…end` block`` although the flatten is byte-correct; both oracles print a value on every measured cell in the module and the import lane (the scoped lane is silently wrong instead — its own §2 row) | `check_block_local_scope_leaks` keys on the NAME, not on the binding a post-block reference takes | the gate must resolve that binding. Three narrowings that keyed on properties of the DECLARATION — inertness, geometry, an outer-twin lookup — were each measured to create a new defect, and the axis was reverted whole (§4.5.490) | 2-oracle | — |
 | scoped-call-comb-arg | a scoped package call inside `always_comb` whose actual is a variable WITH a declaration initializer (`int i = 21; always_comb r = pk::g(i);`) is a false E3001 ``variable `i` has a declaration initializer AND is written by `always_comb` `` where both oracles print 44; the import spelling and the module-local twin run, and no block-local is involved | Rule A's driver walk counts the scoped call's actual as a write (the same conservative walk the `frame-body-write-sites` row records for a hierarchical callee) | resolve the scoped callee's ports before the walk, as the local twin does | 2-oracle | small |
@@ -1707,7 +1735,7 @@ Do not start:
   other on the `$fatal` spelling.
 - §2 🆕 Q — a block-scoped CONSTANT binding is the prerequisite; the bare-name hoist measures 5 new
   silent-wrongs.
-- §2 row 10's surviving bound half, whose prerequisite is a wide resolver that reads a SELECT.
+- §2 row 10's surviving bound half, whose prerequisite is a declaring-scope fold (§4.5.560).
 - What is left of §2 row 7 (the time-0 hierarchy start order and the order inside a wake group):
   the two oracles answer each differently, and the headline cell is a split on order.
 - §3 ⑤ⓕ's ARITY (dim COUNT) axis: the prerequisite is measurably absent. The declarator dim list is

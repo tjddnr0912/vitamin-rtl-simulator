@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8721 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
+8725 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
 older build is refused at the header gate with `E9001`), 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
@@ -41,32 +41,35 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §0 promotion queue (T2 residues) | 14 rows | 9 / 5 | real const-fold residues ⓐ–ⓔ ⓖ ⓗ, enum-label folding ⓐⓑ, negative bounds (part select / port), the `-G` aliases and the `.velab` header field, `case inside` |
 | §2-N verilog-axi census | 2 rows + 3 | 0 / 5 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and three t0-event residues (§4.5.533 closed the x-valued ones) |
 | §2 start-order table | 21 rows | 1 / 20 | LOUD 4 · BLOCKED 4 · OPEN 5 (🆕 H startable; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557; row 26 absorbed by row 14 in §4.5.546; 🆕 F and 🆕 R closed) · ORACLE-SPLIT 4 (row 7 since §4.5.541: the `#d` / `#0` / fork kinds landed, the wake-group and time-0 hierarchy orders are splits) · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
-| §2 recorded defects by mechanism | 179 bullets | 97 / 82 | inline / frame binds 13 · size cast / signedness 12 · constant domain (i64) 14 · scoping / imports / block-locals 27 · delays / events 19 · real 9 · performance 6 · index sealing 15 · ranges / bounds / selects 8 · diagnostics / artifacts 10 · class fields 3 · oracle splits 43 |
+| §2 recorded defects by mechanism | 182 bullets | 98 / 84 | inline / frame binds 13 · size cast / signedness 12 · constant domain (i64) 14 · scoping / imports / block-locals 30 · delays / events 19 · real 9 · performance 6 · index sealing 15 · ranges / bounds / selects 8 · diagnostics / artifacts 10 · class fields 3 · oracle splits 43 |
 | §3 numbered items | 24 rows | 19 / 5 | ③ file-I/O hoisting (4), ⑤ ibex ladder residues (9, including ⓕ the unpacked-array typedef residue), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 114 rows | 98 / 16 | subroutine / frame 25 · constants / parameters 26 · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 |
+| §3 small residues | 115 rows | 99 / 16 | subroutine / frame 26 · constants / parameters 26 · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | 0 / 6 | mostly no oracle; hand-IEEE when started; every row states a prerequisite |
 | §5 performance / hardening residues | 17 rows | 8 / 9 | frame-body wprog (5c), native scratch pooling (4b-r), array-LHS cliff, inline-fold exponential, memory guard, CI nextest, MSRV ceiling, quiescence / render / eof seams |
 | §6 G2 OBS | 6 stages + 10 | 15 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 10 items beside the staged track (call tree, a `void` function filed as `kind: task`, a route decided per spelling, per-call-site builtins, `builtins` rows for primitives the source never wrote, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2, `wprog` keys with no producer) |
 | §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
-| total | 414 | 247 / 167 | |
+| total | 418 | 249 / 169 | |
 
 `startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
 prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.
 
 ## D. Prerequisites that block work from starting
 
-- A wide resolver that reads a SELECT — blocks §2 row 10's surviving half; an unguarded bound
-  fallback moves 0 of 18 cells.
 - A generate-scope alias's recorded type — `localparam C = A;` under a generate block records A's
   width and sign, with a GUESSED type followed through forwarding (a child typed from a guessed name
   is a guess) — blocks §2 "Index sealing"'s sign-keyword bullet; the §4.5.559 attempt made the sign
   right and was reverted after three rounds, each finding an alias the fix turned wrong.
-- A declaring-scope fold of a function's return range (a module body, a generate block, `$unit`, a
-  package) — blocks the CALL half of §2 "Real"'s integral-override bullet; the constant interpreter
-  folds the range at the call site too (§2 "Constant domain"). Folding at the call site was built in
-  §4.5.558 and reverted after three review rounds, each finding one more scope that shadows it.
+- A declaring-scope fold (a module body, a generate block, `$unit`, a package): every fold of one
+  scope's code at another scope's prefix — a function's return, formal and local ranges and its
+  defaults, a typedef's range, a constant function's body, a package routine's declarations —
+  resolves names where they are declared. Blocks the CALL half of §2 "Real"'s integral-override
+  bullet (the constant interpreter folds the range at the call site too, §2 "Constant domain"),
+  §2 row 10, the bare-name >64-bit select bullet ("Ranges") and the package-routine select residue
+  ("Scoping"). Folding a call's return range at the call site was built in §4.5.558 and letting the
+  select resolvers see >64-bit, string and real bindings in §4.5.560; each was reverted after three
+  review rounds, each finding one more lane that folds another scope's code here.
 - A tree-wide AST self-width pass — blocks the size-cast cluster in §2 "Size cast / signedness".
 - An exact declared-width fold for hierarchical placeholders (`env_fold` negates a narrow literal in
   i64, `-4'd1` → −1 where the binder gives 15) — blocks widening §4.5.528's placeholder record past

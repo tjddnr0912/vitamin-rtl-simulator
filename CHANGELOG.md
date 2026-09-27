@@ -9,6 +9,20 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — selects of a parameter wider than 64 bits through a package or a hierarchical path
+
+- `pk::P[15:8]` over a package `localparam logic [79:8] P = 72'h616263646566676869` in a constant
+  (a `localparam`, a range bound, a generate condition) read the stored bits by position (`68`); it
+  now reads the declared bits (`69`), as both reference tools do. A package constant declared wider
+  than 64 bits whose value fits in 64 bits has a constant select too (`pk::K[31:24]`).
+- `u.P[15:8]` of a child's parameter wider than 64 bits reads the declared bits (was `68`, and `xx`
+  for `u.P[79:72]`).
+- An instance array no longer leaks its child's header parameters into the parent (`dut.P` read the
+  child's value).
+- An override of a `parameter signed [127:0]` whose value has bit 63 set but is positive
+  (`128'h0000_0000_0000_0000_8000_0000_0000_0000`) binds that value, not its sign extension.
+- Still open: a bare-name select of a parameter wider than 64 bits in its own module (ROADMAP §2).
+
 ### Fixed — a fill override types an untyped parameter
 
 - `#(.P('1))` (or `-G P='1`) onto an untyped `parameter P = 5` bound one bit, but a size cast read the
