@@ -685,6 +685,7 @@ impl Elaborator<'_> {
                         let folded = self
                             .untyped_fill_init(p)
                             .map(|(v, _)| v)
+                            .or_else(|| self.param_init_at_declared_width(p))
                             .or_else(|| self.eval_param_init(&p.value, meta))
                             .or_else(|| self.param_value_via_real(p, meta))
                             .or_else(|| {

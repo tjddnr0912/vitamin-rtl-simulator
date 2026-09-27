@@ -846,14 +846,18 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
             // `'1 != 40'hff_ffff_ffff` is false in both oracles; two fills are one bit
             // each) and a context-determined operator on one side computes at that
             // width: `(~8'd1 == 16'hFFFE)` complements at 16 and is 1, not `00fe` vs
-            // `fffe`. A side already at the common width keeps its pass-1 bits: it was
-            // folded through `fold_bits_at`, which ran its own second pass.
+            // `fffe`. A side already at the common width keeps its pass-1 bits — it was
+            // folded through `fold_bits_at`, which ran its own second pass — unless it
+            // is SIGNED in an unsigned region: that pass pushed the side's own sign, and
+            // §11.8.2 converts it to the region's first, so an operator inside must run
+            // unsigned (`(P >>> 60) > 64'd100` over a signed 64-bit `P = -100` shifts in
+            // zeros and is 0 in both oracles; keeping the side's bits shifted in ones).
             let l0 = fold_selfdet_operand(lhs, name)?;
             let r0 = fold_selfdet_operand(rhs, name)?;
             let w = l0.1.max(r0.1);
             let sg = l0.2 && r0.2;
             let at = |x: &ast::Expr, v: WideBits| -> Option<WideBits> {
-                if v.1 < w {
+                if v.1 < w || (v.2 && !sg) {
                     fold_region(x, w, Some(sg), name)
                 } else {
                     Some(v)

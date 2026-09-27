@@ -635,6 +635,7 @@ impl Elaborator<'_> {
                     let folded = self
                         .untyped_fill_init(p)
                         .map(|(v, _)| v)
+                        .or_else(|| self.param_init_at_declared_width(p))
                         // The same evaluator a module parameter takes: a fill
                         // inside a sized initializer folds at the declared width
                         // (§4.5.420), and a fill-free one is `const_eval_in_scope`.

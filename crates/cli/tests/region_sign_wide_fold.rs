@@ -12,9 +12,9 @@
 //! own, sized to the larger side and signed only if both are.
 //!
 //! Every `localparam` here is 65 bits or wider (or contains a `$signed` the i64 walk
-//! declines), so it folds in the wide domain; the ≤64-bit lane folds through the
-//! width-unlimited i64 walk and is ROADMAP §2 rows 14 / 30 (its cells are pinned
-//! known-wrong at the bottom). Oracles: iverilog 13.0 `-g2012` and verilator 5.052
+//! declines), so it folds in the wide domain; a declaration of 64 bits or less whose
+//! initializer names a constant or has a wider operand takes the same walk since §4.5.556
+//! (ROADMAP §2 row 14, pinned at the bottom). Oracles: iverilog 13.0 `-g2012` and verilator 5.052
 //! `--binary --timing` print every value pinned below; the runtime twin (`assign r =
 //! <same text>`) prints the same in all three tools.
 use std::process::Command;
@@ -226,22 +226,33 @@ fn a_comparison_operands_form_a_region_sized_to_the_larger_side() {
     }
 }
 
-/// ⚠️ KNOWN-WRONG, pinned so the routing slice (ROADMAP §2 rows 14 / 30) sees what it
-/// moves: a declaration of 64 bits or less folds through the width-unlimited i64 walk,
-/// which sign-extends the signed leaf whatever the region's sign (`d38`–`d40`), and a
-/// `65'd0` beside an 8-bit target does not change that lane (`c11`, `c12`). The same
-/// lane decides a generate condition: `if ((~S8 + 128'd0) > 128'd255)` picks the else
-/// branch where both oracles pick the then branch. `a07` / `a08` (`int'(…)`) are the
-/// prim-cast lane (§2 "Size cast / signedness"). Both oracles' values are beside each pin.
+/// A declaration of 64 bits or less whose initializer names a constant or has an operand
+/// wider than 64 bits folds in the wide walk at its declared width (§4.5.556, ROADMAP §2 row
+/// 14): the signed leaf of an unsigned region zero-extends (`d38`–`d40`) and a `65'd0` beside
+/// an 8-bit target sizes the region (`c11`, `c12`). The i64 walk had sign-extended the leaf
+/// and read `-1'sb1` as a 64-bit `-1`: `fffd`, `fffe`, `ff…fe`, `fe`, `f1`. Both oracles'
+/// values.
 #[test]
-fn the_i64_lane_is_not_this_slice_known_wrong_pins() {
-    let o = run("module top;\n  localparam logic signed [7:0] S8 = -8'sd3;\n  localparam logic signed [7:0] S8n = -8'sd3;\n  localparam logic signed [63:0] S64 = -1;\n  localparam logic [7:0] U8 = 8'hfd;\n  localparam logic [7:0] L_c11 = 8'hFF - (-1'sb1) + 65'd0;\n  localparam logic [7:0] L_c12 = 8'hF0 | (-1'sb1) | 65'd0;\n  localparam logic [15:0] L_d38 = S8 + 16'd0;\n  localparam logic [15:0] L_d39 = (S8 >>> 1) + 16'd0;\n  localparam logic [63:0] L_d40 = (S8 >>> 1) + 64'd0;\n  localparam logic [127:0] L_a07 = int'(~8'd1) + 128'd0;\n  localparam logic [127:0] L_a08 = int'(S8n) + 128'd0;\n  initial begin\n    $display(\"c11 %h\", L_c11);\n    $display(\"c12 %h\", L_c12);\n    $display(\"d38 %h\", L_d38);\n    $display(\"d39 %h\", L_d39);\n    $display(\"d40 %h\", L_d40);\n    $display(\"a07 %h\", L_a07);\n    $display(\"a08 %h\", L_a08);\n    $finish;\n  end\nendmodule\n");
+fn a_declared_target_of_64_bits_or_less_takes_the_region() {
+    let o = run("module top;\n  localparam logic signed [7:0] S8 = -8'sd3;\n  localparam logic [7:0] L_c11 = 8'hFF - (-1'sb1) + 65'd0;\n  localparam logic [7:0] L_c12 = 8'hF0 | (-1'sb1) | 65'd0;\n  localparam logic [15:0] L_d38 = S8 + 16'd0;\n  localparam logic [15:0] L_d39 = (S8 >>> 1) + 16'd0;\n  localparam logic [63:0] L_d40 = (S8 >>> 1) + 64'd0;\n  initial begin\n    $display(\"c11 %h\", L_c11);\n    $display(\"c12 %h\", L_c12);\n    $display(\"d38 %h\", L_d38);\n    $display(\"d39 %h\", L_d39);\n    $display(\"d40 %h\", L_d40);\n    $finish;\n  end\nendmodule\n");
     for want in [
-        "c11 fe",                               // both oracles 00
-        "c12 f1",                               // both oracles ff
-        "d38 fffd",                             // both oracles 00fd
-        "d39 fffe",                             // both oracles 007e
-        "d40 fffffffffffffffe",                 // both oracles 000000000000007e
+        "c11 00",
+        "c12 ff",
+        "d38 00fd",
+        "d39 007e",
+        "d40 000000000000007e",
+    ] {
+        assert!(o.contains(want), "missing `{want}` in:\n{o}");
+    }
+}
+
+/// ⚠️ KNOWN-WRONG, pinned (ROADMAP §2 "Size cast / signedness"): a primitive cast inside the
+/// initializer of a declaration wider than 64 bits is folded at 64 bits, so
+/// `int'(~8'd1) + 128'd0` keeps a 64-bit sign extension. Both oracles' values are beside each pin.
+#[test]
+fn a_prim_cast_in_a_wide_initializer_is_known_wrong() {
+    let o = run("module top;\n  localparam logic signed [7:0] S8n = -8'sd3;\n  localparam logic [127:0] L_a07 = int'(~8'd1) + 128'd0;\n  localparam logic [127:0] L_a08 = int'(S8n) + 128'd0;\n  initial begin\n    $display(\"a07 %h\", L_a07);\n    $display(\"a08 %h\", L_a08);\n    $finish;\n  end\nendmodule\n");
+    for want in [
         "a07 0000000000000000fffffffffffffffe", // both oracles 000000000000000000000000fffffffe
         "a08 0000000000000000fffffffffffffffd", // both oracles 000000000000000000000000fffffffd
     ] {

@@ -759,6 +759,7 @@ impl Elaborator<'_> {
                 match self
                     .untyped_fill_init(p)
                     .map(|(v, _)| v)
+                    .or_else(|| self.param_init_at_declared_width(p))
                     // The same evaluator every other binder takes: a fill
                     // inside a sized initializer folds at the declared width
                     // (§4.5.420 review B BLOCKING-1 — this twin was left on

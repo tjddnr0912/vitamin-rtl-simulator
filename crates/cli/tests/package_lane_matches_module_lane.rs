@@ -3,14 +3,14 @@
 //! it made `pk::X`'s stored value canonical while every consumer still folded through the
 //! width-unlimited walk, and measured a net loss (1,233 correct→silent against 714 fixed).
 //!
-//! At HEAD the four lanes agree cell for cell — a `localparam` in the module, in a package read
-//! as `pk::X`, a module `localparam` over an IMPORTED `PA`, and one over `pk::PA` — including the
-//! cells that are wrong in all four (a ≤64-bit declared target folds through the unlimited
-//! walk: `localparam logic [63:0] X = PA ^ 64'h0;` over a signed 8-bit `PA = 8'hFE` is
-//! `fffffffffffffffe`, both oracles `00000000000000fe`). This file pins that agreement so the
-//! row-14 routing moves every lane at once: a fix that moves one lane and not the others fails
-//! here before it can reach a design. Values: vita at HEAD; the known-wrong cells are listed
-//! with the oracles' value (iverilog 13.0 and verilator 5.052 agree on every cell here).
+//! The four lanes agree cell for cell — a `localparam` in the module, in a package read as
+//! `pk::X`, a module `localparam` over an IMPORTED `PA`, and one over `pk::PA`. Six of the twelve
+//! cells were wrong in all four until row 14's routing (a ≤64-bit declared target folded through
+//! the unlimited walk: `localparam logic [63:0] X = PA ^ 64'h0;` over a signed 8-bit
+//! `PA = 8'hFE` was `fffffffffffffffe`, both oracles `00000000000000fe`), and they moved together
+//! because every binder takes the route (§4.5.556). This file keeps pinning the agreement, so a
+//! change that moves one lane and not the others fails here before it can reach a design. Every
+//! value is iverilog 13.0's and verilator 5.052's.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -34,7 +34,7 @@ fn run(src: &str) -> String {
         .to_string()
 }
 
-/// `x1` — KNOWN-WRONG (row 14): both oracles `bits=64 hex=00000000000000fe`.
+/// `x1` — both oracles `bits=64 hex=00000000000000fe`; all four lanes moved together when row 14's routing landed (was `bits=64 hex=fffffffffffffffe`).
 #[test]
 fn lane_x1_module_package_import_and_scoped_agree() {
     assert_eq!(
@@ -44,7 +44,7 @@ fn lane_x1_module_package_import_and_scoped_agree() {
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=fffffffffffffffe"
+        "T bits=64 hex=00000000000000fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -55,7 +55,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(pk::X), pk::X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=fffffffffffffffe"
+        "T bits=64 hex=00000000000000fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -67,7 +67,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=fffffffffffffffe"
+        "T bits=64 hex=00000000000000fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -78,11 +78,11 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=fffffffffffffffe"
+        "T bits=64 hex=00000000000000fe"
     );
 }
 
-/// `x2` — KNOWN-WRONG (row 14): both oracles `bits=64 hex=00000000000000fe`.
+/// `x2` — both oracles `bits=64 hex=00000000000000fe`; all four lanes moved together when row 14's routing landed (was `bits=64 hex=fffffffffffffffe`).
 #[test]
 fn lane_x2_module_package_import_and_scoped_agree() {
     assert_eq!(
@@ -92,7 +92,7 @@ fn lane_x2_module_package_import_and_scoped_agree() {
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=fffffffffffffffe"
+        "T bits=64 hex=00000000000000fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -103,7 +103,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(pk::X), pk::X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=fffffffffffffffe"
+        "T bits=64 hex=00000000000000fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -115,7 +115,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=fffffffffffffffe"
+        "T bits=64 hex=00000000000000fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -126,11 +126,11 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=fffffffffffffffe"
+        "T bits=64 hex=00000000000000fe"
     );
 }
 
-/// `x3` — KNOWN-WRONG (row 14): both oracles `bits=16 hex=00fe`.
+/// `x3` — both oracles `bits=16 hex=00fe`; all four lanes moved together when row 14's routing landed (was `bits=16 hex=fffe`).
 #[test]
 fn lane_x3_module_package_import_and_scoped_agree() {
     assert_eq!(
@@ -140,7 +140,7 @@ fn lane_x3_module_package_import_and_scoped_agree() {
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=16 hex=fffe"
+        "T bits=16 hex=00fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -151,7 +151,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(pk::X), pk::X); $finish; end
 endmodule
 "#),
-        "T bits=16 hex=fffe"
+        "T bits=16 hex=00fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -163,7 +163,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=16 hex=fffe"
+        "T bits=16 hex=00fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -174,11 +174,11 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=16 hex=fffe"
+        "T bits=16 hex=00fe"
     );
 }
 
-/// `x4` — KNOWN-WRONG (row 14): both oracles `bits=16 hex=00fe`.
+/// `x4` — both oracles `bits=16 hex=00fe`; all four lanes moved together when row 14's routing landed (was `bits=16 hex=fffe`).
 #[test]
 fn lane_x4_module_package_import_and_scoped_agree() {
     assert_eq!(
@@ -188,7 +188,7 @@ fn lane_x4_module_package_import_and_scoped_agree() {
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=16 hex=fffe"
+        "T bits=16 hex=00fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -199,7 +199,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(pk::X), pk::X); $finish; end
 endmodule
 "#),
-        "T bits=16 hex=fffe"
+        "T bits=16 hex=00fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -211,7 +211,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=16 hex=fffe"
+        "T bits=16 hex=00fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -222,7 +222,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=16 hex=fffe"
+        "T bits=16 hex=00fe"
     );
 }
 
@@ -274,7 +274,7 @@ endmodule
     );
 }
 
-/// `x6` — KNOWN-WRONG (row 14): both oracles `bits=32 hex=000000fe`.
+/// `x6` — both oracles `bits=32 hex=000000fe`; all four lanes moved together when row 14's routing landed (was `bits=32 hex=fffffffe`).
 #[test]
 fn lane_x6_module_package_import_and_scoped_agree() {
     assert_eq!(
@@ -284,7 +284,7 @@ fn lane_x6_module_package_import_and_scoped_agree() {
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=32 hex=fffffffe"
+        "T bits=32 hex=000000fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -295,7 +295,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(pk::X), pk::X); $finish; end
 endmodule
 "#),
-        "T bits=32 hex=fffffffe"
+        "T bits=32 hex=000000fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -307,7 +307,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=32 hex=fffffffe"
+        "T bits=32 hex=000000fe"
     );
     assert_eq!(
         run(r#"package pk;
@@ -318,7 +318,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=32 hex=fffffffe"
+        "T bits=32 hex=000000fe"
     );
 }
 
@@ -514,7 +514,7 @@ endmodule
     );
 }
 
-/// `x11` — KNOWN-WRONG (row 14): both oracles `bits=64 hex=000000000000007f`.
+/// `x11` — both oracles `bits=64 hex=000000000000007f`; all four lanes moved together when row 14's routing landed (was `bits=64 hex=ffffffffffffffff`).
 #[test]
 fn lane_x11_module_package_import_and_scoped_agree() {
     assert_eq!(
@@ -524,7 +524,7 @@ fn lane_x11_module_package_import_and_scoped_agree() {
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=ffffffffffffffff"
+        "T bits=64 hex=000000000000007f"
     );
     assert_eq!(
         run(r#"package pk;
@@ -535,7 +535,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(pk::X), pk::X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=ffffffffffffffff"
+        "T bits=64 hex=000000000000007f"
     );
     assert_eq!(
         run(r#"package pk;
@@ -547,7 +547,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=ffffffffffffffff"
+        "T bits=64 hex=000000000000007f"
     );
     assert_eq!(
         run(r#"package pk;
@@ -558,7 +558,7 @@ module t;
   initial begin #1; $display("T bits=%0d hex=%h", $bits(X), X); $finish; end
 endmodule
 "#),
-        "T bits=64 hex=ffffffffffffffff"
+        "T bits=64 hex=000000000000007f"
     );
 }
 

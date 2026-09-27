@@ -1016,6 +1016,50 @@ impl Elaborator<'_> {
         }
     }
 
+    /// ROADMAP §2 row 14: a DECLARED target of 64 bits or less whose initializer names
+    /// another constant folds in the wide walk at its declared width, AHEAD of the i64
+    /// walk.
+    ///
+    /// The i64 walk (`const_eval_in_scope`) is width-unlimited: it holds a narrow
+    /// SIGNED leaf as an i64 that is already sign-extended, so an unsigned region
+    /// (§11.8.2) never zero-extends it — `localparam logic signed [7:0] NM = -8'sd2;
+    /// localparam logic [63:0] X = NM ^ 64'h0;` was `ff…fe` where both oracles give
+    /// `0…0fe` — and it never wraps at the region's width, so `/`, `%` and `>>>` read
+    /// bits the declared operands do not have (`(P + 8'd100) % 8'd7` with P = 200 was 6
+    /// against 2). `fold_bits_at` decides the region's width and sign over the whole
+    /// tree (§11.6.1, §11.8.2) and is the walk a constant function's local already folds
+    /// through, so a function-local twin always printed the oracles' answer.
+    ///
+    /// The gate is the fold's own: every NAME leaf resolves through
+    /// `param_leaf_bits` → `narrow_param_bits` / `pkg_const_narrow_bits`, which answer
+    /// only a DECLARED width that `param_meta` agrees with (an inferred width, a
+    /// non-zero LSB, an ascending range, a frame local and a shadowing net decline), and
+    /// the innermost binding of the name decides (`walk_scopes_key`), so an inner
+    /// declaration without a recorded range declines rather than let an outer one
+    /// answer. `param_i64_at_declared` declines above 64 bits and an unknown bit. A
+    /// decline falls through to the i64 walk, which is where every such tree was.
+    /// Every binder takes it — module header and body, generate scope, package,
+    /// interface — so the four lanes that read one declaration stay one answer
+    /// (`package_lane_matches_module_lane.rs`).
+    pub(crate) fn param_init_at_declared_width(&self, p: &ast::ParamDecl) -> Option<i64> {
+        let dm = self.param_decl_width_declared(p)?;
+        // The two shapes the i64 walk cannot size: a NAME leaf (its declared width and
+        // sign are not in the i64), and an operand wider than 64 bits (the width-aware
+        // assignment walk `eval_param_init` opts into clamps its context at 64, so
+        // `8'hFF - (-1'sb1) + 65'd0` read the 1-bit `-1` sign-extended: `fe` where both
+        // oracles give `00`). Every other initializer keeps its route.
+        let names = crate::param_query::ast_any(&p.value, &|x| {
+            matches!(
+                x.kind,
+                ast::ExprKind::Ident(_) | ast::ExprKind::PkgScoped { .. }
+            )
+        });
+        if !names && self.const_ctx_within_i64(&p.value) {
+            return None;
+        }
+        self.param_i64_at_declared(&p.value, Some(dm))
+    }
+
     /// Evaluate a parameter/localparam INITIALIZER to its i64 value, sizing an
     /// unsized fill literal (`'0`/`'1`/`'x`/`'z`) to the DECLARED width (IEEE
     /// §5.7.1 / §11.6 — the fill is context-determined, here by the param type).
@@ -2083,7 +2127,8 @@ impl Elaborator<'_> {
                             return Some(v);
                         }
                     }
-                    self.eval_param_init(&p.value, meta)
+                    self.param_init_at_declared_width(p)
+                        .or_else(|| self.eval_param_init(&p.value, meta))
                 })
                 // Branch parity with the module-body, generate and package twins: a
                 // declared-integral parameter whose initializer mentions a real

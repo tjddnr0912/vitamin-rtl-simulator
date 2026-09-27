@@ -80,35 +80,15 @@ fn the_width_neighbours_pin_the_boundary() {
 }
 
 #[test]
-fn above_sixty_four_bits_keeps_the_pre_slice_answer() {
-    // ⚠️ A DELIBERATE DECLINE, pinned as a RESIDUE and not as support. The rule is
-    // `w == 64`, not `w >= 64`: above 64 bits the i64 has ALREADY truncated the
-    // value, so neither reading is the language's. Measured on both oracles, the
-    // two directions disagree about which guess is better —
-    //
-    //   `(64'hFFFF_FFFF_FFFF_FFFF + 65'd1) > 64'hFFFF_FFFF_FFFF_FFFF` is 1, and the
-    //   unsigned reading of the truncation answers 2;
-    //   `((65'd1 - 65'd2) > 65'd0)` is 1, and the signed reading answers 0.
-    //
-    // Neither dominates, which is the definition of a guess, so >64 bits keeps the
-    // pre-slice signed reading and stays ROADMAP §2's. The RUNTIME column below is
-    // the oracle-correct one, which is exactly what makes this a recorded residue
-    // rather than a claim of support.
-    let (out, code) = both("((65'd1 - 65'd2) > 65'd0)");
-    assert_eq!(code, Some(0), "got:\n{out}");
-    assert!(
-        out.contains("C=0 R=1"),
-        "65 bits: the constant domain keeps its pre-slice answer while the runtime \
-         lowering is right — both oracles say 1;\n{out}"
-    );
-
-    let (out, code) = both("((64'hFFFFFFFFFFFFFFFF + 65'd1) > 64'hFFFFFFFFFFFFFFFF)");
-    assert_eq!(code, Some(0), "got:\n{out}");
-    assert!(
-        out.contains("C=1"),
-        "the carry shape is right under the signed reading — moving >64 to unsigned \
-         would break it, which is why the boundary is `== 64`;\n{out}"
-    );
+fn above_sixty_four_bits_folds_at_the_operands_width() {
+    // Above 64 bits the i64 walk had already truncated the value, so neither the signed nor
+    // the unsigned reading of the truncation was the language's, and the two shapes below
+    // disagreed about which guess was better (the constant column of the first was 0, both
+    // oracles 1). A declared target of 64 bits or less with an operand wider than 64 bits now
+    // folds in the wide walk at the operands' width (§4.5.556, ROADMAP §2 row 14), so both
+    // columns are both oracles' answer in both shapes.
+    assert_both("((65'd1 - 65'd2) > 65'd0)", 1);
+    assert_both("((64'hFFFFFFFFFFFFFFFF + 65'd1) > 64'hFFFFFFFFFFFFFFFF)", 1);
 }
 
 #[test]

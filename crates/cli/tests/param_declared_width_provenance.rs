@@ -1,59 +1,20 @@
-//! ROADMAP §2 row 14 — BUILT, MEASURED, REVERTED (2026-09-01). This file pins the state
-//! it was reverted TO, so the next attempt starts from measurements instead of a guess.
+//! ROADMAP §2 row 14 — CLOSED by §4.5.556. A module-scope initializer of 64 bits or less
+//! folded through the width-UNLIMITED i64 walk (`const_eval_in_scope`), which holds a narrow
+//! SIGNED leaf already sign-extended: `localparam logic signed [7:0] NM = -8'sd2; localparam
+//! logic [63:0] X = NM ^ 64'h0;` was `fffffffffffffffe` where iverilog AND verilator print
+//! `00000000000000fe` (§11.8.2 converts a signed operand of an unsigned expression at its own
+//! width) — and vita contradicted itself, since the same expression over a FUNCTION LOCAL
+//! folded `00…fe`.
 //!
-//! **The defect.** `localparam logic signed [7:0] NM = -8'sd2; localparam logic [63:0] X
-//! = NM ^ 64'h0;` is `fffffffffffffffe` in vita and `00000000000000fe` in iverilog AND
-//! verilator. §11.8.2 converts a signed operand of an unsigned expression at ITS OWN
-//! width. ⭐⭐ vita contradicts ITSELF: the same expression over a FUNCTION LOCAL folds
-//! `00…fe`, because a local's declared width lives in the interpreter's `envw` and the
-//! module-scope initializer folds through the width-UNLIMITED `const_eval_in_scope`,
-//! which has no context to convert a leaf into.
+//! History, for the next reader of a routing change: the first attempt (2026-09-01) routed the
+//! target through `eval_const_assign` and was reverted after three review rounds (a shift
+//! count pushed into the context, closed as row 27; and an i64 bound on the TARGET only, which
+//! evaluated a `logic signed [64:0]` leaf as a 64-bit operand). §4.5.542 made the wide walk
+//! `fold_bits_at` evaluate a region the way §11.8.2 does, and §4.5.556 routes a declared target
+//! of 64 bits or less whose initializer names a constant (or has an operand wider than 64
+//! bits) through it — `Elaborator::param_init_at_declared_width`, in every binder at once.
 //!
-//! **What was built.** Route an initializer whose target has a DECLARED width/sign
-//! through `eval_const_assign` — the width-aware entry the constant-function interpreter
-//! already used. It works: a 44-cell census (4 declarations × 11 operators) went 27
-//! divergent → 3, §4.5.366's four-operator module-scope residue closed, and the pinned
-//! `>>>` self-contradiction (`18446744073709551615` constant vs `4294967295` runtime)
-//! went away.
-//!
-//! **Why it was reverted — three review rounds, seven BLOCKING.**
-//!
-//! Rounds 1 and 2 were mine and were fixed: the gate has to demand provenance of every
-//! LEAF as well as the target (`param_meta`'s width is a DEFAULT for an untyped parameter
-//! and ABSENT for a `time` one); it must decline above the i64 lane (else it returns the
-//! correct value TRUNCATED = a silent-for-silent trade); it must refuse an unsized FILL
-//! operand (vita already sizes `'1` to 64 all-ones and the old fold's overflow DECLINE
-//! was the only thing keeping that honest); the provenance set must answer THREE-valued
-//! or an inner declaration that records nothing lets the scope walk vouch for an
-//! ancestor's width; and the PACKAGE binder must not be routed, because a package's
-//! stored value cannot go canonical while its consumers still fold unlimited (§2 row 26, absorbed
-//! into row 14 by §4.5.546: the lanes agree at HEAD and move together — see
-//! `package_lane_matches_module_lane.rs`).
-//!
-//! ⚠️⚠️ **Round 3 found two more, both in the shared walk and both there since round 1:**
-//!
-//! 1. ~~**§11.4.10 — a shift's RIGHT operand is self-determined and unsigned.**~~ ✅
-//!    **CLOSED** as ROADMAP §2 row 27 — it was pre-existing and independent (the
-//!    const-FUNCTION spelling was wrong with no routing involved), which is why it became
-//!    its own row and its own slice. See `shift_count_selfdet.rs`. One prerequisite left.
-//! 2. **The i64-lane bound was on the TARGET only.** A `logic signed [64:0]` LEAF whose
-//!    value fits an i64 passes the provenance test and is then evaluated as a 64-bit
-//!    operand, which changes what `/` and `%` answer. 83 cells.
-//!
-//! ⇒ the prerequisite is a width-aware walk that is correct on its own terms, and that is
-//! a different slice with a different blast radius (it is shared with the constant-function
-//! interpreter). Reverted rather than fixed forward a fourth time.
-//!
-//! §4.5.542 made the WIDE walk (`const_wide::fold_bits_at`) that walk: it evaluates a region
-//! the way §11.8.2 does at 65 bits and wider (`region_sign_wide_fold.rs`). The routing of a
-//! ≤64-bit declared target through it is the open half of this row; the cells below are
-//! unchanged by that slice and still pin the reverted state.
-//!
-//! The cells below are the reverted state. Every "vita" value here is KNOWN-WRONG against
-//! the oracle named beside it; they are asserted so the next attempt can see instantly
-//! what it moved, and so a partial fix cannot land unnoticed.
-//!
-//! Values pinned to iverilog 13.0 and verilator 5.050.
+//! Values pinned to iverilog 13.0 and verilator 5.052.
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -75,10 +36,10 @@ fn run(src: &str) -> (String, bool) {
     (s, out.status.success())
 }
 
-/// The row itself, with the FUNCTION-LOCAL twin that proves the machinery exists and is
-/// right. Both oracles answer `00…fe` for both columns; vita splits them.
+/// The row itself, with the FUNCTION-LOCAL twin: both oracles answer `00…fe` for both
+/// columns, and so does vita now (the module column was `ff…fe`).
 #[test]
-fn a_module_scope_name_does_not_convert_at_its_declared_width_but_a_local_does() {
+fn a_module_scope_name_converts_at_its_declared_width_like_a_local() {
     let (o, ok) = run("module top;\n  \
            function automatic logic [63:0] f();\n    \
              logic signed [7:0] L;\n    L = -8'sd2;\n    f = L ^ 64'h0;\n  \
@@ -89,10 +50,9 @@ fn a_module_scope_name_does_not_convert_at_its_declared_width_but_a_local_does()
            initial begin $display(\"OUT func=%h mod=%h\", XF, XM); $finish; end\n\
          endmodule\n");
     assert!(ok, "vita failed:\n{o}");
-    // KNOWN-WRONG on the `mod` column: both oracles give 00000000000000fe for BOTH.
     assert!(
-        o.contains("OUT func=00000000000000fe mod=fffffffffffffffe"),
-        "the split is the row; closing it makes both columns 00…fe:\n{o}"
+        o.contains("OUT func=00000000000000fe mod=00000000000000fe"),
+        "both oracles give 00…fe for both columns:\n{o}"
     );
 }
 
