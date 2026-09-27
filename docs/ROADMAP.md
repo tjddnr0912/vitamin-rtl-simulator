@@ -27,10 +27,10 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 21 | 1 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 5 (🆕 H startable; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 170 | 93 | 77 | oracle split / pinned / oracle disqualified / no oracle 54 · named prerequisite 11 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 13 · size cast / signedness 13 · constant domain (i64) 13 · scoping / imports / block-locals 27 · delays / events 19 · real 7 · performance 6 · index sealing 12 · ranges / selects 7 · diagnostics 10 · class fields 3 · oracle splits 40 | ① | |
+| §2 | recorded defects by mechanism | 176 | 95 | 81 | oracle split / pinned / oracle disqualified / no oracle 57 · named prerequisite 12 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 13 · size cast / signedness 13 · constant domain (i64) 14 · scoping / imports / block-locals 27 · delays / events 19 · real 9 · performance 6 · index sealing 12 · ranges / selects 7 · diagnostics 10 · class fields 3 · oracle splits 43 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
-| §3.b | loud → correct-support, small | 113 | 97 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 25 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
+| §3.b | loud → correct-support, small | 114 | 98 | 16 | named prerequisite 6 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 25 · constants / parameters 26 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
 | §3.c | intentionally loud | 12 | 0 | 12 | by design 6 · oracle split or disqualified oracle 4 · non-goal 1 · prerequisite 1 | not gaps; each row states its reason | — | |
 | §0 | correct-support promotion queue (T2 residues) | 14 | 9 | 5 | non-goal + oracle split 2 · deliberate / withdrawn fix 2 · inherits the §8 `defparam` non-goal 1 | real const-fold ⓐ–ⓗ · enum-label folding · negative bounds · `-G` aliases · `case inside` | ③ | |
 | §4 | SVA honest-loud | 6 | 0 | 6 | an explicit prerequisite on every row; no oracle on 3 | mostly no oracle; hand-IEEE when started | ③ | |
@@ -38,9 +38,9 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 404 | 242 | 162 | | | | |
+| total | | 411 | 245 | 166 | | | | |
 
-Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a tree-wide AST self-width pass, an exact declared-width fold for
+Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a wide SELECT resolver, a declaring-scope fold of a function's return range, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
 a block-scoped constant binding, a field-key normalisation map, per-instance arity / class registration,
 a binding-resolved scope, the purity-certification adjudication, one-oracle clocking, the `$finish`-in-a-function oracle split).
@@ -74,7 +74,7 @@ Deliberately loud, not gaps: `new[]` on a fixed array; a multi-dimensional parti
 |---|---|---|---|---|
 | 8ⓐ | implicit conversion `logic [R-1:0]` and `{R{1'b1}}` from a real, loud | — | non-goal | split (width: verilator rejects, iverilog 3; count: iverilog rejects, verilator 3) |
 | 8ⓑ | a real value in an untyped `localparam`, loud | a real parameter under §6.20.2 | rounding here is a withdrawn silent-wrong | 2-oracle |
-| 8ⓒ | a real-valued override, loud: `#(.R(2.5))` onto `parameter real R`; `#(.P(2.6))` onto `parameter int P` (both oracles 3), `#(.P(2.5 + 1))` onto `logic [7:0] P` (both `04`), `#(.P(1.5))` onto `time P` (both 2), `#(.P(2.6))` onto an untyped `P` (both the real 2.6) | the override channel is i64 | widen the channel to real, converting at a declared integral type | 2-oracle |
+| 8ⓒ | a real-valued override, loud: `#(.R(2.5))` onto `parameter real R`; `#(.P(2.6))` onto `parameter int P` (both oracles 3), `#(.P(2.5 + 1))` onto `logic [7:0] P` (both `04`), `#(.P(1.5))` onto `time P` (both 2), `#(.P(2.6))` onto an untyped `P` (both the real 2.6); since §4.5.558 also an inexact real override an untyped parameter took (`P = X / 4`) read by a typed-integral child override or a constant-function argument (`#(.Q(P))`, `f(P)`: both oracles 1, E3009 — as the same readers of a real default are) | the override channel is i64 | widen the channel to real, converting at a declared integral type | 2-oracle |
 | 8ⓓ | `1.0/0.0`, loud | the real domain refuses non-finite values on purpose | deliberate | 2-oracle |
 | 8ⓔ | `R<<1` (an operator undefined on real), loud | — | non-goal | split (iverilog rejects, verilator 6) |
 | 8ⓖ | `$rtoi` in a constant-function body, loud | the module-scope resolver would allow a shadow | move to an environment-aware walk | 2-oracle |
@@ -336,6 +336,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - There are three declared-width models and only one sees packed dimensions: `const_decl_wsign`
   (product), `const_bound.rs::decl_is_wide` (first dimension only), `ast_kind_range_width`. Sound
   today, silently broken the moment a dimension rule that SHRINKS a width appears.
+- The constant-function interpreter types a call's return from the CALL site: an `int unsigned`
+  return reads signed (`const_fn_ret_wsign` answers `(32, true)` for every `int`), so `(fig(-3) <
+  fiu(1))` over `function int unsigned fiu` is 1 where both oracles compare unsigned (0); and a
+  return range that names a constant is folded where the call is, so `function [W-1:0] f` declared
+  under a module `W = 6` and called under a generate block's `W = 3` truncates `f(100)` to 4 where
+  both oracles return 36. S (the sign) / M (the scope — the same declaring-scope fold §D names).
 
 ### Index sealing
 
@@ -408,12 +414,6 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   declared `logic [15:0] Y = A` is `000a` where both oracles give `fffa` — §6.20.2 keeps the sign
   specification and takes only the range from the value. `param_decl_width_opt`'s untyped literal arm
   answers the literal's own sign. S.
-- `-G U=100` onto an untyped `parameter U = 4'd3` binds the default literal's 4 bits: `V = U` is
-  `0004` and `U - 16'd4` `0000` where both oracles give `0064` / `0060` (the decimal's 32-bit type);
-  `#(.U(100))` is right. The `-G` decimal arm (`cli_overrides_for`) fills neither `bits` nor
-  `self_meta`, so no channel carries the override's type; the same gap leaves `-G R=3` onto an
-  untyped real default real (the "Real" bullet). Fix shape = the decimal arm states its type (32
-  bits, signed) on the operator channel. S.
 - `parameter unsigned U = 1` overridden with a SIGNED value (`#(.U(-8'sd91))`) binds `-91` where
   both oracles bind `165`. The width axis is correct; only the sign column is open. Root =
   `ast::ParamDecl.signed` is `false` for both "the `unsigned` keyword" and "no keyword", a direction
@@ -427,11 +427,19 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `0000000000000052` to `7fffffffffffffd2`). 26 two-oracle cast cells stay on the pre-slice route:
   `64'(~(P + 32'd1))` over `#(.P(-3))` onto `parameter P = 5` is `0000000000000001` against both
   oracles' `ffffffff00000001` (`override_channel_types_the_parameter.rs`). The field closes them.
+  Since §4.5.558 the `-G` lane answers as the `#()` lane does: `-G U=-1` onto `parameter unsigned U
+  = 4'd3` binds signed −1 at 32 bits (both oracles 4294967295; `#(.U(-1))` was already −1).
 - Observation only: two producers write `p.signed` from something that is NOT the parameter's own
   keyword — `hdl-parser/src/params.rs:313` (`signed = expl0.unwrap_or(info.signed)`, a typedef
   prefix) and `module_items.rs:740` (`signed: d.signed`, the NetVarDecl-shaped header entry with
   `ty: ParamType::Implicit`). The reachable typedef spellings are harmless in measurement (all four
   tools agree). The `is_sign_declared` field above closes this too.
+- An instance ARRAY's untyped parameter whose override no channel types takes the WIDTH of a
+  sibling array's override: `sr #(.P(g(200))) d[1:0]()` beside `si #(.P(f(100))) a[1:0]()` (`f` a
+  6-bit function, `g` a `signed [7:0]` one, `sr` defaulting to the real 2.5) binds `d[0]` -56 at 6
+  signed bits where both oracles bind -56 at 8. The non-array twin and a lone array do not. Not
+  isolated: the per-element binding reuses state from the other array (`instance_array.rs`).
+  Measured in §4.5.558's review (`lensD3/d03`, `d12`); PRE-identical. M.
 
 ### Inline / frame binds
 
@@ -539,20 +547,39 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   `localparam real R5 = 65'd5 - 65'd7;` is -2.0 where both oracles give 36893488147419103232.0 (the
   65-bit unsigned difference). The real fold promotes an integral operand through the i64 walk,
   which has no 65th bit. S.
-- An UNTYPED parameter overridden by a REAL parameter whose value is an exact integer binds it as an
-  integer: `module sub #(parameter P = 3)` with `localparam real X = 5; sub #(.P(X))` reads `P/2`
-  as 2 with `$bits` 32, where both oracles keep the real (2.5; `$bits` 1 in iverilog, 64 in
-  verilator). The real's i64 twin folds in `by_name` and the untyped target takes that channel's
-  type; §6.20.2 gives it the override's REAL type. A real-literal DEFAULT (`parameter P = 2.5`) is
-  right since §4.5.555, which reads an override's type off the typed channels only. S.
-- An untyped `parameter R = 2.5` given an INTEGRAL override whose type rides none of the typed
-  override channels stays real: `#(.R(fi(3)))` over an `int` function, `#(.R(N2))` with
-  `localparam N2 = 2.5 > 1`, and `-G R=3` read `R/2` as 1.5 / 0.5 / 1.5 where both oracles bind the
-  integer (1 / 0 / 1; `-G` measured as iverilog `-Pt.R=3` and verilator `-GR=3`). A fill, a sized
-  or plain literal, a declared-width name, `$clog2`, `$rtoi` and a genvar are right since
-  §4.5.555. Fix shape = the override collectors record whether the expression's RESULT is real
-  (`rhs_has_real_domain`) and a `-G` decimal states its 32-bit signed type; keying on `by_name`
-  alone was built and reverted (a real parameter with an exact value folds to an i64 too). S.
+- An untyped parameter given an integral override whose type no channel states keeps its DEFAULT's
+  type: onto `parameter R = 2.5` it stays real — a call (`#(.R(fi(3)))` over an `int` function,
+  `R/2` 1.5 for 1), a name whose own width is value-inferred (`#(.R(N2))` with `localparam N2 = 2.5 >
+  1`, 0.5 for 0; `N2 + 0`), a ternary with a real condition (`#(.R(X ? 3 : 4))`, 1.5 for 1) — and
+  onto an integral default a call takes the default's width (`#(.P(fl(3)))` over an 8-bit function:
+  32 bits, both oracles 8). A prim cast, a comparison / logical / reduction top and a `-G` decimal
+  are typed since §4.5.558 (`override_top_meta`). A call's type is its declared return, whose range
+  belongs to the DECLARING scope (a module, a generate block, `$unit`, a package): folding it at the
+  call site was built in §4.5.558 and reverted after three review rounds (a generate block's, then
+  the calling module's, shadowing constant sized it). Moving a name or a ternary by its domain alone
+  was built there too and reverted (the value right, the width the default's). BLOCKED BY: a
+  declaring-scope fold of a function's return range (REMAINING_WORK §D); the name and ternary cells
+  need the name's own declared type certified for the operator channel. M.
+- A real parameter's integer VIEW answers a constant integral context in the INTEGER domain:
+  `generate if (R/4 > 1)` and `localparam L = R/4` over `parameter real R = 5` (a declared real whose
+  initializer is integral), and over an untyped parameter an exactly integral real override made
+  real (`#(.P(X))`, `real X = 5`), are `le` / 1.0 where both oracles give `gt` / 1.25 (§11.8.1: a
+  real operand puts the operation in the real domain). The view (`params`) is what lets `logic
+  [R-1:0]` size; the constant readers take it before `real_param_val`. Fix shape = a constant reader
+  of a name bound in `real_param_val` folds in the real domain and converts at its context. M.
+- A package real imported by name (`import pk::*`, `import pk::X`, a header import) reads as its i64
+  twin: `X/2` over `localparam real X = 5` is 2.0 where both oracles give 2.5, and `sub #(.P(X))`
+  onto an untyped `parameter P = 3` binds the integer (`P/4` 1.0 for 1.25). `apply_import_consts`
+  binds `params` only — §3.a ⑨'s root, whose inexact half is loud; since §4.5.558 an override naming
+  such a constant keeps its default's route (`names_imported_real`). S (⑨'s plumbing).
+- An integral value converts to real two ways that disagree: `$realtobits` goes through
+  `Value::integral_to_f64` since §4.5.558 (each x/z bit 0, any width, iverilog's LSB-first
+  accumulation), while `$itor`, `real'(…)` and a real assignment use `to_f64`, which is correctly
+  rounded, reads 0.0 past 128 bits and declines any x/z bit: `real'(64'h8020_0000_0000_0401)` is
+  `43e0040000000001` where both oracles give `…0000` (their `$realtobits` of the same value, and
+  vita's since §4.5.558), `r = 8'b0000_001x` is 0.0 (both 2.0), `$itor(200'h…)` 0.0 (verilator
+  4.201145e+56; iverilog -1.716864e+09 contradicts its own `$realtobits`). Fix shape = route the
+  `Itor` arm and the real assignment conversion through `integral_to_f64`. S.
 
 
 ### Ranges / bounds / selects
@@ -1337,6 +1364,20 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   (`S t=3 a=2 | M t=3 a=2`, the Postponed FIFO in scheduling order), verilator the monitor line
   first; when the change precedes the strobe both print the monitor line first (§4.5.541
   follow-up, `s28/review/d` m1–m4, q1–q3). vita prints the monitor line first (= verilator).
+- A `-G` decimal outside the 32-bit signed range onto an untyped parameter: iverilog widens it
+  (`-Pt.U=2147483648` is 33 bits), verilator truncates it to 32 bits (`U - 16'd4` `7ffffffc`); vita
+  states no type for it (the default's route). An in-range decimal is 32-bit signed in all three
+  since §4.5.558.
+- A sign keyword with no range beside a real value: `parameter signed P = 3` or `parameter unsigned
+  P = 3` given a real override (`#(.P(X))`, `real X = 5`), and `parameter signed R = 2.5` itself —
+  iverilog binds an integer (`P/4` 1.000000), verilator the real (1.250000). vita keeps iverilog's
+  for `signed` with an override (the `!p.signed` exclusion, §4.5.558), verilator's for `unsigned`
+  with an override (the keyword is not recorded — the `unsigned` bullet's root) and for the default.
+- `$realtobits` of an integral argument where the oracles convert differently: iverilog adds the
+  set bits LSB first (`2^100 + 2^47 + 1` rounds up, `4630000000000001`) and verilator keeps only its
+  top three 32-bit words (`…0000`); a NEGATIVE signed value with an x/z bit is -0.0 in iverilog and
+  the value with x read as 0 in verilator (`8'sb1xxx_0000` → `c060000000000000`, -128.0). vita follows
+  iverilog on the first and verilator on the second (`Value::integral_to_f64`, §4.5.558).
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
@@ -1409,6 +1450,7 @@ behind the §2 correctness queue.
 | real-int-overflow | a declared-integral parameter whose real default is outside the i64 range is E3009: `localparam int A = 1e20;` (both oracles 1661992960 — the low 32 bits of the rounded integer), `int B = -1e10` (both -1410065408) | `real_round_to_i64` declines outside the i64 range | convert per §6.24.1 at the declared width (the low bits of the rounded value) | 2 | S |
 | wide-untyped-consumer | an UNTYPED declaration over an untyped parameter wider than 64 bits is E3009 (``parameter `Q` value is not a foldable constant expression``) where both oracles fold: `localparam P = ~128'd0; localparam Q = P;` (both 128 ones), `localparam R = P & 8'hFF` (both 128 bits `…ff`); the same in a child over `#(.P(~128'd0))`, which a fill tree also reaches since §4.5.557 (`#(.P(1'b1 ? '1 : 128'd0))`: PRE ran with a 32-bit P). A declared target (`localparam logic [127:0] S = P`) folds | the untyped initializer folds through the i64 walk, which declines a leaf past 64 bits; only a declared target takes the wide walk | fold an untyped initializer with a leaf past 64 bits in the wide walk at its self width (`fold_self_bits` with `param_leaf_bits`) and census the untyped-parameter width tail | 2 | S |
 | override-signing-operand | an operator over `$signed` / `$unsigned` / `signed'` as a whole override onto an untyped target is E3009 (``the override of parameter `P` is not a constant``) in every channel where both oracles bind: `#(.P($signed(H0) / 8'sd3))` over `localparam logic [7:0] H0 = 8'hF3` (both `fc`, 8 bits), `signed'(S0) / 8'sd2` over a signed `-3` (`ff`), `$unsigned(S0) / 8'd3` (`54`), `$signed(H0) + 8'sd0` (verilator `f3` 8 bits, iverilog 9). The bare `$signed(H0)` binds `f3` 8 bits | not isolated: the bare call is answered as a whole override, and an operator over it declines in every channel | admit the signing call in the operator channel at its operand's declared width with the call's sign, value through the width-aware walk | 2 | S |
+| real-param-hier | `u.P` of a module's real parameter (`parameter real P`, an untyped real default) is E3010 ``undeclared hierarchical name `u.P` `` where both oracles read it (`u.P/4` 1.25, `%0d u.P` 5); an untyped parameter a real override made real (§4.5.558) keeps the integer twin its integer route published, so `u.P` reads and `u.P/4` divides as an integer (1.0) | `hier_params` is i64 and the module real route publishes nothing (the interface lane republishes the i64 twin, measured) | carry the real value to the hierarchical read | 2 | M |
 | compound-==? | `==?` fold residue = an unsized x/z pattern · a negative signed LHS · a non-literal RHS · a non-constant parameter override (W3056→error) · a longint MIN fold (package) · two loud-message quality items | the current fold handles sized patterns only | widen it | — | — |
 | defparam-iface | `ifc a(); defparam a.D = 255;` gives `W3056 … matched no instance` and keeps the default (iverilog `d=ff`, vita `d=8`) | `defparams` is consumed only in `elaborate_instance`, and `iface_inst.rs` reads only its own `overrides` | merge `defparams.remove(path)` into the canonical binder · re-measured §4.5.527: `defparam i.P = 5` onto `ifc #(parameter P = 1) i()` prints `bits=32 hex=00000001` at exit 0 with only `W3056 defparam target top.i matched no instance`, any value; verilator applies it too | iverilog, verilator | small |
 | neg-ascending | `reg [-33:-2]` gives `$bits` 1 in vita against iverilog's 32, plus a loud `W3056`. Descending `[-2:-33]` and mixed `[3:-2]` are correct | `array_geom.rs`'s `allow_neg_lsb` is opt-in | put that combination on the opt-in path | iverilog | — |
@@ -1629,7 +1671,7 @@ unlimited fold is deleted, or the deletion is 8 cells of loud→silent-wrong.
 |---|---|---|---|---|
 | 1 | 1 | an EXPLICIT `import p::PT;` of a package `parameter type PT` is ``E3009 package `p` has no symbol `PT` `` where both oracles run it (`N35 b=8 lo=0 v1=1` for `PT v; v = 8'h23; $display("N%0d b=%0d lo=%0d v1=%0d", v, $bits(v), $low(v), v[0])`); the wildcard `import p::*`, every `p::PT` spelling and the `typedef` twin run since §4.5.515 — the explicit-import binding is a third package-export registry beside the `pkg::t` typedef map and the wildcard export set (§3.b `pkg-type-param-import`). First action: census the three registries' producers in `package.rs` on HEAD and teach the explicit-import name check the type-parameter names a package declared | §3 | ② |
 | 2 | next | `scoped-call-comb-arg` · a mixed-caller callee · `m #(8)` / `defparam u.T$w` · the VCD `$scope` `[0]` spelling · a `genblk<N>` label collision (split) · the §2 🆕 L ⓦ residue · the §2 🆕 N residue | §3 | ② |
-| 3 | hygiene | measured with `wc -l` at HEAD, production files only. Over the 1,000-line policy and NOT on the exception list: `elaborate/packed.rs` (2,399), `elaborate/params.rs` (2,428), `sim-engine/native/kernel.rs` (2,966), `sim-engine/backend.rs` (1,994), `sim-engine/native/wprog.rs` (1,918, its vocabulary already split into `wprog/why.rs`), `elaborate/const_eval.rs` (1,917), `elaborate/package.rs` (1,909), `sim-engine/state/frame_eval.rs` (1,814), `elaborate/lib.rs` (1,752), `elaborate/const_fn.rs` (1,702), `sim-engine/value.rs` (1,770), `elaborate/instance.rs` (1,651), `sim-engine/state/changes.rs` (1,626), `hdl-parser/module_items.rs` (1,536), `sim-engine/sched/scan_arm.rs` (1,790), `elaborate/frames_classify.rs` (1,397), `elaborate/frames_reserve.rs` (1,395), `hdl-parser/typedefs.rs` (1,389), `sim-engine/alias.rs` (1,430), `elaborate/const_wide.rs` (1,712), `sim-engine/lib.rs` (1,331), `sim-engine/jit.rs` (1,305), `sim-engine/native/run.rs` (1,515), `elaborate/stmt_flow.rs` (1,313), `sim-engine/eval/eval_core.rs` (1,241), `sim-engine/state/init_diag.rs` (1,258), `sim-engine/state/task_frames.rs` (1,236), `elaborate/expr_size_ctx.rs` (1,208), `elaborate/expr_ctx.rs` (1,233), `hdl-parser/lib.rs` (1,189), `sim-engine/builtins/dispatch.rs` (1,158), `sim-engine/state/mod.rs` (1,171), `sim-engine/builtins/queues_io.rs` (1,151), `hdl-lexer/lib.rs` (1,113), `elaborate/ports.rs` (1,094), `cli/src/frontend.rs` (1,087), `sim-engine/native/frames.rs` (1,059), `hdl-parser/functask.rs` (1,038), `cli/src/stage_args.rs` (1,037), `hdl-parser/params.rs` (1,035), `elaborate/expr_special.rs` (1,034), `elaborate/net_util.rs` (1,033), `elaborate/arrays.rs` (1,023), `elaborate/dynarr.rs` (1,021), `elaborate/strings.rs` (1,028). `param_query.rs` (854) is the precedent for the `params.rs` split; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs`, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290), and §4.5.520/522/523 added `param_dup.rs`, `gen_scope_name.rs` and `ident_route.rs` the same way; §4.5.526 took `elaborate/inline_fn.rs` from 1,172 to 895 lines by moving the bind into `inline_bind.rs` (268) and the straight-line body fold into `inline_fold.rs` (165). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
+| 3 | hygiene | measured with `wc -l` at HEAD, production files only. Over the 1,000-line policy and NOT on the exception list: `elaborate/packed.rs` (2,399), `elaborate/params.rs` (2,508), `sim-engine/native/kernel.rs` (2,966), `sim-engine/backend.rs` (1,994), `sim-engine/native/wprog.rs` (1,918, its vocabulary already split into `wprog/why.rs`), `elaborate/const_eval.rs` (1,917), `elaborate/package.rs` (1,909), `sim-engine/state/frame_eval.rs` (1,814), `elaborate/lib.rs` (1,755), `elaborate/const_fn.rs` (1,702), `sim-engine/value.rs` (1,817), `elaborate/instance.rs` (1,655), `sim-engine/state/changes.rs` (1,626), `hdl-parser/module_items.rs` (1,536), `sim-engine/sched/scan_arm.rs` (1,790), `elaborate/frames_classify.rs` (1,397), `elaborate/frames_reserve.rs` (1,395), `hdl-parser/typedefs.rs` (1,389), `sim-engine/alias.rs` (1,430), `elaborate/const_wide.rs` (1,712), `sim-engine/lib.rs` (1,331), `sim-engine/jit.rs` (1,305), `sim-engine/native/run.rs` (1,515), `elaborate/stmt_flow.rs` (1,313), `sim-engine/eval/eval_core.rs` (1,241), `sim-engine/state/init_diag.rs` (1,258), `sim-engine/state/task_frames.rs` (1,236), `elaborate/expr_size_ctx.rs` (1,208), `elaborate/expr_ctx.rs` (1,233), `hdl-parser/lib.rs` (1,189), `sim-engine/builtins/dispatch.rs` (1,158), `sim-engine/state/mod.rs` (1,171), `sim-engine/builtins/queues_io.rs` (1,151), `hdl-lexer/lib.rs` (1,113), `elaborate/ports.rs` (1,094), `cli/src/frontend.rs` (1,087), `sim-engine/native/frames.rs` (1,059), `hdl-parser/functask.rs` (1,038), `cli/src/stage_args.rs` (1,037), `hdl-parser/params.rs` (1,035), `elaborate/expr_special.rs` (1,034), `elaborate/net_util.rs` (1,033), `elaborate/arrays.rs` (1,023), `elaborate/dynarr.rs` (1,021), `elaborate/strings.rs` (1,028), `elaborate/generate.rs` (1,018). `param_query.rs` (854) is the precedent for the `params.rs` split; §4.5.493 put its lane in a sibling module (`pkg_body_scope.rs`, 160) rather than growing `package.rs`, as §4.5.490–491 did with `block_local_feed.rs` (105) and `inline_body_ctx.rs` (290), and §4.5.520/522/523 added `param_dup.rs`, `gen_scope_name.rs` and `ident_route.rs` the same way; §4.5.526 took `elaborate/inline_fn.rs` from 1,172 to 895 lines by moving the bind into `inline_bind.rs` (268) and the straight-line body fold into `inline_fold.rs` (165). NOT inside a correctness bundle — a refactor is a design nobody has reviewed | [ENGINEERING_RULES.md](ENGINEERING_RULES.md) §10.1 | — |
 
 Do not start:
 

@@ -54,6 +54,7 @@ Vocabulary used throughout:
 | Never trade one silent-wrong for another: convert types at the context boundary, not at the leaf, and stay loud where the context domain cannot be built | A leaf conversion destroying the value before the enclosing operator sees it |
 | Remove a feature whose partial support only trades one silent-wrong for another, and build the consumer-by-value matrix before removing, because removal is an edit | Shipping "the better half" of a broken feature, keeping a silent-wrong and adding a regression |
 | Treat a clamp as a silent value change: read the sign in the domain before the clamp and let a shape the clamp cannot carry fall through to the path that is already right | A clamped negative becoming a legal value that then fires |
+| Move a value to another type's route only when its whole type — domain and width — is stated; a domain alone turns the old type's loud consumers into silent ones at a guessed width | An integral override routed off a real default by its domain: `R/2` right, `%h` and `$bits` at the default's width where PRE was loud (§4.5.558 round 1) |
 | Equalise head-on an asymmetry where one path is narrower than its twin, prerequisite slices first, rather than routing around it | The workaround becoming the next change's constraint |
 | Support only the cleanly verifiable subset where interaction is unpredictable, and keep the rest loud | Forcing support and getting a silent-wrong |
 | Do not widen a loud into a silent: a pre-existing root cause does not license expanding the surface. Defer the root and keep the surface loud | The widening being your own regression |
@@ -710,6 +711,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Make an ordering requirement data — a rank path — when it cannot be expressed as pass order | No rearrangement of passes being able to satisfy it |
 | Separate "runs first" from "creates no event"; when measurement says the order is right and the behaviour is still wrong, you need a phase | An initialisation write handing an edge-sensitive process an edge |
 | Disqualify only the offending element, never the whole name; things that cannot exist simultaneously have no standing to disqualify each other | A dead branch of a conditional generate breaking a live pair elsewhere |
+| Fold a type a declaration states in the declaring scope; where the reader sits in another scope, decline rather than approximate which scopes coincide — every approximation meets one more scope that shadows it | A callee's return range folded at the call site: a generate block's, then a `$unit` function's calling module's, constant sized it in three review rounds (§4.5.558) |
 | Split a value that answers three questions into its components | One key breaking in several places at once |
 | Record which role an added behaviour belongs to when a function serves two, and split by parameter | A syntactic region behaving like a real scope |
 | Collect in one pass what must interleave in declaration order | Two loops producing two orders that never interleave |

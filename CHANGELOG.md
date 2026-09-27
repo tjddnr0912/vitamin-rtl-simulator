@@ -9,6 +9,22 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — an override's own type types an untyped parameter
+
+- `#(.P(X))` with `localparam real X = 5` onto an untyped `parameter P = 3` bound the integer 5
+  (`P/4` was 1); it now binds the real 5.0 (1.25), as both reference tools do (IEEE 1800 §6.20.2),
+  on every override spelling. A real override's value is its real result: `#(.R(X / 2))` bound 2.0
+  where the tools bind 2.5.
+- An integral override of an untyped `parameter R = 2.5` that is a cast or a comparison
+  (`#(.R(int'(2.5)))`, `#(.R(X > 1))`) now makes `R` an integer, and the same overrides give an
+  untyped integral parameter their own width (`#(.P(byte'(100)))` is 8 bits, was 32).
+- `-G U=100` onto `parameter U = 4'd3` bound 4 bits (the value 4); a `-G` decimal is a 32-bit signed
+  integer.
+- A real constant expression reads a name's innermost binding (`localparam real R = N + X` under a
+  generate block's integral `N` was 7.5, now 8.0), and a genvar hides an outer `real` of its name.
+- `$realtobits` of an integral argument is the bits of its real value (`$realtobits(5)` was
+  `0000000000000005`, now `4014000000000000`), with an x/z bit read as 0.
+
 ### Fixed — an override over an array-parameter element, and a fill in a wide override, take their own type
 
 - `#(.P(~A[0][3:0]))` onto an untyped `parameter P = 0`, with `A` an unpacked array parameter,
