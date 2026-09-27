@@ -86,6 +86,16 @@ pub(crate) fn str_raw_const(raw: &str) -> Option<ir::ConstVal> {
     })
 }
 
+/// Does `e` read any NAME (a bare or package-scoped identifier)?
+fn ast_any_name(e: &ast::Expr) -> bool {
+    crate::param_query::ast_any(e, &|x| {
+        matches!(
+            x.kind,
+            ast::ExprKind::Ident(_) | ast::ExprKind::PkgScoped { .. }
+        )
+    })
+}
+
 /// A zeroed bit vector wide enough for `width` bits.
 pub(crate) fn bp_zero(width: u32) -> ir::BitPacked {
     let n = ((width as usize).div_ceil(64)).max(1);
@@ -1622,8 +1632,8 @@ impl Elaborator<'_> {
     /// the rule kept 32 bits or E3009.
     ///
     /// Residues on that route (ROADMAP §2): a tree the fold declines (a zero divisor,
-    /// a real operand) and a fill in a wide tree bind 32 bits; an x/z value stays
-    /// E3009; a ≤64-bit tree keeps the i64 route's width.
+    /// a real operand) binds 32 bits, and so does a fill in a wide tree that also names
+    /// a constant; an x/z value stays E3009; a ≤64-bit tree keeps the i64 route's width.
     pub(crate) fn override_bits(&self, e: &ast::Expr) -> Option<ir::ConstVal> {
         let name = |n: &ast::Expr, _| self.param_leaf_bits(n);
         // §2 🆕 M ⓓ: a bitwise `& | ^` tree over self-determined leaves folds here too
@@ -1661,11 +1671,28 @@ impl Elaborator<'_> {
         // ≤64-bit tree keeps the i64 route whatever its sub-nodes. The width is past
         // 64 only by DECLARED provenance (`wide_name_bits`), which is what moves `~W`
         // over a `parameter [127:0] W`.
-        if crate::param_query::ast_contains_fill(e) || !crate::const_wide_num::wide_operator_top(e)
-        {
+        if !crate::const_wide_num::wide_operator_top(e) {
             return None;
         }
-        let (b, w, sg) = fold_self_bits(e, &name)?;
+        let (b, w, sg) = if crate::param_query::ast_contains_fill(e) {
+            // ROADMAP §2 "Index sealing" (the fill in a wide tree): a fill has no self
+            // width (§5.7.1), so the walk's first pass declines it with no context and the
+            // whole tree fell to the i64 route — `#(.P(~128'd0 | '1))` bound 32 bits
+            // `ffffffff` where both oracles bind 128 ones. The region's width is its
+            // other operands' (`const_self_width` answers 0 for a fill), and folding at
+            // that width sizes the fill. Name-free trees only: a NAME's width here would
+            // come from `const_self_width`'s `param_meta` read, the inferred-width door.
+            if ast_any_name(e) {
+                return None;
+            }
+            let w0 = self.const_self_width(e, &ConstWidths::new())?;
+            if w0 <= 64 {
+                return None;
+            }
+            fold_bits_at(e, w0, &name)?
+        } else {
+            fold_self_bits(e, &name)?
+        };
         if w <= 64 {
             return None;
         }

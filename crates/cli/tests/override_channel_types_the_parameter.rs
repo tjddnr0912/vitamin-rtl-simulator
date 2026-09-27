@@ -926,9 +926,9 @@ endmodule
     );
 }
 
-/// NOT this slice, pinned as measured (ROADMAP §2 row 25): an OPERATOR over an element select binds the default literal's type — `A[1][3:0] + 4'd1` is 32 bits `0000000d` and `~A[0][3:0]` 32 signed bits `fffffffa`, where verilator binds 4 bits `d` / `a`. `declared_override_widths` certifies declared-width vector names and selects of them, not an element of an unpacked array parameter.
+/// An OPERATOR over an element select binds the tree's own type (ROADMAP §2 row 25, §4.5.557): `A[1][3:0] + 4'd1` is 4 bits `d` and `~A[0][3:0]` 4 bits `a`, verilator's answer. It was the default literal's 32 bits (`0000000d`, signed `fffffffa`): `declared_override_widths` certifies declared-width vector names and selects of them, not an element of an unpacked array parameter, and such a tree now folds in the wide walk, which reads the element at its declared width.
 #[test]
-fn an_operator_over_an_array_element_is_the_recorded_residue() {
+fn an_operator_over_an_array_element_takes_the_trees_type() {
     check(
         r#"module c #(parameter P = 0) (); initial $display("T bits=%0d hex=%h dec=%0d cat=%h", $bits(P), P, P, {P,P}); endmodule
 module tb;
@@ -938,7 +938,7 @@ c #(.P(A[1][3:0] + 4'd1)) u1();
 initial begin #1 $finish; end
 endmodule
 "#,
-        &[r#"T bits=32 hex=0000000d dec=13 cat=0000000d0000000d"#],
+        &[r#"T bits=4 hex=d dec=13 cat=dd"#],
     );
     check(
         r#"module c #(parameter P = 0) (); initial $display("T bits=%0d hex=%h dec=%0d cat=%h", $bits(P), P, P, {P,P}); endmodule
@@ -949,6 +949,6 @@ c #(.P(~A[0][3:0])) u1();
 initial begin #1 $finish; end
 endmodule
 "#,
-        &[r#"T bits=32 hex=fffffffa dec=-6 cat=fffffffafffffffa"#],
+        &[r#"T bits=4 hex=a dec=10 cat=aa"#],
     );
 }

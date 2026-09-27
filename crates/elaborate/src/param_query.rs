@@ -564,7 +564,22 @@ impl Elaborator<'_> {
         // §2 "Index sealing" residue ⓐ: a NAME leaf whose DECLARED width this
         // scope can prove. Empty for a literal-only tree, which is every cell
         // §4.5.463's census covered, so that lane is byte-identical.
-        let envw = self.declared_override_widths(e)?;
+        let Some(envw) = self.declared_override_widths(e) else {
+            // ROADMAP §2 row 25: an ELEMENT of an array parameter is a leaf this proof
+            // cannot certify (`narrow_param_decl_width` needs a scalar), so the whole
+            // override declined and the untyped target took the DEFAULT literal's
+            // type: `#(.P(~A[0][3:0]))` bound 32 bits `fffffffa` where verilator binds
+            // 4 bits `a`. The wide walk reads an element at its declared width
+            // (`const_array_elem_bits`, through `param_leaf_bits`) and decides the
+            // tree's self width and sign (§11.6.1, §11.8.1), so it answers such a tree
+            // whole; every other decline stays one.
+            return (sized_by_type
+                && !ast_contains_fill(e)
+                && ast_any(e, &|x| self.is_array_param_elem(x)))
+            .then(|| self.override_elem_bits(top))
+            .flatten()
+            .map(|(_, w, sg)| (w, sg));
+        };
         if !sized_by_type
             || ast_contains_fill(e)
             || !Self::ctx_width_names_are_evident(e, &envw)
@@ -713,6 +728,20 @@ impl Elaborator<'_> {
         Some(out)
     }
 
+    /// Is `e` a read of an ELEMENT of a constant array parameter (`A[i]`)?
+    pub(crate) fn is_array_param_elem(&self, e: &ast::Expr) -> bool {
+        matches!(e.kind, ast::ExprKind::BitSelect { .. }) && self.const_array_elem_read(e).is_some()
+    }
+
+    /// Row 25: an override tree over array-parameter elements folded in the wide walk
+    /// at its SELF width (the binder's resolver: elements, selects and names at their
+    /// declared widths). Declines past 64 bits and on an x/z bit, like the operator
+    /// channel it feeds.
+    fn override_elem_bits(&self, e: &ast::Expr) -> Option<WideBits> {
+        let (b, w, sg) = crate::const_wide::fold_self_bits(e, &|n, _| self.param_leaf_bits(n))?;
+        (w > 0 && w <= 64 && !crate::const_wide::bp_any_unknown(&b, w)).then_some((b, w, sg))
+    }
+
     /// The same override expression's VALUE, re-folded AT the type
     /// [`Self::override_self_meta`] just gave it.
     ///
@@ -732,6 +761,22 @@ impl Elaborator<'_> {
     /// instead of staying loud.
     pub(crate) fn override_self_value(&self, e: &ast::Expr, meta: (u32, bool)) -> Option<i64> {
         self.const_eval_in_scope(e)?;
+        // Row 25's element trees take their value from the same wide fold that gave
+        // their type (`override_self_meta`'s element arm, reached only when
+        // `declared_override_widths` declines), so the two halves are one answer. A tree
+        // the OLD arm typed keeps the assignment walk below: an element under `$bits`,
+        // `$clog2` or `$rtoi` is invisible to that arm's name walk, and the wide fold
+        // declines an element it cannot read (`[11:4]`, `[0:7]`) or a `$rtoi`.
+        if self.declared_override_widths(e).is_none()
+            && ast_any(e, &|x| self.is_array_param_elem(x))
+        {
+            let (b, w, sg) = self.override_elem_bits(e)?;
+            if (w, sg) != meta {
+                return None;
+            }
+            let raw = b.val.first().copied().unwrap_or(0);
+            return Some(crate::const_eval::coerce_i64_to_width(raw as i64, w, sg));
+        }
         self.eval_const_assign(
             e,
             &std::collections::BTreeMap::new(),
