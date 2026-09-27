@@ -45,6 +45,8 @@ impl<'s> Elaborator<'s> {
             pkg_wide_bits: BTreeMap::new(),
             pkg_real_val: BTreeMap::new(),
             pkg_funcs: BTreeMap::new(),
+            pkg_own_rtns: BTreeMap::new(),
+            const_call_fn: std::cell::RefCell::new(None),
             pkg_tasks: BTreeMap::new(),
             cu_imports: Vec::new(),
             scope_imports: Vec::new(),

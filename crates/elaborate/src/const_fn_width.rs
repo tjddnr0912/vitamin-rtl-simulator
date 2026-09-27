@@ -144,6 +144,18 @@ impl Elaborator<'_> {
         coerce_int_width(v, w, signed)
     }
 
+    /// Inside a PACKAGE function the constant interpreter is running (`const_call_pkg`),
+    /// the declared `(width, signed)` of that package's own numeric constant `name` —
+    /// which the interpreter seeds into `env` without an `envw` twin, so a width or sign
+    /// read of it fell to the CALLER's same-named parameter: `return C;` over a package
+    /// `[15:0] C = 16'h0123` beside a module `[7:0] C` folded `23` (both oracles `123`).
+    /// Asked only on an `envw` miss, so a formal or local of the name keeps its own.
+    fn pkg_fn_const_meta(&self, name: &str) -> Option<(u32, bool)> {
+        let pkg = self.pkg_fn_own()?;
+        self.pkg_consts.get(&pkg)?.get(name)?;
+        self.pkg_const_meta.get(&pkg)?.get(name).copied()
+    }
+
     /// The SELF-determined width of `e` (IEEE Table 11-21). `None` when a leaf's
     /// width is unknown, which makes the caller keep the unlimited i64 behavior
     /// rather than invent a truncation.
@@ -171,7 +183,8 @@ impl Elaborator<'_> {
                 Some((0, _)) => None,
                 Some((w, _)) => Some(w),
                 None => Some(
-                    self.walk_scopes(&p.segments[0].name, &self.param_meta)
+                    self.pkg_fn_const_meta(&p.segments[0].name)
+                        .or_else(|| self.walk_scopes(&p.segments[0].name, &self.param_meta))
                         .map_or(32, |(w, _)| w),
                 ),
             },
@@ -312,6 +325,7 @@ impl Elaborator<'_> {
             K::Ident(p) if p.segments.len() == 1 => envw
                 .get(&p.segments[0].name)
                 .copied()
+                .or_else(|| self.pkg_fn_const_meta(&p.segments[0].name))
                 .or_else(|| self.walk_scopes(&p.segments[0].name, &self.param_meta))
                 .is_some_and(|(_, s)| s),
             K::PkgScoped { .. } => self.const_expr_signed(e),

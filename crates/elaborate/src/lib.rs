@@ -462,6 +462,14 @@ struct Elaborator<'s> {
     /// v7 P2-D: package name → its function/task definitions (clones — the
     /// same inline-expansion tables modules use).
     pkg_funcs: BTreeMap<String, BTreeMap<String, ast::FunctionDef>>,
+    // Package → the routines it DECLARES (not the ones an import merged into
+    // `pkg_funcs` / `pkg_tasks`). A routine imported into another package still runs
+    // under the importing package's scope (ROADMAP §2); a rule that reads the package's
+    // own declarations is only sound for the package's own routines.
+    pkg_own_rtns: BTreeMap<String, BTreeSet<String>>,
+    // The bare name of the function the constant interpreter is running, beside
+    // `const_call_pkg` — see `pkg_fn_own`.
+    const_call_fn: std::cell::RefCell<Option<String>>,
     pkg_tasks: BTreeMap<String, BTreeMap<String, ast::TaskDef>>,
     /// v7 P2-D: compilation-unit-scope `import` items — applied to every
     /// module elaboration (IEEE visibility is decl-order; TBs put them first).

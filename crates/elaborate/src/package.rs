@@ -831,9 +831,17 @@ impl Elaborator<'_> {
                 }
                 ast::ModuleItem::Func(f) => {
                     funcs.insert(f.name.name.clone(), f.clone());
+                    self.pkg_own_rtns
+                        .entry(pkg.clone())
+                        .or_default()
+                        .insert(f.name.name.clone());
                 }
                 ast::ModuleItem::Task(t) => {
                     tasks.insert(t.name.name.clone(), t.clone());
+                    self.pkg_own_rtns
+                        .entry(pkg.clone())
+                        .or_default()
+                        .insert(t.name.name.clone());
                 }
                 ast::ModuleItem::Import(imp) => {
                     // Family D (r17): apply an imported package's CONSTANTS into this

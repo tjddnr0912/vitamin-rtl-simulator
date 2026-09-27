@@ -1393,6 +1393,20 @@ impl Elaborator<'_> {
         }
     }
 
+    /// The package of the function the constant interpreter is running, when that
+    /// package DECLARES the function (`pkg_own_rtns`). A function imported into another
+    /// package is found in, and seeded from, the IMPORTING package (`const_fn_def`,
+    /// ROADMAP §2), so a rule that reads the package's own declarations answers for a
+    /// different constant there: `None`.
+    pub(crate) fn pkg_fn_own(&self) -> Option<String> {
+        let pkg = self.const_call_pkg.borrow().clone()?;
+        let f = self.const_call_fn.borrow().clone()?;
+        self.pkg_own_rtns
+            .get(&pkg)
+            .is_some_and(|s| s.contains(&f))
+            .then_some(pkg)
+    }
+
     pub(crate) fn eval_const_call(
         &self,
         name: &ast::HierPath,
@@ -1476,6 +1490,7 @@ impl Elaborator<'_> {
             }
         }
         let saved_pkg = self.const_call_pkg.replace(pkg);
+        let saved_fn = self.const_call_fn.replace(Some(name.to_string()));
         let mut body = || -> Option<i64> {
             // The body's declarations run at the BODY's depth — the same `depth + 1`
             // the body itself gets below, and the reason a self-referential
@@ -1502,6 +1517,7 @@ impl Elaborator<'_> {
         };
         let r = body();
         self.const_call_pkg.replace(saved_pkg);
+        self.const_call_fn.replace(saved_fn);
         r
     }
 
