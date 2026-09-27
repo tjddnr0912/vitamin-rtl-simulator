@@ -2452,7 +2452,19 @@ impl Elaborator<'_> {
             // (`#(parameter P = 5, parameter Q = P + 1)`) inherits the guess: its
             // value was folded from the guessed binding and its meta inferred from
             // that value. Typed declarations carry a declared type and are facts.
-            let typed_sign = if ovr_bits_binds {
+            // A FILL types the override too — one unsigned bit, the fill arm of the meta
+            // chain above — so it is not a guess: the size-cast classifier then reads that
+            // bit instead of taking the pre-slice route, which read `64'(-P)` over
+            // `#(.P('1))` as `0000000000000001` where both oracles give all ones. Not onto
+            // a `signed` keyword, whose fill the chain above still records unsigned (both
+            // oracles bind the signed −1): that record is not a fact, so it stays a guess.
+            let fill_types = matches!(p.ty, ast::ParamType::Implicit)
+                && p.range.is_none()
+                && !p.signed
+                && ovr_fill.contains_key(p.name.name.as_str());
+            let typed_sign = if fill_types {
+                Some(false)
+            } else if ovr_bits_binds {
                 ovr_bits.map(|c| c.signed)
             } else if self_meta_binds && ovr_self_val.is_some() {
                 ovr_self_meta.map(|(_, s)| s)
