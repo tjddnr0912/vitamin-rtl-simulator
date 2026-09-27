@@ -546,7 +546,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Rule | Prevents |
 |---|---|
 | Answer a property question by walking the expression, never by enumerating spellings; use an exhaustive allow-list and fail closed on unknown variants | A spelling-counting classifier contradicting itself inside one design |
-| Extend a shared classifier or gate only with a full consumer census, and make accept-gate walkers conservative or exhaustive | Under-detection in a shared walker, the repeating source of silent-wrongs |
+| Extend a shared classifier, gate or fold ARM only with a full consumer census — or enable the arm per consumer — and make accept-gate walkers conservative or exhaustive | Under-detection in a shared walker, the repeating source of silent-wrongs; and a new arm of the region walk answering, in every lane at once, trees those lanes had refused — class-field defaults folded without their width, a constant function's body folded with the caller's bindings — one more lane per review round until the slice was reverted (§4.5.562) |
 | Spell a gate predicate as an exhaustive match, never as a boolean shorthand; the compiler must catch a new variant | An implicit catch-all letting a new identifier default to the quiet side |
 | Close a syntactic walker's blind spot by opting into an already exhaustive walker with one axis parameterised, not by writing a new walker | A new walker repeating the old one's omissions |
 | Build a scope or safety guard as an allow-list of provably safe forms plus a reject, not as an enumeration of dangers; a recursive allow-list recurses over every value sub-expression | Enumerating dangers repeatedly omitting a category, and one unvisited sub-expression being an escape |

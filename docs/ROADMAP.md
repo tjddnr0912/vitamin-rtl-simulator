@@ -27,7 +27,7 @@ behind it, so the queue and the composition are read from one table.
 | § | track | open | startable | blocked | blocked by (top reasons) | composition | rung | next |
 |---|---|---:|---:|---:|---|---|---|---|
 | §2 | silent-wrong start-order table | 21 | 1 | 20 | named prerequisite 5 · one oracle + zero demand (clocking) 3 · oracle split, never chased 4 · residues held on purpose or zero demand 6 · performance, not a §2 correctness item 2 | LOUD 4 · BLOCKED 4 · OPEN 5 (🆕 H startable; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557) · ORACLE-SPLIT 4 · PERF 2 · DO-NOT-START 2 | ① | |
-| §2 | recorded defects by mechanism | 187 | 101 | 86 | oracle split / pinned / oracle disqualified / no oracle 59 · named prerequisite 15 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 14 · size cast / signedness 12 · constant domain (i64) 16 · scoping / imports / block-locals 31 · delays / events 19 · real 9 · performance 6 · index sealing 15 · ranges / selects 8 · diagnostics 10 · class fields 3 · oracle splits 44 | ① | |
+| §2 | recorded defects by mechanism | 196 | 108 | 88 | oracle split / pinned / oracle disqualified / no oracle 60 · named prerequisite 16 · WALL (AST self-width) size-cast cluster 5 · held on purpose 3 · one oracle + a single-diagnosis statement 2 · pair columns not measured 1 · filed to §3 1 | inline / frame binds 14 · size cast / signedness 12 · constant domain (i64) 20 · scoping / imports / block-locals 32 · delays / events 19 · real 11 · performance 6 · index sealing 15 · ranges / selects 8 · diagnostics 10 · class fields 4 · oracle splits 45 | ① | |
 | §2-N | verilog-axi census | 2 + 3 | 0 | 5 | t0-event residues held on purpose 3 · needs a second oracle or a digest ruling 1 · upstream fst-writer API 1 | x-cycle promotion · FST `$dumpvars` snapshot · three t0-event residues | ① | |
 | §3.a | loud → correct-support, numbered | 24 | 19 | 5 | named prerequisite 2 · loud by design 2 · deferred to §5 performance 1 | file-I/O hoisting 4 · ibex ladder ⑤ 9 · system functions in function bodies 4 · package and the rest | ② | |
 | §3.b | loud → correct-support, small | 116 | 99 | 17 | named prerequisite 7 · oracle split / unmeasured 6 · by design or trigger-gated 3 | subroutine / frame 27 · constants / parameters 26 (the pkg-type-param-import row) · parser accept 17 · system tasks & file I/O 9 · nets / timing 11 · loud shapes from §4.5.493–495 7 · strings / heap 8 · diagnostics quality 7 · VCD / real conversion 3 | ② | 1 |
@@ -38,7 +38,7 @@ behind it, so the queue and the composition are read from one table.
 | §5.b | performance / hardening | 17 | 8 | 9 | named prerequisite 5 · trigger-gated 2 · census-first 1 · on hold 1 | frame-body wprog · scratch pooling · array-LHS cliff · inline-fold exponential · memory guard · CI nextest · MSRV ceiling | below the ladder | |
 | §7 | conditional / long-term | 4 | 0 | 4 | trigger-gated re-entry 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT | trigger-gated | |
 | §8 | non-goals | 2 | 0 | 2 | permanent 2 | IMPLICIT-NET · `defparam` beyond a direct-child constant | permanent | |
-| total | | 424 | 252 | 172 | | | | |
+| total | | 433 | 259 | 174 | | | | |
 
 Prerequisites that block rows from starting are listed in REMAINING_WORK §D (a declaring-scope fold, a generate-scope alias's recorded type, a tree-wide AST self-width pass, an exact declared-width fold for
 hierarchical placeholders, a declared width for array-reduction / string / placeholder cast operands,
@@ -300,11 +300,21 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
 - A declaration of 64 bits or less whose initializer the wide walk DECLINES keeps the width-unlimited
   i64 answer (§4.5.556 routes the rest): a prim cast `int'(NM) ^ 64'h0` and a call `fi(I3) ^ 64'h0`
   over a signed 8-bit `-2` are `ff…fe` (both oracles `00000000fffffffe`), `byte'(N200) + 16'd0` is
-  `ffc8` (both `00c8`), a real condition `(U > 2.0) ? NM : 16'd7` and an untaken `/0` arm
-  `(Z != 0) ? (16'd100 % Z) : NM` are `fffe` (both `00fe`). `fold_region` has no prim-cast, call or
-  real arm and declines a zero divisor in either arm. Fix shape = those arms (a prim cast is a size
-  cast with the type's sign; a call through the constant-function interpreter at its return width;
-  the untaken arm unevaluated). M.
+  `ffc8` (both `00c8`), a real condition `(U < 2.0) ? NM : 16'd7` and an untaken `/0` arm
+  `(Z != 0) ? (16'd100 % Z) : NM` are `fffe` (both `00fe`); a name-free cast tree never reaches the
+  walk (`int'(-3) + 64'd0` `ff…fd` for `00000000fffffffd`), nor does a cast over a real, a
+  non-zero-LSB or an ascending name. `fold_region` has no prim-cast, call or real arm and declines a
+  zero divisor in either arm. §4.5.562 built the prim-cast arm (a size cast with the type's sign) and
+  a width-only fold of the unselected arm — 486 loud → right and 123 wrong → right over the first
+  round's 1,997 review cells — and reverted it after three review rounds: the arms
+  sit in the SHARED walk, and each round met one more lane that folds without its context or at a
+  foreign prefix (class-field defaults, a constant function's body and defaults in the
+  interpreter's concatenation lane, a generate-scope `real` shadowing an integral name, a negative
+  signed replication count — each its own bullet). The unselected arm may answer x only where the
+  LRM value is x (arithmetic over an x/z operand, a zero divisor, a shift by x, a relational
+  operator): `===` and `$isunknown` in the same arm read it. Fix shape = the two arms enabled per
+  CONSUMER (the typed declaration route, the override channels), with the `real`-shadow decline in
+  that route only; every other lane keeps the pre-slice walk. M.
 - A `*` or `**` whose operands the width-aware walk holds MASKED overflows its checked i64
   arithmetic and declines, and the value then comes from the width-unlimited lane (where the operands
   are small negatives) resized at the end — truncation does not commute with `/`:
@@ -351,6 +361,29 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   folds to `55` where both oracles give `a5` (vita's run-time call is right), in a module function
   and a package function alike. The placement resolver's structural arm selects the local's stored
   bits without its declared range (`envw` carries a width, not an LSB). S.
+- A NEGATIVE signed replication count is accepted (both oracles reject the program, §11.4.12.1):
+  `{$signed(8'hff){1'b1}}`, `{8'shff{1'b1}}`, `{1'sb1{1'b1}}`, `{8'(-1){1'b1}}` and
+  `{signed'(4'hf){1'b1}}` replicate 255, 255, 1, 255 and 15 times. `fold_count` reads every count
+  unsigned and `const_eval_u32` answers a signed literal before any fold. The rule is the
+  replication count's alone — a select bound, an index and an indexed width read their operand
+  unsigned in both oracles (`W[0 +: $signed(4'd8)]` is 8 bits). Fix shape, measured in §4.5.562: a
+  sign check at the replication count on the count's ONE fold (a second fold per nesting level was
+  exponential, 20 s at depth 26), and the same rule in the width lanes (`$bits({8'shff{1'b1}})`
+  is 255 and `$bits({-8'sd1{1'b1}})` −1; `$bits({'1{1'b1}})` is −1 where both oracles give 1). S.
+- The i64 lane's primitive-type cast folds its operand without the type's width (both oracles
+  agree): `byte'((8'd200 + 8'd100) / 8'd2) == 8'd22` in a range bound and a generate condition
+  sizes 4 bits and takes the `else` branch (both 8 bits and `then`: the sum wraps at 8 bits before
+  the division). `const_eval_cast` folds width-unlimited and truncates. The assignment funnel
+  `const_size_cast` uses is not the fix as is (measured in §4.5.562): a `real` parameter's exact i64
+  twin has no `param_meta`, so the funnel read it as 32 unsigned bits (`longint'(R)` over
+  `real R = -5` 4294967291), and a cast the funnel declines was folded twice per nesting level. M.
+- A replication COUNT built on an equality over a signed x/z-MSB operand collapses to 0 (both
+  oracles agree): `v = {4'hF, {(((4'sbx000 == 8'sd5) === 1'b0) ? 8 : 1){1'b1}}};` is `000f` where
+  both give `0fff` — `4'sbx000 == 8'sd5` is a definite 0 (a known bit differs, §11.4.5), and
+  `wide_eq_with_unknowns` declines at `widen_to`'s refusal to sign-extend the x MSB. S.
+- A fill divisor that wraps to zero at its context width divides silently (both oracles agree):
+  `16'd1 % ('1 + 1'b1)` into `logic [15:0]` is `0001` where both give `xxxx` (the fill is 16 ones and
+  the sum wraps to 0). S.
 
 ### Index sealing
 
@@ -378,14 +411,13 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   width-unlimited lane declines `1 << 70` and the operator channel's value must come from it
   (the override lane's rule: correct a value, never create one). The `localparam` twins fold to 0 through the
   width-aware walk. The ≤64-bit operator-top bullet that stood here closed in §4.5.544.
-- A >64-bit operator tree that the wide fold itself DECLINES still binds 32 bits silently through the
-  i64 route (both oracles 128): `1 ? ~128'd0 : 128'd1 / 128'd0` and `… % 128'd0` are `32 ffffffff`
-  against `128 ff…ff`; `~128'd0 & (1 ? 128'd7 : 128'd1 / 128'd0)` is `32 00000007` against
-  `128 …07`; `~128'd0 + int'(2.5)` is `32 00000002` against verilator `128 …02`. Root: the divisor
-  path returns `None` for a zero divisor in the UNCHOSEN ternary arm (`const_wide_num.rs`), and a
-  real cast leaf has no wide arm; the i64 route then answers with the default's meta. Fix: evaluate
-  only the chosen arm, or refuse (E3009) when the wide fold declines a tree whose self width is
-  past 64.
+- A >64-bit operator tree that the wide fold itself DECLINES binds its low 64 bits through the i64
+  route (both oracles 128 ones): `1 ? ~128'd0 : 128'd1 / 128'd0` and `… % 128'd0` are
+  `0000000000000000ffffffffffffffff`, `0 ? 128'd1 / 128'd0 : ~64'd0` the same; the divisor path
+  returns `None` for a zero divisor in the UNCHOSEN arm (`const_wide_num.rs`). (`~128'd0 &
+  (1 ? 128'd7 : …)` and `~128'd0 + int'(2.5)` are right at HEAD — the latter with verilator, iverilog
+  sizes 129 bits.) §4.5.562's unselected-arm fold closed these and was reverted with the prim-cast arm
+  (the bullet above: same walk, same consumer-scoping fix shape). S–M.
 - A fill in an override tree keeps the DEFAULT literal's type unless the tree is wider than 64 bits
   and names no constant (those fold since §4.5.557): `#(.P(8'd1 | '1))` binds 32 bits `ffffffff`
   (both oracles 8 bits `ff`), `#(.P('1 ^ 1'b0))` 32 bits (both 1 bit `1`), `#(.P(~W | '1))` over a
@@ -618,7 +650,12 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   vita's since §4.5.558), `r = 8'b0000_001x` is 0.0 (both 2.0), `$itor(200'h…)` 0.0 (verilator
   4.201145e+56; iverilog -1.716864e+09 contradicts its own `$realtobits`). Fix shape = route the
   `Itor` arm and the real assignment conversion through `integral_to_f64`. S.
-
+- A `real` parameter with an exact integer value divides as an integer under a real operator (both
+  oracles agree): `int'(R / 2)` over `localparam real R = 5` is 2 where both give 3 (2.5 rounds away
+  from zero); the exact i64 twin in `params` answers the integer fold before the real one. S.
+- `localparam real R = time'(NM) + 0.0` over a signed 8-bit −2 converts the cast as signed: vita
+  `-2.0`, iverilog `18446744073709551614.0` (hand-IEEE agrees: `time` is unsigned 64-bit), verilator
+  refuses the constant. S.
 
 ### Ranges / bounds / selects
 
@@ -685,6 +722,16 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   verilator refuses (`Duplicate declaration of signal: 'x'`). vita matches iverilog; a class body is
   outside the §3.13 declaration walk §4.5.525 added, which judges module / interface / package
   bodies only (§4.5.525 census p26_j).
+- A class field's default folds at the value's OWN width and keeps x in a 2-state field (both oracles
+  agree): `logic [63:0] e = 8'd3 << 40;` is 0 (`0000030000000000`), `logic [63:0] c = ~32'd0;`
+  `00000000ffffffff` (all ones), `bit [7:0] q = 4'b1x0z;` `0X` (`08`). `fold_init` extends a
+  self-width fold instead of folding at the field's width (§11.6.1), and `classes.rs` computes the
+  field's 2-state-ness without applying it (an enum field over a `bit` base keeps `1x0z` too). Fix
+  shape, measured in §4.5.562: fold at the field width,
+  fall back to the self-width fold and sign extension where that declines (a signed x/z-MSB widen —
+  iverilog copies the x — and the division work cap), read x/z as 0 for a 2-state field. A new arm of
+  the region walk must stay off in this lane until then: it answers PRE-loud trees at the self width.
+  S.
 
 ### Scoping / imports / block-locals
 
@@ -903,6 +950,18 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   where the same-named parameter's range had matched it by accident (`T 9 0 1 9` for `T 12 9 2 12`).
   Fix shape = the run-time select lowering's own iterator step with the element's declared range,
   and callee bodies lowered without the iterator. M.
+- A generate-scope `real` parameter does not shadow an outer INTEGRAL parameter of the same name in
+  the integer name walks (both oracles agree): under `localparam real RP = 2.5` in `g` and a module
+  `localparam int RP = 7`, `int'(RP) ^ 64'h0` is `…07` and `logic [int'(RP):0]` 8 bits (both
+  `…03`, 4 bits), and `R + 16'd0` over an outer `logic signed [7:0] R = -8'sd2` is `00fe` (both
+  `0003`). `lookup_scoped`, `narrow_param_bits`, `wide_name_bits` and the concatenation lane's
+  resolver walk `params` (and `wide_param_bits`) only; the override lane's real predicate has the
+  same blind spot (an inner >64-bit `R` over an outer `real R` is refused where both oracles bind
+  it). A decline keyed on the innermost binding was built in §4.5.562 and reverted: it must walk the
+  value walk's own tables (`wide_param_bits` included — an inner wide `R` went loud) and must not
+  fire while a callee's return and formal ranges, its defaults or a typedef's range fold at the
+  CALLER's prefix (a module function's default `{R}` under a generate `real R` went loud). BLOCKED BY
+  the declaring-scope fold (REMAINING_WORK §D).
 
 ### Delays / events
 
@@ -1485,6 +1544,10 @@ lowering it. That pass already stands INSIDE a cast (`const_self_width` + `const
   package's `logic [11:4] L` (`0a`), and verilator refuses the constant call. vita follows verilator
   at run time and is E3009 in the constant lane (§4.5.561's select arm answered iverilog's `0a`
   there, one text with two lanes' answers, and was reverted with it).
+- A NEGATIVE signed part-select bound: iverilog reads it signed (`W256[255:NB]` over
+  `localparam byte NB = 248` is 264 bits, x below bit 0), verilator unsigned (8 bits `84`); vita takes
+  the width from the signed reading and the value from the unsigned one (264 bits `0…084`) — one
+  text, two readings in one binary.
 
 ## 3. loud → correct-support candidates (all loud = safe, additive)
 
