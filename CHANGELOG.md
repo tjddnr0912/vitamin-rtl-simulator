@@ -9,6 +9,17 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — an override over an array-parameter element, and a fill in a wide override, take their own type
+
+- `#(.P(~A[0][3:0]))` onto an untyped `parameter P = 0`, with `A` an unpacked array parameter,
+  bound the default literal's 32 signed bits (`fffffffa`); it now binds the expression's own
+  type, 4 bits `a` (IEEE 1800 §6.20.2), as verilator does. Every operator over an element
+  (`A[0] + A[1]`, `SA[0] >>> 1`, `A[1][3:0] * 4'd2`, a package array's element) is sized by the
+  element's declared width.
+- `#(.P(~128'd0 | '1))` bound `ffffffff` at 32 bits; a fill in an override wider than 64 bits now
+  takes the width of the rest of the expression (128 ones), as in both reference tools, on an
+  untyped and on a declared target.
+
 ### Fixed — a narrow declared parameter folds at its declared width
 
 - A parameter declared 64 bits or narrower folded its initializer in an unlimited integer walk,
