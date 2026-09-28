@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8767 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
+8790 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
 older build is refused at the header gate with `E9001`), 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
@@ -18,8 +18,9 @@ canonical table is the fact table in [README.md](../README.md).
   ROADMAP §2's synthetic-probe rows are frozen; a review's pre-existing findings outside a slice's
   fix path go to [PROBE_CATALOG.md](PROBE_CATALOG.md), which is neither queued nor counted.
 - Default backend `native`; product build `--no-default-features` (one executor); workload corpus
-  10/11. `ibex`, the only SystemVerilog row, is refused at elaboration: 30 errors in four classes
-  (its parse error closed in §4.5.564, its generate-block enum labels in §4.5.565). Its oracle is verilator, under the x-invariance condition of contract rule 2.
+  10/11. `ibex`, the only SystemVerilog row, is refused at elaboration: 12 errors in five classes
+  (its parse error closed in §4.5.564, its generate-block enum labels in §4.5.565, its whole-array
+  continuous assigns in §4.5.566). Its oracle is verilator, under the x-invariance condition of contract rule 2.
 - The performance axis is at diminishing returns and ranks below the correctness ladder: codegen
   (cranelift), 2-state storage, cycle-based mode and levelize are all rejected, each with a recorded
   re-entry condition (ROADMAP §5.a).

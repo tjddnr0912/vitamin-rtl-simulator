@@ -9,6 +9,20 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — a whole unpacked array as the target of a continuous `assign`
+
+- `assign a = b;` (an array of the same shape and element type), `assign a = '{e0, e1, …};`
+  and `assign a = '{default: v};` on a fixed-size unpacked array now run, one element at a
+  time: position pairs with position (`[0:3]` from `[3:0]` takes the leftmost first), and each
+  item is sized as an assignment to its element. They were `E3009` (`a whole unpacked array
+  cannot be the write target in this context`). Values match Verilator and Icarus Verilog.
+- Lowered when the `assign` is the array's only writer and the element type is written in the
+  array's own declaration (`logic [7:0] a [4]`). With another writer — a procedural or
+  clocking-block write, a second `assign`, an output or `inout` port, `$readmem*`, a task
+  output — or an element type from a typedef, an enum or a struct, a net delay, a 1-bit or
+  2-state/4-state mixed copy, the `assign` keeps its `E3009`.
+- The workload corpus's `ibex` row moves from 30 elaboration errors to 12.
+
 ### Added — enum labels of a `typedef enum` inside a generate block
 
 - A `typedef enum` written directly in a generate block (a `for`, `if` or `case` body, or a

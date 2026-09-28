@@ -117,6 +117,7 @@ Vocabulary used throughout:
 | Widen a fold's accept set over x/z by the OPERATOR's rule (a known bit that decides it), carry an answer that is x as an x BIT rather than a decline, and measure the loud→value column at every BINDER that reads the fold — one that drops the unknown plane turns the carried x into a silent 0 | A definite operator declining on any unknown (§4.5.543: 119 two-oracle cells, a range bound silently one bit), and an x carried into a binder with no unknown plane (`#(.P(\|4'b000x))` bound 0 in the first cut; the lane declines it) |
 | Decide a value's domain from the DECLARATION, in one predicate every binder asks: only an untyped declaration takes its value's type; a typed one is a context the value converts into. When the representation moves (a string map entry becomes a numeric constant), census the consumers of the OLD representation's properties and scope any consumer fix to the representation that changed | A binder routing a typed parameter by its default's form — a string literal to a width-free map, a real literal to the real domain — so one declaration answered by the value and lost its width; and a global NUL-strip written for the new numeric constants changing `%s` and `.len()` of every string literal (§4.5.555: 520 cells right, then round 2's literal regressions) |
 | Size a case comparison once, over the case expression and every item, then compare each item at that width and sign; a pairwise compare at each side's self width wraps a context-determined operand | `case (P + 4'd1)` over a 4-bit `P = 15` matching the `0` item because the sum wrapped at 4 bits before the widening (§4.5.555 round 3, reverted) |
+| Size an assignment-pattern ITEM through the pattern path, not through the scalar assignment's resize: a stream that is a pattern item is zero-extended into its element, and only a stream that is the whole right-hand side is left-justified | Two spellings of one pattern disagreeing — verilator reads `'{{<<{n}}}` into 8-bit elements as `08` and `assign s = {<<{n}}` as `80` (§4.5.566) |
 
 ### 2.5 Declines, defaults and folds
 
@@ -387,6 +388,7 @@ another.
 | Measure the end-to-end outcome of the pair when a re-grounding says closing one item moves the refusal | Fixing either half alone producing a worse report than fixing neither |
 | Check the input set before looking for missing machinery when a feature works in one place and not another | The classifier walking a narrower set than the feature reaches |
 | Put the PRODUCER census of any new per-instance carrier (key, parameter) in the review brief; a second producer (alias, pass-through) re-seeds the default after every consumer is routed, and a routed predicate must be checked against the stored value it guards | Every consumer routed and the default still landing |
+| Lower a whole into its parts only where the whole is the parts' sole writer, and census the writers in the finished IR, channels no statement carries included — a clocking-block output commit, an `inout` connection approximated one way, a placeholder no pass resolved | The whole inheriting every mixed-writer case the parts' spelling already gets wrong: a `wire` array element with two drivers reads the last driver where iverilog reads `x` (§4.5.566) |
 
 ### 4.4 Routing, ordering and consumers
 
@@ -468,6 +470,7 @@ another.
 | Reject a cited cell that both candidate rules answer identically as evidence; measure a cell where they differ, and size the slice as the whole subclass minus what an existing channel already answers | A slice justified by a cell that cannot distinguish the rules |
 | Read the type alias behind any tuple a row cites by POSITION before accepting its root, and build the no-construct control (the same expression with a plain declared name in place of the row's construct) before naming the class after the construct | A row naming a sign bit that was an `ascending` flag, and a genvar row whose class was every outer-scope name read from a nested scope |
 | When PRE agrees with the oracle on a cell whose PRE mechanism is a constant, vary the value the constant coincided with before attributing the movement | A coincidence cell being filed as a regression by one lens and as a working design by the next |
+| Census a refused page by the construct inside the diagnostic's `[in scope]`, not by its `file:line`: an elaboration error inside an instance is reported at the instance's site | A row named and priced after the location — 25 `ibex` errors reported at instance sites read as port connections; all were continuous assigns, and 5 of them another construct (§4.5.566) |
 
 ### 4.7 Completeness for a change already under way
 
@@ -578,6 +581,7 @@ written to fail closed and is measured on what it refuses as well as on what it 
 | Make every query used for a decision three-state; folding "not yet known" into "no" is a silent-wrong | A placeholder answering with a fabricated fact that the caller reads as a fact |
 | Ask whether a caller uses the answer for a decision before adding a fallback, not whether it is visible in the engine | A fallback that looks harmless in one lane demoting correct support to loud-wrong in another |
 | Exempt a synthesized name by producer IDENTITY — the registry or the pair the producer actually mints, read at the producer's source — never by name shape | A `$` suffix grammar also matching legal user identifiers, so the guard was silent on real duplicates: two review rounds died on it, the first as a blanket "contains `$`", the second as the narrowed suffix list (§4.5.525) |
+| When the IR does not keep what a type is — its identity, its 2-state-ness — gate on where the type is WRITTEN (the declaration's own text), not on the kind the lowering recorded | A predicate reading a recorded kind the lowering already got wrong: two review rounds of 2-state checks passed `enum bit [7:0]` elements, which the parser records as 4-state `logic`, and an `x` item read `x1` where both oracles read `01` (§4.5.566) |
 
 ### 5.3 The predicate must match what it gates
 

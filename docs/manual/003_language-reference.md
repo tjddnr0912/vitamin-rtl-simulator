@@ -515,7 +515,14 @@ Whole-array operations: an unpacked-array assignment requires identical element
 types and the same number and size of dimensions (IEEE 1800 §7.6); a whole
 unpacked array has no value in an expression, as a subroutine argument, or as a
 port; and a whole-handle copy needs the same dynamic-storage kind and matching
-element types on both sides.
+element types on both sides. A continuous `assign` of a whole fixed-size unpacked
+array — from another array of the same shape and element type, from a positional
+pattern `'{e0, e1, …}` or from `'{default: v}` — runs one element at a time, pairing
+by position and sizing each item as an assignment to its element. It is lowered when
+the `assign` is the array's only writer (no procedural, clocking-block or port write,
+no second `assign`, no `$readmem*` or task output into it) and the element type is
+written in the array's own declaration (`logic [7:0] a [4]`, not a typedef, enum or
+struct, and not 1-bit); anything else is `VITA-E3009`.
 
 ### 6.4 `foreach`
 

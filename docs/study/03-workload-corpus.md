@@ -169,10 +169,11 @@ digest, and sv2v converted and run under Icarus Verilog, a 4-state simulator, pr
 too. Eight asymmetric mutations across the ALU, the multiplier, the load-store unit, the
 register file, the prefetch buffer and the core's clock gate move it. The testbench asserts reset with a falling edge: the core runs on a gated clock
 whose enable is itself reset state. vita refuses
-it at elaboration: 30 errors in four classes, which are ROADMAP §3.a ⑤ⓘ–⑤ⓚ and ⑤ⓐ and the
-head of the §5.2 queue. (The parse error in front of them — two `prim_lfsr.sv` functions
-returning a generate-local multi-dimensional packed typedef — closed in §4.5.564, and the twelve
-undeclared labels of a generate block's `typedef enum` in §4.5.565.) Recipe, x runs and mutation:
+it at elaboration: 12 errors in five classes, which are ROADMAP §3.a ⑤ⓙ–⑤ⓛ and ⑤ⓐ and §3.b
+`cont-array-typedef-elem`, the head of the §5.2 queue. (The parse error in front of them — two
+`prim_lfsr.sv` functions returning a generate-local multi-dimensional packed typedef — closed in
+§4.5.564, the twelve undeclared labels of a generate block's `typedef enum` in §4.5.565, and
+the eighteen errors of nine whole-array continuous assigns in §4.5.566.) Recipe, x runs and mutation:
 [`bench/ibex/RUN.md`](../../bench/ibex/RUN.md).
 
 ### 3.2 Pinned digests
@@ -568,9 +569,10 @@ workload sizes are tuned to 3–15 seconds under Icarus Verilog.
 **The corpus.**
 
 - One row is a ruled split (`verilog-axi`) and one is a loss vita has not closed (`serv`).
-- `ibex` is refused (§3.1). Its page — 30 elaboration errors in four classes, since §4.5.564
-  closed its parse error and §4.5.565 its generate-block enum labels — is the head of ROADMAP §5.2; after it closes, the run itself is compared with the
-  Verilator digest.
+- `ibex` is refused (§3.1). Its page — 12 elaboration errors in five classes, since §4.5.564
+  closed its parse error, §4.5.565 its generate-block enum labels and §4.5.566 its whole-array
+  continuous assigns — is the head of ROADMAP §5.2; after it closes, the run itself is compared
+  with the Verilator digest.
 - New designs, licence and oracle first: OpenTitan IPs and VeeR EL2 / EH1 (Apache-2.0),
   alexforencich verilog-axis / -pcie / -uart / -i2c (MIT). Solderpad designs (cv32e40p,
   cva6, the pulp-platform libraries) stay outside rule 1 (owner ruling).

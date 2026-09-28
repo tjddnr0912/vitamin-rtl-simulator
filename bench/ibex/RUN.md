@@ -197,12 +197,15 @@ zero digest, so the cycle count was added.
 
 ## vita today
 
-The run stops at elaboration with 30 errors in four classes. The parse error in front of
+The run stops at elaboration with 12 errors in five classes. The parse error in front of
 them — `prim_lfsr.sv:392` and `:401` declare functions whose return type is a
 multi-dimensional packed typedef local to a generate block — closed in ROADMAP §4.5.564;
 that code sits under `if (NonLinearOut)`, which Ibex leaves 0. The twelve undeclared enum
-labels of `ibex_multdiv_fast`'s generate-local `mult_fsm_e` closed in §4.5.565. The manifest
-pins the first error printed:
+labels of `ibex_multdiv_fast`'s generate-local `mult_fsm_e` closed in §4.5.565, and the eighteen
+errors of nine whole-array continuous assigns (`assign ic_tag_rdata = '{default:'b0};`, the
+`unused_*` sinks, `assign imd_val_q_ex_o = imd_val_q;`) in §4.5.566. An error inside an instance is reported at
+the instance's site (`tb.sv:92` is `u_top`), so the table names the construct. The manifest pins
+the first error printed:
 
 ```
 error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PRINCE_SHIFT_ROWS64` value is not a foldable constant [in prim_cipher_pkg]
@@ -210,10 +213,11 @@ error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PRINCE_SHIFT_ROWS64` va
 
 | Errors | Class | Sites |
 |---:|---|---|
-| 25 | A whole unpacked array as a net value or port: a continuous `assign` of an array, an array port connection, `'{default: …}` in that context | `ibex_top` (no-RAM branch), `ibex_core` (no-PMP branch, three instances), `ibex_ex_block` |
+| 5 | `'{default: v}` on a packed target in a continuous `assign` | `ibex_top` no-RAM branch (`ram_cfg_icache_{tag,data}_o`, `icache_{tag,data}_alert`), `ibex_alu` (`imd_val_we_o`) |
 | 2 | An `int` localparam holding a string literal, compared with a string in a generate-if | `ibex_counter.sv:65` (`UseDsp == "yes"`) |
 | 2 | A multi-dimensional packed package parameter initialised from a positional pattern | `prim_cipher_pkg` `PRINCE_SHIFT_ROWS64[_INV]` |
+| 2 | A whole-array continuous `assign` whose element type is a typedef | `ibex_core` no-PMP branch (`unused_csr_pmp_cfg = csr_pmp_cfg`, `pmp_cfg_t`) |
 | 1 | A keyed pattern as a `?:` arm whose target is a packed struct | `ibex_controller.sv:737` |
 
-Nobody has seen what the simulation shows after these. When all four classes close, the
+Nobody has seen what the simulation shows after these. When all five classes close, the
 next measurement is the run itself: vita's digest against `13b2ddfcd551ba2f`.
