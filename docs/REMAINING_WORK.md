@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8743 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
+8767 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
 older build is refused at the header gate with `E9001`), 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
@@ -18,8 +18,8 @@ canonical table is the fact table in [README.md](../README.md).
   ROADMAP §2's synthetic-probe rows are frozen; a review's pre-existing findings outside a slice's
   fix path go to [PROBE_CATALOG.md](PROBE_CATALOG.md), which is neither queued nor counted.
 - Default backend `native`; product build `--no-default-features` (one executor); workload corpus
-  10/11. `ibex`, the only SystemVerilog row, is refused at elaboration: 42 errors in five classes
-  (its parse error closed in §4.5.564). Its oracle is verilator, under the x-invariance condition of contract rule 2.
+  10/11. `ibex`, the only SystemVerilog row, is refused at elaboration: 30 errors in four classes
+  (its parse error closed in §4.5.564, its generate-block enum labels in §4.5.565). Its oracle is verilator, under the x-invariance condition of contract rule 2.
 - The performance axis is at diminishing returns and ranks below the correctness ladder: codegen
   (cranelift), 2-state storage, cycle-based mode and levelize are all rejected, each with a recorded
   re-entry condition (ROADMAP §5.a).
@@ -32,13 +32,12 @@ canonical table is the fact table in [README.md](../README.md).
 
 | # | track | item |
 |---|---|---|
-| 1 | corpus `ibex` · §3.a ⑤ⓗ | enum labels of a typedef declared inside a generate block (12 of the 42) |
-| 2 | corpus `ibex` · §3.a ⑤ⓘ | a whole unpacked array as a net value or a port (25 of the 42) |
-| 3 | corpus `darkriscv` · §3.b `display-null-arg` | `$display("…",);` is E2002; the stale "full SoC is refused" lines go with it |
-| 4 | corpus `aes` · §3.b `oob-read-exit` | an out-of-range array read is an error (exit 1); owner ruling: a warning with the value x |
-| 5–7 | corpus `ibex` · §3.a ⑤ⓙ, ⑤ⓐ, ⑤ⓚ | a string literal in an `int` localparam (2), a positional pattern for a multi-packed package parameter (2), a keyed pattern in a `?:` arm (1) |
-| 8 | corpus `ibex` | run it end to end against `DIGEST=13b2ddfcd551ba2f` |
-| 9 | corpus | new-design census (OpenTitan IPs, VeeR EL2 / EH1, alexforencich axis / pcie / uart / i2c) |
+| 1 | corpus `ibex` · §3.a ⑤ⓘ | a whole unpacked array as a net value or a port (25 of the 30) |
+| 2–4 | corpus `ibex` · §3.a ⑤ⓙ, ⑤ⓐ, ⑤ⓚ | a string literal in an `int` localparam (2), a positional pattern for a multi-packed package parameter (2), a keyed pattern in a `?:` arm (1) |
+| 5 | corpus `ibex` | run it end to end against `DIGEST=13b2ddfcd551ba2f` |
+| 6 | corpus `darkriscv` · §3.b `display-null-arg` | `$display("…",);` is E2002; the stale "full SoC is refused" lines go with it |
+| 7 | corpus `aes` · §3.b `oob-read-exit` | an out-of-range array read is an error (exit 1); owner ruling: a warning with the value x |
+| 8 | corpus | new-design census (OpenTitan IPs, VeeR EL2 / EH1, alexforencich axis / pcie / uart / i2c) |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ an
 honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.
@@ -51,8 +50,8 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §2-N verilog-axi census | 2 rows + 3 | 0 / 5 | verilog-axi x-cycle promotion, the FST `$dumpvars` snapshot, and three t0-event residues (§4.5.533 closed the x-valued ones) |
 | §2 start-order table (frozen) | 21 rows | 1 / 20 | LOUD 4 · BLOCKED 4 · OPEN 5 (🆕 H startable; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557; row 26 absorbed by row 14 in §4.5.546; 🆕 F and 🆕 R closed) · ORACLE-SPLIT 4 (row 7 since §4.5.541: the `#d` / `#0` / fork kinds landed, the wake-group and time-0 hierarchy orders are splits) · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
 | §2 recorded defects by mechanism (frozen) | 196 bullets | 108 / 88 | inline / frame binds 14 · size cast / signedness 12 · constant domain (i64) 20 · scoping / imports / block-locals 32 · delays / events 19 · real 11 · performance 6 · index sealing 15 · ranges / bounds / selects 8 · diagnostics / artifacts 10 · class fields 4 · oracle splits 45 |
-| §3 numbered items | 28 rows | 23 / 5 | ⑤ ibex ladder (13: the corpus row's classes ⑤ⓗ–⑤ⓚ and ⑤ⓐ's ibex cell lead; ⓕ is the unpacked-array typedef residue), ③ file-I/O hoisting (4), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 119 rows | 101 / 18 | subroutine / frame 28 (md-return-select: §4.5.564's loud edges) · constants / parameters 26 · parser accept 18 (display-null-arg: darkriscv) · system tasks & file I/O 9 · nets / timing 11 · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 8 (oob-read-exit: aes) · VCD / real conversion 3 |
+| §3 numbered items | 27 rows | 22 / 5 | ⑤ ibex ladder (12: the corpus row's classes ⑤ⓘ–⑤ⓚ and ⑤ⓐ's ibex cell lead; ⓕ is the unpacked-array typedef residue), ③ file-I/O hoisting (4), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
+| §3 small residues | 120 rows | 102 / 18 | subroutine / frame 28 (md-return-select: §4.5.564's loud edges) · constants / parameters 27 (gen-enum-uncarried: §4.5.565's loud edges) · parser accept 18 (display-null-arg: darkriscv) · system tasks & file I/O 9 · nets / timing 11 · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 8 (oob-read-exit: aes) · VCD / real conversion 3 |
 | workload corpus (study/03) | 3 items | 2 / 1 | ibex end to end against its verilator digest · the new-design census · the corpus in CI (deferred, owner ruling) |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | 0 / 6 | mostly no oracle; hand-IEEE when started; every row states a prerequisite |
@@ -80,8 +79,9 @@ synthetic-origin §3 rows, and they wake with the rows they block.
   resolves names where they are declared. Blocks the CALL half of §2 "Real"'s integral-override
   bullet (the constant interpreter folds the range at the call site too, §2 "Constant domain"),
   §2 row 10, the bare-name >64-bit select bullet ("Ranges"), the package-routine constant-domain
-  bullet and its `$bits` twin ("Scoping"), the `real`-shadow bullet ("Scoping") and §3.b
-  `pkg-string-const-select-dir`. Folding a call's
+  bullet and its `$bits` twin ("Scoping"), the `real`-shadow bullet ("Scoping"), §3.b
+  `pkg-string-const-select-dir`, and §3.b `gen-enum-uncarried` (a generate block's constants bound
+  in scope order, per block, not by position once per phase). Folding a call's
   return range at the call site was built in §4.5.558, letting the select resolvers see >64-bit,
   string and real bindings in §4.5.560, and a package routine's own-constant selects (run time,
   interpreter, concatenation, a range bound at the frame scope) in §4.5.561; each was reverted after

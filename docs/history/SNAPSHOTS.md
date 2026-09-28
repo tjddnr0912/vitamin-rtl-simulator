@@ -19,6 +19,7 @@ continues unchanged.
 |---|---|---|---|---|---|---|
 | 2026-09-28 | 586fa91 | §4.5.563 | 0 / 0 / 0 | +1 | 10/11 · 9 ok · verilog-axi ruled-split · ibex known-gap | ibex: not a row → parse 2 (elaboration 42 behind it) |
 | 2026-09-28 | d4d3dc3 | §4.5.564 | 0 / 0 / 0 | +5 | 10/11 · 9 ok · verilog-axi ruled-split · ibex known-gap | ibex: parse 2 → elaboration 42 (25 / 12 / 2 / 2 / 1) |
+| 2026-09-28 | b18dab7 | §4.5.565 | 0 / 0 / 0 | +5 | 10/11 · 9 ok · verilog-axi ruled-split · ibex known-gap | ibex: elaboration 42 → 30 (25 / 2 / 2 / 1) |
 
 ## Section counts
 
@@ -199,6 +200,7 @@ a section restructure, a residue split).
 | 2026-09-28 | baa91e0 | §4.5.562 | 8727 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 116 / 99 / 17 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 433 / 259 / 174 |
 | 2026-09-28 | 586fa91 | §4.5.563 | 8730 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 29 / 24 / 5 | 118 / 101 / 17 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 443 / 268 / 175 |
 | 2026-09-28 | d4d3dc3 | §4.5.564 | 8743 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 28 / 23 / 5 | 119 / 101 / 18 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 443 / 267 / 176 |
+| 2026-09-28 | b18dab7 | §4.5.565 | 8767 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 27 / 22 / 5 | 120 / 102 / 18 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 443 / 267 / 176 |
 - 2026-09-28 (§4.5.563): 3a +5 (ibex's classes ⑤ⓖ–⑤ⓚ; ⑤ⓐ gained an ibex cell) and 3b +2
   (display-null-arg, oob-read-exit). The total includes the Summary's new `study/03` row (3 / 2 / 1:
   ibex end to end, the new-design census, the corpus in CI), which has no column here. §2 is frozen
@@ -206,3 +208,7 @@ a section restructure, a residue split).
 - 2026-09-28 (§4.5.564): 3a −1 (⑤ⓖ closed); 3b +1 (`md-return-select`, the slice's loud edges,
   blocked by the declaring-scope fold). `study/03` unchanged (3 / 2 / 1). The catalog gained five
   rows (§4.5.564 review), which this table does not count.
+- 2026-09-28 (§4.5.565): 3a −1 (⑤ⓗ closed); 3b +1 (`gen-enum-uncarried`, the slice's loud edges
+  and the reverted collision refusal). §2 🆕 O and the "Oracle splits" `always @*` bullet lost their
+  enum-label twin (resolved to verilator's reading); no §2 count moved. `study/03` unchanged
+  (3 / 2 / 1). The catalog gained five rows (§4.5.565 review), which this table does not count.

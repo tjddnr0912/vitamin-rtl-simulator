@@ -9,6 +9,30 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — enum labels of a `typedef enum` inside a generate block
+
+- A `typedef enum` written directly in a generate block (a `for`, `if` or `case` body, or a
+  labelled block) declares its labels in that block: a read, a generate-if condition, a
+  child's parameter override, a routine of the block and each loop iteration see them, at
+  the base's width and sign. They were undeclared (`E3010`), and a label named like an outer
+  constant or net read the outer object instead. Values match Verilator and, where it runs,
+  sv2v → Icarus Verilog (Icarus itself cannot bind such a label).
+- Carried when the base and the label values are literals, nothing above the typedef in its
+  block reads a label, and no other declaration of the block takes a label's name. Any other
+  generate-block typedef keeps its labels undeclared, as before.
+- The workload corpus's `ibex` row moves from 42 elaboration errors to 30.
+
+### Fixed — enum labels, `.name()` and begin-less generate branches in the parser
+
+- `.name()` on a variable answers from its own enum type when two types share a name in one
+  module (sibling generate blocks, a block's type shadowing the module's): it printed the
+  first type's label.
+- An enum label now hides an outer constant, multi-dimensional packed parameter or struct
+  variable of its name in the parser's parse-time folds, as any declaration does: a
+  generate-array index or a package typedef's bound read the outer value.
+- A generate `if` / `else` / `for` / `case` body written without `begin … end` is a scope
+  to the parser too: what a declaration there hid stayed hidden for the rest of the module.
+
 ### Added — functions returning a multi-dimensional packed type
 
 - `function t f(…)` where `typedef logic [N-1:0][W-1:0] t`, the inline
