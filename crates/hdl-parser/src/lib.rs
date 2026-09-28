@@ -640,6 +640,13 @@ pub struct Parser<'t, 's> {
     /// scoped read `p::P[i]`. Unit-scoped (never cleared), like `struct_layouts`'s
     /// scoped keys.
     packed_md_scoped: std::collections::HashMap<String, Vec<Range>>,
+    /// §3 ⑤ⓖ: while a function body with a multi-dimensional packed return type is
+    /// parsed, the function's name — its return variable (IEEE §13.4.1), bound in
+    /// `packed_md_params` like a formal — and whether its dimension bounds are all
+    /// decimal literals.
+    /// Its selects are held to the shapes the flat twin carries (`packed_md.rs`).
+    /// `None` everywhere else.
+    md_ret_var: Option<(String, bool)>,
     /// Round-9: UNPACKED struct (record) type name → its members (each keeps its
     /// OWN type — a `string`/`int` member can't share a flat vector). A scalar
     /// variable of this type desugars to N independent member nets `k$field`
@@ -834,6 +841,7 @@ impl<'t, 's> Parser<'t, 's> {
             ansi_prev_struct: None,
             packed_md_params: std::collections::HashMap::new(),
             packed_md_scoped: std::collections::HashMap::new(),
+            md_ret_var: None,
             union_type_names: std::collections::HashSet::new(),
             const_locals: std::collections::HashMap::new(),
             pkg_const_scoped: std::collections::HashMap::new(),

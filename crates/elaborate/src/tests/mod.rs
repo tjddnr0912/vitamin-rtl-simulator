@@ -697,6 +697,7 @@ fn func_def(
             lsb: dec(&l.to_string()),
             span: SP,
         }),
+        ret_packed: Vec::new(),
         ret_type: ast::ParamType::Implicit,
         ret_two_state: false,
         ret_string: false,

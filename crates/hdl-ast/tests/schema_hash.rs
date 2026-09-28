@@ -12,6 +12,14 @@
 use vita_schema::schema_hash;
 
 /// Pinned root hash of `hdl_ast::SourceUnit`'s full type closure.
+/// Re-pinned 2026-09-28 §3 ⑤ⓖ `FunctionDef.ret_packed: Vec<Range>` — the packed
+/// dimensions of a function return type that has more than one (`function logic
+/// [2:0][3:0] f`, or a typedef that declares them), which used to be a parse error.
+/// The parser declares the return flat (`range` = the product range) and rewrites the
+/// body's selects on the return variable against the dims, so no consumer that sizes
+/// the return reads the field; elaborate reads it only to refuse a select on a CALL of
+/// such a function (`f(x)[1]` would index the flat bits). Empty on every function that
+/// predates it. All `.vu` artifacts are stale; no sim-ir/format_version change.
 /// Re-pinned 2026-09-11 §3 ⑤ⓕ `CastTarget::SigningParam { shape_param: Ident }` —
 /// the signing half of a `T'(e)` cast, and of a whole-member read of a packed-struct
 /// member declared `T`, where `T` is an OVERRIDABLE `parameter type`. Both positions
@@ -269,8 +277,8 @@ use vita_schema::schema_hash;
 /// 29 and the SimIr schema hash / canonical / RON goldens are untouched (verified:
 /// the only test this slice moves is this one). All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    6, 130, 59, 81, 151, 73, 243, 150, 224, 94, 114, 103, 245, 178, 206, 149, 4, 108, 162, 251,
-    150, 54, 106, 52, 176, 218, 110, 57, 236, 175, 77, 149,
+    0, 223, 20, 171, 63, 54, 75, 169, 7, 3, 186, 183, 67, 224, 139, 114, 79, 211, 88, 214, 191, 95,
+    177, 227, 172, 174, 200, 47, 24, 4, 84, 189,
 ];
 
 #[test]

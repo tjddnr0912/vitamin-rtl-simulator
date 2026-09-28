@@ -1956,6 +1956,16 @@ pub struct FunctionDef {
     pub automatic: bool,
     pub signed: bool,
     pub range: Option<Range>,
+    /// §3 ⑤ⓖ: the packed dimensions of a return type that has more than one
+    /// (`function logic [2:0][3:0] f`, or a typedef that declares them), outer
+    /// first. The parser declares the return FLAT — `range` is then the product
+    /// range — and rewrites the body's selects on the return variable against these
+    /// dims (`packed_md.rs`), so nothing that sizes the return reads this field.
+    /// Elaborate reads it for one purpose: a select on a CALL of such a function
+    /// (`f(x)[1]`, a vita extension) would index the flat bits where verilator
+    /// names the outer element, so it is refused (`md_return.rs`). Empty for every
+    /// other function.
+    pub ret_packed: Vec<Range>,
     pub ret_type: ParamType,
     /// The return type is a 2-state integral (`int`/`byte`/`shortint`/`longint`/
     /// `bit`) — it can never hold X/Z (§6.11.3), so the return assignment coerces

@@ -103,26 +103,15 @@ fn builtin_and_implicit_returns_unchanged() {
 }
 
 #[test]
-fn multidim_packed_typedef_return_is_loud() {
-    // A multi-dim packed typedef return (`typedef logic [3:0][7:0] m_t`) can't be
-    // represented by the single-`range` return field, so it is loud-rejected rather
-    // than silently returning only the first dimension's width (correct-or-loud).
-    let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let d = std::env::temp_dir().join(format!("vita_frt_loud_{}_{n}", std::process::id()));
-    std::fs::create_dir_all(&d).unwrap();
-    let f = d.join("t.sv");
-    std::fs::write(
-        &f,
+fn multidim_packed_typedef_return_is_carried_flat() {
+    // A multi-dim packed typedef return (`typedef logic [3:0][7:0] m_t`) used to be
+    // loud: the return fields carry one `range`. §3 ⑤ⓖ declares the return FLAT (the
+    // product range) and keeps the dims on `FunctionDef::ret_packed`, so the whole
+    // value comes back — iverilog 13.0 and verilator 5.052 both print `11223344`.
+    // The element-level cells live in `func_ret_packed_md.rs`.
+    let o = run(
         "module top; typedef logic [3:0][7:0] m_t; function m_t f; f=32'h11223344; endfunction\n\
          initial begin $display(\"%h\", f()); #1 $finish; end endmodule",
-    )
-    .unwrap();
-    let ok = Command::new(env!("CARGO_BIN_EXE_vita"))
-        .arg(f.to_str().unwrap())
-        .current_dir(&d)
-        .output()
-        .expect("run vita")
-        .status
-        .success();
-    assert!(!ok, "a multi-dim packed typedef return must be loud");
+    );
+    assert!(o.contains("11223344"), "got:\n{o}");
 }

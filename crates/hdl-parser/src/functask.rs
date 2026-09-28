@@ -95,6 +95,13 @@ impl Parser<'_, '_> {
         let mut ret_type = ParamType::Implicit;
         let mut ret_two_state = false;
         let mut ret_string = false;
+        // §3 ⑤ⓖ: the packed dimensions after the first one (`logic [2:0][3:0]`, or a
+        // typedef that declares them). `FunctionDef` carries one `range`, so the
+        // return is declared FLAT (`flatten_packed_md_formal`) and the function name
+        // — the body's implicit return variable (IEEE §13.4.1) — is bound in the
+        // multi-dim packed rewrite table for the body, exactly like a multi-dim
+        // packed formal (§4.5.418).
+        let mut ret_md: Vec<Range> = Vec::new();
         let is_void = self.eat_kw(Kw::Void);
         if is_void {
             // `function void f(...)`: no return value. In module/package scope the
@@ -151,6 +158,9 @@ impl Parser<'_, '_> {
                 }
                 if range.is_none() {
                     range = self.opt_range();
+                    if range.is_some() && matches!(k, Kw::Logic | Kw::Reg | Kw::Bit) {
+                        ret_md = self.opt_packed_dims();
+                    }
                 }
                 // §4.5.156 (§3 全 site): `int` is the only non-vector kw-kind that can reach a
                 // USER range here (byte/shortint/longint carry a forced width; logic/reg/bit are
@@ -169,16 +179,22 @@ impl Parser<'_, '_> {
                 // return fields, mirroring the built-in-keyword arm above.
                 self.eat_scope_qualifier(); // optional `pkg::` before the type name
                 self.bump(); // the typedef name
-                             // The function return-type fields carry one packed dimension
-                             // (`range`); a multi-dim packed typedef (`typedef logic [3:0][7:0]
-                             // m_t`) cannot be represented, so loud-reject rather than silently
-                             // return only the first dimension's width (correct-or-loud).
-                             // §3 ⑤: an UNPACKED-array typedef return type has no field to ride
-                             // either — the return would silently be ONE element.
-                if !info.packed.is_empty() || !info.unpacked.is_empty() {
+                             // §3 ⑤: an UNPACKED-array typedef return type has no field to
+                             // ride — the return would silently be ONE element.
+                if !info.unpacked.is_empty() {
                     self.error(
-                        "a multi-dimension packed or unpacked-array type as a function return type",
+                        "a function return type other than an unpacked-array typedef (the return would be one element in v1)",
                     );
+                }
+                // §3 ⑤ⓖ: a multi-dim packed typedef is flattened below. A TYPE
+                // PARAMETER's dims stay loud: they follow an override per instance,
+                // and the return has no slot for the override's shape (§3 ⑤ⓕ).
+                if !info.packed.is_empty() && info.shape_param.is_some() {
+                    self.error(
+                        "a function return type other than a multi-dimensional packed type parameter (an override's dimensions cannot reach a function return in v1)",
+                    );
+                } else if info.unpacked.is_empty() {
+                    ret_md = info.packed.clone();
                 }
                 signed = info.signed;
                 range = info.range.clone();
@@ -212,7 +228,14 @@ impl Parser<'_, '_> {
                 // return-type signedness/range/type, V2005 order: [signed] [range] [type]
                 let sign_kw = self.opt_signed();
                 range = self.opt_range();
+                if range.is_some() {
+                    ret_md = self.opt_packed_dims(); // §3 ⑤ⓖ: `function [1:0][3:0] f`
+                }
                 ret_type = self.opt_param_type();
+                if !ret_md.is_empty() && !matches!(ret_type, ParamType::Implicit) {
+                    self.error("packed dimensions on a vector return type only (IEEE §13.4)");
+                    ret_md.clear();
+                }
                 // `integer` defaults SIGNED; an explicit qualifier wins.
                 signed = sign_kw.unwrap_or(matches!(ret_type, ParamType::Integer));
             }
@@ -223,13 +246,16 @@ impl Parser<'_, '_> {
             name: String::new(),
             span: self.cur_span(),
         });
+        let ret_dims = self.flatten_packed_md_formal(&mut range, ret_md);
         // EXT2-C: scope struct-port `var_struct` bindings to this function (see
         // `parse_task_def`) — snapshot before the ports, restore after the body.
         let tf_scope = self.snapshot_scope();
+        let outer_ret = self.bind_md_return(&name.name, &ret_dims); // §3 ⑤ⓖ
         let mut ports = self.opt_tf_port_paren_list();
         self.note_tf_formal_names(&ports);
         self.expect(TokenKind::Semi, "';' after function header");
         let (body_decls, body_enums, body) = self.tf_body(BlockEnd2::Endfunction, &mut ports);
+        self.md_ret_var = outer_ret;
         self.restore_scope(tf_scope);
         self.expect(
             TokenKind::Word(WordKind::Keyword(Kw::Endfunction)),
@@ -241,6 +267,7 @@ impl Parser<'_, '_> {
                 automatic,
                 signed,
                 range,
+                ret_packed: ret_dims,
                 ret_type,
                 ret_two_state,
                 ret_string,

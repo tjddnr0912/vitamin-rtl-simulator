@@ -559,7 +559,7 @@ impl Elaborator<'_> {
                 // A second index into a dynamic-storage element whose element type
                 // has >1 packed dimension is a flat bit-select here, not the outer
                 // packed element — loud (`dyn_md_elem.rs`).
-                if self.reject_dyn_md_elem_select(base) {
+                if self.reject_dyn_md_elem_select(base) || self.reject_md_return_call_select(base) {
                     let _ = index;
                     return self.placeholder_expr();
                 }
@@ -673,7 +673,7 @@ impl Elaborator<'_> {
             ast::ExprKind::PartSelect { base, msb, lsb } => {
                 // Loud twin of the BitSelect guard: `q[0][5:2]` on a >1-packed-dim
                 // element is a flat bit range, not a run of packed elements.
-                if self.reject_dyn_md_elem_select(base) {
+                if self.reject_dyn_md_elem_select(base) || self.reject_md_return_call_select(base) {
                     let _ = (msb, lsb);
                     return self.placeholder_expr();
                 }
@@ -776,7 +776,7 @@ impl Elaborator<'_> {
                 dir,
             } => {
                 // Loud twin of the BitSelect guard (`q[0][2+:4]`).
-                if self.reject_dyn_md_elem_select(base) {
+                if self.reject_dyn_md_elem_select(base) || self.reject_md_return_call_select(base) {
                     let _ = (offset, width, dir);
                     return self.placeholder_expr();
                 }

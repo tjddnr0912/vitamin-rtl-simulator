@@ -343,6 +343,20 @@ impl Parser<'_, '_> {
             );
             return base;
         }
+        // §3 ⑤ⓖ: a function's return variable is held to the shapes the flat twin carries
+        // exactly (`ret_var_selects_carried`); the rest stay loud.
+        if let Some(folded) = self.md_ret_folded(&base) {
+            if !folded {
+                self.error(MD_RET_UNFOLDED);
+                return base;
+            }
+            if !Self::ret_var_selects_carried(&dims, &sels) {
+                self.error(
+                    "a decimal literal inside the dimension for every select after the first, and an index without an arithmetic, bitwise, shift or conditional operator for the first, on a multi-dimensional packed function return variable in v1 (build the value in a local variable and return it)",
+                );
+                return base;
+            }
+        }
         // Bits below the selected element(s) contributed by the leading indexes.
         let mut off = Self::lit(0, span);
         for (k, s) in sels.iter().enumerate().take(m - 1) {
@@ -438,6 +452,170 @@ impl Parser<'_, '_> {
     }
 }
 
+/// §3 ⑤ⓖ: the refusal of a select or a dimension query on a return variable whose
+/// dimension bounds are not all decimal literals.
+const MD_RET_UNFOLDED: &str = "a return type whose dimension bounds are decimal literals to select from or query a multi-dimensional packed function return variable in v1 (build the value in a local variable and return it)";
+
+impl Parser<'_, '_> {
+    /// §3 ⑤ⓖ: bind a function's multi-dimensional packed RETURN variable — the
+    /// function name (IEEE §13.4.1) — for the body, like a multi-dimensional packed
+    /// formal, and mark it (`md_ret_var`). Returns the previous mark, which the caller
+    /// restores at `endfunction`; the caller's scope snapshot drops the binding. A
+    /// one-dimensional return binds nothing.
+    ///
+    /// Selects on the return variable are rewritten only when every dimension bound is
+    /// a decimal literal (`plain_int`). The flat rewrite re-evaluates a bound's
+    /// expression at each select, so a bound that is a NAME reads whatever a body-local,
+    /// loop variable, formal, class parameter or enum label of that name means there;
+    /// and a parse-time fold of the name cannot stand in for it, because the parser's
+    /// constant table does not follow every declaration that shadows a constant. When
+    /// a bound is not a literal, the dims are bound as written and marked, so every
+    /// select and dimension query on the return variable is refused.
+    pub(crate) fn bind_md_return(&mut self, name: &str, dims: &[Range]) -> Option<(String, bool)> {
+        if dims.is_empty() || name.is_empty() {
+            return self.md_ret_var.take();
+        }
+        let literal = dims
+            .iter()
+            .all(|r| Self::plain_int(&r.msb).is_some() && Self::plain_int(&r.lsb).is_some());
+        self.bind_packed_md_formal(name, dims);
+        self.md_ret_var.replace((name.to_string(), literal))
+    }
+
+    /// A decimal literal or its negation (parentheses peeled).
+    fn plain_int(e: &Expr) -> Option<i64> {
+        match &e.kind {
+            ExprKind::Paren { inner } => Self::plain_int(inner),
+            ExprKind::Unary {
+                op: UnOp::Minus,
+                operand,
+            } => Self::plain_dec(operand)?.checked_neg(),
+            _ => Self::plain_dec(e),
+        }
+    }
+
+    /// `Some(folded)` when `base` is the marked return variable.
+    fn md_ret_folded(&self, base: &Expr) -> Option<bool> {
+        let ExprKind::Ident(p) = &base.kind else {
+            return None;
+        };
+        match &self.md_ret_var {
+            Some((n, folded)) if p.segments.len() == 1 && p.segments[0].name == *n => Some(*folded),
+            _ => None,
+        }
+    }
+
+    /// The selects the flat twin carries exactly on a return variable whose `dims` are
+    /// decimal literals (`sels` in source order):
+    ///
+    /// - every select after the first (an INNER dimension) is decimal literals inside
+    ///   that dimension. Outside it, the flat twin reads a neighbouring element's bits
+    ///   where IEEE §7.4.6 reads x and a write changes nothing, and a name there could
+    ///   read a loop variable the parse-time fold cannot see.
+    /// - the first select's index or offset has no arithmetic, bitwise, shift or
+    ///   conditional operator at its top (`ctx_invariant`). An index is
+    ///   self-determined (IEEE §11.6.1), but the flat twin embeds it in 32-bit offset
+    ///   arithmetic, where `q + 1'b1` would no longer wrap at `q`'s width. Outside the
+    ///   first dimension the flat select leaves the vector too, so it needs no range.
+    /// - a part-select's bounds and an indexed part-select's width are decimal
+    ///   literals, so the existing order check sees them.
+    fn ret_var_selects_carried(dims: &[Range], sels: &[Sel]) -> bool {
+        sels.iter().enumerate().all(|(k, s)| {
+            let (Some(a), Some(b)) = (Self::plain_int(&dims[k].msb), Self::plain_int(&dims[k].lsb))
+            else {
+                return false;
+            };
+            let inside = |v: i64| k == 0 || (a.min(b) <= v && v <= a.max(b));
+            let lit = |e: &Expr| Self::plain_dec(e).filter(|v| inside(*v));
+            match s {
+                Sel::Bit(i) if k == 0 => Self::ctx_invariant(i),
+                Sel::Bit(i) => lit(i).is_some(),
+                // In the dimension's own direction: a reversed select would be a flat
+                // `+:` of width 0.
+                Sel::Part(hi, lo) => match (lit(hi), lit(lo)) {
+                    (Some(h), Some(l)) => (a >= b) == (h >= l) || h == l,
+                    _ => false,
+                },
+                Sel::Idx(o, w, _) if k == 0 => {
+                    Self::ctx_invariant(o) && Self::plain_dec(w).is_some_and(|w| w >= 1)
+                }
+                Sel::Idx(o, w, dir) => match (lit(o), Self::plain_dec(w)) {
+                    (Some(o), Some(w)) if w >= 1 => {
+                        let last = match dir {
+                            PartDir::PlusColon => o + w - 1,
+                            PartDir::MinusColon => o - w + 1,
+                        };
+                        inside(last)
+                    }
+                    _ => false,
+                },
+            }
+        })
+    }
+
+    /// A bare decimal literal (parentheses peeled): the one spelling whose value is the
+    /// same self-determined and inside any wider offset arithmetic.
+    fn plain_dec(e: &Expr) -> Option<i64> {
+        match &e.kind {
+            ExprKind::Paren { inner } => Self::plain_dec(inner),
+            ExprKind::IntLit {
+                kind: IntLitKind::Decimal,
+                ..
+            } => Self::const_lit(e),
+            _ => None,
+        }
+    }
+
+    /// An index whose value does not depend on the width it is evaluated at: a sized,
+    /// decimal or based literal, a name, a select, a call, a concatenation, a cast, or
+    /// an operator whose result is one bit. An arithmetic, bitwise or shift operator, a
+    /// unary minus or `~`, `?:`, and a fill literal (`'1`, IEEE §5.7.1 — one bit on its
+    /// own, all ones in the offset arithmetic) take the width around them.
+    fn ctx_invariant(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Paren { inner } => Self::ctx_invariant(inner),
+            ExprKind::IntLit { kind, raw } => !Self::is_fill_literal(*kind, raw),
+            ExprKind::Ident(_)
+            | ExprKind::PkgScoped { .. }
+            | ExprKind::BitSelect { .. }
+            | ExprKind::PartSelect { .. }
+            | ExprKind::IndexedPart { .. }
+            | ExprKind::Call { .. }
+            | ExprKind::SysCall { .. }
+            | ExprKind::MethodCall { .. }
+            | ExprKind::Concat { .. }
+            | ExprKind::Replicate { .. }
+            | ExprKind::Cast { .. } => true,
+            ExprKind::Unary { op, .. } => !matches!(op, UnOp::Minus | UnOp::Plus | UnOp::BitNot),
+            ExprKind::Binary { op, .. } => matches!(
+                op,
+                BinOp::Eq
+                    | BinOp::Ne
+                    | BinOp::CaseEq
+                    | BinOp::CaseNe
+                    | BinOp::WildEq
+                    | BinOp::WildNe
+                    | BinOp::Lt
+                    | BinOp::Le
+                    | BinOp::Gt
+                    | BinOp::Ge
+                    | BinOp::LogAnd
+                    | BinOp::LogOr
+            ),
+            _ => false,
+        }
+    }
+
+    /// `'0` / `'1` / `'x` / `'z` (optionally `'s…`): an unsized literal with no base.
+    fn is_fill_literal(kind: IntLitKind, raw: &str) -> bool {
+        let Some(rest) = raw.strip_prefix('\'') else {
+            return false;
+        };
+        let rest = rest.strip_prefix(['s', 'S']).unwrap_or(rest);
+        kind == IntLitKind::UnsizedBased && matches!(rest, "0" | "1" | "x" | "X" | "z" | "Z" | "?")
+    }
+}
+
 /// The §20.7 array query functions [`Parser::rewrite_packed_md_dim_query`] answers.
 /// Twin of `elaborate::const_array::is_dim_query_name` — the two crates cannot share
 /// a list, so a name added to one must be added to the other.
@@ -488,6 +666,10 @@ impl Parser<'_, '_> {
         let Some(dims) = dims else {
             return e;
         };
+        if self.md_ret_folded(&args[0]) == Some(false) {
+            self.error(MD_RET_UNFOLDED);
+            return e;
+        }
         let span = e.span;
         match name.name.as_str() {
             "$dimensions" | "$unpacked_dimensions" if args.len() == 2 => {

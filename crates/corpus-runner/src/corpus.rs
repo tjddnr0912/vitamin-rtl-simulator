@@ -559,11 +559,13 @@ pub static CORPUS: &[Workload] = &[
         data: &[],
         plusargs: &["+N=20000"],
         digest: "DIGEST=13b2ddfcd551ba2f",
-        // Refused at PARSE: `prim_lfsr.sv` declares two functions whose return type
-        // is a multi-dimensional packed typedef local to a generate block. Behind it,
-        // elaboration reports 42 errors in five classes (bench/ibex/RUN.md).
+        // Refused at ELABORATION: 42 errors in five classes (bench/ibex/RUN.md). The
+        // pin is the first one printed, `prim_cipher_pkg`'s packed-array parameter
+        // written as `'{…}` (ROADMAP §3.a ⑤ⓐ). The parse error in front of them — two
+        // `prim_lfsr.sv` functions returning a generate-local multi-dimensional packed
+        // typedef — closed in §3.a ⑤ⓖ.
         expect: Expect::Refused {
-            diag: "packed or unpacked-array type as a function return type",
+            diag: "package parameter `PRINCE_SHIFT_ROWS64` value is not a foldable constant",
         },
         // Not iverilog: it stops at `ibex_pkg.sv:350`, a keyed assignment pattern on
         // a packed-struct localparam. verilator is 2-state, so it answers here only
@@ -576,8 +578,8 @@ pub static CORPUS: &[Workload] = &[
         oracle:
             "verilator 5.052, x-invariant under randomized reset (iverilog 13 cannot parse it; \
                  sv2v 0.0.13 + iverilog 13, 4-state, agrees)",
-        note: "the only SystemVerilog workload (30k lines); refused at parse, then 42 \
-               elaboration errors in five classes",
+        note: "the only SystemVerilog workload (30k lines); refused at elaboration, 42 \
+               errors in five classes",
     },
     Workload {
         name: "keccak",

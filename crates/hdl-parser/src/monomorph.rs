@@ -309,6 +309,10 @@ pub(crate) fn subst_class_item(it: &mut ClassItem, map: &std::collections::BTree
         }
         ClassItem::Func { def, .. } => {
             subst_range(&mut def.range, map);
+            for p in &mut def.ret_packed {
+                subst_expr(&mut p.msb, map);
+                subst_expr(&mut p.lsb, map);
+            }
             for p in &mut def.ports {
                 subst_range(&mut p.range, map);
             }

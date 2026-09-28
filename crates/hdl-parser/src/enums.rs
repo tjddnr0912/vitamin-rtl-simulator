@@ -219,6 +219,7 @@ impl Parser<'_, '_> {
             automatic: false,
             signed: false,
             range: None,
+            ret_packed: Vec::new(),
             ret_type: ParamType::Implicit,
             ret_two_state: false,
             ret_string: true,

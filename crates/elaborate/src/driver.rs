@@ -147,6 +147,7 @@ impl<'s> Elaborator<'s> {
             hier_funcs: BTreeMap::new(),
             hier_tasks: BTreeMap::new(),
             hier_called_task_names: std::collections::BTreeSet::new(),
+            md_return_fns: std::collections::BTreeSet::new(),
             hier_task_port_dirs: BTreeMap::new(),
             hier_body_write_callers: BTreeMap::new(),
             hier_body_write_refused: std::collections::BTreeSet::new(),
@@ -628,6 +629,8 @@ impl<'s> Elaborator<'s> {
     /// hierarchy into ONE SimIr. The v1 single-module path is now the special
     /// case `top instantiating nothing` (one Instance, parent None).
     pub(crate) fn run(&mut self, unit: &ast::SourceUnit) {
+        // §3 ⑤ⓖ: before anything lowers (package bodies and class methods lower below).
+        self.md_return_fns = md_return::md_return_fn_names(unit);
         let (map, order) = build_module_map(unit);
         // Per-module static facts for the §11.6.1 region walks' hierarchical
         // leaves (`expr_size_hier`). Built here, from the same declaration order

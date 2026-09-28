@@ -410,14 +410,16 @@ fn the_containers_that_cannot_hold_a_dimension_list_stay_loud() {
          module top; m u(); initial #5 $finish; endmodule\n",
         "a simple type for a struct/union member",
     );
-    // (b) a function RETURN type (iverilog runs it: `FR f=a5`). `FunctionDef` is a
-    // frozen SchemaHash type with one `range`; widening it is a format bump.
+    // (b) a function RETURN type (iverilog runs it: `FR f=a5`). A typedef's or an
+    // inline multi-dimensional return is carried since §3 ⑤ⓖ (flat `range` plus
+    // `FunctionDef::ret_packed`), but a TYPE PARAMETER's dims follow an override per
+    // instance and the return has no slot for the override's shape.
     is_loud(
         "module m #(parameter type T = logic [1:0][3:0]) ();\n  \
          function automatic T f(logic [7:0] x); return x; endfunction\n  \
          initial #1 $display(\"FR f=%h\", f(8'hA5));\nendmodule\n\
          module top; m u(); initial #5 $finish; endmodule\n",
-        "as a function return type",
+        "a function return type other than a multi-dimensional packed type parameter",
     );
     // (c) a NON-ANSI port (iverilog runs it: `NA x1=a`). `PortDecl` has no packed
     // list; the ANSI twin below is the supported spelling.

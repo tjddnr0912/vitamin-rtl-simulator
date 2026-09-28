@@ -97,6 +97,7 @@ mod generate;
 mod hier;
 mod hier_defer;
 mod hier_leaf_shape;
+mod md_return;
 pub(crate) use hier_leaf_shape::HierLeafShape;
 mod hoist;
 mod ident_route;
@@ -884,6 +885,10 @@ struct Elaborator<'s> {
     // per-module framing; frame ⊇ inline (§4.5.198/199) means force-framing never regresses
     // the task's LOCAL callers, and name-based over-collection is harmless. NEVER restored.
     hier_called_task_names: std::collections::BTreeSet<String>,
+    // §3 ⑤ⓖ: the names of every function in the design whose return type has more than
+    // one packed dimension (`md_return.rs`). Collected ONCE at the start of `run`; a
+    // select on a call of one of these names is loud. NEVER restored.
+    md_return_fns: std::collections::BTreeSet<String>,
     // §4.5.201: per hier-callable frame-TASK FuncId, the declared port DIRECTIONS (parallel
     // to the formals). `resolve_deferred_hier_task_call` reads it to route each deferred arg
     // to an in-bind (input/inout copy-in) and/or an out-bind (output/inout copy-out) — the
