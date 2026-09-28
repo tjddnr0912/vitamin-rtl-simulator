@@ -859,6 +859,10 @@ impl Elaborator<'_> {
     // ── PASS 1a: ANSI ports → nets ─────────────────────────────────
     pub(crate) fn elaborate_ports(&mut self, ports: &ast::PortList) {
         if let ast::PortList::Ansi(list) = ports {
+            // Each port's type text, `[start, name)`. A continuation port (`output logic
+            // [1:0] a, b`) inherits its range from the port that wrote it.
+            let type_texts: Vec<(u32, u32)> =
+                list.iter().map(|p| (p.span.lo, p.name.span.lo)).collect();
             for p in list {
                 if p.iface.is_some() {
                     // v5 ⑥ (D): an interface-typed port creates NO net — its
@@ -920,6 +924,16 @@ impl Elaborator<'_> {
                     },
                 );
                 self.record_declared_bounds(&p.name.name, p.range.as_ref());
+                if p.unpacked.is_empty()
+                    && p.shape_param.is_none()
+                    && type_texts.iter().any(|&(lo, first)| {
+                        packed_pattern::first_dim_written(lo, first, p.range.as_ref())
+                    })
+                {
+                    if let Some(&(_, n, _)) = packed_ext.first() {
+                        self.record_packed_default_target(&p.name.name, n);
+                    }
+                }
                 if !p.packed.is_empty() {
                     if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
                         self.packed_dims.insert(id, packed_ext);

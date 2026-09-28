@@ -30,6 +30,8 @@ impl Elaborator<'_> {
     }
 
     fn lower_stmt_inner(&mut self, b: &mut ProcessBuilder, s: &ast::Stmt) {
+        // Before a hoist below can move a call out of a `'{default: v}` (`packed_pattern.rs`).
+        self.note_default_pattern_call(s);
         // R5-B: hoist an inout/output-function call out of a once-evaluated expression
         // to a temp (emitting its copy-out `Terminator::Call` first), so the statement
         // below lowers as a plain read of the temp. Gated on `inout_func_names`, so a
@@ -268,11 +270,13 @@ impl Elaborator<'_> {
                 // N7: reject forging a handle from an integral / leaking a handle
                 // to an integral (closes the use-after-free hole).
                 self.check_handle_assign(lhs, rhs);
+                let (early_lv, packed) = self.packed_default_target_first(lhs, rhs);
+                let rhs = packed.as_ref().unwrap_or(rhs);
                 let rhs_id = self.lower_expr(rhs);
                 if dyn_blessed {
                     self.dyn_formal_call_ok = false;
                 }
-                let lv = self.lower_lvalue(lhs);
+                let lv = early_lv.unwrap_or_else(|| self.lower_lvalue(lhs));
                 self.check_lvalue_kind(&lv, true); // P1-9 (E3018): no proc write to a net
                                                    // §5.7.1: context-determined fill literal → lvalue width.
                 let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
@@ -366,8 +370,10 @@ impl Elaborator<'_> {
                     return;
                 }
                 self.check_handle_assign(lhs, rhs); // N7 handle type gate
+                let (early_lv, packed) = self.packed_default_target_first(lhs, rhs);
+                let rhs = packed.as_ref().unwrap_or(rhs);
                 let rhs_id = self.lower_expr(rhs);
-                let lv = self.lower_lvalue(lhs);
+                let lv = early_lv.unwrap_or_else(|| self.lower_lvalue(lhs));
                 self.check_lvalue_kind(&lv, true); // P1-9 (E3018)
                                                    // §5.7.1: context-determined fill literal → lvalue width.
                 let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lv);
@@ -1288,8 +1294,10 @@ impl Elaborator<'_> {
             // VARIABLE: a net is E3018 (same check as procedural writes), a
             // bit/part-select is loud-unsupported (the force restriction).
             ast::Stmt::Assign { lhs, rhs, .. } => {
+                let (early_lv, packed) = self.packed_default_target_first(lhs, rhs);
+                let rhs = packed.as_ref().unwrap_or(rhs);
                 let rhs_id = self.lower_expr(rhs);
-                let lv = self.lower_lvalue(lhs);
+                let lv = early_lv.unwrap_or_else(|| self.lower_lvalue(lhs));
                 self.check_lvalue_kind(&lv, true);
                 if !is_whole_single_net(&lv) {
                     self.error(
@@ -1331,8 +1339,10 @@ impl Elaborator<'_> {
             // "RHS will only be evaluated once"); full procedural-continuous
             // re-evaluation is a documented refinement.
             ast::Stmt::Force { lhs, rhs, .. } => {
+                let (early_lv, packed) = self.packed_default_target_first(lhs, rhs);
+                let rhs = packed.as_ref().unwrap_or(rhs);
                 let rhs_id = self.lower_expr(rhs);
-                let lv = self.lower_lvalue(lhs);
+                let lv = early_lv.unwrap_or_else(|| self.lower_lvalue(lhs));
                 if !is_whole_single_net(&lv) {
                     self.error(
                         MsgCode::ElabUnsupported,

@@ -129,6 +129,7 @@ mod package;
 pub mod packed;
 mod packed_inner;
 mod packed_lval;
+mod packed_pattern;
 mod param_dup;
 mod param_query;
 mod params;
@@ -286,6 +287,13 @@ struct Elaborator<'s> {
     inline_elem_arrays: BTreeSet<u32>,
     /// Unpacked-array nets declared with a net delay (`wire #2 w [2];`). Never restored.
     delayed_decl_nets: BTreeSet<u32>,
+    /// Packed nets whose first packed dimension is written in their declaration → that
+    /// dimension's element count, for `'{default: v}` (`packed_pattern.rs`). Never restored.
+    packed_default_nets: BTreeMap<u32, u32>,
+    /// The spans of statement right-hand sides `'{default: v}` whose `v` calls something,
+    /// noted before a hoist moves the call into a temporary (`packed_pattern.rs`). Never
+    /// restored.
+    default_pattern_calls: BTreeSet<(u32, u32)>,
     /// The lowered actual of every `inout` port connection, approximated as
     /// parent→child: the child's drive back is in no IR. Never restored.
     inout_actual_exprs: Vec<u32>,

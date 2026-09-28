@@ -134,6 +134,9 @@ impl Elaborator<'_> {
                 span: name.name.span,
             };
             let lhs = self.lower_lvalue(&ast::Lvalue::Ident(path));
+            // `'{default: v}` on a packed target (`packed_pattern.rs`).
+            let packed = self.packed_default_rhs(&lhs, init);
+            let init = packed.as_ref().unwrap_or(init);
             let rhs_id = self.lower_expr(init);
             // §5.7.1: context-determined fill literal → lvalue width. THE SAME CALL
             // `elaborate_cont_assign` makes, because this IS that construct — a net

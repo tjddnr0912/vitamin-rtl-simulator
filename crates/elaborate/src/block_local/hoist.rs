@@ -419,6 +419,10 @@ impl Elaborator<'_> {
             .first()
             .and_then(|n| self.symbols.get(&self.fq(&n.name.name)).copied());
         if let Some(net) = existing {
+            // Two declarations now share this net, and the first one's packed shape is what
+            // `'{default: v}` would read (`packed_pattern.rs`); the second may differ, so
+            // neither takes that pattern.
+            self.packed_default_nets.remove(&net);
             // ⓑ-breadth fix: a SCALAR local safely coalesces (the net
             // is just overwritten in time), but a DYNAMIC-STORAGE local
             // (queue/dyn-array/assoc/string) is backed by a persistent

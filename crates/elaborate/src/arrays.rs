@@ -846,7 +846,7 @@ impl Elaborator<'_> {
     /// does not pin that count and iverilog cannot be asked (it rejects the form),
     /// so a call-bearing default stays loud. Deliberately CONSERVATIVE — anything
     /// this walker does not recognise as a pure leaf/compound counts as a call.
-    fn assign_pattern_expr_has_call(e: &ast::Expr) -> bool {
+    pub(crate) fn assign_pattern_expr_has_call(e: &ast::Expr) -> bool {
         use ast::ExprKind as K;
         match &e.kind {
             K::IntLit { .. }

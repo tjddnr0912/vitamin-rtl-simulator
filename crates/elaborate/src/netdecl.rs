@@ -815,6 +815,18 @@ impl Elaborator<'_> {
                     self.packed_dims.insert(id, packed_ext.clone());
                 }
             }
+            // A `'{default: v}` target whose first packed dimension is written here, so
+            // its element is known (`packed_pattern.rs`).
+            let first = d.names.first().map_or(d.span.hi, |n| n.name.span.lo);
+            if decl.unpacked.is_empty()
+                && !d.const_param
+                && d.shape_param.is_none()
+                && packed_pattern::first_dim_written(d.span.lo, first, d.range.as_ref())
+            {
+                if let Some(&(_, n, _)) = packed_ext.first() {
+                    self.record_packed_default_target(&decl.name.name, n);
+                }
+            }
         }
     }
 
@@ -864,6 +876,9 @@ impl Elaborator<'_> {
             // bindings / decl-inits are NOT routed here (IEEE 1800 var-port and
             // legacy `reg r = init` forms stay accepted).
             self.check_lvalue_kind(&lhs, false);
+            // `'{default: v}` on a packed target (`packed_pattern.rs`).
+            let packed = self.packed_default_rhs(&lhs, rhs);
+            let rhs = packed.as_ref().unwrap_or(rhs);
             let rhs_id = self.lower_expr(rhs);
             let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lhs);
             // The index of THIS cont-assign is the len BEFORE the push.

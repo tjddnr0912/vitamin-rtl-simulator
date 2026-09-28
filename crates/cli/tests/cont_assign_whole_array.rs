@@ -689,10 +689,11 @@ fn a_mismatched_source_or_pattern_names_the_mismatch() {
 }
 
 #[test]
-fn a_packed_target_default_pattern_is_still_refused() {
+fn a_packed_target_default_pattern_fills_every_bit() {
     // `'{default: v}` on a PACKED target (`ibex_top`'s `icache_tag_alert`, `ibex_alu`'s
-    // `imd_val_we_o`) is a different construct and stays E3009 here. verilator and sv2v →
-    // iverilog print `0000 1111 00`.
+    // `imd_val_we_o`) is a different construct, lowered by `packed_pattern.rs` since §3
+    // ⑤ⓛ (its tests are `packed_default_pattern.rs`); it was E3009 here. verilator and
+    // sv2v → iverilog print `0000 1111 00`.
     let src = r#"
 module t;
   logic [3:0] v0, v1;
@@ -706,10 +707,7 @@ module t;
   end
 endmodule
 "#;
-    is_loud(
-        src,
-        "a keyed assignment pattern `'{k: v, …}` is supported for a packed-struct target",
-    );
+    prints(src, "D1", &["D1 0000 1111 00"]);
 }
 
 #[test]
