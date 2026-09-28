@@ -7,6 +7,20 @@ section keys: 2T = §2 start-order table, 2M = §2 defects by mechanism, 2N = §
 numbered / small / intentionally loud, 0 = §0 promotion queue, 4 = SVA, 6 = G2 OBS (stages +
 beside-track items, counted together), 5b = performance / hardening, 7 / 8 = conditional / non-goals.
 
+## Real-design scoreboard
+
+One row per loop iteration from §4.5.563 on, when the queue turned real-design first. `§2` counts
+the frozen §2 rows the slice closed / newly recorded / net; `catalog` the rows it added to
+[../PROBE_CATALOG.md](../PROBE_CATALOG.md); `corpus` the `corpus-runner run` result; `refused
+pages` each refused row's error page before → after the slice. The section-count table below
+continues unchanged.
+
+| date | HEAD | slice | §2 closed / new / net | catalog | corpus | refused pages |
+|---|---|---|---|---|---|---|
+| 2026-09-28 | 586fa91 | §4.5.563 | 0 / 0 / 0 | +1 | 10/11 · 9 ok · verilog-axi ruled-split · ibex known-gap | ibex: not a row → parse 2 (elaboration 42 behind it) |
+
+## Section counts
+
 | date | HEAD | slice | tests | fmt | 2T | 2M | 2N | 3a | 3b | 3c | 0 | 4 | 6 | 5b | 7 | 8 | total (open / startable / blocked) |
 |---|---|---|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2026-09-18 | 772afe6 | §4.5.509 | 8004 | 32 | 27 / 6 / 21 | 116 / 76 / 40 | 7 / 0 / 7 | 24 / 19 / 5 | 91 / 79 / 12 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 14 / 13 / 1 | 18 / 9 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 335 / 211 / 124 |
@@ -182,3 +196,8 @@ a section restructure, a residue split).
 | 2026-09-28 | 24fe07d | §4.5.560 | 8725 | 34 | 21 / 1 / 20 | 182 / 98 / 84 | 5 / 0 / 5 | 24 / 19 / 5 | 115 / 99 / 16 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 418 / 249 / 169 |
 | 2026-09-28 | 74eddcb | §4.5.561 | 8727 | 34 | 21 / 1 / 20 | 187 / 101 / 86 | 5 / 0 / 5 | 24 / 19 / 5 | 116 / 99 / 17 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 424 / 252 / 172 |
 | 2026-09-28 | baa91e0 | §4.5.562 | 8727 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 116 / 99 / 17 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 433 / 259 / 174 |
+| 2026-09-28 | 586fa91 | §4.5.563 | 8730 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 29 / 24 / 5 | 118 / 101 / 17 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 443 / 268 / 175 |
+- 2026-09-28 (§4.5.563): 3a +5 (ibex's classes ⑤ⓖ–⑤ⓚ; ⑤ⓐ gained an ibex cell) and 3b +2
+  (display-null-arg, oob-read-exit). The total includes the Summary's new `study/03` row (3 / 2 / 1:
+  ibex end to end, the new-design census, the corpus in CI), which has no column here. §2 is frozen
+  from this row on; its counts stay, and the real-design scoreboard above is the progress measure.

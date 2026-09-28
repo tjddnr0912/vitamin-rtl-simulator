@@ -9,6 +9,20 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — `ibex`, the workload corpus's first SystemVerilog design (refused today)
+
+- The corpus has an eleventh row: lowRISC's Ibex RV32 core (30,272 lines of SystemVerilog,
+  Apache-2.0) running an RV32IM loop from a testbench memory, pinned at `DIGEST=13b2ddfcd551ba2f`.
+  Icarus Verilog 13 cannot parse it, so the digest is Verilator's. It is admitted because it
+  does not move when Verilator randomises every uninitialised bit (66 runs), sv2v converted
+  and run under Icarus Verilog (4-state) prints the same digest, and eight small mutations of
+  the core move it. `corpus-runner run` grades the row `known-gap` and reports
+  `coverage: 10/11`: vita stops at a parse error in `prim_lfsr.sv`, and behind it elaboration
+  reports 42 errors in five classes. Recipe and measurements: `bench/ibex/RUN.md`.
+- The corpus contract admits Verilator as the oracle of a SystemVerilog design Icarus Verilog
+  cannot parse only under that x-invariance check, and a manifest test holds such a row to
+  recording it.
+
 ### Fixed — a package function's own constant keeps its declared type in a constant
 
 - `localparam [31:0] K = g();` where the package function `g` returns the package's
