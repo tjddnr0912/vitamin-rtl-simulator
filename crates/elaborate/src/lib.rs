@@ -61,6 +61,7 @@ mod const_eval;
 mod const_fn;
 mod const_fn_width;
 mod const_level_header;
+mod cont_array;
 pub use const_level_header::T0_PULSE_KIND;
 mod const_real;
 mod const_select;
@@ -277,6 +278,17 @@ struct Elaborator<'s> {
     exprs: Vec<ir::Expr>,
     consts: Vec<ir::ConstVal>,
     cont_assigns: Vec<ir::ContAssign>,
+    /// Whole-array `assign`s lowered element by element, for the sole-writer check
+    /// (`cont_array.rs`). Never restored.
+    whole_array_cas: Vec<cont_array::WholeArrayCa>,
+    /// Unpacked-array nets whose element type is written in their own declaration
+    /// (`cont_array::inline_elem_type`). Never restored.
+    inline_elem_arrays: BTreeSet<u32>,
+    /// Unpacked-array nets declared with a net delay (`wire #2 w [2];`). Never restored.
+    delayed_decl_nets: BTreeSet<u32>,
+    /// The lowered actual of every `inout` port connection, approximated as
+    /// parent→child: the child's drive back is in no IR. Never restored.
+    inout_actual_exprs: Vec<u32>,
     /// WAND/WOR: NetIds declared `wand`/`wor` — the engine resolves a MULTI-driven
     /// such net by wired-AND / wired-OR instead of the default wire resolution.
     wired_and_nets: BTreeSet<u32>,

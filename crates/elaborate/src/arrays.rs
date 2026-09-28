@@ -617,33 +617,8 @@ impl Elaborator<'_> {
         let s_dims = self.net_dim_extents(s_net);
         let t_res = &t_dims[t_lead.len()..];
         let s_res = &s_dims[s_lead.len()..];
-        if t_res.len() != s_res.len()
-            || t_res.iter().zip(s_res).any(|(&(_, ts), &(_, ss))| ts != ss)
-        {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "unpacked-array assignment requires the same number of dimensions \
-                 and the same size per dimension (IEEE 1800 §7.6)",
-            );
-            return true;
-        }
-        let (tw, tk, tsg) = {
-            let nv = &self.nets[t_net as usize];
-            (nv.width, nv.kind, nv.signed)
-        };
-        let (sw, sk, ssg) = {
-            let nv = &self.nets[s_net as usize];
-            (nv.width, nv.kind, nv.signed)
-        };
-        // §6.22.2 equivalent element types: width, realness AND signedness
-        // (a raw word copy would be bit-correct either way, but accepting a
-        // signed/unsigned mix would silently diverge from conformant tools).
-        if tw != sw || (tk == ir::NetKind::Real) != (sk == ir::NetKind::Real) || tsg != ssg {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "unpacked-array assignment requires identical element types \
-                 (IEEE 1800 §7.6)",
-            );
+        if let Some(msg) = self.array_copy_mismatch(t_net, t_res, s_net, s_res) {
+            self.error(MsgCode::ElabUnsupported, msg);
             return true;
         }
         if !nonblocking && delay.is_some() {

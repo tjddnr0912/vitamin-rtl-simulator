@@ -789,6 +789,22 @@ impl Elaborator<'_> {
                 let key = self.fq(&decl.name.name);
                 if let Some(&id) = self.symbols.get(&key) {
                     self.unpacked_array_nets.insert(id);
+                    // A net declaration delay (`wire #2 w [2];`) reaches only a
+                    // net-declaration assignment here, so a whole-array `assign` to
+                    // such a net stays refused (`cont_array.rs`).
+                    if d.delay.is_some() {
+                        self.delayed_decl_nets.insert(id);
+                    }
+                    let first = d.names.first().map_or(d.span.hi, |n| n.name.span.lo);
+                    if cont_array::inline_elem_type(
+                        d.span.lo,
+                        first,
+                        d.range.as_ref(),
+                        &d.packed,
+                        d.shape_param.is_some(),
+                    ) {
+                        self.inline_elem_arrays.insert(id);
+                    }
                 }
             }
             // Record packed-dim extents for a multi-dim packed net so a select can be
@@ -836,6 +852,12 @@ impl Elaborator<'_> {
         // (`fold_ca_delay_rt`, which also stamps the `Some(0)` routing flag).
         let (delay, rft, rt, zero_scope) = self.fold_ca_delay_rt(ca.delay.as_ref());
         for (lv, rhs) in &ca.assigns {
+            // A whole unpacked array has no whole value here: an undelayed user `assign`
+            // of one is lowered element by element (`cont_array.rs`).
+            if ca.delay.is_none() && !ca.from_gate && self.cont_assign_whole_array(lv, rhs, ca.span)
+            {
+                continue;
+            }
             let lhs = self.lower_lvalue(lv);
             // P1-9 (E3018): a user `assign` may not drive a Reg/Integer/Real
             // variable (SV `logic` admits one continuous driver — passes). Port

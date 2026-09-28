@@ -535,6 +535,9 @@ impl Elaborator<'_> {
                 net: src,
                 word: Some(widx_r),
             });
+            if matches!(dir, ir::PortDir::Inout) {
+                self.inout_actual_exprs.push(rhs);
+            }
             // R14: a per-element port hookup vita synthesized — `port` is the
             // honest kind (there is no `assign` keyword in the source).
             //
@@ -766,6 +769,11 @@ impl Elaborator<'_> {
                         .map(|n| n.width)
                         .unwrap_or(32);
                     let rhs = self.lower_ctx_or_plain(conn.expr, pw);
+                    if matches!(dir, ir::PortDir::Inout) {
+                        // The child may drive what it is connected to, and no IR says
+                        // so: the sole-writer check reads this (`cont_array.rs`).
+                        self.inout_actual_exprs.push(rhs);
+                    }
                     self.cur_prefix = child_prefix;
                     let lhs = whole_net_lvalue(child_id);
                     self.push_cont_assign_port(
@@ -915,6 +923,19 @@ impl Elaborator<'_> {
                 if !p.packed.is_empty() {
                     if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
                         self.packed_dims.insert(id, packed_ext);
+                    }
+                }
+                if !p.unpacked.is_empty()
+                    && cont_array::inline_elem_type(
+                        p.span.lo,
+                        p.name.span.lo,
+                        p.range.as_ref(),
+                        &p.packed,
+                        p.shape_param.is_some(),
+                    )
+                {
+                    if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
+                        self.inline_elem_arrays.insert(id);
                     }
                 }
                 // MULTI-DIM (or non-zero-based) unpacked geometry, exactly as

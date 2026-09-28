@@ -15,6 +15,10 @@ impl<'s> Elaborator<'s> {
             exprs: Vec::new(),
             consts: Vec::new(),
             cont_assigns: Vec::new(),
+            whole_array_cas: Vec::new(),
+            delayed_decl_nets: BTreeSet::new(),
+            inline_elem_arrays: BTreeSet::new(),
+            inout_actual_exprs: Vec::new(),
             wired_and_nets: BTreeSet::new(),
             wired_or_nets: BTreeSet::new(),
             instances: Vec::new(),
@@ -974,5 +978,8 @@ impl<'s> Elaborator<'s> {
         self.demote_runtime_delay_on_resolved_nets();
         // whole-net multidriver check over the WHOLE flat IR (instance-agnostic).
         self.check_whole_net_multidriver();
+        // A whole-array `assign` is kept only as its array's sole writer — every
+        // writer exists by now (`cont_array.rs`).
+        self.check_whole_array_sole_writer();
     }
 }
