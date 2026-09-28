@@ -9,6 +9,23 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — `'{default: v}` on a whole packed variable or net
+
+- `assign v = '{default: '0};`, `w = '{default: s};` and `logic [1:0][3:0] m = '{default: 4'hA};`
+  now run in continuous and procedural assignments (blocking, non-blocking, procedural `assign`,
+  `force`) and in declaration initializers. Every element of the first packed dimension takes `v`
+  as an assignment to that element: a bit of `logic [3:0]` takes `v`'s low bit, an element of
+  `logic [1:0][3:0]` or of an array of packed structs takes `v` sized to the element (sign-extended
+  when `v` is signed). They were `E3009` (`a keyed assignment pattern … is supported for a
+  packed-struct target … and as '{default: v} on an unpacked array`). Values match Verilator and
+  sv2v → Icarus Verilog. The corpus row `ibex` goes from 12 elaboration errors to 7.
+- Lowered when the target's first packed dimension is written in its own declaration and `v` is
+  built from literals, numeric or string-valued constants and plain packed variables. Everything
+  else keeps `E3009`: a first dimension a typedef supplies, a part-select, concatenation or
+  element target, a parameter value, two same-named block-locals sharing one net, and a `v` that
+  calls a function (Verilator evaluates it once per element, Icarus once), is real, a string
+  variable, a class handle or a hierarchical reference (ROADMAP §3.b `packed-default-residue`).
+
 ### Added — a whole unpacked array as the target of a continuous `assign`
 
 - `assign a = b;` (an array of the same shape and element type), `assign a = '{e0, e1, …};`

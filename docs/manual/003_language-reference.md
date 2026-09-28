@@ -554,12 +554,12 @@ end
 |---|---|---|
 | Positional `'{e0, …}` | Supported | Packed struct or union, fixed-size unpacked array (1-D and multi-dimensional, nested), dynamic array, queue. |
 | Named `'{name: v, …}` | Supported | For a packed struct and a packable record, in a procedural assignment, a declaration initializer, and a `push_back`/`push_front`/`insert` actual. Field order comes from the declaration. Every member must be named exactly once. |
-| `'{default: v}` | Supported | For a packed struct and for a fixed-size unpacked array of any bounds. The value is applied once per filled slot, so it takes each member's own width: `'{default: 1'b1}` on `cfg_t` is `13'h0301`, not all-ones. At most one `default:`. |
+| `'{default: v}` | Supported | For a packed struct and for a fixed-size unpacked array of any bounds. The value is applied once per filled slot, so it takes each member's own width: `'{default: 1'b1}` on `cfg_t` is `13'h0301`, not all-ones. At most one `default:`. Also for a whole packed vector or packed array whose first packed dimension is written in its own declaration, in every assignment form and initializer: each element of that dimension takes `v` as an assignment to it — a bit of `logic [3:0]` takes `v`'s low bit, `logic [1:0][3:0] m = '{default: 4'hA}` is `8'haa`, and an element of an array of packed structs takes `v` whole. |
 | Mixed `'{name: v, default: v}` | Supported | `default` covers whatever no name gave. |
 | Integer key `'{0: a}`, type key `'{int: 0}`, replication `'{N{e}}` | Loud | `VITA-E2002` |
 | Mixing positional and keyed | Loud | `VITA-E2002` — IEEE 1800 §10.9 does not allow it. |
-| A call as the `default:` value | Loud | The value is duplicated into every slot it fills, so a call would run once per member. |
-| A keyed pattern on a dynamic array, queue, packed array, subroutine argument or continuous assign, or nested inside a positional multi-dimensional pattern | Loud | `VITA-E3009` — the keys cannot be resolved against that target. |
+| A call as the `default:` value | Loud | The value is duplicated into every slot it fills, so a call would run once per member. On a packed target a real, string-variable, class-handle or hierarchical value is loud too. |
+| A keyed pattern on a dynamic array, queue or subroutine argument, `'{default: v}` on a packed target whose first dimension a typedef supplies, on a part-select, concatenation or element target, or as a parameter value, or a keyed pattern nested inside a positional multi-dimensional pattern | Loud | `VITA-E3009` — the keys cannot be resolved against that target. |
 
 Prefer the named spelling for a struct: a positional pattern is coupled to the
 declaration order, so inserting a member shifts every later value.
