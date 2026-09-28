@@ -1,0 +1,210 @@
+// Testbench for lowRISC Ibex - vitamin bench corpus. Written for this benchmark.
+`timescale 1ns/1ps
+
+module tb;
+
+  logic clk = 1'b0;
+  logic rst_n = 1'b1;
+
+  always #5 clk = ~clk;
+
+  // ---------------- memory ----------------
+  logic [31:0] mem [0:8191];
+
+  // instruction port
+  logic        instr_req;
+  logic        instr_gnt;
+  logic        instr_rvalid;
+  logic [31:0] instr_addr;
+  logic [31:0] instr_rdata;
+
+  // data port
+  logic        data_req;
+  logic        data_gnt;
+  logic        data_rvalid;
+  logic        data_we;
+  logic [3:0]  data_be;
+  logic [31:0] data_addr;
+  logic [31:0] data_wdata;
+  logic [31:0] data_rdata;
+
+  assign instr_gnt = instr_req;
+  assign data_gnt  = data_req;
+
+  wire [12:0] iw = instr_addr[14:2];
+  wire [12:0] dw = data_addr[14:2];
+
+  // `always`, not `always_ff`: the initial block loads the program into `mem`, and a variable
+  // an always_ff writes may have no other writer (IEEE 1800-2017 §9.2.2.4).
+  always @(posedge clk) begin
+    instr_rvalid <= instr_req;
+    if (instr_req) instr_rdata <= mem[iw];
+
+    data_rvalid <= data_req;
+    if (data_req) begin
+      if (data_we) begin
+        if (data_be[0]) mem[dw][7:0]   <= data_wdata[7:0];
+        if (data_be[1]) mem[dw][15:8]  <= data_wdata[15:8];
+        if (data_be[2]) mem[dw][23:16] <= data_wdata[23:16];
+        if (data_be[3]) mem[dw][31:24] <= data_wdata[31:24];
+        data_rdata <= 32'h0;
+      end else begin
+        data_rdata <= mem[dw];
+      end
+    end
+  end
+
+  // ---------------- digest ----------------
+  logic [63:0] digest;
+  integer      cycles;
+
+  wire [63:0] cyc_val = { instr_req ? instr_addr : 32'h0,
+                          data_req  ? data_addr  : 32'h0 };
+  wire [63:0] wr_val  = (data_req && data_we) ? { 28'h0, data_be, data_wdata } : 64'h0;
+  // The strobes and the byte enables of every request, loads included. Without this term a
+  // request at address 0 reads as no request, and a load's byte enables reach no term.
+  wire [7:0]  ctl_val = { 1'b0, instr_req, data_req, data_req && data_we,
+                          data_req ? data_be : 4'h0 };
+  // The cycle count enters every cycle too. Without it an idle cycle only rotates the digest,
+  // so idle cycles before the first request (digest still 0) and any 64 idle cycles in a row
+  // (a full rotation) change nothing, and a core that starts a cycle late prints the pin.
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      digest <= 64'h0;
+      cycles <= 0;
+    end else begin
+      digest <= ({digest[62:0], digest[63]} ^ cyc_val ^ {ctl_val, 56'h0} ^ {32'h0, cycles})
+                + wr_val;
+      cycles <= cycles + 1;
+    end
+  end
+
+  // ---------------- DUT ----------------
+  ibex_top #(
+    .RV32M          (ibex_pkg::RV32MFast),
+    .RV32B          (ibex_pkg::RV32BNone),
+    .RegFile        (ibex_pkg::RegFileFF),
+    .BranchTargetALU(1'b0),
+    .WritebackStage (1'b0),
+    .ICache         (1'b0),
+    .SecureIbex     (1'b0)
+  ) u_top (
+    .clk_i                 (clk),
+    .rst_ni                (rst_n),
+    .test_en_i             (1'b0),
+    .scan_rst_ni           (1'b1),
+
+    .cheriot_enable_i      (4'b1010),
+    .hart_id_i             (32'h0),
+    .boot_addr_i           (32'h0),
+    .trvk_heap_base_addr_i (32'h0),
+
+    .instr_req_o           (instr_req),
+    .instr_gnt_i           (instr_gnt),
+    .instr_rvalid_i        (instr_rvalid),
+    .instr_addr_o          (instr_addr),
+    .instr_rdata_i         (instr_rdata),
+    .instr_rdata_intg_i    (7'h0),
+    .instr_err_i           (1'b0),
+
+    .data_req_o            (data_req),
+    .data_gnt_i            (data_gnt),
+    .data_rvalid_i         (data_rvalid),
+    .data_we_o             (data_we),
+    .data_be_o             (data_be),
+    .data_addr_o           (data_addr),
+    .data_wdata_o          (data_wdata),
+    .data_wdata_intg_o     (),
+    .data_tag_o            (),
+    .data_rdata_i          (data_rdata),
+    .data_rdata_intg_i     (7'h0),
+    .data_tag_i            (1'b0),
+    .data_err_i            (1'b0),
+
+    .trvk_revbm_gnt_i      (1'b0),
+    .trvk_revbm_rvalid_i   (1'b0),
+    .trvk_revbm_rdata_i    (32'h0),
+    .trvk_revbm_rdata_intg_i(7'h0),
+    .trvk_revbm_err_i      (1'b0),
+
+    .irq_software_i        (1'b0),
+    .irq_timer_i           (1'b0),
+    .irq_external_i        (1'b0),
+    .irq_fast_i            (15'h0),
+    .irq_nm_i              (1'b0),
+
+    .scramble_key_valid_i  (1'b0),
+    // Tied off rather than left open: an open input floats at z in a 4-state simulator and at
+    // 0 in verilator, and the two must see the same design.
+    .scramble_key_i        ('0),
+    .scramble_nonce_i      ('0),
+    .ram_cfg_icache_tag_i  ('0),
+    .ram_cfg_icache_data_i ('0),
+    .debug_req_i           (1'b0),
+
+    .fetch_enable_i        (4'b0101),
+    .mcounteren_writable_i (4'b1010)
+  );
+
+  // ---------------- stimulus ----------------
+  integer N;
+  integer i;
+  logic done;
+
+  // The program is generated by gen_prog.py: an RV32IM loop run N times that stores
+  // its accumulator every iteration, then a store to 0x404 that ends the run.
+  initial begin
+    for (i = 0; i < 8192; i = i + 1) mem[i] = 32'h0;
+    mem[13'h020] = 32'h40002183;
+    mem[13'h021] = 32'h00000093;
+    mem[13'h022] = 32'h00000113;
+    mem[13'h023] = 32'h002080b3;
+    mem[13'h024] = 32'h00311213;
+    mem[13'h025] = 32'h0040c0b3;
+    mem[13'h026] = 32'h022102b3;
+    mem[13'h027] = 32'h005080b3;
+    mem[13'h028] = 32'h0070d313;
+    mem[13'h029] = 32'h006080b3;
+    mem[13'h02a] = 32'h00110113;
+    mem[13'h02b] = 32'h70102023;
+    mem[13'h02c] = 32'hfc314ee3;
+    mem[13'h02d] = 32'h40102223;
+    mem[13'h02e] = 32'h0000006f;
+    N = 2000;
+    void'($value$plusargs("N=%d", N));
+    mem[13'h100] = N[31:0];   // byte 0x400
+
+    // Reset is asserted by a falling edge, at #1 so every process already waits for it. A reset
+    // that relied on clock edges alone would miss ibex's core: it runs on a gated clock whose
+    // enable is state the reset itself clears, and a 2-state run can start with that gate
+    // closed. A declaration initialiser makes no edge (IEEE 1800-2017 §6.8).
+    #1 rst_n = 1'b0;
+    repeat (10) @(posedge clk);
+    // Released on a falling edge. A blocking write at the rising edge races every
+    // flop that samples rst_n there, and simulators may order that race differently.
+    @(negedge clk);
+    rst_n = 1'b1;
+  end
+
+  // sentinel: store to byte address 0x404. `done` is reset here, not in an initial
+  // block: a variable an always_ff writes may have no other writer (IEEE 1800-2017
+  // §9.2.2.4), and vita refuses the two-writer form.
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      done <= 1'b0;
+    end else if (!done && data_req && data_we && data_addr == 32'h0000_0404) begin
+      done <= 1'b1;
+      $display("DIGEST=%016h", digest ^ {32'h0, data_wdata});
+      $finish;
+    end
+  end
+
+  initial begin
+    #20000000;
+    $display("WATCHDOG");
+    $display("DIGEST=%016h", 64'hDEADDEADDEADDEAD);
+    $finish;
+  end
+
+endmodule

@@ -66,7 +66,7 @@ pub enum Expect {
     /// wired to report itself as a regression. Making the code reachable only from
     /// `Runs` removes the shape of that mistake.
     Runs { exit: i32 },
-    /// Declines at elaborate. `diag` is a distinctive fragment of the message —
+    /// Declines at parse or elaborate. `diag` is a distinctive fragment of the message —
     /// matched as a substring so rewording a diagnostic does not break the gate,
     /// which is the same reason the compliance corpus asserts on message codes.
     Refused { diag: &'static str },
@@ -458,6 +458,126 @@ pub static CORPUS: &[Workload] = &[
                settle learning that a call can be certified — without the second, \
                elaborate passed in 1.03 s and the run took ~38 hours against \
                iverilog's 7.62 s",
+    },
+    Workload {
+        name: "ibex",
+        origin: Origin::Upstream {
+            repo: "https://github.com/lowRISC/ibex",
+            sha: "8b8ee086aef72e0833b7f0493d9d33f1e4d3c8e2",
+            license: "Apache-2.0",
+        },
+        shape: Shape::Cpu,
+        root: "ibex",
+        dir: "ibex",
+        // `SYNTHESIS` removes the DPI-C exports and `DV_FCOV_DISABLE` empties the
+        // coverage macros. Every tool gets both, or the rows compare two designs.
+        vita_args: &[
+            "--top",
+            "tb",
+            "-DSYNTHESIS",
+            "-DDV_FCOV_DISABLE",
+            "-Isrc/vendor/lowrisc_ip/ip/prim/rtl",
+            "-Isrc/vendor/lowrisc_ip/dv/sv/dv_utils",
+            "-Isrc/rtl",
+        ],
+        iverilog_args: &[
+            "-s",
+            "tb",
+            "-DSYNTHESIS",
+            "-DDV_FCOV_DISABLE",
+            "-Isrc/vendor/lowrisc_ip/ip/prim/rtl",
+            "-Isrc/vendor/lowrisc_ip/dv/sv/dv_utils",
+            "-Isrc/rtl",
+        ],
+        // The files verilator's `-y` search resolved for `tb`, in its order: packages
+        // first. `bench/ibex/files.txt` holds the same list.
+        files: &[
+            "src/rtl/ibex_pkg.sv",
+            "src/rtl/ibex_cheriot_pkg.sv",
+            "src/vendor/lowrisc_ip/ip/prim_generic/rtl/prim_pkg.sv",
+            "src/vendor/lowrisc_ip/ip/prim_generic/rtl/prim_ram_1p_pkg.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_util_pkg.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_pkg.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_mubi_pkg.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_count_pkg.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_cipher_pkg.sv",
+            "src/rtl/ibex_alu.sv",
+            "src/rtl/ibex_branch_predict.sv",
+            "src/rtl/ibex_cheriot_ex.sv",
+            "src/rtl/ibex_compressed_decoder.sv",
+            "src/rtl/ibex_controller.sv",
+            "src/rtl/ibex_core.sv",
+            "src/rtl/ibex_counter.sv",
+            "src/rtl/ibex_cs_registers.sv",
+            "src/rtl/ibex_csr.sv",
+            "src/rtl/ibex_decoder.sv",
+            "src/rtl/ibex_dummy_instr.sv",
+            "src/rtl/ibex_ex_block.sv",
+            "src/rtl/ibex_fetch_fifo.sv",
+            "src/rtl/ibex_icache.sv",
+            "src/rtl/ibex_id_stage.sv",
+            "src/rtl/ibex_if_stage.sv",
+            "src/rtl/ibex_load_store_unit.sv",
+            "src/rtl/ibex_lockstep.sv",
+            "src/rtl/ibex_multdiv_fast.sv",
+            "src/rtl/ibex_multdiv_slow.sv",
+            "src/rtl/ibex_pmp.sv",
+            "src/rtl/ibex_prefetch_buffer.sv",
+            "src/rtl/ibex_register_file_ff.sv",
+            "src/rtl/ibex_register_file_fpga.sv",
+            "src/rtl/ibex_register_file_latch.sv",
+            "src/rtl/ibex_top.sv",
+            "src/rtl/ibex_trvk.sv",
+            "src/rtl/ibex_wb_stage.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_count.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_fifo_sync.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_fifo_sync_cnt.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_lfsr.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_prince.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_ram_1p_adv.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_ram_1p_scr.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_22_16_dec.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_22_16_enc.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_28_22_dec.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_28_22_enc.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_39_32_dec.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_39_32_enc.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_64_57_dec.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_64_57_enc.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_hamming_22_16_dec.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_hamming_22_16_enc.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_hamming_39_32_dec.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_secded_inv_hamming_39_32_enc.sv",
+            "src/vendor/lowrisc_ip/ip/prim/rtl/prim_subst_perm.sv",
+            "src/vendor/lowrisc_ip/ip/prim_generic/rtl/prim_buf.sv",
+            "src/vendor/lowrisc_ip/ip/prim_generic/rtl/prim_clock_gating.sv",
+            "src/vendor/lowrisc_ip/ip/prim_generic/rtl/prim_clock_mux2.sv",
+            "src/vendor/lowrisc_ip/ip/prim_generic/rtl/prim_flop.sv",
+            "src/vendor/lowrisc_ip/ip/prim_generic/rtl/prim_ram_1p.sv",
+            "tb.sv",
+        ],
+        data: &[],
+        plusargs: &["+N=20000"],
+        digest: "DIGEST=13b2ddfcd551ba2f",
+        // Refused at PARSE: `prim_lfsr.sv` declares two functions whose return type
+        // is a multi-dimensional packed typedef local to a generate block. Behind it,
+        // elaboration reports 42 errors in five classes (bench/ibex/RUN.md).
+        expect: Expect::Refused {
+            diag: "packed or unpacked-array type as a function return type",
+        },
+        // Not iverilog: it stops at `ibex_pkg.sv:350`, a keyed assignment pattern on
+        // a packed-struct localparam. verilator is 2-state, so it answers here only
+        // because the digest does not move under randomized x initialisation (contract
+        // rule 2): 168 runs, at least 64 seeds at each size. The testbench asserts reset
+        // with a falling edge because ibex's core runs on a gated clock whose enable is
+        // itself reset state; without that edge, 29 of 62 runs did not print the pin. sv2v 0.0.13
+        // converted to Verilog and run under iverilog 13 — a 4-state simulator — prints
+        // the same digest at both sizes (bench/ibex/RUN.md).
+        oracle:
+            "verilator 5.052, x-invariant under randomized reset (iverilog 13 cannot parse it; \
+                 sv2v 0.0.13 + iverilog 13, 4-state, agrees)",
+        note: "the only SystemVerilog workload (30k lines); refused at parse, then 42 \
+               elaboration errors in five classes",
     },
     Workload {
         name: "keccak",

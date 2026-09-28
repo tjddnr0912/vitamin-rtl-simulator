@@ -94,6 +94,24 @@ fn every_workload_has_sources_and_an_oracle() {
     }
 }
 
+/// verilator is 2-state. It stands as a row's oracle only when iverilog cannot parse
+/// the design and the digest was shown not to depend on x (contract rule 2). A row that
+/// skipped the second half would grade vita against another design's answer: picorv32's
+/// and serv's verilator digests are exactly that.
+#[test]
+fn a_verilator_oracle_row_records_its_x_invariance_check() {
+    for w in CORPUS {
+        if w.oracle.to_ascii_lowercase().starts_with("verilator") {
+            assert!(
+                w.oracle.contains("x-invariant"),
+                "{}: verilator is the oracle but no x-invariance check is recorded: {:?}",
+                w.name,
+                w.oracle
+            );
+        }
+    }
+}
+
 /// A refusal pinned as an empty string would match every diagnostic, so a *changed*
 /// gap would grade as the known one.
 #[test]

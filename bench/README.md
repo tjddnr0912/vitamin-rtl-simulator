@@ -29,9 +29,9 @@ are not comparable.
 | 2 | nothing present (run `fetch --run` first), or `--filter` matched no workload |
 | 3 | usage error, or no `vita` binary to run |
 
-## The ten rows
+## The eleven rows
 
-Ten workloads over nine directories: `keccak` and `keccak-arr` share `bench/keccak`
+Eleven workloads over ten directories: `keccak` and `keccak-arr` share `bench/keccak`
 and differ only in which design file they compile. Four shapes are represented, so
 the corpus measures more than one kind of RTL.
 
@@ -47,15 +47,16 @@ the corpus measures more than one kind of RTL.
 | `verilog-ethernet` | `verilog-ethernet/` | alexforencich/verilog-ethernet | stream | MIT |
 | `keccak` | `keccak/` | first-party | crypto | this repository |
 | `keccak-arr` | `keccak/` | first-party | crypto | this repository |
+| `ibex` | `ibex/` | lowRISC/ibex | cpu | Apache-2.0 |
 
 Each directory carries a `RUN.md` with the by-hand recipe for that one workload: the
 pinned SHA, the exact file list in order, the exact command lines, the expected
 output, and the reconstruction steps for anything not committed. `bench/keccak` also
 carries a `README.md`, because that RTL is written here rather than fetched.
 
-`bench/ibex` is not a corpus row and is not committed. It is kept locally for
-reproduction only: iverilog 13 cannot parse it, so no oracle can grade it, and the
-corpus admits no design an oracle has not run first.
+`ibex` is the only SystemVerilog row and the only one vita refuses. iverilog 13 cannot
+parse it, so its oracle is verilator, admitted because its digest does not move when
+every uninitialised bit is randomised (`bench/ibex/RUN.md`).
 
 ## Committed here, and not
 
@@ -71,8 +72,7 @@ Two kinds of thing live under `bench/`, treated oppositely.
 
 `.gitignore` implements this as an allow-list: everything under `bench/` is ignored
 unless it matches a named pattern, so a stray binary or scratch probe cannot be
-committed by accident. `bench/*/src/`, `bench/*/obj_dir*/` and `bench/ibex/` are
-ignored outright.
+committed by accident. `bench/*/src/` and `bench/*/obj_dir*/` are ignored outright.
 
 ## Fetching
 
@@ -130,9 +130,9 @@ After the table `run` prints a phase split (one extra `--obs-dir` probe run per
 workload, not the timed rounds), then a coverage line. With `--compare` it also prints
 one `vita … iverilog … = N.NNx faster|SLOWER` line per workload.
 
-At HEAD the corpus reports `coverage: 10/10`: nine rows grade `ok` and
-`verilog-axi` grades `ruled-split`, which is neither a pass nor a failure and reads
-that way on every run with its reason on the line.
+At HEAD the corpus reports `coverage: 10/11`: nine rows grade `ok`, `verilog-axi`
+grades `ruled-split`, which is neither a pass nor a failure and reads that way on every
+run with its reason on the line, and `ibex` grades `known-gap`.
 
 ## Gating without a simulator installed
 

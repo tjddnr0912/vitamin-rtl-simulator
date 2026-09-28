@@ -337,44 +337,14 @@ pub fn measure(jobs: &[Job], reps: usize, budget: Duration) -> Vec<Measurement> 
             cmd.args(&j.args).current_dir(&j.cwd);
             let r = run_bounded(&mut cmd, budget);
 
-            let want = expected_exit(j.tool, j.workload);
-
-            let outcome = if r.timed_out {
-                Outcome::Timeout
-            } else {
-                match (r.code, digest_line(&r.stdout)) {
-                    (Some(c), Some(d)) if c == want && d == j.workload.digest => {
-                        if !acc[i].digests.contains(&d) {
-                            acc[i].digests.push(d);
-                        }
-                        Outcome::Match
+            let outcome = outcome_of(j.tool, j.workload, &r);
+            if let Outcome::Match | Outcome::Mismatch { .. } = outcome {
+                if let Some(d) = digest_line(&r.stdout) {
+                    if !acc[i].digests.contains(&d) {
+                        acc[i].digests.push(d);
                     }
-                    (Some(c), Some(d)) if c == want => {
-                        if !acc[i].digests.contains(&d) {
-                            acc[i].digests.push(d.clone());
-                        }
-                        Outcome::Mismatch { got: d }
-                    }
-                    // Right answer, wrong exit code. Not a mismatch — the simulation
-                    // was correct — but not a clean pass either, and saying so is the
-                    // whole reason the expected code is pinned.
-                    (Some(c), Some(d)) if d == j.workload.digest => Outcome::Crashed {
-                        code: c,
-                        tail: format!("digest correct but exit {c}, expected {want}"),
-                    },
-                    // The pinned refusal is matched against the WHOLE of stderr, not
-                    // against whichever diagnostic happens to come first: vita emits
-                    // 24 warnings before the pinned error on `verilog-ethernet`, and
-                    // grading on emission order would call a reordering a drift.
-                    (_, _) => match refusal(&r.stderr, j.workload) {
-                        Some(diag) => Outcome::Refused { diag },
-                        None => Outcome::Crashed {
-                            code: r.code.unwrap_or(-1),
-                            tail: tail_of(&r.stdout, &r.stderr),
-                        },
-                    },
                 }
-            };
+            }
             let secs = r.secs;
 
             // A run that did not produce the expected digest is not worth timing, and
@@ -397,6 +367,41 @@ pub fn measure(jobs: &[Job], reps: usize, budget: Duration) -> Vec<Measurement> 
         }
     }
     acc
+}
+
+/// What one finished run means, read against the manifest. Pure, so the grading edges
+/// are testable without spawning a simulator.
+fn outcome_of(tool: Tool, w: &Workload, r: &Run) -> Outcome {
+    if r.timed_out {
+        return Outcome::Timeout;
+    }
+    let want = expected_exit(tool, w);
+    match (r.code, digest_line(&r.stdout)) {
+        (Some(c), Some(d)) if c == want && d == w.digest => Outcome::Match,
+        (Some(c), Some(d)) if c == want => Outcome::Mismatch { got: d },
+        // Right answer, wrong exit code. Not a mismatch — the simulation was correct —
+        // but not a clean pass either, and saying so is the whole reason the expected
+        // code is pinned.
+        (Some(c), Some(d)) if d == w.digest => Outcome::Crashed {
+            code: c,
+            tail: format!("digest correct but exit {c}, expected {want}"),
+        },
+        // The pinned refusal is matched against the WHOLE of stderr, not against
+        // whichever diagnostic happens to come first: vita emits 24 warnings before the
+        // pinned error on `verilog-ethernet`, and grading on emission order would call a
+        // reordering a drift.
+        //
+        // vita declines a design with exit 1. Any other code — a panic's 101, a signal,
+        // the stale-artifact 2 — is a crash even when the pinned diagnostic was printed
+        // before it; reading the text alone graded such a crash `known-gap`.
+        (code, _) => match refusal(&r.stderr, w) {
+            Some(diag) if tool != Tool::Vita || code == Some(1) => Outcome::Refused { diag },
+            _ => Outcome::Crashed {
+                code: code.unwrap_or(-1),
+                tail: tail_of(&r.stdout, &r.stderr),
+            },
+        },
+    }
 }
 
 /// Run one vita job once more with `--obs-dir` and read the phase split back.
@@ -848,6 +853,53 @@ mod tests {
         assert_eq!(grade(&w, Tool::Vita, &Outcome::Match), Grade::Promoted);
         // …and a split row counts as one vita RUNS.
         assert!(!w.is_refused());
+    }
+
+    fn finished(code: Option<i32>, stdout: &str, stderr: &str) -> Run {
+        Run {
+            code,
+            stdout: stdout.into(),
+            stderr: stderr.into(),
+            secs: 0.0,
+            timed_out: false,
+        }
+    }
+
+    /// vita printed the pinned refusal and then panicked. The text alone says "known
+    /// gap"; the exit code says crash, and a crash on a refused row is a regression.
+    #[test]
+    fn a_panic_after_the_pinned_refusal_is_a_crash_not_a_refusal() {
+        let w = wl(REFUSED);
+        let err = "x.v:1:1: error[VITA-E3009] nope\nthread 'main' panicked at src/x.rs:1:1\n";
+        let o = outcome_of(Tool::Vita, &w, &finished(Some(101), "", err));
+        assert!(matches!(o, Outcome::Crashed { code: 101, .. }), "got {o:?}");
+        assert!(grade(&w, Tool::Vita, &o).is_failure());
+        // Killed by a signal: no code at all.
+        let o = outcome_of(Tool::Vita, &w, &finished(None, "", err));
+        assert!(matches!(o, Outcome::Crashed { code: -1, .. }), "got {o:?}");
+        // The same text with vita's refusal code is the known gap.
+        let o = outcome_of(Tool::Vita, &w, &finished(Some(1), "", err));
+        assert_eq!(grade(&w, Tool::Vita, &o), Grade::KnownGap);
+    }
+
+    /// The digest decides before the refusal text does, and a timeout before either.
+    #[test]
+    fn a_run_is_read_digest_first() {
+        let w = wl(RUNS);
+        let o = outcome_of(Tool::Vita, &w, &finished(Some(0), "DIGEST=abc\n", ""));
+        assert_eq!(o, Outcome::Match);
+        let o = outcome_of(Tool::Vita, &w, &finished(Some(0), "DIGEST=abd\n", ""));
+        assert_eq!(
+            o,
+            Outcome::Mismatch {
+                got: "DIGEST=abd".into()
+            }
+        );
+        let o = outcome_of(Tool::Vita, &w, &finished(Some(1), "DIGEST=abc\n", ""));
+        assert!(matches!(o, Outcome::Crashed { code: 1, .. }), "got {o:?}");
+        let mut r = finished(None, "", "");
+        r.timed_out = true;
+        assert_eq!(outcome_of(Tool::Vita, &w, &r), Outcome::Timeout);
     }
 
     #[test]

@@ -18,7 +18,14 @@
 //!    clones it at the pinned SHA on the machine that runs it.
 //! 2. **An oracle ran it first.** A workload with no oracle is not admitted, however
 //!    interesting it looks. `iverilog` is the reference; `verilator` is a second
-//!    opinion on 2-state arithmetic only.
+//!    opinion on 2-state arithmetic only. One exception: a SystemVerilog design that
+//!    iverilog cannot parse may take `verilator` as its oracle, but only if its digest
+//!    is x-invariant — identical under `--x-assign unique --x-initial unique` with
+//!    `+verilator+rand+reset+0`, `+1`, and `+2` over at least 64 seeds (five seeds once
+//!    passed a testbench that failed on 29 of 62). A 2-state oracle cannot answer for a
+//!    design that reads x (`picorv32` and `serv` do), and a 4-state cross-check is
+//!    recorded beside it where one can be built (`ibex`: sv2v, then iverilog). The
+//!    manifest tests hold such a row to naming the check.
 //! 3. **One digest line, accumulated over the whole run.** Not final state — a
 //!    final-state comparison is blind to any divergence the design later overwrites.
 //!    The pinned [`Workload::digest`] is what the oracle printed, so `run` is a

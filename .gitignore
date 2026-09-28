@@ -37,9 +37,6 @@ CLAUDE.md
 !/bench/*/run.sh
 !/bench/*/prepare.sh
 !/bench/*/*.py
-# ibex is NOT a corpus workload — iverilog 13 cannot parse it, so there is no oracle
-# (ROADMAP §3 ⑤). The local tree is kept for reproduction; none of it is committed.
-/bench/ibex/
 # NOT firmware images. `blinky.hex` is byte-identical to serv's own sw/blinky.hex and
 # `prog.hex` is extracted from biriscv's test.elf — both are third-party content, so
 # they are fetched or regenerated (bench/<name>/prepare.sh), never committed.
