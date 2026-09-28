@@ -197,19 +197,15 @@ zero digest, so the cycle count was added.
 
 ## vita today
 
-The run stops at parse with two errors from one mechanism. `prim_lfsr.sv:392` and `:401`
-declare functions whose return type is a multi-dimensional packed typedef local to a
-generate block:
+The run stops at elaboration with 42 errors in five classes. The parse error in front of
+them — `prim_lfsr.sv:392` and `:401` declare functions whose return type is a
+multi-dimensional packed typedef local to a generate block — closed in ROADMAP §4.5.564;
+that code sits under `if (NonLinearOut)`, which Ibex leaves 0. The manifest pins the first
+error printed:
 
 ```
-src/vendor/lowrisc_ip/ip/prim/rtl/prim_lfsr.sv:392:37: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected a multi-dimension packed or unpacked-array type as a function return type, found identifier 'lrotcol'
+error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PRINCE_SHIFT_ROWS64` value is not a foldable constant [in prim_cipher_pkg]
 ```
-
-The manifest pins that fragment. That code sits under `if (NonLinearOut)`, which Ibex
-leaves 0, so it is parsed but never elaborated.
-
-With those two functions respelled as flat vectors in a scratch copy, elaboration
-reports 42 errors in five classes:
 
 | Errors | Class | Sites |
 |---:|---|---|

@@ -387,8 +387,16 @@ type name answers, in the package-scoped spelling as well. A dimension may name
 a constant, including an overridable `parameter`, and is then computed per
 instance; a package type's dimensions always read the package's own constants.
 
-Loud on a typedef: use as a function return type, as an enum base, or as a
-packed-struct member; `a_t'(e)`; `$bits` of a `[]`, `[$]` or `[string]` typedef;
+A typedef with more than one packed dimension — or the inline `logic
+[A-1:0][B-1:0]` — is also a function return type. Inside the body, selecting from
+the return variable needs dimension bounds written as decimal literals, a decimal
+literal inside the dimension for every index after the first, and a first index
+without an arithmetic, bitwise, shift or conditional operator; a select written
+directly on a call of such a function (`f(x)[1]`) is refused. Build the value in a
+local variable and return it where those do not hold.
+
+Loud on a typedef: an unpacked-array typedef as a function return type, use as an
+enum base or as a packed-struct member; `a_t'(e)`; `$bits` of a `[]`, `[$]` or `[string]` typedef;
 and dimensions written on both the typedef and the declarator, because the
 reference tools disagree about the resulting dimension order.
 

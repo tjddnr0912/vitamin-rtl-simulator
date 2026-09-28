@@ -9,6 +9,21 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — functions returning a multi-dimensional packed type
+
+- `function t f(…)` where `typedef logic [N-1:0][W-1:0] t`, the inline
+  `function logic [A-1:0][B-1:0] f` and the implicit `function [1:0][3:0] f` are accepted;
+  they were a parse error. The value, and the return variable written as a whole or by
+  element inside the body, match Verilator and, where it runs, Icarus Verilog — across
+  signed, 2-state, ascending, package, class, interface and generate-block functions.
+- Three spellings stay loud in v1: a select or `$size`-family query on the return variable
+  when a dimension bound is a name rather than a decimal literal; a runtime or out-of-range
+  index into an inner dimension there, or an operator in the first index; and a select
+  written directly on a call of such a function (`f(x)[1]`, a non-standard spelling that
+  Icarus Verilog rejects), including through a `let` or `?:`.
+- The workload corpus's `ibex` row now fails at elaboration (42 errors in five classes)
+  instead of at parse; `corpus-runner` grades it `known-gap` on the new first error.
+
 ### Added — `ibex`, the workload corpus's first SystemVerilog design (refused today)
 
 - The corpus has an eleventh row: lowRISC's Ibex RV32 core (30,272 lines of SystemVerilog,

@@ -169,9 +169,9 @@ digest, and sv2v converted and run under Icarus Verilog, a 4-state simulator, pr
 too. Eight asymmetric mutations across the ALU, the multiplier, the load-store unit, the
 register file, the prefetch buffer and the core's clock gate move it. The testbench asserts reset with a falling edge: the core runs on a gated clock
 whose enable is itself reset state. vita refuses
-it at parse: two functions in `prim_lfsr.sv` return a generate-local multi-dimensional
-packed typedef. Behind that, elaboration reports 42 errors in five classes, which are
-ROADMAP §3.a ⑤ⓖ–⑤ⓚ and ⑤ⓐ and the head of the §5.2 queue. Recipe, x runs and mutation:
+it at elaboration: 42 errors in five classes, which are ROADMAP §3.a ⑤ⓗ–⑤ⓚ and ⑤ⓐ and the
+head of the §5.2 queue. (The parse error in front of them — two `prim_lfsr.sv` functions
+returning a generate-local multi-dimensional packed typedef — closed in §4.5.564.) Recipe, x runs and mutation:
 [`bench/ibex/RUN.md`](../../bench/ibex/RUN.md).
 
 ### 3.2 Pinned digests
@@ -567,8 +567,8 @@ workload sizes are tuned to 3–15 seconds under Icarus Verilog.
 **The corpus.**
 
 - One row is a ruled split (`verilog-axi`) and one is a loss vita has not closed (`serv`).
-- `ibex` is refused (§3.1). Its page — 2 parse errors, then 42 elaboration errors in five
-  classes — is the head of ROADMAP §5.2; after it closes, the run itself is compared with the
+- `ibex` is refused (§3.1). Its page — 42 elaboration errors in five classes, since §4.5.564
+  closed its parse error — is the head of ROADMAP §5.2; after it closes, the run itself is compared with the
   Verilator digest.
 - New designs, licence and oracle first: OpenTitan IPs and VeeR EL2 / EH1 (Apache-2.0),
   alexforencich verilog-axis / -pcie / -uart / -i2c (MIT). Solderpad designs (cv32e40p,
