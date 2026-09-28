@@ -813,16 +813,19 @@ fn the_local_call_and_no_shadow_controls_are_unchanged() {
     assert_eq!(local_inout, "Z=64\n");
 }
 
-// ── the axis this slice does NOT close ───────────────────────────────
+// ── the enum-label twin, since §3 ⑤ⓗ ────────────────────────────────
 
-/// An ENUM LABEL declared in the generate scope does not shadow the outer net in vita
-/// at all — not in the readers this slice fixed and not in the whole-name read either.
-/// Measured on every one of this file's shapes: the enum twin is byte-identical before
-/// and after. The oracles split on it (iverilog reads the NET, verilator the LABEL),
-/// so it stays a recorded split rather than a side to pin; this test only proves the
-/// slice did not move it.
+/// An ENUM LABEL declared in the generate scope shadows the outer name exactly as the
+/// `localparam` above does. Until §3 ⑤ⓗ vita never bound a generate block's labels,
+/// so every reader here took the outer net; that was iverilog's answer too, and the
+/// cell was recorded as an oracle split. It is not one: iverilog 13 cannot bind a
+/// generate block's enum label at all (`Unable to bind wire/reg/memory` on a plain
+/// read, then a segfault), so its "the net" is that defect. Verilator reads the
+/// label, which is IEEE 1800-2017 §6.19 (a label is declared in the scope holding the
+/// typedef) with §27.3 (a generate block is a scope). Thirteen enum twins of this
+/// file's shapes now match verilator, byte for byte.
 #[test]
-fn an_enum_label_shadow_is_untouched_by_this_slice() {
+fn an_enum_label_in_a_generate_block_shadows_the_outer_name() {
     let select = run("module top;\n\
            logic [15:8] V;\n\
            initial V = 8'hA5;\n\
@@ -832,10 +835,13 @@ fn an_enum_label_shadow_is_untouched_by_this_slice() {
            end endgenerate\n\
            initial #5 $finish;\n\
          endmodule\n");
-    // iverilog `P=a` (the net, which is vita's answer), verilator `P=0` (the label).
-    assert_eq!(select, "P=a\n");
+    // verilator `P=0` (bits [15:12] of the label's 2); iverilog `P=a`, the net.
+    assert_eq!(select, "P=0\n");
 
-    let string_method = run("module top;\n\
+    // Verilator refuses `V.len()` on the label ("Can't find definition of
+    // task/function: 'len'"); vita refuses it through the shadow funnel.
+    loud(
+        "module top;\n\
            string V;\n\
            initial V = \"hello\";\n\
            generate if (1) begin : g\n\
@@ -843,6 +849,7 @@ fn an_enum_label_shadow_is_untouched_by_this_slice() {
              initial begin #1; $display(\"L=%0d S=%s\", V.len(), V); end\n\
            end endgenerate\n\
            initial #5 $finish;\n\
-         endmodule\n");
-    assert_eq!(string_method, "L=5 S=hello\n");
+         endmodule\n",
+        SHADOW,
+    );
 }

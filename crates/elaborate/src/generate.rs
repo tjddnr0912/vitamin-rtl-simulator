@@ -1,6 +1,7 @@
 //! generate blocks — split out of the original `elaborate` lib.rs (mechanical move).
 
 use super::*;
+use crate::instance::LabelPass;
 
 // ════════════════════════════════════════════════════════════════════
 //  v4 — GENERATE unrolling (GenerateConstruct → flat SimIr at elab time)
@@ -835,6 +836,24 @@ impl Elaborator<'_> {
                         }
                     }
                 }
+            }
+            // §3 ⑤ⓗ: a `typedef enum` inside a generate block declares its labels in
+            // THAT block (§6.19, §27.3). A CARRIED one (`gen_enum.rs`: literal inputs,
+            // written directly in the block, no label read above it) binds at the
+            // block's own key, beside its parameters, in every phase for the same
+            // reason; the Nets phase reports. Any other keeps its labels unbound.
+            (_, ast::ModuleItem::Typedef(td))
+                if self
+                    .gen_enum_carried
+                    .get(&self.cur_module)
+                    .is_some_and(|c| c.contains(&(td.span.lo, td.span.hi))) =>
+            {
+                let pass = if phase == GenPhase::Nets {
+                    LabelPass::Final
+                } else {
+                    LabelPass::GenRepeat
+                };
+                self.bind_enum_labels_of(td, &mut Vec::new(), pass);
             }
             // A PORT declaration inside generate stays forbidden (IEEE §27:
             // ports are module-boundary, not per-instance). Reported once.

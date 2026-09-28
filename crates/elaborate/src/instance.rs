@@ -2,6 +2,22 @@
 
 use super::*;
 
+/// Which pass of [`Elaborator::bind_enum_labels_of`] is running.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LabelPass {
+    /// The module body's declaration-order walk: bind only when every input is already a
+    /// fact, and record what was bound.
+    Prepass,
+    /// The module body's pass after the walk, and a generate scope's first (Nets) phase:
+    /// bind every label, report a label that does not fold or fit, verify the prepass.
+    Final,
+    /// A generate scope's later phases re-walk the same items (§3 ⑤ⓗ) and bind again,
+    /// as the scope's parameters do, which puts back a range a routine body's genvar
+    /// replay cleared at the same key. Only a carried typedef gets here (`gen_enum.rs`),
+    /// so its inputs are the facts the Nets phase read; nothing reports twice.
+    GenRepeat,
+}
+
 impl Elaborator<'_> {
     /// Bind one `typedef enum`'s labels as module-scope constants.
     ///
@@ -10,7 +26,7 @@ impl Elaborator<'_> {
     /// `localparam` written after a typedef must see its labels, and both oracles
     /// agree: `typedef enum logic [31:0] {EA = 32'hAB34} e_t; localparam logic
     /// [31:0] Q = EA;` is 43828 in iverilog and verilator and was `E3009 undefined
-    /// name` here. So this runs from the (3b) walk, in order, with `quiet`.
+    /// name` here. So this runs from the (3b) walk, in order, as `LabelPass::Prepass`.
     ///
     /// ⚠️ …and AGAIN afterwards, not instead. Moving the binding wholesale into the
     /// decl-order walk would break the other direction: a label whose value names a
@@ -47,13 +63,13 @@ impl Elaborator<'_> {
     /// bindings visible, so `typedef enum {A = B} e1_t; typedef enum {B = 5} e2_t;`
     /// folds where it used to be loud (verilator agrees; iverilog rejects it).
     ///
-    /// `quiet` also suppresses `check_enum_label_fits`, so one illegal label still
+    /// `Prepass` also suppresses `check_enum_label_fits`, so one illegal label still
     /// reports once.
-    fn bind_enum_labels_of(
+    pub(crate) fn bind_enum_labels_of(
         &mut self,
         td: &ast::TypedefDecl,
         saved_params: &mut Vec<(String, Option<i64>)>,
-        quiet: bool,
+        pass: LabelPass,
     ) {
         #[allow(irrefutable_let_patterns)]
         if let ast::TypedefKind::Enum {
@@ -97,7 +113,7 @@ impl Elaborator<'_> {
             // happened before this pass existed. A per-LABEL skip is not enough: the
             // labels share the `next` counter and the base's width, so one label that
             // cannot fold makes every later label's binding differ between the passes.
-            if quiet
+            if pass != LabelPass::Final
                 && (base_range.is_none()
                     || (base.is_some() && base_w.is_none())
                     || labels.iter().any(|lab| {
@@ -110,8 +126,8 @@ impl Elaborator<'_> {
             }
             let mut next: i64 = 0;
             for lab in labels {
-                // The gate above guarantees every value folds when `quiet`, so this
-                // diagnostic belongs to the after-the-walk pass alone.
+                // The gate above guarantees every value folds outside `Final`, so this
+                // diagnostic belongs to that pass alone.
                 let v = match &lab.value {
                     Some(e) => self.const_eval_in_scope(e).unwrap_or_else(|| {
                         self.error(
@@ -127,7 +143,7 @@ impl Elaborator<'_> {
                 };
                 // §6.19 first, on the value as WRITTEN — the mask below would
                 // hide the very thing this reports.
-                if !quiet {
+                if pass == LabelPass::Final {
                     self.check_enum_label_fits(
                         base,
                         *signed,
@@ -164,22 +180,28 @@ impl Elaborator<'_> {
                 // ⭐ RECORD (pass 1) / VERIFY (pass 2). See the header: two bindings
                 // are sound only if they agree, and the gate above removes only the
                 // mechanisms two lenses actually measured.
-                if quiet {
-                    self.enum_label_prepass
-                        .insert(key.clone(), (v, base_w, base_range));
-                } else if let Some(pre) = self.enum_label_prepass.remove(&key) {
-                    if pre != (v, base_w, base_range) {
-                        self.error(
-                            MsgCode::ElabUnsupported,
-                            &format!(
-                                "enum label `{}` folds to two different constants in one \
-                                 module: a name its value depends on is re-declared after \
-                                 the `typedef`, so anything written between the two reads a \
-                                 different value",
-                                lab.name.name
-                            ),
-                        );
+                match pass {
+                    LabelPass::Prepass => {
+                        self.enum_label_prepass
+                            .insert(key.clone(), (v, base_w, base_range));
                     }
+                    LabelPass::Final => {
+                        if let Some(pre) = self.enum_label_prepass.remove(&key) {
+                            if pre != (v, base_w, base_range) {
+                                self.error(
+                                    MsgCode::ElabUnsupported,
+                                    &format!(
+                                        "enum label `{}` folds to two different constants in \
+                                         one module: a name its value depends on is \
+                                         re-declared after the `typedef`, so anything written \
+                                         between the two reads a different value",
+                                        lab.name.name
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    LabelPass::GenRepeat => {}
                 }
                 let prev = self.bind_param_value(key.clone(), v);
                 self.bind_param_range(&key, base_range);
@@ -739,7 +761,7 @@ impl Elaborator<'_> {
                 // `bind_enum_labels_of` for why this pass is additive and runs again
                 // after the walk rather than replacing it.
                 ast::ModuleItem::Typedef(td) => {
-                    self.bind_enum_labels_of(td, &mut saved_params, true);
+                    self.bind_enum_labels_of(td, &mut saved_params, LabelPass::Prepass);
                 }
                 ast::ModuleItem::NetVar(d) => {
                     self.prescan_net_bits(d);
@@ -767,7 +789,7 @@ impl Elaborator<'_> {
         //      explicit `LABEL = expr` resets the running counter (next = expr+1).
         for item in &module.body {
             if let ast::ModuleItem::Typedef(td) = item {
-                self.bind_enum_labels_of(td, &mut saved_params, false);
+                self.bind_enum_labels_of(td, &mut saved_params, LabelPass::Final);
             }
         }
 

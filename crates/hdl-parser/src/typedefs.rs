@@ -290,6 +290,13 @@ impl Parser<'_, '_> {
                 } else {
                     None
                 };
+                // §6.19: a label is a declaration of the scope holding the typedef, so
+                // from here on it hides an outer constant, multi-dimensional packed
+                // parameter or struct variable of its name in every parse-time table
+                // (§3 ⑤ⓗ). Without it, a generate block's label `A` beside a module
+                // `localparam A = 2` folded `C = A + 4` to 6 for `.first()` and
+                // rewrote `P[1]` through the module's `[1:0][3:0] P` layout.
+                self.unbind_struct_enum_name(&name.name);
                 labels.push(EnumLabel { name, value });
                 if !self.eat(TokenKind::Comma) {
                     break;

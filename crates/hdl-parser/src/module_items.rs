@@ -1130,7 +1130,7 @@ impl Parser<'_, '_> {
         // `x.name()` desugar in this container's body, appended in deterministic
         // (BTreeMap key) order. Drained so the next container starts fresh — each
         // container gets its own copy (module-scoped functions, no collision).
-        for (_, f) in std::mem::take(&mut self.pending_enum_name_fns) {
+        for (_, (_, f)) in std::mem::take(&mut self.pending_enum_name_fns) {
             body.push(ModuleItem::Func(f));
         }
         // §6.20.1: no container leaks `in_package` to what follows it. It used to

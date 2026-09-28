@@ -379,6 +379,12 @@ impl Parser<'_, '_> {
             // (`if (c) localparam A=1, B=2;`) emits >1 item from ONE construct;
             // collect the queued continuations into THIS branch so they stay scoped
             // to it rather than leaking to the enclosing scope.
+            // It is a generate block too (§27.5 names it `genblk<N>`), so it gets the
+            // scope `parse_gen_block` gives a `begin … end`: without it a declaration
+            // here dropped the enclosing scope's binding of its name for good (§3 ⑤ⓗ
+            // review: `if (1) typedef enum { P, Q } e_t;` beside a module
+            // `[1:0][3:0] P` read the module's `P[1]` as `0` where every tool reads `a`).
+            let snap = self.snapshot_scope();
             let mut items = Vec::new();
             if let Some(it) = self.parse_gen_item() {
                 items.push(it);
@@ -386,6 +392,7 @@ impl Parser<'_, '_> {
             while !self.pending_module_items.is_empty() {
                 items.push(GenItem::Item(Box::new(self.pending_module_items.remove(0))));
             }
+            self.restore_scope(snap);
             (None, items)
         }
     }

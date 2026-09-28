@@ -92,6 +92,7 @@ mod frames_classify_fork;
 mod frames_classify_write;
 mod frames_reserve;
 mod frames_static_init;
+mod gen_enum;
 mod gen_scope_name;
 mod generate;
 mod hier;
@@ -889,6 +890,11 @@ struct Elaborator<'s> {
     // one packed dimension (`md_return.rs`). Collected ONCE at the start of `run`; a
     // select on a call of one of these names is loud. NEVER restored.
     md_return_fns: std::collections::BTreeSet<String>,
+    // §3 ⑤ⓗ: per module definition, the spans of its generate-block `typedef enum`s
+    // whose labels bind (`gen_enum.rs`) — keyed by the definition as well, since a span
+    // is an offset into its own compilation unit. Filled per definition in `run` before
+    // any instance. NEVER restored.
+    gen_enum_carried: BTreeMap<String, std::collections::BTreeSet<(u32, u32)>>,
     // §4.5.201: per hier-callable frame-TASK FuncId, the declared port DIRECTIONS (parallel
     // to the formals). `resolve_deferred_hier_task_call` reads it to route each deferred arg
     // to an in-bind (input/inout copy-in) and/or an out-bind (output/inout copy-out) — the

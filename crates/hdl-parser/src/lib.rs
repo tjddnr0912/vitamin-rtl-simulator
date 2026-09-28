@@ -788,7 +788,10 @@ pub struct Parser<'t, 's> {
     /// which a packed string-literal ternary cannot (it pads to the widest label).
     /// BTreeMap (not HashMap) so the module-end injection order is DETERMINISTic
     /// (3-OS byte-identical golden — never iterate a HashMap into the AST).
-    pending_enum_name_fns: std::collections::BTreeMap<String, FunctionDef>,
+    /// Keyed by function name; the label list beside it tells two same-named types
+    /// apart.
+    #[allow(clippy::type_complexity)]
+    pending_enum_name_fns: std::collections::BTreeMap<String, (Vec<(String, i64)>, FunctionDef)>,
     /// True while parsing a `package … endpackage` body. IEEE §6.20.1: a
     /// `parameter` declared in a package is treated as a `localparam` (a package
     /// is never instantiated, so nothing can override it) — the A2a array-parameter

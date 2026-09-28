@@ -90,10 +90,25 @@ impl Parser<'_, '_> {
             // packed string-literal ternary would pad shorter labels to the widest
             // label's width (a silent-wrong vs iverilog's exact-length dynamic string).
             "name" => {
-                let fname = format!("$enum_name${ename}");
-                self.pending_enum_name_fns
-                    .entry(ename)
-                    .or_insert_with(|| Self::build_enum_name_fn(&fname, &labels, span));
+                // Keyed by the LABEL LIST, not the type name alone: one container can
+                // hold two enum types of one name (sibling generate blocks, a block's
+                // type shadowing the module's), and the first one's function answered
+                // for both — `B R` where verilator prints `B Y2`.
+                let stem = format!("$enum_name${ename}");
+                let mut fname = stem.clone();
+                let mut n = 1u32;
+                while let Some((l, _)) = self.pending_enum_name_fns.get(&fname) {
+                    if *l == labels {
+                        break;
+                    }
+                    n += 1;
+                    fname = format!("{stem}${n}");
+                }
+                if !self.pending_enum_name_fns.contains_key(&fname) {
+                    let f = Self::build_enum_name_fn(&fname, &labels, span);
+                    self.pending_enum_name_fns
+                        .insert(fname.clone(), (labels.clone(), f));
+                }
                 Expr {
                     kind: ExprKind::Call {
                         name: HierPath {

@@ -216,8 +216,8 @@ enum DeclClass {
 }
 
 /// One declaration of one name, in source order.
-struct DeclSite<'a> {
-    name: &'a str,
+pub(crate) struct DeclSite<'a> {
+    pub(crate) name: &'a str,
     kind: DeclKind,
     span: ast::Span,
     /// Reached THROUGH a transparent `generate … endgenerate` region. The refusal
@@ -395,7 +395,7 @@ fn collect_items<'a>(
     }
 }
 
-fn collect_item<'a>(
+pub(crate) fn collect_item<'a>(
     it: &'a ast::ModuleItem,
     unit: UnitKind,
     rgn: bool,
