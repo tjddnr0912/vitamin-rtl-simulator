@@ -10,8 +10,12 @@
 //! bindings (`var_struct`, `struct_scalar_vars`, `struct_layouts`) by NAME, and a
 //! function formal, a class property, an import, a later typedef or a block-local in a
 //! labeled assertion's action block rewrites them, so an arm resolved against them was
-//! wrong where the pre-slice binary was loud. The prerequisite is a certified binding of
-//! the target (ROADMAP §3.a ⑤ⓚ).
+//! wrong where the pre-slice binary was loud. §4.5.572 recorded each declaration's struct
+//! members in the parser and resolved the arm in elaborate against the declaration the
+//! target reaches; it ran `ibex` to verilator's digest and was reverted after three more
+//! rounds, on two prerequisites (ROADMAP §3.a ⑤ⓚ): the block-local scope-leak check walks
+//! no `force` statement, and a wildcard import replaces a local typedef in the parser's
+//! binding. The last two tests hold that slice's measured cells.
 //!
 //! Every cell is pinned REFUSED with the oracles' lines beside it, so the admission slice
 //! turns each comment into its pin. Oracles: verilator 5.052 (`--binary --timing`,
@@ -674,4 +678,214 @@ endmodule
 "#
     );
     is_loud(&src, KEYED);
+}
+
+#[test]
+fn the_module_scopes_ports_and_values_of_4_5_572_are_held() {
+    // Each REFUSED; the oracles' lines beside it. A process in a generate block, a named
+    // block that declares a name, a typed `for`, a `foreach` and a nested named block
+    // writing module variables (verilator and sv2v → iverilog: `A 1000010 1000011
+    // 1000100 1000001 1101001` · `B 1001100` · `C 0111111`).
+    is_loud(
+        &format!(
+            "{PKG}{}",
+            r#"
+module t;
+  import p::*;
+  exc_cause_t e1, e2, e3, e4, e5;
+  logic c;
+  logic [4:0] cause;
+  int a [2];
+  if (1) begin : g
+    always @(c or cause) e1 = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: cause};
+  end
+  initial begin : blk
+    int k;
+    #1 k = 0;
+    e2 = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: 5'd3};
+    for (int i = 0; i < 1; i++) e3 = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: 5'd4};
+    foreach (a[j]) e4 = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: 5'(j)};
+    begin : inner
+      e5 = !c ? '{irq_ext: 1'b1, irq_int: 1'b1, lower_cause: 5'd9} : P;
+    end
+    #1 $display("A %b %b %b %b %b", e1, e2, e3, e4, e5);
+    cause = 5'd12; #1 $display("B %b", e1);
+    c = 1; #1 $display("C %b", e1);
+    $finish;
+  end
+  initial begin c = 0; cause = 5'd2; end
+endmodule
+"#
+        ),
+        E3009,
+    );
+    // The ibex shape: an ANSI output port of a package struct connected to a parent net
+    // of another struct type (`po.q` reads the child's bits through the parent's
+    // layout), `always_comb` following `cause` (verilator and sv2v → iverilog `A 1000011
+    // 1000011 q=4` · `B 1001100 1001100` · `C 0111111 0111111`); a non-ANSI port whose
+    // type a body declaration gives (verilator `A 1100111` · `C 0111111`; sv2v cannot
+    // convert it).
+    is_loud(
+        &format!(
+            "{PKG}{}",
+            r#"
+module sub import p::*; (input logic c, input logic [4:0] cause, output exc_cause_t o);
+  always_comb o = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: cause};
+endmodule
+module sub2(c, o);
+  import p::*;
+  input logic c;
+  output o;
+  exc_cause_t o;
+  always_comb o = c ? P : '{irq_ext: 1'b1, irq_int: 1'b1, lower_cause: 5'd7};
+endmodule
+module t;
+  import p::*;
+  typedef struct packed { logic [2:0] q; logic [3:0] r; } other_t;
+  logic c; logic [4:0] cause;
+  other_t po;
+  exc_cause_t e, e2;
+  sub u(.c(c), .cause(cause), .o(po));
+  sub2 u2(.c(c), .o(e2));
+  always_comb e = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: cause};
+  initial begin
+    c = 0; cause = 5'd3;
+    #1 $display("A %b %b q=%h %b", e, po, po.q, e2);
+    cause = 5'd12;
+    #1 $display("B %b %b", e, po);
+    c = 1;
+    #1 $display("C %b %b %b", e, po, e2);
+    $finish;
+  end
+endmodule
+"#
+        ),
+        E3009,
+    );
+    // Fills on 4-state and 2-state members, and a call in an arm evaluated only when the
+    // arm is taken: sv2v → iverilog `a xxxxxxx` · `b zzzzzzz` (verilator reads the `x` /
+    // `z` as 0); no oracle keeps `bit`, and iverilog prints `00101` for the
+    // member-by-member twin of `d`, which IEEE 1800-2017 §6.11.3 gives `c 00000` · `d
+    // 00101` too; verilator and sv2v → iverilog `A 0111111 n=0` · `f called n=1` · `B
+    // 1000011 n=1`.
+    is_loud(
+        &format!(
+            "{PKG}{}",
+            r#"
+module t;
+  import p::*;
+  typedef struct packed { bit a; bit [3:0] b; } z_t;
+  exc_cause_t e;
+  z_t z;
+  logic c;
+  int n;
+  function automatic logic [4:0] f(input logic [4:0] x);
+    n = n + 1;
+    $display("f called n=%0d", n);
+    return x + 5'd1;
+  endfunction
+  initial begin
+    c = 0; n = 0;
+    e = c ? P : '{default: 'x}; $display("a %b", e);
+    e = c ? P : '{default: 'z}; $display("b %b", e);
+    z = c ? '{a: 1, b: 4'b1001} : '{default: 'x}; $display("c %b", z);
+    z = c ? '{a: 1, b: 4'b1001} : '{a: 1'bx, b: 4'bx1z1}; $display("d %b", z);
+    c = 1; e = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: f(5'd2)}; $display("A %b n=%0d", e, n);
+    c = 0; e = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: f(5'd2)}; $display("B %b n=%0d", e, n);
+  end
+endmodule
+"#
+        ),
+        E3009,
+    );
+}
+
+#[test]
+fn the_review_shapes_of_4_5_572_are_held() {
+    // The cells §4.5.572's three rounds found, each REFUSED here with the oracles' lines.
+    // A keyed read of an outer block-local, the nested block declaring its own `v`
+    // (verilator and sv2v → iverilog `s=12`), in a blocking assignment and in `force`
+    // (the concatenation twin `force s = c ? {v, 4'd2} : 8'h00;` prints `52` on this
+    // binary: the block-local scope-leak check walks no `force`).
+    for stmt in ["s = ", "force s = "] {
+        is_loud(
+            &format!(
+                r#"
+module t;
+  typedef struct packed {{ logic [3:0] a; logic [3:0] b; }} s_t;
+  s_t s;
+  logic c;
+  initial begin
+    logic [3:0] v = 4'd1;
+    c = 1;
+    #1;
+    begin
+      logic [3:0] v;
+      v = 4'd5;
+    end
+    {stmt}c ? '{{a: v, b: 4'd2}} : 8'h00;
+    #1 $display("s=%h", s);
+  end
+endmodule
+"#
+            ),
+            E3009,
+        );
+    }
+    // A wildcard import replacing a local typedef of the name in the parser's binding: a
+    // `$unit` one (verilator and sv2v → iverilog `U1 06 bits=8`; the whole-pattern twin
+    // prints `102 bits=12` on this binary) and a module's own (`G4 06 bits=8`).
+    for src in [
+        r#"
+package p;
+  typedef struct packed { logic [3:0] a; logic [7:0] b; } st;
+endpackage
+typedef struct packed { logic [5:0] a; logic [1:0] b; } st;
+import p::*;
+module t;
+  logic c;
+  st s2;
+  initial begin
+    c = 0; #1;
+    s2 = c ? '{a: 6'h3, b: 2'h1} : '{a: 6'h1, b: 2'h2};
+    $display("U1 %h bits=%0d", s2, $bits(s2));
+  end
+endmodule
+"#,
+        r#"
+typedef struct packed { logic [3:0] a; logic [3:0] b; } st;
+package p;
+  typedef struct packed { logic [3:0] a; logic [7:0] b; } st;
+endpackage
+module t;
+  logic c;
+  typedef struct packed { logic [5:0] a; logic [1:0] b; } st;
+  import p::*;
+  st s2;
+  initial begin
+    c = 1; s2 = c ? '{a: 6'h1, b: 2'h2} : '{a: 6'h3, b: 2'h1};
+    $display("G4 %h bits=%0d", s2, $bits(s2));
+  end
+endmodule
+"#,
+    ] {
+        is_loud(src, E3009);
+    }
+    // An arm driving an `inout` port, which vita connects from the parent only (W3056):
+    // verilator and sv2v → iverilog `inout 56`.
+    is_loud(
+        r#"
+typedef struct packed { logic [3:0] a; logic [3:0] b; } s_t;
+module child(inout s_t io, input logic en);
+  assign io = en ? '{a: 4'h5, b: 4'h6} : 'z;
+endmodule
+module t;
+  logic en;
+  wire [7:0] pio;
+  child u(.io(pio), .en(en));
+  initial begin en = 1; #1 $display("inout %h", pio); end
+endmodule
+"#,
+        E3009,
+    );
 }
