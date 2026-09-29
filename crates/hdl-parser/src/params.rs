@@ -232,6 +232,7 @@ impl Parser<'_, '_> {
         // `finish_param_assignment` takes the array channel and appends these AFTER
         // any dims written on the name; empty for every prefix that parsed before.
         let mut typedef_unpacked: Vec<Dim> = Vec::new();
+        let mut string_kw = false;
         let kw_kind = match self.peek() {
             Some(TokenKind::Word(WordKind::Keyword(
                 k @ (Kw::Logic
@@ -351,6 +352,7 @@ impl Parser<'_, '_> {
                 // `localparam S = "abc"` (N5B) rides the same value-detection path).
                 Some(TokenKind::Word(WordKind::Keyword(Kw::String))) => {
                     self.bump();
+                    string_kw = true;
                     ParamType::Implicit
                 }
                 _ => ParamType::Implicit,
@@ -386,6 +388,7 @@ impl Parser<'_, '_> {
             tyname,
             packed_dims,
             typedef_unpacked,
+            string_kw,
         }
     }
 
@@ -513,6 +516,7 @@ impl Parser<'_, '_> {
             tyname: _,
             packed_dims,
             typedef_unpacked,
+            string_kw,
         } = pfx.clone();
         // `logic`/`reg`/`bit` with NO explicit range are ONE bit (§6.11.2). The atom
         // recorded that in `var_kind` and then dropped it: `ParamDecl` has no such
@@ -618,6 +622,15 @@ impl Parser<'_, '_> {
         // for member reads but never pattern-desugared (same as the variable path).
         self.unbind_struct_enum_name(&name.name);
         if !md_dims.is_empty() {
+            // §3 ⑤ⓐ: a positional `'{…}` value becomes the concatenation the flat
+            // declaration carries (`packed_md_pattern_value`). Not for a 2-state (`bit`)
+            // element: the parameter lane keeps no 2-state identity, so an `x` item
+            // would stay `x` in a value wider than 64 bits, where IEEE 1800-2017
+            // §6.11.3 reads 0; that value stays refused. Nor after `string`, which
+            // takes no packed dimensions (all three oracles reject the declaration).
+            if var_kind != Some(NetVarKind::Bit) && !string_kw {
+                value = Self::packed_md_pattern_value(&md_dims, value);
+            }
             self.packed_md_params.insert(name.name.clone(), md_dims);
         }
         if let Some(tn) = &pfx.tyname {

@@ -473,10 +473,10 @@ fn the_v1_limits_are_loud_not_silent() {
         ),
         "an array parameter of a multi-dimensional packed type",
     );
-    // A write, an assignment pattern and `foreach` stay as loud as on a scalar
-    // parameter. §4.5.446 replaced the message: the write funnel now says WHY (`P` is a
-    // constant and constants are not assignable — verilator: "Storing to parameter
-    // variable 'P'") instead of the false "undeclared net/variable `tb.P`".
+    // A write and `foreach` stay as loud as on a scalar parameter. §4.5.446 replaced
+    // the message: the write funnel now says WHY (`P` is a constant and constants are
+    // not assignable — verilator: "Storing to parameter variable 'P'") instead of the
+    // false "undeclared net/variable `tb.P`".
     loud(
         &format!(
             "module tb;\n{d}\n  initial begin P[1] = 5'd1; #1 $display(\"DIGEST=%0d\", P[1]); #1 $finish; end\nendmodule"
@@ -525,12 +525,15 @@ module tb;
 endmodule",
         "E3010",
     );
-    loud(
-        &body(
+    // A positional pattern value was E3009 here; since §3 ⑤ⓐ it is the concatenation
+    // of its items (`packed_md_param_pattern.rs`): `P[0]` is the last item, as verilator
+    // 5.052 and sv2v 0.0.13 → iverilog 13 print (`30 3 1c53e` for `P[0], P[3], P`).
+    assert_eq!(
+        digest(&body(
             "  localparam logic [3:0][4:0] P = '{5'd3, 5'd17, 5'd9, 5'd30};",
-            "%0d",
-            "P[0]",
-        ),
-        "E3009",
+            "%0d %0d %h",
+            "P[0], P[3], P",
+        )),
+        "30 3 1c53e"
     );
 }

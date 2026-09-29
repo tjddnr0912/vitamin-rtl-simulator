@@ -18,11 +18,14 @@
 //! `[LfsrDw-1:0][LfsrIdxDw-1:0]` is overridden per instance), folded to a literal
 //! only when every operand is one; elaborate folds the rest.
 //!
+//! A POSITIONAL assignment pattern of literals as the declaration's value (`'{…}`)
+//! becomes the concatenation of its items, each sized to its element
+//! (`packed_md_pattern_value`).
+//!
 //! What is NOT rewritten stays exactly as loud as the scalar parameter twin: a
-//! write (`P[i] = …`, E3010), a hierarchical read (`u.P[i]`, E3010), `$size`/
-//! `$left`/`$dimensions` (no fold arm), an assignment pattern value (`'{…}`,
-//! E3009), and `foreach`. A chain with more selects than dimensions, or a
-//! non-final RANGE select, is a loud parse error here (the flat twin would
+//! write (`P[i] = …`, E3010), a hierarchical read (`u.P[i]`, E3010), a keyed
+//! pattern value or one with a non-literal item (E3009), and `foreach`. A chain with more selects than dimensions,
+//! or a non-final RANGE select, is a loud parse error here (the flat twin would
 //! silently answer a bit or `x`).
 
 use super::*;
@@ -449,6 +452,145 @@ impl Parser<'_, '_> {
             },
             span,
         }
+    }
+}
+
+impl Parser<'_, '_> {
+    /// §3 ⑤ⓐ: the value of a multi-dimensional packed parameter written as a
+    /// POSITIONAL assignment pattern — `parameter logic [15:0][3:0] P = '{4'hF, …}` —
+    /// as the concatenation its flat declaration carries.
+    ///
+    /// IEEE 1800-2017 §10.9.1: the items are the elements of the first dimension, the
+    /// left bound's first, and each item is assigned to its element. The element at the
+    /// left bound holds the highest bits whichever way the dimension runs (§7.4.1), so
+    /// the items concatenate in writing order. An element is the product of the
+    /// remaining dimensions, `W` bits; an item is sized to it as an assignment would size
+    /// it (truncated, or extended by its own signedness), which is the size cast
+    /// `W'(item)` (§6.24.1). An item that is itself a positional pattern is its element's
+    /// value by the same rule over the remaining dimensions, and its concatenation is
+    /// exactly `W` bits. A fill item (`'0` / `'1` / `'x` / `'z`) is the sized literal it
+    /// denotes at `W`, because a size cast of a fill has no constant-fold arm.
+    ///
+    /// `e` is returned unchanged — elaborate's refusal, as before — unless every
+    /// dimension bound is a literal, each level's item count equals its dimension's
+    /// element count, and every item is a fill, a positional pattern over a remaining
+    /// dimension, or a literal leaf (`literal_leaf`). A count mismatch stays with
+    /// elaborate because a header default that every instance overrides is never
+    /// folded, and both oracles run that design too.
+    pub(crate) fn packed_md_pattern_value(dims: &[Range], e: Expr) -> Expr {
+        Self::packed_md_pattern_concat(dims, &e).unwrap_or(e)
+    }
+
+    fn packed_md_pattern_concat(dims: &[Range], e: &Expr) -> Option<Expr> {
+        let ExprKind::AssignPattern(items) = &e.kind else {
+            return None;
+        };
+        let (first, rest) = dims.split_first()?;
+        if items.len() != Self::lit_dim_count(first)? as usize {
+            return None;
+        }
+        let w = rest
+            .iter()
+            .try_fold(1u32, |acc, r| acc.checked_mul(Self::lit_dim_count(r)?))?;
+        let parts = items
+            .iter()
+            .map(|it| {
+                if Self::is_assign_pattern(it) {
+                    return if rest.is_empty() {
+                        None
+                    } else {
+                        Self::packed_md_pattern_concat(rest, it)
+                    };
+                }
+                if let Some(lit) = Self::fill_at_width(it, w, false) {
+                    return Some(lit);
+                }
+                Self::literal_leaf(it).then(|| Expr {
+                    kind: ExprKind::Cast {
+                        target: CastTarget::Size(Box::new(Self::dec_lit(w, it.span))),
+                        expr: Box::new(it.clone()),
+                    },
+                    span: it.span,
+                })
+            })
+            .collect::<Option<Vec<Expr>>>()?;
+        Some(Expr {
+            kind: ExprKind::Concat { parts },
+            span: e.span,
+        })
+    }
+
+    /// The element count of a dimension whose bounds are both literals.
+    fn lit_dim_count(r: &Range) -> Option<u32> {
+        let (m, l) = (Self::lit_u32(&r.msb)?, Self::lit_u32(&r.lsb)?);
+        m.abs_diff(l).checked_add(1)
+    }
+
+    /// An item the rewrite carries: a LITERAL whose value the parameter fold reads as
+    /// the oracles do — a sized literal of any width (`4'hF`, `8'sh80`, `66'hx1`), an
+    /// unsized decimal or unsized based literal below 2^31 holding no `x`, `z` or `?`
+    /// (`3`, `'h7F`, `'sb1`), the negation of such a decimal (`-1`), or one of these in
+    /// parentheses. The rule is the item's shape, not its value, because the fold behind
+    /// every other item is shared code with measured defects the slice does not own:
+    ///
+    /// - a NAME is read through its binder, and an instance override carrying `x` or `z`
+    ///   binds 0 or 1 there (ROADMAP §2 row 15: `#(.N('bx))` feeding `'{N, 64'h1}` is
+    ///   `0…0` where verilator and iverilog keep the `x`);
+    /// - an unsized based literal led by `x` or `z` pads its unknown only to 32 bits,
+    ///   where IEEE 1800-2017 §5.7.1 pads it to the context (`'bx` into 64 bits: vita
+    ///   `00000000xxxxxxxx`, iverilog all `x`) — in any expression, not only here;
+    /// - an unsized literal of 2^31 or more grows to hold its value, as iverilog reads
+    ///   it, where verilator reads 32 signed bits (`2147483648` into 64 bits:
+    ///   `0000000080000000` against `ffffffff80000000`) — an oracle split.
+    ///
+    /// An operator, a cast, a call, a string or a real keeps the pattern's refusal too.
+    fn literal_leaf(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Paren { inner } => Self::literal_leaf(inner),
+            ExprKind::IntLit {
+                kind: IntLitKind::Sized,
+                ..
+            } => true,
+            ExprKind::IntLit { kind, raw } => Self::small_unsized_lit(*kind, raw),
+            ExprKind::Unary {
+                op: UnOp::Minus,
+                operand,
+            } => matches!(
+                &operand.kind,
+                ExprKind::IntLit { kind: IntLitKind::Decimal, raw }
+                    if Self::small_unsized_lit(IntLitKind::Decimal, raw)
+            ),
+            _ => false,
+        }
+    }
+
+    /// An unsized decimal or unsized based literal below 2^31 with no `x`, `z` or `?`
+    /// digit; a fill (`'1`) is not one.
+    fn small_unsized_lit(kind: IntLitKind, raw: &str) -> bool {
+        let (radix, body) = match kind {
+            IntLitKind::Decimal => (10, raw),
+            IntLitKind::UnsizedBased => {
+                let Some(rest) = raw.trim().strip_prefix('\'') else {
+                    return false;
+                };
+                let rest = rest.strip_prefix(['s', 'S']).unwrap_or(rest);
+                let mut ch = rest.chars();
+                let radix = match ch.next() {
+                    Some('b' | 'B') => 2,
+                    Some('o' | 'O') => 8,
+                    Some('d' | 'D') => 10,
+                    Some('h' | 'H') => 16,
+                    _ => return false,
+                };
+                (radix, ch.as_str())
+            }
+            IntLitKind::Sized => return false,
+        };
+        let digits: String = body
+            .chars()
+            .filter(|c| *c != '_' && !c.is_whitespace())
+            .collect();
+        u64::from_str_radix(&digits, radix).is_ok_and(|v| v <= i32::MAX as u64)
     }
 }
 

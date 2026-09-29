@@ -364,7 +364,7 @@ impl Parser<'_, '_> {
     /// §3 ⑤ ⓓ: the sized literal a fill `e` denotes at width `w` (`'1` → `w'b11…1`,
     /// `'0` → `w'b0`, `'x`/`'z` → all-x/all-z, or all-zero on a 2-state field);
     /// `None` when `e` is not a fill literal.
-    fn fill_at_width(e: &Expr, w: u32, two_state: bool) -> Option<Expr> {
+    pub(crate) fn fill_at_width(e: &Expr, w: u32, two_state: bool) -> Option<Expr> {
         let ExprKind::IntLit { raw, .. } = &e.kind else {
             return None;
         };

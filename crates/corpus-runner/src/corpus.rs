@@ -559,17 +559,19 @@ pub static CORPUS: &[Workload] = &[
         data: &[],
         plusargs: &["+N=20000"],
         digest: "DIGEST=13b2ddfcd551ba2f",
-        // Refused at ELABORATION: 5 errors in three classes (bench/ibex/RUN.md). The
-        // pin is the first one printed, `prim_cipher_pkg`'s packed-array parameter
-        // written as `'{…}` (ROADMAP §3.a ⑤ⓐ). The parse error in front of them — two
+        // Refused at ELABORATION: 3 errors in two classes (bench/ibex/RUN.md). The
+        // pin is the first one printed, `ibex_core`'s whole-array continuous assign of
+        // an array whose element type is a typedef (`g_no_pmp`, ROADMAP §3.b
+        // `cont-array-typedef-elem`). The parse error in front of them — two
         // `prim_lfsr.sv` functions returning a generate-local multi-dimensional packed
         // typedef — closed in §3.a ⑤ⓖ, the twelve undeclared enum labels of a
         // generate block's typedef (`ibex_multdiv_fast`) in §3.a ⑤ⓗ, eighteen errors
         // of whole-array continuous assigns in §3.a ⑤ⓘ, five `'{default: v}` on a
-        // packed target in §3.a ⑤ⓛ, and two string-literal generate-if conditions in
-        // §3.a ⑤ⓙ.
+        // packed target in §3.a ⑤ⓛ, two string-literal generate-if conditions in
+        // §3.a ⑤ⓙ, and `prim_cipher_pkg`'s two packed-array parameters written as
+        // `'{…}` in §3.a ⑤ⓐ.
         expect: Expect::Refused {
-            diag: "package parameter `PRINCE_SHIFT_ROWS64` value is not a foldable constant",
+            diag: "a whole unpacked array cannot be the write target in this context",
         },
         // Not iverilog: it stops at `ibex_pkg.sv:350`, a keyed assignment pattern on
         // a packed-struct localparam. verilator is 2-state, so it answers here only
@@ -582,8 +584,8 @@ pub static CORPUS: &[Workload] = &[
         oracle:
             "verilator 5.052, x-invariant under randomized reset (iverilog 13 cannot parse it; \
                  sv2v 0.0.13 + iverilog 13, 4-state, agrees)",
-        note: "the only SystemVerilog workload (30k lines); refused at elaboration, 7 \
-               errors in four classes",
+        note: "the only SystemVerilog workload (30k lines); refused at elaboration, 3 \
+               errors in two classes",
     },
     Workload {
         name: "keccak",

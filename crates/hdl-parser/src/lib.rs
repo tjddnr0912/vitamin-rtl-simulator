@@ -516,6 +516,11 @@ struct ParamPrefix {
     /// the dims written on the name; empty for every prefix that parsed before ⇒
     /// byte-identical.
     typedef_unpacked: Vec<Dim>,
+    /// The prefix was the `string` keyword, which leaves no other trace here (`ty` is
+    /// `Implicit`, `var_kind` `None`, the same as `parameter [3:0][1:0] P`). §3 ⑤ⓐ's
+    /// pattern rewrite reads it: `string` takes no packed dimensions, so such a
+    /// declaration keeps its refusal rather than gain a value.
+    string_kw: bool,
 }
 
 /// The components of a parsed `property_spec` (the body shared by an inline
