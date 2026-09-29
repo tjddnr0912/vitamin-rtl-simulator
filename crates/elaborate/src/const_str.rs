@@ -233,6 +233,39 @@ impl Elaborator<'_> {
     }
 }
 
+/// A string literal's §5.9 bits for a consumer that reads literals:
+/// [`crate::const_wide::str_lit_bits`] (every literal, the parameter binder's reading) or
+/// [`std_str_lit_bits`] (Table 5-1 escapes only).
+pub(crate) type LitBits = fn(&ast::Expr) -> Option<WideBits>;
+
+impl Elaborator<'_> {
+    /// The wide domain's leaf resolver for a consumer that reads string literals through
+    /// `lit`: a literal from `lit` (one it declines stays declined), any other node
+    /// through [`Self::wide_name_bits`], exactly as the walks that read no literal.
+    pub(crate) fn leaf_bits_reading(&self, lit: LitBits, n: &ast::Expr) -> Option<WideBits> {
+        match n.kind {
+            ast::ExprKind::StrLit { .. } => lit(n),
+            _ => self.wide_name_bits(n),
+        }
+    }
+}
+
+/// [`crate::const_wide::str_lit_bits`] for a literal whose escapes are all in IEEE
+/// 1800-2017 Table 5-1 — `None` for any other expression, and for a literal holding
+/// `\r` or an unknown `\q`, whose bytes are one oracle's reading
+/// ([`literal::NonStdEscape`]: vita and verilator read `\r` as 0x0D, iverilog the
+/// letter). A consumer that newly reads literals takes this one, so it does not start
+/// answering on that split.
+pub(crate) fn std_str_lit_bits(e: &ast::Expr) -> Option<WideBits> {
+    let ast::ExprKind::StrLit { raw } = &e.kind else {
+        return None;
+    };
+    if !literal::unescape_str_literal_reporting(raw).1.is_empty() {
+        return None;
+    }
+    crate::const_wide::str_lit_bits(e)
+}
+
 /// The text INSIDE a raw string literal's quotes.
 ///
 /// Values in the string constant domain carry their delimiters — `str_param_raw`

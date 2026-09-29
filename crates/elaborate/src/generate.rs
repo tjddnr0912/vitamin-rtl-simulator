@@ -300,8 +300,11 @@ impl Elaborator<'_> {
 
                 let mut idx_count: u32 = 0;
                 loop {
-                    // cond folded WITH the genvar bound (so `i < N` resolves).
-                    let keep = match self.const_truth_in_scope(cond) {
+                    // cond folded WITH the genvar bound (so `i < N` resolves). It never
+                    // reads a string literal: the genvar setup leaves a same-named WIDE
+                    // constant in `wide_param_bits`, which `wide_name_bits` asks first
+                    // (`cond_names.rs`).
+                    let keep = match self.const_truth_in_scope(cond, false) {
                         Some(c) => c,
                         None => {
                             if phase == GenPhase::Nets {
@@ -587,11 +590,18 @@ impl Elaborator<'_> {
         depth: u32,
         map: &ModuleMap<'_>,
     ) {
-        let taken = match self.const_truth_in_scope(cond) {
+        // A condition at the module's top level (`depth` 0, the else-if chain included)
+        // may read a string literal (`cond_names.rs`), and its refusal is read the same way.
+        let top = depth == 0;
+        let taken = match self.const_truth_in_scope(cond, top) {
             Some(c) => c,
             None => {
                 if phase == GenPhase::Nets {
-                    let msg = self.unfoldable_note("generate-if condition", cond);
+                    let msg = if top && crate::const_real::holds_str_lit(cond) {
+                        self.unfoldable_note_reading("generate-if condition", cond)
+                    } else {
+                        self.unfoldable_note("generate-if condition", cond)
+                    };
                     self.error_at(MsgCode::ElabUnresolvedName, cond.span, &msg);
                 }
                 return;

@@ -32,7 +32,10 @@ impl Elaborator<'_> {
     /// 1-bit RESULT crosses into the integer world. Converting `R` to an integer
     /// first would decide the branch on the wrong value — the exact leaf-conversion
     /// mistake this domain exists to avoid.
-    pub(crate) fn const_truth_in_scope(&self, e: &ast::Expr) -> Option<bool> {
+    ///
+    /// `top_level` says the condition is a generate-if written at the module's top level,
+    /// the one position [`Self::selfdet_truth_reading_str`] reads a string literal in.
+    pub(crate) fn const_truth_in_scope(&self, e: &ast::Expr, top_level: bool) -> Option<bool> {
         // A CONDITION is a self-determined position (§11.6.1 Table 11-21): nothing
         // around it supplies a width. `generate if (4'd15 + 4'd1)` therefore tests the
         // 4-bit 0 and takes the `else` — which is what iverilog AND verilator do, and
@@ -50,10 +53,45 @@ impl Elaborator<'_> {
         if let Some(v) = self.selfdet_bits_unsigned(e) {
             return Some(v != 0);
         }
+        if let Some(t) = top_level
+            .then(|| self.selfdet_truth_reading_str(e))
+            .flatten()
+        {
+            return Some(t);
+        }
         if !self.expr_mentions_real(e) {
             return None;
         }
         Some(self.const_eval_real_in_scope(e)? != 0.0)
+    }
+
+    /// The truth of a control expression that holds a STRING LITERAL, read as §5.9's
+    /// unsigned constant of eight bits per character — `localparam int UseDsp = "no";`
+    /// then `if (UseDsp == "yes")` is how `ibex_counter` picks its DSP flop, and all three
+    /// oracles take the `else` (`00006e6f` against `00796573`). The two domains above
+    /// decline any literal, since their name hooks answer names only (the literal
+    /// reading is opt-in per consumer, [`Self::param_leaf_bits`]); a condition may opt
+    /// in because §11.6.1 makes it self-determined, so nothing around it could have made
+    /// the literal a `string`.
+    ///
+    /// Only the literal is new, and only where a name cannot be read wrong: the caller
+    /// asks for a generate-if at the module's top level, and every name must be one the
+    /// module declares once, at its top level, as a parameter with a written integral
+    /// type ([`Self::cond_names_ok`], `cond_names.rs` — the review rounds that found each
+    /// other name reading an outer object). A literal with an escape Table 5-1 does not
+    /// define declines too
+    /// ([`crate::const_str::std_str_lit_bits`]). The truth is "some bit is 1", so a
+    /// literal past 64 bits needs no u64 reading; an x bit declines as it does above.
+    fn selfdet_truth_reading_str(&self, e: &ast::Expr) -> Option<bool> {
+        if !holds_str_lit(e) || !self.cond_names_ok(e) {
+            return None;
+        }
+        let lit: crate::const_str::LitBits = crate::const_str::std_str_lit_bits;
+        let (b, w, _) = fold_self_bits(e, &|n, _| self.leaf_bits_reading(lit, n))?;
+        if bp_any_unknown(&b, w) {
+            return None;
+        }
+        Some((0..w as usize).any(|i| bp_get(&b, i).0))
     }
 
     /// Fold `e` in the REAL domain. `None` (⇒ the caller stays loud) for anything
@@ -247,4 +285,9 @@ impl Elaborator<'_> {
         }
         real_round_to_i64(self.const_eval_real_in_scope(e)?.trunc())
     }
+}
+
+/// Does `e` hold a string literal anywhere the constant domain reads?
+pub(crate) fn holds_str_lit(e: &ast::Expr) -> bool {
+    crate::param_query::ast_any(e, &|x| matches!(x.kind, ast::ExprKind::StrLit { .. }))
 }

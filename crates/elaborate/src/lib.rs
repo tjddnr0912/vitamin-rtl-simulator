@@ -54,6 +54,7 @@ mod block_local_feed;
 mod ca_delay_rt;
 mod class_lower;
 mod classes;
+mod cond_names;
 mod const_array;
 mod const_bound;
 mod const_decl_width;
@@ -915,6 +916,10 @@ struct Elaborator<'s> {
     // is an offset into its own compilation unit. Filled per definition in `run` before
     // any instance. NEVER restored.
     gen_enum_carried: BTreeMap<String, std::collections::BTreeSet<(u32, u32)>>,
+    // §3 ⑤ⓙ: per module / interface definition, the names a top-level generate condition
+    // holding a string literal may read (`cond_names.rs`) — a question about the source,
+    // filled per definition in `run` beside `gen_enum_carried`. NEVER restored.
+    cond_census: BTreeMap<String, cond_names::CondCensus>,
     // §4.5.201: per hier-callable frame-TASK FuncId, the declared port DIRECTIONS (parallel
     // to the formals). `resolve_deferred_hier_task_call` reads it to route each deferred arg
     // to an in-bind (input/inout copy-in) and/or an out-bind (output/inout copy-out) — the

@@ -155,6 +155,7 @@ impl<'s> Elaborator<'s> {
             hier_called_task_names: std::collections::BTreeSet::new(),
             md_return_fns: std::collections::BTreeSet::new(),
             gen_enum_carried: BTreeMap::new(),
+            cond_census: BTreeMap::new(),
             hier_task_port_dirs: BTreeMap::new(),
             hier_body_write_callers: BTreeMap::new(),
             hier_body_write_refused: std::collections::BTreeSet::new(),
@@ -678,6 +679,8 @@ impl<'s> Elaborator<'s> {
             self.check_decl_name_collisions(m, kind);
             self.gen_enum_carried
                 .insert(m.name.name.clone(), gen_enum::gen_carried_typedefs(m, kind));
+            self.cond_census
+                .insert(m.name.name.clone(), cond_names::cond_census(m, kind));
             self.cur_prefix = saved;
         }
         // §4.5.200: pre-scan EVERY module's procedural blocks for hierarchical TASK enables

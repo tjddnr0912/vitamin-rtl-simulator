@@ -6,6 +6,19 @@
 //! (`const_eval_in_scope`, the constant-function interpreter) stays there.
 
 use super::*;
+use crate::const_str::LitBits;
+
+/// How the consumer asking for a refusal's reason reads a string literal — which
+/// decides what the reason may blame.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Reading {
+    /// A consumer that reads no string literal.
+    Plain,
+    /// A generate-if condition at the module's top level that holds a string literal
+    /// (`selfdet_truth_reading_str`): a literal whose escapes are all in Table 5-1, and
+    /// only the names `cond_names.rs` clears.
+    Condition,
+}
 
 impl Elaborator<'_> {
     /// The constant value of a select BOUND or a replication COUNT in the u32
@@ -546,25 +559,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Does the WIDE bit domain have an answer for this sub-expression?
-    ///
-    /// ⚠️⚠️ [`Self::unfoldable_reason`] used to ask only the i64 domain, so every
-    /// operand of a >64-bit expression looked like a cause. `wide_param_name_in_pub`
-    /// then blamed the first wide NAME anywhere in the tree, which is how
-    /// `localparam logic C2 = A[128];` reported *"`A` is wider than 64 bits, so it has
-    /// no integral constant value here"* — true of `A[127]` as well, and that folds.
-    /// A sub-expression the wide domain answers is not the reason the enclosing one
-    /// failed, so the walk steps over it and keeps looking outward.
-    ///
-    /// ⚠️ An x/z-carrying fold is NOT an answer. `fold_self_bits` returns `Some` for
-    /// `128'hx` — it carries the unknown plane faithfully — but every VALUE-reading
-    /// consumer declines it, so treating it as "answered" promoted the operator above
-    /// it into the message and `128'hx / 128'd3` blamed the `/` instead of the operand.
-    pub(crate) fn wide_self_folds(&self, e: &ast::Expr) -> bool {
-        fold_self_bits(e, &|n, _| self.wide_name_bits(n))
-            .is_some_and(|(b, w, _)| !bp_any_unknown(&b, w))
-    }
-
     /// The 2-state value of a count/index sub-expression as a `u128`, or `None` when
     /// it is not a foldable 2-state constant or needs more than 128 bits. Used only
     /// to WORD a diagnostic — never to fold.
@@ -588,7 +582,7 @@ impl Elaborator<'_> {
     /// Name the real cause when a SELECT or a REPLICATION did not fold because its
     /// index / count is out of range rather than because an arm is missing.
     ///
-    /// Both halves are reachable only after [`Self::wide_self_folds`] has cleared the
+    /// Both halves are reachable only after [`Self::wide_folds_reading`] has cleared the
     /// operands, so anything this reports is genuinely about the index or the count.
     fn select_or_count_reason(&self, e: &ast::Expr) -> Option<String> {
         use ast::ExprKind as K;
@@ -671,6 +665,113 @@ impl Elaborator<'_> {
     }
 
     pub(crate) fn unfoldable_reason(&self, e: &ast::Expr) -> Option<String> {
+        self.unfoldable_reason_in(e, Reading::Plain)
+    }
+
+    /// [`Self::unfoldable_reason`] for a consumer that reads a string literal as its §5.9
+    /// value — a top-level generate condition. There a literal it reads is never the
+    /// cause, and naming it ("a string literal has no integral constant value") would send
+    /// the reader to the one operand that folds.
+    pub(crate) fn unfoldable_reason_reading(&self, e: &ast::Expr) -> Option<String> {
+        self.unfoldable_reason_in(e, Reading::Condition)
+    }
+
+    /// Does the WIDE bit domain have an answer for this sub-expression — reading its
+    /// string literals through `lit` when the consumer does?
+    ///
+    /// ⚠️⚠️ [`Self::unfoldable_reason`] used to ask only the i64 domain, so every
+    /// operand of a >64-bit expression looked like a cause. `wide_param_name_in_pub`
+    /// then blamed the first wide NAME anywhere in the tree, which is how
+    /// `localparam logic C2 = A[128];` reported *"`A` is wider than 64 bits, so it has
+    /// no integral constant value here"* — true of `A[127]` as well, and that folds.
+    /// A sub-expression the wide domain answers is not the reason the enclosing one
+    /// failed, so the walk steps over it and keeps looking outward.
+    ///
+    /// ⚠️ An x/z-carrying fold is NOT an answer. `fold_self_bits` returns `Some` for
+    /// `128'hx` — it carries the unknown plane faithfully — but every VALUE-reading
+    /// consumer declines it, so treating it as "answered" promoted the operator above
+    /// it into the message and `128'hx / 128'd3` blamed the `/` instead of the operand.
+    fn wide_folds_reading(&self, e: &ast::Expr, rd: Reading) -> bool {
+        let lit: LitBits = match rd {
+            Reading::Plain => return self.wide_domain_folds(e),
+            // The condition reads only the names its census clears, so neither does
+            // this question — or it would call a name folded through an outer binding
+            // the condition declined to read.
+            Reading::Condition if !self.cond_names_ok(e) => return false,
+            Reading::Condition => crate::const_str::std_str_lit_bits,
+        };
+        fold_self_bits(e, &|n, _| self.leaf_bits_reading(lit, n))
+            .is_some_and(|(b, w, _)| !bp_any_unknown(&b, w))
+    }
+
+    fn unfoldable_reason_in(&self, e: &ast::Expr, rd: Reading) -> Option<String> {
+        // A name the condition's census refuses is named before the fold checks below,
+        // which would read it through the outer binding the condition declined. One no
+        // parameter map binds is named as the plain walk names it (a net, a
+        // hierarchical or an undefined name).
+        if rd == Reading::Condition {
+            if let ast::ExprKind::Ident(p) = &e.kind {
+                if p.segments.len() == 1 && !self.cond_names_ok(e) {
+                    let n = &p.segments[0].name;
+                    let param = self
+                        .walk_scopes_key(n, |k| {
+                            self.str_param_raw.contains_key(k)
+                                || self.real_param_val.contains_key(k)
+                                || self.params.contains_key(k)
+                                || self.wide_param_bits.contains_key(k)
+                        })
+                        .is_some();
+                    let carrier = self
+                        .cond_census
+                        .get(&self.cur_module)
+                        .is_some_and(|c| c.is_carrier(n));
+                    return Some(match self.nonconst_bound_reason(e) {
+                        Some(r) if !param => format!("{r} is not a constant"),
+                        _ if carrier => "a condition that holds a string literal does not read \
+                                         a type parameter's width or signedness"
+                            .to_string(),
+                        _ => format!(
+                            "a condition that holds a string literal reads only a parameter \
+                             declared once in the module, outside every `generate` region and \
+                             block, as an `int`, an `integer` or a type with a packed range; it \
+                             does not read {}",
+                            Self::expr_brief(e)
+                        ),
+                    });
+                }
+            }
+        }
+        // A wildcard equality with a string-literal operand: its pattern's x / z bits are
+        // don't-cares, not a failure, so the pattern literal is never blamed; any other
+        // operand that fails is, and when none does the operator is the cause — the wide
+        // domain has no wildcard equality, and the constant one reads its left side as
+        // an i64.
+        if let (
+            Reading::Condition,
+            ast::ExprKind::Binary {
+                op: ast::BinOp::WildEq | ast::BinOp::WildNe,
+                lhs,
+                rhs,
+            },
+        ) = (rd, &e.kind)
+        {
+            let str_lit = |x: &ast::Expr| matches!(x.kind, ast::ExprKind::StrLit { .. });
+            if crate::param_query::ast_any(e, &str_lit) {
+                let pattern = matches!(rhs.kind, ast::ExprKind::IntLit { .. });
+                let operands =
+                    std::iter::once(lhs.as_ref()).chain((!pattern).then_some(rhs.as_ref()));
+                return Some(
+                    operands
+                        .filter(|c| !self.wide_folds_reading(c, rd))
+                        .find_map(|c| self.unfoldable_reason_in(c, rd))
+                        .unwrap_or_else(|| {
+                            "a wildcard equality (`==?`, `!=?`) has no constant-fold arm for a \
+                             string-literal operand"
+                                .to_string()
+                        }),
+                );
+            }
+        }
         if let Some(r) = Self::const_fold_children(e)
             .into_iter()
             // ⚠️ A child the WIDE bit domain can fold is not the failure, even though
@@ -680,13 +781,24 @@ impl Elaborator<'_> {
             // difficulty, and said nothing about the zero divisor that is the actual
             // reason. Same shape as any stale proxy — the membership test kept
             // standing in for a property that had moved.
-            .filter(|c| !self.wide_domain_folds(c))
-            .find_map(|c| self.unfoldable_reason(c))
+            .filter(|c| !self.wide_folds_reading(c, rd))
+            .find_map(|c| self.unfoldable_reason_in(c, rd))
         {
             return Some(r);
         }
-        if self.const_eval_in_scope(e).is_some() || self.wide_self_folds(e) {
+        if self.wide_folds_reading(e, rd) {
             return None;
+        }
+        if self.const_eval_in_scope(e).is_some() {
+            // The integer domain folds it and the condition's own walk does not (a
+            // constant function call): with a string literal beside it, the condition
+            // reads the wide domain only, so THIS operand is the cause.
+            return (rd == Reading::Condition).then(|| {
+                format!(
+                    "{} has no constant-fold arm in a condition that holds a string literal",
+                    Self::expr_brief(e)
+                )
+            });
         }
         // The domains that HAVE a value but not an integral one get named for what
         // they are; a caller reading "not foldable" about `pk::R` would look for a
@@ -774,7 +886,16 @@ impl Elaborator<'_> {
                 "{} has no constant-fold arm (its runtime spelling works)",
                 Self::expr_brief(e)
             ),
-            K::StrLit { .. } => "a string literal has no integral constant value".to_string(),
+            // The condition declines a literal only for an escape Table 5-1 does not
+            // define (`std_str_lit_bits`), whose value is one oracle's.
+            K::StrLit { raw } => match literal::unescape_str_literal_reporting(raw).1.first() {
+                Some(esc) if rd != Reading::Plain => format!(
+                    "`{}` is not a string escape in IEEE 1800-2017 Table 5-1, so the \
+                     literal's value differs between tools",
+                    esc.written()
+                ),
+                _ => "a string literal has no integral constant value".to_string(),
+            },
             K::RealLit { .. } => "a real literal has no integral constant value here".to_string(),
             _ => format!("{} has no constant-fold arm", Self::expr_brief(e)),
         })
@@ -794,7 +915,18 @@ impl Elaborator<'_> {
     /// not inventing a format. `None` keeps the unqualified wording, which stays
     /// honest: nothing here can name a cause it did not find.
     pub(crate) fn unfoldable_note(&self, what: &str, e: &ast::Expr) -> String {
-        match self.unfoldable_reason(e) {
+        Self::note_with(what, self.unfoldable_reason(e))
+    }
+
+    /// [`Self::unfoldable_note`] for a position that reads string literals
+    /// ([`Self::unfoldable_reason_reading`]) — a top-level generate-if condition that
+    /// holds one.
+    pub(crate) fn unfoldable_note_reading(&self, what: &str, e: &ast::Expr) -> String {
+        Self::note_with(what, self.unfoldable_reason_reading(e))
+    }
+
+    fn note_with(what: &str, why: Option<String>) -> String {
+        match why {
             Some(why) => format!("{what} is not a constant: {why}"),
             None => format!("{what} is not a constant"),
         }
