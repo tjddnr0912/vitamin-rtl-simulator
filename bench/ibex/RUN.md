@@ -227,3 +227,9 @@ the one-shot and the staged flow, in 30 s at `+N=20000` (0.22 s of it elaboratio
 reverted: the parser keys its struct bindings by name, and the review found designs where the
 name reached another declaration (ROADMAP §3.a ⑤ⓚ). When the row closes, the digest is measured
 again on the landed build.
+
+ROADMAP §4.5.572 resolved it again, in elaborate against the declaration the target reaches, and
+its builds printed the pins at both sizes and, for eight of the mutations in the table above (all
+but the clock gate, whose edit was not reproduced) and both controls, verilator's digests. It was
+reverted too: the review drove the arm through the parser's wildcard-import binding and through a
+block-local check that skips `force` (ROADMAP §3.a ⑤ⓚ and §5.2).
