@@ -169,7 +169,9 @@ digest, and sv2v converted and run under Icarus Verilog, a 4-state simulator, pr
 too. Eight asymmetric mutations across the ALU, the multiplier, the load-store unit, the
 register file, the prefetch buffer and the core's clock gate move it. The testbench asserts reset with a falling edge: the core runs on a gated clock
 whose enable is itself reset state. vita refuses
-it at elaboration: 1 error, ROADMAP §3.a ⑤ⓚ, the head of the §5.2 queue. (The parse error in
+it at elaboration: 1 error, ROADMAP §3.a ⑤ⓚ, the head of the §5.2 queue. §4.5.571's builds that
+resolved it ran the whole design to Verilator's digest at both sizes and were reverted: the parser
+could not certify which declaration the construct's target reaches. (The parse error in
 front of it — two `prim_lfsr.sv` functions returning a generate-local multi-dimensional packed
 typedef — closed in §4.5.564, the twelve undeclared labels of a generate block's `typedef enum`
 in §4.5.565, the eighteen errors of nine whole-array continuous assigns in §4.5.566, five
@@ -576,7 +578,7 @@ workload sizes are tuned to 3–15 seconds under Icarus Verilog.
   §4.5.567 its packed-target `'{default: v}`, §4.5.568 its string-literal generate-if, §4.5.569
   its packed-array parameters written as `'{…}` and §4.5.570 its copy of a typedef-element array
   — is the head of ROADMAP §5.2; after it closes, the run itself is compared with the Verilator
-  digest.
+  digest. §4.5.571's reverted builds already made that comparison: both sizes printed the pins.
 - New designs, licence and oracle first: OpenTitan IPs and VeeR EL2 / EH1 (Apache-2.0),
   alexforencich verilog-axis / -pcie / -uart / -i2c (MIT). Solderpad designs (cv32e40p,
   cva6, the pulp-platform libraries) stay outside rule 1 (owner ruling).

@@ -25,6 +25,7 @@ continues unchanged.
 | 2026-09-29 | b872780 | §4.5.568 | 0 / 0 / 0 | +5 | 10/11 · 9 ok · verilog-axi ruled-split · ibex known-gap | ibex: elaboration 7 → 5 (2 / 2 / 1) |
 | 2026-09-29 | 4f4bf53 | §4.5.569 | 0 / 0 / 0 | +3 | 10/11 · 9 ok · verilog-axi ruled-split · ibex known-gap | ibex: elaboration 5 → 3 (2 / 1) |
 | 2026-09-29 | 1e1788d | §4.5.570 | 0 / 0 / 0 | +5 | 10/11 · 9 ok · verilog-axi ruled-split · ibex known-gap | ibex: elaboration 3 → 1 (1) |
+| 2026-09-29 | 0268415 | §4.5.571 (reverted) | 0 / 0 / 0 | +6 | 10/11 · 9 ok · verilog-axi ruled-split · ibex known-gap | ibex: elaboration 1 → 1 (the reverted builds: 0, and the run printed verilator's digest at both sizes) |
 
 ## Section counts
 
@@ -211,6 +212,7 @@ a section restructure, a residue split).
 | 2026-09-29 | b872780 | §4.5.568 | 8818 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 25 / 20 / 5 | 124 / 105 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 445 / 268 / 177 |
 | 2026-09-29 | 4f4bf53 | §4.5.569 | 8835 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 25 / 20 / 5 | 125 / 106 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 446 / 269 / 177 |
 | 2026-09-29 | 1e1788d | §4.5.570 | 8847 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 25 / 20 / 5 | 125 / 106 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 446 / 269 / 177 |
+| 2026-09-29 | 0268415 | §4.5.571 | 8860 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 25 / 20 / 5 | 125 / 106 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 446 / 269 / 177 |
 - 2026-09-28 (§4.5.563): 3a +5 (ibex's classes ⑤ⓖ–⑤ⓚ; ⑤ⓐ gained an ibex cell) and 3b +2
   (display-null-arg, oob-read-exit). The total includes the Summary's new `study/03` row (3 / 2 / 1:
   ibex end to end, the new-design census, the corpus in CI), which has no column here. §2 is frozen
@@ -241,4 +243,9 @@ a section restructure, a residue split).
 - 2026-09-29 (§4.5.570): 3a ±0; 3b ±0 (`cont-array-typedef-elem` closed, `cont-array-typedef-residue`
   new: the slice's loud edges, startable item by item). No §2 count moved. `study/03` unchanged
   (3 / 2 / 1). The catalog gained five rows (§4.5.570 grounding and review), which this table does
+  not count.
+- 2026-09-29 (§4.5.571): no count moved — the slice was reverted after three review rounds on one
+  axis and ⑤ⓚ stays open and startable with a new fix shape (certify the target in elaborate). The
+  tests rose by 13 held pins (every cell REFUSED with its oracle lines). `study/03` unchanged
+  (3 / 2 / 1). The catalog gained six rows (§4.5.571 grounding and review), which this table does
   not count.

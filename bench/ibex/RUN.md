@@ -220,5 +220,10 @@ src/rtl/ibex_controller.sv:737:13: error[VITA-E3009] E-ELAB-UNSUPPORTED: a keyed
 |---:|---|---|
 | 1 | A keyed pattern as a `?:` arm whose target is a packed struct | `ibex_controller.sv:737` |
 
-Nobody has seen what the simulation shows after it. When it closes, the next measurement
-is the run itself: vita's digest against `13b2ddfcd551ba2f`.
+ROADMAP §4.5.571 resolved that construct in the parser, and every build that did ran the whole
+design to the pins: `+N=2000` `32e0e78741376133`, `+N=20000` `13b2ddfcd551ba2f`, and the
+`ibex_alu.sv:386` and `ibex_multdiv_fast.sv:136` mutations' digests in the table above, through
+the one-shot and the staged flow, in 30 s at `+N=20000` (0.22 s of it elaboration). The builds were
+reverted: the parser keys its struct bindings by name, and the review found designs where the
+name reached another declaration (ROADMAP §3.a ⑤ⓚ). When the row closes, the digest is measured
+again on the landed build.

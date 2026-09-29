@@ -2,7 +2,7 @@
 
 One-screen snapshot of what stands between HEAD and the two goals. The detailed rows are in
 [ROADMAP.md](ROADMAP.md); finished work is in [history/](history/README.md). Baseline counts at HEAD:
-8835 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
+8860 tests passing with 15 skipped, artifact `format_version` 34 (a `.velab` / `.vu` written by an
 older build is refused at the header gate with `E9001`), 70 `MsgCode` diagnostic codes; the
 canonical table is the fact table in [README.md](../README.md).
 
@@ -22,8 +22,10 @@ canonical table is the fact table in [README.md](../README.md).
   parse error closed in §4.5.564, its generate-block enum labels in §4.5.565, its whole-array
   continuous assigns in §4.5.566, its packed-target `'{default: v}` in §4.5.567, its string-literal
   generate-if in §4.5.568, its packed-array parameters written as `'{…}` in §4.5.569, its copy of a
-  typedef-element array in §4.5.570). Its oracle is verilator, under the x-invariance condition of
-  contract rule 2.
+  typedef-element array in §4.5.570). §4.5.571 resolved the last one in the parser, ran the whole
+  design to verilator's digest at both sizes, and was reverted: the parser keys its struct bindings
+  by name and cannot certify which declaration the target reaches, so the row's fix moves the check
+  to elaborate. Its oracle is verilator, under the x-invariance condition of contract rule 2.
 - The performance axis is at diminishing returns and ranks below the correctness ladder: codegen
   (cranelift), 2-state storage, cycle-based mode and levelize are all rejected, each with a recorded
   re-entry condition (ROADMAP §5.a).
@@ -36,8 +38,8 @@ canonical table is the fact table in [README.md](../README.md).
 
 | # | track | item |
 |---|---|---|
-| 1 | corpus `ibex` · §3.a ⑤ⓚ | a keyed pattern in a `?:` arm whose target is a packed struct (the page's only error) |
-| 2 | corpus `ibex` | run it end to end against `DIGEST=13b2ddfcd551ba2f` |
+| 1 | corpus `ibex` · §3.a ⑤ⓚ | a keyed pattern in a `?:` arm whose target is a packed struct (the page's only error); certify the target in elaborate — §4.5.571's three parser-side designs were reverted |
+| 2 | corpus `ibex` | run it end to end against `DIGEST=13b2ddfcd551ba2f` (§4.5.571's reverted builds printed it) |
 | 3 | corpus `darkriscv` · §3.b `display-null-arg` | `$display("…",);` is E2002; the stale "full SoC is refused" lines go with it |
 | 4 | corpus `aes` · §3.b `oob-read-exit` | an out-of-range array read is an error (exit 1); owner ruling: a warning with the value x |
 | 5 | corpus | new-design census (OpenTitan IPs, VeeR EL2 / EH1, alexforencich axis / pcie / uart / i2c) |
@@ -129,7 +131,10 @@ synthetic-origin §3 rows, and they wake with the rows they block.
 - A binding-resolved scope (which declaration a post-block reference binds, not a name) — blocks
   three §2 "Scoping" bullets (a package routine body's read after a shadowing block, the scoped
   `pk::g()` scope-leak gate, the inline-fold lane's by-name context) and the §3 false-loud row the
-  same gate owns; each narrowing keyed on the declaration's properties created a new defect.
+  same gate owns; each narrowing keyed on the declaration's properties created a new defect. The
+  parser's name-keyed struct bindings are the same gap for assignment patterns (the §4.5.571 CLASS
+  row in docs/PROBE_CATALOG.md); §3.a ⑤ⓚ does not wait for it — it certifies its one target in
+  elaborate, where the name is resolved.
 - The adjudication of the diagnostic stream a purity certification moves (a pure RHS reports
   `errors=5`, the same RHS inside a no-op `$unsigned` `errors=9`) — blocks the §2 "Performance"
   certification bullet and the two bullets with its root.
