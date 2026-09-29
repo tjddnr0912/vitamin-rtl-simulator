@@ -197,7 +197,7 @@ zero digest, so the cycle count was added.
 
 ## vita today
 
-The run stops at elaboration with 5 errors in three classes. The parse error in front of
+The run stops at elaboration with 3 errors in two classes. The parse error in front of
 them — `prim_lfsr.sv:392` and `:401` declare functions whose return type is a
 multi-dimensional packed typedef local to a generate block — closed in ROADMAP §4.5.564;
 that code sits under `if (NonLinearOut)`, which Ibex leaves 0. The twelve undeclared enum
@@ -206,19 +206,19 @@ errors of nine whole-array continuous assigns (`assign ic_tag_rdata = '{default:
 `unused_*` sinks, `assign imd_val_q_ex_o = imd_val_q;`) in §4.5.566, and the five `'{default: v}` on
 a packed target (`ibex_top`'s no-RAM tie-offs, `ibex_alu`'s `imd_val_we_o`) in §4.5.567, and the two
 string-literal generate-if conditions of `ibex_counter` (`localparam int UseDsp = "no"; if (UseDsp ==
-"yes")`) in §4.5.568. An error inside an instance is reported at
+"yes")`) in §4.5.568, and `prim_cipher_pkg`'s two packed-array parameters written as a positional
+pattern (`PRINCE_SHIFT_ROWS64[_INV] = '{4'hF, 4'hA, …}`) in §4.5.569. An error inside an instance is reported at
 the instance's site (`tb.sv:92` is `u_top`), so the table names the construct. The manifest pins
 the first error printed:
 
 ```
-error[VITA-E3009] E-ELAB-UNSUPPORTED: package parameter `PRINCE_SHIFT_ROWS64` value is not a foldable constant [in prim_cipher_pkg]
+src/rtl/ibex_top.sv:410:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array cannot be the write target in this context (v1: procedural array assignment only) [in tb.u_top.u_ibex_core.g_no_pmp]
 ```
 
 | Errors | Class | Sites |
 |---:|---|---|
-| 2 | A multi-dimensional packed package parameter initialised from a positional pattern | `prim_cipher_pkg` `PRINCE_SHIFT_ROWS64[_INV]` |
 | 2 | A whole-array continuous `assign` whose element type is a typedef | `ibex_core` no-PMP branch (`unused_csr_pmp_cfg = csr_pmp_cfg`, `pmp_cfg_t`) |
 | 1 | A keyed pattern as a `?:` arm whose target is a packed struct | `ibex_controller.sv:737` |
 
-Nobody has seen what the simulation shows after these. When all three classes close, the
+Nobody has seen what the simulation shows after these. When both classes close, the
 next measurement is the run itself: vita's digest against `13b2ddfcd551ba2f`.

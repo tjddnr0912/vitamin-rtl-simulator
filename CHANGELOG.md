@@ -9,6 +9,21 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — a positional `'{…}` value for a multi-dimensional packed parameter
+
+- `parameter logic [15:0][3:0] P = '{4'hF, 4'hA, …};` now elaborates: the items are the elements
+  of the first dimension, the left bound's first (the highest bits in either direction), each
+  sized to its element as an assignment would size it, a nested positional pattern giving its
+  element's value. It was `E3009` (`package parameter `P` value is not a foldable constant` /
+  `parameter `P` value is not a constant`) in every scope. Values match Verilator and, where it
+  can read them, sv2v → Icarus Verilog. The corpus row `ibex` goes from 5 elaboration errors
+  to 3.
+- Only literal items are read: a sized literal, an unsized one below 2^31 with no `x`/`z`, `-`
+  on an unsized decimal, a fill, or a nested positional pattern of them. An item that names a
+  constant, computes, casts, calls, or is a string or a real, a keyed pattern, a dimension
+  bound that is not a literal, a `bit` element and a wrong item count keep `E3009` (ROADMAP §3.b
+  `md-param-pattern-residue`).
+
 ### Added — a string literal in a top-level generate-`if` condition
 
 - `localparam int UseDsp = "no";` then `if (UseDsp == "yes") … else …` now elaborates: the string

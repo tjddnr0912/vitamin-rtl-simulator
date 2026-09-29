@@ -169,12 +169,13 @@ digest, and sv2v converted and run under Icarus Verilog, a 4-state simulator, pr
 too. Eight asymmetric mutations across the ALU, the multiplier, the load-store unit, the
 register file, the prefetch buffer and the core's clock gate move it. The testbench asserts reset with a falling edge: the core runs on a gated clock
 whose enable is itself reset state. vita refuses
-it at elaboration: 5 errors in three classes, which are ROADMAP §3.a ⑤ⓐ and ⑤ⓚ and §3.b
-`cont-array-typedef-elem`, the head of the §5.2 queue. (The parse error in front of them — two
+it at elaboration: 3 errors in two classes, which are ROADMAP §3.b `cont-array-typedef-elem`
+and §3.a ⑤ⓚ, the head of the §5.2 queue. (The parse error in front of them — two
 `prim_lfsr.sv` functions returning a generate-local multi-dimensional packed typedef — closed in
 §4.5.564, the twelve undeclared labels of a generate block's `typedef enum` in §4.5.565,
 the eighteen errors of nine whole-array continuous assigns in §4.5.566, five `'{default: v}`
-on a packed target in §4.5.567, and two string-literal generate-if conditions in §4.5.568.) Recipe, x runs and mutation:
+on a packed target in §4.5.567, two string-literal generate-if conditions in §4.5.568, and two
+packed-array parameters written as `'{…}` in §4.5.569.) Recipe, x runs and mutation:
 [`bench/ibex/RUN.md`](../../bench/ibex/RUN.md).
 
 ### 3.2 Pinned digests
@@ -570,11 +571,11 @@ workload sizes are tuned to 3–15 seconds under Icarus Verilog.
 **The corpus.**
 
 - One row is a ruled split (`verilog-axi`) and one is a loss vita has not closed (`serv`).
-- `ibex` is refused (§3.1). Its page — 5 elaboration errors in three classes, since §4.5.564
+- `ibex` is refused (§3.1). Its page — 3 elaboration errors in two classes, since §4.5.564
   closed its parse error, §4.5.565 its generate-block enum labels, §4.5.566 its whole-array
-  continuous assigns, §4.5.567 its packed-target `'{default: v}` and §4.5.568 its string-literal
-  generate-if — is the head of ROADMAP §5.2; after it closes, the run itself is compared
-  with the Verilator digest.
+  continuous assigns, §4.5.567 its packed-target `'{default: v}`, §4.5.568 its string-literal
+  generate-if and §4.5.569 its packed-array parameters written as `'{…}` — is the head of
+  ROADMAP §5.2; after it closes, the run itself is compared with the Verilator digest.
 - New designs, licence and oracle first: OpenTitan IPs and VeeR EL2 / EH1 (Apache-2.0),
   alexforencich verilog-axis / -pcie / -uart / -i2c (MIT). Solderpad designs (cv32e40p,
   cva6, the pulp-platform libraries) stay outside rule 1 (owner ruling).
