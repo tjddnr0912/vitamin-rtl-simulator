@@ -12,6 +12,12 @@
 use vita_schema::schema_hash;
 
 /// Pinned root hash of `hdl_ast::SourceUnit`'s full type closure.
+/// Re-pinned 2026-09-29 §3.b cont-array-typedef-elem `NetVarDecl.integral_typedef` and
+/// `AnsiPort.integral_typedef: bool` — the parser's mark that a declaration's type is a
+/// typedef of an integral packed type other than an enum, with every part in the state
+/// its `kind` records and name-free bounds. Elaborate reads it only to let a whole-array
+/// continuous `assign` copy such elements; `false` on every declaration that predates
+/// it. All `.vu` artifacts are stale; no sim-ir/format_version change.
 /// Re-pinned 2026-09-28 §3 ⑤ⓖ `FunctionDef.ret_packed: Vec<Range>` — the packed
 /// dimensions of a function return type that has more than one (`function logic
 /// [2:0][3:0] f`, or a typedef that declares them), which used to be a parse error.
@@ -277,8 +283,8 @@ use vita_schema::schema_hash;
 /// 29 and the SimIr schema hash / canonical / RON goldens are untouched (verified:
 /// the only test this slice moves is this one). All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    0, 223, 20, 171, 63, 54, 75, 169, 7, 3, 186, 183, 67, 224, 139, 114, 79, 211, 88, 214, 191, 95,
-    177, 227, 172, 174, 200, 47, 24, 4, 84, 189,
+    218, 159, 236, 199, 74, 245, 14, 153, 217, 212, 84, 114, 137, 226, 90, 200, 181, 117, 246, 69,
+    201, 82, 83, 40, 120, 241, 48, 223, 42, 202, 228, 181,
 ];
 
 #[test]

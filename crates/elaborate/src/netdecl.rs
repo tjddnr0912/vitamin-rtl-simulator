@@ -804,6 +804,11 @@ impl Elaborator<'_> {
                         d.shape_param.is_some(),
                     ) {
                         self.inline_elem_arrays.insert(id);
+                    } else if cont_array::typedef_elem_type(
+                        d.integral_typedef,
+                        d.shape_param.is_some(),
+                    ) {
+                        self.typedef_elem_arrays.insert(id);
                     }
                 }
             }

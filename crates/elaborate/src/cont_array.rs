@@ -107,21 +107,24 @@ impl Elaborator<'_> {
         // Excluded before any side effect, so the scalar funnel answers exactly as
         // before: a `real` element; a net declared with a delay (`wire #2 w [2];`),
         // which this IR applies only to a net-declaration assignment; an element type
-        // not written in the array's own declaration (`inline_elem_type`: an enum, a
-        // struct, a typedef or a type parameter, whose 2-state-ness and enum identity
-        // this IR does not keep — `enum bit [7:0]` elements read `x` where both oracles
-        // read 0, and an enum array copied to a vector is refused by iverilog); and a
-        // copy between a 2-state and a 4-state element type, which §7.6 does not call
-        // equivalent (both oracles refuse `logic [7:0] d [2]; bit [7:0] s [2]; assign
-        // d = s;`).
+        // this IR cannot vouch for — neither written in the array's own declaration
+        // (`inline_elem_type`) nor, for a copy, a typedef the parser marks integral
+        // (`typedef_elem_type`): an enum, whose identity this IR does not keep (an enum
+        // array copied to a vector is refused by iverilog), a type with an `enum bit
+        // [7:0]` part (recorded 4-state: elements read `x` where both oracles read 0),
+        // a struct mixing 2-state and 4-state members, a type parameter, and a pattern
+        // into any typedef element; and a copy between a 2-state and a 4-state element
+        // type, which §7.6 does not call equivalent (both oracles refuse `logic [7:0] d
+        // [2]; bit [7:0] s [2]; assign d = s;`).
+        let copy = s_array.is_some();
         if self.nets[t_net as usize].kind == ir::NetKind::Real
             || self.delayed_decl_nets.contains(&t_net)
-            || !self.inline_elem_arrays.contains(&t_net)
+            || !self.elem_type_known(t_net, copy)
         {
             return false;
         }
         if let Some(s_net) = s_array {
-            if !self.inline_elem_arrays.contains(&s_net)
+            if !self.elem_type_known(s_net, copy)
                 || self.net_is_two_state(t_net) != self.net_is_two_state(s_net)
             {
                 return false;
@@ -364,6 +367,13 @@ impl Elaborator<'_> {
         }
     }
 
+    /// Is `net`'s element type one a whole-array `assign` can carry: written in its own
+    /// declaration, or — for a `copy` only — a typedef the parser marks integral? A
+    /// pattern into a struct or union element would need that type's own pattern rules.
+    fn elem_type_known(&self, net: u32, copy: bool) -> bool {
+        self.inline_elem_arrays.contains(&net) || (copy && self.typedef_elem_arrays.contains(&net))
+    }
+
     /// Is `net` declared with a 2-state type (`bit`, `byte`, `int`, …)?
     fn net_is_two_state(&self, net: u32) -> bool {
         self.intro_kind
@@ -426,6 +436,17 @@ pub(crate) fn inline_elem_type(
 ) -> bool {
     let within = |r: &ast::Range| lo <= r.span.lo && r.span.hi <= first;
     !shape_param && range.is_some_and(within) && packed.iter().all(within)
+}
+
+/// Is an element type a typedef a whole-array COPY can carry — the parser's
+/// `integral_typedef` (a packed struct or union, or a vector or packed-array alias, that
+/// is not an enum, has every part in its recorded state and every bound written as an
+/// integer literal) and no type parameter? Such a type is equivalent (IEEE 1800 §6.22.2) to every integral
+/// packed type of its width, state and signedness, which `array_copy_mismatch` and the
+/// 2-state check compare: verilator and sv2v → iverilog both run a copy between two
+/// struct typedefs, and between a struct typedef and a vector, of one width.
+pub(crate) fn typedef_elem_type(integral_typedef: bool, shape_param: bool) -> bool {
+    integral_typedef && !shape_param
 }
 
 /// A system task that reads its arguments and writes no net. Anything not listed may

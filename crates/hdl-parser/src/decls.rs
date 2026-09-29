@@ -172,6 +172,7 @@ impl Parser<'_, '_> {
                 unpacked: Vec::new(),
                 default: None,
                 shape_param: None,
+                integral_typedef: false,
                 iface: Some(IfaceRef {
                     iface,
                     modport,
@@ -212,12 +213,16 @@ impl Parser<'_, '_> {
         // typedef resolves to its (kind, signed, range); the typedef name carries
         // the range, so the normal signed/range/packed reads are SKIPPED for it
         // (they would otherwise consume the port NAME). Built-in path unchanged.
-        let pre_shape = self.peek_typedef_name().and_then(|i| i.shape_param);
+        let pre_info = self.peek_typedef_name();
+        let pre_shape = pre_info.as_ref().and_then(|i| i.shape_param.clone());
         let typedef_ty = if net_or_var.is_none() {
             self.try_port_typedef()
         } else {
             None
         };
+        // §3.b cont-array-typedef-elem: only when the typedef path resolved the type.
+        let mut integral_typedef =
+            typedef_ty.is_some() && pre_info.as_ref().is_some_and(Self::integral_typedef);
         // §3 ⑤ⓕ: only when the typedef path actually resolved the port's type.
         let shape_param = typedef_ty
             .is_some()
@@ -243,6 +248,7 @@ impl Parser<'_, '_> {
                 net_or_var = Some(k);
                 port_struct_name = sn;
                 typedef_one_dim = extra.len() == 1;
+                integral_typedef &= self.bounds_source_literal(None, &extra);
                 typedef_unpacked = unp;
                 // §3.a ⑤: the typedef's own INNER packed dims come after whatever
                 // the dims written before the port name produced — the same
@@ -278,6 +284,7 @@ impl Parser<'_, '_> {
                 signed = p.signed;
                 range = p.range.clone();
                 packed = p.packed.clone();
+                integral_typedef = p.integral_typedef;
                 // §4.5.425 (review B F3): `input cfg_t [1:0] a, b` — `b` is the same
                 // struct (array) as `a`; without this only `a[i].field` desugared.
                 if let Some((sn, one)) = self.ansi_prev_struct.clone() {
@@ -345,6 +352,7 @@ impl Parser<'_, '_> {
             default,
             iface: None,
             shape_param,
+            integral_typedef,
             span: start.to(self.prev_span()),
         }
     }
@@ -551,6 +559,7 @@ impl Parser<'_, '_> {
             self.unbind_struct_enum_name(&n.name.name);
         }
         Some(NetVarDecl {
+            integral_typedef: false,
             kind,
             signed,
             range,
@@ -598,6 +607,20 @@ impl Parser<'_, '_> {
         Some(names)
     }
 
+    /// §3.b cont-array-typedef-elem: `NetVarDecl::integral_typedef` for a declaration
+    /// whose type resolved to `info` — not an enum, `layout_exact` (every part in its
+    /// recorded state, every bound — its own and its member types' — written as an
+    /// integer literal), not a class, not an unpacked-array typedef, not a type
+    /// parameter, and a vector. The caller adds the dims written after the type name.
+    pub(crate) fn integral_typedef(info: &TypeInfo) -> bool {
+        !info.enum_type
+            && info.layout_exact
+            && info.class_name.is_none()
+            && info.unpacked.is_empty()
+            && info.shape_param.is_none()
+            && info.range.is_some()
+    }
+
     /// `T name1, name2 = init, …;` where the leading type-name resolved to `info`.
     pub(crate) fn parse_typed_decl(&mut self, info: TypeInfo) -> Option<NetVarDecl> {
         let start = self.cur_span();
@@ -606,6 +629,8 @@ impl Parser<'_, '_> {
         self.bump(); // the type-name identifier
                      // §4.5.425: `cfg_t [1:0] r;` — packed dims after the type name.
         let extra = self.opt_packed_dims();
+        let integral_typedef =
+            Self::integral_typedef(&info) && self.bounds_source_literal(None, &extra);
         // Review B F1: ONE extra dim makes `v[i]` the struct; two make it a sub-array
         // (both oracles refuse `v[i].field`) — no member set for it.
         let packed_array = extra.len() == 1;
@@ -725,6 +750,7 @@ impl Parser<'_, '_> {
             class_type,
             class_args,
             const_param: false,
+            integral_typedef,
             span: start.to(self.prev_span()),
         })
     }

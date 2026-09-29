@@ -939,17 +939,22 @@ impl Elaborator<'_> {
                         self.packed_dims.insert(id, packed_ext);
                     }
                 }
-                if !p.unpacked.is_empty()
-                    && cont_array::inline_elem_type(
-                        p.span.lo,
-                        p.name.span.lo,
-                        p.range.as_ref(),
-                        &p.packed,
-                        p.shape_param.is_some(),
-                    )
-                {
+                if !p.unpacked.is_empty() {
                     if let Some(&id) = self.symbols.get(&self.fq(&p.name.name)) {
-                        self.inline_elem_arrays.insert(id);
+                        if cont_array::inline_elem_type(
+                            p.span.lo,
+                            p.name.span.lo,
+                            p.range.as_ref(),
+                            &p.packed,
+                            p.shape_param.is_some(),
+                        ) {
+                            self.inline_elem_arrays.insert(id);
+                        } else if cont_array::typedef_elem_type(
+                            p.integral_typedef,
+                            p.shape_param.is_some(),
+                        ) {
+                            self.typedef_elem_arrays.insert(id);
+                        }
                     }
                 }
                 // MULTI-DIM (or non-zero-based) unpacked geometry, exactly as

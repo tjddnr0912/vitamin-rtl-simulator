@@ -198,6 +198,7 @@ impl Parser<'_, '_> {
             return None;
         }
         Some(NetVarDecl {
+            integral_typedef: false,
             shape_param: None,
             kind: if all_two_state {
                 NetVarKind::Bit
@@ -250,6 +251,7 @@ impl Parser<'_, '_> {
                             .clone()
                             .map(|e| self.desugar_record_array_init(&tyname, e));
                         out.push(NetVarDecl {
+                            integral_typedef: false,
                             shape_param: None,
                             kind: if all_two_state {
                                 NetVarKind::Bit
@@ -303,6 +305,7 @@ impl Parser<'_, '_> {
                             .insert(n.name.name.clone(), tyname.clone());
                         for (m, finit) in members.iter().zip(field_inits) {
                             out.push(NetVarDecl {
+                                integral_typedef: false,
                                 shape_param: None,
                                 kind: m.kind,
                                 signed: m.signed,
@@ -355,6 +358,7 @@ impl Parser<'_, '_> {
                         self.var_struct.insert(n.name.name.clone(), tyname.clone());
                         self.struct_1d_array_vars.insert(n.name.name.clone());
                         out.push(NetVarDecl {
+                            integral_typedef: false,
                             shape_param: None,
                             kind: if all_two_state {
                                 NetVarKind::Bit
@@ -395,6 +399,7 @@ impl Parser<'_, '_> {
                             .insert(n.name.name.clone(), tyname.clone());
                         for m in &members {
                             out.push(NetVarDecl {
+                                integral_typedef: false,
                                 shape_param: None,
                                 kind: m.kind,
                                 signed: m.signed,
@@ -460,6 +465,7 @@ impl Parser<'_, '_> {
                 self.var_struct.insert(n.name.name.clone(), tyname.clone());
                 self.struct_scalar_vars.insert(n.name.name.clone());
                 out.push(NetVarDecl {
+                    integral_typedef: false,
                     shape_param: None,
                     kind: if all_two_state {
                         NetVarKind::Bit
@@ -488,6 +494,7 @@ impl Parser<'_, '_> {
                 .insert(n.name.name.clone(), tyname.clone());
             for m in &members {
                 out.push(NetVarDecl {
+                    integral_typedef: false,
                     shape_param: None,
                     kind: m.kind,
                     signed: m.signed,

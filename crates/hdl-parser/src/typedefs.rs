@@ -194,6 +194,11 @@ impl Parser<'_, '_> {
         // the AST label-width path (`enum_base_width`). `None` = the base is not one of
         // those synthesized kinds (explicit-range vector, `int`/`integer`, base-less).
         let mut atom_kind: Option<NetVarKind> = None;
+        // §3.b cont-array-typedef-elem: a 2-state VECTOR base (`enum bit [7:0]`, or a
+        // `bit [N]` typedef base) is recorded as 4-state `logic` below, so the enum's
+        // `TypeInfo::layout_exact` is false, as it is for a base bound not written as a
+        // literal. An atom or bare-kind base keeps its kind and has no written bound.
+        let mut base_exact = true;
         let base = if let Some(nvk) = self.net_var_kind() {
             self.bump(); // base kind keyword (logic/reg/integer/…)
                          // §4.5.153: capture an explicit `signed`/`unsigned` on the built-in enum
@@ -209,6 +214,8 @@ impl Parser<'_, '_> {
                 // packed range — reject (a vector base logic/reg/bit is fine).
                 Some(r) => {
                     self.reject_packed_dims_on_nonvector(nvk, true);
+                    base_exact =
+                        nvk != NetVarKind::Bit && self.bounds_source_literal(Some(&r), &[]);
                     Some(r)
                 }
                 // No explicit range → an ATOM (`byte`/`shortint`/`longint`) or a bare vector kind
@@ -276,9 +283,12 @@ impl Parser<'_, '_> {
             }
             self.eat_scope_qualifier();
             self.bump(); // the typedef-name token
+            base_exact = !Self::member_kind_two_state(info.kind) && info.layout_exact;
             info.range
         } else {
-            self.opt_range()
+            let r = self.opt_range();
+            base_exact = self.bounds_source_literal(r.as_ref(), &[]);
+            r
         };
         self.expect(TokenKind::LBrace, "'{' for enum body");
         let mut labels = Vec::new();
@@ -322,6 +332,8 @@ impl Parser<'_, '_> {
                 class_name: None,
                 unpacked: Vec::new(),
                 shape_param: None,
+                enum_type: true,
+                layout_exact: base_exact,
             }
         } else {
             match &base {
@@ -334,6 +346,8 @@ impl Parser<'_, '_> {
                     class_name: None,
                     unpacked: Vec::new(),
                     shape_param: None,
+                    enum_type: true,
+                    layout_exact: base_exact,
                 },
                 // Base-less `enum {…}` (and any illegal non-integral base that slipped through):
                 // the default enum base is `int` = 32-bit signed 2-state (§4.5.154 — was the
@@ -349,6 +363,8 @@ impl Parser<'_, '_> {
                     class_name: None,
                     unpacked: Vec::new(),
                     shape_param: None,
+                    enum_type: true,
+                    layout_exact: base_exact,
                 },
             }
         };
@@ -466,6 +482,7 @@ impl Parser<'_, '_> {
         let range = self.opt_range();
         let packed = self.opt_packed_dims();
         self.reject_packed_dims_on_nonvector(kind, range.is_some() || !packed.is_empty());
+        let layout_exact = self.bounds_source_literal(range.as_ref(), &packed);
         let tname = self.ident()?;
         // §3 ⑤: UNPACKED dims after the NAME — `typedef logic [7:0] a_t [0:3];`.
         // Both oracles accept it and vita's own machinery already runs the shape
@@ -491,6 +508,8 @@ impl Parser<'_, '_> {
                 class_name: None,
                 unpacked,
                 shape_param: None,
+                enum_type: false,
+                layout_exact,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -592,7 +611,9 @@ impl Parser<'_, '_> {
         } else {
             false
         };
-        let (members, nested_keys, shape_keys) = self.parse_struct_member_list(packed)?;
+        let (members, nested_keys, shape_keys, each_exact) =
+            self.parse_struct_member_list(packed)?;
+        let layout_exact = Self::members_layout_exact(&members, each_exact);
         let tname = self.ident()?;
         self.expect(TokenKind::Semi, "';'");
         if !packed {
@@ -632,8 +653,14 @@ impl Parser<'_, '_> {
             .iter()
             .any(|m| !matches!(self.member_flat_dims(m.kind, &m.range, &m.packed_dims), Some((f, _)) if f > 0))
         {
-            return self
-                .register_sym_struct(start, members, nested_keys, shape_keys, tname, struct_signed);
+            return self.register_sym_struct(
+                start,
+                members,
+                nested_keys,
+                shape_keys,
+                tname,
+                struct_signed,
+            );
         }
         let mut widths = Vec::with_capacity(members.len()); // (flat_width, elem_stride)
         for m in &members {
@@ -693,6 +720,8 @@ impl Parser<'_, '_> {
                 class_name: None,
                 unpacked: Vec::new(),
                 shape_param: None,
+                enum_type: false,
+                layout_exact,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -781,6 +810,9 @@ impl Parser<'_, '_> {
                 class_name: None,
                 unpacked: Vec::new(),
                 shape_param: None,
+                enum_type: false,
+                // Laid out per instance from a bound this parse could not fold.
+                layout_exact: false,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -962,14 +994,16 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::LBrace, "'{' for union body");
         let mut members = Vec::new();
         let mut nested_keys = Vec::new();
+        let mut each_exact = true;
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
             let before = self.pos;
             let m_start = self.cur_span();
-            let Some((kind, signed, range, packed_dims, nested, _shape)) =
+            let Some((kind, signed, range, packed_dims, nested, _shape, exact)) =
                 self.parse_struct_member_type(false)
             else {
                 break;
             };
+            each_exact &= exact;
             loop {
                 let Some(name) = self.ident() else { break };
                 members.push(StructMember {
@@ -1053,6 +1087,8 @@ impl Parser<'_, '_> {
                 class_name: None,
                 unpacked: Vec::new(),
                 shape_param: None,
+                enum_type: false,
+                layout_exact: Self::members_layout_exact(&members, each_exact),
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {

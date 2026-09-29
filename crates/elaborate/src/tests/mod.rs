@@ -78,6 +78,7 @@ fn netvar(
         span: SP,
     });
     ast::ModuleItem::NetVar(ast::NetVarDecl {
+        integral_typedef: false,
         shape_param: None,
         kind,
         signed,
@@ -156,6 +157,7 @@ fn logic_mem(bit_msb: u32, depth_msb: u32, name: &str) -> ast::ModuleItem {
 
 fn reg_mem(bit_msb: u32, depth_msb: u32, name: &str) -> ast::ModuleItem {
     ast::ModuleItem::NetVar(ast::NetVarDecl {
+        integral_typedef: false,
         shape_param: None,
         kind: ast::NetVarKind::Reg,
         signed: false,
@@ -354,6 +356,7 @@ fn ev_list(terms: Vec<(ast::Edge, &str)>) -> ast::Sensitivity {
 // ── v3 builders ──
 fn ansi_port(dir: ast::PortDir, range: Option<(&str, &str)>, name: &str) -> ast::AnsiPort {
     ast::AnsiPort {
+        integral_typedef: false,
         shape_param: None,
         dir,
         net_or_var: None,
@@ -604,6 +607,7 @@ fn gitem(mi: ast::ModuleItem) -> ast::GenItem {
 /// can appear in the width bound).
 fn wire_range_expr(msb: ast::Expr, names: &[&str]) -> ast::ModuleItem {
     ast::ModuleItem::NetVar(ast::NetVarDecl {
+        integral_typedef: false,
         shape_param: None,
         kind: ast::NetVarKind::Wire,
         signed: false,
@@ -728,6 +732,7 @@ fn task_def(
 /// `reg [7:0] name;` as a bare NetVarDecl (for function/task body_decls).
 fn netvar_decl_reg(name: &str) -> ast::NetVarDecl {
     ast::NetVarDecl {
+        integral_typedef: false,
         shape_param: None,
         kind: ast::NetVarKind::Reg,
         signed: false,

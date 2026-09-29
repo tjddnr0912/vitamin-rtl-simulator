@@ -318,6 +318,20 @@ pub struct AnsiPort {
     /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
     /// the same way `range` already names `T$w` so the WIDTH follows.
     pub shape_param: Option<Ident>,
+    /// §3.b cont-array-typedef-elem: the data type is a user typedef of an integral
+    /// packed type other than an enum — a packed struct or union, or an alias of a
+    /// vector or packed array — whose every part has the state its recorded `kind`
+    /// says (no `enum bit [N]`, which is recorded as 4-state `logic`, anywhere in it,
+    /// and no 2-state member beside a 4-state one), whose every bound — its own, its
+    /// member types', and any written after the type name — is written as an integer
+    /// literal (a name or a `$bits(T)` is read where the parser folds it, not where the
+    /// type was declared), and which is neither a type parameter nor an unpacked-array
+    /// typedef.
+    /// Such a type is equivalent (IEEE 1800 §6.22.2) to every integral packed type of
+    /// its width, state and signedness, so a whole array of it can be copied element
+    /// by element. `false` for every declaration written with a built-in type, which
+    /// is every declaration that predates the field.
+    pub integral_typedef: bool,
     pub span: Span,
 }
 
@@ -717,6 +731,20 @@ pub struct NetVarDecl {
     /// INSTANCE (bit 0 = signed, bit 1 = 2-state) and lets the override's shape win,
     /// the same way `range` already names `T$w` so the WIDTH follows.
     pub shape_param: Option<Ident>,
+    /// §3.b cont-array-typedef-elem: the data type is a user typedef of an integral
+    /// packed type other than an enum — a packed struct or union, or an alias of a
+    /// vector or packed array — whose every part has the state its recorded `kind`
+    /// says (no `enum bit [N]`, which is recorded as 4-state `logic`, anywhere in it,
+    /// and no 2-state member beside a 4-state one), whose every bound — its own, its
+    /// member types', and any written after the type name — is written as an integer
+    /// literal (a name or a `$bits(T)` is read where the parser folds it, not where the
+    /// type was declared), and which is neither a type parameter nor an unpacked-array
+    /// typedef.
+    /// Such a type is equivalent (IEEE 1800 §6.22.2) to every integral packed type of
+    /// its width, state and signedness, so a whole array of it can be copied element
+    /// by element. `false` for every declaration written with a built-in type, which
+    /// is every declaration that predates the field.
+    pub integral_typedef: bool,
     pub span: Span,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]

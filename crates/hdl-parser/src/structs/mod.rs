@@ -39,7 +39,8 @@ impl Parser<'_, '_> {
                     None => break,
                 }
             }
-            return Some((kind, signed, range, packed_dims, None, None));
+            let exact = self.bounds_source_literal(range.as_ref(), &packed_dims);
+            return Some((kind, signed, range, packed_dims, None, None, exact));
         }
         if let Some(info) = self.peek_typedef_name() {
             // §3 ⑤ⓕ: `StructMember` has no shape slot, but the SYMBOLIC layout's
@@ -77,6 +78,7 @@ impl Parser<'_, '_> {
                 Vec::new(),
                 nested,
                 member_shape,
+                info.layout_exact,
             ));
         }
         self.error("a net/var type in a struct/union member");
@@ -131,14 +133,16 @@ impl Parser<'_, '_> {
         let mut members = Vec::new();
         let mut nested_keys = Vec::new();
         let mut shape_keys = Vec::new();
+        let mut each_exact = true;
         while self.peek() != Some(TokenKind::RBrace) && !self.at_eof() {
             let before = self.pos;
             let m_start = self.cur_span();
-            let Some((kind, signed, range, packed_dims, nested, shape)) =
+            let Some((kind, signed, range, packed_dims, nested, shape, exact)) =
                 self.parse_struct_member_type(sign_carried)
             else {
                 break;
             };
+            each_exact &= exact;
             loop {
                 let Some(name) = self.ident() else { break };
                 members.push(StructMember {
@@ -161,7 +165,51 @@ impl Parser<'_, '_> {
             }
         }
         self.expect(TokenKind::RBrace, "'}' to close struct body");
-        Some((members, nested_keys, shape_keys))
+        Some((members, nested_keys, shape_keys, each_exact))
+    }
+
+    /// §3.b cont-array-typedef-elem: a packed struct or union's
+    /// `TypeInfo::layout_exact` — every member's type exact (`each_exact`) and every
+    /// member 2-state or every member 4-state. A 2-state member of a 4-state struct is
+    /// read through a conversion (IEEE 1800 §7.2.1) that a whole-value copy does not
+    /// show.
+    pub(crate) fn members_layout_exact(members: &[StructMember], each_exact: bool) -> bool {
+        each_exact
+            && members.windows(2).all(|w| {
+                Self::member_kind_two_state(w[0].kind) == Self::member_kind_two_state(w[1].kind)
+            })
+    }
+
+    /// §3.b cont-array-typedef-elem: every bound in `range` and `packed` was WRITTEN as
+    /// an integer literal (`source_literal`).
+    pub(crate) fn bounds_source_literal(&self, range: Option<&Range>, packed: &[Range]) -> bool {
+        let lit = |r: &Range| self.source_literal(&r.msb) && self.source_literal(&r.lsb);
+        range.is_none_or(lit) && packed.iter().all(lit)
+    }
+
+    /// §3.b cont-array-typedef-elem: `e` is an integer literal written in the source —
+    /// the text at its span is its lexeme — or `(…)`, unary `-`, `+`, `-` or `*` of
+    /// such. A literal a parse-time fold produced keeps the span of the text it replaced
+    /// (a name, a `$bits(T)`), which is not its lexeme: that text was read in the scope
+    /// that folded it, not necessarily where the type was declared (`$bits(v_t)` re-reads
+    /// `v_t`'s `[W-1:0]` with the reader's `W`).
+    pub(crate) fn source_literal(&self, e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::IntLit { raw, .. } => {
+                self.src.get(e.span.lo as usize..e.span.hi as usize) == Some(raw.as_str())
+            }
+            ExprKind::Paren { inner } => self.source_literal(inner),
+            ExprKind::Unary {
+                op: UnOp::Minus,
+                operand,
+            } => self.source_literal(operand),
+            ExprKind::Binary {
+                op: BinOp::Add | BinOp::Sub | BinOp::Mul,
+                lhs,
+                rhs,
+            } => self.source_literal(lhs) && self.source_literal(rhs),
+            _ => false,
+        }
     }
 
     /// Width of a struct member from its range. `None` ⇒ scalar (1). Constant

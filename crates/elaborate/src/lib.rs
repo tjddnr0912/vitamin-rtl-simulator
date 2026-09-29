@@ -286,6 +286,10 @@ struct Elaborator<'s> {
     /// Unpacked-array nets whose element type is written in their own declaration
     /// (`cont_array::inline_elem_type`). Never restored.
     inline_elem_arrays: BTreeSet<u32>,
+    /// Unpacked-array nets whose element type is a typedef the parser marks
+    /// `integral_typedef` (`cont_array::typedef_elem_type`): a copy may read or write
+    /// them, a pattern may not. Never restored.
+    typedef_elem_arrays: BTreeSet<u32>,
     /// Unpacked-array nets declared with a net delay (`wire #2 w [2];`). Never restored.
     delayed_decl_nets: BTreeSet<u32>,
     /// Packed nets whose first packed dimension is written in their declaration → that

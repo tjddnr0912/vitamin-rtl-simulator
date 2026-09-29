@@ -284,6 +284,10 @@ impl Parser<'_, '_> {
                     // has nothing to carry.
                     shape_param: (overridable || tv.shape_expr.is_some())
                         .then(|| shape_name.clone()),
+                    // §3.b cont-array-typedef-elem: the default type's parts are not
+                    // tracked here.
+                    enum_type: false,
+                    layout_exact: false,
                 },
             );
             // §3 ⑤ⓕ: `U$s = T$s` — record the alias so an UNCARRIED use of `U` marks

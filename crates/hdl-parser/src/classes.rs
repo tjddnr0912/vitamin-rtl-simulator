@@ -121,6 +121,8 @@ impl Parser<'_, '_> {
                 class_name: Some(n.clone()),
                 unpacked: Vec::new(),
                 shape_param: None,
+                enum_type: false,
+                layout_exact: true,
             });
         }
     }
@@ -152,6 +154,7 @@ impl Parser<'_, '_> {
         }
         self.expect(TokenKind::Semi, "';' after a virtual interface declaration");
         Some(NetVarDecl {
+            integral_typedef: false,
             kind: NetVarKind::VirtualIface,
             signed: false,
             shape_param: None,

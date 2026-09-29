@@ -287,6 +287,7 @@ impl Parser<'_, '_> {
         };
         let decl_span = start.to(self.prev_span());
         let decl = NetVarDecl {
+            integral_typedef: false,
             shape_param: None,
             kind,
             signed,
@@ -526,6 +527,7 @@ impl Parser<'_, '_> {
         };
         // block-local `integer i; integer __st;` so neither leaks/collides.
         let decl_of = |id: &Ident| NetVarDecl {
+            integral_typedef: false,
             shape_param: None,
             kind: NetVarKind::Integer,
             signed: true,
@@ -641,6 +643,7 @@ impl Parser<'_, '_> {
             span: id.span,
         };
         let decl_of = |id: &Ident| NetVarDecl {
+            integral_typedef: false,
             shape_param: None,
             kind: NetVarKind::Integer,
             signed: true,

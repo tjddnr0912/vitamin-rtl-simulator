@@ -235,6 +235,22 @@ struct TypeInfo {
     /// copies the name into its AST container so elaborate can fold the OVERRIDE's
     /// signedness and 2-state kind per instance instead of the default's literal.
     shape_param: Option<String>,
+    /// §3.b cont-array-typedef-elem: an enum, or an alias of one. An enum is
+    /// equivalent only to itself (IEEE 1800 §6.22.2), which `kind` and `range` cannot
+    /// say.
+    enum_type: bool,
+    /// §3.b cont-array-typedef-elem: the recorded `kind` / `range` / `packed` are this
+    /// type's own width and state for every part. `false` for an enum with a 2-state
+    /// vector base (`enum bit [7:0]` is recorded as 4-state `logic`); for a type with a
+    /// bound — its own, or a member type's, keyword or typedef — not WRITTEN as an
+    /// integer literal (`source_literal`): a name, or a `$bits(T)` the parser folds, is
+    /// read in the scope that folds it, which need not be where the type was declared
+    /// (a `$unit` `[W-1:0]` member type under a module's `localparam W = 8` lays out 8
+    /// bits where both oracles read 4); for a struct or union holding an inexact member
+    /// or mixing 2-state and 4-state members (a 2-state member of a 4-state struct is
+    /// read through a conversion, IEEE §7.2.1); and for a type parameter, whose
+    /// default's parts are not tracked here.
+    layout_exact: bool,
 }
 
 /// A parse-time constant (§3 ⑤ ⓓ table): its value, and the WIDTH and sign of the
@@ -343,8 +359,14 @@ impl SymStructLayout {
 /// The member list of one packed struct/union body: the members, each member's
 /// NESTED struct/union type key, and — §3 ⑤ⓕ — each member's `T$s` carrier name.
 /// The three vectors are index-parallel by construction (`parse_struct_member_list`
-/// pushes to all three per declarator).
-type StructMemberList = (Vec<StructMember>, Vec<Option<String>>, Vec<Option<Ident>>);
+/// pushes to all three per declarator). The `bool` is `true` when every member's
+/// type is `TypeInfo::layout_exact` (§3.b cont-array-typedef-elem).
+type StructMemberList = (
+    Vec<StructMember>,
+    Vec<Option<String>>,
+    Vec<Option<Ident>>,
+    bool,
+);
 /// §3 ⑤ⓕ: bit 0 of `T$s` — the type's SIGNEDNESS. Set in `shape_uncarried` by a
 /// use of `T` that cannot follow an override of it.
 pub(crate) const SHAPE_AXIS_SIGN: u8 = 1;
@@ -354,7 +376,9 @@ pub(crate) const SHAPE_AXIS_TWO_STATE: u8 = 2;
 pub(crate) const SHAPE_AXIS_ALL: u8 = SHAPE_AXIS_SIGN | SHAPE_AXIS_TWO_STATE;
 
 /// A parsed struct/union member TYPE `(kind, signed, range, packed_dims, nested,
-/// shape_param)` (`parse_struct_member_type`). §3 ⑤ⓕ: `shape_param` is the `T$s`
+/// shape_param, layout_exact)` (`parse_struct_member_type`). The last is the
+/// member type's `TypeInfo::layout_exact`; for a built-in keyword, whether its bounds
+/// were written as integer literals (`source_literal`). §3 ⑤ⓕ: `shape_param` is the `T$s`
 /// name when the member's type is an OVERRIDABLE `parameter type T` AND the caller
 /// lays the member out symbolically, so the member's SIGN can ride a per-instance
 /// `CastTarget::SigningParam` node instead of the default's parse-time bool.
@@ -365,6 +389,7 @@ type MemberType = (
     Vec<Range>,
     Option<String>,
     Option<Ident>,
+    bool,
 );
 #[derive(Clone, PartialEq)]
 struct StructLayout {

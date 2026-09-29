@@ -2,7 +2,7 @@
 //! (IEEE 1800-2017 §10.3 with §7.6 and §10.9.1). Every such `assign` was E3009 (`a whole
 //! unpacked array cannot be the write target in this context`), which stopped the corpus
 //! row `ibex` 20 times: its tie-offs `assign ic_tag_rdata = '{default:'b0};`, its lint
-//! sinks `assign unused_csr_pmp_cfg = csr_pmp_cfg;`, an output port driven from a
+//! sinks `assign unused_csr_pmp_addr = csr_pmp_addr;`, an output port driven from a
 //! register array (`assign imd_val_q_ex_o = imd_val_q;`) and a positional pattern
 //! (`assign alu_imd_val_q = '{imd_val_q_i[0][31:0], imd_val_q_i[1][31:0]};`).
 //!
@@ -794,18 +794,17 @@ endmodule
 #[test]
 fn an_element_type_from_a_typedef_keeps_its_refusal() {
     // This IR keeps neither an enum's identity nor its base's 2-state-ness
-    // (`enum bit [7:0]` elements are recorded as 4-state `logic`), so only an element
-    // type written in the array's own declaration is lowered. The enum cells are the
-    // reason: an `x` item into `enum bit [7:0]` elements reads `x1` where verilator and
-    // iverilog read `01`; a copy from such an array into a `logic` one is refused by both
-    // oracles, and one from an `enum logic [7:0]` array by iverilog. A struct or union
-    // typedef and a 1-bit element (`enum logic` has no range to tell it apart) wait with
-    // them.
+    // (`enum bit [7:0]` elements are recorded as 4-state `logic`), so an element type
+    // from a typedef is lowered only for a copy, and only when the parser marks it
+    // integral (`cont_assign_typedef_elem.rs`). The enum cells are the reason: an `x`
+    // item into `enum bit [7:0]` elements reads `x1` where verilator and iverilog read
+    // `01`; a copy from such an array into a `logic` one is refused by both oracles, and
+    // one from an `enum logic [7:0]` array by iverilog. A pattern into a typedef element
+    // and a 1-bit element (`enum logic` has no range to tell it apart) wait with them.
     for decl in [
         "typedef enum bit [7:0] {A = 8'h01, B = 8'h02} e_t;\n  e_t d [2];\n  logic [7:0] x1 = 8'hx1;\n  assign d = '{e_t'(x1), B};",
         "typedef enum bit [7:0] {A = 8'h11, B = 8'h22} e_t;\n  e_t s [2];\n  wire [7:0] d [2];\n  assign d = s;",
         "typedef enum logic [7:0] {C = 8'h33, D = 8'h44} e_t;\n  e_t s [2];\n  logic [7:0] d [2];\n  assign d = s;",
-        "typedef struct packed { logic l; logic [1:0] a; } s_t;\n  s_t s [2];\n  s_t d [2];\n  assign d = s;",
         "typedef logic [7:0] b_t;\n  b_t d [2];\n  assign d = '{default: 8'h5};",
         "logic d [2];\n  assign d = '{1'b1, 1'b0};",
     ] {
@@ -817,4 +816,14 @@ fn an_element_type_from_a_typedef_keeps_its_refusal() {
             "a whole unpacked array cannot be the write target in this context",
         );
     }
+}
+
+#[test]
+fn a_struct_typedef_element_copy_runs() {
+    // Formerly refused with the typedefs above; a packed struct typedef is now copied
+    // (`cont_assign_typedef_elem.rs`). The never-written source reads `x x` in iverilog
+    // 13 (verilator, 2-state, `0 0`; sv2v → iverilog `z z`: it declares the source a
+    // `wire` nothing drives).
+    let src = "module t;\n  typedef struct packed { logic l; logic [1:0] a; } s_t;\n  s_t s [2];\n  s_t d [2];\n  assign d = s;\n  initial begin #1 $display(\"T %h %h\", d[0], d[1]); $finish; end\nendmodule\n";
+    prints(src, "T", &["T x x"]);
 }

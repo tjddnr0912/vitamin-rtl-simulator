@@ -18,6 +18,7 @@ impl<'s> Elaborator<'s> {
             whole_array_cas: Vec::new(),
             delayed_decl_nets: BTreeSet::new(),
             inline_elem_arrays: BTreeSet::new(),
+            typedef_elem_arrays: BTreeSet::new(),
             packed_default_nets: BTreeMap::new(),
             default_pattern_calls: BTreeSet::new(),
             inout_actual_exprs: Vec::new(),
