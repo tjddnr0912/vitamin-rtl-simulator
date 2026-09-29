@@ -559,14 +559,15 @@ pub static CORPUS: &[Workload] = &[
         data: &[],
         plusargs: &["+N=20000"],
         digest: "DIGEST=13b2ddfcd551ba2f",
-        // Refused at ELABORATION: 7 errors in four classes (bench/ibex/RUN.md). The
+        // Refused at ELABORATION: 5 errors in three classes (bench/ibex/RUN.md). The
         // pin is the first one printed, `prim_cipher_pkg`'s packed-array parameter
         // written as `'{…}` (ROADMAP §3.a ⑤ⓐ). The parse error in front of them — two
         // `prim_lfsr.sv` functions returning a generate-local multi-dimensional packed
         // typedef — closed in §3.a ⑤ⓖ, the twelve undeclared enum labels of a
         // generate block's typedef (`ibex_multdiv_fast`) in §3.a ⑤ⓗ, eighteen errors
-        // of whole-array continuous assigns in §3.a ⑤ⓘ, and five `'{default: v}` on a
-        // packed target in §3.a ⑤ⓛ.
+        // of whole-array continuous assigns in §3.a ⑤ⓘ, five `'{default: v}` on a
+        // packed target in §3.a ⑤ⓛ, and two string-literal generate-if conditions in
+        // §3.a ⑤ⓙ.
         expect: Expect::Refused {
             diag: "package parameter `PRINCE_SHIFT_ROWS64` value is not a foldable constant",
         },

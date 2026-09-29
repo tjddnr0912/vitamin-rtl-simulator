@@ -9,6 +9,22 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — a string literal in a top-level generate-`if` condition
+
+- `localparam int UseDsp = "no";` then `if (UseDsp == "yes") … else …` now elaborates: the string
+  literal is its IEEE 1800 §5.9 value, eight bits per character with the first character most
+  significant, and the condition is folded like any sized comparison (`"no"` is `16'h6e6f`, the
+  empty literal one NUL byte). It was `E3010` (`generate-if condition is not a constant: a string
+  literal has no integral constant value`). Values match Verilator and Icarus Verilog. The corpus
+  row `ibex` goes from 7 elaboration errors to 5.
+- Read only where the condition's names cannot resolve to another object: an `if` written at the
+  module's top level whose every name is a parameter declared once in the module, outside every
+  `generate` region and block, as an `int`, an `integer` or a type with a packed range. A nested
+  generate-`if`, every generate-`for` condition, a generate-`case` scrutinee, a `string`, untyped,
+  `real` or `time` parameter, a genvar, an imported name and a literal with an escape outside
+  Table 5-1 (`"\r"`) keep `E3010`; at the top level the message names the parameter or escape it
+  does not read (ROADMAP §3.b `string-literal-condition-residue`).
+
 ### Added — `'{default: v}` on a whole packed variable or net
 
 - `assign v = '{default: '0};`, `w = '{default: s};` and `logic [1:0][3:0] m = '{default: 4'hA};`
