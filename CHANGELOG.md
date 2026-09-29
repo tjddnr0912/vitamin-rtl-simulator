@@ -9,6 +9,18 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — a whole-array continuous copy of typedef elements
+
+- `assign dst = src;` between unpacked arrays whose element type is a typedef — a packed struct
+  or union, or a vector or packed-array alias, as `pmp_cfg_t unused [4]; assign unused = cfg;`
+  — now runs one element at a time, as the same copy of an inline element type did since
+  §4.5.566. The element may be copied to or from any integral type of the same width, state and
+  signedness (IEEE 1800 §6.22.2). It stays `E3009` for an enum element, a type holding an
+  `enum bit [N]` part or a 2-state member beside a 4-state one, a bound not written as an integer
+  literal (a name or a `$bits(T)` is read where the parser folds it), and a pattern into a
+  typedef element. Values match Verilator and Icarus Verilog, or sv2v → Icarus Verilog where
+  iverilog aborts. The corpus row `ibex` goes from 3 elaboration errors to 1.
+
 ### Added — a positional `'{…}` value for a multi-dimensional packed parameter
 
 - `parameter logic [15:0][3:0] P = '{4'hF, 4'hA, …};` now elaborates: the items are the elements

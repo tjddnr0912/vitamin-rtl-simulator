@@ -522,8 +522,12 @@ pattern `'{e0, e1, …}` or from `'{default: v}` — runs one element at a time,
 by position and sizing each item as an assignment to its element. It is lowered when
 the `assign` is the array's only writer (no procedural, clocking-block or port write,
 no second `assign`, no `$readmem*` or task output into it) and the element type is
-written in the array's own declaration (`logic [7:0] a [4]`, not a typedef, enum or
-struct, and not 1-bit); anything else is `VITA-E3009`.
+written in the array's own declaration (`logic [7:0] a [4]`, not 1-bit) or — for a
+copy only — is a typedef of a packed struct, a packed union or a vector whose every
+bound, its members' included, is written as an integer literal, that is not an enum
+and holds no `enum bit [N]` part and no 2-state member beside a 4-state one; such an
+element may be copied to or from any integral element of the same width, state and
+signedness (IEEE 1800 §6.22.2). Anything else is `VITA-E3009`.
 
 ### 6.4 `foreach`
 

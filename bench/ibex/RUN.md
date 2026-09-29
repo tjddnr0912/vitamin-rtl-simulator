@@ -197,8 +197,8 @@ zero digest, so the cycle count was added.
 
 ## vita today
 
-The run stops at elaboration with 3 errors in two classes. The parse error in front of
-them — `prim_lfsr.sv:392` and `:401` declare functions whose return type is a
+The run stops at elaboration with 1 error. The parse error in front of
+it — `prim_lfsr.sv:392` and `:401` declare functions whose return type is a
 multi-dimensional packed typedef local to a generate block — closed in ROADMAP §4.5.564;
 that code sits under `if (NonLinearOut)`, which Ibex leaves 0. The twelve undeclared enum
 labels of `ibex_multdiv_fast`'s generate-local `mult_fsm_e` closed in §4.5.565, and the eighteen
@@ -207,18 +207,18 @@ errors of nine whole-array continuous assigns (`assign ic_tag_rdata = '{default:
 a packed target (`ibex_top`'s no-RAM tie-offs, `ibex_alu`'s `imd_val_we_o`) in §4.5.567, and the two
 string-literal generate-if conditions of `ibex_counter` (`localparam int UseDsp = "no"; if (UseDsp ==
 "yes")`) in §4.5.568, and `prim_cipher_pkg`'s two packed-array parameters written as a positional
-pattern (`PRINCE_SHIFT_ROWS64[_INV] = '{4'hF, 4'hA, …}`) in §4.5.569. An error inside an instance is reported at
+pattern (`PRINCE_SHIFT_ROWS64[_INV] = '{4'hF, 4'hA, …}`) in §4.5.569, and `ibex_core`'s no-PMP sink
+`assign unused_csr_pmp_cfg = csr_pmp_cfg;` over `pmp_cfg_t` arrays in §4.5.570. An error inside an instance is reported at
 the instance's site (`tb.sv:92` is `u_top`), so the table names the construct. The manifest pins
 the first error printed:
 
 ```
-src/rtl/ibex_top.sv:410:5: error[VITA-E3009] E-ELAB-UNSUPPORTED: a whole unpacked array cannot be the write target in this context (v1: procedural array assignment only) [in tb.u_top.u_ibex_core.g_no_pmp]
+src/rtl/ibex_controller.sv:737:13: error[VITA-E3009] E-ELAB-UNSUPPORTED: a keyed assignment pattern `'{k: v, …}` is supported for a packed-struct target (member names, IEEE 1800 §10.9.2) and as `'{default: v}` on an unpacked array (§10.9.1) [in tb.u_top.u_ibex_core.id_stage_i.controller_i]
 ```
 
 | Errors | Class | Sites |
 |---:|---|---|
-| 2 | A whole-array continuous `assign` whose element type is a typedef | `ibex_core` no-PMP branch (`unused_csr_pmp_cfg = csr_pmp_cfg`, `pmp_cfg_t`) |
 | 1 | A keyed pattern as a `?:` arm whose target is a packed struct | `ibex_controller.sv:737` |
 
-Nobody has seen what the simulation shows after these. When both classes close, the
-next measurement is the run itself: vita's digest against `13b2ddfcd551ba2f`.
+Nobody has seen what the simulation shows after it. When it closes, the next measurement
+is the run itself: vita's digest against `13b2ddfcd551ba2f`.
