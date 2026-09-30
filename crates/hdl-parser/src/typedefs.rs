@@ -157,10 +157,21 @@ impl Parser<'_, '_> {
         }
     }
 
+    /// `typedef …;` of any kind, in any scope. The declared name joins the scope's own
+    /// type names (`scope_type_names`), so a LATER wildcard import in the same scope
+    /// never rebinds it (IEEE §26.3).
+    pub(crate) fn parse_typedef(&mut self) -> Option<ModuleItem> {
+        let it = self.parse_typedef_inner();
+        if let Some(ModuleItem::Typedef(td)) = &it {
+            self.scope_type_names.insert(td.name.name.clone());
+        }
+        it
+    }
+
     /// `typedef enum [base] { L0, L1 = expr, … } name;` (Phase-2). Registers
     /// `name` in `self.typedefs` (so a later `name var;` parses) and returns the
     /// AST node so elaborate can register the labels as integer constants.
-    pub(crate) fn parse_typedef(&mut self) -> Option<ModuleItem> {
+    fn parse_typedef_inner(&mut self) -> Option<ModuleItem> {
         let start = self.cur_span();
         self.bump(); // `typedef`
         if self.at_kw(Kw::Struct) {

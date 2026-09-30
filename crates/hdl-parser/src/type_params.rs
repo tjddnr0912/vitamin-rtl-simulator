@@ -311,6 +311,9 @@ impl Parser<'_, '_> {
                 },
             );
             self.local_decl_names.insert(name.name.clone());
+            // A type parameter declares a type name of this scope: a wildcard import
+            // here never binds a package type over it, in any map.
+            self.scope_type_names.insert(name.name.clone());
             // §3.b: the positive record the `endpackage` twin pass reads. Only a
             // PACKAGE body writes it (a module's type parameters have no scoped
             // twin), and every container clears it, so the set names exactly the

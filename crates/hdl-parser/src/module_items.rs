@@ -2,6 +2,31 @@
 
 use super::*;
 
+/// Copy each `prefix`-keyed twin in `map` (`p::st`) to its bare name (`st`) as a
+/// wildcard import's per-name decision in `binds` says. A name with no decision is not
+/// a type the package exports (a layout it keeps for a type it imported).
+fn copy_wildcard_twins<V: Clone>(
+    map: &mut std::collections::HashMap<String, V>,
+    prefix: &str,
+    binds: &std::collections::BTreeMap<String, WildcardBind>,
+) {
+    let twins: Vec<(String, V)> = map
+        .iter()
+        .filter_map(|(k, v)| k.strip_prefix(prefix).map(|b| (b.to_string(), v.clone())))
+        .collect();
+    for (b, v) in twins {
+        match binds.get(&b) {
+            Some(WildcardBind::Replace) => {
+                map.insert(b, v);
+            }
+            Some(WildcardBind::IfAbsent) => {
+                map.entry(b).or_insert(v);
+            }
+            Some(WildcardBind::Skip) | None => {}
+        }
+    }
+}
+
 impl Parser<'_, '_> {
     /// v7 P2-D: `import pkg::*;` / `import pkg::sym;` — the whole statement,
     /// INCLUDING a comma list (IEEE 1800 §26.8 `package_import_declaration` is
@@ -34,6 +59,20 @@ impl Parser<'_, '_> {
         self.cu_type_names.contains(bare) && !self.local_decl_names.contains(bare)
     }
 
+    /// How a wildcard import binds `bare`, the bare name of one of its package's types —
+    /// one answer for every type map, so a name the scope declares as one kind never
+    /// gains another kind's layout from the package. At the unit scope every name in
+    /// `cu_type_names` is the unit's own, so `Replace` is reached from a container only.
+    fn wildcard_type_bind(&self, bare: &str) -> WildcardBind {
+        if self.scope_type_names.contains(bare) {
+            WildcardBind::Skip
+        } else if self.cu_type_overridable(bare) {
+            WildcardBind::Replace
+        } else {
+            WildcardBind::IfAbsent
+        }
+    }
+
     /// One `pkg::sym` / `pkg::*` term, no `import` keyword and no `;`.
     fn parse_import_term(&mut self) -> Option<ImportDecl> {
         let start = self.cur_span();
@@ -58,6 +97,9 @@ impl Parser<'_, '_> {
             Some(name) => {
                 let scoped = format!("{prefix}{}", name.name);
                 let bare = name.name.clone();
+                // IEEE §26.3: the name is now bound in this scope, so a later wildcard
+                // import here leaves it alone (`wildcard_type_bind`).
+                self.scope_type_names.insert(bare.clone());
                 if let Some(v) = self.typedefs.get(&scoped).cloned() {
                     self.typedefs.insert(bare.clone(), v);
                 }
@@ -78,71 +120,46 @@ impl Parser<'_, '_> {
                 }
             }
             None => {
-                // Wildcard `import p::*` — copy every `p::X` type twin to bare `X`.
-                // `or_insert`: a local/explicit-import name of the same kind wins.
-                let td: Vec<(String, TypeInfo)> = self
+                // Wildcard `import p::*` — copy every type p exports, `p::X`, to bare
+                // `X`, as `wildcard_type_bind` decides ONCE per name for every map:
+                // never over a type this scope binds itself (§5.2 row 1), over a
+                // unit-scope binding from a container (§4.5.434), else only where the
+                // map has no entry (an earlier wildcard's binding stays). p exports a
+                // type when it has a `typedefs` twin (every packed kind, an enum, a
+                // type parameter) or an unpacked-struct twin. A `p::X` key only in
+                // `struct_layouts` / `enum_defs` / `union_type_names` is the layout of
+                // a type p IMPORTED, kept for its own variables' replay
+                // (`pkg_binding_type_key`); p does not re-export it (IEEE §26.3), so no
+                // bare name learns it here — with a unit `typedef st`, `import p::*`
+                // wrote base's layout under the unit's `st` (`12 2 2 003` where all
+                // three oracles print `12 4 8 0ff`).
+                let offered: std::collections::BTreeSet<String> = self
                     .typedefs
-                    .iter()
-                    .filter_map(|(k, v)| {
-                        k.strip_prefix(&prefix).map(|b| (b.to_string(), v.clone()))
-                    })
+                    .keys()
+                    .chain(self.unpacked_struct_layouts.keys())
+                    .filter_map(|k| k.strip_prefix(&prefix).map(str::to_string))
                     .collect();
-                for (b, v) in td {
-                    if self.cu_type_overridable(&b) {
-                        self.typedefs.insert(b, v);
-                    } else {
-                        self.typedefs.entry(b).or_insert(v);
-                    }
-                }
-                let sl: Vec<(String, StructLayout)> = self
-                    .struct_layouts
+                let binds: std::collections::BTreeMap<String, WildcardBind> = offered
                     .iter()
-                    .filter_map(|(k, v)| {
-                        k.strip_prefix(&prefix).map(|b| (b.to_string(), v.clone()))
-                    })
+                    .map(|b| (b.clone(), self.wildcard_type_bind(b)))
                     .collect();
-                for (b, v) in sl {
-                    if self.cu_type_overridable(&b) {
-                        self.struct_layouts.insert(b, v);
-                    } else {
-                        self.struct_layouts.entry(b).or_insert(v);
-                    }
-                }
-                let ed: Vec<(String, Vec<(String, i64)>)> = self
-                    .enum_defs
-                    .iter()
-                    .filter_map(|(k, v)| {
-                        k.strip_prefix(&prefix).map(|b| (b.to_string(), v.clone()))
-                    })
-                    .collect();
-                for (b, v) in ed {
-                    if self.cu_type_overridable(&b) {
-                        self.enum_defs.insert(b, v);
-                    } else {
-                        self.enum_defs.entry(b).or_insert(v);
-                    }
-                }
+                copy_wildcard_twins(&mut self.typedefs, &prefix, &binds);
+                copy_wildcard_twins(&mut self.struct_layouts, &prefix, &binds);
+                copy_wildcard_twins(&mut self.enum_defs, &prefix, &binds);
+                // G6: wildcard-copy UNPACKED struct typedefs too (see the explicit arm).
+                copy_wildcard_twins(&mut self.unpacked_struct_layouts, &prefix, &binds);
                 let un: Vec<String> = self
                     .union_type_names
                     .iter()
                     .filter_map(|k| k.strip_prefix(&prefix).map(|b| b.to_string()))
-                    .collect();
-                self.union_type_names.extend(un);
-                // G6: wildcard-copy UNPACKED struct typedefs too (see the explicit arm).
-                let usl: Vec<(String, Vec<StructMember>)> = self
-                    .unpacked_struct_layouts
-                    .iter()
-                    .filter_map(|(k, v)| {
-                        k.strip_prefix(&prefix).map(|b| (b.to_string(), v.clone()))
+                    .filter(|b| {
+                        matches!(
+                            binds.get(b),
+                            Some(WildcardBind::Replace | WildcardBind::IfAbsent)
+                        )
                     })
                     .collect();
-                for (b, v) in usl {
-                    if self.cu_type_overridable(&b) {
-                        self.unpacked_struct_layouts.insert(b, v);
-                    } else {
-                        self.unpacked_struct_layouts.entry(b).or_insert(v);
-                    }
-                }
+                self.union_type_names.extend(un);
             }
         }
         // §3 ⑤: replay the package's struct/enum NAME bindings so a member access /
@@ -686,6 +703,7 @@ impl Parser<'_, '_> {
         self.packed_md_params.clear();
         self.wildcard_bound.clear();
         self.local_decl_names.clear();
+        self.scope_type_names.clear();
         self.const_locals.clear();
         self.overridable_params.clear();
         self.shape_carriers.clear();

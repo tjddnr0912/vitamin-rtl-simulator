@@ -14,8 +14,9 @@
 //! members in the parser and resolved the arm in elaborate against the declaration the
 //! target reaches; it ran `ibex` to verilator's digest and was reverted after three more
 //! rounds, on two prerequisites (ROADMAP §3.a ⑤ⓚ): the block-local scope-leak check walks
-//! no `force` statement, and a wildcard import replaces a local typedef in the parser's
-//! binding. The last two tests hold that slice's measured cells.
+//! no `force` statement, and a wildcard import replaced a local typedef in the parser's
+//! binding (closed in §4.5.573, `wildcard_import_own_type.rs`). The last two tests hold that
+//! slice's measured cells.
 //!
 //! Every cell is pinned REFUSED with the oracles' lines beside it, so the admission slice
 //! turns each comment into its pin. Oracles: verilator 5.052 (`--binary --timing`,
@@ -832,9 +833,10 @@ endmodule
             E3009,
         );
     }
-    // A wildcard import replacing a local typedef of the name in the parser's binding: a
-    // `$unit` one (verilator and sv2v → iverilog `U1 06 bits=8`; the whole-pattern twin
-    // prints `102 bits=12` on this binary) and a module's own (`G4 06 bits=8`).
+    // A wildcard import over a local typedef of the name: a `$unit` one (verilator and
+    // sv2v → iverilog `U1 06 bits=8`) and a module's own (`G4 06 bits=8`). The parser's
+    // binding is right since §4.5.573 — the whole-pattern twin prints `06 bits=8`, where it
+    // printed `102 bits=12` before — and the `?:` arm stays E3009 until ⑤ⓚ.
     for src in [
         r#"
 package p;

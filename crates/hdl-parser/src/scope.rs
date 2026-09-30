@@ -32,6 +32,7 @@ impl Parser<'_, '_> {
             packed_md_params: self.packed_md_params.clone(),
             wildcard_bound: self.wildcard_bound.clone(),
             local_decl_names: self.local_decl_names.clone(),
+            scope_type_names: self.scope_type_names.clone(),
             const_locals: self.const_locals.clone(),
         }
     }
@@ -108,6 +109,7 @@ impl Parser<'_, '_> {
         self.packed_md_params = s.packed_md_params;
         self.wildcard_bound = s.wildcard_bound;
         self.local_decl_names = s.local_decl_names;
+        self.scope_type_names = s.scope_type_names;
         self.const_locals = s.const_locals;
     }
 
@@ -178,7 +180,15 @@ impl Parser<'_, '_> {
         self.packed_md_params = s.packed_md_params;
         self.wildcard_bound = s.wildcard_bound;
         self.local_decl_names = s.local_decl_names;
+        self.scope_type_names = s.scope_type_names;
         self.const_locals = s.const_locals;
+    }
+
+    /// A generate block is a scope (IEEE §27.2): the type names it binds itself start
+    /// empty — the module's typedefs are an enclosing scope's. The caller has
+    /// snapshotted the scope; the restore at the block's end gives the set back.
+    pub(crate) fn enter_generate_type_scope(&mut self) {
+        self.scope_type_names.clear();
     }
 
     /// Map a member SOURCE bit index `e` onto the field part-select `pv[w-1:0]`.

@@ -476,7 +476,21 @@ struct ScopeSnapshot {
     packed_md_params: std::collections::HashMap<String, Vec<Range>>,
     wildcard_bound: std::collections::HashSet<String>,
     local_decl_names: std::collections::HashSet<String>,
+    scope_type_names: std::collections::HashSet<String>,
     const_locals: std::collections::HashMap<String, ConstVal>,
+}
+
+/// What a wildcard import does with one bare type name its package exports, decided
+/// once per name for every type map (`wildcard_type_bind`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WildcardBind {
+    /// The importing scope declares the name itself: no map learns the package's.
+    Skip,
+    /// A unit-scope binding a container's import is nearer than (§4.5.434): overwrite
+    /// it in every map the package's type writes.
+    Replace,
+    /// Anything else: bind only where the map has no entry for the name.
+    IfAbsent,
 }
 
 /// A trailing READ sub-select on a packed-struct member, normalized to an
@@ -810,6 +824,17 @@ pub struct Parser<'t, 's> {
     /// the replay's `!var_struct.contains_key` test alone could not see it and bound
     /// p's struct `V` over a plain local array (review R1: PRE ran, POST refused).
     local_decl_names: std::collections::HashSet<String>,
+    /// The bare TYPE names the current scope binds itself — its `typedef`s (every
+    /// kind), its type parameters and its explicit imports. A wildcard import never
+    /// binds one of these, in any type map (IEEE §26.3: a wildcard-imported name is
+    /// imported only when it is neither declared in the importing scope nor imported
+    /// explicitly there). At the unit scope it holds the unit's own; every container
+    /// and every generate block starts empty, and `ScopeSnapshot` gives the set back
+    /// to the enclosing scope. §5.2 row 1: without it `typedef … st; import p::*;
+    /// st s2;` took p's `st` whenever the unit scope also declared an `st` (the
+    /// §4.5.434 replacement), and at the unit scope an `import p::*` replaced the
+    /// unit's own `typedef st` — `102 bits=12` where both oracles print `06 bits=8`.
+    scope_type_names: std::collections::HashSet<String>,
     /// SV §6.19.5 `x.name()`: a synthetic `function string $enum_name$<T>(x)` —
     /// a `case(x)` returning each label's string literal — generated on first use
     /// per enum type in the CURRENT container, then injected into its body at the
@@ -892,6 +917,7 @@ impl<'t, 's> Parser<'t, 's> {
             pkg_bindings: std::collections::HashMap::new(),
             wildcard_bound: std::collections::HashSet::new(),
             local_decl_names: std::collections::HashSet::new(),
+            scope_type_names: std::collections::HashSet::new(),
             in_package: false,
             pending_enum_name_fns: std::collections::BTreeMap::new(),
         }

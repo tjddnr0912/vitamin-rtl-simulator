@@ -351,6 +351,7 @@ impl Parser<'_, '_> {
                                             // inside the block dropped the module-scope binding of `P` (§4.5.410
                                             // review: q's value read through r's layout at module scope).
         let snap = self.snapshot_scope();
+        self.enter_generate_type_scope();
         let items = self.parse_gen_items_until(&|p| p.at_kw(Kw::End) || p.at_eof());
         self.restore_scope(snap);
         self.expect(TokenKind::Word(WordKind::Keyword(Kw::End)), "'end'");
@@ -385,6 +386,7 @@ impl Parser<'_, '_> {
             // review: `if (1) typedef enum { P, Q } e_t;` beside a module
             // `[1:0][3:0] P` read the module's `P[1]` as `0` where every tool reads `a`).
             let snap = self.snapshot_scope();
+            self.enter_generate_type_scope();
             let mut items = Vec::new();
             if let Some(it) = self.parse_gen_item() {
                 items.push(it);
