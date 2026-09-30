@@ -277,8 +277,9 @@ pub static CORPUS: &[Workload] = &[
         digest: "DIGEST=59370cf8b1d0503d",
         expect: Expect::Runs { exit: 0 },
         oracle: "iverilog 13.0 (verilator 5.050 agrees)",
-        // The full SoC (darksocv + darkuart + …) is REFUSED — see ROADMAP §3 ③.
-        note: "core only — the full SoC is refused (ROADMAP §3 ③). One of two rows vita loses",
+        // The full SoC (darksocv + darkuart + …) runs and agrees with iverilog
+        // (bench/darkriscv/RUN.md); its UART's `$fgetc` path depends on host file state.
+        note: "core only — the full SoC agrees with iverilog but is not a row. One of two rows vita loses",
     },
     Workload {
         name: "biriscv",
