@@ -669,7 +669,10 @@ impl Parser<'_, '_> {
             span: Self::sp(&t.span),
         };
         let args = if self.peek() == Some(TokenKind::LParen) {
-            self.call_args()
+            match display_null_from(&name.name) {
+                Some(first) => self.display_call_args(first),
+                None => self.call_args(),
+            }
         } else {
             Vec::new()
         };
@@ -680,4 +683,52 @@ impl Parser<'_, '_> {
             span: start.to(self.prev_span()),
         }
     }
+
+    /// The argument list of a display-family task, where an argument may be NULL —
+    /// nothing between two commas, or between a comma and a parenthesis (IEEE 1364-2005
+    /// §17.1.1: a null argument displays a single space). A null argument at index
+    /// `first` or later becomes the string literal `" "`, which is what iverilog 13.0,
+    /// sv2v → iverilog and verilator 5.050 print for one under any format specifier
+    /// (`%d` of it is ` 32`, `%c` a space). One before `first` — the file descriptor of
+    /// `$fdisplay` — stays the parse error it was (iverilog: "must be numeric"). `()` is
+    /// still no arguments. Cursor is at `(`.
+    fn display_call_args(&mut self, first: usize) -> Vec<Expr> {
+        self.bump(); // '('
+        let mut args = Vec::new();
+        if self.peek() == Some(TokenKind::RParen) {
+            self.bump();
+            return args;
+        }
+        loop {
+            let empty = matches!(self.peek(), Some(TokenKind::Comma | TokenKind::RParen));
+            if empty && args.len() >= first {
+                let at = self.cur_span();
+                args.push(Expr {
+                    kind: ExprKind::StrLit {
+                        raw: "\" \"".to_string(),
+                    },
+                    span: Span::new(at.lo, at.lo),
+                });
+            } else {
+                args.push(self.expr(0));
+            }
+            if self.node_budget_blown || !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(TokenKind::RParen, "')'");
+        args
+    }
+}
+
+/// The display-family tasks whose arguments may be null, and the index of the first
+/// argument that may be (1 past a file descriptor). Every other task keeps
+/// `call_args`, which takes no null argument.
+fn display_null_from(name: &str) -> Option<usize> {
+    let family = |t: &str| match t {
+        "$display" | "$write" | "$strobe" | "$monitor" => Some(0),
+        "$fdisplay" | "$fwrite" | "$fstrobe" | "$fmonitor" => Some(1),
+        _ => None,
+    };
+    family(name).or_else(|| family(name.strip_suffix(['b', 'h', 'o'])?))
 }
