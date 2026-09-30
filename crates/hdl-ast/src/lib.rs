@@ -332,6 +332,8 @@ pub struct AnsiPort {
     /// by element. `false` for every declaration written with a built-in type, which
     /// is every declaration that predates the field.
     pub integral_typedef: bool,
+    /// §3.a ⑤ⓚ: as `NetVarDecl::pattern_members`.
+    pub pattern_members: Vec<PatternMember>,
     pub span: Span,
 }
 
@@ -745,7 +747,24 @@ pub struct NetVarDecl {
     /// by element. `false` for every declaration written with a built-in type, which
     /// is every declaration that predates the field.
     pub integral_typedef: bool,
+    /// §3.a ⑤ⓚ: the members of the packed-struct type this declaration names, as the
+    /// parser resolved the type AT the declaration — from the typedef entry that gave
+    /// the declaration its range, never from a table keyed by the type's name. Set
+    /// only when that type is a packed struct laid out exactly (every member's bounds
+    /// literal, one state throughout) with no packed-struct member, and nothing is
+    /// written after the type name. Elaborate reads it to type an assignment pattern
+    /// that is an arm of `?:` (IEEE 1800-2017 §10.8). Empty for every other
+    /// declaration, which is every declaration that predates the field.
+    pub pattern_members: Vec<PatternMember>,
     pub span: Span,
+}
+/// One member of a packed struct, in declaration order (the first is the MSB):
+/// its name, its width and whether it is 2-state. See `NetVarDecl::pattern_members`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
+pub struct PatternMember {
+    pub name: String,
+    pub width: u32,
+    pub two_state: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub struct DeclName {

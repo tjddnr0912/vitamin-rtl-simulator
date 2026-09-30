@@ -173,6 +173,7 @@ impl Parser<'_, '_> {
                 default: None,
                 shape_param: None,
                 integral_typedef: false,
+                pattern_members: Vec::new(),
                 iface: Some(IfaceRef {
                     iface,
                     modport,
@@ -214,6 +215,8 @@ impl Parser<'_, '_> {
         // the range, so the normal signed/range/packed reads are SKIPPED for it
         // (they would otherwise consume the port NAME). Built-in path unchanged.
         let pre_info = self.peek_typedef_name();
+        let pre_tyname = self.type_name_key();
+        let mut continued = false;
         let pre_shape = pre_info.as_ref().and_then(|i| i.shape_param.clone());
         let typedef_ty = if net_or_var.is_none() {
             self.try_port_typedef()
@@ -223,6 +226,16 @@ impl Parser<'_, '_> {
         // §3.b cont-array-typedef-elem: only when the typedef path resolved the type.
         let mut integral_typedef =
             typedef_ty.is_some() && pre_info.as_ref().is_some_and(Self::integral_typedef);
+        // §3.a ⑤ⓚ: as `parse_typed_decl` — the resolved struct type's members, when no
+        // packed dimension follows the type name (checked below).
+        let mut pattern_members = if typedef_ty.is_some() {
+            pre_info
+                .as_ref()
+                .and_then(|i| i.pattern_members.clone())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         // §3 ⑤ⓕ: only when the typedef path actually resolved the port's type.
         let shape_param = typedef_ty
             .is_some()
@@ -249,6 +262,9 @@ impl Parser<'_, '_> {
                 port_struct_name = sn;
                 typedef_one_dim = extra.len() == 1;
                 integral_typedef &= self.bounds_source_literal(None, &extra);
+                if !extra.is_empty() {
+                    pattern_members.clear();
+                }
                 typedef_unpacked = unp;
                 // §3.a ⑤: the typedef's own INNER packed dims come after whatever
                 // the dims written before the port name produced — the same
@@ -285,6 +301,8 @@ impl Parser<'_, '_> {
                 range = p.range.clone();
                 packed = p.packed.clone();
                 integral_typedef = p.integral_typedef;
+                pattern_members = p.pattern_members.clone();
+                continued = true;
                 // §4.5.425 (review B F3): `input cfg_t [1:0] a, b` — `b` is the same
                 // struct (array) as `a`; without this only `a[i].field` desugared.
                 if let Some((sn, one)) = self.ansi_prev_struct.clone() {
@@ -341,6 +359,15 @@ impl Parser<'_, '_> {
         } else {
             None
         };
+        let ty = if continued {
+            self.ansi_prev_pattern_ty.clone().unwrap_or_default()
+        } else {
+            pre_tyname
+        };
+        if !pattern_members.is_empty() {
+            self.note_pattern_use(&ty, start.lo);
+        }
+        self.ansi_prev_pattern_ty = Some(ty);
         AnsiPort {
             dir,
             net_or_var,
@@ -353,6 +380,7 @@ impl Parser<'_, '_> {
             iface: None,
             shape_param,
             integral_typedef,
+            pattern_members,
             span: start.to(self.prev_span()),
         }
     }
@@ -560,6 +588,7 @@ impl Parser<'_, '_> {
         }
         Some(NetVarDecl {
             integral_typedef: false,
+            pattern_members: Vec::new(),
             kind,
             signed,
             range,
@@ -622,6 +651,54 @@ impl Parser<'_, '_> {
     }
 
     /// `T name1, name2 = init, …;` where the leading type-name resolved to `info`.
+    /// §3.a ⑤ⓚ: a declaration starting at `lo` recorded the members of the struct
+    /// type named `ty` (a scoped `p::t` cannot be bound again by the container).
+    pub(crate) fn note_pattern_use(&mut self, ty: &str, lo: u32) {
+        if !ty.contains("::") {
+            self.pattern_used
+                .entry(ty.to_string())
+                .or_default()
+                .push(lo);
+        }
+    }
+
+    /// §3.a ⑤ⓚ: `name` is bound as a type again in this container, after declarations
+    /// that recorded members under it — which type such a declaration has is an oracle
+    /// split (verilator refuses the earlier reference, IEEE 1800-2023 §6.18; sv2v →
+    /// iverilog reads the earlier type for a positional pattern and the later one for a
+    /// keyed one), so their records are dropped at the container's end.
+    pub(crate) fn note_type_rebound(&mut self, name: &str) {
+        if let Some(v) = self.pattern_used.remove(name) {
+            self.pattern_rebound.extend(v);
+        }
+    }
+
+    /// §3.a ⑤ⓚ: clear the records `note_type_rebound` marked, in the container's ANSI
+    /// ports and top-level declarations (elaborate reads no other).
+    pub(crate) fn drop_rebound_pattern_members(
+        &mut self,
+        ports: &mut PortList,
+        body: &mut [ModuleItem],
+    ) {
+        if self.pattern_rebound.is_empty() {
+            return;
+        }
+        if let PortList::Ansi(ps) = ports {
+            for p in ps.iter_mut() {
+                if self.pattern_rebound.contains(&p.span.lo) {
+                    p.pattern_members.clear();
+                }
+            }
+        }
+        for it in body.iter_mut() {
+            if let ModuleItem::NetVar(d) = it {
+                if self.pattern_rebound.contains(&d.span.lo) {
+                    d.pattern_members.clear();
+                }
+            }
+        }
+    }
+
     pub(crate) fn parse_typed_decl(&mut self, info: TypeInfo) -> Option<NetVarDecl> {
         let start = self.cur_span();
         let tyname = self.type_name_key(); // "pkg::t" (scoped twin key) or bare "t"
@@ -635,6 +712,16 @@ impl Parser<'_, '_> {
         // (both oracles refuse `v[i].field`) — no member set for it.
         let packed_array = extra.len() == 1;
         let any_packed = !extra.is_empty();
+        // §3.a ⑤ⓚ: the members of the struct type that gave this declaration its range,
+        // when nothing is written after the type name.
+        let pattern_members = if any_packed {
+            Vec::new()
+        } else {
+            info.pattern_members.clone().unwrap_or_default()
+        };
+        if !pattern_members.is_empty() {
+            self.note_pattern_use(&tyname, start.lo);
+        }
         let (info_signed, info_range, mut info_packed) =
             self.typedef_dims_layout(info.signed, info.range.clone(), extra);
         info_packed.extend(info.packed.iter().cloned());
@@ -751,6 +838,7 @@ impl Parser<'_, '_> {
             class_args,
             const_param: false,
             integral_typedef,
+            pattern_members,
             span: start.to(self.prev_span()),
         })
     }

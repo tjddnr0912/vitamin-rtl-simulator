@@ -271,6 +271,11 @@ impl Elaborator<'_> {
                 // to an integral (closes the use-after-free hole).
                 self.check_handle_assign(lhs, rhs);
                 let (early_lv, packed) = self.packed_default_target_first(lhs, rhs);
+                // §3.a ⑤ⓚ: a `'{…}` as an arm of `?:` on a packed-struct target.
+                let (early_lv, packed) = match early_lv {
+                    None => self.struct_arm_target_first(lhs, rhs),
+                    some => (some, packed),
+                };
                 let rhs = packed.as_ref().unwrap_or(rhs);
                 let rhs_id = self.lower_expr(rhs);
                 if dyn_blessed {
@@ -371,6 +376,11 @@ impl Elaborator<'_> {
                 }
                 self.check_handle_assign(lhs, rhs); // N7 handle type gate
                 let (early_lv, packed) = self.packed_default_target_first(lhs, rhs);
+                // §3.a ⑤ⓚ: as the blocking arm.
+                let (early_lv, packed) = match early_lv {
+                    None => self.struct_arm_target_first(lhs, rhs),
+                    some => (some, packed),
+                };
                 let rhs = packed.as_ref().unwrap_or(rhs);
                 let rhs_id = self.lower_expr(rhs);
                 let lv = early_lv.unwrap_or_else(|| self.lower_lvalue(lhs));

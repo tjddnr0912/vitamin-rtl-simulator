@@ -288,6 +288,7 @@ impl Parser<'_, '_> {
                     // tracked here.
                     enum_type: false,
                     layout_exact: false,
+                    pattern_members: None,
                 },
             );
             // §3 ⑤ⓕ: `U$s = T$s` — record the alias so an UNCARRIED use of `U` marks
@@ -314,6 +315,7 @@ impl Parser<'_, '_> {
             // A type parameter declares a type name of this scope: a wildcard import
             // here never binds a package type over it, in any map.
             self.scope_type_names.insert(name.name.clone());
+            self.note_type_rebound(&name.name);
             // §3.b: the positive record the `endpackage` twin pass reads. Only a
             // PACKAGE body writes it (a module's type parameters have no scoped
             // twin), and every container clears it, so the set names exactly the

@@ -738,6 +738,7 @@ impl Parser<'_, '_> {
         for (k, _inp) in ordered_inputs.iter().enumerate() {
             body.push(ModuleItem::NetVar(NetVarDecl {
                 integral_typedef: false,
+                pattern_members: Vec::new(),
                 shape_param: None,
                 kind: NetVarKind::Reg,
                 signed: false,
@@ -763,6 +764,7 @@ impl Parser<'_, '_> {
         let mut ports: Vec<AnsiPort> = Vec::with_capacity(port_names.len());
         ports.push(AnsiPort {
             integral_typedef: false,
+            pattern_members: Vec::new(),
             shape_param: None,
             dir: PortDir::Output,
             net_or_var: Some(NetVarKind::Reg),
@@ -778,6 +780,7 @@ impl Parser<'_, '_> {
         for inp in &ordered_inputs {
             ports.push(AnsiPort {
                 integral_typedef: false,
+                pattern_members: Vec::new(),
                 shape_param: None,
                 dir: PortDir::Input,
                 net_or_var: None, // default wire

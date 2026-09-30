@@ -882,7 +882,10 @@ impl Elaborator<'_> {
             // legacy `reg r = init` forms stay accepted).
             self.check_lvalue_kind(&lhs, false);
             // `'{default: v}` on a packed target (`packed_pattern.rs`).
-            let packed = self.packed_default_rhs(&lhs, rhs);
+            let packed = self
+                .packed_default_rhs(&lhs, rhs)
+                // §3.a ⑤ⓚ: a `'{…}` as an arm of `?:` on a packed-struct target.
+                .or_else(|| self.struct_arm_rhs(lv, &lhs, rhs));
             let rhs = packed.as_ref().unwrap_or(rhs);
             let rhs_id = self.lower_expr(rhs);
             let rhs_id = self.resize_rhs_for_lvalue(rhs, rhs_id, &lhs);

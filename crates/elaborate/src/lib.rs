@@ -63,6 +63,7 @@ mod const_fn;
 mod const_fn_width;
 mod const_level_header;
 mod cont_array;
+mod struct_arm;
 pub use const_level_header::T0_PULSE_KIND;
 mod const_real;
 mod const_select;
@@ -295,6 +296,13 @@ struct Elaborator<'s> {
     /// Packed nets whose first packed dimension is written in their declaration → that
     /// dimension's element count, for `'{default: v}` (`packed_pattern.rs`). Never restored.
     packed_default_nets: BTreeMap<u32, u32>,
+    /// §3.a ⑤ⓚ (`struct_arm.rs`): each module-body scalar packed-struct variable and ANSI
+    /// port whose members the parser recorded at its declaration — its key and members.
+    pattern_targets: BTreeMap<u32, (String, Vec<ast::PatternMember>)>,
+    /// §3.a ⑤ⓚ: a net recorded twice, which keeps no record.
+    pattern_target_twice: BTreeSet<u32>,
+    /// §3.a ⑤ⓚ: the design declares an `inout` port somewhere; no arm is rewritten.
+    design_inout_port: bool,
     /// The spans of statement right-hand sides `'{default: v}` whose `v` calls something,
     /// noted before a hoist moves the call into a temporary (`packed_pattern.rs`). Never
     /// restored.

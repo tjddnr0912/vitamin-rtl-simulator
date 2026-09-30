@@ -924,6 +924,10 @@ impl Elaborator<'_> {
                     },
                 );
                 self.record_declared_bounds(&p.name.name, p.range.as_ref());
+                // §3.a ⑤ⓚ: an ANSI struct port other than `inout` (`struct_arm.rs`).
+                if p.unpacked.is_empty() && p.dir != ast::PortDir::Inout {
+                    self.record_pattern_target(&p.name.name, &p.pattern_members);
+                }
                 if p.unpacked.is_empty()
                     && p.shape_param.is_none()
                     && type_texts.iter().any(|&(lo, first)| {
