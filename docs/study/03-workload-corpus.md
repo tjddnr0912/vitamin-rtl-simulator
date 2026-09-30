@@ -119,8 +119,9 @@ overwrites. Its oracle is Icarus Verilog only: picorv32's register file starts
 uninitialised, so the design genuinely depends on 4-state semantics and Verilator's 2-state
 approximation produces a different answer (`17b6f447736ac50d`).
 
-**`darkriscv`** — core only; the full SoC (darksocv, darkuart and the rest) is refused, and
-that refusal is a queue row rather than a corpus row. This is the one workload whose `dir`
+**`darkriscv`** — core only; the full SoC (darksocv, darkuart and the rest) runs and agrees
+with Icarus Verilog, but its UART's `$fgetc` path depends on host file state, so it is not a
+corpus row (`bench/darkriscv/RUN.md`). This is the one workload whose `dir`
 differs from its `root`: it runs from `bench/darkriscv/src/sim` because upstream's
 `darkram.v` opens `../src/darksocv.mem` relative to the working directory. Flags are
 `--top tb2 -DSIMULATION=1 -D__WAITSTATE__=7 -I ../rtl` for vita and `-s tb2` with the same
@@ -587,7 +588,9 @@ workload sizes are tuned to 3–15 seconds under Icarus Verilog.
   cva6, the pulp-platform libraries) stay outside rule 1 (owner ruling).
 - `stream` and `fabric` have one row each. Until that changes, those two shapes rest on a
   single design apiece.
-- The full `darkriscv` SoC is refused and is a queue row rather than a corpus row.
+- The full `darkriscv` SoC runs and agrees with Icarus Verilog (`bench/darkriscv/RUN.md`), also
+  with upstream's `__RMW_CYCLE__` on since §4.5.575 accepted its null `$display` argument; it is
+  not a corpus row because its UART's `$fgetc` path depends on host file state.
 - `aes` exits 1 on an IEEE-defined out-of-range read (§3.1); closing that over-loud
   diagnostic will require moving its pin.
 

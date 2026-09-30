@@ -185,14 +185,20 @@ vita and iverilog agree on it, at `+N=500`, `+N=1000` and `+N=5000`:
 | 1000 | `40c2edba15a45106` |
 | 5000 | `4c251ba45c48151c` |
 
-## A construct in the SoC tree that vita rejects
+## Upstream's `__RMW_CYCLE__` option
 
-Enabling upstream's `__RMW_CYCLE__` option (`config.vh:298`) reaches `darkram.v:72`,
-`$display("dpram: RMW cycle enabled.",);` — a null argument, which IEEE 1364-2005
-§17.1.1.2 explicitly permits (it prints a space) and iverilog accepts:
+Enabling `__RMW_CYCLE__` (`config.vh:298`) reaches `darkram.v:72`,
+`$display("dpram: RMW cycle enabled.",);` — a null argument, which IEEE 1364-2005 §17.1.1
+permits (it prints a space). vita refused it (`E2002 expected expression, found ')'`) until
+§4.5.575. With `-D__RMW_CYCLE__` added to the commands above, all tools print
+`dpram: RMW cycle enabled. ` (a trailing space) and the same digests as without it:
 
-```
-../rtl/darkram.v:72:50: error[VITA-E2002] E-PARSE-UNEXPECTED-TOKEN: expected expression, found ')'
-```
+| harness | `+N=` | DIGEST | agreeing tools |
+|---|---|---|---|
+| core (`tb2`) | 30000 | `a0dbce6fd1dc52ec` | iverilog, vita |
+| core (`tb2`) | 600000 | `59370cf8b1d0503d` | iverilog, vita, verilator |
+| SoC (`tb`) | 500 | `73607907b6755e07` | iverilog, vita |
+| SoC (`tb`) | 1000 | `40c2edba15a45106` | iverilog, vita |
+| SoC (`tb`) | 5000 | `4c251ba45c48151c` | iverilog, vita |
 
-The option is off in both harnesses above, so neither run reaches it.
+The option is off in the corpus row, so its pin does not move.

@@ -9,6 +9,17 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — a null argument in `$display` and its family
+
+- `$display("dpram: RMW cycle enabled.",);`, `$display("A",,"B");` — an empty argument of
+  `$display`, `$write`, `$strobe`, `$monitor` (and their `b` / `h` / `o` forms), or of
+  `$fdisplay`, `$fwrite`, `$fstrobe`, `$fmonitor` after the file descriptor, now prints what
+  Icarus Verilog and Verilator print: a single space (IEEE 1364-2005 §17.1.1), read as the string
+  `" "` by a format specifier (`%d` of it is ` 32`). It was a parse error (E2002). A null file
+  descriptor and a null argument of any other task stay refused.
+- darkriscv with upstream's `__RMW_CYCLE__` option now runs, core and full SoC, to Icarus
+  Verilog's digests.
+
 ### Added — an assignment pattern as an arm of `?:` on a packed-struct target; `ibex` runs
 
 - `e = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: cause};` — a keyed, positional or
