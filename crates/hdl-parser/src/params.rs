@@ -806,6 +806,7 @@ impl Parser<'_, '_> {
         let signed = expl_signed.unwrap_or_else(|| atom_default_signed(Some(vk)));
         Some(ParamItem::ConstArrayVar(NetVarDecl {
             integral_typedef: false,
+            pattern_members: Vec::new(),
             shape_param: None,
             kind: vk,
             signed,

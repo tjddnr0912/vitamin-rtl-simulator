@@ -280,9 +280,11 @@ pub(crate) fn stmt_refs_ident_outside(
                     .find_map(|st| stmt_refs_ident_outside(st, skip, name))
             })
         }
-        Blocking { lhs, rhs, span, .. } | NonBlocking { lhs, rhs, span, .. } => {
-            lv_ref(lhs, *span).or_else(|| e_ref(rhs))
-        }
+        // §3.a ⑤ⓚ: a keyed pattern the arm rewrite takes reads its values
+        // (`struct_arm::arm_reads_ident`); `force` is never rewritten.
+        Blocking { lhs, rhs, span, .. } | NonBlocking { lhs, rhs, span, .. } => lv_ref(lhs, *span)
+            .or_else(|| e_ref(rhs))
+            .or_else(|| crate::struct_arm::arm_reads_ident(rhs, name).then_some(rhs.span)),
         If {
             cond,
             then_s,

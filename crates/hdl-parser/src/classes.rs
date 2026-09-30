@@ -123,6 +123,7 @@ impl Parser<'_, '_> {
                 shape_param: None,
                 enum_type: false,
                 layout_exact: true,
+                pattern_members: None,
             });
         }
     }
@@ -155,6 +156,7 @@ impl Parser<'_, '_> {
         self.expect(TokenKind::Semi, "';' after a virtual interface declaration");
         Some(NetVarDecl {
             integral_typedef: false,
+            pattern_members: Vec::new(),
             kind: NetVarKind::VirtualIface,
             signed: false,
             shape_param: None,

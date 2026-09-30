@@ -925,6 +925,12 @@ impl Elaborator<'_> {
         for item in &module.body {
             if let ast::ModuleItem::NetVar(d) = item {
                 self.elaborate_netvar_decl(d, &module.ports, &module.body, true);
+                // §3.a ⑤ⓚ: a module-body scalar struct variable (`struct_arm.rs`).
+                if !d.pattern_members.is_empty() && !d.const_param {
+                    for n in d.names.iter().filter(|n| n.unpacked.is_empty()) {
+                        self.record_pattern_target(&n.name.name, &d.pattern_members);
+                    }
+                }
             }
         }
         // Non-ANSI port nets: a body `input/output [w] name;` (a `PortDecl`)

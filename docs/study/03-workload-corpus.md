@@ -90,7 +90,7 @@ for a file that changes a few times a year. The compiler checks it instead.
 | 8 | `verilog-ethernet` | github.com/alexforencich/verilog-ethernet | stream | MIT | `77320a9471d19c7dd383914bc049e02d9f4f1ffb` | `verilog-ethernet` | `+N=1000` | `Runs { exit: 0 }` | iverilog 13.0; verilator 5.050 agrees |
 | 9 | `keccak` | first-party, in this repository | crypto | ours | — | `keccak` | `+N=2000` | `Runs { exit: 0 }` | iverilog 13.0, verilator 5.050 and a Python reference all agree |
 | 10 | `keccak-arr` | first-party, in this repository | crypto | ours | — | `keccak` | `+N=2000` | `Runs { exit: 0 }` | iverilog 13.0, verilator 5.050 and a Python reference all agree |
-| 11 | `ibex` | github.com/lowRISC/ibex | cpu | Apache-2.0 | `8b8ee086aef72e0833b7f0493d9d33f1e4d3c8e2` | `ibex` | `+N=20000` | `Refused { … }` | verilator 5.052, x-invariant (iverilog 13 cannot parse it) |
+| 11 | `ibex` | github.com/lowRISC/ibex | cpu | Apache-2.0 | `8b8ee086aef72e0833b7f0493d9d33f1e4d3c8e2` | `ibex` | `+N=20000` | `Runs { exit: 0 }` | verilator 5.052, x-invariant (iverilog 13 cannot parse it) |
 
 Shapes, from `enum Shape`, and what each exercises:
 
@@ -196,7 +196,7 @@ in §4.5.565, the eighteen errors of nine whole-array continuous assigns in §4.
 | `verilog-axi` | `DIGEST=3b9321d5ea42f302` (oracle) and `DIGEST=fd90a1407928ebc8` (vita) |
 | `verilog-ethernet` | `DIGEST=ca4945d0044f74d8` |
 | `keccak`, `keccak-arr` | `perms=2000 lane0=54aa20c46ef0e0f6 lane1=b19e9f995e1f41d3 acc=767c5ab6776c4bde` |
-| `ibex` | `DIGEST=13b2ddfcd551ba2f` (verilator; sv2v + iverilog agrees; vita refuses it) |
+| `ibex` | `DIGEST=13b2ddfcd551ba2f` (verilator; sv2v + iverilog agrees; vita prints it since §4.5.574) |
 
 The manifest's `note` fields deliberately carry no timings. A number written in two places
 rots in one of them; the timings live in §7 of this document, and
@@ -429,10 +429,10 @@ scratch probe cannot be committed by accident.
 
 ## 6. Current state
 
-`coverage()` counts rows that are not `Expect::Refused`. One row, `ibex`, is refused, so
-`list` and `run` print `coverage: 10/11`. A clean run grades nine rows `ok`, `verilog-axi`
-`ruled-split` and `ibex` `known-gap`. A slice that moves ibex's page re-pins its refusal to
-the next rung in the same commit: the runner grades a moved refusal `DRIFTED`, a failure.
+`coverage()` counts rows that are not `Expect::Refused`. No row is refused since §4.5.574, so
+`list` and `run` print `coverage: 11/11`. A clean run grades ten rows `ok` and `verilog-axi`
+`ruled-split`. A slice that makes a row refused again fails the run (the runner grades a moved
+refusal `DRIFTED`, a runs-row that stops running a regression).
 Since the real-design direction the corpus is also the loop's pre-push gate:
 `corpus-runner run` runs before every push until the corpus is in CI (§8).
 
@@ -576,13 +576,12 @@ workload sizes are tuned to 3–15 seconds under Icarus Verilog.
 **The corpus.**
 
 - One row is a ruled split (`verilog-axi`) and one is a loss vita has not closed (`serv`).
-- `ibex` is refused (§3.1). Its page — 1 elaboration error, since §4.5.564 closed its parse
-  error, §4.5.565 its generate-block enum labels, §4.5.566 its whole-array continuous assigns,
-  §4.5.567 its packed-target `'{default: v}`, §4.5.568 its string-literal generate-if, §4.5.569
-  its packed-array parameters written as `'{…}` and §4.5.570 its copy of a typedef-element array
-  — is the head of ROADMAP §5.2; after it closes, the run itself is compared with the Verilator
-  digest. §4.5.571's and §4.5.572's reverted builds already made that comparison: both sizes
-  printed the pins, and §4.5.572's printed Verilator's table for eight of the mutations.
+- `ibex` runs (§4.5.574) and prints the Verilator digest at both sizes (`+N=2000`
+  `32e0e78741376133`, `+N=20000` `13b2ddfcd551ba2f`, 43 warnings). Its page fell from 2 parse
+  errors to 0 over §4.5.564–570, §4.5.573 (the parser's wildcard-import binding) and §4.5.574 (a
+  keyed `'{…}` as a `?:` arm typed by its packed-struct target); §4.5.571's and §4.5.572's
+  reverted builds had printed the same pins, and §4.5.572's Verilator's table for eight of
+  RUN.md's mutations.
 - New designs, licence and oracle first: OpenTitan IPs and VeeR EL2 / EH1 (Apache-2.0),
   alexforencich verilog-axis / -pcie / -uart / -i2c (MIT). Solderpad designs (cv32e40p,
   cva6, the pulp-platform libraries) stay outside rule 1 (owner ruling).

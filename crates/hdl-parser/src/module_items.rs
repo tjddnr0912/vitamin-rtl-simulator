@@ -100,6 +100,7 @@ impl Parser<'_, '_> {
                 // IEEE §26.3: the name is now bound in this scope, so a later wildcard
                 // import here leaves it alone (`wildcard_type_bind`).
                 self.scope_type_names.insert(bare.clone());
+                self.note_type_rebound(&bare);
                 if let Some(v) = self.typedefs.get(&scoped).cloned() {
                     self.typedefs.insert(bare.clone(), v);
                 }
@@ -143,6 +144,11 @@ impl Parser<'_, '_> {
                     .iter()
                     .map(|b| (b.clone(), self.wildcard_type_bind(b)))
                     .collect();
+                for (b, bind) in &binds {
+                    if *bind == WildcardBind::Replace {
+                        self.note_type_rebound(b);
+                    }
+                }
                 copy_wildcard_twins(&mut self.typedefs, &prefix, &binds);
                 copy_wildcard_twins(&mut self.struct_layouts, &prefix, &binds);
                 copy_wildcard_twins(&mut self.enum_defs, &prefix, &binds);
@@ -704,6 +710,8 @@ impl Parser<'_, '_> {
         self.wildcard_bound.clear();
         self.local_decl_names.clear();
         self.scope_type_names.clear();
+        self.pattern_used.clear();
+        self.pattern_rebound.clear();
         self.const_locals.clear();
         self.overridable_params.clear();
         self.shape_carriers.clear();
@@ -819,7 +827,7 @@ impl Parser<'_, '_> {
         }
 
         // port list: ANSI ( dir type name, … ) | non-ANSI ( name, … ) | none
-        let ports = self.parse_port_list();
+        let mut ports = self.parse_port_list();
         // Port names are local declarations too (a body `import p::*` must not
         // bind a package struct over a port of the same name).
         match &ports {
@@ -1156,6 +1164,7 @@ impl Parser<'_, '_> {
         // unit-scope `parameter type` after a package accidentally right and the
         // same declaration before one wrong — the predicate was position-dependent.
         self.in_package = false;
+        self.drop_rebound_pattern_members(&mut ports, &mut body);
         Some(ModuleDecl {
             is_macromodule,
             name,

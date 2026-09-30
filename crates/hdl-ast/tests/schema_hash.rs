@@ -12,6 +12,13 @@
 use vita_schema::schema_hash;
 
 /// Pinned root hash of `hdl_ast::SourceUnit`'s full type closure.
+/// Re-pinned 2026-09-30 §3.a ⑤ⓚ `NetVarDecl.pattern_members` and
+/// `AnsiPort.pattern_members: Vec<PatternMember>` (new `PatternMember { name, width,
+/// two_state }`) — the members of the exact, flat packed-struct type a declaration names,
+/// as the parser resolved it at the declaration. Elaborate reads them only to type an
+/// assignment pattern that is an arm of `?:` (`struct_arm.rs`); empty on every
+/// declaration that predates them. All `.vu` artifacts are stale; no sim-ir/format_version
+/// change.
 /// Re-pinned 2026-09-29 §3.b cont-array-typedef-elem `NetVarDecl.integral_typedef` and
 /// `AnsiPort.integral_typedef: bool` — the parser's mark that a declaration's type is a
 /// typedef of an integral packed type other than an enum, with every part in the state
@@ -283,8 +290,8 @@ use vita_schema::schema_hash;
 /// 29 and the SimIr schema hash / canonical / RON goldens are untouched (verified:
 /// the only test this slice moves is this one). All `.vu` artifacts are stale.
 const EXPECTED: [u8; 32] = [
-    218, 159, 236, 199, 74, 245, 14, 153, 217, 212, 84, 114, 137, 226, 90, 200, 181, 117, 246, 69,
-    201, 82, 83, 40, 120, 241, 48, 223, 42, 202, 228, 181,
+    160, 68, 58, 253, 70, 50, 97, 166, 212, 211, 103, 0, 121, 76, 208, 77, 50, 132, 208, 210, 166,
+    167, 169, 170, 218, 241, 128, 174, 71, 19, 44, 127,
 ];
 
 #[test]

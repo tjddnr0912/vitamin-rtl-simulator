@@ -199,6 +199,7 @@ impl Parser<'_, '_> {
         }
         Some(NetVarDecl {
             integral_typedef: false,
+            pattern_members: Vec::new(),
             shape_param: None,
             kind: if all_two_state {
                 NetVarKind::Bit
@@ -252,6 +253,7 @@ impl Parser<'_, '_> {
                             .map(|e| self.desugar_record_array_init(&tyname, e));
                         out.push(NetVarDecl {
                             integral_typedef: false,
+                            pattern_members: Vec::new(),
                             shape_param: None,
                             kind: if all_two_state {
                                 NetVarKind::Bit
@@ -306,6 +308,7 @@ impl Parser<'_, '_> {
                         for (m, finit) in members.iter().zip(field_inits) {
                             out.push(NetVarDecl {
                                 integral_typedef: false,
+                                pattern_members: Vec::new(),
                                 shape_param: None,
                                 kind: m.kind,
                                 signed: m.signed,
@@ -359,6 +362,7 @@ impl Parser<'_, '_> {
                         self.struct_1d_array_vars.insert(n.name.name.clone());
                         out.push(NetVarDecl {
                             integral_typedef: false,
+                            pattern_members: Vec::new(),
                             shape_param: None,
                             kind: if all_two_state {
                                 NetVarKind::Bit
@@ -400,6 +404,7 @@ impl Parser<'_, '_> {
                         for m in &members {
                             out.push(NetVarDecl {
                                 integral_typedef: false,
+                                pattern_members: Vec::new(),
                                 shape_param: None,
                                 kind: m.kind,
                                 signed: m.signed,
@@ -466,6 +471,7 @@ impl Parser<'_, '_> {
                 self.struct_scalar_vars.insert(n.name.name.clone());
                 out.push(NetVarDecl {
                     integral_typedef: false,
+                    pattern_members: Vec::new(),
                     shape_param: None,
                     kind: if all_two_state {
                         NetVarKind::Bit
@@ -495,6 +501,7 @@ impl Parser<'_, '_> {
             for m in &members {
                 out.push(NetVarDecl {
                     integral_typedef: false,
+                    pattern_members: Vec::new(),
                     shape_param: None,
                     kind: m.kind,
                     signed: m.signed,

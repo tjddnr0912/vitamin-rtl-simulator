@@ -251,6 +251,13 @@ struct TypeInfo {
     /// read through a conversion, IEEE §7.2.1); and for a type parameter, whose
     /// default's parts are not tracked here.
     layout_exact: bool,
+    /// §3.a ⑤ⓚ: the members (name, width, 2-state) of a packed struct that is
+    /// `layout_exact` and has no packed-struct member, in declaration order — what a
+    /// declaration of this type records as `NetVarDecl::pattern_members`. It travels
+    /// with the entry (a chained alias, an import, a package twin copy it), so a
+    /// declaration reads the members of the type that gave it its range. `None` for
+    /// every other type.
+    pattern_members: Option<Vec<hdl_ast::PatternMember>>,
 }
 
 /// A parse-time constant (§3 ⑤ ⓓ table): its value, and the WIDTH and sign of the
@@ -834,6 +841,16 @@ pub struct Parser<'t, 's> {
     /// st s2;` took p's `st` whenever the unit scope also declared an `st` (the
     /// §4.5.434 replacement), and at the unit scope an `import p::*` replaced the
     /// unit's own `typedef st` — `102 bits=12` where both oracles print `06 bits=8`.
+    /// §3.a ⑤ⓚ: the type names this container's declarations recorded struct members
+    /// under (`NetVarDecl::pattern_members`), with the declarations' start offsets, and
+    /// the offsets whose type name a later typedef, type parameter or import of the
+    /// container binds again — where the oracles split on which type the earlier
+    /// declaration has. `parse_module_like` clears those records at the container's end.
+    /// §3.a ⑤ⓚ: the type name the previous ANSI port recorded members under, for a
+    /// bare continuation (`output exc_cause_t a, b`).
+    ansi_prev_pattern_ty: Option<String>,
+    pattern_used: std::collections::HashMap<String, Vec<u32>>,
+    pattern_rebound: std::collections::HashSet<u32>,
     scope_type_names: std::collections::HashSet<String>,
     /// SV §6.19.5 `x.name()`: a synthetic `function string $enum_name$<T>(x)` —
     /// a `case(x)` returning each label's string literal — generated on first use
@@ -918,6 +935,9 @@ impl<'t, 's> Parser<'t, 's> {
             wildcard_bound: std::collections::HashSet::new(),
             local_decl_names: std::collections::HashSet::new(),
             scope_type_names: std::collections::HashSet::new(),
+            ansi_prev_pattern_ty: None,
+            pattern_used: std::collections::HashMap::new(),
+            pattern_rebound: std::collections::HashSet::new(),
             in_package: false,
             pending_enum_name_fns: std::collections::BTreeMap::new(),
         }

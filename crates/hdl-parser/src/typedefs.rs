@@ -164,6 +164,7 @@ impl Parser<'_, '_> {
         let it = self.parse_typedef_inner();
         if let Some(ModuleItem::Typedef(td)) = &it {
             self.scope_type_names.insert(td.name.name.clone());
+            self.note_type_rebound(&td.name.name);
         }
         it
     }
@@ -345,6 +346,7 @@ impl Parser<'_, '_> {
                 shape_param: None,
                 enum_type: true,
                 layout_exact: base_exact,
+                pattern_members: None,
             }
         } else {
             match &base {
@@ -359,6 +361,7 @@ impl Parser<'_, '_> {
                     shape_param: None,
                     enum_type: true,
                     layout_exact: base_exact,
+                    pattern_members: None,
                 },
                 // Base-less `enum {…}` (and any illegal non-integral base that slipped through):
                 // the default enum base is `int` = 32-bit signed 2-state (§4.5.154 — was the
@@ -376,6 +379,7 @@ impl Parser<'_, '_> {
                     shape_param: None,
                     enum_type: true,
                     layout_exact: base_exact,
+                    pattern_members: None,
                 },
             }
         };
@@ -521,6 +525,7 @@ impl Parser<'_, '_> {
                 shape_param: None,
                 enum_type: false,
                 layout_exact,
+                pattern_members: None,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -705,6 +710,19 @@ impl Parser<'_, '_> {
                 nested.clone(),
             ));
         }
+        // §3.a ⑤ⓚ: the members a declaration of this type records, when the layout is
+        // exact and flat (no packed-struct member).
+        let pattern_members =
+            (layout_exact && nested_keys.iter().all(Option::is_none)).then(|| {
+                fields
+                    .iter()
+                    .map(|f| hdl_ast::PatternMember {
+                        name: f.0.clone(),
+                        width: f.2,
+                        two_state: f.5,
+                    })
+                    .collect::<Vec<_>>()
+            });
         self.struct_layouts
             .insert(tname.name.clone(), StructLayout { fields });
         // If a union with the same name was defined in an earlier module, retract it
@@ -733,6 +751,7 @@ impl Parser<'_, '_> {
                 shape_param: None,
                 enum_type: false,
                 layout_exact,
+                pattern_members,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -824,6 +843,7 @@ impl Parser<'_, '_> {
                 enum_type: false,
                 // Laid out per instance from a bound this parse could not fold.
                 layout_exact: false,
+                pattern_members: None,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {
@@ -1100,6 +1120,7 @@ impl Parser<'_, '_> {
                 shape_param: None,
                 enum_type: false,
                 layout_exact: Self::members_layout_exact(&members, each_exact),
+                pattern_members: None,
             },
         );
         Some(ModuleItem::Typedef(TypedefDecl {

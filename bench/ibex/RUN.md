@@ -8,8 +8,8 @@ only row whose oracle is verilator, because iverilog 13 cannot parse it. A secon
 4-state oracle agrees with verilator: sv2v converts the design to Verilog, and iverilog
 runs the result.
 
-vita refuses it today (`Expect::Refused`). The row measures the distance to running it,
-one error class at a time; see "vita today" below.
+vita runs it (`Expect::Runs { exit: 0 }`, since ROADMAP §4.5.574) and prints the verilator digest
+at both sizes; see "vita today" below.
 
 ## Provenance
 
@@ -197,7 +197,13 @@ zero digest, so the cycle count was added.
 
 ## vita today
 
-The run stops at elaboration with 1 error. The parse error in front of
+The whole design runs to the pins: `+N=2000` prints `DIGEST=32e0e78741376133` and `+N=20000`
+`DIGEST=13b2ddfcd551ba2f`, with 0 errors and 43 warnings (§4.5.574, 2026-09-30). The last refusal
+— `ibex_controller.sv:737`, a keyed `'{…}` as a `?:` arm on the packed-struct port
+`exc_cause_o` — is typed by its target (IEEE 1800-2017 §10.8), in elaborate against the members
+the parser recorded at the port's declaration. The history below is kept as it was measured.
+
+Before §4.5.574 the run stopped at elaboration with 1 error. The parse error in front of
 it — `prim_lfsr.sv:392` and `:401` declare functions whose return type is a
 multi-dimensional packed typedef local to a generate block — closed in ROADMAP §4.5.564;
 that code sits under `if (NonLinearOut)`, which Ibex leaves 0. The twelve undeclared enum

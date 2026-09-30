@@ -20,6 +20,9 @@ impl<'s> Elaborator<'s> {
             inline_elem_arrays: BTreeSet::new(),
             typedef_elem_arrays: BTreeSet::new(),
             packed_default_nets: BTreeMap::new(),
+            pattern_targets: BTreeMap::new(),
+            pattern_target_twice: BTreeSet::new(),
+            design_inout_port: false,
             default_pattern_calls: BTreeSet::new(),
             inout_actual_exprs: Vec::new(),
             wired_and_nets: BTreeSet::new(),
@@ -640,6 +643,7 @@ impl<'s> Elaborator<'s> {
     pub(crate) fn run(&mut self, unit: &ast::SourceUnit) {
         // §3 ⑤ⓖ: before anything lowers (package bodies and class methods lower below).
         self.md_return_fns = md_return::md_return_fn_names(unit);
+        self.design_inout_port = struct_arm::design_has_inout_port(unit);
         let (map, order) = build_module_map(unit);
         // Per-module static facts for the §11.6.1 region walks' hierarchical
         // leaves (`expr_size_hier`). Built here, from the same declaration order
