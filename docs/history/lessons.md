@@ -13,6 +13,40 @@ the open queues in [../ROADMAP.md](../ROADMAP.md).
 
 ---
 
+## 2026-09-30
+
+### A binding decided per map, and three widenings of a replacement that met name-keyed readers (§4.5.573)
+
+The queue row said a wildcard import replaced a local typedef "when the unit scope also declares the
+name". The census (457 cells, three oracles at the documented versions) found the row's two cells to
+be one face of a decision the parser made per MAP: `typedefs`, `struct_layouts`, `enum_defs`,
+`union_type_names` and `unpacked_struct_layouts` each asked `cu_type_overridable` or fell back to
+`or_insert` on their own entry. With a unit twin the replacement fired in every map, so the scope's
+own typedef, type parameter or explicit import lost to the package — in a module, at the unit scope,
+in a package (whose `q2::st` twin then carried p's type out), a program, an interface, a header, a
+comma list; without one, the per-map fallback let a package type of another kind land beside the
+scope's own. Deciding once per name — skip the scope's own, keep the rest as it was — and offering
+only the types a package exports closed 105 cells wrong → right and 4 loud → right, none the other
+way; that is what shipped.
+
+The same census also measured three REPLACEMENTS vita does not make — a container's wildcard over a
+unit-scope import, a generate block's repeated import over the module's own name, a replacement that
+leaves the old binding's other-kind entries — and the slice built all three. Round 1 found a class
+missing from the own set (a module's `class st` lost to its own import once a unit import offered
+`st`: E3009 for `7`), and the author's follow-up found the export leak turned into a right → wrong
+by the wider replacement (`12 2 2 003` for `12 4 8 0ff`). Round 2 then found what every widening
+of the replacement meets: variables and nested members keep their type by bare NAME, so a nearer
+rebinding retargets a module variable read inside the block (`x5` for `5`, `PY` for `B`), and a
+replacement that clears every map loses what a package's diffed twins omitted when its typedef is
+identical to the outer one (`s.a` E3010). Nine blocking cells from two pre-existing roots, with the
+fixes of the previous round among the triggers: the three widenings were reverted, the separable
+half kept, and the two roots filed as REMAINING_WORK §D prerequisites of the three catalogue rows.
+The rule it bought: before widening which bindings a nearer scope rebinds, census who resolves the
+name later. Round 3, on the shipped build, found no blocking cell. The one cell whose output moved
+away from the oracles was a coincidence: PRE's `bits=32` came from a type the wildcard must not
+import, and it matched only because that type had the width of the explicitly imported value.
+Varying that width showed PRE was wrong too.
+
 ## 2026-09-12
 
 ### Narrow a shared gate on the binding, not on the declaration (§4.5.490)

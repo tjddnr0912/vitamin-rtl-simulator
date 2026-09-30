@@ -9,6 +9,28 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Fixed — a wildcard import no longer rebinds a type the importing scope declares itself
+
+- `typedef struct packed { logic [5:0] a; logic [1:0] b; } st; import p::*; st s2;` in a module
+  whose compilation unit also declared an `st` gave `s2` the package's type (`'{a: 6'h1, b: 2'h2}`
+  printed `102`, `$bits` 12); it now keeps the module's own (`06`, 8), as Verilator and Icarus
+  Verilog do (IEEE 1800 §26.3). The same held at the compilation-unit scope (a unit `typedef st`
+  then a unit `import p::*;`), in a package (whose `q2::st` then carried the package's type out),
+  interface or program body, in a generate block, for a type parameter and for an explicit
+  `import q::st;` written before the wildcard — also when the explicit import is a value (after
+  `import p::W;` of a package `parameter int W`, a later `import q::*;` made `$bits(W)` read q's
+  type `W`); and a package type of another kind no longer lands beside the scope's own (a local
+  struct beside a package union named alike had its keyed pattern refused).
+- A wildcard import no longer offers a type the package only imported itself (a package does not
+  re-export): with `import base::*` inside `p`, a module's `import p::*` wrote base's layout under
+  a unit `typedef st`.
+- Still open (docs/PROBE_CATALOG.md): a container's wildcard import over a type the compilation
+  unit imported, a generate block's repeated import over the module's own type name, a
+  replacement that keeps the replaced binding's entries of another kind, a declaration that
+  shadows a same-named type of another kind where either one is an unpacked struct, and a module
+  value (a `localparam`, an imported parameter) named like a compilation-unit type, which `$bits`
+  and a cast still read as the type.
+
 ### Added — a whole-array continuous copy of typedef elements
 
 - `assign dst = src;` between unpacked arrays whose element type is a typedef — a packed struct
