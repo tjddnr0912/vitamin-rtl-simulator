@@ -52,7 +52,7 @@ fn inner_dim_over_index_reads_x_not_alias() {
         err.contains("VITA-E4002"),
         "OOB must emit the runtime range diagnostic:\n{err}"
     );
-    let _ = code; // exit 1 by the severity contract (E4002 is an ERROR)
+    let _ = code; // exit 0: E4002 is emitted as a warning (§4.5.576)
     assert!(
         out.contains("r=xx"),
         "OOB read must be X, not an alias:\n{out}"
@@ -76,7 +76,7 @@ fn inner_dim_over_index_write_is_noop() {
         err.contains("VITA-E4002"),
         "OOB must emit the runtime range diagnostic:\n{err}"
     );
-    let _ = code; // exit 1 by the severity contract (E4002 is an ERROR)
+    let _ = code; // exit 0: E4002 is emitted as a warning (§4.5.576)
     assert!(out.contains("g12=22"), "OOB write must not alias:\n{out}");
 }
 
@@ -97,7 +97,7 @@ fn outer_dim_over_index_reads_x() {
         err.contains("VITA-E4002"),
         "OOB must emit the runtime range diagnostic:\n{err}"
     );
-    let _ = code; // exit 1 by the severity contract (E4002 is an ERROR)
+    let _ = code; // exit 0: E4002 is emitted as a warning (§4.5.576)
     assert!(out.contains("r=xx"), "got:\n{out}");
 }
 
@@ -119,7 +119,7 @@ fn under_index_below_nonzero_lo_reads_x() {
         err.contains("VITA-E4002"),
         "OOB must emit the runtime range diagnostic:\n{err}"
     );
-    let _ = code; // exit 1 by the severity contract (E4002 is an ERROR)
+    let _ = code; // exit 0: E4002 is emitted as a warning (§4.5.576)
     assert!(out.contains("a=xx"), "got:\n{out}");
     assert!(out.contains("b=xx"), "got:\n{out}");
 }
@@ -156,7 +156,7 @@ fn negative_index_reads_x() {
         err.contains("VITA-E4002"),
         "OOB must emit the runtime range diagnostic:\n{err}"
     );
-    let _ = code; // exit 1 by the severity contract (E4002 is an ERROR)
+    let _ = code; // exit 0: E4002 is emitted as a warning (§4.5.576)
     assert!(out.contains("r=xx"), "got:\n{out}");
 }
 
@@ -198,7 +198,7 @@ fn three_d_middle_dim_over_index_reads_x() {
         err.contains("VITA-E4002"),
         "OOB must emit the runtime range diagnostic:\n{err}"
     );
-    let _ = code; // exit 1 by the severity contract (E4002 is an ERROR)
+    let _ = code; // exit 0: E4002 is emitted as a warning (§4.5.576)
     assert!(out.contains("r=x"), "got:\n{out}");
 }
 
@@ -221,7 +221,7 @@ fn one_d_over_index_unchanged() {
         err.contains("VITA-E4002"),
         "OOB must emit the runtime range diagnostic:\n{err}"
     );
-    let _ = code; // exit 1 by the severity contract (E4002 is an ERROR)
+    let _ = code; // exit 0: E4002 is emitted as a warning (§4.5.576)
     assert!(out.contains("r=xx"), "got:\n{out}");
     assert!(out.contains("m0=10"), "got:\n{out}");
 }
@@ -245,7 +245,7 @@ fn element_part_select_with_oob_word_is_x() {
         err.contains("VITA-E4002"),
         "OOB must emit the runtime range diagnostic:\n{err}"
     );
-    let _ = code; // exit 1 by the severity contract (E4002 is an ERROR)
+    let _ = code; // exit 0: E4002 is emitted as a warning (§4.5.576)
     assert!(out.contains("r=x"), "got:\n{out}");
     assert!(
         out.contains("g12=22"),
@@ -298,7 +298,7 @@ fn array_assign_slice_with_oob_row_index_is_noop() {
         err.contains("VITA-E4002"),
         "OOB must emit the runtime range diagnostic:\n{err}"
     );
-    let _ = code; // exit 1 by the severity contract (E4002 is an ERROR)
+    let _ = code; // exit 0: E4002 is emitted as a warning (§4.5.576)
     assert!(
         out.contains("g10=77"),
         "OOB slice copy must not land:\n{out}"
@@ -306,7 +306,7 @@ fn array_assign_slice_with_oob_row_index_is_noop() {
 }
 
 /// An UNKNOWN (x/z) index and a KNOWN out-of-range index are different facts, and
-/// each must get its own diagnostic, severity and exit code.
+/// each must get its own diagnostic code.
 ///
 /// Both were `E-RUN-RANGE` at Error severity until the aes_top report, so reading
 /// `mem[idx_q]` while `idx_q` was still X — the reset window of any design that
@@ -317,8 +317,11 @@ fn array_assign_slice_with_oob_row_index_is_noop() {
 ///
 /// The two halves are asserted TOGETHER because either alone is passable by a
 /// mistake: collapsing the split back to one code keeps the first half green if it
-/// only checks for "some diagnostic", and demoting BOTH keeps the second half green
-/// if it only checks the text.
+/// only checks for "some diagnostic".
+///
+/// §4.5.576: the known half is a WARNING too now (owner ruling — the same §5.2.1
+/// access, and `aes_key_mem.v:182` exited 1 on a design both oracles pass), so the
+/// exit code no longer tells the halves apart; the code does.
 #[test]
 fn unknown_index_warns_while_known_out_of_range_errors() {
     // idx is X for the whole run: legal X propagation, warning, exit 0.
@@ -335,7 +338,7 @@ fn unknown_index_warns_while_known_out_of_range_errors() {
     assert!(!err.contains("VITA-E4002"), "…and must not be E4002: {err}");
     assert!(out.contains("o=xx"), "the value is still all-X: {out}");
 
-    // A KNOWN index past the end: still an error, still exit 1.
+    // A KNOWN index past the end: E4002, emitted as a warning, exit 0.
     let (out, err, code) = run("module t;\n\
            reg [7:0] mem [0:3]; reg [7:0] o; integer i;\n\
            initial begin mem[0]=8'h11; i = 9; o = mem[i];\n\
@@ -343,11 +346,11 @@ fn unknown_index_warns_while_known_out_of_range_errors() {
          endmodule\n");
     assert_eq!(
         code,
-        Some(1),
-        "a known out-of-range index stays loud: {err}"
+        Some(0),
+        "a known out-of-range index is a warning: {err}"
     );
     assert!(
-        err.contains("VITA-E4002") && err.contains("out of range"),
+        err.contains("warning[VITA-E4002]") && err.contains("out of range"),
         "a known out-of-range index keeps E4002: {err}"
     );
     assert!(
@@ -362,11 +365,7 @@ fn unknown_index_warns_while_known_out_of_range_errors() {
            reg [7:0] mem [0:3]; reg [7:0] o; integer i;\n\
            initial begin i = -1; o = mem[i]; $display(\"o=%h\", o); $finish; end\n\
          endmodule\n");
-    assert_eq!(
-        code,
-        Some(1),
-        "a known negative index is not unknown: {err}"
-    );
+    assert_eq!(code, Some(0), "a known negative index is a warning: {err}");
     assert!(
         err.contains("VITA-E4002"),
         "a known negative index keeps E4002: {err}"

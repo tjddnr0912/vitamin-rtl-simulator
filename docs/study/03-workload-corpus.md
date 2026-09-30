@@ -81,7 +81,7 @@ for a file that changes a few times a year. The compiler checks it instead.
 | # | Name | Origin | Shape | Licence | Pinned SHA | Directory | Plusargs | Expect | Oracle |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | `sha256` | github.com/secworks/sha256 | crypto | BSD-2 | `837c5cc396f001d18f2c765721c585716eb439ae` | `sha256` | `+N=2000` | `Runs { exit: 0 }` | iverilog 13.0; verilator 5.050 agrees |
-| 2 | `aes` | github.com/secworks/aes | crypto | BSD-2 | `80dc4718e1dcbbdb4b0dd1bdb393d8f7b98981dc` | `aes` | `+N=200` | `Runs { exit: 1 }` | iverilog 13.0; verilator 5.050 agrees |
+| 2 | `aes` | github.com/secworks/aes | crypto | BSD-2 | `80dc4718e1dcbbdb4b0dd1bdb393d8f7b98981dc` | `aes` | `+N=200` | `Runs { exit: 0 }` | iverilog 13.0; verilator 5.050 agrees |
 | 3 | `picorv32` | github.com/YosysHQ/picorv32 | cpu | ISC | `a473fc8fca393771d83b0ffcf0b14db3393339d8` | `picorv32` | `+N=400000` | `Runs { exit: 0 }` | iverilog 13.0 only |
 | 4 | `darkriscv` | github.com/darklife/darkriscv | cpu | BSD-3 | `4aa437997cd35253c9111f10a449de13ccaeee78` | `darkriscv/src/sim` | `+N=600000` | `Runs { exit: 0 }` | iverilog 13.0; verilator 5.050 agrees |
 | 5 | `biriscv` | github.com/ultraembedded/biriscv | cpu | Apache-2.0 | `6af9c4be5a0807d368eaad5e49af52322e31d073` | `biriscv` | `+N=50000` | `Runs { exit: 0 }` | iverilog 13.0 |
@@ -107,11 +107,10 @@ Distribution is four crypto, five cpu, one stream, one fabric. `ibex` is the onl
 
 **`sha256`** — four files, the corpus's widest vita margin.
 
-**`aes`** — seven files. It produces the correct digest and still exits 1: vita reports the
-out-of-range array read in `aes_key_mem.v` as an error where IEEE 1364-2005 §5.2.1 defines
-the behaviour (read x, write ignored) and both oracles stay silent. `Expect::Runs { exit: 1 }`
-pins that rather than grading the workload as a crash, so the over-loud diagnostic stays
-visible and closing it will show up as a row that needs its pin moved.
+**`aes`** — seven files. `aes_key_mem.v:182` reads one word past `key_mem`, which IEEE
+1364-2005 §5.2.1 defines (read x, write ignored) and both oracles pass silently. vita reports
+it as the warning `VITA-E4002` and exits 0 (`Expect::Runs { exit: 0 }`). Until §4.5.576 it was
+an error: the row printed the correct digest and exited 1, pinned `Runs { exit: 1 }`.
 
 **`picorv32`** — the reference RISC-V workload; two files. It uses `tbd.v`, not the older
 `tb.v`, because that one prints final state only and is blind to a divergence the core later
@@ -591,8 +590,8 @@ workload sizes are tuned to 3–15 seconds under Icarus Verilog.
 - The full `darkriscv` SoC runs and agrees with Icarus Verilog (`bench/darkriscv/RUN.md`), also
   with upstream's `__RMW_CYCLE__` on since §4.5.575 accepted its null `$display` argument; it is
   not a corpus row because its UART's `$fgetc` path depends on host file state.
-- `aes` exits 1 on an IEEE-defined out-of-range read (§3.1); closing that over-loud
-  diagnostic will require moving its pin.
+- `aes` exited 1 on an IEEE-defined out-of-range read until §4.5.576 made `VITA-E4002` a
+  warning; every row now pins exit 0.
 
 **The tool.**
 

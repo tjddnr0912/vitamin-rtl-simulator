@@ -206,28 +206,27 @@ fn a_terminator_condition_reports_no_location_rather_than_a_wrong_one() {
 fn a_declaration_initializer_anchors_at_itself() {
     let out = one_shot(DECL_INIT);
     assert!(
-        out.contains("d.sv:4:17: error[VITA-E4002]"),
+        out.contains("d.sv:4:17: warning[VITA-E4002]"),
         "decl-init anchor wrong:\n{out}"
     );
 }
 
-// The KNOWN-out-of-range twin. `W4029` and `E4002` are one emitter with two
-// severities (a reset window's x/z index is not an error; walking past the end
-// almost always is), so the location has to arrive for both or the split would
-// have quietly made only half the family locatable.
+// The KNOWN-out-of-range twin. `W4029` and `E4002` are one emitter with two codes
+// (both warnings since §4.5.576), so the location has to arrive for both or the
+// split would have quietly made only half the family locatable.
 #[test]
 fn the_known_out_of_range_error_locates_too() {
     let out = one_shot(KNOWN_OOR);
     assert!(
         out.contains(
-            "d.sv:5:5: error[VITA-E4002] E-RUN-RANGE: \
+            "d.sv:5:5: warning[VITA-E4002] E-RUN-RANGE: \
              array word index of `t.mem` (out of range; read X / write ignored) \
              [in t] [at time 0]"
         ),
         "read side:\n{out}"
     );
     assert!(
-        out.contains("d.sv:6:5: error[VITA-E4002]"),
+        out.contains("d.sv:6:5: warning[VITA-E4002]"),
         "write side:\n{out}"
     );
 }

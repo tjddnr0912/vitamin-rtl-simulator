@@ -372,7 +372,8 @@ endmodule
     let sized = format!("{HEAD}  always @(posedge clk) y <= mem[3'd7];{TAIL}");
     let (o1, c1, obs1) = run(&plain, &[]);
     let (o2, c2, obs2) = run(&sized, &[]);
-    assert_eq!((c1, c2), (1, 1), "E4002 is an error on both spellings");
+    // E4002 is a warning since §4.5.576, so both spellings exit 0.
+    assert_eq!((c1, c2), (0, 0), "the same exit on both spellings");
     assert_eq!(
         o1, o2,
         "the value and the diagnostics must not depend on the spelling"

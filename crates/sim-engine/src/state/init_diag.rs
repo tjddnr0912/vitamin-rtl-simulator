@@ -391,20 +391,24 @@ impl<'a> SimState<'a> {
     }
 
     /// Emit a rate-limited runtime diagnostic for an index that fell outside an
-    /// array or select — `E-RUN-RANGE` (VITA-E4002, Error) for a KNOWN index past
-    /// the end, `W-RUN-RANGE-UNKNOWN` (VITA-W4029, Warning) for an UNKNOWN one. The
-    /// access is RECOVERED either way (read X / drop the write), so the run still
-    /// finishes; this only surfaces it.
+    /// array or select — `E-RUN-RANGE` (VITA-E4002) for a KNOWN index past the end,
+    /// `W-RUN-RANGE-UNKNOWN` (VITA-W4029) for an UNKNOWN one. Both are emitted as
+    /// WARNINGS: the access is RECOVERED either way (read X / drop the write), so
+    /// the run still finishes; this only surfaces it.
     ///
     /// ⚠️ The two are different facts and used to share one Error-severity code, so
     /// reading `mem[idx_q]` while `idx_q` is still X — every design's reset window —
     /// filled the log with errors and set exit 1 on correct RTL. IEEE 1364 §5.2.1
     /// says an unknown index reads X and drops the write; that is the behaviour vita
-    /// already had, and it is not an error. iverilog says nothing at all in either
-    /// case, so a warning here is still more than the oracle offers, while a KNOWN
-    /// index past the end stays an Error because it is almost always a bug (a slice
-    /// once measured that dropping it turned a walked-past-memory run from FAIL into
-    /// a clean PASS).
+    /// already had, and it is not an error.
+    ///
+    /// §4.5.576: a KNOWN index past the end is the same §5.2.1 access, and it too
+    /// exited 1 on a correct design — `aes_key_mem.v:182` reads one word past
+    /// `key_mem` while its digest matches both oracles, which say nothing. By owner
+    /// ruling it is a warning with the same value; E4002 keeps its code (the
+    /// mnemonic is fixed by meaning, and `-Werror=E-RUN-RANGE` restores the old
+    /// exit class for a bench that wants it), and doc-15 lists it among the codes
+    /// emitted at a severity other than their declared default.
     ///
     /// The caps are SEPARATE. Sharing one budget would let a reset window's unknown
     /// indexes eat all eight slots and suppress the genuine out-of-range report that
@@ -462,11 +466,7 @@ impl<'a> SimState<'a> {
             // located runtime diagnostic already reads.
             let (location, context) = self.stmt_diag_meta(self.cur_stmt.get());
             self.sink.emit(LogEvent::Diagnostic(Diagnostic {
-                severity: if unknown {
-                    Severity::Warning
-                } else {
-                    Severity::Error
-                },
+                severity: Severity::Warning,
                 code: if unknown {
                     MsgCode::RunRangeUnknown
                 } else {

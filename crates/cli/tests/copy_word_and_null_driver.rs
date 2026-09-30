@@ -420,6 +420,7 @@ fn an_out_of_range_word_under_the_select_stays_loud() {
         ),
         "native",
     );
-    assert_eq!(code, Some(1), "expected a loud exit 1:\n{out}");
-    assert!(out.contains("VITA-E4002"), "{out}");
+    // A warning since §4.5.576: exit 0, and the report is what stays loud.
+    assert_eq!(code, Some(0), "expected exit 0:\n{out}");
+    assert!(out.contains("warning[VITA-E4002]"), "{out}");
 }

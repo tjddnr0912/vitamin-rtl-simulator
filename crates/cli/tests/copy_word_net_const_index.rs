@@ -57,8 +57,16 @@ fn prints_all(src: &str, want: &[&str]) {
     prints_all_rc(src, want, 0)
 }
 
-/// The same, for a design whose read is out of range: the E4002 is an ERROR, so
-/// the run ends at exit 1 and still prints every line.
+/// The same, for a design whose read is out of range: every line still prints, the
+/// run reports E4002, and — a warning since §4.5.576 — ends at exit 0.
+fn prints_all_warned(src: &str, want: &[&str]) {
+    prints_all_rc(src, want, 0);
+    for b in ["native", "interp", "vm"] {
+        let (out, _) = run_backend(src, b);
+        assert!(out.contains("warning[VITA-E4002]"), "[{b}] E4002\n{out}");
+    }
+}
+
 fn prints_all_rc(src: &str, want: &[&str], rc: i32) {
     for b in ["native", "interp", "vm"] {
         let (out, code) = run_backend(src, b);
@@ -213,10 +221,9 @@ fn an_out_of_range_or_unknown_constant_index_stays_where_it_was() {
     // a NEGATIVE constant index is out of range on `m[0:1]`: iverilog `xx`,
     // verilator reads `m[1]` (a live split — vita is on iverilog's side, PRE and
     // POST alike).
-    prints_all_rc(
+    prints_all_warned(
         &cell("wire signed [3:0] k; assign k = -4'sd1;", "k"),
         &["D=xx", "L=xx"],
-        1,
     );
 }
 

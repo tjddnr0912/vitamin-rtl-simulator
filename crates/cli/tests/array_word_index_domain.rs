@@ -35,17 +35,24 @@ fn run(src: &str) -> (String, Option<i32>) {
         .current_dir(&d)
         .output()
         .expect("run vita");
+    // stdout then stderr: since §4.5.576 an out-of-range word is a warning at
+    // exit 0, so "stays loud" is the E4002 line itself, not the exit code.
     (
-        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr),
         out.status.code(),
     )
 }
 
-/// How many diagnostics the run emitted. `run` returns stdout only, and the
-/// duplication guards below are about the DIAGNOSTIC channel — asserting the
-/// exit code instead cannot tell one report from two, which is exactly the
-/// difference those guards exist to prevent.
-fn error_count(src: &str) -> usize {
+/// The run finished at exit 0 and reported an out-of-range word (E4002).
+fn is_range_loud(out: &str, code: Option<i32>) -> bool {
+    code == Some(0) && out.contains("warning[VITA-E4002]")
+}
+
+/// How many out-of-range reports (E4002) the run emitted. The duplication guards
+/// below are about the DIAGNOSTIC channel — asserting the exit code instead cannot
+/// tell one report from two, which is exactly the difference those guards exist
+/// to prevent.
+fn range_count(src: &str) -> usize {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let d = std::env::temp_dir().join(format!("vita_awi_e{}_{n}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
@@ -58,7 +65,7 @@ fn error_count(src: &str) -> usize {
         .expect("run vita");
     String::from_utf8_lossy(&out.stderr)
         .lines()
-        .filter(|l| l.contains("error["))
+        .filter(|l| l.contains("[VITA-E4002]"))
         .count()
 }
 
@@ -113,7 +120,10 @@ fn an_array_word_index_is_self_determined_then_read_as_i32() {
         );
     }
     // The two controls are genuine out-of-range reads, so the run stays loud.
-    assert_eq!(code, Some(1), "the control rows must still be loud\n{out}");
+    assert!(
+        is_range_loud(&out, code),
+        "the control rows must still be loud\n{out}"
+    );
 }
 
 /// Writes, on the funnel that drops silently rather than reading `x`.
@@ -223,7 +233,10 @@ fn a_constant_index_out_of_range_stays_loud() {
         out.contains("K 11 11 11 11 11 11"),
         "no constant index may land\n{out}"
     );
-    assert_eq!(code, Some(1), "every row must be diagnosed\n{out}");
+    assert!(
+        is_range_loud(&out, code),
+        "every row must be diagnosed\n{out}"
+    );
     // …and the same value as a RUNTIME index DOES land, which is what makes the
     // rows above a decision rather than an accident.
     let rt = "module top;\n\
@@ -362,8 +375,11 @@ fn the_funnel_does_not_duplicate_the_index_or_touch_the_packed_domain() {
          $finish;\n\
        end\n\
      endmodule\n";
-    let (_o2, code2) = run(diag);
-    assert_eq!(code2, Some(1), "the out-of-range read is still loud");
+    let (o2, code2) = run(diag);
+    assert!(
+        is_range_loud(&o2, code2),
+        "the out-of-range read is still loud\n{o2}"
+    );
 
     // The packed element offset keeps its true value and drops, as iverilog does.
     let packed = "module top;\n\
@@ -485,7 +501,10 @@ fn the_provisional_width_path_answers_what_the_cached_one_does() {
             out.contains("W 253 0"),
             "{tag}: the write must not land\n{out}"
         );
-        assert_eq!(code, Some(1), "{tag}: an out-of-range access stays loud");
+        assert!(
+            is_range_loud(out, code),
+            "{tag}: an out-of-range access stays loud\n{out}"
+        );
     }
 }
 
@@ -643,9 +662,8 @@ fn a_deeply_nested_index_still_gets_its_seal() {
             out.contains("R x"),
             "signed pads={pads}: 200 is out of range\n{out}"
         );
-        assert_eq!(
-            code,
-            Some(1),
+        assert!(
+            is_range_loud(&out, code),
             "signed pads={pads}: and it stays loud\n{out}"
         );
     }
@@ -671,7 +689,10 @@ fn a_deeply_nested_index_still_gets_its_seal() {
             out.contains("K 50 51 52 53 54 55"),
             "const pads={pads}: an out-of-range constant must not land\n{out}"
         );
-        assert_eq!(code, Some(1), "const pads={pads}: and it stays loud\n{out}");
+        assert!(
+            is_range_loud(&out, code),
+            "const pads={pads}: and it stays loud\n{out}"
+        );
     }
 }
 
@@ -721,15 +742,14 @@ fn the_packed_branchs_sign_extension_does_not_duplicate_the_index() {
        end\n\
      endmodule\n";
     let (out2, code2) = run(diag);
-    assert_eq!(
-        code2,
-        Some(1),
+    assert!(
+        is_range_loud(&out2, code2),
         "the out-of-range element read stays loud\n{out2}"
     );
     // The exit code cannot tell one report from two — count them. Measured: 3
     // with the guard, 6 without it.
     assert_eq!(
-        error_count(diag),
+        range_count(diag),
         3,
         "one logical out-of-range read must not be reported twice"
     );

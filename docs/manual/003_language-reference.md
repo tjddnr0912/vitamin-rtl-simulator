@@ -470,7 +470,7 @@ control. `real` and `event` elements in dynamic storage are Loud.
 
 | Situation | Behaviour | Diagnostic |
 |---|---|---|
-| Known index past the end | Read yields all-`x`; the write is dropped, not clamped. | `E-RUN-RANGE` / `VITA-E4002`, rate-limited to 8 reports per kind |
+| Known index past the end | Read yields all-`x`; the write is dropped, not clamped. | `E-RUN-RANGE` / `VITA-E4002`, a warning, rate-limited to 8 reports per kind |
 | Unknown (x/z) index | Read yields all-`x`; the write is a no-op. | `W-RUN-RANGE-UNKNOWN` / `VITA-W4029`, separate budget |
 
 A sub-dimension over-index of a multi-dimensional unpacked array is bounds

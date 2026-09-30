@@ -556,7 +556,8 @@ fn legal_forward_references_are_untouched() {
 /// Both were E4002 at Error severity, so reading `mem[idx_q]` during reset filled the
 /// log with errors and set exit 1 on correct RTL. IEEE 1364 §5.2.1 makes an unknown
 /// index read X and drop the write — which is what vita already did; only the
-/// diagnostic was wrong about it. A KNOWN index past the end stays an error.
+/// diagnostic was wrong about it. A KNOWN index past the end keeps its own code,
+/// E4002 — emitted as a warning since §4.5.576 (the same §5.2.1 access, exit 0).
 ///
 /// The third row is the one a single `u32::MAX` sentinel cannot get right: 1073741825
 /// is a perfectly known value that happens to equal the unknown sentinel on the WRITE
@@ -589,8 +590,11 @@ fn unknown_and_out_of_range_indexes_are_different_diagnostics() {
                 ),
                 &["--backend", backend],
             );
-            assert_eq!(c, Some(1), "[{backend}] {what} stays loud:\n{e}");
-            assert!(e.contains("VITA-E4002"), "[{backend}] {what}:\n{e}");
+            assert_eq!(c, Some(0), "[{backend}] {what} is a warning:\n{e}");
+            assert!(
+                e.contains("warning[VITA-E4002]"),
+                "[{backend}] {what}:\n{e}"
+            );
         }
     }
 }
