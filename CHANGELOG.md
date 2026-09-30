@@ -9,6 +9,19 @@ changed for a user of the simulator.
 
 ## [Unreleased]
 
+### Added — an assignment pattern as an arm of `?:` on a packed-struct target; `ibex` runs
+
+- `e = c ? P : '{irq_ext: 1'b0, irq_int: 1'b1, lower_cause: cause};` — a keyed, positional or
+  `default:` pattern as an arm of `?:` (at any depth, or inside parentheses) whose target is a
+  whole packed-struct variable or ANSI port is now typed by the target (IEEE 1800-2017 §10.8), in
+  `=`, `<=` and a continuous `assign`, and prints what Verilator and sv2v → Icarus Verilog print.
+  It was refused (E3009). The members are the ones of the type the target was declared with.
+- Still refused: the same arm under `force`, inside a function, task or class method, into an
+  array element, member, packed array or block-local, for a struct with a nested struct member or
+  mixed 2-state / 4-state members, and in any design with an `inout` port.
+- The workload corpus is 11/11: lowRISC `ibex` (30k lines of SystemVerilog) runs to Verilator's
+  digest at both sizes.
+
 ### Fixed — a wildcard import no longer rebinds a type the importing scope declares itself
 
 - `typedef struct packed { logic [5:0] a; logic [1:0] b; } st; import p::*; st s2;` in a module
