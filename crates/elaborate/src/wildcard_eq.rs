@@ -4,11 +4,9 @@
 //! (§12.5.4) is to reuse: it works on operands that are ALREADY LOWERED, so a
 //! caller decides nothing by lowering an operand twice.
 //!
-//! This is the RUN-TIME half of §2 🆕 S plus the i64 constant `==?`
-//! ([`Elaborator::const_wildcard_i64`]). The WIDE constant domain still compares an
-//! `inside` element with `==` and has no `==?` arm (as before the slice): it waits on
-//! one current binding per key and on phase-stable generate-case label resolution
-//! (ROADMAP queue).
+//! This is the RUN-TIME half of §2 🆕 S. The constant domains still compare an `inside`
+//! element with `==` (as before the slice); their `==?` waits on generate-case labels
+//! being compared in the 4-state domain at full width (ROADMAP queue).
 
 use super::*;
 
@@ -165,133 +163,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// §11.4.6 `==?`/`!=?` and §11.4.13's `inside` element against an x/z LITERAL
-    /// pattern, in the i64 domain: the left operand is evaluated at the comparison's
-    /// common width `w = max(L(lhs), L(pattern))` with the pair's sign (§11.6.1 Table
-    /// 11-21, §11.8.1 — so a carry, a shift or a `~` runs at `w`, which reading it at
-    /// its own width did not: `(4'd15 + 4'd1) ==? 5'b1?000` was 0, both oracles 1),
-    /// the pattern is extended by [`pattern_ext_fill`] — the rule the run-time builder
-    /// uses — and [`wildcard_match`] decides.
-    ///
-    /// `None` hands the node on, never a guessed answer: a fill pattern, a pattern
-    /// with no x/z bit (that is `==`, answered by the generic arm), a width past 64 or
-    /// an unknown one, and a left operand this walk cannot evaluate (an x/z literal
-    /// inside it) all go where they went before this routine existed — the wide
-    /// domain (`selfdet_bits_i64`), which declines `==?` / `!=?` and reads an `inside`
-    /// element as `==`.
-    pub(crate) fn const_wildcard_i64(
-        &self,
-        op: ast::BinOp,
-        lhs: &ast::Expr,
-        rhs: &ast::Expr,
-        env: &std::collections::BTreeMap<String, i64>,
-        envw: &ConstWidths,
-        depth: u32,
-    ) -> Option<i64> {
-        if !matches!(
-            op,
-            ast::BinOp::WildEq | ast::BinOp::WildNe | ast::BinOp::InsideEq
-        ) {
-            return None;
-        }
-        let mut pat = rhs;
-        while let ast::ExprKind::Paren { inner } = &pat.kind {
-            pat = inner;
-        }
-        let ast::ExprKind::IntLit { kind, raw } = &pat.kind else {
-            return None;
-        };
-        if literal::is_fill_literal(raw, *kind) {
-            return None;
-        }
-        let cv = parse_int_literal(raw, *kind)?;
-        if !cv.bits.unk.iter().any(|&u| u != 0) {
-            return None;
-        }
-        let pw = cv.width.max(1);
-        let w = self.const_self_width(lhs, envw)?.max(pw);
-        if w > 64 {
-            // A new first route must fall back to the one it displaced: past 64 bits
-            // this routine cannot hold the comparison, and the wide domain has no
-            // `==?` arm, so PRE's own-width masked compare answers, exactly as before
-            // this routine existed (see `const_wildcard_masked_pre`).
-            return self.const_wildcard_masked_pre(op, lhs, rhs);
-        }
-        let sg = self.const_signed_env(lhs, envw) && cv.signed;
-        let a = self.eval_const_env_at(lhs, env, envw, depth, w, sg)?;
-        let lbits = ir::BitPacked {
-            val: vec![a as u64],
-            unk: vec![0],
-        };
-        let fill = if pw < w {
-            let bit = |v: &[u64]| v.first().is_some_and(|x| (x >> (pw - 1)) & 1 == 1);
-            crate::wildcard_eq::pattern_ext_fill(
-                bit(&cv.bits.unk),
-                bit(&cv.bits.val),
-                sg,
-                matches!(kind, ast::IntLitKind::UnsizedBased),
-            )
-        } else {
-            Some(false)
-        };
-        let m = wildcard_match(&lbits, &cv.bits, pw, w, fill)?;
-        Some(i64::from(m != matches!(op, ast::BinOp::WildNe)))
-    }
-
-    /// PRE's constant `==?` / `!=?` against a SIZED x/z pattern literal, kept verbatim
-    /// as the fallback of [`Self::const_wildcard_i64`] for the one decline that left
-    /// cells PRE answered unanswered: a common width past 64 bits. The left operand is
-    /// read at its own width (self-determined) and masked-compared with the pattern
-    /// zero-extended; only a NON-NEGATIVE left value and a single-word, bit-63-clear
-    /// pattern answer, anything else is `None` (loud, as on PRE). It serves a wide
-    /// DECLARATION holding a value that fits: `localparam logic [67:0] P68 = 68'hC;`
-    /// `(P68 ==? 4'b1?00)` is 1 and `(P68 !=? 4'b1?00)` 0 on PRE and in both oracles,
-    /// as a localparam, a generate-`if` condition and a generate-`case` label (review
-    /// round 2: without the fallback the first two went loud and the label took
-    /// `default`). It is NOT reached by the cells the common-width routine fixed —
-    /// `(4'd15 + 4'd1) ==? 5'b1?000` (1; this reading gave 0), `S ==? 4'sb?100` over
-    /// an 8-bit signed `S = 84` (1), an `inside` element (this routine never handled
-    /// one; the constant domains compared it with `==` on PRE), a signed literal left
-    /// operand (`8'sb1111_1100 ==? 4'sb1?00`) — every one of them has a common width of
-    /// 64 bits or less.
-    fn const_wildcard_masked_pre(
-        &self,
-        op: ast::BinOp,
-        lhs: &ast::Expr,
-        rhs: &ast::Expr,
-    ) -> Option<i64> {
-        if !matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
-            return None;
-        }
-        let ast::ExprKind::IntLit { kind, raw } = &rhs.kind else {
-            return None;
-        };
-        if !matches!(kind, ast::IntLitKind::Sized) {
-            return None;
-        }
-        let a = self.const_int_selfdet(lhs)?;
-        let cv = parse_int_literal(raw, *kind)?;
-        if !cv.bits.unk.iter().any(|&u| u != 0) {
-            return None;
-        }
-        let pat = cv.bits.val.first().copied().unwrap_or(0);
-        let mask = cv.bits.unk.first().copied().unwrap_or(0);
-        if a < 0
-            || cv.bits.val.len() > 1
-            || cv.bits.unk.len() > 1
-            || (pat >> 63) != 0
-            || (mask >> 63) != 0
-        {
-            return None;
-        }
-        let eq = (a & !(mask as i64)) == (pat as i64 & !(mask as i64));
-        Some(i64::from(if matches!(op, ast::BinOp::WildEq) {
-            eq
-        } else {
-            !eq
-        }))
-    }
-
     /// The `(lhs & mask) ==/!= cleaned` compare for the constant pattern `cv` (the
     /// `Const` node `pat_id`) against the already-lowered `lhs_id`.
     ///
@@ -300,8 +171,7 @@ impl Elaborator<'_> {
     /// wildcard bits cleared. An operand narrower than `w` is extended first, by
     /// §11.4.5's rule for equality (which §11.4.6 applies to `==?`): sign extension
     /// when BOTH operands are signed, zero extension otherwise. The pattern's
-    /// extension bits [pattern width, w) follow [`pattern_ext_fill`], the one rule the
-    /// constant domains read too.
+    /// extension bits [pattern width, w) follow [`pattern_ext_fill`].
     ///
     /// When BOTH operands are signed, the mask AND the cleaned pattern take the signed
     /// type, at any widths: the `Eq` and its `BitAnd` are one §11.8.2 region, signed
@@ -439,10 +309,11 @@ impl Elaborator<'_> {
     }
 }
 
-/// THE extension rule of a wildcard pattern narrower than its comparison — read by
-/// the run-time builder ([`Elaborator::wildcard_cmp_ids`]) and by the i64 constant
-/// routine ([`Elaborator::const_wildcard_i64`]), so a constant and a run-time spelling
-/// of one comparison cannot extend differently.
+/// THE extension rule of a wildcard pattern narrower than its comparison, read by the
+/// run-time builder ([`Elaborator::wildcard_cmp_ids`]). The constant domains do not
+/// take `==?` for an `inside` element yet (they compare it with `==`, as before this
+/// slice); a constant `==?` routine must read this rule too, so a constant and a
+/// run-time spelling of one comparison cannot extend differently.
 ///
 /// `Some(b)`: each extension bit is compared against `b`; `None`: each is a
 /// don't-care.
@@ -466,43 +337,6 @@ pub(crate) fn pattern_ext_fill(
     } else {
         Some(false)
     }
-}
-
-/// §11.4.6 wildcard match: the left bits `l` (at least `w` of them) against the
-/// pattern `p` of `pw` bits, whose x/z bits are don't-cares, extended to `w` by
-/// `fill` ([`pattern_ext_fill`]: `Some(b)` compares each extension bit against `b`,
-/// `None` makes it a don't-care). `Some(false)` when a KNOWN left bit differs from a
-/// compared pattern bit, `None` (x) when none does and a compared left bit is x/z,
-/// `Some(true)` otherwise.
-fn wildcard_match(
-    l: &ir::BitPacked,
-    p: &ir::BitPacked,
-    pw: u32,
-    w: u32,
-    fill: Option<bool>,
-) -> Option<bool> {
-    let mut unknown = false;
-    for i in 0..w as usize {
-        let pv = if i < pw as usize {
-            let (v, u) = crate::const_wide::bp_get(p, i);
-            if u {
-                continue;
-            }
-            v
-        } else {
-            match fill {
-                Some(b) => b,
-                None => continue,
-            }
-        };
-        let (lv, lu) = crate::const_wide::bp_get(l, i);
-        if lu {
-            unknown = true;
-        } else if lv != pv {
-            return Some(false);
-        }
-    }
-    (!unknown).then_some(true)
 }
 
 /// Bit `i` of a little-endian word vector (`false` past its end).
