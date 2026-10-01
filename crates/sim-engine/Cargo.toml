@@ -70,3 +70,11 @@ hdl-preprocess = { path = "../hdl-preprocess" }
 hdl-lexer  = { path = "../hdl-lexer" }
 hdl-parser = { path = "../hdl-parser" }
 hdl-ast    = { path = "../hdl-ast" }
+
+# `deny`, not the workspace's `forbid`: one module of this crate opts out with
+# `#![allow(unsafe_code)]` (CONTRIBUTING.md, "`unsafe`").
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"

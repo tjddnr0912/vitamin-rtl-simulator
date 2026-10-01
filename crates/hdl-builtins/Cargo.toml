@@ -5,3 +5,6 @@ publish = false # 1-line stub — post-v1 $task-handler extraction anchor (doc-0
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+
+[lints]
+workspace = true

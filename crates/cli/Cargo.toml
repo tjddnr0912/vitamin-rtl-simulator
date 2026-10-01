@@ -74,3 +74,11 @@ elaborate = { path = "../elaborate" }
 sim-ir = { path = "../sim-ir" }
 sim-engine = { path = "../sim-engine" }
 diag = { path = "../diag" }
+
+# `deny`, not the workspace's `forbid`: one module of this crate opts out with
+# `#![allow(unsafe_code)]` (CONTRIBUTING.md, "`unsafe`").
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"

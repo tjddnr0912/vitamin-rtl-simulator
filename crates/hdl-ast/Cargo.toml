@@ -17,3 +17,6 @@ vita-artifact-derive = { path = "../vita-artifact-derive" }
 [dev-dependencies]
 postcard = { workspace = true }   # round-trip AST in unit tests (workspace-pinned;
                                   # avoids a new serde_json tree — verdict L4)
+
+[lints]
+workspace = true

@@ -19,3 +19,6 @@ fst-writer = "=0.3.1"
 # Independent FST reader (same author as fst-writer) — the transcode's
 # correct-or-loud oracle: read the emitted FST back and assert it round-trips.
 fst-reader = "=0.10.2"
+
+[lints]
+workspace = true

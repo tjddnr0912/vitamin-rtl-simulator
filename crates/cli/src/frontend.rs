@@ -1069,6 +1069,7 @@ pub fn resolve_applet(argv: &[String]) -> (Applet, Vec<String>) {
 /// SIGPIPE). A tiny FFI avoids pulling in `libc` for one call; `SIGPIPE` is 13
 /// and `SIG_DFL` is 0 on every Unix target vita builds for (Linux/macOS).
 #[cfg(unix)]
+#[allow(unsafe_code)] // one of the two `unsafe` sites the workspace permits (CONTRIBUTING.md)
 pub(crate) fn restore_default_sigpipe() {
     const SIGPIPE: i32 = 13;
     const SIG_DFL: usize = 0;

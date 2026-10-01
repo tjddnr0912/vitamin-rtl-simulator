@@ -7,3 +7,6 @@ license.workspace = true
 
 [dependencies]
 diag = { path = "../diag" }
+
+[lints]
+workspace = true

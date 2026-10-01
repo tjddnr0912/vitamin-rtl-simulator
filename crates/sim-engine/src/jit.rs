@@ -22,6 +22,8 @@
 //! per-target reimplementation. Ops whose Verilog semantics this module does not
 //! reproduce exactly are simply refused (`None`), and the program runs on the VM.
 
+#![allow(unsafe_code)] // the generated-code call boundary: one of the two `unsafe` sites the workspace permits (CONTRIBUTING.md)
+
 use cranelift_codegen::ir::{types, AbiParam, InstBuilder, Value as CV};
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};

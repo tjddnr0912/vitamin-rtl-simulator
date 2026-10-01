@@ -71,8 +71,8 @@ skips `crates/cli/tests/*.rs`, which CI lints.
 
 CI runs the same nextest command with `--no-fail-fast`, then
 `cargo test --doc --workspace --locked`, because nextest does not run doctests.
-The suite: 7352 tests, all passing, 15 skipped, in about 36 s. The 15 are the `#[ignore]`d
-performance probes in `crates/sim-engine/tests/perf_baseline.rs` and
+The test count and run time are in the fact table in [README.md](README.md). The skipped
+tests are the `#[ignore]`d performance probes in `crates/sim-engine/tests/perf_baseline.rs` and
 `crates/cli/tests/perf_call_regime.rs` — data, not gates.
 
 The two runners are not interchangeable. `cargo test --workspace --locked` still
@@ -121,14 +121,33 @@ every `.vu` and `.velab` in existence. That is why `hdl-ast`'s types and
 `sim-ir`'s frozen types live at their crate roots. Code that is never serialized
 can move freely.
 
+## `unsafe`
+
+`unsafe` code is forbidden outside two sites, and the compiler enforces it. The
+workspace sets `unsafe_code = "forbid"` (`[workspace.lints.rust]` in `Cargo.toml`)
+and every crate inherits it for every target, tests included — except `cli` and
+`sim-engine`, which set `deny` so that one item in each can opt out with
+`allow(unsafe_code)`.
+
+| Site | Why it needs `unsafe` |
+|---|---|
+| `crates/cli/src/frontend.rs`, `restore_default_sigpipe` | one `signal(2)` call that resets `SIGPIPE` to its default disposition, without pulling in `libc` |
+| `crates/sim-engine/src/jit.rs`, the whole module | the call boundary into machine code that the off-by-default `jit` feature generates |
+
+Every `unsafe` block carries a `// SAFETY:` comment stating the invariant it relies
+on; both crates deny clippy's `undocumented_unsafe_blocks`. CI's clippy compiles
+`frontend.rs`; `jit.rs` is checked only with the feature on
+(`cargo clippy -p sim-engine --features jit --locked -- -D warnings`). A new site
+changes this table and the lint configuration in the same commit, with its reason.
+
 ## Frozen types and `format_version`
 
 `sim_ir::SimIr` is the golden root. Adding, removing or reordering a field in
 any type reachable from it changes the structural root hash.
 
 The container version is `CURRENT_FORMAT_VERSION` in
-`crates/vita-artifact/src/header.rs`, currently 31. Three kinds of change touch
-it, and they cost different amounts:
+`crates/vita-artifact/src/header.rs`; the constant and the comment on it are
+canonical. Three kinds of change touch it, and they cost different amounts:
 
 | Change | Consequence |
 |---|---|
@@ -183,7 +202,8 @@ place. Adding or changing one is a three-part edit:
    same change.
 
 `crates/diag/tests/bijection.rs` gates parts 1 and 2 against each other. It
-asserts the enum has exactly 68 body variants, that the mnemonic sets are 1:1,
+asserts the enum's body-variant count (pinned in the test, so a new code moves
+it there), that the mnemonic sets are 1:1,
 that each documented `VITA-####` number matches the enum's, that each documented
 severity matches the enum's default, and that no mnemonic or number repeats.
 Adding a code without a doc entry fails, and so does the reverse.

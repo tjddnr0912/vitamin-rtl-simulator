@@ -15,3 +15,6 @@ proc-macro2 = { workspace = true }
 
 [dev-dependencies]
 vita-schema = { path = "../vita-schema" }
+
+[lints]
+workspace = true

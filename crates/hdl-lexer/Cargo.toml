@@ -20,3 +20,6 @@ logos = { workspace = true, features = ["export_derive", "std"] }
 
 # Root Cargo.toml [workspace.dependencies] gains:
 #   logos = { version = "0.16", default-features = false }
+
+[lints]
+workspace = true

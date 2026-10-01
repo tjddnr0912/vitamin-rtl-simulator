@@ -17,3 +17,6 @@ hex = { workspace = true }
 diag = { path = "../diag" }
 vita-schema = { path = "../vita-schema" }
 sim-ir = { path = "../sim-ir" }
+
+[lints]
+workspace = true

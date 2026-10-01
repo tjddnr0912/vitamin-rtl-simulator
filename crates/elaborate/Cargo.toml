@@ -10,3 +10,6 @@ hdl-ast = { path = "../hdl-ast" }
 sim-ir = { path = "../sim-ir" }
 diag = { path = "../diag" }
 serde = { workspace = true }
+
+[lints]
+workspace = true

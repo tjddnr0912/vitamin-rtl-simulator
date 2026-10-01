@@ -56,6 +56,11 @@ proc-macro2      = "1.0"
 hex              = "0.4"
 serde-reflection = "0.6"
 
+# `unsafe` is forbidden in every crate. `cli` and `sim-engine` override this with `deny` so that
+# exactly two modules can opt out (CONTRIBUTING.md, "`unsafe`").
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
 [profile.release]
 opt-level     = 3
 lto           = "thin"
