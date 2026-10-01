@@ -5,7 +5,9 @@
 //!
 //! The parser emits `BinOp::InsideEq` per value element; elaborate's `inside_value_cmp`
 //! builds the `==?` compare for a constant element with x/z bits, refuses a compound
-//! x/z element, and keeps `==` for everything else (byte-identical IR).
+//! x/z element, and keeps `==` for everything else (byte-identical IR). Constant
+//! contexts read one wildcard routine in both constant domains (`const_wildcard_i64`,
+//! `const_wide::fold_region`), which the `==?` operator shares.
 //!
 //! Oracles, recorded per test: verilator 5.052 (2-state cells only — it reads an x/z
 //! sign bit as 0 and refuses a 4-state non-constant element), sv2v 0.0.13 → iverilog
@@ -859,38 +861,324 @@ fn compound_x_z_element_is_loud() {
     }
 }
 
-/// Refusals this slice keeps, each with the reason PRE gave too. A SIGNED x/z pattern
-/// in a constant context (the constant masked compare zero-extends; sv2v → iverilog 1,
-/// verilator 0 — the x sign bit, hand-IEEE 1); two x/z elements in a constant context
-/// (the constant domain reads only a top-level wildcard compare, exactly as
-/// `(PV ==? 4'b0?00) || (PV ==? 4'b1?00)` is refused; sv2v → iverilog 1); an x/z
-/// element in a constraint (verilator 5.052 cannot solve it either: `randomize()`
-/// returns 0). The needles are the refusal's class, not the literal it names.
+/// Refusals kept or added, each a shape with no constant value. A constant x/z element in
+/// a constraint (verilator 5.052 cannot solve it either: `randomize()` returns 0); a
+/// constant-function body comparing against an x/z pattern (PRE and e5147442 the same
+/// refusal; both oracles 1); a range bound and an array dimension on a wildcard whose
+/// pattern is not one literal or whose value is x — PRE and e5147442 made the net ONE bit
+/// silently and `$size` x, sv2v → iverilog 2 / x; a generate-`case` item of the same kind
+/// — PRE and e5147442 took `default` silently, sv2v → iverilog takes the item, verilator
+/// refuses an x/? label there; an unsized x pattern against an absolute hierarchical left
+/// operand, whose width — and so the pattern's padding — is not known at lowering. The
+/// needles are the refusal's class, not its full text.
 #[test]
-fn constant_and_constraint_x_z_shapes_stay_loud() {
+fn shapes_without_a_constant_value_are_loud() {
     let cases = [
         (
-            "module t;\n  localparam signed [7:0] S = 8'sd84;\n  localparam L = S inside {4'sb?100};\n  initial begin $display(\"L %b\", L); $finish; end\nendmodule\n",
-            "parameter `L` value is not a constant",
-        ),
-        (
-            "module t;\n  localparam logic [3:0] PV = 4'b1100;\n  localparam L = PV inside {4'b0?00, 4'b1?00};\n  initial begin $display(\"L %b\", L); $finish; end\nendmodule\n",
-            "parameter `L` value is not a constant",
-        ),
-        (
             "class C; rand bit [3:0] x; constraint c { x inside {4'b1?00}; } endclass\nmodule t;\n  initial begin C o; int ok; o = new; ok = o.randomize(); $display(\"ok %0d x %b\", ok, o.x); $finish; end\nendmodule\n",
+            "[VITA-E3009]",
             "unsupported constraint expression form",
         ),
+        (
+            "module t;\n  function automatic logic cf(input logic [3:0] a); return a inside {4'b1?00}; endfunction\n  localparam logic L = cf(4'b1100);\n  initial begin $display(\"L %b\", L); $finish; end\nendmodule\n",
+            "[VITA-E3009]",
+            "parameter `L` value is not a constant",
+        ),
+        (
+            "module t;\n  logic [(4'b1100 inside {{2'b1?, 2'b00}}) : 0] wb;\n  initial begin $display(\"B %0d\", $bits(wb)); $finish; end\nendmodule\n",
+            "[VITA-E3009]",
+            "is not allowed in a constant range bound",
+        ),
+        (
+            "module t;\n  logic ad [(4'bx100 inside {4'b1?00}) : 0];\n  initial begin $display(\"A %0d\", $size(ad)); $finish; end\nendmodule\n",
+            "[VITA-E3009]",
+            "is not allowed in a constant range bound",
+        ),
+        (
+            "module t;\n  logic [(4'b1100 ==? {2'b1?, 2'b00}) : 0] wq;\n  initial begin $display(\"Q %0d\", $bits(wq)); $finish; end\nendmodule\n",
+            "[VITA-E3009]",
+            "is not allowed in a constant range bound",
+        ),
+        (
+            "module t;\n  case (1'b1)\n    (4'b1100 inside {{2'b1?, 2'b00}}): begin : gi initial $display(\"item\"); end\n    default: begin : gd initial $display(\"default\"); end\n  endcase\n  initial #1 $finish;\nendmodule\n",
+            "[VITA-E3010]",
+            "generate-case item is not a constant",
+        ),
+        (
+            "module late; logic [35:0] u36 = 36'hF_0000_0001; endmodule\nmodule t;\n  late uL();\n  initial begin #1 $display(\"H %b\", t.uL.u36 inside {'bx1}); $finish; end\nendmodule\n",
+            "[VITA-E3009]",
+            "unsized pattern whose leftmost digit is x/z",
+        ),
     ];
-    for (src, needle) in cases {
+    for (src, code, needle) in cases {
         let r = run(src, &[]);
         assert_eq!(r.code, 1, "must be refused:\n{src}\n{}{}", r.out, r.err);
         assert!(
-            r.err.contains("[VITA-E3009]") && r.err.contains(needle),
+            r.err.contains(code) && r.err.contains(needle),
             "{src}\n{}",
             r.err
         );
+        assert!(r.lines().is_empty(), "{src} printed a value:\n{}", r.out);
     }
+}
+
+/// Round 2 (R2-1). A CONSTANT `inside` element with x/z bits compares the left operand
+/// at the comparison's width, `max(L(lhs), L(pattern))` (§11.6.1 Table 11-21): the carry
+/// of `4'd15 + 4'd1`, the shift of `4'b1000 << 1` and the `~` run at the pattern's width.
+/// Localparams (typed and untyped), a range bound, a `?:` bound, generate `if` and an
+/// instance override. sv2v 0.0.13 → iverilog 13.0 and verilator 5.052 print every line.
+/// e5147442 read the left operand at its own width and printed `gen-a else`, `gen-b then`,
+/// `override W=8`, `L 0 0 0 0 1 1 0 0 0 0 0`, `bits 1 8` — `L5`, `L6`, `gen-b`, the `?:` bound
+/// and the override were RIGHT on PRE (00c3d76d), which refused every other line here
+/// (E3009 / E3010 "has no constant-fold arm").
+#[test]
+fn constant_wildcard_reads_the_left_operand_at_the_common_width() {
+    let r = run(
+        r#"`timescale 1ns/1ns
+module m #(parameter W = 0) (); initial #1 $display("override W=%0d", W); endmodule
+module t;
+  localparam [3:0] A = 4'd15;
+  localparam [3:0] U4 = 4'b1100;
+  localparam L1 = (4'd15 + 4'd1) inside {5'b1?000};
+  localparam L2 = (~4'b0000) inside {5'b1111?};
+  localparam L3 = (A + 4'd1) inside {5'b1?000};
+  localparam L4 = (4'b1000 << 1) inside {5'b1?000};
+  localparam L5 = (4'd15 + 4'd1) inside {5'b0?000};
+  localparam L6 = (4'hF << 1) inside {8'b0000_111?};
+  localparam L7 = (~4'b0011) inside {8'b1111_11?0};
+  localparam L8 = (U4 + 4'd4) inside {8'b0001_0?00};
+  localparam L9 = (-(4'd4)) inside {8'b1111_1?00};
+  localparam L10 = (4'd4 - 4'd5) inside {8'b1111_111?};
+  localparam bit LB = (4'd0 - 4'd1) inside {5'b1111?};
+  logic [((4'd15 + 4'd1) inside {5'b1?000}) : 0] rb;
+  logic [((4'd15 + 4'd1) inside {8'b0000_?000}) ? 7 : 3 : 0] ab;
+  if ((4'd15 + 4'd1) inside {5'b1?000}) begin : g1 initial #1 $display("gen-a then"); end
+  else begin : g1e initial #1 $display("gen-a else"); end
+  if ((4'd15 + 4'd1) inside {5'b0?000}) begin : g2 initial #1 $display("gen-b then"); end
+  else begin : g2e initial #1 $display("gen-b else"); end
+  m #(.W(((4'd15 + 4'd1) inside {8'b0000_?000}) ? 8 : 2)) u();
+  initial begin
+    #2 $display("L %b %b %b %b %b %b %b %b %b %b %b", L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, LB);
+    $display("bits %0d %0d", $bits(rb), $bits(ab));
+    $finish;
+  end
+endmodule
+"#,
+        &[],
+    );
+    assert_eq!(r.code, 0, "stderr:\n{}", r.err);
+    assert_eq!(
+        r.lines(),
+        [
+            "gen-a then",
+            "gen-b else",
+            "override W=2",
+            "L 1 1 1 1 0 0 1 1 1 1 1",
+            "bits 2 4",
+        ],
+        "stdout:\n{}",
+        r.out
+    );
+}
+
+/// Round 2 (R2-1). The `==?` OPERATOR in a constant context reads the same routine:
+/// `Q1`–`Q3` at the common width, `Q4`/`Q5` a signed pattern against a signed byte (sign
+/// extension, an x sign bit a don't-care), `Q6` two wildcard compares under `||`, `Q7`
+/// `!=?`; `I1` the signed `inside` twin and `I2` a two-element set. iverilog 13.0's own
+/// `==?` prints the Q line; sv2v → iverilog prints all of it (verilator 5.052 reads the x
+/// sign bit of `Q4` / `I1` as 0). On PRE (00c3d76d) and e5147442 the `==?` cells were
+/// silently wrong — lens probes: `(4'd15+4'd1) ==? 5'b1?000` 0, `S ==? 4'sb?100` 0,
+/// `S2 ==? 4'sb1?00` 1 — and `Q6`, `I1`, `I2` were E3009.
+#[test]
+fn constant_wildcard_eq_operator_and_sets() {
+    let r = run(
+        r#"`timescale 1ns/1ns
+module t;
+  localparam signed [7:0] S = 8'sd84;
+  localparam signed [7:0] S2 = 8'sd12;
+  localparam logic [3:0] PV = 4'b1100;
+  localparam Q1 = (4'd15 + 4'd1) ==? 5'b1?000;
+  localparam Q2 = (~4'b0000) ==? 5'b1111?;
+  localparam Q3 = (4'd15 + 4'd1) ==? 5'b0?000;
+  localparam Q4 = S ==? 4'sb?100;
+  localparam Q5 = S2 ==? 4'sb1?00;
+  localparam Q6 = (PV ==? 4'b0?00) || (PV ==? 4'b1?00);
+  localparam Q7 = (4'd15 + 4'd1) !=? 8'b0001_?000;
+  localparam I1 = S inside {4'sb?100};
+  localparam I2 = PV inside {4'b0?00, 4'b1?00};
+  logic [((4'd15 + 4'd1) ==? 5'b1?000) : 0] rbq;
+  if ((4'd15 + 4'd1) ==? 5'b1?000) begin : gq initial #1 $display("gen-q then"); end
+  else begin : gqe initial #1 $display("gen-q else"); end
+  initial begin
+    #2 $display("Q %b %b %b %b %b %b %b I %b %b bits %0d", Q1, Q2, Q3, Q4, Q5, Q6, Q7, I1, I2, $bits(rbq));
+    $finish;
+  end
+endmodule
+"#,
+        &[],
+    );
+    assert_eq!(r.code, 0, "stderr:\n{}", r.err);
+    assert_eq!(
+        r.lines(),
+        ["gen-q then", "Q 1 1 0 1 0 1 0 I 1 1 bits 2",],
+        "stdout:\n{}",
+        r.out
+    );
+}
+
+/// Round 2 (R2-2, R2-6). A definite known-bit mismatch is the `==?` answer (0) — a
+/// signed, an unsized and a 100-bit operand — and a range bound / array dimension on an
+/// admitted wildcard takes its width. sv2v → iverilog 13.0 and verilator 5.052 print every
+/// value. PRE (00c3d76d) printed `gen else`, `L 0 0 0 bits 1 1 1 size x` (the three bounds
+/// one bit and the array size x, silently); e5147442 refused `L1`, `L2` and the generate
+/// `if` (E3009 / E3010) — a correct → loud the round-1 wide-domain decline caused.
+#[test]
+fn constant_definite_mismatch_and_bounds() {
+    let r = run(
+        r#"`timescale 1ns/1ns
+module t;
+  localparam [99:0] W = 100'd2;
+  localparam L1 = 4'b0100 inside {4'sb1?00};
+  localparam L2 = 4'b0100 inside {'b1?00};
+  localparam L3 = W inside {4'b000?};
+  logic [(4'b1100 inside {4'sb1?00}) : 0] rbs;
+  logic [(4'b1100 inside {'b1?00}) : 0] rbu;
+  logic [(4'b1100 inside {4'b0000, 4'b1?00}) : 0] rb2;
+  logic ad [(4'b1100 inside {4'b1?00}) : 0];
+  if (4'b0100 inside {4'sb1?00}) begin : g initial #1 $display("gen then"); end
+  else begin : ge initial #1 $display("gen else"); end
+  initial begin
+    #2 $display("L %b %b %b bits %0d %0d %0d size %0d", L1, L2, L3, $bits(rbs), $bits(rbu), $bits(rb2), $size(ad));
+    $finish;
+  end
+endmodule
+"#,
+        &[],
+    );
+    assert_eq!(r.code, 0, "stderr:\n{}", r.err);
+    assert_eq!(
+        r.lines(),
+        ["gen else", "L 0 0 0 bits 2 2 2 size 2",],
+        "stdout:\n{}",
+        r.out
+    );
+}
+
+/// Round 2 (R2-3). A left operand with no width at lowering (an absolute hierarchical
+/// path) takes `(lhs | W) ==/!= (P | W)`, which the engine sizes and signs once the path
+/// resolves. iverilog 13.0's own `==?` (sv2v → iverilog for the `inside` spelling) prints
+/// every line; verilator 5.052 differs only on the x sign bit / x left operand (2-state)
+/// and on `s4 inside {8'b1111_1?00}` (its own sign defect, iverilog 0). PRE (00c3d76d)
+/// refused the `==?` line and printed `x`/`0` for the `inside` ones; e5147442 refused
+/// all of them ("left operand of unsizable width").
+#[test]
+fn absolute_hierarchical_left_operand() {
+    let r = run(
+        r#"`timescale 1ns/1ns
+module late;
+  logic [7:0] u8 = 8'b0101_0100; logic signed [7:0] s8 = -8'sd4; logic signed [3:0] s4 = -4'sd4;
+  logic [7:0] ux = 8'b0x01_x100;
+endmodule
+module t;
+  logic [7:0] u8n;
+  late uL();
+  wire a1 = t.uL.u8 inside {4'b?100};
+  wire a2 = t.u8n inside {4'b?100};
+  initial begin
+    u8n = 8'b0000_0100; #1;
+    $display("cont %b %b", a1, a2);
+    $display("hier %b %b %b", t.uL.u8 inside {4'b?100}, t.u8n inside {4'b?100}, t.uL.u8 inside {8'b0101_0100});
+    $display("signed %b %b %b %b", t.uL.s8 inside {4'sb?100}, t.uL.s8 inside {4'sb1?00}, t.uL.s4 inside {8'sb1111_1?00}, t.uL.s4 inside {8'b1111_1?00});
+    $display("xz %b %b %b", t.uL.ux inside {8'b0?01_?100}, t.uL.ux inside {8'b0101_?100}, t.uL.ux inside {8'b0111_?100});
+    $display("weq %b %b", t.uL.u8 ==? 4'b?100, t.uL.s8 !=? 4'sb1?00);
+    $finish;
+  end
+endmodule
+"#,
+        &[],
+    );
+    assert_eq!(r.code, 0, "stderr:\n{}", r.err);
+    assert_eq!(
+        r.lines(),
+        [
+            "cont 0 1",
+            "hier 0 1 1",
+            "signed 1 1 1 0",
+            "xz 1 x 0",
+            "weq 0 0",
+        ],
+        "stdout:\n{}",
+        r.out
+    );
+}
+
+/// Round 2 (R2-4). A `let` that names an unsized x literal pads it to the expression's
+/// width exactly as the literal written in place does (§5.7.1, §11.12): the fact is
+/// recorded where the literal is lowered, not read from the element's source text.
+/// iverilog cannot run `let`; its own `v36 ==? 'bx1` and `v8 ==? 4'bx100` print 1 and 1,
+/// hand-IEEE agrees. e5147442 printed `let-unsized 0 direct 1` — one design, two answers —
+/// and `let-weq 0`; PRE (00c3d76d) printed `let-unsized 0 direct 0`, `let-sized x direct x`,
+/// `let-weq 0`.
+#[test]
+fn let_reference_to_an_unsized_x_literal() {
+    let r = run(
+        r#"`timescale 1ns/1ns
+module t;
+  let LU = 'bx1;
+  let LS = 4'bx100;
+  logic [35:0] v36; logic [7:0] v8;
+  initial begin
+    v36 = 36'hF_0000_0001; v8 = 8'b0000_0100;
+    $display("let-unsized %b direct %b", v36 inside {LU}, v36 inside {'bx1});
+    $display("let-sized %b direct %b", v8 inside {LS}, v8 inside {4'bx100});
+    $display("let-weq %b", v36 ==? LU);
+    $finish;
+  end
+endmodule
+"#,
+        &[],
+    );
+    assert_eq!(r.code, 0, "stderr:\n{}", r.err);
+    assert_eq!(
+        r.lines(),
+        [
+            "let-unsized 1 direct 1",
+            "let-sized 1 direct 1",
+            "let-weq 1",
+        ],
+        "stdout:\n{}",
+        r.out
+    );
+}
+
+/// Round 2 (R2-5). `8'(a + (b ==? 4'b1x0x))`: the size-cast lowering used to map every
+/// binary operator before looking at it, and `==?` has no `ir::BinOp` twin, so a DEBUG
+/// build panicked (`WildEq must be lowered via lower_wildcard_eq`, rc 101) while release
+/// threw the mapping away. cli tests run the debug binary. iverilog 13.0 and verilator
+/// 5.052: `sc 00000010 00000001 00000010`; release PRE (00c3d76d) printed the first two and
+/// `xxxxxxxx` for the `inside` spelling; the e5147442 debug binary panicked.
+#[test]
+fn wildcard_eq_under_a_size_cast_debug_build() {
+    let r = run(
+        r#"`timescale 1ns/1ns
+module t;
+  logic [7:0] a; logic [3:0] b;
+  initial begin
+    a = 8'd1; b = 4'b1000;
+    $display("sc %b %b %b", 8'(a + (b ==? 4'b1x0x)), 8'(a + (b !=? 4'b1x0x)), 8'(a + (b inside {4'b1x0x})));
+    $finish;
+  end
+endmodule
+"#,
+        &[],
+    );
+    assert_eq!(r.code, 0, "stderr:\n{}", r.err);
+    assert_eq!(
+        r.lines(),
+        ["sc 00000010 00000001 00000010",],
+        "stdout:\n{}",
+        r.out
+    );
 }
 
 /// The comparison is IR, so the three executors print the same bytes — the pinned

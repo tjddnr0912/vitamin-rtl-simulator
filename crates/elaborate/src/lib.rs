@@ -1127,6 +1127,14 @@ struct Elaborator<'s> {
     /// SVA-REST `let NAME [(formals)] = expr;` declarations, inlined at use sites
     /// (the named-sequence precedent). Pure IR-0.
     let_table: BTreeMap<String, ast::LetDecl>,
+    /// The `Const` expr ids lowered from an UNSIZED based literal whose leftmost
+    /// digit is x/z (`'bx1`, `'h?`). §5.7.1 pads such a literal with that x/z to the
+    /// width of the expression containing it, and the `Const` cannot say so: it is
+    /// 32 bits like `32'bx…x1`, which zero-extends. Recorded where the literal is
+    /// lowered, so the wildcard builder reads the fact through every route that
+    /// delivers the same node — a parenthesis, a `let` body — not from the source
+    /// text in front of it. The arena is append-only, so an id never changes owner.
+    unsized_xz_lits: BTreeSet<u32>,
     // Recursion guard for named-sequence inlining (separate from `inline_stack`,
     // which is empty by the time SVA checkers materialize, but a dedicated stack
     // keeps SVA correctness independent of func/task inline state).

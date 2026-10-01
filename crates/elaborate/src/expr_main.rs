@@ -48,7 +48,20 @@ impl Elaborator<'_> {
                     return self.push_expr(ir::Expr::Const { val: cid });
                 }
                 let cid = self.lower_int_literal(*kind, raw);
-                self.push_expr(ir::Expr::Const { val: cid })
+                let id = self.push_expr(ir::Expr::Const { val: cid });
+                if matches!(kind, ast::IntLitKind::UnsizedBased) {
+                    let msb_xz = self.consts.get(cid as usize).is_some_and(|c| {
+                        let m = c.width.max(1) - 1;
+                        c.bits
+                            .unk
+                            .get(m as usize / 64)
+                            .is_some_and(|u| (u >> (m % 64)) & 1 == 1)
+                    });
+                    if msb_xz {
+                        self.unsized_xz_lits.insert(id);
+                    }
+                }
+                id
             }
             // G11: a time literal folds to a Const in the current module's time unit
             // (reuses the `const_eval_in_scope` fold). Loud on sub-precision / real /
@@ -534,13 +547,12 @@ impl Elaborator<'_> {
                         rhs: zero,
                     });
                 }
-                let el = rhs;
                 let lhs = self.lower_expr(lhs); // POST-ORDER: lhs, then rhs, then self
                 let rhs = self.lower_expr(rhs);
                 // §11.4.13: an `inside` element is `==?` when it is a constant with
                 // x/z bits; `None` is the `==` case, which continues as `Eq` below.
                 if matches!(op, ast::BinOp::InsideEq) {
-                    if let Some(id) = self.inside_value_cmp(el, lhs, rhs) {
+                    if let Some(id) = self.inside_value_cmp(lhs, rhs) {
                         return id;
                     }
                 }

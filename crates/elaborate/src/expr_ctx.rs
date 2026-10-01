@@ -867,7 +867,7 @@ impl Elaborator<'_> {
                 // x/z bits (a fill element is already sized to the left operand
                 // above); `None` is the `==` case, which continues as `Eq` below.
                 if matches!(op, InsideEq) {
-                    if let Some(id) = self.inside_value_cmp(rhs, l, r) {
+                    if let Some(id) = self.inside_value_cmp(l, r) {
                         return id;
                     }
                 }

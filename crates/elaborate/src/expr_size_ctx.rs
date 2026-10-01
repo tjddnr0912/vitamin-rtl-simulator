@@ -726,7 +726,12 @@ impl Elaborator<'_> {
         match &e.kind {
             ast::ExprKind::Paren { inner } => self.lower_size_ctx(inner, n, ext),
             ast::ExprKind::Binary { op, lhs, rhs } => {
-                let irop = map_binop(*op);
+                // Mapped only in the arms that build a node: the comparison family falls
+                // to `lower_size_leaf` below, and `==?`/`!=?` have no `ir::BinOp` twin —
+                // calling `map_binop` on one tripped its debug assertion
+                // (`8'(a + (b ==? 4'b1x0x))` panicked a debug build; release mapped it
+                // and threw the result away).
+                let irop = || map_binop(*op);
                 match op {
                     ast::BinOp::Add
                     | ast::BinOp::Sub
@@ -739,7 +744,7 @@ impl Elaborator<'_> {
                         let l = self.lower_size_ctx(lhs, n, ext);
                         let r = self.lower_size_ctx(rhs, n, ext);
                         self.push_expr(ir::Expr::Binary {
-                            op: irop,
+                            op: irop(),
                             lhs: l,
                             rhs: r,
                         })
@@ -797,7 +802,7 @@ impl Elaborator<'_> {
                                 self.refuse_real_size_operand(r)
                             };
                             self.push_expr(ir::Expr::Binary {
-                                op: irop,
+                                op: irop(),
                                 lhs: l,
                                 rhs: r,
                             })
@@ -847,7 +852,7 @@ impl Elaborator<'_> {
                             let narrow_op = if matches!(op, ast::BinOp::AShr) && !ext {
                                 ir::BinOp::Shr
                             } else {
-                                irop
+                                irop()
                             };
                             let _ = plain; // the width probe; nothing references it
                             self.push_expr(ir::Expr::Binary {
@@ -863,7 +868,7 @@ impl Elaborator<'_> {
                         let r = self.lower_expr(rhs);
                         let r = self.refuse_real_size_operand(r);
                         self.push_expr(ir::Expr::Binary {
-                            op: irop,
+                            op: irop(),
                             lhs: l,
                             rhs: r,
                         })

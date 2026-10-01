@@ -190,6 +190,7 @@ impl<'s> Elaborator<'s> {
             seq_table: BTreeMap::new(),
             prop_table: BTreeMap::new(),
             let_table: BTreeMap::new(),
+            unsized_xz_lits: std::collections::BTreeSet::new(),
             sva_inline_stack: Vec::new(),
             sva_seq_depth: 0,
             class_table: BTreeMap::new(),

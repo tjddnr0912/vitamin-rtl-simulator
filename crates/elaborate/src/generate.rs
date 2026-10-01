@@ -460,6 +460,26 @@ impl Elaborator<'_> {
                                     self.const_str_in_scope(lab)
                                         .and_then(|t| crate::const_wide::str_raw_i64(&t))
                                 });
+                                // An unfoldable label is skipped as a non-match, which a
+                                // plain x/z label is (`===` against a known scrutinee).
+                                // A wildcard comparison with x/z bits is not: it declines
+                                // when its value is x or its pattern is not one literal,
+                                // and skipping it took `default` where sv2v → iverilog
+                                // takes the item (verilator refuses an x/? label here).
+                                if lv.is_none() && crate::wildcard_eq::holds_xz_wildcard(lab) {
+                                    if phase == GenPhase::Nets {
+                                        self.error_at(
+                                            MsgCode::ElabUnresolvedName,
+                                            lab.span,
+                                            "generate-case item is not a constant: a wildcard \
+                                             comparison (`==?`, `!=?` or an `inside` element) \
+                                             with x/z bits has no constant value here — its \
+                                             result is x, or its x/z pattern is not a single \
+                                             literal",
+                                        );
+                                    }
+                                    return;
+                                }
                                 if lv == Some(scrut) {
                                     chosen = Some(body);
                                     break 'scan;

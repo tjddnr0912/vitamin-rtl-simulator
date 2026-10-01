@@ -208,9 +208,7 @@ fn wide_eq_with_unknowns(op: ast::BinOp, l: &WideBits, r: &WideBits) -> Option<W
     let w = w as usize;
     let eq = match op {
         ast::BinOp::CaseEq | ast::BinOp::CaseNe => (0..w).all(|i| bp_get(lb, i) == bp_get(rb, i)),
-        // `InsideEq` arrives here only with a fully KNOWN element (`fold_region`
-        // declines an element with an x/z bit), where §11.4.13's `==?` is `==`.
-        ast::BinOp::Eq | ast::BinOp::Ne | ast::BinOp::InsideEq => {
+        ast::BinOp::Eq | ast::BinOp::Ne => {
             let differs = (0..w).any(|i| {
                 let ((a, au), (b, bu)) = (bp_get(lb, i), bp_get(rb, i));
                 !au && !bu && a != b
@@ -223,11 +221,46 @@ fn wide_eq_with_unknowns(op: ast::BinOp, l: &WideBits, r: &WideBits) -> Option<W
         _ => return None,
     };
     Some(bp_bit(
-        matches!(
-            op,
-            ast::BinOp::CaseEq | ast::BinOp::Eq | ast::BinOp::InsideEq
-        ) == eq,
+        matches!(op, ast::BinOp::CaseEq | ast::BinOp::Eq) == eq,
     ))
+}
+
+/// §11.4.6 wildcard match: the left bits `l` (at least `w` of them) against the
+/// pattern `p` of `pw` bits, whose x/z bits are don't-cares, extended to `w` by
+/// `fill` ([`crate::wildcard_eq::pattern_ext_fill`]: `Some(b)` compares each extension
+/// bit against `b`, `None` makes it a don't-care). `Some(false)` when a KNOWN left bit
+/// differs from a compared pattern bit, `None` (x) when none does and a compared left
+/// bit is x/z, `Some(true)` otherwise. Shared by both constant domains (this one and
+/// `const_fn_width`'s i64 walk), so they cannot answer the same comparison twice.
+pub(crate) fn wildcard_match(
+    l: &ir::BitPacked,
+    p: &ir::BitPacked,
+    pw: u32,
+    w: u32,
+    fill: Option<bool>,
+) -> Option<bool> {
+    let mut unknown = false;
+    for i in 0..w as usize {
+        let pv = if i < pw as usize {
+            let (v, u) = bp_get(p, i);
+            if u {
+                continue;
+            }
+            v
+        } else {
+            match fill {
+                Some(b) => b,
+                None => continue,
+            }
+        };
+        let (lv, lu) = bp_get(l, i);
+        if lu {
+            unknown = true;
+        } else if lv != pv {
+            return Some(false);
+        }
+    }
+    (!unknown).then_some(true)
 }
 
 /// Fold an expression at its OWN (self-determined) width in the WIDE bit domain.
@@ -849,6 +882,8 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
                     | ast::BinOp::Ne
                     | ast::BinOp::CaseEq
                     | ast::BinOp::CaseNe
+                    | ast::BinOp::WildEq
+                    | ast::BinOp::WildNe
                     | ast::BinOp::InsideEq
             ) =>
         {
@@ -879,15 +914,51 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
                     Some(v)
                 }
             };
-            let (l, r) = (at(lhs, l0)?, at(rhs, r0)?);
-            // An `inside` element with an x/z bit is §11.4.13's `==?`, whose x/z bits
-            // are don't-cares; this domain has no `==?`, and reading it as `==` (x or
-            // 0) is the defect the operator exists to fix. Decline: the caller's next
-            // evaluator answers (the i64 masked compare reads a sized unsigned
-            // literal) or the consumer refuses.
-            if matches!(op, ast::BinOp::InsideEq) && bp_any_unknown(&r.0, r.1) {
-                return None;
+            // §11.4.6 `==?`/`!=?` and §11.4.13's `inside` element: a pattern with an
+            // x/z bit compares with those bits as don't-cares, in this region.
+            if matches!(
+                op,
+                ast::BinOp::WildEq | ast::BinOp::WildNe | ast::BinOp::InsideEq
+            ) && bp_any_unknown(&r0.0, r0.1)
+            {
+                // Only a LITERAL pattern, as the run-time lowering: an x/z bit built
+                // into a larger expression is refused there (`inside`) or not folded
+                // (`==?`), and a constant must not answer what the run time refuses.
+                let mut pat = rhs.as_ref();
+                while let ast::ExprKind::Paren { inner } = &pat.kind {
+                    pat = inner;
+                }
+                let ast::ExprKind::IntLit { kind, .. } = &pat.kind else {
+                    return None;
+                };
+                let l = widen_to(at(lhs, l0)?, w, sg)?;
+                // A fill is refolded at `w` here; any other literal keeps its width.
+                let (pb, pw, _) = at(rhs, r0)?;
+                let pw = pw.min(w);
+                let fill = if pw < w {
+                    let (msb_val, msb_xz) = bp_get(&pb, pw as usize - 1);
+                    crate::wildcard_eq::pattern_ext_fill(
+                        msb_xz,
+                        msb_val,
+                        sg,
+                        matches!(kind, ast::IntLitKind::UnsizedBased),
+                    )
+                } else {
+                    Some(false)
+                };
+                let ne = matches!(op, ast::BinOp::WildNe);
+                return Some(match wildcard_match(&l.0, &pb, pw, w, fill) {
+                    Some(m) => bp_bit(m != ne),
+                    None => bp_xbit(),
+                });
             }
+            // With no don't-care bit, `==?` and an `inside` element ARE `==`.
+            let op = &match op {
+                ast::BinOp::WildEq | ast::BinOp::InsideEq => ast::BinOp::Eq,
+                ast::BinOp::WildNe => ast::BinOp::Ne,
+                o => *o,
+            };
+            let (l, r) = (at(lhs, l0)?, at(rhs, r0)?);
             if let Some(v) = wide_eq_with_unknowns(*op, &l, &r) {
                 return Some(v);
             }
@@ -899,7 +970,7 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
                 ast::BinOp::Le => ord != Greater,
                 ast::BinOp::Gt => ord == Greater,
                 ast::BinOp::Ge => ord != Less,
-                ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::InsideEq => ord == Equal,
+                ast::BinOp::Eq | ast::BinOp::CaseEq => ord == Equal,
                 _ => ord != Equal,
             }))
         }
@@ -1162,6 +1233,8 @@ pub(crate) fn wide_top_is_self_determined(e: &ast::Expr) -> bool {
                 | ast::BinOp::Ne
                 | ast::BinOp::CaseEq
                 | ast::BinOp::CaseNe
+                | ast::BinOp::WildEq
+                | ast::BinOp::WildNe
                 | ast::BinOp::InsideEq
                 | ast::BinOp::LogAnd
                 | ast::BinOp::LogOr
