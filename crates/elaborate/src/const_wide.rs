@@ -458,11 +458,37 @@ fn bp_operands_at(
 /// `fold_shift_count` already applies to a shift amount, and the i64 lane's
 /// `const_self_width` gives the same answer). Both oracles: `('1 && 1'b1)` is 1,
 /// `(2 ** '1)` is 2, `('1 ? 1'b1 : 1'b0)` is 1.
-fn fold_selfdet_operand(e: &ast::Expr, name: WideNameFn) -> Option<WideBits> {
+///
+/// Also the first half of a comparison REGION's operand (see [`fold_in_region`]): it
+/// gives the operand's own width and sign, from which the region's are decided.
+pub(crate) fn fold_selfdet_operand(e: &ast::Expr, name: WideNameFn) -> Option<WideBits> {
     if fill_literal_ast(e).is_some() {
         fold_bits_at(e, 1, name)
     } else {
         fold_bits_at0(e, name)
+    }
+}
+
+/// One operand of a comparison REGION of width `w` and sign `sg` (§11.8.3: "neither
+/// fully self-determined nor fully context-determined"), given its own fold `v` from
+/// [`fold_selfdet_operand`]. A side narrower than the region is refolded at `w` with the
+/// region's sign pushed into it, so a context-determined operator inside computes at
+/// that width and a fill takes it; a side already at `w` keeps its bits unless it is
+/// SIGNED in an unsigned region, where §11.8.2 converts it first and an operator inside
+/// must run unsigned. The relational and equality arm of [`fold_region`] sizes its two
+/// operands with it; the generate-case arm choice (`gen_case.rs`) sizes a case
+/// expression and its items with it (§12.5).
+pub(crate) fn fold_in_region(
+    e: &ast::Expr,
+    v: WideBits,
+    w: u32,
+    sg: bool,
+    name: WideNameFn,
+) -> Option<WideBits> {
+    if v.1 < w || (v.2 && !sg) {
+        fold_region(e, w, Some(sg), name)
+    } else {
+        Some(v)
     }
 }
 
@@ -872,14 +898,10 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
             let r0 = fold_selfdet_operand(rhs, name)?;
             let w = l0.1.max(r0.1);
             let sg = l0.2 && r0.2;
-            let at = |x: &ast::Expr, v: WideBits| -> Option<WideBits> {
-                if v.1 < w || (v.2 && !sg) {
-                    fold_region(x, w, Some(sg), name)
-                } else {
-                    Some(v)
-                }
-            };
-            let (l, r) = (at(lhs, l0)?, at(rhs, r0)?);
+            let (l, r) = (
+                fold_in_region(lhs, l0, w, sg, name)?,
+                fold_in_region(rhs, r0, w, sg, name)?,
+            );
             if let Some(v) = wide_eq_with_unknowns(*op, &l, &r) {
                 return Some(v);
             }
