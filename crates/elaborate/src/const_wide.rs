@@ -1480,12 +1480,39 @@ impl Elaborator<'_> {
                     || self.params.contains_key(k)
                     || self.symbols.contains_key(k)
             }) {
+                // A wide entry beside a narrow binding at the same key is a stale one
+                // ([`Self::wide_entry_is_stale`]): decline, so the caller falls back to
+                // the i64 lane, which reads the narrow binding, or stays loud.
+                if self.wide_entry_is_stale(&key) {
+                    return None;
+                }
                 if let Some(cv) = self.wide_param_bits.get(&key) {
                     return Some((cv.bits.clone(), cv.width, cv.signed));
                 }
             }
         }
         self.narrow_param_bits(path)
+    }
+
+    /// Does `key` hold a `wide_param_bits` entry AND a narrow value binding (`params`,
+    /// `str_param_raw` or `real_param_val`)? No single binding writes both: a wide
+    /// declaration installs its value and returns before `bind_param_value` (`params.rs`,
+    /// `generate.rs`, `instance.rs`), and the import loops write one map per name. What
+    /// leaves both is a later NARROW rebinding of a key a wide value was bound at, which
+    /// does not clear the wide entry — a genvar under a same-named wide constant (the
+    /// genvar setup suspends only `real_param_val`), a local enum label or an explicit
+    /// import under a wildcard-imported wide constant. The narrow binding is the current
+    /// one in each of those, so a resolver that asks the wide map FIRST must skip the
+    /// entry: [`Self::wide_name_bits`] declines and `bare_ident_route` takes the
+    /// narrow route. Measured (review round 1, F1): `localparam [64:0] i =
+    /// 65'h1_0000_0000_0000_0009; for (genvar i …) case (i) 0: … 1: …` took `default`
+    /// for both iterations where every oracle takes `0` / `1`. Clearing the entry at
+    /// the binders is the producer fix, recorded as its own row.
+    pub(crate) fn wide_entry_is_stale(&self, key: &str) -> bool {
+        self.wide_param_bits.contains_key(key)
+            && (self.params.contains_key(key)
+                || self.str_param_raw.contains_key(key)
+                || self.real_param_val.contains_key(key))
     }
 
     /// Fold a parameter INITIALIZER in the wide bit domain at its DECLARED width.

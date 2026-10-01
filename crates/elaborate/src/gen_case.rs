@@ -13,20 +13,24 @@
 //!
 //! ⚠️⚠️ The SIZING of that comparison is an oracle split, measured on generate-case
 //! census cells W01–W20 (`case (4'd15 + 4'd1) 0: … 16: …`, `case (4'sb1111) -1: … 8'd0:
-//! …`). verilator 5.052 sizes the case expression and every item TOGETHER — each
-//! evaluated at the longest width, unsigned if any is unsigned — as all three tools and
-//! vita's runtime size a PROCEDURAL `case` (one exception measured, in both positions:
-//! verilator takes `default` for `case (4'sb1111) 4'sb1111: … 8'd0: …`, where iverilog's
-//! procedural case and vita's runtime take the item). iverilog 13.0 (and sv2v → iverilog,
-//! which hands it the same generate-case) evaluates each expression at its OWN width and
-//! compares one item at a time with the pair's sign, so it contradicts its own procedural
-//! `case`: `4'd15 + 4'd1` against `0` / `16` takes `16` procedurally and `0` in a
-//! generate-case, and `-1` equals `64'hFFFF_FFFF_FFFF_FFFF` procedurally (`-1` negates at
-//! 64 bits) and not in a generate-case. Both readings are computed here, and a label
-//! decides only where they agree; where they disagree, and wherever the bit domain cannot
-//! read the case, the label keeps exactly the answer it had before this lane existed: its
-//! i64 value compared with the case expression's, else a non-match. Nothing here refuses
-//! (a label the bit domain cannot fold is a residue to close by making it foldable).
+//! …`). The WHOLE reading is §12.5's — the case expression and every item evaluated at
+//! the longest width, unsigned if any is unsigned — and it is what every tool's
+//! PROCEDURAL `case` and vita's runtime do. Each oracle deviates from it in a generate
+//! region on part of the axis: iverilog 13.0 (and sv2v → iverilog, which hands it the
+//! same generate-case) evaluates each expression at its OWN width and compares one item
+//! at a time with the pair's sign, contradicting its own procedural `case` (`4'd15 +
+//! 4'd1` against `0` / `16` takes `16` procedurally and `0` in a generate-case; `-1`
+//! equals `64'hFFFF_FFFF_FFFF_FFFF` procedurally, where `-1` negates at 64 bits, and not
+//! in a generate-case); verilator 5.052 follows the whole width but sign-extends a signed
+//! item inside a wider unsigned case (`case (4'sb1111) 4'sb1111: … 8'd0: …` takes
+//! `default` — its procedural case does too there — and a `$unit` `int` `-1` item under
+//! `64'hFFFF_FFFF_FFFF_FFFF` hits while its own `===` of the pair is 0). So vita
+//! computes the PAIR reading (iverilog's) and the WHOLE reading (§12.5), and a label
+//! decides only where they agree; where they disagree, and wherever the bit domain
+//! cannot read the case, the label keeps exactly the answer it had before this lane
+//! existed: its i64 value compared with the case expression's, else a non-match. Nothing
+//! here refuses (a label the bit domain cannot fold is a residue to close by making it
+//! foldable).
 
 use super::*;
 use crate::const_wide::{self, WideBits};
@@ -57,14 +61,21 @@ impl Elaborator<'_> {
     /// compared exactly as before this lane: its i64 value against `scrut_i`, and a
     /// label with no i64 value is a non-match.
     ///
-    /// Returns the body to elaborate: the first matching item in source order, else
-    /// `default`, else none.
+    /// `use_region` false forces that previous comparison for every label: the caller
+    /// passes it when the region was not available on the construct's first
+    /// elaboration, so that a region a later phase can build (a label that refers
+    /// forward to a generate-scope localparam the Nets walk binds) cannot change the
+    /// arm between phases.
+    ///
+    /// Returns the body to elaborate — the first matching item in source order, else
+    /// `default`, else none — and whether the region was available.
     pub(crate) fn gen_case_choose<'a>(
         &self,
         scrutinee: &ast::Expr,
         scrut_i: i64,
         items: &'a [ast::GenCaseItem],
-    ) -> Option<&'a [ast::GenItem]> {
+        use_region: bool,
+    ) -> (Option<&'a [ast::GenItem]>, bool) {
         let name = |n: &ast::Expr, _: bool| self.param_leaf_bits(n);
         let wide = |e: &ast::Expr| const_wide::fold_selfdet_operand(e, &name);
         // The i64 reading the lane decided with before: a numeric fold, or a string
@@ -96,6 +107,8 @@ impl Elaborator<'_> {
             let s = const_wide::fold_in_region(scrutinee, s0.clone(), w, sg, &name)?;
             Some((w, sg, s))
         });
+        let region_ok = region.is_some();
+        let region = region.filter(|_| use_region);
         let mut default: Option<&'a [ast::GenItem]> = None;
         let mut folded = folded.into_iter();
         for ci in items {
@@ -124,10 +137,10 @@ impl Elaborator<'_> {
                     _ => pre(),
                 };
                 if hit {
-                    return Some(body);
+                    return (Some(body), region_ok);
                 }
             }
         }
-        default
+        (default, region_ok)
     }
 }

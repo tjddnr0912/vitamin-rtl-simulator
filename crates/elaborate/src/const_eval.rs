@@ -1030,19 +1030,26 @@ impl Elaborator<'_> {
             );
             return;
         }
-        // A wildcard comparison carrying x/z bits that did not fold — its value is x
-        // (an x/z left bit under a compared pattern bit), or its x/z pattern is not one
-        // literal (`{2'b1?, 2'b00}`), which the constant domains refuse as the run time
-        // does. Left to the catch-all below, the bound silently became one bit (`[(…
-        // inside {{2'b1?, 2'b00}}):0]`: `$bits` 1, both oracles 2). Scoped to those
-        // nodes: a plain `==` / relational with an x operand keeps its old route.
-        if crate::wildcard_eq::holds_xz_wildcard(e) {
+        // A bound holding a wildcard comparison with x/z bits whose own bit-domain fold
+        // is x-VALUED (an x/z left bit under a compared pattern bit reaches the bound's
+        // value): an x bound is not a range (the oracles split — iverilog reads 1 bit,
+        // sv2v → iverilog `x`), and the catch-all below would make it one bit. Keyed on
+        // the VALUE, not on the node: `((4'bx100 ==? 4'b1?00) & 1'b0)` is a defined 0
+        // (all three oracles 1 bit, as the catch-all gives), and a fold that declines for
+        // another reason — the 4-state `&` / `|` / `?:` the bit domain lacks, a compound
+        // x/z pattern (`{2'b1?, 2'b00}`) — keeps the catch-all it had before the constant
+        // `==?` fold existed (review round 1, differential F1: a node-keyed refusal made
+        // six right bounds loud). A plain `==` / relational with an x operand keeps its
+        // old route.
+        if crate::wildcard_eq::holds_xz_wildcard(e)
+            && crate::const_wide::fold_self_bits(e, &|n, _| self.wide_name_bits(n))
+                .is_some_and(|(b, w, _)| crate::const_wide::bp_any_unknown(&b, w))
+        {
             self.error_at(
                 MsgCode::ElabUnsupported,
                 e.span,
                 "a wildcard comparison (`==?`, `!=?` or an `inside` element) with x/z bits \
-                 that has no constant value — its result is x, or its x/z pattern is not a \
-                 single literal — is not allowed in a constant range bound",
+                 makes this bound's value x, which is not allowed in a constant range bound",
             );
         }
     }

@@ -181,6 +181,7 @@ impl<'s> Elaborator<'s> {
             decl_pos_range: (0, 0),
             decl_block_locals: std::collections::BTreeSet::new(),
             wide_param_bits: BTreeMap::new(),
+            gen_case_region: BTreeMap::new(),
             tf_decl_scope: String::new(),
             inout_func_names: std::collections::BTreeSet::new(),
             body_write_func_names: std::collections::BTreeSet::new(),

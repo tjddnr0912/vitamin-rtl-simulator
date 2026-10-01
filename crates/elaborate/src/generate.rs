@@ -443,8 +443,18 @@ impl Elaborator<'_> {
                     return;
                 };
                 // The first item whose label matches (§12.5 case equality, 4-state, at
-                // full width — `gen_case.rs`), else `default`.
-                if let Some(body) = self.gen_case_choose(scrutinee, scrut, items) {
+                // full width — `gen_case.rs`), else `default`. The bit-domain region is
+                // used only if it was available the first time this construct was
+                // elaborated in this scope (`gen_case_region`), so every phase picks
+                // the same arm.
+                let region_key = (self.cur_prefix.clone(), span.lo, span.hi);
+                let first = self.gen_case_region.get(&region_key).copied();
+                let (chosen, region_ok) =
+                    self.gen_case_choose(scrutinee, scrut, items, first.unwrap_or(true));
+                if first.is_none() {
+                    self.gen_case_region.insert(region_key, region_ok);
+                }
+                if let Some(body) = chosen {
                     // The arm's block: its own label (kept as a `Block` by
                     // `gen_case_body`) or `genblk<N>` (§27.6) — an un-blocked arm is an
                     // implicit block too (both oracles `top.genblk3`).

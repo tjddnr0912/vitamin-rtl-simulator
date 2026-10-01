@@ -404,11 +404,10 @@ pub(crate) fn pattern_ext_fill(
 }
 
 /// Does `e` hold a wildcard comparison (`==?`, `!=?`, an `inside` element) with an
-/// x/z literal on either side? The constant positions that swallow a declined fold —
-/// a range bound, an array dimension, a generate-`case` item — ask it to refuse
-/// loudly instead: such a node declines only when its value is x (an x/z left bit
-/// under a compared pattern bit) or its x/z pattern is not one literal, and a
-/// silent default there is a different design.
+/// x/z literal on either side? Asked by one caller, `check_const_range_bound` (a range
+/// bound or an array dimension), which refuses only when the bound's own bit-domain
+/// fold is also x-valued; a node is not a value, and keying the refusal on the node
+/// alone made bounds whose value the x never reaches loud.
 pub(crate) fn holds_xz_wildcard(e: &ast::Expr) -> bool {
     crate::param_query::ast_any(e, &|x| {
         matches!(

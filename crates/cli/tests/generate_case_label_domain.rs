@@ -475,6 +475,58 @@ fn a_constant_wildcard_label_is_read_in_the_bit_domain() {
     );
 }
 
+/// A genvar, a local enum label or an explicit import that rebinds a key a WIDE
+/// constant was bound at leaves the wide entry behind; the bit domain and the run-time
+/// name route now skip it and read the narrow binding (review round 1, soundness F1).
+/// iverilog, sv2v → iverilog and verilator: `A1S zero 1`, `A1S one 2`, `B2E a 1`, and for
+/// the run-time twins `A1D i=0 K=0`, `A1D i=1 K=1`, `B2D E1=1 K=1`. PRE took the arms
+/// (the i64 lane reads the genvar) but printed `i=18446744073709551625 K=9` and
+/// `E1=18446744073709551616 K=0`; the first bit-domain build took `default` for A1S and
+/// B2E.
+#[test]
+fn a_stale_wide_entry_under_a_narrow_rebinding_is_not_read() {
+    check(
+        "`timescale 1ns/1ns\nmodule t;\n  localparam [64:0] i = 65'h1_0000_0000_0000_0009;\n  \
+         for (genvar i = 0; i < 2; i++) begin : g\n    case (i)\n      \
+         0: begin : z wire [7:0] w = 8'd1; initial #1 $display(\"A1S zero %0d\", w); end\n      \
+         1: begin : o wire [7:0] w = 8'd2; initial #1 $display(\"A1S one %0d\", w); end\n      \
+         default: begin : d wire [7:0] w = 8'd99; initial #1 $display(\"A1S def %0d\", w); end\n    \
+         endcase\n    localparam int K = i;\n    \
+         initial #2 $display(\"A1D i=%0d K=%0d\", i, K);\n  end\nendmodule\n",
+        &["A1S zero 1", "A1S one 2", "A1D i=0 K=0", "A1D i=1 K=1"],
+    );
+    check(
+        "`timescale 1ns/1ns\npackage pk;\n  localparam [64:0] E1 = 65'h1_0000_0000_0000_0000;\n\
+         endpackage\nmodule t;\n  import pk::*;\n  typedef enum {E0, E1} e_t;\n  \
+         case (1)\n    E1: begin : a wire [7:0] w = 8'd1; initial #1 $display(\"B2E a %0d\", w); end\n    \
+         default: begin : d wire [7:0] w = 8'd99; initial #1 $display(\"B2E def %0d\", w); end\n  \
+         endcase\n  localparam int K = E1;\n  initial #2 $display(\"B2D E1=%0d K=%0d\", E1, K);\n\
+         endmodule\n",
+        &["B2E a 1", "B2D E1=1 K=1"],
+    );
+}
+
+/// The bit-domain region is used only if it was available on the construct's FIRST
+/// elaboration (the Nets phase): a label that refers forward to a later generate-scope
+/// localparam folds only in later phases, and the first build let that later region
+/// re-decide the OTHER labels — the Nets phase built `default`'s 4-bit net and the Logic
+/// phase ran arm `a`'s process (`D1W a 8 bits=4`). Now every phase takes PRE's answer:
+/// `D1W def 9 bits=4`, consistent though wrong — iverilog, sv2v → iverilog and verilator
+/// print `D1W a 200 bits=8` (residue: the forward-referenced label itself).
+#[test]
+fn a_region_a_later_phase_builds_does_not_change_the_arm() {
+    check(
+        "`timescale 1ns/1ns\nmodule t;\n  if (1) begin : gb\n    case (-1)\n      \
+         32'hFFFFFFFF: begin : g wire [7:0] w = 8'd200; initial #1 \
+         $display(\"D1W a %0d bits=%0d\", w, $bits(w)); end\n      \
+         K: begin : g wire [7:0] w = 8'd2; initial #1 $display(\"D1W k %0d\", w); end\n      \
+         default: begin : g wire [3:0] w = 4'd9; initial #1 \
+         $display(\"D1W def %0d bits=%0d\", w, $bits(w)); end\n    endcase\n    \
+         localparam logic [7:0] K = 8'd99;\n  end\nendmodule\n",
+        &["D1W def 9 bits=4"],
+    );
+}
+
 /// The scan stops at the first match, so a label after it is never read, and a label the
 /// i64 fold reads keeps its answer beside one only the bit domain reads. iverilog and
 /// sv2v → iverilog: `M05 a`, `M01 a`, `M02 b`, `M03 a` (verilator refuses M05's x literal;
