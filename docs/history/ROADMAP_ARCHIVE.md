@@ -573,6 +573,16 @@
 
 ## 완료 슬라이스 로그 (이관 이후 — 최신이 위)
 
+#### 4.5.578 CI stands on the MSRV ceiling — a non-blocking latest-stable job, and the workspace lints clean on it (2026-10-01, branch claude/peaceful-feynman-1mdvuf) ✅
+
+**ROADMAP rows**: §5.b `MSRV-CEIL` closed (deleted); the Summary (§5.b 15 / 7 / 8, total 440 / 264 / 176) and REMAINING_WORK §C.
+
+**Before (PRE 1ed7762).** CONTRIBUTING and preview/03 §4 say 1.85 is a floor, not a ceiling, and a newer toolchain is followed rather than pinned away from — but the toolchain file, `rust-version` and every ci.yml job pin 1.85.0, so nothing ever ran on a newer compiler. Measured on stable 1.94.1: `cargo fmt --check` clean; `cargo clippy --workspace --all-targets -- -D warnings` red with 35 lints in 29 files (`manual_div_ceil` 9, `mem_replace_option_with_some` 7, `while_let_loop` 5, `manual_repeat_n` 3, `manual_contains` 2, `cloned_ref_to_slice_refs` 2, `unnecessary_map_or` 2, `unnecessary_unwrap` 2, `filter_next`, `doc_overindented_list_items`, `large_enum_variant`).
+
+**Change.** ci.yml gains `build-stable` (ubuntu, `continue-on-error: true`): clippy `-D warnings`, `cargo nextest run --workspace --no-fail-fast` and `cargo test --doc` on `dtolnay/rust-toolchain@stable`. `RUSTUP_TOOLCHAIN: stable` is set on the job because it is the only override that outranks `rust-toolchain.toml` (verified: with it `rustc -V` in the repository is 1.94.1, without it 1.85.0). The lints are fixed — `cargo clippy --fix` plus 12 by hand — as behaviour-preserving rewrites that use only APIs stable at 1.85 (`div_ceil`, `Option::replace`, `repeat_n`, `is_none_or`, `rfind`, `slice::from_ref`, `while let`); hdl-ast's `GenItem` keeps its size under `#[allow(clippy::large_enum_variant)]`, because boxing the variant would change the AST shape and its schema hash. No `format_version` change. CONTRIBUTING, preview/03 and preview/09 describe the fifth job.
+
+**Gate.** 1.85: fmt, clippy `-D warnings` (workspace and the product shape), `cargo nextest run --workspace --no-fail-fast` 8888 / 8888 (15 skipped), `cargo test --doc` clean. Stable 1.94.1: fmt, clippy `-D warnings` (workspace and the product shape), `cargo nextest run --workspace --no-fail-fast` 8888 / 8888 (15 skipped), `cargo test --doc` clean; the lint census above is the PRE tree under stable clippy's JSON output. CI on the PR is the cross-platform gate.
+
 #### 4.5.577 CI runs its test jobs under cargo-nextest, each test process in a private TMPDIR (2026-10-01, branch claude/peaceful-feynman-1mdvuf) ✅
 
 **ROADMAP rows**: §5.b `CI-NEXTEST` closed (deleted); the Summary (§5.b 16 / 8 / 8, total 441 / 265 / 176) and REMAINING_WORK §C (its total row, stale at 443 / 266 since §4.5.576, corrected with it).

@@ -156,14 +156,17 @@ dependency graph.
 ### 3.1 The jobs
 
 `.github/workflows/ci.yml` is the only workflow. It triggers on push to `main` and on every
-pull request, and cancels superseded runs in the same group. Three job definitions produce
-four runs. The toolchain action is pinned to `dtolnay/rust-toolchain@1.85.0` in all three.
+pull request, and cancels superseded runs in the same group. Four job definitions produce
+five runs. The toolchain action is pinned to `dtolnay/rust-toolchain@1.85.0` in the first
+three; `build-stable` stands on the ceiling (the latest stable) and is non-blocking — a red
+there is a signal that a new Rust release breaks or newly lints the workspace, not a merge gate.
 
 | Job | Runner(s) | Steps |
 |---|---|---|
 | `build-native` | matrix `ubuntu-latest`, `macos-latest`, `fail-fast: false` | `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings`; `cargo build --workspace --locked`; `cargo nextest run --workspace --locked --no-fail-fast`; `cargo test --doc --workspace --locked` |
 | `build-no-oracle` | `ubuntu-latest` | `cargo build -p cli -p sim-engine --locked --no-default-features`; `cargo clippy -p cli -p sim-engine --locked --no-default-features -- -D warnings`; `cargo nextest run -p sim-engine --locked --no-default-features --lib`; a shell smoke test |
 | `build-rhel` | `ubuntu-latest` with the `redhat/ubi9` container, `dnf install -y gcc tar gzip` for a C linker and the nextest install | `cargo build --workspace --locked`; `cargo nextest run --workspace --locked --no-fail-fast`; `cargo test --doc --workspace --locked` |
+| `build-stable` | `ubuntu-latest`, `continue-on-error: true`, `RUSTUP_TOOLCHAIN: stable` (the only override that outranks `rust-toolchain.toml`) | `rustc -V`; `cargo clippy --workspace --all-targets --locked -- -D warnings`; `cargo nextest run --workspace --locked --no-fail-fast`; `cargo test --doc --workspace --locked` |
 
 Every job installs `cargo-nextest@0.9.100` with `taiki-e/install-action@v2`, and every
 nextest step runs under `scripts/test-tmpdir.sh` (§2.4).

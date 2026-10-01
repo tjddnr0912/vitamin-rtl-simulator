@@ -32,6 +32,7 @@ continues unchanged.
 | 2026-09-30 | c852bca | §4.5.575 | 0 / 0 / 0 | +3 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (darkriscv with `__RMW_CYCLE__`: parse 1 → runs, iverilog's digests, core and SoC) |
 | 2026-09-30 | 39fcd62 | §4.5.576 | 0 / 0 / 0 | +2 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (aes: exit 1 → 0 on the same digest; every row pins exit 0) |
 | 2026-10-01 | 61409e9 | §4.5.577 | 0 / 0 / 0 | 0 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (CI only: the test jobs run under nextest) |
+| 2026-10-01 | cb12baa | §4.5.578 | 0 / 0 / 0 | 0 | 11/11 · 10 ok · verilog-axi ruled-split | none refused (CI only: a non-blocking latest-stable job; lint-only source rewrites) |
 
 ## Section counts
 
@@ -225,6 +226,7 @@ a section restructure, a residue split).
 | 2026-09-30 | c852bca | §4.5.575 | 8886 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 124 / 105 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 443 / 266 / 177 |
 | 2026-09-30 | 39fcd62 | §4.5.576 | 8888 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 123 / 104 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 17 / 8 / 9 | 4 / 0 / 4 | 2 / 0 / 2 | 442 / 265 / 177 |
 | 2026-10-01 | 61409e9 | §4.5.577 | 8888 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 123 / 104 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 16 / 8 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 441 / 265 / 176 |
+| 2026-10-01 | cb12baa | §4.5.578 | 8888 | 34 | 21 / 1 / 20 | 196 / 108 / 88 | 5 / 0 / 5 | 24 / 19 / 5 | 123 / 104 / 19 | 12 / 0 / 12 | 14 / 9 / 5 | 6 / 0 / 6 | 16 / 15 / 1 | 15 / 7 / 8 | 4 / 0 / 4 | 2 / 0 / 2 | 440 / 264 / 176 |
 - 2026-09-28 (§4.5.563): 3a +5 (ibex's classes ⑤ⓖ–⑤ⓚ; ⑤ⓐ gained an ibex cell) and 3b +2
   (display-null-arg, oob-read-exit). The total includes the Summary's new `study/03` row (3 / 2 / 1:
   ibex end to end, the new-design census, the corpus in CI), which has no column here. §2 is frozen
@@ -281,3 +283,5 @@ a section restructure, a residue split).
   two rows (§4.5.576 review), which this table does not count.
 - 2026-10-01 (§4.5.577): 5.b −1 (`CI-NEXTEST` closed, blocked −1: its prerequisite, the
   temp-name collision, closed with it). Tests unchanged; CI only.
+- 2026-10-01 (§4.5.578): 5.b −1 (`MSRV-CEIL` closed, startable −1). Tests unchanged; CI gains
+  `build-stable`, and 35 stable-only clippy lints are fixed without a behaviour change.
