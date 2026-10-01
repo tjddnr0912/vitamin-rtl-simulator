@@ -452,8 +452,8 @@ impl Elaborator<'_> {
                 // sum wraps to 0 and BOTH oracles say 0, and the same 16-vs-0 rode into
                 // every generate-if condition and ternary condition built on one.
                 // The width-aware walk owns that arm (and consults
-                // `const_compare_special` from inside it, so the string / wildcard
-                // whole-node folds still fire).
+                // `const_compare_special` and `const_wildcard_i64` from inside it, so
+                // the string fold and the `==?` / `inside` wildcard still fire).
                 if !binop_result_is_context_determined(*op) {
                     // …and when the width-aware walk cannot hold an operand (a
                     // 128-bit literal: `8'd3 + (128'h1_0000_0000_0000_0000 > 128'd1)`

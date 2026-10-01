@@ -393,8 +393,9 @@ fn a_split_sizing_keeps_the_i64_answer() {
 ///   its real and hierarchical labels).
 /// - a case expression with no bit-domain width (a constant-function call): S48, a 65-bit
 ///   label beside `f(2)` — all three `default`, vita `default`.
-/// - an x-left `==?` (no constant `==?` fold yet, §2 🆕 S (a)): T2
-///   `$isunknown(4'bx100 ==? 4'b1?00)` against 1 — iverilog and sv2v `item`, vita `default`.
+/// - a compound x/z `inside` element (`{2'b1?, 2'b00}`), which the constant `==?` fold
+///   refuses as the run time does: T4 against 1 — sv2v `item` (iverilog refuses
+///   `inside`, verilator x/? labels), vita `default`.
 #[test]
 fn a_label_the_bit_domain_cannot_read_keeps_the_pre_answer() {
     check(
@@ -414,7 +415,7 @@ fn a_label_the_bit_domain_cannot_read_keeps_the_pre_answer() {
                 ("L14", "3", "t.P"),
                 ("L14T", "4", "t.P"),
                 ("S48", "f(2)", "W"),
-                ("T2", "1", "$isunknown(4'bx100 ==? 4'b1?00)"),
+                ("T4", "1", "4'b1100 inside {{2'b1?, 2'b00}}"),
             ],
         ),
         &[
@@ -429,7 +430,47 @@ fn a_label_the_bit_domain_cannot_read_keeps_the_pre_answer() {
             "L14 default",
             "L14T default",
             "S48 default",
-            "T2 default",
+            "T4 default",
+        ],
+    );
+}
+
+/// A label holding a constant `==?` or `inside` the constant domains now fold (§2 🆕 S (a),
+/// on top of 🆕 T): an x-left `==?` reads x, so `$isunknown` of it is 1 and a shift of it
+/// is x, and an `inside` element with x/z bits matches as `==?`. iverilog and sv2v →
+/// iverilog print every `item` line (iverilog refuses `inside`; its own `==?` twins
+/// `4'b1100 ==? 4'b1?00` and `4'b1100 ==? 4'b11x0` give 1; verilator refuses x/? labels).
+/// PRE printed `T2 default`, `T3 default`, `X13 default`, `X23 default`, `M04 b`, `R08 b`,
+/// and the x-valued labels C1 / X21 / M06 / M10 were skipped unread, right by accident.
+#[test]
+fn a_constant_wildcard_label_is_read_in_the_bit_domain() {
+    check(
+        &cases(
+            "  localparam M = 1;",
+            &[
+                ("T2", "1", "$isunknown(4'bx100 ==? 4'b1?00)"),
+                ("T3", "0", "(4'bx100 ==? 4'b1?00) >> 1"),
+                ("X13", "1", "4'b1100 inside {4'b1?00}"),
+                ("X23", "1", "4'b1100 inside {4'b11x0}"),
+                ("M04", "1", "$isunknown(4'bx100 ==? 4'b1?00), 2"),
+                ("R08", "M", "$isunknown(4'bx100 ==? 4'b1?00), 2"),
+                ("C1", "1", "(4'bx100 ==? 4'b1?00)"),
+                ("X21", "1", "(4'bx100 !=? 4'b1?00)"),
+                ("M06", "0", "$isunknown(4'bx100 ==? 4'b1?00), 2"),
+                ("M10", "0", "(4'bx100 ==? 4'b1?00), 0"),
+            ],
+        ),
+        &[
+            "T2 item",
+            "T3 item",
+            "X13 item",
+            "X23 item",
+            "M04 item",
+            "R08 item",
+            "C1 default",
+            "X21 default",
+            "M06 default",
+            "M10 item",
         ],
     );
 }

@@ -133,14 +133,13 @@ impl Elaborator<'_> {
         }
     }
 
-    /// The two WHOLE-NODE comparison folds that do not live in the numeric domain:
-    /// a `string` parameter equality (§6.16 compares TEXT, and neither operand has an
-    /// i64 value at all) and `==?`/`!=?` against an x/z PATTERN literal (§11.4.6 makes
-    /// the pattern's unknown bits don't-cares).
+    /// The WHOLE-NODE comparison fold that does not live in the numeric domain: a
+    /// `string` parameter equality (§6.16 compares TEXT, and neither operand has an
+    /// i64 value at all).
     ///
-    /// Both are MODULE-SCOPE facts — they resolve names through `const_str_in_scope` /
-    /// `const_eval_in_scope` — so a caller with local bindings must not consult them.
-    /// They live here rather than inline because the WIDTH-AWARE walk
+    /// It is a MODULE-SCOPE fact — it resolves names through `const_str_in_scope` — so
+    /// a caller with local bindings must not consult it. It lives here rather than
+    /// inline because the WIDTH-AWARE walk
     /// (`eval_const_env_at`) recurses into a comparison's OPERANDS and would otherwise
     /// shadow them: routing a size cast through that walk turned `8'(MODE == "Y")` —
     /// the canonical way to switch an implementation on a string parameter — from
@@ -180,64 +179,13 @@ impl Elaborator<'_> {
                 return Some(i64::from((x == y) == want_eq));
             }
         }
-        // ⚠️ Everything below is the WILDCARD case only, and the LHS fold must not
-        // happen before that check. This helper runs on EVERY binary node, and the
-        // arm it was extracted from folds the LHS again for its generic path — so
-        // computing it here unconditionally evaluates each left operand TWICE, which
-        // is 2^depth on a left-deep chain. Measured: a 200-deep `(~r5) - 5'd0 - …`
-        // index went from milliseconds to over four minutes (a suite timeout).
-        if !matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
-            return None;
-        }
-        // ⚠️ SELF-DETERMINED, like every other operand of a comparison: this helper is
-        // consulted from inside the width-aware arm, so reading the LHS with the
-        // width-unlimited walk would make the wildcard the one member of its own
-        // operator family still answering from the evaluator that family redirects
-        // away from (`(4'd15 + 4'd1) ==? 4'b000x` is 1 for both oracles and was 0).
-        let a = self.const_int_selfdet(lhs)?;
-        // `==?`/`!=?` against a wildcard LITERAL (`P ==? 4'b1x1x`): the x/z bits
-        // of the PATTERN (rhs) are don't-cares (§11.4.6). const_eval carries no
-        // x/z, so the generic `const_eval_in_scope(rhs)` below returns None on
-        // the pattern; pull the pattern's value + x/z mask straight from the
-        // literal and masked-compare. The pattern zero-extends, so `a & !mask`
-        // at full width matches iverilog for a narrower pattern too. Fail-closed:
-        // only a NON-NEGATIVE const `a` (an i64 sign bit would corrupt the
-        // full-width compare) and a single-word, bit-63-clear pattern; otherwise
-        // fall through to None (loud). An x/z-free pattern is NOT intercepted —
-        // it folds via the `WildEq`/`WildNe` collapse arm below.
-        if matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
-            if let ast::ExprKind::IntLit { kind, raw } = &rhs.kind {
-                // Only a SIZED pattern is safe: bits ABOVE its declared width
-                // zero-extend, so the masked compare's "the LHS high bits must
-                // be 0" is correct. An UNSIZED x/z literal (`'hx`) x-FILLS to the
-                // context width — but parse_int_literal sizes it to its 32-bit
-                // self-width, so an LHS wider than 32 bits would wrongly require
-                // its high bits to be 0 (silent-wrong). Leave unsized x/z patterns
-                // loud (fall through → the generic rhs fold returns None).
-                if matches!(kind, ast::IntLitKind::Sized) {
-                    if let Some(cv) = parse_int_literal(raw, *kind) {
-                        if cv.bits.unk.iter().any(|&u| u != 0) {
-                            let pat = cv.bits.val.first().copied().unwrap_or(0);
-                            let mask = cv.bits.unk.first().copied().unwrap_or(0);
-                            if a >= 0
-                                && cv.bits.val.len() <= 1
-                                && cv.bits.unk.len() <= 1
-                                && (pat >> 63) == 0
-                                && (mask >> 63) == 0
-                            {
-                                let eq = (a & !(mask as i64)) == (pat as i64 & !(mask as i64));
-                                return Some(if matches!(op, ast::BinOp::WildEq) {
-                                    eq
-                                } else {
-                                    !eq
-                                } as i64);
-                            }
-                            return None; // negative LHS / wide / bit-63 pattern → loud
-                        }
-                    }
-                }
-            }
-        }
+        // `==?` / `!=?` / an `inside` element against an x/z PATTERN is not a
+        // whole-node fold here any more: it needs the comparison's common width,
+        // which `eval_const_env_at` (the caller) computes — see
+        // `Elaborator::const_wildcard_i64` — and the wide domain answers the rest
+        // (`const_wide::fold_region`). The masked compare that lived here read the
+        // left operand at its OWN width (`(4'd15 + 4'd1) ==? 5'b1?000` was 0, both
+        // oracles 1) and zero-extended a signed pattern.
         None
     }
 }

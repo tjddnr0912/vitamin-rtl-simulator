@@ -263,45 +263,40 @@ endmodule
     assert_eq!(out.trim(), "match");
 }
 
-/// A NEGATIVE signed LHS is fail-closed (loud): const_eval's i64 sign bits would
-/// corrupt the full-width masked compare, so vita rejects rather than compute an
-/// unverifiable value (iverilog computes it — a correct-or-loud over-rejection).
+/// A NEGATIVE signed LHS folds: the compare reads the left operand's BITS at the
+/// comparison's width (`-6` is `4'b1010`), which the unsigned pattern then masks —
+/// §11.4.6 with §11.4.5's extension, one routine for both constant domains
+/// (`const_wildcard_i64`). It used to be refused (the i64 masked compare could not read
+/// a sign bit). iverilog 13.0 and verilator 5.052 print `1 0`.
 #[test]
-fn wildcard_eq_negative_lhs_is_loud() {
-    let (_out, diags) = run_with_diags(
-        r#"
+fn wildcard_eq_negative_lhs_folds() {
+    let out = run(r#"
 module t;
   localparam signed [3:0] P = -6;
   localparam int A = (P ==? 4'b1x1x);
-  initial $display("%0d", A);
+  localparam int B = (P ==? 4'b0x1x);
+  initial $display("%0d %0d", A, B);
 endmodule
-"#,
-    );
-    assert!(
-        diags.iter().any(|d| d.starts_with("Error")),
-        "negative signed LHS wildcard fold must be loud: {diags:?}"
-    );
+"#);
+    assert_eq!(out.trim(), "1 0");
 }
 
-/// An UNSIZED x/z pattern (`'hx`) is fail-closed (loud): it x-FILLS to the context
-/// width, but parse_int_literal sizes it to its 32-bit self-width, so an LHS wider
-/// than 32 bits would wrongly require its high bits to be 0. Only SIZED patterns fold.
-/// (iverilog computes M=1 here — a correct-or-loud over-rejection, not silent-wrong.)
+/// An UNSIZED x/z pattern (`'hx`) pads its leftmost x/z digit to the width of the
+/// expression (§5.7.1), so against a 40-bit left operand every bit is a don't-care and
+/// the compare is 1; a known leftmost digit (`'h0x`) pads with zeros, which the left
+/// operand's high byte then fails. It used to be refused (the i64 masked compare sized
+/// the literal at its own 32 bits). iverilog 13.0 and verilator 5.052 print `M=1 M2=0`.
 #[test]
-fn wildcard_eq_unsized_pattern_is_loud() {
-    let (_out, diags) = run_with_diags(
-        r#"
+fn wildcard_eq_unsized_pattern_pads_to_the_expression() {
+    let out = run(r#"
 module t;
   localparam logic [39:0] P = 40'hFF_0000_0000;
   localparam int M = (P ==? 'hx);
-  initial $display("M=%0d", M);
+  localparam int M2 = (P ==? 'h0x);
+  initial $display("M=%0d M2=%0d", M, M2);
 endmodule
-"#,
-    );
-    assert!(
-        diags.iter().any(|d| d.starts_with("Error")),
-        "unsized x/z wildcard pattern must be loud (self-width truncation): {diags:?}"
-    );
+"#);
+    assert_eq!(out.trim(), "M=1 M2=0");
 }
 
 /// §4.5.147 — a width-63 param (`[62:0]`) folds without panicking. `coerce_i64_to_width`

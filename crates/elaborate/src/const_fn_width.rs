@@ -552,6 +552,14 @@ impl Elaborator<'_> {
                             if let Some(v) = self.const_compare_special(*op, lhs, rhs) {
                                 return Some(v);
                             }
+                            // `==?`/`!=?`/an `inside` element against an x/z LITERAL:
+                            // the left operand at the comparison's common width. One
+                            // it cannot evaluate falls to the wide domain just below.
+                            if let Some(v) =
+                                self.const_wildcard_i64(*op, lhs, rhs, env, envw, depth)
+                            {
+                                return Some(v);
+                            }
                             // An operand carrying x/z bits has no i64 reading; the
                             // wide domain answers the equalities and logical operators
                             // that are definite regardless (`4'b1x10 === 4'b1x10`,
