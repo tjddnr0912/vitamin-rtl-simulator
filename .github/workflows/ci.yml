@@ -28,6 +28,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.100
       - name: fmt
         run: cargo fmt --all -- --check
       - name: clippy
@@ -35,7 +38,14 @@ jobs:
       - name: build
         run: cargo build --workspace --locked
       - name: test
-        run: cargo test --workspace --locked
+        run: |
+          # Each test process gets a private TMPDIR (scripts/test-tmpdir.sh):
+          # test temp names restart their counter in every nextest process.
+          export "CARGO_TARGET_$(rustc -vV | sed -n 's/^host: //p' | tr 'a-z-' 'A-Z_')_RUNNER=$PWD/scripts/test-tmpdir.sh"
+          cargo nextest run --workspace --locked --no-fail-fast
+      # nextest does not run doctests.
+      - name: doctests
+        run: cargo test --doc --workspace --locked
 
   # ⚠️ Phase B5 — a SEPARATE AXIS, not an extra step on the jobs above, and that
   # is feature unification rather than tidiness: if any crate in a workspace
@@ -59,6 +69,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: no-oracle
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.100
       - name: build
         run: cargo build -p cli -p sim-engine --locked --no-default-features
       - name: clippy
@@ -68,7 +81,11 @@ jobs:
       # back to. `--lib` because the integration targets pull dev-dependencies
       # that re-enable `oracle`.
       - name: test (lib)
-        run: cargo test -p sim-engine --locked --no-default-features --lib
+        run: |
+          # Each test process gets a private TMPDIR (scripts/test-tmpdir.sh):
+          # test temp names restart their counter in every nextest process.
+          export "CARGO_TARGET_$(rustc -vV | sed -n 's/^host: //p' | tr 'a-z-' 'A-Z_')_RUNNER=$PWD/scripts/test-tmpdir.sh"
+          cargo nextest run -p sim-engine --locked --no-default-features --lib
       - name: smoke — a design runs, and the absent executors are LOUD
         run: |
           set -euo pipefail
@@ -87,10 +104,20 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: install C linker
-        run: dnf install -y gcc
+        run: dnf install -y gcc tar gzip
       - uses: dtolnay/rust-toolchain@1.85.0
       - uses: Swatinem/rust-cache@v2
         with:
           key: rhel9
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.100
       - run: cargo build --workspace --locked
-      - run: cargo test --workspace --locked
+      - name: test
+        run: |
+          # Each test process gets a private TMPDIR (scripts/test-tmpdir.sh):
+          # test temp names restart their counter in every nextest process.
+          export "CARGO_TARGET_$(rustc -vV | sed -n 's/^host: //p' | tr 'a-z-' 'A-Z_')_RUNNER=$PWD/scripts/test-tmpdir.sh"
+          cargo nextest run --workspace --locked --no-fail-fast
+      - name: doctests
+        run: cargo test --doc --workspace --locked

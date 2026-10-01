@@ -14,7 +14,7 @@
 # (`sim-engine::backend_equiv runaway_codegenable_loop_equal_and_fatal`). A test
 # that reaches 4 minutes is hung, not slow.
 #
-# ⚠️ CI still runs `cargo test` (ci.yml, 4 jobs), which does NOT read this file.
-# This protects local runs — which is where the mutation battery runs.
+# CI runs nextest too (ci.yml, since ROADMAP §5.b CI-NEXTEST), so this cap
+# applies there as well as to local runs, where the mutation battery runs.
 [profile.default]
 slow-timeout = { period = "60s", terminate-after = 4 }
