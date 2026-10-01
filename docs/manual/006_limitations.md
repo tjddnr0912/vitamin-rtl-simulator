@@ -171,13 +171,17 @@ run.
 `W-RUN-UNIQUE-VIOLATION` / `VITA-W4031` with the message `value is unhandled for
 priority or unique case statement`, pinned to Icarus Verilog's wording. `unique0` and
 `priority0` parse as the plain statement with that report suppressed, per §12.4.2.
+On `if`, the arm is injected only when the first `if` has no `else`, so an `if … else if`
+chain with no final `else` reports nothing (ROADMAP §3.b `unique-if-chain`).
 
 The report is printed when the arm executes, not deferred to the end of the time step
 (IEEE 1800 §12.4.2.1), so a zero-delay glitch reports too — typically at time 0, before the
 inputs settle — where Icarus Verilog and Verilator print nothing (ROADMAP §3.b
 `unique-glitch-t0`).
 
-The multi-match uniqueness check is a documented cut. The lowered decision cascade is
+The multi-match uniqueness check is a documented cut, and nothing announces it at run time yet
+(Icarus Verilog says `sorry: Case unique/unique0 qualities are ignored.` when it compiles;
+ROADMAP §3.b `unique-overlap-note`). The lowered decision cascade is
 first-match-wins, so an overlap between arms is unobservable in the result, and reporting
 it would require a second evaluation of every arm.
 

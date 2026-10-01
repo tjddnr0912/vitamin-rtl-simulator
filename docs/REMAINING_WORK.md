@@ -31,10 +31,14 @@ canonical table is the fact table in [README.md](../README.md).
   re-entry condition (ROADMAP §5.a).
 - The teeth for anything on the G2 rail that REPORTS is an asymmetric mutation — change something
   upstream that must not move the numbers — because a same-input golden lies identically twice.
-- An external report reproduced three items at HEAD: a silent-wrong in `inside` (a wildcard element
+- An external report reproduced four items at HEAD: a silent-wrong in `inside` (a wildcard element
   compared with `==`, ROADMAP §2 🆕 S), `case … inside` refused at parse (§3.b `case-inside`;
-  verilator is a 2-state oracle for it) and a time-0 `unique` warning both reference tools omit
-  (§3.b `unique-glitch-t0`). Incoming reports pre-empt the queue, so they are §5.2 rows 1–3.
+  verilator is a 2-state oracle for it), a time-0 `unique` warning both reference tools omit
+  (§3.b `unique-glitch-t0`) and a `unique` / `unique0` overlap that is neither checked (a §8
+  non-goal) nor announced (§3.b `unique-overlap-note`). Re-measuring them found a fifth: a
+  `unique if … else if` chain with no final `else` never reports the no-match (§3.b
+  `unique-if-chain`, landing with `unique-glitch-t0`). Incoming reports pre-empt the queue, so
+  they are §5.2 rows 1–4.
 - `corpus-runner run` prints the elaborate/simulate split per row. Every workload is ≥99%
   simulation, so the corpus cannot GATE a front-end regression (ROADMAP §5.b `ELAB-PHASE-BLIND`).
 
@@ -44,8 +48,9 @@ canonical table is the fact table in [README.md](../README.md).
 |---|---|---|
 | 1 | §2 🆕 S | `inside` compares a constant wildcard element with `==` instead of `==?` (silent-wrong) |
 | 2 | §3.b `case-inside` | accept `case (e) inside`, reusing row 1's comparison |
-| 3 | §3.b `unique-glitch-t0` | defer the `unique` / `priority` violation report to the Observed region |
-| 4 | corpus | new-design census (OpenTitan IPs, VeeR EL2 / EH1, alexforencich axis / pcie / uart / i2c) |
+| 3 | §3.b `unique-glitch-t0` + `unique-if-chain` | defer the `unique` / `priority` violation report to the Observed region; report the no-match at the end of an `else if` chain |
+| 4 | §3.b `unique-overlap-note` | say once per run that `unique` / `unique0` overlaps are not checked (the check stays a §8 non-goal) |
+| 5 | corpus | new-design census (OpenTitan IPs, VeeR EL2 / EH1, alexforencich axis / pcie / uart / i2c) |
 
 Priority principle: ① silent-wrong with an oracle > ② loud→supported with an oracle > ③ an
 honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is below the ladder.
@@ -59,7 +64,7 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §2 start-order table (frozen) | 22 rows | 2 / 20 | LOUD 4 · BLOCKED 4 · OPEN 6 (🆕 H and 🆕 S startable, 🆕 S re-entered from an external report; row 14 closed and row 30 re-measured stale in §4.5.556, row 25 closed in §4.5.557; row 26 absorbed by row 14 in §4.5.546; 🆕 F and 🆕 R closed) · ORACLE-SPLIT 4 (row 7 since §4.5.541: the `#d` / `#0` / fork kinds landed, the wake-group and time-0 hierarchy orders are splits) · PERF 2 · DO-NOT-START 2 — the six startable rows were taken in one batch (§4.5.519–524): rows 5 and 🆕 L ⓢ closed, 🆕 I ⓖ, 🆕 N's two spelling cells and 🆕 O's eleven-reader class closed, row 32 re-measured and reclassified ORACLE-SPLIT. §4.5.525 then took the §2 declaration-collision cluster out of the mechanism list (six rows deleted) and §4.5.526 the inline-lane store rules (nine rows deleted), not this table. §4.5.527 added 🆕 R (the shared wide walk inside self-determined positions and on the §11.8.2 sign, WALL), the prerequisite for widening its override arm |
 | §2 recorded defects by mechanism (frozen) | 196 bullets | 108 / 88 | inline / frame binds 14 · size cast / signedness 12 · constant domain (i64) 20 · scoping / imports / block-locals 32 · delays / events 19 · real 11 · performance 6 · index sealing 15 · ranges / bounds / selects 8 · diagnostics / artifacts 10 · class fields 4 · oracle splits 45 |
 | §3 numbered items | 24 rows | 19 / 5 | ⑤ ibex ladder (9, ⑤ⓚ closed in §4.5.574; ⓕ is the unpacked-array typedef residue), ③ file-I/O hoisting (4), ⑧ system functions in function bodies and `$finish` (4), ⑨ package string/real constants (2), ⑬ diagnostic location (3), ⑭ call-tree observability (2) |
-| §3 small residues | 124 rows | 105 / 19 | subroutine / frame 28 (md-return-select: §4.5.564's loud edges) · constants / parameters 29 (gen-enum-uncarried, string-literal-condition-residue and md-param-pattern-residue: §4.5.565's, §4.5.568's and §4.5.569's loud edges) · parser accept 17 · system tasks & file I/O 9 · nets / timing 14 (cont-array-residue, packed-default-residue and cont-array-typedef-residue: §4.5.566–567's and §4.5.570's loud edges) · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 8 (unique-glitch-t0) · VCD / real conversion 3 |
+| §3 small residues | 126 rows | 107 / 19 | subroutine / frame 28 (md-return-select: §4.5.564's loud edges) · constants / parameters 29 (gen-enum-uncarried, string-literal-condition-residue and md-param-pattern-residue: §4.5.565's, §4.5.568's and §4.5.569's loud edges) · parser accept 17 · system tasks & file I/O 9 · nets / timing 14 (cont-array-residue, packed-default-residue and cont-array-typedef-residue: §4.5.566–567's and §4.5.570's loud edges) · loud shapes surfaced by §4.5.493–495 7 · strings / heap 8 · diagnostics quality 10 (unique-glitch-t0, unique-if-chain, unique-overlap-note) · VCD / real conversion 3 |
 | workload corpus (study/03) | 1 item | 1 / 0 | the new-design census (the corpus runs in CI since §4.5.579) |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | 0 / 6 | mostly no oracle; hand-IEEE when started; every row states a prerequisite |
@@ -67,7 +72,7 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | §6 G2 OBS | 6 stages + 10 | 15 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 10 items beside the staged track (call tree, a `void` function filed as `kind: task`, a route decided per spelling, per-call-site builtins, `builtins` rows for primitives the source never wrote, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2, `wprog` keys with no producer) |
 | §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
-| total | 441 | 266 / 175 | |
+| total | 443 | 268 / 175 | |
 
 `startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
 prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.
