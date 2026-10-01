@@ -161,13 +161,22 @@ impl Elaborator<'_> {
         // i64 value, so the numeric fold below returned None and the generate-if
         // was loud ("condition is not a constant"). IEEE 1800 §6.16 compares
         // string VALUES, so equality is exact text equality.
+        //
+        // An `inside` element on a string is §11.4.13's `==` (non-integral).
         if matches!(
             op,
-            ast::BinOp::Eq | ast::BinOp::Ne | ast::BinOp::CaseEq | ast::BinOp::CaseNe
+            ast::BinOp::Eq
+                | ast::BinOp::Ne
+                | ast::BinOp::CaseEq
+                | ast::BinOp::CaseNe
+                | ast::BinOp::InsideEq
         ) {
             if let (Some(x), Some(y)) = (self.const_str_in_scope(lhs), self.const_str_in_scope(rhs))
             {
-                let want_eq = matches!(op, ast::BinOp::Eq | ast::BinOp::CaseEq);
+                let want_eq = matches!(
+                    op,
+                    ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::InsideEq
+                );
                 return Some(i64::from((x == y) == want_eq));
             }
         }
@@ -177,7 +186,16 @@ impl Elaborator<'_> {
         // computing it here unconditionally evaluates each left operand TWICE, which
         // is 2^depth on a left-deep chain. Measured: a 200-deep `(~r5) - 5'd0 - …`
         // index went from milliseconds to over four minutes (a suite timeout).
-        if !matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
+        //
+        // An `inside` element (§11.4.13) is a `==?` exactly when it is an integral
+        // pattern carrying x/z bits, and the one such pattern this domain can read is
+        // the sized UNSIGNED literal below. Every other `inside` element returns here:
+        // one with no x/z folds as `==` on the generic path, and any other x/z shape
+        // declines there (the i64 domain has no x/z), which is loud. A SIGNED pattern
+        // is not admitted: the masked compare zero-extends the pattern, and §11.4.5
+        // sign-extends a signed pattern against a wider signed left operand.
+        let inside_wild = matches!(op, ast::BinOp::InsideEq) && unsigned_sized_xz_literal(rhs);
+        if !matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) && !inside_wild {
             return None;
         }
         // ⚠️ SELF-DETERMINED, like every other operand of a comparison: this helper is
@@ -196,7 +214,10 @@ impl Elaborator<'_> {
         // full-width compare) and a single-word, bit-63-clear pattern; otherwise
         // fall through to None (loud). An x/z-free pattern is NOT intercepted —
         // it folds via the `WildEq`/`WildNe` collapse arm below.
-        if matches!(op, ast::BinOp::WildEq | ast::BinOp::WildNe) {
+        if matches!(
+            op,
+            ast::BinOp::WildEq | ast::BinOp::WildNe | ast::BinOp::InsideEq
+        ) {
             if let ast::ExprKind::IntLit { kind, raw } = &rhs.kind {
                 // Only a SIZED pattern is safe: bits ABOVE its declared width
                 // zero-extend, so the masked compare's "the LHS high bits must
@@ -217,7 +238,10 @@ impl Elaborator<'_> {
                                 && (mask >> 63) == 0
                             {
                                 let eq = (a & !(mask as i64)) == (pat as i64 & !(mask as i64));
-                                return Some(if matches!(op, ast::BinOp::WildEq) {
+                                return Some(if matches!(
+                                    op,
+                                    ast::BinOp::WildEq | ast::BinOp::InsideEq
+                                ) {
                                     eq
                                 } else {
                                     !eq
@@ -231,6 +255,17 @@ impl Elaborator<'_> {
         }
         None
     }
+}
+
+/// Is `e` a SIZED, UNSIGNED integer literal with at least one x/z/? bit — the one
+/// `inside`-element pattern `const_compare_special`'s masked compare reads exactly?
+fn unsigned_sized_xz_literal(e: &ast::Expr) -> bool {
+    let ast::ExprKind::IntLit { kind, raw } = &e.kind else {
+        return false;
+    };
+    matches!(kind, ast::IntLitKind::Sized)
+        && parse_int_literal(raw, *kind)
+            .is_some_and(|cv| !cv.signed && cv.bits.unk.iter().any(|&u| u != 0))
 }
 
 /// A string literal's §5.9 bits for a consumer that reads literals:

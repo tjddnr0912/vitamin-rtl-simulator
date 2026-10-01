@@ -37,7 +37,10 @@ pub(crate) fn map_cbinop(op: ast::BinOp) -> Option<sim_ir::CBinOp> {
         B::Le => C::Le,
         B::Gt => C::Gt,
         B::Ge => C::Ge,
-        B::Eq => C::Eq,
+        // An `inside` element: its constant operand is folded by `const_eval_in_scope`,
+        // which declines an x/z literal (loud at the predicate compiler), so an element
+        // that reaches the i64 predicate has no don't-care bit and `==?` is `==`.
+        B::Eq | B::InsideEq => C::Eq,
         B::Ne => C::Ne,
         B::LogAnd => C::And,
         B::LogOr => C::Or,
@@ -144,7 +147,7 @@ pub(crate) fn apply_cmp_bound(op: ast::BinOp, c: i64, lo: &mut i64, hi: &mut i64
         Le => *hi = (*hi).min(c),
         Gt => *lo = (*lo).max(c.saturating_add(1)),
         Ge => *lo = (*lo).max(c),
-        Eq => {
+        Eq | InsideEq => {
             *lo = (*lo).max(c);
             *hi = (*hi).min(c);
         }
@@ -260,7 +263,7 @@ impl Elaborator<'_> {
             ExprKind::Binary { op, lhs, rhs }
                 if matches!(
                     op,
-                    BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq
+                    BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::InsideEq
                 ) =>
             {
                 let narrow = if let Some(fname) = rand_field_ident(lhs) {

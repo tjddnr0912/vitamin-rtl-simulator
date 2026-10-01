@@ -163,6 +163,7 @@ mod tables;
 mod toplevel;
 mod var_init;
 mod wide_param_range;
+mod wildcard_eq;
 pub use api::*;
 pub(crate) use array_formal::*;
 pub(crate) use ast_query::*;

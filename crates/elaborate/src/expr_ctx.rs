@@ -105,6 +105,10 @@ pub(crate) fn map_binop(op: ast::BinOp) -> ir::BinOp {
             debug_assert!(false, "WildNe must be lowered via lower_wildcard_eq");
             ir::BinOp::Ne
         }
+        // An `inside` element (§11.4.13) reaching here IS the `==` case: both
+        // `Binary` arms ask `inside_value_cmp` first, which builds the `==?` compare
+        // for a constant x/z element and refuses one it cannot carry.
+        InsideEq => ir::BinOp::Eq,
         BitAnd => ir::BinOp::BitAnd,
         BitXor => ir::BinOp::BitXor,
         BitXnor => ir::BinOp::BitXnor,
@@ -227,8 +231,8 @@ pub(crate) fn ctx_widening_below(
                 return true;
             }
             match op {
-                Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe | WildEq | WildNe | LogAnd
-                | LogOr => false, // self-determined 1-bit result
+                Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe | WildEq | WildNe | InsideEq
+                | LogAnd | LogOr => false, // self-determined 1-bit result
                 // A shift's count / power's exponent is self-determined — recurse only
                 // into the (context-determined) LEFT operand.
                 Shl | Shr | AShl | AShr | Pow => rec(lhs),
@@ -281,8 +285,8 @@ pub(crate) fn ast_expr_self_width(
         Binary { op, lhs, rhs } => {
             use ast::BinOp::*;
             match op {
-                Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe | WildEq | WildNe | LogAnd
-                | LogOr => Some(1),
+                Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe | WildEq | WildNe | InsideEq
+                | LogAnd | LogOr => Some(1),
                 // §11.6.1: a shift / power self-width is the LEFT operand's width.
                 Shl | Shr | AShl | AShr | Pow => rec(lhs),
                 _ => Some(rec(lhs)?.max(rec(rhs)?)),
@@ -839,7 +843,7 @@ impl Elaborator<'_> {
                 // arith/bitwise: operands sized to max(ctx, both self-widths).
                 // comparison: operands sized to max of the two self-widths ONLY (the
                 // 1-bit result does not let the outer ctx into the operands).
-                let is_cmp = matches!(op, Eq | Ne | Lt | Le | Gt | Ge | CaseEq | CaseNe);
+                let is_cmp = matches!(op, Eq | Ne | Lt | Le | Gt | Ge | CaseEq | CaseNe | InsideEq);
                 let base = if is_cmp { 0 } else { ctx };
                 let lf = expr_contains_fill(lhs);
                 let rf = expr_contains_fill(rhs);
@@ -859,6 +863,14 @@ impl Elaborator<'_> {
                     let w = base.max(1);
                     (self.lower_expr_ctx(lhs, w), self.lower_expr_ctx(rhs, w))
                 };
+                // §11.4.13: an `inside` element is `==?` when it is a constant with
+                // x/z bits (a fill element is already sized to the left operand
+                // above); `None` is the `==` case, which continues as `Eq` below.
+                if matches!(op, InsideEq) {
+                    if let Some(id) = self.inside_value_cmp(rhs, l, r) {
+                        return id;
+                    }
+                }
                 if let Some(id) = self.binary_real_operand_route(irop, l, r) {
                     return id;
                 }
@@ -1008,6 +1020,7 @@ impl Elaborator<'_> {
         matches!(
             op,
             ast::BinOp::Eq
+                | ast::BinOp::InsideEq
                 | ast::BinOp::Ne
                 | ast::BinOp::Lt
                 | ast::BinOp::Le

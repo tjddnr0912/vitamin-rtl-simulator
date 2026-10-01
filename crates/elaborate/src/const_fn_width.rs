@@ -104,6 +104,7 @@ pub(crate) fn binop_result_is_context_determined(op: ast::BinOp) -> bool {
         | B::CaseNe
         | B::WildEq
         | B::WildNe
+        | B::InsideEq
         | B::LogAnd
         | B::LogOr => false,
     }

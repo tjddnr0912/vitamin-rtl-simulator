@@ -1524,7 +1524,7 @@ impl Elaborator<'_> {
                     B::Le => t(a <= b),
                     B::Gt => t(a > b),
                     B::Ge => t(a >= b),
-                    B::Eq | B::CaseEq => t(a == b),
+                    B::Eq | B::CaseEq | B::InsideEq => t(a == b),
                     B::Ne | B::CaseNe => t(a != b),
                     B::LogAnd => t(a != 0.0 && b != 0.0),
                     B::LogOr => t(a != 0.0 || b != 0.0),

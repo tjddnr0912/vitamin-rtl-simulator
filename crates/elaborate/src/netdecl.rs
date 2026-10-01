@@ -844,7 +844,12 @@ impl Elaborator<'_> {
         if let ast::ExprKind::Binary { op, lhs, rhs } = &e.kind {
             if matches!(
                 op,
-                ast::BinOp::Lt | ast::BinOp::Le | ast::BinOp::Gt | ast::BinOp::Ge | ast::BinOp::Eq
+                ast::BinOp::Lt
+                    | ast::BinOp::Le
+                    | ast::BinOp::Gt
+                    | ast::BinOp::Ge
+                    | ast::BinOp::Eq
+                    | ast::BinOp::InsideEq
             ) {
                 if let Some(f) = rand_field_ident(lhs) {
                     if self.const_eval_in_scope(rhs).is_some() {

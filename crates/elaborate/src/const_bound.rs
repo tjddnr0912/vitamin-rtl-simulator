@@ -944,6 +944,7 @@ fn bin_op_text(op: ast::BinOp) -> &'static str {
         B::Mod => "%",
         B::Pow => "**",
         B::Eq => "==",
+        B::InsideEq => "inside",
         B::Ne => "!=",
         B::CaseEq => "===",
         B::CaseNe => "!==",

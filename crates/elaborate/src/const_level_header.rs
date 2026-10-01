@@ -573,6 +573,8 @@ fn binop_text(op: ast::BinOp) -> &'static str {
         B::CaseNe => "!==",
         B::WildEq => "==?",
         B::WildNe => "!=?",
+        // One element of an `inside` set: the user wrote `inside`, not `==`.
+        B::InsideEq => "inside",
         B::BitAnd => "&",
         B::BitXor => "^",
         B::BitXnor => "~^",

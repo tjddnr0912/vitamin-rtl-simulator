@@ -190,7 +190,8 @@ impl Elaborator<'_> {
                     B::Le => Some((a <= b) as i64 as f64),
                     B::Gt => Some((a > b) as i64 as f64),
                     B::Ge => Some((a >= b) as i64 as f64),
-                    B::Eq | B::CaseEq => Some((a == b) as i64 as f64),
+                    // An `inside` element on a real is §11.4.13's `==` (non-integral).
+                    B::Eq | B::CaseEq | B::InsideEq => Some((a == b) as i64 as f64),
                     B::Ne | B::CaseNe => Some((a != b) as i64 as f64),
                     B::LogAnd => Some(((a != 0.0) && (b != 0.0)) as i64 as f64),
                     B::LogOr => Some(((a != 0.0) || (b != 0.0)) as i64 as f64),

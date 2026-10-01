@@ -486,7 +486,9 @@ impl Elaborator<'_> {
                     let any_handle = matches!(lk, HKind::Handle | HKind::Null)
                         || matches!(rk, HKind::Handle | HKind::Null);
                     if any_handle {
-                        let is_eq = matches!(op, ast::BinOp::Eq | ast::BinOp::Ne);
+                        // An `inside` element on a handle is §11.4.13's `==`.
+                        let is_eq =
+                            matches!(op, ast::BinOp::Eq | ast::BinOp::Ne | ast::BinOp::InsideEq);
                         // both sides handle/null/unknown ⇒ a legal handle compare.
                         let both_ok = matches!(lk, HKind::Handle | HKind::Null | HKind::Unknown)
                             && matches!(rk, HKind::Handle | HKind::Null | HKind::Unknown);
@@ -508,6 +510,7 @@ impl Elaborator<'_> {
                 if matches!(
                     op,
                     ast::BinOp::Eq
+                        | ast::BinOp::InsideEq
                         | ast::BinOp::Ne
                         | ast::BinOp::Lt
                         | ast::BinOp::Le
@@ -531,8 +534,16 @@ impl Elaborator<'_> {
                         rhs: zero,
                     });
                 }
+                let el = rhs;
                 let lhs = self.lower_expr(lhs); // POST-ORDER: lhs, then rhs, then self
                 let rhs = self.lower_expr(rhs);
+                // §11.4.13: an `inside` element is `==?` when it is a constant with
+                // x/z bits; `None` is the `==` case, which continues as `Eq` below.
+                if matches!(op, ast::BinOp::InsideEq) {
+                    if let Some(id) = self.inside_value_cmp(el, lhs, rhs) {
+                        return id;
+                    }
+                }
                 let irop = map_binop(*op);
                 if let Some(id) = self.binary_real_operand_route(irop, lhs, rhs) {
                     return id;

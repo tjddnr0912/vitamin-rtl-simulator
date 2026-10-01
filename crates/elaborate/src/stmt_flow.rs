@@ -612,6 +612,7 @@ impl Elaborator<'_> {
                     | ast::BinOp::CaseNe
                     | ast::BinOp::WildEq
                     | ast::BinOp::WildNe
+                    | ast::BinOp::InsideEq
                     | ast::BinOp::Lt
                     | ast::BinOp::Le
                     | ast::BinOp::Gt

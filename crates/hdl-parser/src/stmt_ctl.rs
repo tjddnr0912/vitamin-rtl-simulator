@@ -3,7 +3,8 @@
 use super::*;
 
 impl Parser<'_, '_> {
-    /// Desugar `lhs inside { item, … }` to an OR of equality (`lhs == v`) and range
+    /// Desugar `lhs inside { item, … }` to an OR of element tests (`BinOp::InsideEq`,
+    /// §11.4.13's `==?`-or-`==` comparison, decided in elaborate) and range
     /// (`lhs >= lo && lhs <= hi`) tests. `lhs` is cloned per item (constraint / `if`
     /// operands are side-effect-free). An empty set never matches (`1'b0`).
     pub(crate) fn parse_inside(&mut self, lhs: Expr) -> Expr {
@@ -29,8 +30,14 @@ impl Parser<'_, '_> {
                 let le = mk_bin(BinOp::Le, lhs.clone(), hi);
                 mk_bin(BinOp::LogAnd, ge, le)
             } else {
+                // §11.4.13: a value element is compared with `==?` when it is integral
+                // (its x/z bits are don't-cares) and with `==` otherwise. Whether the
+                // element is a constant x/z pattern is a question only elaborate can
+                // answer (a parameter and a variable look the same here), so the
+                // element gets its own operator and elaborate decides; an element with
+                // no x/z lowers byte-identically to the `Eq` this used to emit.
                 let v = self.expr(0);
-                mk_bin(BinOp::Eq, lhs.clone(), v)
+                mk_bin(BinOp::InsideEq, lhs.clone(), v)
             };
             terms.push(term);
             if self.peek() == Some(TokenKind::Comma) {

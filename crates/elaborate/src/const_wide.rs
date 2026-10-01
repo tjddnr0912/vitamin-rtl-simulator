@@ -208,7 +208,9 @@ fn wide_eq_with_unknowns(op: ast::BinOp, l: &WideBits, r: &WideBits) -> Option<W
     let w = w as usize;
     let eq = match op {
         ast::BinOp::CaseEq | ast::BinOp::CaseNe => (0..w).all(|i| bp_get(lb, i) == bp_get(rb, i)),
-        ast::BinOp::Eq | ast::BinOp::Ne => {
+        // `InsideEq` arrives here only with a fully KNOWN element (`fold_region`
+        // declines an element with an x/z bit), where §11.4.13's `==?` is `==`.
+        ast::BinOp::Eq | ast::BinOp::Ne | ast::BinOp::InsideEq => {
             let differs = (0..w).any(|i| {
                 let ((a, au), (b, bu)) = (bp_get(lb, i), bp_get(rb, i));
                 !au && !bu && a != b
@@ -221,7 +223,10 @@ fn wide_eq_with_unknowns(op: ast::BinOp, l: &WideBits, r: &WideBits) -> Option<W
         _ => return None,
     };
     Some(bp_bit(
-        matches!(op, ast::BinOp::CaseEq | ast::BinOp::Eq) == eq,
+        matches!(
+            op,
+            ast::BinOp::CaseEq | ast::BinOp::Eq | ast::BinOp::InsideEq
+        ) == eq,
     ))
 }
 
@@ -844,6 +849,7 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
                     | ast::BinOp::Ne
                     | ast::BinOp::CaseEq
                     | ast::BinOp::CaseNe
+                    | ast::BinOp::InsideEq
             ) =>
         {
             // §11.8.3: a comparison's operands are "neither fully self-determined nor
@@ -874,6 +880,14 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
                 }
             };
             let (l, r) = (at(lhs, l0)?, at(rhs, r0)?);
+            // An `inside` element with an x/z bit is §11.4.13's `==?`, whose x/z bits
+            // are don't-cares; this domain has no `==?`, and reading it as `==` (x or
+            // 0) is the defect the operator exists to fix. Decline: the caller's next
+            // evaluator answers (the i64 masked compare reads a sized unsigned
+            // literal) or the consumer refuses.
+            if matches!(op, ast::BinOp::InsideEq) && bp_any_unknown(&r.0, r.1) {
+                return None;
+            }
             if let Some(v) = wide_eq_with_unknowns(*op, &l, &r) {
                 return Some(v);
             }
@@ -885,7 +899,7 @@ fn fold_region(e: &ast::Expr, ctx: u32, psg: Option<bool>, name: WideNameFn) -> 
                 ast::BinOp::Le => ord != Greater,
                 ast::BinOp::Gt => ord == Greater,
                 ast::BinOp::Ge => ord != Less,
-                ast::BinOp::Eq | ast::BinOp::CaseEq => ord == Equal,
+                ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::InsideEq => ord == Equal,
                 _ => ord != Equal,
             }))
         }
@@ -1148,6 +1162,7 @@ pub(crate) fn wide_top_is_self_determined(e: &ast::Expr) -> bool {
                 | ast::BinOp::Ne
                 | ast::BinOp::CaseEq
                 | ast::BinOp::CaseNe
+                | ast::BinOp::InsideEq
                 | ast::BinOp::LogAnd
                 | ast::BinOp::LogOr
         ),

@@ -82,8 +82,8 @@ impl Elaborator<'_> {
                 use ast::BinOp::*;
                 match op {
                     // comparison / logical / wildcard: a 1-bit unsigned result.
-                    Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe | WildEq | WildNe | LogAnd
-                    | LogOr => Some((false, 1)),
+                    Lt | Le | Gt | Ge | Eq | Ne | CaseEq | CaseNe | WildEq | WildNe | InsideEq
+                    | LogAnd | LogOr => Some((false, 1)),
                     // §11.6.1: a shift / power self width & sign follow the LEFT operand.
                     Shl | Shr | AShl | AShr | Pow => self.arm_coercion_info(lhs),
                     // arithmetic / bitwise: signed iff BOTH operands signed (§11.8.1),

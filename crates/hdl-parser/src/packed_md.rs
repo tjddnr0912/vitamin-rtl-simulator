@@ -737,6 +737,7 @@ impl Parser<'_, '_> {
                     | BinOp::CaseNe
                     | BinOp::WildEq
                     | BinOp::WildNe
+                    | BinOp::InsideEq
                     | BinOp::Lt
                     | BinOp::Le
                     | BinOp::Gt

@@ -259,7 +259,8 @@ impl Elaborator<'_> {
                     ast::BinOp::Le => b(l <= r),
                     ast::BinOp::Gt => b(l > r),
                     ast::BinOp::Ge => b(l >= r),
-                    ast::BinOp::Eq | ast::BinOp::CaseEq => b(l == r),
+                    // Decimal leaves only, so an `inside` element has no x/z bit here.
+                    ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::InsideEq => b(l == r),
                     ast::BinOp::Ne | ast::BinOp::CaseNe => b(l != r),
                     ast::BinOp::LogAnd => b(l != 0 && r != 0),
                     ast::BinOp::LogOr => b(l != 0 || r != 0),

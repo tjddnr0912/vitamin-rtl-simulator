@@ -39,7 +39,7 @@ impl Elaborator<'_> {
             ExprKind::Binary { op, lhs, rhs }
                 if matches!(
                     op,
-                    BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq
+                    BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::InsideEq
                 ) =>
             {
                 let (f, c, op) = if let Some(f) = rand_field_ident(lhs) {
@@ -53,7 +53,7 @@ impl Elaborator<'_> {
                     BinOp::Le => (i64::MIN, c),
                     BinOp::Gt => (c.saturating_add(1), i64::MAX),
                     BinOp::Ge => (c, i64::MAX),
-                    BinOp::Eq => (c, c),
+                    BinOp::Eq | BinOp::InsideEq => (c, c),
                     _ => return None,
                 };
                 Some((f, lo, hi))
@@ -843,118 +843,6 @@ impl Elaborator<'_> {
         } else {
             from_table(self).or_else(|| from_prescan(self))
         }
-    }
-
-    /// Per-label equality test for a case arm. Plain `case` is the exact 4-state
-    /// `scrut === label`.
-    ///
-    /// `casez`/`casex` lower to the dedicated v7 match ops: a bit position is
-    /// don't-care iff EITHER side (label or RUNTIME scrutinee) has z there
-    /// (`CasezEq`) or x-or-z (`CasexEq`); every remaining position compares
-    /// 4-state exact. This replaces the v1 `redor(scrut^label) !== 1` formula,
-    /// which was exact for casex but over-lenient for casez (it wildcarded x
-    /// too — `casez(1x10)` falsely matched `1010`; iverilog-pinned strict).
-    /// §11.4.6 `==?`/`!=?` wildcard equality: the RHS PATTERN's x/z bits are
-    /// don't-care; every other bit compares like plain `==`/`!=` (an LHS x/z in
-    /// a compared position propagates x — UNLIKE `CasexEq`, which wildcards
-    /// EITHER side, so mapping there would be a silent-wrong). Lowered as
-    /// `(lhs & mask) ==/!= cleaned` with mask/cleaned computed from the CONSTANT
-    /// pattern at elaborate time: mask = the pattern's known bits, 1-filled
-    /// through the comparison width (the pattern zero-extends, so extension
-    /// bits stay COMPARED against 0 — iverilog-pinned); cleaned = pattern with
-    /// its wildcard bits cleared. The compare inherits vita's oracle-pinned
-    /// `Eq`/`Ne` 4-state semantics. A NON-constant pattern would need a runtime
-    /// known-bit mask (no frozen-IR primitive exposes the unk plane) →
-    /// honest-loud; iverilog supports it, recorded as a follow-on.
-    pub(crate) fn lower_wildcard_eq(&mut self, lhs: &ast::Expr, rhs: &ast::Expr, ne: bool) -> u32 {
-        let lhs_id = self.lower_expr(lhs);
-        // A fill pattern (`'1`/`'x`/…) sizes to the LHS width, like a case
-        // label (§11.6 — mirrors `lower_case_label`).
-        let rhs_id = if expr_contains_fill(rhs) {
-            let w = self.ir_bits_of(lhs_id).unwrap_or(32);
-            self.lower_expr_ctx(rhs, w)
-        } else {
-            self.lower_expr(rhs)
-        };
-        if self.expr_is_real(lhs_id) || self.expr_is_real(rhs_id) {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "wildcard equality (==?/!=?) is not defined on a real operand",
-            );
-            return self.placeholder_expr();
-        }
-        let cv = match self.exprs.get(rhs_id as usize) {
-            Some(ir::Expr::Const { val }) => self.consts.get(*val as usize).cloned(),
-            _ => None,
-        };
-        // Numeric AND string-literal patterns are fine (a string has packed
-        // known bytes and no x/z, so its mask is all-ones — iverilog accepts
-        // `"ab" ==? "ab"`). Real is guarded above; a COMPOUND const expression
-        // (`{2'b1?,2'b1?}`, `(P|1)`) lowers to a non-Const node and stays loud
-        // (a const-fold walker is a recorded follow-on — honest, iverilog folds).
-        let Some(cv) = cv.filter(|c| c.repr != ir::ConstRepr::Real) else {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "wildcard equality (==?/!=?) needs a constant right-hand pattern \
-                 (a runtime pattern's x/z mask has no IR primitive; a compound \
-                 const expression is not folded yet — use a literal or parameter)",
-            );
-            return self.placeholder_expr();
-        };
-        // Comparison width = max(operands) (§11.8.2): the pattern zero-extends,
-        // so mask bits ABOVE the pattern width stay 1 (known-0 must match). An
-        // UNSIZABLE lhs is loud: falling back to the pattern width would build
-        // a too-narrow mask whose zero-extension ANDs the lhs's high bits away
-        // — every high bit would silently "match" (the engine widens the And
-        // to max(lhs, mask), so the mask MUST cover the lhs).
-        let Some(aw) = self.ir_bits_of(lhs_id) else {
-            self.error(
-                MsgCode::ElabUnsupported,
-                "wildcard equality (==?/!=?) on a left operand of unsizable \
-                 width is unsupported (the pattern mask must cover it)",
-            );
-            return self.placeholder_expr();
-        };
-        let w = aw.max(cv.width).max(1);
-        let nwords = (w as usize).div_ceil(64);
-        let mut mask = vec![0u64; nwords];
-        let mut clean = vec![0u64; nwords];
-        for wi in 0..nwords {
-            let cvv = cv.bits.val.get(wi).copied().unwrap_or(0);
-            let cvu = cv.bits.unk.get(wi).copied().unwrap_or(0);
-            mask[wi] = !cvu; // pattern x/z ⇒ 0 (don't-care); known/extension ⇒ 1
-            clean[wi] = cvv & !cvu; // wildcard positions cleared to 0
-        }
-        let top = w % 64;
-        if top != 0 {
-            let m = (1u64 << top) - 1;
-            mask[nwords - 1] &= m;
-            clean[nwords - 1] &= m;
-        }
-        let push_const = |el: &mut Self, bits: Vec<u64>| -> u32 {
-            let cid = el.intern_const(ir::ConstVal {
-                width: w,
-                signed: false,
-                repr: ir::ConstRepr::Numeric,
-                bits: ir::BitPacked {
-                    val: bits,
-                    unk: vec![0u64; nwords],
-                },
-            });
-            el.push_expr(ir::Expr::Const { val: cid })
-        };
-        let m_id = push_const(self, mask);
-        let c_id = push_const(self, clean);
-        let anded = self.push_expr(ir::Expr::Binary {
-            op: ir::BinOp::BitAnd,
-            lhs: lhs_id,
-            rhs: m_id,
-        });
-        self.push_expr(ir::Expr::Binary {
-            op: if ne { ir::BinOp::Ne } else { ir::BinOp::Eq },
-            lhs: anded,
-            rhs: c_id,
-        })
     }
 
     /// Fill-aware lowering of ONE case label to its IR expr id. §11.6: a case

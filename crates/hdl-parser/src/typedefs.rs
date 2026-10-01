@@ -934,7 +934,14 @@ impl Parser<'_, '_> {
             // emits for a nested symbolic member (`(E < 0) ? 1 - E : E + 1`), and a
             // user's `[(W > 4 ? W : 4)-1:0]`.
             ExprKind::Binary {
-                op: BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne,
+                op:
+                    BinOp::Lt
+                    | BinOp::Le
+                    | BinOp::Gt
+                    | BinOp::Ge
+                    | BinOp::Eq
+                    | BinOp::Ne
+                    | BinOp::InsideEq,
                 lhs,
                 rhs,
             } => {

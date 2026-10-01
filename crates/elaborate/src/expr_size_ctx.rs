@@ -516,6 +516,7 @@ impl Elaborator<'_> {
                 | ast::BinOp::CaseNe
                 | ast::BinOp::WildEq
                 | ast::BinOp::WildNe
+                | ast::BinOp::InsideEq
                 | ast::BinOp::LogAnd
                 | ast::BinOp::LogOr => Some(1),
                 // a shift / power is as wide as its LEFT operand alone.

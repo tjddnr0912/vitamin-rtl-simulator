@@ -126,7 +126,11 @@ pub(crate) fn const_binop(op: ast::BinOp, a: i64, b: i64) -> Option<i64> {
         ast::BinOp::Le => Some((a <= b) as i64),
         ast::BinOp::Gt => Some((a > b) as i64),
         ast::BinOp::Ge => Some((a >= b) as i64),
-        ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::WildEq => Some((a == b) as i64),
+        // `InsideEq`: an x/z literal never reaches the i64 domain (its fold declines),
+        // so the element here has no don't-care bit and §11.4.13's `==?` is `==`.
+        ast::BinOp::Eq | ast::BinOp::CaseEq | ast::BinOp::WildEq | ast::BinOp::InsideEq => {
+            Some((a == b) as i64)
+        }
         ast::BinOp::Ne | ast::BinOp::CaseNe | ast::BinOp::WildNe => Some((a != b) as i64),
         ast::BinOp::BitAnd => Some(a & b),
         ast::BinOp::BitOr => Some(a | b),

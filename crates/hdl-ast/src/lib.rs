@@ -1766,7 +1766,8 @@ pub enum UnOp {
     RedXnor,
 }
 /// Binary operators — names mirror sim-ir `BinOp` 1:1 (verified sim-ir/src/lib.rs:112):
-/// `AShl`/`AShr` = `<<<`/`>>>`;  `Le`/`Ge`/`Ne`; `CaseEq`/`CaseNe` = `===`/`!==`.
+/// `AShl`/`AShr` = `<<<`/`>>>`;  `Le`/`Ge`/`Ne`; `CaseEq`/`CaseNe` = `===`/`!==`. Three
+/// have no sim-ir twin and lower to compositions: `WildEq`/`WildNe` and `InsideEq`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
 pub enum BinOp {
     Add,
@@ -1800,6 +1801,17 @@ pub enum BinOp {
     BitOr,
     LogAnd,
     LogOr,
+    /// ONE value element of an `inside` set (IEEE 1800-2017 §11.4.13): `lhs` is the
+    /// set's left operand, `rhs` the element. The parser's `inside` desugar emits it
+    /// where it used to emit `Eq` (a range element stays `Ge`/`Le` under `LogAnd`).
+    /// §11.4.13 compares an integral element with `==?` — the element's x/z bits are
+    /// don't-cares, the left operand's are not — and a non-integral one with `==`.
+    /// Elaborate lowers it EXACTLY as `Eq` unless the lowered element is a constant
+    /// carrying x/z bits, which takes the `==?` builder (`inside_value_cmp`); every
+    /// constant-fold domain treats it as `Eq` only where an x/z element cannot reach
+    /// it. APPENDED LAST so postcard's positional discriminants of every existing
+    /// variant are unchanged.
+    InsideEq,
 }
 /// Indexed part-select direction. Lowers to sim-ir `SelKind::PartIdxUp/Down`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, SchemaHash)]
