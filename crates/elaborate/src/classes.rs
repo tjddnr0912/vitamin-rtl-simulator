@@ -480,14 +480,11 @@ impl Elaborator<'_> {
         let mut cur = Some(class.to_string());
         let mut guard = 0;
         while let Some(c) = cur {
-            if let Some(ci) = self.class_table.get(&c) {
-                if let Some(m) = ci.methods.iter().find(|m| m.name == name) {
-                    return Some((c.clone(), m.clone()));
-                }
-                cur = ci.base.clone();
-            } else {
-                return None;
+            let ci = self.class_table.get(&c)?;
+            if let Some(m) = ci.methods.iter().find(|m| m.name == name) {
+                return Some((c.clone(), m.clone()));
             }
+            cur = ci.base.clone();
             guard += 1;
             if guard > 256 {
                 break;

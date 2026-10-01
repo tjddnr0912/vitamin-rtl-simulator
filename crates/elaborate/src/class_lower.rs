@@ -289,11 +289,10 @@ impl Elaborator<'_> {
         // context of a `$error` inside the body is the `.<class>.<method>` marker
         // the engine completes with the process scope (`stmt_diag_meta`).
         let saved_block_scope = std::mem::take(&mut self.block_scope);
-        let saved_root = std::mem::replace(&mut self.block_scope_root, Some(String::new()));
-        let saved_cm = std::mem::replace(
-            &mut self.cur_class_method,
-            Some(format!("{cname}.{}", method.name)),
-        );
+        let saved_root = self.block_scope_root.replace(String::new());
+        let saved_cm = self
+            .cur_class_method
+            .replace(format!("{cname}.{}", method.name));
         // A class method body reserves no span nets, so it must not inherit an
         // enclosing frame's owner and answer from that frame's window.
         let saved_cfo = self.cur_frame_owner.take();

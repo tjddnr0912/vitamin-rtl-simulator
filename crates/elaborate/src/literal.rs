@@ -64,7 +64,7 @@ fn alloc_width(width: u32) -> u32 {
 /// Pack an LSB-first `Bit` slice into `width` bits. Missing bits use `fill`;
 /// bits beyond `width` are dropped. Result has `ceil(width/64)` words (≥1).
 fn pack_bits(bits: &[Bit], width: u32, fill: Bit) -> BitPacked {
-    let nwords = (((width as usize) + 63) / 64).max(1);
+    let nwords = (width as usize).div_ceil(64).max(1);
     let mut val = vec![0u64; nwords];
     let mut unk = vec![0u64; nwords];
     for i in 0..(width as usize) {
@@ -610,7 +610,7 @@ pub fn parse_str_literal(raw: &str) -> ConstVal {
 /// SYNTHETIC strings too (e.g. the $dumpvars scope-path encoding, ⑤b).
 pub fn str_const_from_bytes(bytes: &[u8]) -> ConstVal {
     let width = (bytes.len() as u32).saturating_mul(8);
-    let nwords = (((width as usize) + 63) / 64).max(1);
+    let nwords = (width as usize).div_ceil(64).max(1);
     let mut val = vec![0u64; nwords];
     let unk = vec![0u64; nwords]; // strings are 2-state
     for (k, &b) in bytes.iter().enumerate() {
@@ -692,7 +692,7 @@ pub fn make_const_i64(v: i64, width: u32, signed: bool) -> ConstVal {
 /// Synthesize a small unsigned `ConstVal` of `n` in `width` bits (used for
 /// select widths / single-bit selects). Always 2-state (`unk` all zero).
 pub fn make_const_u32(n: u32, width: u32) -> ConstVal {
-    let nwords = (((width as usize) + 63) / 64).max(1);
+    let nwords = (width as usize).div_ceil(64).max(1);
     let mut val = vec![0u64; nwords];
     let unk = vec![0u64; nwords];
     for i in 0..(width.min(32) as usize) {

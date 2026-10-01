@@ -503,8 +503,7 @@ fn repeat_operand_then_andor_is_cleanly_loud() {
 fn deep_andor_nesting_is_loud_not_a_crash() {
     // A pathologically deep `a and a and …` chain must hit the loud depth cap, not
     // overflow the stack (review N2d determinism MEDIUM).
-    let chain = std::iter::repeat("a")
-        .take(2000)
+    let chain = std::iter::repeat_n("a", 2000)
         .collect::<Vec<_>>()
         .join(" and ");
     let (out, err, code) = run(&format!(
@@ -527,8 +526,7 @@ fn very_deep_andor_chain_does_not_overflow_default_stack() {
     // ~8 MiB Linux/macOS default too — so it crashes on EVERY OS unless the driver
     // runs on the large-stack worker thread (see `crates/cli/src/main.rs`). It must
     // still terminate with the loud depth-cap diagnostic, never an overflow abort.
-    let chain = std::iter::repeat("a")
-        .take(40_000)
+    let chain = std::iter::repeat_n("a", 40_000)
         .collect::<Vec<_>>()
         .join(" and ");
     let (out, err, code) = run(&format!(

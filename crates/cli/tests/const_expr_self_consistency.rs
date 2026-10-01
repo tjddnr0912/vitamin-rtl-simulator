@@ -11,7 +11,7 @@
 //!   1. Wrapping a sub-expression in a SAME-WIDTH `+ 8'd0` changes its value:
 //!      `(8'd200+8'd100) >> 2`           -> 11
 //!      `((8'd200+8'd100) >> 2) + 8'd0`  -> 75   (same shift, same operands, and
-//!                                                iverilog's own `$bits` here is 9)
+//!      iverilog's own `$bits` here is 9)
 //!      ⚠️ The 32-bit `+ 0` spelling is NOT this defect — a 32-bit sibling widens the
 //!      context (§11.6.1), so 75 is the right answer there in all three tools.
 //!   2. `+` and `*` are folded UNBOUNDED while `<<` is folded at 32 bits:

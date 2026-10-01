@@ -185,7 +185,7 @@ pub(crate) fn default_init(kind: ast::NetVarKind, width: u32) -> ir::BitPacked {
             unk: vec![0u64; nwords],
         };
     }
-    let nwords = (((width as usize) + 63) / 64).max(1);
+    let nwords = (width as usize).div_ceil(64).max(1);
     let is_var = matches!(
         kind,
         ast::NetVarKind::Reg
@@ -225,7 +225,7 @@ pub(crate) fn resize_bits(
         return src.clone();
     }
 
-    let nwords = (((to_w as usize) + 63) / 64).max(1);
+    let nwords = (to_w as usize).div_ceil(64).max(1);
     let mut val = vec![0u64; nwords];
     let mut unk = vec![0u64; nwords];
     let get = |plane: &[u64], i: usize| -> bool {

@@ -224,7 +224,9 @@ targets = [
 MSRV policy:
 
 - 1.85 is a floor, not a ceiling. There is no upper bound, and a newer toolchain is
-  followed rather than pinned away from.
+  followed rather than pinned away from. CI's non-blocking `build-stable` job (§9) runs
+  clippy and the tests on the latest stable, so a release that breaks or newly lints the
+  workspace shows up as a red job rather than going unnoticed.
 - The floor is the maximum over the requirements of the adopted crates. `fst-writer` 0.3.x
   sets it; every other dependency requires less.
 - vita's own crates stay on edition 2021 even though the toolchain permits 2024. Raising
@@ -373,15 +375,16 @@ cargo test  --workspace --locked
 
 `.github/workflows/ci.yml` is the only workflow file. It triggers on pushes to `main` and
 on every pull request, with concurrency grouped per workflow and ref and
-`cancel-in-progress` on. Three job definitions expand to four job runs.
+`cancel-in-progress` on. Four job definitions expand to five job runs.
 
 | Job | Runner | What it holds |
 |---|---|---|
 | `build-native` | `ubuntu-latest` and `macos-latest`, `fail-fast: false` | the four canonical commands, on both native platforms |
 | `build-no-oracle` | `ubuntu-latest` | the product shape: one executor, and a refusal that has nowhere to fall back to |
 | `build-rhel` | `ubuntu-latest` in a `redhat/ubi9` container | the same build and test on the glibc and RHEL axis |
+| `build-stable` | `ubuntu-latest`, `continue-on-error: true` | clippy, test and doctests on the latest stable — the MSRV ceiling (§4); non-blocking |
 
-Shared actions: `actions/checkout@v6`, `dtolnay/rust-toolchain@1.85.0`,
+Shared actions: `actions/checkout@v6`, `dtolnay/rust-toolchain@1.85.0` (`@stable` in `build-stable`),
 `Swatinem/rust-cache@v2` keyed per job, and `taiki-e/install-action@v2`, which installs
 `cargo-nextest@0.9.100`.
 

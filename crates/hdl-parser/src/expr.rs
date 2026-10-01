@@ -163,8 +163,7 @@ impl Parser<'_, '_> {
 
     pub(crate) fn expr_capped(&mut self, min_bp: u8) -> Expr {
         let mut lhs = self.expr_prefix();
-        loop {
-            let Some(op) = self.peek() else { break };
+        while let Some(op) = self.peek() {
             if op == TokenKind::Question {
                 // ternary, right-assoc
                 if TERNARY_LBP < min_bp {

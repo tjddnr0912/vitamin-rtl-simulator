@@ -379,7 +379,7 @@ fn reductions_and_lognot_match_oracle() {
             vw_xz(8, 0xFF, 0b1),    // X with otherwise-all-1 (AND → X, OR → 1)
             vw_xz(8, 0x00, 0b1000), // X with otherwise-all-0 (OR → X, AND → 0)
         ] {
-            assert_matches_oracle(&ir, 1, 8, false, &[v.clone()]);
+            assert_matches_oracle(&ir, 1, 8, false, std::slice::from_ref(&v));
         }
     }
 }

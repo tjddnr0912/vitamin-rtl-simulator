@@ -727,7 +727,7 @@ impl Elaborator<'_> {
         let saved_scope = std::mem::replace(&mut self.block_scope, vec![tname.to_string()]);
         // §4.5.435: rooted at the DECLARING instance, not the caller's generate scope.
         let decl_root = self.display_of(&self.inst_prefix);
-        let saved_root = std::mem::replace(&mut self.block_scope_root, Some(decl_root));
+        let saved_root = self.block_scope_root.replace(decl_root);
         // A package task's body resolves in its own package (`pkg_body_scope.rs`) —
         // the fourth lane to push this scope; without it `import pk::ts;` left a
         // STATIC task's read of its package's constant `C` as `undeclared

@@ -143,8 +143,8 @@ impl Elaborator<'_> {
         // to `synth_liveness` (which emits an end-of-sim `final` obligation check);
         // a SAFETY-only tree (`and`/`or`/`not`/`always`/weak-`until`/recursion)
         // reduces to a per-clock boolean violation by `synth_prop_expr`.
-        if sva.prop_expr.is_some() {
-            if Self::prop_expr_has_liveness(sva.prop_expr.as_ref().unwrap()) {
+        if let Some(pe) = sva.prop_expr.as_ref() {
+            if Self::prop_expr_has_liveness(pe) {
                 self.synth_liveness(sva, sp);
             } else {
                 self.synth_prop_expr(sva, sp);

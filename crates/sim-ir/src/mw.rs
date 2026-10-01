@@ -21,7 +21,7 @@
 /// Word count for `width` bits.
 #[inline]
 fn nwords(width: u32) -> usize {
-    ((width as usize) + 63) / 64
+    (width as usize).div_ceil(64)
 }
 
 /// Low mask over `width` bits in a single u64 (width ≤ 64 usage).

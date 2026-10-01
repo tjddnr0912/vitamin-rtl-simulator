@@ -56,11 +56,11 @@ honest-loud promotion whose prerequisite holds > ④ G2 OBS. Performance is belo
 | workload corpus (study/03) | 2 items | 1 / 1 | the new-design census · the corpus in CI (deferred, owner ruling) |
 | §3 intentionally loud | 12 rows | 0 / 12 | not gaps; each has its reason |
 | §4 SVA honest-loud | 6 | 0 / 6 | mostly no oracle; hand-IEEE when started; every row states a prerequisite |
-| §5 performance / hardening residues | 16 rows | 8 / 8 | frame-body wprog (5c), native scratch pooling (4b-r), array-LHS cliff, inline-fold exponential, memory guard, MSRV ceiling, quiescence / render / eof seams |
+| §5 performance / hardening residues | 15 rows | 7 / 8 | frame-body wprog (5c), native scratch pooling (4b-r), array-LHS cliff, inline-fold exponential, memory guard, quiescence / render / eof seams |
 | §6 G2 OBS | 6 stages + 10 | 15 / 1 | OBS-2 residue → OBS-1 residue → R-L4 → OBS-4 control → OBS-5 snapshot → OBS-6 X-origin, plus 10 items beside the staged track (call tree, a `void` function filed as `kind: task`, a route decided per spelling, per-call-site builtins, `builtins` rows for primitives the source never wrote, the staged `--hier-tree` accept-and-drop, generate scopes, enum names, R-I1/R-I2, `wprog` keys with no producer) |
 | §7 conditional | 4 | 0 / 4 | BACKEND · VHDL · VCD-EXT · MVP-CUT |
 | §8 non-goals | 2 | 0 / 2 | IMPLICIT-NET and the out-of-scope list · `defparam` beyond a direct-child constant target |
-| total | 441 | 265 / 176 | |
+| total | 440 | 264 / 176 | |
 
 `startable` = two oracles or a hand-IEEE plan and no unmet prerequisite; `blocked` = a stated
 prerequisite (§D), WALL, ORACLE-SPLIT, DO-NOT-START, by design, trigger-gated or non-goal.

@@ -248,8 +248,7 @@ fn long_bodied_parameterized_sequence_decl_is_recognized() {
     // REVIEW (parser-masking lens, MEDIUM): a valid parameterized sequence whose body
     // is long (>512 tokens, the old budget) must still be recognized as a decl, not
     // flipped to a malformed instantiation. Build a ~300-term `x ##1 x ##1 …` body.
-    let body = std::iter::repeat("x")
-        .take(300)
+    let body = std::iter::repeat_n("x", 300)
         .collect::<Vec<_>>()
         .join(" ##1 ");
     // The long parameterized decl is declared (and unused); recognition is what is

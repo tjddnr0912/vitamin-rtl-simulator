@@ -143,8 +143,7 @@ impl Parser<'_, '_> {
                 break;
             };
             each_exact &= exact;
-            loop {
-                let Some(name) = self.ident() else { break };
+            while let Some(name) = self.ident() {
                 members.push(StructMember {
                     name,
                     kind,

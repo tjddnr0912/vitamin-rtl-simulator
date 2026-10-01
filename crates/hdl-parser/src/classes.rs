@@ -141,8 +141,7 @@ impl Parser<'_, '_> {
         let _ = self.eat_kw(Kw::Interface); // optional `interface` keyword
         let iface = self.ident()?;
         let mut names = Vec::new();
-        loop {
-            let Some(name) = self.ident() else { break };
+        while let Some(name) = self.ident() {
             names.push(DeclName {
                 span: name.span,
                 name,

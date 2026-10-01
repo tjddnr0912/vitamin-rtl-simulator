@@ -121,3 +121,38 @@ jobs:
           cargo nextest run --workspace --locked --no-fail-fast
       - name: doctests
         run: cargo test --doc --workspace --locked
+
+  # MSRV-CEIL — 1.85 is a floor, not a ceiling (CONTRIBUTING.md, preview/03 §4),
+  # so one job stands on the ceiling: the latest stable. It is NON-BLOCKING: a red
+  # here means a new Rust release breaks or newly lints the workspace — a signal
+  # to follow, not a merge gate. `RUSTUP_TOOLCHAIN` is required: it is the only
+  # thing that outranks `rust-toolchain.toml`, which would otherwise pin 1.85.0.
+  build-stable:
+    name: build & test (latest stable, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.100
+      - name: toolchain
+        run: rustc -V
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: test
+        run: |
+          # Each test process gets a private TMPDIR (scripts/test-tmpdir.sh):
+          # test temp names restart their counter in every nextest process.
+          export "CARGO_TARGET_$(rustc -vV | sed -n 's/^host: //p' | tr 'a-z-' 'A-Z_')_RUNNER=$PWD/scripts/test-tmpdir.sh"
+          cargo nextest run --workspace --locked --no-fail-fast
+      - name: doctests
+        run: cargo test --doc --workspace --locked

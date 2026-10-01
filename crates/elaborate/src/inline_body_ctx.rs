@@ -55,7 +55,7 @@ impl Elaborator<'_> {
         let Some((ext, _)) = self.size_ctx_route(e) else {
             return self.lower_ctx_or_plain(e, ctx);
         };
-        let saved = std::mem::replace(&mut self.inline_ctx_ext, Some(ext));
+        let saved = self.inline_ctx_ext.replace(ext);
         let id = self.lower_ctx_or_plain(e, ctx);
         self.inline_ctx_ext = saved;
         id

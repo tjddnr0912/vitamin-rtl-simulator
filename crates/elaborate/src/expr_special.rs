@@ -44,10 +44,9 @@ impl Elaborator<'_> {
             {
                 let (f, c, op) = if let Some(f) = rand_field_ident(lhs) {
                     (f, self.const_eval_in_scope(rhs)?, *op)
-                } else if let Some(f) = rand_field_ident(rhs) {
-                    (f, self.const_eval_in_scope(lhs)?, flip_cmp(*op))
                 } else {
-                    return None;
+                    let f = rand_field_ident(rhs)?;
+                    (f, self.const_eval_in_scope(lhs)?, flip_cmp(*op))
                 };
                 let (lo, hi) = match op {
                     BinOp::Lt => (i64::MIN, c.saturating_sub(1)),
@@ -917,7 +916,7 @@ impl Elaborator<'_> {
             return self.placeholder_expr();
         };
         let w = aw.max(cv.width).max(1);
-        let nwords = ((w as usize) + 63) / 64;
+        let nwords = (w as usize).div_ceil(64);
         let mut mask = vec![0u64; nwords];
         let mut clean = vec![0u64; nwords];
         for wi in 0..nwords {

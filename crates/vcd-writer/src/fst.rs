@@ -350,12 +350,10 @@ pub fn transcode_vcd_to_fst(
             // control keywords carry no value themselves; their inner value lines
             // are handled by the arms above. A `$comment … $end` in the body must
             // skip its content.
-            b'$' => {
-                if tok == "$comment" {
-                    while let Some(t) = toks.next_tok()? {
-                        if t == "$end" {
-                            break;
-                        }
+            b'$' if tok == "$comment" => {
+                while let Some(t) = toks.next_tok()? {
+                    if t == "$end" {
+                        break;
                     }
                 }
             }

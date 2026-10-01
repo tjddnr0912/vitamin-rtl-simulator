@@ -265,7 +265,7 @@ fn wide_reductions_and_lognot_match_oracle() {
             vwide_xz(128, u64::MAX, 0, 0, 1),   // X only in word 1
             vwide_xz(128, 0, 0, 0, 1 << 63),    // X with otherwise-all-0
         ] {
-            assert_matches_oracle(&ir, 1, 8, false, &[v.clone()]);
+            assert_matches_oracle(&ir, 1, 8, false, std::slice::from_ref(&v));
         }
     }
 }

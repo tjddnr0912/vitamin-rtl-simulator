@@ -245,10 +245,10 @@ impl Parser<'_, '_> {
                 // SVA-REST contextual property operators (`until`/`implies`/
                 // `s_eventually`/`nexttime`/…) — reserved SV words, so a property body
                 // identifier never legitimately collides with them.
-                Some(TokenKind::Word(WordKind::Ident)) if depth == 0 => {
-                    if Self::is_prop_op_text(self.text_at(i)) {
-                        return true;
-                    }
+                Some(TokenKind::Word(WordKind::Ident))
+                    if depth == 0 && Self::is_prop_op_text(self.text_at(i)) =>
+                {
+                    return true;
                 }
                 _ => {}
             }
@@ -487,10 +487,10 @@ impl Parser<'_, '_> {
                 Some(TokenKind::Word(WordKind::Keyword(
                     Kw::And | Kw::Or | Kw::Not | Kw::Always,
                 ))) if depth == 1 => return true,
-                Some(TokenKind::Word(WordKind::Ident)) if depth == 1 => {
-                    if Self::is_prop_op_text(self.text_at(i)) {
-                        return true;
-                    }
+                Some(TokenKind::Word(WordKind::Ident))
+                    if depth == 1 && Self::is_prop_op_text(self.text_at(i)) =>
+                {
+                    return true;
                 }
                 _ => {}
             }

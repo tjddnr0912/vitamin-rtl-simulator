@@ -28,7 +28,7 @@ targets = [
 
 | Pin | Value | Reason |
 |---|---|---|
-| rustc / cargo | 1.85.0 | `fst-writer` 0.3.x is edition 2024, which requires 1.85. 1.85 is a floor, not a ceiling — there is no upper MSRV bound |
+| rustc / cargo | 1.85.0 | `fst-writer` 0.3.x is edition 2024, which requires 1.85. 1.85 is a floor, not a ceiling — there is no upper MSRV bound; CI's non-blocking `build-stable` job checks the ceiling |
 | Edition | 2021 for every vita crate | the toolchain permits 2024; vita's crates stay on 2021 deliberately |
 | `blake3` | `=1.8.2` | 1.8.3 and later move to edition 2024. Keep the exact pin |
 | `fst-writer` | `=0.3.1` | the 0.2.x line writes an FST time table that GTKWave tolerates and wellen (Surfer) rejects |
@@ -224,14 +224,15 @@ from the `--help` text.
 
 ## CI
 
-`.github/workflows/ci.yml` is the only workflow. It defines three jobs that
-expand to four runs, triggered on pushes to `main` and on every pull request.
+`.github/workflows/ci.yml` is the only workflow. It defines four jobs that
+expand to five runs, triggered on pushes to `main` and on every pull request.
 
 | Job | Runner | Steps |
 |---|---|---|
 | `build-native` | ubuntu-latest and macos-latest | fmt, clippy, build, test — the four canonical commands |
 | `build-no-oracle` | ubuntu-latest | the product-shape build, clippy and lib tests, then a smoke script that simulates a small design, greps its output, and asserts `--backend vm` is rejected rather than silently ignored |
 | `build-rhel` | ubuntu-latest in a `redhat/ubi9` container | `dnf install -y gcc tar gzip` for a C linker and the nextest install, then build and test |
+| `build-stable` | ubuntu-latest, `continue-on-error: true` | clippy, test and doctests on the latest stable (`RUSTUP_TOOLCHAIN: stable`) — the MSRV ceiling. Non-blocking: red means a new Rust release breaks or newly lints the workspace |
 
 There is no Windows runner and no release or publish workflow.
 

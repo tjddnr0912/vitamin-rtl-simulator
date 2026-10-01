@@ -79,8 +79,8 @@ fn nested_instances_generate_and_severity_tasks() {
             .any(|l| l.ends_with(".blk") && l.contains("top.g")),
         "{out}"
     );
-    assert!(got.iter().any(|l| *l == "D=top.a"), "{out}");
-    assert!(got.iter().any(|l| *l == "D=top"), "{out}");
+    assert!(got.contains(&"D=top.a"), "{out}");
+    assert!(got.contains(&"D=top"), "{out}");
 }
 
 #[test]

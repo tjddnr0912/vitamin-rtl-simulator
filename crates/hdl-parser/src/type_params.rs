@@ -154,8 +154,7 @@ impl Parser<'_, '_> {
         self.bump(); // `type`
         let mut decls = Vec::new();
         let mut guards = Vec::new();
-        loop {
-            let Some(name) = self.ident() else { break };
+        while let Some(name) = self.ident() {
             if !self.expect(TokenKind::Eq, "'=' after the type parameter name") {
                 break;
             }

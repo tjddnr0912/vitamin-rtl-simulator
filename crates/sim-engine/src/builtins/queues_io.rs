@@ -817,7 +817,7 @@ pub(crate) fn expr_const_string(st: &SimState, eid: u32) -> String {
 /// Decode a `ConstVal` (StrUtf8 → text; numeric → packed bytes).
 pub(crate) fn const_string(ir: &sim_ir::SimIr, cid: u32) -> String {
     let c = &ir.consts[cid as usize];
-    let nbytes = ((c.width + 7) / 8) as usize;
+    let nbytes = c.width.div_ceil(8) as usize;
     let mut bytes = Vec::with_capacity(nbytes);
     // StrUtf8 packs in IEEE §5.9 order (v6): the FIRST character is the MOST
     // significant byte — read the value top byte down to recover source order.
